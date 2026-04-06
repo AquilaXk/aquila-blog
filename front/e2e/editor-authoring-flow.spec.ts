@@ -1318,6 +1318,58 @@ test.describe("block editor authoring flow", () => {
     await page.mouse.up()
   })
 
+  test("plain markdown table도 column width 메타 없이 drag commit 후 실제 폭을 갱신한다", async ({
+    page,
+  }) => {
+    const seedMarkdown = [
+      "| 제목 | 내용 |",
+      "| --- | --- |",
+      "| WebSocket | HTTP 요청/응답만으로는 채팅 같은 실시간 양방향 통신을 자연스럽게 처리하기 어렵다 |",
+      "| STOMP | Broker 기반 구독/배포 모델로 메시지를 주고받는다 |",
+    ].join("\n")
+    const seedParam = encodeURIComponent(seedMarkdown.replace(/\n/g, "\\n"))
+
+    await page.goto(`${QA_ENGINE_ROUTE}&seed=${seedParam}`)
+
+    const firstHeaderCell = page.locator("table th").first()
+    const markdownOutput = page.getByTestId("qa-markdown-output")
+    await firstHeaderCell.click()
+    await firstHeaderCell.hover()
+
+    const resizeHandle = page.getByTestId("table-column-resize-boundary-0")
+    const handleBox = await resizeHandle.boundingBox()
+    if (!handleBox) {
+      throw new Error("plain markdown table column resize handle is missing")
+    }
+
+    const beforeWidth = await firstHeaderCell.evaluate((element) =>
+      Math.round((element as HTMLElement).getBoundingClientRect().width)
+    )
+    const beforeMarkdown = (await markdownOutput.textContent()) || ""
+    const startX = Math.round(handleBox.x + handleBox.width / 2)
+    const startY = Math.round(handleBox.y + handleBox.height / 2)
+
+    await page.mouse.move(startX, startY)
+    await page.mouse.down()
+    await page.mouse.move(startX + 72, startY, { steps: 8 })
+    await page.mouse.up()
+
+    await expect
+      .poll(async () =>
+        firstHeaderCell.evaluate((element) =>
+          Math.round((element as HTMLElement).getBoundingClientRect().width)
+        )
+      )
+      .toBeGreaterThan(beforeWidth + 16)
+
+    await expect
+      .poll(async () =>
+        (await markdownOutput.textContent()) || ""
+      )
+      .not.toBe(beforeMarkdown)
+    await expect(markdownOutput).toContainText('"columnWidths"')
+  })
+
   test("table column resize는 desktop writer readable width budget을 넘지 않는다", async ({
     page,
   }) => {

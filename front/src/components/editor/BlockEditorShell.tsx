@@ -217,6 +217,7 @@ export type BlockEditorChangeMeta = {
 
 export type BlockEditorQaActions = {
   selectTableAxis: (axis: "row" | "column") => void
+  selectTableColumnViaDomFallback: (columnIndex: number) => void
   setActiveTableCellAlign: (align: "left" | "center" | "right" | null) => void
   setActiveTableCellBackground: (color: string | null) => void
   addTableRowAfter: () => void
@@ -2662,7 +2663,7 @@ const BlockEditorShell = ({
     for (let depth = resolvedPosition.depth; depth > 0; depth -= 1) {
       if (resolvedPosition.node(depth).type.name !== "table") continue
       const table = resolvedPosition.node(depth)
-      const tableStart = resolvedPosition.before(depth)
+      const tableStart = resolvedPosition.start(depth)
       return {
         map: TableMap.get(table),
         table,
@@ -4595,6 +4596,12 @@ const BlockEditorShell = ({
       selectTableAxis: (axis) => {
         selectCurrentTableAxis(axis)
       },
+      selectTableColumnViaDomFallback: (columnIndex) => {
+        const currentEditor = editorRef.current ?? editor
+        if (!currentEditor) return
+        currentEditor.chain().focus("end").run()
+        selectTableColumnByIndex(columnIndex)
+      },
       setActiveTableCellAlign: (align) => {
         updateActiveTableCellAttrs({ textAlign: align })
       },
@@ -4663,6 +4670,7 @@ const BlockEditorShell = ({
     onQaActionsReady,
     resizeFirstTableColumnBy,
     resizeFirstTableRowBy,
+    selectTableColumnByIndex,
     selectCurrentTableAxis,
     updateActiveTableCellAttrs,
     withTrailingParagraph,

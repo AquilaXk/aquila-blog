@@ -776,6 +776,23 @@ test.describe("block editor authoring flow", () => {
     await expect(page.getByTestId("table-column-menu")).toHaveCount(0)
   })
 
+  test("table rail segment selection은 fallback rect에서도 native text selection 없이 전체 열을 선택한다", async ({
+    page,
+  }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    await page.getByRole("button", { name: "테이블" }).click()
+    await page.getByRole("button", { name: "QA fallback 열 선택" }).click()
+
+    const rowCount = await page.locator("table tr").count()
+    await expect
+      .poll(async () => page.locator(".aq-block-editor__content .selectedCell").count())
+      .toBe(rowCount)
+    await expect
+      .poll(async () => page.evaluate(() => window.getSelection()?.toString() || ""))
+      .toBe("")
+  })
+
   test("table axis rail hover 전환 중에도 axis menu 액션이 끊기지 않는다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 

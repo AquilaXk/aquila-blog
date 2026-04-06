@@ -10,6 +10,7 @@ const reuseExistingServer = process.env.PLAYWRIGHT_REUSE_SERVER === "true"
 const useLiveMultiBrowser = process.env.PLAYWRIGHT_LIVE_MULTI_BROWSER === "true"
 const useLiveFailFast = process.env.PLAYWRIGHT_LIVE_FAIL_FAST === "true"
 const playwrightJsonReportPath = process.env.PLAYWRIGHT_JSON_REPORT_PATH?.trim() || ""
+const shouldUseChromiumChannel = process.platform === "darwin" && !process.env.CI
 const inheritedEnv = { ...process.env }
 const resolvedBackendInternalUrl = inheritedEnv.BACKEND_INTERNAL_URL || "http://127.0.0.1:1"
 const shouldEnableAdminGuardQaBypassByDefault =
@@ -24,20 +25,43 @@ if (inheritedEnv.FORCE_COLOR && Object.prototype.hasOwnProperty.call(inheritedEn
 const defaultProjects = [
   {
     name: "chromium",
-    use: { ...devices["Desktop Chrome"] },
+    use: {
+      ...devices["Desktop Chrome"],
+      ...(shouldUseChromiumChannel ? { channel: "chromium" as const } : {}),
+    },
   },
 ]
 
 const liveMultiBrowserProjects = [
   {
     name: "chromium",
-    use: { ...devices["Desktop Chrome"] },
+    use: {
+      ...devices["Desktop Chrome"],
+      ...(shouldUseChromiumChannel ? { channel: "chromium" as const } : {}),
+    },
   },
   {
     name: "webkit",
     use: { ...devices["Desktop Safari"] },
   },
 ]
+
+const assertDarwinLocalChromiumChannel = (
+  projects: Array<{ name: string; use?: { channel?: string } }>
+) => {
+  if (!shouldUseChromiumChannel) return
+
+  for (const project of projects) {
+    if (project.name !== "chromium") continue
+    if (project.use?.channel === "chromium") continue
+    throw new Error(
+      "Local darwin Playwright chromium project must use channel=chromium to avoid the chromium_headless_shell permission regression."
+    )
+  }
+}
+
+assertDarwinLocalChromiumChannel(defaultProjects)
+assertDarwinLocalChromiumChannel(liveMultiBrowserProjects)
 
 const playwrightReporters: NonNullable<ReturnType<typeof defineConfig>["reporter"]> = process.env.CI
   ? [["github"], ["html", { open: "never" }]]

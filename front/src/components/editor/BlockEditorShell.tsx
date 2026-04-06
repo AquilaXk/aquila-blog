@@ -739,6 +739,13 @@ type TableColumnRailResizeState = {
   lastClientX: number
 }
 
+type TableColumnDragGuideState = {
+  visible: boolean
+  left: number
+  top: number
+  height: number
+}
+
 const BLOCK_HANDLE_MEDIA_QUERY = "(pointer: coarse)"
 const DESKTOP_TABLE_RAIL_MEDIA_QUERY = "(max-width: 768px)"
 const DEFAULT_EDITOR_READABLE_WIDTH_PX = 48 * 16
@@ -1710,6 +1717,12 @@ const BlockEditorShell = ({
     columnIndex: 0,
     columnSegments: [],
   })
+  const [tableColumnDragGuideState, setTableColumnDragGuideState] = useState<TableColumnDragGuideState>({
+    visible: false,
+    left: 0,
+    top: 0,
+    height: 0,
+  })
   const [tableMenuState, setTableMenuState] = useState<TableMenuState>(null)
   const tableQuickRailStateRef = useRef(tableQuickRailState)
   const [draggedBlockState, setDraggedBlockState] = useState<DraggedBlockState>(null)
@@ -1768,6 +1781,47 @@ const BlockEditorShell = ({
       tableQuickRailHideTimerRef.current = null
     }
   }, [])
+
+  const hideTableColumnDragGuide = useCallback(() => {
+    setTableColumnDragGuideState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
+  }, [])
+
+  const syncTableColumnDragGuideForColumn = useCallback(
+    (columnIndex: number) => {
+      const viewport = viewportRef.current
+      if (!viewport) {
+        hideTableColumnDragGuide()
+        return
+      }
+
+      const selectedCellTable = viewport.querySelector(".aq-block-editor__content .selectedCell")?.closest("table")
+      const fallbackTable = viewport.querySelector(".aq-block-editor__content .tableWrapper table, .aq-block-editor__content table")
+      const tableElement = (selectedCellTable ?? fallbackTable) as HTMLTableElement | null
+      const headerRow = tableElement?.querySelector("thead tr, tbody tr, tr")
+      if (!tableElement || !headerRow) {
+        hideTableColumnDragGuide()
+        return
+      }
+
+      const cells = Array.from(headerRow.children).filter(
+        (node): node is HTMLElement => node instanceof HTMLElement
+      )
+      if (columnIndex < 0 || columnIndex >= cells.length) {
+        hideTableColumnDragGuide()
+        return
+      }
+
+      const tableRect = tableElement.getBoundingClientRect()
+      const cellRect = cells[columnIndex].getBoundingClientRect()
+      setTableColumnDragGuideState({
+        visible: true,
+        left: Math.round(Math.min(tableRect.right, cellRect.right)),
+        top: Math.round(tableRect.top),
+        height: Math.round(tableRect.height),
+      })
+    },
+    [hideTableColumnDragGuide]
+  )
 
   const scheduleTableQuickRailHide = useCallback((delayMs = TABLE_QUICK_RAIL_HIDE_DELAY_MS) => {
     cancelTableQuickRailHide()
@@ -2664,17 +2718,21 @@ const BlockEditorShell = ({
         column.some((cell) => cell.pos === cellPosition)
       )
       if (activeColumnIndex === -1) return
+      if (!isCurrentTableColumnSelection(activeColumnIndex) && !selectTableColumnByIndex(activeColumnIndex)) {
+        return
+      }
       resizeTableColumnByIndex(activeColumnIndex, deltaPx)
       return
     }
-  }, [resizeTableColumnByIndex])
+  }, [isCurrentTableColumnSelection, resizeTableColumnByIndex, selectTableColumnByIndex])
 
   const stopTableColumnRailResize = useCallback(() => {
     tableColumnRailResizeRef.current = null
+    hideTableColumnDragGuide()
     if (typeof document !== "undefined") {
       document.body.style.removeProperty("cursor")
     }
-  }, [])
+  }, [hideTableColumnDragGuide])
 
   const startTableColumnRailResize = useCallback(
     (pointerId: number, columnIndex: number, clientX: number) => {
@@ -2688,8 +2746,9 @@ const BlockEditorShell = ({
       if (typeof document !== "undefined") {
         document.body.style.cursor = "col-resize"
       }
+      syncTableColumnDragGuideForColumn(columnIndex)
     },
-    [selectTableColumnByIndex]
+    [selectTableColumnByIndex, syncTableColumnDragGuideForColumn]
   )
 
   const syncTableQuickRailFromElement = useCallback((element: Element | null) => {
@@ -3620,6 +3679,7 @@ const BlockEditorShell = ({
       const applied = resizeTableColumnByIndex(state.columnIndex, deltaX)
       if (applied) {
         state.lastClientX = event.clientX
+        syncTableColumnDragGuideForColumn(state.columnIndex)
       }
     }
 
@@ -3639,7 +3699,7 @@ const BlockEditorShell = ({
       window.removeEventListener("pointercancel", handlePointerUp)
       stopTableColumnRailResize()
     }
-  }, [resizeTableColumnByIndex, stopTableColumnRailResize])
+  }, [resizeTableColumnByIndex, stopTableColumnRailResize, syncTableColumnDragGuideForColumn])
 
   useEffect(() => {
     const currentEditor = editorRef.current ?? editor
@@ -6295,6 +6355,11 @@ const BlockEditorShell = ({
     )
   }, [desktopTableRailTrackWidth, tableQuickRailState])
 
+  useEffect(() => {
+    if (shouldShowTableHandles) return
+    hideTableColumnDragGuide()
+  }, [hideTableColumnDragGuide, shouldShowTableHandles])
+
   return (
     <Shell className={className}>
       <Toolbar>
@@ -6735,6 +6800,16 @@ const BlockEditorShell = ({
               </BubbleToolbar>
             ) : null}
           </FloatingBubbleToolbar>
+        ) : null}
+        {tableColumnDragGuideState.visible ? (
+          <TableColumnDragGuide
+            data-testid="table-column-drag-guide"
+            style={{
+              left: `${tableColumnDragGuideState.left}px`,
+              top: `${tableColumnDragGuideState.top}px`,
+              height: `${tableColumnDragGuideState.height}px`,
+            }}
+          />
         ) : null}
         {shouldShowTableHandles ? (
           <>
@@ -8812,6 +8887,21 @@ const TableColumnRailResizeHandle = styled.span`
   ${TableColumnRailSegment}[data-active="true"] & {
     opacity: 1;
   }
+`
+
+const TableColumnDragGuide = styled.div`
+  position: fixed;
+  z-index: 57;
+  width: 2px;
+  margin-left: -1px;
+  pointer-events: none;
+  border-radius: 999px;
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(96, 165, 250, 0.9)" : "rgba(37, 99, 235, 0.82)"};
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "dark"
+      ? "0 0 0 1px rgba(15, 23, 42, 0.36), 0 0 0 6px rgba(59, 130, 246, 0.16)"
+      : "0 0 0 1px rgba(255, 255, 255, 0.72), 0 0 0 6px rgba(59, 130, 246, 0.12)"};
 `
 
 const TableQuickRailButton = styled.button`

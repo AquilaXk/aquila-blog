@@ -174,6 +174,22 @@ test.describe("editor studio state", () => {
     expect(navBarSource).toContain('router.pathname.startsWith("/editor")')
   })
 
+  test("table resize metadata와 상세 렌더 계약은 colgroup width와 drag guide를 유지한다", () => {
+    const blockEditorSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"),
+      "utf8"
+    )
+    const markdownRendererRootSource = readFileSync(
+      path.resolve(__dirname, "../src/libs/markdown/components/MarkdownRendererRoot.tsx"),
+      "utf8"
+    )
+
+    expect(blockEditorSource).toContain('data-testid="table-column-drag-guide"')
+    expect(blockEditorSource).toContain("const syncTableColumnDragGuideForColumn = useCallback(")
+    expect(markdownRendererRootSource.match(/table-layout: auto;/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
+    expect(markdownRendererRootSource).not.toContain("table-layout: fixed;")
+  })
+
   test("editor studio SSR은 작성자 카드에 공개 프로필 snapshot을 먼저 seed한다", () => {
     const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
 

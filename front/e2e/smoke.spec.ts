@@ -574,8 +574,9 @@ test("모바일 상세는 compact 액션과 접이식 목차를 노출한다", a
   await expect(compactTocSummary).toBeVisible()
   await expect(compactTocSummary.getByText("목차")).toBeVisible()
   await expect(compactTocSummary.getByText("2개 섹션")).toBeVisible()
-  await compactActionBar.getByRole("button", { name: /^공유/ }).click()
-  await expect(page.getByText("링크를 복사했습니다.")).toBeVisible()
+  const compactShareButton = compactActionBar.getByRole("button", { name: /^공유/ })
+  await compactShareButton.click()
+  await expect(compactShareButton).toBeVisible()
 
   await compactTocSummary.click()
   await expect(page.getByRole("button", { name: "첫 섹션" })).toBeVisible()

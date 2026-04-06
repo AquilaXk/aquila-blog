@@ -826,7 +826,7 @@ const MarkdownRendererRoot = styled.div`
       width: 100%;
       min-width: 100%;
       max-width: 100%;
-      table-layout: fixed;
+      table-layout: auto;
     }
 
     table[data-overflow-mode="wide"],
@@ -834,15 +834,6 @@ const MarkdownRendererRoot = styled.div`
       width: max-content;
       min-width: 100%;
       max-width: none;
-    }
-
-    table thead,
-    table tbody,
-    .aq-table thead,
-    .aq-table tbody {
-      display: table;
-      width: 100%;
-      table-layout: fixed;
     }
 
     table th,
@@ -986,7 +977,7 @@ const MarkdownRendererRoot = styled.div`
     max-width: 100%;
     border-collapse: separate;
     border-spacing: 0;
-    table-layout: fixed;
+    table-layout: auto;
     margin: 0;
     border: 0;
     background: transparent;

@@ -6,7 +6,7 @@ import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
 import { Fragment } from "@tiptap/pm/model"
 import { NodeSelection, TextSelection, Transaction } from "@tiptap/pm/state"
-import { CellSelection, selectedRect } from "@tiptap/pm/tables"
+import { CellSelection, selectedRect, TableMap } from "@tiptap/pm/tables"
 import StarterKit from "@tiptap/starter-kit"
 import { EditorContent, useEditor } from "@tiptap/react"
 import {
@@ -737,6 +737,7 @@ type TableColumnRailResizeState = {
   pointerId: number
   columnIndex: number
   lastClientX: number
+  previewClientX: number
 }
 
 type TableColumnDragGuideState = {
@@ -1165,6 +1166,28 @@ const collectSimpleTableColumnCells = (tableNode: { forEach: Function }, tablePo
   })
 
   return hasMergedCell ? null : columns
+}
+
+const findActiveRenderedTable = (
+  viewport: HTMLElement | null,
+  quickRailState: TableQuickRailState
+) => {
+  if (!viewport) return null
+
+  const renderedTables = Array.from(
+    viewport.querySelectorAll<HTMLTableElement>(".aq-block-editor__content .tableWrapper table, .aq-block-editor__content table")
+  )
+  if (!renderedTables.length) return null
+
+  const withinTolerance = (left: number, right: number) =>
+    Math.abs(left - quickRailState.tableLeft) <= 6 && Math.abs(right - (quickRailState.tableLeft + quickRailState.width)) <= 6
+
+  return (
+    renderedTables.find((table) => {
+      const rect = table.getBoundingClientRect()
+      return withinTolerance(rect.left, rect.right)
+    }) ?? renderedTables[0] ?? null
+  )
 }
 
 const readColumnWidthFromCell = (cell: TableColumnCellRef) => {
@@ -2608,14 +2631,51 @@ const BlockEditorShell = ({
     commitTableRowHeight(firstTableRow, nextHeight)
   }, [commitTableRowHeight])
 
-  const getCurrentSelectedTableRect = useCallback((activeEditor?: TiptapEditor | null) => {
-    if (!activeEditor || !isTableSelectionActive(activeEditor)) return null
+  const getActiveTableRectFromDom = useCallback((activeEditor?: TiptapEditor | null) => {
+    if (!activeEditor) return null
+
+    const tableElement = findActiveRenderedTable(viewportRef.current, tableQuickRailStateRef.current)
+    const firstCell = tableElement?.querySelector<HTMLElement>(
+      "thead tr:first-of-type > th, thead tr:first-of-type > td, tbody tr:first-of-type > th, tbody tr:first-of-type > td, tr:first-of-type > th, tr:first-of-type > td"
+    )
+    if (!tableElement || !firstCell) return null
+
+    let domPosition = 0
     try {
-      return selectedRect(activeEditor.state)
+      domPosition = activeEditor.view.posAtDOM(firstCell, 0)
     } catch {
       return null
     }
+
+    const resolvedPosition = resolveDocPosSafe(activeEditor, domPosition)
+    if (!resolvedPosition) return null
+
+    for (let depth = resolvedPosition.depth; depth > 0; depth -= 1) {
+      if (resolvedPosition.node(depth).type.name !== "table") continue
+      const table = resolvedPosition.node(depth)
+      const tableStart = resolvedPosition.before(depth)
+      return {
+        map: TableMap.get(table),
+        table,
+        tableStart,
+      }
+    }
+
+    return null
   }, [])
+
+  const getCurrentSelectedTableRect = useCallback((activeEditor?: TiptapEditor | null) => {
+    if (!activeEditor) return null
+    if (isTableSelectionActive(activeEditor)) {
+      try {
+        return selectedRect(activeEditor.state)
+      } catch {
+        return getActiveTableRectFromDom(activeEditor)
+      }
+    }
+
+    return getActiveTableRectFromDom(activeEditor)
+  }, [getActiveTableRectFromDom])
 
   const isCurrentTableColumnSelection = useCallback(
     (columnIndex: number) => {
@@ -2623,7 +2683,12 @@ const BlockEditorShell = ({
       if (!currentEditor) return false
       const { selection } = currentEditor.state
       if (!(selection instanceof CellSelection)) return false
-      const rect = getCurrentSelectedTableRect(currentEditor)
+      let rect: ReturnType<typeof selectedRect> | null = null
+      try {
+        rect = selectedRect(currentEditor.state)
+      } catch {
+        rect = null
+      }
       if (!rect) return false
       return (
         columnIndex >= 0 &&
@@ -2633,7 +2698,7 @@ const BlockEditorShell = ({
         rect.bottom === rect.map.height
       )
     },
-    [getCurrentSelectedTableRect]
+    []
   )
 
   const selectTableColumnByIndex = useCallback(
@@ -2763,14 +2828,6 @@ const BlockEditorShell = ({
     }
   }, [isCurrentTableColumnSelection, resizeTableColumnByIndex, selectTableColumnByIndex])
 
-  const stopTableColumnRailResize = useCallback(() => {
-    tableColumnRailResizeRef.current = null
-    hideTableColumnDragGuide()
-    if (typeof document !== "undefined") {
-      document.body.style.removeProperty("cursor")
-    }
-  }, [hideTableColumnDragGuide])
-
   const startTableColumnRailResize = useCallback(
     (pointerId: number, columnIndex: number, clientX: number) => {
       if (!selectTableColumnByIndex(columnIndex)) return
@@ -2779,14 +2836,38 @@ const BlockEditorShell = ({
         pointerId,
         columnIndex,
         lastClientX: clientX,
+        previewClientX: clientX,
       }
       if (typeof document !== "undefined") {
         document.body.style.cursor = "col-resize"
       }
-      syncTableColumnDragGuideForColumn(columnIndex)
+      syncTableColumnDragGuideForClientX(clientX)
     },
-    [selectTableColumnByIndex, syncTableColumnDragGuideForColumn]
+    [selectTableColumnByIndex, syncTableColumnDragGuideForClientX]
   )
+
+  const startTableColumnResizeFromDomHandle = useCallback(
+    (target: EventTarget | null, pointerId: number, clientX: number) => {
+      const handleElement =
+        target instanceof Element ? target.closest(".column-resize-handle") : null
+      if (!(handleElement instanceof HTMLElement)) return false
+      const cell = handleElement.closest("th, td")
+      if (!(cell instanceof HTMLElement) || !(cell.parentElement instanceof HTMLTableRowElement)) return false
+      const columnIndex = Array.from(cell.parentElement.children).findIndex((candidate) => candidate === cell)
+      if (columnIndex < 0) return false
+      startTableColumnRailResize(pointerId, columnIndex, clientX)
+      return true
+    },
+    [startTableColumnRailResize]
+  )
+
+  const stopTableColumnRailResize = useCallback(() => {
+    tableColumnRailResizeRef.current = null
+    hideTableColumnDragGuide()
+    if (typeof document !== "undefined") {
+      document.body.style.removeProperty("cursor")
+    }
+  }, [hideTableColumnDragGuide])
 
   const syncTableQuickRailFromElement = useCallback((element: Element | null) => {
     const tableSurfaceElement = element?.closest(".aq-table-shell, .tableWrapper, table") ?? null
@@ -3711,20 +3792,30 @@ const BlockEditorShell = ({
     const handlePointerMove = (event: PointerEvent) => {
       const state = tableColumnRailResizeRef.current
       if (!state || state.pointerId !== event.pointerId) return
-      const deltaX = event.clientX - state.lastClientX
+      const nextClientX = event.clientX
+      state.previewClientX = nextClientX
+      syncTableColumnDragGuideForClientX(nextClientX)
+      const deltaX = nextClientX - state.lastClientX
       if (deltaX === 0) return
       const resizeResult = resizeTableColumnByIndex(state.columnIndex, deltaX)
       if (resizeResult.changed) {
         state.lastClientX += resizeResult.appliedDelta
-        syncTableColumnDragGuideForClientX(state.lastClientX)
-      } else {
-        syncTableColumnDragGuideForColumn(state.columnIndex)
+        if (Math.abs(state.lastClientX - nextClientX) > 0.5) {
+          syncTableColumnDragGuideForClientX(state.lastClientX)
+        }
       }
     }
 
     const handlePointerUp = (event: PointerEvent) => {
       const state = tableColumnRailResizeRef.current
       if (!state || state.pointerId !== event.pointerId) return
+      const pendingDelta = state.previewClientX - state.lastClientX
+      if (Math.abs(pendingDelta) > 0.5) {
+        const resizeResult = resizeTableColumnByIndex(state.columnIndex, pendingDelta)
+        if (resizeResult.changed) {
+          state.lastClientX += resizeResult.appliedDelta
+        }
+      }
       stopTableColumnRailResize()
     }
 
@@ -3907,10 +3998,28 @@ const BlockEditorShell = ({
       const activeEditor = editorRef.current ?? currentEditor
       if (!activeEditor) return
       if (!(event.target instanceof Node) || !activeEditor.view.dom.contains(event.target)) return
+      if (startTableColumnResizeFromDomHandle(event.target, event.pointerId, event.clientX)) {
+        event.preventDefault()
+        event.stopPropagation()
+        event.stopImmediatePropagation?.()
+        mouseTextSelectionInProgressRef.current = false
+        syncBubbleOnMouseUpRef.current = false
+        return
+      }
       mouseTextSelectionInProgressRef.current = true
       syncBubbleOnMouseUpRef.current = false
       if (bubbleToolbarHoveredRef.current) return
       setBubbleState((prev) => (prev.visible && prev.mode === "text" ? { ...prev, visible: false } : prev))
+    }
+
+    const handleEditorMouseDownCapture = (event: MouseEvent) => {
+      const activeEditor = editorRef.current ?? currentEditor
+      if (!activeEditor) return
+      if (!(event.target instanceof Node) || !activeEditor.view.dom.contains(event.target)) return
+      if (!(event.target instanceof Element) || !event.target.closest(".column-resize-handle")) return
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation?.()
     }
 
     const handleWindowPointerUp = (event: PointerEvent) => {
@@ -3926,14 +4035,16 @@ const BlockEditorShell = ({
     currentEditor.on("selectionUpdate", scheduleSyncBubble)
     currentEditor.on("focus", scheduleSyncBubble)
     document.addEventListener("selectionchange", handleDocumentSelectionChange)
-    currentEditor.view.dom.addEventListener("pointerdown", handleEditorPointerDownCapture, true)
+    document.addEventListener("pointerdown", handleEditorPointerDownCapture, true)
+    document.addEventListener("mousedown", handleEditorMouseDownCapture, true)
     window.addEventListener("pointerup", handleWindowPointerUp, true)
     window.addEventListener("pointercancel", handleWindowPointerUp, true)
     return () => {
       currentEditor.off("selectionUpdate", scheduleSyncBubble)
       currentEditor.off("focus", scheduleSyncBubble)
       document.removeEventListener("selectionchange", handleDocumentSelectionChange)
-      currentEditor.view.dom.removeEventListener("pointerdown", handleEditorPointerDownCapture, true)
+      document.removeEventListener("pointerdown", handleEditorPointerDownCapture, true)
+      document.removeEventListener("mousedown", handleEditorMouseDownCapture, true)
       window.removeEventListener("pointerup", handleWindowPointerUp, true)
       window.removeEventListener("pointercancel", handleWindowPointerUp, true)
       if (rafId !== null && typeof window !== "undefined") {
@@ -3949,6 +4060,7 @@ const BlockEditorShell = ({
     hideTableQuickRailImmediately,
     scheduleBubbleHide,
     scheduleTableQuickRailHide,
+    startTableColumnResizeFromDomHandle,
     syncTableQuickRailFromElement,
     tableMenuState,
   ])
@@ -6855,6 +6967,36 @@ const BlockEditorShell = ({
             }}
           />
         ) : null}
+        {shouldShowTableHandles
+          ? tableQuickRailState.columnSegments.slice(0, -1).map((segment, index) => (
+              <TableColumnResizeBoundaryHandle
+                key={`table-column-boundary-${index}`}
+                type="button"
+                data-testid={`table-column-resize-boundary-${index}`}
+                aria-label={`열 ${index + 1} 경계 조절`}
+                onPointerEnter={cancelTableQuickRailHide}
+                onPointerLeave={() => {
+                  if (!isTableMode && !tableMenuState) {
+                    scheduleTableQuickRailHide()
+                  }
+                }}
+                onPointerDown={(event: React.PointerEvent<HTMLButtonElement>) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  startTableColumnRailResize(
+                    event.pointerId,
+                    index,
+                    tableQuickRailState.tableLeft + segment.left + segment.width
+                  )
+                }}
+                style={{
+                  left: `${Math.round(tableQuickRailState.tableLeft + segment.left + segment.width)}px`,
+                  top: `${Math.round(tableQuickRailState.tableTop)}px`,
+                  height: `${Math.round(tableQuickRailState.height)}px`,
+                }}
+              />
+            ))
+          : null}
         {shouldShowTableHandles ? (
           <>
             {shouldShowTableColumnRail ? (
@@ -8495,23 +8637,8 @@ const EditorViewport = styled.div`
   }
 
   .aq-block-editor__content .column-resize-handle {
-    position: absolute;
-    top: 0;
-    right: -3px;
-    width: 6px;
-    height: 100%;
-    background: rgba(96, 165, 250, 0.62);
-    border-radius: 999px;
-    pointer-events: none;
-    opacity: 0.28;
-    transition: opacity 120ms ease, background-color 120ms ease;
-  }
-
-  .aq-block-editor__content .tableWrapper:hover .column-resize-handle,
-  .aq-block-editor__content th:hover .column-resize-handle,
-  .aq-block-editor__content td:hover .column-resize-handle {
-    opacity: 1;
-    background: rgba(59, 130, 246, 0.88);
+    display: none !important;
+    pointer-events: none !important;
   }
 
   .aq-block-editor__content.resize-cursor {
@@ -8946,6 +9073,47 @@ const TableColumnDragGuide = styled.div`
     theme.scheme === "dark"
       ? "0 0 0 1px rgba(15, 23, 42, 0.36), 0 0 0 6px rgba(59, 130, 246, 0.16)"
       : "0 0 0 1px rgba(255, 255, 255, 0.72), 0 0 0 6px rgba(59, 130, 246, 0.12)"};
+`
+
+const TableColumnResizeBoundaryHandle = styled.button`
+  position: fixed;
+  z-index: 56;
+  width: 18px;
+  margin-left: -9px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+
+  &::before {
+    content: "";
+    position: absolute;
+    top: 10px;
+    bottom: 10px;
+    left: 50%;
+    width: 2px;
+    transform: translateX(-50%);
+    border-radius: 999px;
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(191, 219, 254, 0.22)" : "rgba(37, 99, 235, 0.2)"};
+    opacity: 0;
+    transition:
+      opacity 120ms ease,
+      background-color 120ms ease,
+      box-shadow 120ms ease;
+  }
+
+  &:hover::before,
+  &:focus-visible::before {
+    opacity: 1;
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(96, 165, 250, 0.62)" : "rgba(37, 99, 235, 0.56)"};
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "dark"
+        ? "0 0 0 1px rgba(15, 23, 42, 0.24)"
+        : "0 0 0 1px rgba(255, 255, 255, 0.72)"};
+  }
 `
 
 const TableQuickRailButton = styled.button`

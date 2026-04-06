@@ -189,7 +189,11 @@ test.describe("editor studio state", () => {
     )
 
     expect(blockEditorSource).toContain('data-testid="table-column-drag-guide"')
+    expect(blockEditorSource).toContain('data-testid={`table-column-resize-boundary-${index}`}')
     expect(blockEditorSource).toContain("const syncTableColumnDragGuideForColumn = useCallback(")
+    expect(blockEditorSource).toContain("const getActiveTableRectFromDom = useCallback(")
+    expect(blockEditorSource).toContain("findActiveRenderedTable(viewportRef.current, tableQuickRailStateRef.current)")
+    expect(blockEditorSource).toContain("display: none !important;")
     expect(editorStudioSource).toContain("const currentPostContent = postContentLiveRef.current")
     expect(markdownRendererRootSource.match(/table-layout: fixed;/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
     expect(markdownRendererRootSource).not.toContain("table-layout: auto;")

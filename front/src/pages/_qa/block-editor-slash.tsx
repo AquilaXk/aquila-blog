@@ -127,6 +127,9 @@ const QaEngineSurface = ({ seedMarkdown }: Pick<QaBlockEditorSlashPageProps, "se
         <button type="button" onClick={() => qaActionsRef.current?.selectTableAxis("column")}>
           QA 열 선택
         </button>
+        <button type="button" onClick={() => qaActionsRef.current?.selectTableColumnViaDomFallback(0)}>
+          QA fallback 열 선택
+        </button>
         <button type="button" onClick={() => qaActionsRef.current?.setActiveTableCellAlign("center")}>
           QA 가운데
         </button>

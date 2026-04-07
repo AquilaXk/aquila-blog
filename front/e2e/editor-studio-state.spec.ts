@@ -128,7 +128,8 @@ test.describe("editor studio state", () => {
 
   test("editor studio는 v2 단일 경로와 단일 작성 모드 계약을 유지한다", () => {
     const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
-    const blockEditorSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"), "utf8")
+    const blockEditorShellSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"), "utf8")
+    const blockEditorEngineSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"), "utf8")
     const writerEditorHostSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/WriterEditorHost.tsx"), "utf8")
 
     expect(editorStudioSource).not.toContain("BLOCK_EDITOR_V2_ENABLED")
@@ -159,15 +160,18 @@ test.describe("editor studio state", () => {
     expect(writerEditorHostSource).toContain("<Profiler")
     expect(writerEditorHostSource).toContain("<LazyBlockEditorShell")
 
-    expect(blockEditorSource).not.toContain("Markdown 편집")
-    expect(blockEditorSource).not.toContain('label: "원문 블록"')
-    expect(blockEditorSource).not.toContain("buildStructuredInsertContent")
-    expect(blockEditorSource).not.toContain("insertRawMarkdownBlock")
-    expect(blockEditorSource).toContain("const QuickInsertBar = styled.div`")
-    expect(blockEditorSource).not.toContain("슬래시(`/`)나 `+` 없이도 자주 쓰는 블록을 바로 넣을 수 있습니다.")
-    expect(blockEditorSource).toContain(".aq-block-editor__content blockquote {")
-    expect(blockEditorSource).toContain("border-left: 4px solid")
-    expect(blockEditorSource).toContain("border-radius: 0;")
+    expect(blockEditorShellSource).toContain('import BlockEditorEngine from "./BlockEditorEngine"')
+    expect(blockEditorShellSource).toContain('import type { BlockEditorEngineProps } from "./blockEditorEngineTypes"')
+    expect(blockEditorShellSource).toContain("const BlockEditorShell = (props: BlockEditorEngineProps) => <BlockEditorEngine {...props} />")
+    expect(blockEditorEngineSource).not.toContain("Markdown 편집")
+    expect(blockEditorEngineSource).not.toContain('label: "원문 블록"')
+    expect(blockEditorEngineSource).not.toContain("buildStructuredInsertContent")
+    expect(blockEditorEngineSource).not.toContain("insertRawMarkdownBlock")
+    expect(blockEditorEngineSource).toContain("const QuickInsertBar = styled.div`")
+    expect(blockEditorEngineSource).not.toContain("슬래시(`/`)나 `+` 없이도 자주 쓰는 블록을 바로 넣을 수 있습니다.")
+    expect(blockEditorEngineSource).toContain(".aq-block-editor__content blockquote {")
+    expect(blockEditorEngineSource).toContain("border-left: 4px solid")
+    expect(blockEditorEngineSource).toContain("border-radius: 0;")
   })
 
   test("editor studio는 SSR 관리자 스냅샷을 hydration auth race 동안 유지한다", () => {
@@ -181,8 +185,8 @@ test.describe("editor studio state", () => {
   })
 
   test("table resize metadata와 상세 렌더 계약은 colgroup width와 drag guide를 유지한다", () => {
-    const blockEditorSource = readFileSync(
-      path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"),
+    const blockEditorEngineSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"),
       "utf8"
     )
     const editorStudioSource = readFileSync(
@@ -194,12 +198,12 @@ test.describe("editor studio state", () => {
       "utf8"
     )
 
-    expect(blockEditorSource).toContain('data-testid="table-column-drag-guide"')
-    expect(blockEditorSource).toContain('data-testid={`table-column-resize-boundary-${index}`}')
-    expect(blockEditorSource).toContain("const syncTableColumnDragGuideForColumn = useCallback(")
-    expect(blockEditorSource).toContain("const getActiveTableRectFromDom = useCallback(")
-    expect(blockEditorSource).toContain("findActiveRenderedTable(viewportRef.current, tableQuickRailStateRef.current)")
-    expect(blockEditorSource).toContain("display: none !important;")
+    expect(blockEditorEngineSource).toContain('data-testid="table-column-drag-guide"')
+    expect(blockEditorEngineSource).toContain('data-testid={`table-column-resize-boundary-${index}`}')
+    expect(blockEditorEngineSource).toContain("const syncTableColumnDragGuideForColumn = useCallback(")
+    expect(blockEditorEngineSource).toContain("const getActiveTableRectFromDom = useCallback(")
+    expect(blockEditorEngineSource).toContain("findActiveRenderedTable(viewportRef.current, tableQuickRailStateRef.current)")
+    expect(blockEditorEngineSource).toContain("display: none !important;")
     expect(editorStudioSource).toContain("const currentPostContent = postContentLiveRef.current")
     expect(markdownRendererRootSource.match(/table-layout: fixed;/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
     expect(markdownRendererRootSource).not.toContain("table-layout: auto;")

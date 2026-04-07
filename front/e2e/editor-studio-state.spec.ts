@@ -176,11 +176,16 @@ test.describe("editor studio state", () => {
 
   test("editor studio는 SSR 관리자 스냅샷을 hydration auth race 동안 유지한다", () => {
     const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
+    const editorStudioRoutingSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/useEditorStudioRouting.ts"),
+      "utf8"
+    )
     const navBarSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/Header/NavBar.tsx"), "utf8")
 
     expect(editorStudioSource).toContain("const sessionMember = me || initialMember")
-    expect(editorStudioSource).toContain("if (!sessionMember) {")
-    expect(editorStudioSource).toContain("if (!router.isReady || !isDedicatedEditorRoute || !sessionMember?.isAdmin) return")
+    expect(editorStudioSource).toContain('import { useEditorStudioRouting } from "./useEditorStudioRouting"')
+    expect(editorStudioRoutingSource).toContain("if (!sessionMember) {")
+    expect(editorStudioRoutingSource).toContain("if (!router.isReady || !isDedicatedEditorRoute || !sessionMember?.isAdmin) return")
     expect(navBarSource).toContain('router.pathname.startsWith("/editor")')
   })
 
@@ -191,6 +196,10 @@ test.describe("editor studio state", () => {
     )
     const editorStudioSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"),
+      "utf8"
+    )
+    const editorStudioPersistenceSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/useEditorStudioPersistence.ts"),
       "utf8"
     )
     const markdownRendererRootSource = readFileSync(
@@ -204,7 +213,8 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).toContain("const getActiveTableRectFromDom = useCallback(")
     expect(blockEditorEngineSource).toContain("findActiveRenderedTable(viewportRef.current, tableQuickRailStateRef.current)")
     expect(blockEditorEngineSource).toContain("display: none !important;")
-    expect(editorStudioSource).toContain("const currentPostContent = postContentLiveRef.current")
+    expect(editorStudioSource).toContain('import { useEditorStudioPersistence } from "./useEditorStudioPersistence"')
+    expect(editorStudioPersistenceSource).toContain("const currentPostContent = postContentLiveRef.current")
     expect(markdownRendererRootSource.match(/table-layout: fixed;/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
     expect(markdownRendererRootSource).not.toContain("table-layout: auto;")
   })
@@ -221,24 +231,36 @@ test.describe("editor studio state", () => {
 
   test("/editor/new는 temp draft bootstrap이 끝날 때까지 loading state를 먼저 유지한다", () => {
     const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
+    const editorStudioDraftLifecycleSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/useEditorStudioDraftLifecycle.ts"),
+      "utf8"
+    )
+    const editorStudioRoutingSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/useEditorStudioRouting.ts"),
+      "utf8"
+    )
 
     expect(editorStudioSource).toContain("const isDedicatedNewEditorRoute = isDedicatedEditorRoute && router.pathname === EDITOR_NEW_ROUTE_PATH")
     expect(editorStudioSource).toContain("const [isNewEditorBootstrapPending, setIsNewEditorBootstrapPending] = useState(isDedicatedNewEditorRoute)")
-    expect(editorStudioSource).toContain("if (options?.redirectToEditor && tempPost.id) {")
-    expect(editorStudioSource).toContain("await replaceRoute(router, destination)")
-    expect(editorStudioSource).toContain("setIsNewEditorBootstrapPending(true)")
+    expect(editorStudioDraftLifecycleSource).toContain("if (options?.redirectToEditor && tempPost.id) {")
+    expect(editorStudioDraftLifecycleSource).toContain("await replaceRoute(router, destination)")
+    expect(editorStudioRoutingSource).toContain("setIsNewEditorBootstrapPending(true)")
     expect(editorStudioSource).toContain("(isNewEditorBootstrapPending || loadingKey === \"postTemp\")")
   })
 
   test("썸네일 편집 패널은 클립보드 이미지 붙여넣기 업로드 계약을 유지한다", () => {
     const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
+    const editorStudioPersistenceSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/useEditorStudioPersistence.ts"),
+      "utf8"
+    )
 
     expect(editorStudioSource).toContain("const extractImageFileFromClipboard = (clipboardData: DataTransfer | null): File | null => {")
-    expect(editorStudioSource).toContain("const handleThumbnailPaste = useCallback(")
     expect(editorStudioSource).toContain("<PreviewEditorSection onPasteCapture={handleThumbnailPaste}>")
     expect(editorStudioSource).toContain("onPaste={handleThumbnailPaste}")
-    expect(editorStudioSource).toContain("setThumbnailImageFileName(imageFile.name || \"clipboard-image.png\")")
-    expect(editorStudioSource).toContain("void handleUploadThumbnailImage(imageFile)")
+    expect(editorStudioPersistenceSource).toContain("const handleThumbnailPaste = useCallback(")
+    expect(editorStudioPersistenceSource).toContain("setThumbnailImageFileName(imageFile.name || \"clipboard-image.png\")")
+    expect(editorStudioPersistenceSource).toContain("void handleUploadThumbnailImage(imageFile)")
   })
 
   test("QA route는 writer/engine surface 계약을 분리 유지한다", () => {

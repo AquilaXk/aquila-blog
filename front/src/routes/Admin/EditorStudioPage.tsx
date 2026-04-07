@@ -3,7 +3,6 @@ import { useQueryClient } from "@tanstack/react-query"
 import { GetServerSideProps, NextPage } from "next"
 import { useRouter } from "next/router"
 import {
-  type ClipboardEvent as ReactClipboardEvent,
   ChangeEvent,
   useDeferredValue,
   useCallback,
@@ -34,17 +33,16 @@ import {
   isPublishActionDisabled,
 } from "./editorStudioState"
 import { WriterEditorHost } from "./WriterEditorHost"
+import { useEditorStudioDraftLifecycle } from "./useEditorStudioDraftLifecycle"
+import { useEditorStudioPersistence } from "./useEditorStudioPersistence"
+import { useEditorStudioRouting } from "./useEditorStudioRouting"
 import {
   isServerTempDraftPost,
-  isTempDraftTitlePlaceholder,
   TEMP_DRAFT_BODY_PLACEHOLDER,
 } from "./editorTempDraft"
 import {
-  isNavigationCancelledError,
   pushRoute,
-  replaceRoute,
   replaceShallowRoutePreservingScroll,
-  toLoginPath,
 } from "src/libs/router"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import {
@@ -74,16 +72,12 @@ import {
 import {
   buildImageOptimizationSummary,
   normalizeProfileImageUploadError,
-  preparePostImageForUpload,
   prepareProfileImageForUpload,
   POST_IMAGE_UPLOAD_RULE_LABEL,
   PROFILE_IMAGE_UPLOAD_RULE_LABEL,
 } from "src/libs/profileImageUpload"
 import { saveProfileCardWithConflictRetry } from "src/libs/profileCardSave"
 import useViewportImageEditor from "src/libs/imageEditor/useViewportImageEditor"
-import {
-  parseStandaloneMarkdownImageLine,
-} from "src/libs/markdown/rendering"
 import { convertHtmlToMarkdown as convertHtmlClipboardToMarkdown } from "src/libs/markdown/htmlToMarkdown"
 import { buildPreviewSummaryFromMarkdown } from "src/libs/postSummary"
 import type { BlockEditorChangeMeta } from "src/components/editor/blockEditorContract"
@@ -159,28 +153,6 @@ type PostForEditor = {
 type PostVisibility = "PRIVATE" | "PUBLIC_UNLISTED" | "PUBLIC_LISTED"
 type PostListScope = "active" | "deleted"
 
-type UploadPostImageResponse = {
-  data: {
-    key: string
-    url: string
-    markdown: string
-  }
-}
-type UploadPostImageResult = {
-  uploaded: UploadPostImageResponse
-  prepared: {
-    summary: string
-  }
-}
-
-type UploadPostFileResponse = {
-  data: {
-    key: string
-    url: string
-    name: string
-  }
-}
-
 type RsData<T> = {
   resultCode: string
   msg: string
@@ -193,11 +165,6 @@ type PostWriteResult = {
   version?: number
   published: boolean
   listed: boolean
-}
-
-type PublicPostContentFallback = {
-  content?: string
-  contentHtml?: string
 }
 
 type RecommendTagsPayload = {
@@ -384,8 +351,8 @@ const isTempDraftBodyPlaceholder = (value: string) => {
 }
 
 const isBlankServerTempDraft = (
-  post: Pick<PostForEditor, "title" | "published" | "listed">,
-  snapshot: Pick<ResolvedEditorMetaSnapshot, "body">
+  post: Pick<PostForEditor, "title" | "published" | "listed" | "tempDraft">,
+  snapshot: ResolvedEditorMetaSnapshot
 ) => isServerTempDraftPost(post) && isTempDraftBodyPlaceholder(snapshot.body)
 
 const buildEmptyEditorMetaSnapshot = (): ResolvedEditorMetaSnapshot => ({
@@ -487,7 +454,7 @@ const toFlags = (visibility: PostVisibility): { published: boolean; listed: bool
   return { published: true, listed: true }
 }
 
-const pretty = (value: JsonValue) => JSON.stringify(value, null, 2)
+const pretty = (value: unknown) => JSON.stringify(value, null, 2)
 
 const dedupeStrings = (items: string[]) =>
   Array.from(
@@ -935,7 +902,7 @@ const resolveEditorBodyFallback = (content: string, parsedBody: string) => {
   return inlineMetadataSplit.body.trim().length > 0 ? inlineMetadataSplit.body : parsedBody
 }
 
-const resolveEditorMetaSnapshot = (content: string, contentHtml?: string): ResolvedEditorMetaSnapshot => {
+const resolveEditorMetaSnapshot = (content: string, contentHtml?: string | null): ResolvedEditorMetaSnapshot => {
   const parsed = parseEditorMeta(content)
   const normalizedRawContent = content.replace(/\r\n?/g, "\n").trim()
   const markdownFromHtml = contentHtml?.trim() ? convertHtmlClipboardToMarkdown(contentHtml).trim() : ""
@@ -1066,13 +1033,6 @@ const parseEditorMeta = (content: string): ParsedEditorMeta => {
     summary,
     thumbnail,
   }
-}
-
-const shouldHydrateEditorBodyFallback = (content: string, contentHtml?: string) => {
-  const parsed = parseEditorMeta(content)
-  if (parsed.body.trim().length > 0) return false
-  if (contentHtml?.trim()) return false
-  return true
 }
 
 const serializeMetaItems = (items: string[]) => items.map((item) => JSON.stringify(item)).join(", ")
@@ -1731,135 +1691,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     [setPublishStatus]
   )
 
-  const localDraftCore = useMemo(
-    () => ({
-      title: postTitle,
-      content: postContent,
-      summary: postSummary,
-      thumbnailUrl: postThumbnailUrl,
-      thumbnailFocusX: postThumbnailFocusX,
-      thumbnailFocusY: postThumbnailFocusY,
-      thumbnailZoom: postThumbnailZoom,
-      tags: dedupeStrings(postTags),
-      category: postCategory ? normalizeCategoryValue(postCategory) : "",
-      visibility: postVisibility,
-    }),
-    [
-      postCategory,
-      postContent,
-      postSummary,
-      postTags,
-      postThumbnailFocusX,
-      postThumbnailFocusY,
-      postThumbnailZoom,
-      postThumbnailUrl,
-      postTitle,
-      postVisibility,
-    ]
-  )
-  const localDraftFingerprint = useMemo(
-    () => buildLocalDraftFingerprint(localDraftCore),
-    [localDraftCore]
-  )
-
-  const saveLocalDraft = useCallback((options?: { silent?: boolean }) => {
-    if (lastLocalDraftFingerprintRef.current === localDraftFingerprint) {
-      return
-    }
-
-    const payload: LocalDraftPayload = {
-      ...localDraftCore,
-      savedAt: new Date().toISOString(),
-    }
-
-    persistLocalDraft(payload)
-    lastLocalDraftFingerprintRef.current = localDraftFingerprint
-    setLocalDraftSavedAt(payload.savedAt)
-
-    if (!options?.silent) {
-      setPublishStatus(
-        {
-          tone: "success",
-          text: `브라우저 임시저장 완료 (${payload.savedAt.slice(11, 16)})`,
-        },
-        "page"
-      )
-    }
-  }, [
-    localDraftCore,
-    localDraftFingerprint,
-    setPublishStatus,
-  ])
-
-  const restoreLocalDraft = useCallback(() => {
-    const draft = readLocalDraft()
-    if (!draft) {
-      setPublishStatus(
-        {
-          tone: "error",
-          text: "저장된 브라우저 임시글이 없습니다.",
-        },
-        "page"
-      )
-      return
-    }
-
-    setEditorMode("create")
-    setIsTempDraftMode(false)
-    setPostId("")
-    setPostVersion(null)
-    lastWriteFingerprintRef.current = ""
-    lastWriteIdempotencyKeyRef.current = ""
-    lastLocalDraftFingerprintRef.current = buildLocalDraftFingerprint({
-      title: draft.title,
-      content: draft.content,
-      summary: draft.summary,
-      thumbnailUrl: draft.thumbnailUrl,
-      thumbnailFocusX: draft.thumbnailFocusX,
-      thumbnailFocusY: draft.thumbnailFocusY,
-      thumbnailZoom: draft.thumbnailZoom,
-      tags: dedupeStrings(draft.tags),
-      category: draft.category ? normalizeCategoryValue(draft.category) : "",
-      visibility: draft.visibility,
-    })
-
-    setPostTitle(draft.title)
-    setPostContent(draft.content)
-    setPostSummary(draft.summary)
-    setPostThumbnailUrl(draft.thumbnailUrl)
-    setPostThumbnailFocusX(draft.thumbnailFocusX)
-    setPostThumbnailFocusY(draft.thumbnailFocusY)
-    setPostThumbnailZoom(draft.thumbnailZoom)
-    setPreviewThumbnailSourceUrl("")
-    setPostTags(draft.tags)
-    setPostCategory(draft.category)
-    setPostVisibility(draft.visibility)
-
-    setKnownTags((prev) => dedupeStrings([...prev, ...draft.tags]).sort((a, b) => a.localeCompare(b)))
-    setLocalDraftSavedAt(draft.savedAt || "")
-    setPublishStatus(
-      {
-        tone: "success",
-        text: `브라우저 임시글을 불러왔습니다${draft.savedAt ? ` (${draft.savedAt.slice(11, 16)})` : ""}.`,
-      },
-      "page"
-    )
-  }, [setPublishStatus])
-
-  const clearLocalDraft = useCallback(() => {
-    removeLocalDraft()
-    lastLocalDraftFingerprintRef.current = ""
-    setLocalDraftSavedAt("")
-    setPublishStatus(
-      {
-        tone: "success",
-        text: "브라우저 임시저장을 삭제했습니다.",
-      },
-      "page"
-    )
-  }, [setPublishStatus])
-
-  const syncEditorMeta = useCallback((content: string, contentHtml?: string) => {
+  const syncEditorMeta = useCallback((content: string, contentHtml?: string | null) => {
     const snapshot = resolveEditorMetaSnapshot(content, contentHtml)
     blockEditorLoadGuardStateRef.current = createBlockEditorLoadGuardState(snapshot.body)
     setPostContent(snapshot.body)
@@ -1874,6 +1706,82 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     setKnownTags((prev) => dedupeStrings([...prev, ...snapshot.tags]).sort((a, b) => a.localeCompare(b)))
     return snapshot
   }, [])
+
+  const {
+    clearLocalDraft,
+    handleLoadOrCreateTempPost,
+    loadPostForEditor,
+    restoreLocalDraft,
+    saveLocalDraft,
+    switchToCreateMode,
+  } = useEditorStudioDraftLifecycle({
+    router,
+    toEditorPostRoute,
+    postId,
+    postTitle,
+    postContent,
+    postSummary,
+    postThumbnailUrl,
+    postThumbnailFocusX,
+    postThumbnailFocusY,
+    postThumbnailZoom,
+    postTags,
+    postCategory,
+    postVisibility,
+    isCompactMobileLayout,
+    setEditorMode,
+    setIsTempDraftMode,
+    setPostId,
+    setPostVersion,
+    setPreviewThumbnailSourceUrl,
+    setPostTitle,
+    setPostContent,
+    setPostSummary,
+    setPostThumbnailUrl,
+    setPostThumbnailFocusX,
+    setPostThumbnailFocusY,
+    setPostThumbnailZoom,
+    setPostTags,
+    setPostCategory,
+    setPostVisibility,
+    setKnownTags,
+    setLocalDraftSavedAt,
+    setLoadingKey,
+    setResult,
+    setIsNewEditorBootstrapPending,
+    setMobileComposeStep,
+    activateComposeSurface,
+    setPublishStatus,
+    dedupeStrings,
+    normalizeCategoryValue,
+    buildLocalDraftFingerprint,
+    persistLocalDraft,
+    readLocalDraft,
+    removeLocalDraft,
+    buildEditorStateFingerprint,
+    pretty,
+    resolveEditorMetaSnapshot,
+    syncEditorMeta,
+    buildEmptyEditorMetaSnapshot,
+    isBlankServerTempDraft: (post, snapshot) =>
+      isBlankServerTempDraft(
+        post as Pick<PostForEditor, "title" | "published" | "listed" | "tempDraft">,
+        snapshot as ResolvedEditorMetaSnapshot
+      ),
+    toVisibility,
+    requestTempPostWithConflictRetry: async (resolveExistingTempPost) =>
+      (await requestTempPostWithConflictRetry(
+        async () => (await resolveExistingTempPost()) as PostForEditor | null
+      )) as RsData<PostForEditor>,
+    defaultThumbnailFocusX: DEFAULT_THUMBNAIL_FOCUS_X,
+    defaultThumbnailFocusY: DEFAULT_THUMBNAIL_FOCUS_Y,
+    defaultThumbnailZoom: DEFAULT_THUMBNAIL_ZOOM,
+    lastLocalDraftFingerprintRef,
+    lastWriteFingerprintRef,
+    lastWriteIdempotencyKeyRef,
+    serverBaselineEditorFingerprintRef,
+    tempPostRequestRef,
+  })
 
   const deferredContentDerived = useMemo(() => {
     const fingerprint = computeContentFingerprint(deferredPostContent)
@@ -2202,123 +2110,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     })
   }
 
-  const switchToCreateMode = useCallback((options?: { keepContent?: boolean }) => {
-    const keepContent = options?.keepContent ?? true
-    activateComposeSurface()
-    setEditorMode("create")
-    setIsTempDraftMode(false)
-    setPostId("")
-    setPostVersion(null)
-    setPreviewThumbnailSourceUrl("")
-    serverBaselineEditorFingerprintRef.current = ""
-    lastWriteFingerprintRef.current = ""
-    lastWriteIdempotencyKeyRef.current = ""
-    if (!keepContent) {
-      setPostTitle("")
-      setPostContent("")
-      setPostSummary("")
-      setPostThumbnailUrl("")
-      setPostThumbnailFocusX(DEFAULT_THUMBNAIL_FOCUS_X)
-      setPostThumbnailFocusY(DEFAULT_THUMBNAIL_FOCUS_Y)
-      setPostThumbnailZoom(DEFAULT_THUMBNAIL_ZOOM)
-      setPostTags([])
-      setPostCategory("")
-    }
-    setPublishStatus(
-      {
-        tone: "idle",
-        text: "새 글 모드입니다. 글 작성 버튼은 새 글 생성에만 사용됩니다.",
-      },
-      "page"
-    )
-    if (isCompactMobileLayout) {
-      setMobileComposeStep("edit")
-    }
-  }, [activateComposeSurface, isCompactMobileLayout, setPublishStatus])
-
-  const applyLoadedPostContext = useCallback((post: PostForEditor) => {
-    activateComposeSurface()
-    setPostId(String(post.id))
-    setPostVersion(typeof post.version === "number" ? post.version : null)
-    setEditorMode("edit")
-    setIsTempDraftMode(isServerTempDraftPost(post))
-    lastWriteFingerprintRef.current = ""
-    lastWriteIdempotencyKeyRef.current = ""
-    if (isCompactMobileLayout) {
-      setMobileComposeStep("edit")
-    }
-  }, [activateComposeSurface, isCompactMobileLayout])
-
-  const loadPostForEditor = useCallback(async (targetPostId: string = postId) => {
-    try {
-      setLoadingKey("postOne")
-      const post = await apiFetch<PostForEditor>(`/post/api/v1/adm/posts/${targetPostId}`)
-      let resolvedPost = post
-
-      if (shouldHydrateEditorBodyFallback(post.content ?? "", post.contentHtml)) {
-        try {
-          const publicPost = await apiFetch<PublicPostContentFallback>(`/post/api/v1/posts/${targetPostId}`)
-          if (!shouldHydrateEditorBodyFallback(publicPost.content ?? "", publicPost.contentHtml)) {
-            resolvedPost = {
-              ...post,
-              content: publicPost.content ?? post.content,
-              contentHtml: publicPost.contentHtml ?? post.contentHtml,
-            }
-          }
-        } catch {
-          // 비공개/삭제 글 등 공개 읽기 폴백이 불가능한 경우 admin payload를 그대로 사용한다.
-        }
-      }
-
-      const rawSnapshot = resolveEditorMetaSnapshot(resolvedPost.content ?? "", resolvedPost.contentHtml)
-      const shouldMaskTempTitle = isServerTempDraftPost(resolvedPost)
-      const shouldMaskTempPlaceholder = isBlankServerTempDraft(resolvedPost, rawSnapshot)
-      const nextTitle = shouldMaskTempTitle ? "" : resolvedPost.title ?? ""
-      const nextVisibility = toVisibility(!!resolvedPost.published, !!resolvedPost.listed)
-      const snapshot = shouldMaskTempPlaceholder
-        ? (syncEditorMeta("") ?? buildEmptyEditorMetaSnapshot())
-        : syncEditorMeta(resolvedPost.content ?? "", resolvedPost.contentHtml)
-      setPostTitle(nextTitle)
-      setPostVisibility(nextVisibility)
-      serverBaselineEditorFingerprintRef.current = buildEditorStateFingerprint({
-        title: nextTitle,
-        content: snapshot.body,
-        summary: snapshot.summary,
-        thumbnailUrl: snapshot.thumbnailUrl,
-        thumbnailFocusX: snapshot.thumbnailFocusX,
-        thumbnailFocusY: snapshot.thumbnailFocusY,
-        thumbnailZoom: snapshot.thumbnailZoom,
-        tags: snapshot.tags,
-        category: snapshot.category,
-        visibility: nextVisibility,
-      })
-      applyLoadedPostContext(resolvedPost)
-      setResult(pretty(resolvedPost as unknown as JsonValue))
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      setResult(pretty({ error: message }))
-    } finally {
-      setLoadingKey("")
-    }
-  }, [applyLoadedPostContext, postId, syncEditorMeta])
-
-  const loadExistingTempPostForRecovery = useCallback(async (): Promise<PostForEditor | null> => {
-    try {
-      const data = await apiFetch<PageDto<AdminPostListItem>>(
-        "/post/api/v1/adm/posts?page=1&pageSize=30&kw=&sort=MODIFIED_AT"
-      )
-      const tempRow = (data.content || []).find(
-        (row) =>
-          isServerTempDraftPost(row) &&
-          !row.deletedAt
-      )
-      if (!tempRow?.id) return null
-      return await apiFetch<PostForEditor>(`/post/api/v1/adm/posts/${tempRow.id}`)
-    } catch {
-      return null
-    }
-  }, [])
-
   const handleRecommendTags = useCallback(async () => {
     const content = postContent.trim()
     if (!content) {
@@ -2385,346 +2176,67 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     }
   }, [postContent, postTags, postTitle])
 
-  const handleWritePost = async (): Promise<boolean> => {
-    const currentPostContent = postContentLiveRef.current
-    if (editorMode === "edit" || postId.trim()) {
-      const msg = "현재는 수정 모드입니다. 새 글을 만들려면 먼저 '새 글 모드 전환'을 눌러주세요."
-      setPublishStatus({ tone: "error", text: msg })
-      setResult(pretty({ error: msg }))
-      return false
-    }
-
-    if (!postTitle.trim()) {
-      const msg = "제목을 입력해주세요."
-      setPublishStatus({ tone: "error", text: msg })
-      setResult(pretty({ error: msg }))
-      return false
-    }
-
-    if (!currentPostContent.trim()) {
-      const msg = "본문을 입력해주세요."
-      setPublishStatus({ tone: "error", text: msg })
-      setResult(pretty({ error: msg }))
-      return false
-    }
-
-    const placeholderIssue = detectPublishPlaceholderIssue(currentPostContent)
-    if (placeholderIssue) {
-      setPublishStatus({ tone: "error", text: placeholderIssue })
-      setResult(pretty({ error: placeholderIssue }))
-      return false
-    }
-
-    try {
-      setLoadingKey("writePost")
-      setPublishStatus({ tone: "loading", text: "글 작성 중입니다..." })
-      const contentWithMetadata = composeEditorContent(currentPostContent, postTags, {
-        category: postCategory,
-        summary: postSummary,
-        thumbnail: effectiveThumbnailUrl,
-      })
-
-      const fingerprint = `${postTitle}\n---\n${contentWithMetadata}\n---\n${postVisibility}`
-      if (lastWriteFingerprintRef.current !== fingerprint || !lastWriteIdempotencyKeyRef.current) {
-        lastWriteFingerprintRef.current = fingerprint
-        lastWriteIdempotencyKeyRef.current = generateIdempotencyKey()
-      }
-
-      const response = await apiFetch<RsData<PostWriteResult>>("/post/api/v1/posts", {
-        method: "POST",
-        headers: {
-          "Idempotency-Key": lastWriteIdempotencyKeyRef.current,
-        },
-        body: JSON.stringify({
-          title: postTitle,
-          content: contentWithMetadata,
-          ...toFlags(postVisibility),
-        }),
-      })
-
-      setResult(pretty(response as unknown as JsonValue))
-      if (response?.data?.id) {
-        setPostId(String(response.data.id))
-        setPostVersion(typeof response.data.version === "number" ? response.data.version : null)
-        setEditorMode("edit")
-        setIsTempDraftMode(false)
-        serverBaselineEditorFingerprintRef.current = buildEditorStateFingerprint({
-          title: postTitle,
-          content: currentPostContent,
-          summary: postSummary,
-          thumbnailUrl: postThumbnailUrl,
-          thumbnailFocusX: postThumbnailFocusX,
-          thumbnailFocusY: postThumbnailFocusY,
-          thumbnailZoom: postThumbnailZoom,
-          tags: postTags,
-          category: postCategory,
-          visibility: postVisibility,
-        })
-        lastWriteFingerprintRef.current = ""
-        lastWriteIdempotencyKeyRef.current = ""
-      }
-      await refreshPublicPostReadViews(response?.data?.id)
-
-      const visibilityText =
-        postVisibility === "PUBLIC_LISTED"
-          ? "전체 공개(목록 노출)"
-          : postVisibility === "PUBLIC_UNLISTED"
-            ? "링크 공개(목록 미노출)"
-            : "비공개"
-
-      removeLocalDraft()
-      lastLocalDraftFingerprintRef.current = ""
-      setLocalDraftSavedAt("")
-
-      setPublishStatus(
-        {
-          tone: "success",
-          text: `작성 완료: ${response.msg} (공개 범위: ${visibilityText})`,
-        },
-        "page"
-      )
-      setKnownTags((prev) => dedupeStrings([...prev, ...postTags]).sort((a, b) => a.localeCompare(b)))
-      return true
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      setResult(pretty({ error: message }))
-      setPublishStatus({ tone: "error", text: `작성 실패: ${message}` })
-      return false
-    } finally {
-      setLoadingKey("")
-    }
-  }
-
-  const handleModifyPost = async (): Promise<boolean> => {
-    const currentPostContent = postContentLiveRef.current
-    if (editorMode !== "edit" || !postId.trim()) {
-      const msg = "수정할 글 ID를 먼저 선택해주세요."
-      setPublishStatus({ tone: "error", text: msg })
-      setResult(pretty({ error: msg }))
-      return false
-    }
-
-    if (!postTitle.trim()) {
-      const msg = "제목을 입력해주세요."
-      setPublishStatus({ tone: "error", text: msg })
-      setResult(pretty({ error: msg }))
-      return false
-    }
-
-    if (!currentPostContent.trim()) {
-      const msg = "본문을 입력해주세요."
-      setPublishStatus({ tone: "error", text: msg })
-      setResult(pretty({ error: msg }))
-      return false
-    }
-
-    const placeholderIssue = detectPublishPlaceholderIssue(currentPostContent)
-    if (placeholderIssue) {
-      setPublishStatus({ tone: "error", text: placeholderIssue })
-      setResult(pretty({ error: placeholderIssue }))
-      return false
-    }
-
-    if (postVersion == null) {
-      const msg = "최신 글 버전을 불러오지 못했습니다. 글을 다시 열어주세요."
-      setPublishStatus({ tone: "error", text: msg })
-      setResult(pretty({ error: msg }))
-      return false
-    }
-
-    try {
-      setLoadingKey("modifyPost")
-      setPublishStatus({ tone: "loading", text: "글 수정 중입니다..." })
-
-      const response = await apiFetch<RsData<PostWriteResult>>(`/post/api/v1/posts/${postId}`, {
-        method: "PUT",
-        body: JSON.stringify({
-          title: postTitle,
-          content: composeEditorContent(currentPostContent, postTags, {
-            category: postCategory,
-            summary: postSummary,
-            thumbnail: effectiveThumbnailUrl,
-          }),
-          ...toFlags(postVisibility),
-          version: postVersion,
-        }),
-      })
-
-      setKnownTags((prev) => dedupeStrings([...prev, ...postTags]).sort((a, b) => a.localeCompare(b)))
-      setPostVersion(typeof response?.data?.version === "number" ? response.data.version : postVersion)
-      setIsTempDraftMode(isTempDraftTitlePlaceholder(postTitle) && postVisibility === "PRIVATE")
-      serverBaselineEditorFingerprintRef.current = buildEditorStateFingerprint({
-        title: postTitle,
-        content: currentPostContent,
-        summary: postSummary,
-        thumbnailUrl: postThumbnailUrl,
-        thumbnailFocusX: postThumbnailFocusX,
-        thumbnailFocusY: postThumbnailFocusY,
-        thumbnailZoom: postThumbnailZoom,
-        tags: postTags,
-        category: postCategory,
-        visibility: postVisibility,
-      })
-      await refreshPublicPostReadViews(postId)
-      setPublishStatus({ tone: "success", text: `수정 완료: ${response.msg}` }, "page")
-      setResult(pretty(response as unknown as JsonValue))
-      return true
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      setPublishStatus({ tone: "error", text: `수정 실패: ${message}` })
-      setResult(pretty({ error: message }))
-      return false
-    } finally {
-      setLoadingKey("")
-    }
-  }
-
-  const handleLoadOrCreateTempPost = useCallback(async (options?: { redirectToEditor?: boolean; source?: string; returnTo?: string }) => {
-    try {
-      setLoadingKey("postTemp")
-      setPublishStatus({ tone: "loading", text: "새 글을 준비하고 있습니다..." }, "page")
-      if (!tempPostRequestRef.current) {
-        tempPostRequestRef.current = requestTempPostWithConflictRetry(loadExistingTempPostForRecovery).finally(() => {
-          tempPostRequestRef.current = null
-        })
-      }
-      const response = await tempPostRequestRef.current
-      const tempPost = response.data
-      if (options?.redirectToEditor && tempPost.id) {
-        const query = new URLSearchParams()
-        if (options.source) query.set("source", options.source)
-        if (options.returnTo) query.set("returnTo", options.returnTo)
-        const destination = query.size > 0 ? `${toEditorPostRoute(tempPost.id)}?${query.toString()}` : toEditorPostRoute(tempPost.id)
-        await replaceRoute(router, destination)
-        return
-      }
-      const rawSnapshot = resolveEditorMetaSnapshot(tempPost.content ?? "", tempPost.contentHtml)
-      const shouldMaskTempTitle = isServerTempDraftPost(tempPost)
-      const shouldMaskTempPlaceholder = isBlankServerTempDraft(tempPost, rawSnapshot)
-      const nextTitle = shouldMaskTempTitle ? "" : tempPost.title ?? ""
-      const nextVisibility = toVisibility(!!tempPost.published, !!tempPost.listed)
-      const snapshot = shouldMaskTempPlaceholder
-        ? (syncEditorMeta("") ?? buildEmptyEditorMetaSnapshot())
-        : syncEditorMeta(tempPost.content ?? "", tempPost.contentHtml)
-      setPostTitle(nextTitle)
-      setPostVisibility(nextVisibility)
-      serverBaselineEditorFingerprintRef.current = buildEditorStateFingerprint({
-        title: nextTitle,
-        content: snapshot.body,
-        summary: snapshot.summary,
-        thumbnailUrl: snapshot.thumbnailUrl,
-        thumbnailFocusX: snapshot.thumbnailFocusX,
-        thumbnailFocusY: snapshot.thumbnailFocusY,
-        thumbnailZoom: snapshot.thumbnailZoom,
-        tags: snapshot.tags,
-        category: snapshot.category,
-        visibility: nextVisibility,
-      })
-      applyLoadedPostContext(tempPost)
-      setIsTempDraftMode(true)
-      setPublishStatus(
-        {
-          tone: "success",
-          text: shouldMaskTempPlaceholder ? "새 글을 시작할 수 있습니다." : "저장된 임시 저장본을 불러왔습니다.",
-        },
-        "page"
-      )
-      if (isCompactMobileLayout) {
-        setMobileComposeStep("edit")
-      }
-      setResult(pretty(response as unknown as JsonValue))
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      setPublishStatus({ tone: "error", text: `새 글 불러오기 실패: ${message}` }, "page")
-      setResult(pretty({ error: message }))
-      setIsNewEditorBootstrapPending(false)
-    } finally {
-      setLoadingKey("")
-    }
-  }, [applyLoadedPostContext, isCompactMobileLayout, loadExistingTempPostForRecovery, router, setPublishStatus, syncEditorMeta])
-
-  const handlePublishTempDraft = async (): Promise<boolean> => {
-    const currentPostContent = postContentLiveRef.current
-    if (editorMode !== "edit" || !postId.trim()) {
-      const msg = "작성할 새 글을 먼저 불러와주세요."
-      setPublishStatus({ tone: "error", text: msg })
-      setResult(pretty({ error: msg }))
-      return false
-    }
-
-    if (!postTitle.trim()) {
-      const msg = "제목을 입력해주세요."
-      setPublishStatus({ tone: "error", text: msg })
-      setResult(pretty({ error: msg }))
-      return false
-    }
-
-    if (!currentPostContent.trim()) {
-      const msg = "본문을 입력해주세요."
-      setPublishStatus({ tone: "error", text: msg })
-      setResult(pretty({ error: msg }))
-      return false
-    }
-
-    const placeholderIssue = detectPublishPlaceholderIssue(currentPostContent)
-    if (placeholderIssue) {
-      setPublishStatus({ tone: "error", text: placeholderIssue })
-      setResult(pretty({ error: placeholderIssue }))
-      return false
-    }
-
-    if (postVersion == null) {
-      const msg = "새 글 버전을 불러오지 못했습니다. 글을 다시 열어주세요."
-      setPublishStatus({ tone: "error", text: msg })
-      setResult(pretty({ error: msg }))
-      return false
-    }
-
-    try {
-      setLoadingKey("publishTempPost")
-      setPublishStatus({ tone: "loading", text: "새 글을 작성하는 중입니다..." })
-
-      const response = await apiFetch<RsData<PostWriteResult>>(`/post/api/v1/posts/${postId}`, {
-        method: "PUT",
-        body: JSON.stringify({
-          title: postTitle,
-          content: composeEditorContent(currentPostContent, postTags, {
-            category: postCategory,
-            summary: postSummary,
-            thumbnail: effectiveThumbnailUrl,
-          }),
-          ...toFlags(postVisibility),
-          version: postVersion,
-        }),
-      })
-      setPostVisibility(postVisibility)
-      setPostVersion(typeof response?.data?.version === "number" ? response.data.version : postVersion)
-      setIsTempDraftMode(false)
-      serverBaselineEditorFingerprintRef.current = buildEditorStateFingerprint({
-        title: postTitle,
-        content: currentPostContent,
-        summary: postSummary,
-        thumbnailUrl: postThumbnailUrl,
-        thumbnailFocusX: postThumbnailFocusX,
-        thumbnailFocusY: postThumbnailFocusY,
-        thumbnailZoom: postThumbnailZoom,
-        tags: postTags,
-        category: postCategory,
-        visibility: postVisibility,
-      })
-      await refreshPublicPostReadViews(postId)
-      setPublishStatus({ tone: "success", text: "새 글 작성이 완료되었습니다." }, "page")
-      setResult(pretty(response as unknown as JsonValue))
-      return true
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      setPublishStatus({ tone: "error", text: `새 글 작성 실패: ${message}` })
-      setResult(pretty({ error: message }))
-      return false
-    } finally {
-      setLoadingKey("")
-    }
-  }
+  const {
+    handleBlockEditorFileUpload,
+    handleBlockEditorImageUpload,
+    handleModifyPost,
+    handlePublishTempDraft,
+    handleThumbnailImageFileChange,
+    handleThumbnailPaste,
+    handleWritePost,
+  } = useEditorStudioPersistence({
+    editorMode,
+    postId,
+    postVersion,
+    postTitle,
+    postTags,
+    postCategory,
+    postSummary,
+    postThumbnailUrl,
+    postThumbnailFocusX,
+    postThumbnailFocusY,
+    postThumbnailZoom,
+    postVisibility,
+    effectiveThumbnailUrl,
+    loadingKey,
+    postContentLiveRef,
+    lastWriteFingerprintRef,
+    lastWriteIdempotencyKeyRef,
+    lastLocalDraftFingerprintRef,
+    serverBaselineEditorFingerprintRef,
+    defaultThumbnailFocusX: DEFAULT_THUMBNAIL_FOCUS_X,
+    defaultThumbnailFocusY: DEFAULT_THUMBNAIL_FOCUS_Y,
+    defaultThumbnailZoom: DEFAULT_THUMBNAIL_ZOOM,
+    setEditorMode,
+    setIsTempDraftMode,
+    setPostId,
+    setPostVersion,
+    setPostVisibility,
+    setKnownTags,
+    setLocalDraftSavedAt,
+    setPublishStatus,
+    setLoadingKey,
+    setResult,
+    setPostThumbnailUrl,
+    setPostThumbnailFocusX,
+    setPostThumbnailFocusY,
+    setPostThumbnailZoom,
+    setPreviewThumbnailSourceUrl,
+    setIsPreviewThumbnailError,
+    setThumbnailImageFileName,
+    composeEditorContent,
+    toFlags,
+    buildEditorStateFingerprint,
+    dedupeStrings,
+    detectPublishPlaceholderIssue: (content) => detectPublishPlaceholderIssue(content) || "",
+    refreshPublicPostReadViews,
+    pretty,
+    generateIdempotencyKey,
+    removeLocalDraft,
+    uploadWithConflictRetry,
+    normalizeSafeImageUrl,
+    extractImageFileFromClipboard,
+  })
 
   const visibilityLabel = (published: boolean, listed: boolean) => {
     if (!published) return "비공개"
@@ -3089,15 +2601,28 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     }
   }, [loadAdminPosts, refreshPublicPostReadViews, softDeleteUndoState])
 
-  const activeEditorRoute = useMemo(() => {
-    if (postId.trim()) return toEditorPostRoute(postId.trim())
-    return EDITOR_NEW_ROUTE_PATH
-  }, [postId])
-  const dedicatedEditorReturnRoute = useMemo(() => {
-    if (!isDedicatedEditorRoute) return ADMIN_POSTS_WORKSPACE_ROUTE
-    const rawReturnTo = typeof router.query.returnTo === "string" ? router.query.returnTo : ""
-    return normalizeEditorReturnRoute(rawReturnTo) || ADMIN_POSTS_WORKSPACE_ROUTE
-  }, [isDedicatedEditorRoute, router.query.returnTo])
+  const { handleExitDedicatedEditor } = useEditorStudioRouting({
+    router,
+    authStatus,
+    sessionMember,
+    postId,
+    isDedicatedEditorRoute,
+    isDedicatedNewEditorRoute,
+    adminPostsWorkspaceRoute: ADMIN_POSTS_WORKSPACE_ROUTE,
+    editorNewRoutePath: EDITOR_NEW_ROUTE_PATH,
+    toEditorPostRoute,
+    normalizeEditorReturnRoute,
+    pretty,
+    setResult,
+    setPostId,
+    setIsNewEditorBootstrapPending,
+    redirectingRef,
+    autoLoadedPostIdRef,
+    autoCreatedTempDraftRef,
+    restoreLocalDraft,
+    loadPostForEditor,
+    handleLoadOrCreateTempPost,
+  })
 
   useEffect(() => {
     if (adminPostRows.length === 0) {
@@ -3263,22 +2788,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     } catch {
       // noop: 깨진 저장값은 무시하고 기본값 사용
     }
-    const localDraft = readLocalDraft()
-    if (localDraft?.savedAt) {
-      lastLocalDraftFingerprintRef.current = buildLocalDraftFingerprint({
-        title: localDraft.title,
-        content: localDraft.content,
-        summary: localDraft.summary,
-        thumbnailUrl: localDraft.thumbnailUrl,
-        thumbnailFocusX: localDraft.thumbnailFocusX,
-        thumbnailFocusY: localDraft.thumbnailFocusY,
-        thumbnailZoom: localDraft.thumbnailZoom,
-        tags: dedupeStrings(localDraft.tags),
-        category: localDraft.category ? normalizeCategoryValue(localDraft.category) : "",
-        visibility: localDraft.visibility,
-      })
-      setLocalDraftSavedAt(localDraft.savedAt)
-    }
   }, [])
 
   useEffect(() => {
@@ -3304,79 +2813,12 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   }, [customCategoryCatalog])
 
   useEffect(() => {
-    const hasDraftContent =
-      postTitle.trim().length > 0 ||
-      postContent.trim().length > 0 ||
-      postSummary.trim().length > 0 ||
-      postThumbnailUrl.trim().length > 0 ||
-      postTags.length > 0 ||
-      postCategory.trim().length > 0
-
-    if (!hasDraftContent) return
-    if (lastLocalDraftFingerprintRef.current === localDraftFingerprint) return
-
-    const timerId = window.setTimeout(() => {
-      saveLocalDraft({ silent: true })
-    }, 1200)
-
-    return () => {
-      window.clearTimeout(timerId)
-    }
-  }, [
-    localDraftFingerprint,
-    postCategory,
-    postContent,
-    postSummary,
-    postTags,
-    postThumbnailUrl,
-    postTitle,
-    saveLocalDraft,
-  ])
-
-  useEffect(() => {
     setKnownTags((prev) =>
       dedupeStrings([...prev, ...Object.keys(tagUsageMap), ...customTagCatalog, ...postTags]).sort((a, b) =>
         a.localeCompare(b)
       )
     )
   }, [customTagCatalog, postTags, tagUsageMap])
-
-  useEffect(() => {
-    if (authStatus === "loading" || authStatus === "unavailable") return
-
-    if (!sessionMember) {
-      const target = toLoginPath(router.asPath || activeEditorRoute, activeEditorRoute)
-      if (!redirectingRef.current && router.asPath !== target) {
-        redirectingRef.current = true
-        void (async () => {
-          try {
-            await replaceRoute(router, target, { preferHardNavigation: true })
-          } catch (error) {
-            if (!isNavigationCancelledError(error)) {
-              setResult(pretty({ error: error instanceof Error ? error.message : String(error) }))
-            }
-          }
-        })()
-      }
-      return
-    }
-
-    if (!sessionMember.isAdmin) {
-      if (!redirectingRef.current && router.asPath !== "/") {
-        redirectingRef.current = true
-        void (async () => {
-          try {
-            await replaceRoute(router, "/", { preferHardNavigation: true })
-          } catch (error) {
-            if (!isNavigationCancelledError(error)) {
-              setResult(pretty({ error: error instanceof Error ? error.message : String(error) }))
-            }
-          }
-        })()
-      }
-      return
-    }
-  }, [activeEditorRoute, authStatus, router, sessionMember])
 
   useEffect(() => {
     if (!sessionMember) return
@@ -3392,231 +2834,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     })
     void refreshEditorMetaCatalog()
   }, [applyProfileState, refreshEditorMetaCatalog, sessionMember])
-
-  useEffect(() => {
-    if (!router.isReady) return
-
-    const queryPostId =
-      typeof router.query.id === "string"
-        ? router.query.id.trim()
-        : typeof router.query.postId === "string"
-          ? router.query.postId.trim()
-          : ""
-    if (!queryPostId) return
-    if (autoLoadedPostIdRef.current === queryPostId) return
-
-    autoLoadedPostIdRef.current = queryPostId
-    setPostId(queryPostId)
-    void loadPostForEditor(queryPostId)
-  }, [loadPostForEditor, router.isReady, router.query.id, router.query.postId])
-
-  useEffect(() => {
-    if (!router.isReady) return
-    const source = typeof router.query.source === "string" ? router.query.source.trim() : ""
-    if (source !== "local-draft") return
-    restoreLocalDraft()
-    const nextQuery = { ...router.query }
-    delete nextQuery.source
-    void replaceShallowRoutePreservingScroll(router, { query: nextQuery })
-  }, [restoreLocalDraft, router])
-
-  useEffect(() => {
-    if (!isDedicatedNewEditorRoute) {
-      autoCreatedTempDraftRef.current = false
-      setIsNewEditorBootstrapPending(false)
-      return
-    }
-
-    if (!postId.trim()) {
-      setIsNewEditorBootstrapPending(true)
-    }
-  }, [isDedicatedNewEditorRoute, postId])
-
-  useEffect(() => {
-    if (!router.isReady || !isDedicatedEditorRoute || !sessionMember?.isAdmin) return
-    if (router.pathname !== EDITOR_NEW_ROUTE_PATH) return
-    if (autoCreatedTempDraftRef.current) return
-
-    autoCreatedTempDraftRef.current = true
-    const source = typeof router.query.source === "string" ? router.query.source.trim() : ""
-    const returnTo = typeof router.query.returnTo === "string" ? normalizeEditorReturnRoute(router.query.returnTo) : ""
-    void handleLoadOrCreateTempPost({
-      redirectToEditor: true,
-      source: source || undefined,
-      returnTo: returnTo || undefined,
-    })
-  }, [handleLoadOrCreateTempPost, isDedicatedEditorRoute, router, sessionMember?.isAdmin])
-
-  const uploadPostImageFile = useCallback(async (file: File): Promise<UploadPostImageResult> => {
-    const prepared = await preparePostImageForUpload(file)
-    const requestUpload = async () => {
-      const formData = new FormData()
-      formData.append("file", prepared.file, prepared.file.name)
-      return await fetch(`${getApiBaseUrl()}/post/api/v1/posts/images`, {
-        method: "POST",
-        credentials: "include",
-        body: formData,
-      })
-    }
-
-    const response = await uploadWithConflictRetry(requestUpload)
-
-    return {
-      uploaded: (await response.json()) as UploadPostImageResponse,
-      prepared: {
-        summary: buildImageOptimizationSummary(prepared),
-      },
-    }
-  }, [])
-
-  const handleBlockEditorImageUpload = useCallback(
-    async (file: File) => {
-      setPublishStatus({
-        tone: "loading",
-        text: `이미지 "${file.name}" 최적화/업로드 중입니다. 완료되면 블록에 바로 삽입됩니다.`,
-      })
-
-      try {
-        const uploaded = await uploadPostImageFile(file)
-        const markdown = uploaded.uploaded.data?.markdown
-        if (!markdown) throw new Error("업로드 응답 형식이 올바르지 않습니다.")
-
-        const parsed = parseStandaloneMarkdownImageLine(markdown)
-        if (!parsed) throw new Error("이미지 markdown 메타데이터를 해석하지 못했습니다.")
-
-        setPublishStatus({
-          tone: "success",
-          text: `이미지 업로드가 완료되었습니다. ${uploaded.prepared.summary}`,
-        })
-
-        return {
-          src: parsed.src,
-          alt: parsed.alt,
-          title: parsed.title,
-          widthPx: parsed.widthPx,
-          align: parsed.align || "center",
-        }
-      } catch (error) {
-        const message = normalizeProfileImageUploadError(error)
-        setPublishStatus({
-          tone: "error",
-          text: `이미지 업로드 실패: ${message}`,
-        })
-        throw error
-      }
-    },
-    [setPublishStatus, uploadPostImageFile]
-  )
-
-  const uploadPostAttachmentFile = useCallback(async (file: File): Promise<UploadPostFileResponse> => {
-    const formData = new FormData()
-    formData.append("file", file, file.name)
-
-    const response = await uploadWithConflictRetry(async () =>
-      fetch(`${getApiBaseUrl()}/post/api/v1/posts/files`, {
-        method: "POST",
-        credentials: "include",
-        body: formData,
-      })
-    )
-
-    return (await response.json()) as UploadPostFileResponse
-  }, [])
-
-  const handleBlockEditorFileUpload = useCallback(
-    async (file: File) => {
-      setPublishStatus({
-        tone: "loading",
-        text: `첨부 파일 "${file.name}" 업로드 중입니다. 완료되면 파일 블록으로 삽입됩니다.`,
-      })
-
-      try {
-        const uploaded = await uploadPostAttachmentFile(file)
-        const uploadedUrl = String(uploaded.data?.url || "").trim()
-        const uploadedName = String(uploaded.data?.name || file.name).trim() || file.name
-        if (!uploadedUrl) throw new Error("업로드 응답 형식이 올바르지 않습니다.")
-
-        setPublishStatus({
-          tone: "success",
-          text: `첨부 파일 업로드가 완료되었습니다. ${uploadedName}`,
-        })
-
-        return {
-          url: uploadedUrl,
-          name: uploadedName,
-          description: "",
-          mimeType: file.type || "",
-          sizeBytes: file.size,
-        }
-      } catch (error) {
-        const message = normalizeProfileImageUploadError(error)
-        setPublishStatus({
-          tone: "error",
-          text: `첨부 파일 업로드 실패: ${message}`,
-        })
-        throw error
-      }
-    },
-    [setPublishStatus, uploadPostAttachmentFile]
-  )
-
-  const handleUploadThumbnailImage = useCallback(async (file: File) => {
-    try {
-      setLoadingKey("uploadThumbnail")
-      setPublishStatus({
-        tone: "loading",
-        text: `썸네일 "${file.name}" 최적화/업로드 중입니다...`,
-      })
-      const uploaded = await uploadPostImageFile(file)
-      const uploadedUrl = uploaded.uploaded.data?.url?.trim()
-      if (!uploadedUrl) throw new Error("업로드 응답 형식이 올바르지 않습니다.")
-      const safeUploadedUrl = normalizeSafeImageUrl(uploadedUrl)
-      if (!safeUploadedUrl) throw new Error("허용되지 않은 썸네일 URL 형식입니다.")
-
-      setPostThumbnailUrl(stripThumbnailFocusFromUrl(safeUploadedUrl))
-      setPostThumbnailFocusX(DEFAULT_THUMBNAIL_FOCUS_X)
-      setPostThumbnailFocusY(DEFAULT_THUMBNAIL_FOCUS_Y)
-      setPostThumbnailZoom(DEFAULT_THUMBNAIL_ZOOM)
-      setPreviewThumbnailSourceUrl(stripThumbnailFocusFromUrl(safeUploadedUrl))
-      setIsPreviewThumbnailError(false)
-      setPublishStatus({
-        tone: "success",
-        text: `썸네일 파일 업로드가 완료되었습니다. ${uploaded.prepared.summary}`,
-      })
-    } catch (error) {
-      const message = normalizeProfileImageUploadError(error)
-      setPublishStatus({
-        tone: "error",
-        text: `썸네일 업로드 실패: ${message}`,
-      })
-    } finally {
-      setLoadingKey("")
-    }
-  }, [setPublishStatus, uploadPostImageFile])
-
-  const handleThumbnailImageFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    e.target.value = ""
-    if (!file) return
-    setThumbnailImageFileName(file.name)
-    void handleUploadThumbnailImage(file)
-  }
-
-  const handleThumbnailPaste = useCallback(
-    (event: ReactClipboardEvent<HTMLElement>) => {
-      const imageFile = extractImageFileFromClipboard(event.clipboardData)
-      if (!imageFile) return
-
-      event.preventDefault()
-      event.stopPropagation()
-
-      if (loadingKey === "uploadThumbnail") return
-
-      setThumbnailImageFileName(imageFile.name || "clipboard-image.png")
-      void handleUploadThumbnailImage(imageFile)
-    },
-    [handleUploadThumbnailImage, loadingKey]
-  )
 
   const openPublishModal = useCallback((actionType: PublishActionType) => {
     activateComposeSurface()
@@ -4152,9 +3369,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     !postId.trim() &&
     (isNewEditorBootstrapPending || loadingKey === "postTemp")
   const shouldShowResultPanel = Boolean(loadingKey || result)
-  const handleExitDedicatedEditor = useCallback(() => {
-    void pushRoute(router, dedicatedEditorReturnRoute)
-  }, [dedicatedEditorReturnRoute, router])
   const dedicatedEditorTopBar = useMemo(
     () => (
       <EditorStudioTopBar>

@@ -304,6 +304,8 @@ type TableQuickRailState = {
     left: number
     width: number
   }>
+  showColumnRail: boolean
+  showRowRail: boolean
   showColumnAddBar: boolean
   showRowAddBar: boolean
 }
@@ -780,6 +782,7 @@ const TABLE_ADD_BAR_THICKNESS_PX = 28
 const TABLE_ADD_BAR_GAP_PX = 0
 const TABLE_ADD_BAR_MIN_LENGTH_PX = 96
 const TABLE_ADD_BAR_VIEWPORT_PADDING_PX = 8
+const TABLE_AXIS_RAIL_EDGE_HOTZONE_PX = 18
 const TABLE_TRAILING_ADD_EDGE_HOTZONE_PX = 18
 const TABLE_QUICK_RAIL_HIDE_DELAY_MS = 120
 const TABLE_MENU_EDGE_PADDING_PX = 16
@@ -1809,6 +1812,8 @@ const BlockEditorShell = ({
     columnWidth: 0,
     columnIndex: 0,
     columnSegments: [],
+    showColumnRail: false,
+    showRowRail: false,
     showColumnAddBar: false,
     showRowAddBar: false,
   })
@@ -3240,6 +3245,10 @@ const BlockEditorShell = ({
     const activeCellRect = activeCell?.getBoundingClientRect()
     const activeRow = activeCell?.closest("tr") as HTMLTableRowElement | null
     const activeRowRect = activeRow?.getBoundingClientRect()
+    const activeColumnLeft = activeCellRect?.left ?? tableRect.left
+    const activeColumnRight = activeCellRect?.right ?? tableRect.right
+    const activeRowTopBound = activeRowRect?.top ?? tableRect.top
+    const activeRowBottomBound = activeRowRect?.bottom ?? tableRect.bottom
     const hasHoverPoint =
       typeof hoverClientX === "number" &&
       Number.isFinite(hoverClientX) &&
@@ -3251,12 +3260,26 @@ const BlockEditorShell = ({
       hoverClientX <= tableRect.right + TABLE_ADD_BAR_THICKNESS_PX &&
       hoverClientY >= tableRect.top &&
       hoverClientY <= tableRect.bottom
+    const showColumnRail =
+      hasHoverPoint &&
+      Boolean(activeCellRect) &&
+      hoverClientY >= tableRect.top - TABLE_COLUMN_GRIP_HEIGHT_PX &&
+      hoverClientY <= tableRect.top + TABLE_AXIS_RAIL_EDGE_HOTZONE_PX &&
+      hoverClientX >= activeColumnLeft &&
+      hoverClientX <= activeColumnRight
     const showRowAddBar =
       hasHoverPoint &&
       hoverClientY >= tableRect.bottom - TABLE_TRAILING_ADD_EDGE_HOTZONE_PX &&
       hoverClientY <= tableRect.bottom + TABLE_ADD_BAR_THICKNESS_PX &&
       hoverClientX >= tableRect.left &&
       hoverClientX <= tableRect.right
+    const showRowRail =
+      hasHoverPoint &&
+      Boolean(activeRowRect) &&
+      hoverClientX >= tableRect.left - TABLE_ROW_GRIP_WIDTH_PX &&
+      hoverClientX <= tableRect.left + TABLE_AXIS_RAIL_EDGE_HOTZONE_PX &&
+      hoverClientY >= activeRowTopBound &&
+      hoverClientY <= activeRowBottomBound
     const activeRowIndex = activeRow
       ? Array.from(tableElement.querySelectorAll("tr")).findIndex((row) => row === activeRow)
       : 0
@@ -3290,6 +3313,8 @@ const BlockEditorShell = ({
       columnWidth: Math.round(activeCellRect?.width ?? 120),
       columnIndex: activeColumnIndex >= 0 ? activeColumnIndex : 0,
       columnSegments: firstRowCells,
+      showColumnRail: hasHoverPoint ? showColumnRail : prev.showColumnRail,
+      showRowRail: hasHoverPoint ? showRowRail : prev.showRowRail,
       showColumnAddBar: hasHoverPoint ? showColumnAddBar : prev.showColumnAddBar,
       showRowAddBar: hasHoverPoint ? showRowAddBar : prev.showRowAddBar,
     }))
@@ -7465,82 +7490,86 @@ const BlockEditorShell = ({
                 <TableHandleIcon kind="more" />
               </TableHandleButton>
             </TableCornerHandle>
-            <TableAxisRail
-              data-table-axis-rail="true"
-              data-testid="table-row-rail"
-              data-axis="row"
-              onPointerEnter={cancelTableQuickRailHide}
-              onPointerLeave={() => {
-                if (!shouldPersistTableHandles) {
-                  scheduleTableQuickRailHide()
-                }
-              }}
-              style={{
-                left: `${
-                  desktopTableRailLayout?.rowGripLeft ??
-                  Math.round(tableQuickRailState.tableLeft - Math.round(TABLE_ROW_GRIP_WIDTH_PX / 2))
-                }px`,
-                top: `${
-                  desktopTableRailLayout?.rowGripTop ??
-                  Math.round(
-                    tableQuickRailState.rowTop + Math.max(0, tableQuickRailState.rowHeight / 2 - TABLE_ROW_GRIP_HEIGHT_PX / 2)
-                  )
-                }px`,
-              }}
-            >
-              <TableQuickRailButton
-                type="button"
+            {tableQuickRailState.showRowRail || shouldPersistTableHandles ? (
+              <TableAxisRail
+                data-table-axis-rail="true"
+                data-testid="table-row-rail"
                 data-axis="row"
-                data-active={isCurrentTableRowSelection(tableQuickRailState.rowIndex)}
-                title="행 메뉴"
-                aria-label="행 메뉴"
-                onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  handleTableRowGripClick(tableQuickRailState.rowIndex, event.currentTarget.getBoundingClientRect())
+                onPointerEnter={cancelTableQuickRailHide}
+                onPointerLeave={() => {
+                  if (!shouldPersistTableHandles) {
+                    scheduleTableQuickRailHide()
+                  }
+                }}
+                style={{
+                  left: `${
+                    desktopTableRailLayout?.rowGripLeft ??
+                    Math.round(tableQuickRailState.tableLeft - Math.round(TABLE_ROW_GRIP_WIDTH_PX / 2))
+                  }px`,
+                  top: `${
+                    desktopTableRailLayout?.rowGripTop ??
+                    Math.round(
+                      tableQuickRailState.rowTop + Math.max(0, tableQuickRailState.rowHeight / 2 - TABLE_ROW_GRIP_HEIGHT_PX / 2)
+                    )
+                  }px`,
                 }}
               >
-                <TableHandleIcon kind="grip" />
-              </TableQuickRailButton>
-            </TableAxisRail>
-            <TableAxisRail
-              data-table-axis-rail="true"
-              data-testid="table-column-rail"
-              data-axis="column"
-              onPointerEnter={cancelTableQuickRailHide}
-              onPointerLeave={() => {
-                if (!shouldPersistTableHandles) {
-                  scheduleTableQuickRailHide()
-                }
-              }}
-              style={{
-                left: `${
-                  desktopTableRailLayout?.columnGripLeft ??
-                  Math.round(
-                    tableQuickRailState.columnLeft + Math.max(0, tableQuickRailState.columnWidth / 2 - TABLE_COLUMN_GRIP_WIDTH_PX / 2)
-                  )
-                }px`,
-                top: `${
-                  desktopTableRailLayout?.columnGripTop ??
-                  Math.round(tableQuickRailState.tableTop - Math.round(TABLE_COLUMN_GRIP_HEIGHT_PX / 2))
-                }px`,
-              }}
-            >
-              <TableQuickRailButton
-                type="button"
+                <TableQuickRailButton
+                  type="button"
+                  data-axis="row"
+                  data-active={isCurrentTableRowSelection(tableQuickRailState.rowIndex)}
+                  title="행 메뉴"
+                  aria-label="행 메뉴"
+                  onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    handleTableRowGripClick(tableQuickRailState.rowIndex, event.currentTarget.getBoundingClientRect())
+                  }}
+                >
+                  <TableHandleIcon kind="grip" />
+                </TableQuickRailButton>
+              </TableAxisRail>
+            ) : null}
+            {tableQuickRailState.showColumnRail || shouldPersistTableHandles ? (
+              <TableAxisRail
+                data-table-axis-rail="true"
+                data-testid="table-column-rail"
                 data-axis="column"
-                data-active={isCurrentTableColumnSelection(tableQuickRailState.columnIndex)}
-                title="열 메뉴"
-                aria-label="열 메뉴"
-                onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  handleTableColumnRailSegmentClick(tableQuickRailState.columnIndex, event.currentTarget.getBoundingClientRect())
+                onPointerEnter={cancelTableQuickRailHide}
+                onPointerLeave={() => {
+                  if (!shouldPersistTableHandles) {
+                    scheduleTableQuickRailHide()
+                  }
+                }}
+                style={{
+                  left: `${
+                    desktopTableRailLayout?.columnGripLeft ??
+                    Math.round(
+                      tableQuickRailState.columnLeft + Math.max(0, tableQuickRailState.columnWidth / 2 - TABLE_COLUMN_GRIP_WIDTH_PX / 2)
+                    )
+                  }px`,
+                  top: `${
+                    desktopTableRailLayout?.columnGripTop ??
+                    Math.round(tableQuickRailState.tableTop - Math.round(TABLE_COLUMN_GRIP_HEIGHT_PX / 2))
+                  }px`,
                 }}
               >
-                <TableHandleIcon kind="grip" />
-              </TableQuickRailButton>
-            </TableAxisRail>
+                <TableQuickRailButton
+                  type="button"
+                  data-axis="column"
+                  data-active={isCurrentTableColumnSelection(tableQuickRailState.columnIndex)}
+                  title="열 메뉴"
+                  aria-label="열 메뉴"
+                  onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    handleTableColumnRailSegmentClick(tableQuickRailState.columnIndex, event.currentTarget.getBoundingClientRect())
+                  }}
+                >
+                  <TableHandleIcon kind="grip" />
+                </TableQuickRailButton>
+              </TableAxisRail>
+            ) : null}
             {tableQuickRailState.showColumnAddBar ? (
               <TableTrailingAddBar
                 type="button"

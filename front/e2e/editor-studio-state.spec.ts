@@ -129,6 +129,7 @@ test.describe("editor studio state", () => {
   test("editor studio는 v2 단일 경로와 단일 작성 모드 계약을 유지한다", () => {
     const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
     const blockEditorSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"), "utf8")
+    const writerEditorHostSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/WriterEditorHost.tsx"), "utf8")
 
     expect(editorStudioSource).not.toContain("BLOCK_EDITOR_V2_ENABLED")
     expect(editorStudioSource).not.toContain("EditorStudioLegacyToolbar")
@@ -136,7 +137,9 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).toContain("const isCompactSplitPreview = false")
     expect(editorStudioSource).toContain("width: min(100%, 1600px);")
     expect(editorStudioSource).toContain("grid-template-columns: minmax(0, 1fr);")
-    expect(editorStudioSource.match(/<LazyBlockEditorShell/g)?.length).toBe(2)
+    expect(editorStudioSource).toContain('import { WriterEditorHost } from "./WriterEditorHost"')
+    expect(editorStudioSource.match(/<WriterEditorHost/g)?.length).toBe(2)
+    expect(editorStudioSource).not.toContain("<LazyBlockEditorShell")
     expect(editorStudioSource).not.toContain("EditorStudioPreviewColumn")
     expect(editorStudioSource).not.toContain('data-testid="editor-preview-body"')
     expect(editorStudioSource).not.toContain("LazyMarkdownRenderer")
@@ -152,6 +155,9 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).toContain("min-height: 42px;")
     expect(editorStudioSource).toContain("const EditorStudioFrame = styled.div`")
     expect(editorStudioSource).toContain("const EditorStudioWritingColumn = styled.section<{ $compact?: boolean }>`")
+    expect(writerEditorHostSource).toContain('dynamic(() => import("src/components/editor/BlockEditorShell")')
+    expect(writerEditorHostSource).toContain("<Profiler")
+    expect(writerEditorHostSource).toContain("<LazyBlockEditorShell")
 
     expect(blockEditorSource).not.toContain("Markdown 편집")
     expect(blockEditorSource).not.toContain('label: "원문 블록"')

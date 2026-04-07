@@ -1268,6 +1268,57 @@ const expandTableColumnWidthsToBudget = (widths: number[], budget: number) => {
   return nextWidths
 }
 
+const expandTableColumnWidthsToBudgetExcludingIndex = (
+  widths: number[],
+  budget: number,
+  excludedIndex: number
+) => {
+  const nextWidths = widths.map((width) => Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(width)))
+  const currentTotal = nextWidths.reduce((sum, width) => sum + width, 0)
+  const safeBudget = Math.max(TABLE_MIN_COLUMN_WIDTH_PX * nextWidths.length, Math.round(budget))
+
+  if (!nextWidths.length || currentTotal >= safeBudget) {
+    return nextWidths
+  }
+
+  const recipients = nextWidths
+    .map((width, index) => ({
+      index,
+      width,
+    }))
+    .filter((column) => column.index !== excludedIndex)
+  const trailingRecipients = recipients.filter((column) => column.index > excludedIndex)
+  const recipientColumns = (trailingRecipients.length > 0 ? trailingRecipients : recipients).sort(
+    (left, right) => left.index - right.index
+  )
+
+  if (!recipientColumns.length) {
+    return nextWidths
+  }
+
+  const deficit = safeBudget - currentTotal
+  const weightTotal = recipientColumns.reduce((sum, column) => sum + column.width, 0)
+  let consumed = 0
+
+  recipientColumns.forEach((column, columnIndex) => {
+    if (columnIndex === recipientColumns.length - 1) return
+    const ratio = weightTotal > 0 ? column.width / weightTotal : 1 / recipientColumns.length
+    const addBy = Math.max(0, Math.floor(deficit * ratio))
+    nextWidths[column.index] += addBy
+    consumed += addBy
+  })
+
+  let remainder = deficit - consumed
+  let cursor = 0
+  while (remainder > 0) {
+    nextWidths[recipientColumns[cursor % recipientColumns.length].index] += 1
+    remainder -= 1
+    cursor += 1
+  }
+
+  return nextWidths
+}
+
 const isLegacyCollapsedTableWidthState = (widths: number[]) => {
   if (widths.length <= 1) return false
   return widths.every((width) => width <= TABLE_MIN_COLUMN_WIDTH_PX + 2)
@@ -1287,8 +1338,12 @@ const redistributeTableColumnWidthsForResize = (
   }
 
   if (roundedDelta < 0) {
-    nextWidths[activeIndex] = Math.max(TABLE_MIN_COLUMN_WIDTH_PX, nextWidths[activeIndex] + roundedDelta)
-    return nextWidths
+    const previousWidth = nextWidths[activeIndex]
+    nextWidths[activeIndex] = Math.max(TABLE_MIN_COLUMN_WIDTH_PX, previousWidth + roundedDelta)
+    if (nextWidths[activeIndex] === previousWidth) {
+      return nextWidths
+    }
+    return expandTableColumnWidthsToBudgetExcludingIndex(nextWidths, budget, activeIndex)
   }
 
   const minBudget = TABLE_MIN_COLUMN_WIDTH_PX * nextWidths.length

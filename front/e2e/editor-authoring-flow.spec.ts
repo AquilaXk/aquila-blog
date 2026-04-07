@@ -1660,4 +1660,78 @@ test.describe("block editor authoring flow", () => {
     expect(widthShape.tableWidth).toBeLessThanOrEqual(widthShape.contentWidth + 2)
     expect(widthShape.firstCellWidth).toBeGreaterThanOrEqual(beforeWidth)
   })
+
+  test("table last column shrink는 normal mode에서 남는 폭을 재분배해 구조를 유지한다", async ({
+    page,
+  }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    await page.getByRole("button", { name: "테이블" }).click()
+    const lastHeaderCell = page.locator("table th").last()
+    await lastHeaderCell.click()
+    await lastHeaderCell.hover()
+
+    const readShape = async () =>
+      page.evaluate(() => {
+        const contentRoot = document.querySelector<HTMLElement>(".aq-block-editor__content")
+        const wrapper = document.querySelector<HTMLElement>(".aq-block-editor__content .tableWrapper")
+        const table = wrapper?.querySelector<HTMLElement>("table")
+        const headerCells = Array.from(table?.querySelectorAll<HTMLElement>("th") ?? [])
+        if (!contentRoot || !wrapper || !table || headerCells.length === 0) return null
+        return {
+          contentWidth: Math.round(contentRoot.getBoundingClientRect().width),
+          wrapperWidth: Math.round(wrapper.getBoundingClientRect().width),
+          tableWidth: Math.round(table.getBoundingClientRect().width),
+          columnWidths: headerCells.map((cell) => Math.round(cell.getBoundingClientRect().width)),
+        }
+      })
+
+    const beforeShape = await readShape()
+    expect(beforeShape).not.toBeNull()
+    if (!beforeShape) {
+      throw new Error("table width shape is missing")
+    }
+
+    const resizeHandles = page.locator('[data-testid^="table-column-resize-boundary-"]')
+    const handleCount = await resizeHandles.count()
+    expect(handleCount).toBeGreaterThan(0)
+
+    const lastResizeHandle = resizeHandles.nth(handleCount - 1)
+    const handleBox = await lastResizeHandle.boundingBox()
+    if (!handleBox) {
+      throw new Error("last table column resize handle is missing")
+    }
+
+    const dragDeltaX = handleCount >= beforeShape.columnWidths.length ? -72 : 72
+    const startX = handleBox.x + handleBox.width / 2
+    const startY = handleBox.y + handleBox.height / 2
+
+    await page.mouse.move(startX, startY)
+    await page.mouse.down()
+    await page.mouse.move(startX + dragDeltaX, startY, { steps: 8 })
+    await page.mouse.up()
+
+    await expect
+      .poll(async () => {
+        const shape = await readShape()
+        return shape?.columnWidths.at(-1) ?? null
+      })
+      .not.toBe(beforeShape.columnWidths.at(-1) ?? null)
+
+    const afterShape = await readShape()
+    expect(afterShape).not.toBeNull()
+    if (!afterShape) {
+      throw new Error("updated table width shape is missing")
+    }
+
+    expect(Math.abs(afterShape.wrapperWidth - afterShape.tableWidth)).toBeLessThanOrEqual(2)
+    expect(afterShape.tableWidth).toBeLessThanOrEqual(afterShape.contentWidth + 2)
+    expect(Math.abs(afterShape.tableWidth - beforeShape.tableWidth)).toBeLessThanOrEqual(2)
+    expect(afterShape.columnWidths.at(-1) ?? 0).toBeLessThan((beforeShape.columnWidths.at(-1) ?? 0) - 12)
+    expect(
+      afterShape.columnWidths
+        .slice(0, -1)
+        .some((width, index) => width > (beforeShape.columnWidths[index] ?? width) + 8)
+    ).toBe(true)
+  })
 })

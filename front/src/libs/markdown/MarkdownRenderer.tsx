@@ -1,4 +1,5 @@
 import {
+  Children,
   createContext,
   CSSProperties,
   FC,
@@ -56,6 +57,103 @@ type MarkdownImageFigureProps = {
   imageIndex: number
   onWidthCommit?: (payload: { src: string; alt: string; index: number; widthPx: number }) => void
 }
+
+const QUOTED_STRONG_MARKERS = ["**", "__"] as const
+const QUOTED_STRONG_QUOTE_PAIRS = [
+  ['"', '"'],
+  ["“", "”"],
+  ["‘", "’"],
+  ["«", "»"],
+  ["「", "」"],
+  ["『", "』"],
+  ["〈", "〉"],
+  ["《", "》"],
+] as const
+
+const QUOTED_STRONG_QUOTE_MARKERS = QUOTED_STRONG_QUOTE_PAIRS.flatMap(([openQuote, closeQuote]) =>
+  openQuote === closeQuote ? [openQuote] : [openQuote, closeQuote]
+)
+
+const isLetterOrNumber = (value: string) => /[\p{L}\p{N}]/u.test(value)
+
+type QuotedStrongMatch = {
+  end: number
+  quotedText: string
+}
+
+const matchQuotedStrongAt = (value: string, start: number): QuotedStrongMatch | null => {
+  for (const marker of QUOTED_STRONG_MARKERS) {
+    if (!value.startsWith(marker, start)) continue
+
+    for (const [openQuote, closeQuote] of QUOTED_STRONG_QUOTE_PAIRS) {
+      const quoteStart = start + marker.length
+      if (!value.startsWith(openQuote, quoteStart)) continue
+
+      const contentStart = quoteStart + openQuote.length
+      const closingToken = `${closeQuote}${marker}`
+      const closeIndex = value.indexOf(closingToken, contentStart)
+      if (closeIndex < 0) continue
+
+      const suffixIndex = closeIndex + closingToken.length
+      const suffixChar = value[suffixIndex] || ""
+      if (!suffixChar || !isLetterOrNumber(suffixChar)) continue
+
+      const inner = value.slice(contentStart, closeIndex)
+      if (!inner.trim()) continue
+
+      return {
+        end: suffixIndex,
+        quotedText: `${openQuote}${inner}${closeQuote}`,
+      }
+    }
+  }
+
+  return null
+}
+
+const restoreQuotedStrongText = (value: string): ReactNode[] => {
+  if (
+    (!value.includes("**") && !value.includes("__")) ||
+    !QUOTED_STRONG_QUOTE_MARKERS.some((quote) => value.includes(quote))
+  ) {
+    return [value]
+  }
+
+  const nodes: ReactNode[] = []
+  let textCursor = 0
+  let index = 0
+  let strongIndex = 0
+
+  while (index < value.length) {
+    const match = matchQuotedStrongAt(value, index)
+    if (!match) {
+      index += 1
+      continue
+    }
+
+    if (textCursor < index) {
+      nodes.push(value.slice(textCursor, index))
+    }
+
+    nodes.push(<strong key={`quoted-strong-${strongIndex}`}>{match.quotedText}</strong>)
+    strongIndex += 1
+    index = match.end
+    textCursor = match.end
+  }
+
+  if (strongIndex === 0) return [value]
+  if (textCursor < value.length) {
+    nodes.push(value.slice(textCursor))
+  }
+
+  return nodes
+}
+
+const normalizeQuotedStrongChildren = (children: ReactNode) =>
+  Children.toArray(children).flatMap((child) => {
+    if (typeof child !== "string") return [child]
+    return restoreQuotedStrongText(child)
+  })
 
 const MarkdownImageFigure = memo(
   ({ alt, src, widthPx, eager = false, editable = false, imageIndex, onWidthCommit }: MarkdownImageFigureProps) => {
@@ -349,9 +447,10 @@ const MarkdownRendererComponent: FC<Props> = ({
       rehypePlugins={[rehypeKatex]}
       components={{
         p({ children }) {
-          if (inlineOnly) return <>{children}</>
-          if (!inCallout) return <p>{children}</p>
-          return <p className="aq-markdown-text">{children}</p>
+          const normalizedChildren = normalizeQuotedStrongChildren(children)
+          if (inlineOnly) return <>{normalizedChildren}</>
+          if (!inCallout) return <p>{normalizedChildren}</p>
+          return <p className="aq-markdown-text">{normalizedChildren}</p>
         },
         table({ children, ...props }) {
           const layout = tableLayouts[tableRenderIndex] || null

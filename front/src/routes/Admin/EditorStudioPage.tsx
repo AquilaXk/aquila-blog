@@ -88,7 +88,7 @@ import {
 } from "src/libs/markdown/rendering"
 import { convertHtmlToMarkdown as convertHtmlClipboardToMarkdown } from "src/libs/markdown/htmlToMarkdown"
 import { buildPreviewSummaryFromMarkdown } from "src/libs/postSummary"
-import type { BlockEditorChangeMeta } from "src/components/editor/BlockEditorShell"
+import type { BlockEditorChangeMeta } from "src/components/editor/blockEditorContract"
 
 const BLOCK_EDITOR_V2_MERMAID_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED !== "false"
 const ADMIN_POSTS_WORKSPACE_ROUTE = "/admin/posts"

@@ -240,7 +240,7 @@ test.describe("editor studio state", () => {
     expect(qaSource).toContain("return <EditorStudioPage {...props} />")
     expect(qaSource).toContain('const QaEngineSurface = ({ seedMarkdown }')
     expect(qaSource).toContain("return <QaEngineSurface seedMarkdown={props.seedMarkdown} />")
-    expect(qaSource).toContain('import type { BlockEditorQaActions } from "src/components/editor/BlockEditorShell"')
+    expect(qaSource).toContain('import type { BlockEditorQaActions } from "src/components/editor/blockEditorContract"')
     expect(qaSource).toContain('dynamic(() => import("src/components/editor/BlockEditorShell")')
     expect(qaSource).toContain("BlockEditorShell 엔진 QA")
     expect(qaSource).toContain("실제 글쓰기 화면 레이아웃과 제목 입력칸 회귀는")

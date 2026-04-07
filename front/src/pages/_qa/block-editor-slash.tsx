@@ -1,7 +1,7 @@
 import dynamic from "next/dynamic"
 import type { GetServerSideProps, NextPage } from "next"
 import { useEffect, useRef, useState } from "react"
-import type { BlockEditorQaActions } from "src/components/editor/BlockEditorShell"
+import type { BlockEditorQaActions } from "src/components/editor/blockEditorContract"
 import type { AuthMember } from "src/hooks/useAuthSession"
 import { queryKey } from "src/constants/queryKey"
 import { createQueryClient } from "src/libs/react-query"

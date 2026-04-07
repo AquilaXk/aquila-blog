@@ -718,8 +718,8 @@ test.describe("block editor authoring flow", () => {
     await firstTableCell.hover()
 
     await expect(page.getByTestId("table-column-rail-track")).toHaveCount(0)
-    await expect(page.getByTestId("table-column-rail")).toBeVisible()
-    await expect(page.getByTestId("table-row-rail")).toBeVisible()
+    await expect(page.getByTestId("table-column-rail")).toHaveCount(0)
+    await expect(page.getByTestId("table-row-rail")).toHaveCount(0)
     await expect(page.getByTestId("table-corner-handle")).toBeVisible()
     await expect(page.getByTestId("table-column-add-bar")).toHaveCount(0)
     await expect(page.getByTestId("table-row-add-bar")).toHaveCount(0)
@@ -755,7 +755,7 @@ test.describe("block editor authoring flow", () => {
     if (!tableBox) {
       throw new Error("table bounding box is missing")
     }
-    await page.mouse.move(tableBox.x + tableBox.width - 3, tableBox.y + tableBox.height - 3)
+    await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
 
     const columnRailButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })
     const rowRailButton = page.getByTestId("table-row-rail").getByRole("button", { name: "행 메뉴" })
@@ -764,13 +764,13 @@ test.describe("block editor authoring flow", () => {
     const tableCornerButton = page.getByTestId("table-corner-handle").getByRole("button", { name: "표 메뉴" })
 
     await expect(columnRailButton).toBeVisible()
-    await expect(columnQuickAddButton).toBeVisible()
     await expect(rowRailButton).toBeVisible()
-    await expect(rowQuickAddButton).toBeVisible()
+    await expect(columnQuickAddButton).toHaveCount(0)
+    await expect(rowQuickAddButton).toHaveCount(0)
     await expect(tableCornerButton).toBeVisible()
 
-    const [columnGripRect, columnAddRect, rowGripRect, rowAddRect, cornerRect] = await Promise.all(
-      [columnRailButton, columnQuickAddButton, rowRailButton, rowQuickAddButton, tableCornerButton].map((locator) =>
+    const [columnGripRect, rowGripRect, cornerRect] = await Promise.all(
+      [columnRailButton, rowRailButton, tableCornerButton].map((locator) =>
         locator.evaluate((element) => {
           const rect = element.getBoundingClientRect()
           return { width: Math.round(rect.width), height: Math.round(rect.height) }
@@ -779,10 +779,23 @@ test.describe("block editor authoring flow", () => {
     )
     expect(columnGripRect.width).toBeGreaterThan(columnGripRect.height)
     expect(rowGripRect.height).toBeGreaterThan(rowGripRect.width)
-    expect(columnAddRect.height).toBeGreaterThan(columnAddRect.width * 3)
-    expect(rowAddRect.width).toBeGreaterThan(rowAddRect.height * 3)
     expect(cornerRect.width).toBeLessThanOrEqual(26)
     expect(cornerRect.height).toBeLessThanOrEqual(26)
+
+    await page.mouse.move(tableBox.x + tableBox.width - 3, tableBox.y + tableBox.height - 3)
+    await expect(columnQuickAddButton).toBeVisible()
+    await expect(rowQuickAddButton).toBeVisible()
+
+    const [columnAddRect, rowAddRect] = await Promise.all(
+      [columnQuickAddButton, rowQuickAddButton].map((locator) =>
+        locator.evaluate((element) => {
+          const rect = element.getBoundingClientRect()
+          return { width: Math.round(rect.width), height: Math.round(rect.height) }
+        })
+      )
+    )
+    expect(columnAddRect.height).toBeGreaterThan(columnAddRect.width * 3)
+    expect(rowAddRect.width).toBeGreaterThan(rowAddRect.height * 3)
 
     const edgeAlignment = await page.evaluate(() => {
       const table = document.querySelector<HTMLElement>(".aq-block-editor__content .tableWrapper table")
@@ -805,6 +818,7 @@ test.describe("block editor authoring flow", () => {
     expect(Math.abs(edgeAlignment.columnGap)).toBeLessThanOrEqual(2)
     expect(Math.abs(edgeAlignment.rowGap)).toBeLessThanOrEqual(2)
 
+    await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
     await rowRailButton.click()
     await expect(page.getByTestId("table-row-selection-outline")).toBeVisible()
     await expect(page.getByTestId("table-row-menu")).toBeVisible()
@@ -812,12 +826,14 @@ test.describe("block editor authoring flow", () => {
     await page.keyboard.press("Escape")
     await expect(page.getByTestId("table-row-menu")).toHaveCount(0)
 
+    await page.mouse.move(tableBox.x + tableBox.width - 3, tableBox.y + tableBox.height - 3)
     await columnQuickAddButton.click()
     await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(4)
 
     await rowQuickAddButton.click()
     await expect(page.locator("table tr")).toHaveCount(4)
 
+    await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
     await columnRailButton.click()
     await expect(page.getByTestId("table-column-selection-outline")).toBeVisible()
     const columnMenu = page.getByTestId("table-column-menu")
@@ -844,18 +860,13 @@ test.describe("block editor authoring flow", () => {
       .toBe("")
   })
 
-  test("table axis rail hover 전환 중에도 axis menu 액션이 끊기지 않는다", async ({ page }) => {
+  test("table axis rail hover 전환 중에도 target axis anchor가 끊기지 않는다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 
     await page.getByRole("button", { name: "테이블" }).click()
     const targetCell = page.locator("table tr").nth(2).locator("th, td").nth(1)
     await targetCell.click()
     await targetCell.hover()
-
-    const columnRailButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })
-    const rowRailButton = page.getByTestId("table-row-rail").getByRole("button", { name: "행 메뉴" })
-    await expect(columnRailButton).toBeVisible()
-    await expect(rowRailButton).toBeVisible()
 
     const targetMetrics = await targetCell.evaluate((element) => {
       const rect = element.getBoundingClientRect()
@@ -866,21 +877,24 @@ test.describe("block editor authoring flow", () => {
         height: Math.round(rect.height),
       }
     })
-    const railMetrics = await Promise.all(
-      [columnRailButton, rowRailButton].map((locator) =>
-        locator.evaluate((element) => {
-          const rect = element.getBoundingClientRect()
-          return {
-            left: Math.round(rect.left),
-            top: Math.round(rect.top),
-            width: Math.round(rect.width),
-            height: Math.round(rect.height),
-          }
-        })
-      )
-    )
-    const [columnRailRect, rowRailRect] = railMetrics
-    expect(Math.abs(columnRailRect.left + columnRailRect.width / 2 - (targetMetrics.left + targetMetrics.width / 2))).toBeLessThanOrEqual(8)
+    const tableBox = await page.locator(".aq-block-editor__content .tableWrapper table").boundingBox()
+    if (!tableBox) {
+      throw new Error("table bounding box is missing")
+    }
+
+    await page.mouse.move(tableBox.x + 6, targetMetrics.top + targetMetrics.height / 2)
+    const columnRailButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })
+    const rowRailButton = page.getByTestId("table-row-rail").getByRole("button", { name: "행 메뉴" })
+    await expect(rowRailButton).toBeVisible()
+    const rowRailRect = await rowRailButton.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      return {
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      }
+    })
     expect(Math.abs(rowRailRect.top + rowRailRect.height / 2 - (targetMetrics.top + targetMetrics.height / 2))).toBeLessThanOrEqual(8)
 
     await rowRailButton.click()
@@ -890,12 +904,20 @@ test.describe("block editor authoring flow", () => {
     await page.keyboard.press("Escape")
     await expect(rowMenu).toHaveCount(0)
 
-    await columnRailButton.click()
-    await expect(page.getByTestId("table-column-selection-outline")).toBeVisible()
-    const columnMenu = page.getByTestId("table-column-menu")
-    await expect(columnMenu).toBeVisible()
-    await columnMenu.getByRole("button", { name: "오른쪽에 삽입" }).click()
-    await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(4)
+    await targetCell.click()
+    await targetCell.hover()
+    await page.mouse.move(targetMetrics.left + targetMetrics.width / 2, tableBox.y + 6)
+    await expect(columnRailButton).toBeVisible()
+    const columnRailRect = await columnRailButton.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      return {
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      }
+    })
+    expect(Math.abs(columnRailRect.left + columnRailRect.width / 2 - (targetMetrics.left + targetMetrics.width / 2))).toBeLessThanOrEqual(8)
   })
 
   test("table menu는 좁은 뷰포트에서도 화면 내부에 배치된다", async ({ page }) => {
@@ -933,25 +955,35 @@ test.describe("block editor authoring flow", () => {
     const firstTableCell = page.locator("table th, table td").first()
     await firstTableCell.click()
 
-    const assertHandlesInViewport = async () => {
+    const moveToRowColumnHotzone = async () => {
+      const tableBox = await page.locator(".aq-block-editor__content .tableWrapper table").boundingBox()
+      if (!tableBox) {
+        throw new Error("table bounding box is missing")
+      }
+      await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
+    }
+
+    const moveToTrailingHotzone = async () => {
       const tableBox = await page.locator(".aq-block-editor__content .tableWrapper table").boundingBox()
       if (!tableBox) {
         throw new Error("table bounding box is missing")
       }
       await page.mouse.move(tableBox.x + tableBox.width - 3, tableBox.y + tableBox.height - 3)
+    }
 
-      const readMetrics = async () =>
+    const assertHandlesInViewport = async () => {
+      await moveToRowColumnHotzone()
+
+      const readRailMetrics = async () =>
         page.evaluate(() => {
           const viewportWidth = window.innerWidth
           const viewportHeight = window.innerHeight
           const columnRail = document.querySelector<HTMLElement>("[data-testid='table-column-rail']")
-          const columnAddBar = document.querySelector<HTMLElement>("[data-testid='table-column-add-bar']")
           const corner = document.querySelector<HTMLElement>("[data-testid='table-corner-handle']")
           const rowRail = document.querySelector<HTMLElement>("[data-testid='table-row-rail']")
-          const rowAddBar = document.querySelector<HTMLElement>("[data-testid='table-row-add-bar']")
           const table = document.querySelector<HTMLElement>(".aq-block-editor__content .tableWrapper table")
           const content = document.querySelector<HTMLElement>(".aq-block-editor__content")
-          if (!columnRail || !columnAddBar || !corner || !rowRail || !rowAddBar || !table || !content) return null
+          if (!columnRail || !corner || !rowRail || !table || !content) return null
 
           const toRect = (element: HTMLElement) => {
             const rect = element.getBoundingClientRect()
@@ -973,32 +1005,22 @@ test.describe("block editor authoring flow", () => {
           return {
             tableWidth: Math.round(table.getBoundingClientRect().width),
             contentWidth: Math.round(content.getBoundingClientRect().width),
-            columnRail: toRect(columnRail),
-            columnAddBar: toRect(columnAddBar),
-            corner: toRect(corner),
-            rowRail: toRect(rowRail),
-            rowAddBar: toRect(rowAddBar),
             cornerWithinViewport: withinViewport(toRect(corner)),
             rowWithinViewport: withinViewport(toRect(rowRail)),
             columnWithinViewport: withinViewport(toRect(columnRail)),
-            rowAddWithinViewport: withinViewport(toRect(rowAddBar)),
-            columnAddWithinViewport: withinViewport(toRect(columnAddBar)),
-            columnCount: table.querySelectorAll("tr:first-child > th, tr:first-child > td").length,
           }
         })
 
       await expect
         .poll(
           async () => {
-            const metrics = await readMetrics()
+            const metrics = await readRailMetrics()
             if (!metrics) return null
             return {
               widthStable: metrics.tableWidth <= metrics.contentWidth + 2,
               cornerWithinViewport: metrics.cornerWithinViewport,
               rowWithinViewport: metrics.rowWithinViewport,
               columnWithinViewport: metrics.columnWithinViewport,
-              rowAddWithinViewport: metrics.rowAddWithinViewport,
-              columnAddWithinViewport: metrics.columnAddWithinViewport,
             }
           },
           { timeout: 5000 }
@@ -1008,11 +1030,72 @@ test.describe("block editor authoring flow", () => {
           cornerWithinViewport: true,
           rowWithinViewport: true,
           columnWithinViewport: true,
+        })
+
+      await moveToTrailingHotzone()
+
+      const readAddMetrics = async () =>
+        page.evaluate(() => {
+          const viewportWidth = window.innerWidth
+          const viewportHeight = window.innerHeight
+          const columnAddBar = document.querySelector<HTMLElement>("[data-testid='table-column-add-bar']")
+          const rowAddBar = document.querySelector<HTMLElement>("[data-testid='table-row-add-bar']")
+          const table = document.querySelector<HTMLElement>(".aq-block-editor__content .tableWrapper table")
+          const content = document.querySelector<HTMLElement>(".aq-block-editor__content")
+          if (!columnAddBar || !rowAddBar || !table || !content) return null
+
+          const toRect = (element: HTMLElement) => {
+            const rect = element.getBoundingClientRect()
+            return {
+              left: Math.round(rect.left),
+              top: Math.round(rect.top),
+              right: Math.round(rect.right),
+              bottom: Math.round(rect.bottom),
+              width: Math.round(rect.width),
+            }
+          }
+
+          const withinViewport = (rect: { left: number; top: number; right: number; bottom: number }) =>
+            rect.left >= 8 &&
+            rect.top >= 8 &&
+            rect.right <= viewportWidth - 8 &&
+            rect.bottom <= viewportHeight - 8
+
+          return {
+            tableWidth: Math.round(table.getBoundingClientRect().width),
+            contentWidth: Math.round(content.getBoundingClientRect().width),
+            columnAddBar: toRect(columnAddBar),
+            rowAddBar: toRect(rowAddBar),
+            rowAddWithinViewport: withinViewport(toRect(rowAddBar)),
+            columnAddWithinViewport: withinViewport(toRect(columnAddBar)),
+            columnCount: table.querySelectorAll("tr:first-child > th, tr:first-child > td").length,
+          }
+        })
+
+      await expect
+        .poll(
+          async () => {
+            const metrics = await readAddMetrics()
+            if (!metrics) return null
+            return {
+              widthStable: metrics.tableWidth <= metrics.contentWidth + 2,
+              rowAddWithinViewport: metrics.rowAddWithinViewport,
+              columnAddWithinViewport: metrics.columnAddWithinViewport,
+            }
+          },
+          { timeout: 5000 }
+        )
+        .toMatchObject({
+          widthStable: true,
           rowAddWithinViewport: true,
           columnAddWithinViewport: true,
         })
 
-      const metrics = await readMetrics()
+      const addMetrics = await readAddMetrics()
+      expect(addMetrics).not.toBeNull()
+      await moveToRowColumnHotzone()
+      const railMetrics = await readRailMetrics()
+      const metrics = railMetrics && addMetrics ? { ...railMetrics, ...addMetrics } : null
       expect(metrics).not.toBeNull()
       if (!metrics) {
         throw new Error("desktop table handle viewport metrics are missing")
@@ -1031,6 +1114,7 @@ test.describe("block editor authoring flow", () => {
     const beforeMetrics = await assertHandlesInViewport()
     expect(beforeMetrics.columnCount).toBe(3)
 
+    await moveToRowColumnHotzone()
     const columnRailButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })
     await columnRailButton.click()
     const columnMenu = page.getByTestId("table-column-menu")
@@ -1040,6 +1124,7 @@ test.describe("block editor authoring flow", () => {
     const afterInsertMetrics = await assertHandlesInViewport()
     expect(afterInsertMetrics.columnCount).toBe(4)
 
+    await moveToRowColumnHotzone()
     await columnRailButton.click()
     await columnMenu.getByRole("button", { name: "열 삭제" }).click()
     await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(3)
@@ -1048,7 +1133,7 @@ test.describe("block editor authoring flow", () => {
     expect(afterDeleteMetrics.columnCount).toBe(3)
   })
 
-  test("writer surface의 trailing +행/+열은 마지막 edge hover에서만 노출된다", async ({ page }) => {
+  test("writer surface의 row/column grip과 trailing +행/+열은 edge hover에서만 노출된다", async ({ page }) => {
     await page.goto(QA_WRITER_ROUTE)
 
     await page.getByRole("button", { name: "테이블" }).click()
@@ -1057,8 +1142,8 @@ test.describe("block editor authoring flow", () => {
     await firstTableCell.click()
     await firstTableCell.hover()
 
-    await expect(page.getByTestId("table-column-rail")).toBeVisible()
-    await expect(page.getByTestId("table-row-rail")).toBeVisible()
+    await expect(page.getByTestId("table-column-rail")).toHaveCount(0)
+    await expect(page.getByTestId("table-row-rail")).toHaveCount(0)
     await expect(page.getByTestId("table-column-add-bar")).toHaveCount(0)
     await expect(page.getByTestId("table-row-add-bar")).toHaveCount(0)
 
@@ -1066,6 +1151,13 @@ test.describe("block editor authoring flow", () => {
     if (!tableBox) {
       throw new Error("writer table bounding box is missing")
     }
+    await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
+
+    await expect(page.getByTestId("table-column-rail")).toBeVisible()
+    await expect(page.getByTestId("table-row-rail")).toBeVisible()
+    await expect(page.getByTestId("table-column-add-bar")).toHaveCount(0)
+    await expect(page.getByTestId("table-row-add-bar")).toHaveCount(0)
+
     await page.mouse.move(tableBox.x + tableBox.width - 3, tableBox.y + tableBox.height - 3)
 
     await expect(page.getByTestId("table-column-add-bar")).toBeVisible()

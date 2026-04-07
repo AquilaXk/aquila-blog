@@ -777,6 +777,7 @@ const TABLE_ROW_GRIP_HEIGHT_PX = 40
 const TABLE_ADD_BAR_THICKNESS_PX = 28
 const TABLE_ADD_BAR_GAP_PX = 0
 const TABLE_ADD_BAR_MIN_LENGTH_PX = 96
+const TABLE_ADD_BAR_VIEWPORT_PADDING_PX = 8
 const TABLE_QUICK_RAIL_HIDE_DELAY_MS = 120
 const TABLE_MENU_EDGE_PADDING_PX = 16
 const TABLE_MENU_ESTIMATED_WIDTH_PX = 308
@@ -812,10 +813,9 @@ const clampViewportPosition = (
 }
 
 const resolveDesktopTableRailLayout = (
-  state: TableQuickRailState,
-  trackWidth: number
+  state: TableQuickRailState
 ) => {
-  const visibleTableWidth = Math.max(0, Math.round(trackWidth))
+  const visibleTableWidth = Math.max(0, Math.round(state.width))
   const visibleTableHeight = Math.max(TABLE_ADD_BAR_MIN_LENGTH_PX, Math.round(state.height))
   const rowAddBarWidth = Math.max(TABLE_ADD_BAR_MIN_LENGTH_PX, Math.round(state.width))
   const columnGripTop = Math.round(state.tableTop - Math.round(TABLE_COLUMN_GRIP_HEIGHT_PX / 2))
@@ -824,14 +824,30 @@ const resolveDesktopTableRailLayout = (
   const columnGripLeft = Math.round(
     state.columnLeft + Math.max(0, state.columnWidth / 2 - TABLE_COLUMN_GRIP_WIDTH_PX / 2)
   )
-  const columnAddBarLeft = Math.round(state.tableLeft + visibleTableWidth + TABLE_ADD_BAR_GAP_PX)
+  const columnAddBarLeft =
+    typeof window === "undefined"
+      ? Math.round(state.tableLeft + visibleTableWidth + TABLE_ADD_BAR_GAP_PX)
+      : clampViewportPosition(
+          Math.round(state.tableLeft + visibleTableWidth + TABLE_ADD_BAR_GAP_PX),
+          TABLE_ADD_BAR_VIEWPORT_PADDING_PX,
+          window.innerWidth,
+          TABLE_ADD_BAR_THICKNESS_PX
+        )
   const columnAddBarTop = Math.round(state.tableTop)
   const rowGripTop = Math.round(
     state.rowTop + Math.max(0, state.rowHeight / 2 - TABLE_ROW_GRIP_HEIGHT_PX / 2)
   )
   const rowGripLeft = Math.round(state.tableLeft - Math.round(TABLE_ROW_GRIP_WIDTH_PX / 2))
   const rowAddBarLeft = Math.round(state.tableLeft)
-  const rowAddBarTop = Math.round(state.tableTop + state.height + TABLE_ADD_BAR_GAP_PX)
+  const rowAddBarTop =
+    typeof window === "undefined"
+      ? Math.round(state.tableTop + state.height + TABLE_ADD_BAR_GAP_PX)
+      : clampViewportPosition(
+          Math.round(state.tableTop + state.height + TABLE_ADD_BAR_GAP_PX),
+          TABLE_ADD_BAR_VIEWPORT_PADDING_PX,
+          window.innerHeight,
+          TABLE_ADD_BAR_THICKNESS_PX
+        )
 
   return {
     cornerLeft,
@@ -1742,6 +1758,8 @@ const BlockEditorShell = ({
     top: 0,
     height: 0,
   })
+  const [isTableQuickRailHovered, setIsTableQuickRailHovered] = useState(false)
+  const [isTableColumnResizeActive, setIsTableColumnResizeActive] = useState(false)
   const [tableMenuState, setTableMenuState] = useState<TableMenuState>(null)
   const tableQuickRailStateRef = useRef(tableQuickRailState)
   const [draggedBlockState, setDraggedBlockState] = useState<DraggedBlockState>(null)
@@ -2855,6 +2873,40 @@ const BlockEditorShell = ({
     [getCurrentSelectedTableRect]
   )
 
+  const focusRenderedTableCell = useCallback((cell: HTMLTableCellElement) => {
+    const currentEditor = editorRef.current
+    if (!currentEditor) return false
+
+    let domPosition = 0
+    try {
+      domPosition = currentEditor.view.posAtDOM(cell, 0)
+    } catch {
+      return false
+    }
+
+    const resolvedPosition = resolveDocPosSafe(currentEditor, domPosition)
+    if (!resolvedPosition) return false
+
+    for (let depth = resolvedPosition.depth; depth > 0; depth -= 1) {
+      const node = resolvedPosition.node(depth)
+      if (node.type.name !== "tableCell" && node.type.name !== "tableHeader") continue
+
+      const cellPosition = resolvedPosition.before(depth)
+      const cellNode = currentEditor.state.doc.nodeAt(cellPosition)
+      if (!cellNode) return false
+
+      const selectionPos =
+        getFirstEditableTextPositionInNode(cellNode, cellPosition) ?? Math.max(1, cellPosition + 1)
+      currentEditor.view.dispatch(
+        currentEditor.state.tr.setSelection(TextSelection.create(currentEditor.state.doc, selectionPos))
+      )
+      currentEditor.view.focus()
+      return true
+    }
+
+    return false
+  }, [])
+
   const appendTableAxisAtEnd = useCallback(
     (axis: "row" | "column") => {
       const currentEditor = editorRef.current
@@ -3054,6 +3106,7 @@ const BlockEditorShell = ({
       if (!selectTableColumnByIndex(columnIndex)) return
       const resizeContext = getCurrentTableColumnResizeContext(columnIndex)
       if (!resizeContext) return
+      setIsTableColumnResizeActive(true)
       setTableQuickRailState((prev) => ({ ...prev, columnIndex }))
       clearWindowTextSelection()
       setColumnResizeUserSelectSuppressed(true)
@@ -3096,6 +3149,7 @@ const BlockEditorShell = ({
 
   const stopTableColumnRailResize = useCallback(() => {
     tableColumnRailResizeRef.current = null
+    setIsTableColumnResizeActive(false)
     hideTableColumnDragGuide()
     clearWindowTextSelection()
     setColumnResizeUserSelectSuppressed(false)
@@ -6267,37 +6321,28 @@ const BlockEditorShell = ({
   ])
 
   useEffect(() => {
-    if (!tableQuickRailState.visible) return
-    const activeEditor = editorRef.current ?? editor
-    if (!activeEditor) return
-
-    if (!isTableSelectionActive(activeEditor)) {
-      if (!tableMenuState) {
+    if (!tableQuickRailState.visible && !isTableQuickRailHovered) return
+    const anchorCell = resolveTableQuickRailAnchorElement()
+    if (!anchorCell) {
+      if (!tableMenuState && !isTableColumnResizeActive && !isTableQuickRailHovered) {
         scheduleTableQuickRailHide(0)
       }
       return
     }
-
-    if (!shouldPersistTableHandles) {
-      return
-    }
-
-    const anchorCell = resolveTableQuickRailAnchorElement()
-    if (!anchorCell) return
     syncTableQuickRailFromElement(anchorCell)
   }, [
-    editor,
+    isTableColumnResizeActive,
+    isTableQuickRailHovered,
     resolveTableQuickRailAnchorElement,
     selectionTick,
     scheduleTableQuickRailHide,
-    shouldPersistTableHandles,
     syncTableQuickRailFromElement,
     tableMenuState,
     tableQuickRailState.visible,
   ])
 
   useEffect(() => {
-    if (typeof window === "undefined" || isCoarsePointer || !tableQuickRailState.visible || !shouldPersistTableHandles) return
+    if (typeof window === "undefined" || isCoarsePointer || (!tableQuickRailState.visible && !isTableQuickRailHovered)) return
     if (tableColumnRailResizeRef.current || tableRowResizeRef.current) return
 
     const anchorElement = resolveTableQuickRailAnchorElement()
@@ -6330,9 +6375,9 @@ const BlockEditorShell = ({
     syncTableQuickRailFromElement(anchorElement)
   }, [
     isCoarsePointer,
+    isTableQuickRailHovered,
     resolveTableQuickRailAnchorElement,
     selectionTick,
-    shouldPersistTableHandles,
     syncTableQuickRailFromElement,
     tableQuickRailState.columnSegments,
     tableQuickRailState.visible,
@@ -6341,7 +6386,7 @@ const BlockEditorShell = ({
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof MutationObserver === "undefined") return
-    if (isCoarsePointer || !tableQuickRailState.visible || !shouldPersistTableHandles) return
+    if (isCoarsePointer || (!tableQuickRailState.visible && !isTableQuickRailHovered)) return
 
     const resolveAnchorElement = () => resolveTableQuickRailAnchorElement()
 
@@ -6391,7 +6436,7 @@ const BlockEditorShell = ({
       resizeObserver?.disconnect()
       mutationObserver.disconnect()
     }
-  }, [isCoarsePointer, resolveTableQuickRailAnchorElement, selectionTick, shouldPersistTableHandles, syncTableQuickRailFromElement, tableQuickRailState.visible])
+  }, [isCoarsePointer, isTableQuickRailHovered, resolveTableQuickRailAnchorElement, selectionTick, syncTableQuickRailFromElement, tableQuickRailState.visible])
 
   useEffect(() => {
     const elements = getTopLevelBlockElements()
@@ -6445,6 +6490,7 @@ const BlockEditorShell = ({
         target?.closest("[data-table-column-rail-track='true']")
       ) {
         cancelTableQuickRailHide()
+        setIsTableQuickRailHovered(true)
         if (isTableMode) {
           setHoveredBlockIndex(null)
         }
@@ -6453,7 +6499,17 @@ const BlockEditorShell = ({
       const hoveredTableElement = cell?.closest(".aq-table-shell, .tableWrapper, table") ?? target?.closest(".aq-table-shell, .tableWrapper, table") ?? null
       if (hoveredTableElement) {
         syncTableQuickRailFromElement(cell ?? target ?? hoveredTableElement)
+        setIsTableQuickRailHovered(true)
+        setViewportRowResizeHot(isRowResizeHandleTarget(cell, clientX, clientY))
+        setHoveredBlockIndex(null)
+        if (selectedBlockNodeIndex !== null && !keyboardBlockSelectionStickyRef.current) {
+          keyboardBlockSelectionStickyRef.current = false
+          setSelectedBlockNodeIndex(null)
+          syncSelectedBlockNodeSurface(null)
+        }
+        return
       } else if (!tableMenuState) {
+        setIsTableQuickRailHovered(false)
         scheduleTableQuickRailHide()
       }
       if (isTableMode) {
@@ -6486,6 +6542,7 @@ const BlockEditorShell = ({
       findTopLevelBlockIndexFromTarget,
       getTableCellFromClientPoint,
       isCoarsePointer,
+      isTableQuickRailHovered,
       isTableMode,
       isRowResizeHandleTarget,
       selectedBlockNodeIndex,
@@ -6513,6 +6570,7 @@ const BlockEditorShell = ({
 
   const handleViewportPointerLeave = useCallback(() => {
     scheduleHoveredBlockClear()
+    setIsTableQuickRailHovered(false)
     if (!shouldPersistTableHandles) {
       scheduleTableQuickRailHide()
     }
@@ -6596,6 +6654,22 @@ const BlockEditorShell = ({
       }
       if (isCoarsePointer || tableRowResizeRef.current || tableColumnRailResizeRef.current) return
       const cell = getTableCellFromClientPoint(event.clientX, event.clientY, event.target)
+      const currentEditor = editorRef.current ?? editor
+      const hasTableStructuralSelection = Boolean(
+        currentEditor &&
+          (currentEditor.state.selection instanceof CellSelection ||
+            (currentEditor.state.selection instanceof NodeSelection &&
+              currentEditor.state.selection.node.type.name === "table"))
+      )
+      if (cell) {
+        setIsTableQuickRailHovered(false)
+        if (!shouldPersistTableHandles) {
+          hideTableQuickRailImmediately()
+        }
+      }
+      if (cell && hasTableStructuralSelection && !isRowResizeHandleTarget(cell, event.clientX, event.clientY)) {
+        focusRenderedTableCell(cell)
+      }
       if (!isRowResizeHandleTarget(cell, event.clientX, event.clientY) || !cell) return
       event.preventDefault()
       event.stopPropagation()
@@ -6604,13 +6678,17 @@ const BlockEditorShell = ({
     [
       findTopLevelBlockIndexFromTarget,
       findTopLevelBlockIndexByClientPosition,
+      editor,
+      focusRenderedTableCell,
       getTableCellFromClientPoint,
+      hideTableQuickRailImmediately,
       isOuterBlockSelectionGesture,
       isCoarsePointer,
       isRowResizeHandleTarget,
       isTableMode,
       promoteTopLevelBlockSelection,
       selectedBlockNodeIndex,
+      shouldPersistTableHandles,
       startTableRowResize,
       syncSelectedBlockNodeSurface,
     ]
@@ -6754,18 +6832,12 @@ const BlockEditorShell = ({
   }, [tableMenuState])
 
   const shouldShowTableHandles =
-    !isCoarsePointer && (tableQuickRailState.visible || shouldPersistTableHandles)
-  const desktopTableRailTrackWidth = useMemo(
-    () =>
-      tableQuickRailState.columnSegments.length
-        ? tableQuickRailState.columnSegments.reduce((sum, segment) => sum + Math.max(0, segment.width), 0)
-        : tableQuickRailState.width,
-    [tableQuickRailState.columnSegments, tableQuickRailState.width]
-  )
+    !isCoarsePointer &&
+    (tableQuickRailState.visible || isTableQuickRailHovered || shouldPersistTableHandles || isTableColumnResizeActive)
   const desktopTableRailLayout = useMemo(() => {
     if (typeof window === "undefined") return null
-    return resolveDesktopTableRailLayout(tableQuickRailState, desktopTableRailTrackWidth)
-  }, [desktopTableRailTrackWidth, tableQuickRailState])
+    return resolveDesktopTableRailLayout(tableQuickRailState)
+  }, [tableQuickRailState])
 
   useEffect(() => {
     if (shouldShowTableHandles) return
@@ -7404,7 +7476,12 @@ const BlockEditorShell = ({
                 appendTableAxisAtEnd("column")
               }}
               style={{
-                left: `${desktopTableRailLayout?.columnAddBarLeft ?? Math.round(tableQuickRailState.tableLeft + tableQuickRailState.width + TABLE_ADD_BAR_GAP_PX)}px`,
+                left: `${
+                  desktopTableRailLayout?.columnAddBarLeft ??
+                  Math.round(
+                    tableQuickRailState.tableLeft + tableQuickRailState.width + TABLE_ADD_BAR_GAP_PX
+                  )
+                }px`,
                 top: `${desktopTableRailLayout?.columnAddBarTop ?? Math.round(tableQuickRailState.tableTop)}px`,
                 height: `${desktopTableRailLayout?.columnAddBarHeight ?? Math.max(TABLE_ADD_BAR_MIN_LENGTH_PX, Math.round(tableQuickRailState.height))}px`,
               }}
@@ -7431,7 +7508,12 @@ const BlockEditorShell = ({
               }}
               style={{
                 left: `${desktopTableRailLayout?.rowAddBarLeft ?? Math.round(tableQuickRailState.tableLeft)}px`,
-                top: `${desktopTableRailLayout?.rowAddBarTop ?? Math.round(tableQuickRailState.tableTop + tableQuickRailState.height + TABLE_ADD_BAR_GAP_PX)}px`,
+                top: `${
+                  desktopTableRailLayout?.rowAddBarTop ??
+                  Math.round(
+                    tableQuickRailState.tableTop + tableQuickRailState.height + TABLE_ADD_BAR_GAP_PX
+                  )
+                }px`,
                 width: `${desktopTableRailLayout?.rowAddBarWidth ?? Math.max(TABLE_ADD_BAR_MIN_LENGTH_PX, Math.round(tableQuickRailState.width))}px`,
               }}
             >

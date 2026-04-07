@@ -721,6 +721,8 @@ test.describe("block editor authoring flow", () => {
     await expect(page.getByTestId("table-column-rail")).toBeVisible()
     await expect(page.getByTestId("table-row-rail")).toBeVisible()
     await expect(page.getByTestId("table-corner-handle")).toBeVisible()
+    await expect(page.getByTestId("table-column-add-bar")).toHaveCount(0)
+    await expect(page.getByTestId("table-row-add-bar")).toHaveCount(0)
     await expect(page.getByTestId("table-bubble-toolbar")).toHaveCount(0)
     await expect(page.getByTestId("block-drag-handle")).toHaveCount(0)
 
@@ -748,6 +750,12 @@ test.describe("block editor authoring flow", () => {
     expect(Math.abs(tableWidthShape.contentWidth - tableWidthShape.tableWidth)).toBeLessThanOrEqual(2)
     expect(tableWidthShape.firstCellWidth).toBeGreaterThanOrEqual(180)
     expect(tableWidthShape.firstCellWidth).toBeLessThanOrEqual(320)
+
+    const tableBox = await page.locator(".aq-block-editor__content .tableWrapper table").boundingBox()
+    if (!tableBox) {
+      throw new Error("table bounding box is missing")
+    }
+    await page.mouse.move(tableBox.x + tableBox.width - 3, tableBox.y + tableBox.height - 3)
 
     const columnRailButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })
     const rowRailButton = page.getByTestId("table-row-rail").getByRole("button", { name: "행 메뉴" })
@@ -924,9 +932,14 @@ test.describe("block editor authoring flow", () => {
     await page.getByRole("button", { name: "테이블" }).click()
     const firstTableCell = page.locator("table th, table td").first()
     await firstTableCell.click()
-    await firstTableCell.hover()
 
     const assertHandlesInViewport = async () => {
+      const tableBox = await page.locator(".aq-block-editor__content .tableWrapper table").boundingBox()
+      if (!tableBox) {
+        throw new Error("table bounding box is missing")
+      }
+      await page.mouse.move(tableBox.x + tableBox.width - 3, tableBox.y + tableBox.height - 3)
+
       const readMetrics = async () =>
         page.evaluate(() => {
           const viewportWidth = window.innerWidth
@@ -1033,6 +1046,30 @@ test.describe("block editor authoring flow", () => {
 
     const afterDeleteMetrics = await assertHandlesInViewport()
     expect(afterDeleteMetrics.columnCount).toBe(3)
+  })
+
+  test("writer surface의 trailing +행/+열은 마지막 edge hover에서만 노출된다", async ({ page }) => {
+    await page.goto(QA_WRITER_ROUTE)
+
+    await page.getByRole("button", { name: "테이블" }).click()
+
+    const firstTableCell = page.locator("table th, table td").first()
+    await firstTableCell.click()
+    await firstTableCell.hover()
+
+    await expect(page.getByTestId("table-column-rail")).toBeVisible()
+    await expect(page.getByTestId("table-row-rail")).toBeVisible()
+    await expect(page.getByTestId("table-column-add-bar")).toHaveCount(0)
+    await expect(page.getByTestId("table-row-add-bar")).toHaveCount(0)
+
+    const tableBox = await page.locator(".aq-block-editor__content .tableWrapper table").boundingBox()
+    if (!tableBox) {
+      throw new Error("writer table bounding box is missing")
+    }
+    await page.mouse.move(tableBox.x + tableBox.width - 3, tableBox.y + tableBox.height - 3)
+
+    await expect(page.getByTestId("table-column-add-bar")).toBeVisible()
+    await expect(page.getByTestId("table-row-add-bar")).toBeVisible()
   })
 
   test("모바일 뷰포트에서는 표만 wrapper 내부 가로 스크롤을 사용하고 페이지 전체 overflow는 생기지 않는다", async ({

@@ -5,7 +5,6 @@ import { usePostsTotalCountQuery } from "src/hooks/usePostsTotalCountQuery"
 import { useTagsQuery } from "src/hooks/useTagsQuery"
 import { replaceShallowRoutePreservingScroll } from "src/libs/router"
 import {
-  FEED_CHIP_GAP_PX,
   FEED_TAG_RAIL_CHIP_MAX_PX,
   FEED_TAG_RAIL_DESKTOP_MIN_PX,
   FEED_TAG_REPRESENTATIVE_CHIP_LIMIT,
@@ -271,10 +270,10 @@ const StyledWrapper = styled.div`
     border-radius: 4px;
     background: transparent;
     padding: 0.12rem 0;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: ${FEED_CHIP_GAP_PX}px;
+    display: flex;
+    align-items: baseline;
+    justify-content: flex-start;
+    gap: 0.42rem;
     text-align: left;
     color: ${({ theme }) => theme.colors.gray10};
     cursor: pointer;
@@ -323,6 +322,8 @@ const StyledWrapper = styled.div`
   }
 
   .desktopList button .name {
+    min-width: 0;
+    flex: 0 1 auto;
     font-size: 0.84rem;
     font-weight: 610;
     color: ${({ theme }) => theme.colors.gray10};
@@ -338,7 +339,8 @@ const StyledWrapper = styled.div`
   }
 
   .desktopList button .count {
-    font-size: 0.72rem;
+    flex: 0 0 auto;
+    font-size: 0.78rem;
     color: ${({ theme }) => theme.colors.gray10};
     font-variant-numeric: tabular-nums;
   }

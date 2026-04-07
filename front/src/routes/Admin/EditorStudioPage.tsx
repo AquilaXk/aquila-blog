@@ -1,13 +1,10 @@
 import styled from "@emotion/styled"
 import { useQueryClient } from "@tanstack/react-query"
 import { GetServerSideProps, NextPage } from "next"
-import dynamic from "next/dynamic"
 import { useRouter } from "next/router"
 import {
   type ClipboardEvent as ReactClipboardEvent,
   ChangeEvent,
-  Profiler,
-  type ProfilerOnRenderCallback,
   useDeferredValue,
   useCallback,
   useEffect,
@@ -36,6 +33,7 @@ import {
   deriveEditorPersistenceState,
   isPublishActionDisabled,
 } from "./editorStudioState"
+import { WriterEditorHost } from "./WriterEditorHost"
 import {
   isServerTempDraftPost,
   isTempDraftTitlePlaceholder,
@@ -125,11 +123,6 @@ const normalizeEditorReturnRoute = (value: string) => {
   if (normalized.startsWith("/editor")) return ""
   return normalized
 }
-
-const LazyBlockEditorShell = dynamic(() => import("src/components/editor/BlockEditorShell"), {
-  ssr: false,
-  loading: () => <div style={{ padding: "1rem 1.1rem", color: "var(--color-gray10)" }}>블록 에디터 준비 중...</div>,
-})
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null
 
@@ -4107,52 +4100,49 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         ? "새 글 작성"
         : "발행"
   const isBlockEditorDisabled = loadingKey.length > 0
-  const handleEditorProfilerRender = useCallback<ProfilerOnRenderCallback>(
-    (_id, _phase, actualDuration) => {
-      recordEditorCommitDurationForRuntimeGuard(actualDuration)
-    },
-    []
-  )
+  const handleEditorCommitDuration = useCallback((actualDuration: number) => {
+    recordEditorCommitDurationForRuntimeGuard(actualDuration)
+  }, [])
   const dedicatedEditorCanvas = useMemo(
     () => (
-      <Profiler id="editor-dedicated-canvas" onRender={handleEditorProfilerRender}>
-        <LazyBlockEditorShell
-          value={postContent}
-          onChange={handleBlockEditorChange}
-          onUploadImage={handleBlockEditorImageUpload}
-          onUploadFile={handleBlockEditorFileUpload}
-          enableMermaidBlocks={BLOCK_EDITOR_V2_MERMAID_ENABLED}
-          disabled={isBlockEditorDisabled}
-        />
-      </Profiler>
+      <WriterEditorHost
+        canvasId="editor-dedicated-canvas"
+        markdown={postContent}
+        onMarkdownChange={handleBlockEditorChange}
+        onImageUpload={handleBlockEditorImageUpload}
+        onFileUpload={handleBlockEditorFileUpload}
+        mermaidEnabled={BLOCK_EDITOR_V2_MERMAID_ENABLED}
+        disabled={isBlockEditorDisabled}
+        onCommitDuration={handleEditorCommitDuration}
+      />
     ),
     [
-      handleEditorProfilerRender,
       handleBlockEditorChange,
       handleBlockEditorFileUpload,
       handleBlockEditorImageUpload,
+      handleEditorCommitDuration,
       isBlockEditorDisabled,
       postContent,
     ]
   )
   const composeEditorCanvas = useMemo(
     () => (
-      <Profiler id="editor-compose-canvas" onRender={handleEditorProfilerRender}>
-        <LazyBlockEditorShell
-          value={postContent}
-          onChange={handleBlockEditorChange}
-          onUploadImage={handleBlockEditorImageUpload}
-          onUploadFile={handleBlockEditorFileUpload}
-          enableMermaidBlocks={BLOCK_EDITOR_V2_MERMAID_ENABLED}
-          disabled={isBlockEditorDisabled}
-        />
-      </Profiler>
+      <WriterEditorHost
+        canvasId="editor-compose-canvas"
+        markdown={postContent}
+        onMarkdownChange={handleBlockEditorChange}
+        onImageUpload={handleBlockEditorImageUpload}
+        onFileUpload={handleBlockEditorFileUpload}
+        mermaidEnabled={BLOCK_EDITOR_V2_MERMAID_ENABLED}
+        disabled={isBlockEditorDisabled}
+        onCommitDuration={handleEditorCommitDuration}
+      />
     ),
     [
-      handleEditorProfilerRender,
       handleBlockEditorChange,
       handleBlockEditorFileUpload,
       handleBlockEditorImageUpload,
+      handleEditorCommitDuration,
       isBlockEditorDisabled,
       postContent,
     ]

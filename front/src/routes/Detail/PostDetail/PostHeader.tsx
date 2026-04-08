@@ -143,8 +143,16 @@ const PostHeader: React.FC<Props> = ({
           {showEngagement ? (
             <div className="engagementRow" aria-label="post engagement">
               <div className="stats" aria-label="post stats">
-                <span className="statChip">댓글 {data.commentsCount ?? 0}</span>
-                <span className="statChip">조회 {hitCount ?? data.hitCount ?? 0}</span>
+                <span className="statChip commentStatChip" data-hide-mobile={hideActionButtonsOnMobile}>
+                  댓글 {data.commentsCount ?? 0}
+                </span>
+                <span className="statChip viewStatChip">
+                  <span className="statMetaLabel">
+                    <AppIcon name="eye" />
+                    <span>조회</span>
+                  </span>
+                  <strong className="statMetricValue">{hitCount ?? data.hitCount ?? 0}</strong>
+                </span>
                 {onToggleLike && (
                   <button
                     type="button"
@@ -155,8 +163,11 @@ const PostHeader: React.FC<Props> = ({
                     disabled={likePending}
                     onClick={onToggleLike}
                   >
-                    <AppIcon name={actorHasLiked ? "heart-filled" : "heart"} />
-                    <span>좋아요 {likesCount ?? data.likesCount ?? 0}</span>
+                    <span className="mobileLikeHeading">
+                      <AppIcon name={actorHasLiked ? "heart-filled" : "heart"} />
+                      <span>좋아요</span>
+                    </span>
+                    <strong className="mobileLikeValue">{likesCount ?? data.likesCount ?? 0}</strong>
                   </button>
                 )}
               </div>
@@ -410,29 +421,33 @@ const StyledWrapper = styled.header`
 
   .mobileLikeButton {
     display: none;
-    align-items: center;
+    flex-direction: column;
+    align-items: flex-start;
     justify-content: center;
-    gap: 0.38rem;
+    gap: 0.44rem;
     min-height: 40px;
-    padding: 0 0.82rem;
-    border-radius: 8px;
+    padding: 0.72rem 0.9rem;
+    border-radius: 14px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: transparent;
+    background: ${({ theme }) => theme.colors.gray2};
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 0.88rem;
     font-weight: 700;
     cursor: pointer;
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
     transition:
       border-color 0.18s ease,
       background-color 0.18s ease,
-      color 0.18s ease;
+      color 0.18s ease,
+      transform 0.18s ease;
 
     svg {
-      font-size: 1rem;
+      font-size: 1.02rem;
     }
 
     &[data-active="true"] {
       border-color: ${({ theme }) => theme.colors.red7};
+      background: ${({ theme }) => theme.colors.red3};
 
       svg {
         color: ${({ theme }) => theme.colors.red10};
@@ -443,6 +458,23 @@ const StyledWrapper = styled.header`
       opacity: 0.72;
       cursor: not-allowed;
     }
+  }
+
+  .mobileLikeHeading {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .mobileLikeValue {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 1.34rem;
+    line-height: 1;
+    letter-spacing: -0.03em;
   }
 
   .likeButton {
@@ -516,6 +548,7 @@ const StyledWrapper = styled.header`
   .statChip {
     display: inline-flex;
     align-items: center;
+    gap: 0.42rem;
     min-height: 40px;
     padding: 0 0.82rem;
     border-radius: 8px;
@@ -525,6 +558,28 @@ const StyledWrapper = styled.header`
     font-size: 0.9rem;
     font-weight: 650;
     line-height: 1;
+  }
+
+  .viewStatChip {
+    justify-content: space-between;
+  }
+
+  .statMetaLabel {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.34rem;
+    color: ${({ theme }) => theme.colors.gray11};
+
+    svg {
+      font-size: 0.96rem;
+    }
+  }
+
+  .statMetricValue {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.96rem;
+    font-weight: 760;
+    letter-spacing: -0.02em;
   }
 
   .thumbnail {
@@ -574,12 +629,16 @@ const StyledWrapper = styled.header`
     .stats {
       width: 100%;
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 0.55rem;
+      grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+      gap: 0.6rem;
     }
 
     .mobileLikeButton {
       display: inline-flex;
+    }
+
+    .commentStatChip[data-hide-mobile="true"] {
+      display: none;
     }
 
     .shareFeedbackPill {
@@ -595,8 +654,36 @@ const StyledWrapper = styled.header`
     .mobileLikeButton,
     .likeButton,
     .shareButton {
-      min-height: 38px;
       width: 100%;
+    }
+
+    .viewStatChip,
+    .mobileLikeButton {
+      min-height: 64px;
+      border-radius: 16px;
+      padding: 0.85rem 0.95rem;
+    }
+
+    .viewStatChip {
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 0.52rem;
+      background: ${({ theme }) => theme.colors.gray2};
+    }
+
+    .statMetaLabel {
+      font-size: 0.8rem;
+    }
+
+    .statMetricValue,
+    .mobileLikeValue {
+      font-size: 1.4rem;
+    }
+
+    .likeButton,
+    .shareButton {
+      min-height: 38px;
       justify-content: center;
     }
   }

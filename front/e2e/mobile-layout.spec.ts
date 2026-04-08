@@ -353,9 +353,8 @@ test("iPhone 15 Pro 상세 액션은 메타/공유/댓글/작성자 유틸리티
   await page.goto("/posts/991")
 
   const engagementRow = page.locator('[aria-label="post engagement"]')
-  const statChips = engagementRow.locator(".statChip")
-  const commentStat = statChips.nth(0)
-  const hitStat = statChips.nth(1)
+  const commentStat = engagementRow.locator(".commentStatChip")
+  const hitStat = engagementRow.locator(".viewStatChip")
   const likeButton = engagementRow.getByRole("button", { name: "좋아요 1" })
   const compactActionBar = page.getByLabel("빠른 이동 및 반응")
   const shareButton = compactActionBar.getByRole("button", { name: /^공유/ })
@@ -363,17 +362,16 @@ test("iPhone 15 Pro 상세 액션은 메타/공유/댓글/작성자 유틸리티
   const editButton = page.getByRole("button", { name: "수정" }).first()
   const deleteButton = page.getByRole("button", { name: "삭제" }).first()
 
-  await expect(statChips).toHaveCount(2)
-  await expect(commentStat).toHaveText("댓글 4")
-  await expect(hitStat).toHaveText("조회 25")
+  await expect(commentStat).toBeHidden()
+  await expect(hitStat).toContainText("조회")
+  await expect(hitStat).toContainText("25")
   await expect(likeButton).toBeVisible()
   await expect(shareButton).toBeVisible()
   await expect(commentButton).toBeVisible()
   await expect(editButton).toBeVisible()
   await expect(deleteButton).toBeVisible()
 
-  const [commentBox, hitBox, likeBox, shareBox, commentActionBox, editBox, deleteBox] = await Promise.all([
-    commentStat.boundingBox(),
+  const [hitBox, likeBox, shareBox, commentActionBox, editBox, deleteBox] = await Promise.all([
     hitStat.boundingBox(),
     likeButton.boundingBox(),
     shareButton.boundingBox(),
@@ -382,7 +380,6 @@ test("iPhone 15 Pro 상세 액션은 메타/공유/댓글/작성자 유틸리티
     deleteButton.boundingBox(),
   ])
 
-  expect(commentBox).not.toBeNull()
   expect(hitBox).not.toBeNull()
   expect(likeBox).not.toBeNull()
   expect(shareBox).not.toBeNull()
@@ -390,9 +387,9 @@ test("iPhone 15 Pro 상세 액션은 메타/공유/댓글/작성자 유틸리티
   expect(editBox).not.toBeNull()
   expect(deleteBox).not.toBeNull()
 
-  expect(Math.abs((commentBox?.y ?? 0) - (hitBox?.y ?? 0))).toBeLessThanOrEqual(4)
   expect(Math.abs((hitBox?.y ?? 0) - (likeBox?.y ?? 0))).toBeLessThanOrEqual(4)
   expect((likeBox?.x ?? 0)).toBeGreaterThan((hitBox?.x ?? 0))
+  expect((likeBox?.width ?? 0)).toBeGreaterThan((hitBox?.width ?? 0))
   expect((shareBox?.y ?? 0)).toBeGreaterThan((likeBox?.y ?? 0) + ((likeBox?.height ?? 0) * 0.6))
   expect(Math.abs((shareBox?.y ?? 0) - (commentActionBox?.y ?? 0))).toBeLessThanOrEqual(4)
   expect((editBox?.y ?? 0)).toBeLessThan((likeBox?.y ?? 0))

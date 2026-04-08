@@ -20,6 +20,7 @@ import type {
   MouseEvent as ReactMouseEvent,
   ReactNode,
 } from "react"
+import { createPortal } from "react-dom"
 import { getPreferredCodeLanguage } from "./extensions"
 import {
   deleteTopLevelBlockAt,
@@ -6614,6 +6615,485 @@ const BlockEditorEngine = ({
     hideTableColumnDragGuide()
   }, [hideTableColumnDragGuide, shouldShowTableHandles])
 
+  const tableOverlay = (
+    <>
+      {tableColumnDragGuideState.visible ? (
+        <TableColumnDragGuide
+          data-testid="table-column-drag-guide"
+          style={{
+            left: `${tableColumnDragGuideState.left}px`,
+            top: `${tableColumnDragGuideState.top}px`,
+            height: `${tableColumnDragGuideState.height}px`,
+          }}
+        />
+      ) : null}
+      {shouldShowTableHandles
+        ? !tableColumnDragGuideState.visible
+          ? tableQuickRailState.columnSegments.slice(0, -1).map((segment, index) => (
+            <TableColumnResizeBoundaryHandle
+              key={`table-column-boundary-${index}`}
+              type="button"
+              data-testid={`table-column-resize-boundary-${index}`}
+              aria-label={`열 ${index + 1} 경계 조절`}
+              onPointerEnter={cancelTableQuickRailHide}
+              onPointerLeave={() => {
+                if (!shouldPersistTableHandles) {
+                  scheduleTableQuickRailHide()
+                }
+              }}
+              onPointerDown={(event: React.PointerEvent<HTMLButtonElement>) => {
+                event.preventDefault()
+                event.stopPropagation()
+                startTableColumnRailResize(event.pointerId, index, event.clientX)
+              }}
+              style={{
+                left: `${Math.round(tableQuickRailState.tableLeft + segment.left + segment.width)}px`,
+                top: `${Math.round(tableQuickRailState.tableTop)}px`,
+                height: `${Math.round(tableQuickRailState.height)}px`,
+              }}
+            />
+            ))
+          : null
+        : null}
+      {shouldShowTableHandles ? (
+        <>
+          {isCurrentTableColumnSelection(tableQuickRailState.columnIndex) ? (
+            <TableAxisSelectionOutline
+              data-axis="column"
+              data-testid="table-column-selection-outline"
+              style={{
+                left: `${Math.round(tableQuickRailState.columnLeft)}px`,
+                top: `${Math.round(tableQuickRailState.tableTop)}px`,
+                width: `${Math.round(tableQuickRailState.columnWidth)}px`,
+                height: `${Math.round(tableQuickRailState.height)}px`,
+              }}
+            />
+          ) : null}
+          {isCurrentTableRowSelection(tableQuickRailState.rowIndex) ? (
+            <TableAxisSelectionOutline
+              data-axis="row"
+              data-testid="table-row-selection-outline"
+              style={{
+                left: `${Math.round(tableQuickRailState.tableLeft)}px`,
+                top: `${Math.round(tableQuickRailState.rowTop)}px`,
+                width: `${Math.round(tableQuickRailState.width)}px`,
+                height: `${Math.round(tableQuickRailState.rowHeight)}px`,
+              }}
+            />
+          ) : null}
+          <TableCornerHandle
+            data-table-corner-handle="true"
+            data-testid="table-corner-handle"
+            onPointerEnter={cancelTableQuickRailHide}
+            onPointerLeave={() => {
+              if (!shouldPersistTableHandles) {
+                scheduleTableQuickRailHide()
+              }
+            }}
+            style={{
+              left: `${
+                desktopTableRailLayout?.cornerLeft ??
+                Math.round(tableQuickRailState.tableLeft + Math.max(0, tableQuickRailState.width - TABLE_CORNER_BUTTON_SIZE_PX))
+              }px`,
+              top: `${desktopTableRailLayout?.cornerTop ?? Math.round(tableQuickRailState.tableTop - TABLE_CORNER_OFFSET_PX)}px`,
+            }}
+          >
+            <TableHandleButton
+              type="button"
+              title="표 메뉴"
+              aria-label="표 메뉴"
+              data-testid="table-corner-handle-button"
+              onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+                event.preventDefault()
+                event.stopPropagation()
+                openSelectionAwareTableMenu("table", event.currentTarget.getBoundingClientRect())
+              }}
+            >
+              <TableHandleIcon kind="more" />
+            </TableHandleButton>
+          </TableCornerHandle>
+          {tableQuickRailState.showRowRail || shouldPersistTableHandles ? (
+            <TableAxisRail
+              data-table-axis-rail="true"
+              data-testid="table-row-rail"
+              data-axis="row"
+              onPointerEnter={cancelTableQuickRailHide}
+              onPointerLeave={() => {
+                if (!shouldPersistTableHandles) {
+                  scheduleTableQuickRailHide()
+                }
+              }}
+              style={{
+                left: `${
+                  desktopTableRailLayout?.rowGripLeft ??
+                  Math.round(tableQuickRailState.tableLeft - Math.round(TABLE_ROW_GRIP_WIDTH_PX / 2))
+                }px`,
+                top: `${
+                  desktopTableRailLayout?.rowGripTop ??
+                  Math.round(
+                    tableQuickRailState.rowTop + Math.max(0, tableQuickRailState.rowHeight / 2 - TABLE_ROW_GRIP_HEIGHT_PX / 2)
+                  )
+                }px`,
+              }}
+            >
+              <TableQuickRailButton
+                type="button"
+                data-axis="row"
+                data-active={isCurrentTableRowSelection(tableQuickRailState.rowIndex)}
+                title="행 메뉴"
+                aria-label="행 메뉴"
+                onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  handleTableRowGripClick(tableQuickRailState.rowIndex, event.currentTarget.getBoundingClientRect())
+                }}
+              >
+                <TableHandleIcon kind="grip" />
+              </TableQuickRailButton>
+            </TableAxisRail>
+          ) : null}
+          {tableQuickRailState.showColumnRail || shouldPersistTableHandles ? (
+            <TableAxisRail
+              data-table-axis-rail="true"
+              data-testid="table-column-rail"
+              data-axis="column"
+              onPointerEnter={cancelTableQuickRailHide}
+              onPointerLeave={() => {
+                if (!shouldPersistTableHandles) {
+                  scheduleTableQuickRailHide()
+                }
+              }}
+              style={{
+                left: `${
+                  desktopTableRailLayout?.columnGripLeft ??
+                  Math.round(
+                    tableQuickRailState.columnLeft + Math.max(0, tableQuickRailState.columnWidth / 2 - TABLE_COLUMN_GRIP_WIDTH_PX / 2)
+                  )
+                }px`,
+                top: `${
+                  desktopTableRailLayout?.columnGripTop ??
+                  Math.round(tableQuickRailState.tableTop - Math.round(TABLE_COLUMN_GRIP_HEIGHT_PX / 2))
+                }px`,
+              }}
+            >
+              <TableQuickRailButton
+                type="button"
+                data-axis="column"
+                data-active={isCurrentTableColumnSelection(tableQuickRailState.columnIndex)}
+                title="열 메뉴"
+                aria-label="열 메뉴"
+                onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  handleTableColumnRailSegmentClick(tableQuickRailState.columnIndex, event.currentTarget.getBoundingClientRect())
+                }}
+              >
+                <TableHandleIcon kind="grip" />
+              </TableQuickRailButton>
+            </TableAxisRail>
+          ) : null}
+          {tableQuickRailState.showColumnAddBar ? (
+            <TableTrailingAddBar
+              type="button"
+              data-table-axis-rail="true"
+              data-testid="table-column-add-bar"
+              data-axis="column"
+              title="열 추가"
+              aria-label="열 추가"
+              onPointerEnter={cancelTableQuickRailHide}
+              onPointerLeave={() => {
+                if (!shouldPersistTableHandles) {
+                  scheduleTableQuickRailHide()
+                }
+              }}
+              onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+                event.preventDefault()
+                event.stopPropagation()
+                appendTableAxisAtEnd("column")
+              }}
+              style={{
+                left: `${
+                  desktopTableRailLayout?.columnAddBarLeft ??
+                  Math.round(
+                    tableQuickRailState.tableLeft + tableQuickRailState.width + TABLE_ADD_BAR_GAP_PX
+                  )
+                }px`,
+                top: `${desktopTableRailLayout?.columnAddBarTop ?? Math.round(tableQuickRailState.tableTop)}px`,
+                height: `${desktopTableRailLayout?.columnAddBarHeight ?? Math.max(TABLE_ADD_BAR_MIN_LENGTH_PX, Math.round(tableQuickRailState.height))}px`,
+              }}
+            >
+              <TableHandleIcon kind="plus" />
+            </TableTrailingAddBar>
+          ) : null}
+          {tableQuickRailState.showRowAddBar ? (
+            <TableTrailingAddBar
+              type="button"
+              data-table-axis-rail="true"
+              data-testid="table-row-add-bar"
+              data-axis="row"
+              title="행 추가"
+              aria-label="행 추가"
+              onPointerEnter={cancelTableQuickRailHide}
+              onPointerLeave={() => {
+                if (!shouldPersistTableHandles) {
+                  scheduleTableQuickRailHide()
+                }
+              }}
+              onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+                event.preventDefault()
+                event.stopPropagation()
+                appendTableAxisAtEnd("row")
+              }}
+              style={{
+                left: `${desktopTableRailLayout?.rowAddBarLeft ?? Math.round(tableQuickRailState.tableLeft)}px`,
+                top: `${
+                  desktopTableRailLayout?.rowAddBarTop ??
+                  Math.round(
+                    tableQuickRailState.tableTop + tableQuickRailState.height + TABLE_ADD_BAR_GAP_PX
+                  )
+                }px`,
+                width: `${desktopTableRailLayout?.rowAddBarWidth ?? Math.max(TABLE_ADD_BAR_MIN_LENGTH_PX, Math.round(tableQuickRailState.width))}px`,
+              }}
+            >
+              <TableHandleIcon kind="plus" />
+            </TableTrailingAddBar>
+          ) : null}
+        </>
+      ) : null}
+      {tableMenuState ? (
+        <FloatingTableMenu
+          data-table-menu-root="true"
+          data-testid={`table-${tableMenuState.kind}-menu`}
+          style={{
+            left: `${tableMenuState.left}px`,
+            top: `${tableMenuState.top}px`,
+          }}
+        >
+          <FloatingBlockMenuHeader>
+            {tableMenuState.kind === "row"
+              ? "행 메뉴"
+              : tableMenuState.kind === "column"
+                ? "열 메뉴"
+                : "표 메뉴"}
+          </FloatingBlockMenuHeader>
+          <FloatingBlockActionList>
+            {tableMenuState.kind === "row" ? (
+              <>
+                <FloatingBlockActionButton type="button" onClick={() => { selectCurrentTableAxis("row"); closeTableMenu() }}>
+                  행 선택
+                </FloatingBlockActionButton>
+                <FloatingBlockActionButton
+                  type="button"
+                  onClick={() =>
+                    runTableMenuEditorAction((activeEditor) => {
+                      activeEditor.chain().focus().addRowBefore().run()
+                    })
+                  }
+                >
+                  위에 삽입
+                </FloatingBlockActionButton>
+                <FloatingBlockActionButton
+                  type="button"
+                  onClick={() =>
+                    runTableMenuEditorAction((activeEditor) => {
+                      activeEditor.chain().focus().addRowAfter().run()
+                    })
+                  }
+                >
+                  아래에 삽입
+                </FloatingBlockActionButton>
+              </>
+            ) : tableMenuState.kind === "column" ? (
+              <>
+                <FloatingBlockActionButton type="button" onClick={() => { selectCurrentTableAxis("column"); closeTableMenu() }}>
+                  열 선택
+                </FloatingBlockActionButton>
+                <FloatingBlockActionButton
+                  type="button"
+                  onClick={() =>
+                    runTableMenuEditorAction((activeEditor) => {
+                      activeEditor.chain().focus().addColumnBefore().run()
+                    })
+                  }
+                >
+                  왼쪽에 삽입
+                </FloatingBlockActionButton>
+                <FloatingBlockActionButton
+                  type="button"
+                  onClick={() =>
+                    runTableMenuEditorAction((activeEditor) => {
+                      activeEditor.chain().focus().addColumnAfter().run()
+                    })
+                  }
+                >
+                  오른쪽에 삽입
+                </FloatingBlockActionButton>
+              </>
+            ) : (
+              <>
+                <FloatingBlockActionButton type="button" onClick={() => { selectActiveTableBlock(); closeTableMenu() }}>
+                  표 선택
+                </FloatingBlockActionButton>
+                <FloatingBlockActionButton
+                  type="button"
+                  data-active={activeTableStructureState.hasHeaderRow}
+                  onClick={() =>
+                    runTableMenuEditorAction((activeEditor) => {
+                      activeEditor.chain().focus().toggleHeaderRow().run()
+                    })
+                  }
+                >
+                  제목 행
+                </FloatingBlockActionButton>
+                <FloatingBlockActionButton
+                  type="button"
+                  data-active={activeTableStructureState.hasHeaderColumn}
+                  onClick={() =>
+                    runTableMenuEditorAction((activeEditor) => {
+                      activeEditor.chain().focus().toggleHeaderColumn().run()
+                    })
+                  }
+                >
+                  제목 열
+                </FloatingBlockActionButton>
+                <FloatingBlockActionButton
+                  type="button"
+                  onClick={() =>
+                    runTableMenuEditorAction((activeEditor) => {
+                      activeEditor.chain().focus().mergeCells().run()
+                    })
+                  }
+                >
+                  셀 병합
+                </FloatingBlockActionButton>
+                <FloatingBlockActionButton
+                  type="button"
+                  onClick={() =>
+                    runTableMenuEditorAction((activeEditor) => {
+                      activeEditor.chain().focus().splitCell().run()
+                    })
+                  }
+                >
+                  셀 분리
+                </FloatingBlockActionButton>
+              </>
+            )}
+          </FloatingBlockActionList>
+          <FloatingBlockMenuDivider />
+          <TableMenuSectionTitle>정렬</TableMenuSectionTitle>
+          <TableMenuButtonRow>
+            <ToolbarButton
+              type="button"
+              data-active={activeTableCellAttrs.textAlign === "left"}
+              onMouseDown={handleToolbarButtonMouseDown}
+              onClick={() => updateActiveTableCellAttrs({ textAlign: "left" })}
+            >
+              좌측
+            </ToolbarButton>
+            <ToolbarButton
+              type="button"
+              data-active={activeTableCellAttrs.textAlign === "center"}
+              onMouseDown={handleToolbarButtonMouseDown}
+              onClick={() => updateActiveTableCellAttrs({ textAlign: "center" })}
+            >
+              가운데
+            </ToolbarButton>
+            <ToolbarButton
+              type="button"
+              data-active={activeTableCellAttrs.textAlign === "right"}
+              onMouseDown={handleToolbarButtonMouseDown}
+              onClick={() => updateActiveTableCellAttrs({ textAlign: "right" })}
+            >
+              우측
+            </ToolbarButton>
+          </TableMenuButtonRow>
+          <TableMenuSectionTitle>배경</TableMenuSectionTitle>
+          <TableMenuButtonRow>
+            <ToolbarButton
+              type="button"
+              data-active={activeTableCellAttrs.backgroundColor === "#f8fafc"}
+              onMouseDown={handleToolbarButtonMouseDown}
+              onClick={() => updateActiveTableCellAttrs({ backgroundColor: "#f8fafc" })}
+            >
+              기본
+            </ToolbarButton>
+            <ToolbarButton
+              type="button"
+              onMouseDown={handleToolbarButtonMouseDown}
+              onClick={() => updateActiveTableCellAttrs({ backgroundColor: null })}
+            >
+              배경 해제
+            </ToolbarButton>
+          </TableMenuButtonRow>
+          <TablePresetSwatches aria-label="표 셀 배경 preset">
+            {TABLE_CELL_COLOR_PRESETS.map((preset) => (
+              <TablePresetSwatch
+                key={preset.value}
+                type="button"
+                title={preset.label}
+                aria-label={`${preset.label} 배경`}
+                data-active={activeTableCellAttrs.backgroundColor === preset.value}
+                style={{ "--table-swatch-color": preset.value } as React.CSSProperties}
+                onClick={() => updateActiveTableCellAttrs({ backgroundColor: preset.value })}
+              />
+            ))}
+            <TableColorInput
+              type="color"
+              aria-label="표 셀 배경색 선택"
+              value={normalizeTableColorInputValue(activeTableCellAttrs.backgroundColor)}
+              onChange={(event) =>
+                updateActiveTableCellAttrs({ backgroundColor: event.currentTarget.value })
+              }
+            />
+          </TablePresetSwatches>
+          <FloatingBlockMenuDivider />
+          <FloatingBlockActionList>
+            {tableMenuState.kind === "row" ? (
+              <FloatingBlockActionButton
+                type="button"
+                data-variant="danger"
+                onClick={() =>
+                  runTableMenuEditorAction((activeEditor) => {
+                    activeEditor.chain().focus().deleteRow().run()
+                  })
+                }
+              >
+                행 삭제
+              </FloatingBlockActionButton>
+            ) : tableMenuState.kind === "column" ? (
+              <FloatingBlockActionButton
+                type="button"
+                data-variant="danger"
+                onClick={() =>
+                  runTableMenuEditorAction((activeEditor) => {
+                    activeEditor.chain().focus().deleteColumn().run()
+                  })
+                }
+              >
+                열 삭제
+              </FloatingBlockActionButton>
+            ) : (
+              <FloatingBlockActionButton
+                type="button"
+                data-variant="danger"
+                onClick={() =>
+                  runTableMenuEditorAction((activeEditor) => {
+                    activeEditor.chain().focus().deleteTable().run()
+                  })
+                }
+              >
+                표 삭제
+              </FloatingBlockActionButton>
+            )}
+          </FloatingBlockActionList>
+        </FloatingTableMenu>
+      ) : null}
+    </>
+  )
+
+  const tableOverlayPortal =
+    typeof document !== "undefined" ? createPortal(tableOverlay, document.body) : tableOverlay
+
   return (
     <Shell className={className}>
       <Toolbar>
@@ -7056,477 +7536,6 @@ const BlockEditorEngine = ({
             ) : null}
           </FloatingBubbleToolbar>
         ) : null}
-        {tableColumnDragGuideState.visible ? (
-          <TableColumnDragGuide
-            data-testid="table-column-drag-guide"
-            style={{
-              left: `${tableColumnDragGuideState.left}px`,
-              top: `${tableColumnDragGuideState.top}px`,
-              height: `${tableColumnDragGuideState.height}px`,
-            }}
-          />
-        ) : null}
-        {shouldShowTableHandles
-          ? !tableColumnDragGuideState.visible
-            ? tableQuickRailState.columnSegments.slice(0, -1).map((segment, index) => (
-              <TableColumnResizeBoundaryHandle
-                key={`table-column-boundary-${index}`}
-                type="button"
-                data-testid={`table-column-resize-boundary-${index}`}
-                aria-label={`열 ${index + 1} 경계 조절`}
-                onPointerEnter={cancelTableQuickRailHide}
-                onPointerLeave={() => {
-                  if (!shouldPersistTableHandles) {
-                    scheduleTableQuickRailHide()
-                  }
-                }}
-                onPointerDown={(event: React.PointerEvent<HTMLButtonElement>) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  startTableColumnRailResize(event.pointerId, index, event.clientX)
-                }}
-                style={{
-                  left: `${Math.round(tableQuickRailState.tableLeft + segment.left + segment.width)}px`,
-                  top: `${Math.round(tableQuickRailState.tableTop)}px`,
-                  height: `${Math.round(tableQuickRailState.height)}px`,
-                }}
-              />
-              ))
-            : null
-          : null}
-        {shouldShowTableHandles ? (
-          <>
-            {isCurrentTableColumnSelection(tableQuickRailState.columnIndex) ? (
-              <TableAxisSelectionOutline
-                data-axis="column"
-                data-testid="table-column-selection-outline"
-                style={{
-                  left: `${Math.round(tableQuickRailState.columnLeft)}px`,
-                  top: `${Math.round(tableQuickRailState.tableTop)}px`,
-                  width: `${Math.round(tableQuickRailState.columnWidth)}px`,
-                  height: `${Math.round(tableQuickRailState.height)}px`,
-                }}
-              />
-            ) : null}
-            {isCurrentTableRowSelection(tableQuickRailState.rowIndex) ? (
-              <TableAxisSelectionOutline
-                data-axis="row"
-                data-testid="table-row-selection-outline"
-                style={{
-                  left: `${Math.round(tableQuickRailState.tableLeft)}px`,
-                  top: `${Math.round(tableQuickRailState.rowTop)}px`,
-                  width: `${Math.round(tableQuickRailState.width)}px`,
-                  height: `${Math.round(tableQuickRailState.rowHeight)}px`,
-                }}
-              />
-            ) : null}
-            <TableCornerHandle
-              data-table-corner-handle="true"
-              data-testid="table-corner-handle"
-              onPointerEnter={cancelTableQuickRailHide}
-              onPointerLeave={() => {
-                if (!shouldPersistTableHandles) {
-                  scheduleTableQuickRailHide()
-                }
-              }}
-              style={{
-                left: `${
-                  desktopTableRailLayout?.cornerLeft ??
-                  Math.round(tableQuickRailState.tableLeft + Math.max(0, tableQuickRailState.width - TABLE_CORNER_BUTTON_SIZE_PX))
-                }px`,
-                top: `${desktopTableRailLayout?.cornerTop ?? Math.round(tableQuickRailState.tableTop - TABLE_CORNER_OFFSET_PX)}px`,
-              }}
-            >
-              <TableHandleButton
-                type="button"
-                title="표 메뉴"
-                aria-label="표 메뉴"
-                data-testid="table-corner-handle-button"
-                onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  openSelectionAwareTableMenu("table", event.currentTarget.getBoundingClientRect())
-                }}
-              >
-                <TableHandleIcon kind="more" />
-              </TableHandleButton>
-            </TableCornerHandle>
-            {tableQuickRailState.showRowRail || shouldPersistTableHandles ? (
-              <TableAxisRail
-                data-table-axis-rail="true"
-                data-testid="table-row-rail"
-                data-axis="row"
-                onPointerEnter={cancelTableQuickRailHide}
-                onPointerLeave={() => {
-                  if (!shouldPersistTableHandles) {
-                    scheduleTableQuickRailHide()
-                  }
-                }}
-                style={{
-                  left: `${
-                    desktopTableRailLayout?.rowGripLeft ??
-                    Math.round(tableQuickRailState.tableLeft - Math.round(TABLE_ROW_GRIP_WIDTH_PX / 2))
-                  }px`,
-                  top: `${
-                    desktopTableRailLayout?.rowGripTop ??
-                    Math.round(
-                      tableQuickRailState.rowTop + Math.max(0, tableQuickRailState.rowHeight / 2 - TABLE_ROW_GRIP_HEIGHT_PX / 2)
-                    )
-                  }px`,
-                }}
-              >
-                <TableQuickRailButton
-                  type="button"
-                  data-axis="row"
-                  data-active={isCurrentTableRowSelection(tableQuickRailState.rowIndex)}
-                  title="행 메뉴"
-                  aria-label="행 메뉴"
-                  onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    handleTableRowGripClick(tableQuickRailState.rowIndex, event.currentTarget.getBoundingClientRect())
-                  }}
-                >
-                  <TableHandleIcon kind="grip" />
-                </TableQuickRailButton>
-              </TableAxisRail>
-            ) : null}
-            {tableQuickRailState.showColumnRail || shouldPersistTableHandles ? (
-              <TableAxisRail
-                data-table-axis-rail="true"
-                data-testid="table-column-rail"
-                data-axis="column"
-                onPointerEnter={cancelTableQuickRailHide}
-                onPointerLeave={() => {
-                  if (!shouldPersistTableHandles) {
-                    scheduleTableQuickRailHide()
-                  }
-                }}
-                style={{
-                  left: `${
-                    desktopTableRailLayout?.columnGripLeft ??
-                    Math.round(
-                      tableQuickRailState.columnLeft + Math.max(0, tableQuickRailState.columnWidth / 2 - TABLE_COLUMN_GRIP_WIDTH_PX / 2)
-                    )
-                  }px`,
-                  top: `${
-                    desktopTableRailLayout?.columnGripTop ??
-                    Math.round(tableQuickRailState.tableTop - Math.round(TABLE_COLUMN_GRIP_HEIGHT_PX / 2))
-                  }px`,
-                }}
-              >
-                <TableQuickRailButton
-                  type="button"
-                  data-axis="column"
-                  data-active={isCurrentTableColumnSelection(tableQuickRailState.columnIndex)}
-                  title="열 메뉴"
-                  aria-label="열 메뉴"
-                  onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    handleTableColumnRailSegmentClick(tableQuickRailState.columnIndex, event.currentTarget.getBoundingClientRect())
-                  }}
-                >
-                  <TableHandleIcon kind="grip" />
-                </TableQuickRailButton>
-              </TableAxisRail>
-            ) : null}
-            {tableQuickRailState.showColumnAddBar ? (
-              <TableTrailingAddBar
-                type="button"
-                data-table-axis-rail="true"
-                data-testid="table-column-add-bar"
-                data-axis="column"
-                title="열 추가"
-                aria-label="열 추가"
-                onPointerEnter={cancelTableQuickRailHide}
-                onPointerLeave={() => {
-                  if (!shouldPersistTableHandles) {
-                    scheduleTableQuickRailHide()
-                  }
-                }}
-                onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  appendTableAxisAtEnd("column")
-                }}
-                style={{
-                  left: `${
-                    desktopTableRailLayout?.columnAddBarLeft ??
-                    Math.round(
-                      tableQuickRailState.tableLeft + tableQuickRailState.width + TABLE_ADD_BAR_GAP_PX
-                    )
-                  }px`,
-                  top: `${desktopTableRailLayout?.columnAddBarTop ?? Math.round(tableQuickRailState.tableTop)}px`,
-                  height: `${desktopTableRailLayout?.columnAddBarHeight ?? Math.max(TABLE_ADD_BAR_MIN_LENGTH_PX, Math.round(tableQuickRailState.height))}px`,
-                }}
-              >
-                <TableHandleIcon kind="plus" />
-              </TableTrailingAddBar>
-            ) : null}
-            {tableQuickRailState.showRowAddBar ? (
-              <TableTrailingAddBar
-                type="button"
-                data-table-axis-rail="true"
-                data-testid="table-row-add-bar"
-                data-axis="row"
-                title="행 추가"
-                aria-label="행 추가"
-                onPointerEnter={cancelTableQuickRailHide}
-                onPointerLeave={() => {
-                  if (!shouldPersistTableHandles) {
-                    scheduleTableQuickRailHide()
-                  }
-                }}
-                onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  appendTableAxisAtEnd("row")
-                }}
-                style={{
-                  left: `${desktopTableRailLayout?.rowAddBarLeft ?? Math.round(tableQuickRailState.tableLeft)}px`,
-                  top: `${
-                    desktopTableRailLayout?.rowAddBarTop ??
-                    Math.round(
-                      tableQuickRailState.tableTop + tableQuickRailState.height + TABLE_ADD_BAR_GAP_PX
-                    )
-                  }px`,
-                  width: `${desktopTableRailLayout?.rowAddBarWidth ?? Math.max(TABLE_ADD_BAR_MIN_LENGTH_PX, Math.round(tableQuickRailState.width))}px`,
-                }}
-              >
-                <TableHandleIcon kind="plus" />
-              </TableTrailingAddBar>
-            ) : null}
-          </>
-        ) : null}
-        {tableMenuState ? (
-          <FloatingTableMenu
-            data-table-menu-root="true"
-            data-testid={`table-${tableMenuState.kind}-menu`}
-            style={{
-              left: `${tableMenuState.left}px`,
-              top: `${tableMenuState.top}px`,
-            }}
-          >
-            <FloatingBlockMenuHeader>
-              {tableMenuState.kind === "row"
-                ? "행 메뉴"
-                : tableMenuState.kind === "column"
-                  ? "열 메뉴"
-                  : "표 메뉴"}
-            </FloatingBlockMenuHeader>
-            <FloatingBlockActionList>
-              {tableMenuState.kind === "row" ? (
-                <>
-                  <FloatingBlockActionButton type="button" onClick={() => { selectCurrentTableAxis("row"); closeTableMenu() }}>
-                    행 선택
-                  </FloatingBlockActionButton>
-                  <FloatingBlockActionButton
-                    type="button"
-                    onClick={() =>
-                      runTableMenuEditorAction((activeEditor) => {
-                        activeEditor.chain().focus().addRowBefore().run()
-                      })
-                    }
-                  >
-                    위에 삽입
-                  </FloatingBlockActionButton>
-                  <FloatingBlockActionButton
-                    type="button"
-                    onClick={() =>
-                      runTableMenuEditorAction((activeEditor) => {
-                        activeEditor.chain().focus().addRowAfter().run()
-                      })
-                    }
-                  >
-                    아래에 삽입
-                  </FloatingBlockActionButton>
-                </>
-              ) : tableMenuState.kind === "column" ? (
-                <>
-                  <FloatingBlockActionButton type="button" onClick={() => { selectCurrentTableAxis("column"); closeTableMenu() }}>
-                    열 선택
-                  </FloatingBlockActionButton>
-                  <FloatingBlockActionButton
-                    type="button"
-                    onClick={() =>
-                      runTableMenuEditorAction((activeEditor) => {
-                        activeEditor.chain().focus().addColumnBefore().run()
-                      })
-                    }
-                  >
-                    왼쪽에 삽입
-                  </FloatingBlockActionButton>
-                  <FloatingBlockActionButton
-                    type="button"
-                    onClick={() =>
-                      runTableMenuEditorAction((activeEditor) => {
-                        activeEditor.chain().focus().addColumnAfter().run()
-                      })
-                    }
-                  >
-                    오른쪽에 삽입
-                  </FloatingBlockActionButton>
-                </>
-              ) : (
-                <>
-                  <FloatingBlockActionButton type="button" onClick={() => { selectActiveTableBlock(); closeTableMenu() }}>
-                    표 선택
-                  </FloatingBlockActionButton>
-                  <FloatingBlockActionButton
-                    type="button"
-                    data-active={activeTableStructureState.hasHeaderRow}
-                    onClick={() =>
-                      runTableMenuEditorAction((activeEditor) => {
-                        activeEditor.chain().focus().toggleHeaderRow().run()
-                      })
-                    }
-                  >
-                    제목 행
-                  </FloatingBlockActionButton>
-                  <FloatingBlockActionButton
-                    type="button"
-                    data-active={activeTableStructureState.hasHeaderColumn}
-                    onClick={() =>
-                      runTableMenuEditorAction((activeEditor) => {
-                        activeEditor.chain().focus().toggleHeaderColumn().run()
-                      })
-                    }
-                  >
-                    제목 열
-                  </FloatingBlockActionButton>
-                  <FloatingBlockActionButton
-                    type="button"
-                    onClick={() =>
-                      runTableMenuEditorAction((activeEditor) => {
-                        activeEditor.chain().focus().mergeCells().run()
-                      })
-                    }
-                  >
-                    셀 병합
-                  </FloatingBlockActionButton>
-                  <FloatingBlockActionButton
-                    type="button"
-                    onClick={() =>
-                      runTableMenuEditorAction((activeEditor) => {
-                        activeEditor.chain().focus().splitCell().run()
-                      })
-                    }
-                  >
-                    셀 분리
-                  </FloatingBlockActionButton>
-                </>
-              )}
-            </FloatingBlockActionList>
-            <FloatingBlockMenuDivider />
-            <TableMenuSectionTitle>정렬</TableMenuSectionTitle>
-            <TableMenuButtonRow>
-              <ToolbarButton
-                type="button"
-                data-active={activeTableCellAttrs.textAlign === "left"}
-                onMouseDown={handleToolbarButtonMouseDown}
-                onClick={() => updateActiveTableCellAttrs({ textAlign: "left" })}
-              >
-                좌측
-              </ToolbarButton>
-              <ToolbarButton
-                type="button"
-                data-active={activeTableCellAttrs.textAlign === "center"}
-                onMouseDown={handleToolbarButtonMouseDown}
-                onClick={() => updateActiveTableCellAttrs({ textAlign: "center" })}
-              >
-                가운데
-              </ToolbarButton>
-              <ToolbarButton
-                type="button"
-                data-active={activeTableCellAttrs.textAlign === "right"}
-                onMouseDown={handleToolbarButtonMouseDown}
-                onClick={() => updateActiveTableCellAttrs({ textAlign: "right" })}
-              >
-                우측
-              </ToolbarButton>
-            </TableMenuButtonRow>
-            <TableMenuSectionTitle>배경</TableMenuSectionTitle>
-            <TableMenuButtonRow>
-              <ToolbarButton
-                type="button"
-                data-active={activeTableCellAttrs.backgroundColor === "#f8fafc"}
-                onMouseDown={handleToolbarButtonMouseDown}
-                onClick={() => updateActiveTableCellAttrs({ backgroundColor: "#f8fafc" })}
-              >
-                기본
-              </ToolbarButton>
-              <ToolbarButton
-                type="button"
-                onMouseDown={handleToolbarButtonMouseDown}
-                onClick={() => updateActiveTableCellAttrs({ backgroundColor: null })}
-              >
-                배경 해제
-              </ToolbarButton>
-            </TableMenuButtonRow>
-            <TablePresetSwatches aria-label="표 셀 배경 preset">
-              {TABLE_CELL_COLOR_PRESETS.map((preset) => (
-                <TablePresetSwatch
-                  key={preset.value}
-                  type="button"
-                  title={preset.label}
-                  aria-label={`${preset.label} 배경`}
-                  data-active={activeTableCellAttrs.backgroundColor === preset.value}
-                  style={{ "--table-swatch-color": preset.value } as React.CSSProperties}
-                  onClick={() => updateActiveTableCellAttrs({ backgroundColor: preset.value })}
-                />
-              ))}
-              <TableColorInput
-                type="color"
-                aria-label="표 셀 배경색 선택"
-                value={normalizeTableColorInputValue(activeTableCellAttrs.backgroundColor)}
-                onChange={(event) =>
-                  updateActiveTableCellAttrs({ backgroundColor: event.currentTarget.value })
-                }
-              />
-            </TablePresetSwatches>
-            <FloatingBlockMenuDivider />
-            <FloatingBlockActionList>
-              {tableMenuState.kind === "row" ? (
-                <FloatingBlockActionButton
-                  type="button"
-                  data-variant="danger"
-                  onClick={() =>
-                    runTableMenuEditorAction((activeEditor) => {
-                      activeEditor.chain().focus().deleteRow().run()
-                    })
-                  }
-                >
-                  행 삭제
-                </FloatingBlockActionButton>
-              ) : tableMenuState.kind === "column" ? (
-                <FloatingBlockActionButton
-                  type="button"
-                  data-variant="danger"
-                  onClick={() =>
-                    runTableMenuEditorAction((activeEditor) => {
-                      activeEditor.chain().focus().deleteColumn().run()
-                    })
-                  }
-                >
-                  열 삭제
-                </FloatingBlockActionButton>
-              ) : (
-                <FloatingBlockActionButton
-                  type="button"
-                  data-variant="danger"
-                  onClick={() =>
-                    runTableMenuEditorAction((activeEditor) => {
-                      activeEditor.chain().focus().deleteTable().run()
-                    })
-                  }
-                >
-                  표 삭제
-                </FloatingBlockActionButton>
-              )}
-            </FloatingBlockActionList>
-          </FloatingTableMenu>
-        ) : null}
         {!isCoarsePointer ? (
           <BlockHandleRail
             ref={blockHandleRailRef}
@@ -7792,6 +7801,7 @@ const BlockEditorEngine = ({
           data-gramm="false"
         />
       </EditorViewport>
+      {tableOverlayPortal}
 
       {preview ? (
         <AuxDisclosure open={isPreviewOpen}>

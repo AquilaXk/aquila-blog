@@ -1053,13 +1053,16 @@ const ToggleBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =>
     <ToggleEditorWrapper data-selected={selected}>
       <ToggleEditorCard open={isPreviewOpen} data-selected={selected}>
         <summary
+          data-testid="toggle-block-summary"
           onClick={(event) => {
             event.preventDefault()
             setIsPreviewOpen((prev) => !prev)
           }}
         >
           <ToggleSummaryInner>
-            <ToggleChevron aria-hidden="true">{isPreviewOpen ? "▾" : "▸"}</ToggleChevron>
+            <ToggleChevron data-testid="toggle-block-chevron" aria-hidden="true">
+              {isPreviewOpen ? "▾" : "▸"}
+            </ToggleChevron>
             <ToggleTitleInput
               value={draftTitle}
               placeholder="제목"
@@ -3009,7 +3012,7 @@ const ToggleEditorWrapper = styled(NodeViewWrapper)`
 `
 
 const ToggleEditorCard = styled.details`
-  --toggle-indent: 2.16rem;
+  --toggle-indent: 2.48rem;
   margin: 0;
 
   &[data-selected="true"] {
@@ -3019,7 +3022,7 @@ const ToggleEditorCard = styled.details`
   summary {
     cursor: pointer;
     list-style: none;
-    padding: 0.1rem 0;
+    padding: 0.22rem 0.12rem;
     border-radius: 0.62rem;
     transition: background-color 140ms ease;
     user-select: none;
@@ -3038,19 +3041,19 @@ const ToggleEditorCard = styled.details`
 
 const ToggleSummaryInner = styled.div`
   display: flex;
-  align-items: flex-start;
-  gap: 0.44rem;
-  min-height: 2.2rem;
+  align-items: center;
+  gap: 0.56rem;
+  min-height: 2.64rem;
 `
 
 const ToggleChevron = styled.span`
-  width: 1.08rem;
-  height: 1.72rem;
+  width: 1.3rem;
+  height: 2rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--color-gray10);
-  font-size: 0.88rem;
+  font-size: 1.14rem;
   line-height: 1;
   flex-shrink: 0;
 `
@@ -3061,10 +3064,11 @@ const ToggleTitleInput = styled.input`
   border: 0;
   background: transparent;
   color: var(--color-gray12);
-  font-size: 1.01rem;
-  font-weight: 580;
-  line-height: 1.58;
-  padding: 0.04rem 0;
+  font-size: 1.12rem;
+  font-weight: 650;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  padding: 0.16rem 0;
 
   &::placeholder {
     color: var(--color-gray10);
@@ -3072,7 +3076,7 @@ const ToggleTitleInput = styled.input`
 `
 
 const ToggleEditorBody = styled.div`
-  margin-top: 0.18rem;
+  margin-top: 0.22rem;
   padding-left: var(--toggle-indent);
 `
 

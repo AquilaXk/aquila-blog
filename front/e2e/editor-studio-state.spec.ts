@@ -256,8 +256,14 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).toContain("제목 열")
     expect(blockEditorEngineSource).toContain("type TableAffordanceGeometry = {")
     expect(blockEditorEngineSource).toContain("type TableAffordanceVisibility = {")
-    expect(blockEditorEngineSource).toContain("extractTableAffordanceGeometry(tableQuickRailState)")
-    expect(blockEditorEngineSource).toContain("extractTableAffordanceVisibility(tableQuickRailState)")
+    expect(blockEditorEngineSource).toContain("const INITIAL_TABLE_AFFORDANCE_GEOMETRY: TableAffordanceGeometry = {")
+    expect(blockEditorEngineSource).toContain("const INITIAL_TABLE_AFFORDANCE_VISIBILITY: TableAffordanceVisibility = {")
+    expect(blockEditorEngineSource).toContain("const [tableAffordanceGeometry, setTableAffordanceGeometry] = useState<TableAffordanceGeometry>(")
+    expect(blockEditorEngineSource).toContain(
+      "const [tableAffordanceVisibility, setTableAffordanceVisibility] = useState<TableAffordanceVisibility>("
+    )
+    expect(blockEditorEngineSource).toContain("const tableAffordanceVisibilityRef = useRef(tableAffordanceVisibility)")
+    expect(blockEditorEngineSource).not.toContain("type TableQuickRailState =")
     expect(blockEditorEngineSource).toContain("const isTableStructureMenuOpen = Boolean(tableMenuState)")
     expect(blockEditorEngineSource).toContain(
       "const shouldShowColumnAddBar = tableAffordanceVisibility.showColumnAddBar || isTableStructureMenuOpen"

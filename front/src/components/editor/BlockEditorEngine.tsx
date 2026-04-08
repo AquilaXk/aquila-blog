@@ -255,8 +255,6 @@ type TableAffordanceVisibility = {
   showRowAddBar: boolean
 }
 
-type TableQuickRailState = TableAffordanceGeometry & TableAffordanceVisibility
-
 type TableMenuKind = "row" | "column" | "table" | "cell"
 
 type TableMenuState =
@@ -382,26 +380,33 @@ type TableAxisReorderIndicatorState = {
   height: number
 }
 
-const extractTableAffordanceGeometry = (state: TableQuickRailState): TableAffordanceGeometry => {
-  const {
-    visible: _visible,
-    showColumnRail: _showColumnRail,
-    showRowRail: _showRowRail,
-    showColumnAddBar: _showColumnAddBar,
-    showRowAddBar: _showRowAddBar,
-    ...geometry
-  } = state
-
-  return geometry
+const INITIAL_TABLE_AFFORDANCE_GEOMETRY: TableAffordanceGeometry = {
+  left: 0,
+  top: 0,
+  tableLeft: 0,
+  tableTop: 0,
+  width: 0,
+  height: 0,
+  cellLeft: 0,
+  cellTop: 0,
+  cellWidth: 0,
+  cellHeight: 0,
+  rowIndex: 0,
+  rowTop: 0,
+  rowHeight: 0,
+  columnLeft: 0,
+  columnWidth: 0,
+  columnIndex: 0,
+  columnSegments: [],
 }
 
-const extractTableAffordanceVisibility = (state: TableQuickRailState): TableAffordanceVisibility => ({
-  visible: state.visible,
-  showColumnRail: state.showColumnRail,
-  showRowRail: state.showRowRail,
-  showColumnAddBar: state.showColumnAddBar,
-  showRowAddBar: state.showRowAddBar,
-})
+const INITIAL_TABLE_AFFORDANCE_VISIBILITY: TableAffordanceVisibility = {
+  visible: false,
+  showColumnRail: false,
+  showRowRail: false,
+  showColumnAddBar: false,
+  showRowAddBar: false,
+}
 
 type BlockSelectionPointerEventLike = {
   button: number
@@ -2104,30 +2109,12 @@ const BlockEditorEngine = ({
     left: 0,
     top: 0,
   })
-  const [tableQuickRailState, setTableQuickRailState] = useState<TableQuickRailState>({
-    visible: false,
-    left: 0,
-    top: 0,
-    tableLeft: 0,
-    tableTop: 0,
-    width: 0,
-    height: 0,
-    cellLeft: 0,
-    cellTop: 0,
-    cellWidth: 0,
-    cellHeight: 0,
-    rowIndex: 0,
-    rowTop: 0,
-    rowHeight: 0,
-    columnLeft: 0,
-    columnWidth: 0,
-    columnIndex: 0,
-    columnSegments: [],
-    showColumnRail: false,
-    showRowRail: false,
-    showColumnAddBar: false,
-    showRowAddBar: false,
-  })
+  const [tableAffordanceGeometry, setTableAffordanceGeometry] = useState<TableAffordanceGeometry>(
+    INITIAL_TABLE_AFFORDANCE_GEOMETRY
+  )
+  const [tableAffordanceVisibility, setTableAffordanceVisibility] = useState<TableAffordanceVisibility>(
+    INITIAL_TABLE_AFFORDANCE_VISIBILITY
+  )
   const [tableColumnDragGuideState, setTableColumnDragGuideState] = useState<TableColumnDragGuideState>({
     visible: false,
     left: 0,
@@ -2147,10 +2134,8 @@ const BlockEditorEngine = ({
   const [isTableColumnResizeActive, setIsTableColumnResizeActive] = useState(false)
   const [isTableCornerGrowActive, setIsTableCornerGrowActive] = useState(false)
   const [tableMenuState, setTableMenuState] = useState<TableMenuState>(null)
-  const tableAffordanceGeometry = useMemo(() => extractTableAffordanceGeometry(tableQuickRailState), [tableQuickRailState])
-  const tableAffordanceVisibility = useMemo(() => extractTableAffordanceVisibility(tableQuickRailState), [tableQuickRailState])
-  const tableQuickRailStateRef = useRef(tableQuickRailState)
   const tableAffordanceGeometryRef = useRef(tableAffordanceGeometry)
+  const tableAffordanceVisibilityRef = useRef(tableAffordanceVisibility)
   const [draggedTableAxisState, setDraggedTableAxisState] = useState<DraggedTableAxisState>(null)
   const [tableAxisDragGhostPosition, setTableAxisDragGhostPosition] = useState<{ x: number; y: number } | null>(null)
   const [tableAxisReorderIndicatorState, setTableAxisReorderIndicatorState] = useState<TableAxisReorderIndicatorState>({
@@ -2228,7 +2213,7 @@ const BlockEditorEngine = ({
       window.clearTimeout(tableQuickRailHideTimerRef.current)
       tableQuickRailHideTimerRef.current = null
     }
-    setTableQuickRailState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
+    setTableAffordanceVisibility((prev) => (prev.visible ? { ...prev, visible: false } : prev))
   }, [])
 
   const cancelTableQuickRailHide = useCallback(() => {
@@ -2329,7 +2314,7 @@ const BlockEditorEngine = ({
     cancelTableQuickRailHide()
     if (typeof window === "undefined") return
     tableQuickRailHideTimerRef.current = window.setTimeout(() => {
-      setTableQuickRailState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
+      setTableAffordanceVisibility((prev) => (prev.visible ? { ...prev, visible: false } : prev))
       tableQuickRailHideTimerRef.current = null
     }, delayMs)
   }, [cancelTableQuickRailHide])
@@ -3325,12 +3310,12 @@ const BlockEditorEngine = ({
     const rows = Array.from(renderedTable.querySelectorAll("tr")).filter(
       (node): node is HTMLTableRowElement => node instanceof HTMLTableRowElement
     )
-    const row = rows[tableQuickRailStateRef.current.rowIndex] ?? null
+    const row = rows[tableAffordanceGeometryRef.current.rowIndex] ?? null
     if (!row) return renderedTable.querySelector("th, td") as HTMLElement | null
 
     const cells = Array.from(row.children).filter((node): node is HTMLElement => node instanceof HTMLElement)
     return (
-      cells[tableQuickRailStateRef.current.columnIndex] ??
+      cells[tableAffordanceGeometryRef.current.columnIndex] ??
       (row.querySelector("th, td") as HTMLElement | null) ??
       (renderedTable.querySelector("th, td") as HTMLElement | null)
     )
@@ -3446,7 +3431,7 @@ const BlockEditorEngine = ({
       )
 
       const selected = selectTableAxisAtIndex(currentEditor, tablePos, axis, reorderedTable.nextIndex)
-      setTableQuickRailState((prev) =>
+      setTableAffordanceGeometry((prev) =>
         axis === "row"
           ? { ...prev, rowIndex: reorderedTable.nextIndex }
           : { ...prev, columnIndex: reorderedTable.nextIndex }
@@ -3527,10 +3512,10 @@ const BlockEditorEngine = ({
         tablePos,
         startX: clientX,
         startY: clientY,
-        previewLeft: axis === "row" ? tableQuickRailStateRef.current.tableLeft : tableQuickRailStateRef.current.columnLeft,
-        previewTop: axis === "row" ? tableQuickRailStateRef.current.rowTop : tableQuickRailStateRef.current.tableTop,
-        previewWidth: axis === "row" ? tableQuickRailStateRef.current.width : tableQuickRailStateRef.current.columnWidth,
-        previewHeight: axis === "row" ? tableQuickRailStateRef.current.rowHeight : tableQuickRailStateRef.current.height,
+        previewLeft: axis === "row" ? tableAffordanceGeometryRef.current.tableLeft : tableAffordanceGeometryRef.current.columnLeft,
+        previewTop: axis === "row" ? tableAffordanceGeometryRef.current.rowTop : tableAffordanceGeometryRef.current.tableTop,
+        previewWidth: axis === "row" ? tableAffordanceGeometryRef.current.width : tableAffordanceGeometryRef.current.columnWidth,
+        previewHeight: axis === "row" ? tableAffordanceGeometryRef.current.rowHeight : tableAffordanceGeometryRef.current.height,
       }
 
       const DRAG_THRESHOLD_PX = 5
@@ -3789,19 +3774,19 @@ const BlockEditorEngine = ({
 
   const getTableCornerGrowStepMetrics = useCallback(() => {
     const lastColumnSegment =
-      tableQuickRailStateRef.current.columnSegments[tableQuickRailStateRef.current.columnSegments.length - 1]
+      tableAffordanceGeometryRef.current.columnSegments[tableAffordanceGeometryRef.current.columnSegments.length - 1]
     return {
       columnStepPx: Math.max(
         TABLE_MIN_COLUMN_WIDTH_PX,
         Math.round(
           lastColumnSegment?.width ??
-            tableQuickRailStateRef.current.columnWidth ??
+            tableAffordanceGeometryRef.current.columnWidth ??
             TABLE_MIN_COLUMN_WIDTH_PX
         )
       ),
       rowStepPx: Math.max(
         TABLE_MIN_ROW_HEIGHT_PX,
-        Math.round(tableQuickRailStateRef.current.rowHeight || TABLE_MIN_ROW_HEIGHT_PX)
+        Math.round(tableAffordanceGeometryRef.current.rowHeight || TABLE_MIN_ROW_HEIGHT_PX)
       ),
     }
   }, [])
@@ -4032,7 +4017,7 @@ const BlockEditorEngine = ({
       const resizeContext = getCurrentTableColumnResizeContext(columnIndex)
       if (!resizeContext) return
       setIsTableColumnResizeActive(true)
-      setTableQuickRailState((prev) => ({ ...prev, columnIndex }))
+      setTableAffordanceGeometry((prev) => ({ ...prev, columnIndex }))
       clearWindowTextSelection()
       setColumnResizeUserSelectSuppressed(true)
       tableColumnRailResizeRef.current = {
@@ -4157,9 +4142,7 @@ const BlockEditorEngine = ({
           width: Math.round(cellRect.width),
         }
       })
-    setTableQuickRailState((prev) => ({
-      ...prev,
-      visible: true,
+    setTableAffordanceGeometry({
       left: Math.round(Math.max(12, tableRect.left - 46)),
       top: Math.round(tableRect.top + 10),
       tableLeft: Math.round(tableRect.left),
@@ -4177,6 +4160,9 @@ const BlockEditorEngine = ({
       columnWidth: Math.round(activeCellRect?.width ?? 120),
       columnIndex: activeColumnIndex >= 0 ? activeColumnIndex : 0,
       columnSegments: firstRowCells,
+    })
+    setTableAffordanceVisibility((prev) => ({
+      visible: true,
       showColumnRail: hasHoverPoint ? showColumnRail : prev.showColumnRail,
       showRowRail: hasHoverPoint ? showRowRail : prev.showRowRail,
       showColumnAddBar: hasHoverPoint ? showColumnAddBar : prev.showColumnAddBar,
@@ -4212,12 +4198,12 @@ const BlockEditorEngine = ({
   }, [syncTableQuickRailFromElement])
 
   useEffect(() => {
-    tableQuickRailStateRef.current = tableQuickRailState
-  }, [tableQuickRailState])
-
-  useEffect(() => {
     tableAffordanceGeometryRef.current = tableAffordanceGeometry
   }, [tableAffordanceGeometry])
+
+  useEffect(() => {
+    tableAffordanceVisibilityRef.current = tableAffordanceVisibility
+  }, [tableAffordanceVisibility])
 
   const syncSerializedDoc = useCallback(
     (nextDoc: BlockEditorDoc) => {
@@ -5498,7 +5484,7 @@ const BlockEditorEngine = ({
     const activeEditor = editorRef.current ?? editor
     if (!activeEditor) return false
     if (isTableSelectionActive(activeEditor)) return false
-    if (tableQuickRailStateRef.current.visible || tableMenuState) return false
+    if (tableAffordanceVisibilityRef.current.visible || tableMenuState) return false
 
     if (typeof window !== "undefined") {
       const selection = window.getSelection()
@@ -6841,7 +6827,7 @@ const BlockEditorEngine = ({
     (columnIndex: number, anchorRect: DOMRect) => {
       const selected = selectTableColumnByIndex(columnIndex)
       if (!selected) return
-      setTableQuickRailState((prev) => ({ ...prev, columnIndex }))
+      setTableAffordanceGeometry((prev) => ({ ...prev, columnIndex }))
       openTableMenu("column", anchorRect)
     },
     [openTableMenu, selectTableColumnByIndex]
@@ -6851,7 +6837,7 @@ const BlockEditorEngine = ({
     (rowIndex: number, anchorRect: DOMRect) => {
       const selected = selectTableRowByIndex(rowIndex)
       if (!selected) return
-      setTableQuickRailState((prev) => ({ ...prev, rowIndex }))
+      setTableAffordanceGeometry((prev) => ({ ...prev, rowIndex }))
       openTableMenu("row", anchorRect)
     },
     [openTableMenu, selectTableRowByIndex]
@@ -7780,7 +7766,7 @@ const BlockEditorEngine = ({
         : null}
       {shouldShowTableHandles ? (
         <>
-          {isCurrentTableColumnSelection(tableQuickRailState.columnIndex) ? (
+          {isCurrentTableColumnSelection(tableAffordanceGeometry.columnIndex) ? (
             <TableAxisSelectionOutline
               data-axis="column"
               data-testid="table-column-selection-outline"
@@ -7792,7 +7778,7 @@ const BlockEditorEngine = ({
               }}
             />
           ) : null}
-          {isCurrentTableRowSelection(tableQuickRailState.rowIndex) ? (
+          {isCurrentTableRowSelection(tableAffordanceGeometry.rowIndex) ? (
             <TableAxisSelectionOutline
               data-axis="row"
               data-testid="table-row-selection-outline"
@@ -7903,7 +7889,7 @@ const BlockEditorEngine = ({
               <TableQuickRailButton
                 type="button"
                 data-axis="row"
-                data-active={isCurrentTableRowSelection(tableQuickRailState.rowIndex)}
+                data-active={isCurrentTableRowSelection(tableAffordanceGeometry.rowIndex)}
                 title="행 메뉴"
                 aria-label="행 메뉴"
                 onMouseDown={handleToolbarButtonMouseDown}
@@ -7911,7 +7897,7 @@ const BlockEditorEngine = ({
                   if (event.button !== 0) return
                   event.preventDefault()
                   event.stopPropagation()
-                  startPendingTableAxisDrag("row", tableQuickRailState.rowIndex, event.pointerId, event.clientX, event.clientY)
+                  startPendingTableAxisDrag("row", tableAffordanceGeometry.rowIndex, event.pointerId, event.clientX, event.clientY)
                 }}
                 onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                   event.preventDefault()
@@ -7920,7 +7906,7 @@ const BlockEditorEngine = ({
                     tableAxisDragSuppressClickRef.current = false
                     return
                   }
-                  handleTableRowGripClick(tableQuickRailState.rowIndex, event.currentTarget.getBoundingClientRect())
+                  handleTableRowGripClick(tableAffordanceGeometry.rowIndex, event.currentTarget.getBoundingClientRect())
                 }}
               >
                 <TableHandleIcon kind="grip" />
@@ -7956,7 +7942,7 @@ const BlockEditorEngine = ({
               <TableQuickRailButton
                 type="button"
                 data-axis="column"
-                data-active={isCurrentTableColumnSelection(tableQuickRailState.columnIndex)}
+                data-active={isCurrentTableColumnSelection(tableAffordanceGeometry.columnIndex)}
                 title="열 메뉴"
                 aria-label="열 메뉴"
                 onMouseDown={handleToolbarButtonMouseDown}
@@ -7966,7 +7952,7 @@ const BlockEditorEngine = ({
                   event.stopPropagation()
                   startPendingTableAxisDrag(
                     "column",
-                    tableQuickRailState.columnIndex,
+                    tableAffordanceGeometry.columnIndex,
                     event.pointerId,
                     event.clientX,
                     event.clientY
@@ -7979,7 +7965,7 @@ const BlockEditorEngine = ({
                     tableAxisDragSuppressClickRef.current = false
                     return
                   }
-                  handleTableColumnRailSegmentClick(tableQuickRailState.columnIndex, event.currentTarget.getBoundingClientRect())
+                  handleTableColumnRailSegmentClick(tableAffordanceGeometry.columnIndex, event.currentTarget.getBoundingClientRect())
                 }}
               >
                 <TableHandleIcon kind="grip" />

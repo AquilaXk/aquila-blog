@@ -797,7 +797,7 @@ test.describe("block editor authoring flow", () => {
     expect(cellMenuRect.width).toBeLessThanOrEqual(24)
     expect(cellMenuRect.height).toBeLessThanOrEqual(24)
 
-    await page.mouse.move(tableBox.x + tableBox.width - 3, tableBox.y + tableBox.height - 3)
+    await page.mouse.move(tableBox.x + tableBox.width - 8, tableBox.y + tableBox.height - 8)
     await expect(columnQuickAddButton).toBeVisible()
     await expect(rowQuickAddButton).toBeVisible()
 
@@ -1311,7 +1311,7 @@ test.describe("block editor authoring flow", () => {
     expect(metrics.pageScrollWidth).toBeLessThanOrEqual(metrics.viewportWidth + 2)
   })
 
-  test("table corner grow handle은 row/column을 함께 확장한다", async ({ page }) => {
+  test("table corner grow handle은 row/column을 함께 확장하고 trailing empty axis만 축소한다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 
     await page.getByRole("button", { name: "테이블" }).click()
@@ -1344,6 +1344,104 @@ test.describe("block editor authoring flow", () => {
           })
       )
       .toBeGreaterThan(before.columns)
+
+    const afterGrow = await page.evaluate(() => {
+      const firstRow = document.querySelector("table tr")
+      return {
+        rows: document.querySelectorAll("table tr").length,
+        columns: firstRow?.children.length ?? 0,
+      }
+    })
+
+    const growHandleBox = await growHandle.boundingBox()
+    expect(growHandleBox).not.toBeNull()
+    const stepMetrics = await growHandle.evaluate((element) => ({
+      columnStep: Number((element as HTMLElement).dataset.columnStep || "0"),
+      rowStep: Number((element as HTMLElement).dataset.rowStep || "0"),
+    }))
+    expect(stepMetrics.columnStep).toBeGreaterThan(0)
+    expect(stepMetrics.rowStep).toBeGreaterThan(0)
+
+    const startX = (growHandleBox?.x ?? 0) + (growHandleBox?.width ?? 0) / 2
+    const startY = (growHandleBox?.y ?? 0) + (growHandleBox?.height ?? 0) / 2
+    await page.mouse.move(startX, startY)
+    await page.mouse.down()
+    await page.mouse.move(startX - stepMetrics.columnStep - 8, startY - stepMetrics.rowStep - 8)
+
+    await expect(page.getByTestId("table-corner-preview-outline")).toBeVisible()
+    await expect(page.locator("table tr")).toHaveCount(afterGrow.rows)
+    await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(afterGrow.columns)
+
+    await page.mouse.up()
+
+    await expect(page.locator("table tr")).toHaveCount(before.rows)
+    await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(before.columns)
+
+    const trailingCell = page.locator("table tr").nth(before.rows - 1).locator("th, td").nth(before.columns - 1)
+    await trailingCell.click()
+    await page.keyboard.type("keep")
+    await firstTableCell.hover()
+
+    await growHandle.evaluate(async (element, payload) => {
+      const { pointerId, padding } = payload as {
+        pointerId: number
+        padding: number
+      }
+      const rect = (element as HTMLElement).getBoundingClientRect()
+      const startX = rect.left + rect.width / 2
+      const startY = rect.top + rect.height / 2
+      const columnStep = Number((element as HTMLElement).dataset.columnStep || "0")
+      const rowStep = Number((element as HTMLElement).dataset.rowStep || "0")
+      if (!Number.isFinite(columnStep) || !Number.isFinite(rowStep) || columnStep <= 0 || rowStep <= 0) {
+        throw new Error("table corner blocked shrink step metrics are missing")
+      }
+      const currentX = startX - columnStep - padding
+      const currentY = startY - rowStep - padding
+      const waitForFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+      element.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          pointerId,
+          pointerType: "mouse",
+          button: 0,
+          buttons: 1,
+          isPrimary: true,
+          clientX: startX,
+          clientY: startY,
+        })
+      )
+      await waitForFrame()
+      window.dispatchEvent(
+        new PointerEvent("pointermove", {
+          bubbles: true,
+          pointerId,
+          pointerType: "mouse",
+          button: 0,
+          buttons: 1,
+          isPrimary: true,
+          clientX: currentX,
+          clientY: currentY,
+        })
+      )
+      await waitForFrame()
+      window.dispatchEvent(
+        new PointerEvent("pointerup", {
+          bubbles: true,
+          pointerId,
+          pointerType: "mouse",
+          button: 0,
+          buttons: 0,
+          isPrimary: true,
+          clientX: currentX,
+          clientY: currentY,
+        })
+      )
+      await waitForFrame()
+    }, { pointerId: 32, padding: 8 })
+
+    await expect(page.locator("table tr")).toHaveCount(before.rows)
+    await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(before.columns)
+    await expect(trailingCell).toContainText("keep")
   })
 
   test("table 구조 메뉴는 구조 액션만 포함하고 제목 행 토글과 표 삭제가 동작한다", async ({ page }) => {
@@ -1362,6 +1460,8 @@ test.describe("block editor authoring flow", () => {
     await expect(page.getByTestId("block-drag-handle")).toHaveCount(0)
     await expect(tableMenu.getByRole("button", { name: "좌측" })).toHaveCount(0)
     await expect(tableMenu.getByRole("button", { name: "배경 해제" })).toHaveCount(0)
+    await expect(tableMenu.getByRole("button", { name: "페이지 너비에 맞춤" })).toBeVisible()
+    await expect(tableMenu.getByRole("button", { name: "넓은 표" })).toBeVisible()
 
     await tableMenu.getByRole("button", { name: "제목 행" }).click()
     await expect(page.locator("table tr").first().locator("th")).toHaveCount(0)
@@ -1371,6 +1471,61 @@ test.describe("block editor authoring flow", () => {
     await tableMenu.getByRole("button", { name: "표 삭제" }).click()
     await expect(page.locator(".aq-block-editor__content table")).toHaveCount(0)
     await expect(page.getByTestId("block-editor-prosemirror")).toBeVisible()
+  })
+
+  test("table 구조 메뉴의 폭 정책 UI는 wide/fit-to-page를 토글하고 재진입 후에도 유지된다", async ({
+    page,
+  }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    await page.getByRole("button", { name: "테이블" }).click()
+    const firstTableCell = page.locator("table th, table td").first()
+    await firstTableCell.click()
+    await firstTableCell.hover()
+
+    const structureMenuButton = page.getByTestId("table-structure-menu-button")
+    const table = page.locator(".aq-block-editor__content .tableWrapper table").first()
+
+    await structureMenuButton.click()
+    const tableMenu = page.getByTestId("table-table-menu")
+    await expect(tableMenu).toBeVisible()
+    await expect(tableMenu.getByTestId("table-overflow-mode-normal")).toHaveAttribute("data-active", "true")
+    await expect(tableMenu.getByTestId("table-overflow-mode-wide")).toHaveAttribute("data-active", "false")
+
+    await tableMenu.getByRole("button", { name: "넓은 표" }).click()
+    await expect(table).toHaveAttribute("data-overflow-mode", "wide")
+    await expect(page.getByTestId("qa-markdown-output")).toContainText('"overflowMode":"wide"')
+
+    const wideMarkdown = (await page.getByTestId("qa-markdown-output").textContent()) || ""
+    await page.goto(`${QA_ENGINE_ROUTE}&seed=${encodeURIComponent(wideMarkdown.replace(/\n/g, "\\n"))}`)
+    await expect(page.locator(".aq-block-editor__content .tableWrapper table").first()).toHaveAttribute(
+      "data-overflow-mode",
+      "wide"
+    )
+
+    const reloadedFirstCell = page.locator("table th, table td").first()
+    await reloadedFirstCell.click()
+    await reloadedFirstCell.hover()
+
+    await page.getByTestId("table-structure-menu-button").click()
+    const reloadedTableMenu = page.getByTestId("table-table-menu")
+    await expect(reloadedTableMenu.getByTestId("table-overflow-mode-normal")).toHaveAttribute("data-active", "false")
+    await expect(reloadedTableMenu.getByTestId("table-overflow-mode-wide")).toHaveAttribute("data-active", "true")
+
+    await reloadedTableMenu.getByRole("button", { name: "페이지 너비에 맞춤" }).click()
+    await expect(page.locator(".aq-block-editor__content .tableWrapper table").first()).not.toHaveAttribute(
+      "data-overflow-mode",
+      "wide"
+    )
+    await expect(page.getByTestId("qa-markdown-output")).toContainText('"overflowMode":"normal"')
+
+    const normalMarkdown = (await page.getByTestId("qa-markdown-output").textContent()) || ""
+    await page.goto(`${QA_ENGINE_ROUTE}&seed=${encodeURIComponent(normalMarkdown.replace(/\n/g, "\\n"))}`)
+    await expect(page.locator(".aq-block-editor__content .tableWrapper table").first()).not.toHaveAttribute(
+      "data-overflow-mode",
+      "wide"
+    )
+    await expect(page.getByTestId("qa-markdown-output")).toContainText('"overflowMode":"normal"')
   })
 
   test("table cell menu는 셀 스타일만 포함하고 구조 액션 없이 정렬/배경을 저장한다", async ({ page }) => {
@@ -1403,24 +1558,36 @@ test.describe("block editor authoring flow", () => {
       .toContain('"backgroundColor":"#fef3c7"')
   })
 
-  test("table 제목 행/열 토글 상태는 저장 후 재진입해도 유지된다", async ({ page }) => {
+  test("table row/column 메뉴는 axis-level header action을 노출하고 저장 후 재진입해도 유지된다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 
     await page.getByRole("button", { name: "테이블" }).click()
     const firstTableCell = page.locator("table th, table td").first()
     await firstTableCell.click()
-    await firstTableCell.hover()
+    const tableBox = await page.locator(".aq-block-editor__content .tableWrapper table").boundingBox()
+    if (!tableBox) {
+      throw new Error("table axis menu metrics are missing")
+    }
+    await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
 
-    const cornerHandleButton = page.getByTestId("table-structure-menu-button")
+    const rowMenuButton = page.getByTestId("table-row-rail").getByRole("button", { name: "행 메뉴" })
+    await expect(page.getByTestId("table-row-rail")).toBeVisible()
+    await rowMenuButton.click()
+    const rowMenu = page.getByTestId("table-row-menu")
+    await expect(rowMenu).toBeVisible()
+    await expect(rowMenu.getByRole("button", { name: "제목 행" })).toBeVisible()
+    await expect(rowMenu.getByRole("button", { name: "제목 열" })).toHaveCount(0)
+    await rowMenu.getByRole("button", { name: "제목 행" }).click()
 
-    await cornerHandleButton.click()
-    const tableMenu = page.getByTestId("table-table-menu")
-    await expect(tableMenu).toBeVisible()
-    await tableMenu.getByRole("button", { name: "제목 행" }).click()
-
-    await cornerHandleButton.click()
-    await expect(tableMenu).toBeVisible()
-    await tableMenu.getByRole("button", { name: "제목 열" }).click()
+    await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
+    const columnMenuButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })
+    await expect(page.getByTestId("table-column-rail")).toBeVisible()
+    await columnMenuButton.click()
+    const columnMenu = page.getByTestId("table-column-menu")
+    await expect(columnMenu).toBeVisible()
+    await expect(columnMenu.getByRole("button", { name: "제목 열" })).toBeVisible()
+    await expect(columnMenu.getByRole("button", { name: "제목 행" })).toHaveCount(0)
+    await columnMenu.getByRole("button", { name: "제목 열" }).click()
 
     await expect(page.locator("table tr").first().locator("th")).toHaveCount(1)
     await expect(page.locator("table tr").nth(1).locator("th")).toHaveCount(1)
@@ -1540,14 +1707,14 @@ test.describe("block editor authoring flow", () => {
     }
 
     await rowGrip.evaluate((element, payload) => {
-      const { targetY } = payload as { targetY: number }
+      const { pointerId, targetY } = payload as { pointerId: number; targetY: number }
       const rect = (element as HTMLElement).getBoundingClientRect()
       const startX = rect.left + rect.width / 2
       const startY = rect.top + rect.height / 2
       element.dispatchEvent(
         new PointerEvent("pointerdown", {
           bubbles: true,
-          pointerId: 1,
+          pointerId,
           pointerType: "mouse",
           button: 0,
           buttons: 1,
@@ -1559,7 +1726,7 @@ test.describe("block editor authoring flow", () => {
       window.dispatchEvent(
         new PointerEvent("pointermove", {
           bubbles: true,
-          pointerId: 1,
+          pointerId,
           pointerType: "mouse",
           button: 0,
           buttons: 1,
@@ -1571,7 +1738,7 @@ test.describe("block editor authoring flow", () => {
       window.dispatchEvent(
         new PointerEvent("pointerup", {
           bubbles: true,
-          pointerId: 1,
+          pointerId,
           pointerType: "mouse",
           button: 0,
           buttons: 0,
@@ -1580,7 +1747,7 @@ test.describe("block editor authoring flow", () => {
           clientY: targetY,
         })
       )
-    }, { targetY: lastRowBox.y + lastRowBox.height + 18 })
+    }, { pointerId: 11, targetY: lastRowBox.y + lastRowBox.height + 18 })
 
     await expect
       .poll(async () => (await readTableGrid(page)).map((row) => row[0]))
@@ -1598,20 +1765,21 @@ test.describe("block editor authoring flow", () => {
     await expect(page.getByTestId("table-column-rail")).toBeVisible()
 
     const columnGrip = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })
+    await expect(columnGrip).toBeVisible()
     const firstRowLastCellBox = await page.locator("table tr").first().locator("th, td").nth(2).boundingBox()
     if (!firstRowLastCellBox) {
       throw new Error("table column reorder handle metrics are missing")
     }
 
     await columnGrip.evaluate((element, payload) => {
-      const { targetX } = payload as { targetX: number }
+      const { pointerId, targetX } = payload as { pointerId: number; targetX: number }
       const rect = (element as HTMLElement).getBoundingClientRect()
       const startX = rect.left + rect.width / 2
       const startY = rect.top + rect.height / 2
       element.dispatchEvent(
         new PointerEvent("pointerdown", {
           bubbles: true,
-          pointerId: 1,
+          pointerId,
           pointerType: "mouse",
           button: 0,
           buttons: 1,
@@ -1623,7 +1791,7 @@ test.describe("block editor authoring flow", () => {
       window.dispatchEvent(
         new PointerEvent("pointermove", {
           bubbles: true,
-          pointerId: 1,
+          pointerId,
           pointerType: "mouse",
           button: 0,
           buttons: 1,
@@ -1635,7 +1803,7 @@ test.describe("block editor authoring flow", () => {
       window.dispatchEvent(
         new PointerEvent("pointerup", {
           bubbles: true,
-          pointerId: 1,
+          pointerId,
           pointerType: "mouse",
           button: 0,
           buttons: 0,
@@ -1644,15 +1812,22 @@ test.describe("block editor authoring flow", () => {
           clientY: startY,
         })
       )
-    }, { targetX: firstRowLastCellBox.x + firstRowLastCellBox.width + 18 })
+    }, { pointerId: 12, targetX: firstRowLastCellBox.x + firstRowLastCellBox.width + 18 })
 
     await expect
       .poll(async () => (await readTableGrid(page))[0])
       .toEqual(["r2c2", "r2c3", "r2c1"])
 
     await expect
-      .poll(async () => (await page.getByTestId("qa-markdown-output").textContent()) || "")
-      .toContain("r2c2")
+      .poll(async () => {
+        const markdown = (await page.getByTestId("qa-markdown-output").textContent()) || ""
+        return (
+          markdown.includes("| r2c2 | r2c3 | r2c1 |") &&
+          markdown.includes("| r3c2 | r3c3 | r3c1 |") &&
+          markdown.includes("| r1c2 | r1c3 | r1c1 |")
+        )
+      })
+      .toBe(true)
 
     const markdown = (await page.getByTestId("qa-markdown-output").textContent()) || ""
     await page.goto(`${QA_ENGINE_ROUTE}&seed=${encodeURIComponent(markdown.replace(/\n/g, "\\n"))}`)

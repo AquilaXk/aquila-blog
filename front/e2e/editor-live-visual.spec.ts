@@ -102,6 +102,11 @@ test.describe("editor live visual regression", () => {
     await expect(rowRail).toBeVisible()
     await expect(columnRail).toBeVisible()
 
+    await structureMenuButton.click()
+    const tableMenu = page.getByTestId("table-table-menu")
+    await expect(tableMenu.getByRole("button", { name: "페이지 너비에 맞춤" })).toBeVisible()
+    await expect(tableMenu.getByRole("button", { name: "넓은 표" })).toBeVisible()
+
     await page.mouse.move(tableBox.x + tableBox.width - 3, tableBox.y + tableBox.height - 3)
 
     const columnAddBar = page.getByTestId("table-column-add-bar")

@@ -224,8 +224,7 @@ type FloatingBubbleState = {
   top: number
 }
 
-type TableQuickRailState = {
-  visible: boolean
+type TableAffordanceGeometry = {
   left: number
   top: number
   tableLeft: number
@@ -246,11 +245,17 @@ type TableQuickRailState = {
     left: number
     width: number
   }>
+}
+
+type TableAffordanceVisibility = {
+  visible: boolean
   showColumnRail: boolean
   showRowRail: boolean
   showColumnAddBar: boolean
   showRowAddBar: boolean
 }
+
+type TableQuickRailState = TableAffordanceGeometry & TableAffordanceVisibility
 
 type TableMenuKind = "row" | "column" | "table" | "cell"
 
@@ -376,6 +381,27 @@ type TableAxisReorderIndicatorState = {
   width: number
   height: number
 }
+
+const extractTableAffordanceGeometry = (state: TableQuickRailState): TableAffordanceGeometry => {
+  const {
+    visible: _visible,
+    showColumnRail: _showColumnRail,
+    showRowRail: _showRowRail,
+    showColumnAddBar: _showColumnAddBar,
+    showRowAddBar: _showRowAddBar,
+    ...geometry
+  } = state
+
+  return geometry
+}
+
+const extractTableAffordanceVisibility = (state: TableQuickRailState): TableAffordanceVisibility => ({
+  visible: state.visible,
+  showColumnRail: state.showColumnRail,
+  showRowRail: state.showRowRail,
+  showColumnAddBar: state.showColumnAddBar,
+  showRowAddBar: state.showRowAddBar,
+})
 
 type BlockSelectionPointerEventLike = {
   button: number
@@ -742,10 +768,26 @@ type TableColumnDragGuideState = {
 
 type TableCornerGrowState = {
   pointerId: number
-  lastClientX: number
-  lastClientY: number
+  startClientX: number
+  startClientY: number
+  baseLeft: number
+  baseTop: number
+  baseWidth: number
+  baseHeight: number
   columnStepPx: number
   rowStepPx: number
+  maxShrinkColumnSteps: number
+  maxShrinkRowSteps: number
+}
+
+type TableCornerPreviewState = {
+  visible: boolean
+  left: number
+  top: number
+  width: number
+  height: number
+  columnSteps: number
+  rowSteps: number
 }
 
 const BLOCK_HANDLE_MEDIA_QUERY = "(pointer: coarse)"
@@ -760,6 +802,7 @@ const TABLE_COLUMN_RESIZE_GUARD_PX = 12
 const TABLE_RAIL_EDGE_PADDING_PX = 12
 const TABLE_CORNER_BUTTON_SIZE_PX = 22
 const TABLE_CORNER_GROW_MOUSE_POINTER_ID = -1
+const TABLE_CORNER_DRAG_CLICK_GUARD_PX = 4
 const TABLE_COLUMN_GRIP_WIDTH_PX = 40
 const TABLE_COLUMN_GRIP_HEIGHT_PX = 22
 const TABLE_ROW_GRIP_WIDTH_PX = 22
@@ -768,6 +811,169 @@ const TABLE_ADD_BAR_THICKNESS_PX = 28
 const TABLE_ADD_BAR_VIEWPORT_PADDING_PX = 8
 const TABLE_AXIS_RAIL_EDGE_HOTZONE_PX = 18
 const TABLE_TRAILING_ADD_EDGE_HOTZONE_PX = 18
+
+const isTableCellNode = (node: ProseMirrorNode | null | undefined) =>
+  Boolean(node && (node.type.name === "tableCell" || node.type.name === "tableHeader"))
+
+const isVisuallyEmptyTableCellContent = (node: ProseMirrorNode | null | undefined): boolean => {
+  if (!node) return true
+  if (node.isText) return node.textContent.trim().length === 0
+  if (node.isLeaf) return false
+
+  for (let childIndex = 0; childIndex < node.childCount; childIndex += 1) {
+    if (!isVisuallyEmptyTableCellContent(node.child(childIndex))) {
+      return false
+    }
+  }
+
+  return true
+}
+
+const canShrinkTableAxisAtEnd = (tableNode: ProseMirrorNode, axis: "row" | "column"): boolean => {
+  const rowCount = tableNode.childCount
+  if (rowCount === 0) return false
+
+  const firstRow = tableNode.firstChild
+  if (!firstRow) return false
+  const columnCount = firstRow.childCount
+  if (columnCount === 0) return false
+
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const row = tableNode.child(rowIndex)
+    if (row.childCount !== columnCount) return false
+    for (let columnIndex = 0; columnIndex < row.childCount; columnIndex += 1) {
+      const cell = row.child(columnIndex)
+      if (!isTableCellNode(cell)) return false
+      const colspan = typeof cell.attrs?.colspan === "number" ? cell.attrs.colspan : 1
+      const rowspan = typeof cell.attrs?.rowspan === "number" ? cell.attrs.rowspan : 1
+      if (colspan > 1 || rowspan > 1) return false
+    }
+  }
+
+  if (axis === "row") {
+    if (rowCount <= 1) return false
+    const trailingRow = tableNode.child(rowCount - 1)
+    for (let columnIndex = 0; columnIndex < trailingRow.childCount; columnIndex += 1) {
+      if (!isVisuallyEmptyTableCellContent(trailingRow.child(columnIndex))) {
+        return false
+      }
+    }
+    return true
+  }
+
+  if (columnCount <= 1) return false
+  const trailingColumnIndex = columnCount - 1
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const row = tableNode.child(rowIndex)
+    if (!isVisuallyEmptyTableCellContent(row.child(trailingColumnIndex))) {
+      return false
+    }
+  }
+  return true
+}
+
+const countShrinkableTableAxisAtEnd = (tableNode: ProseMirrorNode, axis: "row" | "column"): number => {
+  const rowCount = tableNode.childCount
+  if (rowCount === 0) return 0
+
+  const firstRow = tableNode.firstChild
+  if (!firstRow) return 0
+  const columnCount = firstRow.childCount
+  if (columnCount === 0) return 0
+
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+    const row = tableNode.child(rowIndex)
+    if (row.childCount !== columnCount) return 0
+    for (let columnIndex = 0; columnIndex < row.childCount; columnIndex += 1) {
+      const cell = row.child(columnIndex)
+      if (!isTableCellNode(cell)) return 0
+      const colspan = typeof cell.attrs?.colspan === "number" ? cell.attrs.colspan : 1
+      const rowspan = typeof cell.attrs?.rowspan === "number" ? cell.attrs.rowspan : 1
+      if (colspan > 1 || rowspan > 1) return 0
+    }
+  }
+
+  if (axis === "row") {
+    let shrinkableRows = 0
+    for (let rowIndex = rowCount - 1; rowIndex >= 1; rowIndex -= 1) {
+      const trailingRow = tableNode.child(rowIndex)
+      let empty = true
+      for (let columnIndex = 0; columnIndex < trailingRow.childCount; columnIndex += 1) {
+        if (!isVisuallyEmptyTableCellContent(trailingRow.child(columnIndex))) {
+          empty = false
+          break
+        }
+      }
+      if (!empty) break
+      shrinkableRows += 1
+    }
+    return shrinkableRows
+  }
+
+  let shrinkableColumns = 0
+  for (let columnIndex = columnCount - 1; columnIndex >= 1; columnIndex -= 1) {
+    let empty = true
+    for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+      const row = tableNode.child(rowIndex)
+      if (!isVisuallyEmptyTableCellContent(row.child(columnIndex))) {
+        empty = false
+        break
+      }
+    }
+    if (!empty) break
+    shrinkableColumns += 1
+  }
+  return shrinkableColumns
+}
+
+const isVisuallyEmptyRenderedTableCell = (cell: HTMLTableCellElement | null | undefined) => {
+  if (!cell) return true
+  if (cell.querySelector("img, video, svg, canvas, iframe, object, embed, table")) return false
+  return cell.textContent?.trim().length ? false : true
+}
+
+const countShrinkableRenderedTableAxisAtEnd = (tableElement: HTMLTableElement | null, axis: "row" | "column"): number => {
+  if (!tableElement) return 0
+  const rows = Array.from(tableElement.querySelectorAll("tr")).filter(
+    (row): row is HTMLTableRowElement => row instanceof HTMLTableRowElement
+  )
+  if (rows.length === 0) return 0
+  const columnCount = rows[0]?.cells.length ?? 0
+  if (columnCount === 0) return 0
+
+  for (const row of rows) {
+    if (row.cells.length !== columnCount) return 0
+    for (const cell of Array.from(row.cells)) {
+      const colspan = Number(cell.getAttribute("colspan") || "1")
+      const rowspan = Number(cell.getAttribute("rowspan") || "1")
+      if (colspan > 1 || rowspan > 1) return 0
+    }
+  }
+
+  if (axis === "row") {
+    let shrinkableRows = 0
+    for (let rowIndex = rows.length - 1; rowIndex >= 1; rowIndex -= 1) {
+      const row = rows[rowIndex]
+      if (Array.from(row.cells).some((cell) => !isVisuallyEmptyRenderedTableCell(cell))) break
+      shrinkableRows += 1
+    }
+    return shrinkableRows
+  }
+
+  let shrinkableColumns = 0
+  for (let columnIndex = columnCount - 1; columnIndex >= 1; columnIndex -= 1) {
+    let empty = true
+    for (const row of rows) {
+      if (!isVisuallyEmptyRenderedTableCell(row.cells[columnIndex] ?? null)) {
+        empty = false
+        break
+      }
+    }
+    if (!empty) break
+    shrinkableColumns += 1
+  }
+  return shrinkableColumns
+}
 const TABLE_EDGE_HANDLE_INSET_PX = 6
 const TABLE_EDGE_ADD_BUTTON_SIZE_PX = 24
 const TABLE_CORNER_CLUSTER_GAP_PX = 6
@@ -809,7 +1015,7 @@ const clampViewportPosition = (
 }
 
 const resolveDesktopTableRailLayout = (
-  state: TableQuickRailState
+  state: TableAffordanceGeometry
 ) => {
   const visibleTableWidth = Math.max(0, Math.round(state.width))
   const visibleTableHeight = Math.max(0, Math.round(state.height))
@@ -1285,9 +1491,9 @@ const buildReorderedSimpleTableNode = (
 
 const findActiveRenderedTable = (
   viewport: HTMLElement | null,
-  quickRailState: TableQuickRailState
+  quickRailGeometry: TableAffordanceGeometry | null
 ) => {
-  if (!viewport) return null
+  if (!viewport || !quickRailGeometry) return null
 
   const renderedTables = Array.from(
     viewport.querySelectorAll<HTMLTableElement>(".aq-block-editor__content .tableWrapper table, .aq-block-editor__content table")
@@ -1295,7 +1501,8 @@ const findActiveRenderedTable = (
   if (!renderedTables.length) return null
 
   const withinTolerance = (left: number, right: number) =>
-    Math.abs(left - quickRailState.tableLeft) <= 6 && Math.abs(right - (quickRailState.tableLeft + quickRailState.width)) <= 6
+    Math.abs(left - quickRailGeometry.tableLeft) <= 6 &&
+    Math.abs(right - (quickRailGeometry.tableLeft + quickRailGeometry.width)) <= 6
 
   return (
     renderedTables.find((table) => {
@@ -1742,6 +1949,7 @@ const getActiveTableStructureState = (editor?: TiptapEditor | null) => {
     return {
       hasHeaderRow: false,
       hasHeaderColumn: false,
+      overflowMode: "normal",
     }
   }
 
@@ -1765,6 +1973,7 @@ const getActiveTableStructureState = (editor?: TiptapEditor | null) => {
     return {
       hasHeaderRow: false,
       hasHeaderColumn: false,
+      overflowMode: "normal",
     }
   }
 
@@ -1782,6 +1991,7 @@ const getActiveTableStructureState = (editor?: TiptapEditor | null) => {
   return {
     hasHeaderRow,
     hasHeaderColumn,
+    overflowMode: getTableOverflowMode(tableNode),
   }
 }
 
@@ -1844,6 +2054,7 @@ const BlockEditorEngine = ({
   const tableRowResizeRef = useRef<TableRowResizeState | null>(null)
   const tableColumnRailResizeRef = useRef<TableColumnRailResizeState | null>(null)
   const tableCornerGrowRef = useRef<TableCornerGrowState | null>(null)
+  const tableCornerGrowSuppressClickRef = useRef(false)
   const tableQuickRailHideTimerRef = useRef<number | null>(null)
   const hoveredBlockClearTimerRef = useRef<number | null>(null)
   const bubbleHideTimerRef = useRef<number | null>(null)
@@ -1923,11 +2134,23 @@ const BlockEditorEngine = ({
     top: 0,
     height: 0,
   })
+  const [tableCornerPreviewState, setTableCornerPreviewState] = useState<TableCornerPreviewState>({
+    visible: false,
+    left: 0,
+    top: 0,
+    width: 0,
+    height: 0,
+    columnSteps: 0,
+    rowSteps: 0,
+  })
   const [isTableQuickRailHovered, setIsTableQuickRailHovered] = useState(false)
   const [isTableColumnResizeActive, setIsTableColumnResizeActive] = useState(false)
   const [isTableCornerGrowActive, setIsTableCornerGrowActive] = useState(false)
   const [tableMenuState, setTableMenuState] = useState<TableMenuState>(null)
+  const tableAffordanceGeometry = useMemo(() => extractTableAffordanceGeometry(tableQuickRailState), [tableQuickRailState])
+  const tableAffordanceVisibility = useMemo(() => extractTableAffordanceVisibility(tableQuickRailState), [tableQuickRailState])
   const tableQuickRailStateRef = useRef(tableQuickRailState)
+  const tableAffordanceGeometryRef = useRef(tableAffordanceGeometry)
   const [draggedTableAxisState, setDraggedTableAxisState] = useState<DraggedTableAxisState>(null)
   const [tableAxisDragGhostPosition, setTableAxisDragGhostPosition] = useState<{ x: number; y: number } | null>(null)
   const [tableAxisReorderIndicatorState, setTableAxisReorderIndicatorState] = useState<TableAxisReorderIndicatorState>({
@@ -2529,7 +2752,7 @@ const BlockEditorEngine = ({
 
   const resolveTableAxisReorderIndicator = useCallback(
     (axis: "row" | "column", sourceIndex: number, clientX: number, clientY: number) => {
-      const renderedTable = findActiveRenderedTable(viewportRef.current, tableQuickRailStateRef.current)
+      const renderedTable = findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)
       if (!renderedTable) return null
 
       const tableRect = renderedTable.getBoundingClientRect()
@@ -2594,7 +2817,7 @@ const BlockEditorEngine = ({
 
   const resolveTableAxisIndexFromPointer = useCallback(
     (axis: "row" | "column", clientX: number, clientY: number) => {
-      const renderedTable = findActiveRenderedTable(viewportRef.current, tableQuickRailStateRef.current)
+      const renderedTable = findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)
       if (!renderedTable) return null
 
       const rows = Array.from(renderedTable.querySelectorAll("tr")).filter(
@@ -3059,7 +3282,7 @@ const BlockEditorEngine = ({
   const getActiveTableRectFromDom = useCallback((activeEditor?: TiptapEditor | null) => {
     if (!activeEditor) return null
 
-    const tableElement = findActiveRenderedTable(viewportRef.current, tableQuickRailStateRef.current)
+    const tableElement = findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)
     const firstCell = tableElement?.querySelector<HTMLElement>(
       "thead tr:first-of-type > th, thead tr:first-of-type > td, tbody tr:first-of-type > th, tbody tr:first-of-type > td, tr:first-of-type > th, tr:first-of-type > td"
     )
@@ -3096,7 +3319,7 @@ const BlockEditorEngine = ({
     const selectedCell = viewport.querySelector(".aq-block-editor__content .selectedCell") as HTMLElement | null
     if (selectedCell) return selectedCell
 
-    const renderedTable = findActiveRenderedTable(viewport, tableQuickRailStateRef.current)
+    const renderedTable = findActiveRenderedTable(viewport, tableAffordanceGeometryRef.current)
     if (!renderedTable) return null
 
     const rows = Array.from(renderedTable.querySelectorAll("tr")).filter(
@@ -3442,7 +3665,7 @@ const BlockEditorEngine = ({
       if (!currentEditor) return false
       let rect = getCurrentSelectedTableRect(currentEditor)
       if (!rect) {
-        const renderedTable = findActiveRenderedTable(viewportRef.current, tableQuickRailStateRef.current)
+        const renderedTable = findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)
         const fallbackCell = renderedTable?.querySelector<HTMLTableCellElement>(
           "tr:last-child > th:last-child, tr:last-child > td:last-child"
         )
@@ -3465,38 +3688,168 @@ const BlockEditorEngine = ({
     [focusRenderedTableCell, getCurrentSelectedTableRect, selectTableColumnByIndex, selectTableRowByIndex]
   )
 
+  const shrinkTableAxisAtEnd = useCallback(
+    (axis: "row" | "column") => {
+      const currentEditor = editorRef.current
+      if (!currentEditor) return false
+      let rect = getCurrentSelectedTableRect(currentEditor)
+      if (!rect) {
+        const renderedTable = findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)
+        const fallbackCell = renderedTable?.querySelector<HTMLTableCellElement>(
+          "tr:last-child > th:last-child, tr:last-child > td:last-child"
+        )
+        if (fallbackCell && focusRenderedTableCell(fallbackCell)) {
+          rect = getCurrentSelectedTableRect(currentEditor)
+        }
+      }
+      if (!rect || !canShrinkTableAxisAtEnd(rect.table, axis)) return false
+
+      const trailingIndex = axis === "column" ? rect.map.width - 1 : rect.map.height - 1
+      if (trailingIndex < 0) return false
+
+      const selected =
+        axis === "column" ? selectTableColumnByIndex(trailingIndex) : selectTableRowByIndex(trailingIndex)
+      if (!selected) return false
+
+      const chain = currentEditor.chain().focus()
+      axis === "column" ? chain.deleteColumn() : chain.deleteRow()
+      return chain.run()
+    },
+    [focusRenderedTableCell, getCurrentSelectedTableRect, selectTableColumnByIndex, selectTableRowByIndex]
+  )
+
   const growTableFromCorner = useCallback(() => {
     const appendedColumn = appendTableAxisAtEnd("column")
     const appendedRow = appendTableAxisAtEnd("row")
     return appendedColumn || appendedRow
   }, [appendTableAxisAtEnd])
 
+  const resolveTableCornerPreviewState = useCallback(
+    (state: TableCornerGrowState, clientX: number, clientY: number): TableCornerPreviewState => {
+      const rawColumnSteps = Math.trunc((clientX - state.startClientX) / state.columnStepPx)
+      const rawRowSteps = Math.trunc((clientY - state.startClientY) / state.rowStepPx)
+      const columnSteps = Math.max(-state.maxShrinkColumnSteps, rawColumnSteps)
+      const rowSteps = Math.max(-state.maxShrinkRowSteps, rawRowSteps)
+
+      if (columnSteps === 0 && rowSteps === 0) {
+        return {
+          visible: false,
+          left: state.baseLeft,
+          top: state.baseTop,
+          width: state.baseWidth,
+          height: state.baseHeight,
+          columnSteps: 0,
+          rowSteps: 0,
+        }
+      }
+
+      return {
+        visible: true,
+        left: state.baseLeft,
+        top: state.baseTop,
+        width: Math.max(TABLE_MIN_COLUMN_WIDTH_PX, state.baseWidth + columnSteps * state.columnStepPx),
+        height: Math.max(TABLE_MIN_ROW_HEIGHT_PX, state.baseHeight + rowSteps * state.rowStepPx),
+        columnSteps,
+        rowSteps,
+      }
+    },
+    []
+  )
+
+  const applyTableCornerGrowSteps = useCallback(
+    (columnSteps: number, rowSteps: number) => {
+      let appliedColumnSteps = 0
+      let appliedRowSteps = 0
+
+      while (Math.abs(appliedColumnSteps) < Math.abs(columnSteps)) {
+        const direction = columnSteps > 0 ? 1 : -1
+        const changed = direction > 0 ? appendTableAxisAtEnd("column") : shrinkTableAxisAtEnd("column")
+        if (!changed) break
+        appliedColumnSteps += direction
+      }
+
+      while (Math.abs(appliedRowSteps) < Math.abs(rowSteps)) {
+        const direction = rowSteps > 0 ? 1 : -1
+        const changed = direction > 0 ? appendTableAxisAtEnd("row") : shrinkTableAxisAtEnd("row")
+        if (!changed) break
+        appliedRowSteps += direction
+      }
+
+      if (appliedColumnSteps !== 0 || appliedRowSteps !== 0) {
+        setSelectionTick((prev) => prev + 1)
+      }
+
+      return {
+        appliedColumnSteps,
+        appliedRowSteps,
+      }
+    },
+    [appendTableAxisAtEnd, shrinkTableAxisAtEnd]
+  )
+
+  const getTableCornerGrowStepMetrics = useCallback(() => {
+    const lastColumnSegment =
+      tableQuickRailStateRef.current.columnSegments[tableQuickRailStateRef.current.columnSegments.length - 1]
+    return {
+      columnStepPx: Math.max(
+        TABLE_MIN_COLUMN_WIDTH_PX,
+        Math.round(
+          lastColumnSegment?.width ??
+            tableQuickRailStateRef.current.columnWidth ??
+            TABLE_MIN_COLUMN_WIDTH_PX
+        )
+      ),
+      rowStepPx: Math.max(
+        TABLE_MIN_ROW_HEIGHT_PX,
+        Math.round(tableQuickRailStateRef.current.rowHeight || TABLE_MIN_ROW_HEIGHT_PX)
+      ),
+    }
+  }, [])
+
   const stopTableCornerGrow = useCallback(() => {
     tableCornerGrowRef.current = null
+    setTableCornerPreviewState((prev) => (prev.visible ? { ...prev, visible: false, columnSteps: 0, rowSteps: 0 } : prev))
     setIsTableCornerGrowActive(false)
   }, [])
 
   const startTableCornerGrow = useCallback(
     (pointerId: number, clientX: number, clientY: number) => {
-      const lastColumnSegment =
-        tableQuickRailStateRef.current.columnSegments[tableQuickRailStateRef.current.columnSegments.length - 1]
+      const { columnStepPx, rowStepPx } = getTableCornerGrowStepMetrics()
+      const currentEditor = editorRef.current
+      const rect = currentEditor ? getCurrentSelectedTableRect(currentEditor) : null
+      const renderedTable = findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)
+      const maxShrinkColumnSteps = rect
+        ? countShrinkableTableAxisAtEnd(rect.table, "column")
+        : countShrinkableRenderedTableAxisAtEnd(renderedTable, "column")
+      const maxShrinkRowSteps = rect
+        ? countShrinkableTableAxisAtEnd(rect.table, "row")
+        : countShrinkableRenderedTableAxisAtEnd(renderedTable, "row")
       tableCornerGrowRef.current = {
         pointerId,
-        lastClientX: clientX,
-        lastClientY: clientY,
-        columnStepPx: Math.max(
-          TABLE_MIN_COLUMN_WIDTH_PX,
-          Math.round(
-            lastColumnSegment?.width ??
-              tableQuickRailStateRef.current.columnWidth ??
-              TABLE_MIN_COLUMN_WIDTH_PX
-          )
-        ),
-        rowStepPx: Math.max(TABLE_MIN_ROW_HEIGHT_PX, Math.round(tableQuickRailStateRef.current.rowHeight || TABLE_MIN_ROW_HEIGHT_PX)),
+        startClientX: clientX,
+        startClientY: clientY,
+        baseLeft: tableAffordanceGeometryRef.current.tableLeft,
+        baseTop: tableAffordanceGeometryRef.current.tableTop,
+        baseWidth: tableAffordanceGeometryRef.current.width,
+        baseHeight: tableAffordanceGeometryRef.current.height,
+        columnStepPx,
+        rowStepPx,
+        maxShrinkColumnSteps,
+        maxShrinkRowSteps,
       }
+      tableCornerGrowSuppressClickRef.current = false
+      setTableCornerPreviewState({
+        visible: false,
+        left: tableAffordanceGeometryRef.current.tableLeft,
+        top: tableAffordanceGeometryRef.current.tableTop,
+        width: tableAffordanceGeometryRef.current.width,
+        height: tableAffordanceGeometryRef.current.height,
+        columnSteps: 0,
+        rowSteps: 0,
+      })
       setIsTableCornerGrowActive(true)
     },
-    []
+    [getCurrentSelectedTableRect, getTableCornerGrowStepMetrics]
   )
 
   const getCurrentTableColumnResizeContext = useCallback(
@@ -3519,7 +3872,7 @@ const BlockEditorEngine = ({
       }
 
       const currentWidths = columns.map((column) => readColumnWidthFromCell(column[0]))
-      const renderedTable = findActiveRenderedTable(viewportRef.current, tableQuickRailStateRef.current)
+      const renderedTable = findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)
       const renderedColumnWidths = readRenderedColumnWidths(renderedTable)
       const measuredWidths =
         columns.some((column) => !hasExplicitColumnWidth(column)) &&
@@ -3861,6 +4214,10 @@ const BlockEditorEngine = ({
   useEffect(() => {
     tableQuickRailStateRef.current = tableQuickRailState
   }, [tableQuickRailState])
+
+  useEffect(() => {
+    tableAffordanceGeometryRef.current = tableAffordanceGeometry
+  }, [tableAffordanceGeometry])
 
   const syncSerializedDoc = useCallback(
     (nextDoc: BlockEditorDoc) => {
@@ -4448,6 +4805,19 @@ const BlockEditorEngine = ({
 
   useEffect(() => {
     if (!editor) return
+
+    const handleSelectionUpdate = () => {
+      setSelectionTick((prev) => prev + 1)
+    }
+
+    editor.on("selectionUpdate", handleSelectionUpdate)
+    return () => {
+      editor.off("selectionUpdate", handleSelectionUpdate)
+    }
+  }, [editor])
+
+  useEffect(() => {
+    if (!editor) return
     editor.setEditable(!disabled)
   }, [disabled, editor])
 
@@ -4717,62 +5087,56 @@ const BlockEditorEngine = ({
   useEffect(() => {
     if (typeof window === "undefined") return
 
-    const applyPointerDelta = (pointerId: number, clientX: number, clientY: number) => {
+    const updateCornerPreview = (pointerId: number, clientX: number, clientY: number) => {
       const state = tableCornerGrowRef.current
       if (!state || state.pointerId !== pointerId) return
 
-      const deltaX = clientX - state.lastClientX
-      const deltaY = clientY - state.lastClientY
-      const columnSteps = deltaX >= state.columnStepPx ? Math.floor(deltaX / state.columnStepPx) : 0
-      const rowSteps = deltaY >= state.rowStepPx ? Math.floor(deltaY / state.rowStepPx) : 0
-
-      let appliedColumnSteps = 0
-      let appliedRowSteps = 0
-
-      while (appliedColumnSteps < columnSteps) {
-        if (!appendTableAxisAtEnd("column")) break
-        appliedColumnSteps += 1
+      const totalTravelX = clientX - state.startClientX
+      const totalTravelY = clientY - state.startClientY
+      if (
+        Math.abs(totalTravelX) > TABLE_CORNER_DRAG_CLICK_GUARD_PX ||
+        Math.abs(totalTravelY) > TABLE_CORNER_DRAG_CLICK_GUARD_PX
+      ) {
+        tableCornerGrowSuppressClickRef.current = true
       }
-
-      while (appliedRowSteps < rowSteps) {
-        if (!appendTableAxisAtEnd("row")) break
-        appliedRowSteps += 1
-      }
-
-      if (appliedColumnSteps > 0) {
-        state.lastClientX += state.columnStepPx * appliedColumnSteps
-      }
-      if (appliedRowSteps > 0) {
-        state.lastClientY += state.rowStepPx * appliedRowSteps
-      }
-
-      if (appliedColumnSteps > 0 || appliedRowSteps > 0) {
-        const currentEditor = editorRef.current
-        if (currentEditor) {
-          stabilizeTableSelectionSurface(currentEditor)
+      setTableCornerPreviewState((prev) => {
+        const next = resolveTableCornerPreviewState(state, clientX, clientY)
+        if (
+          prev.visible === next.visible &&
+          prev.left === next.left &&
+          prev.top === next.top &&
+          prev.width === next.width &&
+          prev.height === next.height &&
+          prev.columnSteps === next.columnSteps &&
+          prev.rowSteps === next.rowSteps
+        ) {
+          return prev
         }
-      }
+        return next
+      })
     }
 
     const handlePointerMove = (event: PointerEvent) => {
-      applyPointerDelta(event.pointerId, event.clientX, event.clientY)
+      updateCornerPreview(event.pointerId, event.clientX, event.clientY)
     }
 
     const handlePointerUp = (event: PointerEvent) => {
       const state = tableCornerGrowRef.current
       if (!state || state.pointerId !== event.pointerId) return
-      applyPointerDelta(event.pointerId, event.clientX, event.clientY)
+      const nextPreview = resolveTableCornerPreviewState(state, event.clientX, event.clientY)
+      applyTableCornerGrowSteps(nextPreview.columnSteps, nextPreview.rowSteps)
       stopTableCornerGrow()
     }
 
     const handleMouseMove = (event: MouseEvent) => {
-      applyPointerDelta(TABLE_CORNER_GROW_MOUSE_POINTER_ID, event.clientX, event.clientY)
+      updateCornerPreview(TABLE_CORNER_GROW_MOUSE_POINTER_ID, event.clientX, event.clientY)
     }
 
     const handleMouseUp = (event: MouseEvent) => {
       const state = tableCornerGrowRef.current
       if (!state || state.pointerId !== TABLE_CORNER_GROW_MOUSE_POINTER_ID) return
-      applyPointerDelta(TABLE_CORNER_GROW_MOUSE_POINTER_ID, event.clientX, event.clientY)
+      const nextPreview = resolveTableCornerPreviewState(state, event.clientX, event.clientY)
+      applyTableCornerGrowSteps(nextPreview.columnSteps, nextPreview.rowSteps)
       stopTableCornerGrow()
     }
 
@@ -4790,7 +5154,7 @@ const BlockEditorEngine = ({
       window.removeEventListener("mouseup", handleMouseUp)
       stopTableCornerGrow()
     }
-  }, [appendTableAxisAtEnd, stabilizeTableSelectionSurface, stopTableCornerGrow])
+  }, [applyTableCornerGrowSteps, resolveTableCornerPreviewState, stopTableCornerGrow])
 
   useEffect(() => {
     const currentEditor = editorRef.current ?? editor
@@ -5469,6 +5833,28 @@ const BlockEditorEngine = ({
       chain.updateAttributes(cellNodeType, attrs).run()
     },
     [editor]
+  )
+
+  const updateActiveTableOverflowMode = useCallback(
+    (activeEditor: TiptapEditor, overflowMode: "normal" | "wide") => {
+      const tableRect = getCurrentSelectedTableRect(activeEditor)
+      const tablePos = tableRect ? Math.max(0, tableRect.tableStart - 1) : null
+      if (!tableRect || tablePos === null) return false
+
+      const tableNode = activeEditor.state.doc.nodeAt(tablePos)
+      if (!tableNode || tableNode.type.name !== "table") return false
+      if (getTableOverflowMode(tableNode) === overflowMode) return true
+
+      activeEditor.view.dispatch(
+        activeEditor.state.tr.setNodeMarkup(tablePos, undefined, {
+          ...tableNode.attrs,
+          overflowMode,
+        })
+      )
+      setSelectionTick((prev) => prev + 1)
+      return true
+    },
+    [getCurrentSelectedTableRect]
   )
 
   const selectCurrentTableAxis = useCallback(
@@ -6611,7 +6997,7 @@ const BlockEditorEngine = ({
   const shouldTrackSelectionLayoutSync =
     blockSelectionOverlayState.visible ||
     blockHandleState.visible ||
-    tableQuickRailState.visible ||
+    tableAffordanceVisibility.visible ||
     isTableQuickRailHovered ||
     tableMenuState !== null ||
     isTableColumnResizeActive ||
@@ -6620,7 +7006,7 @@ const BlockEditorEngine = ({
     tableAxisReorderIndicatorState.visible
   const shouldThrottleSelectionLayoutSync =
     !blockSelectionOverlayState.visible &&
-    !tableQuickRailState.visible &&
+    !tableAffordanceVisibility.visible &&
     !isTableQuickRailHovered &&
     tableMenuState === null &&
     !isTableColumnResizeActive &&
@@ -6717,7 +7103,7 @@ const BlockEditorEngine = ({
 
     const hideBlockHandle = () =>
       setBlockHandleState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
-    if (isTableMode || tableQuickRailState.visible || tableMenuState) {
+    if (isTableMode || tableAffordanceVisibility.visible || tableMenuState) {
       hideBlockHandle()
       return
     }
@@ -6774,11 +7160,11 @@ const BlockEditorEngine = ({
     selectedBlockNodeIndex,
     selectionTick,
     tableMenuState,
-    tableQuickRailState.visible,
+    tableAffordanceVisibility.visible,
   ])
 
   useEffect(() => {
-    if (!tableQuickRailState.visible && !isTableQuickRailHovered) return
+    if (!tableAffordanceVisibility.visible && !isTableQuickRailHovered) return
     const anchorCell = resolveTableQuickRailAnchorElement()
     if (!anchorCell) {
       if (!tableMenuState && !isTableColumnResizeActive && !isTableQuickRailHovered) {
@@ -6795,11 +7181,11 @@ const BlockEditorEngine = ({
     scheduleTableQuickRailHide,
     syncTableQuickRailFromElement,
     tableMenuState,
-    tableQuickRailState.visible,
+    tableAffordanceVisibility.visible,
   ])
 
   useEffect(() => {
-    if (typeof window === "undefined" || isCoarsePointer || (!tableQuickRailState.visible && !isTableQuickRailHovered)) return
+    if (typeof window === "undefined" || isCoarsePointer || (!tableAffordanceVisibility.visible && !isTableQuickRailHovered)) return
     if (tableColumnRailResizeRef.current || tableRowResizeRef.current) return
 
     const anchorElement = resolveTableQuickRailAnchorElement()
@@ -6821,13 +7207,13 @@ const BlockEditorEngine = ({
       })
 
     const segmentsChanged =
-      nextSegments.length !== tableQuickRailState.columnSegments.length ||
+      nextSegments.length !== tableAffordanceGeometry.columnSegments.length ||
       nextSegments.some((segment, index) => {
-        const prev = tableQuickRailState.columnSegments[index]
+        const prev = tableAffordanceGeometry.columnSegments[index]
         return !prev || Math.abs(prev.left - segment.left) > 2 || Math.abs(prev.width - segment.width) > 2
       })
 
-    if (Math.abs(nextWidth - tableQuickRailState.width) <= 2 && !segmentsChanged) return
+    if (Math.abs(nextWidth - tableAffordanceGeometry.width) <= 2 && !segmentsChanged) return
 
     syncTableQuickRailFromElement(anchorElement)
   }, [
@@ -6836,14 +7222,14 @@ const BlockEditorEngine = ({
     resolveTableQuickRailAnchorElement,
     selectionTick,
     syncTableQuickRailFromElement,
-    tableQuickRailState.columnSegments,
-    tableQuickRailState.visible,
-    tableQuickRailState.width,
+    tableAffordanceGeometry.columnSegments,
+    tableAffordanceVisibility.visible,
+    tableAffordanceGeometry.width,
   ])
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof MutationObserver === "undefined") return
-    if (isCoarsePointer || (!tableQuickRailState.visible && !isTableQuickRailHovered)) return
+    if (isCoarsePointer || (!tableAffordanceVisibility.visible && !isTableQuickRailHovered)) return
 
     const resolveAnchorElement = () => resolveTableQuickRailAnchorElement()
 
@@ -6893,7 +7279,7 @@ const BlockEditorEngine = ({
       resizeObserver?.disconnect()
       mutationObserver.disconnect()
     }
-  }, [isCoarsePointer, isTableQuickRailHovered, resolveTableQuickRailAnchorElement, selectionTick, syncTableQuickRailFromElement, tableQuickRailState.visible])
+  }, [isCoarsePointer, isTableQuickRailHovered, resolveTableQuickRailAnchorElement, selectionTick, syncTableQuickRailFromElement, tableAffordanceVisibility.visible])
 
   useEffect(() => {
     const elements = getTopLevelBlockElements()
@@ -7296,11 +7682,11 @@ const BlockEditorEngine = ({
 
   const shouldShowTableHandles =
     !isCoarsePointer &&
-    (tableQuickRailState.visible || isTableQuickRailHovered || shouldPersistTableHandles || isTableColumnResizeActive)
+    (tableAffordanceVisibility.visible || isTableQuickRailHovered || shouldPersistTableHandles || isTableColumnResizeActive)
   const desktopTableRailLayout = useMemo(() => {
     if (typeof window === "undefined") return null
-    return resolveDesktopTableRailLayout(tableQuickRailState)
-  }, [tableQuickRailState])
+    return resolveDesktopTableRailLayout(tableAffordanceGeometry)
+  }, [tableAffordanceGeometry])
 
   useEffect(() => {
     if (shouldShowTableHandles) return
@@ -7348,9 +7734,21 @@ const BlockEditorEngine = ({
           }}
         />
       ) : null}
+      {tableCornerPreviewState.visible ? (
+        <TableCornerPreviewOutline
+          aria-hidden="true"
+          data-testid="table-corner-preview-outline"
+          style={{
+            left: `${Math.round(tableCornerPreviewState.left)}px`,
+            top: `${Math.round(tableCornerPreviewState.top)}px`,
+            width: `${Math.round(tableCornerPreviewState.width)}px`,
+            height: `${Math.round(tableCornerPreviewState.height)}px`,
+          }}
+        />
+      ) : null}
       {shouldShowTableHandles
         ? !tableColumnDragGuideState.visible
-          ? tableQuickRailState.columnSegments.slice(0, -1).map((segment, index) => (
+          ? tableAffordanceGeometry.columnSegments.slice(0, -1).map((segment, index) => (
             <TableColumnResizeBoundaryHandle
               key={`table-column-boundary-${index}`}
               type="button"
@@ -7368,9 +7766,9 @@ const BlockEditorEngine = ({
                 startTableColumnRailResize(event.pointerId, index, event.clientX)
               }}
               style={{
-                left: `${Math.round(tableQuickRailState.tableLeft + segment.left + segment.width)}px`,
-                top: `${Math.round(tableQuickRailState.tableTop)}px`,
-                height: `${Math.round(tableQuickRailState.height)}px`,
+                left: `${Math.round(tableAffordanceGeometry.tableLeft + segment.left + segment.width)}px`,
+                top: `${Math.round(tableAffordanceGeometry.tableTop)}px`,
+                height: `${Math.round(tableAffordanceGeometry.height)}px`,
               }}
             />
             ))
@@ -7383,10 +7781,10 @@ const BlockEditorEngine = ({
               data-axis="column"
               data-testid="table-column-selection-outline"
               style={{
-                left: `${Math.round(tableQuickRailState.columnLeft)}px`,
-                top: `${Math.round(tableQuickRailState.tableTop)}px`,
-                width: `${Math.round(tableQuickRailState.columnWidth)}px`,
-                height: `${Math.round(tableQuickRailState.height)}px`,
+                left: `${Math.round(tableAffordanceGeometry.columnLeft)}px`,
+                top: `${Math.round(tableAffordanceGeometry.tableTop)}px`,
+                width: `${Math.round(tableAffordanceGeometry.columnWidth)}px`,
+                height: `${Math.round(tableAffordanceGeometry.height)}px`,
               }}
             />
           ) : null}
@@ -7395,10 +7793,10 @@ const BlockEditorEngine = ({
               data-axis="row"
               data-testid="table-row-selection-outline"
               style={{
-                left: `${Math.round(tableQuickRailState.tableLeft)}px`,
-                top: `${Math.round(tableQuickRailState.rowTop)}px`,
-                width: `${Math.round(tableQuickRailState.width)}px`,
-                height: `${Math.round(tableQuickRailState.rowHeight)}px`,
+                left: `${Math.round(tableAffordanceGeometry.tableLeft)}px`,
+                top: `${Math.round(tableAffordanceGeometry.rowTop)}px`,
+                width: `${Math.round(tableAffordanceGeometry.width)}px`,
+                height: `${Math.round(tableAffordanceGeometry.rowHeight)}px`,
               }}
             />
           ) : null}
@@ -7415,20 +7813,22 @@ const BlockEditorEngine = ({
               left: `${
                 desktopTableRailLayout?.cornerLeft ??
                 Math.round(
-                  tableQuickRailState.tableLeft +
-                      Math.max(0, tableQuickRailState.width - TABLE_CORNER_CLUSTER_WIDTH_PX - TABLE_EDGE_HANDLE_INSET_PX)
+                  tableAffordanceGeometry.tableLeft +
+                      Math.max(0, tableAffordanceGeometry.width - TABLE_CORNER_CLUSTER_WIDTH_PX - TABLE_EDGE_HANDLE_INSET_PX)
                   )
               }px`,
-                top: `${desktopTableRailLayout?.cornerTop ?? Math.round(tableQuickRailState.tableTop + TABLE_EDGE_HANDLE_INSET_PX)}px`,
+                top: `${desktopTableRailLayout?.cornerTop ?? Math.round(tableAffordanceGeometry.tableTop + TABLE_EDGE_HANDLE_INSET_PX)}px`,
               }}
           >
             <TableCornerGrowButton
               type="button"
-              title="표 확장"
-              aria-label="표 확장"
+              title="표 크기 조절"
+              aria-label="표 크기 조절"
               data-testid="table-corner-grow-handle"
               data-table-menu-trigger="true"
               data-active={isTableCornerGrowActive}
+              data-column-step={getTableCornerGrowStepMetrics().columnStepPx}
+              data-row-step={getTableCornerGrowStepMetrics().rowStepPx}
               onPointerDown={(event: React.PointerEvent<HTMLButtonElement>) => {
                 event.preventDefault()
                 event.stopPropagation()
@@ -7445,6 +7845,10 @@ const BlockEditorEngine = ({
               onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                 event.preventDefault()
                 event.stopPropagation()
+                if (tableCornerGrowSuppressClickRef.current) {
+                  tableCornerGrowSuppressClickRef.current = false
+                  return
+                }
                 growTableFromCorner()
               }}
             >
@@ -7466,7 +7870,7 @@ const BlockEditorEngine = ({
               <TableHandleIcon kind="more" />
             </TableHandleButton>
           </TableCornerHandle>
-          {tableQuickRailState.showRowRail || shouldPersistTableHandles ? (
+          {tableAffordanceVisibility.showRowRail || shouldPersistTableHandles ? (
             <TableAxisRail
               data-table-axis-rail="true"
               data-testid="table-row-rail"
@@ -7481,13 +7885,13 @@ const BlockEditorEngine = ({
                 left: `${
                   desktopTableRailLayout?.rowGripLeft ??
                   Math.round(
-                    tableQuickRailState.tableLeft - Math.round(TABLE_ROW_GRIP_WIDTH_PX / 2) + TABLE_EDGE_HANDLE_INSET_PX
+                    tableAffordanceGeometry.tableLeft - Math.round(TABLE_ROW_GRIP_WIDTH_PX / 2) + TABLE_EDGE_HANDLE_INSET_PX
                   )
                 }px`,
                 top: `${
                   desktopTableRailLayout?.rowGripTop ??
                   Math.round(
-                    tableQuickRailState.rowTop + Math.max(0, tableQuickRailState.rowHeight / 2 - TABLE_ROW_GRIP_HEIGHT_PX / 2)
+                    tableAffordanceGeometry.rowTop + Math.max(0, tableAffordanceGeometry.rowHeight / 2 - TABLE_ROW_GRIP_HEIGHT_PX / 2)
                   )
                 }px`,
               }}
@@ -7519,7 +7923,7 @@ const BlockEditorEngine = ({
               </TableQuickRailButton>
             </TableAxisRail>
           ) : null}
-          {tableQuickRailState.showColumnRail || shouldPersistTableHandles ? (
+          {tableAffordanceVisibility.showColumnRail || shouldPersistTableHandles ? (
             <TableAxisRail
               data-table-axis-rail="true"
               data-testid="table-column-rail"
@@ -7534,13 +7938,13 @@ const BlockEditorEngine = ({
                 left: `${
                   desktopTableRailLayout?.columnGripLeft ??
                   Math.round(
-                    tableQuickRailState.columnLeft + Math.max(0, tableQuickRailState.columnWidth / 2 - TABLE_COLUMN_GRIP_WIDTH_PX / 2)
+                    tableAffordanceGeometry.columnLeft + Math.max(0, tableAffordanceGeometry.columnWidth / 2 - TABLE_COLUMN_GRIP_WIDTH_PX / 2)
                   )
                 }px`,
                 top: `${
                   desktopTableRailLayout?.columnGripTop ??
                   Math.round(
-                    tableQuickRailState.tableTop - Math.round(TABLE_COLUMN_GRIP_HEIGHT_PX / 2) + TABLE_EDGE_HANDLE_INSET_PX
+                    tableAffordanceGeometry.tableTop - Math.round(TABLE_COLUMN_GRIP_HEIGHT_PX / 2) + TABLE_EDGE_HANDLE_INSET_PX
                   )
                 }px`,
               }}
@@ -7578,7 +7982,7 @@ const BlockEditorEngine = ({
               </TableQuickRailButton>
             </TableAxisRail>
           ) : null}
-          {tableQuickRailState.showColumnAddBar ? (
+          {tableAffordanceVisibility.showColumnAddBar ? (
             <TableTrailingAddBar
               type="button"
               data-table-axis-rail="true"
@@ -7601,8 +8005,8 @@ const BlockEditorEngine = ({
                 left: `${
                   desktopTableRailLayout?.columnAddBarLeft ??
                   Math.round(
-                    tableQuickRailState.tableLeft +
-                      tableQuickRailState.width -
+                    tableAffordanceGeometry.tableLeft +
+                      tableAffordanceGeometry.width -
                       Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) -
                       TABLE_EDGE_HANDLE_INSET_PX
                   )
@@ -7610,7 +8014,7 @@ const BlockEditorEngine = ({
                 top: `${
                   desktopTableRailLayout?.columnAddBarTop ??
                   Math.round(
-                    tableQuickRailState.tableTop + Math.max(0, tableQuickRailState.height / 2 - TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2)
+                    tableAffordanceGeometry.tableTop + Math.max(0, tableAffordanceGeometry.height / 2 - TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2)
                   )
                 }px`,
               }}
@@ -7618,7 +8022,7 @@ const BlockEditorEngine = ({
               <TableHandleIcon kind="plus" />
             </TableTrailingAddBar>
           ) : null}
-          {tableQuickRailState.showRowAddBar ? (
+          {tableAffordanceVisibility.showRowAddBar ? (
             <TableTrailingAddBar
               type="button"
               data-table-axis-rail="true"
@@ -7641,14 +8045,14 @@ const BlockEditorEngine = ({
                 left: `${
                   desktopTableRailLayout?.rowAddBarLeft ??
                   Math.round(
-                    tableQuickRailState.tableLeft + Math.max(0, tableQuickRailState.width / 2 - TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2)
+                    tableAffordanceGeometry.tableLeft + Math.max(0, tableAffordanceGeometry.width / 2 - TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2)
                   )
                 }px`,
                 top: `${
                   desktopTableRailLayout?.rowAddBarTop ??
                   Math.round(
-                    tableQuickRailState.tableTop +
-                      tableQuickRailState.height -
+                    tableAffordanceGeometry.tableTop +
+                      tableAffordanceGeometry.height -
                       Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) -
                       TABLE_EDGE_HANDLE_INSET_PX
                   )
@@ -7681,8 +8085,8 @@ const BlockEditorEngine = ({
                 left: `${
                   desktopTableRailLayout?.cellMenuLeft ??
                   Math.round(
-                    tableQuickRailState.cellLeft +
-                      tableQuickRailState.cellWidth -
+                    tableAffordanceGeometry.cellLeft +
+                      tableAffordanceGeometry.cellWidth -
                       Math.round(TABLE_CELL_MENU_BUTTON_SIZE_PX / 2) -
                       TABLE_EDGE_HANDLE_INSET_PX
                   )
@@ -7690,8 +8094,8 @@ const BlockEditorEngine = ({
                 top: `${
                   desktopTableRailLayout?.cellMenuTop ??
                   Math.round(
-                    tableQuickRailState.cellTop +
-                      Math.max(0, tableQuickRailState.cellHeight / 2 - TABLE_CELL_MENU_BUTTON_SIZE_PX / 2)
+                    tableAffordanceGeometry.cellTop +
+                      Math.max(0, tableAffordanceGeometry.cellHeight / 2 - TABLE_CELL_MENU_BUTTON_SIZE_PX / 2)
                   )
                 }px`,
               }}
@@ -7797,6 +8201,17 @@ const BlockEditorEngine = ({
                 </FloatingBlockActionButton>
                 <FloatingBlockActionButton
                   type="button"
+                  data-active={activeTableStructureState.hasHeaderRow}
+                  onClick={() =>
+                    runTableMenuEditorAction((activeEditor) => {
+                      activeEditor.chain().focus().toggleHeaderRow().run()
+                    })
+                  }
+                >
+                  제목 행
+                </FloatingBlockActionButton>
+                <FloatingBlockActionButton
+                  type="button"
                   onClick={() =>
                     runTableMenuEditorAction((activeEditor) => {
                       activeEditor.chain().focus().addRowBefore().run()
@@ -7820,6 +8235,17 @@ const BlockEditorEngine = ({
               <>
                 <FloatingBlockActionButton type="button" onClick={() => { selectCurrentTableAxis("column"); closeTableMenu() }}>
                   열 선택
+                </FloatingBlockActionButton>
+                <FloatingBlockActionButton
+                  type="button"
+                  data-active={activeTableStructureState.hasHeaderColumn}
+                  onClick={() =>
+                    runTableMenuEditorAction((activeEditor) => {
+                      activeEditor.chain().focus().toggleHeaderColumn().run()
+                    })
+                  }
+                >
+                  제목 열
                 </FloatingBlockActionButton>
                 <FloatingBlockActionButton
                   type="button"
@@ -7868,6 +8294,30 @@ const BlockEditorEngine = ({
                   }
                 >
                   제목 열
+                </FloatingBlockActionButton>
+                <FloatingBlockActionButton
+                  type="button"
+                  data-testid="table-overflow-mode-normal"
+                  data-active={activeTableStructureState.overflowMode !== TABLE_OVERFLOW_MODE_WIDE}
+                  onClick={() =>
+                    runTableMenuEditorAction((activeEditor) => {
+                      updateActiveTableOverflowMode(activeEditor, "normal")
+                    })
+                  }
+                >
+                  페이지 너비에 맞춤
+                </FloatingBlockActionButton>
+                <FloatingBlockActionButton
+                  type="button"
+                  data-testid="table-overflow-mode-wide"
+                  data-active={activeTableStructureState.overflowMode === TABLE_OVERFLOW_MODE_WIDE}
+                  onClick={() =>
+                    runTableMenuEditorAction((activeEditor) => {
+                      updateActiveTableOverflowMode(activeEditor, TABLE_OVERFLOW_MODE_WIDE)
+                    })
+                  }
+                >
+                  넓은 표
                 </FloatingBlockActionButton>
                 <FloatingBlockActionButton
                   type="button"
@@ -8160,6 +8610,7 @@ const BlockEditorEngine = ({
                               action.section === "structure"
                           }
                           onMouseDown={(event) => event.preventDefault()}
+                          onPointerEnter={() => handleSlashActionPointerMove(flatIndex)}
                           onPointerMove={() => handleSlashActionPointerMove(flatIndex)}
                           onClick={() => {
                             if (
@@ -10150,6 +10601,20 @@ const TableAxisSelectionOutline = styled.div`
   border: 2px solid rgba(59, 130, 246, 0.96);
   border-radius: 0.2rem;
   box-shadow: 0 0 0 1px rgba(30, 64, 175, 0.14);
+`
+
+const TableCornerPreviewOutline = styled.div`
+  position: fixed;
+  z-index: 58;
+  pointer-events: none;
+  border: 2px dashed rgba(59, 130, 246, 0.84);
+  border-radius: 0.3rem;
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(37, 99, 235, 0.08)" : "rgba(219, 234, 254, 0.42)"};
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "dark"
+      ? "0 0 0 1px rgba(15, 23, 42, 0.28), 0 0 0 6px rgba(59, 130, 246, 0.12)"
+      : "0 0 0 1px rgba(255, 255, 255, 0.78), 0 0 0 6px rgba(59, 130, 246, 0.1)"};
 `
 
 const TableRowDragShadow = styled.div`

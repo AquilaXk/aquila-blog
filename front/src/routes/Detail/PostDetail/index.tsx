@@ -1128,6 +1128,19 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
             <MobileSummaryBar aria-label="빠른 이동 및 반응">
               <button
                 type="button"
+                data-active={engagement.actorHasLiked}
+                data-tone="accent"
+                aria-label={`좋아요 ${engagement.likesCount}`}
+                aria-pressed={engagement.actorHasLiked}
+                disabled={likePending}
+                onClick={handleToggleLike}
+              >
+                <AppIcon name={engagement.actorHasLiked ? "heart-filled" : "heart"} />
+                <span>좋아요</span>
+                <strong>{engagement.likesCount}</strong>
+              </button>
+              <button
+                type="button"
                 data-active={Boolean(shareFeedback)}
                 data-tone="accent"
                 aria-label={
@@ -1811,7 +1824,7 @@ const MobileSummaryBar = styled.div`
     top: calc(var(--app-header-height, 64px) + 0.4rem);
     z-index: 14;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.45rem;
     padding: 0.16rem 0 0.4rem;
     margin-bottom: 0.18rem;

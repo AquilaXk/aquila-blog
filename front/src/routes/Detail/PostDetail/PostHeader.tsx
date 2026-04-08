@@ -117,6 +117,11 @@ const PostHeader: React.FC<Props> = ({
                     <span>수정 {modifiedAt}</span>
                   </>
                 )}
+                <span className="dot mobileMetaOnly" />
+                <span className="metaInlineMetric metaInlineViewStat mobileMetaOnly">
+                  <AppIcon name="eye" />
+                  <span>조회 {hitCount ?? data.hitCount ?? 0}</span>
+                </span>
               </div>
               {(showModifyAction || showDeleteAction) && (
                 <div className="authorUtilities">
@@ -139,7 +144,7 @@ const PostHeader: React.FC<Props> = ({
         )}
 
         {showEngagement ? (
-        <div className="actions">
+        <div className="actions" data-hide-mobile={hideActionButtonsOnMobile}>
           {showEngagement ? (
             <div className="engagementRow" aria-label="post engagement">
               <div className="stats" aria-label="post stats">
@@ -153,23 +158,6 @@ const PostHeader: React.FC<Props> = ({
                   </span>
                   <strong className="statMetricValue">{hitCount ?? data.hitCount ?? 0}</strong>
                 </span>
-                {onToggleLike && (
-                  <button
-                    type="button"
-                    className="mobileLikeButton"
-                    aria-label={`좋아요 ${likesCount ?? data.likesCount ?? 0}`}
-                    aria-pressed={actorHasLiked}
-                    data-active={actorHasLiked}
-                    disabled={likePending}
-                    onClick={onToggleLike}
-                  >
-                    <span className="mobileLikeHeading">
-                      <AppIcon name={actorHasLiked ? "heart-filled" : "heart"} />
-                      <span>좋아요</span>
-                    </span>
-                    <strong className="mobileLikeValue">{likesCount ?? data.likesCount ?? 0}</strong>
-                  </button>
-                )}
               </div>
               <button
                 type="button"
@@ -419,71 +407,26 @@ const StyledWrapper = styled.header`
     color: ${({ theme }) => theme.colors.red11};
   }
 
-  .mobileLikeButton {
+  .mobileMetaOnly {
     display: none;
+  }
+
+  .metaInlineMetric {
     align-items: center;
-    justify-content: space-between;
-    gap: 0.72rem;
-    min-height: 40px;
-    padding: 0.72rem 0.96rem;
-    border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: linear-gradient(135deg, ${({ theme }) => theme.colors.gray2} 0%, ${({ theme }) => theme.colors.gray3} 100%);
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.88rem;
-    font-weight: 700;
-    cursor: pointer;
-    box-shadow: 0 16px 30px rgba(0, 0, 0, 0.16);
-    transition:
-      border-color 0.18s ease,
-      background-color 0.18s ease,
-      color 0.18s ease,
-      transform 0.18s ease;
+    gap: 0.32rem;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.84rem;
+    font-weight: 600;
+    line-height: 1;
 
     svg {
-      font-size: 1.02rem;
-    }
-
-    &[data-active="true"] {
-      border-color: ${({ theme }) => theme.colors.red7};
-      background: linear-gradient(135deg, ${({ theme }) => theme.colors.red3} 0%, ${({ theme }) => theme.colors.gray3} 100%);
-
-      svg {
-        color: ${({ theme }) => theme.colors.red10};
-      }
-    }
-
-    :disabled {
-      opacity: 0.72;
-      cursor: not-allowed;
+      font-size: 0.9rem;
     }
   }
 
-  .mobileLikeHeading {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.42rem;
+  .metaInlineViewStat {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.84rem;
-    font-weight: 700;
-    line-height: 1;
-    letter-spacing: -0.01em;
     white-space: nowrap;
-  }
-
-  .mobileLikeValue {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 2.4rem;
-    padding: 0.32rem 0.62rem;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.08);
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1rem;
-    font-weight: 800;
-    line-height: 1;
-    letter-spacing: -0.02em;
   }
 
   .likeButton {
@@ -621,93 +564,17 @@ const StyledWrapper = styled.header`
       margin-top: 1.15rem;
       align-items: flex-start;
     }
-
-    .actions {
-      width: 100%;
-      justify-content: flex-start;
-      display: grid;
-      gap: 0.55rem;
-    }
-
-    .engagementRow {
-      width: 100%;
-      display: grid;
-      gap: 0.52rem;
-    }
-
-    .stats {
-      width: 100%;
-      display: grid;
-      grid-template-columns: minmax(6.4rem, max-content) minmax(0, 1fr);
-      align-items: stretch;
-      gap: 0.52rem;
-    }
-
-    .mobileLikeButton {
-      display: inline-flex;
-    }
-
-    .commentStatChip[data-hide-mobile="true"] {
-      display: none;
-    }
-
-    .shareFeedbackPill {
-      width: fit-content;
-    }
-
-    .metaText,
-    .stats {
-      font-size: 0.86rem;
-    }
-
-    .statChip,
-    .mobileLikeButton,
-    .likeButton,
-    .shareButton {
-      width: 100%;
-    }
-
-    .viewStatChip,
-    .mobileLikeButton {
-      min-height: 52px;
-    }
-
-    .viewStatChip {
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.5rem;
-      border-radius: 999px;
-      padding: 0 0.9rem;
-      background: ${({ theme }) => theme.colors.gray2};
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-    }
-
-    .statMetaLabel {
-      font-size: 0.77rem;
-      white-space: nowrap;
-    }
-
-    .statMetricValue {
-      font-size: 1.08rem;
-      font-weight: 800;
-    }
-
-    .mobileLikeButton {
-      padding: 0 1rem 0 1.02rem;
-    }
-
-    .mobileLikeValue {
-      font-size: 1rem;
-    }
-
-    .likeButton,
-    .shareButton {
-      min-height: 38px;
-      justify-content: center;
-    }
   }
 
   @media (max-width: 1023px) {
+    .mobileMetaOnly {
+      display: inline-flex;
+    }
+
+    .actions[data-hide-mobile="true"] {
+      display: none;
+    }
+
     .likeButton[data-hide-mobile="true"],
     .shareButton[data-hide-mobile="true"],
     .shareFeedbackPill[data-hide-mobile="true"] {

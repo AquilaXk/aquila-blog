@@ -758,11 +758,13 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     scheduler.schedule()
     railScheduler.schedule()
 
+    const tocVisibility = tocVisibilityRef.current
+
     return () => {
       registry.cleanup()
       scheduler.cancel()
       railScheduler.cancel()
-      tocVisibilityRef.current.clear()
+      tocVisibility.clear()
       clearInlineRailStyle(leftRailInnerNode)
       clearInlineRailStyle(rightRailInnerNode)
       if (leftHybridRailActiveRef.current) {

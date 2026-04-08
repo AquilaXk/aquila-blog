@@ -267,10 +267,39 @@ const useMermaidEffect = (
     const retryTimers = new Set<number>()
     const loggedErrorSignatures = new Set<string>()
     let scheduledRunFrame: number | null = null
+    let cachedDesktopWideLaneBounds:
+      | {
+          leftBound: number
+          rightBound: number
+        }
+      | null
+      | undefined
     const maxRetryCount = 6
     const retryBaseDelayMs = 150
     const preset = resolveMermaidPreset(effectiveScheme)
     let mermaidPromise: Promise<any> | null = null
+
+    const resolveDesktopWideLaneBounds = (block: HTMLElement) => {
+      if (!allowDesktopWideLane) return null
+      if (cachedDesktopWideLaneBounds !== undefined) return cachedDesktopWideLaneBounds
+
+      const detailLayout = block.closest<HTMLElement>(".detailLayout")
+      const rightRail = detailLayout?.querySelector<HTMLElement>(".rightRail")
+      if (!detailLayout || !rightRail || rightRail.offsetParent === null) {
+        cachedDesktopWideLaneBounds = null
+        return cachedDesktopWideLaneBounds
+      }
+
+      const leftRail = detailLayout.querySelector<HTMLElement>(".leftRail")
+      cachedDesktopWideLaneBounds = {
+        leftBound:
+          leftRail && leftRail.offsetParent !== null
+            ? leftRail.getBoundingClientRect().right + MERMAID_DESKTOP_SAFE_MARGIN_PX
+            : MERMAID_DESKTOP_SAFE_MARGIN_PX,
+        rightBound: rightRail.getBoundingClientRect().left - MERMAID_DESKTOP_SAFE_MARGIN_PX,
+      }
+      return cachedDesktopWideLaneBounds
+    }
 
     const stripRiskyFlowchartDirectives = (source: string) =>
       source
@@ -688,6 +717,7 @@ const useMermaidEffect = (
         if (alreadyRendered) return
 
         const blockRect = block.getBoundingClientRect()
+        const desktopWideLaneBounds = resolveDesktopWideLaneBounds(block)
         const visibleWidth = Math.floor(blockRect.width)
         if (visibleWidth <= 0) {
           if (scheduleRetry(i, block)) return
@@ -770,18 +800,12 @@ const useMermaidEffect = (
           let maxDisplayWidth = containerWidth
           let wideBleedLeft = 0
           let wideBleedRight = 0
-          const detailLayout = allowDesktopWideLane ? block.closest<HTMLElement>(".detailLayout") : null
-          const rightRail = detailLayout?.querySelector<HTMLElement>(".rightRail")
 
-          if (isDesktopViewport && detailLayout && exceedsArticleWidth && rightRail && rightRail.offsetParent !== null) {
-            const leftRail = detailLayout?.querySelector<HTMLElement>(".leftRail")
-            const liveBlockRect = block.getBoundingClientRect()
-            const leftBound =
-              leftRail && leftRail.offsetParent !== null
-                ? leftRail.getBoundingClientRect().right + MERMAID_DESKTOP_SAFE_MARGIN_PX
-                : MERMAID_DESKTOP_SAFE_MARGIN_PX
-            const rightBound = rightRail.getBoundingClientRect().left - MERMAID_DESKTOP_SAFE_MARGIN_PX
-            const safeLaneWidth = Math.max(containerWidth, Math.round(rightBound - leftBound))
+          if (isDesktopViewport && desktopWideLaneBounds && exceedsArticleWidth) {
+            const safeLaneWidth = Math.max(
+              containerWidth,
+              Math.round(desktopWideLaneBounds.rightBound - desktopWideLaneBounds.leftBound)
+            )
             const desiredWideWidth = Math.max(
               containerWidth,
               Math.min(intrinsicWidth, MERMAID_DESKTOP_WIDE_MAX_PX, safeLaneWidth)
@@ -789,8 +813,8 @@ const useMermaidEffect = (
             const desiredExtra = Math.max(0, desiredWideWidth - containerWidth)
 
             if (desiredExtra > 24) {
-              const leftAllowance = Math.max(0, Math.round(liveBlockRect.left - leftBound))
-              const rightAllowance = Math.max(0, Math.round(rightBound - liveBlockRect.right))
+              const leftAllowance = Math.max(0, Math.round(blockRect.left - desktopWideLaneBounds.leftBound))
+              const rightAllowance = Math.max(0, Math.round(desktopWideLaneBounds.rightBound - blockRect.right))
               let nextLeftBleed = Math.min(leftAllowance, Math.round(desiredExtra / 2))
               let nextRightBleed = desiredExtra - nextLeftBleed
 
@@ -1005,6 +1029,7 @@ const useMermaidEffect = (
 
     const scheduleRun = () => {
       if (disposed) return
+      cachedDesktopWideLaneBounds = undefined
       if (typeof document !== "undefined" && document.visibilityState !== "visible") {
         rerunRequested = true
         return

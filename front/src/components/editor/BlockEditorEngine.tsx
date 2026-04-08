@@ -6241,7 +6241,6 @@ const BlockEditorEngine = ({
       findTopLevelBlockIndexFromTarget,
       getTableCellFromClientPoint,
       isCoarsePointer,
-      isTableQuickRailHovered,
       isTableMode,
       isRowResizeHandleTarget,
       selectedBlockNodeIndex,

@@ -182,7 +182,14 @@ const useAutosizeTextarea = (
   layoutVersion?: string | number | boolean
 ) => {
   const rafIdRef = useRef<number | null>(null)
-  const secondRafIdRef = useRef<number | null>(null)
+  const metricsRef = useRef<{
+    rows: number
+    minHeightFromRows: number
+  }>({
+    rows: Number.NaN,
+    minHeightFromRows: 0,
+  })
+  const previousLayoutVersionRef = useRef<string | number | boolean | undefined>(undefined)
 
   const cancelQueuedSync = useCallback(() => {
     if (typeof window === "undefined") return
@@ -190,49 +197,48 @@ const useAutosizeTextarea = (
       window.cancelAnimationFrame(rafIdRef.current)
       rafIdRef.current = null
     }
-    if (secondRafIdRef.current !== null) {
-      window.cancelAnimationFrame(secondRafIdRef.current)
-      secondRafIdRef.current = null
-    }
   }, [])
 
-  const syncHeight = useCallback(() => {
+  const syncHeight = useCallback((remeasureBase = false) => {
     const element = ref.current
     if (!element) return
-    const computedStyle = window.getComputedStyle(element)
     const rows = Number(element.getAttribute("rows") || 0)
-    const lineHeight = Number.parseFloat(computedStyle.lineHeight || "0")
-    const paddingBlock =
-      Number.parseFloat(computedStyle.paddingTop || "0") + Number.parseFloat(computedStyle.paddingBottom || "0")
-    const minHeightFromRows = rows > 0 && Number.isFinite(lineHeight) ? rows * lineHeight + paddingBlock : 0
+    if (remeasureBase || metricsRef.current.rows !== rows) {
+      const computedStyle = window.getComputedStyle(element)
+      const lineHeight = Number.parseFloat(computedStyle.lineHeight || "0")
+      const paddingBlock =
+        Number.parseFloat(computedStyle.paddingTop || "0") + Number.parseFloat(computedStyle.paddingBottom || "0")
+      metricsRef.current = {
+        rows,
+        minHeightFromRows: rows > 0 && Number.isFinite(lineHeight) ? rows * lineHeight + paddingBlock : 0,
+      }
+    }
     element.style.height = "auto"
-    element.style.height = `${Math.ceil(Math.max(element.scrollHeight + 6, minHeightFromRows + 6, 88))}px`
+    element.style.height = `${Math.ceil(Math.max(element.scrollHeight + 6, metricsRef.current.minHeightFromRows + 6, 88))}px`
   }, [ref])
 
-  const queueSyncHeight = useCallback(() => {
-    syncHeight()
-
-    if (typeof window === "undefined") return
+  const queueSyncHeight = useCallback((remeasureBase = false) => {
     cancelQueuedSync()
+    if (typeof window === "undefined") return
     rafIdRef.current = window.requestAnimationFrame(() => {
-      syncHeight()
-      secondRafIdRef.current = window.requestAnimationFrame(() => {
-        syncHeight()
-      })
+      rafIdRef.current = null
+      syncHeight(remeasureBase)
     })
   }, [cancelQueuedSync, syncHeight])
 
   useLayoutEffect(() => {
-    queueSyncHeight()
+    const remeasureBase = previousLayoutVersionRef.current !== layoutVersion
+    previousLayoutVersionRef.current = layoutVersion
+    syncHeight(remeasureBase)
     return cancelQueuedSync
-  }, [cancelQueuedSync, queueSyncHeight, value, layoutVersion])
+  }, [cancelQueuedSync, layoutVersion, syncHeight, value])
 
   useEffect(() => {
     const element = ref.current
     if (!element || typeof window === "undefined") return
 
-    const handleResize = () => queueSyncHeight()
-    const handleFocus = () => queueSyncHeight()
+    const handleResize = () => queueSyncHeight(true)
+    const handleFocus = () => queueSyncHeight(true)
     window.addEventListener("resize", handleResize)
     element.addEventListener("focus", handleFocus)
     element.addEventListener("click", handleFocus)
@@ -240,7 +246,7 @@ const useAutosizeTextarea = (
     let observer: ResizeObserver | null = null
     if (typeof ResizeObserver !== "undefined") {
       observer = new ResizeObserver(() => {
-        queueSyncHeight()
+        queueSyncHeight(true)
       })
       if (element.parentElement) observer.observe(element.parentElement)
       observer.observe(element)

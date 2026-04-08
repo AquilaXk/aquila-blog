@@ -240,11 +240,32 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     actorHasLiked: data?.actorHasLiked ?? false,
   }))
   const visibleTocItemsRef = useRef<TocItem[]>([])
+  const tocVisibilityRef = useRef(new Map<string, { ratio: number; top: number }>())
   const showFloatingLikeRef = useRef(false)
   const showStickyTocRef = useRef(false)
   const commentsRailActiveRef = useRef(false)
   const leftHybridRailActiveRef = useRef(false)
   const rightHybridRailActiveRef = useRef(false)
+  const hybridRailMetricsRef = useRef({
+    left: {
+      enabled: false,
+      left: 0,
+      width: 0,
+      railTopDoc: 0,
+      articleBottomDoc: 0,
+      innerHeight: 0,
+      stickyBlocked: false,
+    },
+    right: {
+      enabled: false,
+      left: 0,
+      width: 0,
+      railTopDoc: 0,
+      articleBottomDoc: 0,
+      innerHeight: 0,
+      stickyBlocked: false,
+    },
+  })
 
   const loginHref = useMemo(() => {
     const next = router.asPath || toCanonicalPostPath(postId)
@@ -510,30 +531,58 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
       inner.style.transform = ""
     }
 
-    const applyHybridRail = ({
-      rail,
-      inner,
-      enabled,
-    }: {
-      rail: HTMLElement | null
-      inner: HTMLElement | null
+    const measureHybridRail = (
+      rail: HTMLElement | null,
+      inner: HTMLElement | null,
       enabled: boolean
-    }) => {
+    ) => {
       if (!rail || !inner || !enabled) {
+        return {
+          enabled,
+          left: 0,
+          width: 0,
+          railTopDoc: 0,
+          articleBottomDoc: 0,
+          innerHeight: 0,
+          stickyBlocked: false,
+        }
+      }
+
+      const railRect = rail.getBoundingClientRect()
+      const articleRect = article.getBoundingClientRect()
+      return {
+        enabled,
+        left: Math.round(railRect.left),
+        width: Math.round(railRect.width),
+        railTopDoc: window.scrollY + railRect.top,
+        articleBottomDoc: window.scrollY + articleRect.bottom,
+        innerHeight: inner.offsetHeight,
+        stickyBlocked: hasStickyBlockingAncestor(rail),
+      }
+    }
+
+    const applyHybridRail = (
+      inner: HTMLElement | null,
+      metrics: {
+        enabled: boolean
+        left: number
+        width: number
+        railTopDoc: number
+        articleBottomDoc: number
+        innerHeight: number
+        stickyBlocked: boolean
+      }
+    ) => {
+      if (!inner || !metrics.enabled || !metrics.stickyBlocked) {
         clearInlineRailStyle(inner)
         return
       }
 
       const topOffset = resolveRailTopOffset()
-      const railRect = rail.getBoundingClientRect()
-      const innerHeight = inner.offsetHeight
-      const articleRect = article.getBoundingClientRect()
-      const railTopDoc = window.scrollY + railRect.top
-      const articleBottomDoc = window.scrollY + articleRect.bottom
-      const startFixedScrollY = railTopDoc - topOffset
-      const endFixedScrollY = articleBottomDoc - topOffset - innerHeight
+      const startFixedScrollY = metrics.railTopDoc - topOffset
+      const endFixedScrollY = metrics.articleBottomDoc - topOffset - metrics.innerHeight
 
-      if (railRect.width <= 0 || innerHeight <= 0 || endFixedScrollY <= startFixedScrollY) {
+      if (metrics.width <= 0 || metrics.innerHeight <= 0 || endFixedScrollY <= startFixedScrollY) {
         clearInlineRailStyle(inner)
         return
       }
@@ -549,7 +598,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
       }
 
       if (window.scrollY > endFixedScrollY) {
-        const bottomTop = Math.max(0, articleBottomDoc - railTopDoc - innerHeight)
+        const bottomTop = Math.max(0, metrics.articleBottomDoc - metrics.railTopDoc - metrics.innerHeight)
         inner.style.position = "absolute"
         inner.style.top = `${bottomTop}px`
         inner.style.left = "0px"
@@ -561,18 +610,23 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
 
       inner.style.position = "fixed"
       inner.style.top = `${topOffset}px`
-      inner.style.left = `${Math.round(railRect.left)}px`
-      inner.style.width = `${Math.round(railRect.width)}px`
+      inner.style.left = `${metrics.left}px`
+      inner.style.width = `${metrics.width}px`
       inner.style.bottom = ""
       inner.style.transform = "translateZ(0)"
     }
 
-    const syncHybridRails = () => {
+    const syncHybridRails = ({ remeasure = false }: { remeasure?: boolean } = {}) => {
       const viewportWidth = window.innerWidth
       const leftEnabled = showFloatingLikeRef.current && viewportWidth >= LEFT_RAIL_HYBRID_MIN_VIEWPORT_PX
       const rightEnabled = showStickyTocRef.current && viewportWidth >= RIGHT_RAIL_HYBRID_MIN_VIEWPORT_PX
-      const leftNeedsHybridFallback = leftEnabled && hasStickyBlockingAncestor(leftRailRef.current)
-      const rightNeedsHybridFallback = rightEnabled && hasStickyBlockingAncestor(rightRailRef.current)
+      if (remeasure) {
+        hybridRailMetricsRef.current.left = measureHybridRail(leftRailRef.current, leftRailInnerRef.current, leftEnabled)
+        hybridRailMetricsRef.current.right = measureHybridRail(rightRailRef.current, rightRailInnerRef.current, rightEnabled)
+      }
+
+      const leftNeedsHybridFallback = leftEnabled && hybridRailMetricsRef.current.left.stickyBlocked
+      const rightNeedsHybridFallback = rightEnabled && hybridRailMetricsRef.current.right.stickyBlocked
 
       if (leftHybridRailActiveRef.current !== leftNeedsHybridFallback) {
         leftHybridRailActiveRef.current = leftNeedsHybridFallback
@@ -583,20 +637,11 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
         setRightHybridRailActive(rightNeedsHybridFallback)
       }
 
-      applyHybridRail({
-        rail: leftRailRef.current,
-        inner: leftRailInnerRef.current,
-        enabled: leftNeedsHybridFallback,
-      })
-
-      applyHybridRail({
-        rail: rightRailRef.current,
-        inner: rightRailInnerRef.current,
-        enabled: rightNeedsHybridFallback,
-      })
+      hybridRailMetricsRef.current.left.enabled = leftEnabled
+      hybridRailMetricsRef.current.right.enabled = rightEnabled
+      applyHybridRail(leftRailInnerRef.current, hybridRailMetricsRef.current.left)
+      applyHybridRail(rightRailInnerRef.current, hybridRailMetricsRef.current.right)
     }
-
-    const ratioMap = new Map<string, number>()
 
     const resolveActiveByRatio = () => {
       const items = visibleTocItemsRef.current
@@ -604,9 +649,9 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
 
       const anchorTop = resolveRailTopOffset() + 12
       const candidates = items.map((item) => {
-        const node = document.getElementById(item.id)
-        const top = node ? node.getBoundingClientRect().top : Number.POSITIVE_INFINITY
-        const ratio = ratioMap.get(item.id) ?? 0
+        const entry = tocVisibilityRef.current.get(item.id)
+        const top = entry?.top ?? Number.POSITIVE_INFINITY
+        const ratio = entry?.ratio ?? 0
         return { id: item.id, ratio, top }
       })
 
@@ -630,6 +675,8 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     const scheduler = createRafScheduler(() => {
       const nextActiveId = resolveActiveByRatio()
       setActiveTocId((prev) => (prev === nextActiveId ? prev : nextActiveId))
+    })
+    const railScheduler = createRafScheduler(() => {
       syncHybridRails()
     })
     const registry = createObserverRegistry()
@@ -645,7 +692,10 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
         for (const entry of entries) {
           const id = (entry.target as HTMLElement).id
           if (!id || !visibleIdSet.has(id)) continue
-          ratioMap.set(id, entry.isIntersecting ? entry.intersectionRatio : 0)
+          tocVisibilityRef.current.set(id, {
+            ratio: entry.isIntersecting ? entry.intersectionRatio : 0,
+            top: entry.boundingClientRect.top,
+          })
         }
         scheduler.schedule()
       },
@@ -678,26 +728,41 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
       )
     }
 
-    registry.addWindowEvent("scroll", scheduler.schedule, { passive: true })
-    registry.addWindowEvent("resize", scheduler.schedule, { passive: true })
-    registry.addWindowEvent("orientationchange", scheduler.schedule)
+    registry.addWindowEvent("scroll", railScheduler.schedule, { passive: true })
+    registry.addWindowEvent("resize", () => {
+      syncHybridRails({ remeasure: true })
+      scheduler.schedule()
+    }, { passive: true })
+    registry.addWindowEvent("orientationchange", () => {
+      syncHybridRails({ remeasure: true })
+      scheduler.schedule()
+    })
 
     const resizeTargets = [article, leftRailInnerNode, rightRailInnerNode].filter(
       (target): target is HTMLElement => Boolean(target)
     )
-    registry.addResizeObserver(resizeTargets, () => scheduler.schedule())
+    registry.addResizeObserver(resizeTargets, () => {
+      syncHybridRails({ remeasure: true })
+      scheduler.schedule()
+    })
 
     const fontSet = document.fonts
     if (fontSet) {
-      void fontSet.ready.then(() => scheduler.schedule()).catch(() => {})
+      void fontSet.ready.then(() => {
+        syncHybridRails({ remeasure: true })
+        scheduler.schedule()
+      }).catch(() => {})
     }
 
+    syncHybridRails({ remeasure: true })
     scheduler.schedule()
+    railScheduler.schedule()
 
     return () => {
       registry.cleanup()
       scheduler.cancel()
-      ratioMap.clear()
+      railScheduler.cancel()
+      tocVisibilityRef.current.clear()
       clearInlineRailStyle(leftRailInnerNode)
       clearInlineRailStyle(rightRailInnerNode)
       if (leftHybridRailActiveRef.current) {

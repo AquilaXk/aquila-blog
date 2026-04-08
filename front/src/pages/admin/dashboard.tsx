@@ -4,6 +4,7 @@ import { GetServerSideProps, NextPage } from "next"
 import { IncomingMessage } from "http"
 import Link from "next/link"
 import type { SimpleIcon } from "simple-icons"
+import { useEffect, useRef, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import AppIcon from "src/components/icons/AppIcon"
 import type { AuthMember } from "src/hooks/useAuthSession"
@@ -145,6 +146,81 @@ export const getServerSideProps: GetServerSideProps<AdminDashboardPageProps> = a
 }
 
 const env = getMonitoringEnv()
+const DASHBOARD_EAGER_PANEL_COUNT = 2
+const DASHBOARD_IDLE_EMBED_DELAY_MS = 1800
+
+const DeferredPanelFrame: React.FC<{
+  eager?: boolean
+  src: string
+  title: string
+}> = ({ eager = false, src, title }) => {
+  const anchorRef = useRef<HTMLDivElement | null>(null)
+  const [isActivated, setIsActivated] = useState(eager)
+
+  useEffect(() => {
+    if (isActivated || !src || typeof window === "undefined") return
+
+    let observer: IntersectionObserver | null = null
+    let timeoutId: number | null = null
+    let idleId: number | null = null
+
+    const activate = () => {
+      setIsActivated(true)
+    }
+
+    if (anchorRef.current && typeof IntersectionObserver !== "undefined") {
+      observer = new IntersectionObserver(
+        (entries) => {
+          if (!entries.some((entry) => entry.isIntersecting)) return
+          activate()
+          observer?.disconnect()
+        },
+        { root: null, rootMargin: "280px 0px" }
+      )
+      observer.observe(anchorRef.current)
+    }
+
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (
+        callback: () => void,
+        options?: {
+          timeout?: number
+        }
+      ) => number
+      cancelIdleCallback?: (id: number) => void
+    }
+
+    if (typeof idleWindow.requestIdleCallback === "function") {
+      idleId = idleWindow.requestIdleCallback(activate, { timeout: DASHBOARD_IDLE_EMBED_DELAY_MS })
+    } else {
+      timeoutId = window.setTimeout(activate, DASHBOARD_IDLE_EMBED_DELAY_MS)
+    }
+
+    return () => {
+      observer?.disconnect()
+      if (idleId !== null && typeof idleWindow.cancelIdleCallback === "function") {
+        idleWindow.cancelIdleCallback(idleId)
+      }
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+      }
+    }
+  }, [isActivated, src])
+
+  return (
+    <div ref={anchorRef}>
+      {isActivated ? (
+        <PanelFrame src={src} title={title} loading="lazy" referrerPolicy="no-referrer" />
+      ) : (
+        <PanelFrame
+          as="div"
+          aria-hidden="true"
+          data-pending="true"
+        />
+      )}
+    </div>
+  )
+}
 
 const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
   initialMember,
@@ -203,7 +279,7 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
         </ServiceRail>
 
         <PanelGrid data-ui="monitoring-panel-grid">
-          {DASHBOARD_PANEL_CARDS.map((panel) => {
+          {DASHBOARD_PANEL_CARDS.map((panel, index) => {
             const panelUrl = grafanaDashboardUrl ? buildGrafanaPanelEmbedUrl(grafanaDashboardUrl, panel.panelId) : ""
             return (
               <PanelCard key={panel.key} data-ui="monitoring-panel-card">
@@ -220,11 +296,10 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
                 </PanelHeader>
                 <PanelBody>
                   {panelUrl ? (
-                    <PanelFrame
+                    <DeferredPanelFrame
+                      eager={index < DASHBOARD_EAGER_PANEL_COUNT}
                       src={panelUrl}
                       title={panel.title}
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
                     />
                   ) : (
                     <PanelFallback>

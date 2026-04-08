@@ -345,6 +345,46 @@ test.describe("block editor authoring flow", () => {
     await expect(markdownOutput).not.toContainText(":::toggle 더 보기")
   })
 
+  test("writer surface 토글 요약줄은 본문 스케일에 맞는 크기와 hit area를 유지한다", async ({ page }) => {
+    await page.goto(QA_WRITER_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.getByRole("button", { name: "토글", exact: true }).first().click()
+
+    const summary = page.getByTestId("toggle-block-summary").first()
+    await expect(summary).toBeVisible()
+
+    const metrics = await summary.evaluate((element) => {
+      const summaryElement = element as HTMLElement
+      const titleInput = summaryElement.querySelector("input")
+      const chevron = summaryElement.querySelector("[data-testid='toggle-block-chevron']")
+      if (!(titleInput instanceof HTMLInputElement) || !(chevron instanceof HTMLElement)) {
+        return null
+      }
+
+      const summaryRect = summaryElement.getBoundingClientRect()
+      const chevronRect = chevron.getBoundingClientRect()
+      const titleStyle = window.getComputedStyle(titleInput)
+      const chevronStyle = window.getComputedStyle(chevron)
+
+      return {
+        summaryHeight: summaryRect.height,
+        chevronWidth: chevronRect.width,
+        chevronFontSize: Number.parseFloat(chevronStyle.fontSize),
+        titleFontSize: Number.parseFloat(titleStyle.fontSize),
+        titleLineHeight: Number.parseFloat(titleStyle.lineHeight),
+      }
+    })
+
+    expect(metrics).not.toBeNull()
+    expect(metrics?.summaryHeight ?? 0).toBeGreaterThanOrEqual(44)
+    expect(metrics?.chevronWidth ?? 0).toBeGreaterThanOrEqual(18)
+    expect(metrics?.chevronFontSize ?? 0).toBeGreaterThanOrEqual(18)
+    expect(metrics?.titleFontSize ?? 0).toBeGreaterThanOrEqual(17.5)
+    expect(metrics?.titleLineHeight ?? 0).toBeGreaterThanOrEqual(26)
+  })
+
   test("콜아웃 본문은 단일 리치 편집 surface로 동작하고 split preview를 노출하지 않는다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 

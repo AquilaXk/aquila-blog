@@ -688,6 +688,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
       setActiveTocId((prev) => (prev === nextActiveId ? prev : nextActiveId))
     })
     const railScheduler = createRafScheduler(() => {
+      if (!leftHybridRailActiveRef.current && !rightHybridRailActiveRef.current) return
       syncHybridRails()
     })
     const registry = createObserverRegistry()
@@ -700,20 +701,34 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     registry.addIntersectionObserver(
       headingNodes,
       (entries) => {
+        let didChange = false
         for (const entry of entries) {
           const id = (entry.target as HTMLElement).id
           if (!id || !visibleIdSet.has(id)) continue
+          const nextRatio = entry.isIntersecting ? entry.intersectionRatio : 0
+          const nextTop = Math.round(entry.boundingClientRect.top)
+          const previous = tocVisibilityRef.current.get(id)
+          if (
+            previous &&
+            Math.abs(previous.ratio - nextRatio) < 0.04 &&
+            Math.abs(previous.top - nextTop) < 8
+          ) {
+            continue
+          }
           tocVisibilityRef.current.set(id, {
-            ratio: entry.isIntersecting ? entry.intersectionRatio : 0,
-            top: entry.boundingClientRect.top,
+            ratio: nextRatio,
+            top: nextTop,
           })
+          didChange = true
         }
-        scheduler.schedule()
+        if (didChange) {
+          scheduler.schedule()
+        }
       },
       {
         root: null,
         rootMargin: `-${resolveRailTopOffset() + 12}px 0px -52% 0px`,
-        threshold: [0, 0.08, 0.2, 0.36, 0.5, 0.65, 0.8, 1],
+        threshold: [0, 0.15, 0.4, 0.75, 1],
       }
     )
 
@@ -734,12 +749,19 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
         {
           root: null,
           rootMargin: "-24% 0px -48% 0px",
-          threshold: [0, 0.15, 0.22, 0.4, 0.65],
+          threshold: [0, 0.22, 0.5],
         }
       )
     }
 
-    registry.addWindowEvent("scroll", railScheduler.schedule, { passive: true })
+    registry.addWindowEvent(
+      "scroll",
+      () => {
+        if (!leftHybridRailActiveRef.current && !rightHybridRailActiveRef.current) return
+        railScheduler.schedule()
+      },
+      { passive: true }
+    )
     registry.addWindowEvent("resize", () => {
       syncHybridRails({ remeasure: true })
       scheduler.schedule()
@@ -749,7 +771,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
       scheduler.schedule()
     })
 
-    const resizeTargets = [article, leftRailRef.current, rightRailRef.current].filter(
+    const resizeTargets = [article].filter(
       (target): target is HTMLElement => Boolean(target)
     )
     registry.addResizeObserver(resizeTargets, () => {

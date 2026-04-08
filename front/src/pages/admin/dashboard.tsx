@@ -146,10 +146,10 @@ export const getServerSideProps: GetServerSideProps<AdminDashboardPageProps> = a
 }
 
 const env = getMonitoringEnv()
-const DASHBOARD_EAGER_PANEL_COUNT = 2
-const DASHBOARD_PANEL_STAGGER_MS = 420
-const DASHBOARD_INTERSECTION_ROOT_MARGIN = "24px 0px"
-const DASHBOARD_IDLE_ACTIVATION_TIMEOUT_MS = 900
+const DASHBOARD_EAGER_PANEL_COUNT = 1
+const DASHBOARD_PANEL_STAGGER_MS = 640
+const DASHBOARD_INTERSECTION_ROOT_MARGIN = "0px"
+const DASHBOARD_IDLE_ACTIVATION_TIMEOUT_MS = 1400
 
 const DeferredPanelFrame: React.FC<{
   eager?: boolean

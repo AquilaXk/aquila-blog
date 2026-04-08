@@ -1768,6 +1768,24 @@ const BlockEditorEngine = ({
   const [selectionTick, setSelectionTick] = useState(0)
   const selectionUiSignatureRef = useRef("")
   const blockSelectionLayoutRectCacheRef = useRef(new Map<number, { element: HTMLElement; rect: DOMRect }>())
+  const blockHandleRailMetricsRef = useRef({ width: 54, height: 40 })
+
+  useEffect(() => {
+    const railElement = blockHandleRailRef.current
+    if (!railElement || typeof ResizeObserver === "undefined") return
+
+    const syncRailMetrics = () => {
+      blockHandleRailMetricsRef.current = {
+        width: railElement.offsetWidth || 54,
+        height: railElement.offsetHeight || 40,
+      }
+    }
+
+    syncRailMetrics()
+    const observer = new ResizeObserver(syncRailMetrics)
+    observer.observe(railElement)
+    return () => observer.disconnect()
+  }, [])
 
   const cancelHoveredBlockClear = useCallback(() => {
     if (hoveredBlockClearTimerRef.current !== null && typeof window !== "undefined") {
@@ -6010,11 +6028,9 @@ const BlockEditorEngine = ({
     }
 
     const rect = blockTarget?.rect ?? blockElement.getBoundingClientRect()
-    const railElement = blockHandleRailRef.current
-    const railWidth = railElement?.offsetWidth || 54
+    const { width: railWidth, height: railHeight } = blockHandleRailMetricsRef.current
     const blocks = ((editor.getJSON() as BlockEditorDoc).content ?? []) as BlockEditorDoc[]
     const blockNode = blocks[blockIndex]
-    const railHeight = railElement?.offsetHeight || 40
     const anchoredTop = shouldCenterBlockHandleForNode(blockNode)
       ? resolveBlockHandleAnchorTop(blockElement, railHeight)
       : rect.top + 6

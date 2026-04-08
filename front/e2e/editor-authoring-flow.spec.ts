@@ -762,6 +762,9 @@ test.describe("block editor authoring flow", () => {
     if (!tableBox) {
       throw new Error("table bounding box is missing")
     }
+    const trailingParagraph = page.locator(".aq-block-editor__content > p").last()
+    await expect(trailingParagraph).toBeVisible()
+    await trailingParagraph.click()
     await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
 
     const columnRailButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })

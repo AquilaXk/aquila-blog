@@ -89,10 +89,16 @@ test.describe("editor live visual regression", () => {
     await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
 
     const cornerHandle = page.getByTestId("table-corner-handle")
+    const growHandle = page.getByTestId("table-corner-grow-handle")
+    const structureMenuButton = page.getByTestId("table-structure-menu-button")
+    const cellMenuButton = page.getByTestId("table-cell-menu-button")
     const rowRail = page.getByTestId("table-row-rail")
     const columnRail = page.getByTestId("table-column-rail")
 
     await expect(cornerHandle).toBeVisible()
+    await expect(growHandle).toBeVisible()
+    await expect(structureMenuButton).toBeVisible()
+    await expect(cellMenuButton).toBeVisible()
     await expect(rowRail).toBeVisible()
     await expect(columnRail).toBeVisible()
 
@@ -113,7 +119,17 @@ test.describe("editor live visual regression", () => {
 
     expect(columnAddBarBox.x + columnAddBarBox.width).toBeLessThanOrEqual(viewport.width)
     expect(rowAddBarBox.y + rowAddBarBox.height).toBeLessThanOrEqual(viewport.height)
-    expect(columnAddBarBox.x).toBeGreaterThanOrEqual(tableBox.x + tableBox.width - 4)
-    expect(rowAddBarBox.y).toBeGreaterThanOrEqual(tableBox.y + tableBox.height - 4)
+    expect(
+      Math.abs(columnAddBarBox.x + columnAddBarBox.width / 2 - (tableBox.x + tableBox.width))
+    ).toBeLessThanOrEqual(18)
+    expect(
+      Math.abs(rowAddBarBox.y + rowAddBarBox.height / 2 - (tableBox.y + tableBox.height))
+    ).toBeLessThanOrEqual(18)
+    expect(
+      Math.abs(columnAddBarBox.y + columnAddBarBox.height / 2 - (tableBox.y + tableBox.height / 2))
+    ).toBeLessThanOrEqual(18)
+    expect(
+      Math.abs(rowAddBarBox.x + rowAddBarBox.width / 2 - (tableBox.x + tableBox.width / 2))
+    ).toBeLessThanOrEqual(18)
   })
 })

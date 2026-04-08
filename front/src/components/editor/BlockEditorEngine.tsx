@@ -232,6 +232,10 @@ type TableQuickRailState = {
   tableTop: number
   width: number
   height: number
+  cellLeft: number
+  cellTop: number
+  cellWidth: number
+  cellHeight: number
   rowIndex: number
   rowTop: number
   rowHeight: number
@@ -248,7 +252,7 @@ type TableQuickRailState = {
   showRowAddBar: boolean
 }
 
-type TableMenuKind = "row" | "column" | "table"
+type TableMenuKind = "row" | "column" | "table" | "cell"
 
 type TableMenuState =
   | {
@@ -700,6 +704,14 @@ type TableColumnDragGuideState = {
   height: number
 }
 
+type TableCornerGrowState = {
+  pointerId: number
+  lastClientX: number
+  lastClientY: number
+  columnStepPx: number
+  rowStepPx: number
+}
+
 const BLOCK_HANDLE_MEDIA_QUERY = "(pointer: coarse)"
 const DESKTOP_TABLE_RAIL_MEDIA_QUERY = "(max-width: 768px)"
 const DEFAULT_EDITOR_READABLE_WIDTH_PX = 48 * 16
@@ -711,17 +723,21 @@ const TABLE_ROW_RESIZE_EDGE_PX = 6
 const TABLE_COLUMN_RESIZE_GUARD_PX = 12
 const TABLE_RAIL_EDGE_PADDING_PX = 12
 const TABLE_CORNER_BUTTON_SIZE_PX = 22
-const TABLE_CORNER_OFFSET_PX = 34
+const TABLE_CORNER_GROW_MOUSE_POINTER_ID = -1
 const TABLE_COLUMN_GRIP_WIDTH_PX = 40
 const TABLE_COLUMN_GRIP_HEIGHT_PX = 22
 const TABLE_ROW_GRIP_WIDTH_PX = 22
 const TABLE_ROW_GRIP_HEIGHT_PX = 40
 const TABLE_ADD_BAR_THICKNESS_PX = 28
-const TABLE_ADD_BAR_GAP_PX = 0
-const TABLE_ADD_BAR_MIN_LENGTH_PX = 96
 const TABLE_ADD_BAR_VIEWPORT_PADDING_PX = 8
 const TABLE_AXIS_RAIL_EDGE_HOTZONE_PX = 18
 const TABLE_TRAILING_ADD_EDGE_HOTZONE_PX = 18
+const TABLE_EDGE_HANDLE_INSET_PX = 6
+const TABLE_EDGE_ADD_BUTTON_SIZE_PX = 24
+const TABLE_CORNER_CLUSTER_GAP_PX = 6
+const TABLE_CORNER_CLUSTER_WIDTH_PX =
+  TABLE_CORNER_BUTTON_SIZE_PX * 2 + TABLE_CORNER_CLUSTER_GAP_PX
+const TABLE_CELL_MENU_BUTTON_SIZE_PX = 22
 const TABLE_QUICK_RAIL_HIDE_DELAY_MS = 120
 const TABLE_MENU_EDGE_PADDING_PX = 16
 const TABLE_MENU_ESTIMATED_WIDTH_PX = 308
@@ -760,37 +776,81 @@ const resolveDesktopTableRailLayout = (
   state: TableQuickRailState
 ) => {
   const visibleTableWidth = Math.max(0, Math.round(state.width))
-  const visibleTableHeight = Math.max(TABLE_ADD_BAR_MIN_LENGTH_PX, Math.round(state.height))
-  const rowAddBarWidth = Math.max(TABLE_ADD_BAR_MIN_LENGTH_PX, Math.round(state.width))
-  const columnGripTop = Math.round(state.tableTop - Math.round(TABLE_COLUMN_GRIP_HEIGHT_PX / 2))
-  const cornerTop = Math.round(state.tableTop - TABLE_CORNER_OFFSET_PX)
-  const cornerLeft = Math.round(state.tableLeft + visibleTableWidth - TABLE_CORNER_BUTTON_SIZE_PX)
+  const visibleTableHeight = Math.max(0, Math.round(state.height))
+  const columnGripTop = Math.round(
+    state.tableTop - Math.round(TABLE_COLUMN_GRIP_HEIGHT_PX / 2) + TABLE_EDGE_HANDLE_INSET_PX
+  )
+  const cornerTop = Math.round(state.tableTop + TABLE_EDGE_HANDLE_INSET_PX)
+  const cornerLeft = Math.round(
+    state.tableLeft + visibleTableWidth - TABLE_CORNER_CLUSTER_WIDTH_PX - TABLE_EDGE_HANDLE_INSET_PX
+  )
   const columnGripLeft = Math.round(
     state.columnLeft + Math.max(0, state.columnWidth / 2 - TABLE_COLUMN_GRIP_WIDTH_PX / 2)
   )
   const columnAddBarLeft =
     typeof window === "undefined"
-      ? Math.round(state.tableLeft + visibleTableWidth + TABLE_ADD_BAR_GAP_PX)
+      ? Math.round(
+          state.tableLeft + visibleTableWidth - Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX
+        )
       : clampViewportPosition(
-          Math.round(state.tableLeft + visibleTableWidth + TABLE_ADD_BAR_GAP_PX),
+          Math.round(
+            state.tableLeft + visibleTableWidth - Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX
+          ),
           TABLE_ADD_BAR_VIEWPORT_PADDING_PX,
           window.innerWidth,
-          TABLE_ADD_BAR_THICKNESS_PX
+          TABLE_EDGE_ADD_BUTTON_SIZE_PX
         )
-  const columnAddBarTop = Math.round(state.tableTop)
+  const columnAddBarTop = Math.round(
+    state.tableTop + Math.max(0, visibleTableHeight / 2 - TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2)
+  )
   const rowGripTop = Math.round(
     state.rowTop + Math.max(0, state.rowHeight / 2 - TABLE_ROW_GRIP_HEIGHT_PX / 2)
   )
-  const rowGripLeft = Math.round(state.tableLeft - Math.round(TABLE_ROW_GRIP_WIDTH_PX / 2))
-  const rowAddBarLeft = Math.round(state.tableLeft)
+  const rowGripLeft = Math.round(
+    state.tableLeft - Math.round(TABLE_ROW_GRIP_WIDTH_PX / 2) + TABLE_EDGE_HANDLE_INSET_PX
+  )
+  const rowAddBarLeft = Math.round(
+    state.tableLeft + Math.max(0, visibleTableWidth / 2 - TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2)
+  )
   const rowAddBarTop =
     typeof window === "undefined"
-      ? Math.round(state.tableTop + state.height + TABLE_ADD_BAR_GAP_PX)
+      ? Math.round(
+          state.tableTop + state.height - Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX
+        )
       : clampViewportPosition(
-          Math.round(state.tableTop + state.height + TABLE_ADD_BAR_GAP_PX),
+          Math.round(
+            state.tableTop + state.height - Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX
+          ),
           TABLE_ADD_BAR_VIEWPORT_PADDING_PX,
           window.innerHeight,
-          TABLE_ADD_BAR_THICKNESS_PX
+          TABLE_EDGE_ADD_BUTTON_SIZE_PX
+        )
+
+  const cellMenuLeft =
+    typeof window === "undefined"
+      ? Math.round(
+          state.cellLeft + state.cellWidth - Math.round(TABLE_CELL_MENU_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX
+        )
+      : clampViewportPosition(
+          Math.round(
+            state.cellLeft + state.cellWidth - Math.round(TABLE_CELL_MENU_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX
+          ),
+          TABLE_ADD_BAR_VIEWPORT_PADDING_PX,
+          window.innerWidth,
+          TABLE_CELL_MENU_BUTTON_SIZE_PX
+        )
+  const cellMenuTop =
+    typeof window === "undefined"
+      ? Math.round(
+          state.cellTop + Math.max(0, state.cellHeight / 2 - TABLE_CELL_MENU_BUTTON_SIZE_PX / 2)
+        )
+      : clampViewportPosition(
+          Math.round(
+            state.cellTop + Math.max(0, state.cellHeight / 2 - TABLE_CELL_MENU_BUTTON_SIZE_PX / 2)
+          ),
+          TABLE_ADD_BAR_VIEWPORT_PADDING_PX,
+          window.innerHeight,
+          TABLE_CELL_MENU_BUTTON_SIZE_PX
         )
 
   return {
@@ -800,12 +860,12 @@ const resolveDesktopTableRailLayout = (
     columnGripTop,
     columnAddBarLeft,
     columnAddBarTop,
-    columnAddBarHeight: visibleTableHeight,
     rowGripLeft,
     rowGripTop,
     rowAddBarLeft,
     rowAddBarTop,
-    rowAddBarWidth,
+    cellMenuLeft,
+    cellMenuTop,
   }
 }
 
@@ -1665,6 +1725,7 @@ const BlockEditorEngine = ({
   const editorRef = useRef<TiptapEditor | null>(null)
   const tableRowResizeRef = useRef<TableRowResizeState | null>(null)
   const tableColumnRailResizeRef = useRef<TableColumnRailResizeState | null>(null)
+  const tableCornerGrowRef = useRef<TableCornerGrowState | null>(null)
   const tableQuickRailHideTimerRef = useRef<number | null>(null)
   const hoveredBlockClearTimerRef = useRef<number | null>(null)
   const bubbleHideTimerRef = useRef<number | null>(null)
@@ -1679,6 +1740,7 @@ const BlockEditorEngine = ({
   const [recentSlashItemIds, setRecentSlashItemIds] = useState<string[]>([])
   const [isSlashImeComposing, setIsSlashImeComposing] = useState(false)
   const [slashInteractionMode, setSlashInteractionMode] = useState<"keyboard" | "pointer">("keyboard")
+  const slashPointerResumeAtRef = useRef(0)
   const [isToolbarMoreOpen, setIsToolbarMoreOpen] = useState(false)
   const [isInlineColorMenuOpen, setIsInlineColorMenuOpen] = useState(false)
   const [isBubbleTextStyleMenuOpen, setIsBubbleTextStyleMenuOpen] = useState(false)
@@ -1721,6 +1783,10 @@ const BlockEditorEngine = ({
     tableTop: 0,
     width: 0,
     height: 0,
+    cellLeft: 0,
+    cellTop: 0,
+    cellWidth: 0,
+    cellHeight: 0,
     rowIndex: 0,
     rowTop: 0,
     rowHeight: 0,
@@ -1741,6 +1807,7 @@ const BlockEditorEngine = ({
   })
   const [isTableQuickRailHovered, setIsTableQuickRailHovered] = useState(false)
   const [isTableColumnResizeActive, setIsTableColumnResizeActive] = useState(false)
+  const [isTableCornerGrowActive, setIsTableCornerGrowActive] = useState(false)
   const [tableMenuState, setTableMenuState] = useState<TableMenuState>(null)
   const tableQuickRailStateRef = useRef(tableQuickRailState)
   const [draggedBlockState, setDraggedBlockState] = useState<DraggedBlockState>(null)
@@ -2441,7 +2508,8 @@ const BlockEditorEngine = ({
         targetElement?.closest("[data-block-menu-root='true']") ||
         targetElement?.closest("[data-table-menu-root='true']") ||
         targetElement?.closest("[data-table-axis-rail='true']") ||
-        targetElement?.closest("[data-table-corner-handle='true']")
+        targetElement?.closest("[data-table-corner-handle='true']") ||
+        targetElement?.closest("[data-table-menu-trigger='true']")
       ) {
         return false
       }
@@ -2911,7 +2979,16 @@ const BlockEditorEngine = ({
     (axis: "row" | "column") => {
       const currentEditor = editorRef.current
       if (!currentEditor) return false
-      const rect = getCurrentSelectedTableRect(currentEditor)
+      let rect = getCurrentSelectedTableRect(currentEditor)
+      if (!rect) {
+        const renderedTable = findActiveRenderedTable(viewportRef.current, tableQuickRailStateRef.current)
+        const fallbackCell = renderedTable?.querySelector<HTMLTableCellElement>(
+          "tr:last-child > th:last-child, tr:last-child > td:last-child"
+        )
+        if (fallbackCell && focusRenderedTableCell(fallbackCell)) {
+          rect = getCurrentSelectedTableRect(currentEditor)
+        }
+      }
       if (!rect) return false
 
       const selected =
@@ -2924,7 +3001,41 @@ const BlockEditorEngine = ({
       axis === "column" ? chain.addColumnAfter() : chain.addRowAfter()
       return chain.run()
     },
-    [getCurrentSelectedTableRect, selectTableColumnByIndex, selectTableRowByIndex]
+    [focusRenderedTableCell, getCurrentSelectedTableRect, selectTableColumnByIndex, selectTableRowByIndex]
+  )
+
+  const growTableFromCorner = useCallback(() => {
+    const appendedColumn = appendTableAxisAtEnd("column")
+    const appendedRow = appendTableAxisAtEnd("row")
+    return appendedColumn || appendedRow
+  }, [appendTableAxisAtEnd])
+
+  const stopTableCornerGrow = useCallback(() => {
+    tableCornerGrowRef.current = null
+    setIsTableCornerGrowActive(false)
+  }, [])
+
+  const startTableCornerGrow = useCallback(
+    (pointerId: number, clientX: number, clientY: number) => {
+      const lastColumnSegment =
+        tableQuickRailStateRef.current.columnSegments[tableQuickRailStateRef.current.columnSegments.length - 1]
+      tableCornerGrowRef.current = {
+        pointerId,
+        lastClientX: clientX,
+        lastClientY: clientY,
+        columnStepPx: Math.max(
+          TABLE_MIN_COLUMN_WIDTH_PX,
+          Math.round(
+            lastColumnSegment?.width ??
+              tableQuickRailStateRef.current.columnWidth ??
+              TABLE_MIN_COLUMN_WIDTH_PX
+          )
+        ),
+        rowStepPx: Math.max(TABLE_MIN_ROW_HEIGHT_PX, Math.round(tableQuickRailStateRef.current.rowHeight || TABLE_MIN_ROW_HEIGHT_PX)),
+      }
+      setIsTableCornerGrowActive(true)
+    },
+    []
   )
 
   const getCurrentTableColumnResizeContext = useCallback(
@@ -3241,6 +3352,10 @@ const BlockEditorEngine = ({
       tableTop: Math.round(tableRect.top),
       width: Math.round(tableRect.width),
       height: Math.round(tableRect.height),
+      cellLeft: Math.round(activeCellRect?.left ?? tableRect.left + 16),
+      cellTop: Math.round(activeCellRect?.top ?? tableRect.top + 16),
+      cellWidth: Math.round(activeCellRect?.width ?? 120),
+      cellHeight: Math.round(activeCellRect?.height ?? 44),
       rowIndex: activeRowIndex >= 0 ? activeRowIndex : 0,
       rowTop: Math.round(activeRowRect?.top ?? tableRect.top + 52),
       rowHeight: Math.round(activeRowRect?.height ?? 44),
@@ -4137,6 +4252,84 @@ const BlockEditorEngine = ({
     stopTableColumnRailResize,
     syncTableColumnDragGuideForColumn,
   ])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const applyPointerDelta = (pointerId: number, clientX: number, clientY: number) => {
+      const state = tableCornerGrowRef.current
+      if (!state || state.pointerId !== pointerId) return
+
+      const deltaX = clientX - state.lastClientX
+      const deltaY = clientY - state.lastClientY
+      const columnSteps = deltaX >= state.columnStepPx ? Math.floor(deltaX / state.columnStepPx) : 0
+      const rowSteps = deltaY >= state.rowStepPx ? Math.floor(deltaY / state.rowStepPx) : 0
+
+      let appliedColumnSteps = 0
+      let appliedRowSteps = 0
+
+      while (appliedColumnSteps < columnSteps) {
+        if (!appendTableAxisAtEnd("column")) break
+        appliedColumnSteps += 1
+      }
+
+      while (appliedRowSteps < rowSteps) {
+        if (!appendTableAxisAtEnd("row")) break
+        appliedRowSteps += 1
+      }
+
+      if (appliedColumnSteps > 0) {
+        state.lastClientX += state.columnStepPx * appliedColumnSteps
+      }
+      if (appliedRowSteps > 0) {
+        state.lastClientY += state.rowStepPx * appliedRowSteps
+      }
+
+      if (appliedColumnSteps > 0 || appliedRowSteps > 0) {
+        const currentEditor = editorRef.current
+        if (currentEditor) {
+          stabilizeTableSelectionSurface(currentEditor)
+        }
+      }
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      applyPointerDelta(event.pointerId, event.clientX, event.clientY)
+    }
+
+    const handlePointerUp = (event: PointerEvent) => {
+      const state = tableCornerGrowRef.current
+      if (!state || state.pointerId !== event.pointerId) return
+      applyPointerDelta(event.pointerId, event.clientX, event.clientY)
+      stopTableCornerGrow()
+    }
+
+    const handleMouseMove = (event: MouseEvent) => {
+      applyPointerDelta(TABLE_CORNER_GROW_MOUSE_POINTER_ID, event.clientX, event.clientY)
+    }
+
+    const handleMouseUp = (event: MouseEvent) => {
+      const state = tableCornerGrowRef.current
+      if (!state || state.pointerId !== TABLE_CORNER_GROW_MOUSE_POINTER_ID) return
+      applyPointerDelta(TABLE_CORNER_GROW_MOUSE_POINTER_ID, event.clientX, event.clientY)
+      stopTableCornerGrow()
+    }
+
+    window.addEventListener("pointermove", handlePointerMove)
+    window.addEventListener("pointerup", handlePointerUp)
+    window.addEventListener("pointercancel", handlePointerUp)
+    window.addEventListener("mousemove", handleMouseMove)
+    window.addEventListener("mouseup", handleMouseUp)
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove)
+      window.removeEventListener("pointerup", handlePointerUp)
+      window.removeEventListener("pointercancel", handlePointerUp)
+      window.removeEventListener("mousemove", handleMouseMove)
+      window.removeEventListener("mouseup", handleMouseUp)
+      stopTableCornerGrow()
+    }
+  }, [appendTableAxisAtEnd, stabilizeTableSelectionSurface, stopTableCornerGrow])
 
   useEffect(() => {
     const currentEditor = editorRef.current ?? editor
@@ -5501,6 +5694,8 @@ const BlockEditorEngine = ({
       rankedItems[0] ??
       null
     if (!selectedItem || selectedItem.disabled) return null
+    const insideTableCell = activeEditor.isActive("tableCell") || activeEditor.isActive("tableHeader")
+    if (insideTableCell && selectedItem.section === "structure") return null
 
     return {
       item: selectedItem,
@@ -5549,6 +5744,7 @@ const BlockEditorEngine = ({
 
     if (event.key === "ArrowDown" || (event.key === "Tab" && !event.shiftKey)) {
       stopSlashKeyboardEvent(event)
+      slashPointerResumeAtRef.current = typeof performance !== "undefined" ? performance.now() + 180 : Date.now() + 180
       setSlashInteractionMode("keyboard")
       setSelectedSlashIndex((prev) => {
         if (!flatSlashEntries.length) return 0
@@ -5559,6 +5755,7 @@ const BlockEditorEngine = ({
 
     if (event.key === "ArrowUp" || (event.key === "Tab" && event.shiftKey)) {
       stopSlashKeyboardEvent(event)
+      slashPointerResumeAtRef.current = typeof performance !== "undefined" ? performance.now() + 180 : Date.now() + 180
       setSlashInteractionMode("keyboard")
       setSelectedSlashIndex((prev) => {
         if (!flatSlashEntries.length) return 0
@@ -5569,6 +5766,7 @@ const BlockEditorEngine = ({
 
     if (event.key === "Home") {
       stopSlashKeyboardEvent(event)
+      slashPointerResumeAtRef.current = typeof performance !== "undefined" ? performance.now() + 180 : Date.now() + 180
       setSlashInteractionMode("keyboard")
       setSelectedSlashIndex(0)
       return
@@ -5576,6 +5774,7 @@ const BlockEditorEngine = ({
 
     if (event.key === "End") {
       stopSlashKeyboardEvent(event)
+      slashPointerResumeAtRef.current = typeof performance !== "undefined" ? performance.now() + 180 : Date.now() + 180
       setSlashInteractionMode("keyboard")
       setSelectedSlashIndex(Math.max(flatSlashEntries.length - 1, 0))
       return
@@ -5589,6 +5788,8 @@ const BlockEditorEngine = ({
   }, [closeSlashMenu, editor, executeSlashCatalogAction, flatSlashEntries, isSlashMenuOpen, resolveSlashExecutionTarget])
 
   const handleSlashActionPointerMove = useCallback((flatIndex: number) => {
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now()
+    if (now < slashPointerResumeAtRef.current) return
     setSlashInteractionMode((prev) => (prev === "pointer" ? prev : "pointer"))
     setSelectedSlashIndex((prev) => (prev === flatIndex ? prev : flatIndex))
   }, [])
@@ -6259,7 +6460,8 @@ const BlockEditorEngine = ({
         target?.closest("[data-table-menu-root='true']") ||
         target?.closest("[data-table-axis-rail='true']") ||
         target?.closest("[data-table-corner-handle='true']") ||
-        target?.closest("[data-table-column-rail-track='true']")
+        target?.closest("[data-table-column-rail-track='true']") ||
+        target?.closest("[data-table-menu-trigger='true']")
       ) {
         cancelTableQuickRailHide()
         setIsTableQuickRailHovered(true)
@@ -6586,7 +6788,8 @@ const BlockEditorEngine = ({
           (target.closest("[data-table-menu-root='true']") ||
             target.closest("[data-table-axis-rail='true']") ||
             target.closest("[data-table-corner-handle='true']") ||
-            target.closest("[data-table-column-rail-track='true']"))
+            target.closest("[data-table-column-rail-track='true']") ||
+            target.closest("[data-table-menu-trigger='true']"))
         ) {
           return
         }
@@ -6693,16 +6896,49 @@ const BlockEditorEngine = ({
             style={{
               left: `${
                 desktopTableRailLayout?.cornerLeft ??
-                Math.round(tableQuickRailState.tableLeft + Math.max(0, tableQuickRailState.width - TABLE_CORNER_BUTTON_SIZE_PX))
+                Math.round(
+                  tableQuickRailState.tableLeft +
+                      Math.max(0, tableQuickRailState.width - TABLE_CORNER_CLUSTER_WIDTH_PX - TABLE_EDGE_HANDLE_INSET_PX)
+                  )
               }px`,
-              top: `${desktopTableRailLayout?.cornerTop ?? Math.round(tableQuickRailState.tableTop - TABLE_CORNER_OFFSET_PX)}px`,
-            }}
+                top: `${desktopTableRailLayout?.cornerTop ?? Math.round(tableQuickRailState.tableTop + TABLE_EDGE_HANDLE_INSET_PX)}px`,
+              }}
           >
+            <TableCornerGrowButton
+              type="button"
+              title="표 확장"
+              aria-label="표 확장"
+              data-testid="table-corner-grow-handle"
+              data-table-menu-trigger="true"
+              data-active={isTableCornerGrowActive}
+              onPointerDown={(event: React.PointerEvent<HTMLButtonElement>) => {
+                event.preventDefault()
+                event.stopPropagation()
+                try {
+                  event.currentTarget.setPointerCapture(event.pointerId)
+                } catch {}
+                startTableCornerGrow(event.pointerId, event.clientX, event.clientY)
+              }}
+              onMouseDown={(event: ReactMouseEvent<HTMLButtonElement>) => {
+                event.preventDefault()
+                if (tableCornerGrowRef.current) return
+                startTableCornerGrow(TABLE_CORNER_GROW_MOUSE_POINTER_ID, event.clientX, event.clientY)
+              }}
+              onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+                event.preventDefault()
+                event.stopPropagation()
+                growTableFromCorner()
+              }}
+            >
+              <TableHandleIcon kind="grow" />
+            </TableCornerGrowButton>
             <TableHandleButton
               type="button"
-              title="표 메뉴"
-              aria-label="표 메뉴"
-              data-testid="table-corner-handle-button"
+              title="표 구조 메뉴"
+              aria-label="표 구조 메뉴"
+              data-testid="table-structure-menu-button"
+              data-table-menu-trigger="true"
+              onMouseDown={handleToolbarButtonMouseDown}
               onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                 event.preventDefault()
                 event.stopPropagation()
@@ -6726,7 +6962,9 @@ const BlockEditorEngine = ({
               style={{
                 left: `${
                   desktopTableRailLayout?.rowGripLeft ??
-                  Math.round(tableQuickRailState.tableLeft - Math.round(TABLE_ROW_GRIP_WIDTH_PX / 2))
+                  Math.round(
+                    tableQuickRailState.tableLeft - Math.round(TABLE_ROW_GRIP_WIDTH_PX / 2) + TABLE_EDGE_HANDLE_INSET_PX
+                  )
                 }px`,
                 top: `${
                   desktopTableRailLayout?.rowGripTop ??
@@ -6772,7 +7010,9 @@ const BlockEditorEngine = ({
                 }px`,
                 top: `${
                   desktopTableRailLayout?.columnGripTop ??
-                  Math.round(tableQuickRailState.tableTop - Math.round(TABLE_COLUMN_GRIP_HEIGHT_PX / 2))
+                  Math.round(
+                    tableQuickRailState.tableTop - Math.round(TABLE_COLUMN_GRIP_HEIGHT_PX / 2) + TABLE_EDGE_HANDLE_INSET_PX
+                  )
                 }px`,
               }}
             >
@@ -6815,11 +7055,18 @@ const BlockEditorEngine = ({
                 left: `${
                   desktopTableRailLayout?.columnAddBarLeft ??
                   Math.round(
-                    tableQuickRailState.tableLeft + tableQuickRailState.width + TABLE_ADD_BAR_GAP_PX
+                    tableQuickRailState.tableLeft +
+                      tableQuickRailState.width -
+                      Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) -
+                      TABLE_EDGE_HANDLE_INSET_PX
                   )
                 }px`,
-                top: `${desktopTableRailLayout?.columnAddBarTop ?? Math.round(tableQuickRailState.tableTop)}px`,
-                height: `${desktopTableRailLayout?.columnAddBarHeight ?? Math.max(TABLE_ADD_BAR_MIN_LENGTH_PX, Math.round(tableQuickRailState.height))}px`,
+                top: `${
+                  desktopTableRailLayout?.columnAddBarTop ??
+                  Math.round(
+                    tableQuickRailState.tableTop + Math.max(0, tableQuickRailState.height / 2 - TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2)
+                  )
+                }px`,
               }}
             >
               <TableHandleIcon kind="plus" />
@@ -6845,18 +7092,66 @@ const BlockEditorEngine = ({
                 appendTableAxisAtEnd("row")
               }}
               style={{
-                left: `${desktopTableRailLayout?.rowAddBarLeft ?? Math.round(tableQuickRailState.tableLeft)}px`,
+                left: `${
+                  desktopTableRailLayout?.rowAddBarLeft ??
+                  Math.round(
+                    tableQuickRailState.tableLeft + Math.max(0, tableQuickRailState.width / 2 - TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2)
+                  )
+                }px`,
                 top: `${
                   desktopTableRailLayout?.rowAddBarTop ??
                   Math.round(
-                    tableQuickRailState.tableTop + tableQuickRailState.height + TABLE_ADD_BAR_GAP_PX
+                    tableQuickRailState.tableTop +
+                      tableQuickRailState.height -
+                      Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) -
+                      TABLE_EDGE_HANDLE_INSET_PX
                   )
                 }px`,
-                width: `${desktopTableRailLayout?.rowAddBarWidth ?? Math.max(TABLE_ADD_BAR_MIN_LENGTH_PX, Math.round(tableQuickRailState.width))}px`,
               }}
             >
               <TableHandleIcon kind="plus" />
             </TableTrailingAddBar>
+          ) : null}
+          {isTableMode && !isTableStructuralSelection ? (
+            <TableCellMenuButton
+              type="button"
+              data-testid="table-cell-menu-button"
+              data-table-menu-trigger="true"
+              title="셀 스타일"
+              aria-label="셀 스타일"
+              onMouseDown={handleToolbarButtonMouseDown}
+              onPointerEnter={cancelTableQuickRailHide}
+              onPointerLeave={() => {
+                if (!shouldPersistTableHandles) {
+                  scheduleTableQuickRailHide()
+                }
+              }}
+              onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+                event.preventDefault()
+                event.stopPropagation()
+                openTableMenu("cell", event.currentTarget.getBoundingClientRect())
+              }}
+              style={{
+                left: `${
+                  desktopTableRailLayout?.cellMenuLeft ??
+                  Math.round(
+                    tableQuickRailState.cellLeft +
+                      tableQuickRailState.cellWidth -
+                      Math.round(TABLE_CELL_MENU_BUTTON_SIZE_PX / 2) -
+                      TABLE_EDGE_HANDLE_INSET_PX
+                  )
+                }px`,
+                top: `${
+                  desktopTableRailLayout?.cellMenuTop ??
+                  Math.round(
+                    tableQuickRailState.cellTop +
+                      Math.max(0, tableQuickRailState.cellHeight / 2 - TABLE_CELL_MENU_BUTTON_SIZE_PX / 2)
+                  )
+                }px`,
+              }}
+            >
+              <TableHandleIcon kind="more" />
+            </TableCellMenuButton>
           ) : null}
         </>
       ) : null}
@@ -6874,10 +7169,82 @@ const BlockEditorEngine = ({
               ? "행 메뉴"
               : tableMenuState.kind === "column"
                 ? "열 메뉴"
-                : "표 메뉴"}
+                : tableMenuState.kind === "cell"
+                  ? "셀 스타일"
+                  : "표 구조 메뉴"}
           </FloatingBlockMenuHeader>
-          <FloatingBlockActionList>
-            {tableMenuState.kind === "row" ? (
+          {tableMenuState.kind === "cell" ? (
+            <>
+              <TableMenuSectionTitle>정렬</TableMenuSectionTitle>
+              <TableMenuButtonRow>
+                <ToolbarButton
+                  type="button"
+                  data-active={activeTableCellAttrs.textAlign === "left"}
+                  onMouseDown={handleToolbarButtonMouseDown}
+                  onClick={() => updateActiveTableCellAttrs({ textAlign: "left" })}
+                >
+                  좌측
+                </ToolbarButton>
+                <ToolbarButton
+                  type="button"
+                  data-active={activeTableCellAttrs.textAlign === "center"}
+                  onMouseDown={handleToolbarButtonMouseDown}
+                  onClick={() => updateActiveTableCellAttrs({ textAlign: "center" })}
+                >
+                  가운데
+                </ToolbarButton>
+                <ToolbarButton
+                  type="button"
+                  data-active={activeTableCellAttrs.textAlign === "right"}
+                  onMouseDown={handleToolbarButtonMouseDown}
+                  onClick={() => updateActiveTableCellAttrs({ textAlign: "right" })}
+                >
+                  우측
+                </ToolbarButton>
+              </TableMenuButtonRow>
+              <TableMenuSectionTitle>배경</TableMenuSectionTitle>
+              <TableMenuButtonRow>
+                <ToolbarButton
+                  type="button"
+                  data-active={activeTableCellAttrs.backgroundColor === "#f8fafc"}
+                  onMouseDown={handleToolbarButtonMouseDown}
+                  onClick={() => updateActiveTableCellAttrs({ backgroundColor: "#f8fafc" })}
+                >
+                  기본
+                </ToolbarButton>
+                <ToolbarButton
+                  type="button"
+                  onMouseDown={handleToolbarButtonMouseDown}
+                  onClick={() => updateActiveTableCellAttrs({ backgroundColor: null })}
+                >
+                  배경 해제
+                </ToolbarButton>
+              </TableMenuButtonRow>
+              <TablePresetSwatches aria-label="표 셀 배경 preset">
+                {TABLE_CELL_COLOR_PRESETS.map((preset) => (
+                  <TablePresetSwatch
+                    key={preset.value}
+                    type="button"
+                    title={preset.label}
+                    aria-label={`${preset.label} 배경`}
+                    data-active={activeTableCellAttrs.backgroundColor === preset.value}
+                    style={{ "--table-swatch-color": preset.value } as React.CSSProperties}
+                    onClick={() => updateActiveTableCellAttrs({ backgroundColor: preset.value })}
+                  />
+                ))}
+                <TableColorInput
+                  type="color"
+                  aria-label="표 셀 배경색 선택"
+                  value={normalizeTableColorInputValue(activeTableCellAttrs.backgroundColor)}
+                  onChange={(event) =>
+                    updateActiveTableCellAttrs({ backgroundColor: event.currentTarget.value })
+                  }
+                />
+              </TablePresetSwatches>
+            </>
+          ) : (
+            <FloatingBlockActionList>
+              {tableMenuState.kind === "row" ? (
               <>
                 <FloatingBlockActionButton type="button" onClick={() => { selectCurrentTableAxis("row"); closeTableMenu() }}>
                   행 선택
@@ -6977,78 +7344,14 @@ const BlockEditorEngine = ({
                   셀 분리
                 </FloatingBlockActionButton>
               </>
-            )}
-          </FloatingBlockActionList>
-          <FloatingBlockMenuDivider />
-          <TableMenuSectionTitle>정렬</TableMenuSectionTitle>
-          <TableMenuButtonRow>
-            <ToolbarButton
-              type="button"
-              data-active={activeTableCellAttrs.textAlign === "left"}
-              onMouseDown={handleToolbarButtonMouseDown}
-              onClick={() => updateActiveTableCellAttrs({ textAlign: "left" })}
-            >
-              좌측
-            </ToolbarButton>
-            <ToolbarButton
-              type="button"
-              data-active={activeTableCellAttrs.textAlign === "center"}
-              onMouseDown={handleToolbarButtonMouseDown}
-              onClick={() => updateActiveTableCellAttrs({ textAlign: "center" })}
-            >
-              가운데
-            </ToolbarButton>
-            <ToolbarButton
-              type="button"
-              data-active={activeTableCellAttrs.textAlign === "right"}
-              onMouseDown={handleToolbarButtonMouseDown}
-              onClick={() => updateActiveTableCellAttrs({ textAlign: "right" })}
-            >
-              우측
-            </ToolbarButton>
-          </TableMenuButtonRow>
-          <TableMenuSectionTitle>배경</TableMenuSectionTitle>
-          <TableMenuButtonRow>
-            <ToolbarButton
-              type="button"
-              data-active={activeTableCellAttrs.backgroundColor === "#f8fafc"}
-              onMouseDown={handleToolbarButtonMouseDown}
-              onClick={() => updateActiveTableCellAttrs({ backgroundColor: "#f8fafc" })}
-            >
-              기본
-            </ToolbarButton>
-            <ToolbarButton
-              type="button"
-              onMouseDown={handleToolbarButtonMouseDown}
-              onClick={() => updateActiveTableCellAttrs({ backgroundColor: null })}
-            >
-              배경 해제
-            </ToolbarButton>
-          </TableMenuButtonRow>
-          <TablePresetSwatches aria-label="표 셀 배경 preset">
-            {TABLE_CELL_COLOR_PRESETS.map((preset) => (
-              <TablePresetSwatch
-                key={preset.value}
-                type="button"
-                title={preset.label}
-                aria-label={`${preset.label} 배경`}
-                data-active={activeTableCellAttrs.backgroundColor === preset.value}
-                style={{ "--table-swatch-color": preset.value } as React.CSSProperties}
-                onClick={() => updateActiveTableCellAttrs({ backgroundColor: preset.value })}
-              />
-            ))}
-            <TableColorInput
-              type="color"
-              aria-label="표 셀 배경색 선택"
-              value={normalizeTableColorInputValue(activeTableCellAttrs.backgroundColor)}
-              onChange={(event) =>
-                updateActiveTableCellAttrs({ backgroundColor: event.currentTarget.value })
-              }
-            />
-          </TablePresetSwatches>
-          <FloatingBlockMenuDivider />
-          <FloatingBlockActionList>
-            {tableMenuState.kind === "row" ? (
+              )}
+            </FloatingBlockActionList>
+          )}
+          {tableMenuState.kind !== "cell" ? (
+            <>
+              <FloatingBlockMenuDivider />
+              <FloatingBlockActionList>
+                {tableMenuState.kind === "row" ? (
               <FloatingBlockActionButton
                 type="button"
                 data-variant="danger"
@@ -7082,10 +7385,12 @@ const BlockEditorEngine = ({
                   })
                 }
               >
-                표 삭제
-              </FloatingBlockActionButton>
-            )}
-          </FloatingBlockActionList>
+                  표 삭제
+                </FloatingBlockActionButton>
+                )}
+              </FloatingBlockActionList>
+            </>
+          ) : null}
         </FloatingTableMenu>
       ) : null}
     </>
@@ -7274,11 +7579,6 @@ const BlockEditorEngine = ({
           role="dialog"
           aria-label="블록 삽입 메뉴"
           onKeyDown={handleSlashMenuKeyDown}
-          onPointerMove={() => {
-            if (slashInteractionMode !== "pointer") {
-              setSlashInteractionMode("pointer")
-            }
-          }}
           style={
             slashMenuState
               ? {
@@ -7307,11 +7607,22 @@ const BlockEditorEngine = ({
                           data-slash-action-id={action.id}
                           data-active={flatIndex === selectedSlashIndex}
                           data-input-mode={slashInteractionMode}
-                          disabled={disabled || action.disabled}
+                          disabled={
+                            disabled ||
+                            action.disabled ||
+                            ((editorRef.current ?? editor)?.isActive("tableCell") || (editorRef.current ?? editor)?.isActive("tableHeader")) &&
+                              action.section === "structure"
+                          }
                           onMouseDown={(event) => event.preventDefault()}
                           onPointerMove={() => handleSlashActionPointerMove(flatIndex)}
                           onClick={() => {
-                            if (action.disabled) return
+                            if (
+                              action.disabled ||
+                              (((editorRef.current ?? editor)?.isActive("tableCell") || (editorRef.current ?? editor)?.isActive("tableHeader")) &&
+                                action.section === "structure")
+                            ) {
+                              return
+                            }
                             void executeSlashCatalogAction(action)
                           }}
                         >
@@ -9030,7 +9341,7 @@ const FloatingBubbleToolbar = styled.div`
   }
 `
 
-type TableHandleIconKind = "table" | "row" | "column" | "more" | "plus" | "grip"
+type TableHandleIconKind = "table" | "row" | "column" | "more" | "plus" | "grip" | "grow"
 
 const TableHandleIcon = ({ kind }: { kind: TableHandleIconKind }) => {
   if (kind === "grip") {
@@ -9061,6 +9372,17 @@ const TableHandleIcon = ({ kind }: { kind: TableHandleIconKind }) => {
       <TableHandleIconSvg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
         <line x1="8" y1="3.25" x2="8" y2="12.75" />
         <line x1="3.25" y1="8" x2="12.75" y2="8" />
+      </TableHandleIconSvg>
+    )
+  }
+
+  if (kind === "grow") {
+    return (
+      <TableHandleIconSvg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+        <polyline points="9.5 3.5 12.5 3.5 12.5 6.5" />
+        <line x1="12.5" y1="3.5" x2="8.25" y2="7.75" />
+        <polyline points="6.5 12.5 3.5 12.5 3.5 9.5" />
+        <line x1="3.5" y1="12.5" x2="7.75" y2="8.25" />
       </TableHandleIconSvg>
     )
   }
@@ -9127,6 +9449,7 @@ const TableCornerHandle = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: ${TABLE_CORNER_CLUSTER_GAP_PX}px;
   pointer-events: auto;
 `
 
@@ -9317,6 +9640,8 @@ const TableQuickRailButton = styled.button`
     height: ${TABLE_ROW_GRIP_HEIGHT_PX}px;
   }
 
+  pointer-events: auto;
+
   &::after {
     content: "";
     position: absolute;
@@ -9352,6 +9677,7 @@ const TableHandleButton = styled(TableQuickRailButton)`
   color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.78)" : "rgba(100, 116, 139, 0.88)")};
   box-shadow: none;
   backdrop-filter: none;
+  pointer-events: auto;
 
   &:hover,
   &:focus-visible {
@@ -9363,6 +9689,23 @@ const TableHandleButton = styled(TableQuickRailButton)`
   }
 `
 
+const TableCornerGrowButton = styled(TableHandleButton)`
+  cursor: nwse-resize;
+  touch-action: none;
+
+  &[data-active="true"] {
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(37, 99, 235, 0.28)" : "rgba(59, 130, 246, 0.16)"};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#ffffff" : "rgba(30, 64, 175, 0.96)")};
+  }
+`
+
+const TableCellMenuButton = styled(TableHandleButton)`
+  width: ${TABLE_CELL_MENU_BUTTON_SIZE_PX}px;
+  height: ${TABLE_CELL_MENU_BUTTON_SIZE_PX}px;
+  border-radius: 999px;
+`
+
 const TableTrailingAddBar = styled.button`
   all: unset;
   position: fixed;
@@ -9371,34 +9714,33 @@ const TableTrailingAddBar = styled.button`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 0.5rem;
+  width: ${TABLE_EDGE_ADD_BUTTON_SIZE_PX}px;
+  height: ${TABLE_EDGE_ADD_BUTTON_SIZE_PX}px;
+  border-radius: 999px;
   border: 1px solid ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(255, 255, 255, 0.06)" : "rgba(15, 23, 42, 0.08)"};
+    theme.scheme === "dark" ? "rgba(59, 130, 246, 0.24)" : "rgba(37, 99, 235, 0.18)"};
   background: ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(15, 23, 42, 0.06)"};
-  color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(255, 255, 255, 0.72)" : "rgba(51, 65, 85, 0.76)")};
+    theme.scheme === "dark" ? "rgba(15, 23, 42, 0.86)" : "rgba(255, 255, 255, 0.98)"};
+  color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(241, 245, 249, 0.86)" : "rgba(51, 65, 85, 0.82)")};
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "dark" ? "0 10px 22px rgba(2, 6, 23, 0.28)" : "0 10px 22px rgba(15, 23, 42, 0.12)"};
   cursor: pointer;
   transition:
     background-color 120ms ease,
     border-color 120ms ease,
     color 120ms ease,
+    box-shadow 120ms ease,
     transform 120ms ease;
-
-  &[data-axis="column"] {
-    width: ${TABLE_ADD_BAR_THICKNESS_PX}px;
-  }
-
-  &[data-axis="row"] {
-    height: ${TABLE_ADD_BAR_THICKNESS_PX}px;
-  }
 
   &:hover,
   &:focus-visible {
     background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(255, 255, 255, 0.12)" : "rgba(15, 23, 42, 0.09)"};
+      theme.scheme === "dark" ? "rgba(29, 78, 216, 0.88)" : "rgba(59, 130, 246, 0.14)"};
     border-color: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(255, 255, 255, 0.12)" : "rgba(15, 23, 42, 0.12)"};
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#ffffff" : "rgba(30, 41, 59, 0.92)")};
+      theme.scheme === "dark" ? "rgba(191, 219, 254, 0.52)" : "rgba(59, 130, 246, 0.38)"};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#ffffff" : "rgba(30, 64, 175, 0.92)")};
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "dark" ? "0 12px 24px rgba(2, 6, 23, 0.34)" : "0 10px 20px rgba(59, 130, 246, 0.18)"};
     transform: translateY(-1px);
   }
 `

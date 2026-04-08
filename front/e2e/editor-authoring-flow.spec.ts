@@ -761,16 +761,20 @@ test.describe("block editor authoring flow", () => {
     const rowRailButton = page.getByTestId("table-row-rail").getByRole("button", { name: "행 메뉴" })
     const columnQuickAddButton = page.getByTestId("table-column-add-bar")
     const rowQuickAddButton = page.getByTestId("table-row-add-bar")
-    const tableCornerButton = page.getByTestId("table-corner-handle").getByRole("button", { name: "표 메뉴" })
+    const tableGrowHandle = page.getByTestId("table-corner-grow-handle")
+    const tableStructureMenuButton = page.getByTestId("table-structure-menu-button")
+    const tableCellMenuButton = page.getByTestId("table-cell-menu-button")
 
     await expect(columnRailButton).toBeVisible()
     await expect(rowRailButton).toBeVisible()
     await expect(columnQuickAddButton).toHaveCount(0)
     await expect(rowQuickAddButton).toHaveCount(0)
-    await expect(tableCornerButton).toBeVisible()
+    await expect(tableGrowHandle).toBeVisible()
+    await expect(tableStructureMenuButton).toBeVisible()
+    await expect(tableCellMenuButton).toBeVisible()
 
-    const [columnGripRect, rowGripRect, cornerRect] = await Promise.all(
-      [columnRailButton, rowRailButton, tableCornerButton].map((locator) =>
+    const [columnGripRect, rowGripRect, growHandleRect, structureMenuRect, cellMenuRect] = await Promise.all(
+      [columnRailButton, rowRailButton, tableGrowHandle, tableStructureMenuButton, tableCellMenuButton].map((locator) =>
         locator.evaluate((element) => {
           const rect = element.getBoundingClientRect()
           return { width: Math.round(rect.width), height: Math.round(rect.height) }
@@ -779,8 +783,12 @@ test.describe("block editor authoring flow", () => {
     )
     expect(columnGripRect.width).toBeGreaterThan(columnGripRect.height)
     expect(rowGripRect.height).toBeGreaterThan(rowGripRect.width)
-    expect(cornerRect.width).toBeLessThanOrEqual(26)
-    expect(cornerRect.height).toBeLessThanOrEqual(26)
+    expect(growHandleRect.width).toBeLessThanOrEqual(26)
+    expect(growHandleRect.height).toBeLessThanOrEqual(26)
+    expect(structureMenuRect.width).toBeLessThanOrEqual(26)
+    expect(structureMenuRect.height).toBeLessThanOrEqual(26)
+    expect(cellMenuRect.width).toBeLessThanOrEqual(24)
+    expect(cellMenuRect.height).toBeLessThanOrEqual(24)
 
     await page.mouse.move(tableBox.x + tableBox.width - 3, tableBox.y + tableBox.height - 3)
     await expect(columnQuickAddButton).toBeVisible()
@@ -790,12 +798,19 @@ test.describe("block editor authoring flow", () => {
       [columnQuickAddButton, rowQuickAddButton].map((locator) =>
         locator.evaluate((element) => {
           const rect = element.getBoundingClientRect()
-          return { width: Math.round(rect.width), height: Math.round(rect.height) }
+          return {
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+            left: Math.round(rect.left),
+            top: Math.round(rect.top),
+            right: Math.round(rect.right),
+            bottom: Math.round(rect.bottom),
+          }
         })
       )
     )
-    expect(columnAddRect.height).toBeGreaterThan(columnAddRect.width * 3)
-    expect(rowAddRect.width).toBeGreaterThan(rowAddRect.height * 3)
+    expect(Math.abs(columnAddRect.width - columnAddRect.height)).toBeLessThanOrEqual(4)
+    expect(Math.abs(rowAddRect.width - rowAddRect.height)).toBeLessThanOrEqual(4)
 
     const edgeAlignment = await page.evaluate(() => {
       const table = document.querySelector<HTMLElement>(".aq-block-editor__content .tableWrapper table")
@@ -807,16 +822,24 @@ test.describe("block editor authoring flow", () => {
       const columnAddRect = columnAddBar.getBoundingClientRect()
       const rowAddRect = rowAddBar.getBoundingClientRect()
       return {
-        columnGap: Math.round(columnAddRect.left - tableRect.right),
-        rowGap: Math.round(rowAddRect.top - tableRect.bottom),
+        columnEdgeCenterGap: Math.round(columnAddRect.left + columnAddRect.width / 2 - tableRect.right),
+        rowEdgeCenterGap: Math.round(rowAddRect.top + rowAddRect.height / 2 - tableRect.bottom),
+        columnVerticalCenterGap: Math.round(
+          columnAddRect.top + columnAddRect.height / 2 - (tableRect.top + tableRect.height / 2)
+        ),
+        rowHorizontalCenterGap: Math.round(
+          rowAddRect.left + rowAddRect.width / 2 - (tableRect.left + tableRect.width / 2)
+        ),
       }
     })
     expect(edgeAlignment).not.toBeNull()
     if (!edgeAlignment) {
       throw new Error("table edge alignment metrics are missing")
     }
-    expect(Math.abs(edgeAlignment.columnGap)).toBeLessThanOrEqual(2)
-    expect(Math.abs(edgeAlignment.rowGap)).toBeLessThanOrEqual(2)
+    expect(Math.abs(edgeAlignment.columnEdgeCenterGap)).toBeLessThanOrEqual(18)
+    expect(Math.abs(edgeAlignment.rowEdgeCenterGap)).toBeLessThanOrEqual(18)
+    expect(Math.abs(edgeAlignment.columnVerticalCenterGap)).toBeLessThanOrEqual(18)
+    expect(Math.abs(edgeAlignment.rowHorizontalCenterGap)).toBeLessThanOrEqual(18)
 
     await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
     await rowRailButton.click()
@@ -928,7 +951,7 @@ test.describe("block editor authoring flow", () => {
     const firstTableCell = page.locator("table th, table td").first()
     await firstTableCell.click()
     await firstTableCell.hover()
-    await page.getByTestId("table-corner-handle").getByRole("button", { name: "표 메뉴" }).click()
+    await page.getByTestId("table-structure-menu-button").click()
 
     const menu = page.getByTestId("table-table-menu")
     await expect(menu).toBeVisible()
@@ -1281,7 +1304,7 @@ test.describe("block editor authoring flow", () => {
     expect(metrics.pageScrollWidth).toBeLessThanOrEqual(metrics.viewportWidth + 2)
   })
 
-  test("table corner menu에서 제목 행 토글과 표 삭제가 동작한다", async ({ page }) => {
+  test("table corner grow handle은 row/column을 함께 확장한다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 
     await page.getByRole("button", { name: "테이블" }).click()
@@ -1289,21 +1312,88 @@ test.describe("block editor authoring flow", () => {
     await firstTableCell.click()
     await firstTableCell.hover()
 
-    const cornerHandleButton = page.getByTestId("table-corner-handle").getByRole("button", { name: "표 메뉴" })
-    await cornerHandleButton.click()
+    const growHandle = page.getByTestId("table-corner-grow-handle")
+    await expect(growHandle).toBeVisible()
+
+    const before = await page.evaluate(() => {
+      const firstRow = document.querySelector("table tr")
+      return {
+        rows: document.querySelectorAll("table tr").length,
+        columns: firstRow?.children.length ?? 0,
+      }
+    })
+
+    await growHandle.click()
+
+    await expect
+      .poll(async () => await page.locator("table tr").count())
+      .toBeGreaterThan(before.rows)
+    await expect
+      .poll(
+        async () =>
+          await page.evaluate(() => {
+            const firstRow = document.querySelector("table tr")
+            return firstRow?.children.length ?? 0
+          })
+      )
+      .toBeGreaterThan(before.columns)
+  })
+
+  test("table 구조 메뉴는 구조 액션만 포함하고 제목 행 토글과 표 삭제가 동작한다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    await page.getByRole("button", { name: "테이블" }).click()
+    const firstTableCell = page.locator("table th, table td").first()
+    await firstTableCell.click()
+    await firstTableCell.hover()
+
+    const structureMenuButton = page.getByTestId("table-structure-menu-button")
+    await structureMenuButton.click()
     const tableMenu = page.getByTestId("table-table-menu")
     await expect(tableMenu).toBeVisible()
     await expect(page.locator("table tr").first().locator("th")).toHaveCount(3)
     await expect(page.getByTestId("block-drag-handle")).toHaveCount(0)
+    await expect(tableMenu.getByRole("button", { name: "좌측" })).toHaveCount(0)
+    await expect(tableMenu.getByRole("button", { name: "배경 해제" })).toHaveCount(0)
 
     await tableMenu.getByRole("button", { name: "제목 행" }).click()
     await expect(page.locator("table tr").first().locator("th")).toHaveCount(0)
 
-    await cornerHandleButton.click()
+    await structureMenuButton.click()
     await expect(tableMenu).toBeVisible()
     await tableMenu.getByRole("button", { name: "표 삭제" }).click()
     await expect(page.locator(".aq-block-editor__content table")).toHaveCount(0)
     await expect(page.getByTestId("block-editor-prosemirror")).toBeVisible()
+  })
+
+  test("table cell menu는 셀 스타일만 포함하고 구조 액션 없이 정렬/배경을 저장한다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    await page.getByRole("button", { name: "테이블" }).click()
+    const firstTableCell = page.locator("table th, table td").first()
+    await firstTableCell.click()
+    await firstTableCell.hover()
+
+    const cellMenuButton = page.getByTestId("table-cell-menu-button")
+    await cellMenuButton.click()
+
+    const cellMenu = page.getByTestId("table-cell-menu")
+    await expect(cellMenu).toBeVisible()
+    await expect(cellMenu.getByRole("button", { name: "좌측" })).toBeVisible()
+    await expect(cellMenu.getByRole("button", { name: "가운데" })).toBeVisible()
+    await expect(cellMenu.getByRole("button", { name: "배경 해제" })).toBeVisible()
+    await expect(cellMenu.getByRole("button", { name: "제목 행" })).toHaveCount(0)
+    await expect(cellMenu.getByRole("button", { name: "표 삭제" })).toHaveCount(0)
+
+    await cellMenu.getByRole("button", { name: "가운데" }).click()
+    await cellMenu.getByRole("button", { name: "노랑 배경" }).click()
+
+    await expect
+      .poll(async () => (await page.getByTestId("qa-markdown-output").textContent()) || "")
+      .toContain('"align":"center"')
+    await expect
+      .poll(async () => (await page.getByTestId("qa-markdown-output").textContent()) || "")
+      .toContain('"backgroundColor":"#fef3c7"')
   })
 
   test("table 제목 행/열 토글 상태는 저장 후 재진입해도 유지된다", async ({ page }) => {
@@ -1314,9 +1404,7 @@ test.describe("block editor authoring flow", () => {
     await firstTableCell.click()
     await firstTableCell.hover()
 
-    const cornerHandleButton = page
-      .getByTestId("table-corner-handle")
-      .getByRole("button", { name: "표 메뉴" })
+    const cornerHandleButton = page.getByTestId("table-structure-menu-button")
 
     await cornerHandleButton.click()
     const tableMenu = page.getByTestId("table-table-menu")

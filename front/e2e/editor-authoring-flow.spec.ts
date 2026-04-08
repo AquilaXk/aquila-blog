@@ -749,7 +749,7 @@ test.describe("block editor authoring flow", () => {
     await page.mouse.up()
   })
 
-  test("table mode에서는 block rail이 숨고 table handle/menu가 유지된다", async ({ page }) => {
+  test("table hover에서도 block selection affordance를 다시 띄우고 table block selection으로 전환할 수 있다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 
     await page.getByRole("button", { name: "테이블" }).click()
@@ -771,7 +771,6 @@ test.describe("block editor authoring flow", () => {
     await expect(page.getByTestId("table-column-add-bar")).toHaveCount(0)
     await expect(page.getByTestId("table-row-add-bar")).toHaveCount(0)
     await expect(page.getByTestId("table-bubble-toolbar")).toHaveCount(0)
-    await expect(page.getByTestId("block-drag-handle")).toHaveCount(0)
 
     const tableWidthShape = await page.evaluate(() => {
       const contentRoot = document.querySelector<HTMLElement>(".aq-block-editor__content")
@@ -896,6 +895,7 @@ test.describe("block editor authoring flow", () => {
     await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
     await rowRailButton.click()
     await expect(page.getByTestId("table-row-selection-outline")).toBeVisible()
+    await expect(page.getByTestId("table-column-selection-outline")).toHaveCount(0)
     await expect(page.getByTestId("table-row-menu")).toBeVisible()
     await expect(page.getByTestId("table-row-menu").getByRole("button", { name: "행 삭제" })).toBeVisible()
     await page.keyboard.press("Escape")
@@ -911,11 +911,19 @@ test.describe("block editor authoring flow", () => {
     await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
     await columnRailButton.click()
     await expect(page.getByTestId("table-column-selection-outline")).toBeVisible()
+    await expect(page.getByTestId("table-row-selection-outline")).toHaveCount(0)
     const columnMenu = page.getByTestId("table-column-menu")
     await expect(columnMenu).toBeVisible()
     await expect(columnMenu.getByRole("button", { name: "열 삭제" })).toBeVisible()
     await columnMenu.getByRole("button", { name: "열 선택" }).click()
     await expect(page.getByTestId("table-column-menu")).toHaveCount(0)
+
+    await page.mouse.move(tableBox.x + 24, tableBox.y + 24)
+
+    const blockDragHandle = page.getByTestId("block-drag-handle")
+    await expect(blockDragHandle).toBeVisible()
+    await blockDragHandle.click()
+    await expect(page.getByTestId("keyboard-block-selection-overlay")).toBeVisible()
   })
 
   test("table rail segment selection은 fallback rect에서도 native text selection 없이 전체 열을 선택한다", async ({
@@ -1774,9 +1782,18 @@ test.describe("block editor authoring flow", () => {
     await textBubbleToolbar.getByRole("button", { name: "굵게", exact: true }).click()
 
     await selectWordInEditable(page, firstTableCell, "셀색상")
+    if ((await textBubbleToolbar.count()) === 0) {
+      await selectWordInEditable(page, firstTableCell, "셀색상")
+    }
     await expect(textBubbleToolbar).toBeVisible()
-    await textBubbleToolbar.locator("summary[aria-label='글자색']").click()
-    await textBubbleToolbar.getByRole("button", { name: "하늘", exact: true }).click()
+    const colorSummary = textBubbleToolbar.locator("summary[aria-label='글자색']")
+    await colorSummary.click()
+    const skyColorButton = textBubbleToolbar.getByRole("button", { name: "하늘", exact: true })
+    if ((await skyColorButton.count()) === 0) {
+      await colorSummary.click()
+    }
+    await expect(skyColorButton).toBeVisible()
+    await skyColorButton.dispatchEvent("click")
 
     const markdownOutput = page.getByTestId("qa-markdown-output")
     await expect(markdownOutput).toContainText("**셀굵게**")

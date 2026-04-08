@@ -258,6 +258,13 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).toContain("type TableAffordanceVisibility = {")
     expect(blockEditorEngineSource).toContain("extractTableAffordanceGeometry(tableQuickRailState)")
     expect(blockEditorEngineSource).toContain("extractTableAffordanceVisibility(tableQuickRailState)")
+    expect(blockEditorEngineSource).toContain("const isTableStructureMenuOpen = Boolean(tableMenuState)")
+    expect(blockEditorEngineSource).toContain(
+      "const shouldShowColumnAddBar = tableAffordanceVisibility.showColumnAddBar || isTableStructureMenuOpen"
+    )
+    expect(blockEditorEngineSource).toContain(
+      "const shouldShowRowAddBar = tableAffordanceVisibility.showRowAddBar || isTableStructureMenuOpen"
+    )
     expect(blockEditorEngineSource).toContain("findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)")
     expect(blockEditorEngineSource).toContain("display: none !important;")
     expect(editorStudioSource).toContain('import { useEditorStudioPersistence } from "./useEditorStudioPersistence"')

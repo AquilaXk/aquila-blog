@@ -5767,8 +5767,11 @@ const BlockEditorEngine = ({
     const { selection } = editor.state
     return selection instanceof CellSelection || (selection instanceof NodeSelection && selection.node.type.name === "table")
   }, [editor, selectionTick])
+  const isTableStructureMenuOpen = Boolean(tableMenuState)
   const shouldPersistTableHandles =
-    isTableStructuralSelection || Boolean(tableMenuState) || Boolean(draggedTableAxisState)
+    isTableStructuralSelection || isTableStructureMenuOpen || Boolean(draggedTableAxisState)
+  const shouldShowColumnAddBar = tableAffordanceVisibility.showColumnAddBar || isTableStructureMenuOpen
+  const shouldShowRowAddBar = tableAffordanceVisibility.showRowAddBar || isTableStructureMenuOpen
   const activeTableStructureState = useMemo(() => {
     void selectionTick
     return getActiveTableStructureState(editor)
@@ -7983,7 +7986,7 @@ const BlockEditorEngine = ({
               </TableQuickRailButton>
             </TableAxisRail>
           ) : null}
-          {tableAffordanceVisibility.showColumnAddBar ? (
+          {shouldShowColumnAddBar ? (
             <TableTrailingAddBar
               type="button"
               data-table-axis-rail="true"
@@ -8023,7 +8026,7 @@ const BlockEditorEngine = ({
               <TableHandleIcon kind="plus" />
             </TableTrailingAddBar>
           ) : null}
-          {tableAffordanceVisibility.showRowAddBar ? (
+          {shouldShowRowAddBar ? (
             <TableTrailingAddBar
               type="button"
               data-table-axis-rail="true"

@@ -800,6 +800,8 @@ test.describe("block editor authoring flow", () => {
     expect(cellMenuRect.width).toBeLessThanOrEqual(24)
     expect(cellMenuRect.height).toBeLessThanOrEqual(24)
 
+    await tableStructureMenuButton.click()
+    await expect(page.getByTestId("table-table-menu")).toBeVisible()
     await page.mouse.move(tableBox.x + tableBox.width - 8, tableBox.y + tableBox.height - 8)
     await expect(columnQuickAddButton).toBeVisible()
     await expect(rowQuickAddButton).toBeVisible()

@@ -1056,9 +1056,11 @@ test.describe("block editor authoring flow", () => {
           const columnRail = document.querySelector<HTMLElement>("[data-testid='table-column-rail']")
           const corner = document.querySelector<HTMLElement>("[data-testid='table-corner-handle']")
           const rowRail = document.querySelector<HTMLElement>("[data-testid='table-row-rail']")
+          const columnRailButton = columnRail?.querySelector<HTMLElement>("button") ?? null
+          const rowRailButton = rowRail?.querySelector<HTMLElement>("button") ?? null
           const table = document.querySelector<HTMLElement>(".aq-block-editor__content .tableWrapper table")
           const content = document.querySelector<HTMLElement>(".aq-block-editor__content")
-          if (!columnRail || !corner || !rowRail || !table || !content) return null
+          if (!columnRail || !columnRailButton || !corner || !rowRail || !rowRailButton || !table || !content) return null
 
           const toRect = (element: HTMLElement) => {
             const rect = element.getBoundingClientRect()
@@ -1068,6 +1070,7 @@ test.describe("block editor authoring flow", () => {
               right: Math.round(rect.right),
               bottom: Math.round(rect.bottom),
               width: Math.round(rect.width),
+              height: Math.round(rect.height),
             }
           }
 
@@ -1078,11 +1081,23 @@ test.describe("block editor authoring flow", () => {
             rect.bottom <= viewportHeight - 8
 
           return {
+            rowRailRect: toRect(rowRail),
+            columnRailRect: toRect(columnRail),
             tableWidth: Math.round(table.getBoundingClientRect().width),
             contentWidth: Math.round(content.getBoundingClientRect().width),
             cornerWithinViewport: withinViewport(toRect(corner)),
             rowWithinViewport: withinViewport(toRect(rowRail)),
             columnWithinViewport: withinViewport(toRect(columnRail)),
+            rowGripCompact: (() => {
+              const railRect = toRect(rowRail)
+              const buttonRect = toRect(rowRailButton)
+              return buttonRect.width <= railRect.width - 4 && buttonRect.height <= railRect.height - 10
+            })(),
+            columnGripCompact: (() => {
+              const railRect = toRect(columnRail)
+              const buttonRect = toRect(columnRailButton)
+              return buttonRect.width <= railRect.width - 10 && buttonRect.height <= railRect.height - 4
+            })(),
           }
         })
 
@@ -1096,6 +1111,8 @@ test.describe("block editor authoring flow", () => {
               cornerWithinViewport: metrics.cornerWithinViewport,
               rowWithinViewport: metrics.rowWithinViewport,
               columnWithinViewport: metrics.columnWithinViewport,
+              rowGripCompact: metrics.rowGripCompact,
+              columnGripCompact: metrics.columnGripCompact,
             }
           },
           { timeout: 5000 }
@@ -1105,6 +1122,8 @@ test.describe("block editor authoring flow", () => {
           cornerWithinViewport: true,
           rowWithinViewport: true,
           columnWithinViewport: true,
+          rowGripCompact: true,
+          columnGripCompact: true,
         })
 
       await moveToTrailingHotzone()
@@ -1237,6 +1256,93 @@ test.describe("block editor authoring flow", () => {
 
     await expect(page.getByTestId("table-column-add-bar")).toBeVisible()
     await expect(page.getByTestId("table-row-add-bar")).toBeVisible()
+  })
+
+  test("writer surface의 pasted 4열 table에서도 row/column menu가 계속 동작한다", async ({ page }) => {
+    await page.setViewportSize({ width: 1680, height: 1500 })
+    await page.goto(QA_WRITER_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+
+    const tableMarkdown = [
+      "| 축 | 대표 지표 | 의미 | 자주 하는 오해 |",
+      "| --- | --- | --- | --- |",
+      "| 처리량 | TPS / RPS | 초당 얼마나 많은 요청과 트랜잭션을 처리하는가 | 처리량이 높으면 시스템이 건강하다고 생각함 |",
+      "| 지연 | P95 / P99 | 느린 요청의 꼬리 지연을 확인 | 평균 응답 시간만 보고 빠르다고 결론냄 |",
+      "| 안정성 | Error Rate | 타임아웃, 5xx, 재시도 증가를 포함해 실패를 측정 | 에러를 일시적 네트워크 문제로만 봄 |",
+      "| 자원 | CPU, 메모리, 스레드, 커넥션 | 병목이 애플리케이션인지 인프라인지 좁히는 단서 | 리소스가 남아 있으면 안전하다고 생각함 |",
+    ].join("\n")
+
+    await editor.evaluate((element, markdown) => {
+      const data = new DataTransfer()
+      data.setData("text/plain", markdown)
+      const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true })
+      Object.defineProperty(event, "clipboardData", { value: data })
+      element.dispatchEvent(event)
+    }, tableMarkdown)
+
+    const table = page.locator(".aq-block-editor__content .tableWrapper table")
+    const tableSurface = page.locator(".aq-block-editor__content .tableWrapper")
+    await expect(table.locator("tr")).toHaveCount(5)
+    await expect(table.locator("tr").first().locator("th, td")).toHaveCount(4)
+
+    const firstTableCell = table.locator("tr").first().locator("th, td").first()
+    await firstTableCell.click()
+
+    const getTableSurfaceBox = async () => {
+      const box = await tableSurface.boundingBox()
+      if (!box) {
+        throw new Error("writer 4x4 growth table bounding box is missing")
+      }
+      return box
+    }
+
+    const moveToTopLeftHotzone = async () => {
+      const box = await getTableSurfaceBox()
+      await page.mouse.move(box.x + 3, box.y + 3)
+    }
+    const moveToBottomRightHotzone = async () => {
+      const box = await getTableSurfaceBox()
+      await page.mouse.move(box.x + box.width - 3, box.y + box.height - 3)
+    }
+    await moveToTopLeftHotzone()
+
+    const rowMenuButton = page.getByTestId("table-row-rail").getByRole("button", { name: "행 메뉴" })
+    const columnMenuButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })
+
+    await expect(rowMenuButton).toBeVisible()
+    await expect(columnMenuButton).toBeVisible()
+
+    await rowMenuButton.click()
+    const rowMenu = page.getByTestId("table-row-menu")
+    await expect(rowMenu).toBeVisible()
+    await rowMenu.getByRole("button", { name: "아래에 삽입" }).click()
+    await expect(table.locator("tr")).toHaveCount(6)
+
+    await moveToTopLeftHotzone()
+    await columnMenuButton.click()
+    const columnMenu = page.getByTestId("table-column-menu")
+    await expect(columnMenu).toBeVisible()
+    await columnMenu.getByRole("button", { name: "오른쪽에 삽입" }).click()
+    await expect(table.locator("tr").first().locator("th, td")).toHaveCount(5)
+
+    const rowAddBar = page.getByTestId("table-row-add-bar")
+    const columnAddBar = page.getByTestId("table-column-add-bar")
+    await page.evaluate(() => {
+      window.scrollTo(0, document.body.scrollHeight)
+    })
+    await page.waitForTimeout(120)
+    await moveToBottomRightHotzone()
+    await expect(rowAddBar).toBeVisible()
+    await expect(columnAddBar).toBeVisible()
+
+    await rowAddBar.click()
+    await expect(table.locator("tr")).toHaveCount(7)
+
+    await moveToBottomRightHotzone()
+    await columnAddBar.click()
+    await expect(table.locator("tr").first().locator("th, td")).toHaveCount(6)
   })
 
   test("모바일 뷰포트에서는 표만 wrapper 내부 가로 스크롤을 사용하고 페이지 전체 overflow는 생기지 않는다", async ({

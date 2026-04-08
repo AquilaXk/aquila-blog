@@ -231,6 +231,10 @@ type TableAffordanceGeometry = {
   tableTop: number
   width: number
   height: number
+  surfaceLeft: number
+  surfaceTop: number
+  surfaceWidth: number
+  surfaceHeight: number
   cellLeft: number
   cellTop: number
   cellWidth: number
@@ -387,6 +391,10 @@ const INITIAL_TABLE_AFFORDANCE_GEOMETRY: TableAffordanceGeometry = {
   tableTop: 0,
   width: 0,
   height: 0,
+  surfaceLeft: 0,
+  surfaceTop: 0,
+  surfaceWidth: 0,
+  surfaceHeight: 0,
   cellLeft: 0,
   cellTop: 0,
   cellWidth: 0,
@@ -812,6 +820,11 @@ const TABLE_COLUMN_GRIP_WIDTH_PX = 40
 const TABLE_COLUMN_GRIP_HEIGHT_PX = 22
 const TABLE_ROW_GRIP_WIDTH_PX = 22
 const TABLE_ROW_GRIP_HEIGHT_PX = 40
+const TABLE_COLUMN_GRIP_BUTTON_WIDTH_PX = 26
+const TABLE_COLUMN_GRIP_BUTTON_HEIGHT_PX = 16
+const TABLE_ROW_GRIP_BUTTON_WIDTH_PX = 16
+const TABLE_ROW_GRIP_BUTTON_HEIGHT_PX = 26
+const TABLE_AXIS_GRIP_EDGE_INSET_PX = 0
 const TABLE_ADD_BAR_THICKNESS_PX = 28
 const TABLE_ADD_BAR_VIEWPORT_PADDING_PX = 8
 const TABLE_AXIS_RAIL_EDGE_HOTZONE_PX = 18
@@ -1022,14 +1035,16 @@ const clampViewportPosition = (
 const resolveDesktopTableRailLayout = (
   state: TableAffordanceGeometry
 ) => {
-  const visibleTableWidth = Math.max(0, Math.round(state.width))
-  const visibleTableHeight = Math.max(0, Math.round(state.height))
+  const visibleSurfaceLeft = Math.round(state.surfaceLeft || state.tableLeft)
+  const visibleSurfaceTop = Math.round(state.surfaceTop || state.tableTop)
+  const visibleTableWidth = Math.max(0, Math.round(state.surfaceWidth || state.width))
+  const visibleTableHeight = Math.max(0, Math.round(state.surfaceHeight || state.height))
   const columnGripTop = Math.round(
-    state.tableTop - Math.round(TABLE_COLUMN_GRIP_HEIGHT_PX / 2) + TABLE_EDGE_HANDLE_INSET_PX
+    visibleSurfaceTop - Math.round(TABLE_COLUMN_GRIP_HEIGHT_PX / 2) + TABLE_AXIS_GRIP_EDGE_INSET_PX
   )
-  const cornerTop = Math.round(state.tableTop + TABLE_EDGE_HANDLE_INSET_PX)
+  const cornerTop = Math.round(visibleSurfaceTop + TABLE_EDGE_HANDLE_INSET_PX)
   const cornerLeft = Math.round(
-    state.tableLeft + visibleTableWidth - TABLE_CORNER_CLUSTER_WIDTH_PX - TABLE_EDGE_HANDLE_INSET_PX
+    visibleSurfaceLeft + visibleTableWidth - TABLE_CORNER_CLUSTER_WIDTH_PX - TABLE_EDGE_HANDLE_INSET_PX
   )
   const columnGripLeft = Math.round(
     state.columnLeft + Math.max(0, state.columnWidth / 2 - TABLE_COLUMN_GRIP_WIDTH_PX / 2)
@@ -1037,36 +1052,36 @@ const resolveDesktopTableRailLayout = (
   const columnAddBarLeft =
     typeof window === "undefined"
       ? Math.round(
-          state.tableLeft + visibleTableWidth - Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX
+          visibleSurfaceLeft + visibleTableWidth - Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX
         )
       : clampViewportPosition(
           Math.round(
-            state.tableLeft + visibleTableWidth - Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX
+            visibleSurfaceLeft + visibleTableWidth - Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX
           ),
           TABLE_ADD_BAR_VIEWPORT_PADDING_PX,
           window.innerWidth,
           TABLE_EDGE_ADD_BUTTON_SIZE_PX
         )
   const columnAddBarTop = Math.round(
-    state.tableTop + Math.max(0, visibleTableHeight / 2 - TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2)
+    visibleSurfaceTop + Math.max(0, visibleTableHeight / 2 - TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2)
   )
   const rowGripTop = Math.round(
     state.rowTop + Math.max(0, state.rowHeight / 2 - TABLE_ROW_GRIP_HEIGHT_PX / 2)
   )
   const rowGripLeft = Math.round(
-    state.tableLeft - Math.round(TABLE_ROW_GRIP_WIDTH_PX / 2) + TABLE_EDGE_HANDLE_INSET_PX
+    visibleSurfaceLeft - Math.round(TABLE_ROW_GRIP_WIDTH_PX / 2) + TABLE_AXIS_GRIP_EDGE_INSET_PX
   )
   const rowAddBarLeft = Math.round(
-    state.tableLeft + Math.max(0, visibleTableWidth / 2 - TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2)
+    visibleSurfaceLeft + Math.max(0, visibleTableWidth / 2 - TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2)
   )
   const rowAddBarTop =
     typeof window === "undefined"
       ? Math.round(
-          state.tableTop + state.height - Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX
+          visibleSurfaceTop + visibleTableHeight - Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX
         )
       : clampViewportPosition(
           Math.round(
-            state.tableTop + state.height - Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX
+            visibleSurfaceTop + visibleTableHeight - Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX
           ),
           TABLE_ADD_BAR_VIEWPORT_PADDING_PX,
           window.innerHeight,
@@ -4078,8 +4093,9 @@ const BlockEditorEngine = ({
       tableSurfaceElement instanceof HTMLTableElement
         ? tableSurfaceElement
         : (tableSurfaceElement?.querySelector("table") as HTMLTableElement | null)
+    const tableSurfaceRect = tableSurfaceElement?.getBoundingClientRect()
     const tableRect = tableElement?.getBoundingClientRect()
-    if (!tableElement || !tableRect) {
+    if (!tableElement || !tableRect || !tableSurfaceRect) {
       hideTableQuickRailImmediately()
       return
     }
@@ -4099,30 +4115,34 @@ const BlockEditorEngine = ({
       Number.isFinite(hoverClientX) &&
       typeof hoverClientY === "number" &&
       Number.isFinite(hoverClientY)
+    const visibleLeft = Math.round(tableSurfaceRect.left)
+    const visibleTop = Math.round(tableSurfaceRect.top)
+    const visibleRight = Math.round(tableSurfaceRect.right)
+    const visibleBottom = Math.round(tableSurfaceRect.bottom)
     const showColumnAddBar =
       hasHoverPoint &&
-      hoverClientX >= tableRect.right - TABLE_TRAILING_ADD_EDGE_HOTZONE_PX &&
-      hoverClientX <= tableRect.right + TABLE_ADD_BAR_THICKNESS_PX &&
-      hoverClientY >= tableRect.top &&
-      hoverClientY <= tableRect.bottom
+      hoverClientX >= visibleRight - TABLE_TRAILING_ADD_EDGE_HOTZONE_PX &&
+      hoverClientX <= visibleRight + TABLE_ADD_BAR_THICKNESS_PX &&
+      hoverClientY >= visibleTop &&
+      hoverClientY <= visibleBottom
     const showColumnRail =
       hasHoverPoint &&
       Boolean(activeCellRect) &&
-      hoverClientY >= tableRect.top - TABLE_COLUMN_GRIP_HEIGHT_PX &&
-      hoverClientY <= tableRect.top + TABLE_AXIS_RAIL_EDGE_HOTZONE_PX &&
+      hoverClientY >= visibleTop - TABLE_COLUMN_GRIP_HEIGHT_PX &&
+      hoverClientY <= visibleTop + TABLE_AXIS_RAIL_EDGE_HOTZONE_PX &&
       hoverClientX >= activeColumnLeft &&
       hoverClientX <= activeColumnRight
     const showRowAddBar =
       hasHoverPoint &&
-      hoverClientY >= tableRect.bottom - TABLE_TRAILING_ADD_EDGE_HOTZONE_PX &&
-      hoverClientY <= tableRect.bottom + TABLE_ADD_BAR_THICKNESS_PX &&
-      hoverClientX >= tableRect.left &&
-      hoverClientX <= tableRect.right
+      hoverClientY >= visibleBottom - TABLE_TRAILING_ADD_EDGE_HOTZONE_PX &&
+      hoverClientY <= visibleBottom + TABLE_ADD_BAR_THICKNESS_PX &&
+      hoverClientX >= visibleLeft &&
+      hoverClientX <= visibleRight
     const showRowRail =
       hasHoverPoint &&
       Boolean(activeRowRect) &&
-      hoverClientX >= tableRect.left - TABLE_ROW_GRIP_WIDTH_PX &&
-      hoverClientX <= tableRect.left + TABLE_AXIS_RAIL_EDGE_HOTZONE_PX &&
+      hoverClientX >= visibleLeft - TABLE_ROW_GRIP_WIDTH_PX &&
+      hoverClientX <= visibleLeft + TABLE_AXIS_RAIL_EDGE_HOTZONE_PX &&
       hoverClientY >= activeRowTopBound &&
       hoverClientY <= activeRowBottomBound
     const activeRowIndex = activeRow
@@ -4149,6 +4169,10 @@ const BlockEditorEngine = ({
       tableTop: Math.round(tableRect.top),
       width: Math.round(tableRect.width),
       height: Math.round(tableRect.height),
+      surfaceLeft: visibleLeft,
+      surfaceTop: visibleTop,
+      surfaceWidth: Math.round(tableSurfaceRect.width),
+      surfaceHeight: Math.round(tableSurfaceRect.height),
       cellLeft: Math.round(activeCellRect?.left ?? tableRect.left + 16),
       cellTop: Math.round(activeCellRect?.top ?? tableRect.top + 16),
       cellWidth: Math.round(activeCellRect?.width ?? 120),
@@ -7875,7 +7899,7 @@ const BlockEditorEngine = ({
                 left: `${
                   desktopTableRailLayout?.rowGripLeft ??
                   Math.round(
-                    tableAffordanceGeometry.tableLeft - Math.round(TABLE_ROW_GRIP_WIDTH_PX / 2) + TABLE_EDGE_HANDLE_INSET_PX
+                    tableAffordanceGeometry.tableLeft - Math.round(TABLE_ROW_GRIP_WIDTH_PX / 2) + TABLE_AXIS_GRIP_EDGE_INSET_PX
                   )
                 }px`,
                 top: `${
@@ -7934,7 +7958,7 @@ const BlockEditorEngine = ({
                 top: `${
                   desktopTableRailLayout?.columnGripTop ??
                   Math.round(
-                    tableAffordanceGeometry.tableTop - Math.round(TABLE_COLUMN_GRIP_HEIGHT_PX / 2) + TABLE_EDGE_HANDLE_INSET_PX
+                    tableAffordanceGeometry.tableTop - Math.round(TABLE_COLUMN_GRIP_HEIGHT_PX / 2) + TABLE_AXIS_GRIP_EDGE_INSET_PX
                   )
                 }px`,
               }}
@@ -10423,10 +10447,14 @@ const TableAxisRail = styled.div`
 
   &[data-axis="column"] {
     justify-content: center;
+    width: ${TABLE_COLUMN_GRIP_WIDTH_PX}px;
+    height: ${TABLE_COLUMN_GRIP_HEIGHT_PX}px;
   }
 
   &[data-axis="row"] {
     justify-content: center;
+    width: ${TABLE_ROW_GRIP_WIDTH_PX}px;
+    height: ${TABLE_ROW_GRIP_HEIGHT_PX}px;
   }
 `
 
@@ -10645,14 +10673,14 @@ const TableQuickRailButton = styled.button`
   align-items: center;
   justify-content: center;
   padding: 0;
-  border-radius: 0.55rem;
+  border-radius: 999px;
   border: 1px solid ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(59, 130, 246, 0.22)" : "rgba(37, 99, 235, 0.18)"};
+    theme.scheme === "dark" ? "rgba(96, 165, 250, 0.24)" : "rgba(59, 130, 246, 0.18)"};
   background: ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(23, 37, 84, 0.72)" : "rgba(255, 255, 255, 0.96)"};
+    theme.scheme === "dark" ? "rgba(30, 41, 59, 0.92)" : "rgba(255, 255, 255, 0.96)"};
   color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(241, 245, 249, 0.86)" : "rgba(51, 65, 85, 0.82)")};
   box-shadow: ${({ theme }) =>
-    theme.scheme === "dark" ? "0 8px 18px rgba(2, 6, 23, 0.26)" : "0 8px 18px rgba(15, 23, 42, 0.08)"};
+    theme.scheme === "dark" ? "0 6px 14px rgba(2, 6, 23, 0.24)" : "0 6px 14px rgba(15, 23, 42, 0.08)"};
   cursor: pointer;
   transition:
     background-color 120ms ease,
@@ -10662,13 +10690,18 @@ const TableQuickRailButton = styled.button`
     transform 120ms ease;
 
   &[data-axis="column"] {
-    width: ${TABLE_COLUMN_GRIP_WIDTH_PX}px;
-    height: ${TABLE_COLUMN_GRIP_HEIGHT_PX}px;
+    width: ${TABLE_COLUMN_GRIP_BUTTON_WIDTH_PX}px;
+    height: ${TABLE_COLUMN_GRIP_BUTTON_HEIGHT_PX}px;
   }
 
   &[data-axis="row"] {
-    width: ${TABLE_ROW_GRIP_WIDTH_PX}px;
-    height: ${TABLE_ROW_GRIP_HEIGHT_PX}px;
+    width: ${TABLE_ROW_GRIP_BUTTON_WIDTH_PX}px;
+    height: ${TABLE_ROW_GRIP_BUTTON_HEIGHT_PX}px;
+  }
+
+  &[data-axis] svg {
+    width: 0.72rem;
+    height: 0.72rem;
   }
 
   pointer-events: auto;
@@ -10676,7 +10709,7 @@ const TableQuickRailButton = styled.button`
   &::after {
     content: "";
     position: absolute;
-    inset: -0.22rem;
+    inset: -0.5rem;
   }
 
   &:hover,
@@ -10687,7 +10720,7 @@ const TableQuickRailButton = styled.button`
       theme.scheme === "dark" ? "rgba(191, 219, 254, 0.52)" : "rgba(59, 130, 246, 0.42)"};
     color: ${({ theme }) => (theme.scheme === "dark" ? "#ffffff" : "rgba(30, 64, 175, 0.92)")};
     box-shadow: ${({ theme }) =>
-      theme.scheme === "dark" ? "0 10px 20px rgba(2, 6, 23, 0.34)" : "0 8px 18px rgba(59, 130, 246, 0.18)"};
+      theme.scheme === "dark" ? "0 8px 18px rgba(2, 6, 23, 0.3)" : "0 8px 18px rgba(59, 130, 246, 0.18)"};
     transform: translateY(-1px);
   }
 

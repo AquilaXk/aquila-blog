@@ -390,6 +390,8 @@ test("iPhone 15 Pro 상세 액션은 메타/공유/댓글/작성자 유틸리티
   expect(Math.abs((hitBox?.y ?? 0) - (likeBox?.y ?? 0))).toBeLessThanOrEqual(4)
   expect((likeBox?.x ?? 0)).toBeGreaterThan((hitBox?.x ?? 0))
   expect((likeBox?.width ?? 0)).toBeGreaterThan((hitBox?.width ?? 0))
+  expect((hitBox?.height ?? 0)).toBeLessThanOrEqual(72)
+  expect((likeBox?.height ?? 0)).toBeLessThanOrEqual(72)
   expect((shareBox?.y ?? 0)).toBeGreaterThan((likeBox?.y ?? 0) + ((likeBox?.height ?? 0) * 0.6))
   expect(Math.abs((shareBox?.y ?? 0) - (commentActionBox?.y ?? 0))).toBeLessThanOrEqual(4)
   expect((editBox?.y ?? 0)).toBeLessThan((likeBox?.y ?? 0))

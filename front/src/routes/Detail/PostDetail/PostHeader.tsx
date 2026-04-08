@@ -421,20 +421,19 @@ const StyledWrapper = styled.header`
 
   .mobileLikeButton {
     display: none;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
-    gap: 0.44rem;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.72rem;
     min-height: 40px;
-    padding: 0.72rem 0.9rem;
-    border-radius: 14px;
+    padding: 0.72rem 0.96rem;
+    border-radius: 999px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
+    background: linear-gradient(135deg, ${({ theme }) => theme.colors.gray2} 0%, ${({ theme }) => theme.colors.gray3} 100%);
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 0.88rem;
     font-weight: 700;
     cursor: pointer;
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
+    box-shadow: 0 16px 30px rgba(0, 0, 0, 0.16);
     transition:
       border-color 0.18s ease,
       background-color 0.18s ease,
@@ -447,7 +446,7 @@ const StyledWrapper = styled.header`
 
     &[data-active="true"] {
       border-color: ${({ theme }) => theme.colors.red7};
-      background: ${({ theme }) => theme.colors.red3};
+      background: linear-gradient(135deg, ${({ theme }) => theme.colors.red3} 0%, ${({ theme }) => theme.colors.gray3} 100%);
 
       svg {
         color: ${({ theme }) => theme.colors.red10};
@@ -464,17 +463,27 @@ const StyledWrapper = styled.header`
     display: inline-flex;
     align-items: center;
     gap: 0.42rem;
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.8rem;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.84rem;
     font-weight: 700;
     line-height: 1;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
   }
 
   .mobileLikeValue {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.4rem;
+    padding: 0.32rem 0.62rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1.34rem;
+    font-size: 1rem;
+    font-weight: 800;
     line-height: 1;
-    letter-spacing: -0.03em;
+    letter-spacing: -0.02em;
   }
 
   .likeButton {
@@ -623,14 +632,15 @@ const StyledWrapper = styled.header`
     .engagementRow {
       width: 100%;
       display: grid;
-      gap: 0.55rem;
+      gap: 0.52rem;
     }
 
     .stats {
       width: 100%;
       display: grid;
-      grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
-      gap: 0.6rem;
+      grid-template-columns: minmax(6.4rem, max-content) minmax(0, 1fr);
+      align-items: stretch;
+      gap: 0.52rem;
     }
 
     .mobileLikeButton {
@@ -659,26 +669,35 @@ const StyledWrapper = styled.header`
 
     .viewStatChip,
     .mobileLikeButton {
-      min-height: 64px;
-      border-radius: 16px;
-      padding: 0.85rem 0.95rem;
+      min-height: 52px;
     }
 
     .viewStatChip {
-      flex-direction: column;
-      align-items: flex-start;
-      justify-content: center;
-      gap: 0.52rem;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      border-radius: 999px;
+      padding: 0 0.9rem;
       background: ${({ theme }) => theme.colors.gray2};
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
     }
 
     .statMetaLabel {
-      font-size: 0.8rem;
+      font-size: 0.77rem;
+      white-space: nowrap;
     }
 
-    .statMetricValue,
+    .statMetricValue {
+      font-size: 1.08rem;
+      font-weight: 800;
+    }
+
+    .mobileLikeButton {
+      padding: 0 1rem 0 1.02rem;
+    }
+
     .mobileLikeValue {
-      font-size: 1.4rem;
+      font-size: 1rem;
     }
 
     .likeButton,

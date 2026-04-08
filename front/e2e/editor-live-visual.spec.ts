@@ -64,4 +64,56 @@ test.describe("editor live visual regression", () => {
 
     expect(Math.abs(headingBox.x - paragraphBox.x)).toBeLessThanOrEqual(4)
   })
+
+  test("실제 /editor/new는 table affordance가 제품 셸 clipping 없이 노출된다", async ({ page }) => {
+    test.slow()
+    await page.setViewportSize({ width: 1512, height: 982 })
+    await loginThroughUi(page)
+
+    await page.goto("/editor/new")
+    await page.waitForURL(/\/editor(\/|$)/, { timeout: 30000 })
+    await page.getByPlaceholder("제목을 입력하세요").first().fill("실화면 테이블 affordance 회귀 점검")
+
+    const editor = page.getByTestId("block-editor-prosemirror").first()
+    await editor.click()
+    await page.getByRole("button", { name: "테이블", exact: true }).first().click()
+
+    const table = page.locator(".aq-block-editor__content .tableWrapper table").first()
+    await expect(table).toBeVisible()
+
+    const tableBox = await table.boundingBox()
+    if (!tableBox) {
+      throw new Error("table bounding box is missing")
+    }
+
+    await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
+
+    const cornerHandle = page.getByTestId("table-corner-handle")
+    const rowRail = page.getByTestId("table-row-rail")
+    const columnRail = page.getByTestId("table-column-rail")
+
+    await expect(cornerHandle).toBeVisible()
+    await expect(rowRail).toBeVisible()
+    await expect(columnRail).toBeVisible()
+
+    await page.mouse.move(tableBox.x + tableBox.width - 3, tableBox.y + tableBox.height - 3)
+
+    const columnAddBar = page.getByTestId("table-column-add-bar")
+    const rowAddBar = page.getByTestId("table-row-add-bar")
+    await expect(columnAddBar).toBeVisible()
+    await expect(rowAddBar).toBeVisible()
+
+    const viewport = page.viewportSize()
+    const addBarBoxes = await Promise.all([columnAddBar.boundingBox(), rowAddBar.boundingBox()])
+    const [columnAddBarBox, rowAddBarBox] = addBarBoxes
+    expect(viewport).not.toBeNull()
+    expect(columnAddBarBox).not.toBeNull()
+    expect(rowAddBarBox).not.toBeNull()
+    if (!viewport || !columnAddBarBox || !rowAddBarBox) return
+
+    expect(columnAddBarBox.x + columnAddBarBox.width).toBeLessThanOrEqual(viewport.width)
+    expect(rowAddBarBox.y + rowAddBarBox.height).toBeLessThanOrEqual(viewport.height)
+    expect(columnAddBarBox.x).toBeGreaterThanOrEqual(tableBox.x + tableBox.width - 4)
+    expect(rowAddBarBox.y).toBeGreaterThanOrEqual(tableBox.y + tableBox.height - 4)
+  })
 })

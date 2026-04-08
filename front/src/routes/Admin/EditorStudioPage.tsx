@@ -8781,7 +8781,7 @@ const EditorStudioFrame = styled.div`
   gap: 1.4rem;
   align-items: start;
   justify-content: center;
-  overflow-x: clip;
+  overflow-x: visible;
 
   @media (min-width: 1024px) {
     grid-template-columns: minmax(0, 1fr);
@@ -8793,7 +8793,7 @@ const EditorStudioWritingColumn = styled.section<{ $compact?: boolean }>`
   display: grid;
   min-width: 0;
   gap: ${({ $compact }) => ($compact ? "0.88rem" : "1rem")};
-  overflow-x: clip;
+  overflow-x: visible;
 `
 
 const EditorStudioMetaSection = styled.section<{ $compact?: boolean }>`
@@ -8909,7 +8909,7 @@ const EditorStudioCanvas = styled.section`
   min-height: clamp(28rem, 70vh, 56rem);
   display: grid;
   gap: 0.72rem;
-  overflow-x: clip;
+  overflow-x: visible;
 `
 
 const EditorStudioResultPanel = styled.section`

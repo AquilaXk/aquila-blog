@@ -269,6 +269,19 @@ const MarkdownTableRenderer = ({
 }) => {
   const rowCursorRef = useRef(0)
   const columnWidths = layout?.columnWidths || []
+  const normalizedColumnWidths = useMemo(
+    () =>
+      columnWidths.map((width) =>
+        typeof width === "number" && Number.isFinite(width) && width > 0
+          ? Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(width))
+          : null
+      ),
+    [columnWidths]
+  )
+  const explicitTableWidth = useMemo(
+    () => normalizedColumnWidths.reduce<number>((sum, width) => sum + (width || 0), 0),
+    [normalizedColumnWidths]
+  )
   rowCursorRef.current = 0
   const contextValue = useMemo<MarkdownTableRenderContextValue>(
     () => ({
@@ -297,15 +310,23 @@ const MarkdownTableRenderer = ({
               .filter(Boolean)
               .join(" ")}
             data-overflow-mode={layout?.overflowMode === "wide" ? "wide" : undefined}
+            style={
+              explicitTableWidth > 0
+                ? {
+                    width: `${explicitTableWidth}px`,
+                    minWidth: `${explicitTableWidth}px`,
+                  }
+                : undefined
+            }
           >
-            {columnWidths.some((width) => typeof width === "number" && width > 0) ? (
+            {normalizedColumnWidths.some((width) => typeof width === "number" && width > 0) ? (
               <colgroup>
-                {columnWidths.map((width, index) => {
+                {normalizedColumnWidths.map((width, index) => {
                   if (!width) return <col key={`table-col-${index}`} />
                   return (
                     <col
                       key={`table-col-${index}`}
-                      style={{ width: `${Math.max(TABLE_MIN_COLUMN_WIDTH_PX, width)}px` }}
+                      style={{ width: `${width}px` }}
                     />
                   )
                 })}

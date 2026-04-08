@@ -1767,6 +1767,7 @@ const BlockEditorEngine = ({
   })
   const [selectionTick, setSelectionTick] = useState(0)
   const selectionUiSignatureRef = useRef("")
+  const blockSelectionLayoutRectCacheRef = useRef(new Map<number, { element: HTMLElement; rect: DOMRect }>())
 
   const cancelHoveredBlockClear = useCallback(() => {
     if (hoveredBlockClearTimerRef.current !== null && typeof window !== "undefined") {
@@ -5941,6 +5942,17 @@ const BlockEditorEngine = ({
 
   useEffect(() => {
     if (!editor) return
+    const rectCache = blockSelectionLayoutRectCacheRef.current
+    rectCache.clear()
+    const resolveCachedBlockRect = (index: number) => {
+      const cached = rectCache.get(index)
+      if (cached) return cached
+      const element = getTopLevelBlockElementByIndex(index)
+      if (!element) return null
+      const next = { element, rect: element.getBoundingClientRect() }
+      rectCache.set(index, next)
+      return next
+    }
     const overlayIndex =
       selectedBlockNodeIndex !== null
         ? selectedBlockNodeIndex
@@ -5950,11 +5962,11 @@ const BlockEditorEngine = ({
     if (overlayIndex === null) {
       setBlockSelectionOverlayState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
     } else {
-      const overlayElement = getTopLevelBlockElementByIndex(overlayIndex)
-      if (!overlayElement) {
+      const overlayTarget = resolveCachedBlockRect(overlayIndex)
+      if (!overlayTarget) {
         setBlockSelectionOverlayState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
       } else {
-        const rect = overlayElement.getBoundingClientRect()
+        const { rect } = overlayTarget
         const nextOverlayState: BlockSelectionOverlayState = {
           visible: true,
           left: rect.left - 6,
@@ -5985,7 +5997,8 @@ const BlockEditorEngine = ({
       hideBlockHandle()
       return
     }
-    const blockElement = getTopLevelBlockElementByIndex(blockIndex)
+    const blockTarget = resolveCachedBlockRect(blockIndex)
+    const blockElement = blockTarget?.element ?? null
     const canShowHandle = isTopLevelBlockHandleEligible(blockIndex)
     const shouldShow = Boolean(
       blockElement && canShowHandle && (isCoarsePointer || stickySelectionActive || hoveredBlockIndex !== null)
@@ -5996,7 +6009,7 @@ const BlockEditorEngine = ({
       return
     }
 
-    const rect = blockElement.getBoundingClientRect()
+    const rect = blockTarget?.rect ?? blockElement.getBoundingClientRect()
     const railElement = blockHandleRailRef.current
     const railWidth = railElement?.offsetWidth || 54
     const blocks = ((editor.getJSON() as BlockEditorDoc).content ?? []) as BlockEditorDoc[]
@@ -6015,6 +6028,7 @@ const BlockEditorEngine = ({
     }
 
     setBlockHandleState((prev) => (isStableBlockHandleState(prev, nextState) ? prev : nextState))
+    rectCache.clear()
   }, [
     editor,
     clickedBlockIndex,

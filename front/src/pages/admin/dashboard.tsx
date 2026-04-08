@@ -148,7 +148,8 @@ export const getServerSideProps: GetServerSideProps<AdminDashboardPageProps> = a
 const env = getMonitoringEnv()
 const DASHBOARD_EAGER_PANEL_COUNT = 2
 const DASHBOARD_PANEL_STAGGER_MS = 420
-const DASHBOARD_INTERSECTION_ROOT_MARGIN = "96px 0px"
+const DASHBOARD_INTERSECTION_ROOT_MARGIN = "24px 0px"
+const DASHBOARD_IDLE_ACTIVATION_TIMEOUT_MS = 900
 
 const DeferredPanelFrame: React.FC<{
   eager?: boolean
@@ -164,20 +165,38 @@ const DeferredPanelFrame: React.FC<{
 
     let observer: IntersectionObserver | null = null
     let activationDelayId: number | null = null
+    let idleId: number | null = null
     let activationQueued = false
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (
+        callback: () => void,
+        options?: {
+          timeout?: number
+        }
+      ) => number
+      cancelIdleCallback?: (id: number) => void
+    }
 
     const activate = () => {
       setIsActivated(true)
+    }
+
+    const queueIdleActivation = () => {
+      if (typeof idleWindow.requestIdleCallback === "function") {
+        idleId = idleWindow.requestIdleCallback(activate, { timeout: DASHBOARD_IDLE_ACTIVATION_TIMEOUT_MS })
+        return
+      }
+      activate()
     }
 
     const scheduleActivation = (delayMs: number) => {
       if (activationQueued) return
       activationQueued = true
       if (delayMs <= 0) {
-        activate()
+        queueIdleActivation()
         return
       }
-      activationDelayId = window.setTimeout(activate, delayMs)
+      activationDelayId = window.setTimeout(queueIdleActivation, delayMs)
     }
 
     if (anchorRef.current && typeof IntersectionObserver !== "undefined") {
@@ -194,6 +213,9 @@ const DeferredPanelFrame: React.FC<{
 
     return () => {
       observer?.disconnect()
+      if (idleId !== null && typeof idleWindow.cancelIdleCallback === "function") {
+        idleWindow.cancelIdleCallback(idleId)
+      }
       if (activationDelayId !== null) {
         window.clearTimeout(activationDelayId)
       }

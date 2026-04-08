@@ -534,7 +534,8 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     const measureHybridRail = (
       rail: HTMLElement | null,
       inner: HTMLElement | null,
-      enabled: boolean
+      enabled: boolean,
+      articleBottomDoc: number
     ) => {
       if (!rail || !inner || !enabled) {
         return {
@@ -549,13 +550,12 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
       }
 
       const railRect = rail.getBoundingClientRect()
-      const articleRect = article.getBoundingClientRect()
       return {
         enabled,
         left: Math.round(railRect.left),
         width: Math.round(railRect.width),
         railTopDoc: window.scrollY + railRect.top,
-        articleBottomDoc: window.scrollY + articleRect.bottom,
+        articleBottomDoc,
         innerHeight: inner.offsetHeight,
         stickyBlocked: hasStickyBlockingAncestor(rail),
       }
@@ -621,8 +621,19 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
       const leftEnabled = showFloatingLikeRef.current && viewportWidth >= LEFT_RAIL_HYBRID_MIN_VIEWPORT_PX
       const rightEnabled = showStickyTocRef.current && viewportWidth >= RIGHT_RAIL_HYBRID_MIN_VIEWPORT_PX
       if (remeasure) {
-        hybridRailMetricsRef.current.left = measureHybridRail(leftRailRef.current, leftRailInnerRef.current, leftEnabled)
-        hybridRailMetricsRef.current.right = measureHybridRail(rightRailRef.current, rightRailInnerRef.current, rightEnabled)
+        const articleBottomDoc = window.scrollY + article.getBoundingClientRect().bottom
+        hybridRailMetricsRef.current.left = measureHybridRail(
+          leftRailRef.current,
+          leftRailInnerRef.current,
+          leftEnabled,
+          articleBottomDoc
+        )
+        hybridRailMetricsRef.current.right = measureHybridRail(
+          rightRailRef.current,
+          rightRailInnerRef.current,
+          rightEnabled,
+          articleBottomDoc
+        )
       }
 
       const leftNeedsHybridFallback = leftEnabled && hybridRailMetricsRef.current.left.stickyBlocked
@@ -738,7 +749,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
       scheduler.schedule()
     })
 
-    const resizeTargets = [article, leftRailInnerNode, rightRailInnerNode].filter(
+    const resizeTargets = [article, leftRailRef.current, rightRailRef.current].filter(
       (target): target is HTMLElement => Boolean(target)
     )
     registry.addResizeObserver(resizeTargets, () => {

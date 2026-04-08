@@ -111,6 +111,13 @@ const getWordDragPoints = async (
   return points
 }
 
+const readTableGrid = async (page: Page) =>
+  page.locator("table tr").evaluateAll((rows) =>
+    rows.map((row) =>
+      Array.from(row.querySelectorAll("th, td")).map((cell) => (cell.textContent || "").trim())
+    )
+  )
+
 test.describe("block editor authoring flow", () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -1497,6 +1504,165 @@ test.describe("block editor authoring flow", () => {
     await firstCell.click()
     await page.getByRole("button", { name: "QA 행 삭제" }).click()
     await expect(page.locator("table tr")).toHaveCount(3)
+  })
+
+  test("table row/column grip drag는 축을 재정렬하고 seed 재진입 후에도 순서를 유지한다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    await page.getByRole("button", { name: "테이블" }).click()
+
+    const initialValues = [
+      ["r1c1", "r1c2", "r1c3"],
+      ["r2c1", "r2c2", "r2c3"],
+      ["r3c1", "r3c2", "r3c3"],
+    ]
+
+    for (let rowIndex = 0; rowIndex < initialValues.length; rowIndex += 1) {
+      for (let columnIndex = 0; columnIndex < initialValues[rowIndex].length; columnIndex += 1) {
+        const cell = page.locator("table tr").nth(rowIndex).locator("th, td").nth(columnIndex)
+        await cell.click()
+        await page.keyboard.type(initialValues[rowIndex][columnIndex])
+      }
+    }
+
+    const tableBox = await page.locator(".aq-block-editor__content .tableWrapper table").boundingBox()
+    if (!tableBox) {
+      throw new Error("table reorder anchor metrics are missing")
+    }
+
+    await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
+    await expect(page.getByTestId("table-row-rail")).toBeVisible()
+
+    const rowGrip = page.getByTestId("table-row-rail").getByRole("button", { name: "행 메뉴" })
+    const lastRowBox = await page.locator("table tr").nth(2).boundingBox()
+    if (!lastRowBox) {
+      throw new Error("table row reorder handle metrics are missing")
+    }
+
+    await rowGrip.evaluate((element, payload) => {
+      const { targetY } = payload as { targetY: number }
+      const rect = (element as HTMLElement).getBoundingClientRect()
+      const startX = rect.left + rect.width / 2
+      const startY = rect.top + rect.height / 2
+      element.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          pointerId: 1,
+          pointerType: "mouse",
+          button: 0,
+          buttons: 1,
+          isPrimary: true,
+          clientX: startX,
+          clientY: startY,
+        })
+      )
+      window.dispatchEvent(
+        new PointerEvent("pointermove", {
+          bubbles: true,
+          pointerId: 1,
+          pointerType: "mouse",
+          button: 0,
+          buttons: 1,
+          isPrimary: true,
+          clientX: startX,
+          clientY: targetY,
+        })
+      )
+      window.dispatchEvent(
+        new PointerEvent("pointerup", {
+          bubbles: true,
+          pointerId: 1,
+          pointerType: "mouse",
+          button: 0,
+          buttons: 0,
+          isPrimary: true,
+          clientX: startX,
+          clientY: targetY,
+        })
+      )
+    }, { targetY: lastRowBox.y + lastRowBox.height + 18 })
+
+    await expect
+      .poll(async () => (await readTableGrid(page)).map((row) => row[0]))
+      .toEqual(["r2c1", "r3c1", "r1c1"])
+
+    const reorderedFirstCellBox = await page.locator("table tr").first().locator("th, td").first().boundingBox()
+    if (!reorderedFirstCellBox) {
+      throw new Error("table reordered first cell metrics are missing")
+    }
+
+    await page.mouse.move(
+      reorderedFirstCellBox.x + reorderedFirstCellBox.width / 2,
+      reorderedFirstCellBox.y + 3
+    )
+    await expect(page.getByTestId("table-column-rail")).toBeVisible()
+
+    const columnGrip = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })
+    const firstRowLastCellBox = await page.locator("table tr").first().locator("th, td").nth(2).boundingBox()
+    if (!firstRowLastCellBox) {
+      throw new Error("table column reorder handle metrics are missing")
+    }
+
+    await columnGrip.evaluate((element, payload) => {
+      const { targetX } = payload as { targetX: number }
+      const rect = (element as HTMLElement).getBoundingClientRect()
+      const startX = rect.left + rect.width / 2
+      const startY = rect.top + rect.height / 2
+      element.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          pointerId: 1,
+          pointerType: "mouse",
+          button: 0,
+          buttons: 1,
+          isPrimary: true,
+          clientX: startX,
+          clientY: startY,
+        })
+      )
+      window.dispatchEvent(
+        new PointerEvent("pointermove", {
+          bubbles: true,
+          pointerId: 1,
+          pointerType: "mouse",
+          button: 0,
+          buttons: 1,
+          isPrimary: true,
+          clientX: targetX,
+          clientY: startY,
+        })
+      )
+      window.dispatchEvent(
+        new PointerEvent("pointerup", {
+          bubbles: true,
+          pointerId: 1,
+          pointerType: "mouse",
+          button: 0,
+          buttons: 0,
+          isPrimary: true,
+          clientX: targetX,
+          clientY: startY,
+        })
+      )
+    }, { targetX: firstRowLastCellBox.x + firstRowLastCellBox.width + 18 })
+
+    await expect
+      .poll(async () => (await readTableGrid(page))[0])
+      .toEqual(["r2c2", "r2c3", "r2c1"])
+
+    await expect
+      .poll(async () => (await page.getByTestId("qa-markdown-output").textContent()) || "")
+      .toContain("r2c2")
+
+    const markdown = (await page.getByTestId("qa-markdown-output").textContent()) || ""
+    await page.goto(`${QA_ENGINE_ROUTE}&seed=${encodeURIComponent(markdown.replace(/\n/g, "\\n"))}`)
+
+    await expect
+      .poll(async () => (await readTableGrid(page)).map((row) => row[0]))
+      .toEqual(["r2c2", "r3c2", "r1c2"])
+    await expect
+      .poll(async () => (await readTableGrid(page))[0])
+      .toEqual(["r2c2", "r2c3", "r2c1"])
   })
 
   test("table row resize handle은 drag 후 row height를 유지한다", async ({ page }) => {

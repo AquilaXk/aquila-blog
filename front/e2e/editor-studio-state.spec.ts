@@ -206,6 +206,10 @@ test.describe("editor studio state", () => {
       path.resolve(__dirname, "../src/libs/markdown/components/MarkdownRendererRoot.tsx"),
       "utf8"
     )
+    const markdownRendererSource = readFileSync(
+      path.resolve(__dirname, "../src/libs/markdown/MarkdownRenderer.tsx"),
+      "utf8"
+    )
 
     expect(blockEditorEngineSource).toContain('data-testid="table-column-drag-guide"')
     expect(blockEditorEngineSource).toContain('data-testid={`table-column-resize-boundary-${index}`}')
@@ -222,6 +226,8 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).toContain('data-testid="table-cell-menu-button"')
     expect(blockEditorEngineSource).toContain('data-testid="table-overflow-mode-normal"')
     expect(blockEditorEngineSource).toContain('data-testid="table-overflow-mode-wide"')
+    expect(blockEditorEngineSource).toContain("const promoteLargeTablesToWideOverflowMode = (editor: TiptapEditor) => {")
+    expect(blockEditorEngineSource).toContain("shouldPromoteWideTableOverflowMode(columns.length, readableWidthBudget)")
     expect(blockEditorEngineSource).toContain('data-testid="table-row-drag-shadow"')
     expect(blockEditorEngineSource).toContain('"table-row-reorder-indicator"')
     expect(blockEditorEngineSource).toContain('"table-column-reorder-indicator"')
@@ -240,9 +246,14 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).toContain("const startPendingTableAxisDrag = useCallback(")
     expect(blockEditorEngineSource).toContain("const selectTableAxisAtIndex = useCallback(")
     expect(blockEditorEngineSource).toContain('overflowMode: getTableOverflowMode(tableNode)')
+    expect(blockEditorEngineSource).toContain("const maxActiveWidth = Math.max(TABLE_MIN_COLUMN_WIDTH_PX, safeBudget - otherColumnsWidth)")
     expect(blockEditorEngineSource).toContain("const tableCornerGrowSuppressClickRef = useRef(false)")
     expect(blockEditorEngineSource).toContain('"grip" | "grow"')
     expect(blockEditorEngineSource).toContain('tableMenuState.kind === "cell"')
+    expect(markdownRendererSource).toContain("const explicitTableWidth = useMemo(")
+    expect(markdownRendererSource).toContain("minWidth: `${explicitTableWidth}px`")
+    expect(markdownRendererRootSource).toContain("width: auto;")
+    expect(markdownRendererRootSource).toContain("max-width: none;")
     expect(blockEditorEngineSource).toContain('tableMenuState.kind === "row" ?')
     expect(blockEditorEngineSource).toContain('tableMenuState.kind === "column" ?')
     expect(blockEditorEngineSource).toContain("activeTableStructureState.hasHeaderRow")

@@ -1582,147 +1582,9 @@ const shrinkTableColumnWidthsToFit = (widths: number[], budget: number) => {
   return nextWidths
 }
 
-const expandTableColumnWidthsToBudget = (widths: number[], budget: number) => {
-  const nextWidths = widths.map((width) => Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(width)))
-  const currentTotal = nextWidths.reduce((sum, width) => sum + width, 0)
-  const safeBudget = Math.max(TABLE_MIN_COLUMN_WIDTH_PX * nextWidths.length, Math.round(budget))
-
-  if (!nextWidths.length || currentTotal >= safeBudget) {
-    return nextWidths
-  }
-
-  const deficit = safeBudget - currentTotal
-  const weightTotal = nextWidths.reduce((sum, width) => sum + width, 0)
-  let consumed = 0
-
-  nextWidths.forEach((width, index) => {
-    if (index === nextWidths.length - 1) return
-    const ratio = weightTotal > 0 ? width / weightTotal : 1 / nextWidths.length
-    const addBy = Math.max(0, Math.floor(deficit * ratio))
-    nextWidths[index] += addBy
-    consumed += addBy
-  })
-
-  let remainder = deficit - consumed
-  let cursor = 0
-  while (remainder > 0 && nextWidths.length > 0) {
-    nextWidths[cursor % nextWidths.length] += 1
-    remainder -= 1
-    cursor += 1
-  }
-
-  return nextWidths
-}
-
-const expandTableColumnWidthsToBudgetExcludingIndex = (
-  widths: number[],
-  budget: number,
-  excludedIndex: number
-) => {
-  const nextWidths = widths.map((width) => Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(width)))
-  const currentTotal = nextWidths.reduce((sum, width) => sum + width, 0)
-  const safeBudget = Math.max(TABLE_MIN_COLUMN_WIDTH_PX * nextWidths.length, Math.round(budget))
-
-  if (!nextWidths.length || currentTotal >= safeBudget) {
-    return nextWidths
-  }
-
-  const recipients = nextWidths
-    .map((width, index) => ({
-      index,
-      width,
-    }))
-    .filter((column) => column.index !== excludedIndex)
-  const trailingRecipients = recipients.filter((column) => column.index > excludedIndex)
-  const recipientColumns = (trailingRecipients.length > 0 ? trailingRecipients : recipients).sort(
-    (left, right) => left.index - right.index
-  )
-
-  if (!recipientColumns.length) {
-    return nextWidths
-  }
-
-  const deficit = safeBudget - currentTotal
-  const weightTotal = recipientColumns.reduce((sum, column) => sum + column.width, 0)
-  let consumed = 0
-
-  recipientColumns.forEach((column, columnIndex) => {
-    if (columnIndex === recipientColumns.length - 1) return
-    const ratio = weightTotal > 0 ? column.width / weightTotal : 1 / recipientColumns.length
-    const addBy = Math.max(0, Math.floor(deficit * ratio))
-    nextWidths[column.index] += addBy
-    consumed += addBy
-  })
-
-  let remainder = deficit - consumed
-  let cursor = 0
-  while (remainder > 0) {
-    nextWidths[recipientColumns[cursor % recipientColumns.length].index] += 1
-    remainder -= 1
-    cursor += 1
-  }
-
-  return nextWidths
-}
-
 const isLegacyCollapsedTableWidthState = (widths: number[]) => {
   if (widths.length <= 1) return false
   return widths.every((width) => width <= TABLE_MIN_COLUMN_WIDTH_PX + 2)
-}
-
-const redistributeTableColumnWidthsForResize = (
-  widths: number[],
-  activeColumnIndex: number,
-  deltaPx: number,
-  budget: number
-) => {
-  const nextWidths = widths.map((width) => Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(width)))
-  const activeIndex = Math.max(0, Math.min(activeColumnIndex, nextWidths.length - 1))
-  const roundedDelta = Math.round(deltaPx)
-  if (!nextWidths.length || roundedDelta === 0) {
-    return nextWidths
-  }
-
-  if (roundedDelta < 0) {
-    const previousWidth = nextWidths[activeIndex]
-    nextWidths[activeIndex] = Math.max(TABLE_MIN_COLUMN_WIDTH_PX, previousWidth + roundedDelta)
-    if (nextWidths[activeIndex] === previousWidth) {
-      return nextWidths
-    }
-    return expandTableColumnWidthsToBudgetExcludingIndex(nextWidths, budget, activeIndex)
-  }
-
-  const minBudget = TABLE_MIN_COLUMN_WIDTH_PX * nextWidths.length
-  const safeBudget = Math.max(minBudget, Math.round(budget))
-  const currentTotal = nextWidths.reduce((sum, width) => sum + width, 0)
-  let growBy = Math.min(roundedDelta, Math.max(0, safeBudget - currentTotal))
-  let remainingGrow = roundedDelta - growBy
-
-  if (remainingGrow > 0) {
-    const shrinkableColumns = nextWidths
-      .map((width, index) => ({
-        index,
-        width,
-        capacity: index === activeIndex ? 0 : width - TABLE_MIN_COLUMN_WIDTH_PX,
-      }))
-      .filter((column) => column.capacity > 0)
-      .sort((left, right) => right.width - left.width || right.index - left.index)
-
-    for (const column of shrinkableColumns) {
-      if (remainingGrow <= 0) break
-      const shrinkBy = Math.min(column.capacity, remainingGrow)
-      if (shrinkBy <= 0) continue
-      nextWidths[column.index] -= shrinkBy
-      growBy += shrinkBy
-      remainingGrow -= shrinkBy
-    }
-  }
-
-  if (growBy > 0) {
-    nextWidths[activeIndex] += growBy
-  }
-
-  return nextWidths
 }
 
 const computeNextTableColumnWidthsForResize = (
@@ -1732,14 +1594,29 @@ const computeNextTableColumnWidthsForResize = (
   shouldClampToBudget: boolean,
   overflowMode: string,
   budget: number
-) =>
-  shouldClampToBudget && overflowMode !== TABLE_OVERFLOW_MODE_WIDE
-    ? redistributeTableColumnWidthsForResize(widths, activeColumnIndex, deltaPx, budget)
-    : widths.map((width, index) =>
-        index === activeColumnIndex
-          ? Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(width + deltaPx))
-          : width
-      )
+) => {
+  const nextWidths = widths.map((width) => Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(width)))
+  const activeIndex = Math.max(0, Math.min(activeColumnIndex, nextWidths.length - 1))
+  if (!nextWidths.length) {
+    return nextWidths
+  }
+
+  const proposedWidth = Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(nextWidths[activeIndex] + deltaPx))
+  if (!shouldClampToBudget || overflowMode === TABLE_OVERFLOW_MODE_WIDE) {
+    nextWidths[activeIndex] = proposedWidth
+    return nextWidths
+  }
+
+  const minBudget = TABLE_MIN_COLUMN_WIDTH_PX * nextWidths.length
+  const safeBudget = Math.max(minBudget, Math.round(budget))
+  const otherColumnsWidth = nextWidths.reduce(
+    (sum, width, index) => (index === activeIndex ? sum : sum + width),
+    0
+  )
+  const maxActiveWidth = Math.max(TABLE_MIN_COLUMN_WIDTH_PX, safeBudget - otherColumnsWidth)
+  nextWidths[activeIndex] = Math.min(proposedWidth, maxActiveWidth)
+  return nextWidths
+}
 
 const applyTableColumnWidthsToTransaction = (
   transaction: Transaction,
@@ -1781,36 +1658,61 @@ const normalizeTableWidthsToReadableBudget = (editor: TiptapEditor) => {
     if (!columns || columns.length === 0) return true
 
     const currentWidths = columns.map((column) => readColumnWidthFromCell(column[0]))
-    const requiresExplicitWidths = columns.some((column) => !hasExplicitColumnWidth(column))
-    const shouldRecoverLegacyCollapsedWidths = isLegacyCollapsedTableWidthState(currentWidths)
     const minBudget = TABLE_MIN_COLUMN_WIDTH_PX * currentWidths.length
     const safeBudget = Math.max(minBudget, maxTableWidth)
     const totalWidth = currentWidths.reduce((sum, width) => sum + width, 0)
-    if (
-      totalWidth <= safeBudget &&
-      !requiresExplicitWidths &&
-      !shouldRecoverLegacyCollapsedWidths
-    ) {
+    if (totalWidth <= safeBudget) {
       return true
     }
 
-    const nextWidths =
-      totalWidth > safeBudget
-        ? shrinkTableColumnWidthsToFit(currentWidths, safeBudget)
-        : requiresExplicitWidths || shouldRecoverLegacyCollapsedWidths
-          ? expandTableColumnWidthsToBudget(currentWidths, safeBudget)
-          : currentWidths
-    if (
-      nextWidths.every((width, index) => width === currentWidths[index]) &&
-      !requiresExplicitWidths &&
-      !shouldRecoverLegacyCollapsedWidths
-    ) {
+    const nextWidths = shrinkTableColumnWidthsToFit(currentWidths, safeBudget)
+    if (nextWidths.every((width, index) => width === currentWidths[index])) {
       return true
     }
 
     const applied = applyTableColumnWidthsToTransaction(transaction, columns, currentWidths, nextWidths)
     transaction = applied.transaction
     changed ||= applied.changed
+
+    return true
+  })
+
+  if (!changed || !transaction.docChanged) return false
+  transaction = transaction.setMeta(TABLE_WIDTH_BUDGET_META_KEY, true)
+  editor.view.dispatch(transaction)
+  return true
+}
+
+const promoteLargeTablesToWideOverflowMode = (editor: TiptapEditor) => {
+  if (!shouldClampTableWidthBudget()) return false
+
+  const readableWidthBudget = getCurrentEditorReadableWidthPx(editor) - 2
+  let transaction = editor.state.tr
+  let changed = false
+
+  editor.state.doc.descendants((node: any, pos: number) => {
+    if (node.type?.name !== "table") return true
+    if (getTableOverflowMode(node) === TABLE_OVERFLOW_MODE_WIDE) return true
+
+    const columns = collectSimpleTableColumnCells(node, pos)
+    if (!columns || columns.length === 0) return true
+    if (!shouldPromoteWideTableOverflowMode(columns.length, readableWidthBudget)) return true
+
+    const currentWidths = columns.map((column) => readColumnWidthFromCell(column[0]))
+    const nextWidths = currentWidths.map((width) =>
+      Math.max(TABLE_WIDE_COLUMN_MIN_WIDTH_PX, width)
+    )
+    const applied = applyTableColumnWidthsToTransaction(
+      transaction,
+      columns,
+      currentWidths,
+      nextWidths
+    )
+    transaction = applied.transaction.setNodeMarkup(pos, undefined, {
+      ...node.attrs,
+      overflowMode: TABLE_OVERFLOW_MODE_WIDE,
+    })
+    changed = true
 
     return true
   })
@@ -1912,14 +1814,8 @@ const normalizeRenderedTableWidthsToReadableBudget = (editor: TiptapEditor) => {
     const nextWidths =
       measuredTotalWidth > contentBudget
         ? shrinkTableColumnWidthsToFit(measuredWidths, contentBudget)
-        : shouldRecoverLegacyCollapsedWidths || requiresExplicitWidths
-          ? expandTableColumnWidthsToBudget(measuredWidths, contentBudget)
-          : measuredWidths
-    if (
-      nextWidths.every((width, index) => width === currentWidths[index]) &&
-      !requiresExplicitWidths &&
-      !shouldRecoverLegacyCollapsedWidths
-    ) {
+        : measuredWidths.map((width) => Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(width)))
+    if (nextWidths.every((width, index) => width === currentWidths[index])) {
       return true
     }
 
@@ -4513,11 +4409,16 @@ const BlockEditorEngine = ({
     onCreate: ({ editor: createdEditor }) => {
       editorRef.current = createdEditor
       createdEditor.setEditable(!disabled)
+      promoteLargeTablesToWideOverflowMode(createdEditor)
       scheduleTableViewportBudgetNormalize(createdEditor)
     },
     onTransaction: ({ editor: nextEditor, transaction }) => {
       if (!transaction.docChanged) return
       if (transaction.getMeta(TABLE_WIDTH_BUDGET_META_KEY)) return
+      if (promoteLargeTablesToWideOverflowMode(nextEditor)) {
+        scheduleTableViewportBudgetNormalize(nextEditor)
+        return
+      }
       normalizeTableWidthsToReadableBudget(nextEditor)
       scheduleTableViewportBudgetNormalize(nextEditor)
     },
@@ -10007,9 +9908,9 @@ const EditorViewport = styled.div`
   }
 
   .aq-block-editor__content table {
-    width: 100%;
-    min-width: 100%;
-    max-width: 100%;
+    width: auto;
+    min-width: 0;
+    max-width: none;
     margin: 0;
     border-collapse: separate;
     border-spacing: 0;
@@ -10018,10 +9919,7 @@ const EditorViewport = styled.div`
   }
 
   .aq-block-editor__content .tableWrapper > table {
-    width: 100% !important;
-    min-width: 100% !important;
-    max-width: 100% !important;
-    table-layout: fixed !important;
+    table-layout: fixed;
   }
 
   .aq-block-editor__content .tableWrapper {

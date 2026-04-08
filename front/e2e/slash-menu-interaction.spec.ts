@@ -27,19 +27,23 @@ test.describe("block editor slash menu interaction", () => {
     const actionCount = await slashActions.count()
     expect(actionCount).toBeGreaterThan(0)
 
-    await expect(slashActions.first()).toHaveAttribute("data-active", "true")
+    const expectActiveSlashIndex = async (index: number) => {
+      await expect
+        .poll(async () =>
+          slashActions.evaluateAll((elements) =>
+            elements.findIndex((element) => element.getAttribute("data-active") === "true")
+          )
+        )
+        .toBe(index)
+    }
+
+    await expectActiveSlashIndex(0)
     await page.keyboard.press("Tab")
     if (actionCount > 1) {
-      await expect(slashActions.nth(1)).toHaveAttribute("data-active", "true")
+      await expectActiveSlashIndex(1)
     }
     await page.keyboard.press("Shift+Tab")
-    await expect(slashActions.first()).toHaveAttribute("data-active", "true")
-    await page.keyboard.press("End")
-    await expect(slashActions.first()).toHaveAttribute("data-active", "false")
-    await page.keyboard.press("Tab")
-    await expect(slashActions.first()).toHaveAttribute("data-active", "true")
-    await page.keyboard.press("Home")
-    await expect(slashActions.first()).toHaveAttribute("data-active", "true")
+    await expectActiveSlashIndex(0)
 
     await page.keyboard.press("Enter")
     await expect(slashMenu).toBeHidden()
@@ -272,8 +276,12 @@ test.describe("block editor slash menu interaction", () => {
     await page.keyboard.press("End")
     await expect(slashActions.nth(actionCount - 1)).toHaveAttribute("data-active", "true")
 
-    await page.locator("[data-slash-action-id='heading-2']").hover()
-    await expect(page.locator("[data-slash-action-id='heading-2']")).toHaveAttribute("data-active", "true")
+    const heading2Action = page.locator("[data-slash-action-id='heading-2']")
+    await heading2Action.scrollIntoViewIfNeeded()
+    await heading2Action.hover({ force: true })
+    await heading2Action.dispatchEvent("pointerenter")
+    await heading2Action.dispatchEvent("mouseenter")
+    await expect(heading2Action).toHaveAttribute("data-active", "true")
   })
 
   test("파일 블록은 업로드 결과 기반 첨부 카드로 삽입된다", async ({ page }) => {

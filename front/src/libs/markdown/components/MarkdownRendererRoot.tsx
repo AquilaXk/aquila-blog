@@ -972,9 +972,9 @@ const MarkdownRendererRoot = styled.div`
 
   table,
   .aq-table {
-    width: 100%;
-    min-width: 100%;
-    max-width: 100%;
+    width: auto;
+    min-width: 0;
+    max-width: none;
     border-collapse: separate;
     border-spacing: 0;
     table-layout: fixed;
@@ -1054,13 +1054,24 @@ const MarkdownRendererRoot = styled.div`
       overflow-y: hidden;
     }
 
+    table,
+    .aq-table,
     table.aq-table-responsive,
     .aq-table.aq-table-responsive {
       display: table;
+      width: 100%;
+      min-width: 100%;
+      max-width: 100%;
+      table-layout: fixed;
+    }
+
+    table[data-overflow-mode="wide"],
+    .aq-table.aq-table-wide,
+    table.aq-table-responsive[data-overflow-mode="wide"],
+    .aq-table.aq-table-responsive.aq-table-wide {
       width: max-content;
       min-width: 100%;
       max-width: none;
-      table-layout: fixed;
     }
 
     table.aq-table-responsive > thead,

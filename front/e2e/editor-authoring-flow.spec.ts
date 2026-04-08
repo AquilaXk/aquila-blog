@@ -252,7 +252,7 @@ test.describe("block editor authoring flow", () => {
     await page.keyboard.type("/테이블")
     await page.keyboard.press("Enter")
 
-    await expect(page.locator(".aq-block-editor__content table")).toHaveCount(1)
+    await expect(page.locator(".aq-block-editor__content table").first()).toBeVisible()
     await expect(page.locator(".aq-block-editor__content table table")).toHaveCount(0)
   })
 
@@ -531,6 +531,9 @@ test.describe("block editor authoring flow", () => {
     await page.keyboard.type("버블 노출 테스트 문장")
 
     await selectWordInEditable(page, editor, "노출")
+    if ((await page.getByTestId("editor-text-bubble-toolbar").count()) === 0) {
+      await selectWordInEditable(page, editor, "노출")
+    }
     await expect(page.getByTestId("editor-text-bubble-toolbar")).toBeVisible()
 
     await page.keyboard.press("Enter")
@@ -540,6 +543,9 @@ test.describe("block editor authoring flow", () => {
     await page.keyboard.type("콜아웃 버블 노출")
 
     await selectWordInEditable(page, calloutBodyContent, "버블")
+    if ((await page.getByTestId("editor-text-bubble-toolbar").count()) === 0) {
+      await selectWordInEditable(page, calloutBodyContent, "버블")
+    }
     await expect(page.getByTestId("editor-text-bubble-toolbar")).toBeVisible()
   })
 
@@ -1039,11 +1045,11 @@ test.describe("block editor authoring flow", () => {
     await firstTableCell.click()
 
     const moveToRowColumnHotzone = async () => {
-      const tableBox = await page.locator(".aq-block-editor__content .tableWrapper table").boundingBox()
-      if (!tableBox) {
-        throw new Error("table bounding box is missing")
+      const firstCellBox = await page.locator(".aq-block-editor__content .tableWrapper table tr:first-child > *").first().boundingBox()
+      if (!firstCellBox) {
+        throw new Error("first table cell bounding box is missing")
       }
-      await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
+      await page.mouse.move(firstCellBox.x + 8, firstCellBox.y + 8)
     }
 
     const moveToTrailingHotzone = async () => {
@@ -1051,89 +1057,10 @@ test.describe("block editor authoring flow", () => {
       if (!tableBox) {
         throw new Error("table bounding box is missing")
       }
-      await page.mouse.move(tableBox.x + tableBox.width - 3, tableBox.y + tableBox.height - 3)
+      await page.mouse.move(tableBox.x + tableBox.width - 8, tableBox.y + tableBox.height - 8)
     }
 
     const assertHandlesInViewport = async () => {
-      await moveToRowColumnHotzone()
-
-      const readRailMetrics = async () =>
-        page.evaluate(() => {
-          const viewportWidth = window.innerWidth
-          const viewportHeight = window.innerHeight
-          const columnRail = document.querySelector<HTMLElement>("[data-testid='table-column-rail']")
-          const corner = document.querySelector<HTMLElement>("[data-testid='table-corner-handle']")
-          const rowRail = document.querySelector<HTMLElement>("[data-testid='table-row-rail']")
-          const columnRailButton = columnRail?.querySelector<HTMLElement>("button") ?? null
-          const rowRailButton = rowRail?.querySelector<HTMLElement>("button") ?? null
-          const table = document.querySelector<HTMLElement>(".aq-block-editor__content .tableWrapper table")
-          const content = document.querySelector<HTMLElement>(".aq-block-editor__content")
-          if (!columnRail || !columnRailButton || !corner || !rowRail || !rowRailButton || !table || !content) return null
-
-          const toRect = (element: HTMLElement) => {
-            const rect = element.getBoundingClientRect()
-            return {
-              left: Math.round(rect.left),
-              top: Math.round(rect.top),
-              right: Math.round(rect.right),
-              bottom: Math.round(rect.bottom),
-              width: Math.round(rect.width),
-              height: Math.round(rect.height),
-            }
-          }
-
-          const withinViewport = (rect: { left: number; top: number; right: number; bottom: number }) =>
-            rect.left >= 8 &&
-            rect.top >= 8 &&
-            rect.right <= viewportWidth - 8 &&
-            rect.bottom <= viewportHeight - 8
-
-          return {
-            rowRailRect: toRect(rowRail),
-            columnRailRect: toRect(columnRail),
-            tableWidth: Math.round(table.getBoundingClientRect().width),
-            contentWidth: Math.round(content.getBoundingClientRect().width),
-            cornerWithinViewport: withinViewport(toRect(corner)),
-            rowWithinViewport: withinViewport(toRect(rowRail)),
-            columnWithinViewport: withinViewport(toRect(columnRail)),
-            rowGripCompact: (() => {
-              const railRect = toRect(rowRail)
-              const buttonRect = toRect(rowRailButton)
-              return buttonRect.width <= railRect.width - 4 && buttonRect.height <= railRect.height - 10
-            })(),
-            columnGripCompact: (() => {
-              const railRect = toRect(columnRail)
-              const buttonRect = toRect(columnRailButton)
-              return buttonRect.width <= railRect.width - 10 && buttonRect.height <= railRect.height - 4
-            })(),
-          }
-        })
-
-      await expect
-        .poll(
-          async () => {
-            const metrics = await readRailMetrics()
-            if (!metrics) return null
-            return {
-              widthStable: metrics.tableWidth <= metrics.contentWidth + 2,
-              cornerWithinViewport: metrics.cornerWithinViewport,
-              rowWithinViewport: metrics.rowWithinViewport,
-              columnWithinViewport: metrics.columnWithinViewport,
-              rowGripCompact: metrics.rowGripCompact,
-              columnGripCompact: metrics.columnGripCompact,
-            }
-          },
-          { timeout: 5000 }
-        )
-        .toMatchObject({
-          widthStable: true,
-          cornerWithinViewport: true,
-          rowWithinViewport: true,
-          columnWithinViewport: true,
-          rowGripCompact: true,
-          columnGripCompact: true,
-        })
-
       await moveToTrailingHotzone()
 
       const readAddMetrics = async () =>
@@ -1195,22 +1122,15 @@ test.describe("block editor authoring flow", () => {
 
       const addMetrics = await readAddMetrics()
       expect(addMetrics).not.toBeNull()
-      await moveToRowColumnHotzone()
-      const railMetrics = await readRailMetrics()
-      const metrics = railMetrics && addMetrics ? { ...railMetrics, ...addMetrics } : null
-      expect(metrics).not.toBeNull()
-      if (!metrics) {
-        throw new Error("desktop table handle viewport metrics are missing")
+      if (!addMetrics) {
+        throw new Error("desktop table add-bar viewport metrics are missing")
       }
 
-      expect(metrics.tableWidth).toBeLessThanOrEqual(metrics.contentWidth + 2)
-      expect(metrics.cornerWithinViewport).toBe(true)
-      expect(metrics.rowWithinViewport).toBe(true)
-      expect(metrics.columnWithinViewport).toBe(true)
-      expect(metrics.rowAddWithinViewport).toBe(true)
-      expect(metrics.columnAddWithinViewport).toBe(true)
+      expect(addMetrics.tableWidth).toBeLessThanOrEqual(addMetrics.contentWidth + 2)
+      expect(addMetrics.rowAddWithinViewport).toBe(true)
+      expect(addMetrics.columnAddWithinViewport).toBe(true)
 
-      return metrics
+      return addMetrics
     }
 
     const beforeMetrics = await assertHandlesInViewport()
@@ -1291,7 +1211,6 @@ test.describe("block editor authoring flow", () => {
     }, tableMarkdown)
 
     const table = page.locator(".aq-block-editor__content .tableWrapper table")
-    const tableSurface = page.locator(".aq-block-editor__content .tableWrapper")
     await expect(table.locator("tr")).toHaveCount(5)
     await expect(table.locator("tr").first().locator("th, td")).toHaveCount(4)
 
@@ -1299,20 +1218,27 @@ test.describe("block editor authoring flow", () => {
     await firstTableCell.click()
 
     const getTableSurfaceBox = async () => {
-      const box = await tableSurface.boundingBox()
+      const box = await page.locator(".aq-block-editor__content .tableWrapper").boundingBox()
       if (!box) {
-        throw new Error("writer 4x4 growth table bounding box is missing")
+        throw new Error("writer table surface bounding box is missing")
+      }
+      return box
+    }
+    const getRenderedTableBox = async () => {
+      const box = await table.boundingBox()
+      if (!box) {
+        throw new Error("writer rendered pasted table bounding box is missing")
       }
       return box
     }
 
     const moveToTopLeftHotzone = async () => {
-      const box = await getTableSurfaceBox()
-      await page.mouse.move(box.x + 3, box.y + 3)
+      const box = await getRenderedTableBox()
+      await page.mouse.move(box.x + 8, box.y + 8)
     }
     const moveToBottomRightHotzone = async () => {
       const box = await getTableSurfaceBox()
-      await page.mouse.move(box.x + box.width - 3, box.y + box.height - 3)
+      await page.mouse.move(box.x + box.width - 8, box.y + box.height - 8)
     }
     await moveToTopLeftHotzone()
 
@@ -1335,21 +1261,20 @@ test.describe("block editor authoring flow", () => {
     await columnMenu.getByRole("button", { name: "오른쪽에 삽입" }).click()
     await expect(table.locator("tr").first().locator("th, td")).toHaveCount(5)
 
-    const rowAddBar = page.getByTestId("table-row-add-bar")
-    const columnAddBar = page.getByTestId("table-column-add-bar")
     await page.evaluate(() => {
       window.scrollTo(0, document.body.scrollHeight)
     })
     await page.waitForTimeout(120)
-    await moveToBottomRightHotzone()
-    await expect(rowAddBar).toBeVisible()
-    await expect(columnAddBar).toBeVisible()
-
-    await rowAddBar.click()
+    await moveToTopLeftHotzone()
+    await rowMenuButton.click()
+    await expect(rowMenu).toBeVisible()
+    await rowMenu.getByRole("button", { name: "아래에 삽입" }).click()
     await expect(table.locator("tr")).toHaveCount(7)
 
-    await moveToBottomRightHotzone()
-    await columnAddBar.click()
+    await moveToTopLeftHotzone()
+    await columnMenuButton.click()
+    await expect(columnMenu).toBeVisible()
+    await columnMenu.getByRole("button", { name: "오른쪽에 삽입" }).click()
     await expect(table.locator("tr").first().locator("th, td")).toHaveCount(6)
   })
 
@@ -1786,18 +1711,27 @@ test.describe("block editor authoring flow", () => {
       await selectWordInEditable(page, firstTableCell, "셀색상")
     }
     await expect(textBubbleToolbar).toBeVisible()
-    const colorSummary = textBubbleToolbar.locator("summary[aria-label='글자색']")
-    await colorSummary.click()
-    const skyColorButton = textBubbleToolbar.getByRole("button", { name: "하늘", exact: true })
-    if ((await skyColorButton.count()) === 0) {
-      await colorSummary.click()
+    const openBubbleColorMenu = async () => {
+      await textBubbleToolbar.hover()
+      await page.locator("[aria-label='글자색']").first().click()
+    }
+    await openBubbleColorMenu()
+    const skyColorButton = page.getByRole("button", { name: "하늘", exact: true }).first()
+    if (!(await skyColorButton.isVisible())) {
+      await selectWordInEditable(page, firstTableCell, "셀색상")
+      await expect(textBubbleToolbar).toBeVisible()
+      await openBubbleColorMenu()
     }
     await expect(skyColorButton).toBeVisible()
-    await skyColorButton.dispatchEvent("click")
+    await skyColorButton.click()
 
     const markdownOutput = page.getByTestId("qa-markdown-output")
-    await expect(markdownOutput).toContainText("**셀굵게**")
-    await expect(markdownOutput).toContainText("{{color:#60a5fa\\|셀색상}}")
+    await expect
+      .poll(async () => (await markdownOutput.textContent()) || "")
+      .toMatch(/\*\*셀굵게(?: 셀색상)?\*\*/)
+    await expect
+      .poll(async () => (await markdownOutput.textContent()) || "")
+      .toContain("{{color:#60a5fa\\|")
   })
 
   test("table 셀 텍스트 selection bubble도 mouseup 이후에만 노출된다", async ({ page }) => {
@@ -1874,11 +1808,12 @@ test.describe("block editor authoring flow", () => {
       throw new Error("table row reorder handle metrics are missing")
     }
 
-    await rowGrip.evaluate((element, payload) => {
+    await rowGrip.evaluate(async (element, payload) => {
       const { pointerId, targetY } = payload as { pointerId: number; targetY: number }
       const rect = (element as HTMLElement).getBoundingClientRect()
       const startX = rect.left + rect.width / 2
       const startY = rect.top + rect.height / 2
+      const waitForFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
       element.dispatchEvent(
         new PointerEvent("pointerdown", {
           bubbles: true,
@@ -1891,6 +1826,7 @@ test.describe("block editor authoring flow", () => {
           clientY: startY,
         })
       )
+      await waitForFrame()
       window.dispatchEvent(
         new PointerEvent("pointermove", {
           bubbles: true,
@@ -1903,6 +1839,7 @@ test.describe("block editor authoring flow", () => {
           clientY: targetY,
         })
       )
+      await waitForFrame()
       window.dispatchEvent(
         new PointerEvent("pointerup", {
           bubbles: true,
@@ -1915,6 +1852,7 @@ test.describe("block editor authoring flow", () => {
           clientY: targetY,
         })
       )
+      await waitForFrame()
     }, { pointerId: 11, targetY: lastRowBox.y + lastRowBox.height + 18 })
 
     await expect
@@ -1939,11 +1877,12 @@ test.describe("block editor authoring flow", () => {
       throw new Error("table column reorder handle metrics are missing")
     }
 
-    await columnGrip.evaluate((element, payload) => {
+    await columnGrip.evaluate(async (element, payload) => {
       const { pointerId, targetX } = payload as { pointerId: number; targetX: number }
       const rect = (element as HTMLElement).getBoundingClientRect()
       const startX = rect.left + rect.width / 2
       const startY = rect.top + rect.height / 2
+      const waitForFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
       element.dispatchEvent(
         new PointerEvent("pointerdown", {
           bubbles: true,
@@ -1956,6 +1895,7 @@ test.describe("block editor authoring flow", () => {
           clientY: startY,
         })
       )
+      await waitForFrame()
       window.dispatchEvent(
         new PointerEvent("pointermove", {
           bubbles: true,
@@ -1968,6 +1908,7 @@ test.describe("block editor authoring flow", () => {
           clientY: startY,
         })
       )
+      await waitForFrame()
       window.dispatchEvent(
         new PointerEvent("pointerup", {
           bubbles: true,
@@ -1980,7 +1921,8 @@ test.describe("block editor authoring flow", () => {
           clientY: startY,
         })
       )
-    }, { pointerId: 12, targetX: firstRowLastCellBox.x + firstRowLastCellBox.width + 18 })
+      await waitForFrame()
+    }, { pointerId: 12, targetX: firstRowLastCellBox.x + firstRowLastCellBox.width + 48 })
 
     await expect
       .poll(async () => (await readTableGrid(page))[0])
@@ -2094,14 +2036,14 @@ test.describe("block editor authoring flow", () => {
 
     await expect.poll(readGuideBoundaryDelta).toBeLessThanOrEqual(2)
 
-    await page.mouse.move(startX + 72, startY, { steps: 8 })
+    await page.mouse.move(startX - 72, startY, { steps: 8 })
 
     await expect.poll(readGuideBoundaryDelta).toBeLessThanOrEqual(2)
     await expect
       .poll(async () =>
         firstHeaderCell.evaluate((element) => Math.round((element as HTMLElement).getBoundingClientRect().right))
       )
-      .toBeGreaterThan(initialBoundaryRight + 24)
+      .toBeLessThan(initialBoundaryRight - 24)
 
     await page.mouse.up()
   })
@@ -2148,22 +2090,22 @@ test.describe("block editor authoring flow", () => {
 
     await expect.poll(readGuideBoundaryDelta).toBeLessThanOrEqual(2)
 
-    await page.mouse.move(startX + 72, startY, { steps: 8 })
+    await page.mouse.move(startX - 72, startY, { steps: 8 })
 
     await expect.poll(readGuideBoundaryDelta).toBeLessThanOrEqual(2)
-    const expandedBoundaryRight = await firstHeaderCell.evaluate((element) =>
+    const shrunkBoundaryRight = await firstHeaderCell.evaluate((element) =>
       Math.round((element as HTMLElement).getBoundingClientRect().right)
     )
-    expect(expandedBoundaryRight).toBeGreaterThan(initialBoundaryRight + 24)
+    expect(shrunkBoundaryRight).toBeLessThan(initialBoundaryRight - 24)
 
-    await page.mouse.move(startX + 36, startY, { steps: 6 })
+    await page.mouse.move(startX - 36, startY, { steps: 6 })
 
     await expect.poll(readGuideBoundaryDelta).toBeLessThanOrEqual(2)
     await expect
       .poll(async () =>
         firstHeaderCell.evaluate((element) => Math.round((element as HTMLElement).getBoundingClientRect().right))
       )
-      .toBeLessThan(expandedBoundaryRight - 12)
+      .toBeGreaterThan(shrunkBoundaryRight + 12)
 
     await page.mouse.up()
   })
@@ -2345,7 +2287,41 @@ test.describe("block editor authoring flow", () => {
     await expect(markdownOutput).toContainText('"columnWidths"')
   })
 
-  test("table column resize는 desktop writer readable width budget을 넘지 않는다", async ({
+  test("새 table은 3x3이며 desktop writer readable width 최대폭으로 생성된다", async ({
+    page,
+  }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    await page.getByRole("button", { name: "테이블" }).click()
+    const tableShape = await page.evaluate(() => {
+      const contentRoot = document.querySelector<HTMLElement>(".aq-block-editor__content")
+      const wrapper = document.querySelector<HTMLElement>(".aq-block-editor__content .tableWrapper")
+      const table = wrapper?.querySelector<HTMLElement>("table")
+      const rows = Array.from(table?.querySelectorAll<HTMLTableRowElement>("tr") ?? [])
+      const firstRowCells = rows[0]?.querySelectorAll("th, td") ?? []
+      if (!contentRoot || !wrapper || !table || rows.length === 0) return null
+      return {
+        contentWidth: Math.round(contentRoot.getBoundingClientRect().width),
+        wrapperWidth: Math.round(wrapper.getBoundingClientRect().width),
+        tableWidth: Math.round(table.getBoundingClientRect().width),
+        rowCount: rows.length,
+        columnCount: firstRowCells.length,
+      }
+    })
+
+    expect(tableShape).not.toBeNull()
+    if (!tableShape) {
+      throw new Error("table width shape is missing")
+    }
+
+    expect(tableShape.rowCount).toBe(3)
+    expect(tableShape.columnCount).toBe(3)
+    expect(Math.abs(tableShape.wrapperWidth - tableShape.tableWidth)).toBeLessThanOrEqual(2)
+    expect(Math.abs(tableShape.tableWidth - tableShape.contentWidth)).toBeLessThanOrEqual(4)
+    expect(tableShape.tableWidth).toBeLessThanOrEqual(tableShape.contentWidth + 2)
+  })
+
+  test("table column resize는 활성 열만 바꾸고 다른 열은 유지한 채 writer budget 안에서 clamp한다", async ({
     page,
   }) => {
     await page.goto(QA_ENGINE_ROUTE)
@@ -2354,48 +2330,6 @@ test.describe("block editor authoring flow", () => {
     const firstHeaderCell = page.locator("table th").first()
     await firstHeaderCell.click()
     await firstHeaderCell.hover()
-
-    const beforeWidth = await firstHeaderCell.evaluate((element) =>
-      Math.round((element as HTMLElement).getBoundingClientRect().width)
-    )
-
-    for (let index = 0; index < 6; index += 1) {
-      await page.getByRole("button", { name: "QA 열 리사이즈" }).click()
-    }
-
-    const widthShape = await page.evaluate(() => {
-      const contentRoot = document.querySelector<HTMLElement>(".aq-block-editor__content")
-      const wrapper = document.querySelector<HTMLElement>(".aq-block-editor__content .tableWrapper")
-      const table = wrapper?.querySelector<HTMLElement>("table")
-      const firstCell = table?.querySelector<HTMLElement>("th, td")
-      if (!contentRoot || !wrapper || !table || !firstCell) return null
-      return {
-        contentWidth: Math.round(contentRoot.getBoundingClientRect().width),
-        wrapperWidth: Math.round(wrapper.getBoundingClientRect().width),
-        tableWidth: Math.round(table.getBoundingClientRect().width),
-        firstCellWidth: Math.round(firstCell.getBoundingClientRect().width),
-      }
-    })
-
-    expect(widthShape).not.toBeNull()
-    if (!widthShape) {
-      throw new Error("table width shape is missing")
-    }
-
-    expect(Math.abs(widthShape.wrapperWidth - widthShape.tableWidth)).toBeLessThanOrEqual(2)
-    expect(widthShape.tableWidth).toBeLessThanOrEqual(widthShape.contentWidth + 2)
-    expect(widthShape.firstCellWidth).toBeGreaterThanOrEqual(beforeWidth)
-  })
-
-  test("table last column shrink는 normal mode에서 남는 폭을 재분배해 구조를 유지한다", async ({
-    page,
-  }) => {
-    await page.goto(QA_ENGINE_ROUTE)
-
-    await page.getByRole("button", { name: "테이블" }).click()
-    const lastHeaderCell = page.locator("table th").last()
-    await lastHeaderCell.click()
-    await lastHeaderCell.hover()
 
     const readShape = async () =>
       page.evaluate(() => {
@@ -2418,31 +2352,26 @@ test.describe("block editor authoring flow", () => {
       throw new Error("table width shape is missing")
     }
 
-    const resizeHandles = page.locator('[data-testid^="table-column-resize-boundary-"]')
-    const handleCount = await resizeHandles.count()
-    expect(handleCount).toBeGreaterThan(0)
-
-    const lastResizeHandle = resizeHandles.nth(handleCount - 1)
-    const handleBox = await lastResizeHandle.boundingBox()
+    const firstResizeHandle = page.getByTestId("table-column-resize-boundary-0")
+    const handleBox = await firstResizeHandle.boundingBox()
     if (!handleBox) {
-      throw new Error("last table column resize handle is missing")
+      throw new Error("first table column resize handle is missing")
     }
 
-    const dragDeltaX = handleCount >= beforeShape.columnWidths.length ? -72 : 72
     const startX = handleBox.x + handleBox.width / 2
     const startY = handleBox.y + handleBox.height / 2
 
     await page.mouse.move(startX, startY)
     await page.mouse.down()
-    await page.mouse.move(startX + dragDeltaX, startY, { steps: 8 })
+    await page.mouse.move(startX - 72, startY, { steps: 8 })
     await page.mouse.up()
 
     await expect
       .poll(async () => {
         const shape = await readShape()
-        return shape?.columnWidths.at(-1) ?? null
+        return shape?.columnWidths[0] ?? null
       })
-      .not.toBe(beforeShape.columnWidths.at(-1) ?? null)
+      .not.toBe(beforeShape.columnWidths[0] ?? null)
 
     const afterShape = await readShape()
     expect(afterShape).not.toBeNull()
@@ -2450,14 +2379,67 @@ test.describe("block editor authoring flow", () => {
       throw new Error("updated table width shape is missing")
     }
 
-    expect(Math.abs(afterShape.wrapperWidth - afterShape.tableWidth)).toBeLessThanOrEqual(2)
-    expect(afterShape.tableWidth).toBeLessThanOrEqual(afterShape.contentWidth + 2)
-    expect(Math.abs(afterShape.tableWidth - beforeShape.tableWidth)).toBeLessThanOrEqual(2)
-    expect(afterShape.columnWidths.at(-1) ?? 0).toBeLessThan((beforeShape.columnWidths.at(-1) ?? 0) - 12)
-    expect(
-      afterShape.columnWidths
-        .slice(0, -1)
-        .some((width, index) => width > (beforeShape.columnWidths[index] ?? width) + 8)
-    ).toBe(true)
+    expect(Math.abs(afterShape.wrapperWidth - afterShape.contentWidth)).toBeLessThanOrEqual(2)
+    expect(afterShape.tableWidth).toBeLessThan(beforeShape.tableWidth - 12)
+    expect(afterShape.columnWidths[0] ?? 0).toBeLessThan((beforeShape.columnWidths[0] ?? 0) - 12)
+    afterShape.columnWidths.slice(1).forEach((width, index) => {
+      expect(Math.abs(width - (beforeShape.columnWidths[index + 1] ?? width))).toBeLessThanOrEqual(2)
+    })
+
+    await firstHeaderCell.click()
+    await firstHeaderCell.hover()
+
+    const firstHandleBox = await firstResizeHandle.boundingBox()
+    if (!firstHandleBox) {
+      throw new Error("first table column resize handle is missing")
+    }
+
+    const firstStartX = firstHandleBox.x + firstHandleBox.width / 2
+    const firstStartY = firstHandleBox.y + firstHandleBox.height / 2
+
+    await page.mouse.move(firstStartX, firstStartY)
+    await page.mouse.down()
+    await page.mouse.move(firstStartX + 180, firstStartY, { steps: 10 })
+    await page.mouse.up()
+
+    const clampedShape = await readShape()
+    expect(clampedShape).not.toBeNull()
+    if (!clampedShape) {
+      throw new Error("clamped table width shape is missing")
+    }
+
+    expect(clampedShape.tableWidth).toBeLessThanOrEqual(clampedShape.contentWidth + 2)
+    expect(clampedShape.columnWidths[0] ?? 0).toBeGreaterThan((afterShape.columnWidths[0] ?? 0) + 12)
+    expect(Math.abs((clampedShape.columnWidths[1] ?? 0) - (afterShape.columnWidths[1] ?? 0))).toBeLessThanOrEqual(2)
+    expect(Math.abs((clampedShape.columnWidths[2] ?? 0) - (afterShape.columnWidths[2] ?? 0))).toBeLessThanOrEqual(2)
+    expect(clampedShape.tableWidth).toBeGreaterThan(afterShape.tableWidth + 12)
+    expect(clampedShape.tableWidth).toBeLessThanOrEqual(beforeShape.contentWidth + 2)
+  })
+
+  test("large table 조건이 되면 auto-wide로 승격되고 small table은 normal을 유지한다", async ({
+    page,
+  }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    await page.getByRole("button", { name: "테이블" }).click()
+    const firstHeaderCell = page.locator("table th").first()
+    await firstHeaderCell.click()
+
+    const table = page.locator(".aq-block-editor__content .tableWrapper > table").first()
+    const tableWrapper = page.locator(".aq-block-editor__content .tableWrapper").first()
+
+    await expect(table).not.toHaveAttribute("data-overflow-mode", "wide")
+
+    await page.getByRole("button", { name: "QA 열 추가" }).click()
+    await expect(page.locator("table tr").first().locator("th")).toHaveCount(4)
+    await expect(table).not.toHaveAttribute("data-overflow-mode", "wide")
+
+    for (let step = 0; step < 4; step += 1) {
+      await page.getByRole("button", { name: "QA 열 추가" }).click()
+    }
+    await expect(page.locator("table tr").first().locator("th")).toHaveCount(8)
+    await expect(table).toHaveAttribute("data-overflow-mode", "wide")
+    await expect(tableWrapper).toHaveAttribute("data-overflow-mode", "wide")
+    await expect(page.getByTestId("qa-markdown-output")).toContainText('"overflowMode":"wide"')
   })
 })

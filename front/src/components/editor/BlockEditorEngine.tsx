@@ -5907,9 +5907,20 @@ const BlockEditorEngine = ({
     }
   }, [clearPendingBlockDrag])
 
+  const shouldTrackSelectionLayoutSync =
+    blockSelectionOverlayState.visible ||
+    blockHandleState.visible ||
+    tableQuickRailState.visible ||
+    isTableQuickRailHovered ||
+    tableMenuState !== null ||
+    isTableColumnResizeActive ||
+    tableColumnDragGuideState.visible
+
   useEffect(() => {
-    if (typeof window === "undefined") return
+    if (typeof window === "undefined" || !shouldTrackSelectionLayoutSync) return
     let rafId: number | null = null
+    const scrollOptions: AddEventListenerOptions = { capture: true, passive: true }
+    const resizeOptions: AddEventListenerOptions = { passive: true }
     const sync = () => {
       if (rafId !== null) return
       rafId = window.requestAnimationFrame(() => {
@@ -5917,16 +5928,16 @@ const BlockEditorEngine = ({
         setSelectionTick((prev) => prev + 1)
       })
     }
-    window.addEventListener("scroll", sync, true)
-    window.addEventListener("resize", sync)
+    window.addEventListener("scroll", sync, scrollOptions)
+    window.addEventListener("resize", sync, resizeOptions)
     return () => {
-      window.removeEventListener("scroll", sync, true)
-      window.removeEventListener("resize", sync)
+      window.removeEventListener("scroll", sync, scrollOptions)
+      window.removeEventListener("resize", sync, resizeOptions)
       if (rafId !== null) {
         window.cancelAnimationFrame(rafId)
       }
     }
-  }, [])
+  }, [shouldTrackSelectionLayoutSync])
 
   useEffect(() => {
     if (!editor) return

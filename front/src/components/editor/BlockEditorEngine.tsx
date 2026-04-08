@@ -341,6 +341,42 @@ type DropIndicatorState = {
   highlightHeight: number
 }
 
+type PendingTableAxisDragState = {
+  axis: "row" | "column"
+  sourceIndex: number
+  pointerId: number
+  tablePos: number
+  startX: number
+  startY: number
+  previewLeft: number
+  previewTop: number
+  previewWidth: number
+  previewHeight: number
+}
+
+type DraggedTableAxisState =
+  | {
+      axis: "row" | "column"
+      sourceIndex: number
+      pointerId: number
+      tablePos: number
+      previewLeft: number
+      previewTop: number
+      previewWidth: number
+      previewHeight: number
+    }
+  | null
+
+type TableAxisReorderIndicatorState = {
+  visible: boolean
+  axis: "row" | "column"
+  insertionIndex: number
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
 type BlockSelectionPointerEventLike = {
   button: number
   detail: number
@@ -1168,6 +1204,85 @@ const collectSimpleTableColumnCells = (tableNode: { forEach: Function }, tablePo
   return hasMergedCell ? null : columns
 }
 
+const moveItemToInsertionIndex = <T,>(items: T[], sourceIndex: number, insertionIndex: number) => {
+  if (sourceIndex < 0 || sourceIndex >= items.length) {
+    return { changed: false, items, nextIndex: sourceIndex }
+  }
+
+  const boundedInsertionIndex = Math.max(0, Math.min(insertionIndex, items.length))
+  if (boundedInsertionIndex === sourceIndex || boundedInsertionIndex === sourceIndex + 1) {
+    return { changed: false, items, nextIndex: sourceIndex }
+  }
+
+  const nextItems = items.slice()
+  const [movedItem] = nextItems.splice(sourceIndex, 1)
+  if (typeof movedItem === "undefined") {
+    return { changed: false, items, nextIndex: sourceIndex }
+  }
+
+  const nextIndex = boundedInsertionIndex > sourceIndex ? boundedInsertionIndex - 1 : boundedInsertionIndex
+  nextItems.splice(nextIndex, 0, movedItem)
+
+  return {
+    changed: true,
+    items: nextItems,
+    nextIndex,
+  }
+}
+
+const buildReorderedSimpleTableNode = (
+  tableNode: ProseMirrorNode,
+  axis: "row" | "column",
+  sourceIndex: number,
+  insertionIndex: number
+) => {
+  const rowNodes: ProseMirrorNode[] = []
+  tableNode.forEach((rowNode: ProseMirrorNode) => {
+    if (rowNode.type.name === "tableRow") {
+      rowNodes.push(rowNode)
+    }
+  })
+
+  if (rowNodes.length === 0) return null
+
+  if (axis === "row") {
+    const movedRows = moveItemToInsertionIndex(rowNodes, sourceIndex, insertionIndex)
+    if (!movedRows.changed) return null
+    return {
+      node: tableNode.type.create(tableNode.attrs, Fragment.fromArray(movedRows.items), tableNode.marks),
+      nextIndex: movedRows.nextIndex,
+    }
+  }
+
+  if (!collectSimpleTableColumnCells(tableNode, 0)) {
+    return null
+  }
+
+  const firstRowCells: ProseMirrorNode[] = []
+  rowNodes[0]?.forEach((cellNode: ProseMirrorNode) => {
+    firstRowCells.push(cellNode)
+  })
+  const movedColumns = moveItemToInsertionIndex(firstRowCells, sourceIndex, insertionIndex)
+  if (!movedColumns.changed) return null
+
+  const nextRows = rowNodes.map((rowNode) => {
+    const cells: ProseMirrorNode[] = []
+    rowNode.forEach((cellNode: ProseMirrorNode) => {
+      cells.push(cellNode)
+    })
+    if (cells.length !== firstRowCells.length) {
+      return rowNode
+    }
+    const movedCells = moveItemToInsertionIndex(cells, sourceIndex, insertionIndex)
+    return rowNode.type.create(rowNode.attrs, Fragment.fromArray(movedCells.items), rowNode.marks)
+  })
+
+  return {
+    node: tableNode.type.create(tableNode.attrs, Fragment.fromArray(nextRows), tableNode.marks),
+    nextIndex: movedColumns.nextIndex,
+  }
+}
+
 const findActiveRenderedTable = (
   viewport: HTMLElement | null,
   quickRailState: TableQuickRailState
@@ -1711,6 +1826,9 @@ const BlockEditorEngine = ({
   const blockHandleRailRef = useRef<HTMLDivElement>(null)
   const pendingBlockDragRef = useRef<PendingBlockDragState | null>(null)
   const pendingBlockDragCleanupRef = useRef<(() => void) | null>(null)
+  const pendingTableAxisDragRef = useRef<PendingTableAxisDragState | null>(null)
+  const pendingTableAxisDragCleanupRef = useRef<(() => void) | null>(null)
+  const tableAxisDragSuppressClickRef = useRef(false)
   const skipNextPointerDownSelectionClearRef = useRef(false)
   const pendingImageInsertIndexRef = useRef<number | null>(null)
   const pendingAttachmentInsertIndexRef = useRef<number | null>(null)
@@ -1810,6 +1928,17 @@ const BlockEditorEngine = ({
   const [isTableCornerGrowActive, setIsTableCornerGrowActive] = useState(false)
   const [tableMenuState, setTableMenuState] = useState<TableMenuState>(null)
   const tableQuickRailStateRef = useRef(tableQuickRailState)
+  const [draggedTableAxisState, setDraggedTableAxisState] = useState<DraggedTableAxisState>(null)
+  const [tableAxisDragGhostPosition, setTableAxisDragGhostPosition] = useState<{ x: number; y: number } | null>(null)
+  const [tableAxisReorderIndicatorState, setTableAxisReorderIndicatorState] = useState<TableAxisReorderIndicatorState>({
+    visible: false,
+    axis: "row",
+    insertionIndex: 0,
+    left: 0,
+    top: 0,
+    width: 0,
+    height: 0,
+  })
   const [draggedBlockState, setDraggedBlockState] = useState<DraggedBlockState>(null)
   const [dragGhostPosition, setDragGhostPosition] = useState<{ x: number; y: number } | null>(null)
   const [dropIndicatorState, setDropIndicatorState] = useState<DropIndicatorState>({
@@ -2352,6 +2481,165 @@ const BlockEditorEngine = ({
       pendingBlockDragCleanupRef.current = null
     }
   }, [])
+
+  const selectTableAxisAtIndex = useCallback(
+    (activeEditor: TiptapEditor, tablePos: number, axis: "row" | "column", axisIndex: number) => {
+      const tableNode = activeEditor.state.doc.nodeAt(tablePos)
+      if (!tableNode || tableNode.type.name !== "table") return false
+
+      const map = TableMap.get(tableNode)
+      if (axis === "column") {
+        if (axisIndex < 0 || axisIndex >= map.width) return false
+        const anchorCellPos = tablePos + 1 + map.positionAt(0, axisIndex, tableNode)
+        const headCellPos = tablePos + 1 + map.positionAt(map.height - 1, axisIndex, tableNode)
+        const anchorResolved = resolveDocPosSafe(activeEditor, anchorCellPos)
+        const headResolved = resolveDocPosSafe(activeEditor, headCellPos)
+        if (!anchorResolved || !headResolved) return false
+
+        activeEditor.view.dispatch(
+          activeEditor.state.tr.setSelection(CellSelection.colSelection(anchorResolved, headResolved))
+        )
+        activeEditor.view.focus()
+        return true
+      }
+
+      if (axisIndex < 0 || axisIndex >= map.height) return false
+      const anchorCellPos = tablePos + 1 + map.positionAt(axisIndex, 0, tableNode)
+      const headCellPos = tablePos + 1 + map.positionAt(axisIndex, map.width - 1, tableNode)
+      const anchorResolved = resolveDocPosSafe(activeEditor, anchorCellPos)
+      const headResolved = resolveDocPosSafe(activeEditor, headCellPos)
+      if (!anchorResolved || !headResolved) return false
+
+      activeEditor.view.dispatch(
+        activeEditor.state.tr.setSelection(CellSelection.rowSelection(anchorResolved, headResolved))
+      )
+      activeEditor.view.focus()
+      return true
+    },
+    []
+  )
+
+  const clearPendingTableAxisDrag = useCallback(() => {
+    pendingTableAxisDragRef.current = null
+    if (pendingTableAxisDragCleanupRef.current) {
+      pendingTableAxisDragCleanupRef.current()
+      pendingTableAxisDragCleanupRef.current = null
+    }
+  }, [])
+
+  const resolveTableAxisReorderIndicator = useCallback(
+    (axis: "row" | "column", sourceIndex: number, clientX: number, clientY: number) => {
+      const renderedTable = findActiveRenderedTable(viewportRef.current, tableQuickRailStateRef.current)
+      if (!renderedTable) return null
+
+      const tableRect = renderedTable.getBoundingClientRect()
+      const rows = Array.from(renderedTable.querySelectorAll("tr")).filter(
+        (row): row is HTMLTableRowElement => row instanceof HTMLTableRowElement && row.cells.length > 0
+      )
+      if (rows.length === 0) return null
+
+      if (axis === "row") {
+        const boundedSourceIndex = Math.max(0, Math.min(sourceIndex, rows.length - 1))
+        let insertionIndex = rows.length
+        let top = tableRect.bottom
+
+        rows.forEach((row, rowIndex) => {
+          if (insertionIndex !== rows.length) return
+          const rowRect = row.getBoundingClientRect()
+          if (clientY < rowRect.top + rowRect.height / 2) {
+            insertionIndex = rowIndex
+            top = rowRect.top
+          }
+        })
+
+        return {
+          visible: true,
+          axis,
+          insertionIndex,
+          left: Math.round(tableRect.left),
+          top: Math.round(top),
+          width: Math.round(tableRect.width),
+          height: Math.max(2, Math.round(Math.min(rows[boundedSourceIndex]?.getBoundingClientRect().height ?? 2, 3))),
+        }
+      }
+
+      const firstRowCells = Array.from(rows[0].cells).filter(
+        (cell): cell is HTMLTableCellElement => cell instanceof HTMLTableCellElement
+      )
+      if (firstRowCells.length === 0) return null
+
+      let insertionIndex = firstRowCells.length
+      let left = tableRect.right
+      firstRowCells.forEach((cell, columnIndex) => {
+        if (insertionIndex !== firstRowCells.length) return
+        const cellRect = cell.getBoundingClientRect()
+        if (clientX < cellRect.left + cellRect.width / 2) {
+          insertionIndex = columnIndex
+          left = cellRect.left
+        }
+      })
+
+      return {
+        visible: true,
+        axis,
+        insertionIndex,
+        left: Math.round(left),
+        top: Math.round(tableRect.top),
+        width: 2,
+        height: Math.round(tableRect.height),
+      }
+    },
+    []
+  )
+
+  const resolveTableAxisIndexFromPointer = useCallback(
+    (axis: "row" | "column", clientX: number, clientY: number) => {
+      const renderedTable = findActiveRenderedTable(viewportRef.current, tableQuickRailStateRef.current)
+      if (!renderedTable) return null
+
+      const rows = Array.from(renderedTable.querySelectorAll("tr")).filter(
+        (row): row is HTMLTableRowElement => row instanceof HTMLTableRowElement && row.cells.length > 0
+      )
+      if (rows.length === 0) return null
+
+      if (axis === "row") {
+        const matchedRowIndex = rows.findIndex((row) => {
+          const rowRect = row.getBoundingClientRect()
+          return clientY >= rowRect.top && clientY <= rowRect.bottom
+        })
+        if (matchedRowIndex >= 0) return matchedRowIndex
+
+        return rows.reduce((bestIndex, row, rowIndex) => {
+          const rowRect = row.getBoundingClientRect()
+          const nextDistance = Math.abs(clientY - (rowRect.top + rowRect.height / 2))
+          const currentDistance = Math.abs(
+            clientY - (rows[bestIndex].getBoundingClientRect().top + rows[bestIndex].getBoundingClientRect().height / 2)
+          )
+          return nextDistance < currentDistance ? rowIndex : bestIndex
+        }, 0)
+      }
+
+      const firstRowCells = Array.from(rows[0].cells).filter(
+        (cell): cell is HTMLTableCellElement => cell instanceof HTMLTableCellElement
+      )
+      if (firstRowCells.length === 0) return null
+
+      const matchedColumnIndex = firstRowCells.findIndex((cell) => {
+        const cellRect = cell.getBoundingClientRect()
+        return clientX >= cellRect.left && clientX <= cellRect.right
+      })
+      if (matchedColumnIndex >= 0) return matchedColumnIndex
+
+      return firstRowCells.reduce((bestIndex, cell, columnIndex) => {
+        const cellRect = cell.getBoundingClientRect()
+        const nextDistance = Math.abs(clientX - (cellRect.left + cellRect.width / 2))
+        const currentRect = firstRowCells[bestIndex].getBoundingClientRect()
+        const currentDistance = Math.abs(clientX - (currentRect.left + currentRect.width / 2))
+        return nextDistance < currentDistance ? columnIndex : bestIndex
+      }, 0)
+    },
+    []
+  )
 
   const beginBlockDragFromPending = useCallback(
     (pending: PendingBlockDragState, clientX: number, clientY: number) => {
@@ -2902,20 +3190,9 @@ const BlockEditorEngine = ({
       const rect = getCurrentSelectedTableRect(currentEditor)
       if (!rect || columnIndex < 0 || columnIndex >= rect.map.width) return false
 
-      const anchorCellPos = rect.tableStart + rect.map.positionAt(0, columnIndex, rect.table)
-      const headCellPos =
-        rect.tableStart + rect.map.positionAt(rect.map.height - 1, columnIndex, rect.table)
-      const anchorResolved = resolveDocPosSafe(currentEditor, anchorCellPos)
-      const headResolved = resolveDocPosSafe(currentEditor, headCellPos)
-      if (!anchorResolved || !headResolved) return false
-
-      currentEditor.view.dispatch(
-        currentEditor.state.tr.setSelection(CellSelection.colSelection(anchorResolved, headResolved))
-      )
-      currentEditor.view.focus()
-      return true
+      return selectTableAxisAtIndex(currentEditor, rect.tableStart - 1, "column", columnIndex)
     },
-    [getCurrentSelectedTableRect]
+    [getCurrentSelectedTableRect, selectTableAxisAtIndex]
   )
 
   const selectTableRowByIndex = useCallback(
@@ -2925,20 +3202,204 @@ const BlockEditorEngine = ({
       const rect = getCurrentSelectedTableRect(currentEditor)
       if (!rect || rowIndex < 0 || rowIndex >= rect.map.height) return false
 
-      const anchorCellPos = rect.tableStart + rect.map.positionAt(rowIndex, 0, rect.table)
-      const headCellPos =
-        rect.tableStart + rect.map.positionAt(rowIndex, rect.map.width - 1, rect.table)
-      const anchorResolved = resolveDocPosSafe(currentEditor, anchorCellPos)
-      const headResolved = resolveDocPosSafe(currentEditor, headCellPos)
-      if (!anchorResolved || !headResolved) return false
+      return selectTableAxisAtIndex(currentEditor, rect.tableStart - 1, "row", rowIndex)
+    },
+    [getCurrentSelectedTableRect, selectTableAxisAtIndex]
+  )
+
+  const reorderTableAxisAtPosition = useCallback(
+    (tablePos: number, axis: "row" | "column", sourceIndex: number, insertionIndex: number) => {
+      const currentEditor = editorRef.current
+      if (!currentEditor) return false
+
+      const tableNode = currentEditor.state.doc.nodeAt(tablePos)
+      if (!tableNode || tableNode.type.name !== "table") return false
+
+      const reorderedTable = buildReorderedSimpleTableNode(tableNode, axis, sourceIndex, insertionIndex)
+      if (!reorderedTable) return false
 
       currentEditor.view.dispatch(
-        currentEditor.state.tr.setSelection(CellSelection.rowSelection(anchorResolved, headResolved))
+        currentEditor.state.tr.replaceWith(tablePos, tablePos + tableNode.nodeSize, reorderedTable.node)
       )
-      currentEditor.view.focus()
-      return true
+
+      const selected = selectTableAxisAtIndex(currentEditor, tablePos, axis, reorderedTable.nextIndex)
+      setTableQuickRailState((prev) =>
+        axis === "row"
+          ? { ...prev, rowIndex: reorderedTable.nextIndex }
+          : { ...prev, columnIndex: reorderedTable.nextIndex }
+      )
+      setSelectionTick((prev) => prev + 1)
+      return selected
     },
-    [getCurrentSelectedTableRect]
+    [selectTableAxisAtIndex]
+  )
+
+  const beginTableAxisDragFromPending = useCallback(
+    (pending: PendingTableAxisDragState, clientX: number, clientY: number) => {
+      const nextDragState = {
+        axis: pending.axis,
+        sourceIndex: pending.sourceIndex,
+        pointerId: pending.pointerId,
+        tablePos: pending.tablePos,
+        previewLeft: pending.previewLeft,
+        previewTop: pending.previewTop,
+        previewWidth: pending.previewWidth,
+        previewHeight: pending.previewHeight,
+      } satisfies Exclude<DraggedTableAxisState, null>
+      tableAxisDragSuppressClickRef.current = true
+      const currentEditor = editorRef.current
+      if (currentEditor) {
+        selectTableAxisAtIndex(currentEditor, pending.tablePos, pending.axis, pending.sourceIndex)
+      }
+      setTableMenuState(null)
+      cancelTableQuickRailHide()
+      setDraggedTableAxisState(nextDragState)
+      setTableAxisReorderIndicatorState(
+        resolveTableAxisReorderIndicator(pending.axis, pending.sourceIndex, clientX, clientY) ?? {
+          visible: false,
+          axis: pending.axis,
+          insertionIndex: pending.sourceIndex,
+          left: 0,
+          top: 0,
+          width: 0,
+          height: 0,
+        }
+      )
+      setTableAxisDragGhostPosition(
+        pending.axis === "row"
+          ? {
+              x: pending.previewLeft,
+              y: Math.round(clientY - pending.previewHeight / 2),
+            }
+          : null
+      )
+      return nextDragState
+    },
+    [cancelTableQuickRailHide, resolveTableAxisReorderIndicator, selectTableAxisAtIndex]
+  )
+
+  const startPendingTableAxisDrag = useCallback(
+    (axis: "row" | "column", sourceIndex: number, pointerId: number, clientX: number, clientY: number) => {
+      const currentEditor = editorRef.current
+      if (!currentEditor) return
+
+      const tableRect = getCurrentSelectedTableRect(currentEditor)
+      const tablePos = tableRect ? Math.max(0, tableRect.tableStart - 1) : null
+      if (!tableRect || tablePos === null) return
+      const resolvedSourceIndex = resolveTableAxisIndexFromPointer(axis, clientX, clientY) ?? sourceIndex
+
+      const withinBounds =
+        axis === "row"
+          ? resolvedSourceIndex >= 0 && resolvedSourceIndex < tableRect.map.height
+          : resolvedSourceIndex >= 0 && resolvedSourceIndex < tableRect.map.width
+      if (!withinBounds) return
+
+      clearPendingTableAxisDrag()
+      tableAxisDragSuppressClickRef.current = false
+
+      pendingTableAxisDragRef.current = {
+        axis,
+        sourceIndex: resolvedSourceIndex,
+        pointerId,
+        tablePos,
+        startX: clientX,
+        startY: clientY,
+        previewLeft: axis === "row" ? tableQuickRailStateRef.current.tableLeft : tableQuickRailStateRef.current.columnLeft,
+        previewTop: axis === "row" ? tableQuickRailStateRef.current.rowTop : tableQuickRailStateRef.current.tableTop,
+        previewWidth: axis === "row" ? tableQuickRailStateRef.current.width : tableQuickRailStateRef.current.columnWidth,
+        previewHeight: axis === "row" ? tableQuickRailStateRef.current.rowHeight : tableQuickRailStateRef.current.height,
+      }
+
+      const DRAG_THRESHOLD_PX = 5
+      let activeDragState: Exclude<DraggedTableAxisState, null> | null = null
+
+      const handlePendingPointerMove = (moveEvent: PointerEvent) => {
+        if (activeDragState) {
+          if (moveEvent.pointerId !== activeDragState.pointerId) return
+          const nextIndicator = resolveTableAxisReorderIndicator(
+            activeDragState.axis,
+            activeDragState.sourceIndex,
+            moveEvent.clientX,
+            moveEvent.clientY
+          )
+          setTableAxisReorderIndicatorState(
+            nextIndicator ?? {
+              visible: false,
+              axis: activeDragState.axis,
+              insertionIndex: activeDragState.sourceIndex,
+              left: 0,
+              top: 0,
+              width: 0,
+              height: 0,
+            }
+          )
+          if (activeDragState.axis === "row") {
+            setTableAxisDragGhostPosition({
+              x: activeDragState.previewLeft,
+              y: Math.round(moveEvent.clientY - activeDragState.previewHeight / 2),
+            })
+          }
+          return
+        }
+
+        const pending = pendingTableAxisDragRef.current
+        if (!pending || moveEvent.pointerId !== pending.pointerId) return
+
+        const distance = Math.hypot(moveEvent.clientX - pending.startX, moveEvent.clientY - pending.startY)
+        if (distance < DRAG_THRESHOLD_PX) return
+
+        pendingTableAxisDragRef.current = null
+        activeDragState = beginTableAxisDragFromPending(pending, moveEvent.clientX, moveEvent.clientY)
+      }
+
+      const handlePendingPointerDone = (doneEvent: PointerEvent) => {
+        if (activeDragState) {
+          if (doneEvent.pointerId !== activeDragState.pointerId) return
+          const nextIndicator = resolveTableAxisReorderIndicator(
+            activeDragState.axis,
+            activeDragState.sourceIndex,
+            doneEvent.clientX,
+            doneEvent.clientY
+          )
+          if (nextIndicator) {
+            reorderTableAxisAtPosition(
+              activeDragState.tablePos,
+              activeDragState.axis,
+              activeDragState.sourceIndex,
+              nextIndicator.insertionIndex
+            )
+          }
+          activeDragState = null
+          setDraggedTableAxisState(null)
+          setTableAxisDragGhostPosition(null)
+          setTableAxisReorderIndicatorState((prev) => ({ ...prev, visible: false }))
+          clearPendingTableAxisDrag()
+          return
+        }
+
+        const pending = pendingTableAxisDragRef.current
+        if (!pending || doneEvent.pointerId !== pending.pointerId) return
+        clearPendingTableAxisDrag()
+      }
+
+      window.addEventListener("pointermove", handlePendingPointerMove)
+      window.addEventListener("pointerup", handlePendingPointerDone)
+      window.addEventListener("pointercancel", handlePendingPointerDone)
+
+      pendingTableAxisDragCleanupRef.current = () => {
+        window.removeEventListener("pointermove", handlePendingPointerMove)
+        window.removeEventListener("pointerup", handlePendingPointerDone)
+        window.removeEventListener("pointercancel", handlePendingPointerDone)
+      }
+    },
+    [
+      beginTableAxisDragFromPending,
+      clearPendingTableAxisDrag,
+      getCurrentSelectedTableRect,
+      reorderTableAxisAtPosition,
+      resolveTableAxisIndexFromPointer,
+      resolveTableAxisReorderIndicator,
+    ]
   )
 
   const focusRenderedTableCell = useCallback((cell: HTMLTableCellElement) => {
@@ -4942,7 +5403,8 @@ const BlockEditorEngine = ({
     const { selection } = editor.state
     return selection instanceof CellSelection || (selection instanceof NodeSelection && selection.node.type.name === "table")
   }, [editor, selectionTick])
-  const shouldPersistTableHandles = isTableStructuralSelection || Boolean(tableMenuState)
+  const shouldPersistTableHandles =
+    isTableStructuralSelection || Boolean(tableMenuState) || Boolean(draggedTableAxisState)
   const activeTableStructureState = useMemo(() => {
     void selectionTick
     return getActiveTableStructureState(editor)
@@ -6114,6 +6576,18 @@ const BlockEditorEngine = ({
   }, [draggedBlockState])
 
   useEffect(() => {
+    if (typeof document === "undefined" || !draggedTableAxisState) return
+    const previousCursor = document.body.style.cursor
+    const previousUserSelect = document.body.style.userSelect
+    document.body.style.cursor = draggedTableAxisState.axis === "column" ? "col-resize" : "grabbing"
+    document.body.style.userSelect = "none"
+    return () => {
+      document.body.style.cursor = previousCursor
+      document.body.style.userSelect = previousUserSelect
+    }
+  }, [draggedTableAxisState])
+
+  useEffect(() => {
     if (typeof window === "undefined") return
     const mediaQuery = window.matchMedia(BLOCK_HANDLE_MEDIA_QUERY)
     const sync = () => setIsCoarsePointer(mediaQuery.matches)
@@ -6128,6 +6602,12 @@ const BlockEditorEngine = ({
     }
   }, [clearPendingBlockDrag])
 
+  useEffect(() => {
+    return () => {
+      clearPendingTableAxisDrag()
+    }
+  }, [clearPendingTableAxisDrag])
+
   const shouldTrackSelectionLayoutSync =
     blockSelectionOverlayState.visible ||
     blockHandleState.visible ||
@@ -6135,14 +6615,18 @@ const BlockEditorEngine = ({
     isTableQuickRailHovered ||
     tableMenuState !== null ||
     isTableColumnResizeActive ||
-    tableColumnDragGuideState.visible
+    tableColumnDragGuideState.visible ||
+    Boolean(draggedTableAxisState) ||
+    tableAxisReorderIndicatorState.visible
   const shouldThrottleSelectionLayoutSync =
     !blockSelectionOverlayState.visible &&
     !tableQuickRailState.visible &&
     !isTableQuickRailHovered &&
     tableMenuState === null &&
     !isTableColumnResizeActive &&
-    !tableColumnDragGuideState.visible
+    !tableColumnDragGuideState.visible &&
+    !draggedTableAxisState &&
+    !tableAxisReorderIndicatorState.visible
 
   useEffect(() => {
     if (typeof window === "undefined" || !shouldTrackSelectionLayoutSync) return
@@ -6452,6 +6936,10 @@ const BlockEditorEngine = ({
         cancelTableQuickRailHide()
         return
       }
+      if (draggedTableAxisState) {
+        cancelTableQuickRailHide()
+        return
+      }
       if (isCoarsePointer) return
       const target =
         targetEvent instanceof Element ? targetEvent : targetEvent instanceof Node ? targetEvent.parentElement : null
@@ -6515,6 +7003,7 @@ const BlockEditorEngine = ({
       findTopLevelBlockIndexByClientPosition,
       findTopLevelBlockIndexFromTarget,
       getTableCellFromClientPoint,
+      draggedTableAxisState,
       isCoarsePointer,
       isTableMode,
       isRowResizeHandleTarget,
@@ -6820,6 +7309,35 @@ const BlockEditorEngine = ({
 
   const tableOverlay = (
     <>
+      {draggedTableAxisState?.axis === "row" && tableAxisDragGhostPosition ? (
+        <TableRowDragShadow
+          aria-hidden="true"
+          data-testid="table-row-drag-shadow"
+          style={{
+            left: `${Math.round(draggedTableAxisState.previewLeft)}px`,
+            top: `${Math.round(tableAxisDragGhostPosition.y)}px`,
+            width: `${Math.round(draggedTableAxisState.previewWidth)}px`,
+            height: `${Math.round(draggedTableAxisState.previewHeight)}px`,
+          }}
+        />
+      ) : null}
+      {tableAxisReorderIndicatorState.visible ? (
+        <TableAxisReorderIndicator
+          aria-hidden="true"
+          data-axis={tableAxisReorderIndicatorState.axis}
+          data-testid={
+            tableAxisReorderIndicatorState.axis === "row"
+              ? "table-row-reorder-indicator"
+              : "table-column-reorder-indicator"
+          }
+          style={{
+            left: `${tableAxisReorderIndicatorState.left}px`,
+            top: `${tableAxisReorderIndicatorState.top}px`,
+            width: `${Math.max(2, tableAxisReorderIndicatorState.width)}px`,
+            height: `${Math.max(2, tableAxisReorderIndicatorState.height)}px`,
+          }}
+        />
+      ) : null}
       {tableColumnDragGuideState.visible ? (
         <TableColumnDragGuide
           data-testid="table-column-drag-guide"
@@ -6980,9 +7498,20 @@ const BlockEditorEngine = ({
                 data-active={isCurrentTableRowSelection(tableQuickRailState.rowIndex)}
                 title="행 메뉴"
                 aria-label="행 메뉴"
+                onMouseDown={handleToolbarButtonMouseDown}
+                onPointerDown={(event: React.PointerEvent<HTMLButtonElement>) => {
+                  if (event.button !== 0) return
+                  event.preventDefault()
+                  event.stopPropagation()
+                  startPendingTableAxisDrag("row", tableQuickRailState.rowIndex, event.pointerId, event.clientX, event.clientY)
+                }}
                 onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                   event.preventDefault()
                   event.stopPropagation()
+                  if (tableAxisDragSuppressClickRef.current) {
+                    tableAxisDragSuppressClickRef.current = false
+                    return
+                  }
                   handleTableRowGripClick(tableQuickRailState.rowIndex, event.currentTarget.getBoundingClientRect())
                 }}
               >
@@ -7022,9 +7551,26 @@ const BlockEditorEngine = ({
                 data-active={isCurrentTableColumnSelection(tableQuickRailState.columnIndex)}
                 title="열 메뉴"
                 aria-label="열 메뉴"
+                onMouseDown={handleToolbarButtonMouseDown}
+                onPointerDown={(event: React.PointerEvent<HTMLButtonElement>) => {
+                  if (event.button !== 0) return
+                  event.preventDefault()
+                  event.stopPropagation()
+                  startPendingTableAxisDrag(
+                    "column",
+                    tableQuickRailState.columnIndex,
+                    event.pointerId,
+                    event.clientX,
+                    event.clientY
+                  )
+                }}
                 onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                   event.preventDefault()
                   event.stopPropagation()
+                  if (tableAxisDragSuppressClickRef.current) {
+                    tableAxisDragSuppressClickRef.current = false
+                    return
+                  }
                   handleTableColumnRailSegmentClick(tableQuickRailState.columnIndex, event.currentTarget.getBoundingClientRect())
                 }}
               >
@@ -9604,6 +10150,36 @@ const TableAxisSelectionOutline = styled.div`
   border: 2px solid rgba(59, 130, 246, 0.96);
   border-radius: 0.2rem;
   box-shadow: 0 0 0 1px rgba(30, 64, 175, 0.14);
+`
+
+const TableRowDragShadow = styled.div`
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  border-radius: 0.35rem;
+  border: 1px solid rgba(59, 130, 246, 0.32);
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(30, 41, 59, 0.82)" : "rgba(255, 255, 255, 0.92)"};
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "dark" ? "0 18px 34px rgba(2, 6, 23, 0.42)" : "0 18px 32px rgba(15, 23, 42, 0.14)"};
+  opacity: 0.94;
+`
+
+const TableAxisReorderIndicator = styled.div`
+  position: fixed;
+  z-index: 61;
+  pointer-events: none;
+  background: rgba(59, 130, 246, 0.96);
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(191, 219, 254, 0.68);
+
+  &[data-axis="row"] {
+    min-height: 3px;
+  }
+
+  &[data-axis="column"] {
+    min-width: 3px;
+  }
 `
 
 const TableQuickRailButton = styled.button`

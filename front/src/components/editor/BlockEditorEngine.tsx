@@ -3005,7 +3005,11 @@ const BlockEditorEngine = ({
     (event: BlockSelectionPointerEventLike, targetBlockIndex: number | null) => {
       if (targetBlockIndex === null) return false
       if (event.button !== 0) return false
-      if (event.detail < 2) return false
+      const currentEditor = editorRef.current
+      const allowSingleClickFromTableSelection = Boolean(
+        currentEditor && isTableSelectionActive(currentEditor)
+      )
+      if (event.detail < 2 && !allowSingleClickFromTableSelection) return false
       if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return false
 
       const targetElement =
@@ -3014,20 +3018,21 @@ const BlockEditorEngine = ({
           : event.target instanceof Node
             ? event.target.parentElement
             : null
+      const blockElement = getTopLevelBlockElementByIndex(targetBlockIndex)
+      if (!blockElement) return false
+      const rect = blockElement.getBoundingClientRect()
+      const isFarLeftOuterGutter = event.clientX <= rect.left - 12
+      const clickedTableAxisRail = targetElement?.closest("[data-table-axis-rail='true']")
       if (
         targetElement?.closest("[data-block-handle-rail='true'] button") ||
         targetElement?.closest("[data-block-menu-root='true']") ||
         targetElement?.closest("[data-table-menu-root='true']") ||
-        targetElement?.closest("[data-table-axis-rail='true']") ||
+        (clickedTableAxisRail && !(allowSingleClickFromTableSelection && isFarLeftOuterGutter)) ||
         targetElement?.closest("[data-table-corner-handle='true']") ||
         targetElement?.closest("[data-table-menu-trigger='true']")
       ) {
         return false
       }
-
-      const blockElement = getTopLevelBlockElementByIndex(targetBlockIndex)
-      if (!blockElement) return false
-      const rect = blockElement.getBoundingClientRect()
       const withinVerticalRange =
         event.clientY >= rect.top - BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX &&
         event.clientY <= rect.bottom + BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX
@@ -3364,7 +3369,7 @@ const BlockEditorEngine = ({
   const isCurrentTableColumnSelection = useCallback(
     (columnIndex: number) => {
       const currentEditor = editorRef.current
-      if (!currentEditor) return false
+      if (!currentEditor || columnIndex < 0) return false
       const { selection } = currentEditor.state
       if (!(selection instanceof CellSelection)) return false
       let rect: ReturnType<typeof selectedRect> | null = null
@@ -3374,20 +3379,14 @@ const BlockEditorEngine = ({
         rect = null
       }
       if (!rect) return false
-      return (
-        columnIndex >= 0 &&
-        rect.left === columnIndex &&
-        rect.right === columnIndex + 1 &&
-        rect.top === 0 &&
-        rect.bottom === rect.map.height
-      )
+      return rect.left === columnIndex && rect.right === columnIndex + 1 && rect.top === 0 && rect.bottom === rect.map.height
     },
     []
   )
 
   const isCurrentTableRowSelection = useCallback((rowIndex: number) => {
     const currentEditor = editorRef.current
-    if (!currentEditor) return false
+    if (!currentEditor || rowIndex < 0) return false
     const { selection } = currentEditor.state
     if (!(selection instanceof CellSelection)) return false
     let rect: ReturnType<typeof selectedRect> | null = null
@@ -3397,13 +3396,7 @@ const BlockEditorEngine = ({
       rect = null
     }
     if (!rect) return false
-    return (
-      rowIndex >= 0 &&
-      rect.top === rowIndex &&
-      rect.bottom === rowIndex + 1 &&
-      rect.left === 0 &&
-      rect.right === rect.map.width
-    )
+    return rect.top === rowIndex && rect.bottom === rowIndex + 1 && rect.left === 0 && rect.right === rect.map.width
   }, [])
 
   const selectTableColumnByIndex = useCallback(
@@ -4924,8 +4917,9 @@ const BlockEditorEngine = ({
       const targetBlockIndex =
         findTopLevelBlockIndexFromTarget(event.target) ??
         findTopLevelBlockIndexByClientPosition(event.clientX, event.clientY)
-      if (isTableSelectionActive(editor)) return
-      if (!isOuterBlockSelectionGesture(event, targetBlockIndex)) {
+      const isOuterSelectionGesture = isOuterBlockSelectionGesture(event, targetBlockIndex)
+      if (isTableSelectionActive(editor) && !isOuterSelectionGesture) return
+      if (!isOuterSelectionGesture) {
         const shouldReleaseStickyBlockSelection =
           event.button === 0 &&
           !event.metaKey &&
@@ -5775,11 +5769,36 @@ const BlockEditorEngine = ({
     if (!editor) return false
     void selectionTick
     const { selection } = editor.state
-    return selection instanceof CellSelection || (selection instanceof NodeSelection && selection.node.type.name === "table")
+    return selection instanceof CellSelection
   }, [editor, selectionTick])
+  const currentTableAxisSelection = useMemo(() => {
+    if (!editor || !isTableStructuralSelection) return null
+    let rect: ReturnType<typeof selectedRect> | null = null
+    try {
+      rect = selectedRect(editor.state)
+    } catch {
+      rect = null
+    }
+    if (!rect) return null
+    if (rect.left === 0 && rect.right === rect.map.width && rect.bottom === rect.top + 1) {
+      return { axis: "row" as const, index: rect.top }
+    }
+    if (rect.top === 0 && rect.bottom === rect.map.height && rect.right === rect.left + 1) {
+      return { axis: "column" as const, index: rect.left }
+    }
+    return null
+  }, [editor, isTableStructuralSelection, selectionTick])
   const isTableStructureMenuOpen = Boolean(tableMenuState)
   const shouldPersistTableHandles =
     isTableStructuralSelection || isTableStructureMenuOpen || Boolean(draggedTableAxisState)
+  const shouldShowColumnRail =
+    tableAffordanceVisibility.showColumnRail ||
+    currentTableAxisSelection?.axis === "column" ||
+    draggedTableAxisState?.axis === "column"
+  const shouldShowRowRail =
+    tableAffordanceVisibility.showRowRail ||
+    currentTableAxisSelection?.axis === "row" ||
+    draggedTableAxisState?.axis === "row"
   const shouldShowColumnAddBar = tableAffordanceVisibility.showColumnAddBar || isTableStructureMenuOpen
   const shouldShowRowAddBar = tableAffordanceVisibility.showRowAddBar || isTableStructureMenuOpen
   const activeTableStructureState = useMemo(() => {
@@ -6023,9 +6042,9 @@ const BlockEditorEngine = ({
   const activeTableCellAttrs = editor?.getAttributes(activeTableCellNodeType) || {}
 
   useEffect(() => {
-    if (isTableMode) return
+    if (isTableStructuralSelection) return
     setTableMenuState(null)
-  }, [isTableMode])
+  }, [isTableStructuralSelection])
 
   const handleImageInputChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -6868,7 +6887,7 @@ const BlockEditorEngine = ({
   )
 
   const openBlockMenu = useCallback((blockIndex: number, anchorRect: DOMRect) => {
-    if (isTableMode) return
+    if (isTableStructuralSelection) return
     setBlockMenuState((prev) =>
       prev && prev.blockIndex === blockIndex
         ? null
@@ -6878,7 +6897,7 @@ const BlockEditorEngine = ({
             top: Math.round(anchorRect.bottom + 8),
           }
     )
-  }, [isTableMode])
+  }, [isTableStructuralSelection])
 
   const moveBlockByStep = useCallback(
     (blockIndex: number, delta: -1 | 1) => {
@@ -7114,12 +7133,6 @@ const BlockEditorEngine = ({
       }
     }
 
-    const hideBlockHandle = () =>
-      setBlockHandleState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
-    if (isTableMode || tableAffordanceVisibility.visible || tableMenuState) {
-      hideBlockHandle()
-      return
-    }
     const stickySelectionActive =
       !isCoarsePointer && selectedBlockNodeIndex !== null && keyboardBlockSelectionStickyRef.current
     const blockIndex = isCoarsePointer
@@ -7127,6 +7140,17 @@ const BlockEditorEngine = ({
       : stickySelectionActive
         ? selectedBlockNodeIndex
         : hoveredBlockIndex
+    const hideBlockHandle = () =>
+      setBlockHandleState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
+    const hasOuterBlockSelectionIntent = blockIndex !== null
+    if (
+      (isTableStructuralSelection && !hasOuterBlockSelectionIntent) ||
+      (tableAffordanceVisibility.visible && !hasOuterBlockSelectionIntent) ||
+      tableMenuState
+    ) {
+      hideBlockHandle()
+      return
+    }
     if (blockIndex === null) {
       hideBlockHandle()
       return
@@ -7166,7 +7190,7 @@ const BlockEditorEngine = ({
     clickedBlockIndex,
     getTopLevelBlockElementByIndex,
     hoveredBlockIndex,
-    isTableMode,
+    isTableStructuralSelection,
     isCoarsePointer,
     isTopLevelBlockHandleEligible,
     selectedBlockIndex,
@@ -7343,18 +7367,37 @@ const BlockEditorEngine = ({
       const target =
         targetEvent instanceof Element ? targetEvent : targetEvent instanceof Node ? targetEvent.parentElement : null
       const cell = getTableCellFromClientPoint(clientX, clientY, targetEvent)
+      const targetBlockIndex =
+        findTopLevelBlockIndexFromTarget(targetEvent) ??
+        findTopLevelBlockIndexByClientPosition(clientX, clientY)
+      const targetBlockElement =
+        targetBlockIndex !== null ? getTopLevelBlockElementByIndex(targetBlockIndex) : null
+      const targetBlockRect = targetBlockElement?.getBoundingClientRect() ?? null
+      const isFarLeftTableBlockGutter = Boolean(
+        targetBlockElement?.querySelector(".aq-table-shell, .tableWrapper, table") &&
+          targetBlockRect &&
+          clientY >= targetBlockRect.top - BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX &&
+          clientY <= targetBlockRect.bottom + BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX &&
+          clientX <= targetBlockRect.left - 12
+      )
       if (
         target?.closest("[data-table-menu-root='true']") ||
-        target?.closest("[data-table-axis-rail='true']") ||
+        (target?.closest("[data-table-axis-rail='true']") && !isFarLeftTableBlockGutter) ||
         target?.closest("[data-table-corner-handle='true']") ||
         target?.closest("[data-table-column-rail-track='true']") ||
         target?.closest("[data-table-menu-trigger='true']")
       ) {
         cancelTableQuickRailHide()
         setIsTableQuickRailHovered(true)
-        if (isTableMode) {
-          setHoveredBlockIndex(null)
+        if (currentTableAxisSelection !== null) {
+          setHoveredBlockIndex(targetBlockIndex)
         }
+        return
+      }
+      if (isFarLeftTableBlockGutter) {
+        setIsTableQuickRailHovered(false)
+        setViewportRowResizeHot(false)
+        setHoveredBlockIndex(targetBlockIndex)
         return
       }
       const hoveredTableElement = cell?.closest(".aq-table-shell, .tableWrapper, table") ?? target?.closest(".aq-table-shell, .tableWrapper, table") ?? null
@@ -7362,7 +7405,11 @@ const BlockEditorEngine = ({
         syncTableQuickRailFromElement(cell ?? target ?? hoveredTableElement, clientX, clientY)
         setIsTableQuickRailHovered(true)
         setViewportRowResizeHot(isRowResizeHandleTarget(cell, clientX, clientY))
-        setHoveredBlockIndex(null)
+        if (currentTableAxisSelection !== null) {
+          setHoveredBlockIndex(targetBlockIndex)
+        } else {
+          setHoveredBlockIndex(null)
+        }
         if (selectedBlockNodeIndex !== null && !keyboardBlockSelectionStickyRef.current) {
           keyboardBlockSelectionStickyRef.current = false
           setSelectedBlockNodeIndex(null)
@@ -7373,7 +7420,7 @@ const BlockEditorEngine = ({
         setIsTableQuickRailHovered(false)
         scheduleTableQuickRailHide()
       }
-      if (isTableMode) {
+      if (isTableStructuralSelection) {
         setHoveredBlockIndex(null)
         return
       }
@@ -7402,9 +7449,11 @@ const BlockEditorEngine = ({
       findTopLevelBlockIndexByClientPosition,
       findTopLevelBlockIndexFromTarget,
       getTableCellFromClientPoint,
+      getTopLevelBlockElementByIndex,
       draggedTableAxisState,
+      currentTableAxisSelection,
       isCoarsePointer,
-      isTableMode,
+      isTableStructuralSelection,
       isRowResizeHandleTarget,
       selectedBlockNodeIndex,
       setViewportRowResizeHot,
@@ -7500,7 +7549,7 @@ const BlockEditorEngine = ({
       const targetBlockIndex =
         findTopLevelBlockIndexFromTarget(event.target) ??
         findTopLevelBlockIndexByClientPosition(event.clientX, event.clientY)
-      if (!isTableMode && isOuterBlockSelectionGesture(event, targetBlockIndex)) {
+      if (isOuterBlockSelectionGesture(event, targetBlockIndex)) {
         if (targetBlockIndex === null) return
         event.preventDefault()
         event.stopPropagation()
@@ -7546,7 +7595,7 @@ const BlockEditorEngine = ({
       isOuterBlockSelectionGesture,
       isCoarsePointer,
       isRowResizeHandleTarget,
-      isTableMode,
+      isTableStructuralSelection,
       promoteTopLevelBlockSelection,
       selectedBlockNodeIndex,
       shouldPersistTableHandles,
@@ -7884,7 +7933,7 @@ const BlockEditorEngine = ({
               <TableHandleIcon kind="more" />
             </TableHandleButton>
           </TableCornerHandle>
-          {tableAffordanceVisibility.showRowRail || shouldPersistTableHandles ? (
+          {shouldShowRowRail ? (
             <TableAxisRail
               data-table-axis-rail="true"
               data-testid="table-row-rail"
@@ -7937,7 +7986,7 @@ const BlockEditorEngine = ({
               </TableQuickRailButton>
             </TableAxisRail>
           ) : null}
-          {tableAffordanceVisibility.showColumnRail || shouldPersistTableHandles ? (
+          {shouldShowColumnRail ? (
             <TableAxisRail
               data-table-axis-rail="true"
               data-testid="table-column-rail"

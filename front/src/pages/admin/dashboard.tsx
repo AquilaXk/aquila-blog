@@ -147,13 +147,15 @@ export const getServerSideProps: GetServerSideProps<AdminDashboardPageProps> = a
 
 const env = getMonitoringEnv()
 const DASHBOARD_EAGER_PANEL_COUNT = 2
-const DASHBOARD_IDLE_EMBED_DELAY_MS = 1800
+const DASHBOARD_PANEL_STAGGER_MS = 420
+const DASHBOARD_INTERSECTION_ROOT_MARGIN = "96px 0px"
 
 const DeferredPanelFrame: React.FC<{
   eager?: boolean
+  activationDelayMs?: number
   src: string
   title: string
-}> = ({ eager = false, src, title }) => {
+}> = ({ eager = false, activationDelayMs = 0, src, title }) => {
   const anchorRef = useRef<HTMLDivElement | null>(null)
   const [isActivated, setIsActivated] = useState(eager)
 
@@ -161,56 +163,47 @@ const DeferredPanelFrame: React.FC<{
     if (isActivated || !src || typeof window === "undefined") return
 
     let observer: IntersectionObserver | null = null
-    let timeoutId: number | null = null
-    let idleId: number | null = null
+    let activationDelayId: number | null = null
+    let activationQueued = false
 
     const activate = () => {
       setIsActivated(true)
+    }
+
+    const scheduleActivation = (delayMs: number) => {
+      if (activationQueued) return
+      activationQueued = true
+      if (delayMs <= 0) {
+        activate()
+        return
+      }
+      activationDelayId = window.setTimeout(activate, delayMs)
     }
 
     if (anchorRef.current && typeof IntersectionObserver !== "undefined") {
       observer = new IntersectionObserver(
         (entries) => {
           if (!entries.some((entry) => entry.isIntersecting)) return
-          activate()
+          scheduleActivation(activationDelayMs)
           observer?.disconnect()
         },
-        { root: null, rootMargin: "280px 0px" }
+        { root: null, rootMargin: DASHBOARD_INTERSECTION_ROOT_MARGIN }
       )
       observer.observe(anchorRef.current)
     }
 
-    const idleWindow = window as Window & {
-      requestIdleCallback?: (
-        callback: () => void,
-        options?: {
-          timeout?: number
-        }
-      ) => number
-      cancelIdleCallback?: (id: number) => void
-    }
-
-    if (typeof idleWindow.requestIdleCallback === "function") {
-      idleId = idleWindow.requestIdleCallback(activate, { timeout: DASHBOARD_IDLE_EMBED_DELAY_MS })
-    } else {
-      timeoutId = window.setTimeout(activate, DASHBOARD_IDLE_EMBED_DELAY_MS)
-    }
-
     return () => {
       observer?.disconnect()
-      if (idleId !== null && typeof idleWindow.cancelIdleCallback === "function") {
-        idleWindow.cancelIdleCallback(idleId)
-      }
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId)
+      if (activationDelayId !== null) {
+        window.clearTimeout(activationDelayId)
       }
     }
-  }, [isActivated, src])
+  }, [activationDelayMs, isActivated, src])
 
   return (
     <div ref={anchorRef}>
       {isActivated ? (
-        <PanelFrame src={src} title={title} loading="lazy" referrerPolicy="no-referrer" />
+        <PanelFrame src={src} title={title} loading={eager ? "eager" : "lazy"} referrerPolicy="no-referrer" />
       ) : (
         <PanelFrame
           as="div"
@@ -298,6 +291,11 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
                   {panelUrl ? (
                     <DeferredPanelFrame
                       eager={index < DASHBOARD_EAGER_PANEL_COUNT}
+                      activationDelayMs={
+                        index < DASHBOARD_EAGER_PANEL_COUNT
+                          ? 0
+                          : (index - DASHBOARD_EAGER_PANEL_COUNT + 1) * DASHBOARD_PANEL_STAGGER_MS
+                      }
                       src={panelUrl}
                       title={panel.title}
                     />

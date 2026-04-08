@@ -289,6 +289,9 @@ const extractPromotedCalloutTitle = (bodyLines: string[]) => {
   }
 
   const remainingLine = (boldMatch?.[3] || "").trim()
+  if (remainingLine.length > 0) {
+    return { title: "", bodyLines }
+  }
 
   const resolvedBodyLines = remainingLine
     ? bodyLines.map((line, index) => (index === firstBodyLineIndex ? remainingLine : line))

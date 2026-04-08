@@ -150,6 +150,16 @@ const DASHBOARD_EAGER_PANEL_COUNT = 1
 const DASHBOARD_PANEL_STAGGER_MS = 640
 const DASHBOARD_INTERSECTION_ROOT_MARGIN = "0px"
 const DASHBOARD_IDLE_ACTIVATION_TIMEOUT_MS = 1400
+let dashboardPanelActivationCursor = 0
+
+const reserveDashboardPanelActivationDelay = (delayMs: number) => {
+  if (typeof performance === "undefined") return Math.max(0, delayMs)
+  const now = performance.now()
+  const requestedAt = now + Math.max(0, delayMs)
+  const scheduledAt = Math.max(requestedAt, dashboardPanelActivationCursor)
+  dashboardPanelActivationCursor = scheduledAt + DASHBOARD_PANEL_STAGGER_MS
+  return Math.max(0, Math.round(scheduledAt - now))
+}
 
 const DeferredPanelFrame: React.FC<{
   eager?: boolean
@@ -192,11 +202,12 @@ const DeferredPanelFrame: React.FC<{
     const scheduleActivation = (delayMs: number) => {
       if (activationQueued) return
       activationQueued = true
-      if (delayMs <= 0) {
+      const nextDelayMs = eager ? 0 : reserveDashboardPanelActivationDelay(delayMs)
+      if (nextDelayMs <= 0) {
         queueIdleActivation()
         return
       }
-      activationDelayId = window.setTimeout(queueIdleActivation, delayMs)
+      activationDelayId = window.setTimeout(queueIdleActivation, nextDelayMs)
     }
 
     if (anchorRef.current && typeof IntersectionObserver !== "undefined") {
@@ -220,7 +231,7 @@ const DeferredPanelFrame: React.FC<{
         window.clearTimeout(activationDelayId)
       }
     }
-  }, [activationDelayMs, isActivated, src])
+  }, [activationDelayMs, eager, isActivated, src])
 
   return (
     <div ref={anchorRef}>

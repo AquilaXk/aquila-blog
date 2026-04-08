@@ -12,6 +12,40 @@ import { CONFIG } from "site.config"
 import { pretendard } from "src/assets"
 import createEmotionCache from "src/libs/emotion/createEmotionCache"
 
+const STALE_MANIFEST_RELOAD_SCRIPT = `
+(function () {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  var storageKey = "__aquila_stale_manifest_reload__";
+  var isManifestAsset = function (target) {
+    return typeof target === "string" && (target.indexOf("/_buildManifest.js") >= 0 || target.indexOf("/_ssgManifest.js") >= 0);
+  };
+  var shouldReload = function () {
+    try {
+      return sessionStorage.getItem(storageKey) !== "1";
+    } catch (_) {
+      return true;
+    }
+  };
+  var markReloaded = function () {
+    try {
+      sessionStorage.setItem(storageKey, "1");
+    } catch (_) {}
+  };
+  window.addEventListener(
+    "error",
+    function (event) {
+      var target = event && event.target;
+      if (!(target instanceof HTMLScriptElement)) return;
+      var src = target.getAttribute("src") || "";
+      if (!isManifestAsset(src) || !shouldReload()) return;
+      markReloaded();
+      window.location.reload();
+    },
+    true
+  );
+})();
+`
+
 class MyDocument extends Document {
   static async getInitialProps(ctx: DocumentContext): Promise<DocumentInitialProps> {
     const originalRenderPage = ctx.renderPage
@@ -78,6 +112,7 @@ class MyDocument extends Document {
           )}
         </Head>
         <body className={pretendard.className}>
+          <script dangerouslySetInnerHTML={{ __html: STALE_MANIFEST_RELOAD_SCRIPT }} />
           <Main />
           <NextScript />
         </body>

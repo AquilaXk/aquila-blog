@@ -5934,18 +5934,46 @@ const BlockEditorEngine = ({
     tableMenuState !== null ||
     isTableColumnResizeActive ||
     tableColumnDragGuideState.visible
+  const shouldThrottleSelectionLayoutSync =
+    !blockSelectionOverlayState.visible &&
+    !tableQuickRailState.visible &&
+    !isTableQuickRailHovered &&
+    tableMenuState === null &&
+    !isTableColumnResizeActive &&
+    !tableColumnDragGuideState.visible
 
   useEffect(() => {
     if (typeof window === "undefined" || !shouldTrackSelectionLayoutSync) return
     let rafId: number | null = null
+    let timeoutId: number | null = null
+    let lastCommittedAt = 0
     const scrollOptions: AddEventListenerOptions = { capture: true, passive: true }
     const resizeOptions: AddEventListenerOptions = { passive: true }
+    const minSyncIntervalMs = shouldThrottleSelectionLayoutSync ? 72 : 0
     const sync = () => {
-      if (rafId !== null) return
-      rafId = window.requestAnimationFrame(() => {
-        rafId = null
-        setSelectionTick((prev) => prev + 1)
-      })
+      if (rafId !== null || timeoutId !== null) return
+      const now = window.performance.now()
+      const remainingDelayMs = minSyncIntervalMs > 0 ? minSyncIntervalMs - (now - lastCommittedAt) : 0
+      const schedule = (delayMs: number) => {
+        if (delayMs > 0) {
+          timeoutId = window.setTimeout(() => {
+            timeoutId = null
+            schedule(0)
+          }, delayMs)
+          return
+        }
+        if (rafId !== null) return
+        rafId = window.requestAnimationFrame(() => {
+          rafId = null
+          lastCommittedAt = window.performance.now()
+          setSelectionTick((prev) => prev + 1)
+        })
+      }
+      if (remainingDelayMs > 0) {
+        schedule(remainingDelayMs)
+        return
+      }
+      schedule(0)
     }
     window.addEventListener("scroll", sync, scrollOptions)
     window.addEventListener("resize", sync, resizeOptions)
@@ -5955,8 +5983,11 @@ const BlockEditorEngine = ({
       if (rafId !== null) {
         window.cancelAnimationFrame(rafId)
       }
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+      }
     }
-  }, [shouldTrackSelectionLayoutSync])
+  }, [shouldThrottleSelectionLayoutSync, shouldTrackSelectionLayoutSync])
 
   useEffect(() => {
     if (!editor) return

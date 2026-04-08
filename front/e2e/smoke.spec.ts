@@ -568,9 +568,12 @@ test("모바일 상세는 compact 액션과 접이식 목차를 노출한다", a
 
   await page.goto("/posts/909")
   const compactActionBar = page.getByLabel("빠른 이동 및 반응")
+  const engagementRow = page.locator('[aria-label="post engagement"]')
   await expect(page.getByRole("button", { name: /공유/ })).toHaveCount(1)
-  await expect(compactActionBar.getByRole("button", { name: /^좋아요/ })).toBeVisible()
+  await expect(page.getByRole("button", { name: /^좋아요/ })).toHaveCount(1)
+  await expect(engagementRow.getByRole("button", { name: /^좋아요/ })).toBeVisible()
   await expect(compactActionBar.getByRole("button", { name: /^공유/ })).toBeVisible()
+  await expect(compactActionBar.getByRole("button", { name: /^댓글/ })).toBeVisible()
   const compactTocSummary = page.locator('[aria-label="접이식 목차"] summary')
   await expect(compactTocSummary).toBeVisible()
   await expect(compactTocSummary.getByText("목차")).toBeVisible()

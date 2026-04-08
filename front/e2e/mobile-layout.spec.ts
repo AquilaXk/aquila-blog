@@ -98,13 +98,42 @@ const mockFeedEndpoints = async (page: Page) => {
   })
 }
 
-const mockDetailEndpoint = async (page: Page) => {
-  await page.route("**/post/api/v1/posts/990**", async (route) => {
+type MockDetailOverrides = {
+  id?: number
+  title?: string
+  content?: string
+  likesCount?: number
+  commentsCount?: number
+  hitCount?: number
+  actorHasLiked?: boolean
+  actorCanModify?: boolean
+  actorCanDelete?: boolean
+}
+
+const DETAIL_CONTENT = [
+  "| 항목 | 설명 |",
+  "| --- | --- |",
+  "| 증상 | iPhone 15 Pro에서 가로 스크롤 없이 본문에 맞춰 표시되어야 한다 |",
+  "| 원인 | 레이아웃 폭 계산/스크롤 컨테이너 처리 불일치 |",
+  "",
+  "| 단계 | 핵심 요소 | 설명 |",
+  "| --- | --- | --- |",
+  "| 연결 | WebSocket | 실시간 양방향 채널을 유지한다 |",
+  "| 인증 | STOMP CONNECT | 토큰 검증 시점을 분리한다 |",
+  "",
+  "```kotlin",
+  "fun ensureMobileLayout(width: Int) = if (width <= 393) \"safe\" else \"ok\"",
+  "```",
+].join("\n")
+
+const mockDetailEndpoint = async (page: Page, overrides: MockDetailOverrides = {}) => {
+  const postId = overrides.id ?? 990
+  await page.route(`**/post/api/v1/posts/${postId}**`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        id: 990,
+        id: postId,
         createdAt: "2026-03-21T00:00:00Z",
         modifiedAt: "2026-03-21T00:00:00Z",
         authorId: 1,
@@ -112,21 +141,7 @@ const mockDetailEndpoint = async (page: Page) => {
         authorUsername: "aquila",
         authorProfileImageDirectUrl: "/avatar.png",
         title: "모바일 테이블/코드블록 회귀 테스트",
-        content: [
-          "| 항목 | 설명 |",
-          "| --- | --- |",
-          "| 증상 | iPhone 15 Pro에서 가로 스크롤 없이 본문에 맞춰 표시되어야 한다 |",
-          "| 원인 | 레이아웃 폭 계산/스크롤 컨테이너 처리 불일치 |",
-          "",
-          "| 단계 | 핵심 요소 | 설명 |",
-          "| --- | --- | --- |",
-          "| 연결 | WebSocket | 실시간 양방향 채널을 유지한다 |",
-          "| 인증 | STOMP CONNECT | 토큰 검증 시점을 분리한다 |",
-          "",
-          "```kotlin",
-          "fun ensureMobileLayout(width: Int) = if (width <= 393) \"safe\" else \"ok\"",
-          "```",
-        ].join("\n"),
+        content: DETAIL_CONTENT,
         tags: ["모바일"],
         category: ["프론트"],
         published: true,
@@ -137,18 +152,21 @@ const mockDetailEndpoint = async (page: Page) => {
         actorHasLiked: false,
         actorCanModify: false,
         actorCanDelete: false,
+        ...overrides,
+        id: postId,
+        content: overrides.content ?? DETAIL_CONTENT,
       }),
     })
   })
 
-  await page.route("**/post/api/v1/posts/990/hit**", async (route) => {
+  await page.route(`**/post/api/v1/posts/${postId}/hit**`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
         resultCode: "200-1",
         msg: "ok",
-        data: { hitCount: 1 },
+        data: { hitCount: (overrides.hitCount ?? 0) + 1 },
       }),
     })
   })
@@ -319,4 +337,64 @@ test("iPhone 15 Pro 상세 본문(table/code block)은 가로 클리핑 없이 �
   expect(["none", "normal"]).toContain(secondSnapshot.firstTableCellBeforeContent)
   expect(secondSnapshot.secondTableHeadDisplay).not.toBe("none")
   expect(["none", "normal"]).toContain(secondSnapshot.secondTableCellBeforeContent)
+})
+
+test("iPhone 15 Pro 상세 액션은 메타/공유/댓글/작성자 유틸리티 순서를 유지한다", async ({ page }) => {
+  await mockDetailEndpoint(page, {
+    id: 991,
+    title: "모바일 액션 위계 테스트",
+    likesCount: 1,
+    commentsCount: 4,
+    hitCount: 24,
+    actorCanModify: true,
+    actorCanDelete: true,
+  })
+
+  await page.goto("/posts/991")
+
+  const engagementRow = page.locator('[aria-label="post engagement"]')
+  const statChips = engagementRow.locator(".statChip")
+  const commentStat = statChips.nth(0)
+  const hitStat = statChips.nth(1)
+  const likeButton = engagementRow.getByRole("button", { name: "좋아요 1" })
+  const compactActionBar = page.getByLabel("빠른 이동 및 반응")
+  const shareButton = compactActionBar.getByRole("button", { name: /^공유/ })
+  const commentButton = compactActionBar.getByRole("button", { name: /^댓글/ })
+  const editButton = page.getByRole("button", { name: "수정" }).first()
+  const deleteButton = page.getByRole("button", { name: "삭제" }).first()
+
+  await expect(statChips).toHaveCount(2)
+  await expect(commentStat).toHaveText("댓글 4")
+  await expect(hitStat).toHaveText("조회 25")
+  await expect(likeButton).toBeVisible()
+  await expect(shareButton).toBeVisible()
+  await expect(commentButton).toBeVisible()
+  await expect(editButton).toBeVisible()
+  await expect(deleteButton).toBeVisible()
+
+  const [commentBox, hitBox, likeBox, shareBox, commentActionBox, editBox, deleteBox] = await Promise.all([
+    commentStat.boundingBox(),
+    hitStat.boundingBox(),
+    likeButton.boundingBox(),
+    shareButton.boundingBox(),
+    commentButton.boundingBox(),
+    editButton.boundingBox(),
+    deleteButton.boundingBox(),
+  ])
+
+  expect(commentBox).not.toBeNull()
+  expect(hitBox).not.toBeNull()
+  expect(likeBox).not.toBeNull()
+  expect(shareBox).not.toBeNull()
+  expect(commentActionBox).not.toBeNull()
+  expect(editBox).not.toBeNull()
+  expect(deleteBox).not.toBeNull()
+
+  expect(Math.abs((commentBox?.y ?? 0) - (hitBox?.y ?? 0))).toBeLessThanOrEqual(4)
+  expect(Math.abs((hitBox?.y ?? 0) - (likeBox?.y ?? 0))).toBeLessThanOrEqual(4)
+  expect((likeBox?.x ?? 0)).toBeGreaterThan((hitBox?.x ?? 0))
+  expect((shareBox?.y ?? 0)).toBeGreaterThan((likeBox?.y ?? 0) + ((likeBox?.height ?? 0) * 0.6))
+  expect(Math.abs((shareBox?.y ?? 0) - (commentActionBox?.y ?? 0))).toBeLessThanOrEqual(4)
+  expect((editBox?.y ?? 0)).toBeLessThan((likeBox?.y ?? 0))
+  expect((deleteBox?.y ?? 0)).toBeLessThan((likeBox?.y ?? 0))
 })

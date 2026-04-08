@@ -118,30 +118,48 @@ const PostHeader: React.FC<Props> = ({
                   </>
                 )}
               </div>
+              {(showModifyAction || showDeleteAction) && (
+                <div className="authorUtilities">
+                  {showModifyAction && (
+                    <button type="button" className="adminButton" onClick={onEditPost} disabled={adminActionPending}>
+                      <AppIcon name="edit" />
+                      <span>수정</span>
+                    </button>
+                  )}
+                  {showDeleteAction && (
+                    <button type="button" className="adminButton dangerButton" onClick={onDeletePost} disabled={adminActionPending}>
+                      <AppIcon name="trash" />
+                      <span>{adminActionPending ? "삭제 중..." : "삭제"}</span>
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {showEngagement || showModifyAction || showDeleteAction ? (
+        {showEngagement ? (
         <div className="actions">
-          {(showModifyAction || showDeleteAction) && (
-            <div className="adminActions">
-              {showModifyAction && (
-                <button type="button" className="adminButton" onClick={onEditPost} disabled={adminActionPending}>
-                  <AppIcon name="edit" />
-                  <span>수정</span>
-                </button>
-              )}
-              {showDeleteAction && (
-                <button type="button" className="adminButton dangerButton" onClick={onDeletePost} disabled={adminActionPending}>
-                  <AppIcon name="trash" />
-                  <span>{adminActionPending ? "삭제 중..." : "삭제"}</span>
-                </button>
-              )}
-            </div>
-          )}
           {showEngagement ? (
             <div className="engagementRow" aria-label="post engagement">
+              <div className="stats" aria-label="post stats">
+                <span className="statChip">댓글 {data.commentsCount ?? 0}</span>
+                <span className="statChip">조회 {hitCount ?? data.hitCount ?? 0}</span>
+                {onToggleLike && (
+                  <button
+                    type="button"
+                    className="mobileLikeButton"
+                    aria-label={`좋아요 ${likesCount ?? data.likesCount ?? 0}`}
+                    aria-pressed={actorHasLiked}
+                    data-active={actorHasLiked}
+                    disabled={likePending}
+                    onClick={onToggleLike}
+                  >
+                    <AppIcon name={actorHasLiked ? "heart-filled" : "heart"} />
+                    <span>좋아요 {likesCount ?? data.likesCount ?? 0}</span>
+                  </button>
+                )}
+              </div>
               <button
                 type="button"
                 className="likeButton"
@@ -169,11 +187,6 @@ const PostHeader: React.FC<Props> = ({
                   <span>공유</span>
                 </button>
               )}
-
-              <div className="stats" aria-label="post stats">
-                <span className="statChip">댓글 {data.commentsCount ?? 0}</span>
-                <span className="statChip">조회 {hitCount ?? data.hitCount ?? 0}</span>
-              </div>
             </div>
           ) : null}
           {showEngagement && shareFeedback && (
@@ -319,8 +332,19 @@ const StyledWrapper = styled.header`
     gap: 0.42rem;
     color: ${({ theme }) => theme.colors.gray11};
     font-size: 0.9rem;
-    font-weight: 500;
     min-width: 0;
+  }
+
+  .metaText {
+    font-weight: 500;
+  }
+
+  .authorUtilities {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-top: 0.5rem;
   }
 
   .actions {
@@ -354,24 +378,17 @@ const StyledWrapper = styled.header`
     line-height: 1;
   }
 
-  .adminActions {
-    display: inline-flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.55rem;
-  }
-
   .adminButton {
     display: inline-flex;
     align-items: center;
     gap: 0.42rem;
-    min-height: 40px;
-    padding: 0 0.9rem;
-    border-radius: 8px;
+    min-height: 34px;
+    padding: 0 0.76rem;
+    border-radius: 999px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: transparent;
+    background: ${({ theme }) => theme.colors.gray2};
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.9rem;
+    font-size: 0.82rem;
     font-weight: 700;
     cursor: pointer;
     transition:
@@ -389,6 +406,43 @@ const StyledWrapper = styled.header`
     border-color: ${({ theme }) => theme.colors.red7};
     background: transparent;
     color: ${({ theme }) => theme.colors.red11};
+  }
+
+  .mobileLikeButton {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 0.38rem;
+    min-height: 40px;
+    padding: 0 0.82rem;
+    border-radius: 8px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.88rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition:
+      border-color 0.18s ease,
+      background-color 0.18s ease,
+      color 0.18s ease;
+
+    svg {
+      font-size: 1rem;
+    }
+
+    &[data-active="true"] {
+      border-color: ${({ theme }) => theme.colors.red7};
+
+      svg {
+        color: ${({ theme }) => theme.colors.red10};
+      }
+    }
+
+    :disabled {
+      opacity: 0.72;
+      cursor: not-allowed;
+    }
   }
 
   .likeButton {
@@ -508,12 +562,24 @@ const StyledWrapper = styled.header`
       width: 100%;
       justify-content: flex-start;
       display: grid;
-      gap: 0.65rem;
+      gap: 0.55rem;
     }
 
     .engagementRow {
       width: 100%;
-      justify-content: flex-start;
+      display: grid;
+      gap: 0.55rem;
+    }
+
+    .stats {
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.55rem;
+    }
+
+    .mobileLikeButton {
+      display: inline-flex;
     }
 
     .shareFeedbackPill {
@@ -526,11 +592,13 @@ const StyledWrapper = styled.header`
     }
 
     .statChip,
+    .mobileLikeButton,
     .likeButton,
     .shareButton {
       min-height: 38px;
+      width: 100%;
+      justify-content: center;
     }
-
   }
 
   @media (max-width: 1023px) {

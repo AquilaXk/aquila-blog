@@ -1028,30 +1028,8 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
             <MobileSummaryBar aria-label="빠른 이동 및 반응">
               <button
                 type="button"
-                data-active={engagement.actorHasLiked}
-                data-tone="danger"
-                aria-pressed={engagement.actorHasLiked}
-                onClick={handleToggleLike}
-              >
-                <AppIcon name={engagement.actorHasLiked ? "heart-filled" : "heart"} />
-                <span>좋아요</span>
-                <strong>{engagement.likesCount}</strong>
-              </button>
-              <button
-                type="button"
-                data-active={commentsRailActive}
-                data-tone="accent"
-                aria-label={commentsRailActive ? `댓글 영역 읽는 중, 댓글 ${commentsCount}개` : `댓글 ${commentsCount}개`}
-                onClick={() => scrollSectionIntoView(commentsSectionRef.current)}
-              >
-                <AppIcon name="message" />
-                <span>댓글</span>
-                <strong>{commentsProgressLabel}</strong>
-              </button>
-              <button
-                type="button"
                 data-active={Boolean(shareFeedback)}
-                data-tone={shareFeedback === "failed" ? "danger" : "accent"}
+                data-tone="accent"
                 aria-label={
                   shareFeedback === "failed"
                     ? "공유 실패, 다시 시도"
@@ -1066,6 +1044,17 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                 <AppIcon name="share" />
                 <span>{shareFeedback === "copied" ? "복사" : shareFeedback === "shared" ? "복사" : shareFeedback === "failed" ? "실패" : "공유"}</span>
                 {shareProgressLabel ? <strong>{shareProgressLabel}</strong> : null}
+              </button>
+              <button
+                type="button"
+                data-active={commentsRailActive}
+                data-tone="accent"
+                aria-label={commentsRailActive ? `댓글 영역 읽는 중, 댓글 ${commentsCount}개` : `댓글 ${commentsCount}개`}
+                onClick={() => scrollSectionIntoView(commentsSectionRef.current)}
+              >
+                <AppIcon name="message" />
+                <span>댓글</span>
+                <strong>{commentsProgressLabel}</strong>
               </button>
             </MobileSummaryBar>
           ) : null}
@@ -1722,7 +1711,7 @@ const MobileSummaryBar = styled.div`
     top: calc(var(--app-header-height, 64px) + 0.4rem);
     z-index: 14;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.45rem;
     padding: 0.16rem 0 0.4rem;
     margin-bottom: 0.18rem;
@@ -1767,10 +1756,6 @@ const MobileSummaryBar = styled.div`
       color: ${({ theme }) => theme.colors.gray12};
       font-size: 0.74rem;
     }
-  }
-
-  @media (max-width: 540px) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 `
 

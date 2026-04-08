@@ -7683,6 +7683,7 @@ const BlockEditorEngine = ({
   const shouldShowTableHandles =
     !isCoarsePointer &&
     (tableAffordanceVisibility.visible || isTableQuickRailHovered || shouldPersistTableHandles || isTableColumnResizeActive)
+  const shouldShowTableCellMenu = shouldShowTableHandles && !isTableStructuralSelection
   const desktopTableRailLayout = useMemo(() => {
     if (typeof window === "undefined") return null
     return resolveDesktopTableRailLayout(tableAffordanceGeometry)
@@ -8062,7 +8063,7 @@ const BlockEditorEngine = ({
               <TableHandleIcon kind="plus" />
             </TableTrailingAddBar>
           ) : null}
-          {isTableMode && !isTableStructuralSelection ? (
+          {shouldShowTableCellMenu ? (
             <TableCellMenuButton
               type="button"
               data-testid="table-cell-menu-button"

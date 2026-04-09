@@ -109,6 +109,32 @@ const readSimpleTableColumnCount = (tableNode: JSONContent): number => {
 const shouldPromoteWideTableOverflowMode = (columnCount: number, readableWidthBudget: number) =>
   columnCount > 0 && columnCount * TABLE_WIDE_PROMOTION_COLUMN_BUDGET_PX >= readableWidthBudget
 
+const getPreferredNormalTableTotalWidth = (columnCount: number, readableWidthBudget: number) => {
+  const minBudget = TABLE_MIN_COLUMN_WIDTH_PX * Math.max(1, columnCount)
+  const preferredBudget = Math.max(
+    minBudget,
+    Math.round(columnCount * TABLE_WIDE_PROMOTION_COLUMN_BUDGET_PX)
+  )
+  return Math.max(minBudget, Math.min(Math.round(readableWidthBudget), preferredBudget))
+}
+
+const createBalancedTableColumnWidths = (columnCount: number, totalWidth: number) => {
+  if (columnCount <= 0) return []
+
+  const safeTotalWidth = Math.max(TABLE_MIN_COLUMN_WIDTH_PX * columnCount, Math.round(totalWidth))
+  const baseColumnWidth = Math.max(
+    TABLE_MIN_COLUMN_WIDTH_PX,
+    Math.floor(safeTotalWidth / columnCount)
+  )
+  const lastColumnWidth = safeTotalWidth - baseColumnWidth * (columnCount - 1)
+
+  return Array.from({ length: columnCount }, (_, columnIndex) =>
+    columnIndex === columnCount - 1
+      ? Math.max(TABLE_MIN_COLUMN_WIDTH_PX, lastColumnWidth)
+      : baseColumnWidth
+  )
+}
+
 const promoteTableBlockToWideOverflowMode = (
   tableNode: JSONContent,
   readableWidthBudget: number
@@ -1604,6 +1630,23 @@ const isLegacyCollapsedTableWidthState = (widths: number[]) => {
   return widths.every((width) => width <= TABLE_MIN_COLUMN_WIDTH_PX + 2)
 }
 
+const isLegacyFullWidthInitializedTableState = (
+  widths: number[],
+  readableWidthBudget: number
+) => {
+  if (widths.length <= 1) return false
+
+  const totalWidth = widths.reduce((sum, width) => sum + width, 0)
+  const maxBudget = Math.max(TABLE_MIN_COLUMN_WIDTH_PX * widths.length, Math.round(readableWidthBudget))
+  const preferredWidth = getPreferredNormalTableTotalWidth(widths.length, maxBudget)
+  if (totalWidth <= preferredWidth + widths.length * 2) return false
+  if (Math.abs(totalWidth - maxBudget) > widths.length * 4) return false
+
+  const minWidth = Math.min(...widths)
+  const maxWidth = Math.max(...widths)
+  return maxWidth - minWidth <= 2
+}
+
 const computeNextTableColumnWidthsForResize = (
   widths: number[],
   activeColumnIndex: number,
@@ -1765,11 +1808,15 @@ const normalizeTableWidthsToReadableBudget = (editor: TiptapEditor) => {
     const minBudget = TABLE_MIN_COLUMN_WIDTH_PX * currentWidths.length
     const safeBudget = Math.max(minBudget, maxTableWidth)
     const totalWidth = currentWidths.reduce((sum, width) => sum + width, 0)
-    if (totalWidth <= safeBudget) {
+    const shouldRecoverLegacyFullWidth = isLegacyFullWidthInitializedTableState(currentWidths, safeBudget)
+    if (totalWidth <= safeBudget && !shouldRecoverLegacyFullWidth) {
       return true
     }
 
-    const nextWidths = shrinkTableColumnWidthsToFit(currentWidths, safeBudget)
+    const targetWidth = shouldRecoverLegacyFullWidth
+      ? getPreferredNormalTableTotalWidth(currentWidths.length, safeBudget)
+      : safeBudget
+    const nextWidths = shrinkTableColumnWidthsToFit(currentWidths, targetWidth)
     if (nextWidths.every((width, index) => width === currentWidths[index])) {
       return true
     }
@@ -1907,17 +1954,22 @@ const normalizeRenderedTableWidthsToReadableBudget = (editor: TiptapEditor) => {
       : measuredTotalWidth
     const borderOverhead = Math.max(0, renderedTableWidth - measuredTotalWidth)
     const contentBudget = Math.max(minBudget, safeBudget - borderOverhead)
+    const shouldRecoverLegacyFullWidth = isLegacyFullWidthInitializedTableState(currentWidths, contentBudget)
     if (
       renderedTableWidth <= safeBudget &&
       !requiresExplicitWidths &&
-      !shouldRecoverLegacyCollapsedWidths
+      !shouldRecoverLegacyCollapsedWidths &&
+      !shouldRecoverLegacyFullWidth
     ) {
       return true
     }
 
+    const targetContentBudget = shouldRecoverLegacyFullWidth
+      ? getPreferredNormalTableTotalWidth(currentWidths.length, contentBudget)
+      : contentBudget
     const nextWidths =
-      measuredTotalWidth > contentBudget
-        ? shrinkTableColumnWidthsToFit(measuredWidths, contentBudget)
+      measuredTotalWidth > targetContentBudget
+        ? shrinkTableColumnWidthsToFit(measuredWidths, targetContentBudget)
         : measuredWidths.map((width) => Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(width)))
     if (nextWidths.every((width, index) => width === currentWidths[index])) {
       return true
@@ -4340,26 +4392,19 @@ const BlockEditorEngine = ({
   }, [syncSerializedDoc])
 
   const createInitialTableNode = useCallback(() => {
-    const safeContentWidth = Math.max(
+    const readableWidthBudget = Math.max(
       TABLE_MIN_COLUMN_WIDTH_PX * DEFAULT_EMPTY_TABLE_COLUMN_COUNT,
-      getCurrentEditorReadableWidthPx(editorRef.current)
+      getCurrentEditorReadableWidthPx(editorRef.current) - 2
     )
-    const targetInnerWidth = Math.max(
-      TABLE_MIN_COLUMN_WIDTH_PX * DEFAULT_EMPTY_TABLE_COLUMN_COUNT,
-      safeContentWidth - 2
+    const targetInnerWidth = getPreferredNormalTableTotalWidth(
+      DEFAULT_EMPTY_TABLE_COLUMN_COUNT,
+      readableWidthBudget
     )
-    const baseColumnWidth = Math.max(
-      TABLE_MIN_COLUMN_WIDTH_PX,
-      Math.floor(targetInnerWidth / DEFAULT_EMPTY_TABLE_COLUMN_COUNT)
-    )
-    const lastColumnWidth =
-      targetInnerWidth - baseColumnWidth * (DEFAULT_EMPTY_TABLE_COLUMN_COUNT - 1)
     const initialLayout: MarkdownTableLayout = {
       overflowMode: "normal",
-      columnWidths: Array.from({ length: DEFAULT_EMPTY_TABLE_COLUMN_COUNT }, (_, columnIndex) =>
-        columnIndex === DEFAULT_EMPTY_TABLE_COLUMN_COUNT - 1
-          ? Math.max(TABLE_MIN_COLUMN_WIDTH_PX, lastColumnWidth)
-          : baseColumnWidth
+      columnWidths: createBalancedTableColumnWidths(
+        DEFAULT_EMPTY_TABLE_COLUMN_COUNT,
+        targetInnerWidth
       ),
     }
 
@@ -9879,7 +9924,7 @@ const EditorViewport = styled.div`
   .aq-block-editor__content > *[data-block-selected="true"] {
     background: ${({ theme }) =>
       theme.scheme === "dark" ? "rgba(59, 130, 246, 0.12)" : "rgba(59, 130, 246, 0.1)"};
-    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.24);
+    box-shadow: none;
   }
 
   .aq-block-editor__content > *[data-block-dragging="true"] {
@@ -10034,8 +10079,8 @@ const EditorViewport = styled.div`
     display: block;
     position: relative;
     isolation: isolate;
-    inline-size: 100%;
-    width: 100%;
+    inline-size: fit-content;
+    width: fit-content;
     max-width: 100%;
     max-inline-size: 100%;
     min-width: 0;

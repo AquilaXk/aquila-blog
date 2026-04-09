@@ -1060,9 +1060,7 @@ const ToggleBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =>
           }}
         >
           <ToggleSummaryInner>
-            <ToggleChevron data-testid="toggle-block-chevron" data-open={isPreviewOpen} aria-hidden="true">
-              <AppIcon name="chevron-down" />
-            </ToggleChevron>
+            <ToggleChevron data-testid="toggle-block-chevron" data-open={isPreviewOpen} aria-hidden="true" />
             <ToggleTitleInput
               value={draftTitle}
               placeholder="제목"
@@ -3027,7 +3025,11 @@ const ToggleEditorWrapper = styled(NodeViewWrapper)`
 `
 
 const ToggleEditorCard = styled.details`
-  --toggle-indent: 2.9rem;
+  --toggle-caret-size: 0.94rem;
+  --toggle-caret-hit: 1.38rem;
+  --toggle-gap: 0.62rem;
+  --toggle-summary-padding-x: 0.16rem;
+  --toggle-indent: calc(var(--toggle-summary-padding-x) + var(--toggle-caret-hit) + var(--toggle-gap));
   margin: 0;
 
   &[data-selected="true"] {
@@ -3037,7 +3039,7 @@ const ToggleEditorCard = styled.details`
   summary {
     cursor: pointer;
     list-style: none;
-    padding: 0.26rem 0.18rem;
+    padding: 0.24rem var(--toggle-summary-padding-x);
     border-radius: 0.62rem;
     transition: background-color 140ms ease;
     user-select: none;
@@ -3057,33 +3059,33 @@ const ToggleEditorCard = styled.details`
 const ToggleSummaryInner = styled.div`
   display: flex;
   align-items: center;
-  gap: 0.7rem;
+  gap: var(--toggle-gap);
   min-height: 2.8rem;
 `
 
 const ToggleChevron = styled.span`
-  width: 1.56rem;
-  height: 1.56rem;
+  width: var(--toggle-caret-hit);
+  height: var(--toggle-caret-hit);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--color-gray10);
-  font-size: 1.26rem;
   line-height: 1;
   flex-shrink: 0;
-  border-radius: 0.46rem;
-  transition:
-    transform 140ms ease,
-    color 140ms ease,
-    background-color 140ms ease;
+  transition: color 140ms ease;
 
-  &[data-open="false"] {
-    transform: rotate(-90deg);
+  &::before {
+    content: "";
+    width: var(--toggle-caret-size);
+    height: var(--toggle-caret-size);
+    background: currentColor;
+    clip-path: polygon(26% 18%, 82% 50%, 26% 82%);
+    transform-origin: center;
+    transition: transform 140ms ease;
   }
 
-  svg {
-    width: 1em;
-    height: 1em;
+  &[data-open="true"]::before {
+    transform: rotate(90deg);
   }
 `
 

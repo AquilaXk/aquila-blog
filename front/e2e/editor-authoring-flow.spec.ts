@@ -357,22 +357,35 @@ test.describe("block editor authoring flow", () => {
 
     const metrics = await summary.evaluate((element) => {
       const summaryElement = element as HTMLElement
+      const toggleRoot = summaryElement.closest("details")
       const titleInput = summaryElement.querySelector("input")
       const chevron = summaryElement.querySelector("[data-testid='toggle-block-chevron']")
-      if (!(titleInput instanceof HTMLInputElement) || !(chevron instanceof HTMLElement)) {
+      if (
+        !(titleInput instanceof HTMLInputElement) ||
+        !(chevron instanceof HTMLElement) ||
+        !(toggleRoot instanceof HTMLElement) ||
+        !(summaryElement.nextElementSibling instanceof HTMLElement)
+      ) {
         return null
       }
 
       const summaryRect = summaryElement.getBoundingClientRect()
+      const toggleRootRect = toggleRoot.getBoundingClientRect()
       const chevronRect = chevron.getBoundingClientRect()
+      const titleRect = titleInput.getBoundingClientRect()
       const titleStyle = window.getComputedStyle(titleInput)
       const chevronStyle = window.getComputedStyle(chevron)
+      const chevronShapeStyle = window.getComputedStyle(chevron, "::before")
+      const bodyStyle = window.getComputedStyle(summaryElement.nextElementSibling)
 
       return {
         summaryHeight: summaryRect.height,
         chevronWidth: chevronRect.width,
         chevronHeight: chevronRect.height,
         chevronFontSize: Number.parseFloat(chevronStyle.fontSize),
+        chevronClipPath: chevronShapeStyle.clipPath,
+        titleOffset: titleRect.left - toggleRootRect.left,
+        bodyIndent: Number.parseFloat(bodyStyle.paddingLeft),
         titleFontSize: Number.parseFloat(titleStyle.fontSize),
         titleLineHeight: Number.parseFloat(titleStyle.lineHeight),
       }
@@ -382,8 +395,9 @@ test.describe("block editor authoring flow", () => {
     expect(metrics?.summaryHeight ?? 0).toBeGreaterThanOrEqual(44)
     expect(metrics?.chevronWidth ?? 0).toBeGreaterThanOrEqual(18)
     expect(metrics?.chevronHeight ?? 0).toBeGreaterThanOrEqual(18)
-    expect(metrics?.chevronFontSize ?? 0).toBeGreaterThanOrEqual(19)
+    expect(metrics?.chevronClipPath ?? "").toContain("polygon")
     expect((metrics?.chevronHeight ?? 0) + 1).toBeGreaterThanOrEqual(metrics?.titleFontSize ?? 0)
+    expect(Math.abs((metrics?.titleOffset ?? 0) - (metrics?.bodyIndent ?? 0))).toBeLessThanOrEqual(2)
     expect(metrics?.titleFontSize ?? 0).toBeGreaterThanOrEqual(17.5)
     expect(metrics?.titleLineHeight ?? 0).toBeGreaterThanOrEqual(26)
   })

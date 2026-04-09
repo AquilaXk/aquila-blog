@@ -219,9 +219,10 @@ const escapeHtml = (value: string) =>
     .replace(/\"/g, "&quot;")
     .replace(/'/g, "&#39;")
 
+const normalizeCodeLineBreaks = (value: string) => value.replace(/\r\n?|\u2028|\u2029/g, "\n")
+
 const renderLineWrappedHtml = (source: string) =>
-  source
-    .replace(/\r\n?/g, "\n")
+  normalizeCodeLineBreaks(source)
     .split("\n")
     .map((line) => `<span class="line" data-line="true">${line.length > 0 ? line : "<br />"}</span>`)
     .join("")

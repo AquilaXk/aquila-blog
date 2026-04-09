@@ -35,6 +35,9 @@ const blockHasSyntaxMarkup = (block: HTMLElement) =>
       block.querySelector("span[data-token-type]")
   )
 
+const extractCodeSource = (block: HTMLElement) =>
+  block.getAttribute("data-raw-code") || block.dataset.prismSource || block.textContent || ""
+
 type PrismEffectOptions = {
   observeMutations?: boolean
   mutationDebounceMs?: number
@@ -107,7 +110,7 @@ const usePrismEffect = (
         .map((block) => ({
           block,
           rawLanguage: extractLanguage(block),
-          source: block.textContent || "",
+          source: extractCodeSource(block),
         }))
         .map((entry) => {
           const inferred = isGenericLanguage(entry.rawLanguage)
@@ -144,6 +147,7 @@ const usePrismEffect = (
         block.dataset.prismLanguage = immediate.language
         block.dataset.prismSource = source
         block.setAttribute("data-language", immediate.language)
+        block.setAttribute("data-raw-code", source)
       })
 
       const highlightedBlocks = await Promise.all(
@@ -169,6 +173,7 @@ const usePrismEffect = (
         block.dataset.prismLanguage = language
         block.dataset.prismSource = source
         block.setAttribute("data-language", language)
+        block.setAttribute("data-raw-code", source)
       })
     }
 

@@ -17,6 +17,7 @@ import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
 import {
   extractCodeMetaFromPreChildren,
+  extractTextFromCodeAst,
   isMermaidSource,
   resolveMarkdownRenderModel,
 } from "src/libs/markdown/rendering"
@@ -154,6 +155,8 @@ const normalizeQuotedStrongChildren = (children: ReactNode) =>
     if (typeof child !== "string") return [child]
     return restoreQuotedStrongText(child)
   })
+
+const normalizeCodeLineBreaks = (value: string) => value.replace(/\r\n?|\u2028|\u2029/g, "\n")
 
 const MarkdownImageFigure = memo(
   ({ alt, src, widthPx, eager = false, editable = false, imageIndex, onWidthCommit }: MarkdownImageFigureProps) => {
@@ -520,7 +523,13 @@ const MarkdownRendererComponent: FC<Props> = ({
           )
         },
         code({ className, children, ...props }) {
-          const raw = typeof children === "string" ? children : String(children ?? "")
+          const raw =
+            extractTextFromCodeAst(props.node) ||
+            (typeof children === "string"
+              ? children
+              : Array.isArray(children)
+                ? children.map((child) => (typeof child === "string" || typeof child === "number" ? String(child) : "")).join("\n")
+                : String(children ?? ""))
           const isInlineCode = !className && !raw.includes("\n")
 
           if (isInlineCode) {
@@ -532,7 +541,7 @@ const MarkdownRendererComponent: FC<Props> = ({
           }
 
           return (
-            <code className={className} {...props}>
+            <code className={className} data-raw-code={raw} {...props}>
               {children}
             </code>
           )
@@ -560,6 +569,7 @@ const MarkdownRendererComponent: FC<Props> = ({
             source: rawCode,
             language,
           })
+          const fallbackLines = normalizeCodeLineBreaks(rawCode).split("\n")
 
           return (
             <PrettyCodeBlock
@@ -570,8 +580,19 @@ const MarkdownRendererComponent: FC<Props> = ({
                   <code
                     className={`language-${highlightedCode.language}`}
                     data-language={highlightedCode.language}
-                    dangerouslySetInnerHTML={{ __html: highlightedCode.html }}
-                  />
+                    data-raw-code={rawCode}
+                    {...(highlightedCode.highlighted
+                      ? { dangerouslySetInnerHTML: { __html: highlightedCode.html } }
+                      : {})}
+                  >
+                    {highlightedCode.highlighted
+                      ? null
+                      : fallbackLines.map((line, index) => (
+                          <span className="line" data-line="true" key={`line-${renderKey}-${index}`}>
+                            {line.length > 0 ? line : <br />}
+                          </span>
+                        ))}
+                  </code>
                 </pre>
               }
             />
@@ -605,8 +626,11 @@ const MarkdownRendererComponent: FC<Props> = ({
         if (segment.type === "toggle") {
           return (
             <details className="aq-toggle" key={`toggle-${index}`}>
-              <summary>{segment.title}</summary>
-              {renderMarkdown(segment.content, `toggle-body-${index}`)}
+              <summary>
+                <span className="aq-toggle__caret" aria-hidden="true" />
+                <span className="aq-toggle__title">{segment.title}</span>
+              </summary>
+              <div className="aq-toggle__body">{renderMarkdown(segment.content, `toggle-body-${index}`)}</div>
             </details>
           )
         }

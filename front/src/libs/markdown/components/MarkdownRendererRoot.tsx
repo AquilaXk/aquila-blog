@@ -300,6 +300,9 @@ const MarkdownRendererRoot = styled.div`
   }
 
   .aq-code-block {
+    --aq-code-shell-padding-x: 0.92rem;
+    --aq-code-gutter-width: 1.58rem;
+    --aq-code-gutter-gap: 0.34rem;
     margin: 1.2rem 0;
     max-width: 100%;
     min-width: 0;
@@ -444,7 +447,7 @@ const MarkdownRendererRoot = styled.div`
     border: 0;
     border-radius: 0;
     box-shadow: none;
-    padding: 1.05rem 1.18rem 3.55rem;
+    padding: 1.05rem var(--aq-code-shell-padding-x) 3.55rem;
     min-width: 100%;
     background: ${({ theme }) =>
       theme.scheme === "dark" ? "#2b2d3a" : "#f2f4f8"};
@@ -477,19 +480,19 @@ const MarkdownRendererRoot = styled.div`
     counter-reset: aq-line;
   }
 
-  .aq-pretty-pre code > [data-line] {
+  .aq-pretty-pre code [data-line] {
     display: block;
     position: relative;
-    padding-left: 3rem;
+    padding-left: calc(var(--aq-code-gutter-width) + var(--aq-code-gutter-gap));
   }
 
-  .aq-pretty-pre code > [data-line]::before {
+  .aq-pretty-pre code [data-line]::before {
     counter-increment: aq-line;
     content: counter(aq-line);
     position: absolute;
     left: 0;
     top: 0;
-    width: 2.15rem;
+    width: var(--aq-code-gutter-width);
     text-align: right;
     color: ${({ theme }) => (theme.scheme === "dark" ? "#6d768b" : "#90a0b7")};
     user-select: none;
@@ -559,8 +562,13 @@ const MarkdownRendererRoot = styled.div`
   }
 
   .aq-toggle {
-    --aq-toggle-indent: 2.12rem;
+    --aq-toggle-caret-size: 0.92rem;
+    --aq-toggle-caret-hit: 1.34rem;
+    --aq-toggle-gap: 0.52rem;
+    --aq-toggle-summary-padding-x: 0;
+    --aq-toggle-indent: calc(var(--aq-toggle-summary-padding-x) + var(--aq-toggle-caret-hit) + var(--aq-toggle-gap));
     margin: 0.98rem 0;
+    position: relative;
   }
 
   .aq-mermaid {
@@ -849,13 +857,17 @@ const MarkdownRendererRoot = styled.div`
       min-width: max(${TABLE_MIN_COLUMN_WIDTH_PX}px, 10ch);
     }
 
+    .aq-code-block {
+      --aq-code-shell-padding-x: 0.74rem;
+      --aq-code-gutter-width: 1.36rem;
+      --aq-code-gutter-gap: 0.26rem;
+    }
+
     .aq-code-toolbar {
       grid-template-columns: auto 1fr;
     }
 
     .aq-code-block .aq-code {
-      padding-left: 0.74rem;
-      padding-right: 0.74rem;
       padding-bottom: 3.2rem;
     }
 
@@ -896,51 +908,62 @@ const MarkdownRendererRoot = styled.div`
 
   .aq-toggle > summary {
     cursor: pointer;
-    display: flex;
-    align-items: flex-start;
-    gap: 0.44rem;
+    position: relative;
+    display: block;
     list-style: none;
-    padding: 0.1rem 0;
+    padding: 0.1rem var(--aq-toggle-summary-padding-x) 0.1rem var(--aq-toggle-indent);
     color: var(--color-gray12);
     font-size: 1.01rem;
     font-weight: 580;
     line-height: 1.58;
   }
 
+  .aq-toggle__title {
+    display: block;
+    min-width: 0;
+  }
+
   .aq-toggle > summary::-webkit-details-marker {
     display: none;
   }
 
-  .aq-toggle > summary::before {
-    content: "▸";
-    width: 1.08rem;
-    height: 1.66em;
+  .aq-toggle__caret {
+    position: absolute;
+    left: 0;
+    top: 0.12rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: var(--aq-toggle-caret-hit);
+    height: var(--aq-toggle-caret-hit);
     color: var(--color-gray10);
-    font-size: 0.88rem;
-    line-height: 1;
-    flex-shrink: 0;
+  }
+
+  .aq-toggle__caret::before {
+    content: "";
+    width: var(--aq-toggle-caret-size);
+    height: var(--aq-toggle-caret-size);
+    background: currentColor;
+    clip-path: polygon(26% 18%, 82% 50%, 26% 82%);
     transform-origin: center;
     transition: transform 120ms ease;
   }
 
-  .aq-toggle[open] > summary::before {
+  .aq-toggle[open] .aq-toggle__caret::before {
     transform: rotate(90deg);
   }
 
-  .aq-toggle[open] > *:not(summary) {
+  .aq-toggle__body {
     margin-top: 0.22rem;
-    margin-left: var(--aq-toggle-indent);
+    padding-left: var(--aq-toggle-indent);
   }
 
-  .aq-toggle[open] > :not(summary):first-of-type {
+  .aq-toggle[open] > .aq-toggle__body:first-of-type {
     margin-top: 0;
   }
 
-  .aq-toggle[open] > :not(summary) p,
-  .aq-toggle[open] > :not(summary) li {
+  .aq-toggle__body p,
+  .aq-toggle__body li {
     line-height: 1.7;
   }
 

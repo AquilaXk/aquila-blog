@@ -493,9 +493,22 @@ export const shouldPreferMarkdownPipeline = (markdown: string) => {
 
 const extractTextFromNode = (node: ReactNode): string => {
   if (typeof node === "string" || typeof node === "number") return String(node)
-  if (Array.isArray(node)) return node.map(extractTextFromNode).join("")
+  if (Array.isArray(node)) return node.map(extractTextFromNode).join("\n")
   if (!isValidElement(node)) return ""
   return extractTextFromNode((node.props as { children?: ReactNode }).children)
+}
+
+export const extractTextFromCodeAst = (node: unknown): string => {
+  if (!node || typeof node !== "object") return ""
+
+  const textValue = (node as { value?: unknown }).value
+  if (typeof textValue === "string" || typeof textValue === "number") {
+    return String(textValue)
+  }
+
+  const children = (node as { children?: unknown }).children
+  if (!Array.isArray(children)) return ""
+  return children.map(extractTextFromCodeAst).join("")
 }
 
 export const extractCodeMetaFromPreChildren = (children: ReactNode) => {
@@ -519,9 +532,14 @@ export const extractCodeMetaFromPreChildren = (children: ReactNode) => {
     typeof codeElement?.props["data-language"] === "string"
       ? String(codeElement.props["data-language"]).toLowerCase()
       : ""
+  const dataRawCode =
+    typeof codeElement?.props["data-raw-code"] === "string"
+      ? String(codeElement.props["data-raw-code"])
+      : ""
 
   const codeChildren = (codeElement?.props.children as ReactNode | undefined) ?? children
-  const rawCode = extractTextFromNode(codeChildren).replace(/\n$/, "")
+  const rawCodeFromAst = extractTextFromCodeAst(codeElement?.props.node)
+  const rawCode = (dataRawCode || rawCodeFromAst || extractTextFromNode(codeChildren)).replace(/\n$/, "")
 
   return {
     language: dataLanguage || classLanguage || "text",

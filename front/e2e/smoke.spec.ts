@@ -926,6 +926,15 @@ test("상세 페이지 콜아웃과 토글 블록은 작성 문법대로 렌더�
           "- **Broker**는 구독자에게 메시지를 전달하는 우체국입니다.",
           "</aside>",
           "",
+          "```txt",
+          "src/main/java/com/team/bidnow",
+          "|-- BidNowApplication.java",
+          "|",
+          "|-- global",
+          "|   |-- config",
+          "|   |   |-- WebSocketConfig.java",
+          "```",
+          "",
           ":::toggle 더 보기",
           "토글 내부 본문입니다.",
           ":::",
@@ -980,6 +989,88 @@ test("상세 페이지 콜아웃과 토글 블록은 작성 문법대로 렌더�
   await expect(page.getByText(/^Information$/)).toHaveCount(0)
   await page.getByText("더 보기").click()
   await expect(page.getByText("토글 내부 본문입니다.")).toBeVisible()
+
+  const toggleSummary = page.locator(".aq-toggle > summary").first()
+  const toggleMetrics = await toggleSummary.evaluate((element) => {
+    const summaryElement = element as HTMLElement
+    const contentWrapper = summaryElement.parentElement?.querySelector(".aq-toggle__body")
+    const titleElement = summaryElement.querySelector(".aq-toggle__title")
+    const caretElement = summaryElement.querySelector(".aq-toggle__caret")
+    const bodyParagraph = contentWrapper?.querySelector("p")
+    if (
+      !(contentWrapper instanceof HTMLElement) ||
+      !(titleElement instanceof HTMLElement) ||
+      !(caretElement instanceof HTMLElement) ||
+      !(bodyParagraph instanceof HTMLElement) ||
+      !(titleElement.firstChild instanceof Text)
+    ) {
+      return null
+    }
+
+    const titleRange = document.createRange()
+    titleRange.selectNodeContents(titleElement.firstChild)
+    const titleRect = titleRange.getBoundingClientRect()
+    const bodyRect = bodyParagraph.getBoundingClientRect()
+    const caretRect = caretElement.getBoundingClientRect()
+    const caretStyle = window.getComputedStyle(caretElement, "::before")
+
+    return {
+      titleLeft: titleRect.left,
+      bodyLeft: bodyRect.left,
+      caretWidth: caretRect.width,
+      caretHeight: caretRect.height,
+      caretClipPath: caretStyle.clipPath,
+    }
+  })
+
+  expect(toggleMetrics).not.toBeNull()
+  expect(toggleMetrics?.caretClipPath ?? "").toContain("polygon")
+  expect(toggleMetrics?.caretWidth ?? 0).toBeGreaterThanOrEqual(12)
+  expect(toggleMetrics?.caretHeight ?? 0).toBeGreaterThanOrEqual(12)
+  expect(Math.abs((toggleMetrics?.titleLeft ?? 0) - (toggleMetrics?.bodyLeft ?? 0))).toBeLessThanOrEqual(2)
+
+  const codeBlock = page.locator(".aq-code-block").first()
+  await expect(codeBlock).toBeVisible()
+  const codeLines = codeBlock.locator(".aq-pretty-pre code [data-line]")
+  await expect(codeLines).toHaveCount(6)
+  await expect(codeLines.nth(1)).toHaveText("|-- BidNowApplication.java")
+  await expect(codeLines.nth(5)).toHaveText("|   |   |-- WebSocketConfig.java")
+
+  const codeMetrics = await codeBlock.evaluate((element) => {
+    const block = element as HTMLElement
+    const pre = block.querySelector(".aq-pretty-pre")
+    const code = pre?.querySelector("code")
+    const lines = code ? Array.from(code.querySelectorAll<HTMLElement>("[data-line]")) : []
+    const firstLine = lines[0]
+    const secondLine = lines[1]
+
+    if (
+      !(pre instanceof HTMLElement) ||
+      !(code instanceof HTMLElement) ||
+      !(firstLine instanceof HTMLElement) ||
+      !(secondLine instanceof HTMLElement)
+    ) {
+      return null
+    }
+
+    const preStyle = window.getComputedStyle(pre)
+    const lineStyle = window.getComputedStyle(firstLine)
+    const gutterStyle = window.getComputedStyle(firstLine, "::before")
+    const firstRect = firstLine.getBoundingClientRect()
+    const secondRect = secondLine.getBoundingClientRect()
+
+    return {
+      prePaddingLeft: Number.parseFloat(preStyle.paddingLeft),
+      linePaddingLeft: Number.parseFloat(lineStyle.paddingLeft),
+      gutterWidth: Number.parseFloat(gutterStyle.width),
+      lineDeltaTop: secondRect.top - firstRect.top,
+    }
+  })
+
+  expect(codeMetrics).not.toBeNull()
+  expect(codeMetrics?.lineDeltaTop ?? 0).toBeGreaterThan(12)
+  expect(codeMetrics?.prePaddingLeft ?? 999).toBeLessThanOrEqual(16)
+  expect((codeMetrics?.linePaddingLeft ?? 999) - (codeMetrics?.gutterWidth ?? 0)).toBeLessThanOrEqual(8)
 })
 
 test("비로그인 상태에서 좋아요 클릭 시 로그인 페이지로 이동한다", async ({ page }) => {

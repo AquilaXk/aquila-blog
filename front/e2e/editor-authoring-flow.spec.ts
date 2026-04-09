@@ -2116,6 +2116,60 @@ test.describe("block editor authoring flow", () => {
     await page.mouse.up()
   })
 
+  test("writer surface의 최우측 table column boundary drag도 mouseup 전 guide가 실제 우측 경계를 따라간다", async ({
+    page,
+  }) => {
+    await page.goto(QA_WRITER_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.getByRole("button", { name: "테이블", exact: true }).first().click()
+
+    const lastHeaderCell = page.locator("table th").last()
+    await lastHeaderCell.click()
+    await lastHeaderCell.hover()
+
+    const resizeHandle = page.getByTestId("table-column-resize-boundary-2")
+    const handleBox = await resizeHandle.boundingBox()
+    if (!handleBox) {
+      throw new Error("writer table last-column resize boundary is missing")
+    }
+
+    const startX = Math.round(handleBox.x + handleBox.width / 2)
+    const startY = Math.round(handleBox.y + handleBox.height / 2)
+
+    await page.mouse.move(startX, startY)
+    await page.mouse.down()
+
+    await expect(page.getByTestId("table-column-drag-guide")).toBeVisible()
+    const readGuideBoundaryDelta = async () => {
+      const [guideCenter, boundaryRight] = await Promise.all([
+        page.getByTestId("table-column-drag-guide").evaluate((element) => {
+          const rect = (element as HTMLElement).getBoundingClientRect()
+          return Math.round(rect.left + rect.width / 2)
+        }),
+        lastHeaderCell.evaluate((element) => Math.round((element as HTMLElement).getBoundingClientRect().right)),
+      ])
+      return Math.abs(guideCenter - boundaryRight)
+    }
+    const initialBoundaryRight = await lastHeaderCell.evaluate((element) =>
+      Math.round((element as HTMLElement).getBoundingClientRect().right)
+    )
+
+    await expect.poll(readGuideBoundaryDelta).toBeLessThanOrEqual(2)
+
+    await page.mouse.move(startX + 48, startY, { steps: 8 })
+
+    await expect.poll(readGuideBoundaryDelta).toBeLessThanOrEqual(2)
+    await expect
+      .poll(async () =>
+        lastHeaderCell.evaluate((element) => Math.round((element as HTMLElement).getBoundingClientRect().right))
+      )
+      .toBeGreaterThan(initialBoundaryRight + 8)
+
+    await page.mouse.up()
+  })
+
   test("writer surface의 table column boundary drag는 native text selection 없이 guide만 남긴다", async ({
     page,
   }) => {

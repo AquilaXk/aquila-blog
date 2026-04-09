@@ -7865,11 +7865,17 @@ const BlockEditorEngine = ({
       ) : null}
       {shouldShowTableHandles
         ? !tableColumnDragGuideState.visible
-          ? tableAffordanceGeometry.columnSegments.slice(0, -1).map((segment, index) => (
+          ? tableAffordanceGeometry.columnSegments.map((segment, index) => {
+            const isOuterEdge = index === tableAffordanceGeometry.columnSegments.length - 1
+            const outerEdgeReservedOffset = isOuterEdge
+              ? TABLE_EDGE_ADD_BUTTON_SIZE_PX + TABLE_EDGE_HANDLE_INSET_PX
+              : 0
+            return (
             <TableColumnResizeBoundaryHandle
               key={`table-column-boundary-${index}`}
               type="button"
               data-testid={`table-column-resize-boundary-${index}`}
+              data-edge={isOuterEdge ? "outer" : "inner"}
               aria-label={`열 ${index + 1} 경계 조절`}
               onPointerEnter={cancelTableQuickRailHide}
               onPointerLeave={() => {
@@ -7884,11 +7890,17 @@ const BlockEditorEngine = ({
               }}
               style={{
                 left: `${Math.round(tableAffordanceGeometry.tableLeft + segment.left + segment.width)}px`,
-                top: `${Math.round(tableAffordanceGeometry.tableTop)}px`,
-                height: `${Math.round(tableAffordanceGeometry.height)}px`,
+                top: `${Math.round(tableAffordanceGeometry.tableTop + outerEdgeReservedOffset)}px`,
+                height: `${Math.round(
+                  Math.max(
+                    44,
+                    tableAffordanceGeometry.height - outerEdgeReservedOffset * (isOuterEdge ? 2 : 0)
+                  )
+                )}px`,
               }}
             />
-            ))
+            )
+          })
           : null
         : null}
       {shouldShowTableHandles ? (
@@ -10681,6 +10693,12 @@ const TableColumnResizeBoundaryHandle = styled.button`
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+
+  &[data-edge="outer"] {
+    z-index: 59;
+    width: 24px;
+    margin-left: -12px;
+  }
 
   &::before {
     content: "";

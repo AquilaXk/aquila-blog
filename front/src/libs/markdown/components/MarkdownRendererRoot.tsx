@@ -300,9 +300,9 @@ const MarkdownRendererRoot = styled.div`
   }
 
   .aq-code-block {
-    --aq-code-shell-padding-x: 0.92rem;
-    --aq-code-gutter-width: 1.58rem;
-    --aq-code-gutter-gap: 0.34rem;
+    --aq-code-shell-padding-x: 0.72rem;
+    --aq-code-gutter-width: 1.34rem;
+    --aq-code-gutter-gap: 0.54rem;
     margin: 1.2rem 0;
     max-width: 100%;
     min-width: 0;
@@ -858,9 +858,9 @@ const MarkdownRendererRoot = styled.div`
     }
 
     .aq-code-block {
-      --aq-code-shell-padding-x: 0.74rem;
-      --aq-code-gutter-width: 1.36rem;
-      --aq-code-gutter-gap: 0.26rem;
+      --aq-code-shell-padding-x: 0.58rem;
+      --aq-code-gutter-width: 1.16rem;
+      --aq-code-gutter-gap: 0.46rem;
     }
 
     .aq-code-toolbar {

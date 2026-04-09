@@ -1070,7 +1070,9 @@ test("상세 페이지 콜아웃과 토글 블록은 작성 문법대로 렌더�
   expect(codeMetrics).not.toBeNull()
   expect(codeMetrics?.lineDeltaTop ?? 0).toBeGreaterThan(12)
   expect(codeMetrics?.prePaddingLeft ?? 999).toBeLessThanOrEqual(16)
-  expect((codeMetrics?.linePaddingLeft ?? 999) - (codeMetrics?.gutterWidth ?? 0)).toBeLessThanOrEqual(8)
+  const lineGap = (codeMetrics?.linePaddingLeft ?? 999) - (codeMetrics?.gutterWidth ?? 0)
+  expect(lineGap).toBeGreaterThanOrEqual(8)
+  expect(lineGap).toBeLessThanOrEqual(10)
 })
 
 test("비로그인 상태에서 좋아요 클릭 시 로그인 페이지로 이동한다", async ({ page }) => {

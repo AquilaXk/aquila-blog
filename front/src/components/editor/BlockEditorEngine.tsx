@@ -1537,26 +1537,48 @@ const buildReorderedSimpleTableNode = (
 
 const findActiveRenderedTable = (
   viewport: HTMLElement | null,
-  quickRailGeometry: TableAffordanceGeometry | null
+  quickRailGeometry: TableAffordanceGeometry | null,
+  preferredTable?: HTMLTableElement | null
 ) => {
   if (!viewport || !quickRailGeometry) return null
+
+  if (preferredTable?.isConnected && viewport.contains(preferredTable)) {
+    return preferredTable
+  }
 
   const renderedTables = Array.from(
     viewport.querySelectorAll<HTMLTableElement>(".aq-block-editor__content .tableWrapper table, .aq-block-editor__content table")
   )
   if (!renderedTables.length) return null
 
-  const withinTolerance = (left: number, right: number) =>
+  const withinHorizontalTolerance = (left: number, right: number) =>
     Math.abs(left - quickRailGeometry.tableLeft) <= 6 &&
     Math.abs(right - (quickRailGeometry.tableLeft + quickRailGeometry.width)) <= 6
+  const withinFullTolerance = (rect: DOMRect) =>
+    withinHorizontalTolerance(rect.left, rect.right) && Math.abs(rect.top - quickRailGeometry.tableTop) <= 6
 
   return (
     renderedTables.find((table) => {
       const rect = table.getBoundingClientRect()
-      return withinTolerance(rect.left, rect.right)
+      return withinFullTolerance(rect)
+    }) ??
+    renderedTables.find((table) => {
+      const rect = table.getBoundingClientRect()
+      return withinHorizontalTolerance(rect.left, rect.right)
     }) ?? renderedTables[0] ?? null
   )
 }
+
+const resolveTableScopedSelectedCell = (tableElement: ParentNode | null) =>
+  (tableElement?.querySelector(".selectedCell") as HTMLElement | null) ?? null
+
+const resolveActiveRenderedTableForFloatingUi = (
+  viewport: HTMLElement | null,
+  quickRailGeometry: TableAffordanceGeometry | null,
+  preferredTable?: HTMLTableElement | null
+) =>
+  findActiveRenderedTable(viewport, quickRailGeometry, preferredTable) ??
+  (viewport?.querySelector(".aq-block-editor__content .tableWrapper table, .aq-block-editor__content table") as HTMLTableElement | null)
 
 const readColumnWidthFromCell = (cell: TableColumnCellRef) => {
   const widthValue = Array.isArray(cell.node.attrs?.colwidth) ? cell.node.attrs?.colwidth[0] : null
@@ -2098,6 +2120,7 @@ const BlockEditorEngine = ({
   enableMermaidBlocks = false,
   onQaActionsReady,
 }: BlockEditorEngineProps) => {
+  const isWriterSurface = typeof className === "string" && className.includes("aq-block-editor--writer-surface")
   const imageFileInputRef = useRef<HTMLInputElement>(null)
   const attachmentFileInputRef = useRef<HTMLInputElement>(null)
   const inlineColorMenuRef = useRef<HTMLDetailsElement>(null)
@@ -2105,6 +2128,9 @@ const BlockEditorEngine = ({
   const bubbleInlineColorMenuRef = useRef<HTMLDetailsElement>(null)
   const slashMenuRef = useRef<HTMLDivElement>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
+  const activeTableElementRef = useRef<HTMLTableElement | null>(null)
+  const hoveredTableElementRef = useRef<HTMLTableElement | null>(null)
+  const tableHoverAnchorLockUntilRef = useRef(0)
   const blockHandleRailRef = useRef<HTMLDivElement>(null)
   const pendingBlockDragRef = useRef<PendingBlockDragState | null>(null)
   const pendingBlockDragCleanupRef = useRef<(() => void) | null>(null)
@@ -2200,6 +2226,10 @@ const BlockEditorEngine = ({
   const [isTableQuickRailHovered, setIsTableQuickRailHovered] = useState(false)
   const [isTableColumnResizeActive, setIsTableColumnResizeActive] = useState(false)
   const [isTableCornerGrowActive, setIsTableCornerGrowActive] = useState(false)
+  const [hoveredTableCellMenuLayout, setHoveredTableCellMenuLayout] = useState<{
+    cellMenuLeft: number
+    cellMenuTop: number
+  } | null>(null)
   const [tableMenuState, setTableMenuState] = useState<TableMenuState>(null)
   const tableAffordanceGeometryRef = useRef(tableAffordanceGeometry)
   const tableAffordanceVisibilityRef = useRef(tableAffordanceVisibility)
@@ -2320,9 +2350,11 @@ const BlockEditorEngine = ({
         return
       }
 
-      const selectedCellTable = viewport.querySelector(".aq-block-editor__content .selectedCell")?.closest("table")
-      const fallbackTable = viewport.querySelector(".aq-block-editor__content .tableWrapper table, .aq-block-editor__content table")
-      const tableElement = (selectedCellTable ?? fallbackTable) as HTMLTableElement | null
+      const tableElement = resolveActiveRenderedTableForFloatingUi(
+        viewport,
+        tableAffordanceGeometryRef.current,
+        activeTableElementRef.current
+      )
       const headerRow = tableElement?.querySelector("thead tr, tbody tr, tr")
       if (!tableElement || !headerRow) {
         hideTableColumnDragGuide()
@@ -2357,9 +2389,11 @@ const BlockEditorEngine = ({
         return
       }
 
-      const selectedCellTable = viewport.querySelector(".aq-block-editor__content .selectedCell")?.closest("table")
-      const fallbackTable = viewport.querySelector(".aq-block-editor__content .tableWrapper table, .aq-block-editor__content table")
-      const tableElement = (selectedCellTable ?? fallbackTable) as HTMLTableElement | null
+      const tableElement = resolveActiveRenderedTableForFloatingUi(
+        viewport,
+        tableAffordanceGeometryRef.current,
+        activeTableElementRef.current
+      )
       if (!tableElement) {
         hideTableColumnDragGuide()
         return
@@ -3378,10 +3412,26 @@ const BlockEditorEngine = ({
     const viewport = viewportRef.current
     if (!viewport) return null
 
-    const selectedCell = viewport.querySelector(".aq-block-editor__content .selectedCell") as HTMLElement | null
+    const now =
+      typeof window !== "undefined" && typeof window.performance !== "undefined"
+        ? window.performance.now()
+        : Date.now()
+    const hoveredTable =
+      hoveredTableElementRef.current?.isConnected &&
+      viewport.contains(hoveredTableElementRef.current) &&
+      now <= tableHoverAnchorLockUntilRef.current
+        ? hoveredTableElementRef.current
+        : null
+    const renderedTable =
+      hoveredTable ??
+      resolveActiveRenderedTableForFloatingUi(
+        viewport,
+        tableAffordanceGeometryRef.current,
+        activeTableElementRef.current
+      )
+    const selectedCell = resolveTableScopedSelectedCell(renderedTable)
     if (selectedCell) return selectedCell
 
-    const renderedTable = findActiveRenderedTable(viewport, tableAffordanceGeometryRef.current)
     if (!renderedTable) return null
 
     const rows = Array.from(renderedTable.querySelectorAll("tr")).filter(
@@ -3396,6 +3446,46 @@ const BlockEditorEngine = ({
       (row.querySelector("th, td") as HTMLElement | null) ??
       (renderedTable.querySelector("th, td") as HTMLElement | null)
     )
+  }, [])
+
+  const syncHoveredTableCellMenuLayout = useCallback((
+    tableElement: HTMLTableElement | null,
+    preferredCell?: HTMLElement | null
+  ) => {
+    if (typeof window === "undefined" || !tableElement?.isConnected) {
+      setHoveredTableCellMenuLayout(null)
+      return
+    }
+    const anchorCell =
+      preferredCell ??
+      resolveTableScopedSelectedCell(tableElement) ??
+      (tableElement.querySelector("th, td") as HTMLElement | null)
+    if (!anchorCell) {
+      setHoveredTableCellMenuLayout(null)
+      return
+    }
+    const cellRect = anchorCell.getBoundingClientRect()
+    setHoveredTableCellMenuLayout({
+      cellMenuLeft: clampViewportPosition(
+        Math.round(
+          cellRect.left +
+            cellRect.width -
+            Math.round(TABLE_CELL_MENU_BUTTON_SIZE_PX / 2) -
+            TABLE_EDGE_HANDLE_INSET_PX
+        ),
+        TABLE_ADD_BAR_VIEWPORT_PADDING_PX,
+        window.innerWidth,
+        TABLE_CELL_MENU_BUTTON_SIZE_PX
+      ),
+      cellMenuTop: clampViewportPosition(
+        Math.round(
+          cellRect.top + Math.max(0, cellRect.height / 2 - TABLE_CELL_MENU_BUTTON_SIZE_PX / 2)
+        ),
+        TABLE_ADD_BAR_VIEWPORT_PADDING_PX,
+        window.innerHeight,
+        TABLE_CELL_MENU_BUTTON_SIZE_PX
+      ),
+    })
   }, [])
 
   const getCurrentSelectedTableRect = useCallback((activeEditor?: TiptapEditor | null) => {
@@ -4145,13 +4235,30 @@ const BlockEditorEngine = ({
         : (tableSurfaceElement?.querySelector("table") as HTMLTableElement | null)
     const tableSurfaceRect = tableSurfaceElement?.getBoundingClientRect()
     const tableRect = tableElement?.getBoundingClientRect()
+    const hasHoverPoint =
+      typeof hoverClientX === "number" &&
+      Number.isFinite(hoverClientX) &&
+      typeof hoverClientY === "number" &&
+      Number.isFinite(hoverClientY)
     if (!tableElement || !tableRect || !tableSurfaceRect) {
+      activeTableElementRef.current = null
+      hoveredTableElementRef.current = null
+      tableHoverAnchorLockUntilRef.current = 0
+      setHoveredTableCellMenuLayout(null)
       hideTableQuickRailImmediately()
       return
     }
+    activeTableElementRef.current = tableElement
+    if (hasHoverPoint) {
+      hoveredTableElementRef.current = tableElement
+      tableHoverAnchorLockUntilRef.current =
+        (typeof window !== "undefined" && typeof window.performance !== "undefined"
+          ? window.performance.now()
+          : Date.now()) + 280
+    }
     cancelTableQuickRailHide()
     const hoveredCell = element?.closest("th, td") as HTMLElement | null
-    const selectedCell = viewportRef.current?.querySelector(".aq-block-editor__content .selectedCell") as HTMLElement | null
+    const selectedCell = resolveTableScopedSelectedCell(tableElement)
     const activeCell = hoveredCell || selectedCell || (tableElement.querySelector("th, td") as HTMLElement | null)
     const activeCellRect = activeCell?.getBoundingClientRect()
     const activeRow = activeCell?.closest("tr") as HTMLTableRowElement | null
@@ -4160,11 +4267,6 @@ const BlockEditorEngine = ({
     const activeColumnRight = activeCellRect?.right ?? tableRect.right
     const activeRowTopBound = activeRowRect?.top ?? tableRect.top
     const activeRowBottomBound = activeRowRect?.bottom ?? tableRect.bottom
-    const hasHoverPoint =
-      typeof hoverClientX === "number" &&
-      Number.isFinite(hoverClientX) &&
-      typeof hoverClientY === "number" &&
-      Number.isFinite(hoverClientY)
     const visibleLeft = Math.round(tableSurfaceRect.left)
     const visibleTop = Math.round(tableSurfaceRect.top)
     const visibleRight = Math.round(tableSurfaceRect.right)
@@ -4201,6 +4303,9 @@ const BlockEditorEngine = ({
     const activeColumnIndex = activeCell?.parentElement
       ? Array.from(activeCell.parentElement.children).findIndex((child) => child === activeCell)
       : 0
+    if (hasHoverPoint) {
+      syncHoveredTableCellMenuLayout(tableElement, activeCell)
+    }
     const firstRowCells = Array.from(
       (tableElement.querySelector("thead tr, tbody tr, tr")?.children ?? []) as HTMLCollectionOf<HTMLElement>
     )
@@ -4242,7 +4347,7 @@ const BlockEditorEngine = ({
       showColumnAddBar: hasHoverPoint ? showColumnAddBar : prev.showColumnAddBar,
       showRowAddBar: hasHoverPoint ? showRowAddBar : prev.showRowAddBar,
     }))
-  }, [cancelTableQuickRailHide, hideTableQuickRailImmediately])
+  }, [cancelTableQuickRailHide, hideTableQuickRailImmediately, syncHoveredTableCellMenuLayout])
 
   const stabilizeTableSelectionSurface = useCallback((nextEditor?: TiptapEditor | null) => {
     if (typeof window === "undefined") return
@@ -4251,14 +4356,9 @@ const BlockEditorEngine = ({
       const activeEditor = nextEditor ?? editorRef.current
       if (!activeEditor) return
       normalizeRenderedTableWidthsToReadableBudget(activeEditor)
-      const selectedCell = viewportRef.current?.querySelector(
-        ".aq-block-editor__content .selectedCell"
-      ) as HTMLElement | null
-      const fallbackCell = viewportRef.current?.querySelector(
-        ".aq-block-editor__content table th, .aq-block-editor__content table td"
-      ) as HTMLElement | null
-      if (!isTableSelectionActive(activeEditor) && !fallbackCell) return
-      syncTableQuickRailFromElement(selectedCell ?? fallbackCell)
+      const anchorCell = resolveTableQuickRailAnchorElement()
+      if (!isTableSelectionActive(activeEditor) && !anchorCell) return
+      syncTableQuickRailFromElement(anchorCell)
       setSelectionTick((prev) => prev + 1)
     }
 
@@ -4269,7 +4369,7 @@ const BlockEditorEngine = ({
     }
 
     window.requestAnimationFrame(() => schedule(4))
-  }, [syncTableQuickRailFromElement])
+  }, [resolveTableQuickRailAnchorElement, syncTableQuickRailFromElement])
 
   useEffect(() => {
     tableAffordanceGeometryRef.current = tableAffordanceGeometry
@@ -7449,12 +7549,16 @@ const BlockEditorEngine = ({
       ) {
         cancelTableQuickRailHide()
         setIsTableQuickRailHovered(true)
-        if (currentTableAxisSelection !== null) {
+        syncHoveredTableCellMenuLayout(hoveredTableElementRef.current ?? activeTableElementRef.current)
+        if (isWriterSurface || currentTableAxisSelection !== null) {
           setHoveredBlockIndex(targetBlockIndex)
         }
         return
       }
       if (isFarLeftTableBlockGutter) {
+        hoveredTableElementRef.current = null
+        tableHoverAnchorLockUntilRef.current = 0
+        setHoveredTableCellMenuLayout(null)
         setIsTableQuickRailHovered(false)
         setViewportRowResizeHot(false)
         setHoveredBlockIndex(targetBlockIndex)
@@ -7465,11 +7569,7 @@ const BlockEditorEngine = ({
         syncTableQuickRailFromElement(cell ?? target ?? hoveredTableElement, clientX, clientY)
         setIsTableQuickRailHovered(true)
         setViewportRowResizeHot(isRowResizeHandleTarget(cell, clientX, clientY))
-        if (currentTableAxisSelection !== null) {
-          setHoveredBlockIndex(targetBlockIndex)
-        } else {
-          setHoveredBlockIndex(null)
-        }
+        setHoveredBlockIndex(isWriterSurface || currentTableAxisSelection !== null ? targetBlockIndex : null)
         if (selectedBlockNodeIndex !== null && !keyboardBlockSelectionStickyRef.current) {
           keyboardBlockSelectionStickyRef.current = false
           setSelectedBlockNodeIndex(null)
@@ -7477,6 +7577,9 @@ const BlockEditorEngine = ({
         }
         return
       } else if (!tableMenuState) {
+        hoveredTableElementRef.current = null
+        tableHoverAnchorLockUntilRef.current = 0
+        setHoveredTableCellMenuLayout(null)
         setIsTableQuickRailHovered(false)
         scheduleTableQuickRailHide()
       }
@@ -7513,11 +7616,13 @@ const BlockEditorEngine = ({
       draggedTableAxisState,
       currentTableAxisSelection,
       isCoarsePointer,
+      isWriterSurface,
       isTableStructuralSelection,
       isRowResizeHandleTarget,
       selectedBlockNodeIndex,
       setViewportRowResizeHot,
       syncSelectedBlockNodeSurface,
+      syncHoveredTableCellMenuLayout,
       scheduleTableQuickRailHide,
       syncTableQuickRailFromElement,
       tableMenuState,
@@ -7544,6 +7649,7 @@ const BlockEditorEngine = ({
     if (!shouldPersistTableHandles) {
       scheduleTableQuickRailHide()
     }
+    setHoveredTableCellMenuLayout(null)
     if (!tableRowResizeRef.current) {
       setViewportRowResizeHot(false)
     }
@@ -7551,6 +7657,7 @@ const BlockEditorEngine = ({
     scheduleHoveredBlockClear,
     scheduleTableQuickRailHide,
     setViewportRowResizeHot,
+    setHoveredTableCellMenuLayout,
     shouldPersistTableHandles,
   ])
 
@@ -8218,6 +8325,7 @@ const BlockEditorEngine = ({
               }}
               style={{
                 left: `${
+                  (isTableQuickRailHovered ? hoveredTableCellMenuLayout?.cellMenuLeft : null) ??
                   desktopTableRailLayout?.cellMenuLeft ??
                   Math.round(
                     tableAffordanceGeometry.cellLeft +
@@ -8227,6 +8335,7 @@ const BlockEditorEngine = ({
                   )
                 }px`,
                 top: `${
+                  (isTableQuickRailHovered ? hoveredTableCellMenuLayout?.cellMenuTop : null) ??
                   desktopTableRailLayout?.cellMenuTop ??
                   Math.round(
                     tableAffordanceGeometry.cellTop +
@@ -10889,6 +10998,8 @@ const TableCornerGrowButton = styled(TableHandleButton)`
 `
 
 const TableCellMenuButton = styled(TableHandleButton)`
+  position: fixed;
+  z-index: 59;
   width: ${TABLE_CELL_MENU_BUTTON_SIZE_PX}px;
   height: ${TABLE_CELL_MENU_BUTTON_SIZE_PX}px;
   border-radius: 999px;

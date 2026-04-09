@@ -38,6 +38,7 @@ export const WriterEditorHost = ({
     }}
   >
     <LazyBlockEditorShell
+      className="aq-block-editor--writer-surface"
       value={markdown}
       onChange={onMarkdownChange}
       onUploadImage={onImageUpload}

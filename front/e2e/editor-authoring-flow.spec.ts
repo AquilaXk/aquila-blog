@@ -1227,6 +1227,64 @@ test.describe("block editor authoring flow", () => {
     await expect(page.getByTestId("table-row-add-bar")).toBeVisible()
   })
 
+  test("writer surface의 multi-table hover는 hovered table 기준으로 cell menu를 고정하고 block drag handle을 유지한다", async ({
+    page,
+  }) => {
+    await page.goto(QA_WRITER_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.getByRole("button", { name: "테이블", exact: true }).first().click()
+
+    const firstTableForSetup = page.locator(".aq-block-editor__content .tableWrapper table").first()
+    const firstSetupBox = await firstTableForSetup.boundingBox()
+    if (!firstSetupBox) {
+      throw new Error("writer first table bounding box is missing before multi-table setup")
+    }
+
+    await page.mouse.click(firstSetupBox.x + 40, firstSetupBox.y + firstSetupBox.height + 28)
+    await page.keyboard.type("중간 문단 1")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("중간 문단 2")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("중간 문단 3")
+    await page.keyboard.press("Enter")
+    await page.getByRole("button", { name: "테이블", exact: true }).first().click()
+
+    const tables = page.locator(".aq-block-editor__content .tableWrapper table")
+    await expect(tables).toHaveCount(2)
+
+    const secondTableCell = tables.nth(1).locator("th, td").nth(1)
+    await secondTableCell.scrollIntoViewIfNeeded()
+    await secondTableCell.click()
+
+    const firstTable = tables.first()
+    await firstTable.scrollIntoViewIfNeeded()
+    const firstTableBox = await firstTable.boundingBox()
+    if (!firstTableBox) {
+      throw new Error("writer first table bounding box is missing")
+    }
+
+    const firstTableCell = firstTable.locator("th, td").first()
+    await firstTableCell.hover()
+    await page.mouse.move(firstTableBox.x + firstTableBox.width / 2, firstTableBox.y + 6)
+
+    const cellMenuMetrics = await page.getByTestId("table-cell-menu-button").evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      return {
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        left: Math.round(rect.left),
+      }
+    })
+
+    expect(cellMenuMetrics.top).toBeGreaterThanOrEqual(Math.round(firstTableBox.y) - 12)
+    expect(cellMenuMetrics.bottom).toBeLessThanOrEqual(Math.round(firstTableBox.y + firstTableBox.height) + 24)
+
+    await page.mouse.move(firstTableBox.x + 24, firstTableBox.y + 24)
+    await expect(page.getByTestId("block-drag-handle")).toBeVisible()
+  })
+
   test("writer surface의 pasted 4열 table에서도 row/column menu가 계속 동작한다", async ({ page }) => {
     await page.setViewportSize({ width: 1680, height: 1500 })
     await page.goto(QA_WRITER_ROUTE)

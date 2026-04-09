@@ -608,6 +608,35 @@ test.describe("block editor authoring flow", () => {
     expect(colors.string).not.toBe(colors.base)
   })
 
+  test("코드 언어 선택 팝오버는 본문 숨김 텍스트 스타일을 상속하지 않는다", async ({ page }) => {
+    const seed = encodeURIComponent("```javascript\nconst answer = 42;\n```")
+    await page.goto(`${QA_ENGINE_ROUTE}&seed=${seed}`)
+
+    await page.getByRole("button", { name: /JavaScript/i }).click()
+
+    const languageDialog = page.getByRole("dialog", { name: "코드 언어 선택" })
+    await expect(languageDialog).toBeVisible()
+    await expect(languageDialog.getByRole("button", { name: "TXT", exact: true })).toBeVisible()
+
+    const computed = await languageDialog.getByRole("button", { name: "TXT", exact: true }).evaluate((element) => {
+      const buttonStyle = window.getComputedStyle(element as HTMLElement)
+      const label = element.querySelector("span")
+      const labelStyle = label ? window.getComputedStyle(label) : null
+
+      return {
+        buttonTextSecurity: buttonStyle.webkitTextSecurity,
+        buttonTextFill: buttonStyle.webkitTextFillColor,
+        labelTextSecurity: labelStyle?.webkitTextSecurity ?? "",
+        labelTextFill: labelStyle?.webkitTextFillColor ?? "",
+      }
+    })
+
+    expect(computed.buttonTextSecurity).toBe("none")
+    expect(computed.labelTextSecurity).toBe("none")
+    expect(computed.buttonTextFill).not.toBe("transparent")
+    expect(computed.labelTextFill).not.toBe("transparent")
+  })
+
   test("텍스트 블록에서 Tab은 부분 선택이 아니라 블록 선택으로 승격된다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 
@@ -936,6 +965,12 @@ test.describe("block editor authoring flow", () => {
     await expect(blockDragHandle).toBeVisible()
     await blockDragHandle.click()
     await expect(page.getByTestId("keyboard-block-selection-overlay")).toBeVisible()
+
+    await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
+    await expect(columnRailButton).toBeVisible()
+    await columnRailButton.click()
+    await expect(page.getByTestId("table-column-selection-outline")).toBeVisible()
+    await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
   })
 
   test("table rail segment selection은 fallback rect에서도 native text selection 없이 전체 열을 선택한다", async ({

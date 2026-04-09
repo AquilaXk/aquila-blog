@@ -2526,6 +2526,8 @@ const CodeLanguageButton = styled.button`
   letter-spacing: 0.04em;
   padding: 0 0.8rem;
   text-transform: uppercase;
+  -webkit-text-fill-color: currentColor;
+  -webkit-text-security: none;
 
   svg {
     width: 0.95rem;
@@ -2549,6 +2551,8 @@ const CodeLanguagePopover = styled.div`
   background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(30, 31, 36, 0.98)")};
   box-shadow: ${({ theme }) =>
     theme.scheme === "light" ? "0 14px 28px rgba(15, 23, 42, 0.12)" : "0 18px 36px rgba(0, 0, 0, 0.3)"};
+  -webkit-text-fill-color: currentColor;
+  -webkit-text-security: none;
 `
 
 const CodeLanguageSearchInput = styled.input`
@@ -2560,6 +2564,8 @@ const CodeLanguageSearchInput = styled.input`
   color: var(--color-gray12);
   font-size: 0.96rem;
   padding: 0 0.95rem;
+  -webkit-text-fill-color: currentColor;
+  -webkit-text-security: none;
 `
 
 const CodeLanguageOptionList = styled.div`
@@ -2584,11 +2590,20 @@ const CodeLanguageOptionButton = styled.button`
   font-weight: 600;
   padding: 0 0.7rem;
   text-align: left;
+  -webkit-text-fill-color: currentColor;
+  -webkit-text-security: none;
 
   small {
     color: var(--color-gray10);
     font-size: 0.76rem;
     font-weight: 700;
+    -webkit-text-fill-color: currentColor;
+    -webkit-text-security: none;
+  }
+
+  span {
+    -webkit-text-fill-color: currentColor;
+    -webkit-text-security: none;
   }
 
   svg {

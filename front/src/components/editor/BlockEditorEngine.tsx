@@ -2757,6 +2757,14 @@ const BlockEditorEngine = ({
     }
   }, [])
 
+  const clearStickyTopLevelBlockSelection = useCallback(() => {
+    keyboardBlockSelectionStickyRef.current = false
+    selectedBlockNodeIndexRef.current = null
+    setClickedBlockIndex(null)
+    setSelectedBlockNodeIndex(null)
+    syncSelectedBlockNodeSurface(null)
+  }, [syncSelectedBlockNodeSurface])
+
   const selectTableAxisAtIndex = useCallback(
     (activeEditor: TiptapEditor, tablePos: number, axis: "row" | "column", axisIndex: number) => {
       const tableNode = activeEditor.state.doc.nodeAt(tablePos)
@@ -2771,6 +2779,7 @@ const BlockEditorEngine = ({
         const headResolved = resolveDocPosSafe(activeEditor, headCellPos)
         if (!anchorResolved || !headResolved) return false
 
+        clearStickyTopLevelBlockSelection()
         activeEditor.view.dispatch(
           activeEditor.state.tr.setSelection(CellSelection.colSelection(anchorResolved, headResolved))
         )
@@ -2785,13 +2794,14 @@ const BlockEditorEngine = ({
       const headResolved = resolveDocPosSafe(activeEditor, headCellPos)
       if (!anchorResolved || !headResolved) return false
 
+      clearStickyTopLevelBlockSelection()
       activeEditor.view.dispatch(
         activeEditor.state.tr.setSelection(CellSelection.rowSelection(anchorResolved, headResolved))
       )
       activeEditor.view.focus()
       return true
     },
-    []
+    [clearStickyTopLevelBlockSelection]
   )
 
   const clearPendingTableAxisDrag = useCallback(() => {
@@ -3057,11 +3067,7 @@ const BlockEditorEngine = ({
     (event: BlockSelectionPointerEventLike, targetBlockIndex: number | null) => {
       if (targetBlockIndex === null) return false
       if (event.button !== 0) return false
-      const currentEditor = editorRef.current
-      const allowSingleClickFromTableSelection = Boolean(
-        currentEditor && isTableSelectionActive(currentEditor)
-      )
-      if (event.detail < 2 && !allowSingleClickFromTableSelection) return false
+      if (event.detail < 2) return false
       if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return false
 
       const targetElement =
@@ -3073,13 +3079,12 @@ const BlockEditorEngine = ({
       const blockElement = getTopLevelBlockElementByIndex(targetBlockIndex)
       if (!blockElement) return false
       const rect = blockElement.getBoundingClientRect()
-      const isFarLeftOuterGutter = event.clientX <= rect.left - 12
       const clickedTableAxisRail = targetElement?.closest("[data-table-axis-rail='true']")
       if (
         targetElement?.closest("[data-block-handle-rail='true'] button") ||
         targetElement?.closest("[data-block-menu-root='true']") ||
         targetElement?.closest("[data-table-menu-root='true']") ||
-        (clickedTableAxisRail && !(allowSingleClickFromTableSelection && isFarLeftOuterGutter)) ||
+        clickedTableAxisRail ||
         targetElement?.closest("[data-table-corner-handle='true']") ||
         targetElement?.closest("[data-table-menu-trigger='true']")
       ) {
@@ -4902,7 +4907,7 @@ const BlockEditorEngine = ({
       }
       const nextBlockIndex = getTopLevelBlockIndexFromSelection(editor)
       const isTopLevelBlockNodeSelection = Boolean(
-        selection.$from.depth === 0 && selection.node?.isBlock
+        selection instanceof NodeSelection && selection.$from.depth === 0 && selection.node?.isBlock
       )
       const inTableContext = isTableSelectionActive(editor) ? 1 : 0
       const nextSignature = `${nextBlockIndex ?? "none"}:${isTopLevelBlockNodeSelection ? 1 : 0}:${keyboardBlockSelectionStickyRef.current ? 1 : 0}:${inTableContext}`
@@ -5967,10 +5972,11 @@ const BlockEditorEngine = ({
           ? CellSelection.rowSelection(anchorResolved, headResolved)
           : CellSelection.colSelection(anchorResolved, headResolved)
 
+      clearStickyTopLevelBlockSelection()
       editor.view.dispatch(editor.state.tr.setSelection(selection))
       editor.view.focus()
     },
-    [editor]
+    [clearStickyTopLevelBlockSelection, editor]
   )
 
   const selectActiveTableBlock = useCallback(() => {

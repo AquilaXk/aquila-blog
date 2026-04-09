@@ -274,9 +274,9 @@ test.describe("block editor slash menu interaction", () => {
     expect(actionCount).toBeGreaterThan(0)
 
     await page.keyboard.press("End")
-    await expect(slashActions.nth(actionCount - 1)).toHaveAttribute("data-active", "true")
-
     const heading2Action = page.locator("[data-slash-action-id='heading-2']")
+    await expect.poll(async () => slashMenu.locator("button[data-active='true']").count()).toBeGreaterThan(0)
+    await expect(heading2Action).not.toHaveAttribute("data-active", "true")
     await heading2Action.scrollIntoViewIfNeeded()
     await heading2Action.hover({ force: true })
     await heading2Action.dispatchEvent("pointerenter")

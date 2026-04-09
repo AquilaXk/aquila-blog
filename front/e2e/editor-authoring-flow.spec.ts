@@ -371,6 +371,7 @@ test.describe("block editor authoring flow", () => {
       return {
         summaryHeight: summaryRect.height,
         chevronWidth: chevronRect.width,
+        chevronHeight: chevronRect.height,
         chevronFontSize: Number.parseFloat(chevronStyle.fontSize),
         titleFontSize: Number.parseFloat(titleStyle.fontSize),
         titleLineHeight: Number.parseFloat(titleStyle.lineHeight),
@@ -380,7 +381,9 @@ test.describe("block editor authoring flow", () => {
     expect(metrics).not.toBeNull()
     expect(metrics?.summaryHeight ?? 0).toBeGreaterThanOrEqual(44)
     expect(metrics?.chevronWidth ?? 0).toBeGreaterThanOrEqual(18)
-    expect(metrics?.chevronFontSize ?? 0).toBeGreaterThanOrEqual(18)
+    expect(metrics?.chevronHeight ?? 0).toBeGreaterThanOrEqual(18)
+    expect(metrics?.chevronFontSize ?? 0).toBeGreaterThanOrEqual(19)
+    expect((metrics?.chevronHeight ?? 0) + 1).toBeGreaterThanOrEqual(metrics?.titleFontSize ?? 0)
     expect(metrics?.titleFontSize ?? 0).toBeGreaterThanOrEqual(17.5)
     expect(metrics?.titleLineHeight ?? 0).toBeGreaterThanOrEqual(26)
   })
@@ -675,6 +678,9 @@ test.describe("block editor authoring flow", () => {
     await textBlock.dblclick({ position: { x: 4, y: Math.max(4, textBlockRect.height / 2) } })
     await expect(selectionOverlay).toBeVisible()
     await expect
+      .poll(() => textBlock.evaluate((element) => window.getComputedStyle(element).boxShadow))
+      .toBe("none")
+    await expect
       .poll(async () => {
         const textRect = textBlockRect
         const overlayRect = await selectionOverlay.boundingBox()
@@ -799,7 +805,7 @@ test.describe("block editor authoring flow", () => {
       throw new Error("table wrapper/table width shape is missing")
     }
     expect(Math.abs(tableWidthShape.wrapperWidth - tableWidthShape.tableWidth)).toBeLessThanOrEqual(2)
-    expect(Math.abs(tableWidthShape.contentWidth - tableWidthShape.tableWidth)).toBeLessThanOrEqual(2)
+    expect(tableWidthShape.tableWidth).toBeLessThan(tableWidthShape.contentWidth - 120)
     expect(tableWidthShape.firstCellWidth).toBeGreaterThanOrEqual(180)
     expect(tableWidthShape.firstCellWidth).toBeLessThanOrEqual(320)
 
@@ -2225,7 +2231,10 @@ test.describe("block editor authoring flow", () => {
 
     await page.mouse.move(startX, startY)
     await page.mouse.down()
+    // Headless drag starts can miss the guide until the pointer crosses a tiny delta.
+    await page.mouse.move(startX + 2, startY)
     await expect(page.getByTestId("table-column-drag-guide")).toBeVisible()
+    await expect.poll(readGuideBoundaryDelta).toBeLessThanOrEqual(2)
 
     for (const offsetX of [72, 24, 96, 18, 88, 28, 64, 36]) {
       await page.mouse.move(startX + offsetX, startY)
@@ -2287,7 +2296,7 @@ test.describe("block editor authoring flow", () => {
     await expect(markdownOutput).toContainText('"columnWidths"')
   })
 
-  test("새 table은 3x3이며 desktop writer readable width 최대폭으로 생성된다", async ({
+  test("새 table은 3x3이며 normal mode 기본 가독 폭으로 생성된다", async ({
     page,
   }) => {
     await page.goto(QA_ENGINE_ROUTE)
@@ -2317,8 +2326,56 @@ test.describe("block editor authoring flow", () => {
     expect(tableShape.rowCount).toBe(3)
     expect(tableShape.columnCount).toBe(3)
     expect(Math.abs(tableShape.wrapperWidth - tableShape.tableWidth)).toBeLessThanOrEqual(2)
-    expect(Math.abs(tableShape.tableWidth - tableShape.contentWidth)).toBeLessThanOrEqual(4)
-    expect(tableShape.tableWidth).toBeLessThanOrEqual(tableShape.contentWidth + 2)
+    expect(tableShape.tableWidth).toBeLessThan(tableShape.contentWidth - 120)
+    expect(tableShape.tableWidth).toBeGreaterThanOrEqual(540)
+    expect(tableShape.tableWidth).toBeLessThanOrEqual(548)
+  })
+
+  test("legacy 최대폭 normal table은 작성 surface에서 기본 가독 폭으로 자동 축소된다", async ({
+    page,
+  }) => {
+    const seed = encodeURIComponent(
+      [
+        '<!-- aq-table {"overflowMode":"normal","columnWidths":[314,314,316]} -->',
+        "| 구성 요소 | 역할 | 실무에서 자주 생기는 문제 |",
+        "| --- | --- | --- |",
+        "| Endpoint | WebSocket 연결 URL | CORS 설정, 프록시 업그레이드 헤더 누락 |",
+        "| Application Prefix | 클라이언트가 서버로 보내는 메시지 경로 | 컨트롤러 매핑 충돌, 경로 규칙 혼란 |",
+        "| Broker Prefix | 서버가 구독자에게 메시지를 배포하는 경로 | 트래픽 증가 시 Broker 한계 |",
+      ].join("\\n")
+    )
+    await page.goto(`${QA_ENGINE_ROUTE}&seed=${seed}`)
+
+    const markdownOutput = page.getByTestId("qa-markdown-output")
+    await expect(markdownOutput).not.toContainText('"columnWidths":[314,314,316]')
+
+    const tableShape = await page.evaluate(() => {
+      const contentRoot = document.querySelector<HTMLElement>(".aq-block-editor__content")
+      const wrapper = document.querySelector<HTMLElement>(".aq-block-editor__content .tableWrapper")
+      const table = wrapper?.querySelector<HTMLElement>("table")
+      const headerCells = Array.from(table?.querySelectorAll<HTMLElement>("th") ?? [])
+      if (!contentRoot || !wrapper || !table || headerCells.length === 0) return null
+      return {
+        contentWidth: Math.round(contentRoot.getBoundingClientRect().width),
+        wrapperWidth: Math.round(wrapper.getBoundingClientRect().width),
+        tableWidth: Math.round(table.getBoundingClientRect().width),
+        columnWidths: headerCells.map((cell) => Math.round(cell.getBoundingClientRect().width)),
+      }
+    })
+
+    expect(tableShape).not.toBeNull()
+    if (!tableShape) {
+      throw new Error("legacy normalized table shape is missing")
+    }
+
+    expect(Math.abs(tableShape.wrapperWidth - tableShape.tableWidth)).toBeLessThanOrEqual(2)
+    expect(tableShape.tableWidth).toBeLessThan(tableShape.contentWidth - 120)
+    expect(tableShape.tableWidth).toBeGreaterThanOrEqual(540)
+    expect(tableShape.tableWidth).toBeLessThanOrEqual(548)
+    tableShape.columnWidths.forEach((width) => {
+      expect(width).toBeGreaterThanOrEqual(178)
+      expect(width).toBeLessThanOrEqual(184)
+    })
   })
 
   test("table column resize는 활성 열만 바꾸고 다른 열은 유지한 채 writer budget 안에서 clamp한다", async ({
@@ -2379,7 +2436,8 @@ test.describe("block editor authoring flow", () => {
       throw new Error("updated table width shape is missing")
     }
 
-    expect(Math.abs(afterShape.wrapperWidth - afterShape.contentWidth)).toBeLessThanOrEqual(2)
+    expect(Math.abs(afterShape.wrapperWidth - afterShape.tableWidth)).toBeLessThanOrEqual(2)
+    expect(afterShape.wrapperWidth).toBeLessThan(afterShape.contentWidth - 12)
     expect(afterShape.tableWidth).toBeLessThan(beforeShape.tableWidth - 12)
     expect(afterShape.columnWidths[0] ?? 0).toBeLessThan((beforeShape.columnWidths[0] ?? 0) - 12)
     afterShape.columnWidths.slice(1).forEach((width, index) => {
@@ -2460,6 +2518,7 @@ test.describe("block editor authoring flow", () => {
       throw new Error("narrowed table width shape is missing")
     }
 
+    expect(Math.abs(narrowedShape.wrapperWidth - narrowedShape.tableWidth)).toBeLessThanOrEqual(2)
     expect(narrowedShape.tableWidth).toBeLessThan(narrowedShape.contentWidth - 24)
 
     const thirdHeaderCell = page.locator("table th").nth(2)
@@ -2474,6 +2533,7 @@ test.describe("block editor authoring flow", () => {
     }
 
     expect(afterDeleteShape.columnWidths).toHaveLength(2)
+    expect(Math.abs(afterDeleteShape.wrapperWidth - afterDeleteShape.tableWidth)).toBeLessThanOrEqual(2)
     expect(Math.abs(afterDeleteShape.tableWidth - narrowedShape.tableWidth)).toBeLessThanOrEqual(8)
     expect(afterDeleteShape.tableWidth).toBeLessThan(afterDeleteShape.contentWidth - 24)
     expect(afterDeleteShape.columnWidths[0]).toBeGreaterThan(narrowedShape.columnWidths[0] + 60)

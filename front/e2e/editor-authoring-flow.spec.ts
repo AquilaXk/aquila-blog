@@ -2416,6 +2416,70 @@ test.describe("block editor authoring flow", () => {
     expect(clampedShape.tableWidth).toBeLessThanOrEqual(beforeShape.contentWidth + 2)
   })
 
+  test("normal mode에서 열 삭제는 기존 표 폭을 유지하며 남은 열 폭을 재분배하고 항상 최대폭으로 되돌리지는 않는다", async ({
+    page,
+  }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    await page.getByRole("button", { name: "테이블" }).click()
+    const firstHeaderCell = page.locator("table th").first()
+    await firstHeaderCell.click()
+    await firstHeaderCell.hover()
+
+    const readShape = async () =>
+      page.evaluate(() => {
+        const contentRoot = document.querySelector<HTMLElement>(".aq-block-editor__content")
+        const wrapper = document.querySelector<HTMLElement>(".aq-block-editor__content .tableWrapper")
+        const table = wrapper?.querySelector<HTMLElement>("table")
+        const headerCells = Array.from(table?.querySelectorAll<HTMLElement>("th") ?? [])
+        if (!contentRoot || !wrapper || !table || headerCells.length === 0) return null
+        return {
+          contentWidth: Math.round(contentRoot.getBoundingClientRect().width),
+          wrapperWidth: Math.round(wrapper.getBoundingClientRect().width),
+          tableWidth: Math.round(table.getBoundingClientRect().width),
+          columnWidths: headerCells.map((cell) => Math.round(cell.getBoundingClientRect().width)),
+        }
+      })
+
+    const firstResizeHandle = page.getByTestId("table-column-resize-boundary-0")
+    const handleBox = await firstResizeHandle.boundingBox()
+    if (!handleBox) {
+      throw new Error("first table column resize handle is missing")
+    }
+
+    const startX = handleBox.x + handleBox.width / 2
+    const startY = handleBox.y + handleBox.height / 2
+    await page.mouse.move(startX, startY)
+    await page.mouse.down()
+    await page.mouse.move(startX - 96, startY, { steps: 10 })
+    await page.mouse.up()
+
+    const narrowedShape = await readShape()
+    expect(narrowedShape).not.toBeNull()
+    if (!narrowedShape) {
+      throw new Error("narrowed table width shape is missing")
+    }
+
+    expect(narrowedShape.tableWidth).toBeLessThan(narrowedShape.contentWidth - 24)
+
+    const thirdHeaderCell = page.locator("table th").nth(2)
+    await thirdHeaderCell.click()
+    await page.getByRole("button", { name: "QA 열 선택" }).click()
+    await page.getByRole("button", { name: "QA 열 삭제" }).click()
+
+    const afterDeleteShape = await readShape()
+    expect(afterDeleteShape).not.toBeNull()
+    if (!afterDeleteShape) {
+      throw new Error("post-delete table width shape is missing")
+    }
+
+    expect(afterDeleteShape.columnWidths).toHaveLength(2)
+    expect(Math.abs(afterDeleteShape.tableWidth - narrowedShape.tableWidth)).toBeLessThanOrEqual(8)
+    expect(afterDeleteShape.tableWidth).toBeLessThan(afterDeleteShape.contentWidth - 24)
+    expect(afterDeleteShape.columnWidths[0]).toBeGreaterThan(narrowedShape.columnWidths[0] + 60)
+    expect(afterDeleteShape.columnWidths.every((width) => width >= 140)).toBe(true)
+  })
+
   test("large table 조건이 되면 auto-wide로 승격되고 small table은 normal을 유지한다", async ({
     page,
   }) => {

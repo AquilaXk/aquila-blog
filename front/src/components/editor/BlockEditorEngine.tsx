@@ -1582,6 +1582,23 @@ const shrinkTableColumnWidthsToFit = (widths: number[], budget: number) => {
   return nextWidths
 }
 
+const expandTableColumnWidthsToFit = (widths: number[], budget: number) => {
+  const nextWidths = widths.map((width) => Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(width)))
+  let remaining = Math.max(0, budget - nextWidths.reduce((sum, width) => sum + width, 0))
+
+  while (remaining > 0) {
+    const targetShare = Math.max(1, Math.floor(remaining / nextWidths.length) || 1)
+    nextWidths.forEach((_, index) => {
+      if (remaining <= 0) return
+      const addBy = index === nextWidths.length - 1 ? remaining : Math.min(targetShare, remaining)
+      nextWidths[index] += addBy
+      remaining -= addBy
+    })
+  }
+
+  return nextWidths
+}
+
 const isLegacyCollapsedTableWidthState = (widths: number[]) => {
   if (widths.length <= 1) return false
   return widths.every((width) => width <= TABLE_MIN_COLUMN_WIDTH_PX + 2)
@@ -1641,6 +1658,93 @@ const applyTableColumnWidthsToTransaction = (
   })
 
   return { transaction: nextTransaction, changed }
+}
+
+type TableWidthSnapshot = {
+  pos: number
+  overflowMode: string
+  columns: TableColumnCellRef[][]
+  columnWidths: number[]
+  totalWidth: number
+}
+
+const collectTableWidthSnapshots = (doc: ProseMirrorNode) => {
+  const snapshots: TableWidthSnapshot[] = []
+
+  doc.descendants((node: any, pos: number) => {
+    if (node.type?.name !== "table") return true
+
+    const columns = collectSimpleTableColumnCells(node, pos)
+    if (!columns || columns.length === 0) {
+      return true
+    }
+
+    const columnWidths = columns.map((column) => readColumnWidthFromCell(column[0]))
+    snapshots.push({
+      pos,
+      overflowMode: getTableOverflowMode(node),
+      columns,
+      columnWidths,
+      totalWidth: columnWidths.reduce((sum, width) => sum + width, 0),
+    })
+
+    return true
+  })
+
+  return snapshots
+}
+
+const rebalanceStructurallyChangedNormalTableWidths = (
+  editor: TiptapEditor,
+  previousDoc: ProseMirrorNode
+) => {
+  if (!shouldClampTableWidthBudget()) return false
+
+  const readableWidthBudget = getCurrentEditorReadableWidthPx(editor) - 2
+  const previousTables = collectTableWidthSnapshots(previousDoc)
+  const nextTables = collectTableWidthSnapshots(editor.state.doc)
+  let transaction = editor.state.tr
+  let changed = false
+
+  nextTables.forEach((nextTable, index) => {
+    const previousTable = previousTables[index]
+    if (!previousTable) return
+    if (previousTable.overflowMode === TABLE_OVERFLOW_MODE_WIDE || nextTable.overflowMode === TABLE_OVERFLOW_MODE_WIDE) {
+      return
+    }
+    if (previousTable.columns.length === nextTable.columns.length) return
+
+    const minBudget = TABLE_MIN_COLUMN_WIDTH_PX * nextTable.columns.length
+    const targetTotalWidth = Math.max(
+      minBudget,
+      Math.min(
+        readableWidthBudget,
+        previousTable.totalWidth > 0 ? previousTable.totalWidth : nextTable.totalWidth
+      )
+    )
+    const nextWidths =
+      nextTable.totalWidth > targetTotalWidth
+        ? shrinkTableColumnWidthsToFit(nextTable.columnWidths, targetTotalWidth)
+        : expandTableColumnWidthsToFit(nextTable.columnWidths, targetTotalWidth)
+
+    if (nextWidths.every((width, widthIndex) => width === nextTable.columnWidths[widthIndex])) {
+      return
+    }
+
+    const applied = applyTableColumnWidthsToTransaction(
+      transaction,
+      nextTable.columns,
+      nextTable.columnWidths,
+      nextWidths
+    )
+    transaction = applied.transaction
+    changed ||= applied.changed
+  })
+
+  if (!changed || !transaction.docChanged) return false
+  transaction = transaction.setMeta(TABLE_WIDTH_BUDGET_META_KEY, true)
+  editor.view.dispatch(transaction)
+  return true
 }
 
 const normalizeTableWidthsToReadableBudget = (editor: TiptapEditor) => {
@@ -4416,6 +4520,10 @@ const BlockEditorEngine = ({
       if (!transaction.docChanged) return
       if (transaction.getMeta(TABLE_WIDTH_BUDGET_META_KEY)) return
       if (promoteLargeTablesToWideOverflowMode(nextEditor)) {
+        scheduleTableViewportBudgetNormalize(nextEditor)
+        return
+      }
+      if (rebalanceStructurallyChangedNormalTableWidths(nextEditor, transaction.before)) {
         scheduleTableViewportBudgetNormalize(nextEditor)
         return
       }

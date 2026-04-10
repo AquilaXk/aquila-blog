@@ -980,7 +980,7 @@ test.describe("block editor authoring flow", () => {
     const columnMenu = page.getByTestId("table-column-menu")
     await expect(columnMenu).toBeVisible()
     await expect(columnMenu.getByRole("button", { name: "열 삭제" })).toBeVisible()
-    await columnMenu.getByRole("button", { name: "열 선택" }).click()
+    await page.keyboard.press("Escape")
     await expect(page.getByTestId("table-column-menu")).toHaveCount(0)
 
     await page.mouse.move(tableBox.x + 24, tableBox.y + 24)
@@ -1204,7 +1204,7 @@ test.describe("block editor authoring flow", () => {
     await moveToRowColumnHotzone()
     await columnHandle.click()
     const columnMenu = page.getByTestId("table-column-menu")
-    await columnMenu.getByRole("button", { name: "오른쪽에 삽입" }).click()
+    await columnMenu.getByRole("button", { name: "오른쪽 열 추가" }).click()
     await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(4)
 
     const afterInsertMetrics = await assertHandlesInViewport()
@@ -1373,14 +1373,14 @@ test.describe("block editor authoring flow", () => {
     await rowMenuButton.click()
     const rowMenu = page.getByTestId("table-row-menu")
     await expect(rowMenu).toBeVisible()
-    await rowMenu.getByRole("button", { name: "아래에 삽입" }).click()
+    await rowMenu.getByRole("button", { name: "아래에 행 추가" }).click()
     await expect(table.locator("tr")).toHaveCount(6)
 
     await moveToTopLeftHotzone()
     await columnMenuButton.click()
     const columnMenu = page.getByTestId("table-column-menu")
     await expect(columnMenu).toBeVisible()
-    await columnMenu.getByRole("button", { name: "오른쪽에 삽입" }).click()
+    await columnMenu.getByRole("button", { name: "오른쪽 열 추가" }).click()
     await expect(table.locator("tr").first().locator("th, td")).toHaveCount(5)
 
     await page.evaluate(() => {
@@ -1390,13 +1390,13 @@ test.describe("block editor authoring flow", () => {
     await moveToTopLeftHotzone()
     await rowMenuButton.click()
     await expect(rowMenu).toBeVisible()
-    await rowMenu.getByRole("button", { name: "아래에 삽입" }).click()
+    await rowMenu.getByRole("button", { name: "아래에 행 추가" }).click()
     await expect(table.locator("tr")).toHaveCount(7)
 
     await moveToTopLeftHotzone()
     await columnMenuButton.click()
     await expect(columnMenu).toBeVisible()
-    await columnMenu.getByRole("button", { name: "오른쪽에 삽입" }).click()
+    await columnMenu.getByRole("button", { name: "오른쪽 열 추가" }).click()
     await expect(table.locator("tr").first().locator("th, td")).toHaveCount(6)
   })
 
@@ -1652,7 +1652,7 @@ test.describe("block editor authoring flow", () => {
     await expect(trailingCell).toContainText("keep")
   })
 
-  test("table 구조 메뉴는 구조 액션만 포함하고 제목 행 토글과 표 삭제가 동작한다", async ({ page }) => {
+  test("table 구조 메뉴는 폭 정책과 삭제만 담는 compact popover를 유지한다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 
     await page.getByRole("button", { name: "테이블" }).click()
@@ -1668,14 +1668,12 @@ test.describe("block editor authoring flow", () => {
     await expect(page.getByTestId("block-drag-handle")).toHaveCount(0)
     await expect(tableMenu.getByRole("button", { name: "좌측" })).toHaveCount(0)
     await expect(tableMenu.getByRole("button", { name: "배경 해제" })).toHaveCount(0)
+    await expect(tableMenu.getByRole("button", { name: "제목 행" })).toHaveCount(0)
+    await expect(tableMenu.getByRole("button", { name: "제목 열" })).toHaveCount(0)
     await expect(tableMenu.getByRole("button", { name: "페이지 너비에 맞춤" })).toBeVisible()
     await expect(tableMenu.getByRole("button", { name: "넓은 표" })).toBeVisible()
+    await expect(tableMenu.getByText("제목 행/열 토글은 행 메뉴와 열 메뉴에서 분리했습니다.")).toBeVisible()
 
-    await tableMenu.getByRole("button", { name: "제목 행" }).click()
-    await expect(page.locator("table tr").first().locator("th")).toHaveCount(0)
-
-    await structureMenuButton.click()
-    await expect(tableMenu).toBeVisible()
     await tableMenu.getByRole("button", { name: "표 삭제" }).click()
     await expect(page.locator(".aq-block-editor__content table")).toHaveCount(0)
     await expect(page.getByTestId("block-editor-prosemirror")).toBeVisible()
@@ -1752,6 +1750,8 @@ test.describe("block editor authoring flow", () => {
     await expect(cellMenu.getByRole("button", { name: "좌측" })).toBeVisible()
     await expect(cellMenu.getByRole("button", { name: "가운데" })).toBeVisible()
     await expect(cellMenu.getByRole("button", { name: "배경 해제" })).toBeVisible()
+    await expect(cellMenu.getByRole("button", { name: "셀 병합" })).toHaveCount(0)
+    await expect(cellMenu.getByRole("button", { name: "셀 분리" })).toHaveCount(0)
     await expect(cellMenu.getByRole("button", { name: "제목 행" })).toHaveCount(0)
     await expect(cellMenu.getByRole("button", { name: "표 삭제" })).toHaveCount(0)
 
@@ -1784,7 +1784,11 @@ test.describe("block editor authoring flow", () => {
     const rowMenu = page.getByTestId("table-row-menu")
     await expect(rowMenu).toBeVisible()
     await expect(rowMenu.getByRole("button", { name: "제목 행" })).toBeVisible()
+    await expect(rowMenu.getByRole("button", { name: "위에 행 추가" })).toBeVisible()
+    await expect(rowMenu.getByRole("button", { name: "아래에 행 추가" })).toBeVisible()
     await expect(rowMenu.getByRole("button", { name: "제목 열" })).toHaveCount(0)
+    await expect(rowMenu.getByRole("button", { name: "페이지 너비에 맞춤" })).toHaveCount(0)
+    await expect(rowMenu.getByText("행 핸들을 드래그해 순서를 바꿀 수 있습니다.")).toBeVisible()
     await rowMenu.getByRole("button", { name: "제목 행" }).click()
 
     await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
@@ -1793,7 +1797,11 @@ test.describe("block editor authoring flow", () => {
     const columnMenu = page.getByTestId("table-column-menu")
     await expect(columnMenu).toBeVisible()
     await expect(columnMenu.getByRole("button", { name: "제목 열" })).toBeVisible()
+    await expect(columnMenu.getByRole("button", { name: "왼쪽 열 추가" })).toBeVisible()
+    await expect(columnMenu.getByRole("button", { name: "오른쪽 열 추가" })).toBeVisible()
     await expect(columnMenu.getByRole("button", { name: "제목 행" })).toHaveCount(0)
+    await expect(columnMenu.getByRole("button", { name: "넓은 표" })).toHaveCount(0)
+    await expect(columnMenu.getByText("열 핸들을 드래그해 순서를 바꿀 수 있습니다.")).toBeVisible()
     await columnMenu.getByRole("button", { name: "제목 열" }).click()
 
     await expect(page.locator("table tr").first().locator("th")).toHaveCount(1)

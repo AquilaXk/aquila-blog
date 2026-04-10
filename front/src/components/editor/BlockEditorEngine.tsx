@@ -1047,8 +1047,8 @@ const TABLE_CORNER_CLUSTER_WIDTH_PX =
 const TABLE_CELL_MENU_BUTTON_SIZE_PX = 22
 const TABLE_QUICK_RAIL_HIDE_DELAY_MS = 120
 const TABLE_MENU_EDGE_PADDING_PX = 16
-const TABLE_MENU_ESTIMATED_WIDTH_PX = 308
-const TABLE_MENU_ESTIMATED_HEIGHT_PX = 560
+const TABLE_MENU_ESTIMATED_WIDTH_PX = 272
+const TABLE_MENU_ESTIMATED_HEIGHT_PX = 420
 const TABLE_WIDTH_BUDGET_META_KEY = "aq-table-width-budget-normalized"
 const SLASH_MENU_RECENT_IDS_STORAGE_KEY = "editor:block-slash-recent:v1"
 const SLASH_MENU_MAX_RECENT_ITEMS = 6
@@ -6078,6 +6078,24 @@ const BlockEditorEngine = ({
     void selectionTick
     return getActiveTableStructureState(editor)
   }, [editor, selectionTick])
+  const canMergeSelectedTableCells = useMemo(() => {
+    if (!editor) return false
+    void selectionTick
+    try {
+      return editor.can().chain().focus().mergeCells().run()
+    } catch {
+      return false
+    }
+  }, [editor, selectionTick])
+  const canSplitSelectedTableCell = useMemo(() => {
+    if (!editor) return false
+    void selectionTick
+    try {
+      return editor.can().chain().focus().splitCell().run()
+    } catch {
+      return false
+    }
+  }, [editor, selectionTick])
   const activeInlineTextStyleOption = useMemo(() => {
     if (!editor) return INLINE_TEXT_STYLE_OPTIONS[0]
     void selectionTick
@@ -8096,12 +8114,14 @@ const BlockEditorEngine = ({
   const shouldShowTableHandles =
     !isCoarsePointer &&
     (tableAffordanceVisibility.visible || isTableQuickRailHovered || shouldPersistTableHandles || isTableColumnResizeActive)
-  const shouldShowTableCellMenu = shouldShowTableHandles && !isTableStructuralSelection
+  const shouldShowTableCellMenu = shouldShowTableHandles && currentTableAxisSelection === null
   const desktopTableRailLayout = useMemo(() => {
     if (typeof window === "undefined") return null
     return resolveDesktopTableRailLayout(tableAffordanceGeometry)
   }, [tableAffordanceGeometry])
   const tableCornerGrowStepMetrics = getTableCornerGrowStepMetrics()
+  const tableMenuKind = tableMenuState?.kind ?? null
+  const shouldShowCellMergeSection = canMergeSelectedTableCells || canSplitSelectedTableCell
 
   useEffect(() => {
     if (shouldShowTableHandles) return
@@ -8527,279 +8547,298 @@ const BlockEditorEngine = ({
             top: `${tableMenuState.top}px`,
           }}
         >
-          <FloatingBlockMenuHeader>
-            {tableMenuState.kind === "row"
-              ? "행 메뉴"
-              : tableMenuState.kind === "column"
-                ? "열 메뉴"
-                : tableMenuState.kind === "cell"
-                  ? "셀 스타일"
-                  : "표 구조 메뉴"}
-          </FloatingBlockMenuHeader>
-          {tableMenuState.kind === "cell" ? (
+          <TableMenuHeader>
+            <TableMenuHeaderEyebrow>
+              {tableMenuKind === "row"
+                ? "Axis"
+                : tableMenuKind === "column"
+                  ? "Axis"
+                  : tableMenuKind === "cell"
+                    ? "Cell"
+                    : "Table"}
+            </TableMenuHeaderEyebrow>
+            <TableMenuHeaderTitle>
+              {tableMenuKind === "row"
+                ? "행 메뉴"
+                : tableMenuKind === "column"
+                  ? "열 메뉴"
+                  : tableMenuKind === "cell"
+                    ? "셀 스타일"
+                    : "표 구조"}
+            </TableMenuHeaderTitle>
+            <TableMenuHeaderDescription>
+              {tableMenuKind === "row"
+                ? "현재 행에만 적용되는 삽입과 헤더 설정"
+                : tableMenuKind === "column"
+                  ? "현재 열에만 적용되는 삽입과 헤더 설정"
+                  : tableMenuKind === "cell"
+                    ? "정렬과 배경, 필요할 때만 셀 결합"
+                    : "표 수준 폭 정책과 삭제만 유지"}
+            </TableMenuHeaderDescription>
+          </TableMenuHeader>
+          {tableMenuKind === "cell" ? (
             <>
-              <TableMenuSectionTitle>정렬</TableMenuSectionTitle>
-              <TableMenuButtonRow>
-                <ToolbarButton
-                  type="button"
-                  data-active={activeTableCellAttrs.textAlign === "left"}
-                  onMouseDown={handleToolbarButtonMouseDown}
-                  onClick={() => updateActiveTableCellAttrs({ textAlign: "left" })}
-                >
-                  좌측
-                </ToolbarButton>
-                <ToolbarButton
-                  type="button"
-                  data-active={activeTableCellAttrs.textAlign === "center"}
-                  onMouseDown={handleToolbarButtonMouseDown}
-                  onClick={() => updateActiveTableCellAttrs({ textAlign: "center" })}
-                >
-                  가운데
-                </ToolbarButton>
-                <ToolbarButton
-                  type="button"
-                  data-active={activeTableCellAttrs.textAlign === "right"}
-                  onMouseDown={handleToolbarButtonMouseDown}
-                  onClick={() => updateActiveTableCellAttrs({ textAlign: "right" })}
-                >
-                  우측
-                </ToolbarButton>
-              </TableMenuButtonRow>
-              <TableMenuSectionTitle>배경</TableMenuSectionTitle>
-              <TableMenuButtonRow>
-                <ToolbarButton
-                  type="button"
-                  data-active={activeTableCellAttrs.backgroundColor === "#f8fafc"}
-                  onMouseDown={handleToolbarButtonMouseDown}
-                  onClick={() => updateActiveTableCellAttrs({ backgroundColor: "#f8fafc" })}
-                >
-                  기본
-                </ToolbarButton>
-                <ToolbarButton
-                  type="button"
-                  onMouseDown={handleToolbarButtonMouseDown}
-                  onClick={() => updateActiveTableCellAttrs({ backgroundColor: null })}
-                >
-                  배경 해제
-                </ToolbarButton>
-              </TableMenuButtonRow>
-              <TablePresetSwatches aria-label="표 셀 배경 preset">
-                {TABLE_CELL_COLOR_PRESETS.map((preset) => (
-                  <TablePresetSwatch
-                    key={preset.value}
+              <TableMenuCompactSection>
+                <TableMenuSectionTitle>정렬</TableMenuSectionTitle>
+                <TableMenuSegmentedRow data-columns="3">
+                  <TableMenuSegmentedButton
                     type="button"
-                    title={preset.label}
-                    aria-label={`${preset.label} 배경`}
-                    data-active={activeTableCellAttrs.backgroundColor === preset.value}
-                    style={{ "--table-swatch-color": preset.value } as React.CSSProperties}
-                    onClick={() => updateActiveTableCellAttrs({ backgroundColor: preset.value })}
+                    data-active={activeTableCellAttrs.textAlign === "left"}
+                    onMouseDown={handleToolbarButtonMouseDown}
+                    onClick={() => updateActiveTableCellAttrs({ textAlign: "left" })}
+                  >
+                    좌측
+                  </TableMenuSegmentedButton>
+                  <TableMenuSegmentedButton
+                    type="button"
+                    data-active={activeTableCellAttrs.textAlign === "center"}
+                    onMouseDown={handleToolbarButtonMouseDown}
+                    onClick={() => updateActiveTableCellAttrs({ textAlign: "center" })}
+                  >
+                    가운데
+                  </TableMenuSegmentedButton>
+                  <TableMenuSegmentedButton
+                    type="button"
+                    data-active={activeTableCellAttrs.textAlign === "right"}
+                    onMouseDown={handleToolbarButtonMouseDown}
+                    onClick={() => updateActiveTableCellAttrs({ textAlign: "right" })}
+                  >
+                    우측
+                  </TableMenuSegmentedButton>
+                </TableMenuSegmentedRow>
+              </TableMenuCompactSection>
+              <TableMenuCompactSection>
+                <TableMenuSectionTitle>배경</TableMenuSectionTitle>
+                <TableMenuSegmentedRow data-columns="2">
+                  <TableMenuSegmentedButton
+                    type="button"
+                    data-active={activeTableCellAttrs.backgroundColor === "#f8fafc"}
+                    onMouseDown={handleToolbarButtonMouseDown}
+                    onClick={() => updateActiveTableCellAttrs({ backgroundColor: "#f8fafc" })}
+                  >
+                    기본
+                  </TableMenuSegmentedButton>
+                  <TableMenuSegmentedButton
+                    type="button"
+                    onMouseDown={handleToolbarButtonMouseDown}
+                    onClick={() => updateActiveTableCellAttrs({ backgroundColor: null })}
+                  >
+                    배경 해제
+                  </TableMenuSegmentedButton>
+                </TableMenuSegmentedRow>
+                <TablePresetSwatches aria-label="표 셀 배경 preset">
+                  {TABLE_CELL_COLOR_PRESETS.map((preset) => (
+                    <TablePresetSwatch
+                      key={preset.value}
+                      type="button"
+                      title={preset.label}
+                      aria-label={`${preset.label} 배경`}
+                      data-active={activeTableCellAttrs.backgroundColor === preset.value}
+                      style={{ "--table-swatch-color": preset.value } as React.CSSProperties}
+                      onClick={() => updateActiveTableCellAttrs({ backgroundColor: preset.value })}
+                    />
+                  ))}
+                  <TableColorInput
+                    type="color"
+                    aria-label="표 셀 배경색 선택"
+                    value={normalizeTableColorInputValue(activeTableCellAttrs.backgroundColor)}
+                    onChange={(event) =>
+                      updateActiveTableCellAttrs({ backgroundColor: event.currentTarget.value })
+                    }
                   />
-                ))}
-                <TableColorInput
-                  type="color"
-                  aria-label="표 셀 배경색 선택"
-                  value={normalizeTableColorInputValue(activeTableCellAttrs.backgroundColor)}
-                  onChange={(event) =>
-                    updateActiveTableCellAttrs({ backgroundColor: event.currentTarget.value })
+                </TablePresetSwatches>
+              </TableMenuCompactSection>
+              {shouldShowCellMergeSection ? (
+                <>
+                  <FloatingBlockMenuDivider />
+                  <TableMenuCompactSection>
+                    <TableMenuSectionTitle>셀 구조</TableMenuSectionTitle>
+                    <TableMenuCompactList>
+                      {canMergeSelectedTableCells ? (
+                        <TableMenuCompactAction
+                          type="button"
+                          onClick={() =>
+                            runTableMenuEditorAction((activeEditor) => {
+                              activeEditor.chain().focus().mergeCells().run()
+                            })
+                          }
+                        >
+                          셀 병합
+                        </TableMenuCompactAction>
+                      ) : null}
+                      {canSplitSelectedTableCell ? (
+                        <TableMenuCompactAction
+                          type="button"
+                          onClick={() =>
+                            runTableMenuEditorAction((activeEditor) => {
+                              activeEditor.chain().focus().splitCell().run()
+                            })
+                          }
+                        >
+                          셀 분리
+                        </TableMenuCompactAction>
+                      ) : null}
+                    </TableMenuCompactList>
+                  </TableMenuCompactSection>
+                </>
+              ) : null}
+            </>
+          ) : tableMenuKind === "row" ? (
+            <>
+              <TableMenuCompactSection>
+                <TableMenuSectionTitle>행 액션</TableMenuSectionTitle>
+                <TableMenuCompactList>
+                  <TableMenuCompactAction
+                    type="button"
+                    data-active={activeTableStructureState.hasHeaderRow}
+                    onClick={() =>
+                      runTableMenuEditorAction((activeEditor) => {
+                        activeEditor.chain().focus().toggleHeaderRow().run()
+                      })
+                    }
+                  >
+                    제목 행
+                  </TableMenuCompactAction>
+                  <TableMenuCompactAction
+                    type="button"
+                    onClick={() =>
+                      runTableMenuEditorAction((activeEditor) => {
+                        activeEditor.chain().focus().addRowBefore().run()
+                      })
+                    }
+                  >
+                    위에 행 추가
+                  </TableMenuCompactAction>
+                  <TableMenuCompactAction
+                    type="button"
+                    onClick={() =>
+                      runTableMenuEditorAction((activeEditor) => {
+                        activeEditor.chain().focus().addRowAfter().run()
+                      })
+                    }
+                  >
+                    아래에 행 추가
+                  </TableMenuCompactAction>
+                </TableMenuCompactList>
+              </TableMenuCompactSection>
+              <TableMenuHint>행 핸들을 드래그해 순서를 바꿀 수 있습니다.</TableMenuHint>
+              <FloatingBlockMenuDivider />
+              <TableMenuCompactList>
+                <TableMenuCompactAction
+                  type="button"
+                  data-variant="danger"
+                  onClick={() =>
+                    runTableMenuEditorAction((activeEditor) => {
+                      activeEditor.chain().focus().deleteRow().run()
+                    })
                   }
-                />
-              </TablePresetSwatches>
+                >
+                  행 삭제
+                </TableMenuCompactAction>
+              </TableMenuCompactList>
+            </>
+          ) : tableMenuKind === "column" ? (
+            <>
+              <TableMenuCompactSection>
+                <TableMenuSectionTitle>열 액션</TableMenuSectionTitle>
+                <TableMenuCompactList>
+                  <TableMenuCompactAction
+                    type="button"
+                    data-active={activeTableStructureState.hasHeaderColumn}
+                    onClick={() =>
+                      runTableMenuEditorAction((activeEditor) => {
+                        activeEditor.chain().focus().toggleHeaderColumn().run()
+                      })
+                    }
+                  >
+                    제목 열
+                  </TableMenuCompactAction>
+                  <TableMenuCompactAction
+                    type="button"
+                    onClick={() =>
+                      runTableMenuEditorAction((activeEditor) => {
+                        activeEditor.chain().focus().addColumnBefore().run()
+                      })
+                    }
+                  >
+                    왼쪽 열 추가
+                  </TableMenuCompactAction>
+                  <TableMenuCompactAction
+                    type="button"
+                    onClick={() =>
+                      runTableMenuEditorAction((activeEditor) => {
+                        activeEditor.chain().focus().addColumnAfter().run()
+                      })
+                    }
+                  >
+                    오른쪽 열 추가
+                  </TableMenuCompactAction>
+                </TableMenuCompactList>
+              </TableMenuCompactSection>
+              <TableMenuHint>열 핸들을 드래그해 순서를 바꿀 수 있습니다.</TableMenuHint>
+              <FloatingBlockMenuDivider />
+              <TableMenuCompactList>
+                <TableMenuCompactAction
+                  type="button"
+                  data-variant="danger"
+                  onClick={() =>
+                    runTableMenuEditorAction((activeEditor) => {
+                      activeEditor.chain().focus().deleteColumn().run()
+                    })
+                  }
+                >
+                  열 삭제
+                </TableMenuCompactAction>
+              </TableMenuCompactList>
             </>
           ) : (
-            <FloatingBlockActionList>
-              {tableMenuState.kind === "row" ? (
-              <>
-                <FloatingBlockActionButton type="button" onClick={() => { selectCurrentTableAxis("row"); closeTableMenu() }}>
-                  행 선택
-                </FloatingBlockActionButton>
-                <FloatingBlockActionButton
-                  type="button"
-                  data-active={activeTableStructureState.hasHeaderRow}
-                  onClick={() =>
-                    runTableMenuEditorAction((activeEditor) => {
-                      activeEditor.chain().focus().toggleHeaderRow().run()
-                    })
-                  }
-                >
-                  제목 행
-                </FloatingBlockActionButton>
-                <FloatingBlockActionButton
-                  type="button"
-                  onClick={() =>
-                    runTableMenuEditorAction((activeEditor) => {
-                      activeEditor.chain().focus().addRowBefore().run()
-                    })
-                  }
-                >
-                  위에 삽입
-                </FloatingBlockActionButton>
-                <FloatingBlockActionButton
-                  type="button"
-                  onClick={() =>
-                    runTableMenuEditorAction((activeEditor) => {
-                      activeEditor.chain().focus().addRowAfter().run()
-                    })
-                  }
-                >
-                  아래에 삽입
-                </FloatingBlockActionButton>
-              </>
-            ) : tableMenuState.kind === "column" ? (
-              <>
-                <FloatingBlockActionButton type="button" onClick={() => { selectCurrentTableAxis("column"); closeTableMenu() }}>
-                  열 선택
-                </FloatingBlockActionButton>
-                <FloatingBlockActionButton
-                  type="button"
-                  data-active={activeTableStructureState.hasHeaderColumn}
-                  onClick={() =>
-                    runTableMenuEditorAction((activeEditor) => {
-                      activeEditor.chain().focus().toggleHeaderColumn().run()
-                    })
-                  }
-                >
-                  제목 열
-                </FloatingBlockActionButton>
-                <FloatingBlockActionButton
-                  type="button"
-                  onClick={() =>
-                    runTableMenuEditorAction((activeEditor) => {
-                      activeEditor.chain().focus().addColumnBefore().run()
-                    })
-                  }
-                >
-                  왼쪽에 삽입
-                </FloatingBlockActionButton>
-                <FloatingBlockActionButton
-                  type="button"
-                  onClick={() =>
-                    runTableMenuEditorAction((activeEditor) => {
-                      activeEditor.chain().focus().addColumnAfter().run()
-                    })
-                  }
-                >
-                  오른쪽에 삽입
-                </FloatingBlockActionButton>
-              </>
-            ) : (
-              <>
-                <FloatingBlockActionButton type="button" onClick={() => { selectActiveTableBlock(); closeTableMenu() }}>
-                  표 선택
-                </FloatingBlockActionButton>
-                <FloatingBlockActionButton
-                  type="button"
-                  data-active={activeTableStructureState.hasHeaderRow}
-                  onClick={() =>
-                    runTableMenuEditorAction((activeEditor) => {
-                      activeEditor.chain().focus().toggleHeaderRow().run()
-                    })
-                  }
-                >
-                  제목 행
-                </FloatingBlockActionButton>
-                <FloatingBlockActionButton
-                  type="button"
-                  data-active={activeTableStructureState.hasHeaderColumn}
-                  onClick={() =>
-                    runTableMenuEditorAction((activeEditor) => {
-                      activeEditor.chain().focus().toggleHeaderColumn().run()
-                    })
-                  }
-                >
-                  제목 열
-                </FloatingBlockActionButton>
-                <FloatingBlockActionButton
-                  type="button"
-                  data-testid="table-overflow-mode-normal"
-                  data-active={activeTableStructureState.overflowMode !== TABLE_OVERFLOW_MODE_WIDE}
-                  onClick={() =>
-                    runTableMenuEditorAction((activeEditor) => {
-                      updateActiveTableOverflowMode(activeEditor, "normal")
-                    })
-                  }
-                >
-                  페이지 너비에 맞춤
-                </FloatingBlockActionButton>
-                <FloatingBlockActionButton
-                  type="button"
-                  data-testid="table-overflow-mode-wide"
-                  data-active={activeTableStructureState.overflowMode === TABLE_OVERFLOW_MODE_WIDE}
-                  onClick={() =>
-                    runTableMenuEditorAction((activeEditor) => {
-                      updateActiveTableOverflowMode(activeEditor, TABLE_OVERFLOW_MODE_WIDE)
-                    })
-                  }
-                >
-                  넓은 표
-                </FloatingBlockActionButton>
-                <FloatingBlockActionButton
-                  type="button"
-                  onClick={() =>
-                    runTableMenuEditorAction((activeEditor) => {
-                      activeEditor.chain().focus().mergeCells().run()
-                    })
-                  }
-                >
-                  셀 병합
-                </FloatingBlockActionButton>
-                <FloatingBlockActionButton
-                  type="button"
-                  onClick={() =>
-                    runTableMenuEditorAction((activeEditor) => {
-                      activeEditor.chain().focus().splitCell().run()
-                    })
-                  }
-                >
-                  셀 분리
-                </FloatingBlockActionButton>
-              </>
-              )}
-            </FloatingBlockActionList>
-          )}
-          {tableMenuState.kind !== "cell" ? (
             <>
+              <TableMenuCompactSection>
+                <TableMenuSectionTitle>폭</TableMenuSectionTitle>
+                <TableMenuSegmentedRow data-columns="2">
+                  <TableMenuSegmentedButton
+                    type="button"
+                    data-testid="table-overflow-mode-normal"
+                    data-active={activeTableStructureState.overflowMode !== TABLE_OVERFLOW_MODE_WIDE}
+                    onClick={() =>
+                      runTableMenuEditorAction((activeEditor) => {
+                        updateActiveTableOverflowMode(activeEditor, "normal")
+                      })
+                    }
+                  >
+                    페이지 너비에 맞춤
+                  </TableMenuSegmentedButton>
+                  <TableMenuSegmentedButton
+                    type="button"
+                    data-testid="table-overflow-mode-wide"
+                    data-active={activeTableStructureState.overflowMode === TABLE_OVERFLOW_MODE_WIDE}
+                    onClick={() =>
+                      runTableMenuEditorAction((activeEditor) => {
+                        updateActiveTableOverflowMode(activeEditor, TABLE_OVERFLOW_MODE_WIDE)
+                      })
+                    }
+                  >
+                    넓은 표
+                  </TableMenuSegmentedButton>
+                </TableMenuSegmentedRow>
+              </TableMenuCompactSection>
+              <TableMenuHint>제목 행/열 토글은 행 메뉴와 열 메뉴에서 분리했습니다.</TableMenuHint>
               <FloatingBlockMenuDivider />
-              <FloatingBlockActionList>
-                {tableMenuState.kind === "row" ? (
-              <FloatingBlockActionButton
-                type="button"
-                data-variant="danger"
-                onClick={() =>
-                  runTableMenuEditorAction((activeEditor) => {
-                    activeEditor.chain().focus().deleteRow().run()
-                  })
-                }
-              >
-                행 삭제
-              </FloatingBlockActionButton>
-            ) : tableMenuState.kind === "column" ? (
-              <FloatingBlockActionButton
-                type="button"
-                data-variant="danger"
-                onClick={() =>
-                  runTableMenuEditorAction((activeEditor) => {
-                    activeEditor.chain().focus().deleteColumn().run()
-                  })
-                }
-              >
-                열 삭제
-              </FloatingBlockActionButton>
-            ) : (
-              <FloatingBlockActionButton
-                type="button"
-                data-variant="danger"
-                onClick={() =>
-                  runTableMenuEditorAction((activeEditor) => {
-                    activeEditor.chain().focus().deleteTable().run()
-                  })
-                }
-              >
+              <TableMenuCompactList>
+                <TableMenuCompactAction
+                  type="button"
+                  data-variant="danger"
+                  onClick={() =>
+                    runTableMenuEditorAction((activeEditor) => {
+                      activeEditor.chain().focus().deleteTable().run()
+                    })
+                  }
+                >
                   표 삭제
-                </FloatingBlockActionButton>
-                )}
-              </FloatingBlockActionList>
+                </TableMenuCompactAction>
+              </TableMenuCompactList>
             </>
-          ) : null}
+          )}
         </FloatingTableMenu>
       ) : null}
     </>
@@ -11217,17 +11256,48 @@ const TableTrailingAddBar = styled.button`
 const FloatingTableMenu = styled.div`
   position: fixed;
   z-index: 65;
-  width: min(19rem, calc(100vw - 2rem));
+  width: min(16.75rem, calc(100vw - 2rem));
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
-  padding: 0.7rem;
-  border-radius: 0.9rem;
+  gap: 0.48rem;
+  padding: 0.62rem;
+  border-radius: 0.82rem;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) =>
     theme.scheme === "dark" ? "rgba(15, 18, 24, 0.96)" : "rgba(255, 255, 255, 0.98)"};
   box-shadow: ${({ theme }) =>
-    theme.scheme === "dark" ? "0 14px 22px rgba(0, 0, 0, 0.15)" : "0 14px 22px rgba(15, 23, 42, 0.1)"};
+    theme.scheme === "dark" ? "0 12px 18px rgba(0, 0, 0, 0.16)" : "0 12px 18px rgba(15, 23, 42, 0.1)"};
+`
+
+const TableMenuHeader = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+`
+
+const TableMenuHeaderEyebrow = styled.span`
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.9)" : "rgba(71, 85, 105, 0.86)")};
+`
+
+const TableMenuHeaderTitle = styled.strong`
+  font-size: 0.82rem;
+  color: var(--color-gray12);
+`
+
+const TableMenuHeaderDescription = styled.span`
+  font-size: 0.7rem;
+  line-height: 1.45;
+  color: var(--color-gray10);
+`
+
+const TableMenuCompactSection = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.34rem;
 `
 
 const TableMenuSectionTitle = styled.span`
@@ -11236,10 +11306,83 @@ const TableMenuSectionTitle = styled.span`
   color: var(--color-gray10);
 `
 
-const TableMenuButtonRow = styled.div`
+const TableMenuCompactList = styled.div`
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.42rem;
+  flex-direction: column;
+  gap: 0.28rem;
+`
+
+const TableMenuCompactAction = styled.button`
+  min-height: 2rem;
+  border-radius: 0.72rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(18, 21, 26, 0.72)" : "rgba(255, 255, 255, 0.96)"};
+  color: var(--color-gray12);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-align: left;
+  padding: 0 0.72rem;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
+
+  &[data-active="true"] {
+    border-color: rgba(59, 130, 246, 0.42);
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(37, 99, 235, 0.18)" : "rgba(219, 234, 254, 0.96)"};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#dbeafe" : "#1d4ed8")};
+  }
+
+  &[data-variant="danger"] {
+    border-color: rgba(248, 113, 113, 0.2);
+    background: rgba(127, 29, 29, 0.08);
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#fecaca" : "#b91c1c")};
+  }
+`
+
+const TableMenuSegmentedRow = styled.div`
+  display: grid;
+  gap: 0.34rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+
+  &[data-columns="3"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+`
+
+const TableMenuSegmentedButton = styled.button`
+  min-height: 2rem;
+  border-radius: 0.68rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(18, 21, 26, 0.72)" : "rgba(255, 255, 255, 0.96)"};
+  color: var(--color-gray11);
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 0 0.58rem;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
+
+  &[data-active="true"] {
+    border-color: rgba(59, 130, 246, 0.42);
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(37, 99, 235, 0.18)" : "rgba(219, 234, 254, 0.96)"};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#dbeafe" : "#1d4ed8")};
+  }
+`
+
+const TableMenuHint = styled.div`
+  border-radius: 0.7rem;
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(30, 41, 59, 0.46)" : "rgba(248, 250, 252, 0.96)"};
+  color: var(--color-gray10);
+  font-size: 0.7rem;
+  line-height: 1.45;
+  padding: 0.52rem 0.64rem;
 `
 
 const BlockHandleRail = styled.div`

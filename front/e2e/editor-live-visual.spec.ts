@@ -119,6 +119,16 @@ const getVisibleUiLoginError = async (page: Parameters<typeof test>[0]["page"]) 
   return (await loginError.textContent())?.trim() || "unknown error"
 }
 
+const getTableAffordances = (page: Parameters<typeof test>[0]["page"]) => ({
+  rowHandle: page.locator("[data-table-affordance='row-handle']").first(),
+  columnHandle: page.locator("[data-table-affordance='column-handle']").first(),
+  rowAddButton: page.locator("[data-table-affordance='row-add']").first(),
+  columnAddButton: page.locator("[data-table-affordance='column-add']").first(),
+  growHandle: page.locator("[data-table-affordance='grow-handle']").first(),
+  structureMenuButton: page.locator("[data-table-affordance='structure-menu']").first(),
+  cellMenuButton: page.locator("[data-table-affordance='cell-menu']").first(),
+})
+
 const waitForUiLoginOutcome = async (
   page: Parameters<typeof test>[0]["page"],
   getObservedLoginResponse: () => { status: number; bodyPreview: string } | null,
@@ -395,6 +405,15 @@ test.describe("editor live visual regression", () => {
     test.slow()
     await page.setViewportSize({ width: 1512, height: 982 })
     await loginThroughUi(page)
+    const {
+      rowHandle,
+      columnHandle,
+      rowAddButton,
+      columnAddButton,
+      growHandle,
+      structureMenuButton,
+      cellMenuButton,
+    } = getTableAffordances(page)
 
     await page.goto("/editor/new")
     await page.waitForURL(/\/editor(\/|$)/, { timeout: 30000 })
@@ -415,18 +434,12 @@ test.describe("editor live visual regression", () => {
     await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
 
     const cornerHandle = page.getByTestId("table-corner-handle")
-    const growHandle = page.getByTestId("table-corner-grow-handle")
-    const structureMenuButton = page.getByTestId("table-structure-menu-button")
-    const cellMenuButton = page.getByTestId("table-cell-menu-button")
-    const rowRail = page.getByTestId("table-row-rail")
-    const columnRail = page.getByTestId("table-column-rail")
-
     await expect(cornerHandle).toBeVisible()
     await expect(growHandle).toBeVisible()
     await expect(structureMenuButton).toBeVisible()
     await expect(cellMenuButton).toBeVisible()
-    await expect(rowRail).toBeVisible()
-    await expect(columnRail).toBeVisible()
+    await expect(rowHandle).toBeVisible()
+    await expect(columnHandle).toBeVisible()
 
     await structureMenuButton.click()
     const tableMenu = page.getByTestId("table-table-menu")
@@ -435,13 +448,11 @@ test.describe("editor live visual regression", () => {
 
     await page.mouse.move(tableBox.x + tableBox.width - 3, tableBox.y + tableBox.height - 3)
 
-    const columnAddBar = page.getByTestId("table-column-add-bar")
-    const rowAddBar = page.getByTestId("table-row-add-bar")
-    await expect(columnAddBar).toBeVisible()
-    await expect(rowAddBar).toBeVisible()
+    await expect(columnAddButton).toBeVisible()
+    await expect(rowAddButton).toBeVisible()
 
     const viewport = page.viewportSize()
-    const addBarBoxes = await Promise.all([columnAddBar.boundingBox(), rowAddBar.boundingBox()])
+    const addBarBoxes = await Promise.all([columnAddButton.boundingBox(), rowAddButton.boundingBox()])
     const [columnAddBarBox, rowAddBarBox] = addBarBoxes
     expect(viewport).not.toBeNull()
     expect(columnAddBarBox).not.toBeNull()

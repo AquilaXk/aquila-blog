@@ -6010,16 +6010,58 @@ const BlockEditorEngine = ({
     (attrs: Record<string, unknown>) => {
       if (!editor) return
       const entries = Object.entries(attrs)
-      const chain = editor.chain().focus()
+      if (entries.length === 0) return
 
-      if (typeof editor.commands.setCellAttribute === "function" && entries.length > 0) {
-        entries.forEach(([name, value]) => {
-          chain.setCellAttribute(name, value)
+      const cellPositions = new Set<number>()
+      const { selection } = editor.state
+
+      if (selection instanceof CellSelection) {
+        selection.forEachCell((_node, pos) => {
+          cellPositions.add(pos)
         })
-        chain.run()
+      } else {
+        const collectFromResolvedPos = (resolvedPos: typeof selection.$from) => {
+          for (let depth = resolvedPos.depth; depth >= 0; depth -= 1) {
+            const nodeTypeName = resolvedPos.node(depth).type.name
+            if (nodeTypeName !== "tableCell" && nodeTypeName !== "tableHeader") continue
+            cellPositions.add(resolvedPos.before(depth))
+            return
+          }
+        }
+
+        collectFromResolvedPos(selection.$from)
+        collectFromResolvedPos(selection.$to)
+      }
+
+      if (cellPositions.size > 0) {
+        let transaction = editor.state.tr
+        let changed = false
+
+        cellPositions.forEach((cellPos) => {
+          const cellNode = transaction.doc.nodeAt(cellPos)
+          if (!cellNode) return
+
+          const nextAttrs = { ...(cellNode.attrs || {}) }
+          let cellChanged = false
+          entries.forEach(([name, value]) => {
+            if (nextAttrs[name] === value) return
+            nextAttrs[name] = value
+            cellChanged = true
+          })
+
+          if (!cellChanged) return
+          transaction = transaction.setNodeMarkup(cellPos, undefined, nextAttrs, cellNode.marks)
+          changed = true
+        })
+
+        if (changed) {
+          editor.view.dispatch(transaction)
+          setSelectionTick((prev) => prev + 1)
+        }
         return
       }
 
+      const chain = editor.chain().focus()
       const cellNodeType = editor.isActive("tableHeader") ? "tableHeader" : "tableCell"
       chain.updateAttributes(cellNodeType, attrs).run()
     },
@@ -6332,6 +6374,16 @@ const BlockEditorEngine = ({
   const quickInsertActions = useMemo(
     () => blockInsertCatalog.filter((item) => item.quickInsert),
     [blockInsertCatalog]
+  )
+
+  const isQuickInsertActionDisabled = useCallback(
+    (action: BlockInsertCatalogItem) =>
+      Boolean(
+        disabled ||
+        action.disabled ||
+        (isTableMode && TABLE_CONTEXT_BLOCKED_INSERT_IDS.has(action.id))
+      ),
+    [disabled, isTableMode]
   )
 
   const normalizedSlashQuery = normalizeSlashSearchText(slashQuery)
@@ -8067,6 +8119,7 @@ const BlockEditorEngine = ({
               title="표 크기 조절"
               aria-label="표 크기 조절"
               data-testid="table-corner-grow-handle"
+              data-table-affordance="grow-handle"
               data-table-menu-trigger="true"
               data-active={isTableCornerGrowActive}
               data-column-step={getTableCornerGrowStepMetrics().columnStepPx}
@@ -8101,6 +8154,7 @@ const BlockEditorEngine = ({
               title="표 구조 메뉴"
               aria-label="표 구조 메뉴"
               data-testid="table-structure-menu-button"
+              data-table-affordance="structure-menu"
               data-table-menu-trigger="true"
               onMouseDown={handleToolbarButtonMouseDown}
               onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -8141,6 +8195,7 @@ const BlockEditorEngine = ({
               <TableQuickRailButton
                 type="button"
                 data-axis="row"
+                data-table-affordance="row-handle"
                 data-active={isCurrentTableRowSelection(tableAffordanceGeometry.rowIndex)}
                 title="행 메뉴"
                 aria-label="행 메뉴"
@@ -8194,6 +8249,7 @@ const BlockEditorEngine = ({
               <TableQuickRailButton
                 type="button"
                 data-axis="column"
+                data-table-affordance="column-handle"
                 data-active={isCurrentTableColumnSelection(tableAffordanceGeometry.columnIndex)}
                 title="열 메뉴"
                 aria-label="열 메뉴"
@@ -8229,6 +8285,7 @@ const BlockEditorEngine = ({
               type="button"
               data-table-axis-rail="true"
               data-testid="table-column-add-bar"
+              data-table-affordance="column-add"
               data-axis="column"
               title="열 추가"
               aria-label="열 추가"
@@ -8269,6 +8326,7 @@ const BlockEditorEngine = ({
               type="button"
               data-table-axis-rail="true"
               data-testid="table-row-add-bar"
+              data-table-affordance="row-add"
               data-axis="row"
               title="행 추가"
               aria-label="행 추가"
@@ -8308,6 +8366,7 @@ const BlockEditorEngine = ({
             <TableCellMenuButton
               type="button"
               data-testid="table-cell-menu-button"
+              data-table-affordance="cell-menu"
               data-table-menu-trigger="true"
               title="셀 스타일"
               aria-label="셀 스타일"
@@ -8781,9 +8840,10 @@ const BlockEditorEngine = ({
               key={action.id}
               type="button"
               onClick={() => {
+                if (isQuickInsertActionDisabled(action)) return
                 void action.insertAtCursor()
               }}
-              disabled={disabled || action.disabled}
+              disabled={isQuickInsertActionDisabled(action)}
             >
               {action.label}
             </QuickInsertButton>

@@ -118,6 +118,16 @@ const readTableGrid = async (page: Page) =>
     )
   )
 
+const getTableAffordances = (page: Page) => ({
+  rowHandle: page.locator("[data-table-affordance='row-handle']").first(),
+  columnHandle: page.locator("[data-table-affordance='column-handle']").first(),
+  rowAddButton: page.locator("[data-table-affordance='row-add']").first(),
+  columnAddButton: page.locator("[data-table-affordance='column-add']").first(),
+  growHandle: page.locator("[data-table-affordance='grow-handle']").first(),
+  structureMenuButton: page.locator("[data-table-affordance='structure-menu']").first(),
+  cellMenuButton: page.locator("[data-table-affordance='cell-menu']").first(),
+})
+
 test.describe("block editor authoring flow", () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -806,25 +816,33 @@ test.describe("block editor authoring flow", () => {
 
   test("table hover에서도 block selection affordance를 다시 띄우고 table block selection으로 전환할 수 있다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
+    const {
+      columnHandle,
+      rowHandle,
+      columnAddButton,
+      rowAddButton,
+      growHandle: tableGrowHandle,
+      structureMenuButton: tableStructureMenuButton,
+      cellMenuButton: tableCellMenuButton,
+    } = getTableAffordances(page)
 
     await page.getByRole("button", { name: "테이블" }).click()
 
     const firstTableCell = page.locator("table th, table td").first()
     await firstTableCell.click()
 
-    await expect(page.getByTestId("table-column-rail")).toHaveCount(0)
-    await expect(page.getByTestId("table-row-rail")).toHaveCount(0)
-    await expect(page.getByTestId("table-column-add-bar")).toHaveCount(0)
-    await expect(page.getByTestId("table-row-add-bar")).toHaveCount(0)
+    await expect(columnHandle).toHaveCount(0)
+    await expect(rowHandle).toHaveCount(0)
+    await expect(columnAddButton).toHaveCount(0)
+    await expect(rowAddButton).toHaveCount(0)
 
     await firstTableCell.hover()
 
-    await expect(page.getByTestId("table-column-rail-track")).toHaveCount(0)
-    await expect(page.getByTestId("table-column-rail")).toHaveCount(0)
-    await expect(page.getByTestId("table-row-rail")).toHaveCount(0)
+    await expect(columnHandle).toHaveCount(0)
+    await expect(rowHandle).toHaveCount(0)
     await expect(page.getByTestId("table-corner-handle")).toBeVisible()
-    await expect(page.getByTestId("table-column-add-bar")).toHaveCount(0)
-    await expect(page.getByTestId("table-row-add-bar")).toHaveCount(0)
+    await expect(columnAddButton).toHaveCount(0)
+    await expect(rowAddButton).toHaveCount(0)
     await expect(page.getByTestId("table-bubble-toolbar")).toHaveCount(0)
 
     const tableWidthShape = await page.evaluate(() => {
@@ -861,24 +879,16 @@ test.describe("block editor authoring flow", () => {
     await trailingParagraph.click()
     await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
 
-    const columnRailButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })
-    const rowRailButton = page.getByTestId("table-row-rail").getByRole("button", { name: "행 메뉴" })
-    const columnQuickAddButton = page.getByTestId("table-column-add-bar")
-    const rowQuickAddButton = page.getByTestId("table-row-add-bar")
-    const tableGrowHandle = page.getByTestId("table-corner-grow-handle")
-    const tableStructureMenuButton = page.getByTestId("table-structure-menu-button")
-    const tableCellMenuButton = page.getByTestId("table-cell-menu-button")
-
-    await expect(columnRailButton).toBeVisible()
-    await expect(rowRailButton).toBeVisible()
-    await expect(columnQuickAddButton).toHaveCount(0)
-    await expect(rowQuickAddButton).toHaveCount(0)
+    await expect(columnHandle).toBeVisible()
+    await expect(rowHandle).toBeVisible()
+    await expect(columnAddButton).toHaveCount(0)
+    await expect(rowAddButton).toHaveCount(0)
     await expect(tableGrowHandle).toBeVisible()
     await expect(tableStructureMenuButton).toBeVisible()
     await expect(tableCellMenuButton).toBeVisible()
 
     const [columnGripRect, rowGripRect, growHandleRect, structureMenuRect, cellMenuRect] = await Promise.all(
-      [columnRailButton, rowRailButton, tableGrowHandle, tableStructureMenuButton, tableCellMenuButton].map((locator) =>
+      [columnHandle, rowHandle, tableGrowHandle, tableStructureMenuButton, tableCellMenuButton].map((locator) =>
         locator.evaluate((element) => {
           const rect = element.getBoundingClientRect()
           return { width: Math.round(rect.width), height: Math.round(rect.height) }
@@ -897,11 +907,11 @@ test.describe("block editor authoring flow", () => {
     await tableStructureMenuButton.click()
     await expect(page.getByTestId("table-table-menu")).toBeVisible()
     await page.mouse.move(tableBox.x + tableBox.width - 8, tableBox.y + tableBox.height - 8)
-    await expect(columnQuickAddButton).toBeVisible()
-    await expect(rowQuickAddButton).toBeVisible()
+    await expect(columnAddButton).toBeVisible()
+    await expect(rowAddButton).toBeVisible()
 
     const [columnAddRect, rowAddRect] = await Promise.all(
-      [columnQuickAddButton, rowQuickAddButton].map((locator) =>
+      [columnAddButton, rowAddButton].map((locator) =>
         locator.evaluate((element) => {
           const rect = element.getBoundingClientRect()
           return {
@@ -920,8 +930,8 @@ test.describe("block editor authoring flow", () => {
 
     const edgeAlignment = await page.evaluate(() => {
       const table = document.querySelector<HTMLElement>(".aq-block-editor__content .tableWrapper table")
-      const columnAddBar = document.querySelector<HTMLElement>("[data-testid='table-column-add-bar']")
-      const rowAddBar = document.querySelector<HTMLElement>("[data-testid='table-row-add-bar']")
+      const columnAddBar = document.querySelector<HTMLElement>("[data-table-affordance='column-add']")
+      const rowAddBar = document.querySelector<HTMLElement>("[data-table-affordance='row-add']")
       if (!table || !columnAddBar || !rowAddBar) return null
 
       const tableRect = table.getBoundingClientRect()
@@ -948,7 +958,7 @@ test.describe("block editor authoring flow", () => {
     expect(Math.abs(edgeAlignment.rowHorizontalCenterGap)).toBeLessThanOrEqual(18)
 
     await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
-    await rowRailButton.click()
+    await rowHandle.click()
     await expect(page.getByTestId("table-row-selection-outline")).toBeVisible()
     await expect(page.getByTestId("table-column-selection-outline")).toHaveCount(0)
     await expect(page.getByTestId("table-row-menu")).toBeVisible()
@@ -957,14 +967,14 @@ test.describe("block editor authoring flow", () => {
     await expect(page.getByTestId("table-row-menu")).toHaveCount(0)
 
     await page.mouse.move(tableBox.x + tableBox.width - 3, tableBox.y + tableBox.height - 3)
-    await columnQuickAddButton.click()
+    await columnAddButton.click()
     await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(4)
 
-    await rowQuickAddButton.click()
+    await rowAddButton.click()
     await expect(page.locator("table tr")).toHaveCount(4)
 
     await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
-    await columnRailButton.click()
+    await columnHandle.click()
     await expect(page.getByTestId("table-column-selection-outline")).toBeVisible()
     await expect(page.getByTestId("table-row-selection-outline")).toHaveCount(0)
     const columnMenu = page.getByTestId("table-column-menu")
@@ -981,8 +991,8 @@ test.describe("block editor authoring flow", () => {
     await expect(page.getByTestId("keyboard-block-selection-overlay")).toBeVisible()
 
     await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
-    await expect(columnRailButton).toBeVisible()
-    await columnRailButton.click()
+    await expect(columnHandle).toBeVisible()
+    await columnHandle.click()
     await expect(page.getByTestId("table-column-selection-outline")).toBeVisible()
     await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
   })
@@ -1006,6 +1016,7 @@ test.describe("block editor authoring flow", () => {
 
   test("table axis rail hover 전환 중에도 target axis anchor가 끊기지 않는다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
+    const { columnHandle, rowHandle } = getTableAffordances(page)
 
     await page.getByRole("button", { name: "테이블" }).click()
     const targetCell = page.locator("table tr").nth(2).locator("th, td").nth(1)
@@ -1027,10 +1038,8 @@ test.describe("block editor authoring flow", () => {
     }
 
     await page.mouse.move(tableBox.x + 6, targetMetrics.top + targetMetrics.height / 2)
-    const columnRailButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })
-    const rowRailButton = page.getByTestId("table-row-rail").getByRole("button", { name: "행 메뉴" })
-    await expect(rowRailButton).toBeVisible()
-    const rowRailRect = await rowRailButton.evaluate((element) => {
+    await expect(rowHandle).toBeVisible()
+    const rowRailRect = await rowHandle.evaluate((element) => {
       const rect = element.getBoundingClientRect()
       return {
         left: Math.round(rect.left),
@@ -1041,7 +1050,7 @@ test.describe("block editor authoring flow", () => {
     })
     expect(Math.abs(rowRailRect.top + rowRailRect.height / 2 - (targetMetrics.top + targetMetrics.height / 2))).toBeLessThanOrEqual(8)
 
-    await rowRailButton.click()
+    await rowHandle.click()
     const rowMenu = page.getByTestId("table-row-menu")
     await expect(rowMenu).toBeVisible()
     await expect(rowMenu.getByRole("button", { name: "행 삭제" })).toBeVisible()
@@ -1051,8 +1060,8 @@ test.describe("block editor authoring flow", () => {
     await targetCell.click()
     await targetCell.hover()
     await page.mouse.move(targetMetrics.left + targetMetrics.width / 2, tableBox.y + 6)
-    await expect(columnRailButton).toBeVisible()
-    const columnRailRect = await columnRailButton.evaluate((element) => {
+    await expect(columnHandle).toBeVisible()
+    const columnRailRect = await columnHandle.evaluate((element) => {
       const rect = element.getBoundingClientRect()
       return {
         left: Math.round(rect.left),
@@ -1094,6 +1103,7 @@ test.describe("block editor authoring flow", () => {
   }) => {
     await page.setViewportSize({ width: 820, height: 900 })
     await page.goto(QA_ENGINE_ROUTE)
+    const { columnHandle } = getTableAffordances(page)
 
     await page.getByRole("button", { name: "테이블" }).click()
     const firstTableCell = page.locator("table th, table td").first()
@@ -1122,8 +1132,8 @@ test.describe("block editor authoring flow", () => {
         page.evaluate(() => {
           const viewportWidth = window.innerWidth
           const viewportHeight = window.innerHeight
-          const columnAddBar = document.querySelector<HTMLElement>("[data-testid='table-column-add-bar']")
-          const rowAddBar = document.querySelector<HTMLElement>("[data-testid='table-row-add-bar']")
+          const columnAddBar = document.querySelector<HTMLElement>("[data-table-affordance='column-add']")
+          const rowAddBar = document.querySelector<HTMLElement>("[data-table-affordance='row-add']")
           const table = document.querySelector<HTMLElement>(".aq-block-editor__content .tableWrapper table")
           const content = document.querySelector<HTMLElement>(".aq-block-editor__content")
           if (!columnAddBar || !rowAddBar || !table || !content) return null
@@ -1192,8 +1202,7 @@ test.describe("block editor authoring flow", () => {
     expect(beforeMetrics.columnCount).toBe(3)
 
     await moveToRowColumnHotzone()
-    const columnRailButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })
-    await columnRailButton.click()
+    await columnHandle.click()
     const columnMenu = page.getByTestId("table-column-menu")
     await columnMenu.getByRole("button", { name: "오른쪽에 삽입" }).click()
     await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(4)
@@ -1202,7 +1211,7 @@ test.describe("block editor authoring flow", () => {
     expect(afterInsertMetrics.columnCount).toBe(4)
 
     await moveToRowColumnHotzone()
-    await columnRailButton.click()
+    await columnHandle.click()
     await columnMenu.getByRole("button", { name: "열 삭제" }).click()
     await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(3)
 
@@ -1212,6 +1221,7 @@ test.describe("block editor authoring flow", () => {
 
   test("writer surface의 row/column grip과 trailing +행/+열은 edge hover에서만 노출된다", async ({ page }) => {
     await page.goto(QA_WRITER_ROUTE)
+    const { columnHandle, rowHandle, columnAddButton, rowAddButton } = getTableAffordances(page)
 
     await page.getByRole("button", { name: "테이블" }).click()
 
@@ -1219,10 +1229,10 @@ test.describe("block editor authoring flow", () => {
     await firstTableCell.click()
     await firstTableCell.hover()
 
-    await expect(page.getByTestId("table-column-rail")).toHaveCount(0)
-    await expect(page.getByTestId("table-row-rail")).toHaveCount(0)
-    await expect(page.getByTestId("table-column-add-bar")).toHaveCount(0)
-    await expect(page.getByTestId("table-row-add-bar")).toHaveCount(0)
+    await expect(columnHandle).toHaveCount(0)
+    await expect(rowHandle).toHaveCount(0)
+    await expect(columnAddButton).toHaveCount(0)
+    await expect(rowAddButton).toHaveCount(0)
 
     const tableBox = await page.locator(".aq-block-editor__content .tableWrapper table").boundingBox()
     if (!tableBox) {
@@ -1230,21 +1240,22 @@ test.describe("block editor authoring flow", () => {
     }
     await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
 
-    await expect(page.getByTestId("table-column-rail")).toBeVisible()
-    await expect(page.getByTestId("table-row-rail")).toBeVisible()
-    await expect(page.getByTestId("table-column-add-bar")).toHaveCount(0)
-    await expect(page.getByTestId("table-row-add-bar")).toHaveCount(0)
+    await expect(columnHandle).toBeVisible()
+    await expect(rowHandle).toBeVisible()
+    await expect(columnAddButton).toHaveCount(0)
+    await expect(rowAddButton).toHaveCount(0)
 
     await page.mouse.move(tableBox.x + tableBox.width - 3, tableBox.y + tableBox.height - 3)
 
-    await expect(page.getByTestId("table-column-add-bar")).toBeVisible()
-    await expect(page.getByTestId("table-row-add-bar")).toBeVisible()
+    await expect(columnAddButton).toBeVisible()
+    await expect(rowAddButton).toBeVisible()
   })
 
   test("writer surface의 multi-table hover는 hovered table 기준으로 cell menu를 고정하고 block drag handle을 유지한다", async ({
     page,
   }) => {
     await page.goto(QA_WRITER_ROUTE)
+    const { cellMenuButton } = getTableAffordances(page)
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     await editor.click()
@@ -1283,7 +1294,7 @@ test.describe("block editor authoring flow", () => {
     await firstTableCell.hover()
     await page.mouse.move(firstTableBox.x + firstTableBox.width / 2, firstTableBox.y + 6)
 
-    const cellMenuMetrics = await page.getByTestId("table-cell-menu-button").evaluate((element) => {
+    const cellMenuMetrics = await cellMenuButton.evaluate((element) => {
       const rect = element.getBoundingClientRect()
       return {
         top: Math.round(rect.top),
@@ -1302,6 +1313,7 @@ test.describe("block editor authoring flow", () => {
   test("writer surface의 pasted 4열 table에서도 row/column menu가 계속 동작한다", async ({ page }) => {
     await page.setViewportSize({ width: 1680, height: 1500 })
     await page.goto(QA_WRITER_ROUTE)
+    const { rowHandle: rowMenuButton, columnHandle: columnMenuButton } = getTableAffordances(page)
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     await editor.click()
@@ -1355,9 +1367,6 @@ test.describe("block editor authoring flow", () => {
     }
     await moveToTopLeftHotzone()
 
-    const rowMenuButton = page.getByTestId("table-row-rail").getByRole("button", { name: "행 메뉴" })
-    const columnMenuButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })
-
     await expect(rowMenuButton).toBeVisible()
     await expect(columnMenuButton).toBeVisible()
 
@@ -1396,12 +1405,14 @@ test.describe("block editor authoring flow", () => {
   }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto(QA_ENGINE_ROUTE)
+    const { columnHandle, rowHandle } = getTableAffordances(page)
 
     await page.getByRole("button", { name: "테이블" }).click()
     const firstTableCell = page.locator("table th, table td").first()
     await firstTableCell.click()
 
-    await expect(page.getByTestId("table-column-rail-track")).toHaveCount(0)
+    await expect(columnHandle).toHaveCount(0)
+    await expect(rowHandle).toHaveCount(0)
 
     for (let index = 0; index < 8; index += 1) {
       await page.getByRole("button", { name: "QA 열 추가" }).click()
@@ -1727,13 +1738,13 @@ test.describe("block editor authoring flow", () => {
 
   test("table cell menu는 셀 스타일만 포함하고 구조 액션 없이 정렬/배경을 저장한다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
+    const { cellMenuButton } = getTableAffordances(page)
 
     await page.getByRole("button", { name: "테이블" }).click()
     const firstTableCell = page.locator("table th, table td").first()
     await firstTableCell.click()
     await firstTableCell.hover()
 
-    const cellMenuButton = page.getByTestId("table-cell-menu-button")
     await cellMenuButton.click()
 
     const cellMenu = page.getByTestId("table-cell-menu")
@@ -1757,6 +1768,7 @@ test.describe("block editor authoring flow", () => {
 
   test("table row/column 메뉴는 axis-level header action을 노출하고 저장 후 재진입해도 유지된다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
+    const { rowHandle: rowMenuButton, columnHandle: columnMenuButton } = getTableAffordances(page)
 
     await page.getByRole("button", { name: "테이블" }).click()
     const firstTableCell = page.locator("table th, table td").first()
@@ -1767,8 +1779,7 @@ test.describe("block editor authoring flow", () => {
     }
     await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
 
-    const rowMenuButton = page.getByTestId("table-row-rail").getByRole("button", { name: "행 메뉴" })
-    await expect(page.getByTestId("table-row-rail")).toBeVisible()
+    await expect(rowMenuButton).toBeVisible()
     await rowMenuButton.click()
     const rowMenu = page.getByTestId("table-row-menu")
     await expect(rowMenu).toBeVisible()
@@ -1777,8 +1788,7 @@ test.describe("block editor authoring flow", () => {
     await rowMenu.getByRole("button", { name: "제목 행" }).click()
 
     await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
-    const columnMenuButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })
-    await expect(page.getByTestId("table-column-rail")).toBeVisible()
+    await expect(columnMenuButton).toBeVisible()
     await columnMenuButton.click()
     const columnMenu = page.getByTestId("table-column-menu")
     await expect(columnMenu).toBeVisible()
@@ -1890,6 +1900,7 @@ test.describe("block editor authoring flow", () => {
 
   test("table row/column grip drag는 축을 재정렬하고 seed 재진입 후에도 순서를 유지한다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
+    const { rowHandle: rowGrip, columnHandle: columnGrip } = getTableAffordances(page)
 
     await page.getByRole("button", { name: "테이블" }).click()
 
@@ -1913,9 +1924,7 @@ test.describe("block editor authoring flow", () => {
     }
 
     await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
-    await expect(page.getByTestId("table-row-rail")).toBeVisible()
-
-    const rowGrip = page.getByTestId("table-row-rail").getByRole("button", { name: "행 메뉴" })
+    await expect(rowGrip).toBeVisible()
     const lastRowBox = await page.locator("table tr").nth(2).boundingBox()
     if (!lastRowBox) {
       throw new Error("table row reorder handle metrics are missing")
@@ -1981,9 +1990,7 @@ test.describe("block editor authoring flow", () => {
       reorderedFirstCellBox.x + reorderedFirstCellBox.width / 2,
       reorderedFirstCellBox.y + 3
     )
-    await expect(page.getByTestId("table-column-rail")).toBeVisible()
-
-    const columnGrip = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })
+    await expect(columnGrip).toBeVisible()
     await expect(columnGrip).toBeVisible()
     const firstRowLastCellBox = await page.locator("table tr").first().locator("th, td").nth(2).boundingBox()
     if (!firstRowLastCellBox) {

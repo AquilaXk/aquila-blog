@@ -2220,6 +2220,15 @@ const BlockEditorEngine = ({
   const [tableMenuState, setTableMenuState] = useState<TableMenuState>(null)
   const tableAffordanceGeometryRef = useRef(tableAffordanceGeometry)
   const tableAffordanceVisibilityRef = useRef(tableAffordanceVisibility)
+  const tableCornerPreviewStateRef = useRef<TableCornerPreviewState>({
+    visible: false,
+    left: 0,
+    top: 0,
+    width: 0,
+    height: 0,
+    columnSteps: 0,
+    rowSteps: 0,
+  })
   const [draggedTableAxisState, setDraggedTableAxisState] = useState<DraggedTableAxisState>(null)
   const [tableAxisDragGhostPosition, setTableAxisDragGhostPosition] = useState<{ x: number; y: number } | null>(null)
   const [tableAxisReorderIndicatorState, setTableAxisReorderIndicatorState] = useState<TableAxisReorderIndicatorState>({
@@ -2255,6 +2264,24 @@ const BlockEditorEngine = ({
     width: 0,
   })
   const [selectionTick, setSelectionTick] = useState(0)
+
+  const updateTableCornerPreviewState = useCallback(
+    (
+      nextState:
+        | TableCornerPreviewState
+        | ((prev: TableCornerPreviewState) => TableCornerPreviewState)
+    ) => {
+      setTableCornerPreviewState((prev) => {
+        const resolved =
+          typeof nextState === "function"
+            ? (nextState as (prev: TableCornerPreviewState) => TableCornerPreviewState)(prev)
+            : nextState
+        tableCornerPreviewStateRef.current = resolved
+        return resolved
+      })
+    },
+    []
+  )
   const selectionUiSignatureRef = useRef("")
   const blockSelectionLayoutRectCacheRef = useRef(new Map<number, { element: HTMLElement; rect: DOMRect }>())
   const blockHandleRailMetricsRef = useRef({ width: 54, height: 40 })
@@ -3933,15 +3960,38 @@ const BlockEditorEngine = ({
     }
   }, [])
 
+  const getTableCornerGrowStepMetricsFromHandle = useCallback(
+    (element: HTMLElement | null) => {
+      const columnStepPx = Number(element?.dataset.columnStep || "0")
+      const rowStepPx = Number(element?.dataset.rowStep || "0")
+      if (Number.isFinite(columnStepPx) && columnStepPx > 0 && Number.isFinite(rowStepPx) && rowStepPx > 0) {
+        return {
+          columnStepPx,
+          rowStepPx,
+        }
+      }
+      return getTableCornerGrowStepMetrics()
+    },
+    [getTableCornerGrowStepMetrics]
+  )
+
   const stopTableCornerGrow = useCallback(() => {
     tableCornerGrowRef.current = null
-    setTableCornerPreviewState((prev) => (prev.visible ? { ...prev, visible: false, columnSteps: 0, rowSteps: 0 } : prev))
+    updateTableCornerPreviewState((prev) => (prev.visible ? { ...prev, visible: false, columnSteps: 0, rowSteps: 0 } : prev))
     setIsTableCornerGrowActive(false)
-  }, [])
+  }, [updateTableCornerPreviewState])
 
   const startTableCornerGrow = useCallback(
-    (pointerId: number, clientX: number, clientY: number) => {
-      const { columnStepPx, rowStepPx } = getTableCornerGrowStepMetrics()
+    (
+      pointerId: number,
+      clientX: number,
+      clientY: number,
+      stepMetrics?: {
+        columnStepPx: number
+        rowStepPx: number
+      }
+    ) => {
+      const { columnStepPx, rowStepPx } = stepMetrics ?? getTableCornerGrowStepMetrics()
       const currentEditor = editorRef.current
       const rect = currentEditor ? getCurrentSelectedTableRect(currentEditor) : null
       const renderedTable = findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)
@@ -3965,7 +4015,7 @@ const BlockEditorEngine = ({
         maxShrinkRowSteps,
       }
       tableCornerGrowSuppressClickRef.current = false
-      setTableCornerPreviewState({
+      updateTableCornerPreviewState({
         visible: false,
         left: tableAffordanceGeometryRef.current.tableLeft,
         top: tableAffordanceGeometryRef.current.tableTop,
@@ -3976,7 +4026,7 @@ const BlockEditorEngine = ({
       })
       setIsTableCornerGrowActive(true)
     },
-    [getCurrentSelectedTableRect, getTableCornerGrowStepMetrics]
+    [getCurrentSelectedTableRect, getTableCornerGrowStepMetrics, updateTableCornerPreviewState]
   )
 
   const getCurrentTableColumnResizeContext = useCallback(
@@ -5326,7 +5376,7 @@ const BlockEditorEngine = ({
       ) {
         tableCornerGrowSuppressClickRef.current = true
       }
-      setTableCornerPreviewState((prev) => {
+      updateTableCornerPreviewState((prev) => {
         const next = resolveTableCornerPreviewState(state, clientX, clientY)
         if (
           prev.visible === next.visible &&
@@ -5350,7 +5400,7 @@ const BlockEditorEngine = ({
     const handlePointerUp = (event: PointerEvent) => {
       const state = tableCornerGrowRef.current
       if (!state || state.pointerId !== event.pointerId) return
-      const nextPreview = resolveTableCornerPreviewState(state, event.clientX, event.clientY)
+      const nextPreview = tableCornerPreviewStateRef.current
       applyTableCornerGrowSteps(nextPreview.columnSteps, nextPreview.rowSteps)
       stopTableCornerGrow()
     }
@@ -5362,7 +5412,7 @@ const BlockEditorEngine = ({
     const handleMouseUp = (event: MouseEvent) => {
       const state = tableCornerGrowRef.current
       if (!state || state.pointerId !== TABLE_CORNER_GROW_MOUSE_POINTER_ID) return
-      const nextPreview = resolveTableCornerPreviewState(state, event.clientX, event.clientY)
+      const nextPreview = tableCornerPreviewStateRef.current
       applyTableCornerGrowSteps(nextPreview.columnSteps, nextPreview.rowSteps)
       stopTableCornerGrow()
     }
@@ -5381,7 +5431,7 @@ const BlockEditorEngine = ({
       window.removeEventListener("mouseup", handleMouseUp)
       stopTableCornerGrow()
     }
-  }, [applyTableCornerGrowSteps, resolveTableCornerPreviewState, stopTableCornerGrow])
+  }, [applyTableCornerGrowSteps, resolveTableCornerPreviewState, stopTableCornerGrow, updateTableCornerPreviewState])
 
   useEffect(() => {
     const currentEditor = editorRef.current ?? editor
@@ -8051,6 +8101,7 @@ const BlockEditorEngine = ({
     if (typeof window === "undefined") return null
     return resolveDesktopTableRailLayout(tableAffordanceGeometry)
   }, [tableAffordanceGeometry])
+  const tableCornerGrowStepMetrics = getTableCornerGrowStepMetrics()
 
   useEffect(() => {
     if (shouldShowTableHandles) return
@@ -8201,20 +8252,30 @@ const BlockEditorEngine = ({
               data-table-affordance="grow-handle"
               data-table-menu-trigger="true"
               data-active={isTableCornerGrowActive}
-              data-column-step={getTableCornerGrowStepMetrics().columnStepPx}
-              data-row-step={getTableCornerGrowStepMetrics().rowStepPx}
+              data-column-step={tableCornerGrowStepMetrics.columnStepPx}
+              data-row-step={tableCornerGrowStepMetrics.rowStepPx}
               onPointerDown={(event: React.PointerEvent<HTMLButtonElement>) => {
                 event.preventDefault()
                 event.stopPropagation()
                 try {
                   event.currentTarget.setPointerCapture(event.pointerId)
                 } catch {}
-                startTableCornerGrow(event.pointerId, event.clientX, event.clientY)
+                startTableCornerGrow(
+                  event.pointerId,
+                  event.clientX,
+                  event.clientY,
+                  getTableCornerGrowStepMetricsFromHandle(event.currentTarget)
+                )
               }}
               onMouseDown={(event: ReactMouseEvent<HTMLButtonElement>) => {
                 event.preventDefault()
                 if (tableCornerGrowRef.current) return
-                startTableCornerGrow(TABLE_CORNER_GROW_MOUSE_POINTER_ID, event.clientX, event.clientY)
+                startTableCornerGrow(
+                  TABLE_CORNER_GROW_MOUSE_POINTER_ID,
+                  event.clientX,
+                  event.clientY,
+                  getTableCornerGrowStepMetricsFromHandle(event.currentTarget)
+                )
               }}
               onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                 event.preventDefault()
@@ -10325,15 +10386,15 @@ const EditorViewport = styled.div`
     overflow-y: hidden;
     margin: 1rem 0;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    border-radius: 16px;
+    border-radius: 12px;
     background: ${({ theme }) =>
       theme.scheme === "dark"
-        ? "linear-gradient(180deg, rgba(18, 22, 29, 0.96), rgba(15, 18, 24, 0.96))"
-        : "linear-gradient(180deg, #ffffff, #fbfcfe)"};
+        ? "rgba(15, 18, 24, 0.9)"
+        : "rgba(255, 255, 255, 0.94)"};
     box-shadow: ${({ theme }) =>
       theme.scheme === "dark"
-        ? "0 18px 38px rgba(2, 6, 23, 0.28)"
-        : "0 18px 38px rgba(15, 23, 42, 0.08)"};
+        ? "0 1px 2px rgba(2, 6, 23, 0.2)"
+        : "0 1px 2px rgba(15, 23, 42, 0.04)"};
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
     overscroll-behavior-y: contain;
@@ -10345,13 +10406,13 @@ const EditorViewport = styled.div`
   }
 
   .aq-block-editor__content .tableWrapper:hover {
-    border-color: rgba(59, 130, 246, 0.24);
+    border-color: rgba(59, 130, 246, 0.18);
     box-shadow:
       ${({ theme }) =>
         theme.scheme === "dark"
-          ? "0 18px 38px rgba(2, 6, 23, 0.28)"
-          : "0 18px 38px rgba(15, 23, 42, 0.08)"},
-      0 0 0 1px rgba(59, 130, 246, 0.12);
+          ? "0 1px 2px rgba(2, 6, 23, 0.2)"
+          : "0 1px 2px rgba(15, 23, 42, 0.04)"},
+      0 0 0 1px rgba(59, 130, 246, 0.08);
   }
 
   .aq-block-editor__content .tableWrapper[data-overflow-mode="wide"] {

@@ -250,11 +250,18 @@ type FloatingBubbleState = {
   top: number
 }
 
+type TableOverlayAnchor = {
+  left: number
+  top: number
+}
+
 type TableAffordanceGeometry = {
   left: number
   top: number
   tableLeft: number
   tableTop: number
+  tableRight: number
+  tableBottom: number
   width: number
   height: number
   surfaceLeft: number
@@ -271,6 +278,12 @@ type TableAffordanceGeometry = {
   columnLeft: number
   columnWidth: number
   columnIndex: number
+  rowHandleAnchor: TableOverlayAnchor
+  columnHandleAnchor: TableOverlayAnchor
+  rowAddAnchor: TableOverlayAnchor
+  columnAddAnchor: TableOverlayAnchor
+  cornerAnchor: TableOverlayAnchor
+  cellMenuAnchor: TableOverlayAnchor
   columnSegments: Array<{
     left: number
     width: number
@@ -415,6 +428,8 @@ const INITIAL_TABLE_AFFORDANCE_GEOMETRY: TableAffordanceGeometry = {
   top: 0,
   tableLeft: 0,
   tableTop: 0,
+  tableRight: 0,
+  tableBottom: 0,
   width: 0,
   height: 0,
   surfaceLeft: 0,
@@ -431,6 +446,12 @@ const INITIAL_TABLE_AFFORDANCE_GEOMETRY: TableAffordanceGeometry = {
   columnLeft: 0,
   columnWidth: 0,
   columnIndex: 0,
+  rowHandleAnchor: { left: 0, top: 0 },
+  columnHandleAnchor: { left: 0, top: 0 },
+  rowAddAnchor: { left: 0, top: 0 },
+  columnAddAnchor: { left: 0, top: 0 },
+  cornerAnchor: { left: 0, top: 0 },
+  cellMenuAnchor: { left: 0, top: 0 },
   columnSegments: [],
 }
 
@@ -1061,54 +1082,28 @@ const clampViewportPosition = (
 const resolveDesktopTableRailLayout = (
   state: TableAffordanceGeometry
 ) => {
-  const visibleSurfaceLeft = Math.round(state.surfaceLeft || state.tableLeft)
-  const visibleSurfaceTop = Math.round(state.surfaceTop || state.tableTop)
-  const visibleTableWidth = Math.max(0, Math.round(state.surfaceWidth || state.width))
-  const visibleTableHeight = Math.max(0, Math.round(state.surfaceHeight || state.height))
-  const columnGripTop = Math.round(
-    visibleSurfaceTop - Math.round(TABLE_COLUMN_GRIP_HEIGHT_PX / 2) + TABLE_AXIS_GRIP_EDGE_INSET_PX
-  )
-  const cornerTop = Math.round(visibleSurfaceTop + TABLE_EDGE_HANDLE_INSET_PX)
-  const cornerLeft = Math.round(
-    visibleSurfaceLeft + visibleTableWidth - TABLE_CORNER_CLUSTER_WIDTH_PX - TABLE_EDGE_HANDLE_INSET_PX
-  )
-  const columnGripLeft = Math.round(
-    state.columnLeft + Math.max(0, state.columnWidth / 2 - TABLE_COLUMN_GRIP_WIDTH_PX / 2)
-  )
+  const columnGripTop = Math.round(state.columnHandleAnchor.top)
+  const cornerTop = Math.round(state.cornerAnchor.top)
+  const cornerLeft = Math.round(state.cornerAnchor.left)
+  const columnGripLeft = Math.round(state.columnHandleAnchor.left)
   const columnAddBarLeft =
     typeof window === "undefined"
-      ? Math.round(
-          visibleSurfaceLeft + visibleTableWidth - Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX
-        )
+      ? Math.round(state.columnAddAnchor.left)
       : clampViewportPosition(
-          Math.round(
-            visibleSurfaceLeft + visibleTableWidth - Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX
-          ),
+          Math.round(state.columnAddAnchor.left),
           TABLE_ADD_BAR_VIEWPORT_PADDING_PX,
           window.innerWidth,
           TABLE_EDGE_ADD_BUTTON_SIZE_PX
         )
-  const columnAddBarTop = Math.round(
-    visibleSurfaceTop + Math.max(0, visibleTableHeight / 2 - TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2)
-  )
-  const rowGripTop = Math.round(
-    state.rowTop + Math.max(0, state.rowHeight / 2 - TABLE_ROW_GRIP_HEIGHT_PX / 2)
-  )
-  const rowGripLeft = Math.round(
-    visibleSurfaceLeft - Math.round(TABLE_ROW_GRIP_WIDTH_PX / 2) + TABLE_AXIS_GRIP_EDGE_INSET_PX
-  )
-  const rowAddBarLeft = Math.round(
-    visibleSurfaceLeft + Math.max(0, visibleTableWidth / 2 - TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2)
-  )
+  const columnAddBarTop = Math.round(state.columnAddAnchor.top)
+  const rowGripTop = Math.round(state.rowHandleAnchor.top)
+  const rowGripLeft = Math.round(state.rowHandleAnchor.left)
+  const rowAddBarLeft = Math.round(state.rowAddAnchor.left)
   const rowAddBarTop =
     typeof window === "undefined"
-      ? Math.round(
-          visibleSurfaceTop + visibleTableHeight - Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX
-        )
+      ? Math.round(state.rowAddAnchor.top)
       : clampViewportPosition(
-          Math.round(
-            visibleSurfaceTop + visibleTableHeight - Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX
-          ),
+          Math.round(state.rowAddAnchor.top),
           TABLE_ADD_BAR_VIEWPORT_PADDING_PX,
           window.innerHeight,
           TABLE_EDGE_ADD_BUTTON_SIZE_PX
@@ -1116,26 +1111,18 @@ const resolveDesktopTableRailLayout = (
 
   const cellMenuLeft =
     typeof window === "undefined"
-      ? Math.round(
-          state.cellLeft + state.cellWidth - Math.round(TABLE_CELL_MENU_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX
-        )
+      ? Math.round(state.cellMenuAnchor.left)
       : clampViewportPosition(
-          Math.round(
-            state.cellLeft + state.cellWidth - Math.round(TABLE_CELL_MENU_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX
-          ),
+          Math.round(state.cellMenuAnchor.left),
           TABLE_ADD_BAR_VIEWPORT_PADDING_PX,
           window.innerWidth,
           TABLE_CELL_MENU_BUTTON_SIZE_PX
         )
   const cellMenuTop =
     typeof window === "undefined"
-      ? Math.round(
-          state.cellTop + Math.max(0, state.cellHeight / 2 - TABLE_CELL_MENU_BUTTON_SIZE_PX / 2)
-        )
+      ? Math.round(state.cellMenuAnchor.top)
       : clampViewportPosition(
-          Math.round(
-            state.cellTop + Math.max(0, state.cellHeight / 2 - TABLE_CELL_MENU_BUTTON_SIZE_PX / 2)
-          ),
+          Math.round(state.cellMenuAnchor.top),
           TABLE_ADD_BAR_VIEWPORT_PADDING_PX,
           window.innerHeight,
           TABLE_CELL_MENU_BUTTON_SIZE_PX
@@ -4233,14 +4220,13 @@ const BlockEditorEngine = ({
       tableSurfaceElement instanceof HTMLTableElement
         ? tableSurfaceElement
         : (tableSurfaceElement?.querySelector("table") as HTMLTableElement | null)
-    const tableSurfaceRect = tableSurfaceElement?.getBoundingClientRect()
     const tableRect = tableElement?.getBoundingClientRect()
     const hasHoverPoint =
       typeof hoverClientX === "number" &&
       Number.isFinite(hoverClientX) &&
       typeof hoverClientY === "number" &&
       Number.isFinite(hoverClientY)
-    if (!tableElement || !tableRect || !tableSurfaceRect) {
+    if (!tableElement || !tableRect) {
       activeTableElementRef.current = null
       hoveredTableElementRef.current = null
       tableHoverAnchorLockUntilRef.current = 0
@@ -4267,10 +4253,10 @@ const BlockEditorEngine = ({
     const activeColumnRight = activeCellRect?.right ?? tableRect.right
     const activeRowTopBound = activeRowRect?.top ?? tableRect.top
     const activeRowBottomBound = activeRowRect?.bottom ?? tableRect.bottom
-    const visibleLeft = Math.round(tableSurfaceRect.left)
-    const visibleTop = Math.round(tableSurfaceRect.top)
-    const visibleRight = Math.round(tableSurfaceRect.right)
-    const visibleBottom = Math.round(tableSurfaceRect.bottom)
+    const visibleLeft = Math.round(tableRect.left)
+    const visibleTop = Math.round(tableRect.top)
+    const visibleRight = Math.round(tableRect.right)
+    const visibleBottom = Math.round(tableRect.bottom)
     const showColumnAddBar =
       hasHoverPoint &&
       hoverClientX >= visibleRight - TABLE_TRAILING_ADD_EDGE_HOTZONE_PX &&
@@ -4317,27 +4303,105 @@ const BlockEditorEngine = ({
           width: Math.round(cellRect.width),
         }
       })
+    const tableLeft = Math.round(tableRect.left)
+    const tableTop = Math.round(tableRect.top)
+    const tableWidth = Math.round(tableRect.width)
+    const tableHeight = Math.round(tableRect.height)
+    const tableRight = tableLeft + tableWidth
+    const tableBottom = tableTop + tableHeight
+    const cellLeft = Math.round(activeCellRect?.left ?? tableRect.left + 16)
+    const cellTop = Math.round(activeCellRect?.top ?? tableRect.top + 16)
+    const cellWidth = Math.round(activeCellRect?.width ?? 120)
+    const cellHeight = Math.round(activeCellRect?.height ?? 44)
+    const rowTop = Math.round(activeRowRect?.top ?? tableRect.top + 52)
+    const rowHeight = Math.round(activeRowRect?.height ?? 44)
+    const columnLeft = Math.round(activeCellRect?.left ?? tableRect.left + 72)
+    const columnWidth = Math.round(activeCellRect?.width ?? 120)
+    const rowHandleAnchor = {
+      left: Math.round(tableLeft - Math.round(TABLE_ROW_GRIP_WIDTH_PX / 2) + TABLE_AXIS_GRIP_EDGE_INSET_PX),
+      top: Math.round(rowTop + Math.max(0, rowHeight / 2 - TABLE_ROW_GRIP_HEIGHT_PX / 2)),
+    }
+    const columnHandleAnchor = {
+      left: Math.round(columnLeft + Math.max(0, columnWidth / 2 - TABLE_COLUMN_GRIP_WIDTH_PX / 2)),
+      top: Math.round(tableTop - Math.round(TABLE_COLUMN_GRIP_HEIGHT_PX / 2) + TABLE_AXIS_GRIP_EDGE_INSET_PX),
+    }
+    const columnAddAnchor = {
+      left:
+        typeof window === "undefined"
+          ? Math.round(tableRight - Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX)
+          : clampViewportPosition(
+              Math.round(tableRight - Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX),
+              TABLE_ADD_BAR_VIEWPORT_PADDING_PX,
+              window.innerWidth,
+              TABLE_EDGE_ADD_BUTTON_SIZE_PX
+            ),
+      top: Math.round(tableTop + Math.max(0, tableHeight / 2 - TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2)),
+    }
+    const rowAddAnchor = {
+      left: Math.round(tableLeft + Math.max(0, tableWidth / 2 - TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2)),
+      top:
+        typeof window === "undefined"
+          ? Math.round(tableBottom - Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX)
+          : clampViewportPosition(
+              Math.round(tableBottom - Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX),
+              TABLE_ADD_BAR_VIEWPORT_PADDING_PX,
+              window.innerHeight,
+              TABLE_EDGE_ADD_BUTTON_SIZE_PX
+            ),
+    }
+    const cornerAnchor = {
+      left: Math.round(tableLeft + Math.max(0, tableWidth - TABLE_CORNER_CLUSTER_WIDTH_PX - TABLE_EDGE_HANDLE_INSET_PX)),
+      top: Math.round(tableTop + TABLE_EDGE_HANDLE_INSET_PX),
+    }
+    const cellMenuAnchor = {
+      left:
+        typeof window === "undefined"
+          ? Math.round(cellLeft + cellWidth - Math.round(TABLE_CELL_MENU_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX)
+          : clampViewportPosition(
+              Math.round(cellLeft + cellWidth - Math.round(TABLE_CELL_MENU_BUTTON_SIZE_PX / 2) - TABLE_EDGE_HANDLE_INSET_PX),
+              TABLE_ADD_BAR_VIEWPORT_PADDING_PX,
+              window.innerWidth,
+              TABLE_CELL_MENU_BUTTON_SIZE_PX
+            ),
+      top:
+        typeof window === "undefined"
+          ? Math.round(cellTop + Math.max(0, cellHeight / 2 - TABLE_CELL_MENU_BUTTON_SIZE_PX / 2))
+          : clampViewportPosition(
+              Math.round(cellTop + Math.max(0, cellHeight / 2 - TABLE_CELL_MENU_BUTTON_SIZE_PX / 2)),
+              TABLE_ADD_BAR_VIEWPORT_PADDING_PX,
+              window.innerHeight,
+              TABLE_CELL_MENU_BUTTON_SIZE_PX
+            ),
+    }
     setTableAffordanceGeometry({
-      left: Math.round(Math.max(12, tableRect.left - 46)),
-      top: Math.round(tableRect.top + 10),
-      tableLeft: Math.round(tableRect.left),
-      tableTop: Math.round(tableRect.top),
-      width: Math.round(tableRect.width),
-      height: Math.round(tableRect.height),
-      surfaceLeft: visibleLeft,
-      surfaceTop: visibleTop,
-      surfaceWidth: Math.round(tableSurfaceRect.width),
-      surfaceHeight: Math.round(tableSurfaceRect.height),
-      cellLeft: Math.round(activeCellRect?.left ?? tableRect.left + 16),
-      cellTop: Math.round(activeCellRect?.top ?? tableRect.top + 16),
-      cellWidth: Math.round(activeCellRect?.width ?? 120),
-      cellHeight: Math.round(activeCellRect?.height ?? 44),
+      left: rowHandleAnchor.left,
+      top: cornerAnchor.top,
+      tableLeft,
+      tableTop,
+      tableRight,
+      tableBottom,
+      width: tableWidth,
+      height: tableHeight,
+      surfaceLeft: tableLeft,
+      surfaceTop: tableTop,
+      surfaceWidth: tableWidth,
+      surfaceHeight: tableHeight,
+      cellLeft,
+      cellTop,
+      cellWidth,
+      cellHeight,
       rowIndex: activeRowIndex >= 0 ? activeRowIndex : 0,
-      rowTop: Math.round(activeRowRect?.top ?? tableRect.top + 52),
-      rowHeight: Math.round(activeRowRect?.height ?? 44),
-      columnLeft: Math.round(activeCellRect?.left ?? tableRect.left + 72),
-      columnWidth: Math.round(activeCellRect?.width ?? 120),
+      rowTop,
+      rowHeight,
+      columnLeft,
+      columnWidth,
       columnIndex: activeColumnIndex >= 0 ? activeColumnIndex : 0,
+      rowHandleAnchor,
+      columnHandleAnchor,
+      rowAddAnchor,
+      columnAddAnchor,
+      cornerAnchor,
+      cellMenuAnchor,
       columnSegments: firstRowCells,
     })
     setTableAffordanceVisibility((prev) => ({
@@ -6376,14 +6440,32 @@ const BlockEditorEngine = ({
     [blockInsertCatalog]
   )
 
+  const hasRenderedTableEditingContext = useMemo(() => {
+    if (typeof window === "undefined") return false
+    void selectionTick
+
+    const activeElement = document.activeElement instanceof Element ? document.activeElement : null
+    if (activeElement?.closest(".aq-block-editor__content td, .aq-block-editor__content th")) {
+      return true
+    }
+
+    const domSelection = window.getSelection()
+    const anchorNode = domSelection?.anchorNode ?? null
+    const anchorElement =
+      anchorNode instanceof Element ? anchorNode : anchorNode?.parentElement ?? null
+
+    return Boolean(anchorElement?.closest(".aq-block-editor__content td, .aq-block-editor__content th"))
+  }, [selectionTick])
+
   const isQuickInsertActionDisabled = useCallback(
     (action: BlockInsertCatalogItem) =>
       Boolean(
         disabled ||
         action.disabled ||
-        (isTableMode && TABLE_CONTEXT_BLOCKED_INSERT_IDS.has(action.id))
+        ((isTableMode || hasRenderedTableEditingContext) &&
+          TABLE_CONTEXT_BLOCKED_INSERT_IDS.has(action.id))
       ),
-    [disabled, isTableMode]
+    [disabled, hasRenderedTableEditingContext, isTableMode]
   )
 
   const normalizedSlashQuery = normalizeSlashSearchText(slashQuery)
@@ -8103,15 +8185,12 @@ const BlockEditorEngine = ({
                 scheduleTableQuickRailHide()
               }
             }}
-            style={{
-              left: `${
-                desktopTableRailLayout?.cornerLeft ??
-                Math.round(
-                  tableAffordanceGeometry.tableLeft +
-                      Math.max(0, tableAffordanceGeometry.width - TABLE_CORNER_CLUSTER_WIDTH_PX - TABLE_EDGE_HANDLE_INSET_PX)
-                  )
+              style={{
+                left: `${
+                  desktopTableRailLayout?.cornerLeft ??
+                  Math.round(tableAffordanceGeometry.cornerAnchor.left)
               }px`,
-                top: `${desktopTableRailLayout?.cornerTop ?? Math.round(tableAffordanceGeometry.tableTop + TABLE_EDGE_HANDLE_INSET_PX)}px`,
+                top: `${desktopTableRailLayout?.cornerTop ?? Math.round(tableAffordanceGeometry.cornerAnchor.top)}px`,
               }}
           >
             <TableCornerGrowButton
@@ -8180,15 +8259,11 @@ const BlockEditorEngine = ({
               style={{
                 left: `${
                   desktopTableRailLayout?.rowGripLeft ??
-                  Math.round(
-                    tableAffordanceGeometry.tableLeft - Math.round(TABLE_ROW_GRIP_WIDTH_PX / 2) + TABLE_AXIS_GRIP_EDGE_INSET_PX
-                  )
+                  Math.round(tableAffordanceGeometry.rowHandleAnchor.left)
                 }px`,
                 top: `${
                   desktopTableRailLayout?.rowGripTop ??
-                  Math.round(
-                    tableAffordanceGeometry.rowTop + Math.max(0, tableAffordanceGeometry.rowHeight / 2 - TABLE_ROW_GRIP_HEIGHT_PX / 2)
-                  )
+                  Math.round(tableAffordanceGeometry.rowHandleAnchor.top)
                 }px`,
               }}
             >
@@ -8234,15 +8309,11 @@ const BlockEditorEngine = ({
               style={{
                 left: `${
                   desktopTableRailLayout?.columnGripLeft ??
-                  Math.round(
-                    tableAffordanceGeometry.columnLeft + Math.max(0, tableAffordanceGeometry.columnWidth / 2 - TABLE_COLUMN_GRIP_WIDTH_PX / 2)
-                  )
+                  Math.round(tableAffordanceGeometry.columnHandleAnchor.left)
                 }px`,
                 top: `${
                   desktopTableRailLayout?.columnGripTop ??
-                  Math.round(
-                    tableAffordanceGeometry.tableTop - Math.round(TABLE_COLUMN_GRIP_HEIGHT_PX / 2) + TABLE_AXIS_GRIP_EDGE_INSET_PX
-                  )
+                  Math.round(tableAffordanceGeometry.columnHandleAnchor.top)
                 }px`,
               }}
             >
@@ -8303,18 +8374,11 @@ const BlockEditorEngine = ({
               style={{
                 left: `${
                   desktopTableRailLayout?.columnAddBarLeft ??
-                  Math.round(
-                    tableAffordanceGeometry.tableLeft +
-                      tableAffordanceGeometry.width -
-                      Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) -
-                      TABLE_EDGE_HANDLE_INSET_PX
-                  )
+                  Math.round(tableAffordanceGeometry.columnAddAnchor.left)
                 }px`,
                 top: `${
                   desktopTableRailLayout?.columnAddBarTop ??
-                  Math.round(
-                    tableAffordanceGeometry.tableTop + Math.max(0, tableAffordanceGeometry.height / 2 - TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2)
-                  )
+                  Math.round(tableAffordanceGeometry.columnAddAnchor.top)
                 }px`,
               }}
             >
@@ -8344,18 +8408,11 @@ const BlockEditorEngine = ({
               style={{
                 left: `${
                   desktopTableRailLayout?.rowAddBarLeft ??
-                  Math.round(
-                    tableAffordanceGeometry.tableLeft + Math.max(0, tableAffordanceGeometry.width / 2 - TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2)
-                  )
+                  Math.round(tableAffordanceGeometry.rowAddAnchor.left)
                 }px`,
                 top: `${
                   desktopTableRailLayout?.rowAddBarTop ??
-                  Math.round(
-                    tableAffordanceGeometry.tableTop +
-                      tableAffordanceGeometry.height -
-                      Math.round(TABLE_EDGE_ADD_BUTTON_SIZE_PX / 2) -
-                      TABLE_EDGE_HANDLE_INSET_PX
-                  )
+                  Math.round(tableAffordanceGeometry.rowAddAnchor.top)
                 }px`,
               }}
             >
@@ -8386,20 +8443,12 @@ const BlockEditorEngine = ({
                 left: `${
                   (isTableQuickRailHovered ? hoveredTableCellMenuLayout?.cellMenuLeft : null) ??
                   desktopTableRailLayout?.cellMenuLeft ??
-                  Math.round(
-                    tableAffordanceGeometry.cellLeft +
-                      tableAffordanceGeometry.cellWidth -
-                      Math.round(TABLE_CELL_MENU_BUTTON_SIZE_PX / 2) -
-                      TABLE_EDGE_HANDLE_INSET_PX
-                  )
+                  Math.round(tableAffordanceGeometry.cellMenuAnchor.left)
                 }px`,
                 top: `${
                   (isTableQuickRailHovered ? hoveredTableCellMenuLayout?.cellMenuTop : null) ??
                   desktopTableRailLayout?.cellMenuTop ??
-                  Math.round(
-                    tableAffordanceGeometry.cellTop +
-                      Math.max(0, tableAffordanceGeometry.cellHeight / 2 - TABLE_CELL_MENU_BUTTON_SIZE_PX / 2)
-                  )
+                  Math.round(tableAffordanceGeometry.cellMenuAnchor.top)
                 }px`,
               }}
             >

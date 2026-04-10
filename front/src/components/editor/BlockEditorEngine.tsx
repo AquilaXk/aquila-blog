@@ -296,6 +296,8 @@ type TableAffordanceVisibility = {
   showRowRail: boolean
   showColumnAddBar: boolean
   showRowAddBar: boolean
+  showCornerControls: boolean
+  showCellMenu: boolean
 }
 
 type TableMenuKind = "row" | "column" | "table" | "cell"
@@ -461,6 +463,8 @@ const INITIAL_TABLE_AFFORDANCE_VISIBILITY: TableAffordanceVisibility = {
   showRowRail: false,
   showColumnAddBar: false,
   showRowAddBar: false,
+  showCornerControls: false,
+  showCellMenu: false,
 }
 
 type BlockSelectionPointerEventLike = {
@@ -2161,6 +2165,7 @@ const BlockEditorEngine = ({
   const [isBubbleInlineColorMenuOpen, setIsBubbleInlineColorMenuOpen] = useState(false)
   const [blockMenuState, setBlockMenuState] = useState<BlockMenuState>(null)
   const [isCoarsePointer, setIsCoarsePointer] = useState(false)
+  const [isNarrowTableViewport, setIsNarrowTableViewport] = useState(false)
   const [hoveredBlockIndex, setHoveredBlockIndex] = useState<number | null>(null)
   const [selectedBlockIndex, setSelectedBlockIndex] = useState<number | null>(null)
   const [clickedBlockIndex, setClickedBlockIndex] = useState<number | null>(null)
@@ -4307,8 +4312,17 @@ const BlockEditorEngine = ({
     const visibleTop = Math.round(tableRect.top)
     const visibleRight = Math.round(tableRect.right)
     const visibleBottom = Math.round(tableRect.bottom)
+    const cornerHotzoneWidth = TABLE_CORNER_CLUSTER_WIDTH_PX + TABLE_EDGE_HANDLE_INSET_PX
+    const cornerHotzoneHeight = TABLE_CORNER_BUTTON_SIZE_PX + TABLE_EDGE_HANDLE_INSET_PX
+    const showCornerControls =
+      hasHoverPoint &&
+      hoverClientX >= visibleRight - cornerHotzoneWidth &&
+      hoverClientX <= visibleRight + TABLE_EDGE_HANDLE_INSET_PX &&
+      hoverClientY >= visibleTop - TABLE_EDGE_HANDLE_INSET_PX &&
+      hoverClientY <= visibleTop + cornerHotzoneHeight
     const showColumnAddBar =
       hasHoverPoint &&
+      !showCornerControls &&
       hoverClientX >= visibleRight - TABLE_TRAILING_ADD_EDGE_HOTZONE_PX &&
       hoverClientX <= visibleRight + TABLE_ADD_BAR_THICKNESS_PX &&
       hoverClientY >= visibleTop &&
@@ -4316,6 +4330,7 @@ const BlockEditorEngine = ({
     const showColumnRail =
       hasHoverPoint &&
       Boolean(activeCellRect) &&
+      !showCornerControls &&
       hoverClientY >= visibleTop - TABLE_COLUMN_GRIP_HEIGHT_PX &&
       hoverClientY <= visibleTop + TABLE_AXIS_RAIL_EDGE_HOTZONE_PX &&
       hoverClientX >= activeColumnLeft &&
@@ -4333,6 +4348,14 @@ const BlockEditorEngine = ({
       hoverClientX <= visibleLeft + TABLE_AXIS_RAIL_EDGE_HOTZONE_PX &&
       hoverClientY >= activeRowTopBound &&
       hoverClientY <= activeRowBottomBound
+    const showCellMenu =
+      hasHoverPoint &&
+      Boolean(hoveredCell) &&
+      !showColumnRail &&
+      !showRowRail &&
+      !showColumnAddBar &&
+      !showRowAddBar &&
+      !showCornerControls
     const activeRowIndex = activeRow
       ? Array.from(tableElement.querySelectorAll("tr")).findIndex((row) => row === activeRow)
       : 0
@@ -4460,6 +4483,8 @@ const BlockEditorEngine = ({
       showRowRail: hasHoverPoint ? showRowRail : prev.showRowRail,
       showColumnAddBar: hasHoverPoint ? showColumnAddBar : prev.showColumnAddBar,
       showRowAddBar: hasHoverPoint ? showRowAddBar : prev.showRowAddBar,
+      showCornerControls: hasHoverPoint ? showCornerControls : prev.showCornerControls,
+      showCellMenu: hasHoverPoint ? showCellMenu : prev.showCellMenu,
     }))
   }, [cancelTableQuickRailHide, hideTableQuickRailImmediately, syncHoveredTableCellMenuLayout])
 
@@ -6061,19 +6086,64 @@ const BlockEditorEngine = ({
     }
     return null
   }, [editor, isTableStructuralSelection, selectionTick])
-  const isTableStructureMenuOpen = Boolean(tableMenuState)
+  const tableMenuKind = tableMenuState?.kind ?? null
+  const isAnyTableMenuOpen = tableMenuKind !== null
+  const isTableStructureMenuOpen = tableMenuKind === "table"
+  const isRowMenuOpen = tableMenuKind === "row"
+  const isColumnMenuOpen = tableMenuKind === "column"
+  const isCellMenuOpen = tableMenuKind === "cell"
+  const hasActiveTableCellContext = useMemo(() => {
+    if (!editor || isTableStructuralSelection) return false
+    void selectionTick
+    return Boolean(editor.isActive("tableCell") || editor.isActive("tableHeader"))
+  }, [editor, isTableStructuralSelection, selectionTick])
   const shouldPersistTableHandles =
-    isTableStructuralSelection || isTableStructureMenuOpen || Boolean(draggedTableAxisState)
+    isTableStructuralSelection || isAnyTableMenuOpen || Boolean(draggedTableAxisState) || isTableCornerGrowActive
+  const shouldUseCompactTableAffordance = isCoarsePointer || isNarrowTableViewport
+  const shouldShowDesktopTableHandles =
+    !shouldUseCompactTableAffordance &&
+    (tableAffordanceVisibility.visible || isTableQuickRailHovered || shouldPersistTableHandles || isTableColumnResizeActive)
+  const compactTableAffordanceKind = useMemo(() => {
+    if (!shouldUseCompactTableAffordance) return null
+    if (currentTableAxisSelection?.axis === "row" || draggedTableAxisState?.axis === "row" || isRowMenuOpen) {
+      return "row" as const
+    }
+    if (currentTableAxisSelection?.axis === "column" || draggedTableAxisState?.axis === "column" || isColumnMenuOpen) {
+      return "column" as const
+    }
+    if (tableAffordanceVisibility.visible || shouldPersistTableHandles || isTableStructureMenuOpen || hasActiveTableCellContext) {
+      return "table" as const
+    }
+    return null
+  }, [
+    currentTableAxisSelection?.axis,
+    draggedTableAxisState?.axis,
+    hasActiveTableCellContext,
+    isColumnMenuOpen,
+    isRowMenuOpen,
+    isTableStructureMenuOpen,
+    shouldPersistTableHandles,
+    shouldUseCompactTableAffordance,
+    tableAffordanceVisibility.visible,
+  ])
   const shouldShowColumnRail =
-    tableAffordanceVisibility.showColumnRail ||
-    currentTableAxisSelection?.axis === "column" ||
-    draggedTableAxisState?.axis === "column"
+    compactTableAffordanceKind === "column" ||
+    (shouldShowDesktopTableHandles &&
+      (tableAffordanceVisibility.showColumnRail ||
+        currentTableAxisSelection?.axis === "column" ||
+        draggedTableAxisState?.axis === "column" ||
+        isColumnMenuOpen))
   const shouldShowRowRail =
-    tableAffordanceVisibility.showRowRail ||
-    currentTableAxisSelection?.axis === "row" ||
-    draggedTableAxisState?.axis === "row"
-  const shouldShowColumnAddBar = tableAffordanceVisibility.showColumnAddBar || isTableStructureMenuOpen
-  const shouldShowRowAddBar = tableAffordanceVisibility.showRowAddBar || isTableStructureMenuOpen
+    compactTableAffordanceKind === "row" ||
+    (shouldShowDesktopTableHandles &&
+      (tableAffordanceVisibility.showRowRail ||
+        currentTableAxisSelection?.axis === "row" ||
+        draggedTableAxisState?.axis === "row" ||
+        isRowMenuOpen))
+  const shouldShowColumnAddBar =
+    shouldShowDesktopTableHandles && (tableAffordanceVisibility.showColumnAddBar || isColumnMenuOpen)
+  const shouldShowRowAddBar =
+    shouldShowDesktopTableHandles && (tableAffordanceVisibility.showRowAddBar || isRowMenuOpen)
   const activeTableStructureState = useMemo(() => {
     void selectionTick
     return getActiveTableStructureState(editor)
@@ -7377,6 +7447,15 @@ const BlockEditorEngine = ({
   }, [])
 
   useEffect(() => {
+    if (typeof window === "undefined") return
+    const mediaQuery = window.matchMedia(DESKTOP_TABLE_RAIL_MEDIA_QUERY)
+    const sync = () => setIsNarrowTableViewport(mediaQuery.matches)
+    sync()
+    mediaQuery.addEventListener?.("change", sync)
+    return () => mediaQuery.removeEventListener?.("change", sync)
+  }, [])
+
+  useEffect(() => {
     return () => {
       clearPendingBlockDrag()
     }
@@ -8111,22 +8190,44 @@ const BlockEditorEngine = ({
     }
   }, [tableMenuState])
 
-  const shouldShowTableHandles =
-    !isCoarsePointer &&
-    (tableAffordanceVisibility.visible || isTableQuickRailHovered || shouldPersistTableHandles || isTableColumnResizeActive)
-  const shouldShowTableCellMenu = shouldShowTableHandles && currentTableAxisSelection === null
+  const shouldShowTableCellMenu =
+    currentTableAxisSelection === null &&
+    !shouldUseCompactTableAffordance &&
+    (isCellMenuOpen ||
+      ((tableAffordanceVisibility.showCellMenu || hasActiveTableCellContext) &&
+        !tableAffordanceVisibility.showColumnRail &&
+        !tableAffordanceVisibility.showRowRail &&
+        !tableAffordanceVisibility.showColumnAddBar &&
+        !tableAffordanceVisibility.showRowAddBar &&
+        !tableAffordanceVisibility.showCornerControls))
+  const shouldShowCornerControls =
+    shouldShowDesktopTableHandles &&
+    (tableAffordanceVisibility.showCornerControls ||
+      isTableStructureMenuOpen ||
+      isTableCornerGrowActive ||
+      (isTableStructuralSelection && currentTableAxisSelection === null))
+  const shouldShowGrowHandle = shouldShowCornerControls
+  const shouldShowStructureMenuButton =
+    compactTableAffordanceKind === "table" || shouldShowCornerControls
+  const shouldRenderTableAffordanceOverlay =
+    shouldShowDesktopTableHandles ||
+    shouldShowRowRail ||
+    shouldShowColumnRail ||
+    shouldShowRowAddBar ||
+    shouldShowColumnAddBar ||
+    shouldShowStructureMenuButton ||
+    shouldShowTableCellMenu
   const desktopTableRailLayout = useMemo(() => {
     if (typeof window === "undefined") return null
     return resolveDesktopTableRailLayout(tableAffordanceGeometry)
   }, [tableAffordanceGeometry])
   const tableCornerGrowStepMetrics = getTableCornerGrowStepMetrics()
-  const tableMenuKind = tableMenuState?.kind ?? null
   const shouldShowCellMergeSection = canMergeSelectedTableCells || canSplitSelectedTableCell
 
   useEffect(() => {
-    if (shouldShowTableHandles) return
+    if (shouldShowDesktopTableHandles) return
     hideTableColumnDragGuide()
-  }, [hideTableColumnDragGuide, shouldShowTableHandles])
+  }, [hideTableColumnDragGuide, shouldShowDesktopTableHandles])
 
   const tableOverlay = (
     <>
@@ -8181,7 +8282,7 @@ const BlockEditorEngine = ({
           }}
         />
       ) : null}
-      {shouldShowTableHandles
+      {shouldShowDesktopTableHandles
         ? !tableColumnDragGuideState.visible
           ? tableAffordanceGeometry.columnSegments.map((segment, index) => {
             const isOuterEdge = index === tableAffordanceGeometry.columnSegments.length - 1
@@ -8221,7 +8322,7 @@ const BlockEditorEngine = ({
           })
           : null
         : null}
-      {shouldShowTableHandles ? (
+      {shouldRenderTableAffordanceOverlay ? (
         <>
           {isCurrentTableColumnSelection(tableAffordanceGeometry.columnIndex) ? (
             <TableAxisSelectionOutline
@@ -8247,85 +8348,93 @@ const BlockEditorEngine = ({
               }}
             />
           ) : null}
-          <TableCornerHandle
-            data-table-corner-handle="true"
-            data-testid="table-corner-handle"
-            onPointerEnter={cancelTableQuickRailHide}
-            onPointerLeave={() => {
-              if (!shouldPersistTableHandles) {
-                scheduleTableQuickRailHide()
-              }
-            }}
+          {shouldShowStructureMenuButton || shouldShowGrowHandle ? (
+            <TableCornerHandle
+              data-table-corner-handle="true"
+              data-testid="table-corner-handle"
+              data-compact={compactTableAffordanceKind === "table"}
+              onPointerEnter={cancelTableQuickRailHide}
+              onPointerLeave={() => {
+                if (!shouldPersistTableHandles) {
+                  scheduleTableQuickRailHide()
+                }
+              }}
               style={{
                 left: `${
                   desktopTableRailLayout?.cornerLeft ??
                   Math.round(tableAffordanceGeometry.cornerAnchor.left)
-              }px`,
+                }px`,
                 top: `${desktopTableRailLayout?.cornerTop ?? Math.round(tableAffordanceGeometry.cornerAnchor.top)}px`,
               }}
-          >
-            <TableCornerGrowButton
-              type="button"
-              title="표 크기 조절"
-              aria-label="표 크기 조절"
-              data-testid="table-corner-grow-handle"
-              data-table-affordance="grow-handle"
-              data-table-menu-trigger="true"
-              data-active={isTableCornerGrowActive}
-              data-column-step={tableCornerGrowStepMetrics.columnStepPx}
-              data-row-step={tableCornerGrowStepMetrics.rowStepPx}
-              onPointerDown={(event: React.PointerEvent<HTMLButtonElement>) => {
-                event.preventDefault()
-                event.stopPropagation()
-                try {
-                  event.currentTarget.setPointerCapture(event.pointerId)
-                } catch {}
-                startTableCornerGrow(
-                  event.pointerId,
-                  event.clientX,
-                  event.clientY,
-                  getTableCornerGrowStepMetricsFromHandle(event.currentTarget)
-                )
-              }}
-              onMouseDown={(event: ReactMouseEvent<HTMLButtonElement>) => {
-                event.preventDefault()
-                if (tableCornerGrowRef.current) return
-                startTableCornerGrow(
-                  TABLE_CORNER_GROW_MOUSE_POINTER_ID,
-                  event.clientX,
-                  event.clientY,
-                  getTableCornerGrowStepMetricsFromHandle(event.currentTarget)
-                )
-              }}
-              onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
-                event.preventDefault()
-                event.stopPropagation()
-                if (tableCornerGrowSuppressClickRef.current) {
-                  tableCornerGrowSuppressClickRef.current = false
-                  return
-                }
-                growTableFromCorner()
-              }}
             >
-              <TableHandleIcon kind="grow" />
-            </TableCornerGrowButton>
-            <TableHandleButton
-              type="button"
-              title="표 구조 메뉴"
-              aria-label="표 구조 메뉴"
-              data-testid="table-structure-menu-button"
-              data-table-affordance="structure-menu"
-              data-table-menu-trigger="true"
-              onMouseDown={handleToolbarButtonMouseDown}
-              onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
-                event.preventDefault()
-                event.stopPropagation()
-                openSelectionAwareTableMenu("table", event.currentTarget.getBoundingClientRect())
-              }}
-            >
-              <TableHandleIcon kind="more" />
-            </TableHandleButton>
-          </TableCornerHandle>
+              {shouldShowGrowHandle ? (
+                <TableCornerGrowButton
+                  type="button"
+                  title="표 크기 조절"
+                  aria-label="표 크기 조절"
+                  data-testid="table-corner-grow-handle"
+                  data-table-affordance="grow-handle"
+                  data-table-menu-trigger="true"
+                  data-active={isTableCornerGrowActive}
+                  data-column-step={tableCornerGrowStepMetrics.columnStepPx}
+                  data-row-step={tableCornerGrowStepMetrics.rowStepPx}
+                  onPointerDown={(event: React.PointerEvent<HTMLButtonElement>) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    try {
+                      event.currentTarget.setPointerCapture(event.pointerId)
+                    } catch {}
+                    startTableCornerGrow(
+                      event.pointerId,
+                      event.clientX,
+                      event.clientY,
+                      getTableCornerGrowStepMetricsFromHandle(event.currentTarget)
+                    )
+                  }}
+                  onMouseDown={(event: ReactMouseEvent<HTMLButtonElement>) => {
+                    event.preventDefault()
+                    if (tableCornerGrowRef.current) return
+                    startTableCornerGrow(
+                      TABLE_CORNER_GROW_MOUSE_POINTER_ID,
+                      event.clientX,
+                      event.clientY,
+                      getTableCornerGrowStepMetricsFromHandle(event.currentTarget)
+                    )
+                  }}
+                  onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    if (tableCornerGrowSuppressClickRef.current) {
+                      tableCornerGrowSuppressClickRef.current = false
+                      return
+                    }
+                    growTableFromCorner()
+                  }}
+                >
+                  <TableHandleIcon kind="grow" />
+                </TableCornerGrowButton>
+              ) : null}
+              {shouldShowStructureMenuButton ? (
+                <TableHandleButton
+                  type="button"
+                  title="표 구조 메뉴"
+                  aria-label="표 구조 메뉴"
+                  data-testid="table-structure-menu-button"
+                  data-table-affordance="structure-menu"
+                  data-table-menu-trigger="true"
+                  data-compact={compactTableAffordanceKind === "table"}
+                  onMouseDown={handleToolbarButtonMouseDown}
+                  onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    openSelectionAwareTableMenu("table", event.currentTarget.getBoundingClientRect())
+                  }}
+                >
+                  <TableHandleIcon kind="more" />
+                </TableHandleButton>
+              ) : null}
+            </TableCornerHandle>
+          ) : null}
           {shouldShowRowRail ? (
             <TableAxisRail
               data-table-axis-rail="true"
@@ -8353,6 +8462,7 @@ const BlockEditorEngine = ({
                 data-axis="row"
                 data-table-affordance="row-handle"
                 data-active={isCurrentTableRowSelection(tableAffordanceGeometry.rowIndex)}
+                data-compact={compactTableAffordanceKind === "row"}
                 title="행 메뉴"
                 aria-label="행 메뉴"
                 onMouseDown={handleToolbarButtonMouseDown}
@@ -8403,6 +8513,7 @@ const BlockEditorEngine = ({
                 data-axis="column"
                 data-table-affordance="column-handle"
                 data-active={isCurrentTableColumnSelection(tableAffordanceGeometry.columnIndex)}
+                data-compact={compactTableAffordanceKind === "column"}
                 title="열 메뉴"
                 aria-label="열 메뉴"
                 onMouseDown={handleToolbarButtonMouseDown}
@@ -10902,6 +11013,10 @@ const TableCornerHandle = styled.div`
   justify-content: center;
   gap: ${TABLE_CORNER_CLUSTER_GAP_PX}px;
   pointer-events: auto;
+
+  &[data-compact="true"] {
+    gap: 0;
+  }
 `
 
 const TableColumnRailTrack = styled.div`
@@ -11172,6 +11287,13 @@ const TableQuickRailButton = styled.button`
     color: #ffffff;
     box-shadow: 0 8px 20px rgba(37, 99, 235, 0.32);
   }
+
+  &[data-compact="true"] {
+    min-width: 30px;
+    min-height: 30px;
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "dark" ? "0 10px 20px rgba(2, 6, 23, 0.32)" : "0 10px 20px rgba(15, 23, 42, 0.14)"};
+  }
 `
 
 const TableHandleButton = styled(TableQuickRailButton)`
@@ -11193,6 +11315,19 @@ const TableHandleButton = styled(TableQuickRailButton)`
     color: ${({ theme }) => (theme.scheme === "dark" ? "#ffffff" : "rgba(30, 41, 59, 0.92)")};
     box-shadow: none;
   }
+
+  &[data-compact="true"] {
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(15, 23, 42, 0.88)" : "rgba(255, 255, 255, 0.98)"};
+    border: 1px solid ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(96, 165, 250, 0.24)" : "rgba(59, 130, 246, 0.18)"};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(241, 245, 249, 0.9)" : "rgba(51, 65, 85, 0.82)")};
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "dark" ? "0 10px 20px rgba(2, 6, 23, 0.32)" : "0 10px 20px rgba(15, 23, 42, 0.14)"};
+  }
 `
 
 const TableCornerGrowButton = styled(TableHandleButton)`
@@ -11212,6 +11347,11 @@ const TableCellMenuButton = styled(TableHandleButton)`
   width: ${TABLE_CELL_MENU_BUTTON_SIZE_PX}px;
   height: ${TABLE_CELL_MENU_BUTTON_SIZE_PX}px;
   border-radius: 999px;
+
+  &[data-compact="true"] {
+    width: 32px;
+    height: 32px;
+  }
 `
 
 const TableTrailingAddBar = styled.button`

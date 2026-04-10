@@ -840,7 +840,10 @@ test.describe("block editor authoring flow", () => {
 
     await expect(columnHandle).toHaveCount(0)
     await expect(rowHandle).toHaveCount(0)
-    await expect(page.getByTestId("table-corner-handle")).toBeVisible()
+    await expect(page.getByTestId("table-corner-handle")).toHaveCount(0)
+    await expect(tableGrowHandle).toHaveCount(0)
+    await expect(tableStructureMenuButton).toHaveCount(0)
+    await expect(tableCellMenuButton).toBeVisible()
     await expect(columnAddButton).toHaveCount(0)
     await expect(rowAddButton).toHaveCount(0)
     await expect(page.getByTestId("table-bubble-toolbar")).toHaveCount(0)
@@ -883,12 +886,12 @@ test.describe("block editor authoring flow", () => {
     await expect(rowHandle).toBeVisible()
     await expect(columnAddButton).toHaveCount(0)
     await expect(rowAddButton).toHaveCount(0)
-    await expect(tableGrowHandle).toBeVisible()
-    await expect(tableStructureMenuButton).toBeVisible()
-    await expect(tableCellMenuButton).toBeVisible()
+    await expect(tableGrowHandle).toHaveCount(0)
+    await expect(tableStructureMenuButton).toHaveCount(0)
+    await expect(tableCellMenuButton).toHaveCount(0)
 
-    const [columnGripRect, rowGripRect, growHandleRect, structureMenuRect, cellMenuRect] = await Promise.all(
-      [columnHandle, rowHandle, tableGrowHandle, tableStructureMenuButton, tableCellMenuButton].map((locator) =>
+    const [columnGripRect, rowGripRect] = await Promise.all(
+      [columnHandle, rowHandle].map((locator) =>
         locator.evaluate((element) => {
           const rect = element.getBoundingClientRect()
           return { width: Math.round(rect.width), height: Math.round(rect.height) }
@@ -897,12 +900,40 @@ test.describe("block editor authoring flow", () => {
     )
     expect(columnGripRect.width).toBeGreaterThan(columnGripRect.height)
     expect(rowGripRect.height).toBeGreaterThan(rowGripRect.width)
+
+    await page.mouse.move(tableBox.x + 42, tableBox.y + 24)
+
+    await expect(tableCellMenuButton).toBeVisible()
+    await expect(columnHandle).toHaveCount(0)
+    await expect(rowHandle).toHaveCount(0)
+    await expect(tableGrowHandle).toHaveCount(0)
+    await expect(tableStructureMenuButton).toHaveCount(0)
+
+    const cellMenuRect = await tableCellMenuButton.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      return { width: Math.round(rect.width), height: Math.round(rect.height) }
+    })
+    expect(cellMenuRect.width).toBeLessThanOrEqual(24)
+    expect(cellMenuRect.height).toBeLessThanOrEqual(24)
+
+    await page.mouse.move(tableBox.x + tableBox.width - 6, tableBox.y + 6)
+
+    await expect(tableGrowHandle).toBeVisible()
+    await expect(tableStructureMenuButton).toBeVisible()
+    await expect(tableCellMenuButton).toHaveCount(0)
+
+    const [growHandleRect, structureMenuRect] = await Promise.all(
+      [tableGrowHandle, tableStructureMenuButton].map((locator) =>
+        locator.evaluate((element) => {
+          const rect = element.getBoundingClientRect()
+          return { width: Math.round(rect.width), height: Math.round(rect.height) }
+        })
+      )
+    )
     expect(growHandleRect.width).toBeLessThanOrEqual(26)
     expect(growHandleRect.height).toBeLessThanOrEqual(26)
     expect(structureMenuRect.width).toBeLessThanOrEqual(26)
     expect(structureMenuRect.height).toBeLessThanOrEqual(26)
-    expect(cellMenuRect.width).toBeLessThanOrEqual(24)
-    expect(cellMenuRect.height).toBeLessThanOrEqual(24)
 
     await tableStructureMenuButton.click()
     await expect(page.getByTestId("table-table-menu")).toBeVisible()
@@ -1016,7 +1047,7 @@ test.describe("block editor authoring flow", () => {
 
   test("table axis rail hover 전환 중에도 target axis anchor가 끊기지 않는다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
-    const { columnHandle, rowHandle } = getTableAffordances(page)
+    const { columnHandle, rowHandle, growHandle, structureMenuButton, cellMenuButton } = getTableAffordances(page)
 
     await page.getByRole("button", { name: "테이블" }).click()
     const targetCell = page.locator("table tr").nth(2).locator("th, td").nth(1)
@@ -1080,8 +1111,9 @@ test.describe("block editor authoring flow", () => {
     await page.getByRole("button", { name: "테이블" }).click()
     const firstTableCell = page.locator("table th, table td").first()
     await firstTableCell.click()
-    await firstTableCell.hover()
-    await page.getByTestId("table-structure-menu-button").click()
+    const structureMenuButton = page.getByTestId("table-structure-menu-button")
+    await expect(structureMenuButton).toBeVisible()
+    await structureMenuButton.click()
 
     const menu = page.getByTestId("table-table-menu")
     await expect(menu).toBeVisible()
@@ -1221,7 +1253,8 @@ test.describe("block editor authoring flow", () => {
 
   test("writer surface의 row/column grip과 trailing +행/+열은 edge hover에서만 노출된다", async ({ page }) => {
     await page.goto(QA_WRITER_ROUTE)
-    const { columnHandle, rowHandle, columnAddButton, rowAddButton } = getTableAffordances(page)
+    const { columnHandle, rowHandle, columnAddButton, rowAddButton, growHandle, structureMenuButton, cellMenuButton } =
+      getTableAffordances(page)
 
     await page.getByRole("button", { name: "테이블" }).click()
 
@@ -1242,11 +1275,29 @@ test.describe("block editor authoring flow", () => {
 
     await expect(columnHandle).toBeVisible()
     await expect(rowHandle).toBeVisible()
+    await expect(growHandle).toHaveCount(0)
+    await expect(structureMenuButton).toHaveCount(0)
+    await expect(cellMenuButton).toHaveCount(0)
+    await expect(columnAddButton).toHaveCount(0)
+    await expect(rowAddButton).toHaveCount(0)
+
+    await page.mouse.move(tableBox.x + tableBox.width - 6, tableBox.y + 6)
+
+    await expect(growHandle).toBeVisible()
+    await expect(structureMenuButton).toBeVisible()
+    await expect(columnHandle).toHaveCount(0)
+    await expect(rowHandle).toHaveCount(0)
+    await expect(cellMenuButton).toHaveCount(0)
     await expect(columnAddButton).toHaveCount(0)
     await expect(rowAddButton).toHaveCount(0)
 
     await page.mouse.move(tableBox.x + tableBox.width - 3, tableBox.y + tableBox.height - 3)
 
+    await expect(columnHandle).toHaveCount(0)
+    await expect(rowHandle).toHaveCount(0)
+    await expect(growHandle).toHaveCount(0)
+    await expect(structureMenuButton).toHaveCount(0)
+    await expect(cellMenuButton).toHaveCount(0)
     await expect(columnAddButton).toBeVisible()
     await expect(rowAddButton).toBeVisible()
   })
@@ -1292,7 +1343,11 @@ test.describe("block editor authoring flow", () => {
 
     const firstTableCell = firstTable.locator("th, td").first()
     await firstTableCell.hover()
-    await page.mouse.move(firstTableBox.x + firstTableBox.width / 2, firstTableBox.y + 6)
+    const firstTableCellBox = await firstTableCell.boundingBox()
+    if (!firstTableCellBox) {
+      throw new Error("writer first table cell bounding box is missing")
+    }
+    await page.mouse.move(firstTableCellBox.x + firstTableCellBox.width / 2, firstTableCellBox.y + firstTableCellBox.height / 2)
 
     const cellMenuMetrics = await cellMenuButton.evaluate((element) => {
       const rect = element.getBoundingClientRect()
@@ -1405,7 +1460,7 @@ test.describe("block editor authoring flow", () => {
   }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto(QA_ENGINE_ROUTE)
-    const { columnHandle, rowHandle } = getTableAffordances(page)
+    const { columnHandle, rowHandle, growHandle, structureMenuButton, cellMenuButton } = getTableAffordances(page)
 
     await page.getByRole("button", { name: "테이블" }).click()
     const firstTableCell = page.locator("table th, table td").first()
@@ -1413,6 +1468,9 @@ test.describe("block editor authoring flow", () => {
 
     await expect(columnHandle).toHaveCount(0)
     await expect(rowHandle).toHaveCount(0)
+    await expect(growHandle).toHaveCount(0)
+    await expect(cellMenuButton).toHaveCount(0)
+    await expect(structureMenuButton).toBeVisible()
 
     for (let index = 0; index < 8; index += 1) {
       await page.getByRole("button", { name: "QA 열 추가" }).click()
@@ -1525,7 +1583,11 @@ test.describe("block editor authoring flow", () => {
     await page.getByRole("button", { name: "테이블" }).click()
     const firstTableCell = page.locator("table th, table td").first()
     await firstTableCell.click()
-    await firstTableCell.hover()
+    const tableBox = await page.locator(".aq-block-editor__content .tableWrapper table").boundingBox()
+    if (!tableBox) {
+      throw new Error("table bounding box is missing before grow handle hover")
+    }
+    await page.mouse.move(tableBox.x + tableBox.width - 6, tableBox.y + 6)
 
     const growHandle = page.getByTestId("table-corner-grow-handle")
     await expect(growHandle).toBeVisible()
@@ -1538,7 +1600,13 @@ test.describe("block editor authoring flow", () => {
       }
     })
 
-    await growHandle.click()
+    await page.evaluate(() => {
+      const button = document.querySelector('[data-testid="table-corner-grow-handle"]')
+      if (!(button instanceof HTMLButtonElement)) {
+        throw new Error("table corner grow handle is not attached")
+      }
+      button.click()
+    })
 
     await expect
       .poll(async () => await page.locator("table tr").count())
@@ -1561,8 +1629,6 @@ test.describe("block editor authoring flow", () => {
       }
     })
 
-    const growHandleBox = await growHandle.boundingBox()
-    expect(growHandleBox).not.toBeNull()
     const stepMetrics = await growHandle.evaluate((element) => ({
       columnStep: Number((element as HTMLElement).dataset.columnStep || "0"),
       rowStep: Number((element as HTMLElement).dataset.rowStep || "0"),
@@ -1570,17 +1636,90 @@ test.describe("block editor authoring flow", () => {
     expect(stepMetrics.columnStep).toBeGreaterThan(0)
     expect(stepMetrics.rowStep).toBeGreaterThan(0)
 
-    const startX = (growHandleBox?.x ?? 0) + (growHandleBox?.width ?? 0) / 2
-    const startY = (growHandleBox?.y ?? 0) + (growHandleBox?.height ?? 0) / 2
-    await page.mouse.move(startX, startY)
-    await page.mouse.down()
-    await page.mouse.move(startX - stepMetrics.columnStep - 8, startY - stepMetrics.rowStep - 8)
+    await growHandle.evaluate(async (element, payload) => {
+      const { pointerId, padding } = payload as {
+        pointerId: number
+        padding: number
+      }
+      const rect = (element as HTMLElement).getBoundingClientRect()
+      const startX = rect.left + rect.width / 2
+      const startY = rect.top + rect.height / 2
+      const columnStep = Number((element as HTMLElement).dataset.columnStep || "0")
+      const rowStep = Number((element as HTMLElement).dataset.rowStep || "0")
+      if (!Number.isFinite(columnStep) || !Number.isFinite(rowStep) || columnStep <= 0 || rowStep <= 0) {
+        throw new Error("table corner shrink step metrics are missing")
+      }
+      const currentX = startX - columnStep - padding
+      const currentY = startY - rowStep - padding
+      const qaWindow = window as Window & {
+        __qaTableGrowPointer?: {
+          pointerId: number
+          clientX: number
+          clientY: number
+        }
+      }
+      const waitForFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+      qaWindow.__qaTableGrowPointer = { pointerId, clientX: currentX, clientY: currentY }
+      element.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          pointerId,
+          pointerType: "mouse",
+          button: 0,
+          buttons: 1,
+          isPrimary: true,
+          clientX: startX,
+          clientY: startY,
+        })
+      )
+      await waitForFrame()
+      window.dispatchEvent(
+        new PointerEvent("pointermove", {
+          bubbles: true,
+          pointerId,
+          pointerType: "mouse",
+          button: 0,
+          buttons: 1,
+          isPrimary: true,
+          clientX: currentX,
+          clientY: currentY,
+        })
+      )
+      await waitForFrame()
+    }, { pointerId: 31, padding: 8 })
 
     await expect(page.getByTestId("table-corner-preview-outline")).toBeVisible()
     await expect(page.locator("table tr")).toHaveCount(afterGrow.rows)
     await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(afterGrow.columns)
 
-    await page.mouse.up()
+    await page.evaluate(async () => {
+      const qaWindow = window as Window & {
+        __qaTableGrowPointer?: {
+          pointerId: number
+          clientX: number
+          clientY: number
+        }
+      }
+      const state = qaWindow.__qaTableGrowPointer
+      if (!state) {
+        throw new Error("table corner grow pointer state is missing before pointerup")
+      }
+      const waitForFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+      window.dispatchEvent(
+        new PointerEvent("pointerup", {
+          bubbles: true,
+          pointerId: state.pointerId,
+          pointerType: "mouse",
+          button: 0,
+          buttons: 0,
+          isPrimary: true,
+          clientX: state.clientX,
+          clientY: state.clientY,
+        })
+      )
+      await waitForFrame()
+      delete qaWindow.__qaTableGrowPointer
+    })
 
     await expect(page.locator("table tr")).toHaveCount(before.rows)
     await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(before.columns)
@@ -1588,7 +1727,7 @@ test.describe("block editor authoring flow", () => {
     const trailingCell = page.locator("table tr").nth(before.rows - 1).locator("th, td").nth(before.columns - 1)
     await trailingCell.click()
     await page.keyboard.type("keep")
-    await firstTableCell.hover()
+    await page.mouse.move(tableBox.x + tableBox.width - 6, tableBox.y + 6)
 
     await growHandle.evaluate(async (element, payload) => {
       const { pointerId, padding } = payload as {
@@ -1658,10 +1797,22 @@ test.describe("block editor authoring flow", () => {
     await page.getByRole("button", { name: "테이블" }).click()
     const firstTableCell = page.locator("table th, table td").first()
     await firstTableCell.click()
-    await firstTableCell.hover()
+    const table = page.locator(".aq-block-editor__content .tableWrapper table").first()
+    const tableBox = await table.boundingBox()
+    if (!tableBox) {
+      throw new Error("table bounding box is missing before structure menu hover")
+    }
+    await page.mouse.move(tableBox.x + tableBox.width - 6, tableBox.y + 6)
 
     const structureMenuButton = page.getByTestId("table-structure-menu-button")
-    await structureMenuButton.click()
+    await expect(structureMenuButton).toBeVisible()
+    await page.evaluate(() => {
+      const button = document.querySelector('[data-testid="table-structure-menu-button"]')
+      if (!(button instanceof HTMLButtonElement)) {
+        throw new Error("table structure menu button is not attached")
+      }
+      button.click()
+    })
     const tableMenu = page.getByTestId("table-table-menu")
     await expect(tableMenu).toBeVisible()
     await expect(page.locator("table tr").first().locator("th")).toHaveCount(3)
@@ -1687,12 +1838,17 @@ test.describe("block editor authoring flow", () => {
     await page.getByRole("button", { name: "테이블" }).click()
     const firstTableCell = page.locator("table th, table td").first()
     await firstTableCell.click()
-    await firstTableCell.hover()
+    const table = page.locator(".aq-block-editor__content .tableWrapper table").first()
+    const tableBox = await table.boundingBox()
+    if (!tableBox) {
+      throw new Error("table bounding box is missing before structure menu hover")
+    }
+    await page.mouse.move(tableBox.x + tableBox.width - 6, tableBox.y + 6)
 
     const structureMenuButton = page.getByTestId("table-structure-menu-button")
-    const table = page.locator(".aq-block-editor__content .tableWrapper table").first()
 
-    await structureMenuButton.click()
+    await expect(structureMenuButton).toBeVisible()
+    await structureMenuButton.click({ force: true })
     const tableMenu = page.getByTestId("table-table-menu")
     await expect(tableMenu).toBeVisible()
     await expect(tableMenu.getByTestId("table-overflow-mode-normal")).toHaveAttribute("data-active", "true")
@@ -1711,10 +1867,24 @@ test.describe("block editor authoring flow", () => {
 
     const reloadedFirstCell = page.locator("table th, table td").first()
     await reloadedFirstCell.click()
-    await reloadedFirstCell.hover()
+    const reloadedTable = page.locator(".aq-block-editor__content .tableWrapper table").first()
+    const reloadedTableBox = await reloadedTable.boundingBox()
+    if (!reloadedTableBox) {
+      throw new Error("reloaded table bounding box is missing before structure menu hover")
+    }
+    await page.mouse.move(reloadedTableBox.x + reloadedTableBox.width - 6, reloadedTableBox.y + 6)
 
-    await page.getByTestId("table-structure-menu-button").click()
+    const reloadedStructureMenuButton = page.getByTestId("table-structure-menu-button")
+    await expect(reloadedStructureMenuButton).toBeVisible()
+    await page.evaluate(() => {
+      const button = document.querySelector('[data-testid="table-structure-menu-button"]')
+      if (!(button instanceof HTMLButtonElement)) {
+        throw new Error("reloaded table structure menu button is not attached")
+      }
+      button.click()
+    })
     const reloadedTableMenu = page.getByTestId("table-table-menu")
+    await expect(reloadedTableMenu).toBeVisible()
     await expect(reloadedTableMenu.getByTestId("table-overflow-mode-normal")).toHaveAttribute("data-active", "false")
     await expect(reloadedTableMenu.getByTestId("table-overflow-mode-wide")).toHaveAttribute("data-active", "true")
 

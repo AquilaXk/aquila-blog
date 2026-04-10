@@ -433,13 +433,31 @@ test.describe("editor live visual regression", () => {
 
     await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
 
+    await expect(rowHandle).toBeVisible()
+    await expect(columnHandle).toBeVisible()
+    await expect(growHandle).toHaveCount(0)
+    await expect(structureMenuButton).toHaveCount(0)
+    await expect(cellMenuButton).toHaveCount(0)
+    await expect(rowAddButton).toHaveCount(0)
+    await expect(columnAddButton).toHaveCount(0)
+
+    await page.mouse.move(tableBox.x + tableBox.width / 2, tableBox.y + 24)
+
+    await expect(cellMenuButton).toBeVisible()
+    await expect(rowHandle).toHaveCount(0)
+    await expect(columnHandle).toHaveCount(0)
+    await expect(growHandle).toHaveCount(0)
+    await expect(structureMenuButton).toHaveCount(0)
+
+    await page.mouse.move(tableBox.x + tableBox.width - 6, tableBox.y + 6)
+
     const cornerHandle = page.getByTestId("table-corner-handle")
     await expect(cornerHandle).toBeVisible()
     await expect(growHandle).toBeVisible()
     await expect(structureMenuButton).toBeVisible()
-    await expect(cellMenuButton).toBeVisible()
-    await expect(rowHandle).toBeVisible()
-    await expect(columnHandle).toBeVisible()
+    await expect(cellMenuButton).toHaveCount(0)
+    await expect(rowHandle).toHaveCount(0)
+    await expect(columnHandle).toHaveCount(0)
 
     await structureMenuButton.click()
     const tableMenu = page.getByTestId("table-table-menu")

@@ -700,6 +700,71 @@ test("깃허브 호환용 mermaid info 블록도 렌더 경로를 탄다", async
   await expect(page.locator("pre code", { hasText: /^info$/ })).toHaveCount(0)
 })
 
+test("mermaid source style 지시문이 있어도 상세 배경은 투명 preset을 유지한다", async ({ page }) => {
+  await page.route("**/post/api/v1/posts/782**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 782,
+        createdAt: "2026-03-16T00:00:00Z",
+        modifiedAt: "2026-03-16T00:00:00Z",
+        authorId: 1,
+        authorName: "관리자",
+        authorUsername: "aquila",
+        authorProfileImageDirectUrl: "/avatar.png",
+        title: "머메이드 스타일 지시문 투명 배경 테스트",
+        content: [
+          "```mermaid",
+          "flowchart TD",
+          "classDef default fill:#2b2d3a,stroke:#30363d,color:#f0f6fc",
+          "  A[에러 로그 다발] --> B[SSE 원인]",
+          "  A --> C[Like 500]",
+          "```",
+        ].join("\n"),
+        tags: [],
+        category: [],
+        published: true,
+        listed: true,
+        likesCount: 0,
+        commentsCount: 0,
+        hitCount: 0,
+        actorHasLiked: false,
+        actorCanModify: false,
+        actorCanDelete: false,
+      }),
+    })
+  })
+
+  await page.route("**/post/api/v1/posts/782/hit**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        resultCode: "200-1",
+        msg: "ok",
+        data: { hitCount: 1 },
+      }),
+    })
+  })
+
+  await page.goto("/posts/782")
+  await expect(page.getByText("머메이드 스타일 지시문 투명 배경 테스트")).toBeVisible()
+  await expect
+    .poll(async () => await page.locator("pre.aq-mermaid[data-mermaid-rendered='true']").count(), {
+      timeout: 20_000,
+    })
+    .toBeGreaterThan(0)
+
+  const mermaidStyleText = (await page.locator(".aq-mermaid-stage svg style").first().textContent()) || ""
+  expect(mermaidStyleText).not.toContain("#2b2d3a!important")
+
+  const nodeFill = await page.locator(".aq-mermaid-stage svg .node rect").first().evaluate((node) => {
+    return window.getComputedStyle(node as SVGGraphicsElement).fill
+  })
+  expect(["transparent", "rgba(0, 0, 0, 0)"]).toContain(nodeFill)
+})
+
 test("긴 Mermaid 라벨은 자동 줄바꿈 힌트를 적용해 렌더된다", async ({ page }) => {
   await page.route("**/post/api/v1/posts/781**", async (route) => {
     await route.fulfill({

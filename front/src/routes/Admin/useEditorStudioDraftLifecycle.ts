@@ -9,10 +9,7 @@ import {
 } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import { replaceRoute } from "src/libs/router"
-import {
-  isServerTempDraftPost,
-  isTempDraftTitlePlaceholder,
-} from "./editorTempDraft"
+import { isServerTempDraftPost } from "./editorTempDraft"
 
 type StudioSetState<T> = Dispatch<SetStateAction<T>>
 type NoticeTone = "idle" | "loading" | "success" | "error"

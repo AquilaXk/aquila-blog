@@ -5,6 +5,8 @@ import { acquireBodyScrollLock } from "src/libs/utils/bodyScrollLock"
 
 const MERMAID_SOURCE_PATTERN =
   /^(%%\{|\s*(?:info|flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|gitGraph|quadrantChart|requirementDiagram|c4Context|C4Context|xychart-beta)\b)/
+const MERMAID_FLOWCHART_HEADER_PATTERN = /^\s*(?:flowchart|graph)\b/i
+const MERMAID_RISKY_STYLE_DIRECTIVE_PATTERN = /^\s*(style|linkStyle|classDef)\b/i
 
 const isMermaidSource = (rawCode: string) => {
   const normalized = rawCode.trim()
@@ -304,8 +306,18 @@ const useMermaidEffect = (
     const stripRiskyFlowchartDirectives = (source: string) =>
       source
         .split("\n")
-        .filter((line) => !/^\s*(style|linkStyle|classDef)\b/i.test(line))
+        .filter((line) => !MERMAID_RISKY_STYLE_DIRECTIVE_PATTERN.test(line))
         .join("\n")
+
+    // 공개 상세는 서비스 preset을 디자인 기준으로 유지해야 하므로
+    // source 내부 style/classDef/linkStyle 로 node fill/background 를 재정의하지 못하게 한다.
+    const sanitizeRenderableMermaidSource = (source: string) => {
+      const trimmed = source.trim()
+      if (!MERMAID_FLOWCHART_HEADER_PATTERN.test(trimmed)) return trimmed
+
+      const sanitized = stripRiskyFlowchartDirectives(trimmed).trim()
+      return sanitized || trimmed
+    }
 
     // Mermaid htmlLabels(<foreignObject>)는 전역 타이포/line-height 영향으로 CJK 줄바꿈 라벨이 잘릴 수 있어
     // 렌더 직후 라벨 스타일을 최소값으로 고정해 작성/상세 모두 동일한 가독성을 유지한다.
@@ -700,9 +712,10 @@ const useMermaidEffect = (
           )
         )
         if (!source) return
+        const renderableSource = sanitizeRenderableMermaidSource(source)
         const looksLikeMermaid = isMermaidSource(source)
         if (!hasMermaidHint && !looksLikeMermaid) return
-        const complexity = estimateMermaidComplexity(source)
+        const complexity = estimateMermaidComplexity(renderableSource)
         block.dataset.mermaidComplexity = complexity.level
         if (!block.dataset.mermaidRendered) {
           block.dataset.mermaidRendered = "pending"
@@ -914,7 +927,7 @@ const useMermaidEffect = (
         }
 
         try {
-          await renderSourceIntoBlock(source, complexity.level)
+          await renderSourceIntoBlock(renderableSource, complexity.level)
 
           block.dataset.mermaidSource = source
           block.dataset.mermaidTheme = preset.themeKey
@@ -930,7 +943,7 @@ const useMermaidEffect = (
           }
 
           const fallbackSource = stripRiskyFlowchartDirectives(source).trim()
-          if (fallbackSource && fallbackSource !== source) {
+          if (fallbackSource && fallbackSource !== source && fallbackSource !== renderableSource) {
             try {
               await renderSourceIntoBlock(fallbackSource, complexity.level)
               block.dataset.mermaidSource = fallbackSource

@@ -1047,7 +1047,7 @@ test.describe("block editor authoring flow", () => {
 
   test("table axis rail hover 전환 중에도 target axis anchor가 끊기지 않는다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
-    const { columnHandle, rowHandle, growHandle, structureMenuButton, cellMenuButton } = getTableAffordances(page)
+    const { columnHandle, rowHandle } = getTableAffordances(page)
 
     await page.getByRole("button", { name: "테이블" }).click()
     const targetCell = page.locator("table tr").nth(2).locator("th, td").nth(1)
@@ -1415,10 +1415,6 @@ test.describe("block editor authoring flow", () => {
     const moveToTopLeftHotzone = async () => {
       const box = await getRenderedTableBox()
       await page.mouse.move(box.x + 8, box.y + 8)
-    }
-    const moveToBottomRightHotzone = async () => {
-      const box = await getTableSurfaceBox()
-      await page.mouse.move(box.x + box.width - 8, box.y + box.height - 8)
     }
     await moveToTopLeftHotzone()
 

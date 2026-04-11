@@ -144,8 +144,7 @@ const PostHeader: React.FC<Props> = ({
         )}
 
         {showEngagement ? (
-        <div className="actions" data-hide-mobile={hideActionButtonsOnMobile}>
-          {showEngagement ? (
+          <div className="actions" data-hide-mobile={hideActionButtonsOnMobile}>
             <div className="engagementRow" aria-label="post engagement">
               <div className="stats" aria-label="post stats">
                 <span className="statChip commentStatChip" data-hide-mobile={hideActionButtonsOnMobile}>
@@ -187,19 +186,18 @@ const PostHeader: React.FC<Props> = ({
                 </button>
               )}
             </div>
-          ) : null}
-          {showEngagement && shareFeedback && (
-            <span
-              className="shareFeedbackPill"
-              data-hide-desktop={hideShareActionOnDesktop}
-              data-hide-mobile={hideActionButtonsOnMobile}
-              role="status"
-              aria-live="polite"
-            >
-              {shareFeedbackMessage}
-            </span>
-          )}
-        </div>
+            {shareFeedback && (
+              <span
+                className="shareFeedbackPill"
+                data-hide-desktop={hideShareActionOnDesktop}
+                data-hide-mobile={hideActionButtonsOnMobile}
+                role="status"
+                aria-live="polite"
+              >
+                {shareFeedbackMessage}
+              </span>
+            )}
+          </div>
         ) : null}
       </div>
 

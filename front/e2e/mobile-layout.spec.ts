@@ -127,7 +127,8 @@ const DETAIL_CONTENT = [
 ].join("\n")
 
 const mockDetailEndpoint = async (page: Page, overrides: MockDetailOverrides = {}) => {
-  const postId = overrides.id ?? 990
+  const { id: overrideId, content: overrideContent, ...restOverrides } = overrides
+  const postId = overrideId ?? 990
   await page.route(`**/post/api/v1/posts/${postId}**`, async (route) => {
     await route.fulfill({
       status: 200,
@@ -152,9 +153,8 @@ const mockDetailEndpoint = async (page: Page, overrides: MockDetailOverrides = {
         actorHasLiked: false,
         actorCanModify: false,
         actorCanDelete: false,
-        ...overrides,
-        id: postId,
-        content: overrides.content ?? DETAIL_CONTENT,
+        content: overrideContent ?? DETAIL_CONTENT,
+        ...restOverrides,
       }),
     })
   })

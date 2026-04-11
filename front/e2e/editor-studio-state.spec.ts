@@ -189,6 +189,17 @@ test.describe("editor studio state", () => {
     expect(navBarSource).toContain('router.pathname.startsWith("/editor")')
   })
 
+  test("dedicated editor 나가기는 returnTo 복귀를 replace로 처리해 editor history 엔트리를 남기지 않는다", () => {
+    const editorStudioRoutingSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/useEditorStudioRouting.ts"),
+      "utf8"
+    )
+
+    expect(editorStudioRoutingSource).toContain("const handleExitDedicatedEditor = useCallback(() => {")
+    expect(editorStudioRoutingSource).toContain("void replaceRoute(router, dedicatedEditorReturnRoute)")
+    expect(editorStudioRoutingSource).not.toContain("void pushRoute(router, dedicatedEditorReturnRoute)")
+  })
+
   test("table resize metadata와 상세 렌더 계약은 colgroup width와 drag guide를 유지한다", () => {
     const blockEditorEngineSource = readFileSync(
       path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"),
@@ -249,18 +260,19 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).toContain("const maxActiveWidth = Math.max(TABLE_MIN_COLUMN_WIDTH_PX, safeBudget - otherColumnsWidth)")
     expect(blockEditorEngineSource).toContain("const tableCornerGrowSuppressClickRef = useRef(false)")
     expect(blockEditorEngineSource).toContain('"grip" | "grow"')
-    expect(blockEditorEngineSource).toContain('tableMenuState.kind === "cell"')
+    expect(blockEditorEngineSource).toContain('const isCellMenuOpen = tableMenuKind === "cell"')
     expect(markdownRendererSource).toContain("const explicitTableWidth = useMemo(")
     expect(markdownRendererSource).toContain("minWidth: `${explicitTableWidth}px`")
     expect(markdownRendererRootSource).toContain("width: auto;")
     expect(markdownRendererRootSource).toContain("max-width: none;")
-    expect(blockEditorEngineSource).toContain('tableMenuState.kind === "row" ?')
-    expect(blockEditorEngineSource).toContain('tableMenuState.kind === "column" ?')
+    expect(blockEditorEngineSource).toContain('const isRowMenuOpen = tableMenuKind === "row"')
+    expect(blockEditorEngineSource).toContain('const isColumnMenuOpen = tableMenuKind === "column"')
     expect(blockEditorEngineSource).toContain("activeTableStructureState.hasHeaderRow")
     expect(blockEditorEngineSource).toContain("activeTableStructureState.hasHeaderColumn")
-    expect(blockEditorEngineSource).toContain("data-column-step={getTableCornerGrowStepMetrics().columnStepPx}")
-    expect(blockEditorEngineSource).toContain("data-row-step={getTableCornerGrowStepMetrics().rowStepPx}")
-    expect(blockEditorEngineSource).toContain(': "표 구조 메뉴"}')
+    expect(blockEditorEngineSource).toContain("const tableCornerGrowStepMetrics = getTableCornerGrowStepMetrics()")
+    expect(blockEditorEngineSource).toContain("data-column-step={tableCornerGrowStepMetrics.columnStepPx}")
+    expect(blockEditorEngineSource).toContain("data-row-step={tableCornerGrowStepMetrics.rowStepPx}")
+    expect(blockEditorEngineSource).toContain('aria-label="표 구조 메뉴"')
     expect(blockEditorEngineSource).toContain("페이지 너비에 맞춤")
     expect(blockEditorEngineSource).toContain("넓은 표")
     expect(blockEditorEngineSource).toContain("제목 행")
@@ -275,12 +287,18 @@ test.describe("editor studio state", () => {
     )
     expect(blockEditorEngineSource).toContain("const tableAffordanceVisibilityRef = useRef(tableAffordanceVisibility)")
     expect(blockEditorEngineSource).not.toContain("type TableQuickRailState =")
-    expect(blockEditorEngineSource).toContain("const isTableStructureMenuOpen = Boolean(tableMenuState)")
+    expect(blockEditorEngineSource).toContain('const isTableStructureMenuOpen = tableMenuKind === "table"')
     expect(blockEditorEngineSource).toContain(
-      "const shouldShowColumnAddBar = tableAffordanceVisibility.showColumnAddBar || isTableStructureMenuOpen"
+      "const shouldShowColumnAddBar ="
     )
     expect(blockEditorEngineSource).toContain(
-      "const shouldShowRowAddBar = tableAffordanceVisibility.showRowAddBar || isTableStructureMenuOpen"
+      "shouldShowDesktopTableHandles && (tableAffordanceVisibility.showColumnAddBar || isColumnMenuOpen)"
+    )
+    expect(blockEditorEngineSource).toContain(
+      "const shouldShowRowAddBar ="
+    )
+    expect(blockEditorEngineSource).toContain(
+      "shouldShowDesktopTableHandles && (tableAffordanceVisibility.showRowAddBar || isRowMenuOpen)"
     )
     expect(blockEditorEngineSource).toContain("findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)")
     expect(blockEditorEngineSource).toContain("display: none !important;")

@@ -92,11 +92,6 @@ const DetailShell = styled.div`
   &[data-type="Paper"] {
     padding: 40px 0;
   }
-
-  code[class*="language-mermaid"],
-  pre[class*="language-mermaid"] {
-    background-color: ${({ theme }) => theme.colors.gray5};
-  }
 `
 
 const LoadingShell = styled.section`

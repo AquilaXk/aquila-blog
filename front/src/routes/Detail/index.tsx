@@ -28,9 +28,4 @@ const StyledWrapper = styled.div`
   &[data-type="Paper"] {
     padding: 40px 0;
   }
-  /** Reference: https://github.com/chriskempson/tomorrow-theme **/
-  code[class*="language-mermaid"],
-  pre[class*="language-mermaid"] {
-    background-color: ${({ theme }) => theme.colors.gray5};
-  }
 `

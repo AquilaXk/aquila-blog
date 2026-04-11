@@ -9,7 +9,6 @@ import {
 } from "react"
 import {
   isNavigationCancelledError,
-  pushRoute,
   replaceRoute,
   replaceShallowRoutePreservingScroll,
   toLoginPath,
@@ -183,7 +182,7 @@ export const useEditorStudioRouting = ({
   ])
 
   const handleExitDedicatedEditor = useCallback(() => {
-    void pushRoute(router, dedicatedEditorReturnRoute)
+    void replaceRoute(router, dedicatedEditorReturnRoute)
   }, [dedicatedEditorReturnRoute, router])
 
   return {

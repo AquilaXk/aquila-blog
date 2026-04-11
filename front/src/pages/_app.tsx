@@ -2,6 +2,7 @@ import { AppPropsWithLayout } from "../types"
 import { CacheProvider } from "@emotion/react"
 import { HydrationBoundary, QueryClientProvider } from "@tanstack/react-query"
 import type { NextWebVitalsMetric } from "next/app"
+import dynamic from "next/dynamic"
 import Head from "next/head"
 import { RootLayout } from "src/layouts"
 import createEmotionCache from "src/libs/emotion/createEmotionCache"
@@ -10,6 +11,9 @@ import { useState } from "react"
 import "katex/dist/katex.min.css"
 
 const clientSideEmotionCache = createEmotionCache()
+const SpeedInsights = dynamic(() => import("@vercel/speed-insights/next").then((mod) => mod.SpeedInsights), {
+  ssr: false,
+})
 
 function App({ Component, pageProps, emotionCache = clientSideEmotionCache }: AppPropsWithLayout) {
   const getLayout = Component.getLayout || ((page) => page)
@@ -23,7 +27,10 @@ function App({ Component, pageProps, emotionCache = clientSideEmotionCache }: Ap
       </Head>
       <QueryClientProvider client={queryClient}>
         <HydrationBoundary state={pageProps.dehydratedState}>
-          <RootLayout>{getLayout(<Component {...pageProps} />)}</RootLayout>
+          <RootLayout>
+            {getLayout(<Component {...pageProps} />)}
+            {process.env.NODE_ENV === "production" ? <SpeedInsights /> : null}
+          </RootLayout>
         </HydrationBoundary>
       </QueryClientProvider>
     </CacheProvider>

@@ -1714,6 +1714,17 @@ const computeNextTableColumnWidthsForResize = (
   }
 }
 
+const didTableColumnResizeHitOverflowPolicy = (
+  requestedDeltaPx: number,
+  resizeResult: { appliedDelta?: number; wasClamped?: boolean } | null | undefined
+) => {
+  if (requestedDeltaPx <= 0) return false
+  if (!resizeResult) return false
+  if (resizeResult.wasClamped) return true
+  const appliedDelta = typeof resizeResult.appliedDelta === "number" ? resizeResult.appliedDelta : requestedDeltaPx
+  return requestedDeltaPx - appliedDelta >= 2
+}
+
 const applyTableColumnWidthsToTransaction = (
   transaction: Transaction,
   columns: TableColumnCellRef[][],
@@ -4264,7 +4275,10 @@ const BlockEditorEngine = ({
       }
       const overflowMode = getTableOverflowMode(tableNode)
       const resizeResult = resizeTableColumnByIndex(activeColumnIndex, deltaPx)
-      if (deltaPx > 0 && overflowMode !== TABLE_OVERFLOW_MODE_WIDE && resizeResult.wasClamped) {
+      if (
+        overflowMode !== TABLE_OVERFLOW_MODE_WIDE &&
+        didTableColumnResizeHitOverflowPolicy(deltaPx, resizeResult)
+      ) {
         showTableOverflowCoachmark()
       } else if (deltaPx < 0) {
         hideTableOverflowCoachmark()
@@ -5427,8 +5441,7 @@ const BlockEditorEngine = ({
       )
       if (
         state.overflowMode !== TABLE_OVERFLOW_MODE_WIDE &&
-        nextClientX > state.startClientX &&
-        resizeResult.wasClamped
+        didTableColumnResizeHitOverflowPolicy(nextClientX - state.startClientX, resizeResult)
       ) {
         showTableOverflowCoachmark()
       } else if (nextClientX <= state.startClientX) {
@@ -5449,8 +5462,7 @@ const BlockEditorEngine = ({
       )
       if (
         state.overflowMode !== TABLE_OVERFLOW_MODE_WIDE &&
-        event.clientX > state.startClientX &&
-        resizeResult.wasClamped
+        didTableColumnResizeHitOverflowPolicy(event.clientX - state.startClientX, resizeResult)
       ) {
         showTableOverflowCoachmark()
       }

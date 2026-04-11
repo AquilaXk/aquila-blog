@@ -60,6 +60,11 @@ import {
   TABLE_WIDE_COLUMN_MIN_WIDTH_PX,
   TABLE_WIDE_PROMOTION_COLUMN_BUDGET_PX,
 } from "src/libs/markdown/tableMetadata"
+import {
+  getTableChromePalette,
+  TABLE_SHARED_MARGIN_Y,
+  TABLE_SHARED_RADIUS_PX,
+} from "src/libs/markdown/tableChrome"
 import { markdownContentTypography } from "src/libs/markdown/contentTypography"
 import {
   convertHtmlToMarkdown,
@@ -10523,6 +10528,9 @@ const EditorViewport = styled.div`
   }
 
   .aq-block-editor__content .tableWrapper {
+    ${({ theme }) => {
+      const tableChrome = getTableChromePalette(theme)
+      return `
     display: block;
     position: relative;
     isolation: isolate;
@@ -10534,17 +10542,11 @@ const EditorViewport = styled.div`
     box-sizing: border-box;
     overflow-x: auto;
     overflow-y: hidden;
-    margin: 1rem 0;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    border-radius: 12px;
-    background: ${({ theme }) =>
-      theme.scheme === "dark"
-        ? "rgba(15, 18, 24, 0.9)"
-        : "rgba(255, 255, 255, 0.94)"};
-    box-shadow: ${({ theme }) =>
-      theme.scheme === "dark"
-        ? "0 1px 2px rgba(2, 6, 23, 0.2)"
-        : "0 1px 2px rgba(15, 23, 42, 0.04)"};
+    margin: ${TABLE_SHARED_MARGIN_Y} 0;
+    border: 1px solid ${tableChrome.border};
+    border-radius: ${TABLE_SHARED_RADIUS_PX}px;
+    background: ${tableChrome.background};
+    box-shadow: ${tableChrome.shadow};
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
     overscroll-behavior-y: contain;
@@ -10553,16 +10555,18 @@ const EditorViewport = styled.div`
       border-color 140ms ease,
       box-shadow 140ms ease,
       background 140ms ease;
+      `
+    }}
   }
 
   .aq-block-editor__content .tableWrapper:hover {
-    border-color: rgba(59, 130, 246, 0.18);
-    box-shadow:
-      ${({ theme }) =>
-        theme.scheme === "dark"
-          ? "0 1px 2px rgba(2, 6, 23, 0.2)"
-          : "0 1px 2px rgba(15, 23, 42, 0.04)"},
-      0 0 0 1px rgba(59, 130, 246, 0.08);
+    ${({ theme }) => {
+      const tableChrome = getTableChromePalette(theme)
+      return `
+    border-color: ${tableChrome.hoverBorder};
+    box-shadow: ${tableChrome.shadow}, ${tableChrome.hoverRing};
+      `
+    }}
   }
 
   .aq-block-editor__content .tableWrapper[data-overflow-mode="wide"] {
@@ -10581,10 +10585,14 @@ const EditorViewport = styled.div`
   }
 
   .aq-block-editor__content thead th {
-    background: ${({ theme }) => theme.colors.gray3};
+    ${({ theme }) => {
+      const tableChrome = getTableChromePalette(theme)
+      return `
+    background: ${tableChrome.headerBackground};
     font-weight: 700;
-    border-bottom: 2px solid
-      ${({ theme }) => (theme.scheme === "dark" ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.16)")};
+    border-bottom: 2px solid ${tableChrome.headerRule};
+      `
+    }}
   }
 
   .aq-block-editor__content th,

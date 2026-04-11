@@ -3,6 +3,11 @@ import {
   TABLE_MIN_COLUMN_WIDTH_PX,
   TABLE_MIN_ROW_HEIGHT_PX,
 } from "src/libs/markdown/tableMetadata"
+import {
+  getTableChromePalette,
+  TABLE_SHARED_MARGIN_Y,
+  TABLE_SHARED_RADIUS_PX,
+} from "src/libs/markdown/tableChrome"
 import { markdownContentTypography } from "src/libs/markdown/contentTypography"
 
 const MarkdownRendererRoot = styled.div`
@@ -971,26 +976,28 @@ const MarkdownRendererRoot = styled.div`
     width: 100%;
     max-width: 100%;
     min-width: 0;
-    margin: 1rem 0;
+    margin: ${TABLE_SHARED_MARGIN_Y} 0;
   }
 
   .aq-table-scroll {
+    ${({ theme }) => {
+      const tableChrome = getTableChromePalette(theme)
+      return `
     width: 100%;
     max-width: 100%;
     min-width: 0;
     overflow-x: auto;
     overflow-y: hidden;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    border-radius: 16px;
-    background: ${({ theme }) =>
-      theme.scheme === "dark"
-        ? "linear-gradient(180deg, rgba(18, 22, 29, 0.96), rgba(15, 18, 24, 0.96))"
-        : "linear-gradient(180deg, #ffffff, #fbfcfe)"};
-    box-shadow: ${({ theme }) =>
-      theme.scheme === "dark"
-        ? "0 18px 38px rgba(2, 6, 23, 0.28)"
-        : "0 18px 38px rgba(15, 23, 42, 0.08)"};
+    border: 1px solid ${tableChrome.border};
+    border-radius: ${TABLE_SHARED_RADIUS_PX}px;
+    background: ${tableChrome.background};
+    box-shadow: ${tableChrome.shadow};
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    overscroll-behavior-y: contain;
+    touch-action: pan-x;
+      `
+    }}
   }
 
   table,
@@ -1015,11 +1022,15 @@ const MarkdownRendererRoot = styled.div`
 
   thead th,
   .aq-table thead th {
+    ${({ theme }) => {
+      const tableChrome = getTableChromePalette(theme)
+      return `
     text-align: left !important;
-    background: ${({ theme }) => theme.colors.gray3};
+    background: ${tableChrome.headerBackground};
     font-weight: 700;
-    border-bottom: 2px solid
-      ${({ theme }) => (theme.scheme === "dark" ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.16)")};
+    border-bottom: 2px solid ${tableChrome.headerRule};
+      `
+    }}
   }
 
   th,
@@ -1063,7 +1074,7 @@ const MarkdownRendererRoot = styled.div`
 
   @media (max-width: 480px) {
     .aq-table-shell {
-      margin: 0.9rem 0;
+      margin: calc(${TABLE_SHARED_MARGIN_Y} - 0.1rem) 0;
       width: 100%;
       max-width: 100%;
       min-width: 0;

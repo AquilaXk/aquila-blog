@@ -11,6 +11,9 @@ import { useState } from "react"
 import "katex/dist/katex.min.css"
 
 const clientSideEmotionCache = createEmotionCache()
+const Analytics = dynamic(() => import("@vercel/analytics/next").then((mod) => mod.Analytics), {
+  ssr: false,
+})
 const SpeedInsights = dynamic(() => import("@vercel/speed-insights/next").then((mod) => mod.SpeedInsights), {
   ssr: false,
 })
@@ -29,7 +32,12 @@ function App({ Component, pageProps, emotionCache = clientSideEmotionCache }: Ap
         <HydrationBoundary state={pageProps.dehydratedState}>
           <RootLayout>
             {getLayout(<Component {...pageProps} />)}
-            {process.env.NODE_ENV === "production" ? <SpeedInsights /> : null}
+            {process.env.NODE_ENV === "production" ? (
+              <>
+                <Analytics />
+                <SpeedInsights />
+              </>
+            ) : null}
           </RootLayout>
         </HydrationBoundary>
       </QueryClientProvider>

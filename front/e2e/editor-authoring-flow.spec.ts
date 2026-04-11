@@ -178,9 +178,11 @@ test.describe("block editor authoring flow", () => {
 
     const firstTableCell = page.locator("table th, table td").first()
     await firstTableCell.click()
-    await page.getByRole("button", { name: "QA 열 선택" }).click()
+    await page.getByRole("button", { name: "QA fallback 열 선택" }).click()
     await page.getByRole("button", { name: "QA 가운데" }).click()
+    await expect(page.getByTestId("qa-markdown-output")).toContainText('"columnAlignments":["center"]')
     await page.getByRole("button", { name: "QA 노랑 배경" }).click()
+    await expect(page.getByTestId("qa-markdown-output")).toContainText('"backgroundColor":"#fef3c7"')
     await page.getByRole("button", { name: "QA 끝으로 이동" }).click()
 
     await page.getByRole("button", { name: "QA 콜아웃" }).click()
@@ -1987,7 +1989,41 @@ test.describe("block editor authoring flow", () => {
     await expect(rowMenu.getByRole("button", { name: "제목 열" })).toHaveCount(0)
     await expect(rowMenu.getByRole("button", { name: "페이지 너비에 맞춤" })).toHaveCount(0)
     await expect(rowMenu.getByText("행 핸들을 드래그해 순서를 바꿀 수 있습니다.")).toBeVisible()
+    const initialHeaderRowVisual = await page.evaluate(() => {
+      const firstRowSecondCell = document.querySelector("table tr:first-child > :nth-child(2)") as HTMLElement | null
+      const secondRowSecondCell = document.querySelector("table tr:nth-child(2) > :nth-child(2)") as HTMLElement | null
+      if (!firstRowSecondCell || !secondRowSecondCell) return null
+      return {
+        firstRowSecondTag: firstRowSecondCell.tagName,
+        firstRowSecondBackground: window.getComputedStyle(firstRowSecondCell).backgroundColor,
+        secondRowSecondTag: secondRowSecondCell.tagName,
+        secondRowSecondBackground: window.getComputedStyle(secondRowSecondCell).backgroundColor,
+      }
+    })
+    expect(initialHeaderRowVisual).not.toBeNull()
+    expect(initialHeaderRowVisual?.firstRowSecondTag).toBe("TH")
+    expect(initialHeaderRowVisual?.firstRowSecondBackground).not.toBe(
+      initialHeaderRowVisual?.secondRowSecondBackground
+    )
     await rowMenu.getByRole("button", { name: "제목 행" }).click()
+    const toggledHeaderRowVisual = await page.evaluate(() => {
+      const firstRowSecondCell = document.querySelector("table tr:first-child > :nth-child(2)") as HTMLElement | null
+      const secondRowSecondCell = document.querySelector("table tr:nth-child(2) > :nth-child(2)") as HTMLElement | null
+      if (!firstRowSecondCell || !secondRowSecondCell) return null
+      return {
+        firstRowSecondTag: firstRowSecondCell.tagName,
+        firstRowSecondBackground: window.getComputedStyle(firstRowSecondCell).backgroundColor,
+        secondRowSecondBackground: window.getComputedStyle(secondRowSecondCell).backgroundColor,
+      }
+    })
+    expect(toggledHeaderRowVisual).not.toBeNull()
+    expect(toggledHeaderRowVisual?.firstRowSecondTag).toBe("TD")
+    expect(toggledHeaderRowVisual?.firstRowSecondBackground).toBe(
+      toggledHeaderRowVisual?.secondRowSecondBackground
+    )
+    expect(toggledHeaderRowVisual?.firstRowSecondBackground).not.toBe(
+      initialHeaderRowVisual?.firstRowSecondBackground
+    )
 
     await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
     await expect(columnMenuButton).toBeVisible()
@@ -2001,6 +2037,23 @@ test.describe("block editor authoring flow", () => {
     await expect(columnMenu.getByRole("button", { name: "넓은 표" })).toHaveCount(0)
     await expect(columnMenu.getByText("열 핸들을 드래그해 순서를 바꿀 수 있습니다.")).toBeVisible()
     await columnMenu.getByRole("button", { name: "제목 열" }).click()
+    const headerColumnVisual = await page.evaluate(() => {
+      const secondRowFirstCell = document.querySelector("table tr:nth-child(2) > :first-child") as HTMLElement | null
+      const secondRowSecondCell = document.querySelector("table tr:nth-child(2) > :nth-child(2)") as HTMLElement | null
+      if (!secondRowFirstCell || !secondRowSecondCell) return null
+      return {
+        secondRowFirstTag: secondRowFirstCell.tagName,
+        secondRowFirstBackground: window.getComputedStyle(secondRowFirstCell).backgroundColor,
+        secondRowSecondTag: secondRowSecondCell.tagName,
+        secondRowSecondBackground: window.getComputedStyle(secondRowSecondCell).backgroundColor,
+      }
+    })
+    expect(headerColumnVisual).not.toBeNull()
+    expect(headerColumnVisual?.secondRowFirstTag).toBe("TH")
+    expect(headerColumnVisual?.secondRowSecondTag).toBe("TD")
+    expect(headerColumnVisual?.secondRowFirstBackground).not.toBe(
+      headerColumnVisual?.secondRowSecondBackground
+    )
 
     await expect(page.locator("table tr").first().locator("th")).toHaveCount(1)
     await expect(page.locator("table tr").nth(1).locator("th")).toHaveCount(1)

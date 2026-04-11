@@ -10716,17 +10716,6 @@ const EditorViewport = styled.div`
     table-layout: fixed !important;
   }
 
-  .aq-block-editor__content thead th {
-    ${({ theme }) => {
-      const tableChrome = getTableChromePalette(theme)
-      return `
-    background: ${tableChrome.headerBackground};
-    font-weight: 700;
-    border-bottom: 2px solid ${tableChrome.headerRule};
-      `
-    }}
-  }
-
   .aq-block-editor__content th,
   .aq-block-editor__content td {
     border-right: 1px solid ${({ theme }) => theme.colors.gray6};
@@ -10740,7 +10729,37 @@ const EditorViewport = styled.div`
     white-space: normal;
     overflow-wrap: break-word;
     word-break: normal;
+  }
+
+  .aq-block-editor__content td {
     background: transparent;
+  }
+
+  .aq-block-editor__content th {
+    ${({ theme }) => {
+      const tableChrome = getTableChromePalette(theme)
+      const headerColumnBackground =
+        theme.scheme === "dark" ? "rgba(51, 65, 85, 0.46)" : "rgba(241, 245, 249, 0.96)"
+      return `
+    background: ${headerColumnBackground};
+    color: ${theme.colors.gray12};
+    font-weight: 700;
+    box-shadow: inset 0 -1px 0 ${tableChrome.headerRule};
+      `
+    }}
+  }
+
+  .aq-block-editor__content thead th {
+    ${({ theme }) => {
+      const tableChrome = getTableChromePalette(theme)
+      const headerRowBackground =
+        theme.scheme === "dark" ? "rgba(71, 85, 105, 0.56)" : "rgba(226, 232, 240, 0.98)"
+      return `
+    background: ${headerRowBackground};
+    border-bottom: 2px solid ${tableChrome.headerRule};
+    box-shadow: inset 0 -1px 0 ${tableChrome.headerRule};
+      `
+    }}
   }
 
   .aq-block-editor__content tr > :is(th, td):last-child {
@@ -11322,12 +11341,12 @@ const TableQuickRailButton = styled.button`
   padding: 0;
   border-radius: 999px;
   border: 1px solid ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(96, 165, 250, 0.24)" : "rgba(59, 130, 246, 0.18)"};
+    theme.scheme === "dark" ? "rgba(148, 163, 184, 0.2)" : "rgba(148, 163, 184, 0.28)"};
   background: ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(30, 41, 59, 0.92)" : "rgba(255, 255, 255, 0.96)"};
-  color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(241, 245, 249, 0.86)" : "rgba(51, 65, 85, 0.82)")};
+    theme.scheme === "dark" ? "rgba(15, 23, 42, 0.88)" : "rgba(255, 255, 255, 0.97)"};
+  color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(203, 213, 225, 0.86)" : "rgba(71, 85, 105, 0.82)")};
   box-shadow: ${({ theme }) =>
-    theme.scheme === "dark" ? "0 6px 14px rgba(2, 6, 23, 0.24)" : "0 6px 14px rgba(15, 23, 42, 0.08)"};
+    theme.scheme === "dark" ? "0 5px 12px rgba(2, 6, 23, 0.22)" : "0 5px 12px rgba(15, 23, 42, 0.08)"};
   cursor: pointer;
   transition:
     background-color 120ms ease,
@@ -11362,27 +11381,30 @@ const TableQuickRailButton = styled.button`
   &:hover,
   &:focus-visible {
     background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(29, 78, 216, 0.88)" : "rgba(59, 130, 246, 0.16)"};
+      theme.scheme === "dark" ? "rgba(51, 65, 85, 0.64)" : "rgba(241, 245, 249, 0.98)"};
     border-color: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(191, 219, 254, 0.52)" : "rgba(59, 130, 246, 0.42)"};
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#ffffff" : "rgba(30, 64, 175, 0.92)")};
+      theme.scheme === "dark" ? "rgba(203, 213, 225, 0.34)" : "rgba(100, 116, 139, 0.34)"};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(248, 250, 252, 0.96)" : "rgba(30, 41, 59, 0.92)")};
     box-shadow: ${({ theme }) =>
-      theme.scheme === "dark" ? "0 8px 18px rgba(2, 6, 23, 0.3)" : "0 8px 18px rgba(59, 130, 246, 0.18)"};
+      theme.scheme === "dark" ? "0 7px 16px rgba(2, 6, 23, 0.26)" : "0 7px 16px rgba(15, 23, 42, 0.12)"};
     transform: translateY(-1px);
   }
 
   &[data-active="true"] {
-    background: rgba(59, 130, 246, 0.96);
-    border-color: rgba(147, 197, 253, 0.86);
-    color: #ffffff;
-    box-shadow: 0 8px 20px rgba(37, 99, 235, 0.32);
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(71, 85, 105, 0.88)" : "rgba(226, 232, 240, 0.96)"};
+    border-color: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(226, 232, 240, 0.32)" : "rgba(100, 116, 139, 0.28)"};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#ffffff" : "rgba(15, 23, 42, 0.94)")};
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "dark" ? "0 7px 16px rgba(2, 6, 23, 0.28)" : "0 7px 16px rgba(15, 23, 42, 0.12)"};
   }
 
   &[data-compact="true"] {
     min-width: 30px;
     min-height: 30px;
     box-shadow: ${({ theme }) =>
-      theme.scheme === "dark" ? "0 10px 20px rgba(2, 6, 23, 0.32)" : "0 10px 20px rgba(15, 23, 42, 0.14)"};
+      theme.scheme === "dark" ? "0 8px 18px rgba(2, 6, 23, 0.3)" : "0 8px 18px rgba(15, 23, 42, 0.12)"};
   }
 `
 
@@ -11413,10 +11435,10 @@ const TableHandleButton = styled(TableQuickRailButton)`
     background: ${({ theme }) =>
       theme.scheme === "dark" ? "rgba(15, 23, 42, 0.88)" : "rgba(255, 255, 255, 0.98)"};
     border: 1px solid ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(96, 165, 250, 0.24)" : "rgba(59, 130, 246, 0.18)"};
-    color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(241, 245, 249, 0.9)" : "rgba(51, 65, 85, 0.82)")};
+      theme.scheme === "dark" ? "rgba(148, 163, 184, 0.2)" : "rgba(148, 163, 184, 0.28)"};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(203, 213, 225, 0.9)" : "rgba(71, 85, 105, 0.82)")};
     box-shadow: ${({ theme }) =>
-      theme.scheme === "dark" ? "0 10px 20px rgba(2, 6, 23, 0.32)" : "0 10px 20px rgba(15, 23, 42, 0.14)"};
+      theme.scheme === "dark" ? "0 8px 18px rgba(2, 6, 23, 0.3)" : "0 8px 18px rgba(15, 23, 42, 0.12)"};
   }
 `
 
@@ -11456,12 +11478,12 @@ const TableTrailingAddBar = styled.button`
   height: ${TABLE_EDGE_ADD_BUTTON_SIZE_PX}px;
   border-radius: 999px;
   border: 1px solid ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(59, 130, 246, 0.24)" : "rgba(37, 99, 235, 0.18)"};
+    theme.scheme === "dark" ? "rgba(148, 163, 184, 0.2)" : "rgba(148, 163, 184, 0.28)"};
   background: ${({ theme }) =>
     theme.scheme === "dark" ? "rgba(15, 23, 42, 0.86)" : "rgba(255, 255, 255, 0.98)"};
-  color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(241, 245, 249, 0.86)" : "rgba(51, 65, 85, 0.82)")};
+  color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(203, 213, 225, 0.86)" : "rgba(71, 85, 105, 0.82)")};
   box-shadow: ${({ theme }) =>
-    theme.scheme === "dark" ? "0 10px 22px rgba(2, 6, 23, 0.28)" : "0 10px 22px rgba(15, 23, 42, 0.12)"};
+    theme.scheme === "dark" ? "0 8px 18px rgba(2, 6, 23, 0.26)" : "0 8px 18px rgba(15, 23, 42, 0.12)"};
   cursor: pointer;
   transition:
     background-color 120ms ease,
@@ -11473,12 +11495,12 @@ const TableTrailingAddBar = styled.button`
   &:hover,
   &:focus-visible {
     background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(29, 78, 216, 0.88)" : "rgba(59, 130, 246, 0.14)"};
+      theme.scheme === "dark" ? "rgba(51, 65, 85, 0.64)" : "rgba(241, 245, 249, 0.98)"};
     border-color: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(191, 219, 254, 0.52)" : "rgba(59, 130, 246, 0.38)"};
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#ffffff" : "rgba(30, 64, 175, 0.92)")};
+      theme.scheme === "dark" ? "rgba(203, 213, 225, 0.34)" : "rgba(100, 116, 139, 0.34)"};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(248, 250, 252, 0.96)" : "rgba(30, 41, 59, 0.92)")};
     box-shadow: ${({ theme }) =>
-      theme.scheme === "dark" ? "0 12px 24px rgba(2, 6, 23, 0.34)" : "0 10px 20px rgba(59, 130, 246, 0.18)"};
+      theme.scheme === "dark" ? "0 9px 18px rgba(2, 6, 23, 0.3)" : "0 9px 18px rgba(15, 23, 42, 0.12)"};
     transform: translateY(-1px);
   }
 `

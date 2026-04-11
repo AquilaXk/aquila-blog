@@ -7,6 +7,8 @@ const MERMAID_SOURCE_PATTERN =
   /^(%%\{|\s*(?:info|flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|gitGraph|quadrantChart|requirementDiagram|c4Context|C4Context|xychart-beta)\b)/
 const MERMAID_FLOWCHART_HEADER_PATTERN = /^\s*(?:flowchart|graph)\b/i
 const MERMAID_RISKY_STYLE_DIRECTIVE_PATTERN = /^\s*(style|linkStyle|classDef)\b/i
+const MERMAID_INIT_DIRECTIVE_PATTERN = /^\s*%%\{\s*(init|initialize)\s*:\s*([\s\S]*?)\}\s*%%(?:\r?\n)?/i
+const MERMAID_RISKY_INIT_KEY_PATTERN = /^(theme|themeVariables|themeCSS|darkMode)$/i
 
 const isMermaidSource = (rawCode: string) => {
   const normalized = rawCode.trim()
@@ -309,14 +311,124 @@ const useMermaidEffect = (
         .filter((line) => !MERMAID_RISKY_STYLE_DIRECTIVE_PATTERN.test(line))
         .join("\n")
 
+    const stripLeadingMermaidInitDirective = (source: string) => {
+      const directiveMatch = source.match(MERMAID_INIT_DIRECTIVE_PATTERN)
+      if (!directiveMatch) return source
+      return source.slice(directiveMatch[0].length).trimStart()
+    }
+
+    const splitMermaidTopLevelEntries = (value: string) => {
+      const entries: string[] = []
+      let current = ""
+      let quote: "'" | '"' | null = null
+      let escaped = false
+      let depth = 0
+
+      for (const char of value) {
+        if (quote) {
+          current += char
+          if (escaped) {
+            escaped = false
+            continue
+          }
+          if (char === "\\") {
+            escaped = true
+            continue
+          }
+          if (char === quote) {
+            quote = null
+          }
+          continue
+        }
+
+        if (char === "'" || char === '"') {
+          quote = char
+          current += char
+          continue
+        }
+
+        if (char === "{" || char === "[" || char === "(") {
+          depth += 1
+          current += char
+          continue
+        }
+
+        if (char === "}" || char === "]" || char === ")") {
+          depth = Math.max(0, depth - 1)
+          current += char
+          continue
+        }
+
+        if (char === "," && depth === 0) {
+          const trimmed = current.trim()
+          if (trimmed) entries.push(trimmed)
+          current = ""
+          continue
+        }
+
+        current += char
+      }
+
+      const trimmed = current.trim()
+      if (trimmed) entries.push(trimmed)
+      return entries
+    }
+
+    const extractMermaidInitEntryKey = (entry: string) => {
+      const match = entry
+        .trim()
+        .match(/^(?:"([^"]+)"|'([^']+)'|([A-Za-z_$][\w$-]*))\s*:/)
+      return match?.[1] || match?.[2] || match?.[3] || null
+    }
+
+    const stripRiskyFlowchartInitDirective = (source: string) => {
+      const directiveMatch = source.match(MERMAID_INIT_DIRECTIVE_PATTERN)
+      if (!directiveMatch) return source
+
+      const [directive, directiveKind, rawConfigLiteral] = directiveMatch
+      const remainder = source.slice(directive.length)
+      const trimmedConfigLiteral = rawConfigLiteral.trim()
+      const referencesVisualOverride =
+        /\b(?:themeVariables|themeCSS|theme|darkMode)\b/i.test(trimmedConfigLiteral)
+      if (!referencesVisualOverride) return source
+
+      if (!trimmedConfigLiteral.startsWith("{") || !trimmedConfigLiteral.endsWith("}")) {
+        return remainder
+      }
+
+      const innerLiteral = trimmedConfigLiteral.slice(1, -1)
+      const entries = splitMermaidTopLevelEntries(innerLiteral)
+      if (!entries.length) return remainder
+
+      const safeEntries: string[] = []
+      for (const entry of entries) {
+        const key = extractMermaidInitEntryKey(entry)
+        if (!key) {
+          return remainder
+        }
+        if (MERMAID_RISKY_INIT_KEY_PATTERN.test(key)) continue
+        safeEntries.push(entry.trim())
+      }
+
+      if (!safeEntries.length) return remainder
+
+      const sanitizedDirective = `%%{${directiveKind}: { ${safeEntries.join(", ")} }}%%`
+      return remainder.trim()
+        ? `${sanitizedDirective}\n${remainder.trimStart()}`
+        : sanitizedDirective
+    }
+
     // 공개 상세는 서비스 preset을 디자인 기준으로 유지해야 하므로
-    // source 내부 style/classDef/linkStyle 로 node fill/background 를 재정의하지 못하게 한다.
+    // source 내부 style/classDef/linkStyle/init(theme override) 로
+    // node fill/background 를 재정의하지 못하게 한다.
     const sanitizeRenderableMermaidSource = (source: string) => {
       const trimmed = source.trim()
-      if (!MERMAID_FLOWCHART_HEADER_PATTERN.test(trimmed)) return trimmed
+      const flowchartCandidate = stripLeadingMermaidInitDirective(trimmed)
+      if (!MERMAID_FLOWCHART_HEADER_PATTERN.test(flowchartCandidate)) return trimmed
 
-      const sanitized = stripRiskyFlowchartDirectives(trimmed).trim()
-      return sanitized || trimmed
+      const withoutRiskyInitDirective = stripRiskyFlowchartInitDirective(trimmed)
+      const sanitized = stripRiskyFlowchartDirectives(withoutRiskyInitDirective).trim()
+      return sanitized || withoutRiskyInitDirective || trimmed
     }
 
     // Mermaid htmlLabels(<foreignObject>)는 전역 타이포/line-height 영향으로 CJK 줄바꿈 라벨이 잘릴 수 있어

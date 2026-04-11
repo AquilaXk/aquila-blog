@@ -315,6 +315,12 @@ type TableMenuState =
     }
   | null
 
+type TableOverflowCoachmarkState = {
+  visible: boolean
+  left: number
+  top: number
+}
+
 type TopLevelBlockHandleState = {
   visible: boolean
   blockIndex: number
@@ -885,6 +891,8 @@ const TABLE_ADD_BAR_THICKNESS_PX = 28
 const TABLE_ADD_BAR_VIEWPORT_PADDING_PX = 8
 const TABLE_AXIS_RAIL_EDGE_HOTZONE_PX = 18
 const TABLE_TRAILING_ADD_EDGE_HOTZONE_PX = 18
+const TABLE_OVERFLOW_COACHMARK_ESTIMATED_WIDTH_PX = 244
+const TABLE_OVERFLOW_COACHMARK_DISMISS_MS = 4200
 
 const isTableCellNode = (node: ProseMirrorNode | null | undefined) =>
   Boolean(node && (node.type.name === "tableCell" || node.type.name === "tableHeader"))
@@ -1676,13 +1684,19 @@ const computeNextTableColumnWidthsForResize = (
   const nextWidths = widths.map((width) => Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(width)))
   const activeIndex = Math.max(0, Math.min(activeColumnIndex, nextWidths.length - 1))
   if (!nextWidths.length) {
-    return nextWidths
+    return {
+      widths: nextWidths,
+      wasClamped: false,
+    }
   }
 
   const proposedWidth = Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(nextWidths[activeIndex] + deltaPx))
   if (!shouldClampToBudget || overflowMode === TABLE_OVERFLOW_MODE_WIDE) {
     nextWidths[activeIndex] = proposedWidth
-    return nextWidths
+    return {
+      widths: nextWidths,
+      wasClamped: false,
+    }
   }
 
   const minBudget = TABLE_MIN_COLUMN_WIDTH_PX * nextWidths.length
@@ -1692,8 +1706,12 @@ const computeNextTableColumnWidthsForResize = (
     0
   )
   const maxActiveWidth = Math.max(TABLE_MIN_COLUMN_WIDTH_PX, safeBudget - otherColumnsWidth)
-  nextWidths[activeIndex] = Math.min(proposedWidth, maxActiveWidth)
-  return nextWidths
+  const nextActiveWidth = Math.min(proposedWidth, maxActiveWidth)
+  nextWidths[activeIndex] = nextActiveWidth
+  return {
+    widths: nextWidths,
+    wasClamped: proposedWidth >= maxActiveWidth,
+  }
 }
 
 const applyTableColumnWidthsToTransaction = (
@@ -2150,6 +2168,7 @@ const BlockEditorEngine = ({
   const tableCornerGrowRef = useRef<TableCornerGrowState | null>(null)
   const tableCornerGrowSuppressClickRef = useRef(false)
   const tableQuickRailHideTimerRef = useRef<number | null>(null)
+  const tableOverflowCoachmarkHideTimerRef = useRef<number | null>(null)
   const hoveredBlockClearTimerRef = useRef<number | null>(null)
   const bubbleHideTimerRef = useRef<number | null>(null)
   const bubbleToolbarHoveredRef = useRef(false)
@@ -2228,6 +2247,11 @@ const BlockEditorEngine = ({
     cellMenuTop: number
   } | null>(null)
   const [tableMenuState, setTableMenuState] = useState<TableMenuState>(null)
+  const [tableOverflowCoachmarkState, setTableOverflowCoachmarkState] = useState<TableOverflowCoachmarkState>({
+    visible: false,
+    left: 0,
+    top: 0,
+  })
   const tableAffordanceGeometryRef = useRef(tableAffordanceGeometry)
   const tableAffordanceVisibilityRef = useRef(tableAffordanceVisibility)
   const tableCornerPreviewStateRef = useRef<TableCornerPreviewState>({
@@ -2292,6 +2316,64 @@ const BlockEditorEngine = ({
     },
     []
   )
+
+  const cancelTableOverflowCoachmarkHide = useCallback(() => {
+    if (typeof window === "undefined") return
+    if (tableOverflowCoachmarkHideTimerRef.current !== null) {
+      window.clearTimeout(tableOverflowCoachmarkHideTimerRef.current)
+      tableOverflowCoachmarkHideTimerRef.current = null
+    }
+  }, [])
+
+  const hideTableOverflowCoachmark = useCallback(() => {
+    cancelTableOverflowCoachmarkHide()
+    setTableOverflowCoachmarkState((prev) =>
+      prev.visible
+        ? {
+            ...prev,
+            visible: false,
+          }
+        : prev
+    )
+  }, [cancelTableOverflowCoachmarkHide])
+
+  const scheduleTableOverflowCoachmarkHide = useCallback(
+    (delayMs = TABLE_OVERFLOW_COACHMARK_DISMISS_MS) => {
+      if (typeof window === "undefined") return
+      cancelTableOverflowCoachmarkHide()
+      tableOverflowCoachmarkHideTimerRef.current = window.setTimeout(() => {
+        tableOverflowCoachmarkHideTimerRef.current = null
+        setTableOverflowCoachmarkState((prev) => ({ ...prev, visible: false }))
+      }, delayMs)
+    },
+    [cancelTableOverflowCoachmarkHide]
+  )
+  useEffect(() => () => cancelTableOverflowCoachmarkHide(), [cancelTableOverflowCoachmarkHide])
+  const showTableOverflowCoachmark = useCallback(() => {
+    if (isCoarsePointer || isNarrowTableViewport || typeof window === "undefined") return
+    const renderedTable = resolveActiveRenderedTableForFloatingUi(
+      viewportRef.current,
+      tableAffordanceGeometryRef.current
+    )
+    const tableRect = renderedTable?.getBoundingClientRect() ?? null
+    const fallbackAnchor = tableAffordanceGeometryRef.current.cornerAnchor
+    const anchorRight = tableRect ? tableRect.right : fallbackAnchor.left + TABLE_CORNER_BUTTON_SIZE_PX
+    const anchorTop = tableRect ? tableRect.top : fallbackAnchor.top
+    const nextLeft = Math.min(
+      Math.max(16, Math.round(anchorRight - TABLE_OVERFLOW_COACHMARK_ESTIMATED_WIDTH_PX)),
+      Math.max(16, window.innerWidth - TABLE_OVERFLOW_COACHMARK_ESTIMATED_WIDTH_PX - 16)
+    )
+    const preferredTop = Math.round(anchorTop - 54)
+    const nextTop =
+      preferredTop >= 16 ? preferredTop : Math.min(window.innerHeight - 52, Math.round(anchorTop + 12))
+
+    setTableOverflowCoachmarkState({
+      visible: true,
+      left: nextLeft,
+      top: Math.max(16, nextTop),
+    })
+    scheduleTableOverflowCoachmarkHide()
+  }, [isCoarsePointer, isNarrowTableViewport, scheduleTableOverflowCoachmarkHide])
   const selectionUiSignatureRef = useRef("")
   const blockSelectionLayoutRectCacheRef = useRef(new Map<number, { element: HTMLElement; rect: DOMRect }>())
   const blockHandleRailMetricsRef = useRef({ width: 54, height: 40 })
@@ -4087,7 +4169,7 @@ const BlockEditorEngine = ({
       }
 
       const { currentEditor, rect, columns, currentWidths, measuredWidths } = resizeContext
-      const nextWidths = computeNextTableColumnWidthsForResize(
+      const nextWidthsResult = computeNextTableColumnWidthsForResize(
         measuredWidths,
         columnIndex,
         deltaPx,
@@ -4100,16 +4182,17 @@ const BlockEditorEngine = ({
         currentEditor.state.tr,
         columns,
         currentWidths,
-        nextWidths
+        nextWidthsResult.widths
       )
       if (!applied.changed) {
-        return { changed: false, appliedDelta: 0 }
+        return { changed: false, appliedDelta: 0, wasClamped: nextWidthsResult.wasClamped }
       }
       currentEditor.view.dispatch(applied.transaction)
       setSelectionTick((prev) => prev + 1)
       return {
         changed: true,
-        appliedDelta: nextWidths[columnIndex] - measuredWidths[columnIndex],
+        appliedDelta: nextWidthsResult.widths[columnIndex] - measuredWidths[columnIndex],
+        wasClamped: nextWidthsResult.wasClamped,
       }
     },
     [getCurrentTableColumnResizeContext]
@@ -4129,7 +4212,7 @@ const BlockEditorEngine = ({
       }
 
       const { currentEditor, columns, currentWidths } = resizeContext
-      const nextWidths = computeNextTableColumnWidthsForResize(
+      const nextWidthsResult = computeNextTableColumnWidthsForResize(
         baseWidths,
         columnIndex,
         totalDeltaPx,
@@ -4141,16 +4224,17 @@ const BlockEditorEngine = ({
         currentEditor.state.tr,
         columns,
         currentWidths,
-        nextWidths
+        nextWidthsResult.widths
       )
       if (!applied.changed) {
-        return { changed: false, appliedDelta: 0 }
+        return { changed: false, appliedDelta: 0, wasClamped: nextWidthsResult.wasClamped }
       }
       currentEditor.view.dispatch(applied.transaction)
       setSelectionTick((prev) => prev + 1)
       return {
         changed: true,
-        appliedDelta: nextWidths[columnIndex] - baseWidths[columnIndex],
+        appliedDelta: nextWidthsResult.widths[columnIndex] - baseWidths[columnIndex],
+        wasClamped: nextWidthsResult.wasClamped,
       }
     },
     [getCurrentTableColumnResizeContext]
@@ -4208,10 +4292,22 @@ const BlockEditorEngine = ({
       if (!isCurrentTableColumnSelection(activeColumnIndex) && !selectTableColumnByIndex(activeColumnIndex)) {
         return
       }
-      resizeTableColumnByIndex(activeColumnIndex, deltaPx)
+      const overflowMode = getTableOverflowMode(tableNode)
+      const resizeResult = resizeTableColumnByIndex(activeColumnIndex, deltaPx)
+      if (deltaPx > 0 && overflowMode !== TABLE_OVERFLOW_MODE_WIDE && resizeResult.wasClamped) {
+        showTableOverflowCoachmark()
+      } else if (deltaPx < 0) {
+        hideTableOverflowCoachmark()
+      }
       return
     }
-  }, [isCurrentTableColumnSelection, resizeTableColumnByIndex, selectTableColumnByIndex])
+  }, [
+    hideTableOverflowCoachmark,
+    isCurrentTableColumnSelection,
+    resizeTableColumnByIndex,
+    selectTableColumnByIndex,
+    showTableOverflowCoachmark,
+  ])
 
   const startTableColumnRailResize = useCallback(
     (pointerId: number, columnIndex: number, clientX: number) => {
@@ -5352,26 +5448,42 @@ const BlockEditorEngine = ({
       const state = tableColumnRailResizeRef.current
       if (!state || state.pointerId !== event.pointerId) return
       const nextClientX = event.clientX
-      resizeTableColumnBySessionDelta(
+      const resizeResult = resizeTableColumnBySessionDelta(
         state.columnIndex,
         state.baseWidths,
         nextClientX - state.startClientX,
         state.overflowMode,
         state.budget
       )
+      if (
+        state.overflowMode !== TABLE_OVERFLOW_MODE_WIDE &&
+        nextClientX > state.startClientX &&
+        resizeResult.wasClamped
+      ) {
+        showTableOverflowCoachmark()
+      } else if (nextClientX <= state.startClientX) {
+        hideTableOverflowCoachmark()
+      }
       syncTableColumnDragGuideForColumn(state.columnIndex)
     }
 
     const handlePointerUp = (event: PointerEvent) => {
       const state = tableColumnRailResizeRef.current
       if (!state || state.pointerId !== event.pointerId) return
-      resizeTableColumnBySessionDelta(
+      const resizeResult = resizeTableColumnBySessionDelta(
         state.columnIndex,
         state.baseWidths,
         event.clientX - state.startClientX,
         state.overflowMode,
         state.budget
       )
+      if (
+        state.overflowMode !== TABLE_OVERFLOW_MODE_WIDE &&
+        event.clientX > state.startClientX &&
+        resizeResult.wasClamped
+      ) {
+        showTableOverflowCoachmark()
+      }
       stopTableColumnRailResize()
     }
 
@@ -5386,7 +5498,9 @@ const BlockEditorEngine = ({
       stopTableColumnRailResize()
     }
   }, [
+    hideTableOverflowCoachmark,
     resizeTableColumnBySessionDelta,
+    showTableOverflowCoachmark,
     stopTableColumnRailResize,
     syncTableColumnDragGuideForColumn,
   ])
@@ -6153,6 +6267,11 @@ const BlockEditorEngine = ({
     void selectionTick
     return getActiveTableStructureState(editor)
   }, [editor, selectionTick])
+  useEffect(() => {
+    if (activeTableStructureState.overflowMode === TABLE_OVERFLOW_MODE_WIDE || tableMenuState) {
+      hideTableOverflowCoachmark()
+    }
+  }, [activeTableStructureState.overflowMode, hideTableOverflowCoachmark, tableMenuState])
   const canMergeSelectedTableCells = useMemo(() => {
     if (!editor) return false
     void selectionTick
@@ -8653,6 +8772,37 @@ const BlockEditorEngine = ({
             </TableCellMenuButton>
           ) : null}
         </>
+      ) : null}
+      {tableOverflowCoachmarkState.visible ? (
+        <TableOverflowCoachmark
+          data-testid="table-overflow-policy-hint"
+          style={{
+            left: `${tableOverflowCoachmarkState.left}px`,
+            top: `${tableOverflowCoachmarkState.top}px`,
+          }}
+          onPointerEnter={cancelTableOverflowCoachmarkHide}
+          onPointerLeave={() => scheduleTableOverflowCoachmarkHide(2400)}
+        >
+          <TableOverflowCoachmarkBody>
+            <TableOverflowCoachmarkTitle>페이지 너비에 맞춤 유지 중</TableOverflowCoachmarkTitle>
+            <TableOverflowCoachmarkDescription>
+              더 넓게 편집하려면 넓은 표로 전환하세요.
+            </TableOverflowCoachmarkDescription>
+          </TableOverflowCoachmarkBody>
+          <TableOverflowCoachmarkAction
+            type="button"
+            data-testid="table-overflow-policy-hint-wide-action"
+            onMouseDown={handleToolbarButtonMouseDown}
+            onClick={() => {
+              if (!editor) return
+              updateActiveTableOverflowMode(editor, TABLE_OVERFLOW_MODE_WIDE)
+              hideTableOverflowCoachmark()
+              stabilizeTableSelectionSurface(editor)
+            }}
+          >
+            넓은 표
+          </TableOverflowCoachmarkAction>
+        </TableOverflowCoachmark>
       ) : null}
       {tableMenuState ? (
         <FloatingTableMenu
@@ -11415,6 +11565,67 @@ const FloatingTableMenu = styled.div`
     theme.scheme === "dark" ? "rgba(15, 18, 24, 0.96)" : "rgba(255, 255, 255, 0.98)"};
   box-shadow: ${({ theme }) =>
     theme.scheme === "dark" ? "0 12px 18px rgba(0, 0, 0, 0.16)" : "0 12px 18px rgba(15, 23, 42, 0.1)"};
+`
+
+const TableOverflowCoachmark = styled.div`
+  position: fixed;
+  z-index: 64;
+  width: min(${TABLE_OVERFLOW_COACHMARK_ESTIMATED_WIDTH_PX}px, calc(100vw - 2rem));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0.8rem;
+  border-radius: 0.9rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(15, 18, 24, 0.98)" : "rgba(255, 255, 255, 0.985)"};
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "dark" ? "0 12px 24px rgba(2, 6, 23, 0.32)" : "0 12px 24px rgba(15, 23, 42, 0.12)"};
+`
+
+const TableOverflowCoachmarkBody = styled.div`
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.14rem;
+`
+
+const TableOverflowCoachmarkTitle = styled.strong`
+  font-size: 0.76rem;
+  color: var(--color-gray12);
+`
+
+const TableOverflowCoachmarkDescription = styled.span`
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: var(--color-gray10);
+`
+
+const TableOverflowCoachmarkAction = styled.button`
+  flex: 0 0 auto;
+  min-height: 1.95rem;
+  padding: 0 0.78rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(96, 165, 250, 0.28)" : "rgba(59, 130, 246, 0.24)"};
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(30, 41, 59, 0.88)" : "rgba(248, 250, 252, 0.98)"};
+  color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(241, 245, 249, 0.94)" : "rgba(30, 64, 175, 0.92)")};
+  font-size: 0.74rem;
+  font-weight: 800;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
+
+  &:hover,
+  &:focus-visible {
+    border-color: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(147, 197, 253, 0.46)" : "rgba(59, 130, 246, 0.42)"};
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(29, 78, 216, 0.32)" : "rgba(219, 234, 254, 0.92)"};
+  }
 `
 
 const TableMenuHeader = styled.div`

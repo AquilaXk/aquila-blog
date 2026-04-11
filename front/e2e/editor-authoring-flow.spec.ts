@@ -1578,16 +1578,44 @@ test.describe("block editor authoring flow", () => {
   })
 
   test("table corner grow handle은 row/column을 함께 확장하고 trailing empty axis만 축소한다", async ({ page }) => {
+    const tableLocator = page.locator(".aq-block-editor__content .tableWrapper table").first()
+    const hoverTableCorner = async () => {
+      const tableBox = await tableLocator.boundingBox()
+      if (!tableBox) {
+        throw new Error("table bounding box is missing before grow handle hover")
+      }
+      await tableLocator.hover({
+        position: {
+          x: Math.max(2, Math.round(tableBox.width) - 4),
+          y: 6,
+        },
+      })
+    }
+
+    const clickVisibleGrowHandle = async () => {
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            const button = document.querySelector('[data-testid="table-corner-grow-handle"]')
+            return button instanceof HTMLButtonElement
+          })
+        )
+        .toBe(true)
+      await page.evaluate(() => {
+        const button = document.querySelector('[data-testid="table-corner-grow-handle"]')
+        if (!(button instanceof HTMLButtonElement)) {
+          throw new Error("table corner grow handle is not attached")
+        }
+        button.click()
+      })
+    }
+
     await page.goto(QA_ENGINE_ROUTE)
 
     await page.getByRole("button", { name: "테이블" }).click()
     const firstTableCell = page.locator("table th, table td").first()
     await firstTableCell.click()
-    const tableBox = await page.locator(".aq-block-editor__content .tableWrapper table").boundingBox()
-    if (!tableBox) {
-      throw new Error("table bounding box is missing before grow handle hover")
-    }
-    await page.mouse.move(tableBox.x + tableBox.width - 6, tableBox.y + 6)
+    await hoverTableCorner()
 
     const growHandle = page.getByTestId("table-corner-grow-handle")
     await expect(growHandle).toBeVisible()
@@ -1600,13 +1628,7 @@ test.describe("block editor authoring flow", () => {
       }
     })
 
-    await page.evaluate(() => {
-      const button = document.querySelector('[data-testid="table-corner-grow-handle"]')
-      if (!(button instanceof HTMLButtonElement)) {
-        throw new Error("table corner grow handle is not attached")
-      }
-      button.click()
-    })
+    await clickVisibleGrowHandle()
 
     await expect
       .poll(async () => await page.locator("table tr").count())
@@ -1727,7 +1749,7 @@ test.describe("block editor authoring flow", () => {
     const trailingCell = page.locator("table tr").nth(before.rows - 1).locator("th, td").nth(before.columns - 1)
     await trailingCell.click()
     await page.keyboard.type("keep")
-    await page.mouse.move(tableBox.x + tableBox.width - 6, tableBox.y + 6)
+    await hoverTableCorner()
 
     await growHandle.evaluate(async (element, payload) => {
       const { pointerId, padding } = payload as {
@@ -1833,22 +1855,49 @@ test.describe("block editor authoring flow", () => {
   test("table 구조 메뉴의 폭 정책 UI는 wide/fit-to-page를 토글하고 재진입 후에도 유지된다", async ({
     page,
   }) => {
+    const hoverTableCorner = async (tableLocator: Locator, missingMessage: string) => {
+      const tableBox = await tableLocator.boundingBox()
+      if (!tableBox) {
+        throw new Error(missingMessage)
+      }
+      await tableLocator.hover({
+        position: {
+          x: Math.max(2, Math.round(tableBox.width) - 4),
+          y: 6,
+        },
+      })
+    }
+
+    const clickVisibleStructureMenuButton = async () => {
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            const button = document.querySelector('[data-testid="table-structure-menu-button"]')
+            return button instanceof HTMLButtonElement
+          })
+        )
+        .toBe(true)
+      await page.evaluate(() => {
+        const button = document.querySelector('[data-testid="table-structure-menu-button"]')
+        if (!(button instanceof HTMLButtonElement)) {
+          throw new Error("table structure menu button is not attached")
+        }
+        button.click()
+      })
+    }
+
     await page.goto(QA_ENGINE_ROUTE)
 
     await page.getByRole("button", { name: "테이블" }).click()
     const firstTableCell = page.locator("table th, table td").first()
     await firstTableCell.click()
     const table = page.locator(".aq-block-editor__content .tableWrapper table").first()
-    const tableBox = await table.boundingBox()
-    if (!tableBox) {
-      throw new Error("table bounding box is missing before structure menu hover")
-    }
-    await page.mouse.move(tableBox.x + tableBox.width - 6, tableBox.y + 6)
+    await hoverTableCorner(table, "table bounding box is missing before structure menu hover")
 
     const structureMenuButton = page.getByTestId("table-structure-menu-button")
 
     await expect(structureMenuButton).toBeVisible()
-    await structureMenuButton.click({ force: true })
+    await clickVisibleStructureMenuButton()
     const tableMenu = page.getByTestId("table-table-menu")
     await expect(tableMenu).toBeVisible()
     await expect(tableMenu.getByTestId("table-overflow-mode-normal")).toHaveAttribute("data-active", "true")
@@ -1868,21 +1917,11 @@ test.describe("block editor authoring flow", () => {
     const reloadedFirstCell = page.locator("table th, table td").first()
     await reloadedFirstCell.click()
     const reloadedTable = page.locator(".aq-block-editor__content .tableWrapper table").first()
-    const reloadedTableBox = await reloadedTable.boundingBox()
-    if (!reloadedTableBox) {
-      throw new Error("reloaded table bounding box is missing before structure menu hover")
-    }
-    await page.mouse.move(reloadedTableBox.x + reloadedTableBox.width - 6, reloadedTableBox.y + 6)
+    await hoverTableCorner(reloadedTable, "reloaded table bounding box is missing before structure menu hover")
 
     const reloadedStructureMenuButton = page.getByTestId("table-structure-menu-button")
     await expect(reloadedStructureMenuButton).toBeVisible()
-    await page.evaluate(() => {
-      const button = document.querySelector('[data-testid="table-structure-menu-button"]')
-      if (!(button instanceof HTMLButtonElement)) {
-        throw new Error("reloaded table structure menu button is not attached")
-      }
-      button.click()
-    })
+    await clickVisibleStructureMenuButton()
     const reloadedTableMenu = page.getByTestId("table-table-menu")
     await expect(reloadedTableMenu).toBeVisible()
     await expect(reloadedTableMenu.getByTestId("table-overflow-mode-normal")).toHaveAttribute("data-active", "false")
@@ -2004,6 +2043,9 @@ test.describe("block editor authoring flow", () => {
 
     await selectWordInEditable(page, firstTableCell, "셀굵게")
     const textBubbleToolbar = page.getByTestId("editor-text-bubble-toolbar")
+    if ((await textBubbleToolbar.count()) === 0) {
+      await selectWordInEditable(page, firstTableCell, "셀굵게")
+    }
     await expect(textBubbleToolbar).toBeVisible()
     await textBubbleToolbar.getByRole("button", { name: "굵게", exact: true }).click()
 
@@ -2800,10 +2842,11 @@ test.describe("block editor authoring flow", () => {
 
     const firstStartX = firstHandleBox.x + firstHandleBox.width / 2
     const firstStartY = firstHandleBox.y + firstHandleBox.height / 2
+    const clampAttemptDelta = beforeShape.contentWidth
 
     await page.mouse.move(firstStartX, firstStartY)
     await page.mouse.down()
-    await page.mouse.move(firstStartX + 180, firstStartY, { steps: 10 })
+    await page.mouse.move(firstStartX + clampAttemptDelta, firstStartY, { steps: 16 })
     await page.mouse.up()
 
     const clampedShape = await readShape()
@@ -2818,6 +2861,17 @@ test.describe("block editor authoring flow", () => {
     expect(Math.abs((clampedShape.columnWidths[2] ?? 0) - (afterShape.columnWidths[2] ?? 0))).toBeLessThanOrEqual(2)
     expect(clampedShape.tableWidth).toBeGreaterThan(afterShape.tableWidth + 12)
     expect(clampedShape.tableWidth).toBeLessThanOrEqual(beforeShape.contentWidth + 2)
+
+    const overflowPolicyHint = page.getByTestId("table-overflow-policy-hint")
+    await expect(overflowPolicyHint).toBeVisible()
+    await expect(overflowPolicyHint).toContainText("페이지 너비에 맞춤 유지 중")
+    await overflowPolicyHint.getByTestId("table-overflow-policy-hint-wide-action").click()
+    await expect(page.locator(".aq-block-editor__content .tableWrapper > table").first()).toHaveAttribute(
+      "data-overflow-mode",
+      "wide"
+    )
+    await expect(page.getByTestId("qa-markdown-output")).toContainText('"overflowMode":"wide"')
+    await expect(overflowPolicyHint).toBeHidden()
   })
 
   test("normal mode에서 열 삭제는 기존 표 폭을 유지하며 남은 열 폭을 재분배하고 항상 최대폭으로 되돌리지는 않는다", async ({

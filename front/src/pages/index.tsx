@@ -10,7 +10,6 @@ import { dehydrate } from "@tanstack/react-query"
 import { AdminProfile } from "src/hooks/useAdminProfile"
 import { hydrateServerAuthSession } from "src/libs/server/authSession"
 import {
-  buildStaticAdminProfileSnapshot,
   fetchServerAdminProfile,
   hasServerAuthCookie,
   resolvePublicAdminProfileSnapshot,
@@ -42,18 +41,12 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
     })
   )
 
-  const publicProfileSnapshot = !hasAuthCookie && !crawlerRequest ? resolvePublicAdminProfileSnapshot(req) : null
-  const adminProfilePromise = publicProfileSnapshot
-    ? Promise.resolve({
-        ok: true as const,
-        value: publicProfileSnapshot.profile,
-        durationMs: 0,
-      })
-    : timed(() =>
-        fetchServerAdminProfile(req, {
-          timeoutMs: hasAuthCookie ? 1_800 : crawlerRequest ? 1_500 : 900,
-        })
-      )
+  const fallbackProfileSnapshot = !hasAuthCookie ? resolvePublicAdminProfileSnapshot(req) : null
+  const adminProfilePromise = timed(() =>
+    fetchServerAdminProfile(req, {
+      timeoutMs: hasAuthCookie ? 1_800 : crawlerRequest ? 1_500 : 900,
+    })
+  )
 
   const authMemberPromise = timed(() => hydrateServerAuthSession(queryClient, req))
 
@@ -68,7 +61,7 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
       ? adminProfileResult.value
       : hasAuthCookie
         ? null
-        : buildStaticAdminProfileSnapshot()
+        : fallbackProfileSnapshot?.profile || null
   const authMember = authMemberResult.ok ? authMemberResult.value : undefined
   const bootstrapSnapshot =
     bootstrapResult.ok
@@ -109,11 +102,9 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
       durationMs: adminProfileResult.durationMs,
       description:
         initialAdminProfile !== null
-          ? publicProfileSnapshot
-            ? publicProfileSnapshot.source
-            : adminProfileResult.ok && adminProfileResult.value
+          ? adminProfileResult.ok && adminProfileResult.value
             ? "ok"
-            : "static-fallback"
+            : fallbackProfileSnapshot?.source || "static-fallback"
           : "auth-session",
     },
     {

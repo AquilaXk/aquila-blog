@@ -127,7 +127,17 @@ const DETAIL_CONTENT = [
 ].join("\n")
 
 const mockDetailEndpoint = async (page: Page, overrides: MockDetailOverrides = {}) => {
-  const { id: overrideId, content: overrideContent, ...restOverrides } = overrides
+  const {
+    id: overrideId,
+    title: overrideTitle,
+    content: overrideContent,
+    likesCount: overrideLikesCount,
+    commentsCount: overrideCommentsCount,
+    hitCount: overrideHitCount,
+    actorHasLiked: overrideActorHasLiked,
+    actorCanModify: overrideActorCanModify,
+    actorCanDelete: overrideActorCanDelete,
+  } = overrides
   const postId = overrideId ?? 990
   await page.route(`**/post/api/v1/posts/${postId}**`, async (route) => {
     await route.fulfill({
@@ -141,20 +151,18 @@ const mockDetailEndpoint = async (page: Page, overrides: MockDetailOverrides = {
         authorName: "관리자",
         authorUsername: "aquila",
         authorProfileImageDirectUrl: "/avatar.png",
-        title: "모바일 테이블/코드블록 회귀 테스트",
-        content: DETAIL_CONTENT,
+        title: overrideTitle ?? "모바일 테이블/코드블록 회귀 테스트",
+        content: overrideContent ?? DETAIL_CONTENT,
         tags: ["모바일"],
         category: ["프론트"],
         published: true,
         listed: true,
-        likesCount: 0,
-        commentsCount: 0,
-        hitCount: 0,
-        actorHasLiked: false,
-        actorCanModify: false,
-        actorCanDelete: false,
-        content: overrideContent ?? DETAIL_CONTENT,
-        ...restOverrides,
+        likesCount: overrideLikesCount ?? 0,
+        commentsCount: overrideCommentsCount ?? 0,
+        hitCount: overrideHitCount ?? 0,
+        actorHasLiked: overrideActorHasLiked ?? false,
+        actorCanModify: overrideActorCanModify ?? false,
+        actorCanDelete: overrideActorCanDelete ?? false,
       }),
     })
   })

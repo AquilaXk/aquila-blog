@@ -2487,36 +2487,6 @@ const BlockEditorEngine = ({
     [hideTableColumnDragGuide]
   )
 
-  const syncTableColumnDragGuideForClientX = useCallback(
-    (clientX: number) => {
-      const viewport = viewportRef.current
-      if (!viewport) {
-        hideTableColumnDragGuide()
-        return
-      }
-
-      const tableElement = resolveActiveRenderedTableForFloatingUi(
-        viewport,
-        tableAffordanceGeometryRef.current,
-        activeTableElementRef.current
-      )
-      if (!tableElement) {
-        hideTableColumnDragGuide()
-        return
-      }
-
-      const tableRect = tableElement.getBoundingClientRect()
-      const clampedX = Math.max(tableRect.left, Math.min(tableRect.right, clientX))
-      setTableColumnDragGuideState({
-        visible: true,
-        left: Math.round(clampedX),
-        top: Math.round(tableRect.top),
-        height: Math.round(tableRect.height),
-      })
-    },
-    [hideTableColumnDragGuide]
-  )
-
   const scheduleTableQuickRailHide = useCallback((delayMs = TABLE_QUICK_RAIL_HIDE_DELAY_MS) => {
     cancelTableQuickRailHide()
     if (typeof window === "undefined") return
@@ -11177,23 +11147,6 @@ const TableCornerHandle = styled.div`
   }
 `
 
-const TableColumnRailTrack = styled.div`
-  position: fixed;
-  z-index: 57;
-  height: 0.625rem;
-  overflow: visible;
-  user-select: none;
-  -webkit-user-select: none;
-  border-radius: 999px;
-  border: 1px solid
-    ${({ theme }) => (theme.scheme === "dark" ? "rgba(71, 85, 105, 0.34)" : "rgba(148, 163, 184, 0.28)")};
-  background: ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(15, 23, 42, 0.58)" : "rgba(255, 255, 255, 0.9)"};
-  box-shadow: ${({ theme }) =>
-    theme.scheme === "dark" ? "0 8px 18px rgba(2, 6, 23, 0.18)" : "0 8px 18px rgba(15, 23, 42, 0.06)"};
-  pointer-events: auto;
-`
-
 const TableColumnRailSegment = styled.button`
   all: unset;
   box-sizing: border-box;
@@ -11227,39 +11180,6 @@ const TableColumnRailSegment = styled.button`
 
   &:last-child::after {
     display: none;
-  }
-`
-
-const TableColumnRailResizeHandle = styled.span`
-  position: absolute;
-  top: -0.35rem;
-  right: -0.44rem;
-  bottom: -0.35rem;
-  width: 0.88rem;
-  user-select: none;
-  -webkit-user-select: none;
-  cursor: col-resize;
-  opacity: 0.82;
-  transition: opacity 120ms ease;
-
-  &::before {
-    content: "";
-    position: absolute;
-    top: 0.22rem;
-    bottom: 0.22rem;
-    left: 50%;
-    width: 2px;
-    transform: translateX(-50%);
-    border-radius: 999px;
-    background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(191, 219, 254, 0.9)" : "rgba(37, 99, 235, 0.72)"};
-    box-shadow: ${({ theme }) =>
-      theme.scheme === "dark" ? "0 0 0 1px rgba(15, 23, 42, 0.28)" : "0 0 0 1px rgba(255, 255, 255, 0.72)"};
-  }
-
-  ${TableColumnRailSegment}:hover &,
-  ${TableColumnRailSegment}[data-active="true"] & {
-    opacity: 1;
   }
 `
 

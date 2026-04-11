@@ -1397,13 +1397,6 @@ test.describe("block editor authoring flow", () => {
     const firstTableCell = table.locator("tr").first().locator("th, td").first()
     await firstTableCell.click()
 
-    const getTableSurfaceBox = async () => {
-      const box = await page.locator(".aq-block-editor__content .tableWrapper").boundingBox()
-      if (!box) {
-        throw new Error("writer table surface bounding box is missing")
-      }
-      return box
-    }
     const getRenderedTableBox = async () => {
       const box = await table.boundingBox()
       if (!box) {

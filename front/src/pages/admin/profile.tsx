@@ -51,6 +51,7 @@ import { hasServerAuthCookie } from "src/libs/server/authSession"
 import { fetchServerProfileWorkspace } from "src/libs/server/profileWorkspace"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import { acquireBodyScrollLock } from "src/libs/utils/bodyScrollLock"
+import AdminShell from "src/routes/Admin/AdminShell"
 
 type NoticeTone = "idle" | "loading" | "success" | "error"
 type WorkspaceSectionId = "identity" | "about" | "home" | "links"
@@ -1583,7 +1584,8 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
   }
 
   return (
-    <Main>
+    <AdminShell currentSection="profile" member={sessionMember || initialMember}>
+      <Main>
       <input
         ref={profileImageFileInputRef}
         type="file"
@@ -1925,7 +1927,8 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
           </ModalCard>
         </ModalOverlay>
       ) : null}
-    </Main>
+      </Main>
+    </AdminShell>
   )
 }
 

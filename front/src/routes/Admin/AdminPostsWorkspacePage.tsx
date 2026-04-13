@@ -17,6 +17,7 @@ import { serverApiFetch } from "src/libs/server/backend"
 import { readServerSnapshot } from "src/libs/server/serverSnapshotCache"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import { isServerTempDraftPost } from "./editorTempDraft"
+import AdminShell from "./AdminShell"
 
 type PostListScope = "active" | "deleted"
 
@@ -830,7 +831,8 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
   if (!sessionMember) return null
 
   return (
-    <Main>
+    <AdminShell currentSection="posts" member={sessionMember}>
+      <Main>
       <PageHeader>
         <ContextLine aria-label="현재 위치" />
       </PageHeader>
@@ -1334,7 +1336,8 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
           </ConfirmDialog>
         </ConfirmBackdrop>
       ) : null}
-    </Main>
+      </Main>
+    </AdminShell>
   )
 }
 

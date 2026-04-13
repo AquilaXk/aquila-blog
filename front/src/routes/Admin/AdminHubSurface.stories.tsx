@@ -53,6 +53,12 @@ const meta: Meta<typeof AdminHubSurface> = {
         description: "",
         cta: "대시보드 열기",
       },
+      {
+        href: "/admin/tools",
+        title: "운영 진단",
+        description: "",
+        cta: "진단 열기",
+      },
     ],
   },
 }

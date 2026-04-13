@@ -1,8 +1,8 @@
+import type { Theme } from "@emotion/react"
 import styled from "@emotion/styled"
 import Link from "next/link"
-import AppIcon from "src/components/icons/AppIcon"
+import AppIcon, { type IconName } from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
-import type { Theme } from "@emotion/react"
 
 export type AdminHubPrimaryAction = {
   href: string
@@ -45,6 +45,21 @@ type Props = {
   secondaryLinks: AdminHubSecondaryLink[]
 }
 
+type QuickLinkItem = {
+  href: string
+  label: string
+  detail: string
+  icon: IconName
+}
+
+const resolveQuickLinkIcon = (href: string): IconName => {
+  if (href.includes("/profile")) return "camera"
+  if (href.includes("/dashboard")) return "service"
+  if (href.includes("/tools")) return "laptop"
+  if (href.includes("/posts")) return "spark"
+  return "edit"
+}
+
 const AdminHubSurface = ({
   displayName,
   displayNameInitial,
@@ -56,255 +71,460 @@ const AdminHubSurface = ({
   primaryAction,
   secondaryLinks,
 }: Props) => {
+  const quickLinks: QuickLinkItem[] = [
+    {
+      href: primaryAction.href,
+      label: primaryAction.cta,
+      detail: primaryAction.title,
+      icon: "edit",
+    },
+    {
+      href: primaryAction.secondaryHref,
+      label: primaryAction.secondaryLabel,
+      detail: "최근 초안과 수정 흐름 점검",
+      icon: resolveQuickLinkIcon(primaryAction.secondaryHref),
+    },
+    ...secondaryLinks.map((item) => ({
+      href: item.href,
+      label: item.cta,
+      detail: item.title,
+      icon: resolveQuickLinkIcon(item.href),
+    })),
+  ]
+
   return (
     <Main>
-      <HeaderPanel>
-        <HeaderCopy>
-          <h1>관리자 허브</h1>
-        </HeaderCopy>
-        <SummaryRail aria-label="관리자 상태 요약">
-          {summaryItems.map((item) => (
-            <StatusItem key={`${item.label}-${item.value}`} data-tone={item.tone || "neutral"}>
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-            </StatusItem>
-          ))}
-        </SummaryRail>
-        <NextActionStrip aria-label="지금 해야 할 일">
+      <div className="mid">
+        <HeroPanel>
+          <SectionEyebrow>운영 시작점</SectionEyebrow>
+          <HeroTop>
+            <HeroCopy>
+              <h1>관리자 허브</h1>
+              <p>오늘의 핵심 상태를 먼저 확인하고, 글 작성과 운영 점검 흐름을 같은 화면에서 이어갑니다.</p>
+            </HeroCopy>
+            <HeroActions>
+              <Link href={primaryAction.href} passHref legacyBehavior>
+                <PrimaryActionLink>
+                  <AppIcon name="edit" aria-hidden="true" />
+                  <span>{primaryAction.cta}</span>
+                </PrimaryActionLink>
+              </Link>
+              <Link href={primaryAction.secondaryHref} passHref legacyBehavior>
+                <SecondaryActionLink>{primaryAction.secondaryLabel}</SecondaryActionLink>
+              </Link>
+            </HeroActions>
+          </HeroTop>
+
+          <SummaryRail aria-label="관리자 상태 요약">
+            {summaryItems.map((item) => (
+              <SummaryCard key={`${item.label}-${item.value}`} data-tone={item.tone || "neutral"}>
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+              </SummaryCard>
+            ))}
+          </SummaryRail>
+        </HeroPanel>
+
+        <ActionStrip aria-label="지금 해야 할 일">
           <SectionHeader>
             <h2>지금 해야 할 일</h2>
+            <p>first fold에서 바로 처리할 우선 작업만 남겨서 시작점을 고정합니다.</p>
           </SectionHeader>
-          <NextActionGrid>
-            {nextActions.map((item) => (
+          <ActionStripGrid>
+            {nextActions.map((item, index) => (
               <Link key={`${item.href}-${item.title}`} href={item.href} passHref legacyBehavior>
-                <NextActionLink data-tone={item.tone || "neutral"}>
+                <ActionCard data-tone={item.tone || "neutral"} data-featured={index === 0 ? "true" : "false"}>
                   <div className="copy">
                     <strong>{item.title}</strong>
                     <p>{item.detail}</p>
                   </div>
                   <span className="meta">바로 가기</span>
-                </NextActionLink>
+                </ActionCard>
               </Link>
             ))}
-          </NextActionGrid>
-        </NextActionStrip>
-      </HeaderPanel>
+          </ActionStripGrid>
+        </ActionStrip>
 
-      <HeroPanel>
-        <HeroBody>
-          <HeroCopy>
-            <h2>{primaryAction.title}</h2>
-            {primaryAction.description ? <p>{primaryAction.description}</p> : null}
-          </HeroCopy>
-          <HeroActions>
-            <Link href={primaryAction.href} passHref legacyBehavior>
-              <PrimaryActionLink>
-                <AppIcon name="edit" aria-hidden="true" />
-                <span>{primaryAction.cta}</span>
-              </PrimaryActionLink>
-            </Link>
-            <Link href={primaryAction.secondaryHref} passHref legacyBehavior>
-              <SecondaryActionLink>
-                <span>{primaryAction.secondaryLabel}</span>
-              </SecondaryActionLink>
-            </Link>
-          </HeroActions>
-        </HeroBody>
-      </HeroPanel>
+        <WorkspaceBoard>
+          <SectionCard>
+            <SectionHeader>
+              <h2>오늘의 운영 루틴</h2>
+              <p>글 작성과 주요 관리 화면 진입을 하나의 작업 보드로 묶었습니다.</p>
+            </SectionHeader>
 
-      <ShortcutPanel>
-        <SectionHeader>
-          <h2>보조 작업</h2>
-        </SectionHeader>
-        <ShortcutGrid>
-          {secondaryLinks.map((item) => (
-            <Link key={item.href} href={item.href} passHref legacyBehavior>
-              <ShortcutLink>
-                <ShortcutCopy>
-                  <ShortcutTitleRow>
-                    <strong>{item.title}</strong>
-                    <AppIcon name="chevron-down" aria-hidden="true" className="chevron" />
-                  </ShortcutTitleRow>
-                  {item.description ? <p>{item.description}</p> : null}
-                </ShortcutCopy>
-                <ShortcutMeta>{item.cta}</ShortcutMeta>
-              </ShortcutLink>
-            </Link>
-          ))}
-        </ShortcutGrid>
-      </ShortcutPanel>
+            <PrimaryWorkflow>
+              <div className="iconWrap">
+                <AppIcon name="spark" aria-hidden="true" />
+              </div>
+              <div className="copy">
+                <strong>{primaryAction.title}</strong>
+                <p>{primaryAction.description}</p>
+              </div>
+              <Link href={primaryAction.href} passHref legacyBehavior>
+                <WorkflowAction>{primaryAction.cta}</WorkflowAction>
+              </Link>
+            </PrimaryWorkflow>
 
-      <ProfileCompact>
-        <ProfileFrame>
-          {profileSrc ? (
-            <ProfileImage src={profileSrc} alt={displayName} fillContainer />
-          ) : (
-            <ProfileFallback>{displayNameInitial}</ProfileFallback>
-          )}
-        </ProfileFrame>
-        <ProfileCopy>
-          <strong>{displayName}</strong>
-          <span>{profileRole || "관리자 역할 미설정"}</span>
-          <p>{profileBio || "관리자 소개 문구가 없습니다."}</p>
-        </ProfileCopy>
-        <Link href="/admin/profile" passHref legacyBehavior>
-          <ProfileAction>프로필 편집</ProfileAction>
-        </Link>
-      </ProfileCompact>
+            <ShortcutGrid>
+              {secondaryLinks.map((item) => (
+                <Link key={item.href} href={item.href} passHref legacyBehavior>
+                  <ShortcutLink>
+                    <ShortcutTitleRow>
+                      <div className="iconWrap">
+                        <AppIcon name={resolveQuickLinkIcon(item.href)} aria-hidden="true" />
+                      </div>
+                      <div className="copy">
+                        <strong>{item.title}</strong>
+                        <p>{item.description}</p>
+                      </div>
+                    </ShortcutTitleRow>
+                    <span className="meta">{item.cta}</span>
+                  </ShortcutLink>
+                </Link>
+              ))}
+            </ShortcutGrid>
+          </SectionCard>
+
+          <SectionCard>
+            <SectionHeader>
+              <h2>현재 체크포인트</h2>
+              <p>프로필과 홈 소개, 연결 채널 준비 상태를 빠르게 스캔할 수 있게 정리했습니다.</p>
+            </SectionHeader>
+            <Checklist>
+              {summaryItems.map((item) => (
+                <ChecklistItem key={`checkpoint-${item.label}`} data-tone={item.tone || "neutral"}>
+                  <div className="copy">
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
+                  </div>
+                  <StatusDot data-tone={item.tone || "neutral"} aria-hidden="true" />
+                </ChecklistItem>
+              ))}
+            </Checklist>
+          </SectionCard>
+        </WorkspaceBoard>
+      </div>
+
+      <RailColumn className="rt">
+        <RailCard>
+          <SectionHeader>
+            <h2>운영 메모</h2>
+            <p>현재 계정과 공개 프로필 노출 상태를 같은 문맥에서 확인합니다.</p>
+          </SectionHeader>
+          <ProfileSnapshot>
+            <ProfileFrame>
+              {profileSrc ? (
+                <ProfileImage src={profileSrc} alt={displayName} fillContainer />
+              ) : (
+                <ProfileFallback>{displayNameInitial}</ProfileFallback>
+              )}
+            </ProfileFrame>
+            <ProfileCopy>
+              <strong>{displayName}</strong>
+              <span>{profileRole || "관리자 역할 미설정"}</span>
+              <p>{profileBio || "관리자 소개 문구가 아직 없습니다."}</p>
+            </ProfileCopy>
+          </ProfileSnapshot>
+          <Link href="/admin/profile" passHref legacyBehavior>
+            <RailActionLink>프로필 편집</RailActionLink>
+          </Link>
+        </RailCard>
+
+        <RailCard>
+          <SectionHeader>
+            <h2>빠른 이동</h2>
+            <p>허브에서 자주 오가는 관리 화면만 따로 모았습니다.</p>
+          </SectionHeader>
+          <QuickLinkList>
+            {quickLinks.map((item) => (
+              <Link key={`${item.href}-${item.label}`} href={item.href} passHref legacyBehavior>
+                <QuickLink>
+                  <span className="iconWrap">
+                    <AppIcon name={item.icon} aria-hidden="true" />
+                  </span>
+                  <span className="copy">
+                    <strong>{item.label}</strong>
+                    <span>{item.detail}</span>
+                  </span>
+                </QuickLink>
+              </Link>
+            ))}
+          </QuickLinkList>
+        </RailCard>
+
+        <RailCard>
+          <SectionHeader>
+            <h2>상태 메모</h2>
+            <p>요약 레일에서 바로 보지 못한 값을 다시 한 번 정리합니다.</p>
+          </SectionHeader>
+          <MiniStatusList>
+            {summaryItems.map((item) => (
+              <MiniStatus key={`mini-${item.label}`} data-tone={item.tone || "neutral"}>
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+              </MiniStatus>
+            ))}
+          </MiniStatusList>
+        </RailCard>
+      </RailColumn>
     </Main>
   )
 }
 
 export default AdminHubSurface
 
-const statusItemSurface = (theme: Theme) =>
+const panelSurface = (theme: Theme) =>
   theme.scheme === "light"
-    ? theme.colors.gray1
-    : "linear-gradient(180deg, rgba(58, 86, 122, 0.22) 0%, rgba(31, 43, 65, 0.42) 100%)"
+    ? "linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(246, 249, 255, 0.94) 100%)"
+    : "linear-gradient(180deg, rgba(23, 28, 36, 0.96) 0%, rgba(17, 20, 27, 0.94) 100%)"
 
-const statusItemShadow = (theme: Theme) =>
-  theme.scheme === "light"
-    ? "inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 8px 20px rgba(15, 23, 42, 0.06)"
-    : "inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 0 0 1px rgba(59, 130, 246, 0.08), 0 16px 34px rgba(17, 24, 39, 0.18)"
-
-const nextActionSurface = (theme: Theme) =>
-  theme.scheme === "light"
-    ? theme.colors.gray1
-    : "linear-gradient(180deg, rgba(58, 86, 122, 0.12) 0%, rgba(30, 35, 46, 0.9) 100%)"
-
-const heroPanelSurface = (theme: Theme) =>
-  theme.scheme === "light"
-    ? theme.colors.gray1
-    : "linear-gradient(180deg, rgba(58, 86, 122, 0.18) 0%, rgba(32, 39, 52, 0.76) 100%)"
-
-const shortcutSurface = (theme: Theme) =>
-  theme.scheme === "light"
-    ? theme.colors.gray1
-    : "linear-gradient(180deg, rgba(58, 86, 122, 0.12) 0%, rgba(30, 35, 46, 0.85) 100%)"
-
-const shortcutSurfaceHover = (theme: Theme) =>
-  theme.scheme === "light"
-    ? theme.colors.gray2
-    : "linear-gradient(180deg, rgba(58, 86, 122, 0.18) 0%, rgba(34, 41, 54, 0.92) 100%)"
-
-const profileCompactSurface = (theme: Theme) =>
-  theme.scheme === "light"
-    ? theme.colors.gray1
-    : "linear-gradient(180deg, rgba(58, 86, 122, 0.14) 0%, rgba(30, 35, 46, 0.9) 100%)"
+const panelBorder = (theme: Theme) => theme.colors.gray5
 
 const Main = styled.main`
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 1.35rem 1rem 2.6rem;
   display: grid;
-  gap: 1.2rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+  width: min(100%, 1180px);
+  margin: 0 auto;
+  padding: 1.15rem 0 2.4rem;
 
-  @media (max-width: 900px) {
-    gap: 0.92rem;
-    padding-top: 1rem;
+  @media (min-width: 1280px) {
+    grid-template-columns: minmax(0, 1fr) minmax(17.25rem, 18.75rem);
+    column-gap: 1.35rem;
+  }
+
+  @media (max-width: 768px) {
+    padding-top: 0.8rem;
+    gap: 1rem;
+  }
+
+  > .mid {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
   }
 `
 
-const HeaderPanel = styled.section`
+const HeroPanel = styled.section`
   display: grid;
-  gap: 0.9rem;
+  gap: 1rem;
+  padding: 1.25rem;
+  border-radius: 28px;
+  border: 1px solid ${({ theme }) => panelBorder(theme)};
+  background: ${({ theme }) => panelSurface(theme)};
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "light"
+      ? "0 18px 42px rgba(15, 23, 42, 0.06)"
+      : "0 20px 44px rgba(0, 0, 0, 0.2)"};
 `
 
-const HeaderCopy = styled.div`
+const SectionEyebrow = styled.span`
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+`
+
+const HeroTop = styled.div`
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-end;
+
+  @media (max-width: 860px) {
+    flex-direction: column;
+    align-items: stretch;
+  }
+`
+
+const HeroCopy = styled.div`
   display: grid;
+  gap: 0.42rem;
+  min-width: 0;
 
   h1 {
     margin: 0;
-    font-size: clamp(1.72rem, 3vw, 2.15rem);
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: clamp(2rem, 3.2vw, 2.9rem);
+    line-height: 1.08;
     font-weight: 800;
-    letter-spacing: -0.03em;
+    letter-spacing: -0.04em;
   }
+
+  p {
+    margin: 0;
+    max-width: 42rem;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 1rem;
+    line-height: 1.58;
+  }
+
+  @media (max-width: 768px) {
+    h1 {
+      font-size: clamp(1.85rem, 9vw, 2.4rem);
+    }
+
+    p {
+      font-size: 0.92rem;
+      line-height: 1.52;
+    }
+  }
+`
+
+const HeroActions = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.72rem;
+  justify-content: flex-end;
+
+  @media (max-width: 860px) {
+    justify-content: flex-start;
+  }
+`
+
+const PrimaryActionLink = styled.a`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 48px;
+  padding: 0 1.25rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.blue8};
+  background: ${({ theme }) => theme.colors.blue8};
+  color: #ffffff;
+  text-decoration: none;
+  font-size: 0.95rem;
+  font-weight: 800;
+  transition:
+    transform 0.16s ease,
+    background-color 0.16s ease,
+    border-color 0.16s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    background: ${({ theme }) => theme.colors.blue9};
+    border-color: ${({ theme }) => theme.colors.blue9};
+  }
+`
+
+const SecondaryActionLink = styled.a`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 1.15rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "light" ? "rgba(255, 255, 255, 0.7)" : "rgba(31, 31, 31, 0.88)"};
+  color: ${({ theme }) => theme.colors.gray12};
+  text-decoration: none;
+  font-size: 0.92rem;
+  font-weight: 760;
 `
 
 const SummaryRail = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
-  gap: 0.78rem;
+  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+  gap: 0.75rem;
 
-  @media (max-width: 900px) {
-    grid-template-columns: 1fr;
+  @media (max-width: 640px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 `
 
-const StatusItem = styled.div`
+const SummaryCard = styled.div`
   display: grid;
-  gap: 0.42rem;
+  gap: 0.35rem;
   min-width: 0;
-  padding: 1rem 1.1rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.blue7};
-  background: ${({ theme }) => statusItemSurface(theme)};
-  box-shadow: ${({ theme }) => statusItemShadow(theme)};
+  padding: 1rem 1.05rem;
+  border-radius: 20px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "light" ? "rgba(255, 255, 255, 0.86)" : "rgba(31, 31, 31, 0.9)"};
 
   &[data-tone="good"] {
     border-color: ${({ theme }) => theme.colors.green7};
-    box-shadow: ${({ theme }) =>
-      theme.scheme === "light"
-        ? "inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 0 1px rgba(74, 222, 128, 0.14), 0 8px 20px rgba(15, 23, 42, 0.06)"
-        : "inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 0 0 1px rgba(74, 222, 128, 0.08), 0 16px 34px rgba(17, 24, 39, 0.18)"};
   }
 
   &[data-tone="warn"] {
     border-color: ${({ theme }) => theme.colors.orange7};
-    box-shadow: ${({ theme }) =>
-      theme.scheme === "light"
-        ? "inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 0 1px rgba(251, 191, 36, 0.14), 0 8px 20px rgba(15, 23, 42, 0.06)"
-        : "inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 0 0 1px rgba(251, 191, 36, 0.08), 0 16px 34px rgba(17, 24, 39, 0.18)"};
   }
 
   span {
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.84rem;
+    font-size: 0.8rem;
     font-weight: 700;
   }
 
   strong {
     min-width: 0;
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1.18rem;
+    font-size: 1.12rem;
     font-weight: 800;
-    line-height: 1.32;
+    line-height: 1.28;
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
   }
 `
 
-const NextActionStrip = styled.section`
+const ActionStrip = styled.section`
   display: grid;
-  gap: 0.62rem;
+  gap: 0.75rem;
 `
 
-const NextActionGrid = styled.div`
+const SectionHeader = styled.div`
+  display: grid;
+  gap: 0.2rem;
+
+  h2 {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 1.02rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+`
+
+const ActionStripGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.72rem;
+  gap: 0.75rem;
 
   @media (max-width: 960px) {
     grid-template-columns: 1fr;
   }
 `
 
-const NextActionLink = styled.a`
+const ActionCard = styled.a`
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.7rem;
+  gap: 0.72rem;
   align-items: center;
-  padding: 0.88rem 0.96rem;
-  border-radius: 16px;
+  padding: 1rem 1.05rem;
+  border-radius: 22px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => nextActionSurface(theme)};
+  background: ${({ theme }) => panelSurface(theme)};
   color: inherit;
   text-decoration: none;
   transition:
-    border-color 0.16s ease,
     transform 0.16s ease,
-    background-color 0.16s ease;
+    border-color 0.16s ease;
+
+  &[data-featured="true"] {
+    border-color: ${({ theme }) => theme.colors.blue7};
+  }
 
   &[data-tone="warn"] {
     border-color: ${({ theme }) => theme.colors.orange7};
@@ -315,26 +535,26 @@ const NextActionLink = styled.a`
   }
 
   &:hover {
-    border-color: ${({ theme }) => theme.colors.blue7};
     transform: translateY(-1px);
+    border-color: ${({ theme }) => theme.colors.blue7};
   }
 
   .copy {
     min-width: 0;
     display: grid;
-    gap: 0.18rem;
+    gap: 0.16rem;
   }
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.92rem;
+    font-size: 0.94rem;
     font-weight: 800;
   }
 
   p {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.78rem;
+    font-size: 0.8rem;
     line-height: 1.5;
   }
 
@@ -351,252 +571,241 @@ const NextActionLink = styled.a`
   }
 `
 
-const HeroPanel = styled.section`
+const WorkspaceBoard = styled.section`
   display: grid;
-  padding: 1.18rem 1.2rem;
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) => heroPanelSurface(theme)};
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.9fr);
+  gap: 1rem;
+
+  @media (max-width: 980px) {
+    grid-template-columns: 1fr;
+  }
 `
 
-const HeroBody = styled.div`
+const SectionCard = styled.article`
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 1rem;
-  align-items: end;
+  gap: 0.95rem;
+  padding: 1.1rem;
+  border-radius: 24px;
+  border: 1px solid ${({ theme }) => panelBorder(theme)};
+  background: ${({ theme }) => panelSurface(theme)};
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "light"
+      ? "0 16px 34px rgba(15, 23, 42, 0.05)"
+      : "0 18px 34px rgba(0, 0, 0, 0.18)"};
+`
 
-  @media (max-width: 760px) {
+const PrimaryWorkflow = styled.div`
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.95rem;
+  align-items: center;
+  padding: 1rem;
+  border-radius: 22px;
+  border: 1px solid ${({ theme }) => theme.colors.blue7};
+  background: ${({ theme }) =>
+    theme.scheme === "light" ? "rgba(59, 130, 246, 0.08)" : "rgba(59, 130, 246, 0.16)"};
+
+  .iconWrap {
+    width: 3rem;
+    height: 3rem;
+    border-radius: 16px;
+    display: grid;
+    place-items: center;
+    background: ${({ theme }) => theme.colors.blue8};
+    color: #ffffff;
+    flex-shrink: 0;
+  }
+
+  .copy {
+    min-width: 0;
+    display: grid;
+    gap: 0.16rem;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 1rem;
+    font-weight: 800;
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+
+  @media (max-width: 720px) {
     grid-template-columns: 1fr;
     align-items: start;
   }
 `
 
-const HeroCopy = styled.div`
-  display: grid;
-  gap: 0.2rem;
-
-  h2 {
-    margin: 0;
-    font-size: clamp(1.9rem, 3vw, 2.3rem);
-    font-weight: 800;
-    color: ${({ theme }) => theme.colors.gray12};
-    letter-spacing: -0.03em;
-  }
-
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.92rem;
-    line-height: 1.4;
-    max-width: 34rem;
-  }
-`
-
-const HeroActions = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.85rem;
-  align-items: center;
-  justify-content: flex-end;
-
-  @media (max-width: 760px) {
-    justify-content: flex-start;
-  }
-`
-
-const PrimaryActionLink = styled.a`
+const WorkflowAction = styled.a`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.46rem;
-  min-height: 48px;
-  padding: 0 1.2rem;
+  min-height: 42px;
+  padding: 0 1rem;
   border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.blue8};
   background: ${({ theme }) => theme.colors.blue8};
-  color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.96rem;
+  color: #ffffff;
+  text-decoration: none;
+  font-size: 0.84rem;
   font-weight: 800;
-  text-decoration: none;
-  line-height: 1.2;
-  transition:
-    background-color 0.16s ease,
-    border-color 0.16s ease,
-    transform 0.16s ease;
-
-  svg {
-    font-size: 0.98rem;
-  }
-
-  &:hover {
-    background: ${({ theme }) => theme.colors.blue9};
-    border-color: ${({ theme }) => theme.colors.blue9};
-    transform: translateY(-1px);
-  }
-`
-
-const SecondaryActionLink = styled.a`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 48px;
-  padding: 0 1.2rem;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.blue7};
-  background: transparent;
-  color: ${({ theme }) => theme.colors.blue9};
-  font-size: 0.94rem;
-  font-weight: 700;
-  text-decoration: none;
-  line-height: 1.2;
-  transition:
-    border-color 0.16s ease,
-    background-color 0.16s ease;
-
-  &:hover {
-    border-color: ${({ theme }) => theme.colors.blue8};
-    background: rgba(59, 130, 246, 0.08);
-  }
-`
-
-const ShortcutPanel = styled.section`
-  display: grid;
-  gap: 0.72rem;
-`
-
-const SectionHeader = styled.div`
-  display: grid;
-  gap: 0.24rem;
-
-  h2 {
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 800;
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.78rem;
-    line-height: 1.4;
-  }
 `
 
 const ShortcutGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
 
-  @media (max-width: 760px) {
+  @media (max-width: 900px) {
     grid-template-columns: 1fr;
   }
 `
 
 const ShortcutLink = styled.a`
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.8rem;
-  align-items: center;
-  padding: 1rem 1.08rem;
-  border-radius: 16px;
+  gap: 0.75rem;
+  padding: 0.95rem;
+  border-radius: 20px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => shortcutSurface(theme)};
+  background: ${({ theme }) =>
+    theme.scheme === "light" ? "rgba(255, 255, 255, 0.82)" : "rgba(31, 31, 31, 0.88)"};
   color: inherit;
   text-decoration: none;
-  transition:
-    border-color 0.16s ease,
-    background-color 0.16s ease,
-    color 0.16s ease;
 
-  &:hover {
-    border-color: ${({ theme }) => theme.colors.blue7};
-    background: ${({ theme }) => shortcutSurfaceHover(theme)};
-  }
-
-  @media (max-width: 640px) {
-    grid-template-columns: 1fr;
-    gap: 0.45rem;
+  .meta {
+    color: ${({ theme }) => theme.colors.blue9};
+    font-size: 0.78rem;
+    font-weight: 760;
   }
 `
 
-const ShortcutCopy = styled.div`
-  min-width: 0;
+const ShortcutTitleRow = styled.div`
   display: grid;
-  gap: 0.12rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.72rem;
+  align-items: start;
+
+  .iconWrap {
+    width: 2.65rem;
+    height: 2.65rem;
+    border-radius: 15px;
+    display: grid;
+    place-items: center;
+    background: ${({ theme }) =>
+      theme.scheme === "light" ? "rgba(59, 130, 246, 0.1)" : "rgba(59, 130, 246, 0.18)"};
+    color: ${({ theme }) => theme.colors.blue9};
+  }
+
+  .copy {
+    min-width: 0;
+    display: grid;
+    gap: 0.18rem;
+  }
 
   strong {
-    font-size: 1rem;
-    font-weight: 800;
     color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.95rem;
+    font-weight: 800;
   }
 
   p {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.74rem;
-    line-height: 1.45;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 1;
-    overflow: hidden;
+    font-size: 0.78rem;
+    line-height: 1.5;
   }
 `
 
-const ShortcutTitleRow = styled.div`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-
-  .chevron {
-    font-size: 0.92rem;
-    color: ${({ theme }) => theme.colors.gray10};
-    transform: rotate(-90deg);
-  }
-`
-
-const ShortcutMeta = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 32px;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
-  padding: 0 0.74rem;
-  font-size: 0.76rem;
-  font-weight: 700;
-  white-space: nowrap;
-`
-
-const ProfileCompact = styled.section`
+const Checklist = styled.div`
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 1rem;
+  gap: 0.65rem;
+`
+
+const ChecklistItem = styled.div`
+  display: flex;
   align-items: center;
-  padding: 1rem 1.08rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) => profileCompactSurface(theme)};
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.9rem 0.95rem;
+  border-radius: 18px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "light" ? "rgba(255, 255, 255, 0.8)" : "rgba(31, 31, 31, 0.88)"};
 
-  @media (max-width: 760px) {
-    grid-template-columns: auto minmax(0, 1fr);
+  .copy {
+    min-width: 0;
+    display: grid;
+    gap: 0.14rem;
   }
 
-  @media (max-width: 560px) {
-    grid-template-columns: 1fr;
-    gap: 0.42rem;
-    padding: 0.5rem 0.62rem;
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.79rem;
+    font-weight: 700;
   }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.92rem;
+    font-weight: 780;
+    line-height: 1.4;
+  }
+`
+
+const StatusDot = styled.span`
+  width: 0.72rem;
+  height: 0.72rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: ${({ theme }) => theme.colors.blue8};
+
+  &[data-tone="good"] {
+    background: ${({ theme }) => theme.colors.green7};
+  }
+
+  &[data-tone="warn"] {
+    background: ${({ theme }) => theme.colors.orange7};
+  }
+`
+
+const RailColumn = styled.aside`
+  display: grid;
+  gap: 0.95rem;
+
+  @media (min-width: 1280px) {
+    position: sticky;
+    top: calc(var(--app-header-height, 73px) + 0.8rem);
+    align-self: start;
+  }
+`
+
+const RailCard = styled.section`
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+  border-radius: 24px;
+  border: 1px solid ${({ theme }) => panelBorder(theme)};
+  background: ${({ theme }) => panelSurface(theme)};
+`
+
+const ProfileSnapshot = styled.div`
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.8rem;
+  align-items: center;
 `
 
 const ProfileFrame = styled.div`
   position: relative;
-  width: 84px;
-  height: 84px;
+  width: 4.25rem;
+  height: 4.25rem;
   border-radius: 999px;
   overflow: hidden;
+  background: ${({ theme }) => theme.colors.gray4};
 `
 
 const ProfileFallback = styled.div`
@@ -604,69 +813,139 @@ const ProfileFallback = styled.div`
   height: 100%;
   display: grid;
   place-items: center;
-  font-size: 1.1rem;
+  color: ${({ theme }) => theme.colors.gray12};
+  font-size: 1rem;
   font-weight: 800;
-  background: ${({ theme }) => theme.colors.gray4};
-  color: ${({ theme }) => theme.colors.gray11};
 `
 
 const ProfileCopy = styled.div`
   min-width: 0;
   display: grid;
-  gap: 0.24rem;
+  gap: 0.14rem;
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1.35rem;
+    font-size: 1rem;
     font-weight: 800;
   }
 
   span {
     color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.82rem;
     font-weight: 700;
-    font-size: 1rem;
   }
 
   p {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.94rem;
+    font-size: 0.8rem;
     line-height: 1.5;
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     overflow: hidden;
-    overflow-wrap: anywhere;
-  }
-
-  @media (max-width: 560px) {
-    p {
-      -webkit-line-clamp: 1;
-    }
   }
 `
 
-const ProfileAction = styled.a`
+const RailActionLink = styled.a`
   display: inline-flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   min-height: 40px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.blue9};
+  padding: 0 0.95rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "light" ? "rgba(255, 255, 255, 0.86)" : "rgba(31, 31, 31, 0.88)"};
+  color: ${({ theme }) => theme.colors.gray12};
   text-decoration: none;
-  font-size: 0.96rem;
-  font-weight: 800;
-  line-height: 1.2;
+  font-size: 0.84rem;
+  font-weight: 760;
+  width: fit-content;
+`
 
-  &:hover {
-    color: ${({ theme }) => theme.colors.blue10};
-    opacity: 0.92;
+const QuickLinkList = styled.div`
+  display: grid;
+  gap: 0.6rem;
+`
+
+const QuickLink = styled.a`
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.7rem;
+  align-items: center;
+  padding: 0.82rem 0.88rem;
+  border-radius: 18px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "light" ? "rgba(255, 255, 255, 0.8)" : "rgba(31, 31, 31, 0.88)"};
+  color: inherit;
+  text-decoration: none;
+
+  .iconWrap {
+    width: 2.35rem;
+    height: 2.35rem;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    background: ${({ theme }) =>
+      theme.scheme === "light" ? "rgba(59, 130, 246, 0.1)" : "rgba(59, 130, 246, 0.18)"};
+    color: ${({ theme }) => theme.colors.blue9};
   }
 
-  @media (max-width: 760px) {
-    grid-column: 1 / -1;
-    justify-self: start;
+  .copy {
+    min-width: 0;
+    display: grid;
+    gap: 0.12rem;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.86rem;
+    font-weight: 780;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+`
+
+const MiniStatusList = styled.div`
+  display: grid;
+  gap: 0.55rem;
+`
+
+const MiniStatus = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.72rem;
+  padding: 0.74rem 0.82rem;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "light" ? "rgba(255, 255, 255, 0.82)" : "rgba(31, 31, 31, 0.88)"};
+
+  &[data-tone="good"] {
+    border-color: ${({ theme }) => theme.colors.green7};
+  }
+
+  &[data-tone="warn"] {
+    border-color: ${({ theme }) => theme.colors.orange7};
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.76rem;
+    font-weight: 700;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.82rem;
+    font-weight: 780;
+    text-align: right;
   }
 `

@@ -15,7 +15,15 @@ import { serverApiFetch } from "src/libs/server/backend"
 import { readServerSnapshot } from "src/libs/server/serverSnapshotCache"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import AdminShell from "src/routes/Admin/AdminShell"
-import { AdminRailCard, AdminSectionHeading, AdminSectionTitleStack, AdminStickyRail } from "src/routes/Admin/AdminSurfacePrimitives"
+import {
+  AdminRailCard,
+  AdminSectionHeading,
+  AdminSectionTitleStack,
+  AdminWorkspaceHero,
+  AdminWorkspaceSectionNav,
+  AdminWorkspaceSectionNavButton,
+  AdminWorkspaceSectionNavStatus,
+} from "src/routes/Admin/AdminSurfacePrimitives"
 import { buildMonitoringItems, getMonitoringEnv } from "src/routes/Admin/adminMonitoring"
 
 type JsonValue = unknown
@@ -2058,13 +2066,11 @@ const Main = styled.main`
   gap: 1.25rem;
 `
 
-const OpsOverview = styled.section`
+const OpsOverview = styled(AdminWorkspaceHero)`
   display: grid;
   gap: 1rem;
   padding: 1.1rem 1.1rem 1rem;
   border-radius: 22px;
-  background: ${({ theme }) => theme.colors.gray2};
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
 `
 
 const OverviewHeader = styled.div`
@@ -2274,119 +2280,22 @@ const WorkspaceShell = styled.div`
   }
 `
 
-const SectionNav = styled(AdminStickyRail)`
+const SectionNav = styled(AdminWorkspaceSectionNav)`
   top: calc(var(--app-header-height, 64px) + 1rem);
-  gap: 0.55rem;
 
   @media (max-width: 960px) {
-    position: static;
-    display: flex;
-    gap: 0.5rem;
-    overflow-x: auto;
-    padding-bottom: 0.2rem;
-    scrollbar-width: none;
-
-    &::-webkit-scrollbar {
-      display: none;
-    }
+    min-width: 0;
   }
 `
 
-const SectionNavStatus = styled(AdminRailCard)`
-  gap: 0.22rem;
-  padding: 0.88rem 0.96rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-
-  small {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.72rem;
-    font-weight: 800;
-    letter-spacing: 0.03em;
-  }
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.92rem;
-    font-weight: 780;
-    letter-spacing: -0.02em;
-  }
-
-  &[data-jumping="true"] {
-    border-color: ${({ theme }) => theme.colors.accentBorder};
-    background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
-  }
-
+const SectionNavStatus = styled(AdminWorkspaceSectionNavStatus)`
   @media (max-width: 960px) {
     min-width: 12.5rem;
     flex: 0 0 auto;
   }
 `
 
-const SectionNavButton = styled.button`
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  min-height: 42px;
-  padding: 0 0.9rem;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.84rem;
-  font-weight: 700;
-  text-align: left;
-  cursor: pointer;
-  white-space: nowrap;
-
-  &[data-active="true"] {
-    color: ${({ theme }) => theme.colors.gray12};
-    border-color: ${({ theme }) => theme.colors.accentBorder};
-    background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
-  }
-
-  &[data-freshness="fresh"] {
-    border-color: ${({ theme }) => theme.colors.statusSuccessBorder};
-  }
-
-  &[data-freshness="aging"] {
-    border-color: ${({ theme }) => theme.colors.orange7};
-  }
-
-  &[data-freshness="stale"] {
-    border-color: ${({ theme }) => theme.colors.gray7};
-  }
-
-  &[data-freshness]::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 7px;
-    bottom: 7px;
-    width: 3px;
-    border-radius: 999px;
-    background: ${({ theme }) => theme.colors.gray7};
-  }
-
-  &[data-freshness="fresh"]::before {
-    background: ${({ theme }) => theme.colors.statusSuccessBorder};
-  }
-
-  &[data-freshness="aging"]::before {
-    background: ${({ theme }) => theme.colors.orange8};
-  }
-
-  &[data-freshness="stale"]::before {
-    background: ${({ theme }) => theme.colors.gray8};
-  }
-
-  &[data-tone="danger"] {
-    border-color: ${({ theme }) => theme.colors.statusDangerBorder};
-    color: ${({ theme }) => theme.colors.statusDangerText};
-  }
-`
+const SectionNavButton = styled(AdminWorkspaceSectionNavButton)``
 
 const WorkspaceColumn = styled.div`
   display: grid;

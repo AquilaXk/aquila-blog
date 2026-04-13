@@ -52,7 +52,19 @@ import { fetchServerProfileWorkspace } from "src/libs/server/profileWorkspace"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import { acquireBodyScrollLock } from "src/libs/utils/bodyScrollLock"
 import AdminShell from "src/routes/Admin/AdminShell"
-import { AdminPaneHeader, AdminRailCard, AdminStickyRail, AdminSubtleCard } from "src/routes/Admin/AdminSurfacePrimitives"
+import {
+  AdminPaneHeader,
+  AdminRailCard,
+  AdminStickyRail,
+  AdminSubtleCard,
+  AdminWorkspaceActionDock,
+  AdminWorkspaceActionDockInner,
+  AdminWorkspaceHero,
+  AdminWorkspaceHeroCopy,
+  AdminWorkspaceHeroLayout,
+  AdminWorkspaceSectionNav,
+  AdminWorkspaceSectionNavButton,
+} from "src/routes/Admin/AdminSurfacePrimitives"
 
 type NoticeTone = "idle" | "loading" | "success" | "error"
 type WorkspaceSectionId = "identity" | "about" | "home" | "links"
@@ -83,27 +95,22 @@ const PROFILE_IMAGE_UPLOAD_RETRY_DELAY_MS = 700
 const WORKSPACE_SECTIONS: {
   id: WorkspaceSectionId
   label: string
-  description: string
 }[] = [
   {
     id: "identity",
     label: "프로필",
-    description: "",
   },
   {
     id: "about",
     label: "About 페이지",
-    description: "",
   },
   {
     id: "home",
     label: "헤더 문구",
-    description: "",
   },
   {
     id: "links",
     label: "외부 링크",
-    description: "",
   },
 ]
 
@@ -1585,32 +1592,22 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
         onChange={handleDraftFileChange}
       />
 
-      <CompactHeader>
-        <h1>프로필 설정</h1>
-      </CompactHeader>
-
-      <MobileSectionRail role="tablist" aria-label="프로필 섹션">
-        {WORKSPACE_SECTIONS.map((section) => (
-          <SectionSwitchButton
-            key={section.id}
-            type="button"
-            role="tab"
-            aria-selected={activeSection === section.id}
-            data-active={activeSection === section.id}
-            onClick={() => setActiveSection(section.id)}
-          >
-            {section.label}
-            {sectionStateMap[section.id].dirty ? <SectionStateDot data-tone="dirty" aria-hidden="true" /> : null}
-          </SectionSwitchButton>
-        ))}
-      </MobileSectionRail>
+      <WorkspaceHero>
+        <AdminWorkspaceHeroLayout>
+          <AdminWorkspaceHeroCopy>
+            <h1>프로필 설정</h1>
+          </AdminWorkspaceHeroCopy>
+        </AdminWorkspaceHeroLayout>
+      </WorkspaceHero>
 
       <WorkspaceShell $isHomeSection={isHomeSection}>
-        <SectionRail aria-label="프로필 섹션">
+        <SectionRail role="tablist" aria-label="프로필 섹션">
           {WORKSPACE_SECTIONS.map((section) => (
             <SectionRailButton
               key={section.id}
               type="button"
+              role="tab"
+              aria-selected={activeSection === section.id}
               data-active={activeSection === section.id}
               onClick={() => setActiveSection(section.id)}
             >
@@ -1639,29 +1636,16 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
             </EditorPaneHeader>
             {renderActiveSection()}
           </EditorSurface>
-          {isHomeSection ? (
-            <PreviewActionDock>
-              <ActionDockInner>
-                <DockSecondaryButton type="button" disabled={!canSave} onClick={() => void handleSaveDraft()}>
-                  {loadingKey === "save" ? "저장 중..." : "임시 저장"}
-                </DockSecondaryButton>
-                <DockPrimaryButton type="button" disabled={!canPublish} onClick={() => void handlePublish()}>
-                  {loadingKey === "publish" ? "공개 중..." : "지금 공개하기"}
-                </DockPrimaryButton>
-              </ActionDockInner>
-            </PreviewActionDock>
-          ) : (
-            <CompactOnlyActionDock>
-              <ActionDockInner>
-                <DockSecondaryButton type="button" disabled={!canSave} onClick={() => void handleSaveDraft()}>
-                  {loadingKey === "save" ? "저장 중..." : "임시 저장"}
-                </DockSecondaryButton>
-                <DockPrimaryButton type="button" disabled={!canPublish} onClick={() => void handlePublish()}>
-                  {loadingKey === "publish" ? "공개 중..." : "지금 공개하기"}
-                </DockPrimaryButton>
-              </ActionDockInner>
-            </CompactOnlyActionDock>
-          )}
+          <EditorActionDock>
+            <AdminWorkspaceActionDockInner>
+              <DockSecondaryButton type="button" disabled={!canSave} onClick={() => void handleSaveDraft()}>
+                {loadingKey === "save" ? "저장 중..." : "임시 저장"}
+              </DockSecondaryButton>
+              <DockPrimaryButton type="button" disabled={!canPublish} onClick={() => void handlePublish()}>
+                {loadingKey === "publish" ? "공개 중..." : "지금 공개하기"}
+              </DockPrimaryButton>
+            </AdminWorkspaceActionDockInner>
+          </EditorActionDock>
         </EditorColumn>
 
         {!isHomeSection ? (
@@ -1770,16 +1754,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                 ) : null}
               </PreviewViewport>
             </PreviewBody>
-            <PreviewActionDock>
-              <ActionDockInner>
-                <DockSecondaryButton type="button" disabled={!canSave} onClick={() => void handleSaveDraft()}>
-                  {loadingKey === "save" ? "저장 중..." : "임시 저장"}
-                </DockSecondaryButton>
-                <DockPrimaryButton type="button" disabled={!canPublish} onClick={() => void handlePublish()}>
-                  {loadingKey === "publish" ? "공개 중..." : "지금 공개하기"}
-                </DockPrimaryButton>
-              </ActionDockInner>
-            </PreviewActionDock>
           </PreviewCardShell>
           </PreviewRail>
         ) : null}
@@ -2044,64 +2018,8 @@ const PreviewAnchor = styled.a`
   text-decoration: none;
 `
 
-const CompactHeader = styled.section`
-  display: flex;
-  align-items: center;
-  padding: 0.15rem 0 0.1rem;
-
-  h1 {
-    margin: 0;
-    font-size: clamp(1.5rem, 2vw, 1.9rem);
-    line-height: 1.08;
-    letter-spacing: -0.04em;
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  @media (max-width: 760px) {
-    align-items: flex-start;
-  }
-`
-
-const MobileSectionRail = styled.div`
-  display: none;
-
-  @media (max-width: 1180px) {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.48rem;
-  }
-
-  @media (max-width: 760px) {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 0.15rem;
-    scrollbar-width: none;
-
-    &::-webkit-scrollbar {
-      display: none;
-    }
-  }
-`
-
-const SectionSwitchButton = styled.button`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.42rem;
-  min-height: 38px;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray11};
-  font-weight: 700;
-  white-space: nowrap;
-  padding: 0 0.9rem;
-
-  &[data-active="true"] {
-    border-color: ${({ theme }) => theme.colors.blue8};
-    background: ${({ theme }) => theme.colors.blue3};
-    color: ${({ theme }) => theme.colors.blue11};
-  }
+const WorkspaceHero = styled(AdminWorkspaceHero)`
+  padding: 1rem 1.05rem;
 `
 
 const WorkspaceShell = styled.section<{ $isHomeSection: boolean }>`
@@ -2120,40 +2038,20 @@ const WorkspaceShell = styled.section<{ $isHomeSection: boolean }>`
   }
 `
 
-const SectionRail = styled.nav`
-  position: sticky;
-  top: calc(var(--app-header-height, 64px) + 0.8rem);
-  gap: 0.24rem;
-  display: grid;
-
-  @media (max-width: 1180px) {
-    display: none;
+const SectionRail = styled(AdminWorkspaceSectionNav)`
+  @media (min-width: 1181px) {
+    display: grid;
+    gap: 0.24rem;
   }
 `
 
-const SectionRailButton = styled.button`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.42rem;
-  text-align: left;
-  padding: 0.82rem 0.9rem 0.82rem 1rem;
-  border-radius: 14px;
-  border: 1px solid transparent;
-  border-left: 2px solid transparent;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.94rem;
-  font-weight: 700;
-
-  &[data-active="true"] {
-    border-color: ${({ theme }) => theme.colors.gray6};
-    border-left-color: ${({ theme }) => theme.colors.blue8};
-    background: ${({ theme }) => theme.colors.gray2};
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  &:hover {
-    color: ${({ theme }) => theme.colors.gray12};
+const SectionRailButton = styled(AdminWorkspaceSectionNavButton)`
+  @media (min-width: 1181px) {
+    width: 100%;
+    min-height: 48px;
+    justify-content: space-between;
+    padding: 0.82rem 1rem;
+    border-radius: 16px;
   }
 `
 
@@ -2812,35 +2710,7 @@ const PreviewBody = styled.div<{ "data-expanded"?: boolean }>`
   }
 `
 
-const PreviewActionDock = styled.div`
-  display: grid;
-  justify-items: center;
-`
-
-const CompactOnlyActionDock = styled(PreviewActionDock)`
-  display: none;
-
-  @media (max-width: 1180px) {
-    display: grid;
-  }
-`
-
-const ActionDockInner = styled.div`
-  width: 100%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.65rem;
-  padding: 0.7rem 0.9rem;
-  border-radius: 20px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-
-  @media (max-width: 760px) {
-    width: 100%;
-    justify-content: space-between;
-  }
-`
+const EditorActionDock = styled(AdminWorkspaceActionDock)``
 
 const DockSecondaryButton = styled(BaseButton)`
   min-height: 40px;

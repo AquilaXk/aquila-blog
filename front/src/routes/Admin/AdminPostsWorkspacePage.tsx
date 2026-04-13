@@ -18,7 +18,15 @@ import { readServerSnapshot } from "src/libs/server/serverSnapshotCache"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import { isServerTempDraftPost } from "./editorTempDraft"
 import AdminShell from "./AdminShell"
-import { AdminRailCard, AdminSectionHeading, AdminSubtleCard } from "./AdminSurfacePrimitives"
+import {
+  AdminRailCard,
+  AdminSectionHeading,
+  AdminSubtleCard,
+  AdminWorkspaceHero,
+  AdminWorkspaceHeroActions,
+  AdminWorkspaceHeroCopy,
+  AdminWorkspaceHeroLayout,
+} from "./AdminSurfacePrimitives"
 
 type PostListScope = "active" | "deleted"
 
@@ -833,17 +841,12 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
   return (
     <AdminShell currentSection="posts" member={sessionMember}>
       <Main>
-      <PageHeader>
-        <ContextLine aria-label="현재 위치" />
-      </PageHeader>
-
       <HeroSection>
-        <HeroLabel>지금 할 일</HeroLabel>
-        <HeroLayout>
-          <HeroCopy>
+        <AdminWorkspaceHeroLayout>
+          <AdminWorkspaceHeroCopy>
             <h1>글 작성</h1>
-          </HeroCopy>
-          <HeroActions>
+          </AdminWorkspaceHeroCopy>
+          <AdminWorkspaceHeroActions>
             <PrimaryCta type="button" onClick={() => void openWriteRoute()}>
               새 글 작성
             </PrimaryCta>
@@ -853,8 +856,8 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
             >
               글 관리
             </SecondaryLinkButton>
-          </HeroActions>
-        </HeroLayout>
+          </AdminWorkspaceHeroActions>
+        </AdminWorkspaceHeroLayout>
       </HeroSection>
 
       <ResumeSection ref={continueSectionRef}>
@@ -1028,7 +1031,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
 
         <RecentActionPanel aria-live="polite">
           <div className="panelHead">
-            <strong>최근 작업</strong>
+            <strong>작업 기록</strong>
           </div>
           {recentActions.length > 0 ? (
             <RecentActionList>
@@ -1344,80 +1347,7 @@ const Main = styled.main`
   }
 `
 
-const PageHeader = styled.section`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.8rem;
-`
-
-const ContextLine = styled.div`
-  display: none;
-`
-
-const HeroSection = styled.section`
-  display: grid;
-  gap: 0.8rem;
-  padding: 1.25rem 1.15rem;
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.blue7};
-  background: ${({ theme }) =>
-    theme.scheme === "light"
-      ? "linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(241, 247, 255, 0.96) 100%)"
-      : "linear-gradient(180deg, rgba(29, 78, 216, 0.12) 0%, rgba(15, 23, 42, 0.95) 100%)"};
-`
-
-const HeroLabel = styled.span`
-  display: inline-flex;
-  width: fit-content;
-  min-height: 28px;
-  align-items: center;
-  padding: 0 0.7rem;
-  border-radius: 999px;
-  background: rgba(96, 165, 250, 0.14);
-  color: ${({ theme }) => theme.colors.blue9};
-  font-size: 0.74rem;
-  font-weight: 800;
-`
-
-const HeroLayout = styled.div`
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 1rem;
-  align-items: center;
-
-  @media (max-width: 900px) {
-    grid-template-columns: 1fr;
-  }
-`
-
-const HeroCopy = styled.div`
-  display: grid;
-  gap: 0.42rem;
-
-  h1 {
-    margin: 0;
-    font-size: clamp(1.65rem, 3vw, 2.1rem);
-    letter-spacing: -0.04em;
-  }
-
-  p {
-    margin: 0;
-    max-width: 34rem;
-    color: ${({ theme }) => theme.colors.gray11};
-    line-height: 1.55;
-  }
-`
-
-const HeroActions = styled.div`
-  display: grid;
-  gap: 0.7rem;
-  justify-items: end;
-
-  @media (max-width: 900px) {
-    justify-items: stretch;
-  }
-`
+const HeroSection = styled(AdminWorkspaceHero)``
 
 const baseButton = ({ theme }: { theme: any }) => `
   min-height: 48px;

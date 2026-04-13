@@ -5,6 +5,15 @@ import { queryKey } from "src/constants/queryKey"
 import { extractPostIdFromLegacySlug } from "src/libs/utils/postPath"
 import { PostDetail } from "src/types"
 
+const extractPostIdFromAsPath = (asPath: string): string => {
+  const pathname = asPath.split(/[?#]/, 1)[0] || ""
+  const canonicalMatch = pathname.match(/^\/posts\/(\d+)(?:\/)?$/)
+  if (canonicalMatch) return canonicalMatch[1]
+
+  const legacyId = extractPostIdFromLegacySlug(pathname)
+  return legacyId ? String(legacyId) : ""
+}
+
 const usePostQuery = () => {
   const router = useRouter()
   const routeId =
@@ -12,7 +21,7 @@ const usePostQuery = () => {
       ? router.query.id
       : typeof router.query.slug === "string"
         ? String(extractPostIdFromLegacySlug(router.query.slug) || "")
-        : ""
+        : extractPostIdFromAsPath(router.asPath || "")
   const hasRouteId = routeId.length > 0
   const query = useQuery<PostDetail | null>({
     queryKey: queryKey.post(routeId),

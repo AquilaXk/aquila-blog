@@ -14,6 +14,7 @@ import { hasServerAuthCookie } from "src/libs/server/authSession"
 import { serverApiFetch } from "src/libs/server/backend"
 import { readServerSnapshot } from "src/libs/server/serverSnapshotCache"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
+import AdminShell from "src/routes/Admin/AdminShell"
 import { buildMonitoringItems, getMonitoringEnv } from "src/routes/Admin/adminMonitoring"
 
 type JsonValue = unknown
@@ -1226,7 +1227,8 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
       ? `${SECTION_LABELS[activeSection]} · ${DIAGNOSTIC_TAB_LABELS[activeDiagnosticTab]}`
       : SECTION_LABELS[activeSection]
   return (
-    <Main>
+    <AdminShell currentSection="tools" member={sessionMember}>
+      <Main>
       <OpsOverview id={SECTION_IDS.overview} data-ops-section="overview">
         <OverviewHeader>
           <div>
@@ -2039,7 +2041,8 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
           </WorkspaceSection>
         </WorkspaceColumn>
       </WorkspaceShell>
-    </Main>
+      </Main>
+    </AdminShell>
   )
 }
 

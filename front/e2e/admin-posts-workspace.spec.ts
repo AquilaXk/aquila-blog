@@ -26,12 +26,13 @@ test.describe("admin posts workspace link contract", () => {
     expect(source).toContain("링크 복사")
   })
 
-  test("canonical detail SSR은 서버 fetch에서 원 요청 쿠키를 전달해 private 상세를 복구한다", () => {
+  test("canonical detail static props는 ISR 생성 실패 시 recovery shell로 폴백한다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/libs/server/postDetailPage.ts"), "utf8")
 
-    expect(source).toContain("const getPostDetailByIdForSsr = async (req: IncomingMessage, id: string) => {")
-    expect(source).toContain("const response = await serverApiFetch(req, `/post/api/v1/posts/${postId}`)")
-    expect(source).toContain("return mapPostDetail(post)")
-    expect(source).toContain("timed(() => getPostDetailByIdForSsr(req, postId))")
+    expect(source).toContain("export const buildCanonicalPostDetailStaticProps = async (")
+    expect(source).toContain("postDetail = await getPostDetailById(postId)")
+    expect(source).toContain("const shouldServeClientRecoveryShell = shouldClientRecover || (IS_QA_STATIC_RECOVERY_MODE && !postDetail)")
+    expect(source).toContain("if (!postDetail && !shouldServeClientRecoveryShell) return { notFound: true }")
+    expect(source).toContain("revalidate: shouldServeClientRecoveryShell ? DETAIL_RECOVERY_REVALIDATE_SECONDS : DETAIL_ISR_REVALIDATE_SECONDS,")
   })
 })

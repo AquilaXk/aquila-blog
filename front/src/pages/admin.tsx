@@ -9,6 +9,7 @@ import {
   resolvePublicAdminProfileSnapshot,
 } from "src/libs/server/adminProfile"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
+import AdminShell from "src/routes/Admin/AdminShell"
 import AdminHubSurface, { type AdminHubNextAction } from "src/routes/Admin/AdminHubSurface"
 
 type AdminHubPageProps = AdminPageProps & {
@@ -195,6 +196,12 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialProfi
       description: "핵심 Grafana 패널과 외부 모니터링을 카드 단위로 확인합니다.",
       cta: "대시보드 열기",
     },
+    {
+      href: "/admin/tools",
+      title: "운영 진단",
+      description: "메일, 큐, 보안 로그와 수동 진단 작업을 같은 워크스페이스에서 이어갑니다.",
+      cta: "진단 열기",
+    },
   ]
 
   const nextActionCandidates: Array<AdminHubNextAction | null> = [
@@ -247,17 +254,19 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialProfi
   if (!sessionMember) return null
 
   return (
-    <AdminHubSurface
-      displayName={displayName}
-      displayNameInitial={displayNameInitial}
-      profileSrc={profileSrc}
-      profileRole={profileSnapshot.profileRole}
-      profileBio={profileSnapshot.profileBio}
-      summaryItems={summaryItems}
-      nextActions={nextActions}
-      primaryAction={primaryAction}
-      secondaryLinks={secondaryLinks}
-    />
+    <AdminShell currentSection="hub" member={sessionMember}>
+      <AdminHubSurface
+        displayName={displayName}
+        displayNameInitial={displayNameInitial}
+        profileSrc={profileSrc}
+        profileRole={profileSnapshot.profileRole}
+        profileBio={profileSnapshot.profileBio}
+        summaryItems={summaryItems}
+        nextActions={nextActions}
+        primaryAction={primaryAction}
+        secondaryLinks={secondaryLinks}
+      />
+    </AdminShell>
   )
 }
 

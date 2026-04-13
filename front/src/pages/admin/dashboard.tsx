@@ -19,6 +19,7 @@ import {
   buildMonitoringItems,
   getMonitoringEnv,
 } from "src/routes/Admin/adminMonitoring"
+import AdminShell from "src/routes/Admin/AdminShell"
 
 type SystemHealthPayload = {
   status?: string
@@ -274,7 +275,8 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
   const grafanaDashboardUrl = env.monitoringEmbedLooksLikeGrafana ? env.monitoringEmbedUrl : ""
 
   return (
-    <Main>
+    <AdminShell currentSection="dashboard" member={sessionMember}>
+      <Main>
       <Shell>
         <TopRow>
           <div>
@@ -353,7 +355,8 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
           </span>
         </ReviewNote>
       </Shell>
-    </Main>
+      </Main>
+    </AdminShell>
   )
 }
 
@@ -414,7 +417,7 @@ const TopRow = styled.header`
     line-height: 1.6;
   }
 
-  @media (max-width: 900px) {
+  @media (max-width: 720px) {
     flex-direction: column;
   }
 `
@@ -469,7 +472,11 @@ const ServiceRail = styled.div`
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 
-  @media (max-width: 900px) {
+  @media (max-width: 720px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 560px) {
     grid-template-columns: 1fr;
   }
 `

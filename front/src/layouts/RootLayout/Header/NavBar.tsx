@@ -6,6 +6,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import AppIcon from "src/components/icons/AppIcon"
 import useAuthSession from "src/hooks/useAuthSession"
+import {
+  type HeaderAuthShellSnapshot,
+  persistHeaderAuthShellSnapshot,
+  readHeaderAuthShellSnapshot,
+  syncHeaderAuthShellSnapshot,
+} from "src/libs/headerAuthShell"
 import { normalizeNextPath, replaceRoute, toLoginPath } from "src/libs/router"
 import { acquireBodyScrollLock } from "src/libs/utils/bodyScrollLock"
 import { zIndexes } from "src/styles/zIndexes"
@@ -14,10 +20,6 @@ const NotificationBellShell: React.FC = () => (
   <span className="bellShell" aria-hidden="true">
     <AppIcon name="bell" />
   </span>
-)
-
-const NavGhost: React.FC<{ className?: string }> = ({ className }) => (
-  <span className={className ? `navGhost ${className}` : "navGhost"} aria-hidden="true" />
 )
 
 const AuthEntryModal = dynamic(() => import("src/components/auth/AuthEntryModal"), {
@@ -35,52 +37,15 @@ const preloadAuthEntryModal = () => {
   })
 }
 
-type HeaderAuthShellSnapshot = {
-  authenticated: boolean
-  admin: boolean
-}
-
-const HEADER_AUTH_SHELL_STORAGE_KEY = "header.auth-shell.v1"
-
-const readHeaderAuthShellSnapshot = (): HeaderAuthShellSnapshot | null => {
-  if (typeof window === "undefined") return null
-
-  try {
-    const raw = window.sessionStorage.getItem(HEADER_AUTH_SHELL_STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as Partial<HeaderAuthShellSnapshot>
-    if (typeof parsed.authenticated !== "boolean" || typeof parsed.admin !== "boolean") {
-      return null
-    }
-
-    return {
-      authenticated: parsed.authenticated,
-      admin: parsed.admin,
-    }
-  } catch {
-    return null
-  }
-}
-
-const persistHeaderAuthShellSnapshot = (snapshot: HeaderAuthShellSnapshot) => {
-  if (typeof window === "undefined") return
-
-  try {
-    window.sessionStorage.setItem(HEADER_AUTH_SHELL_STORAGE_KEY, JSON.stringify(snapshot))
-  } catch {
-    // ignore storage failures
-  }
-}
-
-const useBrowserLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect
-
 const NavBar: React.FC = () => {
   const router = useRouter()
   const { me, authStatus, logout } = useAuthSession()
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isClientMounted, setIsClientMounted] = useState(false)
-  const [authShellSnapshot, setAuthShellSnapshot] = useState<HeaderAuthShellSnapshot | null>(null)
+  const [authShellSnapshot, setAuthShellSnapshot] = useState<HeaderAuthShellSnapshot | null>(() =>
+    readHeaderAuthShellSnapshot()
+  )
   const rootRef = useRef<HTMLDivElement | null>(null)
   const mobileMenuRef = useRef<HTMLDivElement | null>(null)
   const menuTriggerRef = useRef<HTMLButtonElement | null>(null)
@@ -94,8 +59,8 @@ const NavBar: React.FC = () => {
 
   const primaryLinks = useMemo(() => [{ id: "about", name: "About", to: "/about" }], [])
   const mobileLinks = useMemo(
-    () => [...primaryLinks, ...(isAdmin ? [{ id: "admin", name: "Admin", to: "/admin" }] : [])],
-    [primaryLinks, isAdmin]
+    () => [...primaryLinks, ...(shellAdmin ? [{ id: "admin", name: "Admin", to: "/admin" }] : [])],
+    [primaryLinks, shellAdmin]
   )
 
   const nextPath = useMemo(() => {
@@ -110,8 +75,10 @@ const NavBar: React.FC = () => {
     setIsClientMounted(true)
   }, [])
 
-  useBrowserLayoutEffect(() => {
-    setAuthShellSnapshot(readHeaderAuthShellSnapshot())
+  useLayoutEffect(() => {
+    const snapshot = readHeaderAuthShellSnapshot()
+    setAuthShellSnapshot(snapshot)
+    syncHeaderAuthShellSnapshot(snapshot)
   }, [])
 
   useEffect(() => {
@@ -187,15 +154,10 @@ const NavBar: React.FC = () => {
     setAuthModalOpen(true)
   }
 
-  // authStatus=loading 구간에서는 Login CTA를 노출하지 않아
-  // refresh hydration 중 "Login -> Logout" 플래시와 슬롯 점프를 막는다.
-  const showImmediateLoginAction = authStatus === "anonymous"
+  const showImmediateLoginAction = authStatus === "anonymous" || (authStatus === "loading" && !shellAuthenticated)
   const showUnavailableAuthAction = authStatus === "unavailable" && !me
-  const shouldRenderLoginSlot =
-    showImmediateLoginAction || showUnavailableAuthAction || (authStatus === "loading" && !shellAuthenticated)
-  const shouldShowBellShell = authStatus === "loading" && shellAuthenticated
-  const shouldRenderBellSlot = isAuthenticated || shouldShowBellShell
-  const shouldRenderLogoutSlot = isAuthenticated || (authStatus === "loading" && shellAuthenticated)
+  const shouldShowAuthenticatedShell = isAuthenticated || (authStatus === "loading" && shellAuthenticated)
+  const loginButtonClassName = showUnavailableAuthAction ? "navPill navPill--warning navAction--login" : "navPill navAction--login"
 
   return (
     <StyledWrapper ref={rootRef}>
@@ -207,65 +169,44 @@ const NavBar: React.FC = () => {
             </Link>
           </li>
         ))}
-        {shellAdmin ? (
-          <li className="adminLinkSlot" aria-hidden={!isAdmin}>
-            {isAdmin ? (
-              <Link href="/admin" data-ui="nav-control">
-                Admin
-              </Link>
-            ) : (
-              <NavGhost className="navGhost--fill" />
-            )}
-          </li>
-        ) : null}
+        <li className="adminLinkSlot">
+          <Link href="/admin" data-ui="nav-control" className="navLink navAction--admin">
+            Admin
+          </Link>
+        </li>
       </ul>
 
       <div className="authArea" data-auth-state={authState}>
-        {shouldRenderLoginSlot ? (
-          <div className="authSlot authSlot--login">
-            {showImmediateLoginAction ? (
-              <button
-                type="button"
-                className="navPill"
-                data-ui="nav-control"
-                onMouseEnter={preloadAuthEntryModal}
-                onFocus={preloadAuthEntryModal}
-                onClick={openLoginModal}
-              >
-                Login
-              </button>
-            ) : showUnavailableAuthAction ? (
-              <button
-                type="button"
-                className="navPill navPill--warning"
-                data-ui="nav-control"
-                onClick={() => void handleUnavailableAuthLogin()}
-              >
-                Login
-              </button>
-            ) : (
-              <NavGhost className="navGhost--action" />
-            )}
-          </div>
-        ) : null}
+        <div className="authSlot authSlot--login">
+          <button
+            type="button"
+            className={loginButtonClassName}
+            data-ui="nav-control"
+            onMouseEnter={preloadAuthEntryModal}
+            onFocus={preloadAuthEntryModal}
+            onClick={() => {
+              if (showUnavailableAuthAction) {
+                void handleUnavailableAuthLogin()
+                return
+              }
+              openLoginModal()
+            }}
+          >
+            Login
+          </button>
+        </div>
 
-        {shouldRenderBellSlot ? (
-          <div className="authSlot authSlot--bell">
+        <div className="authSlot authSlot--bell">
+          <span className="authBellState" data-visible={shouldShowAuthenticatedShell ? "true" : "false"}>
             {isAuthenticated ? <NotificationBell enabled /> : <NotificationBellShell />}
-          </div>
-        ) : null}
+          </span>
+        </div>
 
-        {shouldRenderLogoutSlot ? (
-          <div className="authSlot authSlot--logout">
-            {isAuthenticated ? (
-              <button type="button" onClick={handleLogout} className="logoutBtn" data-ui="nav-control">
-                Logout
-              </button>
-            ) : (
-              <NavGhost className="navGhost--action" />
-            )}
-          </div>
-        ) : null}
+        <div className="authSlot authSlot--logout">
+          <button type="button" onClick={handleLogout} className="logoutBtn navAction--logout" data-ui="nav-control">
+            Logout
+          </button>
+        </div>
 
         {showUnavailableAuthAction && <span className="authNotice">Auth check failed</span>}
 
@@ -310,7 +251,7 @@ const NavBar: React.FC = () => {
                   </button>
                 )}
 
-                {isAuthenticated && (
+                {shouldShowAuthenticatedShell && (
                   <button
                     type="button"
                     role="menuitem"
@@ -387,25 +328,6 @@ const StyledWrapper = styled.div`
     }
   }
 
-  .navGhost {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: ${({ theme }) => theme.variables.navControl.height}px;
-    padding: 0 0.46rem;
-    border-radius: ${({ theme }) => theme.variables.navControl.radius}px;
-    color: transparent;
-    user-select: none;
-    pointer-events: none;
-    white-space: nowrap;
-    visibility: hidden;
-  }
-
-  .navGhost--fill {
-    width: 100%;
-    padding: 0;
-  }
-
   .authArea {
     display: flex;
     align-items: center;
@@ -442,19 +364,6 @@ const StyledWrapper = styled.div`
     min-width: 4.95rem;
   }
 
-  .navGhost--action {
-    min-width: 100%;
-    padding: 0;
-  }
-
-  .iconGhost {
-    display: inline-flex;
-    width: 1.9rem;
-    height: 1.9rem;
-    border-radius: 999px;
-    visibility: hidden;
-  }
-
   .bellShell {
     display: inline-flex;
     align-items: center;
@@ -467,7 +376,8 @@ const StyledWrapper = styled.div`
   }
 
   .navPill,
-  .logoutBtn {
+  .logoutBtn,
+  .navLink {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -489,6 +399,38 @@ const StyledWrapper = styled.div`
       text-underline-offset: 3px;
       text-decoration-thickness: 1px;
     }
+  }
+
+  .navLink {
+    text-decoration: none;
+  }
+
+  .navAction--login,
+  .navAction--logout,
+  .navAction--admin,
+  .authBellState {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  html[data-header-auth-shell="anonymous"] & .navAction--login {
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  html[data-header-auth-shell="authenticated"] & .navAction--logout {
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  html[data-header-auth-shell="authenticated"] & .authBellState {
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  html[data-header-auth-shell="authenticated"][data-header-auth-admin="true"] & .navAction--admin {
+    visibility: visible;
+    pointer-events: auto;
   }
 
   .authNotice {

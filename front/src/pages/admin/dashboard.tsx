@@ -6,7 +6,7 @@ import Link from "next/link"
 import type { SimpleIcon } from "simple-icons"
 import { useEffect, useRef, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
-import AppIcon from "src/components/icons/AppIcon"
+import AppIcon, { type IconName } from "src/components/icons/AppIcon"
 import type { AuthMember } from "src/hooks/useAuthSession"
 import useAuthSession from "src/hooks/useAuthSession"
 import { AdminPageProps, buildAdminPagePropsFromMember, getAdminPageProps, readAdminProtectedBootstrap } from "src/libs/server/adminPage"
@@ -39,10 +39,35 @@ type AdminDashboardBootstrapPayload = {
   health: SystemHealthPayload
 }
 
+type DashboardKpiCard = {
+  key: string
+  label: string
+  value: string
+  tone: "neutral" | "good" | "warn"
+  icon: IconName
+}
+
+type DashboardPriorityRow = {
+  key: string
+  title: string
+  priority: string
+  tone: "neutral" | "good" | "warn"
+  href: string
+}
+
+type DashboardQuickAction = {
+  key: string
+  href: string
+  label: string
+  icon: IconName
+}
+
 const EMPTY_INITIAL_SNAPSHOT: AdminDashboardInitialSnapshot = {
   systemHealth: null,
   fetchedAt: null,
 }
+
+const DASHBOARD_PRIORITY_PANEL_LIMIT = 4
 
 async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | null> {
   try {
@@ -239,11 +264,7 @@ const DeferredPanelFrame: React.FC<{
       {isActivated ? (
         <PanelFrame src={src} title={title} loading={eager ? "eager" : "lazy"} referrerPolicy="no-referrer" />
       ) : (
-        <PanelFrame
-          as="div"
-          aria-hidden="true"
-          data-pending="true"
-        />
+        <PanelFrame as="div" aria-hidden="true" data-pending="true" />
       )}
     </div>
   )
@@ -271,90 +292,261 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
 
   if (!sessionMember) return null
 
-  const monitoringItems = buildMonitoringItems(systemHealthQuery.data?.status || "확인 전", env)
+  const systemHealthStatus = systemHealthQuery.data?.status || "확인 전"
+  const monitoringItems = buildMonitoringItems(systemHealthStatus, env)
   const grafanaDashboardUrl = env.monitoringEmbedLooksLikeGrafana ? env.monitoringEmbedUrl : ""
+  const leadPanel = DASHBOARD_PANEL_CARDS[0]
+  const remainingPanels = DASHBOARD_PANEL_CARDS.slice(1)
+  const primaryRows = DASHBOARD_PANEL_CARDS.slice(0, DASHBOARD_PRIORITY_PANEL_LIMIT)
+  const dashboardStatusLabel = systemHealthStatus === "UP" ? "서비스 정상" : systemHealthStatus
+  const dashboardStatusTone = systemHealthStatus === "UP" ? "good" : "warn"
+
+  const kpiCards: DashboardKpiCard[] = [
+    {
+      key: "health",
+      label: "서비스 상태",
+      value: dashboardStatusLabel,
+      tone: dashboardStatusTone,
+      icon: "service",
+    },
+    {
+      key: "channels",
+      label: "연결 채널",
+      value: `${monitoringItems.length}개`,
+      tone: monitoringItems.length >= 2 ? "good" : "warn",
+      icon: "spark",
+    },
+    {
+      key: "panels",
+      label: "패널 묶음",
+      value: `${DASHBOARD_PANEL_CARDS.length}개`,
+      tone: "neutral",
+      icon: "laptop",
+    },
+    {
+      key: "focus",
+      label: "우선 점검",
+      value: `${primaryRows.length}개`,
+      tone: "neutral",
+      icon: "edit",
+    },
+  ]
+
+  const priorityRows: DashboardPriorityRow[] = primaryRows.map((panel, index) => ({
+    key: panel.key,
+    title: panel.title,
+    priority: index === 0 ? "즉시" : index === 1 ? "높음" : "보통",
+    tone: systemHealthStatus === "UP" ? (index === 0 ? "good" : "neutral") : index < 2 ? "warn" : "neutral",
+    href: grafanaDashboardUrl ? buildGrafanaPanelEmbedUrl(grafanaDashboardUrl, panel.panelId) : grafanaDashboardUrl,
+  }))
+
+  const quickActions: DashboardQuickAction[] = [
+    {
+      key: "tools",
+      href: "/admin/tools",
+      label: "운영 진단 열기",
+      icon: "laptop",
+    },
+    {
+      key: "hub",
+      href: "/admin",
+      label: "관리자 허브",
+      icon: "spark",
+    },
+    ...(env.logsDashboardUrl
+      ? [
+          {
+            key: "logs",
+            href: env.logsDashboardUrl,
+            label: "로그 보드",
+            icon: "service" as const,
+          },
+        ]
+      : []),
+  ]
+
+  const leadPanelUrl = grafanaDashboardUrl ? buildGrafanaPanelEmbedUrl(grafanaDashboardUrl, leadPanel.panelId) : ""
 
   return (
     <AdminShell currentSection="dashboard" member={sessionMember}>
       <Main>
-      <Shell>
-        <TopRow>
-          <div>
-            <PageEyebrow>운영 모니터링</PageEyebrow>
-            <h1>운영 대시보드</h1>
-            <p>first-fold 핵심 지표를 먼저 보고, 아래에서 수집 건강도와 SSE 연결 상태까지 이어서 점검합니다.</p>
-          </div>
-          <TopActions>
-            <StatusChip data-tone={systemHealthQuery.data?.status === "UP" ? "good" : "neutral"}>
-              {systemHealthQuery.data?.status === "UP" ? "서비스 정상" : systemHealthQuery.data?.status || "상태 확인 전"}
-            </StatusChip>
-            <Link href="/admin/tools" passHref legacyBehavior>
-              <HeaderLink>진단/실행 열기</HeaderLink>
-            </Link>
-          </TopActions>
-        </TopRow>
+        <Shell>
+          <HeroPanel>
+            <HeroTop>
+              <HeroCopy>
+                <PageEyebrow>운영 모니터링</PageEyebrow>
+                <h1>운영 대시보드</h1>
+              </HeroCopy>
+              <HeroActions>
+                <StatusChip data-tone={dashboardStatusTone}>{dashboardStatusLabel}</StatusChip>
+                <Link href="/admin/tools" passHref legacyBehavior>
+                  <HeaderLink>진단/실행 열기</HeaderLink>
+                </Link>
+              </HeroActions>
+            </HeroTop>
+          </HeroPanel>
 
-        <ServiceRail data-ui="monitoring-service-rail">
-          {monitoringItems.map((item) => (
-            <ServiceCard key={item.key} href={item.href} target="_blank" rel="noreferrer noopener">
-              <ServiceIcon>{renderMonitoringBrand(item.brand.icon, item.brand.fallbackIcon, item.title)}</ServiceIcon>
-              <ServiceCopy>
-                <strong>{item.title}</strong>
-                <span>{item.status}</span>
-              </ServiceCopy>
-            </ServiceCard>
-          ))}
-        </ServiceRail>
+          <ServiceRail data-ui="monitoring-service-rail">
+            {kpiCards.map((item) => (
+              <MetricCard key={item.key} data-tone={item.tone}>
+                <MetricIcon data-tone={item.tone}>
+                  <AppIcon name={item.icon} aria-hidden="true" />
+                </MetricIcon>
+                <MetricCopy>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </MetricCopy>
+              </MetricCard>
+            ))}
+          </ServiceRail>
 
-        <PanelGrid data-ui="monitoring-panel-grid">
-          {DASHBOARD_PANEL_CARDS.map((panel, index) => {
-            const panelUrl = grafanaDashboardUrl ? buildGrafanaPanelEmbedUrl(grafanaDashboardUrl, panel.panelId) : ""
-            return (
-              <PanelCard key={panel.key} data-ui="monitoring-panel-card">
-                <PanelHeader>
-                  <div>
-                    <strong>{panel.title}</strong>
-                    <span>{panel.description}</span>
-                  </div>
-                  {grafanaDashboardUrl ? (
-                    <LaunchLink href={panelUrl || grafanaDashboardUrl} target="_blank" rel="noreferrer noopener">
-                      새 창
-                    </LaunchLink>
-                  ) : null}
-                </PanelHeader>
-                <PanelBody>
-                  {panelUrl ? (
-                    <DeferredPanelFrame
-                      eager={index < DASHBOARD_EAGER_PANEL_COUNT}
-                      activationDelayMs={
-                        index < DASHBOARD_EAGER_PANEL_COUNT
-                          ? 0
-                          : (index - DASHBOARD_EAGER_PANEL_COUNT + 1) * DASHBOARD_PANEL_STAGGER_MS
-                      }
-                      src={panelUrl}
-                      title={panel.title}
-                    />
-                  ) : (
-                    <PanelFallback>
-                      <strong>대시보드를 불러올 수 없습니다.</strong>
-                      <span>Grafana embed URL 또는 public dashboard 구성을 먼저 확인하세요.</span>
-                    </PanelFallback>
-                  )}
-                </PanelBody>
-              </PanelCard>
-            )
-          })}
-        </PanelGrid>
+          <PanelGrid data-ui="monitoring-panel-grid">
+            <LeadPanelCard data-ui="monitoring-panel-card">
+              <PanelHeader>
+                <div>
+                  <strong>{leadPanel.title}</strong>
+                </div>
+                {grafanaDashboardUrl ? (
+                  <LaunchLink href={leadPanelUrl || grafanaDashboardUrl} target="_blank" rel="noreferrer noopener">
+                    새 창
+                  </LaunchLink>
+                ) : null}
+              </PanelHeader>
+              <PanelBody>
+                {leadPanelUrl ? (
+                  <DeferredPanelFrame eager src={leadPanelUrl} title={leadPanel.title} />
+                ) : (
+                  <PanelFallback>
+                    <strong>대시보드를 불러올 수 없습니다.</strong>
+                    <span>Grafana embed URL 또는 public dashboard 구성을 먼저 확인하세요.</span>
+                  </PanelFallback>
+                )}
+              </PanelBody>
+            </LeadPanelCard>
 
-        <ReviewNote>
-          <strong>운영 관점 점검 결과</strong>
-          <span>
-            운영 first fold에는 총 요청량, p95, 메모리 압박, DB 커넥션 포화를 우선 두고, 다음 행에서 5xx, 큐 적체, 캐시
-            효율, SSE recovery를 확인하도록 구성했습니다. 마지막 행에는 scrape health와 SSE emitter 수를 둬 지표 수집
-            실패와 연결 누적도 함께 점검할 수 있게 했습니다.
-          </span>
-        </ReviewNote>
-      </Shell>
+            <InsightRail>
+              <RailCard>
+                <SectionHeader>
+                  <h2>연결된 채널</h2>
+                </SectionHeader>
+                <MonitoringLinkList>
+                  {monitoringItems.map((item) => (
+                    <MonitoringLinkItem key={item.key} href={item.href} target="_blank" rel="noreferrer noopener">
+                      <span className="iconWrap">{renderMonitoringBrand(item.brand.icon, item.brand.fallbackIcon, item.title)}</span>
+                      <span className="copy">
+                        <strong>{item.title}</strong>
+                        <span>{item.status}</span>
+                      </span>
+                    </MonitoringLinkItem>
+                  ))}
+                </MonitoringLinkList>
+              </RailCard>
+
+              <RailCard>
+                <SectionHeader>
+                  <h2>현재 포커스</h2>
+                </SectionHeader>
+                <FocusChipRail>
+                  {primaryRows.map((panel) => (
+                    <FocusChip key={`focus-${panel.key}`}>{panel.title}</FocusChip>
+                  ))}
+                </FocusChipRail>
+              </RailCard>
+
+              <RailCard>
+                <SectionHeader>
+                  <h2>빠른 이동</h2>
+                </SectionHeader>
+                <QuickActionList>
+                  {quickActions.map((action) => (
+                    <Link key={action.key} href={action.href} passHref legacyBehavior>
+                      <QuickActionLink target={action.href.startsWith("http") ? "_blank" : undefined} rel={action.href.startsWith("http") ? "noreferrer noopener" : undefined}>
+                        <span className="iconWrap">
+                          <AppIcon name={action.icon} aria-hidden="true" />
+                        </span>
+                        <span className="copy">
+                          <strong>{action.label}</strong>
+                        </span>
+                      </QuickActionLink>
+                    </Link>
+                  ))}
+                </QuickActionList>
+              </RailCard>
+            </InsightRail>
+
+            {remainingPanels.map((panel, index) => {
+              const panelUrl = grafanaDashboardUrl ? buildGrafanaPanelEmbedUrl(grafanaDashboardUrl, panel.panelId) : ""
+              return (
+                <PanelCard key={panel.key} data-ui="monitoring-panel-card">
+                  <PanelHeader>
+                    <div>
+                      <strong>{panel.title}</strong>
+                    </div>
+                    {grafanaDashboardUrl ? (
+                      <LaunchLink href={panelUrl || grafanaDashboardUrl} target="_blank" rel="noreferrer noopener">
+                        새 창
+                      </LaunchLink>
+                    ) : null}
+                  </PanelHeader>
+                  <PanelBody>
+                    {panelUrl ? (
+                      <DeferredPanelFrame
+                        eager={index + 1 < DASHBOARD_EAGER_PANEL_COUNT}
+                        activationDelayMs={index * DASHBOARD_PANEL_STAGGER_MS}
+                        src={panelUrl}
+                        title={panel.title}
+                      />
+                    ) : (
+                      <PanelFallback>
+                        <strong>대시보드를 불러올 수 없습니다.</strong>
+                        <span>Grafana embed URL 또는 public dashboard 구성을 먼저 확인하세요.</span>
+                      </PanelFallback>
+                    )}
+                  </PanelBody>
+                </PanelCard>
+              )
+            })}
+          </PanelGrid>
+
+          <PrioritySection>
+            <SectionHeader>
+              <h2>우선 점검 패널</h2>
+            </SectionHeader>
+
+            <PriorityTable>
+              <thead>
+                <tr>
+                  <th>패널</th>
+                  <th>우선순위</th>
+                  <th>관리</th>
+                </tr>
+              </thead>
+              <tbody>
+                {priorityRows.map((row) => (
+                  <tr key={row.key}>
+                    <td>
+                      <PriorityCellCopy>
+                        <strong>{row.title}</strong>
+                      </PriorityCellCopy>
+                    </td>
+                    <td>
+                      <PriorityBadge data-tone={row.tone}>{row.priority}</PriorityBadge>
+                    </td>
+                    <td>
+                      {row.href ? (
+                        <PriorityLink href={row.href} target="_blank" rel="noreferrer noopener">
+                          열기
+                        </PriorityLink>
+                      ) : (
+                        <PriorityLink as="span">환경 확인</PriorityLink>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </PriorityTable>
+          </PrioritySection>
+        </Shell>
       </Main>
     </AdminShell>
   )
@@ -386,78 +578,129 @@ const Main = styled.main`
 const Shell = styled.div`
   width: min(1380px, calc(100% - 40px));
   margin: 0 auto;
-  padding: 40px 0 72px;
+  padding: 26px 0 72px;
   display: grid;
-  gap: 24px;
+  gap: 20px;
 
   @media (max-width: 768px) {
     width: min(calc(100% - 24px), 1380px);
-    padding-top: 28px;
+    padding-top: 10px;
+    gap: 10px;
   }
 `
 
-const TopRow = styled.header`
+const HeroPanel = styled.header`
+  display: grid;
+  gap: 12px;
+  padding: 24px 26px;
+  border-radius: 28px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: ${({ theme }) =>
+    theme.scheme === "light"
+      ? "linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(246, 249, 255, 0.94) 100%)"
+      : "linear-gradient(180deg, rgba(22, 27, 34, 0.96) 0%, rgba(17, 20, 26, 0.94) 100%)"};
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "light"
+      ? "0 18px 40px rgba(15, 23, 42, 0.06)"
+      : "0 18px 40px rgba(0, 0, 0, 0.18)"};
+
+  @media (max-width: 820px) {
+    gap: 10px;
+    padding: 14px 18px;
+  }
+`
+
+const HeroTop = styled.div`
   display: flex;
   justify-content: space-between;
   gap: 24px;
-  align-items: flex-start;
+  align-items: flex-end;
+
+  @media (max-width: 700px) {
+    flex-direction: column;
+    align-items: stretch;
+  }
+`
+
+const HeroCopy = styled.div`
+  display: grid;
+  gap: 6px;
 
   h1 {
-    margin: 6px 0 0;
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray12};
     font-size: clamp(2rem, 3vw, 2.8rem);
     line-height: 1.08;
     letter-spacing: -0.04em;
+    font-weight: 800;
   }
 
   p {
-    margin: 12px 0 0;
-    max-width: 720px;
+    margin: 0;
+    max-width: 760px;
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 1rem;
+    font-size: 0.98rem;
     line-height: 1.6;
   }
 
-  @media (max-width: 720px) {
-    flex-direction: column;
+  @media (max-width: 768px) {
+    h1 {
+      font-size: clamp(1.8rem, 8vw, 2.35rem);
+    }
+
+    p {
+      font-size: 0.9rem;
+      line-height: 1.55;
+    }
   }
 `
 
 const PageEyebrow = styled.span`
   color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 800;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 `
 
-const TopActions = styled.div`
+const HeroActions = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   justify-content: flex-end;
+
+  @media (max-width: 700px) {
+    justify-content: flex-start;
+  }
 `
 
 const StatusChip = styled.span`
   display: inline-flex;
   align-items: center;
-  min-height: 34px;
-  padding: 0 14px;
+  min-height: 38px;
+  padding: 0 15px;
   border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.82rem;
+  font-size: 0.84rem;
   font-weight: 800;
 
   &[data-tone="good"] {
+    border-color: ${({ theme }) => theme.colors.green7};
     background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
+  }
+
+  &[data-tone="warn"] {
+    border-color: ${({ theme }) => theme.colors.orange7};
   }
 `
 
 const HeaderLink = styled.a`
   display: inline-flex;
   align-items: center;
-  min-height: 34px;
-  padding: 0 14px;
+  min-height: 38px;
+  padding: 0 15px;
   border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
@@ -467,66 +710,119 @@ const HeaderLink = styled.a`
   font-weight: 780;
 `
 
-const ServiceRail = styled.div`
+const ServiceRail = styled.section`
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 
-  @media (max-width: 720px) {
+  @media (max-width: 820px) {
+    gap: 10px;
+  }
+
+  @media (max-width: 640px) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  @media (max-width: 560px) {
+  @media (max-width: 420px) {
     grid-template-columns: 1fr;
   }
 `
 
-const ServiceCard = styled.a`
+const MetricCard = styled.article`
   display: grid;
-  grid-template-columns: auto 1fr;
   gap: 12px;
-  align-items: center;
-  padding: 14px 16px;
-  border-radius: 18px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  padding: 16px;
+  border-radius: 22px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
-  text-decoration: none;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.05);
+
+  &[data-tone="good"] {
+    border-color: ${({ theme }) => theme.colors.green7};
+  }
+
+  &[data-tone="warn"] {
+    border-color: ${({ theme }) => theme.colors.orange7};
+  }
+
+  @media (max-width: 820px) {
+    padding: 12px;
+    gap: 10px;
+  }
 `
 
-const ServiceIcon = styled.div`
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
+const MetricIcon = styled.div`
+  width: 46px;
+  height: 46px;
+  border-radius: 15px;
   display: grid;
   place-items: center;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray12};
+  background: ${({ theme }) =>
+    theme.scheme === "light" ? "rgba(59, 130, 246, 0.1)" : "rgba(59, 130, 246, 0.18)"};
+  color: ${({ theme }) => theme.colors.blue9};
+
+  &[data-tone="good"] {
+    background: ${({ theme }) =>
+      theme.scheme === "light" ? "rgba(34, 197, 94, 0.1)" : "rgba(34, 197, 94, 0.18)"};
+    color: ${({ theme }) => theme.colors.green7};
+  }
+
+  &[data-tone="warn"] {
+    background: ${({ theme }) =>
+      theme.scheme === "light" ? "rgba(249, 115, 22, 0.1)" : "rgba(249, 115, 22, 0.18)"};
+    color: ${({ theme }) => theme.colors.orange7};
+  }
 `
 
-const ServiceCopy = styled.div`
+const MetricCopy = styled.div`
   display: grid;
-  gap: 2px;
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.95rem;
-    font-weight: 800;
-  }
+  gap: 4px;
+  min-width: 0;
 
   span {
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.82rem;
     font-weight: 700;
   }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 1.22rem;
+    font-weight: 820;
+    line-height: 1.24;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.76rem;
+    line-height: 1.45;
+  }
+
+  @media (max-width: 820px) {
+    strong {
+      font-size: 1.08rem;
+    }
+
+    p {
+      font-size: 0.72rem;
+      line-height: 1.38;
+    }
+  }
 `
 
 const PanelGrid = styled.section`
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.2fr) minmax(17.5rem, 0.8fr);
   gap: 20px;
+  align-items: start;
 
-  @media (max-width: 1080px) {
+  @media (max-width: 1180px) {
     grid-template-columns: 1fr;
   }
 `
@@ -539,12 +835,16 @@ const PanelCard = styled.article`
   box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
 `
 
+const LeadPanelCard = styled(PanelCard)`
+  min-width: 0;
+`
+
 const PanelHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 16px;
-  padding: 26px 26px 18px;
+  padding: 24px 24px 16px;
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray4};
 
   strong {
@@ -559,7 +859,7 @@ const PanelHeader = styled.div`
     display: block;
     margin-top: 8px;
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.9rem;
+    font-size: 0.88rem;
     line-height: 1.55;
   }
 `
@@ -569,13 +869,13 @@ const LaunchLink = styled.a`
   align-items: center;
   justify-content: center;
   min-width: 76px;
-  min-height: 48px;
+  min-height: 44px;
   padding: 0 18px;
   border-radius: 999px;
   background: ${({ theme }) => theme.colors.gray2};
   color: ${({ theme }) => theme.colors.blue9};
   text-decoration: none;
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   font-weight: 780;
 `
 
@@ -612,22 +912,261 @@ const PanelFallback = styled.div`
   }
 `
 
-const ReviewNote = styled.section`
+const InsightRail = styled.aside`
   display: grid;
-  gap: 8px;
-  padding: 18px 20px;
-  border-radius: 18px;
+  gap: 16px;
+
+  @media (max-width: 1180px) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  @media (max-width: 860px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const RailCard = styled.section`
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 24px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
+`
+
+const SectionHeader = styled.div`
+  display: grid;
+  gap: 4px;
+
+  h2 {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.98rem;
+    font-weight: 820;
+    letter-spacing: -0.02em;
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+`
+
+const MonitoringLinkList = styled.div`
+  display: grid;
+  gap: 10px;
+`
+
+const MonitoringLinkItem = styled.a`
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 12px 13px;
+  border-radius: 18px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  text-decoration: none;
+  color: inherit;
+
+  .iconWrap {
+    width: 38px;
+    height: 38px;
+    border-radius: 13px;
+    display: grid;
+    place-items: center;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray1};
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  .copy {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+  }
 
   strong {
-    font-size: 0.96rem;
-    font-weight: 820;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.84rem;
+    font-weight: 780;
   }
 
   span {
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.9rem;
-    line-height: 1.6;
+    font-size: 0.74rem;
+    font-weight: 700;
   }
+`
+
+const FocusChipRail = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+`
+
+const FocusChip = styled.span`
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: ${({ theme }) =>
+    theme.scheme === "light" ? "rgba(59, 130, 246, 0.1)" : "rgba(59, 130, 246, 0.18)"};
+  color: ${({ theme }) => theme.colors.blue9};
+  font-size: 0.76rem;
+  font-weight: 780;
+`
+
+const QuickActionList = styled.div`
+  display: grid;
+  gap: 10px;
+`
+
+const QuickActionLink = styled.a`
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 12px 13px;
+  border-radius: 18px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  text-decoration: none;
+  color: inherit;
+
+  .iconWrap {
+    width: 38px;
+    height: 38px;
+    border-radius: 13px;
+    display: grid;
+    place-items: center;
+    background: ${({ theme }) =>
+      theme.scheme === "light" ? "rgba(59, 130, 246, 0.1)" : "rgba(59, 130, 246, 0.18)"};
+    color: ${({ theme }) => theme.colors.blue9};
+  }
+
+  .copy {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.84rem;
+    font-weight: 780;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.74rem;
+    font-weight: 700;
+  }
+`
+
+const PrioritySection = styled.section`
+  display: grid;
+  gap: 12px;
+  padding: 20px 22px;
+  border-radius: 24px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+`
+
+const PriorityTable = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+
+  th,
+  td {
+    padding: 14px 10px;
+    border-top: 1px solid ${({ theme }) => theme.colors.gray4};
+    text-align: left;
+    vertical-align: middle;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.84rem;
+    line-height: 1.5;
+  }
+
+  thead th {
+    border-top: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.75rem;
+    font-weight: 780;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  @media (max-width: 720px) {
+    thead {
+      display: none;
+    }
+
+    tbody,
+    tr,
+    td {
+      display: block;
+      width: 100%;
+    }
+
+    tr {
+      padding: 12px 0;
+      border-top: 1px solid ${({ theme }) => theme.colors.gray4};
+    }
+
+    tbody tr:first-of-type {
+      border-top: 0;
+    }
+
+    td {
+      border-top: 0;
+      padding: 6px 0;
+    }
+  }
+`
+
+const PriorityCellCopy = styled.div`
+  display: grid;
+  gap: 2px;
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.9rem;
+    font-weight: 800;
+  }
+`
+
+const PriorityBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray12};
+  font-size: 0.75rem;
+  font-weight: 780;
+
+  &[data-tone="good"] {
+    border-color: ${({ theme }) => theme.colors.green7};
+  }
+
+  &[data-tone="warn"] {
+    border-color: ${({ theme }) => theme.colors.orange7};
+  }
+`
+
+const PriorityLink = styled.a`
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  color: ${({ theme }) => theme.colors.blue9};
+  font-size: 0.8rem;
+  font-weight: 780;
+  text-decoration: none;
 `

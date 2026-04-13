@@ -177,7 +177,6 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialProfi
   const primaryAction = {
     href: "/editor/new",
     title: "글 작성",
-    description: "임시글 준비부터 발행 직전 확인까지 한 흐름으로 이어집니다.",
     cta: "새 글 작성",
     secondaryHref: "/admin/posts",
     secondaryLabel: "글 관리",
@@ -187,19 +186,16 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialProfi
     {
       href: "/admin/profile",
       title: "프로필 관리",
-      description: "소개, 홈 인트로, 링크, 이미지까지 공개 화면 기준으로 정리합니다.",
       cta: "프로필 정리",
     },
     {
       href: "/admin/dashboard",
       title: "운영 대시보드",
-      description: "핵심 Grafana 패널과 외부 모니터링을 카드 단위로 확인합니다.",
       cta: "대시보드 열기",
     },
     {
       href: "/admin/tools",
       title: "운영 진단",
-      description: "메일, 큐, 보안 로그와 수동 진단 작업을 같은 워크스페이스에서 이어갑니다.",
       cta: "진단 열기",
     },
   ]
@@ -209,7 +205,6 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialProfi
       ? {
           href: "/admin/profile",
           title: "프로필 완성도 보강",
-          detail: `현재 ${profileCompletion}% 상태입니다. 소개와 이미지를 먼저 정리하세요.`,
           tone: "warn" as const,
         }
       : null,
@@ -217,7 +212,6 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialProfi
       ? {
           href: "/admin/profile",
           title: "홈 소개 문구 채우기",
-          detail: "첫 방문자가 블로그의 주제를 바로 이해할 수 있도록 인트로를 완성하세요.",
           tone: "warn" as const,
         }
       : null,
@@ -225,26 +219,22 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialProfi
       ? {
           href: "/admin/profile",
           title: "연결 채널 추가",
-          detail: "연락처나 서비스 링크를 하나 이상 등록해 방문자 동선을 열어두세요.",
           tone: "warn" as const,
         }
       : null,
     {
       href: "/editor/new",
       title: "새 글 작성 시작",
-      detail: "허브 점검이 끝났다면 바로 임시글부터 작성 흐름을 이어갈 수 있습니다.",
       tone: "neutral" as const,
     },
     {
       href: "/admin/dashboard",
       title: "운영 대시보드 확인",
-      detail: "모니터링 패널과 외부 지표는 전용 대시보드에서 한 번에 점검하세요.",
       tone: "neutral" as const,
     },
     {
       href: "/admin/tools",
       title: "운영 진단 열기",
-      detail: "작업 큐, 메일, 파일 정리, 인증 보안 점검은 운영 진단에서 이어집니다.",
       tone: "neutral" as const,
     },
   ]

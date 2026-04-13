@@ -7,7 +7,6 @@ import ProfileImage from "src/components/ProfileImage"
 export type AdminHubPrimaryAction = {
   href: string
   title: string
-  description: string
   cta: string
   secondaryHref: string
   secondaryLabel: string
@@ -16,7 +15,6 @@ export type AdminHubPrimaryAction = {
 export type AdminHubSecondaryLink = {
   href: string
   title: string
-  description: string
   cta: string
 }
 
@@ -29,7 +27,6 @@ export type AdminHubSummaryItem = {
 export type AdminHubNextAction = {
   href: string
   title: string
-  detail: string
   tone?: "neutral" | "good" | "warn"
 }
 
@@ -48,7 +45,6 @@ type Props = {
 type QuickLinkItem = {
   href: string
   label: string
-  detail: string
   icon: IconName
 }
 
@@ -75,19 +71,16 @@ const AdminHubSurface = ({
     {
       href: primaryAction.href,
       label: primaryAction.cta,
-      detail: primaryAction.title,
       icon: "edit",
     },
     {
       href: primaryAction.secondaryHref,
       label: primaryAction.secondaryLabel,
-      detail: "최근 초안과 수정 흐름 점검",
       icon: resolveQuickLinkIcon(primaryAction.secondaryHref),
     },
     ...secondaryLinks.map((item) => ({
       href: item.href,
       label: item.cta,
-      detail: item.title,
       icon: resolveQuickLinkIcon(item.href),
     })),
   ]
@@ -100,7 +93,6 @@ const AdminHubSurface = ({
           <HeroTop>
             <HeroCopy>
               <h1>관리자 허브</h1>
-              <p>오늘의 핵심 상태를 먼저 확인하고, 글 작성과 운영 점검 흐름을 같은 화면에서 이어갑니다.</p>
             </HeroCopy>
             <HeroActions>
               <Link href={primaryAction.href} passHref legacyBehavior>
@@ -128,7 +120,6 @@ const AdminHubSurface = ({
         <ActionStrip aria-label="지금 해야 할 일">
           <SectionHeader>
             <h2>지금 해야 할 일</h2>
-            <p>first fold에서 바로 처리할 우선 작업만 남겨서 시작점을 고정합니다.</p>
           </SectionHeader>
           <ActionStripGrid>
             {nextActions.map((item, index) => (
@@ -136,9 +127,7 @@ const AdminHubSurface = ({
                 <ActionCard data-tone={item.tone || "neutral"} data-featured={index === 0 ? "true" : "false"}>
                   <div className="copy">
                     <strong>{item.title}</strong>
-                    <p>{item.detail}</p>
                   </div>
-                  <span className="meta">바로 가기</span>
                 </ActionCard>
               </Link>
             ))}
@@ -149,7 +138,6 @@ const AdminHubSurface = ({
           <SectionCard>
             <SectionHeader>
               <h2>오늘의 운영 루틴</h2>
-              <p>글 작성과 주요 관리 화면 진입을 하나의 작업 보드로 묶었습니다.</p>
             </SectionHeader>
 
             <PrimaryWorkflow>
@@ -158,7 +146,6 @@ const AdminHubSurface = ({
               </div>
               <div className="copy">
                 <strong>{primaryAction.title}</strong>
-                <p>{primaryAction.description}</p>
               </div>
               <Link href={primaryAction.href} passHref legacyBehavior>
                 <WorkflowAction>{primaryAction.cta}</WorkflowAction>
@@ -175,7 +162,6 @@ const AdminHubSurface = ({
                       </div>
                       <div className="copy">
                         <strong>{item.title}</strong>
-                        <p>{item.description}</p>
                       </div>
                     </ShortcutTitleRow>
                     <span className="meta">{item.cta}</span>
@@ -188,7 +174,6 @@ const AdminHubSurface = ({
           <SectionCard>
             <SectionHeader>
               <h2>현재 체크포인트</h2>
-              <p>프로필과 홈 소개, 연결 채널 준비 상태를 빠르게 스캔할 수 있게 정리했습니다.</p>
             </SectionHeader>
             <Checklist>
               {summaryItems.map((item) => (
@@ -209,7 +194,6 @@ const AdminHubSurface = ({
         <RailCard>
           <SectionHeader>
             <h2>운영 메모</h2>
-            <p>현재 계정과 공개 프로필 노출 상태를 같은 문맥에서 확인합니다.</p>
           </SectionHeader>
           <ProfileSnapshot>
             <ProfileFrame>
@@ -222,7 +206,6 @@ const AdminHubSurface = ({
             <ProfileCopy>
               <strong>{displayName}</strong>
               <span>{profileRole || "관리자 역할 미설정"}</span>
-              <p>{profileBio || "관리자 소개 문구가 아직 없습니다."}</p>
             </ProfileCopy>
           </ProfileSnapshot>
           <Link href="/admin/profile" passHref legacyBehavior>
@@ -233,7 +216,6 @@ const AdminHubSurface = ({
         <RailCard>
           <SectionHeader>
             <h2>빠른 이동</h2>
-            <p>허브에서 자주 오가는 관리 화면만 따로 모았습니다.</p>
           </SectionHeader>
           <QuickLinkList>
             {quickLinks.map((item) => (
@@ -244,7 +226,6 @@ const AdminHubSurface = ({
                   </span>
                   <span className="copy">
                     <strong>{item.label}</strong>
-                    <span>{item.detail}</span>
                   </span>
                 </QuickLink>
               </Link>
@@ -255,7 +236,6 @@ const AdminHubSurface = ({
         <RailCard>
           <SectionHeader>
             <h2>상태 메모</h2>
-            <p>요약 레일에서 바로 보지 못한 값을 다시 한 번 정리합니다.</p>
           </SectionHeader>
           <MiniStatusList>
             {summaryItems.map((item) => (

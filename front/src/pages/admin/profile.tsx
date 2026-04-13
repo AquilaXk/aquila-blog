@@ -1404,16 +1404,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                   링크 추가
                 </GhostButton>
               </LinkManagerHeader>
-              <LinkManagerHint
-                data-tone={draggingLinkIndex !== null ? "dragging" : sectionStateMap.links.dirty ? "dirty" : "idle"}
-              >
-                {draggingLinkIndex !== null
-                  ? "드롭 위치에 놓으면 순서가 바로 바뀝니다."
-                  : sectionStateMap.links.dirty
-                    ? "링크 순서나 내용이 바뀌었습니다. 저장 또는 공개해야 실제 카드에 반영됩니다."
-                    : "드래그해서 순서를 바꾸고, 필요하면 저장 후 공개하세요."}
-              </LinkManagerHint>
-
               {visibleLinks.length > 0 ? (
                 <LinkCardList>
                   {visibleLinks.map((item, index) => {
@@ -1645,7 +1635,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                   <SectionStateBadge data-tone="synced">동기화됨</SectionStateBadge>
                 )}
               </div>
-              {activeSectionMeta.description ? <p>{activeSectionMeta.description}</p> : null}
             </EditorPaneHeader>
             {renderActiveSection()}
           </EditorSurface>
@@ -1726,8 +1715,8 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                       )}
                     </div>
                     <strong>{displayName}</strong>
-                    <span>{previewContent.profileRole || "한 줄 역할"}</span>
-                    <p>{previewContent.profileBio || "짧은 소개"}</p>
+                    {previewContent.profileRole ? <span>{previewContent.profileRole}</span> : null}
+                    {previewContent.profileBio ? <p>{previewContent.profileBio}</p> : null}
                   </PreviewProfileCard>
                 ) : null}
 
@@ -1737,8 +1726,8 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                       <span>About</span>
                       <strong>{displayName}</strong>
                     </header>
-                    <h4>{previewContent.aboutRole || "페이지 역할 문구"}</h4>
-                    <p>{previewContent.aboutBio || "소개 문단"}</p>
+                    {previewContent.aboutRole ? <h4>{previewContent.aboutRole}</h4> : null}
+                    {previewContent.aboutBio ? <p>{previewContent.aboutBio}</p> : null}
                     {previewContent.aboutSections.length > 0 ? (
                       <div className="sections">
                         {previewContent.aboutSections.map((section) => (
@@ -1773,9 +1762,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                               </li>
                             ))}
                           </ul>
-                        ) : (
-                          <p>등록된 링크 없음</p>
-                        )}
+                        ) : null}
                       </section>
                     ))}
                   </PreviewLinksCard>
@@ -2562,21 +2549,6 @@ const LinkManagerHeader = styled.div`
   @media (max-width: 760px) {
     flex-direction: column;
     align-items: flex-start;
-  }
-`
-
-const LinkManagerHint = styled.p`
-  margin: -0.18rem 0 0;
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.79rem;
-  line-height: 1.5;
-
-  &[data-tone="dirty"] {
-    color: ${({ theme }) => theme.colors.orange10};
-  }
-
-  &[data-tone="dragging"] {
-    color: ${({ theme }) => theme.colors.accentLink};
   }
 `
 

@@ -22,20 +22,17 @@ const meta: Meta<typeof AdminHubSurface> = {
       {
         href: "/admin/profile",
         title: "프로필 완성도 보강",
-        detail: "공개 프로필과 홈 소개를 먼저 정리하세요.",
         tone: "warn",
       },
       {
         href: "/editor/new",
         title: "새 글 작성 시작",
-        detail: "허브 점검이 끝났다면 바로 임시글 작성으로 이어집니다.",
         tone: "neutral",
       },
     ],
     primaryAction: {
       href: "/editor/new",
       title: "새 글 쓰기",
-      description: "",
       cta: "글 쓰기 시작",
       secondaryHref: "/admin/posts",
       secondaryLabel: "기존 글 관리",
@@ -44,19 +41,16 @@ const meta: Meta<typeof AdminHubSurface> = {
       {
         href: "/admin/profile",
         title: "프로필 관리",
-        description: "",
         cta: "프로필 정리",
       },
       {
         href: "/admin/dashboard",
         title: "운영 대시보드",
-        description: "",
         cta: "대시보드 열기",
       },
       {
         href: "/admin/tools",
         title: "운영 진단",
-        description: "",
         cta: "진단 열기",
       },
     ],

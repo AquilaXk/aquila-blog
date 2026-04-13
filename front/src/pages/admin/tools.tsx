@@ -16,10 +16,14 @@ import { readServerSnapshot } from "src/libs/server/serverSnapshotCache"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import AdminShell from "src/routes/Admin/AdminShell"
 import {
+  AdminActionCardButton,
   AdminInfoLinkCard,
+  AdminInlineActionRow,
   AdminRailCard,
   AdminSectionHeading,
   AdminSectionTitleStack,
+  AdminStatusPill,
+  AdminTextActionButton,
   AdminWorkspaceHero,
   AdminWorkspaceSectionNav,
   AdminWorkspaceSectionNavButton,
@@ -2364,18 +2368,12 @@ const SectionHeading = styled(AdminSectionHeading)`
   align-items: flex-start;
 `
 
-const StatusBadge = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+const StatusBadge = styled(AdminStatusPill)`
   min-height: 34px;
   padding: 0 0.78rem;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.indigo8};
+  border-color: ${({ theme }) => theme.colors.indigo8};
   background: ${({ theme }) => theme.colors.indigo3};
   color: ${({ theme }) => theme.colors.indigo11};
-  font-size: 0.78rem;
-  font-weight: 800;
 
   &[data-tone="success"] {
     border-color: ${({ theme }) => theme.colors.statusSuccessBorder};
@@ -2390,19 +2388,9 @@ const StatusBadge = styled.span`
   }
 `
 
-const FreshnessBadge = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+const FreshnessBadge = styled(AdminStatusPill)`
   min-height: 26px;
   padding: 0 0.58rem;
-  border-radius: 10px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.78rem;
-  font-weight: 800;
-  line-height: 1;
 
   &[data-tone="fresh"] {
     border-color: ${({ theme }) => theme.colors.statusSuccessBorder};
@@ -2560,22 +2548,13 @@ const HeaderSubline = styled.div`
   }
 `
 
-const ActionRow = styled.div`
-  display: flex;
-  flex-wrap: wrap;
+const ActionRow = styled(AdminInlineActionRow)`
   gap: 0.5rem;
 `
 
-const QuietButton = styled.button`
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
+const QuietButton = styled(AdminTextActionButton)`
   font-size: 0.82rem;
   font-weight: 700;
-  cursor: pointer;
 
   &:disabled {
     opacity: 0.56;
@@ -2766,18 +2745,9 @@ const CardSectionHeading = styled.div`
   }
 `
 
-const ActionToneBadge = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 32px;
-  padding: 0 0.72rem;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+const ActionToneBadge = styled(AdminStatusPill)`
   background: ${({ theme }) => theme.colors.gray3};
   color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.76rem;
-  font-weight: 800;
 
   &[data-tone="write"] {
     border-color: ${({ theme }) => theme.colors.accentBorder};
@@ -2801,32 +2771,7 @@ const ActionList = styled.div`
   gap: 0.55rem;
 `
 
-const ActionRowButton = styled.button`
-  text-align: left;
-  display: grid;
-  gap: 0.16rem;
-  padding: 0.82rem 0.88rem;
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray12};
-  cursor: pointer;
-
-  &:disabled {
-    opacity: 0.56;
-    cursor: not-allowed;
-  }
-
-  span {
-    font-size: 0.88rem;
-    font-weight: 760;
-  }
-
-  small {
-    color: ${({ theme }) => theme.colors.gray10};
-    line-height: 1.55;
-  }
-`
+const ActionRowButton = styled(AdminActionCardButton)``
 
 const FieldStack = styled.div`
   display: grid;

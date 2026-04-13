@@ -8,6 +8,9 @@ test.describe("admin posts workspace link contract", () => {
 
     expect(source).toContain('if (visibility === "PUBLIC_UNLISTED") return "링크 공개"')
     expect(source).toContain("const buildCanonicalPostUrl = (postId: string | number) => {")
+    expect(source).toContain("AdminInlineActionRow,")
+    expect(source).toContain("AdminStatusPill,")
+    expect(source).toContain("AdminTextActionButton,")
     expect(source).not.toContain("const openPostDetailRoute = useCallback(")
     expect(source).toContain("<TitleLink href={toCanonicalPostPath(row.id)}>")
     expect(source).toContain("copyPostDetailLink(row)")

@@ -26,6 +26,8 @@ import {
   AdminInfoList,
   AdminPlainCard,
   AdminSectionTitleStack,
+  AdminStatusPill,
+  AdminTextActionLink,
 } from "src/routes/Admin/AdminSurfacePrimitives"
 
 type SystemHealthPayload = {
@@ -1023,15 +1025,10 @@ const PriorityCellCopy = styled.div`
   }
 `
 
-const PriorityBadge = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+const PriorityBadge = styled(AdminStatusPill)`
   min-height: 30px;
   padding: 0 10px;
   border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray12};
   font-size: 0.75rem;
   font-weight: 780;
@@ -1045,12 +1042,9 @@ const PriorityBadge = styled.span`
   }
 `
 
-const PriorityLink = styled.a`
-  display: inline-flex;
-  align-items: center;
+const PriorityLink = styled(AdminTextActionLink)`
   min-height: 30px;
   color: ${({ theme }) => theme.colors.blue9};
   font-size: 0.8rem;
   font-weight: 780;
-  text-decoration: none;
 `

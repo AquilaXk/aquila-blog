@@ -19,9 +19,12 @@ import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import { isServerTempDraftPost } from "./editorTempDraft"
 import AdminShell from "./AdminShell"
 import {
+  AdminInlineActionRow,
   AdminRailCard,
   AdminSectionHeading,
+  AdminStatusPill,
   AdminSubtleCard,
+  AdminTextActionButton,
   AdminWorkspaceHero,
   AdminWorkspaceHeroActions,
   AdminWorkspaceHeroCopy,
@@ -1518,21 +1521,11 @@ const ResumeMeta = styled.div`
   }
 `
 
-const VisibilityBadge = styled.span<{ "data-tone": string }>`
-  display: inline-flex;
+const VisibilityBadge = styled(AdminStatusPill)<{ "data-tone": string }>`
   min-height: 28px;
-  align-items: center;
   padding: 0 0.72rem;
-  border-radius: 999px;
   font-size: 0.78rem;
   font-weight: 800;
-  border: 1px solid
-    ${({ theme, "data-tone": tone }) =>
-      tone === "PRIVATE"
-        ? theme.colors.gray7
-        : tone === "PUBLIC_UNLISTED"
-          ? theme.colors.blue8
-          : theme.colors.green8};
   color: ${({ theme, "data-tone": tone }) =>
     tone === "PRIVATE"
       ? theme.colors.gray11
@@ -1545,32 +1538,25 @@ const VisibilityBadge = styled.span<{ "data-tone": string }>`
       : tone === "PUBLIC_UNLISTED"
         ? "rgba(59, 130, 246, 0.12)"
         : "rgba(34, 197, 94, 0.12)"};
+  border-color: ${({ theme, "data-tone": tone }) =>
+    tone === "PRIVATE"
+      ? theme.colors.gray7
+      : tone === "PUBLIC_UNLISTED"
+        ? theme.colors.blue8
+        : theme.colors.green8};
 `
 
-const ActionRow = styled.div`
-  display: flex;
-  gap: 0.65rem;
-  flex-wrap: wrap;
-`
+const ActionRow = styled(AdminInlineActionRow)``
 
-const PrimaryInlineButton = styled.button`
-  border: 0;
-  background: transparent;
+const PrimaryInlineButton = styled(AdminTextActionButton)`
   color: ${({ theme }) => theme.colors.blue9};
-  padding: 0;
   font-size: 0.92rem;
   font-weight: 800;
-  cursor: pointer;
 `
 
-const GhostButton = styled.button`
-  border: 0;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
-  padding: 0;
+const GhostButton = styled(AdminTextActionButton)`
   font-size: 0.88rem;
   font-weight: 700;
-  cursor: pointer;
 `
 
 const WorkspaceEmpty = styled.div`
@@ -2198,21 +2184,12 @@ const TitleLink = styled(Link)`
   }
 `
 
-const RowActions = styled.div`
-  display: flex;
-  gap: 0.55rem;
-  align-items: center;
-  flex-wrap: wrap;
-`
+const RowActions = styled(AdminInlineActionRow)``
 
-const RowPrimaryButton = styled.button`
-  border: 0;
-  background: transparent;
+const RowPrimaryButton = styled(AdminTextActionButton)`
   color: ${({ theme }) => theme.colors.blue9};
-  padding: 0;
   font-size: 0.86rem;
   font-weight: 800;
-  cursor: pointer;
 
   &:disabled {
     opacity: 0.48;
@@ -2220,14 +2197,9 @@ const RowPrimaryButton = styled.button`
   }
 `
 
-const RowSecondaryButton = styled.button`
-  border: 0;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
-  padding: 0;
+const RowSecondaryButton = styled(AdminTextActionButton)`
   font-size: 0.84rem;
   font-weight: 700;
-  cursor: pointer;
 
   &:disabled {
     opacity: 0.48;
@@ -2235,14 +2207,10 @@ const RowSecondaryButton = styled.button`
   }
 `
 
-const DangerTextButton = styled.button`
-  border: 0;
-  background: transparent;
+const DangerTextButton = styled(AdminTextActionButton)`
   color: ${({ theme }) => theme.colors.red11};
-  padding: 0;
   font-size: 0.86rem;
   font-weight: 700;
-  cursor: pointer;
 
   &:disabled {
     opacity: 0.48;

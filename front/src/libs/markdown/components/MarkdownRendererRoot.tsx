@@ -1036,6 +1036,15 @@ const MarkdownRendererRoot = styled.div`
     }}
   }
 
+  @media (min-width: 769px) {
+    thead th,
+    .aq-table thead th {
+      line-height: 1.6;
+      padding-top: calc(0.78rem + 0.32rem);
+      padding-bottom: calc(0.78rem - 0.04rem);
+    }
+  }
+
   th,
   td,
   .aq-table th,

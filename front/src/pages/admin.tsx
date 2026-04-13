@@ -13,7 +13,6 @@ import AdminShell from "src/routes/Admin/AdminShell"
 import { type AdminHubNextAction } from "src/routes/Admin/AdminHubSurface"
 
 const AdminHubSurface = dynamic(() => import("src/routes/Admin/AdminHubSurface"), {
-  ssr: false,
   loading: () => <div aria-hidden="true" style={{ minHeight: "32rem" }} />,
 })
 

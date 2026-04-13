@@ -197,6 +197,10 @@ const ADMIN_TOOLS_MAIL_SNAPSHOT_MAX_AGE_SECONDS = 60 * 30
 const ADMIN_TOOLS_MAIL_SNAPSHOT_MAX_STALE_MS = 1000 * 60 * 60 * 6
 const ADMIN_TOOLS_HEALTH_SSR_CACHE_KEY = "admin-tools:system-health"
 const ADMIN_TOOLS_HEALTH_SSR_CACHE_TTL_MS = 10_000
+type IdleWindow = Window & {
+  requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number
+  cancelIdleCallback?: (handle: number) => void
+}
 
 const readCookieValue = (req: IncomingMessage, key: string) => {
   const rawCookie = req.headers.cookie || ""
@@ -727,6 +731,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   const [authSecurityCheckedAt, setAuthSecurityCheckedAt] = useState<string | null>(initialSnapshot.authSecurityCheckedAt)
   const [activeSection, setActiveSection] = useState<SectionKey>("overview")
   const [sectionJumpTarget, setSectionJumpTarget] = useState<SectionKey | null>(null)
+  const [isWorkspaceReady, setIsWorkspaceReady] = useState(false)
   const [activeDiagnosticTab, setActiveDiagnosticTab] = useState<DiagnosticTab>("mail")
   const [testEmail, setTestEmail] = useState("")
   const [mailTestNotice, setMailTestNotice] = useState<{ tone: InlineNoticeTone; text: string }>({
@@ -959,6 +964,38 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   }, [activeSection, executeAction, loadingKey, postId, sessionMember?.isAdmin])
 
   useEffect(() => {
+    if (isWorkspaceReady || typeof window === "undefined") return
+
+    const idleWindow = window as IdleWindow
+    const activate = () => setIsWorkspaceReady(true)
+
+    if (typeof idleWindow.requestIdleCallback === "function") {
+      const handle = idleWindow.requestIdleCallback(() => activate(), { timeout: 900 })
+      return () => {
+        if (typeof idleWindow.cancelIdleCallback === "function") {
+          idleWindow.cancelIdleCallback(handle)
+        }
+      }
+    }
+
+    const handle = window.setTimeout(activate, 180)
+    return () => window.clearTimeout(handle)
+  }, [isWorkspaceReady])
+
+  useEffect(() => {
+    if (!isWorkspaceReady || !sectionJumpTarget || typeof window === "undefined") return
+
+    const target = document.getElementById(SECTION_IDS[sectionJumpTarget])
+    if (!target) return
+
+    const frame = window.requestAnimationFrame(() => {
+      target.scrollIntoView({ behavior: "smooth", block: "start" })
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [isWorkspaceReady, sectionJumpTarget])
+
+  useEffect(() => {
     if (!sectionJumpTarget || typeof window === "undefined") return
 
     const timeout = window.setTimeout(() => {
@@ -1007,7 +1044,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
 
     nodes.forEach((node) => observer.observe(node))
     return () => observer.disconnect()
-  }, [])
+  }, [isWorkspaceReady])
 
   const filteredExecutions = useMemo(() => {
     return executions.filter((entry) => {
@@ -1222,14 +1259,9 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
 
   const focusSection = (section: SectionKey, tab?: DiagnosticTab) => {
     if (tab) setActiveDiagnosticTab(tab)
+    setIsWorkspaceReady(true)
     setActiveSection(section)
     setSectionJumpTarget(section)
-    const target = document.getElementById(SECTION_IDS[section])
-    if (target) {
-      requestAnimationFrame(() => {
-        target.scrollIntoView({ behavior: "smooth", block: "start" })
-      })
-    }
   }
 
   if (!sessionMember) return null
@@ -1324,6 +1356,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
           ))}
         </SectionNav>
 
+        {isWorkspaceReady ? (
         <WorkspaceColumn>
           <WorkspaceSection id={SECTION_IDS.diagnostics} data-ops-section="diagnostics">
             <SectionHeading>
@@ -2053,6 +2086,20 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
             )}
           </WorkspaceSection>
         </WorkspaceColumn>
+        ) : (
+        <DeferredWorkspaceColumn>
+          <DeferredWorkspaceCard>
+            <small>워크스페이스 준비 중</small>
+            <strong>개요를 먼저 렌더링하고 진단 도구는 순차적으로 준비합니다.</strong>
+            <span>섹션을 선택하면 바로 해당 패널을 불러옵니다.</span>
+          </DeferredWorkspaceCard>
+          <DeferredWorkspaceSkeleton aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </DeferredWorkspaceSkeleton>
+        </DeferredWorkspaceColumn>
+        )}
       </WorkspaceShell>
       </Main>
     </AdminShell>
@@ -2307,6 +2354,49 @@ const WorkspaceColumn = styled.div`
   gap: 1rem;
 `
 
+const DeferredWorkspaceColumn = styled.div`
+  display: grid;
+  gap: 0.85rem;
+`
+
+const DeferredWorkspaceCard = styled(AdminRailCard)`
+  display: grid;
+  gap: 0.4rem;
+  padding: 1rem 1.05rem;
+
+  small {
+    color: ${({ theme }) => theme.colors.gray9};
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.98rem;
+    line-height: 1.5;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.82rem;
+    line-height: 1.55;
+  }
+`
+
+const DeferredWorkspaceSkeleton = styled.div`
+  display: grid;
+  gap: 0.7rem;
+
+  span {
+    display: block;
+    height: 96px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, ${({ theme }) => theme.colors.gray3} 0%, ${({ theme }) => theme.colors.gray2} 100%);
+    border: 1px solid ${({ theme }) => theme.colors.gray5};
+  }
+`
+
 const WorkspaceSection = styled.section`
   display: grid;
   gap: 0.9rem;
@@ -2314,6 +2404,8 @@ const WorkspaceSection = styled.section`
   border-radius: 20px;
   background: ${({ theme }) => theme.colors.gray2};
   border: 1px solid ${({ theme }) => theme.colors.gray5};
+  content-visibility: auto;
+  contain-intrinsic-size: 720px;
 
   &[data-tone="danger"] {
     background: linear-gradient(180deg, ${({ theme }) => theme.colors.gray2} 0%, rgba(239, 68, 68, 0.08) 100%);

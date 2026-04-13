@@ -1,67 +1,54 @@
 import { dehydrate } from "@tanstack/react-query"
-import { IncomingMessage, ServerResponse } from "http"
-import { GetServerSidePropsResult } from "next"
+import { GetStaticPathsResult, GetStaticPropsResult } from "next"
 import { getPostDetailById } from "src/apis"
+import { getPostsBootstrap } from "src/apis/backend/posts"
 import { queryKey } from "src/constants/queryKey"
 import { createQueryClient } from "src/libs/react-query"
-import { hydrateServerAuthSession } from "./authSession"
 import { TPostComment } from "src/types"
-import { appendSsrDebugTiming, isSsrDebugEnabled, timed } from "./serverTiming"
-import { ApiPostWithContentDto, mapPostDetail } from "src/apis/backend/posts"
-import { serverApiFetch } from "./backend"
 
 type DetailPageProps = {
   dehydratedState: unknown
   initialComments: TPostComment[] | null
 }
 
+const DETAIL_ISR_REVALIDATE_SECONDS = 60 * 60
+const DETAIL_PREBUILD_COUNT = 16
+const DETAIL_RECOVERY_REVALIDATE_SECONDS = 30
+const IS_QA_STATIC_RECOVERY_MODE = process.env.ENABLE_QA_ROUTES === "true"
+
 const toSerializableState = (value: unknown): unknown =>
   JSON.parse(
     JSON.stringify(value, (_key, currentValue) => (currentValue === undefined ? null : currentValue))
   )
 
-const getPostDetailByIdForSsr = async (req: IncomingMessage, id: string) => {
-  const postId = Number(id)
-  if (!Number.isInteger(postId) || postId <= 0) return null
-
-  const response = await serverApiFetch(req, `/post/api/v1/posts/${postId}`)
-  if (response.status === 404) return null
-  if (!response.ok) {
-    throw new Error(`post detail SSR fetch failed: ${response.status}`)
-  }
-
-  const post = (await response.json()) as ApiPostWithContentDto
-  return mapPostDetail(post)
-}
-
-export const buildCanonicalPostDetailPage = async (
-  req: IncomingMessage,
-  res: ServerResponse,
+export const buildCanonicalPostDetailStaticProps = async (
   postId: string
-): Promise<GetServerSidePropsResult<DetailPageProps>> => {
-  const ssrStartedAt = performance.now()
-  const debugSsr = isSsrDebugEnabled(req)
+): Promise<GetStaticPropsResult<DetailPageProps>> => {
   const queryClient = createQueryClient()
-  const authMemberPromise = timed(() => hydrateServerAuthSession(queryClient, req))
+
+  if (IS_QA_STATIC_RECOVERY_MODE) {
+    return {
+      props: {
+        dehydratedState: toSerializableState(dehydrate(queryClient)),
+        initialComments: null,
+      },
+      revalidate: DETAIL_RECOVERY_REVALIDATE_SECONDS,
+    }
+  }
 
   let postDetail = null as Awaited<ReturnType<typeof getPostDetailById>>
   let shouldClientRecover = false
-  const postDetailResult = await timed(() => getPostDetailByIdForSsr(req, postId))
-  if (postDetailResult.ok) {
-    postDetail = postDetailResult.value
-  } else {
-    // SSR fetch timeout/일시 장애 시에는 404 대신 클라이언트 1회 복구 fetch를 허용한다.
+  try {
+    postDetail = await getPostDetailById(postId)
+  } catch {
+    // ISR 생성 시점의 일시 장애는 기존 정적 결과를 유지하고, 첫 생성에서는 클라이언트 1회 복구 fetch를 허용한다.
     shouldClientRecover = true
   }
-  const authMemberResult = await authMemberPromise
-  const authMember = authMemberResult.ok ? authMemberResult.value : undefined
-  if (!postDetail && !shouldClientRecover) return { notFound: true }
+  const shouldServeClientRecoveryShell = shouldClientRecover || (IS_QA_STATIC_RECOVERY_MODE && !postDetail)
+  if (!postDetail && !shouldServeClientRecoveryShell) return { notFound: true }
 
   if (postDetail) {
-    await queryClient.prefetchQuery({
-      queryKey: queryKey.post(postDetail.id),
-      queryFn: () => postDetail,
-    })
+    queryClient.setQueryData(queryKey.post(postDetail.id), postDetail)
   }
   const initialComments =
     postDetail && postDetail.type[0] === "Post"
@@ -70,35 +57,41 @@ export const buildCanonicalPostDetailPage = async (
         : null
       : null
 
-  res.setHeader(
-    "Cache-Control",
-    !debugSsr && authMember === null && !shouldClientRecover
-      ? "public, s-maxage=120, stale-while-revalidate=600"
-      : "private, no-store"
-  )
-  const timingMetrics = [
-    {
-      name: "post-detail",
-      durationMs: postDetailResult.durationMs,
-      description: shouldClientRecover ? "client-recover" : postDetail ? "ok" : "not-found",
-    },
-    {
-      name: "post-auth-session",
-      durationMs: authMemberResult.durationMs,
-      description: authMember === undefined ? "unknown" : authMember === null ? "anonymous" : "member",
-    },
-    {
-      name: "post-ssr-total",
-      durationMs: performance.now() - ssrStartedAt,
-      description: shouldClientRecover ? "deferred-comments" : "ready",
-    },
-  ]
-  appendSsrDebugTiming(req, res, timingMetrics)
-
   return {
     props: {
       dehydratedState: toSerializableState(dehydrate(queryClient)),
       initialComments,
     },
+    revalidate: shouldServeClientRecoveryShell ? DETAIL_RECOVERY_REVALIDATE_SECONDS : DETAIL_ISR_REVALIDATE_SECONDS,
+  }
+}
+
+export const buildCanonicalPostDetailStaticPaths = async (): Promise<GetStaticPathsResult> => {
+  if (IS_QA_STATIC_RECOVERY_MODE) {
+    return {
+      paths: [],
+      fallback: "blocking",
+    }
+  }
+
+  const bootstrap = await (async () => {
+    try {
+      return await getPostsBootstrap({
+        pageSize: DETAIL_PREBUILD_COUNT,
+      })
+    } catch {
+      return {
+        posts: [],
+      }
+    }
+  })()
+
+  return {
+    paths: bootstrap.posts.map((post: { id: string | number }) => ({
+      params: {
+        id: String(post.id),
+      },
+    })),
+    fallback: "blocking",
   }
 }

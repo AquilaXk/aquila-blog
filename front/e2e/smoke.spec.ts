@@ -254,6 +254,7 @@ test("검색 입력은 search API의 kw 파라미터를 통해 백엔드 탐색�
   })
 
   await page.goto("/")
+  await expect(page.getByRole("button", { name: "전체보기" })).toBeVisible()
   const searchInput = page.getByLabel("Search posts by keyword")
   await searchInput.fill("alpha")
 
@@ -262,6 +263,8 @@ test("검색 입력은 search API의 kw 파라미터를 통해 백엔드 탐색�
 })
 
 test("검색 모드는 백엔드가 반환한 순서를 그대로 유지한다", async ({ page }) => {
+  const capturedKw: string[] = []
+
   await mockAvatarAsset(page)
   await page.route("**/post/api/v1/posts/feed**", async (route) => {
     await route.fulfill({
@@ -280,6 +283,7 @@ test("검색 모드는 백엔드가 반환한 순서를 그대로 유지한다",
   await page.route("**/post/api/v1/posts/search**", async (route) => {
     const url = new URL(route.request().url())
     const kw = url.searchParams.get("kw") || ""
+    capturedKw.push(kw)
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -324,9 +328,11 @@ test("검색 모드는 백엔드가 반환한 순서를 그대로 유지한다",
   })
 
   await page.goto("/")
+  await expect(page.getByRole("button", { name: "전체보기" })).toBeVisible()
   const searchInput = page.getByLabel("Search posts by keyword")
   await searchInput.fill("alpha beta")
 
+  await expect.poll(() => capturedKw.some((value) => value === "alpha beta")).toBeTruthy()
   await expect(page.getByText("본문 exact phrase 매치")).toBeVisible()
   const titles = await page.locator("a[href^='/posts/'] h2").evaluateAll((elements) =>
     elements.map((element) => element.textContent?.trim() || "").filter(Boolean)

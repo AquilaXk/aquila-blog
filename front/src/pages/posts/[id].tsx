@@ -1,5 +1,5 @@
 import { CONFIG } from "site.config"
-import { GetServerSideProps } from "next"
+import { GetStaticPaths, GetStaticProps } from "next"
 import { NextPageWithLayout } from "../../types"
 import styled from "@emotion/styled"
 import CustomError from "src/routes/Error"
@@ -7,12 +7,19 @@ import MetaConfig from "src/components/MetaConfig"
 import PostDetail from "src/routes/Detail/PostDetail"
 import usePostQuery from "src/hooks/usePostQuery"
 import { TPostComment } from "src/types"
-import { buildCanonicalPostDetailPage } from "src/libs/server/postDetailPage"
+import {
+  buildCanonicalPostDetailStaticPaths,
+  buildCanonicalPostDetailStaticProps,
+} from "src/libs/server/postDetailPage"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 
-export const getServerSideProps: GetServerSideProps = async ({ params, req, res }) => {
+export const getStaticPaths: GetStaticPaths = async () => {
+  return await buildCanonicalPostDetailStaticPaths()
+}
+
+export const getStaticProps: GetStaticProps = async ({ params }) => {
   const postId = params?.id as string
-  return await buildCanonicalPostDetailPage(req, res, postId)
+  return await buildCanonicalPostDetailStaticProps(postId)
 }
 
 type DetailPageProps = {

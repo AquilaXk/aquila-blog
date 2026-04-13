@@ -95,11 +95,8 @@ const AdminHubSurface = ({
     <Main>
       <div className="mid">
         <HeroPanel>
-          <SectionEyebrow>운영 시작점</SectionEyebrow>
-          <HeroTop>
-            <HeroCopy>
-              <h1>관리자 허브</h1>
-            </HeroCopy>
+          <HeroHeader>
+            <HeroHeading>관리자 허브</HeroHeading>
             <HeroActions>
               <Link href={primaryAction.href} passHref legacyBehavior>
                 <PrimaryActionLink>
@@ -111,7 +108,7 @@ const AdminHubSurface = ({
                 <SecondaryActionLink>{primaryAction.secondaryLabel}</SecondaryActionLink>
               </Link>
             </HeroActions>
-          </HeroTop>
+          </HeroHeader>
 
           <SummaryRail aria-label="관리자 상태 요약">
             {summaryItems.map((item) => (
@@ -123,9 +120,9 @@ const AdminHubSurface = ({
           </SummaryRail>
         </HeroPanel>
 
-        <ActionStrip aria-label="지금 해야 할 일">
+        <ActionStrip aria-label="다음 작업">
           <SectionHeader>
-            <h2>지금 해야 할 일</h2>
+            <h2>다음 작업</h2>
           </SectionHeader>
           <ActionStripGrid>
             {nextActions.map((item, index) => (
@@ -143,7 +140,7 @@ const AdminHubSurface = ({
         <WorkspaceBoard>
           <SectionCard>
             <SectionHeader>
-              <h2>오늘의 운영 루틴</h2>
+              <h2>주요 작업</h2>
             </SectionHeader>
 
             <PrimaryWorkflow>
@@ -179,7 +176,7 @@ const AdminHubSurface = ({
 
           <SectionCard>
             <SectionHeader>
-              <h2>현재 체크포인트</h2>
+              <h2>체크</h2>
             </SectionHeader>
             <Checklist>
               {summaryItems.map((item) => (
@@ -199,7 +196,7 @@ const AdminHubSurface = ({
       <RailColumn className="rt">
         <RailCard>
           <SectionHeader>
-            <h2>운영 메모</h2>
+            <h2>프로필</h2>
           </SectionHeader>
           <ProfileSnapshot>
             <ProfileFrame>
@@ -211,17 +208,17 @@ const AdminHubSurface = ({
             </ProfileFrame>
             <ProfileCopy>
               <strong>{displayName}</strong>
-              <span>{profileRole || "관리자 역할 미설정"}</span>
+              <span>{profileRole || "역할 미설정"}</span>
             </ProfileCopy>
           </ProfileSnapshot>
           <Link href="/admin/profile" passHref legacyBehavior>
-            <RailActionLink>프로필 편집</RailActionLink>
+            <RailActionLink>편집</RailActionLink>
           </Link>
         </RailCard>
 
         <RailCard>
           <SectionHeader>
-            <h2>빠른 이동</h2>
+            <h2>바로가기</h2>
           </SectionHeader>
           <QuickLinkList>
             {quickLinks.map((item) => (
@@ -241,7 +238,7 @@ const AdminHubSurface = ({
 
         <RailCard>
           <SectionHeader>
-            <h2>상태 메모</h2>
+            <h2>상태</h2>
           </SectionHeader>
           <MiniStatusList>
             {summaryItems.map((item) => (
@@ -292,19 +289,11 @@ const HeroPanel = styled(AdminElevatedCard)`
   border-radius: 28px;
 `
 
-const SectionEyebrow = styled.span`
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.76rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-`
-
-const HeroTop = styled.div`
+const HeroHeader = styled.div`
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  align-items: flex-end;
+  align-items: center;
 
   @media (max-width: 860px) {
     flex-direction: column;
@@ -312,37 +301,17 @@ const HeroTop = styled.div`
   }
 `
 
-const HeroCopy = styled.div`
-  display: grid;
-  gap: 0.42rem;
+const HeroHeading = styled.h1`
+  margin: 0;
   min-width: 0;
-
-  h1 {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: clamp(2rem, 3.2vw, 2.9rem);
-    line-height: 1.08;
-    font-weight: 800;
-    letter-spacing: -0.04em;
-  }
-
-  p {
-    margin: 0;
-    max-width: 42rem;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 1rem;
-    line-height: 1.58;
-  }
+  color: ${({ theme }) => theme.colors.gray12};
+  font-size: clamp(2rem, 3.2vw, 2.9rem);
+  line-height: 1.08;
+  font-weight: 800;
+  letter-spacing: -0.04em;
 
   @media (max-width: 768px) {
-    h1 {
-      font-size: clamp(1.85rem, 9vw, 2.4rem);
-    }
-
-    p {
-      font-size: 0.92rem;
-      line-height: 1.52;
-    }
+    font-size: clamp(1.85rem, 9vw, 2.4rem);
   }
 `
 
@@ -510,20 +479,6 @@ const ActionCard = styled.a`
     font-weight: 800;
   }
 
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.8rem;
-    line-height: 1.5;
-  }
-
-  .meta {
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.76rem;
-    font-weight: 700;
-    white-space: nowrap;
-  }
-
   @media (max-width: 560px) {
     grid-template-columns: 1fr;
     align-items: start;
@@ -582,13 +537,6 @@ const PrimaryWorkflow = styled.div`
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 1rem;
     font-weight: 800;
-  }
-
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.82rem;
-    line-height: 1.5;
   }
 
   @media (max-width: 720px) {

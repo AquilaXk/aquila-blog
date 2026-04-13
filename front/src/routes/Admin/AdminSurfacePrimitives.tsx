@@ -11,6 +11,9 @@ export const adminElevatedBorder = (theme: Theme) => theme.colors.gray5
 export const adminElevatedShadow = (theme: Theme) =>
   theme.scheme === "light" ? "0 18px 42px rgba(15, 23, 42, 0.06)" : "0 20px 44px rgba(0, 0, 0, 0.2)"
 
+export const adminInteractiveFocusRing = (theme: Theme) =>
+  theme.scheme === "light" ? "0 0 0 3px rgba(59, 130, 246, 0.18)" : "0 0 0 3px rgba(96, 165, 250, 0.28)"
+
 export const AdminElevatedCard = styled.section`
   border-radius: 24px;
   border: 1px solid ${({ theme }) => adminElevatedBorder(theme)};
@@ -172,6 +175,7 @@ export const AdminWorkspaceSectionNav = styled(AdminStickyRail)`
     gap: 0.5rem;
     overflow-x: auto;
     padding-bottom: 0.2rem;
+    scroll-snap-type: x proximity;
     scrollbar-width: none;
 
     &::-webkit-scrollbar {
@@ -208,6 +212,7 @@ export const AdminWorkspaceSectionNavStatus = styled(AdminRailCard)`
   @media (max-width: 1180px) {
     min-width: 12.5rem;
     flex: 0 0 auto;
+    scroll-snap-align: start;
   }
 `
 
@@ -229,6 +234,17 @@ export const AdminWorkspaceSectionNavButton = styled.button`
   text-align: left;
   cursor: pointer;
   white-space: nowrap;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+
+  &:focus-visible {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.blue8};
+    box-shadow: ${({ theme }) => adminInteractiveFocusRing(theme)};
+  }
 
   &[data-active="true"] {
     color: ${({ theme }) => theme.colors.gray12};
@@ -275,6 +291,10 @@ export const AdminWorkspaceSectionNavButton = styled.button`
     border-color: ${({ theme }) => theme.colors.statusDangerBorder};
     color: ${({ theme }) => theme.colors.statusDangerText};
   }
+
+  @media (max-width: 1180px) {
+    scroll-snap-align: start;
+  }
 `
 
 export const AdminWorkspaceActionDock = styled.div`
@@ -316,6 +336,16 @@ export const AdminInfoLinkCard = styled.a<{ $withIcon?: boolean }>`
   color: inherit;
   text-decoration: none;
   min-width: 0;
+  transition:
+    border-color 0.18s ease,
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+
+  &:focus-visible {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.blue8};
+    box-shadow: ${({ theme }) => adminInteractiveFocusRing(theme)};
+  }
 
   .iconWrap {
     display: ${({ $withIcon = true }) => ($withIcon ? "grid" : "none")};

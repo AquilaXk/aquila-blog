@@ -913,10 +913,10 @@ const InsightRail = styled.aside`
   gap: 16px;
 
   @media (max-width: 1180px) {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  @media (max-width: 860px) {
+  @media (max-width: 960px) {
     grid-template-columns: 1fr;
   }
 `

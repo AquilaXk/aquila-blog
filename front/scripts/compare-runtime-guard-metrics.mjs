@@ -19,6 +19,21 @@ const readArg = (name, fallback = "") => {
 }
 
 const hasFlag = (name) => args.includes(`--${name}`)
+
+if (hasFlag("help") || hasFlag("h")) {
+  console.log(`Usage: node front/scripts/compare-runtime-guard-metrics.mjs [options]
+
+Options:
+  --metrics <path>       NDJSON metrics file path
+  --baseline <path>      Baseline JSON file path
+  --output <path>        Markdown summary output path
+  --json-output <path>   JSON summary output path
+  --append-step-summary  Append markdown summary to GITHUB_STEP_SUMMARY
+  --help, --h            Show this help message
+`)
+  process.exit(0)
+}
+
 const cwd = process.cwd()
 const metricsPath = path.resolve(
   cwd,

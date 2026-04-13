@@ -616,6 +616,91 @@ test("code-heavy 상세 페이지는 markdown AST prop 누수 없이 hydration �
   expect(runtimeErrors).toEqual([])
 })
 
+test("상세 runtime guard 는 hydration 오류에서 build당 1회만 hard reload 한다", async ({ page }) => {
+  await page.route("**/post/api/v1/posts/467", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 467,
+        createdAt: "2026-04-13T00:00:00Z",
+        modifiedAt: "2026-04-13T00:00:00Z",
+        authorId: 1,
+        authorName: "관리자",
+        authorUsername: "aquila",
+        authorProfileImageDirectUrl: "/avatar.png",
+        title: "runtime guard reload 회귀 방지",
+        content: "stale build hydration guard",
+        tags: ["테스트태그"],
+        category: [],
+        published: true,
+        listed: true,
+        likesCount: 0,
+        commentsCount: 0,
+        hitCount: 1,
+        actorHasLiked: false,
+        actorCanModify: false,
+        actorCanDelete: false,
+      }),
+    })
+  })
+
+  await page.route("**/post/api/v1/posts/467/hit", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        resultCode: "200-1",
+        msg: "ok",
+        data: { hitCount: 2 },
+      }),
+    })
+  })
+
+  await page.goto("/posts/467")
+  await expect(page.getByText("runtime guard reload 회귀 방지")).toBeVisible()
+
+  const reloadPromise = page.waitForEvent("framenavigated", {
+    predicate: (frame) => frame === page.mainFrame(),
+    timeout: 5000,
+  })
+
+  await page.evaluate(() => {
+    window.dispatchEvent(new ErrorEvent("error", { message: "Minified React error #418" }))
+  })
+
+  await reloadPromise
+  await expect(page.getByText("runtime guard reload 회귀 방지")).toBeVisible()
+  await expect.poll(async () => {
+    return page.evaluate(() => performance.getEntriesByType("navigation")[0]?.type || "")
+  }).toBe("reload")
+  const recoveredTimeOrigin = await page.evaluate(() => performance.timeOrigin)
+
+  const guardState = await page.evaluate(() => {
+    const keys = Object.keys(sessionStorage).filter(
+      (entry) =>
+        entry.indexOf("__aquila_client_runtime_recovery__") === 0 &&
+        entry.indexOf(":reason") === -1
+    )
+
+    return {
+      keys,
+      reasons: keys.map((key) => sessionStorage.getItem(key + ":reason") || ""),
+    }
+  })
+
+  expect(guardState.keys).toHaveLength(1)
+  expect(guardState.keys[0]).toContain("/posts/467")
+  expect(guardState.reasons[0]).toContain("hydration:")
+
+  await page.evaluate(() => {
+    window.dispatchEvent(new ErrorEvent("error", { message: "Minified React error #423" }))
+  })
+  await page.waitForTimeout(500)
+
+  expect(await page.evaluate(() => performance.timeOrigin)).toBe(recoveredTimeOrigin)
+})
+
 test("상세 normal table metadata는 저장 viewport 폭이 아니라 현재 본문 폭을 채운다", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 1100 })
 

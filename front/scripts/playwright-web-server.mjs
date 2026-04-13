@@ -5,6 +5,7 @@ import { fileURLToPath } from "url"
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const buildIdPath = path.join(projectRoot, ".next", "BUILD_ID")
+const buildSignaturePath = path.join(projectRoot, ".next", "playwright-build-signature.json")
 const baseUrl = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000"
 const resolvedPort = (() => {
   try {
@@ -22,6 +23,10 @@ const watchedEntries = [
   "next.config.js",
   "site.config.js",
 ]
+
+const buildSignature = {
+  enableQaRoutes: process.env.ENABLE_QA_ROUTES === "true",
+}
 
 const getLatestMtimeMs = (targetPath) => {
   if (!fs.existsSync(targetPath)) return 0
@@ -43,6 +48,17 @@ const getLatestMtimeMs = (targetPath) => {
 const resolveNeedsBuild = () => {
   if (!fs.existsSync(buildIdPath)) return true
 
+  if (!fs.existsSync(buildSignaturePath)) return true
+
+  try {
+    const savedSignature = JSON.parse(fs.readFileSync(buildSignaturePath, "utf8"))
+    if (JSON.stringify(savedSignature) !== JSON.stringify(buildSignature)) {
+      return true
+    }
+  } catch {
+    return true
+  }
+
   const buildMtimeMs = fs.statSync(buildIdPath).mtimeMs
   const latestSourceMtimeMs = watchedEntries.reduce((maxMtime, entry) => {
     return Math.max(maxMtime, getLatestMtimeMs(path.join(projectRoot, entry)))
@@ -61,6 +77,9 @@ if (resolveNeedsBuild()) {
   if (buildResult.status !== 0) {
     process.exit(buildResult.status ?? 1)
   }
+
+  fs.mkdirSync(path.dirname(buildSignaturePath), { recursive: true })
+  fs.writeFileSync(buildSignaturePath, JSON.stringify(buildSignature))
 }
 
 const startResult = spawnSync("yarn", ["start", "-H", "127.0.0.1", "-p", resolvedPort], {

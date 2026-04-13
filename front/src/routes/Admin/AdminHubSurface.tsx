@@ -265,12 +265,12 @@ const Main = styled.main`
   grid-template-columns: minmax(0, 1fr);
   gap: 1.25rem;
   align-items: start;
-  width: min(100%, 1180px);
+  width: min(100%, 1220px);
   margin: 0 auto;
   padding: 1.15rem 0 2.4rem;
 
   @media (min-width: 1280px) {
-    grid-template-columns: minmax(0, 1fr) minmax(17.25rem, 18.75rem);
+    grid-template-columns: minmax(0, 1fr) minmax(16.75rem, 18rem);
     column-gap: 1.35rem;
   }
 
@@ -294,14 +294,17 @@ const HeroPanel = styled(AdminElevatedCard)`
 `
 
 const HeroHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem 1.2rem;
+  align-items: start;
+
+  @media (max-width: 1480px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
 
   @media (max-width: 860px) {
-    flex-direction: column;
-    align-items: stretch;
+    gap: 0.88rem;
   }
 `
 
@@ -313,6 +316,7 @@ const HeroHeading = styled.h1`
   line-height: 1.08;
   font-weight: 800;
   letter-spacing: -0.04em;
+  word-break: keep-all;
 
   @media (max-width: 768px) {
     font-size: clamp(1.85rem, 9vw, 2.4rem);
@@ -324,6 +328,10 @@ const HeroActions = styled.div`
   flex-wrap: wrap;
   gap: 0.72rem;
   justify-content: flex-end;
+
+  @media (max-width: 1480px) {
+    justify-content: flex-start;
+  }
 
   @media (max-width: 860px) {
     justify-content: flex-start;

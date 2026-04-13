@@ -2046,9 +2046,14 @@ const WorkspaceHero = styled(AdminWorkspaceHero)`
 const WorkspaceShell = styled.section<{ $isHomeSection: boolean }>`
   display: grid;
   grid-template-columns: ${({ $isHomeSection }) =>
-    $isHomeSection ? "188px minmax(0, 1fr)" : "188px minmax(0, 1fr) 312px"};
+    $isHomeSection ? "184px minmax(0, 1fr)" : "184px minmax(0, 1fr) 288px"};
   gap: 1rem;
   align-items: start;
+
+  @media (max-width: 1480px) {
+    grid-template-columns: ${({ $isHomeSection }) =>
+      $isHomeSection ? "176px minmax(0, 1fr)" : "176px minmax(0, 1fr)"};
+  }
 
   @media (max-width: 1180px) {
     grid-template-columns: minmax(0, 1fr);
@@ -2666,6 +2671,12 @@ const LinkInputs = styled.div`
 
 const PreviewRail = styled(AdminStickyRail)`
   top: calc(var(--app-header-height, 64px) + 0.8rem);
+
+  @media (max-width: 1480px) {
+    position: static;
+    top: auto;
+    grid-column: 2;
+  }
 
   @media (max-width: 1180px) {
     display: none;

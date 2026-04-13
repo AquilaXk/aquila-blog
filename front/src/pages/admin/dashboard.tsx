@@ -835,6 +835,15 @@ const PanelCard = styled(AdminPlainCard)`
 
 const LeadPanelCard = styled(PanelCard)`
   min-width: 0;
+
+  > div:last-of-type > iframe,
+  > div:last-of-type > [data-pending="true"] {
+    height: 348px;
+  }
+
+  > div:last-of-type > div {
+    min-height: 264px;
+  }
 `
 
 const PanelHeader = styled.div`
@@ -884,13 +893,13 @@ const PanelBody = styled.div`
 const PanelFrame = styled.iframe`
   display: block;
   width: 100%;
-  height: 420px;
+  height: 304px;
   border: 0;
   background: ${({ theme }) => theme.colors.gray1};
 `
 
 const PanelFallback = styled.div`
-  min-height: 320px;
+  min-height: 236px;
   display: grid;
   place-items: center;
   gap: 8px;

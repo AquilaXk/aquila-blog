@@ -1293,18 +1293,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
           </OverviewMeta>
         </OverviewHeader>
 
-        <HeaderLinks>
-          <Link href="/admin" passHref legacyBehavior>
-            <NavLink>관리자 허브</NavLink>
-          </Link>
-          <Link href="/admin/dashboard" passHref legacyBehavior>
-            <NavLink>운영 대시보드</NavLink>
-          </Link>
-          <Link href="/admin/posts" passHref legacyBehavior>
-            <NavLink>글 작업 공간</NavLink>
-          </Link>
-        </HeaderLinks>
-
         <OverviewContent>
           <Link href="/admin/dashboard" passHref legacyBehavior>
             <FeaturedStatusCard as="a">
@@ -1340,7 +1328,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
             <strong>{sectionNavStatusLabel}</strong>
           </SectionNavStatus>
           {([
-            { key: "overview", label: "개요" },
             { key: "diagnostics", label: "진단" },
             { key: "observability", label: "관측" },
             { key: "execution", label: "실행" },
@@ -2185,32 +2172,6 @@ const MetaCaption = styled.div`
 
   strong {
     font-size: 0.88rem;
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-`
-
-const HeaderLinks = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-`
-
-const NavLink = styled.a`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 38px;
-  padding: 0 0.88rem;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray11};
-  text-decoration: none;
-  font-size: 0.84rem;
-  font-weight: 700;
-
-  &:hover {
-    border-color: ${({ theme }) => theme.colors.gray7};
     color: ${({ theme }) => theme.colors.gray12};
   }
 `

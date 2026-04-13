@@ -1115,7 +1115,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
   const canSave = hasUnsavedChanges && loadingKey !== "save"
   const activeSectionState = sectionStateMap[activeSection]
   const previewStatusItems = [
-    { label: "섹션", value: activeSectionMeta.label, tone: "neutral" as const },
     { label: "보기", value: previewMode === "draft" ? "초안" : "공개본", tone: "neutral" as const },
     {
       label: "상태",
@@ -1666,6 +1665,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
             <PreviewHeader>
               <div>
                 <span>미리보기</span>
+                <strong>{activeSectionMeta.label}</strong>
               </div>
               <PreviewHeaderActions>
                 <SegmentedControl>
@@ -2704,6 +2704,13 @@ const PreviewHeader = styled.div`
     letter-spacing: 0.08em;
   }
 
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.98rem;
+    font-weight: 780;
+    letter-spacing: -0.02em;
+  }
+
   @media (max-width: 760px) {
     flex-direction: column;
     align-items: flex-start;
@@ -2759,7 +2766,7 @@ const DockPrimaryButton = styled(PublishButton)`
 `
 
 const PreviewStatusRail = styled(AdminInfoStatusList)`
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 
   @media (max-width: 760px) {
     grid-template-columns: 1fr;

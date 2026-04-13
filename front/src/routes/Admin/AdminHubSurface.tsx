@@ -573,8 +573,12 @@ const WorkflowAction = styled.a`
 
 const ShortcutGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(11.5rem, 1fr));
   gap: 0.75rem;
+
+  @media (max-width: 1140px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 
   @media (max-width: 900px) {
     grid-template-columns: 1fr;
@@ -596,6 +600,7 @@ const ShortcutLink = styled.a`
     color: ${({ theme }) => theme.colors.blue9};
     font-size: 0.78rem;
     font-weight: 760;
+    word-break: keep-all;
   }
 `
 
@@ -626,6 +631,7 @@ const ShortcutTitleRow = styled.div`
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 0.95rem;
     font-weight: 800;
+    word-break: keep-all;
   }
 
   p {

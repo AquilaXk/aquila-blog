@@ -98,3 +98,202 @@ export const AdminPaneHeader = styled.div`
     line-height: 1.55;
   }
 `
+
+export const AdminWorkspaceHero = styled(AdminElevatedCard)`
+  display: grid;
+  gap: 0.9rem;
+  padding: 1.15rem 1.1rem;
+`
+
+export const AdminWorkspaceHeroLabel = styled.span`
+  display: inline-flex;
+  width: fit-content;
+  min-height: 28px;
+  align-items: center;
+  padding: 0 0.72rem;
+  border-radius: 999px;
+  background: ${({ theme }) =>
+    theme.scheme === "light" ? "rgba(59, 130, 246, 0.12)" : "rgba(59, 130, 246, 0.18)"};
+  color: ${({ theme }) => theme.colors.blue9};
+  font-size: 0.74rem;
+  font-weight: 800;
+`
+
+export const AdminWorkspaceHeroLayout = styled.div`
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+
+  @media (max-width: 900px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+export const AdminWorkspaceHeroCopy = styled.div`
+  display: grid;
+  gap: 0.42rem;
+
+  h1 {
+    margin: 0;
+    font-size: clamp(1.65rem, 3vw, 2.1rem);
+    line-height: 1.04;
+    letter-spacing: -0.04em;
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  p {
+    margin: 0;
+    max-width: 36rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    line-height: 1.55;
+  }
+`
+
+export const AdminWorkspaceHeroActions = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+
+  @media (max-width: 900px) {
+    justify-content: flex-start;
+  }
+`
+
+export const AdminWorkspaceSectionNav = styled(AdminStickyRail)`
+  top: calc(var(--app-header-height, 64px) + 1rem);
+  gap: 0.55rem;
+
+  @media (max-width: 1180px) {
+    position: static;
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding-bottom: 0.2rem;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+`
+
+export const AdminWorkspaceSectionNavStatus = styled(AdminRailCard)`
+  gap: 0.22rem;
+  padding: 0.88rem 0.96rem;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+
+  small {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.92rem;
+    font-weight: 780;
+    letter-spacing: -0.02em;
+  }
+
+  &[data-jumping="true"] {
+    border-color: ${({ theme }) => theme.colors.accentBorder};
+    background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
+  }
+
+  @media (max-width: 1180px) {
+    min-width: 12.5rem;
+    flex: 0 0 auto;
+  }
+`
+
+export const AdminWorkspaceSectionNavButton = styled.button`
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.42rem;
+  min-height: 42px;
+  padding: 0 0.9rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+
+  &[data-active="true"] {
+    color: ${({ theme }) => theme.colors.gray12};
+    border-color: ${({ theme }) => theme.colors.accentBorder};
+    background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
+  }
+
+  &[data-freshness="fresh"] {
+    border-color: ${({ theme }) => theme.colors.statusSuccessBorder};
+  }
+
+  &[data-freshness="aging"] {
+    border-color: ${({ theme }) => theme.colors.orange7};
+  }
+
+  &[data-freshness="stale"] {
+    border-color: ${({ theme }) => theme.colors.gray7};
+  }
+
+  &[data-freshness]::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 7px;
+    bottom: 7px;
+    width: 3px;
+    border-radius: 999px;
+    background: ${({ theme }) => theme.colors.gray7};
+  }
+
+  &[data-freshness="fresh"]::before {
+    background: ${({ theme }) => theme.colors.statusSuccessBorder};
+  }
+
+  &[data-freshness="aging"]::before {
+    background: ${({ theme }) => theme.colors.orange8};
+  }
+
+  &[data-freshness="stale"]::before {
+    background: ${({ theme }) => theme.colors.gray8};
+  }
+
+  &[data-tone="danger"] {
+    border-color: ${({ theme }) => theme.colors.statusDangerBorder};
+    color: ${({ theme }) => theme.colors.statusDangerText};
+  }
+`
+
+export const AdminWorkspaceActionDock = styled.div`
+  display: grid;
+  justify-items: stretch;
+`
+
+export const AdminWorkspaceActionDockInner = styled.div`
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 20px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+
+  @media (max-width: 760px) {
+    justify-content: space-between;
+  }
+`

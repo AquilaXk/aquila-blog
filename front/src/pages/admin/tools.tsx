@@ -16,6 +16,7 @@ import { readServerSnapshot } from "src/libs/server/serverSnapshotCache"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import AdminShell from "src/routes/Admin/AdminShell"
 import {
+  AdminInfoLinkCard,
   AdminRailCard,
   AdminSectionHeading,
   AdminSectionTitleStack,
@@ -1710,10 +1711,10 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
             {monitoringItems.length ? (
               <MonitoringLinkRail>
                 {monitoringItems.map((item) => (
-                  <MonitoringLinkCard key={item.key} href={item.href} target="_blank" rel="noreferrer noopener">
+                  <AdminInfoLinkCard key={item.key} href={item.href} target="_blank" rel="noreferrer noopener" $withIcon={false}>
                     <strong>{item.title}</strong>
                     <span>{item.status}</span>
-                  </MonitoringLinkCard>
+                  </AdminInfoLinkCard>
                 ))}
               </MonitoringLinkRail>
             ) : null}
@@ -2323,31 +2324,6 @@ const MonitoringLinkRail = styled.div`
 
   @media (max-width: 960px) {
     grid-template-columns: 1fr;
-  }
-`
-
-const MonitoringLinkCard = styled.a`
-  display: grid;
-  gap: 0.16rem;
-  padding: 0.78rem 0.85rem;
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  text-decoration: none;
-  min-width: 0;
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.86rem;
-    font-weight: 780;
-    overflow-wrap: anywhere;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.78rem;
-    font-weight: 700;
-    overflow-wrap: anywhere;
   }
 `
 

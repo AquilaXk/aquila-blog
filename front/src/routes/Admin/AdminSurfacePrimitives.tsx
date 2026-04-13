@@ -297,3 +297,94 @@ export const AdminWorkspaceActionDockInner = styled.div`
     justify-content: space-between;
   }
 `
+
+export const AdminInfoList = styled.div`
+  display: grid;
+  gap: 0.6rem;
+`
+
+export const AdminInfoLinkCard = styled.a<{ $withIcon?: boolean }>`
+  display: grid;
+  grid-template-columns: ${({ $withIcon = true }) => ($withIcon ? "auto minmax(0, 1fr)" : "minmax(0, 1fr)")};
+  gap: ${({ $withIcon = true }) => ($withIcon ? "0.7rem" : "0.18rem")};
+  align-items: center;
+  padding: 0.82rem 0.88rem;
+  border-radius: 18px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "light" ? "rgba(255, 255, 255, 0.84)" : "rgba(31, 31, 31, 0.88)"};
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+
+  .iconWrap {
+    display: ${({ $withIcon = true }) => ($withIcon ? "grid" : "none")};
+    width: 2.35rem;
+    height: 2.35rem;
+    border-radius: 14px;
+    place-items: center;
+    background: ${({ theme }) =>
+      theme.scheme === "light" ? "rgba(59, 130, 246, 0.1)" : "rgba(59, 130, 246, 0.18)"};
+    color: ${({ theme }) => theme.colors.blue9};
+  }
+
+  .copy {
+    min-width: 0;
+    display: grid;
+    gap: 0.12rem;
+  }
+
+  .copy strong,
+  > strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.86rem;
+    font-weight: 780;
+    overflow-wrap: anywhere;
+  }
+
+  .copy span,
+  > span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.75rem;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+`
+
+export const AdminInfoStatusList = styled.div`
+  display: grid;
+  gap: 0.55rem;
+`
+
+export const AdminInfoStatusItem = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.72rem;
+  padding: 0.74rem 0.82rem;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "light" ? "rgba(255, 255, 255, 0.82)" : "rgba(31, 31, 31, 0.88)"};
+
+  &[data-tone="good"] {
+    border-color: ${({ theme }) => theme.colors.green7};
+  }
+
+  &[data-tone="warn"] {
+    border-color: ${({ theme }) => theme.colors.orange7};
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.76rem;
+    font-weight: 700;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.82rem;
+    font-weight: 780;
+    text-align: right;
+  }
+`

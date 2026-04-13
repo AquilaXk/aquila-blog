@@ -10,7 +10,12 @@ const DEFAULT_BASE_URL = "https://www.aquilaxk.site"
 const DEFAULT_TIMEOUT_MS = 15_000
 const DEFAULT_REQUESTS_PER_ROUTE = 2
 const DEFAULT_LATEST_POSTS = 3
-const DEFAULT_STATE_PATH = "/tmp/aquila-blog-public-edge-probe-state.json"
+const DEFAULT_STATE_PATH = path.join(
+  process.env.HOME || process.cwd(),
+  ".cache",
+  "aquila-blog",
+  "public-edge-probe-state.json"
+)
 const DEFAULT_REFRESH_INTERVAL_MS = 5 * 60_000
 const DEFAULT_SERVE_PORT = 9915
 
@@ -243,6 +248,22 @@ const ensureDirForFile = async (filePath) => {
   await fs.mkdir(path.dirname(filePath), { recursive: true })
 }
 
+const writeFileAtomically = async (filePath, content) => {
+  if (!filePath) return
+  await ensureDirForFile(filePath)
+  const parentDir = path.dirname(filePath)
+  const baseName = path.basename(filePath)
+  const tempDir = await fs.mkdtemp(path.join(parentDir, `${baseName}.tmp-`))
+  const tempPath = path.join(tempDir, baseName)
+
+  try {
+    await fs.writeFile(tempPath, content, { encoding: "utf8", mode: 0o600 })
+    await fs.rename(tempPath, filePath)
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {})
+  }
+}
+
 const round = (value) => Number(value.toFixed(3))
 
 const updateCounts = (bucket, cacheState) => {
@@ -435,20 +456,16 @@ const runProbe = async (args) => {
   const markdown = toMarkdownReport(report)
   const prometheus = toPrometheusText(report)
 
-  await ensureDirForFile(args.statePath)
-  await fs.writeFile(args.statePath, `${JSON.stringify(state, null, 2)}\n`, "utf8")
+  await writeFileAtomically(args.statePath, `${JSON.stringify(state, null, 2)}\n`)
 
   if (args.outputJson) {
-    await ensureDirForFile(args.outputJson)
-    await fs.writeFile(args.outputJson, `${JSON.stringify(report, null, 2)}\n`, "utf8")
+    await writeFileAtomically(args.outputJson, `${JSON.stringify(report, null, 2)}\n`)
   }
   if (args.outputMd) {
-    await ensureDirForFile(args.outputMd)
-    await fs.writeFile(args.outputMd, `${markdown}\n`, "utf8")
+    await writeFileAtomically(args.outputMd, `${markdown}\n`)
   }
   if (args.prometheusOut) {
-    await ensureDirForFile(args.prometheusOut)
-    await fs.writeFile(args.prometheusOut, prometheus, "utf8")
+    await writeFileAtomically(args.prometheusOut, prometheus)
   }
 
   return { report, markdown, prometheus }

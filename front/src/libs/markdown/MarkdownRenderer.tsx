@@ -271,10 +271,10 @@ const MarkdownTableRenderer = ({
   layout?: MarkdownTableLayout | null
 }) => {
   const rowCursorRef = useRef(0)
-  const columnWidths = layout?.columnWidths || []
+  const columnWidths = layout?.columnWidths
   const normalizedColumnWidths = useMemo(
     () =>
-      columnWidths.map((width) =>
+      (columnWidths ?? []).map((width) =>
         typeof width === "number" && Number.isFinite(width) && width > 0
           ? Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(width))
           : null

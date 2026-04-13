@@ -230,6 +230,38 @@ groups:
 
   - name: aquila-monitoring-stack
     rules:
+      - alert: AquilaPublicEdgeProbeScrapeDown
+        expr: min(up{job="public_edge_probe",service="aquila-public-edge-probe"}) < 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Public edge probe scrape is down"
+          description: "Prometheus cannot scrape public_edge_probe for 5m. Check the exporter container, live probe refresh loop, and network path."
+
+      - alert: AquilaPublicEdgeColdRatioHigh
+        expr: |
+          (
+            count(aquila_public_edge_probe_request_ttfb_seconds{request_index="1",cache_state=~"MISS|STALE"})
+            /
+            clamp_min(count(aquila_public_edge_probe_request_ttfb_seconds{request_index="1"}), 1)
+          ) > 0.5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Public edge cold ratio is high"
+          description: "More than half of first-request probes are MISS/STALE for 15m. Check deploy churn, cache invalidation frequency, and edge warm-up path."
+
+      - alert: AquilaPublicEdgeFirstRequestTtfbHigh
+        expr: max(aquila_public_edge_probe_request_ttfb_seconds{request_index="1"}) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Public edge first-request TTFB is high"
+          description: "Synthetic public route first-request TTFB stayed above 800ms for 10m. Check cold edge cache, origin SSR timing, and deploy recency."
+
       - alert: AquilaLokiScrapeDown
         expr: min(up{job="loki",service="aquila-loki"}) < 1
         for: 3m

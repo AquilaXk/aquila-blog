@@ -22,6 +22,8 @@ import {
 import AdminShell from "src/routes/Admin/AdminShell"
 import {
   AdminElevatedCard,
+  AdminInfoLinkCard,
+  AdminInfoList,
   AdminPlainCard,
   AdminSectionTitleStack,
 } from "src/routes/Admin/AdminSurfacePrimitives"
@@ -434,17 +436,17 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
                 <SectionHeader>
                   <h2>연결된 채널</h2>
                 </SectionHeader>
-                <MonitoringLinkList>
+                <AdminInfoList>
                   {monitoringItems.map((item) => (
-                    <MonitoringLinkItem key={item.key} href={item.href} target="_blank" rel="noreferrer noopener">
+                    <AdminInfoLinkCard key={item.key} href={item.href} target="_blank" rel="noreferrer noopener">
                       <span className="iconWrap">{renderMonitoringBrand(item.brand.icon, item.brand.fallbackIcon, item.title)}</span>
                       <span className="copy">
                         <strong>{item.title}</strong>
                         <span>{item.status}</span>
                       </span>
-                    </MonitoringLinkItem>
+                    </AdminInfoLinkCard>
                   ))}
-                </MonitoringLinkList>
+                </AdminInfoList>
               </RailCard>
 
               <RailCard>
@@ -462,20 +464,20 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
                 <SectionHeader>
                   <h2>빠른 이동</h2>
                 </SectionHeader>
-                <QuickActionList>
+                <AdminInfoList>
                   {quickActions.map((action) => (
                     <Link key={action.key} href={action.href} passHref legacyBehavior>
-                      <QuickActionLink target={action.href.startsWith("http") ? "_blank" : undefined} rel={action.href.startsWith("http") ? "noreferrer noopener" : undefined}>
+                      <AdminInfoLinkCard target={action.href.startsWith("http") ? "_blank" : undefined} rel={action.href.startsWith("http") ? "noreferrer noopener" : undefined}>
                         <span className="iconWrap">
                           <AppIcon name={action.icon} aria-hidden="true" />
                         </span>
                         <span className="copy">
                           <strong>{action.label}</strong>
                         </span>
-                      </QuickActionLink>
+                      </AdminInfoLinkCard>
                     </Link>
                   ))}
-                </QuickActionList>
+                </AdminInfoList>
               </RailCard>
             </InsightRail>
 
@@ -932,53 +934,6 @@ const SectionHeader = styled(AdminSectionTitleStack)`
   }
 `
 
-const MonitoringLinkList = styled.div`
-  display: grid;
-  gap: 10px;
-`
-
-const MonitoringLinkItem = styled.a`
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-  padding: 12px 13px;
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  text-decoration: none;
-  color: inherit;
-
-  .iconWrap {
-    width: 38px;
-    height: 38px;
-    border-radius: 13px;
-    display: grid;
-    place-items: center;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray1};
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  .copy {
-    min-width: 0;
-    display: grid;
-    gap: 2px;
-  }
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.84rem;
-    font-weight: 780;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.74rem;
-    font-weight: 700;
-  }
-`
-
 const FocusChipRail = styled.div`
   display: flex;
   flex-wrap: wrap;
@@ -996,53 +951,6 @@ const FocusChip = styled.span`
   color: ${({ theme }) => theme.colors.blue9};
   font-size: 0.76rem;
   font-weight: 780;
-`
-
-const QuickActionList = styled.div`
-  display: grid;
-  gap: 10px;
-`
-
-const QuickActionLink = styled.a`
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-  padding: 12px 13px;
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  text-decoration: none;
-  color: inherit;
-
-  .iconWrap {
-    width: 38px;
-    height: 38px;
-    border-radius: 13px;
-    display: grid;
-    place-items: center;
-    background: ${({ theme }) =>
-      theme.scheme === "light" ? "rgba(59, 130, 246, 0.1)" : "rgba(59, 130, 246, 0.18)"};
-    color: ${({ theme }) => theme.colors.blue9};
-  }
-
-  .copy {
-    min-width: 0;
-    display: grid;
-    gap: 2px;
-  }
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.84rem;
-    font-weight: 780;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.74rem;
-    font-weight: 700;
-  }
 `
 
 const PrioritySection = styled(AdminPlainCard)`

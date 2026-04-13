@@ -34,3 +34,10 @@ scrape_configs:
       - targets: ["promtail:9080"]
         labels:
           service: aquila-promtail
+
+  - job_name: public_edge_probe
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["public_edge_probe:9915"]
+        labels:
+          service: aquila-public-edge-probe

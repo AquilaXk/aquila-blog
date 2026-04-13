@@ -729,6 +729,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   const [authSecurityEvents, setAuthSecurityEvents] = useState<AuthSecurityEvent[]>(initialSnapshot.authSecurityEvents)
   const [authSecurityEventsError, setAuthSecurityEventsError] = useState("")
   const [authSecurityCheckedAt, setAuthSecurityCheckedAt] = useState<string | null>(initialSnapshot.authSecurityCheckedAt)
+  const [systemHealthCheckedAt, setSystemHealthCheckedAt] = useState<string | null>(initialSnapshot.systemHealthFetchedAt)
   const [activeSection, setActiveSection] = useState<SectionKey>("overview")
   const [sectionJumpTarget, setSectionJumpTarget] = useState<SectionKey | null>(null)
   const [isWorkspaceReady, setIsWorkspaceReady] = useState(false)
@@ -983,6 +984,11 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   }, [isWorkspaceReady])
 
   useEffect(() => {
+    if (systemHealthCheckedAt || !systemHealthQuery.data) return
+    setSystemHealthCheckedAt(new Date().toISOString())
+  }, [systemHealthCheckedAt, systemHealthQuery.data])
+
+  useEffect(() => {
     if (!isWorkspaceReady || !sectionJumpTarget || typeof window === "undefined") return
 
     const target = document.getElementById(SECTION_IDS[sectionJumpTarget])
@@ -1071,15 +1077,13 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   }, [filteredExecutions, selectedExecutionId])
 
   const systemHealthStatus = systemHealthQuery.data?.status || "UNKNOWN"
-  const systemHealthFreshness = getFreshnessMeta(
-    systemHealthQuery.dataUpdatedAt ? new Date(systemHealthQuery.dataUpdatedAt).toISOString() : null
-  )
+  const systemHealthFreshness = getFreshnessMeta(systemHealthCheckedAt)
   const mailFreshness = getFreshnessMeta(mailDiagnostics?.checkedAt ?? null)
   const taskQueueFreshness = getFreshnessMeta(taskQueueCheckedAt)
   const cleanupFreshness = getFreshnessMeta(cleanupCheckedAt)
   const authFreshness = getFreshnessMeta(authSecurityCheckedAt)
   const systemHealthSummary = getSystemHealthSummary(systemHealthQuery.data ?? null)
-  const systemHealthFetchedAt = systemHealthQuery.dataUpdatedAt ? formatInstant(new Date(systemHealthQuery.dataUpdatedAt).toISOString()) : "-"
+  const systemHealthFetchedAt = systemHealthCheckedAt ? formatInstant(systemHealthCheckedAt) : "-"
   const isMailLoading = loadingKey === "mailStatus" || loadingKey === "mailConnectivity"
   const isQueueLoading = loadingKey === "taskQueueStatus"
   const isCleanupLoading = loadingKey === "cleanupStatus"
@@ -1188,14 +1192,14 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
 
   const recentCheckedLabel = useMemo(() => {
     const values = [
-      systemHealthQuery.dataUpdatedAt ? new Date(systemHealthQuery.dataUpdatedAt).toISOString() : null,
+      systemHealthCheckedAt,
       mailDiagnostics?.checkedAt ?? null,
     ]
       .filter((value): value is string => Boolean(value))
       .sort()
 
     return values.length ? formatInstant(values[values.length - 1]) : "-"
-  }, [systemHealthQuery.dataUpdatedAt, mailDiagnostics?.checkedAt])
+  }, [systemHealthCheckedAt, mailDiagnostics?.checkedAt])
 
   const overviewStatusLabel =
     systemHealthStatus !== "UP" || mailDiagnostics?.status === "CONNECTION_FAILED"
@@ -1773,7 +1777,17 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                   <ReadonlyPill>읽기 전용</ReadonlyPill>
                 </CardSectionHeading>
                 <ActionList>
-                  <ActionRowButton type="button" disabled={isBusy} onClick={() => void executeAction("systemHealth", () => fetchSystemHealthCached())}>
+                  <ActionRowButton
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() =>
+                      void executeAction("systemHealth", () => fetchSystemHealthCached(), {
+                        onSuccess: () => {
+                          setSystemHealthCheckedAt(new Date().toISOString())
+                        },
+                      })
+                    }
+                  >
                     <span>서비스 상태 조회</span>
                   </ActionRowButton>
                   <ActionRowButton type="button" disabled={isBusy} onClick={() => void executeAction("admPostCount", () => apiFetch("/post/api/v1/adm/posts/count"))}>

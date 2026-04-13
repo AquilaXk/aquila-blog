@@ -1934,7 +1934,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
             <SectionHeading>
               <SectionTitleBlock>
                 <h2>최근 실행 결과</h2>
-                <p>방금 실행한 작업과 최근 진단 결과를 빠르게 좁혀서 확인할 수 있습니다.</p>
               </SectionTitleBlock>
             </SectionHeading>
 

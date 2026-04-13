@@ -761,7 +761,6 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                 <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
                   {visibilityLabel(row.published, row.listed)}
                 </VisibilityBadge>
-                <span>이어서 쓰기</span>
               </RecentMeta>
             </button>
           </li>
@@ -849,12 +848,6 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
             </PrimaryCta>
             <SecondaryLinkButton
               type="button"
-              onClick={() => continueSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            >
-              최근 작업 이어쓰기
-            </SecondaryLinkButton>
-            <SecondaryLinkButton
-              type="button"
               onClick={() => listSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
             >
               글 관리
@@ -866,7 +859,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
       <ResumeSection ref={continueSectionRef}>
         <SectionHeading>
           <div>
-            <h2>이어서 쓰기</h2>
+            <h2>최근 작업</h2>
           </div>
         </SectionHeading>
         {shouldRenderResumeGrid ? (
@@ -879,7 +872,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
               {localDraft ? (
                 <>
                   <ResumeTitle>{localDraft.title}</ResumeTitle>
-                  <ResumeDescription>{localDraft.summary || "저장된 본문을 이어서 쓸 수 있습니다."}</ResumeDescription>
+                  {localDraft.summary ? <ResumeDescription>{localDraft.summary}</ResumeDescription> : null}
                   <ResumeMeta>
                     <VisibilityBadge data-tone={localDraft.visibility}>
                       {visibilityLabelFromValue(localDraft.visibility)}
@@ -888,7 +881,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                   </ResumeMeta>
                   <ActionRow>
                     <PrimaryInlineButton type="button" onClick={() => void openWriteRoute({ source: "local-draft" })}>
-                      이어서 쓰기
+                      열기
                     </PrimaryInlineButton>
                   </ActionRow>
                 </>
@@ -909,7 +902,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
           </ResumeGrid>
         ) : (
           <WorkspaceEmpty>
-            <strong>이어 쓸 원고 없음</strong>
+            <strong>최근 작업 없음</strong>
             <PrimaryInlineButton type="button" onClick={() => void openWriteRoute()}>
               새 글 작성
             </PrimaryInlineButton>
@@ -1035,7 +1028,6 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
         <RecentActionPanel aria-live="polite">
           <div className="panelHead">
             <strong>최근 작업</strong>
-            <span>삭제/복구 작업의 마지막 결과를 빠르게 다시 확인할 수 있습니다.</span>
           </div>
           {recentActions.length > 0 ? (
             <RecentActionList>
@@ -1119,11 +1111,6 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
         ) : listState.rows.length === 0 ? (
           <ListEmptyState>
             <strong>{listScope === "active" ? "아직 글이 없습니다." : "삭제된 글이 없습니다."}</strong>
-            <p>
-              {listScope === "active"
-                ? "바로 새 글을 시작하거나, 검색 조건을 조정해 다른 결과를 확인하세요."
-                : "복구할 글이 없다면 활성 글 범위로 돌아가 새 작업을 시작하세요."}
-            </p>
             <ActionRow>
               <PrimaryInlineButton type="button" onClick={() => void openWriteRoute()}>
                 새 글 작성

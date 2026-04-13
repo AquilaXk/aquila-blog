@@ -20,6 +20,11 @@ import {
   getMonitoringEnv,
 } from "src/routes/Admin/adminMonitoring"
 import AdminShell from "src/routes/Admin/AdminShell"
+import {
+  AdminElevatedCard,
+  AdminPlainCard,
+  AdminSectionTitleStack,
+} from "src/routes/Admin/AdminSurfacePrimitives"
 
 type SystemHealthPayload = {
   status?: string
@@ -589,20 +594,11 @@ const Shell = styled.div`
   }
 `
 
-const HeroPanel = styled.header`
+const HeroPanel = styled(AdminElevatedCard)`
   display: grid;
   gap: 12px;
   padding: 24px 26px;
   border-radius: 28px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) =>
-    theme.scheme === "light"
-      ? "linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(246, 249, 255, 0.94) 100%)"
-      : "linear-gradient(180deg, rgba(22, 27, 34, 0.96) 0%, rgba(17, 20, 26, 0.94) 100%)"};
-  box-shadow: ${({ theme }) =>
-    theme.scheme === "light"
-      ? "0 18px 40px rgba(15, 23, 42, 0.06)"
-      : "0 18px 40px rgba(0, 0, 0, 0.18)"};
 
   @media (max-width: 820px) {
     gap: 10px;
@@ -827,11 +823,9 @@ const PanelGrid = styled.section`
   }
 `
 
-const PanelCard = styled.article`
+const PanelCard = styled(AdminPlainCard)`
   border-radius: 28px;
   overflow: hidden;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
   box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
 `
 
@@ -925,32 +919,16 @@ const InsightRail = styled.aside`
   }
 `
 
-const RailCard = styled.section`
+const RailCard = styled(AdminPlainCard)`
   display: grid;
   gap: 12px;
   padding: 18px;
   border-radius: 24px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
 `
 
-const SectionHeader = styled.div`
-  display: grid;
-  gap: 4px;
-
+const SectionHeader = styled(AdminSectionTitleStack)`
   h2 {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray12};
     font-size: 0.98rem;
-    font-weight: 820;
-    letter-spacing: -0.02em;
-  }
-
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.8rem;
-    line-height: 1.5;
   }
 `
 
@@ -1067,13 +1045,11 @@ const QuickActionLink = styled.a`
   }
 `
 
-const PrioritySection = styled.section`
+const PrioritySection = styled(AdminPlainCard)`
   display: grid;
   gap: 12px;
   padding: 20px 22px;
   border-radius: 24px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
 `
 
 const PriorityTable = styled.table`

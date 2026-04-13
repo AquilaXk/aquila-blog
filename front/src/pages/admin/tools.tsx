@@ -15,6 +15,7 @@ import { serverApiFetch } from "src/libs/server/backend"
 import { readServerSnapshot } from "src/libs/server/serverSnapshotCache"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import AdminShell from "src/routes/Admin/AdminShell"
+import { AdminRailCard, AdminSectionHeading, AdminSectionTitleStack, AdminStickyRail } from "src/routes/Admin/AdminSurfacePrimitives"
 import { buildMonitoringItems, getMonitoringEnv } from "src/routes/Admin/adminMonitoring"
 
 type JsonValue = unknown
@@ -2249,21 +2250,10 @@ const StatusCardButton = styled.button`
   }
 `
 
-const SectionTitleBlock = styled.div`
-  min-width: 0;
-
+const SectionTitleBlock = styled(AdminSectionTitleStack)`
   h2,
   h3 {
-    margin: 0;
     font-size: 1.05rem;
-    letter-spacing: -0.02em;
-  }
-
-  p {
-    margin: 0.26rem 0 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.84rem;
-    line-height: 1.55;
   }
 `
 
@@ -2284,10 +2274,8 @@ const WorkspaceShell = styled.div`
   }
 `
 
-const SectionNav = styled.aside`
-  position: sticky;
+const SectionNav = styled(AdminStickyRail)`
   top: calc(var(--app-header-height, 64px) + 1rem);
-  display: grid;
   gap: 0.55rem;
 
   @media (max-width: 960px) {
@@ -2304,13 +2292,11 @@ const SectionNav = styled.aside`
   }
 `
 
-const SectionNavStatus = styled.div`
-  display: grid;
+const SectionNavStatus = styled(AdminRailCard)`
   gap: 0.22rem;
   padding: 0.88rem 0.96rem;
   border-radius: 16px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
 
   small {
     color: ${({ theme }) => theme.colors.gray10};
@@ -2489,16 +2475,8 @@ const DashboardShortcutLink = styled.a`
   font-weight: 800;
 `
 
-const SectionHeading = styled.div`
-  display: flex;
-  justify-content: space-between;
+const SectionHeading = styled(AdminSectionHeading)`
   align-items: flex-start;
-  gap: 0.8rem;
-
-  @media (max-width: 760px) {
-    flex-direction: column;
-    align-items: stretch;
-  }
 `
 
 const StatusBadge = styled.span`
@@ -2876,10 +2854,8 @@ const ExecutionGrid = styled.div`
   }
 `
 
-const ActionGroupCard = styled.div`
-  display: grid;
+const ActionGroupCard = styled(AdminRailCard)`
   gap: 0.8rem;
-  padding: 0.92rem;
   border-radius: 18px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};

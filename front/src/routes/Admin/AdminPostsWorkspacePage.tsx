@@ -18,6 +18,7 @@ import { readServerSnapshot } from "src/libs/server/serverSnapshotCache"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import { isServerTempDraftPost } from "./editorTempDraft"
 import AdminShell from "./AdminShell"
+import { AdminRailCard, AdminSectionHeading, AdminSubtleCard } from "./AdminSurfacePrimitives"
 
 type PostListScope = "active" | "deleted"
 
@@ -1451,28 +1452,10 @@ const ResumeSection = styled.section`
   gap: 0.85rem;
 `
 
-const SectionHeading = styled.div`
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 0.75rem;
-
+const SectionHeading = styled(AdminSectionHeading)`
   h2 {
-    margin: 0;
     font-size: 1.22rem;
-    font-weight: 800;
     letter-spacing: -0.03em;
-  }
-
-  p {
-    margin: 0.15rem 0 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.9rem;
-  }
-
-  @media (max-width: 767px) {
-    flex-direction: column;
-    align-items: stretch;
   }
 `
 
@@ -1541,8 +1524,7 @@ const ResumeGrid = styled.div`
   }
 `
 
-const ResumeCard = styled.article<{ "data-emphasis"?: "strong" | "soft" }>`
-  display: grid;
+const ResumeCard = styled(AdminRailCard)<{ "data-emphasis"?: "strong" | "soft" }>`
   gap: 0.7rem;
   padding: 1rem;
   border-radius: 16px;
@@ -1964,13 +1946,11 @@ const SummaryPill = styled.span<{ "data-tone"?: "neutral" }>`
   font-weight: 700;
 `
 
-const RecentActionPanel = styled.section`
-  display: grid;
+const RecentActionPanel = styled(AdminRailCard)`
   gap: 0.72rem;
   padding: 0.92rem 1rem;
   border-radius: 14px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) => theme.colors.gray2};
 
   .panelHead {
     display: grid;
@@ -2203,10 +2183,8 @@ const ListEmptyState = styled.div`
   }
 `
 
-const ListCard = styled.div`
+const ListCard = styled(AdminSubtleCard)`
   border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) => theme.colors.gray2};
   overflow: hidden;
 `
 

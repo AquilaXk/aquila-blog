@@ -52,6 +52,7 @@ import { fetchServerProfileWorkspace } from "src/libs/server/profileWorkspace"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import { acquireBodyScrollLock } from "src/libs/utils/bodyScrollLock"
 import AdminShell from "src/routes/Admin/AdminShell"
+import { AdminPaneHeader, AdminRailCard, AdminStickyRail, AdminSubtleCard } from "src/routes/Admin/AdminSurfacePrimitives"
 
 type NoticeTone = "idle" | "loading" | "success" | "error"
 type WorkspaceSectionId = "identity" | "about" | "home" | "links"
@@ -2119,17 +2120,11 @@ const WorkspaceShell = styled.section<{ $isHomeSection: boolean }>`
   }
 `
 
-const SurfaceCard = styled.section`
-  border-radius: 20px;
-  background: ${({ theme }) => theme.colors.gray2};
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-`
-
 const SectionRail = styled.nav`
   position: sticky;
-  top: 0.88rem;
-  display: grid;
+  top: calc(var(--app-header-height, 64px) + 0.8rem);
   gap: 0.24rem;
+  display: grid;
 
   @media (max-width: 1180px) {
     display: none;
@@ -2183,31 +2178,12 @@ const EditorColumn = styled.div`
   gap: 0.8rem;
 `
 
-const EditorPaneHeader = styled.div`
-  display: grid;
-  gap: 0.22rem;
-  padding-bottom: 0.95rem;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
-
+const EditorPaneHeader = styled(AdminPaneHeader)`
   .titleRow {
     display: flex;
     align-items: center;
     gap: 0.6rem;
     flex-wrap: wrap;
-  }
-
-  h2 {
-    margin: 0;
-    font-size: clamp(1.24rem, 2vw, 1.5rem);
-    line-height: 1.2;
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.86rem;
-    line-height: 1.55;
   }
 `
 
@@ -2244,7 +2220,7 @@ const SectionStateBadge = styled.span`
   }
 `
 
-const EditorSurface = styled(SurfaceCard)`
+const EditorSurface = styled(AdminSubtleCard)`
   padding: 1.1rem 1.14rem 1.18rem;
   display: grid;
   gap: 1rem;
@@ -2769,22 +2745,15 @@ const LinkInputs = styled.div`
   }
 `
 
-const PreviewRail = styled.div`
-  display: grid;
-  gap: 0.82rem;
-  position: sticky;
-  top: 0.88rem;
+const PreviewRail = styled(AdminStickyRail)`
+  top: calc(var(--app-header-height, 64px) + 0.8rem);
 
   @media (max-width: 1180px) {
     display: none;
   }
 `
 
-const PreviewCardShell = styled(SurfaceCard)`
-  padding: 0.92rem;
-  display: grid;
-  gap: 0.78rem;
-`
+const PreviewCardShell = styled(AdminRailCard)``
 
 const PreviewHeader = styled.div`
   display: flex;

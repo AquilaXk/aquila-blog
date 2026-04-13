@@ -1028,6 +1028,9 @@ const MarkdownRendererRoot = styled.div`
     text-align: left !important;
     background: ${tableChrome.headerBackground};
     font-weight: 700;
+    line-height: 1.52;
+    padding-top: calc(0.78rem + 0.14rem);
+    padding-bottom: calc(0.78rem - 0.14rem);
     border-bottom: 2px solid ${tableChrome.headerRule};
       `
     }}

@@ -379,7 +379,7 @@ export const invalidatePublicPostReadCaches = async (
   queryClient.removeQueries({ queryKey: queryKey.postsTotalCount() })
   queryClient.removeQueries({ queryKey: ["post"] })
   if (postId !== undefined && postId !== null && String(postId).trim()) {
-    queryClient.removeQueries({ queryKey: queryKey.post(String(postId).trim()) })
+    queryClient.removeQueries({ queryKey: queryKey.post(postId) })
   }
 }
 

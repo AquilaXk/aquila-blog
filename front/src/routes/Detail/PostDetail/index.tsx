@@ -825,7 +825,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
         if (cancelled) return
 
         setEngagement((prev) => ({ ...prev, hitCount: response.data.hitCount }))
-        queryClient.setQueryData<PostDetailType | undefined>(queryKey.post(String(detailId)), (prev) =>
+        queryClient.setQueryData<PostDetailType | undefined>(queryKey.post(detailId), (prev) =>
           prev ? { ...prev, hitCount: response.data.hitCount } : prev
         )
       })
@@ -879,7 +879,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
       actorHasLiked: optimisticLiked,
       likesCount: optimisticLikesCount,
     }))
-    queryClient.setQueryData<PostDetailType | undefined>(queryKey.post(String(data.id)), (prev) =>
+    queryClient.setQueryData<PostDetailType | undefined>(queryKey.post(data.id), (prev) =>
       prev
         ? {
             ...prev,
@@ -904,7 +904,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
         likesCount: response.data.likesCount,
       }))
 
-      queryClient.setQueryData<PostDetailType | undefined>(queryKey.post(String(data.id)), (prev) =>
+      queryClient.setQueryData<PostDetailType | undefined>(queryKey.post(data.id), (prev) =>
         prev
           ? {
               ...prev,
@@ -925,8 +925,8 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
 
       if (status === 409 || (typeof status === "number" && status >= 500)) {
         try {
-          await queryClient.invalidateQueries({ queryKey: queryKey.post(String(data.id)) })
-          const refreshed = queryClient.getQueryData<PostDetailType | undefined>(queryKey.post(String(data.id)))
+          await queryClient.invalidateQueries({ queryKey: queryKey.post(data.id) })
+          const refreshed = queryClient.getQueryData<PostDetailType | undefined>(queryKey.post(data.id))
           if (refreshed) {
             setEngagement((prev) => ({
               ...prev,
@@ -946,7 +946,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
           actorHasLiked: currentLiked,
           likesCount: currentLikesCount,
         }))
-        queryClient.setQueryData<PostDetailType | undefined>(queryKey.post(String(data.id)), (prev) =>
+        queryClient.setQueryData<PostDetailType | undefined>(queryKey.post(data.id), (prev) =>
           prev
             ? {
                 ...prev,
@@ -985,7 +985,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
       await apiFetch(`/post/api/v1/posts/${data.id}`, {
         method: "DELETE",
       })
-      queryClient.removeQueries({ queryKey: queryKey.post(String(data.id)) })
+      queryClient.removeQueries({ queryKey: queryKey.post(data.id) })
       await replaceRoute(router, "/", { preferHardNavigation: true })
     } finally {
       setAdminActionPending(false)

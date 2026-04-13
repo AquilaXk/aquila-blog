@@ -1,5 +1,7 @@
 import { normalizeKeywordQuery, normalizeTagQuery } from "src/libs/query/normalize"
 
+const normalizePostQueryKeyId = (postId: string | number) => String(postId).trim()
+
 export const queryKey = {
   scheme: () => ["scheme"] as const,
   authMe: () => ["auth", "me"] as const,
@@ -82,7 +84,7 @@ export const queryKey = {
   postsTotalCount: () => ["posts", "totalCount"] as const,
   tags: () => ["tags"] as const,
   categories: () => ["categories"] as const,
-  post: (postId: string) => ["post", postId] as const,
+  post: (postId: string | number) => ["post", normalizePostQueryKeyId(postId)] as const,
   postsRelatedByAuthor: (params: {
     authorId: string
     excludePostId?: string

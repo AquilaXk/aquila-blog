@@ -61,8 +61,43 @@ const wait = async (ms: number) => {
   await new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+const measureHeaderActionGap = async (page: Page, mode: "anonymous" | "authenticated") => {
+  return page.evaluate(({ currentMode }) => {
+    const aboutLink = Array.from(document.querySelectorAll<HTMLAnchorElement>("a")).find(
+      (link) => link.textContent?.trim() === "About"
+    )
+    const loginButton = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.trim() === "Login"
+    )
+    const adminLink = Array.from(document.querySelectorAll<HTMLAnchorElement>("a")).find(
+      (link) => link.textContent?.trim() === "Admin"
+    )
+    const logoutButton = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.trim() === "Logout"
+    )
+
+    const aboutRect = aboutLink?.getBoundingClientRect() ?? null
+    const loginRect = loginButton?.getBoundingClientRect() ?? null
+    const adminRect = adminLink?.getBoundingClientRect() ?? null
+    const logoutRect = logoutButton?.getBoundingClientRect() ?? null
+
+    return currentMode === "anonymous"
+      ? {
+          aboutRight: aboutRect?.right ?? 0,
+          loginLeft: loginRect?.left ?? 0,
+          gap: loginRect && aboutRect ? loginRect.left - aboutRect.right : Number.POSITIVE_INFINITY,
+        }
+      : {
+          adminRight: adminRect?.right ?? 0,
+          logoutLeft: logoutRect?.left ?? 0,
+          gap: logoutRect && adminRect ? logoutRect.left - adminRect.right : Number.POSITIVE_INFINITY,
+        }
+  }, { currentMode: mode })
+}
+
 test("익명 snapshot이 있으면 delayed auth probe 동안에도 Login이 유지된다", async ({ page }) => {
   await mockFeedEndpoints(page)
+  await page.setViewportSize({ width: 1800, height: 900 })
   await page.addInitScript(
     ({ storageKey }) => {
       window.sessionStorage.setItem(
@@ -84,12 +119,17 @@ test("익명 snapshot이 있으면 delayed auth probe 동안에도 Login이 유�
 
   await page.goto("/", { waitUntil: "domcontentloaded" })
   await expect(page.getByRole("button", { name: "Login", exact: true })).toBeVisible()
+  const anonymousGap = await measureHeaderActionGap(page, "anonymous")
+  expect(anonymousGap.gap).toBeLessThanOrEqual(72)
   await page.waitForTimeout(300)
   await expect(page.getByRole("button", { name: "Login", exact: true })).toBeVisible()
+  const anonymousGapAfterProbe = await measureHeaderActionGap(page, "anonymous")
+  expect(anonymousGapAfterProbe.gap).toBeLessThanOrEqual(72)
 })
 
 test("인증 snapshot이 있으면 delayed auth probe 동안에도 Admin/Logout이 유지된다", async ({ page }) => {
   await mockFeedEndpoints(page)
+  await page.setViewportSize({ width: 1800, height: 900 })
   await page.addInitScript(
     ({ storageKey }) => {
       window.sessionStorage.setItem(
@@ -117,7 +157,11 @@ test("인증 snapshot이 있으면 delayed auth probe 동안에도 Admin/Logout�
   await page.goto("/", { waitUntil: "domcontentloaded" })
   await expect(page.getByRole("link", { name: "Admin", exact: true })).toBeVisible()
   await expect(page.getByRole("button", { name: "Logout", exact: true })).toBeVisible()
+  const authenticatedGap = await measureHeaderActionGap(page, "authenticated")
+  expect(authenticatedGap.gap).toBeLessThanOrEqual(120)
   await page.waitForTimeout(300)
   await expect(page.getByRole("link", { name: "Admin", exact: true })).toBeVisible()
   await expect(page.getByRole("button", { name: "Logout", exact: true })).toBeVisible()
+  const authenticatedGapAfterProbe = await measureHeaderActionGap(page, "authenticated")
+  expect(authenticatedGapAfterProbe.gap).toBeLessThanOrEqual(120)
 })

@@ -324,7 +324,9 @@ const StyledWrapper = styled.div`
     }
 
     .adminLinkSlot {
+      display: none;
       min-width: 4.06rem;
+      align-items: center;
     }
   }
 
@@ -346,21 +348,23 @@ const StyledWrapper = styled.div`
   }
 
   .authSlot {
-    display: inline-flex;
     align-items: center;
     justify-content: center;
     min-height: ${({ theme }) => theme.variables.navControl.height}px;
   }
 
   .authSlot--login {
+    display: none;
     min-width: 4.55rem;
   }
 
   .authSlot--bell {
+    display: none;
     width: 2.25rem;
   }
 
   .authSlot--logout {
+    display: none;
     min-width: 4.95rem;
   }
 
@@ -405,32 +409,20 @@ const StyledWrapper = styled.div`
     text-decoration: none;
   }
 
-  .navAction--login,
-  .navAction--logout,
-  .navAction--admin,
-  .authBellState {
-    visibility: hidden;
-    pointer-events: none;
+  html[data-header-auth-shell="anonymous"] & .authSlot--login {
+    display: inline-flex;
   }
 
-  html[data-header-auth-shell="anonymous"] & .navAction--login {
-    visibility: visible;
-    pointer-events: auto;
+  html[data-header-auth-shell="authenticated"] & .authSlot--bell {
+    display: inline-flex;
   }
 
-  html[data-header-auth-shell="authenticated"] & .navAction--logout {
-    visibility: visible;
-    pointer-events: auto;
+  html[data-header-auth-shell="authenticated"] & .authSlot--logout {
+    display: inline-flex;
   }
 
-  html[data-header-auth-shell="authenticated"] & .authBellState {
-    visibility: visible;
-    pointer-events: auto;
-  }
-
-  html[data-header-auth-shell="authenticated"][data-header-auth-admin="true"] & .navAction--admin {
-    visibility: visible;
-    pointer-events: auto;
+  html[data-header-auth-shell="authenticated"][data-header-auth-admin="true"] & .adminLinkSlot {
+    display: inline-flex;
   }
 
   .authNotice {

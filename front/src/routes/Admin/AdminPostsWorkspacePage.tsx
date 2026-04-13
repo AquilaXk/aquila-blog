@@ -871,7 +871,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
         </SectionHeading>
         {shouldRenderResumeGrid ? (
           <ResumeGrid>
-            <ResumeCard data-emphasis={localDraft ? "strong" : "soft"}>
+            <ResumeCard data-emphasis={localDraft ? "strong" : "soft"} data-empty={localDraft ? undefined : "true"}>
               <ResumeHeader>
                 <strong>브라우저 임시저장</strong>
                 {localDraft?.savedAt ? <span>{formatDateTime(localDraft.savedAt)}</span> : null}
@@ -1451,6 +1451,7 @@ const ResumeGrid = styled.div`
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.9rem;
+  align-items: start;
 
   @media (max-width: 960px) {
     grid-template-columns: 1fr;
@@ -1464,6 +1465,11 @@ const ResumeCard = styled(AdminRailCard)<{ "data-emphasis"?: "strong" | "soft" }
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme, "data-emphasis": emphasis }) =>
     emphasis === "strong" ? "rgba(29, 78, 216, 0.08)" : theme.colors.gray2};
+
+  &[data-empty="true"] {
+    gap: 0.4rem;
+    padding-block: 0.9rem;
+  }
 `
 
 const ResumeHeader = styled.div`
@@ -1500,6 +1506,7 @@ const EmptyInlineState = styled.div`
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.92rem;
   }
 
   p {
@@ -1523,9 +1530,11 @@ const ResumeMeta = styled.div`
 
 const VisibilityBadge = styled(AdminStatusPill)<{ "data-tone": string }>`
   min-height: 28px;
-  padding: 0 0.72rem;
+  padding: 0 0.82rem;
   font-size: 0.78rem;
   font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
   color: ${({ theme, "data-tone": tone }) =>
     tone === "PRIVATE"
       ? theme.colors.gray11

@@ -53,6 +53,9 @@ import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import { acquireBodyScrollLock } from "src/libs/utils/bodyScrollLock"
 import AdminShell from "src/routes/Admin/AdminShell"
 import {
+  AdminInfoPanelCard,
+  AdminInfoStatusItem,
+  AdminInfoStatusList,
   AdminPaneHeader,
   AdminRailCard,
   AdminStickyRail,
@@ -1111,6 +1114,15 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
   const canPublish = !hasUnsavedChanges && hasPublishedDiff && loadingKey !== "publish" && loadingKey !== "save"
   const canSave = hasUnsavedChanges && loadingKey !== "save"
   const activeSectionState = sectionStateMap[activeSection]
+  const previewStatusItems = [
+    { label: "섹션", value: activeSectionMeta.label, tone: "neutral" as const },
+    { label: "보기", value: previewMode === "draft" ? "초안" : "공개본", tone: "neutral" as const },
+    {
+      label: "상태",
+      value: activeSectionState.dirty ? "저장 안 됨" : activeSectionState.publishedDiff ? "공개본과 차이" : "동기화됨",
+      tone: activeSectionState.dirty ? ("warn" as const) : ("good" as const),
+    },
+  ]
 
   const renderActiveSection = () => {
     switch (activeSection) {
@@ -1681,6 +1693,15 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                 </PreviewToggleButton>
               </PreviewHeaderActions>
             </PreviewHeader>
+
+            <PreviewStatusRail>
+              {previewStatusItems.map((item) => (
+                <AdminInfoStatusItem key={`preview-${item.label}`} data-tone={item.tone}>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </AdminInfoStatusItem>
+              ))}
+            </PreviewStatusRail>
 
             <PreviewBody data-expanded={isPreviewExpanded}>
               <PreviewViewport>
@@ -2726,12 +2747,16 @@ const DockPrimaryButton = styled(PublishButton)`
   border-radius: 999px;
 `
 
-const PreviewViewport = styled.div`
+const PreviewStatusRail = styled(AdminInfoStatusList)`
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+
+  @media (max-width: 760px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const PreviewViewport = styled(AdminInfoPanelCard)`
   min-height: 300px;
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.92rem;
 `
 
 const PreviewProfileCard = styled.div`

@@ -388,3 +388,12 @@ export const AdminInfoStatusItem = styled.div`
     text-align: right;
   }
 `
+
+export const AdminInfoPanelCard = styled.div`
+  display: grid;
+  gap: 0.68rem;
+  padding: 0.92rem;
+  border-radius: 18px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+`

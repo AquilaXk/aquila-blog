@@ -14,7 +14,8 @@ export const pretendard = localFont({
     },
   ],
   display: 'swap',
-  preload: false,
+  // Home/header copy uses these weights on first paint, so preload them to avoid font-swap CLS.
+  preload: true,
   fallback: [
     '-apple-system',
     'BlinkMacSystemFont',

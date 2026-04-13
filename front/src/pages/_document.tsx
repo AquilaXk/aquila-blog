@@ -11,6 +11,7 @@ import React from "react"
 import { CONFIG } from "site.config"
 import { pretendard } from "src/assets"
 import createEmotionCache from "src/libs/emotion/createEmotionCache"
+import { HEADER_AUTH_SHELL_BOOTSTRAP_SCRIPT } from "src/libs/headerAuthShell"
 
 const CLIENT_RUNTIME_RECOVERY_SCRIPT = `
 (function () {
@@ -122,7 +123,7 @@ class MyDocument extends Document {
 
   render() {
     return (
-      <Html lang={CONFIG.lang}>
+      <Html lang={CONFIG.lang} data-header-auth-shell="anonymous" data-header-auth-admin="false">
         <Head>
           <link rel="icon" href="/favicon.ico" />
           <link
@@ -156,6 +157,7 @@ class MyDocument extends Document {
           )}
         </Head>
         <body className={pretendard.className}>
+          <script dangerouslySetInnerHTML={{ __html: HEADER_AUTH_SHELL_BOOTSTRAP_SCRIPT }} />
           <script dangerouslySetInnerHTML={{ __html: CLIENT_RUNTIME_RECOVERY_SCRIPT }} />
           <Main />
           <NextScript />

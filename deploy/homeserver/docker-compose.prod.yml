@@ -105,6 +105,37 @@ services:
     depends_on:
       - loki
 
+  public_edge_probe:
+    image: node:20-alpine
+    restart: unless-stopped
+    working_dir: /app
+    command:
+      - "node"
+      - "/app/public-edge-probe.mjs"
+      - "--serve-port"
+      - "9915"
+      - "--refresh-ms"
+      - "${PUBLIC_EDGE_PROBE_REFRESH_MS:-300000}"
+      - "--requests"
+      - "${PUBLIC_EDGE_PROBE_REQUESTS:-2}"
+      - "--latest-posts"
+      - "${PUBLIC_EDGE_PROBE_LATEST_POSTS:-3}"
+      - "--timeout-ms"
+      - "${PUBLIC_EDGE_PROBE_TIMEOUT_MS:-15000}"
+      - "--base-url"
+      - "${PUBLIC_EDGE_PROBE_BASE_URL:-https://www.aquilaxk.site}"
+      - "--state-path"
+      - "/data/public-edge-probe-state.json"
+    volumes:
+      - ./monitoring/public-edge-probe.mjs:/app/public-edge-probe.mjs:ro
+      - public_edge_probe_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:9915/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
   back_blue:
     image: ${BACK_IMAGE:?BACK_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped
@@ -305,3 +336,4 @@ volumes:
   grafana_data:
   loki_data:
   promtail_positions:
+  public_edge_probe_data:

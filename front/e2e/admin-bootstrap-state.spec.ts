@@ -35,6 +35,9 @@ test.describe("admin bootstrap state contract", () => {
     expect(toolsSource).toContain("baseProps = buildAdminPagePropsFromMember(bootstrapResult.value.value.member)")
     expect(toolsSource).toContain("systemHealth: bootstrapResult.value.value.health")
     expect(toolsSource).toContain('source: "bootstrap"')
+    expect(toolsSource).toContain("const [systemHealthCheckedAt, setSystemHealthCheckedAt] = useState<string | null>(initialSnapshot.systemHealthFetchedAt)")
+    expect(toolsSource).toContain("const systemHealthFreshness = getFreshnessMeta(systemHealthCheckedAt)")
+    expect(toolsSource).toContain("const systemHealthFetchedAt = systemHealthCheckedAt ? formatInstant(systemHealthCheckedAt) : \"-\"")
   })
 
   test("운영 대시보드는 auth/session 선조회 대신 protected bootstrap으로 health summary를 first paint에 주입한다", () => {

@@ -271,6 +271,7 @@ const MarkdownTableRenderer = ({
   layout?: MarkdownTableLayout | null
 }) => {
   const rowCursorRef = useRef(0)
+  const isWideOverflowTable = layout?.overflowMode === "wide"
   const columnWidths = layout?.columnWidths
   const normalizedColumnWidths = useMemo(
     () =>
@@ -285,6 +286,37 @@ const MarkdownTableRenderer = ({
     () => normalizedColumnWidths.reduce<number>((sum, width) => sum + (width || 0), 0),
     [normalizedColumnWidths]
   )
+  const hasExplicitColumnWidths = useMemo(
+    () => normalizedColumnWidths.some((width) => typeof width === "number" && width > 0),
+    [normalizedColumnWidths]
+  )
+  const normalizedColumnWidthPercentages = useMemo(
+    () =>
+      !isWideOverflowTable && explicitTableWidth > 0
+        ? normalizedColumnWidths.map((width) =>
+            width ? `${((width / explicitTableWidth) * 100).toFixed(4)}%` : null
+          )
+        : [],
+    [explicitTableWidth, isWideOverflowTable, normalizedColumnWidths]
+  )
+  const tableStyle = useMemo<CSSProperties | undefined>(() => {
+    if (isWideOverflowTable && explicitTableWidth > 0) {
+      return {
+        width: `${explicitTableWidth}px`,
+        minWidth: `${explicitTableWidth}px`,
+      }
+    }
+
+    if (!isWideOverflowTable) {
+      return {
+        width: "100%",
+        minWidth: "100%",
+        maxWidth: "100%",
+      }
+    }
+
+    return undefined
+  }, [explicitTableWidth, isWideOverflowTable])
   rowCursorRef.current = 0
   const contextValue = useMemo<MarkdownTableRenderContextValue>(
     () => ({
@@ -307,29 +339,28 @@ const MarkdownTableRenderer = ({
           <table
             className={[
               "aq-table",
-              layout?.overflowMode === "wide" ? "aq-table-wide" : "aq-table-normal",
+              isWideOverflowTable ? "aq-table-wide" : "aq-table-normal",
               className,
             ]
               .filter(Boolean)
               .join(" ")}
-            data-overflow-mode={layout?.overflowMode === "wide" ? "wide" : undefined}
-            style={
-              explicitTableWidth > 0
-                ? {
-                    width: `${explicitTableWidth}px`,
-                    minWidth: `${explicitTableWidth}px`,
-                  }
-                : undefined
-            }
+            data-overflow-mode={isWideOverflowTable ? "wide" : undefined}
+            style={tableStyle}
           >
-            {normalizedColumnWidths.some((width) => typeof width === "number" && width > 0) ? (
+            {hasExplicitColumnWidths ? (
               <colgroup>
                 {normalizedColumnWidths.map((width, index) => {
                   if (!width) return <col key={`table-col-${index}`} />
                   return (
                     <col
                       key={`table-col-${index}`}
-                      style={{ width: `${width}px` }}
+                      style={
+                        isWideOverflowTable
+                          ? { width: `${width}px` }
+                          : normalizedColumnWidthPercentages[index]
+                            ? { width: normalizedColumnWidthPercentages[index] || undefined }
+                            : undefined
+                      }
                     />
                   )
                 })}
@@ -522,9 +553,9 @@ const MarkdownRendererComponent: FC<Props> = ({
             </figure>
           )
         },
-        code({ className, children, ...props }) {
+        code({ node, className, children, ...props }) {
           const raw =
-            extractTextFromCodeAst(props.node) ||
+            extractTextFromCodeAst(node) ||
             (typeof children === "string"
               ? children
               : Array.isArray(children)
@@ -546,7 +577,7 @@ const MarkdownRendererComponent: FC<Props> = ({
             </code>
           )
         },
-        pre({ children, className, ...props }) {
+        pre({ node: _node, children, className, ...props }) {
           const { language, rawCode } = extractCodeMetaFromPreChildren(children)
           const mermaidSource = extractNormalizedMermaidSource(rawCode)
           const shouldRenderMermaid = language === "mermaid" || isMermaidSource(rawCode)

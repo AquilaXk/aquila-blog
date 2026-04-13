@@ -1,8 +1,14 @@
-import type { Theme } from "@emotion/react"
 import styled from "@emotion/styled"
 import Link from "next/link"
 import AppIcon, { type IconName } from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
+import {
+  AdminElevatedCard,
+  AdminSectionTitleStack,
+  adminElevatedBorder,
+  adminElevatedSurface,
+  adminElevatedShadow,
+} from "./AdminSurfacePrimitives"
 
 export type AdminHubPrimaryAction = {
   href: string
@@ -253,13 +259,6 @@ const AdminHubSurface = ({
 
 export default AdminHubSurface
 
-const panelSurface = (theme: Theme) =>
-  theme.scheme === "light"
-    ? "linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(246, 249, 255, 0.94) 100%)"
-    : "linear-gradient(180deg, rgba(23, 28, 36, 0.96) 0%, rgba(17, 20, 27, 0.94) 100%)"
-
-const panelBorder = (theme: Theme) => theme.colors.gray5
-
 const Main = styled.main`
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -286,17 +285,11 @@ const Main = styled.main`
   }
 `
 
-const HeroPanel = styled.section`
+const HeroPanel = styled(AdminElevatedCard)`
   display: grid;
   gap: 1rem;
   padding: 1.25rem;
   border-radius: 28px;
-  border: 1px solid ${({ theme }) => panelBorder(theme)};
-  background: ${({ theme }) => panelSurface(theme)};
-  box-shadow: ${({ theme }) =>
-    theme.scheme === "light"
-      ? "0 18px 42px rgba(15, 23, 42, 0.06)"
-      : "0 20px 44px rgba(0, 0, 0, 0.2)"};
 `
 
 const SectionEyebrow = styled.span`
@@ -457,23 +450,9 @@ const ActionStrip = styled.section`
   gap: 0.75rem;
 `
 
-const SectionHeader = styled.div`
-  display: grid;
-  gap: 0.2rem;
-
+const SectionHeader = styled(AdminSectionTitleStack)`
   h2 {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray12};
     font-size: 1.02rem;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-  }
-
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.82rem;
-    line-height: 1.5;
   }
 `
 
@@ -495,7 +474,7 @@ const ActionCard = styled.a`
   padding: 1rem 1.05rem;
   border-radius: 22px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => panelSurface(theme)};
+  background: ${({ theme }) => adminElevatedSurface(theme)};
   color: inherit;
   text-decoration: none;
   transition:
@@ -561,17 +540,14 @@ const WorkspaceBoard = styled.section`
   }
 `
 
-const SectionCard = styled.article`
+const SectionCard = styled(AdminElevatedCard)`
   display: grid;
   gap: 0.95rem;
   padding: 1.1rem;
   border-radius: 24px;
-  border: 1px solid ${({ theme }) => panelBorder(theme)};
-  background: ${({ theme }) => panelSurface(theme)};
-  box-shadow: ${({ theme }) =>
-    theme.scheme === "light"
-      ? "0 16px 34px rgba(15, 23, 42, 0.05)"
-      : "0 18px 34px rgba(0, 0, 0, 0.18)"};
+  border-color: ${({ theme }) => adminElevatedBorder(theme)};
+  background: ${({ theme }) => adminElevatedSurface(theme)};
+  box-shadow: ${({ theme }) => adminElevatedShadow(theme)};
 `
 
 const PrimaryWorkflow = styled.div`
@@ -763,13 +739,11 @@ const RailColumn = styled.aside`
   }
 `
 
-const RailCard = styled.section`
+const RailCard = styled(AdminElevatedCard)`
   display: grid;
   gap: 0.8rem;
   padding: 1rem;
   border-radius: 24px;
-  border: 1px solid ${({ theme }) => panelBorder(theme)};
-  background: ${({ theme }) => panelSurface(theme)};
 `
 
 const ProfileSnapshot = styled.div`

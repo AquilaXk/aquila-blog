@@ -6172,6 +6172,7 @@ const BlockEditorEngine = ({
   }, [editor, selectionTick])
   const currentTableAxisSelection = useMemo(() => {
     if (!editor || !isTableStructuralSelection) return null
+    void selectionTick
     let rect: ReturnType<typeof selectedRect> | null = null
     try {
       rect = selectedRect(editor.state)
@@ -8149,7 +8150,6 @@ const BlockEditorEngine = ({
       isOuterBlockSelectionGesture,
       isCoarsePointer,
       isRowResizeHandleTarget,
-      isTableStructuralSelection,
       promoteTopLevelBlockSelection,
       selectedBlockNodeIndex,
       shouldPersistTableHandles,
@@ -11175,42 +11175,6 @@ const TableCornerHandle = styled.div`
 
   &[data-compact="true"] {
     gap: 0;
-  }
-`
-
-const TableColumnRailSegment = styled.button`
-  all: unset;
-  box-sizing: border-box;
-  position: absolute;
-  top: 1px;
-  bottom: 1px;
-  user-select: none;
-  -webkit-user-select: none;
-  border-radius: 999px;
-  background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.14)" : "rgba(148, 163, 184, 0.14)")};
-  transition: background-color 120ms ease, transform 120ms ease;
-  cursor: pointer;
-
-  &:hover {
-    background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.2)" : "rgba(148, 163, 184, 0.2)")};
-  }
-
-  &[data-active="true"] {
-    background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(191, 219, 254, 0.26)" : "rgba(59, 130, 246, 0.18)")};
-  }
-
-  &::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    right: -1px;
-    bottom: 0;
-    width: 1px;
-    background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.2)" : "rgba(100, 116, 139, 0.18)")};
-  }
-
-  &:last-child::after {
-    display: none;
   }
 `
 

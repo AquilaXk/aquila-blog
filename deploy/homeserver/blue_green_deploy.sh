@@ -25,6 +25,7 @@ PREWARM_CONNECT_TIMEOUT_SECONDS="${PREWARM_CONNECT_TIMEOUT_SECONDS:-2}"
 PREWARM_MAX_TIME_SECONDS="${PREWARM_MAX_TIME_SECONDS:-6}"
 PREWARM_RETRIES="${PREWARM_RETRIES:-2}"
 PREWARM_BACKOFF_SECONDS="${PREWARM_BACKOFF_SECONDS:-1}"
+PREWARM_PUBLIC_ROUTE_POST_LIMIT="${PREWARM_PUBLIC_ROUTE_POST_LIMIT:-5}"
 STREAM_DRAIN_SECONDS="${STREAM_DRAIN_SECONDS:-15}"
 RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED:-false}"
 RUNTIME_SPLIT_STAGE="${RUNTIME_SPLIT_STAGE:-A}"
@@ -1401,6 +1402,32 @@ prewarm_public_read_cache() {
     prewarm_explore_cursor_with_retry "${first_tag}" "/post/api/v1/posts/explore/cursor(tag=${first_tag})" || true
   else
     echo "prewarm skipped: no public tags available for explore/cursor"
+  fi
+
+  # 실사용자 첫 paint를 줄이려면 API cache뿐 아니라 실제 public HTML route도 함께 데운다.
+  prewarm_path_with_retry "/" "/" || true
+
+  local sitemap_body latest_public_routes
+  sitemap_body="$(docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+    --connect-timeout "${PREWARM_CONNECT_TIMEOUT_SECONDS}" \
+    --max-time "${PREWARM_MAX_TIME_SECONDS}" \
+    -s "http://caddy:80/sitemap.xml" \
+    -H "Host: ${api_domain}" || true)"
+  latest_public_routes="$(
+    printf '%s' "${sitemap_body}" |
+      grep -oE '<loc>https?://[^<]+/posts/[0-9]+</loc>' |
+      sed -E 's#<loc>https?://[^/]+(/posts/[0-9]+)</loc>#\1#' |
+      awk '!seen[$0]++' |
+      head -n "${PREWARM_PUBLIC_ROUTE_POST_LIMIT}" || true
+  )"
+
+  if [[ -n "${latest_public_routes}" ]]; then
+    while IFS= read -r route; do
+      [[ -n "${route}" ]] || continue
+      prewarm_path_with_retry "${route}" "${route}" || true
+    done <<< "${latest_public_routes}"
+  else
+    echo "prewarm skipped: no public post routes available from sitemap"
   fi
 }
 

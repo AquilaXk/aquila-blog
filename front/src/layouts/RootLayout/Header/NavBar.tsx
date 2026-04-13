@@ -16,6 +16,10 @@ const NotificationBellShell: React.FC = () => (
   </span>
 )
 
+const NavGhost: React.FC<{ className?: string }> = ({ className }) => (
+  <span className={className ? `navGhost ${className}` : "navGhost"} aria-hidden="true" />
+)
+
 const AuthEntryModal = dynamic(() => import("src/components/auth/AuthEntryModal"), {
   ssr: false,
   loading: () => null,
@@ -210,7 +214,7 @@ const NavBar: React.FC = () => {
                 Admin
               </Link>
             ) : (
-              <span className="navGhost">Admin</span>
+              <NavGhost className="navGhost--fill" />
             )}
           </li>
         ) : null}
@@ -240,7 +244,7 @@ const NavBar: React.FC = () => {
                 Login
               </button>
             ) : (
-              <span className="navGhost navGhost--action">Login</span>
+              <NavGhost className="navGhost--action" />
             )}
           </div>
         ) : null}
@@ -258,7 +262,7 @@ const NavBar: React.FC = () => {
                 Logout
               </button>
             ) : (
-              <span className="navGhost navGhost--action">Logout</span>
+              <NavGhost className="navGhost--action" />
             )}
           </div>
         ) : null}
@@ -395,6 +399,11 @@ const StyledWrapper = styled.div`
     pointer-events: none;
     white-space: nowrap;
     visibility: hidden;
+  }
+
+  .navGhost--fill {
+    width: 100%;
+    padding: 0;
   }
 
   .authArea {

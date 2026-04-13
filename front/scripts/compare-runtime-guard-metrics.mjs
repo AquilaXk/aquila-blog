@@ -1,5 +1,6 @@
 import fs from "node:fs"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 
 const args = process.argv.slice(2)
 
@@ -35,19 +36,32 @@ Options:
 }
 
 const cwd = process.cwd()
+const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+const frontRoot = path.resolve(scriptDir, "..")
+const resolveFromFrontRoot = (value) =>
+  path.isAbsolute(value) ? value : path.resolve(frontRoot, value)
+const resolveCandidatePaths = (value) => {
+  if (path.isAbsolute(value)) return [value]
+  const candidates = [path.resolve(cwd, value), path.resolve(frontRoot, value)]
+  return Array.from(new Set(candidates))
+}
+const firstExistingPath = (value) => resolveCandidatePaths(value).find((candidate) => fs.existsSync(candidate))
 const metricsPath = path.resolve(
-  cwd,
-  readArg("metrics", process.env.PLAYWRIGHT_PERF_RUNTIME_METRICS_PATH || "test-results/perf/runtime-guard-metrics.ndjson")
+  firstExistingPath(
+    readArg("metrics", process.env.PLAYWRIGHT_PERF_RUNTIME_METRICS_PATH || "test-results/perf/runtime-guard-metrics.ndjson")
+  ) ||
+    resolveFromFrontRoot(
+      readArg("metrics", process.env.PLAYWRIGHT_PERF_RUNTIME_METRICS_PATH || "test-results/perf/runtime-guard-metrics.ndjson")
+    )
 )
-const baselinePath = path.resolve(
-  cwd,
+const baselinePath = resolveFromFrontRoot(
   readArg(
     "baseline",
     process.env.RUNTIME_GUARD_BASELINE_PATH || "../deploy/homeserver/monitoring/grafana/dashboards/blog-runtime-guard-baseline.json"
   )
 )
-const outputPath = path.resolve(cwd, readArg("output", "test-results/perf/runtime-guard-summary.md"))
-const jsonOutputPath = path.resolve(cwd, readArg("json-output", "test-results/perf/runtime-guard-summary.json"))
+const outputPath = resolveFromFrontRoot(readArg("output", "test-results/perf/runtime-guard-summary.md"))
+const jsonOutputPath = resolveFromFrontRoot(readArg("json-output", "test-results/perf/runtime-guard-summary.json"))
 const appendStepSummary =
   hasFlag("append-step-summary") || process.env.RUNTIME_GUARD_APPEND_STEP_SUMMARY === "true"
 

@@ -1,7 +1,7 @@
 import { GetServerSideProps, NextPage } from "next"
+import dynamic from "next/dynamic"
 import type { AuthMember } from "src/hooks/useAuthSession"
-import useAuthSession from "src/hooks/useAuthSession"
-import { useAdminProfile, type AdminProfile } from "src/hooks/useAdminProfile"
+import { type AdminProfile } from "src/hooks/useAdminProfile"
 import { AdminPageProps, buildAdminPagePropsFromMember, getAdminPageProps, readAdminProtectedBootstrap } from "src/libs/server/adminPage"
 import {
   fetchServerAdminProfile,
@@ -10,7 +10,12 @@ import {
 } from "src/libs/server/adminProfile"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import AdminShell from "src/routes/Admin/AdminShell"
-import AdminHubSurface, { type AdminHubNextAction } from "src/routes/Admin/AdminHubSurface"
+import { type AdminHubNextAction } from "src/routes/Admin/AdminHubSurface"
+
+const AdminHubSurface = dynamic(() => import("src/routes/Admin/AdminHubSurface"), {
+  ssr: false,
+  loading: () => <div aria-hidden="true" style={{ minHeight: "32rem" }} />,
+})
 
 type AdminHubPageProps = AdminPageProps & {
   initialProfileSnapshot: AdminProfile
@@ -114,32 +119,27 @@ export const getServerSideProps: GetServerSideProps<AdminHubPageProps> = async (
 }
 
 const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialProfileSnapshot }) => {
-  const { me, authStatus } = useAuthSession()
-  const adminProfile = useAdminProfile(initialProfileSnapshot)
-  const sessionMember = authStatus === "loading" || authStatus === "unavailable" ? initialMember : me || initialMember
-  const displayName =
-    sessionMember?.nickname || sessionMember?.username || adminProfile?.nickname || adminProfile?.username || "관리자"
+  const sessionMember = initialMember
+  const adminProfile = initialProfileSnapshot
+  const displayName = sessionMember?.nickname || sessionMember?.username || adminProfile?.nickname || adminProfile?.username || "관리자"
   const displayNameInitial = displayName.slice(0, 2).toUpperCase()
   const profileSnapshot = {
-    profileImageDirectUrl:
-      adminProfile?.profileImageDirectUrl || sessionMember?.profileImageDirectUrl || initialProfileSnapshot.profileImageDirectUrl || "",
-    profileImageUrl:
-      adminProfile?.profileImageUrl || sessionMember?.profileImageUrl || initialProfileSnapshot.profileImageUrl || "",
-    profileRole: adminProfile?.profileRole || sessionMember?.profileRole || initialProfileSnapshot.profileRole || "",
-    profileBio: adminProfile?.profileBio || sessionMember?.profileBio || initialProfileSnapshot.profileBio || "",
-    homeIntroTitle:
-      adminProfile?.homeIntroTitle || sessionMember?.homeIntroTitle || initialProfileSnapshot.homeIntroTitle || "",
+    profileImageDirectUrl: adminProfile?.profileImageDirectUrl || sessionMember?.profileImageDirectUrl || "",
+    profileImageUrl: adminProfile?.profileImageUrl || sessionMember?.profileImageUrl || "",
+    profileRole: adminProfile?.profileRole || sessionMember?.profileRole || "",
+    profileBio: adminProfile?.profileBio || sessionMember?.profileBio || "",
+    homeIntroTitle: adminProfile?.homeIntroTitle || sessionMember?.homeIntroTitle || "",
     homeIntroDescription:
-      adminProfile?.homeIntroDescription || sessionMember?.homeIntroDescription || initialProfileSnapshot.homeIntroDescription || "",
-    serviceLinks: adminProfile?.serviceLinks || sessionMember?.serviceLinks || initialProfileSnapshot.serviceLinks || [],
-    contactLinks: adminProfile?.contactLinks || sessionMember?.contactLinks || initialProfileSnapshot.contactLinks || [],
-    modifiedAt: adminProfile?.modifiedAt || sessionMember?.modifiedAt || initialProfileSnapshot.modifiedAt,
+      adminProfile?.homeIntroDescription || sessionMember?.homeIntroDescription || "",
+    serviceLinks: adminProfile?.serviceLinks || sessionMember?.serviceLinks || [],
+    contactLinks: adminProfile?.contactLinks || sessionMember?.contactLinks || [],
+    modifiedAt: adminProfile?.modifiedAt || sessionMember?.modifiedAt,
   }
   const profileSrc = profileSnapshot.profileImageDirectUrl || profileSnapshot.profileImageUrl || ""
 
   const profileUpdatedText = profileSnapshot.modifiedAt
     ? profileSnapshot.modifiedAt.slice(0, 16).replace("T", " ")
-    : "확인 전"
+    : "미확인"
   const profileChecklist = [
     Boolean(profileSrc),
     Boolean(profileSnapshot.profileRole?.trim()),
@@ -152,51 +152,51 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialProfi
   )
   const linkCount = (profileSnapshot.serviceLinks?.length || 0) + (profileSnapshot.contactLinks?.length || 0)
   const summaryItems = [
-    { label: "현재 계정", value: displayName, tone: "neutral" as const },
+    { label: "계정", value: displayName, tone: "neutral" as const },
     {
-      label: "프로필 완성도",
+      label: "프로필",
       value: `${profileCompletion}%`,
       tone: profileCompletion >= 80 ? ("good" as const) : ("warn" as const),
     },
     {
-      label: "홈 소개",
-      value: profileSnapshot.homeIntroTitle?.trim() && profileSnapshot.homeIntroDescription?.trim() ? "준비됨" : "점검 필요",
+      label: "소개",
+      value: profileSnapshot.homeIntroTitle?.trim() && profileSnapshot.homeIntroDescription?.trim() ? "완료" : "필요",
       tone:
         profileSnapshot.homeIntroTitle?.trim() && profileSnapshot.homeIntroDescription?.trim()
           ? ("good" as const)
           : ("warn" as const),
     },
     {
-      label: "연결 채널",
-      value: linkCount > 0 ? `${linkCount}개` : "미등록",
+      label: "채널",
+      value: linkCount > 0 ? `${linkCount}개` : "없음",
       tone: linkCount > 0 ? ("good" as const) : ("warn" as const),
     },
-    { label: "마지막 업데이트", value: profileUpdatedText, tone: "neutral" as const },
+    { label: "업데이트", value: profileUpdatedText, tone: "neutral" as const },
   ]
 
   const primaryAction = {
     href: "/editor/new",
-    title: "글 작성",
-    cta: "새 글 작성",
+    title: "새 글 작성",
+    cta: "작성",
     secondaryHref: "/admin/posts",
-    secondaryLabel: "글 관리",
+    secondaryLabel: "목록",
   }
 
   const secondaryLinks = [
     {
       href: "/admin/profile",
-      title: "프로필 관리",
-      cta: "프로필 정리",
+      title: "프로필",
+      cta: "프로필",
     },
     {
       href: "/admin/dashboard",
-      title: "운영 대시보드",
-      cta: "대시보드 열기",
+      title: "대시보드",
+      cta: "대시보드",
     },
     {
       href: "/admin/tools",
-      title: "운영 진단",
-      cta: "진단 열기",
+      title: "운영 도구",
+      cta: "도구",
     },
   ]
 
@@ -204,37 +204,37 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialProfi
     profileCompletion < 80
       ? {
           href: "/admin/profile",
-          title: "프로필 완성도 보강",
+          title: "프로필 보강",
           tone: "warn" as const,
         }
       : null,
     !(profileSnapshot.homeIntroTitle?.trim() && profileSnapshot.homeIntroDescription?.trim())
       ? {
           href: "/admin/profile",
-          title: "홈 소개 문구 채우기",
+          title: "소개 입력",
           tone: "warn" as const,
         }
       : null,
     linkCount === 0
       ? {
           href: "/admin/profile",
-          title: "연결 채널 추가",
+          title: "채널 추가",
           tone: "warn" as const,
         }
       : null,
     {
       href: "/editor/new",
-      title: "새 글 작성 시작",
+      title: "새 글 작성",
       tone: "neutral" as const,
     },
     {
       href: "/admin/dashboard",
-      title: "운영 대시보드 확인",
+      title: "대시보드",
       tone: "neutral" as const,
     },
     {
       href: "/admin/tools",
-      title: "운영 진단 열기",
+      title: "운영 도구",
       tone: "neutral" as const,
     },
   ]

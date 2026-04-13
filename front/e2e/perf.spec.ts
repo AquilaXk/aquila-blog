@@ -14,9 +14,12 @@ const feedScrollLongFrameRatioBudget = Number(process.env.PERF_FEED_SCROLL_LONG_
 const detailEntryBudgetMs = Number(process.env.PERF_DETAIL_ENTRY_BUDGET_MS || 1800)
 const homeFcpBudgetMs = Number(process.env.PERF_HOME_FCP_BUDGET_MS || 1800)
 const playwrightBaseURL = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000"
-const runtimeGuardMetricsPath = path.resolve(
-  process.cwd(),
+const runtimeGuardMetricsRelativePath =
   process.env.PLAYWRIGHT_PERF_RUNTIME_METRICS_PATH || "test-results/perf/runtime-guard-metrics.ndjson"
+const frontRoot = path.basename(process.cwd()) === "front" ? process.cwd() : path.resolve(process.cwd(), "front")
+const runtimeGuardMetricsPath = path.resolve(
+  frontRoot,
+  runtimeGuardMetricsRelativePath
 )
 const isSsrAuthBackendDisconnectedForPerf =
   (process.env.BACKEND_INTERNAL_URL || "").trim().replace(/\/+$/, "") === "http://127.0.0.1:1"

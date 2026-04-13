@@ -427,3 +427,154 @@ export const AdminInfoPanelCard = styled.div`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
 `
+
+export const AdminStatusPill = styled.span<{ $size?: "sm" | "md" }>`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: ${({ $size = "md" }) => ($size === "sm" ? "28px" : "32px")};
+  padding: ${({ $size = "md" }) => ($size === "sm" ? "0 0.62rem" : "0 0.72rem")};
+  border-radius: ${({ $size = "md" }) => ($size === "sm" ? "10px" : "999px")};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: ${({ $size = "md" }) => ($size === "sm" ? "0.76rem" : "0.78rem")};
+  font-weight: 800;
+  line-height: 1;
+
+  &[data-tone="neutral"] {
+    border-color: ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.gray10};
+  }
+
+  &[data-tone="accent"] {
+    border-color: ${({ theme }) => theme.colors.accentBorder};
+    background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
+    color: ${({ theme }) => theme.colors.accentLink};
+  }
+
+  &[data-tone="success"] {
+    border-color: ${({ theme }) => theme.colors.statusSuccessBorder};
+    background: ${({ theme }) => theme.colors.statusSuccessSurface};
+    color: ${({ theme }) => theme.colors.statusSuccessText};
+  }
+
+  &[data-tone="warn"] {
+    border-color: ${({ theme }) => theme.colors.orange7};
+    background: ${({ theme }) => theme.colors.orange2};
+    color: ${({ theme }) => theme.colors.orange10};
+  }
+
+  &[data-tone="danger"] {
+    border-color: ${({ theme }) => theme.colors.statusDangerBorder};
+    background: ${({ theme }) => theme.colors.statusDangerSurface};
+    color: ${({ theme }) => theme.colors.statusDangerText};
+  }
+`
+
+export const AdminInlineActionRow = styled.div`
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
+  flex-wrap: wrap;
+`
+
+export const AdminTextActionButton = styled.button`
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0.36rem;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: ${({ theme }) => adminInteractiveFocusRing(theme)};
+  }
+
+  &:disabled {
+    opacity: 0.56;
+    cursor: not-allowed;
+  }
+
+  &[data-tone="primary"] {
+    color: ${({ theme }) => theme.colors.blue9};
+    font-weight: 800;
+  }
+
+  &[data-tone="danger"] {
+    color: ${({ theme }) => theme.colors.red11};
+  }
+`
+
+export const AdminTextActionLink = styled.a`
+  display: inline-flex;
+  align-items: center;
+  min-height: 0;
+  border-radius: 0.36rem;
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition:
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: ${({ theme }) => adminInteractiveFocusRing(theme)};
+  }
+
+  &[data-tone="primary"] {
+    color: ${({ theme }) => theme.colors.blue9};
+    font-weight: 800;
+  }
+
+  &[data-tone="danger"] {
+    color: ${({ theme }) => theme.colors.red11};
+  }
+`
+
+export const AdminActionCardButton = styled.button`
+  text-align: left;
+  display: grid;
+  gap: 0.16rem;
+  padding: 0.82rem 0.88rem;
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray12};
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    box-shadow 0.18s ease;
+
+  &:focus-visible {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.blue8};
+    box-shadow: ${({ theme }) => adminInteractiveFocusRing(theme)};
+  }
+
+  &:disabled {
+    opacity: 0.56;
+    cursor: not-allowed;
+  }
+
+  span {
+    font-size: 0.88rem;
+    font-weight: 760;
+  }
+
+  small {
+    color: ${({ theme }) => theme.colors.gray10};
+    line-height: 1.55;
+  }
+`

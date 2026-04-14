@@ -16,6 +16,11 @@ import org.springframework.stereotype.Component
 class PostDeletedQueryRepository(
     private val jdbcTemplate: JdbcTemplate,
 ) {
+    private companion object {
+        const val DEFAULT_PROFILE_IMG_URL = "https://placehold.co/600x600?text=U_U"
+        const val PROFILE_IMG_ATTR_NAME = "profileImgUrl"
+    }
+
     fun findDeletedSnapshotById(id: Long): AdmDeletedPostSnapshotDto? =
         jdbcTemplate
             .query(
@@ -64,6 +69,9 @@ class PostDeletedQueryRepository(
               p.title,
               p.author_id,
               coalesce(m.nickname, m.login_id, '알 수 없음') as author_name,
+              ma.str_value as author_profile_img_url,
+              ma.modified_at as author_profile_img_modified_at,
+              m.modified_at as author_modified_at,
               p.published,
               p.listed,
               p.created_at,
@@ -71,6 +79,7 @@ class PostDeletedQueryRepository(
               p.deleted_at
             from post p
             left join member m on m.id = p.author_id
+            left join member_attr ma on ma.subject_id = m.id and ma.name = ?
             where $whereClause
             order by p.deleted_at desc, p.id desc
             limit ? offset ?
@@ -85,6 +94,7 @@ class PostDeletedQueryRepository(
 
         val listParams =
             mutableListOf<Any>().apply {
+                add(PROFILE_IMG_ATTR_NAME)
                 if (hasKeyword) {
                     add(escapedKw)
                     add(escapedKw)
@@ -110,6 +120,12 @@ class PostDeletedQueryRepository(
                         title = rs.getString("title"),
                         authorId = rs.getLong("author_id"),
                         authorName = rs.getString("author_name"),
+                        authorProfileImgUrl =
+                            resolveAuthorProfileImgUrl(
+                                rawUrl = rs.getString("author_profile_img_url"),
+                                profileImgModifiedAt = rs.getTimestamp("author_profile_img_modified_at")?.toInstant(),
+                                authorModifiedAt = rs.getTimestamp("author_modified_at")?.toInstant(),
+                            ),
                         published = rs.getBoolean("published"),
                         listed = rs.getBoolean("listed"),
                         createdAt = rs.getTimestamp("created_at").toInstant(),
@@ -193,4 +209,17 @@ class PostDeletedQueryRepository(
             .replace("\\", "\\\\")
             .replace("%", "\\%")
             .replace("_", "\\_")
+
+    private fun resolveAuthorProfileImgUrl(
+        rawUrl: String?,
+        profileImgModifiedAt: java.time.Instant?,
+        authorModifiedAt: java.time.Instant?,
+    ): String {
+        val normalizedUrl = rawUrl?.trim().orEmpty()
+        if (normalizedUrl.isBlank()) return DEFAULT_PROFILE_IMG_URL
+
+        val version = profileImgModifiedAt ?: authorModifiedAt ?: return normalizedUrl
+        val separator = if (normalizedUrl.contains("?")) "&" else "?"
+        return "$normalizedUrl${separator}v=${version.toEpochMilli()}"
+    }
 }

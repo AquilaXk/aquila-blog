@@ -13,6 +13,7 @@ import com.back.global.security.config.CustomAuthenticationFilter
 import com.back.global.security.domain.SecurityUser
 import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.page.PagedResult
+import org.hamcrest.Matchers.startsWith
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
@@ -167,6 +168,7 @@ class ApiV1AdmPostControllerTest {
                 status { isOk() }
                 jsonPath("$.content.length()") { value(1) }
                 jsonPath("$.content[0].id") { value(101) }
+                jsonPath("$.content[0].authorProfileImgUrl") { value(startsWith("https://cdn.example.com/profiles/user1.png")) }
                 jsonPath("$.content[0].published") { value(false) }
                 jsonPath("$.content[0].listed") { value(false) }
                 jsonPath("$.pageable.pageNumber") { value(1) }
@@ -238,6 +240,7 @@ class ApiV1AdmPostControllerTest {
                 title = "삭제된 글",
                 authorId = 7,
                 authorName = "user1",
+                authorProfileImgUrl = "https://cdn.example.com/profiles/user1.png?v=1710374400000",
                 published = true,
                 listed = true,
                 createdAt = Instant.parse("2026-03-12T00:00:00Z"),
@@ -255,6 +258,7 @@ class ApiV1AdmPostControllerTest {
                 jsonPath("$.content.length()") { value(1) }
                 jsonPath("$.content[0].id") { value(808) }
                 jsonPath("$.content[0].title") { value("삭제된 글") }
+                jsonPath("$.content[0].authorProfileImgUrl") { value("https://cdn.example.com/profiles/user1.png?v=1710374400000") }
                 jsonPath("$.content[0].deletedAt") { value("2026-03-14T00:00:00Z") }
             }
     }
@@ -439,6 +443,7 @@ class ApiV1AdmPostControllerTest {
                 nickname = "user1",
                 email = "user1@test.com",
             )
+        author.profileImgUrl = "https://cdn.example.com/profiles/user1.png"
         val post =
             Post(
                 id = id,

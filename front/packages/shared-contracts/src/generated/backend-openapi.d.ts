@@ -1852,6 +1852,7 @@ export interface components {
             /** Format: int64 */
             authorId?: number;
             authorName?: string;
+            authorProfileImgUrl?: string;
             published?: boolean;
             listed?: boolean;
             /** Format: date-time */

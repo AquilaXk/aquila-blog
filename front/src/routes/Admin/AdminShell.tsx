@@ -4,6 +4,7 @@ import Link from "next/link"
 import { type ReactNode } from "react"
 import AppIcon, { type IconName } from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
+import { useAdminProfile } from "src/hooks/useAdminProfile"
 import type { AuthMember } from "src/hooks/useAuthSession"
 
 export type AdminShellSection = "hub" | "dashboard" | "posts" | "profile" | "tools"
@@ -19,7 +20,6 @@ type NavItem = {
   href: string
   label: string
   icon: IconName
-  summary: string
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -28,35 +28,30 @@ const NAV_ITEMS: NavItem[] = [
     href: "/admin",
     label: "허브",
     icon: "spark",
-    summary: "새 글 작성과 핵심 확인 작업을 먼저 정리합니다.",
   },
   {
     id: "dashboard",
     href: "/admin/dashboard",
     label: "운영 대시보드",
     icon: "service",
-    summary: "읽기 전용 모니터링 패널과 우선 점검 항목을 확인합니다.",
   },
   {
     id: "posts",
     href: "/admin/posts",
     label: "글 관리",
     icon: "edit",
-    summary: "원고, 임시저장, 공개 상태를 한곳에서 관리합니다.",
   },
   {
     id: "profile",
     href: "/admin/profile",
     label: "프로필",
     icon: "camera",
-    summary: "프로필 사진과 소개 문구, 공개 링크를 다듬습니다.",
   },
   {
     id: "tools",
     href: "/admin/tools",
     label: "운영 도구",
     icon: "laptop",
-    summary: "운영 스크립트와 진단 워크스페이스를 실행합니다.",
   },
 ]
 
@@ -66,6 +61,7 @@ const AdminUtilityBar = dynamic(() => import("./AdminUtilityBar"), {
 })
 
 const AdminShell = ({ currentSection, member, children }: AdminShellProps) => {
+  const adminProfile = useAdminProfile()
   const currentNav = NAV_ITEMS.find((item) => item.id === currentSection) ?? NAV_ITEMS[0]
   const utilityNavItems = NAV_ITEMS.map((item) => ({
     key: item.id,
@@ -74,9 +70,15 @@ const AdminShell = ({ currentSection, member, children }: AdminShellProps) => {
     icon: item.icon,
     active: item.id === currentSection,
   }))
-  const sidebarIdentityName = member.nickname?.trim() || "AquilaLog"
+  const sidebarIdentityName = (adminProfile?.blogTitle || "AquilaLog").trim()
   const sidebarIdentityInitial = sidebarIdentityName.slice(0, 2).toUpperCase()
-  const sidebarProfileImageSrc = (member.profileImageDirectUrl || member.profileImageUrl || "").trim()
+  const sidebarProfileImageSrc = (
+    adminProfile?.profileImageDirectUrl ||
+    adminProfile?.profileImageUrl ||
+    member.profileImageDirectUrl ||
+    member.profileImageUrl ||
+    ""
+  ).trim()
 
   return (
     <ShellFrame>
@@ -99,17 +101,12 @@ const AdminShell = ({ currentSection, member, children }: AdminShellProps) => {
               <span>관리자</span>
             </BrandCopy>
           </BrandBlock>
-          <SidebarStatusCard aria-label="현재 화면">
-            <SidebarCardKicker>현재 화면</SidebarCardKicker>
-            <SidebarCardTitle>{currentNav.label}</SidebarCardTitle>
-            <SidebarCardSummary>{currentNav.summary}</SidebarCardSummary>
-            <Link href="/editor/new" passHref legacyBehavior>
-              <SidebarPrimaryAction title="새 글 작성">
-                <AppIcon name="edit" />
-                <span>새 글 작성</span>
-              </SidebarPrimaryAction>
-            </Link>
-          </SidebarStatusCard>
+          <Link href="/editor/new" passHref legacyBehavior>
+            <SidebarPrimaryAction title="새 글 작성">
+              <AppIcon name="edit" />
+              <span>새 글 작성</span>
+            </SidebarPrimaryAction>
+          </Link>
         </SidebarTop>
 
         <SidebarNavSection>
@@ -121,10 +118,7 @@ const AdminShell = ({ currentSection, member, children }: AdminShellProps) => {
                   <span className="navIcon">
                     <AppIcon name={item.icon} />
                   </span>
-                  <span className="navCopy">
-                    <strong>{item.label}</strong>
-                    <span>{item.summary}</span>
-                  </span>
+                  <strong className="navLabel">{item.label}</strong>
                 </NavLink>
               </Link>
             ))}
@@ -169,15 +163,8 @@ const Sidebar = styled.aside`
   height: fit-content;
   padding: 1.05rem;
   border: 1px solid ${({ theme }) => theme.colors.gray4};
-  border-radius: 28px;
-  background: ${({ theme }) =>
-    theme.scheme === "light"
-      ? "linear-gradient(180deg, rgba(255, 255, 255, 0.97) 0%, rgba(246, 246, 247, 0.93) 100%)"
-      : "linear-gradient(180deg, rgba(20, 20, 21, 0.97) 0%, rgba(16, 16, 17, 0.95) 100%)"};
-  box-shadow: ${({ theme }) =>
-    theme.scheme === "light"
-      ? "0 18px 40px rgba(15, 23, 42, 0.08)"
-      : "0 20px 40px rgba(0, 0, 0, 0.22)"};
+  border-radius: 24px;
+  background: ${({ theme }) => theme.colors.gray1};
 
   @media (max-width: 1100px) {
     position: static;
@@ -189,7 +176,7 @@ const Sidebar = styled.aside`
 
 const SidebarTop = styled.div`
   display: grid;
-  gap: 0.9rem;
+  gap: 0.8rem;
 
   @media (max-width: 1100px) {
     display: flex;
@@ -211,9 +198,9 @@ const BrandBlock = styled.div`
 `
 
 const BrandMark = styled.div`
-  width: 3rem;
-  height: 3rem;
-  border-radius: 18px;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 16px;
   display: grid;
   place-items: center;
   position: relative;
@@ -223,7 +210,7 @@ const BrandMark = styled.div`
   color: ${({ theme }) => theme.colors.gray12};
 
   span {
-    font-size: 0.88rem;
+    font-size: 0.9rem;
     font-weight: 800;
     letter-spacing: -0.04em;
   }
@@ -251,43 +238,10 @@ const BrandCopy = styled.div`
   }
 `
 
-const SidebarStatusCard = styled.section`
-  display: grid;
-  gap: 0.44rem;
-  padding: 1.02rem 1rem 1rem;
-  border-radius: 24px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) =>
-    theme.scheme === "light"
-      ? "linear-gradient(135deg, rgba(250, 250, 250, 0.98) 0%, rgba(243, 244, 246, 0.94) 100%)"
-      : "linear-gradient(135deg, rgba(26, 26, 27, 0.96) 0%, rgba(20, 20, 21, 0.94) 100%)"};
-`
-
-const SidebarCardKicker = styled.small`
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.74rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-`
-
-const SidebarCardTitle = styled.strong`
-  color: ${({ theme }) => theme.colors.gray12};
-  font-size: 1.08rem;
-  font-weight: 820;
-  letter-spacing: -0.03em;
-`
-
-const SidebarCardSummary = styled.p`
-  margin: 0;
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.83rem;
-  line-height: 1.5;
-`
-
 const SidebarNavSection = styled.section`
   display: grid;
   gap: 0.7rem;
-  padding-top: 0.2rem;
+  padding-top: 0.25rem;
 `
 
 const SidebarSectionLabel = styled.small`
@@ -321,20 +275,17 @@ const NavLink = styled.a`
   align-items: center;
   gap: 0.82rem;
   min-width: 0;
-  padding: 0.82rem 0.88rem;
-  border-radius: 18px;
-  border: 1px solid transparent;
+  padding: 0.78rem 0.84rem;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray3};
   color: inherit;
   text-decoration: none;
-  transition:
-    transform 140ms ease,
-    border-color 140ms ease,
-    background 140ms ease;
+  transition: border-color 140ms ease, background 140ms ease;
 
   .navIcon {
-    width: 2.6rem;
-    height: 2.6rem;
-    border-radius: 15px;
+    width: 2.3rem;
+    height: 2.3rem;
+    border-radius: 13px;
     display: grid;
     place-items: center;
     flex-shrink: 0;
@@ -342,41 +293,27 @@ const NavLink = styled.a`
     background: ${({ theme }) => theme.colors.gray2};
   }
 
-  .navCopy {
-    display: grid;
-    min-width: 0;
-    gap: 0.15rem;
-  }
-
-  .navCopy strong {
+  .navLabel {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.95rem;
-    font-weight: 800;
+    font-size: 0.92rem;
+    font-weight: 760;
     letter-spacing: -0.02em;
-  }
-
-  .navCopy span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.75rem;
-    font-weight: 600;
-    line-height: 1.45;
+    line-height: 1.2;
   }
 
   &[data-active="true"] {
     border-color: ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray1};
+    background: ${({ theme }) => theme.colors.gray2};
   }
 
   &[data-active="true"] .navIcon {
-    background: ${({ theme }) => theme.colors.gray2};
+    background: ${({ theme }) => theme.colors.gray3};
     color: ${({ theme }) => theme.colors.gray12};
   }
 
   &:hover {
-    transform: translateY(-1px);
     border-color: ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) =>
-      theme.scheme === "light" ? "rgba(255, 255, 255, 0.86)" : "rgba(31, 31, 31, 0.92)"};
+    background: ${({ theme }) => theme.colors.gray2};
   }
 
   @media (max-width: 1100px) {
@@ -384,32 +321,31 @@ const NavLink = styled.a`
     padding: 0.72rem;
     min-width: 3.25rem;
 
-    .navCopy {
+    .navLabel {
       display: none;
     }
   }
 `
 
 const SidebarPrimaryAction = styled.a`
-  margin-top: 0.48rem;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.46rem;
   width: 100%;
-  min-height: 3.1rem;
-  padding: 0.82rem 0.92rem;
-  border-radius: 999px;
+  min-height: 2.9rem;
+  padding: 0.78rem 0.9rem;
+  border-radius: 14px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  background: ${({ theme }) => theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray12};
   text-decoration: none;
-  font-size: 0.9rem;
-  font-weight: 800;
-  box-shadow: ${({ theme }) =>
-    theme.scheme === "light"
-      ? "0 10px 20px rgba(15, 23, 42, 0.05)"
-      : "0 12px 24px rgba(0, 0, 0, 0.18)"};
+  font-size: 0.88rem;
+  font-weight: 760;
+
+  &:hover {
+    background: ${({ theme }) => theme.colors.gray3};
+  }
 `
 
 const ContentColumn = styled.div`

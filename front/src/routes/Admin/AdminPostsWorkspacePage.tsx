@@ -7,6 +7,7 @@ import { useRouter } from "next/router"
 import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { invalidatePublicPostReadCaches } from "src/apis/backend/posts"
 import { apiFetch } from "src/apis/backend/client"
+import ProfileImage from "src/components/ProfileImage"
 import type { AuthMember } from "src/hooks/useAuthSession"
 import useAuthSession from "src/hooks/useAuthSession"
 import { pushRoute } from "src/libs/router"
@@ -37,6 +38,7 @@ type AdminPostListItem = {
   id: number
   title: string
   authorName: string
+  authorProfileImgUrl?: string
   published: boolean
   listed: boolean
   tempDraft?: boolean
@@ -240,6 +242,11 @@ const visibilityLabelFromValue = (visibility: LocalDraftPayload["visibility"]) =
 
 const buildRowTitle = (row: Pick<AdminPostListItem, "title" | "published" | "listed" | "tempDraft">) =>
   getWorkspaceRowTitle(row) || "제목 없는 글"
+
+const buildWorkspaceAuthorFallbackInitial = (authorName: string) => {
+  const source = authorName.trim() || "작"
+  return source.slice(0, 1).toUpperCase()
+}
 
 const canOpenCanonicalPost = (row: Pick<AdminPostListItem, "published" | "tempDraft">) =>
   row.published && row.tempDraft !== true
@@ -457,6 +464,24 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
   const recentRequestIdRef = useRef(0)
   const skipInitialRecentFetchRef = useRef(hasInitialRecentPosts)
   const skipInitialListFetchRef = useRef(hasInitialListState)
+
+  const renderAuthorMeta = (row: Pick<AdminPostListItem, "authorName" | "authorProfileImgUrl">) => {
+    const authorName = row.authorName || "작성자 미상"
+    const avatarSrc = (row.authorProfileImgUrl || "").trim()
+
+    return (
+      <AuthorIdentity>
+        <AuthorAvatarFrame aria-hidden="true" data-has-image={avatarSrc ? "true" : "false"}>
+          {avatarSrc ? (
+            <ProfileImage src={avatarSrc} alt="" fillContainer />
+          ) : (
+            <span>{buildWorkspaceAuthorFallbackInitial(row.authorName)}</span>
+          )}
+        </AuthorAvatarFrame>
+        <span className="author">{authorName}</span>
+      </AuthorIdentity>
+    )
+  }
 
   const loadRecentPosts = useCallback(async () => {
     const requestId = recentRequestIdRef.current + 1
@@ -1192,7 +1217,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                           <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
                             {visibilityLabel(row.published, row.listed)}
                           </VisibilityBadge>
-                          <span className="author">{row.authorName || "작성자 미상"}</span>
+                          {renderAuthorMeta(row)}
                         </div>
                       </TitleCell>
                     </td>
@@ -1259,7 +1284,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                     <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
                       {visibilityLabel(row.published, row.listed)}
                     </VisibilityBadge>
-                    <span className="author">{row.authorName || "작성자 미상"}</span>
+                    {renderAuthorMeta(row)}
                   </div>
                   <span className="date">{formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)}</span>
                   <div className="actions">
@@ -2283,6 +2308,40 @@ const TitleText = styled.strong`
   font-size: 0.96rem;
   font-weight: 800;
   line-height: 1.45;
+`
+
+const AuthorIdentity = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+`
+
+const AuthorAvatarFrame = styled.span`
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 1.4rem;
+  height: 1.4rem;
+  overflow: hidden;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 999px;
+  background: ${({ theme }) => theme.colors.gray3};
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.66rem;
+  font-weight: 800;
+  line-height: 1;
+
+  &[data-has-image="true"] {
+    background: ${({ theme }) => theme.colors.gray4};
+  }
+
+  img {
+    width: 100%;
+    height: 100%;
+  }
 `
 
 const RowActions = styled(AdminInlineActionRow)``

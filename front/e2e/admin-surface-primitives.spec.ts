@@ -27,6 +27,8 @@ test.describe("admin surface primitives contract", () => {
     expect(source).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));")
     expect(source).toContain("@media (max-width: 1180px) {\n    grid-template-columns: 1fr;")
     expect(source).toContain("const DASHBOARD_FIRST_FOLD_PANEL_LIMIT = 2")
+    expect(source).toContain("const grafanaPanelsCanEmbed = env.monitoringEmbedIsPublicGrafana && Boolean(grafanaDashboardUrl)")
+    expect(source).toContain("private Grafana 대시보드라 iframe 대신 링크로만 제공합니다.")
     expect(source).toContain("<ContextGrid>")
     expect(source).toContain("const ContextLinkGrid = styled(AdminInfoList)`")
     expect(source).toContain("const CompactPanelCard = styled(PanelCard)`")
@@ -49,9 +51,9 @@ test.describe("admin surface primitives contract", () => {
     expect(toolsSource).toContain("const [isMutationExpanded, setIsMutationExpanded] = useState(false)")
     expect(toolsSource).toContain("<DetailsPanel open={isMutationExpanded}>")
     expect(toolsSource).toContain('{ key: "results", label: "최근 실행 결과" },')
-    expect(toolsSource).toContain('{ key: "observability", label: "관측" },')
-    expect(toolsSource).toContain("<span>외부 관측 링크</span>")
-    expect(toolsSource).toContain("여기서는 이동 링크와 외부 채널만 유지합니다.")
+    expect(toolsSource).not.toContain('{ key: "observability", label: "관측" },')
+    expect(toolsSource).not.toContain("<span>외부 관측 링크</span>")
+    expect(toolsSource).not.toContain("여기서는 이동 링크와 외부 채널만 유지합니다.")
   })
 
   test("admin utility bar keeps explicit current-view/account controls instead of ambiguous icon chips", () => {

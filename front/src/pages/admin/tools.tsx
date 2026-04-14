@@ -17,7 +17,6 @@ import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import AdminShell from "src/routes/Admin/AdminShell"
 import {
   AdminActionCardButton,
-  AdminInfoLinkCard,
   AdminInlineActionRow,
   AdminRailCard,
   AdminSectionHeading,
@@ -28,7 +27,6 @@ import {
   AdminWorkspaceSectionNav,
   AdminWorkspaceSectionNavButton,
 } from "src/routes/Admin/AdminSurfacePrimitives"
-import { buildMonitoringItems, getMonitoringEnv } from "src/routes/Admin/adminMonitoring"
 
 type JsonValue = unknown
 
@@ -534,7 +532,6 @@ const RESULTS_FILTER_STORAGE_KEY = "admin.tools.resultsFilter.v1"
 const SECTION_IDS = {
   overview: "ops-overview",
   diagnostics: "ops-diagnostics",
-  observability: "ops-observability",
   execution: "ops-execution",
   mutation: "ops-mutation",
   results: "ops-results",
@@ -545,7 +542,6 @@ type SectionKey = keyof typeof SECTION_IDS
 const SECTION_LABELS: Record<SectionKey, string> = {
   overview: "개요",
   diagnostics: "진단",
-  observability: "관측",
   execution: "실행",
   mutation: "실데이터 테스트",
   results: "최근 실행 결과",
@@ -557,8 +553,6 @@ const DIAGNOSTIC_TAB_LABELS: Record<DiagnosticTab, string> = {
   cleanup: "파일 정리 진단",
   auth: "인증 보안 기록",
 }
-
-const MONITORING_ENV = getMonitoringEnv()
 
 const isExecutionResultFilter = (value: string): value is ExecutionResultFilter =>
   value === "all" || value === "success" || value === "error" || value === "stale"
@@ -1109,10 +1103,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   const hasTaskQueueDiagnostics = Boolean(taskQueueDiagnostics)
   const hasCleanupDiagnostics = Boolean(cleanupDiagnostics)
   const hasAuthDiagnostics = Boolean(authSecurityCheckedAt) || Boolean(authSecurityEvents.length)
-  const monitoringItems = useMemo(
-    () => buildMonitoringItems(systemHealthStatus, MONITORING_ENV),
-    [systemHealthStatus]
-  )
   const mailStatusLabel =
     !hasMailDiagnostics
       ? isMailLoading
@@ -1233,7 +1223,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
       hasCleanupDiagnostics ? cleanupFreshness.tone : null,
       hasAuthDiagnostics ? authFreshness.tone : null
     ),
-    observability: systemHealthFreshness.tone,
     results: executions[0] ? getFreshnessMeta(executions[0].completedAt, freshnessClock).tone : "stale",
   }
 
@@ -1340,7 +1329,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
             { key: "diagnostics", label: "진단" },
             { key: "execution", label: "실행" },
             { key: "results", label: "최근 실행 결과" },
-            { key: "observability", label: "관측" },
             { key: "mutation", label: "실데이터 테스트", tone: "danger" },
           ] as Array<{ key: SectionKey; label: string; tone?: "danger" }>).map((item) => (
             <SectionNavButton
@@ -1913,42 +1901,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                 {executions.length === 0 ? "실행 기록 없음" : "현재 필터에 맞는 실행 결과가 없습니다."}
               </EmptyResultState>
             )}
-          </WorkspaceSection>
-
-          <WorkspaceSection id={SECTION_IDS.observability} data-ops-section="observability" data-emphasis="secondary">
-            <SectionHeading>
-              <SectionTitleBlock>
-                <h2>관측</h2>
-              </SectionTitleBlock>
-              <ReadonlyPill>보조 정보</ReadonlyPill>
-            </SectionHeading>
-
-            <ObservabilityNotice>
-              실시간 패널 확인은 <strong>`/admin/dashboard` 단일 화면</strong>에서 진행하고, 여기서는 이동 링크와 외부 채널만 유지합니다.
-            </ObservabilityNotice>
-
-            <DashboardShortcutRow>
-              <Link href="/admin/dashboard" passHref legacyBehavior>
-                <DashboardShortcutLink>운영 대시보드 열기</DashboardShortcutLink>
-              </Link>
-            </DashboardShortcutRow>
-
-            {monitoringItems.length ? (
-              <DetailsPanel>
-                <DetailsSummary>
-                  <span>외부 관측 링크</span>
-                  <small>{monitoringItems.length}개</small>
-                </DetailsSummary>
-                <MonitoringLinkRail>
-                  {monitoringItems.map((item) => (
-                    <AdminInfoLinkCard key={item.key} href={item.href} target="_blank" rel="noreferrer noopener" $withIcon={false}>
-                      <strong>{item.title}</strong>
-                      <span>{item.status}</span>
-                    </AdminInfoLinkCard>
-                  ))}
-                </MonitoringLinkRail>
-              </DetailsPanel>
-            ) : null}
           </WorkspaceSection>
 
           <WorkspaceSection

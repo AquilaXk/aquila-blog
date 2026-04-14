@@ -100,6 +100,8 @@ const buildGrafanaDashboardUrl = (origin: string, uid: string, slug: string) => 
   return `${stripTrailingSlash(origin)}/d/${uid}/${slug}?orgId=1&kiosk`
 }
 
+const isGrafanaPublicDashboardUrl = (value: string) => value.includes("/public-dashboards/")
+
 export const getMonitoringEnv = () => {
   const defaultUptimeStatusPath = process.env.NEXT_PUBLIC_UPTIME_KUMA_STATUS_PATH?.trim() || "/status/aquila"
   const monitoringEmbedUrl =
@@ -110,6 +112,8 @@ export const getMonitoringEnv = () => {
     monitoringEmbedUrl.includes("grafana") ||
     monitoringEmbedUrl.includes("/d/") ||
     monitoringEmbedUrl.includes("/public-dashboards/")
+  const monitoringEmbedIsPublicGrafana = isGrafanaPublicDashboardUrl(monitoringEmbedUrl)
+  const monitoringEmbedIsPrivateGrafana = monitoringEmbedLooksLikeGrafana && !monitoringEmbedIsPublicGrafana
   const monitoringOrigin = extractUrlOrigin(monitoringEmbedUrl)
   const logsDashboardUrl =
     process.env.NEXT_PUBLIC_LOGS_EMBED_URL?.trim() ||
@@ -122,6 +126,8 @@ export const getMonitoringEnv = () => {
     defaultUptimeStatusPath,
     monitoringEmbedUrl,
     monitoringEmbedLooksLikeGrafana,
+    monitoringEmbedIsPublicGrafana,
+    monitoringEmbedIsPrivateGrafana,
     monitoringOrigin,
     logsDashboardUrl,
     uptimeKumaUrl,
@@ -190,6 +196,10 @@ export const buildGrafanaPanelEmbedUrl = (dashboardUrl: string, panelId: number)
       }
     }
 
+    if (url.pathname.includes("/public-dashboards/")) {
+      applyPanelDefaults()
+      return url.toString()
+    }
     if (url.pathname.includes("/d-solo/")) {
       applyPanelDefaults()
       return url.toString()

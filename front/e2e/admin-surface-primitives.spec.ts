@@ -26,9 +26,10 @@ test.describe("admin surface primitives contract", () => {
 
     expect(source).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));")
     expect(source).toContain("@media (max-width: 1180px) {\n    grid-template-columns: 1fr;")
-    expect(source).toContain("const DASHBOARD_FIRST_FOLD_PANEL_LIMIT = 0")
-    expect(source).toContain("<ContextSection>")
+    expect(source).toContain("const DASHBOARD_FIRST_FOLD_PANEL_LIMIT = 2")
+    expect(source).toContain("<ContextGrid>")
     expect(source).toContain("const ContextLinkGrid = styled(AdminInfoList)`")
+    expect(source).toContain("const CompactPanelCard = styled(PanelCard)`")
     expect(source).toContain("<AdditionalPanelsSection>")
     expect(source).toContain("const PriorityBadge = styled(AdminStatusPill)`")
     expect(source).toContain("const PriorityLink = styled(AdminTextActionLink)`")

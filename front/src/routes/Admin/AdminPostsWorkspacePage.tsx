@@ -4,7 +4,7 @@ import { GetServerSideProps, NextPage } from "next"
 import { IncomingMessage } from "http"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { invalidatePublicPostReadCaches } from "src/apis/backend/posts"
 import { apiFetch } from "src/apis/backend/client"
 import type { AuthMember } from "src/hooks/useAuthSession"
@@ -240,6 +240,9 @@ const visibilityLabelFromValue = (visibility: LocalDraftPayload["visibility"]) =
 
 const buildRowTitle = (row: Pick<AdminPostListItem, "title" | "published" | "listed" | "tempDraft">) =>
   getWorkspaceRowTitle(row) || "제목 없는 글"
+
+const canOpenCanonicalPost = (row: Pick<AdminPostListItem, "published" | "tempDraft">) =>
+  row.published && row.tempDraft !== true
 
 const buildListEndpoint = (scope: PostListScope, options: { page: string; pageSize: string; kw: string; sort: ListSort }) => {
   const query = new URLSearchParams({
@@ -582,6 +585,10 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
 
   const copyPostDetailLink = useCallback(
     async (row: Pick<AdminPostListItem, "id" | "title" | "published" | "listed" | "tempDraft">) => {
+      if (!canOpenCanonicalPost(row)) {
+        showToast({ tone: "error", text: `#${row.id} ${buildRowTitle(row)}는 아직 공개 링크가 없습니다.` })
+        return
+      }
       const url = buildCanonicalPostUrl(row.id)
       try {
         if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
@@ -601,6 +608,29 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
       }
     },
     [showToast]
+  )
+
+  const openCanonicalPost = useCallback(
+    async (
+      event: MouseEvent<HTMLAnchorElement>,
+      row: Pick<AdminPostListItem, "id" | "published" | "listed" | "tempDraft">
+    ) => {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return
+      }
+
+      event.preventDefault()
+      if (!canOpenCanonicalPost(row)) return
+      await pushRoute(router, toCanonicalPostPath(row.id))
+    },
+    [router]
   )
 
   const pushRecentAction = useCallback(
@@ -760,9 +790,11 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
       return <MutedText>이어 쓸 원고 없음</MutedText>
     }
 
+    const recentRows = recentPosts.slice(0, 3)
+
     return (
       <RecentPostList>
-        {recentPosts.map((row) => (
+        {recentRows.map((row) => (
           <li key={row.id}>
             <button type="button" onClick={() => void handleContinueRecent(row)}>
               <div>
@@ -895,13 +927,18 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
               ) : (
                 <EmptyInlineState>
                   <strong>저장된 임시 저장 없음</strong>
+                  <ActionRow>
+                    <PrimaryInlineButton type="button" onClick={() => void openWriteRoute()}>
+                      새 글 작성
+                    </PrimaryInlineButton>
+                  </ActionRow>
                 </EmptyInlineState>
               )}
             </ResumeCard>
 
             <ResumeCard data-emphasis="soft">
               <ResumeHeader>
-                <strong>최근 수정한 글</strong>
+                <strong>최근 수정 3건</strong>
                 {isRecentLoading ? <span>불러오는 중</span> : null}
               </ResumeHeader>
               {renderRecentEdited()}
@@ -1153,7 +1190,13 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                     <td>
                       <TitleCell>
                         <div className="titleRow">
-                          <TitleLink href={toCanonicalPostPath(row.id)}>{getWorkspaceRowTitle(row)}</TitleLink>
+                          {canOpenCanonicalPost(row) ? (
+                            <TitleAnchor href={toCanonicalPostPath(row.id)} onClick={(event) => void openCanonicalPost(event, row)}>
+                              {getWorkspaceRowTitle(row)}
+                            </TitleAnchor>
+                          ) : (
+                            <TitleText>{getWorkspaceRowTitle(row)}</TitleText>
+                          )}
                           <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
                             {visibilityLabel(row.published, row.listed)}
                           </VisibilityBadge>
@@ -1169,9 +1212,11 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                             <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
                               수정
                             </RowPrimaryButton>
-                            <RowSecondaryButton type="button" onClick={() => void copyPostDetailLink(row)}>
-                              링크 복사
-                            </RowSecondaryButton>
+                            {canOpenCanonicalPost(row) ? (
+                              <RowSecondaryButton type="button" onClick={() => void copyPostDetailLink(row)}>
+                                링크 복사
+                              </RowSecondaryButton>
+                            ) : null}
                             <DangerTextButton
                               type="button"
                               disabled={Boolean(mutationPending)}
@@ -1214,7 +1259,13 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                       {visibilityLabel(row.published, row.listed)}
                     </VisibilityBadge>
                   </header>
-                  <TitleLink href={toCanonicalPostPath(row.id)}>{getWorkspaceRowTitle(row)}</TitleLink>
+                  {canOpenCanonicalPost(row) ? (
+                    <TitleAnchor href={toCanonicalPostPath(row.id)} onClick={(event) => void openCanonicalPost(event, row)}>
+                      {getWorkspaceRowTitle(row)}
+                    </TitleAnchor>
+                  ) : (
+                    <TitleText>{getWorkspaceRowTitle(row)}</TitleText>
+                  )}
                   <p>{row.authorName || "작성자 미상"}</p>
                   <span className="date">{formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)}</span>
                   <div className="actions">
@@ -1223,9 +1274,11 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                         <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
                           수정
                         </RowPrimaryButton>
-                        <RowSecondaryButton type="button" onClick={() => void copyPostDetailLink(row)}>
-                          링크 복사
-                        </RowSecondaryButton>
+                        {canOpenCanonicalPost(row) ? (
+                          <RowSecondaryButton type="button" onClick={() => void copyPostDetailLink(row)}>
+                            링크 복사
+                          </RowSecondaryButton>
+                        ) : null}
                         <DangerTextButton
                           type="button"
                           disabled={Boolean(mutationPending)}
@@ -1449,8 +1502,8 @@ const SupportMeta = styled.span`
 
 const ResumeGrid = styled.div`
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 0.75rem;
+  grid-template-columns: minmax(16rem, 0.86fr) minmax(0, 1.14fr);
+  gap: 0.68rem;
   align-items: start;
 
   @media (max-width: 1120px) {
@@ -1459,16 +1512,16 @@ const ResumeGrid = styled.div`
 `
 
 const ResumeCard = styled(AdminRailCard)<{ "data-emphasis"?: "strong" | "soft" }>`
-  gap: 0.58rem;
-  padding: 0.88rem;
+  gap: 0.5rem;
+  padding: 0.82rem;
   border-radius: 16px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme, "data-emphasis": emphasis }) =>
     emphasis === "strong" ? "rgba(29, 78, 216, 0.08)" : theme.colors.gray2};
 
   &[data-empty="true"] {
-    gap: 0.28rem;
-    padding-block: 0.78rem;
+    gap: 0.36rem;
+    padding-block: 0.72rem;
   }
 `
 
@@ -1490,14 +1543,15 @@ const ResumeHeader = styled.div`
 `
 
 const ResumeTitle = styled.strong`
-  font-size: 0.98rem;
+  font-size: 0.94rem;
   line-height: 1.35;
 `
 
 const ResumeDescription = styled.p`
   margin: 0;
   color: ${({ theme }) => theme.colors.gray11};
-  line-height: 1.55;
+  font-size: 0.84rem;
+  line-height: 1.5;
 `
 
 const EmptyInlineState = styled.div`
@@ -1620,7 +1674,7 @@ const RecentPostList = styled.ul`
 
   li button {
     width: 100%;
-    padding: 0.72rem 0.8rem;
+    padding: 0.68rem 0.76rem;
     border-radius: 12px;
     border: 1px solid ${({ theme }) => theme.colors.gray5};
     background: ${({ theme }) => theme.colors.gray1};
@@ -1642,11 +1696,12 @@ const RecentPostList = styled.ul`
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-size: 0.9rem;
   }
 
   span {
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.78rem;
+    font-size: 0.76rem;
   }
 
   @media (max-width: 820px) {
@@ -2188,7 +2243,7 @@ const TitleCell = styled.div`
   }
 `
 
-const TitleLink = styled(Link)`
+const TitleAnchor = styled.a`
   color: ${({ theme }) => theme.colors.gray12};
   font-size: 0.96rem;
   font-weight: 800;
@@ -2206,6 +2261,13 @@ const TitleLink = styled(Link)`
     outline-offset: 3px;
     border-radius: 0.32rem;
   }
+`
+
+const TitleText = styled.strong`
+  color: ${({ theme }) => theme.colors.gray12};
+  font-size: 0.96rem;
+  font-weight: 800;
+  line-height: 1.45;
 `
 
 const RowActions = styled(AdminInlineActionRow)``

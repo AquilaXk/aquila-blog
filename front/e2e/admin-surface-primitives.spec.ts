@@ -32,6 +32,8 @@ test.describe("admin surface primitives contract", () => {
     expect(source).toContain("<ContextGrid>")
     expect(source).toContain("const ContextLinkGrid = styled(AdminInfoList)`")
     expect(source).toContain("const CompactPanelCard = styled(PanelCard)`")
+    expect(source).toContain("const CompactPanelSummary = styled.div`")
+    expect(source).toContain("const InsightLink = styled(AdminTextActionLink)`")
     expect(source).toContain("<AdditionalPanelsSection>")
     expect(source).toContain("const PriorityBadge = styled(AdminStatusPill)`")
     expect(source).toContain("const PriorityLink = styled(AdminTextActionLink)`")

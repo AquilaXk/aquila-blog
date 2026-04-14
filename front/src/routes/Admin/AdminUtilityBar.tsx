@@ -169,10 +169,9 @@ const CompactNavLink = styled.a`
   text-decoration: none;
 
   &[data-active="true"] {
-    border-color: ${({ theme }) => theme.colors.blue7};
-    background: ${({ theme }) =>
-      theme.scheme === "light" ? "rgba(59, 130, 246, 0.12)" : "rgba(59, 130, 246, 0.2)"};
-    color: ${({ theme }) => theme.colors.blue9};
+    border-color: ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray1};
+    color: ${({ theme }) => theme.colors.gray12};
   }
 `
 
@@ -216,8 +215,8 @@ const SearchInput = styled.input`
 
   &:focus {
     outline: none;
-    border-color: ${({ theme }) => theme.colors.blue7};
-    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+    border-color: ${({ theme }) => theme.colors.gray6};
+    box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.16);
   }
 `
 
@@ -286,12 +285,12 @@ const SettingsLink = styled.a`
   &:hover {
     background: ${({ theme }) => theme.colors.gray2};
     border-color: ${({ theme }) => theme.colors.gray6};
-    color: ${({ theme }) => theme.colors.blue9};
+    color: ${({ theme }) => theme.colors.gray12};
   }
 
   &:focus-visible {
     outline: none;
-    border-color: ${({ theme }) => theme.colors.blue7};
-    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+    border-color: ${({ theme }) => theme.colors.gray6};
+    box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.16);
   }
 `

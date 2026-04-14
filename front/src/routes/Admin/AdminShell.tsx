@@ -150,8 +150,8 @@ const Sidebar = styled.aside`
   border-radius: 28px;
   background: ${({ theme }) =>
     theme.scheme === "light"
-      ? "linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(246, 249, 255, 0.92) 100%)"
-      : "linear-gradient(180deg, rgba(21, 25, 31, 0.96) 0%, rgba(15, 18, 24, 0.94) 100%)"};
+      ? "linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(247, 247, 248, 0.92) 100%)"
+      : "linear-gradient(180deg, rgba(21, 21, 22, 0.96) 0%, rgba(16, 16, 17, 0.94) 100%)"};
   box-shadow: ${({ theme }) =>
     theme.scheme === "light"
       ? "0 18px 40px rgba(15, 23, 42, 0.08)"
@@ -193,9 +193,9 @@ const BrandMark = styled.div`
   border-radius: 18px;
   display: grid;
   place-items: center;
-  background: ${({ theme }) => theme.colors.blue8};
-  color: #ffffff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray12};
 
   svg {
     font-size: 1.25rem;
@@ -264,9 +264,8 @@ const NavLink = styled.a`
     display: grid;
     place-items: center;
     flex-shrink: 0;
-    color: ${({ theme }) => theme.colors.blue9};
-    background: ${({ theme }) =>
-      theme.scheme === "light" ? "rgba(59, 130, 246, 0.1)" : "rgba(255, 255, 255, 0.05)"};
+    color: ${({ theme }) => theme.colors.gray11};
+    background: ${({ theme }) => theme.colors.gray2};
   }
 
   .navCopy {
@@ -283,14 +282,13 @@ const NavLink = styled.a`
   }
 
   &[data-active="true"] {
-    border-color: ${({ theme }) => theme.colors.blue7};
-    background: ${({ theme }) =>
-      theme.scheme === "light" ? "rgba(59, 130, 246, 0.12)" : "rgba(59, 130, 246, 0.2)"};
+    border-color: ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray1};
   }
 
   &[data-active="true"] .navIcon {
-    background: ${({ theme }) =>
-      theme.scheme === "light" ? "rgba(59, 130, 246, 0.18)" : "rgba(59, 130, 246, 0.28)"};
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.gray12};
   }
 
   &:hover {
@@ -319,8 +317,8 @@ const SidebarCard = styled.section`
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) =>
     theme.scheme === "light"
-      ? "linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(96, 165, 250, 0.16) 100%)"
-      : "linear-gradient(135deg, rgba(37, 99, 235, 0.2) 0%, rgba(30, 64, 175, 0.28) 100%)"};
+      ? "linear-gradient(135deg, rgba(250, 250, 250, 0.96) 0%, rgba(243, 244, 246, 0.92) 100%)"
+      : "linear-gradient(135deg, rgba(24, 24, 25, 0.96) 0%, rgba(19, 19, 20, 0.92) 100%)"};
 
   small {
     color: ${({ theme }) => theme.colors.gray10};
@@ -347,9 +345,9 @@ const SidebarCardAction = styled.a`
   width: fit-content;
   padding: 0.72rem 0.92rem;
   border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.blue8};
-  background: ${({ theme }) => theme.colors.blue8};
-  color: #ffffff;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray12};
   text-decoration: none;
   font-size: 0.86rem;
   font-weight: 800;

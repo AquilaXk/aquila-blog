@@ -108,11 +108,40 @@ test.beforeEach(async ({ page }) => {
 })
 
 test("홈 피드 기본 UI가 렌더링된다", async ({ page }) => {
+  await page.setViewportSize({ width: 1680, height: 1200 })
   await mockFeedEndpoints(page)
 
   await page.goto("/")
   await expect(page.getByLabel("Search posts by keyword")).toBeVisible()
   await expect(page.getByRole("button", { name: "전체보기" })).toBeVisible()
+  await expect(page.locator('[data-ui="feed-service-section"]')).toBeVisible()
+  await expect(page.locator('[data-ui="feed-contact-section"]')).toBeVisible()
+  await expect(page.locator('[data-ui="feed-service-section"]').getByText("aquila-blog", { exact: true })).toBeVisible()
+  await expect(
+    page.locator('[data-ui="feed-contact-section"]').getByRole("link", { name: /github github\.com\/aquilaxk/i })
+  ).toBeVisible()
+
+  const sidebarStyles = await page.evaluate(() => {
+    const read = (selector: string) => {
+      const element = document.querySelector(selector) as HTMLElement | null
+      if (!element) return null
+      const styles = window.getComputedStyle(element)
+      return {
+        backgroundColor: styles.backgroundColor,
+        borderBottomWidth: styles.borderBottomWidth,
+      }
+    }
+
+    return {
+      service: read('[data-ui="feed-service-links"]'),
+      contact: read('[data-ui="feed-contact-links"]'),
+    }
+  })
+
+  expect(sidebarStyles.service?.backgroundColor).toBe("rgba(0, 0, 0, 0)")
+  expect(sidebarStyles.service?.borderBottomWidth).toBe("1px")
+  expect(sidebarStyles.contact?.backgroundColor).toBe("rgba(0, 0, 0, 0)")
+  expect(sidebarStyles.contact?.borderBottomWidth).toBe("1px")
 })
 
 test("홈 새로고침 이후에도 레거시 기본 문구로 되돌아가지 않는다", async ({ page }) => {

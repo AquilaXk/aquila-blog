@@ -90,3 +90,25 @@ export const resolveRenderableProfileLinkHref = (
   section: "service" | "contact",
   href: string
 ): string | null => getRenderableProfileLinkHref(section, href)
+
+export const formatProfileLinkHint = (href: string): string => {
+  const trimmed = href.trim()
+  if (!trimmed) return ""
+
+  if (trimmed.startsWith("mailto:")) {
+    return trimmed.replace(/^mailto:/i, "")
+  }
+
+  if (trimmed.startsWith("tel:")) {
+    return trimmed.replace(/^tel:/i, "")
+  }
+
+  try {
+    const parsed = new URL(trimmed)
+    const normalizedPath = parsed.pathname.replace(/\/$/, "")
+    if (!normalizedPath || normalizedPath === "/") return parsed.host
+    return `${parsed.host}${normalizedPath}`
+  } catch {
+    return trimmed.replace(/^https?:\/\//i, "").replace(/\/$/, "")
+  }
+}

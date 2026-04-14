@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "${REPO_ROOT}"
 
-CURRENT_TASK_FILE="${CURRENT_TASK_FILE_PATH:-${REPO_ROOT}/.codex/current-task.local}"
+CURRENT_TASK_FILE="$(bash tools/guards/current-task-resolve.sh)"
 
 if [[ ! -f "${CURRENT_TASK_FILE}" ]]; then
   exit 0
@@ -53,12 +53,12 @@ if [[ -z "${status}" ]]; then
   exit 1
 fi
 
-if [[ "${status}" != "active" && "${status}" != "done" ]]; then
-  echo "[current-task-state] status 는 active|done 이어야 합니다: ${status}" >&2
+if [[ "${status}" != "draft" && "${status}" != "active" && "${status}" != "done" ]]; then
+  echo "[current-task-state] status 는 draft|active|done 이어야 합니다: ${status}" >&2
   exit 1
 fi
 
-if [[ "${status}" == "done" ]]; then
+if [[ "${status}" == "draft" || "${status}" == "done" ]]; then
   exit 0
 fi
 

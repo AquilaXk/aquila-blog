@@ -4,7 +4,8 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "${REPO_ROOT}"
 
-CURRENT_TASK_FILE="${CURRENT_TASK_FILE_PATH:-${REPO_ROOT}/.codex/current-task.local}"
+CURRENT_TASK_FILE="$(bash tools/guards/current-task-resolve.sh)"
+CURRENT_TASK_FILE_REL="$(bash tools/guards/current-task-resolve.sh --relative)"
 
 mode="${1:-}"
 if [[ "${mode}" != "--staged" && "${mode}" != "--worktree" ]]; then
@@ -130,7 +131,7 @@ if [[ ${#scope_violations[@]} -gt 0 ]]; then
 fi
 
 echo "[current-task-scope] 해결 방법:" >&2
-echo "  1) 이번 작업 범위가 맞다면 .codex/current-task.local 의 allow/deny 를 먼저 갱신" >&2
+echo "  1) 이번 작업 범위가 맞다면 ${CURRENT_TASK_FILE_REL} 의 allow/deny 를 먼저 갱신" >&2
 echo "  2) 범위 밖 변경이면 git restore --staged <file> 로 스테이징 해제" >&2
 echo "  3) 컨텍스트 압축 후 재진입이면 AGENT-CONTEXT/brief/current-task 를 다시 확인" >&2
 exit 1

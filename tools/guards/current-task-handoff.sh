@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "${REPO_ROOT}"
 
-CURRENT_TASK_FILE="${CURRENT_TASK_FILE_PATH:-${REPO_ROOT}/.codex/current-task.local}"
+CURRENT_TASK_FILE="$(bash tools/guards/current-task-resolve.sh)"
 
 if [[ ! -f "${CURRENT_TASK_FILE}" ]]; then
   echo "[current-task-handoff] current-task file not found: ${CURRENT_TASK_FILE}" >&2

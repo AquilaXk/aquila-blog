@@ -879,7 +879,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
       <HeroSection>
         <AdminWorkspaceHeroLayout>
           <AdminWorkspaceHeroCopy>
-            <h1>글 작성</h1>
+            <h1>글 관리</h1>
           </AdminWorkspaceHeroCopy>
           <AdminWorkspaceHeroActions>
             <PrimaryCta type="button" onClick={() => void openWriteRoute()}>
@@ -926,7 +926,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                 </>
               ) : (
                 <EmptyInlineState>
-                  <strong>저장된 임시 저장 없음</strong>
+                  <strong>임시 저장 없음</strong>
                   <ActionRow>
                     <PrimaryInlineButton type="button" onClick={() => void openWriteRoute()}>
                       새 글 작성
@@ -1189,19 +1189,19 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                     <td className="idCell">#{row.id}</td>
                     <td>
                       <TitleCell>
-                        <div className="titleRow">
-                          {canOpenCanonicalPost(row) ? (
-                            <TitleAnchor href={toCanonicalPostPath(row.id)} onClick={(event) => void openCanonicalPost(event, row)}>
-                              {getWorkspaceRowTitle(row)}
-                            </TitleAnchor>
-                          ) : (
-                            <TitleText>{getWorkspaceRowTitle(row)}</TitleText>
-                          )}
+                        {canOpenCanonicalPost(row) ? (
+                          <TitleAnchor href={toCanonicalPostPath(row.id)} onClick={(event) => void openCanonicalPost(event, row)}>
+                            {getWorkspaceRowTitle(row)}
+                          </TitleAnchor>
+                        ) : (
+                          <TitleText>{getWorkspaceRowTitle(row)}</TitleText>
+                        )}
+                        <div className="metaRow">
                           <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
                             {visibilityLabel(row.published, row.listed)}
                           </VisibilityBadge>
+                          <span className="author">{row.authorName || "작성자 미상"}</span>
                         </div>
-                        <span>{row.authorName || "작성자 미상"}</span>
                       </TitleCell>
                     </td>
                     <td className="dateCell">{formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)}</td>
@@ -1255,9 +1255,6 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                 <article key={`mobile-${row.id}`}>
                   <header>
                     <span className="id">#{row.id}</span>
-                    <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
-                      {visibilityLabel(row.published, row.listed)}
-                    </VisibilityBadge>
                   </header>
                   {canOpenCanonicalPost(row) ? (
                     <TitleAnchor href={toCanonicalPostPath(row.id)} onClick={(event) => void openCanonicalPost(event, row)}>
@@ -1266,7 +1263,12 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                   ) : (
                     <TitleText>{getWorkspaceRowTitle(row)}</TitleText>
                   )}
-                  <p>{row.authorName || "작성자 미상"}</p>
+                  <div className="metaRow">
+                    <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
+                      {visibilityLabel(row.published, row.listed)}
+                    </VisibilityBadge>
+                    <span className="author">{row.authorName || "작성자 미상"}</span>
+                  </div>
                   <span className="date">{formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)}</span>
                   <div className="actions">
                     {listScope === "active" ? (
@@ -1502,8 +1504,8 @@ const SupportMeta = styled.span`
 
 const ResumeGrid = styled.div`
   display: grid;
-  grid-template-columns: minmax(16rem, 0.86fr) minmax(0, 1.14fr);
-  gap: 0.68rem;
+  grid-template-columns: minmax(14rem, 0.74fr) minmax(0, 1.26fr);
+  gap: 0.6rem;
   align-items: start;
 
   @media (max-width: 1120px) {
@@ -1512,16 +1514,15 @@ const ResumeGrid = styled.div`
 `
 
 const ResumeCard = styled(AdminRailCard)<{ "data-emphasis"?: "strong" | "soft" }>`
-  gap: 0.5rem;
-  padding: 0.82rem;
+  gap: 0.42rem;
+  padding: 0.72rem 0.78rem;
   border-radius: 16px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme, "data-emphasis": emphasis }) =>
-    emphasis === "strong" ? "rgba(29, 78, 216, 0.08)" : theme.colors.gray2};
+  background: ${({ theme, "data-emphasis": emphasis }) => (emphasis === "strong" ? theme.colors.gray1 : theme.colors.gray2)};
 
   &[data-empty="true"] {
     gap: 0.36rem;
-    padding-block: 0.72rem;
+    padding-block: 0.68rem;
   }
 `
 
@@ -1532,26 +1533,30 @@ const ResumeHeader = styled.div`
   gap: 0.6rem;
 
   strong {
-    font-size: 0.94rem;
+    font-size: 0.88rem;
   }
 
   span {
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.78rem;
+    font-size: 0.74rem;
     white-space: nowrap;
   }
 `
 
 const ResumeTitle = styled.strong`
-  font-size: 0.94rem;
-  line-height: 1.35;
+  font-size: 0.9rem;
+  line-height: 1.32;
 `
 
 const ResumeDescription = styled.p`
   margin: 0;
   color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.84rem;
-  line-height: 1.5;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 `
 
 const EmptyInlineState = styled.div`
@@ -1560,7 +1565,7 @@ const EmptyInlineState = styled.div`
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.88rem;
+    font-size: 0.84rem;
   }
 
   p {
@@ -1578,7 +1583,7 @@ const ResumeMeta = styled.div`
 
   span {
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.8rem;
+    font-size: 0.76rem;
   }
 `
 
@@ -1596,26 +1601,26 @@ const VisibilityBadge = styled(AdminStatusPill)<{ "data-tone": string }>`
     tone === "PRIVATE"
       ? theme.colors.gray11
       : tone === "PUBLIC_UNLISTED"
-        ? theme.colors.blue9
+        ? theme.colors.orange9
         : theme.colors.green9};
   background: ${({ theme, "data-tone": tone }) =>
     tone === "PRIVATE"
       ? theme.colors.gray2
       : tone === "PUBLIC_UNLISTED"
-        ? "rgba(59, 130, 246, 0.12)"
+        ? "rgba(249, 115, 22, 0.12)"
         : "rgba(34, 197, 94, 0.12)"};
   border-color: ${({ theme, "data-tone": tone }) =>
     tone === "PRIVATE"
       ? theme.colors.gray7
       : tone === "PUBLIC_UNLISTED"
-        ? theme.colors.blue8
+        ? theme.colors.orange8
         : theme.colors.green8};
 `
 
 const ActionRow = styled(AdminInlineActionRow)``
 
 const PrimaryInlineButton = styled(AdminTextActionButton)`
-  color: ${({ theme }) => theme.colors.blue9};
+  color: ${({ theme }) => theme.colors.gray12};
   font-size: 0.92rem;
   font-weight: 800;
 `
@@ -1652,12 +1657,12 @@ const MutedText = styled.p`
 
 const RecentListSkeleton = styled.div`
   display: grid;
-  gap: 0.55rem;
+  gap: 0.45rem;
 
   span {
     display: block;
-    height: 56px;
-    border-radius: 14px;
+    height: 50px;
+    border-radius: 12px;
     background: ${({ theme }) =>
       theme.scheme === "light"
         ? "linear-gradient(90deg, rgba(148, 163, 184, 0.16), rgba(148, 163, 184, 0.28), rgba(148, 163, 184, 0.16))"
@@ -1670,18 +1675,18 @@ const RecentPostList = styled.ul`
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0.5rem;
+  gap: 0.42rem;
 
   li button {
     width: 100%;
-    padding: 0.68rem 0.76rem;
-    border-radius: 12px;
+    padding: 0.58rem 0.68rem;
+    border-radius: 10px;
     border: 1px solid ${({ theme }) => theme.colors.gray5};
-    background: ${({ theme }) => theme.colors.gray1};
+    background: ${({ theme }) => theme.colors.gray2};
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.55rem;
     text-align: left;
     cursor: pointer;
   }
@@ -1696,12 +1701,12 @@ const RecentPostList = styled.ul`
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 0.9rem;
+    font-size: 0.84rem;
   }
 
   span {
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.76rem;
+    font-size: 0.72rem;
   }
 
   @media (max-width: 820px) {
@@ -1792,9 +1797,9 @@ const ScopeTabButton = styled.button<{ "data-active"?: boolean }>`
   ${({ theme }) => baseButton({ theme })};
   min-height: 42px;
   padding: 0 0.85rem;
-  background: ${({ theme, "data-active": active }) => (active ? theme.colors.blue8 : theme.colors.gray2)};
-  color: ${({ theme, "data-active": active }) => (active ? theme.colors.gray12 : theme.colors.gray12)};
-  border-color: ${({ theme, "data-active": active }) => (active ? theme.colors.blue8 : theme.colors.gray5)};
+  background: ${({ theme, "data-active": active }) => (active ? theme.colors.gray1 : theme.colors.gray2)};
+  color: ${({ theme }) => theme.colors.gray12};
+  border-color: ${({ theme, "data-active": active }) => (active ? theme.colors.gray6 : theme.colors.gray5)};
 `
 
 const SearchField = styled.div`
@@ -2228,16 +2233,16 @@ const DesktopListTable = styled.table`
 
 const TitleCell = styled.div`
   display: grid;
-  gap: 0.28rem;
+  gap: 0.38rem;
 
-  .titleRow {
+  .metaRow {
     display: flex;
-    gap: 0.5rem;
+    gap: 0.55rem;
     align-items: center;
     flex-wrap: wrap;
   }
 
-  span {
+  .author {
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.82rem;
   }
@@ -2251,13 +2256,13 @@ const TitleAnchor = styled.a`
   text-decoration: none;
 
   &:hover {
-    color: ${({ theme }) => theme.colors.blue10};
+    color: ${({ theme }) => theme.colors.gray12};
     text-decoration: underline;
     text-underline-offset: 0.16em;
   }
 
   &:focus-visible {
-    outline: 2px solid ${({ theme }) => theme.colors.blue8};
+    outline: 2px solid ${({ theme }) => theme.colors.gray8};
     outline-offset: 3px;
     border-radius: 0.32rem;
   }
@@ -2273,7 +2278,7 @@ const TitleText = styled.strong`
 const RowActions = styled(AdminInlineActionRow)``
 
 const RowPrimaryButton = styled(AdminTextActionButton)`
-  color: ${({ theme }) => theme.colors.blue9};
+  color: ${({ theme }) => theme.colors.gray12};
   font-size: 0.86rem;
   font-weight: 800;
 
@@ -2325,8 +2330,7 @@ const MobileCardList = styled.div`
   header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.6rem;
+    gap: 0.5rem;
   }
 
   .id {
@@ -2340,7 +2344,14 @@ const MobileCardList = styled.div`
     line-height: 1.45;
   }
 
-  p,
+  .metaRow {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+  }
+
+  .author,
   .date {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray10};

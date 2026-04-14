@@ -15,11 +15,15 @@ test.describe("admin posts workspace link contract", () => {
     expect(source).toContain("const openCanonicalPost = useCallback(")
     expect(source).toContain("<TitleAnchor href={toCanonicalPostPath(row.id)} onClick={(event) => void openCanonicalPost(event, row)}>")
     expect(source).toContain("<TitleText>{getWorkspaceRowTitle(row)}</TitleText>")
+    expect(source).toContain('<div className="metaRow">')
+    expect(source).toContain('<span className="author">{row.authorName || "작성자 미상"}</span>')
+    expect(source).not.toContain('<div className="titleRow">')
     expect(source).toContain("copyPostDetailLink(row)")
     expect(source).not.toContain("상세 열기")
     expect(source).toContain("링크 복사")
     expect(source).toContain("recentPosts.slice(0, 3)")
-    expect(source).toContain("grid-template-columns: minmax(16rem, 0.86fr) minmax(0, 1.14fr);")
+    expect(source).toContain("grid-template-columns: minmax(14rem, 0.74fr) minmax(0, 1.26fr);")
+    expect(source).toContain("<h1>글 관리</h1>")
   })
 
   test("관리자 작성 화면은 현재 편집 중인 글이면 visibility와 무관하게 canonical 링크 열기와 복사 액션을 노출한다", () => {

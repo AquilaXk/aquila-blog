@@ -24,8 +24,6 @@ import {
   AdminStatusPill,
   AdminTextActionButton,
   AdminWorkspaceHero,
-  AdminWorkspaceSectionNav,
-  AdminWorkspaceSectionNavButton,
 } from "src/routes/Admin/AdminSurfacePrimitives"
 
 type JsonValue = unknown
@@ -539,14 +537,6 @@ const SECTION_IDS = {
 
 type SectionKey = keyof typeof SECTION_IDS
 
-const SECTION_LABELS: Record<SectionKey, string> = {
-  overview: "개요",
-  diagnostics: "진단",
-  execution: "실행",
-  mutation: "실데이터 테스트",
-  results: "최근 실행 결과",
-}
-
 const DIAGNOSTIC_TAB_LABELS: Record<DiagnosticTab, string> = {
   mail: "메일 진단",
   queue: "작업 큐 진단",
@@ -621,12 +611,6 @@ const getFreshnessMeta = (
   if (diffMs < 15 * 60_000) return { label: `${Math.max(1, Math.floor(diffMs / 60_000))}분 전`, tone: "fresh" }
   if (diffMs < 60 * 60_000) return { label: `${Math.max(15, Math.floor(diffMs / 60_000))}분 전`, tone: "aging" }
   return { label: `${Math.max(1, Math.floor(diffMs / 3_600_000))}시간 전`, tone: "stale" }
-}
-
-const combineFreshnessTones = (...tones: Array<"fresh" | "aging" | "stale" | null | undefined>) => {
-  if (tones.some((tone) => tone === "stale")) return "stale" as const
-  if (tones.some((tone) => tone === "aging")) return "aging" as const
-  return "fresh" as const
 }
 
 const formatRetryPolicy = (policy: TaskRetryPolicy) =>
@@ -730,7 +714,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   const [authSecurityEventsError, setAuthSecurityEventsError] = useState("")
   const [authSecurityCheckedAt, setAuthSecurityCheckedAt] = useState<string | null>(initialSnapshot.authSecurityCheckedAt)
   const [systemHealthCheckedAt, setSystemHealthCheckedAt] = useState<string | null>(initialSnapshot.systemHealthFetchedAt)
-  const [activeSection, setActiveSection] = useState<SectionKey>("overview")
+  const [activeSection, setActiveSection] = useState<SectionKey>("diagnostics")
   const [sectionJumpTarget, setSectionJumpTarget] = useState<SectionKey | null>(null)
   const [isWorkspaceReady, setIsWorkspaceReady] = useState(false)
   const [activeDiagnosticTab, setActiveDiagnosticTab] = useState<DiagnosticTab>("mail")
@@ -1215,17 +1199,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
         ? "확인 필요"
         : "정상"
 
-  const sectionNavFreshnessMap: Partial<Record<SectionKey, "fresh" | "aging" | "stale">> = {
-    overview: combineFreshnessTones(systemHealthFreshness.tone, hasMailDiagnostics ? mailFreshness.tone : null),
-    diagnostics: combineFreshnessTones(
-      hasMailDiagnostics ? mailFreshness.tone : null,
-      hasTaskQueueDiagnostics ? taskQueueFreshness.tone : null,
-      hasCleanupDiagnostics ? cleanupFreshness.tone : null,
-      hasAuthDiagnostics ? authFreshness.tone : null
-    ),
-    results: executions[0] ? getFreshnessMeta(executions[0].completedAt, freshnessClock).tone : "stale",
-  }
-
   const attentionItems = [
     systemHealthStatus !== "UP" ? "서비스 상태를 먼저 확인하세요." : null,
     mailDiagnostics?.status === "MISCONFIGURED" ? "메일 설정 누락을 정리해야 합니다." : null,
@@ -1285,6 +1258,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
         <OverviewHeader>
           <div>
             <h1>운영 진단</h1>
+            <p>진단과 실행, 최근 결과만 한 흐름에서 확인합니다.</p>
           </div>
           <OverviewMeta>
             <StatusBadge data-tone={getStatusTone(overviewStatusLabel)}>{overviewStatusLabel}</StatusBadge>
@@ -1324,28 +1298,14 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
       </OpsOverview>
 
       <WorkspaceShell>
-        <SectionNav aria-label="운영 섹션">
-          {([
-            { key: "diagnostics", label: "진단" },
-            { key: "execution", label: "실행" },
-            { key: "results", label: "최근 실행 결과" },
-            { key: "mutation", label: "실데이터 테스트", tone: "danger" },
-          ] as Array<{ key: SectionKey; label: string; tone?: "danger" }>).map((item) => (
-            <SectionNavButton
-              key={item.key}
-              type="button"
-              data-active={activeSection === item.key}
-              data-tone={item.tone || "default"}
-              data-freshness={sectionNavFreshnessMap[item.key] || undefined}
-              onClick={() => focusSection(item.key)}
-            >
-              {item.label}
-            </SectionNavButton>
-          ))}
-        </SectionNav>
-
         {isWorkspaceReady ? (
         <WorkspaceColumn>
+          <WorkspaceIntroCard>
+            <small>운영 흐름</small>
+            <strong>진단</strong>
+            <span>메일, 작업 큐, 파일 정리, 인증 보안 기록을 먼저 확인합니다.</span>
+          </WorkspaceIntroCard>
+
           <WorkspaceSection id={SECTION_IDS.diagnostics} data-ops-section="diagnostics" data-emphasis="primary">
             <SectionHeading>
               <SectionTitleBlock>
@@ -1718,6 +1678,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
             <SectionHeading>
               <SectionTitleBlock>
                 <h2>실행</h2>
+                <p>읽기 전용 확인과 운영 실행을 같은 문맥에서 처리합니다.</p>
               </SectionTitleBlock>
             </SectionHeading>
 
@@ -1798,6 +1759,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
             <SectionHeading>
               <SectionTitleBlock>
                 <h2>최근 실행 결과</h2>
+                <p>방금 실행한 작업과 최근 기록만 빠르게 다시 읽습니다.</p>
               </SectionTitleBlock>
             </SectionHeading>
 
@@ -1911,6 +1873,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
             <SectionHeading>
               <SectionTitleBlock>
                 <h2>실데이터 테스트</h2>
+                <p>실제 데이터에 영향을 주는 작업은 마지막에만 펼쳐서 실행합니다.</p>
               </SectionTitleBlock>
               <ActionToneBadge data-tone="danger">실데이터 변경</ActionToneBadge>
             </SectionHeading>
@@ -2281,29 +2244,37 @@ const CalmMessage = styled.p`
 
 const WorkspaceShell = styled.div`
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
   gap: 0.95rem;
   align-items: start;
-
-  @media (max-width: 1120px) {
-    grid-template-columns: 1fr;
-  }
 `
-
-const SectionNav = styled(AdminWorkspaceSectionNav)`
-  top: calc(var(--app-header-height, 64px) + 1rem);
-  gap: 0.62rem;
-
-  @media (max-width: 960px) {
-    min-width: 0;
-  }
-`
-
-const SectionNavButton = styled(AdminWorkspaceSectionNavButton)``
 
 const WorkspaceColumn = styled.div`
   display: grid;
   gap: 0.85rem;
+`
+
+const WorkspaceIntroCard = styled(AdminRailCard)`
+  gap: 0.28rem;
+  padding: 0.92rem 1rem;
+
+  small {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 1.02rem;
+    letter-spacing: -0.02em;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.84rem;
+    line-height: 1.6;
+  }
 `
 
 const DeferredWorkspaceColumn = styled.div`

@@ -6292,7 +6292,7 @@ const BlockEditorEngine = ({
     (color?: string | null) => {
       if (!editor) return
 
-      const chain = editor.chain().focus()
+      const chain = editor.chain().focus().extendMarkRange("inlineColor")
       if (!color) {
         chain.unsetMark("inlineColor").run()
       } else {
@@ -9153,6 +9153,7 @@ const BlockEditorEngine = ({
                   <ColorOptionButton
                     type="button"
                     data-active={!activeInlineColor}
+                    onMouseDown={handleToolbarButtonMouseDown}
                     onClick={() => applyInlineColor(null)}
                   >
                     <ColorOptionLabel>
@@ -9166,6 +9167,7 @@ const BlockEditorEngine = ({
                       type="button"
                       data-active={activeInlineColor === option.value}
                       disabled={disabled || isInlineCodeActive}
+                      onMouseDown={handleToolbarButtonMouseDown}
                       onClick={() => applyInlineColor(option.value)}
                     >
                       <ColorOptionLabel>
@@ -9443,7 +9445,12 @@ const BlockEditorEngine = ({
                   </summary>
                   {isBubbleInlineColorMenuOpen ? (
                     <div className="body">
-                      <TextBubbleMenuButton type="button" data-active={!activeInlineColor} onClick={() => applyInlineColor(null)}>
+                      <TextBubbleMenuButton
+                        type="button"
+                        data-active={!activeInlineColor}
+                        onMouseDown={handleToolbarButtonMouseDown}
+                        onClick={() => applyInlineColor(null)}
+                      >
                         <TextBubbleColorSwatch data-empty="true" aria-hidden="true" />
                         <strong>기본색</strong>
                       </TextBubbleMenuButton>
@@ -9453,6 +9460,7 @@ const BlockEditorEngine = ({
                           type="button"
                           data-active={activeInlineColor === option.value}
                           disabled={disabled || isInlineCodeActive}
+                          onMouseDown={handleToolbarButtonMouseDown}
                           onClick={() => applyInlineColor(option.value)}
                         >
                           <TextBubbleColorSwatch style={{ background: option.value }} aria-hidden="true" />
@@ -10532,7 +10540,6 @@ const EditorViewport = styled.div`
 
   .aq-block-editor__content ::selection {
     background: rgba(59, 130, 246, 0.24);
-    color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray12 : "#ffffff")};
   }
 
   .aq-block-editor__content[data-keyboard-block-selection="true"] ::selection {

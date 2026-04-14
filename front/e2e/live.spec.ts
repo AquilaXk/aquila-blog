@@ -14,6 +14,7 @@ const liveUiRedirectTimeoutMs = Number.parseInt(process.env.E2E_LIVE_UI_REDIRECT
 const adminLandingHeadingPattern = /관리자 (?:작업 공간|작업 진입점|운영 허브|허브)/
 const adminProfileHeadingPattern = /(?:프로필 워크스페이스|운영 프로필|관리자 프로필 관리|프로필 관리|프로필 설정)/
 const adminToolsHeadingPattern = /(?:운영 (?:센터|도구|진단|점검 도구)|서비스 상태)/
+const adminPostsHeadingPattern = /(?:글 관리|글 작성)/
 const adminUrlPattern = /\/admin(\/|$|\?)/
 
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
@@ -541,15 +542,11 @@ test.describe("live production e2e", () => {
     await expect(page.getByRole("tab", { name: /^작업 큐 진단/ })).toBeVisible()
 
     await page.goto("/admin/posts")
-    const workspaceHeading = page.getByRole("heading", { name: "글 작성" })
+    await expect(page.getByRole("heading", { name: adminPostsHeadingPattern })).toBeVisible()
     const titleInput = page.locator("#post-title").first()
     const legacyTitleInput = page.getByPlaceholder("제목을 입력하세요").first()
-    if (await workspaceHeading.isVisible().catch(() => false)) {
-      await openAdminNewPostEntry(page)
-      await expect(page).toHaveURL(/\/(editor\/(new|[0-9]+)|admin\/posts\/write)(\/|$|\?)/)
-    } else {
-      await expect(page).toHaveURL(/\/(editor\/(new|[0-9]+)|admin\/posts\/write|admin\/posts\/new)(\/|$|\?)/)
-    }
+    await openAdminNewPostEntry(page)
+    await expect(page).toHaveURL(/\/(editor\/(new|[0-9]+)|admin\/posts\/write|admin\/posts\/new)(\/|$|\?)/)
 
     if (await titleInput.isVisible().catch(() => false)) {
       await expect(titleInput).toBeVisible()

@@ -550,6 +550,29 @@ test.describe("block editor authoring flow", () => {
     await expect(markdownOutput).toContainText("{{color:#60a5fa|테스트}}")
   })
 
+  test("이미 색이 있는 텍스트도 다른 글자색으로 즉시 교체할 수 있다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    const markdownOutput = page.getByTestId("qa-markdown-output")
+    await editor.click()
+    await page.keyboard.type("색상 교체 테스트")
+
+    await selectWordInEditable(page, editor, "테스트")
+    await page.locator("[aria-label='글자색']").first().click()
+    await page.getByRole("button", { name: "하늘" }).first().click()
+    await expect(markdownOutput).toContainText("{{color:#60a5fa|테스트}}")
+
+    await selectWordInEditable(page, editor, "테스트")
+    await page.locator("[aria-label='글자색']").first().click()
+    const roseColorButton = page.getByRole("button", { name: "로즈" }).first()
+    await expect(roseColorButton).toHaveAttribute("data-active", "false")
+    await roseColorButton.click()
+
+    await expect(markdownOutput).toContainText("{{color:#f472b6|테스트}}")
+    await expect(markdownOutput).not.toContainText("{{color:#60a5fa|테스트}}")
+  })
+
   test("writer surface에서도 일반 본문/콜아웃 본문 텍스트 선택 시 인라인 버블이 노출된다", async ({
     page,
   }) => {

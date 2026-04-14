@@ -172,6 +172,9 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).toContain(".aq-block-editor__content blockquote {")
     expect(blockEditorEngineSource).toContain("border-left: 4px solid")
     expect(blockEditorEngineSource).toContain("border-radius: 0;")
+    const selectionRuleMatch = blockEditorEngineSource.match(/\.aq-block-editor__content ::selection\s*\{([^}]*)\}/)
+    expect(selectionRuleMatch?.[1]).toBeTruthy()
+    expect(selectionRuleMatch?.[1]).not.toMatch(/\bcolor\s*:/)
   })
 
   test("editor studio는 SSR 관리자 스냅샷을 hydration auth race 동안 유지한다", () => {

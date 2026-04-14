@@ -327,7 +327,7 @@ const useDebouncedAttributeCommit = (
 
 export const InlineColorMark = Mark.create({
   name: "inlineColor",
-  excludes: "code",
+  excludes: "inlineColor code",
 
   addAttributes() {
     return {

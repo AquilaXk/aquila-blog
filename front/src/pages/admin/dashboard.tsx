@@ -77,7 +77,7 @@ const EMPTY_INITIAL_SNAPSHOT: AdminDashboardInitialSnapshot = {
 }
 
 const DASHBOARD_PRIORITY_PANEL_LIMIT = 4
-const DASHBOARD_FIRST_FOLD_PANEL_LIMIT = 2
+const DASHBOARD_FIRST_FOLD_PANEL_LIMIT = 0
 
 async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | null> {
   try {
@@ -439,23 +439,6 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
             <InsightRail>
               <RailCard>
                 <SectionHeader>
-                  <h2>연결된 채널</h2>
-                </SectionHeader>
-                <AdminInfoList>
-                  {monitoringItems.map((item) => (
-                    <AdminInfoLinkCard key={item.key} href={item.href} target="_blank" rel="noreferrer noopener">
-                      <span className="iconWrap">{renderMonitoringBrand(item.brand.icon, item.brand.fallbackIcon, item.title)}</span>
-                      <span className="copy">
-                        <strong>{item.title}</strong>
-                        <span>{item.status}</span>
-                      </span>
-                    </AdminInfoLinkCard>
-                  ))}
-                </AdminInfoList>
-              </RailCard>
-
-              <RailCard>
-                <SectionHeader>
                   <h2>현재 포커스</h2>
                 </SectionHeader>
                 <FocusChipRail>
@@ -485,39 +468,6 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
                 </AdminInfoList>
               </RailCard>
             </InsightRail>
-
-            {firstFoldPanels.map((panel, index) => {
-              const panelUrl = grafanaDashboardUrl ? buildGrafanaPanelEmbedUrl(grafanaDashboardUrl, panel.panelId) : ""
-              return (
-                <PanelCard key={panel.key} data-ui="monitoring-panel-card">
-                  <PanelHeader>
-                    <div>
-                      <strong>{panel.title}</strong>
-                    </div>
-                    {grafanaDashboardUrl ? (
-                      <LaunchLink href={panelUrl || grafanaDashboardUrl} target="_blank" rel="noreferrer noopener">
-                        새 창
-                      </LaunchLink>
-                    ) : null}
-                  </PanelHeader>
-                  <PanelBody>
-                    {panelUrl ? (
-                      <DeferredPanelFrame
-                        eager={index + 1 < DASHBOARD_EAGER_PANEL_COUNT}
-                        activationDelayMs={index * DASHBOARD_PANEL_STAGGER_MS}
-                        src={panelUrl}
-                        title={panel.title}
-                      />
-                    ) : (
-                      <PanelFallback>
-                        <strong>대시보드를 불러올 수 없습니다.</strong>
-                        <span>Grafana embed URL 또는 public dashboard 구성을 먼저 확인하세요.</span>
-                      </PanelFallback>
-                    )}
-                  </PanelBody>
-                </PanelCard>
-              )
-            })}
           </PanelGrid>
 
           <PrioritySection>
@@ -558,6 +508,23 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
               </tbody>
             </PriorityTable>
           </PrioritySection>
+
+          <ContextSection>
+            <SectionHeader>
+              <h2>연결된 채널</h2>
+            </SectionHeader>
+            <ContextLinkGrid>
+              {monitoringItems.map((item) => (
+                <AdminInfoLinkCard key={item.key} href={item.href} target="_blank" rel="noreferrer noopener">
+                  <span className="iconWrap">{renderMonitoringBrand(item.brand.icon, item.brand.fallbackIcon, item.title)}</span>
+                  <span className="copy">
+                    <strong>{item.title}</strong>
+                    <span>{item.status}</span>
+                  </span>
+                </AdminInfoLinkCard>
+              ))}
+            </ContextLinkGrid>
+          </ContextSection>
 
           {secondaryPanels.length ? (
             <AdditionalPanelsSection>
@@ -640,7 +607,7 @@ const Shell = styled.div`
   margin: 0 auto;
   padding: 26px 0 72px;
   display: grid;
-  gap: 20px;
+  gap: 16px;
 
   @media (max-width: 768px) {
     width: min(calc(100% - 24px), 1380px);
@@ -651,8 +618,8 @@ const Shell = styled.div`
 
 const HeroPanel = styled(AdminElevatedCard)`
   display: grid;
-  gap: 12px;
-  padding: 24px 26px;
+  gap: 10px;
+  padding: 20px 22px;
   border-radius: 28px;
 
   @media (max-width: 820px) {
@@ -784,7 +751,7 @@ const MetricCard = styled.article`
   gap: 12px;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
-  padding: 16px;
+  padding: 14px;
   border-radius: 22px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
@@ -870,7 +837,7 @@ const MetricCopy = styled.div`
 const PanelGrid = styled.section`
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(17.5rem, 0.8fr);
-  gap: 20px;
+  gap: 16px;
   align-items: start;
 
   @media (max-width: 1180px) {
@@ -889,11 +856,11 @@ const LeadPanelCard = styled(PanelCard)`
 
   > div:last-of-type > iframe,
   > div:last-of-type > [data-pending="true"] {
-    height: 348px;
+    height: 292px;
   }
 
   > div:last-of-type > div {
-    min-height: 264px;
+    min-height: 232px;
   }
 `
 
@@ -902,7 +869,7 @@ const PanelHeader = styled.div`
   justify-content: space-between;
   align-items: flex-start;
   gap: 16px;
-  padding: 24px 24px 16px;
+  padding: 18px 18px 12px;
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray4};
 
   strong {
@@ -926,9 +893,9 @@ const LaunchLink = styled.a`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 76px;
-  min-height: 44px;
-  padding: 0 18px;
+  min-width: 68px;
+  min-height: 38px;
+  padding: 0 14px;
   border-radius: 999px;
   background: ${({ theme }) => theme.colors.gray2};
   color: ${({ theme }) => theme.colors.blue9};
@@ -950,7 +917,7 @@ const PanelFrame = styled.iframe`
 `
 
 const PanelFallback = styled.div`
-  min-height: 236px;
+  min-height: 210px;
   display: grid;
   place-items: center;
   gap: 8px;
@@ -972,21 +939,18 @@ const PanelFallback = styled.div`
 
 const InsightRail = styled.aside`
   display: grid;
-  gap: 16px;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 
   @media (max-width: 1180px) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  @media (max-width: 960px) {
     grid-template-columns: 1fr;
   }
 `
 
 const RailCard = styled(AdminPlainCard)`
   display: grid;
-  gap: 12px;
-  padding: 18px;
+  gap: 10px;
+  padding: 16px;
   border-radius: 24px;
 `
 
@@ -1018,8 +982,27 @@ const FocusChip = styled.span`
 const PrioritySection = styled(AdminPlainCard)`
   display: grid;
   gap: 12px;
-  padding: 20px 22px;
+  padding: 18px 20px;
   border-radius: 24px;
+`
+
+const ContextSection = styled(AdminPlainCard)`
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 24px;
+`
+
+const ContextLinkGrid = styled(AdminInfoList)`
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+
+  @media (max-width: 1180px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
+  }
 `
 
 const AdditionalPanelsSection = styled(AdminPlainCard)`

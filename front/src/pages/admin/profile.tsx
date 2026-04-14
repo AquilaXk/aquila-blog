@@ -2040,14 +2040,14 @@ const PreviewAnchor = styled.a`
 `
 
 const WorkspaceHero = styled(AdminWorkspaceHero)`
-  padding: 1rem 1.05rem;
+  padding: 0.86rem 0.98rem;
 `
 
 const WorkspaceShell = styled.section<{ $isHomeSection: boolean }>`
   display: grid;
   grid-template-columns: ${({ $isHomeSection }) =>
     $isHomeSection ? "184px minmax(0, 1fr)" : "184px minmax(0, 1fr) 288px"};
-  gap: 1rem;
+  gap: 0.85rem;
   align-items: start;
 
   @media (max-width: 1480px) {
@@ -2099,7 +2099,7 @@ const SectionStateDot = styled.span`
 
 const EditorColumn = styled.div`
   display: grid;
-  gap: 0.8rem;
+  gap: 0.68rem;
 `
 
 const EditorPaneHeader = styled(AdminPaneHeader)`
@@ -2145,9 +2145,9 @@ const SectionStateBadge = styled.span`
 `
 
 const EditorSurface = styled(AdminSubtleCard)`
-  padding: 1.1rem 1.14rem 1.18rem;
+  padding: 0.96rem 1rem 1.02rem;
   display: grid;
-  gap: 1rem;
+  gap: 0.88rem;
 `
 
 const SectionStack = styled.div`
@@ -2767,6 +2767,7 @@ const DockPrimaryButton = styled(PublishButton)`
 
 const PreviewStatusRail = styled(AdminInfoStatusList)`
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
 
   @media (max-width: 760px) {
     grid-template-columns: 1fr;
@@ -2774,36 +2775,38 @@ const PreviewStatusRail = styled(AdminInfoStatusList)`
 `
 
 const PreviewViewport = styled(AdminInfoPanelCard)`
-  min-height: 300px;
+  min-height: 236px;
 `
 
 const PreviewProfileCard = styled.div`
   display: grid;
   justify-items: center;
   text-align: center;
-  gap: 0.44rem;
+  gap: 0.34rem;
 
   .avatar {
-    width: 88px;
-    height: 88px;
+    width: 72px;
+    height: 72px;
     border-radius: 999px;
     overflow: hidden;
   }
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1.04rem;
+    font-size: 1rem;
   }
 
   span {
     color: ${({ theme }) => theme.colors.blue10};
     font-weight: 700;
+    font-size: 0.88rem;
   }
 
   p {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray11};
-    line-height: 1.6;
+    line-height: 1.5;
+    font-size: 0.9rem;
   }
 `
 

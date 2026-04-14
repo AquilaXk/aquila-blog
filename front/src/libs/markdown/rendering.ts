@@ -1,6 +1,6 @@
 import { ReactElement, ReactNode, isValidElement } from "react"
 import { extractMarkdownTableLayouts, type MarkdownTableLayout } from "src/libs/markdown/tableMetadata"
-import { normalizeInlineHtmlInMarkdownTables } from "src/libs/markdown/inlineHtmlNormalization"
+import { normalizeLegacyInlineHtmlMarkdown } from "src/libs/markdown/inlineHtmlNormalization"
 import {
   extractNormalizedMermaidSource,
   normalizeEscapedMarkdownFences,
@@ -964,7 +964,7 @@ export const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
 }
 
 export const normalizeMarkdownForRender = (rawMarkdown: string) =>
-  normalizeInlineHtmlInMarkdownTables(normalizeEscapedMarkdownFences(rawMarkdown.trim()))
+  normalizeLegacyInlineHtmlMarkdown(normalizeEscapedMarkdownFences(rawMarkdown.trim()))
 
 export const resolveMarkdownRenderModel = ({
   content,

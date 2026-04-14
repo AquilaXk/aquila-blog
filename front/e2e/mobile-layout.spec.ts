@@ -269,6 +269,7 @@ test("iPhone 15 Pro 메인 피드는 카드 overflow 없이 viewport 내부에 �
   await expect(page.getByLabel("Search posts by keyword")).toBeVisible()
   await expect(page.getByRole("button", { name: "헤더 메뉴 열기" })).toBeVisible()
   await expect(page.getByRole("button", { name: "전체보기" })).toBeVisible()
+  await expect(page.locator("a[href^='/posts/'] h2").first()).toBeVisible()
 
   const firstSnapshot = await captureLayoutSnapshot(page)
   expect(firstSnapshot.htmlScrollWidth).toBeLessThanOrEqual(firstSnapshot.viewportWidth)
@@ -278,6 +279,7 @@ test("iPhone 15 Pro 메인 피드는 카드 overflow 없이 viewport 내부에 �
 
   await page.reload()
   await expect(page.getByRole("button", { name: "전체보기" })).toBeVisible()
+  await expect(page.locator("a[href^='/posts/'] h2").first()).toBeVisible()
 
   const secondSnapshot = await captureLayoutSnapshot(page)
   expect(secondSnapshot.htmlScrollWidth).toBeLessThanOrEqual(secondSnapshot.viewportWidth)

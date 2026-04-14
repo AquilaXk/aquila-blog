@@ -74,13 +74,17 @@ test.describe("admin surface primitives contract", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminShell.tsx"), "utf8")
 
     expect(source).toContain('import ProfileImage from "src/components/ProfileImage"')
-    expect(source).toContain('const sidebarIdentityName = member.nickname?.trim() || "AquilaLog"')
-    expect(source).toContain("const sidebarProfileImageSrc = (member.profileImageDirectUrl || member.profileImageUrl || \"\").trim()")
-    expect(source).toContain('<SidebarStatusCard aria-label="현재 화면">')
+    expect(source).toContain('import { useAdminProfile } from "src/hooks/useAdminProfile"')
+    expect(source).toContain('const sidebarIdentityName = (adminProfile?.blogTitle || "AquilaLog").trim()')
+    expect(source).toContain("adminProfile?.profileImageDirectUrl ||")
+    expect(source).toContain("adminProfile?.profileImageUrl ||")
+    expect(source).toContain('<SidebarPrimaryAction title="새 글 작성">')
     expect(source).toContain("<SidebarSectionLabel>관리 메뉴</SidebarSectionLabel>")
-    expect(source.indexOf("<SidebarStatusCard aria-label=\"현재 화면\">")).toBeLessThan(
+    expect(source.indexOf('<SidebarPrimaryAction title="새 글 작성">')).toBeLessThan(
       source.indexOf("<SidebarNavSection>")
     )
+    expect(source).not.toContain('<SidebarStatusCard aria-label="현재 화면">')
+    expect(source).not.toContain("SidebarCardTitle")
     expect(source).not.toContain("<strong>AquilaLog</strong>")
     expect(source).not.toContain('<AppIcon name="service" />')
   })

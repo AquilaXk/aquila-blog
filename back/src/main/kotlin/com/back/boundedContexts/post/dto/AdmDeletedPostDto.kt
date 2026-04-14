@@ -12,6 +12,7 @@ data class AdmDeletedPostDto(
     val title: String,
     val authorId: Long,
     val authorName: String,
+    val authorProfileImgUrl: String,
     val published: Boolean,
     val listed: Boolean,
     val createdAt: Instant,

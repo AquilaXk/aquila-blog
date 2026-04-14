@@ -24,6 +24,7 @@ test.describe("admin posts workspace link contract", () => {
     expect(source).toContain("recentPosts.slice(0, 3)")
     expect(source).toContain("grid-template-columns: minmax(14rem, 0.74fr) minmax(0, 1.26fr);")
     expect(source).toContain("<h1>글 관리</h1>")
+    expect(source).not.toContain("SecondaryLinkButton")
     expect(source).not.toContain("position: sticky;")
     expect(source).not.toContain("top: calc(var(--app-header-height, 64px) + 0.55rem);")
     expect(source).toContain('<ResumeCardButton type="button" onClick={() => void openWriteRoute({ source: "local-draft" })}>')

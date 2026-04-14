@@ -19,6 +19,7 @@ test.describe("admin surface primitives contract", () => {
     expect(source).toContain("export const AdminTextActionButton = styled.button`")
     expect(source).toContain("export const AdminTextActionLink = styled.a`")
     expect(source).toContain("export const AdminActionCardButton = styled.button`")
+    expect(source).toContain("export const AdminWorkspaceHero = styled.section`")
   })
 
   test("dashboard context rail yields priority earlier on tablet widths", () => {
@@ -52,7 +53,7 @@ test.describe("admin surface primitives contract", () => {
     expect(toolsSource).toContain("const ActionRowButton = styled(AdminActionCardButton)``")
     expect(toolsSource).toContain("const [isMutationExpanded, setIsMutationExpanded] = useState(false)")
     expect(toolsSource).toContain('const [activeSection, setActiveSection] = useState<SectionKey>("diagnostics")')
-    expect(toolsSource).toContain("<WorkspaceIntroCard>")
+    expect(toolsSource).not.toContain("<WorkspaceIntroCard>")
     expect(toolsSource).toContain("<DetailsPanel open={isMutationExpanded}>")
     expect(toolsSource).not.toContain('<SectionNav aria-label="운영 섹션">')
     expect(toolsSource).not.toContain("const SectionNav = styled(AdminWorkspaceSectionNav)`")

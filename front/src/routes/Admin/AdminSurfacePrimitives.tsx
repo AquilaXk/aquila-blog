@@ -102,10 +102,11 @@ export const AdminPaneHeader = styled.div`
   }
 `
 
-export const AdminWorkspaceHero = styled(AdminElevatedCard)`
+export const AdminWorkspaceHero = styled.section`
   display: grid;
-  gap: 0.9rem;
-  padding: 1.15rem 1.1rem;
+  gap: 0.72rem;
+  padding: 0 0 0.92rem;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
 `
 
 export const AdminWorkspaceHeroLabel = styled.span`
@@ -135,21 +136,22 @@ export const AdminWorkspaceHeroLayout = styled.div`
 
 export const AdminWorkspaceHeroCopy = styled.div`
   display: grid;
-  gap: 0.42rem;
+  gap: 0.28rem;
 
   h1 {
     margin: 0;
-    font-size: clamp(1.65rem, 3vw, 2.1rem);
-    line-height: 1.04;
-    letter-spacing: -0.04em;
+    font-size: clamp(1.42rem, 2.5vw, 1.86rem);
+    line-height: 1.1;
+    letter-spacing: -0.03em;
     color: ${({ theme }) => theme.colors.gray12};
   }
 
   p {
     margin: 0;
     max-width: 36rem;
-    color: ${({ theme }) => theme.colors.gray11};
-    line-height: 1.55;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.88rem;
+    line-height: 1.58;
   }
 `
 
@@ -158,7 +160,7 @@ export const AdminWorkspaceHeroActions = styled.div`
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 0.65rem;
+  gap: 0.55rem;
 
   @media (max-width: 900px) {
     justify-content: flex-start;

@@ -1300,12 +1300,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
       <WorkspaceShell>
         {isWorkspaceReady ? (
         <WorkspaceColumn>
-          <WorkspaceIntroCard>
-            <small>운영 흐름</small>
-            <strong>진단</strong>
-            <span>메일, 작업 큐, 파일 정리, 인증 보안 기록을 먼저 확인합니다.</span>
-          </WorkspaceIntroCard>
-
           <WorkspaceSection id={SECTION_IDS.diagnostics} data-ops-section="diagnostics" data-emphasis="primary">
             <SectionHeading>
               <SectionTitleBlock>
@@ -2072,8 +2066,7 @@ const Main = styled.main`
 const OpsOverview = styled(AdminWorkspaceHero)`
   display: grid;
   gap: 0.88rem;
-  padding: 0.98rem 1rem 0.92rem;
-  border-radius: 22px;
+  padding-bottom: 0.92rem;
 `
 
 const OverviewHeader = styled.div`
@@ -2084,9 +2077,9 @@ const OverviewHeader = styled.div`
 
   h1 {
     margin: 0;
-    font-size: clamp(1.9rem, 3.8vw, 2.6rem);
-    line-height: 1.04;
-    letter-spacing: -0.035em;
+    font-size: clamp(1.46rem, 2.8vw, 1.96rem);
+    line-height: 1.1;
+    letter-spacing: -0.03em;
   }
 
   p {
@@ -2140,9 +2133,9 @@ const FeaturedStatusCard = styled.button`
   text-align: left;
   display: grid;
   gap: 0.55rem;
-  border-radius: 18px;
+  border-radius: 16px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: linear-gradient(180deg, ${({ theme }) => theme.colors.gray1} 0%, ${({ theme }) => theme.colors.blue2} 100%);
+  background: ${({ theme }) => theme.colors.gray2};
   padding: 1rem;
   cursor: pointer;
 
@@ -2255,30 +2248,6 @@ const WorkspaceShell = styled.div`
 const WorkspaceColumn = styled.div`
   display: grid;
   gap: 0.85rem;
-`
-
-const WorkspaceIntroCard = styled(AdminRailCard)`
-  gap: 0.28rem;
-  padding: 0.92rem 1rem;
-
-  small {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.72rem;
-    font-weight: 800;
-    letter-spacing: 0.04em;
-  }
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1.02rem;
-    letter-spacing: -0.02em;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.84rem;
-    line-height: 1.6;
-  }
 `
 
 const DeferredWorkspaceColumn = styled.div`

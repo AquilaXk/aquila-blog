@@ -885,12 +885,6 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
             <PrimaryCta type="button" onClick={() => void openWriteRoute()}>
               새 글 작성
             </PrimaryCta>
-            <SecondaryLinkButton
-              type="button"
-              onClick={() => listSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            >
-              글 관리
-            </SecondaryLinkButton>
           </AdminWorkspaceHeroActions>
         </AdminWorkspaceHeroLayout>
       </HeroSection>
@@ -1421,15 +1415,6 @@ const PrimaryCta = styled.button`
   padding: 0;
   font-size: 1rem;
   font-weight: 800;
-  cursor: pointer;
-`
-
-const SecondaryLinkButton = styled.button`
-  border: none;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.9rem;
-  font-weight: 700;
   cursor: pointer;
 `
 

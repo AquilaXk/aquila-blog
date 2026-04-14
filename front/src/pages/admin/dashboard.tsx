@@ -637,15 +637,15 @@ const Shell = styled.div`
   }
 `
 
-const HeroPanel = styled(AdminElevatedCard)`
+const HeroPanel = styled.section`
   display: grid;
   gap: 8px;
-  padding: 12px 16px;
-  border-radius: 28px;
+  padding: 0 0 12px;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
 
   @media (max-width: 820px) {
     gap: 6px;
-    padding: 11px 14px;
+    padding-bottom: 11px;
   }
 `
 
@@ -668,9 +668,9 @@ const HeroCopy = styled.div`
   h1 {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: clamp(2rem, 3vw, 2.8rem);
-    line-height: 1.08;
-    letter-spacing: -0.04em;
+    font-size: clamp(1.52rem, 2.5vw, 2rem);
+    line-height: 1.1;
+    letter-spacing: -0.03em;
     font-weight: 800;
   }
 
@@ -684,7 +684,7 @@ const HeroCopy = styled.div`
 
   @media (max-width: 768px) {
     h1 {
-      font-size: clamp(1.8rem, 8vw, 2.35rem);
+      font-size: clamp(1.46rem, 7vw, 1.88rem);
     }
 
     p {

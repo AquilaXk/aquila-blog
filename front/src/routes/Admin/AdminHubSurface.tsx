@@ -262,11 +262,11 @@ const Main = styled.main`
   }
 `
 
-const HeroPanel = styled(AdminElevatedCard)`
+const HeroPanel = styled.section`
   display: grid;
-  gap: 0.9rem;
-  padding: 1.1rem;
-  border-radius: 28px;
+  gap: 0.82rem;
+  padding: 0 0 0.96rem;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
 `
 
 const HeroHeader = styled.div`
@@ -294,22 +294,22 @@ const HeroHeading = styled.h1`
   margin: 0;
   min-width: 0;
   color: ${({ theme }) => theme.colors.gray12};
-  font-size: clamp(2rem, 3.2vw, 2.9rem);
-  line-height: 1.08;
+  font-size: clamp(1.56rem, 2.6vw, 2.1rem);
+  line-height: 1.1;
   font-weight: 800;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   word-break: keep-all;
 
   @media (max-width: 768px) {
-    font-size: clamp(1.85rem, 9vw, 2.4rem);
+    font-size: clamp(1.48rem, 7vw, 1.92rem);
   }
 `
 
 const HeroSummary = styled.p`
   margin: 0;
   color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.92rem;
-  line-height: 1.65;
+  font-size: 0.88rem;
+  line-height: 1.58;
 `
 
 const HeroActions = styled.div`
@@ -330,42 +330,27 @@ const HeroActions = styled.div`
 const PrimaryActionLink = styled.a`
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 0.5rem;
-  min-height: 48px;
-  padding: 0 1.25rem;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.blue8};
-  background: ${({ theme }) => theme.colors.blue8};
-  color: #ffffff;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.blue9};
   text-decoration: none;
-  font-size: 0.95rem;
+  font-size: 0.94rem;
   font-weight: 800;
-  transition:
-    transform 0.16s ease,
-    background-color 0.16s ease,
-    border-color 0.16s ease;
-
-  &:hover {
-    transform: translateY(-1px);
-    background: ${({ theme }) => theme.colors.blue9};
-    border-color: ${({ theme }) => theme.colors.blue9};
-  }
 `
 
 const SecondaryActionLink = styled.a`
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-height: 48px;
-  padding: 0 1.15rem;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(255, 255, 255, 0.7)" : "rgba(31, 31, 31, 0.88)"};
-  color: ${({ theme }) => theme.colors.gray12};
+  min-height: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
   text-decoration: none;
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   font-weight: 760;
 `
 

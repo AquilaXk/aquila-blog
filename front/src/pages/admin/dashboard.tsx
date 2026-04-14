@@ -305,6 +305,7 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
   const systemHealthStatus = systemHealthQuery.data?.status || "확인 전"
   const monitoringItems = buildMonitoringItems(systemHealthStatus, env)
   const grafanaDashboardUrl = env.monitoringEmbedLooksLikeGrafana ? env.monitoringEmbedUrl : ""
+  const grafanaPanelsCanEmbed = env.monitoringEmbedIsPublicGrafana && Boolean(grafanaDashboardUrl)
   const leadPanel = DASHBOARD_PANEL_CARDS[0]
   const remainingPanels = DASHBOARD_PANEL_CARDS.slice(1)
   const firstFoldPanels = remainingPanels.slice(0, DASHBOARD_FIRST_FOLD_PANEL_LIMIT)
@@ -377,7 +378,13 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
       : []),
   ]
 
-  const leadPanelUrl = grafanaDashboardUrl ? buildGrafanaPanelEmbedUrl(grafanaDashboardUrl, leadPanel.panelId) : ""
+  const leadPanelUrl = grafanaPanelsCanEmbed ? buildGrafanaPanelEmbedUrl(grafanaDashboardUrl, leadPanel.panelId) : ""
+  const grafanaPanelFallbackTitle = grafanaDashboardUrl ? "Grafana 패널은 새 창에서 확인하세요." : "대시보드를 불러올 수 없습니다."
+  const grafanaPanelFallbackBody = grafanaDashboardUrl
+    ? env.monitoringEmbedIsPrivateGrafana
+      ? "현재 URL은 인증이 필요한 private Grafana 대시보드라 iframe 대신 링크로만 제공합니다."
+      : "현재 대시보드는 iframe 임베드를 지원하지 않아 새 창 링크로만 제공합니다."
+    : "Grafana embed URL 또는 public dashboard 구성을 먼저 확인하세요."
 
   return (
     <AdminShell currentSection="dashboard" member={sessionMember}>
@@ -429,8 +436,8 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
                   <DeferredPanelFrame eager src={leadPanelUrl} title={leadPanel.title} />
                 ) : (
                   <PanelFallback>
-                    <strong>대시보드를 불러올 수 없습니다.</strong>
-                    <span>Grafana embed URL 또는 public dashboard 구성을 먼저 확인하세요.</span>
+                    <strong>{grafanaPanelFallbackTitle}</strong>
+                    <span>{grafanaPanelFallbackBody}</span>
                   </PanelFallback>
                 )}
               </PanelBody>
@@ -438,7 +445,7 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
 
             <InsightRail>
               {firstFoldPanels.map((panel, index) => {
-                const panelUrl = grafanaDashboardUrl ? buildGrafanaPanelEmbedUrl(grafanaDashboardUrl, panel.panelId) : ""
+                const panelUrl = grafanaPanelsCanEmbed ? buildGrafanaPanelEmbedUrl(grafanaDashboardUrl, panel.panelId) : ""
                 return (
                   <CompactPanelCard key={`first-fold-${panel.key}`} data-ui="monitoring-panel-card">
                     <PanelHeader>
@@ -461,8 +468,8 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
                         />
                       ) : (
                         <PanelFallback>
-                          <strong>대시보드를 불러올 수 없습니다.</strong>
-                          <span>Grafana embed URL 또는 public dashboard 구성을 먼저 확인하세요.</span>
+                          <strong>{grafanaPanelFallbackTitle}</strong>
+                          <span>{grafanaPanelFallbackBody}</span>
                         </PanelFallback>
                       )}
                     </CompactPanelBody>
@@ -562,7 +569,7 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
                 </AdditionalPanelsSummary>
                 <AdditionalPanelsGrid>
                   {secondaryPanels.map((panel, index) => {
-                    const panelUrl = grafanaDashboardUrl ? buildGrafanaPanelEmbedUrl(grafanaDashboardUrl, panel.panelId) : ""
+                    const panelUrl = grafanaPanelsCanEmbed ? buildGrafanaPanelEmbedUrl(grafanaDashboardUrl, panel.panelId) : ""
                     return (
                       <PanelCard key={`secondary-${panel.key}`} data-ui="monitoring-panel-card">
                         <PanelHeader>
@@ -585,8 +592,8 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
                             />
                           ) : (
                             <PanelFallback>
-                              <strong>대시보드를 불러올 수 없습니다.</strong>
-                              <span>Grafana embed URL 또는 public dashboard 구성을 먼저 확인하세요.</span>
+                              <strong>{grafanaPanelFallbackTitle}</strong>
+                              <span>{grafanaPanelFallbackBody}</span>
                             </PanelFallback>
                           )}
                         </PanelBody>

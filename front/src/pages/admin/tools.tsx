@@ -197,6 +197,7 @@ const ADMIN_TOOLS_MAIL_SNAPSHOT_MAX_AGE_SECONDS = 60 * 30
 const ADMIN_TOOLS_MAIL_SNAPSHOT_MAX_STALE_MS = 1000 * 60 * 60 * 6
 const ADMIN_TOOLS_HEALTH_SSR_CACHE_KEY = "admin-tools:system-health"
 const ADMIN_TOOLS_HEALTH_SSR_CACHE_TTL_MS = 10_000
+const ADMIN_TOOLS_DISPLAY_TIME_ZONE = "Asia/Seoul"
 type IdleWindow = Window & {
   requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number
   cancelIdleCallback?: (handle: number) => void
@@ -599,6 +600,7 @@ const formatInstant = (value: string | null | undefined) => {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
+    timeZone: ADMIN_TOOLS_DISPLAY_TIME_ZONE,
   }).format(date)
 }
 
@@ -610,13 +612,18 @@ const formatAge = (seconds: number | null | undefined) => {
   return `${Math.floor(seconds / 86400)}일`
 }
 
-const getFreshnessMeta = (value: string | null | undefined): { label: string; tone: "fresh" | "aging" | "stale" } => {
+const getFreshnessMeta = (
+  value: string | null | undefined,
+  referenceNow: number | null
+): { label: string; tone: "fresh" | "aging" | "stale" } => {
   if (!value) return { label: "미확인", tone: "stale" }
 
   const timestamp = new Date(value).getTime()
   if (Number.isNaN(timestamp)) return { label: "미확인", tone: "stale" }
 
-  const diffMs = Date.now() - timestamp
+  if (referenceNow == null) return { label: "확인됨", tone: "fresh" }
+
+  const diffMs = referenceNow - timestamp
   if (diffMs < 90_000) return { label: "방금 확인", tone: "fresh" }
   if (diffMs < 15 * 60_000) return { label: `${Math.max(1, Math.floor(diffMs / 60_000))}분 전`, tone: "fresh" }
   if (diffMs < 60 * 60_000) return { label: `${Math.max(15, Math.floor(diffMs / 60_000))}분 전`, tone: "aging" }
@@ -739,6 +746,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
     tone: "warning",
     text: "",
   })
+  const [freshnessClock, setFreshnessClock] = useState<number | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [advancedToolsOpen, setAdvancedToolsOpen] = useState(false)
   const [isMutationExpanded, setIsMutationExpanded] = useState(false)
@@ -985,6 +993,15 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   }, [isWorkspaceReady])
 
   useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const syncClock = () => setFreshnessClock(Date.now())
+    syncClock()
+    const interval = window.setInterval(syncClock, 60_000)
+    return () => window.clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
     if (systemHealthCheckedAt || !systemHealthQuery.data) return
     setSystemHealthCheckedAt(new Date().toISOString())
   }, [systemHealthCheckedAt, systemHealthQuery.data])
@@ -1058,18 +1075,18 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
       if (resultsFilter === "all") return true
       if (resultsFilter === "success") return entry.status === "success"
       if (resultsFilter === "error") return entry.status === "error"
-      return getFreshnessMeta(entry.completedAt).tone === "stale"
+      return getFreshnessMeta(entry.completedAt, freshnessClock).tone === "stale"
     })
-  }, [executions, resultsFilter])
+  }, [executions, freshnessClock, resultsFilter])
 
   const resultFilterCounts = useMemo(
     () => ({
       all: executions.length,
       success: executions.filter((entry) => entry.status === "success").length,
       error: executions.filter((entry) => entry.status === "error").length,
-      stale: executions.filter((entry) => getFreshnessMeta(entry.completedAt).tone === "stale").length,
+      stale: executions.filter((entry) => getFreshnessMeta(entry.completedAt, freshnessClock).tone === "stale").length,
     }),
-    [executions]
+    [executions, freshnessClock]
   )
 
   const selectedExecution = useMemo(() => {
@@ -1078,11 +1095,11 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   }, [filteredExecutions, selectedExecutionId])
 
   const systemHealthStatus = systemHealthQuery.data?.status || "UNKNOWN"
-  const systemHealthFreshness = getFreshnessMeta(systemHealthCheckedAt)
-  const mailFreshness = getFreshnessMeta(mailDiagnostics?.checkedAt ?? null)
-  const taskQueueFreshness = getFreshnessMeta(taskQueueCheckedAt)
-  const cleanupFreshness = getFreshnessMeta(cleanupCheckedAt)
-  const authFreshness = getFreshnessMeta(authSecurityCheckedAt)
+  const systemHealthFreshness = getFreshnessMeta(systemHealthCheckedAt, freshnessClock)
+  const mailFreshness = getFreshnessMeta(mailDiagnostics?.checkedAt ?? null, freshnessClock)
+  const taskQueueFreshness = getFreshnessMeta(taskQueueCheckedAt, freshnessClock)
+  const cleanupFreshness = getFreshnessMeta(cleanupCheckedAt, freshnessClock)
+  const authFreshness = getFreshnessMeta(authSecurityCheckedAt, freshnessClock)
   const systemHealthSummary = getSystemHealthSummary(systemHealthQuery.data ?? null)
   const systemHealthFetchedAt = systemHealthCheckedAt ? formatInstant(systemHealthCheckedAt) : "-"
   const isMailLoading = loadingKey === "mailStatus" || loadingKey === "mailConnectivity"
@@ -1218,7 +1235,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
       hasAuthDiagnostics ? authFreshness.tone : null
     ),
     observability: systemHealthFreshness.tone,
-    results: executions[0] ? getFreshnessMeta(executions[0].completedAt).tone : "stale",
+    results: executions[0] ? getFreshnessMeta(executions[0].completedAt, freshnessClock).tone : "stale",
   }
 
   const attentionItems = [
@@ -1884,8 +1901,8 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                       <ActionToneBadge data-tone={selectedExecution.status === "error" ? "danger" : selectedExecution.tone === "danger" ? "danger" : selectedExecution.tone === "write" ? "write" : "read"}>
                         {selectedExecution.status === "error" ? "실패" : "성공"}
                       </ActionToneBadge>
-                      <FreshnessBadge data-tone={getFreshnessMeta(selectedExecution.completedAt).tone}>
-                        {getFreshnessMeta(selectedExecution.completedAt).label}
+                      <FreshnessBadge data-tone={getFreshnessMeta(selectedExecution.completedAt, freshnessClock).tone}>
+                        {getFreshnessMeta(selectedExecution.completedAt, freshnessClock).label}
                       </FreshnessBadge>
                     </ResultBadgeRow>
                   </ResultTop>
@@ -1925,7 +1942,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                       >
                         <span>{entry.source}</span>
                         <small>
-                          {entry.status === "error" ? "실패" : "성공"} · {formatInstant(entry.completedAt)} · {getFreshnessMeta(entry.completedAt).label}
+                          {entry.status === "error" ? "실패" : "성공"} · {formatInstant(entry.completedAt)} · {getFreshnessMeta(entry.completedAt, freshnessClock).label}
                         </small>
                       </HistoryButton>
                     ))}

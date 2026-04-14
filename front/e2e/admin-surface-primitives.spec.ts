@@ -26,6 +26,8 @@ test.describe("admin surface primitives contract", () => {
 
     expect(source).toContain("@media (max-width: 1180px) {\n    grid-template-columns: repeat(2, minmax(0, 1fr));")
     expect(source).toContain("@media (max-width: 960px) {\n    grid-template-columns: 1fr;")
+    expect(source).toContain("const DASHBOARD_FIRST_FOLD_PANEL_LIMIT = 2")
+    expect(source).toContain("<AdditionalPanelsSection>")
     expect(source).toContain("const PriorityBadge = styled(AdminStatusPill)`")
     expect(source).toContain("const PriorityLink = styled(AdminTextActionLink)`")
   })
@@ -41,5 +43,7 @@ test.describe("admin surface primitives contract", () => {
     expect(toolsSource).toContain("const StatusBadge = styled(AdminStatusPill)`")
     expect(toolsSource).toContain("const FreshnessBadge = styled(AdminStatusPill)`")
     expect(toolsSource).toContain("const ActionRowButton = styled(AdminActionCardButton)``")
+    expect(toolsSource).toContain("const [isMutationExpanded, setIsMutationExpanded] = useState(false)")
+    expect(toolsSource).toContain("<DetailsPanel open={isMutationExpanded}>")
   })
 })

@@ -1241,11 +1241,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
             </AvatarWorkspaceCard>
 
             <FieldSectionCard>
-              <SectionBlockHeader>
-                <div>
-                  <h3>텍스트</h3>
-                </div>
-              </SectionBlockHeader>
               <FieldGrid data-columns="2">
                 <FieldBox>
                   <FieldLabel htmlFor="profile-display-name">계정 이름</FieldLabel>
@@ -1257,7 +1252,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                     autoComplete="nickname"
                     onChange={(event) => setDisplayNameInput(event.target.value)}
                   />
-                  <FieldHint>공개 프로필 카드와 관리자 셸에 함께 표시됩니다.</FieldHint>
                 </FieldBox>
                 <FieldBox>
                   <FieldLabel htmlFor="profile-role">한 줄 역할</FieldLabel>

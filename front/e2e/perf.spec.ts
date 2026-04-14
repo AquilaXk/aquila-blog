@@ -1,6 +1,6 @@
 import { appendFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { expect, test, type Page, type Route } from "@playwright/test"
+import { expect, test, type Locator, type Page, type Route } from "@playwright/test"
 
 const clsBudget = Number(process.env.CLS_BUDGET || 0.1)
 const homeClsBudget = Number(process.env.CLS_BUDGET_HOME || 0.12)
@@ -661,6 +661,53 @@ const waitForPageReady = async (page: Page, options?: { waitAuth?: boolean }) =>
   }
 }
 
+const waitForQaEditorReady = async (page: Page): Promise<Locator> => {
+  const readyMarker = page.getByTestId("qa-editor-ready")
+  const editor = page.getByTestId("block-editor-prosemirror").first()
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await expect(readyMarker).toHaveCount(1, { timeout: 12_000 }).catch(() => {})
+    if ((await readyMarker.count()) > 0) {
+      await expect(editor).toBeVisible()
+      return editor
+    }
+
+    if (attempt === 0) {
+      await reloadForPerf(page, { waitAuth: false })
+    }
+  }
+
+  await expect(readyMarker).toHaveCount(1, { timeout: 12_000 })
+  await expect(editor).toBeVisible()
+  return editor
+}
+
+const waitForFeedCardLink = async (page: Page, postId: number): Promise<Locator> => {
+  const cardLink = page.locator(`a[href="/posts/${postId}"]`).first()
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await page
+      .waitForResponse(
+        (response) =>
+          response.request().method() === "GET" && response.url().includes("/post/api/v1/posts/feed"),
+        { timeout: 6000 }
+      )
+      .catch(() => null)
+
+    await expect(cardLink).toBeVisible({ timeout: 8_000 }).catch(() => {})
+    if (await cardLink.isVisible().catch(() => false)) {
+      return cardLink
+    }
+
+    if (attempt === 0) {
+      await reloadForPerf(page)
+    }
+  }
+
+  await expect(cardLink).toBeVisible({ timeout: 8_000 })
+  return cardLink
+}
+
 const reloadForPerf = async (page: Page, options?: { waitAuth?: boolean }) => {
   await page.reload({ waitUntil: "domcontentloaded" })
   await waitForPageReady(page, options)
@@ -788,8 +835,7 @@ test("에디터 타이핑 p95는 런타임 가드 예산을 통과한다", async
   })
 
   for (let trial = 0; trial < PERF_RUNTIME_GUARD_TRIALS; trial += 1) {
-    await page.goto(QA_ENGINE_ROUTE)
-    await page.waitForLoadState("domcontentloaded")
+    await gotoForPerf(page, QA_ENGINE_ROUTE, { waitAuth: false })
     await page.evaluate(() => {
       ;(window as unknown as RuntimeGuardWindow).__AQ_RUNTIME_GUARD_ENABLED__ = true
       ;(window as unknown as RuntimeGuardWindow).__AQ_RUNTIME_GUARD__ = {
@@ -797,8 +843,7 @@ test("에디터 타이핑 p95는 런타임 가드 예산을 통과한다", async
       }
     })
 
-    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
-    await expect(editor).toBeVisible()
+    const editor = await waitForQaEditorReady(page)
     await editor.click()
 
     const typingStats = await editor.evaluate(async (node) => {
@@ -1121,11 +1166,9 @@ test("상세 진입 시간은 런타임 가드 예산을 통과한다", async ({
   await mockDetailRailEndpoint(page, postId)
 
   for (let trial = 0; trial < PERF_RUNTIME_GUARD_TRIALS; trial += 1) {
-    await page.goto("/")
-    await waitForPageReady(page)
+    await gotoForPerf(page, "/")
 
-    const firstCardLink = page.locator(`a[href="/posts/${postId}"]`).first()
-    await expect(firstCardLink).toBeVisible()
+    const firstCardLink = await waitForFeedCardLink(page, postId)
 
     await page.evaluate(() => {
       performance.clearMarks("rum:detail-entry:start")

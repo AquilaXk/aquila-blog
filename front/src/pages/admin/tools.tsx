@@ -717,7 +717,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   const [activeSection, setActiveSection] = useState<SectionKey>("diagnostics")
   const [sectionJumpTarget, setSectionJumpTarget] = useState<SectionKey | null>(null)
   const [isWorkspaceReady, setIsWorkspaceReady] = useState(false)
-  const [activeDiagnosticTab, setActiveDiagnosticTab] = useState<DiagnosticTab>("mail")
+  const [activeDiagnosticTab, setActiveDiagnosticTab] = useState<DiagnosticTab | null>(null)
   const [testEmail, setTestEmail] = useState("")
   const [mailTestNotice, setMailTestNotice] = useState<{ tone: InlineNoticeTone; text: string }>({
     tone: "warning",
@@ -957,7 +957,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
     const activate = () => setIsWorkspaceReady(true)
 
     if (typeof idleWindow.requestIdleCallback === "function") {
-      const handle = idleWindow.requestIdleCallback(() => activate(), { timeout: 900 })
+      const handle = idleWindow.requestIdleCallback(() => activate(), { timeout: 1_600 })
       return () => {
         if (typeof idleWindow.cancelIdleCallback === "function") {
           idleWindow.cancelIdleCallback(handle)
@@ -965,7 +965,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
       }
     }
 
-    const handle = window.setTimeout(activate, 180)
+    const handle = window.setTimeout(activate, 1_100)
     return () => window.clearTimeout(handle)
   }, [isWorkspaceReady])
 
@@ -1333,6 +1333,10 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                 </DiagnosticsTabButton>
               ))}
             </DiagnosticsTabs>
+
+            {activeDiagnosticTab === null ? (
+              <CalmMessage>진단 탭을 선택하면 해당 패널을 불러옵니다.</CalmMessage>
+            ) : null}
 
             {activeDiagnosticTab === "mail" ? (
               <DiagnosticPanel>

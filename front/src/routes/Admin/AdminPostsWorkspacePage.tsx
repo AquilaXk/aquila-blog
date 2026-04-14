@@ -903,28 +903,26 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
         </SectionHeading>
         {shouldRenderResumeGrid ? (
           <ResumeGrid>
-            <ResumeCard data-emphasis={localDraft ? "strong" : "soft"} data-empty={localDraft ? undefined : "true"}>
-              <ResumeHeader>
-                <strong>브라우저 임시저장</strong>
-                {localDraft?.savedAt ? <span>{formatDateTime(localDraft.savedAt)}</span> : null}
-              </ResumeHeader>
-              {localDraft ? (
-                <>
-                  <ResumeTitle>{localDraft.title}</ResumeTitle>
-                  {localDraft.summary ? <ResumeDescription>{localDraft.summary}</ResumeDescription> : null}
-                  <ResumeMeta>
-                    <VisibilityBadge data-tone={localDraft.visibility}>
-                      {visibilityLabelFromValue(localDraft.visibility)}
-                    </VisibilityBadge>
-                    <span>{localDraft.tagCount > 0 ? `태그 ${localDraft.tagCount}개` : "태그 없음"}</span>
-                  </ResumeMeta>
-                  <ActionRow>
-                    <PrimaryInlineButton type="button" onClick={() => void openWriteRoute({ source: "local-draft" })}>
-                      열기
-                    </PrimaryInlineButton>
-                  </ActionRow>
-                </>
-              ) : (
+            {localDraft ? (
+              <ResumeCardButton type="button" onClick={() => void openWriteRoute({ source: "local-draft" })}>
+                <ResumeHeader>
+                  <strong>브라우저 임시저장</strong>
+                  {localDraft.savedAt ? <span>{formatDateTime(localDraft.savedAt)}</span> : null}
+                </ResumeHeader>
+                <ResumeTitle>{localDraft.title}</ResumeTitle>
+                {localDraft.summary ? <ResumeDescription>{localDraft.summary}</ResumeDescription> : null}
+                <ResumeMeta>
+                  <VisibilityBadge data-tone={localDraft.visibility}>
+                    {visibilityLabelFromValue(localDraft.visibility)}
+                  </VisibilityBadge>
+                  <span>{localDraft.tagCount > 0 ? `태그 ${localDraft.tagCount}개` : "태그 없음"}</span>
+                </ResumeMeta>
+              </ResumeCardButton>
+            ) : (
+              <ResumeCard data-empty="true">
+                <ResumeHeader>
+                  <strong>브라우저 임시저장</strong>
+                </ResumeHeader>
                 <EmptyInlineState>
                   <strong>임시 저장 없음</strong>
                   <ActionRow>
@@ -933,10 +931,10 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                     </PrimaryInlineButton>
                   </ActionRow>
                 </EmptyInlineState>
-              )}
-            </ResumeCard>
+              </ResumeCard>
+            )}
 
-            <ResumeCard data-emphasis="soft">
+            <ResumeCard>
               <ResumeHeader>
                 <strong>최근 수정 3건</strong>
                 {isRecentLoading ? <span>불러오는 중</span> : null}
@@ -1513,16 +1511,47 @@ const ResumeGrid = styled.div`
   }
 `
 
-const ResumeCard = styled(AdminRailCard)<{ "data-emphasis"?: "strong" | "soft" }>`
+const ResumeCard = styled(AdminRailCard)`
   gap: 0.42rem;
+  width: 100%;
   padding: 0.72rem 0.78rem;
   border-radius: 16px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme, "data-emphasis": emphasis }) => (emphasis === "strong" ? theme.colors.gray1 : theme.colors.gray2)};
+  background: ${({ theme }) => theme.colors.gray2};
+  text-align: left;
+  color: inherit;
 
   &[data-empty="true"] {
     gap: 0.36rem;
     padding-block: 0.68rem;
+  }
+`
+
+const ResumeCardButton = styled.button`
+  display: grid;
+  gap: 0.42rem;
+  width: 100%;
+  padding: 0.72rem 0.78rem;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: ${({ theme }) => theme.colors.gray2};
+  appearance: none;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    box-shadow 0.18s ease;
+
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray1};
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: ${({ theme }) => `0 0 0 3px ${theme.colors.gray6}`};
   }
 `
 
@@ -1751,9 +1780,6 @@ const ListMeta = styled.div`
 `
 
 const StickyFilterToolbar = styled.div`
-  position: sticky;
-  top: calc(var(--app-header-height, 64px) + 0.55rem);
-  z-index: 12;
   display: grid;
   gap: 0.72rem;
   padding: 0.88rem 0.92rem;
@@ -1765,7 +1791,6 @@ const StickyFilterToolbar = styled.div`
   box-shadow: 0 16px 32px rgba(15, 23, 42, 0.12);
 
   @media (max-width: 767px) {
-    top: calc(var(--app-header-height, 64px) + 0.35rem);
     padding: 0.8rem 0.82rem;
   }
 

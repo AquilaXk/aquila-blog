@@ -28,6 +28,7 @@ type QaEditorHarnessProps = {
 
 export const QaEditorHarness = ({ seedMarkdown }: QaEditorHarnessProps) => {
   const [markdown, setMarkdown] = useState(() => seedMarkdown)
+  const [editorReady, setEditorReady] = useState(false)
   const qaActionsRef = useRef<BlockEditorQaActions | null>(null)
 
   useEffect(() => {
@@ -134,8 +135,10 @@ export const QaEditorHarness = ({ seedMarkdown }: QaEditorHarnessProps) => {
         enableMermaidBlocks={true}
         onQaActionsReady={(actions) => {
           qaActionsRef.current = actions
+          setEditorReady(true)
         }}
       />
+      {editorReady ? <div data-testid="qa-editor-ready" hidden /> : null}
 
       <section style={{ display: "grid", gap: "0.45rem" }}>
         <strong>Markdown output</strong>

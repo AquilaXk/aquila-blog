@@ -4,10 +4,6 @@ import AppIcon, { type IconName } from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
 import {
   AdminElevatedCard,
-  AdminInfoLinkCard,
-  AdminInfoList,
-  AdminInfoStatusItem,
-  AdminInfoStatusList,
   AdminSectionTitleStack,
   adminElevatedBorder,
   adminElevatedSurface,
@@ -56,6 +52,7 @@ type QuickLinkItem = {
   href: string
   label: string
   icon: IconName
+  description: string
 }
 
 const resolveQuickLinkIcon = (href: string): IconName => {
@@ -64,6 +61,14 @@ const resolveQuickLinkIcon = (href: string): IconName => {
   if (href.includes("/tools")) return "laptop"
   if (href.includes("/posts")) return "spark"
   return "edit"
+}
+
+const resolveQuickLinkDescription = (href: string) => {
+  if (href.includes("/profile")) return "프로필 이미지와 소개 문구를 정리합니다."
+  if (href.includes("/dashboard")) return "핵심 운영 지표와 우선 점검 항목을 확인합니다."
+  if (href.includes("/tools")) return "진단과 실행 기록, 위험 작업을 관리합니다."
+  if (href.includes("/posts")) return "최근 글과 게시 상태를 빠르게 확인합니다."
+  return "관리 화면으로 이동합니다."
 }
 
 const AdminHubSurface = ({
@@ -80,18 +85,21 @@ const AdminHubSurface = ({
   const quickLinks: QuickLinkItem[] = [
     {
       href: primaryAction.href,
-      label: primaryAction.cta,
+      label: primaryAction.title,
       icon: "edit",
+      description: "새 초안을 열고 바로 작성 흐름으로 이동합니다.",
     },
     {
       href: primaryAction.secondaryHref,
-      label: primaryAction.secondaryLabel,
+      label: "글 목록",
       icon: resolveQuickLinkIcon(primaryAction.secondaryHref),
+      description: resolveQuickLinkDescription(primaryAction.secondaryHref),
     },
     ...secondaryLinks.map((item) => ({
       href: item.href,
-      label: item.cta,
+      label: item.title,
       icon: resolveQuickLinkIcon(item.href),
+      description: resolveQuickLinkDescription(item.href),
     })),
   ]
 
@@ -141,60 +149,41 @@ const AdminHubSurface = ({
           </ActionStripGrid>
         </ActionStrip>
 
-        <WorkspaceBoard>
-          <SectionCard>
-            <SectionHeader>
-              <h2>주요 작업</h2>
-            </SectionHeader>
+        <SectionCard>
+          <SectionHeader>
+            <h2>주요 작업</h2>
+          </SectionHeader>
 
-            <PrimaryWorkflow>
+          <Link href={primaryAction.href} passHref legacyBehavior>
+            <PrimaryWorkflowLink>
               <div className="iconWrap">
                 <AppIcon name="spark" aria-hidden="true" />
               </div>
               <div className="copy">
                 <strong>{primaryAction.title}</strong>
+                <span>새 초안을 열고 바로 편집 화면으로 이동합니다.</span>
               </div>
-              <Link href={primaryAction.href} passHref legacyBehavior>
-                <WorkflowAction>{primaryAction.cta}</WorkflowAction>
-              </Link>
-            </PrimaryWorkflow>
+            </PrimaryWorkflowLink>
+          </Link>
 
-            <ShortcutGrid>
-              {secondaryLinks.map((item) => (
+          <ShortcutList aria-label="허브 빠른 이동">
+            {quickLinks
+              .filter((item) => item.href !== primaryAction.href)
+              .map((item) => (
                 <Link key={item.href} href={item.href} passHref legacyBehavior>
-                  <ShortcutLink>
-                    <ShortcutTitleRow>
-                      <div className="iconWrap">
-                        <AppIcon name={resolveQuickLinkIcon(item.href)} aria-hidden="true" />
-                      </div>
-                      <div className="copy">
-                        <strong>{item.title}</strong>
-                      </div>
-                    </ShortcutTitleRow>
-                    <span className="meta">{item.cta}</span>
-                  </ShortcutLink>
+                  <ShortcutRowLink>
+                    <div className="iconWrap">
+                      <AppIcon name={item.icon} aria-hidden="true" />
+                    </div>
+                    <div className="copy">
+                      <strong>{item.label}</strong>
+                      <span>{item.description}</span>
+                    </div>
+                  </ShortcutRowLink>
                 </Link>
               ))}
-            </ShortcutGrid>
-          </SectionCard>
-
-          <SectionCard data-variant="subtle">
-            <SectionHeader>
-              <h2>체크</h2>
-            </SectionHeader>
-            <Checklist>
-              {summaryItems.map((item) => (
-                <ChecklistItem key={`checkpoint-${item.label}`} data-tone={item.tone || "neutral"}>
-                  <div className="copy">
-                    <span>{item.label}</span>
-                    <strong>{item.value}</strong>
-                  </div>
-                  <StatusDot data-tone={item.tone || "neutral"} aria-hidden="true" />
-                </ChecklistItem>
-              ))}
-            </Checklist>
-          </SectionCard>
-        </WorkspaceBoard>
+          </ShortcutList>
+        </SectionCard>
       </div>
 
       <RailColumn className="rt">
@@ -213,45 +202,12 @@ const AdminHubSurface = ({
             <ProfileCopy>
               <strong>{displayName}</strong>
               <span>{profileRole || "역할 미설정"}</span>
+              <p>{profileBio || "프로필 소개와 링크를 정리해 공개 카드와 같은 톤으로 맞춥니다."}</p>
             </ProfileCopy>
           </ProfileSnapshot>
           <Link href="/admin/profile" passHref legacyBehavior>
             <RailActionLink>편집</RailActionLink>
           </Link>
-        </RailCard>
-
-        <RailCard data-variant="utility">
-          <SectionHeader>
-            <h2>바로가기</h2>
-          </SectionHeader>
-          <AdminInfoList>
-            {quickLinks.map((item) => (
-              <Link key={`${item.href}-${item.label}`} href={item.href} passHref legacyBehavior>
-                <AdminInfoLinkCard>
-                  <span className="iconWrap">
-                    <AppIcon name={item.icon} aria-hidden="true" />
-                  </span>
-                  <span className="copy">
-                    <strong>{item.label}</strong>
-                  </span>
-                </AdminInfoLinkCard>
-              </Link>
-            ))}
-          </AdminInfoList>
-        </RailCard>
-
-        <RailCard data-variant="utility">
-          <SectionHeader>
-            <h2>상태</h2>
-          </SectionHeader>
-          <AdminInfoStatusList>
-            {summaryItems.map((item) => (
-              <AdminInfoStatusItem key={`mini-${item.label}`} data-tone={item.tone || "neutral"}>
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-              </AdminInfoStatusItem>
-            ))}
-          </AdminInfoStatusList>
         </RailCard>
       </RailColumn>
     </Main>
@@ -501,17 +457,6 @@ const ActionCard = styled.a`
   }
 `
 
-const WorkspaceBoard = styled.section`
-  display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.9fr);
-  gap: 1rem;
-  align-items: start;
-
-  @media (max-width: 1120px) {
-    grid-template-columns: 1fr;
-  }
-`
-
 const SectionCard = styled(AdminElevatedCard)`
   min-width: 0;
   display: grid;
@@ -530,9 +475,9 @@ const SectionCard = styled(AdminElevatedCard)`
   }
 `
 
-const PrimaryWorkflow = styled.div`
+const PrimaryWorkflowLink = styled.a`
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 0.95rem;
   align-items: center;
   padding: 0.92rem;
@@ -540,6 +485,18 @@ const PrimaryWorkflow = styled.div`
   border: 1px solid ${({ theme }) => theme.colors.blue7};
   background: ${({ theme }) =>
     theme.scheme === "light" ? "rgba(59, 130, 246, 0.08)" : "rgba(59, 130, 246, 0.16)"};
+  color: inherit;
+  text-decoration: none;
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    border-color: ${({ theme }) => theme.colors.blue8};
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.12);
+  }
 
   .iconWrap {
     width: 2.8rem;
@@ -564,61 +521,44 @@ const PrimaryWorkflow = styled.div`
     font-weight: 800;
   }
 
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.82rem;
+    line-height: 1.55;
+  }
+
   @media (max-width: 720px) {
     grid-template-columns: 1fr;
     align-items: start;
   }
 `
 
-const WorkflowAction = styled.a`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 42px;
-  padding: 0 1rem;
-  border-radius: 999px;
-  background: ${({ theme }) => theme.colors.blue8};
-  color: #ffffff;
-  text-decoration: none;
-  font-size: 0.84rem;
-  font-weight: 800;
-`
-
-const ShortcutGrid = styled.div`
+const ShortcutList = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
   gap: 0.68rem;
-
-  @media (max-width: 900px) {
-    grid-template-columns: 1fr;
-  }
 `
 
-const ShortcutLink = styled.a`
+const ShortcutRowLink = styled.a`
   min-width: 0;
   display: grid;
-  gap: 0.64rem;
-  padding: 0.82rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.78rem;
+  align-items: center;
+  padding: 0.88rem 0.92rem;
   border-radius: 20px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) =>
     theme.scheme === "light" ? "rgba(255, 255, 255, 0.82)" : "rgba(31, 31, 31, 0.88)"};
   color: inherit;
   text-decoration: none;
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease;
 
-  .meta {
-    color: ${({ theme }) => theme.colors.blue9};
-    font-size: 0.78rem;
-    font-weight: 760;
-    word-break: keep-all;
+  &:hover {
+    transform: translateY(-1px);
+    border-color: ${({ theme }) => theme.colors.blue7};
   }
-`
-
-const ShortcutTitleRow = styled.div`
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.72rem;
-  align-items: start;
 
   .iconWrap {
     width: 2.65rem;
@@ -634,78 +574,20 @@ const ShortcutTitleRow = styled.div`
   .copy {
     min-width: 0;
     display: grid;
-    gap: 0.18rem;
+    gap: 0.2rem;
   }
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.95rem;
+    font-size: 0.92rem;
     font-weight: 800;
     word-break: keep-all;
   }
 
-  p {
-    margin: 0;
+  span {
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.78rem;
     line-height: 1.5;
-  }
-`
-
-const Checklist = styled.div`
-  display: grid;
-  gap: 0.58rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-
-  @media (max-width: 640px) {
-    grid-template-columns: 1fr;
-  }
-`
-
-const ChecklistItem = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.8rem;
-  padding: 0.78rem 0.85rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(255, 255, 255, 0.8)" : "rgba(31, 31, 31, 0.88)"};
-
-  .copy {
-    min-width: 0;
-    display: grid;
-    gap: 0.14rem;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.79rem;
-    font-weight: 700;
-  }
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.88rem;
-    font-weight: 780;
-    line-height: 1.4;
-  }
-`
-
-const StatusDot = styled.span`
-  width: 0.72rem;
-  height: 0.72rem;
-  border-radius: 999px;
-  flex-shrink: 0;
-  background: ${({ theme }) => theme.colors.blue8};
-
-  &[data-tone="good"] {
-    background: ${({ theme }) => theme.colors.green7};
-  }
-
-  &[data-tone="warn"] {
-    background: ${({ theme }) => theme.colors.orange7};
   }
 `
 
@@ -720,7 +602,7 @@ const RailColumn = styled.aside`
   }
 
   @media (max-width: 1279px) {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   @media (max-width: 900px) {

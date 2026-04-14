@@ -36,7 +36,10 @@ test.describe("admin bootstrap state contract", () => {
     expect(toolsSource).toContain("systemHealth: bootstrapResult.value.value.health")
     expect(toolsSource).toContain('source: "bootstrap"')
     expect(toolsSource).toContain("const [systemHealthCheckedAt, setSystemHealthCheckedAt] = useState<string | null>(initialSnapshot.systemHealthFetchedAt)")
-    expect(toolsSource).toContain("const systemHealthFreshness = getFreshnessMeta(systemHealthCheckedAt)")
+    expect(toolsSource).toContain('const ADMIN_TOOLS_DISPLAY_TIME_ZONE = "Asia/Seoul"')
+    expect(toolsSource).toContain("timeZone: ADMIN_TOOLS_DISPLAY_TIME_ZONE")
+    expect(toolsSource).toContain("const [freshnessClock, setFreshnessClock] = useState<number | null>(null)")
+    expect(toolsSource).toContain("const systemHealthFreshness = getFreshnessMeta(systemHealthCheckedAt, freshnessClock)")
     expect(toolsSource).toContain("const systemHealthFetchedAt = systemHealthCheckedAt ? formatInstant(systemHealthCheckedAt) : \"-\"")
   })
 

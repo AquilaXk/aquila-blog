@@ -3,7 +3,7 @@ import styled from "@emotion/styled"
 import AppIcon from "src/components/icons/AppIcon"
 import { Emoji } from "src/components/Emoji"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
-import { resolveRenderableProfileLinkHref, resolveServiceLinks } from "src/libs/utils/profileCardLinks"
+import { formatProfileLinkHint, resolveRenderableProfileLinkHref, resolveServiceLinks } from "src/libs/utils/profileCardLinks"
 
 type Props = {
   initialAdminProfile?: AdminProfile | null
@@ -15,87 +15,111 @@ const ServiceCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
   if (links.length === 0) return null
 
   return (
-    <>
+    <StyledSection data-ui="feed-service-section">
       <StyledTitle>
         <Emoji className="titleEmoji">🌟</Emoji> Service
       </StyledTitle>
-      <StyledWrapper>
+      <StyledContent data-ui="feed-service-links">
         {links.map((item) => {
           const safeHref = resolveRenderableProfileLinkHref("service", item.href)
           const canRenderHref = Boolean(safeHref && (safeHref.startsWith("https://") || safeHref.startsWith("http://")))
           if (!canRenderHref || !safeHref) return null
+          const hint = formatProfileLinkHint(safeHref)
 
           return (
             <a key={`${safeHref}-${item.label}`} href={safeHref} rel="noopener noreferrer" target="_blank">
               <AppIcon name={item.icon} className="icon" />
-              <div className="name">{item.label}</div>
+              <div className="copy">
+                <div className="name">{item.label}</div>
+                {hint ? <div className="hint">{hint}</div> : null}
+              </div>
             </a>
           )
         })}
-      </StyledWrapper>
-    </>
+      </StyledContent>
+    </StyledSection>
   )
 }
 
 export default ServiceCard
 
+const StyledSection = styled.section`
+  margin-bottom: 2.1rem;
+`
+
 const StyledTitle = styled.div`
   display: inline-flex;
   align-items: center;
-  gap: 0.68rem;
-  padding: 0.1rem 0;
-  margin-bottom: 1rem;
-  font-size: 1.22rem;
-  line-height: 1.3;
+  gap: 0.5rem;
+  padding: 0.25rem;
+  margin-bottom: 0.75rem;
+  font-size: 1.05rem;
+  line-height: 1.35;
   font-weight: 800;
 
   .titleEmoji {
-    font-size: 1.38rem;
+    font-size: 1.15rem;
     flex: 0 0 auto;
   }
 `
 
-const StyledWrapper = styled.div`
+const StyledContent = styled.div`
   display: grid;
-  gap: 0.72rem;
-  padding: 1rem 1.05rem;
-  margin-bottom: 2.15rem;
-  border-radius: 24px;
-  background: ${({ theme }) => theme.colors.gray2};
+  gap: 0.22rem;
+  width: 100%;
+  padding: 0 0 1rem;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
 
   > a {
-    display: flex;
-    min-height: 50px;
-    padding: 0.42rem 0.3rem;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    min-height: 44px;
+    padding: 0.48rem 0.2rem;
     gap: 0.72rem;
     align-items: center;
-    border-radius: 16px;
+    border-radius: 14px;
     color: ${({ theme }) => theme.colors.gray11};
     cursor: pointer;
     text-decoration: none;
+    transition: background-color 120ms ease, color 120ms ease;
 
     &:hover {
       color: ${({ theme }) => theme.colors.gray12};
-      background: rgba(255, 255, 255, 0.02);
-      text-decoration: underline;
-      text-underline-offset: 3px;
+      background: rgba(255, 255, 255, 0.028);
     }
+
     .icon {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 2.35rem;
-      height: 2.35rem;
-      flex: 0 0 2.35rem;
-      border-radius: 999px;
-      background: ${({ theme }) => theme.colors.gray3};
-      font-size: 1.08rem;
+      width: 2rem;
+      height: 2rem;
+      flex: 0 0 2rem;
+      border-radius: 12px;
+      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      background: rgba(255, 255, 255, 0.01);
+      color: ${({ theme }) => theme.colors.gray10};
+      font-size: 0.98rem;
       line-height: 1;
     }
+
+    .copy {
+      min-width: 0;
+    }
+
     .name {
-      font-size: 0.95rem;
-      line-height: 1.32rem;
+      color: ${({ theme }) => theme.colors.gray12};
+      font-size: 0.93rem;
+      line-height: 1.24rem;
       font-weight: 600;
+    }
+
+    .hint {
+      margin-top: 0.14rem;
+      color: ${({ theme }) => theme.colors.gray10};
+      font-size: 0.78rem;
+      line-height: 1.24;
+      word-break: break-word;
     }
   }
 `

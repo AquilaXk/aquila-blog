@@ -3,8 +3,8 @@ import styled from "@emotion/styled"
 
 export const adminElevatedSurface = (theme: Theme) =>
   theme.scheme === "light"
-    ? "linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(246, 249, 255, 0.94) 100%)"
-    : "linear-gradient(180deg, rgba(23, 28, 36, 0.96) 0%, rgba(17, 20, 27, 0.94) 100%)"
+    ? "linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 248, 249, 0.94) 100%)"
+    : "linear-gradient(180deg, rgba(23, 23, 24, 0.96) 0%, rgba(17, 17, 18, 0.94) 100%)"
 
 export const adminElevatedBorder = (theme: Theme) => theme.colors.gray5
 
@@ -115,9 +115,9 @@ export const AdminWorkspaceHeroLabel = styled.span`
   align-items: center;
   padding: 0 0.72rem;
   border-radius: 999px;
-  background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(59, 130, 246, 0.12)" : "rgba(59, 130, 246, 0.18)"};
-  color: ${({ theme }) => theme.colors.blue9};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.74rem;
   font-weight: 800;
 `
@@ -205,8 +205,8 @@ export const AdminWorkspaceSectionNavStatus = styled(AdminRailCard)`
   }
 
   &[data-jumping="true"] {
-    border-color: ${({ theme }) => theme.colors.accentBorder};
-    background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
+    border-color: ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray1};
   }
 
   @media (max-width: 1180px) {
@@ -248,8 +248,8 @@ export const AdminWorkspaceSectionNavButton = styled.button`
 
   &[data-active="true"] {
     color: ${({ theme }) => theme.colors.gray12};
-    border-color: ${({ theme }) => theme.colors.accentBorder};
-    background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
+    border-color: ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray1};
   }
 
   &[data-freshness="fresh"] {
@@ -353,9 +353,8 @@ export const AdminInfoLinkCard = styled.a<{ $withIcon?: boolean }>`
     height: 2.35rem;
     border-radius: 14px;
     place-items: center;
-    background: ${({ theme }) =>
-      theme.scheme === "light" ? "rgba(59, 130, 246, 0.1)" : "rgba(59, 130, 246, 0.18)"};
-    color: ${({ theme }) => theme.colors.blue9};
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.gray11};
   }
 
   .copy {
@@ -449,9 +448,9 @@ export const AdminStatusPill = styled.span<{ $size?: "sm" | "md" }>`
   }
 
   &[data-tone="accent"] {
-    border-color: ${({ theme }) => theme.colors.accentBorder};
-    background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
-    color: ${({ theme }) => theme.colors.accentLink};
+    border-color: ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray1};
+    color: ${({ theme }) => theme.colors.gray12};
   }
 
   &[data-tone="success"] {
@@ -505,7 +504,7 @@ export const AdminTextActionButton = styled.button`
   }
 
   &[data-tone="primary"] {
-    color: ${({ theme }) => theme.colors.blue9};
+    color: ${({ theme }) => theme.colors.gray12};
     font-weight: 800;
   }
 
@@ -533,7 +532,7 @@ export const AdminTextActionLink = styled.a`
   }
 
   &[data-tone="primary"] {
-    color: ${({ theme }) => theme.colors.blue9};
+    color: ${({ theme }) => theme.colors.gray12};
     font-weight: 800;
   }
 

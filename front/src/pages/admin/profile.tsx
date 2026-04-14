@@ -417,6 +417,9 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
     tone: "idle",
     text: "",
   })
+  const [displayNameInput, setDisplayNameInput] = useState(
+    (initialMember.nickname || initialMember.username || "").trim()
+  )
   const [remoteDraft, setRemoteDraft] = useState<ProfileWorkspaceContent>(fallbackWorkspace.draft)
   const [publishedSnapshot, setPublishedSnapshot] = useState<ProfileWorkspaceContent>(fallbackWorkspace.published)
   const [draft, setDraft] = useState<ProfileWorkspaceContent>(fallbackWorkspace.draft)
@@ -490,6 +493,11 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
   }, [applyWorkspaceState, workspaceQuery.data])
 
   useEffect(() => {
+    const nextDisplayName = (sessionMember?.nickname || sessionMember?.username || "").trim()
+    setDisplayNameInput(nextDisplayName)
+  }, [sessionMember?.nickname, sessionMember?.username])
+
+  useEffect(() => {
     if (workspaceNotice.tone !== "success" && workspaceNotice.tone !== "error") return
     const timeout = window.setTimeout(() => {
       setWorkspaceNotice({ tone: "idle", text: "" })
@@ -542,10 +550,15 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
     }
   }, [isProfileImageEditorOpen])
 
-  const hasUnsavedChanges = useMemo(
+  const hasWorkspaceUnsavedChanges = useMemo(
     () => serializeProfileWorkspaceContent(draft) !== serializeProfileWorkspaceContent(remoteDraft),
     [draft, remoteDraft]
   )
+  const hasDisplayNameDirty = useMemo(() => {
+    const currentDisplayName = (sessionMember?.nickname || sessionMember?.username || "").trim()
+    return displayNameInput.trim() !== currentDisplayName
+  }, [displayNameInput, sessionMember?.nickname, sessionMember?.username])
+  const hasUnsavedChanges = hasDisplayNameDirty || hasWorkspaceUnsavedChanges
   const hasPublishedDiff = useMemo(
     () => serializeProfileWorkspaceContent(remoteDraft) !== serializeProfileWorkspaceContent(publishedSnapshot),
     [publishedSnapshot, remoteDraft]
@@ -555,8 +568,9 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
       (acc, section) => {
         acc[section.id] = {
           dirty:
+            (section.id === "identity" ? hasDisplayNameDirty : false) ||
             serializeWorkspaceSection(draft, section.id) !==
-            serializeWorkspaceSection(remoteDraft, section.id),
+              serializeWorkspaceSection(remoteDraft, section.id),
           publishedDiff:
             serializeWorkspaceSection(remoteDraft, section.id) !==
             serializeWorkspaceSection(publishedSnapshot, section.id),
@@ -570,7 +584,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
         links: { dirty: false, publishedDiff: false },
       }
     )
-  }, [draft, publishedSnapshot, remoteDraft])
+  }, [draft, hasDisplayNameDirty, publishedSnapshot, remoteDraft])
 
   useEffect(() => {
     if (typeof window === "undefined" || !sessionMember || !hasUnsavedChanges) return
@@ -611,6 +625,21 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
       return nextWorkspace
     },
     [applyWorkspaceState]
+  )
+
+  const persistDisplayName = useCallback(
+    async (memberId: number, nickname: string) => {
+      const updatedMember = await saveProfileCardWithConflictRetry(() =>
+        apiFetch<AuthMember>(`/member/api/v1/adm/members/${memberId}/nickname`, {
+          method: "PATCH",
+          body: JSON.stringify({ nickname }),
+        })
+      )
+      setMe(updatedMember)
+      setAdminProfileCache(queryClient, toAdminProfile(updatedMember))
+      return updatedMember
+    },
+    [queryClient, setMe]
   )
 
   const updateDraft = useCallback(
@@ -1033,29 +1062,91 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
       return
     }
 
+    const normalizedDisplayName = displayNameInput.trim()
+    const shouldSaveDisplayName = hasDisplayNameDirty
+    const shouldSaveWorkspace = hasWorkspaceUnsavedChanges
+
+    if (shouldSaveDisplayName && (normalizedDisplayName.length < 2 || normalizedDisplayName.length > 30)) {
+      setWorkspaceNotice({ tone: "error", text: "계정 이름은 2자 이상 30자 이하로 입력해주세요." })
+      setActiveSection("identity")
+      return
+    }
+
+    if (!shouldSaveDisplayName && !shouldSaveWorkspace) {
+      setWorkspaceNotice({ tone: "idle", text: "이미 최신 상태입니다." })
+      return
+    }
+
+    let workspaceSaved = false
+
     try {
       setLoadingKey("save")
-      setWorkspaceNotice({ tone: "loading", text: "임시 저장 중..." })
-      const normalizedDraft = normalizeProfileWorkspaceContent({
-        ...draft,
-        serviceLinks: toPayloadLinks("service", draft.serviceLinks, DEFAULT_SERVICE_ITEM_ICON),
-        contactLinks: toPayloadLinks("contact", draft.contactLinks, DEFAULT_CONTACT_ITEM_ICON),
+      setWorkspaceNotice({
+        tone: "loading",
+        text:
+          shouldSaveWorkspace && shouldSaveDisplayName
+            ? "임시 저장과 계정 이름 저장을 함께 처리하고 있습니다..."
+            : shouldSaveDisplayName
+              ? "계정 이름을 저장하고 있습니다..."
+              : "임시 저장 중...",
       })
-      const nextWorkspace = await saveProfileCardWithConflictRetry(() =>
-        apiFetch<ProfileWorkspaceResponse>(`/member/api/v1/adm/members/${sessionMember.id}/profileWorkspace/draft`, {
-          method: "PUT",
-          body: JSON.stringify(normalizedDraft),
+
+      if (shouldSaveWorkspace) {
+        const normalizedDraft = normalizeProfileWorkspaceContent({
+          ...draft,
+          serviceLinks: toPayloadLinks("service", draft.serviceLinks, DEFAULT_SERVICE_ITEM_ICON),
+          contactLinks: toPayloadLinks("contact", draft.contactLinks, DEFAULT_CONTACT_ITEM_ICON),
         })
-      )
-      applyWorkspaceState(nextWorkspace)
-      setWorkspaceNotice({ tone: "success", text: "임시 저장했습니다." })
+        const nextWorkspace = await saveProfileCardWithConflictRetry(() =>
+          apiFetch<ProfileWorkspaceResponse>(`/member/api/v1/adm/members/${sessionMember.id}/profileWorkspace/draft`, {
+            method: "PUT",
+            body: JSON.stringify(normalizedDraft),
+          })
+        )
+        applyWorkspaceState(nextWorkspace)
+        workspaceSaved = true
+      }
+
+      if (shouldSaveDisplayName) {
+        await persistDisplayName(sessionMember.id, normalizedDisplayName)
+      }
+
+      setWorkspaceNotice({
+        tone: "success",
+        text:
+          shouldSaveWorkspace && shouldSaveDisplayName
+            ? "임시 저장과 계정 이름 업데이트를 완료했습니다."
+            : shouldSaveDisplayName
+              ? "계정 이름을 저장했습니다."
+              : "임시 저장했습니다.",
+      })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      setWorkspaceNotice({ tone: "error", text: `임시 저장 실패: ${message}` })
+      const failureText =
+        shouldSaveWorkspace && shouldSaveDisplayName
+          ? "임시 저장 또는 계정 이름 저장 실패"
+          : shouldSaveDisplayName
+            ? "계정 이름 저장 실패"
+            : "임시 저장 실패"
+      setWorkspaceNotice({
+        tone: "error",
+        text:
+          workspaceSaved && shouldSaveDisplayName
+            ? `임시 저장은 완료됐지만 계정 이름 저장은 실패했습니다: ${message}`
+            : `${failureText}: ${message}`,
+      })
     } finally {
       setLoadingKey("")
     }
-  }, [applyWorkspaceState, draft, sessionMember?.id])
+  }, [
+    applyWorkspaceState,
+    displayNameInput,
+    draft,
+    hasDisplayNameDirty,
+    hasWorkspaceUnsavedChanges,
+    persistDisplayName,
+    sessionMember?.id,
+  ])
 
   const handlePublish = useCallback(async () => {
     if (!sessionMember?.id) return
@@ -1102,7 +1193,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
 
   if (!sessionMember) return null
 
-  const displayName = sessionMember.nickname || sessionMember.username || "관리자"
+  const displayName = displayNameInput.trim() || sessionMember.nickname || sessionMember.username || "관리자"
   const displayNameInitial = displayName.slice(0, 2).toUpperCase()
   const previewContent = previewMode === "published" ? publishedSnapshot : draft
   const isHomeSection = activeSection === "home"
@@ -1159,11 +1250,16 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
               </SectionBlockHeader>
               <FieldGrid data-columns="2">
                 <FieldBox>
-                  <FieldLabel>계정 이름</FieldLabel>
-                  <LockedField>
-                    <strong>{displayName}</strong>
-                    <span>읽기 전용</span>
-                  </LockedField>
+                  <FieldLabel htmlFor="profile-display-name">계정 이름</FieldLabel>
+                  <Input
+                    id="profile-display-name"
+                    value={displayNameInput}
+                    maxLength={30}
+                    placeholder="공개 프로필에 표시할 이름"
+                    autoComplete="nickname"
+                    onChange={(event) => setDisplayNameInput(event.target.value)}
+                  />
+                  <FieldHint>공개 프로필 카드와 관리자 셸에 함께 표시됩니다.</FieldHint>
                 </FieldBox>
                 <FieldBox>
                   <FieldLabel htmlFor="profile-role">한 줄 역할</FieldLabel>
@@ -2166,8 +2262,8 @@ const AvatarWorkspaceCard = styled.div`
   gap: 0.58rem;
   padding: 0.92rem;
   border-radius: 18px;
-  background: ${({ theme }) => theme.colors.gray1};
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
 
   .avatarPreview {
     width: 88px;
@@ -2195,6 +2291,14 @@ const AvatarWorkspaceCard = styled.div`
 const FieldSectionCard = styled.div`
   display: grid;
   gap: 0.82rem;
+  padding: 1rem;
+  border-radius: 22px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: ${({ theme }) => theme.colors.gray1};
+
+  @media (max-width: 760px) {
+    padding: 0.9rem;
+  }
 `
 
 const SectionBlockHeader = styled.div`
@@ -2251,17 +2355,30 @@ const FieldLabel = styled.label`
   font-weight: 800;
 `
 
+const FieldHint = styled.span`
+  color: ${({ theme }) => theme.colors.gray9};
+  font-size: 0.76rem;
+  line-height: 1.45;
+`
+
 const Input = styled.input`
   width: 100%;
   min-height: 42px;
   border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray3};
   color: ${({ theme }) => theme.colors.gray12};
   padding: 0.82rem 0.95rem;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
 
   &::placeholder {
     color: ${({ theme }) => theme.colors.gray9};
+  }
+
+  &:focus-visible {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.accentBorder};
+    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
   }
 `
 
@@ -2269,35 +2386,22 @@ const TextArea = styled.textarea`
   width: 100%;
   min-height: 132px;
   border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray3};
   color: ${({ theme }) => theme.colors.gray12};
   padding: 0.92rem 1rem;
   resize: vertical;
   line-height: 1.6;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
 
   &::placeholder {
     color: ${({ theme }) => theme.colors.gray9};
   }
-`
 
-const LockedField = styled.div`
-  min-height: 42px;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  padding: 0.82rem 0.95rem;
-  display: grid;
-  gap: 0.2rem;
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.76rem;
-    line-height: 1.45;
+  &:focus-visible {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.accentBorder};
+    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
   }
 `
 
@@ -2311,7 +2415,7 @@ const AboutSectionCard = styled.div`
   gap: 0.72rem;
   padding: 0.9rem;
   border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
   background: ${({ theme }) => theme.colors.gray2};
 `
 
@@ -2386,7 +2490,7 @@ const InlineActionRow = styled.div`
 const EmptyStateCard = styled.div`
   padding: 1rem;
   border-radius: 16px;
-  border: 1px dashed ${({ theme }) => theme.colors.gray6};
+  border: 1px dashed ${({ theme }) => theme.colors.gray7};
   background: ${({ theme }) => theme.colors.gray2};
   display: grid;
   gap: 0.28rem;
@@ -2407,7 +2511,7 @@ const SegmentedControl = styled.div`
   gap: 0.36rem;
   padding: 0.25rem;
   border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
   background: ${({ theme }) => theme.colors.gray2};
 `
 
@@ -2464,7 +2568,7 @@ const LinkRowCard = styled.div`
   gap: 0.72rem;
   padding: 0.9rem;
   border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
   background: ${({ theme }) => theme.colors.gray2};
   transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
 

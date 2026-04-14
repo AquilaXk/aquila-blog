@@ -422,6 +422,22 @@ export interface paths {
         patch: operations["updateProfileCard"];
         trace?: never;
     };
+    "/member/api/v1/adm/members/{id}/nickname": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateProfileIdentity"];
+        trace?: never;
+    };
     "/system/api/v1/adm/tasks": {
         parameters: {
             query?: never;
@@ -1554,6 +1570,9 @@ export interface components {
             homeIntroDescription?: string;
             serviceLinks?: components["schemas"]["ProfileCardLinkItemRequest"][];
             contactLinks?: components["schemas"]["ProfileCardLinkItemRequest"][];
+        };
+        UpdateProfileIdentityRequest: {
+            nickname: string;
         };
         TaskExecutionSample: {
             /** Format: int64 */
@@ -2700,6 +2719,32 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["UpdateProfileCardRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["MemberWithUsernameDto"];
+                };
+            };
+        };
+    };
+    updateProfileIdentity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProfileIdentityRequest"];
             };
         };
         responses: {

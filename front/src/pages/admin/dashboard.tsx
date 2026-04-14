@@ -77,7 +77,7 @@ const EMPTY_INITIAL_SNAPSHOT: AdminDashboardInitialSnapshot = {
 }
 
 const DASHBOARD_PRIORITY_PANEL_LIMIT = 4
-const DASHBOARD_FIRST_FOLD_PANEL_LIMIT = 0
+const DASHBOARD_FIRST_FOLD_PANEL_LIMIT = 2
 
 async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | null> {
   try {
@@ -437,36 +437,38 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
             </LeadPanelCard>
 
             <InsightRail>
-              <RailCard>
-                <SectionHeader>
-                  <h2>현재 포커스</h2>
-                </SectionHeader>
-                <FocusChipRail>
-                  {primaryRows.map((panel) => (
-                    <FocusChip key={`focus-${panel.key}`}>{panel.title}</FocusChip>
-                  ))}
-                </FocusChipRail>
-              </RailCard>
-
-              <RailCard>
-                <SectionHeader>
-                  <h2>빠른 이동</h2>
-                </SectionHeader>
-                <AdminInfoList>
-                  {quickActions.map((action) => (
-                    <Link key={action.key} href={action.href} passHref legacyBehavior>
-                      <AdminInfoLinkCard target={action.href.startsWith("http") ? "_blank" : undefined} rel={action.href.startsWith("http") ? "noreferrer noopener" : undefined}>
-                        <span className="iconWrap">
-                          <AppIcon name={action.icon} aria-hidden="true" />
-                        </span>
-                        <span className="copy">
-                          <strong>{action.label}</strong>
-                        </span>
-                      </AdminInfoLinkCard>
-                    </Link>
-                  ))}
-                </AdminInfoList>
-              </RailCard>
+              {firstFoldPanels.map((panel, index) => {
+                const panelUrl = grafanaDashboardUrl ? buildGrafanaPanelEmbedUrl(grafanaDashboardUrl, panel.panelId) : ""
+                return (
+                  <CompactPanelCard key={`first-fold-${panel.key}`} data-ui="monitoring-panel-card">
+                    <PanelHeader>
+                      <div>
+                        <strong>{panel.title}</strong>
+                      </div>
+                      {grafanaDashboardUrl ? (
+                        <LaunchLink href={panelUrl || grafanaDashboardUrl} target="_blank" rel="noreferrer noopener">
+                          새 창
+                        </LaunchLink>
+                      ) : null}
+                    </PanelHeader>
+                    <CompactPanelBody>
+                      {panelUrl ? (
+                        <DeferredPanelFrame
+                          eager={false}
+                          activationDelayMs={index * DASHBOARD_PANEL_STAGGER_MS}
+                          src={panelUrl}
+                          title={panel.title}
+                        />
+                      ) : (
+                        <PanelFallback>
+                          <strong>대시보드를 불러올 수 없습니다.</strong>
+                          <span>Grafana embed URL 또는 public dashboard 구성을 먼저 확인하세요.</span>
+                        </PanelFallback>
+                      )}
+                    </CompactPanelBody>
+                  </CompactPanelCard>
+                )
+              })}
             </InsightRail>
           </PanelGrid>
 
@@ -509,22 +511,44 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
             </PriorityTable>
           </PrioritySection>
 
-          <ContextSection>
-            <SectionHeader>
-              <h2>연결된 채널</h2>
-            </SectionHeader>
-            <ContextLinkGrid>
-              {monitoringItems.map((item) => (
-                <AdminInfoLinkCard key={item.key} href={item.href} target="_blank" rel="noreferrer noopener">
-                  <span className="iconWrap">{renderMonitoringBrand(item.brand.icon, item.brand.fallbackIcon, item.title)}</span>
-                  <span className="copy">
-                    <strong>{item.title}</strong>
-                    <span>{item.status}</span>
-                  </span>
-                </AdminInfoLinkCard>
-              ))}
-            </ContextLinkGrid>
-          </ContextSection>
+          <ContextGrid>
+            <ContextSection>
+              <SectionHeader>
+                <h2>연결된 채널</h2>
+              </SectionHeader>
+              <ContextLinkGrid>
+                {monitoringItems.map((item) => (
+                  <AdminInfoLinkCard key={item.key} href={item.href} target="_blank" rel="noreferrer noopener">
+                    <span className="iconWrap">{renderMonitoringBrand(item.brand.icon, item.brand.fallbackIcon, item.title)}</span>
+                    <span className="copy">
+                      <strong>{item.title}</strong>
+                      <span>{item.status}</span>
+                    </span>
+                  </AdminInfoLinkCard>
+                ))}
+              </ContextLinkGrid>
+            </ContextSection>
+
+            <ContextSection>
+              <SectionHeader>
+                <h2>빠른 이동</h2>
+              </SectionHeader>
+              <AdminInfoList>
+                {quickActions.map((action) => (
+                  <Link key={action.key} href={action.href} passHref legacyBehavior>
+                    <AdminInfoLinkCard target={action.href.startsWith("http") ? "_blank" : undefined} rel={action.href.startsWith("http") ? "noreferrer noopener" : undefined}>
+                      <span className="iconWrap">
+                        <AppIcon name={action.icon} aria-hidden="true" />
+                      </span>
+                      <span className="copy">
+                        <strong>{action.label}</strong>
+                      </span>
+                    </AdminInfoLinkCard>
+                  </Link>
+                ))}
+              </AdminInfoList>
+            </ContextSection>
+          </ContextGrid>
 
           {secondaryPanels.length ? (
             <AdditionalPanelsSection>
@@ -856,11 +880,24 @@ const LeadPanelCard = styled(PanelCard)`
 
   > div:last-of-type > iframe,
   > div:last-of-type > [data-pending="true"] {
-    height: 292px;
+    height: 248px;
   }
 
   > div:last-of-type > div {
-    min-height: 232px;
+    min-height: 204px;
+  }
+`
+
+const CompactPanelCard = styled(PanelCard)`
+  min-width: 0;
+
+  > div:last-of-type > iframe,
+  > div:last-of-type > [data-pending="true"] {
+    height: 156px;
+  }
+
+  > div:last-of-type > div {
+    min-height: 132px;
   }
 `
 
@@ -916,6 +953,10 @@ const PanelFrame = styled.iframe`
   background: ${({ theme }) => theme.colors.gray1};
 `
 
+const CompactPanelBody = styled(PanelBody)`
+  overflow: hidden;
+`
+
 const PanelFallback = styled.div`
   min-height: 210px;
   display: grid;
@@ -940,11 +981,7 @@ const PanelFallback = styled.div`
 const InsightRail = styled.aside`
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-
-  @media (max-width: 1180px) {
-    grid-template-columns: 1fr;
-  }
+  grid-template-columns: 1fr;
 `
 
 const RailCard = styled(AdminPlainCard)`
@@ -960,30 +997,21 @@ const SectionHeader = styled(AdminSectionTitleStack)`
   }
 `
 
-const FocusChipRail = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-`
-
-const FocusChip = styled.span`
-  display: inline-flex;
-  align-items: center;
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(59, 130, 246, 0.1)" : "rgba(59, 130, 246, 0.18)"};
-  color: ${({ theme }) => theme.colors.blue9};
-  font-size: 0.76rem;
-  font-weight: 780;
-`
-
 const PrioritySection = styled(AdminPlainCard)`
   display: grid;
   gap: 12px;
   padding: 18px 20px;
   border-radius: 24px;
+`
+
+const ContextGrid = styled.section`
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1.3fr) minmax(17rem, 0.7fr);
+
+  @media (max-width: 1180px) {
+    grid-template-columns: 1fr;
+  }
 `
 
 const ContextSection = styled(AdminPlainCard)`

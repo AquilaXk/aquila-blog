@@ -1,4 +1,5 @@
 const TABLE_SEPARATOR_LINE_PATTERN = /^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$/
+const FENCE_MARKER_PATTERN = /^(`{3,}|~{3,})/
 
 const isTableSeparatorLine = (line: string) => TABLE_SEPARATOR_LINE_PATTERN.test(line)
 
@@ -68,6 +69,34 @@ export const normalizeLegacyInlineHtmlSpans = (input: string) => {
   )
 
   return normalized
+}
+
+export const normalizeLegacyInlineHtmlMarkdown = (markdown: string) => {
+  if (!markdown) return markdown
+  if (!markdown.includes("<") && !markdown.includes("&lt;")) return markdown
+
+  let activeFenceMarker = ""
+
+  return markdown
+    .split("\n")
+    .map((line) => {
+      const trimmedStart = line.trimStart()
+      const fenceMatch = trimmedStart.match(FENCE_MARKER_PATTERN)
+
+      if (fenceMatch) {
+        const marker = fenceMatch[1]
+        if (!activeFenceMarker) {
+          activeFenceMarker = marker
+        } else if (marker[0] === activeFenceMarker[0] && marker.length >= activeFenceMarker.length) {
+          activeFenceMarker = ""
+        }
+        return line
+      }
+
+      if (activeFenceMarker) return line
+      return normalizeLegacyInlineHtmlSpans(line)
+    })
+    .join("\n")
 }
 
 export const normalizeInlineHtmlInMarkdownTables = (markdown: string) => {

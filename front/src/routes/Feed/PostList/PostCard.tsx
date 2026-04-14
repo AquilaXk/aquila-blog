@@ -1,4 +1,3 @@
-import Link from "next/link"
 import { CONFIG } from "site.config"
 import { formatDate } from "src/libs/utils"
 import { TPost } from "../../../types"
@@ -6,9 +5,9 @@ import styled from "@emotion/styled"
 import { uiTokens } from "@shared/ui-tokens"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import AppIcon from "src/components/icons/AppIcon"
-import { memo, useCallback, useEffect, useMemo, useRef } from "react"
-import Router from "next/router"
+import { memo, useCallback, useMemo, type MouseEvent } from "react"
 import ProfileImage from "src/components/ProfileImage"
+import Router from "next/router"
 import {
   parseThumbnailFocusXFromUrl,
   parseThumbnailFocusYFromUrl,
@@ -30,45 +29,9 @@ const FEED_CARD_RADIUS_PX = 4
 const FEED_CARD_SHADOW = "0 8px 20px rgba(2, 6, 23, 0.14)"
 const FEED_CARD_SHADOW_HOVER = "0 18px 34px rgba(2, 6, 23, 0.2)"
 const FEED_CARD_HOVER_TRANSLATE_PX = -8
-const PREFETCH_DELAY_MS = 1200
-
-type NavigatorConnectionLike = {
-  saveData?: boolean
-  effectiveType?: string
-}
-
-const prefetchedPostPaths = new Set<string>()
-const inflightPrefetchPaths = new Set<string>()
-
-const getNavigatorConnection = (): NavigatorConnectionLike | undefined => {
-  if (typeof navigator === "undefined") return undefined
-  return (navigator as Navigator & { connection?: NavigatorConnectionLike }).connection
-}
-
-const isNavigatorOnline = () => {
-  if (typeof navigator === "undefined") return true
-  return navigator.onLine !== false
-}
-
-const hasPrefetchedPostPath = (path: string) => prefetchedPostPaths.has(path)
-
-const requestIntentPrefetch = async (path: string) => {
-  if (prefetchedPostPaths.has(path) || inflightPrefetchPaths.has(path)) return
-
-  inflightPrefetchPaths.add(path)
-  try {
-    await Router.prefetch(path)
-    prefetchedPostPaths.add(path)
-  } finally {
-    inflightPrefetchPaths.delete(path)
-  }
-}
-
 const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
   const author = data.author?.[0]
   const postPath = toCanonicalPostPath(data.id)
-  const prefetchTimeoutRef = useRef<number | null>(null)
-  const hasPrefetchedRef = useRef(false)
   const createdAtText = formatDate(
     data?.date?.start_date || data.createdTime,
     CONFIG.lang
@@ -86,61 +49,27 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
     }
   }, [data.thumbnail])
 
-  const clearPrefetchTimer = useCallback(() => {
-    if (!prefetchTimeoutRef.current) return
-    window.clearTimeout(prefetchTimeoutRef.current)
-    prefetchTimeoutRef.current = null
-  }, [])
+  const handleNavigate = useCallback(
+    (event: MouseEvent<HTMLAnchorElement>) => {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return
+      }
 
-  const canPrefetchOnCurrentNetwork = useCallback(() => {
-    if (!isNavigatorOnline()) return false
-    if (typeof navigator === "undefined") return true
-    if (typeof document !== "undefined" && document.visibilityState !== "visible") return false
-    const connection = getNavigatorConnection()
-    if (!connection) return true
-    if (connection.saveData) return false
-    if (connection.effectiveType === "slow-2g" || connection.effectiveType === "2g") return false
-    return true
-  }, [])
-
-  const prefetchPost = useCallback(() => {
-    if (hasPrefetchedRef.current) return
-    if (!canPrefetchOnCurrentNetwork()) return
-    hasPrefetchedRef.current = true
-    void requestIntentPrefetch(postPath).catch(() => {
-      hasPrefetchedRef.current = false
-    })
-  }, [canPrefetchOnCurrentNetwork, postPath])
-
-  const handleMouseEnter = useCallback(() => {
-    if (hasPrefetchedRef.current) return
-    if (hasPrefetchedPostPath(postPath)) {
-      hasPrefetchedRef.current = true
-      return
-    }
-    if (!canPrefetchOnCurrentNetwork()) return
-    clearPrefetchTimer()
-    prefetchTimeoutRef.current = window.setTimeout(prefetchPost, PREFETCH_DELAY_MS)
-  }, [canPrefetchOnCurrentNetwork, clearPrefetchTimer, postPath, prefetchPost])
-
-  const handleMouseLeave = useCallback(() => {
-    clearPrefetchTimer()
-  }, [clearPrefetchTimer])
-
-  useEffect(() => {
-    return () => clearPrefetchTimer()
-  }, [clearPrefetchTimer])
+      event.preventDefault()
+      void Router.push(postPath)
+    },
+    [postPath]
+  )
 
   return (
-    <StyledWrapper
-      href={postPath}
-      data-layout={layout}
-      prefetch={false}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      onFocus={handleMouseEnter}
-      onBlur={handleMouseLeave}
-    >
+    <StyledWrapper href={postPath} data-layout={layout} onClick={handleNavigate}>
       <article>
         {thumbnailSrc && (
           <div className="thumbnail">
@@ -228,7 +157,7 @@ const arePostCardPropsEqual = (prev: Props, next: Props) => {
 
 export default memo(PostCard, arePostCardPropsEqual)
 
-const StyledWrapper = styled(Link)`
+const StyledWrapper = styled.a`
   display: block;
   width: 100%;
   max-width: 100%;

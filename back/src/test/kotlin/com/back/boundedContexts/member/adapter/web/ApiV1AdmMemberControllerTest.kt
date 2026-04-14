@@ -72,6 +72,55 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
     }
 
     @Nested
+    inner class UpdateProfileIdentity {
+        @Test
+        @WithUserDetails("admin@test.com")
+        fun `관리자는 계정 이름을 별도로 수정할 수 있다`() {
+            val member = memberFacade.findByEmail("admin@test.com")!!
+            val newNickname = "운영자 아퀼라"
+
+            mvc
+                .patch("/member/api/v1/adm/members/${member.id}/nickname") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "nickname": "$newNickname"
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1AdmMemberController::class.java))
+                    match(handler().methodName("updateProfileIdentity"))
+                    jsonPath("$.id") { value(member.id) }
+                    jsonPath("$.nickname") { value(newNickname) }
+                }
+
+            val updatedMember = memberFacade.findById(member.id).orElseThrow()
+            assertThat(updatedMember.nickname).isEqualTo(newNickname)
+        }
+
+        @Test
+        @WithUserDetails("admin@test.com")
+        fun `계정 이름이 공백이면 400을 반환한다`() {
+            val member = memberFacade.findByEmail("admin@test.com")!!
+
+            mvc
+                .patch("/member/api/v1/adm/members/${member.id}/nickname") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "nickname": "   "
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isBadRequest() }
+                }
+        }
+    }
+
+    @Nested
     inner class UpdateProfileCard {
         @Test
         @WithUserDetails("admin@test.com")

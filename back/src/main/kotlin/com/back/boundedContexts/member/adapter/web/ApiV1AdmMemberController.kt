@@ -90,6 +90,12 @@ class ApiV1AdmMemberController(
         val profileImgUrl: String,
     )
 
+    data class UpdateProfileIdentityRequest(
+        @field:NotBlank
+        @field:Size(min = 2, max = 30)
+        val nickname: String,
+    )
+
     data class UpdateProfileCardRequest(
         @field:Size(max = 100)
         val role: String = "",
@@ -285,6 +291,23 @@ class ApiV1AdmMemberController(
                 .replace("%2F", "/")
         val imageUrl = "${AppConfig.siteBackUrl}/post/api/v1/images/$encodedKey"
         memberUseCase.modify(member, member.nickname, imageUrl)
+        return currentMemberProfileQueryUseCase.getById(id)
+    }
+
+    /**
+     * 관리자 표시 이름(nickname)을 수정한다.
+     */
+    @PatchMapping("/{id}/nickname")
+    @Transactional
+    @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
+    fun updateProfileIdentity(
+        @PathVariable
+        @Positive
+        id: Long,
+        @RequestBody @Valid reqBody: UpdateProfileIdentityRequest,
+    ): MemberWithUsernameDto {
+        val member = memberUseCase.findById(id).orElseThrow()
+        memberUseCase.modify(member, reqBody.nickname.trim(), member.profileImgUrl)
         return currentMemberProfileQueryUseCase.getById(id)
     }
 

@@ -8,16 +8,18 @@ test.describe("admin posts workspace link contract", () => {
 
     expect(source).toContain('if (visibility === "PUBLIC_UNLISTED") return "링크 공개"')
     expect(source).toContain("const buildCanonicalPostUrl = (postId: string | number) => {")
+    expect(source).toContain("const canOpenCanonicalPost = (row:")
     expect(source).toContain("AdminInlineActionRow,")
     expect(source).toContain("AdminStatusPill,")
     expect(source).toContain("AdminTextActionButton,")
-    expect(source).not.toContain("const openPostDetailRoute = useCallback(")
-    expect(source).toContain("<TitleLink href={toCanonicalPostPath(row.id)}>")
+    expect(source).toContain("const openCanonicalPost = useCallback(")
+    expect(source).toContain("<TitleAnchor href={toCanonicalPostPath(row.id)} onClick={(event) => void openCanonicalPost(event, row)}>")
+    expect(source).toContain("<TitleText>{getWorkspaceRowTitle(row)}</TitleText>")
     expect(source).toContain("copyPostDetailLink(row)")
     expect(source).not.toContain("상세 열기")
     expect(source).toContain("링크 복사")
-    expect(source).toContain("grid-template-columns: minmax(0, 1fr) auto;")
-    expect(source).toContain("@media (max-width: 820px) {")
+    expect(source).toContain("recentPosts.slice(0, 3)")
+    expect(source).toContain("grid-template-columns: minmax(16rem, 0.86fr) minmax(0, 1.14fr);")
   })
 
   test("관리자 작성 화면은 현재 편집 중인 글이면 visibility와 무관하게 canonical 링크 열기와 복사 액션을 노출한다", () => {

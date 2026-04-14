@@ -2119,9 +2119,7 @@ const PreviewAnchor = styled.a`
   text-decoration: none;
 `
 
-const WorkspaceHero = styled(AdminWorkspaceHero)`
-  padding: 0.86rem 0.98rem;
-`
+const WorkspaceHero = styled(AdminWorkspaceHero)``
 
 const WorkspaceShell = styled.section<{ $isHomeSection: boolean }>`
   display: grid;

@@ -1,5 +1,6 @@
 import styled from "@emotion/styled"
 import Link from "next/link"
+import { useEffect, useState } from "react"
 import AppIcon, { type IconName } from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
 import {
@@ -55,6 +56,11 @@ type QuickLinkItem = {
   description: string
 }
 
+type IdleWindow = Window & {
+  requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number
+  cancelIdleCallback?: (handle: number) => void
+}
+
 const resolveQuickLinkIcon = (href: string): IconName => {
   if (href.includes("/profile")) return "camera"
   if (href.includes("/dashboard")) return "service"
@@ -82,6 +88,7 @@ const AdminHubSurface = ({
   primaryAction,
   secondaryLinks,
 }: Props) => {
+  const [showDeferredPanels, setShowDeferredPanels] = useState(false)
   const quickLinks: QuickLinkItem[] = [
     {
       href: primaryAction.href,
@@ -102,6 +109,25 @@ const AdminHubSurface = ({
       description: resolveQuickLinkDescription(item.href),
     })),
   ]
+
+  useEffect(() => {
+    if (showDeferredPanels || typeof window === "undefined") return
+
+    const idleWindow = window as IdleWindow
+    const activate = () => setShowDeferredPanels(true)
+
+    if (typeof idleWindow.requestIdleCallback === "function") {
+      const handle = idleWindow.requestIdleCallback(() => activate(), { timeout: 720 })
+      return () => {
+        if (typeof idleWindow.cancelIdleCallback === "function") {
+          idleWindow.cancelIdleCallback(handle)
+        }
+      }
+    }
+
+    const handle = window.setTimeout(activate, 280)
+    return () => window.clearTimeout(handle)
+  }, [showDeferredPanels])
 
   return (
     <Main>
@@ -134,84 +160,88 @@ const AdminHubSurface = ({
         </SummaryRail>
       </HeroPanel>
 
-      <ActionStrip aria-label="다음 작업">
-        <SectionHeader>
-          <h2>다음 작업</h2>
-        </SectionHeader>
-        <ActionStripGrid>
-          {nextActions.map((item, index) => (
-            <Link key={`${item.href}-${item.title}`} href={item.href} passHref legacyBehavior>
-              <ActionCard data-tone={item.tone || "neutral"} data-featured={index === 0 ? "true" : "false"}>
-                <div className="copy">
-                  <small>{index === 0 ? "우선" : "이어서"}</small>
-                  <strong>{item.title}</strong>
-                </div>
-              </ActionCard>
-            </Link>
-          ))}
-        </ActionStripGrid>
-      </ActionStrip>
-
-      <LandingGrid>
-        <SectionCard>
-          <SectionHeader>
-            <h2>주요 작업</h2>
-          </SectionHeader>
-
-          <Link href={primaryAction.href} passHref legacyBehavior>
-            <PrimaryWorkflowLink>
-              <div className="iconWrap">
-                <AppIcon name="spark" aria-hidden="true" />
-              </div>
-              <div className="copy">
-                <strong>{primaryAction.title}</strong>
-                <span>새 초안을 열고 바로 편집 화면으로 이동합니다.</span>
-              </div>
-            </PrimaryWorkflowLink>
-          </Link>
-
-          <ShortcutList aria-label="허브 빠른 이동">
-            {quickLinks
-              .filter((item) => item.href !== primaryAction.href)
-              .map((item) => (
-                <Link key={item.href} href={item.href} passHref legacyBehavior>
-                  <ShortcutRowLink>
-                    <div className="iconWrap">
-                      <AppIcon name={item.icon} aria-hidden="true" />
-                    </div>
+      {showDeferredPanels ? (
+        <>
+          <ActionStrip aria-label="다음 작업">
+            <SectionHeader>
+              <h2>다음 작업</h2>
+            </SectionHeader>
+            <ActionStripGrid>
+              {nextActions.map((item, index) => (
+                <Link key={`${item.href}-${item.title}`} href={item.href} passHref legacyBehavior>
+                  <ActionCard data-tone={item.tone || "neutral"} data-featured={index === 0 ? "true" : "false"}>
                     <div className="copy">
-                      <strong>{item.label}</strong>
-                      <span>{item.description}</span>
+                      <small>{index === 0 ? "우선" : "이어서"}</small>
+                      <strong>{item.title}</strong>
                     </div>
-                  </ShortcutRowLink>
+                  </ActionCard>
                 </Link>
               ))}
-          </ShortcutList>
-        </SectionCard>
+            </ActionStripGrid>
+          </ActionStrip>
 
-        <SectionCard data-variant="subtle">
-          <SectionHeader>
-            <h2>공개 프로필</h2>
-          </SectionHeader>
-          <ProfileSnapshot>
-            <ProfileFrame>
-              {profileSrc ? (
-                <ProfileImage src={profileSrc} alt={displayName} fillContainer />
-              ) : (
-                <ProfileFallback>{displayNameInitial}</ProfileFallback>
-              )}
-            </ProfileFrame>
-            <ProfileCopy>
-              <strong>{displayName}</strong>
-              <span>{profileRole || "역할 미설정"}</span>
-              <p>{profileBio || "프로필 소개와 링크를 정리해 공개 카드와 같은 톤으로 맞춥니다."}</p>
-            </ProfileCopy>
-          </ProfileSnapshot>
-          <Link href="/admin/profile" passHref legacyBehavior>
-            <RailActionLink>프로필 편집</RailActionLink>
-          </Link>
-        </SectionCard>
-      </LandingGrid>
+          <LandingGrid>
+            <SectionCard>
+              <SectionHeader>
+                <h2>주요 작업</h2>
+              </SectionHeader>
+
+              <Link href={primaryAction.href} passHref legacyBehavior>
+                <PrimaryWorkflowLink>
+                  <div className="iconWrap">
+                    <AppIcon name="spark" aria-hidden="true" />
+                  </div>
+                  <div className="copy">
+                    <strong>{primaryAction.title}</strong>
+                    <span>새 초안을 열고 바로 편집 화면으로 이동합니다.</span>
+                  </div>
+                </PrimaryWorkflowLink>
+              </Link>
+
+              <ShortcutList aria-label="허브 빠른 이동">
+                {quickLinks
+                  .filter((item) => item.href !== primaryAction.href)
+                  .map((item) => (
+                    <Link key={item.href} href={item.href} passHref legacyBehavior>
+                      <ShortcutRowLink>
+                        <div className="iconWrap">
+                          <AppIcon name={item.icon} aria-hidden="true" />
+                        </div>
+                        <div className="copy">
+                          <strong>{item.label}</strong>
+                          <span>{item.description}</span>
+                        </div>
+                      </ShortcutRowLink>
+                    </Link>
+                  ))}
+              </ShortcutList>
+            </SectionCard>
+
+            <SectionCard data-variant="subtle">
+              <SectionHeader>
+                <h2>공개 프로필</h2>
+              </SectionHeader>
+              <ProfileSnapshot>
+                <ProfileFrame>
+                  {profileSrc ? (
+                    <ProfileImage src={profileSrc} alt={displayName} fillContainer />
+                  ) : (
+                    <ProfileFallback>{displayNameInitial}</ProfileFallback>
+                  )}
+                </ProfileFrame>
+                <ProfileCopy>
+                  <strong>{displayName}</strong>
+                  <span>{profileRole || "역할 미설정"}</span>
+                  <p>{profileBio || "프로필 소개와 링크를 정리해 공개 카드와 같은 톤으로 맞춥니다."}</p>
+                </ProfileCopy>
+              </ProfileSnapshot>
+              <Link href="/admin/profile" passHref legacyBehavior>
+                <RailActionLink>프로필 편집</RailActionLink>
+              </Link>
+            </SectionCard>
+          </LandingGrid>
+        </>
+      ) : null}
     </Main>
   )
 }

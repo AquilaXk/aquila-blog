@@ -59,14 +59,29 @@ test.describe("admin surface primitives contract", () => {
     expect(toolsSource).not.toContain("const SectionNavButton = styled(AdminWorkspaceSectionNavButton)``")
   })
 
-  test("admin utility bar keeps explicit current-view/account controls instead of ambiguous icon chips", () => {
+  test("admin utility bar keeps explicit current-view context without extra account CTA", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminUtilityBar.tsx"), "utf8")
 
     expect(source).toContain("<CurrentViewChip aria-label=\"현재 화면\">")
-    expect(source).toContain("프로필 설정")
+    expect(source).not.toContain("프로필 설정")
     expect(source).not.toContain("운영 도구 바로가기")
     expect(source).not.toContain("ProfileImage")
     expect(source).not.toContain('<AppIcon name="camera" />')
+  })
+
+  test("admin shell sidebar uses member profile identity before current task and nav", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminShell.tsx"), "utf8")
+
+    expect(source).toContain('import ProfileImage from "src/components/ProfileImage"')
+    expect(source).toContain('const sidebarIdentityName = member.nickname?.trim() || "AquilaLog"')
+    expect(source).toContain("const sidebarProfileImageSrc = (member.profileImageDirectUrl || member.profileImageUrl || \"\").trim()")
+    expect(source).toContain('<SidebarStatusCard aria-label="현재 화면">')
+    expect(source).toContain("<SidebarSectionLabel>관리 메뉴</SidebarSectionLabel>")
+    expect(source.indexOf("<SidebarStatusCard aria-label=\"현재 화면\">")).toBeLessThan(
+      source.indexOf("<SidebarNavSection>")
+    )
+    expect(source).not.toContain("<strong>AquilaLog</strong>")
+    expect(source).not.toContain('<AppIcon name="service" />')
   })
 
   test("admin hub removes duplicated status and shortcut rails in favor of a single primary workflow", () => {

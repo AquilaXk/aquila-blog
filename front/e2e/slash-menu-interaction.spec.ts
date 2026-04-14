@@ -14,6 +14,7 @@ test.describe("block editor slash menu interaction", () => {
     page,
   }) => {
     await page.goto(QA_ENGINE_ROUTE)
+    await expect(page.getByTestId("qa-editor-ready")).toHaveCount(1)
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     await editor.click()
@@ -38,11 +39,11 @@ test.describe("block editor slash menu interaction", () => {
     }
 
     await expectActiveSlashIndex(0)
-    await page.keyboard.press("Tab")
+    await editor.press("Tab")
     if (actionCount > 1) {
       await expectActiveSlashIndex(1)
     }
-    await page.keyboard.press("Shift+Tab")
+    await editor.press("Shift+Tab")
     await expectActiveSlashIndex(0)
 
     await page.keyboard.press("Enter")

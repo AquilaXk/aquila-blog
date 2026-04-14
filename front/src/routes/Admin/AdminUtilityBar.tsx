@@ -94,12 +94,6 @@ const AdminUtilityBar = ({ navItems, currentLabel }: Props) => {
           <span>현재</span>
           <strong>{currentLabel}</strong>
         </CurrentViewChip>
-
-        <Link href="/admin/profile" passHref legacyBehavior>
-          <SettingsLink>
-            <span>프로필 설정</span>
-          </SettingsLink>
-        </Link>
       </UtilityActions>
     </UtilityBar>
   )
@@ -261,36 +255,5 @@ const CurrentViewChip = styled.div`
 
   @media (max-width: 980px) {
     display: none;
-  }
-`
-
-const SettingsLink = styled.a`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.42rem;
-  min-height: 2.75rem;
-  padding: 0 0.72rem;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
-  text-decoration: none;
-
-  span {
-    white-space: nowrap;
-    font-size: 0.82rem;
-    font-weight: 760;
-  }
-
-  &:hover {
-    background: ${({ theme }) => theme.colors.gray2};
-    border-color: ${({ theme }) => theme.colors.gray6};
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  &:focus-visible {
-    outline: none;
-    border-color: ${({ theme }) => theme.colors.gray6};
-    box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.16);
   }
 `

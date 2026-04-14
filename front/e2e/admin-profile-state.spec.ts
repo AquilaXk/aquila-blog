@@ -25,5 +25,7 @@ test.describe("admin profile state contract", () => {
     expect(source).not.toContain("const LockedField = styled.div`")
     expect(source).not.toContain("const PreviewStatusRail = styled(AdminInfoStatusList)`")
     expect(source).not.toContain("const SectionStateDot = styled.span`")
+    expect(source).not.toContain("<h3>텍스트</h3>")
+    expect(source).not.toContain("공개 프로필 카드와 관리자 셸에 함께 표시됩니다.")
   })
 })

@@ -1,4 +1,5 @@
 import styled from "@emotion/styled"
+import dynamic from "next/dynamic"
 import { GetServerSideProps } from "next"
 import Link from "next/link"
 import { useRouter } from "next/router"
@@ -6,9 +7,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
 import AuthShell from "src/components/auth/AuthShell"
-import IpSecurityInfoModal from "src/components/auth/IpSecurityInfoModal"
 import AppIcon from "src/components/icons/AppIcon"
-import SocialAuthButtons from "src/components/auth/SocialAuthButtons"
 import { buildSocialAuthItems } from "src/components/auth/socialAuth"
 import useAuthSession from "src/hooks/useAuthSession"
 import type { AuthMember } from "src/hooks/useAuthSession"
@@ -22,6 +21,14 @@ type RsData<T> = {
   msg: string
   data: T
 }
+
+const SocialAuthButtons = dynamic(() => import("src/components/auth/SocialAuthButtons"), {
+  ssr: false,
+})
+
+const IpSecurityInfoModal = dynamic(() => import("src/components/auth/IpSecurityInfoModal"), {
+  ssr: false,
+})
 
 export const getServerSideProps: GetServerSideProps<GuestPageProps> = async ({ req }) => {
   return await getGuestPageProps(req)
@@ -54,6 +61,7 @@ const LoginPage = () => {
   const [keepSignedIn, setKeepSignedIn] = useState(true)
   const [ipSecurityOn, setIpSecurityOn] = useState(false)
   const [showIpSecurityInfo, setShowIpSecurityInfo] = useState(false)
+  const [showSocialAuth, setShowSocialAuth] = useState(false)
 
   useEffect(() => {
     if (!loginIdPrefill) return
@@ -69,6 +77,12 @@ const LoginPage = () => {
   useEffect(() => {
     saveAuthLoginPolicyPrefs({ keepSignedIn, ipSecurityOn })
   }, [keepSignedIn, ipSecurityOn])
+
+  useEffect(() => {
+    if (showSocialAuth || typeof window === "undefined") return
+    const handle = window.setTimeout(() => setShowSocialAuth(true), 320)
+    return () => window.clearTimeout(handle)
+  }, [showSocialAuth])
 
   const socialItems = useMemo(() => {
     return buildSocialAuthItems(next)
@@ -262,11 +276,11 @@ const LoginPage = () => {
         <SocialSection>
           <span>소셜 계정으로 로그인</span>
           <SocialButtonRow>
-            <SocialAuthButtons items={socialItems} />
+            {showSocialAuth ? <SocialAuthButtons items={socialItems} /> : null}
           </SocialButtonRow>
         </SocialSection>
       </form>
-      <IpSecurityInfoModal open={showIpSecurityInfo} onClose={() => setShowIpSecurityInfo(false)} />
+      {showIpSecurityInfo ? <IpSecurityInfoModal open={showIpSecurityInfo} onClose={() => setShowIpSecurityInfo(false)} /> : null}
     </AuthShell>
   )
 }

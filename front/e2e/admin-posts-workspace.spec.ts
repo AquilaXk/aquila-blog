@@ -24,6 +24,13 @@ test.describe("admin posts workspace link contract", () => {
     expect(source).toContain("recentPosts.slice(0, 3)")
     expect(source).toContain("grid-template-columns: minmax(14rem, 0.74fr) minmax(0, 1.26fr);")
     expect(source).toContain("<h1>글 관리</h1>")
+    expect(source).not.toContain("position: sticky;")
+    expect(source).not.toContain("top: calc(var(--app-header-height, 64px) + 0.55rem);")
+    expect(source).toContain('<ResumeCardButton type="button" onClick={() => void openWriteRoute({ source: "local-draft" })}>')
+    expect(source).toContain("const ResumeCardButton = styled.button`")
+    expect(source).not.toContain('<PrimaryInlineButton type="button" onClick={() => void openWriteRoute({ source: "local-draft" })}>')
+    expect(source).not.toContain('data-emphasis={localDraft ? "strong" : "soft"}')
+    expect(source).not.toContain('data-clickable={localDraft ? "true" : undefined}')
   })
 
   test("관리자 작성 화면은 현재 편집 중인 글이면 visibility와 무관하게 canonical 링크 열기와 복사 액션을 노출한다", () => {

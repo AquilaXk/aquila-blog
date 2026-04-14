@@ -1342,7 +1342,7 @@ const Main = styled.main`
   margin: 0 auto;
   padding: 1.2rem 1rem 2.8rem;
   display: grid;
-  gap: 1.2rem;
+  gap: 1rem;
 
   @media (max-width: 767px) {
     gap: 0.9rem;
@@ -1382,7 +1382,7 @@ const SecondaryLinkButton = styled.button`
 
 const ResumeSection = styled.section`
   display: grid;
-  gap: 0.85rem;
+  gap: 0.72rem;
 `
 
 const SectionHeading = styled(AdminSectionHeading)`
@@ -1450,25 +1450,25 @@ const SupportMeta = styled.span`
 const ResumeGrid = styled.div`
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 0.9rem;
+  gap: 0.75rem;
   align-items: start;
 
-  @media (max-width: 960px) {
+  @media (max-width: 1120px) {
     grid-template-columns: 1fr;
   }
 `
 
 const ResumeCard = styled(AdminRailCard)<{ "data-emphasis"?: "strong" | "soft" }>`
-  gap: 0.7rem;
-  padding: 1rem;
+  gap: 0.58rem;
+  padding: 0.88rem;
   border-radius: 16px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme, "data-emphasis": emphasis }) =>
     emphasis === "strong" ? "rgba(29, 78, 216, 0.08)" : theme.colors.gray2};
 
   &[data-empty="true"] {
-    gap: 0.4rem;
-    padding-block: 0.9rem;
+    gap: 0.28rem;
+    padding-block: 0.78rem;
   }
 `
 
@@ -1490,8 +1490,8 @@ const ResumeHeader = styled.div`
 `
 
 const ResumeTitle = styled.strong`
-  font-size: 1.02rem;
-  line-height: 1.4;
+  font-size: 0.98rem;
+  line-height: 1.35;
 `
 
 const ResumeDescription = styled.p`
@@ -1502,11 +1502,11 @@ const ResumeDescription = styled.p`
 
 const EmptyInlineState = styled.div`
   display: grid;
-  gap: 0.22rem;
+  gap: 0.12rem;
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.92rem;
+    font-size: 0.88rem;
   }
 
   p {
@@ -1616,12 +1616,12 @@ const RecentPostList = styled.ul`
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0.6rem;
+  gap: 0.5rem;
 
   li button {
     width: 100%;
-    padding: 0.85rem 0.9rem;
-    border-radius: 14px;
+    padding: 0.72rem 0.8rem;
+    border-radius: 12px;
     border: 1px solid ${({ theme }) => theme.colors.gray5};
     background: ${({ theme }) => theme.colors.gray1};
     display: grid;
@@ -1646,7 +1646,7 @@ const RecentPostList = styled.ul`
 
   span {
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.8rem;
+    font-size: 0.78rem;
   }
 
   @media (max-width: 820px) {

@@ -115,17 +115,17 @@ const UtilityBar = styled.header`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.9rem;
-  padding: 0.9rem 1rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  border-radius: 24px;
+  gap: 0.72rem;
+  padding: 0.72rem 0.85rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray4};
+  border-radius: 20px;
   backdrop-filter: blur(18px);
   background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(255, 255, 255, 0.84)" : "rgba(18, 18, 18, 0.84)"};
+    theme.scheme === "light" ? "rgba(255, 255, 255, 0.78)" : "rgba(18, 18, 18, 0.76)"};
   box-shadow: ${({ theme }) =>
     theme.scheme === "light"
-      ? "0 16px 36px rgba(15, 23, 42, 0.06)"
-      : "0 18px 36px rgba(0, 0, 0, 0.2)"};
+      ? "0 10px 24px rgba(15, 23, 42, 0.05)"
+      : "0 12px 28px rgba(0, 0, 0, 0.18)"};
 
   @media (max-width: 720px) {
     top: calc(var(--app-header-height, 73px) + 0.65rem);
@@ -137,7 +137,7 @@ const UtilityBar = styled.header`
 const CompactNav = styled.nav`
   display: none;
 
-  @media (max-width: 1100px) {
+  @media (max-width: 880px) {
     display: flex;
     align-items: center;
     gap: 0.45rem;
@@ -201,14 +201,14 @@ const SearchField = styled.div`
 const SearchInput = styled.input`
   width: 100%;
   min-width: 0;
-  height: 3rem;
-  padding: 0 1rem 0 2.7rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  height: 2.75rem;
+  padding: 0 0.92rem 0 2.55rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray4};
   border-radius: 999px;
   background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(243, 246, 250, 0.92)" : "rgba(31, 31, 31, 0.92)"};
+    theme.scheme === "light" ? "rgba(243, 246, 250, 0.82)" : "rgba(24, 24, 24, 0.82)"};
   color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   font-weight: 600;
 
   &::placeholder {
@@ -225,7 +225,7 @@ const SearchInput = styled.input`
 const UtilityActions = styled.div`
   display: flex;
   align-items: center;
-  gap: 0.68rem;
+  gap: 0.52rem;
 
   @media (max-width: 720px) {
     justify-content: flex-start;
@@ -238,12 +238,11 @@ const CurrentViewChip = styled.div`
   align-items: center;
   gap: 0.72rem;
   min-width: 0;
-  padding: 0.5rem 0.9rem;
+  padding: 0 0.2rem;
   border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(255, 255, 255, 0.82)" : "rgba(31, 31, 31, 0.92)"};
-  color: ${({ theme }) => theme.colors.gray12};
+  border: none;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray10};
   text-decoration: none;
 
   span {
@@ -254,12 +253,16 @@ const CurrentViewChip = styled.div`
   }
 
   strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.88rem;
-    font-weight: 800;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.84rem;
+    font-weight: 760;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  @media (max-width: 980px) {
+    display: none;
   }
 `
 
@@ -267,13 +270,12 @@ const SettingsLink = styled.a`
   display: inline-flex;
   align-items: center;
   gap: 0.42rem;
-  min-height: 3rem;
-  padding: 0 0.95rem;
+  min-height: 2.75rem;
+  padding: 0 0.7rem;
   border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(243, 246, 250, 0.92)" : "rgba(31, 31, 31, 0.92)"};
-  color: ${({ theme }) => theme.colors.gray12};
+  border: 1px solid transparent;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
   text-decoration: none;
 
   svg {
@@ -282,12 +284,12 @@ const SettingsLink = styled.a`
 
   span {
     white-space: nowrap;
-    font-size: 0.86rem;
-    font-weight: 800;
+    font-size: 0.82rem;
+    font-weight: 760;
   }
 
   &:hover {
-    border-color: ${({ theme }) => theme.colors.blue7};
+    background: ${({ theme }) => theme.colors.gray2};
     color: ${({ theme }) => theme.colors.blue9};
   }
 

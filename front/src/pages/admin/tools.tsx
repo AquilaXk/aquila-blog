@@ -1331,8 +1331,8 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
           </SectionNavStatus>
           {([
             { key: "diagnostics", label: "진단" },
-            { key: "observability", label: "관측" },
             { key: "execution", label: "실행" },
+            { key: "observability", label: "관측" },
             { key: "results", label: "최근 실행 결과" },
             { key: "mutation", label: "실데이터 테스트", tone: "danger" },
           ] as Array<{ key: SectionKey; label: string; tone?: "danger" }>).map((item) => (
@@ -1351,7 +1351,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
 
         {isWorkspaceReady ? (
         <WorkspaceColumn>
-          <WorkspaceSection id={SECTION_IDS.diagnostics} data-ops-section="diagnostics">
+          <WorkspaceSection id={SECTION_IDS.diagnostics} data-ops-section="diagnostics" data-emphasis="primary">
             <SectionHeading>
               <SectionTitleBlock>
                 <h2>진단</h2>
@@ -1719,7 +1719,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
             ) : null}
           </WorkspaceSection>
 
-          <WorkspaceSection id={SECTION_IDS.observability} data-ops-section="observability">
+          <WorkspaceSection id={SECTION_IDS.observability} data-ops-section="observability" data-emphasis="secondary">
             <SectionHeading>
               <SectionTitleBlock>
                 <h2>관측</h2>
@@ -1750,7 +1750,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
             ) : null}
           </WorkspaceSection>
 
-          <WorkspaceSection id={SECTION_IDS.execution} data-ops-section="execution">
+          <WorkspaceSection id={SECTION_IDS.execution} data-ops-section="execution" data-emphasis="primary">
             <SectionHeading>
               <SectionTitleBlock>
                 <h2>실행</h2>
@@ -1830,7 +1830,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
             </DetailsPanel>
           </WorkspaceSection>
 
-          <WorkspaceSection id={SECTION_IDS.results} data-ops-section="results">
+          <WorkspaceSection id={SECTION_IDS.results} data-ops-section="results" data-emphasis="secondary">
             <SectionHeading>
               <SectionTitleBlock>
                 <h2>최근 실행 결과</h2>
@@ -2140,8 +2140,8 @@ const Main = styled.main`
 
 const OpsOverview = styled(AdminWorkspaceHero)`
   display: grid;
-  gap: 1rem;
-  padding: 1.1rem 1.1rem 1rem;
+  gap: 0.88rem;
+  padding: 0.98rem 1rem 0.92rem;
   border-radius: 22px;
 `
 
@@ -2200,7 +2200,7 @@ const OverviewContent = styled.div`
   grid-template-columns: minmax(280px, 1.05fr) minmax(0, 1.4fr);
   gap: 0.9rem;
 
-  @media (max-width: 1024px) {
+  @media (max-width: 1180px) {
     grid-template-columns: 1fr;
   }
 `
@@ -2211,7 +2211,7 @@ const FeaturedStatusCard = styled.button`
   gap: 0.55rem;
   border-radius: 18px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: linear-gradient(180deg, ${({ theme }) => theme.colors.gray1} 0%, ${({ theme }) => theme.colors.gray2} 100%);
+  background: linear-gradient(180deg, ${({ theme }) => theme.colors.gray1} 0%, ${({ theme }) => theme.colors.blue2} 100%);
   padding: 1rem;
   cursor: pointer;
 
@@ -2318,10 +2318,10 @@ const CalmMessage = styled.p`
 const WorkspaceShell = styled.div`
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
-  gap: 1.1rem;
+  gap: 0.95rem;
   align-items: start;
 
-  @media (max-width: 960px) {
+  @media (max-width: 1120px) {
     grid-template-columns: 1fr;
   }
 `
@@ -2345,7 +2345,7 @@ const SectionNavButton = styled(AdminWorkspaceSectionNavButton)``
 
 const WorkspaceColumn = styled.div`
   display: grid;
-  gap: 1rem;
+  gap: 0.85rem;
 `
 
 const DeferredWorkspaceColumn = styled.div`
@@ -2393,13 +2393,25 @@ const DeferredWorkspaceSkeleton = styled.div`
 
 const WorkspaceSection = styled.section`
   display: grid;
-  gap: 0.9rem;
-  padding: 1rem;
+  gap: 0.82rem;
+  padding: 0.92rem;
   border-radius: 20px;
   background: ${({ theme }) => theme.colors.gray2};
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   content-visibility: auto;
   contain-intrinsic-size: 720px;
+
+  &[data-emphasis="primary"] {
+    border-color: ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) =>
+      theme.scheme === "light" ? "linear-gradient(180deg, rgba(59, 130, 246, 0.04) 0%, rgba(255, 255, 255, 0.92) 100%)" : "linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(24, 24, 24, 0.96) 100%)"};
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+  }
+
+  &[data-emphasis="secondary"] {
+    background: ${({ theme }) => theme.colors.gray1};
+    border-color: ${({ theme }) => theme.colors.gray4};
+  }
 
   &[data-tone="danger"] {
     background: linear-gradient(180deg, ${({ theme }) => theme.colors.gray2} 0%, rgba(239, 68, 68, 0.08) 100%);
@@ -2808,7 +2820,8 @@ const ActionGroupCard = styled(AdminRailCard)`
   gap: 0.8rem;
   border-radius: 18px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  background: ${({ theme }) =>
+    theme.scheme === "light" ? "rgba(255, 255, 255, 0.82)" : "rgba(24, 24, 24, 0.86)"};
 `
 
 const CardSectionHeading = styled.div`

@@ -178,7 +178,7 @@ const AdminHubSurface = ({
             </ShortcutGrid>
           </SectionCard>
 
-          <SectionCard>
+          <SectionCard data-variant="subtle">
             <SectionHeader>
               <h2>체크</h2>
             </SectionHeader>
@@ -198,7 +198,7 @@ const AdminHubSurface = ({
       </div>
 
       <RailColumn className="rt">
-        <RailCard>
+        <RailCard data-variant="profile">
           <SectionHeader>
             <h2>프로필</h2>
           </SectionHeader>
@@ -220,7 +220,7 @@ const AdminHubSurface = ({
           </Link>
         </RailCard>
 
-        <RailCard>
+        <RailCard data-variant="utility">
           <SectionHeader>
             <h2>바로가기</h2>
           </SectionHeader>
@@ -240,7 +240,7 @@ const AdminHubSurface = ({
           </AdminInfoList>
         </RailCard>
 
-        <RailCard>
+        <RailCard data-variant="utility">
           <SectionHeader>
             <h2>상태</h2>
           </SectionHeader>
@@ -263,7 +263,7 @@ export default AdminHubSurface
 const Main = styled.main`
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 1.25rem;
+  gap: 1.1rem;
   align-items: start;
   width: min(100%, 1220px);
   margin: 0 auto;
@@ -288,8 +288,8 @@ const Main = styled.main`
 
 const HeroPanel = styled(AdminElevatedCard)`
   display: grid;
-  gap: 1rem;
-  padding: 1.25rem;
+  gap: 0.9rem;
+  padding: 1.1rem;
   border-radius: 28px;
 `
 
@@ -383,7 +383,7 @@ const SecondaryActionLink = styled.a`
 const SummaryRail = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
-  gap: 0.75rem;
+  gap: 0.68rem;
 
   @media (max-width: 640px) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -394,11 +394,11 @@ const SummaryCard = styled.div`
   display: grid;
   gap: 0.35rem;
   min-width: 0;
-  padding: 1rem 1.05rem;
+  padding: 0.88rem 0.95rem;
   border-radius: 20px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(255, 255, 255, 0.86)" : "rgba(31, 31, 31, 0.9)"};
+    theme.scheme === "light" ? "rgba(255, 255, 255, 0.74)" : "rgba(24, 24, 24, 0.82)"};
 
   &[data-tone="good"] {
     border-color: ${({ theme }) => theme.colors.green7};
@@ -439,8 +439,12 @@ const SectionHeader = styled(AdminSectionTitleStack)`
 
 const ActionStripGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
+
+  @media (max-width: 1180px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 
   @media (max-width: 960px) {
     grid-template-columns: 1fr;
@@ -452,8 +456,8 @@ const ActionCard = styled.a`
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.72rem;
   align-items: center;
-  padding: 1rem 1.05rem;
-  border-radius: 22px;
+  padding: 0.92rem 1rem;
+  border-radius: 20px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => adminElevatedSurface(theme)};
   color: inherit;
@@ -503,7 +507,7 @@ const WorkspaceBoard = styled.section`
   gap: 1rem;
   align-items: start;
 
-  @media (max-width: 980px) {
+  @media (max-width: 1120px) {
     grid-template-columns: 1fr;
   }
 `
@@ -511,13 +515,19 @@ const WorkspaceBoard = styled.section`
 const SectionCard = styled(AdminElevatedCard)`
   min-width: 0;
   display: grid;
-  gap: 0.95rem;
-  padding: 1.1rem;
+  gap: 0.8rem;
+  padding: 1rem;
   overflow: hidden;
   border-radius: 24px;
   border-color: ${({ theme }) => adminElevatedBorder(theme)};
   background: ${({ theme }) => adminElevatedSurface(theme)};
   box-shadow: ${({ theme }) => adminElevatedShadow(theme)};
+
+  &[data-variant="subtle"] {
+    background: ${({ theme }) =>
+      theme.scheme === "light" ? "rgba(255, 255, 255, 0.64)" : "rgba(24, 24, 24, 0.74)"};
+    box-shadow: none;
+  }
 `
 
 const PrimaryWorkflow = styled.div`
@@ -525,15 +535,15 @@ const PrimaryWorkflow = styled.div`
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 0.95rem;
   align-items: center;
-  padding: 1rem;
+  padding: 0.92rem;
   border-radius: 22px;
   border: 1px solid ${({ theme }) => theme.colors.blue7};
   background: ${({ theme }) =>
     theme.scheme === "light" ? "rgba(59, 130, 246, 0.08)" : "rgba(59, 130, 246, 0.16)"};
 
   .iconWrap {
-    width: 3rem;
-    height: 3rem;
+    width: 2.8rem;
+    height: 2.8rem;
     border-radius: 16px;
     display: grid;
     place-items: center;
@@ -577,7 +587,7 @@ const WorkflowAction = styled.a`
 const ShortcutGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
-  gap: 0.75rem;
+  gap: 0.68rem;
 
   @media (max-width: 900px) {
     grid-template-columns: 1fr;
@@ -587,8 +597,8 @@ const ShortcutGrid = styled.div`
 const ShortcutLink = styled.a`
   min-width: 0;
   display: grid;
-  gap: 0.75rem;
-  padding: 0.95rem;
+  gap: 0.64rem;
+  padding: 0.82rem;
   border-radius: 20px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) =>
@@ -644,7 +654,12 @@ const ShortcutTitleRow = styled.div`
 
 const Checklist = styled.div`
   display: grid;
-  gap: 0.65rem;
+  gap: 0.58rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
 `
 
 const ChecklistItem = styled.div`
@@ -652,8 +667,8 @@ const ChecklistItem = styled.div`
   align-items: center;
   justify-content: space-between;
   gap: 0.8rem;
-  padding: 0.9rem 0.95rem;
-  border-radius: 18px;
+  padding: 0.78rem 0.85rem;
+  border-radius: 16px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) =>
     theme.scheme === "light" ? "rgba(255, 255, 255, 0.8)" : "rgba(31, 31, 31, 0.88)"};
@@ -672,7 +687,7 @@ const ChecklistItem = styled.div`
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.92rem;
+    font-size: 0.88rem;
     font-weight: 780;
     line-height: 1.4;
   }
@@ -696,20 +711,34 @@ const StatusDot = styled.span`
 
 const RailColumn = styled.aside`
   display: grid;
-  gap: 0.95rem;
+  gap: 0.8rem;
 
   @media (min-width: 1280px) {
     position: sticky;
     top: calc(var(--app-header-height, 73px) + 0.8rem);
     align-self: start;
   }
+
+  @media (max-width: 1279px) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  @media (max-width: 900px) {
+    grid-template-columns: 1fr;
+  }
 `
 
 const RailCard = styled(AdminElevatedCard)`
   display: grid;
-  gap: 0.8rem;
-  padding: 1rem;
+  gap: 0.68rem;
+  padding: 0.88rem;
   border-radius: 24px;
+
+  &[data-variant="utility"] {
+    background: ${({ theme }) =>
+      theme.scheme === "light" ? "rgba(255, 255, 255, 0.64)" : "rgba(24, 24, 24, 0.74)"};
+    box-shadow: none;
+  }
 `
 
 const ProfileSnapshot = styled.div`

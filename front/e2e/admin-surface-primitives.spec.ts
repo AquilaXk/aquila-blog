@@ -48,6 +48,10 @@ test.describe("admin surface primitives contract", () => {
     expect(toolsSource).toContain("const ActionRowButton = styled(AdminActionCardButton)``")
     expect(toolsSource).toContain("const [isMutationExpanded, setIsMutationExpanded] = useState(false)")
     expect(toolsSource).toContain("<DetailsPanel open={isMutationExpanded}>")
+    expect(toolsSource).toContain('{ key: "results", label: "최근 실행 결과" },')
+    expect(toolsSource).toContain('{ key: "observability", label: "관측" },')
+    expect(toolsSource).toContain("<span>외부 관측 링크</span>")
+    expect(toolsSource).toContain("여기서는 이동 링크와 외부 채널만 유지합니다.")
   })
 
   test("admin utility bar keeps explicit current-view/account controls instead of ambiguous icon chips", () => {

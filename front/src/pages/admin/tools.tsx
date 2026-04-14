@@ -1339,8 +1339,8 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
           {([
             { key: "diagnostics", label: "진단" },
             { key: "execution", label: "실행" },
-            { key: "observability", label: "관측" },
             { key: "results", label: "최근 실행 결과" },
+            { key: "observability", label: "관측" },
             { key: "mutation", label: "실데이터 테스트", tone: "danger" },
           ] as Array<{ key: SectionKey; label: string; tone?: "danger" }>).map((item) => (
             <SectionNavButton
@@ -1726,37 +1726,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
             ) : null}
           </WorkspaceSection>
 
-          <WorkspaceSection id={SECTION_IDS.observability} data-ops-section="observability" data-emphasis="secondary">
-            <SectionHeading>
-              <SectionTitleBlock>
-                <h2>관측</h2>
-              </SectionTitleBlock>
-              <ReadonlyPill>대시보드 단일 운용</ReadonlyPill>
-            </SectionHeading>
-
-            <ObservabilityNotice>
-              Grafana 패널 임베드는 운영 중 브라우저 세션 회전 요청(401) 노이즈를 줄이기 위해
-              <strong> `/admin/dashboard` 단일 화면</strong>으로 통합했습니다.
-            </ObservabilityNotice>
-
-            <DashboardShortcutRow>
-              <Link href="/admin/dashboard" passHref legacyBehavior>
-                <DashboardShortcutLink>운영 대시보드 열기</DashboardShortcutLink>
-              </Link>
-            </DashboardShortcutRow>
-
-            {monitoringItems.length ? (
-              <MonitoringLinkRail>
-                {monitoringItems.map((item) => (
-                  <AdminInfoLinkCard key={item.key} href={item.href} target="_blank" rel="noreferrer noopener" $withIcon={false}>
-                    <strong>{item.title}</strong>
-                    <span>{item.status}</span>
-                  </AdminInfoLinkCard>
-                ))}
-              </MonitoringLinkRail>
-            ) : null}
-          </WorkspaceSection>
-
           <WorkspaceSection id={SECTION_IDS.execution} data-ops-section="execution" data-emphasis="primary">
             <SectionHeading>
               <SectionTitleBlock>
@@ -1939,11 +1908,47 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                   </HistoryList>
                 </ResultHistoryCard>
               </ResultsLayout>
-            ) : (
+              ) : (
               <EmptyResultState>
                 {executions.length === 0 ? "실행 기록 없음" : "현재 필터에 맞는 실행 결과가 없습니다."}
               </EmptyResultState>
             )}
+          </WorkspaceSection>
+
+          <WorkspaceSection id={SECTION_IDS.observability} data-ops-section="observability" data-emphasis="secondary">
+            <SectionHeading>
+              <SectionTitleBlock>
+                <h2>관측</h2>
+              </SectionTitleBlock>
+              <ReadonlyPill>보조 정보</ReadonlyPill>
+            </SectionHeading>
+
+            <ObservabilityNotice>
+              실시간 패널 확인은 <strong>`/admin/dashboard` 단일 화면</strong>에서 진행하고, 여기서는 이동 링크와 외부 채널만 유지합니다.
+            </ObservabilityNotice>
+
+            <DashboardShortcutRow>
+              <Link href="/admin/dashboard" passHref legacyBehavior>
+                <DashboardShortcutLink>운영 대시보드 열기</DashboardShortcutLink>
+              </Link>
+            </DashboardShortcutRow>
+
+            {monitoringItems.length ? (
+              <DetailsPanel>
+                <DetailsSummary>
+                  <span>외부 관측 링크</span>
+                  <small>{monitoringItems.length}개</small>
+                </DetailsSummary>
+                <MonitoringLinkRail>
+                  {monitoringItems.map((item) => (
+                    <AdminInfoLinkCard key={item.key} href={item.href} target="_blank" rel="noreferrer noopener" $withIcon={false}>
+                      <strong>{item.title}</strong>
+                      <span>{item.status}</span>
+                    </AdminInfoLinkCard>
+                  ))}
+                </MonitoringLinkRail>
+              </DetailsPanel>
+            ) : null}
           </WorkspaceSection>
 
           <WorkspaceSection

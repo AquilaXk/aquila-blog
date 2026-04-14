@@ -91,14 +91,13 @@ const AdminUtilityBar = ({ navItems, currentLabel }: Props) => {
 
       <UtilityActions>
         <CurrentViewChip aria-label="현재 화면">
-          <span>현재 화면</span>
+          <span>현재</span>
           <strong>{currentLabel}</strong>
         </CurrentViewChip>
 
         <Link href="/admin/profile" passHref legacyBehavior>
           <SettingsLink>
-            <AppIcon name="camera" />
-            <span>계정 설정</span>
+            <span>프로필 설정</span>
           </SettingsLink>
         </Link>
       </UtilityActions>
@@ -236,9 +235,9 @@ const UtilityActions = styled.div`
 const CurrentViewChip = styled.div`
   display: flex;
   align-items: center;
-  gap: 0.72rem;
+  gap: 0.48rem;
   min-width: 0;
-  padding: 0 0.2rem;
+  padding: 0 0.1rem;
   border-radius: 999px;
   border: none;
   background: transparent;
@@ -247,15 +246,15 @@ const CurrentViewChip = styled.div`
 
   span {
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.74rem;
+    font-size: 0.7rem;
     font-weight: 700;
     white-space: nowrap;
   }
 
   strong {
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.84rem;
-    font-weight: 760;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.78rem;
+    font-weight: 740;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -271,16 +270,12 @@ const SettingsLink = styled.a`
   align-items: center;
   gap: 0.42rem;
   min-height: 2.75rem;
-  padding: 0 0.7rem;
+  padding: 0 0.72rem;
   border-radius: 999px;
-  border: 1px solid transparent;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
   text-decoration: none;
-
-  svg {
-    font-size: 1rem;
-  }
 
   span {
     white-space: nowrap;
@@ -290,6 +285,7 @@ const SettingsLink = styled.a`
 
   &:hover {
     background: ${({ theme }) => theme.colors.gray2};
+    border-color: ${({ theme }) => theme.colors.gray6};
     color: ${({ theme }) => theme.colors.blue9};
   }
 

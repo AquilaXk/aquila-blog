@@ -53,8 +53,21 @@ test.describe("admin surface primitives contract", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminUtilityBar.tsx"), "utf8")
 
     expect(source).toContain("<CurrentViewChip aria-label=\"현재 화면\">")
-    expect(source).toContain("계정 설정")
+    expect(source).toContain("프로필 설정")
     expect(source).not.toContain("운영 도구 바로가기")
     expect(source).not.toContain("ProfileImage")
+    expect(source).not.toContain('<AppIcon name="camera" />')
+  })
+
+  test("admin hub removes duplicated status and shortcut rails in favor of a single primary workflow", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminHubSurface.tsx"), "utf8")
+
+    expect(source).toContain("const quickLinks: QuickLinkItem[] = [")
+    expect(source).toContain('aria-label="허브 빠른 이동"')
+    expect(source).toContain("새 초안을 열고 바로 편집 화면으로 이동합니다.")
+    expect(source).not.toContain("<h2>체크</h2>")
+    expect(source).not.toContain("<h2>바로가기</h2>")
+    expect(source).not.toContain("<h2>상태</h2>")
+    expect(source).not.toContain("StatusDot")
   })
 })

@@ -27,7 +27,6 @@ import {
   AdminWorkspaceHero,
   AdminWorkspaceSectionNav,
   AdminWorkspaceSectionNavButton,
-  AdminWorkspaceSectionNavStatus,
 } from "src/routes/Admin/AdminSurfacePrimitives"
 import { buildMonitoringItems, getMonitoringEnv } from "src/routes/Admin/adminMonitoring"
 
@@ -1290,11 +1289,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   if (!sessionMember) return null
 
   const isBusy = Boolean(loadingKey)
-  const sectionNavStatusLabel = sectionJumpTarget
-    ? `${SECTION_LABELS[sectionJumpTarget]}로 이동 중`
-    : activeSection === "diagnostics"
-      ? `${SECTION_LABELS[activeSection]} · ${DIAGNOSTIC_TAB_LABELS[activeDiagnosticTab]}`
-      : SECTION_LABELS[activeSection]
   return (
     <AdminShell currentSection="tools" member={sessionMember}>
       <Main>
@@ -1342,10 +1336,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
 
       <WorkspaceShell>
         <SectionNav aria-label="운영 섹션">
-          <SectionNavStatus data-jumping={sectionJumpTarget ? "true" : "false"}>
-            <small>{sectionJumpTarget ? "이동 중" : "현재 위치"}</small>
-            <strong>{sectionNavStatusLabel}</strong>
-          </SectionNavStatus>
           {([
             { key: "diagnostics", label: "진단" },
             { key: "execution", label: "실행" },
@@ -2345,16 +2335,10 @@ const WorkspaceShell = styled.div`
 
 const SectionNav = styled(AdminWorkspaceSectionNav)`
   top: calc(var(--app-header-height, 64px) + 1rem);
+  gap: 0.62rem;
 
   @media (max-width: 960px) {
     min-width: 0;
-  }
-`
-
-const SectionNavStatus = styled(AdminWorkspaceSectionNavStatus)`
-  @media (max-width: 960px) {
-    min-width: 12.5rem;
-    flex: 0 0 auto;
   }
 `
 

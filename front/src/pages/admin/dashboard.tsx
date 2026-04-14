@@ -77,6 +77,7 @@ const EMPTY_INITIAL_SNAPSHOT: AdminDashboardInitialSnapshot = {
 }
 
 const DASHBOARD_PRIORITY_PANEL_LIMIT = 4
+const DASHBOARD_FIRST_FOLD_PANEL_LIMIT = 2
 
 async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | null> {
   try {
@@ -306,6 +307,8 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
   const grafanaDashboardUrl = env.monitoringEmbedLooksLikeGrafana ? env.monitoringEmbedUrl : ""
   const leadPanel = DASHBOARD_PANEL_CARDS[0]
   const remainingPanels = DASHBOARD_PANEL_CARDS.slice(1)
+  const firstFoldPanels = remainingPanels.slice(0, DASHBOARD_FIRST_FOLD_PANEL_LIMIT)
+  const secondaryPanels = remainingPanels.slice(DASHBOARD_FIRST_FOLD_PANEL_LIMIT)
   const primaryRows = DASHBOARD_PANEL_CARDS.slice(0, DASHBOARD_PRIORITY_PANEL_LIMIT)
   const dashboardStatusLabel = systemHealthStatus === "UP" ? "서비스 정상" : systemHealthStatus
   const dashboardStatusTone = systemHealthStatus === "UP" ? "good" : "warn"
@@ -483,7 +486,7 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
               </RailCard>
             </InsightRail>
 
-            {remainingPanels.map((panel, index) => {
+            {firstFoldPanels.map((panel, index) => {
               const panelUrl = grafanaDashboardUrl ? buildGrafanaPanelEmbedUrl(grafanaDashboardUrl, panel.panelId) : ""
               return (
                 <PanelCard key={panel.key} data-ui="monitoring-panel-card">
@@ -555,6 +558,54 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
               </tbody>
             </PriorityTable>
           </PrioritySection>
+
+          {secondaryPanels.length ? (
+            <AdditionalPanelsSection>
+              <AdditionalPanelsDisclosure>
+                <AdditionalPanelsSummary>
+                  <div>
+                    <strong>추가 패널</strong>
+                    <span>{secondaryPanels.length}개</span>
+                  </div>
+                  <small>열기</small>
+                </AdditionalPanelsSummary>
+                <AdditionalPanelsGrid>
+                  {secondaryPanels.map((panel, index) => {
+                    const panelUrl = grafanaDashboardUrl ? buildGrafanaPanelEmbedUrl(grafanaDashboardUrl, panel.panelId) : ""
+                    return (
+                      <PanelCard key={`secondary-${panel.key}`} data-ui="monitoring-panel-card">
+                        <PanelHeader>
+                          <div>
+                            <strong>{panel.title}</strong>
+                          </div>
+                          {grafanaDashboardUrl ? (
+                            <LaunchLink href={panelUrl || grafanaDashboardUrl} target="_blank" rel="noreferrer noopener">
+                              새 창
+                            </LaunchLink>
+                          ) : null}
+                        </PanelHeader>
+                        <PanelBody>
+                          {panelUrl ? (
+                            <DeferredPanelFrame
+                              eager={false}
+                              activationDelayMs={(index + firstFoldPanels.length) * DASHBOARD_PANEL_STAGGER_MS}
+                              src={panelUrl}
+                              title={panel.title}
+                            />
+                          ) : (
+                            <PanelFallback>
+                              <strong>대시보드를 불러올 수 없습니다.</strong>
+                              <span>Grafana embed URL 또는 public dashboard 구성을 먼저 확인하세요.</span>
+                            </PanelFallback>
+                          )}
+                        </PanelBody>
+                      </PanelCard>
+                    )
+                  })}
+                </AdditionalPanelsGrid>
+              </AdditionalPanelsDisclosure>
+            </AdditionalPanelsSection>
+          ) : null}
         </Shell>
       </Main>
     </AdminShell>
@@ -969,6 +1020,59 @@ const PrioritySection = styled(AdminPlainCard)`
   gap: 12px;
   padding: 20px 22px;
   border-radius: 24px;
+`
+
+const AdditionalPanelsSection = styled(AdminPlainCard)`
+  padding: 14px 16px;
+  border-radius: 24px;
+`
+
+const AdditionalPanelsDisclosure = styled.details`
+  display: grid;
+  gap: 14px;
+`
+
+const AdditionalPanelsSummary = styled.summary`
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+
+  div {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.98rem;
+    font-weight: 820;
+  }
+
+  span,
+  small {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+`
+
+const AdditionalPanelsGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+
+  @media (max-width: 980px) {
+    grid-template-columns: 1fr;
+  }
 `
 
 const PriorityTable = styled.table`

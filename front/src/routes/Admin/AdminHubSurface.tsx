@@ -439,7 +439,7 @@ const SectionHeader = styled(AdminSectionTitleStack)`
 
 const ActionStripGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
   gap: 0.75rem;
 
   @media (max-width: 960px) {
@@ -501,6 +501,7 @@ const WorkspaceBoard = styled.section`
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.9fr);
   gap: 1rem;
+  align-items: start;
 
   @media (max-width: 980px) {
     grid-template-columns: 1fr;
@@ -508,9 +509,11 @@ const WorkspaceBoard = styled.section`
 `
 
 const SectionCard = styled(AdminElevatedCard)`
+  min-width: 0;
   display: grid;
   gap: 0.95rem;
   padding: 1.1rem;
+  overflow: hidden;
   border-radius: 24px;
   border-color: ${({ theme }) => adminElevatedBorder(theme)};
   background: ${({ theme }) => adminElevatedSurface(theme)};
@@ -573,12 +576,8 @@ const WorkflowAction = styled.a`
 
 const ShortcutGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(3, minmax(11.5rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
   gap: 0.75rem;
-
-  @media (max-width: 1140px) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 
   @media (max-width: 900px) {
     grid-template-columns: 1fr;
@@ -586,6 +585,7 @@ const ShortcutGrid = styled.div`
 `
 
 const ShortcutLink = styled.a`
+  min-width: 0;
   display: grid;
   gap: 0.75rem;
   padding: 0.95rem;

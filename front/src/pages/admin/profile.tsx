@@ -54,8 +54,6 @@ import { acquireBodyScrollLock } from "src/libs/utils/bodyScrollLock"
 import AdminShell from "src/routes/Admin/AdminShell"
 import {
   AdminInfoPanelCard,
-  AdminInfoStatusItem,
-  AdminInfoStatusList,
   AdminPaneHeader,
   AdminRailCard,
   AdminStickyRail,
@@ -1205,14 +1203,14 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
   const canPublish = !hasUnsavedChanges && hasPublishedDiff && loadingKey !== "publish" && loadingKey !== "save"
   const canSave = hasUnsavedChanges && loadingKey !== "save"
   const activeSectionState = sectionStateMap[activeSection]
-  const previewStatusItems = [
-    { label: "보기", value: previewMode === "draft" ? "초안" : "공개본", tone: "neutral" as const },
-    {
-      label: "상태",
-      value: activeSectionState.dirty ? "저장 안 됨" : activeSectionState.publishedDiff ? "공개본과 차이" : "동기화됨",
-      tone: activeSectionState.dirty ? ("warn" as const) : ("good" as const),
-    },
-  ]
+  const previewMetaLabel =
+    previewMode === "draft"
+      ? activeSectionState.dirty
+        ? "초안 · 저장 안 됨"
+        : "초안 · 임시 저장됨"
+      : activeSectionState.publishedDiff
+        ? "공개본 · 업데이트 필요"
+        : "공개본 · 최신 상태"
 
   const renderActiveSection = () => {
     switch (activeSection) {
@@ -1719,10 +1717,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
               onClick={() => setActiveSection(section.id)}
             >
               <span>{section.label}</span>
-              {sectionStateMap[section.id].dirty ? <SectionStateDot data-tone="dirty" aria-hidden="true" /> : null}
-              {!sectionStateMap[section.id].dirty && sectionStateMap[section.id].publishedDiff ? (
-                <SectionStateDot data-tone="published" aria-hidden="true" />
-              ) : null}
             </SectionRailButton>
           ))}
         </SectionRail>
@@ -1760,8 +1754,9 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
           <PreviewCardShell>
             <PreviewHeader>
               <div>
-                <span>미리보기</span>
+                <span>공개 프로필</span>
                 <strong>{activeSectionMeta.label}</strong>
+                <PreviewMeta>{previewMetaLabel}</PreviewMeta>
               </div>
               <PreviewHeaderActions>
                 <SegmentedControl>
@@ -1790,34 +1785,29 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
               </PreviewHeaderActions>
             </PreviewHeader>
 
-            <PreviewStatusRail>
-              {previewStatusItems.map((item) => (
-                <AdminInfoStatusItem key={`preview-${item.label}`} data-tone={item.tone}>
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
-                </AdminInfoStatusItem>
-              ))}
-            </PreviewStatusRail>
-
             <PreviewBody data-expanded={isPreviewExpanded}>
               <PreviewViewport>
                 {activeSection === "identity" ? (
                   <PreviewProfileCard>
-                    <div className="avatar">
-                      {previewContent.profileImageUrl ? (
-                        <ProfileImage
-                          src={previewContent.profileImageUrl}
-                          alt={displayName}
-                          width={88}
-                          height={88}
-                          priority
-                        />
-                      ) : (
-                        <AvatarFallback>{displayNameInitial}</AvatarFallback>
-                      )}
+                    <div className="identityRow">
+                      <div className="avatar">
+                        {previewContent.profileImageUrl ? (
+                          <ProfileImage
+                            src={previewContent.profileImageUrl}
+                            alt={displayName}
+                            width={72}
+                            height={72}
+                            priority
+                          />
+                        ) : (
+                          <AvatarFallback>{displayNameInitial}</AvatarFallback>
+                        )}
+                      </div>
+                      <div className="identityCopy">
+                        <strong>{displayName}</strong>
+                        {previewContent.profileRole ? <span>{previewContent.profileRole}</span> : null}
+                      </div>
                     </div>
-                    <strong>{displayName}</strong>
-                    {previewContent.profileRole ? <span>{previewContent.profileRole}</span> : null}
                     {previewContent.profileBio ? <p>{previewContent.profileBio}</p> : null}
                   </PreviewProfileCard>
                 ) : null}
@@ -2170,26 +2160,10 @@ const SectionRail = styled(AdminWorkspaceSectionNav)`
 const SectionRailButton = styled(AdminWorkspaceSectionNavButton)`
   @media (min-width: 1181px) {
     width: 100%;
-    min-height: 48px;
-    justify-content: space-between;
-    padding: 0.82rem 1rem;
+    min-height: 46px;
+    justify-content: flex-start;
+    padding: 0.78rem 0.94rem;
     border-radius: 16px;
-  }
-`
-
-const SectionStateDot = styled.span`
-  width: 0.48rem;
-  height: 0.48rem;
-  border-radius: 999px;
-  background: ${({ theme }) => theme.colors.gray7};
-  flex: 0 0 auto;
-
-  &[data-tone="dirty"] {
-    background: ${({ theme }) => theme.colors.orange7};
-  }
-
-  &[data-tone="published"] {
-    background: ${({ theme }) => theme.colors.blue8};
   }
 `
 
@@ -2793,11 +2767,11 @@ const PreviewHeader = styled.div`
   display: flex;
   justify-content: space-between;
   gap: 0.72rem;
-  align-items: center;
+  align-items: flex-start;
 
   > div {
     display: grid;
-    gap: 0.12rem;
+    gap: 0.18rem;
   }
 
   span {
@@ -2819,6 +2793,13 @@ const PreviewHeader = styled.div`
     flex-direction: column;
     align-items: flex-start;
   }
+`
+
+const PreviewMeta = styled.small`
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.45;
 `
 
 const PreviewHeaderActions = styled.div`
@@ -2869,24 +2850,26 @@ const DockPrimaryButton = styled(PublishButton)`
   border-radius: 999px;
 `
 
-const PreviewStatusRail = styled(AdminInfoStatusList)`
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.55rem;
-
-  @media (max-width: 760px) {
-    grid-template-columns: 1fr;
-  }
-`
-
 const PreviewViewport = styled(AdminInfoPanelCard)`
-  min-height: 236px;
+  min-height: 196px;
+  padding: 1rem;
 `
 
 const PreviewProfileCard = styled.div`
   display: grid;
-  justify-items: center;
-  text-align: center;
-  gap: 0.34rem;
+  gap: 0.68rem;
+
+  .identityRow {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.82rem;
+    align-items: center;
+  }
+
+  .identityCopy {
+    display: grid;
+    gap: 0.18rem;
+  }
 
   .avatar {
     width: 72px;
@@ -2898,12 +2881,13 @@ const PreviewProfileCard = styled.div`
   strong {
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 1rem;
+    line-height: 1.3;
   }
 
   span {
-    color: ${({ theme }) => theme.colors.blue10};
+    color: ${({ theme }) => theme.colors.gray10};
     font-weight: 700;
-    font-size: 0.88rem;
+    font-size: 0.84rem;
   }
 
   p {

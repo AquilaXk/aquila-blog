@@ -105,50 +105,54 @@ const AdminHubSurface = ({
 
   return (
     <Main>
-      <div className="mid">
-        <HeroPanel>
-          <HeroHeader>
+      <HeroPanel>
+        <HeroHeader>
+          <HeroCopy>
             <HeroHeading>관리자 허브</HeroHeading>
-            <HeroActions>
-              <Link href={primaryAction.href} passHref legacyBehavior>
-                <PrimaryActionLink>
-                  <AppIcon name="edit" aria-hidden="true" />
-                  <span>{primaryAction.cta}</span>
-                </PrimaryActionLink>
-              </Link>
-              <Link href={primaryAction.secondaryHref} passHref legacyBehavior>
-                <SecondaryActionLink>{primaryAction.secondaryLabel}</SecondaryActionLink>
-              </Link>
-            </HeroActions>
-          </HeroHeader>
+            <HeroSummary>새 글 작성과 핵심 확인 작업만 먼저 보여 주고, 세부 관리는 각 화면으로 분리합니다.</HeroSummary>
+          </HeroCopy>
+          <HeroActions>
+            <Link href={primaryAction.href} passHref legacyBehavior>
+              <PrimaryActionLink>
+                <AppIcon name="edit" aria-hidden="true" />
+                <span>{primaryAction.cta}</span>
+              </PrimaryActionLink>
+            </Link>
+            <Link href={primaryAction.secondaryHref} passHref legacyBehavior>
+              <SecondaryActionLink>{primaryAction.secondaryLabel}</SecondaryActionLink>
+            </Link>
+          </HeroActions>
+        </HeroHeader>
 
-          <SummaryRail aria-label="관리자 상태 요약">
-            {summaryItems.map((item) => (
-              <SummaryCard key={`${item.label}-${item.value}`} data-tone={item.tone || "neutral"}>
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-              </SummaryCard>
-            ))}
-          </SummaryRail>
-        </HeroPanel>
+        <SummaryRail aria-label="관리자 상태 요약">
+          {summaryItems.map((item) => (
+            <SummaryCard key={`${item.label}-${item.value}`} data-tone={item.tone || "neutral"}>
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+            </SummaryCard>
+          ))}
+        </SummaryRail>
+      </HeroPanel>
 
-        <ActionStrip aria-label="다음 작업">
-          <SectionHeader>
-            <h2>다음 작업</h2>
-          </SectionHeader>
-          <ActionStripGrid>
-            {nextActions.map((item, index) => (
-              <Link key={`${item.href}-${item.title}`} href={item.href} passHref legacyBehavior>
-                <ActionCard data-tone={item.tone || "neutral"} data-featured={index === 0 ? "true" : "false"}>
-                  <div className="copy">
-                    <strong>{item.title}</strong>
-                  </div>
-                </ActionCard>
-              </Link>
-            ))}
-          </ActionStripGrid>
-        </ActionStrip>
+      <ActionStrip aria-label="다음 작업">
+        <SectionHeader>
+          <h2>다음 작업</h2>
+        </SectionHeader>
+        <ActionStripGrid>
+          {nextActions.map((item, index) => (
+            <Link key={`${item.href}-${item.title}`} href={item.href} passHref legacyBehavior>
+              <ActionCard data-tone={item.tone || "neutral"} data-featured={index === 0 ? "true" : "false"}>
+                <div className="copy">
+                  <small>{index === 0 ? "우선" : "이어서"}</small>
+                  <strong>{item.title}</strong>
+                </div>
+              </ActionCard>
+            </Link>
+          ))}
+        </ActionStripGrid>
+      </ActionStrip>
 
+      <LandingGrid>
         <SectionCard>
           <SectionHeader>
             <h2>주요 작업</h2>
@@ -184,12 +188,10 @@ const AdminHubSurface = ({
               ))}
           </ShortcutList>
         </SectionCard>
-      </div>
 
-      <RailColumn className="rt">
-        <RailCard data-variant="profile">
+        <SectionCard data-variant="subtle">
           <SectionHeader>
-            <h2>프로필</h2>
+            <h2>공개 프로필</h2>
           </SectionHeader>
           <ProfileSnapshot>
             <ProfileFrame>
@@ -206,10 +208,10 @@ const AdminHubSurface = ({
             </ProfileCopy>
           </ProfileSnapshot>
           <Link href="/admin/profile" passHref legacyBehavior>
-            <RailActionLink>편집</RailActionLink>
+            <RailActionLink>프로필 편집</RailActionLink>
           </Link>
-        </RailCard>
-      </RailColumn>
+        </SectionCard>
+      </LandingGrid>
     </Main>
   )
 }
@@ -218,27 +220,15 @@ export default AdminHubSurface
 
 const Main = styled.main`
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
   gap: 1.1rem;
   align-items: start;
-  width: min(100%, 1220px);
+  width: min(100%, 1088px);
   margin: 0 auto;
   padding: 1.15rem 0 2.4rem;
-
-  @media (min-width: 1280px) {
-    grid-template-columns: minmax(0, 1fr) minmax(16.75rem, 18rem);
-    column-gap: 1.35rem;
-  }
 
   @media (max-width: 768px) {
     padding-top: 0.8rem;
     gap: 1rem;
-  }
-
-  > .mid {
-    display: grid;
-    gap: 1rem;
-    min-width: 0;
   }
 `
 
@@ -264,6 +254,12 @@ const HeroHeader = styled.div`
   }
 `
 
+const HeroCopy = styled.div`
+  display: grid;
+  gap: 0.28rem;
+  min-width: 0;
+`
+
 const HeroHeading = styled.h1`
   margin: 0;
   min-width: 0;
@@ -277,6 +273,13 @@ const HeroHeading = styled.h1`
   @media (max-width: 768px) {
     font-size: clamp(1.85rem, 9vw, 2.4rem);
   }
+`
+
+const HeroSummary = styled.p`
+  margin: 0;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.92rem;
+  line-height: 1.65;
 `
 
 const HeroActions = styled.div`
@@ -409,8 +412,7 @@ const ActionStripGrid = styled.div`
 
 const ActionCard = styled.a`
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.72rem;
+  gap: 0.22rem;
   align-items: center;
   padding: 0.92rem 1rem;
   border-radius: 20px;
@@ -445,6 +447,13 @@ const ActionCard = styled.a`
     gap: 0.16rem;
   }
 
+  small {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+  }
+
   strong {
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 0.94rem;
@@ -455,6 +464,11 @@ const ActionCard = styled.a`
     grid-template-columns: 1fr;
     align-items: start;
   }
+`
+
+const LandingGrid = styled.div`
+  display: grid;
+  gap: 1rem;
 `
 
 const SectionCard = styled(AdminElevatedCard)`
@@ -588,38 +602,6 @@ const ShortcutRowLink = styled.a`
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.78rem;
     line-height: 1.5;
-  }
-`
-
-const RailColumn = styled.aside`
-  display: grid;
-  gap: 0.8rem;
-
-  @media (min-width: 1280px) {
-    position: sticky;
-    top: calc(var(--app-header-height, 73px) + 0.8rem);
-    align-self: start;
-  }
-
-  @media (max-width: 1279px) {
-    grid-template-columns: 1fr;
-  }
-
-  @media (max-width: 900px) {
-    grid-template-columns: 1fr;
-  }
-`
-
-const RailCard = styled(AdminElevatedCard)`
-  display: grid;
-  gap: 0.68rem;
-  padding: 0.88rem;
-  border-radius: 24px;
-
-  &[data-variant="utility"] {
-    background: ${({ theme }) =>
-      theme.scheme === "light" ? "rgba(255, 255, 255, 0.64)" : "rgba(24, 24, 24, 0.74)"};
-    box-shadow: none;
   }
 `
 

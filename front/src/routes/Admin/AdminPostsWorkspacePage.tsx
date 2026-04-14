@@ -1530,11 +1530,14 @@ const ResumeMeta = styled.div`
 
 const VisibilityBadge = styled(AdminStatusPill)<{ "data-tone": string }>`
   min-height: 28px;
+  max-width: 100%;
   padding: 0 0.82rem;
   font-size: 0.78rem;
   font-weight: 800;
   line-height: 1;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: ${({ theme, "data-tone": tone }) =>
     tone === "PRIVATE"
       ? theme.colors.gray11
@@ -1621,9 +1624,9 @@ const RecentPostList = styled.ul`
     border-radius: 14px;
     border: 1px solid ${({ theme }) => theme.colors.gray5};
     background: ${({ theme }) => theme.colors.gray1};
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    justify-content: space-between;
     gap: 0.75rem;
     text-align: left;
     cursor: pointer;
@@ -1645,16 +1648,28 @@ const RecentPostList = styled.ul`
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.8rem;
   }
+
+  @media (max-width: 820px) {
+    li button {
+      grid-template-columns: 1fr;
+      align-items: start;
+    }
+  }
 `
 
 const RecentMeta = styled.div`
   display: grid;
   justify-items: end;
   gap: 0.28rem;
+  flex-shrink: 0;
 
   span:last-of-type {
     color: ${({ theme }) => theme.colors.gray12};
     font-weight: 700;
+  }
+
+  @media (max-width: 820px) {
+    justify-items: start;
   }
 `
 

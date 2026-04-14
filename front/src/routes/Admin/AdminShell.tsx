@@ -58,9 +58,8 @@ const AdminUtilityBar = dynamic(() => import("./AdminUtilityBar"), {
   loading: () => <UtilityBarFallback aria-hidden="true" />,
 })
 
-const AdminShell = ({ currentSection, member, children }: AdminShellProps) => {
+const AdminShell = ({ currentSection, children }: AdminShellProps) => {
   const currentNav = NAV_ITEMS.find((item) => item.id === currentSection) ?? NAV_ITEMS[0]
-  const displayName = member.nickname || member.username || "관리자"
   const utilityNavItems = NAV_ITEMS.map((item) => ({
     key: item.id,
     href: item.href,
@@ -115,9 +114,6 @@ const AdminShell = ({ currentSection, member, children }: AdminShellProps) => {
         <AdminUtilityBar
           navItems={utilityNavItems}
           currentLabel={currentNav.label}
-          displayName={displayName}
-          displayInitial={displayName.slice(0, 2).toUpperCase()}
-          profileSrc={member.profileImageDirectUrl || member.profileImageUrl || ""}
         />
 
         <Canvas>{children}</Canvas>

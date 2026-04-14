@@ -2,7 +2,6 @@ import styled from "@emotion/styled"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import { type FormEvent, useMemo, useState } from "react"
-import ProfileImage from "src/components/ProfileImage"
 import AppIcon, { type IconName } from "src/components/icons/AppIcon"
 import { pushRoute } from "src/libs/router"
 
@@ -17,9 +16,6 @@ type UtilityNavItem = {
 type Props = {
   navItems: UtilityNavItem[]
   currentLabel: string
-  displayName: string
-  displayInitial: string
-  profileSrc: string
 }
 
 type ShortcutItem = {
@@ -39,7 +35,7 @@ const matchesShortcut = (item: ShortcutItem, query: string) => {
     .some((token) => token.includes(normalizedQuery))
 }
 
-const AdminUtilityBar = ({ navItems, currentLabel, displayName, displayInitial, profileSrc }: Props) => {
+const AdminUtilityBar = ({ navItems, currentLabel }: Props) => {
   const router = useRouter()
   const [query, setQuery] = useState("")
   const shortcutItems = useMemo<ShortcutItem[]>(
@@ -94,26 +90,16 @@ const AdminUtilityBar = ({ navItems, currentLabel, displayName, displayInitial, 
       </SearchForm>
 
       <UtilityActions>
-        <Link href="/admin/tools" passHref legacyBehavior>
-          <IconLink aria-label="운영 도구 바로가기">
-            <AppIcon name="bell" />
-          </IconLink>
-        </Link>
+        <CurrentViewChip aria-label="현재 화면">
+          <span>현재 화면</span>
+          <strong>{currentLabel}</strong>
+        </CurrentViewChip>
 
         <Link href="/admin/profile" passHref legacyBehavior>
-          <ProfileLink>
-            <ProfileAvatar>
-              {profileSrc ? (
-                <ProfileImage src={profileSrc} alt={displayName} fillContainer />
-              ) : (
-                <ProfileFallback>{displayInitial}</ProfileFallback>
-              )}
-            </ProfileAvatar>
-            <ProfileMeta>
-              <strong>{displayName}</strong>
-              <span>{currentLabel}</span>
-            </ProfileMeta>
-          </ProfileLink>
+          <SettingsLink>
+            <AppIcon name="camera" />
+            <span>계정 설정</span>
+          </SettingsLink>
         </Link>
       </UtilityActions>
     </UtilityBar>
@@ -242,62 +228,30 @@ const UtilityActions = styled.div`
   gap: 0.68rem;
 
   @media (max-width: 720px) {
-    justify-content: space-between;
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 `
 
-const IconLink = styled.a`
-  width: 3rem;
-  height: 3rem;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(255, 255, 255, 0.82)" : "rgba(31, 31, 31, 0.92)"};
-  color: ${({ theme }) => theme.colors.gray12};
-  text-decoration: none;
-`
-
-const ProfileLink = styled.a`
+const CurrentViewChip = styled.div`
   display: flex;
   align-items: center;
   gap: 0.72rem;
   min-width: 0;
-  padding: 0.38rem 0.42rem 0.38rem 0.38rem;
+  padding: 0.5rem 0.9rem;
   border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) =>
     theme.scheme === "light" ? "rgba(255, 255, 255, 0.82)" : "rgba(31, 31, 31, 0.92)"};
-  color: inherit;
-  text-decoration: none;
-`
-
-const ProfileAvatar = styled.div`
-  position: relative;
-  width: 2.65rem;
-  height: 2.65rem;
-  border-radius: 999px;
-  overflow: hidden;
-  flex-shrink: 0;
-  background: ${({ theme }) => theme.colors.gray4};
-`
-
-const ProfileFallback = styled.div`
-  width: 100%;
-  height: 100%;
-  display: grid;
-  place-items: center;
   color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.86rem;
-  font-weight: 800;
-`
+  text-decoration: none;
 
-const ProfileMeta = styled.div`
-  display: grid;
-  min-width: 0;
-  gap: 0.08rem;
-  padding-right: 0.2rem;
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.74rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
@@ -307,13 +261,39 @@ const ProfileMeta = styled.div`
     overflow: hidden;
     text-overflow: ellipsis;
   }
+`
+
+const SettingsLink = styled.a`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  min-height: 3rem;
+  padding: 0 0.95rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: ${({ theme }) =>
+    theme.scheme === "light" ? "rgba(243, 246, 250, 0.92)" : "rgba(31, 31, 31, 0.92)"};
+  color: ${({ theme }) => theme.colors.gray12};
+  text-decoration: none;
+
+  svg {
+    font-size: 1rem;
+  }
 
   span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.74rem;
-    font-weight: 700;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size: 0.86rem;
+    font-weight: 800;
+  }
+
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.blue7};
+    color: ${({ theme }) => theme.colors.blue9};
+  }
+
+  &:focus-visible {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.blue7};
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
   }
 `

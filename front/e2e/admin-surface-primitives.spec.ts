@@ -46,4 +46,13 @@ test.describe("admin surface primitives contract", () => {
     expect(toolsSource).toContain("const [isMutationExpanded, setIsMutationExpanded] = useState(false)")
     expect(toolsSource).toContain("<DetailsPanel open={isMutationExpanded}>")
   })
+
+  test("admin utility bar keeps explicit current-view/account controls instead of ambiguous icon chips", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminUtilityBar.tsx"), "utf8")
+
+    expect(source).toContain("<CurrentViewChip aria-label=\"현재 화면\">")
+    expect(source).toContain("계정 설정")
+    expect(source).not.toContain("운영 도구 바로가기")
+    expect(source).not.toContain("ProfileImage")
+  })
 })

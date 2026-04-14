@@ -49,11 +49,12 @@ test.describe("admin surface primitives contract", () => {
     expect(toolsSource).toContain("const FreshnessBadge = styled(AdminStatusPill)`")
     expect(toolsSource).toContain("const ActionRowButton = styled(AdminActionCardButton)``")
     expect(toolsSource).toContain("const [isMutationExpanded, setIsMutationExpanded] = useState(false)")
+    expect(toolsSource).toContain('const [activeSection, setActiveSection] = useState<SectionKey>("diagnostics")')
+    expect(toolsSource).toContain("<WorkspaceIntroCard>")
     expect(toolsSource).toContain("<DetailsPanel open={isMutationExpanded}>")
-    expect(toolsSource).toContain('{ key: "results", label: "최근 실행 결과" },')
-    expect(toolsSource).not.toContain('{ key: "observability", label: "관측" },')
-    expect(toolsSource).not.toContain("<span>외부 관측 링크</span>")
-    expect(toolsSource).not.toContain("여기서는 이동 링크와 외부 채널만 유지합니다.")
+    expect(toolsSource).not.toContain('<SectionNav aria-label="운영 섹션">')
+    expect(toolsSource).not.toContain("const SectionNav = styled(AdminWorkspaceSectionNav)`")
+    expect(toolsSource).not.toContain("const SectionNavButton = styled(AdminWorkspaceSectionNavButton)``")
   })
 
   test("admin utility bar keeps explicit current-view/account controls instead of ambiguous icon chips", () => {

@@ -130,7 +130,7 @@ const UtilityBar = styled.header`
 const CompactNav = styled.nav`
   display: none;
 
-  @media (max-width: 880px) {
+  @media (max-width: 1100px) {
     display: flex;
     align-items: center;
     gap: 0.45rem;

@@ -60,10 +60,12 @@ test.describe("admin surface primitives contract", () => {
     expect(toolsSource).not.toContain("const SectionNavButton = styled(AdminWorkspaceSectionNavButton)``")
   })
 
-  test("admin utility bar keeps explicit current-view context without extra account CTA", () => {
+  test("admin utility bar keeps explicit current-view context and tablet compact nav without extra account CTA", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminUtilityBar.tsx"), "utf8")
 
     expect(source).toContain("<CurrentViewChip aria-label=\"현재 화면\">")
+    expect(source).toContain("@media (max-width: 1100px) {")
+    expect(source).toContain("<CompactNav aria-label=\"관리자 바로가기\">")
     expect(source).not.toContain("프로필 설정")
     expect(source).not.toContain("운영 도구 바로가기")
     expect(source).not.toContain("ProfileImage")

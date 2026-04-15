@@ -79,7 +79,7 @@ import {
 import { saveProfileCardWithConflictRetry } from "src/libs/profileCardSave"
 import useViewportImageEditor from "src/libs/imageEditor/useViewportImageEditor"
 import { convertHtmlToMarkdown as convertHtmlClipboardToMarkdown } from "src/libs/markdown/htmlToMarkdown"
-import { buildPreviewSummaryFromMarkdown } from "src/libs/postSummary"
+import { buildPreviewSummaryFromMarkdown, normalizePersistedSummary } from "src/libs/postSummary"
 import type { BlockEditorChangeMeta } from "src/components/editor/blockEditorContract"
 
 const BLOCK_EDITOR_V2_MERMAID_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED !== "false"
@@ -724,7 +724,7 @@ const readThumbnailSourceSizeFromUrl = (url: string): Promise<ThumbnailSourceSiz
   })
 
 const makePreviewSummary = (content: string, maxLength = PREVIEW_SUMMARY_MAX_LENGTH) =>
-  buildPreviewSummaryFromMarkdown(content, maxLength, "요약을 생성할 수 없습니다.")
+  buildPreviewSummaryFromMarkdown(content, maxLength, "")
 
 const normalizeRecommendedTags = (value: unknown, maxTags: number) => {
   if (!Array.isArray(value)) return []
@@ -924,7 +924,7 @@ const resolveEditorMetaSnapshot = (content: string, contentHtml?: string | null)
     body: resolvedBody,
     tags: parsed.tags,
     category: parsed.category,
-    summary: parsed.summary || makePreviewSummary(resolvedBody),
+    summary: normalizePersistedSummary(parsed.summary),
     thumbnailUrl: syncedThumbnail,
     thumbnailFocusX: syncedThumbnailFocusX,
     thumbnailFocusY: syncedThumbnailFocusY,
@@ -1045,7 +1045,7 @@ const composeEditorContent = (
   const normalizedBody = body.trim()
   const normalizedTags = dedupeStrings(tags)
   const normalizedCategory = options?.category ? normalizeCategoryValue(options.category) : ""
-  const normalizedSummary = options?.summary?.trim() || ""
+  const normalizedSummary = normalizePersistedSummary(options?.summary)
   const normalizedThumbnail = options?.thumbnail?.trim() || ""
   const metadataLines: string[] = []
 
@@ -1113,7 +1113,7 @@ const readLocalDraft = (): LocalDraftPayload | null => {
     return {
       title: typeof parsed.title === "string" ? parsed.title : "",
       content: typeof parsed.content === "string" ? parsed.content : "",
-      summary: typeof parsed.summary === "string" ? parsed.summary : "",
+      summary: normalizePersistedSummary(parsed.summary),
       thumbnailUrl: stripThumbnailFocusFromUrl(rawThumbnailUrl),
       thumbnailFocusX: parsedFocusX,
       thumbnailFocusY: parsedFocusY,

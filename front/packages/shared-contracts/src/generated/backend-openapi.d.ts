@@ -550,6 +550,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/system/api/v1/adm/dashboard-snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["dashboardSnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/system/api/v1/adm/bootstrap": {
         parameters: {
             query?: never;
@@ -1754,9 +1770,60 @@ export interface components {
             version?: string;
             checks?: components["schemas"]["HealthChecks"];
         };
+        AdminDashboardAuthSecuritySnapshot: {
+            /** Format: int32 */
+            recentEventCount?: number;
+            /** Format: int32 */
+            blockedEventCount?: number;
+            /** Format: date-time */
+            latestEventAt?: string;
+            /** Format: date-time */
+            latestBlockedAt?: string;
+        };
+        AdminDashboardSignupMailSnapshot: {
+            status?: string;
+            /** Format: int64 */
+            queueLagSeconds?: number;
+            /** Format: date-time */
+            latestFailureAt?: string;
+            latestFailureMessage?: string;
+        };
+        AdminDashboardSnapshot: {
+            /** Format: date-time */
+            generatedAt?: string;
+            taskQueue?: components["schemas"]["AdminDashboardTaskQueueSnapshot"];
+            signupMail?: components["schemas"]["AdminDashboardSignupMailSnapshot"];
+            authSecurity?: components["schemas"]["AdminDashboardAuthSecuritySnapshot"];
+            storageCleanup?: components["schemas"]["AdminDashboardStorageCleanupSnapshot"];
+        };
+        AdminDashboardStorageCleanupSnapshot: {
+            /** Format: int64 */
+            eligibleForPurgeCount?: number;
+            blockedBySafetyThreshold?: boolean;
+            /** Format: date-time */
+            oldestEligiblePurgeAfter?: string;
+        };
+        AdminDashboardTaskQueueSnapshot: {
+            /** Format: int64 */
+            pendingCount?: number;
+            /** Format: int64 */
+            readyPendingCount?: number;
+            /** Format: int64 */
+            processingCount?: number;
+            /** Format: int64 */
+            failedCount?: number;
+            /** Format: int64 */
+            staleProcessingCount?: number;
+            /** Format: int64 */
+            oldestReadyPendingAgeSeconds?: number;
+            /** Format: date-time */
+            latestFailureAt?: string;
+            latestFailureMessage?: string;
+        };
         AdminSystemBootstrapResBody: {
             member?: components["schemas"]["AuthSessionMemberDto"];
             health?: components["schemas"]["HealthResBody"];
+            dashboard?: components["schemas"]["AdminDashboardSnapshot"];
         };
         AuthSessionMemberDto: {
             /** Format: int64 */
@@ -2899,6 +2966,26 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    dashboardSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminDashboardSnapshot"];
+                };
             };
         };
     };

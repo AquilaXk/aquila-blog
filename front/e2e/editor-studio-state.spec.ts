@@ -8,6 +8,7 @@ import {
   isPublishActionDisabled,
 } from "src/routes/Admin/editorStudioState"
 import { getEditorStudioPageProps } from "src/routes/Admin/EditorStudioPage"
+import { buildPreviewSummaryFromMarkdown, normalizeCardSummary, normalizePersistedSummary } from "src/libs/postSummary"
 
 test.describe("editor studio state", () => {
   test("기존 글은 서버 baseline과 같으면 저장됨으로 본다", () => {
@@ -190,6 +191,22 @@ test.describe("editor studio state", () => {
     expect(editorStudioRoutingSource).toContain("if (!sessionMember) {")
     expect(editorStudioRoutingSource).toContain("if (!router.isReady || !isDedicatedEditorRoute || !sessionMember?.isAdmin) return")
     expect(navBarSource).toContain('router.pathname.startsWith("/editor")')
+  })
+
+  test("summary sentinel placeholder는 저장값으로 재사용하지 않고 본문 기준 요약으로 되돌린다", () => {
+    const content =
+      "## Stateless란 무엇인가?\n\nStateless는 서버가 요청 사이 사용자 상태를 저장하지 않고, 요청만으로 인증·인가 판단에 필요한 정보를 처리하는 방식이다."
+
+    expect(normalizePersistedSummary("요약을 생성할 수 없습니다.")).toBe("")
+    expect(normalizeCardSummary("요약을 생성할 수 없습니다.", { fallback: "" })).toBe("")
+    expect(buildPreviewSummaryFromMarkdown(content, 150, "")).toContain(
+      "Stateless는 서버가 요청 사이 사용자 상태를 저장하지 않고"
+    )
+
+    const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
+    expect(editorStudioSource).toContain('buildPreviewSummaryFromMarkdown(content, maxLength, "")')
+    expect(editorStudioSource).toContain("summary: normalizePersistedSummary(parsed.summary)")
+    expect(editorStudioSource).toContain("const normalizedSummary = normalizePersistedSummary(options?.summary)")
   })
 
   test("dedicated editor 나가기는 returnTo 복귀를 replace로 처리해 editor history 엔트리를 남기지 않는다", () => {

@@ -686,6 +686,34 @@ test.describe("block editor authoring flow", () => {
     expect(computed.labelTextFill).not.toBe("transparent")
   })
 
+  test("writer surface 코드 언어 선택 팝오버는 header clip 없이 옵션 리스트를 아래로 펼친다", async ({ page }) => {
+    await page.goto(QA_WRITER_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("/code")
+    await page.keyboard.press("Enter")
+
+    const codeBlock = page.locator("[data-code-block-wrapper='true']").first()
+    await expect(codeBlock).toBeVisible()
+
+    await codeBlock.locator("button[aria-haspopup='dialog']").click()
+
+    const languageDialog = page.getByRole("dialog", { name: "코드 언어 선택" })
+    const txtOption = languageDialog.getByRole("button", { name: "TXT", exact: true })
+    await expect(languageDialog).toBeVisible()
+    await expect(txtOption).toBeVisible()
+
+    await expect
+      .poll(async () => {
+        const headerRect = await codeBlock.locator("[data-code-block-header='true']").boundingBox()
+        const optionRect = await txtOption.boundingBox()
+        if (!headerRect || !optionRect) return Number.NEGATIVE_INFINITY
+        return optionRect.y - headerRect.y - headerRect.height
+      })
+      .toBeGreaterThanOrEqual(8)
+  })
+
   test("머메이드 블록 코드를 바꾸면 preview가 이전 템플릿이 아니라 최신 source로 즉시 다시 렌더된다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
     await expect(page.getByTestId("qa-editor-ready")).toHaveCount(1)
@@ -836,6 +864,9 @@ test.describe("block editor authoring flow", () => {
     await expect(selectionOverlay).toBeVisible()
     await expect
       .poll(() => textBlock.evaluate((element) => window.getComputedStyle(element).boxShadow))
+      .toBe("none")
+    await expect
+      .poll(() => selectionOverlay.evaluate((element) => window.getComputedStyle(element).boxShadow))
       .toBe("none")
     await expect
       .poll(async () => {

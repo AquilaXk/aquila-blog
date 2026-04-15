@@ -52,6 +52,8 @@ test.describe("admin bootstrap state contract", () => {
     )
     expect(dashboardSource).toContain("baseProps = buildAdminPagePropsFromMember(bootstrapResult.value.value.member)")
     expect(dashboardSource).toContain("value: bootstrapResult.value.value.health")
+    expect(dashboardSource).toContain("value: bootstrapResult.value.value.dashboard")
+    expect(dashboardSource).toContain('"/system/api/v1/adm/dashboard-snapshot"')
     expect(dashboardSource).toContain('authDescription: string = "bootstrap"')
   })
 

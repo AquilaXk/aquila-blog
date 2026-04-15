@@ -12,6 +12,8 @@ import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.UploadedFileCleanupDiagnostics
 import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.global.system.application.AdminDashboardSnapshot
+import com.back.global.system.application.AdminDashboardSnapshotService
 import com.back.global.system.application.AdminSystemHealthSnapshotService
 import com.back.global.task.application.TaskDlqReplayResult
 import com.back.global.task.application.TaskDlqReplayService
@@ -49,10 +51,12 @@ class ApiV1AdmSystemController(
     private val postKeywordSearchPipelineService: PostKeywordSearchPipelineService,
     private val postSearchEngineMirrorService: PostSearchEngineMirrorService,
     private val adminSystemHealthSnapshotService: AdminSystemHealthSnapshotService,
+    private val adminDashboardSnapshotService: AdminDashboardSnapshotService,
 ) {
     data class AdminSystemBootstrapResBody(
         val member: AuthSessionMemberDto,
         val health: HealthResBody,
+        val dashboard: AdminDashboardSnapshot,
     )
 
     data class HealthChecks(
@@ -107,6 +111,7 @@ class ApiV1AdmSystemController(
         AdminSystemBootstrapResBody(
             member = AuthSessionMemberDto(securityUser),
             health = adminSystemHealthSnapshotService.getHealthSummary(),
+            dashboard = adminDashboardSnapshotService.getSnapshot(),
         )
 
     /**
@@ -146,6 +151,10 @@ class ApiV1AdmSystemController(
     @GetMapping("/tasks")
     @Transactional(readOnly = true)
     fun taskQueueDiagnostics(): TaskQueueDiagnostics = taskQueueDiagnosticsService.diagnoseQueue()
+
+    @GetMapping("/dashboard-snapshot")
+    @Transactional(readOnly = true)
+    fun dashboardSnapshot(): AdminDashboardSnapshot = adminDashboardSnapshotService.getSnapshot()
 
     @GetMapping("/auth/security-events")
     @Transactional(readOnly = true)

@@ -904,8 +904,8 @@ const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos }: Nod
   }, [editor, getPos, selectCodeBlockText])
 
   return (
-    <CodeBlockEditorWrapper data-selected={selected}>
-      <CodeBlockEditorHeader>
+    <CodeBlockEditorWrapper data-selected={selected} data-code-block-wrapper="true">
+      <CodeBlockEditorHeader data-code-block-header="true">
         <CodeWindowDots aria-hidden="true">
           <span data-tone="red" />
           <span data-tone="yellow" />
@@ -2545,7 +2545,7 @@ const CodeBlockEditorHeader = styled.div`
     theme.scheme === "light" ? `linear-gradient(180deg, ${theme.colors.gray2}, ${theme.colors.gray3})` : "linear-gradient(180deg, #3a3f59, #363b54)"};
   border-top-left-radius: var(--aq-code-block-radius);
   border-top-right-radius: var(--aq-code-block-radius);
-  overflow: hidden;
+  overflow: visible;
 `
 
 const CodeWindowDots = styled.div`

@@ -8,6 +8,11 @@ package com.back.boundedContexts.post.dto
 object PostPreviewExtractor {
     private const val SUMMARY_MAX_LENGTH = 180
     private const val CACHE_MAX_ENTRIES = 1024
+    private val ignoredSummaryPlaceholders =
+        setOf(
+            "요약을 생성할 수 없습니다.",
+            "핵심 내용을 정리 중입니다.",
+        )
 
     private val markdownImageRegex = Regex("!\\[[^\\]]*\\]\\(([^)\\s]+)(?:\\s+\"[^\"]*\")?\\)")
     private val markdownLinkRegex = Regex("\\[(.*?)\\]\\((.*?)\\)")
@@ -113,7 +118,7 @@ object PostPreviewExtractor {
 
             when (key) {
                 "thumbnail", "thumb", "cover", "coverimage", "cover_image" -> thumbnail = value
-                "summary" -> summary = value
+                "summary" -> if (value !in ignoredSummaryPlaceholders) summary = value
             }
         }
 

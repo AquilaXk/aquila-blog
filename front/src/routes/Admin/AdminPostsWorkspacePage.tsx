@@ -137,6 +137,11 @@ type AdminPostsBootstrapPayload = {
   firstPage: PageDto<AdminPostListItem>
 }
 
+type IdleWindow = Window & {
+  requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number
+  cancelIdleCallback?: (handle: number) => void
+}
+
 type AdminPostsWorkspacePageProps = AdminPageProps & {
   initialSnapshot: AdminPostsWorkspaceInitialSnapshot
 }
@@ -147,6 +152,9 @@ const DEFAULT_PAGE = "1"
 const DEFAULT_PAGE_SIZE = "20"
 const DEFAULT_SORT: ListSort = "CREATED_AT"
 const LIST_SKELETON_ROW_COUNT = 5
+const POSTS_WORKSPACE_DEFERRED_PANEL_TIMEOUT_MS = 720
+const POSTS_WORKSPACE_MOBILE_LIST_DELAY_MS = 180
+const POSTS_WORKSPACE_MOBILE_LIST_QUERY = "(max-width: 900px)"
 const EMPTY_INITIAL_SNAPSHOT: AdminPostsWorkspaceInitialSnapshot = {
   recentPosts: [],
   recentFetchedAt: null,
@@ -457,6 +465,8 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
   const [toast, setToast] = useState<WorkspaceToastState>(null)
   const [mutationPending, setMutationPending] = useState<{ rowId: number; kind: "delete" | "restore" | "hardDelete" } | null>(null)
   const [recentActions, setRecentActions] = useState<WorkspaceRecentAction[]>([])
+  const [showDeferredSupportPanels, setShowDeferredSupportPanels] = useState(false)
+  const [shouldRenderMobileList, setShouldRenderMobileList] = useState(false)
 
   const continueSectionRef = useRef<HTMLDivElement | null>(null)
   const listSectionRef = useRef<HTMLElement | null>(null)
@@ -558,6 +568,70 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
     }
     void loadRecentPosts()
   }, [loadRecentPosts])
+
+  useEffect(() => {
+    if (showDeferredSupportPanels || typeof window === "undefined") return
+
+    const idleWindow = window as IdleWindow
+    const activate = () => setShowDeferredSupportPanels(true)
+
+    if (typeof idleWindow.requestIdleCallback === "function") {
+      const handle = idleWindow.requestIdleCallback(activate, {
+        timeout: POSTS_WORKSPACE_DEFERRED_PANEL_TIMEOUT_MS,
+      })
+      return () => {
+        if (typeof idleWindow.cancelIdleCallback === "function") {
+          idleWindow.cancelIdleCallback(handle)
+        }
+      }
+    }
+
+    const handle = window.setTimeout(activate, 320)
+    return () => window.clearTimeout(handle)
+  }, [showDeferredSupportPanels])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const mediaQuery = window.matchMedia(POSTS_WORKSPACE_MOBILE_LIST_QUERY)
+    let timer: number | null = null
+
+    const sync = () => {
+      if (timer !== null) {
+        window.clearTimeout(timer)
+        timer = null
+      }
+
+      if (!mediaQuery.matches) {
+        setShouldRenderMobileList(false)
+        return
+      }
+
+      timer = window.setTimeout(() => {
+        setShouldRenderMobileList(true)
+      }, POSTS_WORKSPACE_MOBILE_LIST_DELAY_MS)
+    }
+
+    sync()
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", sync)
+      return () => {
+        if (timer !== null) {
+          window.clearTimeout(timer)
+        }
+        mediaQuery.removeEventListener("change", sync)
+      }
+    }
+
+    mediaQuery.addListener(sync)
+    return () => {
+      if (timer !== null) {
+        window.clearTimeout(timer)
+      }
+      mediaQuery.removeListener(sync)
+    }
+  }, [])
 
   useEffect(() => {
     if (skipInitialListFetchRef.current) {
@@ -920,54 +994,61 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
             <h2>최근 작업</h2>
           </div>
         </SectionHeading>
-        {shouldRenderResumeGrid ? (
-          <ResumeGrid>
-            {localDraft ? (
-              <ResumeCardButton type="button" onClick={() => void openWriteRoute({ source: "local-draft" })}>
-                <ResumeHeader>
-                  <strong>브라우저 임시저장</strong>
-                  {localDraft.savedAt ? <span>{formatDateTime(localDraft.savedAt)}</span> : null}
-                </ResumeHeader>
-                <ResumeTitle>{localDraft.title}</ResumeTitle>
-                {localDraft.summary ? <ResumeDescription>{localDraft.summary}</ResumeDescription> : null}
-                <ResumeMeta>
-                  <VisibilityBadge data-tone={localDraft.visibility}>
-                    {visibilityLabelFromValue(localDraft.visibility)}
-                  </VisibilityBadge>
-                  <span>{localDraft.tagCount > 0 ? `태그 ${localDraft.tagCount}개` : "태그 없음"}</span>
-                </ResumeMeta>
-              </ResumeCardButton>
-            ) : (
-              <ResumeCard data-empty="true">
-                <ResumeHeader>
-                  <strong>브라우저 임시저장</strong>
-                </ResumeHeader>
-                <EmptyInlineState>
-                  <strong>임시 저장 없음</strong>
-                  <ActionRow>
-                    <PrimaryInlineButton type="button" onClick={() => void openWriteRoute()}>
-                      새 글 작성
-                    </PrimaryInlineButton>
-                  </ActionRow>
-                </EmptyInlineState>
-              </ResumeCard>
-            )}
+        {showDeferredSupportPanels ? (
+          shouldRenderResumeGrid ? (
+            <ResumeGrid>
+              {localDraft ? (
+                <ResumeCardButton type="button" onClick={() => void openWriteRoute({ source: "local-draft" })}>
+                  <ResumeHeader>
+                    <strong>브라우저 임시저장</strong>
+                    {localDraft.savedAt ? <span>{formatDateTime(localDraft.savedAt)}</span> : null}
+                  </ResumeHeader>
+                  <ResumeTitle>{localDraft.title}</ResumeTitle>
+                  {localDraft.summary ? <ResumeDescription>{localDraft.summary}</ResumeDescription> : null}
+                  <ResumeMeta>
+                    <VisibilityBadge data-tone={localDraft.visibility}>
+                      {visibilityLabelFromValue(localDraft.visibility)}
+                    </VisibilityBadge>
+                    <span>{localDraft.tagCount > 0 ? `태그 ${localDraft.tagCount}개` : "태그 없음"}</span>
+                  </ResumeMeta>
+                </ResumeCardButton>
+              ) : (
+                <ResumeCard data-empty="true">
+                  <ResumeHeader>
+                    <strong>브라우저 임시저장</strong>
+                  </ResumeHeader>
+                  <EmptyInlineState>
+                    <strong>임시 저장 없음</strong>
+                    <ActionRow>
+                      <PrimaryInlineButton type="button" onClick={() => void openWriteRoute()}>
+                        새 글 작성
+                      </PrimaryInlineButton>
+                    </ActionRow>
+                  </EmptyInlineState>
+                </ResumeCard>
+              )}
 
-            <ResumeCard>
-              <ResumeHeader>
-                <strong>최근 수정 3건</strong>
-                {isRecentLoading ? <span>불러오는 중</span> : null}
-              </ResumeHeader>
-              {renderRecentEdited()}
-            </ResumeCard>
-          </ResumeGrid>
+              <ResumeCard>
+                <ResumeHeader>
+                  <strong>최근 수정 3건</strong>
+                  {isRecentLoading ? <span>불러오는 중</span> : null}
+                </ResumeHeader>
+                {renderRecentEdited()}
+              </ResumeCard>
+            </ResumeGrid>
+          ) : (
+            <WorkspaceEmpty>
+              <strong>최근 작업 없음</strong>
+              <PrimaryInlineButton type="button" onClick={() => void openWriteRoute()}>
+                새 글 작성
+              </PrimaryInlineButton>
+            </WorkspaceEmpty>
+          )
         ) : (
-          <WorkspaceEmpty>
-            <strong>최근 작업 없음</strong>
-            <PrimaryInlineButton type="button" onClick={() => void openWriteRoute()}>
-              새 글 작성
-            </PrimaryInlineButton>
-          </WorkspaceEmpty>
+          <DeferredPanelPlaceholder data-size="recent">
+            <strong>최근 작업 준비 중</strong>
+            <span>글 목록 워크스페이스를 먼저 표시한 뒤 이어서 최근 작업을 붙입니다.</span>
+          </DeferredPanelPlaceholder>
         )}
       </ResumeSection>
 
@@ -1086,29 +1167,36 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
           </FilterSummaryBar>
         </StickyFilterToolbar>
 
-        <RecentActionPanel aria-live="polite">
-          <div className="panelHead">
-            <strong>작업 기록</strong>
-          </div>
-          {recentActions.length > 0 ? (
-            <RecentActionList>
-              {recentActions.map((entry) => (
-                <li key={entry.id} data-tone={entry.tone}>
-                  <div className="copy">
-                    <div className="headline">
-                      <strong>{entry.label}</strong>
-                      <span className="stateLabel">{entry.stateLabel}</span>
+        {showDeferredSupportPanels ? (
+          <RecentActionPanel aria-live="polite">
+            <div className="panelHead">
+              <strong>작업 기록</strong>
+            </div>
+            {recentActions.length > 0 ? (
+              <RecentActionList>
+                {recentActions.map((entry) => (
+                  <li key={entry.id} data-tone={entry.tone}>
+                    <div className="copy">
+                      <div className="headline">
+                        <strong>{entry.label}</strong>
+                        <span className="stateLabel">{entry.stateLabel}</span>
+                      </div>
+                      <p>{entry.detail}</p>
                     </div>
-                    <p>{entry.detail}</p>
-                  </div>
-                  <span className="time">{formatDateTime(entry.occurredAt)}</span>
-                </li>
-              ))}
-            </RecentActionList>
-          ) : (
-            <MutedText>아직 기록된 작업이 없습니다. 삭제, 복구, 영구삭제 결과가 여기에 쌓입니다.</MutedText>
-          )}
-        </RecentActionPanel>
+                    <span className="time">{formatDateTime(entry.occurredAt)}</span>
+                  </li>
+                ))}
+              </RecentActionList>
+            ) : (
+              <MutedText>아직 기록된 작업이 없습니다. 삭제, 복구, 영구삭제 결과가 여기에 쌓입니다.</MutedText>
+            )}
+          </RecentActionPanel>
+        ) : (
+          <DeferredPanelPlaceholder data-size="activity">
+            <strong>작업 기록 준비 중</strong>
+            <span>목록이 안정된 뒤 최근 변경 이력을 이어서 불러옵니다.</span>
+          </DeferredPanelPlaceholder>
+        )}
 
         {isListLoading ? (
           <ListCard aria-hidden="true">
@@ -1191,143 +1279,147 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
           </ListEmptyState>
         ) : (
           <ListCard>
-            <DesktopListTable>
-              <thead>
-                <tr>
-                  <th className="idCell">ID</th>
-                  <th>제목</th>
-                  <th className="dateCell">{listScope === "active" ? "수정일" : "삭제일"}</th>
-                  <th className="actionCell">작업</th>
-                </tr>
-              </thead>
-              <tbody>
-                {listState.rows.map((row) => (
-                  <tr key={row.id}>
-                    <td className="idCell">#{row.id}</td>
-                    <td>
-                      <TitleCell>
-                        {canOpenCanonicalPost(row) ? (
-                          <TitleAnchor href={toCanonicalPostPath(row.id)} onClick={(event) => void openCanonicalPost(event, row)}>
-                            {getWorkspaceRowTitle(row)}
-                          </TitleAnchor>
-                        ) : (
-                          <TitleText>{getWorkspaceRowTitle(row)}</TitleText>
-                        )}
-                        <div className="metaRow">
-                          <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
-                            {visibilityLabel(row.published, row.listed)}
-                          </VisibilityBadge>
-                          {renderAuthorMeta(row)}
-                        </div>
-                      </TitleCell>
-                    </td>
-                    <td className="dateCell">{formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)}</td>
-                    <td className="actionCell">
-                      <RowActions>
-                        {listScope === "active" ? (
-                          <>
-                            <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
-                              수정
-                            </RowPrimaryButton>
-                            {canOpenCanonicalPost(row) ? (
-                              <RowSecondaryButton type="button" onClick={() => void copyPostDetailLink(row)}>
-                                링크 복사
-                              </RowSecondaryButton>
-                            ) : null}
-                            <DangerTextButton
-                              type="button"
-                              disabled={Boolean(mutationPending)}
-                              onClick={() => void handleDeletePost(row)}
-                            >
-                              삭제
-                            </DangerTextButton>
-                          </>
-                        ) : (
-                          <>
-                            <RowPrimaryButton
-                              type="button"
-                              disabled={Boolean(mutationPending)}
-                              onClick={() => void handleRestorePost(row)}
-                            >
-                              복구
-                            </RowPrimaryButton>
-                            <DangerTextButton
-                              type="button"
-                              disabled={Boolean(mutationPending)}
-                              onClick={() => void handleHardDeletePost(row)}
-                            >
-                              영구삭제
-                            </DangerTextButton>
-                          </>
-                        )}
-                      </RowActions>
-                    </td>
+            {!shouldRenderMobileList ? (
+              <DesktopListTable>
+                <thead>
+                  <tr>
+                    <th className="idCell">ID</th>
+                    <th>제목</th>
+                    <th className="dateCell">{listScope === "active" ? "수정일" : "삭제일"}</th>
+                    <th className="actionCell">작업</th>
                   </tr>
-                ))}
-              </tbody>
-            </DesktopListTable>
+                </thead>
+                <tbody>
+                  {listState.rows.map((row) => (
+                    <tr key={row.id}>
+                      <td className="idCell">#{row.id}</td>
+                      <td>
+                        <TitleCell>
+                          {canOpenCanonicalPost(row) ? (
+                            <TitleAnchor href={toCanonicalPostPath(row.id)} onClick={(event) => void openCanonicalPost(event, row)}>
+                              {getWorkspaceRowTitle(row)}
+                            </TitleAnchor>
+                          ) : (
+                            <TitleText>{getWorkspaceRowTitle(row)}</TitleText>
+                          )}
+                          <div className="metaRow">
+                            <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
+                              {visibilityLabel(row.published, row.listed)}
+                            </VisibilityBadge>
+                            {renderAuthorMeta(row)}
+                          </div>
+                        </TitleCell>
+                      </td>
+                      <td className="dateCell">{formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)}</td>
+                      <td className="actionCell">
+                        <RowActions>
+                          {listScope === "active" ? (
+                            <>
+                              <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
+                                수정
+                              </RowPrimaryButton>
+                              {canOpenCanonicalPost(row) ? (
+                                <RowSecondaryButton type="button" onClick={() => void copyPostDetailLink(row)}>
+                                  링크 복사
+                                </RowSecondaryButton>
+                              ) : null}
+                              <DangerTextButton
+                                type="button"
+                                disabled={Boolean(mutationPending)}
+                                onClick={() => void handleDeletePost(row)}
+                              >
+                                삭제
+                              </DangerTextButton>
+                            </>
+                          ) : (
+                            <>
+                              <RowPrimaryButton
+                                type="button"
+                                disabled={Boolean(mutationPending)}
+                                onClick={() => void handleRestorePost(row)}
+                              >
+                                복구
+                              </RowPrimaryButton>
+                              <DangerTextButton
+                                type="button"
+                                disabled={Boolean(mutationPending)}
+                                onClick={() => void handleHardDeletePost(row)}
+                              >
+                                영구삭제
+                              </DangerTextButton>
+                            </>
+                          )}
+                        </RowActions>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </DesktopListTable>
+            ) : null}
 
-            <MobileCardList>
-              {listState.rows.map((row) => (
-                <article key={`mobile-${row.id}`}>
-                  <header>
-                    <span className="id">#{row.id}</span>
-                  </header>
-                  {canOpenCanonicalPost(row) ? (
-                    <TitleAnchor href={toCanonicalPostPath(row.id)} onClick={(event) => void openCanonicalPost(event, row)}>
-                      {getWorkspaceRowTitle(row)}
-                    </TitleAnchor>
-                  ) : (
-                    <TitleText>{getWorkspaceRowTitle(row)}</TitleText>
-                  )}
-                  <div className="metaRow">
-                    <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
-                      {visibilityLabel(row.published, row.listed)}
-                    </VisibilityBadge>
-                    {renderAuthorMeta(row)}
-                  </div>
-                  <span className="date">{formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)}</span>
-                  <div className="actions">
-                    {listScope === "active" ? (
-                      <>
-                        <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
-                          수정
-                        </RowPrimaryButton>
-                        {canOpenCanonicalPost(row) ? (
-                          <RowSecondaryButton type="button" onClick={() => void copyPostDetailLink(row)}>
-                            링크 복사
-                          </RowSecondaryButton>
-                        ) : null}
-                        <DangerTextButton
-                          type="button"
-                          disabled={Boolean(mutationPending)}
-                          onClick={() => void handleDeletePost(row)}
-                        >
-                          삭제
-                        </DangerTextButton>
-                      </>
+            {shouldRenderMobileList ? (
+              <MobileCardList>
+                {listState.rows.map((row) => (
+                  <article key={`mobile-${row.id}`}>
+                    <header>
+                      <span className="id">#{row.id}</span>
+                    </header>
+                    {canOpenCanonicalPost(row) ? (
+                      <TitleAnchor href={toCanonicalPostPath(row.id)} onClick={(event) => void openCanonicalPost(event, row)}>
+                        {getWorkspaceRowTitle(row)}
+                      </TitleAnchor>
                     ) : (
-                      <>
-                        <RowPrimaryButton
-                          type="button"
-                          disabled={Boolean(mutationPending)}
-                          onClick={() => void handleRestorePost(row)}
-                        >
-                          복구
-                        </RowPrimaryButton>
-                        <DangerTextButton
-                          type="button"
-                          disabled={Boolean(mutationPending)}
-                          onClick={() => void handleHardDeletePost(row)}
-                        >
-                          영구삭제
-                        </DangerTextButton>
-                      </>
+                      <TitleText>{getWorkspaceRowTitle(row)}</TitleText>
                     )}
-                  </div>
-                </article>
-              ))}
-            </MobileCardList>
+                    <div className="metaRow">
+                      <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
+                        {visibilityLabel(row.published, row.listed)}
+                      </VisibilityBadge>
+                      {renderAuthorMeta(row)}
+                    </div>
+                    <span className="date">{formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)}</span>
+                    <div className="actions">
+                      {listScope === "active" ? (
+                        <>
+                          <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
+                            수정
+                          </RowPrimaryButton>
+                          {canOpenCanonicalPost(row) ? (
+                            <RowSecondaryButton type="button" onClick={() => void copyPostDetailLink(row)}>
+                              링크 복사
+                            </RowSecondaryButton>
+                          ) : null}
+                          <DangerTextButton
+                            type="button"
+                            disabled={Boolean(mutationPending)}
+                            onClick={() => void handleDeletePost(row)}
+                          >
+                            삭제
+                          </DangerTextButton>
+                        </>
+                      ) : (
+                        <>
+                          <RowPrimaryButton
+                            type="button"
+                            disabled={Boolean(mutationPending)}
+                            onClick={() => void handleRestorePost(row)}
+                          >
+                            복구
+                          </RowPrimaryButton>
+                          <DangerTextButton
+                            type="button"
+                            disabled={Boolean(mutationPending)}
+                            onClick={() => void handleHardDeletePost(row)}
+                          >
+                            영구삭제
+                          </DangerTextButton>
+                        </>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </MobileCardList>
+            ) : null}
           </ListCard>
         )}
       </ListSection>
@@ -1692,6 +1784,27 @@ const MutedText = styled.p`
   margin: 0;
   color: ${({ theme }) => theme.colors.gray10};
   line-height: 1.55;
+`
+
+const DeferredPanelPlaceholder = styled(AdminRailCard)<{ "data-size": "recent" | "activity" }>`
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.92rem 1rem;
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: ${({ theme }) => theme.colors.gray2};
+  min-height: ${({ "data-size": size }) => (size === "recent" ? "144px" : "92px")};
+
+  strong {
+    font-size: 0.9rem;
+    letter-spacing: -0.01em;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.84rem;
+    line-height: 1.55;
+  }
 `
 
 const RecentListSkeleton = styled.div`

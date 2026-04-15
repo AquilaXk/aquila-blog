@@ -37,4 +37,21 @@ class PostPreviewExtractorTest {
         assertThat(summary).doesNotContain("테스트 이미지 입니다")
         assertThat(summary).contains("도입부 IoC(Inversion of Control)")
     }
+
+    @Test
+    fun `makeSummary ignores persisted fallback summary metadata and rebuilds from body`() {
+        val content =
+            """
+            ---
+            summary: "요약을 생성할 수 없습니다."
+            ---
+
+            Stateless는 서버가 요청 사이 사용자 상태를 저장하지 않고, 요청 자체만으로 인증·인가 판단에 필요한 정보를 처리하는 방식이다.
+            """.trimIndent()
+
+        val summary = PostPreviewExtractor.makeSummary(content)
+
+        assertThat(summary).isNotEqualTo("요약을 생성할 수 없습니다.")
+        assertThat(summary).contains("Stateless는 서버가 요청 사이 사용자 상태를 저장하지 않고")
+    }
 }

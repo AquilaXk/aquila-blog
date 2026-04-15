@@ -1242,6 +1242,24 @@
         }
       }
     },
+    "/system/api/v1/adm/dashboard-snapshot" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-system-controller" ],
+        "operationId" : "dashboardSnapshot",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AdminDashboardSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/system/api/v1/adm/bootstrap" : {
       "get" : {
         "tags" : [ "api-v-1-adm-system-controller" ],
@@ -4075,6 +4093,119 @@
           }
         }
       },
+      "AdminDashboardAuthSecuritySnapshot" : {
+        "type" : "object",
+        "properties" : {
+          "recentEventCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "blockedEventCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "latestEventAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "latestBlockedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "AdminDashboardSignupMailSnapshot" : {
+        "type" : "object",
+        "properties" : {
+          "status" : {
+            "type" : "string"
+          },
+          "queueLagSeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "latestFailureAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "latestFailureMessage" : {
+            "type" : "string"
+          }
+        }
+      },
+      "AdminDashboardSnapshot" : {
+        "type" : "object",
+        "properties" : {
+          "generatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "taskQueue" : {
+            "$ref" : "#/components/schemas/AdminDashboardTaskQueueSnapshot"
+          },
+          "signupMail" : {
+            "$ref" : "#/components/schemas/AdminDashboardSignupMailSnapshot"
+          },
+          "authSecurity" : {
+            "$ref" : "#/components/schemas/AdminDashboardAuthSecuritySnapshot"
+          },
+          "storageCleanup" : {
+            "$ref" : "#/components/schemas/AdminDashboardStorageCleanupSnapshot"
+          }
+        }
+      },
+      "AdminDashboardStorageCleanupSnapshot" : {
+        "type" : "object",
+        "properties" : {
+          "eligibleForPurgeCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "blockedBySafetyThreshold" : {
+            "type" : "boolean"
+          },
+          "oldestEligiblePurgeAfter" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "AdminDashboardTaskQueueSnapshot" : {
+        "type" : "object",
+        "properties" : {
+          "pendingCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "readyPendingCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "processingCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "failedCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "staleProcessingCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "oldestReadyPendingAgeSeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "latestFailureAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "latestFailureMessage" : {
+            "type" : "string"
+          }
+        }
+      },
       "AdminSystemBootstrapResBody" : {
         "type" : "object",
         "properties" : {
@@ -4083,6 +4214,9 @@
           },
           "health" : {
             "$ref" : "#/components/schemas/HealthResBody"
+          },
+          "dashboard" : {
+            "$ref" : "#/components/schemas/AdminDashboardSnapshot"
           }
         }
       },

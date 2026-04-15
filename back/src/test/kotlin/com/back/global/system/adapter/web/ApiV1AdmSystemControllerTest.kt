@@ -11,6 +11,12 @@ import com.back.global.security.config.CustomAuthenticationFilter
 import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.UploadedFileCleanupDiagnostics
 import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.global.system.application.AdminDashboardAuthSecuritySnapshot
+import com.back.global.system.application.AdminDashboardSignupMailSnapshot
+import com.back.global.system.application.AdminDashboardSnapshot
+import com.back.global.system.application.AdminDashboardSnapshotService
+import com.back.global.system.application.AdminDashboardStorageCleanupSnapshot
+import com.back.global.system.application.AdminDashboardTaskQueueSnapshot
 import com.back.global.system.application.AdminSystemHealthSnapshotService
 import com.back.global.task.application.TaskDlqReplayResult
 import com.back.global.task.application.TaskDlqReplayService
@@ -70,6 +76,9 @@ class ApiV1AdmSystemControllerTest {
     private lateinit var adminSystemHealthSnapshotService: AdminSystemHealthSnapshotService
 
     @MockitoBean
+    private lateinit var adminDashboardSnapshotService: AdminDashboardSnapshotService
+
+    @MockitoBean
     private lateinit var signupMailDiagnosticsService: SignupMailDiagnosticsService
 
     @MockitoBean
@@ -121,6 +130,7 @@ class ApiV1AdmSystemControllerTest {
                         ),
                 ),
             )
+        given(adminDashboardSnapshotService.getSnapshot()).willReturn(adminDashboardSnapshot())
 
         mvc
             .get("/system/api/v1/adm/bootstrap") {
@@ -132,6 +142,8 @@ class ApiV1AdmSystemControllerTest {
                 jsonPath("$.member.nickname") { value("관리자") }
                 jsonPath("$.health.status") { value("UP") }
                 jsonPath("$.health.checks.db") { value("UP") }
+                jsonPath("$.dashboard.taskQueue.failedCount") { value(1) }
+                jsonPath("$.dashboard.authSecurity.blockedEventCount") { value(1) }
             }
     }
 
@@ -289,6 +301,22 @@ class ApiV1AdmSystemControllerTest {
             jsonPath("$.taskTypes[0].retryPolicy.baseDelaySeconds") { isNumber() }
             jsonPath("$.recentFailures") { isArray() }
             jsonPath("$.staleProcessingSamples") { isArray() }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 dashboard snapshot을 조회할 수 있다`() {
+        given(adminDashboardSnapshotService.getSnapshot()).willReturn(adminDashboardSnapshot())
+
+        mvc.get("/system/api/v1/adm/dashboard-snapshot").andExpect {
+            status { isOk() }
+            jsonPath("$.generatedAt") { isString() }
+            jsonPath("$.taskQueue.readyPendingCount") { value(2) }
+            jsonPath("$.taskQueue.failedCount") { value(1) }
+            jsonPath("$.signupMail.status") { value("READY") }
+            jsonPath("$.authSecurity.blockedEventCount") { value(1) }
+            jsonPath("$.storageCleanup.eligibleForPurgeCount") { value(1) }
         }
     }
 
@@ -609,6 +637,42 @@ class ApiV1AdmSystemControllerTest {
             blockedBySafetyThreshold = false,
             oldestEligiblePurgeAfter = Instant.parse("2026-03-13T00:00:00Z"),
             sampleEligibleObjectKeys = listOf("posts/2026/test.png"),
+        )
+
+    private fun adminDashboardSnapshot(): AdminDashboardSnapshot =
+        AdminDashboardSnapshot(
+            generatedAt = Instant.parse("2026-03-13T00:03:00Z"),
+            taskQueue =
+                AdminDashboardTaskQueueSnapshot(
+                    pendingCount = 3,
+                    readyPendingCount = 2,
+                    processingCount = 1,
+                    failedCount = 1,
+                    staleProcessingCount = 0,
+                    oldestReadyPendingAgeSeconds = 30,
+                    latestFailureAt = Instant.parse("2026-03-13T00:02:00Z"),
+                    latestFailureMessage = "smtp timeout",
+                ),
+            signupMail =
+                AdminDashboardSignupMailSnapshot(
+                    status = "READY",
+                    queueLagSeconds = 30,
+                    latestFailureAt = Instant.parse("2026-03-13T00:02:00Z"),
+                    latestFailureMessage = "smtp timeout",
+                ),
+            authSecurity =
+                AdminDashboardAuthSecuritySnapshot(
+                    recentEventCount = 3,
+                    blockedEventCount = 1,
+                    latestEventAt = Instant.parse("2026-03-13T00:03:00Z"),
+                    latestBlockedAt = Instant.parse("2026-03-13T00:01:00Z"),
+                ),
+            storageCleanup =
+                AdminDashboardStorageCleanupSnapshot(
+                    eligibleForPurgeCount = 1,
+                    blockedBySafetyThreshold = false,
+                    oldestEligiblePurgeAfter = Instant.parse("2026-03-13T00:00:00Z"),
+                ),
         )
 
     @TestConfiguration

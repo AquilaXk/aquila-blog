@@ -17,11 +17,21 @@ const ESCAPED_CONTROL_REGEX = /\\r\\n|\\n|\\r|\\t/g
 
 export const CARD_SUMMARY_PREVIEW_LIMIT = 150
 export const DEFAULT_CARD_SUMMARY_FALLBACK = "핵심 내용을 정리 중입니다."
+export const SUMMARY_GENERATION_FAILURE_FALLBACK = "요약을 생성할 수 없습니다."
+const SUMMARY_PLACEHOLDER_VALUES = new Set([
+  DEFAULT_CARD_SUMMARY_FALLBACK,
+  SUMMARY_GENERATION_FAILURE_FALLBACK,
+])
 
 const decodeSummaryEntities = (value: string) => value.replace(HTML_COLON_REGEX, ":")
 
 const decodeSummaryEscapes = (value: string) =>
   value.replace(ESCAPED_QUOTES_REGEX, "$1").replace(ESCAPED_CONTROL_REGEX, " ")
+
+const normalizeSummaryText = (value: string) =>
+  decodeSummaryEscapes(decodeSummaryEntities(value))
+    .replace(WHITESPACE_REGEX, " ")
+    .trim()
 
 const stripSummaryLeadIn = (value: string) => {
   let normalized = value.trim()
@@ -40,6 +50,19 @@ const truncateSummary = (value: string, maxLength: number) => {
   return `${value.slice(0, maxLength).trimEnd()}...`
 }
 
+const isSummaryPlaceholderNormalized = (value: string) => SUMMARY_PLACEHOLDER_VALUES.has(value)
+
+export const isSummaryPlaceholder = (value?: string | null) =>
+  typeof value === "string" && isSummaryPlaceholderNormalized(normalizeSummaryText(value))
+
+export const normalizePersistedSummary = (value?: string | null) => {
+  if (typeof value !== "string") return ""
+
+  const normalized = normalizeSummaryText(value)
+  if (!normalized || isSummaryPlaceholderNormalized(normalized)) return ""
+  return normalized
+}
+
 export const normalizeCardSummary = (
   value?: string,
   options?: {
@@ -52,20 +75,16 @@ export const normalizeCardSummary = (
 
   if (typeof value !== "string") return fallback
 
-  const normalized = stripSummaryLeadIn(
-    decodeSummaryEscapes(decodeSummaryEntities(value))
-      .replace(WHITESPACE_REGEX, " ")
-      .trim()
-  )
+  const normalized = stripSummaryLeadIn(normalizeSummaryText(value))
 
-  if (!normalized) return fallback
+  if (!normalized || isSummaryPlaceholderNormalized(normalized)) return fallback
   return truncateSummary(normalized, maxLength)
 }
 
 export const buildPreviewSummaryFromMarkdown = (
   content: string,
   maxLength = CARD_SUMMARY_PREVIEW_LIMIT,
-  fallback = "요약을 생성할 수 없습니다."
+  fallback = SUMMARY_GENERATION_FAILURE_FALLBACK
 ) => {
   const normalized = content
     .replace(FENCED_CODE_REGEX, " ")

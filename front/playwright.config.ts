@@ -1,3 +1,4 @@
+import path from "node:path"
 import { defineConfig, devices } from "@playwright/test"
 
 if (process.env.FORCE_COLOR && Object.prototype.hasOwnProperty.call(process.env, "NO_COLOR")) {
@@ -10,6 +11,13 @@ const reuseExistingServer = process.env.PLAYWRIGHT_REUSE_SERVER === "true"
 const useLiveMultiBrowser = process.env.PLAYWRIGHT_LIVE_MULTI_BROWSER === "true"
 const useLiveFailFast = process.env.PLAYWRIGHT_LIVE_FAIL_FAST === "true"
 const playwrightJsonReportPath = process.env.PLAYWRIGHT_JSON_REPORT_PATH?.trim() || ""
+const playwrightOutputDir =
+  process.env.PLAYWRIGHT_OUTPUT_DIR?.trim() ||
+  path.join(
+    "test-results",
+    "playwright",
+    (process.env.CODEX_THREAD_ID?.trim() || `pid-${process.pid}`).replace(/[^A-Za-z0-9._-]+/g, "-")
+  )
 const shouldUseChromiumChannel = process.platform === "darwin" && !process.env.CI
 const inheritedEnv = { ...process.env }
 const resolvedBackendInternalUrl = inheritedEnv.BACKEND_INTERNAL_URL || "http://127.0.0.1:1"
@@ -73,6 +81,7 @@ if (playwrightJsonReportPath) {
 
 export default defineConfig({
   testDir: "./e2e",
+  outputDir: playwrightOutputDir,
   timeout: 30_000,
   expect: {
     timeout: 10_000,

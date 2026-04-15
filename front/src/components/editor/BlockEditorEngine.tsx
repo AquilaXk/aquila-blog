@@ -11894,7 +11894,7 @@ const BlockSelectionOverlay = styled.div`
   border-radius: 0.95rem;
   background: ${({ theme }) =>
     theme.scheme === "dark" ? "rgba(59, 130, 246, 0.12)" : "rgba(59, 130, 246, 0.1)"};
-  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.24);
+  box-shadow: none;
 `
 
 const MobileBlockActionBar = styled.div`

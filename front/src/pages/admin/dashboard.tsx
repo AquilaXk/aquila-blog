@@ -21,12 +21,13 @@ import {
 } from "src/routes/Admin/adminMonitoring"
 import AdminShell from "src/routes/Admin/AdminShell"
 import {
-  AdminElevatedCard,
   AdminInfoLinkCard,
   AdminInfoList,
+  AdminInfoPanelCard,
+  AdminInfoStatusItem,
+  AdminInfoStatusList,
   AdminPlainCard,
   AdminSectionTitleStack,
-  AdminStatusPill,
   AdminTextActionLink,
 } from "src/routes/Admin/AdminSurfacePrimitives"
 
@@ -34,9 +35,42 @@ type SystemHealthPayload = {
   status?: string
 }
 
+type DashboardSnapshotPayload = {
+  generatedAt: string
+  taskQueue: {
+    pendingCount: number
+    readyPendingCount: number
+    processingCount: number
+    failedCount: number
+    staleProcessingCount: number
+    oldestReadyPendingAgeSeconds: number | null
+    latestFailureAt: string | null
+    latestFailureMessage: string | null
+  }
+  signupMail: {
+    status: string
+    queueLagSeconds: number | null
+    latestFailureAt: string | null
+    latestFailureMessage: string | null
+  }
+  authSecurity: {
+    recentEventCount: number
+    blockedEventCount: number
+    latestEventAt: string | null
+    latestBlockedAt: string | null
+  }
+  storageCleanup: {
+    eligibleForPurgeCount: number
+    blockedBySafetyThreshold: boolean
+    oldestEligiblePurgeAfter: string | null
+  }
+}
+
 type AdminDashboardInitialSnapshot = {
   systemHealth: SystemHealthPayload | null
-  fetchedAt: string | null
+  dashboard: DashboardSnapshotPayload | null
+  systemHealthFetchedAt: string | null
+  dashboardFetchedAt: string | null
 }
 
 type AdminDashboardPageProps = AdminPageProps & {
@@ -46,12 +80,14 @@ type AdminDashboardPageProps = AdminPageProps & {
 type AdminDashboardBootstrapPayload = {
   member: AuthMember
   health: SystemHealthPayload
+  dashboard: DashboardSnapshotPayload
 }
 
 type DashboardKpiCard = {
   key: string
   label: string
   value: string
+  detail: string
   tone: "neutral" | "good" | "warn"
   icon: IconName
 }
@@ -59,9 +95,10 @@ type DashboardKpiCard = {
 type DashboardPriorityRow = {
   key: string
   title: string
-  priority: string
+  summary: string
   tone: "neutral" | "good" | "warn"
   href: string
+  actionLabel: string
 }
 
 type DashboardQuickAction = {
@@ -72,11 +109,10 @@ type DashboardQuickAction = {
 
 const EMPTY_INITIAL_SNAPSHOT: AdminDashboardInitialSnapshot = {
   systemHealth: null,
-  fetchedAt: null,
+  dashboard: null,
+  systemHealthFetchedAt: null,
+  dashboardFetchedAt: null,
 }
-
-const DASHBOARD_PRIORITY_PANEL_LIMIT = 4
-const DASHBOARD_FIRST_FOLD_PANEL_LIMIT = 2
 
 async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | null> {
   try {
@@ -88,6 +124,61 @@ async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | 
   } catch {
     return null
   }
+}
+
+const ADMIN_DASHBOARD_DISPLAY_TIME_ZONE = "Asia/Seoul"
+
+const formatInstant = (value: string | null | undefined) => {
+  if (!value) return "-"
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: ADMIN_DASHBOARD_DISPLAY_TIME_ZONE,
+  }).format(date)
+}
+
+const formatAge = (seconds: number | null | undefined) => {
+  if (seconds == null) return "-"
+  if (seconds < 60) return `${seconds}초`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}분`
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}시간`
+  return `${Math.floor(seconds / 86400)}일`
+}
+
+const getMailStatusLabel = (value: string | null | undefined) => {
+  switch (value) {
+    case "READY":
+      return "전송 준비"
+    case "TEST_MODE":
+      return "테스트 모드"
+    case "MISCONFIGURED":
+      return "설정 누락"
+    case "QUEUE_LOCKED":
+      return "큐 잠금"
+    case "CONNECTION_FAILED":
+      return "연결 실패"
+    case "UNAVAILABLE":
+      return "비활성"
+    default:
+      return value || "미확인"
+  }
+}
+
+const getMailStatusTone = (value: string | null | undefined): DashboardKpiCard["tone"] =>
+  value === "READY" || value === "TEST_MODE" ? "good" : value ? "warn" : "neutral"
+
+const getTaskQueueTone = (snapshot: DashboardSnapshotPayload | null | undefined): DashboardKpiCard["tone"] => {
+  if (!snapshot) return "neutral"
+  if (snapshot.taskQueue.failedCount > 0 || snapshot.taskQueue.staleProcessingCount > 0) return "warn"
+  if (snapshot.taskQueue.readyPendingCount === 0 && snapshot.taskQueue.processingCount === 0) return "good"
+  return "neutral"
 }
 
 export const getServerSideProps: GetServerSideProps<AdminDashboardPageProps> = async ({ req, res }) => {
@@ -117,6 +208,11 @@ export const getServerSideProps: GetServerSideProps<AdminDashboardPageProps> = a
     ok: true
     value: { value: SystemHealthPayload | null; source: string }
   }
+  let dashboardSnapshotResult: {
+    durationMs: number
+    ok: true
+    value: { value: DashboardSnapshotPayload | null; source: string }
+  }
 
   if (bootstrapResult?.ok && bootstrapResult.value.ok) {
     baseProps = buildAdminPagePropsFromMember(bootstrapResult.value.value.member)
@@ -125,6 +221,14 @@ export const getServerSideProps: GetServerSideProps<AdminDashboardPageProps> = a
       ok: true,
       value: {
         value: bootstrapResult.value.value.health,
+        source: "bootstrap",
+      },
+    }
+    dashboardSnapshotResult = {
+      durationMs: bootstrapResult.durationMs,
+      ok: true,
+      value: {
+        value: bootstrapResult.value.value.dashboard,
         source: "bootstrap",
       },
     }
@@ -139,6 +243,10 @@ export const getServerSideProps: GetServerSideProps<AdminDashboardPageProps> = a
 
     const fallbackSystemHealthResult = await timed(() => readJsonIfOk<SystemHealthPayload>(req, "/system/api/v1/adm/health"))
     if (!fallbackSystemHealthResult.ok) throw fallbackSystemHealthResult.error
+    const fallbackDashboardSnapshotResult = await timed(() =>
+      readJsonIfOk<DashboardSnapshotPayload>(req, "/system/api/v1/adm/dashboard-snapshot")
+    )
+    if (!fallbackDashboardSnapshotResult.ok) throw fallbackDashboardSnapshotResult.error
     systemHealthResult = {
       durationMs: fallbackSystemHealthResult.durationMs,
       ok: true,
@@ -147,9 +255,18 @@ export const getServerSideProps: GetServerSideProps<AdminDashboardPageProps> = a
         source: fallbackSystemHealthResult.value ? "ok" : "empty",
       },
     }
+    dashboardSnapshotResult = {
+      durationMs: fallbackDashboardSnapshotResult.durationMs,
+      ok: true,
+      value: {
+        value: fallbackDashboardSnapshotResult.value,
+        source: fallbackDashboardSnapshotResult.value ? "ok" : "empty",
+      },
+    }
   }
 
   const systemHealth = systemHealthResult.value.value
+  const dashboardSnapshot = dashboardSnapshotResult.value.value
 
   appendSsrDebugTiming(req, res, [
     {
@@ -163,6 +280,11 @@ export const getServerSideProps: GetServerSideProps<AdminDashboardPageProps> = a
       description: systemHealth ? systemHealthResult.value.source : "empty",
     },
     {
+      name: "admin-dashboard-snapshot",
+      durationMs: dashboardSnapshotResult.durationMs,
+      description: dashboardSnapshot ? dashboardSnapshotResult.value.source : "empty",
+    },
+    {
       name: "admin-dashboard-ssr-total",
       durationMs: performance.now() - ssrStartedAt,
       description: "ready",
@@ -174,14 +296,15 @@ export const getServerSideProps: GetServerSideProps<AdminDashboardPageProps> = a
       ...baseProps,
       initialSnapshot: {
         systemHealth,
-        fetchedAt: systemHealth ? new Date().toISOString() : null,
+        dashboard: dashboardSnapshot,
+        systemHealthFetchedAt: systemHealth ? new Date().toISOString() : null,
+        dashboardFetchedAt: dashboardSnapshot?.generatedAt ?? (dashboardSnapshot ? new Date().toISOString() : null),
       },
     },
   }
 }
 
 const env = getMonitoringEnv()
-const DASHBOARD_EAGER_PANEL_COUNT = 1
 const DASHBOARD_PANEL_STAGGER_MS = 640
 const DASHBOARD_INTERSECTION_ROOT_MARGIN = "0px"
 const DASHBOARD_IDLE_ACTIVATION_TIMEOUT_MS = 1400
@@ -291,7 +414,24 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
     enabled: Boolean(sessionMember?.isAdmin),
     initialData: initialSnapshot.systemHealth ?? undefined,
     initialDataUpdatedAt:
-      initialSnapshot.systemHealth && initialSnapshot.fetchedAt ? new Date(initialSnapshot.fetchedAt).getTime() : undefined,
+      initialSnapshot.systemHealth && initialSnapshot.systemHealthFetchedAt
+        ? new Date(initialSnapshot.systemHealthFetchedAt).getTime()
+        : undefined,
+    staleTime: 30_000,
+    gcTime: 120_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  })
+  const dashboardSnapshotQuery = useQuery({
+    queryKey: ["admin", "dashboard", "snapshot"],
+    queryFn: (): Promise<DashboardSnapshotPayload> => apiFetch<DashboardSnapshotPayload>("/system/api/v1/adm/dashboard-snapshot"),
+    enabled: Boolean(sessionMember?.isAdmin),
+    initialData: initialSnapshot.dashboard ?? undefined,
+    initialDataUpdatedAt:
+      initialSnapshot.dashboard && initialSnapshot.dashboardFetchedAt
+        ? new Date(initialSnapshot.dashboardFetchedAt).getTime()
+        : undefined,
     staleTime: 30_000,
     gcTime: 120_000,
     retry: 1,
@@ -302,48 +442,113 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
   if (!sessionMember) return null
 
   const systemHealthStatus = systemHealthQuery.data?.status || "확인 전"
+  const dashboardSnapshot = dashboardSnapshotQuery.data ?? initialSnapshot.dashboard
   const monitoringItems = buildMonitoringItems(systemHealthStatus, env)
   const grafanaDashboardUrl = env.monitoringEmbedLooksLikeGrafana ? env.monitoringEmbedUrl : ""
   const grafanaPanelsCanEmbed = env.monitoringEmbedIsPublicGrafana && Boolean(grafanaDashboardUrl)
-  const leadPanel = DASHBOARD_PANEL_CARDS[0]
-  const remainingPanels = DASHBOARD_PANEL_CARDS.slice(1)
-  const firstFoldPanels = remainingPanels.slice(0, DASHBOARD_FIRST_FOLD_PANEL_LIMIT)
-  const secondaryPanels = remainingPanels.slice(DASHBOARD_FIRST_FOLD_PANEL_LIMIT)
-  const primaryRows = DASHBOARD_PANEL_CARDS.slice(0, DASHBOARD_PRIORITY_PANEL_LIMIT)
+  const secondaryPanels = DASHBOARD_PANEL_CARDS
   const dashboardStatusLabel = systemHealthStatus === "UP" ? "서비스 정상" : systemHealthStatus
   const dashboardStatusTone = systemHealthStatus === "UP" ? "good" : "warn"
+  const dashboardSnapshotGeneratedAt = formatInstant(dashboardSnapshot?.generatedAt)
+  const mailStatusLabel = getMailStatusLabel(dashboardSnapshot?.signupMail.status)
+  const taskQueueDetail = dashboardSnapshot
+    ? `실패 ${dashboardSnapshot.taskQueue.failedCount} · 정체 ${dashboardSnapshot.taskQueue.staleProcessingCount}`
+    : "스냅샷 대기"
+  const authSecurityDetail = dashboardSnapshot
+    ? `최근 기록 ${dashboardSnapshot.authSecurity.recentEventCount}건`
+    : "스냅샷 대기"
 
   const kpiCards: DashboardKpiCard[] = [
     {
       key: "health",
       label: "서비스 상태",
       value: dashboardStatusLabel,
+      detail: `스냅샷 ${dashboardSnapshotGeneratedAt}`,
       tone: dashboardStatusTone,
       icon: "service",
     },
     {
-      key: "channels",
-      label: "연결 채널",
-      value: `${monitoringItems.length}개`,
-      tone: monitoringItems.length >= 2 ? "good" : "warn",
+      key: "tasks",
+      label: "작업 큐",
+      value: dashboardSnapshot
+        ? `${dashboardSnapshot.taskQueue.readyPendingCount} 대기 / ${dashboardSnapshot.taskQueue.processingCount} 처리`
+        : "-",
+      detail: taskQueueDetail,
+      tone: getTaskQueueTone(dashboardSnapshot),
       icon: "spark",
     },
     {
-      key: "focus",
-      label: "우선 점검",
-      value: `${primaryRows.length}개`,
-      tone: "neutral",
+      key: "mail",
+      label: "회원가입 메일",
+      value: mailStatusLabel,
+      detail:
+        dashboardSnapshot?.signupMail.queueLagSeconds != null
+          ? `큐 지연 ${formatAge(dashboardSnapshot.signupMail.queueLagSeconds)}`
+          : dashboardSnapshot?.signupMail.latestFailureAt
+            ? `최근 실패 ${formatInstant(dashboardSnapshot.signupMail.latestFailureAt)}`
+            : "메일 큐 정상",
+      tone: getMailStatusTone(dashboardSnapshot?.signupMail.status),
       icon: "edit",
+    },
+    {
+      key: "auth-security",
+      label: "인증 이상",
+      value: dashboardSnapshot ? `${dashboardSnapshot.authSecurity.blockedEventCount}건` : "-",
+      detail: authSecurityDetail,
+      tone: dashboardSnapshot?.authSecurity.blockedEventCount ? "warn" : "good",
+      icon: "check-circle",
     },
   ]
 
-  const priorityRows: DashboardPriorityRow[] = primaryRows.map((panel, index) => ({
-    key: panel.key,
-    title: panel.title,
-    priority: index === 0 ? "즉시" : index === 1 ? "높음" : "보통",
-    tone: systemHealthStatus === "UP" ? (index === 0 ? "good" : "neutral") : index < 2 ? "warn" : "neutral",
-    href: grafanaDashboardUrl ? buildGrafanaPanelEmbedUrl(grafanaDashboardUrl, panel.panelId) : grafanaDashboardUrl,
-  }))
+  const priorityRows: DashboardPriorityRow[] = [
+    {
+      key: "task-queue",
+      title: "작업 큐",
+      summary: dashboardSnapshot
+        ? `ready ${dashboardSnapshot.taskQueue.readyPendingCount} · failed ${dashboardSnapshot.taskQueue.failedCount} · stale ${dashboardSnapshot.taskQueue.staleProcessingCount}`
+        : "-",
+      tone: getTaskQueueTone(dashboardSnapshot),
+      href: "/admin/tools",
+      actionLabel: "도구 열기",
+    },
+    {
+      key: "signup-mail",
+      title: "회원가입 메일",
+      summary:
+        dashboardSnapshot?.signupMail.latestFailureMessage ||
+        (dashboardSnapshot?.signupMail.queueLagSeconds != null
+          ? `큐 지연 ${formatAge(dashboardSnapshot.signupMail.queueLagSeconds)}`
+          : mailStatusLabel),
+      tone: getMailStatusTone(dashboardSnapshot?.signupMail.status),
+      href: "/admin/tools",
+      actionLabel: "메일 진단",
+    },
+    {
+      key: "auth-security",
+      title: "인증 보안",
+      summary: dashboardSnapshot
+        ? `차단 ${dashboardSnapshot.authSecurity.blockedEventCount} · 최근 ${dashboardSnapshot.authSecurity.recentEventCount}`
+        : "-",
+      tone: dashboardSnapshot?.authSecurity.blockedEventCount ? "warn" : "good",
+      href: "/admin/tools",
+      actionLabel: "기록 보기",
+    },
+    {
+      key: "storage-cleanup",
+      title: "스토리지 정리",
+      summary: dashboardSnapshot
+        ? dashboardSnapshot.storageCleanup.blockedBySafetyThreshold
+          ? "안전 임계값으로 purge 보류"
+          : `purge 대상 ${dashboardSnapshot.storageCleanup.eligibleForPurgeCount}건`
+        : "-",
+      tone:
+        dashboardSnapshot?.storageCleanup.blockedBySafetyThreshold || (dashboardSnapshot?.storageCleanup.eligibleForPurgeCount ?? 0) > 0
+          ? "warn"
+          : "good",
+      href: "/admin/tools",
+      actionLabel: "정리 진단",
+    },
+  ]
 
   const quickActions: DashboardQuickAction[] = [
     {
@@ -371,13 +576,41 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
       : []),
   ]
 
-  const leadPanelUrl = grafanaPanelsCanEmbed ? buildGrafanaPanelEmbedUrl(grafanaDashboardUrl, leadPanel.panelId) : ""
   const grafanaPanelFallbackTitle = grafanaDashboardUrl ? "Grafana 패널은 새 창에서 확인하세요." : "대시보드를 불러올 수 없습니다."
   const grafanaPanelFallbackBody = grafanaDashboardUrl
     ? env.monitoringEmbedIsPrivateGrafana
       ? "현재 URL은 인증이 필요한 private Grafana 대시보드라 iframe 대신 링크로만 제공합니다."
       : "현재 대시보드는 iframe 임베드를 지원하지 않아 새 창 링크로만 제공합니다."
     : "Grafana embed URL 또는 public dashboard 구성을 먼저 확인하세요."
+  const focusItems = [
+    {
+      key: "task-failed",
+      label: "실패 task",
+      value: dashboardSnapshot ? `${dashboardSnapshot.taskQueue.failedCount}건` : "-",
+      tone: dashboardSnapshot?.taskQueue.failedCount ? "warn" : "good",
+    },
+    {
+      key: "task-stale",
+      label: "정체 task",
+      value: dashboardSnapshot ? `${dashboardSnapshot.taskQueue.staleProcessingCount}건` : "-",
+      tone: dashboardSnapshot?.taskQueue.staleProcessingCount ? "warn" : "good",
+    },
+    {
+      key: "auth-blocked",
+      label: "최근 인증 차단",
+      value: dashboardSnapshot?.authSecurity.latestBlockedAt ? formatInstant(dashboardSnapshot.authSecurity.latestBlockedAt) : "없음",
+      tone: dashboardSnapshot?.authSecurity.blockedEventCount ? "warn" : "good",
+    },
+    {
+      key: "cleanup-oldest",
+      label: "정리 대상 기준 시각",
+      value: dashboardSnapshot?.storageCleanup.oldestEligiblePurgeAfter ? formatInstant(dashboardSnapshot.storageCleanup.oldestEligiblePurgeAfter) : "-",
+      tone:
+        dashboardSnapshot?.storageCleanup.blockedBySafetyThreshold || (dashboardSnapshot?.storageCleanup.eligibleForPurgeCount ?? 0) > 0
+          ? "warn"
+          : "good",
+    },
+  ]
 
   return (
     <AdminShell currentSection="dashboard" member={sessionMember}>
@@ -408,6 +641,7 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
                 <MetricCopy>
                   <span>{item.label}</span>
                   <strong>{item.value}</strong>
+                  <p>{item.detail}</p>
                 </MetricCopy>
               </MetricCard>
             ))}
@@ -417,69 +651,101 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
             <LeadPanelCard data-ui="monitoring-panel-card">
               <PanelHeader>
                 <div>
-                  <strong>{leadPanel.title}</strong>
+                  <strong>현재 포커스</strong>
+                  <span>실패/정체 작업과 인증 차단, 정리 대상을 앱 안에서 바로 판단합니다.</span>
                 </div>
-                {grafanaDashboardUrl ? (
-                  <LaunchLink href={leadPanelUrl || grafanaDashboardUrl} target="_blank" rel="noreferrer noopener">
-                    새 창
-                  </LaunchLink>
-                ) : null}
+                <Link href="/admin/tools" passHref legacyBehavior>
+                  <LaunchLink>운영 도구</LaunchLink>
+                </Link>
               </PanelHeader>
-              <PanelBody>
-                {leadPanelUrl ? (
-                  <DeferredPanelFrame eager src={leadPanelUrl} title={leadPanel.title} />
-                ) : (
-                  <PanelFallback>
-                    <strong>{grafanaPanelFallbackTitle}</strong>
-                    <span>{grafanaPanelFallbackBody}</span>
-                  </PanelFallback>
-                )}
-              </PanelBody>
+              <SnapshotLeadBody>
+                <AdminInfoStatusList>
+                  {focusItems.map((item) => (
+                    <AdminInfoStatusItem key={item.key} data-tone={item.tone}>
+                      <span>{item.label}</span>
+                      <strong>{item.value}</strong>
+                    </AdminInfoStatusItem>
+                  ))}
+                </AdminInfoStatusList>
+                <LeadMetaGrid>
+                  <AdminInfoPanelCard>
+                    <small>스냅샷 시각</small>
+                    <strong>{dashboardSnapshotGeneratedAt}</strong>
+                  </AdminInfoPanelCard>
+                  <AdminInfoPanelCard>
+                    <small>가장 오래된 ready task</small>
+                    <strong>{formatAge(dashboardSnapshot?.taskQueue.oldestReadyPendingAgeSeconds)}</strong>
+                  </AdminInfoPanelCard>
+                  <AdminInfoPanelCard>
+                    <small>메일 최근 실패</small>
+                    <strong>{dashboardSnapshot?.signupMail.latestFailureAt ? formatInstant(dashboardSnapshot.signupMail.latestFailureAt) : "없음"}</strong>
+                  </AdminInfoPanelCard>
+                  <AdminInfoPanelCard>
+                    <small>마지막 인증 기록</small>
+                    <strong>{dashboardSnapshot?.authSecurity.latestEventAt ? formatInstant(dashboardSnapshot.authSecurity.latestEventAt) : "없음"}</strong>
+                  </AdminInfoPanelCard>
+                </LeadMetaGrid>
+              </SnapshotLeadBody>
             </LeadPanelCard>
 
             <InsightRail>
-              {firstFoldPanels.map((panel, index) => {
-                const panelUrl = grafanaPanelsCanEmbed ? buildGrafanaPanelEmbedUrl(grafanaDashboardUrl, panel.panelId) : ""
-                return (
-                  <CompactPanelCard key={`first-fold-${panel.key}`} data-ui="monitoring-panel-card">
-                    <PanelHeader>
-                      <div>
-                        <strong>{panel.title}</strong>
-                      </div>
-                      {grafanaDashboardUrl ? (
-                        <LaunchLink href={panelUrl || grafanaDashboardUrl} target="_blank" rel="noreferrer noopener">
-                          새 창
-                        </LaunchLink>
-                      ) : null}
-                    </PanelHeader>
-                    <CompactPanelBody>
-                      <CompactPanelSummary>
-                        <span>상세 모니터링은 Grafana 새 창으로 확인합니다.</span>
-                        {grafanaDashboardUrl ? (
-                          <InsightLink href={panelUrl || grafanaDashboardUrl} target="_blank" rel="noreferrer noopener">
-                            Grafana 열기
-                          </InsightLink>
-                        ) : (
-                          <InsightLink as="span">환경 확인</InsightLink>
-                        )}
-                      </CompactPanelSummary>
-                    </CompactPanelBody>
-                  </CompactPanelCard>
-                )
-              })}
+              <CompactPanelCard data-ui="monitoring-panel-card">
+                <PanelHeader>
+                  <div>
+                    <strong>바로 실행할 작업</strong>
+                    <span>운영 조치는 앱 내부 도구에서 먼저 처리하고, 외부 보드는 드릴다운으로만 엽니다.</span>
+                  </div>
+                </PanelHeader>
+                <CompactPanelBody>
+                  <ActionList>
+                    {quickActions.map((action) => (
+                      <Link key={action.key} href={action.href} passHref legacyBehavior>
+                        <AdminInfoLinkCard
+                          $withIcon={false}
+                          target={action.href.startsWith("http") ? "_blank" : undefined}
+                          rel={action.href.startsWith("http") ? "noreferrer noopener" : undefined}
+                        >
+                          <strong>{action.label}</strong>
+                        </AdminInfoLinkCard>
+                      </Link>
+                    ))}
+                  </ActionList>
+                </CompactPanelBody>
+              </CompactPanelCard>
+
+              <CompactPanelCard data-ui="monitoring-panel-card">
+                <PanelHeader>
+                  <div>
+                    <strong>참고 모니터링</strong>
+                    <span>장기 추이와 원본 지표 확인은 아래 연결 채널에서 이어서 봅니다.</span>
+                  </div>
+                </PanelHeader>
+                <CompactPanelBody>
+                  <CompactPanelSummary>
+                    <span>{monitoringItems.length ? `${monitoringItems.length}개 채널이 연결되어 있습니다.` : "연결 채널 설정을 먼저 확인하세요."}</span>
+                    {grafanaDashboardUrl ? (
+                      <InsightLink href={grafanaDashboardUrl} target="_blank" rel="noreferrer noopener">
+                        Grafana 열기
+                      </InsightLink>
+                    ) : (
+                      <InsightLink as="span">환경 확인</InsightLink>
+                    )}
+                  </CompactPanelSummary>
+                </CompactPanelBody>
+              </CompactPanelCard>
             </InsightRail>
           </PanelGrid>
 
           <PrioritySection>
             <SectionHeader>
-              <h2>우선 점검 패널</h2>
+              <h2>우선 점검 항목</h2>
             </SectionHeader>
 
             <PriorityTable>
               <thead>
                 <tr>
-                  <th>패널</th>
-                  <th>우선순위</th>
+                  <th>항목</th>
+                  <th>현재 상태</th>
                   <th>관리</th>
                 </tr>
               </thead>
@@ -492,12 +758,16 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
                       </PriorityCellCopy>
                     </td>
                     <td>
-                      <PriorityBadge data-tone={row.tone}>{row.priority}</PriorityBadge>
+                      <PrioritySummary data-tone={row.tone}>{row.summary}</PrioritySummary>
                     </td>
                     <td>
                       {row.href ? (
-                        <PriorityLink href={row.href} target="_blank" rel="noreferrer noopener">
-                          열기
+                        <PriorityLink
+                          href={row.href}
+                          target={row.href.startsWith("http") ? "_blank" : undefined}
+                          rel={row.href.startsWith("http") ? "noreferrer noopener" : undefined}
+                        >
+                          {row.actionLabel}
                         </PriorityLink>
                       ) : (
                         <PriorityLink as="span">환경 확인</PriorityLink>
@@ -514,7 +784,7 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
               <AdditionalPanelsDisclosure>
                 <AdditionalPanelsSummary>
                   <div>
-                    <strong>추가 패널</strong>
+                    <strong>추가 Grafana 패널</strong>
                     <span>{secondaryPanels.length}개</span>
                   </div>
                   <small>열기</small>
@@ -538,7 +808,7 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
                           {panelUrl ? (
                             <DeferredPanelFrame
                               eager={false}
-                              activationDelayMs={(index + firstFoldPanels.length) * DASHBOARD_PANEL_STAGGER_MS}
+                              activationDelayMs={index * DASHBOARD_PANEL_STAGGER_MS}
                               src={panelUrl}
                               title={panel.title}
                             />
@@ -750,8 +1020,12 @@ const HeaderLink = styled.a`
 
 const ServiceRail = styled.section`
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
+
+  @media (max-width: 1280px) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 
   @media (max-width: 980px) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -872,15 +1146,6 @@ const PanelCard = styled(AdminPlainCard)`
 
 const LeadPanelCard = styled(PanelCard)`
   min-width: 0;
-
-  > div:last-of-type > iframe,
-  > div:last-of-type > [data-pending="true"] {
-    height: 232px;
-  }
-
-  > div:last-of-type > div {
-    min-height: 188px;
-  }
 `
 
 const CompactPanelCard = styled(PanelCard)`
@@ -929,6 +1194,12 @@ const LaunchLink = styled.a`
 
 const PanelBody = styled.div`
   background: ${({ theme }) => theme.colors.gray1};
+`
+
+const SnapshotLeadBody = styled(PanelBody)`
+  display: grid;
+  gap: 14px;
+  padding: 18px;
 `
 
 const PanelFrame = styled.iframe`
@@ -984,11 +1255,19 @@ const InsightRail = styled.aside`
   grid-template-columns: 1fr;
 `
 
-const RailCard = styled(AdminPlainCard)`
+const LeadMetaGrid = styled.div`
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  padding: 16px;
-  border-radius: 24px;
+
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const ActionList = styled(AdminInfoList)`
+  grid-template-columns: 1fr;
+  padding: 18px;
 `
 
 const SectionHeader = styled(AdminSectionTitleStack)`
@@ -1149,20 +1428,28 @@ const PriorityCellCopy = styled.div`
   }
 `
 
-const PriorityBadge = styled(AdminStatusPill)`
-  min-height: 30px;
-  padding: 0 10px;
-  border-radius: 999px;
+const PrioritySummary = styled.div`
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0.32rem 0.72rem;
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.75rem;
-  font-weight: 780;
+  font-size: 0.78rem;
+  font-weight: 760;
+  line-height: 1.4;
+  white-space: normal;
 
   &[data-tone="good"] {
     border-color: ${({ theme }) => theme.colors.green7};
+    background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
   }
 
   &[data-tone="warn"] {
     border-color: ${({ theme }) => theme.colors.orange7};
+    background: ${({ theme }) => theme.colors.orange2};
   }
 `
 

@@ -14,10 +14,12 @@ const sanitizeSegment = (value) =>
     .replace(/^-|-$/g, "") || "unknown"
 
 const threadToken = sanitizeSegment(process.env.CODEX_THREAD_ID || `pid-${process.pid}`)
-const perfDir = path.join(frontRoot, "test-results", "perf", threadToken)
-const runtimeMetricsPath = path.join(perfDir, "runtime-guard-metrics.ndjson")
+const requestedRuntimeMetricsPath = process.env.PLAYWRIGHT_PERF_RUNTIME_METRICS_PATH?.trim()
+const runtimeMetricsPath = requestedRuntimeMetricsPath
+  ? path.resolve(frontRoot, requestedRuntimeMetricsPath)
+  : path.join(frontRoot, "test-results", "perf", threadToken, "runtime-guard-metrics.ndjson")
 
-fs.mkdirSync(perfDir, { recursive: true })
+fs.mkdirSync(path.dirname(runtimeMetricsPath), { recursive: true })
 fs.writeFileSync(runtimeMetricsPath, "")
 
 const childEnv = {

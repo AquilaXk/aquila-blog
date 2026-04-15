@@ -491,9 +491,72 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const codeHighlightRef = useRef<HTMLPreElement>(null)
   const previewRootRef = useRef<HTMLDivElement>(null)
+  const scrollSyncFrameRef = useRef<number | null>(null)
   const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
 
   useAutosizeTextarea(textareaRef, draftSource, selected)
+
+  const syncCodePaneScroll = useCallback(() => {
+    const textarea = textareaRef.current
+    const highlight = codeHighlightRef.current
+    if (!textarea || !highlight) return
+    highlight.scrollTop = textarea.scrollTop
+    highlight.scrollLeft = textarea.scrollLeft
+  }, [])
+
+  const queueCodePaneScrollSync = useCallback(() => {
+    if (typeof window === "undefined") {
+      syncCodePaneScroll()
+      return
+    }
+    if (scrollSyncFrameRef.current !== null) {
+      window.cancelAnimationFrame(scrollSyncFrameRef.current)
+    }
+    scrollSyncFrameRef.current = window.requestAnimationFrame(() => {
+      scrollSyncFrameRef.current = null
+      syncCodePaneScroll()
+    })
+  }, [syncCodePaneScroll])
+
+  useEffect(() => {
+    queueCodePaneScrollSync()
+  }, [draftSource, queueCodePaneScrollSync, viewMode])
+
+  useEffect(() => {
+    const textarea = textareaRef.current
+    if (!textarea || typeof document === "undefined") return
+
+    const syncSelectionScroll = () => {
+      queueCodePaneScrollSync()
+    }
+
+    textarea.addEventListener("click", syncSelectionScroll)
+    textarea.addEventListener("focus", syncSelectionScroll)
+    textarea.addEventListener("keyup", syncSelectionScroll)
+    textarea.addEventListener("mouseup", syncSelectionScroll)
+    textarea.addEventListener("scroll", syncSelectionScroll)
+    textarea.addEventListener("select", syncSelectionScroll)
+    document.addEventListener("selectionchange", syncSelectionScroll)
+
+    return () => {
+      textarea.removeEventListener("click", syncSelectionScroll)
+      textarea.removeEventListener("focus", syncSelectionScroll)
+      textarea.removeEventListener("keyup", syncSelectionScroll)
+      textarea.removeEventListener("mouseup", syncSelectionScroll)
+      textarea.removeEventListener("scroll", syncSelectionScroll)
+      textarea.removeEventListener("select", syncSelectionScroll)
+      document.removeEventListener("selectionchange", syncSelectionScroll)
+    }
+  }, [queueCodePaneScrollSync])
+
+  useEffect(() => {
+    return () => {
+      if (typeof window === "undefined") return
+      if (scrollSyncFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollSyncFrameRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     setDraftSource(String(node.attrs?.source || MERMAID_TEMPLATE))
@@ -566,11 +629,17 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
                     codeHighlightRef.current.scrollLeft = target.scrollLeft
                   }
                 }}
+                onClick={queueCodePaneScrollSync}
                 onChange={(event) => {
                   const nextValue = event.target.value
                   setDraftSource(nextValue)
                   scheduleCommit({ source: nextValue })
+                  queueCodePaneScrollSync()
                 }}
+                onFocus={queueCodePaneScrollSync}
+                onKeyUp={queueCodePaneScrollSync}
+                onMouseUp={queueCodePaneScrollSync}
+                onSelect={queueCodePaneScrollSync}
               />
             </MermaidCodeEditorShell>
           </MermaidCodePane>

@@ -1341,6 +1341,11 @@ const resolveBlockHandleAnchorTop = (blockElement: HTMLElement, railHeight: numb
   return rect.top + Math.max(0, (lineHeight - railHeight) / 2)
 }
 
+const resolveThinBlockHandleAnchorTop = (blockElement: HTMLElement, railHeight: number) => {
+  const rect = blockElement.getBoundingClientRect()
+  return Math.max(0, rect.top + rect.height / 2 - railHeight / 2)
+}
+
 const isWithinBlockHandleEpsilon = (prev: number, next: number) =>
   Math.abs(prev - next) <= BLOCK_HANDLE_POSITION_EPSILON_PX
 
@@ -1375,6 +1380,8 @@ const shouldCenterBlockHandleForNode = (node?: BlockEditorDoc | null) =>
         node.type === "orderedList" ||
         node.type === "taskList")
   )
+
+const shouldUseThinBlockHandleAnchor = (node?: BlockEditorDoc | null) => Boolean(node && node.type === "horizontalRule")
 
 const isTabBlockSelectionEligible = (editor: TiptapEditor, blockIndex: number | null) => {
   if (blockIndex === null || isTableSelectionActive(editor)) return false
@@ -7719,9 +7726,11 @@ const BlockEditorEngine = ({
     const { width: railWidth, height: railHeight } = blockHandleRailMetricsRef.current
     const blocks = ((editor.getJSON() as BlockEditorDoc).content ?? []) as BlockEditorDoc[]
     const blockNode = blocks[blockIndex]
-    const anchoredTop = shouldCenterBlockHandleForNode(blockNode)
-      ? resolveBlockHandleAnchorTop(blockElement, railHeight)
-      : rect.top + 6
+    const anchoredTop = shouldUseThinBlockHandleAnchor(blockNode)
+      ? resolveThinBlockHandleAnchorTop(blockElement, railHeight)
+      : shouldCenterBlockHandleForNode(blockNode)
+        ? resolveBlockHandleAnchorTop(blockElement, railHeight)
+        : rect.top + 6
     const nextState: TopLevelBlockHandleState = {
       visible: true,
       blockIndex,

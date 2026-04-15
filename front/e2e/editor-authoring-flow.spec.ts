@@ -686,6 +686,85 @@ test.describe("block editor authoring flow", () => {
     expect(computed.labelTextFill).not.toBe("transparent")
   })
 
+  test("머메이드 블록 코드를 바꾸면 preview가 이전 템플릿이 아니라 최신 source로 즉시 다시 렌더된다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+    await expect(page.getByTestId("qa-editor-ready")).toHaveCount(1)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("/mermaid")
+    await page.keyboard.press("Enter")
+
+    const mermaidInput = page.locator(".aq-mermaid-code-input").first()
+    await expect(mermaidInput).toBeVisible()
+
+    await mermaidInput.fill(
+      [
+        "sequenceDiagram",
+        "autonumber",
+        "participant C as Client (Browser)",
+        "participant S as Server (API)",
+        "participant DB as Session Store",
+        "",
+        "C->>S: 로그인 시도",
+        "S->>DB: 세션 생성",
+        "DB-->>S: Session Store 응답",
+        "S-->>C: 결과 응답",
+      ].join("\n")
+    )
+
+    const mermaidPreviewText = page.locator(".aq-mermaid-stage").first()
+    await expect
+      .poll(async () => ((await mermaidPreviewText.textContent()) || "").replace(/\s+/g, " ").trim())
+      .toContain("Session Store")
+    await expect
+      .poll(async () => ((await mermaidPreviewText.textContent()) || "").replace(/\s+/g, " ").trim())
+      .not.toContain("사용자 요청")
+  })
+
+  test("머메이드 코드 pane은 caret 이동 후에도 textarea와 highlight overlay의 가로 스크롤이 즉시 동기화된다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+    await expect(page.getByTestId("qa-editor-ready")).toHaveCount(1)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("/mermaid")
+    await page.keyboard.press("Enter")
+
+    const mermaidInput = page.locator(".aq-mermaid-code-input").first()
+    await expect(mermaidInput).toBeVisible()
+    await mermaidInput.fill(
+      [
+        "sequenceDiagram",
+        "participant VeryLongClientIdentifierForHorizontalScrollTesting1234567890 as VeryLongClientIdentifierForHorizontalScrollTesting1234567890",
+        "participant S as Server",
+        "VeryLongClientIdentifierForHorizontalScrollTesting1234567890->>S: 가로 스크롤이 필요한 아주 긴 요청 메시지 HorizontalScrollHorizontalScrollHorizontalScroll",
+        "S-->>C: 응답",
+      ].join("\n")
+    )
+
+    const maxScrollLeft = await mermaidInput.evaluate((element) => {
+      const textarea = element as HTMLTextAreaElement
+      return Math.max(0, textarea.scrollWidth - textarea.clientWidth)
+    })
+    expect(maxScrollLeft).toBeGreaterThanOrEqual(24)
+
+    await mermaidInput.click()
+    await mermaidInput.press("ArrowUp")
+    await mermaidInput.press("End")
+    await mermaidInput.press("ArrowDown")
+
+    await expect
+      .poll(() =>
+        mermaidInput.evaluate((element) => {
+          const textarea = element as HTMLTextAreaElement
+          const highlight = textarea.parentElement?.querySelector<HTMLPreElement>(".aq-mermaid-code-highlight")
+          return Math.abs(Math.round(textarea.scrollLeft) - Math.round(highlight?.scrollLeft || 0))
+        })
+      )
+      .toBeLessThanOrEqual(1)
+  })
+
   test("텍스트 블록에서 Tab은 부분 선택이 아니라 블록 선택으로 승격된다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 
@@ -837,6 +916,43 @@ test.describe("block editor authoring flow", () => {
     await expect(page.getByTestId("block-drop-target-highlight")).toHaveCount(0)
 
     await page.mouse.up()
+  })
+
+  test("구분선 block handle은 다음 문단이 아니라 divider 중심에 맞춰 뜬다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    await expect(page.getByTestId("qa-editor-ready")).toHaveCount(1)
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("/구분선")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("아래 문단")
+
+    const divider = page.locator("hr").first()
+    await divider.hover({ force: true })
+
+    const dragHandle = page.getByTestId("block-drag-handle")
+    await expect(dragHandle).toBeVisible()
+
+    const geometry = await Promise.all([
+      divider.boundingBox(),
+      page.locator(".aq-block-editor__content > p", { hasText: "아래 문단" }).first().boundingBox(),
+      dragHandle.boundingBox(),
+    ])
+
+    const [dividerBox, paragraphBox, handleBox] = geometry
+    if (!dividerBox || !paragraphBox || !handleBox) {
+      throw new Error("구분선 block handle 위치를 계산할 수 없습니다.")
+    }
+
+    const dividerCenterY = dividerBox.y + dividerBox.height / 2
+    const paragraphCenterY = paragraphBox.y + paragraphBox.height / 2
+    const handleCenterY = handleBox.y + handleBox.height / 2
+
+    expect(Math.abs(handleCenterY - dividerCenterY)).toBeLessThanOrEqual(12)
+    expect(Math.abs(handleCenterY - dividerCenterY)).toBeLessThan(
+      Math.abs(handleCenterY - paragraphCenterY)
+    )
   })
 
   test("table hover에서도 block selection affordance를 다시 띄우고 table block selection으로 전환할 수 있다", async ({ page }) => {

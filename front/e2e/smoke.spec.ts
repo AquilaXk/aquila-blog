@@ -1271,7 +1271,10 @@ test("긴 Mermaid 라벨은 자동 줄바꿈 힌트를 적용해 렌더된다", 
   await expect
     .poll(async () => {
       return (
-        (await page.locator("pre.aq-mermaid[data-mermaid-rendered='true']").first().getAttribute("data-mermaid-source")) ||
+        (await page
+          .locator("pre.aq-mermaid[data-mermaid-rendered='true']")
+          .first()
+          .getAttribute("data-mermaid-rendered-source")) ||
         ""
       )
     })

@@ -814,18 +814,17 @@ const useMermaidEffect = (
           blockDataLanguage === "mermaid" ||
           codeClassName.includes("language-mermaid") ||
           codeDataLanguage === "mermaid"
-        const source = applyMermaidSoftWrapHints(
+        const desiredSource = applyMermaidSoftWrapHints(
           normalizeMermaidSource(
             block.getAttribute("data-mermaid-source") ||
-              block.dataset.mermaidSource ||
               codeBlock?.textContent ||
               block.textContent ||
               ""
           )
         )
-        if (!source) return
-        const renderableSource = sanitizeRenderableMermaidSource(source)
-        const looksLikeMermaid = isMermaidSource(source)
+        if (!desiredSource) return
+        const renderableSource = sanitizeRenderableMermaidSource(desiredSource)
+        const looksLikeMermaid = isMermaidSource(desiredSource)
         if (!hasMermaidHint && !looksLikeMermaid) return
         const complexity = estimateMermaidComplexity(renderableSource)
         block.dataset.mermaidComplexity = complexity.level
@@ -837,7 +836,7 @@ const useMermaidEffect = (
         const alreadyRendered =
           (block.dataset.mermaidRendered === "true" ||
             block.dataset.mermaidRendered === "error") &&
-          block.dataset.mermaidSource === source &&
+          block.dataset.mermaidRenderedSource === desiredSource &&
           block.dataset.mermaidTheme === preset.themeKey
         if (alreadyRendered) return
 
@@ -849,7 +848,7 @@ const useMermaidEffect = (
           block.dataset.mermaidRendered = "error"
           block.classList.add("aq-mermaid-error")
           block.innerHTML = renderMermaidErrorState({
-            source,
+            source: desiredSource,
             error: "다이어그램 영역 너비를 계산할 수 없습니다. 레이아웃이 안정되면 다시 렌더링됩니다.",
           })
           return
@@ -1041,7 +1040,7 @@ const useMermaidEffect = (
         try {
           await renderSourceIntoBlock(renderableSource, complexity.level)
 
-          block.dataset.mermaidSource = source
+          block.dataset.mermaidRenderedSource = desiredSource
           block.dataset.mermaidTheme = preset.themeKey
           block.dataset.mermaidPreset = preset.mode
           block.dataset.mermaidRendered = "true"
@@ -1054,11 +1053,11 @@ const useMermaidEffect = (
             return
           }
 
-          const fallbackSource = stripRiskyFlowchartDirectives(source).trim()
-          if (fallbackSource && fallbackSource !== source && fallbackSource !== renderableSource) {
+          const fallbackSource = stripRiskyFlowchartDirectives(desiredSource).trim()
+          if (fallbackSource && fallbackSource !== desiredSource && fallbackSource !== renderableSource) {
             try {
               await renderSourceIntoBlock(fallbackSource, complexity.level)
-              block.dataset.mermaidSource = fallbackSource
+              block.dataset.mermaidRenderedSource = fallbackSource
               block.dataset.mermaidTheme = preset.themeKey
               block.dataset.mermaidPreset = preset.mode
               block.dataset.mermaidRendered = "true"
@@ -1079,14 +1078,14 @@ const useMermaidEffect = (
 
           if (!isSyntaxError && !isTimeoutError && scheduleRetry(i, block)) return
 
-          block.dataset.mermaidSource = source
+          block.dataset.mermaidRenderedSource = desiredSource
           block.dataset.mermaidTheme = preset.themeKey
           block.dataset.mermaidPreset = preset.mode
           block.dataset.mermaidRendered = "error"
           block.classList.add("aq-mermaid-error")
           block.style.minHeight = ""
-          block.innerHTML = renderMermaidErrorState({ source, error })
-          const signature = `${source}:${String(error)}`
+          block.innerHTML = renderMermaidErrorState({ source: desiredSource, error })
+          const signature = `${desiredSource}:${String(error)}`
           if (!loggedErrorSignatures.has(signature)) {
             loggedErrorSignatures.add(signature)
             if (shouldLogMermaidWarnings) {

@@ -44,6 +44,7 @@ type PrismEffectOptions = {
 }
 
 const PRISM_DEFAULT_MUTATION_DEBOUNCE_MS = 72
+const PRISM_INITIAL_HYDRATION_TIMEOUT_MS = 1200
 
 const resolveElementFromNode = (node: Node | null): Element | null => {
   if (!node) return null
@@ -83,9 +84,13 @@ const usePrismEffect = (
     if (!enabled) return
 
     let disposed = false
+    let hydrationSettled = false
     let running = false
     let rerunRequested = false
     let scheduledRunTimer: number | null = null
+    let initialRunTimer: number | null = null
+    let idleHandle: number | null = null
+    let initialRunScheduled = false
     let fullRescanRequested = true
     const pendingBlocks = new Set<HTMLElement>()
     const root = rootRef.current
@@ -206,6 +211,7 @@ const usePrismEffect = (
       if (block) {
         pendingBlocks.add(block)
       }
+      if (!hydrationSettled) return
       if (scheduledRunTimer !== null) return
       scheduledRunTimer = window.setTimeout(() => {
         scheduledRunTimer = null
@@ -213,7 +219,38 @@ const usePrismEffect = (
       }, mutationDebounceMs)
     }
 
-    scheduleRun({ fullRescan: true })
+    const scheduleInitialRun = () => {
+      if (initialRunScheduled || disposed) return
+      initialRunScheduled = true
+
+      const idleWindow = window as Window & {
+        requestIdleCallback?: (
+          callback: IdleRequestCallback,
+          options?: IdleRequestOptions
+        ) => number
+        cancelIdleCallback?: (id: number) => void
+      }
+
+      if (typeof idleWindow.requestIdleCallback === "function") {
+        idleHandle = idleWindow.requestIdleCallback(
+          () => {
+            idleHandle = null
+            hydrationSettled = true
+            scheduleRun({ fullRescan: true })
+          },
+          { timeout: PRISM_INITIAL_HYDRATION_TIMEOUT_MS }
+        )
+        return
+      }
+
+      initialRunTimer = window.setTimeout(() => {
+        initialRunTimer = null
+        hydrationSettled = true
+        scheduleRun({ fullRescan: true })
+      }, PRISM_INITIAL_HYDRATION_TIMEOUT_MS)
+    }
+
+    scheduleInitialRun()
 
     const observer =
       observeMutations && typeof MutationObserver !== "undefined"
@@ -279,6 +316,21 @@ const usePrismEffect = (
       if (scheduledRunTimer !== null) {
         window.clearTimeout(scheduledRunTimer)
         scheduledRunTimer = null
+      }
+      if (initialRunTimer !== null) {
+        window.clearTimeout(initialRunTimer)
+        initialRunTimer = null
+      }
+      if (idleHandle !== null) {
+        const idleWindow = window as Window & {
+          cancelIdleCallback?: (id: number) => void
+        }
+        if (typeof idleWindow.cancelIdleCallback === "function") {
+          idleWindow.cancelIdleCallback(idleHandle)
+        } else {
+          window.clearTimeout(idleHandle)
+        }
+        idleHandle = null
       }
       observer?.disconnect()
     }

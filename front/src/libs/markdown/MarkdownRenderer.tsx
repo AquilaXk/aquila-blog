@@ -158,6 +158,13 @@ const normalizeQuotedStrongChildren = (children: ReactNode) =>
 
 const normalizeCodeLineBreaks = (value: string) => value.replace(/\r\n?|\u2028|\u2029/g, "\n")
 
+const extractTextFromMarkdownNode = (node: ReactNode): string => {
+  if (typeof node === "string" || typeof node === "number") return String(node)
+  if (Array.isArray(node)) return node.map(extractTextFromMarkdownNode).join("\n")
+  if (!node || typeof node !== "object" || !("props" in node)) return ""
+  return extractTextFromMarkdownNode((node as { props?: { children?: ReactNode } }).props?.children)
+}
+
 const MarkdownImageFigure = memo(
   ({ alt, src, widthPx, eager = false, editable = false, imageIndex, onWidthCommit }: MarkdownImageFigureProps) => {
     const frameRef = useRef<HTMLElement>(null)
@@ -554,13 +561,13 @@ const MarkdownRendererComponent: FC<Props> = ({
           )
         },
         code({ node, className, children, ...props }) {
-          const raw =
-            extractTextFromCodeAst(node) ||
-            (typeof children === "string"
+          const rawFromChildren =
+            typeof children === "string"
               ? children
-              : Array.isArray(children)
-                ? children.map((child) => (typeof child === "string" || typeof child === "number" ? String(child) : "")).join("\n")
-                : String(children ?? ""))
+                : Array.isArray(children)
+                  ? children.map((child) => (typeof child === "string" || typeof child === "number" ? String(child) : "")).join("\n")
+                : extractTextFromMarkdownNode(children)
+          const raw = rawFromChildren || extractTextFromCodeAst(node)
           const isInlineCode = !className && !raw.includes("\n")
 
           if (isInlineCode) {
@@ -577,7 +584,7 @@ const MarkdownRendererComponent: FC<Props> = ({
             </code>
           )
         },
-        pre({ node: _node, children, className, ...props }) {
+        pre({ node: _node, children, className: _className, ...props }) {
           const { language, rawCode } = extractCodeMetaFromPreChildren(children)
           const mermaidSource = extractNormalizedMermaidSource(rawCode)
           const shouldRenderMermaid = language === "mermaid" || isMermaidSource(rawCode)
@@ -595,34 +602,25 @@ const MarkdownRendererComponent: FC<Props> = ({
             )
           }
 
-          const mergedClassName = ["aq-code", "aq-pretty-pre", className].filter(Boolean).join(" ")
-          const highlightedCode = renderImmediateCodeToHtml({
+          const mergedClassName = "aq-code aq-pretty-pre"
+          const initialCodePresentation = renderImmediateCodeToHtml({
             source: rawCode,
             language,
           })
-          const fallbackLines = normalizeCodeLineBreaks(rawCode).split("\n")
+          const initialCodeText = normalizeCodeLineBreaks(rawCode)
 
           return (
             <PrettyCodeBlock
-              language={highlightedCode.language}
+              language={initialCodePresentation.language}
               rawCode={rawCode}
               preElement={
-                <pre className={mergedClassName} {...props}>
+                <pre {...props} className={mergedClassName}>
                   <code
-                    className={`language-${highlightedCode.language}`}
-                    data-language={highlightedCode.language}
+                    className={`language-${initialCodePresentation.language}`}
+                    data-language={initialCodePresentation.language}
                     data-raw-code={rawCode}
-                    {...(highlightedCode.highlighted
-                      ? { dangerouslySetInnerHTML: { __html: highlightedCode.html } }
-                      : {})}
                   >
-                    {highlightedCode.highlighted
-                      ? null
-                      : fallbackLines.map((line, index) => (
-                          <span className="line" data-line="true" key={`line-${renderKey}-${index}`}>
-                            {line.length > 0 ? line : <br />}
-                          </span>
-                        ))}
+                    {initialCodeText}
                   </code>
                 </pre>
               }

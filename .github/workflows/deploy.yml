@@ -158,6 +158,19 @@ jobs:
           echo "deploy_sha=${DEPLOY_SHA}" >> "$GITHUB_OUTPUT"
           echo "should_deploy=${SHOULD_DEPLOY}" >> "$GITHUB_OUTPUT"
 
+          {
+            echo "## Deploy Boundary"
+            echo "- backend deploy: homeserver blue/green"
+            echo "- frontend runtime: Vercel (external platform)"
+            echo "- frontend step: \`frontLiveE2E\` verifies the current production frontend URL only"
+            if [ "${SHOULD_DEPLOY}" = "true" ]; then
+              echo "- result: backend deploy pipeline continues"
+            else
+              echo "- result: homeserver deploy skipped because backend/deploy paths did not change"
+            fi
+            echo "- decision source: ${CHANGE_SOURCE}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   buildAndPush:
     runs-on: ubuntu-latest
     needs: calculateTag
@@ -835,6 +848,7 @@ jobs:
           REMOTE
 
   frontLiveE2E:
+    name: Frontend Live E2E Verification
     runs-on: ubuntu-latest
     needs:
       - calculateTag
@@ -1260,6 +1274,9 @@ jobs:
               `Release version: ${releaseVersion}`,
               `Deploy SHA: ${deploySha}`,
               `Backend image: ${imageRef}`,
+              `Deployment mode: backend deploy to homeserver`,
+              `Frontend runtime: Vercel (not deployed by this workflow)`,
+              `Frontend verification: frontLiveE2E against the current production frontend URL`,
               `Workflow run: https://github.com/${owner}/${repo}/actions/runs/${context.runId}`
             ].join("\n");
 

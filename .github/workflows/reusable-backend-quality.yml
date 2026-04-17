@@ -13,9 +13,10 @@ env:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
-  backend-quality:
+  backend-ci:
     runs-on: ubuntu-latest
     env:
       TEST_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
@@ -24,7 +25,59 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
+      - name: Detect backend-related changes
+        id: changes
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
+        with:
+          filters: |
+            backend:
+              - 'back/**'
+              - 'deploy/homeserver/**'
+              - 'tools/guards/check-forbidden-tracked-files.sh'
+              - '.github/workflows/backend-ci.yml'
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/deploy.yml'
+              - '.github/workflows/release-pr.yml'
+              - '.github/workflows/reusable-backend-quality.yml'
+
+      - name: Guard forbidden AI docs and tool metadata
+        run: bash tools/guards/check-forbidden-tracked-files.sh
+
+      - name: Dependency review readiness
+        if: github.event_name == 'pull_request'
+        id: dependency_review
+        shell: bash
+        run: |
+          if [ "${{ vars.DEPENDENCY_REVIEW_ENABLED }}" = "true" ]; then
+            echo "run_review=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "run_review=false" >> "$GITHUB_OUTPUT"
+          echo "::notice title=Dependency review skipped::Enable Settings > Security > Advanced Security > Dependency Graph, then set repository variable DEPENDENCY_REVIEW_ENABLED=true."
+          {
+            echo "## Dependency review skipped"
+            echo
+            echo "- reason: Dependency Graph is disabled or has not been confirmed for this repository."
+            echo "- enable: \`Settings > Security > Advanced Security > Dependency Graph\`"
+            echo "- after enabling: set repository variable \`DEPENDENCY_REVIEW_ENABLED=true\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Dependency review
+        if: github.event_name == 'pull_request' && steps.dependency_review.outputs.run_review == 'true'
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+
+      - name: Skip backend-heavy checks
+        if: steps.changes.outputs.backend != 'true'
+        run: |
+          echo "No backend-related changes detected."
+          {
+            echo "## Backend CI"
+            echo "- backend-heavy checks skipped"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Set up JDK 24
+        if: steps.changes.outputs.backend == 'true'
         uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5
         with:
           distribution: temurin
@@ -32,6 +85,7 @@ jobs:
           cache: gradle
 
       - name: Validate Flyway migration naming
+        if: steps.changes.outputs.backend == 'true'
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -58,27 +112,41 @@ jobs:
           fi
 
       - name: Run backend ktlint
+        if: steps.changes.outputs.backend == 'true'
         working-directory: back
         run: ./gradlew ktlintCheck
 
       - name: Run backend tests
+        if: steps.changes.outputs.backend == 'true'
         working-directory: back
         run: ./gradlew test --rerun-tasks
 
-      - name: Upload backend OpenAPI artifact
-        if: success()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+      - name: Set up Node.js for contract drift check
+        if: steps.changes.outputs.backend == 'true'
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
-          name: backend-openapi-contract
-          path: back/build/openapi/openapi.json
-          if-no-files-found: error
-          retention-days: 7
+          node-version: "20"
+          cache: "yarn"
+          cache-dependency-path: front/yarn.lock
+
+      - name: Install frontend dependencies for contract drift check
+        if: steps.changes.outputs.backend == 'true'
+        working-directory: front
+        run: yarn install --frozen-lockfile
+
+      - name: Verify backend OpenAPI contract drift
+        if: steps.changes.outputs.backend == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp back/build/openapi/openapi.json front/contracts/openapi/openapi.json
+          (cd front && yarn contracts:check)
 
       - name: Upload backend reports on failure
-        if: failure()
+        if: failure() && steps.changes.outputs.backend == 'true'
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
-          name: backend-quality-reports
+          name: backend-ci-reports
           path: |
             back/build/reports/tests/test
             back/build/test-results/test

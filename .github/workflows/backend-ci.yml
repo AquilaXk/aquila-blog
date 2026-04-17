@@ -1,16 +1,10 @@
-name: CI
+name: Backend CI
 
 on:
-  push:
+  pull_request:
     branches:
       - main
       - develop
-    paths:
-      - "back/**"
-      - "front/**"
-      - "deploy/**"
-      - "tools/guards/check-forbidden-tracked-files.sh"
-      - ".github/workflows/**"
 
 permissions:
   contents: read
@@ -22,6 +16,3 @@ jobs:
     secrets:
       CI_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
       CI_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD }}
-
-  frontend-ci:
-    uses: ./.github/workflows/reusable-frontend-verify.yml

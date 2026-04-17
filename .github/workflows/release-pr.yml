@@ -107,6 +107,10 @@ jobs:
               "- develop 최신 green 상태를 main release candidate로 반영하기 위한 자동 PR입니다.",
               "- CI 성공 후 workflow가 PR 본문과 auto-merge 요청 상태를 갱신합니다.",
               "",
+              "## 🚦 Runtime Boundary",
+              "- `main` merge 후 `deploy.yml`은 홈서버 백엔드만 blue/green 배포합니다.",
+              "- 프론트 런타임은 Vercel이 담당하며, `frontLiveE2E`는 현재 운영 프론트 URL 검증만 수행합니다.",
+              "",
               "## 🛠 Changes",
               `- \`develop\` -> \`main\` compare 기준 ahead commit: ${process.env.AHEAD_COUNT}`,
               `- compare 기준 behind commit: ${process.env.BEHIND_COUNT}`,
@@ -211,4 +215,5 @@ jobs:
             echo "- head: develop"
             echo "- ahead commits: ${{ steps.decide.outputs.ahead_count }}"
             echo "- develop sha: \`${{ steps.decide.outputs.develop_sha }}\`"
+            echo "- deploy boundary: backend deploy + frontend live verification"
           } >> "$GITHUB_STEP_SUMMARY"

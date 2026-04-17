@@ -1,4 +1,4 @@
-name: Deploy to Home Server
+name: Deploy / Promote to Home Server
 
 on:
   workflow_run:
@@ -8,16 +8,35 @@ on:
       - completed
     branches:
       - main
+  push:
+    tags:
+      - "prod-*"
   workflow_dispatch:
     inputs:
+      target_environment:
+        description: "배포 대상 환경"
+        required: true
+        default: production
+        type: choice
+        options:
+          - staging
+          - production
+      deploy_sha:
+        description: "수동 승격할 main SHA (production 수동 승격 시 필수)"
+        required: false
+        type: string
+      release_tag:
+        description: "production release tag override (optional, prod-* 권장)"
+        required: false
+        type: string
       force_deploy:
-        description: "front-only 등 changed-path gate를 무시하고 강제 배포"
+        description: "staging 수동 재배포 시 changed-path gate를 무시하고 강제 배포"
         required: false
         default: false
         type: boolean
 
 concurrency:
-  group: homeserver-deploy-${{ github.ref }}
+  group: homeserver-deploy-${{ github.event.inputs.target_environment || github.ref_name || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -37,26 +56,33 @@ jobs:
         github.ref == 'refs/heads/main'
       ) ||
       (
+        github.event_name == 'push' &&
+        startsWith(github.ref, 'refs/tags/prod-')
+      ) ||
+      (
         github.event.workflow_run.conclusion == 'success' &&
         github.event.workflow_run.event == 'push' &&
         github.event.workflow_run.head_branch == 'main' &&
         github.event.workflow_run.head_repository.full_name == github.repository
       )
     outputs:
+      target_environment: ${{ steps.meta.outputs.target_environment }}
       image_tag: ${{ steps.meta.outputs.image_tag }}
       image_ref: ${{ steps.meta.outputs.image_ref }}
       image_latest_ref: ${{ steps.meta.outputs.image_latest_ref }}
+      build_image: ${{ steps.meta.outputs.build_image }}
       release_tag: ${{ steps.meta.outputs.release_tag }}
       release_version: ${{ steps.meta.outputs.release_version }}
       release_name: ${{ steps.meta.outputs.release_name }}
       deploy_sha: ${{ steps.meta.outputs.deploy_sha }}
+      release_enabled: ${{ steps.meta.outputs.release_enabled }}
       should_deploy: ${{ steps.meta.outputs.should_deploy }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.event.inputs.deploy_sha || github.sha }}
 
       - name: Calculate image/release tags
         id: meta
@@ -65,14 +91,53 @@ jobs:
           CURRENT_RUN_ID: ${{ github.event.workflow_run.id || '' }}
           REPOSITORY: ${{ github.repository }}
           GITHUB_TOKEN: ${{ github.token }}
+          TARGET_ENV_INPUT: ${{ github.event.inputs.target_environment || '' }}
+          DEPLOY_SHA_INPUT: ${{ github.event.inputs.deploy_sha || '' }}
+          RELEASE_TAG_INPUT: ${{ github.event.inputs.release_tag || '' }}
           FORCE_DEPLOY_INPUT: ${{ github.event.inputs.force_deploy || 'false' }}
+          REF_NAME: ${{ github.ref_name }}
         shell: bash
         run: |
           set -euo pipefail
 
           OWNER_LC="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
           REPO_NAME="$(basename "${GITHUB_REPOSITORY}")"
-          DEPLOY_SHA="${{ github.event.workflow_run.head_sha || github.sha }}"
+          TARGET_ENVIRONMENT="staging"
+          DEPLOY_SHA="${{ github.event.workflow_run.head_sha || github.event.inputs.deploy_sha || github.sha }}"
+          CHANGE_SOURCE="ci-main-success"
+
+          case "${EVENT_NAME}" in
+            workflow_run)
+              TARGET_ENVIRONMENT="staging"
+              CHANGE_SOURCE="ci-main-success"
+              ;;
+            workflow_dispatch)
+              TARGET_ENVIRONMENT="${TARGET_ENV_INPUT:-production}"
+              CHANGE_SOURCE="workflow_dispatch:${TARGET_ENVIRONMENT}"
+              if [ "${TARGET_ENVIRONMENT}" = "production" ] && [ -z "${DEPLOY_SHA_INPUT:-}" ]; then
+                echo "workflow_dispatch production promotion requires deploy_sha input" >&2
+                exit 1
+              fi
+              ;;
+            push)
+              TARGET_ENVIRONMENT="production"
+              CHANGE_SOURCE="tag:${REF_NAME}"
+              ;;
+            *)
+              echo "Unsupported event: ${EVENT_NAME}" >&2
+              exit 1
+              ;;
+          esac
+
+          if [ "${TARGET_ENVIRONMENT}" != "staging" ] && [ "${TARGET_ENVIRONMENT}" != "production" ]; then
+            echo "Unsupported target_environment: ${TARGET_ENVIRONMENT}" >&2
+            exit 1
+          fi
+          if [ -z "${DEPLOY_SHA}" ]; then
+            echo "deploy sha is empty" >&2
+            exit 1
+          fi
+
           SHORT_SHA="${DEPLOY_SHA::7}"
 
           IMAGE_NAME="ghcr.io/${OWNER_LC}/${REPO_NAME}-back"
@@ -80,17 +145,32 @@ jobs:
           IMAGE_REF="${IMAGE_NAME}:${IMAGE_TAG}"
           IMAGE_LATEST_REF="${IMAGE_NAME}:latest"
           RELEASE_VERSION="v$(date -u +%Y.%m.%d).${GITHUB_RUN_NUMBER}"
-          RELEASE_TAG="prod-${RELEASE_VERSION}-${SHORT_SHA}"
-          RELEASE_NAME="[PROD] ${RELEASE_VERSION} (${SHORT_SHA})"
+          RELEASE_TAG=""
+          RELEASE_NAME=""
+          BUILD_IMAGE="false"
+          RELEASE_ENABLED="false"
+
+          if [ "${TARGET_ENVIRONMENT}" = "staging" ]; then
+            BUILD_IMAGE="true"
+          else
+            RELEASE_ENABLED="true"
+            if [ "${EVENT_NAME}" = "push" ]; then
+              RELEASE_TAG="${REF_NAME}"
+            elif [ -n "${RELEASE_TAG_INPUT:-}" ]; then
+              RELEASE_TAG="${RELEASE_TAG_INPUT}"
+            else
+              RELEASE_TAG="prod-${RELEASE_VERSION}-${SHORT_SHA}"
+            fi
+            RELEASE_NAME="[PROD] ${RELEASE_VERSION} (${SHORT_SHA})"
+          fi
 
           SHOULD_DEPLOY="true"
           REQUIRED_PATHS_PATTERN='^(back/|deploy/homeserver/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
           CHANGED_FILES=""
-          CHANGE_SOURCE="head-commit"
           LATEST_MAIN_SHA=""
           PREV_SUCCESS_SHA=""
 
-          if [ "${EVENT_NAME}" != "workflow_dispatch" ]; then
+          if [ "${TARGET_ENVIRONMENT}" = "staging" ] && [ "${EVENT_NAME}" != "workflow_dispatch" ]; then
             LATEST_MAIN_SHA="$(git ls-remote origin refs/heads/main | awk 'NR==1 {print $1}')"
             if [ -n "${LATEST_MAIN_SHA}" ] && [ "${DEPLOY_SHA}" != "${LATEST_MAIN_SHA}" ]; then
               SHOULD_DEPLOY="false"
@@ -98,7 +178,7 @@ jobs:
             fi
           fi
 
-          if [ "${EVENT_NAME}" != "workflow_dispatch" ] && command -v jq >/dev/null 2>&1 && [ -n "${CURRENT_RUN_ID}" ]; then
+          if [ "${TARGET_ENVIRONMENT}" = "staging" ] && [ "${EVENT_NAME}" != "workflow_dispatch" ] && command -v jq >/dev/null 2>&1 && [ -n "${CURRENT_RUN_ID}" ]; then
             runs_api="https://api.github.com/repos/${REPOSITORY}/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=20"
             runs_json="$(curl -fsSL \
               -H "Authorization: Bearer ${GITHUB_TOKEN}" \
@@ -132,37 +212,45 @@ jobs:
             fi
           fi
 
-          if [ "${SHOULD_DEPLOY}" = "true" ] && [ -z "${CHANGED_FILES}" ]; then
+          if [ "${TARGET_ENVIRONMENT}" = "staging" ] && [ "${SHOULD_DEPLOY}" = "true" ] && [ -z "${CHANGED_FILES}" ]; then
             CHANGED_FILES="$(git diff-tree --no-commit-id --name-only -r "${DEPLOY_SHA}" || true)"
             CHANGE_SOURCE="${CHANGE_SOURCE} -> fallback:head-commit"
           fi
 
-          if [ "${SHOULD_DEPLOY}" = "true" ] && [ -n "${CHANGED_FILES}" ] && ! echo "${CHANGED_FILES}" | grep -Eq "${REQUIRED_PATHS_PATTERN}"; then
+          if [ "${TARGET_ENVIRONMENT}" = "staging" ] && [ "${SHOULD_DEPLOY}" = "true" ] && [ -n "${CHANGED_FILES}" ] && ! echo "${CHANGED_FILES}" | grep -Eq "${REQUIRED_PATHS_PATTERN}"; then
             SHOULD_DEPLOY="false"
           fi
 
-          if [ "${EVENT_NAME}" = "workflow_dispatch" ] && [ "${FORCE_DEPLOY_INPUT}" = "true" ]; then
+          if [ "${TARGET_ENVIRONMENT}" = "staging" ] && [ "${EVENT_NAME}" = "workflow_dispatch" ] && [ "${FORCE_DEPLOY_INPUT}" = "true" ]; then
             SHOULD_DEPLOY="true"
             CHANGE_SOURCE="${CHANGE_SOURCE} + workflow_dispatch(force_deploy=true)"
+          fi
+
+          if [ "${TARGET_ENVIRONMENT}" = "production" ]; then
+            CHANGE_SOURCE="${CHANGE_SOURCE} -> promote-existing-sha-image"
           fi
 
           echo "should_deploy_source=${CHANGE_SOURCE}"
           echo "workflow_dispatch_force_deploy=${FORCE_DEPLOY_INPUT}"
 
+          echo "target_environment=${TARGET_ENVIRONMENT}" >> "$GITHUB_OUTPUT"
           echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
           echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
           echo "image_latest_ref=${IMAGE_LATEST_REF}" >> "$GITHUB_OUTPUT"
+          echo "build_image=${BUILD_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
           echo "release_version=${RELEASE_VERSION}" >> "$GITHUB_OUTPUT"
           echo "release_name=${RELEASE_NAME}" >> "$GITHUB_OUTPUT"
           echo "deploy_sha=${DEPLOY_SHA}" >> "$GITHUB_OUTPUT"
+          echo "release_enabled=${RELEASE_ENABLED}" >> "$GITHUB_OUTPUT"
           echo "should_deploy=${SHOULD_DEPLOY}" >> "$GITHUB_OUTPUT"
 
           {
             echo "## Deploy Boundary"
+            echo "- target environment: ${TARGET_ENVIRONMENT}"
             echo "- backend deploy: homeserver blue/green"
             echo "- frontend runtime: Vercel (external platform)"
-            echo "- frontend step: \`frontLiveE2E\` verifies the current production frontend URL only"
+            echo "- frontend step: \`frontLiveE2E\` verifies the current live URL for ${TARGET_ENVIRONMENT}"
             if [ "${SHOULD_DEPLOY}" = "true" ]; then
               echo "- result: backend deploy pipeline continues"
             else
@@ -174,7 +262,7 @@ jobs:
   buildAndPush:
     runs-on: ubuntu-latest
     needs: calculateTag
-    if: needs.calculateTag.outputs.should_deploy == 'true'
+    if: needs.calculateTag.outputs.should_deploy == 'true' && needs.calculateTag.outputs.build_image == 'true'
     timeout-minutes: 30
     permissions:
       contents: read
@@ -208,15 +296,46 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  verifyImageReady:
+    runs-on: ubuntu-latest
+    needs: calculateTag
+    if: needs.calculateTag.outputs.should_deploy == 'true' && needs.calculateTag.outputs.build_image != 'true'
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify promoted image exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect "${{ needs.calculateTag.outputs.image_ref }}" >/dev/null
+
   blueGreenDeploy:
     runs-on: ubuntu-latest
     needs:
       - calculateTag
       - buildAndPush
-    if: needs.calculateTag.outputs.should_deploy == 'true'
+      - verifyImageReady
+    if: >
+      needs.calculateTag.outputs.should_deploy == 'true' &&
+      (needs.buildAndPush.result == 'success' || needs.buildAndPush.result == 'skipped') &&
+      (needs.verifyImageReady.result == 'success' || needs.verifyImageReady.result == 'skipped')
     timeout-minutes: 30
     permissions:
       contents: read
+    environment: ${{ needs.calculateTag.outputs.target_environment }}
 
     steps:
       - name: Checkout
@@ -857,9 +976,11 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+    environment: ${{ needs.calculateTag.outputs.target_environment }}
     env:
-      PLAYWRIGHT_BASE_URL_OVERRIDE: ${{ secrets.CUSTOM_PROD_FRONTURL || vars.CUSTOM_PROD_FRONTURL || secrets.HOME_FRONT_BASE_URL || vars.HOME_FRONT_BASE_URL || '' }}
-      E2E_API_BASE_URL_OVERRIDE: ${{ secrets.CUSTOM_PROD_BACKURL || vars.CUSTOM_PROD_BACKURL || '' }}
+      TARGET_ENVIRONMENT: ${{ needs.calculateTag.outputs.target_environment }}
+      PLAYWRIGHT_BASE_URL_OVERRIDE: ${{ secrets.CUSTOM_LIVE_FRONTURL || vars.CUSTOM_LIVE_FRONTURL || secrets.CUSTOM_PROD_FRONTURL || vars.CUSTOM_PROD_FRONTURL || secrets.HOME_FRONT_BASE_URL || vars.HOME_FRONT_BASE_URL || '' }}
+      E2E_API_BASE_URL_OVERRIDE: ${{ secrets.CUSTOM_LIVE_BACKURL || vars.CUSTOM_LIVE_BACKURL || secrets.CUSTOM_PROD_BACKURL || vars.CUSTOM_PROD_BACKURL || '' }}
       PLAYWRIGHT_USE_WEBSERVER: "false"
       HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
       E2E_LIVE_ADMIN_EMAIL: ${{ secrets.E2E_LIVE_ADMIN_EMAIL || '' }}
@@ -926,13 +1047,20 @@ jobs:
 
           base_url="${PLAYWRIGHT_BASE_URL_OVERRIDE:-}"
           if [ -z "${base_url}" ]; then
+            base_url="$(extract_from_home_server_env "CUSTOM_LIVE_FRONTURL")"
+          fi
+          if [ -z "${base_url}" ]; then
             base_url="$(extract_from_home_server_env "CUSTOM_PROD_FRONTURL")"
           fi
           if [ -z "${base_url}" ]; then
             base_url="$(extract_from_home_server_env "HOME_FRONT_BASE_URL")"
           fi
-          if [ -z "${base_url}" ]; then
+          if [ -z "${base_url}" ] && [ "${TARGET_ENVIRONMENT}" = "production" ]; then
             base_url="https://www.aquilaxk.site"
+          fi
+          if [ -z "${base_url}" ]; then
+            echo "Missing live frontend URL for ${TARGET_ENVIRONMENT}. Set CUSTOM_LIVE_FRONTURL or HOME_FRONT_BASE_URL in the ${TARGET_ENVIRONMENT} environment." >&2
+            exit 1
           fi
 
           case "${base_url}" in
@@ -948,6 +1076,9 @@ jobs:
 
           base_scheme="$(echo "${base_url}" | sed -E 's#(https?)://.*#\1#')"
           api_base_url="${E2E_API_BASE_URL_OVERRIDE:-}"
+          if [ -z "${api_base_url}" ]; then
+            api_base_url="$(extract_from_home_server_env "CUSTOM_LIVE_BACKURL")"
+          fi
           if [ -z "${api_base_url}" ]; then
             api_base_url="$(extract_from_home_server_env "CUSTOM_PROD_BACKURL")"
           fi
@@ -1151,7 +1282,7 @@ jobs:
         working-directory: front
         run: npx playwright install --with-deps chromium webkit
 
-      - name: Run live production e2e
+      - name: Run live environment e2e
         working-directory: front
         env:
           PLAYWRIGHT_LIVE_FAIL_FAST: "true"
@@ -1195,6 +1326,7 @@ jobs:
       - calculateTag
       - blueGreenDeploy
       - frontLiveE2E
+    if: needs.calculateTag.outputs.should_deploy == 'true' && needs.calculateTag.outputs.release_enabled == 'true'
     permissions:
       contents: write
 
@@ -1274,9 +1406,9 @@ jobs:
               `Release version: ${releaseVersion}`,
               `Deploy SHA: ${deploySha}`,
               `Backend image: ${imageRef}`,
-              `Deployment mode: backend deploy to homeserver`,
+              `Deployment mode: same-sha promote after staging validation`,
               `Frontend runtime: Vercel (not deployed by this workflow)`,
-              `Frontend verification: frontLiveE2E against the current production frontend URL`,
+              `Frontend verification: frontLiveE2E against the current production live URL`,
               `Workflow run: https://github.com/${owner}/${repo}/actions/runs/${context.runId}`
             ].join("\n");
 

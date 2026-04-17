@@ -956,6 +956,85 @@ test("상세 normal table metadata는 저장 viewport 폭이 아니라 현재 �
   expect(metrics?.headerWidths[1] || 0).toBeGreaterThan(metrics?.headerWidths[0] || 0)
 })
 
+test("상세 table hover 중 wheel 입력도 page scroll chain을 유지한다", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+
+  const spacerParagraphs = Array.from({ length: 12 }, (_, index) =>
+    `문단 ${index + 1}. 공개 상세 table hover 스크롤 체인이 유지되는지 확인하기 위한 충분히 긴 본문입니다. `.repeat(4).trim()
+  )
+
+  await page.route("**/post/api/v1/posts/468", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 468,
+        createdAt: "2026-04-17T00:00:00Z",
+        modifiedAt: "2026-04-17T00:00:00Z",
+        authorId: 1,
+        authorName: "관리자",
+        authorUsername: "aquila",
+        authorProfileImageDirectUrl: "/avatar.png",
+        title: "table hover scroll chain 회귀 방지",
+        content: [
+          ...spacerParagraphs.slice(0, 6),
+          [
+            '<!-- aq-table {"overflowMode":"wide","columnWidths":[280,420]} -->',
+            "| 항목 | 설명 |",
+            "| --- | --- |",
+            "| 문제 | table hover 상태에서 세로 스크롤 입력이 page scroll로 이어져야 합니다. |",
+            "| 회귀 방지 | 가로 overflow는 table wrapper가 처리하되, 세로 wheel 입력은 본문 scroll chain을 막지 않습니다. |",
+          ].join("\n"),
+          ...spacerParagraphs.slice(6),
+        ].join("\n\n"),
+        tags: ["테스트태그"],
+        category: [],
+        published: true,
+        listed: true,
+        likesCount: 0,
+        commentsCount: 0,
+        hitCount: 0,
+        actorHasLiked: false,
+        actorCanModify: false,
+        actorCanDelete: false,
+      }),
+    })
+  })
+
+  await page.route("**/post/api/v1/posts/468/hit", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        resultCode: "200-1",
+        msg: "ok",
+        data: { hitCount: 1 },
+      }),
+    })
+  })
+
+  await page.goto("/posts/468")
+  await expect(page.getByText("table hover scroll chain 회귀 방지")).toBeVisible()
+
+  const tableScroll = page.locator(".aq-table-scroll").first()
+  await expect(tableScroll).toBeVisible()
+
+  await page.evaluate(() => {
+    const shell = document.querySelector<HTMLElement>(".aq-table-scroll")
+    if (!shell) return
+    const rect = shell.getBoundingClientRect()
+    const targetTop = window.scrollY + rect.top - Math.round(window.innerHeight * 0.35)
+    window.scrollTo({ top: Math.max(0, targetTop) })
+  })
+
+  await tableScroll.hover()
+  const scrollBeforeWheel = await page.evaluate(() => window.scrollY)
+
+  await page.mouse.wheel(0, 960)
+
+  await expect.poll(async () => page.evaluate(() => window.scrollY)).toBeGreaterThan(scrollBeforeWheel + 120)
+})
+
 test("모바일 상세는 compact 액션과 접이식 목차를 노출한다", async ({ page }) => {
   await page.setViewportSize({ width: 393, height: 852 })
   await page.addInitScript(() => {

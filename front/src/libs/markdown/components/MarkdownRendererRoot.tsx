@@ -994,7 +994,7 @@ const MarkdownRendererRoot = styled.div`
     box-shadow: ${tableChrome.shadow};
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
-    overscroll-behavior-y: contain;
+    overscroll-behavior-y: auto;
     touch-action: pan-x;
       `
     }}

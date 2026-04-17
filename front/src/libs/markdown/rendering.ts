@@ -538,8 +538,9 @@ export const extractCodeMetaFromPreChildren = (children: ReactNode) => {
       : ""
 
   const codeChildren = (codeElement?.props.children as ReactNode | undefined) ?? children
+  const rawCodeFromChildren = extractTextFromNode(codeChildren)
   const rawCodeFromAst = extractTextFromCodeAst(codeElement?.props.node)
-  const rawCode = (dataRawCode || rawCodeFromAst || extractTextFromNode(codeChildren)).replace(/\n$/, "")
+  const rawCode = (dataRawCode || rawCodeFromChildren || rawCodeFromAst).replace(/\n$/, "")
 
   return {
     language: dataLanguage || classLanguage || "text",

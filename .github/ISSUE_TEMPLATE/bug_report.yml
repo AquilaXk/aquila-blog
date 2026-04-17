@@ -1,12 +1,12 @@
 name: "🐞 Bug"
-description: "버그, 장애, 회귀 이슈를 등록합니다."
+description: "버그, 장애, 회귀처럼 기대한 동작과 실제 동작이 어긋난 문제를 정리합니다."
 labels: ["bug"]
 body:
   - type: dropdown
     id: severity
     attributes:
       label: Severity
-      description: 영향도를 선택해 주세요.
+      description: 사용자와 운영 영향 기준으로 현재 심각도를 골라 주세요.
       options:
         - Sev 1 - 서비스 중단 / 배포 차단
         - Sev 2 - 핵심 사용자 흐름 저하
@@ -19,7 +19,7 @@ body:
     id: domain
     attributes:
       label: Domain
-      description: 문제가 발생한 기능/도메인을 적어주세요.
+      description: 문제가 드러난 기능, 화면, API, 배포 영역을 적어 주세요.
       placeholder: 예) front/feed, front/editor, back/post, admin/dashboard, deploy
     validations:
       required: true
@@ -28,7 +28,7 @@ body:
     id: summary
     attributes:
       label: Summary
-      description: 문제를 한 줄로 요약해 주세요.
+      description: 어떤 문제가 발생했는지 한두 문장으로 설명해 주세요.
       placeholder: 예) 공개 글 상세에서 hydration mismatch가 발생합니다.
     validations:
       required: true
@@ -37,7 +37,7 @@ body:
     id: steps
     attributes:
       label: Steps To Reproduce
-      description: 재현 순서를 적어주세요.
+      description: 같은 현상을 다시 볼 수 있도록 재현 순서를 설명해 주세요.
       placeholder: |
         1. ...
         2. ...
@@ -49,10 +49,10 @@ body:
     id: expected_actual
     attributes:
       label: Expected Result / Actual Result
-      description: 기대 결과와 실제 결과를 함께 적어주세요.
+      description: 기대했던 동작과 실제로 나타난 결과를 나란히 적어 주세요.
       placeholder: |
-        - Expected:
-        - Actual:
+        - Expected: 어떤 결과를 기대했는가?
+        - Actual: 실제로는 어떤 결과가 나왔는가?
     validations:
       required: true
 
@@ -60,7 +60,7 @@ body:
     id: impact
     attributes:
       label: Impact
-      description: 사용자, 운영, 데이터/배포 영향 범위를 적어주세요.
+      description: 사용자, 운영, 데이터, 배포에 어떤 영향이 있는지 설명해 주세요.
       placeholder: 예) 공개 피드 UX 저하, 관리자 작성 차단, 데이터 정합성 영향 없음
     validations:
       required: true
@@ -69,12 +69,11 @@ body:
     id: todo
     attributes:
       label: Todo
-      description: 필요한 작업을 체크리스트로 적어주세요.
+      description: 해결까지 필요한 작업을 `...했는가?` 형태의 체크리스트로 적어 주세요.
       placeholder: |
-        - [ ] 재현
-        - [ ] 원인 분석
-        - [ ] 수정
-        - [ ] 테스트
-        - [ ] 운영 영향 확인
+        - [ ] 같은 조건에서 문제를 재현했는가?
+        - [ ] 원인을 충분히 좁혔는가?
+        - [ ] 수정 후 회귀 테스트를 수행했는가?
+        - [ ] 운영 영향과 롤백 포인트를 확인했는가?
     validations:
       required: true

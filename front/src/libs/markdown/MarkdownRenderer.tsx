@@ -36,6 +36,7 @@ import usePrismEffect from "src/libs/markdown/hooks/usePrismEffect"
 import PrettyCodeBlock from "src/libs/markdown/components/PrettyCodeBlock"
 import MarkdownRendererRoot from "src/libs/markdown/components/MarkdownRendererRoot"
 import FormulaRender from "src/libs/markdown/FormulaRender"
+import { resolveInlineColorValue } from "src/libs/markdown/inlineColor"
 import { renderImmediateCodeToHtml } from "src/libs/markdown/prismRuntime"
 import { formatReadableFileSize, inferLinkProvider, resolveEmbedPreviewUrl } from "src/libs/unfurl/extractMeta"
 
@@ -60,6 +61,10 @@ type MarkdownImageFigureProps = {
 }
 
 const QUOTED_STRONG_MARKERS = ["**", "__"] as const
+const INLINE_COLOR_CHILD_PLACEHOLDER_PREFIX = "__AQ_INLINE_COLOR_CHILD_"
+const INLINE_COLOR_CHILD_PLACEHOLDER_SUFFIX = "__"
+const INLINE_COLOR_CHILD_PLACEHOLDER_REGEX = /__AQ_INLINE_COLOR_CHILD_(\d+)__/g
+const INLINE_COLOR_RENDER_REGEX = /\{\{\s*color\s*:\s*([^|{}]+?)\s*\|([\s\S]+?)\s*\}\}/gi
 const QUOTED_STRONG_QUOTE_PAIRS = [
   ['"', '"'],
   ["“", "”"],
@@ -155,6 +160,131 @@ const normalizeQuotedStrongChildren = (children: ReactNode) =>
     if (typeof child !== "string") return [child]
     return restoreQuotedStrongText(child)
   })
+
+const restoreSerializedMarkdownChildren = (serialized: string, sourceChildren: ReactNode[]) => {
+  if (!serialized) return []
+
+  const nodes: ReactNode[] = []
+  let cursor = 0
+
+  for (const match of serialized.matchAll(INLINE_COLOR_CHILD_PLACEHOLDER_REGEX)) {
+    const start = match.index ?? 0
+    if (start > cursor) nodes.push(serialized.slice(cursor, start))
+
+    const nodeIndex = Number.parseInt(match[1] || "", 10)
+    const node = sourceChildren[nodeIndex]
+    if (node !== undefined) nodes.push(node)
+    cursor = start + match[0].length
+  }
+
+  if (cursor < serialized.length) {
+    nodes.push(serialized.slice(cursor))
+  }
+
+  return nodes
+}
+
+const normalizeInlineColorChildren = (children: ReactNode) => {
+  const sourceChildren = Children.toArray(children)
+  if (sourceChildren.length === 0) return sourceChildren
+
+  const serialized = sourceChildren
+    .map((child, index) =>
+      typeof child === "string" || typeof child === "number"
+        ? String(child)
+        : `${INLINE_COLOR_CHILD_PLACEHOLDER_PREFIX}${index}${INLINE_COLOR_CHILD_PLACEHOLDER_SUFFIX}`
+    )
+    .join("")
+
+  if (!serialized.includes("{{")) return sourceChildren
+
+  const nodes: ReactNode[] = []
+  let cursor = 0
+  let colorIndex = 0
+  let matched = false
+
+  for (const match of serialized.matchAll(INLINE_COLOR_RENDER_REGEX)) {
+    const full = match[0]
+    const colorToken = match[1] || ""
+    const contentSerialized = match[2] || ""
+    const start = match.index ?? 0
+    const cssColor = resolveInlineColorValue(colorToken)
+
+    if (start > cursor) {
+      nodes.push(...restoreSerializedMarkdownChildren(serialized.slice(cursor, start), sourceChildren))
+    }
+
+    if (!cssColor) {
+      nodes.push(...restoreSerializedMarkdownChildren(full, sourceChildren))
+    } else {
+      const contentNodes = restoreSerializedMarkdownChildren(contentSerialized, sourceChildren)
+      nodes.push(
+        <span
+          key={`inline-color-${colorIndex}`}
+          className="aq-inline-color"
+          style={{ "--aq-inline-color": cssColor } as CSSProperties}
+        >
+          {contentNodes}
+        </span>
+      )
+      colorIndex += 1
+      matched = true
+    }
+
+    cursor = start + full.length
+  }
+
+  if (!matched) return sourceChildren
+
+  if (cursor < serialized.length) {
+    nodes.push(...restoreSerializedMarkdownChildren(serialized.slice(cursor), sourceChildren))
+  }
+
+  return nodes
+}
+
+const normalizeSoftBreakChildren = (children: ReactNode) => {
+  const nodes: ReactNode[] = []
+  let breakIndex = 0
+
+  Children.toArray(children).forEach((child) => {
+    if (typeof child !== "string") {
+      nodes.push(child)
+      return
+    }
+
+    const parts = child.split("\n")
+    parts.forEach((part, index) => {
+      if (part) nodes.push(part)
+      if (index < parts.length - 1) {
+        nodes.push(<br key={`blockquote-soft-break-${breakIndex}`} />)
+        breakIndex += 1
+      }
+    })
+  })
+
+  return nodes
+}
+
+const MarkdownBlockquoteContext = createContext(false)
+
+const MarkdownParagraph = ({ children, inCallout = false }: { children: ReactNode; inCallout?: boolean }) => {
+  const inBlockquote = useContext(MarkdownBlockquoteContext)
+  let normalizedChildren = normalizeInlineColorChildren(children)
+  normalizedChildren = normalizeQuotedStrongChildren(normalizedChildren)
+  if (inBlockquote) {
+    normalizedChildren = normalizeSoftBreakChildren(normalizedChildren)
+  }
+
+  if (!inCallout) return <p>{normalizedChildren}</p>
+  return <p className="aq-markdown-text">{normalizedChildren}</p>
+}
+
+const MarkdownBlockquote = ({ children }: { children: ReactNode }) => (
+  <MarkdownBlockquoteContext.Provider value={true}>
+    <blockquote>{children}</blockquote>
+  </MarkdownBlockquoteContext.Provider>
+)
 
 const normalizeCodeLineBreaks = (value: string) => value.replace(/\r\n?|\u2028|\u2029/g, "\n")
 
@@ -509,10 +639,11 @@ const MarkdownRendererComponent: FC<Props> = ({
       rehypePlugins={[rehypeKatex]}
       components={{
         p({ children }) {
-          const normalizedChildren = normalizeQuotedStrongChildren(children)
-          if (inlineOnly) return <>{normalizedChildren}</>
-          if (!inCallout) return <p>{normalizedChildren}</p>
-          return <p className="aq-markdown-text">{normalizedChildren}</p>
+          if (inlineOnly) return <>{children}</>
+          return <MarkdownParagraph inCallout={inCallout}>{children}</MarkdownParagraph>
+        },
+        blockquote({ children }) {
+          return <MarkdownBlockquote>{children}</MarkdownBlockquote>
         },
         table({ children, ...props }) {
           const layout = tableLayouts[tableRenderIndex] || null

@@ -15,5 +15,38 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
+      - name: Check dependency review support
+        id: support
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            try {
+              const { data } = await github.rest.repos.get({ owner, repo });
+              const status = data.security_and_analysis?.dependency_graph?.status || "unknown";
+              const enabled = status === "enabled";
+              core.setOutput("status", status);
+              core.setOutput("enabled", String(enabled));
+              if (!enabled) {
+                core.notice(`Dependency review skipped: dependency graph status=${status}`);
+              }
+            } catch (error) {
+              core.warning(`Dependency review support check failed: ${error.message}`);
+              core.setOutput("status", "unknown");
+              core.setOutput("enabled", "false");
+            }
+
       - name: Dependency review
+        if: steps.support.outputs.enabled == 'true'
         uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+
+      - name: Summarize skipped dependency review
+        if: steps.support.outputs.enabled != 'true'
+        shell: bash
+        run: |
+          {
+            echo "## Dependency Review"
+            echo "- skipped: dependency graph unavailable or disabled"
+            echo "- detected status: ${{ steps.support.outputs.status }}"
+            echo "- expected setting: Settings > Security & analysis > Dependency graph"
+          } >> "$GITHUB_STEP_SUMMARY"

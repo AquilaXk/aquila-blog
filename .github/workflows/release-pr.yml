@@ -1,0 +1,219 @@
+name: Release PR
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-pr-develop-main
+  cancel-in-progress: true
+
+jobs:
+  sync-release-pr:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'develop' &&
+        github.event.workflow_run.head_repository.full_name == github.repository
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: develop
+          fetch-depth: 0
+
+      - name: Fetch main/develop refs
+        run: git fetch origin main develop --prune
+
+      - name: Decide release PR sync
+        id: decide
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_HEAD_SHA: ${{ github.event.workflow_run.head_sha || '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          latest_develop_sha="$(git rev-parse origin/develop)"
+          latest_main_sha="$(git rev-parse origin/main)"
+          counts="$(git rev-list --left-right --count origin/main...origin/develop)"
+          behind_count="${counts%% *}"
+          ahead_count="${counts##* }"
+
+          echo "develop_sha=${latest_develop_sha}" >> "$GITHUB_OUTPUT"
+          echo "main_sha=${latest_main_sha}" >> "$GITHUB_OUTPUT"
+          echo "behind_count=${behind_count}" >> "$GITHUB_OUTPUT"
+          echo "ahead_count=${ahead_count}" >> "$GITHUB_OUTPUT"
+
+          if [ "${EVENT_NAME}" = "workflow_run" ] && [ -n "${WORKFLOW_HEAD_SHA}" ] && [ "${WORKFLOW_HEAD_SHA}" != "${latest_develop_sha}" ]; then
+            echo "release_needed=false" >> "$GITHUB_OUTPUT"
+            echo "reason=stale-develop-run" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${ahead_count}" = "0" ]; then
+            echo "release_needed=false" >> "$GITHUB_OUTPUT"
+            echo "reason=no-diff-between-develop-and-main" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "release_needed=true" >> "$GITHUB_OUTPUT"
+          echo "reason=develop-ahead-of-main" >> "$GITHUB_OUTPUT"
+
+      - name: Skip release PR sync
+        if: steps.decide.outputs.release_needed != 'true'
+        run: |
+          echo "release PR sync skipped: ${{ steps.decide.outputs.reason }}"
+
+      - name: Create or update release PR
+        if: steps.decide.outputs.release_needed == 'true'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          DEVELOP_SHA: ${{ steps.decide.outputs.develop_sha }}
+          MAIN_SHA: ${{ steps.decide.outputs.main_sha }}
+          AHEAD_COUNT: ${{ steps.decide.outputs.ahead_count }}
+          BEHIND_COUNT: ${{ steps.decide.outputs.behind_count }}
+          TRIGGER_EVENT_NAME: ${{ github.event_name }}
+          TRIGGER_RUN_ID: ${{ github.event.workflow_run.id || github.run_id }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const base = "main";
+            const head = "develop";
+            const title = "[Chore] develop -> main release";
+            const workflowRunUrl = `https://github.com/${owner}/${repo}/actions/runs/${process.env.TRIGGER_RUN_ID}`;
+            const body = [
+              "## 🔗 Related Issue",
+              "- N/A (auto-generated release PR)",
+              "",
+              "## 📝 Summary",
+              "- develop 최신 green 상태를 main release candidate로 반영하기 위한 자동 PR입니다.",
+              "- CI 성공 후 workflow가 PR 본문과 auto-merge 요청 상태를 갱신합니다.",
+              "",
+              "## 🚦 Runtime Boundary",
+              "- `main` merge 후 `deploy.yml`은 홈서버 백엔드만 blue/green 배포합니다.",
+              "- 프론트 런타임은 Vercel이 담당하며, `frontLiveE2E`는 현재 운영 프론트 URL 검증만 수행합니다.",
+              "",
+              "## 🛠 Changes",
+              `- \`develop\` -> \`main\` compare 기준 ahead commit: ${process.env.AHEAD_COUNT}`,
+              `- compare 기준 behind commit: ${process.env.BEHIND_COUNT}`,
+              `- develop head: \`${process.env.DEVELOP_SHA}\``,
+              "",
+              "## 🎯 Scope",
+              "- [ ] Frontend",
+              "- [ ] Backend",
+              "- [ ] Editor / Content Rendering",
+              "- [ ] Admin / Dashboard",
+              "- [ ] Performance / Bundle / Runtime",
+              "- [x] Infra / CI / Ops",
+              "- [ ] Docs",
+              "",
+              "## ✅ Validation",
+              "- [x] 자동화 테스트",
+              "- [ ] 수동 확인",
+              "- [ ] 로그 / 메트릭 확인",
+              "",
+              "### 실행한 검증",
+              "- `CI` workflow success on `develop`",
+              `- trigger: ${process.env.TRIGGER_EVENT_NAME}`,
+              `- workflow run: ${workflowRunUrl}`,
+              "",
+              "## 📸 Screenshot / API Example",
+              "- N/A",
+              "",
+              "## ⚠️ Risk & Rollback",
+              "- 예상 리스크: develop에 누적된 변경이 main release 묶음으로 반영됩니다.",
+              "- 롤백 방법: release PR merge commit revert 또는 직전 배포 릴리스 기준 복구",
+              "",
+              "## ☑️ Checklist",
+              "- [x] 관련 이슈를 연결했다. (자동 release PR 예외: `N/A`)",
+              "- [x] base branch가 `main`인지 확인했다.",
+              "- [x] PR 범위 밖 변경은 포함하지 않았다.",
+              "- [x] 필요한 테스트를 수행했다. (`develop` CI green)",
+              "- [ ] SEO/권한/캐시/배포 영향이 있으면 본문에 적었다.",
+              "- [x] API 계약 또는 운영 문서 변경이 있으면 반영했다."
+            ].join("\n");
+
+            const openPulls = await github.rest.pulls.list({
+              owner,
+              repo,
+              state: "open",
+              base,
+              head: `${owner}:${head}`,
+              per_page: 10
+            });
+
+            let pullRequest;
+
+            if (openPulls.data.length > 0) {
+              pullRequest = openPulls.data[0];
+              await github.rest.pulls.update({
+                owner,
+                repo,
+                pull_number: pullRequest.number,
+                title,
+                body
+              });
+              core.info(`[release-pr] updated #${pullRequest.number}`);
+            } else {
+              const created = await github.rest.pulls.create({
+                owner,
+                repo,
+                title,
+                head,
+                base,
+                body,
+                maintainer_can_modify: true
+              });
+              pullRequest = created.data;
+              core.info(`[release-pr] created #${pullRequest.number}`);
+            }
+
+            try {
+              await github.graphql(
+                `
+                  mutation EnableAutoMerge($pullRequestId: ID!) {
+                    enablePullRequestAutoMerge(
+                      input: { pullRequestId: $pullRequestId, mergeMethod: MERGE }
+                    ) {
+                      clientMutationId
+                    }
+                  }
+                `,
+                {
+                  pullRequestId: pullRequest.node_id
+                }
+              );
+              core.info(`[release-pr] auto-merge enabled for #${pullRequest.number}`);
+            } catch (error) {
+              core.warning(`[release-pr] auto-merge enable skipped for #${pullRequest.number}: ${error.message}`);
+            }
+
+      - name: Write step summary
+        if: steps.decide.outputs.release_needed == 'true'
+        run: |
+          {
+            echo "## Release PR"
+            echo "- base: main"
+            echo "- head: develop"
+            echo "- ahead commits: ${{ steps.decide.outputs.ahead_count }}"
+            echo "- develop sha: \`${{ steps.decide.outputs.develop_sha }}\`"
+            echo "- deploy boundary: backend deploy + frontend live verification"
+          } >> "$GITHUB_STEP_SUMMARY"

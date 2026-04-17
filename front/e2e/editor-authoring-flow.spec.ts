@@ -2136,6 +2136,48 @@ test.describe("block editor authoring flow", () => {
       .toContain('"backgroundColor":"#fef3c7"')
   })
 
+  test("table 셀 스타일 버튼과 메뉴는 스크롤 후 viewport 잔상 없이 정리된다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+    const { cellMenuButton } = getTableAffordances(page)
+
+    await page.getByRole("button", { name: "테이블" }).click()
+    const firstTableCell = page.locator("table th, table td").first()
+    await firstTableCell.click()
+    await firstTableCell.hover()
+    await expect(cellMenuButton).toBeVisible()
+
+    await page.evaluate(() => {
+      if (document.querySelector('[data-testid="qa-scroll-spacer"]')) return
+      const spacer = document.createElement("div")
+      spacer.setAttribute("data-testid", "qa-scroll-spacer")
+      spacer.style.height = "2200px"
+      spacer.style.pointerEvents = "none"
+      document.body.appendChild(spacer)
+    })
+
+    await page.evaluate(() => {
+      window.scrollTo({ top: document.body.scrollHeight })
+    })
+    await expect(cellMenuButton).toHaveCount(0)
+
+    await page.evaluate(() => {
+      window.scrollTo({ top: 0 })
+    })
+    await expect(firstTableCell).toBeVisible()
+    await firstTableCell.hover()
+    await expect(cellMenuButton).toBeVisible()
+
+    await cellMenuButton.click()
+    const cellMenu = page.getByTestId("table-cell-menu")
+    await expect(cellMenu).toBeVisible()
+
+    await page.evaluate(() => {
+      window.scrollTo({ top: document.body.scrollHeight })
+    })
+    await expect(cellMenuButton).toHaveCount(0)
+    await expect(cellMenu).toHaveCount(0)
+  })
+
   test("table row/column 메뉴는 axis-level header action을 노출하고 저장 후 재진입해도 유지된다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
     const { rowHandle: rowMenuButton, columnHandle: columnMenuButton } = getTableAffordances(page)

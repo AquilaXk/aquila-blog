@@ -1,5 +1,5 @@
 name: "🔧 Task"
-description: "리팩터링, 문서, 테스트, 운영, 빌드 작업을 등록합니다."
+description: "리팩터링, 문서, 테스트, 운영, 빌드처럼 유지보수와 정리가 필요한 작업을 정리합니다."
 labels: ["task"]
 body:
   - type: dropdown
@@ -21,7 +21,7 @@ body:
     id: domain
     attributes:
       label: Domain
-      description: 관련 모듈이나 영역을 적어주세요.
+      description: 관련 모듈, 화면, 운영 영역을 적어 주세요.
       placeholder: 예) back/post, front/editor, admin/dashboard, github-actions
     validations:
       required: true
@@ -30,7 +30,7 @@ body:
     id: reason
     attributes:
       label: Description
-      description: 어떤 작업인지, 왜 필요한지 적어주세요.
+      description: 어떤 작업인지와 왜 지금 필요한지 설명해 주세요.
       placeholder: 예) 검색 쿼리 서비스 책임을 분리해 유지보수성과 테스트 범위를 정리합니다.
     validations:
       required: true
@@ -39,10 +39,10 @@ body:
     id: done_when
     attributes:
       label: Done When
-      description: 완료 조건을 적어주세요.
+      description: 완료로 볼 기준을 `...했는가?` 형태의 체크리스트로 적어 주세요.
       placeholder: |
-        - [ ] 조건 A
-        - [ ] 조건 B
+        - [ ] 목표로 한 정리가 끝났는가?
+        - [ ] 관련 검증과 문서 반영까지 마쳤는가?
     validations:
       required: true
 
@@ -50,11 +50,11 @@ body:
     id: todo
     attributes:
       label: Todo
-      description: 실제 작업 항목을 체크리스트로 적어주세요.
+      description: 실제 작업 항목을 `...했는가?` 형태의 체크리스트로 적어 주세요.
       placeholder: |
-        - [ ] 대상 파악
-        - [ ] 변경 적용
-        - [ ] 테스트 / 검증
-        - [ ] 문서 반영
+        - [ ] 작업 대상을 충분히 파악했는가?
+        - [ ] 변경을 적용하고 범위를 통제했는가?
+        - [ ] 테스트와 검증을 수행했는가?
+        - [ ] 필요한 문서까지 반영했는가?
     validations:
       required: true

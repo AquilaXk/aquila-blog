@@ -1096,6 +1096,20 @@ const clampViewportPosition = (
   return Math.min(Math.max(value, edgePadding), max)
 }
 
+const intersectsViewportBounds = (
+  rect: DOMRect | null | undefined,
+  edgePadding = TABLE_ADD_BAR_VIEWPORT_PADDING_PX
+) => {
+  if (!rect) return false
+  if (typeof window === "undefined") return true
+  return (
+    rect.right >= edgePadding &&
+    rect.bottom >= edgePadding &&
+    rect.left <= window.innerWidth - edgePadding &&
+    rect.top <= window.innerHeight - edgePadding
+  )
+}
+
 const resolveDesktopTableRailLayout = (
   state: TableAffordanceGeometry
 ) => {
@@ -7758,16 +7772,27 @@ const BlockEditorEngine = ({
   ])
 
   useEffect(() => {
-    if (!tableAffordanceVisibility.visible && !isTableQuickRailHovered) return
+    if (!tableAffordanceVisibility.visible && !isTableQuickRailHovered && !tableMenuState) return
     const anchorCell = resolveTableQuickRailAnchorElement()
-    if (!anchorCell) {
-      if (!tableMenuState && !isTableColumnResizeActive && !isTableQuickRailHovered) {
+    const tableElement = anchorCell?.closest("table") as HTMLTableElement | null
+    const tableVisible = intersectsViewportBounds(tableElement?.getBoundingClientRect() ?? null)
+    const anchorVisible = intersectsViewportBounds(anchorCell?.getBoundingClientRect() ?? null)
+    if (!anchorCell || !tableElement || !tableVisible || (!anchorVisible && !isTableQuickRailHovered)) {
+      setHoveredTableCellMenuLayout(null)
+      setIsTableQuickRailHovered(false)
+      if (tableMenuState) {
+        setTableMenuState(null)
+        hideTableQuickRailImmediately()
+      } else if (!isTableColumnResizeActive && !isTableQuickRailHovered) {
         scheduleTableQuickRailHide(0)
+      } else {
+        hideTableQuickRailImmediately()
       }
       return
     }
     syncTableQuickRailFromElement(anchorCell)
   }, [
+    hideTableQuickRailImmediately,
     isTableColumnResizeActive,
     isTableQuickRailHovered,
     resolveTableQuickRailAnchorElement,
@@ -8280,6 +8305,24 @@ const BlockEditorEngine = ({
 
   useEffect(() => {
     if (typeof window === "undefined" || !tableMenuState) return
+    const scrollOptions: AddEventListenerOptions = { capture: true, passive: true }
+    const resizeOptions: AddEventListenerOptions = { passive: true }
+    const closeOnViewportChange = () => {
+      setHoveredTableCellMenuLayout(null)
+      setIsTableQuickRailHovered(false)
+      setTableMenuState(null)
+      hideTableQuickRailImmediately()
+    }
+    window.addEventListener("scroll", closeOnViewportChange, scrollOptions)
+    window.addEventListener("resize", closeOnViewportChange, resizeOptions)
+    return () => {
+      window.removeEventListener("scroll", closeOnViewportChange, scrollOptions)
+      window.removeEventListener("resize", closeOnViewportChange, resizeOptions)
+    }
+  }, [hideTableQuickRailImmediately, tableMenuState])
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !tableMenuState) return
     const close = (event: PointerEvent | KeyboardEvent) => {
       if (event instanceof PointerEvent) {
         const target = event.target
@@ -8309,7 +8352,8 @@ const BlockEditorEngine = ({
     currentTableAxisSelection === null &&
     !shouldUseCompactTableAffordance &&
     (isCellMenuOpen ||
-      ((tableAffordanceVisibility.showCellMenu || hasActiveTableCellContext) &&
+      (tableAffordanceVisibility.visible &&
+        (tableAffordanceVisibility.showCellMenu || hasActiveTableCellContext) &&
         !tableAffordanceVisibility.showColumnRail &&
         !tableAffordanceVisibility.showRowRail &&
         !tableAffordanceVisibility.showColumnAddBar &&

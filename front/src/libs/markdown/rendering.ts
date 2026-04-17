@@ -964,8 +964,33 @@ export const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
   return segments
 }
 
+const normalizeLegacyCollapsedBlockquoteStrongLines = (markdown: string) =>
+  markdown
+    .split("\n")
+    .flatMap((line) => {
+      const match = line.match(/^(\s*>\s?)(.+)$/)
+      if (!match) return [line]
+
+      const prefix = match[1]
+      const content = match[2].trim()
+      if (!content.includes("****") || !content.startsWith("**") || !content.endsWith("**")) {
+        return [line]
+      }
+
+      const inner = content.slice(2, -2)
+      const segments = inner.split("****").map((segment) => segment.trim())
+      if (segments.length < 2 || segments.some((segment) => segment.length === 0 || segment.includes("**"))) {
+        return [line]
+      }
+
+      return segments.map((segment) => `${prefix}**${segment}**`)
+    })
+    .join("\n")
+
 export const normalizeMarkdownForRender = (rawMarkdown: string) =>
-  normalizeLegacyInlineHtmlMarkdown(normalizeEscapedMarkdownFences(rawMarkdown.trim()))
+  normalizeLegacyInlineHtmlMarkdown(
+    normalizeLegacyCollapsedBlockquoteStrongLines(normalizeEscapedMarkdownFences(rawMarkdown.trim()))
+  )
 
 export const resolveMarkdownRenderModel = ({
   content,

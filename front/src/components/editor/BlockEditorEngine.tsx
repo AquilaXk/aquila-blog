@@ -5250,6 +5250,10 @@ const BlockEditorEngine = ({
       const selection = editor.state.selection as typeof editor.state.selection & {
         node?: { isBlock?: boolean }
       }
+      const hasTextRangeSelection = selection instanceof TextSelection && !selection.empty
+      if (hasTextRangeSelection && keyboardBlockSelectionStickyRef.current) {
+        keyboardBlockSelectionStickyRef.current = false
+      }
       const nextBlockIndex = getTopLevelBlockIndexFromSelection(editor)
       const isTopLevelBlockNodeSelection = Boolean(
         selection instanceof NodeSelection && selection.$from.depth === 0 && selection.node?.isBlock
@@ -5262,6 +5266,11 @@ const BlockEditorEngine = ({
       selectionUiSignatureRef.current = nextSignature
       setSelectionTick((prev) => prev + 1)
       setSelectedBlockIndex(nextBlockIndex)
+      if (hasTextRangeSelection) {
+        setClickedBlockIndex(null)
+        setSelectedBlockNodeIndex(null)
+        return
+      }
       if (isTopLevelBlockNodeSelection) {
         if (keyboardBlockSelectionStickyRef.current) {
           setClickedBlockIndex(null)

@@ -220,6 +220,19 @@ test.describe("editor studio state", () => {
     expect(editorStudioRoutingSource).not.toContain("void pushRoute(router, dedicatedEditorReturnRoute)")
   })
 
+  test("공개 글 저장 후 상세 재검증은 client cache eviction과 서버 revalidate를 함께 수행한다", () => {
+    const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
+    const revalidateApiSource = readFileSync(path.resolve(__dirname, "../src/pages/api/revalidate.ts"), "utf8")
+
+    expect(editorStudioSource).toContain("await invalidatePublicPostReadCaches(queryClient, resolvedPostId || undefined)")
+    expect(editorStudioSource).toContain('const revalidateResponse = await fetch("/api/revalidate", {')
+    expect(editorStudioSource).toContain("paths: [toCanonicalPostPath(resolvedPostId)]")
+    expect(revalidateApiSource).toContain('import { invalidatePublicPostReadCaches } from "src/apis/backend/posts"')
+    expect(revalidateApiSource).toContain('import { fetchServerAdminSession } from "src/libs/server/authSession"')
+    expect(revalidateApiSource).toContain("await invalidatePublicPostReadCaches()")
+    expect(revalidateApiSource).toContain("Invalid token or admin session required")
+  })
+
   test("table resize metadata와 상세 렌더 계약은 colgroup width와 drag guide를 유지한다", () => {
     const blockEditorEngineSource = readFileSync(
       path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"),

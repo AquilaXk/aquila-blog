@@ -622,6 +622,58 @@ test.describe("block editor authoring flow", () => {
     await expect(textBubbleToolbar).toBeVisible()
   })
 
+  test("공개 상세 텍스트 선택 툴바가 scroll 동안 stale viewport 좌표에 고정되지 않는다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 720 })
+    const markdown = Array.from({ length: 18 }, (_, index) =>
+      index === 11
+        ? "스크롤 중에도 버블앵커가 본문 selection을 따라가야 한다."
+        : `긴 본문 ${index + 1}. 버블 툴바 scroll anchor 회귀를 확인하기 위한 충분히 긴 문단입니다. `.repeat(3).trim()
+    ).join("\n\n")
+    const seed = encodeURIComponent(markdown.replace(/\n/g, "\\n"))
+
+    await page.goto(`${QA_ENGINE_ROUTE}&seed=${seed}`)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.evaluate((element, targetWord) => {
+      const root = element as HTMLElement
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+      while (walker.nextNode()) {
+        const current = walker.currentNode as Text
+        if (!current.data.includes(targetWord)) continue
+        ;(current.parentElement || root).scrollIntoView({ block: "center" })
+        return
+      }
+      throw new Error(`could not find target word: ${targetWord}`)
+    }, "버블앵커")
+
+    await selectWordInEditable(page, editor, "버블앵커")
+    const textBubbleToolbar = page.getByTestId("editor-text-bubble-toolbar")
+    if ((await textBubbleToolbar.count()) === 0) {
+      await selectWordInEditable(page, editor, "버블앵커")
+    }
+    await expect(textBubbleToolbar).toBeVisible()
+
+    const beforeScrollBox = await textBubbleToolbar.boundingBox()
+    if (!beforeScrollBox) {
+      throw new Error("text bubble toolbar metrics are missing before scroll")
+    }
+
+    await page.evaluate(() => {
+      window.scrollBy(0, 180)
+    })
+    await page.waitForTimeout(120)
+
+    await expect(textBubbleToolbar).toBeVisible()
+    const afterScrollBox = await textBubbleToolbar.boundingBox()
+    if (!afterScrollBox) {
+      throw new Error("text bubble toolbar metrics are missing after scroll")
+    }
+
+    expect(Math.abs(afterScrollBox.y - beforeScrollBox.y)).toBeGreaterThan(40)
+  })
+
   test("코드 블록은 작성 surface에서도 Prism 하이라이트 토큰을 렌더한다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 

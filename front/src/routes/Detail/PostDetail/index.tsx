@@ -12,6 +12,7 @@ import { ApiError, apiFetch } from "src/apis/backend/client"
 import { getExplorePostsPage, getRelatedPostsByAuthor } from "src/apis/backend/posts"
 import { queryKey } from "src/constants/queryKey"
 import { pushRoute, replaceRoute, toLoginPath } from "src/libs/router"
+import { readHeaderAuthShellSnapshot } from "src/libs/headerAuthShell"
 import { formatDate } from "src/libs/utils"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import { PostDetail as PostDetailType, TPostComment } from "src/types"
@@ -210,7 +211,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const { post: data } = usePostQuery()
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { me } = useAuthSession()
+  const { me, authStatus } = useAuthSession()
   const postId = data?.id ?? ""
   const detailId = data?.id
   const didIncrementHitRef = useRef<string | null>(null)
@@ -271,8 +272,10 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     const next = router.asPath || toCanonicalPostPath(postId)
     return toLoginPath(next, toCanonicalPostPath(postId))
   }, [postId, router.asPath])
-  const canModifyPost = Boolean(me?.isAdmin || data?.actorCanModify)
-  const canDeletePost = Boolean(me?.isAdmin || data?.actorCanDelete)
+  const [authShellSnapshot] = useState(() => readHeaderAuthShellSnapshot())
+  const shellAdmin = authStatus === "loading" ? authShellSnapshot?.admin === true : Boolean(me?.isAdmin)
+  const canModifyPost = Boolean(shellAdmin || data?.actorCanModify)
+  const canDeletePost = Boolean(shellAdmin || data?.actorCanDelete)
   const showFloatingLike = data?.type[0] === "Post"
   const hasDepth4Toc = useMemo(() => tocItems.some((item) => item.level === 4), [tocItems])
   const visibleTocItems = useMemo(
@@ -1118,6 +1121,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                 onSharePost={handleSharePost}
                 showModifyAction={canModifyPost}
                 showDeleteAction={canDeletePost}
+                useAdminShellFallback
                 adminActionPending={adminActionPending}
                 onEditPost={handleEditPost}
                 onDeletePost={handleDeletePost}

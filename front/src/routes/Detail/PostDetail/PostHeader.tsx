@@ -5,6 +5,7 @@ import { CONFIG } from "site.config"
 import AppIcon from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
 import Tag from "src/components/Tag"
+import { HEADER_AUTH_ADMIN_ATTR } from "src/libs/headerAuthShell"
 import { formatDateTime } from "src/libs/utils"
 import {
   parseThumbnailFocusXFromUrl,
@@ -28,6 +29,7 @@ type Props = {
   onSharePost?: () => void
   showModifyAction?: boolean
   showDeleteAction?: boolean
+  useAdminShellFallback?: boolean
   adminActionPending?: boolean
   onEditPost?: () => void
   onDeletePost?: () => void
@@ -50,6 +52,7 @@ const PostHeader: React.FC<Props> = ({
   onSharePost,
   showModifyAction = false,
   showDeleteAction = false,
+  useAdminShellFallback = false,
   adminActionPending = false,
   onEditPost,
   onDeletePost,
@@ -69,6 +72,11 @@ const PostHeader: React.FC<Props> = ({
   const thumbnailFocusX = parseThumbnailFocusXFromUrl(data.thumbnail || "")
   const thumbnailFocusY = parseThumbnailFocusYFromUrl(data.thumbnail || "")
   const thumbnailZoom = parseThumbnailZoomFromUrl(data.thumbnail || "")
+  const shellModifyFallback = useAdminShellFallback && Boolean(onEditPost) && !showModifyAction
+  const shellDeleteFallback = useAdminShellFallback && Boolean(onDeletePost) && !showDeleteAction
+  const shouldRenderAuthorUtilities =
+    showModifyAction || showDeleteAction || shellModifyFallback || shellDeleteFallback
+  const authorUtilitiesShellOnly = !showModifyAction && !showDeleteAction && (shellModifyFallback || shellDeleteFallback)
   const shareFeedbackMessage =
     shareFeedback === "failed"
       ? "공유에 실패했습니다."
@@ -123,16 +131,28 @@ const PostHeader: React.FC<Props> = ({
                   <span>조회 {hitCount ?? data.hitCount ?? 0}</span>
                 </span>
               </div>
-              {(showModifyAction || showDeleteAction) && (
-                <div className="authorUtilities">
-                  {showModifyAction && (
-                    <button type="button" className="adminButton" onClick={onEditPost} disabled={adminActionPending}>
+              {shouldRenderAuthorUtilities && (
+                <div className="authorUtilities" data-shell-only={authorUtilitiesShellOnly ? "true" : "false"}>
+                  {(showModifyAction || shellModifyFallback) && (
+                    <button
+                      type="button"
+                      className="adminButton"
+                      data-shell-fallback={shellModifyFallback ? "true" : "false"}
+                      onClick={onEditPost}
+                      disabled={adminActionPending}
+                    >
                       <AppIcon name="edit" />
                       <span>수정</span>
                     </button>
                   )}
-                  {showDeleteAction && (
-                    <button type="button" className="adminButton dangerButton" onClick={onDeletePost} disabled={adminActionPending}>
+                  {(showDeleteAction || shellDeleteFallback) && (
+                    <button
+                      type="button"
+                      className="adminButton dangerButton"
+                      data-shell-fallback={shellDeleteFallback ? "true" : "false"}
+                      onClick={onDeletePost}
+                      disabled={adminActionPending}
+                    >
                       <AppIcon name="trash" />
                       <span>{adminActionPending ? "삭제 중..." : "삭제"}</span>
                     </button>
@@ -344,6 +364,14 @@ const StyledWrapper = styled.header`
     margin-top: 0.5rem;
   }
 
+  .authorUtilities[data-shell-only="true"] {
+    display: none;
+  }
+
+  html[${HEADER_AUTH_ADMIN_ATTR}="true"] & .authorUtilities[data-shell-only="true"] {
+    display: inline-flex;
+  }
+
   .actions {
     display: inline-flex;
     align-items: center;
@@ -397,6 +425,14 @@ const StyledWrapper = styled.header`
       opacity: 0.72;
       cursor: not-allowed;
     }
+  }
+
+  .adminButton[data-shell-fallback="true"] {
+    display: none;
+  }
+
+  html[${HEADER_AUTH_ADMIN_ATTR}="true"] & .adminButton[data-shell-fallback="true"] {
+    display: inline-flex;
   }
 
   .dangerButton {

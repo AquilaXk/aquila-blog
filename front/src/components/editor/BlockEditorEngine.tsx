@@ -5789,6 +5789,8 @@ const BlockEditorEngine = ({
     document.addEventListener("selectionchange", handleDocumentSelectionChange)
     document.addEventListener("pointerdown", handleEditorPointerDownCapture, true)
     document.addEventListener("mousedown", handleEditorMouseDownCapture, true)
+    window.addEventListener("scroll", scheduleSyncBubble, { capture: true, passive: true })
+    window.addEventListener("resize", scheduleSyncBubble, { passive: true })
     window.addEventListener("pointerup", handleWindowPointerUp, true)
     window.addEventListener("pointercancel", handleWindowPointerUp, true)
     return () => {
@@ -5797,6 +5799,8 @@ const BlockEditorEngine = ({
       document.removeEventListener("selectionchange", handleDocumentSelectionChange)
       document.removeEventListener("pointerdown", handleEditorPointerDownCapture, true)
       document.removeEventListener("mousedown", handleEditorMouseDownCapture, true)
+      window.removeEventListener("scroll", scheduleSyncBubble, true)
+      window.removeEventListener("resize", scheduleSyncBubble)
       window.removeEventListener("pointerup", handleWindowPointerUp, true)
       window.removeEventListener("pointercancel", handleWindowPointerUp, true)
       if (rafId !== null && typeof window !== "undefined") {

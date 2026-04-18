@@ -587,6 +587,14 @@ test.describe("block editor authoring flow", () => {
       await selectWordInEditable(page, editor, "노출")
     }
     await expect(page.getByTestId("editor-text-bubble-toolbar")).toBeVisible()
+    await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.querySelectorAll(".aq-block-editor__content > *[data-block-selected='true']").length
+        )
+      )
+      .toBe(0)
 
     await page.keyboard.press("Enter")
     await page.getByRole("button", { name: "콜아웃" }).click()
@@ -599,6 +607,14 @@ test.describe("block editor authoring flow", () => {
       await selectWordInEditable(page, calloutBodyContent, "버블")
     }
     await expect(page.getByTestId("editor-text-bubble-toolbar")).toBeVisible()
+    await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.querySelectorAll(".aq-block-editor__content > *[data-block-selected='true']").length
+        )
+      )
+      .toBe(0)
   })
 
   test("writer surface에서는 마우스 드래그 선택 중 버블을 숨기고 mouseup 이후에만 노출한다", async ({

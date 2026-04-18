@@ -25,6 +25,34 @@ const readOwnerInfo = (ownerPath) => {
   }
 }
 
+const ensurePrivateDir = (dirPath) => {
+  fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 })
+  try {
+    fs.chmodSync(dirPath, 0o700)
+  } catch {
+    // ignore chmod failures on unsupported platforms/filesystems
+  }
+}
+
+const writeOwnerInfoSecurely = (targetPath, value) => {
+  const exclusiveFlags =
+    fs.constants.O_WRONLY |
+    fs.constants.O_CREAT |
+    fs.constants.O_EXCL |
+    (typeof fs.constants.O_NOFOLLOW === "number" ? fs.constants.O_NOFOLLOW : 0)
+
+  let fd
+  try {
+    fd = fs.openSync(targetPath, exclusiveFlags, 0o600)
+    fs.writeFileSync(fd, JSON.stringify(value, null, 2), "utf8")
+    fs.fsyncSync(fd)
+  } finally {
+    if (typeof fd === "number") {
+      fs.closeSync(fd)
+    }
+  }
+}
+
 const isPidAlive = (pid) => {
   if (!Number.isInteger(pid) || pid <= 0) return false
   try {
@@ -163,14 +191,24 @@ for (const signal of signals) {
 const acquireLock = async () => {
   if (reentrant) return
 
-  fs.mkdirSync(lockRoot, { recursive: true })
+  ensurePrivateDir(lockRoot)
   const waitStartedAt = Date.now()
   let lastOwnerSignature = ""
 
   while (true) {
     try {
-      fs.mkdirSync(lockDir)
-      fs.writeFileSync(ownerPath, JSON.stringify(ownerInfo, null, 2))
+      fs.mkdirSync(lockDir, { mode: 0o700 })
+      try {
+        fs.chmodSync(lockDir, 0o700)
+      } catch {
+        // ignore chmod failures on unsupported platforms/filesystems
+      }
+      try {
+        writeOwnerInfoSecurely(ownerPath, ownerInfo)
+      } catch (error) {
+        fs.rmSync(lockDir, { recursive: true, force: true })
+        throw error
+      }
       lockAcquired = true
       console.error(`[test-lock] acquired ${safeResource} (${runLabel})`)
       return

@@ -144,6 +144,32 @@ test("홈 피드 기본 UI가 렌더링된다", async ({ page }) => {
   expect(sidebarStyles.contact?.borderBottomWidth).toBe("1px")
 })
 
+test("about 자기소개 문구는 작성 개행을 유지하는 white-space 계약을 가진다", async ({ page }) => {
+  await page.route("**/member/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ resultCode: "401-1", msg: "unauthorized" }),
+    })
+  })
+
+  await page.goto("/about")
+  await expect(page.getByRole("heading", { level: 1, name: "About Me" })).toBeVisible()
+
+  const profileBioStyle = await page.locator(".profile-bio").evaluate((element) => {
+    const styles = window.getComputedStyle(element as HTMLElement)
+    return {
+      whiteSpace: styles.whiteSpace,
+      lineHeight: styles.lineHeight,
+      text: element.textContent || "",
+    }
+  })
+
+  expect(profileBioStyle.whiteSpace).toBe("pre-line")
+  expect(profileBioStyle.lineHeight).not.toBe("normal")
+  expect(profileBioStyle.text.length).toBeGreaterThan(0)
+})
+
 test("홈 새로고침 이후에도 레거시 기본 문구로 되돌아가지 않는다", async ({ page }) => {
   await mockFeedEndpoints(page)
 

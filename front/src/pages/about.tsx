@@ -281,6 +281,7 @@ const StyledWrapper = styled.div`
         color: ${({ theme }) => theme.colors.gray11};
         max-width: 600px;
         margin: 0;
+        white-space: pre-line;
       }
 
       .about-detail-sections {

@@ -2321,12 +2321,6 @@ const FieldLabel = styled.label`
   font-weight: 800;
 `
 
-const FieldHint = styled.span`
-  color: ${({ theme }) => theme.colors.gray9};
-  font-size: 0.76rem;
-  line-height: 1.45;
-`
-
 const Input = styled.input`
   width: 100%;
   min-height: 42px;

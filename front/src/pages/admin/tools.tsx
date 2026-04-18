@@ -537,13 +537,6 @@ const SECTION_IDS = {
 
 type SectionKey = keyof typeof SECTION_IDS
 
-const DIAGNOSTIC_TAB_LABELS: Record<DiagnosticTab, string> = {
-  mail: "메일 진단",
-  queue: "작업 큐 진단",
-  cleanup: "파일 정리 진단",
-  auth: "인증 보안 기록",
-}
-
 const isExecutionResultFilter = (value: string): value is ExecutionResultFilter =>
   value === "all" || value === "success" || value === "error" || value === "stale"
 
@@ -1072,7 +1065,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   }, [filteredExecutions, selectedExecutionId])
 
   const systemHealthStatus = systemHealthQuery.data?.status || "UNKNOWN"
-  const systemHealthFreshness = getFreshnessMeta(systemHealthCheckedAt, freshnessClock)
   const mailFreshness = getFreshnessMeta(mailDiagnostics?.checkedAt ?? null, freshnessClock)
   const taskQueueFreshness = getFreshnessMeta(taskQueueCheckedAt, freshnessClock)
   const cleanupFreshness = getFreshnessMeta(cleanupCheckedAt, freshnessClock)
@@ -2321,16 +2313,6 @@ const WorkspaceSection = styled.section`
   }
 `
 
-const MonitoringLinkRail = styled.div`
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.65rem;
-
-  @media (max-width: 960px) {
-    grid-template-columns: 1fr;
-  }
-`
-
 const ObservabilityNotice = styled.p`
   margin: 0;
   color: ${({ theme }) => theme.colors.gray10};
@@ -2341,27 +2323,6 @@ const ObservabilityNotice = styled.p`
     color: ${({ theme }) => theme.colors.gray12};
     font-weight: 820;
   }
-`
-
-const DashboardShortcutRow = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-`
-
-const DashboardShortcutLink = styled.a`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 36px;
-  padding: 0 0.9rem;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray12};
-  text-decoration: none;
-  font-size: 0.8rem;
-  font-weight: 800;
 `
 
 const SectionHeading = styled(AdminSectionHeading)`

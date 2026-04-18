@@ -323,7 +323,10 @@ type TableOverflowCoachmarkState = {
 
 type TopLevelBlockHandleState = {
   visible: boolean
+  kind: "top-level" | "list-item"
   blockIndex: number
+  listPath: number[]
+  itemIndex: number | null
   left: number
   top: number
   bottom: number
@@ -347,6 +350,15 @@ type PendingBlockDragState = {
   previewHeight: number
   previewHtml: string
   previewLabel: string
+}
+
+type NestedListItemContext = {
+  listBlockIndex: number
+  listPath: number[]
+  itemIndex: number
+  listItemElement: HTMLElement
+  listElement: HTMLElement
+  listItems: HTMLElement[]
 }
 
 type DraggedBlockState =
@@ -497,6 +509,32 @@ const LIST_ITEM_SELECTOR =
   "li[data-type='taskItem'], li[data-task-item='true'], li[data-list-item='true'], li[data-type='listItem']"
 const LIST_CONTAINER_SELECTOR =
   "ul[data-type='taskList'], ul[data-task-list='true'], ul[data-type='bulletList'], ol[data-type='orderedList'], ul, ol"
+const isListContainerNodeName = (nodeName: string | undefined | null) =>
+  nodeName === "bulletList" || nodeName === "orderedList" || nodeName === "taskList"
+const isListItemNodeName = (nodeName: string | undefined | null) =>
+  nodeName === "listItem" || nodeName === "taskItem"
+const getActiveListItemName = (editor: TiptapEditor): "listItem" | "taskItem" | null => {
+  const { $from } = editor.state.selection
+  for (let depth = $from.depth; depth > 0; depth -= 1) {
+    const nodeName = $from.node(depth)?.type?.name
+    if (nodeName === "taskItem") return "taskItem"
+    if (nodeName === "listItem") return "listItem"
+  }
+  return null
+}
+const sameListPath = (left: number[], right: number[]) =>
+  left.length === right.length && left.every((value, index) => value === right[index])
+const isSameNestedListItemContext = (
+  left: NestedListItemContext | null | undefined,
+  right: NestedListItemContext | null | undefined
+) =>
+  Boolean(
+    left &&
+      right &&
+      left.listBlockIndex === right.listBlockIndex &&
+      left.itemIndex === right.itemIndex &&
+      sameListPath(left.listPath, right.listPath)
+  )
 const MARKDOWN_COMMIT_DEBOUNCE_MS = 140
 const MARKDOWN_COMMIT_IDLE_TIMEOUT_MS = 220
 const MARKDOWN_COMMIT_MAX_WAIT_MS = 700
@@ -1336,6 +1374,56 @@ const selectTopLevelBlockNode = (editor: TiptapEditor, blockIndex: number) => {
   focusEditorViewWithoutScroll(editor)
 }
 
+const getChildNodePosition = (parentNode: ProseMirrorNode, parentPos: number, childIndex: number) => {
+  let position = parentPos + 1
+  for (let index = 0; index < childIndex; index += 1) {
+    position += parentNode.child(index).nodeSize
+  }
+  return position
+}
+
+const findNestedListChildIndexInNode = (node: ProseMirrorNode | null | undefined) => {
+  if (!node) return -1
+  for (let index = 0; index < node.childCount; index += 1) {
+    if (isListContainerNodeName(node.child(index)?.type?.name)) {
+      return index
+    }
+  }
+  return -1
+}
+
+const resolveListItemNodeSelectionPos = (editor: TiptapEditor, context: NestedListItemContext) => {
+  const { doc } = editor.state
+  if (context.listBlockIndex < 0 || context.listBlockIndex >= doc.childCount) return null
+
+  let currentListNode = doc.child(context.listBlockIndex)
+  if (!isListContainerNodeName(currentListNode.type.name)) return null
+
+  let currentListPos = getTopLevelBlockPosition(editor, context.listBlockIndex)
+  for (const pathIndex of context.listPath) {
+    if (pathIndex < 0 || pathIndex >= currentListNode.childCount) return null
+    const parentItemPos = getChildNodePosition(currentListNode, currentListPos, pathIndex)
+    const parentItemNode = currentListNode.child(pathIndex)
+    const nestedListChildIndex = findNestedListChildIndexInNode(parentItemNode)
+    if (nestedListChildIndex < 0) return null
+    currentListPos = getChildNodePosition(parentItemNode, parentItemPos, nestedListChildIndex)
+    currentListNode = parentItemNode.child(nestedListChildIndex)
+    if (!isListContainerNodeName(currentListNode.type.name)) return null
+  }
+
+  if (context.itemIndex < 0 || context.itemIndex >= currentListNode.childCount) return null
+  return getChildNodePosition(currentListNode, currentListPos, context.itemIndex)
+}
+
+const selectNestedListItemNode = (editor: TiptapEditor, context: NestedListItemContext) => {
+  const position = resolveListItemNodeSelectionPos(editor, context)
+  if (position === null) return false
+  const selection = NodeSelection.create(editor.state.doc, position)
+  editor.view.dispatch(editor.state.tr.setSelection(selection))
+  focusEditorViewWithoutScroll(editor)
+  return true
+}
+
 const resolveBlockHandleAnchorTop = (blockElement: HTMLElement, railHeight: number) => {
   const rect = blockElement.getBoundingClientRect()
   if (typeof window === "undefined") return rect.top + 6
@@ -1368,7 +1456,10 @@ const isStableBlockHandleState = (
   next: TopLevelBlockHandleState
 ) =>
   prev.visible === next.visible &&
+  prev.kind === next.kind &&
   prev.blockIndex === next.blockIndex &&
+  prev.itemIndex === next.itemIndex &&
+  sameListPath(prev.listPath, next.listPath) &&
   isWithinBlockHandleEpsilon(prev.left, next.left) &&
   isWithinBlockHandleEpsilon(prev.top, next.top) &&
   isWithinBlockHandleEpsilon(prev.bottom, next.bottom) &&
@@ -2223,6 +2314,7 @@ const BlockEditorEngine = ({
   const [isCoarsePointer, setIsCoarsePointer] = useState(false)
   const [isNarrowTableViewport, setIsNarrowTableViewport] = useState(false)
   const [hoveredBlockIndex, setHoveredBlockIndex] = useState<number | null>(null)
+  const [hoveredListItemContext, setHoveredListItemContext] = useState<NestedListItemContext | null>(null)
   const [selectedBlockIndex, setSelectedBlockIndex] = useState<number | null>(null)
   const [clickedBlockIndex, setClickedBlockIndex] = useState<number | null>(null)
   const [selectedBlockNodeIndex, setSelectedBlockNodeIndex] = useState<number | null>(null)
@@ -2230,7 +2322,10 @@ const BlockEditorEngine = ({
   const keyboardBlockSelectionStickyRef = useRef(false)
   const [blockHandleState, setBlockHandleState] = useState<TopLevelBlockHandleState>({
     visible: false,
+    kind: "top-level",
     blockIndex: 0,
+    listPath: [],
+    itemIndex: null,
     left: 0,
     top: 0,
     bottom: 0,
@@ -2439,6 +2534,7 @@ const BlockEditorEngine = ({
     if (typeof window === "undefined") return
     hoveredBlockClearTimerRef.current = window.setTimeout(() => {
       setHoveredBlockIndex(null)
+      setHoveredListItemContext(null)
       hoveredBlockClearTimerRef.current = null
     }, 260)
   }, [cancelHoveredBlockClear])
@@ -3245,61 +3341,107 @@ const BlockEditorEngine = ({
     [getTopLevelBlockElementByIndex]
   )
 
-  const findNestedListItemDragContextFromTarget = useCallback(
+  const isOuterListItemSelectionGesture = useCallback(
+    (event: BlockSelectionPointerEventLike, targetListItem: NestedListItemContext | null) => {
+      if (!targetListItem) return false
+      if (event.button !== 0) return false
+      if (event.detail < 2) return false
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return false
+
+      const targetElement =
+        event.target instanceof Element
+          ? event.target
+          : event.target instanceof Node
+            ? event.target.parentElement
+            : null
+      if (
+        targetElement?.closest("[data-block-handle-rail='true'] button") ||
+        targetElement?.closest("[data-block-menu-root='true']") ||
+        targetElement?.closest("[data-table-menu-root='true']")
+      ) {
+        return false
+      }
+
+      const rect = targetListItem.listItemElement.getBoundingClientRect()
+      const withinVerticalRange =
+        event.clientY >= rect.top - BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX &&
+        event.clientY <= rect.bottom + BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX
+      if (!withinVerticalRange) return false
+
+      return (
+        event.clientX >= rect.left - BLOCK_OUTER_SELECT_LEFT_GUTTER_PX &&
+        event.clientX <= rect.left + BLOCK_OUTER_SELECT_LEFT_EDGE_INNER_PX
+      )
+    },
+    []
+  )
+
+  const findNestedListItemContextFromTarget = useCallback(
     (target: EventTarget | null) => {
       const root = getContentRoot()
       if (!root || !(target instanceof Element)) return null
 
-      const taskItemElement = target.closest(LIST_ITEM_SELECTOR)
-      if (!(taskItemElement instanceof HTMLElement)) return null
-      const taskListElement = taskItemElement.closest(LIST_CONTAINER_SELECTOR)
-      if (!(taskListElement instanceof HTMLElement)) return null
+      const listItemElement = target.closest(LIST_ITEM_SELECTOR)
+      if (!(listItemElement instanceof HTMLElement)) return null
+      const listElement = listItemElement.closest(LIST_CONTAINER_SELECTOR)
+      if (!(listElement instanceof HTMLElement)) return null
 
-      let blockElement: Element | null = taskListElement
+      let blockElement: Element | null = listElement
       while (blockElement && blockElement.parentElement !== root) {
         blockElement = blockElement.parentElement
       }
 
       if (!(blockElement instanceof HTMLElement) || blockElement.parentElement !== root) return null
-      const taskListBlockIndex = getTopLevelBlockElements().indexOf(blockElement)
-      if (taskListBlockIndex < 0) return null
+      const listBlockIndex = getTopLevelBlockElements().indexOf(blockElement)
+      if (listBlockIndex < 0) return null
 
-      const taskItems = Array.from(
-        taskListElement.querySelectorAll(`:scope > ${LIST_ITEM_SELECTOR}`)
-      ) as HTMLElement[]
-      const sourceItemIndex = taskItems.indexOf(taskItemElement)
-      if (sourceItemIndex < 0) return null
+      const listItems = Array.from(listElement.querySelectorAll(`:scope > ${LIST_ITEM_SELECTOR}`)) as HTMLElement[]
+      const itemIndex = listItems.indexOf(listItemElement)
+      if (itemIndex < 0) return null
 
-      const taskListPath: number[] = []
-      let currentListElement: HTMLElement | null = taskListElement
+      const listPath: number[] = []
+      let currentListElement: HTMLElement | null = listElement
       while (currentListElement && currentListElement !== blockElement) {
-        const parentTaskItem: HTMLElement | null =
+        const parentListItem: HTMLElement | null =
           currentListElement.parentElement?.closest(LIST_ITEM_SELECTOR) ?? null
-        if (!(parentTaskItem instanceof HTMLElement)) break
-        const parentTaskList: HTMLElement | null =
-          parentTaskItem.parentElement?.closest(LIST_CONTAINER_SELECTOR) ?? null
-        if (!(parentTaskList instanceof HTMLElement)) break
+        if (!(parentListItem instanceof HTMLElement)) break
+        const parentList: HTMLElement | null =
+          parentListItem.parentElement?.closest(LIST_CONTAINER_SELECTOR) ?? null
+        if (!(parentList instanceof HTMLElement)) break
 
-        const siblingItems = Array.from(
-          parentTaskList.querySelectorAll(`:scope > ${LIST_ITEM_SELECTOR}`)
-        ) as HTMLElement[]
-        const parentItemIndex = siblingItems.indexOf(parentTaskItem)
+        const siblingItems = Array.from(parentList.querySelectorAll(`:scope > ${LIST_ITEM_SELECTOR}`)) as HTMLElement[]
+        const parentItemIndex = siblingItems.indexOf(parentListItem)
         if (parentItemIndex < 0) break
 
-        taskListPath.unshift(parentItemIndex)
-        currentListElement = parentTaskList
+        listPath.unshift(parentItemIndex)
+        currentListElement = parentList
       }
 
       return {
-        listBlockIndex: taskListBlockIndex,
-        listPath: taskListPath,
-        sourceItemIndex,
-        taskItemElement,
-        listElement: taskListElement,
-        taskItems,
+        listBlockIndex,
+        listPath,
+        itemIndex,
+        listItemElement,
+        listElement,
+        listItems,
       }
     },
     [getContentRoot, getTopLevelBlockElements]
+  )
+
+  const getSelectedNestedListItemContext = useCallback(
+    (currentEditor: TiptapEditor) => {
+      const selection = currentEditor.state.selection as typeof currentEditor.state.selection & {
+        node?: ProseMirrorNode
+      }
+      if (!(selection instanceof NodeSelection) || !isListItemNodeName(selection.node?.type?.name)) {
+        return null
+      }
+
+      const domNode = currentEditor.view.nodeDOM(selection.from)
+      return findNestedListItemContextFromTarget(domNode)
+    },
+    [findNestedListItemContextFromTarget]
   )
 
   const resolveNestedListItemDropIndicatorByClientY = useCallback(
@@ -5229,6 +5371,27 @@ const BlockEditorEngine = ({
   }, [disabled, editor])
 
   useEffect(() => {
+    const root = getContentRoot()
+    if (!root || !editor) return
+
+    const listItems = Array.from(root.querySelectorAll<HTMLElement>(LIST_ITEM_SELECTOR))
+    listItems.forEach((element) => {
+      element.removeAttribute("data-block-selected")
+    })
+
+    const selectedNestedListItemContext = getSelectedNestedListItemContext(editor)
+    if (selectedNestedListItemContext?.listItemElement?.isConnected) {
+      selectedNestedListItemContext.listItemElement.setAttribute("data-block-selected", "true")
+    }
+
+    return () => {
+      listItems.forEach((element) => {
+        element.removeAttribute("data-block-selected")
+      })
+    }
+  }, [editor, getContentRoot, getSelectedNestedListItemContext, selectionTick])
+
+  useEffect(() => {
     selectedBlockNodeIndexRef.current = selectedBlockNodeIndex
   }, [selectedBlockNodeIndex])
 
@@ -5251,6 +5414,7 @@ const BlockEditorEngine = ({
         node?: { isBlock?: boolean }
       }
       const hasTextRangeSelection = selection instanceof TextSelection && !selection.empty
+      const selectedNestedListItemContext = getSelectedNestedListItemContext(editor)
       if (hasTextRangeSelection && keyboardBlockSelectionStickyRef.current) {
         keyboardBlockSelectionStickyRef.current = false
       }
@@ -5258,8 +5422,12 @@ const BlockEditorEngine = ({
       const isTopLevelBlockNodeSelection = Boolean(
         selection instanceof NodeSelection && selection.$from.depth === 0 && selection.node?.isBlock
       )
+      const isNestedListItemNodeSelection = Boolean(selectedNestedListItemContext)
       const inTableContext = isTableSelectionActive(editor) ? 1 : 0
-      const nextSignature = `${nextBlockIndex ?? "none"}:${isTopLevelBlockNodeSelection ? 1 : 0}:${keyboardBlockSelectionStickyRef.current ? 1 : 0}:${inTableContext}`
+      const selectedNestedListItemSignature = selectedNestedListItemContext
+        ? `${selectedNestedListItemContext.listBlockIndex}:${selectedNestedListItemContext.listPath.join(".")}:${selectedNestedListItemContext.itemIndex}`
+        : "none"
+      const nextSignature = `${nextBlockIndex ?? "none"}:${isTopLevelBlockNodeSelection ? 1 : 0}:${isNestedListItemNodeSelection ? 1 : 0}:${keyboardBlockSelectionStickyRef.current ? 1 : 0}:${inTableContext}:${selectedNestedListItemSignature}`
       if (nextSignature === selectionUiSignatureRef.current) {
         return
       }
@@ -5267,6 +5435,11 @@ const BlockEditorEngine = ({
       setSelectionTick((prev) => prev + 1)
       setSelectedBlockIndex(nextBlockIndex)
       if (hasTextRangeSelection) {
+        setClickedBlockIndex(null)
+        setSelectedBlockNodeIndex(null)
+        return
+      }
+      if (isNestedListItemNodeSelection) {
         setClickedBlockIndex(null)
         setSelectedBlockNodeIndex(null)
         return
@@ -5321,18 +5494,20 @@ const BlockEditorEngine = ({
       editor.off("blur", notifyBlur)
       selectionUiSignatureRef.current = ""
     }
-  }, [editor])
+  }, [editor, getSelectedNestedListItemContext])
 
   useEffect(() => {
     if (!editor) return
 
     const handleEditorMouseDownCapture = (event: MouseEvent) => {
+      const targetListItemContext = findNestedListItemContextFromTarget(event.target)
       const targetBlockIndex =
         findTopLevelBlockIndexFromTarget(event.target) ??
         findTopLevelBlockIndexByClientPosition(event.clientX, event.clientY)
+      const isOuterListItemGesture = isOuterListItemSelectionGesture(event, targetListItemContext)
       const isOuterSelectionGesture = isOuterBlockSelectionGesture(event, targetBlockIndex)
-      if (isTableSelectionActive(editor) && !isOuterSelectionGesture) return
-      if (!isOuterSelectionGesture) {
+      if (isTableSelectionActive(editor) && !isOuterSelectionGesture && !isOuterListItemGesture) return
+      if (!isOuterSelectionGesture && !isOuterListItemGesture) {
         const shouldReleaseStickyBlockSelection =
           event.button === 0 &&
           !event.metaKey &&
@@ -5346,6 +5521,13 @@ const BlockEditorEngine = ({
           setSelectedBlockNodeIndex(null)
           syncSelectedBlockNodeSurface(null)
         }
+        return
+      }
+      if (isOuterListItemGesture && targetListItemContext) {
+        event.preventDefault()
+        event.stopPropagation()
+        skipNextPointerDownSelectionClearRef.current = true
+        selectNestedListItemNode(editor, targetListItemContext)
         return
       }
       if (targetBlockIndex === null) return
@@ -5365,6 +5547,8 @@ const BlockEditorEngine = ({
     findTopLevelBlockIndexByClientPosition,
     findTopLevelBlockIndexFromTarget,
     isOuterBlockSelectionGesture,
+    findNestedListItemContextFromTarget,
+    isOuterListItemSelectionGesture,
     promoteTopLevelBlockSelection,
     syncSelectedBlockNodeSurface,
   ])
@@ -5374,11 +5558,23 @@ const BlockEditorEngine = ({
 
     const handleKeyDownCapture = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return
-      if (event.key !== "Tab" || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+      if (event.key !== "Tab" || event.metaKey || event.ctrlKey || event.altKey) return
       if (slashMenuState) return
 
       const currentEditor = editorRef.current
       if (!currentEditor) return
+      const activeListItemName = getActiveListItemName(currentEditor)
+      if (activeListItemName) {
+        event.preventDefault()
+        event.stopPropagation()
+        const handled = event.shiftKey
+          ? currentEditor.commands.liftListItem(activeListItemName)
+          : currentEditor.commands.sinkListItem(activeListItemName)
+        if (handled) {
+          setSelectionTick((prev) => prev + 1)
+        }
+        return
+      }
       const editorDom = currentEditor.view.dom
       const activeElement = document.activeElement
       const domSelection = window.getSelection()
@@ -7679,6 +7875,7 @@ const BlockEditorEngine = ({
     if (!editor) return
     const rectCache = blockSelectionLayoutRectCacheRef.current
     rectCache.clear()
+    const selectedNestedListItemContext = getSelectedNestedListItemContext(editor)
     const resolveCachedBlockRect = (index: number) => {
       const cached = rectCache.get(index)
       if (cached) return cached
@@ -7688,40 +7885,62 @@ const BlockEditorEngine = ({
       rectCache.set(index, next)
       return next
     }
-    const overlayIndex =
-      selectedBlockNodeIndex !== null
-        ? selectedBlockNodeIndex
-        : clickedBlockIndex !== null
-          ? clickedBlockIndex
-          : null
-    if (overlayIndex === null) {
-      setBlockSelectionOverlayState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
+    if (selectedNestedListItemContext?.listItemElement?.isConnected) {
+      const rect = selectedNestedListItemContext.listItemElement.getBoundingClientRect()
+      const nextOverlayState: BlockSelectionOverlayState = {
+        visible: true,
+        left: rect.left - 6,
+        top: rect.top - 4,
+        width: rect.width + 12,
+        height: rect.height + 8,
+      }
+      setBlockSelectionOverlayState((prev) =>
+        isStableBlockSelectionOverlayState(prev, nextOverlayState) ? prev : nextOverlayState
+      )
     } else {
-      const overlayTarget = resolveCachedBlockRect(overlayIndex)
-      if (!overlayTarget) {
+      const overlayIndex =
+        selectedBlockNodeIndex !== null
+          ? selectedBlockNodeIndex
+          : clickedBlockIndex !== null
+            ? clickedBlockIndex
+            : null
+      if (overlayIndex === null) {
         setBlockSelectionOverlayState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
       } else {
-        const { rect } = overlayTarget
-        const nextOverlayState: BlockSelectionOverlayState = {
-          visible: true,
-          left: rect.left - 6,
-          top: rect.top - 4,
-          width: rect.width + 12,
-          height: rect.height + 8,
+        const overlayTarget = resolveCachedBlockRect(overlayIndex)
+        if (!overlayTarget) {
+          setBlockSelectionOverlayState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
+        } else {
+          const { rect } = overlayTarget
+          const nextOverlayState: BlockSelectionOverlayState = {
+            visible: true,
+            left: rect.left - 6,
+            top: rect.top - 4,
+            width: rect.width + 12,
+            height: rect.height + 8,
+          }
+          setBlockSelectionOverlayState((prev) =>
+            isStableBlockSelectionOverlayState(prev, nextOverlayState) ? prev : nextOverlayState
+          )
         }
-        setBlockSelectionOverlayState((prev) =>
-          isStableBlockSelectionOverlayState(prev, nextOverlayState) ? prev : nextOverlayState
-        )
       }
     }
 
     const stickySelectionActive =
       !isCoarsePointer && selectedBlockNodeIndex !== null && keyboardBlockSelectionStickyRef.current
-    const blockIndex = isCoarsePointer
-      ? selectedBlockIndex
-      : stickySelectionActive
-        ? selectedBlockNodeIndex
-        : hoveredBlockIndex
+    const activeListItemContext =
+      hoveredListItemContext?.listItemElement?.isConnected
+        ? hoveredListItemContext
+        : selectedNestedListItemContext?.listItemElement?.isConnected
+          ? selectedNestedListItemContext
+          : null
+    const blockIndex = activeListItemContext
+      ? activeListItemContext.listBlockIndex
+      : isCoarsePointer
+        ? selectedBlockIndex
+        : stickySelectionActive
+          ? selectedBlockNodeIndex
+          : hoveredBlockIndex
     const hideBlockHandle = () =>
       setBlockHandleState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
     const hasOuterBlockSelectionIntent = blockIndex !== null
@@ -7737,6 +7956,25 @@ const BlockEditorEngine = ({
       hideBlockHandle()
       return
     }
+    const { width: railWidth, height: railHeight } = blockHandleRailMetricsRef.current
+    if (activeListItemContext?.listItemElement?.isConnected) {
+      const rect = activeListItemContext.listItemElement.getBoundingClientRect()
+      const nextState: TopLevelBlockHandleState = {
+        visible: true,
+        kind: "list-item",
+        blockIndex: activeListItemContext.listBlockIndex,
+        listPath: [...activeListItemContext.listPath],
+        itemIndex: activeListItemContext.itemIndex,
+        left: Math.max(12, rect.left - railWidth - 10),
+        top: resolveBlockHandleAnchorTop(activeListItemContext.listItemElement, railHeight),
+        bottom: rect.bottom + 12,
+        width: rect.width,
+      }
+      setBlockHandleState((prev) => (isStableBlockHandleState(prev, nextState) ? prev : nextState))
+      rectCache.clear()
+      return
+    }
+
     const blockTarget = resolveCachedBlockRect(blockIndex)
     const blockElement = blockTarget?.element ?? null
     const canShowHandle = isTopLevelBlockHandleEligible(blockIndex)
@@ -7750,7 +7988,6 @@ const BlockEditorEngine = ({
     }
 
     const rect = blockTarget?.rect ?? blockElement.getBoundingClientRect()
-    const { width: railWidth, height: railHeight } = blockHandleRailMetricsRef.current
     const blocks = ((editor.getJSON() as BlockEditorDoc).content ?? []) as BlockEditorDoc[]
     const blockNode = blocks[blockIndex]
     const anchoredTop = shouldUseThinBlockHandleAnchor(blockNode)
@@ -7760,7 +7997,10 @@ const BlockEditorEngine = ({
         : rect.top + 6
     const nextState: TopLevelBlockHandleState = {
       visible: true,
+      kind: "top-level",
       blockIndex,
+      listPath: [],
+      itemIndex: null,
       left: Math.max(12, rect.left - railWidth - 10),
       top: anchoredTop,
       bottom: rect.bottom + 12,
@@ -7773,7 +8013,9 @@ const BlockEditorEngine = ({
     editor,
     clickedBlockIndex,
     getTopLevelBlockElementByIndex,
+    getSelectedNestedListItemContext,
     hoveredBlockIndex,
+    hoveredListItemContext,
     isTableStructuralSelection,
     isCoarsePointer,
     isTopLevelBlockHandleEligible,
@@ -7915,9 +8157,13 @@ const BlockEditorEngine = ({
 
   useEffect(() => {
     const elements = getTopLevelBlockElements()
+    const root = getContentRoot()
+    const listItems = root ? Array.from(root.querySelectorAll<HTMLElement>(LIST_ITEM_SELECTOR)) : []
 
     elements.forEach((element, index) => {
-      if (index === hoveredBlockIndex && !draggedBlockState) {
+      if (hoveredListItemContext) {
+        element.removeAttribute("data-block-hovered")
+      } else if (index === hoveredBlockIndex && !draggedBlockState) {
         element.setAttribute("data-block-hovered", "true")
       } else {
         element.removeAttribute("data-block-hovered")
@@ -7932,14 +8178,40 @@ const BlockEditorEngine = ({
       element.removeAttribute("data-block-drop-target")
     })
 
+    listItems.forEach((element) => {
+      if (
+        hoveredListItemContext &&
+        !draggedBlockState &&
+        isSameNestedListItemContext(hoveredListItemContext, {
+          ...hoveredListItemContext,
+          listItemElement: element,
+          listElement: hoveredListItemContext.listElement,
+          listItems: hoveredListItemContext.listItems,
+        }) &&
+        element === hoveredListItemContext.listItemElement
+      ) {
+        element.setAttribute("data-block-hovered", "true")
+      } else {
+        element.removeAttribute("data-block-hovered")
+      }
+
+      element.removeAttribute("data-block-dragging")
+      element.removeAttribute("data-block-drop-target")
+    })
+
     return () => {
       elements.forEach((element) => {
         element.removeAttribute("data-block-hovered")
         element.removeAttribute("data-block-dragging")
         element.removeAttribute("data-block-drop-target")
       })
+      listItems.forEach((element) => {
+        element.removeAttribute("data-block-hovered")
+        element.removeAttribute("data-block-dragging")
+        element.removeAttribute("data-block-drop-target")
+      })
     }
-  }, [draggedBlockState, dropIndicatorState.insertionIndex, getTopLevelBlockElements, hoveredBlockIndex])
+  }, [draggedBlockState, dropIndicatorState.insertionIndex, getContentRoot, getTopLevelBlockElements, hoveredBlockIndex, hoveredListItemContext])
 
   const syncViewportHoverState = useCallback(
     (targetEvent: EventTarget | null, clientX: number, clientY: number) => {
@@ -7962,6 +8234,7 @@ const BlockEditorEngine = ({
       const target =
         targetEvent instanceof Element ? targetEvent : targetEvent instanceof Node ? targetEvent.parentElement : null
       const cell = getTableCellFromClientPoint(clientX, clientY, targetEvent)
+      const targetListItemContext = findNestedListItemContextFromTarget(targetEvent)
       const targetBlockIndex =
         findTopLevelBlockIndexFromTarget(targetEvent) ??
         findTopLevelBlockIndexByClientPosition(clientX, clientY)
@@ -7985,6 +8258,7 @@ const BlockEditorEngine = ({
         cancelTableQuickRailHide()
         setIsTableQuickRailHovered(true)
         syncHoveredTableCellMenuLayout(hoveredTableElementRef.current ?? activeTableElementRef.current)
+        setHoveredListItemContext(null)
         if (isWriterSurface || currentTableAxisSelection !== null) {
           setHoveredBlockIndex(targetBlockIndex)
         }
@@ -7996,6 +8270,7 @@ const BlockEditorEngine = ({
         setHoveredTableCellMenuLayout(null)
         setIsTableQuickRailHovered(false)
         setViewportRowResizeHot(false)
+        setHoveredListItemContext(null)
         setHoveredBlockIndex(targetBlockIndex)
         return
       }
@@ -8004,6 +8279,7 @@ const BlockEditorEngine = ({
         syncTableQuickRailFromElement(cell ?? target ?? hoveredTableElement, clientX, clientY)
         setIsTableQuickRailHovered(true)
         setViewportRowResizeHot(isRowResizeHandleTarget(cell, clientX, clientY))
+        setHoveredListItemContext(null)
         setHoveredBlockIndex(isWriterSurface || currentTableAxisSelection !== null ? targetBlockIndex : null)
         if (selectedBlockNodeIndex !== null && !keyboardBlockSelectionStickyRef.current) {
           keyboardBlockSelectionStickyRef.current = false
@@ -8019,16 +8295,21 @@ const BlockEditorEngine = ({
         scheduleTableQuickRailHide()
       }
       if (isTableStructuralSelection) {
+        setHoveredListItemContext(null)
         setHoveredBlockIndex(null)
         return
       }
       if (target?.closest("[data-block-handle-rail='true']") || target?.closest("[data-block-menu-root='true']")) {
         if (blockHandleState.visible) {
+          if (blockHandleState.kind === "list-item" && hoveredListItemContext) {
+            setHoveredListItemContext(hoveredListItemContext)
+          }
           setHoveredBlockIndex(blockHandleState.blockIndex)
         }
         return
       }
       setViewportRowResizeHot(isRowResizeHandleTarget(cell, clientX, clientY))
+      setHoveredListItemContext(targetListItemContext)
       setHoveredBlockIndex(
         findTopLevelBlockIndexByClientPosition(clientX, clientY) ??
           findTopLevelBlockIndexFromTarget(targetEvent)
@@ -8041,11 +8322,13 @@ const BlockEditorEngine = ({
     },
     [
       blockHandleState.blockIndex,
+      blockHandleState.kind,
       blockHandleState.visible,
       cancelHoveredBlockClear,
       cancelTableQuickRailHide,
       findTopLevelBlockIndexByClientPosition,
       findTopLevelBlockIndexFromTarget,
+      findNestedListItemContextFromTarget,
       getTableCellFromClientPoint,
       getTopLevelBlockElementByIndex,
       draggedTableAxisState,
@@ -8056,6 +8339,7 @@ const BlockEditorEngine = ({
       isRowResizeHandleTarget,
       selectedBlockNodeIndex,
       setViewportRowResizeHot,
+      hoveredListItemContext,
       syncSelectedBlockNodeSurface,
       syncHoveredTableCellMenuLayout,
       scheduleTableQuickRailHide,
@@ -8125,8 +8409,20 @@ const BlockEditorEngine = ({
       }
 
       if (event.defaultPrevented) return
-      if (event.key !== "Tab" || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+      if (event.key !== "Tab" || event.metaKey || event.ctrlKey || event.altKey) return
       if (slashMenuState) return
+      const activeListItemName = getActiveListItemName(currentEditor)
+      if (activeListItemName) {
+        event.preventDefault()
+        event.stopPropagation()
+        const handled = event.shiftKey
+          ? currentEditor.commands.liftListItem(activeListItemName)
+          : currentEditor.commands.sinkListItem(activeListItemName)
+        if (handled) {
+          setSelectionTick((prev) => prev + 1)
+        }
+        return
+      }
 
       const targetBlockIndex =
         hoveredBlockIndex ??
@@ -8148,9 +8444,21 @@ const BlockEditorEngine = ({
         skipNextPointerDownSelectionClearRef.current = false
         return
       }
+      const targetListItemContext = findNestedListItemContextFromTarget(event.target)
       const targetBlockIndex =
         findTopLevelBlockIndexFromTarget(event.target) ??
         findTopLevelBlockIndexByClientPosition(event.clientX, event.clientY)
+      const currentEditor = editorRef.current ?? editor
+      if (
+        currentEditor &&
+        isOuterListItemSelectionGesture(event, targetListItemContext) &&
+        targetListItemContext
+      ) {
+        event.preventDefault()
+        event.stopPropagation()
+        selectNestedListItemNode(currentEditor, targetListItemContext)
+        return
+      }
       if (isOuterBlockSelectionGesture(event, targetBlockIndex)) {
         if (targetBlockIndex === null) return
         event.preventDefault()
@@ -8166,7 +8474,6 @@ const BlockEditorEngine = ({
       }
       if (isCoarsePointer || tableRowResizeRef.current || tableColumnRailResizeRef.current) return
       const cell = getTableCellFromClientPoint(event.clientX, event.clientY, event.target)
-      const currentEditor = editorRef.current ?? editor
       const hasTableStructuralSelection = Boolean(
         currentEditor &&
           (currentEditor.state.selection instanceof CellSelection ||
@@ -8188,13 +8495,15 @@ const BlockEditorEngine = ({
       startTableRowResize(cell, event.clientY)
     },
     [
+      editor,
+      findNestedListItemContextFromTarget,
       findTopLevelBlockIndexFromTarget,
       findTopLevelBlockIndexByClientPosition,
-      editor,
       focusRenderedTableCell,
       getTableCellFromClientPoint,
       hideTableQuickRailImmediately,
       isOuterBlockSelectionGesture,
+      isOuterListItemSelectionGesture,
       isCoarsePointer,
       isRowResizeHandleTarget,
       promoteTopLevelBlockSelection,
@@ -8207,30 +8516,30 @@ const BlockEditorEngine = ({
 
   const handleViewportDragStart = useCallback(
     (event: ReactDragEvent<HTMLDivElement>) => {
-      const taskItemContext = findNestedListItemDragContextFromTarget(event.target)
-      if (!taskItemContext) return
+      const listItemContext = findNestedListItemContextFromTarget(event.target)
+      if (!listItemContext) return
 
       setDraggedNestedListItemState({
-        listBlockIndex: taskItemContext.listBlockIndex,
-        listPath: taskItemContext.listPath,
-        sourceItemIndex: taskItemContext.sourceItemIndex,
+        listBlockIndex: listItemContext.listBlockIndex,
+        listPath: listItemContext.listPath,
+        sourceItemIndex: listItemContext.itemIndex,
       })
       setNestedListItemDropIndicatorState({
         visible: true,
-        listBlockIndex: taskItemContext.listBlockIndex,
-        listPath: taskItemContext.listPath,
-        ...resolveNestedListItemDropIndicatorByClientY(taskItemContext.listElement, event.clientY),
+        listBlockIndex: listItemContext.listBlockIndex,
+        listPath: listItemContext.listPath,
+        ...resolveNestedListItemDropIndicatorByClientY(listItemContext.listElement, event.clientY),
       })
       event.dataTransfer.effectAllowed = "move"
-      event.dataTransfer.setData("text/plain", `list-item:${taskItemContext.listBlockIndex}:${taskItemContext.sourceItemIndex}`)
+      event.dataTransfer.setData("text/plain", `list-item:${listItemContext.listBlockIndex}:${listItemContext.itemIndex}`)
     },
-    [findNestedListItemDragContextFromTarget, resolveNestedListItemDropIndicatorByClientY]
+    [findNestedListItemContextFromTarget, resolveNestedListItemDropIndicatorByClientY]
   )
 
   const handleViewportDragOver = useCallback(
     (event: ReactDragEvent<HTMLDivElement>) => {
       if (!draggedNestedListItemState) return
-      const taskItemContext = findNestedListItemDragContextFromTarget(event.target)
+      const taskItemContext = findNestedListItemContextFromTarget(event.target)
       if (
         !taskItemContext ||
         taskItemContext.listBlockIndex !== draggedNestedListItemState.listBlockIndex ||
@@ -8247,7 +8556,7 @@ const BlockEditorEngine = ({
         ...resolveNestedListItemDropIndicatorByClientY(taskItemContext.listElement, event.clientY),
       })
     },
-    [draggedNestedListItemState, findNestedListItemDragContextFromTarget, resolveNestedListItemDropIndicatorByClientY]
+    [draggedNestedListItemState, findNestedListItemContextFromTarget, resolveNestedListItemDropIndicatorByClientY]
   )
 
   const clearNestedListItemDragState = useCallback(() => {
@@ -8258,7 +8567,7 @@ const BlockEditorEngine = ({
   const handleViewportDrop = useCallback(
     (event: ReactDragEvent<HTMLDivElement>) => {
       if (!draggedNestedListItemState) return
-      const taskItemContext = findNestedListItemDragContextFromTarget(event.target)
+      const taskItemContext = findNestedListItemContextFromTarget(event.target)
       if (
         !taskItemContext ||
         taskItemContext.listBlockIndex !== draggedNestedListItemState.listBlockIndex ||
@@ -8286,7 +8595,7 @@ const BlockEditorEngine = ({
     [
       clearNestedListItemDragState,
       draggedNestedListItemState,
-      findNestedListItemDragContextFromTarget,
+      findNestedListItemContextFromTarget,
       mutateTopLevelBlocks,
       resolveNestedListItemDropIndicatorByClientY,
     ]
@@ -9626,7 +9935,9 @@ const BlockEditorEngine = ({
             data-visible={blockHandleState.visible}
             onPointerEnter={() => {
               cancelHoveredBlockClear()
-              setHoveredBlockIndex(blockHandleState.blockIndex)
+              if (blockHandleState.kind === "top-level") {
+                setHoveredBlockIndex(blockHandleState.blockIndex)
+              }
             }}
             onPointerLeave={() => {
               scheduleHoveredBlockClear()
@@ -9636,24 +9947,26 @@ const BlockEditorEngine = ({
               top: `${blockHandleState.top}px`,
             }}
           >
+            {blockHandleState.kind === "top-level" ? (
+              <BlockHandleButton
+                type="button"
+                aria-label="블록 추가"
+                title="블록 추가"
+                onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+                  event.stopPropagation()
+                  openBlockMenu(blockHandleState.blockIndex, event.currentTarget.getBoundingClientRect())
+                }}
+              >
+                <BlockHandlePlus aria-hidden="true">
+                  <span />
+                  <span />
+                </BlockHandlePlus>
+              </BlockHandleButton>
+            ) : null}
             <BlockHandleButton
               type="button"
-              aria-label="블록 추가"
-              title="블록 추가"
-              onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
-                event.stopPropagation()
-                openBlockMenu(blockHandleState.blockIndex, event.currentTarget.getBoundingClientRect())
-              }}
-            >
-              <BlockHandlePlus aria-hidden="true">
-                <span />
-                <span />
-              </BlockHandlePlus>
-            </BlockHandleButton>
-            <BlockHandleButton
-              type="button"
-              aria-label="블록 이동"
-              title="블록 이동"
+              aria-label={blockHandleState.kind === "list-item" ? "목록 항목 선택" : "블록 이동"}
+              title={blockHandleState.kind === "list-item" ? "목록 항목 선택" : "블록 이동"}
               data-variant="drag"
               data-testid={blockHandleState.visible ? "block-drag-handle" : undefined}
               onMouseDown={(event) => {
@@ -9664,12 +9977,30 @@ const BlockEditorEngine = ({
                 event.preventDefault()
                 event.stopPropagation()
                 clearPendingBlockDrag()
+                if (blockHandleState.kind === "list-item" && editor) {
+                  const selectedListItemContext = getSelectedNestedListItemContext(editor)
+                  const matchingHoveredListItemContext =
+                    hoveredListItemContext &&
+                    hoveredListItemContext.listBlockIndex === blockHandleState.blockIndex &&
+                    hoveredListItemContext.itemIndex === blockHandleState.itemIndex &&
+                    sameListPath(hoveredListItemContext.listPath, blockHandleState.listPath)
+                      ? hoveredListItemContext
+                      : null
+                  const targetListItemContext = matchingHoveredListItemContext ?? selectedListItemContext
+                  if (targetListItemContext) {
+                    selectNestedListItemNode(editor, targetListItemContext)
+                  }
+                  return
+                }
                 promoteTopLevelBlockSelection(blockHandleState.blockIndex)
               }}
               onPointerDown={(event) => {
                 if (event.button !== 0) return
                 event.preventDefault()
                 event.stopPropagation()
+                if (blockHandleState.kind === "list-item") {
+                  return
+                }
                 const sourceIndex = blockHandleState.blockIndex
                 const sourceElement = getTopLevelBlockElementByIndex(sourceIndex)
                 const sourceRect = sourceElement?.getBoundingClientRect()
@@ -9789,7 +10120,7 @@ const BlockEditorEngine = ({
             }}
           />
         ) : null}
-        {isCoarsePointer && blockHandleState.visible ? (
+        {isCoarsePointer && blockHandleState.visible && blockHandleState.kind === "top-level" ? (
           <MobileBlockActionBar
             style={{
               left: `${Math.max(16, blockHandleState.left + 54 + blockHandleState.width / 2)}px`,
@@ -10583,6 +10914,22 @@ const EditorViewport = styled.div`
     background: ${({ theme }) =>
       theme.scheme === "dark" ? "rgba(59, 130, 246, 0.12)" : "rgba(59, 130, 246, 0.1)"};
     box-shadow: none;
+  }
+
+  .aq-block-editor__content li[data-list-item="true"][data-block-hovered="true"],
+  .aq-block-editor__content li[data-task-item="true"][data-block-hovered="true"] {
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(59, 130, 246, 0.08)" : "rgba(59, 130, 246, 0.08)"};
+    box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.18);
+    border-radius: 10px;
+  }
+
+  .aq-block-editor__content li[data-list-item="true"][data-block-selected="true"],
+  .aq-block-editor__content li[data-task-item="true"][data-block-selected="true"] {
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(59, 130, 246, 0.12)" : "rgba(59, 130, 246, 0.1)"};
+    box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.2);
+    border-radius: 10px;
   }
 
   .aq-block-editor__content > *[data-block-dragging="true"] {

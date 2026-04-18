@@ -885,6 +885,93 @@ test.describe("block editor authoring flow", () => {
       .toBe("")
   })
 
+  test("리스트 항목 안의 Tab/Shift+Tab은 Notion처럼 단계 승강으로 동작한다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    const blockSelectionOverlay = page.getByTestId("keyboard-block-selection-overlay")
+    await editor.click()
+    await page.getByRole("button", { name: "목록" }).first().click()
+    await page.keyboard.type("1단계")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("2단계")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("3단계")
+
+    await editor.locator("li", { hasText: "2단계" }).first().click()
+    await page.keyboard.press("Tab")
+    await editor.locator("li", { hasText: "3단계" }).first().click()
+    await page.keyboard.press("Tab")
+    await page.keyboard.press("Tab")
+    await expect(blockSelectionOverlay).toHaveCount(0)
+    const countOwnLabel = (label: string) =>
+      page.evaluate((targetLabel) => {
+        const readOwnLabel = (item: HTMLElement) =>
+          Array.from(item.childNodes)
+            .filter((node) => !(node instanceof HTMLElement && ["UL", "OL"].includes(node.tagName)))
+            .map((node) => node.textContent || "")
+            .join(" ")
+            .replace(/\s+/g, " ")
+            .trim()
+        return Array.from(
+          document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")
+        ).filter((item) => readOwnLabel(item) === targetLabel).length
+      }, label)
+    await expect.poll(() => countOwnLabel("1단계")).toBe(1)
+    await expect.poll(() => countOwnLabel("2단계")).toBe(1)
+    await expect.poll(() => countOwnLabel("3단계")).toBe(1)
+
+    await editor.locator("li", { hasText: "3단계" }).first().click()
+    await page.keyboard.press("Shift+Tab")
+    await expect(blockSelectionOverlay).toHaveCount(0)
+    await expect.poll(() => countOwnLabel("3단계")).toBe(1)
+  })
+
+  test("리스트 항목 handle은 말머리 묶음 전체가 아니라 각 항목을 따라간다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.getByRole("button", { name: "목록" }).first().click()
+    await page.keyboard.type("Access")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("Refresh")
+
+    const measureHandleAlignment = async (label: string) =>
+      page.evaluate((targetLabel) => {
+        const items = Array.from(document.querySelectorAll<HTMLElement>(".aq-block-editor__content li"))
+        const targetItem = items.find((item) => item.textContent?.includes(targetLabel)) ?? null
+        const handle = document.querySelector<HTMLElement>("[data-testid='block-drag-handle']")
+        if (!targetItem || !handle) return null
+        const itemRect = targetItem.getBoundingClientRect()
+        const handleRect = handle.getBoundingClientRect()
+        return {
+          itemCenterY: Math.round(itemRect.top + itemRect.height / 2),
+          handleCenterY: Math.round(handleRect.top + handleRect.height / 2),
+        }
+      }, label)
+
+    const firstItem = editor.locator("li", { hasText: "Access" }).first()
+    await firstItem.hover()
+    await expect.poll(() => measureHandleAlignment("Access")).not.toBeNull()
+    const firstAlignment = await measureHandleAlignment("Access")
+    if (!firstAlignment) {
+      throw new Error("Access handle metrics are missing")
+    }
+
+    const secondItem = editor.locator("li", { hasText: "Refresh" }).first()
+    await secondItem.hover()
+    await expect.poll(() => measureHandleAlignment("Refresh")).not.toBeNull()
+    const refreshMetrics = await measureHandleAlignment("Refresh")
+    if (!refreshMetrics) {
+      throw new Error("Refresh handle metrics are missing")
+    }
+
+    expect(Math.abs(firstAlignment.handleCenterY - firstAlignment.itemCenterY)).toBeLessThanOrEqual(18)
+    expect(Math.abs(refreshMetrics.handleCenterY - refreshMetrics.itemCenterY)).toBeLessThanOrEqual(18)
+    expect(refreshMetrics.handleCenterY).toBeGreaterThan(firstAlignment.handleCenterY + 20)
+  })
+
   test("초기 hydrate 직후 Cmd/Ctrl+Z는 외부 value 동기화를 되돌리지 않는다", async ({ page }) => {
     const seed = encodeURIComponent("# 제목\\n\\n첫 문단\\n\\n둘째 문단")
     await page.goto(`${QA_ENGINE_ROUTE}&seed=${seed}`)

@@ -306,11 +306,15 @@ test.describe("block editor slash menu interaction", () => {
     const taskItems = page.locator("li[data-task-item='true']")
     await expect(taskItems).toHaveCount(3)
 
-    await taskItems.nth(2).dragTo(taskItems.nth(0))
-
     const markdownOutput = page.getByTestId("qa-markdown-output")
     const expected = "- [ ] 셋째\n- [ ] 첫째\n- [ ] 둘째"
-    const reorderedByNativeDrag = ((await markdownOutput.textContent()) || "").includes(expected)
+    let reorderedByNativeDrag = false
+    try {
+      await taskItems.nth(2).dragTo(taskItems.nth(0), { timeout: 2_000 })
+      reorderedByNativeDrag = ((await markdownOutput.textContent()) || "").includes(expected)
+    } catch {
+      reorderedByNativeDrag = false
+    }
 
     if (!reorderedByNativeDrag) {
       const currentLines = ((await markdownOutput.textContent()) || "")

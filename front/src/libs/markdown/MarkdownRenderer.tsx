@@ -61,6 +61,7 @@ type MarkdownImageFigureProps = {
 }
 
 const QUOTED_STRONG_MARKERS = ["**", "__"] as const
+const QUOTED_EMPHASIS_MARKERS = ["*", "_"] as const
 const INLINE_COLOR_CHILD_PLACEHOLDER_PREFIX = "__AQ_INLINE_COLOR_CHILD_"
 const INLINE_COLOR_CHILD_PLACEHOLDER_SUFFIX = "__"
 const INLINE_COLOR_CHILD_PLACEHOLDER_REGEX = /__AQ_INLINE_COLOR_CHILD_(\d+)__/g
@@ -89,6 +90,36 @@ type QuotedStrongMatch = {
 
 const matchQuotedStrongAt = (value: string, start: number): QuotedStrongMatch | null => {
   for (const marker of QUOTED_STRONG_MARKERS) {
+    if (!value.startsWith(marker, start)) continue
+
+    for (const [openQuote, closeQuote] of QUOTED_STRONG_QUOTE_PAIRS) {
+      const quoteStart = start + marker.length
+      if (!value.startsWith(openQuote, quoteStart)) continue
+
+      const contentStart = quoteStart + openQuote.length
+      const closingToken = `${closeQuote}${marker}`
+      const closeIndex = value.indexOf(closingToken, contentStart)
+      if (closeIndex < 0) continue
+
+      const suffixIndex = closeIndex + closingToken.length
+      const suffixChar = value[suffixIndex] || ""
+      if (!suffixChar || !isLetterOrNumber(suffixChar)) continue
+
+      const inner = value.slice(contentStart, closeIndex)
+      if (!inner.trim()) continue
+
+      return {
+        end: suffixIndex,
+        quotedText: `${openQuote}${inner}${closeQuote}`,
+      }
+    }
+  }
+
+  return null
+}
+
+const matchQuotedEmphasisAt = (value: string, start: number): QuotedStrongMatch | null => {
+  for (const marker of QUOTED_EMPHASIS_MARKERS) {
     if (!value.startsWith(marker, start)) continue
 
     for (const [openQuote, closeQuote] of QUOTED_STRONG_QUOTE_PAIRS) {
@@ -159,6 +190,50 @@ const normalizeQuotedStrongChildren = (children: ReactNode) =>
   Children.toArray(children).flatMap((child) => {
     if (typeof child !== "string") return [child]
     return restoreQuotedStrongText(child)
+  })
+
+const restoreQuotedEmphasisText = (value: string): ReactNode[] => {
+  if (
+    (!value.includes("*") && !value.includes("_")) ||
+    !QUOTED_STRONG_QUOTE_MARKERS.some((quote) => value.includes(quote))
+  ) {
+    return [value]
+  }
+
+  const nodes: ReactNode[] = []
+  let textCursor = 0
+  let index = 0
+  let emphasisIndex = 0
+
+  while (index < value.length) {
+    const match = matchQuotedEmphasisAt(value, index)
+    if (!match) {
+      index += 1
+      continue
+    }
+
+    if (textCursor < index) {
+      nodes.push(value.slice(textCursor, index))
+    }
+
+    nodes.push(<em key={`quoted-emphasis-${emphasisIndex}`}>{match.quotedText}</em>)
+    emphasisIndex += 1
+    index = match.end
+    textCursor = match.end
+  }
+
+  if (emphasisIndex === 0) return [value]
+  if (textCursor < value.length) {
+    nodes.push(value.slice(textCursor))
+  }
+
+  return nodes
+}
+
+const normalizeQuotedEmphasisChildren = (children: ReactNode) =>
+  Children.toArray(children).flatMap((child) => {
+    if (typeof child !== "string") return [child]
+    return restoreQuotedEmphasisText(child)
   })
 
 const restoreSerializedMarkdownChildren = (serialized: string, sourceChildren: ReactNode[]) => {
@@ -272,6 +347,7 @@ const MarkdownParagraph = ({ children, inCallout = false }: { children: ReactNod
   const inBlockquote = useContext(MarkdownBlockquoteContext)
   let normalizedChildren = normalizeInlineColorChildren(children)
   normalizedChildren = normalizeQuotedStrongChildren(normalizedChildren)
+  normalizedChildren = normalizeQuotedEmphasisChildren(normalizedChildren)
   if (inBlockquote) {
     normalizedChildren = normalizeSoftBreakChildren(normalizedChildren)
   }

@@ -69,9 +69,7 @@ test.describe("admin surface primitives contract", () => {
     const toolsSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
 
     expect(toolsSource).toContain("문제 확인과 복구를 같은 흐름에서 처리합니다")
-    expect(toolsSource).toContain(
-      "메일, 작업 큐, 정리 상태, 보안 이벤트처럼 장애와 직접 연결되는 항목만 우선 다룹니다."
-    )
+    expect(toolsSource).toContain("grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));")
     expect(toolsSource).toContain("<h2>메일과 큐</h2>")
     expect(toolsSource).toContain("<h2>정리와 보안</h2>")
     expect(toolsSource).toContain("<h2>최근 진단 결과</h2>")
@@ -85,6 +83,8 @@ test.describe("admin surface primitives contract", () => {
     expect(toolsSource).toContain("<h3>실행 전 체크</h3>")
     expect(toolsSource).toContain("<h3>위험 액션</h3>")
     expect(toolsSource).toContain("<h3>런북/장애 문서</h3>")
+    expect(toolsSource).not.toContain("메일, 작업 큐, 정리 상태, 보안 이벤트처럼 장애와 직접 연결되는 항목만 우선 다룹니다.")
+    expect(toolsSource).not.toContain("운영 변경 없이 현재 상태와 영향 범위를 먼저 다시 확인합니다.")
     expect(toolsSource).not.toContain("<ExecutionGrid>")
     expect(toolsSource).not.toContain("requestIdleCallback")
     expect(toolsSource).not.toContain("isWorkspaceReady")
@@ -128,11 +128,11 @@ test.describe("admin surface primitives contract", () => {
 
     expect(source).toContain('aria-label="최근 작업 상태"')
     expect(source).toContain('aria-label="최근 작업 이어가기"')
-    expect(source).toContain("최근에 확인한 상태와 이어서 처리할 작업을 함께 봅니다.")
     expect(source).toContain("const RecentWorkSummary = styled.div`")
     expect(source).not.toContain("<h2>체크</h2>")
     expect(source).not.toContain("<h2>바로가기</h2>")
     expect(source).not.toContain("<h2>상태</h2>")
+    expect(source).not.toContain("최근에 확인한 상태와 이어서 처리할 작업을 함께 봅니다.")
     expect(source).not.toContain("StatusDot")
   })
 

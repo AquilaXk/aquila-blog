@@ -1070,18 +1070,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
         : mailDiagnostics?.status === "MISCONFIGURED"
           ? "확인 필요"
           : "열기"
-  const mailStatusMessage =
-    !hasMailDiagnostics
-      ? isMailLoading
-        ? "메일 진단을 불러오는 중"
-        : "메일 진단 열기"
-      : mailDiagnostics?.status === "READY"
-      ? "준비 완료"
-      : mailDiagnostics?.status === "CONNECTION_FAILED"
-        ? "연결 실패"
-        : mailDiagnostics?.status === "MISCONFIGURED"
-          ? "설정 누락"
-          : "메일 진단 열기"
   const signupMailTaskQueue = mailDiagnostics?.taskQueue ?? null
   const signupMailQueueStatusLabel =
     signupMailTaskQueue?.staleProcessingCount && signupMailTaskQueue.staleProcessingCount > 0
@@ -1113,24 +1101,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
         : taskQueueDiagnostics
           ? "정상"
           : "열기"
-  const queueHealthMessage =
-    !hasTaskQueueDiagnostics
-      ? isQueueLoading
-        ? "작업 큐 진단을 불러오는 중"
-        : "작업 큐 진단 열기"
-      : taskQueueDiagnostics?.staleProcessingCount && taskQueueDiagnostics.staleProcessingCount > 0
-      ? `stale processing ${taskQueueDiagnostics.staleProcessingCount}건 감지`
-      : taskQueueDiagnostics?.failedCount && taskQueueDiagnostics.failedCount > 0
-        ? `최근 실패 ${taskQueueDiagnostics.failedCount}건`
-        : "이상 없음"
   const cleanupStatusLabel = !hasCleanupDiagnostics ? (isCleanupLoading ? "갱신 중" : "열기") : cleanupDiagnostics?.blockedBySafetyThreshold ? "확인 필요" : "정상"
-  const cleanupHealthMessage = !hasCleanupDiagnostics
-    ? isCleanupLoading
-      ? "파일 정리 진단을 불러오는 중"
-      : "파일 정리 진단 열기"
-    : cleanupDiagnostics?.blockedBySafetyThreshold
-      ? "보류됨"
-      : "이상 없음"
   const authSecurityStatusLabel =
     !hasAuthDiagnostics
       ? isAuthLoading
@@ -1141,16 +1112,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
         ? "확인 필요"
         : "최근 기록"
       : "정상"
-  const authSecurityHealthMessage =
-    !hasAuthDiagnostics
-      ? isAuthLoading
-        ? "인증 보안 기록을 불러오는 중"
-        : "인증 보안 기록 열기"
-      : authSecurityEvents[0]?.eventType === "IP_SECURITY_MISMATCH_BLOCKED"
-      ? "차단 기록 있음"
-      : authSecurityEvents.length > 0
-        ? "최근 기록 있음"
-        : "이상 없음"
 
   const recentCheckedLabel = useMemo(() => {
     const values = [
@@ -1184,28 +1145,24 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
     {
       label: "메일",
       status: mailStatusLabel,
-      detail: mailStatusMessage,
       section: "diagnostics" as SectionKey,
       tab: "mail" as DiagnosticTab,
     },
     {
       label: "작업 큐",
       status: queueStatusLabel,
-      detail: queueHealthMessage,
       section: "diagnostics" as SectionKey,
       tab: "queue" as DiagnosticTab,
     },
     {
       label: "파일 정리",
       status: cleanupStatusLabel,
-      detail: cleanupHealthMessage,
       section: "execution" as SectionKey,
       tab: "cleanup" as DiagnosticTab,
     },
     {
       label: "인증 보안",
       status: authSecurityStatusLabel,
-      detail: authSecurityHealthMessage,
       section: "execution" as SectionKey,
       tab: "auth" as DiagnosticTab,
     },
@@ -1228,7 +1185,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
         <OverviewHeader>
           <div>
             <h1>문제 확인과 복구를 같은 흐름에서 처리합니다</h1>
-            <p>메일, 작업 큐, 정리 상태, 보안 이벤트처럼 장애와 직접 연결되는 항목만 우선 다룹니다.</p>
           </div>
           <OverviewMeta>
             <StatusBadge data-tone={getStatusTone(overviewStatusLabel)}>{overviewStatusLabel}</StatusBadge>
@@ -1246,7 +1202,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
               <CardEyebrow>운영 대시보드</CardEyebrow>
               <CardMainLine>
                 <strong>{systemHealthStatus === "UP" ? "정상" : systemHealthStatus}</strong>
-                <StatusDot data-tone={systemHealthStatus === "UP" ? "success" : "danger"} />
               </CardMainLine>
               <CardDetail>{systemHealthSummary[0] || `최근 확인 ${systemHealthFetchedAt}`}</CardDetail>
             </FeaturedStatusCard>
@@ -1257,7 +1212,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
               <StatusCardButton key={card.label} type="button" onClick={() => focusSection(card.section, card.tab)}>
                 <small>{card.label}</small>
                 <strong>{card.status}</strong>
-                <span>{card.detail}</span>
               </StatusCardButton>
             ))}
           </StatusCardGrid>
@@ -1270,13 +1224,11 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
 
       <WorkspaceShell>
         <WorkspaceColumn>
-          <WorkspaceSection id={SECTION_IDS.diagnostics} data-ops-section="diagnostics" data-emphasis="primary">
+          <WorkspaceSection id={SECTION_IDS.diagnostics} data-ops-section="diagnostics">
             <SectionHeading>
               <SectionTitleBlock>
                 <h2>메일과 큐</h2>
-                <p>발송 경로와 대기열에서 바로 장애로 이어질 신호를 먼저 모아 봅니다.</p>
               </SectionTitleBlock>
-              <ReadonlyPill>읽기 전용</ReadonlyPill>
             </SectionHeading>
 
             <DiagnosticsTabs role="tablist" aria-label="메일과 큐 도메인">
@@ -1297,21 +1249,14 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
               ))}
             </DiagnosticsTabs>
 
-            {activeDiagnosticTab === null ? (
-              <CalmMessage>진단 탭을 선택하면 해당 패널을 불러옵니다.</CalmMessage>
-            ) : null}
-
             {activeDiagnosticTab === "mail" ? (
               <DiagnosticPanel>
                 <DiagnosticHeader>
                   <div>
                     <strong>메일 진단</strong>
-                    <HeaderSubline>
-                      <span>{mailStatusMessage}</span>
-                      {hasMailDiagnostics ? <FreshnessBadge data-tone={mailFreshness.tone}>{mailFreshness.label}</FreshnessBadge> : null}
-                    </HeaderSubline>
                   </div>
                   <ActionRow>
+                    {hasMailDiagnostics ? <FreshnessBadge data-tone={mailFreshness.tone}>{mailFreshness.label}</FreshnessBadge> : null}
                     <QuietButton type="button" disabled={isBusy} onClick={() => void fetchSignupMailDiagnostics(false)}>
                       다시 확인
                     </QuietButton>
@@ -1393,11 +1338,11 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                         )}
                       </>
                     ) : (
-                      <CalmMessage>큐 상태는 메일 진단 결과와 함께 채워집니다.</CalmMessage>
+                      <CalmMessage>{isMailLoading ? "로딩 중" : "없음"}</CalmMessage>
                     )}
                   </>
                 ) : (
-                  <CalmMessage>{isMailLoading ? "메일 진단을 불러오는 중입니다." : "메일 진단 결과가 아직 없습니다. 다시 확인으로 최신 상태를 가져오세요."}</CalmMessage>
+                  <CalmMessage>{isMailLoading ? "로딩 중" : "없음"}</CalmMessage>
                 )}
 
                 {hasMailDiagnostics ? (
@@ -1428,12 +1373,9 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                 <DiagnosticHeader>
                   <div>
                     <strong>작업 큐 진단</strong>
-                    <HeaderSubline>
-                      <span>{queueHealthMessage}</span>
-                      {hasTaskQueueDiagnostics ? <FreshnessBadge data-tone={taskQueueFreshness.tone}>{taskQueueFreshness.label}</FreshnessBadge> : null}
-                    </HeaderSubline>
                   </div>
                   <ActionRow>
+                    {hasTaskQueueDiagnostics ? <FreshnessBadge data-tone={taskQueueFreshness.tone}>{taskQueueFreshness.label}</FreshnessBadge> : null}
                     <QuietButton type="button" disabled={isBusy} onClick={() => void fetchTaskQueueDiagnostics()}>
                       다시 확인
                     </QuietButton>
@@ -1483,7 +1425,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                   </SubtleMetaGrid>
                   </>
                 ) : (
-                  <CalmMessage>{isQueueLoading ? "작업 큐 진단을 불러오는 중입니다." : "작업 큐 진단을 열면 최신 상태를 가져옵니다."}</CalmMessage>
+                  <CalmMessage>{isQueueLoading ? "로딩 중" : "없음"}</CalmMessage>
                 )}
 
                 {!!taskQueueDiagnostics?.taskTypes.length && (
@@ -1538,11 +1480,10 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
             ) : null}
           </WorkspaceSection>
 
-          <WorkspaceSection id={SECTION_IDS.execution} data-ops-section="execution" data-emphasis="primary">
+          <WorkspaceSection id={SECTION_IDS.execution} data-ops-section="execution">
             <SectionHeading>
               <SectionTitleBlock>
                 <h2>정리와 보안</h2>
-                <p>파일 정리, 인증 기록, 실데이터 테스트 전 점검을 한 문맥으로 묶습니다.</p>
               </SectionTitleBlock>
             </SectionHeading>
 
@@ -1566,21 +1507,14 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                   ))}
                 </DiagnosticsTabs>
 
-                {(activeDiagnosticTab === null || activeDiagnosticTab === "mail" || activeDiagnosticTab === "queue") ? (
-                  <CalmMessage>정리와 보안 탭을 선택하면 해당 패널을 불러옵니다.</CalmMessage>
-                ) : null}
-
                 {activeDiagnosticTab === "cleanup" ? (
                   <DiagnosticPanel>
                     <DiagnosticHeader>
                       <div>
                         <strong>파일 정리 진단</strong>
-                        <HeaderSubline>
-                          <span>{cleanupHealthMessage}</span>
-                          {hasCleanupDiagnostics ? <FreshnessBadge data-tone={cleanupFreshness.tone}>{cleanupFreshness.label}</FreshnessBadge> : null}
-                        </HeaderSubline>
                       </div>
                       <ActionRow>
+                        {hasCleanupDiagnostics ? <FreshnessBadge data-tone={cleanupFreshness.tone}>{cleanupFreshness.label}</FreshnessBadge> : null}
                         <QuietButton type="button" disabled={isBusy} onClick={() => void fetchCleanupDiagnostics()}>
                           다시 확인
                         </QuietButton>
@@ -1624,7 +1558,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                         )}
                       </>
                     ) : (
-                      <CalmMessage>{isCleanupLoading ? "파일 정리 진단을 불러오는 중입니다." : "파일 정리 진단을 열면 최신 상태를 가져옵니다."}</CalmMessage>
+                      <CalmMessage>{isCleanupLoading ? "로딩 중" : "없음"}</CalmMessage>
                     )}
                   </DiagnosticPanel>
                 ) : null}
@@ -1634,12 +1568,9 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                     <DiagnosticHeader>
                       <div>
                         <strong>인증 보안 기록</strong>
-                        <HeaderSubline>
-                          <span>{authSecurityHealthMessage}</span>
-                          {hasAuthDiagnostics ? <FreshnessBadge data-tone={authFreshness.tone}>{authFreshness.label}</FreshnessBadge> : null}
-                        </HeaderSubline>
                       </div>
                       <ActionRow>
+                        {hasAuthDiagnostics ? <FreshnessBadge data-tone={authFreshness.tone}>{authFreshness.label}</FreshnessBadge> : null}
                         <QuietButton type="button" disabled={isBusy} onClick={() => void fetchAuthSecurityEvents()}>
                           다시 확인
                         </QuietButton>
@@ -1649,7 +1580,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                     {!!authSecurityEventsError && <InlineNotice data-tone="danger">{authSecurityEventsError}</InlineNotice>}
 
                     {!hasAuthDiagnostics ? (
-                      <CalmMessage>{isAuthLoading ? "인증 보안 기록을 불러오는 중입니다." : "인증 보안 기록을 열면 최근 이벤트를 확인합니다."}</CalmMessage>
+                      <CalmMessage>{isAuthLoading ? "로딩 중" : "없음"}</CalmMessage>
                     ) : authSecurityEvents.length > 0 ? (
                       <CompactList>
                         {authSecurityEvents.map((event) => (
@@ -1668,7 +1599,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                         ))}
                       </CompactList>
                     ) : authSecurityEventsError ? null : (
-                      <CalmMessage>최근 인증 보안 기록이 없습니다.</CalmMessage>
+                      <CalmMessage>없음</CalmMessage>
                     )}
                   </DiagnosticPanel>
                 ) : null}
@@ -1685,7 +1616,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                     <ActionList>
                       <ActionRowButton type="button" disabled={isBusy} onClick={() => void fetchSignupMailDiagnostics(true)}>
                         <span>SMTP 연결 확인</span>
-                        <small>메일 도메인 진단 없이 연결 단계만 다시 확인합니다</small>
                       </ActionRowButton>
                     </ActionList>
                   ) : null}
@@ -1739,7 +1669,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                       <SandboxSection>
                         <SandboxHeader>
                           <h3>읽기 전용 확인</h3>
-                          <ReadonlyPill>읽기 전용</ReadonlyPill>
                         </SandboxHeader>
                         <ActionList>
                           <ActionRowButton
@@ -1851,9 +1780,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                   <CardSectionHeading>
                     <div>
                       <h3>실행 전 체크</h3>
-                      <p>운영 변경 없이 현재 상태와 영향 범위를 먼저 다시 확인합니다.</p>
                     </div>
-                    <ReadonlyPill>읽기 전용</ReadonlyPill>
                   </CardSectionHeading>
                   <ActionList>
                     <ActionRowButton
@@ -1879,7 +1806,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                   <CardSectionHeading>
                     <div>
                       <h3>위험 액션</h3>
-                      <p>외부 발송이나 실데이터 변경으로 이어지는 실행만 분리해 둡니다.</p>
                     </div>
                     <ActionToneBadge data-tone="write">실행 가능</ActionToneBadge>
                   </CardSectionHeading>
@@ -1905,7 +1831,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                   <CardSectionHeading>
                     <div>
                       <h3>런북/장애 문서</h3>
-                      <p>복구 전에 같이 읽어야 할 화면과 기록으로 바로 이동합니다.</p>
                     </div>
                   </CardSectionHeading>
                   <ActionList>
@@ -1928,7 +1853,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
             <SectionHeading>
               <SectionTitleBlock>
                 <h2>최근 진단 결과</h2>
-                <p>방금 확인한 진단과 실행 기록만 빠르게 다시 읽습니다.</p>
               </SectionTitleBlock>
             </SectionHeading>
 
@@ -2072,12 +1996,6 @@ const OverviewHeader = styled.div`
     letter-spacing: -0.03em;
   }
 
-  p {
-    margin: 0.35rem 0 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    line-height: 1.55;
-  }
-
   @media (max-width: 960px) {
     flex-direction: column;
   }
@@ -2153,22 +2071,6 @@ const CardMainLine = styled.div`
   }
 `
 
-const StatusDot = styled.span`
-  width: 0.96rem;
-  height: 0.96rem;
-  flex: 0 0 auto;
-  border-radius: 999px;
-  background: ${({ theme }) => theme.colors.indigo8};
-
-  &[data-tone="success"] {
-    background: ${({ theme }) => theme.colors.statusSuccessBorder};
-  }
-
-  &[data-tone="danger"] {
-    background: ${({ theme }) => theme.colors.statusDangerBorder};
-  }
-`
-
 const CardDetail = styled.span`
   color: ${({ theme }) => theme.colors.gray10};
   font-size: 0.86rem;
@@ -2177,12 +2079,8 @@ const CardDetail = styled.span`
 
 const StatusCardGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));
   gap: 0.8rem;
-
-  @media (max-width: 680px) {
-    grid-template-columns: 1fr;
-  }
 `
 
 const StatusCardButton = styled.button`
@@ -2203,16 +2101,13 @@ const StatusCardButton = styled.button`
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.74rem;
     font-weight: 700;
+    word-break: keep-all;
   }
 
   strong {
     font-size: 1rem;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    line-height: 1.55;
-    font-size: 0.82rem;
+    line-height: 1.35;
+    word-break: keep-all;
   }
 `
 
@@ -2249,13 +2144,6 @@ const WorkspaceSection = styled.section`
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   content-visibility: auto;
   contain-intrinsic-size: 720px;
-
-  &[data-emphasis="primary"] {
-    border-color: ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) =>
-      theme.scheme === "light" ? "linear-gradient(180deg, rgba(59, 130, 246, 0.04) 0%, rgba(255, 255, 255, 0.92) 100%)" : "linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(24, 24, 24, 0.96) 100%)"};
-    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
-  }
 
   &[data-emphasis="secondary"] {
     background: ${({ theme }) => theme.colors.gray1};
@@ -2382,20 +2270,6 @@ const DetailsSummary = styled.summary`
   }
 `
 
-const ReadonlyPill = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 32px;
-  padding: 0 0.72rem;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray3};
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.76rem;
-  font-weight: 800;
-`
-
 const DiagnosticsTabs = styled.div`
   display: flex;
   flex-wrap: wrap;
@@ -2446,21 +2320,6 @@ const DiagnosticHeader = styled.div`
 
   @media (max-width: 760px) {
     flex-direction: column;
-  }
-`
-
-const HeaderSubline = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  flex-wrap: wrap;
-
-  span {
-    margin-top: 0.22rem;
-  }
-
-  ${FreshnessBadge} {
-    margin-top: 0.22rem;
   }
 `
 
@@ -2663,13 +2522,6 @@ const CardSectionHeading = styled.div`
     margin: 0;
     font-size: 0.98rem;
     letter-spacing: -0.02em;
-  }
-
-  p {
-    margin: 0.22rem 0 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    line-height: 1.5;
-    font-size: 0.82rem;
   }
 `
 

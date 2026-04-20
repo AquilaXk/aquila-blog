@@ -8222,9 +8222,10 @@ const BlockEditorEngine = ({
 
     const stickySelectionActive =
       !isCoarsePointer && selectedBlockNodeIndex !== null && keyboardBlockSelectionStickyRef.current
+    const effectiveSelectedListItemContext = resolveEffectiveSelectedListItemContext(editor)
     const activeListItemContext =
-      selectedNestedListItemContext?.listItemElement?.isConnected
-        ? selectedNestedListItemContext
+      effectiveSelectedListItemContext?.listItemElement?.isConnected
+        ? effectiveSelectedListItemContext
         : hoveredListItemContext?.listItemElement?.isConnected
           ? hoveredListItemContext
           : null
@@ -8312,7 +8313,6 @@ const BlockEditorEngine = ({
     isTableStructuralSelection,
     isCoarsePointer,
     isTopLevelBlockHandleEligible,
-    selectedListItemContext,
     selectedBlockIndex,
     selectedBlockNodeIndex,
     selectionTick,
@@ -9018,6 +9018,9 @@ const BlockEditorEngine = ({
       clearPendingNestedListItemHandleDrag()
       flushPendingMarkdownCommit()
       const sourceElement = context.listItemElement
+      if (sourceElement.isConnected) {
+        sourceElement.setAttribute("draggable", "false")
+      }
       const sourceRect = sourceElement.getBoundingClientRect()
       const previewWidth = sourceRect
         ? Math.round(Math.min(Math.max(sourceRect.width, 320), Math.max(320, window.innerWidth - 48)))
@@ -9103,9 +9106,29 @@ const BlockEditorEngine = ({
         const pending = pendingNestedListItemHandleDragRef.current
         if (!pending || doneEvent.pointerId !== pending.pointerId) return
         if (!pending.started) {
+          if (pending.context.listItemElement.isConnected) {
+            pending.context.listItemElement.setAttribute("draggable", "true")
+          }
           clearPendingNestedListItemHandleDrag()
           return
         }
+        if (pending.context.listItemElement.isConnected) {
+          pending.context.listItemElement.setAttribute("draggable", "true")
+        }
+
+        const activeListContext =
+          resolveNestedListItemContextByIndices(
+            pending.context.listBlockIndex,
+            pending.context.listPath,
+            pending.context.itemIndex
+          ) ?? pending.context
+        const indicator = resolveNestedListItemDropIndicatorByClientY(
+          activeListContext.listElement,
+          doneEvent.clientY
+        )
+        pending.targetListBlockIndex = activeListContext.listBlockIndex
+        pending.targetListPath = [...activeListContext.listPath]
+        pending.insertionIndex = indicator.insertionIndex
 
         if (
           pending.targetListBlockIndex === pending.context.listBlockIndex &&
@@ -10575,7 +10598,9 @@ const BlockEditorEngine = ({
                 clearPendingBlockDrag()
                 if (blockHandleState.kind === "list-item" && editor) {
                   const currentHandleListItemContext =
-                    resolveBlockHandleListItemContext() ?? resolveEffectiveSelectedListItemContext(editor)
+                    (hoveredListItemContext?.listItemElement?.isConnected ? hoveredListItemContext : null) ??
+                    resolveBlockHandleListItemContext() ??
+                    resolveEffectiveSelectedListItemContext(editor)
                   if (currentHandleListItemContext) {
                     clearStickyTopLevelBlockSelection()
                     setHoveredListItemContext(currentHandleListItemContext)
@@ -10594,7 +10619,9 @@ const BlockEditorEngine = ({
                 event.stopPropagation()
                 if (blockHandleState.kind === "list-item") {
                   const currentHandleListItemContext =
-                    resolveBlockHandleListItemContext() ?? resolveEffectiveSelectedListItemContext(editor)
+                    (hoveredListItemContext?.listItemElement?.isConnected ? hoveredListItemContext : null) ??
+                    resolveBlockHandleListItemContext() ??
+                    resolveEffectiveSelectedListItemContext(editor)
                   if (editor && currentHandleListItemContext) {
                     event.preventDefault()
                     clearStickyTopLevelBlockSelection()

@@ -898,9 +898,9 @@ test.describe("block editor authoring flow", () => {
     await page.keyboard.press("Enter")
     await page.keyboard.type("3단계")
 
-    await editor.locator("li", { hasText: "2단계" }).first().click()
+    await editor.locator("li", { hasText: /^2단계$/ }).locator("p").first().click()
     await page.keyboard.press("Tab")
-    await editor.locator("li", { hasText: "3단계" }).first().click()
+    await editor.locator("li", { hasText: /^3단계$/ }).locator("p").first().click()
     await page.keyboard.press("Tab")
     await page.keyboard.press("Tab")
     await expect(blockSelectionOverlay).toHaveCount(0)
@@ -921,10 +921,68 @@ test.describe("block editor authoring flow", () => {
     await expect.poll(() => countOwnLabel("2단계")).toBe(1)
     await expect.poll(() => countOwnLabel("3단계")).toBe(1)
 
-    await editor.locator("li", { hasText: "3단계" }).first().click()
+    await editor.locator("li", { hasText: /^3단계$/ }).locator("p").first().click()
     await page.keyboard.press("Shift+Tab")
     await expect(blockSelectionOverlay).toHaveCount(0)
     await expect.poll(() => countOwnLabel("3단계")).toBe(1)
+  })
+
+  test("선택된 리스트 항목 block handle 상태에서도 Tab/Shift+Tab은 단계 승강으로 동작한다", async ({ page }) => {
+    await page.goto(QA_WRITER_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    const blockSelectionOverlay = page.getByTestId("keyboard-block-selection-overlay")
+    await editor.click()
+    await page.getByRole("button", { name: "목록" }).first().click()
+    await page.keyboard.type("1단계")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("2단계")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("3단계")
+
+    const secondItem = editor.locator("li", { hasText: /^2단계$/ }).first()
+    await secondItem.hover()
+    const dragHandle = page.getByTestId("block-drag-handle")
+    await expect(dragHandle).toBeVisible()
+    await dragHandle.click()
+    await expect(page.getByRole("button", { name: "목록 항목 이동" })).toBeVisible()
+    await expect(blockSelectionOverlay).toHaveCount(0)
+
+    await page.keyboard.press("Tab")
+    await expect(blockSelectionOverlay).toHaveCount(0)
+
+    const readListDepth = (label: string) =>
+      page.evaluate((targetLabel) => {
+        const readOwnLabel = (item: HTMLElement) =>
+          Array.from(item.childNodes)
+            .filter((node) => !(node instanceof HTMLElement && ["UL", "OL"].includes(node.tagName)))
+            .map((node) => node.textContent || "")
+            .join(" ")
+            .replace(/\s+/g, " ")
+            .trim()
+        const getDepth = (item: HTMLElement) => {
+          let depth = 1
+          let ancestor = item.parentElement?.closest("li")
+          while (ancestor) {
+            depth += 1
+            ancestor = ancestor.parentElement?.closest("li")
+          }
+          return depth
+        }
+
+        const match =
+          Array.from(
+            document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")
+          ).find((item) => readOwnLabel(item) === targetLabel) ?? null
+
+        return match ? getDepth(match) : null
+      }, label)
+    await expect.poll(() => readListDepth("2단계")).toBe(2)
+
+    await editor.locator("li", { hasText: /^2단계$/ }).first().click()
+    await page.keyboard.press("Shift+Tab")
+
+    await expect.poll(() => readListDepth("2단계")).toBe(1)
   })
 
   test("리스트 항목 handle은 말머리 묶음 전체가 아니라 각 항목을 따라간다", async ({ page }) => {

@@ -356,10 +356,15 @@ type PendingNestedListItemHandleDragState = {
   pointerId: number
   startX: number
   startY: number
+  started: boolean
   context: NestedListItemContext
   targetListBlockIndex: number | null
   targetListPath: number[] | null
   insertionIndex: number | null
+  previewWidth: number
+  previewHeight: number
+  previewHtml: string
+  previewLabel: string
 }
 
 type NestedListItemContext = {
@@ -387,6 +392,10 @@ type DraggedNestedListItemState =
       listBlockIndex: number
       listPath: number[]
       sourceItemIndex: number
+      previewWidth: number
+      previewHeight: number
+      previewHtml: string
+      previewLabel: string
     }
   | null
 
@@ -3632,17 +3641,31 @@ const BlockEditorEngine = ({
 
   const resolveActiveListItemInteraction = useCallback(
     (activeEditor: TiptapEditor) => {
-      const activeListItemName = getActiveListItemName(activeEditor)
       const activeListItemContext = resolveEffectiveSelectedListItemContext(activeEditor)
+      const liveSelectionListItemContext =
+        getNodeSelectedNestedListItemContext(activeEditor) ??
+        getSelectionAnchorNestedListItemContext(activeEditor)
+      const shouldRestoreSelectedListItemContext = Boolean(
+        activeListItemContext &&
+          (!liveSelectionListItemContext ||
+            !isSameNestedListItemContext(liveSelectionListItemContext, activeListItemContext))
+      )
+      const activeListItemName = shouldRestoreSelectedListItemContext ? null : getActiveListItemName(activeEditor)
       const fallbackListItemName = getListItemNameFromContext(activeListItemContext)
       const listItemName = activeListItemName ?? fallbackListItemName
       return {
         listItemName,
         context: activeListItemContext,
-        shouldRestoreNodeSelection: Boolean(!activeListItemName && activeListItemContext && listItemName),
+        shouldRestoreNodeSelection: Boolean(
+          shouldRestoreSelectedListItemContext && activeListItemContext && listItemName
+        ),
       }
     },
-    [resolveEffectiveSelectedListItemContext]
+    [
+      getNodeSelectedNestedListItemContext,
+      getSelectionAnchorNestedListItemContext,
+      resolveEffectiveSelectedListItemContext,
+    ]
   )
 
   useEffect(() => {
@@ -8832,10 +8855,22 @@ const BlockEditorEngine = ({
           clearNativeTextSelection()
         }
       }
+      const sourceElement = listItemContext.listItemElement
+      const sourceRect = sourceElement.getBoundingClientRect()
+      const previewWidth = sourceRect
+        ? Math.round(Math.min(Math.max(sourceRect.width, 320), Math.max(320, window.innerWidth - 48)))
+        : 480
+      const previewHeight = sourceRect ? Math.round(Math.min(Math.max(sourceRect.height, 44), 320)) : 120
+      const previewLabel = sourceElement.textContent?.trim().slice(0, 100) || "목록 항목 이동"
+      const previewHtml = sourceElement.innerHTML || `<p>${previewLabel}</p>`
       setDraggedNestedListItemState({
         listBlockIndex: listItemContext.listBlockIndex,
         listPath: listItemContext.listPath,
         sourceItemIndex: listItemContext.itemIndex,
+        previewWidth,
+        previewHeight,
+        previewHtml,
+        previewLabel,
       })
       setNestedListItemDropIndicatorState({
         visible: true,
@@ -8881,6 +8916,7 @@ const BlockEditorEngine = ({
 
   const clearNestedListItemDragState = useCallback(() => {
     setDraggedNestedListItemState(null)
+    setDragGhostPosition(null)
     setNestedListItemDropIndicatorState((prev) => ({ ...prev, visible: false }))
   }, [])
 
@@ -8897,6 +8933,11 @@ const BlockEditorEngine = ({
 
   const resolveBlockHandleListItemContext = useCallback(() => {
     if (blockHandleState.kind !== "list-item") return null
+
+    const currentHandleListItemContext = resolveNestedListItemContextFromBlockHandleState()
+    if (currentHandleListItemContext) {
+      return currentHandleListItemContext
+    }
 
     const effectiveSelectedListItemContext = resolveEffectiveSelectedListItemContext(editor)
     const matchingSelectedListItemContext =
@@ -8919,7 +8960,7 @@ const BlockEditorEngine = ({
         ? hoveredListItemContext
         : null
 
-    return matchingHoveredListItemContext ?? resolveNestedListItemContextFromBlockHandleState()
+    return matchingSelectedListItemContext ?? matchingHoveredListItemContext
   }, [
     blockHandleState,
     editor,
@@ -8976,14 +9017,27 @@ const BlockEditorEngine = ({
     (pointerId: number, startX: number, startY: number, context: NestedListItemContext) => {
       clearPendingNestedListItemHandleDrag()
       flushPendingMarkdownCommit()
+      const sourceElement = context.listItemElement
+      const sourceRect = sourceElement.getBoundingClientRect()
+      const previewWidth = sourceRect
+        ? Math.round(Math.min(Math.max(sourceRect.width, 320), Math.max(320, window.innerWidth - 48)))
+        : 480
+      const previewHeight = sourceRect ? Math.round(Math.min(Math.max(sourceRect.height, 44), 320)) : 120
+      const previewLabel = sourceElement.textContent?.trim().slice(0, 100) || "목록 항목 이동"
+      const previewHtml = sourceElement.innerHTML || `<p>${previewLabel}</p>`
       pendingNestedListItemHandleDragRef.current = {
         pointerId,
         startX,
         startY,
+        started: false,
         context,
         targetListBlockIndex: null,
         targetListPath: null,
         insertionIndex: null,
+        previewWidth,
+        previewHeight,
+        previewHtml,
+        previewLabel,
       }
       clearStickyTopLevelBlockSelection()
       const currentEditor = editorRef.current ?? editor
@@ -8991,15 +9045,24 @@ const BlockEditorEngine = ({
         selectNestedListItemNode(currentEditor, context)
         clearNativeTextSelection()
       }
-      setDraggedNestedListItemState({
-        listBlockIndex: context.listBlockIndex,
-        listPath: context.listPath,
-        sourceItemIndex: context.itemIndex,
-      })
 
       const handlePointerMove = (moveEvent: PointerEvent) => {
         const pending = pendingNestedListItemHandleDragRef.current
         if (!pending || moveEvent.pointerId !== pending.pointerId) return
+        const distance = Math.hypot(moveEvent.clientX - pending.startX, moveEvent.clientY - pending.startY)
+        if (!pending.started) {
+          if (distance < 5) return
+          pending.started = true
+          setDraggedNestedListItemState({
+            listBlockIndex: pending.context.listBlockIndex,
+            listPath: pending.context.listPath,
+            sourceItemIndex: pending.context.itemIndex,
+            previewWidth: pending.previewWidth,
+            previewHeight: pending.previewHeight,
+            previewHtml: pending.previewHtml,
+            previewLabel: pending.previewLabel,
+          })
+        }
 
         const activeListContext =
           resolveNestedListItemContextByIndices(
@@ -9010,6 +9073,11 @@ const BlockEditorEngine = ({
         const listRect = activeListContext.listElement.getBoundingClientRect()
         const withinListBounds =
           moveEvent.clientY >= listRect.top - 24 && moveEvent.clientY <= listRect.bottom + 24
+
+        setDragGhostPosition({
+          x: moveEvent.clientX,
+          y: moveEvent.clientY,
+        })
 
         if (!withinListBounds) {
           pending.targetListBlockIndex = null
@@ -9034,6 +9102,10 @@ const BlockEditorEngine = ({
       const handlePointerDone = (doneEvent: PointerEvent) => {
         const pending = pendingNestedListItemHandleDragRef.current
         if (!pending || doneEvent.pointerId !== pending.pointerId) return
+        if (!pending.started) {
+          clearPendingNestedListItemHandleDrag()
+          return
+        }
 
         if (
           pending.targetListBlockIndex === pending.context.listBlockIndex &&
@@ -10468,22 +10540,20 @@ const BlockEditorEngine = ({
               top: `${blockHandleState.top}px`,
             }}
           >
-            {blockHandleState.kind === "top-level" ? (
-              <BlockHandleButton
-                type="button"
-                aria-label="블록 추가"
-                title="블록 추가"
-                onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
-                  event.stopPropagation()
-                  openBlockMenu(blockHandleState.blockIndex, event.currentTarget.getBoundingClientRect())
-                }}
-              >
-                <BlockHandlePlus aria-hidden="true">
-                  <span />
-                  <span />
-                </BlockHandlePlus>
-              </BlockHandleButton>
-            ) : null}
+            <BlockHandleButton
+              type="button"
+              aria-label="블록 추가"
+              title="블록 추가"
+              onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+                event.stopPropagation()
+                openBlockMenu(blockHandleState.blockIndex, event.currentTarget.getBoundingClientRect())
+              }}
+            >
+              <BlockHandlePlus aria-hidden="true">
+                <span />
+                <span />
+              </BlockHandlePlus>
+            </BlockHandleButton>
             <BlockHandleButton
               type="button"
               aria-label={blockHandleState.kind === "list-item" ? "목록 항목 이동" : "블록 이동"}
@@ -10513,6 +10583,7 @@ const BlockEditorEngine = ({
                     setSelectedListItemContext(currentHandleListItemContext)
                     selectNestedListItemTextAnchor(editor, currentHandleListItemContext)
                     clearNativeTextSelection()
+                    event.currentTarget.focus({ preventScroll: true })
                   }
                   return
                 }
@@ -10608,26 +10679,30 @@ const BlockEditorEngine = ({
           </BlockHandleRail>
           )
         })() : null}
-        {draggedBlockState && dragGhostPosition ? (
-          <DraggedBlockGhost
-            aria-hidden="true"
-            data-testid="block-drag-ghost"
-            style={{
-              left: `${Math.round(dragGhostPosition.x + 18)}px`,
-              top: `${Math.round(dragGhostPosition.y + 16)}px`,
-              width: `${draggedBlockState.previewWidth}px`,
-            }}
-          >
-            <DraggedBlockGhostBadge>
-              <span aria-hidden="true">↕</span>
-              <strong>글 옮기기</strong>
-            </DraggedBlockGhostBadge>
-            <DraggedBlockGhostCard
-              style={{ maxHeight: `${draggedBlockState.previewHeight}px` }}
-              dangerouslySetInnerHTML={{ __html: draggedBlockState.previewHtml }}
-            />
-          </DraggedBlockGhost>
-        ) : null}
+        {(() => {
+          const dragPreviewState = draggedBlockState ?? draggedNestedListItemState
+          if (!dragPreviewState || !dragGhostPosition) return null
+          return (
+            <DraggedBlockGhost
+              aria-hidden="true"
+              data-testid="block-drag-ghost"
+              style={{
+                left: `${Math.round(dragGhostPosition.x + 18)}px`,
+                top: `${Math.round(dragGhostPosition.y + 16)}px`,
+                width: `${dragPreviewState.previewWidth}px`,
+              }}
+            >
+              <DraggedBlockGhostBadge>
+                <span aria-hidden="true">↕</span>
+                <strong>글 옮기기</strong>
+              </DraggedBlockGhostBadge>
+              <DraggedBlockGhostCard
+                style={{ maxHeight: `${dragPreviewState.previewHeight}px` }}
+                dangerouslySetInnerHTML={{ __html: dragPreviewState.previewHtml }}
+              />
+            </DraggedBlockGhost>
+          )
+        })()}
         {blockSelectionOverlayState.visible &&
         !draggedBlockState &&
         !draggedNestedListItemState &&

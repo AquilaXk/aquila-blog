@@ -30,9 +30,9 @@ test.describe("admin surface primitives contract", () => {
     expect(source).toContain("@media (max-width: 1180px) {\n    grid-template-columns: 1fr;")
     expect(source).toContain("const grafanaPanelsCanEmbed = env.monitoringEmbedIsPublicGrafana && Boolean(grafanaDashboardUrl)")
     expect(source).toContain("private Grafana 대시보드라 iframe 대신 링크로만 제공합니다.")
-    expect(source).toContain("<strong>현재 포커스</strong>")
-    expect(source).toContain("<strong>바로 실행할 작업</strong>")
-    expect(source).toContain("<strong>참고 모니터링</strong>")
+    expect(source).toContain("<strong>최근 실패</strong>")
+    expect(source).toContain("<strong>런북</strong>")
+    expect(source).toContain("<strong>즉시 이동</strong>")
     expect(source).toContain("<ContextGrid>")
     expect(source).toContain("const ContextLinkGrid = styled(AdminInfoList)`")
     expect(source).toContain("const CompactPanelCard = styled(PanelCard)`")
@@ -99,12 +99,22 @@ test.describe("admin surface primitives contract", () => {
   test("admin hub removes duplicated status and shortcut rails in favor of a single primary workflow", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminHubSurface.tsx"), "utf8")
 
-    expect(source).toContain("const quickLinks: QuickLinkItem[] = [")
-    expect(source).toContain('aria-label="허브 빠른 이동"')
-    expect(source).toContain("새 초안을 열고 바로 편집 화면으로 이동합니다.")
+    expect(source).toContain('aria-label="최근 작업 상태"')
+    expect(source).toContain('aria-label="최근 작업 이어가기"')
+    expect(source).toContain("최근에 확인한 상태와 이어서 처리할 작업을 함께 봅니다.")
+    expect(source).toContain("const RecentWorkSummary = styled.div`")
     expect(source).not.toContain("<h2>체크</h2>")
     expect(source).not.toContain("<h2>바로가기</h2>")
     expect(source).not.toContain("<h2>상태</h2>")
     expect(source).not.toContain("StatusDot")
+  })
+
+  test("shared admin landing primitives expose a dedicated lead sentence style", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminSurfacePrimitives.tsx"), "utf8")
+
+    expect(source).toContain("export const AdminLandingSectionLead = styled.p`")
+    expect(source).toContain("font-size: 0.86rem;")
+    expect(source).toContain("line-height: 1.58;")
+    expect(source).toContain("color: ${({ theme }) => theme.colors.gray10};")
   })
 })

@@ -21,4 +21,22 @@ test.describe("admin hub state contract", () => {
     expect(source).toContain("serviceLinks: adminProfile?.serviceLinks || sessionMember?.serviceLinks || []")
     expect(source).toContain("contactLinks: adminProfile?.contactLinks || sessionMember?.contactLinks || []")
   })
+
+  test("admin hub uses backstage landing copy instead of generic management labels", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminHubSurface.tsx"), "utf8")
+
+    expect(source).toContain("오늘 블로그 운영은 이 흐름으로 정리됩니다")
+    expect(source).toContain("<h2>지금 할 일</h2>")
+    expect(source).toContain("<h2>최근 작업</h2>")
+    expect(source).toContain("<h2>공개 노출 상태</h2>")
+  })
+
+  test("dashboard first fold uses main-like priority copy and explicit rail labels", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/dashboard.tsx"), "utf8")
+
+    expect(source).toContain("지금 확인해야 할 운영 상태")
+    expect(source).toContain("<strong>최근 실패</strong>")
+    expect(source).toContain("<strong>런북</strong>")
+    expect(source).toContain("<strong>즉시 이동</strong>")
+  })
 })

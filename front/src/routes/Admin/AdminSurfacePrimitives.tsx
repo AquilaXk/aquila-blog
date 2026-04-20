@@ -102,6 +102,13 @@ export const AdminPaneHeader = styled.div`
   }
 `
 
+export const AdminLandingSectionLead = styled.p`
+  margin: 0;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.86rem;
+  line-height: 1.58;
+`
+
 export const AdminWorkspaceHero = styled.section`
   display: grid;
   gap: 0.72rem;

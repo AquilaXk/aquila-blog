@@ -7928,15 +7928,7 @@ const BlockEditorEngine = ({
 
     const stickySelectionActive =
       !isCoarsePointer && selectedBlockNodeIndex !== null && keyboardBlockSelectionStickyRef.current
-    const activeListItemContext =
-      hoveredListItemContext?.listItemElement?.isConnected
-        ? hoveredListItemContext
-        : selectedNestedListItemContext?.listItemElement?.isConnected
-          ? selectedNestedListItemContext
-          : null
-    const blockIndex = activeListItemContext
-      ? activeListItemContext.listBlockIndex
-      : isCoarsePointer
+    const blockIndex = isCoarsePointer
         ? selectedBlockIndex
         : stickySelectionActive
           ? selectedBlockNodeIndex
@@ -7957,24 +7949,6 @@ const BlockEditorEngine = ({
       return
     }
     const { width: railWidth, height: railHeight } = blockHandleRailMetricsRef.current
-    if (activeListItemContext?.listItemElement?.isConnected) {
-      const rect = activeListItemContext.listItemElement.getBoundingClientRect()
-      const nextState: TopLevelBlockHandleState = {
-        visible: true,
-        kind: "list-item",
-        blockIndex: activeListItemContext.listBlockIndex,
-        listPath: [...activeListItemContext.listPath],
-        itemIndex: activeListItemContext.itemIndex,
-        left: Math.max(12, rect.left - railWidth - 10),
-        top: resolveBlockHandleAnchorTop(activeListItemContext.listItemElement, railHeight),
-        bottom: rect.bottom + 12,
-        width: rect.width,
-      }
-      setBlockHandleState((prev) => (isStableBlockHandleState(prev, nextState) ? prev : nextState))
-      rectCache.clear()
-      return
-    }
-
     const blockTarget = resolveCachedBlockRect(blockIndex)
     const blockElement = blockTarget?.element ?? null
     const canShowHandle = isTopLevelBlockHandleEligible(blockIndex)

@@ -927,7 +927,7 @@ test.describe("block editor authoring flow", () => {
     await expect.poll(() => countOwnLabel("3단계")).toBe(1)
   })
 
-  test("리스트 항목 handle은 말머리 묶음 전체가 아니라 각 항목을 따라간다", async ({ page }) => {
+  test("목록 블록 handle은 항목 hover에서도 일반 블록 rail과 drag ghost를 유지한다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
@@ -936,40 +936,35 @@ test.describe("block editor authoring flow", () => {
     await page.keyboard.type("Access")
     await page.keyboard.press("Enter")
     await page.keyboard.type("Refresh")
-
-    const measureHandleAlignment = async (label: string) =>
-      page.evaluate((targetLabel) => {
-        const items = Array.from(document.querySelectorAll<HTMLElement>(".aq-block-editor__content li"))
-        const targetItem = items.find((item) => item.textContent?.includes(targetLabel)) ?? null
-        const handle = document.querySelector<HTMLElement>("[data-testid='block-drag-handle']")
-        if (!targetItem || !handle) return null
-        const itemRect = targetItem.getBoundingClientRect()
-        const handleRect = handle.getBoundingClientRect()
-        return {
-          itemCenterY: Math.round(itemRect.top + itemRect.height / 2),
-          handleCenterY: Math.round(handleRect.top + handleRect.height / 2),
-        }
-      }, label)
-
-    const firstItem = editor.locator("li", { hasText: "Access" }).first()
-    await firstItem.hover()
-    await expect.poll(() => measureHandleAlignment("Access")).not.toBeNull()
-    const firstAlignment = await measureHandleAlignment("Access")
-    if (!firstAlignment) {
-      throw new Error("Access handle metrics are missing")
-    }
+    await page.keyboard.press("Enter")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("다음 문단")
 
     const secondItem = editor.locator("li", { hasText: "Refresh" }).first()
     await secondItem.hover()
-    await expect.poll(() => measureHandleAlignment("Refresh")).not.toBeNull()
-    const refreshMetrics = await measureHandleAlignment("Refresh")
-    if (!refreshMetrics) {
-      throw new Error("Refresh handle metrics are missing")
+    const blockHandleRail = page.locator("[data-block-handle-rail='true']")
+    await expect(blockHandleRail.getByRole("button", { name: "블록 추가" })).toBeVisible()
+
+    const dragHandle = page.getByTestId("block-drag-handle")
+    await expect(dragHandle).toBeVisible()
+
+    const dragBox = await dragHandle.boundingBox()
+    const trailingParagraph = editor.locator("p", { hasText: "다음 문단" }).first()
+    const paragraphBox = await trailingParagraph.boundingBox()
+    if (!dragBox || !paragraphBox) {
+      throw new Error("목록 블록 drag ghost 좌표를 계산할 수 없습니다.")
     }
 
-    expect(Math.abs(firstAlignment.handleCenterY - firstAlignment.itemCenterY)).toBeLessThanOrEqual(18)
-    expect(Math.abs(refreshMetrics.handleCenterY - refreshMetrics.itemCenterY)).toBeLessThanOrEqual(18)
-    expect(refreshMetrics.handleCenterY).toBeGreaterThan(firstAlignment.handleCenterY + 20)
+    await page.mouse.move(dragBox.x + dragBox.width / 2, dragBox.y + dragBox.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(
+      paragraphBox.x + Math.min(24, paragraphBox.width / 3),
+      paragraphBox.y + paragraphBox.height / 2
+    )
+
+    await expect(page.getByTestId("block-drag-ghost")).toBeVisible()
+
+    await page.mouse.up()
   })
 
   test("초기 hydrate 직후 Cmd/Ctrl+Z는 외부 value 동기화를 되돌리지 않는다", async ({ page }) => {

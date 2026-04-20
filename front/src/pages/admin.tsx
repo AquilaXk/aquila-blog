@@ -150,6 +150,24 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialProfi
     (profileChecklist.filter(Boolean).length / Math.max(1, profileChecklist.length)) * 100
   )
   const linkCount = (profileSnapshot.serviceLinks?.length || 0) + (profileSnapshot.contactLinks?.length || 0)
+  const recentWorkSummary = `최근 업데이트 ${profileUpdatedText} · 프로필 ${profileCompletion}% · 연결 ${linkCount}개`
+  const recentWorkItems = [
+    {
+      label: "마지막 점검",
+      value: profileUpdatedText,
+      tone: "neutral" as const,
+    },
+    {
+      label: "프로필 상태",
+      value: profileCompletion >= 80 ? "정리 완료" : "보강 필요",
+      tone: profileCompletion >= 80 ? ("good" as const) : ("warn" as const),
+    },
+    {
+      label: "연결 채널",
+      value: linkCount > 0 ? `${linkCount}개` : "없음",
+      tone: linkCount > 0 ? ("good" as const) : ("warn" as const),
+    },
+  ]
   const summaryItems = [
     { label: "계정", value: displayName, tone: "neutral" as const },
     {
@@ -180,24 +198,6 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialProfi
     secondaryHref: "/admin/posts",
     secondaryLabel: "목록",
   }
-
-  const secondaryLinks = [
-    {
-      href: "/admin/profile",
-      title: "프로필",
-      cta: "프로필",
-    },
-    {
-      href: "/admin/dashboard",
-      title: "대시보드",
-      cta: "대시보드",
-    },
-    {
-      href: "/admin/tools",
-      title: "운영 도구",
-      cta: "도구",
-    },
-  ]
 
   const nextActionCandidates: Array<AdminHubNextAction | null> = [
     profileCompletion < 80
@@ -250,10 +250,11 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialProfi
         profileSrc={profileSrc}
         profileRole={profileSnapshot.profileRole}
         profileBio={profileSnapshot.profileBio}
+        recentWorkSummary={recentWorkSummary}
+        recentWorkItems={recentWorkItems}
         summaryItems={summaryItems}
         nextActions={nextActions}
         primaryAction={primaryAction}
-        secondaryLinks={secondaryLinks}
       />
     </AdminShell>
   )

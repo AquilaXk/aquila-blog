@@ -23,7 +23,6 @@ import {
   AdminInlineActionRow,
   AdminRailCard,
   AdminSectionHeading,
-  AdminStickyRail,
   AdminStatusPill,
   AdminSubtleCard,
   AdminTextActionButton,
@@ -980,7 +979,6 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
           <AdminWorkspaceHeroLayout>
             <AdminWorkspaceHeroCopy>
               <h1>편집과 검수를 한 화면에서 이어갑니다</h1>
-              <p>최근 초안 복귀, 공개 상태 점검, 목록 필터링까지 지금 필요한 글 작업 흐름을 한곳에 모읍니다.</p>
             </AdminWorkspaceHeroCopy>
             <AdminWorkspaceHeroActions>
               <PrimaryCta type="button" onClick={() => void openWriteRoute()}>
@@ -1429,67 +1427,6 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
             </ListSection>
           </WorkspaceMain>
 
-          <WorkspaceRail>
-            <RailCard>
-              <RailCardHeader>
-                <h2>검수 체크리스트</h2>
-                <span>발행 전 마지막 확인</span>
-              </RailCardHeader>
-              <RailBulletList>
-                <li>임시 저장을 열어 제목, 요약, 태그가 최신 초안과 맞는지 확인합니다.</li>
-                <li>링크 공개와 전체 공개를 구분해 외부 공유 범위를 다시 점검합니다.</li>
-                <li>삭제나 복구 후에는 작업 기록에 결과가 남았는지 확인합니다.</li>
-              </RailBulletList>
-            </RailCard>
-
-            <RailCard>
-              <RailCardHeader>
-                <h2>상태 의미</h2>
-                <span>목록 배지 해석</span>
-              </RailCardHeader>
-              <RailMetaList>
-                <li>
-                  <strong>비공개</strong>
-                  <span>편집 중인 초안으로 외부 링크가 아직 열리지 않습니다.</span>
-                </li>
-                <li>
-                  <strong>링크 공개</strong>
-                  <span>직접 링크를 가진 사람만 볼 수 있어 검수 공유에 적합합니다.</span>
-                </li>
-                <li>
-                  <strong>전체 공개</strong>
-                  <span>피드와 상세 페이지에 모두 노출되는 최종 상태입니다.</span>
-                </li>
-              </RailMetaList>
-            </RailCard>
-
-            <RailCard>
-              <RailCardHeader>
-                <h2>바로가기</h2>
-                <span>옆 작업실 연결</span>
-              </RailCardHeader>
-              <SupportList>
-                <Link href="/admin/profile" passHref legacyBehavior>
-                  <SupportLink>
-                    <SupportCopy>
-                      <strong>프로필 정리</strong>
-                      <p>작성자 정보와 소개 문구를 같은 톤으로 맞춥니다.</p>
-                    </SupportCopy>
-                    <SupportMeta>프로필 열기</SupportMeta>
-                  </SupportLink>
-                </Link>
-                <Link href="/admin/dashboard" passHref legacyBehavior>
-                  <SupportLink>
-                    <SupportCopy>
-                      <strong>운영 대시보드</strong>
-                      <p>발행 뒤 모니터링이 필요한 지표와 장애 징후를 확인합니다.</p>
-                    </SupportCopy>
-                    <SupportMeta>대시보드 열기</SupportMeta>
-                  </SupportLink>
-                </Link>
-              </SupportList>
-            </RailCard>
-          </WorkspaceRail>
         </WorkspaceBody>
 
       {toast ? (
@@ -1560,24 +1497,12 @@ const HeroSection = styled(AdminWorkspaceHero)``
 
 const WorkspaceBody = styled.div`
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(18rem, 20rem);
   gap: 1rem;
-  align-items: start;
-
-  @media (max-width: 1180px) {
-    grid-template-columns: 1fr;
-  }
 `
 
 const WorkspaceMain = styled.div`
   display: grid;
   gap: 1rem;
-`
-
-const WorkspaceRail = styled(AdminStickyRail)`
-  gap: 0.85rem;
-  position: sticky;
-  top: calc(var(--app-header-height, 64px) + 0.55rem);
 `
 
 const baseButton = ({ theme }: { theme: any }) => `
@@ -1611,119 +1536,11 @@ const SectionHeading = styled(AdminSectionHeading)`
   }
 `
 
-const RailCard = styled(AdminRailCard)`
-  gap: 0.76rem;
-`
-
-const RailCardHeader = styled.div`
-  display: grid;
-  gap: 0.18rem;
-
-  h2 {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.98rem;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.8rem;
-    line-height: 1.5;
-  }
-`
-
-const RailBulletList = styled.ul`
-  margin: 0;
-  padding-left: 1.1rem;
-  display: grid;
-  gap: 0.5rem;
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.84rem;
-  line-height: 1.55;
-`
-
-const RailMetaList = styled.ul`
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.65rem;
-
-  li {
-    display: grid;
-    gap: 0.16rem;
-  }
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.86rem;
-    font-weight: 800;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.82rem;
-    line-height: 1.5;
-  }
-`
-
-const SupportList = styled.div`
-  display: grid;
-  gap: 0.75rem;
-`
-
-const SupportLink = styled.a`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.95rem 1rem;
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) => theme.colors.gray2};
-  text-decoration: none;
-
-  @media (max-width: 767px) {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-`
-
-const SupportCopy = styled.div`
-  display: grid;
-  gap: 0.2rem;
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.96rem;
-  }
-
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.88rem;
-    line-height: 1.45;
-  }
-`
-
-const SupportMeta = styled.span`
-  color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.84rem;
-  font-weight: 700;
-  white-space: nowrap;
-`
-
 const ResumeGrid = styled.div`
   display: grid;
-  grid-template-columns: minmax(14rem, 0.74fr) minmax(0, 1.26fr);
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
   gap: 0.6rem;
   align-items: start;
-
-  @media (max-width: 1120px) {
-    grid-template-columns: 1fr;
-  }
 `
 
 const ResumeCard = styled(AdminRailCard)`
@@ -1788,8 +1605,13 @@ const ResumeHeader = styled.div`
 `
 
 const ResumeTitle = styled.strong`
+  display: -webkit-box;
   font-size: 0.9rem;
   line-height: 1.32;
+  overflow: hidden;
+  word-break: keep-all;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 `
 
 const ResumeDescription = styled.p`
@@ -2510,11 +2332,16 @@ const TitleCell = styled.div`
 `
 
 const TitleAnchor = styled.a`
+  display: -webkit-box;
   color: ${({ theme }) => theme.colors.gray12};
   font-size: 0.96rem;
   font-weight: 800;
   line-height: 1.45;
   text-decoration: none;
+  overflow: hidden;
+  word-break: keep-all;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 
   &:hover {
     color: ${({ theme }) => theme.colors.gray12};
@@ -2530,10 +2357,15 @@ const TitleAnchor = styled.a`
 `
 
 const TitleText = styled.strong`
+  display: -webkit-box;
   color: ${({ theme }) => theme.colors.gray12};
   font-size: 0.96rem;
   font-weight: 800;
   line-height: 1.45;
+  overflow: hidden;
+  word-break: keep-all;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 `
 
 const AuthorIdentity = styled.span`

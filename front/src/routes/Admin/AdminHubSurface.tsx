@@ -4,7 +4,6 @@ import AppIcon from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
 import {
   AdminElevatedCard,
-  AdminLandingSectionLead,
   AdminSectionTitleStack,
   adminElevatedBorder,
   adminElevatedSurface,
@@ -101,9 +100,6 @@ const AdminHubSurface = ({
         <HeroHeader>
           <HeroCopy>
             <HeroHeading>오늘 블로그 운영은 이 흐름으로 정리됩니다</HeroHeading>
-            <AdminLandingSectionLead>
-              새 글 작성, 최근 초안 복귀, 프로필 점검, 운영 상태 확인까지 지금 필요한 흐름만 먼저 보여줍니다.
-            </AdminLandingSectionLead>
           </HeroCopy>
           <HeroActions>
             <Link href={primaryAction.href} passHref legacyBehavior>
@@ -147,7 +143,6 @@ const AdminHubSurface = ({
             </SectionHeader>
             <RecentWorkSummary>
               <strong>{recentWorkSummary}</strong>
-              <p>최근에 확인한 상태와 이어서 처리할 작업을 함께 봅니다.</p>
             </RecentWorkSummary>
 
             <RecentWorkGrid aria-label="최근 작업 상태">
@@ -188,7 +183,7 @@ const AdminHubSurface = ({
               <ProfileCopy>
                 <strong>{displayName}</strong>
                 <span>{profileRole || "역할 미설정"}</span>
-                <p>{profileBio || "프로필 소개와 링크를 정리해 공개 카드와 같은 톤으로 맞춥니다."}</p>
+                {profileBio ? <p>{profileBio}</p> : null}
               </ProfileCopy>
             </ProfileSnapshot>
             <Link href="/admin/profile" passHref legacyBehavior>
@@ -458,16 +453,8 @@ const SectionHeader = styled(AdminSectionTitleStack)`
 
 const ActionStripGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
   gap: 0.75rem;
-
-  @media (max-width: 1180px) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  @media (max-width: 960px) {
-    grid-template-columns: 1fr;
-  }
 `
 
 const ActionCard = styled.a`
@@ -551,7 +538,7 @@ const SectionCard = styled(AdminElevatedCard)`
 
 const RecentWorkSummary = styled.div`
   display: grid;
-  gap: 0.22rem;
+  gap: 0;
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
@@ -559,23 +546,12 @@ const RecentWorkSummary = styled.div`
     font-weight: 820;
     line-height: 1.35;
   }
-
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.82rem;
-    line-height: 1.55;
-  }
 `
 
 const RecentWorkGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(11.5rem, 1fr));
   gap: 0.68rem;
-
-  @media (max-width: 720px) {
-    grid-template-columns: 1fr;
-  }
 `
 
 const RecentWorkCard = styled.div`

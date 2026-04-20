@@ -26,7 +26,6 @@ import {
   AdminInfoPanelCard,
   AdminInfoStatusItem,
   AdminInfoStatusList,
-  AdminLandingSectionLead,
   AdminPlainCard,
   AdminSectionTitleStack,
   AdminTextActionLink,
@@ -650,9 +649,6 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
               <HeroCopy>
                 <PageEyebrow>운영 모니터링</PageEyebrow>
                 <h1>지금 확인해야 할 운영 상태</h1>
-                <AdminLandingSectionLead>
-                  큐 지연, 메일 상태, 인증 이상, 파일 정리처럼 운영 리스크가 큰 항목부터 먼저 읽습니다.
-                </AdminLandingSectionLead>
               </HeroCopy>
               <HeroActions>
                 <StatusChip data-tone={dashboardStatusTone}>{dashboardStatusLabel}</StatusChip>
@@ -672,7 +668,6 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
                 <MetricCopy>
                   <span>{item.label}</span>
                   <strong>{item.value}</strong>
-                  <p>{item.detail}</p>
                 </MetricCopy>
               </MetricCard>
             ))}
@@ -680,11 +675,10 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
 
           <PanelGrid data-ui="monitoring-panel-grid">
             <LeadPanelCard data-ui="monitoring-panel-card">
-              <PanelHeader>
-                <div>
-                  <strong>최근 실패</strong>
-                  <span>실패 task, 메일 실패, 인증 차단처럼 문제가 생긴 항목을 먼저 판단합니다.</span>
-                </div>
+                <PanelHeader>
+                  <div>
+                    <strong>최근 실패</strong>
+                  </div>
                 <Link href="/admin/tools" passHref legacyBehavior>
                   <LaunchLink>운영 도구</LaunchLink>
                 </Link>
@@ -714,7 +708,6 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
                 <PanelHeader>
                   <div>
                     <strong>런북</strong>
-                    <span>운영 조치는 앱 내부 도구에서 먼저 처리하고, 외부 보드는 드릴다운으로만 엽니다.</span>
                   </div>
                 </PanelHeader>
                 <CompactPanelBody>
@@ -738,7 +731,6 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
                 <PanelHeader>
                   <div>
                     <strong>즉시 이동</strong>
-                    <span>장기 추이와 원본 지표 확인은 아래 연결 채널에서 이어서 봅니다.</span>
                   </div>
                 </PanelHeader>
                 <CompactPanelBody>
@@ -954,7 +946,7 @@ const HeroTop = styled.div`
 
 const HeroCopy = styled.div`
   display: grid;
-  gap: 4px;
+  gap: 0;
 
   h1 {
     margin: 0;
@@ -964,22 +956,9 @@ const HeroCopy = styled.div`
     letter-spacing: -0.03em;
     font-weight: 800;
   }
-
-  p {
-    margin: 0;
-    max-width: 760px;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.98rem;
-    line-height: 1.6;
-  }
-
   @media (max-width: 768px) {
     h1 {
       font-size: clamp(1.46rem, 7vw, 1.88rem);
-    }
-
-    p {
-      display: none;
     }
   }
 `
@@ -1041,24 +1020,8 @@ const HeaderLink = styled.a`
 
 const ServiceRail = styled.section`
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));
   gap: 8px;
-
-  @media (max-width: 1280px) {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  @media (max-width: 980px) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  @media (max-width: 820px) {
-    gap: 8px;
-  }
-
-  @media (max-width: 640px) {
-    grid-template-columns: 1fr;
-  }
 `
 
 const MetricCard = styled.article`
@@ -1117,6 +1080,8 @@ const MetricCopy = styled.div`
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.82rem;
     font-weight: 700;
+    line-height: 1.4;
+    word-break: keep-all;
   }
 
   strong {
@@ -1129,21 +1094,9 @@ const MetricCopy = styled.div`
     white-space: nowrap;
   }
 
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.76rem;
-    line-height: 1.45;
-  }
-
   @media (max-width: 820px) {
     strong {
       font-size: 1.08rem;
-    }
-
-    p {
-      font-size: 0.72rem;
-      line-height: 1.38;
     }
   }
 `
@@ -1190,11 +1143,7 @@ const PanelHeader = styled.div`
   }
 
   span {
-    display: block;
-    margin-top: 8px;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.88rem;
-    line-height: 1.55;
+    display: none;
   }
 `
 
@@ -1278,11 +1227,16 @@ const InsightRail = styled.aside`
 
 const LeadMetaGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 10px;
 
-  @media (max-width: 720px) {
-    grid-template-columns: 1fr;
+  strong {
+    display: -webkit-box;
+    overflow: hidden;
+    line-height: 1.45;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    word-break: break-word;
   }
 `
 

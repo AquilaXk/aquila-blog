@@ -1032,6 +1032,7 @@ test.describe("block editor authoring flow", () => {
     await page.keyboard.type("Retry")
 
     const retryItem = editor.locator("li", { hasText: /^Retry$/ }).first()
+    await retryItem.locator("p").first().click()
     await retryItem.hover()
 
     const dragHandle = page.getByTestId("block-drag-handle")
@@ -1292,33 +1293,79 @@ test.describe("block editor authoring flow", () => {
 
     const dragHandle = page.getByTestId("block-drag-handle")
     await expect(dragHandle).toBeVisible()
-    const firstItem = editor.locator("li", { hasText: /^Access$/ }).first()
-    await expect(firstItem).toBeVisible()
-    const retryItemBox = await retryItem.boundingBox()
-    const dragHandleBox = await dragHandle.boundingBox()
-    const firstItemBox = await firstItem.boundingBox()
-    if (!retryItemBox || !dragHandleBox || !firstItemBox) {
-      throw new Error("writer 리스트 항목 drag 좌표를 계산할 수 없습니다.")
-    }
-    expect(
-      Math.abs(
+    const measureHandleAlignment = async () => {
+      const retryItemBox = await retryItem.boundingBox()
+      const dragHandleBox = await dragHandle.boundingBox()
+      if (!retryItemBox || !dragHandleBox) {
+        return null
+      }
+      return Math.abs(
         dragHandleBox.y +
           dragHandleBox.height / 2 -
           (retryItemBox.y + retryItemBox.height / 2)
       )
-    ).toBeLessThanOrEqual(18)
-
-    await page.mouse.move(
+    }
+    await expect.poll(measureHandleAlignment).not.toBeNull()
+    await expect.poll(measureHandleAlignment).toBeLessThanOrEqual(18)
+    const dragHandleBox = await dragHandle.boundingBox()
+    if (!dragHandleBox) {
+      throw new Error("writer hover handle geometry is missing")
+    }
+    await page.mouse.click(
       dragHandleBox.x + dragHandleBox.width / 2,
       dragHandleBox.y + dragHandleBox.height / 2
+    )
+    const selectedDragHandle = page.getByRole("button", { name: "목록 항목 이동" })
+    await expect(selectedDragHandle).toBeVisible()
+    const firstItem = editor.locator("li", { hasText: /^Access$/ }).first()
+    await expect(firstItem).toBeVisible()
+
+    const dragGeometry = await page.evaluate(() => {
+      const handle = Array.from(document.querySelectorAll<HTMLElement>("button")).find(
+        (element) =>
+          (element.getAttribute("aria-label") === "목록 항목 이동" ||
+            element.getAttribute("title") === "목록 항목 이동") &&
+          element.offsetParent !== null
+      )
+      const firstItem =
+        Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")).find(
+          (item) => item.textContent?.includes("Access")
+        ) ?? null
+      if (!handle || !firstItem) return null
+
+      const handleRect = handle.getBoundingClientRect()
+      const firstRect = firstItem.getBoundingClientRect()
+      return {
+        dragBox: {
+          x: handleRect.x,
+          y: handleRect.y,
+          width: handleRect.width,
+          height: handleRect.height,
+        },
+        firstBox: {
+          x: firstRect.x,
+          y: firstRect.y,
+          width: firstRect.width,
+          height: firstRect.height,
+        },
+      }
+    })
+    if (!dragGeometry) {
+      throw new Error("writer 리스트 항목 drag 좌표를 계산할 수 없습니다.")
+    }
+    const { dragBox, firstBox } = dragGeometry
+
+    await page.mouse.move(
+      dragBox.x + dragBox.width / 2,
+      dragBox.y + dragBox.height / 2
     )
     await page.waitForTimeout(120)
     await page.mouse.down()
     await page.mouse.move(
-      firstItemBox.x + firstItemBox.width / 2,
-      firstItemBox.y + Math.max(6, firstItemBox.height * 0.2),
+      firstBox.x + firstBox.width / 2,
+      firstBox.y + Math.max(6, firstBox.height * 0.2),
       {
-      steps: 12,
+        steps: 12,
       }
     )
     await expect(page.getByTestId("block-drag-ghost")).toBeVisible()

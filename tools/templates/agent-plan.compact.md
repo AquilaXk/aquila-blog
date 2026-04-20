@@ -6,9 +6,6 @@
 ## issue
 - `#번호 또는 local-only`
 
-## pr
-- `main 대상 PR URL/번호 또는 local-only`
-
 ## repro
 -
 

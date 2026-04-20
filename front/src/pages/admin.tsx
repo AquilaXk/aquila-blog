@@ -10,7 +10,7 @@ import {
 } from "src/libs/server/adminProfile"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import AdminShell from "src/routes/Admin/AdminShell"
-import { type AdminHubNextAction } from "src/routes/Admin/AdminHubSurface"
+import { type AdminHubNextAction, type AdminHubSupportRailGroup } from "src/routes/Admin/AdminHubSurface"
 
 const AdminHubSurface = dynamic(() => import("src/routes/Admin/AdminHubSurface"), {
   loading: () => <div aria-hidden="true" style={{ minHeight: "32rem" }} />,
@@ -150,29 +150,24 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialProfi
     (profileChecklist.filter(Boolean).length / Math.max(1, profileChecklist.length)) * 100
   )
   const linkCount = (profileSnapshot.serviceLinks?.length || 0) + (profileSnapshot.contactLinks?.length || 0)
-  const summaryItems = [
-    { label: "계정", value: displayName, tone: "neutral" as const },
+  const recentWorkSummary = `최근 업데이트 ${profileUpdatedText} · 프로필 ${profileCompletion}% · 연결 ${linkCount}개`
+  const recentWorkItems = [
     {
-      label: "프로필",
-      value: `${profileCompletion}%`,
+      label: "마지막 점검",
+      value: profileUpdatedText,
+      tone: "neutral" as const,
+    },
+    {
+      label: "프로필 상태",
+      value: profileCompletion >= 80 ? "정리 완료" : "보강 필요",
       tone: profileCompletion >= 80 ? ("good" as const) : ("warn" as const),
     },
     {
-      label: "소개",
-      value: profileSnapshot.homeIntroTitle?.trim() && profileSnapshot.homeIntroDescription?.trim() ? "완료" : "필요",
-      tone:
-        profileSnapshot.homeIntroTitle?.trim() && profileSnapshot.homeIntroDescription?.trim()
-          ? ("good" as const)
-          : ("warn" as const),
-    },
-    {
-      label: "채널",
+      label: "연결 채널",
       value: linkCount > 0 ? `${linkCount}개` : "없음",
       tone: linkCount > 0 ? ("good" as const) : ("warn" as const),
     },
-    { label: "업데이트", value: profileUpdatedText, tone: "neutral" as const },
   ]
-
   const primaryAction = {
     href: "/editor/new",
     title: "새 글 작성",
@@ -181,64 +176,96 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialProfi
     secondaryLabel: "목록",
   }
 
-  const secondaryLinks = [
-    {
-      href: "/admin/profile",
-      title: "프로필",
-      cta: "프로필",
-    },
-    {
-      href: "/admin/dashboard",
-      title: "대시보드",
-      cta: "대시보드",
-    },
-    {
-      href: "/admin/tools",
-      title: "운영 도구",
-      cta: "도구",
-    },
-  ]
-
-  const nextActionCandidates: Array<AdminHubNextAction | null> = [
+  const profilePriorityAction =
     profileCompletion < 80
       ? {
           href: "/admin/profile",
           title: "프로필 보강",
           tone: "warn" as const,
         }
-      : null,
-    !(profileSnapshot.homeIntroTitle?.trim() && profileSnapshot.homeIntroDescription?.trim())
-      ? {
-          href: "/admin/profile",
-          title: "소개 입력",
-          tone: "warn" as const,
-        }
-      : null,
-    linkCount === 0
-      ? {
-          href: "/admin/profile",
-          title: "채널 추가",
-          tone: "warn" as const,
-        }
-      : null,
+      : !(profileSnapshot.homeIntroTitle?.trim() && profileSnapshot.homeIntroDescription?.trim())
+        ? {
+            href: "/admin/profile",
+            title: "소개 입력",
+            tone: "warn" as const,
+          }
+        : linkCount === 0
+          ? {
+              href: "/admin/profile",
+              title: "채널 추가",
+              tone: "warn" as const,
+            }
+          : null
+
+  const priorityActions = ([
+    profilePriorityAction,
     {
       href: "/editor/new",
       title: "새 글 작성",
       tone: "neutral" as const,
     },
     {
+      href: "/admin/posts",
+      title: "글 목록 점검",
+      tone: "neutral" as const,
+    },
+  ] satisfies Array<AdminHubNextAction | null>).filter(Boolean) as AdminHubNextAction[]
+
+  const handoffActions = [
+    {
       href: "/admin/dashboard",
-      title: "대시보드",
+      title: "운영 상태 확인",
       tone: "neutral" as const,
     },
     {
       href: "/admin/tools",
-      title: "운영 도구",
+      title: "복구 도구 열기",
       tone: "neutral" as const,
     },
-  ]
+  ] satisfies AdminHubNextAction[]
 
-  const nextActions = nextActionCandidates.filter((item): item is AdminHubNextAction => Boolean(item)).slice(0, 3)
+  const supportRailGroups = [
+    {
+      title: "프로필 완성도",
+      items: [
+        {
+          label: "완성도",
+          value: `${profileCompletion}%`,
+          tone: profileCompletion >= 80 ? ("good" as const) : ("warn" as const),
+        },
+        {
+          label: "소개",
+          value:
+            profileSnapshot.homeIntroTitle?.trim() && profileSnapshot.homeIntroDescription?.trim() ? "완료" : "보강 필요",
+          tone:
+            profileSnapshot.homeIntroTitle?.trim() && profileSnapshot.homeIntroDescription?.trim()
+              ? ("good" as const)
+              : ("warn" as const),
+        },
+        {
+          label: "채널",
+          value: linkCount > 0 ? `${linkCount}개 연결` : "연결 없음",
+          tone: linkCount > 0 ? ("good" as const) : ("warn" as const),
+        },
+      ],
+    },
+    {
+      title: "빠른 이동",
+      items: [
+        { label: "프로필", href: "/admin/profile", cta: "프로필 편집", tone: "neutral" as const },
+        { label: "대시보드", href: "/admin/dashboard", cta: "운영 상태 확인", tone: "neutral" as const },
+        { label: "도구", href: "/admin/tools", cta: "복구 도구 열기", tone: "neutral" as const },
+      ],
+    },
+    {
+      title: "최근 변경",
+      items: [
+        { label: "업데이트", value: profileUpdatedText, tone: "neutral" as const },
+        { label: "계정", value: displayName, tone: "neutral" as const },
+        { label: "요약", value: recentWorkSummary, tone: "neutral" as const },
+      ],
+    },
+  ] satisfies AdminHubSupportRailGroup[]
 
   if (!sessionMember) return null
 
@@ -250,10 +277,12 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialProfi
         profileSrc={profileSrc}
         profileRole={profileSnapshot.profileRole}
         profileBio={profileSnapshot.profileBio}
-        summaryItems={summaryItems}
-        nextActions={nextActions}
+        recentWorkSummary={recentWorkSummary}
+        recentWorkItems={recentWorkItems}
+        supportRailGroups={supportRailGroups}
+        priorityActions={priorityActions}
+        handoffActions={handoffActions}
         primaryAction={primaryAction}
-        secondaryLinks={secondaryLinks}
       />
     </AdminShell>
   )

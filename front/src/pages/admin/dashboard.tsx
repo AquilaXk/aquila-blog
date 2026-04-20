@@ -26,6 +26,7 @@ import {
   AdminInfoPanelCard,
   AdminInfoStatusItem,
   AdminInfoStatusList,
+  AdminLandingSectionLead,
   AdminPlainCard,
   AdminSectionTitleStack,
   AdminTextActionLink,
@@ -457,6 +458,60 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
   const authSecurityDetail = dashboardSnapshot
     ? `최근 기록 ${dashboardSnapshot.authSecurity.recentEventCount}건`
     : "스냅샷 대기"
+  const leadFailureItems = [
+    {
+      key: "task-failed",
+      label: "실패 task",
+      value: dashboardSnapshot ? `${dashboardSnapshot.taskQueue.failedCount}건` : "-",
+      tone: dashboardSnapshot?.taskQueue.failedCount ? ("warn" as const) : ("good" as const),
+    },
+    {
+      key: "task-stale",
+      label: "정체 task",
+      value: dashboardSnapshot ? `${dashboardSnapshot.taskQueue.staleProcessingCount}건` : "-",
+      tone: dashboardSnapshot?.taskQueue.staleProcessingCount ? ("warn" as const) : ("good" as const),
+    },
+    {
+      key: "mail-failure",
+      label: "메일 최근 실패",
+      value: dashboardSnapshot?.signupMail.latestFailureAt ? formatInstant(dashboardSnapshot.signupMail.latestFailureAt) : "없음",
+      tone: dashboardSnapshot?.signupMail.latestFailureAt ? ("warn" as const) : ("good" as const),
+    },
+    {
+      key: "auth-blocked",
+      label: "최근 인증 차단",
+      value: dashboardSnapshot?.authSecurity.latestBlockedAt ? formatInstant(dashboardSnapshot.authSecurity.latestBlockedAt) : "없음",
+      tone: dashboardSnapshot?.authSecurity.latestBlockedAt ? ("warn" as const) : ("good" as const),
+    },
+  ]
+
+  const leadFailureMetaItems = [
+    {
+      key: "mail-message",
+      label: "메일 실패 메시지",
+      value: dashboardSnapshot?.signupMail.latestFailureMessage || "없음",
+    },
+    {
+      key: "task-message",
+      label: "task 실패 메시지",
+      value: dashboardSnapshot?.taskQueue.latestFailureMessage || "없음",
+    },
+    {
+      key: "mail-latest",
+      label: "메일 실패 시각",
+      value: dashboardSnapshot?.signupMail.latestFailureAt ? formatInstant(dashboardSnapshot.signupMail.latestFailureAt) : "없음",
+    },
+    {
+      key: "task-latest",
+      label: "task 실패 시각",
+      value: dashboardSnapshot?.taskQueue.latestFailureAt ? formatInstant(dashboardSnapshot.taskQueue.latestFailureAt) : "없음",
+    },
+    {
+      key: "auth-latest",
+      label: "차단 시각",
+      value: dashboardSnapshot?.authSecurity.latestBlockedAt ? formatInstant(dashboardSnapshot.authSecurity.latestBlockedAt) : "없음",
+    },
+  ]
 
   const kpiCards: DashboardKpiCard[] = [
     {
@@ -583,33 +638,7 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
       : "현재 대시보드는 iframe 임베드를 지원하지 않아 새 창 링크로만 제공합니다."
     : "Grafana embed URL 또는 public dashboard 구성을 먼저 확인하세요."
   const focusItems = [
-    {
-      key: "task-failed",
-      label: "실패 task",
-      value: dashboardSnapshot ? `${dashboardSnapshot.taskQueue.failedCount}건` : "-",
-      tone: dashboardSnapshot?.taskQueue.failedCount ? "warn" : "good",
-    },
-    {
-      key: "task-stale",
-      label: "정체 task",
-      value: dashboardSnapshot ? `${dashboardSnapshot.taskQueue.staleProcessingCount}건` : "-",
-      tone: dashboardSnapshot?.taskQueue.staleProcessingCount ? "warn" : "good",
-    },
-    {
-      key: "auth-blocked",
-      label: "최근 인증 차단",
-      value: dashboardSnapshot?.authSecurity.latestBlockedAt ? formatInstant(dashboardSnapshot.authSecurity.latestBlockedAt) : "없음",
-      tone: dashboardSnapshot?.authSecurity.blockedEventCount ? "warn" : "good",
-    },
-    {
-      key: "cleanup-oldest",
-      label: "정리 대상 기준 시각",
-      value: dashboardSnapshot?.storageCleanup.oldestEligiblePurgeAfter ? formatInstant(dashboardSnapshot.storageCleanup.oldestEligiblePurgeAfter) : "-",
-      tone:
-        dashboardSnapshot?.storageCleanup.blockedBySafetyThreshold || (dashboardSnapshot?.storageCleanup.eligibleForPurgeCount ?? 0) > 0
-          ? "warn"
-          : "good",
-    },
+    ...leadFailureItems,
   ]
 
   return (
@@ -620,8 +649,10 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
             <HeroTop>
               <HeroCopy>
                 <PageEyebrow>운영 모니터링</PageEyebrow>
-                <h1>운영 대시보드</h1>
-                <p>핵심 상태와 즉시 확인할 항목만 남기고, 자세한 패널 탐색은 Grafana 새 창으로 분리합니다.</p>
+                <h1>지금 확인해야 할 운영 상태</h1>
+                <AdminLandingSectionLead>
+                  큐 지연, 메일 상태, 인증 이상, 파일 정리처럼 운영 리스크가 큰 항목부터 먼저 읽습니다.
+                </AdminLandingSectionLead>
               </HeroCopy>
               <HeroActions>
                 <StatusChip data-tone={dashboardStatusTone}>{dashboardStatusLabel}</StatusChip>
@@ -651,8 +682,8 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
             <LeadPanelCard data-ui="monitoring-panel-card">
               <PanelHeader>
                 <div>
-                  <strong>현재 포커스</strong>
-                  <span>실패/정체 작업과 인증 차단, 정리 대상을 앱 안에서 바로 판단합니다.</span>
+                  <strong>최근 실패</strong>
+                  <span>실패 task, 메일 실패, 인증 차단처럼 문제가 생긴 항목을 먼저 판단합니다.</span>
                 </div>
                 <Link href="/admin/tools" passHref legacyBehavior>
                   <LaunchLink>운영 도구</LaunchLink>
@@ -668,22 +699,12 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
                   ))}
                 </AdminInfoStatusList>
                 <LeadMetaGrid>
-                  <AdminInfoPanelCard>
-                    <small>스냅샷 시각</small>
-                    <strong>{dashboardSnapshotGeneratedAt}</strong>
-                  </AdminInfoPanelCard>
-                  <AdminInfoPanelCard>
-                    <small>가장 오래된 ready task</small>
-                    <strong>{formatAge(dashboardSnapshot?.taskQueue.oldestReadyPendingAgeSeconds)}</strong>
-                  </AdminInfoPanelCard>
-                  <AdminInfoPanelCard>
-                    <small>메일 최근 실패</small>
-                    <strong>{dashboardSnapshot?.signupMail.latestFailureAt ? formatInstant(dashboardSnapshot.signupMail.latestFailureAt) : "없음"}</strong>
-                  </AdminInfoPanelCard>
-                  <AdminInfoPanelCard>
-                    <small>마지막 인증 기록</small>
-                    <strong>{dashboardSnapshot?.authSecurity.latestEventAt ? formatInstant(dashboardSnapshot.authSecurity.latestEventAt) : "없음"}</strong>
-                  </AdminInfoPanelCard>
+                  {leadFailureMetaItems.map((item) => (
+                    <AdminInfoPanelCard key={item.key}>
+                      <small>{item.label}</small>
+                      <strong>{item.value}</strong>
+                    </AdminInfoPanelCard>
+                  ))}
                 </LeadMetaGrid>
               </SnapshotLeadBody>
             </LeadPanelCard>
@@ -692,7 +713,7 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
               <CompactPanelCard data-ui="monitoring-panel-card">
                 <PanelHeader>
                   <div>
-                    <strong>바로 실행할 작업</strong>
+                    <strong>런북</strong>
                     <span>운영 조치는 앱 내부 도구에서 먼저 처리하고, 외부 보드는 드릴다운으로만 엽니다.</span>
                   </div>
                 </PanelHeader>
@@ -716,7 +737,7 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
               <CompactPanelCard data-ui="monitoring-panel-card">
                 <PanelHeader>
                   <div>
-                    <strong>참고 모니터링</strong>
+                    <strong>즉시 이동</strong>
                     <span>장기 추이와 원본 지표 확인은 아래 연결 채널에서 이어서 봅니다.</span>
                   </div>
                 </PanelHeader>

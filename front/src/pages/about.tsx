@@ -544,24 +544,26 @@ const StyledWrapper = styled.div`
     gap: 0.92rem;
 
     li {
-      display: grid;
-      grid-template-columns: 7.2rem minmax(0, 1fr);
+      display: flex;
+      align-items: baseline;
       gap: 1rem;
-      align-items: start;
     }
   }
 
   .timeline-date {
+    flex: 0 0 7.2rem;
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.9rem;
-    line-height: 1.5;
+    line-height: 1.45rem;
     font-weight: 650;
   }
 
   .timeline-list strong {
+    flex: 1 1 auto;
+    min-width: 0;
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 1rem;
-    line-height: 1.6;
+    line-height: 1.45rem;
     font-weight: 650;
   }
 
@@ -702,12 +704,14 @@ const StyledWrapper = styled.div`
       gap: 0.74rem;
 
       li {
-        grid-template-columns: 1fr;
+        flex-direction: column;
+        align-items: flex-start;
         gap: 0.18rem;
       }
     }
 
     .timeline-date {
+      flex-basis: auto;
       font-size: 0.82rem;
     }
 

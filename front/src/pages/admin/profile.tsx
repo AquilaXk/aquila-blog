@@ -1194,6 +1194,12 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
   const displayName = displayNameInput.trim() || sessionMember.nickname || sessionMember.username || "관리자"
   const displayNameInitial = displayName.slice(0, 2).toUpperCase()
   const previewContent = previewMode === "published" ? publishedSnapshot : draft
+  const missingExposureItems: string[] = []
+  if (!displayNameInput.trim()) missingExposureItems.push("계정 이름")
+  if (!draft.profileBio.trim()) missingExposureItems.push("짧은 소개")
+  if (!draft.aboutRole.trim() || !draft.aboutBio.trim()) missingExposureItems.push("About 소개")
+  if (!draft.homeIntroTitle.trim() || !draft.homeIntroDescription.trim()) missingExposureItems.push("메인 헤더 카피")
+  const hasMissingExposureItems = missingExposureItems.length > 0
   const activeSectionMeta = WORKSPACE_SECTIONS.find((section) => section.id === activeSection) || WORKSPACE_SECTIONS[0]
   const visibleLinks = linkTab === "service" ? draft.serviceLinks : draft.contactLinks
   const pageToasts = [workspaceNotice, imageNotice].filter(
@@ -1202,30 +1208,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
   const canPublish = !hasUnsavedChanges && hasPublishedDiff && loadingKey !== "publish" && loadingKey !== "save"
   const canSave = hasUnsavedChanges && loadingKey !== "save"
   const activeSectionState = sectionStateMap[activeSection]
-  const previewMetaLabel =
-    previewMode === "draft"
-      ? activeSectionState.dirty
-        ? "초안 · 저장 안 됨"
-        : "초안 · 임시 저장됨"
-      : activeSectionState.publishedDiff
-        ? "공개본 · 업데이트 필요"
-        : "공개본 · 최신 상태"
-  const missingExposureItems: string[] = []
-  if (!draft.profileImageUrl) missingExposureItems.push("프로필 이미지")
-  if (!displayNameInput.trim()) missingExposureItems.push("공개 이름")
-  if (!draft.profileBio.trim()) missingExposureItems.push("프로필 소개")
-  if (!draft.aboutBio.trim() && draft.aboutSections.length === 0) missingExposureItems.push("About 소개")
-  if (!draft.homeIntroTitle.trim() || !draft.homeIntroDescription.trim()) missingExposureItems.push("메인 헤더 카피")
-  if (draft.serviceLinks.length + draft.contactLinks.length === 0) missingExposureItems.push("외부 링크")
-  const recentSaveLabel =
-    loadingKey === "save"
-      ? "지금 임시 저장 중입니다."
-      : hasUnsavedChanges
-        ? "로컬 변경이 남아 있어 다음 저장을 기다립니다."
-        : hasPublishedDiff
-          ? "임시 저장본이 공개 반영을 기다리고 있습니다."
-          : "최근 저장본과 공개본이 같은 상태입니다."
-
   const renderActiveSection = () => {
     switch (activeSection) {
       case "identity":
@@ -1247,7 +1229,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
               </div>
               <div className="avatarMeta">
                 <strong>{displayName}</strong>
-                  <span>{profileImageFileName ? `선택 파일: ${profileImageFileName}` : "현재 이미지"}</span>
+                {profileImageFileName ? <span>{profileImageFileName}</span> : null}
               </div>
               <GhostButton type="button" onClick={() => setIsProfileImageEditorOpen(true)} disabled={loadingKey === "upload"}>
                 {loadingKey === "upload" ? "업로드 중..." : "이미지 바꾸기"}
@@ -1709,7 +1691,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
         <AdminWorkspaceHeroLayout>
           <AdminWorkspaceHeroCopy>
             <h1>메인과 About에 보일 인상을 다듬습니다</h1>
-            <p>프로필 이미지, 소개 문구, 헤더 카피, 외부 링크를 공개 화면 문맥에서 바로 조정합니다.</p>
           </AdminWorkspaceHeroCopy>
         </AdminWorkspaceHeroLayout>
       </WorkspaceHero>
@@ -1739,9 +1720,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                   <SectionStateBadge data-tone="dirty">저장 안 됨</SectionStateBadge>
                 ) : activeSectionState.publishedDiff ? (
                   <SectionStateBadge data-tone="published">공개본과 차이 있음</SectionStateBadge>
-                ) : (
-                  <SectionStateBadge data-tone="synced">동기화됨</SectionStateBadge>
-                )}
+                ) : null}
               </div>
             </EditorPaneHeader>
             {renderActiveSection()}
@@ -1759,12 +1738,10 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
         </EditorColumn>
 
         <PreviewRail>
-          <PreviewCardShell>
+          <PreviewCardShell data-incomplete={previewMode === "draft" && hasMissingExposureItems ? "true" : undefined}>
             <PreviewHeader>
               <div>
-                <span>공개 노출 미리보기</span>
                 <strong>{activeSectionMeta.label}</strong>
-                <PreviewMeta>{previewMetaLabel}</PreviewMeta>
               </div>
               <PreviewHeaderActions>
                 <SegmentedControl>
@@ -1849,8 +1826,8 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                   <PreviewHomeCard>
                     <span>Home</span>
                     <strong>{previewContent.blogTitle || displayName}</strong>
-                    <h4>{previewContent.homeIntroTitle || "메인 헤더 제목을 입력하면 여기서 바로 확인됩니다."}</h4>
-                    <p>{previewContent.homeIntroDescription || "메인 첫 화면 소개 문구를 입력해 공개 노출 톤을 맞춥니다."}</p>
+                    <h4>{previewContent.homeIntroTitle || previewContent.blogTitle || displayName}</h4>
+                    {previewContent.homeIntroDescription ? <p>{previewContent.homeIntroDescription}</p> : null}
                   </PreviewHomeCard>
                 ) : null}
 
@@ -1879,23 +1856,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
               </PreviewViewport>
             </PreviewBody>
           </PreviewCardShell>
-          <PreviewStatusCard>
-            <strong>빠진 항목</strong>
-            {missingExposureItems.length > 0 ? (
-              <PreviewStatusList>
-                {missingExposureItems.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </PreviewStatusList>
-            ) : (
-              <PreviewStatusText>공개 노출에 필요한 기본 항목이 모두 채워졌습니다.</PreviewStatusText>
-            )}
-          </PreviewStatusCard>
-          <PreviewStatusCard>
-            <strong>최근 저장</strong>
-            <PreviewStatusText>{recentSaveLabel}</PreviewStatusText>
-            <PreviewStatusMeta>{previewMetaLabel}</PreviewStatusMeta>
-          </PreviewStatusCard>
         </PreviewRail>
       </WorkspaceShell>
 
@@ -2170,7 +2130,7 @@ const WorkspaceShell = styled.section`
     grid-template-columns: 176px minmax(0, 1fr) 288px;
   }
 
-  @media (max-width: 1180px) {
+  @media (max-width: 1360px) {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -2180,14 +2140,14 @@ const WorkspaceShell = styled.section`
 `
 
 const SectionRail = styled(AdminWorkspaceSectionNav)`
-  @media (min-width: 1181px) {
+  @media (min-width: 1361px) {
     display: grid;
     gap: 0.24rem;
   }
 `
 
 const SectionRailButton = styled(AdminWorkspaceSectionNavButton)`
-  @media (min-width: 1181px) {
+  @media (min-width: 1361px) {
     width: 100%;
     min-height: 46px;
     justify-content: flex-start;
@@ -2773,22 +2733,17 @@ const LinkInputs = styled.div`
 const PreviewRail = styled(AdminStickyRail)`
   top: calc(var(--app-header-height, 64px) + 0.8rem);
 
-  @media (max-width: 1480px) {
+  @media (max-width: 1360px) {
     position: static;
     top: auto;
-    grid-column: 2;
   }
 
-  @media (max-width: 1180px) {
+  @media (max-width: 980px) {
     display: none;
   }
 `
 
 const PreviewCardShell = styled(AdminRailCard)``
-
-const PreviewStatusCard = styled(AdminRailCard)`
-  gap: 0.55rem;
-`
 
 const PreviewHeader = styled.div`
   display: flex;
@@ -2798,15 +2753,7 @@ const PreviewHeader = styled.div`
 
   > div {
     display: grid;
-    gap: 0.18rem;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.78rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+    gap: 0;
   }
 
   strong {
@@ -2822,39 +2769,10 @@ const PreviewHeader = styled.div`
   }
 `
 
-const PreviewMeta = styled.small`
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.78rem;
-  font-weight: 700;
-  line-height: 1.45;
-`
-
 const PreviewHeaderActions = styled.div`
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-`
-
-const PreviewStatusList = styled.ul`
-  margin: 0;
-  padding-left: 1rem;
-  display: grid;
-  gap: 0.32rem;
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.84rem;
-  line-height: 1.55;
-`
-
-const PreviewStatusText = styled.p`
-  margin: 0;
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.84rem;
-  line-height: 1.58;
-`
-
-const PreviewStatusMeta = styled.small`
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.76rem;
 `
 
 const PreviewToggleButton = styled.button`

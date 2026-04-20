@@ -524,7 +524,15 @@ const isListContainerNodeName = (nodeName: string | undefined | null) =>
 const isListItemNodeName = (nodeName: string | undefined | null) =>
   nodeName === "listItem" || nodeName === "taskItem"
 const getActiveListItemName = (editor: TiptapEditor): "listItem" | "taskItem" | null => {
-  const { $from } = editor.state.selection
+  const selection = editor.state.selection as typeof editor.state.selection & {
+    node?: ProseMirrorNode
+  }
+  if (selection instanceof NodeSelection) {
+    const nodeName = selection.node?.type?.name
+    if (nodeName === "taskItem") return "taskItem"
+    if (nodeName === "listItem") return "listItem"
+  }
+  const { $from } = selection
   for (let depth = $from.depth; depth > 0; depth -= 1) {
     const nodeName = $from.node(depth)?.type?.name
     if (nodeName === "taskItem") return "taskItem"
@@ -534,6 +542,15 @@ const getActiveListItemName = (editor: TiptapEditor): "listItem" | "taskItem" | 
 }
 const sameListPath = (left: number[], right: number[]) =>
   left.length === right.length && left.every((value, index) => value === right[index])
+const getListItemNameFromContext = (
+  context: NestedListItemContext | null | undefined
+): "listItem" | "taskItem" | null => {
+  if (!context?.listItemElement) return null
+  if (context.listItemElement.matches("li[data-type='taskItem'], li[data-task-item='true']")) {
+    return "taskItem"
+  }
+  return "listItem"
+}
 const isSameNestedListItemContext = (
   left: NestedListItemContext | null | undefined,
   right: NestedListItemContext | null | undefined
@@ -1426,12 +1443,72 @@ const resolveListItemNodeSelectionPos = (editor: TiptapEditor, context: NestedLi
 }
 
 const selectNestedListItemNode = (editor: TiptapEditor, context: NestedListItemContext) => {
-  const position = resolveListItemNodeSelectionPos(editor, context)
+  const resolveDomMappedSelectionPos = () => {
+    if (!(context.listItemElement instanceof HTMLElement)) return null
+
+    try {
+      const domPos = editor.view.posAtDOM(context.listItemElement, 0)
+      const candidatePositions = [domPos, domPos - 1, domPos + 1]
+
+      for (const candidatePos of candidatePositions) {
+        if (!Number.isFinite(candidatePos)) continue
+        if (candidatePos < 0 || candidatePos > editor.state.doc.content.size) continue
+
+        try {
+          const resolvedPos = editor.state.doc.resolve(candidatePos)
+          if (isListItemNodeName(resolvedPos.nodeAfter?.type?.name)) {
+            return resolvedPos.pos
+          }
+          if (isListItemNodeName(resolvedPos.nodeBefore?.type?.name)) {
+            return resolvedPos.pos - resolvedPos.nodeBefore.nodeSize
+          }
+        } catch {
+          continue
+        }
+      }
+    } catch {
+      return null
+    }
+
+    return null
+  }
+
+  const position = resolveDomMappedSelectionPos() ?? resolveListItemNodeSelectionPos(editor, context)
   if (position === null) return false
   const selection = NodeSelection.create(editor.state.doc, position)
   editor.view.dispatch(editor.state.tr.setSelection(selection))
   focusEditorViewWithoutScroll(editor)
   return true
+}
+
+const selectNestedListItemTextAnchor = (editor: TiptapEditor, context: NestedListItemContext) => {
+  if (!(context.listItemElement instanceof HTMLElement)) return false
+
+  const walker = document.createTreeWalker(context.listItemElement, NodeFilter.SHOW_TEXT)
+  let anchorTextNode: Text | null = null
+
+  while (walker.nextNode()) {
+    const currentNode = walker.currentNode
+    if (!(currentNode instanceof Text)) continue
+    if (!currentNode.data.trim()) continue
+    anchorTextNode = currentNode
+    break
+  }
+
+  if (!anchorTextNode) {
+    return selectNestedListItemNode(editor, context)
+  }
+
+  try {
+    const anchorOffset = Math.min(anchorTextNode.data.length, 1)
+    const anchorPos = editor.view.posAtDOM(anchorTextNode, anchorOffset)
+    const selection = TextSelection.create(editor.state.doc, anchorPos)
+    editor.view.dispatch(editor.state.tr.setSelection(selection))
+    focusEditorViewWithoutScroll(editor)
+    return true
+  } catch {
+    return selectNestedListItemNode(editor, context)
+  }
 }
 
 const resolveBlockHandleAnchorTop = (blockElement: HTMLElement, railHeight: number) => {
@@ -2328,6 +2405,7 @@ const BlockEditorEngine = ({
   const [hoveredBlockIndex, setHoveredBlockIndex] = useState<number | null>(null)
   const [hoveredListItemContext, setHoveredListItemContext] = useState<NestedListItemContext | null>(null)
   const [selectedListItemContext, setSelectedListItemContext] = useState<NestedListItemContext | null>(null)
+  const selectedListItemContextRef = useRef<NestedListItemContext | null>(null)
   const [selectedBlockIndex, setSelectedBlockIndex] = useState<number | null>(null)
   const [clickedBlockIndex, setClickedBlockIndex] = useState<number | null>(null)
   const [selectedBlockNodeIndex, setSelectedBlockNodeIndex] = useState<number | null>(null)
@@ -3532,20 +3610,44 @@ const BlockEditorEngine = ({
       if (liveSelectedListItemContext?.listItemElement?.isConnected) {
         return liveSelectedListItemContext
       }
+      if (selectedListItemContextRef.current?.listItemElement?.isConnected) {
+        return selectedListItemContextRef.current
+      }
       if (selectedListItemContext?.listItemElement?.isConnected) {
         return selectedListItemContext
       }
-      if (!selectedListItemContext) {
+      const persistedSelectedListItemContext =
+        selectedListItemContextRef.current ?? selectedListItemContext
+      if (!persistedSelectedListItemContext) {
         return null
       }
       return resolveNestedListItemContextByIndices(
-        selectedListItemContext.listBlockIndex,
-        selectedListItemContext.listPath,
-        selectedListItemContext.itemIndex
+        persistedSelectedListItemContext.listBlockIndex,
+        persistedSelectedListItemContext.listPath,
+        persistedSelectedListItemContext.itemIndex
       )
     },
     [getNodeSelectedNestedListItemContext, resolveNestedListItemContextByIndices, selectedListItemContext]
   )
+
+  const resolveActiveListItemInteraction = useCallback(
+    (activeEditor: TiptapEditor) => {
+      const activeListItemName = getActiveListItemName(activeEditor)
+      const activeListItemContext = resolveEffectiveSelectedListItemContext(activeEditor)
+      const fallbackListItemName = getListItemNameFromContext(activeListItemContext)
+      const listItemName = activeListItemName ?? fallbackListItemName
+      return {
+        listItemName,
+        context: activeListItemContext,
+        shouldRestoreNodeSelection: Boolean(!activeListItemName && activeListItemContext && listItemName),
+      }
+    },
+    [resolveEffectiveSelectedListItemContext]
+  )
+
+  useEffect(() => {
+    selectedListItemContextRef.current = selectedListItemContext
+  }, [selectedListItemContext])
 
   const resolveNestedListItemDropIndicatorByClientY = useCallback(
     (taskListElement: HTMLElement, clientY: number) => {
@@ -5715,13 +5817,21 @@ const BlockEditorEngine = ({
 
       const currentEditor = editorRef.current
       if (!currentEditor) return
-      const activeListItemName = getActiveListItemName(currentEditor)
-      if (activeListItemName) {
+      const activeListItemInteraction = resolveActiveListItemInteraction(currentEditor)
+      if (activeListItemInteraction.listItemName) {
         event.preventDefault()
         event.stopPropagation()
+        clearStickyTopLevelBlockSelection()
+        if (
+          activeListItemInteraction.shouldRestoreNodeSelection &&
+          activeListItemInteraction.context
+        ) {
+          selectNestedListItemTextAnchor(currentEditor, activeListItemInteraction.context)
+          clearNativeTextSelection()
+        }
         const handled = event.shiftKey
-          ? currentEditor.commands.liftListItem(activeListItemName)
-          : currentEditor.commands.sinkListItem(activeListItemName)
+          ? currentEditor.commands.liftListItem(activeListItemInteraction.listItemName)
+          : currentEditor.commands.sinkListItem(activeListItemInteraction.listItemName)
         if (handled) {
           setSelectionTick((prev) => prev + 1)
         }
@@ -5760,7 +5870,16 @@ const BlockEditorEngine = ({
     return () => {
       document.removeEventListener("keydown", handleKeyDownCapture, true)
     }
-  }, [editor, findTopLevelBlockIndexFromTarget, hoveredBlockIndex, promoteTopLevelBlockSelection, slashMenuState])
+  }, [
+    clearNativeTextSelection,
+    clearStickyTopLevelBlockSelection,
+    editor,
+    findTopLevelBlockIndexFromTarget,
+    hoveredBlockIndex,
+    promoteTopLevelBlockSelection,
+    resolveActiveListItemInteraction,
+    slashMenuState,
+  ])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -8564,13 +8683,21 @@ const BlockEditorEngine = ({
       if (event.defaultPrevented) return
       if (event.key !== "Tab" || event.metaKey || event.ctrlKey || event.altKey) return
       if (slashMenuState) return
-      const activeListItemName = getActiveListItemName(currentEditor)
-      if (activeListItemName) {
+      const activeListItemInteraction = resolveActiveListItemInteraction(currentEditor)
+      if (activeListItemInteraction.listItemName) {
         event.preventDefault()
         event.stopPropagation()
+        clearStickyTopLevelBlockSelection()
+        if (
+          activeListItemInteraction.shouldRestoreNodeSelection &&
+          activeListItemInteraction.context
+        ) {
+          selectNestedListItemTextAnchor(currentEditor, activeListItemInteraction.context)
+          clearNativeTextSelection()
+        }
         const handled = event.shiftKey
-          ? currentEditor.commands.liftListItem(activeListItemName)
-          : currentEditor.commands.sinkListItem(activeListItemName)
+          ? currentEditor.commands.liftListItem(activeListItemInteraction.listItemName)
+          : currentEditor.commands.sinkListItem(activeListItemInteraction.listItemName)
         if (handled) {
           setSelectionTick((prev) => prev + 1)
         }
@@ -8588,7 +8715,17 @@ const BlockEditorEngine = ({
       event.stopPropagation()
       promoteTopLevelBlockSelection(targetBlockIndex)
     },
-    [findTopLevelBlockIndexFromTarget, hoveredBlockIndex, mutateTopLevelBlocks, promoteTopLevelBlockSelection, slashMenuState, syncSelectedBlockNodeSurface]
+    [
+      clearNativeTextSelection,
+      clearStickyTopLevelBlockSelection,
+      findTopLevelBlockIndexFromTarget,
+      hoveredBlockIndex,
+      mutateTopLevelBlocks,
+      promoteTopLevelBlockSelection,
+      resolveActiveListItemInteraction,
+      slashMenuState,
+      syncSelectedBlockNodeSurface,
+    ]
   )
 
   const handleViewportPointerDown = useCallback(
@@ -8790,6 +8927,50 @@ const BlockEditorEngine = ({
     resolveEffectiveSelectedListItemContext,
     resolveNestedListItemContextFromBlockHandleState,
   ])
+
+  const handleBlockHandleKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+      if (
+        blockHandleState.kind !== "list-item" ||
+        event.key !== "Tab" ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      ) {
+        return
+      }
+
+      const currentEditor = editorRef.current ?? editor
+      const currentHandleListItemContext = resolveBlockHandleListItemContext()
+      const activeListItemName = getListItemNameFromContext(currentHandleListItemContext)
+      if (!currentEditor || !currentHandleListItemContext || !activeListItemName) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      clearStickyTopLevelBlockSelection()
+      setHoveredListItemContext(currentHandleListItemContext)
+      selectedListItemContextRef.current = currentHandleListItemContext
+      setSelectedListItemContext(currentHandleListItemContext)
+      selectNestedListItemTextAnchor(currentEditor, currentHandleListItemContext)
+      clearNativeTextSelection()
+
+      const handled = event.shiftKey
+        ? currentEditor.commands.liftListItem(activeListItemName)
+        : currentEditor.commands.sinkListItem(activeListItemName)
+      if (handled) {
+        setSelectionTick((prev) => prev + 1)
+      }
+    },
+    [
+      blockHandleState.kind,
+      clearNativeTextSelection,
+      clearStickyTopLevelBlockSelection,
+      editor,
+      resolveBlockHandleListItemContext,
+    ]
+  )
 
   const beginPendingNestedListItemHandleDrag = useCallback(
     (pointerId: number, startX: number, startY: number, context: NestedListItemContext) => {
@@ -10317,6 +10498,7 @@ const BlockEditorEngine = ({
                 }
                 event.preventDefault()
               }}
+              onKeyDown={handleBlockHandleKeyDown}
               onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                 event.preventDefault()
                 event.stopPropagation()
@@ -10327,8 +10509,9 @@ const BlockEditorEngine = ({
                   if (currentHandleListItemContext) {
                     clearStickyTopLevelBlockSelection()
                     setHoveredListItemContext(currentHandleListItemContext)
+                    selectedListItemContextRef.current = currentHandleListItemContext
                     setSelectedListItemContext(currentHandleListItemContext)
-                    selectNestedListItemNode(editor, currentHandleListItemContext)
+                    selectNestedListItemTextAnchor(editor, currentHandleListItemContext)
                     clearNativeTextSelection()
                   }
                   return
@@ -10345,6 +10528,7 @@ const BlockEditorEngine = ({
                     event.preventDefault()
                     clearStickyTopLevelBlockSelection()
                     setHoveredListItemContext(currentHandleListItemContext)
+                    selectedListItemContextRef.current = currentHandleListItemContext
                     setSelectedListItemContext(currentHandleListItemContext)
                     beginPendingNestedListItemHandleDrag(
                       event.pointerId,
@@ -10444,7 +10628,10 @@ const BlockEditorEngine = ({
             />
           </DraggedBlockGhost>
         ) : null}
-        {blockSelectionOverlayState.visible && !draggedBlockState && !draggedNestedListItemState ? (
+        {blockSelectionOverlayState.visible &&
+        !draggedBlockState &&
+        !draggedNestedListItemState &&
+        !selectedListItemContext ? (
           <BlockSelectionOverlay
             aria-hidden="true"
             data-testid="keyboard-block-selection-overlay"

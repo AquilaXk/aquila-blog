@@ -271,7 +271,7 @@ test.describe("block editor authoring flow", () => {
   test("writer surface에서도 테이블 기본값은 비어 있고 셀 내부 구조 삽입이 차단된다", async ({
     page,
   }) => {
-    await page.goto(QA_WRITER_ROUTE)
+    await page.goto(QA_ENGINE_ROUTE)
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     await editor.click()
@@ -970,6 +970,173 @@ test.describe("block editor authoring flow", () => {
     expect(Math.abs(firstAlignment.handleCenterY - firstAlignment.itemCenterY)).toBeLessThanOrEqual(18)
     expect(Math.abs(refreshMetrics.handleCenterY - refreshMetrics.itemCenterY)).toBeLessThanOrEqual(18)
     expect(refreshMetrics.handleCenterY).toBeGreaterThan(firstAlignment.handleCenterY + 20)
+  })
+
+  test("writer surface의 선택된 리스트 항목 handle은 wrapper 선택으로 흔들리지 않고 선택 항목을 유지한다", async ({
+    page,
+  }) => {
+    await page.goto(QA_WRITER_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.getByRole("button", { name: "목록" }).first().click()
+    await page.keyboard.type("Access")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("Refresh")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("Retry")
+
+    const retryItem = editor.locator("li", { hasText: /^Retry$/ }).first()
+    await retryItem.hover()
+
+    const dragHandle = page.getByTestId("block-drag-handle")
+    await expect(dragHandle).toBeVisible()
+    await dragHandle.click()
+    const selectedDragHandle = page.getByRole("button", { name: "목록 항목 이동" })
+    await expect(selectedDragHandle).toBeVisible()
+
+    const selectedHandleBox = await selectedDragHandle.boundingBox()
+    if (!selectedHandleBox) {
+      throw new Error("selected list item handle bounding box is missing")
+    }
+    await page.mouse.move(
+      selectedHandleBox.x + selectedHandleBox.width / 2,
+      selectedHandleBox.y + selectedHandleBox.height / 2
+    )
+    await page.waitForTimeout(120)
+    await page.mouse.down()
+    await page.mouse.move(
+      selectedHandleBox.x + selectedHandleBox.width / 2,
+      selectedHandleBox.y + selectedHandleBox.height / 2 + 14
+    )
+    await page.waitForTimeout(80)
+    await page.mouse.up()
+
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const buttons = Array.from(document.querySelectorAll<HTMLElement>("button"))
+          const listItemHandleCount = buttons.filter(
+            (element) =>
+              element.getAttribute("aria-label") === "목록 항목 이동" ||
+              element.getAttribute("title") === "목록 항목 이동"
+          ).length
+          const blockHandleCount = buttons.filter(
+            (element) =>
+              element.getAttribute("aria-label") === "블록 이동" ||
+              element.getAttribute("title") === "블록 이동"
+          ).length
+          const readOwnLabel = (item: HTMLElement) =>
+            Array.from(item.childNodes)
+              .filter((node) => !(node instanceof HTMLElement && ["UL", "OL"].includes(node.tagName)))
+              .map((node) => node.textContent || "")
+              .join(" ")
+              .replace(/\s+/g, " ")
+              .trim()
+          const retryItem =
+            Array.from(
+              document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")
+            ).find((item) => readOwnLabel(item) === "Retry") ?? null
+          return {
+            listItemHandleCount,
+            blockHandleCount,
+            retryDraggable: retryItem?.getAttribute("draggable") === "true",
+          }
+        })
+      )
+      .toEqual({
+        listItemHandleCount: 1,
+        blockHandleCount: 0,
+        retryDraggable: true,
+      })
+
+    await expect(selectedDragHandle).toBeVisible()
+    await expect(page.getByRole("button", { name: "블록 이동" })).toHaveCount(0)
+  })
+
+  test("engine surface의 선택된 리스트 항목 handle drag는 항목 순서를 갱신한다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.getByRole("button", { name: "목록" }).first().click()
+    await page.keyboard.type("Access")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("Refresh")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("Retry")
+
+    const retryItem = editor.locator("li", { hasText: /^Retry$/ }).first()
+    await retryItem.hover()
+
+    const dragHandle = page.getByTestId("block-drag-handle")
+    await expect(dragHandle).toBeVisible()
+    await dragHandle.click()
+    await expect(page.getByRole("button", { name: "목록 항목 이동" })).toBeVisible()
+
+    const firstItem = editor.locator("li", { hasText: /^Access$/ }).first()
+    const selectedDragHandle = page.getByRole("button", { name: "목록 항목 이동" })
+    await expect(firstItem).toBeVisible()
+    await expect(selectedDragHandle).toBeVisible()
+
+    const dragGeometry = await page.evaluate(() => {
+      const handle = Array.from(document.querySelectorAll<HTMLElement>("button")).find(
+        (element) => element.getAttribute("aria-label") === "목록 항목 이동" || element.getAttribute("title") === "목록 항목 이동"
+      )
+      const firstItem =
+        Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")).find((item) =>
+          item.textContent?.includes("Access")
+        ) ?? null
+      if (!handle || !firstItem) return null
+
+      const handleRect = handle.getBoundingClientRect()
+      const firstRect = firstItem.getBoundingClientRect()
+      return {
+        dragBox: {
+          x: handleRect.x,
+          y: handleRect.y,
+          width: handleRect.width,
+          height: handleRect.height,
+        },
+        firstBox: {
+          x: firstRect.x,
+          y: firstRect.y,
+          width: firstRect.width,
+          height: firstRect.height,
+        },
+      }
+    })
+    if (!dragGeometry) {
+      throw new Error("리스트 항목 drag 좌표를 계산할 수 없습니다.")
+    }
+    const { dragBox, firstBox } = dragGeometry
+
+    await page.mouse.move(dragBox.x + dragBox.width / 2, dragBox.y + dragBox.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(firstBox.x + firstBox.width / 2, firstBox.y + Math.max(6, firstBox.height * 0.2), {
+      steps: 12,
+    })
+    await page.mouse.up()
+
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const readOwnLabel = (item: HTMLElement) =>
+            Array.from(item.childNodes)
+              .filter((node) => !(node instanceof HTMLElement && ["UL", "OL"].includes(node.tagName)))
+              .map((node) => node.textContent || "")
+              .join(" ")
+              .replace(/\s+/g, " ")
+              .trim()
+
+          return Array.from(
+            document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")
+          )
+            .map((item) => readOwnLabel(item))
+            .filter(Boolean)
+        })
+      )
+      .toEqual(["Retry", "Access", "Refresh"])
   })
 
   test("초기 hydrate 직후 Cmd/Ctrl+Z는 외부 value 동기화를 되돌리지 않는다", async ({ page }) => {

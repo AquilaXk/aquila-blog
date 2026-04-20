@@ -24,6 +24,7 @@ import {
   AdminStatusPill,
   AdminTextActionButton,
   AdminWorkspaceHero,
+  adminInteractiveFocusRing,
 } from "src/routes/Admin/AdminSurfacePrimitives"
 
 type JsonValue = unknown
@@ -1069,6 +1070,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   const taskQueueFreshness = getFreshnessMeta(taskQueueCheckedAt, freshnessClock)
   const cleanupFreshness = getFreshnessMeta(cleanupCheckedAt, freshnessClock)
   const authFreshness = getFreshnessMeta(authSecurityCheckedAt, freshnessClock)
+  const systemHealthFreshness = getFreshnessMeta(systemHealthCheckedAt, freshnessClock)
   const systemHealthSummary = getSystemHealthSummary(systemHealthQuery.data ?? null)
   const systemHealthFetchedAt = systemHealthCheckedAt ? formatInstant(systemHealthCheckedAt) : "-"
   const isMailLoading = loadingKey === "mailStatus" || loadingKey === "mailConnectivity"
@@ -1249,11 +1251,12 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
       <OpsOverview id={SECTION_IDS.overview} data-ops-section="overview">
         <OverviewHeader>
           <div>
-            <h1>운영 진단</h1>
-            <p>진단과 실행, 최근 결과만 한 흐름에서 확인합니다.</p>
+            <h1>문제 확인과 복구를 같은 흐름에서 처리합니다</h1>
+            <p>메일, 작업 큐, 정리 상태, 보안 이벤트처럼 장애와 직접 연결되는 항목만 우선 다룹니다.</p>
           </div>
           <OverviewMeta>
             <StatusBadge data-tone={getStatusTone(overviewStatusLabel)}>{overviewStatusLabel}</StatusBadge>
+            <FreshnessBadge data-tone={systemHealthFreshness.tone}>{systemHealthFreshness.label}</FreshnessBadge>
             <MetaCaption>
               <span>최근 확인</span>
               <strong>{recentCheckedLabel}</strong>
@@ -1676,7 +1679,8 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
               <ActionGroupCard>
                 <CardSectionHeading>
                   <div>
-                    <h3>읽기 전용 실행</h3>
+                    <h3>실행 전 체크</h3>
+                    <p>운영 변경 없이 현재 상태와 영향 범위를 먼저 다시 확인합니다.</p>
                   </div>
                   <ReadonlyPill>읽기 전용</ReadonlyPill>
                 </CardSectionHeading>
@@ -1703,7 +1707,8 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
               <ActionGroupCard>
                 <CardSectionHeading>
                   <div>
-                    <h3>메일 발송 확인</h3>
+                    <h3>위험 액션</h3>
+                    <p>외부 발송이나 실데이터 변경으로 이어지는 실행만 분리해 둡니다.</p>
                   </div>
                   <ActionToneBadge data-tone="write">실행 가능</ActionToneBadge>
                 </CardSectionHeading>
@@ -1723,6 +1728,26 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                   </PrimaryButton>
                   {!!mailTestNotice.text && <InlineNotice data-tone={mailTestNotice.tone}>{mailTestNotice.text}</InlineNotice>}
                 </FieldStack>
+              </ActionGroupCard>
+
+              <ActionGroupCard>
+                <CardSectionHeading>
+                  <div>
+                    <h3>런북/장애 문서</h3>
+                    <p>복구 전에 같이 읽어야 할 화면과 기록으로 바로 이동합니다.</p>
+                  </div>
+                </CardSectionHeading>
+                <ActionList>
+                  <Link href="/admin/dashboard" passHref legacyBehavior>
+                    <ActionRowLink>운영 대시보드 열기</ActionRowLink>
+                  </Link>
+                  <ActionRowButton type="button" disabled={isBusy} onClick={() => focusSection("diagnostics", "queue")}>
+                    <span>작업 큐 진단으로 이동</span>
+                  </ActionRowButton>
+                  <ActionRowButton type="button" disabled={isBusy} onClick={() => focusSection("diagnostics", "auth")}>
+                    <span>인증 보안 기록으로 이동</span>
+                  </ActionRowButton>
+                </ActionList>
               </ActionGroupCard>
             </ExecutionGrid>
 
@@ -2693,7 +2718,9 @@ const CardSectionHeading = styled.div`
   align-items: flex-start;
   gap: 0.8rem;
 
-  h3 {
+  h3,
+  strong {
+    display: block;
     margin: 0;
     font-size: 0.98rem;
     letter-spacing: -0.02em;
@@ -2734,6 +2761,30 @@ const ActionList = styled.div`
 `
 
 const ActionRowButton = styled(AdminActionCardButton)``
+
+const ActionRowLink = styled.a`
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.78rem 0.9rem;
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray12};
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-decoration: none;
+
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.gray7};
+  }
+
+  &:focus-visible {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.accentBorder};
+    box-shadow: ${({ theme }) => adminInteractiveFocusRing(theme)};
+  }
+`
 
 const FieldStack = styled.div`
   display: grid;

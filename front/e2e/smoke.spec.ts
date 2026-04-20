@@ -14,6 +14,46 @@ const mockAvatarAsset = async (page: Page) => {
   })
 }
 
+const addPublicAboutSnapshotCookie = async (page: Page) => {
+  await page.context().addCookies([
+    {
+      name: "admin_profile_snapshot_v1",
+      value: encodeURIComponent(
+        JSON.stringify({
+          username: "aquila",
+          name: "aquila",
+          nickname: "aquila",
+          modifiedAt: new Date().toISOString(),
+          profileImageUrl: "/avatar.png",
+          profileImageDirectUrl: "/avatar.png",
+          profileRole: "Backend Developer",
+          profileBio: "서버 안정성과 운영 복구를 함께 고민합니다.",
+          aboutRole: "Backend Developer",
+          aboutBio:
+            "안녕하세요, 백엔드 개발자 아퀼라입니다.\nJava, Kotlin, Spring Boot를 기반으로 견고한 시스템을 설계합니다.\n블로그에는 기술의 본질을 파고드는 과정을 기록하고 있습니다.",
+          aboutSections: [
+            {
+              id: "journey",
+              title: "이력",
+              items: ["ADsP [2025.09.05]", "정보처리기사 [2025.09.12]", "독학사 컴퓨터공학 [2026.02.25]", "SQLD [2026.03.27]"],
+              dividerBefore: false,
+            },
+            {
+              id: "projects",
+              title: "프로젝트",
+              items: ["고구마마켓", "마음-온", "aquila-blog", "aquila-bank"],
+              dividerBefore: false,
+            },
+          ],
+          serviceLinks: [{ icon: "service", label: "aquila-blog", href: "https://github.com/AquilaXk/aquila-blog" }],
+          contactLinks: [{ icon: "github", label: "GitHub", href: "https://github.com/AquilaXk" }],
+        })
+      ),
+      url: "http://127.0.0.1:3000",
+    },
+  ])
+}
+
 const createExplorePost = (overrides: Partial<Record<string, unknown>> & { title: string }) => ({
   id: 101,
   createdAt: "2026-03-16T00:00:00Z",
@@ -153,8 +193,9 @@ test("about 자기소개 문구는 작성 개행을 유지하는 white-space 계
     })
   })
 
+  await addPublicAboutSnapshotCookie(page)
   await page.goto("/about")
-  await expect(page.getByRole("heading", { level: 1, name: "About Me" })).toBeVisible()
+  await expect(page.locator('[data-ui="about-eyebrow"]')).toHaveText("Profile")
 
   const profileBioStyle = await page.locator(".profile-bio").evaluate((element) => {
     const styles = window.getComputedStyle(element as HTMLElement)
@@ -168,6 +209,54 @@ test("about 자기소개 문구는 작성 개행을 유지하는 white-space 계
   expect(profileBioStyle.whiteSpace).toBe("pre-line")
   expect(profileBioStyle.lineHeight).not.toBe("normal")
   expect(profileBioStyle.text.length).toBeGreaterThan(0)
+})
+
+test("about 공개 프로필은 intro/cta/project/timeline 구조로 재구성된다", async ({ page }) => {
+  await page.route("**/member/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ resultCode: "401-1", msg: "unauthorized" }),
+    })
+  })
+
+  await addPublicAboutSnapshotCookie(page)
+  await page.goto("/about")
+
+  await expect(page.getByRole("heading", { level: 1, name: "About Me" })).toHaveCount(0)
+  await expect(page.locator('[data-ui="about-eyebrow"]')).toHaveText("Profile")
+  await expect(page.locator('[data-ui="about-hero"]')).toBeVisible()
+  await expect(page.locator('[data-ui="about-cta-group"]').getByRole("link")).toHaveCount(3)
+  await expect(page.locator('[data-ui="about-projects"]')).toBeVisible()
+  await expect(page.locator('[data-ui="about-project-list"] li').first()).toBeVisible()
+  await expect(page.locator('[data-ui="about-project-list"] li').first().locator('[data-ui="about-project-summary"]')).toBeVisible()
+  await expect(page.locator('[data-ui="about-project-list"] li').first().locator('[data-ui="about-project-role"]')).toBeVisible()
+  await expect(page.locator('[data-ui="about-timeline"] li').first()).toBeVisible()
+
+  const linkStyles = await page.evaluate(() => {
+    const read = (selector: string) => {
+      const element = document.querySelector(selector) as HTMLElement | null
+      if (!element) return null
+      const styles = window.getComputedStyle(element)
+      return {
+        backgroundColor: styles.backgroundColor,
+        borderTopWidth: styles.borderTopWidth,
+        borderBottomWidth: styles.borderBottomWidth,
+      }
+    }
+
+    return {
+      contact: read('[data-ui="about-contact-links"]'),
+      service: read('[data-ui="about-service-links"]'),
+    }
+  })
+
+  expect(linkStyles.contact?.backgroundColor).toBe("rgba(0, 0, 0, 0)")
+  expect(linkStyles.contact?.borderTopWidth).toBe("0px")
+  expect(linkStyles.contact?.borderBottomWidth).toBe("1px")
+  expect(linkStyles.service?.backgroundColor).toBe("rgba(0, 0, 0, 0)")
+  expect(linkStyles.service?.borderTopWidth).toBe("0px")
+  expect(linkStyles.service?.borderBottomWidth).toBe("1px")
 })
 
 test("홈 새로고침 이후에도 레거시 기본 문구로 되돌아가지 않는다", async ({ page }) => {

@@ -31,6 +31,45 @@ const mockAnonymousSession = async (page: Page) => {
   })
 }
 
+const addPublicAboutSnapshotCookie = async (page: Page) => {
+  await page.context().addCookies([
+    {
+      name: "admin_profile_snapshot_v1",
+      value: encodeURIComponent(
+        JSON.stringify({
+          username: "aquila",
+          name: "aquila",
+          nickname: "aquila",
+          modifiedAt: new Date().toISOString(),
+          profileImageUrl: "/avatar.png",
+          profileImageDirectUrl: "/avatar.png",
+          profileRole: "Backend Developer",
+          aboutRole: "Backend Developer",
+          aboutBio:
+            "안녕하세요, 백엔드 개발자 아퀼라입니다.\nJava, Kotlin, Spring Boot를 기반으로 견고한 시스템을 설계합니다.\n블로그에는 기술의 본질을 파고드는 과정을 기록하고 있습니다.",
+          aboutSections: [
+            {
+              id: "journey",
+              title: "이력",
+              items: ["ADsP [2025.09.05]", "정보처리기사 [2025.09.12]", "독학사 컴퓨터공학 [2026.02.25]", "SQLD [2026.03.27]"],
+              dividerBefore: false,
+            },
+            {
+              id: "projects",
+              title: "프로젝트",
+              items: ["고구마마켓", "마음-온", "aquila-blog", "aquila-bank"],
+              dividerBefore: false,
+            },
+          ],
+          serviceLinks: [{ icon: "service", label: "aquila-blog", href: "https://github.com/AquilaXk/aquila-blog" }],
+          contactLinks: [{ icon: "github", label: "GitHub", href: "https://github.com/AquilaXk" }],
+        })
+      ),
+      url: "http://127.0.0.1:3000",
+    },
+  ])
+}
+
 const createExplorePage = (title: string, tag = "모바일테스트") => ({
   content: [
     {
@@ -285,6 +324,54 @@ test("iPhone 15 Pro 메인 피드는 카드 overflow 없이 viewport 내부에 �
   expect(secondSnapshot.htmlScrollWidth).toBeLessThanOrEqual(secondSnapshot.viewportWidth)
   expect(secondSnapshot.bodyScrollWidth).toBeLessThanOrEqual(secondSnapshot.viewportWidth)
   expect(Math.abs(firstSnapshot.firstCardWidth - secondSnapshot.firstCardWidth)).toBeLessThanOrEqual(1.5)
+})
+
+test("iPhone 15 Pro about 페이지는 소개/cta/프로젝트/이력/링크 순서와 compact avatar 계약을 유지한다", async ({ page }) => {
+  await addPublicAboutSnapshotCookie(page)
+  await page.goto("/about")
+  await expect(page.locator('[data-ui="about-eyebrow"]')).toHaveText("Profile")
+
+  const snapshot = await page.evaluate(() => {
+    const readRect = (selector: string) => {
+      const element = document.querySelector(selector) as HTMLElement | null
+      if (!element) return null
+      const rect = element.getBoundingClientRect()
+      return {
+        top: rect.top,
+        width: rect.width,
+        right: rect.right,
+      }
+    }
+
+    return {
+      viewportWidth: window.innerWidth,
+      htmlScrollWidth: document.documentElement.scrollWidth,
+      bodyScrollWidth: document.body.scrollWidth,
+      hero: readRect('[data-ui="about-hero"]'),
+      cta: readRect('[data-ui="about-cta-group"]'),
+      projects: readRect('[data-ui="about-projects"]'),
+      timeline: readRect('[data-ui="about-timeline-section"]'),
+      contact: readRect('[data-ui="about-contact-section"]'),
+      service: readRect('[data-ui="about-service-section"]'),
+      avatar: readRect('[data-ui="about-avatar"]'),
+    }
+  })
+
+  expect(snapshot.htmlScrollWidth).toBeLessThanOrEqual(snapshot.viewportWidth)
+  expect(snapshot.bodyScrollWidth).toBeLessThanOrEqual(snapshot.viewportWidth)
+  expect(snapshot.hero).not.toBeNull()
+  expect(snapshot.cta).not.toBeNull()
+  expect(snapshot.projects).not.toBeNull()
+  expect(snapshot.timeline).not.toBeNull()
+  expect(snapshot.contact).not.toBeNull()
+  expect(snapshot.service).not.toBeNull()
+  expect((snapshot.cta?.top ?? 0)).toBeGreaterThan(snapshot.hero?.top ?? 0)
+  expect((snapshot.projects?.top ?? 0)).toBeGreaterThan(snapshot.cta?.top ?? 0)
+  expect((snapshot.timeline?.top ?? 0)).toBeGreaterThan(snapshot.projects?.top ?? 0)
+  expect((snapshot.contact?.top ?? 0)).toBeGreaterThan(snapshot.timeline?.top ?? 0)
+  expect((snapshot.service?.top ?? 0)).toBeGreaterThan(snapshot.contact?.top ?? 0)
+  expect(snapshot.avatar?.width ?? 0).toBeLessThanOrEqual(96)
+  expect(snapshot.avatar?.right ?? 0).toBeLessThanOrEqual(snapshot.viewportWidth + 0.5)
 })
 
 test("iPhone 15 Pro 상세 본문(table/code block)은 가로 클리핑 없이 유지된다", async ({ page }) => {

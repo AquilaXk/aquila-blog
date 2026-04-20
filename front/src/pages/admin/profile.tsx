@@ -1194,7 +1194,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
   const displayName = displayNameInput.trim() || sessionMember.nickname || sessionMember.username || "관리자"
   const displayNameInitial = displayName.slice(0, 2).toUpperCase()
   const previewContent = previewMode === "published" ? publishedSnapshot : draft
-  const isHomeSection = activeSection === "home"
   const activeSectionMeta = WORKSPACE_SECTIONS.find((section) => section.id === activeSection) || WORKSPACE_SECTIONS[0]
   const visibleLinks = linkTab === "service" ? draft.serviceLinks : draft.contactLinks
   const pageToasts = [workspaceNotice, imageNotice].filter(
@@ -1715,7 +1714,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
         </AdminWorkspaceHeroLayout>
       </WorkspaceHero>
 
-      <WorkspaceShell $isHomeSection={isHomeSection}>
+      <WorkspaceShell>
         <SectionRail role="tablist" aria-label="프로필 섹션">
           {WORKSPACE_SECTIONS.map((section) => (
             <SectionRailButton
@@ -1759,138 +1758,145 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
           </EditorActionDock>
         </EditorColumn>
 
-        {!isHomeSection ? (
-          <PreviewRail>
-            <PreviewCardShell>
-              <PreviewHeader>
-                <div>
-                  <span>공개 노출 미리보기</span>
-                  <strong>{activeSectionMeta.label}</strong>
-                  <PreviewMeta>{previewMetaLabel}</PreviewMeta>
-                </div>
-                <PreviewHeaderActions>
-                  <SegmentedControl>
-                    <SegmentButton
-                      type="button"
-                      data-active={previewMode === "draft"}
-                      onClick={() => setPreviewMode("draft")}
-                    >
-                      초안
-                    </SegmentButton>
-                    <SegmentButton
-                      type="button"
-                      data-active={previewMode === "published"}
-                      onClick={() => setPreviewMode("published")}
-                    >
-                      공개본
-                    </SegmentButton>
-                  </SegmentedControl>
-                  <PreviewToggleButton
+        <PreviewRail>
+          <PreviewCardShell>
+            <PreviewHeader>
+              <div>
+                <span>공개 노출 미리보기</span>
+                <strong>{activeSectionMeta.label}</strong>
+                <PreviewMeta>{previewMetaLabel}</PreviewMeta>
+              </div>
+              <PreviewHeaderActions>
+                <SegmentedControl>
+                  <SegmentButton
                     type="button"
-                    aria-expanded={isPreviewExpanded}
-                    onClick={() => setIsPreviewExpanded((current) => !current)}
+                    data-active={previewMode === "draft"}
+                    onClick={() => setPreviewMode("draft")}
                   >
-                    {isPreviewExpanded ? "닫기" : "열기"}
-                  </PreviewToggleButton>
-                </PreviewHeaderActions>
-              </PreviewHeader>
+                    초안
+                  </SegmentButton>
+                  <SegmentButton
+                    type="button"
+                    data-active={previewMode === "published"}
+                    onClick={() => setPreviewMode("published")}
+                  >
+                    공개본
+                  </SegmentButton>
+                </SegmentedControl>
+                <PreviewToggleButton
+                  type="button"
+                  aria-expanded={isPreviewExpanded}
+                  onClick={() => setIsPreviewExpanded((current) => !current)}
+                >
+                  {isPreviewExpanded ? "닫기" : "열기"}
+                </PreviewToggleButton>
+              </PreviewHeaderActions>
+            </PreviewHeader>
 
-              <PreviewBody data-expanded={isPreviewExpanded}>
-                <PreviewViewport>
-                  {activeSection === "identity" ? (
-                    <PreviewProfileCard>
-                      <div className="identityRow">
-                        <div className="avatar">
-                          {previewContent.profileImageUrl ? (
-                            <ProfileImage
-                              src={previewContent.profileImageUrl}
-                              alt={displayName}
-                              width={72}
-                              height={72}
-                              priority
-                            />
-                          ) : (
-                            <AvatarFallback>{displayNameInitial}</AvatarFallback>
-                          )}
-                        </div>
-                        <div className="identityCopy">
-                          <strong>{displayName}</strong>
-                          {previewContent.profileRole ? <span>{previewContent.profileRole}</span> : null}
-                        </div>
+            <PreviewBody data-expanded={isPreviewExpanded}>
+              <PreviewViewport>
+                {activeSection === "identity" ? (
+                  <PreviewProfileCard>
+                    <div className="identityRow">
+                      <div className="avatar">
+                        {previewContent.profileImageUrl ? (
+                          <ProfileImage
+                            src={previewContent.profileImageUrl}
+                            alt={displayName}
+                            width={72}
+                            height={72}
+                            priority
+                          />
+                        ) : (
+                          <AvatarFallback>{displayNameInitial}</AvatarFallback>
+                        )}
                       </div>
-                      {previewContent.profileBio ? <p>{previewContent.profileBio}</p> : null}
-                    </PreviewProfileCard>
-                  ) : null}
-
-                  {activeSection === "about" ? (
-                    <PreviewAboutCard>
-                      <header>
-                        <span>About</span>
+                      <div className="identityCopy">
                         <strong>{displayName}</strong>
-                      </header>
-                      {previewContent.aboutRole ? <h4>{previewContent.aboutRole}</h4> : null}
-                      {previewContent.aboutBio ? <p>{previewContent.aboutBio}</p> : null}
-                      {previewContent.aboutSections.length > 0 ? (
-                        <div className="sections">
-                          {previewContent.aboutSections.map((section) => (
-                            <section key={section.id}>
-                              <strong>{section.title || "블록 제목"}</strong>
-                              <ul>
-                                {section.items.slice(0, 3).map((item, index) => (
-                                  <li key={`${section.id}-${index}`}>{item}</li>
-                                ))}
-                              </ul>
-                            </section>
-                          ))}
-                        </div>
-                      ) : null}
-                    </PreviewAboutCard>
-                  ) : null}
+                        {previewContent.profileRole ? <span>{previewContent.profileRole}</span> : null}
+                      </div>
+                    </div>
+                    {previewContent.profileBio ? <p>{previewContent.profileBio}</p> : null}
+                  </PreviewProfileCard>
+                ) : null}
 
-                  {activeSection === "links" ? (
-                    <PreviewLinksCard>
-                      {([
-                        ["Service", previewContent.serviceLinks],
-                        ["Contact", previewContent.contactLinks],
-                      ] as const).map(([title, items]) => (
-                        <section key={title}>
-                          <strong>{title}</strong>
-                          {items.length > 0 ? (
+                {activeSection === "about" ? (
+                  <PreviewAboutCard>
+                    <header>
+                      <span>About</span>
+                      <strong>{displayName}</strong>
+                    </header>
+                    {previewContent.aboutRole ? <h4>{previewContent.aboutRole}</h4> : null}
+                    {previewContent.aboutBio ? <p>{previewContent.aboutBio}</p> : null}
+                    {previewContent.aboutSections.length > 0 ? (
+                      <div className="sections">
+                        {previewContent.aboutSections.map((section) => (
+                          <section key={section.id}>
+                            <strong>{section.title || "블록 제목"}</strong>
                             <ul>
-                              {items.map((item) => (
-                                <li key={`${title}-${item.icon}-${item.label}-${item.href}`}>
-                                  <AppIcon name={item.icon} />
-                                  <span>{item.label}</span>
-                                </li>
+                              {section.items.slice(0, 3).map((item, index) => (
+                                <li key={`${section.id}-${index}`}>{item}</li>
                               ))}
                             </ul>
-                          ) : null}
-                        </section>
-                      ))}
-                    </PreviewLinksCard>
-                  ) : null}
-                </PreviewViewport>
-              </PreviewBody>
-            </PreviewCardShell>
-            <PreviewStatusCard>
-              <strong>빠진 항목</strong>
-              {missingExposureItems.length > 0 ? (
-                <PreviewStatusList>
-                  {missingExposureItems.slice(0, 4).map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </PreviewStatusList>
-              ) : (
-                <PreviewStatusText>공개 노출에 필요한 기본 항목이 모두 채워졌습니다.</PreviewStatusText>
-              )}
-            </PreviewStatusCard>
-            <PreviewStatusCard>
-              <strong>최근 저장</strong>
-              <PreviewStatusText>{recentSaveLabel}</PreviewStatusText>
-              <PreviewStatusMeta>{previewMetaLabel}</PreviewStatusMeta>
-            </PreviewStatusCard>
-          </PreviewRail>
-        ) : null}
+                          </section>
+                        ))}
+                      </div>
+                    ) : null}
+                  </PreviewAboutCard>
+                ) : null}
+
+                {activeSection === "home" ? (
+                  <PreviewHomeCard>
+                    <span>Home</span>
+                    <strong>{previewContent.blogTitle || displayName}</strong>
+                    <h4>{previewContent.homeIntroTitle || "메인 헤더 제목을 입력하면 여기서 바로 확인됩니다."}</h4>
+                    <p>{previewContent.homeIntroDescription || "메인 첫 화면 소개 문구를 입력해 공개 노출 톤을 맞춥니다."}</p>
+                  </PreviewHomeCard>
+                ) : null}
+
+                {activeSection === "links" ? (
+                  <PreviewLinksCard>
+                    {([
+                      ["Service", previewContent.serviceLinks],
+                      ["Contact", previewContent.contactLinks],
+                    ] as const).map(([title, items]) => (
+                      <section key={title}>
+                        <strong>{title}</strong>
+                        {items.length > 0 ? (
+                          <ul>
+                            {items.map((item) => (
+                              <li key={`${title}-${item.icon}-${item.label}-${item.href}`}>
+                                <AppIcon name={item.icon} />
+                                <span>{item.label}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </section>
+                    ))}
+                  </PreviewLinksCard>
+                ) : null}
+              </PreviewViewport>
+            </PreviewBody>
+          </PreviewCardShell>
+          <PreviewStatusCard>
+            <strong>빠진 항목</strong>
+            {missingExposureItems.length > 0 ? (
+              <PreviewStatusList>
+                {missingExposureItems.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </PreviewStatusList>
+            ) : (
+              <PreviewStatusText>공개 노출에 필요한 기본 항목이 모두 채워졌습니다.</PreviewStatusText>
+            )}
+          </PreviewStatusCard>
+          <PreviewStatusCard>
+            <strong>최근 저장</strong>
+            <PreviewStatusText>{recentSaveLabel}</PreviewStatusText>
+            <PreviewStatusMeta>{previewMetaLabel}</PreviewStatusMeta>
+          </PreviewStatusCard>
+        </PreviewRail>
       </WorkspaceShell>
 
       {pageToasts.length > 0 ? (
@@ -2154,16 +2160,14 @@ const PreviewAnchor = styled.a`
 
 const WorkspaceHero = styled(AdminWorkspaceHero)``
 
-const WorkspaceShell = styled.section<{ $isHomeSection: boolean }>`
+const WorkspaceShell = styled.section`
   display: grid;
-  grid-template-columns: ${({ $isHomeSection }) =>
-    $isHomeSection ? "184px minmax(0, 1fr)" : "184px minmax(0, 1fr) 288px"};
+  grid-template-columns: 184px minmax(0, 1fr) 288px;
   gap: 0.85rem;
   align-items: start;
 
   @media (max-width: 1480px) {
-    grid-template-columns: ${({ $isHomeSection }) =>
-      $isHomeSection ? "176px minmax(0, 1fr)" : "176px minmax(0, 1fr)"};
+    grid-template-columns: 176px minmax(0, 1fr) 288px;
   }
 
   @media (max-width: 1180px) {
@@ -2988,6 +2992,31 @@ const PreviewAboutCard = styled.div`
     color: ${({ theme }) => theme.colors.gray11};
     display: grid;
     gap: 0.18rem;
+  }
+`
+
+const PreviewHomeCard = styled.div`
+  display: grid;
+  gap: 0.48rem;
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.76rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  strong,
+  h4 {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray11};
+    line-height: 1.58;
   }
 `
 

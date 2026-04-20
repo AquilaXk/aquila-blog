@@ -39,6 +39,7 @@ test.describe("admin profile state contract", () => {
     expect(source).toContain("<span>공개 노출 미리보기</span>")
     expect(source).toContain("<strong>빠진 항목</strong>")
     expect(source).toContain("<strong>최근 저장</strong>")
+    expect(source).not.toContain("!isHomeSection ? (")
   })
 
   test("profile 빠진 항목은 메인 헤더 제목 또는 설명 한쪽만 비어도 incomplete로 판정한다", () => {
@@ -47,5 +48,6 @@ test.describe("admin profile state contract", () => {
     expect(source).toContain(
       'if (!draft.homeIntroTitle.trim() || !draft.homeIntroDescription.trim()) missingExposureItems.push("메인 헤더 카피")'
     )
+    expect(source).not.toContain("missingExposureItems.slice(0, 4)")
   })
 })

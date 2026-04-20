@@ -21,6 +21,7 @@ import {
   AdminRailCard,
   AdminSectionHeading,
   AdminSectionTitleStack,
+  AdminStickyRail,
   AdminStatusPill,
   AdminTextActionButton,
   AdminWorkspaceHero,
@@ -194,10 +195,6 @@ const ADMIN_TOOLS_MAIL_SNAPSHOT_MAX_STALE_MS = 1000 * 60 * 60 * 6
 const ADMIN_TOOLS_HEALTH_SSR_CACHE_KEY = "admin-tools:system-health"
 const ADMIN_TOOLS_HEALTH_SSR_CACHE_TTL_MS = 10_000
 const ADMIN_TOOLS_DISPLAY_TIME_ZONE = "Asia/Seoul"
-type IdleWindow = Window & {
-  requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number
-  cancelIdleCallback?: (handle: number) => void
-}
 
 const readCookieValue = (req: IncomingMessage, key: string) => {
   const rawCookie = req.headers.cookie || ""
@@ -710,7 +707,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   const [systemHealthCheckedAt, setSystemHealthCheckedAt] = useState<string | null>(initialSnapshot.systemHealthFetchedAt)
   const [activeSection, setActiveSection] = useState<SectionKey>("diagnostics")
   const [sectionJumpTarget, setSectionJumpTarget] = useState<SectionKey | null>(null)
-  const [isWorkspaceReady, setIsWorkspaceReady] = useState(false)
   const [activeDiagnosticTab, setActiveDiagnosticTab] = useState<DiagnosticTab | null>(null)
   const [testEmail, setTestEmail] = useState("")
   const [mailTestNotice, setMailTestNotice] = useState<{ tone: InlineNoticeTone; text: string }>({
@@ -920,7 +916,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   ])
 
   useEffect(() => {
-    if (!sessionMember?.isAdmin || postId.trim() || activeSection !== "mutation" || loadingKey === "seedPostId") return
+    if (!sessionMember?.isAdmin || postId.trim() || activeSection !== "execution" || !isMutationExpanded || loadingKey === "seedPostId") return
 
     void executeAction(
       "seedPostId",
@@ -942,26 +938,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
         },
       }
     )
-  }, [activeSection, executeAction, loadingKey, postId, sessionMember?.isAdmin])
-
-  useEffect(() => {
-    if (isWorkspaceReady || typeof window === "undefined") return
-
-    const idleWindow = window as IdleWindow
-    const activate = () => setIsWorkspaceReady(true)
-
-    if (typeof idleWindow.requestIdleCallback === "function") {
-      const handle = idleWindow.requestIdleCallback(() => activate(), { timeout: 1_600 })
-      return () => {
-        if (typeof idleWindow.cancelIdleCallback === "function") {
-          idleWindow.cancelIdleCallback(handle)
-        }
-      }
-    }
-
-    const handle = window.setTimeout(activate, 1_100)
-    return () => window.clearTimeout(handle)
-  }, [isWorkspaceReady])
+  }, [activeSection, executeAction, isMutationExpanded, loadingKey, postId, sessionMember?.isAdmin])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -978,7 +955,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   }, [systemHealthCheckedAt, systemHealthQuery.data])
 
   useEffect(() => {
-    if (!isWorkspaceReady || !sectionJumpTarget || typeof window === "undefined") return
+    if (!sectionJumpTarget || typeof window === "undefined") return
 
     const target = document.getElementById(SECTION_IDS[sectionJumpTarget])
     if (!target) return
@@ -988,7 +965,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
     })
 
     return () => window.cancelAnimationFrame(frame)
-  }, [isWorkspaceReady, sectionJumpTarget])
+  }, [sectionJumpTarget])
 
   useEffect(() => {
     if (!sectionJumpTarget || typeof window === "undefined") return
@@ -1039,7 +1016,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
 
     nodes.forEach((node) => observer.observe(node))
     return () => observer.disconnect()
-  }, [isWorkspaceReady])
+  }, [])
 
   const filteredExecutions = useMemo(() => {
     return executions.filter((entry) => {
@@ -1222,14 +1199,14 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
       label: "파일 정리",
       status: cleanupStatusLabel,
       detail: cleanupHealthMessage,
-      section: "diagnostics" as SectionKey,
+      section: "execution" as SectionKey,
       tab: "cleanup" as DiagnosticTab,
     },
     {
       label: "인증 보안",
       status: authSecurityStatusLabel,
       detail: authSecurityHealthMessage,
-      section: "diagnostics" as SectionKey,
+      section: "execution" as SectionKey,
       tab: "auth" as DiagnosticTab,
     },
   ]
@@ -1237,7 +1214,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   const focusSection = (section: SectionKey, tab?: DiagnosticTab) => {
     if (tab) setActiveDiagnosticTab(tab)
     if (section === "mutation") setIsMutationExpanded(true)
-    setIsWorkspaceReady(true)
     setActiveSection(section)
     setSectionJumpTarget(section)
   }
@@ -1293,22 +1269,20 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
       </OpsOverview>
 
       <WorkspaceShell>
-        {isWorkspaceReady ? (
         <WorkspaceColumn>
           <WorkspaceSection id={SECTION_IDS.diagnostics} data-ops-section="diagnostics" data-emphasis="primary">
             <SectionHeading>
               <SectionTitleBlock>
-                <h2>진단</h2>
+                <h2>메일과 큐</h2>
+                <p>발송 경로와 대기열에서 바로 장애로 이어질 신호를 먼저 모아 봅니다.</p>
               </SectionTitleBlock>
               <ReadonlyPill>읽기 전용</ReadonlyPill>
             </SectionHeading>
 
-            <DiagnosticsTabs role="tablist" aria-label="진단 도메인">
+            <DiagnosticsTabs role="tablist" aria-label="메일과 큐 도메인">
               {([
                 { key: "mail", label: "메일 진단" },
                 { key: "queue", label: "작업 큐 진단" },
-                { key: "cleanup", label: "파일 정리 진단" },
-                { key: "auth", label: "인증 보안 기록" },
               ] as const).map((tab) => (
                 <DiagnosticsTabButton
                   key={tab.key}
@@ -1562,219 +1536,399 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                 )}
               </DiagnosticPanel>
             ) : null}
-
-            {activeDiagnosticTab === "cleanup" ? (
-              <DiagnosticPanel>
-                <DiagnosticHeader>
-                  <div>
-                    <strong>파일 정리 진단</strong>
-                    <HeaderSubline>
-                      <span>{cleanupHealthMessage}</span>
-                      {hasCleanupDiagnostics ? <FreshnessBadge data-tone={cleanupFreshness.tone}>{cleanupFreshness.label}</FreshnessBadge> : null}
-                    </HeaderSubline>
-                  </div>
-                  <ActionRow>
-                    <QuietButton type="button" disabled={isBusy} onClick={() => void fetchCleanupDiagnostics()}>
-                      다시 확인
-                    </QuietButton>
-                  </ActionRow>
-                </DiagnosticHeader>
-
-                {!!cleanupDiagnosticsError && <InlineNotice data-tone="danger">{cleanupDiagnosticsError}</InlineNotice>}
-                {cleanupDiagnostics ? (
-                  <>
-                    <MetricGrid>
-                      <MetricCard>
-                        <small>TEMP</small>
-                        <strong>{cleanupDiagnostics.tempCount}</strong>
-                      </MetricCard>
-                      <MetricCard>
-                        <small>PENDING_DELETE</small>
-                        <strong>{cleanupDiagnostics.pendingDeleteCount}</strong>
-                      </MetricCard>
-                      <MetricCard>
-                        <small>purge 후보</small>
-                        <strong>{cleanupDiagnostics.eligibleForPurgeCount}</strong>
-                      </MetricCard>
-                      <MetricCard>
-                        <small>threshold</small>
-                        <strong>{cleanupDiagnostics.cleanupSafetyThreshold}</strong>
-                      </MetricCard>
-                    </MetricGrid>
-
-                    {!!cleanupDiagnostics.sampleEligibleObjectKeys.length && (
-                      <DetailsPanel>
-                        <DetailsSummary>
-                          <span>샘플 object key</span>
-                          <small>{cleanupDiagnostics.sampleEligibleObjectKeys.length}개</small>
-                        </DetailsSummary>
-                        <CompactCodeList>
-                          {cleanupDiagnostics.sampleEligibleObjectKeys.map((key) => (
-                            <code key={key}>{key}</code>
-                          ))}
-                        </CompactCodeList>
-                      </DetailsPanel>
-                    )}
-                  </>
-                ) : (
-                  <CalmMessage>{isCleanupLoading ? "파일 정리 진단을 불러오는 중입니다." : "파일 정리 진단을 열면 최신 상태를 가져옵니다."}</CalmMessage>
-                )}
-              </DiagnosticPanel>
-            ) : null}
-
-            {activeDiagnosticTab === "auth" ? (
-              <DiagnosticPanel>
-                <DiagnosticHeader>
-                  <div>
-                    <strong>인증 보안 기록</strong>
-                    <HeaderSubline>
-                      <span>{authSecurityHealthMessage}</span>
-                      {hasAuthDiagnostics ? <FreshnessBadge data-tone={authFreshness.tone}>{authFreshness.label}</FreshnessBadge> : null}
-                    </HeaderSubline>
-                  </div>
-                  <ActionRow>
-                    <QuietButton type="button" disabled={isBusy} onClick={() => void fetchAuthSecurityEvents()}>
-                      다시 확인
-                    </QuietButton>
-                  </ActionRow>
-                </DiagnosticHeader>
-
-                {!!authSecurityEventsError && <InlineNotice data-tone="danger">{authSecurityEventsError}</InlineNotice>}
-
-                {!hasAuthDiagnostics ? (
-                  <CalmMessage>{isAuthLoading ? "인증 보안 기록을 불러오는 중입니다." : "인증 보안 기록을 열면 최근 이벤트를 확인합니다."}</CalmMessage>
-                ) : authSecurityEvents.length > 0 ? (
-                  <CompactList>
-                    {authSecurityEvents.map((event) => (
-                      <CompactListItem key={event.id}>
-                        <div>
-                          <strong>{event.eventType}</strong>
-                          <span>
-                            memberId {event.memberId ?? "-"} · {event.loginIdentifier || "식별자 없음"}
-                          </span>
-                        </div>
-                        <div>
-                          <small>{formatInstant(event.createdAt)}</small>
-                          <small>{event.reason || event.requestPath || "사유 없음"}</small>
-                        </div>
-                      </CompactListItem>
-                    ))}
-                  </CompactList>
-                ) : authSecurityEventsError ? null : (
-                  <CalmMessage>최근 인증 보안 기록이 없습니다.</CalmMessage>
-                )}
-              </DiagnosticPanel>
-            ) : null}
           </WorkspaceSection>
 
           <WorkspaceSection id={SECTION_IDS.execution} data-ops-section="execution" data-emphasis="primary">
             <SectionHeading>
               <SectionTitleBlock>
-                <h2>실행</h2>
-                <p>읽기 전용 확인과 운영 실행을 같은 문맥에서 처리합니다.</p>
+                <h2>정리와 보안</h2>
+                <p>파일 정리, 인증 기록, 실데이터 테스트 전 점검을 한 문맥으로 묶습니다.</p>
               </SectionTitleBlock>
             </SectionHeading>
 
-            <ExecutionGrid>
-              <ActionGroupCard>
-                <CardSectionHeading>
-                  <div>
-                    <h3>실행 전 체크</h3>
-                    <p>운영 변경 없이 현재 상태와 영향 범위를 먼저 다시 확인합니다.</p>
-                  </div>
-                  <ReadonlyPill>읽기 전용</ReadonlyPill>
-                </CardSectionHeading>
-                <ActionList>
-                  <ActionRowButton
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() =>
-                      void executeAction("systemHealth", () => fetchSystemHealthCached(), {
-                        onSuccess: () => {
-                          setSystemHealthCheckedAt(new Date().toISOString())
-                        },
-                      })
-                    }
+            <ExecutionLayout>
+              <ExecutionMain>
+                <DiagnosticsTabs role="tablist" aria-label="정리와 보안 도메인">
+                  {([
+                    { key: "cleanup", label: "파일 정리 진단" },
+                    { key: "auth", label: "인증 보안 기록" },
+                  ] as const).map((tab) => (
+                    <DiagnosticsTabButton
+                      key={tab.key}
+                      type="button"
+                      role="tab"
+                      aria-selected={activeDiagnosticTab === tab.key}
+                      data-active={activeDiagnosticTab === tab.key}
+                      onClick={() => setActiveDiagnosticTab(tab.key)}
+                    >
+                      {tab.label}
+                    </DiagnosticsTabButton>
+                  ))}
+                </DiagnosticsTabs>
+
+                {(activeDiagnosticTab === null || activeDiagnosticTab === "mail" || activeDiagnosticTab === "queue") ? (
+                  <CalmMessage>정리와 보안 탭을 선택하면 해당 패널을 불러옵니다.</CalmMessage>
+                ) : null}
+
+                {activeDiagnosticTab === "cleanup" ? (
+                  <DiagnosticPanel>
+                    <DiagnosticHeader>
+                      <div>
+                        <strong>파일 정리 진단</strong>
+                        <HeaderSubline>
+                          <span>{cleanupHealthMessage}</span>
+                          {hasCleanupDiagnostics ? <FreshnessBadge data-tone={cleanupFreshness.tone}>{cleanupFreshness.label}</FreshnessBadge> : null}
+                        </HeaderSubline>
+                      </div>
+                      <ActionRow>
+                        <QuietButton type="button" disabled={isBusy} onClick={() => void fetchCleanupDiagnostics()}>
+                          다시 확인
+                        </QuietButton>
+                      </ActionRow>
+                    </DiagnosticHeader>
+
+                    {!!cleanupDiagnosticsError && <InlineNotice data-tone="danger">{cleanupDiagnosticsError}</InlineNotice>}
+                    {cleanupDiagnostics ? (
+                      <>
+                        <MetricGrid>
+                          <MetricCard>
+                            <small>TEMP</small>
+                            <strong>{cleanupDiagnostics.tempCount}</strong>
+                          </MetricCard>
+                          <MetricCard>
+                            <small>PENDING_DELETE</small>
+                            <strong>{cleanupDiagnostics.pendingDeleteCount}</strong>
+                          </MetricCard>
+                          <MetricCard>
+                            <small>purge 후보</small>
+                            <strong>{cleanupDiagnostics.eligibleForPurgeCount}</strong>
+                          </MetricCard>
+                          <MetricCard>
+                            <small>threshold</small>
+                            <strong>{cleanupDiagnostics.cleanupSafetyThreshold}</strong>
+                          </MetricCard>
+                        </MetricGrid>
+
+                        {!!cleanupDiagnostics.sampleEligibleObjectKeys.length && (
+                          <DetailsPanel>
+                            <DetailsSummary>
+                              <span>샘플 object key</span>
+                              <small>{cleanupDiagnostics.sampleEligibleObjectKeys.length}개</small>
+                            </DetailsSummary>
+                            <CompactCodeList>
+                              {cleanupDiagnostics.sampleEligibleObjectKeys.map((key) => (
+                                <code key={key}>{key}</code>
+                              ))}
+                            </CompactCodeList>
+                          </DetailsPanel>
+                        )}
+                      </>
+                    ) : (
+                      <CalmMessage>{isCleanupLoading ? "파일 정리 진단을 불러오는 중입니다." : "파일 정리 진단을 열면 최신 상태를 가져옵니다."}</CalmMessage>
+                    )}
+                  </DiagnosticPanel>
+                ) : null}
+
+                {activeDiagnosticTab === "auth" ? (
+                  <DiagnosticPanel>
+                    <DiagnosticHeader>
+                      <div>
+                        <strong>인증 보안 기록</strong>
+                        <HeaderSubline>
+                          <span>{authSecurityHealthMessage}</span>
+                          {hasAuthDiagnostics ? <FreshnessBadge data-tone={authFreshness.tone}>{authFreshness.label}</FreshnessBadge> : null}
+                        </HeaderSubline>
+                      </div>
+                      <ActionRow>
+                        <QuietButton type="button" disabled={isBusy} onClick={() => void fetchAuthSecurityEvents()}>
+                          다시 확인
+                        </QuietButton>
+                      </ActionRow>
+                    </DiagnosticHeader>
+
+                    {!!authSecurityEventsError && <InlineNotice data-tone="danger">{authSecurityEventsError}</InlineNotice>}
+
+                    {!hasAuthDiagnostics ? (
+                      <CalmMessage>{isAuthLoading ? "인증 보안 기록을 불러오는 중입니다." : "인증 보안 기록을 열면 최근 이벤트를 확인합니다."}</CalmMessage>
+                    ) : authSecurityEvents.length > 0 ? (
+                      <CompactList>
+                        {authSecurityEvents.map((event) => (
+                          <CompactListItem key={event.id}>
+                            <div>
+                              <strong>{event.eventType}</strong>
+                              <span>
+                                memberId {event.memberId ?? "-"} · {event.loginIdentifier || "식별자 없음"}
+                              </span>
+                            </div>
+                            <div>
+                              <small>{formatInstant(event.createdAt)}</small>
+                              <small>{event.reason || event.requestPath || "사유 없음"}</small>
+                            </div>
+                          </CompactListItem>
+                        ))}
+                      </CompactList>
+                    ) : authSecurityEventsError ? null : (
+                      <CalmMessage>최근 인증 보안 기록이 없습니다.</CalmMessage>
+                    )}
+                  </DiagnosticPanel>
+                ) : null}
+
+                <DetailsPanel open={advancedToolsOpen}>
+                  <DetailsSummary onClick={(event) => {
+                    event.preventDefault()
+                    setAdvancedToolsOpen((prev) => !prev)
+                  }}>
+                    <span>고급 도구</span>
+                    <small>{advancedToolsOpen ? "접기" : "열기"}</small>
+                  </DetailsSummary>
+                  {advancedToolsOpen ? (
+                    <ActionList>
+                      <ActionRowButton type="button" disabled={isBusy} onClick={() => void fetchSignupMailDiagnostics(true)}>
+                        <span>SMTP 연결 확인</span>
+                        <small>메일 도메인 진단 없이 연결 단계만 다시 확인합니다</small>
+                      </ActionRowButton>
+                    </ActionList>
+                  ) : null}
+                </DetailsPanel>
+
+                <DetailsPanel open={isMutationExpanded}>
+                  <DetailsSummary
+                    onClick={(event) => {
+                      event.preventDefault()
+                      setIsMutationExpanded((prev) => !prev)
+                    }}
                   >
-                    <span>서비스 상태 조회</span>
-                  </ActionRowButton>
-                  <ActionRowButton type="button" disabled={isBusy} onClick={() => void executeAction("admPostCount", () => apiFetch("/post/api/v1/adm/posts/count"))}>
-                    <span>전체 글 수 확인</span>
-                  </ActionRowButton>
-                </ActionList>
-              </ActionGroupCard>
+                    <span>실데이터 테스트</span>
+                    <small>{isMutationExpanded ? "접기" : "열기"}</small>
+                  </DetailsSummary>
+                  {isMutationExpanded ? (
+                    <DangerPanel>
+                      <InlineNotice data-tone="danger">이 영역의 실행은 실제 데이터에 영향을 줍니다. 운영 데이터 확인 후 진행하세요.</InlineNotice>
 
-              <ActionGroupCard>
-                <CardSectionHeading>
-                  <div>
-                    <h3>위험 액션</h3>
-                    <p>외부 발송이나 실데이터 변경으로 이어지는 실행만 분리해 둡니다.</p>
-                  </div>
-                  <ActionToneBadge data-tone="write">실행 가능</ActionToneBadge>
-                </CardSectionHeading>
-                <FieldStack>
-                  <FieldBox>
-                    <FieldLabel htmlFor="signup-mail-test-email">테스트 메일 주소</FieldLabel>
-                    <Input
-                      id="signup-mail-test-email"
-                      type="email"
-                      value={testEmail}
-                      placeholder="메일 수신을 확인할 주소를 입력하세요"
-                      onChange={(event) => setTestEmail(event.target.value)}
-                    />
-                  </FieldBox>
-                  <PrimaryButton type="button" disabled={isBusy} onClick={() => void sendSignupTestMail()}>
-                    테스트 메일 발송
-                  </PrimaryButton>
-                  {!!mailTestNotice.text && <InlineNotice data-tone={mailTestNotice.tone}>{mailTestNotice.text}</InlineNotice>}
-                </FieldStack>
-              </ActionGroupCard>
+                      <SubtleMetaGrid>
+                        <SubtleMetaItem>
+                          <span>대상 글</span>
+                          <strong>#{postId || "-"}</strong>
+                        </SubtleMetaItem>
+                        <SubtleMetaItem>
+                          <span>대상 댓글</span>
+                          <strong>{commentId ? `#${commentId}` : "미지정"}</strong>
+                        </SubtleMetaItem>
+                      </SubtleMetaGrid>
 
-              <ActionGroupCard>
-                <CardSectionHeading>
-                  <div>
-                    <h3>런북/장애 문서</h3>
-                    <p>복구 전에 같이 읽어야 할 화면과 기록으로 바로 이동합니다.</p>
-                  </div>
-                </CardSectionHeading>
-                <ActionList>
-                  <Link href="/admin/dashboard" passHref legacyBehavior>
-                    <ActionRowLink>운영 대시보드 열기</ActionRowLink>
-                  </Link>
-                  <ActionRowButton type="button" disabled={isBusy} onClick={() => focusSection("diagnostics", "queue")}>
-                    <span>작업 큐 진단으로 이동</span>
-                  </ActionRowButton>
-                  <ActionRowButton type="button" disabled={isBusy} onClick={() => focusSection("diagnostics", "auth")}>
-                    <span>인증 보안 기록으로 이동</span>
-                  </ActionRowButton>
-                </ActionList>
-              </ActionGroupCard>
-            </ExecutionGrid>
+                      <FieldGrid>
+                        <FieldBox>
+                          <FieldLabel htmlFor="comment-post-id">대상 글</FieldLabel>
+                          <Input id="comment-post-id" value={postId} onChange={(event) => setPostId(event.target.value)} />
+                        </FieldBox>
+                        <FieldBox>
+                          <FieldLabel htmlFor="comment-id">대상 댓글</FieldLabel>
+                          <Input id="comment-id" value={commentId} onChange={(event) => setCommentId(event.target.value)} />
+                        </FieldBox>
+                        <FieldBox className="wide">
+                          <FieldLabel htmlFor="comment-content">내용</FieldLabel>
+                          <TextArea
+                            id="comment-content"
+                            value={commentContent}
+                            placeholder="테스트할 댓글 내용을 입력하세요"
+                            onChange={(event) => setCommentContent(event.target.value)}
+                          />
+                        </FieldBox>
+                      </FieldGrid>
 
-            <DetailsPanel open={advancedToolsOpen}>
-              <DetailsSummary onClick={(event) => {
-                event.preventDefault()
-                setAdvancedToolsOpen((prev) => !prev)
-              }}>
-                <span>고급 도구</span>
-                <small>{advancedToolsOpen ? "접기" : "열기"}</small>
-              </DetailsSummary>
-              {advancedToolsOpen ? (
-                <ActionList>
-                  <ActionRowButton type="button" disabled={isBusy} onClick={() => void fetchSignupMailDiagnostics(true)}>
-                    <span>SMTP 연결 확인</span>
-                    <small>메일 도메인 진단 없이 연결 단계만 다시 확인합니다</small>
-                  </ActionRowButton>
-                </ActionList>
-              ) : null}
-            </DetailsPanel>
+                      <SandboxSection>
+                        <SandboxHeader>
+                          <h3>읽기 전용 확인</h3>
+                          <ReadonlyPill>읽기 전용</ReadonlyPill>
+                        </SandboxHeader>
+                        <ActionList>
+                          <ActionRowButton
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() =>
+                              void executeAction("commentList", () => {
+                                const targetPostId = parsePositiveInt(postId, "대상 글")
+                                return apiFetch(`/post/api/v1/posts/${targetPostId}/comments`)
+                              })
+                            }
+                          >
+                            <span>댓글 목록 조회</span>
+                          </ActionRowButton>
+                          <ActionRowButton
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() =>
+                              void executeAction("commentOne", () => {
+                                const targetPostId = parsePositiveInt(postId, "대상 글")
+                                const targetCommentId = parsePositiveInt(commentId, "대상 댓글")
+                                return apiFetch(`/post/api/v1/posts/${targetPostId}/comments/${targetCommentId}`)
+                              })
+                            }
+                          >
+                            <span>댓글 상세 조회</span>
+                          </ActionRowButton>
+                        </ActionList>
+                      </SandboxSection>
+
+                      <SandboxSection>
+                        <SandboxHeader>
+                          <h3>변경 실행</h3>
+                          <ActionToneBadge data-tone="write">실행 가능</ActionToneBadge>
+                        </SandboxHeader>
+                        <ActionList>
+                          <ActionRowButton
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() =>
+                              void executeAction("commentWrite", async () => {
+                                const targetPostId = parsePositiveInt(postId, "대상 글")
+                                const content = requireCommentContent()
+                                const response = await apiFetch<ApiRsData<{ id?: number }>>(`/post/api/v1/posts/${targetPostId}/comments`, {
+                                  method: "POST",
+                                  body: JSON.stringify({ content }),
+                                })
+                                const createdCommentId = response.data?.id
+                                if (typeof createdCommentId === "number") setCommentId(String(createdCommentId))
+                                return response
+                              })
+                            }
+                          >
+                            <span>댓글 생성</span>
+                          </ActionRowButton>
+                          <ActionRowButton
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() =>
+                              void executeAction("commentModify", () => {
+                                const targetPostId = parsePositiveInt(postId, "대상 글")
+                                const targetCommentId = parsePositiveInt(commentId, "대상 댓글")
+                                const content = requireCommentContent()
+                                return apiFetch(`/post/api/v1/posts/${targetPostId}/comments/${targetCommentId}`, {
+                                  method: "PUT",
+                                  body: JSON.stringify({ content }),
+                                })
+                              })
+                            }
+                          >
+                            <span>댓글 수정</span>
+                          </ActionRowButton>
+                        </ActionList>
+                      </SandboxSection>
+
+                      <DangerActionRow>
+                        <ConfirmDeleteRow>
+                          <input
+                            id="confirm-comment-delete"
+                            type="checkbox"
+                            checked={confirmDelete}
+                            onChange={(event) => setConfirmDelete(event.target.checked)}
+                          />
+                          <label htmlFor="confirm-comment-delete">삭제 전 대상 댓글을 다시 확인했습니다.</label>
+                        </ConfirmDeleteRow>
+                        <DangerButton
+                          type="button"
+                          disabled={isBusy || !confirmDelete || !commentId.trim()}
+                          onClick={() =>
+                            void executeAction("commentDelete", () => {
+                              const targetPostId = parsePositiveInt(postId, "대상 글")
+                              const targetCommentId = parsePositiveInt(commentId, "대상 댓글")
+                              return apiFetch(`/post/api/v1/posts/${targetPostId}/comments/${targetCommentId}`, {
+                                method: "DELETE",
+                              })
+                            }).then(() => setConfirmDelete(false))
+                          }
+                        >
+                          댓글 삭제
+                        </DangerButton>
+                      </DangerActionRow>
+                    </DangerPanel>
+                  ) : null}
+                </DetailsPanel>
+              </ExecutionMain>
+
+              <ExecutionRail>
+                <ActionGroupCard>
+                  <CardSectionHeading>
+                    <div>
+                      <h3>실행 전 체크</h3>
+                      <p>운영 변경 없이 현재 상태와 영향 범위를 먼저 다시 확인합니다.</p>
+                    </div>
+                    <ReadonlyPill>읽기 전용</ReadonlyPill>
+                  </CardSectionHeading>
+                  <ActionList>
+                    <ActionRowButton
+                      type="button"
+                      disabled={isBusy}
+                      onClick={() =>
+                        void executeAction("systemHealth", () => fetchSystemHealthCached(), {
+                          onSuccess: () => {
+                            setSystemHealthCheckedAt(new Date().toISOString())
+                          },
+                        })
+                      }
+                    >
+                      <span>서비스 상태 조회</span>
+                    </ActionRowButton>
+                    <ActionRowButton type="button" disabled={isBusy} onClick={() => void executeAction("admPostCount", () => apiFetch("/post/api/v1/adm/posts/count"))}>
+                      <span>전체 글 수 확인</span>
+                    </ActionRowButton>
+                  </ActionList>
+                </ActionGroupCard>
+
+                <ActionGroupCard>
+                  <CardSectionHeading>
+                    <div>
+                      <h3>위험 액션</h3>
+                      <p>외부 발송이나 실데이터 변경으로 이어지는 실행만 분리해 둡니다.</p>
+                    </div>
+                    <ActionToneBadge data-tone="write">실행 가능</ActionToneBadge>
+                  </CardSectionHeading>
+                  <FieldStack>
+                    <FieldBox>
+                      <FieldLabel htmlFor="signup-mail-test-email">테스트 메일 주소</FieldLabel>
+                      <Input
+                        id="signup-mail-test-email"
+                        type="email"
+                        value={testEmail}
+                        placeholder="메일 수신을 확인할 주소를 입력하세요"
+                        onChange={(event) => setTestEmail(event.target.value)}
+                      />
+                    </FieldBox>
+                    <PrimaryButton type="button" disabled={isBusy} onClick={() => void sendSignupTestMail()}>
+                      테스트 메일 발송
+                    </PrimaryButton>
+                    {!!mailTestNotice.text && <InlineNotice data-tone={mailTestNotice.tone}>{mailTestNotice.text}</InlineNotice>}
+                  </FieldStack>
+                </ActionGroupCard>
+
+                <ActionGroupCard>
+                  <CardSectionHeading>
+                    <div>
+                      <h3>런북/장애 문서</h3>
+                      <p>복구 전에 같이 읽어야 할 화면과 기록으로 바로 이동합니다.</p>
+                    </div>
+                  </CardSectionHeading>
+                  <ActionList>
+                    <Link href="/admin/dashboard" passHref legacyBehavior>
+                      <ActionRowLink>운영 대시보드 열기</ActionRowLink>
+                    </Link>
+                    <ActionRowButton type="button" disabled={isBusy} onClick={() => focusSection("diagnostics", "queue")}>
+                      <span>작업 큐 진단으로 이동</span>
+                    </ActionRowButton>
+                    <ActionRowButton type="button" disabled={isBusy} onClick={() => focusSection("execution", "auth")}>
+                      <span>인증 보안 기록으로 이동</span>
+                    </ActionRowButton>
+                  </ActionList>
+                </ActionGroupCard>
+              </ExecutionRail>
+            </ExecutionLayout>
           </WorkspaceSection>
 
           <WorkspaceSection id={SECTION_IDS.results} data-ops-section="results" data-emphasis="secondary">
             <SectionHeading>
               <SectionTitleBlock>
-                <h2>최근 실행 결과</h2>
-                <p>방금 실행한 작업과 최근 기록만 빠르게 다시 읽습니다.</p>
+                <h2>최근 진단 결과</h2>
+                <p>방금 확인한 진단과 실행 기록만 빠르게 다시 읽습니다.</p>
               </SectionTitleBlock>
             </SectionHeading>
 
@@ -1880,188 +2034,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
             )}
           </WorkspaceSection>
 
-          <WorkspaceSection
-            id={SECTION_IDS.mutation}
-            data-ops-section="mutation"
-            data-tone={isMutationExpanded ? "danger" : undefined}
-          >
-            <SectionHeading>
-              <SectionTitleBlock>
-                <h2>실데이터 테스트</h2>
-                <p>실제 데이터에 영향을 주는 작업은 마지막에만 펼쳐서 실행합니다.</p>
-              </SectionTitleBlock>
-              <ActionToneBadge data-tone="danger">실데이터 변경</ActionToneBadge>
-            </SectionHeading>
-
-            <DetailsPanel open={isMutationExpanded}>
-              <DetailsSummary
-                onClick={(event) => {
-                  event.preventDefault()
-                  setIsMutationExpanded((prev) => !prev)
-                }}
-              >
-                <span>위험 작업 열기</span>
-                <small>{isMutationExpanded ? "접기" : "열기"}</small>
-              </DetailsSummary>
-              {isMutationExpanded ? (
-                <DangerPanel>
-                  <InlineNotice data-tone="danger">이 영역의 실행은 실제 데이터에 영향을 줍니다. 운영 데이터 확인 후 진행하세요.</InlineNotice>
-
-                  <SubtleMetaGrid>
-                    <SubtleMetaItem>
-                      <span>대상 글</span>
-                      <strong>#{postId || "-"}</strong>
-                    </SubtleMetaItem>
-                    <SubtleMetaItem>
-                      <span>대상 댓글</span>
-                      <strong>{commentId ? `#${commentId}` : "미지정"}</strong>
-                    </SubtleMetaItem>
-                  </SubtleMetaGrid>
-
-                  <FieldGrid>
-                    <FieldBox>
-                      <FieldLabel htmlFor="comment-post-id">대상 글</FieldLabel>
-                      <Input id="comment-post-id" value={postId} onChange={(event) => setPostId(event.target.value)} />
-                    </FieldBox>
-                    <FieldBox>
-                      <FieldLabel htmlFor="comment-id">대상 댓글</FieldLabel>
-                      <Input id="comment-id" value={commentId} onChange={(event) => setCommentId(event.target.value)} />
-                    </FieldBox>
-                    <FieldBox className="wide">
-                      <FieldLabel htmlFor="comment-content">내용</FieldLabel>
-                      <TextArea
-                        id="comment-content"
-                        value={commentContent}
-                        placeholder="테스트할 댓글 내용을 입력하세요"
-                        onChange={(event) => setCommentContent(event.target.value)}
-                      />
-                    </FieldBox>
-                  </FieldGrid>
-
-                  <SandboxSection>
-                    <SandboxHeader>
-                      <h3>읽기 전용 확인</h3>
-                      <ReadonlyPill>읽기 전용</ReadonlyPill>
-                    </SandboxHeader>
-                    <ActionList>
-                      <ActionRowButton
-                        type="button"
-                        disabled={isBusy}
-                        onClick={() =>
-                          void executeAction("commentList", () => {
-                            const targetPostId = parsePositiveInt(postId, "대상 글")
-                            return apiFetch(`/post/api/v1/posts/${targetPostId}/comments`)
-                          })
-                        }
-                      >
-                        <span>댓글 목록 조회</span>
-                      </ActionRowButton>
-                      <ActionRowButton
-                        type="button"
-                        disabled={isBusy}
-                        onClick={() =>
-                          void executeAction("commentOne", () => {
-                            const targetPostId = parsePositiveInt(postId, "대상 글")
-                            const targetCommentId = parsePositiveInt(commentId, "대상 댓글")
-                            return apiFetch(`/post/api/v1/posts/${targetPostId}/comments/${targetCommentId}`)
-                          })
-                        }
-                      >
-                        <span>댓글 상세 조회</span>
-                      </ActionRowButton>
-                    </ActionList>
-                  </SandboxSection>
-
-                  <SandboxSection>
-                    <SandboxHeader>
-                      <h3>변경 실행</h3>
-                      <ActionToneBadge data-tone="write">실행 가능</ActionToneBadge>
-                    </SandboxHeader>
-                    <ActionList>
-                      <ActionRowButton
-                        type="button"
-                        disabled={isBusy}
-                        onClick={() =>
-                          void executeAction("commentWrite", async () => {
-                            const targetPostId = parsePositiveInt(postId, "대상 글")
-                            const content = requireCommentContent()
-                            const response = await apiFetch<ApiRsData<{ id?: number }>>(`/post/api/v1/posts/${targetPostId}/comments`, {
-                              method: "POST",
-                              body: JSON.stringify({ content }),
-                            })
-                            const createdCommentId = response.data?.id
-                            if (typeof createdCommentId === "number") setCommentId(String(createdCommentId))
-                            return response
-                          })
-                        }
-                      >
-                        <span>댓글 생성</span>
-                      </ActionRowButton>
-                      <ActionRowButton
-                        type="button"
-                        disabled={isBusy}
-                        onClick={() =>
-                          void executeAction("commentModify", () => {
-                            const targetPostId = parsePositiveInt(postId, "대상 글")
-                            const targetCommentId = parsePositiveInt(commentId, "대상 댓글")
-                            const content = requireCommentContent()
-                            return apiFetch(`/post/api/v1/posts/${targetPostId}/comments/${targetCommentId}`, {
-                              method: "PUT",
-                              body: JSON.stringify({ content }),
-                            })
-                          })
-                        }
-                      >
-                        <span>댓글 수정</span>
-                      </ActionRowButton>
-                    </ActionList>
-                  </SandboxSection>
-
-                  <DangerActionRow>
-                    <ConfirmDeleteRow>
-                      <input
-                        id="confirm-comment-delete"
-                        type="checkbox"
-                        checked={confirmDelete}
-                        onChange={(event) => setConfirmDelete(event.target.checked)}
-                      />
-                      <label htmlFor="confirm-comment-delete">삭제 전 대상 댓글을 다시 확인했습니다.</label>
-                    </ConfirmDeleteRow>
-                    <DangerButton
-                      type="button"
-                      disabled={isBusy || !confirmDelete || !commentId.trim()}
-                      onClick={() =>
-                        void executeAction("commentDelete", () => {
-                          const targetPostId = parsePositiveInt(postId, "대상 글")
-                          const targetCommentId = parsePositiveInt(commentId, "대상 댓글")
-                          return apiFetch(`/post/api/v1/posts/${targetPostId}/comments/${targetCommentId}`, {
-                            method: "DELETE",
-                          })
-                        }).then(() => setConfirmDelete(false))
-                      }
-                    >
-                      댓글 삭제
-                    </DangerButton>
-                  </DangerActionRow>
-                </DangerPanel>
-              ) : null}
-            </DetailsPanel>
-          </WorkspaceSection>
         </WorkspaceColumn>
-        ) : (
-        <DeferredWorkspaceColumn>
-          <DeferredWorkspaceCard>
-            <small>워크스페이스 준비 중</small>
-            <strong>개요를 먼저 렌더링하고 진단 도구는 순차적으로 준비합니다.</strong>
-            <span>섹션을 선택하면 바로 해당 패널을 불러옵니다.</span>
-          </DeferredWorkspaceCard>
-          <DeferredWorkspaceSkeleton aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </DeferredWorkspaceSkeleton>
-        </DeferredWorkspaceColumn>
-        )}
       </WorkspaceShell>
       </Main>
     </AdminShell>
@@ -2265,49 +2238,6 @@ const WorkspaceShell = styled.div`
 const WorkspaceColumn = styled.div`
   display: grid;
   gap: 0.85rem;
-`
-
-const DeferredWorkspaceColumn = styled.div`
-  display: grid;
-  gap: 0.85rem;
-`
-
-const DeferredWorkspaceCard = styled(AdminRailCard)`
-  display: grid;
-  gap: 0.4rem;
-  padding: 1rem 1.05rem;
-
-  small {
-    color: ${({ theme }) => theme.colors.gray9};
-    font-size: 0.74rem;
-    font-weight: 800;
-    letter-spacing: 0.02em;
-  }
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.98rem;
-    line-height: 1.5;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.82rem;
-    line-height: 1.55;
-  }
-`
-
-const DeferredWorkspaceSkeleton = styled.div`
-  display: grid;
-  gap: 0.7rem;
-
-  span {
-    display: block;
-    height: 96px;
-    border-radius: 20px;
-    background: linear-gradient(135deg, ${({ theme }) => theme.colors.gray3} 0%, ${({ theme }) => theme.colors.gray2} 100%);
-    border: 1px solid ${({ theme }) => theme.colors.gray5};
-  }
 `
 
 const WorkspaceSection = styled.section`
@@ -2694,14 +2624,23 @@ const CompactCodeList = styled.div`
   }
 `
 
-const ExecutionGrid = styled.div`
+const ExecutionLayout = styled.div`
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr) 320px;
   gap: 0.9rem;
 
   @media (max-width: 960px) {
     grid-template-columns: 1fr;
   }
+`
+
+const ExecutionMain = styled.div`
+  display: grid;
+  gap: 0.9rem;
+`
+
+const ExecutionRail = styled(AdminStickyRail)`
+  gap: 0.9rem;
 `
 
 const ActionGroupCard = styled(AdminRailCard)`

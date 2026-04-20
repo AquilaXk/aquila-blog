@@ -20,6 +20,16 @@ test.describe("admin hub state contract", () => {
     expect(source).toContain("adminProfile?.homeIntroTitle || sessionMember?.homeIntroTitle || \"\"")
     expect(source).toContain("serviceLinks: adminProfile?.serviceLinks || sessionMember?.serviceLinks || []")
     expect(source).toContain("contactLinks: adminProfile?.contactLinks || sessionMember?.contactLinks || []")
+    expect(source).toContain("const profilePriorityAction =")
+    expect(source).toContain("const priorityActions =")
+    expect(source).toContain("const handoffActions =")
+    expect(source).toContain("const supportRailGroups = [")
+    expect(source).toContain('title: "프로필 완성도"')
+    expect(source).toContain('title: "빠른 이동"')
+    expect(source).toContain('title: "최근 변경"')
+    expect(source).toContain("priorityActions={priorityActions}")
+    expect(source).toContain("handoffActions={handoffActions}")
+    expect(source).toContain("supportRailGroups={supportRailGroups}")
   })
 
   test("admin hub uses backstage landing copy instead of generic management labels", () => {
@@ -29,6 +39,14 @@ test.describe("admin hub state contract", () => {
     expect(source).toContain("<h2>지금 할 일</h2>")
     expect(source).toContain("<h2>최근 작업</h2>")
     expect(source).toContain("<h2>공개 노출 상태</h2>")
+    expect(source).toContain('aria-label="허브 지원 정보"')
+    expect(source).toContain("resolvedSupportRailGroups.map((group) => (")
+    expect(source).toContain("<h3>{group.title}</h3>")
+    expect(source).toContain("priorityActions: AdminHubNextAction[]")
+    expect(source).toContain("handoffActions: AdminHubNextAction[]")
+    expect(source).not.toContain("const SummaryRail = styled.div`")
+    expect(source).not.toContain("showDeferredPanels")
+    expect(source).not.toContain("requestIdleCallback")
   })
 
   test("dashboard first fold uses main-like priority copy and explicit rail labels", () => {

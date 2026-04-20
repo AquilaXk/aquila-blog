@@ -1,6 +1,5 @@
 import styled from "@emotion/styled"
 import Link from "next/link"
-import { useEffect, useState } from "react"
 import AppIcon from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
 import {
@@ -26,10 +25,17 @@ export type AdminHubSecondaryLink = {
   cta: string
 }
 
-export type AdminHubSummaryItem = {
+export type AdminHubSupportRailItem = {
   label: string
-  value: string
+  value?: string
+  href?: string
+  cta?: string
   tone?: "neutral" | "good" | "warn"
+}
+
+export type AdminHubSupportRailGroup = {
+  title: string
+  items: AdminHubSupportRailItem[]
 }
 
 export type AdminHubNextAction = {
@@ -52,15 +58,13 @@ type Props = {
   profileBio?: string
   recentWorkSummary: string
   recentWorkItems: AdminHubRecentWorkItem[]
-  summaryItems: AdminHubSummaryItem[]
-  nextActions: AdminHubNextAction[]
+  supportRailGroups?: AdminHubSupportRailGroup[]
+  summaryItems?: AdminHubSupportRailItem[]
+  priorityActions: AdminHubNextAction[]
+  handoffActions: AdminHubNextAction[]
+  nextActions?: AdminHubNextAction[]
   primaryAction: AdminHubPrimaryAction
   secondaryLinks?: AdminHubSecondaryLink[]
-}
-
-type IdleWindow = Window & {
-  requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number
-  cancelIdleCallback?: (handle: number) => void
 }
 
 const AdminHubSurface = ({
@@ -71,30 +75,25 @@ const AdminHubSurface = ({
   profileBio,
   recentWorkSummary,
   recentWorkItems,
+  supportRailGroups,
   summaryItems,
+  priorityActions,
+  handoffActions,
   nextActions,
   primaryAction,
 }: Props) => {
-  const [showDeferredPanels, setShowDeferredPanels] = useState(false)
-
-  useEffect(() => {
-    if (showDeferredPanels || typeof window === "undefined") return
-
-    const idleWindow = window as IdleWindow
-    const activate = () => setShowDeferredPanels(true)
-
-    if (typeof idleWindow.requestIdleCallback === "function") {
-      const handle = idleWindow.requestIdleCallback(() => activate(), { timeout: 720 })
-      return () => {
-        if (typeof idleWindow.cancelIdleCallback === "function") {
-          idleWindow.cancelIdleCallback(handle)
-        }
-      }
-    }
-
-    const handle = window.setTimeout(activate, 280)
-    return () => window.clearTimeout(handle)
-  }, [showDeferredPanels])
+  const resolvedPriorityActions = priorityActions || nextActions || []
+  const resolvedHandoffActions = handoffActions || nextActions || []
+  const resolvedSupportRailGroups =
+    supportRailGroups ||
+    (summaryItems?.length
+      ? [
+          {
+            title: "허브 지원 정보",
+            items: summaryItems,
+          },
+        ]
+      : [])
 
   return (
     <Main>
@@ -119,94 +118,113 @@ const AdminHubSurface = ({
           </HeroActions>
         </HeroHeader>
 
-        <SummaryRail aria-label="관리자 상태 요약">
-          {summaryItems.map((item) => (
-            <SummaryCard key={`${item.label}-${item.value}`} data-tone={item.tone || "neutral"}>
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-            </SummaryCard>
-          ))}
-        </SummaryRail>
       </HeroPanel>
 
-      {showDeferredPanels ? (
-        <>
-          <ActionStrip aria-label="지금 할 일">
+      <LandingLayout>
+        <LandingMain>
+        <ActionStrip aria-label="지금 할 일">
+          <SectionHeader>
+            <h2>지금 할 일</h2>
+          </SectionHeader>
+          <ActionStripGrid>
+            {resolvedPriorityActions.map((item, index) => (
+              <Link key={`${item.href}-${item.title}`} href={item.href} passHref legacyBehavior>
+                <ActionCard data-tone={item.tone || "neutral"} data-featured={index === 0 ? "true" : "false"}>
+                  <div className="copy">
+                    <small>{index === 0 ? "우선" : "이어서"}</small>
+                    <strong>{item.title}</strong>
+                  </div>
+                </ActionCard>
+              </Link>
+            ))}
+          </ActionStripGrid>
+        </ActionStrip>
+
+        <LandingGrid>
+          <SectionCard>
             <SectionHeader>
-              <h2>지금 할 일</h2>
+              <h2>최근 작업</h2>
             </SectionHeader>
-            <ActionStripGrid>
-              {nextActions.map((item, index) => (
+            <RecentWorkSummary>
+              <strong>{recentWorkSummary}</strong>
+              <p>최근에 확인한 상태와 이어서 처리할 작업을 함께 봅니다.</p>
+            </RecentWorkSummary>
+
+            <RecentWorkGrid aria-label="최근 작업 상태">
+              {recentWorkItems.map((item) => (
+                <RecentWorkCard key={`${item.label}-${item.value}`} data-tone={item.tone || "neutral"}>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </RecentWorkCard>
+              ))}
+            </RecentWorkGrid>
+
+            <RecentWorkActions aria-label="최근 작업 이어가기">
+              {resolvedHandoffActions.map((item, index) => (
                 <Link key={`${item.href}-${item.title}`} href={item.href} passHref legacyBehavior>
-                  <ActionCard data-tone={item.tone || "neutral"} data-featured={index === 0 ? "true" : "false"}>
+                  <RecentWorkAction data-tone={item.tone || "neutral"} data-featured={index === 0 ? "true" : "false"}>
                     <div className="copy">
-                      <small>{index === 0 ? "우선" : "이어서"}</small>
+                      <small>{index === 0 ? "우선" : "다음"}</small>
                       <strong>{item.title}</strong>
                     </div>
-                  </ActionCard>
+                  </RecentWorkAction>
                 </Link>
               ))}
-            </ActionStripGrid>
-          </ActionStrip>
+            </RecentWorkActions>
+          </SectionCard>
 
-          <LandingGrid>
-            <SectionCard>
-              <SectionHeader>
-                <h2>최근 작업</h2>
-              </SectionHeader>
-              <RecentWorkSummary>
-                <strong>{recentWorkSummary}</strong>
-                <p>최근에 확인한 상태와 이어서 처리할 작업을 함께 봅니다.</p>
-              </RecentWorkSummary>
+          <SectionCard data-variant="subtle">
+            <SectionHeader>
+              <h2>공개 노출 상태</h2>
+            </SectionHeader>
+            <ProfileSnapshot>
+              <ProfileFrame>
+                {profileSrc ? (
+                  <ProfileImage src={profileSrc} alt={displayName} fillContainer />
+                ) : (
+                  <ProfileFallback>{displayNameInitial}</ProfileFallback>
+                )}
+              </ProfileFrame>
+              <ProfileCopy>
+                <strong>{displayName}</strong>
+                <span>{profileRole || "역할 미설정"}</span>
+                <p>{profileBio || "프로필 소개와 링크를 정리해 공개 카드와 같은 톤으로 맞춥니다."}</p>
+              </ProfileCopy>
+            </ProfileSnapshot>
+            <Link href="/admin/profile" passHref legacyBehavior>
+              <RailActionLink>프로필 편집</RailActionLink>
+            </Link>
+          </SectionCard>
+        </LandingGrid>
+        </LandingMain>
 
-              <RecentWorkGrid aria-label="최근 작업 상태">
-                {recentWorkItems.map((item) => (
-                  <RecentWorkCard key={`${item.label}-${item.value}`} data-tone={item.tone || "neutral"}>
-                    <span>{item.label}</span>
-                    <strong>{item.value}</strong>
-                  </RecentWorkCard>
-                ))}
-              </RecentWorkGrid>
-
-              <RecentWorkActions aria-label="최근 작업 이어가기">
-                {nextActions.map((item, index) => (
-                  <Link key={`${item.href}-${item.title}`} href={item.href} passHref legacyBehavior>
-                    <RecentWorkAction data-tone={item.tone || "neutral"} data-featured={index === 0 ? "true" : "false"}>
-                      <div className="copy">
-                        <small>{index === 0 ? "우선" : "다음"}</small>
-                        <strong>{item.title}</strong>
-                      </div>
-                    </RecentWorkAction>
-                  </Link>
-                ))}
-              </RecentWorkActions>
-            </SectionCard>
-
-            <SectionCard data-variant="subtle">
-              <SectionHeader>
-                <h2>공개 노출 상태</h2>
-              </SectionHeader>
-              <ProfileSnapshot>
-                <ProfileFrame>
-                  {profileSrc ? (
-                    <ProfileImage src={profileSrc} alt={displayName} fillContainer />
+        <SupportRail aria-label="허브 지원 정보">
+          {resolvedSupportRailGroups.map((group) => (
+            <SupportCard key={group.title}>
+              <SupportHeader>
+                <h3>{group.title}</h3>
+              </SupportHeader>
+              <SupportList>
+                {group.items.map((item) =>
+                  item.href ? (
+                    <Link key={`${group.title}-${item.label}`} href={item.href} passHref legacyBehavior>
+                      <SupportLink data-tone={item.tone || "neutral"}>
+                        <span>{item.label}</span>
+                        <strong>{item.cta || item.value || item.label}</strong>
+                      </SupportLink>
+                    </Link>
                   ) : (
-                    <ProfileFallback>{displayNameInitial}</ProfileFallback>
-                  )}
-                </ProfileFrame>
-                <ProfileCopy>
-                  <strong>{displayName}</strong>
-                  <span>{profileRole || "역할 미설정"}</span>
-                  <p>{profileBio || "프로필 소개와 링크를 정리해 공개 카드와 같은 톤으로 맞춥니다."}</p>
-                </ProfileCopy>
-              </ProfileSnapshot>
-              <Link href="/admin/profile" passHref legacyBehavior>
-                <RailActionLink>프로필 편집</RailActionLink>
-              </Link>
-            </SectionCard>
-          </LandingGrid>
-        </>
-      ) : null}
+                    <SupportItem key={`${group.title}-${item.label}`} data-tone={item.tone || "neutral"}>
+                      <span>{item.label}</span>
+                      <strong>{item.value || "-"}</strong>
+                    </SupportItem>
+                  )
+                )}
+              </SupportList>
+            </SupportCard>
+          ))}
+        </SupportRail>
+      </LandingLayout>
     </Main>
   )
 }
@@ -312,22 +330,59 @@ const SecondaryActionLink = styled.a`
   font-weight: 760;
 `
 
-const SummaryRail = styled.div`
+const LandingLayout = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
-  gap: 0.68rem;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 1rem;
 
-  @media (max-width: 640px) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  @media (max-width: 1120px) {
+    grid-template-columns: 1fr;
   }
 `
 
-const SummaryCard = styled.div`
+const LandingMain = styled.div`
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+`
+
+const SupportRail = styled.aside`
+  display: grid;
+  gap: 0.82rem;
+  align-self: start;
+`
+
+const SupportCard = styled(AdminElevatedCard)`
+  display: grid;
+  gap: 0.72rem;
+  padding: 0.96rem;
+  border-radius: 24px;
+  border-color: ${({ theme }) => adminElevatedBorder(theme)};
+  background: ${({ theme }) => adminElevatedSurface(theme)};
+  box-shadow: ${({ theme }) => adminElevatedShadow(theme)};
+`
+
+const SupportHeader = styled.div`
+  h3 {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.96rem;
+    font-weight: 800;
+    line-height: 1.35;
+  }
+`
+
+const SupportList = styled.div`
+  display: grid;
+  gap: 0.6rem;
+`
+
+const SupportItem = styled.div`
   display: grid;
   gap: 0.35rem;
   min-width: 0;
-  padding: 0.88rem 0.95rem;
-  border-radius: 20px;
+  padding: 0.82rem 0.88rem;
+  border-radius: 18px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) =>
     theme.scheme === "light" ? "rgba(255, 255, 255, 0.74)" : "rgba(24, 24, 24, 0.82)"};
@@ -349,12 +404,44 @@ const SummaryCard = styled.div`
   strong {
     min-width: 0;
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1.12rem;
+    font-size: 0.94rem;
     font-weight: 800;
-    line-height: 1.28;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    line-height: 1.4;
+    word-break: keep-all;
+  }
+`
+
+const SupportLink = styled.a`
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.82rem 0.88rem;
+  border-radius: 18px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "light" ? "rgba(255, 255, 255, 0.74)" : "rgba(24, 24, 24, 0.82)"};
+  color: inherit;
+  text-decoration: none;
+
+  &[data-tone="good"] {
+    border-color: ${({ theme }) => theme.colors.green7};
+  }
+
+  &[data-tone="warn"] {
+    border-color: ${({ theme }) => theme.colors.orange7};
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.92rem;
+    font-weight: 800;
+    line-height: 1.38;
   }
 `
 

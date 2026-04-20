@@ -8224,10 +8224,10 @@ const BlockEditorEngine = ({
       !isCoarsePointer && selectedBlockNodeIndex !== null && keyboardBlockSelectionStickyRef.current
     const effectiveSelectedListItemContext = resolveEffectiveSelectedListItemContext(editor)
     const activeListItemContext =
-      effectiveSelectedListItemContext?.listItemElement?.isConnected
-        ? effectiveSelectedListItemContext
-        : hoveredListItemContext?.listItemElement?.isConnected
-          ? hoveredListItemContext
+      hoveredListItemContext?.listItemElement?.isConnected
+        ? hoveredListItemContext
+        : effectiveSelectedListItemContext?.listItemElement?.isConnected
+          ? effectiveSelectedListItemContext
           : null
     const blockIndex = activeListItemContext
       ? activeListItemContext.listBlockIndex

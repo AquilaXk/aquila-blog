@@ -11,6 +11,8 @@ if [[ ! -f "${CURRENT_TASK_FILE}" ]]; then
 fi
 
 status=""
+issue_ref=""
+pr_ref=""
 task=""
 repro=""
 done_when=""
@@ -32,6 +34,8 @@ while IFS= read -r raw_line || [[ -n "${raw_line}" ]]; do
 
   case "${line}" in
     status=*) status="${line#status=}" ;;
+    issue_ref=*) issue_ref="${line#issue_ref=}" ;;
+    pr_ref=*) pr_ref="${line#pr_ref=}" ;;
     task=*) task="${line#task=}" ;;
     repro=*) repro="${line#repro=}" ;;
     done_when=*) done_when="${line#done_when=}" ;;
@@ -58,7 +62,21 @@ if [[ "${status}" != "draft" && "${status}" != "active" && "${status}" != "done"
   exit 1
 fi
 
-if [[ "${status}" == "draft" || "${status}" == "done" ]]; then
+if [[ "${status}" == "draft" ]]; then
+  exit 0
+fi
+
+if [[ "${status}" == "done" ]]; then
+  if [[ -z "${issue_ref}" ]]; then
+    echo "[current-task-state] done task인데 issue_ref= 이 비어 있습니다." >&2
+    exit 1
+  fi
+
+  if [[ "${issue_ref}" != "local-only" && -z "${pr_ref}" ]]; then
+    echo "[current-task-state] tracked done task인데 pr_ref= 이 비어 있습니다." >&2
+    exit 1
+  fi
+
   exit 0
 fi
 

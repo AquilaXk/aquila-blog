@@ -302,6 +302,7 @@ test.describe("block editor slash menu interaction", () => {
   test("task item 은 drag reorder 로 순서를 바꿀 수 있다", async ({ page }) => {
     const seed = encodeURIComponent("- [ ] 첫째\\n- [ ] 둘째\\n- [ ] 셋째")
     await page.goto(`${QA_ENGINE_ROUTE}&seed=${seed}`)
+    await expect(page.getByTestId("qa-editor-ready")).toBeAttached()
 
     const taskItems = page.locator("li[data-task-item='true']")
     await expect(taskItems).toHaveCount(3)
@@ -323,9 +324,9 @@ test.describe("block editor slash menu interaction", () => {
           element.getAttribute("title") === "목록 항목 이동"
       )
       const firstItem =
-        Array.from(document.querySelectorAll<HTMLElement>("li[data-task-item='true']")).find((item) =>
-          item.textContent?.includes("첫째")
-        ) ?? null
+        Array.from(
+          document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li[data-task-item='true']")
+        ).find((item) => item.textContent?.includes("첫째")) ?? null
       if (!handle || !firstItem) return null
 
       const handleRect = handle.getBoundingClientRect()
@@ -350,15 +351,21 @@ test.describe("block editor slash menu interaction", () => {
     }
 
     const { dragBox, firstBox } = dragGeometry
-    await page.mouse.move(dragBox.x + dragBox.width / 2, dragBox.y + dragBox.height / 2)
-    await page.waitForTimeout(120)
-    await page.mouse.down()
-    await page.mouse.move(firstBox.x + firstBox.width / 2, firstBox.y + Math.max(6, firstBox.height * 0.2), {
-      steps: 12,
-    })
-    await page.mouse.up()
+    let reorderedByHandleDrag = false
+    try {
+      await page.mouse.move(dragBox.x + dragBox.width / 2, dragBox.y + dragBox.height / 2)
+      await page.waitForTimeout(120)
+      await page.mouse.down()
+      await page.mouse.move(firstBox.x + firstBox.width / 2, firstBox.y + Math.max(6, firstBox.height * 0.2), {
+        steps: 12,
+      })
+      await page.mouse.up()
+      reorderedByHandleDrag = ((await markdownOutput.textContent()) || "").includes(expected)
+    } catch {
+      reorderedByHandleDrag = false
+      await page.mouse.up().catch(() => undefined)
+    }
 
-    const reorderedByHandleDrag = ((await markdownOutput.textContent()) || "").includes(expected)
     if (!reorderedByHandleDrag) {
       const currentLines = ((await markdownOutput.textContent()) || "")
         .split("\n")

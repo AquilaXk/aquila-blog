@@ -302,21 +302,71 @@ test.describe("block editor slash menu interaction", () => {
   test("task item 은 drag reorder 로 순서를 바꿀 수 있다", async ({ page }) => {
     const seed = encodeURIComponent("- [ ] 첫째\\n- [ ] 둘째\\n- [ ] 셋째")
     await page.goto(`${QA_ENGINE_ROUTE}&seed=${seed}`)
+    await expect(page.getByTestId("qa-editor-ready")).toBeAttached()
 
     const taskItems = page.locator("li[data-task-item='true']")
     await expect(taskItems).toHaveCount(3)
 
     const markdownOutput = page.getByTestId("qa-markdown-output")
     const expected = "- [ ] 셋째\n- [ ] 첫째\n- [ ] 둘째"
-    let reorderedByNativeDrag = false
-    try {
-      await taskItems.nth(2).dragTo(taskItems.nth(0), { timeout: 2_000 })
-      reorderedByNativeDrag = ((await markdownOutput.textContent()) || "").includes(expected)
-    } catch {
-      reorderedByNativeDrag = false
+    await taskItems.nth(2).hover()
+    const dragHandle = page.getByTestId("block-drag-handle")
+    await expect(dragHandle).toBeVisible()
+    await dragHandle.click()
+
+    const selectedDragHandle = page.getByRole("button", { name: "목록 항목 이동" })
+    await expect(selectedDragHandle).toBeVisible()
+
+    const dragGeometry = await page.evaluate(() => {
+      const handle = Array.from(document.querySelectorAll<HTMLElement>("button")).find(
+        (element) =>
+          element.getAttribute("aria-label") === "목록 항목 이동" ||
+          element.getAttribute("title") === "목록 항목 이동"
+      )
+      const firstItem =
+        Array.from(
+          document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li[data-task-item='true']")
+        ).find((item) => item.textContent?.includes("첫째")) ?? null
+      if (!handle || !firstItem) return null
+
+      const handleRect = handle.getBoundingClientRect()
+      const firstRect = firstItem.getBoundingClientRect()
+      return {
+        dragBox: {
+          x: handleRect.x,
+          y: handleRect.y,
+          width: handleRect.width,
+          height: handleRect.height,
+        },
+        firstBox: {
+          x: firstRect.x,
+          y: firstRect.y,
+          width: firstRect.width,
+          height: firstRect.height,
+        },
+      }
+    })
+    if (!dragGeometry) {
+      throw new Error("task item drag geometry is missing")
     }
 
-    if (!reorderedByNativeDrag) {
+    const { dragBox, firstBox } = dragGeometry
+    let reorderedByHandleDrag = false
+    try {
+      await page.mouse.move(dragBox.x + dragBox.width / 2, dragBox.y + dragBox.height / 2)
+      await page.waitForTimeout(120)
+      await page.mouse.down()
+      await page.mouse.move(firstBox.x + firstBox.width / 2, firstBox.y + Math.max(6, firstBox.height * 0.2), {
+        steps: 12,
+      })
+      await page.mouse.up()
+      reorderedByHandleDrag = ((await markdownOutput.textContent()) || "").includes(expected)
+    } catch {
+      reorderedByHandleDrag = false
+      await page.mouse.up().catch(() => undefined)
+    }
+
+    if (!reorderedByHandleDrag) {
       const currentLines = ((await markdownOutput.textContent()) || "")
         .split("\n")
         .map((line) => line.trim())

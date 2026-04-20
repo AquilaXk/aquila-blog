@@ -13,6 +13,9 @@
 # 새 스레드 handoff 출력은 `bash tools/guards/current-task-handoff.sh` 를 사용합니다.
 
 status=draft
+plan_ref=
+issue_ref=
+pr_ref=
 task=
 repro=
 done_when=

@@ -23,6 +23,7 @@ import {
   AdminInlineActionRow,
   AdminRailCard,
   AdminSectionHeading,
+  AdminStickyRail,
   AdminStatusPill,
   AdminSubtleCard,
   AdminTextActionButton,
@@ -1573,9 +1574,10 @@ const WorkspaceMain = styled.div`
   gap: 1rem;
 `
 
-const WorkspaceRail = styled.aside`
-  display: grid;
+const WorkspaceRail = styled(AdminStickyRail)`
   gap: 0.85rem;
+  position: sticky;
+  top: calc(var(--app-header-height, 64px) + 0.55rem);
 `
 
 const baseButton = ({ theme }: { theme: any }) => `

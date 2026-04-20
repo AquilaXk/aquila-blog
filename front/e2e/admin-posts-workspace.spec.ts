@@ -11,6 +11,9 @@ test.describe("admin posts workspace link contract", () => {
     expect(source).toContain("<h2>검수 체크리스트</h2>")
     expect(source).toContain("<h2>상태 의미</h2>")
     expect(source).toContain("<h2>바로가기</h2>")
+    expect(source).toContain("const WorkspaceRail = styled(AdminStickyRail)`")
+    expect(source).toContain("position: sticky;")
+    expect(source).toContain("top: calc(var(--app-header-height, 64px) + 0.55rem);")
   })
 
   test("관리자 글 목록은 제목 링크 same-tab 진입과 링크 복사 액션을 유지한다", () => {
@@ -43,8 +46,6 @@ test.describe("admin posts workspace link contract", () => {
     expect(source).toContain("<h1>편집과 검수를 한 화면에서 이어갑니다</h1>")
     expect(source).toContain("const AuthorAvatarFrame = styled.span`")
     expect(source).not.toContain("SecondaryLinkButton")
-    expect(source).not.toContain("position: sticky;")
-    expect(source).not.toContain("top: calc(var(--app-header-height, 64px) + 0.55rem);")
     expect(source).toContain('<ResumeCardButton type="button" onClick={() => void openWriteRoute({ source: "local-draft" })}>')
     expect(source).toContain("const ResumeCardButton = styled.button`")
     expect(source).not.toContain('<PrimaryInlineButton type="button" onClick={() => void openWriteRoute({ source: "local-draft" })}>')

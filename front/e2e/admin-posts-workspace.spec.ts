@@ -3,6 +3,16 @@ import path from "node:path"
 import { expect, test } from "@playwright/test"
 
 test.describe("admin posts workspace link contract", () => {
+  test("posts workspace uses detail-like hero copy and checklist rail labels", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePage.tsx"), "utf8")
+
+    expect(source).toContain("편집과 검수를 한 화면에서 이어갑니다")
+    expect(source).toContain("최근 초안 복귀, 공개 상태 점검, 목록 필터링까지 지금 필요한 글 작업 흐름을 한곳에 모읍니다.")
+    expect(source).toContain("<h2>검수 체크리스트</h2>")
+    expect(source).toContain("<h2>상태 의미</h2>")
+    expect(source).toContain("<h2>바로가기</h2>")
+  })
+
   test("관리자 글 목록은 제목 링크 same-tab 진입과 링크 복사 액션을 유지한다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePage.tsx"), "utf8")
 
@@ -30,7 +40,7 @@ test.describe("admin posts workspace link contract", () => {
     expect(source).toContain("링크 복사")
     expect(source).toContain("recentPosts.slice(0, 3)")
     expect(source).toContain("grid-template-columns: minmax(14rem, 0.74fr) minmax(0, 1.26fr);")
-    expect(source).toContain("<h1>글 관리</h1>")
+    expect(source).toContain("<h1>편집과 검수를 한 화면에서 이어갑니다</h1>")
     expect(source).toContain("const AuthorAvatarFrame = styled.span`")
     expect(source).not.toContain("SecondaryLinkButton")
     expect(source).not.toContain("position: sticky;")

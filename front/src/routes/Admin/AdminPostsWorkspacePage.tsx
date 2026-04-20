@@ -975,326 +975,398 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
   return (
     <AdminShell currentSection="posts" member={sessionMember}>
       <Main>
-      <HeroSection>
-        <AdminWorkspaceHeroLayout>
-          <AdminWorkspaceHeroCopy>
-            <h1>글 관리</h1>
-          </AdminWorkspaceHeroCopy>
-          <AdminWorkspaceHeroActions>
-            <PrimaryCta type="button" onClick={() => void openWriteRoute()}>
-              새 글 작성
-            </PrimaryCta>
-          </AdminWorkspaceHeroActions>
-        </AdminWorkspaceHeroLayout>
-      </HeroSection>
-
-      <ResumeSection ref={continueSectionRef}>
-        <SectionHeading>
-          <div>
-            <h2>최근 작업</h2>
-          </div>
-        </SectionHeading>
-        {showDeferredSupportPanels ? (
-          shouldRenderResumeGrid ? (
-            <ResumeGrid>
-              {localDraft ? (
-                <ResumeCardButton type="button" onClick={() => void openWriteRoute({ source: "local-draft" })}>
-                  <ResumeHeader>
-                    <strong>브라우저 임시저장</strong>
-                    {localDraft.savedAt ? <span>{formatDateTime(localDraft.savedAt)}</span> : null}
-                  </ResumeHeader>
-                  <ResumeTitle>{localDraft.title}</ResumeTitle>
-                  {localDraft.summary ? <ResumeDescription>{localDraft.summary}</ResumeDescription> : null}
-                  <ResumeMeta>
-                    <VisibilityBadge data-tone={localDraft.visibility}>
-                      {visibilityLabelFromValue(localDraft.visibility)}
-                    </VisibilityBadge>
-                    <span>{localDraft.tagCount > 0 ? `태그 ${localDraft.tagCount}개` : "태그 없음"}</span>
-                  </ResumeMeta>
-                </ResumeCardButton>
-              ) : (
-                <ResumeCard data-empty="true">
-                  <ResumeHeader>
-                    <strong>브라우저 임시저장</strong>
-                  </ResumeHeader>
-                  <EmptyInlineState>
-                    <strong>임시 저장 없음</strong>
-                    <ActionRow>
-                      <PrimaryInlineButton type="button" onClick={() => void openWriteRoute()}>
-                        새 글 작성
-                      </PrimaryInlineButton>
-                    </ActionRow>
-                  </EmptyInlineState>
-                </ResumeCard>
-              )}
-
-              <ResumeCard>
-                <ResumeHeader>
-                  <strong>최근 수정 3건</strong>
-                  {isRecentLoading ? <span>불러오는 중</span> : null}
-                </ResumeHeader>
-                {renderRecentEdited()}
-              </ResumeCard>
-            </ResumeGrid>
-          ) : (
-            <WorkspaceEmpty>
-              <strong>최근 작업 없음</strong>
-              <PrimaryInlineButton type="button" onClick={() => void openWriteRoute()}>
+        <HeroSection>
+          <AdminWorkspaceHeroLayout>
+            <AdminWorkspaceHeroCopy>
+              <h1>편집과 검수를 한 화면에서 이어갑니다</h1>
+              <p>최근 초안 복귀, 공개 상태 점검, 목록 필터링까지 지금 필요한 글 작업 흐름을 한곳에 모읍니다.</p>
+            </AdminWorkspaceHeroCopy>
+            <AdminWorkspaceHeroActions>
+              <PrimaryCta type="button" onClick={() => void openWriteRoute()}>
                 새 글 작성
-              </PrimaryInlineButton>
-            </WorkspaceEmpty>
-          )
-        ) : (
-          <DeferredPanelPlaceholder data-size="recent">
-            <strong>최근 작업 준비 중</strong>
-            <span>글 목록 워크스페이스를 먼저 표시한 뒤 이어서 최근 작업을 붙입니다.</span>
-          </DeferredPanelPlaceholder>
-        )}
-      </ResumeSection>
+              </PrimaryCta>
+            </AdminWorkspaceHeroActions>
+          </AdminWorkspaceHeroLayout>
+        </HeroSection>
 
-      <ListSection ref={listSectionRef}>
-        <SectionHeading>
-          <div>
-            <h2>글 목록</h2>
-          </div>
-          <ListMeta>
-            <GhostButton type="button" onClick={() => void Promise.all([loadList(), loadRecentPosts()])}>
-              새로고침
-            </GhostButton>
-          </ListMeta>
-        </SectionHeading>
-
-        <StickyFilterToolbar data-compact={isStickyToolbarCompact}>
-          <FilterRail>
-            <ScopeTabs role="tablist" aria-label="글 범위 선택">
-              <ScopeTabButton type="button" data-active={listScope === "active"} onClick={() => setListScope("active")}>
-                활성 글
-              </ScopeTabButton>
-              <ScopeTabButton type="button" data-active={listScope === "deleted"} onClick={() => setListScope("deleted")}>
-                삭제 글
-              </ScopeTabButton>
-            </ScopeTabs>
-            <SearchField>
-              <label htmlFor="workspace-post-search">검색어</label>
-              <input
-                id="workspace-post-search"
-                placeholder={listScope === "active" ? "제목이나 본문 검색" : "삭제된 글 검색"}
-                value={listKw}
-                onChange={(event) => {
-                  setListPage(DEFAULT_PAGE)
-                  setListKw(event.target.value)
-                }}
-              />
-            </SearchField>
-          </FilterRail>
-
-          {!isStickyToolbarCompact ? (
-            <AdvancedDisclosure open={isAdvancedOpen}>
-              <summary
-                onClick={(event) => {
-                  event.preventDefault()
-                  setIsAdvancedOpen((prev) => !prev)
-                }}
-              >
-                <strong>고급 검색</strong>
-                <span>{isAdvancedOpen ? "닫기" : "열기"}</span>
-              </summary>
-            {isAdvancedOpen && (
-                <div className="body">
-                  <AdvancedGrid>
-                    <FieldBox>
-                      <label htmlFor="workspace-page">페이지</label>
-                      <input
-                        id="workspace-page"
-                        type="number"
-                        min={1}
-                        value={listPage}
-                        onChange={(event) => setListPage(sanitizeNumberInput(event.target.value, DEFAULT_PAGE))}
-                      />
-                    </FieldBox>
-                    <FieldBox>
-                      <label htmlFor="workspace-page-size">페이지 크기</label>
-                      <input
-                        id="workspace-page-size"
-                        type="number"
-                        min={1}
-                        max={30}
-                        value={listPageSize}
-                        onChange={(event) => setListPageSize(sanitizeNumberInput(event.target.value, DEFAULT_PAGE_SIZE))}
-                      />
-                    </FieldBox>
-                    {listScope === "active" && (
-                      <FieldBox>
-                        <label htmlFor="workspace-sort">정렬</label>
-                        <select
-                          id="workspace-sort"
-                          value={listSort}
-                          onChange={(event) => setListSort(event.target.value as ListSort)}
-                        >
-                          <option value="CREATED_AT">최신순</option>
-                          <option value="CREATED_AT_ASC">오래된순</option>
-                        </select>
-                      </FieldBox>
+        <WorkspaceBody>
+          <WorkspaceMain>
+            <ResumeSection ref={continueSectionRef}>
+              <SectionHeading>
+                <div>
+                  <h2>최근 작업</h2>
+                </div>
+              </SectionHeading>
+              {showDeferredSupportPanels ? (
+                shouldRenderResumeGrid ? (
+                  <ResumeGrid>
+                    {localDraft ? (
+                      <ResumeCardButton type="button" onClick={() => void openWriteRoute({ source: "local-draft" })}>
+                        <ResumeHeader>
+                          <strong>브라우저 임시저장</strong>
+                          {localDraft.savedAt ? <span>{formatDateTime(localDraft.savedAt)}</span> : null}
+                        </ResumeHeader>
+                        <ResumeTitle>{localDraft.title}</ResumeTitle>
+                        {localDraft.summary ? <ResumeDescription>{localDraft.summary}</ResumeDescription> : null}
+                        <ResumeMeta>
+                          <VisibilityBadge data-tone={localDraft.visibility}>
+                            {visibilityLabelFromValue(localDraft.visibility)}
+                          </VisibilityBadge>
+                          <span>{localDraft.tagCount > 0 ? `태그 ${localDraft.tagCount}개` : "태그 없음"}</span>
+                        </ResumeMeta>
+                      </ResumeCardButton>
+                    ) : (
+                      <ResumeCard data-empty="true">
+                        <ResumeHeader>
+                          <strong>브라우저 임시저장</strong>
+                        </ResumeHeader>
+                        <EmptyInlineState>
+                          <strong>임시 저장 없음</strong>
+                          <ActionRow>
+                            <PrimaryInlineButton type="button" onClick={() => void openWriteRoute()}>
+                              새 글 작성
+                            </PrimaryInlineButton>
+                          </ActionRow>
+                        </EmptyInlineState>
+                      </ResumeCard>
                     )}
-                  </AdvancedGrid>
-                </div>
+
+                    <ResumeCard>
+                      <ResumeHeader>
+                        <strong>최근 수정 3건</strong>
+                        {isRecentLoading ? <span>불러오는 중</span> : null}
+                      </ResumeHeader>
+                      {renderRecentEdited()}
+                    </ResumeCard>
+                  </ResumeGrid>
+                ) : (
+                  <WorkspaceEmpty>
+                    <strong>최근 작업 없음</strong>
+                    <PrimaryInlineButton type="button" onClick={() => void openWriteRoute()}>
+                      새 글 작성
+                    </PrimaryInlineButton>
+                  </WorkspaceEmpty>
+                )
+              ) : (
+                <DeferredPanelPlaceholder data-size="recent">
+                  <strong>최근 작업 준비 중</strong>
+                  <span>글 목록 워크스페이스를 먼저 표시한 뒤 이어서 최근 작업을 붙입니다.</span>
+                </DeferredPanelPlaceholder>
               )}
-            </AdvancedDisclosure>
-          ) : null}
+            </ResumeSection>
 
-          <FilterSummaryBar>
-            <div className="summaryCopy">
-              <strong>현재 조건</strong>
-              <SummaryPillRow>
-                {listSummaryParts.map((part) => (
-                  <SummaryPill key={part}>{part}</SummaryPill>
-                ))}
-                <SummaryPill data-tone="neutral">
-                  총 {listState.total}건{listState.loadedAt ? ` · ${formatDateTime(listState.loadedAt)} 기준` : ""}
-                </SummaryPill>
-              </SummaryPillRow>
-            </div>
-            <ToolbarUtilityRow>
-              <GhostButton type="button" onClick={() => setIsStickyToolbarCompact((prev) => !prev)}>
-                {isStickyToolbarCompact ? "전체 보기" : "요약만 보기"}
-              </GhostButton>
-              {hasListFilters ? (
-                <GhostButton type="button" onClick={handleResetListFilters}>
-                  조건 초기화
-                </GhostButton>
-              ) : null}
-            </ToolbarUtilityRow>
-          </FilterSummaryBar>
-        </StickyFilterToolbar>
-
-        {showDeferredSupportPanels ? (
-          <RecentActionPanel aria-live="polite">
-            <div className="panelHead">
-              <strong>작업 기록</strong>
-            </div>
-            {recentActions.length > 0 ? (
-              <RecentActionList>
-                {recentActions.map((entry) => (
-                  <li key={entry.id} data-tone={entry.tone}>
-                    <div className="copy">
-                      <div className="headline">
-                        <strong>{entry.label}</strong>
-                        <span className="stateLabel">{entry.stateLabel}</span>
-                      </div>
-                      <p>{entry.detail}</p>
-                    </div>
-                    <span className="time">{formatDateTime(entry.occurredAt)}</span>
-                  </li>
-                ))}
-              </RecentActionList>
-            ) : (
-              <MutedText>아직 기록된 작업이 없습니다. 삭제, 복구, 영구삭제 결과가 여기에 쌓입니다.</MutedText>
-            )}
-          </RecentActionPanel>
-        ) : (
-          <DeferredPanelPlaceholder data-size="activity">
-            <strong>작업 기록 준비 중</strong>
-            <span>목록이 안정된 뒤 최근 변경 이력을 이어서 불러옵니다.</span>
-          </DeferredPanelPlaceholder>
-        )}
-
-        {isListLoading ? (
-          <ListCard aria-hidden="true">
-            <ListSkeleton>
-              <div className="desktopRows">
-                <div className="headerRow">
-                  <span className="idCell">ID</span>
-                  <span>제목</span>
-                  <span className="dateCell">{listScope === "active" ? "수정일" : "삭제일"}</span>
-                  <span className="actionCell">작업</span>
+            <ListSection ref={listSectionRef}>
+              <SectionHeading>
+                <div>
+                  <h2>글 목록</h2>
                 </div>
-                {Array.from({ length: LIST_SKELETON_ROW_COUNT }, (_, index) => (
-                  <div className="row" key={`desktop-skeleton-${index}`}>
-                    <div className="cell idCell">
-                      <span className="line short" />
-                    </div>
-                    <div className="cell titleCell">
-                      <span className="line medium" />
-                      <span className="line wide" />
-                      <span className="line short muted" />
-                    </div>
-                    <div className="cell dateCell">
-                      <span className="line medium" />
-                    </div>
-                    <div className="cell actionCell">
-                      <span className="line short" />
-                      <span className="line short" />
-                    </div>
+                <ListMeta>
+                  <GhostButton type="button" onClick={() => void Promise.all([loadList(), loadRecentPosts()])}>
+                    새로고침
+                  </GhostButton>
+                </ListMeta>
+              </SectionHeading>
+
+              <StickyFilterToolbar data-compact={isStickyToolbarCompact}>
+                <FilterRail>
+                  <ScopeTabs role="tablist" aria-label="글 범위 선택">
+                    <ScopeTabButton type="button" data-active={listScope === "active"} onClick={() => setListScope("active")}>
+                      활성 글
+                    </ScopeTabButton>
+                    <ScopeTabButton type="button" data-active={listScope === "deleted"} onClick={() => setListScope("deleted")}>
+                      삭제 글
+                    </ScopeTabButton>
+                  </ScopeTabs>
+                  <SearchField>
+                    <label htmlFor="workspace-post-search">검색어</label>
+                    <input
+                      id="workspace-post-search"
+                      placeholder={listScope === "active" ? "제목이나 본문 검색" : "삭제된 글 검색"}
+                      value={listKw}
+                      onChange={(event) => {
+                        setListPage(DEFAULT_PAGE)
+                        setListKw(event.target.value)
+                      }}
+                    />
+                  </SearchField>
+                </FilterRail>
+
+                {!isStickyToolbarCompact ? (
+                  <AdvancedDisclosure open={isAdvancedOpen}>
+                    <summary
+                      onClick={(event) => {
+                        event.preventDefault()
+                        setIsAdvancedOpen((prev) => !prev)
+                      }}
+                    >
+                      <strong>고급 검색</strong>
+                      <span>{isAdvancedOpen ? "닫기" : "열기"}</span>
+                    </summary>
+                    {isAdvancedOpen && (
+                      <div className="body">
+                        <AdvancedGrid>
+                          <FieldBox>
+                            <label htmlFor="workspace-page">페이지</label>
+                            <input
+                              id="workspace-page"
+                              type="number"
+                              min={1}
+                              value={listPage}
+                              onChange={(event) => setListPage(sanitizeNumberInput(event.target.value, DEFAULT_PAGE))}
+                            />
+                          </FieldBox>
+                          <FieldBox>
+                            <label htmlFor="workspace-page-size">페이지 크기</label>
+                            <input
+                              id="workspace-page-size"
+                              type="number"
+                              min={1}
+                              max={30}
+                              value={listPageSize}
+                              onChange={(event) => setListPageSize(sanitizeNumberInput(event.target.value, DEFAULT_PAGE_SIZE))}
+                            />
+                          </FieldBox>
+                          {listScope === "active" && (
+                            <FieldBox>
+                              <label htmlFor="workspace-sort">정렬</label>
+                              <select
+                                id="workspace-sort"
+                                value={listSort}
+                                onChange={(event) => setListSort(event.target.value as ListSort)}
+                              >
+                                <option value="CREATED_AT">최신순</option>
+                                <option value="CREATED_AT_ASC">오래된순</option>
+                              </select>
+                            </FieldBox>
+                          )}
+                        </AdvancedGrid>
+                      </div>
+                    )}
+                  </AdvancedDisclosure>
+                ) : null}
+
+                <FilterSummaryBar>
+                  <div className="summaryCopy">
+                    <strong>현재 조건</strong>
+                    <SummaryPillRow>
+                      {listSummaryParts.map((part) => (
+                        <SummaryPill key={part}>{part}</SummaryPill>
+                      ))}
+                      <SummaryPill data-tone="neutral">
+                        총 {listState.total}건{listState.loadedAt ? ` · ${formatDateTime(listState.loadedAt)} 기준` : ""}
+                      </SummaryPill>
+                    </SummaryPillRow>
                   </div>
-                ))}
-              </div>
-              <div className="mobileCards">
-                {Array.from({ length: 3 }, (_, index) => (
-                  <article key={`mobile-skeleton-${index}`}>
-                    <div className="metaRow">
-                      <span className="line short" />
-                      <span className="line short" />
+                  <ToolbarUtilityRow>
+                    <GhostButton type="button" onClick={() => setIsStickyToolbarCompact((prev) => !prev)}>
+                      {isStickyToolbarCompact ? "전체 보기" : "요약만 보기"}
+                    </GhostButton>
+                    {hasListFilters ? (
+                      <GhostButton type="button" onClick={handleResetListFilters}>
+                        조건 초기화
+                      </GhostButton>
+                    ) : null}
+                  </ToolbarUtilityRow>
+                </FilterSummaryBar>
+              </StickyFilterToolbar>
+
+              {showDeferredSupportPanels ? (
+                <RecentActionPanel aria-live="polite">
+                  <div className="panelHead">
+                    <strong>작업 기록</strong>
+                  </div>
+                  {recentActions.length > 0 ? (
+                    <RecentActionList>
+                      {recentActions.map((entry) => (
+                        <li key={entry.id} data-tone={entry.tone}>
+                          <div className="copy">
+                            <div className="headline">
+                              <strong>{entry.label}</strong>
+                              <span className="stateLabel">{entry.stateLabel}</span>
+                            </div>
+                            <p>{entry.detail}</p>
+                          </div>
+                          <span className="time">{formatDateTime(entry.occurredAt)}</span>
+                        </li>
+                      ))}
+                    </RecentActionList>
+                  ) : (
+                    <MutedText>아직 기록된 작업이 없습니다. 삭제, 복구, 영구삭제 결과가 여기에 쌓입니다.</MutedText>
+                  )}
+                </RecentActionPanel>
+              ) : (
+                <DeferredPanelPlaceholder data-size="activity">
+                  <strong>작업 기록 준비 중</strong>
+                  <span>목록이 안정된 뒤 최근 변경 이력을 이어서 불러옵니다.</span>
+                </DeferredPanelPlaceholder>
+              )}
+
+              {isListLoading ? (
+                <ListCard aria-hidden="true">
+                  <ListSkeleton>
+                    <div className="desktopRows">
+                      <div className="headerRow">
+                        <span className="idCell">ID</span>
+                        <span>제목</span>
+                        <span className="dateCell">{listScope === "active" ? "수정일" : "삭제일"}</span>
+                        <span className="actionCell">작업</span>
+                      </div>
+                      {Array.from({ length: LIST_SKELETON_ROW_COUNT }, (_, index) => (
+                        <div className="row" key={`desktop-skeleton-${index}`}>
+                          <div className="cell idCell">
+                            <span className="line short" />
+                          </div>
+                          <div className="cell titleCell">
+                            <span className="line medium" />
+                            <span className="line wide" />
+                            <span className="line short muted" />
+                          </div>
+                          <div className="cell dateCell">
+                            <span className="line medium" />
+                          </div>
+                          <div className="cell actionCell">
+                            <span className="line short" />
+                            <span className="line short" />
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <span className="line wide" />
-                    <span className="line medium muted" />
-                    <span className="line short muted" />
-                    <div className="actionRow">
-                      <span className="line short" />
-                      <span className="line short" />
+                    <div className="mobileCards">
+                      {Array.from({ length: 3 }, (_, index) => (
+                        <article key={`mobile-skeleton-${index}`}>
+                          <div className="metaRow">
+                            <span className="line short" />
+                            <span className="line short" />
+                          </div>
+                          <span className="line wide" />
+                          <span className="line medium muted" />
+                          <span className="line short muted" />
+                          <div className="actionRow">
+                            <span className="line short" />
+                            <span className="line short" />
+                          </div>
+                        </article>
+                      ))}
                     </div>
-                  </article>
-                ))}
-              </div>
-            </ListSkeleton>
-          </ListCard>
-        ) : listError ? (
-          <ListEmptyState>
-            <strong>목록을 불러오지 못했습니다.</strong>
-            <p>{listError}</p>
-            <ActionRow>
-              <PrimaryInlineButton type="button" onClick={() => void loadList()}>
-                다시 시도
-              </PrimaryInlineButton>
-            </ActionRow>
-          </ListEmptyState>
-        ) : listState.rows.length === 0 ? (
-          <ListEmptyState>
-            <strong>{listScope === "active" ? "아직 글이 없습니다." : "삭제된 글이 없습니다."}</strong>
-            <ActionRow>
-              <PrimaryInlineButton type="button" onClick={() => void openWriteRoute()}>
-                새 글 작성
-              </PrimaryInlineButton>
-              {listKw.trim() ? (
-                <GhostButton
-                  type="button"
-                  onClick={() => {
-                    setListKw("")
-                    setListPage(DEFAULT_PAGE)
-                  }}
-                >
-                  검색 초기화
-                </GhostButton>
-              ) : null}
-            </ActionRow>
-          </ListEmptyState>
-        ) : (
-          <ListCard>
-            {!shouldRenderMobileList ? (
-              <DesktopListTable>
-                <thead>
-                  <tr>
-                    <th className="idCell">ID</th>
-                    <th>제목</th>
-                    <th className="dateCell">{listScope === "active" ? "수정일" : "삭제일"}</th>
-                    <th className="actionCell">작업</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {listState.rows.map((row) => (
-                    <tr key={row.id}>
-                      <td className="idCell">#{row.id}</td>
-                      <td>
-                        <TitleCell>
+                  </ListSkeleton>
+                </ListCard>
+              ) : listError ? (
+                <ListEmptyState>
+                  <strong>목록을 불러오지 못했습니다.</strong>
+                  <p>{listError}</p>
+                  <ActionRow>
+                    <PrimaryInlineButton type="button" onClick={() => void loadList()}>
+                      다시 시도
+                    </PrimaryInlineButton>
+                  </ActionRow>
+                </ListEmptyState>
+              ) : listState.rows.length === 0 ? (
+                <ListEmptyState>
+                  <strong>{listScope === "active" ? "아직 글이 없습니다." : "삭제된 글이 없습니다."}</strong>
+                  <ActionRow>
+                    <PrimaryInlineButton type="button" onClick={() => void openWriteRoute()}>
+                      새 글 작성
+                    </PrimaryInlineButton>
+                    {listKw.trim() ? (
+                      <GhostButton
+                        type="button"
+                        onClick={() => {
+                          setListKw("")
+                          setListPage(DEFAULT_PAGE)
+                        }}
+                      >
+                        검색 초기화
+                      </GhostButton>
+                    ) : null}
+                  </ActionRow>
+                </ListEmptyState>
+              ) : (
+                <ListCard>
+                  {!shouldRenderMobileList ? (
+                    <DesktopListTable>
+                      <thead>
+                        <tr>
+                          <th className="idCell">ID</th>
+                          <th>제목</th>
+                          <th className="dateCell">{listScope === "active" ? "수정일" : "삭제일"}</th>
+                          <th className="actionCell">작업</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {listState.rows.map((row) => (
+                          <tr key={row.id}>
+                            <td className="idCell">#{row.id}</td>
+                            <td>
+                              <TitleCell>
+                                {canOpenCanonicalPost(row) ? (
+                                  <TitleAnchor href={toCanonicalPostPath(row.id)} onClick={(event) => void openCanonicalPost(event, row)}>
+                                    {getWorkspaceRowTitle(row)}
+                                  </TitleAnchor>
+                                ) : (
+                                  <TitleText>{getWorkspaceRowTitle(row)}</TitleText>
+                                )}
+                                <div className="metaRow">
+                                  <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
+                                    {visibilityLabel(row.published, row.listed)}
+                                  </VisibilityBadge>
+                                  {renderAuthorMeta(row)}
+                                </div>
+                              </TitleCell>
+                            </td>
+                            <td className="dateCell">{formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)}</td>
+                            <td className="actionCell">
+                              <RowActions>
+                                {listScope === "active" ? (
+                                  <>
+                                    <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
+                                      수정
+                                    </RowPrimaryButton>
+                                    {canOpenCanonicalPost(row) ? (
+                                      <RowSecondaryButton type="button" onClick={() => void copyPostDetailLink(row)}>
+                                        링크 복사
+                                      </RowSecondaryButton>
+                                    ) : null}
+                                    <DangerTextButton
+                                      type="button"
+                                      disabled={Boolean(mutationPending)}
+                                      onClick={() => void handleDeletePost(row)}
+                                    >
+                                      삭제
+                                    </DangerTextButton>
+                                  </>
+                                ) : (
+                                  <>
+                                    <RowPrimaryButton
+                                      type="button"
+                                      disabled={Boolean(mutationPending)}
+                                      onClick={() => void handleRestorePost(row)}
+                                    >
+                                      복구
+                                    </RowPrimaryButton>
+                                    <DangerTextButton
+                                      type="button"
+                                      disabled={Boolean(mutationPending)}
+                                      onClick={() => void handleHardDeletePost(row)}
+                                    >
+                                      영구삭제
+                                    </DangerTextButton>
+                                  </>
+                                )}
+                              </RowActions>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </DesktopListTable>
+                  ) : null}
+
+                  {shouldRenderMobileList ? (
+                    <MobileCardList>
+                      {listState.rows.map((row) => (
+                        <article key={`mobile-${row.id}`}>
+                          <header>
+                            <span className="id">#{row.id}</span>
+                          </header>
                           {canOpenCanonicalPost(row) ? (
                             <TitleAnchor href={toCanonicalPostPath(row.id)} onClick={(event) => void openCanonicalPost(event, row)}>
                               {getWorkspaceRowTitle(row)}
@@ -1308,147 +1380,116 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                             </VisibilityBadge>
                             {renderAuthorMeta(row)}
                           </div>
-                        </TitleCell>
-                      </td>
-                      <td className="dateCell">{formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)}</td>
-                      <td className="actionCell">
-                        <RowActions>
-                          {listScope === "active" ? (
-                            <>
-                              <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
-                                수정
-                              </RowPrimaryButton>
-                              {canOpenCanonicalPost(row) ? (
-                                <RowSecondaryButton type="button" onClick={() => void copyPostDetailLink(row)}>
-                                  링크 복사
-                                </RowSecondaryButton>
-                              ) : null}
-                              <DangerTextButton
-                                type="button"
-                                disabled={Boolean(mutationPending)}
-                                onClick={() => void handleDeletePost(row)}
-                              >
-                                삭제
-                              </DangerTextButton>
-                            </>
-                          ) : (
-                            <>
-                              <RowPrimaryButton
-                                type="button"
-                                disabled={Boolean(mutationPending)}
-                                onClick={() => void handleRestorePost(row)}
-                              >
-                                복구
-                              </RowPrimaryButton>
-                              <DangerTextButton
-                                type="button"
-                                disabled={Boolean(mutationPending)}
-                                onClick={() => void handleHardDeletePost(row)}
-                              >
-                                영구삭제
-                              </DangerTextButton>
-                            </>
-                          )}
-                        </RowActions>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </DesktopListTable>
-            ) : null}
+                          <span className="date">{formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)}</span>
+                          <div className="actions">
+                            {listScope === "active" ? (
+                              <>
+                                <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
+                                  수정
+                                </RowPrimaryButton>
+                                {canOpenCanonicalPost(row) ? (
+                                  <RowSecondaryButton type="button" onClick={() => void copyPostDetailLink(row)}>
+                                    링크 복사
+                                  </RowSecondaryButton>
+                                ) : null}
+                                <DangerTextButton
+                                  type="button"
+                                  disabled={Boolean(mutationPending)}
+                                  onClick={() => void handleDeletePost(row)}
+                                >
+                                  삭제
+                                </DangerTextButton>
+                              </>
+                            ) : (
+                              <>
+                                <RowPrimaryButton
+                                  type="button"
+                                  disabled={Boolean(mutationPending)}
+                                  onClick={() => void handleRestorePost(row)}
+                                >
+                                  복구
+                                </RowPrimaryButton>
+                                <DangerTextButton
+                                  type="button"
+                                  disabled={Boolean(mutationPending)}
+                                  onClick={() => void handleHardDeletePost(row)}
+                                >
+                                  영구삭제
+                                </DangerTextButton>
+                              </>
+                            )}
+                          </div>
+                        </article>
+                      ))}
+                    </MobileCardList>
+                  ) : null}
+                </ListCard>
+              )}
+            </ListSection>
+          </WorkspaceMain>
 
-            {shouldRenderMobileList ? (
-              <MobileCardList>
-                {listState.rows.map((row) => (
-                  <article key={`mobile-${row.id}`}>
-                    <header>
-                      <span className="id">#{row.id}</span>
-                    </header>
-                    {canOpenCanonicalPost(row) ? (
-                      <TitleAnchor href={toCanonicalPostPath(row.id)} onClick={(event) => void openCanonicalPost(event, row)}>
-                        {getWorkspaceRowTitle(row)}
-                      </TitleAnchor>
-                    ) : (
-                      <TitleText>{getWorkspaceRowTitle(row)}</TitleText>
-                    )}
-                    <div className="metaRow">
-                      <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
-                        {visibilityLabel(row.published, row.listed)}
-                      </VisibilityBadge>
-                      {renderAuthorMeta(row)}
-                    </div>
-                    <span className="date">{formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)}</span>
-                    <div className="actions">
-                      {listScope === "active" ? (
-                        <>
-                          <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
-                            수정
-                          </RowPrimaryButton>
-                          {canOpenCanonicalPost(row) ? (
-                            <RowSecondaryButton type="button" onClick={() => void copyPostDetailLink(row)}>
-                              링크 복사
-                            </RowSecondaryButton>
-                          ) : null}
-                          <DangerTextButton
-                            type="button"
-                            disabled={Boolean(mutationPending)}
-                            onClick={() => void handleDeletePost(row)}
-                          >
-                            삭제
-                          </DangerTextButton>
-                        </>
-                      ) : (
-                        <>
-                          <RowPrimaryButton
-                            type="button"
-                            disabled={Boolean(mutationPending)}
-                            onClick={() => void handleRestorePost(row)}
-                          >
-                            복구
-                          </RowPrimaryButton>
-                          <DangerTextButton
-                            type="button"
-                            disabled={Boolean(mutationPending)}
-                            onClick={() => void handleHardDeletePost(row)}
-                          >
-                            영구삭제
-                          </DangerTextButton>
-                        </>
-                      )}
-                    </div>
-                  </article>
-                ))}
-              </MobileCardList>
-            ) : null}
-          </ListCard>
-        )}
-      </ListSection>
+          <WorkspaceRail>
+            <RailCard>
+              <RailCardHeader>
+                <h2>검수 체크리스트</h2>
+                <span>발행 전 마지막 확인</span>
+              </RailCardHeader>
+              <RailBulletList>
+                <li>임시 저장을 열어 제목, 요약, 태그가 최신 초안과 맞는지 확인합니다.</li>
+                <li>링크 공개와 전체 공개를 구분해 외부 공유 범위를 다시 점검합니다.</li>
+                <li>삭제나 복구 후에는 작업 기록에 결과가 남았는지 확인합니다.</li>
+              </RailBulletList>
+            </RailCard>
 
-      <SupportSection>
-        <SectionHeading>
-          <div>
-            <h2>지원 도구</h2>
-          </div>
-        </SectionHeading>
-        <SupportList>
-          <Link href="/admin/profile" passHref legacyBehavior>
-            <SupportLink>
-              <SupportCopy>
-                <strong>프로필 정리</strong>
-              </SupportCopy>
-              <SupportMeta>프로필 열기</SupportMeta>
-            </SupportLink>
-          </Link>
-          <Link href="/admin/dashboard" passHref legacyBehavior>
-            <SupportLink>
-              <SupportCopy>
-                <strong>운영 대시보드</strong>
-              </SupportCopy>
-              <SupportMeta>대시보드 열기</SupportMeta>
-            </SupportLink>
-          </Link>
-        </SupportList>
-      </SupportSection>
+            <RailCard>
+              <RailCardHeader>
+                <h2>상태 의미</h2>
+                <span>목록 배지 해석</span>
+              </RailCardHeader>
+              <RailMetaList>
+                <li>
+                  <strong>비공개</strong>
+                  <span>편집 중인 초안으로 외부 링크가 아직 열리지 않습니다.</span>
+                </li>
+                <li>
+                  <strong>링크 공개</strong>
+                  <span>직접 링크를 가진 사람만 볼 수 있어 검수 공유에 적합합니다.</span>
+                </li>
+                <li>
+                  <strong>전체 공개</strong>
+                  <span>피드와 상세 페이지에 모두 노출되는 최종 상태입니다.</span>
+                </li>
+              </RailMetaList>
+            </RailCard>
+
+            <RailCard>
+              <RailCardHeader>
+                <h2>바로가기</h2>
+                <span>옆 작업실 연결</span>
+              </RailCardHeader>
+              <SupportList>
+                <Link href="/admin/profile" passHref legacyBehavior>
+                  <SupportLink>
+                    <SupportCopy>
+                      <strong>프로필 정리</strong>
+                      <p>작성자 정보와 소개 문구를 같은 톤으로 맞춥니다.</p>
+                    </SupportCopy>
+                    <SupportMeta>프로필 열기</SupportMeta>
+                  </SupportLink>
+                </Link>
+                <Link href="/admin/dashboard" passHref legacyBehavior>
+                  <SupportLink>
+                    <SupportCopy>
+                      <strong>운영 대시보드</strong>
+                      <p>발행 뒤 모니터링이 필요한 지표와 장애 징후를 확인합니다.</p>
+                    </SupportCopy>
+                    <SupportMeta>대시보드 열기</SupportMeta>
+                  </SupportLink>
+                </Link>
+              </SupportList>
+            </RailCard>
+          </WorkspaceRail>
+        </WorkspaceBody>
 
       {toast ? (
         <ToastViewport data-tone={toast.tone} role="status" aria-live="polite">
@@ -1516,6 +1557,27 @@ const Main = styled.main`
 
 const HeroSection = styled(AdminWorkspaceHero)``
 
+const WorkspaceBody = styled.div`
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 20rem);
+  gap: 1rem;
+  align-items: start;
+
+  @media (max-width: 1180px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const WorkspaceMain = styled.div`
+  display: grid;
+  gap: 1rem;
+`
+
+const WorkspaceRail = styled.aside`
+  display: grid;
+  gap: 0.85rem;
+`
+
 const baseButton = ({ theme }: { theme: any }) => `
   min-height: 48px;
   border-radius: 12px;
@@ -1547,12 +1609,61 @@ const SectionHeading = styled(AdminSectionHeading)`
   }
 `
 
-const SupportSection = styled.section`
+const RailCard = styled(AdminRailCard)`
+  gap: 0.76rem;
+`
+
+const RailCardHeader = styled.div`
   display: grid;
-  gap: 0.8rem;
+  gap: 0.18rem;
 
   h2 {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.98rem;
     font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+`
+
+const RailBulletList = styled.ul`
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.5rem;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.84rem;
+  line-height: 1.55;
+`
+
+const RailMetaList = styled.ul`
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+
+  li {
+    display: grid;
+    gap: 0.16rem;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.86rem;
+    font-weight: 800;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.82rem;
+    line-height: 1.5;
   }
 `
 

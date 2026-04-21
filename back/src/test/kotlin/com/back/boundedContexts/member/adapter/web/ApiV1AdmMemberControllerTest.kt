@@ -368,6 +368,7 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
                             "profileImageUrl": "",
                             "profileRole": "Platform Engineer",
                             "profileBio": "초안 프로필 소개",
+                            "aboutHeadline": "운영 가능한 구조를 설계합니다.",
                             "aboutRole": "Architecture Writer",
                             "aboutBio": "About 초안 소개",
                             "aboutSections": [
@@ -376,6 +377,17 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
                                     "title": "경력",
                                     "items": ["2026.03 Aquila Blog 운영", "2025.11 관측성 체계 정리"],
                                     "dividerBefore": false
+                                }
+                            ],
+                            "aboutProjectSectionTitle": "프로젝트",
+                            "aboutProjects": [
+                                {
+                                    "id": "blog",
+                                    "name": "aquila-blog",
+                                    "summary": "관리자에서 수정하는 소개 프로젝트",
+                                    "role": "Full-stack",
+                                    "href": "https://github.com/AquilaXk/aquila-blog",
+                                    "linkLabel": "GitHub"
                                 }
                             ],
                             "blogTitle": "Aquila Workspace",
@@ -392,8 +404,11 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
                 }.andExpect {
                     status { isOk() }
                     jsonPath("$.draft.profileRole") { value("Platform Engineer") }
+                    jsonPath("$.draft.aboutHeadline") { value("운영 가능한 구조를 설계합니다.") }
                     jsonPath("$.draft.aboutSections.length()") { value(1) }
                     jsonPath("$.draft.aboutSections[0].title") { value("경력") }
+                    jsonPath("$.draft.aboutProjects.length()") { value(1) }
+                    jsonPath("$.draft.aboutProjects[0].summary") { value("관리자에서 수정하는 소개 프로젝트") }
                     jsonPath("$.published.profileRole") { value(previousPublishedRole) }
                     jsonPath("$.dirtyFromPublished") { value(true) }
                 }
@@ -424,6 +439,7 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
                             "profileImageUrl": "",
                             "profileRole": "Draft Role",
                             "profileBio": "Draft Bio",
+                            "aboutHeadline": "Draft Headline",
                             "aboutRole": "Draft About Role",
                             "aboutBio": "Draft About Bio",
                             "aboutSections": [
@@ -432,6 +448,17 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
                                     "title": "수상이력",
                                     "items": ["2026.03 운영 포트폴리오 고도화"],
                                     "dividerBefore": false
+                                }
+                            ],
+                            "aboutProjectSectionTitle": "Draft Projects",
+                            "aboutProjects": [
+                                {
+                                    "id": "bank",
+                                    "name": "aquila-bank",
+                                    "summary": "Draft Project Summary",
+                                    "role": "Backend",
+                                    "href": "https://github.com/AquilaXk/aquila-bank",
+                                    "linkLabel": "Repository"
                                 }
                             ],
                             "blogTitle": "Draft Blog Title",
@@ -467,9 +494,13 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
                     status { isOk() }
                     jsonPath("$.profileRole") { value("Draft Role") }
                     jsonPath("$.profileBio") { value("Draft Bio") }
+                    jsonPath("$.aboutHeadline") { value("Draft Headline") }
                     jsonPath("$.aboutRole") { value("Draft About Role") }
                     jsonPath("$.aboutSections.length()") { value(1) }
                     jsonPath("$.aboutSections[0].title") { value("수상이력") }
+                    jsonPath("$.aboutProjectSectionTitle") { value("Draft Projects") }
+                    jsonPath("$.aboutProjects.length()") { value(1) }
+                    jsonPath("$.aboutProjects[0].linkLabel") { value("Repository") }
                     jsonPath("$.blogTitle") { value("Draft Blog Title") }
                     jsonPath("$.homeIntroTitle") { value("Draft Intro Title") }
                 }

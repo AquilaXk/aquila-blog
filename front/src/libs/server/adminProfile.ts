@@ -1,6 +1,7 @@
 import { IncomingMessage } from "http"
 import { CONFIG } from "site.config"
 import { AdminProfile } from "src/hooks/useAdminProfile"
+import { DEFAULT_ABOUT_HEADLINE, DEFAULT_ABOUT_PROJECT_SECTION_TITLE, DEFAULT_ABOUT_PROJECTS } from "src/libs/profileWorkspace"
 import { serverApiFetch } from "./backend"
 
 type FetchServerAdminProfileOptions = {
@@ -55,8 +56,11 @@ export const buildStaticAdminProfileSnapshot = (): AdminProfile => ({
   profileImageDirectUrl: CONFIG.profile.image,
   profileRole: CONFIG.profile.role,
   profileBio: CONFIG.profile.bio,
+  aboutHeadline: DEFAULT_ABOUT_HEADLINE,
   aboutRole: CONFIG.profile.role,
   aboutBio: CONFIG.profile.bio,
+  aboutProjectSectionTitle: DEFAULT_ABOUT_PROJECT_SECTION_TITLE,
+  aboutProjects: DEFAULT_ABOUT_PROJECTS,
   blogTitle: CONFIG.blog.title,
   homeIntroTitle: CONFIG.blog.homeIntroTitle,
   homeIntroDescription: CONFIG.blog.homeIntroDescription,
@@ -71,10 +75,13 @@ export const buildPersistedAdminProfileSnapshot = (profile: AdminProfile): Admin
   profileImageDirectUrl: profile.profileImageDirectUrl,
   profileRole: profile.profileRole,
   profileBio: profile.profileBio,
+  aboutHeadline: profile.aboutHeadline,
   aboutRole: profile.aboutRole,
   aboutBio: profile.aboutBio,
   aboutDetails: profile.aboutDetails,
   aboutSections: profile.aboutSections || [],
+  aboutProjectSectionTitle: profile.aboutProjectSectionTitle,
+  aboutProjects: profile.aboutProjects || [],
   blogTitle: profile.blogTitle,
   homeIntroTitle: profile.homeIntroTitle,
   homeIntroDescription: profile.homeIntroDescription,
@@ -105,10 +112,13 @@ export const readAdminProfileSnapshotFromCookie = (req: IncomingMessage): AdminP
       profileImageDirectUrl: parsed.profileImageDirectUrl,
       profileRole: parsed.profileRole,
       profileBio: parsed.profileBio,
+      aboutHeadline: parsed.aboutHeadline,
       aboutRole: parsed.aboutRole,
       aboutBio: parsed.aboutBio,
       aboutDetails: parsed.aboutDetails,
       aboutSections: Array.isArray(parsed.aboutSections) ? parsed.aboutSections : [],
+      aboutProjectSectionTitle: parsed.aboutProjectSectionTitle,
+      aboutProjects: Array.isArray(parsed.aboutProjects) ? parsed.aboutProjects : [],
       blogTitle: parsed.blogTitle,
       homeIntroTitle: parsed.homeIntroTitle,
       homeIntroDescription: parsed.homeIntroDescription,

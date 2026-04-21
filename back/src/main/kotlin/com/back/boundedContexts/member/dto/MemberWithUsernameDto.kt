@@ -41,10 +41,13 @@ data class MemberWithUsernameDto(
     val profileImageDirectUrl: String,
     val profileRole: String,
     val profileBio: String,
+    val aboutHeadline: String,
     val aboutRole: String,
     val aboutBio: String,
     val aboutDetails: String,
     val aboutSections: List<MemberProfileAboutSectionBlockDto>,
+    val aboutProjectSectionTitle: String,
+    val aboutProjects: List<MemberProfileAboutProjectBlockDto>,
     val blogTitle: String,
     val homeIntroTitle: String,
     val homeIntroDescription: String,
@@ -70,6 +73,7 @@ data class MemberWithUsernameDto(
         profileImageDirectUrl = resolveProfileImageDirectUrl(member, workspaceContent, workspaceModifiedAt),
         profileRole = workspaceContent?.profileRole ?: member.profileRole,
         profileBio = workspaceContent?.profileBio ?: member.profileBio,
+        aboutHeadline = workspaceContent?.aboutHeadline.orEmpty(),
         aboutRole = workspaceContent?.aboutRole ?: member.aboutRole,
         aboutBio = workspaceContent?.aboutBio ?: member.aboutBio,
         aboutDetails =
@@ -81,6 +85,12 @@ data class MemberWithUsernameDto(
                 workspaceContent?.aboutSections
                     ?: parseLegacyAboutDetailsToBlocks(member.aboutDetails)
             ).map(::MemberProfileAboutSectionBlockDto),
+        aboutProjectSectionTitle = workspaceContent?.aboutProjectSectionTitle.orEmpty(),
+        aboutProjects =
+            (
+                workspaceContent?.aboutProjects
+                    ?: emptyList()
+            ).map(::MemberProfileAboutProjectBlockDto),
         blogTitle = workspaceContent?.blogTitle ?: member.blogTitle,
         homeIntroTitle = workspaceContent?.homeIntroTitle ?: member.homeIntroTitle,
         homeIntroDescription = workspaceContent?.homeIntroDescription ?: member.homeIntroDescription,

@@ -3,7 +3,7 @@ import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query"
 import { apiFetch } from "src/apis/backend/client"
 import type { ProfileCardLinkItem } from "src/constants/profileCardLinks"
 import { queryKey } from "src/constants/queryKey"
-import type { AboutSectionBlock } from "src/libs/profileWorkspace"
+import type { AboutProjectBlock, AboutSectionBlock } from "src/libs/profileWorkspace"
 
 const ADMIN_PROFILE_SNAPSHOT_COOKIE = "admin_profile_snapshot_v1"
 const ADMIN_PROFILE_SNAPSHOT_MAX_AGE_SECONDS = 60 * 30
@@ -17,10 +17,13 @@ export type AdminProfile = {
   profileImageDirectUrl?: string
   profileRole?: string
   profileBio?: string
+  aboutHeadline?: string
   aboutRole?: string
   aboutBio?: string
   aboutDetails?: string
   aboutSections?: AboutSectionBlock[]
+  aboutProjectSectionTitle?: string
+  aboutProjects?: AboutProjectBlock[]
   blogTitle?: string
   homeIntroTitle?: string
   homeIntroDescription?: string
@@ -37,10 +40,13 @@ type AdminProfileLike = {
   profileImageDirectUrl?: string
   profileRole?: string
   profileBio?: string
+  aboutHeadline?: string
   aboutRole?: string
   aboutBio?: string
   aboutDetails?: string
   aboutSections?: AboutSectionBlock[]
+  aboutProjectSectionTitle?: string
+  aboutProjects?: AboutProjectBlock[]
   blogTitle?: string
   homeIntroTitle?: string
   homeIntroDescription?: string
@@ -57,10 +63,13 @@ export const toAdminProfile = (value: AdminProfileLike): AdminProfile => ({
   profileImageDirectUrl: value.profileImageDirectUrl,
   profileRole: value.profileRole,
   profileBio: value.profileBio,
+  aboutHeadline: value.aboutHeadline,
   aboutRole: value.aboutRole,
   aboutBio: value.aboutBio,
   aboutDetails: value.aboutDetails,
   aboutSections: value.aboutSections || [],
+  aboutProjectSectionTitle: value.aboutProjectSectionTitle,
+  aboutProjects: value.aboutProjects || [],
   blogTitle: value.blogTitle,
   homeIntroTitle: value.homeIntroTitle,
   homeIntroDescription: value.homeIntroDescription,

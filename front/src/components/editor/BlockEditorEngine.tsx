@@ -3537,6 +3537,32 @@ const BlockEditorEngine = ({
     [getContentRoot, getTopLevelBlockElements]
   )
 
+  const findNestedListItemContextByClientPosition = useCallback(
+    (clientX: number, clientY: number) => {
+      const root = getContentRoot()
+      if (!root) return null
+
+      const candidates = Array.from(root.querySelectorAll<HTMLElement>(LIST_ITEM_SELECTOR))
+        .map((element) => {
+          const rect = element.getBoundingClientRect()
+          return { element, rect, area: rect.width * rect.height }
+        })
+        .filter(({ rect }) => {
+          if (rect.width <= 0 || rect.height <= 0) return false
+          return (
+            clientY >= rect.top &&
+            clientY <= rect.bottom &&
+            clientX >= rect.left - BLOCK_OUTER_SELECT_LEFT_GUTTER_PX &&
+            clientX <= rect.right + 8
+          )
+        })
+        .sort((left, right) => left.area - right.area)
+
+      return candidates[0] ? findNestedListItemContextFromTarget(candidates[0].element) : null
+    },
+    [findNestedListItemContextFromTarget, getContentRoot]
+  )
+
   const getNodeSelectedNestedListItemContext = useCallback(
     (currentEditor: TiptapEditor) => {
       const selection = currentEditor.state.selection as typeof currentEditor.state.selection & {
@@ -8529,7 +8555,9 @@ const BlockEditorEngine = ({
       const target =
         targetEvent instanceof Element ? targetEvent : targetEvent instanceof Node ? targetEvent.parentElement : null
       const cell = getTableCellFromClientPoint(clientX, clientY, targetEvent)
-      const targetListItemContext = findNestedListItemContextFromTarget(targetEvent)
+      const targetListItemContext =
+        findNestedListItemContextFromTarget(targetEvent) ??
+        findNestedListItemContextByClientPosition(clientX, clientY)
       const targetBlockIndex =
         findTopLevelBlockIndexFromTarget(targetEvent) ??
         findTopLevelBlockIndexByClientPosition(clientX, clientY)
@@ -8623,6 +8651,7 @@ const BlockEditorEngine = ({
       cancelTableQuickRailHide,
       findTopLevelBlockIndexByClientPosition,
       findTopLevelBlockIndexFromTarget,
+      findNestedListItemContextByClientPosition,
       findNestedListItemContextFromTarget,
       getTableCellFromClientPoint,
       getTopLevelBlockElementByIndex,

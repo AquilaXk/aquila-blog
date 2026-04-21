@@ -128,6 +128,84 @@ const getTableAffordances = (page: Page) => ({
   cellMenuButton: page.locator("[data-table-affordance='cell-menu']").first(),
 })
 
+type ListItemHandleMetrics = {
+  itemCenterY: number
+  handleCenterY: number
+  handleBox: { x: number; y: number; width: number; height: number }
+  textLeft: number | null
+  boxShadow: string | null
+}
+
+const readListItemHandleMetrics = async (
+  page: Page,
+  label: string,
+  handleLabel?: string
+): Promise<ListItemHandleMetrics | null> =>
+  page.evaluate(
+    ({ targetLabel, targetHandleLabel }) => {
+      const readOwnLabel = (item: HTMLElement) =>
+        Array.from(item.childNodes)
+          .filter((node) => !(node instanceof HTMLElement && ["UL", "OL"].includes(node.tagName)))
+          .map((node) => node.textContent || "")
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim()
+
+      const expectedHandleLabel = targetHandleLabel ?? "목록 항목 이동"
+      const targetItem =
+        Array.from(
+          document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")
+        ).find((item) => readOwnLabel(item) === targetLabel) ?? null
+      const handle =
+        Array.from(document.querySelectorAll<HTMLElement>("button")).find(
+          (element) =>
+            (element.getAttribute("aria-label") === expectedHandleLabel ||
+              element.getAttribute("title") === expectedHandleLabel) &&
+            (targetHandleLabel || element.getAttribute("data-testid") === "block-drag-handle") &&
+            element.offsetParent !== null
+        ) ?? null
+
+      if (!targetItem || !handle || handle.offsetParent === null) {
+        return null
+      }
+
+      const itemRect = targetItem.getBoundingClientRect()
+      const handleRect = handle.getBoundingClientRect()
+      const textBlock = targetItem.querySelector("p") as HTMLElement | null
+
+      return {
+        itemCenterY: itemRect.top + itemRect.height / 2,
+        handleCenterY: handleRect.top + handleRect.height / 2,
+        handleBox: {
+          x: handleRect.x,
+          y: handleRect.y,
+          width: handleRect.width,
+          height: handleRect.height,
+        },
+        textLeft: textBlock?.getBoundingClientRect().left ?? null,
+        boxShadow: window.getComputedStyle(targetItem).boxShadow,
+      }
+    },
+    { targetLabel: label, targetHandleLabel: handleLabel ?? null }
+  )
+
+const expectListItemHandleReady = async (page: Page, label: string, handleLabel?: string) => {
+  await expect.poll(() => readListItemHandleMetrics(page, label, handleLabel)).not.toBeNull()
+  await expect
+    .poll(async () => {
+      const metrics = await readListItemHandleMetrics(page, label, handleLabel)
+      if (!metrics) return null
+      return Math.abs(metrics.handleCenterY - metrics.itemCenterY)
+    })
+    .toBeLessThanOrEqual(18)
+
+  const metrics = await readListItemHandleMetrics(page, label, handleLabel)
+  if (!metrics) {
+    throw new Error(`list item handle metrics are missing: ${label}`)
+  }
+  return metrics
+}
+
 test.describe("block editor authoring flow", () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -995,7 +1073,7 @@ test.describe("block editor authoring flow", () => {
       }, label)
 
     const firstItem = editor.locator("li", { hasText: "Access" }).first()
-    await firstItem.hover()
+    await firstItem.locator("p").first().hover()
     await expect(blockHandleRail.getByRole("button", { name: "블록 추가" })).toBeVisible()
     await expect.poll(() => measureHandleAlignment("Access")).not.toBeNull()
     const firstAlignment = await measureHandleAlignment("Access")
@@ -1004,7 +1082,7 @@ test.describe("block editor authoring flow", () => {
     }
 
     const secondItem = editor.locator("li", { hasText: "Refresh" }).first()
-    await secondItem.hover()
+    await secondItem.locator("p").first().hover()
     await expect(blockHandleRail.getByRole("button", { name: "블록 추가" })).toBeVisible()
     await expect.poll(() => measureHandleAlignment("Refresh")).not.toBeNull()
     const refreshMetrics = await measureHandleAlignment("Refresh")
@@ -1033,31 +1111,17 @@ test.describe("block editor authoring flow", () => {
 
     const retryItem = editor.locator("li", { hasText: /^Retry$/ }).first()
     await retryItem.locator("p").first().click()
-    await retryItem.hover()
+    await retryItem.locator("p").first().hover()
 
     const dragHandle = page.getByTestId("block-drag-handle")
     await expect(dragHandle).toBeVisible()
-    const retryItemBox = await retryItem.boundingBox()
-    const dragHandleBox = await dragHandle.boundingBox()
-    if (!retryItemBox || !dragHandleBox) {
-      throw new Error("writer selected list item handle geometry is missing")
-    }
-    expect(
-      Math.abs(
-        dragHandleBox.y +
-          dragHandleBox.height / 2 -
-          (retryItemBox.y + retryItemBox.height / 2)
-      )
-    ).toBeLessThanOrEqual(18)
+    const { handleBox: dragHandleBox } = await expectListItemHandleReady(page, "Retry")
     await page.mouse.click(dragHandleBox.x + dragHandleBox.width / 2, dragHandleBox.y + dragHandleBox.height / 2)
     const selectedDragHandle = page.getByRole("button", { name: "목록 항목 이동" })
     await expect(selectedDragHandle).toBeVisible()
     await expect(page.getByRole("button", { name: "블록 추가" })).toBeVisible()
 
-    const selectedHandleBox = await selectedDragHandle.boundingBox()
-    if (!selectedHandleBox) {
-      throw new Error("selected list item handle bounding box is missing")
-    }
+    const { handleBox: selectedHandleBox } = await expectListItemHandleReady(page, "Retry", "목록 항목 이동")
     await page.mouse.move(
       selectedHandleBox.x + selectedHandleBox.width / 2,
       selectedHandleBox.y + selectedHandleBox.height / 2
@@ -1120,6 +1184,46 @@ test.describe("block editor authoring flow", () => {
     await expect(page.getByRole("button", { name: "블록 이동" })).toHaveCount(0)
   })
 
+  test("writer surface의 리스트 항목 handle은 row gutter hover에서도 항목을 따라간다", async ({
+    page,
+  }) => {
+    await page.goto(QA_WRITER_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.getByRole("button", { name: "목록" }).first().click()
+    await page.keyboard.type("Access")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("Refresh")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("Retry")
+
+    const hoverPoint = await page.evaluate(() => {
+      const readOwnLabel = (item: HTMLElement) =>
+        Array.from(item.childNodes)
+          .filter((node) => !(node instanceof HTMLElement && ["UL", "OL"].includes(node.tagName)))
+          .map((node) => node.textContent || "")
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim()
+      const retryItem = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")
+      ).find((item) => readOwnLabel(item) === "Retry")
+      if (!retryItem) {
+        throw new Error("Retry item is missing")
+      }
+      const rect = retryItem.getBoundingClientRect()
+      return {
+        x: rect.left - 8,
+        y: rect.top + rect.height / 2,
+      }
+    })
+    await page.mouse.move(hoverPoint.x, hoverPoint.y)
+
+    await expect(page.getByRole("button", { name: "목록 항목 이동" })).toBeVisible()
+    await expectListItemHandleReady(page, "Retry", "목록 항목 이동")
+  })
+
   test("writer surface의 선택된 리스트 항목 affordance는 파란 rail 없이 말머리 바깥에 유지된다", async ({
     page,
   }) => {
@@ -1135,56 +1239,22 @@ test.describe("block editor authoring flow", () => {
     await page.keyboard.type("Retry")
 
     const retryItem = editor.locator("li", { hasText: /^Retry$/ }).first()
-    await retryItem.hover()
+    await retryItem.locator("p").first().hover()
 
     const dragHandle = page.getByTestId("block-drag-handle")
     await expect(dragHandle).toBeVisible()
-    const retryItemBox = await retryItem.boundingBox()
-    const dragHandleBox = await dragHandle.boundingBox()
-    if (!retryItemBox || !dragHandleBox) {
-      throw new Error("writer affordance handle geometry is missing")
-    }
-    expect(
-      Math.abs(
-        dragHandleBox.y +
-          dragHandleBox.height / 2 -
-          (retryItemBox.y + retryItemBox.height / 2)
-      )
-    ).toBeLessThanOrEqual(18)
+    const { handleBox: dragHandleBox } = await expectListItemHandleReady(page, "Retry")
     await page.mouse.click(dragHandleBox.x + dragHandleBox.width / 2, dragHandleBox.y + dragHandleBox.height / 2)
     await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
     const selectedDragHandle = page.getByRole("button", { name: "목록 항목 이동" })
     await expect(selectedDragHandle).toBeVisible()
-    const selectedHandleBox = await selectedDragHandle.boundingBox()
-    if (!selectedHandleBox) {
-      throw new Error("writer selected list item handle bounding box is missing")
-    }
+    const selectedMetrics = await expectListItemHandleReady(page, "Retry", "목록 항목 이동")
+    const selectedHandleBox = selectedMetrics.handleBox
 
-    const affordanceMetrics = await page.evaluate(() => {
-      const readOwnLabel = (item: HTMLElement) =>
-        Array.from(item.childNodes)
-          .filter((node) => !(node instanceof HTMLElement && ["UL", "OL"].includes(node.tagName)))
-          .map((node) => node.textContent || "")
-          .join(" ")
-          .replace(/\s+/g, " ")
-          .trim()
-
-      const targetItem =
-        Array.from(
-          document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")
-        ).find((item) => readOwnLabel(item) === "Retry") ?? null
-      const textBlock = targetItem?.querySelector("p") as HTMLElement | null
-
-      return {
-        boxShadow: targetItem ? window.getComputedStyle(targetItem).boxShadow : null,
-        textLeft: textBlock?.getBoundingClientRect().left ?? null,
-      }
-    })
-
-    expect(affordanceMetrics.boxShadow?.includes("inset")).toBeFalsy()
-    expect(affordanceMetrics.textLeft).not.toBeNull()
+    expect(selectedMetrics.boxShadow?.includes("inset")).toBeFalsy()
+    expect(selectedMetrics.textLeft).not.toBeNull()
     expect(selectedHandleBox.x + selectedHandleBox.width + 2).toBeLessThanOrEqual(
-      affordanceMetrics.textLeft ?? 0
+      selectedMetrics.textLeft ?? 0
     )
   })
 
@@ -1201,7 +1271,7 @@ test.describe("block editor authoring flow", () => {
     await page.keyboard.type("Retry")
 
     const retryItem = editor.locator("li", { hasText: /^Retry$/ }).first()
-    await retryItem.hover()
+    await retryItem.locator("p").first().hover()
 
     const dragHandle = page.getByTestId("block-drag-handle")
     await expect(dragHandle).toBeVisible()
@@ -1289,7 +1359,7 @@ test.describe("block editor authoring flow", () => {
     await page.keyboard.type("Retry")
 
     const retryItem = editor.locator("li", { hasText: /^Retry$/ }).first()
-    await retryItem.hover()
+    await retryItem.locator("p").first().hover()
 
     const dragHandle = page.getByTestId("block-drag-handle")
     await expect(dragHandle).toBeVisible()

@@ -866,13 +866,13 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
               </SectionHeader>
               <ContextLinkGrid>
                 {monitoringItems.map((item) => (
-                  <AdminInfoLinkCard key={item.key} href={item.href} target="_blank" rel="noreferrer noopener">
+                  <ContextMonitoringLinkCard key={item.key} href={item.href} target="_blank" rel="noreferrer noopener">
                     <span className="iconWrap">{renderMonitoringBrand(item.brand.icon, item.brand.fallbackIcon, item.title)}</span>
                     <span className="copy">
                       <strong>{item.title}</strong>
                       <span>{item.status}</span>
                     </span>
-                  </AdminInfoLinkCard>
+                  </ContextMonitoringLinkCard>
                 ))}
               </ContextLinkGrid>
             </ContextSection>
@@ -1276,14 +1276,30 @@ const ContextSection = styled(AdminPlainCard)`
 `
 
 const ContextLinkGrid = styled(AdminInfoList)`
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+`
 
-  @media (max-width: 1180px) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+const ContextMonitoringLinkCard = styled(AdminInfoLinkCard)`
+  min-height: 100%;
+  align-items: flex-start;
+  gap: 0.8rem;
+  padding: 0.94rem 0.98rem;
+
+  .copy {
+    gap: 0.22rem;
   }
 
-  @media (max-width: 720px) {
-    grid-template-columns: 1fr;
+  .copy strong {
+    font-size: 1rem;
+    line-height: 1.18;
+    overflow-wrap: normal;
+    word-break: keep-all;
+  }
+
+  .copy span {
+    line-height: 1.38;
+    overflow-wrap: normal;
+    word-break: keep-all;
   }
 `
 

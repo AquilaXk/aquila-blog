@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import { expect, test } from "@playwright/test"
+import { normalizeProfileWorkspaceContent } from "src/libs/profileWorkspace"
 
 test.describe("admin profile state contract", () => {
   test("profile 작업공간은 공통 section nav/action dock primitive 위에서 반응형 분기를 유지한다", () => {
@@ -73,5 +74,50 @@ test.describe("admin profile state contract", () => {
     expect(aboutSource).toContain("adminProfile?.aboutProjects && adminProfile.aboutProjects.length > 0")
     expect(aboutSource).not.toContain("PROJECT_PRESETS")
     expect(aboutSource).not.toContain("대표 글 보기")
+  })
+
+  test("profile workspace 정규화는 structured 프로젝트가 있으면 legacy 프로젝트 상세 블록을 제거한다", () => {
+    const normalized = normalizeProfileWorkspaceContent({
+      profileImageUrl: "",
+      profileRole: "",
+      profileBio: "",
+      aboutHeadline: "",
+      aboutRole: "",
+      aboutBio: "",
+      aboutSections: [
+        {
+          id: "career",
+          title: "경력",
+          items: ["2026.03 Aquila Blog 운영"],
+          dividerBefore: false,
+        },
+        {
+          id: "projects",
+          title: "프로젝트",
+          items: ["고구마마켓", "aquila-blog"],
+          dividerBefore: false,
+        },
+      ],
+      aboutProjectSectionTitle: "프로젝트",
+      aboutProjects: [
+        {
+          id: "blog",
+          name: "aquila-blog",
+          summary: "관리자에서 직접 수정하는 프로젝트",
+          role: "Full-stack",
+          href: "https://github.com/AquilaXk/aquila-blog",
+          linkLabel: "GitHub",
+        },
+      ],
+      blogTitle: "",
+      homeIntroTitle: "",
+      homeIntroDescription: "",
+      serviceLinks: [],
+      contactLinks: [],
+    })
+
+    expect(normalized.aboutSections.map((section) => section.title)).toEqual(["경력"])
+    expect(normalized.aboutProjectSectionTitle).toBe("프로젝트")
+    expect(normalized.aboutProjects.map((project) => project.name)).toEqual(["aquila-blog"])
   })
 })

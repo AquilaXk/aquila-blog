@@ -377,6 +377,12 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
                                     "title": "경력",
                                     "items": ["2026.03 Aquila Blog 운영", "2025.11 관측성 체계 정리"],
                                     "dividerBefore": false
+                                },
+                                {
+                                    "id": "projects",
+                                    "title": "프로젝트",
+                                    "items": ["고구마마켓", "aquila-blog"],
+                                    "dividerBefore": false
                                 }
                             ],
                             "aboutProjectSectionTitle": "프로젝트",
@@ -420,6 +426,7 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
             assertThat(updatedMember.aboutBio).isEqualTo("About 초안 소개")
             assertThat(updatedMember.aboutDetails).contains("## 경력")
             assertThat(updatedMember.aboutDetails).contains("- 2026.03 Aquila Blog 운영")
+            assertThat(updatedMember.aboutDetails).doesNotContain("## 프로젝트")
             assertThat(updatedMember.blogTitle).isEqualTo("Aquila Workspace")
         }
 

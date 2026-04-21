@@ -141,6 +141,12 @@ fun normalizeMemberProfileWorkspaceContent(content: MemberProfileWorkspaceConten
                 deriveLegacyAboutProjects(normalizedSections)
             },
         )
+    val visibleSections =
+        if (normalizedProjects.isNotEmpty()) {
+            normalizedSections.filterNot { isAboutProjectSection(it.title) }
+        } else {
+            normalizedSections
+        }
 
     return MemberProfileWorkspaceContent(
         profileImageUrl = content.profileImageUrl.trim(),
@@ -149,7 +155,7 @@ fun normalizeMemberProfileWorkspaceContent(content: MemberProfileWorkspaceConten
         aboutHeadline = content.aboutHeadline.trim(),
         aboutRole = content.aboutRole.trim(),
         aboutBio = content.aboutBio.trim(),
-        aboutSections = normalizedSections,
+        aboutSections = visibleSections,
         aboutProjectSectionTitle = content.aboutProjectSectionTitle.trim().ifBlank { legacyProjectSectionTitle },
         aboutProjects = normalizedProjects,
         blogTitle = content.blogTitle.trim(),

@@ -275,7 +275,7 @@ const deriveLegacyAboutProjects = (sections: AboutSectionBlock[]): AboutProjectB
 export const normalizeProfileWorkspaceContent = (
   content: ProfileWorkspaceContent
 ): ProfileWorkspaceContent => {
-  const aboutSections = (content.aboutSections || [])
+  const normalizedSections = (content.aboutSections || [])
     .map((section, index) => ({
       id: (section.id || "").trim() || `section-${index + 1}`,
       title: (section.title || "").trim(),
@@ -283,8 +283,15 @@ export const normalizeProfileWorkspaceContent = (
       dividerBefore: Boolean(section.dividerBefore),
     }))
     .filter((section) => section.title || section.items.length > 0)
-  const legacyProjectSectionTitle = aboutSections.find((section) => isAboutProjectSectionTitle(section.title))?.title || ""
-  const aboutProjects = normalizeAboutProjects(content.aboutProjects)
+  const legacyProjectSectionTitle =
+    normalizedSections.find((section) => isAboutProjectSectionTitle(section.title))?.title || ""
+  const explicitAboutProjects = normalizeAboutProjects(content.aboutProjects)
+  const aboutProjects =
+    explicitAboutProjects.length > 0 ? explicitAboutProjects : deriveLegacyAboutProjects(normalizedSections)
+  const aboutSections =
+    aboutProjects.length > 0
+      ? normalizedSections.filter((section) => !isAboutProjectSectionTitle(section.title))
+      : normalizedSections
 
   return {
     profileImageUrl: (content.profileImageUrl || "").trim(),
@@ -295,7 +302,7 @@ export const normalizeProfileWorkspaceContent = (
     aboutBio: (content.aboutBio || "").trim(),
     aboutSections,
     aboutProjectSectionTitle: (content.aboutProjectSectionTitle || "").trim() || legacyProjectSectionTitle,
-    aboutProjects: aboutProjects.length > 0 ? aboutProjects : deriveLegacyAboutProjects(aboutSections),
+    aboutProjects,
     blogTitle: (content.blogTitle || "").trim(),
     homeIntroTitle: (content.homeIntroTitle || "").trim(),
     homeIntroDescription: (content.homeIntroDescription || "").trim(),

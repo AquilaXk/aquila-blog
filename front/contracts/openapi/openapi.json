@@ -2541,6 +2541,41 @@
         },
         "required" : [ "href", "label" ]
       },
+      "ProfileWorkspaceProjectRequest" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "maxLength" : 80,
+            "minLength" : 0
+          },
+          "name" : {
+            "type" : "string",
+            "maxLength" : 120,
+            "minLength" : 0
+          },
+          "summary" : {
+            "type" : "string",
+            "maxLength" : 500,
+            "minLength" : 0
+          },
+          "role" : {
+            "type" : "string",
+            "maxLength" : 120,
+            "minLength" : 0
+          },
+          "href" : {
+            "type" : "string",
+            "maxLength" : 2000,
+            "minLength" : 0
+          },
+          "linkLabel" : {
+            "type" : "string",
+            "maxLength" : 80,
+            "minLength" : 0
+          }
+        }
+      },
       "ProfileWorkspaceSectionRequest" : {
         "type" : "object",
         "properties" : {
@@ -2585,6 +2620,11 @@
             "maxLength" : 1000,
             "minLength" : 0
           },
+          "aboutHeadline" : {
+            "type" : "string",
+            "maxLength" : 200,
+            "minLength" : 0
+          },
           "aboutRole" : {
             "type" : "string",
             "maxLength" : 100,
@@ -2599,6 +2639,19 @@
             "type" : "array",
             "items" : {
               "$ref" : "#/components/schemas/ProfileWorkspaceSectionRequest"
+            },
+            "maxItems" : 20,
+            "minItems" : 0
+          },
+          "aboutProjectSectionTitle" : {
+            "type" : "string",
+            "maxLength" : 120,
+            "minLength" : 0
+          },
+          "aboutProjects" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ProfileWorkspaceProjectRequest"
             },
             "maxItems" : 20,
             "minItems" : 0
@@ -2633,6 +2686,29 @@
             },
             "maxItems" : 30,
             "minItems" : 0
+          }
+        }
+      },
+      "MemberProfileAboutProjectBlockDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "summary" : {
+            "type" : "string"
+          },
+          "role" : {
+            "type" : "string"
+          },
+          "href" : {
+            "type" : "string"
+          },
+          "linkLabel" : {
+            "type" : "string"
           }
         }
       },
@@ -2682,6 +2758,9 @@
           "profileBio" : {
             "type" : "string"
           },
+          "aboutHeadline" : {
+            "type" : "string"
+          },
           "aboutRole" : {
             "type" : "string"
           },
@@ -2692,6 +2771,15 @@
             "type" : "array",
             "items" : {
               "$ref" : "#/components/schemas/MemberProfileAboutSectionBlockDto"
+            }
+          },
+          "aboutProjectSectionTitle" : {
+            "type" : "string"
+          },
+          "aboutProjects" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/MemberProfileAboutProjectBlockDto"
             }
           },
           "blogTitle" : {
@@ -3544,6 +3632,9 @@
           "profileBio" : {
             "type" : "string"
           },
+          "aboutHeadline" : {
+            "type" : "string"
+          },
           "aboutRole" : {
             "type" : "string"
           },
@@ -3557,6 +3648,15 @@
             "type" : "array",
             "items" : {
               "$ref" : "#/components/schemas/MemberProfileAboutSectionBlockDto"
+            }
+          },
+          "aboutProjectSectionTitle" : {
+            "type" : "string"
+          },
+          "aboutProjects" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/MemberProfileAboutProjectBlockDto"
             }
           },
           "blogTitle" : {

@@ -5,7 +5,12 @@ import AppIcon from "src/components/icons/AppIcon"
 import MetaConfig from "src/components/MetaConfig"
 import ProfileImage from "src/components/ProfileImage"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
-import { parseLegacyAboutDetails } from "src/libs/profileWorkspace"
+import {
+  DEFAULT_ABOUT_HEADLINE,
+  DEFAULT_ABOUT_PROJECT_SECTION_TITLE,
+  isAboutProjectSectionTitle,
+  parseLegacyAboutDetails,
+} from "src/libs/profileWorkspace"
 import { NextPageWithLayout } from "../types"
 import {
   buildStaticAdminProfileSnapshot,
@@ -83,30 +88,7 @@ type AboutProjectItem = {
   linkLabel: string
 }
 
-const PROJECT_PRESETS: Record<string, { summary: string; role: string; href?: string }> = {
-  고구마마켓: {
-    summary: "거래 흐름과 상태 전이를 직접 설계하며 커머스 도메인 감각을 다진 프로젝트입니다.",
-    role: "Backend · 도메인 설계",
-  },
-  "마음-온": {
-    summary: "사용자 감정 기록 흐름을 다루며 서비스 구조와 데이터 설계를 다듬은 프로젝트입니다.",
-    role: "Backend · API 설계",
-  },
-  "aquila-blog": {
-    summary: "글쓰기, 공개 렌더링, 운영 배포까지 직접 관리하는 개인 기술 블로그입니다.",
-    role: "Full-stack · Editor/SSR/Deploy",
-    href: "https://github.com/AquilaXk/aquila-blog",
-  },
-  "aquila-bank": {
-    summary: "금융 도메인을 가정하고 계좌/거래 흐름을 모델링한 학습 프로젝트입니다.",
-    role: "Backend · Transaction Flow",
-    href: "https://github.com/AquilaXk/aquila-bank",
-  },
-}
-
 const normalizeSectionTitle = (title: string) => title.replace(/\s+/g, "").toLowerCase()
-
-const isProjectSection = (title: string) => /프로젝트|project/.test(normalizeSectionTitle(title))
 
 const isTimelineSection = (title: string) => /이력|자격|journey|timeline|credential/.test(normalizeSectionTitle(title))
 
@@ -125,6 +107,7 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
   const adminProfile = useAdminProfile(initialAdminProfile)
 
   const displayName = adminProfile?.nickname || adminProfile?.name || CONFIG.profile.name
+  const displayHeadline = adminProfile?.aboutHeadline || DEFAULT_ABOUT_HEADLINE
   const displayRole = adminProfile?.aboutRole || CONFIG.profile.role
   const displayBio = adminProfile?.aboutBio || CONFIG.profile.bio
   const profileImageSrc =
@@ -156,33 +139,41 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
         : null
     })
     .filter((item): item is NonNullable<typeof item> => Boolean(item))
-  const projectSection = aboutDetailSections.find((section) => isProjectSection(section.title))
+  const projectSection = aboutDetailSections.find((section) => isAboutProjectSectionTitle(section.title))
   const timelineSection = aboutDetailSections.find((section) => isTimelineSection(section.title))
   const supplementalSections = aboutDetailSections.filter(
     (section) => section !== projectSection && section !== timelineSection
   )
   const githubHref = contactLinks.find((item) => item.label.toLowerCase().includes("github"))?.safeHref || ""
-  const projectItems: AboutProjectItem[] = (projectSection?.items || []).map((name) => {
-    const preset = PROJECT_PRESETS[name] || {
-      summary: "직접 구현과 운영 경험을 축적하며 시스템 설계 감각을 넓힌 프로젝트입니다.",
-      role: "Implementation · Problem Solving",
-    }
-    const linkedService = serviceLinks.find((item) => item.label.toLowerCase() === name.toLowerCase())
-    const href = linkedService?.safeHref || preset.href || githubHref || "#about-service-links"
+  const workspaceProjects =
+    adminProfile?.aboutProjects && adminProfile.aboutProjects.length > 0
+      ? adminProfile.aboutProjects
+      : (projectSection?.items || []).map((name, index) => ({
+          id: `legacy-project-${index + 1}`,
+          name,
+          summary: "",
+          role: "",
+          href: "",
+          linkLabel: "",
+        }))
+  const projectSectionTitle =
+    adminProfile?.aboutProjectSectionTitle || projectSection?.title || DEFAULT_ABOUT_PROJECT_SECTION_TITLE
+  const projectItems: AboutProjectItem[] = workspaceProjects.map((project) => {
+    const linkedService = serviceLinks.find((item) => item.label.toLowerCase() === project.name.toLowerCase())
+    const href = project.href || linkedService?.safeHref || ""
     return {
-      name,
-      summary: preset.summary,
-      role: preset.role,
+      name: project.name,
+      summary: project.summary,
+      role: project.role,
       href,
-      linkLabel: linkedService?.label || (href.startsWith("#") ? "섹션 보기" : "링크 보기"),
+      linkLabel: project.linkLabel || linkedService?.label || (href ? "링크 보기" : ""),
     }
   })
   const timelineItems = (timelineSection?.items || []).map(parseTimelineItem)
   const ctaLinks = [
-    { label: "대표 글 보기", href: "/" },
-    { label: "GitHub", href: githubHref || "https://github.com/AquilaXk" },
-    { label: "프로젝트 보기", href: "#about-projects" },
-  ]
+    githubHref ? { label: "GitHub", href: githubHref } : null,
+    projectItems.length > 0 ? { label: "프로젝트 보기", href: "#about-projects" } : null,
+  ].filter((item): item is { label: string; href: string } => Boolean(item))
 
   const meta = {
     title: `About - ${blogTitle}`,
@@ -202,7 +193,7 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
                 Profile
               </p>
               <h1 className="profile-name">{displayName}</h1>
-              <p className="profile-statement">이유를 먼저 따지고, 운영 가능한 시스템을 설계합니다.</p>
+              <p className="profile-statement">{displayHeadline}</p>
               <p className="profile-role">{displayRole}</p>
               <p className="profile-bio">{displayBio}</p>
             </div>
@@ -235,23 +226,25 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
 
           {projectItems.length > 0 ? (
             <section className="content-section" id="about-projects" data-ui="about-projects">
-              <h2 className="section-title">{projectSection?.title || "프로젝트"}</h2>
+              <h2 className="section-title">{projectSectionTitle}</h2>
               <ul className="project-list" data-ui="about-project-list">
                 {projectItems.map((item) => (
                   <li key={item.name}>
                     <div className="project-copy">
                       <h3>{item.name}</h3>
-                      <p data-ui="about-project-summary">{item.summary}</p>
+                      {item.summary ? <p data-ui="about-project-summary">{item.summary}</p> : null}
                     </div>
                     <div className="project-meta">
-                      <span data-ui="about-project-role">{item.role}</span>
-                      <a
-                        href={item.href}
-                        target={isExternalHref(item.href) ? "_blank" : undefined}
-                        rel={isExternalHref(item.href) ? "noopener noreferrer" : undefined}
-                      >
-                        {item.linkLabel}
-                      </a>
+                      {item.role ? <span data-ui="about-project-role">{item.role}</span> : null}
+                      {item.href && item.linkLabel ? (
+                        <a
+                          href={item.href}
+                          target={isExternalHref(item.href) ? "_blank" : undefined}
+                          rel={isExternalHref(item.href) ? "noopener noreferrer" : undefined}
+                        >
+                          {item.linkLabel}
+                        </a>
+                      ) : null}
                     </div>
                   </li>
                 ))}

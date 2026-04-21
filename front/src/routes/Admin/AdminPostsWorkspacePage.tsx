@@ -74,7 +74,6 @@ type LocalDraftPayload = {
 
 type LocalDraftSummary = {
   title: string
-  summary: string
   savedAt: string
   tagCount: number
   visibility: LocalDraftPayload["visibility"]
@@ -193,8 +192,8 @@ const readLocalDraft = (): LocalDraftSummary | null => {
     if (!parsed || typeof parsed !== "object") return null
 
     const title = typeof parsed.title === "string" ? parsed.title.trim() : ""
-    const summary = typeof parsed.summary === "string" ? parsed.summary.trim() : ""
     const content = typeof parsed.content === "string" ? parsed.content.trim() : ""
+    const summary = typeof parsed.summary === "string" ? parsed.summary.trim() : ""
     const savedAt = typeof parsed.savedAt === "string" ? parsed.savedAt : ""
     const tags = Array.isArray(parsed.tags)
       ? parsed.tags.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
@@ -208,7 +207,6 @@ const readLocalDraft = (): LocalDraftSummary | null => {
 
     return {
       title: title || "제목 없는 임시저장",
-      summary: summary || content.slice(0, 120),
       savedAt,
       tagCount: tags.length,
       visibility,
@@ -1006,7 +1004,6 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                           {localDraft.savedAt ? <span>{formatDateTime(localDraft.savedAt)}</span> : null}
                         </ResumeHeader>
                         <ResumeTitle>{localDraft.title}</ResumeTitle>
-                        {localDraft.summary ? <ResumeDescription>{localDraft.summary}</ResumeDescription> : null}
                         <ResumeMeta>
                           <VisibilityBadge data-tone={localDraft.visibility}>
                             {visibilityLabelFromValue(localDraft.visibility)}
@@ -1612,17 +1609,6 @@ const ResumeTitle = styled.strong`
   word-break: keep-all;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-`
-
-const ResumeDescription = styled.p`
-  margin: 0;
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.8rem;
-  line-height: 1.45;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 `
 
 const EmptyInlineState = styled.div`

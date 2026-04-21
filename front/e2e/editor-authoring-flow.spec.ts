@@ -151,26 +151,37 @@ const readListItemHandleMetrics = async (
           .replace(/\s+/g, " ")
           .trim()
 
-      const expectedHandleLabel = targetHandleLabel ?? "목록 항목 이동"
       const targetItem =
         Array.from(
           document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")
         ).find((item) => readOwnLabel(item) === targetLabel) ?? null
-      const handle =
-        Array.from(document.querySelectorAll<HTMLElement>("button")).find(
+      if (!targetItem) {
+        return null
+      }
+
+      const expectedHandleLabel = targetHandleLabel ?? "목록 항목 이동"
+      const itemRect = targetItem.getBoundingClientRect()
+      const itemCenterY = itemRect.top + itemRect.height / 2
+      const handleCandidates = Array.from(document.querySelectorAll<HTMLElement>("button"))
+        .filter(
           (element) =>
             (element.getAttribute("aria-label") === expectedHandleLabel ||
               element.getAttribute("title") === expectedHandleLabel) &&
             (targetHandleLabel || element.getAttribute("data-testid") === "block-drag-handle") &&
             element.offsetParent !== null
-        ) ?? null
+        )
+        .map((element) => {
+          const rect = element.getBoundingClientRect()
+          return { element, rect, delta: Math.abs(rect.top + rect.height / 2 - itemCenterY) }
+        })
+        .sort((left, right) => left.delta - right.delta)
+      const handle = handleCandidates[0] ?? null
 
-      if (!targetItem || !handle || handle.offsetParent === null) {
+      if (!handle || handle.element.offsetParent === null) {
         return null
       }
 
-      const itemRect = targetItem.getBoundingClientRect()
-      const handleRect = handle.getBoundingClientRect()
+      const handleRect = handle.rect
       const textBlock = targetItem.querySelector("p") as HTMLElement | null
 
       return {
@@ -194,7 +205,7 @@ const expectListItemHandleReady = async (page: Page, label: string, handleLabel?
   await expect
     .poll(async () => {
       const metrics = await readListItemHandleMetrics(page, label, handleLabel)
-      if (!metrics) return null
+      if (!metrics) return Number.POSITIVE_INFINITY
       return Math.abs(metrics.handleCenterY - metrics.itemCenterY)
     })
     .toBeLessThanOrEqual(18)
@@ -204,6 +215,31 @@ const expectListItemHandleReady = async (page: Page, label: string, handleLabel?
     throw new Error(`list item handle metrics are missing: ${label}`)
   }
   return metrics
+}
+
+const hoverListItemGutter = async (page: Page, label: string) => {
+  const hoverPoint = await page.evaluate((targetLabel) => {
+    const readOwnLabel = (item: HTMLElement) =>
+      Array.from(item.childNodes)
+        .filter((node) => !(node instanceof HTMLElement && ["UL", "OL"].includes(node.tagName)))
+        .map((node) => node.textContent || "")
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim()
+    const targetItem = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")
+    ).find((item) => readOwnLabel(item) === targetLabel)
+    if (!targetItem) {
+      throw new Error(`list item is missing: ${targetLabel}`)
+    }
+    const rect = targetItem.getBoundingClientRect()
+    return {
+      x: rect.left - 8,
+      y: rect.top + rect.height / 2,
+    }
+  }, label)
+
+  await page.mouse.move(hoverPoint.x, hoverPoint.y)
 }
 
 test.describe("block editor authoring flow", () => {
@@ -1111,11 +1147,9 @@ test.describe("block editor authoring flow", () => {
 
     const retryItem = editor.locator("li", { hasText: /^Retry$/ }).first()
     await retryItem.locator("p").first().click()
-    await retryItem.locator("p").first().hover()
+    await hoverListItemGutter(page, "Retry")
 
-    const dragHandle = page.getByTestId("block-drag-handle")
-    await expect(dragHandle).toBeVisible()
-    const { handleBox: dragHandleBox } = await expectListItemHandleReady(page, "Retry")
+    const { handleBox: dragHandleBox } = await expectListItemHandleReady(page, "Retry", "목록 항목 이동")
     await page.mouse.click(dragHandleBox.x + dragHandleBox.width / 2, dragHandleBox.y + dragHandleBox.height / 2)
     const selectedDragHandle = page.getByRole("button", { name: "목록 항목 이동" })
     await expect(selectedDragHandle).toBeVisible()
@@ -1198,27 +1232,7 @@ test.describe("block editor authoring flow", () => {
     await page.keyboard.press("Enter")
     await page.keyboard.type("Retry")
 
-    const hoverPoint = await page.evaluate(() => {
-      const readOwnLabel = (item: HTMLElement) =>
-        Array.from(item.childNodes)
-          .filter((node) => !(node instanceof HTMLElement && ["UL", "OL"].includes(node.tagName)))
-          .map((node) => node.textContent || "")
-          .join(" ")
-          .replace(/\s+/g, " ")
-          .trim()
-      const retryItem = Array.from(
-        document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")
-      ).find((item) => readOwnLabel(item) === "Retry")
-      if (!retryItem) {
-        throw new Error("Retry item is missing")
-      }
-      const rect = retryItem.getBoundingClientRect()
-      return {
-        x: rect.left - 8,
-        y: rect.top + rect.height / 2,
-      }
-    })
-    await page.mouse.move(hoverPoint.x, hoverPoint.y)
+    await hoverListItemGutter(page, "Retry")
 
     await expect(page.getByRole("button", { name: "목록 항목 이동" })).toBeVisible()
     await expectListItemHandleReady(page, "Retry", "목록 항목 이동")
@@ -1238,12 +1252,9 @@ test.describe("block editor authoring flow", () => {
     await page.keyboard.press("Enter")
     await page.keyboard.type("Retry")
 
-    const retryItem = editor.locator("li", { hasText: /^Retry$/ }).first()
-    await retryItem.locator("p").first().hover()
+    await hoverListItemGutter(page, "Retry")
 
-    const dragHandle = page.getByTestId("block-drag-handle")
-    await expect(dragHandle).toBeVisible()
-    const { handleBox: dragHandleBox } = await expectListItemHandleReady(page, "Retry")
+    const { handleBox: dragHandleBox } = await expectListItemHandleReady(page, "Retry", "목록 항목 이동")
     await page.mouse.click(dragHandleBox.x + dragHandleBox.width / 2, dragHandleBox.y + dragHandleBox.height / 2)
     await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
     const selectedDragHandle = page.getByRole("button", { name: "목록 항목 이동" })
@@ -1270,8 +1281,7 @@ test.describe("block editor authoring flow", () => {
     await page.keyboard.press("Enter")
     await page.keyboard.type("Retry")
 
-    const retryItem = editor.locator("li", { hasText: /^Retry$/ }).first()
-    await retryItem.locator("p").first().hover()
+    await hoverListItemGutter(page, "Retry")
 
     const dragHandle = page.getByTestId("block-drag-handle")
     await expect(dragHandle).toBeVisible()
@@ -1358,29 +1368,9 @@ test.describe("block editor authoring flow", () => {
     await page.keyboard.press("Enter")
     await page.keyboard.type("Retry")
 
-    const retryItem = editor.locator("li", { hasText: /^Retry$/ }).first()
-    await retryItem.locator("p").first().hover()
+    await hoverListItemGutter(page, "Retry")
 
-    const dragHandle = page.getByTestId("block-drag-handle")
-    await expect(dragHandle).toBeVisible()
-    const measureHandleAlignment = async () => {
-      const retryItemBox = await retryItem.boundingBox()
-      const dragHandleBox = await dragHandle.boundingBox()
-      if (!retryItemBox || !dragHandleBox) {
-        return null
-      }
-      return Math.abs(
-        dragHandleBox.y +
-          dragHandleBox.height / 2 -
-          (retryItemBox.y + retryItemBox.height / 2)
-      )
-    }
-    await expect.poll(measureHandleAlignment).not.toBeNull()
-    await expect.poll(measureHandleAlignment).toBeLessThanOrEqual(18)
-    const dragHandleBox = await dragHandle.boundingBox()
-    if (!dragHandleBox) {
-      throw new Error("writer hover handle geometry is missing")
-    }
+    const { handleBox: dragHandleBox } = await expectListItemHandleReady(page, "Retry", "목록 항목 이동")
     await page.mouse.click(
       dragHandleBox.x + dragHandleBox.width / 2,
       dragHandleBox.y + dragHandleBox.height / 2
@@ -1391,19 +1381,40 @@ test.describe("block editor authoring flow", () => {
     await expect(firstItem).toBeVisible()
 
     const dragGeometry = await page.evaluate(() => {
-      const handle = Array.from(document.querySelectorAll<HTMLElement>("button")).find(
-        (element) =>
-          (element.getAttribute("aria-label") === "목록 항목 이동" ||
-            element.getAttribute("title") === "목록 항목 이동") &&
-          element.offsetParent !== null
-      )
+      const readOwnLabel = (item: HTMLElement) =>
+        Array.from(item.childNodes)
+          .filter((node) => !(node instanceof HTMLElement && ["UL", "OL"].includes(node.tagName)))
+          .map((node) => node.textContent || "")
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim()
+      const retryItem =
+        Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")).find(
+          (item) => readOwnLabel(item) === "Retry"
+        ) ?? null
       const firstItem =
         Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")).find(
-          (item) => item.textContent?.includes("Access")
+          (item) => readOwnLabel(item) === "Access"
         ) ?? null
-      if (!handle || !firstItem) return null
+      if (!retryItem || !firstItem) return null
 
-      const handleRect = handle.getBoundingClientRect()
+      const retryRect = retryItem.getBoundingClientRect()
+      const retryCenterY = retryRect.top + retryRect.height / 2
+      const handleCandidate = Array.from(document.querySelectorAll<HTMLElement>("button"))
+        .filter(
+          (element) =>
+            (element.getAttribute("aria-label") === "목록 항목 이동" ||
+              element.getAttribute("title") === "목록 항목 이동") &&
+            element.offsetParent !== null
+        )
+        .map((element) => {
+          const rect = element.getBoundingClientRect()
+          return { rect, delta: Math.abs(rect.top + rect.height / 2 - retryCenterY) }
+        })
+        .sort((left, right) => left.delta - right.delta)[0]
+      if (!handleCandidate) return null
+
+      const handleRect = handleCandidate.rect
       const firstRect = firstItem.getBoundingClientRect()
       return {
         dragBox: {

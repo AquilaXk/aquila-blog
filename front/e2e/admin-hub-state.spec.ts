@@ -65,4 +65,14 @@ test.describe("admin hub state contract", () => {
     expect(source).not.toContain("운영 조치는 앱 내부 도구에서 먼저 처리하고, 외부 보드는 드릴다운으로만 엽니다.")
     expect(source).not.toContain("장기 추이와 원본 지표 확인은 아래 연결 채널에서 이어서 봅니다.")
   })
+
+  test("dashboard 연결된 채널 카드는 좁은 폭에서도 제목이 세로로 쪼개지지 않는 레이아웃 계약을 사용한다", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/dashboard.tsx"), "utf8")
+
+    expect(source).toContain("<ContextMonitoringLinkCard key={item.key}")
+    expect(source).toContain("grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));")
+    expect(source).toContain("const ContextMonitoringLinkCard = styled(AdminInfoLinkCard)`")
+    expect(source).toContain("word-break: keep-all;")
+    expect(source).not.toContain("grid-template-columns: repeat(3, minmax(0, 1fr));")
+  })
 })

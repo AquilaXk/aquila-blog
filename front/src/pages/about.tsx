@@ -213,6 +213,7 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
                 {ctaLinks.map((item) => (
                   <a
                     key={item.label}
+                    className="cta-link"
                     href={item.href}
                     target={isExternalHref(item.href) ? "_blank" : undefined}
                     rel={isExternalHref(item.href) ? "noopener noreferrer" : undefined}
@@ -238,6 +239,7 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
                       {item.role ? <span data-ui="about-project-role">{item.role}</span> : null}
                       {item.href && item.linkLabel ? (
                         <a
+                          className="project-link"
                           href={item.href}
                           target={isExternalHref(item.href) ? "_blank" : undefined}
                           rel={isExternalHref(item.href) ? "noopener noreferrer" : undefined}
@@ -417,26 +419,28 @@ const StyledWrapper = styled.div`
   }
 
   .cta-group {
-    width: min(100%, 240px);
-    display: grid;
-    gap: 0.62rem;
+    width: min(100%, 270px);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.56rem;
 
     a {
       display: inline-flex;
       align-items: center;
-      justify-content: space-between;
-      min-height: 44px;
-      padding: 0.78rem 0.96rem;
-      border-radius: 12px;
+      justify-content: center;
+      min-height: 40px;
+      padding: 0.68rem 0.92rem;
+      border-radius: 999px;
       border: 1px solid ${({ theme }) => theme.colors.gray6};
-      background: ${({ theme }) => theme.colors.gray2};
+      background: ${({ theme }) => theme.colors.gray1};
       color: ${({ theme }) => theme.colors.gray12};
-      font-size: 0.98rem;
+      font-size: 0.94rem;
       font-weight: 700;
       line-height: 1;
-      transition: border-color 0.2s ease, transform 0.2s ease;
+      transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 
       &:hover {
+        background: ${({ theme }) => theme.colors.gray2};
         border-color: ${({ theme }) => theme.colors.gray10};
         transform: translateY(-1px);
       }
@@ -467,19 +471,16 @@ const StyledWrapper = styled.div`
 
   .project-list {
     display: grid;
-    gap: 0;
-    border-top: 1px solid ${({ theme }) => theme.colors.gray6};
-    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+    gap: 0.7rem;
 
     li {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 1rem;
-      padding: 1rem 0;
-    }
-
-    li + li {
-      border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+      grid-template-columns: minmax(0, 1fr) minmax(10rem, 15rem);
+      gap: 1.1rem;
+      padding: 1rem 1.1rem;
+      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      border-radius: 16px;
+      background: ${({ theme }) => theme.colors.gray1};
     }
   }
 
@@ -505,29 +506,35 @@ const StyledWrapper = styled.div`
 
   .project-meta {
     display: grid;
-    justify-items: end;
+    justify-items: start;
     align-content: start;
-    gap: 0.44rem;
+    gap: 0.5rem;
 
     span {
       color: ${({ theme }) => theme.colors.gray10};
       font-size: 0.84rem;
       line-height: 1.4;
       font-weight: 700;
-      text-align: right;
+      text-align: left;
       letter-spacing: 0.02em;
       text-transform: uppercase;
     }
 
     a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 0.42rem 0.7rem;
+      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      border-radius: 999px;
       color: ${({ theme }) => theme.colors.gray12};
-      font-size: 0.92rem;
+      font-size: 0.86rem;
       line-height: 1.4;
       font-weight: 650;
 
       &:hover {
-        text-decoration: underline;
-        text-underline-offset: 3px;
+        border-color: ${({ theme }) => theme.colors.gray10};
+        text-decoration: none;
       }
     }
   }

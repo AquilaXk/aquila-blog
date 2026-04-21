@@ -48,7 +48,9 @@ const isRetriableNetworkError = (error: unknown) => {
 }
 
 const isWebKitCorsAccessControlNoise = (message: string) =>
-  /due to access control checks\./i.test(message) && /\/api\.[\w.-]+\//i.test(message)
+  /due to access control checks\./i.test(message) &&
+  (/\/api\.[\w.-]+\//i.test(message) ||
+    /\/(?:www\.)?[\w.-]+\/_next\/data\/[^/\s]+\/[^?\s]+\.json/i.test(message))
 
 const isRetriableLoginStatus = (status: number) => [502, 503, 504, 520, 522, 524, 530].includes(status)
 const isInvalidLoginRequestBody = (status: number, body: string) =>
@@ -478,6 +480,25 @@ const loginThroughUi = async (
 
   throw new Error(`UI login failed after retries. last=${lastFailure}`)
 }
+
+test.describe("live critical error filter", () => {
+  test("WebKit Next data prefetch access-control noise는 critical error에서 제외한다", () => {
+    expect(
+      isWebKitCorsAccessControlNoise(
+        "/www.aquilaxk.site/_next/data/FsB_f7gB6UefGQbKBjMeG/index.json due to access control checks."
+      )
+    ).toBe(true)
+    expect(
+      isWebKitCorsAccessControlNoise(
+        "https://api.aquilaxk.site/member/api/v1/notifications/snapshot due to access control checks."
+      )
+    ).toBe(true)
+    expect(isWebKitCorsAccessControlNoise("TypeError: Cannot read properties of undefined")).toBe(false)
+    expect(
+      isWebKitCorsAccessControlNoise("https://cdn.example.com/widget.js due to access control checks.")
+    ).toBe(false)
+  })
+})
 
 test.describe("live production e2e", () => {
   test.skip(!hasLiveCredentials, "E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD is required")

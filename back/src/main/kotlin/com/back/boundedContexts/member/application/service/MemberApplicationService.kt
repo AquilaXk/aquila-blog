@@ -5,6 +5,7 @@ import com.back.boundedContexts.member.application.port.output.MemberRepositoryP
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
+import com.back.boundedContexts.member.domain.shared.memberMixin.normalizeMemberProfileWorkspaceContent
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.storage.application.UploadedFileRetentionService
@@ -252,9 +253,10 @@ class MemberApplicationService(
     ) {
         memberProfileHydrator.hydrate(member)
         ensureProfileWorkspaceSnapshotsInitialized(member)
+        val normalizedContent = normalizeMemberProfileWorkspaceContent(content)
         val previousProfileImgUrl = member.profileImgUrl
         val publishedProfileImgUrl = member.getProfileWorkspacePublishedContent().profileImageUrl
-        member.applyProfileWorkspaceContent(content)
+        member.applyProfileWorkspaceContent(normalizedContent)
         saveProfileImgUrlAttr(member)
         saveProfileRoleAttr(member)
         saveProfileBioAttr(member)
@@ -266,7 +268,8 @@ class MemberApplicationService(
         saveHomeIntroDescriptionAttr(member)
         saveServiceLinksAttr(member)
         saveContactLinksAttr(member)
-        syncDraftWorkspaceFromLegacy(member)
+        member.setProfileWorkspaceDraftContent(normalizedContent)
+        saveProfileWorkspaceDraftAttr(member)
         if (previousProfileImgUrl != member.profileImgUrl) {
             uploadedFileRetentionService.syncProfileImage(
                 member.id,

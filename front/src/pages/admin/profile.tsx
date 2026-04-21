@@ -23,6 +23,7 @@ import useViewportImageEditor from "src/libs/imageEditor/useViewportImageEditor"
 import {
   buildLegacyAboutDetails,
   buildProfileWorkspaceFromLegacy,
+  AboutProjectBlock,
   normalizeProfileWorkspaceContent,
   ProfileWorkspaceContent,
   ProfileWorkspaceResponse,
@@ -128,9 +129,12 @@ const pickWorkspaceSectionContent = (
       }
     case "about":
       return {
+        aboutHeadline: content.aboutHeadline,
         aboutRole: content.aboutRole,
         aboutBio: content.aboutBio,
         aboutSections: content.aboutSections,
+        aboutProjectSectionTitle: content.aboutProjectSectionTitle,
+        aboutProjects: content.aboutProjects,
       }
     case "home":
       return {
@@ -212,6 +216,15 @@ const createBlankAboutSection = (): AboutSectionBlock => ({
   title: "",
   items: [""],
   dividerBefore: false,
+})
+
+const createBlankAboutProject = (): AboutProjectBlock => ({
+  id: createLocalId("project"),
+  name: "",
+  summary: "",
+  role: "",
+  href: "",
+  linkLabel: "",
 })
 
 const reorderListItem = <T,>(items: T[], fromIndex: number, toIndex: number) => {
@@ -452,10 +465,13 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
           profileImageDirectUrl: content.profileImageUrl,
           profileRole: content.profileRole,
           profileBio: content.profileBio,
+          aboutHeadline: content.aboutHeadline,
           aboutRole: content.aboutRole,
           aboutBio: content.aboutBio,
           aboutDetails: buildLegacyAboutDetails(content.aboutSections),
           aboutSections: content.aboutSections,
+          aboutProjectSectionTitle: content.aboutProjectSectionTitle,
+          aboutProjects: content.aboutProjects,
           blogTitle: content.blogTitle,
           homeIntroTitle: content.homeIntroTitle,
           homeIntroDescription: content.homeIntroDescription,
@@ -773,6 +789,36 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
       items: moveListItem(section.items, itemIndex, direction),
     }))
   }, [updateAboutSection])
+
+  const updateAboutProject = useCallback((projectIndex: number, updater: (project: AboutProjectBlock) => AboutProjectBlock) => {
+    setDraft((current) => ({
+      ...current,
+      aboutProjects: current.aboutProjects.map((project, index) =>
+        index === projectIndex ? updater(project) : project
+      ),
+    }))
+  }, [])
+
+  const addAboutProject = useCallback(() => {
+    setDraft((current) => ({
+      ...current,
+      aboutProjects: [...current.aboutProjects, createBlankAboutProject()],
+    }))
+  }, [])
+
+  const removeAboutProject = useCallback((projectIndex: number) => {
+    setDraft((current) => ({
+      ...current,
+      aboutProjects: current.aboutProjects.filter((_, index) => index !== projectIndex),
+    }))
+  }, [])
+
+  const moveAboutProject = useCallback((projectIndex: number, direction: -1 | 1) => {
+    setDraft((current) => ({
+      ...current,
+      aboutProjects: moveListItem(current.aboutProjects, projectIndex, direction),
+    }))
+  }, [])
 
   const applyProfileImageDraftPreviewStyle = useCallback(
     (transform: ProfileImageDraftTransformState) => {
@@ -1197,7 +1243,8 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
   const missingExposureItems: string[] = []
   if (!displayNameInput.trim()) missingExposureItems.push("계정 이름")
   if (!draft.profileBio.trim()) missingExposureItems.push("짧은 소개")
-  if (!draft.aboutRole.trim() || !draft.aboutBio.trim()) missingExposureItems.push("About 소개")
+  if (!draft.aboutHeadline.trim() || !draft.aboutRole.trim() || !draft.aboutBio.trim()) missingExposureItems.push("About 소개")
+  if (!draft.aboutProjectSectionTitle.trim() || draft.aboutProjects.length === 0) missingExposureItems.push("About 프로젝트")
   if (!draft.homeIntroTitle.trim() || !draft.homeIntroDescription.trim()) missingExposureItems.push("메인 헤더 카피")
   const hasMissingExposureItems = missingExposureItems.length > 0
   const activeSectionMeta = WORKSPACE_SECTIONS.find((section) => section.id === activeSection) || WORKSPACE_SECTIONS[0]
@@ -1282,6 +1329,15 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                 </div>
               </SectionBlockHeader>
               <FieldGrid data-columns="2">
+                <FieldBox data-span="full">
+                  <FieldLabel htmlFor="about-headline">상단 문구</FieldLabel>
+                  <Input
+                    id="about-headline"
+                    value={draft.aboutHeadline}
+                    placeholder="예: 이유를 먼저 따지고, 운영 가능한 시스템을 설계합니다."
+                    onChange={(event) => updateDraft("aboutHeadline", event.target.value)}
+                  />
+                </FieldBox>
                 <FieldBox>
                   <FieldLabel htmlFor="about-role">페이지 역할 문구</FieldLabel>
                   <Input
@@ -1417,6 +1473,132 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
               ) : (
                 <EmptyStateCard>
                   <strong>아직 상세 블록이 없습니다</strong>
+                </EmptyStateCard>
+              )}
+            </FieldSectionCard>
+
+            <FieldSectionCard>
+              <SectionBlockHeader>
+                <div>
+                  <h3>프로젝트</h3>
+                </div>
+                <GhostButton type="button" onClick={addAboutProject}>
+                  프로젝트 추가
+                </GhostButton>
+              </SectionBlockHeader>
+
+              <FieldBox>
+                <FieldLabel htmlFor="about-project-title">섹션 제목</FieldLabel>
+                <Input
+                  id="about-project-title"
+                  value={draft.aboutProjectSectionTitle}
+                  placeholder="예: 프로젝트"
+                  onChange={(event) => updateDraft("aboutProjectSectionTitle", event.target.value)}
+                />
+              </FieldBox>
+
+              {draft.aboutProjects.length > 0 ? (
+                <AboutProjectList>
+                  {draft.aboutProjects.map((project, projectIndex) => (
+                    <AboutProjectCard key={project.id || `project-${projectIndex}`}>
+                      <AboutSectionCardHeader>
+                        <div>
+                          <span>프로젝트 {projectIndex + 1}</span>
+                        </div>
+                        <InlineActionRow>
+                          <MiniButton
+                            type="button"
+                            disabled={projectIndex === 0}
+                            onClick={() => moveAboutProject(projectIndex, -1)}
+                          >
+                            위로
+                          </MiniButton>
+                          <MiniButton
+                            type="button"
+                            disabled={projectIndex === draft.aboutProjects.length - 1}
+                            onClick={() => moveAboutProject(projectIndex, 1)}
+                          >
+                            아래로
+                          </MiniButton>
+                          <DangerButton type="button" onClick={() => removeAboutProject(projectIndex)}>
+                            삭제
+                          </DangerButton>
+                        </InlineActionRow>
+                      </AboutSectionCardHeader>
+
+                      <FieldGrid data-columns="2">
+                        <FieldBox>
+                          <FieldLabel>제목</FieldLabel>
+                          <Input
+                            value={project.name}
+                            placeholder="예: aquila-blog"
+                            onChange={(event) =>
+                              updateAboutProject(projectIndex, (current) => ({
+                                ...current,
+                                name: event.target.value,
+                              }))
+                            }
+                          />
+                        </FieldBox>
+                        <FieldBox>
+                          <FieldLabel>역할</FieldLabel>
+                          <Input
+                            value={project.role}
+                            placeholder="예: Full-stack · Editor/SSR/Deploy"
+                            onChange={(event) =>
+                              updateAboutProject(projectIndex, (current) => ({
+                                ...current,
+                                role: event.target.value,
+                              }))
+                            }
+                          />
+                        </FieldBox>
+                        <FieldBox data-span="full">
+                          <FieldLabel>요약</FieldLabel>
+                          <TextArea
+                            value={project.summary}
+                            placeholder="프로젝트 목록에 표시할 설명"
+                            onChange={(event) =>
+                              updateAboutProject(projectIndex, (current) => ({
+                                ...current,
+                                summary: event.target.value,
+                              }))
+                            }
+                          />
+                        </FieldBox>
+                        <FieldBox>
+                          <FieldLabel>URL</FieldLabel>
+                          <Input
+                            value={project.href}
+                            placeholder="https://..."
+                            onChange={(event) =>
+                              updateAboutProject(projectIndex, (current) => ({
+                                ...current,
+                                href: event.target.value,
+                              }))
+                            }
+                          />
+                        </FieldBox>
+                        <FieldBox>
+                          <FieldLabel>링크 라벨</FieldLabel>
+                          <Input
+                            value={project.linkLabel}
+                            placeholder="예: 링크 보기"
+                            onChange={(event) =>
+                              updateAboutProject(projectIndex, (current) => ({
+                                ...current,
+                                linkLabel: event.target.value,
+                              }))
+                            }
+                          />
+                        </FieldBox>
+                      </FieldGrid>
+                    </AboutProjectCard>
+                  ))}
+                </AboutProjectList>
+              ) : (
+                <EmptyStateCard>
+                  <strong>아직 프로젝트가 없습니다</strong>
                 </EmptyStateCard>
               )}
             </FieldSectionCard>
@@ -1803,8 +1985,21 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                       <span>About</span>
                       <strong>{displayName}</strong>
                     </header>
+                    {previewContent.aboutHeadline ? <h4>{previewContent.aboutHeadline}</h4> : null}
                     {previewContent.aboutRole ? <h4>{previewContent.aboutRole}</h4> : null}
                     {previewContent.aboutBio ? <p>{previewContent.aboutBio}</p> : null}
+                    {previewContent.aboutProjects.length > 0 ? (
+                      <div className="sections">
+                        <section>
+                          <strong>{previewContent.aboutProjectSectionTitle || "프로젝트"}</strong>
+                          <ul>
+                            {previewContent.aboutProjects.slice(0, 3).map((project, index) => (
+                              <li key={`${project.id}-${index}`}>{project.name || "프로젝트 제목"}</li>
+                            ))}
+                          </ul>
+                        </section>
+                      </div>
+                    ) : null}
                     {previewContent.aboutSections.length > 0 ? (
                       <div className="sections">
                         {previewContent.aboutSections.map((section) => (
@@ -2375,6 +2570,10 @@ const AboutSectionCard = styled.div`
   border: 1px solid ${({ theme }) => theme.colors.gray7};
   background: ${({ theme }) => theme.colors.gray2};
 `
+
+const AboutProjectList = styled(AboutSectionList)``
+
+const AboutProjectCard = styled(AboutSectionCard)``
 
 const AboutSectionCardHeader = styled.div`
   display: flex;

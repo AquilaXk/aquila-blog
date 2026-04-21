@@ -2,6 +2,7 @@ package com.back.boundedContexts.member.adapter.web
 
 import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileAboutProjectBlock
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileAboutSectionBlock
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
@@ -140,6 +141,21 @@ class ApiV1AdmMemberController(
         val dividerBefore: Boolean = false,
     )
 
+    data class ProfileWorkspaceProjectRequest(
+        @field:Size(max = 80)
+        val id: String = "",
+        @field:Size(max = 120)
+        val name: String = "",
+        @field:Size(max = 500)
+        val summary: String = "",
+        @field:Size(max = 120)
+        val role: String = "",
+        @field:Size(max = 2000)
+        val href: String = "",
+        @field:Size(max = 80)
+        val linkLabel: String = "",
+    )
+
     data class UpdateProfileWorkspaceDraftRequest(
         @field:Size(max = 2000)
         val profileImageUrl: String = "",
@@ -147,12 +163,18 @@ class ApiV1AdmMemberController(
         val profileRole: String = "",
         @field:Size(max = 1000)
         val profileBio: String = "",
+        @field:Size(max = 200)
+        val aboutHeadline: String = "",
         @field:Size(max = 100)
         val aboutRole: String = "",
         @field:Size(max = 2000)
         val aboutBio: String = "",
         @field:Size(max = 20)
         val aboutSections: List<@Valid ProfileWorkspaceSectionRequest> = emptyList(),
+        @field:Size(max = 120)
+        val aboutProjectSectionTitle: String = "",
+        @field:Size(max = 20)
+        val aboutProjects: List<@Valid ProfileWorkspaceProjectRequest> = emptyList(),
         @field:Size(max = 120)
         val blogTitle: String = "",
         @field:Size(max = 120)
@@ -393,6 +415,7 @@ class ApiV1AdmMemberController(
             profileImageUrl = profileImageUrl.trim(),
             profileRole = profileRole.trim(),
             profileBio = profileBio.trim(),
+            aboutHeadline = aboutHeadline.trim(),
             aboutRole = aboutRole.trim(),
             aboutBio = aboutBio.trim(),
             aboutSections =
@@ -402,6 +425,18 @@ class ApiV1AdmMemberController(
                         title = it.title.trim(),
                         items = it.items.map(String::trim),
                         dividerBefore = it.dividerBefore,
+                    )
+                },
+            aboutProjectSectionTitle = aboutProjectSectionTitle.trim(),
+            aboutProjects =
+                aboutProjects.map {
+                    MemberProfileAboutProjectBlock(
+                        id = it.id.trim(),
+                        name = it.name.trim(),
+                        summary = it.summary.trim(),
+                        role = it.role.trim(),
+                        href = it.href.trim(),
+                        linkLabel = it.linkLabel.trim(),
                     )
                 },
             blogTitle = blogTitle.trim(),

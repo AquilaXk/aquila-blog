@@ -7,13 +7,25 @@ export type AboutSectionBlock = {
   dividerBefore: boolean
 }
 
+export type AboutProjectBlock = {
+  id: string
+  name: string
+  summary: string
+  role: string
+  href: string
+  linkLabel: string
+}
+
 export type ProfileWorkspaceContent = {
   profileImageUrl: string
   profileRole: string
   profileBio: string
+  aboutHeadline: string
   aboutRole: string
   aboutBio: string
   aboutSections: AboutSectionBlock[]
+  aboutProjectSectionTitle: string
+  aboutProjects: AboutProjectBlock[]
   blogTitle: string
   homeIntroTitle: string
   homeIntroDescription: string
@@ -34,16 +46,60 @@ type LegacyProfileLike = {
   profileImageUrl?: string
   profileRole?: string
   profileBio?: string
+  aboutHeadline?: string
   aboutRole?: string
   aboutBio?: string
   aboutDetails?: string
   aboutSections?: AboutSectionBlock[]
+  aboutProjectSectionTitle?: string
+  aboutProjects?: AboutProjectBlock[]
   blogTitle?: string
   homeIntroTitle?: string
   homeIntroDescription?: string
   serviceLinks?: ProfileCardLinkItem[]
   contactLinks?: ProfileCardLinkItem[]
 }
+
+export const DEFAULT_ABOUT_HEADLINE = "이유를 먼저 따지고, 운영 가능한 시스템을 설계합니다."
+export const DEFAULT_ABOUT_PROJECT_SECTION_TITLE = "프로젝트"
+export const DEFAULT_ABOUT_PROJECTS: AboutProjectBlock[] = [
+  {
+    id: "project-1",
+    name: "고구마마켓",
+    summary: "거래 흐름과 상태 전이를 직접 설계하며 커머스 도메인 감각을 다진 프로젝트입니다.",
+    role: "Backend · 도메인 설계",
+    href: "",
+    linkLabel: "",
+  },
+  {
+    id: "project-2",
+    name: "마음-온",
+    summary: "사용자 감정 기록 흐름을 다루며 서비스 구조와 데이터 설계를 다듬은 프로젝트입니다.",
+    role: "Backend · API 설계",
+    href: "",
+    linkLabel: "",
+  },
+  {
+    id: "project-3",
+    name: "aquila-blog",
+    summary: "글쓰기, 공개 렌더링, 운영 배포까지 직접 관리하는 개인 기술 블로그입니다.",
+    role: "Full-stack · Editor/SSR/Deploy",
+    href: "https://github.com/AquilaXk/aquila-blog",
+    linkLabel: "aquila-blog",
+  },
+  {
+    id: "project-4",
+    name: "aquila-bank",
+    summary: "금융 도메인을 가정하고 계좌/거래 흐름을 모델링한 학습 프로젝트입니다.",
+    role: "Backend · Transaction Flow",
+    href: "https://github.com/AquilaXk/aquila-bank",
+    linkLabel: "링크 보기",
+  },
+]
+
+const normalizeSectionTitle = (title: string) => title.replace(/\s+/g, "").toLowerCase()
+
+export const isAboutProjectSectionTitle = (title: string) => /프로젝트|project/.test(normalizeSectionTitle(title))
 
 export const parseLegacyAboutDetails = (raw: string): AboutSectionBlock[] => {
   const lines = raw.split(/\r?\n/).map((line) => line.trim())
@@ -132,9 +188,12 @@ export const buildLegacyAboutDetails = (sections: AboutSectionBlock[]): string =
     profileImageUrl: "",
     profileRole: "",
     profileBio: "",
+    aboutHeadline: "",
     aboutRole: "",
     aboutBio: "",
     aboutSections: sections,
+    aboutProjectSectionTitle: "",
+    aboutProjects: [],
     blogTitle: "",
     homeIntroTitle: "",
     homeIntroDescription: "",
@@ -174,28 +233,76 @@ const normalizeLinkItems = (items: ProfileCardLinkItem[] | undefined): ProfileCa
     }))
     .filter((item) => item.label && item.href)
 
+const normalizeAboutProjects = (items: AboutProjectBlock[] | undefined): AboutProjectBlock[] =>
+  (items || [])
+    .map((item, index) => {
+      const href = (item.href || "").trim()
+      const linkLabel = (item.linkLabel || "").trim()
+      return {
+        id: (item.id || "").trim() || `project-${index + 1}`,
+        name: (item.name || "").trim(),
+        summary: (item.summary || "").trim(),
+        role: (item.role || "").trim(),
+        href,
+        linkLabel: linkLabel || (href ? "링크 보기" : ""),
+      }
+    })
+    .filter((item) => item.name || item.summary || item.role || item.href)
+
+const deriveLegacyAboutProjects = (sections: AboutSectionBlock[]): AboutProjectBlock[] => {
+  const projectSection = sections.find((section) => isAboutProjectSectionTitle(section.title))
+  if (!projectSection) return []
+
+  return normalizeAboutProjects(
+    projectSection.items.map((name, index) => {
+      const preset = DEFAULT_ABOUT_PROJECTS.find((item) => item.name.toLowerCase() === name.toLowerCase())
+      return {
+        ...(preset || {
+          id: `project-${index + 1}`,
+          name,
+          summary: "",
+          role: "",
+          href: "",
+          linkLabel: "",
+        }),
+        id: preset?.id || `project-${index + 1}`,
+        name,
+      }
+    })
+  )
+}
+
 export const normalizeProfileWorkspaceContent = (
   content: ProfileWorkspaceContent
-): ProfileWorkspaceContent => ({
-  profileImageUrl: (content.profileImageUrl || "").trim(),
-  profileRole: (content.profileRole || "").trim(),
-  profileBio: (content.profileBio || "").trim(),
-  aboutRole: (content.aboutRole || "").trim(),
-  aboutBio: (content.aboutBio || "").trim(),
-  aboutSections: (content.aboutSections || [])
+): ProfileWorkspaceContent => {
+  const aboutSections = (content.aboutSections || [])
     .map((section, index) => ({
       id: (section.id || "").trim() || `section-${index + 1}`,
       title: (section.title || "").trim(),
       items: (section.items || []).map((item) => item.trim()).filter(Boolean),
       dividerBefore: Boolean(section.dividerBefore),
     }))
-    .filter((section) => section.title || section.items.length > 0),
-  blogTitle: (content.blogTitle || "").trim(),
-  homeIntroTitle: (content.homeIntroTitle || "").trim(),
-  homeIntroDescription: (content.homeIntroDescription || "").trim(),
-  serviceLinks: normalizeLinkItems(content.serviceLinks),
-  contactLinks: normalizeLinkItems(content.contactLinks),
-})
+    .filter((section) => section.title || section.items.length > 0)
+  const legacyProjectSectionTitle = aboutSections.find((section) => isAboutProjectSectionTitle(section.title))?.title || ""
+  const aboutProjects = normalizeAboutProjects(content.aboutProjects)
+
+  return {
+    profileImageUrl: (content.profileImageUrl || "").trim(),
+    profileRole: (content.profileRole || "").trim(),
+    profileBio: (content.profileBio || "").trim(),
+    aboutHeadline: (content.aboutHeadline || "").trim(),
+    aboutRole: (content.aboutRole || "").trim(),
+    aboutBio: (content.aboutBio || "").trim(),
+    aboutSections,
+    aboutProjectSectionTitle: (content.aboutProjectSectionTitle || "").trim() || legacyProjectSectionTitle,
+    aboutProjects: aboutProjects.length > 0 ? aboutProjects : deriveLegacyAboutProjects(aboutSections),
+    blogTitle: (content.blogTitle || "").trim(),
+    homeIntroTitle: (content.homeIntroTitle || "").trim(),
+    homeIntroDescription: (content.homeIntroDescription || "").trim(),
+    serviceLinks: normalizeLinkItems(content.serviceLinks),
+    contactLinks: normalizeLinkItems(content.contactLinks),
+  }
+}
 
 export const serializeProfileWorkspaceContent = (content: ProfileWorkspaceContent) =>
   JSON.stringify(normalizeProfileWorkspaceContent(content))
@@ -207,12 +314,15 @@ export const buildProfileWorkspaceFromLegacy = (
     profileImageUrl: value?.profileImageDirectUrl || value?.profileImageUrl || "",
     profileRole: value?.profileRole || "",
     profileBio: value?.profileBio || "",
+    aboutHeadline: value?.aboutHeadline || "",
     aboutRole: value?.aboutRole || "",
     aboutBio: value?.aboutBio || "",
     aboutSections:
       value?.aboutSections && value.aboutSections.length > 0
         ? value.aboutSections
         : parseLegacyAboutDetails(value?.aboutDetails || ""),
+    aboutProjectSectionTitle: value?.aboutProjectSectionTitle || "",
+    aboutProjects: value?.aboutProjects || [],
     blogTitle: value?.blogTitle || "",
     homeIntroTitle: value?.homeIntroTitle || "",
     homeIntroDescription: value?.homeIntroDescription || "",

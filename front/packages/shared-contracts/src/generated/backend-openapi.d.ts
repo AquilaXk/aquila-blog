@@ -1216,6 +1216,14 @@ export interface components {
             label: string;
             href: string;
         };
+        ProfileWorkspaceProjectRequest: {
+            id?: string;
+            name?: string;
+            summary?: string;
+            role?: string;
+            href?: string;
+            linkLabel?: string;
+        };
         ProfileWorkspaceSectionRequest: {
             id?: string;
             title?: string;
@@ -1226,14 +1234,25 @@ export interface components {
             profileImageUrl?: string;
             profileRole?: string;
             profileBio?: string;
+            aboutHeadline?: string;
             aboutRole?: string;
             aboutBio?: string;
             aboutSections?: components["schemas"]["ProfileWorkspaceSectionRequest"][];
+            aboutProjectSectionTitle?: string;
+            aboutProjects?: components["schemas"]["ProfileWorkspaceProjectRequest"][];
             blogTitle?: string;
             homeIntroTitle?: string;
             homeIntroDescription?: string;
             serviceLinks?: components["schemas"]["ProfileCardLinkItemRequest"][];
             contactLinks?: components["schemas"]["ProfileCardLinkItemRequest"][];
+        };
+        MemberProfileAboutProjectBlockDto: {
+            id?: string;
+            name?: string;
+            summary?: string;
+            role?: string;
+            href?: string;
+            linkLabel?: string;
         };
         MemberProfileAboutSectionBlockDto: {
             id?: string;
@@ -1250,9 +1269,12 @@ export interface components {
             profileImageUrl?: string;
             profileRole?: string;
             profileBio?: string;
+            aboutHeadline?: string;
             aboutRole?: string;
             aboutBio?: string;
             aboutSections?: components["schemas"]["MemberProfileAboutSectionBlockDto"][];
+            aboutProjectSectionTitle?: string;
+            aboutProjects?: components["schemas"]["MemberProfileAboutProjectBlockDto"][];
             blogTitle?: string;
             homeIntroTitle?: string;
             homeIntroDescription?: string;
@@ -1561,10 +1583,13 @@ export interface components {
             profileImageDirectUrl?: string;
             profileRole?: string;
             profileBio?: string;
+            aboutHeadline?: string;
             aboutRole?: string;
             aboutBio?: string;
             aboutDetails?: string;
             aboutSections?: components["schemas"]["MemberProfileAboutSectionBlockDto"][];
+            aboutProjectSectionTitle?: string;
+            aboutProjects?: components["schemas"]["MemberProfileAboutProjectBlockDto"][];
             blogTitle?: string;
             homeIntroTitle?: string;
             homeIntroDescription?: string;

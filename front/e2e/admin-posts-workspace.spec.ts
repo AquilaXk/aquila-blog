@@ -52,6 +52,15 @@ test.describe("admin posts workspace link contract", () => {
     expect(source).not.toContain('data-clickable={localDraft ? "true" : undefined}')
   })
 
+  test("브라우저 임시저장 카드는 본문 markdown preview를 직접 노출하지 않는다", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePage.tsx"), "utf8")
+
+    expect(source).not.toContain("summary: summary || content.slice(0, 120)")
+    expect(source).not.toContain("{localDraft.summary ? <ResumeDescription>{localDraft.summary}</ResumeDescription> : null}")
+    expect(source).toContain("{localDraft.savedAt ? <span>{formatDateTime(localDraft.savedAt)}</span> : null}")
+    expect(source).toContain("<ResumeTitle>{localDraft.title}</ResumeTitle>")
+  })
+
   test("관리자 작성 화면은 현재 편집 중인 글이면 visibility와 무관하게 canonical 링크 열기와 복사 액션을 노출한다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
 

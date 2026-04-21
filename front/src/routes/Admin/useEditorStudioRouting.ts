@@ -137,11 +137,13 @@ export const useEditorStudioRouting = ({
     if (!router.isReady) return
     const source = typeof router.query.source === "string" ? router.query.source.trim() : ""
     if (source !== "local-draft") return
+    autoCreatedTempDraftRef.current = true
+    setIsNewEditorBootstrapPending(false)
     restoreLocalDraft()
     const nextQuery = { ...router.query }
     delete nextQuery.source
     void replaceShallowRoutePreservingScroll(router, { query: nextQuery })
-  }, [restoreLocalDraft, router])
+  }, [autoCreatedTempDraftRef, restoreLocalDraft, router, setIsNewEditorBootstrapPending])
 
   useEffect(() => {
     if (!isDedicatedNewEditorRoute) {
@@ -150,18 +152,25 @@ export const useEditorStudioRouting = ({
       return
     }
 
+    const source = typeof router.query.source === "string" ? router.query.source.trim() : ""
+    if (source === "local-draft" || autoCreatedTempDraftRef.current) {
+      setIsNewEditorBootstrapPending(false)
+      return
+    }
+
     if (!postId.trim()) {
       setIsNewEditorBootstrapPending(true)
     }
-  }, [autoCreatedTempDraftRef, isDedicatedNewEditorRoute, postId, setIsNewEditorBootstrapPending])
+  }, [autoCreatedTempDraftRef, isDedicatedNewEditorRoute, postId, router.query.source, setIsNewEditorBootstrapPending])
 
   useEffect(() => {
     if (!router.isReady || !isDedicatedEditorRoute || !sessionMember?.isAdmin) return
     if (router.pathname !== editorNewRoutePath) return
+    const source = typeof router.query.source === "string" ? router.query.source.trim() : ""
+    if (source === "local-draft") return
     if (autoCreatedTempDraftRef.current) return
 
     autoCreatedTempDraftRef.current = true
-    const source = typeof router.query.source === "string" ? router.query.source.trim() : ""
     const returnTo =
       typeof router.query.returnTo === "string"
         ? normalizeEditorReturnRoute(router.query.returnTo)

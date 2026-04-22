@@ -368,6 +368,9 @@ test("iPhone 15 Pro about 페이지는 소개/cta/프로젝트/이력/링크 순
       htmlScrollWidth: document.documentElement.scrollWidth,
       bodyScrollWidth: document.body.scrollWidth,
       hero: readRect('[data-ui="about-hero"]'),
+      eyebrowFontSize: Number.parseFloat(
+        window.getComputedStyle(document.querySelector('[data-ui="about-eyebrow"]') as HTMLElement).fontSize
+      ),
       cta: readRect('[data-ui="about-cta-group"]'),
       projects: readRect('[data-ui="about-projects"]'),
       timeline: readRect('[data-ui="about-timeline-section"]'),
@@ -379,6 +382,7 @@ test("iPhone 15 Pro about 페이지는 소개/cta/프로젝트/이력/링크 순
 
   expect(snapshot.htmlScrollWidth).toBeLessThanOrEqual(snapshot.viewportWidth)
   expect(snapshot.bodyScrollWidth).toBeLessThanOrEqual(snapshot.viewportWidth)
+  expect(snapshot.eyebrowFontSize).toBeGreaterThanOrEqual(16)
   expect(snapshot.hero).not.toBeNull()
   expect(snapshot.cta).not.toBeNull()
   expect(snapshot.projects).not.toBeNull()

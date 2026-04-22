@@ -8,41 +8,41 @@ type ThemeLike = {
 export const markdownContentTypography = (selector: string, theme: ThemeLike) => css`
   ${selector} {
     color: ${theme.colors.gray12};
-    line-height: 1.7;
-    font-size: 1.125rem;
+    line-height: 1.5;
+    font-size: 1rem;
   }
 
   ${selector} h1,
   ${selector} h2,
   ${selector} h3,
   ${selector} h4 {
-    line-height: 1.34;
-    letter-spacing: -0.017em;
+    line-height: 1.3;
+    letter-spacing: 0;
     margin-top: 1.65rem;
     margin-bottom: 0.68rem;
-    font-weight: 760;
+    font-weight: 600;
   }
 
   ${selector} h1 {
-    font-size: clamp(1.88rem, 3vw, 2.3rem);
+    font-size: 1.875rem;
   }
 
   ${selector} h2 {
-    font-size: clamp(1.5rem, 2.35vw, 1.84rem);
+    font-size: 1.5rem;
   }
 
   ${selector} h3 {
-    font-size: clamp(1.2rem, 1.9vw, 1.42rem);
+    font-size: 1.25rem;
   }
 
   ${selector} h4 {
-    font-size: 1.04rem;
+    font-size: 1rem;
   }
 
   ${selector} p {
     margin: 0.72rem 0;
-    font-size: 1.125rem;
-    line-height: 1.7;
+    font-size: 1rem;
+    line-height: 1.5;
     overflow-wrap: anywhere;
   }
 
@@ -85,7 +85,7 @@ export const markdownContentTypography = (selector: string, theme: ThemeLike) =>
   }
 
   ${selector} li {
-    line-height: 1.78;
+    line-height: 1.5;
     overflow-wrap: anywhere;
   }
 

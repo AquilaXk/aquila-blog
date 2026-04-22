@@ -351,7 +351,8 @@ const StyledWrapper = styled.div`
   .about-eyebrow {
     margin: 0 0 0.9rem;
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.82rem;
+    font-size: 1.05rem;
+    line-height: 1.2;
     font-weight: 800;
     letter-spacing: 0.12em;
     text-transform: uppercase;

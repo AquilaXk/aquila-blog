@@ -831,6 +831,64 @@ test("상세 본문은 inline color quoted strong 토큰과 blockquote soft line
   expect(markdownText).not.toContain('*"요청이 진짜 우리 사용자의 의도인가"*를')
 })
 
+test("상세 본문은 trailing-space malformed strong marker를 그대로 노출하지 않는다", async ({ page }) => {
+  await page.route("**/post/api/v1/posts/508", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 508,
+        createdAt: "2026-04-08T00:36:08.787Z",
+        modifiedAt: "2026-04-23T01:03:59.132Z",
+        authorId: 1,
+        authorName: "관리자",
+        authorUsername: "aquila",
+        authorProfileImageDirectUrl: "/avatar.png",
+        title: "post 508 malformed strong 회귀 방지",
+        content: [
+          '왜냐하면 중요한건 {{color:#34d399|**"어디에" **}}저장하느냐가 아니라',
+          "",
+          "## **구현 예시 **",
+        ].join("\n"),
+        tags: ["테스트태그"],
+        category: [],
+        published: true,
+        listed: true,
+        likesCount: 0,
+        commentsCount: 0,
+        hitCount: 0,
+        actorHasLiked: false,
+        actorCanModify: false,
+        actorCanDelete: false,
+      }),
+    })
+  })
+
+  await page.route("**/post/api/v1/posts/508/hit", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        resultCode: "200-1",
+        msg: "ok",
+        data: { hitCount: 1 },
+      }),
+    })
+  })
+
+  await page.goto("/posts/508")
+  await expect(page.getByText("post 508 malformed strong 회귀 방지")).toBeVisible()
+
+  const coloredMalformedStrong = page.locator(".aq-inline-color").filter({ hasText: '"어디에"' }).first()
+  await expect(coloredMalformedStrong).toBeVisible()
+  await expect(coloredMalformedStrong).not.toContainText("**")
+  await expect(page.getByRole("heading", { name: "구현 예시" })).toBeVisible()
+
+  const markdownText = await page.locator(".aq-markdown").first().evaluate((element) => element.textContent || "")
+  expect(markdownText).not.toContain('**"어디에" **')
+  expect(markdownText).not.toContain("**구현 예시 **")
+})
+
 test("상세 코드블럭은 Prism fallback 토큰 하이라이팅을 유지한다", async ({ page }) => {
   await page.route("**/post/api/v1/posts/104", async (route) => {
     await route.fulfill({

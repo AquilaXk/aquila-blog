@@ -176,6 +176,40 @@ test.describe("block editor slash menu interaction", () => {
     await expect(listItems.nth(1)).toContainText("둘째")
   })
 
+  test("writer surface 타이포그래피는 노션 계측값과 일치한다", async ({ page }) => {
+    await page.goto(QA_WRITER_ROUTE)
+
+    const titleInput = page.locator("#post-title")
+    await expect(titleInput).toBeVisible()
+    await titleInput.fill("글 제목 크기")
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await expect(editor).toBeVisible()
+    await editor.click()
+    await page.keyboard.type("본문 크기")
+
+    const readTypography = async (selector: string) =>
+      page.locator(selector).first().evaluate((element) => {
+        const style = window.getComputedStyle(element)
+        return {
+          fontSize: style.fontSize,
+          lineHeight: style.lineHeight,
+          fontWeight: style.fontWeight,
+        }
+      })
+
+    await expect(readTypography("#post-title")).resolves.toEqual({
+      fontSize: "40px",
+      lineHeight: "48px",
+      fontWeight: "700",
+    })
+    await expect(readTypography("[data-testid='block-editor-prosemirror'] p")).resolves.toEqual({
+      fontSize: "16px",
+      lineHeight: "24px",
+      fontWeight: "400",
+    })
+  })
+
   test("writer surface에서 slash 목록 변환 시 아래 기존 목록으로 caret 점프가 발생하지 않는다", async ({
     page,
   }) => {

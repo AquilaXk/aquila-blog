@@ -473,7 +473,7 @@ const MarkdownRendererRoot = styled.div`
   .aq-code code,
   pre code {
     display: block;
-    font-size: 0.875rem;
+    font-size: 0.85rem;
     line-height: 1.5;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New",
       monospace;
@@ -802,30 +802,30 @@ const MarkdownRendererRoot = styled.div`
 
   @media (max-width: 768px) {
     font-size: 1rem;
-    line-height: 1.74;
+    line-height: 1.5;
 
     h1 {
-      font-size: clamp(1.62rem, 7.4vw, 1.98rem);
+      font-size: 1.875rem;
     }
 
     h2 {
-      font-size: clamp(1.36rem, 6.1vw, 1.64rem);
+      font-size: 1.5rem;
     }
 
     h3 {
-      font-size: clamp(1.17rem, 5.1vw, 1.36rem);
+      font-size: 1.25rem;
     }
 
     p,
     li {
       font-size: 1rem;
-      line-height: 1.72;
+      line-height: 1.5;
     }
 
     .aq-code code,
     pre code {
-      font-size: 0.86rem;
-      line-height: 1.54;
+      font-size: 0.85rem;
+      line-height: 1.5;
     }
 
     .aq-table-scroll {
@@ -1203,17 +1203,17 @@ const MarkdownRendererRoot = styled.div`
 
   .aq-callout.aq-admonition .aq-callout-emoji {
     color: var(--ad-accent);
-    font-size: 1.22rem;
+    font-size: 1rem;
     font-weight: 600;
-    line-height: 1;
+    line-height: 1.5;
   }
 
   .aq-callout.aq-admonition .aq-callout-title {
     color: var(--ad-accent);
-    font-size: 1.02rem;
+    font-size: 1rem;
     font-weight: 700;
-    line-height: 1.32;
-    letter-spacing: -0.01em;
+    line-height: 1.5;
+    letter-spacing: 0;
   }
 
   .aq-callout.aq-admonition .aq-page-icon-inline {
@@ -1222,8 +1222,8 @@ const MarkdownRendererRoot = styled.div`
 
   .aq-callout.aq-admonition .aq-markdown-text {
     color: var(--ad-text);
-    font-size: 0.98rem;
-    line-height: 1.6;
+    font-size: 1rem;
+    line-height: 1.5;
   }
 
   .aq-callout.aq-admonition-tip {

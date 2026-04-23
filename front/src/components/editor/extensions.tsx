@@ -2717,8 +2717,8 @@ const CodeBlockEditorSurface = styled.div`
     padding: 1.05rem 1.18rem 1.6rem;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
       "Courier New", monospace;
-    font-size: 0.88rem;
-    line-height: 1.65;
+    font-size: 0.85rem;
+    line-height: 1.5;
     white-space: pre;
   }
 
@@ -3064,8 +3064,8 @@ const CalloutBodyContent = styled.div`
   }
 
   .aq-callout-body-content__content p {
-    font-size: 0.95rem;
-    line-height: 1.65;
+    font-size: 1rem;
+    line-height: 1.5;
     color: inherit;
   }
 

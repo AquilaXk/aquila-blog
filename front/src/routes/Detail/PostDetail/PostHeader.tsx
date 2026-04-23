@@ -288,10 +288,10 @@ const StyledWrapper = styled.header`
 
   .title {
     margin: 0;
-    font-size: clamp(1.94rem, 3.8vw, 3rem);
-    line-height: 1.18;
-    letter-spacing: -0.035em;
-    font-weight: 780;
+    font-size: 2.5rem;
+    line-height: 1.2;
+    letter-spacing: 0;
+    font-weight: 700;
     color: ${({ theme }) => theme.colors.gray12};
     max-width: 18ch;
     overflow-wrap: anywhere;
@@ -590,7 +590,7 @@ const StyledWrapper = styled.header`
     }
 
     .title {
-      font-size: clamp(1.75rem, 7.8vw, 2.3rem);
+      font-size: 2.5rem;
       line-height: 1.2;
     }
 

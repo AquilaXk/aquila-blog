@@ -6276,10 +6276,10 @@ const TitleInput = styled.textarea<{ $compact?: boolean }>`
   background: transparent;
   box-shadow: none;
   font-family: inherit;
-  font-size: ${({ $compact }) => ($compact ? "clamp(1.7rem, 3vw, 2.45rem)" : "clamp(1.94rem, 3.8vw, 3rem)")};
-  font-weight: 780;
-  line-height: ${({ $compact }) => ($compact ? "1.12" : "1.18")};
-  letter-spacing: -0.035em;
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0;
   resize: none;
   overflow: hidden;
   white-space: pre-wrap;
@@ -6295,8 +6295,8 @@ const TitleInput = styled.textarea<{ $compact?: boolean }>`
   }
 
   @media (max-width: 720px) {
-    font-size: ${({ $compact }) => ($compact ? "clamp(1.64rem, 7vw, 2.05rem)" : "clamp(1.75rem, 7.8vw, 2.3rem)")};
-    line-height: ${({ $compact }) => ($compact ? "1.16" : "1.2")};
+    font-size: 2.5rem;
+    line-height: 1.2;
   }
 `
 

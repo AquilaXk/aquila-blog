@@ -176,7 +176,7 @@ test.describe("block editor slash menu interaction", () => {
     await expect(listItems.nth(1)).toContainText("둘째")
   })
 
-  test("writer surface 타이포그래피는 노션 계측값과 일치한다", async ({ page }) => {
+  test("writer surface 타이포그래피는 폭 보정형 shared scale을 따른다", async ({ page }) => {
     await page.goto(QA_WRITER_ROUTE)
 
     const titleInput = page.locator("#post-title")
@@ -199,13 +199,13 @@ test.describe("block editor slash menu interaction", () => {
       })
 
     await expect(readTypography("#post-title")).resolves.toEqual({
-      fontSize: "40px",
-      lineHeight: "48px",
+      fontSize: "44px",
+      lineHeight: "52px",
       fontWeight: "700",
     })
     await expect(readTypography("[data-testid='block-editor-prosemirror'] p")).resolves.toEqual({
-      fontSize: "16px",
-      lineHeight: "24px",
+      fontSize: "17px",
+      lineHeight: "28px",
       fontWeight: "400",
     })
   })

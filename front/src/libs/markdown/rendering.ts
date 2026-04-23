@@ -110,6 +110,8 @@ graph TD
   | --- | --- |
   | a | 1 |`
 
+const FENCE_MARKER_PATTERN = /^(`{3,}|~{3,})/
+
 const CALLOUT_KIND_MAP: Record<string, CalloutKind> = {
   TIP: "tip",
   INFO: "info",
@@ -1082,10 +1084,60 @@ const normalizeSplitInlineColorQuotedEmphasis = (markdown: string) => {
   return normalized
 }
 
+const normalizeMalformedTrailingSpaceEmphasisLine = (line: string) => {
+  let normalized = line
+
+  normalized = normalized.replace(
+    /(\*\*|__)(\S(?:.*?\S)?)\s+(\1)/g,
+    (_match, marker: string, inner: string) => `${marker}${inner}${marker}`
+  )
+
+  normalized = normalized.replace(
+    /(^|[^*])\*([^*\n]*?\S)\s+\*(?!\*)/g,
+    (_match, prefix: string, inner: string) => `${prefix}*${inner}*`
+  )
+
+  normalized = normalized.replace(
+    /(^|[^_])_([^_\n]*?\S)\s+_(?!_)/g,
+    (_match, prefix: string, inner: string) => `${prefix}_${inner}_`
+  )
+
+  return normalized
+}
+
+const normalizeMalformedTrailingSpaceEmphasis = (markdown: string) => {
+  if ((!markdown.includes("*") && !markdown.includes("_")) || !markdown.includes(" ")) return markdown
+
+  let activeFenceMarker = ""
+
+  return markdown
+    .split("\n")
+    .map((line) => {
+      const trimmedStart = line.trimStart()
+      const fenceMatch = trimmedStart.match(FENCE_MARKER_PATTERN)
+
+      if (fenceMatch) {
+        const marker = fenceMatch[1]
+        if (!activeFenceMarker) {
+          activeFenceMarker = marker
+        } else if (marker[0] === activeFenceMarker[0] && marker.length >= activeFenceMarker.length) {
+          activeFenceMarker = ""
+        }
+        return line
+      }
+
+      if (activeFenceMarker) return line
+      return normalizeMalformedTrailingSpaceEmphasisLine(line)
+    })
+    .join("\n")
+}
+
 export const normalizeMarkdownForRender = (rawMarkdown: string) =>
   normalizeLegacyInlineHtmlMarkdown(
     normalizeLegacyCollapsedBlockquoteStrongLines(
-      normalizeSplitInlineColorQuotedEmphasis(normalizeEscapedMarkdownFences(rawMarkdown.trim()))
+      normalizeMalformedTrailingSpaceEmphasis(
+        normalizeSplitInlineColorQuotedEmphasis(normalizeEscapedMarkdownFences(rawMarkdown.trim()))
+      )
     )
   )
 

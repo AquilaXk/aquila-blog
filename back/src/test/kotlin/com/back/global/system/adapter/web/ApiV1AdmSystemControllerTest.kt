@@ -2,109 +2,36 @@ package com.back.global.system.adapter.web
 
 import com.back.boundedContexts.member.subContexts.notification.application.service.MemberNotificationSseService
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnostics
-import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnosticsService
-import com.back.boundedContexts.post.application.service.PostKeywordSearchPipelineService
 import com.back.boundedContexts.post.application.service.PostSearchEngineMirrorService
 import com.back.global.security.application.AuthSecurityEventDto
-import com.back.global.security.application.AuthSecurityEventService
-import com.back.global.security.config.CustomAuthenticationFilter
 import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.UploadedFileCleanupDiagnostics
-import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.system.application.AdminDashboardAuthSecuritySnapshot
 import com.back.global.system.application.AdminDashboardSignupMailSnapshot
 import com.back.global.system.application.AdminDashboardSnapshot
-import com.back.global.system.application.AdminDashboardSnapshotService
 import com.back.global.system.application.AdminDashboardStorageCleanupSnapshot
 import com.back.global.system.application.AdminDashboardTaskQueueSnapshot
-import com.back.global.system.application.AdminSystemHealthSnapshotService
 import com.back.global.task.application.TaskDlqReplayResult
-import com.back.global.task.application.TaskDlqReplayService
 import com.back.global.task.application.TaskExecutionSample
 import com.back.global.task.application.TaskProcessingLockDiagnostics
 import com.back.global.task.application.TaskQueueDiagnostics
-import com.back.global.task.application.TaskQueueDiagnosticsService
 import com.back.global.task.application.TaskRetryPolicy
 import com.back.global.task.application.TaskTypeDiagnostics
 import com.back.global.task.domain.TaskStatus
+import com.back.support.BaseAdmSystemControllerWebMvcTest
 import org.hamcrest.Matchers.anyOf
 import org.hamcrest.Matchers.equalTo
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
-import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.TestConfiguration
-import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
-import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.ComponentScan
-import org.springframework.context.annotation.FilterType
-import org.springframework.context.annotation.Import
-import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext
-import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
-import org.springframework.security.config.annotation.web.builders.HttpSecurity
-import org.springframework.security.config.annotation.web.invoke
-import org.springframework.security.config.http.SessionCreationPolicy
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.context.support.WithMockUser
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user
-import org.springframework.security.web.AuthenticationEntryPoint
-import org.springframework.security.web.SecurityFilterChain
-import org.springframework.security.web.access.AccessDeniedHandler
-import org.springframework.test.context.ActiveProfiles
-import org.springframework.test.context.bean.override.mockito.MockitoBean
-import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 import java.time.Instant
 
-@ActiveProfiles("test")
-@WebMvcTest(
-    ApiV1AdmSystemController::class,
-    excludeFilters = [
-        ComponentScan.Filter(
-            type = FilterType.ASSIGNABLE_TYPE,
-            classes = [CustomAuthenticationFilter::class],
-        ),
-    ],
-)
-@Import(ApiV1AdmSystemControllerTest.TestSecurityConfig::class)
 @org.junit.jupiter.api.DisplayName("ApiV1AdmSystemController 테스트")
-class ApiV1AdmSystemControllerTest {
-    @Autowired
-    private lateinit var mvc: MockMvc
-
-    @MockitoBean
-    private lateinit var adminSystemHealthSnapshotService: AdminSystemHealthSnapshotService
-
-    @MockitoBean
-    private lateinit var adminDashboardSnapshotService: AdminDashboardSnapshotService
-
-    @MockitoBean
-    private lateinit var signupMailDiagnosticsService: SignupMailDiagnosticsService
-
-    @MockitoBean
-    private lateinit var memberNotificationSseService: MemberNotificationSseService
-
-    @MockitoBean
-    private lateinit var authSecurityEventService: AuthSecurityEventService
-
-    @MockitoBean
-    private lateinit var taskQueueDiagnosticsService: TaskQueueDiagnosticsService
-
-    @MockitoBean
-    private lateinit var taskDlqReplayService: TaskDlqReplayService
-
-    @MockitoBean
-    private lateinit var uploadedFileRetentionService: UploadedFileRetentionService
-
-    @MockitoBean
-    private lateinit var postKeywordSearchPipelineService: PostKeywordSearchPipelineService
-
-    @MockitoBean
-    private lateinit var postSearchEngineMirrorService: PostSearchEngineMirrorService
-
-    @MockitoBean(name = "jpaMappingContext")
-    private lateinit var jpaMappingContext: JpaMetamodelMappingContext
-
+class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
     @Test
     fun `관리자는 시스템 bootstrap을 조회할 수 있다`() {
         val securityUser =
@@ -674,44 +601,4 @@ class ApiV1AdmSystemControllerTest {
                     oldestEligiblePurgeAfter = Instant.parse("2026-03-13T00:00:00Z"),
                 ),
         )
-
-    @TestConfiguration
-    class TestSecurityConfig {
-        @Bean
-        fun filterChain(http: HttpSecurity): SecurityFilterChain {
-            http {
-                authorizeHttpRequests {
-                    authorize("/system/api/v1/adm/**", hasRole("ADMIN"))
-                    authorize(anyRequest, permitAll)
-                }
-
-                csrf { disable() }
-                formLogin { disable() }
-                logout { disable() }
-                httpBasic { disable() }
-
-                sessionManagement {
-                    sessionCreationPolicy = SessionCreationPolicy.STATELESS
-                }
-
-                exceptionHandling {
-                    authenticationEntryPoint =
-                        AuthenticationEntryPoint { _, response, _ ->
-                            response.contentType = "$APPLICATION_JSON_VALUE; charset=UTF-8"
-                            response.status = 401
-                            response.writer.write("""{"resultCode":"401-1","msg":"로그인 후 이용해주세요."}""")
-                        }
-
-                    accessDeniedHandler =
-                        AccessDeniedHandler { _, response, _ ->
-                            response.contentType = "$APPLICATION_JSON_VALUE; charset=UTF-8"
-                            response.status = 403
-                            response.writer.write("""{"resultCode":"403-1","msg":"권한이 없습니다."}""")
-                        }
-                }
-            }
-
-            return http.build()
-        }
-    }
 }

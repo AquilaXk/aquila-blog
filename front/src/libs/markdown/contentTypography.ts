@@ -5,18 +5,52 @@ type ThemeLike = {
   scheme?: "light" | "dark"
 }
 
+export const articleTypographyScale = {
+  postTitleFontSize: "2.75rem",
+  postTitleLineHeight: "52px",
+  postTitleFontSizeMobile: "2.5rem",
+  postTitleLineHeightMobile: "48px",
+  h1FontSize: "2rem",
+  h1LineHeight: "40px",
+  h1FontSizeMobile: "1.875rem",
+  h1LineHeightMobile: "39px",
+  h2FontSize: "1.625rem",
+  h2LineHeight: "36px",
+  h2FontSizeMobile: "1.5rem",
+  h2LineHeightMobile: "31.2px",
+  h3FontSize: "1.375rem",
+  h3LineHeight: "31px",
+  h3FontSizeMobile: "1.25rem",
+  h3LineHeightMobile: "26px",
+  h4FontSize: "1.125rem",
+  h4LineHeight: "27px",
+  h4FontSizeMobile: "1rem",
+  h4LineHeightMobile: "24px",
+  bodyFontSize: "1.0625rem",
+  bodyLineHeight: "28px",
+  bodyFontSizeMobile: "1rem",
+  bodyLineHeightMobile: "24px",
+  codeFontSize: "0.9375rem",
+  codeLineHeight: "23px",
+  codeFontSizeMobile: "0.85rem",
+  codeLineHeightMobile: "20.4px",
+  calloutTitleFontSize: "1.0625rem",
+  calloutTitleLineHeight: "28px",
+  calloutTitleFontSizeMobile: "1rem",
+  calloutTitleLineHeightMobile: "24px",
+} as const
+
 export const markdownContentTypography = (selector: string, theme: ThemeLike) => css`
   ${selector} {
     color: ${theme.colors.gray12};
-    line-height: 1.5;
-    font-size: 1rem;
+    line-height: ${articleTypographyScale.bodyLineHeight};
+    font-size: ${articleTypographyScale.bodyFontSize};
   }
 
   ${selector} h1,
   ${selector} h2,
   ${selector} h3,
   ${selector} h4 {
-    line-height: 1.3;
     letter-spacing: 0;
     margin-top: 1.65rem;
     margin-bottom: 0.68rem;
@@ -24,25 +58,29 @@ export const markdownContentTypography = (selector: string, theme: ThemeLike) =>
   }
 
   ${selector} h1 {
-    font-size: 1.875rem;
+    font-size: ${articleTypographyScale.h1FontSize};
+    line-height: ${articleTypographyScale.h1LineHeight};
   }
 
   ${selector} h2 {
-    font-size: 1.5rem;
+    font-size: ${articleTypographyScale.h2FontSize};
+    line-height: ${articleTypographyScale.h2LineHeight};
   }
 
   ${selector} h3 {
-    font-size: 1.25rem;
+    font-size: ${articleTypographyScale.h3FontSize};
+    line-height: ${articleTypographyScale.h3LineHeight};
   }
 
   ${selector} h4 {
-    font-size: 1rem;
+    font-size: ${articleTypographyScale.h4FontSize};
+    line-height: ${articleTypographyScale.h4LineHeight};
   }
 
   ${selector} p {
     margin: 0.72rem 0;
-    font-size: 1rem;
-    line-height: 1.5;
+    font-size: ${articleTypographyScale.bodyFontSize};
+    line-height: ${articleTypographyScale.bodyLineHeight};
     overflow-wrap: anywhere;
   }
 
@@ -85,7 +123,7 @@ export const markdownContentTypography = (selector: string, theme: ThemeLike) =>
   }
 
   ${selector} li {
-    line-height: 1.5;
+    line-height: ${articleTypographyScale.bodyLineHeight};
     overflow-wrap: anywhere;
   }
 
@@ -106,9 +144,51 @@ export const markdownContentTypography = (selector: string, theme: ThemeLike) =>
     color: #ff6b6b;
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
     letter-spacing: -0.01em;
-    font-size: 0.92em;
-    line-height: inherit;
+    font-size: ${articleTypographyScale.codeFontSize};
+    line-height: ${articleTypographyScale.codeLineHeight};
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
       "Courier New", monospace;
+  }
+
+  @media (max-width: 768px) {
+    ${selector} {
+      line-height: ${articleTypographyScale.bodyLineHeightMobile};
+      font-size: ${articleTypographyScale.bodyFontSizeMobile};
+    }
+
+    ${selector} h1 {
+      font-size: ${articleTypographyScale.h1FontSizeMobile};
+      line-height: ${articleTypographyScale.h1LineHeightMobile};
+    }
+
+    ${selector} h2 {
+      font-size: ${articleTypographyScale.h2FontSizeMobile};
+      line-height: ${articleTypographyScale.h2LineHeightMobile};
+    }
+
+    ${selector} h3 {
+      font-size: ${articleTypographyScale.h3FontSizeMobile};
+      line-height: ${articleTypographyScale.h3LineHeightMobile};
+    }
+
+    ${selector} h4 {
+      font-size: ${articleTypographyScale.h4FontSizeMobile};
+      line-height: ${articleTypographyScale.h4LineHeightMobile};
+    }
+
+    ${selector} p,
+    ${selector} li {
+      font-size: ${articleTypographyScale.bodyFontSizeMobile};
+      line-height: ${articleTypographyScale.bodyLineHeightMobile};
+    }
+
+    ${selector} :not(pre) > code,
+    ${selector} li > code,
+    ${selector} p > code,
+    ${selector} blockquote > code,
+    ${selector} .aq-inline-code {
+      font-size: ${articleTypographyScale.codeFontSizeMobile};
+      line-height: ${articleTypographyScale.codeLineHeightMobile};
+    }
   }
 `

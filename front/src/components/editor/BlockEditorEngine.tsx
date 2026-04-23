@@ -65,7 +65,7 @@ import {
   TABLE_SHARED_MARGIN_Y,
   TABLE_SHARED_RADIUS_PX,
 } from "src/libs/markdown/tableChrome"
-import { markdownContentTypography } from "src/libs/markdown/contentTypography"
+import { articleTypographyScale, markdownContentTypography } from "src/libs/markdown/contentTypography"
 import {
   convertHtmlToMarkdown,
   extractPlainTextFromHtml,
@@ -11643,15 +11643,15 @@ const EditorViewport = styled.div`
     padding: 1rem 1.1rem;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
       "Courier New", monospace;
-    font-size: 0.85rem;
-    line-height: 1.5;
+    font-size: ${articleTypographyScale.codeFontSize};
+    line-height: ${articleTypographyScale.codeLineHeight};
   }
 
   .aq-block-editor__content code {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
       "Courier New", monospace;
-    font-size: 0.92em;
-    line-height: inherit;
+    font-size: ${articleTypographyScale.codeFontSize};
+    line-height: ${articleTypographyScale.codeLineHeight};
     border-radius: 0.42rem;
     background: rgba(255, 255, 255, 0.075);
     color: #ff6b6b;
@@ -11669,6 +11669,14 @@ const EditorViewport = styled.div`
     padding: 0;
     box-shadow: none;
     letter-spacing: 0;
+  }
+
+  @media (max-width: 768px) {
+    .aq-block-editor__content pre,
+    .aq-block-editor__content code {
+      font-size: ${articleTypographyScale.codeFontSizeMobile};
+      line-height: ${articleTypographyScale.codeLineHeightMobile};
+    }
   }
 
   .aq-block-editor__content ul[data-type="taskList"],

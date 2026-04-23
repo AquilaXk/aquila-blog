@@ -7,7 +7,7 @@ import com.back.boundedContexts.post.application.service.PostQueryCacheNames
 import com.back.boundedContexts.post.dto.PublicPostDetailSnapshotCacheDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.extensions.getOrThrow
-import com.back.support.SeededSpringBootTestSupport
+import com.back.support.BaseControllerIntegrationTest
 import com.jayway.jsonpath.JsonPath
 import jakarta.persistence.EntityManager
 import jakarta.servlet.http.Cookie
@@ -17,31 +17,19 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.cache.CacheManager
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.test.context.support.WithUserDetails
-import org.springframework.test.context.ActiveProfiles
-import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 import org.springframework.test.web.servlet.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.handler
-import org.springframework.transaction.annotation.Transactional
 
-@ActiveProfiles("test")
-@SpringBootTest
-@AutoConfigureMockMvc
-@Transactional
 @org.junit.jupiter.api.DisplayName("ApiV1PostController 테스트")
-class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
-    @Autowired
-    private lateinit var mvc: MockMvc
-
+class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
     @Autowired
     private lateinit var postFacade: PostApplicationService
 
@@ -76,7 +64,9 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
                     content = """{"title": "제목", "content": "내용"}"""
                 }
 
-            val post = postFacade.findLatest().getOrThrow()
+            val responseBody = resultActions.andReturn().response.contentAsString
+            val postId = JsonPath.read<Int>(responseBody, "$.data.id").toLong()
+            val post = postFacade.findById(postId).getOrThrow()
 
             resultActions.andExpect {
                 match(handler().handlerType(ApiV1PostController::class.java))
@@ -181,22 +171,25 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         @Test
         @WithUserDetails("admin@test.com")
         fun `contentHtml 저장 시 위험한 스크립트와 이벤트 속성은 제거된다`() {
-            mvc
-                .post("/post/api/v1/posts") {
-                    contentType = MediaType.APPLICATION_JSON
-                    content =
-                        """
-                        {
-                          "title": "보안 테스트",
-                          "content": "본문",
-                          "contentHtml": "<p onclick=\"alert('x')\">safe</p><script>alert('x')</script>"
-                        }
-                        """.trimIndent()
-                }.andExpect {
-                    status { isCreated() }
-                }
+            val resultActions =
+                mvc
+                    .post("/post/api/v1/posts") {
+                        contentType = MediaType.APPLICATION_JSON
+                        content =
+                            """
+                            {
+                              "title": "보안 테스트",
+                              "content": "본문",
+                              "contentHtml": "<p onclick=\"alert('x')\">safe</p><script>alert('x')</script>"
+                            }
+                            """.trimIndent()
+                    }.andExpect {
+                        status { isCreated() }
+                    }
 
-            val post = postFacade.findLatest().getOrThrow()
+            val responseBody = resultActions.andReturn().response.contentAsString
+            val postId = JsonPath.read<Int>(responseBody, "$.data.id").toLong()
+            val post = postFacade.findById(postId).getOrThrow()
             assertThat(post.contentHtml).contains("<p>safe</p>")
             assertThat(post.contentHtml).doesNotContain("onclick")
             assertThat(post.contentHtml).doesNotContain("<script")

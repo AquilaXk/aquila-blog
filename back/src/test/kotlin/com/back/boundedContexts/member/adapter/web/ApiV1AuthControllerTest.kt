@@ -4,7 +4,7 @@ import com.back.boundedContexts.member.application.service.AuthTokenService
 import com.back.boundedContexts.member.application.service.LoginAttemptService
 import com.back.boundedContexts.member.application.service.MemberApplicationService
 import com.back.boundedContexts.member.subContexts.session.adapter.persistence.MemberSessionRepository
-import com.back.support.SeededSpringBootTestSupport
+import com.back.support.BaseControllerIntegrationTest
 import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
 import org.hamcrest.Matchers.startsWith
@@ -12,28 +12,16 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
-import org.springframework.test.context.ActiveProfiles
-import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 import org.springframework.test.web.servlet.request.RequestPostProcessor
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.handler
-import org.springframework.transaction.annotation.Transactional
 
-@ActiveProfiles("test")
-@SpringBootTest
-@AutoConfigureMockMvc
-@Transactional
 @org.junit.jupiter.api.DisplayName("ApiV1AuthController 테스트")
-class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
-    @Autowired
-    private lateinit var mvc: MockMvc
-
+class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
     @Autowired
     private lateinit var memberFacade: MemberApplicationService
 

@@ -1,82 +1,22 @@
 package com.back.boundedContexts.member.adapter.web
 
-import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
-import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
-import com.back.global.app.AppConfig
-import com.back.global.security.application.SecurityTipProvider
-import com.back.global.security.config.CustomAuthenticationFilter
+import com.back.support.BaseMemberControllerWebMvcTest
 import jakarta.servlet.http.Cookie
 import org.hamcrest.Matchers.startsWith
-import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
-import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.TestConfiguration
-import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
-import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.ComponentScan
-import org.springframework.context.annotation.FilterType
-import org.springframework.context.annotation.Import
-import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
-import org.springframework.security.config.annotation.web.builders.HttpSecurity
-import org.springframework.security.config.annotation.web.invoke
-import org.springframework.security.web.SecurityFilterChain
-import org.springframework.test.context.ActiveProfiles
-import org.springframework.test.context.bean.override.mockito.MockitoBean
-import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.handler
-import org.springframework.web.servlet.mvc.annotation.ResponseStatusExceptionResolver
 import java.time.Instant
 import java.util.Optional
 
-@ActiveProfiles("test")
-@WebMvcTest(
-    ApiV1MemberController::class,
-    excludeFilters = [
-        ComponentScan.Filter(
-            type = FilterType.ASSIGNABLE_TYPE,
-            classes = [CustomAuthenticationFilter::class],
-        ),
-    ],
-)
-@Import(ApiV1MemberControllerWebMvcTest.TestSecurityConfig::class)
 @org.junit.jupiter.api.DisplayName("ApiV1MemberControllerWebMvc 테스트")
-class ApiV1MemberControllerWebMvcTest {
-    @Autowired
-    private lateinit var mvc: MockMvc
-
-    @MockitoBean
-    private lateinit var memberUseCase: MemberUseCase
-
-    @MockitoBean
-    private lateinit var currentMemberProfileQueryUseCase: CurrentMemberProfileQueryUseCase
-
-    @MockitoBean
-    private lateinit var securityTipProvider: SecurityTipProvider
-
-    @MockitoBean(name = "jpaMappingContext")
-    private lateinit var jpaMappingContext: JpaMetamodelMappingContext
-
-    companion object {
-        @JvmStatic
-        @BeforeAll
-        fun setUpAppConfig() {
-            AppConfig(
-                siteBackUrl = "http://localhost:8080",
-                siteFrontUrl = "http://localhost:3000",
-                adminUsername = "admin",
-                adminEmail = "admin@test.com",
-                adminPassword = "test-password",
-            )
-        }
-    }
-
+class ApiV1MemberControllerWebMvcTest : BaseMemberControllerWebMvcTest() {
     @Nested
     inner class AdminProfile {
         @Test
@@ -187,26 +127,5 @@ class ApiV1MemberControllerWebMvcTest {
         member.createdAt = Instant.parse("2026-03-13T00:00:00Z")
         member.modifiedAt = Instant.parse("2026-03-13T00:01:00Z")
         return member
-    }
-
-    @TestConfiguration
-    class TestSecurityConfig {
-        @Bean
-        fun testSecurityFilterChain(http: HttpSecurity): SecurityFilterChain {
-            http {
-                csrf { disable() }
-                formLogin { disable() }
-                logout { disable() }
-                httpBasic { disable() }
-                authorizeHttpRequests {
-                    authorize(anyRequest, permitAll)
-                }
-            }
-
-            return http.build()
-        }
-
-        @Bean
-        fun appExceptionStatusCodeResolver(): ResponseStatusExceptionResolver = ResponseStatusExceptionResolver()
     }
 }

@@ -9,13 +9,29 @@ import jakarta.persistence.Entity
 import jakarta.persistence.MappedSuperclass
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import java.nio.file.Files
+import java.nio.file.Path
 
 @org.junit.jupiter.api.DisplayName("ArchitectureGuard 테스트")
 class ArchitectureGuardTest {
+    private val testSourceRoot: Path = Path.of("src/test/kotlin")
+
     private fun importedClasses(): JavaClasses =
         ClassFileImporter()
             .withImportOption(ImportOption.DoNotIncludeTests())
             .importPackages("com.back")
+
+    private fun kotlinTestSources(): List<Path> =
+        Files
+            .walk(testSourceRoot)
+            .use { paths ->
+                paths
+                    .filter { Files.isRegularFile(it) }
+                    .filter { it.toString().endsWith(".kt") }
+                    .toList()
+            }
+
+    private fun sourceText(path: Path): String = Files.readString(path)
 
     @Test
     fun `bounded context에서 legacy app 패키지는 제거되어야 한다`() {
@@ -178,5 +194,57 @@ class ArchitectureGuardTest {
             .should()
             .beInterfaces()
             .check(importedClasses())
+    }
+
+    @Test
+    fun `Spring 통합 테스트 설정은 support base에만 선언되어야 한다`() {
+        val bannedAnnotations =
+            listOf(
+                "@SpringBootTest",
+                "@DataJpaTest",
+                "@WebMvcTest",
+                "@ActiveProfiles",
+                "@TestPropertySource",
+                "@DirtiesContext",
+            )
+
+        val violations =
+            kotlinTestSources()
+                .filterNot { it.startsWith(testSourceRoot.resolve("com/back/support")) }
+                .filterNot { it.endsWith("ArchitectureGuardTest.kt") }
+                .flatMap { path ->
+                    val text = sourceText(path)
+                    bannedAnnotations
+                        .filter { annotation -> text.contains(annotation) }
+                        .map { annotation -> "${testSourceRoot.relativize(path)} uses $annotation" }
+                }
+
+        assertThat(violations).isEmpty()
+    }
+
+    @Test
+    fun `Spring test bean override는 support base에만 선언되어야 한다`() {
+        val bannedOverrides =
+            listOf(
+                "@MockBean",
+                "@SpyBean",
+                "@MockitoBean",
+                "@MockitoSpyBean",
+                "@MockkBean",
+                "@SpykBean",
+            )
+
+        val violations =
+            kotlinTestSources()
+                .filterNot { it.startsWith(testSourceRoot.resolve("com/back/support")) }
+                .filterNot { it.endsWith("ArchitectureGuardTest.kt") }
+                .flatMap { path ->
+                    val text = sourceText(path)
+                    bannedOverrides
+                        .filter { annotation -> text.contains(annotation) }
+                        .map { annotation -> "${testSourceRoot.relativize(path)} uses $annotation" }
+                }
+
+        assertThat(violations).isEmpty()
     }
 }

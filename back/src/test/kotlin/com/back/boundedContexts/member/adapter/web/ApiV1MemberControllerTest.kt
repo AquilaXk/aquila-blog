@@ -1,29 +1,17 @@
 package com.back.boundedContexts.member.adapter.web
 
 import com.back.boundedContexts.member.application.service.MemberApplicationService
-import com.back.support.SeededSpringBootTestSupport
+import com.back.support.BaseControllerIntegrationTest
 import org.hamcrest.Matchers.startsWith
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.MediaType
-import org.springframework.test.context.ActiveProfiles
-import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.handler
-import org.springframework.transaction.annotation.Transactional
 
-@ActiveProfiles("test")
-@SpringBootTest
-@AutoConfigureMockMvc
-@Transactional
 @org.junit.jupiter.api.DisplayName("ApiV1MemberController 테스트")
-class ApiV1MemberControllerTest : SeededSpringBootTestSupport() {
-    @Autowired
-    private lateinit var mvc: MockMvc
-
+class ApiV1MemberControllerTest : BaseControllerIntegrationTest() {
     @Autowired
     private lateinit var memberFacade: MemberApplicationService
 

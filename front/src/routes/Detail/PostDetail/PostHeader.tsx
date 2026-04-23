@@ -6,6 +6,7 @@ import AppIcon from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
 import Tag from "src/components/Tag"
 import { HEADER_AUTH_ADMIN_ATTR } from "src/libs/headerAuthShell"
+import { articleTypographyScale } from "src/libs/markdown/contentTypography"
 import { formatDateTime } from "src/libs/utils"
 import {
   parseThumbnailFocusXFromUrl,
@@ -288,8 +289,8 @@ const StyledWrapper = styled.header`
 
   .title {
     margin: 0;
-    font-size: 2.5rem;
-    line-height: 1.2;
+    font-size: ${articleTypographyScale.postTitleFontSize};
+    line-height: ${articleTypographyScale.postTitleLineHeight};
     letter-spacing: 0;
     font-weight: 700;
     color: ${({ theme }) => theme.colors.gray12};
@@ -590,8 +591,8 @@ const StyledWrapper = styled.header`
     }
 
     .title {
-      font-size: 2.5rem;
-      line-height: 1.2;
+      font-size: ${articleTypographyScale.postTitleFontSizeMobile};
+      line-height: ${articleTypographyScale.postTitleLineHeightMobile};
     }
 
     .metaRow {

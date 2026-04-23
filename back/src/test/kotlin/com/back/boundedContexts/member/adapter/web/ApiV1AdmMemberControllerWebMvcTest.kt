@@ -1,89 +1,22 @@
 package com.back.boundedContexts.member.adapter.web
 
-import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
-import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
-import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
-import com.back.boundedContexts.post.config.PostImageStorageProperties
-import com.back.global.app.AppConfig
-import com.back.global.security.config.CustomAuthenticationFilter
-import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.standard.dto.member.type1.MemberSearchSortType1
 import com.back.standard.dto.page.PagedResult
+import com.back.support.BaseAdmMemberControllerWebMvcTest
 import org.hamcrest.Matchers.containsInAnyOrder
 import org.hamcrest.Matchers.startsWith
-import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
-import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.TestConfiguration
-import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
-import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.ComponentScan
-import org.springframework.context.annotation.FilterType
-import org.springframework.context.annotation.Import
-import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext
-import org.springframework.security.config.annotation.web.builders.HttpSecurity
-import org.springframework.security.config.annotation.web.invoke
-import org.springframework.security.config.http.SessionCreationPolicy
 import org.springframework.security.test.context.support.WithMockUser
-import org.springframework.security.web.AuthenticationEntryPoint
-import org.springframework.security.web.SecurityFilterChain
-import org.springframework.security.web.access.AccessDeniedHandler
-import org.springframework.test.context.ActiveProfiles
-import org.springframework.test.context.bean.override.mockito.MockitoBean
-import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.handler
 import java.time.Instant
 
-@ActiveProfiles("test")
-@WebMvcTest(
-    ApiV1AdmMemberController::class,
-    excludeFilters = [
-        ComponentScan.Filter(
-            type = FilterType.ASSIGNABLE_TYPE,
-            classes = [CustomAuthenticationFilter::class],
-        ),
-    ],
-)
-@Import(ApiV1AdmMemberControllerWebMvcTest.TestSecurityConfig::class)
 @org.junit.jupiter.api.DisplayName("ApiV1AdmMemberControllerWebMvc 테스트")
-class ApiV1AdmMemberControllerWebMvcTest {
-    @Autowired
-    private lateinit var mvc: MockMvc
-
-    @MockitoBean
-    private lateinit var memberUseCase: MemberUseCase
-
-    @MockitoBean
-    private lateinit var currentMemberProfileQueryUseCase: CurrentMemberProfileQueryUseCase
-
-    @MockitoBean
-    private lateinit var postImageStoragePort: PostImageStoragePort
-
-    @MockitoBean
-    private lateinit var uploadedFileRetentionService: UploadedFileRetentionService
-
-    @MockitoBean(name = "jpaMappingContext")
-    private lateinit var jpaMappingContext: JpaMetamodelMappingContext
-
-    companion object {
-        @JvmStatic
-        @BeforeAll
-        fun setUpAppConfig() {
-            AppConfig(
-                siteBackUrl = "http://localhost:8080",
-                siteFrontUrl = "http://localhost:3000",
-                adminUsername = "admin",
-                adminEmail = "",
-                adminPassword = "test-password",
-            )
-        }
-    }
-
+class ApiV1AdmMemberControllerWebMvcTest : BaseAdmMemberControllerWebMvcTest() {
     @Nested
     inner class GetItems {
         @Test
@@ -303,50 +236,5 @@ class ApiV1AdmMemberControllerWebMvcTest {
         member.modifiedAt = Instant.parse("2026-03-13T00:01:00Z")
         check(!isAdmin || username == "admin") { "admin 샘플은 username=admin 이어야 한다." }
         return member
-    }
-
-    @TestConfiguration
-    class TestSecurityConfig {
-        @Bean
-        fun postImageStorageProperties(): PostImageStorageProperties = PostImageStorageProperties()
-
-        @Bean
-        fun testSecurityFilterChain(http: HttpSecurity): SecurityFilterChain {
-            http {
-                csrf { disable() }
-                formLogin { disable() }
-                logout { disable() }
-                httpBasic { disable() }
-                sessionManagement {
-                    sessionCreationPolicy = SessionCreationPolicy.STATELESS
-                }
-                authorizeHttpRequests {
-                    authorize("/member/api/v1/adm/**", hasRole("ADMIN"))
-                    authorize(anyRequest, permitAll)
-                }
-                exceptionHandling {
-                    authenticationEntryPoint = jsonAuthenticationEntryPoint()
-                    accessDeniedHandler = jsonAccessDeniedHandler()
-                }
-            }
-
-            return http.build()
-        }
-
-        @Bean
-        fun jsonAuthenticationEntryPoint(): AuthenticationEntryPoint =
-            AuthenticationEntryPoint { _, response, _ ->
-                response.status = 401
-                response.contentType = "application/json;charset=UTF-8"
-                response.writer.write("""{"resultCode":"401-1","msg":"로그인 후 이용해주세요."}""")
-            }
-
-        @Bean
-        fun jsonAccessDeniedHandler(): AccessDeniedHandler =
-            AccessDeniedHandler { _, response, _ ->
-                response.status = 403
-                response.contentType = "application/json;charset=UTF-8"
-                response.writer.write("""{"resultCode":"403-1","msg":"권한이 없습니다."}""")
-            }
     }
 }

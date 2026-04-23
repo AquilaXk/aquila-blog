@@ -3,40 +3,21 @@ package com.back.perf
 import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.boundedContexts.member.application.service.MemberApplicationService
 import com.back.boundedContexts.post.application.service.PostApplicationService
-import com.back.support.SeededSpringBootTestSupport
+import com.back.support.BasePerformanceIntegrationTest
 import jakarta.persistence.EntityManagerFactory
 import org.assertj.core.api.Assertions.assertThat
 import org.hibernate.SessionFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.MediaType
 import org.springframework.security.test.context.support.WithUserDetails
-import org.springframework.test.context.ActiveProfiles
-import org.springframework.test.context.TestPropertySource
-import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 import org.springframework.test.web.servlet.put
-import org.springframework.transaction.annotation.Transactional
 
-@ActiveProfiles("test")
-@SpringBootTest
-@AutoConfigureMockMvc
-@Transactional
-@TestPropertySource(
-    properties = [
-        "spring.jpa.properties.hibernate.generate_statistics=true",
-        "spring.task.scheduling.enabled=false",
-    ],
-)
 @org.junit.jupiter.api.DisplayName("PerformanceSanity 테스트")
-class PerformanceSanityTest : SeededSpringBootTestSupport() {
-    @Autowired
-    private lateinit var mvc: MockMvc
-
+class PerformanceSanityTest : BasePerformanceIntegrationTest() {
     @Autowired
     private lateinit var actorApplicationService: ActorApplicationService
 

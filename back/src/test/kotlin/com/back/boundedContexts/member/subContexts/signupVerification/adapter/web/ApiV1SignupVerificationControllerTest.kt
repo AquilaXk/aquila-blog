@@ -4,31 +4,19 @@ import com.back.boundedContexts.member.application.service.MemberApplicationServ
 import com.back.boundedContexts.member.subContexts.signupVerification.adapter.persistence.MemberSignupVerificationRepository
 import com.back.global.task.adapter.persistence.TaskRepository
 import com.back.global.task.domain.TaskStatus
-import com.back.support.SeededSpringBootTestSupport
+import com.back.support.BaseControllerIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
 import org.hamcrest.Matchers.startsWith
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.MediaType
-import org.springframework.test.context.ActiveProfiles
-import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.handler
-import org.springframework.transaction.annotation.Transactional
 
-@ActiveProfiles("test")
-@SpringBootTest
-@AutoConfigureMockMvc
-@Transactional
 @org.junit.jupiter.api.DisplayName("ApiV1SignupVerificationController 테스트")
-class ApiV1SignupVerificationControllerTest : SeededSpringBootTestSupport() {
-    @Autowired
-    private lateinit var mvc: MockMvc
-
+class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
     @Autowired
     private lateinit var memberApplicationService: MemberApplicationService
 

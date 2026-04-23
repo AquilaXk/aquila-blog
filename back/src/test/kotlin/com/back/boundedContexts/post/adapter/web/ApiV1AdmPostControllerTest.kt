@@ -1,91 +1,29 @@
 package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.post.application.port.input.AdminPostListSnapshotUseCase
-import com.back.boundedContexts.post.application.port.input.PostTagRecommendationUseCase
-import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostTagRecommendationResult
-import com.back.global.app.AppConfig
-import com.back.global.security.config.CustomAuthenticationFilter
 import com.back.global.security.domain.SecurityUser
 import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.page.PagedResult
+import com.back.support.BaseAdmPostControllerWebMvcTest
 import org.hamcrest.Matchers.startsWith
-import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.never
 import org.mockito.BDDMockito.then
-import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.TestConfiguration
-import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
-import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.ComponentScan
-import org.springframework.context.annotation.FilterType
-import org.springframework.context.annotation.Import
-import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext
-import org.springframework.security.config.annotation.web.builders.HttpSecurity
-import org.springframework.security.config.annotation.web.invoke
-import org.springframework.security.config.http.SessionCreationPolicy
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.context.support.WithMockUser
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user
-import org.springframework.security.web.AuthenticationEntryPoint
-import org.springframework.security.web.SecurityFilterChain
-import org.springframework.security.web.access.AccessDeniedHandler
-import org.springframework.test.context.ActiveProfiles
-import org.springframework.test.context.bean.override.mockito.MockitoBean
-import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 import java.time.Instant
 
-@ActiveProfiles("test")
-@WebMvcTest(
-    ApiV1AdmPostController::class,
-    excludeFilters = [
-        ComponentScan.Filter(
-            type = FilterType.ASSIGNABLE_TYPE,
-            classes = [CustomAuthenticationFilter::class],
-        ),
-    ],
-)
-@Import(ApiV1AdmPostControllerTest.TestSecurityConfig::class)
 @org.junit.jupiter.api.DisplayName("ApiV1AdmPostController 테스트")
-class ApiV1AdmPostControllerTest {
-    @Autowired
-    private lateinit var mvc: MockMvc
-
-    @MockitoBean
-    private lateinit var postUseCase: PostUseCase
-
-    @MockitoBean
-    private lateinit var postTagRecommendationUseCase: PostTagRecommendationUseCase
-
-    @MockitoBean
-    private lateinit var adminPostListSnapshotService: AdminPostListSnapshotUseCase
-
-    @MockitoBean(name = "jpaMappingContext")
-    private lateinit var jpaMappingContext: JpaMetamodelMappingContext
-
-    companion object {
-        @JvmStatic
-        @BeforeAll
-        fun setUpAppConfig() {
-            AppConfig(
-                siteBackUrl = "http://localhost:8080",
-                siteFrontUrl = "http://localhost:3000",
-                adminUsername = "admin",
-                adminEmail = "",
-                adminPassword = "test-password",
-            )
-        }
-    }
-
+class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
     @Test
     @WithMockUser(roles = ["ADMIN"])
     fun `관리자는 글 통계를 조회할 수 있다`() {
@@ -456,47 +394,5 @@ class ApiV1AdmPostControllerTest {
         post.createdAt = Instant.parse("2026-03-13T00:00:00Z")
         post.modifiedAt = Instant.parse("2026-03-13T00:01:00Z")
         return post
-    }
-
-    @TestConfiguration
-    class TestSecurityConfig {
-        @Bean
-        fun testSecurityFilterChain(http: HttpSecurity): SecurityFilterChain {
-            http {
-                csrf { disable() }
-                formLogin { disable() }
-                logout { disable() }
-                httpBasic { disable() }
-                sessionManagement {
-                    sessionCreationPolicy = SessionCreationPolicy.STATELESS
-                }
-                authorizeHttpRequests {
-                    authorize("/post/api/v1/adm/**", hasRole("ADMIN"))
-                    authorize(anyRequest, permitAll)
-                }
-                exceptionHandling {
-                    authenticationEntryPoint = jsonAuthenticationEntryPoint()
-                    accessDeniedHandler = jsonAccessDeniedHandler()
-                }
-            }
-
-            return http.build()
-        }
-
-        @Bean
-        fun jsonAuthenticationEntryPoint(): AuthenticationEntryPoint =
-            AuthenticationEntryPoint { _, response, _ ->
-                response.status = 401
-                response.contentType = "application/json;charset=UTF-8"
-                response.writer.write("""{"resultCode":"401-1","msg":"로그인 후 이용해주세요."}""")
-            }
-
-        @Bean
-        fun jsonAccessDeniedHandler(): AccessDeniedHandler =
-            AccessDeniedHandler { _, response, _ ->
-                response.status = 403
-                response.contentType = "application/json;charset=UTF-8"
-                response.writer.write("""{"resultCode":"403-1","msg":"권한이 없습니다."}""")
-            }
     }
 }

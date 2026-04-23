@@ -5,20 +5,16 @@ import com.back.boundedContexts.member.subContexts.notification.adapter.persiste
 import com.back.boundedContexts.member.subContexts.notification.domain.MemberNotificationType
 import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.standard.extensions.getOrThrow
-import com.back.support.SeededSpringBootTestSupport
+import com.back.support.BaseSeededIntegrationTest
 import jakarta.persistence.EntityManager
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.data.domain.PageRequest
-import org.springframework.test.context.ActiveProfiles
 
-@ActiveProfiles("test")
-@SpringBootTest
 @org.junit.jupiter.api.DisplayName("MemberNotificationEventListener 테스트")
-class MemberNotificationEventListenerTest : SeededSpringBootTestSupport() {
+class MemberNotificationEventListenerTest : BaseSeededIntegrationTest() {
     @Autowired
     private lateinit var actorApplicationService: ActorApplicationService
 

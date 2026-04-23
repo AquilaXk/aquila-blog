@@ -1,36 +1,16 @@
 package com.back.boundedContexts.member.application.service
 
-import com.back.boundedContexts.member.adapter.persistence.MemberAttrPersistenceAdapter
 import com.back.boundedContexts.member.adapter.persistence.MemberAttrRepository
 import com.back.boundedContexts.member.adapter.persistence.MemberRepository
-import com.back.boundedContexts.member.adapter.persistence.MemberRepositoryAdapter
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.global.app.AppConfig
-import com.back.global.jpa.config.JpaConfig
-import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.support.BaseMemberApplicationServiceIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
-import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase
-import org.springframework.context.annotation.Import
 import org.springframework.security.crypto.password.PasswordEncoder
-import org.springframework.test.context.ActiveProfiles
-import org.springframework.test.context.bean.override.mockito.MockitoBean
 
-@ActiveProfiles("test")
-@DataJpaTest
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import(
-    MemberApplicationService::class,
-    MemberRepositoryAdapter::class,
-    MemberAttrPersistenceAdapter::class,
-    MemberProfileHydrator::class,
-    JpaConfig::class,
-    AppConfig::class,
-)
 @org.junit.jupiter.api.DisplayName("MemberApplicationService 테스트")
-class MemberApplicationServiceTest {
+class MemberApplicationServiceTest : BaseMemberApplicationServiceIntegrationTest() {
     @Autowired
     private lateinit var memberFacade: MemberApplicationService
 
@@ -42,9 +22,6 @@ class MemberApplicationServiceTest {
 
     @Autowired
     private lateinit var passwordEncoder: PasswordEncoder
-
-    @MockitoBean
-    private lateinit var uploadedFileRetentionService: UploadedFileRetentionService
 
     @Test
     fun `회원 생성에서 profileImgUrl 을 함께 넘기면 기본 이미지 대신 저장된 이미지가 사용된다`() {

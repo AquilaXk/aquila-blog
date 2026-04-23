@@ -8,18 +8,14 @@ import com.back.boundedContexts.post.event.PostWrittenEvent
 import com.back.global.revalidate.adapter.event.RevalidateEventListener
 import com.back.global.task.adapter.persistence.TaskRepository
 import com.back.global.task.domain.TaskStatus
-import com.back.support.SeededSpringBootTestSupport
+import com.back.support.BaseSeededIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.test.context.ActiveProfiles
 import java.util.UUID
 
-@ActiveProfiles("test")
-@SpringBootTest
 @org.junit.jupiter.api.DisplayName("RevalidateEventListener 테스트")
-class RevalidateEventListenerTest : SeededSpringBootTestSupport() {
+class RevalidateEventListenerTest : BaseSeededIntegrationTest() {
     @Autowired
     private lateinit var memberApplicationService: MemberApplicationService
 

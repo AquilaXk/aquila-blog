@@ -6,23 +6,15 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberAttr
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
 import com.back.boundedContexts.post.domain.Post
-import com.back.global.jpa.config.JpaConfig
+import com.back.support.BaseRepositoryIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
-import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase
-import org.springframework.context.annotation.Import
 import org.springframework.data.domain.PageRequest
-import org.springframework.test.context.ActiveProfiles
 import java.time.Instant
 
-@ActiveProfiles("test")
-@DataJpaTest
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import(JpaConfig::class, PostDeletedQueryRepository::class)
 @org.junit.jupiter.api.DisplayName("PostDeletedQueryRepository 테스트")
-class PostDeletedQueryRepositoryTest {
+class PostDeletedQueryRepositoryTest : BaseRepositoryIntegrationTest() {
     @Autowired
     private lateinit var memberRepository: MemberRepository
 

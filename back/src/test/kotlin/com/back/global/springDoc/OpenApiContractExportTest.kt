@@ -1,27 +1,17 @@
 package com.back.global.springDoc
 
-import com.back.support.SeededSpringBootTestSupport
+import com.back.support.BaseControllerIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
-import org.springframework.test.context.ActiveProfiles
-import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
 import tools.jackson.databind.ObjectMapper
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 
-@ActiveProfiles("test")
-@SpringBootTest
-@AutoConfigureMockMvc
 @org.junit.jupiter.api.DisplayName("OpenAPI 계약 산출물 테스트")
-class OpenApiContractExportTest : SeededSpringBootTestSupport() {
-    @Autowired
-    private lateinit var mvc: MockMvc
-
+class OpenApiContractExportTest : BaseControllerIntegrationTest() {
     @Autowired
     private lateinit var objectMapper: ObjectMapper
 

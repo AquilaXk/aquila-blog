@@ -80,6 +80,7 @@ import { saveProfileCardWithConflictRetry } from "src/libs/profileCardSave"
 import useViewportImageEditor from "src/libs/imageEditor/useViewportImageEditor"
 import { convertHtmlToMarkdown as convertHtmlClipboardToMarkdown } from "src/libs/markdown/htmlToMarkdown"
 import { buildPreviewSummaryFromMarkdown, normalizePersistedSummary } from "src/libs/postSummary"
+import { articleTypographyScale } from "src/libs/markdown/contentTypography"
 import type { BlockEditorChangeMeta } from "src/components/editor/blockEditorContract"
 
 const BLOCK_EDITOR_V2_MERMAID_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED !== "false"
@@ -6276,9 +6277,9 @@ const TitleInput = styled.textarea<{ $compact?: boolean }>`
   background: transparent;
   box-shadow: none;
   font-family: inherit;
-  font-size: 2.5rem;
+  font-size: ${articleTypographyScale.postTitleFontSize};
   font-weight: 700;
-  line-height: 1.2;
+  line-height: ${articleTypographyScale.postTitleLineHeight};
   letter-spacing: 0;
   resize: none;
   overflow: hidden;
@@ -6295,8 +6296,8 @@ const TitleInput = styled.textarea<{ $compact?: boolean }>`
   }
 
   @media (max-width: 720px) {
-    font-size: 2.5rem;
-    line-height: 1.2;
+    font-size: ${articleTypographyScale.postTitleFontSizeMobile};
+    line-height: ${articleTypographyScale.postTitleLineHeightMobile};
   }
 `
 

@@ -8,7 +8,7 @@ import {
   TABLE_SHARED_MARGIN_Y,
   TABLE_SHARED_RADIUS_PX,
 } from "src/libs/markdown/tableChrome"
-import { markdownContentTypography } from "src/libs/markdown/contentTypography"
+import { articleTypographyScale, markdownContentTypography } from "src/libs/markdown/contentTypography"
 
 const MarkdownRendererRoot = styled.div`
   margin-top: 1.65rem;
@@ -473,8 +473,8 @@ const MarkdownRendererRoot = styled.div`
   .aq-code code,
   pre code {
     display: block;
-    font-size: 0.85rem;
-    line-height: 1.5;
+    font-size: ${articleTypographyScale.codeFontSize};
+    line-height: ${articleTypographyScale.codeLineHeight};
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New",
       monospace;
   }
@@ -801,31 +801,21 @@ const MarkdownRendererRoot = styled.div`
   }
 
   @media (max-width: 768px) {
-    font-size: 1rem;
-    line-height: 1.5;
-
-    h1 {
-      font-size: 1.875rem;
-    }
-
-    h2 {
-      font-size: 1.5rem;
-    }
-
-    h3 {
-      font-size: 1.25rem;
-    }
-
-    p,
-    li {
-      font-size: 1rem;
-      line-height: 1.5;
-    }
-
     .aq-code code,
     pre code {
-      font-size: 0.85rem;
-      line-height: 1.5;
+      font-size: ${articleTypographyScale.codeFontSizeMobile};
+      line-height: ${articleTypographyScale.codeLineHeightMobile};
+    }
+
+    .aq-callout.aq-admonition .aq-callout-title {
+      font-size: ${articleTypographyScale.calloutTitleFontSizeMobile};
+      line-height: ${articleTypographyScale.calloutTitleLineHeightMobile};
+    }
+
+    .aq-callout.aq-admonition .aq-callout-emoji,
+    .aq-callout.aq-admonition .aq-markdown-text {
+      font-size: ${articleTypographyScale.bodyFontSizeMobile};
+      line-height: ${articleTypographyScale.bodyLineHeightMobile};
     }
 
     .aq-table-scroll {
@@ -1203,16 +1193,16 @@ const MarkdownRendererRoot = styled.div`
 
   .aq-callout.aq-admonition .aq-callout-emoji {
     color: var(--ad-accent);
-    font-size: 1rem;
+    font-size: ${articleTypographyScale.bodyFontSize};
     font-weight: 600;
-    line-height: 1.5;
+    line-height: ${articleTypographyScale.bodyLineHeight};
   }
 
   .aq-callout.aq-admonition .aq-callout-title {
     color: var(--ad-accent);
-    font-size: 1rem;
+    font-size: ${articleTypographyScale.calloutTitleFontSize};
     font-weight: 700;
-    line-height: 1.5;
+    line-height: ${articleTypographyScale.calloutTitleLineHeight};
     letter-spacing: 0;
   }
 
@@ -1222,8 +1212,8 @@ const MarkdownRendererRoot = styled.div`
 
   .aq-callout.aq-admonition .aq-markdown-text {
     color: var(--ad-text);
-    font-size: 1rem;
-    line-height: 1.5;
+    font-size: ${articleTypographyScale.bodyFontSize};
+    line-height: ${articleTypographyScale.bodyLineHeight};
   }
 
   .aq-callout.aq-admonition-tip {

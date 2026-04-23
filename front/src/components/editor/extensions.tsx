@@ -41,6 +41,7 @@ import {
   inferLinkProvider,
   resolveEmbedPreviewUrl,
 } from "src/libs/unfurl/extractMeta"
+import { articleTypographyScale } from "src/libs/markdown/contentTypography"
 import type {
   BookmarkBlockAttrs,
   EmbedBlockAttrs,
@@ -3031,9 +3032,9 @@ const CalloutTitleInput = styled.input`
   border: 0;
   background: transparent;
   color: var(--ad-accent);
-  font-size: 1rem;
+  font-size: ${articleTypographyScale.calloutTitleFontSize};
   font-weight: 700;
-  line-height: 1.35;
+  line-height: ${articleTypographyScale.calloutTitleLineHeight};
   letter-spacing: -0.01em;
 
   &::placeholder {
@@ -3057,6 +3058,8 @@ const CalloutBodyContent = styled.div`
     min-height: 5rem;
     outline: none;
     color: inherit;
+    font-size: ${articleTypographyScale.bodyFontSize};
+    line-height: ${articleTypographyScale.bodyLineHeight};
   }
 
   .aq-callout-body-content__content > * {
@@ -3064,8 +3067,8 @@ const CalloutBodyContent = styled.div`
   }
 
   .aq-callout-body-content__content p {
-    font-size: 1rem;
-    line-height: 1.5;
+    font-size: inherit;
+    line-height: inherit;
     color: inherit;
   }
 
@@ -3086,6 +3089,23 @@ const CalloutBodyContent = styled.div`
   .aq-callout-body-content__content em,
   .aq-callout-body-content__content code {
     color: inherit;
+  }
+
+  .aq-callout-body-content__content code {
+    font-size: ${articleTypographyScale.codeFontSize};
+    line-height: ${articleTypographyScale.codeLineHeight};
+  }
+
+  @media (max-width: 768px) {
+    .aq-callout-body-content__content {
+      font-size: ${articleTypographyScale.bodyFontSizeMobile};
+      line-height: ${articleTypographyScale.bodyLineHeightMobile};
+    }
+
+    .aq-callout-body-content__content code {
+      font-size: ${articleTypographyScale.codeFontSizeMobile};
+      line-height: ${articleTypographyScale.codeLineHeightMobile};
+    }
   }
 `
 

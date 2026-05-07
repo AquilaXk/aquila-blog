@@ -49,7 +49,6 @@ import {
   createToggleNode,
   createBulletListNode,
   parseMarkdownToEditorDoc,
-  serializeEditorDocToMarkdown,
   createEmptyTableNode,
   type BlockEditorDoc,
 } from "./serialization"
@@ -149,6 +148,7 @@ import {
   type BlockSelectionPointerEventLike,
   type TopLevelBlockHandleState,
 } from "./blockSelectionModel"
+import { useBlockEditorMarkdownCommit } from "./useBlockEditorMarkdownCommit"
 
 type RuntimeGuardWindow = Window & {
   __AQ_RUNTIME_GUARD_ENABLED__?: boolean
@@ -386,9 +386,6 @@ const isSameNestedListItemContext = (
       left.itemIndex === right.itemIndex &&
       sameListPath(left.listPath, right.listPath)
   )
-const MARKDOWN_COMMIT_DEBOUNCE_MS = 140
-const MARKDOWN_COMMIT_IDLE_TIMEOUT_MS = 220
-const MARKDOWN_COMMIT_MAX_WAIT_MS = 700
 const EDITOR_RUNTIME_GUARD_SAMPLE_LIMIT = 240
 
 const recordEditorCommitDurationForRuntimeGuard = (durationMs: number) => {
@@ -757,8 +754,6 @@ const blockHasVisibleContent = (node?: BlockEditorDoc | null): boolean => {
 
   return Array.isArray(node.content) && node.content.some((child) => blockHasVisibleContent(child as BlockEditorDoc))
 }
-
-const normalizeMarkdown = (value: string) => value.replace(/\r\n?/g, "\n").trim()
 
 const normalizeTableColorInputValue = (value: unknown) => {
   const normalized = String(value || "").trim()
@@ -1569,13 +1564,6 @@ const BlockEditorEngine = ({
   const skipNextPointerDownSelectionClearRef = useRef(false)
   const pendingImageInsertIndexRef = useRef<number | null>(null)
   const pendingAttachmentInsertIndexRef = useRef<number | null>(null)
-  const lastCommittedMarkdownRef = useRef(normalizeMarkdown(value))
-  const pendingCommitEditorRef = useRef<TiptapEditor | null>(null)
-  const pendingCommitFocusedRef = useRef(false)
-  const markdownCommitIdleHandleRef = useRef<number | null>(null)
-  const markdownCommitIdleModeRef = useRef<"idle" | "timeout" | null>(null)
-  const markdownCommitTimerRef = useRef<number | null>(null)
-  const markdownCommitMaxWaitTimerRef = useRef<number | null>(null)
   const tableViewportBudgetNormalizeFrameRef = useRef<number | null>(null)
   const editorRef = useRef<TiptapEditor | null>(null)
   const tableRowResizeRef = useRef<TableRowResizeState | null>(null)
@@ -1957,103 +1945,16 @@ const BlockEditorEngine = ({
     [cancelScheduledTableViewportBudgetNormalize]
   )
 
-  const cancelPendingMarkdownCommit = useCallback(() => {
-    if (typeof window !== "undefined" && markdownCommitIdleHandleRef.current !== null) {
-      const idleWindow = window as Window & {
-        cancelIdleCallback?: (id: number) => void
-      }
-      if (
-        markdownCommitIdleModeRef.current === "idle" &&
-        typeof idleWindow.cancelIdleCallback === "function"
-      ) {
-        idleWindow.cancelIdleCallback(markdownCommitIdleHandleRef.current)
-      } else {
-        window.clearTimeout(markdownCommitIdleHandleRef.current)
-      }
-      markdownCommitIdleHandleRef.current = null
-      markdownCommitIdleModeRef.current = null
-    }
-    if (markdownCommitTimerRef.current !== null && typeof window !== "undefined") {
-      window.clearTimeout(markdownCommitTimerRef.current)
-      markdownCommitTimerRef.current = null
-    }
-  }, [])
-
-  const clearPendingMarkdownCommitMaxWait = useCallback(() => {
-    if (markdownCommitMaxWaitTimerRef.current !== null && typeof window !== "undefined") {
-      window.clearTimeout(markdownCommitMaxWaitTimerRef.current)
-      markdownCommitMaxWaitTimerRef.current = null
-    }
-  }, [])
-
-  const flushPendingMarkdownCommit = useCallback(() => {
-    cancelPendingMarkdownCommit()
-    clearPendingMarkdownCommitMaxWait()
-    const pendingEditor = pendingCommitEditorRef.current
-    if (!pendingEditor) return
-
-    const markdown = serializeEditorDocToMarkdown(pendingEditor.getJSON() as BlockEditorDoc)
-    const normalized = normalizeMarkdown(markdown)
-    pendingCommitEditorRef.current = null
-
-    if (normalized === lastCommittedMarkdownRef.current) {
-      return
-    }
-
-    lastCommittedMarkdownRef.current = normalized
-    onChange(markdown, { editorFocused: pendingCommitFocusedRef.current })
-  }, [cancelPendingMarkdownCommit, clearPendingMarkdownCommitMaxWait, onChange])
-
-  const scheduleMarkdownCommit = useCallback(
-    (nextEditor: TiptapEditor) => {
-      pendingCommitEditorRef.current = nextEditor
-      pendingCommitFocusedRef.current = nextEditor.isFocused
-
-      if (typeof window === "undefined") {
-        flushPendingMarkdownCommit()
-        return
-      }
-
-      cancelPendingMarkdownCommit()
-      markdownCommitTimerRef.current = window.setTimeout(() => {
-        markdownCommitTimerRef.current = null
-
-        const idleWindow = window as Window & {
-          requestIdleCallback?: (
-            callback: IdleRequestCallback,
-            options?: IdleRequestOptions
-          ) => number
-        }
-
-        if (typeof idleWindow.requestIdleCallback === "function") {
-          markdownCommitIdleModeRef.current = "idle"
-          markdownCommitIdleHandleRef.current = idleWindow.requestIdleCallback(
-            () => {
-              markdownCommitIdleHandleRef.current = null
-              markdownCommitIdleModeRef.current = null
-              flushPendingMarkdownCommit()
-            },
-            { timeout: MARKDOWN_COMMIT_IDLE_TIMEOUT_MS }
-          )
-          return
-        }
-
-        markdownCommitIdleModeRef.current = "timeout"
-        markdownCommitIdleHandleRef.current = window.setTimeout(() => {
-          markdownCommitIdleHandleRef.current = null
-          markdownCommitIdleModeRef.current = null
-          flushPendingMarkdownCommit()
-        }, 16)
-      }, MARKDOWN_COMMIT_DEBOUNCE_MS)
-
-      if (markdownCommitMaxWaitTimerRef.current !== null) return
-      markdownCommitMaxWaitTimerRef.current = window.setTimeout(() => {
-        markdownCommitMaxWaitTimerRef.current = null
-        flushPendingMarkdownCommit()
-      }, MARKDOWN_COMMIT_MAX_WAIT_MS)
-    },
-    [cancelPendingMarkdownCommit, flushPendingMarkdownCommit]
-  )
+  const {
+    cancelPendingMarkdownCommit,
+    discardPendingMarkdownCommit,
+    flushEditorOnDestroy,
+    flushPendingMarkdownCommit,
+    hasExternalMarkdownChanged,
+    markCommittedDoc,
+    scheduleMarkdownCommit,
+    syncSerializedDoc,
+  } = useBlockEditorMarkdownCommit({ value, onChange })
   const initialDocRef = useRef(
     downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(value), enableMermaidBlocks)
   )
@@ -4124,15 +4025,6 @@ const BlockEditorEngine = ({
     tableAffordanceVisibilityRef.current = tableAffordanceVisibility
   }, [tableAffordanceVisibility])
 
-  const syncSerializedDoc = useCallback(
-    (nextDoc: BlockEditorDoc) => {
-      const serialized = serializeEditorDocToMarkdown(nextDoc)
-      lastCommittedMarkdownRef.current = normalizeMarkdown(serialized)
-      onChange(serialized, { editorFocused: false })
-    },
-    [onChange]
-  )
-
   const focusTopLevelBlock = useCallback((blockIndex: number) => {
     const currentEditor = editorRef.current
     if (!currentEditor) return
@@ -4173,16 +4065,14 @@ const BlockEditorEngine = ({
     if (!currentEditor) return
 
     currentEditor.chain().setMeta("addToHistory", false).setContent(nextDoc, { emitUpdate: false }).run()
-    lastCommittedMarkdownRef.current = normalizeMarkdown(serializeEditorDocToMarkdown(nextDoc))
-  }, [])
+    markCommittedDoc(nextDoc)
+  }, [markCommittedDoc])
 
   const replaceEditorDoc = useCallback(
     (nextDoc: BlockEditorDoc, focusIndex?: number | null) => {
       const currentEditor = editorRef.current
       if (!currentEditor) return
-      cancelPendingMarkdownCommit()
-      clearPendingMarkdownCommitMaxWait()
-      pendingCommitEditorRef.current = null
+      discardPendingMarkdownCommit()
       currentEditor.commands.setContent(nextDoc, { emitUpdate: false })
       syncSerializedDoc(nextDoc)
 
@@ -4196,7 +4086,7 @@ const BlockEditorEngine = ({
         })
       }
     },
-    [cancelPendingMarkdownCommit, clearPendingMarkdownCommitMaxWait, focusTopLevelBlock, syncSerializedDoc]
+    [discardPendingMarkdownCommit, focusTopLevelBlock, syncSerializedDoc]
   )
 
   const mutateTopLevelBlocks = useCallback(
@@ -4429,16 +4319,9 @@ const BlockEditorEngine = ({
       scheduleTableViewportBudgetNormalize(nextEditor)
     },
     onDestroy: () => {
-      const destroyedEditor = editorRef.current
-      if (destroyedEditor) {
-        pendingCommitEditorRef.current = destroyedEditor
-        pendingCommitFocusedRef.current = destroyedEditor.isFocused
-      }
       cancelScheduledTableViewportBudgetNormalize()
-      cancelPendingMarkdownCommit()
-      flushPendingMarkdownCommit()
+      flushEditorOnDestroy(editorRef.current)
       editorRef.current = null
-      pendingCommitEditorRef.current = null
     },
     editorProps: {
       attributes: {
@@ -5461,18 +5344,14 @@ const BlockEditorEngine = ({
 
   useEffect(() => {
     if (!editor) return
-    const normalizedIncoming = normalizeMarkdown(value)
-    if (normalizedIncoming === lastCommittedMarkdownRef.current) {
+    if (!hasExternalMarkdownChanged(value)) {
       return
     }
 
-    cancelPendingMarkdownCommit()
-    clearPendingMarkdownCommitMaxWait()
-    pendingCommitEditorRef.current = null
-
+    discardPendingMarkdownCommit()
     const nextDoc = downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(value), enableMermaidBlocks)
     replaceEditorDocFromExternalValue(nextDoc)
-  }, [cancelPendingMarkdownCommit, clearPendingMarkdownCommitMaxWait, editor, enableMermaidBlocks, replaceEditorDocFromExternalValue, value])
+  }, [discardPendingMarkdownCommit, editor, enableMermaidBlocks, hasExternalMarkdownChanged, replaceEditorDocFromExternalValue, value])
 
   useEffect(
     () => () => {

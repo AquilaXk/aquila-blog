@@ -246,6 +246,10 @@ test.describe("editor studio state", () => {
       path.resolve(__dirname, "../src/components/editor/tableWidthModel.ts"),
       "utf8"
     )
+    const tableStructureModelSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/tableStructureModel.ts"),
+      "utf8"
+    )
     const editorStudioSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"),
       "utf8"
@@ -293,6 +297,17 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).not.toContain("const shouldPromoteWideTableOverflowMode =")
     expect(blockEditorEngineSource).not.toContain("const computeNextTableColumnWidthsForResize = (")
     expect(blockEditorEngineSource).not.toContain("const didTableColumnResizeHitOverflowPolicy = (")
+    expect(tableStructureModelSource).toContain("export const collectSimpleTableColumnCells = (")
+    expect(tableStructureModelSource).toContain("export const buildReorderedSimpleTableNode = (")
+    expect(tableStructureModelSource).toContain("export const canShrinkTableAxisAtEnd = (")
+    expect(tableStructureModelSource).toContain("export const countShrinkableTableAxisAtEnd = (")
+    expect(tableStructureModelSource).toContain("export const countShrinkableRenderedTableAxisAtEnd = (")
+    expect(blockEditorEngineSource).toContain('} from "./tableStructureModel"')
+    expect(blockEditorEngineSource).not.toContain("const collectSimpleTableColumnCells = (")
+    expect(blockEditorEngineSource).not.toContain("const buildReorderedSimpleTableNode = (")
+    expect(blockEditorEngineSource).not.toContain("const canShrinkTableAxisAtEnd = (")
+    expect(blockEditorEngineSource).not.toContain("const countShrinkableTableAxisAtEnd = (")
+    expect(blockEditorEngineSource).not.toContain("const countShrinkableRenderedTableAxisAtEnd = (")
     expect(blockEditorEngineSource).toContain('data-testid="table-row-drag-shadow"')
     expect(blockEditorEngineSource).toContain('"table-row-reorder-indicator"')
     expect(blockEditorEngineSource).toContain('"table-column-reorder-indicator"')
@@ -303,9 +318,6 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).toContain("type TableCornerPreviewState = {")
     expect(blockEditorEngineSource).toContain("const resolveTableCornerPreviewState = useCallback(")
     expect(blockEditorEngineSource).toContain("const applyTableCornerGrowSteps = useCallback(")
-    expect(blockEditorEngineSource).toContain("const canShrinkTableAxisAtEnd = (tableNode: ProseMirrorNode, axis: \"row\" | \"column\"): boolean => {")
-    expect(blockEditorEngineSource).toContain("const countShrinkableTableAxisAtEnd = (tableNode: ProseMirrorNode, axis: \"row\" | \"column\"): number => {")
-    expect(blockEditorEngineSource).toContain("const countShrinkableRenderedTableAxisAtEnd = (tableElement: HTMLTableElement | null, axis: \"row\" | \"column\"): number => {")
     expect(blockEditorEngineSource).toContain("const shrinkTableAxisAtEnd = useCallback(")
     expect(blockEditorEngineSource).toContain("const beginTableAxisDragFromPending = useCallback(")
     expect(blockEditorEngineSource).toContain("const startPendingTableAxisDrag = useCallback(")

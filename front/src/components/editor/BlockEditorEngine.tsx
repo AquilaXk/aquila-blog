@@ -943,6 +943,9 @@ const BLOCK_HANDLE_MEDIA_QUERY = "(pointer: coarse)"
 const DESKTOP_TABLE_RAIL_MEDIA_QUERY = "(max-width: 768px)"
 const DEFAULT_EDITOR_READABLE_WIDTH_PX = 48 * 16
 const BLOCK_HANDLE_POSITION_EPSILON_PX = 0.4
+const BLOCK_HANDLE_VIEWPORT_PADDING_PX = 12
+const BLOCK_HANDLE_GUTTER_GAP_PX = 10
+const BLOCK_HANDLE_STACKED_GAP_PX = 8
 const BLOCK_OUTER_SELECT_LEFT_GUTTER_PX = 76
 const BLOCK_OUTER_SELECT_LEFT_EDGE_INNER_PX = 6
 const BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX = 10
@@ -1542,6 +1545,31 @@ const resolveBlockHandleAnchorTop = (blockElement: HTMLElement, railHeight: numb
 const resolveThinBlockHandleAnchorTop = (blockElement: HTMLElement, railHeight: number) => {
   const rect = blockElement.getBoundingClientRect()
   return Math.max(0, rect.top + rect.height / 2 - railHeight / 2)
+}
+
+const resolveBlockHandleRailLayout = (
+  rect: DOMRect,
+  railWidth: number,
+  railHeight: number,
+  anchoredTop: number
+) => {
+  const gutterLeft = rect.left - railWidth - BLOCK_HANDLE_GUTTER_GAP_PX
+  if (gutterLeft >= BLOCK_HANDLE_VIEWPORT_PADDING_PX || typeof window === "undefined") {
+    return {
+      left: Math.max(BLOCK_HANDLE_VIEWPORT_PADDING_PX, gutterLeft),
+      top: anchoredTop,
+    }
+  }
+
+  const maxLeft = Math.max(
+    BLOCK_HANDLE_VIEWPORT_PADDING_PX,
+    window.innerWidth - railWidth - BLOCK_HANDLE_VIEWPORT_PADDING_PX
+  )
+
+  return {
+    left: Math.min(Math.max(BLOCK_HANDLE_VIEWPORT_PADDING_PX, rect.left), maxLeft),
+    top: Math.max(BLOCK_HANDLE_VIEWPORT_PADDING_PX, rect.top - railHeight - BLOCK_HANDLE_STACKED_GAP_PX),
+  }
 }
 
 const isWithinBlockHandleEpsilon = (prev: number, next: number) =>
@@ -3111,6 +3139,12 @@ const BlockEditorEngine = ({
     syncSelectedBlockNodeSurface(null)
   }, [syncSelectedBlockNodeSurface])
 
+  const clearBlockDragVisualState = useCallback(() => {
+    setDraggedBlockState(null)
+    setDragGhostPosition(null)
+    setDropIndicatorState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
+  }, [])
+
   const selectTableAxisAtIndex = useCallback(
     (activeEditor: TiptapEditor, tablePos: number, axis: "row" | "column", axisIndex: number) => {
       const tableNode = activeEditor.state.doc.nodeAt(tablePos)
@@ -3291,8 +3325,27 @@ const BlockEditorEngine = ({
         visible: true,
         ...indicator,
       })
+
+      let earlyPointerDoneTimeout: number | null = null
+      const cleanupEarlyPointerDone = () => {
+        window.removeEventListener("pointerup", handleEarlyPointerDone, true)
+        window.removeEventListener("pointercancel", handleEarlyPointerDone, true)
+        if (earlyPointerDoneTimeout !== null) {
+          window.clearTimeout(earlyPointerDoneTimeout)
+          earlyPointerDoneTimeout = null
+        }
+      }
+      const handleEarlyPointerDone = (event: PointerEvent) => {
+        if (event.pointerId !== pending.pointerId) return
+        clearBlockDragVisualState()
+        cleanupEarlyPointerDone()
+      }
+
+      window.addEventListener("pointerup", handleEarlyPointerDone, true)
+      window.addEventListener("pointercancel", handleEarlyPointerDone, true)
+      earlyPointerDoneTimeout = window.setTimeout(cleanupEarlyPointerDone, 30000)
     },
-    [resolveDropIndicatorByClientY]
+    [clearBlockDragVisualState, resolveDropIndicatorByClientY]
   )
 
   const clearNativeTextSelection = useCallback(() => {
@@ -8280,14 +8333,20 @@ const BlockEditorEngine = ({
     const { width: railWidth, height: railHeight } = blockHandleRailMetricsRef.current
     if (activeListItemContext?.listItemElement?.isConnected) {
       const rect = activeListItemContext.listItemElement.getBoundingClientRect()
+      const railLayout = resolveBlockHandleRailLayout(
+        rect,
+        railWidth,
+        railHeight,
+        resolveBlockHandleAnchorTop(activeListItemContext.listItemElement, railHeight)
+      )
       const nextState: TopLevelBlockHandleState = {
         visible: true,
         kind: "list-item",
         blockIndex: activeListItemContext.listBlockIndex,
         listPath: [...activeListItemContext.listPath],
         itemIndex: activeListItemContext.itemIndex,
-        left: Math.max(12, rect.left - railWidth - 10),
-        top: resolveBlockHandleAnchorTop(activeListItemContext.listItemElement, railHeight),
+        left: railLayout.left,
+        top: railLayout.top,
         bottom: rect.bottom + 12,
         width: rect.width,
       }
@@ -8316,14 +8375,15 @@ const BlockEditorEngine = ({
       : shouldCenterBlockHandleForNode(blockNode)
         ? resolveBlockHandleAnchorTop(blockElement, railHeight)
         : rect.top + 6
+    const railLayout = resolveBlockHandleRailLayout(rect, railWidth, railHeight, anchoredTop)
     const nextState: TopLevelBlockHandleState = {
       visible: true,
       kind: "top-level",
       blockIndex,
       listPath: [],
       itemIndex: null,
-      left: Math.max(12, rect.left - railWidth - 10),
-      top: anchoredTop,
+      left: railLayout.left,
+      top: railLayout.top,
       bottom: rect.bottom + 12,
       width: rect.width,
     }

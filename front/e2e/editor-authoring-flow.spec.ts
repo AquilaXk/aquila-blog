@@ -1644,6 +1644,115 @@ test.describe("block editor authoring flow", () => {
     )
   })
 
+  test("빠른 block drag release 뒤에는 drop indicator가 남지 않는다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    await expect(page.getByTestId("qa-editor-ready")).toHaveCount(1)
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("첫 줄")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("둘째 줄")
+
+    const firstParagraph = editor.locator("p").first()
+    const secondParagraph = editor.locator("p").nth(1)
+    await firstParagraph.hover()
+
+    const dragHandle = page.getByTestId("block-drag-handle")
+    await expect(dragHandle).toBeVisible()
+
+    const [dragBox, targetBox] = await Promise.all([
+      dragHandle.boundingBox(),
+      secondParagraph.boundingBox(),
+    ])
+    if (!dragBox || !targetBox) {
+      throw new Error("빠른 block drag 좌표를 계산할 수 없습니다.")
+    }
+
+    const pointerId = 44
+    const startX = dragBox.x + dragBox.width / 2
+    const startY = dragBox.y + dragBox.height / 2
+    const endX = targetBox.x + Math.min(24, targetBox.width / 3)
+    const endY = targetBox.y + targetBox.height / 2
+
+    await dragHandle.dispatchEvent("pointerdown", {
+      pointerId,
+      pointerType: "mouse",
+      button: 0,
+      buttons: 1,
+      clientX: startX,
+      clientY: startY,
+      bubbles: true,
+      cancelable: true,
+    })
+    await page.evaluate(
+      ({ pointerId: nextPointerId, endX: nextEndX, endY: nextEndY }) => {
+        window.dispatchEvent(
+          new PointerEvent("pointermove", {
+            pointerId: nextPointerId,
+            pointerType: "mouse",
+            button: 0,
+            buttons: 1,
+            clientX: nextEndX,
+            clientY: nextEndY,
+            bubbles: true,
+            cancelable: true,
+          })
+        )
+        window.dispatchEvent(
+          new PointerEvent("pointerup", {
+            pointerId: nextPointerId,
+            pointerType: "mouse",
+            button: 0,
+            buttons: 0,
+            clientX: nextEndX,
+            clientY: nextEndY,
+            bubbles: true,
+            cancelable: true,
+          })
+        )
+      },
+      { pointerId, endX, endY }
+    )
+
+    await expect(page.getByTestId("block-drag-ghost")).toHaveCount(0)
+    await expect(page.getByTestId("block-drop-indicator")).toHaveCount(0)
+  })
+
+  test("writer surface 좁은 폭에서도 block handle rail은 본문 첫 줄을 덮지 않는다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 640, height: 720 })
+    await page.goto(QA_WRITER_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await expect(editor).toBeVisible()
+    await editor.click()
+    await page.keyboard.type("말머리 보호")
+
+    const paragraph = editor.locator("p", { hasText: "말머리 보호" }).first()
+    await paragraph.hover({ force: true })
+
+    const handleRail = page.locator("[data-block-handle-rail='true'][data-visible='true']").first()
+    await expect(handleRail).toBeVisible()
+
+    const [paragraphBox, railBox] = await Promise.all([
+      paragraph.boundingBox(),
+      handleRail.boundingBox(),
+    ])
+    if (!paragraphBox || !railBox) {
+      throw new Error("block handle rail 겹침 좌표를 계산할 수 없습니다.")
+    }
+
+    const overlapsParagraph =
+      railBox.x < paragraphBox.x + paragraphBox.width &&
+      railBox.x + railBox.width > paragraphBox.x &&
+      railBox.y < paragraphBox.y + paragraphBox.height &&
+      railBox.y + railBox.height > paragraphBox.y
+
+    expect(overlapsParagraph).toBe(false)
+  })
+
   test("table hover에서도 block selection affordance를 다시 띄우고 table block selection으로 전환할 수 있다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
     const {

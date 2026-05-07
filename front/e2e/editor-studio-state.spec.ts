@@ -138,6 +138,9 @@ test.describe("editor studio state", () => {
     const slashMenuModelPath = path.resolve(__dirname, "../src/components/editor/slashMenuModel.ts")
     expect(existsSync(slashMenuModelPath)).toBe(true)
     const slashMenuModelSource = existsSync(slashMenuModelPath) ? readFileSync(slashMenuModelPath, "utf8") : ""
+    const inlineToolbarModelPath = path.resolve(__dirname, "../src/components/editor/inlineToolbarModel.ts")
+    expect(existsSync(inlineToolbarModelPath)).toBe(true)
+    const inlineToolbarModelSource = existsSync(inlineToolbarModelPath) ? readFileSync(inlineToolbarModelPath, "utf8") : ""
     const writerEditorHostSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/WriterEditorHost.tsx"), "utf8")
 
     expect(editorStudioSource).not.toContain("BLOCK_EDITOR_V2_ENABLED")
@@ -183,6 +186,10 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).toContain('from "./blockSelectionModel"')
     expect(blockEditorEngineSource).toContain('from "./useBlockEditorMarkdownCommit"')
     expect(blockEditorEngineSource).toContain('from "./slashMenuModel"')
+    expect(blockEditorEngineSource).toContain('from "./inlineToolbarModel"')
+    expect(blockEditorEngineSource).not.toContain("type InlineTextStyleOption =")
+    expect(blockEditorEngineSource).not.toContain("const INLINE_TEXT_STYLE_OPTIONS")
+    expect(blockEditorEngineSource).not.toContain("normalizeInlineColorToken")
     expect(blockEditorEngineSource).not.toContain("const normalizeSlashSearchText =")
     expect(blockEditorEngineSource).not.toContain("const compactSlashSearchText =")
     expect(blockEditorEngineSource).not.toContain("const getSlashSearchTerms =")
@@ -195,6 +202,11 @@ test.describe("editor studio state", () => {
     expect(slashMenuModelSource).toContain("export const getRankedSlashItems =")
     expect(slashMenuModelSource).toContain("export const buildSlashMenuSections =")
     expect(slashMenuModelSource).toContain("export const getSlashActionGlyph =")
+    expect(inlineToolbarModelSource).toContain("export type InlineTextStyleOption =")
+    expect(inlineToolbarModelSource).toContain("export const INLINE_TEXT_STYLE_OPTIONS")
+    expect(inlineToolbarModelSource).toContain("export const getActiveInlineColor")
+    expect(inlineToolbarModelSource).toContain("export const getActiveInlineTextStyleOption")
+    expect(inlineToolbarModelSource).toContain("export const runInlineTextStyle")
     expect(blockEditorEngineSource).not.toContain("const normalizeMarkdown =")
     expect(blockEditorEngineSource).not.toContain("markdownCommitTimerRef")
     expect(blockEditorEngineSource).not.toContain("markdownCommitIdleHandleRef")

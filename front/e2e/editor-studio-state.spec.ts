@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { expect, test } from "@playwright/test"
 import { getServerSideProps as getEditPageServerSideProps } from "src/pages/editor/[id]"
@@ -135,6 +135,9 @@ test.describe("editor studio state", () => {
       path.resolve(__dirname, "../src/components/editor/blockSelectionModel.ts"),
       "utf8"
     )
+    const slashMenuModelPath = path.resolve(__dirname, "../src/components/editor/slashMenuModel.ts")
+    expect(existsSync(slashMenuModelPath)).toBe(true)
+    const slashMenuModelSource = existsSync(slashMenuModelPath) ? readFileSync(slashMenuModelPath, "utf8") : ""
     const writerEditorHostSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/WriterEditorHost.tsx"), "utf8")
 
     expect(editorStudioSource).not.toContain("BLOCK_EDITOR_V2_ENABLED")
@@ -179,6 +182,19 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).toContain("border-radius: 0;")
     expect(blockEditorEngineSource).toContain('from "./blockSelectionModel"')
     expect(blockEditorEngineSource).toContain('from "./useBlockEditorMarkdownCommit"')
+    expect(blockEditorEngineSource).toContain('from "./slashMenuModel"')
+    expect(blockEditorEngineSource).not.toContain("const normalizeSlashSearchText =")
+    expect(blockEditorEngineSource).not.toContain("const compactSlashSearchText =")
+    expect(blockEditorEngineSource).not.toContain("const getSlashSearchTerms =")
+    expect(blockEditorEngineSource).not.toContain("const getSlashActionGlyph =")
+    expect(blockEditorEngineSource).not.toContain("const getSlashMenuContextBonus =")
+    expect(blockEditorEngineSource).not.toContain("const getSlashMenuMatchScore =")
+    expect(blockEditorEngineSource).not.toContain("type SlashMenuContext =")
+    expect(slashMenuModelSource).toContain("export type SlashMenuContext =")
+    expect(slashMenuModelSource).toContain("export const normalizeSlashSearchText =")
+    expect(slashMenuModelSource).toContain("export const getRankedSlashItems =")
+    expect(slashMenuModelSource).toContain("export const buildSlashMenuSections =")
+    expect(slashMenuModelSource).toContain("export const getSlashActionGlyph =")
     expect(blockEditorEngineSource).not.toContain("const normalizeMarkdown =")
     expect(blockEditorEngineSource).not.toContain("markdownCommitTimerRef")
     expect(blockEditorEngineSource).not.toContain("markdownCommitIdleHandleRef")

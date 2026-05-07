@@ -250,6 +250,10 @@ test.describe("editor studio state", () => {
       path.resolve(__dirname, "../src/components/editor/tableStructureModel.ts"),
       "utf8"
     )
+    const tablePasteModelSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/tablePasteModel.ts"),
+      "utf8"
+    )
     const editorStudioSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"),
       "utf8"
@@ -308,6 +312,13 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).not.toContain("const canShrinkTableAxisAtEnd = (")
     expect(blockEditorEngineSource).not.toContain("const countShrinkableTableAxisAtEnd = (")
     expect(blockEditorEngineSource).not.toContain("const countShrinkableRenderedTableAxisAtEnd = (")
+    expect(tablePasteModelSource).toContain("export const normalizeTableContextPasteText = (")
+    expect(tablePasteModelSource).toContain("const normalizeTableContextPasteLine = (")
+    expect(tablePasteModelSource).toContain("const isMarkdownTableRow = (")
+    expect(blockEditorEngineSource).toContain('from "./tablePasteModel"')
+    expect(blockEditorEngineSource).not.toContain("const normalizeTableContextPasteText = (")
+    expect(blockEditorEngineSource).not.toContain("const normalizeTableContextPasteLine = (")
+    expect(blockEditorEngineSource).not.toContain("const isMarkdownTableRow = (")
     expect(blockEditorEngineSource).toContain('data-testid="table-row-drag-shadow"')
     expect(blockEditorEngineSource).toContain('"table-row-reorder-indicator"')
     expect(blockEditorEngineSource).toContain('"table-column-reorder-indicator"')

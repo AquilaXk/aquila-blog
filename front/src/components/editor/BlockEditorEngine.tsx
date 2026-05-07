@@ -70,10 +70,7 @@ import {
   looksLikeStructuredMarkdownDocument,
   normalizeStructuredMarkdownClipboard,
 } from "src/libs/markdown/htmlToMarkdown"
-import {
-  INLINE_TEXT_COLOR_OPTIONS,
-  normalizeInlineColorToken,
-} from "src/libs/markdown/inlineColor"
+import { INLINE_TEXT_COLOR_OPTIONS } from "src/libs/markdown/inlineColor"
 import { inferCardKindFromUrl, inferLinkProvider, resolveEmbedPreviewUrl } from "src/libs/unfurl/extractMeta"
 import type {
   BlockEditorChangeMeta,
@@ -156,6 +153,14 @@ import {
   normalizeSlashSearchText,
   type SlashMenuContext,
 } from "./slashMenuModel"
+import {
+  INLINE_TEXT_STYLE_OPTIONS,
+  getActiveInlineColor,
+  getActiveInlineTextStyleOption,
+  isInlineCodeMarkActive,
+  runInlineTextStyle,
+  type InlineTextStyleOption,
+} from "./inlineToolbarModel"
 
 type RuntimeGuardWindow = Window & {
   __AQ_RUNTIME_GUARD_ENABLED__?: boolean
@@ -183,14 +188,6 @@ type ToolbarAction = {
   run: () => void
   active: boolean
   disabled?: boolean
-}
-
-type InlineTextStyleOption = {
-  id: "paragraph" | "heading-1" | "heading-2" | "heading-3" | "heading-4"
-  label: string
-  shortLabel: string
-  isActive: (activeEditor: TiptapEditor) => boolean
-  run: (activeEditor: TiptapEditor) => void
 }
 
 type FloatingBubbleState = {
@@ -405,54 +402,6 @@ const recordEditorCommitDurationForRuntimeGuard = (durationMs: number) => {
   }
   store.editorCommitSamples = nextSamples
 }
-
-const INLINE_TEXT_STYLE_OPTIONS: InlineTextStyleOption[] = [
-  {
-    id: "paragraph",
-    label: "본문",
-    shortLabel: "T",
-    isActive: (activeEditor) => activeEditor.isActive("paragraph"),
-    run: (activeEditor) => {
-      activeEditor.chain().focus().setParagraph().run()
-    },
-  },
-  {
-    id: "heading-1",
-    label: "제목 1",
-    shortLabel: "H1",
-    isActive: (activeEditor) => activeEditor.isActive("heading", { level: 1 }),
-    run: (activeEditor) => {
-      activeEditor.chain().focus().setHeading({ level: 1 }).run()
-    },
-  },
-  {
-    id: "heading-2",
-    label: "제목 2",
-    shortLabel: "H2",
-    isActive: (activeEditor) => activeEditor.isActive("heading", { level: 2 }),
-    run: (activeEditor) => {
-      activeEditor.chain().focus().setHeading({ level: 2 }).run()
-    },
-  },
-  {
-    id: "heading-3",
-    label: "제목 3",
-    shortLabel: "H3",
-    isActive: (activeEditor) => activeEditor.isActive("heading", { level: 3 }),
-    run: (activeEditor) => {
-      activeEditor.chain().focus().setHeading({ level: 3 }).run()
-    },
-  },
-  {
-    id: "heading-4",
-    label: "제목 4",
-    shortLabel: "H4",
-    isActive: (activeEditor) => activeEditor.isActive("heading", { level: 4 }),
-    run: (activeEditor) => {
-      activeEditor.chain().focus().setHeading({ level: 4 }).run()
-    },
-  },
-]
 
 type BlockMenuState =
   | {
@@ -5515,8 +5464,8 @@ const BlockEditorEngine = ({
     editor?.chain().focus().toggleStrike().run()
   }, [editor])
 
-  const activeInlineColor = normalizeInlineColorToken(String(editor?.getAttributes("inlineColor").color || ""))
-  const isInlineCodeActive = editor?.isActive("code") ?? false
+  const activeInlineColor = getActiveInlineColor(editor)
+  const isInlineCodeActive = isInlineCodeMarkActive(editor)
   const isTableMode = isTableSelectionActive(editor)
   const isTableStructuralSelection = useMemo(() => {
     if (!editor) return false
@@ -5628,9 +5577,8 @@ const BlockEditorEngine = ({
     }
   }, [editor, selectionTick])
   const activeInlineTextStyleOption = useMemo(() => {
-    if (!editor) return INLINE_TEXT_STYLE_OPTIONS[0]
     void selectionTick
-    return INLINE_TEXT_STYLE_OPTIONS.find((option) => option.isActive(editor)) || INLINE_TEXT_STYLE_OPTIONS[0]
+    return getActiveInlineTextStyleOption(editor)
   }, [editor, selectionTick])
 
   useEffect(() => {
@@ -5660,11 +5608,9 @@ const BlockEditorEngine = ({
 
   const applyInlineTextStyle = useCallback(
     (styleId: InlineTextStyleOption["id"]) => {
-      if (!editor) return
-      const option = INLINE_TEXT_STYLE_OPTIONS.find((entry) => entry.id === styleId)
-      if (!option) return
-      option.run(editor)
-      setIsBubbleTextStyleMenuOpen(false)
+      if (runInlineTextStyle(editor, styleId)) {
+        setIsBubbleTextStyleMenuOpen(false)
+      }
     },
     [editor]
   )

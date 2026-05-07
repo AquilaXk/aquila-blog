@@ -100,6 +100,14 @@ import {
   resolveDesktopTableRailLayout,
 } from "./tableAffordanceModel"
 import {
+  type TableCornerGrowState,
+  type TableCornerGrowStepMetrics,
+  type TableCornerPreviewState,
+  resolveTableCornerGrowStepMetrics,
+  resolveTableCornerGrowStepMetricsFromDataset,
+  resolveTableCornerPreviewState,
+} from "./tableCornerGrowModel"
+import {
   TABLE_OVERFLOW_MODE_WIDE,
   TABLE_WIDTH_BUDGET_META_KEY,
   computeNextTableColumnWidthsForResize,
@@ -687,30 +695,6 @@ type TableColumnDragGuideState = {
   left: number
   top: number
   height: number
-}
-
-type TableCornerGrowState = {
-  pointerId: number
-  startClientX: number
-  startClientY: number
-  baseLeft: number
-  baseTop: number
-  baseWidth: number
-  baseHeight: number
-  columnStepPx: number
-  rowStepPx: number
-  maxShrinkColumnSteps: number
-  maxShrinkRowSteps: number
-}
-
-type TableCornerPreviewState = {
-  visible: boolean
-  left: number
-  top: number
-  width: number
-  height: number
-  columnSteps: number
-  rowSteps: number
 }
 
 const BLOCK_HANDLE_MEDIA_QUERY = "(pointer: coarse)"
@@ -3654,38 +3638,6 @@ const BlockEditorEngine = ({
     return appendedColumn || appendedRow
   }, [appendTableAxisAtEnd])
 
-  const resolveTableCornerPreviewState = useCallback(
-    (state: TableCornerGrowState, clientX: number, clientY: number): TableCornerPreviewState => {
-      const rawColumnSteps = Math.trunc((clientX - state.startClientX) / state.columnStepPx)
-      const rawRowSteps = Math.trunc((clientY - state.startClientY) / state.rowStepPx)
-      const columnSteps = Math.max(-state.maxShrinkColumnSteps, rawColumnSteps)
-      const rowSteps = Math.max(-state.maxShrinkRowSteps, rawRowSteps)
-
-      if (columnSteps === 0 && rowSteps === 0) {
-        return {
-          visible: false,
-          left: state.baseLeft,
-          top: state.baseTop,
-          width: state.baseWidth,
-          height: state.baseHeight,
-          columnSteps: 0,
-          rowSteps: 0,
-        }
-      }
-
-      return {
-        visible: true,
-        left: state.baseLeft,
-        top: state.baseTop,
-        width: Math.max(TABLE_MIN_COLUMN_WIDTH_PX, state.baseWidth + columnSteps * state.columnStepPx),
-        height: Math.max(TABLE_MIN_ROW_HEIGHT_PX, state.baseHeight + rowSteps * state.rowStepPx),
-        columnSteps,
-        rowSteps,
-      }
-    },
-    []
-  )
-
   const applyTableCornerGrowSteps = useCallback(
     (columnSteps: number, rowSteps: number) => {
       let appliedColumnSteps = 0
@@ -3717,38 +3669,18 @@ const BlockEditorEngine = ({
     [appendTableAxisAtEnd, shrinkTableAxisAtEnd]
   )
 
-  const getTableCornerGrowStepMetrics = useCallback(() => {
-    const lastColumnSegment =
-      tableAffordanceGeometryRef.current.columnSegments[tableAffordanceGeometryRef.current.columnSegments.length - 1]
-    return {
-      columnStepPx: Math.max(
-        TABLE_MIN_COLUMN_WIDTH_PX,
-        Math.round(
-          lastColumnSegment?.width ??
-            tableAffordanceGeometryRef.current.columnWidth ??
-            TABLE_MIN_COLUMN_WIDTH_PX
-        )
-      ),
-      rowStepPx: Math.max(
-        TABLE_MIN_ROW_HEIGHT_PX,
-        Math.round(tableAffordanceGeometryRef.current.rowHeight || TABLE_MIN_ROW_HEIGHT_PX)
-      ),
-    }
-  }, [])
+  const resolveCurrentTableCornerGrowStepMetrics = useCallback(
+    () => resolveTableCornerGrowStepMetrics(tableAffordanceGeometryRef.current),
+    []
+  )
 
-  const getTableCornerGrowStepMetricsFromHandle = useCallback(
-    (element: HTMLElement | null) => {
-      const columnStepPx = Number(element?.dataset.columnStep || "0")
-      const rowStepPx = Number(element?.dataset.rowStep || "0")
-      if (Number.isFinite(columnStepPx) && columnStepPx > 0 && Number.isFinite(rowStepPx) && rowStepPx > 0) {
-        return {
-          columnStepPx,
-          rowStepPx,
-        }
-      }
-      return getTableCornerGrowStepMetrics()
-    },
-    [getTableCornerGrowStepMetrics]
+  const resolveTableCornerGrowStepMetricsFromHandle = useCallback(
+    (element: HTMLElement | null) =>
+      resolveTableCornerGrowStepMetricsFromDataset(
+        element?.dataset,
+        resolveCurrentTableCornerGrowStepMetrics()
+      ),
+    [resolveCurrentTableCornerGrowStepMetrics]
   )
 
   const stopTableCornerGrow = useCallback(() => {
@@ -3762,12 +3694,9 @@ const BlockEditorEngine = ({
       pointerId: number,
       clientX: number,
       clientY: number,
-      stepMetrics?: {
-        columnStepPx: number
-        rowStepPx: number
-      }
+      stepMetrics?: TableCornerGrowStepMetrics
     ) => {
-      const { columnStepPx, rowStepPx } = stepMetrics ?? getTableCornerGrowStepMetrics()
+      const { columnStepPx, rowStepPx } = stepMetrics ?? resolveCurrentTableCornerGrowStepMetrics()
       const currentEditor = editorRef.current
       const rect = currentEditor ? getCurrentSelectedTableRect(currentEditor) : null
       const renderedTable = findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)
@@ -3802,7 +3731,7 @@ const BlockEditorEngine = ({
       })
       setIsTableCornerGrowActive(true)
     },
-    [getCurrentSelectedTableRect, getTableCornerGrowStepMetrics, updateTableCornerPreviewState]
+    [getCurrentSelectedTableRect, resolveCurrentTableCornerGrowStepMetrics, updateTableCornerPreviewState]
   )
 
   const getCurrentTableColumnResizeContext = useCallback(
@@ -5389,7 +5318,7 @@ const BlockEditorEngine = ({
       window.removeEventListener("mouseup", handleMouseUp)
       stopTableCornerGrow()
     }
-  }, [applyTableCornerGrowSteps, resolveTableCornerPreviewState, stopTableCornerGrow, updateTableCornerPreviewState])
+  }, [applyTableCornerGrowSteps, stopTableCornerGrow, updateTableCornerPreviewState])
 
   useEffect(() => {
     const currentEditor = editorRef.current ?? editor
@@ -8637,7 +8566,7 @@ const BlockEditorEngine = ({
     if (typeof window === "undefined") return null
     return resolveDesktopTableRailLayout(tableAffordanceGeometry)
   }, [tableAffordanceGeometry])
-  const tableCornerGrowStepMetrics = getTableCornerGrowStepMetrics()
+  const tableCornerGrowStepMetrics = resolveTableCornerGrowStepMetrics(tableAffordanceGeometry)
   const shouldShowCellMergeSection = canMergeSelectedTableCells || canSplitSelectedTableCell
 
   useEffect(() => {
@@ -8804,7 +8733,7 @@ const BlockEditorEngine = ({
                       event.pointerId,
                       event.clientX,
                       event.clientY,
-                      getTableCornerGrowStepMetricsFromHandle(event.currentTarget)
+                      resolveTableCornerGrowStepMetricsFromHandle(event.currentTarget)
                     )
                   }}
                   onMouseDown={(event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -8814,7 +8743,7 @@ const BlockEditorEngine = ({
                       TABLE_CORNER_GROW_MOUSE_POINTER_ID,
                       event.clientX,
                       event.clientY,
-                      getTableCornerGrowStepMetricsFromHandle(event.currentTarget)
+                      resolveTableCornerGrowStepMetricsFromHandle(event.currentTarget)
                     )
                   }}
                   onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {

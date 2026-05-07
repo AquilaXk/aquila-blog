@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Response } from "@playwright/test"
+import { expect, test, type Locator, type Page, type Response } from "@playwright/test"
 
 const adminEmail = process.env.E2E_ADMIN_EMAIL?.trim() || ""
 const adminLegacyLoginId = process.env.E2E_ADMIN_USERNAME?.trim() || ""
@@ -278,6 +278,99 @@ const appendTextToBlockEditor = async (page: Page, text: string) => {
     .toContain(text)
 
   return blockEditor
+}
+
+const liveHoverWheelTableMarkdown = [
+  "| A | B | C | D | E | F | G |",
+  "| --- | --- | --- | --- | --- | --- | --- |",
+  "| 1 | 2 | 3 | 4 | 5 | 6 | 7 |",
+  "| aa | bb | cc | dd | ee | ff | gg |",
+].join("\n")
+
+const pasteMarkdownIntoBlockEditor = async (blockEditor: Locator, markdown: string) => {
+  await blockEditor.evaluate((element, payload) => {
+    const data = new DataTransfer()
+    data.setData("text/plain", payload)
+    const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true })
+    Object.defineProperty(event, "clipboardData", { value: data })
+    element.dispatchEvent(event)
+  }, markdown)
+}
+
+const ensureLiveHoverWheelFixture = async (page: Page, blockEditor: Locator) => {
+  await blockEditor.click({ position: { x: 24, y: 24 } })
+  await page.keyboard.press("Enter")
+
+  const codeButton = page.getByRole("button", { name: "코드", exact: true }).first()
+  if (await codeButton.isVisible().catch(() => false)) {
+    await codeButton.click()
+  } else {
+    await page.keyboard.type("/코드")
+    await page.keyboard.press("Enter")
+  }
+
+  await expect(page.locator("[data-code-block-wrapper='true']").first()).toBeVisible()
+  await expect(page.locator(".aq-code-shell").first()).toBeVisible()
+  await page.keyboard.type("const liveHoverWheel = true")
+
+  const tableButton = page.getByRole("button", { name: "테이블", exact: true }).first()
+  if (await tableButton.isVisible().catch(() => false)) {
+    await tableButton.click()
+  } else {
+    await pasteMarkdownIntoBlockEditor(blockEditor, liveHoverWheelTableMarkdown)
+  }
+
+  await expect(page.locator(".aq-block-editor__content .tableWrapper").first()).toBeVisible()
+}
+
+const readDocumentScrollTop = (page: Page) =>
+  page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
+
+const expectHoverWheelChainsToPageScroll = async (page: Page, target: Locator, label: string) => {
+  await page.evaluate(() => {
+    if (document.querySelector("[data-testid='live-hover-wheel-scroll-spacer']")) return
+    const spacer = document.createElement("div")
+    spacer.setAttribute("data-testid", "live-hover-wheel-scroll-spacer")
+    spacer.style.height = "2400px"
+    document.body.appendChild(spacer)
+  })
+
+  await target.scrollIntoViewIfNeeded()
+  const box = await target.boundingBox()
+  if (!box) {
+    throw new Error(`${label} metrics are missing before wheel`)
+  }
+
+  const overflowContract = await target.evaluate((element) => {
+    const style = window.getComputedStyle(element as HTMLElement)
+    return {
+      overscrollY: (style as CSSStyleDeclaration & { overscrollBehaviorY?: string }).overscrollBehaviorY || "",
+      touchAction: style.touchAction,
+    }
+  })
+  expect(overflowContract.overscrollY || "auto").toBe("auto")
+  expect(overflowContract.touchAction === "auto" || overflowContract.touchAction.includes("pan-y")).toBe(true)
+
+  await page.mouse.move(box.x + Math.min(box.width / 2, 120), box.y + Math.min(box.height / 2, 40))
+
+  const beforeScrollTop = await readDocumentScrollTop(page)
+  await page.mouse.wheel(0, 420)
+
+  await expect.poll(() => readDocumentScrollTop(page)).toBeGreaterThan(beforeScrollTop + 80)
+}
+
+const expectLiveEditorHoverWheelScrollChain = async (page: Page, blockEditor: Locator) => {
+  await ensureLiveHoverWheelFixture(page, blockEditor)
+  await expectHoverWheelChainsToPageScroll(
+    page,
+    page.locator("[data-code-block-wrapper='true']").first(),
+    "live code block"
+  )
+  await expectHoverWheelChainsToPageScroll(
+    page,
+    page.locator(".aq-block-editor__content .tableWrapper").first(),
+    "live table wrapper"
+  )
 }
 
 type LoginPayloadCandidate = {
@@ -580,7 +673,8 @@ test.describe("live production e2e", () => {
     } else {
       await expect(legacyTitleInput).toBeVisible()
     }
-    await appendTextToBlockEditor(page, "라이브 E2E 편집 확인")
+    const blockEditor = await appendTextToBlockEditor(page, "라이브 E2E 편집 확인")
+    await expectLiveEditorHoverWheelScrollChain(page, blockEditor)
 
     await page.getByRole("button", { name: "Logout", exact: true }).click()
     await expect(page).toHaveURL(/\/login/)

@@ -10,13 +10,13 @@ const isLikelyTableRow = (line: string) => {
 }
 
 const wrapWithMarkdownMark = (content: string, marker: string) => {
-  const normalized = content.trim()
+  const normalized = decodeLegacyHtmlEntities(content).trim()
   if (!normalized) return ""
   return `${marker}${normalized}${marker}`
 }
 
 const wrapWithMarkdownCodeMark = (content: string) => {
-  const normalized = content.trim()
+  const normalized = decodeLegacyHtmlEntities(content).trim()
   if (!normalized) return ""
   const backtickRuns = normalized.match(/`+/g)
   const longestRun = backtickRuns?.reduce((max, run) => Math.max(max, run.length), 0) ?? 0
@@ -25,6 +25,34 @@ const wrapWithMarkdownCodeMark = (content: string) => {
     normalized.startsWith("`") || normalized.endsWith("`") ? ` ${normalized} ` : normalized
   return `${marker}${paddedContent}${marker}`
 }
+
+const LEGACY_HTML_ENTITY_MAP: Record<string, string> = {
+  amp: "&",
+  apos: "'",
+  gt: ">",
+  lt: "<",
+  nbsp: " ",
+  quot: '"',
+}
+
+const decodeLegacyHtmlCodePoint = (codePoint: number, fallback: string) => {
+  if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff) return fallback
+  return String.fromCodePoint(codePoint)
+}
+
+const decodeLegacyHtmlEntities = (input: string) =>
+  String(input || "").replace(/&(#x[\da-f]+|#\d+|amp|apos|gt|lt|nbsp|quot);/gi, (entity, token: string) => {
+    const normalizedToken = token.toLowerCase()
+    if (normalizedToken.startsWith("#x")) {
+      const codePoint = Number.parseInt(normalizedToken.slice(2), 16)
+      return decodeLegacyHtmlCodePoint(codePoint, entity)
+    }
+    if (normalizedToken.startsWith("#")) {
+      const codePoint = Number.parseInt(normalizedToken.slice(1), 10)
+      return decodeLegacyHtmlCodePoint(codePoint, entity)
+    }
+    return LEGACY_HTML_ENTITY_MAP[normalizedToken] || entity
+  })
 
 const normalizeCodeTagMatch = (rawInner: string) => {
   return wrapWithMarkdownCodeMark(String(rawInner || ""))
@@ -40,7 +68,7 @@ export const normalizeLegacyInlineHtmlSpans = (input: string) => {
     (_match, rawInner: string) => normalizeCodeTagMatch(rawInner)
   )
   normalized = normalized.replace(
-    /&lt;\s*code(?:\s+[^&]*)&gt;([\s\S]*?)&lt;\s*\/\s*code\s*&gt;/gi,
+    /&lt;\s*code(?:\s+[^&]*)?&gt;([\s\S]*?)&lt;\s*\/\s*code\s*&gt;/gi,
     (_match, rawInner: string) => normalizeCodeTagMatch(rawInner)
   )
   normalized = normalized.replace(
@@ -48,7 +76,7 @@ export const normalizeLegacyInlineHtmlSpans = (input: string) => {
     (_match, rawInner: string) => wrapWithMarkdownMark(String(rawInner || ""), "**")
   )
   normalized = normalized.replace(
-    /&lt;\s*(?:strong|b)(?:\s+[^&]*)&gt;([\s\S]*?)&lt;\s*\/\s*(?:strong|b)\s*&gt;/gi,
+    /&lt;\s*(?:strong|b)(?:\s+[^&]*)?&gt;([\s\S]*?)&lt;\s*\/\s*(?:strong|b)\s*&gt;/gi,
     (_match, rawInner: string) => wrapWithMarkdownMark(String(rawInner || ""), "**")
   )
   normalized = normalized.replace(
@@ -56,7 +84,7 @@ export const normalizeLegacyInlineHtmlSpans = (input: string) => {
     (_match, rawInner: string) => wrapWithMarkdownMark(String(rawInner || ""), "*")
   )
   normalized = normalized.replace(
-    /&lt;\s*(?:em|i)(?:\s+[^&]*)&gt;([\s\S]*?)&lt;\s*\/\s*(?:em|i)\s*&gt;/gi,
+    /&lt;\s*(?:em|i)(?:\s+[^&]*)?&gt;([\s\S]*?)&lt;\s*\/\s*(?:em|i)\s*&gt;/gi,
     (_match, rawInner: string) => wrapWithMarkdownMark(String(rawInner || ""), "*")
   )
   normalized = normalized.replace(
@@ -64,7 +92,7 @@ export const normalizeLegacyInlineHtmlSpans = (input: string) => {
     (_match, rawInner: string) => wrapWithMarkdownMark(String(rawInner || ""), "~~")
   )
   normalized = normalized.replace(
-    /&lt;\s*(?:del|s)(?:\s+[^&]*)&gt;([\s\S]*?)&lt;\s*\/\s*(?:del|s)\s*&gt;/gi,
+    /&lt;\s*(?:del|s)(?:\s+[^&]*)?&gt;([\s\S]*?)&lt;\s*\/\s*(?:del|s)\s*&gt;/gi,
     (_match, rawInner: string) => wrapWithMarkdownMark(String(rawInner || ""), "~~")
   )
 
@@ -100,7 +128,7 @@ export const normalizeLegacyInlineHtmlMarkdown = (markdown: string) => {
 }
 
 export const normalizeInlineHtmlInMarkdownTables = (markdown: string) => {
-  if (!markdown || !markdown.includes("<")) return markdown
+  if (!markdown || (!markdown.includes("<") && !markdown.includes("&lt;"))) return markdown
 
   return markdown
     .split("\n")

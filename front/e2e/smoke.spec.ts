@@ -890,6 +890,40 @@ test("상세 본문은 trailing-space malformed strong marker를 그대로 노�
 })
 
 test("상세 코드블럭은 Prism fallback 토큰 하이라이팅을 유지한다", async ({ page }) => {
+  await page.addInitScript(() => {
+    type CodeLineSnapshot = {
+      html: string
+      lineCount: number
+      text: string
+    }
+    const windowWithSnapshots = window as typeof window & {
+      __aqCodeLineSnapshots?: CodeLineSnapshot[]
+    }
+    windowWithSnapshots.__aqCodeLineSnapshots = []
+
+    const capture = () => {
+      const code = document.querySelector<HTMLElement>(".aq-code-block .aq-pretty-pre code")
+      if (!code) return
+      windowWithSnapshots.__aqCodeLineSnapshots?.push({
+        html: code.innerHTML.slice(0, 240),
+        lineCount: code.querySelectorAll("[data-line]").length,
+        text: code.textContent || "",
+      })
+    }
+
+    let frameCount = 0
+    const captureFrame = () => {
+      capture()
+      frameCount += 1
+      if (frameCount < 24) {
+        window.requestAnimationFrame(captureFrame)
+      }
+    }
+    window.requestAnimationFrame(captureFrame)
+    const interval = window.setInterval(capture, 16)
+    window.setTimeout(() => window.clearInterval(interval), 3000)
+  })
+
   await page.route("**/post/api/v1/posts/104", async (route) => {
     await route.fulfill({
       status: 200,
@@ -943,6 +977,25 @@ test("상세 코드블럭은 Prism fallback 토큰 하이라이팅을 유지한�
   await expect(codeRoot).toBeVisible()
   await expect(page.locator(".aq-code-block pre code .token.keyword").first()).toBeVisible()
   await expect(page.locator(".aq-code-block pre code .token.string").first()).toBeVisible()
+
+  const lineSnapshots = await page.evaluate(() => {
+    const windowWithSnapshots = window as typeof window & {
+      __aqCodeLineSnapshots?: Array<{ html: string; lineCount: number; text: string }>
+    }
+    const code = document.querySelector<HTMLElement>(".aq-code-block .aq-pretty-pre code")
+    if (code) {
+      windowWithSnapshots.__aqCodeLineSnapshots?.push({
+        html: code.innerHTML.slice(0, 240),
+        lineCount: code.querySelectorAll("[data-line]").length,
+        text: code.textContent || "",
+      })
+    }
+    return windowWithSnapshots.__aqCodeLineSnapshots || []
+  })
+  expect(lineSnapshots.length).toBeGreaterThan(0)
+  const codeSnapshots = lineSnapshots.filter((snapshot) => snapshot.text.includes("const count"))
+  expect(codeSnapshots.length).toBeGreaterThan(0)
+  expect(codeSnapshots.some((snapshot) => snapshot.lineCount === 0)).toBe(false)
 
   const colors = await page.evaluate(() => {
     const code = document.querySelector<HTMLElement>(".aq-code-block pre code")

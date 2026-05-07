@@ -137,6 +137,18 @@ import {
   resolveActiveRenderedTableForFloatingUi,
   resolveTableScopedSelectedCell,
 } from "./tableRenderedDomModel"
+import {
+  BLOCK_OUTER_SELECT_LEFT_GUTTER_PX,
+  BLOCK_OUTER_SELECT_LEFT_EDGE_GAP_PX,
+  BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX,
+  isStableBlockHandleState,
+  isStableBlockSelectionOverlayState,
+  resolveOuterBlockSelectionGesture,
+  resolveOuterListItemSelectionGesture,
+  type BlockSelectionOverlayState,
+  type BlockSelectionPointerEventLike,
+  type TopLevelBlockHandleState,
+} from "./blockSelectionModel"
 
 type RuntimeGuardWindow = Window & {
   __AQ_RUNTIME_GUARD_ENABLED__?: boolean
@@ -196,26 +208,6 @@ type TableOverflowCoachmarkState = {
   visible: boolean
   left: number
   top: number
-}
-
-type TopLevelBlockHandleState = {
-  visible: boolean
-  kind: "top-level" | "list-item"
-  blockIndex: number
-  listPath: number[]
-  itemIndex: number | null
-  left: number
-  top: number
-  bottom: number
-  width: number
-}
-
-type BlockSelectionOverlayState = {
-  visible: boolean
-  left: number
-  top: number
-  width: number
-  height: number
 }
 
 type PendingBlockDragState = {
@@ -342,18 +334,6 @@ type TableAxisReorderIndicatorState = {
   top: number
   width: number
   height: number
-}
-
-type BlockSelectionPointerEventLike = {
-  button: number
-  detail: number
-  clientX: number
-  clientY: number
-  target: EventTarget | null
-  metaKey?: boolean
-  ctrlKey?: boolean
-  altKey?: boolean
-  shiftKey?: boolean
 }
 
 const normalizeSlashSearchText = (value: string) => value.trim().toLowerCase()
@@ -700,13 +680,9 @@ type TableColumnDragGuideState = {
 const BLOCK_HANDLE_MEDIA_QUERY = "(pointer: coarse)"
 const DESKTOP_TABLE_RAIL_MEDIA_QUERY = "(max-width: 768px)"
 const DEFAULT_EDITOR_READABLE_WIDTH_PX = 48 * 16
-const BLOCK_HANDLE_POSITION_EPSILON_PX = 0.4
 const BLOCK_HANDLE_VIEWPORT_PADDING_PX = 12
 const BLOCK_HANDLE_GUTTER_GAP_PX = 10
 const BLOCK_HANDLE_STACKED_GAP_PX = 8
-const BLOCK_OUTER_SELECT_LEFT_GUTTER_PX = 76
-const BLOCK_OUTER_SELECT_LEFT_EDGE_GAP_PX = 2
-const BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX = 10
 const TABLE_ROW_RESIZE_EDGE_PX = 6
 const TABLE_COLUMN_RESIZE_GUARD_PX = 12
 const TABLE_RAIL_EDGE_PADDING_PX = 12
@@ -1074,33 +1050,6 @@ const resolveBlockHandleRailLayout = (
     top: Math.max(BLOCK_HANDLE_VIEWPORT_PADDING_PX, rect.top - railHeight - BLOCK_HANDLE_STACKED_GAP_PX),
   }
 }
-
-const isWithinBlockHandleEpsilon = (prev: number, next: number) =>
-  Math.abs(prev - next) <= BLOCK_HANDLE_POSITION_EPSILON_PX
-
-const isStableBlockHandleState = (
-  prev: TopLevelBlockHandleState,
-  next: TopLevelBlockHandleState
-) =>
-  prev.visible === next.visible &&
-  prev.kind === next.kind &&
-  prev.blockIndex === next.blockIndex &&
-  prev.itemIndex === next.itemIndex &&
-  sameListPath(prev.listPath, next.listPath) &&
-  isWithinBlockHandleEpsilon(prev.left, next.left) &&
-  isWithinBlockHandleEpsilon(prev.top, next.top) &&
-  isWithinBlockHandleEpsilon(prev.bottom, next.bottom) &&
-  isWithinBlockHandleEpsilon(prev.width, next.width)
-
-const isStableBlockSelectionOverlayState = (
-  prev: BlockSelectionOverlayState,
-  next: BlockSelectionOverlayState
-) =>
-  prev.visible === next.visible &&
-  isWithinBlockHandleEpsilon(prev.left, next.left) &&
-  isWithinBlockHandleEpsilon(prev.top, next.top) &&
-  isWithinBlockHandleEpsilon(prev.width, next.width) &&
-  isWithinBlockHandleEpsilon(prev.height, next.height)
 
 const shouldCenterBlockHandleForNode = (node?: BlockEditorDoc | null) =>
   Boolean(
@@ -2681,75 +2630,15 @@ const BlockEditorEngine = ({
 
   const isOuterBlockSelectionGesture = useCallback(
     (event: BlockSelectionPointerEventLike, targetBlockIndex: number | null) => {
-      if (targetBlockIndex === null) return false
-      if (event.button !== 0) return false
-      if (event.detail < 2) return false
-      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return false
-
-      const targetElement =
-        event.target instanceof Element
-          ? event.target
-          : event.target instanceof Node
-            ? event.target.parentElement
-            : null
-      const blockElement = getTopLevelBlockElementByIndex(targetBlockIndex)
-      if (!blockElement) return false
-      const rect = blockElement.getBoundingClientRect()
-      const clickedTableAxisRail = targetElement?.closest("[data-table-axis-rail='true']")
-      if (
-        targetElement?.closest("[data-block-handle-rail='true'] button") ||
-        targetElement?.closest("[data-block-menu-root='true']") ||
-        targetElement?.closest("[data-table-menu-root='true']") ||
-        clickedTableAxisRail ||
-        targetElement?.closest("[data-table-corner-handle='true']") ||
-        targetElement?.closest("[data-table-menu-trigger='true']")
-      ) {
-        return false
-      }
-      const withinVerticalRange =
-        event.clientY >= rect.top - BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX &&
-        event.clientY <= rect.bottom + BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX
-      if (!withinVerticalRange) return false
-
-      return (
-        event.clientX >= rect.left - BLOCK_OUTER_SELECT_LEFT_GUTTER_PX &&
-        event.clientX <= rect.left - BLOCK_OUTER_SELECT_LEFT_EDGE_GAP_PX
-      )
+      const blockElement = targetBlockIndex !== null ? getTopLevelBlockElementByIndex(targetBlockIndex) : null
+      return resolveOuterBlockSelectionGesture(event, blockElement)
     },
     [getTopLevelBlockElementByIndex]
   )
 
   const isOuterListItemSelectionGesture = useCallback(
     (event: BlockSelectionPointerEventLike, targetListItem: NestedListItemContext | null) => {
-      if (!targetListItem) return false
-      if (event.button !== 0) return false
-      if (event.detail < 2) return false
-      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return false
-
-      const targetElement =
-        event.target instanceof Element
-          ? event.target
-          : event.target instanceof Node
-            ? event.target.parentElement
-            : null
-      if (
-        targetElement?.closest("[data-block-handle-rail='true'] button") ||
-        targetElement?.closest("[data-block-menu-root='true']") ||
-        targetElement?.closest("[data-table-menu-root='true']")
-      ) {
-        return false
-      }
-
-      const rect = targetListItem.listItemElement.getBoundingClientRect()
-      const withinVerticalRange =
-        event.clientY >= rect.top - BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX &&
-        event.clientY <= rect.bottom + BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX
-      if (!withinVerticalRange) return false
-
-      return (
-        event.clientX >= rect.left - BLOCK_OUTER_SELECT_LEFT_GUTTER_PX &&
-        event.clientX <= rect.left - BLOCK_OUTER_SELECT_LEFT_EDGE_GAP_PX
-      )
+      return resolveOuterListItemSelectionGesture(event, targetListItem?.listItemElement ?? null)
     },
     []
   )

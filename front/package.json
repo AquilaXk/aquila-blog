@@ -24,7 +24,7 @@
     "test:e2e:authoring": "yarn playwright:preflight && env -u NO_COLOR PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 yarn playwright test e2e/editor-authoring-flow.spec.ts --workers=1",
     "test:e2e:perf": "yarn playwright:preflight && node scripts/run-playwright-perf.mjs",
     "test:e2e:a11y": "yarn playwright:preflight && env -u NO_COLOR PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 yarn playwright test e2e/accessibility.spec.ts",
-    "test:e2e:live": "yarn playwright:preflight && env -u NO_COLOR PLAYWRIGHT_LIVE_MULTI_BROWSER=true yarn playwright test e2e/live.spec.ts --workers=1",
+    "test:e2e:live": "yarn playwright:preflight && node scripts/run-live-e2e.mjs",
     "storybook": "HOME=$PWD/.storybook-home CI=1 STORYBOOK_DISABLE_TELEMETRY=1 STORYBOOK_DISABLE_UPDATE_CHECK=1 storybook dev -p 6006",
     "storybook:build:raw": "HOME=$PWD/.storybook-home CI=1 STORYBOOK_DISABLE_TELEMETRY=1 STORYBOOK_DISABLE_UPDATE_CHECK=1 storybook build",
     "storybook:build": "yarn storybook:build:raw",

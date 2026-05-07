@@ -544,6 +544,29 @@ test.describe("block editor serialization", () => {
     expect(serializeEditorDocToMarkdown(doc)).toBe(markdown)
   })
 
+  test("legacy table inline HTML mark 내부 entity 는 editor text 로 정규화된다", () => {
+    const markdown = [
+      "| 항목 | 값 |",
+      "| --- | --- |",
+      "| 코드 | <code>&lt;section&gt;</code> |",
+      "| 강조 | <strong>A &amp; B</strong> |",
+      "| 이탤릭 | &lt;em&gt;slow&nbsp;path&lt;/em&gt; |",
+      "| 취소 | <del>&#35;old</del> |",
+      "| 보존 | <strong>&#999999999999;</strong> |",
+    ].join("\n")
+
+    const serialized = serializeEditorDocToMarkdown(parseMarkdownToEditorDoc(markdown))
+
+    expect(serialized).toContain("| 코드 | `<section>` |")
+    expect(serialized).toContain("| 강조 | **A & B** |")
+    expect(serialized).toContain("| 이탤릭 | *slow path* |")
+    expect(serialized).toContain("| 취소 | ~~#old~~ |")
+    expect(serialized).toContain("| 보존 | **&#999999999999;** |")
+    expect(serialized).not.toContain("<strong>")
+    expect(serialized).not.toContain("&amp;")
+    expect(serialized).not.toContain("&lt;em")
+  })
+
   test("렌더 모델은 테이블 메타 comment 를 분리하고 본문 markdown 에서는 제거한다", () => {
     const markdown = [
       '<!-- aq-table {"columnWidths":[220,320],"rowHeights":[52,68,44]} -->',

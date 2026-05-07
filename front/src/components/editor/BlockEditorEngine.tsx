@@ -161,6 +161,12 @@ import {
   runInlineTextStyle,
   type InlineTextStyleOption,
 } from "./inlineToolbarModel"
+import {
+  areFloatingBubbleStatesEqual,
+  hideFloatingBubbleState,
+  resolveFloatingBubbleStateFromCoords,
+  useFloatingBubbleState,
+} from "./useFloatingBubbleState"
 
 type RuntimeGuardWindow = Window & {
   __AQ_RUNTIME_GUARD_ENABLED__?: boolean
@@ -188,14 +194,6 @@ type ToolbarAction = {
   run: () => void
   active: boolean
   disabled?: boolean
-}
-
-type FloatingBubbleState = {
-  visible: boolean
-  mode: "text" | "image"
-  anchor: "center" | "left"
-  left: number
-  top: number
 }
 
 type TableMenuKind = "row" | "column" | "table" | "cell"
@@ -1343,8 +1341,6 @@ const BlockEditorEngine = ({
   const tableQuickRailHideTimerRef = useRef<number | null>(null)
   const tableOverflowCoachmarkHideTimerRef = useRef<number | null>(null)
   const hoveredBlockClearTimerRef = useRef<number | null>(null)
-  const bubbleHideTimerRef = useRef<number | null>(null)
-  const bubbleToolbarHoveredRef = useRef(false)
   const mouseTextSelectionInProgressRef = useRef(false)
   const syncBubbleOnMouseUpRef = useRef(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
@@ -1390,13 +1386,13 @@ const BlockEditorEngine = ({
     width: 0,
     height: 0,
   })
-  const [bubbleState, setBubbleState] = useState<FloatingBubbleState>({
-    visible: false,
-    mode: "text",
-    anchor: "center",
-    left: 0,
-    top: 0,
-  })
+  const {
+    bubbleState,
+    setBubbleState,
+    bubbleToolbarHoveredRef,
+    cancelBubbleHide,
+    scheduleBubbleHide,
+  } = useFloatingBubbleState()
   const [tableAffordanceGeometry, setTableAffordanceGeometry] = useState<TableAffordanceGeometry>(
     INITIAL_TABLE_AFFORDANCE_GEOMETRY
   )
@@ -1675,24 +1671,6 @@ const BlockEditorEngine = ({
       tableQuickRailHideTimerRef.current = null
     }, delayMs)
   }, [cancelTableQuickRailHide])
-
-  const cancelBubbleHide = useCallback(() => {
-    if (bubbleHideTimerRef.current !== null && typeof window !== "undefined") {
-      window.clearTimeout(bubbleHideTimerRef.current)
-      bubbleHideTimerRef.current = null
-    }
-  }, [])
-
-  const scheduleBubbleHide = useCallback(() => {
-    cancelBubbleHide()
-    if (typeof window === "undefined") return
-    bubbleHideTimerRef.current = window.setTimeout(() => {
-      if (!bubbleToolbarHoveredRef.current) {
-        setBubbleState((prev) => ({ ...prev, visible: false }))
-      }
-      bubbleHideTimerRef.current = null
-    }, 220)
-  }, [cancelBubbleHide])
 
   const cancelScheduledTableViewportBudgetNormalize = useCallback(() => {
     if (tableViewportBudgetNormalizeFrameRef.current !== null && typeof window !== "undefined") {
@@ -4945,7 +4923,9 @@ const BlockEditorEngine = ({
       if (canShowTextToolbar && mouseTextSelectionInProgressRef.current) {
         syncBubbleOnMouseUpRef.current = true
         if (bubbleToolbarHoveredRef.current) return
-        setBubbleState((prev) => (prev.visible && prev.mode === "text" ? { ...prev, visible: false } : prev))
+        setBubbleState((prev) =>
+          prev.visible && prev.mode === "text" ? hideFloatingBubbleState(prev) : prev
+        )
         if (!tableMenuState) {
           hideTableQuickRailImmediately()
         }
@@ -4963,7 +4943,7 @@ const BlockEditorEngine = ({
 
       if (isTableActive && !canShowTextToolbar) {
         cancelBubbleHide()
-        setBubbleState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
+        setBubbleState(hideFloatingBubbleState)
         const anchorDom = activeEditor.view.domAtPos(selection.from).node
         const anchorElement =
           anchorDom instanceof Element ? anchorDom : anchorDom.parentElement
@@ -4982,21 +4962,13 @@ const BlockEditorEngine = ({
 
       const startCoords = activeEditor.view.coordsAtPos(selection.from)
       const endCoords = activeEditor.view.coordsAtPos(isImageNodeSelected ? selection.from : selection.to)
-      const nextBubbleState: FloatingBubbleState = {
-        visible: true,
-        mode: isImageNodeSelected ? "image" : "text",
-        anchor: "center",
-        left: Math.round((startCoords.left + endCoords.right) / 2),
-        top: Math.round(Math.min(startCoords.top, endCoords.top)),
-      }
+      const nextBubbleState = resolveFloatingBubbleStateFromCoords(
+        isImageNodeSelected ? "image" : "text",
+        startCoords,
+        endCoords
+      )
       setBubbleState((prev) =>
-        prev.visible === nextBubbleState.visible &&
-        prev.mode === nextBubbleState.mode &&
-        prev.anchor === nextBubbleState.anchor &&
-        prev.left === nextBubbleState.left &&
-        prev.top === nextBubbleState.top
-          ? prev
-          : nextBubbleState
+        areFloatingBubbleStatesEqual(prev, nextBubbleState) ? prev : nextBubbleState
       )
     }
 
@@ -5043,7 +5015,9 @@ const BlockEditorEngine = ({
       mouseTextSelectionInProgressRef.current = true
       syncBubbleOnMouseUpRef.current = false
       if (bubbleToolbarHoveredRef.current) return
-      setBubbleState((prev) => (prev.visible && prev.mode === "text" ? { ...prev, visible: false } : prev))
+      setBubbleState((prev) =>
+        prev.visible && prev.mode === "text" ? hideFloatingBubbleState(prev) : prev
+      )
     }
 
     const handleEditorMouseDownCapture = (event: MouseEvent) => {
@@ -5094,11 +5068,13 @@ const BlockEditorEngine = ({
     }
   }, [
     cancelBubbleHide,
+    bubbleToolbarHoveredRef,
     clearWindowTextSelection,
     editor,
     hideTableQuickRailImmediately,
     scheduleBubbleHide,
     scheduleTableQuickRailHide,
+    setBubbleState,
     startTableColumnResizeFromDomHandle,
     syncTableQuickRailFromElement,
     tableMenuState,

@@ -31,7 +31,7 @@ import {
 import {
   FEED_EXPLORER_RESTORE_KEY_PREFIX,
   FEED_EXPLORER_SNAPSHOT_SUFFIX,
-} from "./feedRestoreCache"
+} from "src/libs/feed/feedRestoreCache"
 
 const LOAD_MORE_THROTTLE_MS = 800
 const LOAD_MORE_OBSERVER_THROTTLE_MS = 180

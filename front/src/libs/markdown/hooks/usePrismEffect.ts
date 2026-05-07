@@ -1,4 +1,4 @@
-import { RefObject, useEffect } from "react"
+import { RefObject, useEffect, useLayoutEffect } from "react"
 import {
   inferPrismLanguageFromSource,
   highlightCodeToHtml,
@@ -38,6 +38,19 @@ const blockHasSyntaxMarkup = (block: HTMLElement) =>
 const extractCodeSource = (block: HTMLElement) =>
   block.getAttribute("data-raw-code") || block.dataset.prismSource || block.textContent || ""
 
+const ensureLineWrappedHtml = ({
+  html,
+  language,
+  source,
+}: {
+  html: string
+  language: string
+  source: string
+}) => {
+  if (html.includes("data-line=")) return html
+  return renderImmediateCodeToHtml({ source, language }).html
+}
+
 type PrismEffectOptions = {
   observeMutations?: boolean
   mutationDebounceMs?: number
@@ -45,6 +58,7 @@ type PrismEffectOptions = {
 
 const PRISM_DEFAULT_MUTATION_DEBOUNCE_MS = 72
 const PRISM_INITIAL_HYDRATION_TIMEOUT_MS = 1200
+const usePrismHydrationEffect = typeof window === "undefined" ? useEffect : useLayoutEffect
 
 const resolveElementFromNode = (node: Node | null): Element | null => {
   if (!node) return null
@@ -80,7 +94,7 @@ const usePrismEffect = (
       ? Math.max(16, options.mutationDebounceMs)
       : PRISM_DEFAULT_MUTATION_DEBOUNCE_MS
 
-  useEffect(() => {
+  usePrismHydrationEffect(() => {
     if (!enabled) return
 
     let disposed = false
@@ -122,6 +136,7 @@ const usePrismEffect = (
             ? inferPrismLanguageFromSource(entry.source)
             : entry.rawLanguage
           const hasSyntaxMarkup = blockHasSyntaxMarkup(entry.block)
+          const hasLineWrappers = Boolean(entry.block.querySelector("[data-line]"))
 
           return {
             ...entry,
@@ -129,10 +144,11 @@ const usePrismEffect = (
             shouldHighlight:
               inferred.length > 0 &&
               inferred !== "mermaid" &&
-              !hasSyntaxMarkup,
+              (!hasSyntaxMarkup || !hasLineWrappers),
             alreadyHighlighted:
               entry.block.dataset.prismLanguage === inferred &&
-              entry.block.dataset.prismSource === entry.source,
+              entry.block.dataset.prismSource === entry.source &&
+              hasLineWrappers,
           }
         })
         .filter((entry) => entry.shouldHighlight && !entry.alreadyHighlighted)
@@ -148,7 +164,11 @@ const usePrismEffect = (
           .filter((className) => className.startsWith("language-"))
           .forEach((className) => block.classList.remove(className))
         block.classList.add(`language-${immediate.language}`)
-        block.innerHTML = immediate.html
+        block.innerHTML = ensureLineWrappedHtml({
+          html: immediate.html,
+          language: immediate.language,
+          source,
+        })
         block.dataset.prismLanguage = immediate.language
         block.dataset.prismSource = source
         block.setAttribute("data-language", immediate.language)
@@ -174,7 +194,11 @@ const usePrismEffect = (
           .filter((className) => className.startsWith("language-"))
           .forEach((className) => block.classList.remove(className))
         block.classList.add(`language-${language}`)
-        block.innerHTML = result.html
+        block.innerHTML = ensureLineWrappedHtml({
+          html: result.html,
+          language,
+          source,
+        })
         block.dataset.prismLanguage = language
         block.dataset.prismSource = source
         block.setAttribute("data-language", language)
@@ -222,6 +246,16 @@ const usePrismEffect = (
     const scheduleInitialRun = () => {
       if (initialRunScheduled || disposed) return
       initialRunScheduled = true
+
+      const hasCodeBlockMissingLineWrappers = Array.from(root.querySelectorAll<HTMLElement>("pre > code")).some(
+        (block) => !block.querySelector("[data-line]")
+      )
+      if (hasCodeBlockMissingLineWrappers) {
+        hydrationSettled = true
+        fullRescanRequested = true
+        void run()
+        return
+      }
 
       const idleWindow = window as Window & {
         requestIdleCallback?: (

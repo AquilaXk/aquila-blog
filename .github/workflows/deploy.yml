@@ -11,7 +11,7 @@ on:
 
 concurrency:
   group: homeserver-deploy-main
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -34,15 +34,17 @@ jobs:
       image_ref: ${{ steps.meta.outputs.image_ref }}
       image_latest_ref: ${{ steps.meta.outputs.image_latest_ref }}
       deploy_sha: ${{ steps.meta.outputs.deploy_sha }}
-      should_deploy: ${{ steps.meta.outputs.should_deploy }}
+      backend_deploy: ${{ steps.meta.outputs.backend_deploy }}
+      front_live_verify: ${{ steps.meta.outputs.front_live_verify }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
 
-      - name: Calculate image tags
+      - name: Calculate deploy targets and image tags
         id: meta
         env:
           DEPLOY_SHA_INPUT: ${{ github.event.workflow_run.head_sha }}
@@ -63,33 +65,56 @@ jobs:
           IMAGE_TAG="sha-${SHORT_SHA}"
           IMAGE_REF="${IMAGE_NAME}:${IMAGE_TAG}"
           IMAGE_LATEST_REF="${IMAGE_NAME}:latest"
-          SHOULD_DEPLOY="true"
-          CHANGE_SOURCE="head-commit"
-          REQUIRED_PATHS_PATTERN='^(back/|deploy/homeserver/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
+          BACKEND_DEPLOY="false"
+          FRONT_LIVE_VERIFY="false"
+          CHANGE_SOURCE="first-parent-diff"
+          BACKEND_DEPLOY_PATHS_PATTERN='^(back/|deploy/homeserver/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
+          FRONT_LIVE_VERIFY_PATHS_PATTERN='^(front/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/frontend-ci\.yml|\.github/workflows/reusable-frontend-verify\.yml)'
           CHANGED_FILES=""
-          CHANGED_FILES="$(git diff-tree --no-commit-id --name-only -r "${DEPLOY_SHA}" || true)"
-          if [ -n "${CHANGED_FILES}" ] && ! echo "${CHANGED_FILES}" | grep -Eq "${REQUIRED_PATHS_PATTERN}"; then
-            SHOULD_DEPLOY="false"
-            CHANGE_SOURCE="skip:no-backend-deploy-path-change"
+          CHANGED_FILES="$(git diff --name-only "${DEPLOY_SHA}^1" "${DEPLOY_SHA}" 2>/dev/null || true)"
+          if [ -z "${CHANGED_FILES}" ]; then
+            CHANGE_SOURCE="merge-diff-tree"
+            CHANGED_FILES="$(git diff-tree --no-commit-id --name-only -r -m "${DEPLOY_SHA}" || true)"
+          fi
+          if [ -z "${CHANGED_FILES}" ]; then
+            BACKEND_DEPLOY="true"
+            FRONT_LIVE_VERIFY="true"
+            CHANGE_SOURCE="fail-open:no-changed-files"
+          else
+            if echo "${CHANGED_FILES}" | grep -Eq "${BACKEND_DEPLOY_PATHS_PATTERN}"; then
+              BACKEND_DEPLOY="true"
+              FRONT_LIVE_VERIFY="true"
+            fi
+            if echo "${CHANGED_FILES}" | grep -Eq "${FRONT_LIVE_VERIFY_PATHS_PATTERN}"; then
+              FRONT_LIVE_VERIFY="true"
+            fi
           fi
 
-          echo "should_deploy_source=${CHANGE_SOURCE}"
+          echo "deploy_target_source=${CHANGE_SOURCE}"
 
           echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
           echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
           echo "image_latest_ref=${IMAGE_LATEST_REF}" >> "$GITHUB_OUTPUT"
           echo "deploy_sha=${DEPLOY_SHA}" >> "$GITHUB_OUTPUT"
-          echo "should_deploy=${SHOULD_DEPLOY}" >> "$GITHUB_OUTPUT"
+          echo "backend_deploy=${BACKEND_DEPLOY}" >> "$GITHUB_OUTPUT"
+          echo "front_live_verify=${FRONT_LIVE_VERIFY}" >> "$GITHUB_OUTPUT"
 
           {
             echo "## Deploy Boundary"
             echo "- backend deploy: homeserver blue/green"
             echo "- frontend runtime: Vercel (external platform)"
             echo "- frontend step: \`frontLiveE2E\` verifies the current live URL after main deploy"
-            if [ "${SHOULD_DEPLOY}" = "true" ]; then
-              echo "- result: backend deploy pipeline continues"
+            echo "- backend_deploy: ${BACKEND_DEPLOY}"
+            echo "- front_live_verify: ${FRONT_LIVE_VERIFY}"
+            if [ "${BACKEND_DEPLOY}" = "true" ]; then
+              echo "- backend result: backend deploy pipeline continues"
             else
-              echo "- result: homeserver deploy skipped because backend/deploy paths did not change"
+              echo "- backend result: homeserver deploy skipped because backend/deploy paths did not change"
+            fi
+            if [ "${FRONT_LIVE_VERIFY}" = "true" ]; then
+              echo "- frontend result: live frontend verification will run"
+            else
+              echo "- frontend result: live frontend verification skipped because frontend/backend deploy paths did not change"
             fi
             echo "- decision source: ${CHANGE_SOURCE}"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -97,7 +122,7 @@ jobs:
   buildAndPush:
     runs-on: ubuntu-latest
     needs: calculateTag
-    if: needs.calculateTag.outputs.should_deploy == 'true'
+    if: needs.calculateTag.outputs.backend_deploy == 'true'
     timeout-minutes: 30
     permissions:
       contents: read
@@ -137,7 +162,7 @@ jobs:
       - calculateTag
       - buildAndPush
     if: >
-      needs.calculateTag.outputs.should_deploy == 'true' &&
+      needs.calculateTag.outputs.backend_deploy == 'true' &&
       needs.buildAndPush.result == 'success'
     timeout-minutes: 30
     permissions:
@@ -778,7 +803,14 @@ jobs:
     needs:
       - calculateTag
       - blueGreenDeploy
-    if: needs.calculateTag.outputs.should_deploy == 'true'
+    if: >
+      always() &&
+      needs.calculateTag.result == 'success' &&
+      needs.calculateTag.outputs.front_live_verify == 'true' &&
+      (
+        needs.calculateTag.outputs.backend_deploy != 'true' ||
+        needs.blueGreenDeploy.result == 'success'
+      )
     timeout-minutes: 20
     permissions:
       contents: read

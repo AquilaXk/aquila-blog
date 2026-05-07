@@ -1,3 +1,21 @@
 {
-  "extends": ["next/core-web-vitals"]
+  "extends": ["next/core-web-vitals"],
+  "overrides": [
+    {
+      "files": ["src/apis/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["src/routes/**", "src/components/**", "src/pages/**"],
+                "message": "API modules must not import UI layers. Move shared helpers to src/libs or src/constants."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }

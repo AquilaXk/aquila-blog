@@ -13,7 +13,8 @@ env:
 
 permissions:
   contents: read
-  pull-requests: read
+  issues: write
+  pull-requests: write
 
 jobs:
   backend-ci:
@@ -24,6 +25,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
 
       - name: Detect backend-related changes
         id: changes
@@ -33,6 +36,7 @@ jobs:
             backend:
               - 'back/**'
               - 'deploy/homeserver/**'
+              - 'tools/ci/**'
               - 'tools/guards/check-forbidden-tracked-files.sh'
               - '.github/workflows/backend-ci.yml'
               - '.github/workflows/ci.yml'
@@ -110,15 +114,10 @@ jobs:
             exit 1
           fi
 
-      - name: Run backend ktlint
+      - name: Run backend fast check
         if: steps.changes.outputs.backend == 'true'
         working-directory: back
-        run: ./gradlew ktlintCheck
-
-      - name: Run backend tests
-        if: steps.changes.outputs.backend == 'true'
-        working-directory: back
-        run: ./gradlew test --rerun-tasks
+        run: ./gradlew ciFastCheck --rerun-tasks
 
       - name: Set up Node.js for contract drift check
         if: steps.changes.outputs.backend == 'true'
@@ -141,6 +140,50 @@ jobs:
           cp back/build/openapi/openapi.json front/contracts/openapi/openapi.json
           (cd front && yarn contracts:check)
 
+      - name: Comment Jacoco coverage summary
+        if: always() && github.event_name == 'pull_request' && steps.changes.outputs.backend == 'true' && github.event.pull_request.head.repo.full_name == github.repository && hashFiles('back/build/reports/jacoco/pr/jacocoPrReport.xml') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          summary_file="${RUNNER_TEMP}/jacoco-summary.md"
+          comments_file="${RUNNER_TEMP}/pr-comments.json"
+          changed_files="${RUNNER_TEMP}/changed-files.txt"
+
+          git diff --name-only "origin/${GITHUB_BASE_REF}...HEAD" > "${changed_files}"
+
+          python3 tools/ci/comment-jacoco-summary.py \
+            back/build/reports/jacoco/pr/jacocoPrReport.xml \
+            back/config/jacoco-coverage-baseline-excludes.txt \
+            --changed-files "${changed_files}" \
+            > "${summary_file}"
+
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate > "${comments_file}"
+          comment_id="$(
+            python3 -c 'import json, sys; marker = "<!-- aquila-blog:jacoco-coverage-summary -->"; comments = json.load(open(sys.argv[1], encoding="utf-8")); print(next((item["id"] for item in comments if marker in item.get("body", "")), ""))' "${comments_file}"
+          )"
+
+          body="$(cat "${summary_file}")"
+          if [[ -n "${comment_id}" ]]; then
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" --field body="${body}"
+          else
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --field body="${body}"
+          fi
+
+          cat "${summary_file}" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload Jacoco PR report
+        if: always() && steps.changes.outputs.backend == 'true' && hashFiles('back/build/reports/jacoco/pr/jacocoPrReport.xml') != ''
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: jacoco-pr-report
+          path: |
+            back/build/reports/jacoco/pr/jacocoPrReport.xml
+            back/build/reports/jacoco/pr/html
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Upload backend reports on failure
         if: failure() && steps.changes.outputs.backend == 'true'
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
@@ -150,4 +193,5 @@ jobs:
             back/build/reports/tests/test
             back/build/test-results/test
             back/build/reports/ktlint
+            back/build/reports/jacoco/pr
           retention-days: 7

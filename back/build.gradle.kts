@@ -1,6 +1,10 @@
+import org.gradle.testing.jacoco.tasks.JacocoCoverageVerification
+import org.gradle.testing.jacoco.tasks.JacocoReport
+
 plugins {
     kotlin("jvm") version "2.2.21"
     kotlin("plugin.spring") version "2.2.21"
+    jacoco
     id("org.springframework.boot") version "4.0.3"
     id("io.spring.dependency-management") version "1.1.7"
     kotlin("plugin.jpa") version "2.2.21"
@@ -203,6 +207,80 @@ fun Test.commandLineIncludePatternsOrEmpty(): Set<String> {
     return raw.mapNotNull { it?.toString() }.toSet()
 }
 
+val jacocoStaticCoverageExclusions =
+    listOf(
+        "com/back/BackApplication.class",
+        "com/back/BackApplicationKt.class",
+        "com/back/**/*Config.class",
+        "com/back/**/*Config$*.class",
+        "com/back/**/*Configuration.class",
+        "com/back/**/*Configuration$*.class",
+        "com/back/**/*Properties.class",
+        "com/back/**/*Properties$*.class",
+        "com/back/**/*Exception.class",
+        "com/back/**/*Exception$*.class",
+    )
+
+val jacocoCoverageBaselineExclusions =
+    layout.projectDirectory.file("config/jacoco-coverage-baseline-excludes.txt")
+
+val fastTestTaskNames = listOf("test")
+val fullTestTaskNames = fastTestTaskNames + "testcontainersTest"
+
+fun jacocoCoverageExclusions(): List<String> =
+    jacocoStaticCoverageExclusions +
+        jacocoCoverageBaselineExclusions.asFile
+            .takeIf { it.exists() }
+            ?.readLines()
+            .orEmpty()
+            .map(String::trim)
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
+
+fun jacocoMainClassDirectories() =
+    files(
+        sourceSets.main.get().output.classesDirs.files.map {
+            fileTree(it) {
+                // 기존 미커버 baseline을 파일로 고정해 신규 코드의 100% 게이트를 유지한다.
+                exclude(jacocoCoverageExclusions())
+            }
+        },
+    )
+
+fun jacocoAllClassDirectories() =
+    files(
+        sourceSets
+            .main
+            .get()
+            .output
+            .classesDirs,
+    )
+
+fun jacocoMainSourceDirectories() =
+    files(
+        sourceSets
+            .main
+            .get()
+            .allSource
+            .srcDirs,
+    )
+
+fun jacocoExecutionDataFor(taskNames: List<String>) =
+    fileTree(layout.buildDirectory.dir("jacoco")) {
+        include(taskNames.map { "$it.exec" })
+    }
+
+fun JacocoCoverageVerification.configureLineCoverageRule() {
+    violationRules {
+        rule {
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "1.00".toBigDecimal()
+            }
+        }
+    }
+}
+
 dependencies {
     // Spring
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
@@ -366,4 +444,69 @@ tasks {
         environment("TEST_INFRA_MODE", "none")
         shouldRunAfter("test")
     }
+}
+
+tasks.named<JacocoReport>("jacocoTestReport") {
+    dependsOn(fullTestTaskNames)
+    classDirectories.setFrom(jacocoMainClassDirectories())
+    sourceDirectories.setFrom(jacocoMainSourceDirectories())
+    executionData.setFrom(jacocoExecutionDataFor(fullTestTaskNames))
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+        csv.required.set(false)
+    }
+}
+
+tasks.register<JacocoReport>("jacocoPrReport") {
+    dependsOn(fastTestTaskNames)
+    classDirectories.setFrom(jacocoMainClassDirectories())
+    sourceDirectories.setFrom(jacocoMainSourceDirectories())
+    executionData.setFrom(jacocoExecutionDataFor(fastTestTaskNames))
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+        csv.required.set(false)
+        xml.outputLocation.set(layout.buildDirectory.file("reports/jacoco/pr/jacocoPrReport.xml"))
+        html.outputLocation.set(layout.buildDirectory.dir("reports/jacoco/pr/html"))
+    }
+}
+
+tasks.register<JacocoReport>("jacocoFullTestReport") {
+    dependsOn(fullTestTaskNames)
+    classDirectories.setFrom(jacocoAllClassDirectories())
+    sourceDirectories.setFrom(jacocoMainSourceDirectories())
+    executionData.setFrom(jacocoExecutionDataFor(fullTestTaskNames))
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+        csv.required.set(false)
+        xml.outputLocation.set(layout.buildDirectory.file("reports/jacoco/full/jacocoFullTestReport.xml"))
+        html.outputLocation.set(layout.buildDirectory.dir("reports/jacoco/full/html"))
+    }
+}
+
+tasks.register<JacocoCoverageVerification>("ciFastCoverageVerification") {
+    dependsOn(fastTestTaskNames)
+    classDirectories.setFrom(jacocoMainClassDirectories())
+    executionData.setFrom(jacocoExecutionDataFor(fastTestTaskNames))
+    configureLineCoverageRule()
+}
+
+tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
+    dependsOn(tasks.named<JacocoReport>("jacocoTestReport"))
+    classDirectories.setFrom(jacocoMainClassDirectories())
+    executionData.setFrom(jacocoExecutionDataFor(fullTestTaskNames))
+    configureLineCoverageRule()
+}
+
+tasks.register("ciFastCheck") {
+    description = "Runs PR fast backend checks with Jacoco coverage reporting."
+    group = "verification"
+    dependsOn("test", "jacocoPrReport", "ciFastCoverageVerification", "ktlintCheck")
+}
+
+tasks.named("check") {
+    dependsOn("testcontainersTest")
+    dependsOn(tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification"))
 }

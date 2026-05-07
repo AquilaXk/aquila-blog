@@ -1,8 +1,9 @@
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { expect, test } from "@playwright/test"
 
 const readFrontText = (relativePath: string): string => readFileSync(path.resolve(__dirname, "..", relativePath), "utf8")
+const frontPathExists = (relativePath: string): boolean => existsSync(path.resolve(__dirname, "..", relativePath))
 
 test.describe("frontend legacy boundary", () => {
   test("package identity does not point to the upstream template project", () => {
@@ -47,5 +48,13 @@ test.describe("frontend legacy boundary", () => {
     expect(postQueryHook).toContain('pathname.match(/^\\/posts\\/(\\d+)(?:\\/)?$/)')
     expect(postQueryHook).not.toContain("extractPostIdFromLegacySlug")
     expect(postQueryHook).not.toContain("router.query.slug")
+  })
+
+  test("canonical post detail does not keep the retired Detail wrapper or PageDetail branch", () => {
+    const canonicalPostPage = readFrontText("src/pages/posts/[id].tsx")
+
+    expect(canonicalPostPage).toContain('import PostDetail from "src/routes/Detail/PostDetail"')
+    expect(frontPathExists("src/routes/Detail/index.tsx")).toBe(false)
+    expect(frontPathExists("src/routes/Detail/PageDetail/index.tsx")).toBe(false)
   })
 })

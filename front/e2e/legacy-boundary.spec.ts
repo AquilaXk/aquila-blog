@@ -39,4 +39,13 @@ test.describe("frontend legacy boundary", () => {
     expect(legacyPageRoute).not.toContain("getStaticProps")
     expect(legacyPageRoute).not.toContain("MarkdownRenderer")
   })
+
+  test("canonical post query hook does not own legacy slug fallback", () => {
+    const postQueryHook = readFrontText("src/hooks/usePostQuery.ts")
+
+    expect(postQueryHook).toContain("extractCanonicalPostIdFromAsPath")
+    expect(postQueryHook).toContain('pathname.match(/^\\/posts\\/(\\d+)(?:\\/)?$/)')
+    expect(postQueryHook).not.toContain("extractPostIdFromLegacySlug")
+    expect(postQueryHook).not.toContain("router.query.slug")
+  })
 })

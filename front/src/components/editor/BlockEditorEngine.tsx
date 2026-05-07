@@ -10797,7 +10797,7 @@ const EditorViewport = styled.div`
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
-    touch-action: pan-x;
+    touch-action: pan-x pan-y;
   }
 
   .aq-block-editor__content > *[data-block-hovered="true"] {
@@ -11005,8 +11005,8 @@ const EditorViewport = styled.div`
     box-shadow: ${tableChrome.shadow};
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
-    overscroll-behavior-y: contain;
-    touch-action: pan-x;
+    overscroll-behavior-y: auto;
+    touch-action: pan-x pan-y;
     transition:
       border-color 140ms ease,
       box-shadow 140ms ease,

@@ -242,6 +242,10 @@ test.describe("editor studio state", () => {
       path.resolve(__dirname, "../src/components/editor/tableAffordanceModel.ts"),
       "utf8"
     )
+    const tableWidthModelSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/tableWidthModel.ts"),
+      "utf8"
+    )
     const editorStudioSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"),
       "utf8"
@@ -277,7 +281,18 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).toContain('data-testid="table-overflow-mode-normal"')
     expect(blockEditorEngineSource).toContain('data-testid="table-overflow-mode-wide"')
     expect(blockEditorEngineSource).toContain("const promoteLargeTablesToWideOverflowMode = (editor: TiptapEditor) => {")
-    expect(blockEditorEngineSource).toContain("shouldPromoteWideTableOverflowMode(columns.length, readableWidthBudget)")
+    expect(tableWidthModelSource).toContain('export const TABLE_OVERFLOW_MODE_WIDE = "wide"')
+    expect(tableWidthModelSource).toContain("export const getTableOverflowMode = (")
+    expect(tableWidthModelSource).toContain("export const shouldPromoteWideTableOverflowMode = (")
+    expect(tableWidthModelSource).toContain("export const promotePastedWideTables = (")
+    expect(tableWidthModelSource).toContain("export const computeNextTableColumnWidthsForResize = (")
+    expect(tableWidthModelSource).toContain("export const didTableColumnResizeHitOverflowPolicy = (")
+    expect(blockEditorEngineSource).toContain('} from "./tableWidthModel"')
+    expect(blockEditorEngineSource).not.toContain("const TABLE_OVERFLOW_MODE_WIDE =")
+    expect(blockEditorEngineSource).not.toContain("const getTableOverflowMode =")
+    expect(blockEditorEngineSource).not.toContain("const shouldPromoteWideTableOverflowMode =")
+    expect(blockEditorEngineSource).not.toContain("const computeNextTableColumnWidthsForResize = (")
+    expect(blockEditorEngineSource).not.toContain("const didTableColumnResizeHitOverflowPolicy = (")
     expect(blockEditorEngineSource).toContain('data-testid="table-row-drag-shadow"')
     expect(blockEditorEngineSource).toContain('"table-row-reorder-indicator"')
     expect(blockEditorEngineSource).toContain('"table-column-reorder-indicator"')
@@ -296,7 +311,7 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).toContain("const startPendingTableAxisDrag = useCallback(")
     expect(blockEditorEngineSource).toContain("const selectTableAxisAtIndex = useCallback(")
     expect(blockEditorEngineSource).toContain('overflowMode: getTableOverflowMode(tableNode)')
-    expect(blockEditorEngineSource).toContain("const maxActiveWidth = Math.max(TABLE_MIN_COLUMN_WIDTH_PX, safeBudget - otherColumnsWidth)")
+    expect(tableWidthModelSource).toContain("const maxActiveWidth = Math.max(TABLE_MIN_COLUMN_WIDTH_PX, safeBudget - otherColumnsWidth)")
     expect(blockEditorEngineSource).toContain("const tableCornerGrowSuppressClickRef = useRef(false)")
     expect(blockEditorEngineSource).toContain('"grip" | "grow"')
     expect(blockEditorEngineSource).toContain('const isCellMenuOpen = tableMenuKind === "cell"')

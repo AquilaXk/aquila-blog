@@ -947,7 +947,7 @@ const BLOCK_HANDLE_VIEWPORT_PADDING_PX = 12
 const BLOCK_HANDLE_GUTTER_GAP_PX = 10
 const BLOCK_HANDLE_STACKED_GAP_PX = 8
 const BLOCK_OUTER_SELECT_LEFT_GUTTER_PX = 76
-const BLOCK_OUTER_SELECT_LEFT_EDGE_INNER_PX = 6
+const BLOCK_OUTER_SELECT_LEFT_EDGE_GAP_PX = 2
 const BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX = 10
 const TABLE_ROW_RESIZE_EDGE_PX = 6
 const TABLE_COLUMN_RESIZE_GUARD_PX = 12
@@ -3496,7 +3496,7 @@ const BlockEditorEngine = ({
 
       return (
         event.clientX >= rect.left - BLOCK_OUTER_SELECT_LEFT_GUTTER_PX &&
-        event.clientX <= rect.left + BLOCK_OUTER_SELECT_LEFT_EDGE_INNER_PX
+        event.clientX <= rect.left - BLOCK_OUTER_SELECT_LEFT_EDGE_GAP_PX
       )
     },
     [getTopLevelBlockElementByIndex]
@@ -3531,7 +3531,7 @@ const BlockEditorEngine = ({
 
       return (
         event.clientX >= rect.left - BLOCK_OUTER_SELECT_LEFT_GUTTER_PX &&
-        event.clientX <= rect.left + BLOCK_OUTER_SELECT_LEFT_EDGE_INNER_PX
+        event.clientX <= rect.left - BLOCK_OUTER_SELECT_LEFT_EDGE_GAP_PX
       )
     },
     []

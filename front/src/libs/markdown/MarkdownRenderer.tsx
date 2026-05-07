@@ -362,8 +362,6 @@ const MarkdownBlockquote = ({ children }: { children: ReactNode }) => (
   </MarkdownBlockquoteContext.Provider>
 )
 
-const normalizeCodeLineBreaks = (value: string) => value.replace(/\r\n?|\u2028|\u2029/g, "\n")
-
 const extractTextFromMarkdownNode = (node: ReactNode): string => {
   if (typeof node === "string" || typeof node === "number") return String(node)
   if (Array.isArray(node)) return node.map(extractTextFromMarkdownNode).join("\n")
@@ -814,7 +812,6 @@ const MarkdownRendererComponent: FC<Props> = ({
             source: rawCode,
             language,
           })
-          const initialCodeText = normalizeCodeLineBreaks(rawCode)
 
           return (
             <PrettyCodeBlock
@@ -825,10 +822,11 @@ const MarkdownRendererComponent: FC<Props> = ({
                   <code
                     className={`language-${initialCodePresentation.language}`}
                     data-language={initialCodePresentation.language}
+                    data-prism-language={initialCodePresentation.language}
+                    data-prism-source={rawCode}
                     data-raw-code={rawCode}
-                  >
-                    {initialCodeText}
-                  </code>
+                    dangerouslySetInnerHTML={{ __html: initialCodePresentation.html }}
+                  />
                 </pre>
               }
             />

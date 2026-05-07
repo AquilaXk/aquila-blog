@@ -2,16 +2,12 @@ import { useQuery } from "@tanstack/react-query"
 import { useRouter } from "next/router"
 import { getPostDetailById } from "src/apis"
 import { queryKey } from "src/constants/queryKey"
-import { extractPostIdFromLegacySlug } from "src/libs/utils/postPath"
 import { PostDetail } from "src/types"
 
-const extractPostIdFromAsPath = (asPath: string): string => {
+const extractCanonicalPostIdFromAsPath = (asPath: string): string => {
   const pathname = asPath.split(/[?#]/, 1)[0] || ""
   const canonicalMatch = pathname.match(/^\/posts\/(\d+)(?:\/)?$/)
-  if (canonicalMatch) return canonicalMatch[1]
-
-  const legacyId = extractPostIdFromLegacySlug(pathname)
-  return legacyId ? String(legacyId) : ""
+  return canonicalMatch ? canonicalMatch[1] : ""
 }
 
 const usePostQuery = () => {
@@ -19,9 +15,7 @@ const usePostQuery = () => {
   const routeId =
     typeof router.query.id === "string"
       ? router.query.id
-      : typeof router.query.slug === "string"
-        ? String(extractPostIdFromLegacySlug(router.query.slug) || "")
-        : extractPostIdFromAsPath(router.asPath || "")
+      : extractCanonicalPostIdFromAsPath(router.asPath || "")
   const hasRouteId = routeId.length > 0
   const query = useQuery<PostDetail | null>({
     queryKey: queryKey.post(routeId),

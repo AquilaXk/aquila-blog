@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query"
 import { PostDetail, TPost } from "src/types"
 import { normalizeCategoryValue } from "src/libs/utils"
-import { clearFeedExplorerRestoreCache } from "src/routes/Feed/feedRestoreCache"
+import { clearFeedExplorerRestoreCache } from "src/libs/feed/feedRestoreCache"
 import { queryKey } from "src/constants/queryKey"
 import { normalizeKeywordQuery, normalizeTagQuery } from "src/libs/query/normalize"
 import { ApiError, apiFetch, evictBrowserRevalidateCacheEntries } from "./client"

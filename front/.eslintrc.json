@@ -16,6 +16,54 @@
           }
         ]
       }
+    },
+    {
+      "files": ["src/libs/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["src/routes/**", "src/pages/**"],
+                "message": "Shared lib modules must not import UI route or page layers. Move shared helpers to src/libs or src/constants."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/components/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["src/routes/**", "src/pages/**"],
+                "message": "Reusable components must not import route or page layers. Pass data/actions in from routes or move shared helpers to src/libs."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/routes/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["src/pages/**"],
+                "message": "Route modules must not import Next.js page entrypoints. Keep page wiring in src/pages and shared helpers in src/libs."
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }

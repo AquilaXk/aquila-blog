@@ -314,6 +314,29 @@ export const normalizeProfileWorkspaceContent = (
 export const serializeProfileWorkspaceContent = (content: ProfileWorkspaceContent) =>
   JSON.stringify(normalizeProfileWorkspaceContent(content))
 
+export const buildProfileWorkspaceAdminProfileCacheFields = (content: ProfileWorkspaceContent) => {
+  const normalized = normalizeProfileWorkspaceContent(content)
+
+  return {
+    profileImageUrl: normalized.profileImageUrl,
+    profileImageDirectUrl: normalized.profileImageUrl,
+    profileRole: normalized.profileRole,
+    profileBio: normalized.profileBio,
+    aboutHeadline: normalized.aboutHeadline,
+    aboutRole: normalized.aboutRole,
+    aboutBio: normalized.aboutBio,
+    aboutDetails: buildLegacyAboutDetails(normalized.aboutSections),
+    aboutSections: normalized.aboutSections,
+    aboutProjectSectionTitle: normalized.aboutProjectSectionTitle,
+    aboutProjects: normalized.aboutProjects,
+    blogTitle: normalized.blogTitle,
+    homeIntroTitle: normalized.homeIntroTitle,
+    homeIntroDescription: normalized.homeIntroDescription,
+    serviceLinks: normalized.serviceLinks,
+    contactLinks: normalized.contactLinks,
+  }
+}
+
 export const buildProfileWorkspaceFromLegacy = (
   value: LegacyProfileLike | null | undefined
 ): ProfileWorkspaceContent =>

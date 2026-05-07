@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import { expect, test } from "@playwright/test"
-import { normalizeProfileWorkspaceContent } from "src/libs/profileWorkspace"
+import { buildProfileWorkspaceAdminProfileCacheFields, normalizeProfileWorkspaceContent } from "src/libs/profileWorkspace"
 
 test.describe("admin profile state contract", () => {
   test("profile 작업공간은 공통 section nav/action dock primitive 위에서 반응형 분기를 유지한다", () => {
@@ -61,12 +61,9 @@ test.describe("admin profile state contract", () => {
     const aboutSource = readFileSync(path.resolve(__dirname, "../src/pages/about.tsx"), "utf8")
 
     expect(profileSource).toContain("syncPublishedAdminProfileCache(normalizeProfileWorkspaceContent(nextWorkspace.published))")
-    expect(profileSource).toContain("aboutHeadline: content.aboutHeadline")
-    expect(profileSource).toContain("aboutRole: content.aboutRole")
-    expect(profileSource).toContain("aboutBio: content.aboutBio")
-    expect(profileSource).toContain("aboutSections: content.aboutSections")
-    expect(profileSource).toContain("aboutProjectSectionTitle: content.aboutProjectSectionTitle")
-    expect(profileSource).toContain("aboutProjects: content.aboutProjects")
+    expect(profileSource).toContain("...buildProfileWorkspaceAdminProfileCacheFields(content)")
+    expect(profileSource).not.toContain("buildLegacyAboutDetails")
+    expect(profileSource).not.toContain("aboutDetails:")
     expect(aboutSource).toContain("const displayHeadline = adminProfile?.aboutHeadline || DEFAULT_ABOUT_HEADLINE")
     expect(aboutSource).toContain("const displayRole = adminProfile?.aboutRole || CONFIG.profile.role")
     expect(aboutSource).toContain("const displayBio = adminProfile?.aboutBio || CONFIG.profile.bio")
@@ -74,6 +71,50 @@ test.describe("admin profile state contract", () => {
     expect(aboutSource).toContain("adminProfile?.aboutProjects && adminProfile.aboutProjects.length > 0")
     expect(aboutSource).not.toContain("PROJECT_PRESETS")
     expect(aboutSource).not.toContain("대표 글 보기")
+  })
+
+  test("profile workspace legacy cache bridge는 structured about 필드와 aboutDetails를 함께 만든다", () => {
+    const bridge = buildProfileWorkspaceAdminProfileCacheFields({
+      profileImageUrl: "/profile.png",
+      profileRole: "Backend",
+      profileBio: "운영 가능한 시스템을 설계합니다.",
+      aboutHeadline: "이유를 먼저 따집니다.",
+      aboutRole: "Full-stack",
+      aboutBio: "문제와 운영을 같이 봅니다.",
+      aboutSections: [
+        {
+          id: "career",
+          title: "경력",
+          items: ["2026.03 Aquila Blog 운영"],
+          dividerBefore: false,
+        },
+      ],
+      aboutProjectSectionTitle: "프로젝트",
+      aboutProjects: [
+        {
+          id: "blog",
+          name: "aquila-blog",
+          summary: "관리자에서 직접 수정하는 프로젝트",
+          role: "Full-stack",
+          href: "https://github.com/AquilaXk/aquila-blog",
+          linkLabel: "GitHub",
+        },
+      ],
+      blogTitle: "AquilaLog",
+      homeIntroTitle: "비밀스러운 IT 공작소",
+      homeIntroDescription: "비밀스러운 지식들을 탐구하는데 목적을 두고 있습니다",
+      serviceLinks: [],
+      contactLinks: [],
+    })
+
+    expect(bridge.profileImageUrl).toBe("/profile.png")
+    expect(bridge.profileImageDirectUrl).toBe("/profile.png")
+    expect(bridge.aboutHeadline).toBe("이유를 먼저 따집니다.")
+    expect(bridge.aboutSections.map((section) => section.title)).toEqual(["경력"])
+    expect(bridge.aboutProjectSectionTitle).toBe("프로젝트")
+    expect(bridge.aboutProjects.map((project) => project.name)).toEqual(["aquila-blog"])
+    expect(bridge.aboutDetails).toContain("## 경력")
+    expect(bridge.aboutDetails).toContain("- 2026.03 Aquila Blog 운영")
   })
 
   test("profile workspace 정규화는 structured 프로젝트가 있으면 legacy 프로젝트 상세 블록을 제거한다", () => {

@@ -258,6 +258,10 @@ test.describe("editor studio state", () => {
       path.resolve(__dirname, "../src/components/editor/tableRenderedDomModel.ts"),
       "utf8"
     )
+    const tableCornerGrowModelSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/tableCornerGrowModel.ts"),
+      "utf8"
+    )
     const editorStudioSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"),
       "utf8"
@@ -338,9 +342,17 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).toContain('const TableCellMenuButton = styled(TableHandleButton)`')
     expect(blockEditorEngineSource).toContain("const updateActiveTableOverflowMode = useCallback(")
     expect(blockEditorEngineSource).toContain("const reorderTableAxisAtPosition = useCallback(")
-    expect(blockEditorEngineSource).toContain("const getTableCornerGrowStepMetrics = useCallback(")
-    expect(blockEditorEngineSource).toContain("type TableCornerPreviewState = {")
-    expect(blockEditorEngineSource).toContain("const resolveTableCornerPreviewState = useCallback(")
+    expect(tableCornerGrowModelSource).toContain("export type TableCornerGrowState = {")
+    expect(tableCornerGrowModelSource).toContain("export type TableCornerPreviewState = {")
+    expect(tableCornerGrowModelSource).toContain("export const resolveTableCornerPreviewState = (")
+    expect(tableCornerGrowModelSource).toContain("export const resolveTableCornerGrowStepMetrics = (")
+    expect(tableCornerGrowModelSource).toContain("export const resolveTableCornerGrowStepMetricsFromDataset = (")
+    expect(blockEditorEngineSource).toContain('} from "./tableCornerGrowModel"')
+    expect(blockEditorEngineSource).not.toContain("type TableCornerGrowState = {")
+    expect(blockEditorEngineSource).not.toContain("type TableCornerPreviewState = {")
+    expect(blockEditorEngineSource).not.toContain("const resolveTableCornerPreviewState = useCallback(")
+    expect(blockEditorEngineSource).not.toContain("const getTableCornerGrowStepMetrics = useCallback(")
+    expect(blockEditorEngineSource).not.toContain("const getTableCornerGrowStepMetricsFromHandle = useCallback(")
     expect(blockEditorEngineSource).toContain("const applyTableCornerGrowSteps = useCallback(")
     expect(blockEditorEngineSource).toContain("const shrinkTableAxisAtEnd = useCallback(")
     expect(blockEditorEngineSource).toContain("const beginTableAxisDragFromPending = useCallback(")
@@ -359,7 +371,7 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).toContain('const isColumnMenuOpen = tableMenuKind === "column"')
     expect(blockEditorEngineSource).toContain("activeTableStructureState.hasHeaderRow")
     expect(blockEditorEngineSource).toContain("activeTableStructureState.hasHeaderColumn")
-    expect(blockEditorEngineSource).toContain("const tableCornerGrowStepMetrics = getTableCornerGrowStepMetrics()")
+    expect(blockEditorEngineSource).toContain("const tableCornerGrowStepMetrics = resolveTableCornerGrowStepMetrics(tableAffordanceGeometry)")
     expect(blockEditorEngineSource).toContain("data-column-step={tableCornerGrowStepMetrics.columnStepPx}")
     expect(blockEditorEngineSource).toContain("data-row-step={tableCornerGrowStepMetrics.rowStepPx}")
     expect(blockEditorEngineSource).toContain('aria-label="표 구조 메뉴"')

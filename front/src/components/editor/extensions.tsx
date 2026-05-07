@@ -2704,7 +2704,7 @@ const CodeBlockEditorSurface = styled.div`
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
-    touch-action: pan-x;
+    touch-action: pan-x pan-y;
   }
 
   .aq-code-highlight-layer,

@@ -131,6 +131,10 @@ test.describe("editor studio state", () => {
     const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
     const blockEditorShellSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"), "utf8")
     const blockEditorEngineSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"), "utf8")
+    const blockSelectionModelSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/blockSelectionModel.ts"),
+      "utf8"
+    )
     const writerEditorHostSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/WriterEditorHost.tsx"), "utf8")
 
     expect(editorStudioSource).not.toContain("BLOCK_EDITOR_V2_ENABLED")
@@ -173,6 +177,12 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).toContain(".aq-block-editor__content blockquote {")
     expect(blockEditorEngineSource).toContain("border-left: 4px solid")
     expect(blockEditorEngineSource).toContain("border-radius: 0;")
+    expect(blockEditorEngineSource).toContain('from "./blockSelectionModel"')
+    expect(blockEditorEngineSource).not.toMatch(/const\s+isStableBlockHandleState\s*=/)
+    expect(blockEditorEngineSource).not.toMatch(/const\s+isStableBlockSelectionOverlayState\s*=/)
+    expect(blockEditorEngineSource).not.toMatch(/const\s+resolveOuterBlockSelectionGesture\s*=/)
+    expect(blockSelectionModelSource).toContain("export const resolveOuterBlockSelectionGesture")
+    expect(blockSelectionModelSource).toContain("export const resolveOuterListItemSelectionGesture")
     const selectionRuleMatch = blockEditorEngineSource.match(/\.aq-block-editor__content ::selection\s*\{([^}]*)\}/)
     expect(selectionRuleMatch?.[1]).toBeTruthy()
     expect(selectionRuleMatch?.[1]).not.toMatch(/\bcolor\s*:/)

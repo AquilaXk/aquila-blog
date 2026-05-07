@@ -18,11 +18,14 @@ import "prismjs/components/prism-kotlin.js"
 
 export type PrismLike = {
   languages?: Record<string, unknown>
+  manual?: boolean
   highlightElement: (element: Element) => void
   highlight?: (text: string, grammar: unknown, language: string) => string
 }
 
-;(globalThis as { Prism?: PrismLike }).Prism = Prism as PrismLike
+const prismRuntime = Prism as PrismLike
+prismRuntime.manual = true
+;(globalThis as { Prism?: PrismLike }).Prism = prismRuntime
 
 let prismLoader: Promise<PrismLike> | null = null
 const loadedLoaders = new Set<string>()

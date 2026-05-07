@@ -129,6 +129,7 @@ const getTableAffordances = (page: Page) => ({
 })
 
 type ListItemHandleMetrics = {
+  itemLeft: number
   itemCenterY: number
   handleCenterY: number
   handleBox: { x: number; y: number; width: number; height: number }
@@ -185,6 +186,7 @@ const readListItemHandleMetrics = async (
       const textBlock = targetItem.querySelector("p") as HTMLElement | null
 
       return {
+        itemLeft: itemRect.left,
         itemCenterY: itemRect.top + itemRect.height / 2,
         handleCenterY: handleRect.top + handleRect.height / 2,
         handleBox: {
@@ -1262,10 +1264,10 @@ test.describe("block editor authoring flow", () => {
     const selectedMetrics = await expectListItemHandleReady(page, "Retry", "목록 항목 이동")
     const selectedHandleBox = selectedMetrics.handleBox
 
-    expect(selectedMetrics.boxShadow?.includes("inset")).toBeFalsy()
+    expect(selectedMetrics.boxShadow).toBe("none")
     expect(selectedMetrics.textLeft).not.toBeNull()
-    expect(selectedHandleBox.x + selectedHandleBox.width + 2).toBeLessThanOrEqual(
-      selectedMetrics.textLeft ?? 0
+    expect(selectedHandleBox.x + selectedHandleBox.width + 6).toBeLessThanOrEqual(
+      selectedMetrics.itemLeft
     )
   })
 
@@ -1518,7 +1520,15 @@ test.describe("block editor authoring flow", () => {
     if (!textBlockRect) {
       throw new Error("텍스트 블록 좌표를 계산할 수 없습니다.")
     }
-    await textBlock.dblclick({ position: { x: 4, y: Math.max(4, textBlockRect.height / 2) } })
+    await textBlock.dispatchEvent("mousedown", {
+      button: 0,
+      buttons: 1,
+      clientX: textBlockRect.x - 12,
+      clientY: textBlockRect.y + textBlockRect.height / 2,
+      detail: 2,
+      bubbles: true,
+      cancelable: true,
+    })
     await expect(selectionOverlay).toBeVisible()
     await expect
       .poll(() => textBlock.evaluate((element) => window.getComputedStyle(element).boxShadow))
@@ -1751,6 +1761,47 @@ test.describe("block editor authoring flow", () => {
       railBox.y + railBox.height > paragraphBox.y
 
     expect(overlapsParagraph).toBe(false)
+  })
+
+  test("writer surface의 본문 첫 글자 더블클릭은 글블록 전체 선택으로 승격되지 않는다", async ({
+    page,
+  }) => {
+    await page.goto(QA_WRITER_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await expect(editor).toBeVisible()
+    await editor.locator("p").first().click()
+    await page.keyboard.type("전체 선택 테두리 방지")
+
+    const paragraph = editor.locator("p", { hasText: "전체 선택 테두리 방지" }).first()
+    await expect(paragraph).toBeVisible()
+    const paragraphBox = await paragraph.boundingBox()
+    if (!paragraphBox) {
+      throw new Error("본문 첫 글자 더블클릭 좌표를 계산할 수 없습니다.")
+    }
+
+    await paragraph.dispatchEvent("mousedown", {
+      button: 0,
+      buttons: 1,
+      clientX: paragraphBox.x + 2,
+      clientY: paragraphBox.y + paragraphBox.height / 2,
+      detail: 2,
+      bubbles: true,
+      cancelable: true,
+    })
+
+    await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
+    await expect
+      .poll(() =>
+        paragraph.evaluate((element) => ({
+          selected: element.getAttribute("data-block-selected"),
+          boxShadow: window.getComputedStyle(element).boxShadow,
+        }))
+      )
+      .toMatchObject({
+        selected: null,
+        boxShadow: "none",
+      })
   })
 
   test("table hover에서도 block selection affordance를 다시 띄우고 table block selection으로 전환할 수 있다", async ({ page }) => {

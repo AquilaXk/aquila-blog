@@ -247,4 +247,31 @@ class ArchitectureGuardTest {
 
         assertThat(violations).isEmpty()
     }
+
+    @Test
+    fun `backend Gradle build logic은 목적별 script plugin으로 분리되어야 한다`() {
+        val buildGradle = Files.readString(Path.of("build.gradle.kts"))
+        val requiredScripts =
+            listOf(
+                "gradle/backend-test-infra.gradle.kts",
+                "gradle/backend-jacoco.gradle.kts",
+                "gradle/backend-ktlint.gradle.kts",
+            )
+
+        assertThat(requiredScripts)
+            .allSatisfy { scriptPath ->
+                assertThat(Path.of(scriptPath)).exists()
+                assertThat(buildGradle).contains("""apply(from = "$scriptPath")""")
+            }
+
+        assertThat(buildGradle)
+            .doesNotContain(
+                "fun Project.runTestInfraCommand",
+                "fun Project.startTestInfra",
+                """register<Test>("testcontainersTest")""",
+                "tasks.register<JacocoReport>",
+                "tasks.register<JacocoCoverageVerification>",
+                "ktlint {",
+            )
+    }
 }

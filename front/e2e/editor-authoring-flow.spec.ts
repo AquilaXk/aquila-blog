@@ -841,6 +841,85 @@ test.describe("block editor authoring flow", () => {
     expect(colors.string).not.toBe(colors.base)
   })
 
+  test("코드 블록 hover scroll surface는 wrapper chrome transition과 세로 gesture 차단을 쓰지 않는다", async ({ page }) => {
+    const seed = encodeURIComponent("```javascript\nconst count = 1;\nreturn \"ok\";\n```\n\n아래 문단")
+    await page.goto(`${QA_ENGINE_ROUTE}&seed=${seed}`)
+
+    const codeWrapper = page.locator("[data-code-block-wrapper='true']").first()
+    const codeShell = page.locator(".aq-code-shell").first()
+    await expect(codeWrapper).toBeVisible()
+    await expect(codeShell.locator(".aq-code-highlight-layer .token.keyword").first()).toBeVisible()
+
+    const metrics = await codeWrapper.evaluate((element) => {
+      const wrapperStyle = window.getComputedStyle(element as HTMLElement)
+      const shell = element.querySelector<HTMLElement>(".aq-code-shell")
+      const shellStyle = shell ? window.getComputedStyle(shell) : null
+      return {
+        transitionProperty: wrapperStyle.transitionProperty,
+        shellTouchAction: shellStyle?.touchAction ?? "",
+      }
+    })
+
+    expect(metrics.transitionProperty.split(",").map((property) => property.trim())).not.toEqual(
+      expect.arrayContaining(["background-color", "box-shadow"])
+    )
+    expect(metrics.shellTouchAction === "auto" || metrics.shellTouchAction.includes("pan-y")).toBe(true)
+  })
+
+  test("wide table hover 중 wheel 입력은 page scroll chain을 유지한다", async ({ page }) => {
+    await page.setViewportSize({ width: 980, height: 900 })
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    const wideTableMarkdown = [
+      "| A | B | C | D | E | F | G |",
+      "| --- | --- | --- | --- | --- | --- | --- |",
+      "| 1 | 2 | 3 | 4 | 5 | 6 | 7 |",
+      "| aa | bb | cc | dd | ee | ff | gg |",
+    ].join("\n")
+    await editor.evaluate((element, markdown) => {
+      const data = new DataTransfer()
+      data.setData("text/plain", markdown)
+      const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true })
+      Object.defineProperty(event, "clipboardData", { value: data })
+      element.dispatchEvent(event)
+    }, wideTableMarkdown)
+
+    const tableWrapper = page.locator(".aq-block-editor__content .tableWrapper").first()
+    const table = tableWrapper.locator("table")
+    await expect(tableWrapper).toBeVisible()
+    await expect(table).toHaveAttribute("data-overflow-mode", "wide")
+    await page.evaluate(() => {
+      const spacer = document.createElement("div")
+      spacer.setAttribute("data-testid", "qa-scroll-spacer")
+      spacer.style.height = "2400px"
+      document.body.appendChild(spacer)
+    })
+
+    await tableWrapper.scrollIntoViewIfNeeded()
+    const box = await tableWrapper.boundingBox()
+    if (!box) {
+      throw new Error("table wrapper metrics are missing before wheel")
+    }
+    const overflowContract = await tableWrapper.evaluate((element) => {
+      const style = window.getComputedStyle(element as HTMLElement)
+      return {
+        overscrollY: (style as CSSStyleDeclaration & { overscrollBehaviorY?: string }).overscrollBehaviorY || "",
+        touchAction: style.touchAction,
+      }
+    })
+    expect(overflowContract.overscrollY || "auto").toBe("auto")
+    expect(overflowContract.touchAction === "auto" || overflowContract.touchAction.includes("pan-y")).toBe(true)
+
+    await page.mouse.move(box.x + Math.min(box.width / 2, 120), box.y + Math.min(box.height / 2, 40))
+
+    const beforeScrollY = await page.evaluate(() => window.scrollY)
+    await page.mouse.wheel(0, 420)
+
+    await expect.poll(async () => page.evaluate(() => window.scrollY)).toBeGreaterThan(beforeScrollY + 120)
+  })
+
   test("코드 언어 선택 팝오버는 본문 숨김 텍스트 스타일을 상속하지 않는다", async ({ page }) => {
     const seed = encodeURIComponent("```javascript\nconst answer = 42;\n```")
     await page.goto(`${QA_ENGINE_ROUTE}&seed=${seed}`)

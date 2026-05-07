@@ -123,6 +123,12 @@ import {
   countShrinkableTableAxisAtEnd,
 } from "./tableStructureModel"
 import { normalizeTableContextPasteText } from "./tablePasteModel"
+import {
+  findActiveRenderedTable,
+  readRenderedColumnWidths,
+  resolveActiveRenderedTableForFloatingUi,
+  resolveTableScopedSelectedCell,
+} from "./tableRenderedDomModel"
 
 type RuntimeGuardWindow = Window & {
   __AQ_RUNTIME_GUARD_ENABLED__?: boolean
@@ -1175,51 +1181,6 @@ const shouldClampTableWidthBudget = () => {
   return !window.matchMedia(DESKTOP_TABLE_RAIL_MEDIA_QUERY).matches
 }
 
-const findActiveRenderedTable = (
-  viewport: HTMLElement | null,
-  quickRailGeometry: TableAffordanceGeometry | null,
-  preferredTable?: HTMLTableElement | null
-) => {
-  if (!viewport || !quickRailGeometry) return null
-
-  if (preferredTable?.isConnected && viewport.contains(preferredTable)) {
-    return preferredTable
-  }
-
-  const renderedTables = Array.from(
-    viewport.querySelectorAll<HTMLTableElement>(".aq-block-editor__content .tableWrapper table, .aq-block-editor__content table")
-  )
-  if (!renderedTables.length) return null
-
-  const withinHorizontalTolerance = (left: number, right: number) =>
-    Math.abs(left - quickRailGeometry.tableLeft) <= 6 &&
-    Math.abs(right - (quickRailGeometry.tableLeft + quickRailGeometry.width)) <= 6
-  const withinFullTolerance = (rect: DOMRect) =>
-    withinHorizontalTolerance(rect.left, rect.right) && Math.abs(rect.top - quickRailGeometry.tableTop) <= 6
-
-  return (
-    renderedTables.find((table) => {
-      const rect = table.getBoundingClientRect()
-      return withinFullTolerance(rect)
-    }) ??
-    renderedTables.find((table) => {
-      const rect = table.getBoundingClientRect()
-      return withinHorizontalTolerance(rect.left, rect.right)
-    }) ?? renderedTables[0] ?? null
-  )
-}
-
-const resolveTableScopedSelectedCell = (tableElement: ParentNode | null) =>
-  (tableElement?.querySelector(".selectedCell") as HTMLElement | null) ?? null
-
-const resolveActiveRenderedTableForFloatingUi = (
-  viewport: HTMLElement | null,
-  quickRailGeometry: TableAffordanceGeometry | null,
-  preferredTable?: HTMLTableElement | null
-) =>
-  findActiveRenderedTable(viewport, quickRailGeometry, preferredTable) ??
-  (viewport?.querySelector(".aq-block-editor__content .tableWrapper table, .aq-block-editor__content table") as HTMLTableElement | null)
-
 const readColumnWidthFromCell = (cell: TableColumnCellRef) => {
   const widthValue = Array.isArray(cell.node.attrs?.colwidth) ? cell.node.attrs?.colwidth[0] : null
   return typeof widthValue === "number" && Number.isFinite(widthValue) && widthValue > 0
@@ -1232,14 +1193,6 @@ const hasExplicitColumnWidth = (column: TableColumnCellRef[]) =>
     const widthValue = Array.isArray(cell.node.attrs?.colwidth) ? cell.node.attrs?.colwidth[0] : null
     return typeof widthValue === "number" && Number.isFinite(widthValue) && widthValue > 0
   })
-
-const readRenderedColumnWidths = (tableElement: HTMLElement | null) => {
-  if (!tableElement) return []
-
-  return Array.from(
-    tableElement.querySelectorAll<HTMLElement>("thead tr:first-of-type > th, thead tr:first-of-type > td, tbody tr:first-of-type > th, tbody tr:first-of-type > td, tr:first-of-type > th, tr:first-of-type > td")
-  ).map((cell) => Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(cell.getBoundingClientRect().width)))
-}
 
 const applyTableColumnWidthsToTransaction = (
   transaction: Transaction,

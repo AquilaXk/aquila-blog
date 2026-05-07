@@ -254,6 +254,10 @@ test.describe("editor studio state", () => {
       path.resolve(__dirname, "../src/components/editor/tablePasteModel.ts"),
       "utf8"
     )
+    const tableRenderedDomModelSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/tableRenderedDomModel.ts"),
+      "utf8"
+    )
     const editorStudioSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"),
       "utf8"
@@ -319,6 +323,15 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).not.toContain("const normalizeTableContextPasteText = (")
     expect(blockEditorEngineSource).not.toContain("const normalizeTableContextPasteLine = (")
     expect(blockEditorEngineSource).not.toContain("const isMarkdownTableRow = (")
+    expect(tableRenderedDomModelSource).toContain("export const findActiveRenderedTable = (")
+    expect(tableRenderedDomModelSource).toContain("export const resolveTableScopedSelectedCell = (")
+    expect(tableRenderedDomModelSource).toContain("export const resolveActiveRenderedTableForFloatingUi = (")
+    expect(tableRenderedDomModelSource).toContain("export const readRenderedColumnWidths = (")
+    expect(blockEditorEngineSource).toContain('} from "./tableRenderedDomModel"')
+    expect(blockEditorEngineSource).not.toContain("const findActiveRenderedTable = (")
+    expect(blockEditorEngineSource).not.toContain("const resolveTableScopedSelectedCell = (")
+    expect(blockEditorEngineSource).not.toContain("const resolveActiveRenderedTableForFloatingUi = (")
+    expect(blockEditorEngineSource).not.toContain("const readRenderedColumnWidths = (")
     expect(blockEditorEngineSource).toContain('data-testid="table-row-drag-shadow"')
     expect(blockEditorEngineSource).toContain('"table-row-reorder-indicator"')
     expect(blockEditorEngineSource).toContain('"table-column-reorder-indicator"')

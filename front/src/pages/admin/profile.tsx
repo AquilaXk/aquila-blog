@@ -21,7 +21,7 @@ import { setAdminProfileCache, toAdminProfile } from "src/hooks/useAdminProfile"
 import { setProfileWorkspaceCache, useProfileWorkspace } from "src/hooks/useProfileWorkspace"
 import useViewportImageEditor from "src/libs/imageEditor/useViewportImageEditor"
 import {
-  buildLegacyAboutDetails,
+  buildProfileWorkspaceAdminProfileCacheFields,
   buildProfileWorkspaceFromLegacy,
   AboutProjectBlock,
   normalizeProfileWorkspaceContent,
@@ -461,22 +461,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
           username: owner.username,
           name: owner.nickname || owner.username,
           nickname: owner.nickname || owner.username,
-          profileImageUrl: content.profileImageUrl,
-          profileImageDirectUrl: content.profileImageUrl,
-          profileRole: content.profileRole,
-          profileBio: content.profileBio,
-          aboutHeadline: content.aboutHeadline,
-          aboutRole: content.aboutRole,
-          aboutBio: content.aboutBio,
-          aboutDetails: buildLegacyAboutDetails(content.aboutSections),
-          aboutSections: content.aboutSections,
-          aboutProjectSectionTitle: content.aboutProjectSectionTitle,
-          aboutProjects: content.aboutProjects,
-          blogTitle: content.blogTitle,
-          homeIntroTitle: content.homeIntroTitle,
-          homeIntroDescription: content.homeIntroDescription,
-          serviceLinks: content.serviceLinks,
-          contactLinks: content.contactLinks,
+          ...buildProfileWorkspaceAdminProfileCacheFields(content),
         })
       )
     },

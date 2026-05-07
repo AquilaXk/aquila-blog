@@ -238,6 +238,10 @@ test.describe("editor studio state", () => {
       path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"),
       "utf8"
     )
+    const tableAffordanceModelSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/tableAffordanceModel.ts"),
+      "utf8"
+    )
     const editorStudioSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"),
       "utf8"
@@ -263,7 +267,9 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).toContain("const tableOverlayPortal =")
     expect(blockEditorEngineSource).toContain("createPortal(tableOverlay, document.body)")
     expect(blockEditorEngineSource).toContain("const TABLE_EDGE_HANDLE_INSET_PX = 6")
-    expect(blockEditorEngineSource).toContain("const TABLE_EDGE_ADD_BUTTON_SIZE_PX = 24")
+    expect(tableAffordanceModelSource).toContain("export const TABLE_EDGE_ADD_BUTTON_SIZE_PX = 24")
+    expect(tableAffordanceModelSource).toContain("export const TABLE_CELL_MENU_BUTTON_SIZE_PX = 22")
+    expect(tableAffordanceModelSource).toContain("export const TABLE_ADD_BAR_VIEWPORT_PADDING_PX = 8")
     expect(blockEditorEngineSource).toContain('data-testid="table-corner-grow-handle"')
     expect(blockEditorEngineSource).toContain('data-testid="table-corner-preview-outline"')
     expect(blockEditorEngineSource).toContain('data-testid="table-structure-menu-button"')
@@ -310,10 +316,16 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).toContain("넓은 표")
     expect(blockEditorEngineSource).toContain("제목 행")
     expect(blockEditorEngineSource).toContain("제목 열")
-    expect(blockEditorEngineSource).toContain("type TableAffordanceGeometry = {")
-    expect(blockEditorEngineSource).toContain("type TableAffordanceVisibility = {")
-    expect(blockEditorEngineSource).toContain("const INITIAL_TABLE_AFFORDANCE_GEOMETRY: TableAffordanceGeometry = {")
-    expect(blockEditorEngineSource).toContain("const INITIAL_TABLE_AFFORDANCE_VISIBILITY: TableAffordanceVisibility = {")
+    expect(tableAffordanceModelSource).toContain("export type TableAffordanceGeometry = {")
+    expect(tableAffordanceModelSource).toContain("export type TableAffordanceVisibility = {")
+    expect(tableAffordanceModelSource).toContain("export const INITIAL_TABLE_AFFORDANCE_GEOMETRY: TableAffordanceGeometry = {")
+    expect(tableAffordanceModelSource).toContain("export const INITIAL_TABLE_AFFORDANCE_VISIBILITY: TableAffordanceVisibility = {")
+    expect(tableAffordanceModelSource).toContain("export const resolveDesktopTableRailLayout = (")
+    expect(blockEditorEngineSource).toContain('} from "./tableAffordanceModel"')
+    expect(blockEditorEngineSource).not.toContain("type TableAffordanceGeometry = {")
+    expect(blockEditorEngineSource).not.toContain("type TableAffordanceVisibility = {")
+    expect(blockEditorEngineSource).not.toContain("const INITIAL_TABLE_AFFORDANCE_GEOMETRY: TableAffordanceGeometry = {")
+    expect(blockEditorEngineSource).not.toContain("const INITIAL_TABLE_AFFORDANCE_VISIBILITY: TableAffordanceVisibility = {")
     expect(blockEditorEngineSource).toContain("const [tableAffordanceGeometry, setTableAffordanceGeometry] = useState<TableAffordanceGeometry>(")
     expect(blockEditorEngineSource).toContain(
       "const [tableAffordanceVisibility, setTableAffordanceVisibility] = useState<TableAffordanceVisibility>("

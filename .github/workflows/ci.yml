@@ -17,6 +17,10 @@ permissions:
 
 jobs:
   backend-ci:
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
     uses: ./.github/workflows/reusable-backend-quality.yml
     secrets:
       CI_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}

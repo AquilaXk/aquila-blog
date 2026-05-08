@@ -154,12 +154,16 @@ import {
 } from "./blockHandleLayoutModel"
 import {
   type NestedListItemContext,
-  LIST_CONTAINER_SELECTOR,
   LIST_ITEM_SELECTOR,
   getActiveListItemName,
   getListItemNameFromContext,
-  isListItemNodeName,
   isSameNestedListItemContext,
+  resolveNestedListItemContextByClientPosition,
+  resolveNestedListItemContextByIndices as resolveNestedListItemContextFromBlockElement,
+  resolveNestedListItemContextFromTarget,
+  resolveNestedListItemDropIndicator,
+  resolveNodeSelectedNestedListItemContext,
+  resolveSelectionAnchorNestedListItemContext,
   sameListPath,
   selectNestedListItemNode,
   selectNestedListItemTextAnchor,
@@ -2080,157 +2084,55 @@ const BlockEditorEngine = ({
     []
   )
 
-  const findNestedListItemContextFromTarget = useCallback(
-    (target: EventTarget | null) => {
+  const resolveNestedListBlockIndex = useCallback(
+    (blockElement: HTMLElement) => {
       const root = getContentRoot()
-      if (!root || !(target instanceof Element)) return null
-
-      const listItemElement = target.closest(LIST_ITEM_SELECTOR)
-      if (!(listItemElement instanceof HTMLElement)) return null
-      const listElement = listItemElement.closest(LIST_CONTAINER_SELECTOR)
-      if (!(listElement instanceof HTMLElement)) return null
-
-      let blockElement: Element | null = listElement
-      while (blockElement && blockElement.parentElement !== root) {
-        blockElement = blockElement.parentElement
-      }
-
-      if (!(blockElement instanceof HTMLElement) || blockElement.parentElement !== root) return null
-      const listBlockIndex = getTopLevelBlockElements().indexOf(blockElement)
-      if (listBlockIndex < 0) return null
-
-      const listItems = Array.from(listElement.querySelectorAll(`:scope > ${LIST_ITEM_SELECTOR}`)) as HTMLElement[]
-      const itemIndex = listItems.indexOf(listItemElement)
-      if (itemIndex < 0) return null
-
-      const listPath: number[] = []
-      let currentListElement: HTMLElement | null = listElement
-      while (currentListElement && currentListElement !== blockElement) {
-        const parentListItem: HTMLElement | null =
-          currentListElement.parentElement?.closest(LIST_ITEM_SELECTOR) ?? null
-        if (!(parentListItem instanceof HTMLElement)) break
-        const parentList: HTMLElement | null =
-          parentListItem.parentElement?.closest(LIST_CONTAINER_SELECTOR) ?? null
-        if (!(parentList instanceof HTMLElement)) break
-
-        const siblingItems = Array.from(parentList.querySelectorAll(`:scope > ${LIST_ITEM_SELECTOR}`)) as HTMLElement[]
-        const parentItemIndex = siblingItems.indexOf(parentListItem)
-        if (parentItemIndex < 0) break
-
-        listPath.unshift(parentItemIndex)
-        currentListElement = parentList
-      }
-
-      return {
-        listBlockIndex,
-        listPath,
-        itemIndex,
-        listItemElement,
-        listElement,
-        listItems,
-      }
+      if (!root || blockElement.parentElement !== root) return null
+      const index = getTopLevelBlockElements().indexOf(blockElement)
+      return index >= 0 ? index : null
     },
     [getContentRoot, getTopLevelBlockElements]
   )
 
+  const findNestedListItemContextFromTarget = useCallback(
+    (target: EventTarget | null) => resolveNestedListItemContextFromTarget(target, resolveNestedListBlockIndex),
+    [resolveNestedListBlockIndex]
+  )
+
   const findNestedListItemContextByClientPosition = useCallback(
     (clientX: number, clientY: number) => {
-      const root = getContentRoot()
-      if (!root) return null
-
-      const candidates = Array.from(root.querySelectorAll<HTMLElement>(LIST_ITEM_SELECTOR))
-        .map((element) => {
-          const rect = element.getBoundingClientRect()
-          return { element, rect, area: rect.width * rect.height }
-        })
-        .filter(({ rect }) => {
-          if (rect.width <= 0 || rect.height <= 0) return false
-          return (
-            clientY >= rect.top &&
-            clientY <= rect.bottom &&
-            clientX >= rect.left - BLOCK_OUTER_SELECT_LEFT_GUTTER_PX &&
-            clientX <= rect.right + 8
-          )
-        })
-        .sort((left, right) => left.area - right.area)
-
-      return candidates[0] ? findNestedListItemContextFromTarget(candidates[0].element) : null
+      return resolveNestedListItemContextByClientPosition(
+        getContentRoot(),
+        clientX,
+        clientY,
+        resolveNestedListBlockIndex,
+        {
+          leftGutterPx: BLOCK_OUTER_SELECT_LEFT_GUTTER_PX,
+          rightPaddingPx: 8,
+        }
+      )
     },
-    [findNestedListItemContextFromTarget, getContentRoot]
+    [getContentRoot, resolveNestedListBlockIndex]
   )
 
   const getNodeSelectedNestedListItemContext = useCallback(
     (currentEditor: TiptapEditor) => {
-      const selection = currentEditor.state.selection as typeof currentEditor.state.selection & {
-        node?: ProseMirrorNode
-      }
-      if (!(selection instanceof NodeSelection) || !isListItemNodeName(selection.node?.type?.name)) {
-        return null
-      }
-
-      const domNode = currentEditor.view.nodeDOM(selection.from)
-      return findNestedListItemContextFromTarget(domNode)
+      return resolveNodeSelectedNestedListItemContext(currentEditor, resolveNestedListBlockIndex)
     },
-    [findNestedListItemContextFromTarget]
+    [resolveNestedListBlockIndex]
   )
 
   const getSelectionAnchorNestedListItemContext = useCallback(
     (currentEditor: TiptapEditor) => {
-      const { $from } = currentEditor.state.selection
-
-      for (let depth = $from.depth; depth > 0; depth -= 1) {
-        if (!isListItemNodeName($from.node(depth)?.type?.name)) continue
-
-        try {
-          const domNode = currentEditor.view.nodeDOM($from.before(depth))
-          return findNestedListItemContextFromTarget(domNode)
-        } catch {
-          return null
-        }
-      }
-
-      return null
+      return resolveSelectionAnchorNestedListItemContext(currentEditor, resolveNestedListBlockIndex)
     },
-    [findNestedListItemContextFromTarget]
+    [resolveNestedListBlockIndex]
   )
 
   const resolveNestedListItemContextByIndices = useCallback(
     (listBlockIndex: number, listPath: number[], itemIndex: number) => {
       const blockElement = getTopLevelBlockElementByIndex(listBlockIndex)
-      if (!(blockElement instanceof HTMLElement)) return null
-
-      let currentListElement: HTMLElement | null = blockElement.matches(LIST_CONTAINER_SELECTOR) ? blockElement : null
-      if (!currentListElement) return null
-
-      for (const parentItemIndex of listPath) {
-        const parentItems = Array.from(
-          currentListElement.querySelectorAll(`:scope > ${LIST_ITEM_SELECTOR}`)
-        ) as HTMLElement[]
-        const parentItem = parentItems[parentItemIndex]
-        if (!(parentItem instanceof HTMLElement)) return null
-        const nestedListElement =
-          Array.from(parentItem.children).find(
-            (child): child is HTMLElement =>
-              child instanceof HTMLElement && child.matches(LIST_CONTAINER_SELECTOR)
-          ) ?? null
-        if (!(nestedListElement instanceof HTMLElement)) return null
-        currentListElement = nestedListElement
-      }
-
-      const listItems = Array.from(
-        currentListElement.querySelectorAll(`:scope > ${LIST_ITEM_SELECTOR}`)
-      ) as HTMLElement[]
-      const listItemElement = listItems[itemIndex]
-      if (!(listItemElement instanceof HTMLElement)) return null
-
-      return {
-        listBlockIndex,
-        listPath,
-        itemIndex,
-        listItemElement,
-        listElement: currentListElement,
-        listItems,
-      } satisfies NestedListItemContext
+      return resolveNestedListItemContextFromBlockElement(blockElement, listBlockIndex, listPath, itemIndex)
     },
     [getTopLevelBlockElementByIndex]
   )
@@ -2295,41 +2197,7 @@ const BlockEditorEngine = ({
   }, [selectedListItemContext])
 
   const resolveNestedListItemDropIndicatorByClientY = useCallback(
-    (taskListElement: HTMLElement, clientY: number) => {
-      const taskItems = Array.from(
-        taskListElement.querySelectorAll(`:scope > ${LIST_ITEM_SELECTOR}`)
-      ) as HTMLElement[]
-      if (!taskItems.length) {
-        const rect = taskListElement.getBoundingClientRect()
-        return {
-          insertionIndex: 0,
-          top: Math.round(rect.top),
-          left: Math.round(rect.left),
-          width: Math.round(rect.width),
-        }
-      }
-
-      let insertionIndex = taskItems.length
-      let top = taskItems[taskItems.length - 1].getBoundingClientRect().bottom
-
-      for (let index = 0; index < taskItems.length; index += 1) {
-        const rect = taskItems[index].getBoundingClientRect()
-        const midpoint = rect.top + rect.height / 2
-        if (clientY < midpoint) {
-          insertionIndex = index
-          top = rect.top
-          break
-        }
-      }
-
-      const rootRect = taskListElement.getBoundingClientRect()
-      return {
-        insertionIndex,
-        top: Math.round(top),
-        left: Math.round(rootRect.left + 12),
-        width: Math.max(48, Math.round(rootRect.width - 24)),
-      }
-    },
+    (listElement: HTMLElement, clientY: number) => resolveNestedListItemDropIndicator(listElement, clientY),
     []
   )
 

@@ -130,6 +130,14 @@ test.describe("editor studio state", () => {
   test("editor studio는 v2 단일 경로와 단일 작성 모드 계약을 유지한다", () => {
     const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
     const editorStudioStateSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/editorStudioState.ts"), "utf8")
+    const editorStudioThumbnailPreviewPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/useEditorStudioThumbnailPreview.ts"
+    )
+    expect(existsSync(editorStudioThumbnailPreviewPath)).toBe(true)
+    const editorStudioThumbnailPreviewSource = existsSync(editorStudioThumbnailPreviewPath)
+      ? readFileSync(editorStudioThumbnailPreviewPath, "utf8")
+      : ""
     const blockEditorShellSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"), "utf8")
     const blockEditorEngineSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"), "utf8")
     const blockSelectionModelSource = readFileSync(
@@ -180,6 +188,22 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).not.toContain("const publishActionButtonText =")
     expect(editorStudioSource).not.toContain("const publishActionTriggerDisabled =")
     expect(editorStudioSource).not.toContain("const mobilePrimaryActionLabel =")
+    expect(editorStudioSource).toContain('import { useEditorStudioThumbnailPreview } from "./useEditorStudioThumbnailPreview"')
+    expect(editorStudioSource).not.toContain("type ThumbnailSourceSize =")
+    expect(editorStudioSource).not.toContain("type ThumbnailTransformState =")
+    expect(editorStudioSource).not.toContain("const DEFAULT_THUMBNAIL_SOURCE_SIZE")
+    expect(editorStudioSource).not.toContain("const THUMBNAIL_FRAME_ASPECT_RATIO")
+    expect(editorStudioSource).not.toContain("const resolveThumbnailDrawRatios =")
+    expect(editorStudioSource).not.toContain("const readThumbnailSourceSizeFromUrl =")
+    expect(editorStudioSource).not.toContain("const applyPreviewThumbStyle = useCallback")
+    expect(editorStudioSource).not.toContain("const normalizePreviewThumbTransform = useCallback")
+    expect(editorStudioSource).not.toContain("const computeAnchoredThumbnailTransform = useCallback")
+    expect(editorStudioSource).not.toContain("const computeDraggedThumbnailTransform = useCallback")
+    expect(editorStudioSource).not.toContain("const applyCommittedPreviewThumbTransform = useCallback")
+    expect(editorStudioThumbnailPreviewSource).toContain("export type ThumbnailTransformState =")
+    expect(editorStudioThumbnailPreviewSource).toContain("export const useEditorStudioThumbnailPreview")
+    expect(editorStudioThumbnailPreviewSource).toContain("const resolveThumbnailDrawRatios =")
+    expect(editorStudioThumbnailPreviewSource).toContain("const readThumbnailSourceSizeFromUrl =")
     expect(editorStudioStateSource).toContain("export type PostVisibility =")
     expect(editorStudioStateSource).toContain("export const toVisibility")
     expect(editorStudioStateSource).toContain("export const toFlags")

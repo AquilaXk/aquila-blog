@@ -163,6 +163,11 @@ test.describe("editor studio state", () => {
     const blockDragModelPath = path.resolve(__dirname, "../src/components/editor/blockDragModel.ts")
     expect(existsSync(blockDragModelPath)).toBe(true)
     const blockDragModelSource = existsSync(blockDragModelPath) ? readFileSync(blockDragModelPath, "utf8") : ""
+    const tableAxisDragModelPath = path.resolve(__dirname, "../src/components/editor/tableAxisDragModel.ts")
+    expect(existsSync(tableAxisDragModelPath)).toBe(true)
+    const tableAxisDragModelSource = existsSync(tableAxisDragModelPath)
+      ? readFileSync(tableAxisDragModelPath, "utf8")
+      : ""
     const nestedListItemModelPath = path.resolve(
       __dirname,
       "../src/components/editor/nestedListItemModel.ts"
@@ -320,6 +325,7 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).not.toMatch(/const\s+resolveOuterBlockSelectionGesture\s*=/)
     expect(blockEditorEngineSource).toContain('from "./blockHandleLayoutModel"')
     expect(blockEditorEngineSource).toContain('from "./blockDragModel"')
+    expect(blockEditorEngineSource).toContain('from "./tableAxisDragModel"')
     expect(blockEditorEngineSource).not.toMatch(/const\s+resolveBlockHandleAnchorTop\s*=/)
     expect(blockEditorEngineSource).not.toMatch(/const\s+resolveThinBlockHandleAnchorTop\s*=/)
     expect(blockEditorEngineSource).not.toMatch(/const\s+resolveBlockHandleRailLayout\s*=/)
@@ -331,6 +337,11 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).not.toContain("const resolveDropIndicatorByClientY = useCallback(")
     expect(blockEditorEngineSource).not.toContain("sourceElement?.textContent?.trim().slice(0, 100)")
     expect(blockEditorEngineSource).not.toContain("sourceElement?.textContent?.trim().replace(/\\s+/g, \" \").slice(0, 220)")
+    expect(blockEditorEngineSource).not.toContain("type PendingTableAxisDragState =")
+    expect(blockEditorEngineSource).not.toContain("type DraggedTableAxisState =")
+    expect(blockEditorEngineSource).not.toContain("type TableAxisReorderIndicatorState =")
+    expect(blockEditorEngineSource).not.toContain("const resolveTableAxisReorderIndicator = useCallback(")
+    expect(blockEditorEngineSource).not.toContain("const resolveTableAxisIndexFromPointer = useCallback(")
     expect(blockEditorEngineSource).not.toContain("type NestedListItemContext =")
     expect(blockEditorEngineSource).not.toMatch(/const\s+LIST_ITEM_SELECTOR\s*=/)
     expect(blockEditorEngineSource).not.toMatch(/const\s+LIST_CONTAINER_SELECTOR\s*=/)
@@ -363,6 +374,16 @@ test.describe("editor studio state", () => {
     expect(blockDragModelSource).toContain("export const createDropIndicatorState")
     expect(blockDragModelSource).toContain("export const hideDropIndicatorState")
     expect(blockDragModelSource).toContain("export const resolveBlockDropIndicatorByClientY")
+    expect(tableAxisDragModelSource).toContain("export type PendingTableAxisDragState")
+    expect(tableAxisDragModelSource).toContain("export type DraggedTableAxisState")
+    expect(tableAxisDragModelSource).toContain("export type TableAxisReorderIndicatorState")
+    expect(tableAxisDragModelSource).toContain("export const createHiddenTableAxisReorderIndicatorState")
+    expect(tableAxisDragModelSource).toContain("export const createPendingTableAxisDragState")
+    expect(tableAxisDragModelSource).toContain("export const createDraggedTableAxisState")
+    expect(tableAxisDragModelSource).toContain("export const createTableAxisDragGhostPosition")
+    expect(tableAxisDragModelSource).toContain("export const hideTableAxisReorderIndicatorState")
+    expect(tableAxisDragModelSource).toContain("export const resolveTableAxisReorderIndicator")
+    expect(tableAxisDragModelSource).toContain("export const resolveTableAxisIndexFromPointer")
     expect(nestedListItemModelSource).toContain("export type NestedListItemContext =")
     expect(nestedListItemModelSource).toContain("export const LIST_ITEM_SELECTOR")
     expect(nestedListItemModelSource).toContain("export const LIST_CONTAINER_SELECTOR")

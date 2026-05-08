@@ -489,6 +489,14 @@ test.describe("editor studio state", () => {
       path.resolve(__dirname, "../src/components/editor/tableRenderedDomModel.ts"),
       "utf8"
     )
+    const tableResizeInteractionModelPath = path.resolve(
+      __dirname,
+      "../src/components/editor/tableResizeInteractionModel.ts"
+    )
+    expect(existsSync(tableResizeInteractionModelPath)).toBe(true)
+    const tableResizeInteractionModelSource = existsSync(tableResizeInteractionModelPath)
+      ? readFileSync(tableResizeInteractionModelPath, "utf8")
+      : ""
     const tableCornerGrowModelSource = readFileSync(
       path.resolve(__dirname, "../src/components/editor/tableCornerGrowModel.ts"),
       "utf8"
@@ -512,7 +520,23 @@ test.describe("editor studio state", () => {
 
     expect(blockEditorEngineSource).toContain('data-testid="table-column-drag-guide"')
     expect(blockEditorEngineSource).toContain('data-testid={`table-column-resize-boundary-${index}`}')
-    expect(blockEditorEngineSource).toContain("const syncTableColumnDragGuideForColumn = useCallback(")
+    expect(blockEditorEngineSource).toContain('} from "./tableResizeInteractionModel"')
+    expect(tableResizeInteractionModelSource).toContain("export type TableRowResizeState = {")
+    expect(tableResizeInteractionModelSource).toContain("export type TableColumnRailResizeState = {")
+    expect(tableResizeInteractionModelSource).toContain("export type TableColumnDragGuideState = {")
+    expect(tableResizeInteractionModelSource).toContain("export const createHiddenTableColumnDragGuideState =")
+    expect(tableResizeInteractionModelSource).toContain("export const hideTableColumnDragGuideState =")
+    expect(tableResizeInteractionModelSource).toContain("export const createTableRowResizeState =")
+    expect(tableResizeInteractionModelSource).toContain("export const createTableColumnRailResizeState =")
+    expect(tableResizeInteractionModelSource).toContain("export const isRowResizeHandleTarget =")
+    expect(tableResizeInteractionModelSource).toContain("export const resolveTableColumnDragGuideState =")
+    expect(tableResizeInteractionModelSource).toContain("export const resolveTableColumnIndexFromResizeHandleTarget =")
+    expect(blockEditorEngineSource).not.toContain("type TableRowResizeState = {")
+    expect(blockEditorEngineSource).not.toContain("type TableColumnRailResizeState = {")
+    expect(blockEditorEngineSource).not.toContain("type TableColumnDragGuideState = {")
+    expect(blockEditorEngineSource).not.toContain("const isRowResizeHandleTarget = useCallback(")
+    expect(blockEditorEngineSource).not.toContain("const syncTableColumnDragGuideForColumn = useCallback(")
+    expect(blockEditorEngineSource).not.toContain("const startTableColumnResizeFromDomHandle = useCallback(")
     expect(blockEditorEngineSource).toContain("const getActiveTableRectFromDom = useCallback(")
     expect(blockEditorEngineSource).toContain('import { createPortal } from "react-dom"')
     expect(blockEditorEngineSource).toContain("const tableOverlayPortal =")

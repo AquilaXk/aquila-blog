@@ -148,6 +148,18 @@ import {
   resolveTableScopedSelectedCell,
 } from "./tableRenderedDomModel"
 import {
+  type TableColumnDragGuideState,
+  type TableColumnRailResizeState,
+  type TableRowResizeState,
+  createHiddenTableColumnDragGuideState,
+  createTableColumnRailResizeState,
+  createTableRowResizeState,
+  hideTableColumnDragGuideState,
+  isRowResizeHandleTarget,
+  resolveTableColumnDragGuideState,
+  resolveTableColumnIndexFromResizeHandleTarget,
+} from "./tableResizeInteractionModel"
+import {
   BLOCK_OUTER_SELECT_LEFT_GUTTER_PX,
   BLOCK_OUTER_SELECT_LEFT_EDGE_GAP_PX,
   BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX,
@@ -307,34 +319,9 @@ type SlashMenuState =
     }
   | null
 
-type TableRowResizeState = {
-  row: HTMLTableRowElement
-  cells: HTMLTableCellElement[]
-  startY: number
-  startHeight: number
-}
-
-type TableColumnRailResizeState = {
-  pointerId: number
-  columnIndex: number
-  startClientX: number
-  baseWidths: number[]
-  budget: number
-  overflowMode: string
-}
-
-type TableColumnDragGuideState = {
-  visible: boolean
-  left: number
-  top: number
-  height: number
-}
-
 const BLOCK_HANDLE_MEDIA_QUERY = "(pointer: coarse)"
 const DESKTOP_TABLE_RAIL_MEDIA_QUERY = "(max-width: 768px)"
 const DEFAULT_EDITOR_READABLE_WIDTH_PX = 48 * 16
-const TABLE_ROW_RESIZE_EDGE_PX = 6
-const TABLE_COLUMN_RESIZE_GUARD_PX = 12
 const TABLE_RAIL_EDGE_PADDING_PX = 12
 const TABLE_CORNER_BUTTON_SIZE_PX = 22
 const TABLE_CORNER_GROW_MOUSE_POINTER_ID = -1
@@ -1112,12 +1099,8 @@ const BlockEditorEngine = ({
   const [tableAffordanceVisibility, setTableAffordanceVisibility] = useState<TableAffordanceVisibility>(
     INITIAL_TABLE_AFFORDANCE_VISIBILITY
   )
-  const [tableColumnDragGuideState, setTableColumnDragGuideState] = useState<TableColumnDragGuideState>({
-    visible: false,
-    left: 0,
-    top: 0,
-    height: 0,
-  })
+  const [tableColumnDragGuideState, setTableColumnDragGuideState] =
+    useState<TableColumnDragGuideState>(createHiddenTableColumnDragGuideState)
   const [tableCornerPreviewState, setTableCornerPreviewState] = useState<TableCornerPreviewState>({
     visible: false,
     left: 0,
@@ -1310,10 +1293,10 @@ const BlockEditorEngine = ({
   }, [])
 
   const hideTableColumnDragGuide = useCallback(() => {
-    setTableColumnDragGuideState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
+    setTableColumnDragGuideState(hideTableColumnDragGuideState)
   }, [])
 
-  const syncTableColumnDragGuideForColumn = useCallback(
+  const updateTableColumnDragGuideForColumn = useCallback(
     (columnIndex: number) => {
       const viewport = viewportRef.current
       if (!viewport) {
@@ -1326,28 +1309,12 @@ const BlockEditorEngine = ({
         tableAffordanceGeometryRef.current,
         activeTableElementRef.current
       )
-      const headerRow = tableElement?.querySelector("thead tr, tbody tr, tr")
-      if (!tableElement || !headerRow) {
+      const guideState = resolveTableColumnDragGuideState(tableElement, columnIndex)
+      if (!guideState) {
         hideTableColumnDragGuide()
         return
       }
-
-      const cells = Array.from(headerRow.children).filter(
-        (node): node is HTMLElement => node instanceof HTMLElement
-      )
-      if (columnIndex < 0 || columnIndex >= cells.length) {
-        hideTableColumnDragGuide()
-        return
-      }
-
-      const tableRect = tableElement.getBoundingClientRect()
-      const cellRect = cells[columnIndex].getBoundingClientRect()
-      setTableColumnDragGuideState({
-        visible: true,
-        left: Math.round(Math.min(tableRect.right, cellRect.right)),
-        top: Math.round(tableRect.top),
-        height: Math.round(tableRect.height),
-      })
+      setTableColumnDragGuideState(guideState)
     },
     [hideTableColumnDragGuide]
   )
@@ -1958,21 +1925,6 @@ const BlockEditorEngine = ({
     [getTableCellFromTarget]
   )
 
-  const isRowResizeHandleTarget = useCallback(
-    (cell: HTMLTableCellElement | null, clientX: number, clientY: number) => {
-      if (!cell) return false
-      const rect = cell.getBoundingClientRect()
-      const distanceToBottom = rect.bottom - clientY
-      const distanceToRight = rect.right - clientX
-      return (
-        distanceToBottom >= -1 &&
-        distanceToBottom <= TABLE_ROW_RESIZE_EDGE_PX &&
-        distanceToRight > TABLE_COLUMN_RESIZE_GUARD_PX
-      )
-    },
-    []
-  )
-
   const stopTableRowResize = useCallback(() => {
     const state = tableRowResizeRef.current
     if (state?.row) {
@@ -1994,18 +1946,11 @@ const BlockEditorEngine = ({
 
   const startTableRowResize = useCallback(
     (cell: HTMLTableCellElement, clientY: number) => {
-      const row = cell.parentElement
-      if (!(row instanceof HTMLTableRowElement)) return
-      const cells = Array.from(row.cells)
-      if (cells.length === 0) return
+      const resizeState = createTableRowResizeState(cell, clientY)
+      if (!resizeState) return
 
-      row.setAttribute("data-row-resize-active", "true")
-      tableRowResizeRef.current = {
-        row,
-        cells,
-        startY: clientY,
-        startHeight: row.getBoundingClientRect().height,
-      }
+      resizeState.row.setAttribute("data-row-resize-active", "true")
+      tableRowResizeRef.current = resizeState
       setViewportRowResizeHot(true)
       if (typeof document !== "undefined") {
         document.body.style.cursor = "row-resize"
@@ -2809,37 +2754,32 @@ const BlockEditorEngine = ({
       setTableAffordanceGeometry((prev) => ({ ...prev, columnIndex }))
       clearWindowTextSelection()
       setColumnResizeUserSelectSuppressed(true)
-      tableColumnRailResizeRef.current = {
+      tableColumnRailResizeRef.current = createTableColumnRailResizeState(
         pointerId,
         columnIndex,
-        startClientX: clientX,
-        baseWidths: resizeContext.measuredWidths,
-        budget: getCurrentEditorReadableWidthPx(resizeContext.currentEditor) - 2,
-        overflowMode: getTableOverflowMode(resizeContext.rect.table),
-      }
+        clientX,
+        resizeContext.measuredWidths,
+        getCurrentEditorReadableWidthPx(resizeContext.currentEditor) - 2,
+        getTableOverflowMode(resizeContext.rect.table)
+      )
       if (typeof document !== "undefined") {
         document.body.style.cursor = "col-resize"
       }
-      syncTableColumnDragGuideForColumn(columnIndex)
+      updateTableColumnDragGuideForColumn(columnIndex)
     },
     [
       clearWindowTextSelection,
       getCurrentTableColumnResizeContext,
       selectTableColumnByIndex,
       setColumnResizeUserSelectSuppressed,
-      syncTableColumnDragGuideForColumn,
+      updateTableColumnDragGuideForColumn,
     ]
   )
 
-  const startTableColumnResizeFromDomHandle = useCallback(
+  const tryStartTableColumnResizeFromDomHandle = useCallback(
     (target: EventTarget | null, pointerId: number, clientX: number) => {
-      const handleElement =
-        target instanceof Element ? target.closest(".column-resize-handle") : null
-      if (!(handleElement instanceof HTMLElement)) return false
-      const cell = handleElement.closest("th, td")
-      if (!(cell instanceof HTMLElement) || !(cell.parentElement instanceof HTMLTableRowElement)) return false
-      const columnIndex = Array.from(cell.parentElement.children).findIndex((candidate) => candidate === cell)
-      if (columnIndex < 0) return false
+      const columnIndex = resolveTableColumnIndexFromResizeHandleTarget(target)
+      if (columnIndex === null) return false
       startTableColumnRailResize(pointerId, columnIndex, clientX)
       return true
     },
@@ -4065,7 +4005,7 @@ const BlockEditorEngine = ({
       } else if (nextClientX <= state.startClientX) {
         hideTableOverflowCoachmark()
       }
-      syncTableColumnDragGuideForColumn(state.columnIndex)
+      updateTableColumnDragGuideForColumn(state.columnIndex)
     }
 
     const handlePointerUp = (event: PointerEvent) => {
@@ -4102,7 +4042,7 @@ const BlockEditorEngine = ({
     resizeTableColumnBySessionDelta,
     showTableOverflowCoachmark,
     stopTableColumnRailResize,
-    syncTableColumnDragGuideForColumn,
+    updateTableColumnDragGuideForColumn,
   ])
 
   useEffect(() => {
@@ -4341,7 +4281,7 @@ const BlockEditorEngine = ({
       const activeEditor = editorRef.current ?? currentEditor
       if (!activeEditor) return
       if (!(event.target instanceof Node) || !activeEditor.view.dom.contains(event.target)) return
-      if (startTableColumnResizeFromDomHandle(event.target, event.pointerId, event.clientX)) {
+      if (tryStartTableColumnResizeFromDomHandle(event.target, event.pointerId, event.clientX)) {
         event.preventDefault()
         event.stopPropagation()
         event.stopImmediatePropagation?.()
@@ -4412,7 +4352,7 @@ const BlockEditorEngine = ({
     scheduleBubbleHide,
     scheduleTableQuickRailHide,
     setBubbleState,
-    startTableColumnResizeFromDomHandle,
+    tryStartTableColumnResizeFromDomHandle,
     syncTableQuickRailFromElement,
     tableMenuState,
   ])
@@ -6690,7 +6630,6 @@ const BlockEditorEngine = ({
       isCoarsePointer,
       isWriterSurface,
       isTableStructuralSelection,
-      isRowResizeHandleTarget,
       selectedBlockNodeIndex,
       setViewportRowResizeHot,
       hoveredListItemContext,
@@ -6883,7 +6822,6 @@ const BlockEditorEngine = ({
       isOuterBlockSelectionGesture,
       isOuterListItemSelectionGesture,
       isCoarsePointer,
-      isRowResizeHandleTarget,
       promoteTopLevelBlockSelection,
       selectedBlockNodeIndex,
       shouldPersistTableHandles,

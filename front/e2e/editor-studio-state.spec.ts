@@ -152,6 +152,22 @@ test.describe("editor studio state", () => {
       path.resolve(__dirname, "../src/components/editor/blockSelectionModel.ts"),
       "utf8"
     )
+    const blockHandleLayoutModelPath = path.resolve(
+      __dirname,
+      "../src/components/editor/blockHandleLayoutModel.ts"
+    )
+    expect(existsSync(blockHandleLayoutModelPath)).toBe(true)
+    const blockHandleLayoutModelSource = existsSync(blockHandleLayoutModelPath)
+      ? readFileSync(blockHandleLayoutModelPath, "utf8")
+      : ""
+    const nestedListItemModelPath = path.resolve(
+      __dirname,
+      "../src/components/editor/nestedListItemModel.ts"
+    )
+    expect(existsSync(nestedListItemModelPath)).toBe(true)
+    const nestedListItemModelSource = existsSync(nestedListItemModelPath)
+      ? readFileSync(nestedListItemModelPath, "utf8")
+      : ""
     const slashMenuModelPath = path.resolve(__dirname, "../src/components/editor/slashMenuModel.ts")
     expect(existsSync(slashMenuModelPath)).toBe(true)
     const slashMenuModelSource = existsSync(slashMenuModelPath) ? readFileSync(slashMenuModelPath, "utf8") : ""
@@ -247,6 +263,7 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).toContain("border-left: 4px solid")
     expect(blockEditorEngineSource).toContain("border-radius: 0;")
     expect(blockEditorEngineSource).toContain('from "./blockSelectionModel"')
+    expect(blockEditorEngineSource).toContain('from "./nestedListItemModel"')
     expect(blockEditorEngineSource).toContain('from "./useBlockEditorMarkdownCommit"')
     expect(blockEditorEngineSource).toContain('from "./slashMenuModel"')
     expect(blockEditorEngineSource).toContain('from "./inlineToolbarModel"')
@@ -290,8 +307,31 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).not.toMatch(/const\s+isStableBlockHandleState\s*=/)
     expect(blockEditorEngineSource).not.toMatch(/const\s+isStableBlockSelectionOverlayState\s*=/)
     expect(blockEditorEngineSource).not.toMatch(/const\s+resolveOuterBlockSelectionGesture\s*=/)
+    expect(blockEditorEngineSource).toContain('from "./blockHandleLayoutModel"')
+    expect(blockEditorEngineSource).not.toMatch(/const\s+resolveBlockHandleAnchorTop\s*=/)
+    expect(blockEditorEngineSource).not.toMatch(/const\s+resolveThinBlockHandleAnchorTop\s*=/)
+    expect(blockEditorEngineSource).not.toMatch(/const\s+resolveBlockHandleRailLayout\s*=/)
+    expect(blockEditorEngineSource).not.toMatch(/const\s+shouldCenterBlockHandleForNode\s*=/)
+    expect(blockEditorEngineSource).not.toMatch(/const\s+shouldUseThinBlockHandleAnchor\s*=/)
+    expect(blockEditorEngineSource).not.toContain("type NestedListItemContext =")
+    expect(blockEditorEngineSource).not.toMatch(/const\s+LIST_ITEM_SELECTOR\s*=/)
+    expect(blockEditorEngineSource).not.toMatch(/const\s+LIST_CONTAINER_SELECTOR\s*=/)
+    expect(blockEditorEngineSource).not.toMatch(/const\s+sameListPath\s*=/)
+    expect(blockEditorEngineSource).not.toMatch(/const\s+selectNestedListItemNode\s*=/)
+    expect(blockEditorEngineSource).not.toMatch(/const\s+selectNestedListItemTextAnchor\s*=/)
     expect(blockSelectionModelSource).toContain("export const resolveOuterBlockSelectionGesture")
     expect(blockSelectionModelSource).toContain("export const resolveOuterListItemSelectionGesture")
+    expect(blockHandleLayoutModelSource).toContain("export const resolveBlockHandleAnchorTop")
+    expect(blockHandleLayoutModelSource).toContain("export const resolveThinBlockHandleAnchorTop")
+    expect(blockHandleLayoutModelSource).toContain("export const resolveBlockHandleRailLayout")
+    expect(blockHandleLayoutModelSource).toContain("export const shouldCenterBlockHandleForNode")
+    expect(blockHandleLayoutModelSource).toContain("export const shouldUseThinBlockHandleAnchor")
+    expect(nestedListItemModelSource).toContain("export type NestedListItemContext =")
+    expect(nestedListItemModelSource).toContain("export const LIST_ITEM_SELECTOR")
+    expect(nestedListItemModelSource).toContain("export const LIST_CONTAINER_SELECTOR")
+    expect(nestedListItemModelSource).toContain("export const sameListPath")
+    expect(nestedListItemModelSource).toContain("export const selectNestedListItemNode")
+    expect(nestedListItemModelSource).toContain("export const selectNestedListItemTextAnchor")
     const selectionRuleMatch = blockEditorEngineSource.match(/\.aq-block-editor__content ::selection\s*\{([^}]*)\}/)
     expect(selectionRuleMatch?.[1]).toBeTruthy()
     expect(selectionRuleMatch?.[1]).not.toMatch(/\bcolor\s*:/)

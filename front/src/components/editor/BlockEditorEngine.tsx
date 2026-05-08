@@ -168,6 +168,18 @@ import {
   selectNestedListItemNode,
   selectNestedListItemTextAnchor,
 } from "./nestedListItemModel"
+import {
+  type DraggedNestedListItemState,
+  type NestedListItemDropIndicatorState,
+  type PendingNestedListItemHandleDragState,
+  createDraggedNestedListItemState,
+  createHiddenNestedListItemDropIndicatorState,
+  createNestedListItemDragPreview,
+  createNestedListItemDropIndicatorState,
+  createPendingNestedListItemHandleDragState,
+  hideNestedListItemDropIndicatorState,
+  isNestedListItemContextInDraggedList,
+} from "./nestedListItemDragModel"
 import { useBlockEditorMarkdownCommit } from "./useBlockEditorMarkdownCommit"
 import {
   buildSlashMenuSections,
@@ -246,21 +258,6 @@ type PendingBlockDragState = {
   previewLabel: string
 }
 
-type PendingNestedListItemHandleDragState = {
-  pointerId: number
-  startX: number
-  startY: number
-  started: boolean
-  context: NestedListItemContext
-  targetListBlockIndex: number | null
-  targetListPath: number[] | null
-  insertionIndex: number | null
-  previewWidth: number
-  previewHeight: number
-  previewText: string
-  previewLabel: string
-}
-
 type DraggedBlockState =
   | {
       sourceIndex: number
@@ -271,38 +268,6 @@ type DraggedBlockState =
       previewLabel: string
     }
   | null
-
-type DraggedNestedListItemState =
-  | {
-      listBlockIndex: number
-      listPath: number[]
-      sourceItemIndex: number
-      previewWidth: number
-      previewHeight: number
-      previewText: string
-      previewLabel: string
-    }
-  | null
-
-type NestedListItemDropIndicatorState =
-  | {
-      visible: boolean
-      listBlockIndex: number
-      listPath: number[]
-      insertionIndex: number
-      top: number
-      left: number
-      width: number
-    }
-  | {
-      visible: false
-      listBlockIndex: number
-      listPath: number[]
-      insertionIndex: number
-      top: number
-      left: number
-      width: number
-    }
 
 type DropIndicatorState = {
   visible: boolean
@@ -1255,15 +1220,8 @@ const BlockEditorEngine = ({
     highlightHeight: 0,
   })
   const [draggedNestedListItemState, setDraggedNestedListItemState] = useState<DraggedNestedListItemState>(null)
-  const [nestedListItemDropIndicatorState, setNestedListItemDropIndicatorState] = useState<NestedListItemDropIndicatorState>({
-    visible: false,
-    listBlockIndex: 0,
-    listPath: [],
-    insertionIndex: 0,
-    top: 0,
-    left: 0,
-    width: 0,
-  })
+  const [nestedListItemDropIndicatorState, setNestedListItemDropIndicatorState] =
+    useState<NestedListItemDropIndicatorState>(createHiddenNestedListItemDropIndicatorState)
   const [selectionTick, setSelectionTick] = useState(0)
 
   const updateTableCornerPreviewState = useCallback(
@@ -7237,28 +7195,14 @@ const BlockEditorEngine = ({
         }
       }
       const sourceElement = listItemContext.listItemElement
-      const sourceRect = sourceElement.getBoundingClientRect()
-      const previewWidth = sourceRect
-        ? Math.round(Math.min(Math.max(sourceRect.width, 320), Math.max(320, window.innerWidth - 48)))
-        : 480
-      const previewHeight = sourceRect ? Math.round(Math.min(Math.max(sourceRect.height, 44), 320)) : 120
-      const previewLabel = sourceElement.textContent?.trim().slice(0, 100) || "목록 항목 이동"
-      const previewText = sourceElement.textContent?.trim().replace(/\s+/g, " ").slice(0, 220) || previewLabel
-      setDraggedNestedListItemState({
-        listBlockIndex: listItemContext.listBlockIndex,
-        listPath: listItemContext.listPath,
-        sourceItemIndex: listItemContext.itemIndex,
-        previewWidth,
-        previewHeight,
-        previewText,
-        previewLabel,
-      })
-      setNestedListItemDropIndicatorState({
-        visible: true,
-        listBlockIndex: listItemContext.listBlockIndex,
-        listPath: listItemContext.listPath,
-        ...resolveNestedListItemDropIndicatorByClientY(listItemContext.listElement, event.clientY),
-      })
+      const preview = createNestedListItemDragPreview(sourceElement, window.innerWidth)
+      setDraggedNestedListItemState(createDraggedNestedListItemState(listItemContext, preview))
+      setNestedListItemDropIndicatorState(
+        createNestedListItemDropIndicatorState(
+          listItemContext,
+          resolveNestedListItemDropIndicatorByClientY(listItemContext.listElement, event.clientY)
+        )
+      )
       event.dataTransfer.effectAllowed = "move"
       event.dataTransfer.setData("text/plain", `list-item:${listItemContext.listBlockIndex}:${listItemContext.itemIndex}`)
     },
@@ -7276,21 +7220,17 @@ const BlockEditorEngine = ({
     (event: ReactDragEvent<HTMLDivElement>) => {
       if (!draggedNestedListItemState) return
       const taskItemContext = findNestedListItemContextFromTarget(event.target)
-      if (
-        !taskItemContext ||
-        taskItemContext.listBlockIndex !== draggedNestedListItemState.listBlockIndex ||
-        taskItemContext.listPath.join(",") !== draggedNestedListItemState.listPath.join(",")
-      ) {
+      if (!isNestedListItemContextInDraggedList(taskItemContext, draggedNestedListItemState)) {
         return
       }
 
       event.preventDefault()
-      setNestedListItemDropIndicatorState({
-        visible: true,
-        listBlockIndex: taskItemContext.listBlockIndex,
-        listPath: taskItemContext.listPath,
-        ...resolveNestedListItemDropIndicatorByClientY(taskItemContext.listElement, event.clientY),
-      })
+      setNestedListItemDropIndicatorState(
+        createNestedListItemDropIndicatorState(
+          taskItemContext,
+          resolveNestedListItemDropIndicatorByClientY(taskItemContext.listElement, event.clientY)
+        )
+      )
     },
     [draggedNestedListItemState, findNestedListItemContextFromTarget, resolveNestedListItemDropIndicatorByClientY]
   )
@@ -7298,7 +7238,7 @@ const BlockEditorEngine = ({
   const clearNestedListItemDragState = useCallback(() => {
     setDraggedNestedListItemState(null)
     setDragGhostPosition(null)
-    setNestedListItemDropIndicatorState((prev) => ({ ...prev, visible: false }))
+    setNestedListItemDropIndicatorState(hideNestedListItemDropIndicatorState)
   }, [])
 
   const resolveNestedListItemContextFromBlockHandleState = useCallback(() => {
@@ -7402,27 +7342,14 @@ const BlockEditorEngine = ({
       if (sourceElement.isConnected) {
         sourceElement.setAttribute("draggable", "false")
       }
-      const sourceRect = sourceElement.getBoundingClientRect()
-      const previewWidth = sourceRect
-        ? Math.round(Math.min(Math.max(sourceRect.width, 320), Math.max(320, window.innerWidth - 48)))
-        : 480
-      const previewHeight = sourceRect ? Math.round(Math.min(Math.max(sourceRect.height, 44), 320)) : 120
-      const previewLabel = sourceElement.textContent?.trim().slice(0, 100) || "목록 항목 이동"
-      const previewText = sourceElement.textContent?.trim().replace(/\s+/g, " ").slice(0, 220) || previewLabel
-      pendingNestedListItemHandleDragRef.current = {
+      const preview = createNestedListItemDragPreview(sourceElement, window.innerWidth)
+      pendingNestedListItemHandleDragRef.current = createPendingNestedListItemHandleDragState(
         pointerId,
         startX,
         startY,
-        started: false,
         context,
-        targetListBlockIndex: null,
-        targetListPath: null,
-        insertionIndex: null,
-        previewWidth,
-        previewHeight,
-        previewText,
-        previewLabel,
-      }
+        preview
+      )
       clearStickyTopLevelBlockSelection()
       const currentEditor = editorRef.current ?? editor
       if (currentEditor) {
@@ -7437,15 +7364,7 @@ const BlockEditorEngine = ({
         if (!pending.started) {
           if (distance < 5) return
           pending.started = true
-          setDraggedNestedListItemState({
-            listBlockIndex: pending.context.listBlockIndex,
-            listPath: pending.context.listPath,
-            sourceItemIndex: pending.context.itemIndex,
-            previewWidth: pending.previewWidth,
-            previewHeight: pending.previewHeight,
-            previewText: pending.previewText,
-            previewLabel: pending.previewLabel,
-          })
+          setDraggedNestedListItemState(createDraggedNestedListItemState(pending.context, pending))
         }
 
         const activeListContext =
@@ -7467,7 +7386,7 @@ const BlockEditorEngine = ({
           pending.targetListBlockIndex = null
           pending.targetListPath = null
           pending.insertionIndex = null
-          setNestedListItemDropIndicatorState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
+          setNestedListItemDropIndicatorState(hideNestedListItemDropIndicatorState)
           return
         }
 
@@ -7475,12 +7394,7 @@ const BlockEditorEngine = ({
         pending.targetListBlockIndex = activeListContext.listBlockIndex
         pending.targetListPath = [...activeListContext.listPath]
         pending.insertionIndex = indicator.insertionIndex
-        setNestedListItemDropIndicatorState({
-          visible: true,
-          listBlockIndex: activeListContext.listBlockIndex,
-          listPath: activeListContext.listPath,
-          ...indicator,
-        })
+        setNestedListItemDropIndicatorState(createNestedListItemDropIndicatorState(activeListContext, indicator))
       }
 
       const handlePointerDone = (doneEvent: PointerEvent) => {
@@ -7562,11 +7476,7 @@ const BlockEditorEngine = ({
     (event: ReactDragEvent<HTMLDivElement>) => {
       if (!draggedNestedListItemState) return
       const taskItemContext = findNestedListItemContextFromTarget(event.target)
-      if (
-        !taskItemContext ||
-        taskItemContext.listBlockIndex !== draggedNestedListItemState.listBlockIndex ||
-        taskItemContext.listPath.join(",") !== draggedNestedListItemState.listPath.join(",")
-      ) {
+      if (!isNestedListItemContextInDraggedList(taskItemContext, draggedNestedListItemState)) {
         clearNestedListItemDragState()
         return
       }

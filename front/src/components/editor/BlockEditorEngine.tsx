@@ -145,6 +145,13 @@ import {
   type BlockSelectionPointerEventLike,
   type TopLevelBlockHandleState,
 } from "./blockSelectionModel"
+import {
+  resolveBlockHandleAnchorTop,
+  resolveBlockHandleRailLayout,
+  resolveThinBlockHandleAnchorTop,
+  shouldCenterBlockHandleForNode,
+  shouldUseThinBlockHandleAnchor,
+} from "./blockHandleLayoutModel"
 import { useBlockEditorMarkdownCommit } from "./useBlockEditorMarkdownCommit"
 import {
   buildSlashMenuSections,
@@ -445,9 +452,6 @@ type TableColumnDragGuideState = {
 const BLOCK_HANDLE_MEDIA_QUERY = "(pointer: coarse)"
 const DESKTOP_TABLE_RAIL_MEDIA_QUERY = "(max-width: 768px)"
 const DEFAULT_EDITOR_READABLE_WIDTH_PX = 48 * 16
-const BLOCK_HANDLE_VIEWPORT_PADDING_PX = 12
-const BLOCK_HANDLE_GUTTER_GAP_PX = 10
-const BLOCK_HANDLE_STACKED_GAP_PX = 8
 const TABLE_ROW_RESIZE_EDGE_PX = 6
 const TABLE_COLUMN_RESIZE_GUARD_PX = 12
 const TABLE_RAIL_EDGE_PADDING_PX = 12
@@ -764,68 +768,6 @@ const selectNestedListItemTextAnchor = (editor: TiptapEditor, context: NestedLis
     return selectNestedListItemNode(editor, context)
   }
 }
-
-const resolveBlockHandleAnchorTop = (blockElement: HTMLElement, railHeight: number) => {
-  const rect = blockElement.getBoundingClientRect()
-  if (typeof window === "undefined") return rect.top + 6
-
-  const lineAnchorElement =
-    (blockElement.matches("p, h1, h2, h3, h4, blockquote")
-      ? blockElement
-      : blockElement.querySelector(":scope > p, :scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > blockquote")) ||
-    blockElement
-
-  const computedStyle = window.getComputedStyle(lineAnchorElement as Element)
-  const fontSize = Number.parseFloat(computedStyle.fontSize || "16")
-  const parsedLineHeight = Number.parseFloat(computedStyle.lineHeight || "")
-  const lineHeight =
-    Number.isFinite(parsedLineHeight) && parsedLineHeight > 0 ? parsedLineHeight : fontSize * 1.42
-
-  return rect.top + Math.max(0, (lineHeight - railHeight) / 2)
-}
-
-const resolveThinBlockHandleAnchorTop = (blockElement: HTMLElement, railHeight: number) => {
-  const rect = blockElement.getBoundingClientRect()
-  return Math.max(0, rect.top + rect.height / 2 - railHeight / 2)
-}
-
-const resolveBlockHandleRailLayout = (
-  rect: DOMRect,
-  railWidth: number,
-  railHeight: number,
-  anchoredTop: number
-) => {
-  const gutterLeft = rect.left - railWidth - BLOCK_HANDLE_GUTTER_GAP_PX
-  if (gutterLeft >= BLOCK_HANDLE_VIEWPORT_PADDING_PX || typeof window === "undefined") {
-    return {
-      left: Math.max(BLOCK_HANDLE_VIEWPORT_PADDING_PX, gutterLeft),
-      top: anchoredTop,
-    }
-  }
-
-  const maxLeft = Math.max(
-    BLOCK_HANDLE_VIEWPORT_PADDING_PX,
-    window.innerWidth - railWidth - BLOCK_HANDLE_VIEWPORT_PADDING_PX
-  )
-
-  return {
-    left: Math.min(Math.max(BLOCK_HANDLE_VIEWPORT_PADDING_PX, rect.left), maxLeft),
-    top: Math.max(BLOCK_HANDLE_VIEWPORT_PADDING_PX, rect.top - railHeight - BLOCK_HANDLE_STACKED_GAP_PX),
-  }
-}
-
-const shouldCenterBlockHandleForNode = (node?: BlockEditorDoc | null) =>
-  Boolean(
-    node &&
-      (node.type === "paragraph" ||
-        node.type === "heading" ||
-        node.type === "blockquote" ||
-        node.type === "bulletList" ||
-        node.type === "orderedList" ||
-        node.type === "taskList")
-  )
-
-const shouldUseThinBlockHandleAnchor = (node?: BlockEditorDoc | null) => Boolean(node && node.type === "horizontalRule")
 
 const isTabBlockSelectionEligible = (editor: TiptapEditor, blockIndex: number | null) => {
   if (blockIndex === null || isTableSelectionActive(editor)) return false

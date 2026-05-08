@@ -11,6 +11,20 @@ export type NestedListItemContext = {
   listItems: HTMLElement[]
 }
 
+export type NestedListItemBlockIndexResolver = (blockElement: HTMLElement) => number | null
+
+export type NestedListItemClientPositionOptions = {
+  leftGutterPx?: number
+  rightPaddingPx?: number
+}
+
+export type NestedListItemDropIndicatorGeometry = {
+  insertionIndex: number
+  top: number
+  left: number
+  width: number
+}
+
 export const LIST_ITEM_SELECTOR =
   "li[data-type='taskItem'], li[data-task-item='true'], li[data-list-item='true'], li[data-type='listItem']"
 
@@ -66,6 +80,222 @@ export const isSameNestedListItemContext = (
       left.itemIndex === right.itemIndex &&
       sameListPath(left.listPath, right.listPath)
   )
+
+const getTargetElement = (target: EventTarget | null) => {
+  if (typeof Element !== "undefined" && target instanceof Element) return target
+  if (typeof Node !== "undefined" && target instanceof Node) return target.parentElement
+  return null
+}
+
+const getDirectListItemElements = (listElement: HTMLElement) =>
+  Array.from(listElement.querySelectorAll(`:scope > ${LIST_ITEM_SELECTOR}`)) as HTMLElement[]
+
+const resolveListBlockFromElement = (
+  listElement: HTMLElement,
+  resolveListBlockIndex: NestedListItemBlockIndexResolver
+) => {
+  let blockElement: HTMLElement | null = listElement
+  while (blockElement) {
+    const listBlockIndex = resolveListBlockIndex(blockElement)
+    if (listBlockIndex !== null && listBlockIndex >= 0) {
+      return {
+        blockElement,
+        listBlockIndex,
+      }
+    }
+    blockElement = blockElement.parentElement
+  }
+  return null
+}
+
+export const resolveNestedListItemContextFromTarget = (
+  target: EventTarget | null,
+  resolveListBlockIndex: NestedListItemBlockIndexResolver
+): NestedListItemContext | null => {
+  if (typeof HTMLElement === "undefined") return null
+
+  const targetElement = getTargetElement(target)
+  const listItemElement = targetElement?.closest(LIST_ITEM_SELECTOR)
+  if (!(listItemElement instanceof HTMLElement)) return null
+  const listElement = listItemElement.closest(LIST_CONTAINER_SELECTOR)
+  if (!(listElement instanceof HTMLElement)) return null
+
+  const listBlock = resolveListBlockFromElement(listElement, resolveListBlockIndex)
+  if (!listBlock) return null
+
+  const listItems = getDirectListItemElements(listElement)
+  const itemIndex = listItems.indexOf(listItemElement)
+  if (itemIndex < 0) return null
+
+  const listPath: number[] = []
+  let currentListElement: HTMLElement | null = listElement
+  while (currentListElement && currentListElement !== listBlock.blockElement) {
+    const parentListItem: HTMLElement | null =
+      currentListElement.parentElement?.closest(LIST_ITEM_SELECTOR) ?? null
+    if (!(parentListItem instanceof HTMLElement)) break
+    const parentList: HTMLElement | null =
+      parentListItem.parentElement?.closest(LIST_CONTAINER_SELECTOR) ?? null
+    if (!(parentList instanceof HTMLElement)) break
+
+    const siblingItems = getDirectListItemElements(parentList)
+    const parentItemIndex = siblingItems.indexOf(parentListItem)
+    if (parentItemIndex < 0) break
+
+    listPath.unshift(parentItemIndex)
+    currentListElement = parentList
+  }
+
+  return {
+    listBlockIndex: listBlock.listBlockIndex,
+    listPath,
+    itemIndex,
+    listItemElement,
+    listElement,
+    listItems,
+  }
+}
+
+export const resolveNestedListItemContextByClientPosition = (
+  root: HTMLElement | null,
+  clientX: number,
+  clientY: number,
+  resolveListBlockIndex: NestedListItemBlockIndexResolver,
+  options: NestedListItemClientPositionOptions = {}
+) => {
+  if (!root) return null
+
+  const leftGutterPx = options.leftGutterPx ?? 0
+  const rightPaddingPx = options.rightPaddingPx ?? 0
+  const candidates = Array.from(root.querySelectorAll<HTMLElement>(LIST_ITEM_SELECTOR))
+    .map((element) => {
+      const rect = element.getBoundingClientRect()
+      return { element, rect, area: rect.width * rect.height }
+    })
+    .filter(({ rect }) => {
+      if (rect.width <= 0 || rect.height <= 0) return false
+      return (
+        clientY >= rect.top &&
+        clientY <= rect.bottom &&
+        clientX >= rect.left - leftGutterPx &&
+        clientX <= rect.right + rightPaddingPx
+      )
+    })
+    .sort((left, right) => left.area - right.area)
+
+  return candidates[0]
+    ? resolveNestedListItemContextFromTarget(candidates[0].element, resolveListBlockIndex)
+    : null
+}
+
+export const resolveNodeSelectedNestedListItemContext = (
+  editor: TiptapEditor,
+  resolveListBlockIndex: NestedListItemBlockIndexResolver
+) => {
+  const selection = editor.state.selection as typeof editor.state.selection & {
+    node?: ProseMirrorNode
+  }
+  if (!(selection instanceof NodeSelection) || !isListItemNodeName(selection.node?.type?.name)) {
+    return null
+  }
+
+  const domNode = editor.view.nodeDOM(selection.from)
+  return resolveNestedListItemContextFromTarget(domNode, resolveListBlockIndex)
+}
+
+export const resolveSelectionAnchorNestedListItemContext = (
+  editor: TiptapEditor,
+  resolveListBlockIndex: NestedListItemBlockIndexResolver
+) => {
+  const { $from } = editor.state.selection
+
+  for (let depth = $from.depth; depth > 0; depth -= 1) {
+    if (!isListItemNodeName($from.node(depth)?.type?.name)) continue
+
+    try {
+      const domNode = editor.view.nodeDOM($from.before(depth))
+      return resolveNestedListItemContextFromTarget(domNode, resolveListBlockIndex)
+    } catch {
+      return null
+    }
+  }
+
+  return null
+}
+
+export const resolveNestedListItemContextByIndices = (
+  blockElement: HTMLElement | null,
+  listBlockIndex: number,
+  listPath: number[],
+  itemIndex: number
+): NestedListItemContext | null => {
+  if (!(blockElement instanceof HTMLElement)) return null
+
+  let currentListElement: HTMLElement | null = blockElement.matches(LIST_CONTAINER_SELECTOR) ? blockElement : null
+  if (!currentListElement) return null
+
+  for (const parentItemIndex of listPath) {
+    const parentItems = getDirectListItemElements(currentListElement)
+    const parentItem = parentItems[parentItemIndex]
+    if (!(parentItem instanceof HTMLElement)) return null
+    const nestedListElement =
+      Array.from(parentItem.children).find(
+        (child): child is HTMLElement =>
+          child instanceof HTMLElement && child.matches(LIST_CONTAINER_SELECTOR)
+      ) ?? null
+    if (!(nestedListElement instanceof HTMLElement)) return null
+    currentListElement = nestedListElement
+  }
+
+  const listItems = getDirectListItemElements(currentListElement)
+  const listItemElement = listItems[itemIndex]
+  if (!(listItemElement instanceof HTMLElement)) return null
+
+  return {
+    listBlockIndex,
+    listPath,
+    itemIndex,
+    listItemElement,
+    listElement: currentListElement,
+    listItems,
+  }
+}
+
+export const resolveNestedListItemDropIndicator = (
+  listElement: HTMLElement,
+  clientY: number
+): NestedListItemDropIndicatorGeometry => {
+  const listItems = getDirectListItemElements(listElement)
+  if (!listItems.length) {
+    const rect = listElement.getBoundingClientRect()
+    return {
+      insertionIndex: 0,
+      top: Math.round(rect.top),
+      left: Math.round(rect.left),
+      width: Math.round(rect.width),
+    }
+  }
+
+  let insertionIndex = listItems.length
+  let top = listItems[listItems.length - 1].getBoundingClientRect().bottom
+
+  for (let index = 0; index < listItems.length; index += 1) {
+    const rect = listItems[index].getBoundingClientRect()
+    const midpoint = rect.top + rect.height / 2
+    if (clientY < midpoint) {
+      insertionIndex = index
+      top = rect.top
+      break
+    }
+  }
+
+  const rootRect = listElement.getBoundingClientRect()
+  return {
+    insertionIndex,
+    top: Math.round(top),
+    left: Math.round(rootRect.left + 12),
+    width: Math.max(48, Math.round(rootRect.width - 24)),
+  }
+}
 
 const getTopLevelBlockPosition = (editor: TiptapEditor, blockIndex: number) => {
   const { doc } = editor.state

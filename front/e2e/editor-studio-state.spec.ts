@@ -168,6 +168,14 @@ test.describe("editor studio state", () => {
     const nestedListItemModelSource = existsSync(nestedListItemModelPath)
       ? readFileSync(nestedListItemModelPath, "utf8")
       : ""
+    const nestedListItemDragModelPath = path.resolve(
+      __dirname,
+      "../src/components/editor/nestedListItemDragModel.ts"
+    )
+    expect(existsSync(nestedListItemDragModelPath)).toBe(true)
+    const nestedListItemDragModelSource = existsSync(nestedListItemDragModelPath)
+      ? readFileSync(nestedListItemDragModelPath, "utf8")
+      : ""
     const slashMenuModelPath = path.resolve(__dirname, "../src/components/editor/slashMenuModel.ts")
     expect(existsSync(slashMenuModelPath)).toBe(true)
     const slashMenuModelSource = existsSync(slashMenuModelPath) ? readFileSync(slashMenuModelPath, "utf8") : ""
@@ -323,6 +331,11 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).not.toContain("currentListElement.querySelectorAll(`:scope > ${LIST_ITEM_SELECTOR}`)")
     expect(blockEditorEngineSource).not.toContain("taskListElement.querySelectorAll(`:scope > ${LIST_ITEM_SELECTOR}`)")
     expect(blockEditorEngineSource).not.toContain("const taskItems = Array.from(")
+    expect(blockEditorEngineSource).not.toContain("type PendingNestedListItemHandleDragState =")
+    expect(blockEditorEngineSource).not.toContain("type DraggedNestedListItemState =")
+    expect(blockEditorEngineSource).not.toContain("type NestedListItemDropIndicatorState =")
+    expect(blockEditorEngineSource).not.toContain("sourceElement.textContent?.trim().slice(0, 100)")
+    expect(blockEditorEngineSource).not.toContain("sourceElement.textContent?.trim().replace(/\\s+/g, \" \").slice(0, 220)")
     expect(blockSelectionModelSource).toContain("export const resolveOuterBlockSelectionGesture")
     expect(blockSelectionModelSource).toContain("export const resolveOuterListItemSelectionGesture")
     expect(blockHandleLayoutModelSource).toContain("export const resolveBlockHandleAnchorTop")
@@ -342,6 +355,14 @@ test.describe("editor studio state", () => {
     expect(nestedListItemModelSource).toContain("export const resolveSelectionAnchorNestedListItemContext")
     expect(nestedListItemModelSource).toContain("export const resolveNestedListItemContextByIndices")
     expect(nestedListItemModelSource).toContain("export const resolveNestedListItemDropIndicator")
+    expect(nestedListItemDragModelSource).toContain("export type PendingNestedListItemHandleDragState")
+    expect(nestedListItemDragModelSource).toContain("export type DraggedNestedListItemState")
+    expect(nestedListItemDragModelSource).toContain("export type NestedListItemDropIndicatorState")
+    expect(nestedListItemDragModelSource).toContain("export const createNestedListItemDragPreview")
+    expect(nestedListItemDragModelSource).toContain("export const createDraggedNestedListItemState")
+    expect(nestedListItemDragModelSource).toContain("export const createNestedListItemDropIndicatorState")
+    expect(nestedListItemDragModelSource).toContain("export const hideNestedListItemDropIndicatorState")
+    expect(nestedListItemDragModelSource).toContain("export const isNestedListItemContextInDraggedList")
     const selectionRuleMatch = blockEditorEngineSource.match(/\.aq-block-editor__content ::selection\s*\{([^}]*)\}/)
     expect(selectionRuleMatch?.[1]).toBeTruthy()
     expect(selectionRuleMatch?.[1]).not.toMatch(/\bcolor\s*:/)

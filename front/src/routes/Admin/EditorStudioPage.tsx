@@ -29,8 +29,16 @@ import {
   type BlockEditorLoadGuardState,
 } from "./editorLoadSyncGuard"
 import {
+  deriveComposeViewModel,
+  deriveEditorContentMetrics,
   deriveEditorPersistenceState,
-  isPublishActionDisabled,
+  derivePublishActionViewModel,
+  getVisibilityLabel,
+  toFlags,
+  toVisibility,
+  type EditorMode,
+  type PostVisibility,
+  type PublishActionType,
 } from "./editorStudioState"
 import { WriterEditorHost } from "./WriterEditorHost"
 import { useEditorStudioDraftLifecycle } from "./useEditorStudioDraftLifecycle"
@@ -151,7 +159,6 @@ type PostForEditor = {
   tempDraft?: boolean
 }
 
-type PostVisibility = "PRIVATE" | "PUBLIC_UNLISTED" | "PUBLIC_LISTED"
 type PostListScope = "active" | "deleted"
 
 type RsData<T> = {
@@ -222,8 +229,6 @@ type NoticeState = {
   tone: NoticeTone
   text: string
 }
-type EditorMode = "create" | "edit"
-type PublishActionType = "create" | "modify" | "temp"
 type StudioSurface = "manage" | "compose"
 type MobileStudioStep = "query" | "list" | "edit" | "publish"
 type ParsedEditorMeta = {
@@ -441,18 +446,6 @@ export const getEditorStudioPageProps: GetServerSideProps<AdminPageProps> = asyn
   }
 
   return await getAdminPageProps(req)
-}
-
-const toVisibility = (published: boolean, listed: boolean): PostVisibility => {
-  if (!published) return "PRIVATE"
-  if (!listed) return "PUBLIC_UNLISTED"
-  return "PUBLIC_LISTED"
-}
-
-const toFlags = (visibility: PostVisibility): { published: boolean; listed: boolean } => {
-  if (visibility === "PRIVATE") return { published: false, listed: false }
-  if (visibility === "PUBLIC_UNLISTED") return { published: true, listed: false }
-  return { published: true, listed: true }
 }
 
 const pretty = (value: unknown) => JSON.stringify(value, null, 2)
@@ -2256,12 +2249,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     extractImageFileFromClipboard,
   })
 
-  const visibilityLabel = (published: boolean, listed: boolean) => {
-    if (!published) return "비공개"
-    if (!listed) return "링크 공개"
-    return "전체 공개"
-  }
-
   const todayDateKey = useMemo(() => getTodayDateKey(), [])
 
   const adminPostViewRows = useMemo(() => {
@@ -2948,40 +2935,45 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       postVisibility,
     ]
   )
-  const currentVisibilityText = visibilityLabel(currentFlags.published, currentFlags.listed)
+  const currentVisibilityText = getVisibilityLabel(currentFlags.published, currentFlags.listed)
   const canOpenCurrentPostDetail = editorMode === "edit" && postId.trim().length > 0
-  const editorModeLabel = editorMode === "edit" ? "원고 편집" : "새 글"
-  const hasSelectedManagedPost = editorMode === "edit" && postId.trim().length > 0
-  const currentPostLabel =
-    hasSelectedManagedPost
-      ? `${postTitle.trim() || "제목 없음"} · #${postId}`
-      : postTitle.trim()
-  const selectedPostLabel =
-    hasSelectedManagedPost ? `선택된 글 ID #${postId}` : "선택된 글이 없습니다."
+  const composeViewModel = useMemo(
+    () =>
+      deriveComposeViewModel({
+        editorMode,
+        isTempDraftMode,
+        postId,
+        postTitle,
+        postSummary,
+        postTags,
+        currentVisibilityText,
+      }),
+    [currentVisibilityText, editorMode, isTempDraftMode, postId, postSummary, postTags, postTitle]
+  )
+  const {
+    editorModeLabel,
+    hasSelectedManagedPost,
+    currentPostLabel,
+    selectedPostLabel,
+    tagSummaryText,
+    composePageTitle,
+    composeSurfaceSubtitle,
+    composeHeroSummary,
+    composeCallToActionLabel,
+  } = composeViewModel
   const hasListFiltersApplied =
     listKw.trim().length > 0 ||
     listQuickPreset !== "none" ||
     listPage !== "1" ||
     listPageSize !== "30" ||
     (listScope === "active" && listSort !== "CREATED_AT")
-  const deferredContentMetrics = useMemo(() => {
-    const trimmedLength = deferredPostContent.trim().length
-    const lineCount = deferredPostContent ? deferredPostContent.split("\n").length : 0
-    const imageCount = (deferredPostContent.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length
-    return {
-      trimmedLength,
-      lineCount,
-      imageCount,
-    }
-  }, [deferredPostContent])
+  const deferredContentMetrics = useMemo(
+    () => deriveEditorContentMetrics(deferredPostContent),
+    [deferredPostContent]
+  )
   const contentLength = deferredContentMetrics.trimmedLength
   const lineCount = deferredContentMetrics.lineCount
   const imageCount = deferredContentMetrics.imageCount
-  const tagSummaryText = postTags.length > 0 ? `${postTags.length}개 선택` : "미선택"
-  const composePageTitle = editorMode === "edit" ? "원고 편집" : "새 글"
-  const composeSurfaceSubtitle = hasSelectedManagedPost
-    ? `#${postId} 원고를 다듬고 있습니다.`
-    : "기술 원고를 차분하게 다듬는 공간입니다."
   const hasEditorDraftContent = Boolean(postTitle.trim() || postContent.trim())
   const hasEditorMinimumFields = Boolean(postTitle.trim() && postContent.trim())
   const publishPlaceholderIssue = hasEditorMinimumFields
@@ -3000,13 +2992,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   })
   const composeStatusText = editorPersistenceState.text
   const composeStatusTone = editorPersistenceState.tone
-  const composeHeroSummary = [
-    currentVisibilityText,
-    postSummary.trim() ? `요약 ${postSummary.trim().length}자` : "요약 자동",
-    postTags.length > 0 ? `태그 ${postTags.length}개` : "태그 미설정",
-  ]
-  const composeCallToActionLabel =
-    editorMode === "create" ? "발행 준비" : isTempDraftMode ? "새 글 작성" : "수정 사항 확인"
   const composeSummaryPreview = useMemo(
     () => postSummary.trim() || deferredContentDerived.summary,
     [deferredContentDerived.summary, postSummary]
@@ -3021,43 +3006,22 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const profileImageHint = profileImageFileName
     ? `선택 파일: ${profileImageFileName}`
     : `${PROFILE_IMAGE_UPLOAD_RULE_LABEL} (선택 즉시 업로드)`
-  const publishActionTitle =
-    publishActionType === "create"
-      ? "발행 설정"
-      : publishActionType === "modify"
-        ? "수정 설정"
-        : "새 글 작성"
-  const publishActionButtonText =
-    publishActionType === "create"
-      ? loadingKey === "writePost"
-        ? "발행 중..."
-        : "발행하기"
-      : publishActionType === "modify"
-        ? loadingKey === "modifyPost"
-          ? "반영 중..."
-          : "변경 반영"
-        : loadingKey === "publishTempPost"
-          ? "작성 중..."
-          : "새 글 작성"
-  const publishActionButtonDisabled = isPublishActionDisabled({
+  const publishActionViewModel = derivePublishActionViewModel({
     publishActionType,
     editorMode,
     loadingKey,
     hasEditorMinimumFields,
     hasPlaceholderIssue: Boolean(publishPlaceholderIssue),
+    isTempDraftMode,
   })
-  const publishActionTriggerDisabled =
-    loadingKey === "writePost" ||
-    loadingKey === "modifyPost" ||
-    loadingKey === "publishTempPost" ||
-    loadingKey === "postTemp"
-  const mobilePrimaryActionLabel =
-    editorMode === "create"
-      ? "발행 설정 열기"
-      : isTempDraftMode
-        ? "새 글 작성"
-        : "수정 설정 열기"
-  const mobilePrimaryActionDisabled = publishActionTriggerDisabled
+  const {
+    publishActionTitle,
+    publishActionButtonText,
+    publishActionButtonDisabled,
+    publishActionTriggerDisabled,
+    mobilePrimaryActionLabel,
+    mobilePrimaryActionDisabled,
+  } = publishActionViewModel
   const activeMobileStudioStep = studioSurface === "manage" ? mobileManageStep : mobileComposeStep
   const mobileStudioSurfaceSteps =
     studioSurface === "manage"
@@ -3088,12 +3052,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const displayName = member.nickname || member.username || "관리자"
   const displayNameInitial = displayName.slice(0, 2).toUpperCase()
   const previewViewportConfig = PREVIEW_CARD_VIEWPORTS[previewViewport]
-  const previewVisibilityLabel =
-    postVisibility === "PRIVATE"
-      ? "비공개"
-      : postVisibility === "PUBLIC_UNLISTED"
-        ? "링크 공개"
-        : "전체 공개"
+  const previewVisibilityLabel = getVisibilityLabel(postVisibility)
   const previewThumbnailSrc = safePreviewThumbnail && !isPreviewThumbnailError ? safePreviewThumbnail : ""
   const shouldShowPublishModalNotice = publishModalNotice.tone !== "idle"
   const previewAuthorAvatarSrc = (
@@ -4204,7 +4163,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                                     {isLoadedRow && <LoadedBadge>현재 편집 중</LoadedBadge>}
                                     {listScope === "deleted" && <DeletedBadge>삭제됨</DeletedBadge>}
                                     <VisibilityBadge className="inlineVisibility" data-tone={toVisibility(row.published, row.listed)}>
-                                      {visibilityLabel(row.published, row.listed)}
+                                      {getVisibilityLabel(row.published, row.listed)}
                                     </VisibilityBadge>
                                   </div>
                                   <span className="meta">{row.authorName || "작성자 미상"}</span>
@@ -4321,7 +4280,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                               {(listScope === "deleted" ? row.deletedAt : row.modifiedAt)?.slice(0, 10) || "-"}
                             </span>
                             <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
-                              {visibilityLabel(row.published, row.listed)}
+                              {getVisibilityLabel(row.published, row.listed)}
                             </VisibilityBadge>
                           </p>
                           <div className="mainAction">

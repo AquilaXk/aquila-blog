@@ -113,6 +113,19 @@ const serializeImage = (element: HTMLImageElement) => {
   return `![${alt}](${escapeLinkHref(src)}${titleSuffix})`
 }
 
+const readCodeSourceAttribute = (...elements: Array<HTMLElement | null | undefined>) => {
+  for (const element of elements) {
+    if (!element) continue
+    const source = (
+      element.getAttribute("data-raw-code") ||
+      element.getAttribute("data-prism-source") ||
+      ""
+    ).trimEnd()
+    if (source) return normalizeClipboardLineEndings(source)
+  }
+  return ""
+}
+
 export const extractPlainTextFromHtml = (html: string) => {
   if (typeof DOMParser === "undefined") return ""
   const parser = new DOMParser()
@@ -352,7 +365,12 @@ export const convertHtmlToMarkdown = (
     if (tag === "ol") return listToMarkdown(element, true)
     if (tag === "pre") {
       const codeElement = element.querySelector("code")
-      const codeText = (codeElement?.textContent || element.textContent || "").trimEnd()
+      const codeText = (
+        readCodeSourceAttribute(codeElement, element) ||
+        codeElement?.textContent ||
+        element.textContent ||
+        ""
+      ).trimEnd()
       const className = codeElement?.className || ""
       const language = (className.match(/language-([a-zA-Z0-9_-]+)/)?.[1] || "").trim()
       return `\`\`\`${language}\n${codeText}\n\`\`\``

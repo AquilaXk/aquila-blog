@@ -2156,18 +2156,6 @@ const WorkspaceSection = styled.section`
   }
 `
 
-const ObservabilityNotice = styled.p`
-  margin: 0;
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.82rem;
-  line-height: 1.6;
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-weight: 820;
-  }
-`
-
 const SectionHeading = styled(AdminSectionHeading)`
   align-items: flex-start;
 `

@@ -312,6 +312,8 @@ test.describe("block editor slash menu interaction", () => {
     const heading2Action = page.locator("[data-slash-action-id='heading-2']")
     await expect.poll(async () => slashMenu.locator("button[data-active='true']").count()).toBeGreaterThan(0)
     await expect(heading2Action).not.toHaveAttribute("data-active", "true")
+    // The menu intentionally suppresses pointer takeover for a short window after keyboard navigation.
+    await page.waitForTimeout(220)
     await heading2Action.scrollIntoViewIfNeeded()
     await heading2Action.hover({ force: true })
     await heading2Action.dispatchEvent("pointerenter")

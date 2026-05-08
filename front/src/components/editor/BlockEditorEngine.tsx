@@ -238,7 +238,7 @@ type PendingBlockDragState = {
   startY: number
   previewWidth: number
   previewHeight: number
-  previewHtml: string
+  previewText: string
   previewLabel: string
 }
 
@@ -253,7 +253,7 @@ type PendingNestedListItemHandleDragState = {
   insertionIndex: number | null
   previewWidth: number
   previewHeight: number
-  previewHtml: string
+  previewText: string
   previewLabel: string
 }
 
@@ -263,7 +263,7 @@ type DraggedBlockState =
       pointerId: number
       previewWidth: number
       previewHeight: number
-      previewHtml: string
+      previewText: string
       previewLabel: string
     }
   | null
@@ -275,7 +275,7 @@ type DraggedNestedListItemState =
       sourceItemIndex: number
       previewWidth: number
       previewHeight: number
-      previewHtml: string
+      previewText: string
       previewLabel: string
     }
   | null
@@ -1917,7 +1917,7 @@ const BlockEditorEngine = ({
         pointerId: pending.pointerId,
         previewWidth: pending.previewWidth,
         previewHeight: pending.previewHeight,
-        previewHtml: pending.previewHtml,
+        previewText: pending.previewText,
         previewLabel: pending.previewLabel,
       })
       setDragGhostPosition({
@@ -7375,14 +7375,14 @@ const BlockEditorEngine = ({
         : 480
       const previewHeight = sourceRect ? Math.round(Math.min(Math.max(sourceRect.height, 44), 320)) : 120
       const previewLabel = sourceElement.textContent?.trim().slice(0, 100) || "목록 항목 이동"
-      const previewHtml = sourceElement.innerHTML || `<p>${previewLabel}</p>`
+      const previewText = sourceElement.textContent?.trim().replace(/\s+/g, " ").slice(0, 220) || previewLabel
       setDraggedNestedListItemState({
         listBlockIndex: listItemContext.listBlockIndex,
         listPath: listItemContext.listPath,
         sourceItemIndex: listItemContext.itemIndex,
         previewWidth,
         previewHeight,
-        previewHtml,
+        previewText,
         previewLabel,
       })
       setNestedListItemDropIndicatorState({
@@ -7540,7 +7540,7 @@ const BlockEditorEngine = ({
         : 480
       const previewHeight = sourceRect ? Math.round(Math.min(Math.max(sourceRect.height, 44), 320)) : 120
       const previewLabel = sourceElement.textContent?.trim().slice(0, 100) || "목록 항목 이동"
-      const previewHtml = sourceElement.innerHTML || `<p>${previewLabel}</p>`
+      const previewText = sourceElement.textContent?.trim().replace(/\s+/g, " ").slice(0, 220) || previewLabel
       pendingNestedListItemHandleDragRef.current = {
         pointerId,
         startX,
@@ -7552,7 +7552,7 @@ const BlockEditorEngine = ({
         insertionIndex: null,
         previewWidth,
         previewHeight,
-        previewHtml,
+        previewText,
         previewLabel,
       }
       clearStickyTopLevelBlockSelection()
@@ -7575,7 +7575,7 @@ const BlockEditorEngine = ({
             sourceItemIndex: pending.context.itemIndex,
             previewWidth: pending.previewWidth,
             previewHeight: pending.previewHeight,
-            previewHtml: pending.previewHtml,
+            previewText: pending.previewText,
             previewLabel: pending.previewLabel,
           })
         }
@@ -9159,7 +9159,7 @@ const BlockEditorEngine = ({
                   : 480
                 const previewHeight = sourceRect ? Math.round(Math.min(Math.max(sourceRect.height, 44), 320)) : 120
                 const previewLabel = sourceElement?.textContent?.trim().slice(0, 100) || "블록 이동"
-                const previewHtml = sourceElement?.innerHTML || `<p>${previewLabel}</p>`
+                const previewText = sourceElement?.textContent?.trim().replace(/\s+/g, " ").slice(0, 220) || previewLabel
                 const pendingState: PendingBlockDragState = {
                   sourceIndex,
                   pointerId: event.pointerId,
@@ -9167,7 +9167,7 @@ const BlockEditorEngine = ({
                   startY: event.clientY,
                   previewWidth,
                   previewHeight,
-                  previewHtml,
+                  previewText,
                   previewLabel,
                 }
                 clearPendingBlockDrag()
@@ -9238,8 +9238,9 @@ const BlockEditorEngine = ({
               </DraggedBlockGhostBadge>
               <DraggedBlockGhostCard
                 style={{ maxHeight: `${dragPreviewState.previewHeight}px` }}
-                dangerouslySetInnerHTML={{ __html: dragPreviewState.previewHtml }}
-              />
+              >
+                {dragPreviewState.previewText}
+              </DraggedBlockGhostCard>
             </DraggedBlockGhost>
           )
         })()}
@@ -11403,25 +11404,11 @@ const DraggedBlockGhostCard = styled.div`
     0 10px 22px rgba(15, 23, 42, 0.22);
   padding: 0.72rem 0.88rem;
   opacity: 0.92;
-
-  > * {
-    margin: 0 !important;
-  }
-
-  p,
-  li,
-  td,
-  th {
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  pre,
-  .aq-code-shell,
-  .aq-table-shell,
-  .tableWrapper {
-    max-width: 100%;
-    overflow: hidden;
-  }
+  color: ${({ theme }) => theme.colors.gray12};
+  font-size: 0.82rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
 `
 
 const BlockDropIndicator = styled.div`

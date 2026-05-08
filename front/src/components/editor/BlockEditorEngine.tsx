@@ -104,6 +104,20 @@ import {
   resolveTableCornerPreviewState,
 } from "./tableCornerGrowModel"
 import {
+  type DraggedTableAxisState,
+  type PendingTableAxisDragState,
+  type TableAxis,
+  type TableAxisDragGhostPosition,
+  type TableAxisReorderIndicatorState,
+  createDraggedTableAxisState,
+  createHiddenTableAxisReorderIndicatorState,
+  createPendingTableAxisDragState,
+  createTableAxisDragGhostPosition,
+  hideTableAxisReorderIndicatorState,
+  resolveTableAxisIndexFromPointer,
+  resolveTableAxisReorderIndicator,
+} from "./tableAxisDragModel"
+import {
   TABLE_OVERFLOW_MODE_WIDE,
   TABLE_WIDTH_BUDGET_META_KEY,
   computeNextTableColumnWidthsForResize,
@@ -257,42 +271,6 @@ type TableOverflowCoachmarkState = {
   visible: boolean
   left: number
   top: number
-}
-
-type PendingTableAxisDragState = {
-  axis: "row" | "column"
-  sourceIndex: number
-  pointerId: number
-  tablePos: number
-  startX: number
-  startY: number
-  previewLeft: number
-  previewTop: number
-  previewWidth: number
-  previewHeight: number
-}
-
-type DraggedTableAxisState =
-  | {
-      axis: "row" | "column"
-      sourceIndex: number
-      pointerId: number
-      tablePos: number
-      previewLeft: number
-      previewTop: number
-      previewWidth: number
-      previewHeight: number
-    }
-  | null
-
-type TableAxisReorderIndicatorState = {
-  visible: boolean
-  axis: "row" | "column"
-  insertionIndex: number
-  left: number
-  top: number
-  width: number
-  height: number
 }
 
 const EDITOR_RUNTIME_GUARD_SAMPLE_LIMIT = 240
@@ -1174,16 +1152,9 @@ const BlockEditorEngine = ({
     rowSteps: 0,
   })
   const [draggedTableAxisState, setDraggedTableAxisState] = useState<DraggedTableAxisState>(null)
-  const [tableAxisDragGhostPosition, setTableAxisDragGhostPosition] = useState<{ x: number; y: number } | null>(null)
-  const [tableAxisReorderIndicatorState, setTableAxisReorderIndicatorState] = useState<TableAxisReorderIndicatorState>({
-    visible: false,
-    axis: "row",
-    insertionIndex: 0,
-    left: 0,
-    top: 0,
-    width: 0,
-    height: 0,
-  })
+  const [tableAxisDragGhostPosition, setTableAxisDragGhostPosition] = useState<TableAxisDragGhostPosition>(null)
+  const [tableAxisReorderIndicatorState, setTableAxisReorderIndicatorState] =
+    useState<TableAxisReorderIndicatorState>(createHiddenTableAxisReorderIndicatorState)
   const [draggedBlockState, setDraggedBlockState] = useState<DraggedBlockState>(null)
   const [dragGhostPosition, setDragGhostPosition] = useState<{ x: number; y: number } | null>(null)
   const [dropIndicatorState, setDropIndicatorState] = useState<DropIndicatorState>(createHiddenDropIndicatorState)
@@ -1664,120 +1635,6 @@ const BlockEditorEngine = ({
       pendingTableAxisDragCleanupRef.current = null
     }
   }, [])
-
-  const resolveTableAxisReorderIndicator = useCallback(
-    (axis: "row" | "column", sourceIndex: number, clientX: number, clientY: number) => {
-      const renderedTable = findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)
-      if (!renderedTable) return null
-
-      const tableRect = renderedTable.getBoundingClientRect()
-      const rows = Array.from(renderedTable.querySelectorAll("tr")).filter(
-        (row): row is HTMLTableRowElement => row instanceof HTMLTableRowElement && row.cells.length > 0
-      )
-      if (rows.length === 0) return null
-
-      if (axis === "row") {
-        const boundedSourceIndex = Math.max(0, Math.min(sourceIndex, rows.length - 1))
-        let insertionIndex = rows.length
-        let top = tableRect.bottom
-
-        rows.forEach((row, rowIndex) => {
-          if (insertionIndex !== rows.length) return
-          const rowRect = row.getBoundingClientRect()
-          if (clientY < rowRect.top + rowRect.height / 2) {
-            insertionIndex = rowIndex
-            top = rowRect.top
-          }
-        })
-
-        return {
-          visible: true,
-          axis,
-          insertionIndex,
-          left: Math.round(tableRect.left),
-          top: Math.round(top),
-          width: Math.round(tableRect.width),
-          height: Math.max(2, Math.round(Math.min(rows[boundedSourceIndex]?.getBoundingClientRect().height ?? 2, 3))),
-        }
-      }
-
-      const firstRowCells = Array.from(rows[0].cells).filter(
-        (cell): cell is HTMLTableCellElement => cell instanceof HTMLTableCellElement
-      )
-      if (firstRowCells.length === 0) return null
-
-      let insertionIndex = firstRowCells.length
-      let left = tableRect.right
-      firstRowCells.forEach((cell, columnIndex) => {
-        if (insertionIndex !== firstRowCells.length) return
-        const cellRect = cell.getBoundingClientRect()
-        if (clientX < cellRect.left + cellRect.width / 2) {
-          insertionIndex = columnIndex
-          left = cellRect.left
-        }
-      })
-
-      return {
-        visible: true,
-        axis,
-        insertionIndex,
-        left: Math.round(left),
-        top: Math.round(tableRect.top),
-        width: 2,
-        height: Math.round(tableRect.height),
-      }
-    },
-    []
-  )
-
-  const resolveTableAxisIndexFromPointer = useCallback(
-    (axis: "row" | "column", clientX: number, clientY: number) => {
-      const renderedTable = findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)
-      if (!renderedTable) return null
-
-      const rows = Array.from(renderedTable.querySelectorAll("tr")).filter(
-        (row): row is HTMLTableRowElement => row instanceof HTMLTableRowElement && row.cells.length > 0
-      )
-      if (rows.length === 0) return null
-
-      if (axis === "row") {
-        const matchedRowIndex = rows.findIndex((row) => {
-          const rowRect = row.getBoundingClientRect()
-          return clientY >= rowRect.top && clientY <= rowRect.bottom
-        })
-        if (matchedRowIndex >= 0) return matchedRowIndex
-
-        return rows.reduce((bestIndex, row, rowIndex) => {
-          const rowRect = row.getBoundingClientRect()
-          const nextDistance = Math.abs(clientY - (rowRect.top + rowRect.height / 2))
-          const currentDistance = Math.abs(
-            clientY - (rows[bestIndex].getBoundingClientRect().top + rows[bestIndex].getBoundingClientRect().height / 2)
-          )
-          return nextDistance < currentDistance ? rowIndex : bestIndex
-        }, 0)
-      }
-
-      const firstRowCells = Array.from(rows[0].cells).filter(
-        (cell): cell is HTMLTableCellElement => cell instanceof HTMLTableCellElement
-      )
-      if (firstRowCells.length === 0) return null
-
-      const matchedColumnIndex = firstRowCells.findIndex((cell) => {
-        const cellRect = cell.getBoundingClientRect()
-        return clientX >= cellRect.left && clientX <= cellRect.right
-      })
-      if (matchedColumnIndex >= 0) return matchedColumnIndex
-
-      return firstRowCells.reduce((bestIndex, cell, columnIndex) => {
-        const cellRect = cell.getBoundingClientRect()
-        const nextDistance = Math.abs(clientX - (cellRect.left + cellRect.width / 2))
-        const currentRect = firstRowCells[bestIndex].getBoundingClientRect()
-        const currentDistance = Math.abs(clientX - (currentRect.left + currentRect.width / 2))
-        return nextDistance < currentDistance ? columnIndex : bestIndex
-      }, 0)
-    },
-    []
-  )
 
   const beginBlockDragFromPending = useCallback(
     (pending: PendingBlockDragState, clientX: number, clientY: number) => {
@@ -2423,16 +2280,7 @@ const BlockEditorEngine = ({
 
   const beginTableAxisDragFromPending = useCallback(
     (pending: PendingTableAxisDragState, clientX: number, clientY: number) => {
-      const nextDragState = {
-        axis: pending.axis,
-        sourceIndex: pending.sourceIndex,
-        pointerId: pending.pointerId,
-        tablePos: pending.tablePos,
-        previewLeft: pending.previewLeft,
-        previewTop: pending.previewTop,
-        previewWidth: pending.previewWidth,
-        previewHeight: pending.previewHeight,
-      } satisfies Exclude<DraggedTableAxisState, null>
+      const nextDragState = createDraggedTableAxisState(pending)
       tableAxisDragSuppressClickRef.current = true
       const currentEditor = editorRef.current
       if (currentEditor) {
@@ -2441,39 +2289,27 @@ const BlockEditorEngine = ({
       setTableMenuState(null)
       cancelTableQuickRailHide()
       setDraggedTableAxisState(nextDragState)
+      const renderedTable = findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)
       setTableAxisReorderIndicatorState(
-        resolveTableAxisReorderIndicator(pending.axis, pending.sourceIndex, clientX, clientY) ?? {
-          visible: false,
-          axis: pending.axis,
-          insertionIndex: pending.sourceIndex,
-          left: 0,
-          top: 0,
-          width: 0,
-          height: 0,
-        }
+        resolveTableAxisReorderIndicator(renderedTable, pending.axis, pending.sourceIndex, clientX, clientY) ??
+          createHiddenTableAxisReorderIndicatorState(pending.axis, pending.sourceIndex)
       )
-      setTableAxisDragGhostPosition(
-        pending.axis === "row"
-          ? {
-              x: pending.previewLeft,
-              y: Math.round(clientY - pending.previewHeight / 2),
-            }
-          : null
-      )
+      setTableAxisDragGhostPosition(createTableAxisDragGhostPosition(pending, clientY))
       return nextDragState
     },
-    [cancelTableQuickRailHide, resolveTableAxisReorderIndicator, selectTableAxisAtIndex]
+    [cancelTableQuickRailHide, selectTableAxisAtIndex]
   )
 
   const startPendingTableAxisDrag = useCallback(
-    (axis: "row" | "column", sourceIndex: number, pointerId: number, clientX: number, clientY: number) => {
+    (axis: TableAxis, sourceIndex: number, pointerId: number, clientX: number, clientY: number) => {
       const currentEditor = editorRef.current
       if (!currentEditor) return
 
       const tableRect = getCurrentSelectedTableRect(currentEditor)
       const tablePos = tableRect ? Math.max(0, tableRect.tableStart - 1) : null
       if (!tableRect || tablePos === null) return
-      const resolvedSourceIndex = resolveTableAxisIndexFromPointer(axis, clientX, clientY) ?? sourceIndex
+      const renderedTable = findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)
+      const resolvedSourceIndex = resolveTableAxisIndexFromPointer(renderedTable, axis, clientX, clientY) ?? sourceIndex
 
       const withinBounds =
         axis === "row"
@@ -2484,18 +2320,15 @@ const BlockEditorEngine = ({
       clearPendingTableAxisDrag()
       tableAxisDragSuppressClickRef.current = false
 
-      pendingTableAxisDragRef.current = {
+      pendingTableAxisDragRef.current = createPendingTableAxisDragState(
         axis,
-        sourceIndex: resolvedSourceIndex,
+        resolvedSourceIndex,
         pointerId,
         tablePos,
-        startX: clientX,
-        startY: clientY,
-        previewLeft: axis === "row" ? tableAffordanceGeometryRef.current.tableLeft : tableAffordanceGeometryRef.current.columnLeft,
-        previewTop: axis === "row" ? tableAffordanceGeometryRef.current.rowTop : tableAffordanceGeometryRef.current.tableTop,
-        previewWidth: axis === "row" ? tableAffordanceGeometryRef.current.width : tableAffordanceGeometryRef.current.columnWidth,
-        previewHeight: axis === "row" ? tableAffordanceGeometryRef.current.rowHeight : tableAffordanceGeometryRef.current.height,
-      }
+        clientX,
+        clientY,
+        tableAffordanceGeometryRef.current
+      )
 
       const DRAG_THRESHOLD_PX = 5
       let activeDragState: Exclude<DraggedTableAxisState, null> | null = null
@@ -2503,28 +2336,20 @@ const BlockEditorEngine = ({
       const handlePendingPointerMove = (moveEvent: PointerEvent) => {
         if (activeDragState) {
           if (moveEvent.pointerId !== activeDragState.pointerId) return
+          const activeRenderedTable = findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)
           const nextIndicator = resolveTableAxisReorderIndicator(
+            activeRenderedTable,
             activeDragState.axis,
             activeDragState.sourceIndex,
             moveEvent.clientX,
             moveEvent.clientY
           )
           setTableAxisReorderIndicatorState(
-            nextIndicator ?? {
-              visible: false,
-              axis: activeDragState.axis,
-              insertionIndex: activeDragState.sourceIndex,
-              left: 0,
-              top: 0,
-              width: 0,
-              height: 0,
-            }
+            nextIndicator ??
+              createHiddenTableAxisReorderIndicatorState(activeDragState.axis, activeDragState.sourceIndex)
           )
           if (activeDragState.axis === "row") {
-            setTableAxisDragGhostPosition({
-              x: activeDragState.previewLeft,
-              y: Math.round(moveEvent.clientY - activeDragState.previewHeight / 2),
-            })
+            setTableAxisDragGhostPosition(createTableAxisDragGhostPosition(activeDragState, moveEvent.clientY))
           }
           return
         }
@@ -2542,7 +2367,9 @@ const BlockEditorEngine = ({
       const handlePendingPointerDone = (doneEvent: PointerEvent) => {
         if (activeDragState) {
           if (doneEvent.pointerId !== activeDragState.pointerId) return
+          const activeRenderedTable = findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)
           const nextIndicator = resolveTableAxisReorderIndicator(
+            activeRenderedTable,
             activeDragState.axis,
             activeDragState.sourceIndex,
             doneEvent.clientX,
@@ -2559,7 +2386,7 @@ const BlockEditorEngine = ({
           activeDragState = null
           setDraggedTableAxisState(null)
           setTableAxisDragGhostPosition(null)
-          setTableAxisReorderIndicatorState((prev) => ({ ...prev, visible: false }))
+          setTableAxisReorderIndicatorState(hideTableAxisReorderIndicatorState)
           clearPendingTableAxisDrag()
           return
         }
@@ -2584,8 +2411,6 @@ const BlockEditorEngine = ({
       clearPendingTableAxisDrag,
       getCurrentSelectedTableRect,
       reorderTableAxisAtPosition,
-      resolveTableAxisIndexFromPointer,
-      resolveTableAxisReorderIndicator,
     ]
   )
 

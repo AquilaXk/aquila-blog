@@ -153,6 +153,18 @@ import {
   shouldUseThinBlockHandleAnchor,
 } from "./blockHandleLayoutModel"
 import {
+  type DraggedBlockState,
+  type DropIndicatorState,
+  type PendingBlockDragState,
+  createBlockDragPreview,
+  createDraggedBlockState,
+  createDropIndicatorState,
+  createHiddenDropIndicatorState,
+  createPendingBlockDragState,
+  hideDropIndicatorState,
+  resolveBlockDropIndicatorByClientY,
+} from "./blockDragModel"
+import {
   type NestedListItemContext,
   LIST_ITEM_SELECTOR,
   getActiveListItemName,
@@ -245,40 +257,6 @@ type TableOverflowCoachmarkState = {
   visible: boolean
   left: number
   top: number
-}
-
-type PendingBlockDragState = {
-  sourceIndex: number
-  pointerId: number
-  startX: number
-  startY: number
-  previewWidth: number
-  previewHeight: number
-  previewText: string
-  previewLabel: string
-}
-
-type DraggedBlockState =
-  | {
-      sourceIndex: number
-      pointerId: number
-      previewWidth: number
-      previewHeight: number
-      previewText: string
-      previewLabel: string
-    }
-  | null
-
-type DropIndicatorState = {
-  visible: boolean
-  insertionIndex: number
-  top: number
-  left: number
-  width: number
-  highlightTop: number
-  highlightLeft: number
-  highlightWidth: number
-  highlightHeight: number
 }
 
 type PendingTableAxisDragState = {
@@ -1208,17 +1186,7 @@ const BlockEditorEngine = ({
   })
   const [draggedBlockState, setDraggedBlockState] = useState<DraggedBlockState>(null)
   const [dragGhostPosition, setDragGhostPosition] = useState<{ x: number; y: number } | null>(null)
-  const [dropIndicatorState, setDropIndicatorState] = useState<DropIndicatorState>({
-    visible: false,
-    insertionIndex: 0,
-    top: 0,
-    left: 0,
-    width: 0,
-    highlightTop: 0,
-    highlightLeft: 0,
-    highlightWidth: 0,
-    highlightHeight: 0,
-  })
+  const [dropIndicatorState, setDropIndicatorState] = useState<DropIndicatorState>(createHiddenDropIndicatorState)
   const [draggedNestedListItemState, setDraggedNestedListItemState] = useState<DraggedNestedListItemState>(null)
   const [nestedListItemDropIndicatorState, setNestedListItemDropIndicatorState] =
     useState<NestedListItemDropIndicatorState>(createHiddenNestedListItemDropIndicatorState)
@@ -1620,66 +1588,6 @@ const BlockEditorEngine = ({
     syncSelectedBlockNodeSurface,
   ])
 
-  const resolveDropIndicatorByClientY = useCallback(
-    (clientY: number) => {
-      const elements = getTopLevelBlockElements()
-      if (!elements.length) {
-        return {
-          insertionIndex: 0,
-          top: 0,
-          left: 0,
-          width: 0,
-          highlightTop: 0,
-          highlightLeft: 0,
-          highlightWidth: 0,
-          highlightHeight: 0,
-        }
-      }
-
-      const rootRect = elements[0]?.parentElement?.getBoundingClientRect()
-      let insertionIndex = elements.length
-      let top = elements[elements.length - 1].getBoundingClientRect().bottom
-      let highlightTop = 0
-      let highlightLeft = 0
-      let highlightWidth = 0
-      let highlightHeight = 0
-
-      for (let index = 0; index < elements.length; index += 1) {
-        const rect = elements[index].getBoundingClientRect()
-        const midpoint = rect.top + rect.height / 2
-        if (clientY < midpoint) {
-          insertionIndex = index
-          top = rect.top
-          highlightTop = Math.round(rect.top - 4)
-          highlightLeft = Math.round(rect.left - 8)
-          highlightWidth = Math.round(rect.width + 16)
-          highlightHeight = Math.round(rect.height + 8)
-          break
-        }
-      }
-
-      if (insertionIndex === elements.length) {
-        const tailRect = elements[elements.length - 1].getBoundingClientRect()
-        highlightTop = Math.round(tailRect.bottom + 6)
-        highlightLeft = Math.round(tailRect.left)
-        highlightWidth = Math.round(tailRect.width)
-        highlightHeight = 18
-      }
-
-      return {
-        insertionIndex,
-        top: Math.round(top),
-        left: Math.round(rootRect?.left || elements[0].getBoundingClientRect().left),
-        width: Math.round(rootRect?.width || elements[0].getBoundingClientRect().width),
-        highlightTop,
-        highlightLeft,
-        highlightWidth,
-        highlightHeight,
-      }
-    },
-    [getTopLevelBlockElements]
-  )
-
   const clearPendingBlockDrag = useCallback(() => {
     pendingBlockDragRef.current = null
     if (pendingBlockDragCleanupRef.current) {
@@ -1707,7 +1615,7 @@ const BlockEditorEngine = ({
   const clearBlockDragVisualState = useCallback(() => {
     setDraggedBlockState(null)
     setDragGhostPosition(null)
-    setDropIndicatorState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
+    setDropIndicatorState(hideDropIndicatorState)
   }, [])
 
   const selectTableAxisAtIndex = useCallback(
@@ -1873,23 +1781,13 @@ const BlockEditorEngine = ({
 
   const beginBlockDragFromPending = useCallback(
     (pending: PendingBlockDragState, clientX: number, clientY: number) => {
-      const indicator = resolveDropIndicatorByClientY(clientY)
-      setDraggedBlockState({
-        sourceIndex: pending.sourceIndex,
-        pointerId: pending.pointerId,
-        previewWidth: pending.previewWidth,
-        previewHeight: pending.previewHeight,
-        previewText: pending.previewText,
-        previewLabel: pending.previewLabel,
-      })
+      const indicator = resolveBlockDropIndicatorByClientY(getTopLevelBlockElements(), clientY)
+      setDraggedBlockState(createDraggedBlockState(pending))
       setDragGhostPosition({
         x: clientX,
         y: clientY,
       })
-      setDropIndicatorState({
-        visible: true,
-        ...indicator,
-      })
+      setDropIndicatorState(createDropIndicatorState(indicator))
 
       let earlyPointerDoneTimeout: number | null = null
       const cleanupEarlyPointerDone = () => {
@@ -1910,7 +1808,7 @@ const BlockEditorEngine = ({
       window.addEventListener("pointercancel", handleEarlyPointerDone, true)
       earlyPointerDoneTimeout = window.setTimeout(cleanupEarlyPointerDone, 30000)
     },
-    [clearBlockDragVisualState, resolveDropIndicatorByClientY]
+    [clearBlockDragVisualState, getTopLevelBlockElements]
   )
 
   const clearNativeTextSelection = useCallback(() => {
@@ -6332,18 +6230,15 @@ const BlockEditorEngine = ({
 
     const handlePointerMove = (event: PointerEvent) => {
       if (event.pointerId !== draggedBlockState.pointerId) return
-      const nextIndicator = resolveDropIndicatorByClientY(event.clientY)
-      setDropIndicatorState({
-        visible: true,
-        ...nextIndicator,
-      })
+      const nextIndicator = resolveBlockDropIndicatorByClientY(getTopLevelBlockElements(), event.clientY)
+      setDropIndicatorState(createDropIndicatorState(nextIndicator))
       setDragGhostPosition({ x: event.clientX, y: event.clientY })
     }
 
     const handlePointerUp = (event: PointerEvent) => {
       if (event.pointerId !== draggedBlockState.pointerId) return
 
-      const nextIndicator = resolveDropIndicatorByClientY(event.clientY)
+      const nextIndicator = resolveBlockDropIndicatorByClientY(getTopLevelBlockElements(), event.clientY)
       const sourceIndex = draggedBlockState.sourceIndex
       const normalizedInsertionIndex =
         nextIndicator.insertionIndex > sourceIndex
@@ -6357,7 +6252,7 @@ const BlockEditorEngine = ({
 
       setDraggedBlockState(null)
       setDragGhostPosition(null)
-      setDropIndicatorState((prev) => ({ ...prev, visible: false }))
+      setDropIndicatorState(hideDropIndicatorState)
       window.removeEventListener("pointermove", handlePointerMove)
       window.removeEventListener("pointerup", handlePointerUp)
       window.removeEventListener("pointercancel", handlePointerUp)
@@ -6371,7 +6266,7 @@ const BlockEditorEngine = ({
       window.removeEventListener("pointerup", handlePointerUp)
       window.removeEventListener("pointercancel", handlePointerUp)
     }
-  }, [draggedBlockState, mutateTopLevelBlocks, resolveDropIndicatorByClientY])
+  }, [draggedBlockState, getTopLevelBlockElements, mutateTopLevelBlocks])
 
   useEffect(() => {
     if (typeof document === "undefined" || !draggedBlockState) return
@@ -8931,23 +8826,14 @@ const BlockEditorEngine = ({
                 event.preventDefault()
                 const sourceIndex = blockHandleState.blockIndex
                 const sourceElement = getTopLevelBlockElementByIndex(sourceIndex)
-                const sourceRect = sourceElement?.getBoundingClientRect()
-                const previewWidth = sourceRect
-                  ? Math.round(Math.min(Math.max(sourceRect.width, 320), Math.max(320, window.innerWidth - 48)))
-                  : 480
-                const previewHeight = sourceRect ? Math.round(Math.min(Math.max(sourceRect.height, 44), 320)) : 120
-                const previewLabel = sourceElement?.textContent?.trim().slice(0, 100) || "블록 이동"
-                const previewText = sourceElement?.textContent?.trim().replace(/\s+/g, " ").slice(0, 220) || previewLabel
-                const pendingState: PendingBlockDragState = {
+                const preview = createBlockDragPreview(sourceElement, window.innerWidth)
+                const pendingState = createPendingBlockDragState(
                   sourceIndex,
-                  pointerId: event.pointerId,
-                  startX: event.clientX,
-                  startY: event.clientY,
-                  previewWidth,
-                  previewHeight,
-                  previewText,
-                  previewLabel,
-                }
+                  event.pointerId,
+                  event.clientX,
+                  event.clientY,
+                  preview
+                )
                 clearPendingBlockDrag()
                 pendingBlockDragRef.current = pendingState
 

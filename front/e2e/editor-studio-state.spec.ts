@@ -138,6 +138,14 @@ test.describe("editor studio state", () => {
     const editorStudioThumbnailPreviewSource = existsSync(editorStudioThumbnailPreviewPath)
       ? readFileSync(editorStudioThumbnailPreviewPath, "utf8")
       : ""
+    const editorStudioThumbnailControlsPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/useEditorStudioThumbnailControls.ts"
+    )
+    expect(existsSync(editorStudioThumbnailControlsPath)).toBe(true)
+    const editorStudioThumbnailControlsSource = existsSync(editorStudioThumbnailControlsPath)
+      ? readFileSync(editorStudioThumbnailControlsPath, "utf8")
+      : ""
     const blockEditorShellSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"), "utf8")
     const blockEditorEngineSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"), "utf8")
     const blockSelectionModelSource = readFileSync(
@@ -189,8 +197,15 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).not.toContain("const publishActionTriggerDisabled =")
     expect(editorStudioSource).not.toContain("const mobilePrimaryActionLabel =")
     expect(editorStudioSource).toContain('import { useEditorStudioThumbnailPreview } from "./useEditorStudioThumbnailPreview"')
+    expect(editorStudioSource).toContain('import { useEditorStudioThumbnailControls } from "./useEditorStudioThumbnailControls"')
     expect(editorStudioSource).not.toContain("type ThumbnailSourceSize =")
     expect(editorStudioSource).not.toContain("type ThumbnailTransformState =")
+    expect(editorStudioSource).not.toContain("const thumbnailImageFileInputRef = useRef<HTMLInputElement>")
+    expect(editorStudioSource).not.toContain("const [thumbnailImageFileName, setThumbnailImageFileName] = useState")
+    expect(editorStudioSource).not.toContain("const handleThumbnailUrlModalChange = useCallback")
+    expect(editorStudioSource).not.toContain("const applyFirstBodyImageToThumbnail = useCallback")
+    expect(editorStudioSource).not.toContain("const resetThumbnailToAutoMode = useCallback")
+    expect(editorStudioSource).not.toContain("const openThumbnailFileInput = useCallback")
     expect(editorStudioSource).not.toContain("const DEFAULT_THUMBNAIL_SOURCE_SIZE")
     expect(editorStudioSource).not.toContain("const THUMBNAIL_FRAME_ASPECT_RATIO")
     expect(editorStudioSource).not.toContain("const resolveThumbnailDrawRatios =")
@@ -204,6 +219,10 @@ test.describe("editor studio state", () => {
     expect(editorStudioThumbnailPreviewSource).toContain("export const useEditorStudioThumbnailPreview")
     expect(editorStudioThumbnailPreviewSource).toContain("const resolveThumbnailDrawRatios =")
     expect(editorStudioThumbnailPreviewSource).toContain("const readThumbnailSourceSizeFromUrl =")
+    expect(editorStudioThumbnailControlsSource).toContain("export type EditorStudioThumbnailControls =")
+    expect(editorStudioThumbnailControlsSource).toContain("export const useEditorStudioThumbnailControls")
+    expect(editorStudioThumbnailControlsSource).toContain("const handleThumbnailUrlModalChange = useCallback")
+    expect(editorStudioThumbnailControlsSource).toContain("const applyFirstBodyImageToThumbnail = useCallback")
     expect(editorStudioStateSource).toContain("export type PostVisibility =")
     expect(editorStudioStateSource).toContain("export const toVisibility")
     expect(editorStudioStateSource).toContain("export const toFlags")

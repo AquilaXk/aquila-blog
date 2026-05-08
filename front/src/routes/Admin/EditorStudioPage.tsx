@@ -44,6 +44,7 @@ import { WriterEditorHost } from "./WriterEditorHost"
 import { useEditorStudioDraftLifecycle } from "./useEditorStudioDraftLifecycle"
 import { useEditorStudioPersistence } from "./useEditorStudioPersistence"
 import { useEditorStudioRouting } from "./useEditorStudioRouting"
+import { useEditorStudioThumbnailControls } from "./useEditorStudioThumbnailControls"
 import { useEditorStudioThumbnailPreview } from "./useEditorStudioThumbnailPreview"
 import {
   isServerTempDraftPost,
@@ -70,9 +71,6 @@ import {
   DEFAULT_THUMBNAIL_FOCUS_X,
   DEFAULT_THUMBNAIL_FOCUS_Y,
   DEFAULT_THUMBNAIL_ZOOM,
-  getThumbnailFocusXFromUrl,
-  getThumbnailFocusYFromUrl,
-  getThumbnailZoomFromUrl,
   parseThumbnailFocusXFromUrl,
   parseThumbnailZoomFromUrl,
   parseThumbnailFocusYFromUrl,
@@ -1246,8 +1244,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     ignoreUntilMs: 0,
     ignoredInitialEmpty: false,
   })
-  const thumbnailImageFileInputRef = useRef<HTMLInputElement>(null)
-  const [thumbnailImageFileName, setThumbnailImageFileName] = useState("")
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false)
   const [publishActionType, setPublishActionType] = useState<PublishActionType>("create")
   const [previewThumbnailSourceUrl, setPreviewThumbnailSourceUrl] = useState("")
@@ -1740,6 +1736,25 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     setPostThumbnailFocusX,
     setPostThumbnailFocusY,
     setPostThumbnailZoom,
+  })
+
+  const {
+    applyFirstBodyImageToThumbnail,
+    handleThumbnailUrlModalChange,
+    openThumbnailFileInput,
+    resetThumbnailToAutoMode,
+    setThumbnailImageFileName,
+    thumbnailImageFileInputRef,
+    thumbnailImageFileName,
+  } = useEditorStudioThumbnailControls({
+    postContent,
+    setPostThumbnailUrl,
+    setPostThumbnailFocusX,
+    setPostThumbnailFocusY,
+    setPostThumbnailZoom,
+    setPreviewThumbnailSourceUrl,
+    extractFirstMarkdownImage,
+    normalizeSafeImageUrl,
   })
 
   const refreshEditorMetaCatalog = useCallback(async () => {
@@ -2819,40 +2834,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       zoom: DEFAULT_THUMBNAIL_ZOOM,
     })
   }, [commitPreviewThumbTransform, previewThumbTransformRef])
-  const handleThumbnailUrlModalChange = useCallback((nextValue: string) => {
-    setPostThumbnailUrl(nextValue)
-    const focusXFromInput = getThumbnailFocusXFromUrl(nextValue)
-    if (focusXFromInput !== null) {
-      setPostThumbnailFocusX(focusXFromInput)
-    }
-    const focusFromInput = getThumbnailFocusYFromUrl(nextValue)
-    if (focusFromInput !== null) {
-      setPostThumbnailFocusY(focusFromInput)
-    }
-    const zoomFromInput = getThumbnailZoomFromUrl(nextValue)
-    if (zoomFromInput !== null) {
-      setPostThumbnailZoom(zoomFromInput)
-    }
-    setPreviewThumbnailSourceUrl("")
-  }, [])
-  const applyFirstBodyImageToThumbnail = useCallback(() => {
-    const extractedThumbnailUrl = normalizeSafeImageUrl(extractFirstMarkdownImage(postContent))
-    setPostThumbnailUrl(stripThumbnailFocusFromUrl(extractedThumbnailUrl))
-    setPostThumbnailFocusX(parseThumbnailFocusXFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_X))
-    setPostThumbnailFocusY(parseThumbnailFocusYFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_Y))
-    setPostThumbnailZoom(parseThumbnailZoomFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_ZOOM))
-    setPreviewThumbnailSourceUrl("")
-  }, [postContent])
-  const resetThumbnailToAutoMode = useCallback(() => {
-    setPostThumbnailUrl("")
-    setPostThumbnailFocusX(DEFAULT_THUMBNAIL_FOCUS_X)
-    setPostThumbnailFocusY(DEFAULT_THUMBNAIL_FOCUS_Y)
-    setPostThumbnailZoom(DEFAULT_THUMBNAIL_ZOOM)
-    setPreviewThumbnailSourceUrl("")
-  }, [])
-  const openThumbnailFileInput = useCallback(() => {
-    thumbnailImageFileInputRef.current?.click()
-  }, [])
   const thumbnailEditorPanel = useMemo(() => (
     <PreviewEditorSection>
       <PreviewEditorSectionHeader>

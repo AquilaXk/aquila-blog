@@ -144,6 +144,14 @@ test.describe("editor studio state", () => {
       path.resolve(__dirname, "../src/components/editor/blockSelectionModel.ts"),
       "utf8"
     )
+    const blockHandleLayoutModelPath = path.resolve(
+      __dirname,
+      "../src/components/editor/blockHandleLayoutModel.ts"
+    )
+    expect(existsSync(blockHandleLayoutModelPath)).toBe(true)
+    const blockHandleLayoutModelSource = existsSync(blockHandleLayoutModelPath)
+      ? readFileSync(blockHandleLayoutModelPath, "utf8")
+      : ""
     const slashMenuModelPath = path.resolve(__dirname, "../src/components/editor/slashMenuModel.ts")
     expect(existsSync(slashMenuModelPath)).toBe(true)
     const slashMenuModelSource = existsSync(slashMenuModelPath) ? readFileSync(slashMenuModelPath, "utf8") : ""
@@ -271,8 +279,19 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).not.toMatch(/const\s+isStableBlockHandleState\s*=/)
     expect(blockEditorEngineSource).not.toMatch(/const\s+isStableBlockSelectionOverlayState\s*=/)
     expect(blockEditorEngineSource).not.toMatch(/const\s+resolveOuterBlockSelectionGesture\s*=/)
+    expect(blockEditorEngineSource).toContain('from "./blockHandleLayoutModel"')
+    expect(blockEditorEngineSource).not.toMatch(/const\s+resolveBlockHandleAnchorTop\s*=/)
+    expect(blockEditorEngineSource).not.toMatch(/const\s+resolveThinBlockHandleAnchorTop\s*=/)
+    expect(blockEditorEngineSource).not.toMatch(/const\s+resolveBlockHandleRailLayout\s*=/)
+    expect(blockEditorEngineSource).not.toMatch(/const\s+shouldCenterBlockHandleForNode\s*=/)
+    expect(blockEditorEngineSource).not.toMatch(/const\s+shouldUseThinBlockHandleAnchor\s*=/)
     expect(blockSelectionModelSource).toContain("export const resolveOuterBlockSelectionGesture")
     expect(blockSelectionModelSource).toContain("export const resolveOuterListItemSelectionGesture")
+    expect(blockHandleLayoutModelSource).toContain("export const resolveBlockHandleAnchorTop")
+    expect(blockHandleLayoutModelSource).toContain("export const resolveThinBlockHandleAnchorTop")
+    expect(blockHandleLayoutModelSource).toContain("export const resolveBlockHandleRailLayout")
+    expect(blockHandleLayoutModelSource).toContain("export const shouldCenterBlockHandleForNode")
+    expect(blockHandleLayoutModelSource).toContain("export const shouldUseThinBlockHandleAnchor")
     const selectionRuleMatch = blockEditorEngineSource.match(/\.aq-block-editor__content ::selection\s*\{([^}]*)\}/)
     expect(selectionRuleMatch?.[1]).toBeTruthy()
     expect(selectionRuleMatch?.[1]).not.toMatch(/\bcolor\s*:/)

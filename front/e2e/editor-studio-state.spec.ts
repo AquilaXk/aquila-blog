@@ -497,6 +497,14 @@ test.describe("editor studio state", () => {
     const tableResizeInteractionModelSource = existsSync(tableResizeInteractionModelPath)
       ? readFileSync(tableResizeInteractionModelPath, "utf8")
       : ""
+    const tableFloatingUiModelPath = path.resolve(
+      __dirname,
+      "../src/components/editor/tableFloatingUiModel.ts"
+    )
+    expect(existsSync(tableFloatingUiModelPath)).toBe(true)
+    const tableFloatingUiModelSource = existsSync(tableFloatingUiModelPath)
+      ? readFileSync(tableFloatingUiModelPath, "utf8")
+      : ""
     const tableCornerGrowModelSource = readFileSync(
       path.resolve(__dirname, "../src/components/editor/tableCornerGrowModel.ts"),
       "utf8"
@@ -531,12 +539,32 @@ test.describe("editor studio state", () => {
     expect(tableResizeInteractionModelSource).toContain("export const isRowResizeHandleTarget =")
     expect(tableResizeInteractionModelSource).toContain("export const resolveTableColumnDragGuideState =")
     expect(tableResizeInteractionModelSource).toContain("export const resolveTableColumnIndexFromResizeHandleTarget =")
+    expect(tableFloatingUiModelSource).toContain("export type TableMenuKind =")
+    expect(tableFloatingUiModelSource).toContain("export type TableMenuState =")
+    expect(tableFloatingUiModelSource).toContain("export type TableOverflowCoachmarkState =")
+    expect(tableFloatingUiModelSource).toContain("export const TABLE_OVERFLOW_COACHMARK_ESTIMATED_WIDTH_PX = 244")
+    expect(tableFloatingUiModelSource).toContain("export const TABLE_OVERFLOW_COACHMARK_DISMISS_MS = 4200")
+    expect(tableFloatingUiModelSource).toContain("export const resolveTableOverflowCoachmarkState =")
+    expect(tableFloatingUiModelSource).toContain("export const hideTableOverflowCoachmarkState =")
+    expect(tableFloatingUiModelSource).toContain("export const resolveTableMenuState =")
+    expect(tableFloatingUiModelSource).toContain("export const resolveTableMenuFlags =")
+    expect(tableFloatingUiModelSource).toContain("export const resolveCompactTableAffordanceKind =")
+    expect(tableFloatingUiModelSource).toContain("export const resolveTableHandleVisibility =")
     expect(blockEditorEngineSource).not.toContain("type TableRowResizeState = {")
     expect(blockEditorEngineSource).not.toContain("type TableColumnRailResizeState = {")
     expect(blockEditorEngineSource).not.toContain("type TableColumnDragGuideState = {")
+    expect(blockEditorEngineSource).not.toContain("type TableMenuKind =")
+    expect(blockEditorEngineSource).not.toContain("type TableMenuState =")
+    expect(blockEditorEngineSource).not.toContain("type TableOverflowCoachmarkState =")
+    expect(blockEditorEngineSource).not.toContain("const TABLE_MENU_EDGE_PADDING_PX =")
+    expect(blockEditorEngineSource).not.toContain("const tableMenuKind = tableMenuState?.kind ?? null")
+    expect(blockEditorEngineSource).not.toContain("const compactTableAffordanceKind = useMemo(")
+    expect(blockEditorEngineSource).not.toContain("const shouldShowColumnRail =")
+    expect(blockEditorEngineSource).not.toContain("const shouldShowRowRail =")
     expect(blockEditorEngineSource).not.toContain("const isRowResizeHandleTarget = useCallback(")
     expect(blockEditorEngineSource).not.toContain("const syncTableColumnDragGuideForColumn = useCallback(")
     expect(blockEditorEngineSource).not.toContain("const startTableColumnResizeFromDomHandle = useCallback(")
+    expect(blockEditorEngineSource).toContain('} from "./tableFloatingUiModel"')
     expect(blockEditorEngineSource).toContain("const getActiveTableRectFromDom = useCallback(")
     expect(blockEditorEngineSource).toContain('import { createPortal } from "react-dom"')
     expect(blockEditorEngineSource).toContain("const tableOverlayPortal =")
@@ -617,13 +645,13 @@ test.describe("editor studio state", () => {
     expect(tableWidthModelSource).toContain("const maxActiveWidth = Math.max(TABLE_MIN_COLUMN_WIDTH_PX, safeBudget - otherColumnsWidth)")
     expect(blockEditorEngineSource).toContain("const tableCornerGrowSuppressClickRef = useRef(false)")
     expect(blockEditorEngineSource).toContain('"grip" | "grow"')
-    expect(blockEditorEngineSource).toContain('const isCellMenuOpen = tableMenuKind === "cell"')
+    expect(blockEditorEngineSource).toContain("isCellMenuOpen,")
     expect(markdownRendererSource).toContain("const explicitTableWidth = useMemo(")
     expect(markdownRendererSource).toContain("minWidth: `${explicitTableWidth}px`")
     expect(markdownRendererRootSource).toContain("width: auto;")
     expect(markdownRendererRootSource).toContain("max-width: none;")
-    expect(blockEditorEngineSource).toContain('const isRowMenuOpen = tableMenuKind === "row"')
-    expect(blockEditorEngineSource).toContain('const isColumnMenuOpen = tableMenuKind === "column"')
+    expect(blockEditorEngineSource).toContain("isRowMenuOpen,")
+    expect(blockEditorEngineSource).toContain("isColumnMenuOpen,")
     expect(blockEditorEngineSource).toContain("activeTableStructureState.hasHeaderRow")
     expect(blockEditorEngineSource).toContain("activeTableStructureState.hasHeaderColumn")
     expect(blockEditorEngineSource).toContain("const tableCornerGrowStepMetrics = resolveTableCornerGrowStepMetrics(tableAffordanceGeometry)")
@@ -650,19 +678,9 @@ test.describe("editor studio state", () => {
     )
     expect(blockEditorEngineSource).toContain("const tableAffordanceVisibilityRef = useRef(tableAffordanceVisibility)")
     expect(blockEditorEngineSource).not.toContain("type TableQuickRailState =")
-    expect(blockEditorEngineSource).toContain('const isTableStructureMenuOpen = tableMenuKind === "table"')
-    expect(blockEditorEngineSource).toContain(
-      "const shouldShowColumnAddBar ="
-    )
-    expect(blockEditorEngineSource).toContain(
-      "shouldShowDesktopTableHandles && (tableAffordanceVisibility.showColumnAddBar || isColumnMenuOpen)"
-    )
-    expect(blockEditorEngineSource).toContain(
-      "const shouldShowRowAddBar ="
-    )
-    expect(blockEditorEngineSource).toContain(
-      "shouldShowDesktopTableHandles && (tableAffordanceVisibility.showRowAddBar || isRowMenuOpen)"
-    )
+    expect(blockEditorEngineSource).toContain("isTableStructureMenuOpen,")
+    expect(blockEditorEngineSource).toContain("shouldShowColumnAddBar,")
+    expect(blockEditorEngineSource).toContain("shouldShowRowAddBar,")
     expect(blockEditorEngineSource).toContain("findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)")
     expect(blockEditorEngineSource).toContain("display: none !important;")
     expect(editorStudioSource).toContain('import { useEditorStudioPersistence } from "./useEditorStudioPersistence"')

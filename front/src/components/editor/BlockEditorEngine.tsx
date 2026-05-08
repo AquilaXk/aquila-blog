@@ -160,6 +160,20 @@ import {
   resolveTableColumnIndexFromResizeHandleTarget,
 } from "./tableResizeInteractionModel"
 import {
+  TABLE_OVERFLOW_COACHMARK_DISMISS_MS,
+  TABLE_OVERFLOW_COACHMARK_ESTIMATED_WIDTH_PX,
+  createHiddenTableOverflowCoachmarkState,
+  hideTableOverflowCoachmarkState,
+  resolveCompactTableAffordanceKind,
+  resolveTableHandleVisibility,
+  resolveTableMenuFlags,
+  resolveTableMenuState,
+  resolveTableOverflowCoachmarkState,
+  type TableMenuKind,
+  type TableMenuState,
+  type TableOverflowCoachmarkState,
+} from "./tableFloatingUiModel"
+import {
   BLOCK_OUTER_SELECT_LEFT_GUTTER_PX,
   BLOCK_OUTER_SELECT_LEFT_EDGE_GAP_PX,
   BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX,
@@ -269,22 +283,6 @@ type ToolbarAction = {
   disabled?: boolean
 }
 
-type TableMenuKind = "row" | "column" | "table" | "cell"
-
-type TableMenuState =
-  | {
-      kind: TableMenuKind
-      left: number
-      top: number
-    }
-  | null
-
-type TableOverflowCoachmarkState = {
-  visible: boolean
-  left: number
-  top: number
-}
-
 const EDITOR_RUNTIME_GUARD_SAMPLE_LIMIT = 240
 
 const recordEditorCommitDurationForRuntimeGuard = (durationMs: number) => {
@@ -338,17 +336,11 @@ const TABLE_AXIS_GRIP_EDGE_INSET_PX = 0
 const TABLE_ADD_BAR_THICKNESS_PX = 28
 const TABLE_AXIS_RAIL_EDGE_HOTZONE_PX = 18
 const TABLE_TRAILING_ADD_EDGE_HOTZONE_PX = 18
-const TABLE_OVERFLOW_COACHMARK_ESTIMATED_WIDTH_PX = 244
-const TABLE_OVERFLOW_COACHMARK_DISMISS_MS = 4200
-
 const TABLE_EDGE_HANDLE_INSET_PX = 6
 const TABLE_CORNER_CLUSTER_GAP_PX = 6
 const TABLE_CORNER_CLUSTER_WIDTH_PX =
   TABLE_CORNER_BUTTON_SIZE_PX * 2 + TABLE_CORNER_CLUSTER_GAP_PX
 const TABLE_QUICK_RAIL_HIDE_DELAY_MS = 120
-const TABLE_MENU_EDGE_PADDING_PX = 16
-const TABLE_MENU_ESTIMATED_WIDTH_PX = 272
-const TABLE_MENU_ESTIMATED_HEIGHT_PX = 420
 const SLASH_MENU_RECENT_IDS_STORAGE_KEY = "editor:block-slash-recent:v1"
 const SLASH_MENU_MAX_RECENT_ITEMS = 6
 const SLASH_MENU_EDGE_PADDING_PX = 16
@@ -1118,11 +1110,9 @@ const BlockEditorEngine = ({
     cellMenuTop: number
   } | null>(null)
   const [tableMenuState, setTableMenuState] = useState<TableMenuState>(null)
-  const [tableOverflowCoachmarkState, setTableOverflowCoachmarkState] = useState<TableOverflowCoachmarkState>({
-    visible: false,
-    left: 0,
-    top: 0,
-  })
+  const [tableOverflowCoachmarkState, setTableOverflowCoachmarkState] = useState<TableOverflowCoachmarkState>(
+    createHiddenTableOverflowCoachmarkState
+  )
   const tableAffordanceGeometryRef = useRef(tableAffordanceGeometry)
   const tableAffordanceVisibilityRef = useRef(tableAffordanceVisibility)
   const tableCornerPreviewStateRef = useRef<TableCornerPreviewState>({
@@ -1174,14 +1164,7 @@ const BlockEditorEngine = ({
 
   const hideTableOverflowCoachmark = useCallback(() => {
     cancelTableOverflowCoachmarkHide()
-    setTableOverflowCoachmarkState((prev) =>
-      prev.visible
-        ? {
-            ...prev,
-            visible: false,
-          }
-        : prev
-    )
+    setTableOverflowCoachmarkState(hideTableOverflowCoachmarkState)
   }, [cancelTableOverflowCoachmarkHide])
 
   const scheduleTableOverflowCoachmarkHide = useCallback(
@@ -1190,7 +1173,7 @@ const BlockEditorEngine = ({
       cancelTableOverflowCoachmarkHide()
       tableOverflowCoachmarkHideTimerRef.current = window.setTimeout(() => {
         tableOverflowCoachmarkHideTimerRef.current = null
-        setTableOverflowCoachmarkState((prev) => ({ ...prev, visible: false }))
+        setTableOverflowCoachmarkState(hideTableOverflowCoachmarkState)
       }, delayMs)
     },
     [cancelTableOverflowCoachmarkHide]
@@ -1203,22 +1186,15 @@ const BlockEditorEngine = ({
       tableAffordanceGeometryRef.current
     )
     const tableRect = renderedTable?.getBoundingClientRect() ?? null
-    const fallbackAnchor = tableAffordanceGeometryRef.current.cornerAnchor
-    const anchorRight = tableRect ? tableRect.right : fallbackAnchor.left + TABLE_CORNER_BUTTON_SIZE_PX
-    const anchorTop = tableRect ? tableRect.top : fallbackAnchor.top
-    const nextLeft = Math.min(
-      Math.max(16, Math.round(anchorRight - TABLE_OVERFLOW_COACHMARK_ESTIMATED_WIDTH_PX)),
-      Math.max(16, window.innerWidth - TABLE_OVERFLOW_COACHMARK_ESTIMATED_WIDTH_PX - 16)
+    setTableOverflowCoachmarkState(
+      resolveTableOverflowCoachmarkState({
+        tableRect,
+        fallbackAnchor: tableAffordanceGeometryRef.current.cornerAnchor,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        cornerButtonSize: TABLE_CORNER_BUTTON_SIZE_PX,
+      })
     )
-    const preferredTop = Math.round(anchorTop - 54)
-    const nextTop =
-      preferredTop >= 16 ? preferredTop : Math.min(window.innerHeight - 52, Math.round(anchorTop + 12))
-
-    setTableOverflowCoachmarkState({
-      visible: true,
-      left: nextLeft,
-      top: Math.max(16, nextTop),
-    })
     scheduleTableOverflowCoachmarkHide()
   }, [isCoarsePointer, isNarrowTableViewport, scheduleTableOverflowCoachmarkHide])
   const selectionUiSignatureRef = useRef("")
@@ -4744,12 +4720,14 @@ const BlockEditorEngine = ({
     }
     return null
   }, [editor, isTableStructuralSelection, selectionTick])
-  const tableMenuKind = tableMenuState?.kind ?? null
-  const isAnyTableMenuOpen = tableMenuKind !== null
-  const isTableStructureMenuOpen = tableMenuKind === "table"
-  const isRowMenuOpen = tableMenuKind === "row"
-  const isColumnMenuOpen = tableMenuKind === "column"
-  const isCellMenuOpen = tableMenuKind === "cell"
+  const {
+    tableMenuKind,
+    isAnyTableMenuOpen,
+    isTableStructureMenuOpen,
+    isRowMenuOpen,
+    isColumnMenuOpen,
+    isCellMenuOpen,
+  } = resolveTableMenuFlags(tableMenuState)
   const hasActiveTableCellContext = useMemo(() => {
     if (!editor || isTableStructuralSelection) return false
     void selectionTick
@@ -4761,47 +4739,31 @@ const BlockEditorEngine = ({
   const shouldShowDesktopTableHandles =
     !shouldUseCompactTableAffordance &&
     (tableAffordanceVisibility.visible || isTableQuickRailHovered || shouldPersistTableHandles || isTableColumnResizeActive)
-  const compactTableAffordanceKind = useMemo(() => {
-    if (!shouldUseCompactTableAffordance) return null
-    if (currentTableAxisSelection?.axis === "row" || draggedTableAxisState?.axis === "row" || isRowMenuOpen) {
-      return "row" as const
-    }
-    if (currentTableAxisSelection?.axis === "column" || draggedTableAxisState?.axis === "column" || isColumnMenuOpen) {
-      return "column" as const
-    }
-    if (tableAffordanceVisibility.visible || shouldPersistTableHandles || isTableStructureMenuOpen || hasActiveTableCellContext) {
-      return "table" as const
-    }
-    return null
-  }, [
-    currentTableAxisSelection?.axis,
-    draggedTableAxisState?.axis,
+  const compactTableAffordanceKind = resolveCompactTableAffordanceKind({
+    shouldUseCompactTableAffordance,
+    currentTableAxisSelection,
+    draggedTableAxis: draggedTableAxisState?.axis ?? null,
+    isRowMenuOpen,
+    isColumnMenuOpen,
+    tableAffordanceVisible: tableAffordanceVisibility.visible,
+    shouldPersistTableHandles,
+    isTableStructureMenuOpen,
     hasActiveTableCellContext,
+  })
+  const {
+    shouldShowColumnRail,
+    shouldShowRowRail,
+    shouldShowColumnAddBar,
+    shouldShowRowAddBar,
+  } = resolveTableHandleVisibility({
+    compactTableAffordanceKind,
+    shouldShowDesktopTableHandles,
+    tableAffordanceVisibility,
+    currentTableAxisSelection,
+    draggedTableAxis: draggedTableAxisState?.axis ?? null,
     isColumnMenuOpen,
     isRowMenuOpen,
-    isTableStructureMenuOpen,
-    shouldPersistTableHandles,
-    shouldUseCompactTableAffordance,
-    tableAffordanceVisibility.visible,
-  ])
-  const shouldShowColumnRail =
-    compactTableAffordanceKind === "column" ||
-    (shouldShowDesktopTableHandles &&
-      (tableAffordanceVisibility.showColumnRail ||
-        currentTableAxisSelection?.axis === "column" ||
-        draggedTableAxisState?.axis === "column" ||
-        isColumnMenuOpen))
-  const shouldShowRowRail =
-    compactTableAffordanceKind === "row" ||
-    (shouldShowDesktopTableHandles &&
-      (tableAffordanceVisibility.showRowRail ||
-        currentTableAxisSelection?.axis === "row" ||
-        draggedTableAxisState?.axis === "row" ||
-        isRowMenuOpen))
-  const shouldShowColumnAddBar =
-    shouldShowDesktopTableHandles && (tableAffordanceVisibility.showColumnAddBar || isColumnMenuOpen)
-  const shouldShowRowAddBar =
-    shouldShowDesktopTableHandles && (tableAffordanceVisibility.showRowAddBar || isRowMenuOpen)
+  })
   const activeTableStructureState = useMemo(() => {
     void selectionTick
     return getActiveTableStructureState(editor)
@@ -5875,35 +5837,18 @@ const BlockEditorEngine = ({
 
   const openTableMenu = useCallback((kind: TableMenuKind, anchorRect: DOMRect) => {
     cancelTableQuickRailHide()
-    const nextLeft =
-      typeof window !== "undefined"
-        ? Math.min(
-            Math.max(TABLE_MENU_EDGE_PADDING_PX, Math.round(anchorRect.left)),
-            Math.max(
-              TABLE_MENU_EDGE_PADDING_PX,
-              window.innerWidth - TABLE_MENU_ESTIMATED_WIDTH_PX - TABLE_MENU_EDGE_PADDING_PX
-            )
-          )
-        : Math.round(anchorRect.left)
-    const nextTop =
-      typeof window !== "undefined"
-        ? Math.min(
-            Math.max(TABLE_MENU_EDGE_PADDING_PX, Math.round(anchorRect.bottom + 8)),
-            Math.max(
-              TABLE_MENU_EDGE_PADDING_PX,
-              window.innerHeight - TABLE_MENU_ESTIMATED_HEIGHT_PX - TABLE_MENU_EDGE_PADDING_PX
-            )
-          )
-        : Math.round(anchorRect.bottom + 8)
-
     setTableMenuState((prev) =>
-      prev && prev.kind === kind
-        ? null
-        : {
-            kind,
-            left: nextLeft,
-            top: nextTop,
-        }
+      resolveTableMenuState(
+        prev,
+        kind,
+        anchorRect,
+        typeof window === "undefined"
+          ? null
+          : {
+              width: window.innerWidth,
+              height: window.innerHeight,
+            }
+      )
     )
   }, [cancelTableQuickRailHide])
 

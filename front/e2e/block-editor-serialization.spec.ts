@@ -246,6 +246,36 @@ test.describe("block editor serialization", () => {
     expect(doc.content?.some((node) => node.type === "resizableImage")).toBe(true)
   })
 
+  test("pretty-code fallback HTML은 data 속성의 원문으로 code block body를 복구한다", async ({ page }) => {
+    const html = `
+      <pre class="aq-code aq-pretty-pre">
+        <code
+          class="language-ts"
+          data-language="ts"
+          data-prism-source="const answer = 42;&#10;return answer"
+        ></code>
+      </pre>
+    `
+
+    const markdown = await page.evaluate(
+      ({ compiledSource, htmlSource }) => {
+        const module = { exports: {} as { convertHtmlToMarkdown?: (html: string) => string } }
+        const exports = module.exports
+        const runner = new Function("module", "exports", compiledSource)
+        runner(module, exports)
+        return module.exports.convertHtmlToMarkdown?.(htmlSource) || ""
+      },
+      { compiledSource: transpiledHtmlToMarkdownModule, htmlSource: html }
+    )
+
+    expect(markdown).toContain(["```ts", "const answer = 42;", "return answer", "```"].join("\n"))
+
+    const doc = parseMarkdownToEditorDoc(markdown)
+    const codeBlock = doc.content?.find((node) => node.type === "codeBlock")
+    expect(codeBlock?.content?.[0]?.text).toContain("const answer = 42;")
+    expect(codeBlock?.content?.[0]?.text).toContain("return answer")
+  })
+
   test("plain text markdown 문서 붙여넣기는 전체 블록을 자동 렌더 상태로 승격한다", async ({ page }) => {
     const markdownSource = [
       "# 시작하며",

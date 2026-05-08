@@ -84,7 +84,7 @@ type AboutProjectItem = {
   name: string
   summary: string
   role: string
-  href: string
+  safeHref: string
   linkLabel: string
 }
 
@@ -102,6 +102,20 @@ const parseTimelineItem = (item: string): AboutTimelineItem => {
 
 const isExternalHref = (href: string) =>
   href.startsWith("https://") || href.startsWith("http://") || href.startsWith("mailto:") || href.startsWith("tel:")
+
+const resolveSafeAboutHref = (href: string) => {
+  const trimmedHref = href.trim()
+  if (!trimmedHref) return ""
+  if (/^#[A-Za-z][\w-]*$/.test(trimmedHref)) return trimmedHref
+  if (trimmedHref.startsWith("/") && !trimmedHref.startsWith("//")) return trimmedHref
+
+  try {
+    const parsedHref = new URL(trimmedHref)
+    return ["http:", "https:", "mailto:", "tel:"].includes(parsedHref.protocol) ? parsedHref.toString() : ""
+  } catch {
+    return ""
+  }
+}
 
 const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) => {
   const adminProfile = useAdminProfile(initialAdminProfile)
@@ -160,20 +174,20 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
     adminProfile?.aboutProjectSectionTitle || projectSection?.title || DEFAULT_ABOUT_PROJECT_SECTION_TITLE
   const projectItems: AboutProjectItem[] = workspaceProjects.map((project) => {
     const linkedService = serviceLinks.find((item) => item.label.toLowerCase() === project.name.toLowerCase())
-    const href = project.href || linkedService?.safeHref || ""
+    const safeHref = resolveSafeAboutHref(project.href || linkedService?.safeHref || "")
     return {
       name: project.name,
       summary: project.summary,
       role: project.role,
-      href,
-      linkLabel: project.linkLabel || linkedService?.label || (href ? "링크 보기" : ""),
+      safeHref,
+      linkLabel: project.linkLabel || linkedService?.label || (safeHref ? "링크 보기" : ""),
     }
   })
   const timelineItems = (timelineSection?.items || []).map(parseTimelineItem)
   const ctaLinks = [
-    githubHref ? { label: "GitHub", href: githubHref } : null,
-    projectItems.length > 0 ? { label: "프로젝트 보기", href: "#about-projects" } : null,
-  ].filter((item): item is { label: string; href: string } => Boolean(item))
+    githubHref ? { label: "GitHub", safeHref: resolveSafeAboutHref(githubHref) } : null,
+    projectItems.length > 0 ? { label: "프로젝트 보기", safeHref: resolveSafeAboutHref("#about-projects") } : null,
+  ].filter((item): item is { label: string; safeHref: string } => Boolean(item?.safeHref))
 
   const meta = {
     title: `About - ${blogTitle}`,
@@ -214,9 +228,9 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
                   <a
                     key={item.label}
                     className="cta-link"
-                    href={item.href}
-                    target={isExternalHref(item.href) ? "_blank" : undefined}
-                    rel={isExternalHref(item.href) ? "noopener noreferrer" : undefined}
+                    href={item.safeHref}
+                    target={isExternalHref(item.safeHref) ? "_blank" : undefined}
+                    rel={isExternalHref(item.safeHref) ? "noopener noreferrer" : undefined}
                   >
                     {item.label}
                   </a>
@@ -237,12 +251,12 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
                     </div>
                     <div className="project-meta">
                       {item.role ? <span data-ui="about-project-role">{item.role}</span> : null}
-                      {item.href && item.linkLabel ? (
+                      {item.safeHref && item.linkLabel ? (
                         <a
                           className="project-link"
-                          href={item.href}
-                          target={isExternalHref(item.href) ? "_blank" : undefined}
-                          rel={isExternalHref(item.href) ? "noopener noreferrer" : undefined}
+                          href={item.safeHref}
+                          target={isExternalHref(item.safeHref) ? "_blank" : undefined}
+                          rel={isExternalHref(item.safeHref) ? "noopener noreferrer" : undefined}
                         >
                           {item.linkLabel}
                         </a>

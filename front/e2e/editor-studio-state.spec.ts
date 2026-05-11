@@ -167,6 +167,14 @@ test.describe("editor studio state", () => {
     const editorStudioThumbnailPanelsSource = existsSync(editorStudioThumbnailPanelsPath)
       ? readFileSync(editorStudioThumbnailPanelsPath, "utf8")
       : ""
+    const editorStudioPublishModalPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioPublishModal.tsx"
+    )
+    expect(existsSync(editorStudioPublishModalPath)).toBe(true)
+    const editorStudioPublishModalSource = existsSync(editorStudioPublishModalPath)
+      ? readFileSync(editorStudioPublishModalPath, "utf8")
+      : ""
     const blockEditorShellSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"), "utf8")
     const blockEditorEngineSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"), "utf8")
     const blockSelectionModelSource = readFileSync(
@@ -281,6 +289,12 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).toContain('} from "./EditorStudioThumbnailPanels"')
     expect(editorStudioSource).not.toContain("const thumbnailEditorPanel = useMemo")
     expect(editorStudioSource).not.toContain("const previewMetaEditorPanel = useMemo")
+    expect(editorStudioPublishModalSource).toContain("export const EditorStudioPublishModal =")
+    expect(editorStudioSource).toContain('import { EditorStudioPublishModal } from "./EditorStudioPublishModal"')
+    expect(editorStudioSource.match(/<EditorStudioPublishModal/g)?.length).toBe(2)
+    expect(editorStudioSource).not.toContain("<PublishModal")
+    expect(editorStudioSource).not.toContain("const PublishModal = styled.div`")
+    expect(editorStudioSource).not.toContain("const PublishOverviewGrid = styled.div`")
     expect(editorStudioStateSource).toContain("export type PostVisibility =")
     expect(editorStudioStateSource).toContain("export const toVisibility")
     expect(editorStudioStateSource).toContain("export const toFlags")

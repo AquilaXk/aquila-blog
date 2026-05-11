@@ -135,6 +135,14 @@ test.describe("editor studio state", () => {
     const editorStudioMetaModelSource = existsSync(editorStudioMetaModelPath)
       ? readFileSync(editorStudioMetaModelPath, "utf8")
       : ""
+    const editorStudioStorageModelPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/editorStudioStorageModel.ts"
+    )
+    expect(existsSync(editorStudioStorageModelPath)).toBe(true)
+    const editorStudioStorageModelSource = existsSync(editorStudioStorageModelPath)
+      ? readFileSync(editorStudioStorageModelPath, "utf8")
+      : ""
     const editorStudioThumbnailPreviewPath = path.resolve(
       __dirname,
       "../src/routes/Admin/useEditorStudioThumbnailPreview.ts"
@@ -288,6 +296,14 @@ test.describe("editor studio state", () => {
     expect(editorStudioMetaModelSource).toContain("export const buildLocalDraftFingerprint =")
     expect(editorStudioMetaModelSource).toContain("export const detectPublishPlaceholderIssue =")
     expect(editorStudioSource).toContain('} from "./editorStudioMetaModel"')
+    expect(editorStudioStorageModelSource).toContain("export const TAG_CATALOG_STORAGE_KEY =")
+    expect(editorStudioStorageModelSource).toContain("export const CATEGORY_CATALOG_STORAGE_KEY =")
+    expect(editorStudioStorageModelSource).toContain("export const readStoredCatalog =")
+    expect(editorStudioStorageModelSource).toContain("export const persistCatalog =")
+    expect(editorStudioStorageModelSource).toContain("export const readLocalDraft =")
+    expect(editorStudioStorageModelSource).toContain("export const persistLocalDraft =")
+    expect(editorStudioStorageModelSource).toContain("export const removeLocalDraft =")
+    expect(editorStudioSource).toContain('} from "./editorStudioStorageModel"')
     expect(editorStudioSource).not.toContain("const normalizeMetaItems =")
     expect(editorStudioSource).not.toContain("const extractFirstMarkdownImage =")
     expect(editorStudioSource).not.toContain("const computeContentFingerprint =")
@@ -303,6 +319,14 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).not.toContain("const composeEditorContent =")
     expect(editorStudioSource).not.toContain("const buildLocalDraftFingerprint =")
     expect(editorStudioSource).not.toContain("const detectPublishPlaceholderIssue =")
+    expect(editorStudioSource).not.toContain("const TAG_CATALOG_STORAGE_KEY =")
+    expect(editorStudioSource).not.toContain("const CATEGORY_CATALOG_STORAGE_KEY =")
+    expect(editorStudioSource).not.toContain("const LOCAL_DRAFT_STORAGE_KEY =")
+    expect(editorStudioSource).not.toContain("const readStoredCatalog =")
+    expect(editorStudioSource).not.toContain("const persistCatalog =")
+    expect(editorStudioSource).not.toContain("const readLocalDraft =")
+    expect(editorStudioSource).not.toContain("const persistLocalDraft =")
+    expect(editorStudioSource).not.toContain("const removeLocalDraft =")
     expect(writerEditorHostSource).toContain('dynamic(() => import("src/components/editor/BlockEditorShell")')
     expect(writerEditorHostSource).toContain("<Profiler")
     expect(writerEditorHostSource).toContain("<LazyBlockEditorShell")

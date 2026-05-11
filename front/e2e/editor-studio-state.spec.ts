@@ -130,6 +130,19 @@ test.describe("editor studio state", () => {
   test("editor studio는 v2 단일 경로와 단일 작성 모드 계약을 유지한다", () => {
     const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
     const editorStudioStateSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/editorStudioState.ts"), "utf8")
+    const editorStudioMetaModelPath = path.resolve(__dirname, "../src/routes/Admin/editorStudioMetaModel.ts")
+    expect(existsSync(editorStudioMetaModelPath)).toBe(true)
+    const editorStudioMetaModelSource = existsSync(editorStudioMetaModelPath)
+      ? readFileSync(editorStudioMetaModelPath, "utf8")
+      : ""
+    const editorStudioStorageModelPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/editorStudioStorageModel.ts"
+    )
+    expect(existsSync(editorStudioStorageModelPath)).toBe(true)
+    const editorStudioStorageModelSource = existsSync(editorStudioStorageModelPath)
+      ? readFileSync(editorStudioStorageModelPath, "utf8")
+      : ""
     const editorStudioThumbnailPreviewPath = path.resolve(
       __dirname,
       "../src/routes/Admin/useEditorStudioThumbnailPreview.ts"
@@ -262,6 +275,58 @@ test.describe("editor studio state", () => {
     expect(editorStudioStateSource).toContain("export const deriveEditorContentMetrics")
     expect(editorStudioStateSource).toContain("export const deriveComposeViewModel")
     expect(editorStudioStateSource).toContain("export const derivePublishActionViewModel")
+    expect(editorStudioMetaModelSource).toContain("export type ParsedEditorMeta =")
+    expect(editorStudioMetaModelSource).toContain("export type ResolvedEditorMetaSnapshot =")
+    expect(editorStudioMetaModelSource).toContain("export type LocalDraftPayload =")
+    expect(editorStudioMetaModelSource).toContain("export const PREVIEW_SUMMARY_MAX_LENGTH = 150")
+    expect(editorStudioMetaModelSource).toContain("export const PREVIEW_SUMMARY_MAX_CONTENT_LENGTH = 50_000")
+    expect(editorStudioMetaModelSource).toContain("export const dedupeStrings =")
+    expect(editorStudioMetaModelSource).toContain("export const extractFirstMarkdownImage =")
+    expect(editorStudioMetaModelSource).toContain("export const computeContentFingerprint =")
+    expect(editorStudioMetaModelSource).toContain("export const normalizeSafeImageUrl =")
+    expect(editorStudioMetaModelSource).toContain("export const normalizeSafePreviewThumbnailUrl =")
+    expect(editorStudioMetaModelSource).toContain("export const makePreviewSummary =")
+    expect(editorStudioMetaModelSource).toContain("export const normalizeRecommendedTags =")
+    expect(editorStudioMetaModelSource).toContain("export const resolveTagRecommendationErrorMessage =")
+    expect(editorStudioMetaModelSource).toContain("export const formatTagRecommendationReason =")
+    expect(editorStudioMetaModelSource).toContain("export const resolveEditorMetaSnapshot =")
+    expect(editorStudioMetaModelSource).toContain("export const buildEditorStateFingerprint =")
+    expect(editorStudioMetaModelSource).toContain("export const parseEditorMeta =")
+    expect(editorStudioMetaModelSource).toContain("export const composeEditorContent =")
+    expect(editorStudioMetaModelSource).toContain("export const buildLocalDraftFingerprint =")
+    expect(editorStudioMetaModelSource).toContain("export const detectPublishPlaceholderIssue =")
+    expect(editorStudioSource).toContain('} from "./editorStudioMetaModel"')
+    expect(editorStudioStorageModelSource).toContain("export const TAG_CATALOG_STORAGE_KEY =")
+    expect(editorStudioStorageModelSource).toContain("export const CATEGORY_CATALOG_STORAGE_KEY =")
+    expect(editorStudioStorageModelSource).toContain("export const readStoredCatalog =")
+    expect(editorStudioStorageModelSource).toContain("export const persistCatalog =")
+    expect(editorStudioStorageModelSource).toContain("export const readLocalDraft =")
+    expect(editorStudioStorageModelSource).toContain("export const persistLocalDraft =")
+    expect(editorStudioStorageModelSource).toContain("export const removeLocalDraft =")
+    expect(editorStudioSource).toContain('} from "./editorStudioStorageModel"')
+    expect(editorStudioSource).not.toContain("const normalizeMetaItems =")
+    expect(editorStudioSource).not.toContain("const extractFirstMarkdownImage =")
+    expect(editorStudioSource).not.toContain("const computeContentFingerprint =")
+    expect(editorStudioSource).not.toContain("const normalizeSafeImageUrl =")
+    expect(editorStudioSource).not.toContain("const normalizeSafePreviewThumbnailUrl =")
+    expect(editorStudioSource).not.toContain("const makePreviewSummary =")
+    expect(editorStudioSource).not.toContain("const normalizeRecommendedTags =")
+    expect(editorStudioSource).not.toContain("const formatTagRecommendationReason =")
+    expect(editorStudioSource).not.toContain("const splitFrontmatterBlock =")
+    expect(editorStudioSource).not.toContain("const resolveEditorMetaSnapshot =")
+    expect(editorStudioSource).not.toContain("const buildEditorStateFingerprint =")
+    expect(editorStudioSource).not.toContain("const parseEditorMeta =")
+    expect(editorStudioSource).not.toContain("const composeEditorContent =")
+    expect(editorStudioSource).not.toContain("const buildLocalDraftFingerprint =")
+    expect(editorStudioSource).not.toContain("const detectPublishPlaceholderIssue =")
+    expect(editorStudioSource).not.toContain("const TAG_CATALOG_STORAGE_KEY =")
+    expect(editorStudioSource).not.toContain("const CATEGORY_CATALOG_STORAGE_KEY =")
+    expect(editorStudioSource).not.toContain("const LOCAL_DRAFT_STORAGE_KEY =")
+    expect(editorStudioSource).not.toContain("const readStoredCatalog =")
+    expect(editorStudioSource).not.toContain("const persistCatalog =")
+    expect(editorStudioSource).not.toContain("const readLocalDraft =")
+    expect(editorStudioSource).not.toContain("const persistLocalDraft =")
+    expect(editorStudioSource).not.toContain("const removeLocalDraft =")
     expect(writerEditorHostSource).toContain('dynamic(() => import("src/components/editor/BlockEditorShell")')
     expect(writerEditorHostSource).toContain("<Profiler")
     expect(writerEditorHostSource).toContain("<LazyBlockEditorShell")
@@ -434,10 +499,13 @@ test.describe("editor studio state", () => {
       "Stateless는 서버가 요청 사이 사용자 상태를 저장하지 않고"
     )
 
-    const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
-    expect(editorStudioSource).toContain('buildPreviewSummaryFromMarkdown(content, maxLength, "")')
-    expect(editorStudioSource).toContain("summary: normalizePersistedSummary(parsed.summary)")
-    expect(editorStudioSource).toContain("const normalizedSummary = normalizePersistedSummary(options?.summary)")
+    const editorStudioMetaModelSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/editorStudioMetaModel.ts"),
+      "utf8"
+    )
+    expect(editorStudioMetaModelSource).toContain('buildPreviewSummaryFromMarkdown(content, maxLength, "")')
+    expect(editorStudioMetaModelSource).toContain("summary: normalizePersistedSummary(parsed.summary)")
+    expect(editorStudioMetaModelSource).toContain("const normalizedSummary = normalizePersistedSummary(options?.summary)")
   })
 
   test("dedicated editor 나가기는 returnTo 복귀를 replace로 처리해 editor history 엔트리를 남기지 않는다", () => {

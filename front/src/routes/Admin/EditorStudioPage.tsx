@@ -51,6 +51,27 @@ import {
   TEMP_DRAFT_BODY_PLACEHOLDER,
 } from "./editorTempDraft"
 import {
+  PREVIEW_SUMMARY_MAX_CONTENT_LENGTH,
+  PREVIEW_SUMMARY_MAX_LENGTH,
+  buildEditorStateFingerprint,
+  buildLocalDraftFingerprint,
+  composeEditorContent,
+  computeContentFingerprint,
+  dedupeStrings,
+  detectPublishPlaceholderIssue,
+  extractFirstMarkdownImage,
+  formatTagRecommendationReason,
+  makePreviewSummary,
+  normalizeRecommendedTags,
+  normalizeSafeImageUrl,
+  normalizeSafePreviewThumbnailUrl,
+  resolveEditorMetaSnapshot,
+  resolveTagRecommendationErrorMessage,
+  type LocalDraftPayload,
+  type MetaUsageMap,
+  type ResolvedEditorMetaSnapshot,
+} from "./editorStudioMetaModel"
+import {
   pushRoute,
   replaceShallowRoutePreservingScroll,
 } from "src/libs/router"
@@ -65,15 +86,10 @@ import ProfileImage from "src/components/ProfileImage"
 import AppIcon from "src/components/icons/AppIcon"
 import {
   applyThumbnailTransformToUrl,
-  clampThumbnailFocusX,
-  clampThumbnailFocusY,
   clampThumbnailZoom,
   DEFAULT_THUMBNAIL_FOCUS_X,
   DEFAULT_THUMBNAIL_FOCUS_Y,
   DEFAULT_THUMBNAIL_ZOOM,
-  parseThumbnailFocusXFromUrl,
-  parseThumbnailZoomFromUrl,
-  parseThumbnailFocusYFromUrl,
   stripThumbnailFocusFromUrl,
 } from "src/libs/thumbnailFocus"
 import {
@@ -84,10 +100,17 @@ import {
   PROFILE_IMAGE_UPLOAD_RULE_LABEL,
 } from "src/libs/profileImageUpload"
 import { saveProfileCardWithConflictRetry } from "src/libs/profileCardSave"
-import { convertHtmlToMarkdown as convertHtmlClipboardToMarkdown } from "src/libs/markdown/htmlToMarkdown"
-import { buildPreviewSummaryFromMarkdown, normalizePersistedSummary } from "src/libs/postSummary"
 import { articleTypographyScale } from "src/libs/markdown/contentTypography"
 import type { BlockEditorChangeMeta } from "src/components/editor/blockEditorContract"
+import {
+  CATEGORY_CATALOG_STORAGE_KEY,
+  TAG_CATALOG_STORAGE_KEY,
+  persistCatalog,
+  persistLocalDraft,
+  readLocalDraft,
+  readStoredCatalog,
+  removeLocalDraft,
+} from "./editorStudioStorageModel"
 
 const BLOCK_EDITOR_V2_MERMAID_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED !== "false"
 const ADMIN_POSTS_WORKSPACE_ROUTE = "/admin/posts"
@@ -229,47 +252,10 @@ type NoticeState = {
 }
 type StudioSurface = "manage" | "compose"
 type MobileStudioStep = "query" | "list" | "edit" | "publish"
-type ParsedEditorMeta = {
-  body: string
-  tags: string[]
-  category: string
-  summary: string
-  thumbnail: string
-}
-
-type ResolvedEditorMetaSnapshot = {
-  body: string
-  tags: string[]
-  category: string
-  summary: string
-  thumbnailUrl: string
-  thumbnailFocusX: number
-  thumbnailFocusY: number
-  thumbnailZoom: number
-}
-
-type MetaUsageMap = Record<string, number>
-type LocalDraftPayload = {
-  title: string
-  content: string
-  summary: string
-  thumbnailUrl: string
-  thumbnailFocusX: number
-  thumbnailFocusY: number
-  thumbnailZoom: number
-  tags: string[]
-  category: string
-  visibility: PostVisibility
-  savedAt: string
-}
-
 type PreviewViewportMode = "desktop" | "tablet" | "mobile"
 type ManageMobileStudioStep = "query" | "list"
 type ComposeMobileStudioStep = "edit" | "publish"
 
-const TAG_CATALOG_STORAGE_KEY = "admin.editor.customTags"
-const CATEGORY_CATALOG_STORAGE_KEY = "admin.editor.customCategories"
-const LOCAL_DRAFT_STORAGE_KEY = "admin.editor.localDraft.v1"
 const LIST_CONDITION_STORAGE_KEY = "admin.contentStudio.listConditions.v1"
 const LIST_CACHE_TTL_MS = 45_000
 const GLOBAL_NOTICE_IDLE_TEXT = "운영 작업 상태가 여기에 표시됩니다."
@@ -307,7 +293,6 @@ const syncTitleTextareaHeight = (element: HTMLTextAreaElement | null) => {
   element.style.height = "0px"
   element.style.height = `${Math.max(element.scrollHeight, 44)}px`
 }
-const EDITOR_TOGGLE_TITLE_PLACEHOLDER = "토글 제목"
 const PREVIEW_CARD_VIEWPORTS: Record<
   PreviewViewportMode,
   {
@@ -432,15 +417,6 @@ export const getEditorStudioPageProps: GetServerSideProps<AdminPageProps> = asyn
 
 const pretty = (value: unknown) => JSON.stringify(value, null, 2)
 
-const dedupeStrings = (items: string[]) =>
-  Array.from(
-    new Set(
-      items
-        .map((item) => item.trim())
-        .filter(Boolean)
-    )
-  )
-
 const isComposingKeyboardEvent = (
   event: React.KeyboardEvent<HTMLElement>
 ) => {
@@ -455,26 +431,6 @@ const generateIdempotencyKey = () => {
   return `post-write-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-const normalizeMetaItems = (raw: string): string[] => {
-  const normalized = raw.trim().replace(/^\[|\]$/g, "")
-  if (!normalized) return []
-
-  return dedupeStrings(
-    normalized
-      .split(",")
-      .map((token) => token.trim().replace(/^['"]|['"]$/g, ""))
-  )
-}
-
-const normalizeMetaScalar = (raw: string) => raw.trim().replace(/^['"]|['"]$/g, "")
-
-const markdownImagePattern = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/
-const PREVIEW_SUMMARY_MAX_LENGTH = 150
-const PREVIEW_SUMMARY_MAX_CONTENT_LENGTH = 50_000
-const PREVIEW_THUMBNAIL_ALLOWED_PATH_PREFIX = "/post/api/v1/images/posts/"
-const PREVIEW_THUMBNAIL_DISALLOWED_CHAR_REGEX = /[\u0000-\u001F\u007F<>"'`\\]/
-const PREVIEW_THUMBNAIL_ALLOWED_PATH_REGEX = /^\/post\/api\/v1\/images\/posts\/[A-Za-z0-9._~/%-]+$/
-const PREVIEW_THUMBNAIL_ALLOWED_QUERY_REGEX = /^\?(?:[A-Za-z0-9._~/%=&-]*)$/
 const EDITOR_RUNTIME_GUARD_SAMPLE_LIMIT = 240
 
 type RuntimeGuardWindow = Window & {
@@ -482,21 +438,6 @@ type RuntimeGuardWindow = Window & {
   __AQ_RUNTIME_GUARD__?: {
     editorCommitSamples?: number[]
   }
-}
-
-const extractFirstMarkdownImage = (content: string): string => {
-  const match = markdownImagePattern.exec(content)
-  return match?.[1]?.trim() || ""
-}
-
-const computeContentFingerprint = (content: string): string => {
-  // Lightweight FNV-1a style hash to gate repeated derived calculations.
-  let hash = 2166136261
-  for (let index = 0; index < content.length; index += 1) {
-    hash ^= content.charCodeAt(index)
-    hash = Math.imul(hash, 16777619)
-  }
-  return `${content.length}:${hash >>> 0}`
 }
 
 const recordEditorCommitDurationForRuntimeGuard = (actualDuration: number) => {
@@ -510,135 +451,6 @@ const recordEditorCommitDurationForRuntimeGuard = (actualDuration: number) => {
     nextSamples.splice(0, nextSamples.length - EDITOR_RUNTIME_GUARD_SAMPLE_LIMIT)
   }
   store.editorCommitSamples = nextSamples
-}
-
-const normalizeSafeImageUrl = (raw: string): string => {
-  const value = raw.trim()
-  if (!value) return ""
-
-  if (value.startsWith("/")) {
-    return value.startsWith("//") ? "" : value
-  }
-
-  if (value.startsWith("./") || value.startsWith("../")) {
-    return value
-  }
-
-  try {
-    const parsed = new URL(value)
-    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-      return parsed.toString()
-    }
-  } catch {
-    return ""
-  }
-
-  return ""
-}
-
-const toSafePreviewThumbnailPath = (pathname: string, search: string): string => {
-  if (!PREVIEW_THUMBNAIL_ALLOWED_PATH_REGEX.test(pathname)) return ""
-  if (!search) return pathname
-  if (!PREVIEW_THUMBNAIL_ALLOWED_QUERY_REGEX.test(search)) return ""
-  return `${pathname}${search}`
-}
-
-const resolvePreviewThumbnailApiOrigin = (): string => {
-  try {
-    return new URL(getApiBaseUrl()).origin
-  } catch {
-    return ""
-  }
-}
-
-const normalizeSafePreviewThumbnailUrl = (raw: string): string => {
-  const value = raw.trim()
-  if (!value) return ""
-  if (PREVIEW_THUMBNAIL_DISALLOWED_CHAR_REGEX.test(value)) return ""
-
-  if (value.startsWith("/")) {
-    if (value.startsWith("//")) return ""
-    try {
-      const parsed = new URL(value, "https://preview.local")
-      const safePath = toSafePreviewThumbnailPath(parsed.pathname, parsed.search)
-      if (!safePath) return ""
-      const apiOrigin = resolvePreviewThumbnailApiOrigin()
-      if (typeof window !== "undefined" && apiOrigin && window.location.origin !== apiOrigin) {
-        return `${apiOrigin}${safePath}`
-      }
-      return safePath
-    } catch {
-      return ""
-    }
-  }
-
-  try {
-    const parsed = new URL(value)
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return ""
-    if (parsed.username || parsed.password) return ""
-
-    const allowedHosts = new Set<string>()
-    const baseUrl = getApiBaseUrl()
-    try {
-      allowedHosts.add(new URL(baseUrl).host)
-    } catch {
-      return ""
-    }
-    if (typeof window !== "undefined" && window.location.host) {
-      allowedHosts.add(window.location.host)
-    }
-    if (!allowedHosts.has(parsed.host)) return ""
-    if (!parsed.pathname.startsWith(PREVIEW_THUMBNAIL_ALLOWED_PATH_PREFIX)) return ""
-    const safePath = toSafePreviewThumbnailPath(parsed.pathname, parsed.search)
-    if (!safePath) return ""
-    const apiOrigin = resolvePreviewThumbnailApiOrigin()
-    if (typeof window !== "undefined" && parsed.origin === window.location.origin) {
-      return safePath
-    }
-    if (apiOrigin && parsed.origin === apiOrigin) {
-      return `${apiOrigin}${safePath}`
-    }
-    return `${parsed.origin}${safePath}`
-  } catch {
-    return ""
-  }
-}
-
-const makePreviewSummary = (content: string, maxLength = PREVIEW_SUMMARY_MAX_LENGTH) =>
-  buildPreviewSummaryFromMarkdown(content, maxLength, "")
-
-const normalizeRecommendedTags = (value: unknown, maxTags: number) => {
-  if (!Array.isArray(value)) return []
-  const map = new Map<string, string>()
-  value.forEach((item) => {
-    if (typeof item !== "string") return
-    const normalized = item.replace(/[\r\n]/g, " ").replace(/#/g, "").replace(/\s+/g, " ").trim()
-    if (!normalized) return
-    if (normalized.length < 2 || normalized.length > 24) return
-    if (!/[\p{L}\p{N}]/u.test(normalized)) return
-    if (normalized.toLowerCase() === "aside") return
-    const key = normalized.toLowerCase()
-    if (map.has(key) || map.size >= maxTags) return
-    map.set(key, normalized)
-  })
-  return Array.from(map.values())
-}
-
-const resolveTagRecommendationErrorMessage = (error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error)
-  const normalized = message.trim()
-  if (!normalized) return "태그 추천 요청 처리 중 오류가 발생했습니다."
-
-  const lowered = normalized.toLowerCase()
-  if (lowered.includes("failed to fetch")) {
-    return "네트워크 연결 또는 API 응답 수신에 실패했습니다."
-  }
-
-  if (lowered.includes("abort") || lowered.includes("timeout")) {
-    return "태그 추천 응답 대기 시간이 초과되었습니다."
-  }
-
-  return normalized
 }
 
 const fetchRecommendedTags = async (
@@ -689,340 +501,6 @@ const fetchRecommendedTags = async (
     clearTimeout(timeoutId)
   }
 }
-
-const formatTagRecommendationReason = (rawReason?: string | null) => {
-  const reason = (rawReason || "").trim()
-  switch (reason) {
-    case "ai-disabled":
-      return "AI 태그 추천이 비활성화됨"
-    case "api-key-missing":
-      return "Gemini API 키 누락"
-    case "rate-limited":
-      return "요청 제한으로 규칙 추천 사용"
-    case "quota-exhausted":
-      return "AI API 사용 한도 초과"
-    case "status-503":
-    case "status-504":
-      return "AI API 통신 실패"
-    case "transport":
-      return "AI API 전송 실패"
-    case "parse-error":
-      return "AI 태그 응답 파싱 실패"
-    case "empty-tags":
-      return "AI가 태그를 반환하지 않음"
-    case "internal-error":
-      return "서버 내부 처리 실패"
-    case "proxy-transport":
-      return "프록시 통신 실패(규칙 추천 대체)"
-    default:
-      if (reason.startsWith("proxy-upstream-")) {
-        return `프록시 업스트림 오류(${reason.slice("proxy-upstream-".length)})`
-      }
-      if (reason.startsWith("status-")) return `AI API 상태코드 ${reason.slice("status-".length)}`
-      return reason
-  }
-}
-
-const FRONTMATTER_DELIMITER_REGEX = /^\s*---\s*$/
-const LEADING_EDITOR_METADATA_LINE_REGEX =
-  /^\s*(tags?|categories?|summary|thumbnail|thumb|cover|coverimage|cover_image)\s*:\s*(.+)\s*$/i
-
-const splitFrontmatterBlock = (content: string) => {
-  const normalized = content.replace(/\r\n?/g, "\n").trimStart()
-  const lines = normalized.split("\n")
-  if (!FRONTMATTER_DELIMITER_REGEX.test(lines[0] || "")) {
-    return {
-      metadataLines: [] as string[],
-      body: normalized,
-    }
-  }
-
-  for (let index = 1; index < lines.length; index += 1) {
-    if (!FRONTMATTER_DELIMITER_REGEX.test(lines[index] || "")) continue
-    return {
-      metadataLines: lines.slice(1, index),
-      body: lines
-        .slice(index + 1)
-        .join("\n")
-        .replace(/^\n+/, ""),
-    }
-  }
-
-  return {
-    metadataLines: [] as string[],
-    body: normalized,
-  }
-}
-
-const stripLeadingEditorMetadataLines = (content: string) => {
-  const normalized = content.replace(/\r\n?/g, "\n")
-  const lines = normalized.split("\n")
-  let consumed = 0
-
-  for (const line of lines) {
-    if (!line.trim()) {
-      consumed += 1
-      break
-    }
-    if (!LEADING_EDITOR_METADATA_LINE_REGEX.test(line)) break
-    consumed += 1
-  }
-
-  return {
-    consumed,
-    body: consumed > 0 ? lines.slice(consumed).join("\n").trimStart() : normalized,
-  }
-}
-
-const resolveEditorBodyFallback = (content: string, parsedBody: string) => {
-  const normalized = content.replace(/\r\n?/g, "\n").trimStart()
-  if (parsedBody.trim().length > 0 || normalized.trim().length === 0) return parsedBody
-
-  const frontmatterSplit = splitFrontmatterBlock(normalized)
-  const inlineMetadataSplit = stripLeadingEditorMetadataLines(frontmatterSplit.body)
-  return inlineMetadataSplit.body.trim().length > 0 ? inlineMetadataSplit.body : parsedBody
-}
-
-const resolveEditorMetaSnapshot = (content: string, contentHtml?: string | null): ResolvedEditorMetaSnapshot => {
-  const parsed = parseEditorMeta(content)
-  const normalizedRawContent = content.replace(/\r\n?/g, "\n").trim()
-  const markdownFromHtml = contentHtml?.trim() ? convertHtmlClipboardToMarkdown(contentHtml).trim() : ""
-  const resolvedBody = parsed.body.trim() || markdownFromHtml || normalizedRawContent
-  const parsedThumbnail = normalizeSafeImageUrl(parsed.thumbnail)
-  const fallbackThumbnail = normalizeSafeImageUrl(extractFirstMarkdownImage(resolvedBody))
-  const syncedThumbnail = stripThumbnailFocusFromUrl(parsedThumbnail || fallbackThumbnail)
-  const syncedThumbnailFocusX = parseThumbnailFocusXFromUrl(
-    parsedThumbnail || fallbackThumbnail,
-    DEFAULT_THUMBNAIL_FOCUS_X
-  )
-  const syncedThumbnailFocusY = parseThumbnailFocusYFromUrl(
-    parsedThumbnail || fallbackThumbnail,
-    DEFAULT_THUMBNAIL_FOCUS_Y
-  )
-  const syncedThumbnailZoom = parseThumbnailZoomFromUrl(parsedThumbnail || fallbackThumbnail, DEFAULT_THUMBNAIL_ZOOM)
-
-  return {
-    body: resolvedBody,
-    tags: parsed.tags,
-    category: parsed.category,
-    summary: normalizePersistedSummary(parsed.summary),
-    thumbnailUrl: syncedThumbnail,
-    thumbnailFocusX: syncedThumbnailFocusX,
-    thumbnailFocusY: syncedThumbnailFocusY,
-    thumbnailZoom: syncedThumbnailZoom,
-  }
-}
-
-const buildEditorStateFingerprint = ({
-  title,
-  content,
-  summary,
-  thumbnailUrl,
-  thumbnailFocusX,
-  thumbnailFocusY,
-  thumbnailZoom,
-  tags,
-  category,
-  visibility,
-}: {
-  title: string
-  content: string
-  summary: string
-  thumbnailUrl: string
-  thumbnailFocusX: number
-  thumbnailFocusY: number
-  thumbnailZoom: number
-  tags: string[]
-  category: string
-  visibility: PostVisibility
-}) =>
-  JSON.stringify({
-    title,
-    content,
-    summary,
-    thumbnailUrl,
-    thumbnailFocusX,
-    thumbnailFocusY,
-    thumbnailZoom,
-    tags: dedupeStrings(tags),
-    category: category ? normalizeCategoryValue(category) : "",
-    visibility,
-  })
-
-const parseEditorMeta = (content: string): ParsedEditorMeta => {
-  let trimmed = content.replace(/\r\n?/g, "\n").trimStart()
-  const tags: string[] = []
-  let category = ""
-  let summary = ""
-  let thumbnail = ""
-
-  const pushTags = (items: string[]) => {
-    dedupeStrings(items).forEach((item) => {
-      if (!tags.includes(item)) tags.push(item)
-    })
-  }
-
-  const setCategory = (items: string[]) => {
-    const nextCategory = dedupeStrings(items).map(normalizeCategoryValue)[0] || ""
-    if (nextCategory) category = nextCategory
-  }
-
-  const frontmatterSplit = splitFrontmatterBlock(trimmed)
-  if (frontmatterSplit.metadataLines.length > 0) {
-    frontmatterSplit.metadataLines.forEach((line) => {
-      const [rawKey, ...rest] = line.split(":")
-      if (!rawKey || rest.length === 0) return
-      const key = rawKey.trim().toLowerCase()
-      const value = rest.join(":").trim()
-      if (!value) return
-
-      if (key === "tags" || key === "tag") pushTags(normalizeMetaItems(value))
-      if (key === "category" || key === "categories") setCategory(normalizeMetaItems(value))
-      if (key === "summary") summary = normalizeMetaScalar(value)
-      if (key === "thumbnail" || key === "thumb" || key === "cover" || key === "coverimage" || key === "cover_image") {
-        thumbnail = normalizeMetaScalar(value)
-      }
-    })
-    trimmed = frontmatterSplit.body.trimStart()
-  }
-
-  const leadingMetadataSplit = stripLeadingEditorMetadataLines(trimmed)
-  if (leadingMetadataSplit.consumed > 0) {
-    trimmed
-      .split("\n")
-      .slice(0, leadingMetadataSplit.consumed)
-      .forEach((line) => {
-        const match = line.match(LEADING_EDITOR_METADATA_LINE_REGEX)
-        if (!match) return
-
-        const key = match[1].toLowerCase()
-        const value = match[2]
-        if (key === "tag" || key === "tags") pushTags(normalizeMetaItems(value))
-        if (key === "category" || key === "categories") setCategory(normalizeMetaItems(value))
-        if (key === "summary") summary = normalizeMetaScalar(value)
-        if (key === "thumbnail" || key === "thumb" || key === "cover" || key === "coverimage" || key === "cover_image") {
-          thumbnail = normalizeMetaScalar(value)
-        }
-      })
-    trimmed = leadingMetadataSplit.body
-  }
-
-  return {
-    body: resolveEditorBodyFallback(content, trimmed),
-    tags,
-    category,
-    summary,
-    thumbnail,
-  }
-}
-
-const serializeMetaItems = (items: string[]) => items.map((item) => JSON.stringify(item)).join(", ")
-
-const composeEditorContent = (
-  body: string,
-  tags: string[],
-  options?: { category?: string; summary?: string; thumbnail?: string }
-) => {
-  const normalizedBody = body.trim()
-  const normalizedTags = dedupeStrings(tags)
-  const normalizedCategory = options?.category ? normalizeCategoryValue(options.category) : ""
-  const normalizedSummary = normalizePersistedSummary(options?.summary)
-  const normalizedThumbnail = options?.thumbnail?.trim() || ""
-  const metadataLines: string[] = []
-
-  if (normalizedTags.length > 0) metadataLines.push(`tags: [${serializeMetaItems(normalizedTags)}]`)
-  if (normalizedCategory) metadataLines.push(`category: [${serializeMetaItems([normalizedCategory])}]`)
-  if (normalizedThumbnail) metadataLines.push(`thumbnail: ${JSON.stringify(normalizedThumbnail)}`)
-  if (normalizedSummary) metadataLines.push(`summary: ${JSON.stringify(normalizedSummary)}`)
-
-  if (metadataLines.length === 0) return normalizedBody
-  if (!normalizedBody) return `---\n${metadataLines.join("\n")}\n---`
-
-  return `---\n${metadataLines.join("\n")}\n---\n\n${normalizedBody}`
-}
-
-const readStoredCatalog = (storageKey: string) => {
-  if (typeof window === "undefined") return []
-
-  try {
-    const raw = window.localStorage.getItem(storageKey)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed)
-      ? dedupeStrings(parsed.filter((item): item is string => typeof item === "string"))
-      : []
-  } catch {
-    return []
-  }
-}
-
-const persistCatalog = (storageKey: string, values: string[]) => {
-  if (typeof window === "undefined") return
-  window.localStorage.setItem(storageKey, JSON.stringify(dedupeStrings(values)))
-}
-
-const readLocalDraft = (): LocalDraftPayload | null => {
-  if (typeof window === "undefined") return null
-
-  try {
-    const raw = window.localStorage.getItem(LOCAL_DRAFT_STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as Partial<LocalDraftPayload>
-    if (!parsed || typeof parsed !== "object") return null
-
-    const visibility = parsed.visibility
-    const isValidVisibility =
-      visibility === "PRIVATE" || visibility === "PUBLIC_UNLISTED" || visibility === "PUBLIC_LISTED"
-    const rawThumbnailUrl =
-      typeof parsed.thumbnailUrl === "string" ? normalizeSafeImageUrl(parsed.thumbnailUrl) : ""
-    const legacyFocusX = parseThumbnailFocusXFromUrl(rawThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_X)
-    const legacyFocusY = parseThumbnailFocusYFromUrl(rawThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_Y)
-    const legacyZoom = parseThumbnailZoomFromUrl(rawThumbnailUrl, DEFAULT_THUMBNAIL_ZOOM)
-    const parsedFocusX =
-      typeof parsed.thumbnailFocusX === "number"
-        ? clampThumbnailFocusX(parsed.thumbnailFocusX)
-        : legacyFocusX
-    const parsedFocusY =
-      typeof parsed.thumbnailFocusY === "number"
-        ? clampThumbnailFocusY(parsed.thumbnailFocusY)
-        : legacyFocusY
-    const parsedZoom =
-      typeof parsed.thumbnailZoom === "number"
-        ? clampThumbnailZoom(parsed.thumbnailZoom)
-        : legacyZoom
-
-    return {
-      title: typeof parsed.title === "string" ? parsed.title : "",
-      content: typeof parsed.content === "string" ? parsed.content : "",
-      summary: normalizePersistedSummary(parsed.summary),
-      thumbnailUrl: stripThumbnailFocusFromUrl(rawThumbnailUrl),
-      thumbnailFocusX: parsedFocusX,
-      thumbnailFocusY: parsedFocusY,
-      thumbnailZoom: parsedZoom,
-      tags: Array.isArray(parsed.tags)
-        ? dedupeStrings(parsed.tags.filter((item): item is string => typeof item === "string"))
-        : [],
-      category: typeof parsed.category === "string" ? normalizeCategoryValue(parsed.category) : "",
-      visibility: isValidVisibility ? visibility : "PUBLIC_LISTED",
-      savedAt: typeof parsed.savedAt === "string" ? parsed.savedAt : "",
-    }
-  } catch {
-    return null
-  }
-}
-
-const persistLocalDraft = (payload: LocalDraftPayload) => {
-  if (typeof window === "undefined") return
-  window.localStorage.setItem(LOCAL_DRAFT_STORAGE_KEY, JSON.stringify(payload))
-}
-
-const removeLocalDraft = () => {
-  if (typeof window === "undefined") return
-  window.localStorage.removeItem(LOCAL_DRAFT_STORAGE_KEY)
-}
-
-const buildLocalDraftFingerprint = (payload: Omit<LocalDraftPayload, "savedAt">) =>
-  JSON.stringify(payload)
 
 const parseResponseErrorBody = async (response: Response): Promise<string> => {
   const text = await response.text().catch(() => "")
@@ -1117,32 +595,6 @@ const uploadWithConflictRetry = async (
   throw new Error(
     `이미지 업로드 실패 (409): ${lastConflictBody || "요청 충돌이 반복되어 업로드를 완료하지 못했습니다."}`
   )
-}
-
-const detectPublishPlaceholderIssue = (content: string): string | null => {
-  let inFence = false
-
-  for (const rawLine of content.replace(/\r\n/g, "\n").split("\n")) {
-    const trimmed = rawLine.trim()
-    if (!trimmed) continue
-
-    if (/^```/.test(trimmed)) {
-      inFence = !inFence
-      continue
-    }
-
-    if (inFence || trimmed.startsWith(">")) continue
-
-    if (trimmed === EDITOR_BODY_PLACEHOLDER) {
-      return "본문에 기본 placeholder 문구가 남아 있습니다. 실제 내용으로 교체한 뒤 다시 시도해주세요."
-    }
-
-    if (trimmed === `:::toggle ${EDITOR_TOGGLE_TITLE_PLACEHOLDER}`) {
-      return "토글 제목이 기본값으로 남아 있습니다. 실제 제목으로 바꾼 뒤 다시 시도해주세요."
-    }
-  }
-
-  return null
 }
 
 const sanitizeNumberInput = (value: string) => value.replace(/[^\d]/g, "")

@@ -14,7 +14,12 @@ import java.nio.file.Path
 
 @org.junit.jupiter.api.DisplayName("ArchitectureGuard 테스트")
 class ArchitectureGuardTest {
+    private val mainBoundedContextSourceRoot: Path = Path.of("src/main/kotlin/com/back/boundedContexts")
     private val testSourceRoot: Path = Path.of("src/test/kotlin")
+    private val boundedContextPackageRegex =
+        Regex("""^package\s+com\.back\.boundedContexts\.([A-Za-z][A-Za-z0-9_]*)(?:\.|$)""", RegexOption.MULTILINE)
+    private val boundedContextImportRegex =
+        Regex("""^import\s+com\.back\.boundedContexts\.([A-Za-z][A-Za-z0-9_]*)\.([A-Za-z0-9_.*]+)(?:\s+as\s+\w+)?\s*$""")
 
     private fun importedClasses(): JavaClasses =
         ClassFileImporter()
@@ -31,7 +36,27 @@ class ArchitectureGuardTest {
                     .toList()
             }
 
+    private fun kotlinMainBoundedContextSources(): List<Path> =
+        Files
+            .walk(mainBoundedContextSourceRoot)
+            .use { paths ->
+                paths
+                    .filter { Files.isRegularFile(it) }
+                    .filter { it.toString().endsWith(".kt") }
+                    .toList()
+            }
+
     private fun sourceText(path: Path): String = Files.readString(path)
+
+    private fun sourceBoundedContextName(source: String): String? =
+        boundedContextPackageRegex
+            .find(source)
+            ?.groupValues
+            ?.get(1)
+
+    private fun isForbiddenDirectCrossBoundedContextImport(targetMemberPath: String): Boolean =
+        targetMemberPath.startsWith("model.") ||
+            targetMemberPath.startsWith("application.service.")
 
     @Test
     fun `bounded context에서 legacy app 패키지는 제거되어야 한다`() {
@@ -170,6 +195,48 @@ class ArchitectureGuardTest {
             .dependOnClassesThat()
             .resideInAnyPackage("org.springframework.data.domain..")
             .check(importedClasses())
+    }
+
+    @Test
+    fun `bounded context dependency classifier는 직접 model service import만 차단한다`() {
+        assertThat(isForbiddenDirectCrossBoundedContextImport("model.Post")).isTrue()
+        assertThat(isForbiddenDirectCrossBoundedContextImport("application.service.PostApplicationService")).isTrue()
+        assertThat(isForbiddenDirectCrossBoundedContextImport("event.PostWrittenEvent")).isFalse()
+        assertThat(isForbiddenDirectCrossBoundedContextImport("application.port.input.PostUseCase")).isFalse()
+        assertThat(isForbiddenDirectCrossBoundedContextImport("application.port.output.PostRepositoryPort")).isFalse()
+        assertThat(isForbiddenDirectCrossBoundedContextImport("domain.shared.Member")).isFalse()
+        assertThat(isForbiddenDirectCrossBoundedContextImport("dto.MemberDto")).isFalse()
+        assertThat(isForbiddenDirectCrossBoundedContextImport("config.shared.AuthSecurityConfigurer")).isFalse()
+    }
+
+    @Test
+    fun `bounded context는 다른 context의 model 또는 application service를 직접 import하지 않는다`() {
+        val violations =
+            kotlinMainBoundedContextSources()
+                .flatMap { path ->
+                    val source = sourceText(path)
+                    val sourceContext = sourceBoundedContextName(source) ?: return@flatMap emptyList()
+
+                    source
+                        .lineSequence()
+                        .mapNotNull { line ->
+                            val match = boundedContextImportRegex.matchEntire(line.trim()) ?: return@mapNotNull null
+                            val targetContext = match.groupValues[1]
+                            val targetMemberPath = match.groupValues[2]
+
+                            if (targetContext == sourceContext) {
+                                return@mapNotNull null
+                            }
+
+                            if (!isForbiddenDirectCrossBoundedContextImport(targetMemberPath)) {
+                                return@mapNotNull null
+                            }
+
+                            "${mainBoundedContextSourceRoot.relativize(path)} imports $targetContext.$targetMemberPath"
+                        }.toList()
+                }
+
+        assertThat(violations).isEmpty()
     }
 
     @Test

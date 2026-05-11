@@ -50,6 +50,7 @@ import {
   EditorStudioThumbnailEditorPanel,
   EditorStudioThumbnailMetaPanel,
 } from "./EditorStudioThumbnailPanels"
+import { EditorStudioPublishModal } from "./EditorStudioPublishModal"
 import {
   isServerTempDraftPost,
   TEMP_DRAFT_BODY_PLACEHOLDER,
@@ -2215,6 +2216,10 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const displayName = member.nickname || member.username || "관리자"
   const displayNameInitial = displayName.slice(0, 2).toUpperCase()
   const previewViewportConfig = PREVIEW_CARD_VIEWPORTS[previewViewport]
+  const previewViewportOptions = PREVIEW_CARD_VIEWPORT_ORDER.map((viewport) => ({
+    value: viewport,
+    label: PREVIEW_CARD_VIEWPORTS[viewport].label,
+  }))
   const previewVisibilityLabel = getVisibilityLabel(postVisibility)
   const previewThumbnailSrc = safePreviewThumbnail && !isPreviewThumbnailError ? safePreviewThumbnail : ""
   const shouldShowPublishModalNotice = publishModalNotice.tone !== "idle"
@@ -2543,185 +2548,49 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
 
       {dedicatedEditorResultPanel}
 
-      {isPublishModalOpen && (
-        <ModalBackdrop data-variant="drawer" onClick={closePublishModal}>
-          <PublishModal data-variant="drawer" onClick={(e) => e.stopPropagation()}>
-            <PublishModalHeader>
-              <div>
-                <h4>{publishActionTitle}</h4>
-              </div>
-            </PublishModalHeader>
-            <PublishModalBody>
-              {shouldShowPublishModalNotice ? (
-                <PublishNotice data-tone={publishModalNotice.tone}>{publishModalNotice.text}</PublishNotice>
-              ) : null}
-              <PublishOverviewGrid>
-                <VisibilityCard>
-                  <SectionKicker>노출 범위</SectionKicker>
-                  <strong>누가 이 글을 볼 수 있나요?</strong>
-                  <VisibilityOptionGrid role="group" aria-label="노출 범위 선택">
-                    {PUBLISH_VISIBILITY_OPTIONS.map((option) => (
-                      <VisibilityOptionButton
-                        key={option.value}
-                        type="button"
-                        data-active={postVisibility === option.value}
-                        aria-pressed={postVisibility === option.value}
-                        onClick={() => setPostVisibility(option.value)}
-                      >
-                        <strong>{option.label}</strong>
-                        <span>{option.description}</span>
-                      </VisibilityOptionButton>
-                    ))}
-                  </VisibilityOptionGrid>
-                  <FieldHelp>메인 피드 노출은 전체 공개에서만 활성화됩니다.</FieldHelp>
-                </VisibilityCard>
-                <PreviewResultPanel>
-                  <PreviewResultHeader>
-                    <div>
-                      <SectionKicker>카드 미리보기</SectionKicker>
-                      <strong>{previewViewportConfig.label}</strong>
-                    </div>
-                    <PreviewViewportTabs role="tablist" aria-label="포스트 카드 미리보기 기기">
-                      {PREVIEW_CARD_VIEWPORT_ORDER.map((viewport) => {
-                        const viewportConfig = PREVIEW_CARD_VIEWPORTS[viewport]
-                        return (
-                          <PreviewViewportButton
-                            key={viewport}
-                            type="button"
-                            role="tab"
-                            aria-selected={previewViewport === viewport}
-                            data-active={previewViewport === viewport}
-                            onClick={() => setPreviewViewport(viewport)}
-                          >
-                            {viewportConfig.label}
-                          </PreviewViewportButton>
-                        )
-                      })}
-                    </PreviewViewportTabs>
-                  </PreviewResultHeader>
-                  <PreviewResultFrame style={{ maxWidth: `${previewViewportConfig.cardWidth}px` }}>
-                    <PreviewResultCard>
-                      <div className="thumbnail">
-                        {previewThumbnailSrc ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={previewThumbnailSrc}
-                            alt="실제 카드 기준 포스트 썸네일 미리보기"
-                            style={{
-                              objectFit: "cover",
-                              objectPosition: `${postThumbnailFocusX}% ${postThumbnailFocusY}%`,
-                              transform: `scale(${postThumbnailZoom})`,
-                              transformOrigin: `${postThumbnailFocusX}% ${postThumbnailFocusY}%`,
-                            }}
-                            onError={() => setIsPreviewThumbnailError(true)}
-                          />
-                        ) : (
-                          <div className="thumbnail-placeholder">
-                            <em>썸네일 없음</em>
-                            <span>본문 첫 이미지가 자동 카드 썸네일로 사용됩니다.</span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="content">
-                        <PreviewVisibilityBadge>{previewVisibilityLabel}</PreviewVisibilityBadge>
-                        <h4>{postTitle.trim() || "제목을 입력하면 카드 결과가 여기에 표시됩니다."}</h4>
-                        <p className="summary">
-                          {resolvedPreviewSummary || "요약을 비워두면 본문에서 자동 생성한 요약이 카드에 반영됩니다."}
-                        </p>
-                        <div className="meta">
-                          <span>{previewDateText}</span>
-                          <span className="dot">·</span>
-                          <span className="comment">
-                            <AppIcon name="message" />
-                            0개의 댓글
-                          </span>
-                        </div>
-                        <div className="footer">
-                          <div className="author">
-                            <span className="avatar" aria-hidden="true">
-                              {previewAuthorAvatarSrc ? (
-                                <ProfileImage src={previewAuthorAvatarSrc} alt="" fillContainer />
-                              ) : (
-                                <span className="initial">{displayNameInitial}</span>
-                              )}
-                            </span>
-                            <span className="by">by</span>
-                            <strong>{displayName}</strong>
-                          </div>
-                          <div className="like">
-                            <AppIcon name="heart" />
-                            <span>0</span>
-                          </div>
-                        </div>
-                      </div>
-                    </PreviewResultCard>
-                  </PreviewResultFrame>
-                </PreviewResultPanel>
-              </PublishOverviewGrid>
-
-              <PostPreviewSetup>
-                <PostPreviewHeader>
-                  <strong>카드 요소 편집</strong>
-                </PostPreviewHeader>
-                {isCompactMobileLayout ? (
-                  <CompactPublishEditorStack>
-                    <CompactPublishEditorCard>
-                      <CompactPublishEditorToggle
-                        type="button"
-                        aria-expanded={isMobileThumbnailEditorOpen}
-                        onClick={() => setIsMobileThumbnailEditorOpen((current) => !current)}
-                      >
-                        <div>
-                          <strong>썸네일 위치 조정</strong>
-                          <span>드래그/확대로 카드 크롭을 빠르게 맞춥니다.</span>
-                        </div>
-                        <span>{isMobileThumbnailEditorOpen ? "닫기" : "열기"}</span>
-                      </CompactPublishEditorToggle>
-                      {isMobileThumbnailEditorOpen ? thumbnailEditorPanel : null}
-                    </CompactPublishEditorCard>
-                    <CompactPublishEditorCard>
-                      <CompactPublishEditorToggle
-                        type="button"
-                        aria-expanded={isMobileMetaEditorOpen}
-                        onClick={() => setIsMobileMetaEditorOpen((current) => !current)}
-                      >
-                        <div>
-                          <strong>카드 메타 편집</strong>
-                          <span>썸네일 URL과 요약만 따로 정리합니다.</span>
-                        </div>
-                        <span>{isMobileMetaEditorOpen ? "닫기" : "열기"}</span>
-                      </CompactPublishEditorToggle>
-                      {isMobileMetaEditorOpen ? previewMetaEditorPanel : null}
-                    </CompactPublishEditorCard>
-                  </CompactPublishEditorStack>
-                ) : (
-                  <PreviewEditorGrid>
-                    {thumbnailEditorPanel}
-                    {previewMetaEditorPanel}
-                  </PreviewEditorGrid>
-                )}
-              </PostPreviewSetup>
-            </PublishModalBody>
-            <PublishModalFooter>
-              <Button
-                type="button"
-                disabled={
-                  loadingKey === "writePost" ||
-                  loadingKey === "modifyPost" ||
-                  loadingKey === "publishTempPost" ||
-                  loadingKey === "recommendTags"
-                }
-                onClick={closePublishModal}
-              >
-                닫기
-              </Button>
-              <PrimaryButton type="button" disabled={publishActionButtonDisabled} onClick={() => void handleConfirmPublish()}>
-                {publishActionButtonText}
-              </PrimaryButton>
-            </PublishModalFooter>
-          </PublishModal>
-        </ModalBackdrop>
-      )}
+      {isPublishModalOpen ? (
+        <EditorStudioPublishModal
+          closeToggleLabel="닫기"
+          displayName={displayName}
+          displayNameInitial={displayNameInitial}
+          isCompactMobileLayout={isCompactMobileLayout}
+          isMobileMetaEditorOpen={isMobileMetaEditorOpen}
+          isMobileThumbnailEditorOpen={isMobileThumbnailEditorOpen}
+          loadingKey={loadingKey}
+          modalNotice={publishModalNotice}
+          postThumbnailFocusX={postThumbnailFocusX}
+          postThumbnailFocusY={postThumbnailFocusY}
+          postThumbnailZoom={postThumbnailZoom}
+          postTitle={postTitle}
+          postVisibility={postVisibility}
+          previewAuthorAvatarSrc={previewAuthorAvatarSrc}
+          previewDateText={previewDateText}
+          previewFrameStyle={{ maxWidth: `${previewViewportConfig.cardWidth}px` }}
+          previewKicker="카드 미리보기"
+          previewMetaEditorPanel={previewMetaEditorPanel}
+          previewSummary={resolvedPreviewSummary}
+          previewSummaryFallback="요약을 비워두면 본문에서 자동 생성한 요약이 카드에 반영됩니다."
+          previewThumbnailSrc={previewThumbnailSrc}
+          previewViewport={previewViewport}
+          previewViewportLabel={previewViewportConfig.label}
+          previewViewportOptions={previewViewportOptions}
+          previewVisibilityLabel={previewVisibilityLabel}
+          publishActionButtonDisabled={publishActionButtonDisabled}
+          publishActionButtonText={publishActionButtonText}
+          publishActionTitle={publishActionTitle}
+          shouldShowNotice={shouldShowPublishModalNotice}
+          thumbnailEditorPanel={thumbnailEditorPanel}
+          variant="drawer"
+          visibilityOptions={PUBLISH_VISIBILITY_OPTIONS}
+          onClose={closePublishModal}
+          onConfirmPublish={() => void handleConfirmPublish()}
+          onPostVisibilityChange={setPostVisibility}
+          onPreviewThumbnailError={() => setIsPreviewThumbnailError(true)}
+          onPreviewViewportChange={setPreviewViewport}
+          onToggleMobileMetaEditor={() => setIsMobileMetaEditorOpen((current) => !current)}
+          onToggleMobileThumbnailEditor={() => setIsMobileThumbnailEditorOpen((current) => !current)}
+        />
+      ) : null}
       </EditorStudioRoot>
     )
   }
@@ -4090,191 +3959,49 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
           </MobilePrimaryActionBar>
         )}
 
-        {isPublishModalOpen && (
-          <ModalBackdrop onClick={closePublishModal}>
-            <PublishModal onClick={(e) => e.stopPropagation()}>
-              <PublishModalHeader>
-                <div>
-                  <h4>{publishActionTitle}</h4>
-                </div>
-              </PublishModalHeader>
-              <PublishModalBody>
-                {shouldShowPublishModalNotice ? (
-                  <PublishNotice data-tone={publishModalNotice.tone}>{publishModalNotice.text}</PublishNotice>
-                ) : null}
-                <PublishOverviewGrid>
-                  <VisibilityCard>
-                    <SectionKicker>노출 범위</SectionKicker>
-                    <strong>누가 이 글을 볼 수 있나요?</strong>
-                    <VisibilityOptionGrid role="group" aria-label="노출 범위 선택">
-                      {PUBLISH_VISIBILITY_OPTIONS.map((option) => (
-                        <VisibilityOptionButton
-                          key={option.value}
-                          type="button"
-                          data-active={postVisibility === option.value}
-                          aria-pressed={postVisibility === option.value}
-                          onClick={() => setPostVisibility(option.value)}
-                        >
-                          <strong>{option.label}</strong>
-                          <span>{option.description}</span>
-                        </VisibilityOptionButton>
-                      ))}
-                    </VisibilityOptionGrid>
-                    <FieldHelp>메인 피드 노출은 전체 공개에서만 활성화됩니다.</FieldHelp>
-                  </VisibilityCard>
-                  <PreviewResultPanel>
-                  <PreviewResultHeader>
-                    <div>
-                      <SectionKicker>실제 카드 결과</SectionKicker>
-                      <strong>{previewViewportConfig.label}</strong>
-                    </div>
-                      <PreviewViewportTabs role="tablist" aria-label="포스트 카드 미리보기 기기">
-                        {PREVIEW_CARD_VIEWPORT_ORDER.map((viewport) => {
-                          const viewportConfig = PREVIEW_CARD_VIEWPORTS[viewport]
-                          return (
-                            <PreviewViewportButton
-                              key={viewport}
-                              type="button"
-                              role="tab"
-                              aria-selected={previewViewport === viewport}
-                              data-active={previewViewport === viewport}
-                              onClick={() => setPreviewViewport(viewport)}
-                            >
-                              {viewportConfig.label}
-                            </PreviewViewportButton>
-                          )
-                        })}
-                      </PreviewViewportTabs>
-                    </PreviewResultHeader>
-                    <PreviewResultFrame style={{ maxWidth: `${previewViewportConfig.cardWidth}px` }}>
-                      <PreviewResultCard>
-                        <div className="thumbnail">
-                          {previewThumbnailSrc ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={previewThumbnailSrc}
-                              alt="실제 카드 기준 포스트 썸네일 미리보기"
-                              style={{
-                                objectFit: "cover",
-                                objectPosition: `${postThumbnailFocusX}% ${postThumbnailFocusY}%`,
-                                transform: `scale(${postThumbnailZoom})`,
-                                transformOrigin: `${postThumbnailFocusX}% ${postThumbnailFocusY}%`,
-                              }}
-                              onError={() => setIsPreviewThumbnailError(true)}
-                            />
-                          ) : (
-                            <div className="thumbnail-placeholder">
-                              <em>썸네일 없음</em>
-                              <span>본문 첫 이미지가 자동 카드 썸네일로 사용됩니다.</span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="content">
-                          <PreviewVisibilityBadge>{previewVisibilityLabel}</PreviewVisibilityBadge>
-                          <h4>{postTitle.trim() || "제목을 입력하면 카드 결과가 여기에 표시됩니다."}</h4>
-                          <p className="summary">
-                            {resolvedPreviewSummary || "요약을 비워두면 본문에서 자동 생성한 요약이 카드에 반영됩니다."}
-                          </p>
-                          <div className="meta">
-                            <span>{previewDateText}</span>
-                            <span className="dot">·</span>
-                            <span className="comment">
-                              <AppIcon name="message" />
-                              0개의 댓글
-                            </span>
-                          </div>
-                          <div className="footer">
-                            <div className="author">
-                              <span className="avatar" aria-hidden="true">
-                                {previewAuthorAvatarSrc ? (
-                                  <ProfileImage src={previewAuthorAvatarSrc} alt="" fillContainer />
-                                ) : (
-                                  <span className="initial">{displayNameInitial}</span>
-                                )}
-                              </span>
-                              <span className="by">by</span>
-                              <strong>{displayName}</strong>
-                            </div>
-                            <div className="like">
-                              <AppIcon name="heart" />
-                              <span>0</span>
-                            </div>
-                          </div>
-                        </div>
-                      </PreviewResultCard>
-                    </PreviewResultFrame>
-                  </PreviewResultPanel>
-                </PublishOverviewGrid>
-
-                <PostPreviewSetup>
-                  <PostPreviewHeader>
-                    <strong>카드 요소 편집</strong>
-                    <span>썸네일 위치와 카드 요약만 조정합니다. 결과는 위 카드에서 바로 확인됩니다.</span>
-                  </PostPreviewHeader>
-
-                  {isCompactMobileLayout ? (
-                    <CompactPublishEditorStack>
-                      <CompactPublishEditorCard>
-                        <CompactPublishEditorToggle
-                          type="button"
-                          aria-expanded={isMobileThumbnailEditorOpen}
-                          onClick={() => setIsMobileThumbnailEditorOpen((current) => !current)}
-                        >
-                          <div>
-                            <strong>썸네일 위치 조정</strong>
-                            <span>드래그/확대로 카드 크롭을 빠르게 맞춥니다.</span>
-                          </div>
-                          <span>{isMobileThumbnailEditorOpen ? "접기" : "열기"}</span>
-                        </CompactPublishEditorToggle>
-                        {isMobileThumbnailEditorOpen ? thumbnailEditorPanel : null}
-                      </CompactPublishEditorCard>
-                      <CompactPublishEditorCard>
-                        <CompactPublishEditorToggle
-                          type="button"
-                          aria-expanded={isMobileMetaEditorOpen}
-                          onClick={() => setIsMobileMetaEditorOpen((current) => !current)}
-                        >
-                          <div>
-                            <strong>카드 메타 편집</strong>
-                            <span>썸네일 URL과 요약만 따로 정리합니다.</span>
-                          </div>
-                          <span>{isMobileMetaEditorOpen ? "접기" : "열기"}</span>
-                        </CompactPublishEditorToggle>
-                        {isMobileMetaEditorOpen ? previewMetaEditorPanel : null}
-                      </CompactPublishEditorCard>
-                    </CompactPublishEditorStack>
-                  ) : (
-                    <PreviewEditorGrid>
-                      {thumbnailEditorPanel}
-                      {previewMetaEditorPanel}
-                    </PreviewEditorGrid>
-                  )}
-                </PostPreviewSetup>
-              </PublishModalBody>
-              <PublishModalFooter>
-                <Button
-                  type="button"
-                  disabled={
-                    loadingKey === "writePost" ||
-                    loadingKey === "modifyPost" ||
-                    loadingKey === "publishTempPost" ||
-                    loadingKey === "recommendTags"
-                  }
-                  onClick={closePublishModal}
-                >
-                  닫기
-                </Button>
-                <PrimaryButton
-                  type="button"
-                  disabled={publishActionButtonDisabled}
-                  onClick={() => void handleConfirmPublish()}
-                >
-                  {publishActionButtonText}
-                </PrimaryButton>
-              </PublishModalFooter>
-            </PublishModal>
-          </ModalBackdrop>
-        )}
+        {isPublishModalOpen ? (
+          <EditorStudioPublishModal
+            closeToggleLabel="접기"
+            displayName={displayName}
+            displayNameInitial={displayNameInitial}
+            isCompactMobileLayout={isCompactMobileLayout}
+            isMobileMetaEditorOpen={isMobileMetaEditorOpen}
+            isMobileThumbnailEditorOpen={isMobileThumbnailEditorOpen}
+            loadingKey={loadingKey}
+            modalNotice={publishModalNotice}
+            postThumbnailFocusX={postThumbnailFocusX}
+            postThumbnailFocusY={postThumbnailFocusY}
+            postThumbnailZoom={postThumbnailZoom}
+            postTitle={postTitle}
+            postVisibility={postVisibility}
+            previewAuthorAvatarSrc={previewAuthorAvatarSrc}
+            previewDateText={previewDateText}
+            previewFrameStyle={{ maxWidth: `${previewViewportConfig.cardWidth}px` }}
+            previewKicker="실제 카드 결과"
+            previewMetaEditorPanel={previewMetaEditorPanel}
+            previewSummary={resolvedPreviewSummary}
+            previewSummaryFallback="요약을 비워두면 본문에서 자동 생성한 요약이 카드에 반영됩니다."
+            previewThumbnailSrc={previewThumbnailSrc}
+            previewViewport={previewViewport}
+            previewViewportLabel={previewViewportConfig.label}
+            previewViewportOptions={previewViewportOptions}
+            previewVisibilityLabel={previewVisibilityLabel}
+            publishActionButtonDisabled={publishActionButtonDisabled}
+            publishActionButtonText={publishActionButtonText}
+            publishActionTitle={publishActionTitle}
+            setupDescription="썸네일 위치와 카드 요약만 조정합니다. 결과는 위 카드에서 바로 확인됩니다."
+            shouldShowNotice={shouldShowPublishModalNotice}
+            thumbnailEditorPanel={thumbnailEditorPanel}
+            visibilityOptions={PUBLISH_VISIBILITY_OPTIONS}
+            onClose={closePublishModal}
+            onConfirmPublish={() => void handleConfirmPublish()}
+            onPostVisibilityChange={setPostVisibility}
+            onPreviewThumbnailError={() => setIsPreviewThumbnailError(true)}
+            onPreviewViewportChange={setPreviewViewport}
+            onToggleMobileMetaEditor={() => setIsMobileMetaEditorOpen((current) => !current)}
+            onToggleMobileThumbnailEditor={() => setIsMobileThumbnailEditorOpen((current) => !current)}
+          />
+        ) : null}
 
           {SHOW_LEGACY_UTILITY_STUDIO && (
           <UtilityGrid>
@@ -5641,73 +5368,6 @@ const InlineMetaInput = styled(Input)`
   }
 `
 
-const PostPreviewSetup = styled.section`
-  display: grid;
-  gap: 0.82rem;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  padding: 0;
-`
-
-const PostPreviewHeader = styled.div`
-  display: grid;
-  gap: 0.18rem;
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.92rem;
-    font-weight: 700;
-    line-height: 1.3;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.76rem;
-    line-height: 1.45;
-  }
-`
-
-const SectionKicker = styled.span`
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-`
-
-const PublishOverviewGrid = styled.div`
-  display: grid;
-  gap: 0.8rem;
-
-  @media (min-width: 1080px) {
-    grid-template-columns: minmax(0, 1fr) minmax(320px, 368px);
-    align-items: start;
-  }
-`
-
-const VisibilityCard = styled.section`
-  display: grid;
-  gap: 0.62rem;
-  align-content: start;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 14px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
-    ${({ theme }) => theme.colors.gray1};
-  padding: 0.9rem;
-
-  > strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.94rem;
-    font-weight: 700;
-    line-height: 1.35;
-  }
-`
-
 const VisibilityOptionGrid = styled.div`
   display: grid;
   gap: 0.5rem;
@@ -5746,19 +5406,6 @@ const VisibilityOptionButton = styled.button`
     background: ${({ theme }) => theme.colors.blue3};
     box-shadow: 0 0 0 1px ${({ theme }) => theme.colors.blue6} inset;
   }
-`
-
-const PreviewResultPanel = styled.div`
-  display: grid;
-  gap: 0.75rem;
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 14px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
-    ${({ theme }) => theme.colors.gray1};
-  padding: 0.9rem;
 `
 
 const PreviewResultHeader = styled.div`
@@ -6012,59 +5659,6 @@ const PreviewEditorGrid = styled.div`
   }
 `
 
-const CompactPublishEditorStack = styled.div`
-  display: grid;
-  gap: 0.7rem;
-`
-
-const CompactPublishEditorCard = styled.div`
-  display: grid;
-  gap: 0.62rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 12px;
-  background: ${({ theme }) => theme.colors.gray2};
-  padding: 0.72rem;
-`
-
-const CompactPublishEditorToggle = styled.button`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.7rem;
-  width: 100%;
-  min-height: 44px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-
-  > div {
-    display: grid;
-    gap: 0.14rem;
-    min-width: 0;
-  }
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.86rem;
-    font-weight: 700;
-    line-height: 1.3;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.76rem;
-    line-height: 1.45;
-  }
-
-  > span:last-of-type {
-    flex: 0 0 auto;
-    color: ${({ theme }) => theme.colors.blue11};
-    font-weight: 700;
-  }
-`
-
 const SummaryCounter = styled.span`
   justify-self: end;
   color: ${({ theme }) => theme.colors.gray10};
@@ -6241,21 +5835,6 @@ const ComposeSidebarSummaryText = styled.p`
   font-size: 0.84rem;
   line-height: 1.65;
   white-space: pre-line;
-`
-
-const FieldHelp = styled.span`
-  display: block;
-  width: 100%;
-  min-width: 0;
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.74rem;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-
-  @media (max-width: 720px) {
-    display: none;
-  }
 `
 
 const PublishNotice = styled.div`
@@ -7371,86 +6950,6 @@ const ConfirmModal = styled.div`
     justify-content: flex-end;
     gap: 0.5rem;
     flex-wrap: wrap;
-  }
-`
-
-const PublishModal = styled.div`
-  width: min(1120px, calc(100vw - 2rem));
-  max-height: min(86vh, 920px);
-  overflow: auto;
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  padding: 1rem 1rem 0;
-  display: grid;
-  gap: 0.8rem;
-
-  &[data-variant="drawer"] {
-    width: min(560px, 100vw);
-    max-height: 100vh;
-    height: 100vh;
-    border-radius: 0;
-    border-left: 1px solid ${({ theme }) => theme.colors.gray6};
-    border-right: 0;
-    border-top: 0;
-    border-bottom: 0;
-    padding-top: max(1rem, env(safe-area-inset-top, 0px));
-    padding-bottom: 0;
-  }
-
-  @media (max-width: 720px) {
-    width: min(100%, 34rem);
-    max-height: min(92vh, 980px);
-    padding: 0.82rem 0.82rem 0;
-    gap: 0.78rem;
-  }
-`
-
-const PublishModalHeader = styled.div`
-  display: grid;
-  gap: 0.75rem;
-
-  h4 {
-    margin: 0;
-    font-size: 1.08rem;
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  p {
-    margin: 0.24rem 0 0;
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.8rem;
-    line-height: 1.5;
-  }
-`
-
-const PublishModalBody = styled.div`
-  display: grid;
-  gap: 0.8rem;
-  padding-bottom: 0.6rem;
-
-  @media (max-width: 720px) {
-    gap: 0.7rem;
-  }
-`
-
-const PublishModalFooter = styled.div`
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  margin: 0 -1rem;
-  padding: 0.9rem 1rem 1rem;
-  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  box-shadow: 0 -10px 28px rgba(2, 6, 23, 0.12);
-
-  @media (max-width: 720px) {
-    margin: 0 -0.82rem;
-    padding: 0.82rem 0.82rem calc(0.9rem + env(safe-area-inset-bottom, 0px));
   }
 `
 

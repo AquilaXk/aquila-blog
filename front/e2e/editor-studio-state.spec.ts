@@ -159,6 +159,14 @@ test.describe("editor studio state", () => {
     const editorStudioThumbnailControlsSource = existsSync(editorStudioThumbnailControlsPath)
       ? readFileSync(editorStudioThumbnailControlsPath, "utf8")
       : ""
+    const editorStudioThumbnailPanelsPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioThumbnailPanels.tsx"
+    )
+    expect(existsSync(editorStudioThumbnailPanelsPath)).toBe(true)
+    const editorStudioThumbnailPanelsSource = existsSync(editorStudioThumbnailPanelsPath)
+      ? readFileSync(editorStudioThumbnailPanelsPath, "utf8")
+      : ""
     const blockEditorShellSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"), "utf8")
     const blockEditorEngineSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"), "utf8")
     const blockSelectionModelSource = readFileSync(
@@ -268,6 +276,11 @@ test.describe("editor studio state", () => {
     expect(editorStudioThumbnailControlsSource).toContain("export const useEditorStudioThumbnailControls")
     expect(editorStudioThumbnailControlsSource).toContain("const handleThumbnailUrlModalChange = useCallback")
     expect(editorStudioThumbnailControlsSource).toContain("const applyFirstBodyImageToThumbnail = useCallback")
+    expect(editorStudioThumbnailPanelsSource).toContain("export const EditorStudioThumbnailEditorPanel =")
+    expect(editorStudioThumbnailPanelsSource).toContain("export const EditorStudioThumbnailMetaPanel =")
+    expect(editorStudioSource).toContain('} from "./EditorStudioThumbnailPanels"')
+    expect(editorStudioSource).not.toContain("const thumbnailEditorPanel = useMemo")
+    expect(editorStudioSource).not.toContain("const previewMetaEditorPanel = useMemo")
     expect(editorStudioStateSource).toContain("export type PostVisibility =")
     expect(editorStudioStateSource).toContain("export const toVisibility")
     expect(editorStudioStateSource).toContain("export const toFlags")
@@ -788,14 +801,19 @@ test.describe("editor studio state", () => {
 
   test("썸네일 편집 패널은 클립보드 이미지 붙여넣기 업로드 계약을 유지한다", () => {
     const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
+    const editorStudioThumbnailPanelsSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/EditorStudioThumbnailPanels.tsx"),
+      "utf8"
+    )
     const editorStudioPersistenceSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/useEditorStudioPersistence.ts"),
       "utf8"
     )
 
     expect(editorStudioSource).toContain("const extractImageFileFromClipboard = (clipboardData: DataTransfer | null): File | null => {")
-    expect(editorStudioSource).toContain("<PreviewEditorSection onPasteCapture={handleThumbnailPaste}>")
-    expect(editorStudioSource).toContain("onPaste={handleThumbnailPaste}")
+    expect(editorStudioSource).toContain("onThumbnailPaste={handleThumbnailPaste}")
+    expect(editorStudioThumbnailPanelsSource).toContain("<PreviewEditorSection onPasteCapture={onThumbnailPaste}>")
+    expect(editorStudioThumbnailPanelsSource).toContain("onPaste={onThumbnailPaste}")
     expect(editorStudioPersistenceSource).toContain("const handleThumbnailPaste = useCallback(")
     expect(editorStudioPersistenceSource).toContain("setThumbnailImageFileName(imageFile.name || \"clipboard-image.png\")")
     expect(editorStudioPersistenceSource).toContain("void handleUploadThumbnailImage(imageFile)")

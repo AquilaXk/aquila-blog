@@ -175,6 +175,14 @@ test.describe("editor studio state", () => {
     const editorStudioPublishModalSource = existsSync(editorStudioPublishModalPath)
       ? readFileSync(editorStudioPublishModalPath, "utf8")
       : ""
+    const editorStudioComposeAssistantPanelPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioComposeAssistantPanel.tsx"
+    )
+    expect(existsSync(editorStudioComposeAssistantPanelPath)).toBe(true)
+    const editorStudioComposeAssistantPanelSource = existsSync(editorStudioComposeAssistantPanelPath)
+      ? readFileSync(editorStudioComposeAssistantPanelPath, "utf8")
+      : ""
     const blockEditorShellSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"), "utf8")
     const blockEditorEngineSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"), "utf8")
     const blockSelectionModelSource = readFileSync(
@@ -295,6 +303,16 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).not.toContain("<PublishModal")
     expect(editorStudioSource).not.toContain("const PublishModal = styled.div`")
     expect(editorStudioSource).not.toContain("const PublishOverviewGrid = styled.div`")
+    expect(editorStudioComposeAssistantPanelSource).toContain("export const EditorStudioComposeAssistantPanel =")
+    expect(editorStudioSource).toContain(
+      'import { EditorStudioComposeAssistantPanel } from "./EditorStudioComposeAssistantPanel"'
+    )
+    expect(editorStudioSource.match(/<EditorStudioComposeAssistantPanel/g)?.length).toBe(1)
+    expect(editorStudioComposeAssistantPanelSource).toContain("const ComposeAssistantPanel = styled.div`")
+    expect(editorStudioComposeAssistantPanelSource).toContain("const PreviewResultCard = styled.article`")
+    expect(editorStudioSource).not.toContain("const ComposeAssistantPanel = styled.div`")
+    expect(editorStudioSource).not.toContain("const PreviewResultCard = styled.article`")
+    expect(editorStudioSource).not.toContain("const PublishSettingsSummary = styled.div`")
     expect(editorStudioStateSource).toContain("export type PostVisibility =")
     expect(editorStudioStateSource).toContain("export const toVisibility")
     expect(editorStudioStateSource).toContain("export const toFlags")

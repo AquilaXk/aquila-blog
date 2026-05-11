@@ -86,15 +86,10 @@ import ProfileImage from "src/components/ProfileImage"
 import AppIcon from "src/components/icons/AppIcon"
 import {
   applyThumbnailTransformToUrl,
-  clampThumbnailFocusX,
-  clampThumbnailFocusY,
   clampThumbnailZoom,
   DEFAULT_THUMBNAIL_FOCUS_X,
   DEFAULT_THUMBNAIL_FOCUS_Y,
   DEFAULT_THUMBNAIL_ZOOM,
-  parseThumbnailFocusXFromUrl,
-  parseThumbnailZoomFromUrl,
-  parseThumbnailFocusYFromUrl,
   stripThumbnailFocusFromUrl,
 } from "src/libs/thumbnailFocus"
 import {
@@ -105,9 +100,17 @@ import {
   PROFILE_IMAGE_UPLOAD_RULE_LABEL,
 } from "src/libs/profileImageUpload"
 import { saveProfileCardWithConflictRetry } from "src/libs/profileCardSave"
-import { normalizePersistedSummary } from "src/libs/postSummary"
 import { articleTypographyScale } from "src/libs/markdown/contentTypography"
 import type { BlockEditorChangeMeta } from "src/components/editor/blockEditorContract"
+import {
+  CATEGORY_CATALOG_STORAGE_KEY,
+  TAG_CATALOG_STORAGE_KEY,
+  persistCatalog,
+  persistLocalDraft,
+  readLocalDraft,
+  readStoredCatalog,
+  removeLocalDraft,
+} from "./editorStudioStorageModel"
 
 const BLOCK_EDITOR_V2_MERMAID_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED !== "false"
 const ADMIN_POSTS_WORKSPACE_ROUTE = "/admin/posts"
@@ -253,9 +256,6 @@ type PreviewViewportMode = "desktop" | "tablet" | "mobile"
 type ManageMobileStudioStep = "query" | "list"
 type ComposeMobileStudioStep = "edit" | "publish"
 
-const TAG_CATALOG_STORAGE_KEY = "admin.editor.customTags"
-const CATEGORY_CATALOG_STORAGE_KEY = "admin.editor.customCategories"
-const LOCAL_DRAFT_STORAGE_KEY = "admin.editor.localDraft.v1"
 const LIST_CONDITION_STORAGE_KEY = "admin.contentStudio.listConditions.v1"
 const LIST_CACHE_TTL_MS = 45_000
 const GLOBAL_NOTICE_IDLE_TEXT = "운영 작업 상태가 여기에 표시됩니다."
@@ -500,86 +500,6 @@ const fetchRecommendedTags = async (
   } finally {
     clearTimeout(timeoutId)
   }
-}
-
-const readStoredCatalog = (storageKey: string) => {
-  if (typeof window === "undefined") return []
-
-  try {
-    const raw = window.localStorage.getItem(storageKey)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed)
-      ? dedupeStrings(parsed.filter((item): item is string => typeof item === "string"))
-      : []
-  } catch {
-    return []
-  }
-}
-
-const persistCatalog = (storageKey: string, values: string[]) => {
-  if (typeof window === "undefined") return
-  window.localStorage.setItem(storageKey, JSON.stringify(dedupeStrings(values)))
-}
-
-const readLocalDraft = (): LocalDraftPayload | null => {
-  if (typeof window === "undefined") return null
-
-  try {
-    const raw = window.localStorage.getItem(LOCAL_DRAFT_STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as Partial<LocalDraftPayload>
-    if (!parsed || typeof parsed !== "object") return null
-
-    const visibility = parsed.visibility
-    const isValidVisibility =
-      visibility === "PRIVATE" || visibility === "PUBLIC_UNLISTED" || visibility === "PUBLIC_LISTED"
-    const rawThumbnailUrl =
-      typeof parsed.thumbnailUrl === "string" ? normalizeSafeImageUrl(parsed.thumbnailUrl) : ""
-    const legacyFocusX = parseThumbnailFocusXFromUrl(rawThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_X)
-    const legacyFocusY = parseThumbnailFocusYFromUrl(rawThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_Y)
-    const legacyZoom = parseThumbnailZoomFromUrl(rawThumbnailUrl, DEFAULT_THUMBNAIL_ZOOM)
-    const parsedFocusX =
-      typeof parsed.thumbnailFocusX === "number"
-        ? clampThumbnailFocusX(parsed.thumbnailFocusX)
-        : legacyFocusX
-    const parsedFocusY =
-      typeof parsed.thumbnailFocusY === "number"
-        ? clampThumbnailFocusY(parsed.thumbnailFocusY)
-        : legacyFocusY
-    const parsedZoom =
-      typeof parsed.thumbnailZoom === "number"
-        ? clampThumbnailZoom(parsed.thumbnailZoom)
-        : legacyZoom
-
-    return {
-      title: typeof parsed.title === "string" ? parsed.title : "",
-      content: typeof parsed.content === "string" ? parsed.content : "",
-      summary: normalizePersistedSummary(parsed.summary),
-      thumbnailUrl: stripThumbnailFocusFromUrl(rawThumbnailUrl),
-      thumbnailFocusX: parsedFocusX,
-      thumbnailFocusY: parsedFocusY,
-      thumbnailZoom: parsedZoom,
-      tags: Array.isArray(parsed.tags)
-        ? dedupeStrings(parsed.tags.filter((item): item is string => typeof item === "string"))
-        : [],
-      category: typeof parsed.category === "string" ? normalizeCategoryValue(parsed.category) : "",
-      visibility: isValidVisibility ? visibility : "PUBLIC_LISTED",
-      savedAt: typeof parsed.savedAt === "string" ? parsed.savedAt : "",
-    }
-  } catch {
-    return null
-  }
-}
-
-const persistLocalDraft = (payload: LocalDraftPayload) => {
-  if (typeof window === "undefined") return
-  window.localStorage.setItem(LOCAL_DRAFT_STORAGE_KEY, JSON.stringify(payload))
-}
-
-const removeLocalDraft = () => {
-  if (typeof window === "undefined") return
-  window.localStorage.removeItem(LOCAL_DRAFT_STORAGE_KEY)
 }
 
 const parseResponseErrorBody = async (response: Response): Promise<string> => {

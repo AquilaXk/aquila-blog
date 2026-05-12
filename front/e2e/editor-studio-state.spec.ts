@@ -272,6 +272,14 @@ test.describe("editor studio state", () => {
     const editorStudioDeleteConfirmDialogSource = existsSync(editorStudioDeleteConfirmDialogPath)
       ? readFileSync(editorStudioDeleteConfirmDialogPath, "utf8")
       : ""
+    const editorStudioComposeMobileChromePath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioComposeMobileChrome.tsx"
+    )
+    expect(existsSync(editorStudioComposeMobileChromePath)).toBe(true)
+    const editorStudioComposeMobileChromeSource = existsSync(editorStudioComposeMobileChromePath)
+      ? readFileSync(editorStudioComposeMobileChromePath, "utf8")
+      : ""
     const blockEditorShellSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"), "utf8")
     const blockEditorEngineSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"), "utf8")
     const blockSelectionModelSource = readFileSync(
@@ -569,6 +577,22 @@ test.describe("editor studio state", () => {
     expect(editorStudioDeleteConfirmDialogSource).not.toContain("run(")
     expect(editorStudioDeleteConfirmDialogSource).not.toContain("deletePostsFromList")
     expect(editorStudioDeleteConfirmDialogSource).not.toContain("setDeleteConfirmState")
+    expect(editorStudioComposeMobileChromeSource).toContain("export const EditorStudioComposeMobileChrome =")
+    expect(editorStudioSource).toContain(
+      'import { EditorStudioComposeMobileChrome } from "./EditorStudioComposeMobileChrome"'
+    )
+    expect(editorStudioSource.match(/<EditorStudioComposeMobileChrome/g)?.length).toBe(1)
+    expect(editorStudioComposeMobileChromeSource).toContain("const MobileComposeStatusBar = styled.div`")
+    expect(editorStudioComposeMobileChromeSource).toContain("const MobilePrimaryActionBar = styled.div`")
+    expect(editorStudioSource).not.toContain("<MobileComposeStatusBar")
+    expect(editorStudioSource).not.toContain("<MobilePrimaryActionBar")
+    expect(editorStudioSource).not.toContain("const MobileComposeStatusBar = styled.div`")
+    expect(editorStudioSource).not.toContain("const MobilePrimaryActionBar = styled.div`")
+    expect(editorStudioComposeMobileChromeSource).not.toContain("apiFetch(")
+    expect(editorStudioComposeMobileChromeSource).not.toContain("run(")
+    expect(editorStudioComposeMobileChromeSource).not.toContain("openPublishModal")
+    expect(editorStudioComposeMobileChromeSource).not.toContain("setMobileComposeStep")
+    expect(editorStudioComposeMobileChromeSource).not.toContain("setPostVisibility")
     expect(editorStudioStateSource).toContain("export type PostVisibility =")
     expect(editorStudioStateSource).toContain("export const toVisibility")
     expect(editorStudioStateSource).toContain("export const toFlags")

@@ -248,6 +248,30 @@ test.describe("editor studio state", () => {
     const editorStudioPostListPanelSource = existsSync(editorStudioPostListPanelPath)
       ? readFileSync(editorStudioPostListPanelPath, "utf8")
       : ""
+    const editorStudioMobileStepNavigatorPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioMobileStepNavigator.tsx"
+    )
+    expect(existsSync(editorStudioMobileStepNavigatorPath)).toBe(true)
+    const editorStudioMobileStepNavigatorSource = existsSync(editorStudioMobileStepNavigatorPath)
+      ? readFileSync(editorStudioMobileStepNavigatorPath, "utf8")
+      : ""
+    const editorStudioUndoToastPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioUndoToast.tsx"
+    )
+    expect(existsSync(editorStudioUndoToastPath)).toBe(true)
+    const editorStudioUndoToastSource = existsSync(editorStudioUndoToastPath)
+      ? readFileSync(editorStudioUndoToastPath, "utf8")
+      : ""
+    const editorStudioDeleteConfirmDialogPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioDeleteConfirmDialog.tsx"
+    )
+    expect(existsSync(editorStudioDeleteConfirmDialogPath)).toBe(true)
+    const editorStudioDeleteConfirmDialogSource = existsSync(editorStudioDeleteConfirmDialogPath)
+      ? readFileSync(editorStudioDeleteConfirmDialogPath, "utf8")
+      : ""
     const blockEditorShellSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"), "utf8")
     const blockEditorEngineSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"), "utf8")
     const blockSelectionModelSource = readFileSync(
@@ -505,6 +529,46 @@ test.describe("editor studio state", () => {
     expect(editorStudioPostListPanelSource).not.toContain("hardDeleteDeletedPostFromList")
     expect(editorStudioPostListPanelSource).not.toContain("openDeleteConfirm")
     expect(editorStudioPostListPanelSource).not.toContain("setPostId")
+    expect(editorStudioMobileStepNavigatorSource).toContain("export const EditorStudioMobileStepNavigator =")
+    expect(editorStudioSource).toContain(
+      'import { EditorStudioMobileStepNavigator } from "./EditorStudioMobileStepNavigator"'
+    )
+    expect(editorStudioSource.match(/<EditorStudioMobileStepNavigator/g)?.length).toBe(1)
+    expect(editorStudioMobileStepNavigatorSource).toContain("모바일 작업 단계")
+    expect(editorStudioMobileStepNavigatorSource).toContain("현재 단계:")
+    expect(editorStudioSource).not.toContain("<MobileStudioStepper")
+    expect(editorStudioSource).not.toContain("<MobileStepGuide")
+    expect(editorStudioSource).not.toContain("const MobileStudioStepper = styled.div`")
+    expect(editorStudioSource).not.toContain("const MobileStepGuide = styled.section`")
+    expect(editorStudioMobileStepNavigatorSource).not.toContain("apiFetch(")
+    expect(editorStudioMobileStepNavigatorSource).not.toContain("run(")
+    expect(editorStudioMobileStepNavigatorSource).not.toContain("setActiveMobileStudioStep")
+    expect(editorStudioUndoToastSource).toContain("export const EditorStudioUndoToast =")
+    expect(editorStudioSource).toContain(
+      'import { EditorStudioUndoToast } from "./EditorStudioUndoToast"'
+    )
+    expect(editorStudioSource.match(/<EditorStudioUndoToast/g)?.length).toBe(1)
+    expect(editorStudioUndoToastSource).toContain("실행 취소")
+    expect(editorStudioSource).not.toContain("<UndoToast")
+    expect(editorStudioSource).not.toContain("const UndoToast = styled.div`")
+    expect(editorStudioUndoToastSource).not.toContain("apiFetch(")
+    expect(editorStudioUndoToastSource).not.toContain("run(")
+    expect(editorStudioUndoToastSource).not.toContain("handleUndoSoftDelete")
+    expect(editorStudioDeleteConfirmDialogSource).toContain("export const EditorStudioDeleteConfirmDialog =")
+    expect(editorStudioSource).toContain(
+      'import { EditorStudioDeleteConfirmDialog } from "./EditorStudioDeleteConfirmDialog"'
+    )
+    expect(editorStudioSource.match(/<EditorStudioDeleteConfirmDialog/g)?.length).toBe(1)
+    expect(editorStudioDeleteConfirmDialogSource).toContain("글을 삭제할까요?")
+    expect(editorStudioDeleteConfirmDialogSource).toContain("삭제 후에는 삭제 글 목록에서 복구할 수 있습니다.")
+    expect(editorStudioSource).not.toContain("<ModalBackdrop")
+    expect(editorStudioSource).not.toContain("<ConfirmModal")
+    expect(editorStudioSource).not.toContain("const ModalBackdrop = styled.div`")
+    expect(editorStudioSource).not.toContain("const ConfirmModal = styled.div`")
+    expect(editorStudioDeleteConfirmDialogSource).not.toContain("apiFetch(")
+    expect(editorStudioDeleteConfirmDialogSource).not.toContain("run(")
+    expect(editorStudioDeleteConfirmDialogSource).not.toContain("deletePostsFromList")
+    expect(editorStudioDeleteConfirmDialogSource).not.toContain("setDeleteConfirmState")
     expect(editorStudioStateSource).toContain("export type PostVisibility =")
     expect(editorStudioStateSource).toContain("export const toVisibility")
     expect(editorStudioStateSource).toContain("export const toFlags")

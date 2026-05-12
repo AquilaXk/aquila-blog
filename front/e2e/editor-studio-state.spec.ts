@@ -208,6 +208,14 @@ test.describe("editor studio state", () => {
     const editorStudioSelectedPostPanelSource = existsSync(editorStudioSelectedPostPanelPath)
       ? readFileSync(editorStudioSelectedPostPanelPath, "utf8")
       : ""
+    const editorStudioLegacyProfileSectionPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioLegacyProfileSection.tsx"
+    )
+    expect(existsSync(editorStudioLegacyProfileSectionPath)).toBe(true)
+    const editorStudioLegacyProfileSectionSource = existsSync(editorStudioLegacyProfileSectionPath)
+      ? readFileSync(editorStudioLegacyProfileSectionPath, "utf8")
+      : ""
     const blockEditorShellSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"), "utf8")
     const blockEditorEngineSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"), "utf8")
     const blockSelectionModelSource = readFileSync(
@@ -392,6 +400,22 @@ test.describe("editor studio state", () => {
     expect(editorStudioSelectedPostPanelSource).not.toContain("openDeleteConfirm")
     expect(editorStudioSelectedPostPanelSource).not.toContain("apiFetch(")
     expect(editorStudioSelectedPostPanelSource).not.toContain("run(")
+    expect(editorStudioLegacyProfileSectionSource).toContain("export const EditorStudioLegacyProfileSection =")
+    expect(editorStudioSource).toContain(
+      'import { EditorStudioLegacyProfileSection } from "./EditorStudioLegacyProfileSection"'
+    )
+    expect(editorStudioSource.match(/<EditorStudioLegacyProfileSection/g)?.length).toBe(1)
+    expect(editorStudioLegacyProfileSectionSource).toContain("Profile Studio")
+    expect(editorStudioLegacyProfileSectionSource).toContain("프로필 이미지 선택")
+    expect(editorStudioLegacyProfileSectionSource).toContain("역할/소개 저장")
+    expect(editorStudioSource).not.toContain("<ProfileStudioGrid>")
+    expect(editorStudioSource).not.toContain("const ProfileStudioGrid = styled.div`")
+    expect(editorStudioSource).not.toContain("const ProfileCardPanel = styled.div`")
+    expect(editorStudioSource).not.toContain("const ProfileCurrentGrid = styled.div`")
+    expect(editorStudioLegacyProfileSectionSource).not.toContain("apiFetch(")
+    expect(editorStudioLegacyProfileSectionSource).not.toContain("run(")
+    expect(editorStudioLegacyProfileSectionSource).not.toContain("setProfileRoleInput")
+    expect(editorStudioLegacyProfileSectionSource).not.toContain("setProfileBioInput")
     expect(editorStudioStateSource).toContain("export type PostVisibility =")
     expect(editorStudioStateSource).toContain("export const toVisibility")
     expect(editorStudioStateSource).toContain("export const toFlags")

@@ -184,6 +184,14 @@ test.describe("editor studio state", () => {
     const editorStudioComposeAssistantPanelSource = existsSync(editorStudioComposeAssistantPanelPath)
       ? readFileSync(editorStudioComposeAssistantPanelPath, "utf8")
       : ""
+    const editorStudioMetadataAssistantPanelPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioMetadataAssistantPanel.tsx"
+    )
+    expect(existsSync(editorStudioMetadataAssistantPanelPath)).toBe(true)
+    const editorStudioMetadataAssistantPanelSource = existsSync(editorStudioMetadataAssistantPanelPath)
+      ? readFileSync(editorStudioMetadataAssistantPanelPath, "utf8")
+      : ""
     const blockEditorShellSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"), "utf8")
     const blockEditorEngineSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"), "utf8")
     const blockSelectionModelSource = readFileSync(
@@ -314,6 +322,15 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).not.toContain("const ComposeAssistantPanel = styled.div`")
     expect(editorStudioSource).not.toContain("const PreviewResultCard = styled.article`")
     expect(editorStudioSource).not.toContain("const PublishSettingsSummary = styled.div`")
+    expect(editorStudioMetadataAssistantPanelSource).toContain("export const EditorStudioMetadataAssistantPanel =")
+    expect(editorStudioSource).toContain(
+      'import { EditorStudioMetadataAssistantPanel } from "./EditorStudioMetadataAssistantPanel"'
+    )
+    expect(editorStudioSource.match(/<EditorStudioMetadataAssistantPanel/g)?.length).toBe(1)
+    expect(editorStudioMetadataAssistantPanelSource).toContain("<strong>태그 정리</strong>")
+    expect(editorStudioMetadataAssistantPanelSource).toContain("<strong>보조 작업</strong>")
+    expect(editorStudioSource).not.toContain("<strong>태그 정리</strong>")
+    expect(editorStudioSource).not.toContain("<strong>보조 작업</strong>")
     expect(editorStudioStateSource).toContain("export type PostVisibility =")
     expect(editorStudioStateSource).toContain("export const toVisibility")
     expect(editorStudioStateSource).toContain("export const toFlags")

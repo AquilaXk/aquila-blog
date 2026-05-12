@@ -92,9 +92,9 @@ if [[ "${needs_detail_render_guard}" == "true" ]]; then
     node scripts/check-bundle-size.mjs
   )
 
-  echo "[pre-commit] 상세 렌더 회귀 가드 실행: yarn playwright test e2e/smoke.spec.ts e2e/mobile-layout.spec.ts"
+  echo "[pre-commit] 상세 렌더 회귀 가드 실행: yarn test:e2e:smoke"
   (
     cd front
-    yarn playwright test e2e/smoke.spec.ts e2e/mobile-layout.spec.ts
+    yarn test:e2e:smoke
   )
 fi

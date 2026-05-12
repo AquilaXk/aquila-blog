@@ -60,6 +60,9 @@ import { EditorStudioLegacyUtilityPanel } from "./EditorStudioLegacyUtilityPanel
 import { EditorStudioResultLogPanel } from "./EditorStudioResultLogPanel"
 import { EditorStudioPostQueryPanel } from "./EditorStudioPostQueryPanel"
 import { EditorStudioPostListPanel } from "./EditorStudioPostListPanel"
+import { EditorStudioMobileStepNavigator } from "./EditorStudioMobileStepNavigator"
+import { EditorStudioUndoToast } from "./EditorStudioUndoToast"
+import { EditorStudioDeleteConfirmDialog } from "./EditorStudioDeleteConfirmDialog"
 import {
   isServerTempDraftPost,
   TEMP_DRAFT_BODY_PLACEHOLDER,
@@ -1574,7 +1577,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     if (uniqueIds.length === 0) return
     setDeleteConfirmNotice({
       tone: "idle",
-      text: "삭제는 즉시 반영되며 되돌릴 수 없습니다.",
+      text: "",
     })
     const headline =
       uniqueIds.length === 1
@@ -2762,48 +2765,18 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
             {shouldShowGlobalNotice ? (
               <GlobalNoticeBar data-tone={globalNotice.tone}>{globalNotice.text}</GlobalNoticeBar>
             ) : null}
-            <MobileStudioStepper role="tablist" aria-label="모바일 작업 단계">
-              {mobileStudioSurfaceSteps.map((step) => (
-                <button
-                  key={step}
-                  type="button"
-                  role="tab"
-                  aria-selected={activeMobileStudioStep === step}
-                  data-active={activeMobileStudioStep === step}
-                  onClick={() => setActiveMobileStudioStep(step)}
-                >
-                  {MOBILE_STUDIO_STEP_LABEL[step]}
-                </button>
-              ))}
-            </MobileStudioStepper>
-            {isCompactMobileLayout ? (
-              <MobileStepGuide role="status" aria-live="polite">
-                <strong>{`현재 단계: ${MOBILE_STUDIO_STEP_LABEL[activeMobileStudioStep]}`}</strong>
-                <p>{MOBILE_STUDIO_STEP_DESCRIPTION[activeMobileStudioStep]}</p>
-                <div>
-                  <Button
-                    type="button"
-                    disabled={!mobileStudioPrevStep}
-                    onClick={() => {
-                      if (!mobileStudioPrevStep) return
-                      setActiveMobileStudioStep(mobileStudioPrevStep)
-                    }}
-                  >
-                    {mobileStudioPrevStepLabel}
-                  </Button>
-                  <PrimaryButton
-                    type="button"
-                    disabled={!mobileStudioNextStep}
-                    onClick={() => {
-                      if (!mobileStudioNextStep) return
-                      setActiveMobileStudioStep(mobileStudioNextStep)
-                    }}
-                  >
-                    {mobileStudioNextStepLabel}
-                  </PrimaryButton>
-                </div>
-              </MobileStepGuide>
-            ) : null}
+            <EditorStudioMobileStepNavigator
+              steps={mobileStudioSurfaceSteps}
+              activeStep={activeMobileStudioStep}
+              stepLabels={MOBILE_STUDIO_STEP_LABEL}
+              stepDescriptions={MOBILE_STUDIO_STEP_DESCRIPTION}
+              prevStep={mobileStudioPrevStep}
+              nextStep={mobileStudioNextStep}
+              prevStepLabel={mobileStudioPrevStepLabel}
+              nextStepLabel={mobileStudioNextStepLabel}
+              isCompactMobileLayout={isCompactMobileLayout}
+              onStepChange={setActiveMobileStudioStep}
+            />
             <ContentStudioGrid>
               <ContentStudioLeft
                 data-mobile-visible={!isCompactMobileLayout || activeMobileStudioStep === "query" || activeMobileStudioStep === "list"}
@@ -2912,53 +2885,26 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
               />
             </ContentStudioGrid>
 
-            {softDeleteUndoState && (
-              <UndoToast role="status" aria-live="polite">
-                <p>{softDeleteUndoState?.message}</p>
-                <Button type="button" onClick={() => void handleUndoSoftDelete()} disabled={disabled("undoDeletePost")}>
-                  실행 취소
-                </Button>
-              </UndoToast>
-            )}
+            <EditorStudioUndoToast
+              isVisible={Boolean(softDeleteUndoState)}
+              message={softDeleteUndoState?.message || ""}
+              isUndoDisabled={disabled("undoDeletePost")}
+              onUndo={() => void handleUndoSoftDelete()}
+            />
           </Section>
           )}
 
-        {deleteConfirmState && (
-          <ModalBackdrop onClick={closeDeleteConfirm}>
-            <ConfirmModal onClick={(e) => e.stopPropagation()}>
-              <div className="header">
-                <h4>글 삭제 확인</h4>
-                <p>
-                  정말 삭제할까요?
-                  <br />
-                  <strong>{deleteConfirmState?.headline}</strong>
-                </p>
-              </div>
-              {deleteConfirmNotice.text ? (
-                <PublishNotice data-tone={deleteConfirmNotice.tone}>{deleteConfirmNotice.text}</PublishNotice>
-              ) : null}
-              <div className="actions">
-                <Button
-                  type="button"
-                  disabled={loadingKey === "deletePost"}
-                  onClick={closeDeleteConfirm}
-                >
-                  취소
-                </Button>
-                <PrimaryButton
-                  type="button"
-                  disabled={loadingKey === "deletePost"}
-                  onClick={async () => {
-                    const ok = await deletePostsFromList(deleteConfirmState?.ids || [])
-                    if (ok) closeDeleteConfirm()
-                  }}
-                >
-                  {loadingKey === "deletePost" ? "삭제 중..." : "삭제 확정"}
-                </PrimaryButton>
-              </div>
-            </ConfirmModal>
-          </ModalBackdrop>
-        )}
+        <EditorStudioDeleteConfirmDialog
+          state={deleteConfirmState}
+          noticeTone={deleteConfirmNotice.tone}
+          noticeText={deleteConfirmNotice.text}
+          isDeleteDisabled={loadingKey === "deletePost"}
+          onClose={closeDeleteConfirm}
+          onConfirm={async (state) => {
+            const ok = await deletePostsFromList(state.ids)
+            if (ok) closeDeleteConfirm()
+          }}
+        />
         {studioSurface === "compose" && (
         <ComposeSurfaceSection>
         <EditorSection data-mobile-visible={!isCompactMobileLayout || studioSurface === "compose"}>
@@ -3542,86 +3488,6 @@ const ContentStudioGrid = styled.div`
 
   @media (max-width: 720px) {
     gap: 0.76rem;
-  }
-`
-
-const MobileStudioStepper = styled.div`
-  display: none;
-
-  @media (max-width: 720px) {
-    position: sticky;
-    top: calc(var(--app-header-height, 56px) + 0.32rem);
-    z-index: 12;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.4rem;
-    margin: 0.2rem 0 0.4rem;
-    padding: 0.5rem;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    border-radius: 10px;
-    background: ${({ theme }) => theme.colors.gray2};
-
-    > button {
-      min-height: 38px;
-      border-radius: 999px;
-      border: 1px solid ${({ theme }) => theme.colors.gray6};
-      background: transparent;
-      color: ${({ theme }) => theme.colors.gray11};
-      font-size: 0.77rem;
-      font-weight: 700;
-      cursor: pointer;
-    }
-
-    > button[data-active="true"] {
-      border-color: ${({ theme }) => theme.colors.blue8};
-      color: ${({ theme }) => theme.colors.blue11};
-      background: ${({ theme }) => theme.colors.blue3};
-    }
-  }
-`
-
-const MobileStepGuide = styled.section`
-  display: none;
-
-  @media (max-width: 720px) {
-    display: grid;
-    gap: 0.58rem;
-    margin-bottom: 0.28rem;
-    padding: 0.66rem 0.72rem;
-    border-radius: 10px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
-
-    strong {
-      font-size: 0.86rem;
-      color: ${({ theme }) => theme.colors.gray12};
-      line-height: 1.4;
-    }
-
-    p {
-      margin: 0;
-      font-size: 0.76rem;
-      line-height: 1.5;
-      color: ${({ theme }) => theme.colors.gray10};
-    }
-
-    > div {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 0.5rem;
-    }
-
-    button {
-      min-height: 38px;
-      width: 100%;
-      justify-content: center;
-    }
-  }
-
-  @media (max-width: 520px) {
-    > div {
-      grid-template-columns: 1fr;
-    }
   }
 `
 
@@ -4303,83 +4169,6 @@ const SubActionRow = styled.div`
       width: 100%;
       justify-content: center;
     }
-  }
-`
-
-const UndoToast = styled.div`
-  position: fixed;
-  right: 1rem;
-  bottom: 1rem;
-  z-index: 140;
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.6rem 0.72rem;
-  border-radius: 10px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.8rem;
-  }
-
-  @media (max-width: 720px) {
-    left: 0.85rem;
-    right: 0.85rem;
-    bottom: calc(0.85rem + env(safe-area-inset-bottom));
-    flex-wrap: wrap;
-  }
-`
-
-const ModalBackdrop = styled.div`
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.42);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 120;
-  padding: 1rem;
-
-  &[data-variant="drawer"] {
-    justify-content: flex-end;
-    padding: 0;
-  }
-`
-
-const ConfirmModal = styled.div`
-  width: min(440px, 100%);
-  border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  padding: 1rem;
-  display: grid;
-  gap: 0.75rem;
-
-  .header {
-    display: grid;
-    gap: 0.5rem;
-  }
-
-  h4 {
-    margin: 0;
-    font-size: 1rem;
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray11};
-    line-height: 1.45;
-  }
-
-  .actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
-    flex-wrap: wrap;
   }
 `
 

@@ -175,7 +175,6 @@ import {
 } from "./tableFloatingUiModel"
 import {
   BLOCK_OUTER_SELECT_LEFT_GUTTER_PX,
-  BLOCK_OUTER_SELECT_LEFT_EDGE_GAP_PX,
   BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX,
   isStableBlockHandleState,
   isStableBlockSelectionOverlayState,
@@ -8435,10 +8434,7 @@ const BlockEditorEngine = ({
             ) : null}
           </FloatingBubbleToolbar>
         ) : null}
-        {!isCoarsePointer ? (() => {
-          const handleListItemContext = resolveBlockHandleListItemContext()
-
-          return (
+        {!isCoarsePointer ? (
           <BlockHandleRail
             ref={blockHandleRailRef}
             data-block-handle-rail="true"
@@ -8589,8 +8585,7 @@ const BlockEditorEngine = ({
               </BlockHandleGrip>
             </BlockHandleButton>
           </BlockHandleRail>
-          )
-        })() : null}
+        ) : null}
         {(() => {
           const dragPreviewState = draggedBlockState ?? draggedNestedListItemState
           if (!dragPreviewState || !dragGhostPosition) return null

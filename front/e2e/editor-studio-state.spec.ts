@@ -7,6 +7,7 @@ import {
   deriveEditorPersistenceState,
   isPublishActionDisabled,
 } from "src/routes/Admin/editorStudioState"
+import { restoreEmptyFencedCodeBlocks } from "src/routes/Admin/editorStudioMetaModel"
 import { getEditorStudioPageProps } from "src/routes/Admin/EditorStudioPage"
 import { buildPreviewSummaryFromMarkdown, normalizeCardSummary, normalizePersistedSummary } from "src/libs/postSummary"
 
@@ -334,6 +335,8 @@ test.describe("editor studio state", () => {
     expect(editorStudioMetaModelSource).toContain("export const normalizeRecommendedTags =")
     expect(editorStudioMetaModelSource).toContain("export const resolveTagRecommendationErrorMessage =")
     expect(editorStudioMetaModelSource).toContain("export const formatTagRecommendationReason =")
+    expect(editorStudioMetaModelSource).toContain("export const restoreEmptyFencedCodeBlocks =")
+    expect(editorStudioMetaModelSource).toContain("restoreEmptyFencedCodeBlocks(parsed.body, markdownFromHtml)")
     expect(editorStudioMetaModelSource).toContain("export const resolveEditorMetaSnapshot =")
     expect(editorStudioMetaModelSource).toContain("export const buildEditorStateFingerprint =")
     expect(editorStudioMetaModelSource).toContain("export const parseEditorMeta =")
@@ -551,6 +554,32 @@ test.describe("editor studio state", () => {
     expect(editorStudioMetaModelSource).toContain('buildPreviewSummaryFromMarkdown(content, maxLength, "")')
     expect(editorStudioMetaModelSource).toContain("summary: normalizePersistedSummary(parsed.summary)")
     expect(editorStudioMetaModelSource).toContain("const normalizedSummary = normalizePersistedSummary(options?.summary)")
+  })
+
+  test("contentHtml fallback은 빈 fenced code body를 pretty-code 원문으로 복구한다", () => {
+    const staleContent = [
+      "수정 대상 코드입니다.",
+      "",
+      "```ts",
+      "",
+      "```",
+      "",
+      "다음 문단입니다.",
+    ].join("\n")
+    const htmlRecoveredContent = [
+      "수정 대상 코드입니다.",
+      "",
+      "```ts",
+      "const answer = 42;",
+      "return answer",
+      "```",
+      "",
+      "다음 문단입니다.",
+    ].join("\n")
+
+    expect(restoreEmptyFencedCodeBlocks(staleContent, htmlRecoveredContent)).toContain(
+      ["```ts", "const answer = 42;", "return answer", "```"].join("\n")
+    )
   })
 
   test("dedicated editor 나가기는 returnTo 복귀를 replace로 처리해 editor history 엔트리를 남기지 않는다", () => {

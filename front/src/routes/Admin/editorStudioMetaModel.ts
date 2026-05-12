@@ -58,6 +58,7 @@ const LEADING_EDITOR_METADATA_LINE_REGEX =
   /^\s*(tags?|categories?|summary|thumbnail|thumb|cover|coverimage|cover_image)\s*:\s*(.+)\s*$/i
 const EDITOR_BODY_PLACEHOLDER = "내용을 입력하세요."
 const EDITOR_TOGGLE_TITLE_PLACEHOLDER = "토글 제목"
+const FENCED_CODE_BLOCK_REGEX = /(^|\n)(`{3,}|~{3,})([^\n]*)\n([\s\S]*?)\n\2(?=\n|$)/g
 
 export const PREVIEW_SUMMARY_MAX_LENGTH = 150
 export const PREVIEW_SUMMARY_MAX_CONTENT_LENGTH = 50_000
@@ -317,11 +318,45 @@ const resolveEditorBodyFallback = (content: string, parsedBody: string) => {
   return inlineMetadataSplit.body.trim().length > 0 ? inlineMetadataSplit.body : parsedBody
 }
 
+const extractNonEmptyFencedCodeBlocks = (content: string) => {
+  const normalized = content.replace(/\r\n?/g, "\n")
+  const blocks: string[] = []
+
+  normalized.replace(FENCED_CODE_BLOCK_REGEX, (_match, _leading, marker, info, codeBody) => {
+    if (String(codeBody).trim().length > 0) {
+      blocks.push(`${marker}${info}\n${codeBody}\n${marker}`)
+    }
+    return _match
+  })
+
+  return blocks
+}
+
+export const restoreEmptyFencedCodeBlocks = (content: string, recoveredContent: string) => {
+  const recoveredBlocks = extractNonEmptyFencedCodeBlocks(recoveredContent)
+  if (recoveredBlocks.length === 0) return content
+
+  let nextRecoveredIndex = 0
+  const normalized = content.replace(/\r\n?/g, "\n")
+
+  return normalized.replace(FENCED_CODE_BLOCK_REGEX, (match, leading, _marker, _info, codeBody) => {
+    if (String(codeBody).trim().length > 0) return match
+
+    const recoveredBlock = recoveredBlocks[nextRecoveredIndex]
+    if (!recoveredBlock) return match
+    nextRecoveredIndex += 1
+    return `${leading}${recoveredBlock}`
+  })
+}
+
 export const resolveEditorMetaSnapshot = (content: string, contentHtml?: string | null): ResolvedEditorMetaSnapshot => {
   const parsed = parseEditorMeta(content)
   const normalizedRawContent = content.replace(/\r\n?/g, "\n").trim()
   const markdownFromHtml = contentHtml?.trim() ? convertHtmlClipboardToMarkdown(contentHtml).trim() : ""
-  const resolvedBody = parsed.body.trim() || markdownFromHtml || normalizedRawContent
+  const restoredParsedBody = parsed.body.trim() && markdownFromHtml
+    ? restoreEmptyFencedCodeBlocks(parsed.body, markdownFromHtml)
+    : parsed.body
+  const resolvedBody = restoredParsedBody.trim() || markdownFromHtml || normalizedRawContent
   const parsedThumbnail = normalizeSafeImageUrl(parsed.thumbnail)
   const fallbackThumbnail = normalizeSafeImageUrl(extractFirstMarkdownImage(resolvedBody))
   const syncedThumbnail = stripThumbnailFocusFromUrl(parsedThumbnail || fallbackThumbnail)

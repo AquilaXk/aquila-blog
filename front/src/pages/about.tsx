@@ -103,20 +103,6 @@ const parseTimelineItem = (item: string): AboutTimelineItem => {
 const isExternalHref = (href: string) =>
   href.startsWith("https://") || href.startsWith("http://") || href.startsWith("mailto:") || href.startsWith("tel:")
 
-const resolveSafeAboutHref = (href: string) => {
-  const trimmedHref = href.trim()
-  if (!trimmedHref) return ""
-  if (/^#[A-Za-z][\w-]*$/.test(trimmedHref)) return trimmedHref
-  if (trimmedHref.startsWith("/") && !trimmedHref.startsWith("//")) return trimmedHref
-
-  try {
-    const parsedHref = new URL(trimmedHref)
-    return ["http:", "https:", "mailto:", "tel:"].includes(parsedHref.protocol) ? parsedHref.toString() : ""
-  } catch {
-    return ""
-  }
-}
-
 const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) => {
   const adminProfile = useAdminProfile(initialAdminProfile)
 
@@ -174,7 +160,7 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
     adminProfile?.aboutProjectSectionTitle || projectSection?.title || DEFAULT_ABOUT_PROJECT_SECTION_TITLE
   const projectItems: AboutProjectItem[] = workspaceProjects.map((project) => {
     const linkedService = serviceLinks.find((item) => item.label.toLowerCase() === project.name.toLowerCase())
-    const safeHref = resolveSafeAboutHref(project.href || linkedService?.safeHref || "")
+    const safeHref = resolveRenderableProfileLinkHref("service", project.href || linkedService?.safeHref || "") || ""
     return {
       name: project.name,
       summary: project.summary,
@@ -185,8 +171,8 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
   })
   const timelineItems = (timelineSection?.items || []).map(parseTimelineItem)
   const ctaLinks = [
-    githubHref ? { label: "GitHub", safeHref: resolveSafeAboutHref(githubHref) } : null,
-    projectItems.length > 0 ? { label: "프로젝트 보기", safeHref: resolveSafeAboutHref("#about-projects") } : null,
+    githubHref ? { label: "GitHub", safeHref: githubHref } : null,
+    projectItems.length > 0 ? { label: "프로젝트 보기", safeHref: "#about-projects" } : null,
   ].filter((item): item is { label: string; safeHref: string } => Boolean(item?.safeHref))
 
   const meta = {

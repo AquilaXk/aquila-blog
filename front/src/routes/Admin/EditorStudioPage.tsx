@@ -56,6 +56,8 @@ import { EditorStudioMetadataAssistantPanel } from "./EditorStudioMetadataAssist
 import { EditorStudioSelectedPostPanel } from "./EditorStudioSelectedPostPanel"
 import { EditorStudioSelectedPostToolsPanel } from "./EditorStudioSelectedPostToolsPanel"
 import { EditorStudioLegacyProfileSection } from "./EditorStudioLegacyProfileSection"
+import { EditorStudioLegacyUtilityPanel } from "./EditorStudioLegacyUtilityPanel"
+import { EditorStudioResultLogPanel } from "./EditorStudioResultLogPanel"
 import {
   isServerTempDraftPost,
   TEMP_DRAFT_BODY_PLACEHOLDER,
@@ -1963,6 +1965,48 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     })
   }
 
+  const handleListComments = () => {
+    void run("commentList", () => apiFetch(`/post/api/v1/posts/${postId}/comments`))
+  }
+
+  const handleReadComment = () => {
+    void run("commentOne", () => apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`))
+  }
+
+  const handleWriteComment = () => {
+    void run("commentWrite", () =>
+      apiFetch(`/post/api/v1/posts/${postId}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ content: commentContent }),
+      })
+    )
+  }
+
+  const handleModifyComment = () => {
+    void run("commentModify", () =>
+      apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`, {
+        method: "PUT",
+        body: JSON.stringify({ content: commentContent }),
+      })
+    )
+  }
+
+  const handleDeleteComment = () => {
+    void run("commentDelete", () =>
+      apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`, {
+        method: "DELETE",
+      })
+    )
+  }
+
+  const handleReadPostCount = () => {
+    void run("admPostCount", () => apiFetch("/post/api/v1/adm/posts/count"))
+  }
+
+  const handleReadSystemHealth = () => {
+    void run("systemHealth", () => apiFetch("/system/api/v1/adm/health"))
+  }
+
   useEffect(() => {
     setCustomTagCatalog(readStoredCatalog(TAG_CATALOG_STORAGE_KEY))
     setCustomCategoryCatalog(
@@ -2470,15 +2514,15 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const dedicatedEditorResultPanel = useMemo(
     () =>
       shouldShowResultPanel ? (
-        <EditorStudioResultPanel>
-          <details open={Boolean(loadingKey)}>
-            <summary>
-              <strong>{loadingKey ? "작업 응답 확인 중" : "최근 작업 응답"}</strong>
-              <span>{loadingKey ? `실행 중: ${loadingKey}` : "원본 응답을 확인할 수 있습니다"}</span>
-            </summary>
-            <ResultPanel>{result || "// API 응답 결과가 여기에 표시됩니다."}</ResultPanel>
-          </details>
-        </EditorStudioResultPanel>
+        <EditorStudioResultLogPanel
+          idleDescription="원본 응답을 확인할 수 있습니다"
+          idleTitle="최근 작업 응답"
+          loadingDescription={(currentLoadingKey) => `실행 중: ${currentLoadingKey}`}
+          loadingKey={loadingKey}
+          loadingTitle="작업 응답 확인 중"
+          result={result}
+          variant="dedicated"
+        />
       ) : null,
     [loadingKey, result, shouldShowResultPanel]
   )
@@ -3615,150 +3659,43 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         ) : null}
 
           {SHOW_LEGACY_UTILITY_STUDIO && (
-          <UtilityGrid>
-            <Section id="comment-studio">
-              <SectionTop>
-                <div>
-                  <SectionEyebrow>댓글 점검</SectionEyebrow>
-                  <h2>댓글 테스트 도구</h2>
-                  <SectionDescription>댓글 CRUD 동작을 빠르게 점검할 때 사용하는 영역입니다.</SectionDescription>
-                </div>
-              </SectionTop>
-              <FieldGrid>
-                <FieldBox>
-                  <FieldLabel htmlFor="comment-post-id">post id</FieldLabel>
-                  <Input
-                    id="comment-post-id"
-                    placeholder="예: 1"
-                    value={postId}
-                    onChange={(e) => setPostId(e.target.value)}
-                  />
-                </FieldBox>
-                <FieldBox>
-                  <FieldLabel htmlFor="comment-id">comment id</FieldLabel>
-                  <Input
-                    id="comment-id"
-                    placeholder="예: 1"
-                    value={commentId}
-                    onChange={(e) => setCommentId(e.target.value)}
-                  />
-                </FieldBox>
-                <FieldBox className="wide">
-                  <FieldLabel htmlFor="comment-content">comment content</FieldLabel>
-                  <Input
-                    id="comment-content"
-                    placeholder="댓글 내용을 입력하세요"
-                    value={commentContent}
-                    onChange={(e) => setCommentContent(e.target.value)}
-                  />
-                </FieldBox>
-              </FieldGrid>
-              <ActionRow>
-                <Button
-                  type="button"
-                  disabled={disabled("commentList")}
-                  onClick={() => run("commentList", () => apiFetch(`/post/api/v1/posts/${postId}/comments`))}
-                >
-                  댓글 목록
-                </Button>
-                <Button
-                  type="button"
-                  disabled={disabled("commentOne")}
-                  onClick={() =>
-                    run("commentOne", () => apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`))
-                  }
-                >
-                  댓글 단건
-                </Button>
-                <Button
-                  type="button"
-                  disabled={disabled("commentWrite")}
-                  onClick={() =>
-                    run("commentWrite", () =>
-                      apiFetch(`/post/api/v1/posts/${postId}/comments`, {
-                        method: "POST",
-                        body: JSON.stringify({ content: commentContent }),
-                      })
-                    )
-                  }
-                >
-                  댓글 작성
-                </Button>
-                <Button
-                  type="button"
-                  disabled={disabled("commentModify")}
-                  onClick={() =>
-                    run("commentModify", () =>
-                      apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`, {
-                        method: "PUT",
-                        body: JSON.stringify({ content: commentContent }),
-                      })
-                    )
-                  }
-                >
-                  댓글 수정
-                </Button>
-                <Button
-                  type="button"
-                  disabled={disabled("commentDelete")}
-                  onClick={() =>
-                    run("commentDelete", () =>
-                      apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`, {
-                        method: "DELETE",
-                      })
-                    )
-                  }
-                >
-                  댓글 삭제
-                </Button>
-              </ActionRow>
-            </Section>
-
-            <Section id="system-tools">
-              <SectionTop>
-                <div>
-                  <SectionEyebrow>시스템 점검</SectionEyebrow>
-                  <h2>운영 점검 도구</h2>
-                  <SectionDescription>자주 확인하는 관리성 API를 한곳에 모았습니다.</SectionDescription>
-                </div>
-              </SectionTop>
-              <ActionRow>
-                <Button
-                  type="button"
-                  disabled={disabled("admPostCount")}
-                  onClick={() => run("admPostCount", () => apiFetch("/post/api/v1/adm/posts/count"))}
-                >
-                  전체 글 개수 확인
-                </Button>
-                <Button
-                  type="button"
-                  disabled={disabled("systemHealth")}
-                  onClick={() => run("systemHealth", () => apiFetch("/system/api/v1/adm/health"))}
-                >
-                  서버 상태 조회
-                </Button>
-              </ActionRow>
-            </Section>
-          </UtilityGrid>
+            <EditorStudioLegacyUtilityPanel
+              commentContent={commentContent}
+              commentId={commentId}
+              isCommentDeleteDisabled={disabled("commentDelete")}
+              isCommentListDisabled={disabled("commentList")}
+              isCommentModifyDisabled={disabled("commentModify")}
+              isCommentOneDisabled={disabled("commentOne")}
+              isCommentWriteDisabled={disabled("commentWrite")}
+              isPostCountDisabled={disabled("admPostCount")}
+              isSystemHealthDisabled={disabled("systemHealth")}
+              postId={postId}
+              onCommentContentChange={setCommentContent}
+              onCommentIdChange={setCommentId}
+              onDeleteComment={handleDeleteComment}
+              onListComments={handleListComments}
+              onModifyComment={handleModifyComment}
+              onPostIdChange={setPostId}
+              onReadComment={handleReadComment}
+              onReadPostCount={handleReadPostCount}
+              onReadSystemHealth={handleReadSystemHealth}
+              onWriteComment={handleWriteComment}
+            />
           )}
         </WorkspaceMain>
 
       </WorkspaceGrid>
 
-      {(loadingKey || result) && (
-        <DevConsoleSection>
-          <details open={Boolean(loadingKey)}>
-            <summary>
-              <div>
-                <SectionEyebrow>실행 로그</SectionEyebrow>
-                <strong>{loadingKey ? "작업 응답 확인 중" : "최근 작업 응답 보기"}</strong>
-              </div>
-              <span>{loadingKey ? `실행 중: ${loadingKey}` : "접어서 숨길 수 있습니다"}</span>
-            </summary>
-            <ResultPanel>{result || "// API 응답 결과가 여기에 표시됩니다."}</ResultPanel>
-          </details>
-        </DevConsoleSection>
-      )}
+      <EditorStudioResultLogPanel
+        eyebrow="실행 로그"
+        idleDescription="접어서 숨길 수 있습니다"
+        idleTitle="최근 작업 응답 보기"
+        loadingDescription={(currentLoadingKey) => `실행 중: ${currentLoadingKey}`}
+        loadingKey={loadingKey}
+        loadingTitle="작업 응답 확인 중"
+        result={result}
+        variant="standard"
+      />
     </Main>
   )
 }
@@ -4375,16 +4312,6 @@ const ActionRow = styled.div`
     > button {
       width: 100%;
     }
-  }
-`
-
-const UtilityGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
-
-  @media (max-width: 980px) {
-    grid-template-columns: 1fr;
   }
 `
 
@@ -5925,43 +5852,6 @@ const EditorStudioCanvas = styled.section`
   overflow-x: visible;
 `
 
-const EditorStudioResultPanel = styled.section`
-  width: 100%;
-  max-width: var(--article-readable-width, 48rem);
-  min-width: 0;
-  margin-inline: auto;
-  border-top: 1px solid ${({ theme }) => theme.colors.gray5};
-  padding-top: 0.9rem;
-
-  details {
-    display: grid;
-    gap: 0.75rem;
-  }
-
-  summary {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 0.8rem;
-    cursor: pointer;
-    list-style: none;
-  }
-
-  summary::-webkit-details-marker {
-    display: none;
-  }
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.92rem;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.76rem;
-  }
-`
-
 const WriterFooterBar = styled.div`
   display: flex;
   align-items: flex-start;
@@ -6104,76 +5994,6 @@ const MobileComposeStatusBar = styled.div`
     &[data-tone="error"] {
       border-color: ${({ theme }) => theme.colors.red7};
       background: color-mix(in srgb, ${({ theme }) => theme.colors.red3} 84%, transparent);
-    }
-  }
-`
-
-const ResultPanel = styled.pre`
-  margin: 0;
-  padding: 1rem;
-  border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.82rem;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-  min-height: 160px;
-`
-
-const DevConsoleSection = styled.section`
-  margin-top: 1rem;
-  border-radius: 0;
-  border: 0;
-  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
-  overflow: hidden;
-
-  details {
-    display: grid;
-  }
-
-  summary {
-    list-style: none;
-    cursor: pointer;
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 0.8rem;
-    padding: 0.95rem 1rem;
-  }
-
-  summary::-webkit-details-marker {
-    display: none;
-  }
-
-  strong {
-    display: block;
-    margin-top: 0.18rem;
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.96rem;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.78rem;
-    line-height: 1.5;
-    white-space: nowrap;
-  }
-
-  > details > pre {
-    margin: 0 1rem 1rem;
-  }
-
-  @media (max-width: 720px) {
-    summary {
-      flex-direction: column;
-    }
-
-    span {
-      white-space: normal;
     }
   }
 `

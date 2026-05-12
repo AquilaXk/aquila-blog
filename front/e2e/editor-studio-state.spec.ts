@@ -7,7 +7,7 @@ import {
   deriveEditorPersistenceState,
   isPublishActionDisabled,
 } from "src/routes/Admin/editorStudioState"
-import { restoreEmptyFencedCodeBlocks } from "src/routes/Admin/editorStudioMetaModel"
+import { resolveEditorMetaSnapshot, restoreEmptyFencedCodeBlocks } from "src/routes/Admin/editorStudioMetaModel"
 import { getEditorStudioPageProps } from "src/routes/Admin/EditorStudioPage"
 import { buildPreviewSummaryFromMarkdown, normalizeCardSummary, normalizePersistedSummary } from "src/libs/postSummary"
 
@@ -615,7 +615,8 @@ test.describe("editor studio state", () => {
     expect(editorStudioMetaModelSource).toContain("export const resolveTagRecommendationErrorMessage =")
     expect(editorStudioMetaModelSource).toContain("export const formatTagRecommendationReason =")
     expect(editorStudioMetaModelSource).toContain("export const restoreEmptyFencedCodeBlocks =")
-    expect(editorStudioMetaModelSource).toContain("restoreEmptyFencedCodeBlocks(parsed.body, markdownFromHtml)")
+    expect(editorStudioMetaModelSource).toContain("const extractRawCodeFencedBlocksFromHtml =")
+    expect(editorStudioMetaModelSource).toContain("restoreEmptyFencedCodeBlocks(parsed.body, recoveredCodeMarkdown)")
     expect(editorStudioMetaModelSource).toContain("export const resolveEditorMetaSnapshot =")
     expect(editorStudioMetaModelSource).toContain("export const buildEditorStateFingerprint =")
     expect(editorStudioMetaModelSource).toContain("export const parseEditorMeta =")
@@ -857,6 +858,34 @@ test.describe("editor studio state", () => {
     ].join("\n")
 
     expect(restoreEmptyFencedCodeBlocks(staleContent, htmlRecoveredContent)).toContain(
+      ["```ts", "const answer = 42;", "return answer", "```"].join("\n")
+    )
+  })
+
+  test("contentHtml fallback은 pretty-code raw attribute만 있어도 빈 코드블럭을 복구한다", () => {
+    const staleContent = [
+      "수정 대상 코드입니다.",
+      "",
+      "```ts",
+      "",
+      "```",
+      "",
+      "다음 문단입니다.",
+    ].join("\n")
+    const prettyCodeHtml = [
+      '<div class="aq-code-block">',
+      '<div class="aq-code-toolbar"><span class="aq-code-language">TS</span></div>',
+      '<div class="aq-code-body"><div class="aq-code-shell">',
+      '<pre class="aq-code aq-pretty-pre">',
+      '<code class="language-ts" data-raw-code="const answer = 42;&#10;return answer">',
+      '<span class="token keyword">const</span> answer = 42;',
+      '</code>',
+      '</pre>',
+      '</div></div>',
+      '</div>',
+    ].join("")
+
+    expect(resolveEditorMetaSnapshot(staleContent, prettyCodeHtml).body).toContain(
       ["```ts", "const answer = 42;", "return answer", "```"].join("\n")
     )
   })

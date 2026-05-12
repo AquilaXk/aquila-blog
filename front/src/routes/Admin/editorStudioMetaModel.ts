@@ -59,6 +59,8 @@ const LEADING_EDITOR_METADATA_LINE_REGEX =
 const EDITOR_BODY_PLACEHOLDER = "내용을 입력하세요."
 const EDITOR_TOGGLE_TITLE_PLACEHOLDER = "토글 제목"
 const FENCED_CODE_BLOCK_REGEX = /(^|\n)(`{3,}|~{3,})([^\n]*)\n([\s\S]*?)\n\2(?=\n|$)/g
+const HTML_CODE_RAW_ATTRIBUTE_TAG_REGEX = /<(?:code|pre)\b([^>]*)>/gi
+const HTML_ATTRIBUTE_REGEX = /\s([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>`]+)))?/g
 
 export const PREVIEW_SUMMARY_MAX_LENGTH = 150
 export const PREVIEW_SUMMARY_MAX_CONTENT_LENGTH = 50_000
@@ -332,6 +334,62 @@ const extractNonEmptyFencedCodeBlocks = (content: string) => {
   return blocks
 }
 
+const decodeHtmlAttributeValue = (value: string) =>
+  value
+    .replace(/&#x([0-9a-f]+);/gi, (_match, code) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .replace(/&#(\d+);/g, (_match, code) => String.fromCodePoint(Number.parseInt(code, 10)))
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/\r\n?/g, "\n")
+
+const readHtmlAttributes = (rawAttributes: string) => {
+  const attributes = new Map<string, string>()
+  rawAttributes.replace(HTML_ATTRIBUTE_REGEX, (_match, name, doubleQuoted, singleQuoted, unquoted) => {
+    const key = String(name).toLowerCase()
+    const value = doubleQuoted ?? singleQuoted ?? unquoted ?? ""
+    attributes.set(key, decodeHtmlAttributeValue(String(value)))
+    return _match
+  })
+  return attributes
+}
+
+const resolveCodeLanguageFromHtmlAttributes = (attributes: Map<string, string>) => {
+  const explicitLanguage = (
+    attributes.get("data-language") ||
+    attributes.get("data-prism-language") ||
+    ""
+  ).trim()
+  if (explicitLanguage) return explicitLanguage
+
+  const className = attributes.get("class") || ""
+  return (className.match(/(?:^|\s)language-([a-zA-Z0-9_-]+)/)?.[1] || "").trim()
+}
+
+const extractRawCodeFencedBlocksFromHtml = (contentHtml?: string | null) => {
+  if (!contentHtml?.trim()) return ""
+
+  const blocks: string[] = []
+  contentHtml.replace(HTML_CODE_RAW_ATTRIBUTE_TAG_REGEX, (_match, rawAttributes) => {
+    const attributes = readHtmlAttributes(String(rawAttributes))
+    const codeSource = (
+      attributes.get("data-raw-code") ||
+      attributes.get("data-prism-source") ||
+      ""
+    ).trimEnd()
+    if (!codeSource.trim()) return _match
+
+    const language = resolveCodeLanguageFromHtmlAttributes(attributes)
+    blocks.push(`\`\`\`${language}\n${codeSource}\n\`\`\``)
+    return _match
+  })
+
+  return blocks.join("\n\n")
+}
+
 export const restoreEmptyFencedCodeBlocks = (content: string, recoveredContent: string) => {
   const recoveredBlocks = extractNonEmptyFencedCodeBlocks(recoveredContent)
   if (recoveredBlocks.length === 0) return content
@@ -353,10 +411,12 @@ export const resolveEditorMetaSnapshot = (content: string, contentHtml?: string 
   const parsed = parseEditorMeta(content)
   const normalizedRawContent = content.replace(/\r\n?/g, "\n").trim()
   const markdownFromHtml = contentHtml?.trim() ? convertHtmlClipboardToMarkdown(contentHtml).trim() : ""
-  const restoredParsedBody = parsed.body.trim() && markdownFromHtml
-    ? restoreEmptyFencedCodeBlocks(parsed.body, markdownFromHtml)
+  const rawCodeMarkdownFromHtml = extractRawCodeFencedBlocksFromHtml(contentHtml)
+  const recoveredCodeMarkdown = [rawCodeMarkdownFromHtml, markdownFromHtml].filter(Boolean).join("\n\n")
+  const restoredParsedBody = parsed.body.trim() && recoveredCodeMarkdown
+    ? restoreEmptyFencedCodeBlocks(parsed.body, recoveredCodeMarkdown)
     : parsed.body
-  const resolvedBody = restoredParsedBody.trim() || markdownFromHtml || normalizedRawContent
+  const resolvedBody = restoredParsedBody.trim() || markdownFromHtml || rawCodeMarkdownFromHtml || normalizedRawContent
   const parsedThumbnail = normalizeSafeImageUrl(parsed.thumbnail)
   const fallbackThumbnail = normalizeSafeImageUrl(extractFirstMarkdownImage(resolvedBody))
   const syncedThumbnail = stripThumbnailFocusFromUrl(parsedThumbnail || fallbackThumbnail)

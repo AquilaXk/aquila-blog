@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "node scripts/with-test-lock.mjs --resource front-verify --label build -- next build",
+    "postinstall": "node scripts/patch-lodash-template.cjs",
     "start": "next start",
     "playwright": "node scripts/with-test-lock.mjs --resource front-verify --label playwright -- playwright",
     "playwright:preflight": "node scripts/check-playwright-local-launcher.mjs",

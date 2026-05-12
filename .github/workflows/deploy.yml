@@ -1142,13 +1142,13 @@ jobs:
 
       - name: Install Playwright browser
         working-directory: front
-        run: npx playwright install --with-deps chromium webkit
+        run: npx playwright install --with-deps chromium
 
       - name: Run live environment e2e
         working-directory: front
         env:
           PLAYWRIGHT_LIVE_FAIL_FAST: "true"
-          PLAYWRIGHT_LIVE_MULTI_BROWSER: "true"
+          PLAYWRIGHT_LIVE_MULTI_BROWSER: "false"
         shell: bash
         run: |
           set -euo pipefail

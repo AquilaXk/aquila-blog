@@ -200,6 +200,14 @@ test.describe("editor studio state", () => {
     const editorStudioSelectedPostToolsPanelSource = existsSync(editorStudioSelectedPostToolsPanelPath)
       ? readFileSync(editorStudioSelectedPostToolsPanelPath, "utf8")
       : ""
+    const editorStudioSelectedPostPanelPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioSelectedPostPanel.tsx"
+    )
+    expect(existsSync(editorStudioSelectedPostPanelPath)).toBe(true)
+    const editorStudioSelectedPostPanelSource = existsSync(editorStudioSelectedPostPanelPath)
+      ? readFileSync(editorStudioSelectedPostPanelPath, "utf8")
+      : ""
     const blockEditorShellSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"), "utf8")
     const blockEditorEngineSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"), "utf8")
     const blockSelectionModelSource = readFileSync(
@@ -360,6 +368,30 @@ test.describe("editor studio state", () => {
     expect(editorStudioSelectedPostToolsPanelSource).not.toContain("setIsTempDraftMode")
     expect(editorStudioSelectedPostToolsPanelSource).not.toContain('run("hitPost"')
     expect(editorStudioSelectedPostToolsPanelSource).not.toContain('run("likePost"')
+    expect(editorStudioSelectedPostPanelSource).toContain("export const EditorStudioSelectedPostPanel =")
+    expect(editorStudioSource).toContain(
+      'import { EditorStudioSelectedPostPanel } from "./EditorStudioSelectedPostPanel"'
+    )
+    expect(editorStudioSource.match(/<EditorStudioSelectedPostPanel/g)?.length).toBe(1)
+    expect(editorStudioSelectedPostPanelSource).toContain("선택한 글")
+    expect(editorStudioSelectedPostPanelSource).toContain("빠른 작업")
+    expect(editorStudioSelectedPostPanelSource).toContain("편집 계속")
+    expect(editorStudioSelectedPostPanelSource).toContain("새 글 작성")
+    expect(editorStudioSelectedPostPanelSource).toContain("글 삭제")
+    expect(editorStudioSource).not.toContain("<SelectedPostHeader>")
+    expect(editorStudioSource).not.toContain("<SelectedPostStateCard")
+    expect(editorStudioSource).not.toContain("const SelectedPostPanel = styled.div`")
+    expect(editorStudioSource).not.toContain("const SelectedPostHeader = styled.div`")
+    expect(editorStudioSource).not.toContain("const SelectedPostStateCard = styled.div`")
+    expect(editorStudioSource).toContain("const handleContinueSelectedPostEditing = useCallback")
+    expect(editorStudioSource).toContain("onContinueEditing={handleContinueSelectedPostEditing}")
+    expect(editorStudioSource).toContain("onCreateNewPost={handleCreateNewPostFromSelectedPanel}")
+    expect(editorStudioSource).toContain("onDeletePost={handleDeleteSelectedPost}")
+    expect(editorStudioSelectedPostPanelSource).not.toContain("openPublishModal")
+    expect(editorStudioSelectedPostPanelSource).not.toContain("switchToCreateMode")
+    expect(editorStudioSelectedPostPanelSource).not.toContain("openDeleteConfirm")
+    expect(editorStudioSelectedPostPanelSource).not.toContain("apiFetch(")
+    expect(editorStudioSelectedPostPanelSource).not.toContain("run(")
     expect(editorStudioStateSource).toContain("export type PostVisibility =")
     expect(editorStudioStateSource).toContain("export const toVisibility")
     expect(editorStudioStateSource).toContain("export const toFlags")

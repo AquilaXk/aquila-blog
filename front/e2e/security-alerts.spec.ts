@@ -62,6 +62,7 @@ test.describe("front security alert contracts", () => {
       dependencies?: Record<string, string>
       devDependencies?: Record<string, string>
       resolutions?: Record<string, string>
+      scripts?: Record<string, string>
     }
     const yarnLock = readFrontFile("yarn.lock")
 
@@ -72,6 +73,7 @@ test.describe("front security alert contracts", () => {
     expect(packageJson.dependencies?.next).toBe("15.5.15")
     expect(packageJson.devDependencies?.["eslint-config-next"]).toBe("15.5.15")
     expect(packageJson.devDependencies?.postcss).toBe("8.5.10")
+    expect(packageJson.scripts?.postinstall).toBe("node scripts/patch-lodash-template.cjs")
 
     expect(packageJson.resolutions).toMatchObject({
       "@babel/plugin-transform-modules-systemjs": "7.29.4",
@@ -132,6 +134,11 @@ test.describe("front security alert contracts", () => {
     ]) {
       expect(yarnLock).not.toContain(vulnerableTarball)
     }
+
+    const lodashPatchSource = readFrontFile("scripts/patch-lodash-template.cjs")
+    expect(lodashPatchSource).toContain("assignWith = require('./assignWith')")
+    expect(lodashPatchSource).toContain("arrayEach = require('./_arrayEach')")
+    expect(lodashPatchSource).toContain("require.resolve(\"lodash/template\")")
   })
 
   test("editor drag ghost renders extracted text instead of reinterpreting HTML", () => {

@@ -232,6 +232,22 @@ test.describe("editor studio state", () => {
     const editorStudioResultLogPanelSource = existsSync(editorStudioResultLogPanelPath)
       ? readFileSync(editorStudioResultLogPanelPath, "utf8")
       : ""
+    const editorStudioPostQueryPanelPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioPostQueryPanel.tsx"
+    )
+    expect(existsSync(editorStudioPostQueryPanelPath)).toBe(true)
+    const editorStudioPostQueryPanelSource = existsSync(editorStudioPostQueryPanelPath)
+      ? readFileSync(editorStudioPostQueryPanelPath, "utf8")
+      : ""
+    const editorStudioPostListPanelPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioPostListPanel.tsx"
+    )
+    expect(existsSync(editorStudioPostListPanelPath)).toBe(true)
+    const editorStudioPostListPanelSource = existsSync(editorStudioPostListPanelPath)
+      ? readFileSync(editorStudioPostListPanelPath, "utf8")
+      : ""
     const blockEditorShellSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"), "utf8")
     const blockEditorEngineSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"), "utf8")
     const blockSelectionModelSource = readFileSync(
@@ -454,6 +470,41 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).not.toContain("const ResultPanel = styled.pre`")
     expect(editorStudioSource).not.toContain("const DevConsoleSection = styled.section`")
     expect(editorStudioSource).not.toContain("const EditorStudioResultPanel = styled.section`")
+    expect(editorStudioPostQueryPanelSource).toContain("export const EditorStudioPostQueryPanel =")
+    expect(editorStudioSource).toContain(
+      'import { EditorStudioPostQueryPanel } from "./EditorStudioPostQueryPanel"'
+    )
+    expect(editorStudioSource.match(/<EditorStudioPostQueryPanel/g)?.length).toBe(1)
+    expect(editorStudioPostQueryPanelSource).toContain("글 목록 조회 조건")
+    expect(editorStudioPostQueryPanelSource).toContain("고급 조회 옵션")
+    expect(editorStudioSource).not.toContain("<QueryPanel")
+    expect(editorStudioSource).not.toContain("const QueryPanel = styled.div`")
+    expect(editorStudioPostQueryPanelSource).not.toContain("apiFetch(")
+    expect(editorStudioPostQueryPanelSource).not.toContain("run(")
+    expect(editorStudioPostQueryPanelSource).not.toContain("setListScope")
+    expect(editorStudioPostQueryPanelSource).not.toContain("setListKw")
+    expect(editorStudioPostQueryPanelSource).not.toContain("setListPage")
+    expect(editorStudioPostQueryPanelSource).not.toContain("setListPageSize")
+    expect(editorStudioPostQueryPanelSource).not.toContain("setListSort")
+    expect(editorStudioPostListPanelSource).toContain("export const EditorStudioPostListPanel =")
+    expect(editorStudioSource).toContain(
+      'import { EditorStudioPostListPanel } from "./EditorStudioPostListPanel"'
+    )
+    expect(editorStudioSource.match(/<EditorStudioPostListPanel/g)?.length).toBe(1)
+    expect(editorStudioPostListPanelSource).toContain("관리자 글 리스트")
+    expect(editorStudioPostListPanelSource).toContain("삭제 글 리스트")
+    expect(editorStudioPostListPanelSource).toContain("현재 목록 전체 선택")
+    expect(editorStudioSource).not.toContain("<ListPanel")
+    expect(editorStudioSource).not.toContain("const ListPanel = styled.div`")
+    expect(editorStudioSource).not.toContain("const ListTable = styled.table`")
+    expect(editorStudioSource).not.toContain("const MobileListCards = styled.div`")
+    expect(editorStudioPostListPanelSource).not.toContain("apiFetch(")
+    expect(editorStudioPostListPanelSource).not.toContain("run(")
+    expect(editorStudioPostListPanelSource).not.toContain("loadPostForEditor")
+    expect(editorStudioPostListPanelSource).not.toContain("restoreDeletedPostFromList")
+    expect(editorStudioPostListPanelSource).not.toContain("hardDeleteDeletedPostFromList")
+    expect(editorStudioPostListPanelSource).not.toContain("openDeleteConfirm")
+    expect(editorStudioPostListPanelSource).not.toContain("setPostId")
     expect(editorStudioStateSource).toContain("export type PostVisibility =")
     expect(editorStudioStateSource).toContain("export const toVisibility")
     expect(editorStudioStateSource).toContain("export const toFlags")

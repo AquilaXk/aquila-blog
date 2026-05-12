@@ -130,6 +130,14 @@ test.describe("editor studio state", () => {
 
   test("editor studio는 v2 단일 경로와 단일 작성 모드 계약을 유지한다", () => {
     const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
+    const dedicatedEditorSurfacePath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioDedicatedEditorSurface.tsx"
+    )
+    expect(existsSync(dedicatedEditorSurfacePath)).toBe(true)
+    const dedicatedEditorSurfaceSource = existsSync(dedicatedEditorSurfacePath)
+      ? readFileSync(dedicatedEditorSurfacePath, "utf8")
+      : ""
     const editorStudioStateSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/editorStudioState.ts"), "utf8")
     const editorStudioMetaModelPath = path.resolve(__dirname, "../src/routes/Admin/editorStudioMetaModel.ts")
     expect(existsSync(editorStudioMetaModelPath)).toBe(true)
@@ -333,8 +341,11 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).not.toContain("EditorStudioLegacyToolbar")
     expect(editorStudioSource).not.toContain("RawMarkdownTextarea")
     expect(editorStudioSource).toContain("const isCompactSplitPreview = false")
-    expect(editorStudioSource).toContain("width: min(100%, 1600px);")
-    expect(editorStudioSource).toContain("grid-template-columns: minmax(0, 1fr);")
+    expect(editorStudioSource).toContain("EditorStudioDedicatedEditorSurface")
+    expect(editorStudioSource).not.toContain("const EditorStudioRoot")
+    expect(dedicatedEditorSurfaceSource).toContain("width: min(100%, 1600px);")
+    expect(dedicatedEditorSurfaceSource).toContain("grid-template-columns: minmax(0, 1fr);")
+    expect(dedicatedEditorSurfaceSource).toContain('data-testid="editor-studio-frame"')
     expect(editorStudioSource).toContain('import { WriterEditorHost } from "./WriterEditorHost"')
     expect(editorStudioSource.match(/<WriterEditorHost/g)?.length).toBe(2)
     expect(editorStudioSource).not.toContain("<LazyBlockEditorShell")
@@ -349,10 +360,10 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).not.toContain('aria-label="미리보기 기기 폭"')
     expect(editorStudioSource).not.toContain('zoom: var(--preview-scale, 1);')
     expect(editorStudioSource).not.toContain("--preview-scale")
-    expect(editorStudioSource).toContain("const EditorExitAction = styled.button`")
-    expect(editorStudioSource).toContain("min-height: 42px;")
-    expect(editorStudioSource).toContain("const EditorStudioFrame = styled.div`")
-    expect(editorStudioSource).toContain("const EditorStudioWritingColumn = styled.section<{ $compact?: boolean }>`")
+    expect(dedicatedEditorSurfaceSource).toContain("const EditorExitAction = styled.button`")
+    expect(dedicatedEditorSurfaceSource).toContain("min-height: 42px;")
+    expect(dedicatedEditorSurfaceSource).toContain("const EditorStudioFrame = styled.div`")
+    expect(dedicatedEditorSurfaceSource).toContain("const EditorStudioWritingColumn = styled.section<{ $compact?: boolean }>`")
     expect(editorStudioSource).not.toContain("type EditorMode =")
     expect(editorStudioSource).not.toContain("type PublishActionType =")
     expect(editorStudioSource).not.toContain("type PostVisibility =")

@@ -216,6 +216,22 @@ test.describe("editor studio state", () => {
     const editorStudioLegacyProfileSectionSource = existsSync(editorStudioLegacyProfileSectionPath)
       ? readFileSync(editorStudioLegacyProfileSectionPath, "utf8")
       : ""
+    const editorStudioLegacyUtilityPanelPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioLegacyUtilityPanel.tsx"
+    )
+    expect(existsSync(editorStudioLegacyUtilityPanelPath)).toBe(true)
+    const editorStudioLegacyUtilityPanelSource = existsSync(editorStudioLegacyUtilityPanelPath)
+      ? readFileSync(editorStudioLegacyUtilityPanelPath, "utf8")
+      : ""
+    const editorStudioResultLogPanelPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioResultLogPanel.tsx"
+    )
+    expect(existsSync(editorStudioResultLogPanelPath)).toBe(true)
+    const editorStudioResultLogPanelSource = existsSync(editorStudioResultLogPanelPath)
+      ? readFileSync(editorStudioResultLogPanelPath, "utf8")
+      : ""
     const blockEditorShellSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"), "utf8")
     const blockEditorEngineSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"), "utf8")
     const blockSelectionModelSource = readFileSync(
@@ -416,6 +432,28 @@ test.describe("editor studio state", () => {
     expect(editorStudioLegacyProfileSectionSource).not.toContain("run(")
     expect(editorStudioLegacyProfileSectionSource).not.toContain("setProfileRoleInput")
     expect(editorStudioLegacyProfileSectionSource).not.toContain("setProfileBioInput")
+    expect(editorStudioLegacyUtilityPanelSource).toContain("export const EditorStudioLegacyUtilityPanel =")
+    expect(editorStudioSource).toContain(
+      'import { EditorStudioLegacyUtilityPanel } from "./EditorStudioLegacyUtilityPanel"'
+    )
+    expect(editorStudioSource.match(/<EditorStudioLegacyUtilityPanel/g)?.length).toBe(1)
+    expect(editorStudioLegacyUtilityPanelSource).toContain("댓글 테스트 도구")
+    expect(editorStudioLegacyUtilityPanelSource).toContain("운영 점검 도구")
+    expect(editorStudioSource).not.toContain("<UtilityGrid>")
+    expect(editorStudioSource).not.toContain("const UtilityGrid = styled.div`")
+    expect(editorStudioLegacyUtilityPanelSource).not.toContain("apiFetch(")
+    expect(editorStudioLegacyUtilityPanelSource).not.toContain("run(")
+    expect(editorStudioLegacyUtilityPanelSource).not.toContain("setPostId")
+    expect(editorStudioLegacyUtilityPanelSource).not.toContain("setCommentId")
+    expect(editorStudioLegacyUtilityPanelSource).not.toContain("setCommentContent")
+    expect(editorStudioResultLogPanelSource).toContain("export const EditorStudioResultLogPanel =")
+    expect(editorStudioSource).toContain(
+      'import { EditorStudioResultLogPanel } from "./EditorStudioResultLogPanel"'
+    )
+    expect(editorStudioSource.match(/<EditorStudioResultLogPanel/g)?.length).toBe(2)
+    expect(editorStudioSource).not.toContain("const ResultPanel = styled.pre`")
+    expect(editorStudioSource).not.toContain("const DevConsoleSection = styled.section`")
+    expect(editorStudioSource).not.toContain("const EditorStudioResultPanel = styled.section`")
     expect(editorStudioStateSource).toContain("export type PostVisibility =")
     expect(editorStudioStateSource).toContain("export const toVisibility")
     expect(editorStudioStateSource).toContain("export const toFlags")

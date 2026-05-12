@@ -67,17 +67,21 @@ test.describe("front security alert contracts", () => {
     const yarnLock = readFrontFile("yarn.lock")
 
     expect(packageJson.dependencies?.["@babel/runtime"]).toBe("7.26.10")
-    expect(packageJson.dependencies?.["@next/env"]).toBe("15.5.15")
+    expect(packageJson.dependencies?.["@next/env"]).toBe("15.5.18")
     expect(packageJson.dependencies?.katex).toBe("0.16.44")
-    expect(packageJson.dependencies?.mermaid).toBe("10.9.3")
-    expect(packageJson.dependencies?.next).toBe("15.5.15")
-    expect(packageJson.devDependencies?.["eslint-config-next"]).toBe("15.5.15")
+    expect(packageJson.dependencies?.mermaid).toBe("10.9.6")
+    expect(packageJson.dependencies?.next).toBe("15.5.18")
+    expect(packageJson.dependencies?.prismjs).toBe("1.30.0")
+    expect(packageJson.devDependencies?.["eslint-config-next"]).toBe("15.5.18")
     expect(packageJson.devDependencies?.postcss).toBe("8.5.10")
+    expect(packageJson.devDependencies?.prismjs).toBe("1.30.0")
     expect(packageJson.scripts?.postinstall).toBe("node scripts/patch-lodash-template.cjs")
 
     expect(packageJson.resolutions).toMatchObject({
       "@babel/plugin-transform-modules-systemjs": "7.29.4",
       braces: "3.0.3",
+      cookie: "0.7.0",
+      diff: "5.2.2",
       dompurify: "3.4.2",
       "fast-uri": "3.1.2",
       flatted: "3.4.2",
@@ -86,22 +90,30 @@ test.describe("front security alert contracts", () => {
       lodash: "4.18.0",
       "lodash-es": "4.18.0",
       postcss: "8.5.10",
+      prismjs: "1.30.0",
+      yaml: "1.10.3",
     })
 
     const patchedVersionFloors: Array<[string, string]> = [
+      ["@next/env", "15.5.18"],
       ["@babel/plugin-transform-modules-systemjs", "7.29.4"],
       ["@babel/runtime", "7.26.10"],
       ["braces", "3.0.3"],
+      ["cookie", "0.7.0"],
+      ["diff", "5.2.2"],
+      ["eslint-config-next", "15.5.18"],
       ["fast-uri", "3.1.2"],
       ["flatted", "3.4.2"],
       ["js-yaml", "4.1.1"],
       ["katex", "0.16.21"],
       ["lodash", "4.18.0"],
       ["lodash-es", "4.18.0"],
-      ["mermaid", "10.9.3"],
+      ["mermaid", "10.9.6"],
       ["minimatch", "3.1.3"],
-      ["next", "15.5.15"],
+      ["next", "15.5.18"],
       ["postcss", "8.5.10"],
+      ["prismjs", "1.30.0"],
+      ["yaml", "1.10.3"],
     ]
 
     for (const [packageName, minimumVersion] of patchedVersionFloors) {
@@ -117,6 +129,10 @@ test.describe("front security alert contracts", () => {
 
     for (const vulnerableTarball of [
       "braces-3.0.2.tgz",
+      "cookie-0.4.2.tgz",
+      "diff-5.2.0.tgz",
+      "env-15.5.15.tgz",
+      "eslint-config-next-15.5.15.tgz",
       "fast-uri-3.1.1.tgz",
       "flatted-3.4.1.tgz",
       "glob-10.3.10.tgz",
@@ -125,12 +141,17 @@ test.describe("front security alert contracts", () => {
       "lodash-4.17.21.tgz",
       "lodash-es-4.17.21.tgz",
       "mermaid-10.9.1.tgz",
+      "mermaid-10.9.3.tgz",
+      "mermaid-10.9.5.tgz",
       "minimatch-3.1.2.tgz",
       "next-14.2.35.tgz",
+      "next-15.5.15.tgz",
       "picomatch-2.3.1.tgz",
       "picomatch-4.0.3.tgz",
       "postcss-8.4.31.tgz",
+      "prismjs-1.29.0.tgz",
       "runtime-7.22.6.tgz",
+      "yaml-1.10.2.tgz",
     ]) {
       expect(yarnLock).not.toContain(vulnerableTarball)
     }

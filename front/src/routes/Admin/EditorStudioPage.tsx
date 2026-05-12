@@ -52,6 +52,7 @@ import {
 } from "./EditorStudioThumbnailPanels"
 import { EditorStudioPublishModal } from "./EditorStudioPublishModal"
 import { EditorStudioComposeAssistantPanel } from "./EditorStudioComposeAssistantPanel"
+import { EditorStudioMetadataAssistantPanel } from "./EditorStudioMetadataAssistantPanel"
 import {
   isServerTempDraftPost,
   TEMP_DRAFT_BODY_PLACEHOLDER,
@@ -3732,87 +3733,35 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                 thumbnailEditorPanel={thumbnailEditorPanel}
                 previewMetaEditorPanel={previewMetaEditorPanel}
               >
-                <InlineDisclosure open={activeMetaPanel === "tag"}>
-                  <summary
-                    onClick={(event) => {
-                      event.preventDefault()
-                      setActiveMetaPanel((prev) => (prev === "tag" ? null : "tag"))
-                    }}
-                  >
-                    <strong>태그 정리</strong>
-                    <span>{activeMetaPanel === "tag" ? "닫기" : "열기"}</span>
-                  </summary>
-                  <div className="body">
-                    <MetadataStatus data-tone={metaNotice.tone}>{metaNotice.text}</MetadataStatus>
-                    <MetadataPanel>
-                      <label>태그 선택</label>
-                      <SelectionRow>
-                        {knownTags.map((tag) => (
-                          <TagCatalogChipGroup
-                            key={tag}
-                            data-active={postTags.includes(tag)}
-                          >
-                            <TagCatalogToggle
-                              type="button"
-                              data-active={postTags.includes(tag)}
-                              onClick={() => (postTags.includes(tag) ? removeTagFromPost(tag) : addTagToPost(tag))}
-                            >
-                              <span className="label">{tag}</span>
-                              {(tagUsageMap[tag] || 0) > 0 ? (
-                                <span className="count">{tagUsageMap[tag] || 0}</span>
-                              ) : null}
-                            </TagCatalogToggle>
-                            <TagCatalogDeleteButton
-                              type="button"
-                              data-active={postTags.includes(tag)}
-                              disabled={(tagUsageMap[tag] || 0) > 0}
-                              title={
-                                (tagUsageMap[tag] || 0) > 0
-                                  ? "사용 중인 태그는 삭제할 수 없습니다."
-                                  : "태그 삭제"
-                              }
-                              onClick={() => deleteTagFromCatalog(tag)}
-                            >
-                              ×
-                            </TagCatalogDeleteButton>
-                          </TagCatalogChipGroup>
-                        ))}
-                        {knownTags.length === 0 ? <EmptyMetaText>아직 저장된 태그가 없습니다.</EmptyMetaText> : null}
-                      </SelectionRow>
-                    </MetadataPanel>
-                  </div>
-                </InlineDisclosure>
-
-                <InlineDisclosure open={isComposeUtilityOpen}>
-                  <summary
-                    onClick={(event) => {
-                      event.preventDefault()
-                      setIsComposeUtilityOpen((prev) => !prev)
-                    }}
-                  >
-                    <strong>보조 작업</strong>
-                    <span>{isComposeUtilityOpen ? "닫기" : "열기"}</span>
-                  </summary>
-                  {isComposeUtilityOpen && (
-                    <div className="body">
-                      <SubActionRow>
-                        <Button type="button" disabled={loadingKey.length > 0} onClick={() => saveLocalDraft()}>
-                          브라우저 임시저장
-                        </Button>
-                        <Button type="button" disabled={loadingKey.length > 0} onClick={restoreLocalDraft}>
-                          임시저장 불러오기
-                        </Button>
-                        <Button
-                          type="button"
-                          disabled={loadingKey.length > 0 || !localDraftSavedAt}
-                          onClick={clearLocalDraft}
-                        >
-                          임시저장 삭제
-                        </Button>
-                      </SubActionRow>
-                    </div>
-                  )}
-                </InlineDisclosure>
+                <EditorStudioMetadataAssistantPanel
+                  isTagPanelOpen={activeMetaPanel === "tag"}
+                  onToggleTagPanel={() => setActiveMetaPanel((prev) => (prev === "tag" ? null : "tag"))}
+                  isUtilityPanelOpen={isComposeUtilityOpen}
+                  onToggleUtilityPanel={() => setIsComposeUtilityOpen((prev) => !prev)}
+                  metaNotice={metaNotice}
+                  knownTags={knownTags}
+                  selectedTags={postTags}
+                  tagUsageMap={tagUsageMap}
+                  onToggleTag={(tag) => (postTags.includes(tag) ? removeTagFromPost(tag) : addTagToPost(tag))}
+                  onDeleteTag={deleteTagFromCatalog}
+                  utilityActions={
+                    <SubActionRow>
+                      <Button type="button" disabled={loadingKey.length > 0} onClick={() => saveLocalDraft()}>
+                        브라우저 임시저장
+                      </Button>
+                      <Button type="button" disabled={loadingKey.length > 0} onClick={restoreLocalDraft}>
+                        임시저장 불러오기
+                      </Button>
+                      <Button
+                        type="button"
+                        disabled={loadingKey.length > 0 || !localDraftSavedAt}
+                        onClick={clearLocalDraft}
+                      >
+                        임시저장 삭제
+                      </Button>
+                    </SubActionRow>
+                  }
+                />
               </EditorStudioComposeAssistantPanel>
             </ComposeAssistantColumn>
           </ComposeStudioLayout>
@@ -5325,60 +5274,6 @@ const PublishNotice = styled.div`
   }
 `
 
-const MetadataStatus = styled.div`
-  padding: 0.62rem 0.74rem;
-  border-radius: 8px;
-  font-size: 0.8rem;
-  line-height: 1.5;
-
-  &[data-tone="idle"] {
-    color: ${({ theme }) => theme.colors.gray11};
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: transparent;
-  }
-
-  &[data-tone="loading"] {
-    color: ${({ theme }) => theme.colors.blue11};
-    border: 1px solid ${({ theme }) => theme.colors.blue7};
-    background: ${({ theme }) => theme.colors.blue3};
-  }
-
-  &[data-tone="success"] {
-    color: ${({ theme }) => theme.colors.green11};
-    border: 1px solid ${({ theme }) => theme.colors.green7};
-    background: ${({ theme }) => theme.colors.green3};
-  }
-
-  &[data-tone="error"] {
-    color: ${({ theme }) => theme.colors.red11};
-    border: 1px solid ${({ theme }) => theme.colors.red7};
-    background: ${({ theme }) => theme.colors.red3};
-  }
-`
-
-const MetadataPanel = styled.div`
-  display: grid;
-  gap: 0.65rem;
-  min-width: 0;
-  padding: 0.55rem 0;
-  border-radius: 0;
-  border: none;
-  background: transparent;
-
-  label {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.84rem;
-    font-weight: 700;
-  }
-`
-
-const SelectionRow = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  min-width: 0;
-`
-
 const SelectedTagChip = styled.span`
   display: inline-flex;
   align-items: stretch;
@@ -5443,131 +5338,6 @@ const SelectedTagChip = styled.span`
       color: ${({ theme }) => theme.colors.gray12};
     }
   }
-`
-
-const TagCatalogChipGroup = styled.div`
-  display: inline-flex;
-  align-items: center;
-  gap: 0;
-  min-width: 0;
-  max-width: 100%;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
-  overflow: hidden;
-  transition:
-    border-color 0.18s ease,
-    transform 0.18s ease,
-    background 0.18s ease;
-
-  &[data-active="true"] {
-    border-color: ${({ theme }) => theme.colors.gray7};
-    background: ${({ theme }) => theme.colors.gray3};
-  }
-
-  &:hover {
-    transform: none;
-  }
-`
-
-const TagCatalogToggle = styled.button`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.46rem;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
-  padding: 0.5rem 0.88rem;
-  font-size: 0.8rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition:
-    background 0.18s ease,
-    color 0.18s ease;
-
-  .label {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .count {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 1.35rem;
-    min-height: 1.35rem;
-    border-radius: 999px;
-    background: rgba(15, 23, 42, 0.16);
-    color: currentColor;
-    font-size: 0.7rem;
-    line-height: 1;
-  }
-
-  &:hover {
-    background: ${({ theme }) => theme.colors.gray2};
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  &[data-active="true"] {
-    color: ${({ theme }) => theme.colors.gray12};
-
-    &:hover {
-      background: transparent;
-      color: ${({ theme }) => theme.colors.gray12};
-    }
-
-    .count {
-      background: ${({ theme }) => theme.colors.gray4};
-    }
-  }
-`
-
-const TagCatalogDeleteButton = styled.button`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  align-self: stretch;
-  min-width: 2.05rem;
-  padding: 0 0.58rem;
-  border: 0;
-  border-left: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
-  cursor: pointer;
-  flex: 0 0 auto;
-  font-size: 0.98rem;
-  line-height: 1;
-  transition:
-    background 0.18s ease,
-    color 0.18s ease,
-    transform 0.18s ease;
-
-  &[data-active="true"] {
-    border-left-color: ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
-    color: ${({ theme }) => theme.colors.gray11};
-  }
-
-  &:hover:not(:disabled) {
-    transform: none;
-    background: ${({ theme }) => theme.colors.red3};
-    color: ${({ theme }) => theme.colors.red11};
-  }
-
-  &:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-`
-
-const EmptyMetaText = styled.span`
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.78rem;
-  line-height: 1.5;
 `
 
 const ListPanel = styled.div`

@@ -65,6 +65,10 @@ import { EditorStudioUndoToast } from "./EditorStudioUndoToast"
 import { EditorStudioDeleteConfirmDialog } from "./EditorStudioDeleteConfirmDialog"
 import { EditorStudioComposeMobileChrome } from "./EditorStudioComposeMobileChrome"
 import {
+  EditorStudioDedicatedEditorLoadingState,
+  EditorStudioDedicatedEditorSurface,
+} from "./EditorStudioDedicatedEditorSurface"
+import {
   isServerTempDraftPost,
   TEMP_DRAFT_BODY_PLACEHOLDER,
 } from "./editorTempDraft"
@@ -100,7 +104,6 @@ import {
   getAdminPageProps,
   readAdminProtectedBootstrap,
 } from "src/libs/server/adminPage"
-import ProfileImage from "src/components/ProfileImage"
 import {
   applyThumbnailTransformToUrl,
   clampThumbnailZoom,
@@ -2486,36 +2489,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     !postId.trim() &&
     (isNewEditorBootstrapPending || loadingKey === "postTemp")
   const shouldShowResultPanel = Boolean(loadingKey || result)
-  const dedicatedEditorTopBar = useMemo(
-    () => (
-      <EditorStudioTopBar>
-        <EditorExitAction type="button" onClick={handleExitDedicatedEditor}>
-          ← 나가기
-        </EditorExitAction>
-        <EditorStudioTopBarActions>
-          {composeStatusText ? (
-            <EditorStudioSaveState data-tone={composeStatusTone}>{composeStatusText}</EditorStudioSaveState>
-          ) : null}
-          <PrimaryButton
-            type="button"
-            disabled={publishActionTriggerDisabled}
-            onClick={() => openPublishModal(editorPrimaryActionType)}
-          >
-            {editorPrimaryActionLabel}
-          </PrimaryButton>
-        </EditorStudioTopBarActions>
-      </EditorStudioTopBar>
-    ),
-    [
-      composeStatusText,
-      composeStatusTone,
-      editorPrimaryActionLabel,
-      editorPrimaryActionType,
-      handleExitDedicatedEditor,
-      openPublishModal,
-      publishActionTriggerDisabled,
-    ]
-  )
   const dedicatedEditorResultPanel = useMemo(
     () =>
       shouldShowResultPanel ? (
@@ -2537,161 +2510,90 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   }
 
   if (shouldShowEditorLoadingState) {
-    return (
-      <EditorStudioRoot>
-        <EditorStudioLoadingState>
-          <strong>편집 화면을 준비하고 있습니다.</strong>
-          <span>잠시만 기다려 주세요.</span>
-        </EditorStudioLoadingState>
-      </EditorStudioRoot>
-    )
+    return <EditorStudioDedicatedEditorLoadingState />
   }
 
   if (isDedicatedEditorRoute) {
     return (
-      <EditorStudioRoot>
-      <input
-        ref={thumbnailImageFileInputRef}
-        type="file"
-        accept="image/*"
-        onChange={handleThumbnailImageFileChange}
-        style={{ display: "none" }}
-      />
-
-      {dedicatedEditorTopBar}
-
-      <EditorStudioFrame data-testid="editor-studio-frame">
-        <EditorStudioWritingColumn data-testid="editor-writing-column" $compact={isCompactSplitPreview}>
-          <EditorStudioMetaSection $compact={isCompactSplitPreview}>
-            <EditorTagRow aria-label="태그 입력" $compact={isCompactSplitPreview}>
-              {postTags.map((tag) => (
-                <SelectedTagChip key={tag}>
-                  <span className="label">{tag}</span>
-                  <button type="button" onClick={() => removeTagFromPost(tag)} aria-label={`${tag} 삭제`}>
-                    ×
-                  </button>
-                </SelectedTagChip>
-              ))}
-              <InlineMetaInput
-                placeholder="태그 입력 후 Enter"
-                value={tagDraft}
-                onChange={(e) => {
-                  const nextValue = e.target.value
-                  const commaSeparated = /[,，]/
-                  if (!commaSeparated.test(nextValue)) {
-                    setTagDraft(nextValue)
-                    return
-                  }
-
-                  const fragments = nextValue.split(commaSeparated)
-                  const tailDraft = fragments.pop() ?? ""
-                  const tagsToAdd = fragments.map((fragment) => fragment.trim()).filter(Boolean)
-                  if (tagsToAdd.length > 0) addTagsToPost(tagsToAdd)
-                  setTagDraft(tailDraft)
-                }}
-                onKeyDown={(e) => {
-                  if (isComposingKeyboardEvent(e)) return
-                  if (e.key === "Enter" || e.key === ",") {
-                    e.preventDefault()
-                    addTagToPost(e.currentTarget.value)
-                  }
-                }}
-              />
-            </EditorTagRow>
-            <TitleInput
-              $compact={isCompactSplitPreview}
-              ref={handleTitleFieldRef}
-              id="post-title"
-              placeholder="제목을 입력하세요"
-              rows={1}
-              value={postTitle}
-              onChange={handleTitleChange}
-              onKeyDown={handleTitleKeyDown}
+      <EditorStudioDedicatedEditorSurface
+        thumbnailImageFileInputRef={thumbnailImageFileInputRef}
+        onThumbnailImageFileChange={handleThumbnailImageFileChange}
+        onExit={handleExitDedicatedEditor}
+        saveStateText={composeStatusText}
+        saveStateTone={composeStatusTone}
+        primaryActionDisabled={publishActionTriggerDisabled}
+        primaryActionLabel={editorPrimaryActionLabel}
+        onPrimaryAction={() => openPublishModal(editorPrimaryActionType)}
+        isCompactSplitPreview={isCompactSplitPreview}
+        postTags={postTags}
+        tagDraft={tagDraft}
+        onTagDraftChange={setTagDraft}
+        onAddTags={addTagsToPost}
+        onAddTag={addTagToPost}
+        onRemoveTag={removeTagFromPost}
+        titleInputRef={handleTitleFieldRef}
+        postTitle={postTitle}
+        onPostTitleChange={handleTitleChange}
+        onPostTitleKeyDown={handleTitleKeyDown}
+        authorName={displayName}
+        authorInitial={displayNameInitial}
+        authorAvatarSrc={previewAuthorAvatarSrc}
+        previewDateText={previewDateText}
+        currentVisibilityText={currentVisibilityText}
+        canOpenCurrentPostDetail={canOpenCurrentPostDetail}
+        onOpenPostDetail={() => void openPostDetailRoute(postId)}
+        onCopyPostDetailLink={() => void copyPostDetailLink(postId, postTitle)}
+        editorCanvas={dedicatedEditorCanvas}
+        showPublishNotice={shouldShowPublishNotice}
+        publishNoticeTone={publishNotice.tone}
+        publishNoticeText={publishNotice.text}
+        resultPanel={dedicatedEditorResultPanel}
+        publishModal={
+          isPublishModalOpen ? (
+            <EditorStudioPublishModal
+              closeToggleLabel="닫기"
+              displayName={displayName}
+              displayNameInitial={displayNameInitial}
+              isCompactMobileLayout={isCompactMobileLayout}
+              isMobileMetaEditorOpen={isMobileMetaEditorOpen}
+              isMobileThumbnailEditorOpen={isMobileThumbnailEditorOpen}
+              loadingKey={loadingKey}
+              modalNotice={publishModalNotice}
+              postThumbnailFocusX={postThumbnailFocusX}
+              postThumbnailFocusY={postThumbnailFocusY}
+              postThumbnailZoom={postThumbnailZoom}
+              postTitle={postTitle}
+              postVisibility={postVisibility}
+              previewAuthorAvatarSrc={previewAuthorAvatarSrc}
+              previewDateText={previewDateText}
+              previewFrameStyle={{ maxWidth: `${previewViewportConfig.cardWidth}px` }}
+              previewKicker="카드 미리보기"
+              previewMetaEditorPanel={previewMetaEditorPanel}
+              previewSummary={resolvedPreviewSummary}
+              previewSummaryFallback="요약을 비워두면 본문에서 자동 생성한 요약이 카드에 반영됩니다."
+              previewThumbnailSrc={previewThumbnailSrc}
+              previewViewport={previewViewport}
+              previewViewportLabel={previewViewportConfig.label}
+              previewViewportOptions={previewViewportOptions}
+              previewVisibilityLabel={previewVisibilityLabel}
+              publishActionButtonDisabled={publishActionButtonDisabled}
+              publishActionButtonText={publishActionButtonText}
+              publishActionTitle={publishActionTitle}
+              shouldShowNotice={shouldShowPublishModalNotice}
+              thumbnailEditorPanel={thumbnailEditorPanel}
+              variant="drawer"
+              visibilityOptions={PUBLISH_VISIBILITY_OPTIONS}
+              onClose={closePublishModal}
+              onConfirmPublish={() => void handleConfirmPublish()}
+              onPostVisibilityChange={setPostVisibility}
+              onPreviewThumbnailError={() => setIsPreviewThumbnailError(true)}
+              onPreviewViewportChange={setPreviewViewport}
+              onToggleMobileMetaEditor={() => setIsMobileMetaEditorOpen((current) => !current)}
+              onToggleMobileThumbnailEditor={() => setIsMobileThumbnailEditorOpen((current) => !current)}
             />
-            <EditorHeaderMetaRow>
-              <EditorHeaderAuthor>
-                <EditorHeaderAvatar $compact={isCompactSplitPreview}>
-                  {previewAuthorAvatarSrc ? (
-                    <ProfileImage src={previewAuthorAvatarSrc} alt={`${displayName} 프로필 이미지`} fillContainer />
-                  ) : (
-                    <span className="initial">{displayNameInitial}</span>
-                  )}
-                </EditorHeaderAvatar>
-                <EditorHeaderAuthorText $compact={isCompactSplitPreview}>
-                  <strong>{displayName}</strong>
-                  <span>{previewDateText}</span>
-                </EditorHeaderAuthorText>
-              </EditorHeaderAuthor>
-              <EditorHeaderMetaActions>
-                <EditorHeaderMetaPill $compact={isCompactSplitPreview}>{currentVisibilityText}</EditorHeaderMetaPill>
-                {canOpenCurrentPostDetail ? (
-                  <>
-                    <EditorHeaderActionButton type="button" onClick={() => void openPostDetailRoute(postId)}>
-                      상세 열기
-                    </EditorHeaderActionButton>
-                    <EditorHeaderActionButton type="button" onClick={() => void copyPostDetailLink(postId, postTitle)}>
-                      링크 복사
-                    </EditorHeaderActionButton>
-                  </>
-                ) : null}
-              </EditorHeaderMetaActions>
-            </EditorHeaderMetaRow>
-          </EditorStudioMetaSection>
-
-          <EditorStudioCanvas>
-            {dedicatedEditorCanvas}
-          </EditorStudioCanvas>
-
-          {shouldShowPublishNotice ? <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice> : null}
-        </EditorStudioWritingColumn>
-      </EditorStudioFrame>
-
-      {dedicatedEditorResultPanel}
-
-      {isPublishModalOpen ? (
-        <EditorStudioPublishModal
-          closeToggleLabel="닫기"
-          displayName={displayName}
-          displayNameInitial={displayNameInitial}
-          isCompactMobileLayout={isCompactMobileLayout}
-          isMobileMetaEditorOpen={isMobileMetaEditorOpen}
-          isMobileThumbnailEditorOpen={isMobileThumbnailEditorOpen}
-          loadingKey={loadingKey}
-          modalNotice={publishModalNotice}
-          postThumbnailFocusX={postThumbnailFocusX}
-          postThumbnailFocusY={postThumbnailFocusY}
-          postThumbnailZoom={postThumbnailZoom}
-          postTitle={postTitle}
-          postVisibility={postVisibility}
-          previewAuthorAvatarSrc={previewAuthorAvatarSrc}
-          previewDateText={previewDateText}
-          previewFrameStyle={{ maxWidth: `${previewViewportConfig.cardWidth}px` }}
-          previewKicker="카드 미리보기"
-          previewMetaEditorPanel={previewMetaEditorPanel}
-          previewSummary={resolvedPreviewSummary}
-          previewSummaryFallback="요약을 비워두면 본문에서 자동 생성한 요약이 카드에 반영됩니다."
-          previewThumbnailSrc={previewThumbnailSrc}
-          previewViewport={previewViewport}
-          previewViewportLabel={previewViewportConfig.label}
-          previewViewportOptions={previewViewportOptions}
-          previewVisibilityLabel={previewVisibilityLabel}
-          publishActionButtonDisabled={publishActionButtonDisabled}
-          publishActionButtonText={publishActionButtonText}
-          publishActionTitle={publishActionTitle}
-          shouldShowNotice={shouldShowPublishModalNotice}
-          thumbnailEditorPanel={thumbnailEditorPanel}
-          variant="drawer"
-          visibilityOptions={PUBLISH_VISIBILITY_OPTIONS}
-          onClose={closePublishModal}
-          onConfirmPublish={() => void handleConfirmPublish()}
-          onPostVisibilityChange={setPostVisibility}
-          onPreviewThumbnailError={() => setIsPreviewThumbnailError(true)}
-          onPreviewViewportChange={setPreviewViewport}
-          onToggleMobileMetaEditor={() => setIsMobileMetaEditorOpen((current) => !current)}
-          onToggleMobileThumbnailEditor={() => setIsMobileThumbnailEditorOpen((current) => !current)}
-        />
-      ) : null}
-      </EditorStudioRoot>
+          ) : null
+        }
+      />
     )
   }
 
@@ -4157,282 +4059,6 @@ const SubActionRow = styled.div`
       justify-content: center;
     }
   }
-`
-
-const EditorStudioRoot = styled.main`
-  width: min(100%, 1600px);
-  margin: 0 auto;
-  padding: 1.4rem 1.6rem 2rem;
-  display: grid;
-  gap: 1.2rem;
-  overflow-x: clip;
-
-  @media (max-width: 1024px) {
-    padding: 1rem 1rem 1.4rem;
-  }
-
-  @media (max-width: 768px) {
-    padding-top: 0.92rem;
-    padding-bottom: 1.2rem;
-    padding-left: max(0.82rem, env(safe-area-inset-left, 0px));
-    padding-right: max(0.82rem, env(safe-area-inset-right, 0px));
-  }
-`
-
-const EditorStudioLoadingState = styled.div`
-  min-height: calc(100vh - 10rem);
-  display: grid;
-  place-content: center;
-  gap: 0.4rem;
-  text-align: center;
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1.1rem;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.9rem;
-  }
-`
-
-const EditorStudioTopBar = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  min-height: 48px;
-
-  @media (max-width: 1200px) {
-    align-items: center;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    justify-content: space-between;
-    gap: 0.8rem;
-  }
-
-  @media (max-width: 760px) {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 0.7rem;
-  }
-`
-
-const EditorExitAction = styled.button`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 42px;
-  padding: 0.2rem 0.32rem;
-  margin: -0.2rem -0.32rem;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.98rem;
-  font-weight: 700;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    background-color 0.18s ease,
-    color 0.18s ease;
-
-  &:hover {
-    background: ${({ theme }) => theme.colors.gray3};
-  }
-
-  &:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
-  }
-
-  @media (max-width: 1200px) {
-    justify-content: flex-start;
-  }
-`
-
-const EditorStudioTopBarActions = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: nowrap;
-  justify-content: flex-end;
-
-  @media (max-width: 1200px) {
-    width: auto;
-    margin-left: auto;
-    justify-content: flex-end;
-    flex-wrap: nowrap;
-  }
-
-  @media (max-width: 760px) {
-    width: 100%;
-    margin-left: 0;
-    justify-content: flex-end;
-    flex-wrap: wrap;
-  }
-`
-
-const EditorStudioSaveState = styled.span`
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.84rem;
-  font-weight: 600;
-  white-space: nowrap;
-  text-align: right;
-
-  &[data-tone="success"] {
-    color: ${({ theme }) => theme.colors.green10};
-  }
-
-  &[data-tone="loading"] {
-    color: ${({ theme }) => theme.colors.blue9};
-  }
-
-  &[data-tone="error"] {
-    color: ${({ theme }) => theme.colors.red10};
-  }
-
-  @media (max-width: 680px) {
-    width: 100%;
-  }
-`
-
-const EditorStudioFrame = styled.div`
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 1.4rem;
-  align-items: start;
-  justify-content: center;
-  overflow-x: visible;
-
-  @media (min-width: 1024px) {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 1.4rem;
-  }
-`
-
-const EditorStudioWritingColumn = styled.section<{ $compact?: boolean }>`
-  display: grid;
-  min-width: 0;
-  gap: ${({ $compact }) => ($compact ? "0.88rem" : "1rem")};
-  overflow-x: visible;
-`
-
-const EditorStudioMetaSection = styled.section<{ $compact?: boolean }>`
-  width: 100%;
-  max-width: var(--article-readable-width, 48rem);
-  min-width: 0;
-  margin-inline: auto;
-  display: grid;
-  gap: ${({ $compact }) => ($compact ? "0.72rem" : "0.9rem")};
-`
-
-const EditorTagRow = styled.div<{ $compact?: boolean }>`
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: ${({ $compact }) => ($compact ? "0.44rem" : "0.55rem")};
-  min-height: 32px;
-`
-
-const EditorHeaderMetaRow = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 0.85rem;
-  min-width: 0;
-`
-
-const EditorHeaderMetaActions = styled.div`
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  min-width: 0;
-`
-
-const EditorHeaderAuthor = styled.div`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.85rem;
-  min-width: 0;
-`
-
-const EditorHeaderAvatar = styled.div<{ $compact?: boolean }>`
-  position: relative;
-  width: ${({ $compact }) => ($compact ? "40px" : "48px")};
-  height: ${({ $compact }) => ($compact ? "40px" : "48px")};
-  flex-shrink: 0;
-  border-radius: 999px;
-  overflow: hidden;
-  background: ${({ theme }) => theme.colors.gray3};
-
-  .initial {
-    display: inline-flex;
-    width: 100%;
-    height: 100%;
-    align-items: center;
-    justify-content: center;
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.84rem;
-    font-weight: 800;
-    letter-spacing: 0.04em;
-  }
-`
-
-const EditorHeaderAuthorText = styled.div<{ $compact?: boolean }>`
-  display: grid;
-  gap: ${({ $compact }) => ($compact ? "0.12rem" : "0.18rem")};
-  min-width: 0;
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: ${({ $compact }) => ($compact ? "0.94rem" : "1rem")};
-    font-weight: 700;
-    overflow-wrap: anywhere;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: ${({ $compact }) => ($compact ? "0.82rem" : "0.9rem")};
-    font-weight: 500;
-  }
-`
-
-const EditorHeaderMetaPill = styled.span<{ $compact?: boolean }>`
-  display: inline-flex;
-  align-items: center;
-  min-height: ${({ $compact }) => ($compact ? "30px" : "34px")};
-  padding: ${({ $compact }) => ($compact ? "0 0.72rem" : "0 0.82rem")};
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: ${({ $compact }) => ($compact ? "0.74rem" : "0.82rem")};
-  font-weight: 650;
-  line-height: 1;
-`
-
-const EditorHeaderActionButton = styled(Button)`
-  min-height: 34px;
-  padding: 0.45rem 0.7rem;
-  border-radius: 999px;
-  font-size: 0.78rem;
-`
-
-const EditorStudioCanvas = styled.section`
-  --compose-pane-readable-width: var(--article-readable-width, 48rem);
-  width: 100%;
-  max-width: var(--article-readable-width, 48rem);
-  min-width: 0;
-  margin-inline: auto;
-  min-height: clamp(28rem, 70vh, 56rem);
-  display: grid;
-  gap: 0.72rem;
-  overflow-x: visible;
 `
 
 const WriterFooterBar = styled.div`

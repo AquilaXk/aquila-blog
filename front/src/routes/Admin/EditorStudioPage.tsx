@@ -53,6 +53,7 @@ import {
 import { EditorStudioPublishModal } from "./EditorStudioPublishModal"
 import { EditorStudioComposeAssistantPanel } from "./EditorStudioComposeAssistantPanel"
 import { EditorStudioMetadataAssistantPanel } from "./EditorStudioMetadataAssistantPanel"
+import { EditorStudioSelectedPostToolsPanel } from "./EditorStudioSelectedPostToolsPanel"
 import {
   isServerTempDraftPost,
   TEMP_DRAFT_BODY_PLACEHOLDER,
@@ -955,6 +956,19 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     }
     setListQuickPreset(preset)
   }, [])
+
+  const handleSelectedPostIdChange = useCallback(
+    (nextPostId: string) => {
+      const normalizedPostId = nextPostId.trim()
+      setPostId(normalizedPostId)
+      if (normalizedPostId !== postId.trim()) {
+        setEditorMode("create")
+        setPostVersion(null)
+        setIsTempDraftMode(false)
+      }
+    },
+    [postId]
+  )
 
   const publishModalHintByAction = useCallback((actionType: PublishActionType): string => {
     if (actionType === "create") return "작성 전 확인이 필요한 항목만 이곳에 표시됩니다."
@@ -3327,86 +3341,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                         글 삭제
                       </Button>
                     </ActionRow>
-                    <InlineDisclosure open={isDirectLoadOpen}>
-                      <summary
-                        onClick={(event) => {
-                          event.preventDefault()
-                          setIsDirectLoadOpen((prev) => !prev)
-                        }}
-                      >
-                        <strong>다른 글 직접 불러오기</strong>
-                        <span>{isDirectLoadOpen ? "닫기" : "열기"}</span>
-                      </summary>
-                      {isDirectLoadOpen && (
-                        <div className="body">
-                          <SelectedPostGrid>
-                            <FieldBox>
-                              <FieldLabel htmlFor="selected-post-id">post id</FieldLabel>
-                              <Input
-                                id="selected-post-id"
-                                placeholder="예: 1"
-                                value={postId}
-                                onChange={(e) => {
-                                  const nextId = e.target.value.trim()
-                                  setPostId(nextId)
-                                  if (nextId !== postId.trim()) {
-                                    setEditorMode("create")
-                                    setPostVersion(null)
-                                    setIsTempDraftMode(false)
-                                  }
-                                }}
-                              />
-                            </FieldBox>
-                          </SelectedPostGrid>
-                          <SelectedPostHint>번호를 알고 있을 때만 씁니다.</SelectedPostHint>
-                          <ActionRow>
-                            <Button
-                              type="button"
-                              disabled={disabled("postOne")}
-                              onClick={() => void loadPostForEditor()}
-                            >
-                              글 불러오기
-                            </Button>
-                          </ActionRow>
-                        </div>
-                      )}
-                    </InlineDisclosure>
-                    <InlineDisclosure open={isSelectedToolsOpen}>
-                      <summary
-                        onClick={(event) => {
-                          event.preventDefault()
-                          setIsSelectedToolsOpen((prev) => !prev)
-                        }}
-                      >
-                        <strong>진단 도구</strong>
-                        <span>{isSelectedToolsOpen ? "닫기" : "열기"}</span>
-                      </summary>
-                      {isSelectedToolsOpen && (
-                        <div className="body">
-                          <SelectedPostHint>진단이 필요할 때만 실행합니다.</SelectedPostHint>
-                          <SubActionRow>
-                            <Button
-                              type="button"
-                              disabled={disabled("hitPost")}
-                              onClick={() =>
-                                run("hitPost", () => apiFetch(`/post/api/v1/posts/${postId}/hit`, { method: "POST" }))
-                              }
-                            >
-                              조회수 테스트
-                            </Button>
-                            <Button
-                              type="button"
-                              disabled={disabled("likePost")}
-                              onClick={() =>
-                                run("likePost", () => apiFetch(`/post/api/v1/posts/${postId}/like`, { method: "PUT" }))
-                              }
-                            >
-                              좋아요 반영 테스트
-                            </Button>
-                          </SubActionRow>
-                        </div>
-                      )}
-                    </InlineDisclosure>
                   </>
                 ) : (
                   <>
@@ -3423,52 +3357,27 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                         새 글 작성 시작
                       </PrimaryButton>
                     </ActionRow>
-                    <InlineDisclosure open={isDirectLoadOpen}>
-                      <summary
-                        onClick={(event) => {
-                          event.preventDefault()
-                          setIsDirectLoadOpen((prev) => !prev)
-                        }}
-                      >
-                        <strong>post id 직접 불러오기</strong>
-                        <span>{isDirectLoadOpen ? "닫기" : "열기"}</span>
-                      </summary>
-                      {isDirectLoadOpen && (
-                        <div className="body">
-                          <SelectedPostGrid>
-                            <FieldBox>
-                              <FieldLabel htmlFor="selected-post-id">post id</FieldLabel>
-                              <Input
-                                id="selected-post-id"
-                                placeholder="예: 1"
-                                value={postId}
-                                onChange={(e) => {
-                                  const nextId = e.target.value.trim()
-                                  setPostId(nextId)
-                                  if (nextId !== postId.trim()) {
-                                    setEditorMode("create")
-                                    setPostVersion(null)
-                                    setIsTempDraftMode(false)
-                                  }
-                                }}
-                              />
-                            </FieldBox>
-                          </SelectedPostGrid>
-                          <SelectedPostHint>특정 글 번호를 알고 있을 때만 씁니다.</SelectedPostHint>
-                          <ActionRow>
-                            <Button
-                              type="button"
-                              disabled={disabled("postOne")}
-                              onClick={() => void loadPostForEditor()}
-                            >
-                              글 불러오기
-                            </Button>
-                          </ActionRow>
-                        </div>
-                      )}
-                    </InlineDisclosure>
                   </>
                 )}
+                <EditorStudioSelectedPostToolsPanel
+                  hasSelectedManagedPost={hasSelectedManagedPost}
+                  isDirectLoadOpen={isDirectLoadOpen}
+                  onToggleDirectLoad={() => setIsDirectLoadOpen((prev) => !prev)}
+                  isSelectedToolsOpen={isSelectedToolsOpen}
+                  onToggleSelectedTools={() => setIsSelectedToolsOpen((prev) => !prev)}
+                  postId={postId}
+                  onPostIdChange={handleSelectedPostIdChange}
+                  isLoadPostDisabled={disabled("postOne")}
+                  onLoadPost={() => void loadPostForEditor()}
+                  isHitPostDisabled={disabled("hitPost")}
+                  onRunHitPost={() =>
+                    void run("hitPost", () => apiFetch(`/post/api/v1/posts/${postId}/hit`, { method: "POST" }))
+                  }
+                  isLikePostDisabled={disabled("likePost")}
+                  onRunLikePost={() =>
+                    void run("likePost", () => apiFetch(`/post/api/v1/posts/${postId}/like`, { method: "PUT" }))
+                  }
+                />
               </SelectedPostPanel>
             </ContentStudioGrid>
 
@@ -5543,12 +5452,6 @@ const SelectedPostBadge = styled.span`
   }
 `
 
-const SelectedPostGrid = styled.div`
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.7rem;
-`
-
 const SelectedPostStateCard = styled.div`
   display: grid;
   gap: 0.52rem;
@@ -5603,13 +5506,6 @@ const SelectedPostStateCard = styled.div`
     font-size: 0.74rem;
     font-weight: 700;
   }
-`
-
-const SelectedPostHint = styled.p`
-  margin: 0.1rem 0 0;
-  font-size: 0.74rem;
-  color: ${({ theme }) => theme.colors.gray11};
-  line-height: 1.45;
 `
 
 const SubActionRow = styled.div`

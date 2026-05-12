@@ -192,6 +192,14 @@ test.describe("editor studio state", () => {
     const editorStudioMetadataAssistantPanelSource = existsSync(editorStudioMetadataAssistantPanelPath)
       ? readFileSync(editorStudioMetadataAssistantPanelPath, "utf8")
       : ""
+    const editorStudioSelectedPostToolsPanelPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioSelectedPostToolsPanel.tsx"
+    )
+    expect(existsSync(editorStudioSelectedPostToolsPanelPath)).toBe(true)
+    const editorStudioSelectedPostToolsPanelSource = existsSync(editorStudioSelectedPostToolsPanelPath)
+      ? readFileSync(editorStudioSelectedPostToolsPanelPath, "utf8")
+      : ""
     const blockEditorShellSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"), "utf8")
     const blockEditorEngineSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"), "utf8")
     const blockSelectionModelSource = readFileSync(
@@ -331,6 +339,27 @@ test.describe("editor studio state", () => {
     expect(editorStudioMetadataAssistantPanelSource).toContain("<strong>보조 작업</strong>")
     expect(editorStudioSource).not.toContain("<strong>태그 정리</strong>")
     expect(editorStudioSource).not.toContain("<strong>보조 작업</strong>")
+    expect(editorStudioSelectedPostToolsPanelSource).toContain("export const EditorStudioSelectedPostToolsPanel =")
+    expect(editorStudioSource).toContain(
+      'import { EditorStudioSelectedPostToolsPanel } from "./EditorStudioSelectedPostToolsPanel"'
+    )
+    expect(editorStudioSource.match(/<EditorStudioSelectedPostToolsPanel/g)?.length).toBe(1)
+    expect(editorStudioSelectedPostToolsPanelSource).toContain("다른 글 직접 불러오기")
+    expect(editorStudioSelectedPostToolsPanelSource).toContain("post id 직접 불러오기")
+    expect(editorStudioSelectedPostToolsPanelSource).toContain("<strong>{directLoadTitle}</strong>")
+    expect(editorStudioSelectedPostToolsPanelSource).toContain("<strong>진단 도구</strong>")
+    expect(editorStudioSource).not.toContain("<strong>다른 글 직접 불러오기</strong>")
+    expect(editorStudioSource).not.toContain("<strong>post id 직접 불러오기</strong>")
+    expect(editorStudioSource).not.toContain("<strong>진단 도구</strong>")
+    expect(editorStudioSource).toContain("const handleSelectedPostIdChange = useCallback")
+    expect(editorStudioSource).toContain("onPostIdChange={handleSelectedPostIdChange}")
+    expect(editorStudioSelectedPostToolsPanelSource).not.toContain("apiFetch(")
+    expect(editorStudioSelectedPostToolsPanelSource).not.toContain("setPostId")
+    expect(editorStudioSelectedPostToolsPanelSource).not.toContain("setEditorMode")
+    expect(editorStudioSelectedPostToolsPanelSource).not.toContain("setPostVersion")
+    expect(editorStudioSelectedPostToolsPanelSource).not.toContain("setIsTempDraftMode")
+    expect(editorStudioSelectedPostToolsPanelSource).not.toContain('run("hitPost"')
+    expect(editorStudioSelectedPostToolsPanelSource).not.toContain('run("likePost"')
     expect(editorStudioStateSource).toContain("export type PostVisibility =")
     expect(editorStudioStateSource).toContain("export const toVisibility")
     expect(editorStudioStateSource).toContain("export const toFlags")

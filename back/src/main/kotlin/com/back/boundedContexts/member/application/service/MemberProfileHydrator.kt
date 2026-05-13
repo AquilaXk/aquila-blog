@@ -6,9 +6,11 @@ import com.back.boundedContexts.member.domain.shared.MemberAttr
 import com.back.boundedContexts.member.domain.shared.memberMixin.ABOUT_BIO
 import com.back.boundedContexts.member.domain.shared.memberMixin.ABOUT_DETAILS
 import com.back.boundedContexts.member.domain.shared.memberMixin.ABOUT_ROLE
+import com.back.boundedContexts.member.domain.shared.memberMixin.BLOG_DESIGN
 import com.back.boundedContexts.member.domain.shared.memberMixin.BLOG_TITLE
 import com.back.boundedContexts.member.domain.shared.memberMixin.HOME_INTRO_DESCRIPTION
 import com.back.boundedContexts.member.domain.shared.memberMixin.HOME_INTRO_TITLE
+import com.back.boundedContexts.member.domain.shared.memberMixin.LEGACY_BLOG_SCHEME
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_BIO
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_CONTACT_LINKS
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
@@ -37,6 +39,8 @@ class MemberProfileHydrator(
             BLOG_TITLE,
             HOME_INTRO_TITLE,
             HOME_INTRO_DESCRIPTION,
+            BLOG_DESIGN,
+            LEGACY_BLOG_SCHEME,
             PROFILE_SERVICE_LINKS,
             PROFILE_CONTACT_LINKS,
             PROFILE_WORKSPACE_DRAFT,
@@ -85,6 +89,12 @@ class MemberProfileHydrator(
             }
             member.getOrInitHomeIntroDescriptionAttr {
                 attrsByKey["${member.id}:$HOME_INTRO_DESCRIPTION"] ?: MemberAttr(0, member, HOME_INTRO_DESCRIPTION, "")
+            }
+            member.getOrInitBlogDesignAttr {
+                attrsByKey["${member.id}:$BLOG_DESIGN"] ?: MemberAttr(0, member, BLOG_DESIGN, "")
+            }
+            member.getOrInitLegacyBlogSchemeAttr {
+                attrsByKey["${member.id}:$LEGACY_BLOG_SCHEME"] ?: MemberAttr(0, member, LEGACY_BLOG_SCHEME, "")
             }
             member.getOrInitServiceLinksAttr {
                 attrsByKey["${member.id}:$PROFILE_SERVICE_LINKS"] ?: MemberAttr(0, member, PROFILE_SERVICE_LINKS, "")

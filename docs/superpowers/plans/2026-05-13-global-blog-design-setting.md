@@ -21,6 +21,7 @@
 - Modify `back/src/main/kotlin/com/back/boundedContexts/member/application/port/input/MemberUseCase.kt`: add design arguments to the legacy profile-card use case.
 - Modify `back/src/main/kotlin/com/back/boundedContexts/member/application/service/MemberUseCaseAdapter.kt`: forward design arguments to the application service.
 - Modify `back/src/main/kotlin/com/back/boundedContexts/member/application/service/MemberApplicationService.kt`: persist design attrs from both legacy and workspace profile flows.
+- Modify `back/src/main/kotlin/com/back/boundedContexts/member/application/service/MemberProfileHydrator.kt`: hydrate persisted design attrs for member fallback responses.
 - Modify `back/src/test/kotlin/com/back/boundedContexts/member/adapter/web/ApiV1AdmMemberControllerTest.kt`: prove draft/save/publish behavior.
 - Modify `back/src/test/kotlin/com/back/boundedContexts/member/adapter/web/ApiV1MemberControllerWebMvcTest.kt`: prove public `adminProfile` exposes the published setting.
 - Modify `front/src/types/index.ts`: add `BlogDesignType` and `LegacyBlogScheme`.
@@ -35,6 +36,7 @@
 - Modify public surfaces under `front/src/routes/Feed/**`, `front/src/routes/About/**`, and `front/src/routes/Detail/PostDetail/**`: opt into grid tokens without changing article typography.
 - Modify `front/e2e/admin-profile-state.spec.ts`, `front/e2e/smoke.spec.ts`, `front/e2e/mobile-layout.spec.ts`, and `front/e2e/perf.spec.ts`: add structural and public route regression coverage.
 - Modify `front/contracts/openapi/openapi.json` only through the existing contract generation/fetch flow if backend verification updates it.
+- Modify `front/packages/shared-contracts/src/generated/backend-openapi.d.ts` only through `yarn --cwd front contracts:generate` if the OpenAPI snapshot changes.
 - Modify `docs/agent/frontend-ui.md` and `docs/agent/auth.md`: record the new global public design contract.
 
 ### Task 1: Backend Profile Contract
@@ -49,8 +51,11 @@
 - Modify: `back/src/main/kotlin/com/back/boundedContexts/member/application/port/input/MemberUseCase.kt`
 - Modify: `back/src/main/kotlin/com/back/boundedContexts/member/application/service/MemberUseCaseAdapter.kt`
 - Modify: `back/src/main/kotlin/com/back/boundedContexts/member/application/service/MemberApplicationService.kt`
+- Modify: `back/src/main/kotlin/com/back/boundedContexts/member/application/service/MemberProfileHydrator.kt`
 - Test: `back/src/test/kotlin/com/back/boundedContexts/member/adapter/web/ApiV1AdmMemberControllerTest.kt`
 - Test: `back/src/test/kotlin/com/back/boundedContexts/member/adapter/web/ApiV1MemberControllerWebMvcTest.kt`
+- Generated: `front/contracts/openapi/openapi.json`
+- Generated: `front/packages/shared-contracts/src/generated/backend-openapi.d.ts`
 
 - [ ] **Step 1: Add failing backend assertions for the new public profile fields**
 
@@ -121,7 +126,7 @@ mockMvc
 Run:
 
 ```bash
-./gradlew -p back test --tests '*ApiV1MemberControllerWebMvcTest*' --tests '*ApiV1AdmMemberControllerTest*'
+back/gradlew -p back test --tests '*ApiV1MemberControllerWebMvcTest*' --tests '*ApiV1AdmMemberControllerTest*'
 ```
 
 Expected: FAIL with unresolved `blogDesign`/`legacyBlogScheme` properties or missing JSON paths.
@@ -246,25 +251,25 @@ In `ApiV1AdmMemberController.kt`, extend `UpdateProfileCardRequest` and `UpdateP
 
 ```kotlin
 @field:Size(max = 20)
-val blogDesign: String = "",
+val blogDesign: String? = null,
 @field:Size(max = 20)
-val legacyBlogScheme: String = "",
+val legacyBlogScheme: String? = null,
 ```
 
 Pass the fields into `MemberProfileWorkspaceContent` in `toDomain()`:
 
 ```kotlin
-blogDesign = blogDesign.trim(),
-legacyBlogScheme = legacyBlogScheme.trim(),
+blogDesign = blogDesign?.trim() ?: member.blogDesign,
+legacyBlogScheme = legacyBlogScheme?.trim() ?: member.legacyBlogScheme,
 ```
 
 Pass the fields through the legacy profile-card endpoint as well, so older admin flows and workspace fallback snapshots keep the same published contract.
 
-In `ApiV1AdmMemberController.updateProfileCard`, extend the use-case call:
+For the legacy `profileCard` PATCH path, omitted request fields preserve the current member values:
 
 ```kotlin
-blogDesign = reqBody.blogDesign.trim(),
-legacyBlogScheme = reqBody.legacyBlogScheme.trim(),
+blogDesign = reqBody.blogDesign?.trim() ?: member.blogDesign,
+legacyBlogScheme = reqBody.legacyBlogScheme?.trim() ?: member.legacyBlogScheme,
 ```
 
 In `MemberUseCase.kt`, add parameters after `homeIntroDescription`:
@@ -309,13 +314,32 @@ private fun saveLegacyBlogSchemeAttr(member: Member) {
 }
 ```
 
+In `MemberProfileHydrator.kt`, include the new attr names in `profileAttrNames` and initialize them in `hydrateAll`:
+
+```kotlin
+BLOG_DESIGN,
+LEGACY_BLOG_SCHEME,
+```
+
+```kotlin
+member.getOrInitBlogDesignAttr()
+member.getOrInitLegacyBlogSchemeAttr()
+```
+
 - [ ] **Step 5: Run backend targeted tests and style**
 
 Run:
 
 ```bash
-./gradlew -p back test --tests '*ApiV1MemberControllerWebMvcTest*' --tests '*ApiV1AdmMemberControllerTest*'
-./gradlew -p back ktlintCheck
+back/gradlew -p back test --tests '*ApiV1MemberControllerWebMvcTest*' --tests '*ApiV1AdmMemberControllerTest*'
+back/gradlew -p back ktlintCheck
+back/gradlew -p back test --tests 'com.back.global.springDoc.OpenApiContractExportTest' --no-daemon
+cp back/build/openapi/openapi.json front/contracts/openapi/openapi.json
+yarn --cwd front contracts:generate
+(
+  cd front
+  yarn contracts:check
+)
 ```
 
 Expected: PASS.
@@ -332,8 +356,11 @@ git add back/src/main/kotlin/com/back/boundedContexts/member/domain/shared/membe
   back/src/main/kotlin/com/back/boundedContexts/member/application/port/input/MemberUseCase.kt \
   back/src/main/kotlin/com/back/boundedContexts/member/application/service/MemberUseCaseAdapter.kt \
   back/src/main/kotlin/com/back/boundedContexts/member/application/service/MemberApplicationService.kt \
+  back/src/main/kotlin/com/back/boundedContexts/member/application/service/MemberProfileHydrator.kt \
   back/src/test/kotlin/com/back/boundedContexts/member/adapter/web/ApiV1AdmMemberControllerTest.kt \
-  back/src/test/kotlin/com/back/boundedContexts/member/adapter/web/ApiV1MemberControllerWebMvcTest.kt
+  back/src/test/kotlin/com/back/boundedContexts/member/adapter/web/ApiV1MemberControllerWebMvcTest.kt \
+  front/contracts/openapi/openapi.json \
+  front/packages/shared-contracts/src/generated/backend-openapi.d.ts
 git commit -m "feat(profile): global blog design 계약 추가"
 git push
 ```
@@ -1076,8 +1103,8 @@ In `docs/agent/auth.md`, add the member/profile contract invariant:
 Run in order:
 
 ```bash
-./gradlew -p back ktlintCheck
-./gradlew -p back test
+back/gradlew -p back ktlintCheck
+back/gradlew -p back test
 yarn --cwd front build
 node front/scripts/check-bundle-size.mjs
 yarn --cwd front playwright:preflight
@@ -1116,8 +1143,8 @@ Include:
 - 공개 블로그는 visitor-local 선택 UI 없이 published admin profile을 기준으로 렌더한다.
 
 ## Verification
-- [ ] ./gradlew -p back ktlintCheck
-- [ ] ./gradlew -p back test
+- [ ] back/gradlew -p back ktlintCheck
+- [ ] back/gradlew -p back test
 - [ ] yarn --cwd front build
 - [ ] node front/scripts/check-bundle-size.mjs
 - [ ] yarn --cwd front playwright:preflight

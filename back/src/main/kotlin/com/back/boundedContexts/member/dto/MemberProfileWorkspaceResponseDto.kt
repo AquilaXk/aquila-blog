@@ -50,6 +50,8 @@ data class MemberProfileWorkspaceContentDto(
     val blogTitle: String,
     val homeIntroTitle: String,
     val homeIntroDescription: String,
+    val blogDesign: String,
+    val legacyBlogScheme: String,
     val serviceLinks: List<MemberProfileLinkItemDto>,
     val contactLinks: List<MemberProfileLinkItemDto>,
 ) {
@@ -66,6 +68,8 @@ data class MemberProfileWorkspaceContentDto(
         blogTitle = content.blogTitle,
         homeIntroTitle = content.homeIntroTitle,
         homeIntroDescription = content.homeIntroDescription,
+        blogDesign = content.blogDesign,
+        legacyBlogScheme = content.legacyBlogScheme,
         serviceLinks = content.serviceLinks.map(::MemberProfileLinkItemDto),
         contactLinks = content.contactLinks.map(::MemberProfileLinkItemDto),
     )

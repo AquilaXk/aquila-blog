@@ -62,6 +62,8 @@ class MemberUseCaseAdapter(
         blogTitle: String,
         homeIntroTitle: String,
         homeIntroDescription: String,
+        blogDesign: String,
+        legacyBlogScheme: String,
         serviceLinks: List<MemberProfileLinkItem>,
         contactLinks: List<MemberProfileLinkItem>,
     ) = memberApplicationService.modifyProfileCard(
@@ -74,6 +76,8 @@ class MemberUseCaseAdapter(
         blogTitle = blogTitle,
         homeIntroTitle = homeIntroTitle,
         homeIntroDescription = homeIntroDescription,
+        blogDesign = blogDesign,
+        legacyBlogScheme = legacyBlogScheme,
         serviceLinks = serviceLinks,
         contactLinks = contactLinks,
     )

@@ -100,8 +100,8 @@
 - Playwright preflight: `yarn --cwd front playwright:preflight`.
 - Public regression: `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 yarn --cwd front playwright test e2e/smoke.spec.ts e2e/mobile-layout.spec.ts --workers=1`.
 - Layout/perf regression: `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 yarn --cwd front playwright test e2e/perf.spec.ts --workers=1`.
-- Backend Kotlin style: `./gradlew -p back ktlintCheck`.
-- Backend tests: `./gradlew -p back test`.
+- Backend Kotlin style: `back/gradlew -p back ktlintCheck`.
+- Backend tests: `back/gradlew -p back test`.
 - Diff hygiene: `git diff --check`.
 
 ## Future Extension

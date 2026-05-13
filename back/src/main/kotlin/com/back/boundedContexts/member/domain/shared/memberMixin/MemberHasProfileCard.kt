@@ -14,6 +14,8 @@ const val ABOUT_DETAILS = "aboutDetails"
 const val BLOG_TITLE = "blogTitle"
 const val HOME_INTRO_TITLE = "homeIntroTitle"
 const val HOME_INTRO_DESCRIPTION = "homeIntroDescription"
+const val BLOG_DESIGN = "blogDesign"
+const val LEGACY_BLOG_SCHEME = "legacyBlogScheme"
 const val PROFILE_SERVICE_LINKS = "profileServiceLinks"
 const val PROFILE_CONTACT_LINKS = "profileContactLinks"
 
@@ -25,6 +27,8 @@ private const val ABOUT_DETAILS_DEFAULT_VALUE = ""
 private const val BLOG_TITLE_DEFAULT_VALUE = ""
 private const val HOME_INTRO_TITLE_DEFAULT_VALUE = ""
 private const val HOME_INTRO_DESCRIPTION_DEFAULT_VALUE = ""
+private const val BLOG_DESIGN_DEFAULT_VALUE = BLOG_DESIGN_LEGACY
+private const val LEGACY_BLOG_SCHEME_DEFAULT_VALUE = LEGACY_BLOG_SCHEME_DARK
 const val PROFILE_SERVICE_LINK_ICON_DEFAULT_VALUE = "service"
 const val PROFILE_CONTACT_LINK_ICON_DEFAULT_VALUE = "message"
 private const val PROFILE_LINK_LABEL_DEFAULT_VALUE = ""
@@ -203,6 +207,16 @@ interface MemberHasProfileCard : MemberAware {
             loader?.invoke() ?: MemberAttr(0, member, HOME_INTRO_DESCRIPTION, HOME_INTRO_DESCRIPTION_DEFAULT_VALUE)
         }
 
+    fun getOrInitBlogDesignAttr(loader: (() -> MemberAttr)? = null): MemberAttr =
+        member.getOrPutAttr(BLOG_DESIGN) {
+            loader?.invoke() ?: MemberAttr(0, member, BLOG_DESIGN, BLOG_DESIGN_DEFAULT_VALUE)
+        }
+
+    fun getOrInitLegacyBlogSchemeAttr(loader: (() -> MemberAttr)? = null): MemberAttr =
+        member.getOrPutAttr(LEGACY_BLOG_SCHEME) {
+            loader?.invoke() ?: MemberAttr(0, member, LEGACY_BLOG_SCHEME, LEGACY_BLOG_SCHEME_DEFAULT_VALUE)
+        }
+
     fun getOrInitServiceLinksAttr(loader: (() -> MemberAttr)? = null): MemberAttr =
         member.getOrPutAttr(PROFILE_SERVICE_LINKS) {
             loader?.invoke() ?: MemberAttr(0, member, PROFILE_SERVICE_LINKS, "")
@@ -271,6 +285,18 @@ interface MemberHasProfileCard : MemberAware {
             getOrInitHomeIntroDescriptionAttr().strValue = value
         }
 
+    var blogDesign: String
+        get() = normalizeBlogDesign(getOrInitBlogDesignAttr().strValue)
+        set(value) {
+            getOrInitBlogDesignAttr().strValue = normalizeBlogDesign(value)
+        }
+
+    var legacyBlogScheme: String
+        get() = normalizeLegacyBlogScheme(getOrInitLegacyBlogSchemeAttr().strValue)
+        set(value) {
+            getOrInitLegacyBlogSchemeAttr().strValue = normalizeLegacyBlogScheme(value)
+        }
+
     var serviceLinks: List<MemberProfileLinkItem>
         get() =
             decodeProfileLinkItems(
@@ -316,6 +342,8 @@ interface MemberHasProfileCard : MemberAware {
                     blogTitle = blogTitle,
                     homeIntroTitle = homeIntroTitle,
                     homeIntroDescription = homeIntroDescription,
+                    blogDesign = blogDesign,
+                    legacyBlogScheme = legacyBlogScheme,
                     serviceLinks = serviceLinks,
                     contactLinks = contactLinks,
                 ),
@@ -360,6 +388,8 @@ interface MemberHasProfileCard : MemberAware {
         blogTitle = normalized.blogTitle
         homeIntroTitle = normalized.homeIntroTitle
         homeIntroDescription = normalized.homeIntroDescription
+        blogDesign = normalized.blogDesign
+        legacyBlogScheme = normalized.legacyBlogScheme
         serviceLinks = normalized.serviceLinks
         contactLinks = normalized.contactLinks
     }

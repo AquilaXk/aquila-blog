@@ -114,6 +114,10 @@ class ApiV1AdmMemberController(
         val homeIntroTitle: String = "",
         @field:Size(max = 500)
         val homeIntroDescription: String = "",
+        @field:Size(max = 20)
+        val blogDesign: String? = null,
+        @field:Size(max = 20)
+        val legacyBlogScheme: String? = null,
         @field:Size(max = 30)
         val serviceLinks: List<@Valid ProfileCardLinkItemRequest> = emptyList(),
         @field:Size(max = 30)
@@ -181,6 +185,10 @@ class ApiV1AdmMemberController(
         val homeIntroTitle: String = "",
         @field:Size(max = 500)
         val homeIntroDescription: String = "",
+        @field:Size(max = 20)
+        val blogDesign: String? = null,
+        @field:Size(max = 20)
+        val legacyBlogScheme: String? = null,
         @field:Size(max = 30)
         val serviceLinks: List<@Valid ProfileCardLinkItemRequest> = emptyList(),
         @field:Size(max = 30)
@@ -356,6 +364,8 @@ class ApiV1AdmMemberController(
             blogTitle = reqBody.blogTitle.trim(),
             homeIntroTitle = reqBody.homeIntroTitle.trim(),
             homeIntroDescription = reqBody.homeIntroDescription.trim(),
+            blogDesign = reqBody.blogDesign?.trim() ?: member.blogDesign,
+            legacyBlogScheme = reqBody.legacyBlogScheme?.trim() ?: member.legacyBlogScheme,
             serviceLinks = reqBody.serviceLinks.normalize(LinkSection.SERVICE),
             contactLinks = reqBody.contactLinks.normalize(LinkSection.CONTACT),
         )
@@ -371,7 +381,7 @@ class ApiV1AdmMemberController(
         @RequestBody @Valid reqBody: UpdateProfileWorkspaceDraftRequest,
     ): MemberProfileWorkspaceResponseDto {
         val member = memberUseCase.findById(id).orElseThrow()
-        memberUseCase.saveProfileWorkspaceDraft(member, reqBody.toDomain())
+        memberUseCase.saveProfileWorkspaceDraft(member, reqBody.toDomain(member.blogDesign, member.legacyBlogScheme))
         return currentMemberProfileQueryUseCase.getWorkspaceById(id)
     }
 
@@ -410,7 +420,10 @@ class ApiV1AdmMemberController(
             )
         }
 
-    private fun UpdateProfileWorkspaceDraftRequest.toDomain(): MemberProfileWorkspaceContent =
+    private fun UpdateProfileWorkspaceDraftRequest.toDomain(
+        currentBlogDesign: String,
+        currentLegacyBlogScheme: String,
+    ): MemberProfileWorkspaceContent =
         MemberProfileWorkspaceContent(
             profileImageUrl = profileImageUrl.trim(),
             profileRole = profileRole.trim(),
@@ -442,6 +455,8 @@ class ApiV1AdmMemberController(
             blogTitle = blogTitle.trim(),
             homeIntroTitle = homeIntroTitle.trim(),
             homeIntroDescription = homeIntroDescription.trim(),
+            blogDesign = blogDesign?.trim() ?: currentBlogDesign,
+            legacyBlogScheme = legacyBlogScheme?.trim() ?: currentLegacyBlogScheme,
             serviceLinks = serviceLinks.normalize(LinkSection.SERVICE),
             contactLinks = contactLinks.normalize(LinkSection.CONTACT),
         )

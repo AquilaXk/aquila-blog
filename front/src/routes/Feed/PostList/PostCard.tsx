@@ -26,9 +26,6 @@ const FEED_CARD_SUMMARY_LINES = uiTokens.feed.card.summaryLines
 const FEED_CARD_SUMMARY_LINE_HEIGHT = uiTokens.feed.card.summaryLineHeight
 const FEED_CARD_TITLE_LINE_HEIGHT = uiTokens.feed.card.titleLineHeight
 const FEED_CARD_RADIUS_PX = 4
-const FEED_CARD_SHADOW = "0 8px 20px rgba(2, 6, 23, 0.14)"
-const FEED_CARD_SHADOW_HOVER = "0 18px 34px rgba(2, 6, 23, 0.2)"
-const FEED_CARD_HOVER_TRANSLATE_PX = -8
 const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
   const author = data.author?.[0]
   const postPath = toCanonicalPostPath(data.id)
@@ -163,9 +160,13 @@ const StyledWrapper = styled.a`
   max-width: 100%;
   min-width: 0;
   text-decoration: none;
-  --post-card-shadow: ${FEED_CARD_SHADOW};
-  --post-card-shadow-hover: ${FEED_CARD_SHADOW_HOVER};
-  --post-card-translate-y: ${FEED_CARD_HOVER_TRANSLATE_PX}px;
+  --post-card-translate-y: -8px;
+  --post-card-border-color: ${({ theme }) => theme.publicDesign.border};
+  --post-card-border-strong: ${({ theme }) => theme.publicDesign.borderStrong};
+  --post-card-surface: ${({ theme }) => theme.publicDesign.surface};
+  --post-card-surface-elevated: ${({ theme }) => theme.publicDesign.surfaceElevated};
+  --post-card-shadow-current: ${({ theme }) => theme.publicDesign.shadow};
+  --post-card-shadow-hover-current: ${({ theme }) => theme.publicDesign.shadow};
 
   &[data-layout="regular"] {
     content-visibility: auto;
@@ -186,16 +187,16 @@ const StyledWrapper = styled.a`
     display: flex;
     flex-direction: column;
     border-radius: ${FEED_CARD_RADIUS_PX}px;
-    border: ${({ theme }) => `${theme.variables.ui.card.borderWidth}px solid ${theme.colors.gray4}`};
-    background: ${({ theme }) => theme.colors.gray1};
-    box-shadow: var(--post-card-shadow);
+    border: ${({ theme }) => `${theme.variables.ui.card.borderWidth}px solid var(--post-card-border-color)`};
+    background: var(--post-card-surface);
+    box-shadow: var(--post-card-shadow-current);
 
     > .thumbnail {
       position: relative;
       width: 100%;
       max-width: 100%;
       aspect-ratio: 1.92 / 1;
-      background-color: ${({ theme }) => theme.colors.gray4};
+      background-color: var(--post-card-surface-elevated);
       overflow: hidden;
       isolation: isolate;
 
@@ -204,7 +205,7 @@ const StyledWrapper = styled.a`
       }
 
       &.placeholder {
-        background: ${({ theme }) => theme.colors.gray3};
+        background: var(--post-card-surface-elevated);
       }
 
       &::after {
@@ -293,7 +294,7 @@ const StyledWrapper = styled.a`
       > .footer {
         margin-top: auto;
         padding-top: 0.74rem;
-        border-top: 1px solid ${({ theme }) => theme.colors.gray4};
+        border-top: 1px solid var(--post-card-border-color);
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -313,7 +314,7 @@ const StyledWrapper = styled.a`
             overflow: hidden;
             flex: 0 0 auto;
             border: none;
-            background: ${({ theme }) => theme.colors.gray4};
+            background: var(--post-card-surface-elevated);
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -371,9 +372,8 @@ const StyledWrapper = styled.a`
     &:hover article,
     &:focus-visible article {
       transform: translateY(${({ theme }) => (theme.scheme === "light" ? "-2px" : "var(--post-card-translate-y)")});
-      box-shadow: ${({ theme }) =>
-        theme.scheme === "light" ? "0 8px 18px rgba(15, 23, 42, 0.06)" : "var(--post-card-shadow-hover)"};
-      border-color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray5 : theme.colors.gray5)};
+      box-shadow: var(--post-card-shadow-hover-current);
+      border-color: var(--post-card-border-strong);
 
       > .thumbnail img {
         transform: scale(${({ theme }) => (theme.scheme === "light" ? 1.01 : 1.025)});
@@ -386,8 +386,6 @@ const StyledWrapper = styled.a`
   }
 
   @media (max-width: 640px) {
-    --post-card-shadow: ${FEED_CARD_SHADOW};
-    --post-card-shadow-hover: ${FEED_CARD_SHADOW_HOVER};
     --post-card-translate-y: -4px;
 
     article {

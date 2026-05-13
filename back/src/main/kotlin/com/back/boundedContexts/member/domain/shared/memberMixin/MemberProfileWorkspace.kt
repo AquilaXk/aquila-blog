@@ -4,6 +4,22 @@ import com.back.standard.util.Ut
 
 const val PROFILE_WORKSPACE_DRAFT = "profileWorkspaceDraft"
 const val PROFILE_WORKSPACE_PUBLISHED = "profileWorkspacePublished"
+const val BLOG_DESIGN_LEGACY = "legacy"
+const val BLOG_DESIGN_GRID = "grid"
+const val LEGACY_BLOG_SCHEME_LIGHT = "light"
+const val LEGACY_BLOG_SCHEME_DARK = "dark"
+
+fun normalizeBlogDesign(value: String?): String =
+    when (value?.trim()?.lowercase()) {
+        BLOG_DESIGN_GRID -> BLOG_DESIGN_GRID
+        else -> BLOG_DESIGN_LEGACY
+    }
+
+fun normalizeLegacyBlogScheme(value: String?): String =
+    when (value?.trim()?.lowercase()) {
+        LEGACY_BLOG_SCHEME_LIGHT -> LEGACY_BLOG_SCHEME_LIGHT
+        else -> LEGACY_BLOG_SCHEME_DARK
+    }
 
 data class MemberProfileAboutSectionBlock(
     val id: String = "",
@@ -34,6 +50,8 @@ data class MemberProfileWorkspaceContent(
     val blogTitle: String = "",
     val homeIntroTitle: String = "",
     val homeIntroDescription: String = "",
+    val blogDesign: String = BLOG_DESIGN_LEGACY,
+    val legacyBlogScheme: String = LEGACY_BLOG_SCHEME_DARK,
     val serviceLinks: List<MemberProfileLinkItem> = emptyList(),
     val contactLinks: List<MemberProfileLinkItem> = emptyList(),
 )
@@ -161,6 +179,8 @@ fun normalizeMemberProfileWorkspaceContent(content: MemberProfileWorkspaceConten
         blogTitle = content.blogTitle.trim(),
         homeIntroTitle = content.homeIntroTitle.trim(),
         homeIntroDescription = content.homeIntroDescription.trim(),
+        blogDesign = normalizeBlogDesign(content.blogDesign),
+        legacyBlogScheme = normalizeLegacyBlogScheme(content.legacyBlogScheme),
         serviceLinks =
             content.serviceLinks.map {
                 MemberProfileLinkItem(

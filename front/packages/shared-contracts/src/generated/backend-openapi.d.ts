@@ -1243,6 +1243,8 @@ export interface components {
             blogTitle?: string;
             homeIntroTitle?: string;
             homeIntroDescription?: string;
+            blogDesign?: string;
+            legacyBlogScheme?: string;
             serviceLinks?: components["schemas"]["ProfileCardLinkItemRequest"][];
             contactLinks?: components["schemas"]["ProfileCardLinkItemRequest"][];
         };
@@ -1278,6 +1280,8 @@ export interface components {
             blogTitle?: string;
             homeIntroTitle?: string;
             homeIntroDescription?: string;
+            blogDesign?: string;
+            legacyBlogScheme?: string;
             serviceLinks?: components["schemas"]["MemberProfileLinkItemDto"][];
             contactLinks?: components["schemas"]["MemberProfileLinkItemDto"][];
         };
@@ -1593,6 +1597,8 @@ export interface components {
             blogTitle?: string;
             homeIntroTitle?: string;
             homeIntroDescription?: string;
+            blogDesign?: string;
+            legacyBlogScheme?: string;
             serviceLinks?: components["schemas"]["MemberProfileLinkItemDto"][];
             contactLinks?: components["schemas"]["MemberProfileLinkItemDto"][];
             admin?: boolean;
@@ -1609,6 +1615,8 @@ export interface components {
             blogTitle?: string;
             homeIntroTitle?: string;
             homeIntroDescription?: string;
+            blogDesign?: string;
+            legacyBlogScheme?: string;
             serviceLinks?: components["schemas"]["ProfileCardLinkItemRequest"][];
             contactLinks?: components["schemas"]["ProfileCardLinkItemRequest"][];
         };

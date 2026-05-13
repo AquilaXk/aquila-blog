@@ -1,12 +1,27 @@
 import { IncomingMessage } from "http"
 import { CONFIG } from "site.config"
 import { AdminProfile } from "src/hooks/useAdminProfile"
-import { DEFAULT_ABOUT_HEADLINE, DEFAULT_ABOUT_PROJECT_SECTION_TITLE, DEFAULT_ABOUT_PROJECTS } from "src/libs/profileWorkspace"
+import {
+  DEFAULT_ABOUT_HEADLINE,
+  DEFAULT_ABOUT_PROJECT_SECTION_TITLE,
+  DEFAULT_ABOUT_PROJECTS,
+  normalizeBlogDesign,
+  normalizeLegacyBlogScheme,
+} from "src/libs/profileWorkspace"
 import { serverApiFetch } from "./backend"
 
 type FetchServerAdminProfileOptions = {
   timeoutMs?: number
 }
+
+export type StaticAdminProfileSeedSource = "published" | "static-fallback"
+
+type StaticAdminProfileSeed = {
+  profile: AdminProfile
+  source: StaticAdminProfileSeedSource
+}
+
+type FetchStaticAdminProfile = () => Promise<AdminProfile>
 
 const ADMIN_PROFILE_SNAPSHOT_COOKIE = "admin_profile_snapshot_v1"
 const ADMIN_PROFILE_SNAPSHOT_MAX_STALE_MS = 1000 * 60 * 60 * 6
@@ -64,7 +79,25 @@ export const buildStaticAdminProfileSnapshot = (): AdminProfile => ({
   blogTitle: CONFIG.blog.title,
   homeIntroTitle: CONFIG.blog.homeIntroTitle,
   homeIntroDescription: CONFIG.blog.homeIntroDescription,
+  blogDesign: "legacy",
+  legacyBlogScheme: "dark",
 })
+
+export const resolveStaticAdminProfileSeed = async (
+  fetchProfile: FetchStaticAdminProfile
+): Promise<StaticAdminProfileSeed> => {
+  try {
+    return {
+      profile: await fetchProfile(),
+      source: "published",
+    }
+  } catch {
+    return {
+      profile: buildStaticAdminProfileSnapshot(),
+      source: "static-fallback",
+    }
+  }
+}
 
 export const buildPersistedAdminProfileSnapshot = (profile: AdminProfile): AdminProfile => ({
   username: profile.username,
@@ -85,6 +118,8 @@ export const buildPersistedAdminProfileSnapshot = (profile: AdminProfile): Admin
   blogTitle: profile.blogTitle,
   homeIntroTitle: profile.homeIntroTitle,
   homeIntroDescription: profile.homeIntroDescription,
+  blogDesign: normalizeBlogDesign(profile.blogDesign),
+  legacyBlogScheme: normalizeLegacyBlogScheme(profile.legacyBlogScheme),
   serviceLinks: profile.serviceLinks || [],
   contactLinks: profile.contactLinks || [],
 })
@@ -122,6 +157,8 @@ export const readAdminProfileSnapshotFromCookie = (req: IncomingMessage): AdminP
       blogTitle: parsed.blogTitle,
       homeIntroTitle: parsed.homeIntroTitle,
       homeIntroDescription: parsed.homeIntroDescription,
+      blogDesign: normalizeBlogDesign(parsed.blogDesign),
+      legacyBlogScheme: normalizeLegacyBlogScheme(parsed.legacyBlogScheme),
       serviceLinks: Array.isArray(parsed.serviceLinks) ? parsed.serviceLinks : [],
       contactLinks: Array.isArray(parsed.contactLinks) ? parsed.contactLinks : [],
     })

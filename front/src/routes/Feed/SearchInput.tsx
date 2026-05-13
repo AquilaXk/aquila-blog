@@ -52,6 +52,11 @@ export default SearchInput
 
 const StyledWrapper = styled.div`
   min-width: 0;
+  --feed-search-border: ${({ theme }) => theme.publicDesign.border};
+  --feed-search-border-strong: ${({ theme }) => theme.publicDesign.borderStrong};
+  --feed-search-surface: ${({ theme }) => theme.publicDesign.surface};
+  --feed-search-surface-elevated: ${({ theme }) => theme.publicDesign.surfaceElevated};
+  --feed-search-accent-muted: ${({ theme }) => theme.publicDesign.accentMuted};
 
   > .field {
     display: flex;
@@ -61,10 +66,9 @@ const StyledWrapper = styled.div`
     min-height: ${FEED_SEARCH_FIELD_MIN_HEIGHT_PX}px;
     padding: 0 0.56rem;
     border-radius: ${({ theme }) => `${theme.variables.ui.button.radius}px`};
-    border: 1px solid ${({ theme }) => theme.colors.gray5};
-    background: ${({ theme }) => theme.colors.gray1};
-    box-shadow: ${({ theme }) =>
-      theme.scheme === "light" ? "0 1px 0 rgba(15, 23, 42, 0.02)" : "none"};
+    border: 1px solid var(--feed-search-border);
+    background: var(--feed-search-surface);
+    box-shadow: 0 0 0 1px var(--feed-search-accent-muted);
     transition: border-color 0.125s ease-in, background-color 0.125s ease-in, box-shadow 0.125s ease-in;
 
     .searchIcon {
@@ -92,7 +96,7 @@ const StyledWrapper = styled.div`
       height: 26px;
       padding: 0 0.52rem;
       border-radius: ${({ theme }) => `${theme.variables.ui.button.radiusPill}px`};
-      border: 1px solid ${({ theme }) => theme.colors.gray5};
+      border: 1px solid var(--feed-search-border);
       background: transparent;
       color: ${({ theme }) => theme.colors.gray10};
       font-size: 0.74rem;
@@ -104,8 +108,8 @@ const StyledWrapper = styled.div`
 
       &:hover {
         color: ${({ theme }) => theme.colors.gray12};
-        border-color: ${({ theme }) => theme.colors.gray6};
-        background: ${({ theme }) => theme.colors.gray3};
+        border-color: var(--feed-search-border-strong);
+        background: var(--feed-search-accent-muted);
       }
 
       @media (max-width: ${FEED_TAG_RAIL_CHIP_MAX_PX}px) {
@@ -151,10 +155,9 @@ const StyledWrapper = styled.div`
   }
 
   > .field:focus-within {
-    border-color: ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray1};
-    box-shadow: ${({ theme }) =>
-      theme.scheme === "light" ? "0 0 0 1px rgba(148, 163, 184, 0.16)" : "none"};
+    border-color: var(--feed-search-border-strong);
+    background: var(--feed-search-surface-elevated);
+    box-shadow: 0 0 0 1px var(--feed-search-accent-muted);
 
     .searchIcon {
       color: ${({ theme }) => theme.colors.gray11};

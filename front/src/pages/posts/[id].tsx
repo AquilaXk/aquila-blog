@@ -6,6 +6,7 @@ import CustomError from "src/routes/Error"
 import MetaConfig from "src/components/MetaConfig"
 import PostDetail from "src/routes/Detail/PostDetail"
 import usePostQuery from "src/hooks/usePostQuery"
+import type { AdminProfile } from "src/hooks/useAdminProfile"
 import { TPostComment } from "src/types"
 import {
   buildCanonicalPostDetailStaticPaths,
@@ -24,6 +25,8 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
 
 type DetailPageProps = {
   initialComments: TPostComment[] | null
+  initialAdminProfile: AdminProfile | null
+  initialAdminProfileSource: "published" | "static-fallback"
 }
 
 const CanonicalPostPage: NextPageWithLayout<DetailPageProps> = ({ initialComments }) => {

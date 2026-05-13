@@ -17,9 +17,11 @@ import {
 
 type Props = {
   fullWidth: boolean
+  showThemeToggle?: boolean
+  blogTitle?: string
 }
 
-const Header: React.FC<Props> = ({ fullWidth }) => {
+const Header: React.FC<Props> = ({ fullWidth, showThemeToggle = true, blogTitle }) => {
   const router = useRouter()
   const isPostDetailRoute = router.pathname === "/posts/[id]"
   const [isHiddenByScroll, setIsHiddenByScroll] = useState(false)
@@ -158,9 +160,9 @@ const Header: React.FC<Props> = ({ fullWidth }) => {
       }
     >
       <div data-full-width={fullWidth} className="container">
-        <Logo />
+        <Logo blogTitle={blogTitle} />
         <div className="nav">
-          <ThemeToggle />
+          {showThemeToggle ? <ThemeToggle /> : null}
           <NavBar />
         </div>
       </div>
@@ -175,8 +177,13 @@ const StyledWrapper = styled.div`
   position: sticky;
   top: 0;
   background-color: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(249, 251, 254, 0.94)" : `${theme.colors.gray1}e6`};
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+    theme.blogDesign === "grid"
+      ? `color-mix(in srgb, ${theme.publicDesign.pageBackgroundColor} 88%, transparent)`
+      : theme.scheme === "light"
+        ? "rgba(249, 251, 254, 0.94)"
+        : `${theme.colors.gray1}e6`};
+  border-bottom: 1px solid ${({ theme }) =>
+    theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   transform: translateY(0);

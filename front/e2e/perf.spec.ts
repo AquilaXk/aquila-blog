@@ -142,6 +142,7 @@ const mockFeedEndpoints = async (
   options?: {
     feedHandler?: (route: Route) => Promise<void>
     exploreHandler?: (route: Route) => Promise<void>
+    adminProfile?: Record<string, unknown>
   }
 ) => {
   const pixelPng = Buffer.from(
@@ -264,8 +265,11 @@ const mockFeedEndpoints = async (
         profileImageDirectUrl: "/avatar.png",
         profileRole: "Backend Developer",
         profileBio: "Hello World!",
+        blogDesign: "legacy",
+        legacyBlogScheme: "dark",
         serviceLinks: [],
         contactLinks: [],
+        ...options?.adminProfile,
       }),
     })
   })
@@ -1552,30 +1556,68 @@ test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지
   }
 })
 
-test("public 핵심 화면은 dark/light 테마 서피스 계층을 유지한다", async ({ page }) => {
+test("public 핵심 화면은 adminProfile grid 서피스 계층을 유지하고 운영 화면은 visitor scheme을 유지한다", async ({ page }) => {
   test.setTimeout(60_000)
-  await mockFeedEndpoints(page)
+  await mockFeedEndpoints(page, {
+    adminProfile: {
+      blogDesign: "grid",
+      legacyBlogScheme: "light",
+    },
+  })
   await mockDetailRailEndpoint(page, 991)
 
-  const scenarios = [
+  const publicScenarios = [
     { route: "/", viewport: { width: 1440, height: 900 } },
     { route: "/", viewport: { width: 393, height: 852 } },
     { route: "/", viewport: { width: 768, height: 1024 } },
     { route: "/posts/991", viewport: { width: 1440, height: 900 } },
     { route: "/posts/991", viewport: { width: 393, height: 852 } },
     { route: "/posts/991", viewport: { width: 768, height: 1024 } },
+  ] as const
+  const operationalScenarios = [
     { route: "/login", viewport: { width: 1440, height: 900 } },
     { route: "/login", viewport: { width: 393, height: 852 } },
     { route: "/login", viewport: { width: 768, height: 1024 } },
   ] as const
 
+  for (const scenario of publicScenarios) {
+    await applySchemePreference(page, "light")
+    await page.setViewportSize(scenario.viewport)
+    await gotoForPerf(page, scenario.route, {
+      readyText: scenario.route === "/posts/991" ? "상세 레일 스티키 회귀 점검" : undefined,
+    })
+    await expect
+      .poll(async () => (await getThemeSurfaceFingerprint(page)).bodyBg, {
+        timeout: 8000,
+      })
+      .toBe("rgb(9, 9, 9)")
+
+    const fingerprint = await getThemeSurfaceFingerprint(page)
+
+    expect(fingerprint.route).toBe(scenario.route)
+    expect(fingerprint.themeToggleLabel).toBeNull()
+    expect(fingerprint.bodyBg).toBe("rgb(9, 9, 9)")
+    expect(fingerprint.headerBg).not.toBeNull()
+    expect(fingerprint.headerBg).not.toBe(fingerprint.bodyBg)
+
+    if (scenario.route === "/") {
+      expect(fingerprint.searchBg).toBe("rgb(17, 17, 17)")
+      expect(fingerprint.searchBorder).toBe("rgba(151, 125, 85, 0.28)")
+      expect(fingerprint.cardBg).toBe("rgb(17, 17, 17)")
+      expect(fingerprint.cardBorder).toBe("rgba(151, 125, 85, 0.28)")
+    }
+
+    if (scenario.route === "/posts/991") {
+      expect(fingerprint.summaryBg).toBeNull()
+      expect(fingerprint.summaryBorder).toBeNull()
+    }
+  }
+
   for (const scheme of ["dark", "light"] as const) {
-    for (const scenario of scenarios) {
+    for (const scenario of operationalScenarios) {
       await applySchemePreference(page, scheme)
       await page.setViewportSize(scenario.viewport)
-      await gotoForPerf(page, scenario.route, {
-        readyText: scenario.route === "/posts/991" ? "상세 레일 스티키 회귀 점검" : undefined,
-      })
+      await gotoForPerf(page, scenario.route)
       await waitForSchemeReady(page, scheme)
       await page.waitForTimeout(120)
 
@@ -1614,23 +1656,8 @@ test("public 핵심 화면은 dark/light 테마 서피스 계층을 유지한다
         expect(fingerprint.headerBg?.includes(expected.headerBgChannel)).toBe(true)
       }
       expect(fingerprint.themeToggleLabel).toBe(expected.toggleLabel)
-
-      if (scenario.route === "/") {
-        expect(fingerprint.searchBg).toBe(expected.searchBg)
-        expect(fingerprint.searchBorder).toBe(expected.searchBorder)
-        expect(fingerprint.cardBg).toBe(expected.cardBg)
-        expect(fingerprint.cardBorder).toBe(expected.cardBorder)
-      }
-
-      if (scenario.route === "/posts/991") {
-        expect(fingerprint.summaryBg).toBeNull()
-        expect(fingerprint.summaryBorder).toBeNull()
-      }
-
-      if (scenario.route === "/login") {
-        expect(fingerprint.authShellBg).toBe(expected.authShellBg)
-        expect(fingerprint.authShellBorder).toBe(expected.authShellBorder)
-      }
+      expect(fingerprint.authShellBg).toBe(expected.authShellBg)
+      expect(fingerprint.authShellBorder).toBe(expected.authShellBorder)
     }
   }
 })

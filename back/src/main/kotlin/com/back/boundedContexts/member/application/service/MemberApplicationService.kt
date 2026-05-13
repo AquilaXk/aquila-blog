@@ -3,6 +3,8 @@ package com.back.boundedContexts.member.application.service
 import com.back.boundedContexts.member.application.port.output.MemberAttrRepositoryPort
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.domain.shared.memberMixin.BLOG_DESIGN
+import com.back.boundedContexts.member.domain.shared.memberMixin.LEGACY_BLOG_SCHEME
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
 import com.back.boundedContexts.member.domain.shared.memberMixin.normalizeMemberProfileWorkspaceContent
@@ -206,6 +208,8 @@ class MemberApplicationService(
         blogTitle: String,
         homeIntroTitle: String,
         homeIntroDescription: String,
+        blogDesign: String,
+        legacyBlogScheme: String,
         serviceLinks: List<MemberProfileLinkItem>,
         contactLinks: List<MemberProfileLinkItem>,
     ) {
@@ -225,6 +229,8 @@ class MemberApplicationService(
         member.blogTitle = blogTitle
         member.homeIntroTitle = homeIntroTitle
         member.homeIntroDescription = homeIntroDescription
+        member.blogDesign = blogDesign
+        member.legacyBlogScheme = legacyBlogScheme
         member.serviceLinks = serviceLinks
         member.contactLinks = contactLinks
         saveProfileRoleAttr(member)
@@ -241,6 +247,8 @@ class MemberApplicationService(
         saveBlogTitleAttr(member)
         saveHomeIntroTitleAttr(member)
         saveHomeIntroDescriptionAttr(member)
+        saveBlogDesignAttr(member)
+        saveLegacyBlogSchemeAttr(member)
         saveServiceLinksAttr(member)
         saveContactLinksAttr(member)
         syncDraftWorkspaceFromLegacy(member)
@@ -266,6 +274,8 @@ class MemberApplicationService(
         saveBlogTitleAttr(member)
         saveHomeIntroTitleAttr(member)
         saveHomeIntroDescriptionAttr(member)
+        saveBlogDesignAttr(member)
+        saveLegacyBlogSchemeAttr(member)
         saveServiceLinksAttr(member)
         saveContactLinksAttr(member)
         member.setProfileWorkspaceDraftContent(normalizedContent)
@@ -404,6 +414,22 @@ class MemberApplicationService(
 
     private fun saveHomeIntroDescriptionAttr(member: Member) {
         memberAttrRepository.save(member.getOrInitHomeIntroDescriptionAttr())
+    }
+
+    private fun saveBlogDesignAttr(member: Member) {
+        val attr =
+            memberAttrRepository.findBySubjectAndName(member, BLOG_DESIGN)
+                ?: member.getOrInitBlogDesignAttr()
+        attr.strValue = member.blogDesign
+        memberAttrRepository.save(attr)
+    }
+
+    private fun saveLegacyBlogSchemeAttr(member: Member) {
+        val attr =
+            memberAttrRepository.findBySubjectAndName(member, LEGACY_BLOG_SCHEME)
+                ?: member.getOrInitLegacyBlogSchemeAttr()
+        attr.strValue = member.legacyBlogScheme
+        memberAttrRepository.save(attr)
     }
 
     private fun saveServiceLinksAttr(member: Member) {

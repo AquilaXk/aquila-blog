@@ -6,6 +6,10 @@ import styled from "@emotion/styled"
 import Scripts from "src/layouts/RootLayout/Scripts"
 import useGtagEffect from "./useGtagEffect"
 import { useRouter } from "next/router"
+import { useQuery } from "@tanstack/react-query"
+import { CONFIG } from "site.config"
+import type { AdminProfile } from "src/hooks/useAdminProfile"
+import { resolvePublicBlogAppearance } from "src/libs/blogAppearance"
 import { isNavigationCancelledError, isRequestCancelledError } from "src/libs/router"
 import {
   CONTENT_MAX_WIDTH_PX,
@@ -17,13 +21,69 @@ import {
   WIDE_CONTENT_MAX_PX,
 } from "./layoutTiers"
 
-type Props = {
-  children: ReactNode
+const PUBLIC_ADMIN_PROFILE_QUERY_KEY = ["member", "adminProfile"] as const
+
+type UsePublicAdminProfileOptions = {
+  enabled: boolean
+  refetchOnMount: boolean
+  staleTimeMs?: number
 }
 
-const RootLayout = ({ children }: Props) => {
+const resolvePublicApiBaseUrl = () => {
+  const publicUrl = process.env.NEXT_PUBLIC_BACKEND_URL
+  return (publicUrl || "http://localhost:8080").replace(/\/+$/, "")
+}
+
+const fetchPublicAdminProfile = async (): Promise<AdminProfile | null> => {
+  const response = await fetch(`${resolvePublicApiBaseUrl()}/member/api/v1/members/adminProfile`, {
+    credentials: "include",
+  })
+  if (!response.ok) return null
+  return (await response.json()) as AdminProfile
+}
+
+const usePublicAdminProfile = (
+  initialProfile: AdminProfile | null,
+  options: UsePublicAdminProfileOptions
+): AdminProfile | null => {
+  const hasSeedProfile = initialProfile != null
+  const query = useQuery<AdminProfile | null>({
+    queryKey: PUBLIC_ADMIN_PROFILE_QUERY_KEY,
+    queryFn: fetchPublicAdminProfile,
+    enabled: typeof window !== "undefined" && options.enabled,
+    initialData: initialProfile ?? undefined,
+    staleTime: options.staleTimeMs ?? (hasSeedProfile ? 5 * 60 * 1000 : 0),
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnMount: options.enabled && (options.refetchOnMount || !hasSeedProfile),
+  })
+
+  return query.data ?? initialProfile
+}
+
+type Props = {
+  children: ReactNode
+  initialAdminProfile?: AdminProfile | null
+  initialAdminProfileShouldRefetch?: boolean
+}
+
+const RootLayout = ({
+  children,
+  initialAdminProfile = null,
+  initialAdminProfileShouldRefetch = false,
+}: Props) => {
   const [scheme] = useScheme()
   const router = useRouter()
+  const isPublicBlogRoute = router.pathname === "/" || router.pathname === "/about" || router.pathname === "/posts/[id]"
+  const adminProfile = usePublicAdminProfile(initialAdminProfile, {
+    enabled: isPublicBlogRoute,
+    refetchOnMount: initialAdminProfileShouldRefetch,
+    staleTimeMs: initialAdminProfileShouldRefetch ? 0 : undefined,
+  })
+  const publicAppearance = resolvePublicBlogAppearance(isPublicBlogRoute ? adminProfile : null)
+  const effectiveScheme = isPublicBlogRoute ? publicAppearance.scheme : scheme
+  const effectiveBlogDesign = isPublicBlogRoute ? publicAppearance.blogDesign : "legacy"
+  const headerBlogTitle = isPublicBlogRoute ? adminProfile?.blogTitle?.trim() || CONFIG.blog.title : CONFIG.blog.title
   const [isNavigating, setIsNavigating] = useState(false)
   useGtagEffect()
 
@@ -123,11 +183,11 @@ const RootLayout = ({ children }: Props) => {
   }, [])
 
   return (
-    <ThemeProvider scheme={scheme}>
+    <ThemeProvider scheme={effectiveScheme} blogDesign={effectiveBlogDesign}>
       <Scripts />
       {/* // TODO: replace react query */}
       {/* {metaConfig.type !== "Paper" && <Header />} */}
-      <Header fullWidth={false} />
+      <Header fullWidth={false} showThemeToggle={!isPublicBlogRoute} blogTitle={headerBlogTitle} />
       <RouteProgress data-busy={isNavigating} aria-hidden="true" />
       <StyledMain>{children}</StyledMain>
     </ThemeProvider>

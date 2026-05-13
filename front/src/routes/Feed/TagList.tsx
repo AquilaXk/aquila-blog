@@ -201,6 +201,13 @@ export default memo(TagList)
 
 const StyledWrapper = styled.div`
   min-width: 0;
+  --feed-tag-border: ${({ theme }) => theme.publicDesign.border};
+  --feed-tag-border-strong: ${({ theme }) => theme.publicDesign.borderStrong};
+  --feed-tag-hover-border: ${({ theme }) => theme.publicDesign.borderStrong};
+  --feed-tag-surface: ${({ theme }) => theme.publicDesign.surface};
+  --feed-tag-surface-elevated: ${({ theme }) => theme.publicDesign.surfaceElevated};
+  --feed-tag-accent: ${({ theme }) => theme.publicDesign.accent};
+  --feed-tag-accent-muted: ${({ theme }) => theme.publicDesign.accentMuted};
 
   .desktopPanel {
     display: none;
@@ -224,7 +231,7 @@ const StyledWrapper = styled.div`
     letter-spacing: -0.01em;
     line-height: 1.5;
     padding: 0 0 0.42rem;
-    border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+    border-bottom: 1px solid var(--feed-tag-border);
     display: inline-flex;
     align-items: center;
     gap: 0.44rem;
@@ -290,7 +297,7 @@ const StyledWrapper = styled.div`
     }
 
     &:focus-visible {
-      outline: 2px solid ${({ theme }) => theme.colors.accentBorder};
+      outline: 2px solid var(--feed-tag-border-strong);
       outline-offset: 1px;
     }
 
@@ -315,7 +322,7 @@ const StyledWrapper = styled.div`
     }
 
     &:focus-visible {
-      outline: 2px solid ${({ theme }) => theme.colors.accentBorder};
+      outline: 2px solid var(--feed-tag-border-strong);
       outline-offset: 2px;
       border-radius: 999px;
     }
@@ -333,7 +340,7 @@ const StyledWrapper = styled.div`
   }
 
   .desktopList button[data-active="true"] .name {
-    color: ${({ theme }) => theme.colors.accentLink};
+    color: var(--feed-tag-accent);
     font-weight: 700;
     text-decoration: none;
   }
@@ -346,7 +353,7 @@ const StyledWrapper = styled.div`
   }
 
   .desktopList button[data-active="true"] .count {
-    color: ${({ theme }) => theme.colors.accentLink};
+    color: var(--feed-tag-accent);
   }
 
   .chipRail {
@@ -405,8 +412,8 @@ const StyledWrapper = styled.div`
       position: absolute;
       inset: 5px 0;
       border-radius: 999px;
-      border: 1px solid ${({ theme }) => theme.colors.gray5};
-      background: ${({ theme }) => theme.colors.gray1};
+      border: 1px solid var(--feed-tag-border);
+      background: var(--feed-tag-surface);
       transition: all 0.125s ease-in;
       z-index: 0;
       pointer-events: none;
@@ -414,22 +421,22 @@ const StyledWrapper = styled.div`
 
     &:hover {
       &::after {
-        border-color: ${({ theme }) => theme.colors.gray7};
-        background: ${({ theme }) => theme.colors.gray2};
+        border-color: var(--feed-tag-hover-border);
+        background: var(--feed-tag-surface-elevated);
       }
     }
 
     &[data-active="true"] {
-      color: ${({ theme }) => theme.colors.accentLink};
+      color: var(--feed-tag-accent);
 
       &::after {
-        border-color: ${({ theme }) => theme.colors.accentBorder};
-        background: ${({ theme }) => theme.colors.gray2};
+        border-color: var(--feed-tag-border-strong);
+        background: var(--feed-tag-accent-muted);
       }
     }
 
     &:focus-visible {
-      outline: 2px solid ${({ theme }) => theme.colors.accentBorder};
+      outline: 2px solid var(--feed-tag-border-strong);
       outline-offset: 1px;
     }
 
@@ -450,7 +457,7 @@ const StyledWrapper = styled.div`
   }
 
   .chipRail button[data-active="true"] .count {
-    color: ${({ theme }) => theme.colors.accentLink};
+    color: var(--feed-tag-accent);
   }
 
   .chipRail .chipToggle {

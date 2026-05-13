@@ -119,7 +119,7 @@ const StyledWrapper = styled.div`
 `
 
 const IntroCard = styled.section`
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+  border-bottom: 1px solid ${({ theme }) => theme.publicDesign.border};
   padding: 0.28rem 0 0.96rem;
 
   h1 {

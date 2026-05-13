@@ -14,6 +14,15 @@ type FetchServerAdminProfileOptions = {
   timeoutMs?: number
 }
 
+export type StaticAdminProfileSeedSource = "published" | "static-fallback"
+
+type StaticAdminProfileSeed = {
+  profile: AdminProfile
+  source: StaticAdminProfileSeedSource
+}
+
+type FetchStaticAdminProfile = () => Promise<AdminProfile>
+
 const ADMIN_PROFILE_SNAPSHOT_COOKIE = "admin_profile_snapshot_v1"
 const ADMIN_PROFILE_SNAPSHOT_MAX_STALE_MS = 1000 * 60 * 60 * 6
 
@@ -73,6 +82,22 @@ export const buildStaticAdminProfileSnapshot = (): AdminProfile => ({
   blogDesign: "legacy",
   legacyBlogScheme: "dark",
 })
+
+export const resolveStaticAdminProfileSeed = async (
+  fetchProfile: FetchStaticAdminProfile
+): Promise<StaticAdminProfileSeed> => {
+  try {
+    return {
+      profile: await fetchProfile(),
+      source: "published",
+    }
+  } catch {
+    return {
+      profile: buildStaticAdminProfileSnapshot(),
+      source: "static-fallback",
+    }
+  }
+}
 
 export const buildPersistedAdminProfileSnapshot = (profile: AdminProfile): AdminProfile => ({
   username: profile.username,

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+import path from "node:path"
 import { expect, test, type Page } from "@playwright/test"
 
 const MOBILE_VIEWPORT = { width: 393, height: 852 }
@@ -9,6 +11,39 @@ test.use({
   viewport: MOBILE_VIEWPORT,
   isMobile: true,
   hasTouch: true,
+})
+
+const readSourceFile = (sourcePath: string) => readFileSync(path.resolve(__dirname, "..", sourcePath), "utf8")
+
+test("grid design은 공개 화면 토큰만 사용하고 article typography를 변경하지 않는다", () => {
+  const publicSurfaceSources = [
+    "src/layouts/RootLayout/Header/index.tsx",
+    "src/layouts/RootLayout/Header/Logo.tsx",
+    "src/routes/Feed/index.tsx",
+    "src/routes/Feed/PostList/PostCard.tsx",
+    "src/routes/Feed/SearchInput.tsx",
+    "src/routes/Feed/TagList.tsx",
+    "src/routes/Feed/ProfileCard.tsx",
+    "src/routes/Feed/ServiceCard.tsx",
+    "src/routes/Feed/ContactCard.tsx",
+    "src/pages/about.tsx",
+    "src/routes/Detail/PostDetail/index.tsx",
+    "src/routes/Detail/PostDetail/PostHeader.tsx",
+  ].map((sourcePath) => [sourcePath, readSourceFile(sourcePath)] as const)
+  const themeSource = readSourceFile("src/styles/theme.ts")
+  const articleSurfaceSource = [
+    readSourceFile("src/routes/Detail/PostDetail/index.tsx"),
+    readSourceFile("src/routes/Detail/PostDetail/PostHeader.tsx"),
+  ].join("\n")
+
+  expect(themeSource).toContain('blogDesign === "grid"')
+  for (const [sourcePath, source] of publicSurfaceSources) {
+    expect(source, sourcePath).toContain("theme.publicDesign")
+  }
+  expect(articleSurfaceSource).not.toContain("font-size: ${({ theme }) =>")
+  expect(articleSurfaceSource).not.toContain("line-height: ${({ theme }) =>")
+  expect(articleSurfaceSource).not.toContain("font-family: ${({ theme }) =>")
+  expect(articleSurfaceSource).not.toContain("max-width: ${({ theme }) => theme.blogDesign")
 })
 
 const mockAvatarAsset = async (page: Page) => {

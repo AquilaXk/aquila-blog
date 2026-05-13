@@ -57,7 +57,7 @@ const StyledWrapper = styled.div`
   > .content {
     margin-bottom: 2.25rem;
     width: 100%;
-    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-bottom: 1px solid ${({ theme }) => theme.publicDesign.border};
     background: transparent;
     padding: 0 0 1rem;
 
@@ -67,8 +67,8 @@ const StyledWrapper = styled.div`
       margin: 0 auto 1rem;
       border-radius: 50%;
       overflow: hidden;
-      border: 1px solid ${({ theme }) => theme.colors.gray6};
-      background: transparent;
+      border: 1px solid ${({ theme }) => theme.publicDesign.border};
+      background: ${({ theme }) => theme.publicDesign.surface};
 
       &:after {
         content: "";

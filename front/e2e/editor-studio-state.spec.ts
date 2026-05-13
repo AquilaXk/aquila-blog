@@ -296,6 +296,14 @@ test.describe("editor studio state", () => {
     const editorStudioComposeWritingSurfaceSource = existsSync(editorStudioComposeWritingSurfacePath)
       ? readFileSync(editorStudioComposeWritingSurfacePath, "utf8")
       : ""
+    const editorStudioComposeWorkspacePath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioComposeWorkspace.tsx"
+    )
+    expect(existsSync(editorStudioComposeWorkspacePath)).toBe(true)
+    const editorStudioComposeWorkspaceSource = existsSync(editorStudioComposeWorkspacePath)
+      ? readFileSync(editorStudioComposeWorkspacePath, "utf8")
+      : ""
     const blockEditorShellSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"), "utf8")
     const blockEditorEngineSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"), "utf8")
     const blockSelectionModelSource = readFileSync(
@@ -420,20 +428,20 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).not.toContain("const PublishModal = styled.div`")
     expect(editorStudioSource).not.toContain("const PublishOverviewGrid = styled.div`")
     expect(editorStudioComposeAssistantPanelSource).toContain("export const EditorStudioComposeAssistantPanel =")
-    expect(editorStudioSource).toContain(
+    expect(editorStudioComposeWorkspaceSource).toContain(
       'import { EditorStudioComposeAssistantPanel } from "./EditorStudioComposeAssistantPanel"'
     )
-    expect(editorStudioSource.match(/<EditorStudioComposeAssistantPanel/g)?.length).toBe(1)
+    expect(editorStudioComposeWorkspaceSource.match(/<EditorStudioComposeAssistantPanel/g)?.length).toBe(1)
     expect(editorStudioComposeAssistantPanelSource).toContain("const ComposeAssistantPanel = styled.div`")
     expect(editorStudioComposeAssistantPanelSource).toContain("const PreviewResultCard = styled.article`")
     expect(editorStudioSource).not.toContain("const ComposeAssistantPanel = styled.div`")
     expect(editorStudioSource).not.toContain("const PreviewResultCard = styled.article`")
     expect(editorStudioSource).not.toContain("const PublishSettingsSummary = styled.div`")
     expect(editorStudioMetadataAssistantPanelSource).toContain("export const EditorStudioMetadataAssistantPanel =")
-    expect(editorStudioSource).toContain(
+    expect(editorStudioComposeWorkspaceSource).toContain(
       'import { EditorStudioMetadataAssistantPanel } from "./EditorStudioMetadataAssistantPanel"'
     )
-    expect(editorStudioSource.match(/<EditorStudioMetadataAssistantPanel/g)?.length).toBe(1)
+    expect(editorStudioComposeWorkspaceSource.match(/<EditorStudioMetadataAssistantPanel/g)?.length).toBe(1)
     expect(editorStudioMetadataAssistantPanelSource).toContain("<strong>태그 정리</strong>")
     expect(editorStudioMetadataAssistantPanelSource).toContain("<strong>보조 작업</strong>")
     expect(editorStudioSource).not.toContain("<strong>태그 정리</strong>")
@@ -597,10 +605,6 @@ test.describe("editor studio state", () => {
     expect(editorStudioDeleteConfirmDialogSource).not.toContain("deletePostsFromList")
     expect(editorStudioDeleteConfirmDialogSource).not.toContain("setDeleteConfirmState")
     expect(editorStudioComposeMobileChromeSource).toContain("export const EditorStudioComposeMobileChrome =")
-    expect(editorStudioSource).toContain(
-      'import { EditorStudioComposeMobileChrome } from "./EditorStudioComposeMobileChrome"'
-    )
-    expect(editorStudioSource.match(/<EditorStudioComposeMobileChrome/g)?.length).toBe(1)
     expect(editorStudioComposeMobileChromeSource).toContain("const MobileComposeStatusBar = styled.div`")
     expect(editorStudioComposeMobileChromeSource).toContain("const MobilePrimaryActionBar = styled.div`")
     expect(editorStudioSource).not.toContain("<MobileComposeStatusBar")
@@ -613,16 +617,57 @@ test.describe("editor studio state", () => {
     expect(editorStudioComposeMobileChromeSource).not.toContain("setMobileComposeStep")
     expect(editorStudioComposeMobileChromeSource).not.toContain("setPostVisibility")
     expect(editorStudioComposeWritingSurfaceSource).toContain("export const EditorStudioComposeWritingSurface =")
+    expect(editorStudioComposeWorkspaceSource).toContain("export const EditorStudioComposeWorkspace =")
     expect(editorStudioSource).toContain(
+      'import { EditorStudioComposeWorkspace } from "./EditorStudioComposeWorkspace"'
+    )
+    expect(editorStudioSource.match(/<EditorStudioComposeWorkspace/g)?.length).toBe(1)
+    expect(editorStudioSource).toContain("composeCallToActionLabel={composeCallToActionLabel}")
+    expect(editorStudioSource).not.toContain(
+      'import { EditorStudioComposeMobileChrome } from "./EditorStudioComposeMobileChrome"'
+    )
+    expect(editorStudioSource).not.toContain(
       'import { EditorStudioComposeWritingSurface } from "./EditorStudioComposeWritingSurface"'
     )
-    expect(editorStudioSource.match(/<EditorStudioComposeWritingSurface/g)?.length).toBe(1)
+    expect(editorStudioSource).not.toContain(
+      'import { EditorStudioComposeAssistantPanel } from "./EditorStudioComposeAssistantPanel"'
+    )
+    expect(editorStudioSource).not.toContain(
+      'import { EditorStudioMetadataAssistantPanel } from "./EditorStudioMetadataAssistantPanel"'
+    )
+    expect(editorStudioSource).not.toContain("<EditorStudioComposeMobileChrome")
+    expect(editorStudioSource).not.toContain("<EditorStudioComposeWritingSurface")
+    expect(editorStudioSource).not.toContain("<EditorStudioComposeAssistantPanel")
+    expect(editorStudioSource).not.toContain("<EditorStudioMetadataAssistantPanel")
+    expect(editorStudioComposeWorkspaceSource).toContain(
+      'import { EditorStudioComposeAssistantPanel } from "./EditorStudioComposeAssistantPanel"'
+    )
+    expect(editorStudioComposeWorkspaceSource).toContain("EditorStudioComposeMobileChrome")
+    expect(editorStudioComposeWorkspaceSource).toContain("EditorStudioComposeWritingSurface")
+    expect(editorStudioComposeWorkspaceSource).toContain("EditorStudioMetadataAssistantPanel")
+    expect(editorStudioComposeWorkspaceSource).toContain("primaryActionLabel={composeCallToActionLabel}")
+    expect(editorStudioComposeWorkspaceSource).toContain("{composeCallToActionLabel}")
+    expect(editorStudioComposeWorkspaceSource).toContain("const ComposeSurfaceSection = styled.section`")
+    expect(editorStudioComposeWorkspaceSource).toContain("const ComposeStudioLayout = styled.div`")
+    expect(editorStudioComposeWorkspaceSource).toContain("const SubActionRow = styled.div`")
+    expect(editorStudioComposeWorkspaceSource).toContain("const PrimaryButton = styled(Button)`")
+    expect(editorStudioComposeWorkspaceSource).not.toContain("data-mobile-visible={!isCompactMobileLayout}")
+    expect(editorStudioComposeWorkspaceSource).not.toContain('[data-mobile-visible="false"]')
     expect(editorStudioComposeWritingSurfaceSource).toContain("const ComposeMainColumn = styled.div`")
     expect(editorStudioComposeWritingSurfaceSource).toContain("const TitleInput = styled.textarea`")
     expect(editorStudioComposeWritingSurfaceSource).toContain("const WriterFooterBar = styled.div`")
+    expect(editorStudioSource).not.toContain("const ComposeSurfaceSection = styled")
+    expect(editorStudioSource).not.toContain("const ComposeStudioLayout = styled.div`")
+    expect(editorStudioSource).not.toContain("const SubActionRow = styled.div`")
+    expect(editorStudioSource).not.toContain("const PrimaryButton = styled(Button)`")
     expect(editorStudioSource).not.toContain("const ComposeMainColumn = styled.div`")
     expect(editorStudioSource).not.toContain("const TitleInput = styled.textarea")
     expect(editorStudioSource).not.toContain("const WriterFooterBar = styled.div`")
+    expect(editorStudioComposeWorkspaceSource).not.toContain("apiFetch(")
+    expect(editorStudioComposeWorkspaceSource).not.toContain("run(")
+    expect(editorStudioComposeWorkspaceSource).not.toContain("openPublishModal")
+    expect(editorStudioComposeWorkspaceSource).not.toContain("WriterEditorHost")
+    expect(editorStudioComposeWorkspaceSource).not.toContain("setPost")
     expect(editorStudioComposeWritingSurfaceSource).not.toContain("apiFetch(")
     expect(editorStudioComposeWritingSurfaceSource).not.toContain("run(")
     expect(editorStudioComposeWritingSurfaceSource).not.toContain("openPublishModal")

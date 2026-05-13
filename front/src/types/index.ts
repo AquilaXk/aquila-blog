@@ -97,3 +97,5 @@ export type TCategories = {
 }
 
 export type SchemeType = "light" | "dark"
+export type BlogDesignType = "legacy" | "grid"
+export type LegacyBlogScheme = "light" | "dark"

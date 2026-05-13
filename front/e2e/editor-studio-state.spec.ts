@@ -256,6 +256,14 @@ test.describe("editor studio state", () => {
     const editorStudioPostListPanelSource = existsSync(editorStudioPostListPanelPath)
       ? readFileSync(editorStudioPostListPanelPath, "utf8")
       : ""
+    const editorStudioContentWorkspacePath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioContentWorkspace.tsx"
+    )
+    expect(existsSync(editorStudioContentWorkspacePath)).toBe(true)
+    const editorStudioContentWorkspaceSource = existsSync(editorStudioContentWorkspacePath)
+      ? readFileSync(editorStudioContentWorkspacePath, "utf8")
+      : ""
     const editorStudioMobileStepNavigatorPath = path.resolve(
       __dirname,
       "../src/routes/Admin/EditorStudioMobileStepNavigator.tsx"
@@ -446,11 +454,16 @@ test.describe("editor studio state", () => {
     expect(editorStudioMetadataAssistantPanelSource).toContain("<strong>보조 작업</strong>")
     expect(editorStudioSource).not.toContain("<strong>태그 정리</strong>")
     expect(editorStudioSource).not.toContain("<strong>보조 작업</strong>")
-    expect(editorStudioSelectedPostToolsPanelSource).toContain("export const EditorStudioSelectedPostToolsPanel =")
+    expect(editorStudioContentWorkspaceSource).toContain("export const EditorStudioContentWorkspace =")
     expect(editorStudioSource).toContain(
+      'import { EditorStudioContentWorkspace } from "./EditorStudioContentWorkspace"'
+    )
+    expect(editorStudioSource.match(/<EditorStudioContentWorkspace/g)?.length).toBe(1)
+    expect(editorStudioSelectedPostToolsPanelSource).toContain("export const EditorStudioSelectedPostToolsPanel =")
+    expect(editorStudioContentWorkspaceSource).toContain(
       'import { EditorStudioSelectedPostToolsPanel } from "./EditorStudioSelectedPostToolsPanel"'
     )
-    expect(editorStudioSource.match(/<EditorStudioSelectedPostToolsPanel/g)?.length).toBe(1)
+    expect(editorStudioContentWorkspaceSource.match(/<EditorStudioSelectedPostToolsPanel/g)?.length).toBe(1)
     expect(editorStudioSelectedPostToolsPanelSource).toContain("다른 글 직접 불러오기")
     expect(editorStudioSelectedPostToolsPanelSource).toContain("post id 직접 불러오기")
     expect(editorStudioSelectedPostToolsPanelSource).toContain("<strong>{directLoadTitle}</strong>")
@@ -468,10 +481,10 @@ test.describe("editor studio state", () => {
     expect(editorStudioSelectedPostToolsPanelSource).not.toContain('run("hitPost"')
     expect(editorStudioSelectedPostToolsPanelSource).not.toContain('run("likePost"')
     expect(editorStudioSelectedPostPanelSource).toContain("export const EditorStudioSelectedPostPanel =")
-    expect(editorStudioSource).toContain(
+    expect(editorStudioContentWorkspaceSource).toContain(
       'import { EditorStudioSelectedPostPanel } from "./EditorStudioSelectedPostPanel"'
     )
-    expect(editorStudioSource.match(/<EditorStudioSelectedPostPanel/g)?.length).toBe(1)
+    expect(editorStudioContentWorkspaceSource.match(/<EditorStudioSelectedPostPanel/g)?.length).toBe(1)
     expect(editorStudioSelectedPostPanelSource).toContain("선택한 글")
     expect(editorStudioSelectedPostPanelSource).toContain("빠른 작업")
     expect(editorStudioSelectedPostPanelSource).toContain("편집 계속")
@@ -530,10 +543,10 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).not.toContain("const DevConsoleSection = styled.section`")
     expect(editorStudioSource).not.toContain("const EditorStudioResultPanel = styled.section`")
     expect(editorStudioPostQueryPanelSource).toContain("export const EditorStudioPostQueryPanel =")
-    expect(editorStudioSource).toContain(
+    expect(editorStudioContentWorkspaceSource).toContain(
       'import { EditorStudioPostQueryPanel } from "./EditorStudioPostQueryPanel"'
     )
-    expect(editorStudioSource.match(/<EditorStudioPostQueryPanel/g)?.length).toBe(1)
+    expect(editorStudioContentWorkspaceSource.match(/<EditorStudioPostQueryPanel/g)?.length).toBe(1)
     expect(editorStudioPostQueryPanelSource).toContain("글 목록 조회 조건")
     expect(editorStudioPostQueryPanelSource).toContain("고급 조회 옵션")
     expect(editorStudioSource).not.toContain("<QueryPanel")
@@ -546,10 +559,10 @@ test.describe("editor studio state", () => {
     expect(editorStudioPostQueryPanelSource).not.toContain("setListPageSize")
     expect(editorStudioPostQueryPanelSource).not.toContain("setListSort")
     expect(editorStudioPostListPanelSource).toContain("export const EditorStudioPostListPanel =")
-    expect(editorStudioSource).toContain(
+    expect(editorStudioContentWorkspaceSource).toContain(
       'import { EditorStudioPostListPanel } from "./EditorStudioPostListPanel"'
     )
-    expect(editorStudioSource.match(/<EditorStudioPostListPanel/g)?.length).toBe(1)
+    expect(editorStudioContentWorkspaceSource.match(/<EditorStudioPostListPanel/g)?.length).toBe(1)
     expect(editorStudioPostListPanelSource).toContain("관리자 글 리스트")
     expect(editorStudioPostListPanelSource).toContain("삭제 글 리스트")
     expect(editorStudioPostListPanelSource).toContain("현재 목록 전체 선택")
@@ -565,10 +578,10 @@ test.describe("editor studio state", () => {
     expect(editorStudioPostListPanelSource).not.toContain("openDeleteConfirm")
     expect(editorStudioPostListPanelSource).not.toContain("setPostId")
     expect(editorStudioMobileStepNavigatorSource).toContain("export const EditorStudioMobileStepNavigator =")
-    expect(editorStudioSource).toContain(
+    expect(editorStudioContentWorkspaceSource).toContain(
       'import { EditorStudioMobileStepNavigator } from "./EditorStudioMobileStepNavigator"'
     )
-    expect(editorStudioSource.match(/<EditorStudioMobileStepNavigator/g)?.length).toBe(1)
+    expect(editorStudioContentWorkspaceSource.match(/<EditorStudioMobileStepNavigator/g)?.length).toBe(1)
     expect(editorStudioMobileStepNavigatorSource).toContain("모바일 작업 단계")
     expect(editorStudioMobileStepNavigatorSource).toContain("현재 단계:")
     expect(editorStudioSource).not.toContain("<MobileStudioStepper")
@@ -579,16 +592,30 @@ test.describe("editor studio state", () => {
     expect(editorStudioMobileStepNavigatorSource).not.toContain("run(")
     expect(editorStudioMobileStepNavigatorSource).not.toContain("setActiveMobileStudioStep")
     expect(editorStudioUndoToastSource).toContain("export const EditorStudioUndoToast =")
-    expect(editorStudioSource).toContain(
+    expect(editorStudioContentWorkspaceSource).toContain(
       'import { EditorStudioUndoToast } from "./EditorStudioUndoToast"'
     )
-    expect(editorStudioSource.match(/<EditorStudioUndoToast/g)?.length).toBe(1)
+    expect(editorStudioContentWorkspaceSource.match(/<EditorStudioUndoToast/g)?.length).toBe(1)
     expect(editorStudioUndoToastSource).toContain("실행 취소")
     expect(editorStudioSource).not.toContain("<UndoToast")
     expect(editorStudioSource).not.toContain("const UndoToast = styled.div`")
     expect(editorStudioUndoToastSource).not.toContain("apiFetch(")
     expect(editorStudioUndoToastSource).not.toContain("run(")
     expect(editorStudioUndoToastSource).not.toContain("handleUndoSoftDelete")
+    expect(editorStudioSource).not.toContain("<ContentStudioGrid")
+    expect(editorStudioSource).not.toContain("<ContentStudioLeft")
+    expect(editorStudioSource).not.toContain("const ContentStudioGrid = styled.div`")
+    expect(editorStudioSource).not.toContain("const ContentStudioLeft = styled.div`")
+    expect(editorStudioSource).not.toContain("const GlobalNoticeBar = styled.div`")
+    expect(editorStudioContentWorkspaceSource).toContain("const ContentStudioGrid = styled.div`")
+    expect(editorStudioContentWorkspaceSource).toContain("const ContentStudioLeft = styled.div`")
+    expect(editorStudioContentWorkspaceSource).toContain("const GlobalNoticeBar = styled.div`")
+    expect(editorStudioContentWorkspaceSource).not.toContain("apiFetch(")
+    expect(editorStudioContentWorkspaceSource).not.toContain("run(")
+    expect(editorStudioContentWorkspaceSource).not.toContain("loadPostForEditor")
+    expect(editorStudioContentWorkspaceSource).not.toContain("openDeleteConfirm")
+    expect(editorStudioContentWorkspaceSource).not.toContain("setListScope")
+    expect(editorStudioContentWorkspaceSource).not.toContain("setSelectedPostIds")
     expect(editorStudioDeleteConfirmDialogSource).toContain("export const EditorStudioDeleteConfirmDialog =")
     expect(editorStudioSource).toContain(
       'import { EditorStudioDeleteConfirmDialog } from "./EditorStudioDeleteConfirmDialog"'

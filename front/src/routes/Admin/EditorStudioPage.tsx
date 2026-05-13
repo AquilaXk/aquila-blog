@@ -51,17 +51,12 @@ import {
   EditorStudioThumbnailMetaPanel,
 } from "./EditorStudioThumbnailPanels"
 import { EditorStudioPublishModal } from "./EditorStudioPublishModal"
-import { EditorStudioSelectedPostPanel } from "./EditorStudioSelectedPostPanel"
-import { EditorStudioSelectedPostToolsPanel } from "./EditorStudioSelectedPostToolsPanel"
 import { EditorStudioLegacyProfileSection } from "./EditorStudioLegacyProfileSection"
 import { EditorStudioLegacyUtilityPanel } from "./EditorStudioLegacyUtilityPanel"
 import { EditorStudioResultLogPanel } from "./EditorStudioResultLogPanel"
-import { EditorStudioPostQueryPanel } from "./EditorStudioPostQueryPanel"
-import { EditorStudioPostListPanel } from "./EditorStudioPostListPanel"
-import { EditorStudioMobileStepNavigator } from "./EditorStudioMobileStepNavigator"
-import { EditorStudioUndoToast } from "./EditorStudioUndoToast"
 import { EditorStudioDeleteConfirmDialog } from "./EditorStudioDeleteConfirmDialog"
 import { EditorStudioComposeWorkspace } from "./EditorStudioComposeWorkspace"
+import { EditorStudioContentWorkspace } from "./EditorStudioContentWorkspace"
 import {
   EditorStudioDedicatedEditorLoadingState,
   EditorStudioDedicatedEditorSurface,
@@ -2655,143 +2650,105 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
           )}
 
           {SHOW_LEGACY_CONTENT_STUDIO && (
-          <Section id="content-studio">
-            <SectionTop>
-              <div>
-                <h2>글 목록 관리</h2>
-                <SectionDescription>조회·선택·편집만 남겨 정리에 집중합니다.</SectionDescription>
-              </div>
-            </SectionTop>
-            {shouldShowGlobalNotice ? (
-              <GlobalNoticeBar data-tone={globalNotice.tone}>{globalNotice.text}</GlobalNoticeBar>
-            ) : null}
-            <EditorStudioMobileStepNavigator
-              steps={mobileStudioSurfaceSteps}
-              activeStep={activeMobileStudioStep}
-              stepLabels={MOBILE_STUDIO_STEP_LABEL}
-              stepDescriptions={MOBILE_STUDIO_STEP_DESCRIPTION}
-              prevStep={mobileStudioPrevStep}
-              nextStep={mobileStudioNextStep}
-              prevStepLabel={mobileStudioPrevStepLabel}
-              nextStepLabel={mobileStudioNextStepLabel}
+            <EditorStudioContentWorkspace
+              shouldShowGlobalNotice={shouldShowGlobalNotice}
+              globalNotice={globalNotice}
+              mobileStudioSurfaceSteps={mobileStudioSurfaceSteps}
+              activeMobileStudioStep={activeMobileStudioStep}
+              mobileStudioStepLabels={MOBILE_STUDIO_STEP_LABEL}
+              mobileStudioStepDescriptions={MOBILE_STUDIO_STEP_DESCRIPTION}
+              mobileStudioPrevStep={mobileStudioPrevStep}
+              mobileStudioNextStep={mobileStudioNextStep}
+              mobileStudioPrevStepLabel={mobileStudioPrevStepLabel}
+              mobileStudioNextStepLabel={mobileStudioNextStepLabel}
               isCompactMobileLayout={isCompactMobileLayout}
-              onStepChange={setActiveMobileStudioStep}
-            />
-            <ContentStudioGrid>
-              <ContentStudioLeft
-                data-mobile-visible={!isCompactMobileLayout || activeMobileStudioStep === "query" || activeMobileStudioStep === "list"}
-              >
-                <EditorStudioPostQueryPanel
-                  activeMobileStep={activeMobileStudioStep as ManageMobileStudioStep}
-                  isCompactMobileLayout={isCompactMobileLayout}
-                  listScope={listScope}
-                  listKeyword={listKw}
-                  listQuickPreset={listQuickPreset}
-                  hasListFiltersApplied={hasListFiltersApplied}
-                  isAdvancedOpen={isListAdvancedOpen}
-                  listPage={listPage}
-                  listPageSize={listPageSize}
-                  listSort={listSort}
-                  listSortOptions={LIST_SORT_OPTIONS}
-                  isRefreshDisabled={disabled("postList")}
-                  isTempPostDisabled={disabled("postTemp")}
-                  onListScopeChange={setListScope}
-                  onListKeywordChange={setListKw}
-                  onRefreshList={() => void loadAdminPosts()}
-                  onLoadOrCreateTempPost={() => void handleLoadOrCreateTempPost()}
-                  onApplyQuickPreset={applyListQuickPreset}
-                  onResetFilters={() => {
-                    setListQuickPreset("none")
-                    setListKw("")
-                    setListPage("1")
-                    setListPageSize("30")
-                    setListSort("CREATED_AT")
-                  }}
-                  onToggleAdvanced={() => setIsListAdvancedOpen((prev) => !prev)}
-                  onListPageChange={handleListPageChange}
-                  onListPageSizeChange={handleListPageSizeChange}
-                  onListSortChange={handleListSortChange}
-                />
-                <EditorStudioPostListPanel
-                  mobileVisible={!isCompactMobileLayout || activeMobileStudioStep === "list"}
-                  listScope={listScope}
-                  selectedPostIds={selectedPostIds}
-                  adminPostTotal={adminPostTotal}
-                  adminPostRows={adminPostRows}
-                  adminPostViewRows={adminPostViewRows}
-                  isAllVisiblePostsSelected={isAllVisiblePostsSelected}
-                  selectedPostIdSet={selectedPostIdSet}
-                  editorMode={editorMode}
-                  postId={postId}
-                  loadingKey={loadingKey}
-                  modifiedSortOrder={modifiedSortOrder}
-                  deletedListNotice={deletedListNotice}
-                  isRefreshDisabled={disabled("postList")}
-                  onToggleSelectAllVisiblePosts={toggleSelectAllVisiblePosts}
-                  onClearSelection={() => setSelectedPostIds([])}
-                  onRequestDeletePosts={(ids, headline) => openDeleteConfirm(ids, headline)}
-                  onRefreshList={() => void loadAdminPosts()}
-                  onTogglePostSelection={togglePostSelection}
-                  onToggleModifiedSortOrder={() => setModifiedSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))}
-                  onEditPost={(row) => {
-                    setPostId(String(row.id))
-                    void loadPostForEditor(String(row.id))
-                  }}
-                  onOpenPostDetail={(id) => void openPostDetailRoute(id)}
-                  onCopyPostDetailLink={(id, title) => void copyPostDetailLink(id, title)}
-                  onRestoreDeletedPost={(row) => void restoreDeletedPostFromList(row)}
-                  onHardDeletePost={(row) => void hardDeleteDeletedPostFromList(row)}
-                />
-              </ContentStudioLeft>
-
-              <EditorStudioSelectedPostPanel
-                mobileVisible={showSelectedPanelInManageSurface}
-                hasSelectedManagedPost={hasSelectedManagedPost}
-                editorModeLabel={editorModeLabel}
-                selectedPostLabel={selectedPostLabel}
-                postTitle={postTitle}
-                postId={postId}
-                postVersion={postVersion}
-                isTempDraftMode={isTempDraftMode}
-                postVisibility={postVisibility}
-                currentVisibilityText={currentVisibilityText}
-                isContinueEditingDisabled={editorMode !== "edit" || disabled("modifyPost")}
-                isCreateNewPostDisabled={loadingKey.length > 0}
-                isDeletePostDisabled={disabled("deletePost")}
-                onContinueEditing={handleContinueSelectedPostEditing}
-                onCreateNewPost={handleCreateNewPostFromSelectedPanel}
-                onDeletePost={handleDeleteSelectedPost}
-                toolsPanel={
-                  <EditorStudioSelectedPostToolsPanel
-                    hasSelectedManagedPost={hasSelectedManagedPost}
-                    isDirectLoadOpen={isDirectLoadOpen}
-                    onToggleDirectLoad={() => setIsDirectLoadOpen((prev) => !prev)}
-                    isSelectedToolsOpen={isSelectedToolsOpen}
-                    onToggleSelectedTools={() => setIsSelectedToolsOpen((prev) => !prev)}
-                    postId={postId}
-                    onPostIdChange={handleSelectedPostIdChange}
-                    isLoadPostDisabled={disabled("postOne")}
-                    onLoadPost={() => void loadPostForEditor()}
-                    isHitPostDisabled={disabled("hitPost")}
-                    onRunHitPost={() =>
-                      void run("hitPost", () => apiFetch(`/post/api/v1/posts/${postId}/hit`, { method: "POST" }))
-                    }
-                    isLikePostDisabled={disabled("likePost")}
-                    onRunLikePost={() =>
-                      void run("likePost", () => apiFetch(`/post/api/v1/posts/${postId}/like`, { method: "PUT" }))
-                    }
-                  />
-                }
-              />
-            </ContentStudioGrid>
-
-            <EditorStudioUndoToast
-              isVisible={Boolean(softDeleteUndoState)}
-              message={softDeleteUndoState?.message || ""}
+              onMobileStepChange={setActiveMobileStudioStep}
+              listScope={listScope}
+              listKeyword={listKw}
+              listQuickPreset={listQuickPreset}
+              hasListFiltersApplied={hasListFiltersApplied}
+              isListAdvancedOpen={isListAdvancedOpen}
+              listPage={listPage}
+              listPageSize={listPageSize}
+              listSort={listSort}
+              listSortOptions={LIST_SORT_OPTIONS}
+              isListRefreshDisabled={disabled("postList")}
+              isTempPostDisabled={disabled("postTemp")}
+              onListScopeChange={setListScope}
+              onListKeywordChange={setListKw}
+              onRefreshList={() => void loadAdminPosts()}
+              onLoadOrCreateTempPost={() => void handleLoadOrCreateTempPost()}
+              onApplyQuickPreset={applyListQuickPreset}
+              onResetFilters={() => {
+                setListQuickPreset("none")
+                setListKw("")
+                setListPage("1")
+                setListPageSize("30")
+                setListSort("CREATED_AT")
+              }}
+              onToggleListAdvanced={() => setIsListAdvancedOpen((prev) => !prev)}
+              onListPageChange={handleListPageChange}
+              onListPageSizeChange={handleListPageSizeChange}
+              onListSortChange={handleListSortChange}
+              selectedPostIds={selectedPostIds}
+              adminPostTotal={adminPostTotal}
+              adminPostRows={adminPostRows}
+              adminPostViewRows={adminPostViewRows}
+              isAllVisiblePostsSelected={isAllVisiblePostsSelected}
+              selectedPostIdSet={selectedPostIdSet}
+              editorMode={editorMode}
+              postId={postId}
+              loadingKey={loadingKey}
+              modifiedSortOrder={modifiedSortOrder}
+              deletedListNotice={deletedListNotice}
+              onToggleSelectAllVisiblePosts={toggleSelectAllVisiblePosts}
+              onClearSelection={() => setSelectedPostIds([])}
+              onRequestDeletePosts={(ids, headline) => openDeleteConfirm(ids, headline)}
+              onTogglePostSelection={togglePostSelection}
+              onToggleModifiedSortOrder={() => setModifiedSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))}
+              onEditPost={(row) => {
+                setPostId(String(row.id))
+                void loadPostForEditor(String(row.id))
+              }}
+              onOpenPostDetail={(id) => void openPostDetailRoute(id)}
+              onCopyPostDetailLink={(id, title) => void copyPostDetailLink(id, title)}
+              onRestoreDeletedPost={(row) => void restoreDeletedPostFromList(row)}
+              onHardDeletePost={(row) => void hardDeleteDeletedPostFromList(row)}
+              showSelectedPanelInManageSurface={showSelectedPanelInManageSurface}
+              hasSelectedManagedPost={hasSelectedManagedPost}
+              editorModeLabel={editorModeLabel}
+              selectedPostLabel={selectedPostLabel}
+              postTitle={postTitle}
+              postVersion={postVersion}
+              isTempDraftMode={isTempDraftMode}
+              postVisibility={postVisibility}
+              currentVisibilityText={currentVisibilityText}
+              isContinueEditingDisabled={editorMode !== "edit" || disabled("modifyPost")}
+              isCreateNewPostDisabled={loadingKey.length > 0}
+              isDeletePostDisabled={disabled("deletePost")}
+              onContinueEditing={handleContinueSelectedPostEditing}
+              onCreateNewPost={handleCreateNewPostFromSelectedPanel}
+              onDeletePost={handleDeleteSelectedPost}
+              isDirectLoadOpen={isDirectLoadOpen}
+              onToggleDirectLoad={() => setIsDirectLoadOpen((prev) => !prev)}
+              isSelectedToolsOpen={isSelectedToolsOpen}
+              onToggleSelectedTools={() => setIsSelectedToolsOpen((prev) => !prev)}
+              onPostIdChange={handleSelectedPostIdChange}
+              isLoadPostDisabled={disabled("postOne")}
+              onLoadPost={() => void loadPostForEditor()}
+              isHitPostDisabled={disabled("hitPost")}
+              onRunHitPost={() =>
+                void run("hitPost", () => apiFetch(`/post/api/v1/posts/${postId}/hit`, { method: "POST" }))
+              }
+              isLikePostDisabled={disabled("likePost")}
+              onRunLikePost={() =>
+                void run("likePost", () => apiFetch(`/post/api/v1/posts/${postId}/like`, { method: "PUT" }))
+              }
+              softDeleteUndoMessage={softDeleteUndoState?.message || ""}
+              isSoftDeleteUndoVisible={Boolean(softDeleteUndoState)}
               isUndoDisabled={disabled("undoDeletePost")}
-              onUndo={() => void handleUndoSoftDelete()}
+              onUndoSoftDelete={() => void handleUndoSoftDelete()}
             />
-          </Section>
           )}
 
         <EditorStudioDeleteConfirmDialog
@@ -3110,229 +3067,4 @@ const WorkspaceGrid = styled.div`
 
 const WorkspaceMain = styled.div`
   min-width: 0;
-`
-
-const Section = styled.section`
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  border-radius: 14px;
-  padding: 0.9rem;
-  margin-bottom: 1.2rem;
-  background: ${({ theme }) => theme.colors.gray2};
-  box-shadow: none;
-
-  h2 {
-    margin: 0;
-    font-size: 1.2rem;
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  &[id="content-studio"] {
-    border: 1px solid ${({ theme }) => theme.colors.gray5};
-    border-radius: 14px;
-    padding: 0.96rem;
-    background: ${({ theme }) => theme.colors.gray2};
-    box-shadow: none;
-    margin-bottom: 1.05rem;
-  }
-
-  @media (max-width: 420px) {
-    border-radius: 12px;
-    padding: 0.74rem;
-    margin-bottom: 0.95rem;
-  }
-`
-
-const SectionTop = styled.div`
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 0.95rem;
-`
-
-const SectionEyebrow = styled.span`
-  display: none;
-`
-
-const SectionDescription = styled.p`
-  margin: 0.22rem 0 0;
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.82rem;
-  line-height: 1.5;
-`
-
-const GlobalNoticeBar = styled.div`
-  margin-bottom: 0.9rem;
-  padding: 0.66rem 0.78rem;
-  border-radius: 10px;
-  font-size: 0.84rem;
-  line-height: 1.5;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-
-  &[data-tone="idle"] {
-    color: ${({ theme }) => theme.colors.gray10};
-    background: ${({ theme }) => theme.colors.gray2};
-    border-color: ${({ theme }) => theme.colors.gray6};
-  }
-
-  &[data-tone="loading"] {
-    color: ${({ theme }) => theme.colors.blue11};
-    background: ${({ theme }) => theme.colors.blue3};
-    border-color: ${({ theme }) => theme.colors.blue7};
-  }
-
-  &[data-tone="success"] {
-    color: ${({ theme }) => theme.colors.green11};
-    background: ${({ theme }) => theme.colors.green3};
-    border-color: ${({ theme }) => theme.colors.green7};
-  }
-
-  &[data-tone="error"] {
-    color: ${({ theme }) => theme.colors.red11};
-    background: ${({ theme }) => theme.colors.red3};
-    border-color: ${({ theme }) => theme.colors.red7};
-  }
-
-  @media (max-width: 420px) {
-    margin-bottom: 0.7rem;
-    padding: 0.58rem 0.62rem;
-    font-size: 0.8rem;
-  }
-`
-
-const ContentStudioGrid = styled.div`
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 1rem;
-  align-items: start;
-
-  @media (min-width: 1320px) {
-    grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
-  }
-
-  @media (max-width: 720px) {
-    gap: 0.76rem;
-  }
-`
-
-const ContentStudioLeft = styled.div`
-  display: grid;
-  gap: 0.95rem;
-  min-width: 0;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  border-radius: 12px;
-  background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.9rem;
-  box-shadow: none;
-  overflow: hidden;
-
-  @media (max-width: 720px) {
-    padding: 0.72rem;
-    gap: 0.8rem;
-  }
-
-  @media (max-width: 720px) {
-    &[data-mobile-visible="false"] {
-      display: none;
-    }
-  }
-`
-
-const FieldBox = styled.div`
-  display: grid;
-  gap: 0.26rem;
-
-  &.wide {
-    grid-column: span 2;
-
-    @media (max-width: 720px) {
-      grid-column: span 1;
-    }
-  }
-`
-
-const InlineStatus = styled.div`
-  margin-bottom: 0.85rem;
-  padding: 0.62rem 0.72rem;
-  border-radius: 8px;
-  font-size: 0.82rem;
-  line-height: 1.5;
-  width: 100%;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-
-  &[data-tone="idle"] {
-    color: ${({ theme }) => theme.colors.gray11};
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: transparent;
-  }
-
-  &[data-tone="loading"] {
-    color: ${({ theme }) => theme.colors.blue11};
-    border: 1px solid ${({ theme }) => theme.colors.blue7};
-    background: ${({ theme }) => theme.colors.blue3};
-  }
-
-  &[data-tone="success"] {
-    color: ${({ theme }) => theme.colors.green11};
-    border: 1px solid ${({ theme }) => theme.colors.green7};
-    background: ${({ theme }) => theme.colors.green3};
-  }
-
-  &[data-tone="error"] {
-    color: ${({ theme }) => theme.colors.red11};
-    border: 1px solid ${({ theme }) => theme.colors.red7};
-    background: ${({ theme }) => theme.colors.red3};
-  }
-`
-
-const FieldGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.7rem;
-
-  @media (max-width: 720px) {
-    grid-template-columns: 1fr;
-  }
-`
-
-const ActionRow = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-  margin-top: 0.85rem;
-  align-items: center;
-
-  > button {
-    min-width: 8.8rem;
-  }
-
-  @media (max-width: 720px) {
-    display: grid;
-    grid-template-columns: 1fr;
-
-    > button {
-      width: 100%;
-    }
-  }
-`
-
-const Input = styled.input`
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 8px;
-  padding: 0.72rem 0.8rem;
-  min-height: 44px;
-  min-width: 0;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray12};
-
-  &:focus-visible {
-    outline: none;
-    border-color: ${({ theme }) => theme.colors.blue8};
-    box-shadow: 0 0 0 4px ${({ theme }) => theme.colors.blue4};
-  }
 `

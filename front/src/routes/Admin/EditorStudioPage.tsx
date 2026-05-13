@@ -51,8 +51,6 @@ import {
   EditorStudioThumbnailMetaPanel,
 } from "./EditorStudioThumbnailPanels"
 import { EditorStudioPublishModal } from "./EditorStudioPublishModal"
-import { EditorStudioComposeAssistantPanel } from "./EditorStudioComposeAssistantPanel"
-import { EditorStudioMetadataAssistantPanel } from "./EditorStudioMetadataAssistantPanel"
 import { EditorStudioSelectedPostPanel } from "./EditorStudioSelectedPostPanel"
 import { EditorStudioSelectedPostToolsPanel } from "./EditorStudioSelectedPostToolsPanel"
 import { EditorStudioLegacyProfileSection } from "./EditorStudioLegacyProfileSection"
@@ -63,8 +61,7 @@ import { EditorStudioPostListPanel } from "./EditorStudioPostListPanel"
 import { EditorStudioMobileStepNavigator } from "./EditorStudioMobileStepNavigator"
 import { EditorStudioUndoToast } from "./EditorStudioUndoToast"
 import { EditorStudioDeleteConfirmDialog } from "./EditorStudioDeleteConfirmDialog"
-import { EditorStudioComposeMobileChrome } from "./EditorStudioComposeMobileChrome"
-import { EditorStudioComposeWritingSurface } from "./EditorStudioComposeWritingSurface"
+import { EditorStudioComposeWorkspace } from "./EditorStudioComposeWorkspace"
 import {
   EditorStudioDedicatedEditorLoadingState,
   EditorStudioDedicatedEditorSurface,
@@ -2809,139 +2806,89 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
           }}
         />
         {studioSurface === "compose" && (
-        <ComposeSurfaceSection>
-        <EditorSection data-mobile-visible={!isCompactMobileLayout || studioSurface === "compose"}>
-          <EditorStudioComposeMobileChrome
-            showStatus={isCompactMobileLayout}
-            showAction={isCompactMobileLayout && !isPublishModalOpen}
-            primaryStatus={mobileComposeStatusPrimary}
-            visibilityText={currentVisibilityText}
-            secondaryStatusText={mobileComposeStatusSecondary?.text}
-            primaryActionLabel={mobilePrimaryActionLabel}
-            primaryActionDisabled={mobilePrimaryActionDisabled}
+          <EditorStudioComposeWorkspace
+            isCompactMobileLayout={isCompactMobileLayout}
+            isPublishModalOpen={isPublishModalOpen}
+            mobilePrimaryStatus={mobileComposeStatusPrimary}
+            mobileSecondaryStatusText={mobileComposeStatusSecondary?.text}
+            mobilePrimaryActionLabel={mobilePrimaryActionLabel}
+            composeCallToActionLabel={composeCallToActionLabel}
+            mobilePrimaryActionDisabled={mobilePrimaryActionDisabled}
             onPrimaryAction={() => openPublishModal(editorPrimaryActionType)}
+            currentVisibilityText={currentVisibilityText}
+            editorModeLabel={editorModeLabel}
+            composePageTitle={composePageTitle}
+            composeSurfaceSubtitle={composeSurfaceSubtitle}
+            composeStatusText={composeStatusText}
+            composeStatusTone={composeStatusTone}
+            postSummary={postSummary}
+            postSummaryMaxLength={PREVIEW_SUMMARY_MAX_LENGTH}
+            onPostSummaryChange={setPostSummary}
+            isFillSummaryFromBodyDisabled={!postContent.trim()}
+            onFillSummaryFromBody={() => setPostSummary(makePreviewSummary(postContent))}
+            postTags={postTags}
+            tagDraft={tagDraft}
+            onTagDraftChange={setTagDraft}
+            onAddTags={addTagsToPost}
+            onAddTag={addTagToPost}
+            onRemoveTag={removeTagFromPost}
+            titleInputRef={handleTitleFieldRef}
+            postTitle={postTitle}
+            onPostTitleChange={handleTitleChange}
+            onPostTitleKeyDown={handleTitleKeyDown}
+            thumbnailImageFileInputRef={thumbnailImageFileInputRef}
+            onThumbnailImageFileChange={handleThumbnailImageFileChange}
+            contentLength={contentLength}
+            lineCount={lineCount}
+            imageCount={imageCount}
+            editorCanvas={composeEditorCanvas}
+            tagSummaryText={tagSummaryText}
+            isSaveDraftDisabled={loadingKey.length > 0}
+            onSaveLocalDraft={saveLocalDraft}
+            composeHeroSummary={composeHeroSummary}
+            isRecommendTagsDisabled={disabled("recommendTags") || !postContent.trim()}
+            isRecommendTagsLoading={loadingKey === "recommendTags"}
+            onRecommendTags={() => void handleRecommendTags()}
+            composeStatusEntries={composeStatusEntries}
+            activeVisibility={postVisibility}
+            visibilityOptions={PUBLISH_VISIBILITY_OPTIONS}
+            onVisibilityChange={setPostVisibility}
+            previewViewport={previewViewport}
+            previewViewportLabel={previewViewportConfig.label}
+            previewViewportOptions={previewViewportOptions}
+            onPreviewViewportChange={(viewport) => setPreviewViewport(viewport)}
+            previewFrameStyle={{ width: `min(100%, ${previewViewportConfig.cardWidth}px)` }}
+            previewThumbnailSrc={previewThumbnailSrc}
+            postThumbnailFocusX={postThumbnailFocusX}
+            postThumbnailFocusY={postThumbnailFocusY}
+            postThumbnailZoom={postThumbnailZoom}
+            onPreviewThumbnailError={() => setIsPreviewThumbnailError(true)}
+            previewVisibilityLabel={previewVisibilityLabel}
+            summaryPreview={composeSummaryPreview}
+            previewDateText={previewDateText}
+            previewAuthorAvatarSrc={previewAuthorAvatarSrc}
+            displayNameInitial={displayNameInitial}
+            displayName={displayName}
+            summaryLengthLabel={
+              postSummary.trim() ? `${postSummary.trim().length}/${PREVIEW_SUMMARY_MAX_LENGTH}` : "본문 기준 자동"
+            }
+            isComposeAssistOpen={isComposeAssistOpen}
+            onToggleComposeAssist={() => setIsComposeAssistOpen((prev) => !prev)}
+            thumbnailEditorPanel={thumbnailEditorPanel}
+            previewMetaEditorPanel={previewMetaEditorPanel}
+            isTagPanelOpen={activeMetaPanel === "tag"}
+            onToggleTagPanel={() => setActiveMetaPanel((prev) => (prev === "tag" ? null : "tag"))}
+            isUtilityPanelOpen={isComposeUtilityOpen}
+            onToggleUtilityPanel={() => setIsComposeUtilityOpen((prev) => !prev)}
+            metaNotice={metaNotice}
+            knownTags={knownTags}
+            tagUsageMap={tagUsageMap}
+            onToggleKnownTag={(tag) => (postTags.includes(tag) ? removeTagFromPost(tag) : addTagToPost(tag))}
+            onDeleteKnownTag={deleteTagFromCatalog}
+            onRestoreLocalDraft={restoreLocalDraft}
+            onClearLocalDraft={clearLocalDraft}
+            isClearLocalDraftDisabled={loadingKey.length > 0 || !localDraftSavedAt}
           />
-          <ComposeStudioLayout>
-            <EditorStudioComposeWritingSurface
-              editorModeLabel={editorModeLabel}
-              composePageTitle={composePageTitle}
-              composeSurfaceSubtitle={composeSurfaceSubtitle}
-              composeStatusText={composeStatusText}
-              composeStatusTone={composeStatusTone}
-              currentVisibilityText={currentVisibilityText}
-              postSummary={postSummary}
-              postSummaryMaxLength={PREVIEW_SUMMARY_MAX_LENGTH}
-              onPostSummaryChange={setPostSummary}
-              isFillSummaryFromBodyDisabled={!postContent.trim()}
-              onFillSummaryFromBody={() => setPostSummary(makePreviewSummary(postContent))}
-              postTags={postTags}
-              tagDraft={tagDraft}
-              onTagDraftChange={setTagDraft}
-              onAddTags={addTagsToPost}
-              onAddTag={addTagToPost}
-              onRemoveTag={removeTagFromPost}
-              titleInputRef={handleTitleFieldRef}
-              postTitle={postTitle}
-              onPostTitleChange={handleTitleChange}
-              onPostTitleKeyDown={handleTitleKeyDown}
-              thumbnailImageFileInputRef={thumbnailImageFileInputRef}
-              onThumbnailImageFileChange={handleThumbnailImageFileChange}
-              contentLength={contentLength}
-              lineCount={lineCount}
-              imageCount={imageCount}
-              editorCanvas={composeEditorCanvas}
-              tagSummaryText={tagSummaryText}
-              isSaveDraftDisabled={loadingKey.length > 0}
-              onSaveDraft={saveLocalDraft}
-              primaryActionDisabled={mobilePrimaryActionDisabled}
-              primaryActionLabel={composeCallToActionLabel}
-              onPrimaryAction={() => openPublishModal(editorPrimaryActionType)}
-            />
-
-            <ComposeAssistantColumn>
-              <EditorStudioComposeAssistantPanel
-                composeHeroSummary={composeHeroSummary}
-                publishAction={
-                  <PrimaryButton
-                    type="button"
-                    disabled={mobilePrimaryActionDisabled}
-                    onClick={() => openPublishModal(editorPrimaryActionType)}
-                  >
-                    {composeCallToActionLabel}
-                  </PrimaryButton>
-                }
-                tagRecommendationAction={
-                  <Button
-                    type="button"
-                    disabled={disabled("recommendTags") || !postContent.trim()}
-                    onClick={() => void handleRecommendTags()}
-                  >
-                    {loadingKey === "recommendTags" ? "태그 제안 중..." : "태그 제안"}
-                  </Button>
-                }
-                composeStatusEntries={composeStatusEntries}
-                activeVisibility={postVisibility}
-                visibilityOptions={PUBLISH_VISIBILITY_OPTIONS}
-                onVisibilityChange={setPostVisibility}
-                previewViewport={previewViewport}
-                previewViewportLabel={previewViewportConfig.label}
-                previewViewportOptions={previewViewportOptions}
-                onPreviewViewportChange={(viewport) => setPreviewViewport(viewport)}
-                previewFrameStyle={{ width: `min(100%, ${previewViewportConfig.cardWidth}px)` }}
-                previewThumbnailSrc={previewThumbnailSrc}
-                postThumbnailFocusX={postThumbnailFocusX}
-                postThumbnailFocusY={postThumbnailFocusY}
-                postThumbnailZoom={postThumbnailZoom}
-                onPreviewThumbnailError={() => setIsPreviewThumbnailError(true)}
-                previewVisibilityLabel={previewVisibilityLabel}
-                postTitle={postTitle}
-                summaryPreview={composeSummaryPreview}
-                previewDateText={previewDateText}
-                previewAuthorAvatarSrc={previewAuthorAvatarSrc}
-                displayNameInitial={displayNameInitial}
-                displayName={displayName}
-                summaryLengthLabel={
-                  postSummary.trim() ? `${postSummary.trim().length}/${PREVIEW_SUMMARY_MAX_LENGTH}` : "본문 기준 자동"
-                }
-                isComposeAssistOpen={isComposeAssistOpen}
-                onToggleComposeAssist={() => setIsComposeAssistOpen((prev) => !prev)}
-                thumbnailEditorPanel={thumbnailEditorPanel}
-                previewMetaEditorPanel={previewMetaEditorPanel}
-              >
-                <EditorStudioMetadataAssistantPanel
-                  isTagPanelOpen={activeMetaPanel === "tag"}
-                  onToggleTagPanel={() => setActiveMetaPanel((prev) => (prev === "tag" ? null : "tag"))}
-                  isUtilityPanelOpen={isComposeUtilityOpen}
-                  onToggleUtilityPanel={() => setIsComposeUtilityOpen((prev) => !prev)}
-                  metaNotice={metaNotice}
-                  knownTags={knownTags}
-                  selectedTags={postTags}
-                  tagUsageMap={tagUsageMap}
-                  onToggleTag={(tag) => (postTags.includes(tag) ? removeTagFromPost(tag) : addTagToPost(tag))}
-                  onDeleteTag={deleteTagFromCatalog}
-                  utilityActions={
-                    <SubActionRow>
-                      <Button type="button" disabled={loadingKey.length > 0} onClick={() => saveLocalDraft()}>
-                        브라우저 임시저장
-                      </Button>
-                      <Button type="button" disabled={loadingKey.length > 0} onClick={restoreLocalDraft}>
-                        임시저장 불러오기
-                      </Button>
-                      <Button
-                        type="button"
-                        disabled={loadingKey.length > 0 || !localDraftSavedAt}
-                        onClick={clearLocalDraft}
-                      >
-                        임시저장 삭제
-                      </Button>
-                    </SubActionRow>
-                  }
-                />
-              </EditorStudioComposeAssistantPanel>
-            </ComposeAssistantColumn>
-          </ComposeStudioLayout>
-        </EditorSection>
-        </ComposeSurfaceSection>
         )}
 
         {isPublishModalOpen ? (
@@ -3387,150 +3334,5 @@ const Input = styled.input`
     outline: none;
     border-color: ${({ theme }) => theme.colors.blue8};
     box-shadow: 0 0 0 4px ${({ theme }) => theme.colors.blue4};
-  }
-`
-
-const Button = styled.button`
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 8px;
-  padding: 0.62rem 0.92rem;
-  min-height: 44px;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray10};
-  cursor: pointer;
-  font-size: 0.84rem;
-  font-weight: 600;
-  transition:
-    border-color 0.18s ease,
-    background-color 0.18s ease,
-    color 0.18s ease,
-    box-shadow 0.18s ease;
-
-  &[data-variant="danger"] {
-    border-color: ${({ theme }) => theme.colors.red8};
-    background: ${({ theme }) => theme.colors.red3};
-    color: ${({ theme }) => theme.colors.red11};
-  }
-
-  &[data-variant="text"] {
-    min-height: auto;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    color: ${({ theme }) => theme.colors.gray11};
-  }
-
-  &:hover:not(:disabled) {
-    border-color: ${({ theme }) => theme.colors.gray8};
-    background: ${({ theme }) => theme.colors.gray3};
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  &[data-variant="text"]:hover:not(:disabled) {
-    border-color: transparent;
-    background: transparent;
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  &:focus-visible {
-    outline: none;
-    border-color: ${({ theme }) => theme.colors.blue8};
-    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
-  }
-
-  &:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-`
-
-const PrimaryButton = styled(Button)`
-  border-radius: 8px;
-  padding: 0.6rem 0.88rem;
-  border-color: ${({ theme }) => theme.colors.blue9};
-  background: ${({ theme }) => theme.colors.blue9};
-  color: ${({ theme }) => theme.colors.gray1};
-  font-weight: 700;
-
-  &:hover:not(:disabled) {
-    border-color: ${({ theme }) => theme.colors.blue10};
-    background: ${({ theme }) => theme.colors.blue10};
-    color: ${({ theme }) => theme.colors.gray1};
-  }
-`
-
-const EditorSection = styled.div`
-  margin: 1.12rem 0 0.25rem;
-  border: none;
-  border-radius: 0;
-  padding: 0;
-  background: transparent;
-
-  @media (max-width: 720px) {
-    padding: 0;
-    margin-top: 0.92rem;
-  }
-
-  @media (max-width: 720px) {
-    &[data-mobile-visible="false"] {
-      display: none;
-    }
-  }
-`
-
-const ComposeSurfaceSection = styled(Section)`
-  display: grid;
-  gap: 1.2rem;
-  padding: 1.1rem 1.1rem 1.3rem;
-  border-color: ${({ theme }) => theme.colors.gray4};
-  background:
-    radial-gradient(circle at top left, rgba(96, 165, 250, 0.04), transparent 24%),
-    ${({ theme }) => theme.colors.gray1};
-
-  @media (max-width: 420px) {
-    gap: 1rem;
-    padding: 0.82rem 0.82rem 1rem;
-  }
-`
-
-const ComposeStudioLayout = styled.div`
-  display: grid;
-  gap: 1.4rem;
-  align-items: start;
-
-  @media (min-width: 1180px) {
-    grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
-  }
-
-  @media (max-width: 720px) {
-    gap: 1rem;
-  }
-`
-
-const ComposeAssistantColumn = styled.aside`
-  min-width: 0;
-`
-
-const SubActionRow = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  margin-top: 0.65rem;
-  padding-top: 0.65rem;
-  border-top: 1px dashed ${({ theme }) => theme.colors.gray6};
-
-  > button {
-    border-style: dashed;
-  }
-
-  @media (max-width: 720px) {
-    display: grid;
-    grid-template-columns: 1fr;
-
-    > button {
-      width: 100%;
-      justify-content: center;
-    }
   }
 `

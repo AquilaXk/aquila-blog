@@ -58,6 +58,8 @@ interface MemberUseCase {
         blogTitle: String,
         homeIntroTitle: String,
         homeIntroDescription: String,
+        blogDesign: String,
+        legacyBlogScheme: String,
         serviceLinks: List<MemberProfileLinkItem>,
         contactLinks: List<MemberProfileLinkItem>,
     )

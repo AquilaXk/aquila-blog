@@ -51,6 +51,8 @@ data class MemberWithUsernameDto(
     val blogTitle: String,
     val homeIntroTitle: String,
     val homeIntroDescription: String,
+    val blogDesign: String,
+    val legacyBlogScheme: String,
     val serviceLinks: List<MemberProfileLinkItemDto>,
     val contactLinks: List<MemberProfileLinkItemDto>,
 ) {
@@ -94,6 +96,8 @@ data class MemberWithUsernameDto(
         blogTitle = workspaceContent?.blogTitle ?: member.blogTitle,
         homeIntroTitle = workspaceContent?.homeIntroTitle ?: member.homeIntroTitle,
         homeIntroDescription = workspaceContent?.homeIntroDescription ?: member.homeIntroDescription,
+        blogDesign = workspaceContent?.blogDesign ?: member.blogDesign,
+        legacyBlogScheme = workspaceContent?.legacyBlogScheme ?: member.legacyBlogScheme,
         serviceLinks =
             (
                 workspaceContent?.serviceLinks

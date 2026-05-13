@@ -2,6 +2,7 @@ package com.back.boundedContexts.member.adapter.web
 
 import com.back.boundedContexts.member.application.service.MemberApplicationService
 import com.back.support.BaseControllerIntegrationTest
+import jakarta.persistence.EntityManager
 import org.assertj.core.api.Assertions.assertThat
 import org.hamcrest.Matchers.containsString
 import org.hamcrest.Matchers.startsWith
@@ -20,6 +21,9 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.handler
 class ApiV1AdmMemberControllerTest : BaseControllerIntegrationTest() {
     @Autowired
     private lateinit var memberFacade: MemberApplicationService
+
+    @Autowired
+    private lateinit var entityManager: EntityManager
 
     @Test
     @WithUserDetails("admin@test.com")
@@ -184,6 +188,97 @@ class ApiV1AdmMemberControllerTest : BaseControllerIntegrationTest() {
             assertThat(updatedMember.contactLinks).hasSize(1)
             assertThat(updatedMember.contactLinks[0].label).isEqualTo(newContactLabel)
             assertThat(updatedMember.contactLinks[0].href).isEqualTo(newContactHref)
+        }
+
+        @Test
+        @WithUserDetails("admin@test.com")
+        fun `프로필 카드 저장에서 디자인 필드를 생략하면 기존 설정을 유지한다`() {
+            val member = memberFacade.findByEmail("admin@test.com")!!
+
+            mvc
+                .patch("/member/api/v1/adm/members/${member.id}/profileCard") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "role": "Backend Developer",
+                            "bio": "bio",
+                            "blogTitle": "blog",
+                            "homeIntroTitle": "title",
+                            "homeIntroDescription": "description",
+                            "blogDesign": "grid",
+                            "legacyBlogScheme": "light",
+                            "serviceLinks": [],
+                            "contactLinks": []
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.blogDesign") { value("grid") }
+                    jsonPath("$.legacyBlogScheme") { value("light") }
+                }
+
+            mvc
+                .patch("/member/api/v1/adm/members/${member.id}/profileCard") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "role": "Backend Developer",
+                            "bio": "updated bio",
+                            "blogTitle": "updated blog",
+                            "homeIntroTitle": "updated title",
+                            "homeIntroDescription": "updated description",
+                            "serviceLinks": [],
+                            "contactLinks": []
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.profileBio") { value("updated bio") }
+                    jsonPath("$.blogDesign") { value("grid") }
+                    jsonPath("$.legacyBlogScheme") { value("light") }
+                }
+        }
+
+        @Test
+        @WithUserDetails("admin@test.com")
+        fun `프로필 카드 디자인 설정은 fresh fallback 조회에서도 유지된다`() {
+            val member = memberFacade.findByEmail("admin@test.com")!!
+
+            mvc
+                .patch("/member/api/v1/adm/members/${member.id}/profileCard") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "role": "Backend Developer",
+                            "bio": "bio",
+                            "blogTitle": "blog",
+                            "homeIntroTitle": "title",
+                            "homeIntroDescription": "description",
+                            "blogDesign": "grid",
+                            "legacyBlogScheme": "light",
+                            "serviceLinks": [],
+                            "contactLinks": []
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.blogDesign") { value("grid") }
+                    jsonPath("$.legacyBlogScheme") { value("light") }
+                }
+
+            entityManager.flush()
+            entityManager.clear()
+
+            mvc
+                .get("/member/api/v1/adm/members/${member.id}")
+                .andExpect {
+                    status { isOk() }
+                    jsonPath("$.blogDesign") { value("grid") }
+                    jsonPath("$.legacyBlogScheme") { value("light") }
+                }
         }
 
         @Test
@@ -420,45 +515,22 @@ class ApiV1AdmMemberControllerTest : BaseControllerIntegrationTest() {
 
         @Test
         @WithUserDetails("admin@test.com")
-        fun `draft 저장 후 공개 관리자 프로필은 발행 전까지 기존 공개본을 유지하고 publish 후 반영된다`() {
+        fun `워크스페이스 초안 저장에서 디자인 필드를 생략하면 현재 설정을 유지한다`() {
             val member = memberFacade.findByEmail("admin@test.com")!!
-            val previousPublishedRole = member.profileRole
-            val previousPublishedBlogTitle = member.blogTitle
 
             mvc
-                .put("/member/api/v1/adm/members/${member.id}/profileWorkspace/draft") {
+                .patch("/member/api/v1/adm/members/${member.id}/profileCard") {
                     contentType = MediaType.APPLICATION_JSON
                     content =
                         """
                         {
-                            "profileImageUrl": "",
-                            "profileRole": "Draft Role",
-                            "profileBio": "Draft Bio",
-                            "aboutHeadline": "Draft Headline",
-                            "aboutRole": "Draft About Role",
-                            "aboutBio": "Draft About Bio",
-                            "aboutSections": [
-                                {
-                                    "id": "awards",
-                                    "title": "수상이력",
-                                    "items": ["2026.03 운영 포트폴리오 고도화"],
-                                    "dividerBefore": false
-                                }
-                            ],
-                            "aboutProjectSectionTitle": "Draft Projects",
-                            "aboutProjects": [
-                                {
-                                    "id": "bank",
-                                    "name": "aquila-bank",
-                                    "summary": "Draft Project Summary",
-                                    "role": "Backend",
-                                    "href": "https://github.com/AquilaXk/aquila-bank",
-                                    "linkLabel": "Repository"
-                                }
-                            ],
-                            "blogTitle": "Draft Blog Title",
-                            "homeIntroTitle": "Draft Intro Title",
-                            "homeIntroDescription": "Draft Intro Description",
+                            "role": "Backend Developer",
+                            "bio": "bio",
+                            "blogTitle": "blog",
+                            "homeIntroTitle": "title",
+                            "homeIntroDescription": "description",
+                            "blogDesign": "grid",
+                            "legacyBlogScheme": "light",
                             "serviceLinks": [],
                             "contactLinks": []
                         }
@@ -468,18 +540,92 @@ class ApiV1AdmMemberControllerTest : BaseControllerIntegrationTest() {
                 }
 
             mvc
+                .put("/member/api/v1/adm/members/${member.id}/profileWorkspace/draft") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "profileImageUrl": "",
+                            "profileRole": "Platform Engineer",
+                            "profileBio": "운영 가능한 시스템을 설계합니다.",
+                            "aboutHeadline": "이유를 먼저 따집니다.",
+                            "aboutRole": "Architecture Writer",
+                            "aboutBio": "문제와 운영을 같이 봅니다.",
+                            "aboutSections": [],
+                            "aboutProjectSectionTitle": "프로젝트",
+                            "aboutProjects": [],
+                            "blogTitle": "Aquila Workspace",
+                            "homeIntroTitle": "프로필 워크스페이스 실험실",
+                            "homeIntroDescription": "브랜드와 소개 문구를 분리 관리합니다.",
+                            "serviceLinks": [],
+                            "contactLinks": []
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.draft.blogDesign") { value("grid") }
+                    jsonPath("$.draft.legacyBlogScheme") { value("light") }
+                }
+        }
+
+        @Test
+        @WithUserDetails("admin@test.com")
+        fun `draft 저장 후 공개 관리자 프로필은 발행 전까지 기존 공개본을 유지하고 publish 후 반영된다`() {
+            val member = memberFacade.findByEmail("admin@test.com")!!
+            val previousPublishedRole = member.profileRole
+            val previousPublishedBlogTitle = member.blogTitle
+            val previousPublishedDesign = member.blogDesign
+            val previousPublishedScheme = member.legacyBlogScheme
+
+            mvc
+                .put("/member/api/v1/adm/members/${member.id}/profileWorkspace/draft") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "profileImageUrl": "",
+                            "profileRole": "Platform Engineer",
+                            "profileBio": "운영 가능한 시스템을 설계합니다.",
+                            "aboutHeadline": "이유를 먼저 따집니다.",
+                            "aboutRole": "Architecture Writer",
+                            "aboutBio": "문제와 운영을 같이 봅니다.",
+                            "aboutSections": [],
+                            "aboutProjectSectionTitle": "프로젝트",
+                            "aboutProjects": [],
+                            "blogTitle": "Aquila Workspace",
+                            "homeIntroTitle": "프로필 워크스페이스 실험실",
+                            "homeIntroDescription": "브랜드와 소개 문구를 분리 관리합니다.",
+                            "blogDesign": "grid",
+                            "legacyBlogScheme": "light",
+                            "serviceLinks": [],
+                            "contactLinks": []
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.draft.blogDesign") { value("grid") }
+                    jsonPath("$.draft.legacyBlogScheme") { value("light") }
+                    jsonPath("$.published.blogDesign") { value(previousPublishedDesign) }
+                    jsonPath("$.published.legacyBlogScheme") { value(previousPublishedScheme) }
+                }
+
+            mvc
                 .get("/member/api/v1/members/adminProfile")
                 .andExpect {
                     status { isOk() }
                     jsonPath("$.profileRole") { value(previousPublishedRole) }
                     jsonPath("$.blogTitle") { value(previousPublishedBlogTitle) }
+                    jsonPath("$.blogDesign") { value(previousPublishedDesign) }
+                    jsonPath("$.legacyBlogScheme") { value(previousPublishedScheme) }
                 }
 
             mvc
                 .post("/member/api/v1/adm/members/${member.id}/profileWorkspace/publish")
                 .andExpect {
                     status { isOk() }
-                    jsonPath("$.published.profileRole") { value("Draft Role") }
+                    jsonPath("$.published.profileRole") { value("Platform Engineer") }
+                    jsonPath("$.published.blogDesign") { value("grid") }
+                    jsonPath("$.published.legacyBlogScheme") { value("light") }
                     jsonPath("$.dirtyFromPublished") { value(false) }
                 }
 
@@ -487,17 +633,17 @@ class ApiV1AdmMemberControllerTest : BaseControllerIntegrationTest() {
                 .get("/member/api/v1/members/adminProfile")
                 .andExpect {
                     status { isOk() }
-                    jsonPath("$.profileRole") { value("Draft Role") }
-                    jsonPath("$.profileBio") { value("Draft Bio") }
-                    jsonPath("$.aboutHeadline") { value("Draft Headline") }
-                    jsonPath("$.aboutRole") { value("Draft About Role") }
-                    jsonPath("$.aboutSections.length()") { value(1) }
-                    jsonPath("$.aboutSections[0].title") { value("수상이력") }
-                    jsonPath("$.aboutProjectSectionTitle") { value("Draft Projects") }
-                    jsonPath("$.aboutProjects.length()") { value(1) }
-                    jsonPath("$.aboutProjects[0].linkLabel") { value("Repository") }
-                    jsonPath("$.blogTitle") { value("Draft Blog Title") }
-                    jsonPath("$.homeIntroTitle") { value("Draft Intro Title") }
+                    jsonPath("$.profileRole") { value("Platform Engineer") }
+                    jsonPath("$.profileBio") { value("운영 가능한 시스템을 설계합니다.") }
+                    jsonPath("$.aboutHeadline") { value("이유를 먼저 따집니다.") }
+                    jsonPath("$.aboutRole") { value("Architecture Writer") }
+                    jsonPath("$.aboutSections.length()") { value(0) }
+                    jsonPath("$.aboutProjectSectionTitle") { value("프로젝트") }
+                    jsonPath("$.aboutProjects.length()") { value(0) }
+                    jsonPath("$.blogTitle") { value("Aquila Workspace") }
+                    jsonPath("$.homeIntroTitle") { value("프로필 워크스페이스 실험실") }
+                    jsonPath("$.blogDesign") { value("grid") }
+                    jsonPath("$.legacyBlogScheme") { value("light") }
                 }
         }
     }

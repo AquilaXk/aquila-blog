@@ -9,6 +9,43 @@ export type InlineTextStyleOption = {
   run: (activeEditor: TiptapEditor) => void
 }
 
+export type InlineMarkCommandId = "bold" | "italic" | "strike" | "code"
+
+type InlineMarkCommand = {
+  isActive: (activeEditor: TiptapEditor) => boolean
+  run: (activeEditor: TiptapEditor) => void
+}
+
+export const INLINE_MARK_COMMANDS: Record<
+  InlineMarkCommandId,
+  InlineMarkCommand
+> = {
+  bold: {
+    isActive: (activeEditor) => activeEditor.isActive("bold"),
+    run: (activeEditor) => {
+      activeEditor.chain().focus().toggleBold().run()
+    },
+  },
+  italic: {
+    isActive: (activeEditor) => activeEditor.isActive("italic"),
+    run: (activeEditor) => {
+      activeEditor.chain().focus().toggleItalic().run()
+    },
+  },
+  strike: {
+    isActive: (activeEditor) => activeEditor.isActive("strike"),
+    run: (activeEditor) => {
+      activeEditor.chain().focus().toggleStrike().run()
+    },
+  },
+  code: {
+    isActive: (activeEditor) => activeEditor.isActive("code"),
+    run: (activeEditor) => {
+      activeEditor.chain().focus().toggleCode().run()
+    },
+  },
+}
+
 export const INLINE_TEXT_STYLE_OPTIONS: InlineTextStyleOption[] = [
   {
     id: "paragraph",
@@ -62,14 +99,29 @@ export const getActiveInlineColor = (editor: TiptapEditor | null | undefined) =>
     String(editor?.getAttributes("inlineColor").color || "")
   )
 
+export const isInlineMarkCommandActive = (
+  editor: TiptapEditor | null | undefined,
+  commandId: InlineMarkCommandId
+) => {
+  if (!editor) return false
+  return INLINE_MARK_COMMANDS[commandId].isActive(editor)
+}
+
 export const isInlineCodeMarkActive = (
   editor: TiptapEditor | null | undefined
-) => editor?.isActive("code") ?? false
+) => isInlineMarkCommandActive(editor, "code")
+
+export const runInlineMarkCommand = (
+  editor: TiptapEditor | null | undefined,
+  commandId: InlineMarkCommandId
+) => {
+  if (!editor) return false
+  INLINE_MARK_COMMANDS[commandId].run(editor)
+  return true
+}
 
 export const runInlineCode = (editor: TiptapEditor | null | undefined) => {
-  if (!editor) return false
-  editor.chain().focus().toggleCode().run()
-  return true
+  return runInlineMarkCommand(editor, "code")
 }
 
 export const runInlineColor = (

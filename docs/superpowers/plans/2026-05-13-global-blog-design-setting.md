@@ -1135,7 +1135,7 @@ Observed:
 - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 yarn --cwd front playwright test e2e/perf.spec.ts --workers=1` initially failed after the grid refetch fix because Header grid tokens were applied to operational legacy routes. Header was corrected to use `publicDesign` only when `theme.blogDesign === "grid"`.
 - `node front/scripts/check-bundle-size.mjs` initially failed with `/ raw` 19 bytes over budget after the style/refetch patch. The root cause was the long theme background-image literal; preserving the same visual intent with compact CSS hex literals brought the route back under budget.
 
-- [ ] **Step 7: Commit public surface styling**
+- [x] **Step 7: Commit public surface styling**
 
 ```bash
 git add front/src/layouts/RootLayout/Header/index.tsx \
@@ -1162,6 +1162,8 @@ git commit -m "feat(frontend): grid public blog 디자인 적용"
 git push
 ```
 
+Observed: commit `fadbd491` pushed to `feat/grimdark-blog-skin`.
+
 ### Task 5: Contract Docs And Full Verification
 
 **Files:**
@@ -1171,7 +1173,7 @@ git push
 - Modify: `front/contracts/openapi/openapi.json` if the contract generation flow changes it
 - Create or modify: `.codex/tmp/pr-grimdark-blog-skin.md`
 
-- [ ] **Step 1: Update the local source-of-truth plan and briefs**
+- [x] **Step 1: Update the local source-of-truth plan and briefs**
 
 In `docs/agent/grimdark-blog-skin-plan-2026-05-13.md`, make sure `commit_plan` exactly matches the commits created in this work:
 
@@ -1200,7 +1202,7 @@ In `docs/agent/auth.md`, add the member/profile contract invariant:
 - "공개 `/member/api/v1/members/adminProfile`과 관리자 profile workspace 응답은 `blogDesign`과 `legacyBlogScheme`을 포함해야 하며, 누락/invalid 값은 legacy/dark로 정규화한다."
 ```
 
-- [ ] **Step 2: Run full related verification**
+- [x] **Step 2: Run full related verification**
 
 Run in order:
 
@@ -1219,16 +1221,29 @@ CURRENT_TASK_SLUG=grimdark-blog-skin bash tools/guards/current-task-preflight.sh
 
 Expected: PASS. On command failure, classify it as code regression or environment/permission before retrying.
 
-- [ ] **Step 3: Commit docs and contract artifacts**
+Observed:
+- `back/gradlew -p back ktlintCheck` PASS
+- `back/gradlew -p back test` PASS
+- `yarn --cwd front build` PASS
+- `node front/scripts/check-bundle-size.mjs` PASS
+- `yarn --cwd front playwright:preflight` PASS
+- `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 yarn --cwd front playwright test e2e/admin-profile-state.spec.ts --workers=1` PASS
+- `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 yarn --cwd front playwright test e2e/smoke.spec.ts e2e/mobile-layout.spec.ts --workers=1` PASS
+- `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 yarn --cwd front playwright test e2e/perf.spec.ts --workers=1` PASS
+
+- [x] **Step 3: Commit docs and contract artifacts**
+
+Repository hook forbids tracking ignored `docs/agent/**` files. Keep `docs/agent/frontend-ui.md`, `docs/agent/auth.md`, and `docs/agent/grimdark-blog-skin-plan-2026-05-13.md` updated as local agent briefs, and commit the tracked implementation plan as the PR-visible operating contract.
 
 ```bash
-git add -f docs/agent/frontend-ui.md docs/agent/auth.md docs/agent/grimdark-blog-skin-plan-2026-05-13.md
-git add front/contracts/openapi/openapi.json
+git add docs/superpowers/plans/2026-05-13-global-blog-design-setting.md
 git commit -m "docs(frontend): global blog design 운영 계약 반영"
 git push
 ```
 
-- [ ] **Step 4: Open the PR**
+Observed: docs commit `354364de` pushed to `feat/grimdark-blog-skin`.
+
+- [x] **Step 4: Open the PR**
 
 Create `.codex/tmp/pr-grimdark-blog-skin.md` with the repository PR template. The first section must include:
 
@@ -1263,3 +1278,5 @@ gh pr create --repo AquilaXk/aquila-blog --base main --head feat/grimdark-blog-s
 ```
 
 Expected: a draft PR URL targeting `main`.
+
+Observed: draft PR `#228` targeting `main`: https://github.com/AquilaXk/aquila-blog/pull/228

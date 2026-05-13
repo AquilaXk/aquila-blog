@@ -17,9 +17,11 @@ import {
 
 type Props = {
   fullWidth: boolean
+  showThemeToggle?: boolean
+  blogTitle?: string
 }
 
-const Header: React.FC<Props> = ({ fullWidth }) => {
+const Header: React.FC<Props> = ({ fullWidth, showThemeToggle = true, blogTitle }) => {
   const router = useRouter()
   const isPostDetailRoute = router.pathname === "/posts/[id]"
   const [isHiddenByScroll, setIsHiddenByScroll] = useState(false)
@@ -158,9 +160,9 @@ const Header: React.FC<Props> = ({ fullWidth }) => {
       }
     >
       <div data-full-width={fullWidth} className="container">
-        <Logo />
+        <Logo blogTitle={blogTitle} />
         <div className="nav">
-          <ThemeToggle />
+          {showThemeToggle ? <ThemeToggle /> : null}
           <NavBar />
         </div>
       </div>

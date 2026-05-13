@@ -270,7 +270,7 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialProfi
   if (!sessionMember) return null
 
   return (
-    <AdminShell currentSection="hub" member={sessionMember}>
+    <AdminShell currentSection="hub" member={sessionMember} profileSnapshot={initialProfileSnapshot}>
       <AdminHubSurface
         displayName={displayName}
         displayNameInitial={displayNameInitial}

@@ -692,6 +692,12 @@ git push
 - Modify: `front/src/layouts/RootLayout/index.tsx`
 - Modify: `front/src/layouts/RootLayout/Header/index.tsx`
 - Modify: `front/src/layouts/RootLayout/Header/ThemeToggle.tsx`
+- Modify: `front/src/pages/_app.tsx`
+- Modify: `front/src/pages/admin.tsx`
+- Modify: `front/src/pages/posts/[id].tsx`
+- Modify: `front/src/libs/server/postDetailPage.ts`
+- Modify: `front/src/hooks/useAdminProfile.ts`
+- Modify: `front/src/routes/Admin/AdminShell.tsx`
 - Test: `front/e2e/smoke.spec.ts`
 - Test: `front/e2e/mobile-layout.spec.ts`
 
@@ -704,11 +710,61 @@ test("public blog appearance는 adminProfile 전역 설정에서 resolve된다",
   const resolverSource = readFileSync(path.resolve(__dirname, "../src/libs/blogAppearance.ts"), "utf8")
   const rootLayoutSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/index.tsx"), "utf8")
   const headerSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/Header/index.tsx"), "utf8")
+  const logoSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/Header/Logo.tsx"), "utf8")
+  const adminShellSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminShell.tsx"), "utf8")
+  const appSource = readFileSync(path.resolve(__dirname, "../src/pages/_app.tsx"), "utf8")
+  const postDetailPageSource = readFileSync(path.resolve(__dirname, "../src/libs/server/postDetailPage.ts"), "utf8")
+  const useAdminProfileSource = readFileSync(path.resolve(__dirname, "../src/hooks/useAdminProfile.ts"), "utf8")
 
   expect(resolverSource).toContain('blogDesign === "grid"')
   expect(resolverSource).toContain('scheme: "dark"')
+  expect(resolverSource).not.toContain("src/libs/profileWorkspace")
   expect(rootLayoutSource).toContain("resolvePublicBlogAppearance")
+  expect(rootLayoutSource).toContain("usePublicAdminProfile(initialAdminProfile")
   expect(headerSource).toContain("showThemeToggle")
+  expect(logoSource).not.toContain("useAdminProfile")
+  expect(logoSource).toContain("blogTitle")
+  expect(adminShellSource).not.toContain("useAdminProfile")
+  expect(appSource).toContain("initialAdminProfile={initialAdminProfile}")
+  expect(postDetailPageSource).toContain("queryKey.adminProfile()")
+  expect(postDetailPageSource).toContain("initialAdminProfile")
+  expect(postDetailPageSource).toContain('initialAdminProfileSource === "static-fallback"')
+  expect(appSource).toContain("initialAdminProfileShouldRefetch")
+  expect(rootLayoutSource).toContain("refetchOnMount: initialAdminProfileShouldRefetch")
+  expect(rootLayoutSource).toContain("staleTimeMs: initialAdminProfileShouldRefetch ? 0 : undefined")
+  expect(useAdminProfileSource).toContain("enabled?: boolean")
+  expect(useAdminProfileSource).toContain("refetchOnMount?: boolean")
+  expect(useAdminProfileSource).toContain("staleTimeMs?: number")
+})
+```
+
+Also add behavioral coverage for the post detail admin profile seed helper:
+
+```ts
+import { resolveStaticAdminProfileSeed } from "../src/libs/server/postDetailPage"
+
+test("post detail adminProfile seed marks published and fallback sources", async () => {
+  const publishedProfile = {
+    username: "aquila",
+    name: "aquila",
+    nickname: "aquila",
+    profileImageUrl: "/avatar.png",
+    blogDesign: "grid" as const,
+    legacyBlogScheme: "light" as const,
+  }
+
+  await expect(resolveStaticAdminProfileSeed(async () => publishedProfile)).resolves.toMatchObject({
+    profile: { blogDesign: "grid", legacyBlogScheme: "light" },
+    source: "published",
+  })
+  await expect(
+    resolveStaticAdminProfileSeed(async () => {
+      throw new Error("admin profile unavailable")
+    })
+  ).resolves.toMatchObject({
+    profile: { blogDesign: "legacy", legacyBlogScheme: "dark" },
+    source: "static-fallback",
+  })
 })
 ```
 
@@ -729,7 +785,6 @@ Create `front/src/libs/blogAppearance.ts`:
 import { CONFIG } from "site.config"
 import type { AdminProfile } from "src/hooks/useAdminProfile"
 import type { BlogDesignType, LegacyBlogScheme, SchemeType } from "src/types"
-import { normalizeBlogDesign, normalizeLegacyBlogScheme } from "src/libs/profileWorkspace"
 
 export type PublicBlogAppearance = {
   blogDesign: BlogDesignType
@@ -739,6 +794,12 @@ export type PublicBlogAppearance = {
 
 const resolveConfigScheme = (): LegacyBlogScheme =>
   CONFIG.blog.scheme === "light" ? "light" : "dark"
+
+const normalizeBlogDesign = (value: unknown): BlogDesignType =>
+  value === "grid" ? "grid" : "legacy"
+
+const normalizeLegacyBlogScheme = (value: unknown): LegacyBlogScheme =>
+  value === "light" ? "light" : "dark"
 
 export const resolvePublicBlogAppearance = (
   profile: Pick<AdminProfile, "blogDesign" | "legacyBlogScheme"> | null | undefined
@@ -842,16 +903,34 @@ publicDesign: createPublicDesignTokens(options.scheme, options.blogDesign ?? "le
 
 In `ThemeProvider/index.tsx`, accept `blogDesign` and call `createTheme({ scheme, blogDesign })`.
 
-In `RootLayout/index.tsx`, import `useAdminProfile` and resolver. Add route guard:
+In `_app.tsx`, pass page-level `initialAdminProfile` into `RootLayout` so public pages can render the published admin profile appearance on SSR/first paint:
+
+```ts
+const initialAdminProfile = pageProps.initialAdminProfile ?? null
+```
+
+```tsx
+<RootLayout initialAdminProfile={initialAdminProfile}>
+```
+
+In `RootLayout/index.tsx`, import `AdminProfile`, `useQuery`, and resolver. Add a lightweight public profile query and route guard:
 
 ```ts
 const isPublicBlogRoute =
   router.pathname === "/" || router.pathname === "/about" || router.pathname === "/posts/[id]"
-const adminProfile = useAdminProfile()
-const publicAppearance = resolvePublicBlogAppearance(adminProfile)
+const adminProfile = usePublicAdminProfile(initialAdminProfile, { enabled: isPublicBlogRoute })
+const publicAppearance = resolvePublicBlogAppearance(isPublicBlogRoute ? adminProfile : null)
 const effectiveScheme = isPublicBlogRoute ? publicAppearance.scheme : scheme
 const effectiveBlogDesign = isPublicBlogRoute ? publicAppearance.blogDesign : "legacy"
 ```
+
+In `postDetailPage.ts`, fetch or fall back to the public admin profile during static prop generation, set `queryKey.adminProfile()` in the dehydrated React Query state, and return `initialAdminProfile` plus `initialAdminProfileSource` in props. If the source is `static-fallback`, use the short recovery revalidation window instead of the normal 1-hour ISR window.
+
+In `posts/[id].tsx`, include `initialAdminProfile` and `initialAdminProfileSource` in the page props type so `_app.tsx` can consume them without changing article rendering.
+
+In `_app.tsx`/`RootLayout/index.tsx`, derive `initialAdminProfileShouldRefetch` from `initialAdminProfileSource === "static-fallback"` and pass `refetchOnMount: initialAdminProfileShouldRefetch` plus `staleTimeMs: initialAdminProfileShouldRefetch ? 0 : undefined` into the public-route-only profile query.
+
+In `useAdminProfile.ts`, keep the existing full profile hook for profile/about/admin callers. RootLayout must use a lightweight public profile query so non-public routes do not pull profile workspace/cookie/admin profile fetch code into the shared `_app` chunk.
 
 Pass:
 
@@ -910,6 +989,10 @@ git add front/src/libs/blogAppearance.ts \
   front/src/layouts/RootLayout/ThemeProvider/Global/index.tsx \
   front/src/layouts/RootLayout/index.tsx \
   front/src/layouts/RootLayout/Header/index.tsx \
+  front/src/pages/_app.tsx \
+  front/src/pages/posts/[id].tsx \
+  front/src/libs/server/postDetailPage.ts \
+  front/src/hooks/useAdminProfile.ts \
   front/e2e/smoke.spec.ts
 git commit -m "feat(frontend): public blog appearance resolver 추가"
 git push

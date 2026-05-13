@@ -4,14 +4,19 @@ import Link from "next/link"
 import { type ReactNode } from "react"
 import AppIcon, { type IconName } from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
-import { useAdminProfile } from "src/hooks/useAdminProfile"
 import type { AuthMember } from "src/hooks/useAuthSession"
+
+type AdminShellProfileSnapshot = Pick<
+  AuthMember,
+  "blogTitle" | "profileImageDirectUrl" | "profileImageUrl"
+>
 
 export type AdminShellSection = "hub" | "dashboard" | "posts" | "profile" | "tools"
 
 type AdminShellProps = {
   currentSection: AdminShellSection
   member: AuthMember
+  profileSnapshot?: AdminShellProfileSnapshot | null
   children: ReactNode
 }
 
@@ -60,8 +65,7 @@ const AdminUtilityBar = dynamic(() => import("./AdminUtilityBar"), {
   loading: () => <UtilityBarFallback aria-hidden="true" />,
 })
 
-const AdminShell = ({ currentSection, member, children }: AdminShellProps) => {
-  const adminProfile = useAdminProfile()
+const AdminShell = ({ currentSection, member, profileSnapshot = null, children }: AdminShellProps) => {
   const currentNav = NAV_ITEMS.find((item) => item.id === currentSection) ?? NAV_ITEMS[0]
   const utilityNavItems = NAV_ITEMS.map((item) => ({
     key: item.id,
@@ -70,11 +74,11 @@ const AdminShell = ({ currentSection, member, children }: AdminShellProps) => {
     icon: item.icon,
     active: item.id === currentSection,
   }))
-  const sidebarIdentityName = (adminProfile?.blogTitle || "AquilaLog").trim()
+  const sidebarIdentityName = (profileSnapshot?.blogTitle || member.blogTitle || "AquilaLog").trim()
   const sidebarIdentityInitial = sidebarIdentityName.slice(0, 2).toUpperCase()
   const sidebarProfileImageSrc = (
-    adminProfile?.profileImageDirectUrl ||
-    adminProfile?.profileImageUrl ||
+    profileSnapshot?.profileImageDirectUrl ||
+    profileSnapshot?.profileImageUrl ||
     member.profileImageDirectUrl ||
     member.profileImageUrl ||
     ""

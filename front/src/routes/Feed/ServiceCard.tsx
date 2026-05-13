@@ -68,7 +68,7 @@ const StyledContent = styled.div`
   gap: 0.22rem;
   width: 100%;
   padding: 0 0 0.8rem;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-bottom: 1px solid ${({ theme }) => theme.publicDesign.border};
 
   > a {
     display: grid;
@@ -85,7 +85,7 @@ const StyledContent = styled.div`
 
     &:hover {
       color: ${({ theme }) => theme.colors.gray12};
-      background: rgba(255, 255, 255, 0.028);
+      background: ${({ theme }) => theme.publicDesign.accentMuted};
     }
 
     .icon {
@@ -96,8 +96,8 @@ const StyledContent = styled.div`
       height: 2rem;
       flex: 0 0 2rem;
       border-radius: 12px;
-      border: 1px solid ${({ theme }) => theme.colors.gray6};
-      background: rgba(255, 255, 255, 0.01);
+      border: 1px solid ${({ theme }) => theme.publicDesign.border};
+      background: ${({ theme }) => theme.publicDesign.surfaceElevated};
       color: ${({ theme }) => theme.colors.gray10};
       font-size: 0.98rem;
       line-height: 1;

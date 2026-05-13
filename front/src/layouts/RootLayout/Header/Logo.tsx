@@ -2,11 +2,13 @@ import Link from "next/link"
 import { CONFIG } from "site.config"
 import styled from "@emotion/styled"
 import BrandMark from "src/components/branding/BrandMark"
-import { useAdminProfile } from "src/hooks/useAdminProfile"
 
-const Logo = () => {
-  const adminProfile = useAdminProfile()
-  const blogTitle = adminProfile?.blogTitle?.trim() || CONFIG.blog.title
+type Props = {
+  blogTitle?: string
+}
+
+const Logo = ({ blogTitle: blogTitleProp }: Props) => {
+  const blogTitle = blogTitleProp?.trim() || CONFIG.blog.title
 
   return (
     <StyledWrapper href="/" aria-label={blogTitle}>
@@ -25,7 +27,7 @@ const StyledWrapper = styled(Link)`
   min-width: 0;
   max-width: 100%;
   min-height: 40px;
-  color: ${({ theme }) => theme.colors.gray12};
+  color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.gray12)};
   font-weight: 760;
   font-size: clamp(1.42rem, 1.12rem + 0.8vw, 1.9rem);
   letter-spacing: -0.03em;

@@ -103,6 +103,8 @@ test.describe("admin profile state contract", () => {
       blogTitle: "AquilaLog",
       homeIntroTitle: "비밀스러운 IT 공작소",
       homeIntroDescription: "비밀스러운 지식들을 탐구하는데 목적을 두고 있습니다",
+      blogDesign: "grid",
+      legacyBlogScheme: "light",
       serviceLinks: [],
       contactLinks: [],
     })
@@ -113,8 +115,44 @@ test.describe("admin profile state contract", () => {
     expect(bridge.aboutSections.map((section) => section.title)).toEqual(["경력"])
     expect(bridge.aboutProjectSectionTitle).toBe("프로젝트")
     expect(bridge.aboutProjects.map((project) => project.name)).toEqual(["aquila-blog"])
+    expect(bridge.blogDesign).toBe("grid")
+    expect(bridge.legacyBlogScheme).toBe("light")
     expect(bridge.aboutDetails).toContain("## 경력")
     expect(bridge.aboutDetails).toContain("- 2026.03 Aquila Blog 운영")
+  })
+
+  test("profile workspace 정규화는 전역 블로그 디자인 fallback을 고정한다", () => {
+    const normalized = normalizeProfileWorkspaceContent({
+      profileImageUrl: "",
+      profileRole: "",
+      profileBio: "",
+      aboutHeadline: "",
+      aboutRole: "",
+      aboutBio: "",
+      aboutSections: [],
+      aboutProjectSectionTitle: "",
+      aboutProjects: [],
+      blogTitle: "",
+      homeIntroTitle: "",
+      homeIntroDescription: "",
+      blogDesign: "unknown" as never,
+      legacyBlogScheme: "blue" as never,
+      serviceLinks: [],
+      contactLinks: [],
+    })
+
+    expect(normalized.blogDesign).toBe("legacy")
+    expect(normalized.legacyBlogScheme).toBe("dark")
+  })
+
+  test("profile 화면은 전역 블로그 디자인 설정과 legacy 전용 scheme control을 가진다", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+
+    expect(source).toContain('id: "design"')
+    expect(source).toContain('label: "디자인"')
+    expect(source).toContain('updateDraft("blogDesign",')
+    expect(source).toContain('updateDraft("legacyBlogScheme",')
+    expect(source).toContain('draft.blogDesign === "legacy"')
   })
 
   test("profile workspace 정규화는 structured 프로젝트가 있으면 legacy 프로젝트 상세 블록을 제거한다", () => {
@@ -153,6 +191,8 @@ test.describe("admin profile state contract", () => {
       blogTitle: "",
       homeIntroTitle: "",
       homeIntroDescription: "",
+      blogDesign: "legacy",
+      legacyBlogScheme: "dark",
       serviceLinks: [],
       contactLinks: [],
     })

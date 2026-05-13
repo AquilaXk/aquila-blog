@@ -5,6 +5,7 @@ import type { NextWebVitalsMetric } from "next/app"
 import dynamic from "next/dynamic"
 import Head from "next/head"
 import { RootLayout } from "src/layouts"
+import type { AdminProfile } from "src/hooks/useAdminProfile"
 import createEmotionCache from "src/libs/emotion/createEmotionCache"
 import { createQueryClient } from "src/libs/react-query"
 import { useState } from "react"
@@ -18,8 +19,16 @@ const SpeedInsights = dynamic(() => import("@vercel/speed-insights/next").then((
   ssr: false,
 })
 
+type AppPageProps = AppPropsWithLayout["pageProps"] & {
+  initialAdminProfile?: AdminProfile | null
+  initialAdminProfileSource?: "published" | "static-fallback"
+}
+
 function App({ Component, pageProps, emotionCache = clientSideEmotionCache }: AppPropsWithLayout) {
   const getLayout = Component.getLayout || ((page) => page)
+  const appPageProps = pageProps as AppPageProps
+  const initialAdminProfile = appPageProps.initialAdminProfile ?? null
+  const initialAdminProfileShouldRefetch = appPageProps.initialAdminProfileSource === "static-fallback"
   const [queryClient] = useState(createQueryClient)
 
   return (
@@ -30,7 +39,10 @@ function App({ Component, pageProps, emotionCache = clientSideEmotionCache }: Ap
       </Head>
       <QueryClientProvider client={queryClient}>
         <HydrationBoundary state={pageProps.dehydratedState}>
-          <RootLayout>
+          <RootLayout
+            initialAdminProfile={initialAdminProfile}
+            initialAdminProfileShouldRefetch={initialAdminProfileShouldRefetch}
+          >
             {getLayout(<Component {...pageProps} />)}
             {process.env.NODE_ENV === "production" ? (
               <>

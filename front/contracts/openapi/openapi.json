@@ -2671,6 +2671,16 @@
             "maxLength" : 500,
             "minLength" : 0
           },
+          "blogDesign" : {
+            "type" : "string",
+            "maxLength" : 20,
+            "minLength" : 0
+          },
+          "legacyBlogScheme" : {
+            "type" : "string",
+            "maxLength" : 20,
+            "minLength" : 0
+          },
           "serviceLinks" : {
             "type" : "array",
             "items" : {
@@ -2789,6 +2799,12 @@
             "type" : "string"
           },
           "homeIntroDescription" : {
+            "type" : "string"
+          },
+          "blogDesign" : {
+            "type" : "string"
+          },
+          "legacyBlogScheme" : {
             "type" : "string"
           },
           "serviceLinks" : {
@@ -3668,6 +3684,12 @@
           "homeIntroDescription" : {
             "type" : "string"
           },
+          "blogDesign" : {
+            "type" : "string"
+          },
+          "legacyBlogScheme" : {
+            "type" : "string"
+          },
           "serviceLinks" : {
             "type" : "array",
             "items" : {
@@ -3737,6 +3759,16 @@
           "homeIntroDescription" : {
             "type" : "string",
             "maxLength" : 500,
+            "minLength" : 0
+          },
+          "blogDesign" : {
+            "type" : "string",
+            "maxLength" : 20,
+            "minLength" : 0
+          },
+          "legacyBlogScheme" : {
+            "type" : "string",
+            "maxLength" : 20,
             "minLength" : 0
           },
           "serviceLinks" : {

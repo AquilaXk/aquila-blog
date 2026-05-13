@@ -86,6 +86,18 @@ class MemberProxy(
             real.homeIntroDescription = value
         }
 
+    override var blogDesign
+        get() = real.blogDesign
+        set(value) {
+            real.blogDesign = value
+        }
+
+    override var legacyBlogScheme
+        get() = real.legacyBlogScheme
+        set(value) {
+            real.legacyBlogScheme = value
+        }
+
     override var serviceLinks
         get() = real.serviceLinks
         set(value) {

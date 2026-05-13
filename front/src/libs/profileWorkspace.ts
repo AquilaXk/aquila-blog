@@ -1,4 +1,5 @@
 import type { ProfileCardLinkItem } from "src/constants/profileCardLinks"
+import type { BlogDesignType, LegacyBlogScheme } from "src/types"
 
 export type AboutSectionBlock = {
   id: string
@@ -29,6 +30,8 @@ export type ProfileWorkspaceContent = {
   blogTitle: string
   homeIntroTitle: string
   homeIntroDescription: string
+  blogDesign: BlogDesignType
+  legacyBlogScheme: LegacyBlogScheme
   serviceLinks: ProfileCardLinkItem[]
   contactLinks: ProfileCardLinkItem[]
 }
@@ -56,12 +59,18 @@ type LegacyProfileLike = {
   blogTitle?: string
   homeIntroTitle?: string
   homeIntroDescription?: string
+  blogDesign?: BlogDesignType
+  legacyBlogScheme?: LegacyBlogScheme
   serviceLinks?: ProfileCardLinkItem[]
   contactLinks?: ProfileCardLinkItem[]
 }
 
 export const DEFAULT_ABOUT_HEADLINE = "이유를 먼저 따지고, 운영 가능한 시스템을 설계합니다."
 export const DEFAULT_ABOUT_PROJECT_SECTION_TITLE = "프로젝트"
+export const normalizeBlogDesign = (value: unknown): BlogDesignType =>
+  value === "grid" ? "grid" : "legacy"
+export const normalizeLegacyBlogScheme = (value: unknown): LegacyBlogScheme =>
+  value === "light" ? "light" : "dark"
 export const DEFAULT_ABOUT_PROJECTS: AboutProjectBlock[] = [
   {
     id: "project-1",
@@ -197,6 +206,8 @@ export const buildLegacyAboutDetails = (sections: AboutSectionBlock[]): string =
     blogTitle: "",
     homeIntroTitle: "",
     homeIntroDescription: "",
+    blogDesign: "legacy",
+    legacyBlogScheme: "dark",
     serviceLinks: [],
     contactLinks: [],
   }).aboutSections
@@ -306,6 +317,8 @@ export const normalizeProfileWorkspaceContent = (
     blogTitle: (content.blogTitle || "").trim(),
     homeIntroTitle: (content.homeIntroTitle || "").trim(),
     homeIntroDescription: (content.homeIntroDescription || "").trim(),
+    blogDesign: normalizeBlogDesign(content.blogDesign),
+    legacyBlogScheme: normalizeLegacyBlogScheme(content.legacyBlogScheme),
     serviceLinks: normalizeLinkItems(content.serviceLinks),
     contactLinks: normalizeLinkItems(content.contactLinks),
   }
@@ -332,6 +345,8 @@ export const buildProfileWorkspaceAdminProfileCacheFields = (content: ProfileWor
     blogTitle: normalized.blogTitle,
     homeIntroTitle: normalized.homeIntroTitle,
     homeIntroDescription: normalized.homeIntroDescription,
+    blogDesign: normalized.blogDesign,
+    legacyBlogScheme: normalized.legacyBlogScheme,
     serviceLinks: normalized.serviceLinks,
     contactLinks: normalized.contactLinks,
   }
@@ -356,6 +371,8 @@ export const buildProfileWorkspaceFromLegacy = (
     blogTitle: value?.blogTitle || "",
     homeIntroTitle: value?.homeIntroTitle || "",
     homeIntroDescription: value?.homeIntroDescription || "",
+    blogDesign: normalizeBlogDesign(value?.blogDesign),
+    legacyBlogScheme: normalizeLegacyBlogScheme(value?.legacyBlogScheme),
     serviceLinks: value?.serviceLinks || [],
     contactLinks: value?.contactLinks || [],
   })

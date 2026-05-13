@@ -29,6 +29,8 @@ class ApiV1MemberControllerWebMvcTest : BaseMemberControllerWebMvcTest() {
             adminMember.blogTitle = "aquilaXk's Archive"
             adminMember.homeIntroTitle = "aquilaXk's Blog"
             adminMember.homeIntroDescription = "welcome to my backend dev log!"
+            adminMember.blogDesign = "grid"
+            adminMember.legacyBlogScheme = "light"
             given(memberUseCase.findByEmail("admin@test.com")).willReturn(adminMember)
             given(currentMemberProfileQueryUseCase.getPublishedById(adminMember.id))
                 .willReturn(MemberWithUsernameDto(adminMember))
@@ -51,6 +53,8 @@ class ApiV1MemberControllerWebMvcTest : BaseMemberControllerWebMvcTest() {
                     jsonPath("$.blogTitle") { value("aquilaXk's Archive") }
                     jsonPath("$.homeIntroTitle") { value("aquilaXk's Blog") }
                     jsonPath("$.homeIntroDescription") { value("welcome to my backend dev log!") }
+                    jsonPath("$.blogDesign") { value("grid") }
+                    jsonPath("$.legacyBlogScheme") { value("light") }
                     jsonPath("$.profileImageUrl") { value(startsWith(adminMember.redirectToProfileImgUrlOrDefault)) }
                 }
         }

@@ -66,6 +66,29 @@ export const isInlineCodeMarkActive = (
   editor: TiptapEditor | null | undefined
 ) => editor?.isActive("code") ?? false
 
+export const runInlineCode = (editor: TiptapEditor | null | undefined) => {
+  if (!editor) return false
+  editor.chain().focus().toggleCode().run()
+  return true
+}
+
+export const runInlineColor = (
+  editor: TiptapEditor | null | undefined,
+  color?: string | null
+) => {
+  if (!editor) return false
+
+  const chain = editor.chain().focus().extendMarkRange("inlineColor")
+  const normalizedColor = normalizeInlineColorToken(String(color || ""))
+  if (!normalizedColor) {
+    chain.unsetMark("inlineColor").run()
+    return true
+  }
+
+  chain.setMark("inlineColor", { color: normalizedColor }).run()
+  return true
+}
+
 export const getActiveInlineTextStyleOption = (
   editor: TiptapEditor | null | undefined
 ) => {

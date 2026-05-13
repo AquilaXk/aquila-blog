@@ -244,6 +244,8 @@ import {
   getActiveInlineColor,
   getActiveInlineTextStyleOption,
   isInlineCodeMarkActive,
+  runInlineCode,
+  runInlineColor,
   runInlineTextStyle,
   type InlineTextStyleOption,
 } from "./inlineToolbarModel"
@@ -4685,7 +4687,7 @@ const BlockEditorEngine = ({
   }, [editor])
 
   const runInlineCodeAction = useCallback(() => {
-    editor?.chain().focus().toggleCode().run()
+    runInlineCode(editor)
   }, [editor])
 
   const runStrikeAction = useCallback(() => {
@@ -4806,16 +4808,10 @@ const BlockEditorEngine = ({
 
   const applyInlineColor = useCallback(
     (color?: string | null) => {
-      if (!editor) return
-
-      const chain = editor.chain().focus().extendMarkRange("inlineColor")
-      if (!color) {
-        chain.unsetMark("inlineColor").run()
-      } else {
-        chain.setMark("inlineColor", { color }).run()
+      if (runInlineColor(editor, color)) {
+        setIsInlineColorMenuOpen(false)
+        setIsBubbleInlineColorMenuOpen(false)
       }
-      setIsInlineColorMenuOpen(false)
-      setIsBubbleInlineColorMenuOpen(false)
     },
     [editor]
   )

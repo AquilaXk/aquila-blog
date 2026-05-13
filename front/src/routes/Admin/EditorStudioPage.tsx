@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { GetServerSideProps, NextPage } from "next"
 import { useRouter } from "next/router"
 import {
-  ChangeEvent,
+  type ChangeEvent,
   useDeferredValue,
   useCallback,
   useEffect,
@@ -44,6 +44,11 @@ import { WriterEditorHost } from "./WriterEditorHost"
 import { useEditorStudioDraftLifecycle } from "./useEditorStudioDraftLifecycle"
 import { useEditorStudioPersistence } from "./useEditorStudioPersistence"
 import { useEditorStudioRouting } from "./useEditorStudioRouting"
+import {
+  LIST_SORT_OPTIONS,
+  useEditorStudioListConditions,
+  type PostListScope,
+} from "./useEditorStudioListConditions"
 import { useEditorStudioThumbnailControls } from "./useEditorStudioThumbnailControls"
 import { useEditorStudioThumbnailPreview } from "./useEditorStudioThumbnailPreview"
 import {
@@ -192,8 +197,6 @@ type PostForEditor = {
   tempDraft?: boolean
 }
 
-type PostListScope = "active" | "deleted"
-
 type RsData<T> = {
   resultCode: string
   msg: string
@@ -234,8 +237,6 @@ type DeleteConfirmState = {
   headline: string
 }
 
-type ListQuickPreset = "none" | "today" | "temp"
-
 type SoftDeleteUndoState = {
   ids: number[]
   expiresAt: number
@@ -268,17 +269,11 @@ type PreviewViewportMode = "desktop" | "tablet" | "mobile"
 type ManageMobileStudioStep = "query" | "list"
 type ComposeMobileStudioStep = "edit" | "publish"
 
-const LIST_CONDITION_STORAGE_KEY = "admin.contentStudio.listConditions.v1"
 const LIST_CACHE_TTL_MS = 45_000
 const GLOBAL_NOTICE_IDLE_TEXT = "운영 작업 상태가 여기에 표시됩니다."
 const TAG_RECOMMENDATION_IDLE_TEXT = "AI 태그 추천 상태가 여기에 표시됩니다."
 const MANAGE_MOBILE_STUDIO_STEPS = ["query", "list"] as const
 const COMPOSE_MOBILE_STUDIO_STEPS = ["edit", "publish"] as const
-
-const LIST_SORT_OPTIONS = [
-  { value: "CREATED_AT", label: "최신순" },
-  { value: "CREATED_AT_ASC", label: "오래된순" },
-] as const
 
 const MOBILE_STUDIO_STEP_LABEL: Record<MobileStudioStep, string> = {
   query: "조회",
@@ -609,8 +604,6 @@ const uploadWithConflictRetry = async (
   )
 }
 
-const sanitizeNumberInput = (value: string) => value.replace(/[^\d]/g, "")
-
 const getTodayDateKey = () => new Date().toISOString().slice(0, 10)
 
 const buildListCacheKey = (params: {
@@ -761,13 +754,24 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     setPostContent(nextMarkdown)
   }, [startPostContentTransition])
 
-  const [listPage, setListPage] = useState("1")
-  const [listPageSize, setListPageSize] = useState("30")
-  const [listKw, setListKw] = useState("")
-  const [listSort, setListSort] = useState("CREATED_AT")
-  const [listScope, setListScope] = useState<PostListScope>("active")
-  const [listQuickPreset, setListQuickPreset] = useState<ListQuickPreset>("none")
-  const [isListAdvancedOpen, setIsListAdvancedOpen] = useState(false)
+  const {
+    listPage,
+    listPageSize,
+    listKw,
+    setListKw,
+    listSort,
+    listScope,
+    setListScope,
+    listQuickPreset,
+    setListQuickPreset,
+    isListAdvancedOpen,
+    handleListPageChange,
+    handleListPageSizeChange,
+    handleListSortChange,
+    applyListQuickPreset,
+    resetListFilters,
+    toggleListAdvanced,
+  } = useEditorStudioListConditions()
   const [isDirectLoadOpen, setIsDirectLoadOpen] = useState(false)
   const [isSelectedToolsOpen, setIsSelectedToolsOpen] = useState(false)
 
@@ -934,32 +938,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   useEffect(() => {
     syncTitleTextareaHeight(titleFieldRef.current)
   }, [postTitle])
-
-  const handleListPageChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
-    setListPage(sanitizeNumberInput(e.target.value))
-  }, [])
-
-  const handleListPageSizeChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
-    setListPageSize(sanitizeNumberInput(e.target.value))
-  }, [])
-
-  const handleListSortChange = useCallback((e: ChangeEvent<HTMLSelectElement>) => {
-    setListSort(e.target.value)
-  }, [])
-
-  const applyListQuickPreset = useCallback((preset: ListQuickPreset) => {
-    setListScope("active")
-    setListPage("1")
-    setListPageSize("30")
-    if (preset === "today") {
-      setListKw("")
-      setListSort("CREATED_AT")
-    } else if (preset === "temp") {
-      setListKw("")
-      setListSort("MODIFIED_AT")
-    }
-    setListQuickPreset(preset)
-  }, [])
 
   const handleSelectedPostIdChange = useCallback(
     (nextPostId: string) => {
@@ -1466,8 +1444,8 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
 
   const loadAdminPosts = useCallback(async () => {
     activateManageSurface()
-    const safePage = sanitizeNumberInput(listPage || "1") || "1"
-    const safePageSize = sanitizeNumberInput(listPageSize || "30") || "30"
+    const safePage = listPage || "1"
+    const safePageSize = listPageSize || "30"
     const safeSort =
       LIST_SORT_OPTIONS.find((option) => option.value === listSort)?.value || LIST_SORT_OPTIONS[0].value
     const cacheKey = buildListCacheKey({
@@ -1832,7 +1810,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       tone: "idle",
       text: "",
     })
-  }, [listScope])
+  }, [listScope, setListQuickPreset])
 
   useEffect(() => {
     if (!softDeleteUndoState) return
@@ -2014,47 +1992,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         compareCategoryValues
       )
     )
-    try {
-      const raw = localStorage.getItem(LIST_CONDITION_STORAGE_KEY)
-      if (raw) {
-        const parsed = JSON.parse(raw) as Partial<{
-          page: string
-          pageSize: string
-          kw: string
-          sort: string
-          scope: PostListScope
-          preset: ListQuickPreset
-        }>
-        if (typeof parsed.page === "string") setListPage(sanitizeNumberInput(parsed.page) || "1")
-        if (typeof parsed.pageSize === "string") setListPageSize(sanitizeNumberInput(parsed.pageSize) || "30")
-        if (typeof parsed.kw === "string") setListKw(parsed.kw)
-        if (typeof parsed.sort === "string") {
-          const hasOption = LIST_SORT_OPTIONS.some((option) => option.value === parsed.sort)
-          setListSort(hasOption ? parsed.sort : LIST_SORT_OPTIONS[0].value)
-        }
-        if (parsed.scope === "active" || parsed.scope === "deleted") setListScope(parsed.scope)
-        if (parsed.preset === "none" || parsed.preset === "today" || parsed.preset === "temp") {
-          setListQuickPreset(parsed.preset)
-        }
-      }
-    } catch {
-      // noop: 깨진 저장값은 무시하고 기본값 사용
-    }
   }, [])
-
-  useEffect(() => {
-    localStorage.setItem(
-      LIST_CONDITION_STORAGE_KEY,
-      JSON.stringify({
-        page: listPage,
-        pageSize: listPageSize,
-        kw: listKw,
-        sort: listSort,
-        scope: listScope,
-        preset: listQuickPreset,
-      })
-    )
-  }, [listKw, listPage, listPageSize, listQuickPreset, listScope, listSort])
 
   useEffect(() => {
     persistCatalog(TAG_CATALOG_STORAGE_KEY, customTagCatalog)
@@ -2679,14 +2617,8 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
               onRefreshList={() => void loadAdminPosts()}
               onLoadOrCreateTempPost={() => void handleLoadOrCreateTempPost()}
               onApplyQuickPreset={applyListQuickPreset}
-              onResetFilters={() => {
-                setListQuickPreset("none")
-                setListKw("")
-                setListPage("1")
-                setListPageSize("30")
-                setListSort("CREATED_AT")
-              }}
-              onToggleListAdvanced={() => setIsListAdvancedOpen((prev) => !prev)}
+              onResetFilters={resetListFilters}
+              onToggleListAdvanced={toggleListAdvanced}
               onListPageChange={handleListPageChange}
               onListPageSizeChange={handleListPageSizeChange}
               onListSortChange={handleListSortChange}

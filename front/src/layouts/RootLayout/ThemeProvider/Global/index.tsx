@@ -1,15 +1,11 @@
 import { Global as _Global, css, useTheme } from "@emotion/react"
 
-import { ThemeProvider as _ThemeProvider } from "@emotion/react"
 import { pretendard } from "src/assets"
 
 export const Global = () => {
   const theme = useTheme()
-  const bodyBackgroundColor = theme.scheme === "light" ? "#f3f5f8" : theme.colors.gray1
-  const bodyBackgroundImage =
-    theme.scheme === "light"
-      ? "radial-gradient(circle at 18% -12%, rgba(37, 99, 235, 0.025), transparent 26%), radial-gradient(circle at 88% 0%, rgba(148, 163, 184, 0.04), transparent 22%)"
-      : "none"
+  const bodyBackgroundColor = theme.publicDesign.pageBackgroundColor
+  const bodyBackgroundImage = theme.publicDesign.pageBackgroundImage
 
   return (
     <_Global

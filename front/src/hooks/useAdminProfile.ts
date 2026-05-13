@@ -60,6 +60,12 @@ type AdminProfileLike = {
   contactLinks?: ProfileCardLinkItem[]
 }
 
+type UseAdminProfileOptions = {
+  enabled?: boolean
+  refetchOnMount?: boolean
+  staleTimeMs?: number
+}
+
 export const toAdminProfile = (value: AdminProfileLike): AdminProfile => ({
   username: value.username,
   name: value.name || value.nickname || value.username,
@@ -98,8 +104,9 @@ const persistAdminProfileSnapshotCookie = (profile: AdminProfile) => {
   })
 }
 
-export const useAdminProfile = (initialProfile: AdminProfile | null = null) => {
+export const useAdminProfile = (initialProfile: AdminProfile | null = null, options: UseAdminProfileOptions = {}) => {
   const isBrowser = typeof window !== "undefined"
+  const canFetch = options.enabled ?? true
   const queryClient = useQueryClient()
   const cacheKey = queryKey.adminProfile()
   const cachedProfile = queryClient.getQueryData<AdminProfile | null>(cacheKey)
@@ -120,12 +127,12 @@ export const useAdminProfile = (initialProfile: AdminProfile | null = null) => {
         return initialProfile ?? null
       }
     },
-    enabled: isBrowser,
+    enabled: isBrowser && canFetch,
     initialData: seededProfile ?? undefined,
-    staleTime: hasSeedProfile ? 5 * 60 * 1000 : 0,
+    staleTime: options.staleTimeMs ?? (hasSeedProfile ? 5 * 60 * 1000 : 0),
     retry: false,
     refetchOnWindowFocus: false,
-    refetchOnMount: !hasSeedProfile,
+    refetchOnMount: canFetch && (options.refetchOnMount ?? !hasSeedProfile),
   })
 
   return query.data ?? initialProfile

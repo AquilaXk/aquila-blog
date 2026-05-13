@@ -1,15 +1,29 @@
 import { dehydrate } from "@tanstack/react-query"
 import { GetStaticPathsResult, GetStaticPropsResult } from "next"
 import { getPostDetailById } from "src/apis"
+import { apiFetch } from "src/apis/backend/client"
 import { getPostsBootstrap } from "src/apis/backend/posts"
 import { queryKey } from "src/constants/queryKey"
+import type { AdminProfile } from "src/hooks/useAdminProfile"
 import { createQueryClient } from "src/libs/react-query"
+import { buildStaticAdminProfileSnapshot } from "src/libs/server/adminProfile"
 import { TPostComment } from "src/types"
 
 type DetailPageProps = {
   dehydratedState: unknown
   initialComments: TPostComment[] | null
+  initialAdminProfile: AdminProfile | null
+  initialAdminProfileSource: StaticAdminProfileSeedSource
 }
+
+type StaticAdminProfileSeedSource = "published" | "static-fallback"
+
+type StaticAdminProfileSeed = {
+  profile: AdminProfile
+  source: StaticAdminProfileSeedSource
+}
+
+type FetchStaticAdminProfile = () => Promise<AdminProfile>
 
 const DETAIL_ISR_REVALIDATE_SECONDS = 60 * 60
 const DETAIL_PREBUILD_COUNT = 16
@@ -21,16 +35,42 @@ const toSerializableState = (value: unknown): unknown =>
     JSON.stringify(value, (_key, currentValue) => (currentValue === undefined ? null : currentValue))
   )
 
+const fetchPublicAdminProfile: FetchStaticAdminProfile = async () => {
+  return await apiFetch<AdminProfile>("/member/api/v1/members/adminProfile")
+}
+
+export const resolveStaticAdminProfileSeed = async (
+  fetchProfile: FetchStaticAdminProfile = fetchPublicAdminProfile
+): Promise<StaticAdminProfileSeed> => {
+  try {
+    return {
+      profile: await fetchProfile(),
+      source: "published",
+    }
+  } catch {
+    return {
+      profile: buildStaticAdminProfileSnapshot(),
+      source: "static-fallback",
+    }
+  }
+}
+
 export const buildCanonicalPostDetailStaticProps = async (
   postId: string
 ): Promise<GetStaticPropsResult<DetailPageProps>> => {
   const queryClient = createQueryClient()
+  const adminProfileSeed = await resolveStaticAdminProfileSeed()
+  const initialAdminProfile = adminProfileSeed.profile
+  const initialAdminProfileSource = adminProfileSeed.source
+  queryClient.setQueryData(queryKey.adminProfile(), initialAdminProfile)
 
   if (IS_QA_STATIC_RECOVERY_MODE) {
     return {
       props: {
         dehydratedState: toSerializableState(dehydrate(queryClient)),
         initialComments: null,
+        initialAdminProfile,
+        initialAdminProfileSource,
       },
       revalidate: DETAIL_RECOVERY_REVALIDATE_SECONDS,
     }
@@ -61,8 +101,13 @@ export const buildCanonicalPostDetailStaticProps = async (
     props: {
       dehydratedState: toSerializableState(dehydrate(queryClient)),
       initialComments,
+      initialAdminProfile,
+      initialAdminProfileSource,
     },
-    revalidate: shouldServeClientRecoveryShell ? DETAIL_RECOVERY_REVALIDATE_SECONDS : DETAIL_ISR_REVALIDATE_SECONDS,
+    revalidate:
+      shouldServeClientRecoveryShell || initialAdminProfileSource === "static-fallback"
+        ? DETAIL_RECOVERY_REVALIDATE_SECONDS
+        : DETAIL_ISR_REVALIDATE_SECONDS,
   }
 }
 

@@ -1,4 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
+import { readFileSync } from "fs"
+import path from "path"
+import { resolveStaticAdminProfileSeed } from "../src/libs/server/postDetailPage"
 
 const AVATAR_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlH0WkAAAAASUVORK5CYII="
@@ -165,6 +168,61 @@ const mockFeedEndpoints = async (page: Page) => {
 
 test.beforeEach(async ({ page }) => {
   await mockAvatarAsset(page)
+})
+
+test("public blog appearance는 adminProfile 전역 설정에서 resolve된다", async () => {
+  const resolverSource = readFileSync(path.resolve(__dirname, "../src/libs/blogAppearance.ts"), "utf8")
+  const rootLayoutSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/index.tsx"), "utf8")
+  const headerSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/Header/index.tsx"), "utf8")
+  const logoSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/Header/Logo.tsx"), "utf8")
+  const adminShellSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminShell.tsx"), "utf8")
+  const appSource = readFileSync(path.resolve(__dirname, "../src/pages/_app.tsx"), "utf8")
+  const postDetailPageSource = readFileSync(path.resolve(__dirname, "../src/libs/server/postDetailPage.ts"), "utf8")
+  const useAdminProfileSource = readFileSync(path.resolve(__dirname, "../src/hooks/useAdminProfile.ts"), "utf8")
+
+  expect(resolverSource).toContain('blogDesign === "grid"')
+  expect(resolverSource).toContain('scheme: "dark"')
+  expect(resolverSource).not.toContain("src/libs/profileWorkspace")
+  expect(rootLayoutSource).toContain("resolvePublicBlogAppearance")
+  expect(rootLayoutSource).toContain("usePublicAdminProfile(initialAdminProfile")
+  expect(headerSource).toContain("showThemeToggle")
+  expect(logoSource).not.toContain("useAdminProfile")
+  expect(logoSource).toContain("blogTitle")
+  expect(adminShellSource).not.toContain("useAdminProfile")
+  expect(appSource).toContain("initialAdminProfile={initialAdminProfile}")
+  expect(postDetailPageSource).toContain("queryKey.adminProfile()")
+  expect(postDetailPageSource).toContain("initialAdminProfile")
+  expect(postDetailPageSource).toContain('initialAdminProfileSource === "static-fallback"')
+  expect(appSource).toContain("initialAdminProfileShouldRefetch")
+  expect(rootLayoutSource).toContain("refetchOnMount: initialAdminProfileShouldRefetch")
+  expect(rootLayoutSource).toContain("staleTimeMs: initialAdminProfileShouldRefetch ? 0 : undefined")
+  expect(useAdminProfileSource).toContain("enabled?: boolean")
+  expect(useAdminProfileSource).toContain("refetchOnMount?: boolean")
+  expect(useAdminProfileSource).toContain("staleTimeMs?: number")
+})
+
+test("post detail adminProfile seed는 published와 fallback source를 구분한다", async () => {
+  const publishedProfile = {
+    username: "aquila",
+    name: "aquila",
+    nickname: "aquila",
+    profileImageUrl: "/avatar.png",
+    blogDesign: "grid" as const,
+    legacyBlogScheme: "light" as const,
+  }
+
+  await expect(resolveStaticAdminProfileSeed(async () => publishedProfile)).resolves.toMatchObject({
+    profile: { blogDesign: "grid", legacyBlogScheme: "light" },
+    source: "published",
+  })
+  await expect(
+    resolveStaticAdminProfileSeed(async () => {
+      throw new Error("admin profile unavailable")
+    })
+  ).resolves.toMatchObject({
+    profile: { blogDesign: "legacy", legacyBlogScheme: "dark" },
+    source: "static-fallback",
+  })
 })
 
 test("홈 피드 기본 UI가 렌더링된다", async ({ page }) => {

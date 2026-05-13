@@ -2,11 +2,13 @@ import Link from "next/link"
 import { CONFIG } from "site.config"
 import styled from "@emotion/styled"
 import BrandMark from "src/components/branding/BrandMark"
-import { useAdminProfile } from "src/hooks/useAdminProfile"
 
-const Logo = () => {
-  const adminProfile = useAdminProfile()
-  const blogTitle = adminProfile?.blogTitle?.trim() || CONFIG.blog.title
+type Props = {
+  blogTitle?: string
+}
+
+const Logo = ({ blogTitle: blogTitleProp }: Props) => {
+  const blogTitle = blogTitleProp?.trim() || CONFIG.blog.title
 
   return (
     <StyledWrapper href="/" aria-label={blogTitle}>

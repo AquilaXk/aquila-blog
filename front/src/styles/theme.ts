@@ -2,11 +2,26 @@ import { Theme } from "@emotion/react"
 import { Colors, colors } from "./colors"
 import { variables } from "./variables"
 import { zIndexes } from "./zIndexes"
-import { SchemeType } from "src/types"
+import type { BlogDesignType, SchemeType } from "src/types"
+
+export type PublicDesignTokens = {
+  pageBackgroundColor: string
+  pageBackgroundImage: string
+  surface: string
+  surfaceElevated: string
+  border: string
+  borderStrong: string
+  accent: string
+  accentMuted: string
+  textMuted: string
+  shadow: string
+}
 
 declare module "@emotion/react" {
   export interface Theme {
     scheme: SchemeType
+    blogDesign: BlogDesignType
+    publicDesign: PublicDesignTokens
     colors: Colors
     zIndexes: typeof zIndexes
     variables: typeof variables
@@ -15,10 +30,49 @@ declare module "@emotion/react" {
 
 type Options = {
   scheme: SchemeType
+  blogDesign?: BlogDesignType
+}
+
+export const createPublicDesignTokens = (scheme: SchemeType, blogDesign: BlogDesignType): PublicDesignTokens => {
+  if (blogDesign === "grid") {
+    return {
+      pageBackgroundColor: "#090909",
+      pageBackgroundImage:
+        "linear-gradient(180deg, rgba(84, 14, 14, 0.22) 0%, rgba(9, 9, 9, 0) 34%), repeating-linear-gradient(90deg, rgba(184, 138, 76, 0.055) 0, rgba(184, 138, 76, 0.055) 1px, transparent 1px, transparent 96px)",
+      surface: "#111111",
+      surfaceElevated: "#181715",
+      border: "rgba(151, 125, 85, 0.28)",
+      borderStrong: "rgba(190, 143, 75, 0.48)",
+      accent: "#b88a4c",
+      accentMuted: "rgba(184, 138, 76, 0.18)",
+      textMuted: "#a7a29a",
+      shadow: "0 18px 50px rgba(0, 0, 0, 0.42)",
+    }
+  }
+
+  const schemeColors = colors[scheme]
+
+  return {
+    pageBackgroundColor: scheme === "light" ? "#f3f5f8" : schemeColors.gray1,
+    pageBackgroundImage:
+      scheme === "light"
+        ? "radial-gradient(circle at 18% -12%, rgba(37, 99, 235, 0.025), transparent 26%), radial-gradient(circle at 88% 0%, rgba(148, 163, 184, 0.04), transparent 22%)"
+        : "none",
+    surface: schemeColors.gray1,
+    surfaceElevated: scheme === "light" ? schemeColors.gray2 : schemeColors.gray3,
+    border: schemeColors.gray6,
+    borderStrong: schemeColors.gray7,
+    accent: schemeColors.accentControl,
+    accentMuted: schemeColors.accentSurfaceSubtle,
+    textMuted: schemeColors.gray10,
+    shadow: variables.ui.card.shadow,
+  }
 }
 
 export const createTheme = (options: Options): Theme => ({
   scheme: options.scheme,
+  blogDesign: options.blogDesign ?? "legacy",
+  publicDesign: createPublicDesignTokens(options.scheme, options.blogDesign ?? "legacy"),
   colors: colors[options.scheme],
   variables: variables,
   zIndexes: zIndexes,

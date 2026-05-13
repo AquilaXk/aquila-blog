@@ -38,7 +38,7 @@ export const createPublicDesignTokens = (scheme: SchemeType, blogDesign: BlogDes
     return {
       pageBackgroundColor: "#090909",
       pageBackgroundImage:
-        "linear-gradient(180deg, rgba(84, 14, 14, 0.22) 0%, rgba(9, 9, 9, 0) 34%), repeating-linear-gradient(90deg, rgba(184, 138, 76, 0.055) 0, rgba(184, 138, 76, 0.055) 1px, transparent 1px, transparent 96px)",
+        "linear-gradient(#540e0e38,#0000 34%),repeating-linear-gradient(90deg,#b88a4c0e,#b88a4c0e 1px,#0000 1px,#0000 96px)",
       surface: "#111111",
       surfaceElevated: "#181715",
       border: "rgba(151, 125, 85, 0.28)",
@@ -56,7 +56,7 @@ export const createPublicDesignTokens = (scheme: SchemeType, blogDesign: BlogDes
     pageBackgroundColor: scheme === "light" ? "#f3f5f8" : schemeColors.gray1,
     pageBackgroundImage:
       scheme === "light"
-        ? "radial-gradient(circle at 18% -12%, rgba(37, 99, 235, 0.025), transparent 26%), radial-gradient(circle at 88% 0%, rgba(148, 163, 184, 0.04), transparent 22%)"
+        ? "radial-gradient(circle at 18% -12%,#2563eb06,transparent 26%),radial-gradient(circle at 88% 0%,#94a3b80a,transparent 22%)"
         : "none",
     surface: schemeColors.gray1,
     surfaceElevated: scheme === "light" ? schemeColors.gray2 : schemeColors.gray3,

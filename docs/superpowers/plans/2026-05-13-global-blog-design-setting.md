@@ -1013,10 +1013,15 @@ git push
 - Modify: `front/src/pages/about.tsx`
 - Modify: `front/src/routes/Detail/PostDetail/index.tsx`
 - Modify: `front/src/routes/Detail/PostDetail/PostHeader.tsx`
+- Modify: `front/src/libs/server/adminProfile.ts`
+- Modify: `front/src/libs/server/postDetailPage.ts`
+- Modify: `front/src/pages/index.tsx`
+- Modify: `front/src/styles/theme.ts`
+- Modify: `front/e2e/smoke.spec.ts`
 - Modify: `front/e2e/mobile-layout.spec.ts`
 - Modify: `front/e2e/perf.spec.ts`
 
-- [ ] **Step 1: Add public styling guard checks**
+- [x] **Step 1: Add public styling guard checks**
 
 In `front/e2e/mobile-layout.spec.ts`, add a source contract test:
 
@@ -1041,7 +1046,7 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 yarn --cwd front playwright test e2e/m
 
 Expected: FAIL until public surface styling consumes `theme.publicDesign`.
 
-- [ ] **Step 2: Apply grid tokens to header without layout changes**
+- [x] **Step 2: Apply grid tokens to header without layout changes**
 
 In `Header/index.tsx`, update `StyledWrapper` background and border:
 
@@ -1064,7 +1069,7 @@ In `Logo.tsx`, keep existing font size and weight. Only adjust color for grid:
 color: ${({ theme }) => (theme.blogDesign === "grid" ? "#f4ead7" : theme.colors.gray12)};
 ```
 
-- [ ] **Step 3: Apply grid tokens to feed surfaces**
+- [x] **Step 3: Apply grid tokens to feed surfaces**
 
 In feed cards and rail cards, replace only background/border/shadow/color accents with conditional tokens:
 
@@ -1088,7 +1093,7 @@ border-color: ${({ theme }) =>
 
 Do not change `font-size`, `line-height`, `letter-spacing`, `max-width`, grid breakpoints, or card dimensions.
 
-- [ ] **Step 4: Apply grid tokens to About and Detail surfaces**
+- [x] **Step 4: Apply grid tokens to About and Detail surfaces**
 
 In `front/src/pages/about.tsx` and `front/src/routes/Detail/PostDetail/**`, change only page/container surface colors, borders, shadows, and decorative dividers:
 
@@ -1108,7 +1113,11 @@ color: ${({ theme }) =>
 
 Do not modify article typography declarations in markdown renderer, post content body, heading scales, or readable width variables.
 
-- [ ] **Step 5: Run public layout/perf focused checks**
+- [x] **Step 5: Keep SSG fallback seeds from blocking public design refetch**
+
+Home/About can render a static fallback admin profile when backend fetch is unavailable during SSG/SSR. That fallback must set `initialAdminProfileSource: "static-fallback"` so `RootLayout` refetches the published public admin profile on mount and the grid design is not hidden behind a stale legacy seed.
+
+- [x] **Step 6: Run public layout/perf focused checks**
 
 Run:
 
@@ -1122,11 +1131,18 @@ yarn --cwd front build
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit public surface styling**
+Observed:
+- `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 yarn --cwd front playwright test e2e/perf.spec.ts --workers=1` initially failed after the grid refetch fix because Header grid tokens were applied to operational legacy routes. Header was corrected to use `publicDesign` only when `theme.blogDesign === "grid"`.
+- `node front/scripts/check-bundle-size.mjs` initially failed with `/ raw` 19 bytes over budget after the style/refetch patch. The root cause was the long theme background-image literal; preserving the same visual intent with compact CSS hex literals brought the route back under budget.
+
+- [ ] **Step 7: Commit public surface styling**
 
 ```bash
 git add front/src/layouts/RootLayout/Header/index.tsx \
   front/src/layouts/RootLayout/Header/Logo.tsx \
+  front/src/libs/server/adminProfile.ts \
+  front/src/libs/server/postDetailPage.ts \
+  front/src/pages/index.tsx \
   front/src/routes/Feed/index.tsx \
   front/src/routes/Feed/PostList/PostCard.tsx \
   front/src/routes/Feed/SearchInput.tsx \
@@ -1135,10 +1151,13 @@ git add front/src/layouts/RootLayout/Header/index.tsx \
   front/src/routes/Feed/ServiceCard.tsx \
   front/src/routes/Feed/ContactCard.tsx \
   front/src/pages/about.tsx \
+  front/src/styles/theme.ts \
   front/src/routes/Detail/PostDetail/index.tsx \
   front/src/routes/Detail/PostDetail/PostHeader.tsx \
+  front/e2e/smoke.spec.ts \
   front/e2e/mobile-layout.spec.ts \
-  front/e2e/perf.spec.ts
+  front/e2e/perf.spec.ts \
+  docs/superpowers/plans/2026-05-13-global-blog-design-setting.md
 git commit -m "feat(frontend): grid public blog 디자인 적용"
 git push
 ```

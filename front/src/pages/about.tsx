@@ -17,6 +17,7 @@ import {
   fetchServerAdminProfile,
   hasServerAuthCookie,
   resolvePublicAdminProfileSnapshot,
+  type StaticAdminProfileSeedSource,
 } from "src/libs/server/adminProfile"
 import { appendSsrDebugTiming, isSsrDebugEnabled, timed } from "src/libs/server/serverTiming"
 import { resolveContactLinks, resolveRenderableProfileLinkHref, resolveServiceLinks } from "src/libs/utils/profileCardLinks"
@@ -37,6 +38,12 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
       : hasAuthCookie
         ? buildStaticAdminProfileSnapshot()
         : fallbackProfileSnapshot?.profile || buildStaticAdminProfileSnapshot()
+  const initialAdminProfileSource: StaticAdminProfileSeedSource =
+    adminProfileResult.ok && adminProfileResult.value
+      ? "published"
+      : fallbackProfileSnapshot?.source === "cookie-snapshot"
+        ? "published"
+        : "static-fallback"
 
   res.setHeader(
     "Cache-Control",
@@ -61,12 +68,14 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
   return {
     props: {
       initialAdminProfile,
+      initialAdminProfileSource,
     },
   }
 }
 
 type AboutPageProps = {
   initialAdminProfile: AdminProfile | null
+  initialAdminProfileSource: StaticAdminProfileSeedSource
 }
 
 type AboutListSection = {
@@ -341,7 +350,8 @@ const StyledWrapper = styled.div`
     grid-template-columns: minmax(0, 1.6fr) minmax(220px, 0.9fr);
     gap: 2.25rem;
     padding-bottom: 2rem;
-    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-bottom: 1px solid ${({ theme }) =>
+      theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
   }
 
   .hero-copy {
@@ -408,9 +418,11 @@ const StyledWrapper = styled.div`
     width: 148px;
     border-radius: 999px;
     overflow: hidden;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray1};
-    box-shadow: 0 18px 38px rgba(0, 0, 0, 0.18);
+    border: 1px solid ${({ theme }) =>
+      theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
+    background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.surface : theme.colors.gray1)};
+    box-shadow: ${({ theme }) =>
+      theme.blogDesign === "grid" ? theme.publicDesign.shadow : "0 18px 38px rgba(0, 0, 0, 0.18)"};
 
     &::after {
       content: "";
@@ -432,8 +444,9 @@ const StyledWrapper = styled.div`
       min-height: 40px;
       padding: 0.68rem 0.92rem;
       border-radius: 999px;
-      border: 1px solid ${({ theme }) => theme.colors.gray6};
-      background: ${({ theme }) => theme.colors.gray1};
+      border: 1px solid ${({ theme }) =>
+        theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
+      background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.surface : theme.colors.gray1)};
       color: ${({ theme }) => theme.colors.gray12};
       font-size: 0.94rem;
       font-weight: 700;
@@ -441,8 +454,10 @@ const StyledWrapper = styled.div`
       transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 
       &:hover {
-        background: ${({ theme }) => theme.colors.gray2};
-        border-color: ${({ theme }) => theme.colors.gray10};
+        background: ${({ theme }) =>
+          theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.gray2};
+        border-color: ${({ theme }) =>
+          theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray10};
         transform: translateY(-1px);
       }
     }
@@ -479,9 +494,10 @@ const StyledWrapper = styled.div`
       grid-template-columns: minmax(0, 1fr) minmax(10rem, 15rem);
       gap: 1.1rem;
       padding: 1rem 1.1rem;
-      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      border: 1px solid ${({ theme }) =>
+        theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
       border-radius: 16px;
-      background: ${({ theme }) => theme.colors.gray1};
+      background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.surface : theme.colors.gray1)};
     }
   }
 
@@ -526,7 +542,8 @@ const StyledWrapper = styled.div`
       align-items: center;
       min-height: 30px;
       padding: 0.42rem 0.7rem;
-      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      border: 1px solid ${({ theme }) =>
+        theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
       border-radius: 999px;
       color: ${({ theme }) => theme.colors.gray12};
       font-size: 0.86rem;
@@ -534,7 +551,8 @@ const StyledWrapper = styled.div`
       font-weight: 650;
 
       &:hover {
-        border-color: ${({ theme }) => theme.colors.gray10};
+        border-color: ${({ theme }) =>
+          theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray10};
         text-decoration: none;
       }
     }
@@ -570,7 +588,8 @@ const StyledWrapper = styled.div`
 
   .supplemental-section[data-has-divider="true"] {
     padding-top: 1.2rem;
-    border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-top: 1px solid ${({ theme }) =>
+      theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
   }
 
   .supplemental-list {
@@ -592,10 +611,12 @@ const StyledWrapper = styled.div`
 
   .compact-link-list {
     background: transparent;
-    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-bottom: 1px solid ${({ theme }) =>
+      theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
 
     li + li {
-      border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+      border-top: 1px solid ${({ theme }) =>
+        theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
     }
 
     a {

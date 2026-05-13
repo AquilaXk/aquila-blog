@@ -6,21 +6,19 @@ import { getPostsBootstrap } from "src/apis/backend/posts"
 import { queryKey } from "src/constants/queryKey"
 import type { AdminProfile } from "src/hooks/useAdminProfile"
 import { createQueryClient } from "src/libs/react-query"
-import { buildStaticAdminProfileSnapshot } from "src/libs/server/adminProfile"
+import {
+  resolveStaticAdminProfileSeed,
+  type StaticAdminProfileSeedSource,
+} from "src/libs/server/adminProfile"
 import { TPostComment } from "src/types"
+
+export { resolveStaticAdminProfileSeed } from "src/libs/server/adminProfile"
 
 type DetailPageProps = {
   dehydratedState: unknown
   initialComments: TPostComment[] | null
   initialAdminProfile: AdminProfile | null
   initialAdminProfileSource: StaticAdminProfileSeedSource
-}
-
-type StaticAdminProfileSeedSource = "published" | "static-fallback"
-
-type StaticAdminProfileSeed = {
-  profile: AdminProfile
-  source: StaticAdminProfileSeedSource
 }
 
 type FetchStaticAdminProfile = () => Promise<AdminProfile>
@@ -39,27 +37,11 @@ const fetchPublicAdminProfile: FetchStaticAdminProfile = async () => {
   return await apiFetch<AdminProfile>("/member/api/v1/members/adminProfile")
 }
 
-export const resolveStaticAdminProfileSeed = async (
-  fetchProfile: FetchStaticAdminProfile = fetchPublicAdminProfile
-): Promise<StaticAdminProfileSeed> => {
-  try {
-    return {
-      profile: await fetchProfile(),
-      source: "published",
-    }
-  } catch {
-    return {
-      profile: buildStaticAdminProfileSnapshot(),
-      source: "static-fallback",
-    }
-  }
-}
-
 export const buildCanonicalPostDetailStaticProps = async (
   postId: string
 ): Promise<GetStaticPropsResult<DetailPageProps>> => {
   const queryClient = createQueryClient()
-  const adminProfileSeed = await resolveStaticAdminProfileSeed()
+  const adminProfileSeed = await resolveStaticAdminProfileSeed(fetchPublicAdminProfile)
   const initialAdminProfile = adminProfileSeed.profile
   const initialAdminProfileSource = adminProfileSeed.source
   queryClient.setQueryData(queryKey.adminProfile(), initialAdminProfile)

@@ -10,7 +10,8 @@ import { GetStaticProps } from "next"
 import { dehydrate } from "@tanstack/react-query"
 import { AdminProfile } from "src/hooks/useAdminProfile"
 import {
-  buildStaticAdminProfileSnapshot,
+  resolveStaticAdminProfileSeed,
+  type StaticAdminProfileSeedSource,
 } from "src/libs/server/adminProfile"
 import type { TPost } from "src/types"
 import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
@@ -20,18 +21,15 @@ const HOME_ISR_REVALIDATE_SECONDS = 60
 const HOME_QA_SHELL_REVALIDATE_SECONDS = 15
 const IS_QA_STATIC_SHELL_MODE = process.env.ENABLE_QA_ROUTES === "true"
 
-const fetchPublicAdminProfile = async (): Promise<AdminProfile> => {
-  try {
-    return await apiFetch<AdminProfile>("/member/api/v1/members/adminProfile")
-  } catch {
-    return buildStaticAdminProfileSnapshot()
-  }
-}
+const fetchPublicAdminProfile = async (): Promise<AdminProfile> =>
+  await apiFetch<AdminProfile>("/member/api/v1/members/adminProfile")
 
 export const getStaticProps: GetStaticProps = async () => {
   const queryClient = createQueryClient()
   const currentTag = ""
-  const initialAdminProfile = await fetchPublicAdminProfile()
+  const adminProfileSeed = await resolveStaticAdminProfileSeed(fetchPublicAdminProfile)
+  const initialAdminProfile = adminProfileSeed.profile
+  const initialAdminProfileSource = adminProfileSeed.source
   const bootstrapSnapshot = await (async () => {
     if (IS_QA_STATIC_SHELL_MODE) {
       return {
@@ -120,6 +118,7 @@ export const getStaticProps: GetStaticProps = async () => {
     props: {
       dehydratedState: dehydrate(queryClient),
       initialAdminProfile,
+      initialAdminProfileSource,
     },
     revalidate:
       IS_QA_STATIC_SHELL_MODE || !postsLoaded ? HOME_QA_SHELL_REVALIDATE_SECONDS : HOME_ISR_REVALIDATE_SECONDS,
@@ -128,6 +127,7 @@ export const getStaticProps: GetStaticProps = async () => {
 
 type FeedPageProps = {
   initialAdminProfile: AdminProfile | null
+  initialAdminProfileSource: StaticAdminProfileSeedSource
 }
 
 const FeedPage: NextPageWithLayout<FeedPageProps> = ({ initialAdminProfile }) => {

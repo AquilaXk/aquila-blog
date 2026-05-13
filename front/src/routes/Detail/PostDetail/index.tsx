@@ -1408,8 +1408,18 @@ const StyledWrapper = styled.div`
     justify-content: center;
     padding: 0;
     border-radius: 999px;
-    border: 1px solid ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.28)" : theme.colors.gray6)};
-    background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(15, 23, 42, 0.32)" : "rgba(255, 255, 255, 0.92)")};
+    border: 1px solid ${({ theme }) =>
+      theme.blogDesign === "grid"
+        ? theme.publicDesign.border
+        : theme.scheme === "dark"
+          ? "rgba(148, 163, 184, 0.28)"
+          : theme.colors.gray6};
+    background: ${({ theme }) =>
+      theme.blogDesign === "grid"
+        ? theme.publicDesign.surface
+        : theme.scheme === "dark"
+          ? "rgba(15, 23, 42, 0.32)"
+          : "rgba(255, 255, 255, 0.92)"};
     color: ${({ theme }) => theme.colors.gray12};
     cursor: pointer;
     transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
@@ -1420,8 +1430,18 @@ const StyledWrapper = styled.div`
 
     &:hover {
       transform: translateY(-1px);
-      border-color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.62)" : theme.colors.gray8)};
-      background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(17, 24, 39, 0.62)" : "#ffffff")};
+      border-color: ${({ theme }) =>
+        theme.blogDesign === "grid"
+          ? theme.publicDesign.borderStrong
+          : theme.scheme === "dark"
+            ? "rgba(148, 163, 184, 0.62)"
+            : theme.colors.gray8};
+      background: ${({ theme }) =>
+        theme.blogDesign === "grid"
+          ? theme.publicDesign.surfaceElevated
+          : theme.scheme === "dark"
+            ? "rgba(17, 24, 39, 0.62)"
+            : "#ffffff"};
     }
 
     &:disabled {
@@ -1445,8 +1465,10 @@ const StyledWrapper = styled.div`
       white-space: nowrap;
       padding: 0.3rem 0.48rem;
       border-radius: 8px;
-      border: 1px solid ${({ theme }) => theme.colors.gray6};
-      background: ${({ theme }) => theme.colors.gray2};
+      border: 1px solid ${({ theme }) =>
+        theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
+      background: ${({ theme }) =>
+        theme.blogDesign === "grid" ? theme.publicDesign.surfaceElevated : theme.colors.gray2};
       color: ${({ theme }) => theme.colors.gray11};
       font-size: 0.68rem;
       line-height: 1;
@@ -1512,7 +1534,12 @@ const StyledWrapper = styled.div`
   }
 
   .rightRailInner {
-    border-left: 1px solid ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.26)" : theme.colors.gray6)};
+    border-left: 1px solid ${({ theme }) =>
+      theme.blogDesign === "grid"
+        ? theme.publicDesign.border
+        : theme.scheme === "dark"
+          ? "rgba(148, 163, 184, 0.26)"
+          : theme.colors.gray6};
     padding: 0.2rem 0 0.2rem 1.4rem;
     background: transparent;
 
@@ -1547,9 +1574,11 @@ const StyledWrapper = styled.div`
     }
 
     .tocDepthToggle {
-      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      border: 1px solid ${({ theme }) =>
+        theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
       border-radius: 999px;
-      background: ${({ theme }) => theme.colors.gray2};
+      background: ${({ theme }) =>
+        theme.blogDesign === "grid" ? theme.publicDesign.surfaceElevated : theme.colors.gray2};
       color: ${({ theme }) => theme.colors.gray10};
       font-size: 0.71rem;
       font-weight: 700;
@@ -1560,7 +1589,8 @@ const StyledWrapper = styled.div`
 
       &:hover {
         color: ${({ theme }) => theme.colors.gray12};
-        border-color: ${({ theme }) => theme.colors.gray8};
+        border-color: ${({ theme }) =>
+          theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray8};
       }
     }
 
@@ -1613,7 +1643,8 @@ const StyledWrapper = styled.div`
 
     button:hover {
       color: ${({ theme }) => theme.colors.gray11};
-      background: ${({ theme }) => theme.colors.gray2};
+      background: ${({ theme }) =>
+        theme.blogDesign === "grid" ? theme.publicDesign.surfaceElevated : theme.colors.gray2};
     }
 
     button::before {
@@ -1624,14 +1655,15 @@ const StyledWrapper = styled.div`
       bottom: 0.24rem;
       width: 1px;
       opacity: 0;
-      background: ${({ theme }) => theme.colors.accentBorder};
+      background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.accentBorder)};
       transition: opacity 0.15s ease;
     }
 
     button[data-active="true"] {
       color: ${({ theme }) => theme.colors.gray12};
       font-weight: 700;
-      background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
+      background: ${({ theme }) =>
+        theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.accentSurfaceSubtle};
     }
 
     button[data-active="true"]::before {
@@ -1696,7 +1728,8 @@ const StyledWrapper = styled.div`
 const BodySection = styled.div`
   margin-top: 0.8rem;
   padding-top: 1.05rem;
-  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-top: 1px solid ${({ theme }) =>
+    theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
   width: 100%;
   min-width: 0;
 
@@ -1709,9 +1742,10 @@ const BodySection = styled.div`
 const CompactTocSection = styled.section`
   display: none;
   margin-top: 0.2rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border: 1px solid ${({ theme }) =>
+    theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
   border-radius: 14px;
-  background: ${({ theme }) => theme.colors.gray2};
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.surface : theme.colors.gray2)};
   overflow: hidden;
 
   details {
@@ -1758,7 +1792,8 @@ const CompactTocSection = styled.section`
     width: 2rem;
     height: 2rem;
     border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    border: 1px solid ${({ theme }) =>
+      theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
     color: ${({ theme }) => theme.colors.gray10};
     flex-shrink: 0;
     transition: transform 0.16s ease;
@@ -1805,12 +1840,14 @@ const CompactTocSection = styled.section`
   }
 
   button:hover {
-    background: ${({ theme }) => theme.colors.gray3};
+    background: ${({ theme }) =>
+      theme.blogDesign === "grid" ? theme.publicDesign.surfaceElevated : theme.colors.gray3};
     color: ${({ theme }) => theme.colors.gray12};
   }
 
   button[data-active="true"] {
-    background: ${({ theme }) => theme.colors.gray3};
+    background: ${({ theme }) =>
+      theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.gray3};
     color: ${({ theme }) => theme.colors.gray12};
     font-weight: 700;
   }
@@ -1841,8 +1878,12 @@ const MobileSummaryBar = styled.div`
       gap: 0.36rem;
       padding: 0 0.55rem;
       border-radius: 999px;
-      border: 1px solid ${({ theme }) => theme.colors.gray6};
-      background: color-mix(in srgb, ${({ theme }) => theme.colors.gray1} 88%, transparent);
+      border: 1px solid ${({ theme }) =>
+        theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
+      background: ${({ theme }) =>
+        theme.blogDesign === "grid"
+          ? `color-mix(in srgb, ${theme.publicDesign.surface} 88%, transparent)`
+          : `color-mix(in srgb, ${theme.colors.gray1} 88%, transparent)`};
       color: ${({ theme }) => theme.colors.gray11};
       box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
       backdrop-filter: blur(12px);
@@ -1853,9 +1894,11 @@ const MobileSummaryBar = styled.div`
     }
 
     button[data-active="true"] {
-      border-color: ${({ theme }) => theme.colors.accentBorder};
-      background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
-      color: ${({ theme }) => theme.colors.accentLink};
+      border-color: ${({ theme }) =>
+        theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.accentBorder};
+      background: ${({ theme }) =>
+        theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.accentSurfaceSubtle};
+      color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.accentLink)};
     }
 
     button[data-active="true"][data-tone="danger"] {
@@ -1879,7 +1922,8 @@ const MobileSummaryBar = styled.div`
 const RelatedSection = styled.section`
   margin-top: 0.52rem;
   padding-top: 0.88rem;
-  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-top: 1px solid ${({ theme }) =>
+    theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
   display: grid;
   gap: 0.72rem;
   content-visibility: auto;
@@ -1945,16 +1989,23 @@ const RelatedSection = styled.section`
     min-width: 0;
     padding: 0.68rem 0.74rem;
     border-radius: 10px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray1};
+    border: 1px solid ${({ theme }) =>
+      theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
+    background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.surface : theme.colors.gray1)};
     text-decoration: none;
     transition: border-color 0.14s ease-in, background-color 0.14s ease-in, box-shadow 0.14s ease-in;
 
     &:hover {
-      border-color: ${({ theme }) => theme.colors.gray8};
-      background: ${({ theme }) => theme.colors.gray2};
+      border-color: ${({ theme }) =>
+        theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray8};
+      background: ${({ theme }) =>
+        theme.blogDesign === "grid" ? theme.publicDesign.surfaceElevated : theme.colors.gray2};
       box-shadow: ${({ theme }) =>
-        theme.scheme === "light" ? "0 10px 24px rgba(15, 23, 42, 0.05)" : "none"};
+        theme.blogDesign === "grid"
+          ? "0 12px 26px rgba(0, 0, 0, 0.28)"
+          : theme.scheme === "light"
+            ? "0 10px 24px rgba(15, 23, 42, 0.05)"
+            : "none"};
     }
   }
 
@@ -1965,8 +2016,10 @@ const RelatedSection = styled.section`
     min-height: 24px;
     padding: 0 0.52rem;
     border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
+    border: 1px solid ${({ theme }) =>
+      theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
+    background: ${({ theme }) =>
+      theme.blogDesign === "grid" ? theme.publicDesign.surfaceElevated : theme.colors.gray2};
     color: ${({ theme }) => theme.colors.gray11};
     font-size: 0.7rem;
     font-weight: 800;
@@ -2020,15 +2073,17 @@ const RelatedSkeletonItem = styled.li`
   min-width: 0;
   padding: 0.68rem 0.74rem;
   border-radius: 10px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  border: 1px solid ${({ theme }) =>
+    theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.surface : theme.colors.gray1)};
 
   .titleLine,
   .summaryLine,
   .metaLine {
     display: block;
     border-radius: 999px;
-    background: ${({ theme }) => theme.colors.gray3};
+    background: ${({ theme }) =>
+      theme.blogDesign === "grid" ? theme.publicDesign.surfaceElevated : theme.colors.gray3};
     animation: related-skeleton-pulse 1.18s ease-in-out infinite;
   }
 

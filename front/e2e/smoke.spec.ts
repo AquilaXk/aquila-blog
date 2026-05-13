@@ -177,6 +177,8 @@ test("public blog appearance는 adminProfile 전역 설정에서 resolve된다",
   const logoSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/Header/Logo.tsx"), "utf8")
   const adminShellSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminShell.tsx"), "utf8")
   const appSource = readFileSync(path.resolve(__dirname, "../src/pages/_app.tsx"), "utf8")
+  const homePageSource = readFileSync(path.resolve(__dirname, "../src/pages/index.tsx"), "utf8")
+  const aboutPageSource = readFileSync(path.resolve(__dirname, "../src/pages/about.tsx"), "utf8")
   const postDetailPageSource = readFileSync(path.resolve(__dirname, "../src/libs/server/postDetailPage.ts"), "utf8")
   const useAdminProfileSource = readFileSync(path.resolve(__dirname, "../src/hooks/useAdminProfile.ts"), "utf8")
 
@@ -190,6 +192,9 @@ test("public blog appearance는 adminProfile 전역 설정에서 resolve된다",
   expect(logoSource).toContain("blogTitle")
   expect(adminShellSource).not.toContain("useAdminProfile")
   expect(appSource).toContain("initialAdminProfile={initialAdminProfile}")
+  expect(homePageSource).toContain("resolveStaticAdminProfileSeed")
+  expect(homePageSource).toContain("initialAdminProfileSource")
+  expect(aboutPageSource).toContain("initialAdminProfileSource")
   expect(postDetailPageSource).toContain("queryKey.adminProfile()")
   expect(postDetailPageSource).toContain("initialAdminProfile")
   expect(postDetailPageSource).toContain('initialAdminProfileSource === "static-fallback"')

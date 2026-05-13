@@ -240,6 +240,11 @@ import {
   type SlashMenuContext,
 } from "./slashMenuModel"
 import {
+  isBlockToolbarCommandActive,
+  isToolbarBlockInsertActive,
+  runBlockToolbarCommand,
+} from "./blockToolbarModel"
+import {
   INLINE_TEXT_STYLE_OPTIONS,
   getActiveInlineColor,
   getActiveInlineTextStyleOption,
@@ -3412,31 +3417,31 @@ const BlockEditorEngine = ({
 
         if (hasPrimaryModifier && event.altKey && !event.shiftKey && normalizedKey === "2") {
           event.preventDefault()
-          currentEditor.chain().focus().toggleHeading({ level: 2 }).run()
+          runBlockToolbarCommand(currentEditor, "heading-2")
           return true
         }
 
         if (hasPrimaryModifier && event.altKey && !event.shiftKey && normalizedKey === "3") {
           event.preventDefault()
-          currentEditor.chain().focus().toggleHeading({ level: 3 }).run()
+          runBlockToolbarCommand(currentEditor, "heading-3")
           return true
         }
 
         if (hasPrimaryModifier && !event.altKey && event.shiftKey && normalizedKey === "7") {
           event.preventDefault()
-          currentEditor.chain().focus().toggleOrderedList().run()
+          runBlockToolbarCommand(currentEditor, "ordered-list")
           return true
         }
 
         if (hasPrimaryModifier && !event.altKey && event.shiftKey && normalizedKey === "8") {
           event.preventDefault()
-          currentEditor.chain().focus().toggleBulletList().run()
+          runBlockToolbarCommand(currentEditor, "bullet-list")
           return true
         }
 
         if (hasPrimaryModifier && !event.altKey && event.shiftKey && normalizedKey === "9") {
           event.preventDefault()
-          currentEditor.chain().focus().toggleBlockquote().run()
+          runBlockToolbarCommand(currentEditor, "quote")
           return true
         }
 
@@ -5496,14 +5501,14 @@ const BlockEditorEngine = ({
   }, [editor, isSlashImeComposing, isSlashMenuOpen, resolveSlashMenuState])
 
   const toolbarActions: ToolbarAction[] = [
-    { id: "heading-1", label: "H1", ariaLabel: "제목 1", run: () => editor?.chain().focus().toggleHeading({ level: 1 }).run(), active: editor?.isActive("heading", { level: 1 }) ?? false },
-    { id: "heading-2", label: "H2", ariaLabel: "제목 2", run: () => editor?.chain().focus().toggleHeading({ level: 2 }).run(), active: editor?.isActive("heading", { level: 2 }) ?? false },
-    { id: "heading-3", label: "H3", ariaLabel: "제목 3", run: () => editor?.chain().focus().toggleHeading({ level: 3 }).run(), active: editor?.isActive("heading", { level: 3 }) ?? false },
-    { id: "heading-4", label: "H4", ariaLabel: "제목 4", run: () => editor?.chain().focus().toggleHeading({ level: 4 }).run(), active: editor?.isActive("heading", { level: 4 }) ?? false },
+    { id: "heading-1", label: "H1", ariaLabel: "제목 1", run: () => runBlockToolbarCommand(editor, "heading-1"), active: isBlockToolbarCommandActive(editor, "heading-1") },
+    { id: "heading-2", label: "H2", ariaLabel: "제목 2", run: () => runBlockToolbarCommand(editor, "heading-2"), active: isBlockToolbarCommandActive(editor, "heading-2") },
+    { id: "heading-3", label: "H3", ariaLabel: "제목 3", run: () => runBlockToolbarCommand(editor, "heading-3"), active: isBlockToolbarCommandActive(editor, "heading-3") },
+    { id: "heading-4", label: "H4", ariaLabel: "제목 4", run: () => runBlockToolbarCommand(editor, "heading-4"), active: isBlockToolbarCommandActive(editor, "heading-4") },
     { id: "bold", label: "B", ariaLabel: "굵게", run: runBoldAction, active: isInlineMarkCommandActive(editor, "bold") },
     { id: "italic", label: <AppIcon name="italic" aria-hidden="true" />, ariaLabel: "기울임", run: runItalicAction, active: isInlineMarkCommandActive(editor, "italic") },
-    { id: "bullet-list", label: <AppIcon name="list" aria-hidden="true" />, ariaLabel: "목록", run: () => editor?.chain().focus().toggleBulletList().run(), active: editor?.isActive("bulletList") ?? false },
-    { id: "quote", label: <span aria-hidden="true">❞</span>, ariaLabel: "인용문", run: () => editor?.chain().focus().toggleBlockquote().run(), active: editor?.isActive("blockquote") ?? false },
+    { id: "bullet-list", label: <AppIcon name="list" aria-hidden="true" />, ariaLabel: "목록", run: () => runBlockToolbarCommand(editor, "bullet-list"), active: isBlockToolbarCommandActive(editor, "bullet-list") },
+    { id: "quote", label: <span aria-hidden="true">❞</span>, ariaLabel: "인용문", run: () => runBlockToolbarCommand(editor, "quote"), active: isBlockToolbarCommandActive(editor, "quote") },
     { id: "link", label: <AppIcon name="link" aria-hidden="true" />, ariaLabel: "링크", run: openLinkPrompt, active: editor?.isActive("link") ?? false },
     { id: "inline-code", label: <span aria-hidden="true">&lt;/&gt;</span>, ariaLabel: "인라인 코드", run: runInlineCodeAction, active: isInlineCodeActive },
     { id: "inline-formula", label: <span aria-hidden="true">ƒx</span>, ariaLabel: "인라인 수식", run: insertInlineFormula, active: editor?.isActive("inlineFormula") ?? false },
@@ -5530,28 +5535,7 @@ const BlockEditorEngine = ({
         void item.insertAtCursor()
         setIsToolbarMoreOpen(false)
       },
-      active:
-        item.id === "ordered-list"
-          ? editor?.isActive("orderedList") ?? false
-          : item.id === "checklist"
-            ? editor?.isActive("taskList") ?? false
-            : item.id === "table"
-              ? editor?.isActive("table") ?? false
-              : item.id === "callout"
-                ? editor?.isActive("calloutBlock") ?? false
-                : item.id === "toggle"
-                  ? editor?.isActive("toggleBlock") ?? false
-                  : item.id === "bookmark"
-                    ? editor?.isActive("bookmarkBlock") ?? false
-                    : item.id === "embed"
-                      ? editor?.isActive("embedBlock") ?? false
-                      : item.id === "file"
-                        ? editor?.isActive("fileBlock") ?? false
-                        : item.id === "formula"
-                          ? editor?.isActive("formulaBlock") ?? false
-                          : item.id === "mermaid"
-                            ? editor?.isActive("mermaidBlock") ?? false
-                            : false,
+      active: isToolbarBlockInsertActive(editor, item.id),
       disabled: item.disabled,
     })),
   ]

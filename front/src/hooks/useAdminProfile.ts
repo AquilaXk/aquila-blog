@@ -3,7 +3,9 @@ import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query"
 import { apiFetch } from "src/apis/backend/client"
 import type { ProfileCardLinkItem } from "src/constants/profileCardLinks"
 import { queryKey } from "src/constants/queryKey"
+import { normalizeBlogDesign, normalizeLegacyBlogScheme } from "src/libs/profileWorkspace"
 import type { AboutProjectBlock, AboutSectionBlock } from "src/libs/profileWorkspace"
+import type { BlogDesignType, LegacyBlogScheme } from "src/types"
 
 const ADMIN_PROFILE_SNAPSHOT_COOKIE = "admin_profile_snapshot_v1"
 const ADMIN_PROFILE_SNAPSHOT_MAX_AGE_SECONDS = 60 * 30
@@ -27,6 +29,8 @@ export type AdminProfile = {
   blogTitle?: string
   homeIntroTitle?: string
   homeIntroDescription?: string
+  blogDesign?: BlogDesignType
+  legacyBlogScheme?: LegacyBlogScheme
   serviceLinks?: ProfileCardLinkItem[]
   contactLinks?: ProfileCardLinkItem[]
 }
@@ -50,6 +54,8 @@ type AdminProfileLike = {
   blogTitle?: string
   homeIntroTitle?: string
   homeIntroDescription?: string
+  blogDesign?: BlogDesignType
+  legacyBlogScheme?: LegacyBlogScheme
   serviceLinks?: ProfileCardLinkItem[]
   contactLinks?: ProfileCardLinkItem[]
 }
@@ -73,6 +79,8 @@ export const toAdminProfile = (value: AdminProfileLike): AdminProfile => ({
   blogTitle: value.blogTitle,
   homeIntroTitle: value.homeIntroTitle,
   homeIntroDescription: value.homeIntroDescription,
+  blogDesign: normalizeBlogDesign(value.blogDesign),
+  legacyBlogScheme: normalizeLegacyBlogScheme(value.legacyBlogScheme),
   serviceLinks: value.serviceLinks || [],
   contactLinks: value.contactLinks || [],
 })

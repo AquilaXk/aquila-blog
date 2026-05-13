@@ -69,7 +69,7 @@ import {
 } from "src/routes/Admin/AdminSurfacePrimitives"
 
 type NoticeTone = "idle" | "loading" | "success" | "error"
-type WorkspaceSectionId = "identity" | "about" | "home" | "links"
+type WorkspaceSectionId = "identity" | "about" | "home" | "design" | "links"
 type LinkTab = "service" | "contact"
 type PreviewMode = "draft" | "published"
 type OpenIconPicker = `${LinkTab}:${number}` | null
@@ -111,6 +111,10 @@ const WORKSPACE_SECTIONS: {
     label: "헤더 문구",
   },
   {
+    id: "design",
+    label: "디자인",
+  },
+  {
     id: "links",
     label: "외부 링크",
   },
@@ -141,6 +145,11 @@ const pickWorkspaceSectionContent = (
         blogTitle: content.blogTitle,
         homeIntroTitle: content.homeIntroTitle,
         homeIntroDescription: content.homeIntroDescription,
+      }
+    case "design":
+      return {
+        blogDesign: content.blogDesign,
+        legacyBlogScheme: content.legacyBlogScheme,
       }
     case "links":
       return {
@@ -285,9 +294,20 @@ const buildWorkspaceFallback = (
   initialWorkspace: ProfileWorkspaceResponse | null
 ): ProfileWorkspaceResponse => {
   if (initialWorkspace) {
+    const draft = normalizeProfileWorkspaceContent({
+      ...initialWorkspace.draft,
+      blogDesign: initialWorkspace.draft.blogDesign || member.blogDesign || "legacy",
+      legacyBlogScheme: initialWorkspace.draft.legacyBlogScheme || member.legacyBlogScheme || "dark",
+    })
+    const published = normalizeProfileWorkspaceContent({
+      ...initialWorkspace.published,
+      blogDesign: initialWorkspace.published.blogDesign || member.blogDesign || "legacy",
+      legacyBlogScheme: initialWorkspace.published.legacyBlogScheme || member.legacyBlogScheme || "dark",
+    })
+
     return {
-      draft: normalizeProfileWorkspaceContent(initialWorkspace.draft),
-      published: normalizeProfileWorkspaceContent(initialWorkspace.published),
+      draft,
+      published,
       lastDraftSavedAt: initialWorkspace.lastDraftSavedAt || member.modifiedAt || null,
       lastPublishedAt: initialWorkspace.lastPublishedAt || member.modifiedAt || null,
       dirtyFromPublished: initialWorkspace.dirtyFromPublished,
@@ -580,6 +600,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
         identity: { dirty: false, publishedDiff: false },
         about: { dirty: false, publishedDiff: false },
         home: { dirty: false, publishedDiff: false },
+        design: { dirty: false, publishedDiff: false },
         links: { dirty: false, publishedDiff: false },
       }
     )
@@ -1640,6 +1661,67 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
           </SectionStack>
         )
 
+      case "design":
+        return (
+          <SectionStack>
+            <FieldSectionCard>
+              <SectionBlockHeader>
+                <div>
+                  <h3>블로그 디자인</h3>
+                </div>
+              </SectionBlockHeader>
+              <FieldGrid data-columns="2">
+                <FieldBox as="div">
+                  <FieldLabel as="span">공개 디자인</FieldLabel>
+                  <SegmentedControl role="group" aria-label="공개 블로그 디자인">
+                    <SegmentButton
+                      type="button"
+                      data-active={draft.blogDesign === "legacy"}
+                      onClick={() => updateDraft("blogDesign", "legacy")}
+                    >
+                      Legacy
+                    </SegmentButton>
+                    <SegmentButton
+                      type="button"
+                      data-active={draft.blogDesign === "grid"}
+                      onClick={() => updateDraft("blogDesign", "grid")}
+                    >
+                      Grid
+                    </SegmentButton>
+                  </SegmentedControl>
+                </FieldBox>
+
+                {draft.blogDesign === "legacy" ? (
+                  <FieldBox as="div">
+                    <FieldLabel as="span">Legacy 색상</FieldLabel>
+                    <SegmentedControl role="group" aria-label="Legacy 색상">
+                      <SegmentButton
+                        type="button"
+                        data-active={draft.legacyBlogScheme === "light"}
+                        onClick={() => updateDraft("legacyBlogScheme", "light")}
+                      >
+                        Light
+                      </SegmentButton>
+                      <SegmentButton
+                        type="button"
+                        data-active={draft.legacyBlogScheme === "dark"}
+                        onClick={() => updateDraft("legacyBlogScheme", "dark")}
+                      >
+                        Dark
+                      </SegmentButton>
+                    </SegmentedControl>
+                  </FieldBox>
+                ) : (
+                  <EmptyStateCard>
+                    <strong>Grid dark presentation</strong>
+                    <p>Grid 디자인은 dark presentation으로 고정됩니다.</p>
+                  </EmptyStateCard>
+                )}
+              </FieldGrid>
+            </FieldSectionCard>
+          </SectionStack>
+        )
+
       case "links":
         return (
           <SectionStack>
@@ -2008,6 +2090,18 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                     <strong>{previewContent.blogTitle || displayName}</strong>
                     <h4>{previewContent.homeIntroTitle || previewContent.blogTitle || displayName}</h4>
                     {previewContent.homeIntroDescription ? <p>{previewContent.homeIntroDescription}</p> : null}
+                  </PreviewHomeCard>
+                ) : null}
+
+                {activeSection === "design" ? (
+                  <PreviewHomeCard>
+                    <span>Design</span>
+                    <strong>{previewContent.blogDesign === "grid" ? "Grid" : "Legacy"}</strong>
+                    <p>
+                      {previewContent.blogDesign === "legacy"
+                        ? `Legacy ${previewContent.legacyBlogScheme}`
+                        : "Grid dark presentation"}
+                    </p>
                   </PreviewHomeCard>
                 ) : null}
 

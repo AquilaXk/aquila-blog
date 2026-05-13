@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { ApiError, apiFetch } from "src/apis/backend/client"
 import { queryKey } from "src/constants/queryKey"
 import type { ProfileCardLinkItem } from "src/constants/profileCardLinks"
+import type { BlogDesignType, LegacyBlogScheme } from "src/types"
 
 const AUTH_ME_ANON_SUPPRESS_UNTIL_KEY = "auth:me:anon-probe-suppress-until:v1"
 const AUTH_ME_ANON_SUPPRESS_TTL_MS = 5 * 60_000
@@ -49,6 +50,8 @@ export type AuthMember = {
   blogTitle?: string
   homeIntroTitle?: string
   homeIntroDescription?: string
+  blogDesign?: BlogDesignType
+  legacyBlogScheme?: LegacyBlogScheme
   serviceLinks?: ProfileCardLinkItem[]
   contactLinks?: ProfileCardLinkItem[]
 }

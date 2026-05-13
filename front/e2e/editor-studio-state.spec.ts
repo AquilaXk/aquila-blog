@@ -264,6 +264,14 @@ test.describe("editor studio state", () => {
     const editorStudioContentWorkspaceSource = existsSync(editorStudioContentWorkspacePath)
       ? readFileSync(editorStudioContentWorkspacePath, "utf8")
       : ""
+    const useEditorStudioListConditionsPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/useEditorStudioListConditions.ts"
+    )
+    expect(existsSync(useEditorStudioListConditionsPath)).toBe(true)
+    const useEditorStudioListConditionsSource = existsSync(useEditorStudioListConditionsPath)
+      ? readFileSync(useEditorStudioListConditionsPath, "utf8")
+      : ""
     const editorStudioMobileStepNavigatorPath = path.resolve(
       __dirname,
       "../src/routes/Admin/EditorStudioMobileStepNavigator.tsx"
@@ -616,6 +624,22 @@ test.describe("editor studio state", () => {
     expect(editorStudioContentWorkspaceSource).not.toContain("openDeleteConfirm")
     expect(editorStudioContentWorkspaceSource).not.toContain("setListScope")
     expect(editorStudioContentWorkspaceSource).not.toContain("setSelectedPostIds")
+    expect(useEditorStudioListConditionsSource).toContain("export const useEditorStudioListConditions =")
+    expect(useEditorStudioListConditionsSource).toContain("export const LIST_SORT_OPTIONS =")
+    expect(useEditorStudioListConditionsSource).toContain("export type PostListScope =")
+    expect(useEditorStudioListConditionsSource).toContain("export type ListQuickPreset =")
+    expect(editorStudioSource).toContain('} from "./useEditorStudioListConditions"')
+    expect(editorStudioSource).toContain("useEditorStudioListConditions()")
+    expect(editorStudioSource).not.toContain("const sanitizeNumberInput =")
+    expect(editorStudioSource).not.toContain("const applyListQuickPreset = useCallback")
+    expect(editorStudioSource).not.toContain("LIST_CONDITION_STORAGE_KEY")
+    expect(editorStudioSource).not.toContain("localStorage.getItem(LIST_CONDITION_STORAGE_KEY)")
+    expect(editorStudioSource).not.toContain("localStorage.setItem(LIST_CONDITION_STORAGE_KEY")
+    expect(useEditorStudioListConditionsSource).not.toContain("apiFetch(")
+    expect(useEditorStudioListConditionsSource).not.toContain("run(")
+    expect(useEditorStudioListConditionsSource).not.toContain("loadAdminPosts")
+    expect(useEditorStudioListConditionsSource).not.toContain("openDeleteConfirm")
+    expect(useEditorStudioListConditionsSource).not.toContain("deletePostsFromList")
     expect(editorStudioDeleteConfirmDialogSource).toContain("export const EditorStudioDeleteConfirmDialog =")
     expect(editorStudioSource).toContain(
       'import { EditorStudioDeleteConfirmDialog } from "./EditorStudioDeleteConfirmDialog"'

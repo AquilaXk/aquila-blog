@@ -243,9 +243,11 @@ import {
   INLINE_TEXT_STYLE_OPTIONS,
   getActiveInlineColor,
   getActiveInlineTextStyleOption,
+  isInlineMarkCommandActive,
   isInlineCodeMarkActive,
   runInlineCode,
   runInlineColor,
+  runInlineMarkCommand,
   runInlineTextStyle,
   type InlineTextStyleOption,
 } from "./inlineToolbarModel"
@@ -3380,13 +3382,13 @@ const BlockEditorEngine = ({
 
         if (hasPrimaryModifier && !event.altKey && !event.shiftKey && normalizedKey === "b") {
           event.preventDefault()
-          currentEditor.chain().focus().toggleBold().run()
+          runInlineMarkCommand(currentEditor, "bold")
           return true
         }
 
         if (hasPrimaryModifier && !event.altKey && !event.shiftKey && normalizedKey === "i") {
           event.preventDefault()
-          currentEditor.chain().focus().toggleItalic().run()
+          runInlineMarkCommand(currentEditor, "italic")
           return true
         }
 
@@ -4679,11 +4681,11 @@ const BlockEditorEngine = ({
   }, [])
 
   const runBoldAction = useCallback(() => {
-    editor?.chain().focus().toggleBold().run()
+    runInlineMarkCommand(editor, "bold")
   }, [editor])
 
   const runItalicAction = useCallback(() => {
-    editor?.chain().focus().toggleItalic().run()
+    runInlineMarkCommand(editor, "italic")
   }, [editor])
 
   const runInlineCodeAction = useCallback(() => {
@@ -4691,7 +4693,7 @@ const BlockEditorEngine = ({
   }, [editor])
 
   const runStrikeAction = useCallback(() => {
-    editor?.chain().focus().toggleStrike().run()
+    runInlineMarkCommand(editor, "strike")
   }, [editor])
 
   const activeInlineColor = getActiveInlineColor(editor)
@@ -5498,12 +5500,12 @@ const BlockEditorEngine = ({
     { id: "heading-2", label: "H2", ariaLabel: "제목 2", run: () => editor?.chain().focus().toggleHeading({ level: 2 }).run(), active: editor?.isActive("heading", { level: 2 }) ?? false },
     { id: "heading-3", label: "H3", ariaLabel: "제목 3", run: () => editor?.chain().focus().toggleHeading({ level: 3 }).run(), active: editor?.isActive("heading", { level: 3 }) ?? false },
     { id: "heading-4", label: "H4", ariaLabel: "제목 4", run: () => editor?.chain().focus().toggleHeading({ level: 4 }).run(), active: editor?.isActive("heading", { level: 4 }) ?? false },
-    { id: "bold", label: "B", ariaLabel: "굵게", run: runBoldAction, active: editor?.isActive("bold") ?? false },
-    { id: "italic", label: <AppIcon name="italic" aria-hidden="true" />, ariaLabel: "기울임", run: runItalicAction, active: editor?.isActive("italic") ?? false },
+    { id: "bold", label: "B", ariaLabel: "굵게", run: runBoldAction, active: isInlineMarkCommandActive(editor, "bold") },
+    { id: "italic", label: <AppIcon name="italic" aria-hidden="true" />, ariaLabel: "기울임", run: runItalicAction, active: isInlineMarkCommandActive(editor, "italic") },
     { id: "bullet-list", label: <AppIcon name="list" aria-hidden="true" />, ariaLabel: "목록", run: () => editor?.chain().focus().toggleBulletList().run(), active: editor?.isActive("bulletList") ?? false },
     { id: "quote", label: <span aria-hidden="true">❞</span>, ariaLabel: "인용문", run: () => editor?.chain().focus().toggleBlockquote().run(), active: editor?.isActive("blockquote") ?? false },
     { id: "link", label: <AppIcon name="link" aria-hidden="true" />, ariaLabel: "링크", run: openLinkPrompt, active: editor?.isActive("link") ?? false },
-    { id: "inline-code", label: <span aria-hidden="true">&lt;/&gt;</span>, ariaLabel: "인라인 코드", run: runInlineCodeAction, active: editor?.isActive("code") ?? false },
+    { id: "inline-code", label: <span aria-hidden="true">&lt;/&gt;</span>, ariaLabel: "인라인 코드", run: runInlineCodeAction, active: isInlineCodeActive },
     { id: "inline-formula", label: <span aria-hidden="true">ƒx</span>, ariaLabel: "인라인 수식", run: insertInlineFormula, active: editor?.isActive("inlineFormula") ?? false },
     { id: "image", label: <AppIcon name="camera" aria-hidden="true" />, ariaLabel: "이미지 추가", run: () => imageFileInputRef.current?.click(), active: false },
     { id: "code-block", label: <span aria-hidden="true">&lt;/&gt;</span>, ariaLabel: "코드 블록", run: insertCodeBlock, active: editor?.isActive("codeBlock") ?? false },
@@ -8352,7 +8354,7 @@ const BlockEditorEngine = ({
 
                 <TextBubbleIconButton
                   type="button"
-                  data-active={editor.isActive("bold")}
+                  data-active={isInlineMarkCommandActive(editor, "bold")}
                   aria-label="굵게"
                   title="굵게"
                   onMouseDown={handleToolbarButtonMouseDown}
@@ -8362,7 +8364,7 @@ const BlockEditorEngine = ({
                 </TextBubbleIconButton>
                 <TextBubbleIconButton
                   type="button"
-                  data-active={editor.isActive("italic")}
+                  data-active={isInlineMarkCommandActive(editor, "italic")}
                   aria-label="기울임"
                   title="기울임"
                   onMouseDown={handleToolbarButtonMouseDown}
@@ -8372,7 +8374,7 @@ const BlockEditorEngine = ({
                 </TextBubbleIconButton>
                 <TextBubbleIconButton
                   type="button"
-                  data-active={editor.isActive("strike")}
+                  data-active={isInlineMarkCommandActive(editor, "strike")}
                   aria-label="취소선"
                   title="취소선"
                   onMouseDown={handleToolbarButtonMouseDown}
@@ -8393,7 +8395,7 @@ const BlockEditorEngine = ({
                 <TextBubbleDivider aria-hidden="true" />
                 <TextBubbleIconButton
                   type="button"
-                  data-active={editor.isActive("code")}
+                  data-active={isInlineCodeActive}
                   aria-label="인라인 코드"
                   title="인라인 코드"
                   onMouseDown={handleToolbarButtonMouseDown}

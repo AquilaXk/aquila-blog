@@ -288,6 +288,14 @@ test.describe("editor studio state", () => {
     const editorStudioComposeMobileChromeSource = existsSync(editorStudioComposeMobileChromePath)
       ? readFileSync(editorStudioComposeMobileChromePath, "utf8")
       : ""
+    const editorStudioComposeWritingSurfacePath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioComposeWritingSurface.tsx"
+    )
+    expect(existsSync(editorStudioComposeWritingSurfacePath)).toBe(true)
+    const editorStudioComposeWritingSurfaceSource = existsSync(editorStudioComposeWritingSurfacePath)
+      ? readFileSync(editorStudioComposeWritingSurfacePath, "utf8")
+      : ""
     const blockEditorShellSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"), "utf8")
     const blockEditorEngineSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"), "utf8")
     const blockSelectionModelSource = readFileSync(
@@ -604,6 +612,22 @@ test.describe("editor studio state", () => {
     expect(editorStudioComposeMobileChromeSource).not.toContain("openPublishModal")
     expect(editorStudioComposeMobileChromeSource).not.toContain("setMobileComposeStep")
     expect(editorStudioComposeMobileChromeSource).not.toContain("setPostVisibility")
+    expect(editorStudioComposeWritingSurfaceSource).toContain("export const EditorStudioComposeWritingSurface =")
+    expect(editorStudioSource).toContain(
+      'import { EditorStudioComposeWritingSurface } from "./EditorStudioComposeWritingSurface"'
+    )
+    expect(editorStudioSource.match(/<EditorStudioComposeWritingSurface/g)?.length).toBe(1)
+    expect(editorStudioComposeWritingSurfaceSource).toContain("const ComposeMainColumn = styled.div`")
+    expect(editorStudioComposeWritingSurfaceSource).toContain("const TitleInput = styled.textarea`")
+    expect(editorStudioComposeWritingSurfaceSource).toContain("const WriterFooterBar = styled.div`")
+    expect(editorStudioSource).not.toContain("const ComposeMainColumn = styled.div`")
+    expect(editorStudioSource).not.toContain("const TitleInput = styled.textarea")
+    expect(editorStudioSource).not.toContain("const WriterFooterBar = styled.div`")
+    expect(editorStudioComposeWritingSurfaceSource).not.toContain("apiFetch(")
+    expect(editorStudioComposeWritingSurfaceSource).not.toContain("run(")
+    expect(editorStudioComposeWritingSurfaceSource).not.toContain("openPublishModal")
+    expect(editorStudioComposeWritingSurfaceSource).not.toContain("WriterEditorHost")
+    expect(editorStudioComposeWritingSurfaceSource).not.toContain("setPost")
     expect(editorStudioStateSource).toContain("export type PostVisibility =")
     expect(editorStudioStateSource).toContain("export const toVisibility")
     expect(editorStudioStateSource).toContain("export const toFlags")

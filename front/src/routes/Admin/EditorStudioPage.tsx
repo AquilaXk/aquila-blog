@@ -64,6 +64,7 @@ import { EditorStudioMobileStepNavigator } from "./EditorStudioMobileStepNavigat
 import { EditorStudioUndoToast } from "./EditorStudioUndoToast"
 import { EditorStudioDeleteConfirmDialog } from "./EditorStudioDeleteConfirmDialog"
 import { EditorStudioComposeMobileChrome } from "./EditorStudioComposeMobileChrome"
+import { EditorStudioComposeWritingSurface } from "./EditorStudioComposeWritingSurface"
 import {
   EditorStudioDedicatedEditorLoadingState,
   EditorStudioDedicatedEditorSurface,
@@ -120,7 +121,6 @@ import {
   PROFILE_IMAGE_UPLOAD_RULE_LABEL,
 } from "src/libs/profileImageUpload"
 import { saveProfileCardWithConflictRetry } from "src/libs/profileCardSave"
-import { articleTypographyScale } from "src/libs/markdown/contentTypography"
 import type { BlockEditorChangeMeta } from "src/components/editor/blockEditorContract"
 import {
   CATEGORY_CATALOG_STORAGE_KEY,
@@ -2819,156 +2819,44 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
             secondaryStatusText={mobileComposeStatusSecondary?.text}
             primaryActionLabel={mobilePrimaryActionLabel}
             primaryActionDisabled={mobilePrimaryActionDisabled}
-            onPrimaryAction={() => openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")}
+            onPrimaryAction={() => openPublishModal(editorPrimaryActionType)}
           />
           <ComposeStudioLayout>
-            <ComposeMainColumn>
-              <ComposeStudioHeader>
-                <ComposeStudioHeaderCopy>
-                  <ComposeStudioKicker>{editorModeLabel}</ComposeStudioKicker>
-                  <h2>{composePageTitle}</h2>
-                  <p>{composeSurfaceSubtitle}</p>
-                </ComposeStudioHeaderCopy>
-                <ComposeStudioContextBar aria-label="원고 상태">
-                  {composeStatusText ? (
-                    <ComposeStudioContextItem data-tone={composeStatusTone}>
-                      <span>상태</span>
-                      <strong>{composeStatusText}</strong>
-                    </ComposeStudioContextItem>
-                  ) : null}
-                  <ComposeStudioContextItem>
-                    <span>공개 범위</span>
-                    <strong>{currentVisibilityText}</strong>
-                  </ComposeStudioContextItem>
-                  <ComposeStudioContextItem>
-                    <span>카드 요약</span>
-                    <strong>{postSummary.trim() ? `${postSummary.trim().length}자` : "자동 생성"}</strong>
-                  </ComposeStudioContextItem>
-                </ComposeStudioContextBar>
-              </ComposeStudioHeader>
-
-              <ComposeReadableIntro>
-                <WriterHeader>
-                  <div className="titleField">
-                    <TitleInput
-                      ref={handleTitleFieldRef}
-                      id="post-title"
-                      placeholder="제목을 입력하세요"
-                      rows={1}
-                      value={postTitle}
-                      onChange={handleTitleChange}
-                      onKeyDown={handleTitleKeyDown}
-                    />
-                    <WriterAccent />
-                  </div>
-                </WriterHeader>
-                <ComposeSummaryField>
-                  <FieldLabel htmlFor="post-summary-inline">요약</FieldLabel>
-                  <ComposeSummaryInput
-                    id="post-summary-inline"
-                    placeholder="이 글의 핵심을 짧게 정리하세요"
-                    value={postSummary}
-                    maxLength={PREVIEW_SUMMARY_MAX_LENGTH}
-                    onChange={(e) => setPostSummary(e.target.value)}
-                  />
-                  <ComposeSummaryMeta>
-                    <SummaryCounter>
-                      {postSummary.length}/{PREVIEW_SUMMARY_MAX_LENGTH}
-                    </SummaryCounter>
-                    <Button
-                      type="button"
-                      disabled={!postContent.trim()}
-                      onClick={() => setPostSummary(makePreviewSummary(postContent))}
-                    >
-                      본문 기준으로 채우기
-                    </Button>
-                  </ComposeSummaryMeta>
-                </ComposeSummaryField>
-                <InlineTagComposer>
-                  <div className="headerRow">
-                    <span className="label">태그</span>
-                  </div>
-                  <InlineTagList>
-                    {postTags.map((tag) => (
-                      <SelectedTagChip key={tag}>
-                        <span className="label">{tag}</span>
-                        <button type="button" onClick={() => removeTagFromPost(tag)} aria-label={`${tag} 삭제`}>
-                          ×
-                        </button>
-                      </SelectedTagChip>
-                    ))}
-                    <InlineMetaInput
-                      placeholder="태그 입력 후 Enter"
-                      value={tagDraft}
-                      onChange={(e) => {
-                        const nextValue = e.target.value
-                        const commaSeparated = /[,，]/
-                        if (!commaSeparated.test(nextValue)) {
-                          setTagDraft(nextValue)
-                          return
-                        }
-
-                        const fragments = nextValue.split(commaSeparated)
-                        const tailDraft = fragments.pop() ?? ""
-                        const tagsToAdd = fragments.map((fragment) => fragment.trim()).filter(Boolean)
-                        if (tagsToAdd.length > 0) addTagsToPost(tagsToAdd)
-                        setTagDraft(tailDraft)
-                      }}
-                      onKeyDown={(e) => {
-                        if (isComposingKeyboardEvent(e)) return
-                        if (e.key === "Enter" || e.key === ",") {
-                          e.preventDefault()
-                          addTagToPost(e.currentTarget.value)
-                        }
-                      }}
-                    />
-                  </InlineTagList>
-                </InlineTagComposer>
-              </ComposeReadableIntro>
-
-              <input
-                ref={thumbnailImageFileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleThumbnailImageFileChange}
-                style={{ display: "none" }}
-              />
-
-              <ComposeBodySection>
-                <ComposeBodyHeader>
-                  <ComposeBodyTitleGroup>
-                    <h3>본문</h3>
-                  </ComposeBodyTitleGroup>
-                  <ComposeBodyMetrics>
-                    <span>{contentLength.toLocaleString()}자</span>
-                    <span>{lineCount}줄</span>
-                    <span>{imageCount}개 이미지</span>
-                  </ComposeBodyMetrics>
-                </ComposeBodyHeader>
-                {composeEditorCanvas}
-              </ComposeBodySection>
-
-              <WriterFooterBar>
-                <WriterFooterSummary>
-                  <span>{tagSummaryText}</span>
-                  <span>{contentLength}자 · {lineCount}줄</span>
-                </WriterFooterSummary>
-                <WriterFooterControls>
-                  <WriterFooterActions>
-                    <Button type="button" disabled={loadingKey.length > 0} onClick={() => saveLocalDraft()}>
-                      임시 저장
-                    </Button>
-                    <PrimaryButton
-                      type="button"
-                      disabled={mobilePrimaryActionDisabled}
-                      onClick={() => openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")}
-                    >
-                      {composeCallToActionLabel}
-                    </PrimaryButton>
-                  </WriterFooterActions>
-                </WriterFooterControls>
-              </WriterFooterBar>
-            </ComposeMainColumn>
+            <EditorStudioComposeWritingSurface
+              editorModeLabel={editorModeLabel}
+              composePageTitle={composePageTitle}
+              composeSurfaceSubtitle={composeSurfaceSubtitle}
+              composeStatusText={composeStatusText}
+              composeStatusTone={composeStatusTone}
+              currentVisibilityText={currentVisibilityText}
+              postSummary={postSummary}
+              postSummaryMaxLength={PREVIEW_SUMMARY_MAX_LENGTH}
+              onPostSummaryChange={setPostSummary}
+              isFillSummaryFromBodyDisabled={!postContent.trim()}
+              onFillSummaryFromBody={() => setPostSummary(makePreviewSummary(postContent))}
+              postTags={postTags}
+              tagDraft={tagDraft}
+              onTagDraftChange={setTagDraft}
+              onAddTags={addTagsToPost}
+              onAddTag={addTagToPost}
+              onRemoveTag={removeTagFromPost}
+              titleInputRef={handleTitleFieldRef}
+              postTitle={postTitle}
+              onPostTitleChange={handleTitleChange}
+              onPostTitleKeyDown={handleTitleKeyDown}
+              thumbnailImageFileInputRef={thumbnailImageFileInputRef}
+              onThumbnailImageFileChange={handleThumbnailImageFileChange}
+              contentLength={contentLength}
+              lineCount={lineCount}
+              imageCount={imageCount}
+              editorCanvas={composeEditorCanvas}
+              tagSummaryText={tagSummaryText}
+              isSaveDraftDisabled={loadingKey.length > 0}
+              onSaveDraft={saveLocalDraft}
+              primaryActionDisabled={mobilePrimaryActionDisabled}
+              primaryActionLabel={composeCallToActionLabel}
+              onPrimaryAction={() => openPublishModal(editorPrimaryActionType)}
+            />
 
             <ComposeAssistantColumn>
               <EditorStudioComposeAssistantPanel
@@ -2977,7 +2865,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                   <PrimaryButton
                     type="button"
                     disabled={mobilePrimaryActionDisabled}
-                    onClick={() => openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")}
+                    onClick={() => openPublishModal(editorPrimaryActionType)}
                   >
                     {composeCallToActionLabel}
                   </PrimaryButton>
@@ -3416,12 +3304,6 @@ const FieldBox = styled.div`
   }
 `
 
-const FieldLabel = styled.label`
-  font-size: 0.8rem;
-  font-weight: 650;
-  color: ${({ theme }) => theme.colors.gray11};
-`
-
 const InlineStatus = styled.div`
   margin-bottom: 0.85rem;
   padding: 0.62rem 0.72rem;
@@ -3505,40 +3387,6 @@ const Input = styled.input`
     outline: none;
     border-color: ${({ theme }) => theme.colors.blue8};
     box-shadow: 0 0 0 4px ${({ theme }) => theme.colors.blue4};
-  }
-`
-
-const TitleInput = styled.textarea<{ $compact?: boolean }>`
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  border-radius: 0;
-  padding: 0;
-  min-height: 44px;
-  background: transparent;
-  box-shadow: none;
-  font-family: inherit;
-  font-size: ${articleTypographyScale.postTitleFontSize};
-  font-weight: 700;
-  line-height: ${articleTypographyScale.postTitleLineHeight};
-  letter-spacing: 0;
-  resize: none;
-  overflow: hidden;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-
-  &::placeholder {
-    color: ${({ theme }) => theme.colors.gray9};
-  }
-
-  &:focus {
-    box-shadow: none;
-    border-color: transparent;
-  }
-
-  @media (max-width: 720px) {
-    font-size: ${articleTypographyScale.postTitleFontSizeMobile};
-    line-height: ${articleTypographyScale.postTitleLineHeightMobile};
   }
 `
 
@@ -3660,382 +3508,8 @@ const ComposeStudioLayout = styled.div`
   }
 `
 
-const ComposeMainColumn = styled.div`
-  display: grid;
-  gap: 1.1rem;
-  min-width: 0;
-`
-
 const ComposeAssistantColumn = styled.aside`
   min-width: 0;
-`
-
-const ComposeStudioHeader = styled.div`
-  display: grid;
-  gap: 0.9rem;
-
-  @media (min-width: 960px) {
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: start;
-  }
-`
-
-const ComposeStudioHeaderCopy = styled.div`
-  display: grid;
-  gap: 0.28rem;
-  min-width: 0;
-
-  h2 {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: clamp(1.45rem, 2.3vw, 2rem);
-    line-height: 1.15;
-    font-weight: 760;
-    letter-spacing: -0.02em;
-  }
-
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.92rem;
-    line-height: 1.58;
-    max-width: 34rem;
-  }
-`
-
-const ComposeStudioKicker = styled.span`
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-`
-
-const ComposeStudioContextBar = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  justify-content: flex-start;
-
-  @media (min-width: 960px) {
-    justify-content: flex-end;
-  }
-`
-
-const ComposeStudioContextItem = styled.div`
-  display: grid;
-  gap: 0.08rem;
-  min-width: 7rem;
-  padding: 0.5rem 0.68rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  border-radius: 12px;
-  background: ${({ theme }) => theme.colors.gray2};
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.68rem;
-    font-weight: 700;
-  }
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.82rem;
-    font-weight: 720;
-    line-height: 1.35;
-  }
-
-  &[data-tone="loading"] strong {
-    color: ${({ theme }) => theme.colors.blue11};
-  }
-
-  &[data-tone="success"] strong {
-    color: ${({ theme }) => theme.colors.green11};
-  }
-
-  &[data-tone="error"] strong {
-    color: ${({ theme }) => theme.colors.red11};
-  }
-`
-
-const WriterHeader = styled.div`
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1rem;
-  margin-bottom: 0.55rem;
-
-  .titleField {
-    display: grid;
-    gap: 1rem;
-    min-width: 0;
-  }
-`
-
-const WriterAccent = styled.div`
-  width: 5rem;
-  height: 0.42rem;
-  border-radius: 999px;
-  background: ${({ theme }) => theme.colors.gray8};
-`
-
-const InlineTagComposer = styled.div`
-  display: grid;
-  gap: 0.55rem;
-  min-width: 0;
-
-  .label {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.88rem;
-    font-weight: 700;
-  }
-
-  .headerRow {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.6rem;
-    flex-wrap: wrap;
-  }
-
-  .status {
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.78rem;
-    font-weight: 600;
-  }
-`
-
-const InlineTagList = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  min-height: auto;
-  align-items: center;
-  border-radius: 0;
-  border: none;
-  background: transparent;
-  padding: 0;
-`
-
-const InlineMetaInput = styled(Input)`
-  flex: 1 1 12rem;
-  min-width: 11rem;
-  border: 0;
-  border-bottom: 1px dashed ${({ theme }) => theme.colors.gray6};
-  outline: none;
-  min-height: 32px;
-  padding: 0 0.12rem;
-  border-radius: 0;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.86rem;
-  font-weight: 500;
-
-  &::placeholder {
-    color: ${({ theme }) => theme.colors.gray10};
-  }
-`
-
-const SummaryCounter = styled.span`
-  justify-self: end;
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.74rem;
-  line-height: 1;
-`
-
-const ComposeReadableIntro = styled.div`
-  width: 100%;
-  max-width: var(--article-readable-width, 48rem);
-  min-width: 0;
-  margin-inline: auto;
-  display: grid;
-  gap: 1rem;
-`
-
-const ComposeSummaryField = styled.div`
-  display: grid;
-  gap: 0.45rem;
-`
-
-const ComposeSummaryInput = styled.textarea`
-  width: 100%;
-  min-height: 5.6rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  border-radius: 16px;
-  padding: 0.95rem 1rem;
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray12};
-  font-size: 1rem;
-  line-height: 1.7;
-  resize: vertical;
-
-  &::placeholder {
-    color: ${({ theme }) => theme.colors.gray10};
-  }
-
-  &:focus-visible {
-    outline: none;
-    border-color: ${({ theme }) => theme.colors.gray7};
-    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
-  }
-`
-
-const ComposeSummaryMeta = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.7rem;
-  flex-wrap: wrap;
-`
-
-const ComposeBodySection = styled.section`
-  display: grid;
-  gap: 0.82rem;
-`
-
-const ComposeBodyHeader = styled.div`
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 0.75rem;
-  width: 100%;
-  max-width: var(--article-readable-width, 48rem);
-  min-width: 0;
-  margin-inline: auto;
-  padding-top: 0.2rem;
-
-  @media (max-width: 720px) {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-`
-
-const ComposeBodyTitleGroup = styled.div`
-  display: grid;
-  gap: 0.14rem;
-
-  h3 {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.98rem;
-    font-weight: 760;
-    line-height: 1.3;
-  }
-`
-
-const ComposeBodyMetrics = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  flex-wrap: wrap;
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.76rem;
-  line-height: 1.4;
-`
-
-const PublishNotice = styled.div`
-  margin: 0;
-  padding: 0.55rem 0.7rem;
-  border-radius: 10px;
-  font-size: 0.83rem;
-  line-height: 1.4;
-  width: 100%;
-  box-sizing: border-box;
-
-  &[data-tone="idle"] {
-    color: ${({ theme }) => theme.colors.gray11};
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: transparent;
-  }
-
-  &[data-tone="loading"] {
-    color: ${({ theme }) => theme.colors.blue11};
-    border: 1px solid ${({ theme }) => theme.colors.blue7};
-    background: ${({ theme }) => theme.colors.blue3};
-  }
-
-  &[data-tone="success"] {
-    color: ${({ theme }) => theme.colors.green11};
-    border: 1px solid ${({ theme }) => theme.colors.green7};
-    background: ${({ theme }) => theme.colors.green3};
-  }
-
-  &[data-tone="error"] {
-    color: ${({ theme }) => theme.colors.red11};
-    border: 1px solid ${({ theme }) => theme.colors.red7};
-    background: ${({ theme }) => theme.colors.red3};
-  }
-
-  @media (max-width: 720px) {
-    width: 100%;
-  }
-`
-
-const SelectedTagChip = styled.span`
-  display: inline-flex;
-  align-items: stretch;
-  gap: 0;
-  min-width: 0;
-  max-width: 100%;
-  min-height: 32px;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray3};
-  overflow: hidden;
-  transition:
-    border-color 0.18s ease,
-    transform 0.18s ease,
-    background 0.18s ease;
-
-  &:hover {
-    transform: none;
-  }
-
-  .label {
-    display: inline-flex;
-    align-items: center;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    padding: 0.38rem 0.78rem;
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.86rem;
-    font-weight: 600;
-    line-height: 1;
-  }
-
-  > button {
-    margin-left: 0;
-  }
-
-  button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    align-self: stretch;
-    min-width: 1.92rem;
-    padding: 0 0.52rem;
-    border: 0;
-    border-left: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
-    color: ${({ theme }) => theme.colors.gray10};
-    cursor: pointer;
-    flex: 0 0 auto;
-    font-size: 0.98rem;
-    line-height: 1;
-    transition:
-      transform 0.18s ease,
-      background 0.18s ease,
-      color 0.18s ease;
-
-    &:hover {
-      transform: none;
-      background: ${({ theme }) => theme.colors.gray4};
-      color: ${({ theme }) => theme.colors.gray12};
-    }
-  }
 `
 
 const SubActionRow = styled.div`
@@ -4058,53 +3532,5 @@ const SubActionRow = styled.div`
       width: 100%;
       justify-content: center;
     }
-  }
-`
-
-const WriterFooterBar = styled.div`
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.8rem;
-  flex-wrap: wrap;
-  margin-top: 0.84rem;
-  padding-top: 0.72rem;
-  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
-`
-
-const WriterFooterSummary = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.52rem 0.72rem;
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.76rem;
-  line-height: 1.45;
-`
-
-const WriterFooterControls = styled.div`
-  display: grid;
-  gap: 0.52rem;
-  justify-items: stretch;
-  flex: 1 1 34rem;
-  width: min(100%, 48rem);
-  min-width: min(100%, 34rem);
-  max-width: 100%;
-  margin-left: auto;
-
-  @media (max-width: 720px) {
-    width: 100%;
-    min-width: 100%;
-  }
-`
-
-const WriterFooterActions = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-  justify-content: flex-end;
-  align-items: center;
-
-  @media (max-width: 720px) {
-    display: none;
   }
 `

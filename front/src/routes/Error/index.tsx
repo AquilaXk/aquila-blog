@@ -35,8 +35,11 @@ const StyledWrapper = styled.div`
   padding-right: 1.5rem;
   padding-top: 3rem;
   padding-bottom: 3rem;
-  border-radius: 1.5rem;
+  border-radius: ${({ theme }) => (theme.blogDesign === "grid" ? "8px" : "1.5rem")};
   max-width: 56rem;
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.readableSurface : "transparent")};
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : "transparent")};
+  box-shadow: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.shadow : "none")};
   .wrapper {
     display: flex;
     padding-top: 5rem;
@@ -54,6 +57,7 @@ const StyledWrapper = styled.div`
       .questionIcon {
         font-size: 3.1rem;
         flex: 0 0 auto;
+        color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : "inherit")};
       }
     }
     > .copy {
@@ -90,8 +94,8 @@ const StyledWrapper = styled.div`
       min-height: 44px;
       padding: 0 1rem;
       border-radius: 999px;
-      border: 1px solid ${({ theme }) => theme.colors.gray6};
-      background: ${({ theme }) => theme.colors.gray1};
+      border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray6)};
+      background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray1)};
       color: ${({ theme }) => theme.colors.gray12};
       text-decoration: none;
       font-size: 0.92rem;
@@ -104,8 +108,8 @@ const StyledWrapper = styled.div`
 
     > .actions a:hover {
       transform: translateY(-1px);
-      border-color: ${({ theme }) => theme.colors.gray8};
-      background: ${({ theme }) => theme.colors.gray2};
+      border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.gray8)};
+      background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.gray2)};
     }
   }
 `

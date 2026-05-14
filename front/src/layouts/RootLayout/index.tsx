@@ -75,7 +75,7 @@ const RootLayout = ({
   const [scheme] = useScheme()
   const router = useRouter()
   const isPublicBlogRoute = router.pathname === "/" || router.pathname === "/about" || router.pathname === "/posts/[id]"
-  const isDesignAwareRoute = isPublicBlogRoute || router.pathname.startsWith("/admin")
+  const isDesignAwareRoute = !router.pathname.startsWith("/_qa") && router.pathname !== "/sitemap.xml"
   const adminProfile = usePublicAdminProfile(initialAdminProfile, {
     enabled: isDesignAwareRoute || initialAdminProfileShouldRefetch,
     refetchOnMount: isDesignAwareRoute,
@@ -84,6 +84,7 @@ const RootLayout = ({
   const publicAppearance = resolvePublicBlogAppearance(isDesignAwareRoute ? adminProfile : null)
   const effectiveScheme = isDesignAwareRoute ? publicAppearance.scheme : scheme
   const effectiveBlogDesign = isDesignAwareRoute ? publicAppearance.blogDesign : "legacy"
+  const showHeaderThemeToggle = effectiveBlogDesign === "legacy" && !isPublicBlogRoute
   const headerBlogTitle = isPublicBlogRoute ? adminProfile?.blogTitle?.trim() || CONFIG.blog.title : CONFIG.blog.title
   const [isNavigating, setIsNavigating] = useState(false)
   useGtagEffect()
@@ -188,7 +189,7 @@ const RootLayout = ({
       <Scripts />
       {/* // TODO: replace react query */}
       {/* {metaConfig.type !== "Paper" && <Header />} */}
-      <Header fullWidth={false} showThemeToggle={!isPublicBlogRoute} blogTitle={headerBlogTitle} />
+      <Header fullWidth={false} showThemeToggle={showHeaderThemeToggle} blogTitle={headerBlogTitle} />
       <RouteProgress data-busy={isNavigating} aria-hidden="true" />
       <StyledMain>{children}</StyledMain>
     </ThemeProvider>

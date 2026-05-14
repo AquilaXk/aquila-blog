@@ -1418,6 +1418,81 @@ test("상세 table hover 중 wheel 입력도 page scroll chain을 유지한다",
   await expect.poll(async () => page.evaluate(() => window.scrollY)).toBeGreaterThan(scrollBeforeWheel + 120)
 })
 
+test("상세 우측 목차 active는 스크롤 anchor를 지난 현재 섹션을 유지한다", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+
+  const leadParagraph = "목차 active scrollspy 회귀를 재현하기 위한 본문입니다. ".repeat(70).trim()
+  const sectionBody = "짧은 섹션 본문입니다. ".repeat(8).trim()
+  const content = [
+    "## 계측 섹션 01",
+    leadParagraph,
+    "## 계측 섹션 02",
+    sectionBody,
+    "### 계측 섹션 03",
+    sectionBody,
+    "### 계측 섹션 04",
+    sectionBody,
+    "## 계측 섹션 05",
+    leadParagraph,
+  ].join("\n\n")
+
+  await page.route("**/post/api/v1/posts/912", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 912,
+        createdAt: "2026-05-14T00:00:00Z",
+        modifiedAt: "2026-05-14T00:00:00Z",
+        authorId: 1,
+        authorName: "관리자",
+        authorUsername: "aquila",
+        authorProfileImageDirectUrl: "/avatar.png",
+        title: "상세 목차 active 안정성 테스트",
+        content,
+        tags: ["목차"],
+        category: [],
+        published: true,
+        listed: true,
+        likesCount: 0,
+        commentsCount: 0,
+        hitCount: 0,
+        actorHasLiked: false,
+        actorCanModify: false,
+        actorCanDelete: false,
+      }),
+    })
+  })
+
+  await page.route("**/post/api/v1/posts/912/hit", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        resultCode: "200-1",
+        msg: "ok",
+        data: { hitCount: 1 },
+      }),
+    })
+  })
+
+  await page.goto("/posts/912")
+  await expect(page.getByRole("heading", { name: "상세 목차 active 안정성 테스트" })).toBeVisible()
+  const rightToc = page.locator('aside.rightRail nav[aria-label="목차"]')
+  await expect(rightToc.getByRole("button", { name: "계측 섹션 02" })).toBeVisible()
+
+  await page.evaluate(() => {
+    const target = Array.from(document.querySelectorAll<HTMLElement>("article h2, article h3"))
+      .find((heading) => heading.textContent?.trim() === "계측 섹션 02")
+    if (!target) throw new Error("계측 섹션 02 heading을 찾지 못했습니다.")
+    const targetTop = window.scrollY + target.getBoundingClientRect().top - 72
+    window.scrollTo(0, targetTop)
+  })
+
+  await expect.poll(async () => page.evaluate(() => Math.round(window.scrollY))).toBeGreaterThan(0)
+  await expect(rightToc.locator('button[data-active="true"]')).toHaveText("계측 섹션 02")
+})
+
 test("모바일 상세는 compact 액션과 접이식 목차를 노출한다", async ({ page }) => {
   await page.setViewportSize({ width: 393, height: 852 })
   await page.addInitScript(() => {

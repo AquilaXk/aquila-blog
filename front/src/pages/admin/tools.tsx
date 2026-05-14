@@ -2042,13 +2042,14 @@ const FeaturedStatusCard = styled.button`
   display: grid;
   gap: 0.55rem;
   border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
+  background: ${({ theme }) =>
+    theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2};
   padding: 1rem;
   cursor: pointer;
 
   &:hover {
-    border-color: ${({ theme }) => theme.colors.gray7};
+    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray7)};
   }
 `
 
@@ -2088,13 +2089,13 @@ const StatusCardButton = styled.button`
   display: grid;
   gap: 0.22rem;
   border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray1)};
   padding: 0.82rem 0.9rem;
   cursor: pointer;
 
   &:hover {
-    border-color: ${({ theme }) => theme.colors.gray7};
+    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray7)};
   }
 
   small {
@@ -2140,14 +2141,15 @@ const WorkspaceSection = styled.section`
   gap: 0.82rem;
   padding: 0.92rem;
   border-radius: 20px;
-  background: ${({ theme }) => theme.colors.gray2};
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: ${({ theme }) =>
+    theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2};
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray5)};
   content-visibility: auto;
   contain-intrinsic-size: 720px;
 
   &[data-emphasis="secondary"] {
-    background: ${({ theme }) => theme.colors.gray1};
-    border-color: ${({ theme }) => theme.colors.gray4};
+    background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray1)};
+    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray4)};
   }
 
   &[data-tone="danger"] {

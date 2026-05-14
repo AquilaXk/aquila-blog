@@ -2,22 +2,66 @@ import { dehydrate, DehydratedState } from "@tanstack/react-query"
 import { IncomingMessage } from "http"
 import { GetServerSidePropsResult } from "next"
 import { queryKey } from "src/constants/queryKey"
+import type { AdminProfile } from "src/hooks/useAdminProfile"
 import type { AuthMember } from "src/hooks/useAuthSession"
 import { createQueryClient } from "src/libs/react-query"
 import { normalizeNextPath, toLoginPath } from "src/libs/router"
 import { serverApiFetch } from "./backend"
 import { guardAdminRequest } from "./adminGuard"
+import {
+  buildStaticAdminProfileSnapshot,
+  fetchServerAdminProfile,
+  resolvePublicAdminProfileSnapshot,
+} from "./adminProfile"
 
 export type AdminPageProps = {
   dehydratedState: DehydratedState
   initialMember: AuthMember
+  initialProfileSnapshot?: AdminProfile | null
 }
 
 type AdminProtectedBootstrapResult<T> =
   | { ok: true; value: T }
   | { ok: false; destination: string | null }
 
-export const buildAdminPagePropsFromMember = (member: AuthMember): AdminPageProps => {
+const buildAdminProfileSnapshotFromMember = (member: AuthMember): AdminProfile => {
+  const fallback = buildStaticAdminProfileSnapshot()
+  return {
+    ...fallback,
+    username: member.username,
+    name: member.nickname || member.username,
+    nickname: member.nickname || member.username,
+    modifiedAt: member.modifiedAt,
+    profileImageUrl: member.profileImageUrl || fallback.profileImageUrl,
+    profileImageDirectUrl:
+      member.profileImageDirectUrl || member.profileImageUrl || fallback.profileImageDirectUrl,
+    profileRole: member.profileRole || fallback.profileRole,
+    profileBio: member.profileBio || fallback.profileBio,
+    aboutRole: member.aboutRole || fallback.aboutRole,
+    aboutBio: member.aboutBio || fallback.aboutBio,
+    aboutDetails: member.aboutDetails,
+    blogTitle: member.blogTitle || fallback.blogTitle,
+    homeIntroTitle: member.homeIntroTitle || fallback.homeIntroTitle,
+    homeIntroDescription: member.homeIntroDescription || fallback.homeIntroDescription,
+    blogDesign: member.blogDesign || fallback.blogDesign,
+    legacyBlogScheme: member.legacyBlogScheme || fallback.legacyBlogScheme,
+    serviceLinks: member.serviceLinks || fallback.serviceLinks,
+    contactLinks: member.contactLinks || fallback.contactLinks,
+  }
+}
+
+const resolveAdminInitialProfileSnapshot = async (req: IncomingMessage): Promise<AdminProfile> => {
+  return (
+    (await fetchServerAdminProfile(req, {
+      timeoutMs: 900,
+    })) || resolvePublicAdminProfileSnapshot(req).profile
+  )
+}
+
+export const buildAdminPagePropsFromMember = (
+  member: AuthMember,
+  initialProfileSnapshot: AdminProfile | null = buildAdminProfileSnapshotFromMember(member)
+): AdminPageProps => {
   const queryClient = createQueryClient()
   queryClient.setQueryData(queryKey.authMeProbe(), true)
   queryClient.setQueryData(queryKey.authMe(), member)
@@ -25,6 +69,7 @@ export const buildAdminPagePropsFromMember = (member: AuthMember): AdminPageProp
   return {
     dehydratedState: dehydrate(queryClient),
     initialMember: member,
+    initialProfileSnapshot,
   }
 }
 
@@ -81,6 +126,6 @@ export const getAdminPageProps = async (
   }
 
   return {
-    props: buildAdminPagePropsFromMember(guardResult.member),
+    props: buildAdminPagePropsFromMember(guardResult.member, await resolveAdminInitialProfileSnapshot(req)),
   }
 }

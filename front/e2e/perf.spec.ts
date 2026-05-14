@@ -1261,6 +1261,55 @@ test("메인 레이아웃은 velog형 width tier(1728/1376/1024/100%)를 유지�
   await expect(page.locator(".rt")).toBeHidden()
 })
 
+test("피드 카드 hover lift는 content-visibility clipping 없이 상단을 그릴 수 있다", async ({ page }) => {
+  await mockFeedEndpoints(page)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await gotoForPerf(page, "/")
+
+  const firstRegularCard = page.locator('a[data-layout="regular"]').first()
+  await expect(firstRegularCard).toBeVisible()
+
+  const initialMetrics = await firstRegularCard.evaluate((card) => {
+    const article = card.querySelector("article")
+    if (!(article instanceof HTMLElement)) {
+      throw new Error("regular feed card article을 찾지 못했습니다.")
+    }
+
+    const cardStyle = window.getComputedStyle(card as HTMLElement)
+    const articleStyle = window.getComputedStyle(article)
+    return {
+      cardContentVisibility: cardStyle.contentVisibility,
+      articleTransform: articleStyle.transform,
+    }
+  })
+
+  expect(initialMetrics.cardContentVisibility).toBe("visible")
+  expect(initialMetrics.articleTransform).toBe("none")
+
+  await firstRegularCard.hover()
+  await page.waitForTimeout(320)
+
+  const hoverMetrics = await firstRegularCard.evaluate((card) => {
+    const article = card.querySelector("article")
+    if (!(article instanceof HTMLElement)) {
+      throw new Error("regular feed card article을 찾지 못했습니다.")
+    }
+
+    const cardRect = (card as HTMLElement).getBoundingClientRect()
+    const articleRect = article.getBoundingClientRect()
+    const articleStyle = window.getComputedStyle(article)
+
+    return {
+      cardTop: Number(cardRect.top.toFixed(2)),
+      articleTop: Number(articleRect.top.toFixed(2)),
+      articleTransform: articleStyle.transform,
+    }
+  })
+
+  expect(hoverMetrics.articleTransform).not.toBe("none")
+  expect(hoverMetrics.articleTop).toBeLessThan(hoverMetrics.cardTop)
+})
+
 test("메인 태그 레일은 1200/1201 전환과 넓은 데스크톱에서 안전하게 전환된다", async ({ page }) => {
   await mockFeedEndpoints(page)
 

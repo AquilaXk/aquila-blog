@@ -168,11 +168,6 @@ const StyledWrapper = styled.a`
   --post-card-shadow-current: ${({ theme }) => theme.publicDesign.shadow};
   --post-card-shadow-hover-current: ${({ theme }) => theme.publicDesign.shadow};
 
-  &[data-layout="regular"] {
-    content-visibility: auto;
-    contain-intrinsic-size: 1px 420px;
-  }
-
   &:focus-visible {
     outline: 0;
   }

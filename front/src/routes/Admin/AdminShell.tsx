@@ -166,9 +166,12 @@ const Sidebar = styled.aside`
   top: calc(var(--app-header-height, 73px) + 0.85rem);
   height: fit-content;
   padding: 1.05rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray4};
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray4)};
   border-radius: 24px;
-  background: ${({ theme }) => theme.colors.gray1};
+  background: ${({ theme }) =>
+    theme.blogDesign === "grid"
+      ? `linear-gradient(180deg, ${theme.publicDesign.operationSurfaceElevated} 0%, ${theme.publicDesign.operationSurface} 100%)`
+      : theme.colors.gray1};
 
   @media (max-width: 1100px) {
     position: static;
@@ -209,8 +212,9 @@ const BrandMark = styled.div`
   place-items: center;
   position: relative;
   overflow: hidden;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray6)};
+  background: ${({ theme }) =>
+    theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray12};
 
   span {
@@ -281,7 +285,7 @@ const NavLink = styled.a`
   min-width: 0;
   padding: 0.78rem 0.84rem;
   border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray3};
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray3)};
   color: inherit;
   text-decoration: none;
   transition: border-color 140ms ease, background 140ms ease;
@@ -294,7 +298,8 @@ const NavLink = styled.a`
     place-items: center;
     flex-shrink: 0;
     color: ${({ theme }) => theme.colors.gray11};
-    background: ${({ theme }) => theme.colors.gray2};
+    background: ${({ theme }) =>
+      theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2};
   }
 
   .navLabel {
@@ -306,18 +311,21 @@ const NavLink = styled.a`
   }
 
   &[data-active="true"] {
-    border-color: ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
+    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray6)};
+    background: ${({ theme }) =>
+      theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2};
   }
 
   &[data-active="true"] .navIcon {
-    background: ${({ theme }) => theme.colors.gray3};
+    background: ${({ theme }) =>
+      theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.gray3};
     color: ${({ theme }) => theme.colors.gray12};
   }
 
   &:hover {
-    border-color: ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
+    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray6)};
+    background: ${({ theme }) =>
+      theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2};
   }
 
   @media (max-width: 1100px) {
@@ -340,15 +348,17 @@ const SidebarPrimaryAction = styled.a`
   min-height: 2.9rem;
   padding: 0.78rem 0.9rem;
   border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray6)};
+  background: ${({ theme }) =>
+    theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray12};
   text-decoration: none;
   font-size: 0.88rem;
   font-weight: 760;
 
   &:hover {
-    background: ${({ theme }) => theme.colors.gray3};
+    background: ${({ theme }) =>
+      theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray3};
   }
 `
 

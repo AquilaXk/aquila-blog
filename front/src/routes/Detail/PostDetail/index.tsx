@@ -1359,6 +1359,28 @@ const StyledWrapper = styled.div`
     gap: 1.15rem;
     min-width: 0;
     width: 100%;
+    position: relative;
+    z-index: 0;
+  }
+
+  article::before {
+    content: "";
+    display: ${({ theme }) => (theme.blogDesign === "grid" ? "block" : "none")};
+    position: absolute;
+    inset: -1.4rem -1.5rem;
+    z-index: -1;
+    border-radius: 18px;
+    border: 1px solid ${({ theme }) => theme.publicDesign.border};
+    background: ${({ theme }) => theme.publicDesign.readableSurface};
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
+    pointer-events: none;
+  }
+
+  @media (max-width: 768px) {
+    article::before {
+      inset: -0.95rem -0.85rem;
+      border-radius: 14px;
+    }
   }
 
   article > * {

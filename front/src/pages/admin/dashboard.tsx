@@ -903,7 +903,8 @@ const renderMonitoringBrand = (
 
 const Main = styled.main`
   min-height: 100vh;
-  background: ${({ theme }) => theme.colors.gray2};
+  background: ${({ theme }) =>
+    theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray2};
 `
 
 const Shell = styled.div`
@@ -924,7 +925,7 @@ const HeroPanel = styled.section`
   display: grid;
   gap: 8px;
   padding: 0 0 12px;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+  border-bottom: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray5)};
 
   @media (max-width: 820px) {
     gap: 6px;
@@ -988,8 +989,8 @@ const StatusChip = styled.span`
   min-height: 38px;
   padding: 0 15px;
   border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray1)};
   color: ${({ theme }) => theme.colors.gray12};
   font-size: 0.84rem;
   font-weight: 800;
@@ -1010,8 +1011,8 @@ const HeaderLink = styled.a`
   min-height: 38px;
   padding: 0 15px;
   border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray1)};
   color: ${({ theme }) => theme.colors.gray12};
   text-decoration: none;
   font-size: 0.84rem;
@@ -1031,9 +1032,9 @@ const MetricCard = styled.article`
   align-items: start;
   padding: 12px;
   border-radius: 22px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.05);
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray1)};
+  box-shadow: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.shadow : "0 14px 30px rgba(15, 23, 42, 0.05)")};
 
   &[data-tone="good"] {
     border-color: ${({ theme }) => theme.colors.green7};
@@ -1055,7 +1056,8 @@ const MetricIcon = styled.div`
   border-radius: 15px;
   display: grid;
   place-items: center;
-  background: ${({ theme }) => theme.colors.gray2};
+  background: ${({ theme }) =>
+    theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray11};
 
   &[data-tone="good"] {
@@ -1115,7 +1117,7 @@ const PanelGrid = styled.section`
 const PanelCard = styled(AdminPlainCard)`
   border-radius: 28px;
   overflow: hidden;
-  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
+  box-shadow: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.shadow : "0 18px 42px rgba(15, 23, 42, 0.08)")};
 `
 
 const LeadPanelCard = styled(PanelCard)`
@@ -1132,7 +1134,7 @@ const PanelHeader = styled.div`
   align-items: flex-start;
   gap: 16px;
   padding: 18px 18px 12px;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray4};
+  border-bottom: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray4)};
 
   strong {
     display: block;
@@ -1155,7 +1157,8 @@ const LaunchLink = styled.a`
   min-height: 38px;
   padding: 0 14px;
   border-radius: 999px;
-  background: ${({ theme }) => theme.colors.gray2};
+  background: ${({ theme }) =>
+    theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray12};
   text-decoration: none;
   font-size: 0.88rem;
@@ -1163,7 +1166,7 @@ const LaunchLink = styled.a`
 `
 
 const PanelBody = styled.div`
-  background: ${({ theme }) => theme.colors.gray1};
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray1)};
 `
 
 const SnapshotLeadBody = styled(PanelBody)`
@@ -1177,7 +1180,7 @@ const PanelFrame = styled.iframe`
   width: 100%;
   height: 304px;
   border: 0;
-  background: ${({ theme }) => theme.colors.gray1};
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray1)};
 `
 
 const CompactPanelBody = styled(PanelBody)`

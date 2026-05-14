@@ -8,6 +8,18 @@ on:
       - completed
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      force_backend_deploy:
+        description: "Build and deploy the backend image even when changed-file detection would skip it."
+        required: false
+        default: true
+        type: boolean
+      force_front_live_verify:
+        description: "Run live frontend verification after deploy target calculation."
+        required: false
+        default: true
+        type: boolean
 
 concurrency:
   group: homeserver-deploy-main
@@ -25,10 +37,17 @@ jobs:
     permissions:
       contents: read
     if: >
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'main' &&
-      github.event.workflow_run.head_repository.full_name == github.repository
+      (
+        github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository
+      ) ||
+      (
+        github.event_name == 'workflow_dispatch' &&
+        github.ref == 'refs/heads/main'
+      )
     outputs:
       image_tag: ${{ steps.meta.outputs.image_tag }}
       image_ref: ${{ steps.meta.outputs.image_ref }}
@@ -41,13 +60,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
 
       - name: Calculate deploy targets and image tags
         id: meta
         env:
-          DEPLOY_SHA_INPUT: ${{ github.event.workflow_run.head_sha }}
+          DEPLOY_SHA_INPUT: ${{ github.event.workflow_run.head_sha || github.sha }}
+          FORCE_BACKEND_DEPLOY_INPUT: ${{ github.event.inputs.force_backend_deploy || 'false' }}
+          FORCE_FRONT_LIVE_VERIFY_INPUT: ${{ github.event.inputs.force_front_live_verify || 'false' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -88,6 +109,15 @@ jobs:
             if echo "${CHANGED_FILES}" | grep -Eq "${FRONT_LIVE_VERIFY_PATHS_PATTERN}"; then
               FRONT_LIVE_VERIFY="true"
             fi
+          fi
+
+          if [ "${FORCE_BACKEND_DEPLOY_INPUT}" = "true" ]; then
+            BACKEND_DEPLOY="true"
+            FRONT_LIVE_VERIFY="true"
+            CHANGE_SOURCE="${CHANGE_SOURCE}+manual-force-backend"
+          elif [ "${FORCE_FRONT_LIVE_VERIFY_INPUT}" = "true" ]; then
+            FRONT_LIVE_VERIFY="true"
+            CHANGE_SOURCE="${CHANGE_SOURCE}+manual-force-front-live-verify"
           fi
 
           echo "deploy_target_source=${CHANGE_SOURCE}"

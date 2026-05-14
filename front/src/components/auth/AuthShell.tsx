@@ -81,19 +81,25 @@ const Main = styled.main`
 const Backdrop = styled.div`
   position: absolute;
   inset: 0;
-  background: ${({ theme }) => theme.colors.gray1};
+  background:
+    ${({ theme }) =>
+      theme.blogDesign === "grid"
+        ? `linear-gradient(180deg, color-mix(in srgb, ${theme.publicDesign.surfaceElevated} 72%, transparent), ${theme.publicDesign.pageBackgroundColor}), ${theme.publicDesign.pageBackgroundImage}`
+        : theme.colors.gray1};
 `
 
 const Shell = styled.section`
   position: relative;
   z-index: 1;
   width: min(520px, 100%);
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  border-radius: 22px;
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray5)};
+  border-radius: ${({ theme }) => (theme.blogDesign === "grid" ? "8px" : "22px")};
   overflow: hidden;
-  background: ${({ theme }) => theme.colors.gray1};
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.readableSurface : theme.colors.gray1)};
   box-shadow: ${({ theme }) =>
-    theme.scheme === "light"
+    theme.blogDesign === "grid"
+      ? theme.publicDesign.shadow
+      : theme.scheme === "light"
       ? "0 18px 40px rgba(15, 23, 42, 0.08)"
       : "0 18px 40px rgba(0, 0, 0, 0.3)"};
 `
@@ -117,7 +123,7 @@ const Eyebrow = styled.span`
   display: inline-flex;
   align-items: center;
   margin-bottom: 0.38rem;
-  color: ${({ theme }) => theme.colors.gray10};
+  color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.gray10)};
   font-size: 0.74rem;
   font-weight: 760;
   letter-spacing: 0.08em;
@@ -145,9 +151,14 @@ const Tabs = styled.div`
 `
 
 const ActiveTab = styled.div`
-  border-radius: 11px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray2 : theme.colors.gray3)};
+  border-radius: ${({ theme }) => (theme.blogDesign === "grid" ? "4px" : "11px")};
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray6)};
+  background: ${({ theme }) =>
+    theme.blogDesign === "grid"
+      ? theme.publicDesign.accentMuted
+      : theme.scheme === "light"
+        ? theme.colors.gray2
+        : theme.colors.gray3};
   color: ${({ theme }) => theme.colors.gray12};
   padding: 0.66rem 0.76rem;
   text-align: center;
@@ -155,9 +166,10 @@ const ActiveTab = styled.div`
 `
 
 const PassiveTab = styled(Link)`
-  border-radius: 11px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) => (theme.scheme === "light" ? "#f8fafc" : theme.colors.gray1)};
+  border-radius: ${({ theme }) => (theme.blogDesign === "grid" ? "4px" : "11px")};
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray5)};
+  background: ${({ theme }) =>
+    theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.scheme === "light" ? "#f8fafc" : theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray11};
   padding: 0.66rem 0.76rem;
   text-align: center;
@@ -177,7 +189,7 @@ const Footer = styled.div`
   color: ${({ theme }) => theme.colors.gray11};
 
   a {
-    color: ${({ theme }) => theme.colors.accentLink};
+    color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.accentLink)};
     text-decoration: underline;
     text-underline-offset: 3px;
   }

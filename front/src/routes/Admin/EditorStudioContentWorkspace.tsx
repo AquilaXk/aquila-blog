@@ -325,12 +325,13 @@ export const EditorStudioContentWorkspace = ({
 )
 
 const Section = styled.section`
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  border-radius: 14px;
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray5)};
+  border-radius: ${({ theme }) => (theme.blogDesign === "grid" ? "8px" : "14px")};
   padding: 0.96rem;
   margin-bottom: 1.05rem;
-  background: ${({ theme }) => theme.colors.gray2};
-  box-shadow: none;
+  background: ${({ theme }) =>
+    theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray2};
+  box-shadow: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.shadow : "none")};
 
   h2 {
     margin: 0;
@@ -366,12 +367,12 @@ const GlobalNoticeBar = styled.div`
   border-radius: 10px;
   font-size: 0.84rem;
   line-height: 1.5;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
 
   &[data-tone="idle"] {
     color: ${({ theme }) => theme.colors.gray10};
-    background: ${({ theme }) => theme.colors.gray2};
-    border-color: ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2)};
+    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
   }
 
   &[data-tone="loading"] {
@@ -418,9 +419,9 @@ const ContentStudioLeft = styled.div`
   display: grid;
   gap: 0.95rem;
   min-width: 0;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  border-radius: 12px;
-  background: ${({ theme }) => theme.colors.gray1};
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray5)};
+  border-radius: ${({ theme }) => (theme.blogDesign === "grid" ? "6px" : "12px")};
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.readableSurface : theme.colors.gray1)};
   padding: 0.9rem;
   box-shadow: none;
   overflow: hidden;

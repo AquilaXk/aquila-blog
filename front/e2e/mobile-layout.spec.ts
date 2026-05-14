@@ -15,7 +15,7 @@ test.use({
 
 const readSourceFile = (sourcePath: string) => readFileSync(path.resolve(__dirname, "..", sourcePath), "utf8")
 
-test("grid design은 공개 화면 토큰만 사용하고 article typography를 변경하지 않는다", () => {
+test("grid design은 전 사용자-facing 화면 토큰을 사용하고 article typography를 변경하지 않는다", () => {
   const publicSurfaceSources = [
     "src/layouts/RootLayout/Header/index.tsx",
     "src/layouts/RootLayout/Header/Logo.tsx",
@@ -40,19 +40,33 @@ test("grid design은 공개 화면 토큰만 사용하고 article typography를 
   const adminShellSource = readSourceFile("src/routes/Admin/AdminShell.tsx")
   const adminToolsSource = readSourceFile("src/pages/admin/tools.tsx")
   const adminDashboardSource = readSourceFile("src/pages/admin/dashboard.tsx")
+  const authShellSource = readSourceFile("src/components/auth/AuthShell.tsx")
+  const errorSource = readSourceFile("src/routes/Error/index.tsx")
+  const editorComposeSource = readSourceFile("src/routes/Admin/EditorStudioComposeWritingSurface.tsx")
+  const editorDedicatedSource = readSourceFile("src/routes/Admin/EditorStudioDedicatedEditorSurface.tsx")
+  const editorPreviewSource = readSourceFile("src/routes/Admin/EditorActualPreviewPage.tsx")
 
   expect(themeSource).toContain('blogDesign === "grid"')
+  expect(themeSource).toContain("#101214")
+  expect(themeSource).toContain("#171a1d")
+  expect(themeSource).toContain("#c2a35b")
   expect(themeSource).toContain("readableSurface")
   expect(themeSource).toContain("operationSurface")
   expect(themeSource).toContain("operationSurfaceElevated")
   expect(rootLayoutSource).toContain("isDesignAwareRoute")
-  expect(rootLayoutSource).toContain('router.pathname.startsWith("/admin")')
+  expect(rootLayoutSource).toContain('!router.pathname.startsWith("/_qa")')
+  expect(rootLayoutSource).toContain("showHeaderThemeToggle")
   expect(rootLayoutSource).toContain("resolvePublicBlogAppearance(isDesignAwareRoute ? adminProfile : null)")
   expect(adminSurfaceSource).toContain("theme.publicDesign.operationSurface")
   expect(adminSurfaceSource).toContain("theme.publicDesign.operationSurfaceElevated")
   expect(adminShellSource).toContain("theme.publicDesign.operationSurface")
   expect(adminToolsSource).toContain("theme.publicDesign.operationSurface")
   expect(adminDashboardSource).toContain("theme.publicDesign.operationSurface")
+  expect(authShellSource).toContain("theme.publicDesign.readableSurface")
+  expect(errorSource).toContain("theme.publicDesign.readableSurface")
+  expect(editorComposeSource).toContain("theme.publicDesign.readableSurface")
+  expect(editorDedicatedSource).toContain("theme.publicDesign.readableSurface")
+  expect(editorPreviewSource).toContain("theme.publicDesign.readableSurface")
   for (const [sourcePath, source] of publicSurfaceSources) {
     expect(source, sourcePath).toContain("theme.publicDesign")
   }

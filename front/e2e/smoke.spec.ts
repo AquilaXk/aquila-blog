@@ -1493,6 +1493,104 @@ test("상세 우측 목차 active는 스크롤 anchor를 지난 현재 섹션을
   await expect(rightToc.locator('button[data-active="true"]')).toHaveText("계측 섹션 02")
 })
 
+test("상세 우측 목차는 긴 목록에서도 active 항목을 자동으로 드러낸다", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+
+  const paragraph = "목차 자동 표시 회귀를 검증하기 위한 본문입니다. ".repeat(20).trim()
+  const content = Array.from({ length: 32 }, (_, index) => {
+    const sectionNumber = String(index + 1).padStart(2, "0")
+    return [`## 자동 표시 섹션 ${sectionNumber}`, paragraph].join("\n\n")
+  }).join("\n\n")
+
+  await page.route("**/post/api/v1/posts/913", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 913,
+        createdAt: "2026-05-14T00:00:00Z",
+        modifiedAt: "2026-05-14T00:00:00Z",
+        authorId: 1,
+        authorName: "관리자",
+        authorUsername: "aquila",
+        authorProfileImageDirectUrl: "/avatar.png",
+        title: "상세 목차 자동 표시 테스트",
+        content,
+        tags: ["목차"],
+        category: [],
+        published: true,
+        listed: true,
+        likesCount: 0,
+        commentsCount: 0,
+        hitCount: 0,
+        actorHasLiked: false,
+        actorCanModify: false,
+        actorCanDelete: false,
+      }),
+    })
+  })
+
+  await page.route("**/post/api/v1/posts/913/hit", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        resultCode: "200-1",
+        msg: "ok",
+        data: { hitCount: 1 },
+      }),
+    })
+  })
+
+  await page.goto("/posts/913")
+  await expect(page.getByRole("heading", { name: "상세 목차 자동 표시 테스트" })).toBeVisible()
+  const rightToc = page.locator('aside.rightRail nav[aria-label="목차"]')
+  await expect(rightToc.getByRole("button", { name: "자동 표시 섹션 32" })).toHaveCount(1)
+
+  await page.evaluate(() => {
+    const target = Array.from(document.querySelectorAll<HTMLElement>("article h2"))
+      .find((heading) => heading.textContent?.trim() === "자동 표시 섹션 28")
+    if (!target) throw new Error("자동 표시 섹션 28 heading을 찾지 못했습니다.")
+    const targetTop = window.scrollY + target.getBoundingClientRect().top - 72
+    window.scrollTo(0, targetTop)
+  })
+
+  await expect
+    .poll(async () => page.evaluate(() => document.querySelector('aside.rightRail nav[aria-label="목차"] button[data-active="true"]')?.textContent?.trim()))
+    .toBe("자동 표시 섹션 28")
+
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const list = document.querySelector<HTMLElement>('aside.rightRail nav[aria-label="목차"] ol')
+          const activeButton = list?.querySelector<HTMLElement>('button[data-active="true"]') ?? null
+          const listRect = list?.getBoundingClientRect()
+          const activeRect = activeButton?.getBoundingClientRect()
+          if (!list || !activeButton || !listRect || !activeRect) {
+            return "missing"
+          }
+
+          const metrics = {
+            activeText: activeButton.textContent?.trim() || "",
+            scrollTop: Math.round(list.scrollTop),
+            activeTop: Math.round(activeRect.top),
+            activeBottom: Math.round(activeRect.bottom),
+            listTop: Math.round(listRect.top),
+            listBottom: Math.round(listRect.bottom),
+          }
+          const activeVisible =
+            metrics.activeTop >= metrics.listTop - 1 && metrics.activeBottom <= metrics.listBottom + 1
+          const revealComplete =
+            metrics.activeText === "자동 표시 섹션 28" && metrics.scrollTop > 0 && activeVisible
+
+          return revealComplete ? "ready" : JSON.stringify(metrics)
+        }),
+      { timeout: 5_000 }
+    )
+    .toBe("ready")
+})
+
 test("모바일 상세는 compact 액션과 접이식 목차를 노출한다", async ({ page }) => {
   await page.setViewportSize({ width: 393, height: 852 })
   await page.addInitScript(() => {

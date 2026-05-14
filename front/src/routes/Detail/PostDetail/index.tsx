@@ -225,6 +225,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const leftRailInnerRef = useRef<HTMLDivElement | null>(null)
   const rightRailRef = useRef<HTMLElement | null>(null)
   const rightRailInnerRef = useRef<HTMLElement | null>(null)
+  const rightTocListRef = useRef<HTMLOListElement | null>(null)
   const [likePending, setLikePending] = useState(false)
   const [adminActionPending, setAdminActionPending] = useState(false)
   const [tocItems, setTocItems] = useState<TocItem[]>([])
@@ -451,6 +452,35 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   useEffect(() => {
     showStickyTocRef.current = showStickyToc
   }, [showStickyToc])
+
+  useEffect(() => {
+    if (!activeTocId || !showStickyToc || typeof window === "undefined") return
+
+    const frame = window.requestAnimationFrame(() => {
+      const listNode = rightTocListRef.current
+      if (!listNode) return
+
+      const activeButton = listNode.querySelector<HTMLElement>('button[data-active="true"]')
+      if (!activeButton) return
+
+      const listRect = listNode.getBoundingClientRect()
+      const activeRect = activeButton.getBoundingClientRect()
+      const revealPadding = 12
+      const overflowTop = listRect.top + revealPadding - activeRect.top
+
+      if (overflowTop > 0) {
+        listNode.scrollTop = Math.max(0, listNode.scrollTop - overflowTop)
+        return
+      }
+
+      const overflowBottom = activeRect.bottom - (listRect.bottom - revealPadding)
+      if (overflowBottom > 0) {
+        listNode.scrollTop += overflowBottom
+      }
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [activeTocId, showDetailedToc, showStickyToc, visibleTocItems.length])
 
   useEffect(() => {
     commentsRailActiveRef.current = commentsRailActive
@@ -1265,7 +1295,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                   </button>
                 )}
               </div>
-              <ol>
+              <ol ref={rightTocListRef}>
                 {visibleTocItems.map((item) => (
                   <li key={item.id} data-level={item.level}>
                     <button

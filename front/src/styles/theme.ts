@@ -13,7 +13,6 @@ export type PublicDesignTokens = {
   borderStrong: string
   accent: string
   accentMuted: string
-  textMuted: string
   shadow: string
 }
 
@@ -38,15 +37,14 @@ export const createPublicDesignTokens = (scheme: SchemeType, blogDesign: BlogDes
     return {
       pageBackgroundColor: "#090909",
       pageBackgroundImage:
-        "linear-gradient(#540e0e38,#0000 34%),repeating-linear-gradient(90deg,#b88a4c0e,#b88a4c0e 1px,#0000 1px,#0000 96px)",
+        "linear-gradient(#540e0e38,#0000 34%),repeating-linear-gradient(90deg,#b88a4c0e 0 1px,#0000 1px 96px)",
       surface: "#111111",
       surfaceElevated: "#181715",
-      border: "rgba(151, 125, 85, 0.28)",
-      borderStrong: "rgba(190, 143, 75, 0.48)",
+      border: "#977d5547",
+      borderStrong: "#be8f4b7a",
       accent: "#b88a4c",
-      accentMuted: "rgba(184, 138, 76, 0.18)",
-      textMuted: "#a7a29a",
-      shadow: "0 18px 50px rgba(0, 0, 0, 0.42)",
+      accentMuted: "#b88a4c2e",
+      shadow: "0 18px 50px #0000006b",
     }
   }
 
@@ -56,7 +54,7 @@ export const createPublicDesignTokens = (scheme: SchemeType, blogDesign: BlogDes
     pageBackgroundColor: scheme === "light" ? "#f3f5f8" : schemeColors.gray1,
     pageBackgroundImage:
       scheme === "light"
-        ? "radial-gradient(circle at 18% -12%,#2563eb06,transparent 26%),radial-gradient(circle at 88% 0%,#94a3b80a,transparent 22%)"
+        ? "radial-gradient(circle at 18% -12%,#2563eb06,#0000 26%),radial-gradient(circle at 88% 0,#94a3b80a,#0000 22%)"
         : "none",
     surface: schemeColors.gray1,
     surfaceElevated: scheme === "light" ? schemeColors.gray2 : schemeColors.gray3,
@@ -64,7 +62,6 @@ export const createPublicDesignTokens = (scheme: SchemeType, blogDesign: BlogDes
     borderStrong: schemeColors.gray7,
     accent: schemeColors.accentControl,
     accentMuted: schemeColors.accentSurfaceSubtle,
-    textMuted: schemeColors.gray10,
     shadow: variables.ui.card.shadow,
   }
 }

@@ -22,6 +22,7 @@ import {
 } from "./layoutTiers"
 
 const PUBLIC_ADMIN_PROFILE_QUERY_KEY = ["member", "adminProfile"] as const
+const INITIAL_PROPS_CANCELLED_MESSAGE = "loading initial props cancelled"
 
 type UsePublicAdminProfileOptions = {
   enabled: boolean
@@ -73,9 +74,9 @@ const RootLayout = ({
   initialAdminProfileShouldRefetch = false,
 }: Props) => {
   const [scheme] = useScheme()
-  const router = useRouter()
-  const isPublicBlogRoute = router.pathname === "/" || router.pathname === "/about" || router.pathname === "/posts/[id]"
-  const isDesignAwareRoute = router.pathname[1] !== "_" && router.pathname !== "/sitemap.xml"
+  const { events, pathname } = useRouter()
+  const isPublicBlogRoute = pathname === "/" || pathname === "/about" || pathname === "/posts/[id]"
+  const isDesignAwareRoute = pathname[1] !== "_" && pathname !== "/sitemap.xml"
   const adminProfile = usePublicAdminProfile(initialAdminProfile, {
     enabled: isDesignAwareRoute || initialAdminProfileShouldRefetch,
     refetchOnMount: isDesignAwareRoute,
@@ -84,7 +85,7 @@ const RootLayout = ({
   const publicAppearance = resolvePublicBlogAppearance(isDesignAwareRoute ? adminProfile : null)
   const effectiveScheme = isDesignAwareRoute ? publicAppearance.scheme : scheme
   const effectiveBlogDesign = isDesignAwareRoute ? publicAppearance.blogDesign : "legacy"
-  const headerBlogTitle = isPublicBlogRoute ? adminProfile?.blogTitle?.trim() || CONFIG.blog.title : CONFIG.blog.title
+  const headerBlogTitle = (isPublicBlogRoute && adminProfile?.blogTitle?.trim()) || CONFIG.blog.title
   const [isNavigating, setIsNavigating] = useState(false)
   useGtagEffect()
 
@@ -92,30 +93,28 @@ const RootLayout = ({
     let mounted = true
 
     const handleStart = (_url: string, options?: { shallow: boolean }) => {
-      if (options?.shallow) return
-      if (!mounted) return
+      if (options?.shallow || !mounted) return
       setIsNavigating(true)
     }
 
     const handleDone = (_url?: string, options?: { shallow: boolean }) => {
-      if (options?.shallow) return
-      if (!mounted) return
-      window.requestAnimationFrame(() => {
+      if (options?.shallow || !mounted) return
+      requestAnimationFrame(() => {
         if (mounted) setIsNavigating(false)
       })
     }
 
-    router.events.on("routeChangeStart", handleStart)
-    router.events.on("routeChangeComplete", handleDone)
-    router.events.on("routeChangeError", handleDone)
+    events.on("routeChangeStart", handleStart)
+    events.on("routeChangeComplete", handleDone)
+    events.on("routeChangeError", handleDone)
 
     return () => {
       mounted = false
-      router.events.off("routeChangeStart", handleStart)
-      router.events.off("routeChangeComplete", handleDone)
-      router.events.off("routeChangeError", handleDone)
+      events.off("routeChangeStart", handleStart)
+      events.off("routeChangeComplete", handleDone)
+      events.off("routeChangeError", handleDone)
     }
-  }, [router.events])
+  }, [events])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -123,17 +122,17 @@ const RootLayout = ({
 
     const isBenignRouteCancellationMessage = (value: unknown): boolean => {
       if (typeof value === "string") {
-        return value.toLowerCase().includes("loading initial props cancelled")
+        return value.toLowerCase().includes(INITIAL_PROPS_CANCELLED_MESSAGE)
       }
 
       if (value instanceof Error) {
-        return value.message.toLowerCase().includes("loading initial props cancelled")
+        return value.message.toLowerCase().includes(INITIAL_PROPS_CANCELLED_MESSAGE)
       }
 
       if (typeof value === "object" && value !== null && "message" in value) {
         const message = (value as { message?: unknown }).message
         if (typeof message === "string") {
-          return message.toLowerCase().includes("loading initial props cancelled")
+          return message.toLowerCase().includes(INITIAL_PROPS_CANCELLED_MESSAGE)
         }
       }
 

@@ -207,12 +207,12 @@ test("public blog appearance는 adminProfile 전역 설정에서 resolve된다",
   expect(postDetailPageSource).toContain("initialAdminProfile")
   expect(postDetailPageSource).toContain('initialAdminProfileSource === "static-fallback"')
   expect(appSource).toContain("initialAdminProfileShouldRefetch")
-  expect(rootLayoutSource).toContain('router.pathname[1] !== "_"')
+  expect(rootLayoutSource).toContain('pathname[1] !== "_"')
   expect(rootLayoutSource).toContain('effectiveBlogDesign === "legacy" && !isPublicBlogRoute')
   expect(rootLayoutSource).toContain("refetchOnMount: isDesignAwareRoute")
   expect(rootLayoutSource).toContain("staleTimeMs: isDesignAwareRoute ? 0 : undefined")
-  expect(rootLayoutSource).toContain('router.pathname[1] !== "_"')
-  expect(rootLayoutSource).toContain('router.pathname !== "/sitemap.xml"')
+  expect(rootLayoutSource).toContain('pathname[1] !== "_"')
+  expect(rootLayoutSource).toContain('pathname !== "/sitemap.xml"')
   expect(appSource).toContain("initialProfileSnapshot?: AdminProfile | null")
   expect(readFileSync(path.resolve(__dirname, "../src/libs/server/guestPage.ts"), "utf8")).toContain(
     "initialProfileSnapshot"

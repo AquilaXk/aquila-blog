@@ -158,9 +158,13 @@ test.describe("admin profile state contract", () => {
   test("profile 디자인 공개 적용은 primary action에서 저장 후 publish까지 처리한다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
 
+    expect(source).toContain("const revalidatePublicBlogAppearance = async (): Promise<boolean> => {")
+    expect(source).toContain('await fetch("/api/revalidate", {')
     expect(source).toContain("const validateDraftBeforePersistence = useCallback(")
     expect(source).toContain("const saveWorkspaceDraft = useCallback(")
     expect(source).toContain("const shouldPublishWorkspace = workspaceForPublish?.dirtyFromPublished ?? hasPublishedDiff")
+    expect(source).toContain("const publicCacheRevalidated = await revalidatePublicBlogAppearance()")
+    expect(source).toContain("공개 적용과 공개 사이트 갱신을 완료했습니다.")
     expect(source).toContain('hasUnsavedChanges ? "저장 후 공개 적용" : "공개 적용"')
     expect(source).toContain("초안 저장")
     expect(source).toContain("편집 중")

@@ -275,7 +275,7 @@ const ComposeStudioKicker = styled.span`
   display: inline-flex;
   align-items: center;
   width: fit-content;
-  color: ${({ theme }) => theme.colors.gray10};
+  color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.gray10)};
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0;
@@ -298,9 +298,9 @@ const ComposeStudioContextItem = styled.div`
   gap: 0.08rem;
   min-width: 7rem;
   padding: 0.5rem 0.68rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  border-radius: 12px;
-  background: ${({ theme }) => theme.colors.gray2};
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray5)};
+  border-radius: ${({ theme }) => (theme.blogDesign === "grid" ? "4px" : "12px")};
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2)};
 
   span {
     color: ${({ theme }) => theme.colors.gray10};
@@ -345,7 +345,7 @@ const WriterAccent = styled.div`
   width: 5rem;
   height: 0.42rem;
   border-radius: 999px;
-  background: ${({ theme }) => theme.colors.gray8};
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.gray8)};
 `
 
 const TitleInput = styled.textarea`
@@ -389,6 +389,10 @@ const ComposeReadableIntro = styled.div`
   margin-inline: auto;
   display: grid;
   gap: 1rem;
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : "transparent")};
+  border-radius: ${({ theme }) => (theme.blogDesign === "grid" ? "8px" : "0")};
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.readableSurface : "transparent")};
+  padding: ${({ theme }) => (theme.blogDesign === "grid" ? "1rem" : "0")};
 `
 
 const ComposeSummaryField = styled.div`
@@ -405,10 +409,10 @@ const FieldLabel = styled.label`
 const ComposeSummaryInput = styled.textarea`
   width: 100%;
   min-height: 5.6rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  border-radius: 16px;
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray5)};
+  border-radius: ${({ theme }) => (theme.blogDesign === "grid" ? "4px" : "16px")};
   padding: 0.95rem 1rem;
-  background: ${({ theme }) => theme.colors.gray2};
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray2)};
   color: ${({ theme }) => theme.colors.gray12};
   font-size: 1rem;
   line-height: 1.7;
@@ -420,8 +424,8 @@ const ComposeSummaryInput = styled.textarea`
 
   &:focus-visible {
     outline: none;
-    border-color: ${({ theme }) => theme.colors.gray7};
-    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
+    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.gray7)};
+    box-shadow: 0 0 0 3px ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.blue4)};
   }
 `
 
@@ -514,8 +518,8 @@ const SelectedTagChip = styled.span`
   max-width: 100%;
   min-height: 32px;
   border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray3};
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.gray3)};
   overflow: hidden;
   transition:
     border-color 0.18s ease,
@@ -548,8 +552,8 @@ const SelectedTagChip = styled.span`
     min-width: 1.92rem;
     padding: 0 0.52rem;
     border: 0;
-    border-left: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
+    border-left: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
+    background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray2)};
     color: ${({ theme }) => theme.colors.gray10};
     cursor: pointer;
     flex: 0 0 auto;

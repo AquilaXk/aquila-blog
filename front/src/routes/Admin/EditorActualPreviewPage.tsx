@@ -109,7 +109,11 @@ export const EditorActualPreviewPage: NextPage<AdminPageProps> = ({ initialMembe
 const PreviewRoot = styled.div`
   min-height: 100vh;
   padding: calc(var(--app-header-height, 64px) + 1.5rem) 1.5rem 3rem;
-  background: ${({ theme }) => theme.colors.gray1};
+  background:
+    ${({ theme }) =>
+      theme.blogDesign === "grid"
+        ? `linear-gradient(180deg, color-mix(in srgb, ${theme.publicDesign.surfaceElevated} 52%, transparent), transparent 18rem), ${theme.publicDesign.pageBackgroundImage}`
+        : theme.colors.gray1};
 `
 
 const PreviewTopBar = styled.div`
@@ -126,7 +130,7 @@ const PreviewTopBar = styled.div`
     gap: 0.5rem;
     border: 0;
     background: transparent;
-    color: ${({ theme }) => theme.colors.gray12};
+    color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.gray12)};
     font-size: 0.95rem;
     font-weight: 700;
     cursor: pointer;
@@ -171,6 +175,11 @@ const PreviewArticle = styled.article`
   display: grid;
   gap: 1.15rem;
   min-width: 0;
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : "transparent")};
+  border-radius: ${({ theme }) => (theme.blogDesign === "grid" ? "8px" : "0")};
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.readableSurface : "transparent")};
+  padding: ${({ theme }) => (theme.blogDesign === "grid" ? "1rem" : "0")};
+  box-shadow: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.shadow : "none")};
 `
 
 const PreviewBody = styled.section`
@@ -182,6 +191,10 @@ const PreviewEmptyState = styled.div`
   margin: 4rem auto 0;
   display: grid;
   gap: 0.5rem;
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : "transparent")};
+  border-radius: ${({ theme }) => (theme.blogDesign === "grid" ? "8px" : "0")};
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.readableSurface : "transparent")};
+  padding: ${({ theme }) => (theme.blogDesign === "grid" ? "1rem" : "0")};
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};

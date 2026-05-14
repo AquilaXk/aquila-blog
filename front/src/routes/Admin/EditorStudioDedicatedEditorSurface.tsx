@@ -218,6 +218,10 @@ const EditorStudioRoot = styled.main`
   display: grid;
   gap: 1.2rem;
   overflow-x: clip;
+  background: ${({ theme }) =>
+    theme.blogDesign === "grid"
+      ? `linear-gradient(180deg, color-mix(in srgb, ${theme.publicDesign.surfaceElevated} 44%, transparent), transparent 18rem)`
+      : "transparent"};
 
   @media (max-width: 1024px) {
     padding: 1rem 1rem 1.4rem;
@@ -291,12 +295,12 @@ const EditorExitAction = styled.button`
     color 0.18s ease;
 
   &:hover {
-    background: ${({ theme }) => theme.colors.gray3};
+    background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.gray3)};
   }
 
   &:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
+    box-shadow: 0 0 0 3px ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.blue4)};
   }
 
   @media (max-width: 1200px) {
@@ -351,11 +355,11 @@ const EditorStudioSaveState = styled.span`
 `
 
 const Button = styled.button`
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
   border-radius: 8px;
   padding: 0.62rem 0.92rem;
   min-height: 44px;
-  background: transparent;
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : "transparent")};
   color: ${({ theme }) => theme.colors.gray10};
   cursor: pointer;
   font-size: 0.84rem;
@@ -367,15 +371,15 @@ const Button = styled.button`
     box-shadow 0.18s ease;
 
   &:hover:not(:disabled) {
-    border-color: ${({ theme }) => theme.colors.gray8};
-    background: ${({ theme }) => theme.colors.gray3};
+    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray8)};
+    background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.gray3)};
     color: ${({ theme }) => theme.colors.gray12};
   }
 
   &:focus-visible {
     outline: none;
-    border-color: ${({ theme }) => theme.colors.blue8};
-    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
+    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.blue8)};
+    box-shadow: 0 0 0 3px ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.blue4)};
   }
 
   &:disabled {
@@ -387,15 +391,15 @@ const Button = styled.button`
 const PrimaryButton = styled(Button)`
   border-radius: 8px;
   padding: 0.6rem 0.88rem;
-  border-color: ${({ theme }) => theme.colors.blue9};
-  background: ${({ theme }) => theme.colors.blue9};
-  color: ${({ theme }) => theme.colors.gray1};
+  border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.blue9)};
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.blue9)};
+  color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.pageBackgroundColor : theme.colors.gray1)};
   font-weight: 700;
 
   &:hover:not(:disabled) {
-    border-color: ${({ theme }) => theme.colors.blue10};
-    background: ${({ theme }) => theme.colors.blue10};
-    color: ${({ theme }) => theme.colors.gray1};
+    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.blue10)};
+    background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.blue10)};
+    color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.pageBackgroundColor : theme.colors.gray1)};
   }
 `
 
@@ -427,6 +431,10 @@ const EditorStudioMetaSection = styled.section<{ $compact?: boolean }>`
   margin-inline: auto;
   display: grid;
   gap: ${({ $compact }) => ($compact ? "0.72rem" : "0.9rem")};
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : "transparent")};
+  border-radius: ${({ theme }) => (theme.blogDesign === "grid" ? "8px" : "0")};
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.readableSurface : "transparent")};
+  padding: ${({ theme, $compact }) => (theme.blogDesign === "grid" ? ($compact ? "0.8rem" : "1rem") : "0")};
 `
 
 const EditorTagRow = styled.div<{ $compact?: boolean }>`
@@ -658,6 +666,11 @@ const EditorStudioCanvas = styled.section`
   display: grid;
   gap: 0.72rem;
   overflow-x: visible;
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : "transparent")};
+  border-radius: ${({ theme }) => (theme.blogDesign === "grid" ? "8px" : "0")};
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.readableSurface : "transparent")};
+  padding: ${({ theme }) => (theme.blogDesign === "grid" ? "1rem" : "0")};
+  box-shadow: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.shadow : "none")};
 `
 
 const PublishNotice = styled.div`

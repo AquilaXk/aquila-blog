@@ -76,9 +76,9 @@ const RootLayout = ({
   const router = useRouter()
   const isPublicBlogRoute = router.pathname === "/" || router.pathname === "/about" || router.pathname === "/posts/[id]"
   const adminProfile = usePublicAdminProfile(initialAdminProfile, {
-    enabled: isPublicBlogRoute,
-    refetchOnMount: initialAdminProfileShouldRefetch,
-    staleTimeMs: initialAdminProfileShouldRefetch ? 0 : undefined,
+    enabled: isPublicBlogRoute || initialAdminProfileShouldRefetch,
+    refetchOnMount: isPublicBlogRoute,
+    staleTimeMs: isPublicBlogRoute ? 0 : undefined,
   })
   const publicAppearance = resolvePublicBlogAppearance(isPublicBlogRoute ? adminProfile : null)
   const effectiveScheme = isPublicBlogRoute ? publicAppearance.scheme : scheme

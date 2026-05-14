@@ -21,13 +21,14 @@ const SpeedInsights = dynamic(() => import("@vercel/speed-insights/next").then((
 
 type AppPageProps = AppPropsWithLayout["pageProps"] & {
   initialAdminProfile?: AdminProfile | null
+  initialProfileSnapshot?: AdminProfile | null
   initialAdminProfileSource?: "published" | "static-fallback"
 }
 
 function App({ Component, pageProps, emotionCache = clientSideEmotionCache }: AppPropsWithLayout) {
   const getLayout = Component.getLayout || ((page) => page)
   const appPageProps = pageProps as AppPageProps
-  const initialAdminProfile = appPageProps.initialAdminProfile ?? null
+  const initialAdminProfile = appPageProps.initialAdminProfile ?? appPageProps.initialProfileSnapshot ?? null
   const initialAdminProfileShouldRefetch = appPageProps.initialAdminProfileSource === "static-fallback"
   const [queryClient] = useState(createQueryClient)
 

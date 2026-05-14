@@ -35,11 +35,29 @@ test("grid design은 공개 화면 토큰만 사용하고 article typography를 
     readSourceFile("src/routes/Detail/PostDetail/index.tsx"),
     readSourceFile("src/routes/Detail/PostDetail/PostHeader.tsx"),
   ].join("\n")
+  const rootLayoutSource = readSourceFile("src/layouts/RootLayout/index.tsx")
+  const adminSurfaceSource = readSourceFile("src/routes/Admin/AdminSurfacePrimitives.tsx")
+  const adminShellSource = readSourceFile("src/routes/Admin/AdminShell.tsx")
+  const adminToolsSource = readSourceFile("src/pages/admin/tools.tsx")
+  const adminDashboardSource = readSourceFile("src/pages/admin/dashboard.tsx")
 
   expect(themeSource).toContain('blogDesign === "grid"')
+  expect(themeSource).toContain("readableSurface")
+  expect(themeSource).toContain("operationSurface")
+  expect(themeSource).toContain("operationSurfaceElevated")
+  expect(rootLayoutSource).toContain("isDesignAwareRoute")
+  expect(rootLayoutSource).toContain('router.pathname.startsWith("/admin")')
+  expect(rootLayoutSource).toContain("resolvePublicBlogAppearance(isDesignAwareRoute ? adminProfile : null)")
+  expect(adminSurfaceSource).toContain("theme.publicDesign.operationSurface")
+  expect(adminSurfaceSource).toContain("theme.publicDesign.operationSurfaceElevated")
+  expect(adminShellSource).toContain("theme.publicDesign.operationSurface")
+  expect(adminToolsSource).toContain("theme.publicDesign.operationSurface")
+  expect(adminDashboardSource).toContain("theme.publicDesign.operationSurface")
   for (const [sourcePath, source] of publicSurfaceSources) {
     expect(source, sourcePath).toContain("theme.publicDesign")
   }
+  expect(articleSurfaceSource).toContain("theme.publicDesign.readableSurface")
+  expect(articleSurfaceSource).toContain("article::before")
   expect(articleSurfaceSource).not.toContain("font-size: ${({ theme }) =>")
   expect(articleSurfaceSource).not.toContain("line-height: ${({ theme }) =>")
   expect(articleSurfaceSource).not.toContain("font-family: ${({ theme }) =>")

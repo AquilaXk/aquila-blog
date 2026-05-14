@@ -9,6 +9,9 @@ export type PublicDesignTokens = {
   pageBackgroundImage: string
   surface: string
   surfaceElevated: string
+  readableSurface: string
+  operationSurface: string
+  operationSurfaceElevated: string
   border: string
   borderStrong: string
   accent: string
@@ -36,15 +39,17 @@ export const createPublicDesignTokens = (scheme: SchemeType, blogDesign: BlogDes
   if (blogDesign === "grid") {
     return {
       pageBackgroundColor: "#090909",
-      pageBackgroundImage:
-        "linear-gradient(#540e0e38,#0000 34%),repeating-linear-gradient(90deg,#b88a4c0e 0 1px,#0000 1px 96px)",
-      surface: "#111111",
-      surfaceElevated: "#181715",
-      border: "#977d5547",
-      borderStrong: "#be8f4b7a",
-      accent: "#b88a4c",
-      accentMuted: "#b88a4c2e",
-      shadow: "0 18px 50px #0000006b",
+      pageBackgroundImage: "repeating-linear-gradient(90deg,#c99a4a14 0 1px,#0000 1px 82px)",
+      surface: "#10100f",
+      surfaceElevated: "#181410",
+      readableSurface: "#141414f5",
+      operationSurface: "#0d0d0c",
+      operationSurfaceElevated: "#17130f",
+      border: "#c99a4a3d",
+      borderStrong: "#d4a95f8a",
+      accent: "#c99a4a",
+      accentMuted: "#c99a4a2b",
+      shadow: "0 20px 56px #0008",
     }
   }
 
@@ -58,6 +63,9 @@ export const createPublicDesignTokens = (scheme: SchemeType, blogDesign: BlogDes
         : "none",
     surface: schemeColors.gray1,
     surfaceElevated: scheme === "light" ? schemeColors.gray2 : schemeColors.gray3,
+    readableSurface: scheme === "light" ? "#ffffff" : schemeColors.gray1,
+    operationSurface: scheme === "light" ? schemeColors.gray1 : schemeColors.gray2,
+    operationSurfaceElevated: scheme === "light" ? schemeColors.gray2 : schemeColors.gray3,
     border: schemeColors.gray6,
     borderStrong: schemeColors.gray7,
     accent: schemeColors.accentControl,

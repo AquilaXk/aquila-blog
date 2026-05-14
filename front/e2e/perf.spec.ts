@@ -1650,10 +1650,10 @@ test("public 핵심 화면은 adminProfile grid 서피스 계층을 유지하고
     expect(fingerprint.headerBg).not.toBe(fingerprint.bodyBg)
 
     if (scenario.route === "/") {
-      expect(fingerprint.searchBg).toBe("rgb(17, 17, 17)")
-      expect(fingerprint.searchBorder).toBe("rgba(151, 125, 85, 0.28)")
-      expect(fingerprint.cardBg).toBe("rgb(17, 17, 17)")
-      expect(fingerprint.cardBorder).toBe("rgba(151, 125, 85, 0.28)")
+      expect(fingerprint.searchBg).toBe("rgb(16, 16, 15)")
+      expect(fingerprint.searchBorder).toBe("rgba(201, 154, 74, 0.24)")
+      expect(fingerprint.cardBg).toBe("rgb(16, 16, 15)")
+      expect(fingerprint.cardBorder).toBe("rgba(201, 154, 74, 0.24)")
     }
 
     if (scenario.route === "/posts/991") {

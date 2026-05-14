@@ -2,14 +2,21 @@ import type { Theme } from "@emotion/react"
 import styled from "@emotion/styled"
 
 export const adminElevatedSurface = (theme: Theme) =>
-  theme.scheme === "light"
-    ? "linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 248, 249, 0.94) 100%)"
-    : "linear-gradient(180deg, rgba(23, 23, 24, 0.96) 0%, rgba(17, 17, 18, 0.94) 100%)"
+  theme.blogDesign === "grid"
+    ? `linear-gradient(180deg, ${theme.publicDesign.operationSurfaceElevated} 0%, ${theme.publicDesign.operationSurface} 100%)`
+    : theme.scheme === "light"
+      ? "linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 248, 249, 0.94) 100%)"
+      : "linear-gradient(180deg, rgba(23, 23, 24, 0.96) 0%, rgba(17, 17, 18, 0.94) 100%)"
 
-export const adminElevatedBorder = (theme: Theme) => theme.colors.gray5
+export const adminElevatedBorder = (theme: Theme) =>
+  theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray5
 
 export const adminElevatedShadow = (theme: Theme) =>
-  theme.scheme === "light" ? "0 18px 42px rgba(15, 23, 42, 0.06)" : "0 20px 44px rgba(0, 0, 0, 0.2)"
+  theme.blogDesign === "grid"
+    ? theme.publicDesign.shadow
+    : theme.scheme === "light"
+      ? "0 18px 42px rgba(15, 23, 42, 0.06)"
+      : "0 20px 44px rgba(0, 0, 0, 0.2)"
 
 export const adminInteractiveFocusRing = (theme: Theme) =>
   theme.scheme === "light" ? "0 0 0 3px rgba(59, 130, 246, 0.18)" : "0 0 0 3px rgba(96, 165, 250, 0.28)"
@@ -23,14 +30,15 @@ export const AdminElevatedCard = styled.section`
 
 export const AdminPlainCard = styled.section`
   border-radius: 20px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray1)};
 `
 
 export const AdminSubtleCard = styled.section`
   border-radius: 20px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) => theme.colors.gray2};
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray5)};
+  background: ${({ theme }) =>
+    theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2};
 `
 
 export const AdminRailCard = styled(AdminSubtleCard)`

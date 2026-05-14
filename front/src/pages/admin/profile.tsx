@@ -204,6 +204,21 @@ const parseResponseErrorBody = async (response: Response): Promise<string> => {
   }
 }
 
+const revalidatePublicBlogAppearance = async (): Promise<boolean> => {
+  try {
+    const response = await fetch("/api/revalidate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
+    })
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
 const moveListItem = <T,>(items: T[], index: number, direction: -1 | 1) => {
   const nextIndex = index + direction
   if (nextIndex < 0 || nextIndex >= items.length) return items
@@ -1260,8 +1275,14 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
         )
         applyWorkspaceState(nextWorkspace)
         syncPublishedAdminProfileCache(normalizeProfileWorkspaceContent(nextWorkspace.published))
+        const publicCacheRevalidated = await revalidatePublicBlogAppearance()
         setPreviewMode("published")
-        setWorkspaceNotice({ tone: "success", text: "공개 적용이 완료되었습니다. 공개 사이트가 최신 설정을 사용합니다." })
+        setWorkspaceNotice({
+          tone: publicCacheRevalidated ? "success" : "error",
+          text: publicCacheRevalidated
+            ? "공개 적용과 공개 사이트 갱신을 완료했습니다."
+            : "공개 적용은 완료됐지만 공개 사이트 캐시 갱신에 실패했습니다. 잠시 후 새로고침해주세요.",
+        })
         return
       }
 

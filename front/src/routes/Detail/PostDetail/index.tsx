@@ -241,7 +241,6 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     actorHasLiked: data?.actorHasLiked ?? false,
   }))
   const visibleTocItemsRef = useRef<TocItem[]>([])
-  const tocVisibilityRef = useRef(new Map<string, { ratio: number; top: number }>())
   const showFloatingLikeRef = useRef(false)
   const showStickyTocRef = useRef(false)
   const commentsRailActiveRef = useRef(false)
@@ -657,37 +656,36 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
       applyHybridRail(rightRailInnerRef.current, hybridRailMetricsRef.current.right)
     }
 
-    const resolveActiveByRatio = () => {
+    const resolveActiveByScrollPosition = () => {
       const items = visibleTocItemsRef.current
       if (!items.length) return ""
 
       const anchorTop = resolveRailTopOffset() + 12
-      const candidates = items.map((item) => {
-        const entry = tocVisibilityRef.current.get(item.id)
-        const top = entry?.top ?? Number.POSITIVE_INFINITY
-        const ratio = entry?.ratio ?? 0
-        return { id: item.id, ratio, top }
-      })
-
-      const intersecting = candidates
-        .filter((candidate) => candidate.ratio > 0.04 && Number.isFinite(candidate.top))
-        .sort((a, b) => {
-          if (b.ratio !== a.ratio) return b.ratio - a.ratio
-          return Math.abs(a.top - anchorTop) - Math.abs(b.top - anchorTop)
+      const activeBoundary = anchorTop + 4
+      const candidates = items
+        .map((item) => {
+          const heading = document.getElementById(item.id)
+          if (!heading) return null
+          return {
+            id: item.id,
+            top: heading.getBoundingClientRect().top,
+          }
         })
+        .filter((candidate): candidate is { id: string; top: number } => Boolean(candidate))
 
-      if (intersecting.length > 0) return intersecting[0].id
+      if (!candidates.length) return items[0]?.id || ""
 
-      const passed = candidates
-        .filter((candidate) => Number.isFinite(candidate.top) && candidate.top <= anchorTop)
-        .sort((a, b) => a.top - b.top)
-      if (passed.length > 0) return passed[passed.length - 1].id
+      let activeId = candidates[0].id
+      for (const candidate of candidates) {
+        if (candidate.top > activeBoundary) break
+        activeId = candidate.id
+      }
 
-      return items[0]?.id || ""
+      return activeId
     }
 
     const scheduler = createRafScheduler(() => {
-      const nextActiveId = resolveActiveByRatio()
+      const nextActiveId = resolveActiveByScrollPosition()
       setActiveTocId((prev) => (prev === nextActiveId ? prev : nextActiveId))
     })
     const railScheduler = createRafScheduler(() => {
@@ -695,45 +693,6 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
       syncHybridRails()
     })
     const registry = createObserverRegistry()
-
-    const visibleIdSet = new Set(visibleTocItemsRef.current.map((item) => item.id))
-    const headingNodes = visibleTocItemsRef.current
-      .map((item) => document.getElementById(item.id))
-      .filter((node): node is HTMLElement => Boolean(node))
-
-    registry.addIntersectionObserver(
-      headingNodes,
-      (entries) => {
-        let didChange = false
-        for (const entry of entries) {
-          const id = (entry.target as HTMLElement).id
-          if (!id || !visibleIdSet.has(id)) continue
-          const nextRatio = entry.isIntersecting ? entry.intersectionRatio : 0
-          const nextTop = Math.round(entry.boundingClientRect.top)
-          const previous = tocVisibilityRef.current.get(id)
-          if (
-            previous &&
-            Math.abs(previous.ratio - nextRatio) < 0.04 &&
-            Math.abs(previous.top - nextTop) < 8
-          ) {
-            continue
-          }
-          tocVisibilityRef.current.set(id, {
-            ratio: nextRatio,
-            top: nextTop,
-          })
-          didChange = true
-        }
-        if (didChange) {
-          scheduler.schedule()
-        }
-      },
-      {
-        root: null,
-        rootMargin: `-${resolveRailTopOffset() + 12}px 0px -52% 0px`,
-        threshold: [0, 0.15, 0.4, 0.75, 1],
-      }
-    )
 
     const commentsNode = commentsSectionRef.current
     if (commentsNode) {
@@ -760,6 +719,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     registry.addWindowEvent(
       "scroll",
       () => {
+        scheduler.schedule()
         if (!leftHybridRailActiveRef.current && !rightHybridRailActiveRef.current) return
         railScheduler.schedule()
       },
@@ -794,13 +754,10 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     scheduler.schedule()
     railScheduler.schedule()
 
-    const tocVisibility = tocVisibilityRef.current
-
     return () => {
       registry.cleanup()
       scheduler.cancel()
       railScheduler.cancel()
-      tocVisibility.clear()
       clearInlineRailStyle(leftRailInnerNode)
       clearInlineRailStyle(rightRailInnerNode)
       if (leftHybridRailActiveRef.current) {

@@ -39,7 +39,7 @@ export const createPublicDesignTokens = (scheme: SchemeType, blogDesign: BlogDes
   if (blogDesign === "grid") {
     return {
       pageBackgroundColor: "#101214",
-      pageBackgroundImage: "repeating-linear-gradient(90deg,#c2a35b12 1px,#0000 0 5em)",
+      pageBackgroundImage: "repeating-linear-gradient(90deg,#ba51 1px,#0000 0 5em)",
       surface: "#171a1d",
       surfaceElevated: "#202328",
       readableSurface: "#121416f5",

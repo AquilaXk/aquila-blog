@@ -155,6 +155,19 @@ test.describe("admin profile state contract", () => {
     expect(source).toContain('draft.blogDesign === "legacy"')
   })
 
+  test("profile 디자인 공개 적용은 primary action에서 저장 후 publish까지 처리한다", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+
+    expect(source).toContain("const validateDraftBeforePersistence = useCallback(")
+    expect(source).toContain("const saveWorkspaceDraft = useCallback(")
+    expect(source).toContain("const shouldPublishWorkspace = workspaceForPublish?.dirtyFromPublished ?? hasPublishedDiff")
+    expect(source).toContain('hasUnsavedChanges ? "저장 후 공개 적용" : "공개 적용"')
+    expect(source).toContain("초안 저장")
+    expect(source).toContain("편집 중")
+    expect(source).toContain("현재 공개")
+    expect(source).not.toContain("로컬 변경 사항을 먼저 임시 저장한 뒤 공개할 수 있습니다.")
+  })
+
   test("profile workspace 정규화는 structured 프로젝트가 있으면 legacy 프로젝트 상세 블록을 제거한다", () => {
     const normalized = normalizeProfileWorkspaceContent({
       profileImageUrl: "",

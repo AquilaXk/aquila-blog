@@ -662,6 +662,57 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
     [queryClient, setMe]
   )
 
+  const validateDraftBeforePersistence = useCallback(() => {
+    const serviceValidationError = validateLinkInputs("service", "서비스", draft.serviceLinks)
+    if (serviceValidationError) {
+      setWorkspaceNotice({ tone: "error", text: serviceValidationError })
+      setActiveSection("links")
+      setLinkTab("service")
+      return false
+    }
+
+    const contactValidationError = validateLinkInputs("contact", "연락 채널", draft.contactLinks)
+    if (contactValidationError) {
+      setWorkspaceNotice({ tone: "error", text: contactValidationError })
+      setActiveSection("links")
+      setLinkTab("contact")
+      return false
+    }
+
+    const normalizedDisplayName = displayNameInput.trim()
+    if (hasDisplayNameDirty && (normalizedDisplayName.length < 2 || normalizedDisplayName.length > 30)) {
+      setWorkspaceNotice({ tone: "error", text: "계정 이름은 2자 이상 30자 이하로 입력해주세요." })
+      setActiveSection("identity")
+      return false
+    }
+
+    return true
+  }, [displayNameInput, draft.contactLinks, draft.serviceLinks, hasDisplayNameDirty])
+
+  const buildDraftPayload = useCallback(
+    () =>
+      normalizeProfileWorkspaceContent({
+        ...draft,
+        serviceLinks: toPayloadLinks("service", draft.serviceLinks, DEFAULT_SERVICE_ITEM_ICON),
+        contactLinks: toPayloadLinks("contact", draft.contactLinks, DEFAULT_CONTACT_ITEM_ICON),
+      }),
+    [draft]
+  )
+
+  const saveWorkspaceDraft = useCallback(async () => {
+    if (!sessionMember?.id) {
+      throw new Error("관리자 세션을 확인할 수 없습니다.")
+    }
+
+    const normalizedDraft = buildDraftPayload()
+    return saveProfileCardWithConflictRetry(() =>
+      apiFetch<ProfileWorkspaceResponse>(`/member/api/v1/adm/members/${sessionMember.id}/profileWorkspace/draft`, {
+        method: "PUT",
+        body: JSON.stringify(normalizedDraft),
+      })
+    )
+  }, [buildDraftPayload, sessionMember?.id])
+
   const updateDraft = useCallback(
     (
       field: keyof ProfileWorkspaceContent,
@@ -1095,32 +1146,11 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
 
   const handleSaveDraft = useCallback(async () => {
     if (!sessionMember?.id) return
-
-    const serviceValidationError = validateLinkInputs("service", "서비스", draft.serviceLinks)
-    if (serviceValidationError) {
-      setWorkspaceNotice({ tone: "error", text: serviceValidationError })
-      setActiveSection("links")
-      setLinkTab("service")
-      return
-    }
-
-    const contactValidationError = validateLinkInputs("contact", "연락 채널", draft.contactLinks)
-    if (contactValidationError) {
-      setWorkspaceNotice({ tone: "error", text: contactValidationError })
-      setActiveSection("links")
-      setLinkTab("contact")
-      return
-    }
+    if (!validateDraftBeforePersistence()) return
 
     const normalizedDisplayName = displayNameInput.trim()
     const shouldSaveDisplayName = hasDisplayNameDirty
     const shouldSaveWorkspace = hasWorkspaceUnsavedChanges
-
-    if (shouldSaveDisplayName && (normalizedDisplayName.length < 2 || normalizedDisplayName.length > 30)) {
-      setWorkspaceNotice({ tone: "error", text: "계정 이름은 2자 이상 30자 이하로 입력해주세요." })
-      setActiveSection("identity")
-      return
-    }
 
     if (!shouldSaveDisplayName && !shouldSaveWorkspace) {
       setWorkspaceNotice({ tone: "idle", text: "이미 최신 상태입니다." })
@@ -1142,17 +1172,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
       })
 
       if (shouldSaveWorkspace) {
-        const normalizedDraft = normalizeProfileWorkspaceContent({
-          ...draft,
-          serviceLinks: toPayloadLinks("service", draft.serviceLinks, DEFAULT_SERVICE_ITEM_ICON),
-          contactLinks: toPayloadLinks("contact", draft.contactLinks, DEFAULT_CONTACT_ITEM_ICON),
-        })
-        const nextWorkspace = await saveProfileCardWithConflictRetry(() =>
-          apiFetch<ProfileWorkspaceResponse>(`/member/api/v1/adm/members/${sessionMember.id}/profileWorkspace/draft`, {
-            method: "PUT",
-            body: JSON.stringify(normalizedDraft),
-          })
-        )
+        const nextWorkspace = await saveWorkspaceDraft()
         applyWorkspaceState(nextWorkspace)
         workspaceSaved = true
       }
@@ -1191,49 +1211,81 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
   }, [
     applyWorkspaceState,
     displayNameInput,
-    draft,
     hasDisplayNameDirty,
     hasWorkspaceUnsavedChanges,
     persistDisplayName,
+    saveWorkspaceDraft,
     sessionMember?.id,
+    validateDraftBeforePersistence,
   ])
 
   const handlePublish = useCallback(async () => {
     if (!sessionMember?.id) return
-    if (hasUnsavedChanges) {
-      setWorkspaceNotice({ tone: "error", text: "로컬 변경 사항을 먼저 임시 저장한 뒤 공개할 수 있습니다." })
-      return
-    }
-    if (!hasPublishedDiff) {
-      setWorkspaceNotice({ tone: "idle", text: "이미 공개본과 임시 저장본이 같습니다." })
+    if (!validateDraftBeforePersistence()) return
+
+    const normalizedDisplayName = displayNameInput.trim()
+    const shouldSaveDisplayName = hasDisplayNameDirty
+    const shouldSaveWorkspace = hasWorkspaceUnsavedChanges
+    const shouldApplyWorkspace = shouldSaveWorkspace || hasPublishedDiff
+
+    if (!shouldSaveDisplayName && !shouldApplyWorkspace) {
+      setWorkspaceNotice({ tone: "idle", text: "이미 공개본과 편집 중인 내용이 같습니다." })
       return
     }
 
+    let workspaceForPublish: ProfileWorkspaceResponse | null = null
+
     try {
       setLoadingKey("publish")
-      setWorkspaceNotice({ tone: "loading", text: "공개 중..." })
-      const nextWorkspace = await apiFetch<ProfileWorkspaceResponse>(
-        `/member/api/v1/adm/members/${sessionMember.id}/profileWorkspace/publish`,
-        {
-          method: "POST",
-        }
-      )
-      applyWorkspaceState(nextWorkspace)
-      syncPublishedAdminProfileCache(normalizeProfileWorkspaceContent(nextWorkspace.published))
-      setPreviewMode("published")
-      setWorkspaceNotice({ tone: "success", text: "지금 공개하기가 완료되었습니다. 공개 사이트가 최신 상태를 사용합니다." })
+      setWorkspaceNotice({
+        tone: "loading",
+        text: shouldSaveWorkspace ? "초안을 저장한 뒤 공개 적용 중..." : "공개 적용 중...",
+      })
+
+      if (shouldSaveWorkspace) {
+        workspaceForPublish = await saveWorkspaceDraft()
+      }
+
+      if (shouldSaveDisplayName) {
+        await persistDisplayName(sessionMember.id, normalizedDisplayName)
+      }
+
+      const shouldPublishWorkspace = workspaceForPublish?.dirtyFromPublished ?? hasPublishedDiff
+      if (shouldPublishWorkspace) {
+        const nextWorkspace = await apiFetch<ProfileWorkspaceResponse>(
+          `/member/api/v1/adm/members/${sessionMember.id}/profileWorkspace/publish`,
+          {
+            method: "POST",
+          }
+        )
+        applyWorkspaceState(nextWorkspace)
+        syncPublishedAdminProfileCache(normalizeProfileWorkspaceContent(nextWorkspace.published))
+        setPreviewMode("published")
+        setWorkspaceNotice({ tone: "success", text: "공개 적용이 완료되었습니다. 공개 사이트가 최신 설정을 사용합니다." })
+        return
+      }
+
+      if (workspaceForPublish) {
+        applyWorkspaceState(workspaceForPublish)
+      }
+      setWorkspaceNotice({ tone: "success", text: "변경 사항을 저장했습니다." })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      setWorkspaceNotice({ tone: "error", text: `공개 실패: ${message}` })
+      setWorkspaceNotice({ tone: "error", text: `공개 적용 실패: ${message}` })
     } finally {
       setLoadingKey("")
     }
   }, [
     applyWorkspaceState,
+    displayNameInput,
+    hasDisplayNameDirty,
     hasPublishedDiff,
-    hasUnsavedChanges,
+    hasWorkspaceUnsavedChanges,
+    persistDisplayName,
+    saveWorkspaceDraft,
     sessionMember?.id,
     syncPublishedAdminProfileCache,
+    validateDraftBeforePersistence,
   ])
 
   useEffect(() => {
@@ -1258,8 +1310,10 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
   const pageToasts = [workspaceNotice, imageNotice].filter(
     (notice) => notice.tone !== "idle" && notice.text.trim().length > 0
   )
-  const canPublish = !hasUnsavedChanges && hasPublishedDiff && loadingKey !== "publish" && loadingKey !== "save"
+  const canPublish = (hasUnsavedChanges || hasPublishedDiff) && loadingKey !== "publish" && loadingKey !== "save"
   const canSave = hasUnsavedChanges && loadingKey !== "save"
+  const publishActionLabel =
+    loadingKey === "publish" ? "공개 적용 중..." : hasUnsavedChanges ? "저장 후 공개 적용" : "공개 적용"
   const activeSectionState = sectionStateMap[activeSection]
   const renderActiveSection = () => {
     switch (activeSection) {
@@ -1977,10 +2031,10 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
           <EditorActionDock>
             <AdminWorkspaceActionDockInner>
               <DockSecondaryButton type="button" disabled={!canSave} onClick={() => void handleSaveDraft()}>
-                {loadingKey === "save" ? "저장 중..." : "임시 저장"}
+                {loadingKey === "save" ? "저장 중..." : "초안 저장"}
               </DockSecondaryButton>
               <DockPrimaryButton type="button" disabled={!canPublish} onClick={() => void handlePublish()}>
-                {loadingKey === "publish" ? "공개 중..." : "지금 공개하기"}
+                {publishActionLabel}
               </DockPrimaryButton>
             </AdminWorkspaceActionDockInner>
           </EditorActionDock>
@@ -1999,14 +2053,14 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                     data-active={previewMode === "draft"}
                     onClick={() => setPreviewMode("draft")}
                   >
-                    초안
+                    편집 중
                   </SegmentButton>
                   <SegmentButton
                     type="button"
                     data-active={previewMode === "published"}
                     onClick={() => setPreviewMode("published")}
                   >
-                    공개본
+                    현재 공개
                   </SegmentButton>
                 </SegmentedControl>
                 <PreviewToggleButton

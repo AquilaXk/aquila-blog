@@ -75,14 +75,15 @@ const RootLayout = ({
   const [scheme] = useScheme()
   const router = useRouter()
   const isPublicBlogRoute = router.pathname === "/" || router.pathname === "/about" || router.pathname === "/posts/[id]"
+  const isDesignAwareRoute = isPublicBlogRoute || router.pathname.startsWith("/admin")
   const adminProfile = usePublicAdminProfile(initialAdminProfile, {
-    enabled: isPublicBlogRoute || initialAdminProfileShouldRefetch,
-    refetchOnMount: isPublicBlogRoute,
-    staleTimeMs: isPublicBlogRoute ? 0 : undefined,
+    enabled: isDesignAwareRoute || initialAdminProfileShouldRefetch,
+    refetchOnMount: isDesignAwareRoute,
+    staleTimeMs: isDesignAwareRoute ? 0 : undefined,
   })
-  const publicAppearance = resolvePublicBlogAppearance(isPublicBlogRoute ? adminProfile : null)
-  const effectiveScheme = isPublicBlogRoute ? publicAppearance.scheme : scheme
-  const effectiveBlogDesign = isPublicBlogRoute ? publicAppearance.blogDesign : "legacy"
+  const publicAppearance = resolvePublicBlogAppearance(isDesignAwareRoute ? adminProfile : null)
+  const effectiveScheme = isDesignAwareRoute ? publicAppearance.scheme : scheme
+  const effectiveBlogDesign = isDesignAwareRoute ? publicAppearance.blogDesign : "legacy"
   const headerBlogTitle = isPublicBlogRoute ? adminProfile?.blogTitle?.trim() || CONFIG.blog.title : CONFIG.blog.title
   const [isNavigating, setIsNavigating] = useState(false)
   useGtagEffect()

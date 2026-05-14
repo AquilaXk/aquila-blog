@@ -176,9 +176,9 @@ const StyledWrapper = styled.div`
   z-index: ${zIndexes.header};
   position: sticky;
   top: 0;
-  background-color: ${({ theme }) =>
+  background: ${({ theme }) =>
     theme.blogDesign === "grid"
-      ? `color-mix(in srgb, ${theme.publicDesign.pageBackgroundColor} 88%, transparent)`
+      ? theme.publicDesign.surface
       : theme.scheme === "light"
         ? "rgba(249, 251, 254, 0.94)"
         : `${theme.colors.gray1}e6`};

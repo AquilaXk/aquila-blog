@@ -38,17 +38,17 @@ type Options = {
 export const createPublicDesignTokens = (scheme: SchemeType, blogDesign: BlogDesignType): PublicDesignTokens => {
   if (blogDesign === "grid") {
     return {
-      pageBackgroundColor: "#090909",
-      pageBackgroundImage: "repeating-linear-gradient(90deg,#c99a4a14 0 1px,#0000 1px 82px)",
-      surface: "#10100f",
-      surfaceElevated: "#181410",
-      readableSurface: "#141414f5",
-      operationSurface: "#0d0d0c",
-      operationSurfaceElevated: "#17130f",
-      border: "#c99a4a3d",
-      borderStrong: "#d4a95f8a",
-      accent: "#c99a4a",
-      accentMuted: "#c99a4a2b",
+      pageBackgroundColor: "#101214",
+      pageBackgroundImage: "repeating-linear-gradient(90deg,#c2a35b12 1px,#0000 0 5em)",
+      surface: "#171a1d",
+      surfaceElevated: "#202328",
+      readableSurface: "#121416f5",
+      operationSurface: "#101214",
+      operationSurfaceElevated: "#171a1d",
+      border: "#6d5a3563",
+      borderStrong: "#c2a35b8a",
+      accent: "#c2a35b",
+      accentMuted: "#2b2418",
       shadow: "0 20px 56px #0008",
     }
   }

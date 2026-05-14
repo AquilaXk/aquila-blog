@@ -326,14 +326,16 @@ export const EditorStudioComposeWorkspace = ({
 const ComposeSurfaceSection = styled.section`
   display: grid;
   gap: 1.2rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray4};
-  border-radius: 14px;
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray4)};
+  border-radius: ${({ theme }) => (theme.blogDesign === "grid" ? "8px" : "14px")};
   padding: 1.1rem 1.1rem 1.3rem;
   margin-bottom: 1.2rem;
   background:
-    radial-gradient(circle at top left, rgba(96, 165, 250, 0.04), transparent 24%),
-    ${({ theme }) => theme.colors.gray1};
-  box-shadow: none;
+    ${({ theme }) =>
+      theme.blogDesign === "grid"
+        ? `linear-gradient(180deg, ${theme.publicDesign.operationSurfaceElevated}, ${theme.publicDesign.operationSurface})`
+        : `radial-gradient(circle at top left, rgba(96, 165, 250, 0.04), transparent 24%), ${theme.colors.gray1}`};
+  box-shadow: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.shadow : "none")};
 
   h2 {
     margin: 0;
@@ -386,7 +388,7 @@ const SubActionRow = styled.div`
   gap: 0.45rem;
   margin-top: 0.65rem;
   padding-top: 0.65rem;
-  border-top: 1px dashed ${({ theme }) => theme.colors.gray6};
+  border-top: 1px dashed ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
 
   > button {
     border-style: dashed;
@@ -404,11 +406,11 @@ const SubActionRow = styled.div`
 `
 
 const Button = styled.button`
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
   border-radius: 8px;
   padding: 0.62rem 0.92rem;
   min-height: 44px;
-  background: transparent;
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : "transparent")};
   color: ${({ theme }) => theme.colors.gray10};
   cursor: pointer;
   font-size: 0.84rem;
@@ -420,15 +422,15 @@ const Button = styled.button`
     box-shadow 0.18s ease;
 
   &:hover:not(:disabled) {
-    border-color: ${({ theme }) => theme.colors.gray8};
-    background: ${({ theme }) => theme.colors.gray3};
+    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray8)};
+    background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.gray3)};
     color: ${({ theme }) => theme.colors.gray12};
   }
 
   &:focus-visible {
     outline: none;
-    border-color: ${({ theme }) => theme.colors.blue8};
-    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
+    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.blue8)};
+    box-shadow: 0 0 0 3px ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.blue4)};
   }
 
   &:disabled {
@@ -440,14 +442,14 @@ const Button = styled.button`
 const PrimaryButton = styled(Button)`
   border-radius: 8px;
   padding: 0.6rem 0.88rem;
-  border-color: ${({ theme }) => theme.colors.blue9};
-  background: ${({ theme }) => theme.colors.blue9};
-  color: ${({ theme }) => theme.colors.gray1};
+  border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.blue9)};
+  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.blue9)};
+  color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.pageBackgroundColor : theme.colors.gray1)};
   font-weight: 700;
 
   &:hover:not(:disabled) {
-    border-color: ${({ theme }) => theme.colors.blue10};
-    background: ${({ theme }) => theme.colors.blue10};
-    color: ${({ theme }) => theme.colors.gray1};
+    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.blue10)};
+    background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.blue10)};
+    color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.pageBackgroundColor : theme.colors.gray1)};
   }
 `

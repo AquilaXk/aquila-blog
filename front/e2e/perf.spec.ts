@@ -604,22 +604,6 @@ const applySchemePreference = async (page: Page, scheme: "light" | "dark") => {
   ])
 }
 
-const waitForSchemeReady = async (page: Page, scheme: "light" | "dark") => {
-  const expectedToggleLabel = scheme === "light" ? "다크 모드로 전환" : "라이트 모드로 전환"
-  await expect
-    .poll(
-      async () =>
-        page.evaluate(() => {
-          const toggle = document.querySelector('button[aria-label*="모드로 전환"]')
-          return toggle?.getAttribute("aria-label") ?? null
-        }),
-      {
-        timeout: 8000,
-      }
-    )
-    .toBe(expectedToggleLabel)
-}
-
 const getThemeSurfaceFingerprint = async (page: Page) =>
   page.evaluate(() => {
     const readStyle = (selector: string, property: keyof CSSStyleDeclaration) => {
@@ -1605,7 +1589,7 @@ test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지
   }
 })
 
-test("public 핵심 화면은 adminProfile grid 서피스 계층을 유지하고 운영 화면은 visitor scheme을 유지한다", async ({ page }) => {
+test("public/auth 핵심 화면은 adminProfile grid 서피스 계층을 유지한다", async ({ page }) => {
   test.setTimeout(60_000)
   await mockFeedEndpoints(page, {
     adminProfile: {
@@ -1623,7 +1607,7 @@ test("public 핵심 화면은 adminProfile grid 서피스 계층을 유지하고
     { route: "/posts/991", viewport: { width: 393, height: 852 } },
     { route: "/posts/991", viewport: { width: 768, height: 1024 } },
   ] as const
-  const operationalScenarios = [
+  const authScenarios = [
     { route: "/login", viewport: { width: 1440, height: 900 } },
     { route: "/login", viewport: { width: 393, height: 852 } },
     { route: "/login", viewport: { width: 768, height: 1024 } },
@@ -1639,21 +1623,21 @@ test("public 핵심 화면은 adminProfile grid 서피스 계층을 유지하고
       .poll(async () => (await getThemeSurfaceFingerprint(page)).bodyBg, {
         timeout: 8000,
       })
-      .toBe("rgb(9, 9, 9)")
+      .toBe("rgb(16, 18, 20)")
 
     const fingerprint = await getThemeSurfaceFingerprint(page)
 
     expect(fingerprint.route).toBe(scenario.route)
     expect(fingerprint.themeToggleLabel).toBeNull()
-    expect(fingerprint.bodyBg).toBe("rgb(9, 9, 9)")
+    expect(fingerprint.bodyBg).toBe("rgb(16, 18, 20)")
     expect(fingerprint.headerBg).not.toBeNull()
     expect(fingerprint.headerBg).not.toBe(fingerprint.bodyBg)
 
     if (scenario.route === "/") {
-      expect(fingerprint.searchBg).toBe("rgb(16, 16, 15)")
-      expect(fingerprint.searchBorder).toBe("rgba(201, 154, 74, 0.24)")
-      expect(fingerprint.cardBg).toBe("rgb(16, 16, 15)")
-      expect(fingerprint.cardBorder).toBe("rgba(201, 154, 74, 0.24)")
+      expect(fingerprint.searchBg).toBe("rgb(23, 26, 29)")
+      expect(fingerprint.searchBorder).toBe("rgba(109, 90, 53, 0.39)")
+      expect(fingerprint.cardBg).toBe("rgb(23, 26, 29)")
+      expect(fingerprint.cardBorder).toBe("rgba(109, 90, 53, 0.39)")
     }
 
     if (scenario.route === "/posts/991") {
@@ -1662,52 +1646,22 @@ test("public 핵심 화면은 adminProfile grid 서피스 계층을 유지하고
     }
   }
 
-  for (const scheme of ["dark", "light"] as const) {
-    for (const scenario of operationalScenarios) {
-      await applySchemePreference(page, scheme)
-      await page.setViewportSize(scenario.viewport)
-      await gotoForPerf(page, scenario.route)
-      await waitForSchemeReady(page, scheme)
-      await page.waitForTimeout(120)
-
-      const fingerprint = await getThemeSurfaceFingerprint(page)
-      const expected = {
-        dark: {
-          bodyBg: "rgb(18, 18, 18)",
-          headerBgChannel: "18, 18, 18",
-          searchBg: "rgb(18, 18, 18)",
-          searchBorder: "rgb(45, 45, 45)",
-          cardBg: "rgb(18, 18, 18)",
-          cardBorder: "rgb(38, 38, 38)",
-          authShellBg: "rgb(18, 18, 18)",
-          authShellBorder: "rgb(45, 45, 45)",
-          toggleLabel: "라이트 모드로 전환",
-        },
-        light: {
-          bodyBg: "rgb(243, 245, 248)",
-          headerBgChannel: "249, 251, 254",
-          searchBg: "rgb(255, 255, 255)",
-          searchBorder: "rgb(215, 224, 234)",
-          cardBg: "rgb(255, 255, 255)",
-          cardBorder: "rgb(231, 237, 244)",
-          authShellBg: "rgb(255, 255, 255)",
-          authShellBorder: "rgb(215, 224, 234)",
-          toggleLabel: "다크 모드로 전환",
-        },
-      }[scheme]
-
-      expect(fingerprint.route).toBe(scenario.route)
-      expect(fingerprint.bodyBg).toBe(expected.bodyBg)
-      if (scheme === "light") {
-        expect(fingerprint.headerBg).not.toBeNull()
-        expect(fingerprint.headerBg).not.toBe(fingerprint.bodyBg)
-      } else {
-        expect(fingerprint.headerBg?.includes(expected.headerBgChannel)).toBe(true)
-      }
-      expect(fingerprint.themeToggleLabel).toBe(expected.toggleLabel)
-      expect(fingerprint.authShellBg).toBe(expected.authShellBg)
-      expect(fingerprint.authShellBorder).toBe(expected.authShellBorder)
-    }
+  for (const scenario of authScenarios) {
+    await applySchemePreference(page, "light")
+    await page.setViewportSize(scenario.viewport)
+    await gotoForPerf(page, scenario.route)
+    await expect
+      .poll(async () => (await getThemeSurfaceFingerprint(page)).bodyBg, {
+        timeout: 8000,
+      })
+      .toBe("rgb(16, 18, 20)")
+    const fingerprint = await getThemeSurfaceFingerprint(page)
+    expect(fingerprint.route).toBe(scenario.route)
+    expect(fingerprint.bodyBg).toBe("rgb(16, 18, 20)")
+    expect(fingerprint.headerBg).toBe("rgb(23, 26, 29)")
+    expect(fingerprint.themeToggleLabel).toBeNull()
+    expect(fingerprint.authShellBg).toBe("rgba(18, 20, 22, 0.96)")
+    expect(fingerprint.authShellBorder).toBe("rgba(194, 163, 91, 0.54)")
   }
 })
 

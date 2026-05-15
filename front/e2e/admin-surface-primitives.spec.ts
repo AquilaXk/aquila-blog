@@ -108,10 +108,12 @@ test.describe("admin surface primitives contract", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminShell.tsx"), "utf8")
 
     expect(source).toContain('import ProfileImage from "src/components/ProfileImage"')
-    expect(source).toContain('import { useAdminProfile } from "src/hooks/useAdminProfile"')
-    expect(source).toContain('const sidebarIdentityName = (adminProfile?.blogTitle || "AquilaLog").trim()')
-    expect(source).toContain("adminProfile?.profileImageDirectUrl ||")
-    expect(source).toContain("adminProfile?.profileImageUrl ||")
+    expect(source).toContain("profileSnapshot?: AdminShellProfileSnapshot | null")
+    expect(source).toContain('const sidebarIdentityName = (profileSnapshot?.blogTitle || member.blogTitle || "AquilaLog").trim()')
+    expect(source).toContain("profileSnapshot?.profileImageDirectUrl ||")
+    expect(source).toContain("profileSnapshot?.profileImageUrl ||")
+    expect(source).toContain("member.profileImageDirectUrl ||")
+    expect(source).not.toContain('import { useAdminProfile } from "src/hooks/useAdminProfile"')
     expect(source).toContain('<SidebarPrimaryAction title="새 글 작성">')
     expect(source).toContain("<SidebarSectionLabel>관리 메뉴</SidebarSectionLabel>")
     expect(source.indexOf('<SidebarPrimaryAction title="새 글 작성">')).toBeLessThan(
@@ -129,11 +131,14 @@ test.describe("admin surface primitives contract", () => {
     expect(source).toContain('aria-label="최근 작업 상태"')
     expect(source).toContain('aria-label="최근 작업 이어가기"')
     expect(source).toContain("const RecentWorkSummary = styled.div`")
+    expect(source).toContain("const BorderlessPanel = styled.div`")
+    expect(source).toContain("const BorderlessMetricRow = styled.div`")
     expect(source).not.toContain("<h2>체크</h2>")
     expect(source).not.toContain("<h2>바로가기</h2>")
     expect(source).not.toContain("<h2>상태</h2>")
     expect(source).not.toContain("최근에 확인한 상태와 이어서 처리할 작업을 함께 봅니다.")
     expect(source).not.toContain("StatusDot")
+    expect(source).not.toContain("border-radius: 24px;")
   })
 
   test("shared admin landing primitives expose a dedicated lead sentence style", () => {

@@ -61,12 +61,16 @@ test.describe("admin hub state contract", () => {
 
   test("dashboard first fold uses main-like priority copy and explicit rail labels", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/dashboard.tsx"), "utf8")
+    const styleSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspace.styles.ts"),
+      "utf8",
+    )
 
     expect(source).toContain("지금 확인해야 할 운영 상태")
     expect(source).toContain("<strong>최근 실패</strong>")
     expect(source).toContain("<strong>런북</strong>")
     expect(source).toContain("<strong>즉시 이동</strong>")
-    expect(source).toContain("grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));")
+    expect(styleSource).toContain("grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));")
     expect(source).not.toContain("큐 지연, 메일 상태, 인증 이상, 파일 정리처럼 운영 리스크가 큰 항목부터 먼저 읽습니다.")
     expect(source).not.toContain("실패 task, 메일 실패, 인증 차단처럼 문제가 생긴 항목을 먼저 판단합니다.")
     expect(source).not.toContain("운영 조치는 앱 내부 도구에서 먼저 처리하고, 외부 보드는 드릴다운으로만 엽니다.")
@@ -75,11 +79,15 @@ test.describe("admin hub state contract", () => {
 
   test("dashboard 연결된 채널 카드는 좁은 폭에서도 제목이 세로로 쪼개지지 않는 레이아웃 계약을 사용한다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/dashboard.tsx"), "utf8")
+    const styleSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspace.styles.ts"),
+      "utf8",
+    )
 
     expect(source).toContain("<ContextMonitoringLinkCard key={item.key}")
-    expect(source).toContain("grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));")
-    expect(source).toContain("const ContextMonitoringLinkCard = styled(AdminInfoLinkCard)`")
-    expect(source).toContain("word-break: keep-all;")
-    expect(source).not.toContain("grid-template-columns: repeat(3, minmax(0, 1fr));")
+    expect(styleSource).toContain("grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));")
+    expect(styleSource).toContain("export const ContextMonitoringLinkCard = styled(AdminInfoLinkCard)`")
+    expect(styleSource).toContain("word-break: keep-all;")
+    expect(styleSource).not.toContain("grid-template-columns: repeat(3, minmax(0, 1fr));")
   })
 })

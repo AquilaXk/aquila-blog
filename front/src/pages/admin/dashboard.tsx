@@ -1115,9 +1115,9 @@ const PanelGrid = styled.section`
 `
 
 const PanelCard = styled(AdminPlainCard)`
-  border-radius: 28px;
+  border-radius: 16px;
   overflow: hidden;
-  box-shadow: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.shadow : "0 18px 42px rgba(15, 23, 42, 0.08)")};
+  box-shadow: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.shadow : "0 12px 30px rgba(15, 23, 42, 0.06)")};
 `
 
 const LeadPanelCard = styled(PanelCard)`

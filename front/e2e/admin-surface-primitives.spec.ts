@@ -178,6 +178,10 @@ test.describe("admin surface primitives contract", () => {
 
   test("tools workspace uses detail-like hero copy and ops rail labels", () => {
     const toolsSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
+    const toolsExecutionRailSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminToolsExecutionRail.tsx"),
+      "utf8",
+    )
     const toolsResultsSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminToolsResultsPanel.tsx"),
       "utf8",
@@ -199,9 +203,9 @@ test.describe("admin surface primitives contract", () => {
     expect(toolsStyleSource).toContain("AdminStickyRail,")
     expect(toolsStyleSource).toContain("export const ExecutionLayout = styled.div`")
     expect(toolsStyleSource).toContain("export const ExecutionRail = styled(AdminStickyRail)`")
-    expect(toolsSource).toContain("<h3>실행 전 체크</h3>")
-    expect(toolsSource).toContain("<h3>위험 액션</h3>")
-    expect(toolsSource).toContain("<h3>런북/장애 문서</h3>")
+    expect(toolsExecutionRailSource).toContain("<h3>실행 전 체크</h3>")
+    expect(toolsExecutionRailSource).toContain("<h3>위험 액션</h3>")
+    expect(toolsExecutionRailSource).toContain("<h3>런북/장애 문서</h3>")
     expect(toolsSource).not.toContain("메일, 작업 큐, 정리 상태, 보안 이벤트처럼 장애와 직접 연결되는 항목만 우선 다룹니다.")
     expect(toolsSource).not.toContain("운영 변경 없이 현재 상태와 영향 범위를 먼저 다시 확인합니다.")
     expect(toolsSource).not.toContain("<ExecutionGrid>")

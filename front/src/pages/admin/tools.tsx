@@ -77,20 +77,14 @@ import {
   CompactCodeList,
   ExecutionLayout,
   ExecutionMain,
-  ExecutionRail,
-  ActionGroupCard,
-  CardSectionHeading,
   ActionToneBadge,
   ActionList,
   ActionRowButton,
-  ActionRowLink,
-  FieldStack,
   FieldGrid,
   FieldBox,
   FieldLabel,
   Input,
   TextArea,
-  PrimaryButton,
   DangerPanel,
   SandboxSection,
   SandboxHeader,
@@ -98,6 +92,7 @@ import {
   ConfirmDeleteRow,
   DangerButton,
 } from "src/routes/Admin/AdminToolsWorkspace.styles"
+import AdminToolsExecutionRail from "src/routes/Admin/AdminToolsExecutionRail"
 import AdminToolsResultsPanel from "src/routes/Admin/AdminToolsResultsPanel"
 
 type SignupMailDiagnostics = {
@@ -1653,77 +1648,22 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                 </DetailsPanel>
               </ExecutionMain>
 
-              <ExecutionRail>
-                <ActionGroupCard>
-                  <CardSectionHeading>
-                    <div>
-                      <h3>실행 전 체크</h3>
-                    </div>
-                  </CardSectionHeading>
-                  <ActionList>
-                    <ActionRowButton
-                      type="button"
-                      disabled={isBusy}
-                      onClick={() =>
-                        void executeAction("systemHealth", () => fetchSystemHealthCached(), {
-                          onSuccess: () => {
-                            setSystemHealthCheckedAt(new Date().toISOString())
-                          },
-                        })
-                      }
-                    >
-                      <span>서비스 상태 조회</span>
-                    </ActionRowButton>
-                    <ActionRowButton type="button" disabled={isBusy} onClick={() => void executeAction("admPostCount", () => apiFetch("/post/api/v1/adm/posts/count"))}>
-                      <span>전체 글 수 확인</span>
-                    </ActionRowButton>
-                  </ActionList>
-                </ActionGroupCard>
-
-                <ActionGroupCard>
-                  <CardSectionHeading>
-                    <div>
-                      <h3>위험 액션</h3>
-                    </div>
-                    <ActionToneBadge data-tone="write">실행 가능</ActionToneBadge>
-                  </CardSectionHeading>
-                  <FieldStack>
-                    <FieldBox>
-                      <FieldLabel htmlFor="signup-mail-test-email">테스트 메일 주소</FieldLabel>
-                      <Input
-                        id="signup-mail-test-email"
-                        type="email"
-                        value={testEmail}
-                        placeholder="메일 수신을 확인할 주소를 입력하세요"
-                        onChange={(event) => setTestEmail(event.target.value)}
-                      />
-                    </FieldBox>
-                    <PrimaryButton type="button" disabled={isBusy} onClick={() => void sendSignupTestMail()}>
-                      테스트 메일 발송
-                    </PrimaryButton>
-                    {!!mailTestNotice.text && <InlineNotice data-tone={mailTestNotice.tone}>{mailTestNotice.text}</InlineNotice>}
-                  </FieldStack>
-                </ActionGroupCard>
-
-                <ActionGroupCard>
-                  <CardSectionHeading>
-                    <div>
-                      <h3>런북/장애 문서</h3>
-                    </div>
-                  </CardSectionHeading>
-                  <ActionList>
-                    <Link href="/admin/dashboard" passHref legacyBehavior>
-                      <ActionRowLink>운영 대시보드 열기</ActionRowLink>
-                    </Link>
-                    <ActionRowButton type="button" disabled={isBusy} onClick={() => focusSection("diagnostics", "queue")}>
-                      <span>작업 큐 진단으로 이동</span>
-                    </ActionRowButton>
-                    <ActionRowButton type="button" disabled={isBusy} onClick={() => focusSection("execution", "auth")}>
-                      <span>인증 보안 기록으로 이동</span>
-                    </ActionRowButton>
-                  </ActionList>
-                </ActionGroupCard>
-              </ExecutionRail>
+              <AdminToolsExecutionRail
+                isBusy={isBusy}
+                mailTestNotice={mailTestNotice}
+                onFocusSection={focusSection}
+                onPostCountCheck={() => void executeAction("admPostCount", () => apiFetch("/post/api/v1/adm/posts/count"))}
+                onSendSignupTestMail={() => void sendSignupTestMail()}
+                onSystemHealthCheck={() =>
+                  void executeAction("systemHealth", () => fetchSystemHealthCached(), {
+                    onSuccess: () => {
+                      setSystemHealthCheckedAt(new Date().toISOString())
+                    },
+                  })
+                }
+                onTestEmailChange={setTestEmail}
+                testEmail={testEmail}
+              />
             </ExecutionLayout>
           </WorkspaceSection>
 

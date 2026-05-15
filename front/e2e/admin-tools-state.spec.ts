@@ -1,8 +1,36 @@
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { expect, test } from "@playwright/test"
 
 test.describe("admin tools state contract", () => {
+  test("운영 도구 workspace model helper는 route-level model이 소유한다", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
+    const modelPath = path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspaceModel.ts")
+
+    if (!existsSync(modelPath)) {
+      expect(existsSync(modelPath), "AdminToolsWorkspaceModel.ts should exist").toBe(true)
+      return
+    }
+
+    const modelSource = readFileSync(modelPath, "utf8")
+
+    expect(source).toContain('from "src/routes/Admin/AdminToolsWorkspaceModel"')
+    expect(modelSource).toContain("export const ADMIN_TOOLS_DISPLAY_TIME_ZONE")
+    expect(modelSource).toContain("export const ACTION_META")
+    expect(modelSource).toContain("export const SECTION_IDS")
+    expect(modelSource).toContain("export const formatInstant")
+    expect(modelSource).toContain("export const getFreshnessMeta")
+    expect(modelSource).toContain("export const buildExecutionSummary")
+    expect(modelSource).toContain("export const getStatusTone")
+    expect(modelSource).toContain("export type ExecutionEntry")
+    expect(modelSource).toContain("export type ExecutionResultFilter")
+    expect(source).not.toContain("const ACTION_META")
+    expect(source).not.toContain("const formatInstant")
+    expect(source).not.toContain("const getFreshnessMeta")
+    expect(source).not.toContain("const buildExecutionSummary")
+    expect(source).not.toContain("const getStatusTone")
+  })
+
   test("운영 도구는 helper copy와 읽기 전용 pill 없이 요약 카드와 실행 버튼만 남긴다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
     const styleSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspace.styles.ts"), "utf8")

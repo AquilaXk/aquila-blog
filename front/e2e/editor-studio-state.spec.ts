@@ -1111,6 +1111,14 @@ test.describe("editor studio state", () => {
       path.resolve(__dirname, "../src/components/editor/tableWidthModel.ts"),
       "utf8"
     )
+    const tableWidthRuntimeModelPath = path.resolve(
+      __dirname,
+      "../src/components/editor/tableWidthRuntime.ts"
+    )
+    expect(existsSync(tableWidthRuntimeModelPath)).toBe(true)
+    const tableWidthRuntimeSource = existsSync(tableWidthRuntimeModelPath)
+      ? readFileSync(tableWidthRuntimeModelPath, "utf8")
+      : ""
     const tableStructureModelSource = readFileSync(
       path.resolve(__dirname, "../src/components/editor/tableStructureModel.ts"),
       "utf8"
@@ -1213,7 +1221,6 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).toContain('data-testid="table-cell-menu-button"')
     expect(blockEditorEngineSource).toContain('data-testid="table-overflow-mode-normal"')
     expect(blockEditorEngineSource).toContain('data-testid="table-overflow-mode-wide"')
-    expect(blockEditorEngineSource).toContain("const promoteLargeTablesToWideOverflowMode = (editor: TiptapEditor) => {")
     expect(tableWidthModelSource).toContain('export const TABLE_OVERFLOW_MODE_WIDE = "wide"')
     expect(tableWidthModelSource).toContain("export const getTableOverflowMode = (")
     expect(tableWidthModelSource).toContain("export const shouldPromoteWideTableOverflowMode = (")
@@ -1221,11 +1228,26 @@ test.describe("editor studio state", () => {
     expect(tableWidthModelSource).toContain("export const computeNextTableColumnWidthsForResize = (")
     expect(tableWidthModelSource).toContain("export const didTableColumnResizeHitOverflowPolicy = (")
     expect(blockEditorEngineSource).toContain('} from "./tableWidthModel"')
+    expect(blockEditorEngineSource).toContain('} from "./tableWidthRuntime"')
+    expect(tableWidthRuntimeSource).toContain("export type TableWidthSnapshot = {")
+    expect(tableWidthRuntimeSource).toContain("export const getCurrentEditorReadableWidthPx = (")
+    expect(tableWidthRuntimeSource).toContain("export const rebalanceStructurallyChangedNormalTableWidths = (")
+    expect(tableWidthRuntimeSource).toContain("export const normalizeTableWidthsToReadableBudget = (")
+    expect(tableWidthRuntimeSource).toContain("export const promoteLargeTablesToWideOverflowMode = (")
+    expect(tableWidthRuntimeSource).toContain("export const syncRenderedTableOverflowModes = (")
+    expect(tableWidthRuntimeSource).toContain("export const normalizeRenderedTableWidthsToReadableBudget = (")
     expect(blockEditorEngineSource).not.toContain("const TABLE_OVERFLOW_MODE_WIDE =")
     expect(blockEditorEngineSource).not.toContain("const getTableOverflowMode =")
     expect(blockEditorEngineSource).not.toContain("const shouldPromoteWideTableOverflowMode =")
     expect(blockEditorEngineSource).not.toContain("const computeNextTableColumnWidthsForResize = (")
     expect(blockEditorEngineSource).not.toContain("const didTableColumnResizeHitOverflowPolicy = (")
+    expect(blockEditorEngineSource).not.toContain("const getCurrentEditorReadableWidthPx =")
+    expect(blockEditorEngineSource).not.toContain("const readColumnWidthFromCell =")
+    expect(blockEditorEngineSource).not.toContain("const collectTableWidthSnapshots =")
+    expect(blockEditorEngineSource).not.toContain("const normalizeTableWidthsToReadableBudget =")
+    expect(blockEditorEngineSource).not.toContain("const promoteLargeTablesToWideOverflowMode =")
+    expect(blockEditorEngineSource).not.toContain("const normalizeRenderedTableWidthsToReadableBudget =")
+    expect(blockEditorEngineSource.split("\n").length).toBeLessThan(10750)
     expect(tableStructureModelSource).toContain("export const collectSimpleTableColumnCells = (")
     expect(tableStructureModelSource).toContain("export const buildReorderedSimpleTableNode = (")
     expect(tableStructureModelSource).toContain("export const canShrinkTableAxisAtEnd = (")

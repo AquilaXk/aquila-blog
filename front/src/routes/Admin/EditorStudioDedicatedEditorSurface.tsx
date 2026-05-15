@@ -212,8 +212,10 @@ export const EditorStudioDedicatedEditorSurface = ({
 )
 
 const EditorStudioRoot = styled.main`
-  width: min(100%, 1600px);
-  margin: 0 auto;
+  box-sizing: border-box;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
   padding: 1.4rem 1.6rem 2rem;
   display: grid;
   gap: 1.2rem;
@@ -254,6 +256,8 @@ const EditorStudioLoadingState = styled.div`
 `
 
 const EditorStudioTopBar = styled.div`
+  width: min(100%, 1600px);
+  margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -404,6 +408,8 @@ const PrimaryButton = styled(Button)`
 `
 
 const EditorStudioFrame = styled.div`
+  width: min(100%, 1600px);
+  margin: 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 1.4rem;

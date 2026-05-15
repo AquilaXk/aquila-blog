@@ -10,6 +10,10 @@ test.describe("admin profile state contract", () => {
       path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspace.styles.ts"),
       "utf8",
     )
+    const previewSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfilePreviewRail.tsx"),
+      "utf8",
+    )
 
     expect(styleSource).toContain("export const SectionRail = styled(AdminWorkspaceSectionNav)`")
     expect(styleSource).toContain("@media (max-width: 1360px)")
@@ -19,7 +23,7 @@ test.describe("admin profile state contract", () => {
     expect(styleSource).toContain("export const EditorActionDock = styled(AdminWorkspaceActionDock)``")
     expect(source).toContain("<AdminWorkspaceActionDockInner>")
     expect(styleSource).toContain("export const PreviewViewport = styled(AdminInfoPanelCard)`")
-    expect(source).toContain('className="identityRow"')
+    expect(previewSource).toContain('className="identityRow"')
     expect(source).toContain('id="profile-display-name"')
     expect(source).toContain('apiFetch<AuthMember>(`/member/api/v1/adm/members/${memberId}/nickname`')
     expect(styleSource).toContain("export const FieldSectionCard = styled.div`")
@@ -80,6 +84,28 @@ test.describe("admin profile state contract", () => {
     expect(source).not.toContain("const revalidatePublicBlogAppearance =")
     expect(source).not.toContain("const requestProfileImageUpload =")
     expect(source.split("\n").length).toBeLessThan(2190)
+  })
+
+  test("profile page는 preview rail 렌더링을 Admin route component로 위임한다", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+    const previewPath = path.resolve(__dirname, "../src/routes/Admin/AdminProfilePreviewRail.tsx")
+    expect(existsSync(previewPath)).toBe(true)
+    const previewSource = existsSync(previewPath) ? readFileSync(previewPath, "utf8") : ""
+
+    expect(source).toContain('AdminProfilePreviewRail from "src/routes/Admin/AdminProfilePreviewRail"')
+    expect(source).toContain("<AdminProfilePreviewRail")
+    expect(previewSource).toContain("export type AdminProfilePreviewRailProps")
+    expect(previewSource).toContain("export default function AdminProfilePreviewRail")
+    expect(previewSource).toContain("<PreviewRail>")
+    expect(previewSource).toContain("<PreviewProfileCard>")
+    expect(previewSource).toContain("<PreviewAboutCard>")
+    expect(previewSource).toContain("<PreviewLinksCard>")
+    expect(previewSource).toContain('className="identityRow"')
+    expect(source).not.toContain("<PreviewRail>")
+    expect(source).not.toContain("<PreviewProfileCard>")
+    expect(source).not.toContain("<PreviewAboutCard>")
+    expect(source).not.toContain("<PreviewLinksCard>")
+    expect(source.split("\n").length).toBeLessThan(2050)
   })
 
   test("profile 작업공간은 공개 노출 기준의 상세형 hero와 rail copy를 사용한다", () => {
@@ -209,6 +235,7 @@ test.describe("admin profile state contract", () => {
 
   test("profile 디자인 공개 적용은 primary action에서 저장 후 publish까지 처리한다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+    const previewSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminProfilePreviewRail.tsx"), "utf8")
     const persistenceModelSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminProfilePersistenceModel.ts"),
       "utf8"
@@ -223,8 +250,8 @@ test.describe("admin profile state contract", () => {
     expect(source).toContain("공개 적용과 공개 사이트 갱신을 완료했습니다.")
     expect(source).toContain('hasUnsavedChanges ? "저장 후 공개 적용" : "공개 적용"')
     expect(source).toContain("초안 저장")
-    expect(source).toContain("편집 중")
-    expect(source).toContain("현재 공개")
+    expect(previewSource).toContain("편집 중")
+    expect(previewSource).toContain("현재 공개")
     expect(source).not.toContain("로컬 변경 사항을 먼저 임시 저장한 뒤 공개할 수 있습니다.")
   })
 

@@ -46,12 +46,12 @@ test.describe("admin surface primitives contract", () => {
   })
 
   test("posts/tools reuse shared badge and action primitives", () => {
-    const postsSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePage.tsx"), "utf8")
+    const postsListSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceList.tsx"), "utf8")
     const toolsSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
 
-    expect(postsSource).toContain("const VisibilityBadge = styled(AdminStatusPill)<{ \"data-tone\": string }>`")
-    expect(postsSource).toContain("const RowPrimaryButton = styled(AdminTextActionButton)`")
-    expect(postsSource).toContain("const RowActions = styled(AdminInlineActionRow)``")
+    expect(postsListSource).toContain("const VisibilityBadge = styled(AdminStatusPill)<{ \"data-tone\": string }>`")
+    expect(postsListSource).toContain("const RowPrimaryButton = styled(AdminTextActionButton)`")
+    expect(postsListSource).toContain("const RowActions = styled(AdminInlineActionRow)``")
 
     expect(toolsSource).toContain("const StatusBadge = styled(AdminStatusPill)`")
     expect(toolsSource).toContain("const FreshnessBadge = styled(AdminStatusPill)`")
@@ -63,6 +63,57 @@ test.describe("admin surface primitives contract", () => {
     expect(toolsSource).not.toContain('<SectionNav aria-label="운영 섹션">')
     expect(toolsSource).not.toContain("const SectionNav = styled(AdminWorkspaceSectionNav)`")
     expect(toolsSource).not.toContain("const SectionNavButton = styled(AdminWorkspaceSectionNavButton)``")
+  })
+
+  test("posts workspace splits repeated UI regions out of the orchestration page", () => {
+    const postsSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePage.tsx"), "utf8")
+    const recentWorkSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceRecentWork.tsx"),
+      "utf8",
+    )
+    const filterSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceFilterToolbar.tsx"),
+      "utf8",
+    )
+    const listSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceList.tsx"),
+      "utf8",
+    )
+    const feedbackSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceFeedbackLayer.tsx"),
+      "utf8",
+    )
+
+    expect(postsSource).toContain('import { AdminPostsWorkspaceRecentWork } from "./AdminPostsWorkspaceRecentWork"')
+    expect(postsSource).toContain('import { AdminPostsWorkspaceFilterToolbar } from "./AdminPostsWorkspaceFilterToolbar"')
+    expect(postsSource).toContain('import { AdminPostsWorkspaceList } from "./AdminPostsWorkspaceList"')
+    expect(postsSource).toContain('import { AdminPostsWorkspaceFeedbackLayer } from "./AdminPostsWorkspaceFeedbackLayer"')
+    expect(postsSource).toContain("<AdminPostsWorkspaceRecentWork")
+    expect(postsSource).toContain("<AdminPostsWorkspaceFilterToolbar")
+    expect(postsSource).toContain("<AdminPostsWorkspaceList")
+    expect(postsSource).toContain("<AdminPostsWorkspaceFeedbackLayer")
+    expect(postsSource).not.toContain("const renderRecentEdited = () =>")
+    expect(postsSource).not.toContain("const RecentPostList = styled.ul`")
+    expect(postsSource).not.toContain("const DesktopListTable = styled.table`")
+    expect(postsSource).not.toContain("const ToastViewport = styled.div`")
+    expect(postsSource.length).toBeLessThan(76000)
+
+    expect(recentWorkSource).toContain("export const AdminPostsWorkspaceRecentWork")
+    expect(filterSource).toContain("export const AdminPostsWorkspaceFilterToolbar")
+    expect(listSource).toContain("export const AdminPostsWorkspaceList")
+    expect(feedbackSource).toContain("export const AdminPostsWorkspaceFeedbackLayer")
+  })
+
+  test("remaining admin pages avoid oversized slab card radii", () => {
+    const dashboardSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/dashboard.tsx"), "utf8")
+    const profileSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+    const toolsSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
+
+    for (const source of [dashboardSource, profileSource, toolsSource]) {
+      expect(source).not.toContain("border-radius: 28px;")
+      expect(source).not.toContain("border-radius: 30px;")
+      expect(source).not.toContain("border-radius: 32px;")
+    }
   })
 
   test("tools workspace uses detail-like hero copy and ops rail labels", () => {

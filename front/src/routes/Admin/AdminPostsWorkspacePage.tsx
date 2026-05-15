@@ -6,7 +6,6 @@ import { useRouter } from "next/router"
 import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { invalidatePublicPostReadCaches } from "src/apis/backend/posts"
 import { apiFetch } from "src/apis/backend/client"
-import ProfileImage from "src/components/ProfileImage"
 import type { AuthMember } from "src/hooks/useAuthSession"
 import useAuthSession from "src/hooks/useAuthSession"
 import { pushRoute } from "src/libs/router"
@@ -16,108 +15,45 @@ import { hasServerAuthCookie } from "src/libs/server/authSession"
 import { serverApiFetch } from "src/libs/server/backend"
 import { readServerSnapshot } from "src/libs/server/serverSnapshotCache"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
-import { isServerTempDraftPost } from "./editorTempDraft"
 import AdminShell from "./AdminShell"
+import { AdminPostsWorkspaceFeedbackLayer } from "./AdminPostsWorkspaceFeedbackLayer"
+import { AdminPostsWorkspaceFilterToolbar } from "./AdminPostsWorkspaceFilterToolbar"
+import { AdminPostsWorkspaceList } from "./AdminPostsWorkspaceList"
 import {
-  AdminInlineActionRow,
+  buildListEndpoint,
+  buildRowTitle,
+  canOpenCanonicalPost,
+  DEFAULT_PAGE,
+  DEFAULT_PAGE_SIZE,
+  DEFAULT_SORT,
+  EDITOR_NEW_ROUTE_PATH,
+  formatDateTime,
+  POSTS_WORKSPACE_DEFERRED_PANEL_TIMEOUT_MS,
+  POSTS_WORKSPACE_MOBILE_LIST_DELAY_MS,
+  POSTS_WORKSPACE_MOBILE_LIST_QUERY,
+  readLocalDraft,
+  sanitizeNumberInput,
+  type AdminPostListItem,
+  type LocalDraftSummary,
+  type ListSort,
+  type ListState,
+  type PageDto,
+  type PostListScope,
+  type PostWriteResult,
+  type WorkspaceConfirmState,
+  type WorkspaceRecentAction,
+  type WorkspaceToastState,
+} from "./AdminPostsWorkspaceModel"
+import { AdminPostsWorkspaceRecentWork } from "./AdminPostsWorkspaceRecentWork"
+import {
   AdminRailCard,
   AdminSectionHeading,
-  AdminStatusPill,
-  AdminSubtleCard,
   AdminTextActionButton,
   AdminWorkspaceHero,
   AdminWorkspaceHeroActions,
   AdminWorkspaceHeroCopy,
   AdminWorkspaceHeroLayout,
 } from "./AdminSurfacePrimitives"
-
-type PostListScope = "active" | "deleted"
-
-type AdminPostListItem = {
-  id: number
-  title: string
-  authorName: string
-  authorProfileImgUrl?: string
-  published: boolean
-  listed: boolean
-  tempDraft?: boolean
-  createdAt: string
-  modifiedAt: string
-  deletedAt?: string
-}
-
-type PageDto<T> = {
-  content: T[]
-  pageable?: {
-    pageNumber?: number
-    pageSize?: number
-    totalElements?: number
-    totalPages?: number
-  }
-}
-
-type PostWriteResult = {
-  id: number
-}
-
-type LocalDraftPayload = {
-  title: string
-  content: string
-  summary: string
-  thumbnailUrl: string
-  tags: string[]
-  category: string
-  visibility: "PRIVATE" | "PUBLIC_UNLISTED" | "PUBLIC_LISTED"
-  savedAt: string
-}
-
-type LocalDraftSummary = {
-  title: string
-  savedAt: string
-  tagCount: number
-  visibility: LocalDraftPayload["visibility"]
-}
-
-type ListSort = "CREATED_AT" | "CREATED_AT_ASC"
-type WorkspaceConfirmState =
-  | {
-      kind: "delete" | "hardDelete"
-      rowId: number
-      rowTitle: string
-      headline: string
-      description: string
-      confirmLabel: string
-      tone: "danger"
-    }
-  | null
-
-type WorkspaceToastState =
-  | {
-      tone: "success" | "error"
-      text: string
-      actionLabel?: string
-      action?: {
-        kind: "restore"
-        rowId: number
-        rowTitle: string
-      }
-    }
-  | null
-
-type WorkspaceRecentAction = {
-  id: string
-  tone: "success" | "error"
-  label: string
-  detail: string
-  stateLabel: string
-  occurredAt: string
-}
-
-type ListState = {
-  rows: AdminPostListItem[]
-  total: number
-  loadedAt: string
-}
 
 type AdminPostsWorkspaceInitialSnapshot = {
   recentPosts: AdminPostListItem[]
@@ -144,15 +80,6 @@ type AdminPostsWorkspacePageProps = AdminPageProps & {
   initialSnapshot: AdminPostsWorkspaceInitialSnapshot
 }
 
-const LOCAL_DRAFT_STORAGE_KEY = "admin.editor.localDraft.v1"
-const EDITOR_NEW_ROUTE_PATH = "/editor/new"
-const DEFAULT_PAGE = "1"
-const DEFAULT_PAGE_SIZE = "20"
-const DEFAULT_SORT: ListSort = "CREATED_AT"
-const LIST_SKELETON_ROW_COUNT = 5
-const POSTS_WORKSPACE_DEFERRED_PANEL_TIMEOUT_MS = 720
-const POSTS_WORKSPACE_MOBILE_LIST_DELAY_MS = 180
-const POSTS_WORKSPACE_MOBILE_LIST_QUERY = "(max-width: 900px)"
 const EMPTY_INITIAL_SNAPSHOT: AdminPostsWorkspaceInitialSnapshot = {
   recentPosts: [],
   recentFetchedAt: null,
@@ -174,101 +101,6 @@ const buildCanonicalPostUrl = (postId: string | number) => {
   const path = toCanonicalPostPath(postId)
   if (typeof window === "undefined") return path
   return new URL(path, window.location.origin).toString()
-}
-
-const sanitizeNumberInput = (value: string, fallback: string) => {
-  const digits = value.replace(/[^0-9]/g, "")
-  return digits.length > 0 ? digits : fallback
-}
-
-const readLocalDraft = (): LocalDraftSummary | null => {
-  if (typeof window === "undefined") return null
-
-  try {
-    const raw = window.localStorage.getItem(LOCAL_DRAFT_STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as Partial<LocalDraftPayload>
-    if (!parsed || typeof parsed !== "object") return null
-
-    const title = typeof parsed.title === "string" ? parsed.title.trim() : ""
-    const content = typeof parsed.content === "string" ? parsed.content.trim() : ""
-    const summary = typeof parsed.summary === "string" ? parsed.summary.trim() : ""
-    const savedAt = typeof parsed.savedAt === "string" ? parsed.savedAt : ""
-    const tags = Array.isArray(parsed.tags)
-      ? parsed.tags.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-      : []
-    const visibility =
-      parsed.visibility === "PRIVATE" || parsed.visibility === "PUBLIC_UNLISTED" || parsed.visibility === "PUBLIC_LISTED"
-        ? parsed.visibility
-        : "PUBLIC_LISTED"
-
-    if (!title && !summary && !content) return null
-
-    return {
-      title: title || "제목 없는 임시저장",
-      savedAt,
-      tagCount: tags.length,
-      visibility,
-    }
-  } catch {
-    return null
-  }
-}
-
-const formatDateTime = (value?: string) => {
-  if (!value) return "-"
-  return value.slice(0, 16).replace("T", " ")
-}
-
-const toVisibility = (published: boolean, listed: boolean) => {
-  if (!published) return "PRIVATE" as const
-  if (listed) return "PUBLIC_LISTED" as const
-  return "PUBLIC_UNLISTED" as const
-}
-
-const visibilityLabel = (published: boolean, listed: boolean) => {
-  const visibility = toVisibility(published, listed)
-  if (visibility === "PRIVATE") return "비공개"
-  if (visibility === "PUBLIC_UNLISTED") return "링크 공개"
-  return "전체 공개"
-}
-
-const isWorkspaceTempDraft = (row: Pick<AdminPostListItem, "title" | "published" | "listed" | "tempDraft">) =>
-  isServerTempDraftPost(row)
-
-const getWorkspaceRowTitle = (row: Pick<AdminPostListItem, "title" | "published" | "listed" | "tempDraft">) =>
-  isWorkspaceTempDraft(row) ? "임시 저장" : row.title
-
-const visibilityLabelFromValue = (visibility: LocalDraftPayload["visibility"]) => {
-  if (visibility === "PRIVATE") return "비공개"
-  if (visibility === "PUBLIC_UNLISTED") return "링크 공개"
-  return "전체 공개"
-}
-
-const buildRowTitle = (row: Pick<AdminPostListItem, "title" | "published" | "listed" | "tempDraft">) =>
-  getWorkspaceRowTitle(row) || "제목 없는 글"
-
-const buildWorkspaceAuthorFallbackInitial = (authorName: string) => {
-  const source = authorName.trim() || "작"
-  return source.slice(0, 1).toUpperCase()
-}
-
-const canOpenCanonicalPost = (row: Pick<AdminPostListItem, "published" | "tempDraft">) =>
-  row.published && row.tempDraft !== true
-
-const buildListEndpoint = (scope: PostListScope, options: { page: string; pageSize: string; kw: string; sort: ListSort }) => {
-  const query = new URLSearchParams({
-    page: options.page,
-    pageSize: options.pageSize,
-    kw: options.kw,
-  })
-
-  const endpoint = scope === "deleted" ? "/post/api/v1/adm/posts/deleted" : "/post/api/v1/adm/posts"
-  if (scope === "active") {
-    query.set("sort", options.sort)
-  }
-
-  return `${endpoint}?${query.toString()}`
 }
 
 async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | null> {
@@ -471,24 +303,6 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
   const recentRequestIdRef = useRef(0)
   const skipInitialRecentFetchRef = useRef(hasInitialRecentPosts)
   const skipInitialListFetchRef = useRef(hasInitialListState)
-
-  const renderAuthorMeta = (row: Pick<AdminPostListItem, "authorName" | "authorProfileImgUrl">) => {
-    const authorName = row.authorName || "작성자 미상"
-    const avatarSrc = (row.authorProfileImgUrl || "").trim()
-
-    return (
-      <AuthorIdentity>
-        <AuthorAvatarFrame aria-hidden="true" data-has-image={avatarSrc ? "true" : "false"}>
-          {avatarSrc ? (
-            <ProfileImage src={avatarSrc} alt="" fillContainer />
-          ) : (
-            <span>{buildWorkspaceAuthorFallbackInitial(row.authorName)}</span>
-          )}
-        </AuthorAvatarFrame>
-        <span className="author">{authorName}</span>
-      </AuthorIdentity>
-    )
-  }
 
   const loadRecentPosts = useCallback(async () => {
     const requestId = recentRequestIdRef.current + 1
@@ -867,50 +681,6 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
     [openWriteRoute]
   )
 
-  const renderRecentEdited = () => {
-    if (isRecentLoading) {
-      return (
-        <RecentListSkeleton aria-hidden="true">
-          <span />
-          <span />
-          <span />
-        </RecentListSkeleton>
-      )
-    }
-
-    if (recentError) {
-      return <MutedText>{recentError}</MutedText>
-    }
-
-    if (recentPosts.length === 0) {
-      return <MutedText>이어 쓸 원고 없음</MutedText>
-    }
-
-    const recentRows = recentPosts.slice(0, 3)
-
-    return (
-      <RecentPostList>
-        {recentRows.map((row) => (
-          <li key={row.id}>
-            <button type="button" onClick={() => void handleContinueRecent(row)}>
-              <div>
-                <strong>{getWorkspaceRowTitle(row)}</strong>
-                <span>{formatDateTime(row.modifiedAt)}</span>
-              </div>
-              <RecentMeta>
-                <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
-                  {visibilityLabel(row.published, row.listed)}
-                </VisibilityBadge>
-              </RecentMeta>
-            </button>
-          </li>
-        ))}
-      </RecentPostList>
-    )
-  }
-
-  const hasAnyResumeTarget = Boolean(localDraft) || recentPosts.length > 0
-  const shouldRenderResumeGrid = isRecentLoading || Boolean(recentError) || hasAnyResumeTarget
   const hasListFilters = Boolean(
     listKw.trim() ||
       listScope !== "active" ||
@@ -987,68 +757,17 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
 
         <WorkspaceBody>
           <WorkspaceMain>
-            <ResumeSection ref={continueSectionRef}>
-              <SectionHeading>
-                <div>
-                  <h2>최근 작업</h2>
-                </div>
-              </SectionHeading>
-              {showDeferredSupportPanels ? (
-                shouldRenderResumeGrid ? (
-                  <ResumeGrid>
-                    {localDraft ? (
-                      <ResumeCardButton type="button" onClick={() => void openWriteRoute({ source: "local-draft" })}>
-                        <ResumeHeader>
-                          <strong>브라우저 임시저장</strong>
-                          {localDraft.savedAt ? <span>{formatDateTime(localDraft.savedAt)}</span> : null}
-                        </ResumeHeader>
-                        <ResumeTitle>{localDraft.title}</ResumeTitle>
-                        <ResumeMeta>
-                          <VisibilityBadge data-tone={localDraft.visibility}>
-                            {visibilityLabelFromValue(localDraft.visibility)}
-                          </VisibilityBadge>
-                          <span>{localDraft.tagCount > 0 ? `태그 ${localDraft.tagCount}개` : "태그 없음"}</span>
-                        </ResumeMeta>
-                      </ResumeCardButton>
-                    ) : (
-                      <ResumeCard data-empty="true">
-                        <ResumeHeader>
-                          <strong>브라우저 임시저장</strong>
-                        </ResumeHeader>
-                        <EmptyInlineState>
-                          <strong>임시 저장 없음</strong>
-                          <ActionRow>
-                            <PrimaryInlineButton type="button" onClick={() => void openWriteRoute()}>
-                              새 글 작성
-                            </PrimaryInlineButton>
-                          </ActionRow>
-                        </EmptyInlineState>
-                      </ResumeCard>
-                    )}
-
-                    <ResumeCard>
-                      <ResumeHeader>
-                        <strong>최근 수정 3건</strong>
-                        {isRecentLoading ? <span>불러오는 중</span> : null}
-                      </ResumeHeader>
-                      {renderRecentEdited()}
-                    </ResumeCard>
-                  </ResumeGrid>
-                ) : (
-                  <WorkspaceEmpty>
-                    <strong>최근 작업 없음</strong>
-                    <PrimaryInlineButton type="button" onClick={() => void openWriteRoute()}>
-                      새 글 작성
-                    </PrimaryInlineButton>
-                  </WorkspaceEmpty>
-                )
-              ) : (
-                <DeferredPanelPlaceholder data-size="recent">
-                  <strong>최근 작업 준비 중</strong>
-                  <span>글 목록 워크스페이스를 먼저 표시한 뒤 이어서 최근 작업을 붙입니다.</span>
-                </DeferredPanelPlaceholder>
-              )}
-            </ResumeSection>
+            <div ref={continueSectionRef}>
+              <AdminPostsWorkspaceRecentWork
+                localDraft={localDraft}
+                recentPosts={recentPosts}
+                isRecentLoading={isRecentLoading}
+                recentError={recentError}
+                showDeferredSupportPanels={showDeferredSupportPanels}
+                onOpenWriteRoute={(query) => void openWriteRoute(query)}
+                onContinueRecent={(row) => void handleContinueRecent(row)}
+              />
+            </div>
 
             <ListSection ref={listSectionRef}>
               <SectionHeading>
@@ -1062,108 +781,29 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                 </ListMeta>
               </SectionHeading>
 
-              <StickyFilterToolbar data-compact={isStickyToolbarCompact}>
-                <FilterRail>
-                  <ScopeTabs role="tablist" aria-label="글 범위 선택">
-                    <ScopeTabButton type="button" data-active={listScope === "active"} onClick={() => setListScope("active")}>
-                      활성 글
-                    </ScopeTabButton>
-                    <ScopeTabButton type="button" data-active={listScope === "deleted"} onClick={() => setListScope("deleted")}>
-                      삭제 글
-                    </ScopeTabButton>
-                  </ScopeTabs>
-                  <SearchField>
-                    <label htmlFor="workspace-post-search">검색어</label>
-                    <input
-                      id="workspace-post-search"
-                      placeholder={listScope === "active" ? "제목이나 본문 검색" : "삭제된 글 검색"}
-                      value={listKw}
-                      onChange={(event) => {
-                        setListPage(DEFAULT_PAGE)
-                        setListKw(event.target.value)
-                      }}
-                    />
-                  </SearchField>
-                </FilterRail>
-
-                {!isStickyToolbarCompact ? (
-                  <AdvancedDisclosure open={isAdvancedOpen}>
-                    <summary
-                      onClick={(event) => {
-                        event.preventDefault()
-                        setIsAdvancedOpen((prev) => !prev)
-                      }}
-                    >
-                      <strong>고급 검색</strong>
-                      <span>{isAdvancedOpen ? "닫기" : "열기"}</span>
-                    </summary>
-                    {isAdvancedOpen && (
-                      <div className="body">
-                        <AdvancedGrid>
-                          <FieldBox>
-                            <label htmlFor="workspace-page">페이지</label>
-                            <input
-                              id="workspace-page"
-                              type="number"
-                              min={1}
-                              value={listPage}
-                              onChange={(event) => setListPage(sanitizeNumberInput(event.target.value, DEFAULT_PAGE))}
-                            />
-                          </FieldBox>
-                          <FieldBox>
-                            <label htmlFor="workspace-page-size">페이지 크기</label>
-                            <input
-                              id="workspace-page-size"
-                              type="number"
-                              min={1}
-                              max={30}
-                              value={listPageSize}
-                              onChange={(event) => setListPageSize(sanitizeNumberInput(event.target.value, DEFAULT_PAGE_SIZE))}
-                            />
-                          </FieldBox>
-                          {listScope === "active" && (
-                            <FieldBox>
-                              <label htmlFor="workspace-sort">정렬</label>
-                              <select
-                                id="workspace-sort"
-                                value={listSort}
-                                onChange={(event) => setListSort(event.target.value as ListSort)}
-                              >
-                                <option value="CREATED_AT">최신순</option>
-                                <option value="CREATED_AT_ASC">오래된순</option>
-                              </select>
-                            </FieldBox>
-                          )}
-                        </AdvancedGrid>
-                      </div>
-                    )}
-                  </AdvancedDisclosure>
-                ) : null}
-
-                <FilterSummaryBar>
-                  <div className="summaryCopy">
-                    <strong>현재 조건</strong>
-                    <SummaryPillRow>
-                      {listSummaryParts.map((part) => (
-                        <SummaryPill key={part}>{part}</SummaryPill>
-                      ))}
-                      <SummaryPill data-tone="neutral">
-                        총 {listState.total}건{listState.loadedAt ? ` · ${formatDateTime(listState.loadedAt)} 기준` : ""}
-                      </SummaryPill>
-                    </SummaryPillRow>
-                  </div>
-                  <ToolbarUtilityRow>
-                    <GhostButton type="button" onClick={() => setIsStickyToolbarCompact((prev) => !prev)}>
-                      {isStickyToolbarCompact ? "전체 보기" : "요약만 보기"}
-                    </GhostButton>
-                    {hasListFilters ? (
-                      <GhostButton type="button" onClick={handleResetListFilters}>
-                        조건 초기화
-                      </GhostButton>
-                    ) : null}
-                  </ToolbarUtilityRow>
-                </FilterSummaryBar>
-              </StickyFilterToolbar>
+              <AdminPostsWorkspaceFilterToolbar
+                listScope={listScope}
+                listKw={listKw}
+                listPage={listPage}
+                listPageSize={listPageSize}
+                listSort={listSort}
+                listState={listState}
+                isAdvancedOpen={isAdvancedOpen}
+                isStickyToolbarCompact={isStickyToolbarCompact}
+                hasListFilters={hasListFilters}
+                listSummaryParts={listSummaryParts}
+                onScopeChange={setListScope}
+                onKeywordChange={(value) => {
+                  setListPage(DEFAULT_PAGE)
+                  setListKw(value)
+                }}
+                onPageChange={setListPage}
+                onPageSizeChange={setListPageSize}
+                onSortChange={setListSort}
+                onAdvancedToggle={() => setIsAdvancedOpen((prev) => !prev)}
+                onCompactToggle={() => setIsStickyToolbarCompact((prev) => !prev)}
+                onResetFilters={handleResetListFilters}
+              />
 
               {showDeferredSupportPanels ? (
                 <RecentActionPanel aria-live="polite">
@@ -1196,279 +836,40 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                 </DeferredPanelPlaceholder>
               )}
 
-              {isListLoading ? (
-                <ListCard aria-hidden="true">
-                  <ListSkeleton>
-                    <div className="desktopRows">
-                      <div className="headerRow">
-                        <span className="idCell">ID</span>
-                        <span>제목</span>
-                        <span className="dateCell">{listScope === "active" ? "수정일" : "삭제일"}</span>
-                        <span className="actionCell">작업</span>
-                      </div>
-                      {Array.from({ length: LIST_SKELETON_ROW_COUNT }, (_, index) => (
-                        <div className="row" key={`desktop-skeleton-${index}`}>
-                          <div className="cell idCell">
-                            <span className="line short" />
-                          </div>
-                          <div className="cell titleCell">
-                            <span className="line medium" />
-                            <span className="line wide" />
-                            <span className="line short muted" />
-                          </div>
-                          <div className="cell dateCell">
-                            <span className="line medium" />
-                          </div>
-                          <div className="cell actionCell">
-                            <span className="line short" />
-                            <span className="line short" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mobileCards">
-                      {Array.from({ length: 3 }, (_, index) => (
-                        <article key={`mobile-skeleton-${index}`}>
-                          <div className="metaRow">
-                            <span className="line short" />
-                            <span className="line short" />
-                          </div>
-                          <span className="line wide" />
-                          <span className="line medium muted" />
-                          <span className="line short muted" />
-                          <div className="actionRow">
-                            <span className="line short" />
-                            <span className="line short" />
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  </ListSkeleton>
-                </ListCard>
-              ) : listError ? (
-                <ListEmptyState>
-                  <strong>목록을 불러오지 못했습니다.</strong>
-                  <p>{listError}</p>
-                  <ActionRow>
-                    <PrimaryInlineButton type="button" onClick={() => void loadList()}>
-                      다시 시도
-                    </PrimaryInlineButton>
-                  </ActionRow>
-                </ListEmptyState>
-              ) : listState.rows.length === 0 ? (
-                <ListEmptyState>
-                  <strong>{listScope === "active" ? "아직 글이 없습니다." : "삭제된 글이 없습니다."}</strong>
-                  <ActionRow>
-                    <PrimaryInlineButton type="button" onClick={() => void openWriteRoute()}>
-                      새 글 작성
-                    </PrimaryInlineButton>
-                    {listKw.trim() ? (
-                      <GhostButton
-                        type="button"
-                        onClick={() => {
-                          setListKw("")
-                          setListPage(DEFAULT_PAGE)
-                        }}
-                      >
-                        검색 초기화
-                      </GhostButton>
-                    ) : null}
-                  </ActionRow>
-                </ListEmptyState>
-              ) : (
-                <ListCard>
-                  {!shouldRenderMobileList ? (
-                    <DesktopListTable>
-                      <thead>
-                        <tr>
-                          <th className="idCell">ID</th>
-                          <th>제목</th>
-                          <th className="dateCell">{listScope === "active" ? "수정일" : "삭제일"}</th>
-                          <th className="actionCell">작업</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {listState.rows.map((row) => (
-                          <tr key={row.id}>
-                            <td className="idCell">#{row.id}</td>
-                            <td>
-                              <TitleCell>
-                                {canOpenCanonicalPost(row) ? (
-                                  <TitleAnchor href={toCanonicalPostPath(row.id)} onClick={(event) => void openCanonicalPost(event, row)}>
-                                    {getWorkspaceRowTitle(row)}
-                                  </TitleAnchor>
-                                ) : (
-                                  <TitleText>{getWorkspaceRowTitle(row)}</TitleText>
-                                )}
-                                <div className="metaRow">
-                                  <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
-                                    {visibilityLabel(row.published, row.listed)}
-                                  </VisibilityBadge>
-                                  {renderAuthorMeta(row)}
-                                </div>
-                              </TitleCell>
-                            </td>
-                            <td className="dateCell">{formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)}</td>
-                            <td className="actionCell">
-                              <RowActions>
-                                {listScope === "active" ? (
-                                  <>
-                                    <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
-                                      수정
-                                    </RowPrimaryButton>
-                                    {canOpenCanonicalPost(row) ? (
-                                      <RowSecondaryButton type="button" onClick={() => void copyPostDetailLink(row)}>
-                                        링크 복사
-                                      </RowSecondaryButton>
-                                    ) : null}
-                                    <DangerTextButton
-                                      type="button"
-                                      disabled={Boolean(mutationPending)}
-                                      onClick={() => void handleDeletePost(row)}
-                                    >
-                                      삭제
-                                    </DangerTextButton>
-                                  </>
-                                ) : (
-                                  <>
-                                    <RowPrimaryButton
-                                      type="button"
-                                      disabled={Boolean(mutationPending)}
-                                      onClick={() => void handleRestorePost(row)}
-                                    >
-                                      복구
-                                    </RowPrimaryButton>
-                                    <DangerTextButton
-                                      type="button"
-                                      disabled={Boolean(mutationPending)}
-                                      onClick={() => void handleHardDeletePost(row)}
-                                    >
-                                      영구삭제
-                                    </DangerTextButton>
-                                  </>
-                                )}
-                              </RowActions>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </DesktopListTable>
-                  ) : null}
-
-                  {shouldRenderMobileList ? (
-                    <MobileCardList>
-                      {listState.rows.map((row) => (
-                        <article key={`mobile-${row.id}`}>
-                          <header>
-                            <span className="id">#{row.id}</span>
-                          </header>
-                          {canOpenCanonicalPost(row) ? (
-                            <TitleAnchor href={toCanonicalPostPath(row.id)} onClick={(event) => void openCanonicalPost(event, row)}>
-                              {getWorkspaceRowTitle(row)}
-                            </TitleAnchor>
-                          ) : (
-                            <TitleText>{getWorkspaceRowTitle(row)}</TitleText>
-                          )}
-                          <div className="metaRow">
-                            <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
-                              {visibilityLabel(row.published, row.listed)}
-                            </VisibilityBadge>
-                            {renderAuthorMeta(row)}
-                          </div>
-                          <span className="date">{formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)}</span>
-                          <div className="actions">
-                            {listScope === "active" ? (
-                              <>
-                                <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
-                                  수정
-                                </RowPrimaryButton>
-                                {canOpenCanonicalPost(row) ? (
-                                  <RowSecondaryButton type="button" onClick={() => void copyPostDetailLink(row)}>
-                                    링크 복사
-                                  </RowSecondaryButton>
-                                ) : null}
-                                <DangerTextButton
-                                  type="button"
-                                  disabled={Boolean(mutationPending)}
-                                  onClick={() => void handleDeletePost(row)}
-                                >
-                                  삭제
-                                </DangerTextButton>
-                              </>
-                            ) : (
-                              <>
-                                <RowPrimaryButton
-                                  type="button"
-                                  disabled={Boolean(mutationPending)}
-                                  onClick={() => void handleRestorePost(row)}
-                                >
-                                  복구
-                                </RowPrimaryButton>
-                                <DangerTextButton
-                                  type="button"
-                                  disabled={Boolean(mutationPending)}
-                                  onClick={() => void handleHardDeletePost(row)}
-                                >
-                                  영구삭제
-                                </DangerTextButton>
-                              </>
-                            )}
-                          </div>
-                        </article>
-                      ))}
-                    </MobileCardList>
-                  ) : null}
-                </ListCard>
-              )}
+              <AdminPostsWorkspaceList
+                listScope={listScope}
+                listKw={listKw}
+                listState={listState}
+                isListLoading={isListLoading}
+                listError={listError}
+                shouldRenderMobileList={shouldRenderMobileList}
+                mutationPending={mutationPending}
+                onLoadList={() => void loadList()}
+                onOpenWriteRoute={(query) => void openWriteRoute(query)}
+                onResetSearch={() => {
+                  setListKw("")
+                  setListPage(DEFAULT_PAGE)
+                }}
+                onContinueRecent={(row) => void handleContinueRecent(row)}
+                onCopyPostDetailLink={(row) => void copyPostDetailLink(row)}
+                onOpenCanonicalPost={(event, row) => void openCanonicalPost(event, row)}
+                onDeletePost={(row) => void handleDeletePost(row)}
+                onRestorePost={(row) => void handleRestorePost(row)}
+                onHardDeletePost={(row) => void handleHardDeletePost(row)}
+              />
             </ListSection>
           </WorkspaceMain>
 
         </WorkspaceBody>
 
-      {toast ? (
-        <ToastViewport data-tone={toast.tone} role="status" aria-live="polite">
-          <div className="copy">
-            <strong>{toast.tone === "error" ? "작업 실패" : "작업 완료"}</strong>
-            <span>{toast.text}</span>
-          </div>
-          <div className="actions">
-            {toast.action ? (
-              <ToastActionButton type="button" onClick={() => void handleToastAction()}>
-                {toast.actionLabel}
-              </ToastActionButton>
-            ) : null}
-            <ToastDismissButton type="button" onClick={() => setToast(null)}>
-              닫기
-            </ToastDismissButton>
-          </div>
-        </ToastViewport>
-      ) : null}
-
-      {confirmState ? (
-        <ConfirmBackdrop role="presentation" onClick={() => setConfirmState(null)}>
-          <ConfirmDialog
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="workspace-confirm-title"
-            aria-describedby="workspace-confirm-description"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <strong id="workspace-confirm-title">{confirmState.headline}</strong>
-            <p id="workspace-confirm-description">
-              <span className="rowTitle">#{confirmState.rowId} {confirmState.rowTitle}</span>
-              <span>{confirmState.description}</span>
-            </p>
-            <ActionRow>
-              <GhostButton type="button" onClick={() => setConfirmState(null)}>
-                취소
-              </GhostButton>
-              <ConfirmButton type="button" data-tone={confirmState.tone} onClick={() => void handleConfirmAction()}>
-                {confirmState.confirmLabel}
-              </ConfirmButton>
-            </ActionRow>
-          </ConfirmDialog>
-        </ConfirmBackdrop>
-      ) : null}
+      <AdminPostsWorkspaceFeedbackLayer
+        toast={toast}
+        confirmState={confirmState}
+        onToastAction={() => void handleToastAction()}
+        onToastDismiss={() => setToast(null)}
+        onConfirmCancel={() => setConfirmState(null)}
+        onConfirmAction={() => void handleConfirmAction()}
+      />
       </Main>
     </AdminShell>
   )
@@ -1501,15 +902,6 @@ const WorkspaceMain = styled.div`
   gap: 1rem;
 `
 
-const baseButton = ({ theme }: { theme: any }) => `
-  min-height: 48px;
-  border-radius: 12px;
-  border: 1px solid ${theme.colors.gray5};
-  font-size: 0.95rem;
-  font-weight: 800;
-  cursor: pointer;
-`
-
 const PrimaryCta = styled.button`
   border: 0;
   background: transparent;
@@ -1520,9 +912,9 @@ const PrimaryCta = styled.button`
   cursor: pointer;
 `
 
-const ResumeSection = styled.section`
+const ListSection = styled.section`
   display: grid;
-  gap: 0.72rem;
+  gap: 0.8rem;
 `
 
 const SectionHeading = styled(AdminSectionHeading)`
@@ -1530,284 +922,6 @@ const SectionHeading = styled(AdminSectionHeading)`
     font-size: 1.22rem;
     letter-spacing: -0.03em;
   }
-`
-
-const ResumeGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
-  gap: 0.6rem;
-  align-items: start;
-`
-
-const ResumeCard = styled(AdminRailCard)`
-  gap: 0.42rem;
-  width: 100%;
-  padding: 0.72rem 0.78rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) => theme.colors.gray2};
-  text-align: left;
-  color: inherit;
-
-  &[data-empty="true"] {
-    gap: 0.36rem;
-    padding-block: 0.68rem;
-  }
-`
-
-const ResumeCardButton = styled.button`
-  display: grid;
-  gap: 0.42rem;
-  width: 100%;
-  padding: 0.72rem 0.78rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) => theme.colors.gray2};
-  appearance: none;
-  text-align: left;
-  color: inherit;
-  cursor: pointer;
-  transition:
-    border-color 0.18s ease,
-    background 0.18s ease,
-    box-shadow 0.18s ease;
-
-  &:hover {
-    border-color: ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray1};
-  }
-
-  &:focus-visible {
-    outline: none;
-    box-shadow: ${({ theme }) => `0 0 0 3px ${theme.colors.gray6}`};
-  }
-`
-
-const ResumeHeader = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.6rem;
-
-  strong {
-    font-size: 0.88rem;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.74rem;
-    white-space: nowrap;
-  }
-`
-
-const ResumeTitle = styled.strong`
-  display: -webkit-box;
-  font-size: 0.9rem;
-  line-height: 1.32;
-  overflow: hidden;
-  word-break: keep-all;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-`
-
-const EmptyInlineState = styled.div`
-  display: grid;
-  gap: 0.12rem;
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.84rem;
-  }
-
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    line-height: 1.55;
-  }
-`
-
-const ResumeMeta = styled.div`
-  display: flex;
-  gap: 0.55rem;
-  align-items: center;
-  flex-wrap: wrap;
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.76rem;
-  }
-`
-
-const VisibilityBadge = styled(AdminStatusPill)<{ "data-tone": string }>`
-  min-height: 28px;
-  max-width: 100%;
-  padding: 0 0.82rem;
-  font-size: 0.78rem;
-  font-weight: 800;
-  line-height: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: ${({ theme, "data-tone": tone }) =>
-    tone === "PRIVATE"
-      ? theme.colors.gray11
-      : tone === "PUBLIC_UNLISTED"
-        ? theme.colors.orange9
-        : theme.colors.green9};
-  background: ${({ theme, "data-tone": tone }) =>
-    tone === "PRIVATE"
-      ? theme.colors.gray2
-      : tone === "PUBLIC_UNLISTED"
-        ? "rgba(249, 115, 22, 0.12)"
-        : "rgba(34, 197, 94, 0.12)"};
-  border-color: ${({ theme, "data-tone": tone }) =>
-    tone === "PRIVATE"
-      ? theme.colors.gray7
-      : tone === "PUBLIC_UNLISTED"
-        ? theme.colors.orange8
-        : theme.colors.green8};
-`
-
-const ActionRow = styled(AdminInlineActionRow)``
-
-const PrimaryInlineButton = styled(AdminTextActionButton)`
-  color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.92rem;
-  font-weight: 800;
-`
-
-const GhostButton = styled(AdminTextActionButton)`
-  font-size: 0.88rem;
-  font-weight: 700;
-`
-
-const WorkspaceEmpty = styled.div`
-  display: grid;
-  gap: 0.45rem;
-  padding: 1rem;
-  border-radius: 16px;
-  border: 1px dashed ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-
-  strong {
-    font-size: 1rem;
-  }
-
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    line-height: 1.55;
-  }
-`
-
-const MutedText = styled.p`
-  margin: 0;
-  color: ${({ theme }) => theme.colors.gray10};
-  line-height: 1.55;
-`
-
-const DeferredPanelPlaceholder = styled(AdminRailCard)<{ "data-size": "recent" | "activity" }>`
-  display: grid;
-  gap: 0.3rem;
-  padding: 0.92rem 1rem;
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) => theme.colors.gray2};
-  min-height: ${({ "data-size": size }) => (size === "recent" ? "144px" : "92px")};
-
-  strong {
-    font-size: 0.9rem;
-    letter-spacing: -0.01em;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.84rem;
-    line-height: 1.55;
-  }
-`
-
-const RecentListSkeleton = styled.div`
-  display: grid;
-  gap: 0.45rem;
-
-  span {
-    display: block;
-    height: 50px;
-    border-radius: 12px;
-    background: ${({ theme }) =>
-      theme.scheme === "light"
-        ? "linear-gradient(90deg, rgba(148, 163, 184, 0.16), rgba(148, 163, 184, 0.28), rgba(148, 163, 184, 0.16))"
-        : "linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.1), rgba(255,255,255,0.06))"};
-  }
-`
-
-const RecentPostList = styled.ul`
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.42rem;
-
-  li button {
-    width: 100%;
-    padding: 0.58rem 0.68rem;
-    border-radius: 10px;
-    border: 1px solid ${({ theme }) => theme.colors.gray5};
-    background: ${({ theme }) => theme.colors.gray2};
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 0.55rem;
-    text-align: left;
-    cursor: pointer;
-  }
-
-  li button > div {
-    display: grid;
-    gap: 0.22rem;
-    min-width: 0;
-  }
-
-  strong {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 0.84rem;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.72rem;
-  }
-
-  @media (max-width: 820px) {
-    li button {
-      grid-template-columns: 1fr;
-      align-items: start;
-    }
-  }
-`
-
-const RecentMeta = styled.div`
-  display: grid;
-  justify-items: end;
-  gap: 0.28rem;
-  flex-shrink: 0;
-
-  span:last-of-type {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-weight: 700;
-  }
-
-  @media (max-width: 820px) {
-    justify-items: start;
-  }
-`
-
-const ListSection = styled.section`
-  display: grid;
-  gap: 0.8rem;
 `
 
 const ListMeta = styled.div`
@@ -1822,196 +936,36 @@ const ListMeta = styled.div`
   }
 `
 
-const StickyFilterToolbar = styled.div`
-  display: grid;
-  gap: 0.72rem;
-  padding: 0.88rem 0.92rem;
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: color-mix(in srgb, ${({ theme }) => theme.colors.gray1} 88%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.12);
-
-  @media (max-width: 767px) {
-    padding: 0.8rem 0.82rem;
-  }
-
-  &[data-compact="true"] {
-    gap: 0.56rem;
-    padding-top: 0.72rem;
-    padding-bottom: 0.72rem;
-  }
+const GhostButton = styled(AdminTextActionButton)`
+  font-size: 0.88rem;
+  font-weight: 700;
 `
 
-const FilterRail = styled.div`
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.75rem;
-  align-items: end;
-
-  @media (max-width: 900px) {
-    grid-template-columns: 1fr;
-  }
+const MutedText = styled.p`
+  margin: 0;
+  color: ${({ theme }) => theme.colors.gray10};
+  line-height: 1.55;
 `
 
-const ScopeTabs = styled.div`
-  display: inline-flex;
-  gap: 0.4rem;
-  flex-wrap: wrap;
-`
-
-const ScopeTabButton = styled.button<{ "data-active"?: boolean }>`
-  ${({ theme }) => baseButton({ theme })};
-  min-height: 42px;
-  padding: 0 0.85rem;
-  background: ${({ theme, "data-active": active }) => (active ? theme.colors.gray1 : theme.colors.gray2)};
-  color: ${({ theme }) => theme.colors.gray12};
-  border-color: ${({ theme, "data-active": active }) => (active ? theme.colors.gray6 : theme.colors.gray5)};
-`
-
-const SearchField = styled.div`
+const DeferredPanelPlaceholder = styled(AdminRailCard)<{ "data-size": "activity" }>`
   display: grid;
   gap: 0.3rem;
-
-  label {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.78rem;
-    font-weight: 700;
-  }
-
-  input {
-    min-height: 46px;
-    border-radius: 12px;
-    border: 1px solid ${({ theme }) => theme.colors.gray5};
-    background: ${({ theme }) => theme.colors.gray1};
-    color: ${({ theme }) => theme.colors.gray12};
-    padding: 0 0.95rem;
-    font-size: 0.95rem;
-  }
-`
-
-const AdvancedDisclosure = styled.details`
-  display: grid;
-  gap: 0.6rem;
-  padding: 0.9rem 1rem;
+  padding: 0.92rem 1rem;
   border-radius: 14px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
-
-  summary {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    cursor: pointer;
-    list-style: none;
-  }
-
-  summary::-webkit-details-marker {
-    display: none;
-  }
+  min-height: 92px;
 
   strong {
-    font-size: 0.92rem;
+    font-size: 0.9rem;
+    letter-spacing: -0.01em;
   }
 
   span {
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.84rem;
+    line-height: 1.55;
   }
-
-  .body {
-    display: grid;
-    gap: 0.75rem;
-  }
-`
-
-const AdvancedGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem;
-
-  @media (max-width: 900px) {
-    grid-template-columns: 1fr;
-  }
-`
-
-const FieldBox = styled.div`
-  display: grid;
-  gap: 0.3rem;
-
-  label {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.78rem;
-    font-weight: 700;
-  }
-
-  input,
-  select {
-    min-height: 44px;
-    border-radius: 12px;
-    border: 1px solid ${({ theme }) => theme.colors.gray5};
-    background: ${({ theme }) => theme.colors.gray1};
-    color: ${({ theme }) => theme.colors.gray12};
-    padding: 0 0.85rem;
-  }
-`
-
-const FilterSummaryBar = styled.div`
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.8rem;
-  padding: 0.9rem 1rem;
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) => theme.colors.gray2};
-
-  .summaryCopy {
-    display: grid;
-    gap: 0.45rem;
-  }
-
-  .summaryCopy > strong {
-    font-size: 0.9rem;
-    letter-spacing: -0.01em;
-  }
-
-  @media (max-width: 767px) {
-    flex-direction: column;
-    align-items: stretch;
-  }
-`
-
-const ToolbarUtilityRow = styled.div`
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-
-  @media (max-width: 767px) {
-    justify-content: flex-start;
-  }
-`
-
-const SummaryPillRow = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-`
-
-const SummaryPill = styled.span<{ "data-tone"?: "neutral" }>`
-  display: inline-flex;
-  align-items: center;
-  min-height: 32px;
-  padding: 0 0.72rem;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme, "data-tone": tone }) => (tone === "neutral" ? theme.colors.gray1 : theme.colors.gray3)};
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.78rem;
-  font-weight: 700;
 `
 
 const RecentActionPanel = styled(AdminRailCard)`
@@ -2028,12 +982,6 @@ const RecentActionPanel = styled(AdminRailCard)`
   .panelHead > strong {
     font-size: 0.9rem;
     letter-spacing: -0.01em;
-  }
-
-  .panelHead > span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.8rem;
-    line-height: 1.5;
   }
 `
 
@@ -2122,475 +1070,4 @@ const RecentActionList = styled.ul`
       white-space: normal;
     }
   }
-`
-
-const ListSkeleton = styled.div`
-  .desktopRows {
-    display: grid;
-  }
-
-  .headerRow,
-  .row {
-    display: grid;
-    grid-template-columns: 88px minmax(0, 1fr) 144px 220px;
-  }
-
-  .headerRow {
-    min-height: 49px;
-    align-items: center;
-    padding: 0 1rem;
-    border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
-  }
-
-  .headerRow > span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.8rem;
-    font-weight: 700;
-  }
-
-  .row {
-    padding: 0 1rem;
-    border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
-  }
-
-  .row:last-of-type {
-    border-bottom: none;
-  }
-
-  .cell {
-    display: grid;
-    align-content: center;
-    gap: 0.34rem;
-    min-height: 78px;
-    padding: 0.95rem 0;
-  }
-
-  .actionCell {
-    grid-auto-flow: column;
-    align-items: center;
-    justify-content: start;
-    gap: 0.65rem;
-  }
-
-  .line {
-    display: block;
-    height: 12px;
-    border-radius: 999px;
-    background: ${({ theme }) =>
-      theme.scheme === "light"
-        ? "linear-gradient(90deg, rgba(148, 163, 184, 0.16), rgba(148, 163, 184, 0.28), rgba(148, 163, 184, 0.16))"
-        : "linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.12), rgba(255,255,255,0.06))"};
-  }
-
-  .line.short {
-    width: 4.5rem;
-  }
-
-  .line.medium {
-    width: 8.5rem;
-  }
-
-  .line.wide {
-    width: min(100%, 22rem);
-  }
-
-  .line.muted {
-    opacity: 0.65;
-  }
-
-  .mobileCards {
-    display: none;
-  }
-
-  @media (max-width: 900px) {
-    .desktopRows {
-      display: none;
-    }
-
-    .mobileCards {
-      display: grid;
-      gap: 0.75rem;
-      padding: 0.95rem;
-    }
-
-    .mobileCards article {
-      display: grid;
-      gap: 0.55rem;
-      padding: 0.95rem;
-      border-radius: 14px;
-      border: 1px solid ${({ theme }) => theme.colors.gray5};
-      background: ${({ theme }) => theme.colors.gray1};
-    }
-
-    .mobileCards .metaRow,
-    .mobileCards .actionRow {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.55rem;
-    }
-  }
-`
-
-const ListEmptyState = styled.div`
-  display: grid;
-  gap: 0.45rem;
-  padding: 1rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) => theme.colors.gray2};
-
-  strong {
-    font-size: 1rem;
-  }
-
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    line-height: 1.55;
-  }
-`
-
-const ListCard = styled(AdminSubtleCard)`
-  border-radius: 16px;
-  overflow: hidden;
-`
-
-const DesktopListTable = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-
-  th,
-  td {
-    padding: 0.95rem 1rem;
-    border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
-    vertical-align: top;
-  }
-
-  th {
-    text-align: left;
-    font-size: 0.8rem;
-    color: ${({ theme }) => theme.colors.gray10};
-  }
-
-  .idCell {
-    width: 88px;
-    white-space: nowrap;
-    vertical-align: middle;
-  }
-
-  .dateCell {
-    width: 144px;
-    white-space: nowrap;
-    vertical-align: middle;
-  }
-
-  .actionCell {
-    width: 220px;
-    vertical-align: middle;
-  }
-
-  tbody tr:last-of-type td {
-    border-bottom: none;
-  }
-
-  @media (max-width: 900px) {
-    display: none;
-  }
-`
-
-const TitleCell = styled.div`
-  display: grid;
-  gap: 0.38rem;
-
-  .metaRow {
-    display: flex;
-    gap: 0.55rem;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .author {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.82rem;
-  }
-`
-
-const TitleAnchor = styled.a`
-  display: -webkit-box;
-  color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.96rem;
-  font-weight: 800;
-  line-height: 1.45;
-  text-decoration: none;
-  overflow: hidden;
-  word-break: keep-all;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-
-  &:hover {
-    color: ${({ theme }) => theme.colors.gray12};
-    text-decoration: underline;
-    text-underline-offset: 0.16em;
-  }
-
-  &:focus-visible {
-    outline: 2px solid ${({ theme }) => theme.colors.gray8};
-    outline-offset: 3px;
-    border-radius: 0.32rem;
-  }
-`
-
-const TitleText = styled.strong`
-  display: -webkit-box;
-  color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.96rem;
-  font-weight: 800;
-  line-height: 1.45;
-  overflow: hidden;
-  word-break: keep-all;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-`
-
-const AuthorIdentity = styled.span`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  min-width: 0;
-`
-
-const AuthorAvatarFrame = styled.span`
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 1.4rem;
-  height: 1.4rem;
-  overflow: hidden;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 999px;
-  background: ${({ theme }) => theme.colors.gray3};
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.66rem;
-  font-weight: 800;
-  line-height: 1;
-
-  &[data-has-image="true"] {
-    background: ${({ theme }) => theme.colors.gray4};
-  }
-
-  img {
-    width: 100%;
-    height: 100%;
-  }
-`
-
-const RowActions = styled(AdminInlineActionRow)``
-
-const RowPrimaryButton = styled(AdminTextActionButton)`
-  color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.86rem;
-  font-weight: 800;
-
-  &:disabled {
-    opacity: 0.48;
-    cursor: wait;
-  }
-`
-
-const RowSecondaryButton = styled(AdminTextActionButton)`
-  font-size: 0.84rem;
-  font-weight: 700;
-
-  &:disabled {
-    opacity: 0.48;
-    cursor: wait;
-  }
-`
-
-const DangerTextButton = styled(AdminTextActionButton)`
-  color: ${({ theme }) => theme.colors.red11};
-  font-size: 0.86rem;
-  font-weight: 700;
-
-  &:disabled {
-    opacity: 0.48;
-    cursor: wait;
-  }
-`
-
-const MobileCardList = styled.div`
-  display: none;
-
-  @media (max-width: 900px) {
-    display: grid;
-    gap: 0.75rem;
-    padding: 0.95rem;
-  }
-
-  article {
-    display: grid;
-    gap: 0.55rem;
-    padding: 0.95rem;
-    border-radius: 14px;
-    border: 1px solid ${({ theme }) => theme.colors.gray5};
-    background: ${({ theme }) => theme.colors.gray1};
-  }
-
-  header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .id {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.8rem;
-    font-weight: 700;
-  }
-
-  strong {
-    font-size: 0.98rem;
-    line-height: 1.45;
-  }
-
-  .metaRow {
-    display: flex;
-    align-items: center;
-    gap: 0.55rem;
-    flex-wrap: wrap;
-  }
-
-  .author,
-  .date {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.84rem;
-  }
-
-  .actions {
-    display: flex;
-    gap: 0.55rem;
-    flex-wrap: wrap;
-  }
-`
-
-const ToastViewport = styled.div<{ "data-tone": "success" | "error" }>`
-  position: fixed;
-  right: 1.2rem;
-  bottom: 1.2rem;
-  z-index: 40;
-  display: grid;
-  gap: 0.55rem;
-  min-width: min(24rem, calc(100vw - 2rem));
-  max-width: min(28rem, calc(100vw - 2rem));
-  padding: 0.95rem 1rem;
-  border-radius: 16px;
-  border: 1px solid
-    ${({ theme, "data-tone": tone }) =>
-      tone === "error" ? theme.colors.statusDangerBorder : theme.colors.statusSuccessBorder};
-  background: ${({ theme }) => theme.colors.gray1};
-  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.18);
-
-  .copy {
-    display: grid;
-    gap: 0.2rem;
-  }
-
-  .copy strong {
-    font-size: 0.92rem;
-  }
-
-  .copy span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.84rem;
-    line-height: 1.55;
-  }
-
-  .actions {
-    display: flex;
-    gap: 0.6rem;
-    flex-wrap: wrap;
-  }
-
-  @media (max-width: 767px) {
-    left: 0.85rem;
-    right: 0.85rem;
-    bottom: 0.85rem;
-    min-width: 0;
-    max-width: none;
-  }
-`
-
-const ToastActionButton = styled.button`
-  border: 0;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.blue9};
-  padding: 0;
-  font-size: 0.84rem;
-  font-weight: 800;
-  cursor: pointer;
-`
-
-const ToastDismissButton = styled.button`
-  border: 0;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
-  padding: 0;
-  font-size: 0.82rem;
-  font-weight: 700;
-  cursor: pointer;
-`
-
-const ConfirmBackdrop = styled.div`
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-  background: rgba(15, 23, 42, 0.56);
-`
-
-const ConfirmDialog = styled.div`
-  width: min(28rem, 100%);
-  display: grid;
-  gap: 0.95rem;
-  padding: 1.1rem;
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  box-shadow: 0 24px 54px rgba(15, 23, 42, 0.24);
-
-  > strong {
-    font-size: 1.02rem;
-    letter-spacing: -0.02em;
-  }
-
-  > p {
-    margin: 0;
-    display: grid;
-    gap: 0.3rem;
-    color: ${({ theme }) => theme.colors.gray10};
-    line-height: 1.55;
-  }
-
-  .rowTitle {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-weight: 800;
-  }
-`
-
-const ConfirmButton = styled.button<{ "data-tone": "danger" }>`
-  border: 0;
-  background: ${({ theme }) => theme.colors.statusDangerSurface};
-  color: ${({ theme }) => theme.colors.statusDangerText};
-  min-height: 40px;
-  padding: 0 0.85rem;
-  border-radius: 10px;
-  font-size: 0.92rem;
-  font-weight: 800;
-  cursor: pointer;
 `

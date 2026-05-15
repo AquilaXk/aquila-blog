@@ -2,13 +2,7 @@ import styled from "@emotion/styled"
 import Link from "next/link"
 import AppIcon from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
-import {
-  AdminElevatedCard,
-  AdminSectionTitleStack,
-  adminElevatedBorder,
-  adminElevatedSurface,
-  adminElevatedShadow,
-} from "./AdminSurfacePrimitives"
+import { AdminSectionTitleStack } from "./AdminSurfacePrimitives"
 
 export type AdminHubPrimaryAction = {
   href: string
@@ -113,89 +107,97 @@ const AdminHubSurface = ({
             </Link>
           </HeroActions>
         </HeroHeader>
-
       </HeroPanel>
 
       <LandingLayout>
         <LandingMain>
-        <ActionStrip aria-label="지금 할 일">
-          <SectionHeader>
-            <h2>지금 할 일</h2>
-          </SectionHeader>
-          <ActionStripGrid>
-            {resolvedPriorityActions.map((item, index) => (
-              <Link key={`${item.href}-${item.title}`} href={item.href} passHref legacyBehavior>
-                <ActionCard data-tone={item.tone || "neutral"} data-featured={index === 0 ? "true" : "false"}>
-                  <div className="copy">
-                    <small>{index === 0 ? "우선" : "이어서"}</small>
-                    <strong>{item.title}</strong>
-                  </div>
-                </ActionCard>
-              </Link>
-            ))}
-          </ActionStripGrid>
-        </ActionStrip>
-
-        <LandingGrid>
-          <SectionCard>
+          <BorderlessSection aria-label="지금 할 일">
             <SectionHeader>
-              <h2>최근 작업</h2>
+              <h2>지금 할 일</h2>
             </SectionHeader>
-            <RecentWorkSummary>
-              <strong>{recentWorkSummary}</strong>
-            </RecentWorkSummary>
-
-            <RecentWorkGrid aria-label="최근 작업 상태">
-              {recentWorkItems.map((item) => (
-                <RecentWorkCard key={`${item.label}-${item.value}`} data-tone={item.tone || "neutral"}>
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
-                </RecentWorkCard>
-              ))}
-            </RecentWorkGrid>
-
-            <RecentWorkActions aria-label="최근 작업 이어가기">
-              {resolvedHandoffActions.map((item, index) => (
+            <ActionStripGrid>
+              {resolvedPriorityActions.map((item, index) => (
                 <Link key={`${item.href}-${item.title}`} href={item.href} passHref legacyBehavior>
-                  <RecentWorkAction data-tone={item.tone || "neutral"} data-featured={index === 0 ? "true" : "false"}>
+                  <BorderlessPanelLink
+                    data-tone={item.tone || "neutral"}
+                    data-featured={index === 0 ? "true" : "false"}
+                  >
                     <div className="copy">
-                      <small>{index === 0 ? "우선" : "다음"}</small>
+                      <small>{index === 0 ? "우선" : "이어서"}</small>
                       <strong>{item.title}</strong>
                     </div>
-                  </RecentWorkAction>
+                  </BorderlessPanelLink>
                 </Link>
               ))}
-            </RecentWorkActions>
-          </SectionCard>
+            </ActionStripGrid>
+          </BorderlessSection>
 
-          <SectionCard data-variant="subtle">
-            <SectionHeader>
-              <h2>공개 노출 상태</h2>
-            </SectionHeader>
-            <ProfileSnapshot>
-              <ProfileFrame>
-                {profileSrc ? (
-                  <ProfileImage src={profileSrc} alt={displayName} fillContainer />
-                ) : (
-                  <ProfileFallback>{displayNameInitial}</ProfileFallback>
-                )}
-              </ProfileFrame>
-              <ProfileCopy>
-                <strong>{displayName}</strong>
-                <span>{profileRole || "역할 미설정"}</span>
-                {profileBio ? <p>{profileBio}</p> : null}
-              </ProfileCopy>
-            </ProfileSnapshot>
-            <Link href="/admin/profile" passHref legacyBehavior>
-              <RailActionLink>프로필 편집</RailActionLink>
-            </Link>
-          </SectionCard>
-        </LandingGrid>
+          <LandingGrid>
+            <BorderlessSection>
+              <SectionHeader>
+                <h2>최근 작업</h2>
+              </SectionHeader>
+              <RecentWorkSummary>
+                <strong>{recentWorkSummary}</strong>
+              </RecentWorkSummary>
+
+              <RecentWorkGrid aria-label="최근 작업 상태">
+                {recentWorkItems.map((item) => (
+                  <BorderlessMetricRow
+                    key={`${item.label}-${item.value}`}
+                    data-tone={item.tone || "neutral"}
+                  >
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
+                  </BorderlessMetricRow>
+                ))}
+              </RecentWorkGrid>
+
+              <RecentWorkActions aria-label="최근 작업 이어가기">
+                {resolvedHandoffActions.map((item, index) => (
+                  <Link key={`${item.href}-${item.title}`} href={item.href} passHref legacyBehavior>
+                    <BorderlessPanelLink
+                      data-tone={item.tone || "neutral"}
+                      data-featured={index === 0 ? "true" : "false"}
+                    >
+                      <div className="copy">
+                        <small>{index === 0 ? "우선" : "다음"}</small>
+                        <strong>{item.title}</strong>
+                      </div>
+                    </BorderlessPanelLink>
+                  </Link>
+                ))}
+              </RecentWorkActions>
+            </BorderlessSection>
+
+            <BorderlessSection data-variant="subtle">
+              <SectionHeader>
+                <h2>공개 노출 상태</h2>
+              </SectionHeader>
+              <ProfileSnapshot>
+                <ProfileFrame>
+                  {profileSrc ? (
+                    <ProfileImage src={profileSrc} alt={displayName} fillContainer />
+                  ) : (
+                    <ProfileFallback>{displayNameInitial}</ProfileFallback>
+                  )}
+                </ProfileFrame>
+                <ProfileCopy>
+                  <strong>{displayName}</strong>
+                  <span>{profileRole || "역할 미설정"}</span>
+                  {profileBio ? <p>{profileBio}</p> : null}
+                </ProfileCopy>
+              </ProfileSnapshot>
+              <Link href="/admin/profile" passHref legacyBehavior>
+                <RailActionLink>프로필 편집</RailActionLink>
+              </Link>
+            </BorderlessSection>
+          </LandingGrid>
         </LandingMain>
 
         <SupportRail aria-label="허브 지원 정보">
           {resolvedSupportRailGroups.map((group) => (
-            <SupportCard key={group.title}>
+            <BorderlessSupportSection key={group.title}>
               <SupportHeader>
                 <h3>{group.title}</h3>
               </SupportHeader>
@@ -203,20 +205,20 @@ const AdminHubSurface = ({
                 {group.items.map((item) =>
                   item.href ? (
                     <Link key={`${group.title}-${item.label}`} href={item.href} passHref legacyBehavior>
-                      <SupportLink data-tone={item.tone || "neutral"}>
+                      <BorderlessPanelLink data-tone={item.tone || "neutral"}>
                         <span>{item.label}</span>
                         <strong>{item.cta || item.value || item.label}</strong>
-                      </SupportLink>
+                      </BorderlessPanelLink>
                     </Link>
                   ) : (
-                    <SupportItem key={`${group.title}-${item.label}`} data-tone={item.tone || "neutral"}>
+                    <BorderlessPanel key={`${group.title}-${item.label}`} data-tone={item.tone || "neutral"}>
                       <span>{item.label}</span>
                       <strong>{item.value || "-"}</strong>
-                    </SupportItem>
+                    </BorderlessPanel>
                   )
                 )}
               </SupportList>
-            </SupportCard>
+            </BorderlessSupportSection>
           ))}
         </SupportRail>
       </LandingLayout>
@@ -347,14 +349,17 @@ const SupportRail = styled.aside`
   align-self: start;
 `
 
-const SupportCard = styled(AdminElevatedCard)`
+const BorderlessSupportSection = styled.section`
   display: grid;
-  gap: 0.72rem;
-  padding: 0.96rem;
-  border-radius: 24px;
-  border-color: ${({ theme }) => adminElevatedBorder(theme)};
-  background: ${({ theme }) => adminElevatedSurface(theme)};
-  box-shadow: ${({ theme }) => adminElevatedShadow(theme)};
+  gap: 0.66rem;
+  min-width: 0;
+  padding: 0 0 0.92rem;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+
+  &:last-of-type {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
 `
 
 const SupportHeader = styled.div`
@@ -372,15 +377,28 @@ const SupportList = styled.div`
   gap: 0.6rem;
 `
 
-const SupportItem = styled.div`
+const BorderlessSection = styled.section`
   display: grid;
-  gap: 0.35rem;
   min-width: 0;
-  padding: 0.82rem 0.88rem;
-  border-radius: 18px;
+  gap: 0.82rem;
+  padding: 0 0 1rem;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+
+  &[data-variant="subtle"] {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+`
+
+const BorderlessPanel = styled.div`
+  display: grid;
+  gap: 0.24rem;
+  min-width: 0;
+  padding: 0.78rem 0.84rem;
+  border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(255, 255, 255, 0.74)" : "rgba(24, 24, 24, 0.82)"};
+    theme.scheme === "light" ? "rgba(255, 255, 255, 0.6)" : "rgba(255, 255, 255, 0.025)"};
 
   &[data-tone="good"] {
     border-color: ${({ theme }) => theme.colors.green7};
@@ -392,31 +410,41 @@ const SupportItem = styled.div`
 
   span {
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     font-weight: 700;
   }
 
   strong {
     min-width: 0;
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.94rem;
+    font-size: 0.9rem;
     font-weight: 800;
-    line-height: 1.4;
+    line-height: 1.36;
     word-break: keep-all;
   }
 `
 
-const SupportLink = styled.a`
+const BorderlessPanelLink = styled.a`
   display: grid;
-  gap: 0.2rem;
+  gap: 0.22rem;
+  align-items: center;
   min-width: 0;
+  min-height: 3.75rem;
   padding: 0.82rem 0.88rem;
-  border-radius: 18px;
+  border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(255, 255, 255, 0.74)" : "rgba(24, 24, 24, 0.82)"};
+    theme.scheme === "light" ? "rgba(255, 255, 255, 0.64)" : "rgba(255, 255, 255, 0.035)"};
   color: inherit;
   text-decoration: none;
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease;
+
+  &[data-featured="true"] {
+    border-color: ${({ theme }) => theme.colors.blue7};
+  }
 
   &[data-tone="good"] {
     border-color: ${({ theme }) => theme.colors.green7};
@@ -426,23 +454,39 @@ const SupportLink = styled.a`
     border-color: ${({ theme }) => theme.colors.orange7};
   }
 
+  &:hover {
+    transform: translateY(-1px);
+    border-color: ${({ theme }) => theme.colors.blue7};
+    background: ${({ theme }) =>
+      theme.scheme === "light" ? "rgba(255, 255, 255, 0.82)" : "rgba(255, 255, 255, 0.055)"};
+  }
+
+  .copy {
+    min-width: 0;
+    display: grid;
+    gap: 0.16rem;
+  }
+
+  small,
   span {
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.8rem;
-    font-weight: 700;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
   }
 
   strong {
+    min-width: 0;
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 0.92rem;
     font-weight: 800;
-    line-height: 1.38;
+    line-height: 1.36;
+    word-break: keep-all;
   }
-`
 
-const ActionStrip = styled.section`
-  display: grid;
-  gap: 0.75rem;
+  @media (max-width: 560px) {
+    min-height: 0;
+  }
 `
 
 const SectionHeader = styled(AdminSectionTitleStack)`
@@ -457,83 +501,9 @@ const ActionStripGrid = styled.div`
   gap: 0.75rem;
 `
 
-const ActionCard = styled.a`
-  display: grid;
-  gap: 0.22rem;
-  align-items: center;
-  padding: 0.92rem 1rem;
-  border-radius: 20px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => adminElevatedSurface(theme)};
-  color: inherit;
-  text-decoration: none;
-  transition:
-    transform 0.16s ease,
-    border-color 0.16s ease;
-
-  &[data-featured="true"] {
-    border-color: ${({ theme }) => theme.colors.blue7};
-  }
-
-  &[data-tone="warn"] {
-    border-color: ${({ theme }) => theme.colors.orange7};
-  }
-
-  &[data-tone="good"] {
-    border-color: ${({ theme }) => theme.colors.green7};
-  }
-
-  &:hover {
-    transform: translateY(-1px);
-    border-color: ${({ theme }) => theme.colors.blue7};
-  }
-
-  .copy {
-    min-width: 0;
-    display: grid;
-    gap: 0.16rem;
-  }
-
-  small {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.72rem;
-    font-weight: 800;
-    letter-spacing: 0.04em;
-  }
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.94rem;
-    font-weight: 800;
-  }
-
-  @media (max-width: 560px) {
-    grid-template-columns: 1fr;
-    align-items: start;
-  }
-`
-
 const LandingGrid = styled.div`
   display: grid;
   gap: 1rem;
-`
-
-const SectionCard = styled(AdminElevatedCard)`
-  min-width: 0;
-  display: grid;
-  gap: 0.8rem;
-  padding: 1rem;
-  overflow: hidden;
-  border-radius: 24px;
-  border-color: ${({ theme }) => adminElevatedBorder(theme)};
-  background: ${({ theme }) => adminElevatedSurface(theme)};
-  box-shadow: ${({ theme }) => adminElevatedShadow(theme)};
-
-  &[data-variant="subtle"] {
-    background: ${({ theme }) =>
-      theme.scheme === "light" ? "rgba(255, 255, 255, 0.64)" : "rgba(24, 24, 24, 0.74)"};
-    box-shadow: none;
-  }
 `
 
 const RecentWorkSummary = styled.div`
@@ -554,14 +524,15 @@ const RecentWorkGrid = styled.div`
   gap: 0.68rem;
 `
 
-const RecentWorkCard = styled.div`
+const BorderlessMetricRow = styled.div`
   display: grid;
   gap: 0.24rem;
-  padding: 0.86rem 0.92rem;
-  border-radius: 18px;
+  min-width: 0;
+  padding: 0.78rem 0.84rem;
+  border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(255, 255, 255, 0.82)" : "rgba(31, 31, 31, 0.88)"};
+    theme.scheme === "light" ? "rgba(255, 255, 255, 0.6)" : "rgba(255, 255, 255, 0.025)"};
 
   &[data-tone="good"] {
     border-color: ${({ theme }) => theme.colors.green7};
@@ -588,53 +559,6 @@ const RecentWorkCard = styled.div`
 const RecentWorkActions = styled.div`
   display: grid;
   gap: 0.68rem;
-`
-
-const RecentWorkAction = styled.a`
-  min-width: 0;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.78rem;
-  align-items: center;
-  padding: 0.88rem 0.92rem;
-  border-radius: 20px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(255, 255, 255, 0.82)" : "rgba(31, 31, 31, 0.88)"};
-  color: inherit;
-  text-decoration: none;
-  transition:
-    transform 0.16s ease,
-    border-color 0.16s ease;
-
-  &:hover {
-    transform: translateY(-1px);
-    border-color: ${({ theme }) => theme.colors.blue7};
-  }
-
-  &[data-featured="true"] {
-    border-color: ${({ theme }) => theme.colors.blue7};
-  }
-
-  .copy {
-    min-width: 0;
-    display: grid;
-    gap: 0.2rem;
-  }
-
-  small {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.72rem;
-    font-weight: 800;
-    letter-spacing: 0.04em;
-  }
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.92rem;
-    font-weight: 800;
-    word-break: keep-all;
-  }
 `
 
 const ProfileSnapshot = styled.div`

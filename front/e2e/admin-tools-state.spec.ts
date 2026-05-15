@@ -5,9 +5,10 @@ import { expect, test } from "@playwright/test"
 test.describe("admin tools state contract", () => {
   test("운영 도구는 helper copy와 읽기 전용 pill 없이 요약 카드와 실행 버튼만 남긴다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
+    const styleSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspace.styles.ts"), "utf8")
 
     expect(source).toContain("문제 확인과 복구를 같은 흐름에서 처리합니다")
-    expect(source).toContain("grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));")
+    expect(styleSource).toContain("grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));")
     expect(source).not.toContain("메일, 작업 큐, 정리 상태, 보안 이벤트처럼 장애와 직접 연결되는 항목만 우선 다룹니다.")
     expect(source).not.toContain("<ReadonlyPill>읽기 전용</ReadonlyPill>")
     expect(source).not.toContain("진단 탭을 선택하면 해당 패널을 불러옵니다.")

@@ -24,45 +24,93 @@ test.describe("admin surface primitives contract", () => {
 
   test("dashboard context rail yields priority earlier on tablet widths", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/dashboard.tsx"), "utf8")
+    const styleSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspace.styles.ts"),
+      "utf8",
+    )
 
     expect(source).toContain('"/system/api/v1/adm/dashboard-snapshot"')
-    expect(source).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));")
-    expect(source).toContain("@media (max-width: 1180px) {\n    grid-template-columns: 1fr;")
     expect(source).toContain("const grafanaPanelsCanEmbed = env.monitoringEmbedIsPublicGrafana && Boolean(grafanaDashboardUrl)")
     expect(source).toContain("private Grafana 대시보드라 iframe 대신 링크로만 제공합니다.")
     expect(source).toContain("<strong>최근 실패</strong>")
     expect(source).toContain("<strong>런북</strong>")
     expect(source).toContain("<strong>즉시 이동</strong>")
     expect(source).toContain("<ContextGrid>")
-    expect(source).toContain("const ContextLinkGrid = styled(AdminInfoList)`")
-    expect(source).toContain("const CompactPanelCard = styled(PanelCard)`")
-    expect(source).toContain("const CompactPanelSummary = styled.div`")
-    expect(source).toContain("const SnapshotLeadBody = styled(PanelBody)`")
-    expect(source).toContain("const LeadMetaGrid = styled.div`")
-    expect(source).toContain("const InsightLink = styled(AdminTextActionLink)`")
     expect(source).toContain("<AdditionalPanelsSection>")
-    expect(source).toContain("const PrioritySummary = styled.div`")
-    expect(source).toContain("const PriorityLink = styled(AdminTextActionLink)`")
+    expect(styleSource).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));")
+    expect(styleSource).toContain("@media (max-width: 1180px) {\n    grid-template-columns: 1fr;")
+    expect(styleSource).toContain("export const ContextLinkGrid = styled(AdminInfoList)`")
+    expect(styleSource).toContain("export const CompactPanelCard = styled(PanelCard)`")
+    expect(styleSource).toContain("export const CompactPanelSummary = styled.div`")
+    expect(styleSource).toContain("export const SnapshotLeadBody = styled(PanelBody)`")
+    expect(styleSource).toContain("export const LeadMetaGrid = styled.div`")
+    expect(styleSource).toContain("export const InsightLink = styled(AdminTextActionLink)`")
+    expect(styleSource).toContain("export const PrioritySummary = styled.div`")
+    expect(styleSource).toContain("export const PriorityLink = styled(AdminTextActionLink)`")
   })
 
   test("posts/tools reuse shared badge and action primitives", () => {
     const postsListSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceList.tsx"), "utf8")
     const toolsSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
+    const toolsStyleSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspace.styles.ts"),
+      "utf8",
+    )
 
     expect(postsListSource).toContain("const VisibilityBadge = styled(AdminStatusPill)<{ \"data-tone\": string }>`")
     expect(postsListSource).toContain("const RowPrimaryButton = styled(AdminTextActionButton)`")
     expect(postsListSource).toContain("const RowActions = styled(AdminInlineActionRow)``")
 
-    expect(toolsSource).toContain("const StatusBadge = styled(AdminStatusPill)`")
-    expect(toolsSource).toContain("const FreshnessBadge = styled(AdminStatusPill)`")
-    expect(toolsSource).toContain("const ActionRowButton = styled(AdminActionCardButton)``")
+    expect(toolsStyleSource).toContain("export const StatusBadge = styled(AdminStatusPill)`")
+    expect(toolsStyleSource).toContain("export const FreshnessBadge = styled(AdminStatusPill)`")
+    expect(toolsStyleSource).toContain("export const ActionRowButton = styled(AdminActionCardButton)``")
     expect(toolsSource).toContain("const [isMutationExpanded, setIsMutationExpanded] = useState(false)")
     expect(toolsSource).toContain('const [activeSection, setActiveSection] = useState<SectionKey>("diagnostics")')
     expect(toolsSource).not.toContain("<WorkspaceIntroCard>")
     expect(toolsSource).toContain("<DetailsPanel open={isMutationExpanded}>")
     expect(toolsSource).not.toContain('<SectionNav aria-label="운영 섹션">')
-    expect(toolsSource).not.toContain("const SectionNav = styled(AdminWorkspaceSectionNav)`")
-    expect(toolsSource).not.toContain("const SectionNavButton = styled(AdminWorkspaceSectionNavButton)``")
+    expect(toolsStyleSource).not.toContain("const SectionNav = styled(AdminWorkspaceSectionNav)`")
+    expect(toolsStyleSource).not.toContain("const SectionNavButton = styled(AdminWorkspaceSectionNavButton)``")
+  })
+
+  test("large admin pages move style-heavy surface definitions out of orchestration pages", () => {
+    const profileSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+    const toolsSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
+    const dashboardSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/dashboard.tsx"), "utf8")
+    const profileStyles = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspace.styles.ts"),
+      "utf8",
+    )
+    const toolsStyles = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspace.styles.ts"), "utf8")
+    const dashboardStyles = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspace.styles.ts"),
+      "utf8",
+    )
+
+    expect(profileSource).toContain('from "src/routes/Admin/AdminProfileWorkspace.styles"')
+    expect(toolsSource).toContain('from "src/routes/Admin/AdminToolsWorkspace.styles"')
+    expect(dashboardSource).toContain('from "src/routes/Admin/AdminDashboardWorkspace.styles"')
+
+    expect(profileSource).not.toContain("const PreviewRail = styled(")
+    expect(profileSource).not.toContain("const ModalOverlay = styled.div`")
+    expect(profileSource).not.toContain("const LinkRowCard = styled.div`")
+    expect(toolsSource).not.toContain("const ExecutionLayout = styled.div`")
+    expect(toolsSource).not.toContain("const ResultPanel = styled.pre`")
+    expect(toolsSource).not.toContain("const WorkspaceSection = styled.section`")
+    expect(dashboardSource).not.toContain("const PanelGrid = styled.section`")
+    expect(dashboardSource).not.toContain("const PriorityTable = styled.table`")
+    expect(dashboardSource).not.toContain("const ServiceRail = styled.section`")
+
+    expect(profileStyles).toContain("export const PreviewRail = styled(AdminStickyRail)`")
+    expect(profileStyles).toContain("export const LinkRowCard = styled.div`")
+    expect(toolsStyles).toContain("export const ExecutionLayout = styled.div`")
+    expect(toolsStyles).toContain("export const ResultPanel = styled.pre`")
+    expect(dashboardStyles).toContain("export const PanelGrid = styled.section`")
+    expect(dashboardStyles).toContain("export const PriorityTable = styled.table`")
+
+    expect(profileSource.split("\n").length).toBeLessThan(2600)
+    expect(toolsSource.split("\n").length).toBeLessThan(2100)
+    expect(dashboardSource.split("\n").length).toBeLessThan(1050)
   })
 
   test("posts workspace splits repeated UI regions out of the orchestration page", () => {
@@ -108,8 +156,20 @@ test.describe("admin surface primitives contract", () => {
     const dashboardSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/dashboard.tsx"), "utf8")
     const profileSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
     const toolsSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
+    const dashboardStyleSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspace.styles.ts"),
+      "utf8",
+    )
+    const profileStyleSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspace.styles.ts"),
+      "utf8",
+    )
+    const toolsStyleSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspace.styles.ts"),
+      "utf8",
+    )
 
-    for (const source of [dashboardSource, profileSource, toolsSource]) {
+    for (const source of [dashboardSource, profileSource, toolsSource, dashboardStyleSource, profileStyleSource, toolsStyleSource]) {
       expect(source).not.toContain("border-radius: 28px;")
       expect(source).not.toContain("border-radius: 30px;")
       expect(source).not.toContain("border-radius: 32px;")
@@ -118,9 +178,13 @@ test.describe("admin surface primitives contract", () => {
 
   test("tools workspace uses detail-like hero copy and ops rail labels", () => {
     const toolsSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
+    const toolsStyleSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspace.styles.ts"),
+      "utf8",
+    )
 
     expect(toolsSource).toContain("문제 확인과 복구를 같은 흐름에서 처리합니다")
-    expect(toolsSource).toContain("grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));")
+    expect(toolsStyleSource).toContain("grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));")
     expect(toolsSource).toContain("<h2>메일과 큐</h2>")
     expect(toolsSource).toContain("<h2>정리와 보안</h2>")
     expect(toolsSource).toContain("<h2>최근 진단 결과</h2>")
@@ -128,9 +192,9 @@ test.describe("admin surface primitives contract", () => {
     expect(toolsSource).not.toContain("<h2>실행</h2>")
     expect(toolsSource).not.toContain("<h2>최근 실행 결과</h2>")
     expect(toolsSource).not.toContain("<h2>실데이터 테스트</h2>")
-    expect(toolsSource).toContain("AdminStickyRail,")
-    expect(toolsSource).toContain("const ExecutionLayout = styled.div`")
-    expect(toolsSource).toContain("const ExecutionRail = styled(AdminStickyRail)`")
+    expect(toolsStyleSource).toContain("AdminStickyRail,")
+    expect(toolsStyleSource).toContain("export const ExecutionLayout = styled.div`")
+    expect(toolsStyleSource).toContain("export const ExecutionRail = styled(AdminStickyRail)`")
     expect(toolsSource).toContain("<h3>실행 전 체크</h3>")
     expect(toolsSource).toContain("<h3>위험 액션</h3>")
     expect(toolsSource).toContain("<h3>런북/장애 문서</h3>")
@@ -139,8 +203,8 @@ test.describe("admin surface primitives contract", () => {
     expect(toolsSource).not.toContain("<ExecutionGrid>")
     expect(toolsSource).not.toContain("requestIdleCallback")
     expect(toolsSource).not.toContain("isWorkspaceReady")
-    expect(toolsSource).toContain("&:focus-visible {")
-    expect(toolsSource).toContain("box-shadow: ${({ theme }) => adminInteractiveFocusRing(theme)};")
+    expect(toolsStyleSource).toContain("&:focus-visible {")
+    expect(toolsStyleSource).toContain("box-shadow: ${({ theme }) => adminInteractiveFocusRing(theme)};")
   })
 
   test("admin utility bar keeps explicit current-view context and tablet compact nav without extra account CTA", () => {

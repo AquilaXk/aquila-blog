@@ -1,10 +1,100 @@
+import type { Editor as TiptapEditor } from "@tiptap/core"
 import { Fragment, Node as ProseMirrorNode } from "@tiptap/pm/model"
+import { NodeSelection } from "@tiptap/pm/state"
+import { CellSelection } from "@tiptap/pm/tables"
+
+import { getTableOverflowMode } from "./tableWidthModel"
 
 export type TableAxis = "row" | "column"
 
 export type TableColumnCellRef = {
   pos: number
   node: ProseMirrorNode
+}
+
+export type ActiveTableStructureState = {
+  hasHeaderColumn: boolean
+  hasHeaderRow: boolean
+  overflowMode: string
+}
+
+const TABLE_CONTEXT_NODE_NAMES = new Set(["table", "tableRow", "tableCell", "tableHeader"])
+
+export const hasTableContextInResolvedPos = (resolvedPos: { depth: number; node: (depth: number) => { type: { name: string } } }) => {
+  for (let depth = resolvedPos.depth; depth >= 0; depth -= 1) {
+    if (TABLE_CONTEXT_NODE_NAMES.has(resolvedPos.node(depth).type.name)) {
+      return true
+    }
+  }
+  return false
+}
+
+export const isTableSelectionActive = (editor?: TiptapEditor | null) => {
+  if (!editor) return false
+  const { selection } = editor.state
+  if (selection instanceof CellSelection) return true
+  if (selection instanceof NodeSelection && selection.node.type.name === "table") return true
+  if (
+    editor.isActive("table") ||
+    editor.isActive("tableRow") ||
+    editor.isActive("tableCell") ||
+    editor.isActive("tableHeader")
+  ) {
+    return true
+  }
+
+  return hasTableContextInResolvedPos(selection.$from) || hasTableContextInResolvedPos(selection.$to)
+}
+
+export const getActiveTableStructureState = (editor?: TiptapEditor | null): ActiveTableStructureState => {
+  if (!editor) {
+    return {
+      hasHeaderRow: false,
+      hasHeaderColumn: false,
+      overflowMode: "normal",
+    }
+  }
+
+  const { selection } = editor.state
+  const tableNode =
+    selection instanceof NodeSelection && selection.node.type.name === "table"
+      ? selection.node
+      : (() => {
+          for (let depth = selection.$from.depth; depth >= 0; depth -= 1) {
+            const node = selection.$from.node(depth)
+            if (node.type.name === "table") return node
+          }
+          for (let depth = selection.$to.depth; depth >= 0; depth -= 1) {
+            const node = selection.$to.node(depth)
+            if (node.type.name === "table") return node
+          }
+          return null
+        })()
+
+  if (!tableNode || tableNode.type.name !== "table" || tableNode.childCount === 0) {
+    return {
+      hasHeaderRow: false,
+      hasHeaderColumn: false,
+      overflowMode: "normal",
+    }
+  }
+
+  const rows = Array.from({ length: tableNode.childCount }, (_, rowIndex) => tableNode.child(rowIndex))
+  const firstRow = rows[0]
+  const hasHeaderRow =
+    firstRow?.childCount > 0 &&
+    Array.from({ length: firstRow.childCount }, (_, columnIndex) => firstRow.child(columnIndex)).every(
+      (cell) => cell.type.name === "tableHeader"
+    )
+  const hasHeaderColumn =
+    rows.length > 0 &&
+    rows.every((row) => row.childCount > 0 && row.child(0)?.type.name === "tableHeader")
+
+  return {
+    hasHeaderRow,
+    hasHeaderColumn,
+    overflowMode: getTableOverflowMode(tableNode),
+  }
 }
 
 const isTableCellNode = (node: ProseMirrorNode | null | undefined) =>

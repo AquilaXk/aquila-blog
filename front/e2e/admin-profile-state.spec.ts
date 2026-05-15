@@ -62,6 +62,26 @@ test.describe("admin profile state contract", () => {
     expect(source.split("\n").length).toBeLessThan(2250)
   })
 
+  test("profile page는 persistence helper를 Admin route model로 위임한다", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+    const modelPath = path.resolve(__dirname, "../src/routes/Admin/AdminProfilePersistenceModel.ts")
+    expect(existsSync(modelPath)).toBe(true)
+    const modelSource = existsSync(modelPath) ? readFileSync(modelPath, "utf8") : ""
+
+    expect(source).toContain('} from "src/routes/Admin/AdminProfilePersistenceModel"')
+    expect(modelSource).toContain("export const PROFILE_UNSAVED_CHANGES_MESSAGE")
+    expect(modelSource).toContain("export const readImageSourceSizeFromFile =")
+    expect(modelSource).toContain("export const parseResponseErrorBody =")
+    expect(modelSource).toContain("export const revalidatePublicBlogAppearance =")
+    expect(modelSource).toContain("export const requestProfileImageUpload =")
+    expect(source).not.toContain("const PROFILE_UNSAVED_CHANGES_MESSAGE =")
+    expect(source).not.toContain("const readImageSourceSizeFromFile =")
+    expect(source).not.toContain("const parseResponseErrorBody =")
+    expect(source).not.toContain("const revalidatePublicBlogAppearance =")
+    expect(source).not.toContain("const requestProfileImageUpload =")
+    expect(source.split("\n").length).toBeLessThan(2190)
+  })
+
   test("profile 작업공간은 공개 노출 기준의 상세형 hero와 rail copy를 사용한다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
 
@@ -189,9 +209,13 @@ test.describe("admin profile state contract", () => {
 
   test("profile 디자인 공개 적용은 primary action에서 저장 후 publish까지 처리한다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+    const persistenceModelSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfilePersistenceModel.ts"),
+      "utf8"
+    )
 
-    expect(source).toContain("const revalidatePublicBlogAppearance = async (): Promise<boolean> => {")
-    expect(source).toContain('await fetch("/api/revalidate", {')
+    expect(persistenceModelSource).toContain("export const revalidatePublicBlogAppearance = async (): Promise<boolean> => {")
+    expect(persistenceModelSource).toContain('await fetch("/api/revalidate", {')
     expect(source).toContain("const validateDraftBeforePersistence = useCallback(")
     expect(source).toContain("const saveWorkspaceDraft = useCallback(")
     expect(source).toContain("const shouldPublishWorkspace = workspaceForPublish?.dirtyFromPublished ?? hasPublishedDiff")

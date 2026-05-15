@@ -5,7 +5,7 @@ import Link from "next/link"
 import type { SimpleIcon } from "simple-icons"
 import { useEffect, useRef, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
-import AppIcon, { type IconName } from "src/components/icons/AppIcon"
+import AppIcon from "src/components/icons/AppIcon"
 import type { AuthMember } from "src/hooks/useAuthSession"
 import useAuthSession from "src/hooks/useAuthSession"
 import { AdminPageProps, buildAdminPagePropsFromMember, getAdminPageProps, readAdminProtectedBootstrap } from "src/libs/server/adminPage"
@@ -19,6 +19,20 @@ import {
   getMonitoringEnv,
 } from "src/routes/Admin/adminMonitoring"
 import AdminShell from "src/routes/Admin/AdminShell"
+import {
+  EMPTY_INITIAL_SNAPSHOT,
+  formatAge,
+  formatInstant,
+  getMailStatusLabel,
+  getMailStatusTone,
+  getTaskQueueTone,
+  type AdminDashboardInitialSnapshot,
+  type DashboardKpiCard,
+  type DashboardPriorityRow,
+  type DashboardQuickAction,
+  type DashboardSnapshotPayload,
+  type SystemHealthPayload,
+} from "src/routes/Admin/AdminDashboardWorkspaceModel"
 import {
   Main,
   Shell,
@@ -72,48 +86,6 @@ import {
   AdminInfoStatusList,
 } from "src/routes/Admin/AdminSurfacePrimitives"
 
-type SystemHealthPayload = {
-  status?: string
-}
-
-type DashboardSnapshotPayload = {
-  generatedAt: string
-  taskQueue: {
-    pendingCount: number
-    readyPendingCount: number
-    processingCount: number
-    failedCount: number
-    staleProcessingCount: number
-    oldestReadyPendingAgeSeconds: number | null
-    latestFailureAt: string | null
-    latestFailureMessage: string | null
-  }
-  signupMail: {
-    status: string
-    queueLagSeconds: number | null
-    latestFailureAt: string | null
-    latestFailureMessage: string | null
-  }
-  authSecurity: {
-    recentEventCount: number
-    blockedEventCount: number
-    latestEventAt: string | null
-    latestBlockedAt: string | null
-  }
-  storageCleanup: {
-    eligibleForPurgeCount: number
-    blockedBySafetyThreshold: boolean
-    oldestEligiblePurgeAfter: string | null
-  }
-}
-
-type AdminDashboardInitialSnapshot = {
-  systemHealth: SystemHealthPayload | null
-  dashboard: DashboardSnapshotPayload | null
-  systemHealthFetchedAt: string | null
-  dashboardFetchedAt: string | null
-}
-
 type AdminDashboardPageProps = AdminPageProps & {
   initialSnapshot: AdminDashboardInitialSnapshot
 }
@@ -122,37 +94,6 @@ type AdminDashboardBootstrapPayload = {
   member: AuthMember
   health: SystemHealthPayload
   dashboard: DashboardSnapshotPayload
-}
-
-type DashboardKpiCard = {
-  key: string
-  label: string
-  value: string
-  detail: string
-  tone: "neutral" | "good" | "warn"
-  icon: IconName
-}
-
-type DashboardPriorityRow = {
-  key: string
-  title: string
-  summary: string
-  tone: "neutral" | "good" | "warn"
-  href: string
-  actionLabel: string
-}
-
-type DashboardQuickAction = {
-  key: string
-  href: string
-  label: string
-}
-
-const EMPTY_INITIAL_SNAPSHOT: AdminDashboardInitialSnapshot = {
-  systemHealth: null,
-  dashboard: null,
-  systemHealthFetchedAt: null,
-  dashboardFetchedAt: null,
 }
 
 async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | null> {
@@ -165,61 +106,6 @@ async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | 
   } catch {
     return null
   }
-}
-
-const ADMIN_DASHBOARD_DISPLAY_TIME_ZONE = "Asia/Seoul"
-
-const formatInstant = (value: string | null | undefined) => {
-  if (!value) return "-"
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-
-  return new Intl.DateTimeFormat("ko-KR", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: ADMIN_DASHBOARD_DISPLAY_TIME_ZONE,
-  }).format(date)
-}
-
-const formatAge = (seconds: number | null | undefined) => {
-  if (seconds == null) return "-"
-  if (seconds < 60) return `${seconds}초`
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}분`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}시간`
-  return `${Math.floor(seconds / 86400)}일`
-}
-
-const getMailStatusLabel = (value: string | null | undefined) => {
-  switch (value) {
-    case "READY":
-      return "전송 준비"
-    case "TEST_MODE":
-      return "테스트 모드"
-    case "MISCONFIGURED":
-      return "설정 누락"
-    case "QUEUE_LOCKED":
-      return "큐 잠금"
-    case "CONNECTION_FAILED":
-      return "연결 실패"
-    case "UNAVAILABLE":
-      return "비활성"
-    default:
-      return value || "미확인"
-  }
-}
-
-const getMailStatusTone = (value: string | null | undefined): DashboardKpiCard["tone"] =>
-  value === "READY" || value === "TEST_MODE" ? "good" : value ? "warn" : "neutral"
-
-const getTaskQueueTone = (snapshot: DashboardSnapshotPayload | null | undefined): DashboardKpiCard["tone"] => {
-  if (!snapshot) return "neutral"
-  if (snapshot.taskQueue.failedCount > 0 || snapshot.taskQueue.staleProcessingCount > 0) return "warn"
-  if (snapshot.taskQueue.readyPendingCount === 0 && snapshot.taskQueue.processingCount === 0) return "good"
-  return "neutral"
 }
 
 export const getServerSideProps: GetServerSideProps<AdminDashboardPageProps> = async ({ req, res }) => {

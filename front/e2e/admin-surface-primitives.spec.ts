@@ -178,6 +178,10 @@ test.describe("admin surface primitives contract", () => {
 
   test("tools workspace uses detail-like hero copy and ops rail labels", () => {
     const toolsSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
+    const toolsResultsSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminToolsResultsPanel.tsx"),
+      "utf8",
+    )
     const toolsStyleSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspace.styles.ts"),
       "utf8",
@@ -187,7 +191,7 @@ test.describe("admin surface primitives contract", () => {
     expect(toolsStyleSource).toContain("grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));")
     expect(toolsSource).toContain("<h2>메일과 큐</h2>")
     expect(toolsSource).toContain("<h2>정리와 보안</h2>")
-    expect(toolsSource).toContain("<h2>최근 진단 결과</h2>")
+    expect(toolsResultsSource).toContain("<h2>최근 진단 결과</h2>")
     expect(toolsSource).not.toContain("<h2>진단</h2>")
     expect(toolsSource).not.toContain("<h2>실행</h2>")
     expect(toolsSource).not.toContain("<h2>최근 실행 결과</h2>")

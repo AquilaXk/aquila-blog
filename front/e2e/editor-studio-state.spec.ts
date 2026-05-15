@@ -373,6 +373,15 @@ test.describe("editor studio state", () => {
     expect(existsSync(floatingBubbleStatePath)).toBe(true)
     const floatingBubbleStateSource = existsSync(floatingBubbleStatePath) ? readFileSync(floatingBubbleStatePath, "utf8") : ""
     const writerEditorHostSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/WriterEditorHost.tsx"), "utf8")
+    const dedicatedEditorRootStyle = dedicatedEditorSurfaceSource.match(
+      /const EditorStudioRoot = styled\.main`([\s\S]*?)`\n\nconst EditorStudioLoadingState/
+    )?.[1] ?? ""
+    const dedicatedEditorFrameStyle = dedicatedEditorSurfaceSource.match(
+      /const EditorStudioFrame = styled\.div`([\s\S]*?)`\n\nconst EditorStudioWritingColumn/
+    )?.[1] ?? ""
+    const dedicatedEditorTopBarStyle = dedicatedEditorSurfaceSource.match(
+      /const EditorStudioTopBar = styled\.div`([\s\S]*?)`\n\nconst EditorExitAction/
+    )?.[1] ?? ""
 
     expect(editorStudioSource).not.toContain("BLOCK_EDITOR_V2_ENABLED")
     expect(editorStudioSource).not.toContain("EditorStudioLegacyToolbar")
@@ -380,7 +389,15 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).toContain("const isCompactSplitPreview = false")
     expect(editorStudioSource).toContain("EditorStudioDedicatedEditorSurface")
     expect(editorStudioSource).not.toContain("const EditorStudioRoot")
-    expect(dedicatedEditorSurfaceSource).toContain("width: min(100%, 1600px);")
+    expect(dedicatedEditorRootStyle).toContain("width: 100vw;")
+    expect(dedicatedEditorRootStyle).toContain("margin-left: calc(50% - 50vw);")
+    expect(dedicatedEditorRootStyle).toContain("margin-right: calc(50% - 50vw);")
+    expect(dedicatedEditorRootStyle).not.toContain("width: min(100%, 1600px);")
+    expect(dedicatedEditorRootStyle).not.toContain("margin: 0 auto;")
+    expect(dedicatedEditorTopBarStyle).toContain("width: min(100%, 1600px);")
+    expect(dedicatedEditorTopBarStyle).toContain("margin: 0 auto;")
+    expect(dedicatedEditorFrameStyle).toContain("width: min(100%, 1600px);")
+    expect(dedicatedEditorFrameStyle).toContain("margin: 0 auto;")
     expect(dedicatedEditorSurfaceSource).toContain("grid-template-columns: minmax(0, 1fr);")
     expect(dedicatedEditorSurfaceSource).toContain('data-testid="editor-studio-frame"')
     expect(editorStudioSource).toContain('import { WriterEditorHost } from "./WriterEditorHost"')

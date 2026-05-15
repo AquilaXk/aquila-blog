@@ -45,4 +45,28 @@ test.describe("admin tools state contract", () => {
     expect(source).not.toContain("복구 전에 같이 읽어야 할 화면과 기록으로 바로 이동합니다.")
     expect(source).not.toContain('data-emphasis="primary"')
   })
+
+  test("운영 도구는 최근 진단 결과 panel 렌더링을 Admin route component로 위임한다", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
+    const resultsPanelPath = path.resolve(__dirname, "../src/routes/Admin/AdminToolsResultsPanel.tsx")
+    expect(existsSync(resultsPanelPath)).toBe(true)
+    const resultsPanelSource = existsSync(resultsPanelPath) ? readFileSync(resultsPanelPath, "utf8") : ""
+
+    expect(source).toContain('AdminToolsResultsPanel from "src/routes/Admin/AdminToolsResultsPanel"')
+    expect(source).toContain("<AdminToolsResultsPanel")
+    expect(resultsPanelSource).toContain("export type AdminToolsResultsPanelProps")
+    expect(resultsPanelSource).toContain("export default function AdminToolsResultsPanel")
+    expect(resultsPanelSource).toContain("<ResultFilterRow")
+    expect(resultsPanelSource).toContain("<ResultsLayout")
+    expect(resultsPanelSource).toContain("<ResultPrimaryCard")
+    expect(resultsPanelSource).toContain("<ResultHistoryCard")
+    expect(resultsPanelSource).toContain("<EmptyResultState")
+    expect(resultsPanelSource).toContain("최근 진단 결과")
+    expect(source).not.toContain("<ResultFilterRow")
+    expect(source).not.toContain("<ResultsLayout")
+    expect(source).not.toContain("<ResultPrimaryCard")
+    expect(source).not.toContain("<ResultHistoryCard")
+    expect(source).not.toContain("<EmptyResultState")
+    expect(source.split("\n").length).toBeLessThan(1760)
+  })
 })

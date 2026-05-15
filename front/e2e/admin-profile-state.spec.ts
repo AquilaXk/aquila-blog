@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { expect, test } from "@playwright/test"
 import { buildProfileWorkspaceAdminProfileCacheFields, normalizeProfileWorkspaceContent } from "src/libs/profileWorkspace"
@@ -36,6 +36,30 @@ test.describe("admin profile state contract", () => {
     expect(styleSource).not.toContain("const PreviewStatusMeta = styled.small`")
     expect(source).not.toContain('data-tone="synced">동기화됨')
     expect(source).not.toContain("현재 이미지")
+  })
+
+  test("profile page는 workspace 순수 모델을 Admin route model로 위임한다", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+    const modelPath = path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceModel.ts")
+    expect(existsSync(modelPath)).toBe(true)
+    const modelSource = existsSync(modelPath) ? readFileSync(modelPath, "utf8") : ""
+
+    expect(source).toContain('} from "src/routes/Admin/AdminProfileWorkspaceModel"')
+    expect(modelSource).toContain("export const WORKSPACE_SECTIONS")
+    expect(modelSource).toContain("export const serializeWorkspaceSection = (")
+    expect(modelSource).toContain("export const createBlankLinkItem = (")
+    expect(modelSource).toContain("export const validateLinkInputs = (")
+    expect(modelSource).toContain("export const toPayloadLinks = (")
+    expect(modelSource).toContain("export const buildWorkspaceFallback = (")
+    expect(source).not.toContain("const WORKSPACE_SECTIONS:")
+    expect(source).not.toContain("const pickWorkspaceSectionContent =")
+    expect(source).not.toContain("const serializeWorkspaceSection =")
+    expect(source).not.toContain("const moveListItem =")
+    expect(source).not.toContain("const createBlankLinkItem =")
+    expect(source).not.toContain("const validateLinkInputs =")
+    expect(source).not.toContain("const toPayloadLinks =")
+    expect(source).not.toContain("const buildWorkspaceFallback =")
+    expect(source.split("\n").length).toBeLessThan(2250)
   })
 
   test("profile 작업공간은 공개 노출 기준의 상세형 hero와 rail copy를 사용한다", () => {
@@ -151,9 +175,13 @@ test.describe("admin profile state contract", () => {
 
   test("profile 화면은 전역 블로그 디자인 설정과 legacy 전용 scheme control을 가진다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+    const modelSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceModel.ts"),
+      "utf8"
+    )
 
-    expect(source).toContain('id: "design"')
-    expect(source).toContain('label: "디자인"')
+    expect(modelSource).toContain('id: "design"')
+    expect(modelSource).toContain('label: "디자인"')
     expect(source).toContain('updateDraft("blogDesign",')
     expect(source).toContain('updateDraft("legacyBlogScheme",')
     expect(source).toContain('draft.blogDesign === "legacy"')

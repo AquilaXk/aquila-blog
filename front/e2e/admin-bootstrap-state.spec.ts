@@ -16,7 +16,10 @@ test.describe("admin bootstrap state contract", () => {
     const adminPageSource = readFileSync(path.resolve(__dirname, "../src/libs/server/adminPage.ts"), "utf8")
     const postsSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePage.tsx"), "utf8")
 
-    expect(adminPageSource).toContain("export const buildAdminPagePropsFromMember = (member: AuthMember): AdminPageProps => {")
+    expect(adminPageSource).toContain("export const buildAdminPagePropsFromMember = (")
+    expect(adminPageSource).toContain("member: AuthMember,")
+    expect(adminPageSource).toContain("initialProfileSnapshot: AdminProfile | null = buildAdminProfileSnapshotFromMember(member)")
+    expect(adminPageSource).toContain("): AdminPageProps => {")
     expect(adminPageSource).toContain("queryClient.setQueryData(queryKey.authMeProbe(), true)")
     expect(adminPageSource).toContain("queryClient.setQueryData(queryKey.authMe(), member)")
     expect(adminPageSource).toContain("export const readAdminProtectedBootstrap = async <T>(")

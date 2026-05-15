@@ -69,4 +69,27 @@ test.describe("admin tools state contract", () => {
     expect(source).not.toContain("<EmptyResultState")
     expect(source.split("\n").length).toBeLessThan(1760)
   })
+
+  test("운영 도구는 execution rail 렌더링을 Admin route component로 위임한다", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
+    const executionRailPath = path.resolve(__dirname, "../src/routes/Admin/AdminToolsExecutionRail.tsx")
+    expect(existsSync(executionRailPath)).toBe(true)
+    const executionRailSource = existsSync(executionRailPath) ? readFileSync(executionRailPath, "utf8") : ""
+
+    expect(source).toContain('AdminToolsExecutionRail from "src/routes/Admin/AdminToolsExecutionRail"')
+    expect(source).toContain("<AdminToolsExecutionRail")
+    expect(executionRailSource).toContain("export type AdminToolsExecutionRailProps")
+    expect(executionRailSource).toContain("export default function AdminToolsExecutionRail")
+    expect(executionRailSource).toContain("<ExecutionRail")
+    expect(executionRailSource).toContain("<ActionGroupCard")
+    expect(executionRailSource).toContain("실행 전 체크")
+    expect(executionRailSource).toContain("위험 액션")
+    expect(executionRailSource).toContain("런북/장애 문서")
+    expect(source).not.toContain("<ExecutionRail")
+    expect(source).not.toContain("<ActionGroupCard")
+    expect(source).not.toContain("실행 전 체크")
+    expect(source).not.toContain("위험 액션")
+    expect(source).not.toContain("런북/장애 문서")
+    expect(source.split("\n").length).toBeLessThan(1700)
+  })
 })

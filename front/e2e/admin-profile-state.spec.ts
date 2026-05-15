@@ -108,6 +108,28 @@ test.describe("admin profile state contract", () => {
     expect(source.split("\n").length).toBeLessThan(2050)
   })
 
+  test("profile page는 이미지 편집 modal 렌더링을 Admin route component로 위임한다", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+    const modalPath = path.resolve(__dirname, "../src/routes/Admin/AdminProfileImageEditorModal.tsx")
+    expect(existsSync(modalPath)).toBe(true)
+    const modalSource = existsSync(modalPath) ? readFileSync(modalPath, "utf8") : ""
+
+    expect(source).toContain('AdminProfileImageEditorModal from "src/routes/Admin/AdminProfileImageEditorModal"')
+    expect(source).toContain("<AdminProfileImageEditorModal")
+    expect(modalSource).toContain("export type AdminProfileImageEditorModalProps")
+    expect(modalSource).toContain("export default function AdminProfileImageEditorModal")
+    expect(modalSource).toContain("<ModalOverlay")
+    expect(modalSource).toContain("<ModalEditorFrame")
+    expect(modalSource).toContain("<ModalSliderWrap")
+    expect(modalSource).toContain("프로필 이미지 편집")
+    expect(modalSource).toContain("편집 결과 저장")
+    expect(source).not.toContain("<ModalOverlay")
+    expect(source).not.toContain("<ModalEditorFrame")
+    expect(source).not.toContain("<ModalSliderWrap")
+    expect(source).not.toContain('aria-label="프로필 이미지 편집"')
+    expect(source.split("\n").length).toBeLessThan(1950)
+  })
+
   test("profile 작업공간은 공개 노출 기준의 상세형 hero와 rail copy를 사용한다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
 

@@ -35,7 +35,6 @@ import {
   ProfileImageSourceSize,
   PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_X,
   PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_Y,
-  PROFILE_IMAGE_EDIT_MAX_ZOOM,
   PROFILE_IMAGE_EDIT_MIN_ZOOM,
   resolveProfileImageEditDrawRatios,
 } from "src/libs/profileImageUpload"
@@ -52,7 +51,6 @@ import {
   Main,
   BaseButton,
   GhostButton,
-  PrimaryButton,
   PublishButton,
   MiniButton,
   DangerButton,
@@ -102,18 +100,7 @@ import {
   DockPrimaryButton,
   ToastStack,
   ToastCard,
-  ModalNotice,
   AvatarFallback,
-  ModalOverlay,
-  ModalCard,
-  ModalHeader,
-  ModalCloseButton,
-  ModalConstraintList,
-  ModalActions,
-  ModalEditorFrame,
-  ModalSliderWrap,
-  ModalEmptyState,
-  ModalFooter,
 } from "src/routes/Admin/AdminProfileWorkspace.styles"
 import {
   WORKSPACE_SECTIONS,
@@ -130,6 +117,7 @@ import {
   validateLinkInputs,
   type WorkspaceSectionId,
 } from "src/routes/Admin/AdminProfileWorkspaceModel"
+import AdminProfileImageEditorModal from "src/routes/Admin/AdminProfileImageEditorModal"
 import AdminProfilePreviewRail from "src/routes/Admin/AdminProfilePreviewRail"
 import {
   PROFILE_IMAGE_DRAFT_DEFAULT_SOURCE_SIZE,
@@ -1903,124 +1891,32 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
       ) : null}
 
       {isProfileImageEditorOpen ? (
-        <ModalOverlay
-          role="presentation"
-          onClick={(event) => {
-            if (event.target === event.currentTarget && loadingKey !== "upload") {
-              setIsProfileImageEditorOpen(false)
-              resetProfileImageDraftInteractions()
-            }
+        <AdminProfileImageEditorModal
+          frameRef={profileImageDraftFrameRef}
+          hasDraftFile={Boolean(profileImageDraftFile)}
+          isDragging={isProfileImageDraftDragging}
+          isUploading={loadingKey === "upload"}
+          notice={profileImageDraftNotice}
+          onApply={() => void handleApplyProfileImageDraft()}
+          onClear={clearProfileImageDraft}
+          onPointerCancel={finalizeProfileImageDraftPointer}
+          onPointerDown={handleProfileImageDraftPointerDown}
+          onPointerMove={handleProfileImageDraftPointerMove}
+          onPointerUp={finalizeProfileImageDraftPointer}
+          onRequestClose={() => {
+            setIsProfileImageEditorOpen(false)
+            resetProfileImageDraftInteractions()
           }}
-        >
-          <ModalCard role="dialog" aria-modal="true" aria-label="프로필 이미지 편집">
-            <ModalHeader>
-              <div>
-                <h2>프로필 이미지 편집</h2>
-              </div>
-              <ModalCloseButton
-                type="button"
-                disabled={loadingKey === "upload"}
-                onClick={() => {
-                  setIsProfileImageEditorOpen(false)
-                  resetProfileImageDraftInteractions()
-                }}
-              >
-                <AppIcon name="close" />
-              </ModalCloseButton>
-            </ModalHeader>
-
-            <ModalConstraintList>
-              <li>지원 형식: JPG/PNG/GIF/WebP</li>
-              <li>업로드 기준: 자동 최적화 후 최대 2MB</li>
-            </ModalConstraintList>
-
-            <ModalActions>
-              <GhostButton type="button" onClick={() => profileImageFileInputRef.current?.click()} disabled={loadingKey === "upload"}>
-                파일 선택
-              </GhostButton>
-              <GhostButton type="button" onClick={clearProfileImageDraft} disabled={loadingKey === "upload"}>
-                편집값 초기화
-              </GhostButton>
-            </ModalActions>
-
-            {profileImageDraftPreviewUrl ? (
-              <>
-                <ModalEditorFrame
-                  ref={profileImageDraftFrameRef}
-                  data-draggable={profileImageDraftFile ? "true" : "false"}
-                  data-dragging={isProfileImageDraftDragging ? "true" : "false"}
-                  onPointerDown={handleProfileImageDraftPointerDown}
-                  onPointerMove={handleProfileImageDraftPointerMove}
-                  onPointerUp={finalizeProfileImageDraftPointer}
-                  onPointerCancel={finalizeProfileImageDraftPointer}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={profileImageDraftPreviewUrl}
-                    alt="프로필 편집 미리보기"
-                    loading="eager"
-                    decoding="async"
-                    style={{
-                      objectFit: "cover",
-                      width: "var(--profile-draft-width)",
-                      height: "var(--profile-draft-height)",
-                      left: "var(--profile-draft-left)",
-                      top: "var(--profile-draft-top)",
-                      maxWidth: "none",
-                      transform: "translateZ(0)",
-                    }}
-                    draggable={false}
-                  />
-                </ModalEditorFrame>
-
-                <ModalSliderWrap>
-                  <label htmlFor="profile-image-zoom">확대/축소</label>
-                  <input
-                    id="profile-image-zoom"
-                    type="range"
-                    min={PROFILE_IMAGE_EDIT_MIN_ZOOM}
-                    max={PROFILE_IMAGE_EDIT_MAX_ZOOM}
-                    step={0.01}
-                    value={profileImageDraftZoom}
-                    onChange={(event) =>
-                      scheduleProfileImageDraftTransform({
-                        ...profileImageDraftTransformRef.current,
-                        zoom: clampProfileImageEditZoom(Number(event.target.value)),
-                      })
-                    }
-                  />
-                  <span>{profileImageDraftZoom.toFixed(2)}x</span>
-                </ModalSliderWrap>
-              </>
-            ) : (
-              <ModalEmptyState>먼저 프로필 이미지를 선택해주세요.</ModalEmptyState>
-            )}
-
-            {profileImageDraftNotice.text ? (
-              <ModalNotice data-tone={profileImageDraftNotice.tone}>{profileImageDraftNotice.text}</ModalNotice>
-            ) : null}
-
-            <ModalFooter>
-              <GhostButton
-                type="button"
-                disabled={loadingKey === "upload"}
-                onClick={() => {
-                  setIsProfileImageEditorOpen(false)
-                  resetProfileImageDraftInteractions()
-                }}
-              >
-                취소
-              </GhostButton>
-              <PrimaryButton
-                type="button"
-                disabled={loadingKey === "upload" || !profileImageDraftFile}
-                onClick={() => void handleApplyProfileImageDraft()}
-              >
-                {loadingKey === "upload" ? "저장 중..." : "편집 결과 저장"}
-              </PrimaryButton>
-            </ModalFooter>
-          </ModalCard>
-        </ModalOverlay>
+          onSelectFile={() => profileImageFileInputRef.current?.click()}
+          onZoomChange={(zoom) =>
+            scheduleProfileImageDraftTransform({
+              ...profileImageDraftTransformRef.current,
+              zoom: clampProfileImageEditZoom(zoom),
+            })
+          }
+          previewUrl={profileImageDraftPreviewUrl}
+          zoom={profileImageDraftZoom}
+        />
       ) : null}
       </Main>
     </AdminShell>

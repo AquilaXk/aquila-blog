@@ -76,6 +76,7 @@ const RootLayout = ({
   const [scheme] = useScheme()
   const { events, pathname } = useRouter()
   const isPublicBlogRoute = pathname === "/" || pathname === "/about" || pathname === "/posts/[id]"
+  const isDedicatedEditorRoute = pathname === "/editor/[id]" || pathname === "/editor/new"
   const isDesignAwareRoute = pathname[1] !== "_" && pathname !== "/sitemap.xml"
   const adminProfile = usePublicAdminProfile(initialAdminProfile, {
     enabled: isDesignAwareRoute || initialAdminProfileShouldRefetch,
@@ -189,38 +190,44 @@ const RootLayout = ({
       {/* {metaConfig.type !== "Paper" && <Header />} */}
       <Header fullWidth={false} showThemeToggle={effectiveBlogDesign === "legacy" && !isPublicBlogRoute} blogTitle={headerBlogTitle} />
       <RouteProgress data-busy={isNavigating} aria-hidden="true" />
-      <StyledMain>{children}</StyledMain>
+      <StyledMain $fullBleed={isDedicatedEditorRoute}>{children}</StyledMain>
     </ThemeProvider>
   )
 }
 
 export default RootLayout
 
-const StyledMain = styled.main`
+const StyledMain = styled.main<{ $fullBleed?: boolean }>`
   margin: 0 auto;
   box-sizing: border-box;
-  width: min(100%, ${CONTENT_MAX_WIDTH_PX}px);
-  padding: 0 clamp(0.85rem, 1.6vw, 1.2rem);
+  width: ${({ $fullBleed }) => ($fullBleed ? "100%" : `min(100%, ${CONTENT_MAX_WIDTH_PX}px)`)};
+  padding: ${({ $fullBleed }) => ($fullBleed ? "0" : "0 clamp(0.85rem, 1.6vw, 1.2rem)")};
+  overflow-x: ${({ $fullBleed }) => ($fullBleed ? "clip" : "visible")};
 
-  @media (max-width: ${WIDE_CONTENT_BREAKPOINT_PX}px) {
-    width: min(100%, ${WIDE_CONTENT_MAX_PX}px);
-  }
+  ${({ $fullBleed }) =>
+    $fullBleed
+      ? ""
+      : `
+        @media (max-width: ${WIDE_CONTENT_BREAKPOINT_PX}px) {
+          width: min(100%, ${WIDE_CONTENT_MAX_PX}px);
+        }
 
-  /* Velog-like desktop width lock: fixed content rail before tablet/mobile fluid mode */
-  @media (max-width: ${DESKTOP_LOCK_MAX_PX}px) and (min-width: ${DESKTOP_LOCK_MIN_PX}px) {
-    width: min(100%, ${DESKTOP_LOCK_WIDTH_PX}px);
-  }
+        /* Velog-like desktop width lock: fixed content rail before tablet/mobile fluid mode */
+        @media (max-width: ${DESKTOP_LOCK_MAX_PX}px) and (min-width: ${DESKTOP_LOCK_MIN_PX}px) {
+          width: min(100%, ${DESKTOP_LOCK_WIDTH_PX}px);
+        }
 
-  @media (max-width: ${FLUID_LAYOUT_MAX_PX}px) {
-    width: 100%;
-    padding-left: 1rem;
-    padding-right: 1rem;
-  }
+        @media (max-width: ${FLUID_LAYOUT_MAX_PX}px) {
+          width: 100%;
+          padding-left: 1rem;
+          padding-right: 1rem;
+        }
 
-  @media (max-width: 768px) {
-    padding-left: 0.85rem;
-    padding-right: 0.85rem;
-  }
+        @media (max-width: 768px) {
+          padding-left: 0.85rem;
+          padding-right: 0.85rem;
+        }
+      `}
 `
 
 const RouteProgress = styled.div`

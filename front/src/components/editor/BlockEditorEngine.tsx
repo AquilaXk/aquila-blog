@@ -8320,6 +8320,8 @@ export default BlockEditorEngine
 const Shell = styled.div`
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  max-width: 100%;
   gap: 0.8rem;
 `
 
@@ -8328,16 +8330,23 @@ const Toolbar = styled.div`
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   gap: 0.9rem;
   padding: 0 0 0.7rem;
+  overflow-x: clip;
   border-bottom: 1px solid rgba(148, 163, 184, 0.14);
   background: transparent;
 `
 
 const ToolbarActions = styled.div`
   display: inline-flex;
+  flex: 1 1 100%;
   flex-wrap: wrap;
   align-items: center;
+  width: 100%;
+  max-width: 100%;
   gap: 0.25rem;
   min-width: 0;
 `
@@ -10523,6 +10532,8 @@ const QuickInsertBar = styled.div`
 const QuickInsertActions = styled.div`
   display: flex;
   flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
   gap: 0.55rem;
 `
 
@@ -10536,6 +10547,7 @@ const QuickInsertButton = styled.button`
   color: var(--color-gray12);
   font-size: 0.82rem;
   font-weight: 700;
+  white-space: nowrap;
   padding: 0 0.95rem;
   transition:
     transform 120ms ease,

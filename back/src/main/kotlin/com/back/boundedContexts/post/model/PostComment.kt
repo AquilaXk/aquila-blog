@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.model
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.postCommentMixin.PostCommentHasPolicy
+import com.back.global.jpa.domain.AfterDDL
 import com.back.global.jpa.domain.BaseTime
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -22,6 +23,18 @@ import java.time.Instant
  */
 @Entity
 @DynamicUpdate
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS post_comment_idx_post_id
+    ON post_comment (post_id)
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS post_comment_idx_parent_comment_id
+    ON post_comment (parent_comment_id)
+    """,
+)
 @SQLRestriction("deleted_at IS NULL")
 class PostComment(
     @field:Id

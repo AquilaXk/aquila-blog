@@ -17,6 +17,9 @@ class MemberSessionRepositoryAdapter(
     override fun findBySessionKeyAndRevokedAtIsNull(sessionKey: String): MemberSession? =
         memberSessionRepository.findBySessionKeyAndRevokedAtIsNull(sessionKey)
 
+    override fun findWithMemberBySessionKeyAndRevokedAtIsNull(sessionKey: String): MemberSession? =
+        memberSessionRepository.findWithMemberBySessionKeyAndRevokedAtIsNull(sessionKey)
+
     override fun findByMemberIdAndSessionKeyAndRevokedAtIsNull(
         memberId: Long,
         sessionKey: String,

@@ -49,11 +49,12 @@ class CustomAuthenticationFilterTest {
 
         given(publicApiRequestMatcher.matches(request)).willReturn(false)
         given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("")
-        given(rq.getCookieValue("apiKey", "")).willReturn("broken-api-key")
-        given(rq.getCookieValue("accessToken", "")).willReturn("")
+        given(rq.getCookieValue("apiKey", "")).willReturn("")
+        given(rq.getCookieValue("accessToken", "")).willReturn("broken-access-token")
         given(rq.getCookieValue("sessionKey", "")).willReturn("")
+        given(rq.getCookieValue("refreshToken", "")).willReturn("")
         given(clientIpResolver.resolve(request)).willReturn("203.0.113.10")
-        given(actorApplicationService.findByApiKey("broken-api-key")).willThrow(RuntimeException("db down"))
+        given(actorApplicationService.payload("broken-access-token")).willThrow(RuntimeException("jwt down"))
 
         val filter =
             CustomAuthenticationFilter(
@@ -96,11 +97,12 @@ class CustomAuthenticationFilterTest {
 
         given(publicApiRequestMatcher.matches(request)).willReturn(true)
         given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("")
-        given(rq.getCookieValue("apiKey", "")).willReturn("broken-api-key")
-        given(rq.getCookieValue("accessToken", "")).willReturn("")
+        given(rq.getCookieValue("apiKey", "")).willReturn("")
+        given(rq.getCookieValue("accessToken", "")).willReturn("broken-access-token")
         given(rq.getCookieValue("sessionKey", "")).willReturn("")
+        given(rq.getCookieValue("refreshToken", "")).willReturn("")
         given(clientIpResolver.resolve(request)).willReturn("203.0.113.11")
-        given(actorApplicationService.findByApiKey("broken-api-key")).willThrow(RuntimeException("db down"))
+        given(actorApplicationService.payload("broken-access-token")).willThrow(RuntimeException("jwt down"))
 
         val filter =
             CustomAuthenticationFilter(

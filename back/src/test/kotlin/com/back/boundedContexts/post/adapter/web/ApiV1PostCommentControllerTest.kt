@@ -1,6 +1,7 @@
 package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
+import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
@@ -28,6 +29,9 @@ class ApiV1PostCommentControllerTest : BaseControllerIntegrationTest() {
 
     @Autowired
     private lateinit var actorApplicationService: ActorApplicationService
+
+    @Autowired
+    private lateinit var memberSessionUseCase: MemberSessionUseCase
 
     @Autowired
     private lateinit var jdbcTemplate: JdbcTemplate
@@ -105,12 +109,29 @@ class ApiV1PostCommentControllerTest : BaseControllerIntegrationTest() {
             postFacade.writeComment(user1, privatePost, "비공개 댓글")
             val driftedEmail = "admin-drift-${System.currentTimeMillis()}@test.com"
             jdbcTemplate.update("update member set email = ? where id = ?", driftedEmail, admin.id)
-            val accessToken = actorApplicationService.genAccessToken(admin)
+            val session =
+                memberSessionUseCase.createSession(
+                    member = admin,
+                    rememberLoginEnabled = true,
+                    ipSecurityEnabled = false,
+                    ipSecurityFingerprint = null,
+                    createdIp = null,
+                    userAgent = null,
+                )
+            val accessToken =
+                actorApplicationService.genAccessToken(
+                    member = admin,
+                    sessionKey = session.sessionKey,
+                    rememberLoginEnabled = true,
+                    ipSecurityEnabled = false,
+                    ipSecurityFingerprint = null,
+                )
 
             mvc
                 .get("/post/api/v1/posts/${privatePost.id}/comments") {
                     cookie(Cookie("apiKey", admin.apiKey))
                     cookie(Cookie("accessToken", accessToken))
+                    cookie(Cookie("sessionKey", session.sessionKey))
                 }.andExpect {
                     status { isOk() }
                     match(handler().handlerType(ApiV1PostCommentController::class.java))

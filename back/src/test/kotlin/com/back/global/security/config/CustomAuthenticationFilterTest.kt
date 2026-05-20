@@ -158,15 +158,27 @@ class CustomAuthenticationFilterTest {
         val objectMapper = ObjectMapper()
         val request = MockHttpServletRequest("PUT", "/post/api/v1/posts/452")
         val legacyToken = "legacy-access-token"
+        val sessionKey = "legacy-session-key"
+        val sessionSnapshot =
+            MemberSessionAuthSnapshot(
+                id = 10L,
+                memberId = 54L,
+                sessionKey = sessionKey,
+                rememberLoginEnabled = true,
+                ipSecurityEnabled = false,
+                ipSecurityFingerprint = null,
+                lastAuthenticatedAt = Instant.now(),
+            )
         val persistedAdmin = Member(54L, "internal-admin", null, "aquila", "admin@test.com")
 
         given(publicApiRequestMatcher.matches(request)).willReturn(false)
         given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("Bearer $legacyToken")
-        given(rq.getCookieValue("sessionKey", "")).willReturn("")
+        given(rq.getCookieValue("sessionKey", "")).willReturn(sessionKey)
         given(actorApplicationService.payload(legacyToken))
             .willReturn(
                 AccessTokenPayload(
                     id = 54L,
+                    sessionKey = sessionKey,
                     username = "internal-admin",
                     email = null,
                     name = "aquila",
@@ -175,8 +187,9 @@ class CustomAuthenticationFilterTest {
                     ipSecurityFingerprint = null,
                 ),
             )
+        given(memberSessionUseCase.findActiveSessionSnapshot(54L, sessionKey)).willReturn(sessionSnapshot)
         given(actorApplicationService.findById(54L)).willReturn(persistedAdmin)
-        given(actorApplicationService.genAccessToken(persistedAdmin)).willReturn("rotated-access-token")
+        given(actorApplicationService.genAccessToken(persistedAdmin, sessionKey, true, false, null)).willReturn("rotated-access-token")
         given(clientIpResolver.resolve(request)).willReturn("203.0.113.12")
 
         val filter =

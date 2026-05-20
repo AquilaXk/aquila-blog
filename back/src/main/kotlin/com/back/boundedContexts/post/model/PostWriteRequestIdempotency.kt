@@ -1,6 +1,7 @@
 package com.back.boundedContexts.post.model
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.global.jpa.domain.AfterDDL
 import com.back.global.jpa.domain.BaseTime
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -19,6 +20,19 @@ import jakarta.persistence.UniqueConstraint
  * 도메인 불변조건을 지키며 상태 변경을 메서드 단위로 통제합니다.
  */
 @Entity
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS post_write_request_idempotency_idx_post_id
+    ON post_write_request_idempotency (post_id)
+    WHERE post_id IS NOT NULL
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS post_write_request_idempotency_idx_created_at
+    ON post_write_request_idempotency (created_at ASC)
+    """,
+)
 @Table(
     name = "post_write_request_idempotency",
     uniqueConstraints = [

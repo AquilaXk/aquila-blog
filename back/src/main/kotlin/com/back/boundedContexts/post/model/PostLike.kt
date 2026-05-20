@@ -1,6 +1,7 @@
 package com.back.boundedContexts.post.model
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.global.jpa.domain.AfterDDL
 import com.back.global.jpa.domain.BaseTime
 import jakarta.persistence.*
 import jakarta.persistence.GenerationType.SEQUENCE
@@ -12,6 +13,12 @@ import org.hibernate.annotations.DynamicUpdate
  */
 @Entity
 @DynamicUpdate
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS post_like_idx_post_id
+    ON post_like (post_id)
+    """,
+)
 @Table(
     uniqueConstraints = [
         UniqueConstraint(columnNames = ["liker_id", "post_id"]),

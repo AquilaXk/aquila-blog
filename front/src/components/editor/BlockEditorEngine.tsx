@@ -190,10 +190,16 @@ import {
 import {
   BLOCK_OUTER_SELECT_LEFT_GUTTER_PX,
   BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX,
+  getEditableTextPositionForTopLevelBlock,
+  getFirstEditableTextPositionInNode,
+  getTopLevelBlockIndexFromSelection,
+  getTopLevelBlockPosition,
+  isTabBlockSelectionEligible,
   isStableBlockHandleState,
   isStableBlockSelectionOverlayState,
   resolveOuterBlockSelectionGesture,
   resolveOuterListItemSelectionGesture,
+  selectTopLevelBlockNode,
   type BlockSelectionOverlayState,
   type BlockSelectionPointerEventLike,
   type TopLevelBlockHandleState,
@@ -415,11 +421,6 @@ const normalizeTableColorInputValue = (value: unknown) => {
 const isPrimaryModifierPressed = (event: ReactKeyboardEvent | globalThis.KeyboardEvent) =>
   event.metaKey || event.ctrlKey
 
-const getTopLevelBlockIndexFromSelection = (editor: TiptapEditor) => {
-  const { selection } = editor.state
-  return Math.max(0, selection.$from.index(0))
-}
-
 const getActiveSlashRangeFromEditor = (editor: TiptapEditor): { from: number; to: number } | null => {
   const selection = editor.state.selection
   if (!selection.empty) return null
@@ -435,78 +436,6 @@ const getActiveSlashRangeFromEditor = (editor: TiptapEditor): { from: number; to
   return {
     from: selection.$from.start() + slashOffset,
     to: selection.from,
-  }
-}
-
-const getTopLevelBlockPosition = (editor: TiptapEditor, blockIndex: number) => {
-  const { doc } = editor.state
-  if (doc.childCount === 0) return 1
-  const clampedIndex = Math.max(0, Math.min(blockIndex, doc.childCount - 1))
-  let position = 1
-  for (let index = 0; index < clampedIndex; index += 1) {
-    position += doc.child(index).nodeSize
-  }
-  return position
-}
-
-const getFirstEditableTextPositionInNode = (node: any, startPos: number): number | null => {
-  if (!node) return null
-  if (node.isTextblock) {
-    return startPos + 1
-  }
-
-  if (!node.childCount) {
-    return null
-  }
-
-  let childPos = startPos + 1
-  for (let index = 0; index < node.childCount; index += 1) {
-    const child = node.child(index)
-    const nested = getFirstEditableTextPositionInNode(child, childPos)
-    if (nested !== null) {
-      return nested
-    }
-    childPos += child.nodeSize
-  }
-
-  return null
-}
-
-const getEditableTextPositionForTopLevelBlock = (editor: TiptapEditor, blockIndex: number) => {
-  const { doc } = editor.state
-  if (doc.childCount === 0) return null
-  const clampedIndex = Math.max(0, Math.min(blockIndex, doc.childCount - 1))
-  const topLevelBlock = doc.child(clampedIndex)
-  if (
-    ![
-      "paragraph",
-      "heading",
-      "blockquote",
-      "bulletList",
-      "orderedList",
-      "taskList",
-      "calloutBlock",
-      "toggleBlock",
-    ].includes(topLevelBlock.type.name)
-  ) {
-    return null
-  }
-
-  const blockPosition = getTopLevelBlockPosition(editor, clampedIndex)
-  return getFirstEditableTextPositionInNode(topLevelBlock, blockPosition)
-}
-
-const focusEditorViewWithoutScroll = (editor: TiptapEditor) => {
-  if (typeof window === "undefined") {
-    editor.view.focus()
-    return
-  }
-
-  const previousScrollX = window.scrollX
-  const previousScrollY = window.scrollY
-  editor.view.focus()
-  if (window.scrollX !== previousScrollX || window.scrollY !== previousScrollY) {
-    window.scrollTo(previousScrollX, previousScrollY)
   }
 }
 
@@ -527,22 +456,6 @@ const focusElementWithoutScroll = (element: HTMLElement | null) => {
   if (window.scrollX !== previousScrollX || window.scrollY !== previousScrollY) {
     window.scrollTo(previousScrollX, previousScrollY)
   }
-}
-
-const selectTopLevelBlockNode = (editor: TiptapEditor, blockIndex: number) => {
-  const { doc, tr } = editor.state
-  if (doc.childCount === 0) return
-  const clampedIndex = Math.max(0, Math.min(blockIndex, doc.childCount - 1))
-  const position = getTopLevelBlockPosition(editor, clampedIndex)
-  const selection = NodeSelection.create(doc, position)
-  editor.view.dispatch(tr.setSelection(selection))
-  focusEditorViewWithoutScroll(editor)
-}
-
-const isTabBlockSelectionEligible = (editor: TiptapEditor, blockIndex: number | null) => {
-  if (blockIndex === null || isTableSelectionActive(editor)) return false
-  const blocks = ((editor.getJSON() as BlockEditorDoc).content ?? []) as BlockEditorDoc[]
-  return shouldCenterBlockHandleForNode(blocks[blockIndex] ?? null)
 }
 
 const resolveDocPosSafe = (editor: TiptapEditor, pos: number) => {

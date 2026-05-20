@@ -35,6 +35,12 @@ class ApiCorsPolicy(
 
     fun corsConfiguration(): CorsConfiguration = CorsConfiguration(configuration)
 
+    fun isAllowedOrigin(origin: String?): Boolean {
+        val normalizedOrigin = origin?.trim().orEmpty()
+        if (normalizedOrigin.isBlank()) return false
+        return configuration.checkOrigin(normalizedOrigin) != null
+    }
+
     /**
      * 허용된 Origin 요청인 경우 응답 헤더에 CORS 필드를 보강합니다.
      * 인증 실패/인가 실패 응답에서도 헤더가 유지되도록 Security 예외 경로에서 호출합니다.

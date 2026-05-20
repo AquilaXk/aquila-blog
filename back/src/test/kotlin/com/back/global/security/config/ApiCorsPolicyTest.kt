@@ -28,6 +28,9 @@ class ApiCorsPolicyTest {
             "http://localhost:*",
             "http://127.0.0.1:*",
         )
+        assertThat(policy.isAllowedOrigin("https://www.aquilaxk.site")).isTrue
+        assertThat(policy.isAllowedOrigin("http://localhost:3000")).isTrue
+        assertThat(policy.isAllowedOrigin("https://evil.example")).isFalse
     }
 
     @Test

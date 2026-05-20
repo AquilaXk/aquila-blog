@@ -46,7 +46,10 @@ class SecurityConfig(
      * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.
      */
     @Bean
-    fun filterChain(http: HttpSecurity): SecurityFilterChain {
+    fun filterChain(
+        http: HttpSecurity,
+        apiMutationCsrfGuardFilter: ApiMutationCsrfGuardFilter,
+    ): SecurityFilterChain {
         http {
             authorizeHttpRequests {
                 authorize(HttpMethod.OPTIONS, "/**", permitAll)
@@ -107,6 +110,7 @@ class SecurityConfig(
                 }
             }
 
+            addFilterBefore<UsernamePasswordAuthenticationFilter>(apiMutationCsrfGuardFilter)
             addFilterBefore<UsernamePasswordAuthenticationFilter>(customAuthenticationFilter)
 
             exceptionHandling {
@@ -148,6 +152,13 @@ class SecurityConfig(
         UrlBasedCorsConfigurationSource().apply {
             registerCorsConfiguration("/**", apiCorsPolicy.corsConfiguration())
         }
+
+    @Bean
+    fun apiMutationCsrfGuardFilter(): ApiMutationCsrfGuardFilter =
+        ApiMutationCsrfGuardFilter(
+            apiCorsPolicy = apiCorsPolicy,
+            objectMapper = objectMapper,
+        )
 
     private fun applyNoStoreHeaders(response: HttpServletResponse) {
         response.setHeader(HttpHeaders.CACHE_CONTROL, "private, no-store, max-age=0")

@@ -201,6 +201,43 @@ class ApiV1PostCommentControllerTest : BaseControllerIntegrationTest() {
         }
 
         @Test
+        fun `쿠키 인증 댓글 작성은 CSRF preflight 헤더가 없으면 거부된다`() {
+            val postId = post.id
+            val authCookies = loginAuthCookies("user1@test.com")
+
+            mvc
+                .post("/post/api/v1/posts/$postId/comments") {
+                    authCookies.forEach { cookie(it) }
+                    contentType = MediaType.APPLICATION_JSON
+                    content = """{"content": "csrf 없는 댓글"}"""
+                }.andExpect {
+                    status { isForbidden() }
+                    jsonPath("$.resultCode") { value("403-3") }
+                    jsonPath("$.msg") { value("CSRF preflight 헤더가 필요합니다.") }
+                }
+        }
+
+        @Test
+        fun `쿠키 인증 댓글 작성은 CSRF preflight 헤더가 있으면 처리된다`() {
+            val postId = post.id
+            val authCookies = loginAuthCookies("user1@test.com")
+
+            mvc
+                .post("/post/api/v1/posts/$postId/comments") {
+                    authCookies.forEach { cookie(it) }
+                    header("X-Aquila-CSRF", "1")
+                    contentType = MediaType.APPLICATION_JSON
+                    content = """{"content": "csrf 헤더 댓글"}"""
+                }.andExpect {
+                    match(handler().handlerType(ApiV1PostCommentController::class.java))
+                    match(handler().methodName("write"))
+                    status { isCreated() }
+                    jsonPath("$.resultCode") { value("201-1") }
+                    jsonPath("$.data.content") { value("csrf 헤더 댓글") }
+                }
+        }
+
+        @Test
         @WithUserDetails("user3@test.com")
         fun `인증된 사용자가 기존 댓글에 대댓글을 작성하면 부모 댓글 식별자가 함께 저장된다`() {
             val postId = post.id
@@ -375,4 +412,22 @@ class ApiV1PostCommentControllerTest : BaseControllerIntegrationTest() {
             }
         }
     }
+
+    private fun loginAuthCookies(email: String): List<Cookie> =
+        mvc
+            .post("/member/api/v1/auth/login") {
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                        "email": "$email",
+                        "password": "1234"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isOk() }
+            }.andReturn()
+            .response
+            .cookies
+            .filter { it.name in setOf("apiKey", "accessToken", "sessionKey") && it.value.isNotBlank() }
 }

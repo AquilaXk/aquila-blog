@@ -7,6 +7,7 @@ const REVALIDATE_CACHE_MAX_TTL_MS = 300_000
 const REVALIDATE_CACHE_MAX_ENTRIES = 200
 const DEFAULT_GET_TRANSIENT_RETRY_COUNT = 1
 const DEFAULT_GET_TRANSIENT_RETRY_DELAY_MS = 120
+const CSRF_PREFLIGHT_HEADER = "X-Aquila-CSRF"
 const GET_RETRYABLE_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504])
 const STALE_IF_ERROR_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504])
 
@@ -371,6 +372,9 @@ export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Pro
 
   if (hasBody && !isFormLikeBody && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json")
+  }
+  if (!isReadMethod && requestCredentials !== "omit" && !headers.has(CSRF_PREFLIGHT_HEADER)) {
+    headers.set(CSRF_PREFLIGHT_HEADER, "1")
   }
   if (canUseRevalidateCache && revalidateCacheEntry && !headers.has("If-None-Match")) {
     headers.set("If-None-Match", revalidateCacheEntry.etag)

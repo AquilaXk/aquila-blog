@@ -20,6 +20,7 @@ export type BlockEditorQaActions = {
   appendCalloutBlock: () => void
   appendFormulaBlock: () => void
   moveTaskItemInFirstTaskList: (sourceIndex: number, insertionIndex: number) => void
+  getUndoDepth: () => number
 }
 
 export type BlockEditorUploadAdapters = {

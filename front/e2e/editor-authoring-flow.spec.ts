@@ -1573,6 +1573,33 @@ test.describe("block editor authoring flow", () => {
     await expect(markdownOutput).not.toContainText("(empty)")
   })
 
+  test("기존 draft 편집 후 외부 글 선택 직후 Cmd/Ctrl+Z는 선택 글 본문을 비우지 않는다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const markdownOutput = page.getByTestId("qa-markdown-output")
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("선택 전 draft")
+    await expect(markdownOutput).toContainText("선택 전 draft")
+
+    await page.getByRole("button", { name: "QA 외부 글 선택" }).click()
+    await expect(markdownOutput).toContainText("# 선택 글 제목")
+    await expect(markdownOutput).toContainText("선택 글 본문")
+    await expect
+      .poll(() =>
+        page.evaluate(() => (window as Window & { __qaGetUndoDepth?: () => number }).__qaGetUndoDepth?.() ?? -1)
+      )
+      .toBe(0)
+
+    await editor.click()
+    await page.keyboard.press(UNDO_SHORTCUT)
+
+    await expect(markdownOutput).toContainText("# 선택 글 제목")
+    await expect(markdownOutput).toContainText("선택 글 본문")
+    await expect(markdownOutput).not.toContainText("선택 전 draft")
+    await expect(markdownOutput).not.toContainText("(empty)")
+  })
+
   test("블록 내부 클릭/텍스트 더블클릭은 편집만 유지하고 좌측 외곽 더블클릭에서만 블록 선택된다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 

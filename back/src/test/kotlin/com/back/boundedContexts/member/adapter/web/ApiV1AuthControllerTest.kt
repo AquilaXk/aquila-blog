@@ -620,13 +620,24 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
 
         @Test
         fun `내 정보 조회에서 Authorization 헤더의 apiKey 와 accessToken 이 모두 유효하면 회원 정보를 반환하고 accessToken 을 재발급하지 않는다`() {
-            val member = memberFacade.findByLoginId("user1")!!
-            val accessToken = authTokenService.genAccessToken(member)
+            val member =
+                memberFacade.join(
+                    username = "session-bound-bearer-user",
+                    password = "Abcd1234!",
+                    nickname = "세션토큰유저",
+                    profileImgUrl = null,
+                    email = "session-bound-bearer-user@example.com",
+                )
+            val authCookies = loginAuthCookies(member.email!!)
+            val apiKeyCookie = requireAuthCookie(authCookies, "apiKey")
+            val accessTokenCookie = requireAuthCookie(authCookies, "accessToken")
+            val sessionKeyCookie = requireAuthCookie(authCookies, "sessionKey")
 
             val resultActions =
                 mvc
                     .get("/member/api/v1/auth/me") {
-                        header(HttpHeaders.AUTHORIZATION, "Bearer ${member.apiKey} $accessToken")
+                        header(HttpHeaders.AUTHORIZATION, "Bearer ${apiKeyCookie.value} ${accessTokenCookie.value}")
+                        cookie(sessionKeyCookie)
                     }.andExpect {
                         status { isOk() }
                         match(handler().handlerType(ApiV1AuthController::class.java))
@@ -648,7 +659,7 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
         }
 
         @Test
-        fun `내 정보 조회에서 표준 Bearer accessToken 형식도 허용한다`() {
+        fun `내 정보 조회에서 sessionKey 없는 Bearer accessToken 은 세션 만료로 거부한다`() {
             val member = memberFacade.findByLoginId("user1")!!
             val accessToken = authTokenService.genAccessToken(member)
 
@@ -656,13 +667,12 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
                 .get("/member/api/v1/auth/me") {
                     header(HttpHeaders.AUTHORIZATION, "Bearer $accessToken")
                 }.andExpect {
-                    status { isOk() }
-                    match(handler().handlerType(ApiV1AuthController::class.java))
-                    match(handler().methodName("me"))
-                    jsonPath("$.id") { value(member.id) }
-                    jsonPath("$.username") { value(member.name) }
-                    jsonPath("$.nickname") { value(member.nickname) }
-                    jsonPath("$.profileImageUrl") { value(startsWith(member.redirectToProfileImgUrlOrDefault)) }
+                    status { isUnauthorized() }
+                    jsonPath("$.resultCode") { value("401-8") }
+                    jsonPath("$.msg") { value("세션이 만료되었습니다. 다시 로그인해주세요.") }
+                    cookie { maxAge("apiKey", 0) }
+                    cookie { maxAge("accessToken", 0) }
+                    cookie { maxAge("sessionKey", 0) }
                 }
         }
 

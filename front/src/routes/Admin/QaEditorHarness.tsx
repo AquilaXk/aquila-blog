@@ -21,6 +21,7 @@ const LazyBlockEditorShell = dynamic(() => import("src/components/editor/BlockEd
 
 const QA_IMAGE_DATA_URL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlH0WkAAAAASUVORK5CYII="
+const QA_EXTERNAL_POST_MARKDOWN = "# 선택 글 제목\n\n선택 글 본문\n\n선택 글 둘째 문단"
 
 type QaEditorHarnessProps = {
   seedMarkdown: string
@@ -33,14 +34,19 @@ export const QaEditorHarness = ({ seedMarkdown }: QaEditorHarnessProps) => {
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    ;(window as unknown as { __qaMoveTaskItemInFirstTaskList?: (sourceIndex: number, insertionIndex: number) => void }).__qaMoveTaskItemInFirstTaskList =
+    const qaWindow = window as unknown as {
+      __qaMoveTaskItemInFirstTaskList?: (sourceIndex: number, insertionIndex: number) => void
+      __qaGetUndoDepth?: () => number
+    }
+    qaWindow.__qaMoveTaskItemInFirstTaskList =
       (sourceIndex, insertionIndex) => {
         qaActionsRef.current?.moveTaskItemInFirstTaskList(sourceIndex, insertionIndex)
       }
+    qaWindow.__qaGetUndoDepth = () => qaActionsRef.current?.getUndoDepth() ?? 0
 
     return () => {
-      delete (window as unknown as { __qaMoveTaskItemInFirstTaskList?: (sourceIndex: number, insertionIndex: number) => void })
-        .__qaMoveTaskItemInFirstTaskList
+      delete qaWindow.__qaMoveTaskItemInFirstTaskList
+      delete qaWindow.__qaGetUndoDepth
     }
   }, [])
 
@@ -112,6 +118,9 @@ export const QaEditorHarness = ({ seedMarkdown }: QaEditorHarnessProps) => {
         </button>
         <button type="button" onClick={() => qaActionsRef.current?.moveTaskItemInFirstTaskList(2, 0)}>
           QA Task 3→1
+        </button>
+        <button type="button" onClick={() => setMarkdown(QA_EXTERNAL_POST_MARKDOWN)}>
+          QA 외부 글 선택
         </button>
       </section>
 

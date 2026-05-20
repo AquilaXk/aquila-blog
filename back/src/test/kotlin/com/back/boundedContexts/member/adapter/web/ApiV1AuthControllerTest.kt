@@ -246,7 +246,10 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
 
             val firstApiKeyCookie =
                 firstLogin.response.cookies.firstOrNull { it.name == "apiKey" && it.value.isNotBlank() }
+            val firstSessionKeyCookie =
+                firstLogin.response.cookies.firstOrNull { it.name == "sessionKey" && it.value.isNotBlank() }
             assertThat(firstApiKeyCookie).isNotNull
+            assertThat(firstSessionKeyCookie).isNotNull
 
             val secondLogin =
                 mvc
@@ -271,6 +274,7 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
             mvc
                 .get("/member/api/v1/auth/me") {
                     cookie(Cookie("apiKey", firstApiKeyCookie.value))
+                    cookie(Cookie("sessionKey", firstSessionKeyCookie!!.value))
                 }.andExpect {
                     status { isOk() }
                     jsonPath("$.id") { value(member.id) }
@@ -475,12 +479,20 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
     @Nested
     inner class Me {
         @Test
-        fun `내 정보 조회는 apiKey 쿠키가 있으면 회원 정보를 반환한다`() {
-            val member = memberFacade.findByLoginId("user1")!!
+        fun `내 정보 조회는 apiKey 와 sessionKey 쿠키가 있으면 회원 정보를 반환한다`() {
+            val member =
+                memberFacade.join(
+                    username = "session-bound-me-user",
+                    password = "Abcd1234!",
+                    nickname = "세션조회",
+                    profileImgUrl = null,
+                    email = "session-bound-me-user@example.com",
+                )
+            val authCookies = loginAuthCookies(member.email!!)
 
             mvc
                 .get("/member/api/v1/auth/me") {
-                    cookie(Cookie("apiKey", member.apiKey))
+                    authCookies.forEach { cookie(it) }
                 }.andExpect {
                     status { isOk() }
                     match(handler().handlerType(ApiV1AuthController::class.java))
@@ -497,12 +509,20 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
         }
 
         @Test
-        fun `세션 정보 조회는 apiKey 쿠키가 있으면 경량 회원 정보를 반환한다`() {
-            val member = memberFacade.findByLoginId("user1")!!
+        fun `세션 정보 조회는 apiKey 와 sessionKey 쿠키가 있으면 경량 회원 정보를 반환한다`() {
+            val member =
+                memberFacade.join(
+                    username = "session-bound-session-user",
+                    password = "Abcd1234!",
+                    nickname = "세션경량조회",
+                    profileImgUrl = null,
+                    email = "session-bound-session-user@example.com",
+                )
+            val authCookies = loginAuthCookies(member.email!!)
 
             mvc
                 .get("/member/api/v1/auth/session") {
-                    cookie(Cookie("apiKey", member.apiKey))
+                    authCookies.forEach { cookie(it) }
                 }.andExpect {
                     status { isOk() }
                     match(handler().handlerType(ApiV1AuthController::class.java))
@@ -511,6 +531,23 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
                     jsonPath("$.isAdmin") { value(member.isAdmin) }
                     jsonPath("$.username") { value(member.name) }
                     jsonPath("$.nickname") { value(member.nickname) }
+                }
+        }
+
+        @Test
+        fun `내 정보 조회는 apiKey 쿠키만 있으면 세션 만료로 거부한다`() {
+            val member = memberFacade.findByLoginId("user1")!!
+
+            mvc
+                .get("/member/api/v1/auth/me") {
+                    cookie(Cookie("apiKey", member.apiKey))
+                }.andExpect {
+                    status { isUnauthorized() }
+                    jsonPath("$.resultCode") { value("401-8") }
+                    jsonPath("$.msg") { value("세션이 만료되었습니다. 다시 로그인해주세요.") }
+                    cookie { maxAge("apiKey", 0) }
+                    cookie { maxAge("accessToken", 0) }
+                    cookie { maxAge("sessionKey", 0) }
                 }
         }
 
@@ -538,13 +575,23 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
         }
 
         @Test
-        fun `내 정보 조회에서 Authorization 헤더의 accessToken 이 잘못되어도 apiKey 가 유효하면 accessToken 을 재발급한다`() {
-            val member = memberFacade.findByLoginId("user1")!!
+        fun `내 정보 조회에서 Authorization 헤더의 accessToken 이 잘못되어도 apiKey 와 sessionKey 가 유효하면 accessToken 을 재발급한다`() {
+            val member =
+                memberFacade.join(
+                    username = "session-bound-rotate-user",
+                    password = "Abcd1234!",
+                    nickname = "세션재발급",
+                    profileImgUrl = null,
+                    email = "session-bound-rotate-user@example.com",
+                )
+            val authCookies = loginAuthCookies(member.email!!)
+            val sessionKeyCookie = requireAuthCookie(authCookies, "sessionKey")
 
             val resultActions =
                 mvc
                     .get("/member/api/v1/auth/me") {
                         header(HttpHeaders.AUTHORIZATION, "Bearer ${member.apiKey} wrong-access-token")
+                        cookie(sessionKeyCookie)
                     }.andExpect {
                         status { isOk() }
                         match(handler().handlerType(ApiV1AuthController::class.java))
@@ -648,11 +695,15 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
 
             val apiKeyCookie =
                 loginResponse.response.cookies.firstOrNull { it.name == "apiKey" && it.value.isNotBlank() }
+            val sessionKeyCookie =
+                loginResponse.response.cookies.firstOrNull { it.name == "sessionKey" && it.value.isNotBlank() }
             assertThat(apiKeyCookie).isNotNull
+            assertThat(sessionKeyCookie).isNotNull
 
             mvc
                 .get("/member/api/v1/auth/me") {
                     cookie(apiKeyCookie!!)
+                    cookie(sessionKeyCookie!!)
                     with(remoteAddr("10.0.0.77"))
                 }.andExpect {
                     status { isUnauthorized() }
@@ -695,11 +746,15 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
 
             val apiKeyCookie =
                 loginResponse.response.cookies.firstOrNull { it.name == "apiKey" && it.value.isNotBlank() }
+            val sessionKeyCookie =
+                loginResponse.response.cookies.firstOrNull { it.name == "sessionKey" && it.value.isNotBlank() }
             assertThat(apiKeyCookie).isNotNull
+            assertThat(sessionKeyCookie).isNotNull
 
             mvc
                 .get("/member/api/v1/auth/me") {
                     cookie(apiKeyCookie!!)
+                    cookie(sessionKeyCookie!!)
                     header("CF-Connecting-IP", "198.51.100.34")
                     with(remoteAddr("172.18.0.9"))
                 }.andExpect {
@@ -709,6 +764,29 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
                 }
         }
     }
+
+    private fun loginAuthCookies(email: String): List<Cookie> =
+        mvc
+            .post("/member/api/v1/auth/login") {
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                        "email": "$email",
+                        "password": "Abcd1234!"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isOk() }
+            }.andReturn()
+            .response
+            .cookies
+            .filter { it.name in setOf("apiKey", "accessToken", "sessionKey") && it.value.isNotBlank() }
+
+    private fun requireAuthCookie(
+        cookies: List<Cookie>,
+        name: String,
+    ): Cookie = cookies.firstOrNull { it.name == name } ?: error("$name cookie not issued")
 
     private fun remoteAddr(ip: String): RequestPostProcessor =
         RequestPostProcessor { request ->

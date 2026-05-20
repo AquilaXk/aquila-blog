@@ -137,7 +137,7 @@ class CustomAuthenticationFilter(
                 val apiKeyMember = actorApplicationService.findByApiKey(apiKey)
                 if (apiKeyMember != null) {
                     val sessionResolution = resolveMemberSession(apiKeyMember.id, sessionKey, payload.sessionKey, payload, request)
-                    ensureSessionIsUsable(sessionResolution)
+                    ensureSessionIsUsable(sessionResolution, requireSession = true)
                     val memberSession = sessionResolution.session
                     val rememberLoginEnabled = memberSession?.rememberLoginEnabled ?: apiKeyMember.rememberLoginEnabled
                     val ipSecurityEnabled = memberSession?.ipSecurityEnabled ?: apiKeyMember.ipSecurityEnabled
@@ -253,7 +253,7 @@ class CustomAuthenticationFilter(
                 ?: throw AppException("401-3", "API 키가 유효하지 않습니다.")
 
         val sessionResolution = resolveMemberSession(member.id, sessionKey, null, null, request)
-        ensureSessionIsUsable(sessionResolution)
+        ensureSessionIsUsable(sessionResolution, requireSession = true)
         val memberSession = sessionResolution.session
         val rememberLoginEnabled = memberSession?.rememberLoginEnabled ?: member.rememberLoginEnabled
         val ipSecurityEnabled = memberSession?.ipSecurityEnabled ?: member.ipSecurityEnabled
@@ -429,7 +429,15 @@ class CustomAuthenticationFilter(
         return resolution.copy(freshTokenFallback = true)
     }
 
-    private fun ensureSessionIsUsable(sessionResolution: SessionResolution) {
+    private fun ensureSessionIsUsable(
+        sessionResolution: SessionResolution,
+        requireSession: Boolean = false,
+    ) {
+        if (!sessionResolution.sessionKeyProvided && requireSession) {
+            authCookieService.expireAuthCookies()
+            throw AppException("401-8", "세션이 만료되었습니다. 다시 로그인해주세요.")
+        }
+
         if (sessionResolution.sessionKeyProvided && sessionResolution.session == null && !sessionResolution.freshTokenFallback) {
             authCookieService.expireAuthCookies()
             throw AppException("401-8", "세션이 만료되었습니다. 다시 로그인해주세요.")

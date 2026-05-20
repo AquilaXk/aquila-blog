@@ -72,6 +72,12 @@ import {
 } from "src/libs/markdown/htmlToMarkdown"
 import { INLINE_TEXT_COLOR_OPTIONS } from "src/libs/markdown/inlineColor"
 import { inferCardKindFromUrl, inferLinkProvider, resolveEmbedPreviewUrl } from "src/libs/unfurl/extractMeta"
+import {
+  captureEmptyEditorHistoryState,
+  getEditorUndoDepth,
+  resetEditorUndoHistory,
+  type EditorHistorySnapshot,
+} from "./editorHistoryModel"
 import type {
   BlockEditorChangeMeta,
   BlockEditorQaActions,
@@ -918,6 +924,7 @@ const BlockEditorEngine = ({
   const initialDocRef = useRef(
     downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(value), enableMermaidBlocks)
   )
+  const emptyHistoryStateRef = useRef<EditorHistorySnapshot | null>(null)
 
   const isSelectionInEmptyParagraph = useCallback(() => {
     const currentEditor = editorRef.current
@@ -2646,6 +2653,7 @@ const BlockEditorEngine = ({
     if (!currentEditor) return
 
     currentEditor.chain().setMeta("addToHistory", false).setContent(nextDoc, { emitUpdate: false }).run()
+    resetEditorUndoHistory(currentEditor, emptyHistoryStateRef.current)
     markCommittedDoc(nextDoc)
   }, [markCommittedDoc])
 
@@ -2881,6 +2889,7 @@ const BlockEditorEngine = ({
     editable: true,
     onCreate: ({ editor: createdEditor }) => {
       editorRef.current = createdEditor
+      emptyHistoryStateRef.current = captureEmptyEditorHistoryState(createdEditor)
       createdEditor.setEditable(!disabled)
       promoteLargeTablesToWideOverflowMode(createdEditor)
       scheduleTableViewportBudgetNormalize(createdEditor)
@@ -4618,6 +4627,10 @@ const BlockEditorEngine = ({
       },
       moveTaskItemInFirstTaskList: (sourceIndex, insertionIndex) => {
         moveTaskItemInFirstTaskList(sourceIndex, insertionIndex)
+      },
+      getUndoDepth: () => {
+        const currentEditor = editorRef.current ?? editor
+        return currentEditor ? getEditorUndoDepth(currentEditor) : 0
       },
     })
 

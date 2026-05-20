@@ -83,7 +83,7 @@ class TaskQueueDiagnosticsService(
     private val taskHandlerRegistry: TaskHandlerRegistry,
     @Value("\${custom.task.processor.processingTimeoutSeconds:900}")
     private val processingTimeoutSeconds: Long,
-    @Value("\${custom.task.diagnostics.cacheSeconds:3}")
+    @Value("\${custom.task.diagnostics.cacheSeconds:30}")
     private val diagnosticsCacheSeconds: Long,
 ) {
     private data class DiagnosticsSnapshot(

@@ -32,6 +32,24 @@ enum class TaskStatus {
     ON task (status, next_retry_at ASC)
     """,
 )
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS task_idx_status_modified_at
+    ON task (status, modified_at ASC)
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS task_idx_task_type_status_next_retry_at
+    ON task (task_type, status, next_retry_at ASC)
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS task_idx_task_type_status_modified_at
+    ON task (task_type, status, modified_at ASC)
+    """,
+)
 class Task(
     @field:Id
     @field:SequenceGenerator(name = "task_seq_gen", sequenceName = "task_seq", allocationSize = 50)

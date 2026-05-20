@@ -88,6 +88,12 @@ BEGIN
     IF to_regclass('public.task') IS NOT NULL THEN
         CREATE INDEX IF NOT EXISTS task_idx_status_next_retry_at
             ON task (status, next_retry_at ASC);
+        CREATE INDEX IF NOT EXISTS task_idx_status_modified_at
+            ON task (status, modified_at ASC);
+        CREATE INDEX IF NOT EXISTS task_idx_task_type_status_next_retry_at
+            ON task (task_type, status, next_retry_at ASC);
+        CREATE INDEX IF NOT EXISTS task_idx_task_type_status_modified_at
+            ON task (task_type, status, modified_at ASC);
     END IF;
 
     IF to_regclass('public.uploaded_file') IS NOT NULL THEN

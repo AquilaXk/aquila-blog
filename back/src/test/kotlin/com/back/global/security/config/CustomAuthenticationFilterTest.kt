@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.application.service.ActorApplicationServi
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.shared.AccessTokenPayload
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
+import com.back.boundedContexts.member.subContexts.session.model.MemberSessionAuthSnapshot
 import com.back.global.app.AppConfig
 import com.back.global.security.application.AuthIpSecurityService
 import com.back.global.security.application.AuthSecurityEventService
@@ -248,13 +249,24 @@ class CustomAuthenticationFilterTest {
         val request = MockHttpServletRequest("PUT", "/post/api/v1/posts/452")
         val apiKey = "admin-api-key"
         val staleAccessToken = "stale-access-token"
+        val sessionKey = "admin-session-key"
+        val sessionSnapshot =
+            MemberSessionAuthSnapshot(
+                id = 11L,
+                memberId = 54L,
+                sessionKey = sessionKey,
+                rememberLoginEnabled = true,
+                ipSecurityEnabled = false,
+                ipSecurityFingerprint = null,
+                lastAuthenticatedAt = Instant.now(),
+            )
         val persistedAdmin = Member(54L, "internal-admin", null, "aquila", "admin@test.com", apiKey)
 
         given(publicApiRequestMatcher.matches(request)).willReturn(false)
         given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("")
         given(rq.getCookieValue("apiKey", "")).willReturn(apiKey)
         given(rq.getCookieValue("accessToken", "")).willReturn(staleAccessToken)
-        given(rq.getCookieValue("sessionKey", "")).willReturn("")
+        given(rq.getCookieValue("sessionKey", "")).willReturn(sessionKey)
         given(actorApplicationService.payload(staleAccessToken))
             .willReturn(
                 AccessTokenPayload(
@@ -268,7 +280,8 @@ class CustomAuthenticationFilterTest {
                 ),
             )
         given(actorApplicationService.findByApiKey(apiKey)).willReturn(persistedAdmin)
-        given(actorApplicationService.genAccessToken(persistedAdmin)).willReturn("rotated-access-token")
+        given(memberSessionUseCase.findActiveSessionSnapshot(54L, sessionKey)).willReturn(sessionSnapshot)
+        given(actorApplicationService.genAccessToken(persistedAdmin, sessionKey, true, false, null)).willReturn("rotated-access-token")
         given(clientIpResolver.resolve(request)).willReturn("203.0.113.13")
 
         val filter =

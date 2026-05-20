@@ -105,6 +105,23 @@ BEGIN
         CREATE INDEX IF NOT EXISTS post_comment_idx_subtree_active
             ON post_comment (post_id, parent_comment_id, created_at ASC, id ASC)
             WHERE deleted_at IS NULL;
+        CREATE INDEX IF NOT EXISTS post_comment_idx_post_id
+            ON post_comment (post_id);
+        CREATE INDEX IF NOT EXISTS post_comment_idx_parent_comment_id
+            ON post_comment (parent_comment_id);
+    END IF;
+
+    IF to_regclass('public.post_like') IS NOT NULL THEN
+        CREATE INDEX IF NOT EXISTS post_like_idx_post_id
+            ON post_like (post_id);
+    END IF;
+
+    IF to_regclass('public.post_write_request_idempotency') IS NOT NULL THEN
+        CREATE INDEX IF NOT EXISTS post_write_request_idempotency_idx_post_id
+            ON post_write_request_idempotency (post_id)
+            WHERE post_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS post_write_request_idempotency_idx_created_at
+            ON post_write_request_idempotency (created_at ASC);
     END IF;
 
     IF to_regclass('public.post_attr') IS NOT NULL THEN

@@ -185,7 +185,7 @@ class CustomAuthenticationFilter(
             }
 
             val sessionResolution = resolveMemberSession(payload.id, sessionKey, payload.sessionKey, payload, request)
-            ensureSessionIsUsable(sessionResolution)
+            ensureSessionIsUsable(sessionResolution, requireSession = true)
             val memberSession = sessionResolution.session
             val rememberLoginEnabled = memberSession?.rememberLoginEnabled ?: payload.rememberLoginEnabled
             val ipSecurityEnabled = memberSession?.ipSecurityEnabled ?: payload.ipSecurityEnabled

@@ -250,7 +250,7 @@ custom:
       perTypeAutoTuneRefreshMs: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_AUTO_TUNE_REFRESH_MS:15000}
       inlineWhenNotProd: ${CUSTOM__TASK__PROCESSOR__INLINE_WHEN_NOT_PROD:false}
     diagnostics:
-      cacheSeconds: ${CUSTOM__TASK__DIAGNOSTICS__CACHE_SECONDS:3}
+      cacheSeconds: ${CUSTOM__TASK__DIAGNOSTICS__CACHE_SECONDS:30}
   runtime:
     workerEnabled: ${CUSTOM__RUNTIME__WORKER_ENABLED:true}
     apiMode: ${CUSTOM__RUNTIME__API_MODE:all}

@@ -80,6 +80,54 @@ class MemberSessionServiceTest {
     }
 
     @Test
+    fun `세션 생성 후 계정별 활성 세션 상한을 넘는 이전 세션을 폐기한다`() {
+        val store = RecordingMemberSessionStorePort()
+        val service =
+            MemberSessionService(
+                memberSessionStorePort = store,
+                cacheManager = ConcurrentMapCacheManager(),
+                touchMinIntervalSeconds = 60,
+                refreshTokenExpirationSeconds = 3600,
+                maxActivePerMember = 2,
+            )
+        val member = Member(56L, "session-cap-user", null, "세션상한", "session-cap@example.com", MemberPolicy.genApiKey())
+
+        val first =
+            service.createSessionWithRefreshToken(
+                member = member,
+                rememberLoginEnabled = true,
+                ipSecurityEnabled = false,
+                ipSecurityFingerprint = null,
+                createdIp = "203.0.113.30",
+                userAgent = "test-agent",
+            )
+        val second =
+            service.createSessionWithRefreshToken(
+                member = member,
+                rememberLoginEnabled = true,
+                ipSecurityEnabled = false,
+                ipSecurityFingerprint = null,
+                createdIp = "203.0.113.31",
+                userAgent = "test-agent",
+            )
+        val third =
+            service.createSessionWithRefreshToken(
+                member = member,
+                rememberLoginEnabled = true,
+                ipSecurityEnabled = false,
+                ipSecurityFingerprint = null,
+                createdIp = "203.0.113.32",
+                userAgent = "test-agent",
+            )
+
+        assertThat(first.session.revokedAt).isNotNull
+        assertThat(second.session.revokedAt).isNull()
+        assertThat(third.session.revokedAt).isNull()
+        assertThat(store.activeSessionKeys(member.id)).containsExactly(second.session.sessionKey, third.session.sessionKey)
+        assertThat(store.lastRevokedBeyondLimit).isEqualTo(2)
+    }
+
+    @Test
     fun `snapshot lastAuthenticatedAt 이 최소 간격 이내면 DB touch update를 생략한다`() {
         val store = RecordingMemberSessionStorePort()
         val service =
@@ -133,6 +181,7 @@ class MemberSessionServiceTest {
     private class RecordingMemberSessionStorePort : MemberSessionStorePort {
         var touchCallCount: Int = 0
         var lastTouchedSessionId: Long? = null
+        var lastRevokedBeyondLimit: Int? = null
         private val sessionsByKey = linkedMapOf<String, MemberSession>()
 
         override fun save(memberSession: MemberSession): MemberSession {
@@ -172,6 +221,25 @@ class MemberSessionServiceTest {
             lastTouchedSessionId = sessionId
             return false
         }
+
+        override fun revokeActiveSessionsBeyondLimit(
+            memberId: Long,
+            keepLimit: Int,
+            now: Instant,
+        ): Int {
+            lastRevokedBeyondLimit = keepLimit
+            val activeSessions =
+                sessionsByKey.values
+                    .filter { it.member.id == memberId && it.revokedAt == null }
+            val sessionsToRevoke = activeSessions.dropLast(keepLimit.coerceAtLeast(1))
+            sessionsToRevoke.forEach { it.revoke(now) }
+            return sessionsToRevoke.size
+        }
+
+        fun activeSessionKeys(memberId: Long): List<String> =
+            sessionsByKey.values
+                .filter { it.member.id == memberId && it.revokedAt == null }
+                .map { it.sessionKey }
 
         private fun MemberSession.toSnapshot(): MemberSessionAuthSnapshot =
             MemberSessionAuthSnapshot(

@@ -79,6 +79,12 @@ BEGIN
             ON member_notification (receiver_id, read_at, created_at DESC);
     END IF;
 
+    IF to_regclass('public.member_session') IS NOT NULL THEN
+        CREATE INDEX IF NOT EXISTS member_session_idx_member_active_recent
+            ON member_session (member_id, last_authenticated_at DESC, id DESC)
+            WHERE revoked_at IS NULL;
+    END IF;
+
     IF to_regclass('public.task') IS NOT NULL THEN
         CREATE INDEX IF NOT EXISTS task_idx_status_next_retry_at
             ON task (status, next_retry_at ASC);

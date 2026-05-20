@@ -90,4 +90,28 @@ interface MemberSessionRepository : JpaRepository<MemberSession, Long> {
         @Param("threshold") threshold: Instant,
         @Param("now") now: Instant,
     ): Int
+
+    @Modifying(flushAutomatically = true, clearAutomatically = false)
+    @Query(
+        value = """
+        update member_session
+        set revoked_at = :now
+        where member_id = :memberId
+          and revoked_at is null
+          and id not in (
+              select id
+              from member_session
+              where member_id = :memberId
+                and revoked_at is null
+              order by last_authenticated_at desc nulls last, id desc
+              limit :keepLimit
+          )
+        """,
+        nativeQuery = true,
+    )
+    fun revokeActiveSessionsBeyondLimit(
+        @Param("memberId") memberId: Long,
+        @Param("keepLimit") keepLimit: Int,
+        @Param("now") now: Instant,
+    ): Int
 }

@@ -1,6 +1,7 @@
 package com.back.global.security.application.port.output
 
 import com.back.global.security.model.AuthSecurityEvent
+import java.time.Instant
 
 /**
  * 인증 보안 이벤트 저장소 포트.
@@ -10,4 +11,11 @@ interface AuthSecurityEventStore {
     fun save(event: AuthSecurityEvent)
 
     fun findRecent(limit: Int): List<AuthSecurityEvent>
+
+    fun findExpired(
+        cutoff: Instant,
+        limit: Int,
+    ): List<AuthSecurityEvent>
+
+    fun deleteAll(events: List<AuthSecurityEvent>)
 }

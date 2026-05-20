@@ -39,4 +39,10 @@ class MemberSessionRepositoryAdapter(
         threshold: Instant,
         now: Instant,
     ): Boolean = memberSessionRepository.touchAuthenticatedIfDue(sessionId, threshold, now) > 0
+
+    override fun revokeActiveSessionsBeyondLimit(
+        memberId: Long,
+        keepLimit: Int,
+        now: Instant,
+    ): Int = memberSessionRepository.revokeActiveSessionsBeyondLimit(memberId, keepLimit.coerceAtLeast(1), now)
 }

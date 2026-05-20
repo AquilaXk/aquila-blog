@@ -446,6 +446,7 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
                 mvc
                     .delete("/member/api/v1/auth/logout") {
                         cookie(sessionKeyCookie!!)
+                        header("X-Aquila-CSRF", "1")
                     }.andExpect {
                         status { isOk() }
                         match(handler().handlerType(ApiV1AuthController::class.java))

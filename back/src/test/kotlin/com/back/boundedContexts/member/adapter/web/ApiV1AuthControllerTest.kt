@@ -94,12 +94,22 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
             assertThat(accessTokenCookie.path).isEqualTo("/")
             assertThat(accessTokenCookie.isHttpOnly).isTrue
 
+            val refreshTokenCookie =
+                result.response.cookies.firstOrNull { it.name == "refreshToken" && it.value.isNotBlank() }
+            assertThat(refreshTokenCookie).isNotNull
+            assertThat(refreshTokenCookie!!.value).isNotBlank()
+            assertThat(refreshTokenCookie.path).isEqualTo("/")
+            assertThat(refreshTokenCookie.isHttpOnly).isTrue
+
             val sessionKeyCookie =
                 result.response.cookies.firstOrNull { it.name == "sessionKey" && it.value.isNotBlank() }
             assertThat(sessionKeyCookie).isNotNull
             val activeSession = memberSessionRepository.findBySessionKeyAndRevokedAtIsNull(sessionKeyCookie!!.value)
             assertThat(activeSession).isNotNull
             assertThat(activeSession!!.member.id).isEqualTo(member.id)
+            assertThat(activeSession.refreshTokenHash).isNotBlank()
+            assertThat(activeSession.refreshTokenHash).isNotEqualTo(refreshTokenCookie.value)
+            assertThat(activeSession.refreshTokenExpiresAt).isNotNull
         }
 
         @Test
@@ -161,6 +171,8 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
                 result.response.cookies.firstOrNull { it.name == "apiKey" && it.value.isNotBlank() }
             val issuedAccessTokenCookie =
                 result.response.cookies.firstOrNull { it.name == "accessToken" && it.value.isNotBlank() }
+            val issuedRefreshTokenCookie =
+                result.response.cookies.firstOrNull { it.name == "refreshToken" && it.value.isNotBlank() }
             val issuedSessionKeyCookie =
                 result.response.cookies.firstOrNull { it.name == "sessionKey" && it.value.isNotBlank() }
 
@@ -170,6 +182,8 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
 
             assertThat(issuedAccessTokenCookie).isNotNull
             assertThat(issuedAccessTokenCookie!!.maxAge).isEqualTo(-1)
+            assertThat(issuedRefreshTokenCookie).isNotNull
+            assertThat(issuedRefreshTokenCookie!!.maxAge).isEqualTo(-1)
             assertThat(issuedSessionKeyCookie).isNotNull
             assertThat(issuedSessionKeyCookie!!.maxAge).isEqualTo(-1)
         }
@@ -201,10 +215,10 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
 
             val issuedCookies =
                 loginResult.response.cookies.filter {
-                    it.name in setOf("apiKey", "accessToken", "sessionKey") && it.value.isNotBlank()
+                    it.name in setOf("apiKey", "accessToken", "refreshToken", "sessionKey") && it.value.isNotBlank()
                 }
 
-            assertThat(issuedCookies.map { it.name }).contains("apiKey", "accessToken", "sessionKey")
+            assertThat(issuedCookies.map { it.name }).contains("apiKey", "accessToken", "refreshToken", "sessionKey")
 
             mvc
                 .get("/member/api/v1/auth/session") {
@@ -246,9 +260,12 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
 
             val firstApiKeyCookie =
                 firstLogin.response.cookies.firstOrNull { it.name == "apiKey" && it.value.isNotBlank() }
+            val firstAccessTokenCookie =
+                firstLogin.response.cookies.firstOrNull { it.name == "accessToken" && it.value.isNotBlank() }
             val firstSessionKeyCookie =
                 firstLogin.response.cookies.firstOrNull { it.name == "sessionKey" && it.value.isNotBlank() }
             assertThat(firstApiKeyCookie).isNotNull
+            assertThat(firstAccessTokenCookie).isNotNull
             assertThat(firstSessionKeyCookie).isNotNull
 
             val secondLogin =
@@ -274,6 +291,7 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
             mvc
                 .get("/member/api/v1/auth/me") {
                     cookie(Cookie("apiKey", firstApiKeyCookie.value))
+                    cookie(Cookie("accessToken", firstAccessTokenCookie!!.value))
                     cookie(Cookie("sessionKey", firstSessionKeyCookie!!.value))
                 }.andExpect {
                     status { isOk() }
@@ -471,6 +489,20 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
             assertThat(accessTokenCookie.path).isEqualTo("/")
             assertThat(accessTokenCookie.isHttpOnly).isTrue
 
+            val refreshTokenCookie: Cookie? = result.response.getCookie("refreshToken")
+            assertThat(refreshTokenCookie).isNotNull
+            assertThat(refreshTokenCookie!!.value).isEmpty()
+            assertThat(refreshTokenCookie.maxAge).isEqualTo(0)
+            assertThat(refreshTokenCookie.path).isEqualTo("/")
+            assertThat(refreshTokenCookie.isHttpOnly).isTrue
+
+            val expiredSessionKeyCookie: Cookie? = result.response.getCookie("sessionKey")
+            assertThat(expiredSessionKeyCookie).isNotNull
+            assertThat(expiredSessionKeyCookie!!.value).isEmpty()
+            assertThat(expiredSessionKeyCookie.maxAge).isEqualTo(0)
+            assertThat(expiredSessionKeyCookie.path).isEqualTo("/")
+            assertThat(expiredSessionKeyCookie.isHttpOnly).isTrue
+
             val revokedSession = memberSessionRepository.findBySessionKey(sessionKeyCookie!!.value)
             assertThat(revokedSession).isNotNull
             assertThat(revokedSession!!.revokedAt).isNotNull
@@ -548,6 +580,7 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
                     jsonPath("$.msg") { value("세션이 만료되었습니다. 다시 로그인해주세요.") }
                     cookie { maxAge("apiKey", 0) }
                     cookie { maxAge("accessToken", 0) }
+                    cookie { maxAge("refreshToken", 0) }
                     cookie { maxAge("sessionKey", 0) }
                 }
         }
@@ -576,7 +609,7 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
         }
 
         @Test
-        fun `내 정보 조회에서 Authorization 헤더의 accessToken 이 잘못되어도 apiKey 와 sessionKey 가 유효하면 accessToken 을 재발급한다`() {
+        fun `내 정보 조회에서 accessToken 이 잘못되어도 refreshToken 과 sessionKey 가 유효하면 토큰을 회전한다`() {
             val member =
                 memberFacade.join(
                     username = "session-bound-rotate-user",
@@ -587,11 +620,13 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
                 )
             val authCookies = loginAuthCookies(member.email!!)
             val sessionKeyCookie = requireAuthCookie(authCookies, "sessionKey")
+            val refreshTokenCookie = requireAuthCookie(authCookies, "refreshToken")
 
             val resultActions =
                 mvc
                     .get("/member/api/v1/auth/me") {
-                        header(HttpHeaders.AUTHORIZATION, "Bearer ${member.apiKey} wrong-access-token")
+                        cookie(Cookie("accessToken", "wrong-access-token"))
+                        cookie(refreshTokenCookie)
                         cookie(sessionKeyCookie)
                     }.andExpect {
                         status { isOk() }
@@ -610,13 +645,64 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
             val result = resultActions.andReturn()
             val accessTokenCookie =
                 result.response.cookies.firstOrNull { it.name == "accessToken" && it.value.isNotBlank() }
+            val rotatedRefreshTokenCookie =
+                result.response.cookies.firstOrNull { it.name == "refreshToken" && it.value.isNotBlank() }
 
             assertThat(accessTokenCookie).isNotNull
             assertThat(accessTokenCookie!!.value).isNotBlank()
             assertThat(accessTokenCookie.path).isEqualTo("/")
             assertThat(accessTokenCookie.isHttpOnly).isTrue
+            assertThat(rotatedRefreshTokenCookie).isNotNull
+            assertThat(rotatedRefreshTokenCookie!!.value).isNotBlank()
+            assertThat(rotatedRefreshTokenCookie.value).isNotEqualTo(refreshTokenCookie.value)
+            assertThat(rotatedRefreshTokenCookie.path).isEqualTo("/")
+            assertThat(rotatedRefreshTokenCookie.isHttpOnly).isTrue
             assertThat(result.response.getHeader(HttpHeaders.AUTHORIZATION))
                 .isEqualTo("Bearer ${accessTokenCookie.value}")
+        }
+
+        @Test
+        fun `내 정보 조회에서 이미 회전된 refreshToken 을 다시 사용하면 세션을 폐기한다`() {
+            val member =
+                memberFacade.join(
+                    username = "session-bound-reuse-user",
+                    password = "Abcd1234!",
+                    nickname = "세션재사용",
+                    profileImgUrl = null,
+                    email = "session-bound-reuse-user@example.com",
+                )
+            val authCookies = loginAuthCookies(member.email!!)
+            val sessionKeyCookie = requireAuthCookie(authCookies, "sessionKey")
+            val staleRefreshTokenCookie = requireAuthCookie(authCookies, "refreshToken")
+
+            mvc
+                .get("/member/api/v1/auth/me") {
+                    cookie(Cookie("accessToken", "wrong-access-token"))
+                    cookie(staleRefreshTokenCookie)
+                    cookie(sessionKeyCookie)
+                }.andExpect {
+                    status { isOk() }
+                }
+
+            mvc
+                .get("/member/api/v1/auth/me") {
+                    cookie(Cookie("accessToken", "wrong-access-token"))
+                    cookie(staleRefreshTokenCookie)
+                    cookie(sessionKeyCookie)
+                }.andExpect {
+                    status { isUnauthorized() }
+                    jsonPath("$.resultCode") { value("401-8") }
+                    jsonPath("$.msg") { value("세션이 만료되었습니다. 다시 로그인해주세요.") }
+                    cookie { maxAge("apiKey", 0) }
+                    cookie { maxAge("accessToken", 0) }
+                    cookie { maxAge("refreshToken", 0) }
+                    cookie { maxAge("sessionKey", 0) }
+                }
+
+            val revokedSession = memberSessionRepository.findBySessionKey(sessionKeyCookie.value)
+            assertThat(revokedSession).isNotNull
+            assertThat(revokedSession!!.refreshTokenReusedAt).isNotNull
+            assertThat(revokedSession.revokedAt).isNotNull
         }
 
         @Test
@@ -673,6 +759,7 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
                     jsonPath("$.msg") { value("세션이 만료되었습니다. 다시 로그인해주세요.") }
                     cookie { maxAge("apiKey", 0) }
                     cookie { maxAge("accessToken", 0) }
+                    cookie { maxAge("refreshToken", 0) }
                     cookie { maxAge("sessionKey", 0) }
                 }
         }
@@ -706,14 +793,18 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
 
             val apiKeyCookie =
                 loginResponse.response.cookies.firstOrNull { it.name == "apiKey" && it.value.isNotBlank() }
+            val accessTokenCookie =
+                loginResponse.response.cookies.firstOrNull { it.name == "accessToken" && it.value.isNotBlank() }
             val sessionKeyCookie =
                 loginResponse.response.cookies.firstOrNull { it.name == "sessionKey" && it.value.isNotBlank() }
             assertThat(apiKeyCookie).isNotNull
+            assertThat(accessTokenCookie).isNotNull
             assertThat(sessionKeyCookie).isNotNull
 
             mvc
                 .get("/member/api/v1/auth/me") {
                     cookie(apiKeyCookie!!)
+                    cookie(accessTokenCookie!!)
                     cookie(sessionKeyCookie!!)
                     with(remoteAddr("10.0.0.77"))
                 }.andExpect {
@@ -723,6 +814,8 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
                 }.andExpect {
                     cookie { maxAge("apiKey", 0) }
                     cookie { maxAge("accessToken", 0) }
+                    cookie { maxAge("refreshToken", 0) }
+                    cookie { maxAge("sessionKey", 0) }
                 }
         }
 
@@ -757,14 +850,18 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
 
             val apiKeyCookie =
                 loginResponse.response.cookies.firstOrNull { it.name == "apiKey" && it.value.isNotBlank() }
+            val accessTokenCookie =
+                loginResponse.response.cookies.firstOrNull { it.name == "accessToken" && it.value.isNotBlank() }
             val sessionKeyCookie =
                 loginResponse.response.cookies.firstOrNull { it.name == "sessionKey" && it.value.isNotBlank() }
             assertThat(apiKeyCookie).isNotNull
+            assertThat(accessTokenCookie).isNotNull
             assertThat(sessionKeyCookie).isNotNull
 
             mvc
                 .get("/member/api/v1/auth/me") {
                     cookie(apiKeyCookie!!)
+                    cookie(accessTokenCookie!!)
                     cookie(sessionKeyCookie!!)
                     header("CF-Connecting-IP", "198.51.100.34")
                     with(remoteAddr("172.18.0.9"))
@@ -792,7 +889,7 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
             }.andReturn()
             .response
             .cookies
-            .filter { it.name in setOf("apiKey", "accessToken", "sessionKey") && it.value.isNotBlank() }
+            .filter { it.name in setOf("apiKey", "accessToken", "refreshToken", "sessionKey") && it.value.isNotBlank() }
 
     private fun requireAuthCookie(
         cookies: List<Cookie>,

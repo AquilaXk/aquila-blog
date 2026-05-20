@@ -45,8 +45,8 @@ class CustomOAuth2LoginSuccessHandler(
         if (actor.apiKey.isBlank() || actor.apiKey == actor.username) {
             actor.modifyApiKey(MemberPolicy.genApiKey())
         }
-        val session =
-            memberSessionUseCase.createSession(
+        val createdSession =
+            memberSessionUseCase.createSessionWithRefreshToken(
                 member = actor,
                 rememberLoginEnabled = true,
                 ipSecurityEnabled = false,
@@ -54,6 +54,7 @@ class CustomOAuth2LoginSuccessHandler(
                 createdIp = clientIpResolver.resolve(request),
                 userAgent = request.getHeader("User-Agent"),
             )
+        val session = createdSession.session
         val accessToken =
             actorApplicationService.genAccessToken(
                 member = actor,
@@ -66,6 +67,7 @@ class CustomOAuth2LoginSuccessHandler(
         authCookieService.issueAuthCookies(
             apiKey = actor.apiKey,
             accessToken = accessToken,
+            refreshToken = createdSession.refreshToken,
             sessionKey = session.sessionKey,
             rememberLoginEnabled = session.rememberLoginEnabled,
         )

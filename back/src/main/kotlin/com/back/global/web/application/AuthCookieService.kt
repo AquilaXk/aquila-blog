@@ -20,15 +20,19 @@ class AuthCookieService(
     private val apiKeyCookieMaxAgeSeconds: Int,
     @param:Value("\${custom.accessToken.expirationSeconds:1200}")
     private val accessTokenCookieMaxAgeSeconds: Int,
+    @param:Value("\${custom.auth.refreshToken.cookieMaxAgeSeconds:2592000}")
+    private val refreshTokenCookieMaxAgeSeconds: Int,
 ) {
     fun issueAuthCookies(
         apiKey: String,
         accessToken: String,
+        refreshToken: String,
         sessionKey: String? = null,
         rememberLoginEnabled: Boolean = true,
     ) {
         issueCookie("apiKey", apiKey, apiKeyCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
         issueCookie("accessToken", accessToken, accessTokenCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
+        issueCookie("refreshToken", refreshToken, refreshTokenCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
         if (!sessionKey.isNullOrBlank()) {
             issueCookie("sessionKey", sessionKey, apiKeyCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
         }
@@ -38,6 +42,7 @@ class AuthCookieService(
         accessToken: String,
         rememberLoginEnabled: Boolean = true,
         sessionKey: String? = null,
+        refreshToken: String? = null,
     ) {
         issueCookie(
             "accessToken",
@@ -45,6 +50,9 @@ class AuthCookieService(
             accessTokenCookieMaxAgeSeconds,
             sessionOnly = !rememberLoginEnabled,
         )
+        if (!refreshToken.isNullOrBlank()) {
+            issueCookie("refreshToken", refreshToken, refreshTokenCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
+        }
         if (!sessionKey.isNullOrBlank()) {
             issueCookie("sessionKey", sessionKey, apiKeyCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
         }
@@ -53,6 +61,7 @@ class AuthCookieService(
     fun expireAuthCookies() {
         expireCookie("apiKey")
         expireCookie("accessToken")
+        expireCookie("refreshToken")
         expireCookie("sessionKey")
     }
 

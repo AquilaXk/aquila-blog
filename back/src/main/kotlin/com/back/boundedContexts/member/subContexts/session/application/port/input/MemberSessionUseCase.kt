@@ -3,6 +3,7 @@ package com.back.boundedContexts.member.subContexts.session.application.port.inp
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.subContexts.session.model.MemberSession
 import com.back.boundedContexts.member.subContexts.session.model.MemberSessionAuthSnapshot
+import com.back.boundedContexts.member.subContexts.session.model.MemberSessionWithRefreshToken
 
 interface MemberSessionUseCase {
     fun createSession(
@@ -13,6 +14,15 @@ interface MemberSessionUseCase {
         createdIp: String?,
         userAgent: String?,
     ): MemberSession
+
+    fun createSessionWithRefreshToken(
+        member: Member,
+        rememberLoginEnabled: Boolean,
+        ipSecurityEnabled: Boolean,
+        ipSecurityFingerprint: String?,
+        createdIp: String?,
+        userAgent: String?,
+    ): MemberSessionWithRefreshToken
 
     fun findActiveSession(sessionKey: String): MemberSession?
 
@@ -31,6 +41,11 @@ interface MemberSessionUseCase {
     fun touchAuthenticated(memberSession: MemberSession)
 
     fun touchAuthenticated(snapshot: MemberSessionAuthSnapshot)
+
+    fun rotateRefreshToken(
+        sessionKey: String,
+        refreshToken: String,
+    ): MemberSessionWithRefreshToken?
 
     fun revokeSession(sessionKey: String)
 }

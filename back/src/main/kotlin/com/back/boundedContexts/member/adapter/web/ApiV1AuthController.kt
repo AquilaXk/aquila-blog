@@ -126,8 +126,8 @@ class ApiV1AuthController(
         if (member.apiKey.isBlank() || member.apiKey == member.username) {
             member.modifyApiKey(MemberPolicy.genApiKey())
         }
-        val session =
-            memberSessionUseCase.createSession(
+        val createdSession =
+            memberSessionUseCase.createSessionWithRefreshToken(
                 member = member,
                 rememberLoginEnabled = reqBody.rememberMe,
                 ipSecurityEnabled = reqBody.ipSecurity,
@@ -135,6 +135,7 @@ class ApiV1AuthController(
                 createdIp = clientIp,
                 userAgent = request.getHeader("User-Agent"),
             )
+        val session = createdSession.session
 
         val sessionBoundAccessToken =
             authTokenIssueUseCase.genAccessToken(
@@ -147,6 +148,7 @@ class ApiV1AuthController(
         authCookieService.issueAuthCookies(
             apiKey = member.apiKey,
             accessToken = sessionBoundAccessToken,
+            refreshToken = createdSession.refreshToken,
             sessionKey = session.sessionKey,
             rememberLoginEnabled = session.rememberLoginEnabled,
         )

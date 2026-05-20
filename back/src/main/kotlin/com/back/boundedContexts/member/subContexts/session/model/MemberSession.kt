@@ -35,6 +35,11 @@ class MemberSession(
     var createdIp: String? = null,
     @field:Column(length = 512)
     var userAgent: String? = null,
+    @field:Column(length = 128)
+    var refreshTokenHash: String? = null,
+    var refreshTokenExpiresAt: Instant? = null,
+    var refreshTokenRotatedAt: Instant? = null,
+    var refreshTokenReusedAt: Instant? = null,
     var lastAuthenticatedAt: Instant? = null,
     var revokedAt: Instant? = null,
 ) : BaseTime(id) {
@@ -44,6 +49,37 @@ class MemberSession(
 
     fun touchAuthenticated(now: Instant = Instant.now()) {
         lastAuthenticatedAt = now
+    }
+
+    fun bindRefreshToken(
+        refreshToken: String,
+        expiresAt: Instant,
+        now: Instant = Instant.now(),
+    ) {
+        refreshTokenHash = MemberSessionRefreshTokenPolicy.hash(refreshToken)
+        refreshTokenExpiresAt = expiresAt
+        refreshTokenRotatedAt = now
+        refreshTokenReusedAt = null
+    }
+
+    fun matchesRefreshToken(
+        refreshToken: String,
+        now: Instant = Instant.now(),
+    ): Boolean {
+        val storedHash = refreshTokenHash ?: return false
+        val expiresAt = refreshTokenExpiresAt ?: return false
+        if (!now.isBefore(expiresAt)) return false
+        return storedHash == MemberSessionRefreshTokenPolicy.hash(refreshToken)
+    }
+
+    fun isRefreshTokenExpired(now: Instant = Instant.now()): Boolean {
+        val expiresAt = refreshTokenExpiresAt ?: return true
+        return !now.isBefore(expiresAt)
+    }
+
+    fun markRefreshTokenReused(now: Instant = Instant.now()) {
+        refreshTokenReusedAt = now
+        revoke(now)
     }
 
     fun touchAuthenticatedIfDue(

@@ -6,6 +6,8 @@ import com.back.boundedContexts.member.subContexts.session.application.port.inpu
 import com.back.boundedContexts.member.subContexts.session.application.port.output.MemberSessionStorePort
 import com.back.boundedContexts.member.subContexts.session.model.MemberSession
 import com.back.boundedContexts.member.subContexts.session.model.MemberSessionAuthSnapshot
+import com.back.boundedContexts.member.subContexts.session.model.MemberSessionRefreshTokenPolicy
+import com.back.boundedContexts.member.subContexts.session.model.MemberSessionWithRefreshToken
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.cache.CacheManager
 import org.springframework.cache.annotation.Cacheable
@@ -22,6 +24,8 @@ class MemberSessionService(
     private val cacheManager: CacheManager,
     @param:Value("\${custom.auth.session.touchMinIntervalSeconds:60}")
     private val touchMinIntervalSeconds: Long,
+    @param:Value("\${custom.auth.refreshToken.expirationSeconds:2592000}")
+    private val refreshTokenExpirationSeconds: Long = 2_592_000,
 ) : MemberSessionUseCase {
     @Transactional
     override fun createSession(
@@ -31,7 +35,27 @@ class MemberSessionService(
         ipSecurityFingerprint: String?,
         createdIp: String?,
         userAgent: String?,
-    ): MemberSession {
+    ): MemberSession =
+        createSessionWithRefreshToken(
+            member = member,
+            rememberLoginEnabled = rememberLoginEnabled,
+            ipSecurityEnabled = ipSecurityEnabled,
+            ipSecurityFingerprint = ipSecurityFingerprint,
+            createdIp = createdIp,
+            userAgent = userAgent,
+        ).session
+
+    @Transactional
+    override fun createSessionWithRefreshToken(
+        member: Member,
+        rememberLoginEnabled: Boolean,
+        ipSecurityEnabled: Boolean,
+        ipSecurityFingerprint: String?,
+        createdIp: String?,
+        userAgent: String?,
+    ): MemberSessionWithRefreshToken {
+        val now = Instant.now()
+        val refreshToken = MemberSessionRefreshTokenPolicy.generate()
         val session =
             MemberSession(
                 member = member,
@@ -42,8 +66,12 @@ class MemberSessionService(
                 createdIp = createdIp?.take(120),
                 userAgent = userAgent?.take(512),
             )
-        session.touchAuthenticated()
-        return memberSessionStorePort.save(session)
+        session.touchAuthenticated(now)
+        session.bindRefreshToken(refreshToken, refreshTokenExpiresAt(now), now)
+        return MemberSessionWithRefreshToken(
+            session = memberSessionStorePort.save(session),
+            refreshToken = refreshToken,
+        )
     }
 
     @Transactional(readOnly = true)
@@ -103,6 +131,32 @@ class MemberSessionService(
     }
 
     @Transactional
+    override fun rotateRefreshToken(
+        sessionKey: String,
+        refreshToken: String,
+    ): MemberSessionWithRefreshToken? {
+        if (sessionKey.isBlank() || refreshToken.isBlank()) return null
+        val session = memberSessionStorePort.findWithMemberBySessionKeyAndRevokedAtIsNull(sessionKey) ?: return null
+        val now = Instant.now()
+
+        if (!session.matchesRefreshToken(refreshToken, now)) {
+            if (session.isRefreshTokenExpired(now)) {
+                session.revoke(now)
+            } else {
+                session.markRefreshTokenReused(now)
+            }
+            evictActiveSnapshot(session.member.id, session.sessionKey)
+            return null
+        }
+
+        val nextRefreshToken = MemberSessionRefreshTokenPolicy.generate()
+        session.bindRefreshToken(nextRefreshToken, refreshTokenExpiresAt(now), now)
+        session.touchAuthenticated(now)
+        evictActiveSnapshot(session.member.id, session.sessionKey)
+        return MemberSessionWithRefreshToken(session = session, refreshToken = nextRefreshToken)
+    }
+
+    @Transactional
     override fun revokeSession(sessionKey: String) {
         if (sessionKey.isBlank()) return
         val session = memberSessionStorePort.findBySessionKeyAndRevokedAtIsNull(sessionKey) ?: return
@@ -127,4 +181,6 @@ class MemberSessionService(
         if (touchMinIntervalSeconds <= 0) return true
         return lastAuthenticatedAt == null || !now.isBefore(lastAuthenticatedAt.plusSeconds(touchMinIntervalSeconds))
     }
+
+    private fun refreshTokenExpiresAt(now: Instant): Instant = now.plusSeconds(refreshTokenExpirationSeconds.coerceAtLeast(1))
 }

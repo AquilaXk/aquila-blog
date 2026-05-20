@@ -16,6 +16,19 @@ interface MemberSessionRepository : JpaRepository<MemberSession, Long> {
 
     fun findBySessionKeyAndRevokedAtIsNull(sessionKey: String): MemberSession?
 
+    @Query(
+        """
+        select session
+        from MemberSession session
+        join fetch session.member
+        where session.sessionKey = :sessionKey
+          and session.revokedAt is null
+        """,
+    )
+    fun findWithMemberBySessionKeyAndRevokedAtIsNull(
+        @Param("sessionKey") sessionKey: String,
+    ): MemberSession?
+
     fun findByMemberIdAndSessionKeyAndRevokedAtIsNull(
         memberId: Long,
         sessionKey: String,

@@ -5,6 +5,7 @@ import com.back.global.security.model.AuthSecurityEvent
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Component
+import java.time.Instant
 
 @Component
 class AuthSecurityEventPersistenceAdapter(
@@ -24,5 +25,24 @@ class AuthSecurityEventPersistenceAdapter(
             )
 
         return authSecurityEventRepository.findAll(pageable).content
+    }
+
+    override fun findExpired(
+        cutoff: Instant,
+        limit: Int,
+    ): List<AuthSecurityEvent> {
+        val normalizedLimit = limit.coerceIn(1, 1_000)
+        val pageable =
+            PageRequest.of(
+                0,
+                normalizedLimit,
+                Sort.by(Sort.Order.asc("createdAt"), Sort.Order.asc("id")),
+            )
+
+        return authSecurityEventRepository.findByCreatedAtBefore(cutoff, pageable)
+    }
+
+    override fun deleteAll(events: List<AuthSecurityEvent>) {
+        authSecurityEventRepository.deleteAllInBatch(events)
     }
 }

@@ -30,4 +30,10 @@ interface MemberSessionStorePort {
         threshold: Instant,
         now: Instant,
     ): Boolean
+
+    fun revokeActiveSessionsBeyondLimit(
+        memberId: Long,
+        keepLimit: Int,
+        now: Instant,
+    ): Int
 }

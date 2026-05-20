@@ -26,6 +26,8 @@ class MemberSessionService(
     private val touchMinIntervalSeconds: Long,
     @param:Value("\${custom.auth.refreshToken.expirationSeconds:2592000}")
     private val refreshTokenExpirationSeconds: Long = 2_592_000,
+    @param:Value("\${custom.auth.session.maxActivePerMember:32}")
+    private val maxActivePerMember: Int = 32,
 ) : MemberSessionUseCase {
     @Transactional
     override fun createSession(
@@ -68,8 +70,18 @@ class MemberSessionService(
             )
         session.touchAuthenticated(now)
         session.bindRefreshToken(refreshToken, refreshTokenExpiresAt(now), now)
+        val savedSession = memberSessionStorePort.save(session)
+        val revokedCount =
+            memberSessionStorePort.revokeActiveSessionsBeyondLimit(
+                memberId = savedSession.member.id,
+                keepLimit = maxActivePerMember.coerceAtLeast(1),
+                now = now,
+            )
+        if (revokedCount > 0) {
+            evictAllActiveSnapshots()
+        }
         return MemberSessionWithRefreshToken(
-            session = memberSessionStorePort.save(session),
+            session = savedSession,
             refreshToken = refreshToken,
         )
     }
@@ -172,6 +184,10 @@ class MemberSessionService(
             cache.evict("session:$sessionKey")
             cache.evict("member:$memberId:session:$sessionKey")
         }
+    }
+
+    private fun evictAllActiveSnapshots() {
+        cacheManager.getCache(MemberSessionCacheNames.ACTIVE)?.clear()
     }
 
     private fun isTouchDue(

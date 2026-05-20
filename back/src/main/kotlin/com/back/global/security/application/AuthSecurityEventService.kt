@@ -4,10 +4,12 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.global.security.application.port.output.AuthSecurityEventStore
 import com.back.global.security.domain.AuthSecurityEventType
 import com.back.global.security.model.AuthSecurityEvent
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 
 data class AuthSecurityEventDto(
     val id: Long,
@@ -28,6 +30,8 @@ data class AuthSecurityEventDto(
 @Service
 class AuthSecurityEventService(
     private val authSecurityEventStore: AuthSecurityEventStore,
+    @param:Value("\${custom.auth.securityEvent.retentionDays:30}")
+    private val retentionDays: Int = 30,
 ) {
     /**
      * 로그인 성공 시 적용된 정책값을 운영 관측용 이벤트로 남깁니다.
@@ -83,6 +87,19 @@ class AuthSecurityEventService(
 
     @Transactional(readOnly = true)
     fun getRecent(limit: Int): List<AuthSecurityEventDto> = authSecurityEventStore.findRecent(limit).map { it.toDto() }
+
+    @Transactional
+    fun purgeExpired(
+        batchSize: Int,
+        now: Instant = Instant.now(),
+    ): Int {
+        val cutoff = now.minus(retentionDays.coerceAtLeast(1).toLong(), ChronoUnit.DAYS)
+        val expiredEvents = authSecurityEventStore.findExpired(cutoff, batchSize.coerceIn(1, 1_000))
+        if (expiredEvents.isEmpty()) return 0
+
+        authSecurityEventStore.deleteAll(expiredEvents)
+        return expiredEvents.size
+    }
 
     private fun AuthSecurityEvent.toDto(): AuthSecurityEventDto =
         AuthSecurityEventDto(

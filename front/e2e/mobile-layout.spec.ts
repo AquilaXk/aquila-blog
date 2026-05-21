@@ -197,6 +197,81 @@ const MOBILE_TAG_ENTRIES = Array.from({ length: 14 }, (_, index) => ({
   count: 14 - index,
 }))
 
+const ADMIN_MEMBER_FIXTURE = {
+  id: 1,
+  username: "aquila",
+  nickname: "aquila",
+  isAdmin: true,
+  profileImageUrl: "/avatar.png",
+  profileImageDirectUrl: "/avatar.png",
+}
+
+const ADMIN_POST_FIXTURES = Array.from({ length: 6 }, (_, index) => ({
+  id: 3200 + index,
+  title: index === 0 ? "First fold 운영 점검" : `관리자 글 목록 회귀 ${index}`,
+  authorName: "관리자",
+  authorProfileImgUrl: "/avatar.png",
+  published: index % 2 === 0,
+  listed: index % 3 !== 0,
+  tempDraft: false,
+  createdAt: `2026-05-${String(10 + index).padStart(2, "0")}T01:00:00Z`,
+  modifiedAt: `2026-05-${String(20 - index).padStart(2, "0")}T08:30:00Z`,
+}))
+
+const createAdminPostPage = () => ({
+  content: ADMIN_POST_FIXTURES,
+  pageable: {
+    pageNumber: 0,
+    pageSize: 20,
+    totalElements: ADMIN_POST_FIXTURES.length,
+    totalPages: 1,
+  },
+})
+
+const mockAdminPostsWorkspaceEndpoints = async (page: Page) => {
+  await page.route("**/member/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(ADMIN_MEMBER_FIXTURE),
+    })
+  })
+
+  await page.route("**/post/api/v1/adm/posts**", async (route) => {
+    const url = new URL(route.request().url())
+
+    if (url.pathname.endsWith("/bootstrap")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          member: ADMIN_MEMBER_FIXTURE,
+          firstPage: createAdminPostPage(),
+        }),
+      })
+      return
+    }
+
+    if (url.pathname.includes("/deleted")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          content: [],
+          pageable: { pageNumber: 0, pageSize: 20, totalElements: 0, totalPages: 0 },
+        }),
+      })
+      return
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(createAdminPostPage()),
+    })
+  })
+}
+
 const mockFeedEndpoints = async (page: Page) => {
   await page.route("**/post/api/v1/posts/feed**", async (route) => {
     await route.fulfill({
@@ -436,6 +511,45 @@ test("모바일 어드민 유틸리티는 검색을 접어 first fold를 보존�
   await searchInput.fill("글 관리")
   await searchInput.press("Enter")
   await expect(page).toHaveURL(/\/admin\/posts(?:$|\?)/)
+})
+
+test("어드민 글 목록 first fold는 목록 본문을 보조 패널보다 먼저 노출한다", async ({ page }) => {
+  await mockAdminPostsWorkspaceEndpoints(page)
+
+  await page.goto("/admin/posts")
+  await expect(page.getByRole("heading", { name: "글 목록" })).toBeVisible()
+  await expect(page.getByLabel("검색어")).toBeVisible()
+
+  const firstListCard = page.locator("article").filter({ hasText: "First fold 운영 점검" }).first()
+  await expect(firstListCard).toBeVisible()
+
+  const foldSnapshot = await page.evaluate(() => {
+    const search = document.querySelector<HTMLElement>("#workspace-post-search")
+    const firstCard = Array.from(document.querySelectorAll<HTMLElement>("article")).find((element) =>
+      element.textContent?.includes("First fold 운영 점검")
+    )
+    const activityLabel = Array.from(document.querySelectorAll<HTMLElement>("strong")).find(
+      (element) => element.textContent?.trim() === "작업 기록"
+    )
+    const activityPanel = activityLabel?.closest<HTMLElement>("section, div")
+    const searchRect = search?.getBoundingClientRect()
+    const firstCardRect = firstCard?.getBoundingClientRect()
+    const activityRect = activityPanel?.getBoundingClientRect()
+
+    return {
+      viewportHeight: window.innerHeight,
+      searchTop: searchRect?.top ?? Number.POSITIVE_INFINITY,
+      firstCardTop: firstCardRect?.top ?? Number.POSITIVE_INFINITY,
+      activityTop: activityRect?.top ?? Number.POSITIVE_INFINITY,
+      bodyScrollWidth: document.body.scrollWidth,
+      viewportWidth: window.innerWidth,
+    }
+  })
+
+  expect(foldSnapshot.searchTop).toBeLessThanOrEqual(610)
+  expect(foldSnapshot.firstCardTop).toBeLessThan(foldSnapshot.viewportHeight)
+  expect(foldSnapshot.firstCardTop).toBeLessThan(foldSnapshot.activityTop)
+  expect(foldSnapshot.bodyScrollWidth).toBeLessThanOrEqual(foldSnapshot.viewportWidth)
 })
 
 test("iPhone 15 Pro 메인 피드는 카드 overflow 없이 viewport 내부에 렌더된다", async ({ page }) => {

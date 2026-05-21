@@ -170,6 +170,8 @@ const GhostButton = styled(AdminTextActionButton)`
 const StickyFilterToolbar = styled.div`
   display: grid;
   gap: 0.72rem;
+  min-width: 0;
+  max-width: 100%;
   padding: 0.88rem 0.92rem;
   border-radius: 16px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
@@ -194,8 +196,13 @@ const StickyFilterToolbar = styled.div`
 const FilterRail = styled.div`
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
   gap: 0.75rem;
   align-items: end;
+
+  > * {
+    min-width: 0;
+  }
 
   @media (max-width: 900px) {
     grid-template-columns: 1fr;
@@ -210,6 +217,7 @@ const FilterRail = styled.div`
 
 const ScopeTabs = styled.div`
   display: inline-flex;
+  min-width: 0;
   gap: 0.4rem;
   flex-wrap: wrap;
 
@@ -238,6 +246,7 @@ const ScopeTabButton = styled.button<{ "data-active"?: boolean }>`
 
 const SearchField = styled.div`
   display: grid;
+  min-width: 0;
   gap: 0.3rem;
 
   label {
@@ -347,6 +356,7 @@ const FieldBox = styled.div`
 
 const FilterSummaryBar = styled.div`
   display: flex;
+  min-width: 0;
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.8rem;
@@ -392,6 +402,7 @@ const ToolbarUtilityRow = styled(AdminInlineActionRow)`
 
 const SummaryPillRow = styled.div`
   display: flex;
+  min-width: 0;
   flex-wrap: wrap;
   gap: 0.5rem;
 
@@ -403,6 +414,8 @@ const SummaryPillRow = styled.div`
 const SummaryPill = styled.span<{ "data-tone"?: "neutral" }>`
   display: inline-flex;
   align-items: center;
+  max-width: 100%;
+  min-width: 0;
   min-height: 32px;
   padding: 0 0.72rem;
   border-radius: 999px;
@@ -411,6 +424,8 @@ const SummaryPill = styled.span<{ "data-tone"?: "neutral" }>`
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.78rem;
   font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 
   @media (max-width: 767px) {
     min-height: 26px;

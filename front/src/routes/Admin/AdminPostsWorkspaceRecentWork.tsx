@@ -174,8 +174,13 @@ const SectionHeading = styled.div`
 const ResumeGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  min-width: 0;
   gap: 0.6rem;
   align-items: start;
+
+  > * {
+    min-width: 0;
+  }
 
   @media (max-width: 767px) {
     grid-template-columns: minmax(0, 0.76fr) minmax(0, 1.24fr);
@@ -185,6 +190,7 @@ const ResumeGrid = styled.div`
 
 const ResumeCard = styled(AdminRailCard)`
   gap: 0.42rem;
+  min-width: 0;
   width: 100%;
   padding: 0.72rem 0.78rem;
   border-radius: 16px;
@@ -212,6 +218,7 @@ const ResumeCard = styled(AdminRailCard)`
 const ResumeCardButton = styled.button`
   display: grid;
   gap: 0.42rem;
+  min-width: 0;
   width: 100%;
   padding: 0.72rem 0.78rem;
   border-radius: 16px;
@@ -245,11 +252,14 @@ const ResumeCardButton = styled.button`
 
 const ResumeHeader = styled.div`
   display: flex;
+  min-width: 0;
   align-items: center;
   justify-content: space-between;
   gap: 0.6rem;
 
   strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
     font-size: 0.88rem;
   }
 
@@ -275,6 +285,7 @@ const ResumeHeader = styled.div`
 
 const ResumeTitle = styled.strong`
   display: -webkit-box;
+  min-width: 0;
   font-size: 0.9rem;
   line-height: 1.32;
   overflow: hidden;
@@ -450,6 +461,7 @@ const RecentPostItems = styled.ul`
 
   li button {
     width: 100%;
+    min-width: 0;
     padding: 0.58rem 0.68rem;
     border-radius: 10px;
     border: 1px solid ${({ theme }) => theme.colors.gray5};

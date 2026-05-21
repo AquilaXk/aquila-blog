@@ -744,9 +744,9 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
       <Main>
         <HeroSection>
           <AdminWorkspaceHeroLayout>
-            <AdminWorkspaceHeroCopy>
+            <PostsHeroCopy>
               <h1>편집과 검수를 한 화면에서 이어갑니다</h1>
-            </AdminWorkspaceHeroCopy>
+            </PostsHeroCopy>
             <AdminWorkspaceHeroActions>
               <PrimaryCta type="button" onClick={() => void openWriteRoute()}>
                 새 글 작성
@@ -891,6 +891,15 @@ const Main = styled.main`
 `
 
 const HeroSection = styled(AdminWorkspaceHero)``
+
+const PostsHeroCopy = styled(AdminWorkspaceHeroCopy)`
+  min-width: 0;
+
+  h1 {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+`
 
 const WorkspaceBody = styled.div`
   display: grid;

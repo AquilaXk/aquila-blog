@@ -20,6 +20,7 @@ export type BlockEditorQaActions = {
   appendCalloutBlock: () => void
   appendFormulaBlock: () => void
   moveTaskItemInFirstTaskList: (sourceIndex: number, insertionIndex: number) => void
+  scrollCurrentSelectionIntoView: () => void
   getUndoDepth: () => number
 }
 

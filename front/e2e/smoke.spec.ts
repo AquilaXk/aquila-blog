@@ -1562,6 +1562,24 @@ test("상세 우측 목차는 긴 목록에서도 active 항목을 자동으로 
   await expect(page.getByRole("heading", { name: "상세 목차 자동 표시 테스트" })).toBeVisible()
   const rightToc = page.locator('aside.rightRail nav[aria-label="목차"]')
   await expect(rightToc.getByRole("button", { name: "자동 표시 섹션 32" })).toHaveCount(1)
+  const tocDensityMetrics = await rightToc.locator("ol").evaluate((list) => {
+    const listRect = list.getBoundingClientRect()
+    const rowHeights = Array.from(list.querySelectorAll<HTMLElement>("button"))
+      .slice(0, 8)
+      .map((button) => button.getBoundingClientRect().height)
+    const firstButton = list.querySelector<HTMLElement>("button")
+    const firstButtonStyle = firstButton ? window.getComputedStyle(firstButton) : null
+
+    return {
+      listHeight: listRect.height,
+      maxRowHeight: Math.max(...rowHeights),
+      rowFontSize: firstButtonStyle ? Number.parseFloat(firstButtonStyle.fontSize) : 0,
+    }
+  })
+
+  expect(tocDensityMetrics.listHeight).toBeLessThanOrEqual(560)
+  expect(tocDensityMetrics.maxRowHeight).toBeLessThanOrEqual(34)
+  expect(tocDensityMetrics.rowFontSize).toBeLessThanOrEqual(13.5)
 
   await page.evaluate(() => {
     const target = Array.from(document.querySelectorAll<HTMLElement>("article h2"))

@@ -1557,7 +1557,7 @@ const StyledWrapper = styled.div`
       align-items: center;
       justify-content: space-between;
       gap: 0.75rem;
-      margin-bottom: 0.5rem;
+      margin-bottom: 0.42rem;
     }
 
     .rightRailTitleGroup {
@@ -1608,7 +1608,7 @@ const StyledWrapper = styled.div`
       padding: 0;
       list-style: none;
       display: block;
-      max-height: calc(100vh - 8.8rem);
+      max-height: min(34rem, calc(100vh - 10rem));
       overflow-y: auto;
       overflow-x: hidden;
     }
@@ -1619,28 +1619,28 @@ const StyledWrapper = styled.div`
     }
 
     li[data-level="3"] button {
-      padding-left: 0.62rem;
-      font-size: 0.82rem;
+      padding-left: 0.54rem;
+      font-size: 0.78rem;
     }
 
     li[data-level="4"] button {
-      padding-left: 1.02rem;
-      font-size: 0.79rem;
+      padding-left: 0.88rem;
+      font-size: 0.75rem;
     }
 
     button {
       width: 100%;
       text-align: left;
       border: 0;
-      border-radius: 10px;
-      min-height: 38px;
+      border-radius: 8px;
+      min-height: 32px;
       box-sizing: border-box;
       max-width: 100%;
-      padding: 0.52rem 0.82rem 0.52rem 0.12rem;
+      padding: 0.34rem 0.68rem 0.34rem 0.1rem;
       background: transparent;
       color: ${({ theme }) => theme.colors.gray9};
-      font-size: 0.875rem;
-      line-height: 1.5;
+      font-size: 0.8125rem;
+      line-height: 1.36;
       cursor: pointer;
       white-space: normal;
       overflow-wrap: anywhere;
@@ -1660,8 +1660,8 @@ const StyledWrapper = styled.div`
       content: "";
       position: absolute;
       left: -1.18rem;
-      top: 0.24rem;
-      bottom: 0.24rem;
+      top: 0.18rem;
+      bottom: 0.18rem;
       width: 1px;
       opacity: 0;
       background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.accentBorder)};

@@ -1610,6 +1610,10 @@ test("모바일 상세는 compact 액션과 접이식 목차를 노출한다", a
       value: clipboard,
     })
   })
+  const mobileTocContent = Array.from({ length: 12 }, (_, index) => {
+    const sectionNumber = String(index + 1).padStart(2, "0")
+    return [`## 모바일 목차 섹션 ${sectionNumber}`, "모바일 compact 목차 높이 회귀를 검증하는 본문입니다."].join("\n\n")
+  }).join("\n\n")
 
   await page.route("**/post/api/v1/posts/909", async (route) => {
     await route.fulfill({
@@ -1624,7 +1628,7 @@ test("모바일 상세는 compact 액션과 접이식 목차를 노출한다", a
         authorUsername: "aquila",
         authorProfileImageDirectUrl: "/avatar.png",
         title: "모바일 상세 UX 테스트",
-        content: ["## 첫 섹션", "본문", "### 둘째 섹션", "본문"].join("\n\n"),
+        content: mobileTocContent,
         tags: ["모바일"],
         category: [],
         published: true,
@@ -1665,13 +1669,22 @@ test("모바일 상세는 compact 액션과 접이식 목차를 노출한다", a
   const compactTocSummary = page.locator('[aria-label="접이식 목차"] summary')
   await expect(compactTocSummary).toBeVisible()
   await expect(compactTocSummary.getByText("목차")).toBeVisible()
-  await expect(compactTocSummary.getByText("2개 섹션")).toBeVisible()
+  await expect(compactTocSummary.getByText("12개 섹션")).toBeVisible()
+  await expect(page.getByRole("button", { name: "모바일 목차 섹션 01" })).toBeHidden()
+  const compactTocInitialListHeight = await page.locator('[aria-label="접이식 목차"] ol').evaluate((list) => list.clientHeight)
+  expect(compactTocInitialListHeight).toBe(0)
   const compactShareButton = compactActionBar.getByRole("button", { name: /^공유/ })
   await compactShareButton.click()
   await expect(compactShareButton).toBeVisible()
 
   await compactTocSummary.click()
-  await expect(page.getByRole("button", { name: "첫 섹션" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "모바일 목차 섹션 01" })).toBeVisible()
+  const compactTocListMetrics = await page.locator('[aria-label="접이식 목차"] ol').evaluate((list) => ({
+    clientHeight: list.clientHeight,
+    scrollHeight: list.scrollHeight,
+  }))
+  expect(compactTocListMetrics.clientHeight).toBeLessThanOrEqual(240)
+  expect(compactTocListMetrics.scrollHeight).toBeGreaterThan(compactTocListMetrics.clientHeight)
 })
 
 test("상세 페이지 머메이드 블록은 코드 텍스트가 아니라 다이어그램 SVG로 렌더된다", async ({ page }) => {

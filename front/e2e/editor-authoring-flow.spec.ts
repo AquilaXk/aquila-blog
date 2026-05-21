@@ -941,6 +941,168 @@ test.describe("block editor authoring flow", () => {
     await expect(codeBlock.locator(".aq-code-highlight-layer .token.keyword").first()).toBeVisible()
   })
 
+  test("실제 /editor/[id] 수정 진입은 보이지 않는 placeholder 코드 fence를 pretty-code 원문으로 복구한다", async ({
+    page,
+  }) => {
+    const adminMember = {
+      id: 1,
+      username: "qa-admin",
+      nickname: "aquila",
+      isAdmin: true,
+    }
+    const staleContent = [
+      "코드 placeholder 복구 대상입니다.",
+      "",
+      "```ts",
+      "\u200B",
+      "```",
+      "",
+      "복구 뒤 문단입니다.",
+    ].join("\n")
+    const prettyCodeHtml = [
+      '<section><p>본문 앞 HTML</p>',
+      '<div class="aq-code-block" data-language="ts" data-raw-code="const invisibleRestored = 306;&#10;return invisibleRestored">',
+      '<pre class="aq-code aq-pretty-pre">',
+      '<code class="language-ts"></code>',
+      "</pre></div></section>",
+    ].join("")
+
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(adminMember),
+      })
+    })
+    await page.route("**/post/api/v1/adm/posts/993", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 993,
+          version: 9,
+          title: "코드 invisible placeholder 복구 글",
+          content: staleContent,
+          contentHtml: prettyCodeHtml,
+          published: true,
+          listed: true,
+        }),
+      })
+    })
+
+    await page.goto("/editor/993")
+
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue("코드 invisible placeholder 복구 글")
+    const codeBlock = page.locator(".aq-code-shell").first()
+    await expect(codeBlock).toBeVisible({ timeout: 15_000 })
+    await expect(codeBlock.locator(".aq-code-highlight-layer")).toContainText("const invisibleRestored = 306;")
+    await expect(codeBlock.locator(".aq-code-highlight-layer")).toContainText("return invisibleRestored")
+  })
+
+  test("실제 /editor/[id] 텍스트 선택 후 block handle은 wheel scroll 중 선택 문단을 따라간다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 980, height: 720 })
+    const adminMember = {
+      id: 1,
+      username: "qa-admin",
+      nickname: "aquila",
+      isAdmin: true,
+    }
+    const targetLabel = "edit route text selection scroll anchor"
+    const paragraphs = Array.from({ length: 38 }, (_, index) =>
+      index === 10
+        ? `${targetLabel} ${index + 1}. 선택한 텍스트의 좌측 block handle이 scroll 동안 같은 문단에 붙어야 합니다.`
+        : `text selection scroll paragraph ${index + 1}. 좌측 block handle scroll anchoring을 확인합니다.`
+    )
+    const content = paragraphs.join("\n\n")
+    const contentHtml = paragraphs.map((paragraph) => `<p>${paragraph}</p>`).join("")
+
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(adminMember),
+      })
+    })
+    await page.route("**/post/api/v1/adm/posts/994", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 994,
+          version: 10,
+          title: "텍스트 선택 scroll handle 회귀 글",
+          content,
+          contentHtml,
+          published: true,
+          listed: true,
+        }),
+      })
+    })
+
+    await page.goto("/editor/994")
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue("텍스트 선택 scroll handle 회귀 글")
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    const targetParagraph = editor.locator("p", { hasText: targetLabel }).first()
+    await targetParagraph.scrollIntoViewIfNeeded()
+    const targetBox = await targetParagraph.boundingBox()
+    if (!targetBox) {
+      throw new Error("text selection target paragraph metrics are missing")
+    }
+
+    const textY = targetBox.y + Math.min(targetBox.height / 2, 18)
+    await page.mouse.move(targetBox.x + 36, textY)
+    await page.mouse.down()
+    await page.mouse.move(targetBox.x + Math.min(targetBox.width - 24, 430), textY, { steps: 12 })
+    await page.mouse.up()
+
+    const dragHandle = page.getByTestId("block-drag-handle")
+    await expect(dragHandle).toBeVisible()
+    const handleBox = await dragHandle.boundingBox()
+    if (!handleBox) {
+      throw new Error("text selection block handle metrics are missing")
+    }
+    await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2)
+
+    const readHandleGeometry = async () =>
+      page.evaluate((label) => {
+        const paragraph =
+          Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] p")).find(
+            (element) => element.textContent?.includes(label)
+          ) ?? null
+        const handle = document.querySelector<HTMLElement>("[data-testid='block-drag-handle']")
+        if (!paragraph || !handle) return null
+        const paragraphRect = paragraph.getBoundingClientRect()
+        const handleRect = handle.getBoundingClientRect()
+        const handleStyle = window.getComputedStyle(handle)
+        return {
+          scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+          paragraphTop: paragraphRect.top,
+          handleTop: handleRect.top,
+          handleVisible:
+            handleRect.width > 0 &&
+            handleRect.height > 0 &&
+            handleStyle.display !== "none" &&
+            handleStyle.visibility !== "hidden" &&
+            Number.parseFloat(handleStyle.opacity || "1") > 0.5,
+        }
+      }, targetLabel)
+
+    const beforeGeometry = await readHandleGeometry()
+    if (!beforeGeometry) {
+      throw new Error("text selection handle geometry is missing before scroll")
+    }
+
+    await page.mouse.wheel(0, 360)
+    await page.waitForTimeout(360)
+
+    const afterGeometry = await readHandleGeometry()
+    if (!afterGeometry) {
+      throw new Error("text selection handle geometry is missing after scroll")
+    }
+    const paragraphDelta = afterGeometry.paragraphTop - beforeGeometry.paragraphTop
+    expect(afterGeometry.scrollTop).toBeGreaterThan(beforeGeometry.scrollTop + 80)
+    expect(afterGeometry.handleVisible).toBe(true)
+    expect(Math.abs(afterGeometry.handleTop - beforeGeometry.handleTop - paragraphDelta)).toBeLessThanOrEqual(12)
+  })
+
   test("실제 /editor/[id] 수정 진입은 본문 hover scroll, 선택 block affordance, code 원문을 유지한다", async ({
     page,
   }) => {
@@ -964,11 +1126,14 @@ test.describe("block editor authoring flow", () => {
       paragraphs.slice(12).join("\n\n"),
     ].join("\n\n")
     const prettyCodeHtml = [
-      '<section><p>본문 앞 HTML</p>',
+      "<section>",
+      ...paragraphs.slice(0, 12).map((paragraph) => `<p>${paragraph}</p>`),
       '<div class="aq-code-block" data-language="ts" data-raw-code="const restored = 305;&#10;return restored">',
       '<pre class="aq-code aq-pretty-pre">',
       '<code class="language-ts"></code>',
-      '</pre></div></section>',
+      '</pre></div>',
+      ...paragraphs.slice(12).map((paragraph) => `<p>${paragraph}</p>`),
+      "</section>",
     ].join("")
 
     await page.route("**/member/api/v1/auth/me", async (route) => {

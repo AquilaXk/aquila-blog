@@ -726,6 +726,15 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
 
     let nextGuardState = consumeGuardOnExpectedUpdate(blockEditorLoadGuardStateRef.current, nextMarkdown)
 
+    if (shouldIgnoreBlockEditorEmptyUpdate({
+      nextMarkdown,
+      currentMarkdown: previousMarkdown,
+      guardState: nextGuardState,
+    })) {
+      blockEditorLoadGuardStateRef.current = markGuardEmptyUpdateIgnored(nextGuardState)
+      return
+    }
+
     if (meta?.editorFocused) {
       nextGuardState = {
         ...nextGuardState,
@@ -737,15 +746,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       startPostContentTransition(() => {
         setPostContent(nextMarkdown)
       })
-      return
-    }
-
-    if (shouldIgnoreBlockEditorEmptyUpdate({
-      nextMarkdown,
-      currentMarkdown: previousMarkdown,
-      guardState: nextGuardState,
-    })) {
-      blockEditorLoadGuardStateRef.current = markGuardEmptyUpdateIgnored(nextGuardState)
       return
     }
 
@@ -1041,6 +1041,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const syncEditorMeta = useCallback((content: string, contentHtml?: string | null) => {
     const snapshot = resolveEditorMetaSnapshot(content, contentHtml)
     blockEditorLoadGuardStateRef.current = createBlockEditorLoadGuardState(snapshot.body)
+    postContentLiveRef.current = snapshot.body
     setPostContent(snapshot.body)
     setPostSummary(snapshot.summary)
     setPostThumbnailUrl(snapshot.thumbnailUrl)

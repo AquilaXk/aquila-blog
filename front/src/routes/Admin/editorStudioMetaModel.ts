@@ -62,6 +62,7 @@ const FENCED_CODE_BLOCK_REGEX = /(^|\n)(`{3,}|~{3,})([^\n]*)\n(?:([\s\S]*?)\n)?\
 const HTML_CODE_RAW_ATTRIBUTE_TAG_REGEX =
   /<([a-z][a-z0-9:-]*)\b([^>]*(?:data-raw-code|data-prism-source)[^>]*)>/gi
 const HTML_ATTRIBUTE_REGEX = /\s([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>`]+)))?/g
+const INVISIBLE_CODE_PLACEHOLDER_REGEX = /[\u00A0\u200B-\u200D\u2060\uFEFF]/g
 
 export const PREVIEW_SUMMARY_MAX_LENGTH = 150
 export const PREVIEW_SUMMARY_MAX_CONTENT_LENGTH = 50_000
@@ -321,13 +322,16 @@ const resolveEditorBodyFallback = (content: string, parsedBody: string) => {
   return inlineMetadataSplit.body.trim().length > 0 ? inlineMetadataSplit.body : parsedBody
 }
 
+const isCodeFenceBodyVisiblyEmpty = (value: string) =>
+  value.replace(INVISIBLE_CODE_PLACEHOLDER_REGEX, "").trim().length === 0
+
 const extractNonEmptyFencedCodeBlocks = (content: string) => {
   const normalized = content.replace(/\r\n?/g, "\n")
   const blocks: string[] = []
 
   normalized.replace(FENCED_CODE_BLOCK_REGEX, (_match, _leading, marker, info, codeBody) => {
     const body = String(codeBody ?? "")
-    if (body.trim().length > 0) {
+    if (!isCodeFenceBodyVisiblyEmpty(body)) {
       blocks.push(`${marker}${info}\n${body}\n${marker}`)
     }
     return _match
@@ -400,7 +404,7 @@ export const restoreEmptyFencedCodeBlocks = (content: string, recoveredContent: 
   const normalized = content.replace(/\r\n?/g, "\n")
 
   return normalized.replace(FENCED_CODE_BLOCK_REGEX, (match, leading, _marker, _info, codeBody) => {
-    if (String(codeBody ?? "").trim().length > 0) return match
+    if (!isCodeFenceBodyVisiblyEmpty(String(codeBody ?? ""))) return match
 
     const recoveredBlock = recoveredBlocks[nextRecoveredIndex]
     if (!recoveredBlock) return match

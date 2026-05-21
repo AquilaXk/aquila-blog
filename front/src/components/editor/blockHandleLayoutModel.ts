@@ -9,6 +9,32 @@ export type BlockHandleRailLayout = {
   top: number
 }
 
+export type BlockChromePositionMode = "editor-local" | "viewport"
+type BlockChromeSurfaceRect = Pick<DOMRect, "left" | "top"> | null
+
+export const resolveBlockChromeLeft = (
+  left: number,
+  surfaceRect: BlockChromeSurfaceRect,
+  mode: BlockChromePositionMode
+) => (mode === "editor-local" ? left - (surfaceRect?.left ?? 0) : left)
+
+export const resolveBlockChromeTop = (
+  top: number,
+  surfaceRect: BlockChromeSurfaceRect,
+  mode: BlockChromePositionMode
+) => (mode === "editor-local" ? top - (surfaceRect?.top ?? 0) : top)
+
+export const resolveBlockSelectionOverlayLayout = (
+  rect: DOMRect,
+  surfaceRect: BlockChromeSurfaceRect
+) => ({
+  visible: true,
+  left: resolveBlockChromeLeft(rect.left - 6, surfaceRect, "editor-local"),
+  top: resolveBlockChromeTop(rect.top - 4, surfaceRect, "editor-local"),
+  width: rect.width + 12,
+  height: rect.height + 8,
+})
+
 export const resolveBlockHandleAnchorTop = (blockElement: HTMLElement, railHeight: number) => {
   const rect = blockElement.getBoundingClientRect()
   if (typeof window === "undefined") return rect.top + 6
@@ -55,6 +81,21 @@ export const resolveBlockHandleRailLayout = (
   return {
     left: Math.min(Math.max(BLOCK_HANDLE_VIEWPORT_PADDING_PX, rect.left), maxLeft),
     top: rect.top - railHeight - BLOCK_HANDLE_STACKED_GAP_PX,
+  }
+}
+
+export const resolveBlockHandleRailLayoutForSurface = (
+  rect: DOMRect,
+  railWidth: number,
+  railHeight: number,
+  anchoredTop: number,
+  surfaceRect: BlockChromeSurfaceRect,
+  mode: BlockChromePositionMode
+): BlockHandleRailLayout => {
+  const railLayout = resolveBlockHandleRailLayout(rect, railWidth, railHeight, anchoredTop)
+  return {
+    left: resolveBlockChromeLeft(railLayout.left, surfaceRect, mode),
+    top: resolveBlockChromeTop(railLayout.top, surfaceRect, mode),
   }
 }
 

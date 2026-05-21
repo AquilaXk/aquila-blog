@@ -303,11 +303,15 @@ const HeroActions = styled.div`
 const PrimaryActionLink = styled.a`
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-  min-height: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
+  min-width: 6rem;
+  min-height: 2.65rem;
+  padding: 0 1rem;
+  border: 1px solid ${({ theme }) => theme.colors.blue8};
+  border-radius: 999px;
+  background: ${({ theme }) =>
+    theme.scheme === "light" ? "rgba(59, 130, 246, 0.12)" : "rgba(37, 99, 235, 0.22)"};
   color: ${({ theme }) => theme.colors.blue9};
   text-decoration: none;
   font-size: 0.94rem;
@@ -317,10 +321,12 @@ const PrimaryActionLink = styled.a`
 const SecondaryActionLink = styled.a`
   display: inline-flex;
   align-items: center;
-  min-height: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
+  justify-content: center;
+  min-height: 2.65rem;
+  padding: 0 0.9rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 999px;
+  background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray11};
   text-decoration: none;
   font-size: 0.88rem;

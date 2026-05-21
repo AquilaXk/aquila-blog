@@ -162,6 +162,13 @@ const SectionHeading = styled.div`
     font-weight: 800;
     letter-spacing: -0.03em;
   }
+
+  @media (max-width: 767px) {
+    h2 {
+      font-size: 0.9rem;
+      letter-spacing: 0;
+    }
+  }
 `
 
 const ResumeGrid = styled.div`
@@ -169,6 +176,11 @@ const ResumeGrid = styled.div`
   grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
   gap: 0.6rem;
   align-items: start;
+
+  @media (max-width: 767px) {
+    grid-template-columns: minmax(0, 0.76fr) minmax(0, 1.24fr);
+    gap: 0.42rem;
+  }
 `
 
 const ResumeCard = styled(AdminRailCard)`
@@ -184,6 +196,16 @@ const ResumeCard = styled(AdminRailCard)`
   &[data-empty="true"] {
     gap: 0.36rem;
     padding-block: 0.68rem;
+  }
+
+  @media (max-width: 767px) {
+    gap: 0.28rem;
+    padding: 0.5rem 0.54rem;
+    border-radius: 12px;
+
+    &[data-empty="true"] {
+      padding-block: 0.5rem;
+    }
   }
 `
 
@@ -213,6 +235,12 @@ const ResumeCardButton = styled.button`
     outline: none;
     box-shadow: ${({ theme }) => `0 0 0 3px ${theme.colors.gray6}`};
   }
+
+  @media (max-width: 767px) {
+    gap: 0.28rem;
+    padding: 0.5rem 0.54rem;
+    border-radius: 12px;
+  }
 `
 
 const ResumeHeader = styled.div`
@@ -230,6 +258,19 @@ const ResumeHeader = styled.div`
     font-size: 0.74rem;
     white-space: nowrap;
   }
+
+  @media (max-width: 767px) {
+    align-items: flex-start;
+
+    strong {
+      font-size: 0.76rem;
+      line-height: 1.2;
+    }
+
+    span {
+      display: none;
+    }
+  }
 `
 
 const ResumeTitle = styled.strong`
@@ -240,6 +281,12 @@ const ResumeTitle = styled.strong`
   word-break: keep-all;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+
+  @media (max-width: 767px) {
+    font-size: 0.78rem;
+    line-height: 1.25;
+    -webkit-line-clamp: 1;
+  }
 `
 
 const EmptyInlineState = styled.div`
@@ -249,6 +296,16 @@ const EmptyInlineState = styled.div`
   strong {
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 0.84rem;
+  }
+
+  @media (max-width: 767px) {
+    gap: 0.08rem;
+
+    strong {
+      color: ${({ theme }) => theme.colors.gray11};
+      font-size: 0.74rem;
+      line-height: 1.2;
+    }
   }
 `
 
@@ -261,6 +318,14 @@ const ResumeMeta = styled.div`
   span {
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.76rem;
+  }
+
+  @media (max-width: 767px) {
+    gap: 0.24rem;
+
+    span {
+      display: none;
+    }
   }
 `
 
@@ -292,6 +357,12 @@ const VisibilityBadge = styled(AdminStatusPill)<{ "data-tone": string }>`
       : tone === "PUBLIC_UNLISTED"
         ? theme.colors.orange8
         : theme.colors.green8};
+
+  @media (max-width: 767px) {
+    min-height: 22px;
+    padding: 0 0.46rem;
+    font-size: 0.68rem;
+  }
 `
 
 const ActionRow = styled(AdminInlineActionRow)``
@@ -300,6 +371,10 @@ const PrimaryInlineButton = styled(AdminTextActionButton)`
   color: ${({ theme }) => theme.colors.gray12};
   font-size: 0.92rem;
   font-weight: 800;
+
+  @media (max-width: 767px) {
+    font-size: 0.74rem;
+  }
 `
 
 const WorkspaceEmpty = styled.div`
@@ -355,6 +430,15 @@ const RecentListSkeleton = styled.div`
         ? "linear-gradient(90deg, rgba(148, 163, 184, 0.16), rgba(148, 163, 184, 0.28), rgba(148, 163, 184, 0.16))"
         : "linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.1), rgba(255,255,255,0.06))"};
   }
+
+  @media (max-width: 767px) {
+    gap: 0.3rem;
+
+    span {
+      height: 28px;
+      border-radius: 8px;
+    }
+  }
 `
 
 const RecentPostItems = styled.ul`
@@ -402,6 +486,28 @@ const RecentPostItems = styled.ul`
       align-items: start;
     }
   }
+
+  @media (max-width: 767px) {
+    gap: 0.3rem;
+
+    li button {
+      min-height: 32px;
+      padding: 0.34rem 0.4rem;
+      border-radius: 8px;
+    }
+
+    li button > div {
+      gap: 0.08rem;
+    }
+
+    strong {
+      font-size: 0.73rem;
+    }
+
+    span {
+      display: none;
+    }
+  }
 `
 
 const RecentMeta = styled.div`
@@ -412,5 +518,9 @@ const RecentMeta = styled.div`
 
   @media (max-width: 820px) {
     justify-items: start;
+  }
+
+  @media (max-width: 767px) {
+    display: none;
   }
 `

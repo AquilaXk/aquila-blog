@@ -805,6 +805,28 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                 onResetFilters={handleResetListFilters}
               />
 
+              <AdminPostsWorkspaceList
+                listScope={listScope}
+                listKw={listKw}
+                listState={listState}
+                isListLoading={isListLoading}
+                listError={listError}
+                shouldRenderMobileList={shouldRenderMobileList}
+                mutationPending={mutationPending}
+                onLoadList={() => void loadList()}
+                onOpenWriteRoute={(query) => void openWriteRoute(query)}
+                onResetSearch={() => {
+                  setListKw("")
+                  setListPage(DEFAULT_PAGE)
+                }}
+                onContinueRecent={(row) => void handleContinueRecent(row)}
+                onCopyPostDetailLink={(row) => void copyPostDetailLink(row)}
+                onOpenCanonicalPost={(event, row) => void openCanonicalPost(event, row)}
+                onDeletePost={(row) => void handleDeletePost(row)}
+                onRestorePost={(row) => void handleRestorePost(row)}
+                onHardDeletePost={(row) => void handleHardDeletePost(row)}
+              />
+
               {showDeferredSupportPanels ? (
                 <RecentActionPanel aria-live="polite">
                   <div className="panelHead">
@@ -835,28 +857,6 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                   <span>목록이 안정된 뒤 최근 변경 이력을 이어서 불러옵니다.</span>
                 </DeferredPanelPlaceholder>
               )}
-
-              <AdminPostsWorkspaceList
-                listScope={listScope}
-                listKw={listKw}
-                listState={listState}
-                isListLoading={isListLoading}
-                listError={listError}
-                shouldRenderMobileList={shouldRenderMobileList}
-                mutationPending={mutationPending}
-                onLoadList={() => void loadList()}
-                onOpenWriteRoute={(query) => void openWriteRoute(query)}
-                onResetSearch={() => {
-                  setListKw("")
-                  setListPage(DEFAULT_PAGE)
-                }}
-                onContinueRecent={(row) => void handleContinueRecent(row)}
-                onCopyPostDetailLink={(row) => void copyPostDetailLink(row)}
-                onOpenCanonicalPost={(event, row) => void openCanonicalPost(event, row)}
-                onDeletePost={(row) => void handleDeletePost(row)}
-                onRestorePost={(row) => void handleRestorePost(row)}
-                onHardDeletePost={(row) => void handleHardDeletePost(row)}
-              />
             </ListSection>
           </WorkspaceMain>
 

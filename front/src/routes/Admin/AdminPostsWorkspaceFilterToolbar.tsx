@@ -179,7 +179,9 @@ const StickyFilterToolbar = styled.div`
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.1);
 
   @media (max-width: 767px) {
-    padding: 0.8rem 0.82rem;
+    gap: 0.52rem;
+    padding: 0.58rem 0.62rem;
+    border-radius: 12px;
   }
 
   &[data-compact="true"] {
@@ -198,12 +200,24 @@ const FilterRail = styled.div`
   @media (max-width: 900px) {
     grid-template-columns: 1fr;
   }
+
+  @media (max-width: 767px) {
+    grid-template-columns: minmax(7.6rem, 0.55fr) minmax(0, 1fr);
+    gap: 0.5rem;
+    align-items: end;
+  }
 `
 
 const ScopeTabs = styled.div`
   display: inline-flex;
   gap: 0.4rem;
   flex-wrap: wrap;
+
+  @media (max-width: 767px) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.28rem;
+  }
 `
 
 const ScopeTabButton = styled.button<{ "data-active"?: boolean }>`
@@ -213,6 +227,13 @@ const ScopeTabButton = styled.button<{ "data-active"?: boolean }>`
   background: ${({ theme, "data-active": active }) => (active ? theme.colors.gray1 : theme.colors.gray2)};
   color: ${({ theme }) => theme.colors.gray12};
   border-color: ${({ theme, "data-active": active }) => (active ? theme.colors.gray6 : theme.colors.gray5)};
+
+  @media (max-width: 767px) {
+    min-height: 38px;
+    padding: 0 0.46rem;
+    border-radius: 10px;
+    font-size: 0.78rem;
+  }
 `
 
 const SearchField = styled.div`
@@ -233,6 +254,28 @@ const SearchField = styled.div`
     color: ${({ theme }) => theme.colors.gray12};
     padding: 0 0.95rem;
     font-size: 0.95rem;
+  }
+
+  @media (max-width: 767px) {
+    gap: 0;
+
+    label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    input {
+      min-height: 38px;
+      border-radius: 10px;
+      padding: 0 0.7rem;
+      font-size: 0.86rem;
+    }
   }
 `
 
@@ -323,8 +366,19 @@ const FilterSummaryBar = styled.div`
   }
 
   @media (max-width: 767px) {
+    gap: 0.5rem;
+    padding: 0.54rem 0.6rem;
+    border-radius: 10px;
     flex-direction: column;
     align-items: stretch;
+
+    .summaryCopy {
+      gap: 0.32rem;
+    }
+
+    .summaryCopy > strong {
+      display: none;
+    }
   }
 `
 
@@ -332,7 +386,7 @@ const ToolbarUtilityRow = styled(AdminInlineActionRow)`
   justify-content: flex-end;
 
   @media (max-width: 767px) {
-    justify-content: flex-start;
+    display: none;
   }
 `
 
@@ -340,6 +394,10 @@ const SummaryPillRow = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+
+  @media (max-width: 767px) {
+    gap: 0.32rem;
+  }
 `
 
 const SummaryPill = styled.span<{ "data-tone"?: "neutral" }>`
@@ -353,4 +411,10 @@ const SummaryPill = styled.span<{ "data-tone"?: "neutral" }>`
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.78rem;
   font-weight: 700;
+
+  @media (max-width: 767px) {
+    min-height: 26px;
+    padding: 0 0.54rem;
+    font-size: 0.7rem;
+  }
 `

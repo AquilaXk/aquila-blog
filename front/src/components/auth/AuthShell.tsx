@@ -130,7 +130,7 @@ const Eyebrow = styled.span`
   text-transform: uppercase;
 `
 
-const Title = styled.h2`
+const Title = styled.h1`
   margin: 0;
   font-size: 1.48rem;
   letter-spacing: -0.025em;

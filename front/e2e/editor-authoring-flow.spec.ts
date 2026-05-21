@@ -5,6 +5,25 @@ const QA_ENGINE_ROUTE = "/_qa/block-editor-slash?surface=engine"
 const QA_WRITER_ROUTE = "/_qa/block-editor-slash?surface=writer"
 const UNDO_SHORTCUT = process.platform === "darwin" ? "Meta+z" : "Control+z"
 
+const expectVisibleBox = async (locator: Locator, errorMessage: string) => {
+  await expect(locator).toBeVisible({ timeout: 15_000 })
+  await expect
+    .poll(
+      async () => {
+        const box = await locator.boundingBox()
+        return Boolean(box && box.width > 0 && box.height > 0)
+      },
+      { timeout: 15_000 }
+    )
+    .toBe(true)
+
+  const box = await locator.boundingBox()
+  if (!box) {
+    throw new Error(errorMessage)
+  }
+  return box
+}
+
 const selectWordInEditable = async (page: Page, editable: Locator, word: string) => {
   const selected = await editable.evaluate((element, targetWord) => {
     const root = element as HTMLElement
@@ -203,13 +222,28 @@ const readListItemHandleMetrics = async (
   )
 
 const expectListItemHandleReady = async (page: Page, label: string, handleLabel?: string) => {
-  await expect.poll(() => readListItemHandleMetrics(page, label, handleLabel)).not.toBeNull()
+  await expect
+    .poll(
+      async () => {
+        const metrics = await readListItemHandleMetrics(page, label, handleLabel)
+        if (metrics) return metrics
+
+        try {
+          await hoverListItemGutter(page, label)
+        } catch {
+          return null
+        }
+        return readListItemHandleMetrics(page, label, handleLabel)
+      },
+      { timeout: 15_000 }
+    )
+    .not.toBeNull()
   await expect
     .poll(async () => {
       const metrics = await readListItemHandleMetrics(page, label, handleLabel)
       if (!metrics) return Number.POSITIVE_INFINITY
       return Math.abs(metrics.handleCenterY - metrics.itemCenterY)
-    })
+    }, { timeout: 15_000 })
     .toBeLessThanOrEqual(18)
 
   const metrics = await readListItemHandleMetrics(page, label, handleLabel)
@@ -236,12 +270,14 @@ const hoverListItemGutter = async (page: Page, label: string) => {
     }
     const rect = targetItem.getBoundingClientRect()
     return {
-      x: rect.left - 8,
+      gutterX: Math.max(4, rect.left - 8),
+      itemX: rect.left + Math.min(12, rect.width / 2),
       y: rect.top + rect.height / 2,
     }
   }, label)
 
-  await page.mouse.move(hoverPoint.x, hoverPoint.y)
+  await page.mouse.move(hoverPoint.itemX, hoverPoint.y)
+  await page.mouse.move(hoverPoint.gutterX, hoverPoint.y)
 }
 
 test.describe("block editor authoring flow", () => {
@@ -895,8 +931,11 @@ test.describe("block editor authoring flow", () => {
     await page.goto("/editor/991")
 
     await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue("코드 복구 글")
+    await expect(page.locator("[data-testid='block-editor-prosemirror']").first()).toContainText(
+      "다음 문단입니다."
+    )
     const codeBlock = page.locator(".aq-code-shell").first()
-    await expect(codeBlock).toBeVisible()
+    await expect(codeBlock).toBeVisible({ timeout: 15_000 })
     await expect(codeBlock.locator(".aq-code-highlight-layer")).toContainText("const answer = 42;")
     await expect(codeBlock.locator(".aq-code-highlight-layer")).toContainText("return answer")
     await expect(codeBlock.locator(".aq-code-highlight-layer .token.keyword").first()).toBeVisible()
@@ -2289,7 +2328,14 @@ test.describe("block editor authoring flow", () => {
     await page.keyboard.type("말머리 보호")
 
     const paragraph = editor.locator("p", { hasText: "말머리 보호" }).first()
-    await paragraph.hover({ force: true })
+    const visibleParagraphBox = await expectVisibleBox(
+      paragraph,
+      "block handle rail 검증 문단 좌표를 계산할 수 없습니다."
+    )
+    await page.mouse.move(
+      visibleParagraphBox.x + Math.min(24, visibleParagraphBox.width / 2),
+      visibleParagraphBox.y + visibleParagraphBox.height / 2
+    )
 
     const handleRail = page.locator("[data-block-handle-rail='true'][data-visible='true']").first()
     await expect(handleRail).toBeVisible()
@@ -2322,11 +2368,10 @@ test.describe("block editor authoring flow", () => {
     await page.keyboard.type("전체 선택 테두리 방지")
 
     const paragraph = editor.locator("p", { hasText: "전체 선택 테두리 방지" }).first()
-    await expect(paragraph).toBeVisible()
-    const paragraphBox = await paragraph.boundingBox()
-    if (!paragraphBox) {
-      throw new Error("본문 첫 글자 더블클릭 좌표를 계산할 수 없습니다.")
-    }
+    const paragraphBox = await expectVisibleBox(
+      paragraph,
+      "본문 첫 글자 더블클릭 좌표를 계산할 수 없습니다."
+    )
 
     await paragraph.dispatchEvent("mousedown", {
       button: 0,

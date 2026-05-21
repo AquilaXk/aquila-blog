@@ -1677,7 +1677,7 @@ test.describe("block editor authoring flow", () => {
     expect(Math.abs(afterGeometry.paragraphTop - beforeGeometry.paragraphTop)).toBeLessThanOrEqual(24)
   })
 
-  test("실제 /editor/[id] rich block 클릭은 이전 선택 위치로 scroll jump하지 않는다", async ({
+  test("실제 /editor/[id] rich block 클릭은 지연된 내부 focus reveal 이후에도 scroll jump하지 않는다", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 980, height: 720 })
@@ -1809,9 +1809,9 @@ test.describe("block editor authoring flow", () => {
             (event) => {
               if (!(event.target instanceof Element)) return
               if (!event.target.closest("[data-testid='block-editor-prosemirror']")) return
-              window.requestAnimationFrame(() => {
+              window.setTimeout(() => {
                 window.scrollTo(0, staleScrollTop)
-              })
+              }, 260)
             },
             { capture: true, once: true }
           )
@@ -1823,7 +1823,7 @@ test.describe("block editor authoring flow", () => {
         targetBox.x + Math.min(clickOffset.x, Math.max(8, targetBox.width - 8)),
         targetBox.y + Math.min(clickOffset.y, Math.max(8, targetBox.height - 8))
       )
-      await page.waitForTimeout(180)
+      await page.waitForTimeout(420)
 
       const afterGeometry = await page.evaluate(
         ({ selector, text }) => {
@@ -1853,6 +1853,7 @@ test.describe("block editor authoring flow", () => {
       expect(Math.abs(afterGeometry.scrollTop - beforeGeometry.scrollTop)).toBeLessThanOrEqual(24)
       expect(Math.abs(afterGeometry.targetTop - beforeGeometry.targetTop)).toBeLessThanOrEqual(24)
       expect(Math.abs(afterGeometry.targetBottom - beforeGeometry.targetBottom)).toBeLessThanOrEqual(24)
+      await page.waitForTimeout(180)
     }
 
     await assertRichBlockClickPreservesScroll(

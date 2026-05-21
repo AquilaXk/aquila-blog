@@ -99,11 +99,12 @@ export const resolveBlockHandleRailLayoutForSurface = (
   }
 }
 
-export const preserveWindowScrollAcrossFrames = (frames = 6, tolerance = 4) => {
+export const preserveWindowScrollAcrossFrames = (frames = 6, tolerance = 4, minDurationMs = 0) => {
   if (typeof window === "undefined" || typeof document === "undefined") return
   const scrollingElement = document.scrollingElement
   const startX = window.scrollX
   const startY = scrollingElement?.scrollTop ?? window.scrollY
+  const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now()
   let cancelled = false
   let frame = 0
   const cancel = () => {
@@ -125,7 +126,8 @@ export const preserveWindowScrollAcrossFrames = (frames = 6, tolerance = 4) => {
       window.scrollTo(startX, startY)
     }
     frame += 1
-    if (frame < frames) {
+    const elapsedMs = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt
+    if (frame < frames || elapsedMs < minDurationMs) {
       window.requestAnimationFrame(restore)
     } else {
       cleanup()
@@ -136,6 +138,8 @@ export const preserveWindowScrollAcrossFrames = (frames = 6, tolerance = 4) => {
 
 let preserveNextEditorPointerAfterTable = false
 
+const EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES = 12
+const EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS = 520
 const EDITOR_POINTER_SCROLL_PRESERVE_SELECTOR = "[data-testid='block-editor-prosemirror'], .ProseMirror"
 const EDITOR_POINTER_SCROLL_CONTROL_SELECTOR =
   "button, input, textarea, select, summary, [role='button'], [contenteditable='false']"
@@ -166,7 +170,11 @@ export const preserveWindowScrollForEditorPointerFocus = (target: EventTarget | 
     preserveNextEditorPointerAfterTable = false
   }
   if (shouldPreserveEditorPointer || tablePointerTarget || tableSelectionActive || shouldPreserveFollowUp) {
-    preserveWindowScrollAcrossFrames(12)
+    preserveWindowScrollAcrossFrames(
+      EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES,
+      4,
+      EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS
+    )
   }
 }
 

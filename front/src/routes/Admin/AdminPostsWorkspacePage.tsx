@@ -757,18 +757,6 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
 
         <WorkspaceBody>
           <WorkspaceMain>
-            <div ref={continueSectionRef}>
-              <AdminPostsWorkspaceRecentWork
-                localDraft={localDraft}
-                recentPosts={recentPosts}
-                isRecentLoading={isRecentLoading}
-                recentError={recentError}
-                showDeferredSupportPanels={showDeferredSupportPanels}
-                onOpenWriteRoute={(query) => void openWriteRoute(query)}
-                onContinueRecent={(row) => void handleContinueRecent(row)}
-              />
-            </div>
-
             <ListSection ref={listSectionRef}>
               <SectionHeading>
                 <div>
@@ -858,6 +846,18 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                 </DeferredPanelPlaceholder>
               )}
             </ListSection>
+
+            <div ref={continueSectionRef}>
+              <AdminPostsWorkspaceRecentWork
+                localDraft={localDraft}
+                recentPosts={recentPosts}
+                isRecentLoading={isRecentLoading}
+                recentError={recentError}
+                showDeferredSupportPanels={showDeferredSupportPanels}
+                onOpenWriteRoute={(query) => void openWriteRoute(query)}
+                onContinueRecent={(row) => void handleContinueRecent(row)}
+              />
+            </div>
           </WorkspaceMain>
 
         </WorkspaceBody>

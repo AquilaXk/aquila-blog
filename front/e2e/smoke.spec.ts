@@ -472,6 +472,14 @@ test("상단 내비 컨트롤은 공통 높이 토큰을 유지한다", async ({
   expect(uniqueHeights[0]).toBeLessThanOrEqual(40)
 })
 
+test("로그인 화면은 활성 소셜 provider가 없으면 빈 소셜 로그인 섹션을 렌더하지 않는다", async () => {
+  const loginSource = readFileSync(path.resolve(__dirname, "../src/pages/login.tsx"), "utf8")
+
+  expect(loginSource).toContain("const hasSocialItems = socialItems.length > 0")
+  expect(loginSource).toContain("if (!hasSocialItems || showSocialAuth")
+  expect(loginSource).toContain("{hasSocialItems ? (")
+})
+
 test("로그인 정책 토글값은 요청 바디에 반영되고 재진입 시 복원된다", async ({ page }) => {
   const loginBodies: Array<{ rememberMe?: boolean; ipSecurity?: boolean }> = []
 

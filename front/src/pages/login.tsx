@@ -78,15 +78,17 @@ const LoginPage = () => {
     saveAuthLoginPolicyPrefs({ keepSignedIn, ipSecurityOn })
   }, [keepSignedIn, ipSecurityOn])
 
-  useEffect(() => {
-    if (showSocialAuth || typeof window === "undefined") return
-    const handle = window.setTimeout(() => setShowSocialAuth(true), 320)
-    return () => window.clearTimeout(handle)
-  }, [showSocialAuth])
-
   const socialItems = useMemo(() => {
     return buildSocialAuthItems(next)
   }, [next])
+  const hasSocialItems = socialItems.length > 0
+
+  useEffect(() => {
+    if (!hasSocialItems || showSocialAuth || typeof window === "undefined") return
+    const handle = window.setTimeout(() => setShowSocialAuth(true), 320)
+    return () => window.clearTimeout(handle)
+  }, [hasSocialItems, showSocialAuth])
+
   const loginIdActive = useMemo(() => loginIdFocused || email.length > 0, [email, loginIdFocused])
   const passwordActive = useMemo(() => passwordFocused || password.length > 0, [password, passwordFocused])
   const feedbackMessage = error ? (
@@ -273,12 +275,14 @@ const LoginPage = () => {
           {loading ? "로그인 중..." : "로그인"}
         </PrimaryButton>
 
-        <SocialSection>
-          <span>소셜 계정으로 로그인</span>
-          <SocialButtonRow>
-            {showSocialAuth ? <SocialAuthButtons items={socialItems} /> : null}
-          </SocialButtonRow>
-        </SocialSection>
+        {hasSocialItems ? (
+          <SocialSection>
+            <span>소셜 계정으로 로그인</span>
+            <SocialButtonRow>
+              {showSocialAuth ? <SocialAuthButtons items={socialItems} /> : null}
+            </SocialButtonRow>
+          </SocialSection>
+        ) : null}
       </form>
       {showIpSecurityInfo ? <IpSecurityInfoModal open={showIpSecurityInfo} onClose={() => setShowIpSecurityInfo(false)} /> : null}
     </AuthShell>

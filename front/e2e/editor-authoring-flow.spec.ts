@@ -1339,6 +1339,197 @@ test.describe("block editor authoring flow", () => {
     expect(Math.abs(afterGeometry.handleTop - beforeGeometry.handleTop - paragraphDelta)).toBeLessThanOrEqual(12)
   })
 
+  test("실제 /editor/[id] 테이블 클릭 후 하단 본문 클릭은 scrollTop을 다른 본문 위치로 되돌리지 않는다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 980, height: 720 })
+    const adminMember = {
+      id: 1,
+      username: "qa-admin",
+      nickname: "aquila",
+      isAdmin: true,
+    }
+    const tableCellLabel = "table click scroll anchor cell"
+    const bottomLabel = "edit route table then bottom click scroll jump target"
+    const previousSelectionLabel = "pre table selection anchor paragraph"
+    const leadParagraphs = Array.from({ length: 72 }, (_, index) =>
+      index === 66
+        ? `${previousSelectionLabel} ${index + 1}. 하단 표를 클릭하기 전 이전 caret이 남아 있는 중간 본문입니다.`
+        : `pre table scroll paragraph ${index + 1}. 긴 글에서 하단 표 클릭 scrollTop 보존 회귀를 확인합니다.`
+    )
+    const closingParagraphs = Array.from({ length: 20 }, (_, index) =>
+      index === 18
+        ? `${bottomLabel} ${index + 1}. 테이블을 먼저 클릭한 뒤 글의 맨 아래쪽 본문을 클릭해도 화면 위치가 다른 문단으로 순간이동하면 안 됩니다.`
+        : `post table bottom paragraph ${index + 1}. 하단 본문 클릭은 caret/focus만 이동해야 합니다.`
+    )
+    const tableMarkdown = [
+      '<!-- aq-table {"overflowMode":"normal","columnWidths":[119,192,210]} -->',
+      "| 기준 | 상태 | 메모 |",
+      "| --- | --- | --- |",
+      `| ${tableCellLabel} | 선택 유지 | 하단 본문 클릭 전 테이블 selection anchor를 만듭니다. |`,
+      "| 다음 행 | 보조 값 | 표가 포함된 긴 수정 글을 재현합니다. |",
+    ].join("\n")
+    const content = [
+      "테이블 클릭 후 하단 본문 클릭 scroll jump 회귀 재현용 글입니다.",
+      ...leadParagraphs,
+      tableMarkdown,
+      ...closingParagraphs,
+    ].join("\n\n")
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(adminMember),
+      })
+    })
+    await page.route("**/post/api/v1/adm/posts/995", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 995,
+          version: 13,
+          title: "테이블 후 하단 본문 클릭 scroll jump 회귀 글",
+          content,
+          contentHtml: null,
+          published: true,
+          listed: true,
+        }),
+      })
+    })
+
+    await page.goto("/editor/995")
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(
+      "테이블 후 하단 본문 클릭 scroll jump 회귀 글"
+    )
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await expectEditorToContainLoadedText(editor, bottomLabel)
+
+    const previousSelectionParagraph = editor.locator("p", { hasText: previousSelectionLabel }).first()
+    await previousSelectionParagraph.scrollIntoViewIfNeeded()
+    const previousSelectionBox = await expectVisibleBox(
+      previousSelectionParagraph,
+      "previous selection paragraph metrics are missing"
+    )
+    await page.mouse.click(
+      previousSelectionBox.x + Math.min(previousSelectionBox.width / 2, 260),
+      previousSelectionBox.y + Math.min(previousSelectionBox.height / 2, 18)
+    )
+
+    const tableCell = editor.locator("table th, table td", { hasText: tableCellLabel }).first()
+    await tableCell.scrollIntoViewIfNeeded()
+    const tableCellBox = await expectVisibleBox(tableCell, "table click anchor cell metrics are missing")
+    const beforeTableClickState = await page.evaluate((label) => {
+      const cell =
+        Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] th, [data-testid='block-editor-prosemirror'] td")).find(
+          (element) => element.textContent?.includes(label)
+        ) ?? null
+      const rect = cell?.getBoundingClientRect() ?? null
+      return rect
+        ? {
+            scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+            tableCellTop: rect.top,
+          }
+        : null
+    }, tableCellLabel)
+    if (!beforeTableClickState) {
+      throw new Error("table click geometry is missing before click")
+    }
+    await page.mouse.click(tableCellBox.x + Math.min(tableCellBox.width / 2, 120), tableCellBox.y + tableCellBox.height / 2)
+
+    const tableAnchorState = await page.evaluate((label) => {
+      const cell =
+        Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] th, [data-testid='block-editor-prosemirror'] td")).find(
+          (element) => element.textContent?.includes(label)
+        ) ?? null
+      const selection = window.getSelection()
+      const anchorElement =
+        selection?.anchorNode instanceof HTMLElement
+          ? selection.anchorNode
+          : selection?.anchorNode?.parentElement ?? null
+      return {
+        activeInsideTable: Boolean(
+          cell &&
+            (document.activeElement?.closest("th, td") === cell ||
+              anchorElement?.closest("th, td") === cell)
+        ),
+        scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+      }
+    }, tableCellLabel)
+    expect(tableAnchorState.activeInsideTable).toBe(true)
+    expect(Math.abs(tableAnchorState.scrollTop - beforeTableClickState.scrollTop)).toBeLessThanOrEqual(24)
+
+    const tableElement = editor.locator(".tableWrapper table").first()
+    const tableBox = await expectVisibleBox(tableElement, "table metrics are missing before structural selection")
+    await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
+    const rowHandle = page.locator("[data-table-affordance='row-handle']").first()
+    await expect(rowHandle).toBeVisible()
+    await rowHandle.click()
+
+    const tableSelectionState = await page.evaluate(() => ({
+      scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+      selectedCellCount: document.querySelectorAll("[data-testid='block-editor-prosemirror'] .selectedCell").length,
+    }))
+    expect(tableSelectionState.selectedCellCount).toBeGreaterThan(0)
+
+    await page.evaluate(() => {
+      window.scrollTo(0, document.scrollingElement?.scrollHeight ?? document.body.scrollHeight)
+    })
+    await page.waitForTimeout(80)
+
+    const beforeGeometry = await page.evaluate((label) => {
+      const root = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
+      const paragraph =
+        Array.from(root?.querySelectorAll<HTMLElement>("p") ?? []).find(
+          (element) => element.textContent?.includes(label)
+        ) ?? null
+      if (!root || !paragraph) return null
+      const rootRect = root.getBoundingClientRect()
+      const rect = paragraph.getBoundingClientRect()
+      const clickX = Math.min(rootRect.left + 260, rootRect.right - 32)
+      const clickY = Math.min(window.innerHeight - 36, rootRect.bottom - 18)
+      const clickTarget = document.elementFromPoint(clickX, clickY)
+      return {
+        scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+        paragraphTop: rect.top,
+        rootBottom: rootRect.bottom,
+        clickX,
+        clickY,
+        clickInsideEditor: Boolean(clickTarget?.closest("[data-testid='block-editor-prosemirror']")),
+        paragraphText: paragraph.textContent || "",
+      }
+    }, bottomLabel)
+    if (!beforeGeometry) {
+      throw new Error("bottom click geometry is missing before click")
+    }
+    expect(beforeGeometry.clickInsideEditor).toBe(true)
+
+    await page.mouse.click(beforeGeometry.clickX, beforeGeometry.clickY)
+    await page.waitForTimeout(180)
+
+    const afterGeometry = await page.evaluate((label) => {
+      const paragraph =
+        Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] p")).find(
+          (element) => element.textContent?.includes(label)
+        ) ?? null
+      const activeElement = document.activeElement
+      if (!paragraph) return null
+      const rect = paragraph.getBoundingClientRect()
+      return {
+        scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+        paragraphTop: rect.top,
+        activeInsideEditor: Boolean(
+          activeElement?.closest("[data-testid='block-editor-prosemirror']")
+        ),
+      }
+    }, bottomLabel)
+    if (!afterGeometry) {
+      throw new Error("bottom click geometry is missing after click")
+    }
+
+    expect(afterGeometry.activeInsideEditor).toBe(true)
+    expect(Math.abs(afterGeometry.scrollTop - beforeGeometry.scrollTop)).toBeLessThanOrEqual(24)
+    expect(Math.abs(afterGeometry.paragraphTop - beforeGeometry.paragraphTop)).toBeLessThanOrEqual(24)
+  })
+
   test("실제 /editor/[id] 수정 진입은 본문 hover scroll, 선택 block affordance, code 원문을 유지한다", async ({
     page,
   }) => {

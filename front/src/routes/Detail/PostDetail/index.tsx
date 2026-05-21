@@ -1812,12 +1812,20 @@ const CompactTocSection = styled.section`
     transform: rotate(180deg);
   }
 
+  details:not([open]) ol {
+    display: none;
+  }
+
   ol {
     list-style: none;
     margin: 0;
     padding: 0 0.78rem 0.88rem;
     display: grid;
     gap: 0.12rem;
+    max-height: 14rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   li[data-level="3"] button {

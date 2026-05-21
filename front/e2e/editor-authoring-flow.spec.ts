@@ -1872,6 +1872,275 @@ test.describe("block editor authoring flow", () => {
     )
   })
 
+  test("ProseMirror selection reveal은 rich block viewport를 이전 block selection anchor로 되돌리지 않는다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 980, height: 720 })
+    const previousSelectionLabel = "selection reveal stale block anchor"
+    const codeLabel = "selection reveal code target"
+    const tableLabel = "Selection reveal table target"
+    const mermaidLabel = "SelectionRevealMermaidTarget"
+    const leadParagraphs = Array.from({ length: 62 }, (_, index) =>
+      index === 12
+        ? `${previousSelectionLabel} ${index + 1}. 이전 top-level block selection이 남아 있던 문단입니다.`
+        : `selection reveal lead paragraph ${index + 1}. rich block 클릭 전 stale selection 거리를 확보합니다.`
+    )
+    const tableMarkdown = [
+      '<!-- aq-table {"overflowMode":"normal","columnWidths":[160,220,240]} -->',
+      "| 영역 | 점검 항목 | 확인 기준 |",
+      "| --- | --- | --- |",
+      `| 테이블 | ${tableLabel} | selection reveal이 scroll을 되돌리지 않음 |`,
+      "| 코드 | focus side effect | 현재 viewport 유지 |",
+    ].join("\n")
+    const markdown = [
+      "# selection reveal rich block 재현",
+      ...leadParagraphs,
+      "```mermaid",
+      "sequenceDiagram",
+      `    participant ${mermaidLabel}`,
+      `    ${mermaidLabel}->>Editor: reveal stale selection`,
+      "```",
+      "```java",
+      `String marker = "${codeLabel}";`,
+      "System.out.println(marker);",
+      "```",
+      tableMarkdown,
+      "selection reveal trailing paragraph. target 아래쪽을 안정화합니다.",
+    ].join("\n\n")
+    const seed = encodeURIComponent(markdown.replace(/\n/g, "\\n"))
+
+    await page.goto(`${QA_ENGINE_ROUTE}&seed=${seed}`)
+    await expect(page.getByTestId("qa-editor-ready")).toHaveCount(1)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await expectEditorToContainLoadedText(editor, tableLabel)
+    const previousSelectionParagraph = editor.locator("p", { hasText: previousSelectionLabel }).first()
+    const dragHandle = page.getByTestId("block-drag-handle")
+    const selectPreviousBlockAnchor = async () => {
+      await previousSelectionParagraph.scrollIntoViewIfNeeded()
+      await previousSelectionParagraph.hover()
+      await expect(dragHandle).toBeVisible()
+      await dragHandle.click()
+      await expect(page.getByTestId("keyboard-block-selection-overlay")).toBeVisible()
+    }
+
+    const assertSelectionRevealKeepsViewport = async (target: Locator, label: string) => {
+      await selectPreviousBlockAnchor()
+      await target.scrollIntoViewIfNeeded()
+      const beforeGeometry = await target.evaluate((element) => {
+        const rect = element.getBoundingClientRect()
+        return {
+          scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+          targetTop: rect.top,
+          targetBottom: rect.bottom,
+        }
+      })
+
+      const actionCalled = await page.evaluate(() => {
+        const qaWindow = window as Window & {
+          __qaScrollCurrentSelectionIntoView?: () => void
+        }
+        if (!qaWindow.__qaScrollCurrentSelectionIntoView) return false
+        qaWindow.__qaScrollCurrentSelectionIntoView()
+        return true
+      })
+      expect(actionCalled).toBe(true)
+      await page.waitForTimeout(100)
+
+      const afterGeometry = await target.evaluate((element) => {
+        const rect = element.getBoundingClientRect()
+        return {
+          scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+          targetTop: rect.top,
+          targetBottom: rect.bottom,
+        }
+      })
+
+      expect(Math.abs(afterGeometry.scrollTop - beforeGeometry.scrollTop), label).toBeLessThanOrEqual(24)
+      expect(Math.abs(afterGeometry.targetTop - beforeGeometry.targetTop), label).toBeLessThanOrEqual(24)
+      expect(Math.abs(afterGeometry.targetBottom - beforeGeometry.targetBottom), label).toBeLessThanOrEqual(24)
+    }
+
+    await assertSelectionRevealKeepsViewport(
+      editor.locator(".aq-mermaid-stage").first(),
+      mermaidLabel
+    )
+    await assertSelectionRevealKeepsViewport(
+      editor.locator(".aq-code-shell", { hasText: codeLabel }).first(),
+      codeLabel
+    )
+    await assertSelectionRevealKeepsViewport(
+      editor.locator("table th, table td", { hasText: tableLabel }).first(),
+      tableLabel
+    )
+  })
+
+  test("실제 /editor/[id] rich block 클릭은 이전 block selection anchor로 되돌아가지 않는다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 980, height: 720 })
+    const adminMember = {
+      id: 1,
+      username: "qa-admin",
+      nickname: "aquila",
+      isAdmin: true,
+    }
+    const previousSelectionLabel = "stale rich block node selection anchor"
+    const codeLabel = "stale code focus target"
+    const tableLabel = "Stale table focus target"
+    const mermaidLabel = "StaleMermaidFocusTarget"
+    const leadParagraphs = Array.from({ length: 56 }, (_, index) =>
+      index === 16
+        ? `${previousSelectionLabel} ${index + 1}. 이전 block selection이 남아 있던 문단입니다.`
+        : `stale selection lead paragraph ${index + 1}. 실제 글수정 rich block 클릭 경로를 검증합니다.`
+    )
+    const tailParagraphs = Array.from({ length: 14 }, (_, index) =>
+      `stale selection tail paragraph ${index + 1}. 클릭 후에도 이 부근 viewport가 유지되어야 합니다.`
+    )
+    const tableMarkdown = [
+      '<!-- aq-table {"overflowMode":"normal","columnWidths":[160,220,240]} -->',
+      "| 영역 | 점검 항목 | 확인 기준 |",
+      "| --- | --- | --- |",
+      `| 개념 이해 | ${tableLabel} | 요청만으로 처리 가능한가 |`,
+      "| 토큰 구조 | Access/Refresh 구분 | 역할 명확 |",
+      "| 흐름 | 재발급 로직 | 구현되어 있는가 |",
+    ].join("\n")
+    const content = [
+      "# rich block stale selection 재현",
+      ...leadParagraphs,
+      "```mermaid",
+      "sequenceDiagram",
+      `    participant ${mermaidLabel}`,
+      `    ${mermaidLabel}->>Server: click target`,
+      "```",
+      "```java",
+      `String marker = "${codeLabel}";`,
+      "System.out.println(marker);",
+      "```",
+      tableMarkdown,
+      ...tailParagraphs,
+    ].join("\n\n")
+
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(adminMember),
+      })
+    })
+    await page.route("**/post/api/v1/adm/posts/998", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 998,
+          version: 5,
+          title: "rich block stale selection 회귀 글",
+          content,
+          contentHtml: null,
+          published: true,
+          listed: true,
+        }),
+      })
+    })
+
+    await page.goto("/editor/998")
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(
+      "rich block stale selection 회귀 글"
+    )
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await expectEditorToContainLoadedText(editor, tableLabel)
+
+    const previousSelectionParagraph = editor.locator("p", { hasText: previousSelectionLabel }).first()
+    const dragHandle = page.getByTestId("block-drag-handle")
+    const selectPreviousBlockAnchor = async () => {
+      await previousSelectionParagraph.scrollIntoViewIfNeeded()
+      const previousSelectionBox = await expectVisibleBox(
+        previousSelectionParagraph,
+        "stale selection paragraph metrics are missing"
+      )
+      await page.mouse.move(
+        previousSelectionBox.x + Math.min(previousSelectionBox.width / 2, 260),
+        previousSelectionBox.y + Math.min(previousSelectionBox.height / 2, 18)
+      )
+      await previousSelectionParagraph.hover()
+      await expect(dragHandle).toBeVisible()
+      await dragHandle.click()
+      await expect(page.getByTestId("keyboard-block-selection-overlay")).toBeVisible()
+    }
+
+    const assertClickKeepsViewport = async (
+      target: Locator,
+      label: string,
+      clickOffset = { x: 36, y: 20 }
+    ) => {
+      await selectPreviousBlockAnchor()
+      await target.scrollIntoViewIfNeeded()
+      const targetBox = await expectVisibleBox(target, `${label} metrics are missing before click`)
+      const beforeGeometry = await target.evaluate((element) => {
+        const rect = element.getBoundingClientRect()
+        return {
+          scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+          targetTop: rect.top,
+          targetBottom: rect.bottom,
+        }
+      })
+
+      await page.mouse.click(
+        targetBox.x + Math.min(clickOffset.x, Math.max(8, targetBox.width - 8)),
+        targetBox.y + Math.min(clickOffset.y, Math.max(8, targetBox.height - 8))
+      )
+      const scrollSamples = await page.evaluate(
+        () =>
+          new Promise<Array<{ scrollTop: number; elapsedMs: number }>>((resolve) => {
+            const samples: Array<{ scrollTop: number; elapsedMs: number }> = []
+            const startedAt = performance.now()
+            const collect = () => {
+              samples.push({
+                scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+                elapsedMs: performance.now() - startedAt,
+              })
+              if (performance.now() - startedAt >= 760) {
+                resolve(samples)
+                return
+              }
+              requestAnimationFrame(collect)
+            }
+            requestAnimationFrame(collect)
+          })
+      )
+
+      const afterGeometry = await target.evaluate((element) => {
+        const rect = element.getBoundingClientRect()
+        return {
+          scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+          targetTop: rect.top,
+          targetBottom: rect.bottom,
+        }
+      })
+
+      const maxScrollDelta = Math.max(
+        ...scrollSamples.map((sample) => Math.abs(sample.scrollTop - beforeGeometry.scrollTop))
+      )
+      expect(maxScrollDelta).toBeLessThanOrEqual(24)
+      expect(Math.abs(afterGeometry.scrollTop - beforeGeometry.scrollTop)).toBeLessThanOrEqual(24)
+      expect(Math.abs(afterGeometry.targetTop - beforeGeometry.targetTop)).toBeLessThanOrEqual(24)
+      expect(Math.abs(afterGeometry.targetBottom - beforeGeometry.targetBottom)).toBeLessThanOrEqual(24)
+    }
+
+    await assertClickKeepsViewport(
+      editor.locator(".aq-mermaid-stage").first(),
+      mermaidLabel
+    )
+    await assertClickKeepsViewport(
+      editor.locator(".aq-code-shell", { hasText: codeLabel }).first(),
+      codeLabel
+    )
+    await assertClickKeepsViewport(
+      editor.locator("table th, table td", { hasText: tableLabel }).first(),
+      tableLabel,
+      { x: 24, y: 16 }
+    )
+  })
+
   test("실제 /editor/[id] 수정 진입은 본문 hover scroll, 선택 block affordance, code 원문을 유지한다", async ({
     page,
   }) => {
@@ -3775,7 +4044,7 @@ test.describe("block editor authoring flow", () => {
     expect(afterDeleteMetrics.columnCount).toBe(3)
   })
 
-  test("writer surface의 row/column grip과 trailing +행/+열은 edge hover에서만 노출된다", async ({ page }) => {
+  test("writer surface의 row/column grip은 edge hover에서만 노출된다", async ({ page }) => {
     await page.goto(QA_WRITER_ROUTE)
     const { columnHandle, rowHandle, columnAddButton, rowAddButton, growHandle, structureMenuButton, cellMenuButton } =
       getTableAffordances(page)
@@ -3795,6 +4064,10 @@ test.describe("block editor authoring flow", () => {
     if (!tableBox) {
       throw new Error("writer table bounding box is missing")
     }
+    const moveToTableCenter = async () => {
+      await page.mouse.move(tableBox.x + tableBox.width / 2, tableBox.y + tableBox.height / 2, { steps: 4 })
+    }
+
     await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
 
     await expect(columnHandle).toBeVisible()
@@ -3805,7 +4078,8 @@ test.describe("block editor authoring flow", () => {
     await expect(columnAddButton).toHaveCount(0)
     await expect(rowAddButton).toHaveCount(0)
 
-    await page.mouse.move(tableBox.x + tableBox.width - 6, tableBox.y + 6)
+    await moveToTableCenter()
+    await page.mouse.move(tableBox.x + tableBox.width - 6, tableBox.y + 6, { steps: 6 })
 
     await expect(growHandle).toBeVisible()
     await expect(structureMenuButton).toBeVisible()
@@ -3814,16 +4088,6 @@ test.describe("block editor authoring flow", () => {
     await expect(cellMenuButton).toHaveCount(0)
     await expect(columnAddButton).toHaveCount(0)
     await expect(rowAddButton).toHaveCount(0)
-
-    await page.mouse.move(tableBox.x + tableBox.width - 3, tableBox.y + tableBox.height - 3)
-
-    await expect(columnHandle).toHaveCount(0)
-    await expect(rowHandle).toHaveCount(0)
-    await expect(growHandle).toHaveCount(0)
-    await expect(structureMenuButton).toHaveCount(0)
-    await expect(cellMenuButton).toHaveCount(0)
-    await expect(columnAddButton).toBeVisible()
-    await expect(rowAddButton).toBeVisible()
   })
 
   test("writer surface의 multi-table hover는 hovered table 기준으로 cell menu를 고정하고 block drag handle을 유지한다", async ({

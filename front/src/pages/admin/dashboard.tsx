@@ -66,7 +66,9 @@ import {
   PanelFallback,
   InsightRail,
   LeadMetaGrid,
+  LeadMetaCard,
   ActionList,
+  ActionListLinkCard,
   SectionHeader,
   PrioritySection,
   ContextGrid,
@@ -86,7 +88,6 @@ import {
 import {
   AdminInfoLinkCard,
   AdminInfoList,
-  AdminInfoPanelCard,
   AdminInfoStatusItem,
   AdminInfoStatusList,
 } from "src/routes/Admin/AdminSurfacePrimitives"
@@ -653,10 +654,10 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
                 </AdminInfoStatusList>
                 <LeadMetaGrid>
                   {leadFailureMetaItems.map((item) => (
-                    <AdminInfoPanelCard key={item.key}>
+                    <LeadMetaCard key={item.key}>
                       <small>{item.label}</small>
                       <strong>{item.value}</strong>
-                    </AdminInfoPanelCard>
+                    </LeadMetaCard>
                   ))}
                 </LeadMetaGrid>
               </SnapshotLeadBody>
@@ -673,13 +674,13 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
                   <ActionList>
                     {quickActions.map((action) => (
                       <Link key={action.key} href={action.href} passHref legacyBehavior>
-                        <AdminInfoLinkCard
+                        <ActionListLinkCard
                           $withIcon={false}
                           target={action.href.startsWith("http") ? "_blank" : undefined}
                           rel={action.href.startsWith("http") ? "noreferrer noopener" : undefined}
                         >
                           <strong>{action.label}</strong>
-                        </AdminInfoLinkCard>
+                        </ActionListLinkCard>
                       </Link>
                     ))}
                   </ActionList>

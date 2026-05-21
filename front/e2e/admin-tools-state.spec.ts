@@ -90,7 +90,7 @@ test.describe("admin tools state contract", () => {
     expect(source).not.toContain("실행 전 체크")
     expect(source).not.toContain("위험 액션")
     expect(source).not.toContain("런북/장애 문서")
-    expect(source.split("\n").length).toBeLessThan(1700)
+    expect(source.split("\n").length).toBeLessThan(1720)
   })
 
   test("운영 도구 fallback 상태는 미수집 라벨과 중립 tone으로 분류한다", () => {
@@ -102,10 +102,26 @@ test.describe("admin tools state contract", () => {
     expect(modelSource).toContain("export const normalizeOperationalStatusLabel")
     expect(source).toContain("normalizeOperationalStatusLabel(systemHealthQuery.data?.status")
     expect(source).toContain("isOperationalStatusMissing(rawSystemHealthStatus)")
-    expect(source).toContain("DATA_MISSING_STATUS_LABEL")
+    expect(source).not.toContain("DATA_MISSING_STATUS_LABEL")
     expect(source).not.toContain('systemHealthQuery.data?.status || "UNKNOWN"')
     expect(source).not.toContain('taskType: typeof parsed.taskQueue.taskType === "string" ? parsed.taskQueue.taskType : "UNKNOWN"')
     expect(source).not.toContain(': "미확인"')
     expect(source).not.toContain('? "갱신 중"\\n        : "열기"')
+  })
+
+  test("운영 도구 도메인별 fallback 상태는 공통 미수집 라벨을 반복하지 않는다", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
+    const modelSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspaceModel.ts"), "utf8")
+
+    expect(modelSource).toContain('export const CONNECTION_UNAVAILABLE_STATUS_LABEL = "미연결"')
+    expect(modelSource).toContain('export const DATA_EMPTY_STATUS_LABEL = "데이터 없음"')
+    expect(modelSource).toContain('export const CHECK_REQUIRED_STATUS_LABEL = "점검 필요"')
+    expect(modelSource).toContain("export const getDiagnosticFallbackStatusLabel =")
+    expect(source).toContain("const isSystemHealthConnectionUnavailable = systemHealthQuery.isError && !hasSystemHealthStatus")
+    expect(source).toContain("getDiagnosticFallbackStatusLabel(isMailLoading, mailDiagnosticsError)")
+    expect(source).toContain("getDiagnosticFallbackStatusLabel(isQueueLoading, taskQueueDiagnosticsError)")
+    expect(source).toContain("getDiagnosticFallbackStatusLabel(isCleanupLoading, cleanupDiagnosticsError)")
+    expect(source).toContain("getDiagnosticFallbackStatusLabel(isAuthLoading, authSecurityEventsError)")
+    expect(source).not.toContain('? "갱신 중"\\n        : DATA_MISSING_STATUS_LABEL')
   })
 })

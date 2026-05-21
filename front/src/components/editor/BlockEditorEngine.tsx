@@ -205,7 +205,7 @@ import {
   resolveBlockHandleRailLayoutForSurface,
   resolveBlockSelectionOverlayLayout,
   resolveThinBlockHandleAnchorTop,
-  preserveWindowScrollForTablePointerFocus,
+  preserveWindowScrollForEditorPointerFocus,
   shouldCenterBlockHandleForNode,
   shouldUseThinBlockHandleAnchor,
 } from "./blockHandleLayoutModel"
@@ -6167,7 +6167,7 @@ const BlockEditorEngine = ({
         findTopLevelBlockIndexFromTarget(event.target) ??
         findTopLevelBlockIndexByClientPosition(event.clientX, event.clientY)
       const currentEditor = editorRef.current ?? editor
-      if (currentEditor) preserveWindowScrollForTablePointerFocus(event.target, isTableSelectionActive(currentEditor))
+      if (currentEditor) preserveWindowScrollForEditorPointerFocus(event.target, isTableSelectionActive(currentEditor))
       if (
         currentEditor &&
         isOuterListItemSelectionGesture(event, targetListItemContext) &&

@@ -256,6 +256,9 @@ const SearchField = styled.div`
   }
 
   input {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
     min-height: 46px;
     border-radius: 12px;
     border: 1px solid ${({ theme }) => theme.colors.gray5};
@@ -345,6 +348,9 @@ const FieldBox = styled.div`
 
   input,
   select {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
     min-height: 44px;
     border-radius: 12px;
     border: 1px solid ${({ theme }) => theme.colors.gray5};

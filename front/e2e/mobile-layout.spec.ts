@@ -399,6 +399,45 @@ test.beforeEach(async ({ page }) => {
   await mockAnonymousSession(page)
 })
 
+test("모바일 어드민 유틸리티는 검색을 접어 first fold를 보존한다", async ({ page }) => {
+  await page.goto("/admin/tools")
+
+  await expect(page.getByRole("heading", { name: /문제 확인과 복구/ })).toBeVisible()
+  await expect(page.getByRole("navigation", { name: "관리자 바로가기" })).toBeVisible()
+  await expect(page.getByRole("link", { name: "글 관리" })).toBeVisible()
+
+  const searchToggle = page.getByRole("button", { name: "관리자 검색 열기" })
+  await expect(searchToggle).toBeVisible()
+  await expect(page.getByRole("searchbox", { name: "관리자 검색" })).toBeHidden()
+
+  const collapsedSnapshot = await page.evaluate(() => {
+    const compactNav = document.querySelector<HTMLElement>('nav[aria-label="관리자 바로가기"]')
+    const utility = compactNav?.closest("header") as HTMLElement | null
+    const heading = document.querySelector("h1")
+    const utilityRect = utility?.getBoundingClientRect()
+    const headingRect = heading?.getBoundingClientRect()
+
+    return {
+      utilityHeight: utilityRect?.height ?? 0,
+      utilityBottom: utilityRect?.bottom ?? 0,
+      headingTop: headingRect?.top ?? 0,
+      bodyScrollWidth: document.body.scrollWidth,
+      viewportWidth: window.innerWidth,
+    }
+  })
+
+  expect(collapsedSnapshot.utilityHeight).toBeLessThanOrEqual(92)
+  expect(collapsedSnapshot.headingTop).toBeLessThanOrEqual(205)
+  expect(collapsedSnapshot.bodyScrollWidth).toBeLessThanOrEqual(collapsedSnapshot.viewportWidth)
+
+  await searchToggle.click()
+  const searchInput = page.getByRole("searchbox", { name: "관리자 검색" })
+  await expect(searchInput).toBeVisible()
+  await searchInput.fill("글 관리")
+  await searchInput.press("Enter")
+  await expect(page).toHaveURL(/\/admin\/posts(?:$|\?)/)
+})
+
 test("iPhone 15 Pro 메인 피드는 카드 overflow 없이 viewport 내부에 렌더된다", async ({ page }) => {
   await mockFeedEndpoints(page)
 

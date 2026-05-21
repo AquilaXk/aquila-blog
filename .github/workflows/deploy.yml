@@ -227,6 +227,16 @@ jobs:
             echo "$key present"
           done
 
+      - name: Validate HOME_SERVER_ENV contract
+        env:
+          HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          home_server_env_file="${RUNNER_TEMP}/home-server.env"
+          printf '%s\n' "${HOME_SERVER_ENV}" > "${home_server_env_file}"
+          node tools/env/validate-env.mjs --target home-server-source --file "${home_server_env_file}"
+
       - name: Resolve Tailscale OAuth tags
         shell: bash
         run: |

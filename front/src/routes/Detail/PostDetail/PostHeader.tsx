@@ -297,8 +297,8 @@ const StyledWrapper = styled.header`
     font-weight: 700;
     color: ${({ theme }) => theme.colors.gray12};
     max-width: 18ch;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    overflow-wrap: break-word;
+    word-break: keep-all;
   }
 
   .metaRow {

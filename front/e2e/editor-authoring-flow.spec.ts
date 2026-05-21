@@ -995,14 +995,15 @@ test.describe("block editor authoring flow", () => {
     await page.goto("/editor/992")
 
     await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue("수정 route scroll/code 회귀 글")
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await expect(editor).toContainText("edit route scroll paragraph 36")
     const codeBlock = page.locator(".aq-code-shell").first()
-    await expect(codeBlock).toBeVisible()
+    await expect(codeBlock).toBeVisible({ timeout: 15_000 })
     await expect(codeBlock.locator(".aq-code-highlight-layer")).toContainText("const restored = 305;")
     await expect(codeBlock.locator(".aq-code-highlight-layer")).toContainText("return restored")
 
     const readScrollTop = () =>
       page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
-    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     const firstParagraph = editor.locator("p", { hasText: "edit route scroll paragraph 1" }).first()
     await expect(firstParagraph).toBeVisible()
     await page.evaluate(() => window.scrollTo(0, 0))

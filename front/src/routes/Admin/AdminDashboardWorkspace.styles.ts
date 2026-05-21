@@ -2,6 +2,7 @@ import styled from "@emotion/styled"
 import {
   AdminInfoLinkCard,
   AdminInfoList,
+  AdminInfoPanelCard,
   AdminPlainCard,
   AdminSectionTitleStack,
   AdminTextActionLink,
@@ -129,6 +130,11 @@ export const ServiceRail = styled.section`
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));
   gap: 8px;
+
+  @media (max-width: 720px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
 `
 
 export const MetricCard = styled.article`
@@ -154,6 +160,12 @@ export const MetricCard = styled.article`
     padding: 11px;
     gap: 9px;
   }
+
+  @media (max-width: 720px) {
+    gap: 7px;
+    padding: 8px;
+    border-radius: 16px;
+  }
 `
 
 export const MetricIcon = styled.div`
@@ -176,6 +188,12 @@ export const MetricIcon = styled.div`
     background: ${({ theme }) =>
       theme.scheme === "light" ? "rgba(249, 115, 22, 0.1)" : "rgba(249, 115, 22, 0.18)"};
     color: ${({ theme }) => theme.colors.orange7};
+  }
+
+  @media (max-width: 720px) {
+    width: 30px;
+    height: 30px;
+    border-radius: 11px;
   }
 `
 
@@ -207,6 +225,20 @@ export const MetricCopy = styled.div`
       font-size: 1.08rem;
     }
   }
+
+  @media (max-width: 720px) {
+    gap: 2px;
+
+    span {
+      font-size: 0.68rem;
+      line-height: 1.22;
+    }
+
+    strong {
+      font-size: 0.92rem;
+      line-height: 1.18;
+    }
+  }
 `
 
 export const PanelGrid = styled.section`
@@ -217,6 +249,10 @@ export const PanelGrid = styled.section`
 
   @media (max-width: 1180px) {
     grid-template-columns: 1fr;
+  }
+
+  @media (max-width: 720px) {
+    gap: 10px;
   }
 `
 
@@ -239,7 +275,7 @@ export const PanelHeader = styled.div`
   justify-content: space-between;
   align-items: flex-start;
   gap: 16px;
-  padding: 18px 18px 12px;
+  padding: 14px 16px 10px;
   border-bottom: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray4)};
 
   strong {
@@ -252,6 +288,15 @@ export const PanelHeader = styled.div`
 
   span {
     display: none;
+  }
+
+  @media (max-width: 720px) {
+    gap: 10px;
+    padding: 10px 12px 8px;
+
+    strong {
+      font-size: 0.92rem;
+    }
   }
 `
 
@@ -277,8 +322,18 @@ export const PanelBody = styled.div`
 
 export const SnapshotLeadBody = styled(PanelBody)`
   display: grid;
-  gap: 14px;
-  padding: 18px;
+  gap: 10px;
+  padding: 14px;
+
+  ${AdminInfoPanelCard} {
+    gap: 0.38rem;
+    padding: 0.72rem;
+    border-radius: 14px;
+  }
+
+  @media (max-width: 720px) {
+    padding: 10px;
+  }
 `
 
 export const PanelFrame = styled.iframe`
@@ -294,11 +349,11 @@ export const CompactPanelBody = styled(PanelBody)`
 `
 
 export const CompactPanelSummary = styled.div`
-  min-height: 132px;
+  min-height: 86px;
   display: grid;
   align-content: space-between;
-  gap: 12px;
-  padding: 18px;
+  gap: 8px;
+  padding: 12px;
 
   span {
     color: ${({ theme }) => theme.colors.gray10};
@@ -330,8 +385,13 @@ export const PanelFallback = styled.div`
 
 export const InsightRail = styled.aside`
   display: grid;
-  gap: 12px;
+  gap: 10px;
   grid-template-columns: 1fr;
+
+  @media (max-width: 720px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
 `
 
 export const LeadMetaGrid = styled.div`
@@ -347,11 +407,27 @@ export const LeadMetaGrid = styled.div`
     -webkit-line-clamp: 2;
     word-break: break-word;
   }
+
+  @media (max-width: 720px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
 `
 
 export const ActionList = styled(AdminInfoList)`
   grid-template-columns: 1fr;
-  padding: 18px;
+  gap: 8px;
+  padding: 12px;
+
+  ${AdminInfoLinkCard} {
+    padding: 0.64rem 0.72rem;
+    border-radius: 14px;
+  }
+
+  @media (max-width: 720px) {
+    gap: 6px;
+    padding: 9px;
+  }
 `
 
 export const SectionHeader = styled(AdminSectionTitleStack)`
@@ -362,9 +438,14 @@ export const SectionHeader = styled(AdminSectionTitleStack)`
 
 export const PrioritySection = styled(AdminPlainCard)`
   display: grid;
-  gap: 12px;
-  padding: 18px 20px;
-  border-radius: 24px;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 18px;
+
+  @media (max-width: 720px) {
+    gap: 8px;
+    padding: 12px;
+  }
 `
 
 export const ContextGrid = styled.section`

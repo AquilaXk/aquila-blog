@@ -531,6 +531,7 @@ const BlockEditorEngine = ({
   const [selectedBlockIndex, setSelectedBlockIndex] = useState<number | null>(null)
   const [clickedBlockIndex, setClickedBlockIndex] = useState<number | null>(null)
   const [selectedBlockNodeIndex, setSelectedBlockNodeIndex] = useState<number | null>(null)
+  const [textSelectionBlockIndex, setTextSelectionBlockIndex] = useState<number | null>(null)
   const selectedBlockNodeIndexRef = useRef<number | null>(null)
   const keyboardBlockSelectionStickyRef = useRef(false)
   const [blockHandleState, setBlockHandleState] = useState<TopLevelBlockHandleState>({
@@ -997,6 +998,7 @@ const BlockEditorEngine = ({
     selectedBlockNodeIndexRef.current = null
     setClickedBlockIndex(null)
     setSelectedBlockNodeIndex(null)
+    setTextSelectionBlockIndex(null)
     syncSelectedBlockNodeSurface(null)
   }, [syncSelectedBlockNodeSurface])
 
@@ -1113,6 +1115,7 @@ const BlockEditorEngine = ({
       setClickedBlockIndex(null)
       setSelectedBlockIndex(blockIndex)
       setSelectedBlockNodeIndex(blockIndex)
+      setTextSelectionBlockIndex(null)
       syncSelectedBlockNodeSurface(blockIndex)
       setSelectionTick((prev) => prev + 1)
       clearNativeTextSelection()
@@ -2535,8 +2538,8 @@ const BlockEditorEngine = ({
     })
   }, [focusTopLevelBlock])
 
-  const replaceEditorDocFromExternalValue = useCallback((nextDoc: BlockEditorDoc) => {
-    const currentEditor = editorRef.current
+  const replaceEditorDocFromExternalValue = useCallback((nextDoc: BlockEditorDoc, fallbackEditor?: TiptapEditor | null) => {
+    const currentEditor = editorRef.current ?? fallbackEditor
     if (!currentEditor) return
 
     currentEditor.chain().setMeta("addToHistory", false).setContent(nextDoc, { emitUpdate: false }).run()
@@ -3177,7 +3180,7 @@ const BlockEditorEngine = ({
       const selectedNestedListItemSignature = selectedNestedListItemContext
         ? `${selectedNestedListItemContext.listBlockIndex}:${selectedNestedListItemContext.listPath.join(".")}:${selectedNestedListItemContext.itemIndex}`
         : "none"
-      const nextSignature = `${nextBlockIndex ?? "none"}:${isTopLevelBlockNodeSelection ? 1 : 0}:${isNestedListItemNodeSelection ? 1 : 0}:${keyboardBlockSelectionStickyRef.current ? 1 : 0}:${inTableContext}:${selectedNestedListItemSignature}`
+      const nextSignature = `${nextBlockIndex ?? "none"}:${hasTextRangeSelection ? 1 : 0}:${isTopLevelBlockNodeSelection ? 1 : 0}:${isNestedListItemNodeSelection ? 1 : 0}:${keyboardBlockSelectionStickyRef.current ? 1 : 0}:${inTableContext}:${selectedNestedListItemSignature}`
       if (nextSignature === selectionUiSignatureRef.current) {
         return
       }
@@ -3187,9 +3190,11 @@ const BlockEditorEngine = ({
       if (hasTextRangeSelection && !selectedNestedListItemContext) {
         setClickedBlockIndex(null)
         setSelectedBlockNodeIndex(null)
+        setTextSelectionBlockIndex(nextBlockIndex)
         setSelectedListItemContext(null)
         return
       }
+      setTextSelectionBlockIndex(null)
       if (isNestedListItemNodeSelection) {
         setClickedBlockIndex(null)
         setSelectedBlockNodeIndex(null)
@@ -3227,6 +3232,7 @@ const BlockEditorEngine = ({
         if (disposed || editor.isFocused) return
         setClickedBlockIndex(null)
         setSelectedBlockIndex(null)
+        setTextSelectionBlockIndex(null)
         if (!keyboardBlockSelectionStickyRef.current) {
           setSelectedBlockNodeIndex(null)
         }
@@ -3825,7 +3831,7 @@ const BlockEditorEngine = ({
 
     discardPendingMarkdownCommit()
     const nextDoc = downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(value), enableMermaidBlocks)
-    replaceEditorDocFromExternalValue(nextDoc)
+    replaceEditorDocFromExternalValue(nextDoc, editor)
   }, [discardPendingMarkdownCommit, editor, enableMermaidBlocks, hasExternalMarkdownChanged, replaceEditorDocFromExternalValue, value])
 
   useEffect(
@@ -5628,7 +5634,7 @@ const BlockEditorEngine = ({
         ? selectedBlockIndex
         : stickySelectionActive
           ? selectedBlockNodeIndex
-          : hoveredBlockIndex
+          : textSelectionBlockIndex ?? hoveredBlockIndex
     const hideBlockHandle = () =>
       setBlockHandleState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
     const hasOuterBlockSelectionIntent = blockIndex !== null
@@ -5672,9 +5678,7 @@ const BlockEditorEngine = ({
     const blockTarget = resolveCachedBlockRect(blockIndex)
     const blockElement = blockTarget?.element ?? null
     const canShowHandle = isTopLevelBlockHandleEligible(blockIndex)
-    const shouldShow = Boolean(
-      blockElement && canShowHandle && (isCoarsePointer || stickySelectionActive || hoveredBlockIndex !== null)
-    )
+    const shouldShow = Boolean(blockElement && canShowHandle && (isCoarsePointer || stickySelectionActive || textSelectionBlockIndex !== null || hoveredBlockIndex !== null))
 
     if (!shouldShow || !blockElement) {
       hideBlockHandle()
@@ -5718,6 +5722,7 @@ const BlockEditorEngine = ({
     selectionTick,
     tableMenuState,
     tableAffordanceVisibility.visible,
+    textSelectionBlockIndex,
     resolveEffectiveSelectedListItemContext,
   ])
 

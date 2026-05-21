@@ -34,6 +34,8 @@ export type ExecutionEntry = {
 }
 
 export const ADMIN_TOOLS_DISPLAY_TIME_ZONE = "Asia/Seoul"
+export const DATA_MISSING_STATUS_LABEL = "데이터 미수집"
+export const CHECK_REQUIRED_STATUS_LABEL = "확인 필요"
 export const SYSTEM_HEALTH_QUERY_KEY = ["admin", "tools", "system-health"] as const
 export const HEALTH_CACHE_MS = 10_000
 export const RESULTS_FILTER_STORAGE_KEY = "admin.tools.resultsFilter.v1"
@@ -102,10 +104,10 @@ export const getFreshnessMeta = (
   value: string | null | undefined,
   referenceNow: number | null
 ): { label: string; tone: "fresh" | "aging" | "stale" } => {
-  if (!value) return { label: "미확인", tone: "stale" }
+  if (!value) return { label: DATA_MISSING_STATUS_LABEL, tone: "stale" }
 
   const timestamp = new Date(value).getTime()
-  if (Number.isNaN(timestamp)) return { label: "미확인", tone: "stale" }
+  if (Number.isNaN(timestamp)) return { label: DATA_MISSING_STATUS_LABEL, tone: "stale" }
 
   if (referenceNow == null) return { label: "확인됨", tone: "fresh" }
 
@@ -119,6 +121,20 @@ export const getFreshnessMeta = (
 export const formatRetryPolicy = (policy: TaskRetryPolicy) =>
   `${policy.maxRetries}회 / ${policy.baseDelaySeconds}초 시작 / x${policy.backoffMultiplier.toFixed(1)} / 최대 ${policy.maxDelaySeconds}초`
 
+export const isOperationalStatusMissing = (value: string | null | undefined) => {
+  const normalized = value?.trim()
+  return !normalized || normalized === "UNKNOWN"
+}
+
+export const normalizeOperationalStatusLabel = (value: string | null | undefined) => {
+  const normalized = value?.trim()
+  if (isOperationalStatusMissing(normalized)) return DATA_MISSING_STATUS_LABEL
+  if (normalized === "UP" || normalized === "READY") return "정상"
+  if (normalized === "CONNECTION_FAILED" || normalized === "DOWN" || normalized === "ERROR") return "오류"
+  if (normalized === "MISCONFIGURED") return CHECK_REQUIRED_STATUS_LABEL
+  return normalized
+}
+
 export const getSystemHealthSummary = (health: SystemHealthPayload | null) => {
   if (!health?.details || typeof health.details !== "object") return []
 
@@ -126,10 +142,10 @@ export const getSystemHealthSummary = (health: SystemHealthPayload | null) => {
     .slice(0, 4)
     .map(([key, value]) => {
       if (value && typeof value === "object" && "status" in value && typeof value.status === "string") {
-        return `${key}: ${String(value.status)}`
+        return `${key}: ${normalizeOperationalStatusLabel(value.status)}`
       }
 
-      return `${key}: ${typeof value === "string" ? value : "ok"}`
+      return `${key}: ${typeof value === "string" ? normalizeOperationalStatusLabel(value) : "ok"}`
     })
 }
 

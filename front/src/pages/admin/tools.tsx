@@ -16,6 +16,8 @@ import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import AdminShell from "src/routes/Admin/AdminShell"
 import {
   ACTION_META,
+  CHECK_REQUIRED_STATUS_LABEL,
+  DATA_MISSING_STATUS_LABEL,
   HEALTH_CACHE_MS,
   RESULTS_FILTER_STORAGE_KEY,
   SECTION_IDS,
@@ -27,7 +29,9 @@ import {
   getFreshnessMeta,
   getStatusTone,
   getSystemHealthSummary,
+  isOperationalStatusMissing,
   isExecutionResultFilter,
+  normalizeOperationalStatusLabel,
   type DiagnosticTab,
   type ExecutionEntry,
   type ExecutionResultFilter,
@@ -327,7 +331,7 @@ const readMailSnapshotFromCookie = (req: IncomingMessage): SignupMailDiagnostics
       taskQueue:
         parsed.taskQueue && typeof parsed.taskQueue === "object"
           ? {
-              taskType: typeof parsed.taskQueue.taskType === "string" ? parsed.taskQueue.taskType : "UNKNOWN",
+              taskType: typeof parsed.taskQueue.taskType === "string" ? parsed.taskQueue.taskType : "미분류",
               pendingCount: typeof parsed.taskQueue.pendingCount === "number" ? parsed.taskQueue.pendingCount : 0,
               readyPendingCount:
                 typeof parsed.taskQueue.readyPendingCount === "number" ? parsed.taskQueue.readyPendingCount : 0,
@@ -915,7 +919,9 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
     return filteredExecutions.find((entry) => entry.id === selectedExecutionId) ?? filteredExecutions[0]
   }, [filteredExecutions, selectedExecutionId])
 
-  const systemHealthStatus = systemHealthQuery.data?.status || "UNKNOWN"
+  const rawSystemHealthStatus = systemHealthQuery.data?.status ?? null
+  const hasSystemHealthStatus = !isOperationalStatusMissing(rawSystemHealthStatus)
+  const systemHealthStatus = normalizeOperationalStatusLabel(systemHealthQuery.data?.status)
   const mailFreshness = getFreshnessMeta(mailDiagnostics?.checkedAt ?? null, freshnessClock)
   const taskQueueFreshness = getFreshnessMeta(taskQueueCheckedAt, freshnessClock)
   const cleanupFreshness = getFreshnessMeta(cleanupCheckedAt, freshnessClock)
@@ -935,14 +941,14 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
     !hasMailDiagnostics
       ? isMailLoading
         ? "갱신 중"
-        : "열기"
+        : DATA_MISSING_STATUS_LABEL
       : mailDiagnostics?.status === "READY"
       ? "정상"
       : mailDiagnostics?.status === "CONNECTION_FAILED"
         ? "오류"
         : mailDiagnostics?.status === "MISCONFIGURED"
           ? "확인 필요"
-          : "열기"
+          : CHECK_REQUIRED_STATUS_LABEL
   const signupMailTaskQueue = mailDiagnostics?.taskQueue ?? null
   const signupMailQueueStatusLabel =
     signupMailTaskQueue?.staleProcessingCount && signupMailTaskQueue.staleProcessingCount > 0
@@ -953,7 +959,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
           ? "대기 중"
           : signupMailTaskQueue
             ? "정상"
-            : "미확인"
+            : DATA_MISSING_STATUS_LABEL
   const signupMailQueueStatusMessage =
     signupMailTaskQueue?.staleProcessingCount && signupMailTaskQueue.staleProcessingCount > 0
       ? `stale ${signupMailTaskQueue.staleProcessingCount}건`
@@ -966,20 +972,22 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
     !hasTaskQueueDiagnostics
       ? isQueueLoading
         ? "갱신 중"
-        : "열기"
+        : DATA_MISSING_STATUS_LABEL
       : taskQueueDiagnostics?.staleProcessingCount && taskQueueDiagnostics.staleProcessingCount > 0
       ? "오류"
       : taskQueueDiagnostics?.failedCount && taskQueueDiagnostics.failedCount > 0
         ? "확인 필요"
         : taskQueueDiagnostics
           ? "정상"
-          : "열기"
-  const cleanupStatusLabel = !hasCleanupDiagnostics ? (isCleanupLoading ? "갱신 중" : "열기") : cleanupDiagnostics?.blockedBySafetyThreshold ? "확인 필요" : "정상"
+          : DATA_MISSING_STATUS_LABEL
+  const cleanupStatusLabel = !hasCleanupDiagnostics
+    ? isCleanupLoading ? "갱신 중" : DATA_MISSING_STATUS_LABEL
+    : cleanupDiagnostics?.blockedBySafetyThreshold ? CHECK_REQUIRED_STATUS_LABEL : "정상"
   const authSecurityStatusLabel =
     !hasAuthDiagnostics
       ? isAuthLoading
         ? "갱신 중"
-        : "열기"
+        : DATA_MISSING_STATUS_LABEL
       : authSecurityEvents.length > 0
       ? authSecurityEvents[0]?.eventType === "IP_SECURITY_MISMATCH_BLOCKED"
         ? "확인 필요"
@@ -998,14 +1006,16 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   }, [systemHealthCheckedAt, mailDiagnostics?.checkedAt])
 
   const overviewStatusLabel =
-    systemHealthStatus !== "UP" || mailDiagnostics?.status === "CONNECTION_FAILED"
+    (hasSystemHealthStatus && rawSystemHealthStatus !== "UP") || mailDiagnostics?.status === "CONNECTION_FAILED"
       ? "오류"
       : mailDiagnostics?.status === "MISCONFIGURED"
-        ? "확인 필요"
-        : "정상"
+        ? CHECK_REQUIRED_STATUS_LABEL
+        : !hasSystemHealthStatus && !hasMailDiagnostics
+          ? DATA_MISSING_STATUS_LABEL
+          : "정상"
 
   const attentionItems = [
-    systemHealthStatus !== "UP" ? "서비스 상태를 먼저 확인하세요." : null,
+    hasSystemHealthStatus && rawSystemHealthStatus !== "UP" ? "서비스 상태를 먼저 확인하세요." : null,
     mailDiagnostics?.status === "MISCONFIGURED" ? "메일 설정 누락을 정리해야 합니다." : null,
     mailDiagnostics?.status === "CONNECTION_FAILED" ? "SMTP 연결 실패 원인을 확인해야 합니다." : null,
     (signupMailTaskQueue?.failedCount ?? 0) > 0 ? "회원가입 메일 큐에 실패 작업이 있습니다." : null,
@@ -1074,7 +1084,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
             <FeaturedStatusCard as="a">
               <CardEyebrow>운영 대시보드</CardEyebrow>
               <CardMainLine>
-                <strong>{systemHealthStatus === "UP" ? "정상" : systemHealthStatus}</strong>
+                <strong>{systemHealthStatus}</strong>
               </CardMainLine>
               <CardDetail>{systemHealthSummary[0] || `최근 확인 ${systemHealthFetchedAt}`}</CardDetail>
             </FeaturedStatusCard>

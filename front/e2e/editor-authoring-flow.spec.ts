@@ -841,6 +841,67 @@ test.describe("block editor authoring flow", () => {
     expect(colors.string).not.toBe(colors.base)
   })
 
+  test("실제 /editor/[id] 수정 진입은 pretty-code 원문으로 빈 코드블럭을 복구한다", async ({
+    page,
+  }) => {
+    const adminMember = {
+      id: 1,
+      username: "qa-admin",
+      nickname: "aquila",
+      isAdmin: true,
+    }
+    const staleContent = [
+      "수정 대상 코드입니다.",
+      "",
+      "```ts",
+      "```",
+      "",
+      "다음 문단입니다.",
+    ].join("\n")
+    const prettyCodeHtml = [
+      '<div class="aq-code-block">',
+      '<div class="aq-code-toolbar"><span class="aq-code-language">TS</span></div>',
+      '<div class="aq-code-body"><div class="aq-code-shell">',
+      '<pre class="aq-code aq-pretty-pre">',
+      '<code class="language-ts" data-raw-code="const answer = 42;&#10;return answer">',
+      '<span class="token keyword">const</span> answer = 42;',
+      '</code>',
+      '</pre>',
+      '</div></div>',
+      '</div>',
+    ].join("")
+
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(adminMember),
+      })
+    })
+    await page.route("**/post/api/v1/adm/posts/991", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 991,
+          version: 7,
+          title: "코드 복구 글",
+          content: staleContent,
+          contentHtml: prettyCodeHtml,
+          published: true,
+          listed: true,
+        }),
+      })
+    })
+
+    await page.goto("/editor/991")
+
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue("코드 복구 글")
+    const codeBlock = page.locator(".aq-code-shell").first()
+    await expect(codeBlock).toBeVisible()
+    await expect(codeBlock.locator(".aq-code-highlight-layer")).toContainText("const answer = 42;")
+    await expect(codeBlock.locator(".aq-code-highlight-layer")).toContainText("return answer")
+    await expect(codeBlock.locator(".aq-code-highlight-layer .token.keyword").first()).toBeVisible()
+  })
+
   test("코드 블록 hover scroll surface는 wrapper chrome transition과 세로 gesture 차단을 쓰지 않는다", async ({ page }) => {
     const seed = encodeURIComponent("```javascript\nconst count = 1;\nreturn \"ok\";\n```\n\n아래 문단")
     await page.goto(`${QA_ENGINE_ROUTE}&seed=${seed}`)

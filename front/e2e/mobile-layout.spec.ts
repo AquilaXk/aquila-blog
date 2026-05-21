@@ -806,3 +806,58 @@ test("iPhone 15 Pro 상세 액션은 메타/공유/댓글/작성자 유틸리티
   expect((editBox?.y ?? 0)).toBeLessThan((likeBox?.y ?? 0))
   expect((deleteBox?.y ?? 0)).toBeLessThan((likeBox?.y ?? 0))
 })
+
+test.describe("데스크톱 상세 floating reaction 액션", () => {
+  test.use({
+    viewport: { width: 1440, height: 900 },
+    isMobile: false,
+    hasTouch: false,
+  })
+
+  test("하트/공유 아이콘은 원형 버튼 크기에 맞는 시각 크기를 유지한다", async ({ page }) => {
+    await mockDetailEndpoint(page, {
+      id: 993,
+      title: "반응 버튼 아이콘 크기 테스트",
+      likesCount: 0,
+      commentsCount: 0,
+      hitCount: 10,
+    })
+
+    await page.goto("/posts/993")
+    await expect(page.getByRole("heading", { name: "반응 버튼 아이콘 크기 테스트", level: 1 })).toBeVisible()
+
+    const metrics = await page.evaluate(() => {
+      const readMetric = (buttonSelector: string) => {
+        const button = document.querySelector<HTMLButtonElement>(buttonSelector)
+        const icon = button?.querySelector<SVGElement>("svg") ?? null
+        const buttonBox = button?.getBoundingClientRect() ?? null
+        const iconBox = icon?.getBoundingClientRect() ?? null
+        const iconStyle = icon ? window.getComputedStyle(icon) : null
+
+        return {
+          buttonWidth: buttonBox?.width ?? 0,
+          buttonHeight: buttonBox?.height ?? 0,
+          iconWidth: iconBox?.width ?? 0,
+          iconHeight: iconBox?.height ?? 0,
+          iconFontSize: iconStyle ? Number.parseFloat(iconStyle.fontSize) : 0,
+        }
+      }
+
+      return {
+        like: readMetric(".floatingLikeButton"),
+        share: readMetric(".floatingShareButton"),
+      }
+    })
+
+    expect(metrics.like.buttonWidth).toBeGreaterThanOrEqual(55.5)
+    expect(metrics.like.buttonHeight).toBeGreaterThanOrEqual(55.5)
+    expect(metrics.share.buttonWidth).toBeGreaterThanOrEqual(55.5)
+    expect(metrics.share.buttonHeight).toBeGreaterThanOrEqual(55.5)
+    expect(metrics.like.iconWidth).toBeGreaterThanOrEqual(28)
+    expect(metrics.like.iconHeight).toBeGreaterThanOrEqual(28)
+    expect(metrics.share.iconWidth).toBeGreaterThanOrEqual(28)
+    expect(metrics.share.iconHeight).toBeGreaterThanOrEqual(28)
+    expect(metrics.like.iconFontSize).toBeGreaterThanOrEqual(28)
+    expect(metrics.share.iconFontSize).toBeGreaterThanOrEqual(28)
+  })
+})

@@ -20,12 +20,17 @@ import {
 } from "src/routes/Admin/adminMonitoring"
 import AdminShell from "src/routes/Admin/AdminShell"
 import {
+  DASHBOARD_BACKEND_CHECK_LABEL,
+  DASHBOARD_DATA_MISSING_LABEL,
   EMPTY_INITIAL_SNAPSHOT,
   formatAge,
   formatInstant,
   getMailStatusLabel,
   getMailStatusTone,
+  getSystemHealthStatusLabel,
+  getSystemHealthTone,
   getTaskQueueTone,
+  hasDashboardSnapshot,
   type AdminDashboardInitialSnapshot,
   type DashboardKpiCard,
   type DashboardPriorityRow,
@@ -368,74 +373,98 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
 
   if (!sessionMember) return null
 
-  const systemHealthStatus = systemHealthQuery.data?.status || "확인 전"
+  const rawSystemHealthStatus = systemHealthQuery.data?.status ?? null
   const dashboardSnapshot = dashboardSnapshotQuery.data ?? initialSnapshot.dashboard
-  const monitoringItems = buildMonitoringItems(systemHealthStatus, env)
+  const hasSnapshot = hasDashboardSnapshot(dashboardSnapshot)
+  const monitoringItems = buildMonitoringItems(rawSystemHealthStatus ?? "", env)
   const grafanaDashboardUrl = env.monitoringEmbedLooksLikeGrafana ? env.monitoringEmbedUrl : ""
   const grafanaPanelsCanEmbed = env.monitoringEmbedIsPublicGrafana && Boolean(grafanaDashboardUrl)
   const secondaryPanels = DASHBOARD_PANEL_CARDS
-  const dashboardStatusLabel = systemHealthStatus === "UP" ? "서비스 정상" : systemHealthStatus
-  const dashboardStatusTone = systemHealthStatus === "UP" ? "good" : "warn"
-  const dashboardSnapshotGeneratedAt = formatInstant(dashboardSnapshot?.generatedAt)
+  const dashboardStatusLabel = getSystemHealthStatusLabel(rawSystemHealthStatus)
+  const dashboardStatusTone = getSystemHealthTone(rawSystemHealthStatus)
+  const dashboardSnapshotGeneratedAt = hasSnapshot ? formatInstant(dashboardSnapshot.generatedAt) : DASHBOARD_DATA_MISSING_LABEL
   const mailStatusLabel = getMailStatusLabel(dashboardSnapshot?.signupMail.status)
-  const taskQueueDetail = dashboardSnapshot
+  const taskQueueDetail = hasSnapshot
     ? `실패 ${dashboardSnapshot.taskQueue.failedCount} · 정체 ${dashboardSnapshot.taskQueue.staleProcessingCount}`
-    : "스냅샷 대기"
-  const authSecurityDetail = dashboardSnapshot
+    : DASHBOARD_DATA_MISSING_LABEL
+  const authSecurityDetail = hasSnapshot
     ? `최근 기록 ${dashboardSnapshot.authSecurity.recentEventCount}건`
-    : "스냅샷 대기"
-  const leadFailureItems = [
+    : DASHBOARD_DATA_MISSING_LABEL
+  const leadFailureItems = hasSnapshot ? [
     {
       key: "task-failed",
       label: "실패 task",
-      value: dashboardSnapshot ? `${dashboardSnapshot.taskQueue.failedCount}건` : "-",
-      tone: dashboardSnapshot?.taskQueue.failedCount ? ("warn" as const) : ("good" as const),
+      value: `${dashboardSnapshot.taskQueue.failedCount}건`,
+      tone: dashboardSnapshot.taskQueue.failedCount ? ("warn" as const) : ("good" as const),
     },
     {
       key: "task-stale",
       label: "정체 task",
-      value: dashboardSnapshot ? `${dashboardSnapshot.taskQueue.staleProcessingCount}건` : "-",
-      tone: dashboardSnapshot?.taskQueue.staleProcessingCount ? ("warn" as const) : ("good" as const),
+      value: `${dashboardSnapshot.taskQueue.staleProcessingCount}건`,
+      tone: dashboardSnapshot.taskQueue.staleProcessingCount ? ("warn" as const) : ("good" as const),
     },
     {
       key: "mail-failure",
       label: "메일 최근 실패",
-      value: dashboardSnapshot?.signupMail.latestFailureAt ? formatInstant(dashboardSnapshot.signupMail.latestFailureAt) : "없음",
-      tone: dashboardSnapshot?.signupMail.latestFailureAt ? ("warn" as const) : ("good" as const),
+      value: dashboardSnapshot.signupMail.latestFailureAt
+        ? formatInstant(dashboardSnapshot.signupMail.latestFailureAt)
+        : DASHBOARD_DATA_MISSING_LABEL,
+      tone: dashboardSnapshot.signupMail.latestFailureAt ? ("warn" as const) : ("good" as const),
     },
     {
       key: "auth-blocked",
       label: "최근 인증 차단",
-      value: dashboardSnapshot?.authSecurity.latestBlockedAt ? formatInstant(dashboardSnapshot.authSecurity.latestBlockedAt) : "없음",
-      tone: dashboardSnapshot?.authSecurity.latestBlockedAt ? ("warn" as const) : ("good" as const),
+      value: dashboardSnapshot.authSecurity.latestBlockedAt
+        ? formatInstant(dashboardSnapshot.authSecurity.latestBlockedAt)
+        : DASHBOARD_DATA_MISSING_LABEL,
+      tone: dashboardSnapshot.authSecurity.latestBlockedAt ? ("warn" as const) : ("good" as const),
+    },
+  ] : [
+    {
+      key: "snapshot-missing",
+      label: "운영 스냅샷",
+      value: DASHBOARD_DATA_MISSING_LABEL,
+      tone: "neutral" as const,
     },
   ]
 
-  const leadFailureMetaItems = [
+  const leadFailureMetaItems = hasSnapshot ? [
     {
       key: "mail-message",
       label: "메일 실패 메시지",
-      value: dashboardSnapshot?.signupMail.latestFailureMessage || "없음",
+      value: dashboardSnapshot.signupMail.latestFailureMessage ?? DASHBOARD_DATA_MISSING_LABEL,
     },
     {
       key: "task-message",
       label: "task 실패 메시지",
-      value: dashboardSnapshot?.taskQueue.latestFailureMessage || "없음",
+      value: dashboardSnapshot.taskQueue.latestFailureMessage ?? DASHBOARD_DATA_MISSING_LABEL,
     },
     {
       key: "mail-latest",
       label: "메일 실패 시각",
-      value: dashboardSnapshot?.signupMail.latestFailureAt ? formatInstant(dashboardSnapshot.signupMail.latestFailureAt) : "없음",
+      value: dashboardSnapshot.signupMail.latestFailureAt
+        ? formatInstant(dashboardSnapshot.signupMail.latestFailureAt)
+        : DASHBOARD_DATA_MISSING_LABEL,
     },
     {
       key: "task-latest",
       label: "task 실패 시각",
-      value: dashboardSnapshot?.taskQueue.latestFailureAt ? formatInstant(dashboardSnapshot.taskQueue.latestFailureAt) : "없음",
+      value: dashboardSnapshot.taskQueue.latestFailureAt
+        ? formatInstant(dashboardSnapshot.taskQueue.latestFailureAt)
+        : DASHBOARD_DATA_MISSING_LABEL,
     },
     {
       key: "auth-latest",
       label: "차단 시각",
-      value: dashboardSnapshot?.authSecurity.latestBlockedAt ? formatInstant(dashboardSnapshot.authSecurity.latestBlockedAt) : "없음",
+      value: dashboardSnapshot.authSecurity.latestBlockedAt
+        ? formatInstant(dashboardSnapshot.authSecurity.latestBlockedAt)
+        : DASHBOARD_DATA_MISSING_LABEL,
+    },
+  ] : [
+    {
+      key: "snapshot-check",
+      label: "스냅샷",
+      value: DASHBOARD_BACKEND_CHECK_LABEL,
     },
   ]
 
@@ -451,9 +480,9 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
     {
       key: "tasks",
       label: "작업 큐",
-      value: dashboardSnapshot
+      value: hasSnapshot
         ? `${dashboardSnapshot.taskQueue.readyPendingCount} 대기 / ${dashboardSnapshot.taskQueue.processingCount} 처리`
-        : "-",
+        : DASHBOARD_DATA_MISSING_LABEL,
       detail: taskQueueDetail,
       tone: getTaskQueueTone(dashboardSnapshot),
       icon: "spark",
@@ -463,31 +492,29 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
       label: "회원가입 메일",
       value: mailStatusLabel,
       detail:
-        dashboardSnapshot?.signupMail.queueLagSeconds != null
+        hasSnapshot && dashboardSnapshot.signupMail.queueLagSeconds != null
           ? `큐 지연 ${formatAge(dashboardSnapshot.signupMail.queueLagSeconds)}`
-          : dashboardSnapshot?.signupMail.latestFailureAt
+          : hasSnapshot && dashboardSnapshot.signupMail.latestFailureAt
             ? `최근 실패 ${formatInstant(dashboardSnapshot.signupMail.latestFailureAt)}`
-            : "메일 큐 정상",
+            : hasSnapshot ? "메일 큐 정상" : DASHBOARD_DATA_MISSING_LABEL,
       tone: getMailStatusTone(dashboardSnapshot?.signupMail.status),
       icon: "edit",
     },
     {
       key: "auth-security",
       label: "인증 이상",
-      value: dashboardSnapshot ? `${dashboardSnapshot.authSecurity.blockedEventCount}건` : "-",
+      value: hasSnapshot ? `${dashboardSnapshot.authSecurity.blockedEventCount}건` : DASHBOARD_DATA_MISSING_LABEL,
       detail: authSecurityDetail,
-      tone: dashboardSnapshot?.authSecurity.blockedEventCount ? "warn" : "good",
+      tone: hasSnapshot ? (dashboardSnapshot.authSecurity.blockedEventCount ? "warn" : "good") : "neutral",
       icon: "check-circle",
     },
   ]
 
-  const priorityRows: DashboardPriorityRow[] = [
+  const priorityRows: DashboardPriorityRow[] = hasSnapshot ? [
     {
       key: "task-queue",
       title: "작업 큐",
-      summary: dashboardSnapshot
-        ? `ready ${dashboardSnapshot.taskQueue.readyPendingCount} · failed ${dashboardSnapshot.taskQueue.failedCount} · stale ${dashboardSnapshot.taskQueue.staleProcessingCount}`
-        : "-",
+      summary: `ready ${dashboardSnapshot.taskQueue.readyPendingCount} · failed ${dashboardSnapshot.taskQueue.failedCount} · stale ${dashboardSnapshot.taskQueue.staleProcessingCount}`,
       tone: getTaskQueueTone(dashboardSnapshot),
       href: "/admin/tools",
       actionLabel: "도구 열기",
@@ -496,8 +523,8 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
       key: "signup-mail",
       title: "회원가입 메일",
       summary:
-        dashboardSnapshot?.signupMail.latestFailureMessage ||
-        (dashboardSnapshot?.signupMail.queueLagSeconds != null
+        dashboardSnapshot.signupMail.latestFailureMessage ??
+        (dashboardSnapshot.signupMail.queueLagSeconds != null
           ? `큐 지연 ${formatAge(dashboardSnapshot.signupMail.queueLagSeconds)}`
           : mailStatusLabel),
       tone: getMailStatusTone(dashboardSnapshot?.signupMail.status),
@@ -507,27 +534,32 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
     {
       key: "auth-security",
       title: "인증 보안",
-      summary: dashboardSnapshot
-        ? `차단 ${dashboardSnapshot.authSecurity.blockedEventCount} · 최근 ${dashboardSnapshot.authSecurity.recentEventCount}`
-        : "-",
-      tone: dashboardSnapshot?.authSecurity.blockedEventCount ? "warn" : "good",
+      summary: `차단 ${dashboardSnapshot.authSecurity.blockedEventCount} · 최근 ${dashboardSnapshot.authSecurity.recentEventCount}`,
+      tone: dashboardSnapshot.authSecurity.blockedEventCount ? "warn" : "good",
       href: "/admin/tools",
       actionLabel: "기록 보기",
     },
     {
       key: "storage-cleanup",
       title: "스토리지 정리",
-      summary: dashboardSnapshot
-        ? dashboardSnapshot.storageCleanup.blockedBySafetyThreshold
-          ? "안전 임계값으로 purge 보류"
-          : `purge 대상 ${dashboardSnapshot.storageCleanup.eligibleForPurgeCount}건`
-        : "-",
+      summary: dashboardSnapshot.storageCleanup.blockedBySafetyThreshold
+        ? "안전 임계값으로 purge 보류"
+        : `purge 대상 ${dashboardSnapshot.storageCleanup.eligibleForPurgeCount}건`,
       tone:
-        dashboardSnapshot?.storageCleanup.blockedBySafetyThreshold || (dashboardSnapshot?.storageCleanup.eligibleForPurgeCount ?? 0) > 0
+        dashboardSnapshot.storageCleanup.blockedBySafetyThreshold || dashboardSnapshot.storageCleanup.eligibleForPurgeCount > 0
           ? "warn"
           : "good",
       href: "/admin/tools",
       actionLabel: "정리 진단",
+    },
+  ] : [
+    {
+      key: "snapshot-missing",
+      title: "운영 스냅샷",
+      summary: `${DASHBOARD_DATA_MISSING_LABEL} · ${DASHBOARD_BACKEND_CHECK_LABEL}`,
+      tone: "neutral",
+      href: "/admin/tools",
+      actionLabel: "진단 열기",
     },
   ]
 

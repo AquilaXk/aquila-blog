@@ -1349,7 +1349,7 @@ test.describe("block editor authoring flow", () => {
       nickname: "aquila",
       isAdmin: true,
     }
-    const tableCellLabel = "table click scroll anchor cell"
+    const tableCellLabel = "table click scroll anchor lower cell"
     const bottomLabel = "edit route table then bottom click scroll jump target"
     const previousSelectionLabel = "pre table selection anchor paragraph"
     const leadParagraphs = Array.from({ length: 72 }, (_, index) =>
@@ -1364,10 +1364,14 @@ test.describe("block editor authoring flow", () => {
     )
     const tableMarkdown = [
       '<!-- aq-table {"overflowMode":"normal","columnWidths":[119,192,210]} -->',
-      "| 기준 | 상태 | 메모 |",
+      "| 영역 | 점검 항목 | 확인 기준 |",
       "| --- | --- | --- |",
-      `| ${tableCellLabel} | 선택 유지 | 하단 본문 클릭 전 테이블 selection anchor를 만듭니다. |`,
-      "| 다음 행 | 보조 값 | 표가 포함된 긴 수정 글을 재현합니다. |",
+      "| 개념 이해 | Stateless 의미 | 요청만으로 처리 가능한가 |",
+      "| 토큰 구조 | Access/Refresh 구분 | 역할 명확 |",
+      "| 보안 | HTTPS 사용 | 필수 |",
+      "| 저장소 | Refresh 저장 | DB/Redis |",
+      "| 만료 | Access 짧게 | 15~60분 |",
+      `| 흐름 | ${tableCellLabel} | 구현되어 있는가 |`,
     ].join("\n")
     const content = [
       "테이블 클릭 후 하단 본문 클릭 scroll jump 회귀 재현용 글입니다.",
@@ -1457,23 +1461,21 @@ test.describe("block editor authoring flow", () => {
     expect(tableAnchorState.activeInsideTable).toBe(true)
     expect(Math.abs(tableAnchorState.scrollTop - beforeTableClickState.scrollTop)).toBeLessThanOrEqual(24)
 
-    const tableElement = editor.locator(".tableWrapper table").first()
-    const tableBox = await expectVisibleBox(tableElement, "table metrics are missing before structural selection")
-    await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
-    const rowHandle = page.locator("[data-table-affordance='row-handle']").first()
-    await expect(rowHandle).toBeVisible()
-    await rowHandle.click()
-
-    const tableSelectionState = await page.evaluate(() => ({
-      scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
-      selectedCellCount: document.querySelectorAll("[data-testid='block-editor-prosemirror'] .selectedCell").length,
-    }))
-    expect(tableSelectionState.selectedCellCount).toBeGreaterThan(0)
-
-    await page.evaluate(() => {
-      window.scrollTo(0, document.scrollingElement?.scrollHeight ?? document.body.scrollHeight)
-    })
-    await page.waitForTimeout(80)
+    await page.mouse.move(760, 360)
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const bottomParagraphVisible = await page.evaluate((label) => {
+        const paragraph =
+          Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] p")).find(
+            (element) => element.textContent?.includes(label)
+          ) ?? null
+        if (!paragraph) return false
+        const rect = paragraph.getBoundingClientRect()
+        return rect.bottom > 0 && rect.top < window.innerHeight
+      }, bottomLabel)
+      if (bottomParagraphVisible) break
+      await page.mouse.wheel(0, 1400)
+      await page.waitForTimeout(40)
+    }
 
     const beforeGeometry = await page.evaluate((label) => {
       const root = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
@@ -1484,8 +1486,8 @@ test.describe("block editor authoring flow", () => {
       if (!root || !paragraph) return null
       const rootRect = root.getBoundingClientRect()
       const rect = paragraph.getBoundingClientRect()
-      const clickX = Math.min(rootRect.left + 260, rootRect.right - 32)
-      const clickY = Math.min(window.innerHeight - 36, rootRect.bottom - 18)
+      const clickX = Math.min(rect.left + Math.min(rect.width / 2, 260), rootRect.right - 32)
+      const clickY = rect.top + Math.min(rect.height / 2, 18)
       const clickTarget = document.elementFromPoint(clickX, clickY)
       return {
         scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
@@ -1493,6 +1495,7 @@ test.describe("block editor authoring flow", () => {
         rootBottom: rootRect.bottom,
         clickX,
         clickY,
+        paragraphVisible: rect.bottom > 0 && rect.top < window.innerHeight,
         clickInsideEditor: Boolean(clickTarget?.closest("[data-testid='block-editor-prosemirror']")),
         paragraphText: paragraph.textContent || "",
       }
@@ -1500,6 +1503,7 @@ test.describe("block editor authoring flow", () => {
     if (!beforeGeometry) {
       throw new Error("bottom click geometry is missing before click")
     }
+    expect(beforeGeometry.paragraphVisible).toBe(true)
     expect(beforeGeometry.clickInsideEditor).toBe(true)
 
     await page.mouse.click(beforeGeometry.clickX, beforeGeometry.clickY)

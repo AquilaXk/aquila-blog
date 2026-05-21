@@ -116,9 +116,18 @@ export const preserveWindowScrollAcrossFrames = (frames = 6, tolerance = 4) => {
   window.requestAnimationFrame(restore)
 }
 
+let preserveNextEditorPointerAfterTable = false
+
 export const preserveWindowScrollForTablePointerFocus = (target: EventTarget | null, tableSelectionActive: boolean) => {
   const targetElement = target instanceof Element ? target : target instanceof Node ? target.parentElement : null
-  if (targetElement?.closest(".aq-table-shell, .tableWrapper, table") || tableSelectionActive) preserveWindowScrollAcrossFrames()
+  const tablePointerTarget = Boolean(targetElement?.closest(".aq-table-shell, .tableWrapper, table"))
+  const shouldPreserveFollowUp = !tablePointerTarget && preserveNextEditorPointerAfterTable
+  if (tablePointerTarget) {
+    preserveNextEditorPointerAfterTable = true
+  } else if (shouldPreserveFollowUp) {
+    preserveNextEditorPointerAfterTable = false
+  }
+  if (tablePointerTarget || tableSelectionActive || shouldPreserveFollowUp) preserveWindowScrollAcrossFrames(12)
 }
 
 export const shouldCenterBlockHandleForNode = (node?: BlockEditorDoc | null) =>

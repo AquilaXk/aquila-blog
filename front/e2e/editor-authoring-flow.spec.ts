@@ -1421,25 +1421,8 @@ test.describe("block editor authoring flow", () => {
     const tableCell = editor.locator("table th, table td", { hasText: tableCellLabel }).first()
     await tableCell.scrollIntoViewIfNeeded()
     const tableCellBox = await expectVisibleBox(tableCell, "table click anchor cell metrics are missing")
-    const beforeTableClickState = await page.evaluate((label) => {
-      const cell =
-        Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] th, [data-testid='block-editor-prosemirror'] td")).find(
-          (element) => element.textContent?.includes(label)
-        ) ?? null
-      const rect = cell?.getBoundingClientRect() ?? null
-      return rect
-        ? {
-            scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
-            tableCellTop: rect.top,
-          }
-        : null
-    }, tableCellLabel)
-    if (!beforeTableClickState) {
-      throw new Error("table click geometry is missing before click")
-    }
-    await page.mouse.click(tableCellBox.x + Math.min(tableCellBox.width / 2, 120), tableCellBox.y + tableCellBox.height / 2)
 
-    const tableAnchorState = await page.evaluate((label) => {
+    const readTableAnchorState = () => page.evaluate((label) => {
       const cell =
         Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] th, [data-testid='block-editor-prosemirror'] td")).find(
           (element) => element.textContent?.includes(label)
@@ -1458,8 +1441,14 @@ test.describe("block editor authoring flow", () => {
         scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
       }
     }, tableCellLabel)
-    expect(tableAnchorState.activeInsideTable).toBe(true)
-    expect(Math.abs(tableAnchorState.scrollTop - beforeTableClickState.scrollTop)).toBeLessThanOrEqual(24)
+
+    await tableCell.click({
+      position: {
+        x: Math.min(tableCellBox.width / 2, 120),
+        y: tableCellBox.height / 2,
+      },
+    })
+    await expect.poll(async () => (await readTableAnchorState()).activeInsideTable, { timeout: 1_000 }).toBe(true)
 
     await page.mouse.move(760, 360)
     for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -1527,6 +1516,160 @@ test.describe("block editor authoring flow", () => {
     }, bottomLabel)
     if (!afterGeometry) {
       throw new Error("bottom click geometry is missing after click")
+    }
+
+    expect(afterGeometry.activeInsideEditor).toBe(true)
+    expect(Math.abs(afterGeometry.scrollTop - beforeGeometry.scrollTop)).toBeLessThanOrEqual(24)
+    expect(Math.abs(afterGeometry.paragraphTop - beforeGeometry.paragraphTop)).toBeLessThanOrEqual(24)
+  })
+
+  test("실제 /editor/[id] 하단 본문 클릭은 이전 선택 위치로 scrollTop을 되돌리지 않는다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 980, height: 720 })
+    const adminMember = {
+      id: 1,
+      username: "qa-admin",
+      nickname: "aquila",
+      isAdmin: true,
+    }
+    const previousSelectionLabel = "pre bottom click selection anchor paragraph"
+    const bottomLabel = "plain bottom click scroll jump target"
+    const leadParagraphs = Array.from({ length: 86 }, (_, index) =>
+      index === 52
+        ? `${previousSelectionLabel} ${index + 1}. 하단 본문 클릭 전 이전 selection anchor가 남아 있는 본문입니다.`
+        : `plain pre bottom paragraph ${index + 1}. 긴 수정 문서에서 본문 클릭 scrollTop 보존을 검증합니다.`
+    )
+    const closingParagraphs = Array.from({ length: 18 }, (_, index) =>
+      index === 16
+        ? `${bottomLabel} ${index + 1}. 글 맨 아래쪽의 아무 글자를 클릭해도 화면 위치가 이전 본문으로 되돌아가면 안 됩니다.`
+        : `plain bottom paragraph ${index + 1}. 하단 본문 클릭은 caret/focus만 이동해야 합니다.`
+    )
+    const content = [
+      "하단 본문 클릭 scroll jump 회귀 재현용 글입니다.",
+      ...leadParagraphs,
+      ...closingParagraphs,
+    ].join("\n\n")
+
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(adminMember),
+      })
+    })
+    await page.route("**/post/api/v1/adm/posts/996", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 996,
+          version: 7,
+          title: "하단 본문 클릭 scroll jump 회귀 글",
+          content,
+          contentHtml: null,
+          published: true,
+          listed: true,
+        }),
+      })
+    })
+
+    await page.goto("/editor/996")
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(
+      "하단 본문 클릭 scroll jump 회귀 글"
+    )
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await expectEditorToContainLoadedText(editor, bottomLabel)
+
+    const previousSelectionParagraph = editor.locator("p", { hasText: previousSelectionLabel }).first()
+    await previousSelectionParagraph.scrollIntoViewIfNeeded()
+    const previousSelectionBox = await expectVisibleBox(
+      previousSelectionParagraph,
+      "previous plain selection paragraph metrics are missing"
+    )
+    await page.mouse.click(
+      previousSelectionBox.x + Math.min(previousSelectionBox.width / 2, 260),
+      previousSelectionBox.y + Math.min(previousSelectionBox.height / 2, 18)
+    )
+    const staleSelectionScrollTop = await page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
+
+    await page.mouse.move(760, 360)
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const bottomParagraphVisible = await page.evaluate((label) => {
+        const paragraph =
+          Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] p")).find(
+            (element) => element.textContent?.includes(label)
+          ) ?? null
+        if (!paragraph) return false
+        const rect = paragraph.getBoundingClientRect()
+        return rect.bottom > 0 && rect.top < window.innerHeight
+      }, bottomLabel)
+      if (bottomParagraphVisible) break
+      await page.mouse.wheel(0, 1400)
+      await page.waitForTimeout(40)
+    }
+
+    await page.evaluate((staleScrollTop) => {
+      const root = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
+      root?.addEventListener(
+        "pointerdown",
+        (event) => {
+          if (!(event.target instanceof Element)) return
+          if (!event.target.closest("[data-testid='block-editor-prosemirror']")) return
+          window.requestAnimationFrame(() => {
+            window.scrollTo(0, staleScrollTop)
+          })
+        },
+        { capture: true, once: true }
+      )
+    }, staleSelectionScrollTop)
+
+    const beforeGeometry = await page.evaluate((label) => {
+      const root = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
+      const paragraph =
+        Array.from(root?.querySelectorAll<HTMLElement>("p") ?? []).find(
+          (element) => element.textContent?.includes(label)
+        ) ?? null
+      if (!root || !paragraph) return null
+      const rootRect = root.getBoundingClientRect()
+      const rect = paragraph.getBoundingClientRect()
+      const clickX = Math.min(rect.left + Math.min(rect.width / 2, 260), rootRect.right - 32)
+      const clickY = rect.top + Math.min(rect.height / 2, 18)
+      const clickTarget = document.elementFromPoint(clickX, clickY)
+      return {
+        scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+        paragraphTop: rect.top,
+        clickX,
+        clickY,
+        paragraphVisible: rect.bottom > 0 && rect.top < window.innerHeight,
+        clickInsideEditor: Boolean(clickTarget?.closest("[data-testid='block-editor-prosemirror']")),
+      }
+    }, bottomLabel)
+    if (!beforeGeometry) {
+      throw new Error("plain bottom click geometry is missing before click")
+    }
+    expect(beforeGeometry.paragraphVisible).toBe(true)
+    expect(beforeGeometry.clickInsideEditor).toBe(true)
+
+    await page.mouse.click(beforeGeometry.clickX, beforeGeometry.clickY)
+    await page.waitForTimeout(180)
+
+    const afterGeometry = await page.evaluate((label) => {
+      const paragraph =
+        Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] p")).find(
+          (element) => element.textContent?.includes(label)
+        ) ?? null
+      const activeElement = document.activeElement
+      if (!paragraph) return null
+      const rect = paragraph.getBoundingClientRect()
+      return {
+        scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+        paragraphTop: rect.top,
+        activeInsideEditor: Boolean(
+          activeElement?.closest("[data-testid='block-editor-prosemirror']")
+        ),
+      }
+    }, bottomLabel)
+    if (!afterGeometry) {
+      throw new Error("plain bottom click geometry is missing after click")
     }
 
     expect(afterGeometry.activeInsideEditor).toBe(true)
@@ -2309,8 +2452,13 @@ test.describe("block editor authoring flow", () => {
     await hoverListItemGutter(page, "Retry")
 
     const { handleBox: dragHandleBox } = await expectListItemHandleReady(page, "Retry", "목록 항목 이동")
-    await page.mouse.click(dragHandleBox.x + dragHandleBox.width / 2, dragHandleBox.y + dragHandleBox.height / 2)
     const selectedDragHandle = page.getByRole("button", { name: "목록 항목 이동" })
+    await selectedDragHandle.click({
+      position: {
+        x: dragHandleBox.width / 2,
+        y: dragHandleBox.height / 2,
+      },
+    })
     await expect(selectedDragHandle).toBeVisible()
     await expect(page.getByRole("button", { name: "블록 추가" })).toBeVisible()
 
@@ -3096,6 +3244,7 @@ test.describe("block editor authoring flow", () => {
     expect(cellMenuRect.width).toBeLessThanOrEqual(24)
     expect(cellMenuRect.height).toBeLessThanOrEqual(24)
 
+    await page.mouse.move(tableBox.x + tableBox.width - 8, tableBox.y + 8)
     await page.mouse.move(tableBox.x + tableBox.width - 6, tableBox.y + 6)
 
     await expect(tableGrowHandle).toBeVisible()
@@ -4620,6 +4769,7 @@ test.describe("block editor authoring flow", () => {
 
     await page.mouse.move(startX, startY)
     await page.mouse.down()
+    await page.mouse.move(startX + 2, startY)
 
     await expect(page.getByTestId("table-column-drag-guide")).toBeVisible()
     const readGuideBoundaryDelta = async () => {
@@ -4674,6 +4824,7 @@ test.describe("block editor authoring flow", () => {
 
     await page.mouse.move(startX, startY)
     await page.mouse.down()
+    await page.mouse.move(startX + 2, startY)
 
     await expect(page.getByTestId("table-column-drag-guide")).toBeVisible()
     const readGuideBoundaryDelta = async () => {
@@ -4736,6 +4887,7 @@ test.describe("block editor authoring flow", () => {
 
     await page.mouse.move(startX, startY)
     await page.mouse.down()
+    await page.mouse.move(startX + 2, startY)
 
     await expect(page.getByTestId("table-column-drag-guide")).toBeVisible()
     const readGuideBoundaryDelta = async () => {

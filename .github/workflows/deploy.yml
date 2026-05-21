@@ -205,21 +205,28 @@ jobs:
           ref: ${{ needs.calculateTag.outputs.deploy_sha }}
 
       - name: Verify required secrets
+        env:
+          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
+          HOME_SSH_USER: ${{ secrets.HOME_SSH_USER }}
+          HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
+          HOME_HOST: ${{ secrets.HOME_TAILSCALE_HOST || secrets.HOME_TS_HOST || secrets.HOME_SSH_HOST || secrets.HOME_HOST }}
+          HOME_SSH_KEY: ${{ secrets.HOME_SSH_KEY || secrets.HOME_SSH_PRIVATE_KEY }}
+          HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
         shell: bash
         run: |
           required=(
-            "TS_OAUTH_CLIENT_ID=${{ secrets.TS_OAUTH_CLIENT_ID }}"
-            "TS_OAUTH_SECRET=${{ secrets.TS_OAUTH_SECRET }}"
-            "HOME_SSH_USER=${{ secrets.HOME_SSH_USER }}"
-            "HOME_APP_DIR=${{ secrets.HOME_APP_DIR }}"
-            "HOME_HOST=${{ secrets.HOME_TAILSCALE_HOST || secrets.HOME_TS_HOST || secrets.HOME_SSH_HOST || secrets.HOME_HOST }}"
-            "HOME_SSH_KEY=${{ secrets.HOME_SSH_KEY || secrets.HOME_SSH_PRIVATE_KEY }}"
-            "HOME_SERVER_ENV=${{ secrets.HOME_SERVER_ENV }}"
+            TS_OAUTH_CLIENT_ID
+            TS_OAUTH_SECRET
+            HOME_SSH_USER
+            HOME_APP_DIR
+            HOME_HOST
+            HOME_SSH_KEY
+            HOME_SERVER_ENV
           )
 
-          for item in "${required[@]}"; do
-            key="${item%%=*}"
-            value="${item#*=}"
+          for key in "${required[@]}"; do
+            value="${!key:-}"
             if [ -z "$value" ]; then
               echo "$key missing"
               exit 1

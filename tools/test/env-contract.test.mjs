@@ -135,6 +135,14 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
   assert(workflow.indexOf("Validate HOME_SERVER_ENV contract") < workflow.indexOf("Deploy over SSH"))
 })
 
+test("required secret check does not inject multi-line HOME_SERVER_ENV into shell", () => {
+  const workflow = readFileSync(workflowPath, "utf8")
+
+  assert(!workflow.includes("HOME_SERVER_ENV=${{ secrets.HOME_SERVER_ENV }}"))
+  assert.match(workflow, /env:\n(?:.*\n)*\s+HOME_SERVER_ENV: \$\{\{ secrets\.HOME_SERVER_ENV \}\}/)
+  assert.match(workflow, /value="\$\{!key:-\}"/)
+})
+
 test("runtime contract accounts for every compose env interpolation", async () => {
   const { loadContract } = await import("../env/validate-env.mjs")
   const contractKeys = new Set(targetKeyNames(loadContract(contractPath), "home-server-runtime"))

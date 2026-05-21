@@ -1134,6 +1134,29 @@ test.describe("editor studio state", () => {
     )
   })
 
+  test("contentHtml fallback은 두 줄짜리 빈 fenced code body도 pretty-code 원문으로 복구한다", () => {
+    const staleContent = [
+      "수정 대상 코드입니다.",
+      "",
+      "```ts",
+      "```",
+      "",
+      "다음 문단입니다.",
+    ].join("\n")
+    const prettyCodeHtml = [
+      '<div class="aq-code-block">',
+      '<pre class="aq-code aq-pretty-pre">',
+      '<code class="language-ts" data-raw-code="const answer = 42;&#10;return answer">',
+      '</code>',
+      '</pre>',
+      '</div>',
+    ].join("")
+
+    expect(resolveEditorMetaSnapshot(staleContent, prettyCodeHtml).body).toContain(
+      ["```ts", "const answer = 42;", "return answer", "```"].join("\n")
+    )
+  })
+
   test("dedicated editor 나가기는 returnTo 복귀를 replace로 처리해 editor history 엔트리를 남기지 않는다", () => {
     const editorStudioRoutingSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/useEditorStudioRouting.ts"),

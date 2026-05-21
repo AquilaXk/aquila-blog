@@ -2,7 +2,7 @@ import styled from "@emotion/styled"
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useLayoutEffect as useReactLayoutEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import AppIcon from "src/components/icons/AppIcon"
 import useAuthSession from "src/hooks/useAuthSession"
@@ -30,6 +30,8 @@ const NotificationBell = dynamic(() => import("src/layouts/RootLayout/Header/Not
   ssr: false,
   loading: () => <NotificationBellShell />,
 })
+const useIsomorphicLayoutEffect =
+  typeof window === "undefined" ? useEffect : useReactLayoutEffect
 
 const preloadAuthEntryModal = () => {
   void import("src/components/auth/AuthEntryModal").then((module) => {
@@ -75,7 +77,7 @@ const NavBar: React.FC = () => {
     setIsClientMounted(true)
   }, [])
 
-  useLayoutEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     const snapshot = readHeaderAuthShellSnapshot()
     setAuthShellSnapshot(snapshot)
     syncHeaderAuthShellSnapshot(snapshot)

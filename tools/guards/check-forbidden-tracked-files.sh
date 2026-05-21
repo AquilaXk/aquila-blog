@@ -10,11 +10,40 @@ if [[ "${mode}" != "tracked" && "${mode}" != "--staged" ]]; then
   exit 2
 fi
 
+is_allowed_markdown() {
+  case "$1" in
+    README.md|\
+    .github/pull_request_template.md|\
+    SECURITY.md|\
+    back/PERF_SANITY_REPORT.md|\
+    back/README.md|\
+    back/REFACTORING_ROADMAP.md|\
+    deploy/homeserver/HARDENING.md|\
+    front/.github/CODE_OF_CONDUCT.md|\
+    front/.github/CONTRIBUTING.md|\
+    front/.github/PULL_REQUEST_TEMPLATE.md|\
+    front/README.md|\
+    infra/README.md|\
+    perf/k6/README.md|\
+    tools/templates/agent-plan.compact.md|\
+    tools/templates/bug-report.compact.md)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
 declare -a targets=()
 while IFS= read -r -d '' file; do
   case "${file}" in
-    AGENTS.md|CLAUDE.md|GEMINI.md|CURSOR.md|COPILOT.md|docs/AGENT-CONTEXT.md|docs/agent/*|.cursor/*|.claude/*|.aider/*|.aider*|.windsurf/*|.codex/*|.ai/*)
+    docs/*|AGENTS.md|CLAUDE.md|GEMINI.md|CURSOR.md|COPILOT.md|.cursor/*|.claude/*|.aider/*|.aider*|.windsurf/*|.codex/*|.ai/*)
       targets+=("${file}")
+      ;;
+    *.md)
+      if ! is_allowed_markdown "${file}"; then
+        targets+=("${file}")
+      fi
       ;;
   esac
 done < <(
@@ -29,7 +58,7 @@ if [[ "${#targets[@]}" -eq 0 ]]; then
   exit 0
 fi
 
-echo "[guard] 금지된 AI/agent 문서 경로가 감지되어 중단합니다." >&2
+echo "[guard] 비허용 문서/AI tool metadata가 감지되어 중단합니다." >&2
 for file in "${targets[@]}"; do
   echo " - ${file}" >&2
 done

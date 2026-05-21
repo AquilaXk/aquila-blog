@@ -8,7 +8,14 @@ on:
       - "back/**"
       - "front/**"
       - "deploy/**"
+      - "AGENTS.md"
+      - "CLAUDE.md"
+      - "GEMINI.md"
+      - "CURSOR.md"
+      - "COPILOT.md"
+      - "docs/**"
       - "tools/guards/check-forbidden-tracked-files.sh"
+      - "tools/test/check-forbidden-tracked-files.test.sh"
       - ".github/workflows/**"
 
 permissions:

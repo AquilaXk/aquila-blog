@@ -38,6 +38,7 @@ jobs:
               - 'deploy/homeserver/**'
               - 'tools/ci/**'
               - 'tools/guards/check-forbidden-tracked-files.sh'
+              - 'tools/test/check-forbidden-tracked-files.test.sh'
               - '.github/workflows/backend-ci.yml'
               - '.github/workflows/ci.yml'
               - '.github/workflows/deploy.yml'
@@ -45,6 +46,9 @@ jobs:
 
       - name: Guard forbidden AI docs and tool metadata
         run: bash tools/guards/check-forbidden-tracked-files.sh
+
+      - name: Test forbidden tracked file guard
+        run: bash tools/test/check-forbidden-tracked-files.test.sh
 
       - name: Dependency review readiness
         if: github.event_name == 'pull_request'

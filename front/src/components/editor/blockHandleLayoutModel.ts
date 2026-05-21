@@ -104,30 +104,57 @@ export const preserveWindowScrollAcrossFrames = (frames = 6, tolerance = 4) => {
   const scrollingElement = document.scrollingElement
   const startX = window.scrollX
   const startY = scrollingElement?.scrollTop ?? window.scrollY
+  let cancelled = false
   let frame = 0
+  const cancel = () => {
+    cancelled = true
+    cleanup()
+  }
+  const cleanup = () => {
+    window.removeEventListener("wheel", cancel, true)
+    window.removeEventListener("touchmove", cancel, true)
+    window.removeEventListener("keydown", cancel, true)
+  }
+  window.addEventListener("wheel", cancel, { capture: true, passive: true, once: true })
+  window.addEventListener("touchmove", cancel, { capture: true, passive: true, once: true })
+  window.addEventListener("keydown", cancel, { capture: true, once: true })
   const restore = () => {
+    if (cancelled) return
     const currentY = scrollingElement?.scrollTop ?? window.scrollY
     if (Math.abs(window.scrollX - startX) > tolerance || Math.abs(currentY - startY) > tolerance) {
       window.scrollTo(startX, startY)
     }
     frame += 1
-    if (frame < frames) window.requestAnimationFrame(restore)
+    if (frame < frames) {
+      window.requestAnimationFrame(restore)
+    } else {
+      cleanup()
+    }
   }
   window.requestAnimationFrame(restore)
 }
 
 let preserveNextEditorPointerAfterTable = false
 
-export const preserveWindowScrollForTablePointerFocus = (target: EventTarget | null, tableSelectionActive: boolean) => {
+const EDITOR_POINTER_SCROLL_PRESERVE_SELECTOR = "[data-testid='block-editor-prosemirror'], .ProseMirror"
+const EDITOR_POINTER_SCROLL_CONTROL_SELECTOR =
+  "button, input, textarea, select, summary, [role='button'], [contenteditable='false']"
+
+export const preserveWindowScrollForEditorPointerFocus = (target: EventTarget | null, tableSelectionActive: boolean) => {
   const targetElement = target instanceof Element ? target : target instanceof Node ? target.parentElement : null
   const tablePointerTarget = Boolean(targetElement?.closest(".aq-table-shell, .tableWrapper, table"))
+  const editorPointerTarget = Boolean(targetElement?.closest(EDITOR_POINTER_SCROLL_PRESERVE_SELECTOR))
+  const editorControlTarget = Boolean(targetElement?.closest(EDITOR_POINTER_SCROLL_CONTROL_SELECTOR))
+  const shouldPreserveEditorPointer = editorPointerTarget && !editorControlTarget
   const shouldPreserveFollowUp = !tablePointerTarget && preserveNextEditorPointerAfterTable
   if (tablePointerTarget) {
     preserveNextEditorPointerAfterTable = true
   } else if (shouldPreserveFollowUp) {
     preserveNextEditorPointerAfterTable = false
   }
-  if (tablePointerTarget || tableSelectionActive || shouldPreserveFollowUp) preserveWindowScrollAcrossFrames(12)
+  if (shouldPreserveEditorPointer || tablePointerTarget || tableSelectionActive || shouldPreserveFollowUp) {
+    preserveWindowScrollAcrossFrames(12)
+  }
 }
 
 export const shouldCenterBlockHandleForNode = (node?: BlockEditorDoc | null) =>

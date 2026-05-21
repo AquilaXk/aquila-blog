@@ -58,7 +58,7 @@ const LEADING_EDITOR_METADATA_LINE_REGEX =
   /^\s*(tags?|categories?|summary|thumbnail|thumb|cover|coverimage|cover_image)\s*:\s*(.+)\s*$/i
 const EDITOR_BODY_PLACEHOLDER = "내용을 입력하세요."
 const EDITOR_TOGGLE_TITLE_PLACEHOLDER = "토글 제목"
-const FENCED_CODE_BLOCK_REGEX = /(^|\n)(`{3,}|~{3,})([^\n]*)\n([\s\S]*?)\n\2(?=\n|$)/g
+const FENCED_CODE_BLOCK_REGEX = /(^|\n)(`{3,}|~{3,})([^\n]*)\n(?:([\s\S]*?)\n)?\2(?=\n|$)/g
 const HTML_CODE_RAW_ATTRIBUTE_TAG_REGEX = /<(?:code|pre)\b([^>]*)>/gi
 const HTML_ATTRIBUTE_REGEX = /\s([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>`]+)))?/g
 
@@ -325,8 +325,9 @@ const extractNonEmptyFencedCodeBlocks = (content: string) => {
   const blocks: string[] = []
 
   normalized.replace(FENCED_CODE_BLOCK_REGEX, (_match, _leading, marker, info, codeBody) => {
-    if (String(codeBody).trim().length > 0) {
-      blocks.push(`${marker}${info}\n${codeBody}\n${marker}`)
+    const body = String(codeBody ?? "")
+    if (body.trim().length > 0) {
+      blocks.push(`${marker}${info}\n${body}\n${marker}`)
     }
     return _match
   })
@@ -398,7 +399,7 @@ export const restoreEmptyFencedCodeBlocks = (content: string, recoveredContent: 
   const normalized = content.replace(/\r\n?/g, "\n")
 
   return normalized.replace(FENCED_CODE_BLOCK_REGEX, (match, leading, _marker, _info, codeBody) => {
-    if (String(codeBody).trim().length > 0) return match
+    if (String(codeBody ?? "").trim().length > 0) return match
 
     const recoveredBlock = recoveredBlocks[nextRecoveredIndex]
     if (!recoveredBlock) return match

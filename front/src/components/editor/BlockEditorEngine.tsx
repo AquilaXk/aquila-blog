@@ -205,6 +205,7 @@ import {
   resolveBlockHandleRailLayoutForSurface,
   resolveBlockSelectionOverlayLayout,
   resolveThinBlockHandleAnchorTop,
+  preserveWindowScrollForTablePointerFocus,
   shouldCenterBlockHandleForNode,
   shouldUseThinBlockHandleAnchor,
 } from "./blockHandleLayoutModel"
@@ -1028,7 +1029,7 @@ const BlockEditorEngine = ({
         activeEditor.view.dispatch(
           activeEditor.state.tr.setSelection(CellSelection.colSelection(anchorResolved, headResolved))
         )
-        activeEditor.view.focus()
+        focusElementWithoutScroll(activeEditor.view.dom)
         return true
       }
 
@@ -1043,7 +1044,7 @@ const BlockEditorEngine = ({
       activeEditor.view.dispatch(
         activeEditor.state.tr.setSelection(CellSelection.rowSelection(anchorResolved, headResolved))
       )
-      activeEditor.view.focus()
+      focusElementWithoutScroll(activeEditor.view.dom)
       return true
     },
     [clearStickyTopLevelBlockSelection]
@@ -1841,7 +1842,7 @@ const BlockEditorEngine = ({
       currentEditor.view.dispatch(
         currentEditor.state.tr.setSelection(TextSelection.create(currentEditor.state.doc, selectionPos))
       )
-      currentEditor.view.focus()
+      focusElementWithoutScroll(currentEditor.view.dom)
       return true
     }
 
@@ -4418,7 +4419,7 @@ const BlockEditorEngine = ({
 
       clearStickyTopLevelBlockSelection()
       editor.view.dispatch(editor.state.tr.setSelection(selection))
-      editor.view.focus()
+      focusElementWithoutScroll(editor.view.dom)
     },
     [clearStickyTopLevelBlockSelection, editor]
   )
@@ -4431,7 +4432,7 @@ const BlockEditorEngine = ({
     if (!targetNode || targetNode.type.name !== "table") return
     const selection = NodeSelection.create(editor.state.doc, position)
     editor.view.dispatch(editor.state.tr.setSelection(selection))
-    editor.view.focus()
+    focusElementWithoutScroll(editor.view.dom)
   }, [editor])
 
   const moveTaskItemInFirstTaskList = useCallback(
@@ -6155,7 +6156,6 @@ const BlockEditorEngine = ({
       syncSelectedBlockNodeSurface,
     ]
   )
-
   const handleViewportPointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       if (skipNextPointerDownSelectionClearRef.current) {
@@ -6167,6 +6167,7 @@ const BlockEditorEngine = ({
         findTopLevelBlockIndexFromTarget(event.target) ??
         findTopLevelBlockIndexByClientPosition(event.clientX, event.clientY)
       const currentEditor = editorRef.current ?? editor
+      if (currentEditor) preserveWindowScrollForTablePointerFocus(event.target, isTableSelectionActive(currentEditor))
       if (
         currentEditor &&
         isOuterListItemSelectionGesture(event, targetListItemContext) &&

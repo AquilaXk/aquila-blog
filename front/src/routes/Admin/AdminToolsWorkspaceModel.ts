@@ -35,7 +35,10 @@ export type ExecutionEntry = {
 
 export const ADMIN_TOOLS_DISPLAY_TIME_ZONE = "Asia/Seoul"
 export const DATA_MISSING_STATUS_LABEL = "데이터 미수집"
-export const CHECK_REQUIRED_STATUS_LABEL = "확인 필요"
+export const CONNECTION_UNAVAILABLE_STATUS_LABEL = "미연결"
+export const DATA_EMPTY_STATUS_LABEL = "데이터 없음"
+export const LOADING_STATUS_LABEL = "갱신 중"
+export const CHECK_REQUIRED_STATUS_LABEL = "점검 필요"
 export const SYSTEM_HEALTH_QUERY_KEY = ["admin", "tools", "system-health"] as const
 export const HEALTH_CACHE_MS = 10_000
 export const RESULTS_FILTER_STORAGE_KEY = "admin.tools.resultsFilter.v1"
@@ -135,6 +138,12 @@ export const normalizeOperationalStatusLabel = (value: string | null | undefined
   return normalized
 }
 
+export const getDiagnosticFallbackStatusLabel = (isLoading: boolean, errorMessage: string | null | undefined) => {
+  if (isLoading) return LOADING_STATUS_LABEL
+  if (errorMessage?.trim()) return CONNECTION_UNAVAILABLE_STATUS_LABEL
+  return DATA_EMPTY_STATUS_LABEL
+}
+
 export const getSystemHealthSummary = (health: SystemHealthPayload | null) => {
   if (!health?.details || typeof health.details !== "object") return []
 
@@ -202,6 +211,6 @@ export const buildExecutionSummary = (key: string, status: "success" | "error", 
 
 export const getStatusTone = (status: string) => {
   if (status === "정상") return "success"
-  if (status === "오류") return "danger"
+  if (status === "오류" || status === CONNECTION_UNAVAILABLE_STATUS_LABEL) return "danger"
   return "warning"
 }

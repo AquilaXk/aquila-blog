@@ -17,7 +17,8 @@ import AdminShell from "src/routes/Admin/AdminShell"
 import {
   ACTION_META,
   CHECK_REQUIRED_STATUS_LABEL,
-  DATA_MISSING_STATUS_LABEL,
+  CONNECTION_UNAVAILABLE_STATUS_LABEL,
+  DATA_EMPTY_STATUS_LABEL,
   HEALTH_CACHE_MS,
   RESULTS_FILTER_STORAGE_KEY,
   SECTION_IDS,
@@ -26,6 +27,7 @@ import {
   formatAge,
   formatInstant,
   formatRetryPolicy,
+  getDiagnosticFallbackStatusLabel,
   getFreshnessMeta,
   getStatusTone,
   getSystemHealthSummary,
@@ -921,7 +923,10 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
 
   const rawSystemHealthStatus = systemHealthQuery.data?.status ?? null
   const hasSystemHealthStatus = !isOperationalStatusMissing(rawSystemHealthStatus)
-  const systemHealthStatus = normalizeOperationalStatusLabel(systemHealthQuery.data?.status)
+  const isSystemHealthConnectionUnavailable = systemHealthQuery.isError && !hasSystemHealthStatus
+  const systemHealthStatus = isSystemHealthConnectionUnavailable
+    ? CONNECTION_UNAVAILABLE_STATUS_LABEL
+    : normalizeOperationalStatusLabel(systemHealthQuery.data?.status)
   const mailFreshness = getFreshnessMeta(mailDiagnostics?.checkedAt ?? null, freshnessClock)
   const taskQueueFreshness = getFreshnessMeta(taskQueueCheckedAt, freshnessClock)
   const cleanupFreshness = getFreshnessMeta(cleanupCheckedAt, freshnessClock)
@@ -939,27 +944,25 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   const hasAuthDiagnostics = Boolean(authSecurityCheckedAt) || Boolean(authSecurityEvents.length)
   const mailStatusLabel =
     !hasMailDiagnostics
-      ? isMailLoading
-        ? "갱신 중"
-        : DATA_MISSING_STATUS_LABEL
+      ? getDiagnosticFallbackStatusLabel(isMailLoading, mailDiagnosticsError)
       : mailDiagnostics?.status === "READY"
       ? "정상"
       : mailDiagnostics?.status === "CONNECTION_FAILED"
         ? "오류"
         : mailDiagnostics?.status === "MISCONFIGURED"
-          ? "확인 필요"
+          ? CHECK_REQUIRED_STATUS_LABEL
           : CHECK_REQUIRED_STATUS_LABEL
   const signupMailTaskQueue = mailDiagnostics?.taskQueue ?? null
   const signupMailQueueStatusLabel =
     signupMailTaskQueue?.staleProcessingCount && signupMailTaskQueue.staleProcessingCount > 0
       ? "오류"
       : signupMailTaskQueue?.failedCount && signupMailTaskQueue.failedCount > 0
-        ? "확인 필요"
+        ? CHECK_REQUIRED_STATUS_LABEL
         : signupMailTaskQueue?.backlogCount && signupMailTaskQueue.backlogCount > 0
           ? "대기 중"
           : signupMailTaskQueue
             ? "정상"
-            : DATA_MISSING_STATUS_LABEL
+            : DATA_EMPTY_STATUS_LABEL
   const signupMailQueueStatusMessage =
     signupMailTaskQueue?.staleProcessingCount && signupMailTaskQueue.staleProcessingCount > 0
       ? `stale ${signupMailTaskQueue.staleProcessingCount}건`
@@ -970,27 +973,23 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
           : "이상 없음"
   const queueStatusLabel =
     !hasTaskQueueDiagnostics
-      ? isQueueLoading
-        ? "갱신 중"
-        : DATA_MISSING_STATUS_LABEL
+      ? getDiagnosticFallbackStatusLabel(isQueueLoading, taskQueueDiagnosticsError)
       : taskQueueDiagnostics?.staleProcessingCount && taskQueueDiagnostics.staleProcessingCount > 0
       ? "오류"
       : taskQueueDiagnostics?.failedCount && taskQueueDiagnostics.failedCount > 0
-        ? "확인 필요"
+        ? CHECK_REQUIRED_STATUS_LABEL
         : taskQueueDiagnostics
           ? "정상"
-          : DATA_MISSING_STATUS_LABEL
+          : DATA_EMPTY_STATUS_LABEL
   const cleanupStatusLabel = !hasCleanupDiagnostics
-    ? isCleanupLoading ? "갱신 중" : DATA_MISSING_STATUS_LABEL
+    ? getDiagnosticFallbackStatusLabel(isCleanupLoading, cleanupDiagnosticsError)
     : cleanupDiagnostics?.blockedBySafetyThreshold ? CHECK_REQUIRED_STATUS_LABEL : "정상"
   const authSecurityStatusLabel =
     !hasAuthDiagnostics
-      ? isAuthLoading
-        ? "갱신 중"
-        : DATA_MISSING_STATUS_LABEL
+      ? getDiagnosticFallbackStatusLabel(isAuthLoading, authSecurityEventsError)
       : authSecurityEvents.length > 0
       ? authSecurityEvents[0]?.eventType === "IP_SECURITY_MISMATCH_BLOCKED"
-        ? "확인 필요"
+        ? CHECK_REQUIRED_STATUS_LABEL
         : "최근 기록"
       : "정상"
 
@@ -1006,15 +1005,18 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   }, [systemHealthCheckedAt, mailDiagnostics?.checkedAt])
 
   const overviewStatusLabel =
-    (hasSystemHealthStatus && rawSystemHealthStatus !== "UP") || mailDiagnostics?.status === "CONNECTION_FAILED"
+    isSystemHealthConnectionUnavailable
+      ? CONNECTION_UNAVAILABLE_STATUS_LABEL
+      : (hasSystemHealthStatus && rawSystemHealthStatus !== "UP") || mailDiagnostics?.status === "CONNECTION_FAILED"
       ? "오류"
       : mailDiagnostics?.status === "MISCONFIGURED"
         ? CHECK_REQUIRED_STATUS_LABEL
         : !hasSystemHealthStatus && !hasMailDiagnostics
-          ? DATA_MISSING_STATUS_LABEL
+          ? DATA_EMPTY_STATUS_LABEL
           : "정상"
 
   const attentionItems = [
+    isSystemHealthConnectionUnavailable ? "공통 데이터 연결을 먼저 확인하세요." : null,
     hasSystemHealthStatus && rawSystemHealthStatus !== "UP" ? "서비스 상태를 먼저 확인하세요." : null,
     mailDiagnostics?.status === "MISCONFIGURED" ? "메일 설정 누락을 정리해야 합니다." : null,
     mailDiagnostics?.status === "CONNECTION_FAILED" ? "SMTP 연결 실패 원인을 확인해야 합니다." : null,

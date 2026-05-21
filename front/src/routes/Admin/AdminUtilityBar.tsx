@@ -1,7 +1,7 @@
 import styled from "@emotion/styled"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { type FormEvent, useMemo, useState } from "react"
+import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import AppIcon, { type IconName } from "src/components/icons/AppIcon"
 import { pushRoute } from "src/libs/router"
 
@@ -38,6 +38,8 @@ const matchesShortcut = (item: ShortcutItem, query: string) => {
 const AdminUtilityBar = ({ navItems, currentLabel }: Props) => {
   const router = useRouter()
   const [query, setQuery] = useState("")
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
   const shortcutItems = useMemo<ShortcutItem[]>(
     () => [
       ...navItems.map(({ href, label, icon }) => ({ href, label, icon })),
@@ -52,6 +54,7 @@ const AdminUtilityBar = ({ navItems, currentLabel }: Props) => {
 
   const navigate = (href: string) => {
     setQuery("")
+    setIsSearchOpen(false)
     void pushRoute(router, href)
   }
 
@@ -62,27 +65,44 @@ const AdminUtilityBar = ({ navItems, currentLabel }: Props) => {
     navigate(nextMatch.href)
   }
 
+  const handleSearchToggle = () => {
+    setIsSearchOpen((current) => !current)
+  }
+
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Escape") return
+    setQuery("")
+    setIsSearchOpen(false)
+  }
+
+  useEffect(() => {
+    if (!isSearchOpen) return
+    searchInputRef.current?.focus()
+  }, [isSearchOpen])
+
   return (
-    <UtilityBar>
+    <UtilityBar data-search-open={isSearchOpen ? "true" : "false"}>
       <CompactNav aria-label="관리자 바로가기">
         {navItems.map((item) => (
           <Link key={`compact-${item.key}`} href={item.href} passHref legacyBehavior>
-            <CompactNavLink data-active={item.active ? "true" : "false"} title={item.label}>
+            <CompactNavLink data-active={item.active ? "true" : "false"} title={item.label} aria-label={item.label}>
               <AppIcon name={item.icon} />
             </CompactNavLink>
           </Link>
         ))}
       </CompactNav>
 
-      <SearchForm role="search" onSubmit={handleSearchSubmit}>
+      <SearchForm role="search" onSubmit={handleSearchSubmit} data-open={isSearchOpen ? "true" : "false"}>
         <SearchField>
           <span className="searchIcon" aria-hidden="true">
             <AppIcon name="search" />
           </span>
           <SearchInput
+            ref={searchInputRef}
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={handleSearchKeyDown}
             placeholder="페이지 검색"
             aria-label="관리자 검색"
           />
@@ -90,6 +110,14 @@ const AdminUtilityBar = ({ navItems, currentLabel }: Props) => {
       </SearchForm>
 
       <UtilityActions>
+        <SearchToggleButton
+          type="button"
+          aria-label={isSearchOpen ? "관리자 검색 닫기" : "관리자 검색 열기"}
+          aria-expanded={isSearchOpen}
+          onClick={handleSearchToggle}
+        >
+          <AppIcon name="search" />
+        </SearchToggleButton>
         <CurrentViewChip aria-label="현재 화면">
           <span>현재</span>
           <strong>{currentLabel}</strong>
@@ -122,8 +150,15 @@ const UtilityBar = styled.header`
 
   @media (max-width: 720px) {
     top: calc(var(--app-header-height, 73px) + 0.65rem);
-    flex-direction: column;
-    align-items: stretch;
+    position: sticky;
+    align-items: center;
+    gap: 0.48rem;
+    padding: 0.58rem 0.64rem;
+    border-radius: 18px;
+
+    &[data-search-open="true"] {
+      margin-bottom: 3.15rem;
+    }
   }
 `
 
@@ -138,7 +173,9 @@ const CompactNav = styled.nav`
   }
 
   @media (max-width: 720px) {
-    width: 100%;
+    width: auto;
+    flex: 1;
+    min-width: 0;
     overflow-x: auto;
     padding-bottom: 0.12rem;
     scrollbar-width: none;
@@ -172,6 +209,19 @@ const CompactNavLink = styled.a`
 const SearchForm = styled.form`
   flex: 1;
   min-width: 0;
+
+  @media (max-width: 720px) {
+    display: none;
+    position: absolute;
+    top: calc(100% + 0.42rem);
+    left: 0;
+    right: 0;
+    z-index: 2;
+
+    &[data-open="true"] {
+      display: block;
+    }
+  }
 `
 
 const SearchField = styled.div`
@@ -187,6 +237,14 @@ const SearchField = styled.div`
     align-items: center;
     justify-content: center;
     pointer-events: none;
+  }
+
+  @media (max-width: 720px) {
+    border-radius: 999px;
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "light"
+        ? "0 14px 28px rgba(15, 23, 42, 0.12)"
+        : "0 16px 30px rgba(0, 0, 0, 0.32)"};
   }
 `
 
@@ -221,7 +279,37 @@ const UtilityActions = styled.div`
 
   @media (max-width: 720px) {
     justify-content: flex-start;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+  }
+`
+
+const SearchToggleButton = styled.button`
+  display: none;
+
+  @media (max-width: 720px) {
+    width: 2.75rem;
+    height: 2.75rem;
+    border: 1px solid ${({ theme }) => theme.colors.gray4};
+    border-radius: 15px;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    background: ${({ theme }) =>
+      theme.scheme === "light" ? "rgba(243, 246, 250, 0.92)" : "rgba(31, 31, 31, 0.92)"};
+    color: ${({ theme }) => theme.colors.gray11};
+    cursor: pointer;
+
+    &[aria-expanded="true"] {
+      border-color: ${({ theme }) => theme.colors.gray6};
+      background: ${({ theme }) => theme.colors.gray1};
+      color: ${({ theme }) => theme.colors.gray12};
+    }
+
+    &:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.16);
+    }
   }
 `
 

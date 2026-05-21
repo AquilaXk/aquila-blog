@@ -325,15 +325,15 @@ export const SnapshotLeadBody = styled(PanelBody)`
   gap: 10px;
   padding: 14px;
 
-  ${AdminInfoPanelCard} {
-    gap: 0.38rem;
-    padding: 0.72rem;
-    border-radius: 14px;
-  }
-
   @media (max-width: 720px) {
     padding: 10px;
   }
+`
+
+export const LeadMetaCard = styled(AdminInfoPanelCard)`
+  gap: 0.38rem;
+  padding: 0.72rem;
+  border-radius: 14px;
 `
 
 export const PanelFrame = styled.iframe`
@@ -419,15 +419,15 @@ export const ActionList = styled(AdminInfoList)`
   gap: 8px;
   padding: 12px;
 
-  ${AdminInfoLinkCard} {
-    padding: 0.64rem 0.72rem;
-    border-radius: 14px;
-  }
-
   @media (max-width: 720px) {
     gap: 6px;
     padding: 9px;
   }
+`
+
+export const ActionListLinkCard = styled(AdminInfoLinkCard)`
+  padding: 0.64rem 0.72rem;
+  border-radius: 14px;
 `
 
 export const SectionHeader = styled(AdminSectionTitleStack)`

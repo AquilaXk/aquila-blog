@@ -139,13 +139,26 @@ let preserveNextEditorPointerAfterTable = false
 const EDITOR_POINTER_SCROLL_PRESERVE_SELECTOR = "[data-testid='block-editor-prosemirror'], .ProseMirror"
 const EDITOR_POINTER_SCROLL_CONTROL_SELECTOR =
   "button, input, textarea, select, summary, [role='button'], [contenteditable='false']"
+const EDITOR_POINTER_SCROLL_RICH_BLOCK_SELECTOR = [
+  ".aq-code-shell",
+  ".aq-code-editor-content",
+  "[data-code-block-wrapper='true']",
+  ".aq-table-shell",
+  ".tableWrapper",
+  "table",
+  "[data-mermaid-block]",
+  ".aq-mermaid-code-input",
+  ".aq-mermaid",
+  ".aq-mermaid-stage",
+].join(", ")
 
 export const preserveWindowScrollForEditorPointerFocus = (target: EventTarget | null, tableSelectionActive: boolean) => {
   const targetElement = target instanceof Element ? target : target instanceof Node ? target.parentElement : null
   const tablePointerTarget = Boolean(targetElement?.closest(".aq-table-shell, .tableWrapper, table"))
   const editorPointerTarget = Boolean(targetElement?.closest(EDITOR_POINTER_SCROLL_PRESERVE_SELECTOR))
   const editorControlTarget = Boolean(targetElement?.closest(EDITOR_POINTER_SCROLL_CONTROL_SELECTOR))
-  const shouldPreserveEditorPointer = editorPointerTarget && !editorControlTarget
+  const editorRichBlockTarget = Boolean(targetElement?.closest(EDITOR_POINTER_SCROLL_RICH_BLOCK_SELECTOR))
+  const shouldPreserveEditorPointer = editorPointerTarget && (editorRichBlockTarget || !editorControlTarget)
   const shouldPreserveFollowUp = !tablePointerTarget && preserveNextEditorPointerAfterTable
   if (tablePointerTarget) {
     preserveNextEditorPointerAfterTable = true

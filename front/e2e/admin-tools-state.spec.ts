@@ -92,4 +92,20 @@ test.describe("admin tools state contract", () => {
     expect(source).not.toContain("런북/장애 문서")
     expect(source.split("\n").length).toBeLessThan(1700)
   })
+
+  test("운영 도구 fallback 상태는 미수집 라벨과 중립 tone으로 분류한다", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
+    const modelSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspaceModel.ts"), "utf8")
+
+    expect(modelSource).toContain('export const DATA_MISSING_STATUS_LABEL = "데이터 미수집"')
+    expect(modelSource).toContain("export const isOperationalStatusMissing")
+    expect(modelSource).toContain("export const normalizeOperationalStatusLabel")
+    expect(source).toContain("normalizeOperationalStatusLabel(systemHealthQuery.data?.status")
+    expect(source).toContain("isOperationalStatusMissing(rawSystemHealthStatus)")
+    expect(source).toContain("DATA_MISSING_STATUS_LABEL")
+    expect(source).not.toContain('systemHealthQuery.data?.status || "UNKNOWN"')
+    expect(source).not.toContain('taskType: typeof parsed.taskQueue.taskType === "string" ? parsed.taskQueue.taskType : "UNKNOWN"')
+    expect(source).not.toContain(': "미확인"')
+    expect(source).not.toContain('? "갱신 중"\\n        : "열기"')
+  })
 })

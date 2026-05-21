@@ -466,7 +466,12 @@ const StyledWrapper = styled.div`
 
   @media (max-width: 768px) {
     .chipRail {
+      flex-wrap: wrap;
       margin-bottom: 0;
+      overflow-x: visible;
+      overflow-y: visible;
+      padding-bottom: 0;
+      scroll-snap-type: none;
     }
   }
 

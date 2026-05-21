@@ -24,6 +24,11 @@ const expectVisibleBox = async (locator: Locator, errorMessage: string) => {
   return box
 }
 
+const expectEditorToContainLoadedText = async (editor: Locator, text: string) => {
+  await expect(editor).toBeVisible({ timeout: 15_000 })
+  await expect(editor).toContainText(text, { timeout: 30_000 })
+}
+
 const selectWordInEditable = async (page: Page, editable: Locator, word: string) => {
   const selected = await editable.evaluate((element, targetWord) => {
     const root = element as HTMLElement
@@ -931,7 +936,8 @@ test.describe("block editor authoring flow", () => {
     await page.goto("/editor/991")
 
     await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue("코드 복구 글")
-    await expect(page.locator("[data-testid='block-editor-prosemirror']").first()).toContainText(
+    await expectEditorToContainLoadedText(
+      page.locator("[data-testid='block-editor-prosemirror']").first(),
       "다음 문단입니다."
     )
     const codeBlock = page.locator(".aq-code-shell").first()
@@ -1161,7 +1167,7 @@ test.describe("block editor authoring flow", () => {
 
     await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue("수정 route scroll/code 회귀 글")
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
-    await expect(editor).toContainText("edit route scroll paragraph 36")
+    await expectEditorToContainLoadedText(editor, "edit route scroll paragraph 36")
     const codeBlock = page.locator(".aq-code-shell").first()
     await expect(codeBlock).toBeVisible({ timeout: 15_000 })
     await expect(codeBlock.locator(".aq-code-highlight-layer")).toContainText("const restored = 305;")

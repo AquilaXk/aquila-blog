@@ -1460,7 +1460,7 @@ test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지
       expect(firstCardHeight).toBeGreaterThanOrEqual(388)
       expect(firstCardHeight).toBeLessThanOrEqual(404)
       expect(firstCardY).toBeGreaterThanOrEqual(298)
-      expect(firstCardY).toBeLessThanOrEqual(332)
+      expect(firstCardY).toBeLessThanOrEqual(360)
       continue
     }
 

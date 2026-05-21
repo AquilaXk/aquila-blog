@@ -1677,6 +1677,200 @@ test.describe("block editor authoring flow", () => {
     expect(Math.abs(afterGeometry.paragraphTop - beforeGeometry.paragraphTop)).toBeLessThanOrEqual(24)
   })
 
+  test("실제 /editor/[id] rich block 클릭은 이전 선택 위치로 scroll jump하지 않는다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 980, height: 720 })
+    const adminMember = {
+      id: 1,
+      username: "qa-admin",
+      nickname: "aquila",
+      isAdmin: true,
+    }
+    const previousSelectionLabel = "rich block previous selection anchor"
+    const codeLabel = "rich code click scroll jump target"
+    const tableLabel = "rich table click scroll jump target"
+    const mermaidLabel = "RichMermaidClickTarget"
+    const leadParagraphs = Array.from({ length: 72 }, (_, index) =>
+      index === 50
+        ? `${previousSelectionLabel} ${index + 1}. rich block 클릭 전 이전 selection anchor가 남아 있는 본문입니다.`
+        : `rich block lead paragraph ${index + 1}. 긴 수정 문서에서 rich block 클릭 scrollTop 보존을 검증합니다.`
+    )
+    const codeMarkdown = ["```ts", `const marker = "${codeLabel}";`, "console.log(marker);", "```"].join("\n")
+    const tableMarkdown = [
+      '<!-- aq-table {"overflowMode":"normal","columnWidths":[160,220]} -->',
+      "| 구분 | 값 |",
+      "| --- | --- |",
+      `| table | ${tableLabel} |`,
+      "| expected | scroll 유지 |",
+    ].join("\n")
+    const mermaidMarkdown = [
+      "```mermaid",
+      "flowchart TD",
+      `  A[${mermaidLabel}] --> B[scroll 유지]`,
+      "```",
+    ].join("\n")
+    const trailingParagraphs = Array.from({ length: 20 }, (_, index) =>
+      `rich block trailing paragraph ${index + 1}. rich block 클릭 이후에도 화면 위치가 유지되어야 합니다.`
+    )
+    const content = [
+      "rich block 클릭 scroll jump 회귀 재현용 글입니다.",
+      ...leadParagraphs,
+      codeMarkdown,
+      tableMarkdown,
+      mermaidMarkdown,
+      ...trailingParagraphs,
+    ].join("\n\n")
+
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(adminMember),
+      })
+    })
+    await page.route("**/post/api/v1/adm/posts/997", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 997,
+          version: 5,
+          title: "rich block 클릭 scroll jump 회귀 글",
+          content,
+          contentHtml: null,
+          published: true,
+          listed: true,
+        }),
+      })
+    })
+
+    await page.goto("/editor/997")
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(
+      "rich block 클릭 scroll jump 회귀 글"
+    )
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await expectEditorToContainLoadedText(editor, codeLabel)
+
+    const previousSelectionParagraph = editor.locator("p", { hasText: previousSelectionLabel }).first()
+    await previousSelectionParagraph.scrollIntoViewIfNeeded()
+    const previousSelectionBox = await expectVisibleBox(
+      previousSelectionParagraph,
+      "previous rich block selection paragraph metrics are missing"
+    )
+    await page.mouse.move(
+      previousSelectionBox.x + Math.min(previousSelectionBox.width / 2, 260),
+      previousSelectionBox.y + Math.min(previousSelectionBox.height / 2, 18)
+    )
+    await previousSelectionParagraph.hover()
+    const dragHandle = page.getByTestId("block-drag-handle")
+    await expect(dragHandle).toBeVisible()
+    await dragHandle.click()
+    await expect(page.getByTestId("keyboard-block-selection-overlay")).toBeVisible()
+    const staleSelectionScrollTop = await page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
+
+    const assertRichBlockClickPreservesScroll = async (
+      target: Locator,
+      label: string,
+      clickOffset = { x: 40, y: 24 }
+    ) => {
+      await target.scrollIntoViewIfNeeded()
+      const targetBox = await expectVisibleBox(target, `${label} metrics are missing before click`)
+
+      const beforeGeometry = await page.evaluate(
+        ({ selector, text }) => {
+          const candidates = Array.from(document.querySelectorAll<HTMLElement>(selector))
+          const target =
+            candidates.find((element) => {
+              const elementText =
+                element instanceof HTMLTextAreaElement ? element.value : element.textContent ?? ""
+              return elementText.includes(text)
+            }) ??
+            candidates[0] ??
+            null
+          if (!target) return null
+          const rect = target.getBoundingClientRect()
+          return {
+            scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+            targetTop: rect.top,
+            targetBottom: rect.bottom,
+            visible: rect.bottom > 0 && rect.top < window.innerHeight,
+          }
+        },
+        { selector: label === mermaidLabel ? ".aq-mermaid-code-input" : "[data-testid='block-editor-prosemirror'] *", text: label }
+      )
+      if (!beforeGeometry) {
+        throw new Error(`${label} geometry is missing before click`)
+      }
+      expect(beforeGeometry.visible).toBe(true)
+      await page.evaluate(
+        ({ staleScrollTop }) => {
+          const root = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
+          root?.addEventListener(
+            "pointerdown",
+            (event) => {
+              if (!(event.target instanceof Element)) return
+              if (!event.target.closest("[data-testid='block-editor-prosemirror']")) return
+              window.requestAnimationFrame(() => {
+                window.scrollTo(0, staleScrollTop)
+              })
+            },
+            { capture: true, once: true }
+          )
+        },
+        { staleScrollTop: staleSelectionScrollTop }
+      )
+
+      await page.mouse.click(
+        targetBox.x + Math.min(clickOffset.x, Math.max(8, targetBox.width - 8)),
+        targetBox.y + Math.min(clickOffset.y, Math.max(8, targetBox.height - 8))
+      )
+      await page.waitForTimeout(180)
+
+      const afterGeometry = await page.evaluate(
+        ({ selector, text }) => {
+          const candidates = Array.from(document.querySelectorAll<HTMLElement>(selector))
+          const target =
+            candidates.find((element) => {
+              const elementText =
+                element instanceof HTMLTextAreaElement ? element.value : element.textContent ?? ""
+              return elementText.includes(text)
+            }) ??
+            candidates[0] ??
+            null
+          if (!target) return null
+          const rect = target.getBoundingClientRect()
+          return {
+            scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+            targetTop: rect.top,
+            targetBottom: rect.bottom,
+          }
+        },
+        { selector: label === mermaidLabel ? ".aq-mermaid-code-input" : "[data-testid='block-editor-prosemirror'] *", text: label }
+      )
+      if (!afterGeometry) {
+        throw new Error(`${label} geometry is missing after click`)
+      }
+
+      expect(Math.abs(afterGeometry.scrollTop - beforeGeometry.scrollTop)).toBeLessThanOrEqual(24)
+      expect(Math.abs(afterGeometry.targetTop - beforeGeometry.targetTop)).toBeLessThanOrEqual(24)
+      expect(Math.abs(afterGeometry.targetBottom - beforeGeometry.targetBottom)).toBeLessThanOrEqual(24)
+    }
+
+    await assertRichBlockClickPreservesScroll(
+      editor.locator(".aq-mermaid-code-input").first(),
+      mermaidLabel,
+      { x: 42, y: 24 }
+    )
+    await assertRichBlockClickPreservesScroll(
+      editor.locator(".aq-code-editor-content", { hasText: codeLabel }).first(),
+      codeLabel
+    )
+    await assertRichBlockClickPreservesScroll(
+      editor.locator("table th, table td", { hasText: tableLabel }).first(),
+      tableLabel,
+      { x: 24, y: 16 }
+    )
+  })
+
   test("실제 /editor/[id] 수정 진입은 본문 hover scroll, 선택 block affordance, code 원문을 유지한다", async ({
     page,
   }) => {

@@ -3742,6 +3742,7 @@ const BlockEditorEngine = ({
       const activeEditor = editorRef.current ?? currentEditor
       if (!activeEditor) return
       if (!(event.target instanceof Node) || !activeEditor.view.dom.contains(event.target)) return
+      preserveWindowScrollForEditorPointerFocus(event.target, isTableSelectionActive(activeEditor))
       if (tryStartTableColumnResizeFromDomHandle(event.target, event.pointerId, event.clientX)) {
         event.preventDefault()
         event.stopPropagation()

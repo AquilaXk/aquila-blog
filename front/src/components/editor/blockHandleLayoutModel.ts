@@ -99,6 +99,28 @@ export const resolveBlockHandleRailLayoutForSurface = (
   }
 }
 
+export const preserveWindowScrollAcrossFrames = (frames = 6, tolerance = 4) => {
+  if (typeof window === "undefined" || typeof document === "undefined") return
+  const scrollingElement = document.scrollingElement
+  const startX = window.scrollX
+  const startY = scrollingElement?.scrollTop ?? window.scrollY
+  let frame = 0
+  const restore = () => {
+    const currentY = scrollingElement?.scrollTop ?? window.scrollY
+    if (Math.abs(window.scrollX - startX) > tolerance || Math.abs(currentY - startY) > tolerance) {
+      window.scrollTo(startX, startY)
+    }
+    frame += 1
+    if (frame < frames) window.requestAnimationFrame(restore)
+  }
+  window.requestAnimationFrame(restore)
+}
+
+export const preserveWindowScrollForTablePointerFocus = (target: EventTarget | null, tableSelectionActive: boolean) => {
+  const targetElement = target instanceof Element ? target : target instanceof Node ? target.parentElement : null
+  if (targetElement?.closest(".aq-table-shell, .tableWrapper, table") || tableSelectionActive) preserveWindowScrollAcrossFrames()
+}
+
 export const shouldCenterBlockHandleForNode = (node?: BlockEditorDoc | null) =>
   Boolean(
     node &&

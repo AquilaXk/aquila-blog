@@ -36,16 +36,21 @@ export const QaEditorHarness = ({ seedMarkdown }: QaEditorHarnessProps) => {
     if (typeof window === "undefined") return
     const qaWindow = window as unknown as {
       __qaMoveTaskItemInFirstTaskList?: (sourceIndex: number, insertionIndex: number) => void
+      __qaScrollCurrentSelectionIntoView?: () => void
       __qaGetUndoDepth?: () => number
     }
     qaWindow.__qaMoveTaskItemInFirstTaskList =
       (sourceIndex, insertionIndex) => {
         qaActionsRef.current?.moveTaskItemInFirstTaskList(sourceIndex, insertionIndex)
       }
+    qaWindow.__qaScrollCurrentSelectionIntoView = () => {
+      qaActionsRef.current?.scrollCurrentSelectionIntoView()
+    }
     qaWindow.__qaGetUndoDepth = () => qaActionsRef.current?.getUndoDepth() ?? 0
 
     return () => {
       delete qaWindow.__qaMoveTaskItemInFirstTaskList
+      delete qaWindow.__qaScrollCurrentSelectionIntoView
       delete qaWindow.__qaGetUndoDepth
     }
   }, [])

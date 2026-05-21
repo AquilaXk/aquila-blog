@@ -53,11 +53,7 @@ import {
   TABLE_MIN_ROW_HEIGHT_PX,
   TABLE_WIDE_COLUMN_MIN_WIDTH_PX,
 } from "src/libs/markdown/tableMetadata"
-import {
-  getTableChromePalette,
-  TABLE_SHARED_MARGIN_Y,
-  TABLE_SHARED_RADIUS_PX,
-} from "src/libs/markdown/tableChrome"
+import { getTableChromePalette, TABLE_SHARED_MARGIN_Y, TABLE_SHARED_RADIUS_PX } from "src/libs/markdown/tableChrome"
 import { articleTypographyScale, markdownContentTypography } from "src/libs/markdown/contentTypography"
 import {
   convertHtmlToMarkdown,
@@ -73,11 +69,9 @@ import {
   resetEditorUndoHistory,
   type EditorHistorySnapshot,
 } from "./editorHistoryModel"
-import type {
-  BlockEditorChangeMeta,
-  BlockEditorQaActions,
-} from "./blockEditorContract"
+import type { BlockEditorChangeMeta, BlockEditorQaActions } from "./blockEditorContract"
 import type { BlockEditorEngineProps } from "./blockEditorEngineTypes"
+import { refocusEditorForSelectionReveal, shouldSuppressStickySelectionScrollToSelection } from "./editorScrollSelectionGuard"
 import {
   type BlockInsertCatalogItem,
   createWriterBlockInsertCatalog,
@@ -2807,6 +2801,7 @@ const BlockEditorEngine = ({
       editorRef.current = null
     },
     editorProps: {
+      handleScrollToSelection: (view) => shouldSuppressStickySelectionScrollToSelection(view, selectedBlockNodeIndexRef.current, keyboardBlockSelectionStickyRef.current),
       attributes: {
         class: "aq-block-editor__content",
         "data-testid": "block-editor-prosemirror",
@@ -4525,6 +4520,7 @@ const BlockEditorEngine = ({
       moveTaskItemInFirstTaskList: (sourceIndex, insertionIndex) => {
         moveTaskItemInFirstTaskList(sourceIndex, insertionIndex)
       },
+      scrollCurrentSelectionIntoView: () => refocusEditorForSelectionReveal(editorRef.current ?? editor),
       getUndoDepth: () => {
         const currentEditor = editorRef.current ?? editor
         return currentEditor ? getEditorUndoDepth(currentEditor) : 0

@@ -47,6 +47,8 @@ test.describe("admin surface primitives contract", () => {
     expect(styleSource).toContain("export const InsightLink = styled(AdminTextActionLink)`")
     expect(styleSource).toContain("export const PrioritySummary = styled.div`")
     expect(styleSource).toContain("export const PriorityLink = styled(AdminTextActionLink)`")
+    expect(styleSource).not.toContain("${AdminInfoPanelCard}")
+    expect(styleSource).not.toContain("${AdminInfoLinkCard}")
   })
 
   test("posts/tools reuse shared badge and action primitives", () => {

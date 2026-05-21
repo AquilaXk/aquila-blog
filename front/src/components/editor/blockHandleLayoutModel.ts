@@ -54,7 +54,7 @@ export const resolveBlockHandleRailLayout = (
 
   return {
     left: Math.min(Math.max(BLOCK_HANDLE_VIEWPORT_PADDING_PX, rect.left), maxLeft),
-    top: Math.max(BLOCK_HANDLE_VIEWPORT_PADDING_PX, rect.top - railHeight - BLOCK_HANDLE_STACKED_GAP_PX),
+    top: rect.top - railHeight - BLOCK_HANDLE_STACKED_GAP_PX,
   }
 }
 

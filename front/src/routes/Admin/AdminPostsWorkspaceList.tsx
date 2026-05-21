@@ -577,6 +577,12 @@ const AuthorAvatarFrame = styled.span`
 const RowActions = styled(AdminInlineActionRow)``
 
 const RowPrimaryButton = styled(AdminTextActionButton)`
+  display: inline-flex;
+  min-width: 32px;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.18rem;
   color: ${({ theme }) => theme.colors.gray12};
   font-size: 0.86rem;
   font-weight: 800;
@@ -588,6 +594,12 @@ const RowPrimaryButton = styled(AdminTextActionButton)`
 `
 
 const RowSecondaryButton = styled(AdminTextActionButton)`
+  display: inline-flex;
+  min-width: 32px;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.18rem;
   font-size: 0.84rem;
   font-weight: 700;
 
@@ -598,6 +610,12 @@ const RowSecondaryButton = styled(AdminTextActionButton)`
 `
 
 const DangerTextButton = styled(AdminTextActionButton)`
+  display: inline-flex;
+  min-width: 32px;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.18rem;
   color: ${({ theme }) => theme.colors.red11};
   font-size: 0.86rem;
   font-weight: 700;

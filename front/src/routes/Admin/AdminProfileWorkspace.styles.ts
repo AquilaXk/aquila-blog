@@ -165,6 +165,13 @@ export const SectionRail = styled(AdminWorkspaceSectionNav)`
     }
   }
 
+  @media (max-width: 760px) {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    padding-bottom: 0;
+    scroll-snap-type: none;
+  }
+
   @media (min-width: 1481px) {
     display: grid;
     gap: 0.24rem;
@@ -172,6 +179,12 @@ export const SectionRail = styled(AdminWorkspaceSectionNav)`
 `
 
 export const SectionRailButton = styled(AdminWorkspaceSectionNavButton)`
+  @media (max-width: 760px) {
+    min-height: 36px;
+    padding: 0 0.78rem;
+    font-size: 0.8rem;
+  }
+
   @media (min-width: 1481px) {
     width: 100%;
     min-height: 46px;

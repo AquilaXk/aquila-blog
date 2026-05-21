@@ -514,6 +514,20 @@ const getVisualLayoutFingerprint = async (page: Page) =>
     }
 
     const route = window.location.pathname
+    const readSectionRectByHeading = (headingText: string) => {
+      const heading = Array.from(document.querySelectorAll<HTMLElement>("h2")).find(
+        (node) => node.textContent?.trim() === headingText,
+      )
+      const section = heading?.closest("section")
+      if (!section) return null
+      const rect = (section as HTMLElement).getBoundingClientRect()
+      return {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      }
+    }
 
     return {
       route,
@@ -540,6 +554,7 @@ const getVisualLayoutFingerprint = async (page: Page) =>
       ...(route === "/admin/dashboard"
         ? {
             dashboardServiceRailRect: readRect('[data-ui="monitoring-service-rail"]'),
+            dashboardPrioritySectionRect: readSectionRectByHeading("우선 점검 항목"),
             dashboardPanelGridRect: readRect('[data-ui="monitoring-panel-grid"]'),
             dashboardFirstPanelRect: readRect('[data-ui="monitoring-panel-card"]'),
           }
@@ -1561,10 +1576,14 @@ test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지
 
       expect(snapshot.route).toBe("/admin/dashboard")
       expect(snapshot.dashboardServiceRailRect).not.toBeNull()
+      expect(snapshot.dashboardPrioritySectionRect).not.toBeNull()
       expect(snapshot.dashboardPanelGridRect).not.toBeNull()
       expect(snapshot.dashboardFirstPanelRect).not.toBeNull()
 
       const serviceRailWidth = snapshot.dashboardServiceRailRect?.width ?? 0
+      const prioritySectionY = snapshot.dashboardPrioritySectionRect?.y ?? 0
+      const prioritySectionBottom =
+        (snapshot.dashboardPrioritySectionRect?.y ?? 0) + (snapshot.dashboardPrioritySectionRect?.height ?? 0)
       const panelGridWidth = snapshot.dashboardPanelGridRect?.width ?? 0
       const firstPanelWidth = snapshot.dashboardFirstPanelRect?.width ?? 0
       const firstPanelY = snapshot.dashboardFirstPanelRect?.y ?? 0
@@ -1574,12 +1593,14 @@ test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지
       // 헤드리스/스크롤바 폭 편차로 iPad mini 768 환경에서 2~3px 오차가 발생할 수 있다.
       expect(serviceRailWidth).toBeGreaterThanOrEqual(716)
       expect(serviceRailWidth).toBeLessThanOrEqual(744)
+      expect(prioritySectionY).toBeGreaterThanOrEqual(360)
+      expect(prioritySectionY).toBeLessThanOrEqual(470)
       expect(panelGridWidth).toBeGreaterThanOrEqual(716)
       expect(panelGridWidth).toBeLessThanOrEqual(744)
       expect(firstPanelWidth).toBeGreaterThanOrEqual(716)
       expect(firstPanelWidth).toBeLessThanOrEqual(744)
-      expect(firstPanelY).toBeGreaterThanOrEqual(290)
-      expect(firstPanelY).toBeLessThanOrEqual(470)
+      expect(firstPanelY).toBeGreaterThanOrEqual(prioritySectionBottom)
+      expect(firstPanelY).toBeLessThanOrEqual(650)
       expect(htmlScrollWidth).toBeLessThanOrEqual(768)
       expect(bodyScrollWidth).toBeLessThanOrEqual(768)
       continue

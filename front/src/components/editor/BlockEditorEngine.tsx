@@ -201,7 +201,9 @@ import {
 } from "./blockSelectionModel"
 import {
   resolveBlockHandleAnchorTop,
-  resolveBlockHandleRailLayout,
+  resolveBlockChromeTop,
+  resolveBlockHandleRailLayoutForSurface,
+  resolveBlockSelectionOverlayLayout,
   resolveThinBlockHandleAnchorTop,
   shouldCenterBlockHandleForNode,
   shouldUseThinBlockHandleAnchor,
@@ -5492,8 +5494,6 @@ const BlockEditorEngine = ({
   }, [clearPendingTableAxisDrag])
 
   const shouldTrackSelectionLayoutSync =
-    blockSelectionOverlayState.visible ||
-    blockHandleState.visible ||
     tableAffordanceVisibility.visible ||
     isTableQuickRailHovered ||
     tableMenuState !== null ||
@@ -5502,7 +5502,6 @@ const BlockEditorEngine = ({
     Boolean(draggedTableAxisState) ||
     tableAxisReorderIndicatorState.visible
   const shouldThrottleSelectionLayoutSync =
-    !blockSelectionOverlayState.visible &&
     !tableAffordanceVisibility.visible &&
     !isTableQuickRailHovered &&
     tableMenuState === null &&
@@ -5510,7 +5509,7 @@ const BlockEditorEngine = ({
     !tableColumnDragGuideState.visible &&
     !draggedTableAxisState &&
     !tableAxisReorderIndicatorState.visible
-  const shouldSyncSelectionLayoutImmediately = blockSelectionOverlayState.visible || blockHandleState.visible
+  const shouldSyncSelectionLayoutImmediately = isTableColumnResizeActive || tableColumnDragGuideState.visible || Boolean(draggedTableAxisState) || tableAxisReorderIndicatorState.visible
 
   useEffect(() => {
     if (typeof window === "undefined" || !shouldTrackSelectionLayoutSync) return
@@ -5566,6 +5565,8 @@ const BlockEditorEngine = ({
 
   useBlockSelectionLayoutEffect(() => {
     if (!editor) return
+    const viewportRect = viewportRef.current?.getBoundingClientRect() ?? null
+    const handlePositionMode = isCoarsePointer ? "viewport" : "editor-local"
     const rectCache = blockSelectionLayoutRectCacheRef.current
     rectCache.clear()
     const selectedNestedListItemContext = resolveEffectiveSelectedListItemContext(editor)
@@ -5580,13 +5581,7 @@ const BlockEditorEngine = ({
     }
     if (selectedNestedListItemContext?.listItemElement?.isConnected) {
       const rect = selectedNestedListItemContext.listItemElement.getBoundingClientRect()
-      const nextOverlayState: BlockSelectionOverlayState = {
-        visible: true,
-        left: rect.left - 6,
-        top: rect.top - 4,
-        width: rect.width + 12,
-        height: rect.height + 8,
-      }
+      const nextOverlayState: BlockSelectionOverlayState = resolveBlockSelectionOverlayLayout(rect, viewportRect)
       setBlockSelectionOverlayState((prev) =>
         isStableBlockSelectionOverlayState(prev, nextOverlayState) ? prev : nextOverlayState
       )
@@ -5605,13 +5600,7 @@ const BlockEditorEngine = ({
           setBlockSelectionOverlayState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
         } else {
           const { rect } = overlayTarget
-          const nextOverlayState: BlockSelectionOverlayState = {
-            visible: true,
-            left: rect.left - 6,
-            top: rect.top - 4,
-            width: rect.width + 12,
-            height: rect.height + 8,
-          }
+          const nextOverlayState: BlockSelectionOverlayState = resolveBlockSelectionOverlayLayout(rect, viewportRect)
           setBlockSelectionOverlayState((prev) =>
             isStableBlockSelectionOverlayState(prev, nextOverlayState) ? prev : nextOverlayState
           )
@@ -5653,11 +5642,13 @@ const BlockEditorEngine = ({
     const { width: railWidth, height: railHeight } = blockHandleRailMetricsRef.current
     if (activeListItemContext?.listItemElement?.isConnected) {
       const rect = activeListItemContext.listItemElement.getBoundingClientRect()
-      const railLayout = resolveBlockHandleRailLayout(
+      const railLayout = resolveBlockHandleRailLayoutForSurface(
         rect,
         railWidth,
         railHeight,
-        resolveBlockHandleAnchorTop(activeListItemContext.listItemElement, railHeight)
+        resolveBlockHandleAnchorTop(activeListItemContext.listItemElement, railHeight),
+        viewportRect,
+        handlePositionMode
       )
       const nextState: TopLevelBlockHandleState = {
         visible: true,
@@ -5667,7 +5658,7 @@ const BlockEditorEngine = ({
         itemIndex: activeListItemContext.itemIndex,
         left: railLayout.left,
         top: railLayout.top,
-        bottom: rect.bottom + 12,
+        bottom: resolveBlockChromeTop(rect.bottom + 12, viewportRect, handlePositionMode),
         width: rect.width,
       }
       setBlockHandleState((prev) => (isStableBlockHandleState(prev, nextState) ? prev : nextState))
@@ -5693,7 +5684,14 @@ const BlockEditorEngine = ({
       : shouldCenterBlockHandleForNode(blockNode)
         ? resolveBlockHandleAnchorTop(blockElement, railHeight)
         : rect.top + 6
-    const railLayout = resolveBlockHandleRailLayout(rect, railWidth, railHeight, anchoredTop)
+    const railLayout = resolveBlockHandleRailLayoutForSurface(
+      rect,
+      railWidth,
+      railHeight,
+      anchoredTop,
+      viewportRect,
+      handlePositionMode
+    )
     const nextState: TopLevelBlockHandleState = {
       visible: true,
       kind: "top-level",
@@ -5702,7 +5700,7 @@ const BlockEditorEngine = ({
       itemIndex: null,
       left: railLayout.left,
       top: railLayout.top,
-      bottom: rect.bottom + 12,
+      bottom: resolveBlockChromeTop(rect.bottom + 12, viewportRect, handlePositionMode),
       width: rect.width,
     }
 
@@ -8817,10 +8815,11 @@ const SlashEmptyState = styled.div`
 `
 
 const EditorViewport = styled.div`
+  position: relative;
   border: 0;
   border-radius: 0;
   background: transparent;
-  overflow: hidden;
+  overflow: visible;
 
   &[data-row-resize-hot="true"] {
     cursor: row-resize;
@@ -10091,7 +10090,7 @@ const TableMenuHint = styled.div`
 `
 
 const BlockHandleRail = styled.div`
-  position: fixed;
+  position: absolute;
   z-index: 55;
   display: flex;
   flex-direction: row;
@@ -10286,7 +10285,7 @@ const BlockDropIndicator = styled.div`
 `
 
 const BlockSelectionOverlay = styled.div`
-  position: fixed;
+  position: absolute;
   z-index: 2;
   pointer-events: none;
   border-radius: 0.95rem;

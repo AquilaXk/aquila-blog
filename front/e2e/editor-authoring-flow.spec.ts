@@ -1109,6 +1109,236 @@ test.describe("block editor authoring flow", () => {
     expect(Math.abs(afterGeometry.handleTop - beforeGeometry.handleTop - paragraphDelta)).toBeLessThanOrEqual(12)
   })
 
+  test("실제 /editor/[id] 본문 클릭과 텍스트 선택 상태의 wheel scroll chain을 유지한다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 980, height: 720 })
+    const adminMember = {
+      id: 1,
+      username: "qa-admin",
+      nickname: "aquila",
+      isAdmin: true,
+    }
+    const targetLabel = "edit route body-selected wheel anchor"
+    const paragraphs = Array.from({ length: 42 }, (_, index) =>
+      index === 12
+        ? `${targetLabel} ${index + 1}. 선택된 글의 좌측 block handle은 본문 위 wheel 중에도 글과 같이 움직여야 합니다.`
+        : `body click wheel regression paragraph ${index + 1}. 본문 클릭 후 wheel scroll chain 회귀를 확인합니다.`
+    )
+    const content = paragraphs.join("\n\n")
+    const contentHtml = paragraphs.map((paragraph) => `<p>${paragraph}</p>`).join("")
+
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(adminMember),
+      })
+    })
+    await page.route("**/post/api/v1/adm/posts/996", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 996,
+          version: 12,
+          title: "본문 클릭 wheel scroll chain 회귀 글",
+          content,
+          contentHtml,
+          published: true,
+          listed: true,
+        }),
+      })
+    })
+
+    await page.goto("/editor/996")
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue("본문 클릭 wheel scroll chain 회귀 글")
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await expectEditorToContainLoadedText(editor, "body click wheel regression paragraph 42")
+
+    const readScrollTop = () =>
+      page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
+
+    await page.evaluate(() => window.scrollTo(0, 0))
+    const firstParagraph = editor.locator("p", { hasText: "body click wheel regression paragraph 1" }).first()
+    const firstBox = await expectVisibleBox(firstParagraph, "body click paragraph metrics are missing")
+    await page.mouse.click(firstBox.x + Math.min(firstBox.width / 2, 180), firstBox.y + firstBox.height / 2)
+
+    const clickScrollBefore = await readScrollTop()
+    await page.mouse.wheel(0, 420)
+    await expect.poll(readScrollTop).toBeGreaterThan(clickScrollBefore + 120)
+
+    const targetParagraph = editor.locator("p", { hasText: targetLabel }).first()
+    await targetParagraph.scrollIntoViewIfNeeded()
+    const targetBox = await expectVisibleBox(targetParagraph, "body-selected target paragraph metrics are missing")
+    const selectionY = targetBox.y + Math.min(targetBox.height / 2, 18)
+    const selectionStartX = targetBox.x + 34
+    const selectionEndX = targetBox.x + Math.min(targetBox.width - 24, 500)
+
+    await page.mouse.move(selectionStartX, selectionY)
+    await page.mouse.down()
+    await page.mouse.move(selectionEndX, selectionY, { steps: 14 })
+    await page.mouse.up()
+
+    const dragHandle = page.getByTestId("block-drag-handle")
+    await expect(dragHandle).toBeVisible()
+
+    const readSelectionGeometry = async () =>
+      page.evaluate((label) => {
+        const paragraph =
+          Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] p")).find(
+            (element) => element.textContent?.includes(label)
+          ) ?? null
+        const handle = document.querySelector<HTMLElement>("[data-testid='block-drag-handle']")
+        if (!paragraph || !handle) return null
+        const paragraphRect = paragraph.getBoundingClientRect()
+        const handleRect = handle.getBoundingClientRect()
+        const handleStyle = window.getComputedStyle(handle)
+        return {
+          scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+          paragraphTop: paragraphRect.top,
+          handleTop: handleRect.top,
+          handleVisible:
+            handleRect.width > 0 &&
+            handleRect.height > 0 &&
+            handleStyle.display !== "none" &&
+            handleStyle.visibility !== "hidden" &&
+            Number.parseFloat(handleStyle.opacity || "1") > 0.5,
+        }
+      }, targetLabel)
+
+    const beforeGeometry = await readSelectionGeometry()
+    if (!beforeGeometry) {
+      throw new Error("body-selected text handle geometry is missing before scroll")
+    }
+
+    const immediateGeometry = await page.evaluate((label) => {
+      const read = () => {
+        const paragraph =
+          Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] p")).find(
+            (element) => element.textContent?.includes(label)
+          ) ?? null
+        const handle = document.querySelector<HTMLElement>("[data-testid='block-drag-handle']")
+        if (!paragraph || !handle) return null
+        const paragraphRect = paragraph.getBoundingClientRect()
+        const handleRect = handle.getBoundingClientRect()
+        const handleStyle = window.getComputedStyle(handle)
+        return {
+          scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+          paragraphTop: paragraphRect.top,
+          handleTop: handleRect.top,
+          handleVisible:
+            handleRect.width > 0 &&
+            handleRect.height > 0 &&
+            handleStyle.display !== "none" &&
+            handleStyle.visibility !== "hidden" &&
+            Number.parseFloat(handleStyle.opacity || "1") > 0.5,
+        }
+      }
+      window.scrollBy(0, 160)
+      return read()
+    }, targetLabel)
+    if (!immediateGeometry) {
+      throw new Error("body-selected text handle geometry is missing during immediate scroll")
+    }
+    const immediateParagraphDelta = immediateGeometry.paragraphTop - beforeGeometry.paragraphTop
+    expect(immediateGeometry.scrollTop).toBeGreaterThan(beforeGeometry.scrollTop + 80)
+    expect(immediateGeometry.handleVisible).toBe(true)
+    expect(
+      Math.abs(immediateGeometry.handleTop - beforeGeometry.handleTop - immediateParagraphDelta)
+    ).toBeLessThanOrEqual(12)
+
+    await page.evaluate(
+      ({ label, base }) => {
+        const win = window as Window & {
+          __bodySelectedWheelSamples?: Array<{
+            scrollTop: number
+            paragraphTop: number
+            handleTop: number
+            handleError: number
+            handleVisible: boolean
+          }>
+          __bodySelectedWheelCleanup?: () => void
+        }
+        win.__bodySelectedWheelCleanup?.()
+        win.__bodySelectedWheelSamples = []
+        let rafId = 0
+        let stopped = false
+        const read = () => {
+          const paragraph =
+            Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] p")).find(
+              (element) => element.textContent?.includes(label)
+            ) ?? null
+          const handle = document.querySelector<HTMLElement>("[data-testid='block-drag-handle']")
+          if (!paragraph || !handle) return null
+          const paragraphRect = paragraph.getBoundingClientRect()
+          const handleRect = handle.getBoundingClientRect()
+          const handleStyle = window.getComputedStyle(handle)
+          const paragraphDelta = paragraphRect.top - base.paragraphTop
+          return {
+            scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+            paragraphTop: paragraphRect.top,
+            handleTop: handleRect.top,
+            handleError: Math.abs(handleRect.top - base.handleTop - paragraphDelta),
+            handleVisible:
+              handleRect.width > 0 &&
+              handleRect.height > 0 &&
+              handleStyle.display !== "none" &&
+              handleStyle.visibility !== "hidden" &&
+              Number.parseFloat(handleStyle.opacity || "1") > 0.5,
+          }
+        }
+        const record = () => {
+          if (stopped) return
+          const next = read()
+          if (next) win.__bodySelectedWheelSamples?.push(next)
+          if ((win.__bodySelectedWheelSamples?.length ?? 0) < 18) {
+            rafId = window.requestAnimationFrame(record)
+          }
+        }
+        rafId = window.requestAnimationFrame(record)
+        win.__bodySelectedWheelCleanup = () => {
+          stopped = true
+          window.cancelAnimationFrame(rafId)
+        }
+      },
+      { label: targetLabel, base: beforeGeometry }
+    )
+
+    await page.mouse.wheel(0, 140)
+    await page.waitForTimeout(24)
+    await page.mouse.wheel(0, 140)
+    await page.waitForTimeout(24)
+    await page.mouse.wheel(0, 140)
+
+    await expect
+      .poll(async () => (await readSelectionGeometry())?.scrollTop ?? 0)
+      .toBeGreaterThan(beforeGeometry.scrollTop + 80)
+
+    const scrollSamples = await page.evaluate(() => {
+      const win = window as Window & {
+        __bodySelectedWheelSamples?: Array<{
+          scrollTop: number
+          handleError: number
+          handleVisible: boolean
+        }>
+        __bodySelectedWheelCleanup?: () => void
+      }
+      win.__bodySelectedWheelCleanup?.()
+      return win.__bodySelectedWheelSamples ?? []
+    })
+    const movedSamples = scrollSamples.filter((sample) => sample.scrollTop > beforeGeometry.scrollTop + 20)
+    expect(movedSamples.length).toBeGreaterThan(0)
+    expect(movedSamples.every((sample) => sample.handleVisible)).toBe(true)
+    expect(Math.max(...movedSamples.map((sample) => sample.handleError))).toBeLessThanOrEqual(12)
+
+    const afterGeometry = await readSelectionGeometry()
+    if (!afterGeometry) {
+      throw new Error("body-selected text handle geometry is missing after scroll")
+    }
+    const paragraphDelta = afterGeometry.paragraphTop - beforeGeometry.paragraphTop
+    expect(afterGeometry.handleVisible).toBe(true)
+    expect(Math.abs(afterGeometry.handleTop - beforeGeometry.handleTop - paragraphDelta)).toBeLessThanOrEqual(12)
+  })
+
   test("실제 /editor/[id] 수정 진입은 본문 hover scroll, 선택 block affordance, code 원문을 유지한다", async ({
     page,
   }) => {

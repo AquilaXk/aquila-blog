@@ -633,12 +633,55 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
             ))}
           </ServiceRail>
 
+          <PrioritySection>
+            <SectionHeader>
+              <h2>우선 점검 항목</h2>
+            </SectionHeader>
+
+            <PriorityTable>
+              <thead>
+                <tr>
+                  <th>항목</th>
+                  <th>현재 상태</th>
+                  <th>관리</th>
+                </tr>
+              </thead>
+              <tbody>
+                {priorityRows.map((row) => (
+                  <tr key={row.key}>
+                    <td>
+                      <PriorityCellCopy>
+                        <strong>{row.title}</strong>
+                      </PriorityCellCopy>
+                    </td>
+                    <td>
+                      <PrioritySummary data-tone={row.tone}>{row.summary}</PrioritySummary>
+                    </td>
+                    <td>
+                      {row.href ? (
+                        <PriorityLink
+                          href={row.href}
+                          target={row.href.startsWith("http") ? "_blank" : undefined}
+                          rel={row.href.startsWith("http") ? "noreferrer noopener" : undefined}
+                        >
+                          {row.actionLabel}
+                        </PriorityLink>
+                      ) : (
+                        <PriorityLink as="span">환경 확인</PriorityLink>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </PriorityTable>
+          </PrioritySection>
+
           <PanelGrid data-ui="monitoring-panel-grid">
             <LeadPanelCard data-ui="monitoring-panel-card">
-                <PanelHeader>
-                  <div>
-                    <strong>최근 실패</strong>
-                  </div>
+              <PanelHeader>
+                <div>
+                  <strong>최근 실패</strong>
+                </div>
                 <Link href="/admin/tools" passHref legacyBehavior>
                   <LaunchLink>운영 도구</LaunchLink>
                 </Link>
@@ -708,49 +751,6 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
               </CompactPanelCard>
             </InsightRail>
           </PanelGrid>
-
-          <PrioritySection>
-            <SectionHeader>
-              <h2>우선 점검 항목</h2>
-            </SectionHeader>
-
-            <PriorityTable>
-              <thead>
-                <tr>
-                  <th>항목</th>
-                  <th>현재 상태</th>
-                  <th>관리</th>
-                </tr>
-              </thead>
-              <tbody>
-                {priorityRows.map((row) => (
-                  <tr key={row.key}>
-                    <td>
-                      <PriorityCellCopy>
-                        <strong>{row.title}</strong>
-                      </PriorityCellCopy>
-                    </td>
-                    <td>
-                      <PrioritySummary data-tone={row.tone}>{row.summary}</PrioritySummary>
-                    </td>
-                    <td>
-                      {row.href ? (
-                        <PriorityLink
-                          href={row.href}
-                          target={row.href.startsWith("http") ? "_blank" : undefined}
-                          rel={row.href.startsWith("http") ? "noreferrer noopener" : undefined}
-                        >
-                          {row.actionLabel}
-                        </PriorityLink>
-                      ) : (
-                        <PriorityLink as="span">환경 확인</PriorityLink>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </PriorityTable>
-          </PrioritySection>
 
           {secondaryPanels.length ? (
             <AdditionalPanelsSection>

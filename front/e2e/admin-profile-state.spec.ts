@@ -16,7 +16,7 @@ test.describe("admin profile state contract", () => {
     )
 
     expect(styleSource).toContain("export const SectionRail = styled(AdminWorkspaceSectionNav)`")
-    expect(styleSource).toContain("@media (max-width: 1360px)")
+    expect(styleSource).toContain("@media (max-width: 1480px)")
     expect(styleSource).toContain("export const SectionRailButton = styled(AdminWorkspaceSectionNavButton)`")
     expect(source).toContain("role=\"tab\"")
     expect(source).toContain("aria-selected={activeSection === section.id}")

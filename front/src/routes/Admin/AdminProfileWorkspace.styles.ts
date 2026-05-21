@@ -142,10 +142,6 @@ export const WorkspaceShell = styled.section`
   align-items: start;
 
   @media (max-width: 1480px) {
-    grid-template-columns: 176px minmax(0, 1fr) 288px;
-  }
-
-  @media (max-width: 1360px) {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -155,14 +151,28 @@ export const WorkspaceShell = styled.section`
 `
 
 export const SectionRail = styled(AdminWorkspaceSectionNav)`
-  @media (min-width: 1361px) {
+  @media (max-width: 1480px) {
+    position: static;
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding-bottom: 0.2rem;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  @media (min-width: 1481px) {
     display: grid;
     gap: 0.24rem;
   }
 `
 
 export const SectionRailButton = styled(AdminWorkspaceSectionNavButton)`
-  @media (min-width: 1361px) {
+  @media (min-width: 1481px) {
     width: 100%;
     min-height: 46px;
     justify-content: flex-start;

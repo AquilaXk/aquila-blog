@@ -1434,7 +1434,9 @@ const StyledWrapper = styled.div`
     transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
 
     svg {
-      font-size: 1.22rem;
+      width: 1em;
+      height: 1em;
+      font-size: 1.75rem;
     }
 
     &:hover {
@@ -1503,10 +1505,6 @@ const StyledWrapper = styled.div`
 
   .floatingShareButton {
     color: ${({ theme }) => theme.colors.gray10};
-
-    svg {
-      font-size: 1.08rem;
-    }
   }
 
   .floatingLikeCluster {

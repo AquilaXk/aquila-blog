@@ -87,6 +87,8 @@ const EMPTY_INITIAL_SNAPSHOT: AdminPostsWorkspaceInitialSnapshot = {
 }
 const ADMIN_POSTS_SSR_LIST_CACHE_KEY = `admin-posts:list:${DEFAULT_SORT}:page=1:size=${DEFAULT_PAGE_SIZE}`
 const ADMIN_POSTS_SSR_LIST_CACHE_TTL_MS = 5_000
+const POSTS_LIST_LOAD_ERROR_MESSAGE = "글 목록 서버와 연결하지 못했습니다. 잠시 후 다시 시도해 주세요."
+const RECENT_POSTS_UNAVAILABLE_MESSAGE = "목록 연결 후 최근 수정 글을 표시합니다."
 
 const toEditorRoute = (query?: Record<string, string>) => {
   if (query?.postId) {
@@ -324,10 +326,9 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
         .sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime())
         .slice(0, 5)
       setRecentPosts(rows)
-    } catch (error) {
+    } catch {
       if (recentRequestIdRef.current !== requestId) return
-      const message = error instanceof Error ? error.message : String(error)
-      setRecentError(`최근 글을 불러오지 못했습니다: ${message}`)
+      setRecentError(RECENT_POSTS_UNAVAILABLE_MESSAGE)
       setRecentPosts([])
     } finally {
       if (recentRequestIdRef.current === requestId) {
@@ -359,10 +360,9 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
         total: data.pageable?.totalElements ?? data.content?.length ?? 0,
         loadedAt: new Date().toISOString(),
       })
-    } catch (error) {
+    } catch {
       if (listRequestIdRef.current !== requestId) return
-      const message = error instanceof Error ? error.message : String(error)
-      setListError(`글 목록을 불러오지 못했습니다: ${message}`)
+      setListError(POSTS_LIST_LOAD_ERROR_MESSAGE)
       setListState({ rows: [], total: 0, loadedAt: "" })
     } finally {
       if (listRequestIdRef.current === requestId) {

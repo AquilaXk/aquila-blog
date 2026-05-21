@@ -902,6 +902,285 @@ test.describe("block editor authoring flow", () => {
     await expect(codeBlock.locator(".aq-code-highlight-layer .token.keyword").first()).toBeVisible()
   })
 
+  test("실제 /editor/[id] 수정 진입은 본문 hover scroll, 선택 block affordance, code 원문을 유지한다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 980, height: 720 })
+    const adminMember = {
+      id: 1,
+      username: "qa-admin",
+      nickname: "aquila",
+      isAdmin: true,
+    }
+    const targetLabel = "edit route selected scroll anchor"
+    const paragraphs = Array.from({ length: 36 }, (_, index) =>
+      index === 8
+        ? `${targetLabel} ${index + 1}`
+        : `edit route scroll paragraph ${index + 1}. 본문 hover wheel 입력과 block selection 고정 상태를 확인합니다.`
+    )
+    const content = [
+      paragraphs.slice(0, 12).join("\n\n"),
+      "```ts",
+      "```",
+      paragraphs.slice(12).join("\n\n"),
+    ].join("\n\n")
+    const prettyCodeHtml = [
+      '<section><p>본문 앞 HTML</p>',
+      '<div class="aq-code-block" data-language="ts" data-raw-code="const restored = 305;&#10;return restored">',
+      '<pre class="aq-code aq-pretty-pre">',
+      '<code class="language-ts"></code>',
+      '</pre></div></section>',
+    ].join("")
+
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(adminMember),
+      })
+    })
+    await page.route("**/post/api/v1/adm/posts/992", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 992,
+          version: 8,
+          title: "수정 route scroll/code 회귀 글",
+          content,
+          contentHtml: prettyCodeHtml,
+          published: true,
+          listed: true,
+        }),
+      })
+    })
+
+    await page.goto("/editor/992")
+
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue("수정 route scroll/code 회귀 글")
+    const codeBlock = page.locator(".aq-code-shell").first()
+    await expect(codeBlock).toBeVisible()
+    await expect(codeBlock.locator(".aq-code-highlight-layer")).toContainText("const restored = 305;")
+    await expect(codeBlock.locator(".aq-code-highlight-layer")).toContainText("return restored")
+
+    const readScrollTop = () =>
+      page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    const firstParagraph = editor.locator("p", { hasText: "edit route scroll paragraph 1" }).first()
+    await expect(firstParagraph).toBeVisible()
+    await page.evaluate(() => window.scrollTo(0, 0))
+
+    const firstBox = await firstParagraph.boundingBox()
+    if (!firstBox) {
+      throw new Error("edit route first paragraph metrics are missing before wheel")
+    }
+    await page.mouse.move(firstBox.x + Math.min(firstBox.width / 2, 120), firstBox.y + firstBox.height / 2)
+
+    const hoverScrollBefore = await readScrollTop()
+    await page.mouse.wheel(0, 360)
+    await expect.poll(readScrollTop).toBeGreaterThan(hoverScrollBefore + 120)
+
+    const targetParagraph = editor.locator("p", { hasText: targetLabel }).first()
+    await targetParagraph.scrollIntoViewIfNeeded()
+    const targetBox = await targetParagraph.boundingBox()
+    if (!targetBox) {
+      throw new Error("edit route target paragraph metrics are missing before block selection")
+    }
+    await page.mouse.move(targetBox.x + Math.min(targetBox.width / 2, 120), targetBox.y + targetBox.height / 2)
+    await targetParagraph.hover()
+
+    const dragHandle = page.getByTestId("block-drag-handle")
+    await expect(dragHandle).toBeVisible()
+    await dragHandle.click()
+
+    const selectionOverlay = page.getByTestId("keyboard-block-selection-overlay")
+    await expect(selectionOverlay).toBeVisible()
+
+    const readSelectionGeometry = async () =>
+      page.evaluate((label) => {
+        const paragraph =
+          Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] p")).find(
+            (element) => element.textContent?.includes(label)
+          ) ?? null
+        const overlay = document.querySelector<HTMLElement>("[data-testid='keyboard-block-selection-overlay']")
+        const handle = document.querySelector<HTMLElement>("[data-testid='block-drag-handle']")
+        if (!paragraph || !overlay || !handle) return null
+        const paragraphRect = paragraph.getBoundingClientRect()
+        const overlayRect = overlay.getBoundingClientRect()
+        const handleRect = handle.getBoundingClientRect()
+        const overlayStyle = window.getComputedStyle(overlay)
+        const handleStyle = window.getComputedStyle(handle)
+        return {
+          scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+          paragraphTop: paragraphRect.top,
+          overlayTop: overlayRect.top,
+          handleTop: handleRect.top,
+          overlayVisible:
+            overlayRect.width > 0 &&
+            overlayRect.height > 0 &&
+            overlayStyle.display !== "none" &&
+            overlayStyle.visibility !== "hidden",
+          handleVisible:
+            handleRect.width > 0 &&
+            handleRect.height > 0 &&
+            handleStyle.display !== "none" &&
+            handleStyle.visibility !== "hidden" &&
+            Number.parseFloat(handleStyle.opacity || "1") > 0.5,
+        }
+      }, targetLabel)
+
+    const beforeGeometry = await readSelectionGeometry()
+    if (!beforeGeometry) {
+      throw new Error("edit route block selection geometry is missing before scroll")
+    }
+
+    await page.evaluate(
+      ({ label, base }) => {
+        const win = window as Window & {
+          __editorScrollGeometrySamples?: Array<{
+            scrollTop: number
+            paragraphTop: number
+            overlayTop: number
+            handleTop: number
+            overlayError: number
+            handleError: number
+            overlayVisible: boolean
+            handleVisible: boolean
+          }>
+          __cleanupEditorScrollGeometrySamples?: () => void
+        }
+        win.__cleanupEditorScrollGeometrySamples?.()
+        win.__editorScrollGeometrySamples = []
+
+        const read = () => {
+          const paragraph =
+            Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] p")).find(
+              (element) => element.textContent?.includes(label)
+            ) ?? null
+          const overlay = document.querySelector<HTMLElement>("[data-testid='keyboard-block-selection-overlay']")
+          const handle = document.querySelector<HTMLElement>("[data-testid='block-drag-handle']")
+          if (!paragraph || !overlay || !handle) return null
+          const paragraphRect = paragraph.getBoundingClientRect()
+          const overlayRect = overlay.getBoundingClientRect()
+          const handleRect = handle.getBoundingClientRect()
+          const overlayStyle = window.getComputedStyle(overlay)
+          const handleStyle = window.getComputedStyle(handle)
+          const paragraphDelta = paragraphRect.top - base.paragraphTop
+          return {
+            scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+            paragraphTop: paragraphRect.top,
+            overlayTop: overlayRect.top,
+            handleTop: handleRect.top,
+            overlayError: Math.abs(overlayRect.top - base.overlayTop - paragraphDelta),
+            handleError: Math.abs(handleRect.top - base.handleTop - paragraphDelta),
+            overlayVisible:
+              overlayRect.width > 0 &&
+              overlayRect.height > 0 &&
+              overlayStyle.display !== "none" &&
+              overlayStyle.visibility !== "hidden",
+            handleVisible:
+              handleRect.width > 0 &&
+              handleRect.height > 0 &&
+              handleStyle.display !== "none" &&
+              handleStyle.visibility !== "hidden" &&
+              Number.parseFloat(handleStyle.opacity || "1") > 0.5,
+          }
+        }
+
+        const record = () => {
+          if ((win.__editorScrollGeometrySamples?.length ?? 0) >= 8) return
+          const next = read()
+          if (next) win.__editorScrollGeometrySamples?.push(next)
+        }
+
+        window.addEventListener("scroll", record, { capture: true, passive: true })
+        win.__cleanupEditorScrollGeometrySamples = () => {
+          window.removeEventListener("scroll", record, true)
+        }
+      },
+      { label: targetLabel, base: beforeGeometry }
+    )
+
+    await page.mouse.move(targetBox.x + Math.min(targetBox.width / 2, 120), targetBox.y + targetBox.height / 2)
+    await page.mouse.wheel(0, 220)
+    await expect
+      .poll(async () => (await readSelectionGeometry())?.scrollTop ?? 0)
+      .toBeGreaterThan(beforeGeometry.scrollTop + 60)
+
+    const scrollSamples = await page.evaluate(() => {
+      const win = window as Window & {
+        __editorScrollGeometrySamples?: Array<{
+          scrollTop: number
+          overlayError: number
+          handleError: number
+          overlayVisible: boolean
+          handleVisible: boolean
+        }>
+        __cleanupEditorScrollGeometrySamples?: () => void
+      }
+      win.__cleanupEditorScrollGeometrySamples?.()
+      return win.__editorScrollGeometrySamples ?? []
+    })
+    const movedSamples = scrollSamples.filter((sample) => sample.scrollTop > beforeGeometry.scrollTop + 30)
+    expect(movedSamples.length).toBeGreaterThan(0)
+    expect(movedSamples.every((sample) => sample.overlayVisible && sample.handleVisible)).toBe(true)
+    expect(Math.max(...movedSamples.map((sample) => sample.overlayError))).toBeLessThanOrEqual(10)
+    expect(Math.max(...movedSamples.map((sample) => sample.handleError))).toBeLessThanOrEqual(12)
+
+    const samples = await page.evaluate(async (label) => {
+      const nextFrame = () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
+      const read = () => {
+        const paragraph =
+          Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] p")).find(
+            (element) => element.textContent?.includes(label)
+          ) ?? null
+        const overlay = document.querySelector<HTMLElement>("[data-testid='keyboard-block-selection-overlay']")
+        const handle = document.querySelector<HTMLElement>("[data-testid='block-drag-handle']")
+        if (!paragraph || !overlay || !handle) return null
+        const paragraphRect = paragraph.getBoundingClientRect()
+        const overlayRect = overlay.getBoundingClientRect()
+        const handleRect = handle.getBoundingClientRect()
+        const overlayStyle = window.getComputedStyle(overlay)
+        const handleStyle = window.getComputedStyle(handle)
+        return {
+          paragraphTop: paragraphRect.top,
+          overlayTop: overlayRect.top,
+          handleTop: handleRect.top,
+          overlayVisible:
+            overlayRect.width > 0 &&
+            overlayRect.height > 0 &&
+            overlayStyle.display !== "none" &&
+            overlayStyle.visibility !== "hidden",
+          handleVisible:
+            handleRect.width > 0 &&
+            handleRect.height > 0 &&
+            handleStyle.display !== "none" &&
+            handleStyle.visibility !== "hidden" &&
+            Number.parseFloat(handleStyle.opacity || "1") > 0.5,
+        }
+      }
+
+      const frames: Array<ReturnType<typeof read>> = []
+      for (let index = 0; index < 8; index += 1) {
+        await nextFrame()
+        frames.push(read())
+      }
+      return frames
+    }, targetLabel)
+
+    expect(samples.every((sample) => sample?.overlayVisible && sample.handleVisible)).toBe(true)
+
+    const afterGeometry = await readSelectionGeometry()
+    if (!afterGeometry) {
+      throw new Error("edit route block selection geometry is missing after scroll")
+    }
+
+    const paragraphDelta = afterGeometry.paragraphTop - beforeGeometry.paragraphTop
+    expect(afterGeometry.overlayVisible).toBe(true)
+    expect(afterGeometry.handleVisible).toBe(true)
+    expect(Math.abs(afterGeometry.overlayTop - beforeGeometry.overlayTop - paragraphDelta)).toBeLessThanOrEqual(10)
+    expect(Math.abs(afterGeometry.handleTop - beforeGeometry.handleTop - paragraphDelta)).toBeLessThanOrEqual(12)
+    expect(Math.abs(afterGeometry.overlayTop + 4 - afterGeometry.paragraphTop)).toBeLessThanOrEqual(10)
+  })
+
   test("코드 블록 hover scroll surface는 wrapper chrome transition과 세로 gesture 차단을 쓰지 않는다", async ({ page }) => {
     const seed = encodeURIComponent("```javascript\nconst count = 1;\nreturn \"ok\";\n```\n\n아래 문단")
     await page.goto(`${QA_ENGINE_ROUTE}&seed=${seed}`)

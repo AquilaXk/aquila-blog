@@ -6,13 +6,7 @@ import { Fragment, Node as ProseMirrorNode } from "@tiptap/pm/model"
 import { NodeSelection, TextSelection } from "@tiptap/pm/state"
 import { CellSelection, selectedRect, TableMap } from "@tiptap/pm/tables"
 import { EditorContent, useEditor } from "@tiptap/react"
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import type {
   ChangeEvent,
   DragEvent as ReactDragEvent,
@@ -21,6 +15,7 @@ import type {
   ReactNode,
 } from "react"
 import { createPortal } from "react-dom"
+import { flushSync } from "react-dom"
 import { getPreferredCodeLanguage } from "./extensions"
 import {
   deleteTopLevelBlockAt,
@@ -282,14 +277,9 @@ import {
   resolveFloatingBubbleStateFromCoords,
   useFloatingBubbleState,
 } from "./useFloatingBubbleState"
+import { recordEditorCommitDurationForRuntimeGuard } from "./editorRuntimeGuardModel"
 
-type RuntimeGuardWindow = Window & {
-  __AQ_RUNTIME_GUARD_ENABLED__?: boolean
-  __AQ_RUNTIME_GUARD__?: {
-    editorCommitSamples?: number[]
-  }
-}
-
+const useBlockSelectionLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect
 type SlashKeyboardEventLike = {
   key: string
   shiftKey?: boolean
@@ -309,22 +299,6 @@ type ToolbarAction = {
   run: () => void
   active: boolean
   disabled?: boolean
-}
-
-const EDITOR_RUNTIME_GUARD_SAMPLE_LIMIT = 240
-
-const recordEditorCommitDurationForRuntimeGuard = (durationMs: number) => {
-  if (typeof window === "undefined" || !Number.isFinite(durationMs) || durationMs <= 0) return
-
-  const runtimeWindow = window as RuntimeGuardWindow
-  if (!runtimeWindow.__AQ_RUNTIME_GUARD_ENABLED__) return
-
-  const store = (runtimeWindow.__AQ_RUNTIME_GUARD__ ??= {})
-  const nextSamples = [...(store.editorCommitSamples ?? []), durationMs]
-  if (nextSamples.length > EDITOR_RUNTIME_GUARD_SAMPLE_LIMIT) {
-    nextSamples.splice(0, nextSamples.length - EDITOR_RUNTIME_GUARD_SAMPLE_LIMIT)
-  }
-  store.editorCommitSamples = nextSamples
 }
 
 type BlockMenuState =
@@ -5530,6 +5504,7 @@ const BlockEditorEngine = ({
     !tableColumnDragGuideState.visible &&
     !draggedTableAxisState &&
     !tableAxisReorderIndicatorState.visible
+  const shouldSyncSelectionLayoutImmediately = blockSelectionOverlayState.visible || blockHandleState.visible
 
   useEffect(() => {
     if (typeof window === "undefined" || !shouldTrackSelectionLayoutSync) return
@@ -5540,6 +5515,11 @@ const BlockEditorEngine = ({
     const resizeOptions: AddEventListenerOptions = { passive: true }
     const minSyncIntervalMs = shouldThrottleSelectionLayoutSync ? 72 : 0
     const sync = () => {
+      if (shouldSyncSelectionLayoutImmediately) {
+        lastCommittedAt = window.performance.now()
+        flushSync(() => setSelectionTick((prev) => prev + 1))
+        return
+      }
       if (rafId !== null || timeoutId !== null) return
       const now = window.performance.now()
       const remainingDelayMs = minSyncIntervalMs > 0 ? minSyncIntervalMs - (now - lastCommittedAt) : 0
@@ -5576,9 +5556,9 @@ const BlockEditorEngine = ({
         window.clearTimeout(timeoutId)
       }
     }
-  }, [shouldThrottleSelectionLayoutSync, shouldTrackSelectionLayoutSync])
+  }, [shouldSyncSelectionLayoutImmediately, shouldThrottleSelectionLayoutSync, shouldTrackSelectionLayoutSync])
 
-  useEffect(() => {
+  useBlockSelectionLayoutEffect(() => {
     if (!editor) return
     const rectCache = blockSelectionLayoutRectCacheRef.current
     rectCache.clear()

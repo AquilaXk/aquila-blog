@@ -59,7 +59,8 @@ const LEADING_EDITOR_METADATA_LINE_REGEX =
 const EDITOR_BODY_PLACEHOLDER = "내용을 입력하세요."
 const EDITOR_TOGGLE_TITLE_PLACEHOLDER = "토글 제목"
 const FENCED_CODE_BLOCK_REGEX = /(^|\n)(`{3,}|~{3,})([^\n]*)\n(?:([\s\S]*?)\n)?\2(?=\n|$)/g
-const HTML_CODE_RAW_ATTRIBUTE_TAG_REGEX = /<(?:code|pre)\b([^>]*)>/gi
+const HTML_CODE_RAW_ATTRIBUTE_TAG_REGEX =
+  /<([a-z][a-z0-9:-]*)\b([^>]*(?:data-raw-code|data-prism-source)[^>]*)>/gi
 const HTML_ATTRIBUTE_REGEX = /\s([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>`]+)))?/g
 
 export const PREVIEW_SUMMARY_MAX_LENGTH = 150
@@ -374,7 +375,7 @@ const extractRawCodeFencedBlocksFromHtml = (contentHtml?: string | null) => {
   if (!contentHtml?.trim()) return ""
 
   const blocks: string[] = []
-  contentHtml.replace(HTML_CODE_RAW_ATTRIBUTE_TAG_REGEX, (_match, rawAttributes) => {
+  contentHtml.replace(HTML_CODE_RAW_ATTRIBUTE_TAG_REGEX, (_match, _tagName, rawAttributes) => {
     const attributes = readHtmlAttributes(String(rawAttributes))
     const codeSource = (
       attributes.get("data-raw-code") ||
@@ -414,10 +415,13 @@ export const resolveEditorMetaSnapshot = (content: string, contentHtml?: string 
   const markdownFromHtml = contentHtml?.trim() ? convertHtmlClipboardToMarkdown(contentHtml).trim() : ""
   const rawCodeMarkdownFromHtml = extractRawCodeFencedBlocksFromHtml(contentHtml)
   const recoveredCodeMarkdown = [rawCodeMarkdownFromHtml, markdownFromHtml].filter(Boolean).join("\n\n")
+  const htmlFallbackBody = rawCodeMarkdownFromHtml
+    ? restoreEmptyFencedCodeBlocks(markdownFromHtml || rawCodeMarkdownFromHtml, rawCodeMarkdownFromHtml)
+    : markdownFromHtml
   const restoredParsedBody = parsed.body.trim() && recoveredCodeMarkdown
     ? restoreEmptyFencedCodeBlocks(parsed.body, recoveredCodeMarkdown)
     : parsed.body
-  const resolvedBody = restoredParsedBody.trim() || markdownFromHtml || rawCodeMarkdownFromHtml || normalizedRawContent
+  const resolvedBody = restoredParsedBody.trim() || htmlFallbackBody || rawCodeMarkdownFromHtml || normalizedRawContent
   const parsedThumbnail = normalizeSafeImageUrl(parsed.thumbnail)
   const fallbackThumbnail = normalizeSafeImageUrl(extractFirstMarkdownImage(resolvedBody))
   const syncedThumbnail = stripThumbnailFocusFromUrl(parsedThumbnail || fallbackThumbnail)

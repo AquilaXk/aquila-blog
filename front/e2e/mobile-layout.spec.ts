@@ -27,12 +27,12 @@ test("grid design은 전 사용자-facing 화면 토큰을 사용하고 article 
     "src/routes/Feed/ServiceCard.tsx",
     "src/routes/Feed/ContactCard.tsx",
     "src/pages/about.tsx",
-    "src/routes/Detail/PostDetail/index.tsx",
+    "src/routes/Detail/PostDetail/PostDetail.styles.ts",
     "src/routes/Detail/PostDetail/PostHeader.tsx",
   ].map((sourcePath) => [sourcePath, readSourceFile(sourcePath)] as const)
   const themeSource = readSourceFile("src/styles/theme.ts")
   const articleSurfaceSource = [
-    readSourceFile("src/routes/Detail/PostDetail/index.tsx"),
+    readSourceFile("src/routes/Detail/PostDetail/PostDetail.styles.ts"),
     readSourceFile("src/routes/Detail/PostDetail/PostHeader.tsx"),
   ].join("\n")
   const rootLayoutSource = readSourceFile("src/layouts/RootLayout/index.tsx")

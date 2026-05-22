@@ -182,6 +182,78 @@ test("admin workspace pages는 orchestration과 section/style module로 분리�
   expect(dashboardPageSource).toContain("AdminDashboardWorkspacePage")
 })
 
+test("public detail and feed file boundaries는 route/data/section/style module로 분리된다", () => {
+  const detailRoot = path.resolve(__dirname, "../src/routes/Detail/PostDetail")
+  const feedRoot = path.resolve(__dirname, "../src/routes/Feed")
+  const requiredDetailModules = [
+    "PostDetailTocModel.ts",
+    "PostDetailRailModel.ts",
+    "PostDetailRelatedSection.tsx",
+    "PostDetail.styles.ts",
+    "CommentBox/CommentBox.styles.ts",
+  ]
+  const requiredFeedModules = [
+    "FeedExplorerRestoreModel.ts",
+    "FeedExplorer.styles.ts",
+  ]
+
+  for (const sourcePath of requiredDetailModules) {
+    expect(existsSync(path.join(detailRoot, sourcePath)), sourcePath).toBe(true)
+  }
+  for (const sourcePath of requiredFeedModules) {
+    expect(existsSync(path.join(feedRoot, sourcePath)), sourcePath).toBe(true)
+  }
+
+  const boundedSourceFiles = [
+    path.join(detailRoot, "index.tsx"),
+    path.join(detailRoot, "CommentBox/index.tsx"),
+    path.join(detailRoot, "PostHeader.tsx"),
+    path.join(feedRoot, "FeedExplorer.tsx"),
+    path.join(feedRoot, "PostList/index.tsx"),
+    path.join(feedRoot, "PostList/PostCard.tsx"),
+  ]
+
+  const oversizedBudgetFiles = boundedSourceFiles
+    .filter((sourcePath) => existsSync(sourcePath))
+    .map((sourcePath) => ({
+      sourcePath: path.relative(path.resolve(__dirname, "../src"), sourcePath),
+      lineCount: readFileSync(sourcePath, "utf8").split("\n").length,
+    }))
+    .filter(({ sourcePath, lineCount }) =>
+      sourcePath.endsWith("PostDetail/index.tsx") ? lineCount > 900 : lineCount > 700
+    )
+
+  expect(oversizedBudgetFiles).toEqual([])
+
+  const collectSourceFiles = (root: string) =>
+    readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+      const sourcePath = path.join(root, entry.name)
+      if (entry.isDirectory()) return collectSourceFiles(sourcePath)
+      return /\.(?:ts|tsx)$/.test(entry.name) ? [sourcePath] : []
+    })
+
+  const publicFilesOverThousand = [...collectSourceFiles(detailRoot), ...collectSourceFiles(feedRoot)]
+    .map((sourcePath) => ({
+      sourcePath: path.relative(path.resolve(__dirname, "../src"), sourcePath),
+      lineCount: readFileSync(sourcePath, "utf8").split("\n").length,
+    }))
+    .filter(({ lineCount }) => lineCount >= 1000)
+
+  expect(publicFilesOverThousand).toEqual([])
+
+  const detailPageSource = readFileSync(path.join(detailRoot, "index.tsx"), "utf8")
+  const commentBoxSource = readFileSync(path.join(detailRoot, "CommentBox/index.tsx"), "utf8")
+  const feedExplorerSource = readFileSync(path.join(feedRoot, "FeedExplorer.tsx"), "utf8")
+
+  expect(detailPageSource).toContain("collectTocFromArticle")
+  expect(detailPageSource).toContain("RelatedPostsSection")
+  expect(detailPageSource).not.toContain("const StyledWrapper = styled.div")
+  expect(commentBoxSource).toContain("CommentBox.styles")
+  expect(commentBoxSource).not.toContain("const StyledWrapper = styled.section")
+  expect(feedExplorerSource).toContain("FeedExplorerRestoreModel")
+  expect(feedExplorerSource).not.toContain("const ExplorerCard = styled.section")
+})
+
 const mockAvatarAsset = async (page: Page) => {
   await page.route("**/avatar.png", async (route) => {
     await route.fulfill({

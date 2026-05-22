@@ -10,6 +10,7 @@ import {
 import { resolveEditorMetaSnapshot, restoreEmptyFencedCodeBlocks } from "src/routes/Admin/editorStudioMetaModel"
 import { getEditorStudioPageProps } from "src/routes/Admin/EditorStudioPage"
 import { buildPreviewSummaryFromMarkdown, normalizeCardSummary, normalizePersistedSummary } from "src/libs/postSummary"
+import { restoreEditorDocCodeBlocksFromMarkdown } from "src/components/editor/serialization"
 
 test.describe("editor studio state", () => {
   test("기존 글은 서버 baseline과 같으면 저장됨으로 본다", () => {
@@ -1155,6 +1156,40 @@ test.describe("editor studio state", () => {
     expect(resolveEditorMetaSnapshot(staleContent, prettyCodeHtml).body).toContain(
       ["```ts", "const answer = 42;", "return answer", "```"].join("\n")
     )
+  })
+
+  test("초기 editor doc의 빈 코드블럭은 source markdown의 non-empty fence로 복구한다", () => {
+    const sourceMarkdown = [
+      "코드 본문 보존 대상입니다.",
+      "",
+      "```text",
+      "로그인 -> 세션 생성 -> 이후 요청에서 세션 확인",
+      "```",
+      "",
+      "```java",
+      "public Token login(User user) {",
+      "",
+      "    return new Token(access, refresh);",
+      "}",
+      "```",
+    ].join("\n")
+    const staleDoc = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "코드 본문 보존 대상입니다." }],
+        },
+        { type: "codeBlock", attrs: { language: "text" }, content: [] },
+        { type: "codeBlock", attrs: { language: "java" }, content: [] },
+      ],
+    }
+
+    const restored = restoreEditorDocCodeBlocksFromMarkdown(sourceMarkdown, staleDoc)
+
+    expect(restored.changed).toBe(true)
+    expect(restored.doc.content?.[1]?.content?.[0]?.text).toBe("로그인 -> 세션 생성 -> 이후 요청에서 세션 확인")
+    expect(restored.doc.content?.[2]?.content?.[0]?.text).toContain("return new Token(access, refresh);")
   })
 
   test("dedicated editor 나가기는 returnTo 복귀를 replace로 처리해 editor history 엔트리를 남기지 않는다", () => {

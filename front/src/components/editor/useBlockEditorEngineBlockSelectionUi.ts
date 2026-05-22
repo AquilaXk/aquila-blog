@@ -1,5 +1,5 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
-import { useCallback, useEffect, useLayoutEffect } from "react"
+import { useCallback } from "react"
 import type {
   Dispatch,
   KeyboardEvent as ReactKeyboardEvent,
@@ -15,32 +15,22 @@ import {
   BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX,
   getTopLevelBlockIndexFromSelection,
   isTabBlockSelectionEligible,
-  isStableBlockHandleState,
-  isStableBlockSelectionOverlayState,
   type BlockSelectionOverlayState,
   type BlockSelectionPointerEventLike,
   type TopLevelBlockHandleState,
 } from "./blockSelectionModel"
 import {
-  resolveBlockHandleAnchorTop,
-  resolveBlockChromeTop,
-  resolveBlockHandleRailLayoutForSurface,
-  resolveBlockSelectionOverlayLayout,
-  resolveThinBlockHandleAnchorTop,
   preserveWindowScrollForEditorPointerFocus,
-  shouldCenterBlockHandleForNode,
-  shouldUseThinBlockHandleAnchor,
 } from "./blockHandleLayoutModel"
 import {
-  LIST_ITEM_SELECTOR,
   type NestedListItemContext,
-  isSameNestedListItemContext,
   selectNestedListItemNode,
   selectNestedListItemTextAnchor,
 } from "./nestedListItemModel"
 import { isTableSelectionActive } from "./tableStructureModel"
 import type { DraggedBlockState, DropIndicatorState } from "./blockDragModel"
 import type { BlockEditorBlockMenuState, BlockEditorSlashMenuState } from "./BlockEditorEngine.layers"
+import { useBlockEditorEngineBlockSelectionLayout } from "./useBlockEditorEngineBlockSelectionLayout"
 
 type SetState<T> = Dispatch<SetStateAction<T>>
 
@@ -128,8 +118,6 @@ type UseBlockEditorEngineBlockSelectionUiArgs = {
   viewportRef: RefObject<HTMLDivElement | null>
 }
 
-const useBlockSelectionLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect
-
 export const useBlockEditorEngineBlockSelectionUi = ({
   blockHandleRailMetricsRef,
   blockHandleState,
@@ -203,153 +191,16 @@ export const useBlockEditorEngineBlockSelectionUi = ({
   textSelectionBlockIndex,
   viewportRef,
 }: UseBlockEditorEngineBlockSelectionUiArgs) => {
-  useBlockSelectionLayoutEffect(() => {
-    if (!editor) return
-    const viewportRect = viewportRef.current?.getBoundingClientRect() ?? null
-    const handlePositionMode = isCoarsePointer ? "viewport" : "editor-local"
-    const rectCache = blockSelectionLayoutRectCacheRef.current
-    rectCache.clear()
-    const selectedNestedListItemContext = resolveEffectiveSelectedListItemContext(editor)
-    const resolveCachedBlockRect = (index: number) => {
-      const cached = rectCache.get(index)
-      if (cached) return cached
-      const element = getTopLevelBlockElementByIndex(index)
-      if (!element) return null
-      const next = { element, rect: element.getBoundingClientRect() }
-      rectCache.set(index, next)
-      return next
-    }
-    if (selectedNestedListItemContext?.listItemElement?.isConnected) {
-      const rect = selectedNestedListItemContext.listItemElement.getBoundingClientRect()
-      const nextOverlayState: BlockSelectionOverlayState = resolveBlockSelectionOverlayLayout(rect, viewportRect)
-      setBlockSelectionOverlayState((prev) =>
-        isStableBlockSelectionOverlayState(prev, nextOverlayState) ? prev : nextOverlayState
-      )
-    } else {
-      const overlayIndex =
-        selectedBlockNodeIndex !== null
-          ? selectedBlockNodeIndex
-          : clickedBlockIndex
-      if (overlayIndex === null) {
-        setBlockSelectionOverlayState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
-      } else {
-        const overlayTarget = resolveCachedBlockRect(overlayIndex)
-        if (!overlayTarget) {
-          setBlockSelectionOverlayState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
-        } else {
-          const { rect } = overlayTarget
-          const nextOverlayState: BlockSelectionOverlayState = resolveBlockSelectionOverlayLayout(rect, viewportRect)
-          setBlockSelectionOverlayState((prev) =>
-            isStableBlockSelectionOverlayState(prev, nextOverlayState) ? prev : nextOverlayState
-          )
-        }
-      }
-    }
-
-    const stickySelectionActive =
-      !isCoarsePointer && selectedBlockNodeIndex !== null && keyboardBlockSelectionStickyRef.current
-    const effectiveSelectedListItemContext = resolveEffectiveSelectedListItemContext(editor)
-    const activeListItemContext =
-      hoveredListItemContext?.listItemElement?.isConnected
-        ? hoveredListItemContext
-        : effectiveSelectedListItemContext?.listItemElement?.isConnected
-          ? effectiveSelectedListItemContext
-          : null
-    const blockIndex = activeListItemContext
-      ? activeListItemContext.listBlockIndex
-      : isCoarsePointer
-        ? selectedBlockIndex
-        : stickySelectionActive
-          ? selectedBlockNodeIndex
-          : textSelectionBlockIndex ?? hoveredBlockIndex
-    const hideBlockHandle = () =>
-      setBlockHandleState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
-    const hasOuterBlockSelectionIntent = blockIndex !== null
-    if (
-      (isTableStructuralSelection && !hasOuterBlockSelectionIntent) ||
-      (isTableAffordanceVisible && !hasOuterBlockSelectionIntent) ||
-      tableMenuState
-    ) {
-      hideBlockHandle()
-      return
-    }
-    if (blockIndex === null) {
-      hideBlockHandle()
-      return
-    }
-    const { width: railWidth, height: railHeight } = blockHandleRailMetricsRef.current
-    if (activeListItemContext?.listItemElement?.isConnected) {
-      const rect = activeListItemContext.listItemElement.getBoundingClientRect()
-      const railLayout = resolveBlockHandleRailLayoutForSurface(
-        rect,
-        railWidth,
-        railHeight,
-        resolveBlockHandleAnchorTop(activeListItemContext.listItemElement, railHeight),
-        viewportRect,
-        handlePositionMode
-      )
-      const nextState: TopLevelBlockHandleState = {
-        visible: true,
-        kind: "list-item",
-        blockIndex: activeListItemContext.listBlockIndex,
-        listPath: [...activeListItemContext.listPath],
-        itemIndex: activeListItemContext.itemIndex,
-        left: railLayout.left,
-        top: railLayout.top,
-        bottom: resolveBlockChromeTop(rect.bottom + 12, viewportRect, handlePositionMode),
-        width: rect.width,
-      }
-      setBlockHandleState((prev) => (isStableBlockHandleState(prev, nextState) ? prev : nextState))
-      rectCache.clear()
-      return
-    }
-
-    const blockTarget = resolveCachedBlockRect(blockIndex)
-    const blockElement = blockTarget?.element ?? null
-    const canShowHandle = isTopLevelBlockHandleEligible(blockIndex)
-    const shouldShow = Boolean(blockElement && canShowHandle && (isCoarsePointer || stickySelectionActive || textSelectionBlockIndex !== null || hoveredBlockIndex !== null))
-
-    if (!shouldShow || !blockElement) {
-      hideBlockHandle()
-      return
-    }
-
-    const rect = blockTarget?.rect ?? blockElement.getBoundingClientRect()
-    const blocks = ((editor.getJSON() as BlockEditorDoc).content ?? []) as BlockEditorDoc[]
-    const blockNode = blocks[blockIndex]
-    const anchoredTop = shouldUseThinBlockHandleAnchor(blockNode)
-      ? resolveThinBlockHandleAnchorTop(blockElement, railHeight)
-      : shouldCenterBlockHandleForNode(blockNode)
-        ? resolveBlockHandleAnchorTop(blockElement, railHeight)
-        : rect.top + 6
-    const railLayout = resolveBlockHandleRailLayoutForSurface(
-      rect,
-      railWidth,
-      railHeight,
-      anchoredTop,
-      viewportRect,
-      handlePositionMode
-    )
-    const nextState: TopLevelBlockHandleState = {
-      visible: true,
-      kind: "top-level",
-      blockIndex,
-      listPath: [],
-      itemIndex: null,
-      left: railLayout.left,
-      top: railLayout.top,
-      bottom: resolveBlockChromeTop(rect.bottom + 12, viewportRect, handlePositionMode),
-      width: rect.width,
-    }
-
-    setBlockHandleState((prev) => (isStableBlockHandleState(prev, nextState) ? prev : nextState))
-    rectCache.clear()
-  }, [
+  useBlockEditorEngineBlockSelectionLayout({
     blockHandleRailMetricsRef,
     blockSelectionLayoutRectCacheRef,
     clickedBlockIndex,
+    draggedBlockState,
+    dropIndicatorState,
     editor,
+    getContentRoot,
     getTopLevelBlockElementByIndex,
+    getTopLevelBlockElements,
     hoveredBlockIndex,
     hoveredListItemContext,
     isCoarsePointer,
@@ -366,65 +217,7 @@ export const useBlockEditorEngineBlockSelectionUi = ({
     tableMenuState,
     textSelectionBlockIndex,
     viewportRef,
-  ])
-
-  useEffect(() => {
-    const elements = getTopLevelBlockElements()
-    const root = getContentRoot()
-    const listItems = root ? Array.from(root.querySelectorAll<HTMLElement>(LIST_ITEM_SELECTOR)) : []
-
-    elements.forEach((element, index) => {
-      if (hoveredListItemContext) {
-        element.removeAttribute("data-block-hovered")
-      } else if (index === hoveredBlockIndex && !draggedBlockState) {
-        element.setAttribute("data-block-hovered", "true")
-      } else {
-        element.removeAttribute("data-block-hovered")
-      }
-
-      if (draggedBlockState && index === draggedBlockState.sourceIndex) {
-        element.setAttribute("data-block-dragging", "true")
-      } else {
-        element.removeAttribute("data-block-dragging")
-      }
-
-      element.removeAttribute("data-block-drop-target")
-    })
-
-    listItems.forEach((element) => {
-      if (
-        hoveredListItemContext &&
-        !draggedBlockState &&
-        isSameNestedListItemContext(hoveredListItemContext, {
-          ...hoveredListItemContext,
-          listItemElement: element,
-          listElement: hoveredListItemContext.listElement,
-          listItems: hoveredListItemContext.listItems,
-        }) &&
-        element === hoveredListItemContext.listItemElement
-      ) {
-        element.setAttribute("data-block-hovered", "true")
-      } else {
-        element.removeAttribute("data-block-hovered")
-      }
-
-      element.removeAttribute("data-block-dragging")
-      element.removeAttribute("data-block-drop-target")
-    })
-
-    return () => {
-      elements.forEach((element) => {
-        element.removeAttribute("data-block-hovered")
-        element.removeAttribute("data-block-dragging")
-        element.removeAttribute("data-block-drop-target")
-      })
-      listItems.forEach((element) => {
-        element.removeAttribute("data-block-hovered")
-        element.removeAttribute("data-block-dragging")
-        element.removeAttribute("data-block-drop-target")
-      })
-    }
-  }, [draggedBlockState, dropIndicatorState.insertionIndex, getContentRoot, getTopLevelBlockElements, hoveredBlockIndex, hoveredListItemContext])
+  })
 
   const syncViewportHoverState = useCallback(
     (targetEvent: EventTarget | null, clientX: number, clientY: number) => {

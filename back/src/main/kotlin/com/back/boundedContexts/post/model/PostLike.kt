@@ -21,7 +21,7 @@ import org.hibernate.annotations.DynamicUpdate
 )
 @Table(
     uniqueConstraints = [
-        UniqueConstraint(columnNames = ["liker_id", "post_id"]),
+        UniqueConstraint(name = "uk_post_like_liker_post", columnNames = ["liker_id", "post_id"]),
     ],
 )
 class PostLike(

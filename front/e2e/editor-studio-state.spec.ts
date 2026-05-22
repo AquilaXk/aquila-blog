@@ -131,10 +131,18 @@ test.describe("editor studio state", () => {
 
   test("editor studio와 BlockEditorEngine은 v2 단일 경로와 단일 작성 모드 계약을 유지한다", () => {
     const editorStudioPageSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
-    const editorStudioSource = readFileSync(
+    const editorStudioControllerSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceController.tsx"),
       "utf8"
     )
+    const editorStudioRootPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioWorkspaceControllerRoot.tsx"
+    )
+    expect(existsSync(editorStudioRootPath)).toBe(true)
+    const editorStudioSource = existsSync(editorStudioRootPath)
+      ? readFileSync(editorStudioRootPath, "utf8")
+      : editorStudioControllerSource
     const dedicatedEditorSurfacePath = path.resolve(
       __dirname,
       "../src/routes/Admin/EditorStudioDedicatedEditorSurface.tsx"
@@ -1073,6 +1081,8 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).toContain('import { useEditorStudioPublishModalFlow } from "./useEditorStudioPublishModalFlow"')
     expect(editorStudioPageSource).toContain('import { EditorStudioWorkspaceController } from "./EditorStudioWorkspaceController"')
     expect(editorStudioPageSource.split("\n").length).toBeLessThanOrEqual(1500)
+    expect(editorStudioControllerSource.split("\n").length).toBeLessThanOrEqual(1000)
+    expect(editorStudioControllerSource).toContain('from "./EditorStudioWorkspaceControllerRoot"')
     expect(editorStudioSource).not.toContain("const loadAdminPosts = useCallback(")
     expect(editorStudioSource).not.toContain("const deletePostsFromList = async")
     expect(editorStudioSource).not.toContain("const restoreDeletedPostFromList = useCallback(")

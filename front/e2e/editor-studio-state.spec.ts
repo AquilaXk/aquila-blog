@@ -182,6 +182,14 @@ test.describe("editor studio state", () => {
     const editorStudioMetaModelSource = existsSync(editorStudioMetaModelPath)
       ? readFileSync(editorStudioMetaModelPath, "utf8")
       : ""
+    const editorStudioMetaModelHelpersPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/editorStudioMetaModelHelpers.ts"
+    )
+    expect(existsSync(editorStudioMetaModelHelpersPath)).toBe(true)
+    const editorStudioMetaModelHelpersSource = existsSync(editorStudioMetaModelHelpersPath)
+      ? readFileSync(editorStudioMetaModelHelpersPath, "utf8")
+      : ""
     const editorStudioStorageModelPath = path.resolve(
       __dirname,
       "../src/routes/Admin/editorStudioStorageModel.ts"
@@ -269,6 +277,14 @@ test.describe("editor studio state", () => {
     expect(existsSync(editorStudioComposeAssistantPanelPath)).toBe(true)
     const editorStudioComposeAssistantPanelSource = existsSync(editorStudioComposeAssistantPanelPath)
       ? readFileSync(editorStudioComposeAssistantPanelPath, "utf8")
+      : ""
+    const editorStudioComposeAssistantPanelPartsPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioComposeAssistantPanelParts.tsx"
+    )
+    expect(existsSync(editorStudioComposeAssistantPanelPartsPath)).toBe(true)
+    const editorStudioComposeAssistantPanelPartsSource = existsSync(editorStudioComposeAssistantPanelPartsPath)
+      ? readFileSync(editorStudioComposeAssistantPanelPartsPath, "utf8")
       : ""
     const editorStudioMetadataAssistantPanelPath = path.resolve(
       __dirname,
@@ -793,8 +809,9 @@ test.describe("editor studio state", () => {
       'import { EditorStudioComposeAssistantPanel } from "./EditorStudioComposeAssistantPanel"'
     )
     expect(editorStudioComposeWorkspaceSource.match(/<EditorStudioComposeAssistantPanel/g)?.length).toBe(1)
-    expect(editorStudioComposeAssistantPanelSource).toContain("const ComposeAssistantPanel = styled.div`")
-    expect(editorStudioComposeAssistantPanelSource).toContain("const PreviewResultCard = styled.article`")
+    expect(editorStudioComposeAssistantPanelSource).toContain('from "./EditorStudioComposeAssistantPanelParts"')
+    expect(editorStudioComposeAssistantPanelPartsSource).toContain("export const ComposeAssistantPanel = styled.div`")
+    expect(editorStudioComposeAssistantPanelPartsSource).toContain("export const PreviewResultCard = styled.article`")
     expect(editorStudioSource).not.toContain("const ComposeAssistantPanel = styled.div`")
     expect(editorStudioSource).not.toContain("const PreviewResultCard = styled.article`")
     expect(editorStudioSource).not.toContain("const PublishSettingsSummary = styled.div`")
@@ -1081,13 +1098,14 @@ test.describe("editor studio state", () => {
     expect(editorStudioMetaModelSource).toContain("export type LocalDraftPayload =")
     expect(editorStudioMetaModelSource).toContain("export const PREVIEW_SUMMARY_MAX_LENGTH = 150")
     expect(editorStudioMetaModelSource).toContain("export const PREVIEW_SUMMARY_MAX_CONTENT_LENGTH = 50_000")
-    expect(editorStudioMetaModelSource).toContain("export const dedupeStrings =")
+    expect(editorStudioMetaModelSource).toContain('from "./editorStudioMetaModelHelpers"')
+    expect(editorStudioMetaModelHelpersSource).toContain("export const dedupeStrings =")
     expect(editorStudioMetaModelSource).toContain("export const extractFirstMarkdownImage =")
     expect(editorStudioMetaModelSource).toContain("export const computeContentFingerprint =")
     expect(editorStudioMetaModelSource).toContain("export const normalizeSafeImageUrl =")
     expect(editorStudioMetaModelSource).toContain("export const normalizeSafePreviewThumbnailUrl =")
     expect(editorStudioMetaModelSource).toContain("export const makePreviewSummary =")
-    expect(editorStudioMetaModelSource).toContain("export const normalizeRecommendedTags =")
+    expect(editorStudioMetaModelHelpersSource).toContain("export const normalizeRecommendedTags =")
     expect(editorStudioMetaModelSource).toContain("export const resolveTagRecommendationErrorMessage =")
     expect(editorStudioMetaModelSource).toContain("export const formatTagRecommendationReason =")
     expect(editorStudioMetaModelSource).toContain("export const restoreEmptyFencedCodeBlocks =")
@@ -2209,6 +2227,10 @@ test.describe("editor studio state", () => {
       path.resolve(__dirname, "../src/routes/Admin/useEditorStudioPersistence.ts"),
       "utf8"
     )
+    const editorStudioPersistenceModelSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/useEditorStudioPersistenceModel.ts"),
+      "utf8"
+    )
     const editorStudioModelSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceControllerRootModel.ts"),
       "utf8"
@@ -2223,9 +2245,10 @@ test.describe("editor studio state", () => {
     expect(editorStudioRootViewSource).toContain("onThumbnailPaste={handleThumbnailPaste}")
     expect(editorStudioThumbnailPanelsSource).toContain("<PreviewEditorSection onPasteCapture={onThumbnailPaste}>")
     expect(editorStudioThumbnailPanelsSource).toContain("onPaste={onThumbnailPaste}")
-    expect(editorStudioPersistenceSource).toContain("const handleThumbnailPaste = useCallback(")
-    expect(editorStudioPersistenceSource).toContain("setThumbnailImageFileName(imageFile.name || \"clipboard-image.png\")")
-    expect(editorStudioPersistenceSource).toContain("void handleUploadThumbnailImage(imageFile)")
+    expect(editorStudioPersistenceSource).toContain('from "./useEditorStudioPersistenceModel"')
+    expect(editorStudioPersistenceModelSource).toContain("const handleThumbnailPaste = useCallback(")
+    expect(editorStudioPersistenceModelSource).toContain("setThumbnailImageFileName(imageFile.name || \"clipboard-image.png\")")
+    expect(editorStudioPersistenceModelSource).toContain("void handleUploadThumbnailImage(imageFile)")
   })
 
   test("QA route는 writer/engine surface 계약을 분리 유지한다", () => {
@@ -2315,5 +2338,43 @@ test.describe("editor studio state", () => {
     expect(dedicatedSurfacePartsSource).toContain("export const EditorStudioDedicatedTopBar =")
     expect(dedicatedSurfacePartsSource).toContain("export const EditorStudioDedicatedMetaSection =")
     expect(dedicatedSurfacePartsSource).toContain("export const EditorStudioDedicatedCanvasSection =")
+  })
+
+  test("EditorStudio 잔여 hooks와 panels는 600 line companion budget을 유지한다", () => {
+    const routeAdminDir = path.resolve(__dirname, "../src/routes/Admin")
+    const residualFiles = [
+      "useEditorStudioPersistence.ts",
+      "EditorStudioComposeAssistantPanel.tsx",
+      "useEditorStudioDraftLifecycle.ts",
+      "editorStudioMetaModel.ts",
+    ]
+    const companionFiles = [
+      "useEditorStudioPersistenceModel.ts",
+      "EditorStudioComposeAssistantPanelParts.tsx",
+      "useEditorStudioDraftLifecycleModel.ts",
+      "editorStudioMetaModelHelpers.ts",
+    ]
+
+    for (const residualFile of residualFiles) {
+      const source = readFileSync(path.join(routeAdminDir, residualFile), "utf8")
+      expect(source.split("\n").length, `${residualFile} should stay under the residual budget`).toBeLessThanOrEqual(600)
+    }
+
+    for (const companionFile of companionFiles) {
+      const companionPath = path.join(routeAdminDir, companionFile)
+      expect(existsSync(companionPath), `${companionFile} should own extracted residual responsibility`).toBe(true)
+      const source = readFileSync(companionPath, "utf8")
+      expect(source.split("\n").length, `${companionFile} should stay under the companion budget`).toBeLessThanOrEqual(600)
+    }
+
+    const persistenceSource = readFileSync(path.join(routeAdminDir, "useEditorStudioPersistence.ts"), "utf8")
+    const draftLifecycleSource = readFileSync(path.join(routeAdminDir, "useEditorStudioDraftLifecycle.ts"), "utf8")
+    const composeAssistantSource = readFileSync(path.join(routeAdminDir, "EditorStudioComposeAssistantPanel.tsx"), "utf8")
+    const metaModelSource = readFileSync(path.join(routeAdminDir, "editorStudioMetaModel.ts"), "utf8")
+
+    expect(persistenceSource).toContain('from "./useEditorStudioPersistenceModel"')
+    expect(draftLifecycleSource).toContain('from "./useEditorStudioDraftLifecycleModel"')
+    expect(composeAssistantSource).toContain('from "./EditorStudioComposeAssistantPanelParts"')
+    expect(metaModelSource).toContain('from "./editorStudioMetaModelHelpers"')
   })
 })

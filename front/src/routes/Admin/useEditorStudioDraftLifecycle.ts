@@ -1,8 +1,6 @@
 import type { NextRouter } from "next/router"
 import {
   useCallback,
-  useEffect,
-  useMemo,
   type Dispatch,
   type MutableRefObject,
   type SetStateAction,
@@ -10,6 +8,7 @@ import {
 import { apiFetch } from "src/apis/backend/client"
 import { replaceRoute } from "src/libs/router"
 import { isServerTempDraftPost } from "./editorTempDraft"
+import { useEditorStudioLocalDraftLifecycle } from "./useEditorStudioDraftLifecycleModel"
 
 type StudioSetState<T> = Dispatch<SetStateAction<T>>
 type NoticeTone = "idle" | "loading" | "success" | "error"
@@ -215,133 +214,31 @@ export const useEditorStudioDraftLifecycle = ({
   toEditorPostRoute,
   toVisibility,
 }: UseEditorStudioDraftLifecycleParams) => {
-  const localDraftCore = useMemo(
-    () => ({
-      title: postTitle,
-      content: postContent,
-      summary: postSummary,
-      thumbnailUrl: postThumbnailUrl,
-      thumbnailFocusX: postThumbnailFocusX,
-      thumbnailFocusY: postThumbnailFocusY,
-      thumbnailZoom: postThumbnailZoom,
-      tags: dedupeStrings(postTags),
-      category: postCategory ? normalizeCategoryValue(postCategory) : "",
-      visibility: postVisibility,
-    }),
-    [
-      dedupeStrings,
-      normalizeCategoryValue,
-      postCategory,
-      postContent,
-      postSummary,
-      postTags,
-      postThumbnailFocusX,
-      postThumbnailFocusY,
-      postThumbnailUrl,
-      postThumbnailZoom,
-      postTitle,
-      postVisibility,
-    ]
-  )
-
-  const localDraftFingerprint = useMemo(
-    () => buildLocalDraftFingerprint(localDraftCore),
-    [buildLocalDraftFingerprint, localDraftCore]
-  )
-
-  const saveLocalDraft = useCallback((options?: { silent?: boolean }) => {
-    if (lastLocalDraftFingerprintRef.current === localDraftFingerprint) {
-      return
-    }
-
-    const payload: LocalDraftPayload = {
-      ...localDraftCore,
-      savedAt: new Date().toISOString(),
-    }
-
-    persistLocalDraft(payload)
-    lastLocalDraftFingerprintRef.current = localDraftFingerprint
-    setLocalDraftSavedAt(payload.savedAt)
-
-    if (!options?.silent) {
-      setPublishStatus(
-        {
-          tone: "success",
-          text: `브라우저 임시저장 완료 (${payload.savedAt.slice(11, 16)})`,
-        },
-        "page"
-      )
-    }
-  }, [
-    lastLocalDraftFingerprintRef,
-    localDraftCore,
+  const {
     localDraftFingerprint,
-    persistLocalDraft,
-    setLocalDraftSavedAt,
-    setPublishStatus,
-  ])
-
-  const restoreLocalDraft = useCallback(() => {
-    const draft = readLocalDraft()
-    if (!draft) {
-      setPublishStatus(
-        {
-          tone: "error",
-          text: "저장된 브라우저 임시글이 없습니다.",
-        },
-        "page"
-      )
-      return
-    }
-
-    setEditorMode("create")
-    setIsTempDraftMode(false)
-    setPostId("")
-    setPostVersion(null)
-    lastWriteFingerprintRef.current = ""
-    lastWriteIdempotencyKeyRef.current = ""
-    lastLocalDraftFingerprintRef.current = buildLocalDraftFingerprint({
-      title: draft.title,
-      content: draft.content,
-      summary: draft.summary,
-      thumbnailUrl: draft.thumbnailUrl,
-      thumbnailFocusX: draft.thumbnailFocusX,
-      thumbnailFocusY: draft.thumbnailFocusY,
-      thumbnailZoom: draft.thumbnailZoom,
-      tags: dedupeStrings(draft.tags),
-      category: draft.category ? normalizeCategoryValue(draft.category) : "",
-      visibility: draft.visibility,
-    })
-
-    setPostTitle(draft.title)
-    setPostContent(draft.content)
-    setPostSummary(draft.summary)
-    setPostThumbnailUrl(draft.thumbnailUrl)
-    setPostThumbnailFocusX(draft.thumbnailFocusX)
-    setPostThumbnailFocusY(draft.thumbnailFocusY)
-    setPostThumbnailZoom(draft.thumbnailZoom)
-    setPreviewThumbnailSourceUrl("")
-    setPostTags(draft.tags)
-    setPostCategory(draft.category)
-    setPostVisibility(draft.visibility)
-
-    setKnownTags((prev) => dedupeStrings([...prev, ...draft.tags]).sort((a, b) => a.localeCompare(b)))
-    setLocalDraftSavedAt(draft.savedAt || "")
-    setPublishStatus(
-      {
-        tone: "success",
-        text: `브라우저 임시글을 불러왔습니다${draft.savedAt ? ` (${draft.savedAt.slice(11, 16)})` : ""}.`,
-      },
-      "page"
-    )
-  }, [
+    saveLocalDraft,
+    restoreLocalDraft,
+    clearLocalDraft,
+  } = useEditorStudioLocalDraftLifecycle({
     buildLocalDraftFingerprint,
     dedupeStrings,
     lastLocalDraftFingerprintRef,
     lastWriteFingerprintRef,
     lastWriteIdempotencyKeyRef,
     normalizeCategoryValue,
+    persistLocalDraft,
+    postCategory,
+    postContent,
+    postSummary,
+    postTags,
+    postThumbnailFocusX,
+    postThumbnailFocusY,
+    postThumbnailUrl,
+    postThumbnailZoom,
+    postTitle,
+    postVisibility,
     readLocalDraft,
+    removeLocalDraft,
     setEditorMode,
     setIsTempDraftMode,
     setKnownTags,
@@ -360,20 +257,7 @@ export const useEditorStudioDraftLifecycle = ({
     setPostVisibility,
     setPreviewThumbnailSourceUrl,
     setPublishStatus,
-  ])
-
-  const clearLocalDraft = useCallback(() => {
-    removeLocalDraft()
-    lastLocalDraftFingerprintRef.current = ""
-    setLocalDraftSavedAt("")
-    setPublishStatus(
-      {
-        tone: "success",
-        text: "브라우저 임시저장을 삭제했습니다.",
-      },
-      "page"
-    )
-  }, [lastLocalDraftFingerprintRef, removeLocalDraft, setLocalDraftSavedAt, setPublishStatus])
+  })
 
   const switchToCreateMode = useCallback((options?: { keepContent?: boolean }) => {
     const keepContent = options?.keepContent ?? true
@@ -636,63 +520,6 @@ export const useEditorStudioDraftLifecycle = ({
     toEditorPostRoute,
     toVisibility,
     loadExistingTempPostForRecovery,
-  ])
-
-  useEffect(() => {
-    const localDraft = readLocalDraft()
-    if (!localDraft?.savedAt) return
-
-    lastLocalDraftFingerprintRef.current = buildLocalDraftFingerprint({
-      title: localDraft.title,
-      content: localDraft.content,
-      summary: localDraft.summary,
-      thumbnailUrl: localDraft.thumbnailUrl,
-      thumbnailFocusX: localDraft.thumbnailFocusX,
-      thumbnailFocusY: localDraft.thumbnailFocusY,
-      thumbnailZoom: localDraft.thumbnailZoom,
-      tags: dedupeStrings(localDraft.tags),
-      category: localDraft.category ? normalizeCategoryValue(localDraft.category) : "",
-      visibility: localDraft.visibility,
-    })
-    setLocalDraftSavedAt(localDraft.savedAt)
-  }, [
-    buildLocalDraftFingerprint,
-    dedupeStrings,
-    lastLocalDraftFingerprintRef,
-    normalizeCategoryValue,
-    readLocalDraft,
-    setLocalDraftSavedAt,
-  ])
-
-  useEffect(() => {
-    const hasDraftContent =
-      postTitle.trim().length > 0 ||
-      postContent.trim().length > 0 ||
-      postSummary.trim().length > 0 ||
-      postThumbnailUrl.trim().length > 0 ||
-      postTags.length > 0 ||
-      postCategory.trim().length > 0
-
-    if (!hasDraftContent) return
-    if (lastLocalDraftFingerprintRef.current === localDraftFingerprint) return
-
-    const timerId = window.setTimeout(() => {
-      saveLocalDraft({ silent: true })
-    }, 1200)
-
-    return () => {
-      window.clearTimeout(timerId)
-    }
-  }, [
-    lastLocalDraftFingerprintRef,
-    localDraftFingerprint,
-    postCategory,
-    postContent,
-    postSummary,
-    postTags,
-    postThumbnailUrl,
-    postTitle,
-    saveLocalDraft,
   ])
 
   return {

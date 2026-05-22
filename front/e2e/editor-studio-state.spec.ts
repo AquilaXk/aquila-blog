@@ -1712,14 +1712,36 @@ test.describe("editor studio state", () => {
       path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.layers.tsx"),
       "utf8"
     )
-    const blockEditorTableOverlayLayerSource = readFileSync(
+    const blockEditorTableOverlayLayerRootSource = readFileSync(
       path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tableOverlayLayer.tsx"),
       "utf8"
     )
-    const blockEditorTableOverlayControllerSource = readFileSync(
+    const blockEditorTableOverlayRailsSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tableOverlayRails.tsx"),
+      "utf8"
+    )
+    const blockEditorTableOverlayMenusSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tableOverlayMenus.tsx"),
+      "utf8"
+    )
+    const blockEditorTableOverlayLayerSource = `${blockEditorTableOverlayLayerRootSource}\n${blockEditorTableOverlayRailsSource}\n${blockEditorTableOverlayMenusSource}`
+    const blockEditorTableOverlayControllerRootSource = readFileSync(
       path.resolve(__dirname, "../src/components/editor/useBlockEditorTableOverlayController.ts"),
       "utf8"
     )
+    const blockEditorTableOverlayControllerStateSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/useBlockEditorTableOverlayControllerState.ts"),
+      "utf8"
+    )
+    const blockEditorTableOverlayControllerCommandsSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/useBlockEditorTableOverlayControllerCommands.ts"),
+      "utf8"
+    )
+    const blockEditorTableOverlayControllerEffectsSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/useBlockEditorTableOverlayControllerEffects.ts"),
+      "utf8"
+    )
+    const blockEditorTableOverlayControllerSource = `${blockEditorTableOverlayControllerRootSource}\n${blockEditorTableOverlayControllerStateSource}\n${blockEditorTableOverlayControllerCommandsSource}\n${blockEditorTableOverlayControllerEffectsSource}`
     const blockEditorTableOverlayDomAdapterSource = readFileSync(
       path.resolve(__dirname, "../src/components/editor/useBlockEditorTableOverlayDomAdapter.ts"),
       "utf8"
@@ -2076,6 +2098,39 @@ test.describe("editor studio state", () => {
         expect(controllerSource).not.toContain(snippet)
       })
     })
+  })
+
+  test("table overlay residual modules는 600 line companion budget을 유지한다", () => {
+    const editorDir = path.resolve(__dirname, "../src/components/editor")
+    const residualFiles = [
+      "BlockEditorEngine.tableOverlayLayer.tsx",
+      "useBlockEditorTableOverlayController.ts",
+    ]
+    const companionFiles = [
+      "BlockEditorEngine.tableOverlayMenus.tsx",
+      "BlockEditorEngine.tableOverlayRails.tsx",
+      "useBlockEditorTableOverlayControllerState.ts",
+      "useBlockEditorTableOverlayControllerCommands.ts",
+    ]
+
+    for (const residualFile of residualFiles) {
+      const source = readFileSync(path.join(editorDir, residualFile), "utf8")
+      expect(source.split("\n").length, `${residualFile} should stay under the residual budget`).toBeLessThanOrEqual(600)
+    }
+
+    for (const companionFile of companionFiles) {
+      const companionPath = path.join(editorDir, companionFile)
+      expect(existsSync(companionPath), `${companionFile} should own extracted table overlay responsibility`).toBe(true)
+      const source = readFileSync(companionPath, "utf8")
+      expect(source.split("\n").length, `${companionFile} should stay under the companion budget`).toBeLessThanOrEqual(600)
+    }
+
+    const overlayLayerSource = readFileSync(path.join(editorDir, "BlockEditorEngine.tableOverlayLayer.tsx"), "utf8")
+    const controllerSource = readFileSync(path.join(editorDir, "useBlockEditorTableOverlayController.ts"), "utf8")
+    expect(overlayLayerSource).toContain('from "./BlockEditorEngine.tableOverlayMenus"')
+    expect(overlayLayerSource).toContain('from "./BlockEditorEngine.tableOverlayRails"')
+    expect(controllerSource).toContain('from "./useBlockEditorTableOverlayControllerState"')
+    expect(controllerSource).toContain('from "./useBlockEditorTableOverlayControllerCommands"')
   })
 
   test("engine controller는 책임별 module과 1000 line budget을 유지한다", () => {

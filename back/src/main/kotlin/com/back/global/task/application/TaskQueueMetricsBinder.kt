@@ -4,6 +4,7 @@ import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.binder.MeterBinder
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import java.util.concurrent.atomic.AtomicLong
@@ -15,6 +16,10 @@ import java.util.concurrent.atomic.AtomicLong
 @Component
 class TaskQueueMetricsBinder(
     private val taskQueueDiagnosticsService: TaskQueueDiagnosticsService,
+    @Value("\${custom.runtime.workerEnabled:true}")
+    private val workerEnabled: Boolean,
+    @Value("\${custom.task.metrics.refreshEnabled:true}")
+    private val refreshEnabled: Boolean,
 ) : MeterBinder {
     private val logger = LoggerFactory.getLogger(TaskQueueMetricsBinder::class.java)
 
@@ -48,8 +53,12 @@ class TaskQueueMetricsBinder(
      * 메트릭/상태 스냅샷을 갱신해 관측 지표를 최신화합니다.
      * 애플리케이션 계층에서 트랜잭션 경계와 후속 처리(캐시/큐/이벤트)를 함께 관리합니다.
      */
-    @Scheduled(fixedDelayString = "\${custom.task.metrics.refreshFixedDelayMs:15000}")
+    @Scheduled(fixedDelayString = "\${custom.task.metrics.refreshFixedDelayMs:60000}")
     fun refreshSnapshot() {
+        if (!refreshEnabled || !workerEnabled) {
+            return
+        }
+
         runCatching { taskQueueDiagnosticsService.diagnoseQueue() }
             .onSuccess { diagnostics ->
                 pending.set(diagnostics.pendingCount)

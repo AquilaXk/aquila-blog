@@ -240,6 +240,12 @@ CREATE INDEX IF NOT EXISTS idx_post_title_content_pgroonga
 CREATE INDEX IF NOT EXISTS post_comment_idx_subtree_active
     ON post_comment (post_id, parent_comment_id, created_at ASC, id ASC)
     WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS post_comment_idx_author_id
+    ON post_comment (author_id);
+CREATE INDEX IF NOT EXISTS post_comment_idx_post_id
+    ON post_comment (post_id);
+CREATE INDEX IF NOT EXISTS post_comment_idx_parent_comment_id
+    ON post_comment (parent_comment_id);
 
 CREATE INDEX IF NOT EXISTS post_like_uidx_liker_post
     ON post_like (liker_id, post_id);
@@ -250,6 +256,15 @@ CREATE INDEX IF NOT EXISTS member_notification_idx_receiver_unread_created_at_de
     ON member_notification (receiver_id, read_at, created_at DESC);
 CREATE INDEX IF NOT EXISTS member_notification_idx_receiver_id_asc
     ON member_notification (receiver_id, id ASC);
+CREATE INDEX IF NOT EXISTS member_notification_idx_actor_id
+    ON member_notification (actor_id);
+
+CREATE INDEX IF NOT EXISTS member_action_log_idx_primary_owner_id
+    ON member_action_log (primary_owner_id);
+CREATE INDEX IF NOT EXISTS member_action_log_idx_secondary_owner_id
+    ON member_action_log (secondary_owner_id);
+CREATE INDEX IF NOT EXISTS member_action_log_idx_actor_id
+    ON member_action_log (actor_id);
 
 CREATE INDEX IF NOT EXISTS member_signup_verification_idx_email_created_at_desc
     ON member_signup_verification (email, created_at DESC);

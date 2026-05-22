@@ -77,6 +77,8 @@ BEGIN
             ON member_notification (receiver_id, created_at DESC);
         CREATE INDEX IF NOT EXISTS member_notification_idx_receiver_unread_created_at_desc
             ON member_notification (receiver_id, read_at, created_at DESC);
+        CREATE INDEX IF NOT EXISTS member_notification_idx_actor_id
+            ON member_notification (actor_id);
     END IF;
 
     IF to_regclass('public.member_session') IS NOT NULL THEN
@@ -109,6 +111,8 @@ BEGIN
             ON post_comment (post_id);
         CREATE INDEX IF NOT EXISTS post_comment_idx_parent_comment_id
             ON post_comment (parent_comment_id);
+        CREATE INDEX IF NOT EXISTS post_comment_idx_author_id
+            ON post_comment (author_id);
     END IF;
 
     IF to_regclass('public.post_like') IS NOT NULL THEN
@@ -131,5 +135,14 @@ BEGIN
         CREATE INDEX IF NOT EXISTS post_attr_idx_meta_tags_subject_id
             ON post_attr (subject_id)
             WHERE name = 'metaTagsIndex';
+    END IF;
+
+    IF to_regclass('public.member_action_log') IS NOT NULL THEN
+        CREATE INDEX IF NOT EXISTS member_action_log_idx_primary_owner_id
+            ON member_action_log (primary_owner_id);
+        CREATE INDEX IF NOT EXISTS member_action_log_idx_secondary_owner_id
+            ON member_action_log (secondary_owner_id);
+        CREATE INDEX IF NOT EXISTS member_action_log_idx_actor_id
+            ON member_action_log (actor_id);
     END IF;
 END $$;

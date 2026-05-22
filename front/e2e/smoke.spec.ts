@@ -63,6 +63,51 @@ test("Markdown renderer pipeline은 facade/component/parser/style module로 분�
   expect(renderingSource).not.toContain("const normalizeSplitInlineColorQuotedEmphasis =")
 })
 
+test("Markdown runtime effects는 Mermaid/Prism side effect module로 분리된다", () => {
+  const markdownRoot = path.resolve(__dirname, "../src/libs/markdown")
+  const requiredModules = [
+    "mermaidRuntimeConfig.ts",
+    "mermaidRuntimeMutations.ts",
+    "mermaidRuntimeOverlay.ts",
+    "mermaidRuntimeRender.ts",
+    "mermaidRuntimeSanitize.ts",
+    "mermaidRuntimeTypes.ts",
+    "prismEffectRuntime.ts",
+  ]
+
+  for (const sourcePath of requiredModules) {
+    expect(existsSync(path.join(markdownRoot, sourcePath)), sourcePath).toBe(true)
+  }
+
+  const runtimeSourceFiles = [
+    "hooks/useMermaidEffect.ts",
+    "hooks/usePrismEffect.ts",
+    "prismRuntime.ts",
+    ...requiredModules,
+  ]
+  const oversizedFiles = runtimeSourceFiles
+    .map((sourcePath) => path.join(markdownRoot, sourcePath))
+    .filter((sourcePath) => existsSync(sourcePath))
+    .map((sourcePath) => ({
+      sourcePath: path.relative(markdownRoot, sourcePath),
+      lineCount: readFileSync(sourcePath, "utf8").split("\n").length,
+    }))
+    .filter(({ lineCount }) => lineCount > 600)
+
+  expect(oversizedFiles).toEqual([])
+
+  const mermaidHookSource = readFileSync(path.join(markdownRoot, "hooks/useMermaidEffect.ts"), "utf8")
+  const prismHookSource = readFileSync(path.join(markdownRoot, "hooks/usePrismEffect.ts"), "utf8")
+
+  expect(mermaidHookSource).toContain("createMermaidRuntimeController")
+  expect(mermaidHookSource).not.toContain("const openMermaidOverlay =")
+  expect(mermaidHookSource).not.toContain("const renderMermaidBlocks =")
+  expect(mermaidHookSource).not.toContain("const sanitizeRenderableMermaidSource =")
+  expect(prismHookSource).toContain("createPrismEffectRuntime")
+  expect(prismHookSource).not.toContain("const extractLanguageFromClassList =")
+  expect(prismHookSource).not.toContain("const highlightBlocks =")
+})
+
 const mockAvatarAsset = async (page: Page) => {
   await page.route("**/avatar.png", async (route) => {
     await route.fulfill({

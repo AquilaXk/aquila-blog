@@ -44,6 +44,7 @@ import {
   createToggleNode,
   createBulletListNode,
   parseMarkdownToEditorDoc,
+  restoreEditorDocCodeBlocksFromMarkdown,
   createEmptyTableNode,
   type BlockEditorDoc,
 } from "./serialization"
@@ -806,9 +807,7 @@ const BlockEditorEngine = ({
     scheduleMarkdownCommit,
     syncSerializedDoc,
   } = useBlockEditorMarkdownCommit({ value, onChange })
-  const initialDocRef = useRef(
-    downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(value), enableMermaidBlocks)
-  )
+  const initialDocRef = useRef(restoreEditorDocCodeBlocksFromMarkdown(value, downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(value), enableMermaidBlocks)).doc)
   const emptyHistoryStateRef = useRef<EditorHistorySnapshot | null>(null)
 
   const isSelectionInEmptyParagraph = useCallback(() => {
@@ -3823,15 +3822,18 @@ const BlockEditorEngine = ({
   }, [cancelBubbleHide, cancelHoveredBlockClear, cancelTableQuickRailHide])
 
   useEffect(() => {
-    if (!editor) return
-    if (!hasExternalMarkdownChanged(value)) {
-      return
-    }
-
+    if (!editor || !hasExternalMarkdownChanged(value)) return
     discardPendingMarkdownCommit()
-    const nextDoc = downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(value), enableMermaidBlocks)
+    const nextDoc = restoreEditorDocCodeBlocksFromMarkdown(value, downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(value), enableMermaidBlocks)).doc
     replaceEditorDocFromExternalValue(nextDoc, editor)
   }, [discardPendingMarkdownCommit, editor, enableMermaidBlocks, hasExternalMarkdownChanged, replaceEditorDocFromExternalValue, value])
+
+  useEffect(() => {
+    const restored = editor && value.trim() ? restoreEditorDocCodeBlocksFromMarkdown(value, editor.getJSON() as BlockEditorDoc) : null
+    if (!restored?.changed) return
+    discardPendingMarkdownCommit()
+    replaceEditorDocFromExternalValue(restored.doc, editor!)
+  }, [discardPendingMarkdownCommit, editor, replaceEditorDocFromExternalValue, value])
 
   useEffect(
     () => () => {

@@ -1,8 +1,7 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
 import AppIcon from "src/components/icons/AppIcon"
-import { createElement, useCallback, useEffect, useMemo } from "react"
+import { createElement, useCallback, useMemo } from "react"
 import type {
-  ChangeEvent,
   Dispatch,
   MouseEvent as ReactMouseEvent,
   MutableRefObject,
@@ -25,11 +24,7 @@ import {
   createToggleNode,
   type BlockEditorDoc,
 } from "./serialization"
-import { inferCardKindFromUrl, inferLinkProvider, resolveEmbedPreviewUrl } from "src/libs/unfurl/extractMeta"
-import { getEditorUndoDepth } from "./editorHistoryModel"
-import type { BlockEditorQaActions } from "./blockEditorContract"
 import type { BlockEditorEngineProps } from "./blockEditorEngineTypes"
-import { refocusEditorForSelectionReveal } from "./editorScrollSelectionGuard"
 import {
   type BlockInsertCatalogItem,
   createWriterBlockInsertCatalog,
@@ -37,6 +32,7 @@ import {
 } from "./writerEditorPreset"
 import { isTableSelectionActive } from "./tableStructureModel"
 import { getTopLevelBlockIndexFromSelection } from "./blockSelectionModel"
+import type { BlockEditorQaActions } from "./blockEditorContract"
 import {
   isBlockToolbarCommandActive,
   isToolbarBlockInsertActive,
@@ -54,6 +50,8 @@ import {
   type InlineTextStyleOption,
 } from "./inlineToolbarModel"
 import type { BlockEditorToolbarAction } from "./BlockEditorEngine.layers"
+import { useBlockEditorEngineInsertMediaActions } from "./useBlockEditorEngineInsertMediaActions"
+import { useBlockEditorEngineQaActions } from "./useBlockEditorEngineQaActions"
 
 type SetBoolean = Dispatch<SetStateAction<boolean>>
 
@@ -309,94 +307,23 @@ export const useBlockEditorEngineInsertActions = ({
     insertBlocksAtCursor([createCodeBlockNode(getPreferredCodeLanguage(), "")], true)
   }, [canInsertTopLevelBlockAtSelection, insertBlocksAtCursor])
 
-  const isHttpUrl = useCallback((value: string) => {
-    try {
-      const parsed = new URL(value.trim())
-      return parsed.protocol === "http:" || parsed.protocol === "https:"
-    } catch {
-      return false
-    }
-  }, [])
-
-  const fetchUnfurlMetadata = useCallback(async (url: string) => {
-    try {
-      const response = await fetch(`/api/editor/unfurl?url=${encodeURIComponent(url)}`)
-      const payload = await response.json()
-      if (!response.ok || !payload?.ok || !payload?.data) return null
-      return payload.data as {
-        title?: string
-        description?: string
-        siteName?: string
-        provider?: string
-        thumbnailUrl?: string
-        embedUrl?: string
-      }
-    } catch {
-      return null
-    }
-  }, [])
-
-  const createCardNodeFromUrl = useCallback(
-    async (url: string) => {
-      const trimmedUrl = url.trim()
-      const cardKind = inferCardKindFromUrl(trimmedUrl)
-      const metadata = await fetchUnfurlMetadata(trimmedUrl)
-      const fallbackProvider = inferLinkProvider(trimmedUrl)
-      const fallbackTitle = (() => {
-        try {
-          const parsed = new URL(trimmedUrl)
-          const lastSegment = parsed.pathname.split("/").filter(Boolean).pop() || ""
-          return decodeURIComponent(lastSegment || parsed.hostname.replace(/^www\./i, "")) || trimmedUrl
-        } catch {
-          return trimmedUrl
-        }
-      })()
-
-      if (cardKind === "file") {
-        return createFileBlockNode({
-          url: trimmedUrl,
-          name: String(metadata?.title || fallbackTitle || "첨부 파일").trim(),
-          description: String(metadata?.description || "").trim(),
-        })
-      }
-
-      if (cardKind === "embed") {
-        return createEmbedNode({
-          url: trimmedUrl,
-          title: String(metadata?.title || fallbackProvider || "임베드").trim(),
-          caption: String(metadata?.description || "").trim(),
-          siteName: String(metadata?.siteName || "").trim(),
-          provider: String(metadata?.provider || fallbackProvider || "").trim(),
-          thumbnailUrl: String(metadata?.thumbnailUrl || "").trim(),
-          embedUrl: String(metadata?.embedUrl || resolveEmbedPreviewUrl(trimmedUrl) || "").trim(),
-        })
-      }
-
-      return createBookmarkNode({
-        url: trimmedUrl,
-        title: String(metadata?.title || fallbackTitle || trimmedUrl).trim(),
-        description: String(metadata?.description || "").trim(),
-        siteName: String(metadata?.siteName || "").trim(),
-        provider: String(metadata?.provider || fallbackProvider || "").trim(),
-        thumbnailUrl: String(metadata?.thumbnailUrl || "").trim(),
-      })
-    },
-    [fetchUnfurlMetadata]
-  )
-
-  const insertCardBlockFromUrl = useCallback(
-    async (url: string) => {
-      const nextNode = await createCardNodeFromUrl(url)
-      return insertDocContent(
-        {
-          type: "doc",
-          content: [nextNode, { type: "paragraph" }],
-        },
-        isSelectionInEmptyParagraph()
-      )
-    },
-    [createCardNodeFromUrl, insertDocContent, isSelectionInEmptyParagraph]
-  )
+  const {
+    createCardNodeFromUrl,
+    handleAttachmentInputChange,
+    handleImageInputChange,
+    insertCardBlockFromUrl,
+    isHttpUrl,
+  } = useBlockEditorEngineInsertMediaActions({
+    editor,
+    insertBlocksAtCursor,
+    insertBlocksAtIndex,
+    insertDocContent,
+    isSelectionInEmptyParagraph,
+    onUploadFile,
+    onUploadImage,
+    pendingAttachmentInsertIndexRef,
+    pendingImageInsertIndexRef,
+  })
 
   const openLinkPrompt = useCallback(() => {
     if (!editor || typeof window === "undefined") return
@@ -476,86 +403,7 @@ export const useBlockEditorEngineInsertActions = ({
     [editorRef, mutateTopLevelBlocks]
   )
 
-  useEffect(() => {
-    if (!onQaActionsReady) return
-
-    onQaActionsReady({
-      selectTableAxis: (axis) => {
-        selectCurrentTableAxis(axis)
-      },
-      selectTableColumnViaDomFallback: (columnIndex) => {
-        const currentEditor = editorRef.current ?? editor
-        if (!currentEditor) return
-        currentEditor.chain().focus("end").run()
-        selectTableColumnByIndex(columnIndex)
-      },
-      setActiveTableCellAlign: (align) => {
-        updateActiveTableCellAttrs({ textAlign: align })
-      },
-      setActiveTableCellBackground: (color) => {
-        updateActiveTableCellAttrs({ backgroundColor: color })
-      },
-      addTableRowAfter: () => {
-        editor?.chain().focus().addRowAfter().run()
-      },
-      addTableColumnAfter: () => {
-        editor?.chain().focus().addColumnAfter().run()
-      },
-      deleteSelectedTableRow: () => {
-        editor?.chain().focus().deleteRow().run()
-      },
-      deleteSelectedTableColumn: () => {
-        editor?.chain().focus().deleteColumn().run()
-      },
-      resizeFirstTableRow: (deltaPx) => {
-        resizeFirstTableRowBy(deltaPx)
-      },
-      resizeFirstTableColumn: (deltaPx) => {
-        resizeFirstTableColumnBy(deltaPx)
-      },
-      focusDocumentEnd: () => {
-        editor?.chain().focus("end").run()
-      },
-      appendCalloutBlock: () => {
-        const currentEditor = editorRef.current
-        if (!currentEditor) return
-        insertBlocksAtIndex(
-          currentEditor.state.doc.childCount,
-          withTrailingParagraph([
-            createCalloutNode({
-              kind: "tip",
-              title: "",
-              body: "",
-            }),
-          ])
-        )
-      },
-      appendFormulaBlock: () => {
-        const currentEditor = editorRef.current
-        if (!currentEditor) return
-        insertBlocksAtIndex(
-          currentEditor.state.doc.childCount,
-          withTrailingParagraph([
-            createFormulaNode({
-              formula: "",
-            }),
-          ])
-        )
-      },
-      moveTaskItemInFirstTaskList: (sourceIndex, insertionIndex) => {
-        moveTaskItemInFirstTaskList(sourceIndex, insertionIndex)
-      },
-      scrollCurrentSelectionIntoView: () => refocusEditorForSelectionReveal(editorRef.current ?? editor),
-      getUndoDepth: () => {
-        const currentEditor = editorRef.current ?? editor
-        return currentEditor ? getEditorUndoDepth(currentEditor) : 0
-      },
-    })
-
-    return () => {
-      onQaActionsReady(null)
-    }
-  }, [
+  useBlockEditorEngineQaActions({
     editor,
     editorRef,
     insertBlocksAtIndex,
@@ -563,73 +411,11 @@ export const useBlockEditorEngineInsertActions = ({
     onQaActionsReady,
     resizeFirstTableColumnBy,
     resizeFirstTableRowBy,
-    selectTableColumnByIndex,
     selectCurrentTableAxis,
+    selectTableColumnByIndex,
     updateActiveTableCellAttrs,
     withTrailingParagraph,
-  ])
-
-  const handleImageInputChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    event.target.value = ""
-    if (!file || !editor) return
-
-    const imageAttrs = await onUploadImage(file)
-    const pendingInsertIndex = pendingImageInsertIndexRef.current
-    pendingImageInsertIndexRef.current = null
-
-    if (typeof pendingInsertIndex === "number") {
-      insertBlocksAtIndex(pendingInsertIndex, [
-        {
-          type: "resizableImage",
-          attrs: {
-            src: imageAttrs.src,
-            alt: imageAttrs.alt || "",
-            title: imageAttrs.title || "",
-            widthPx: imageAttrs.widthPx ?? null,
-            align: imageAttrs.align || "center",
-          },
-        },
-        { type: "paragraph" },
-      ])
-      return
-    }
-
-    editor
-      .chain()
-      .focus()
-      .insertContent([
-        {
-          type: "resizableImage",
-          attrs: {
-            src: imageAttrs.src,
-            alt: imageAttrs.alt || "",
-            title: imageAttrs.title || "",
-            widthPx: imageAttrs.widthPx ?? null,
-            align: imageAttrs.align || "center",
-          },
-        },
-        { type: "paragraph" },
-      ])
-      .run()
-  }
-
-  const handleAttachmentInputChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    event.target.value = ""
-    if (!file || !editor || !onUploadFile) return
-
-    const fileAttrs = await onUploadFile(file)
-    const pendingInsertIndex = pendingAttachmentInsertIndexRef.current
-    pendingAttachmentInsertIndexRef.current = null
-
-    if (typeof pendingInsertIndex === "number") {
-      insertBlocksAtIndex(pendingInsertIndex, [createFileBlockNode(fileAttrs), { type: "paragraph" }])
-      return
-    }
-
-    insertBlocksAtCursor([createFileBlockNode(fileAttrs)], true)
-  }
+  })
 
   const blockInsertCatalog = useMemo<BlockInsertCatalogItem[]>(
     () =>

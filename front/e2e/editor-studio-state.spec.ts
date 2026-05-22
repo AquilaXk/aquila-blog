@@ -440,10 +440,32 @@ test.describe("editor studio state", () => {
     const blockEditorEngineControllerSource = existsSync(blockEditorEngineControllerPath)
       ? readFileSync(blockEditorEngineControllerPath, "utf8")
       : ""
+    const blockEditorEngineControllerStatePath = path.resolve(
+      __dirname,
+      "../src/components/editor/useBlockEditorEngineControllerState.ts"
+    )
+    expect(existsSync(blockEditorEngineControllerStatePath)).toBe(true)
+    const blockEditorEngineControllerStateSource = existsSync(blockEditorEngineControllerStatePath)
+      ? readFileSync(blockEditorEngineControllerStatePath, "utf8")
+      : ""
+    const blockEditorEngineControllerHandlersPath = path.resolve(
+      __dirname,
+      "../src/components/editor/useBlockEditorEngineControllerEditorHandlers.ts"
+    )
+    expect(existsSync(blockEditorEngineControllerHandlersPath)).toBe(true)
+    const blockEditorEngineControllerHandlersSource = existsSync(blockEditorEngineControllerHandlersPath)
+      ? readFileSync(blockEditorEngineControllerHandlersPath, "utf8")
+      : ""
     const blockEditorEngineInsertActionsSource = readFileSync(
       path.resolve(__dirname, "../src/components/editor/useBlockEditorEngineInsertActions.ts"),
       "utf8"
     )
+    const blockEditorEngineControllerRuntimeSource = [
+      blockEditorEngineControllerSource,
+      blockEditorEngineControllerStateSource,
+      blockEditorEngineControllerHandlersSource,
+      blockEditorEngineInsertActionsSource,
+    ].join("\n")
     const blockEditorEngineSlashMenuSource = readFileSync(
       path.resolve(__dirname, "../src/components/editor/useBlockEditorEngineSlashMenu.ts"),
       "utf8"
@@ -1315,13 +1337,13 @@ test.describe("editor studio state", () => {
     expect(blockEditorEditorSurfaceStylesSource).toContain(".aq-block-editor__content blockquote {")
     expect(blockEditorEditorSurfaceStylesSource).toContain("border-left: 4px solid")
     expect(blockEditorEditorSurfaceStylesSource).toContain("border-radius: 0;")
-    expect(blockEditorEngineControllerSource).toContain('from "./blockSelectionModel"')
-    expect(blockEditorEngineControllerSource).toContain('from "./nestedListItemModel"')
+    expect(blockEditorEngineControllerRuntimeSource).toContain('from "./blockSelectionModel"')
+    expect(blockEditorEngineControllerRuntimeSource).toContain('from "./nestedListItemModel"')
     expect(blockEditorEngineControllerSource).toContain('from "./useBlockEditorMarkdownCommit"')
     expect(blockEditorEngineSlashMenuSource).toContain('from "./slashMenuModel"')
-    expect(blockEditorEngineControllerSource).toContain('from "./blockToolbarModel"')
-    expect(blockEditorEngineControllerSource).toContain('from "./inlineToolbarModel"')
-    expect(blockEditorEngineControllerSource).toContain('from "./useFloatingBubbleState"')
+    expect(blockEditorEngineControllerRuntimeSource).toContain('from "./blockToolbarModel"')
+    expect(blockEditorEngineControllerRuntimeSource).toContain('from "./inlineToolbarModel"')
+    expect(blockEditorEngineControllerRuntimeSource).toContain('from "./useFloatingBubbleState"')
     expect(blockEditorEngineSource).not.toContain("type FloatingBubbleState =")
     expect(blockEditorEngineSource).not.toContain("const bubbleHideTimerRef")
     expect(blockEditorEngineSource).not.toContain("const bubbleToolbarHoveredRef = useRef")
@@ -1363,11 +1385,11 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineInsertActionsSource).toContain('runInlineMarkCommand(editor, "bold")')
     expect(blockEditorEngineInsertActionsSource).toContain('runInlineMarkCommand(editor, "italic")')
     expect(blockEditorEngineInsertActionsSource).toContain('runInlineMarkCommand(editor, "strike")')
-    expect(blockEditorEngineControllerSource).toContain('runBlockToolbarCommand(currentEditor, "heading-2")')
-    expect(blockEditorEngineControllerSource).toContain('runBlockToolbarCommand(currentEditor, "heading-3")')
-    expect(blockEditorEngineControllerSource).toContain('runBlockToolbarCommand(currentEditor, "ordered-list")')
-    expect(blockEditorEngineControllerSource).toContain('runBlockToolbarCommand(currentEditor, "bullet-list")')
-    expect(blockEditorEngineControllerSource).toContain('runBlockToolbarCommand(currentEditor, "quote")')
+    expect(blockEditorEngineControllerRuntimeSource).toContain('runBlockToolbarCommand(currentEditor, "heading-2")')
+    expect(blockEditorEngineControllerRuntimeSource).toContain('runBlockToolbarCommand(currentEditor, "heading-3")')
+    expect(blockEditorEngineControllerRuntimeSource).toContain('runBlockToolbarCommand(currentEditor, "ordered-list")')
+    expect(blockEditorEngineControllerRuntimeSource).toContain('runBlockToolbarCommand(currentEditor, "bullet-list")')
+    expect(blockEditorEngineControllerRuntimeSource).toContain('runBlockToolbarCommand(currentEditor, "quote")')
     expect(blockEditorEngineInsertActionsSource).toContain('runBlockToolbarCommand(editor, "heading-1")')
     expect(blockEditorEngineInsertActionsSource).toContain('runBlockToolbarCommand(editor, "bullet-list")')
     expect(blockEditorEngineInsertActionsSource).toContain("isToolbarBlockInsertActive(editor, item.id)")
@@ -1696,6 +1718,19 @@ test.describe("editor studio state", () => {
       path.resolve(__dirname, "../src/components/editor/useBlockEditorEngineController.ts"),
       "utf8"
     )
+    const blockEditorEngineInsertActionsSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/useBlockEditorEngineInsertActions.ts"),
+      "utf8"
+    )
+    const blockEditorEngineControllerHandlersSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/useBlockEditorEngineControllerEditorHandlers.ts"),
+      "utf8"
+    )
+    const blockEditorEngineControllerTableRuntimeSource = [
+      blockEditorEngineControllerSource,
+      blockEditorEngineControllerHandlersSource,
+      blockEditorEngineInsertActionsSource,
+    ].join("\n")
     const blockEditorEngineStylesSource = readFileSync(
       path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.styles.tsx"),
       "utf8"
@@ -1927,7 +1962,7 @@ test.describe("editor studio state", () => {
     expect(tableStructureModelSource).toContain("export const hasTableContextInResolvedPos = (")
     expect(tableStructureModelSource).toContain("export const isTableSelectionActive = (")
     expect(tableStructureModelSource).toContain("export const getActiveTableStructureState = (")
-    expect(blockEditorEngineControllerSource).toContain('} from "./tableStructureModel"')
+    expect(blockEditorEngineControllerTableRuntimeSource).toContain('from "./tableStructureModel"')
     expect(blockEditorEngineSource).not.toContain("const collectSimpleTableColumnCells = (")
     expect(blockEditorEngineSource).not.toContain("const buildReorderedSimpleTableNode = (")
     expect(blockEditorEngineSource).not.toContain("const canShrinkTableAxisAtEnd = (")
@@ -1941,7 +1976,7 @@ test.describe("editor studio state", () => {
     expect(tablePasteModelSource).toContain("export const normalizeTableContextPasteText = (")
     expect(tablePasteModelSource).toContain("const normalizeTableContextPasteLine = (")
     expect(tablePasteModelSource).toContain("const isMarkdownTableRow = (")
-    expect(blockEditorEngineControllerSource).toContain('from "./tablePasteModel"')
+    expect(blockEditorEngineControllerTableRuntimeSource).toContain('from "./tablePasteModel"')
     expect(blockEditorEngineSource).not.toContain("const normalizeTableContextPasteText = (")
     expect(blockEditorEngineSource).not.toContain("const normalizeTableContextPasteLine = (")
     expect(blockEditorEngineSource).not.toContain("const isMarkdownTableRow = (")
@@ -2230,6 +2265,58 @@ test.describe("editor studio state", () => {
         expect(controllerSource).not.toContain(snippet)
       })
     })
+  })
+
+  test("engine residual hooks는 600 line companion budget을 유지한다", () => {
+    const editorDir = path.resolve(__dirname, "../src/components/editor")
+    const residualFiles = [
+      "useBlockEditorEngineController.ts",
+      "useBlockEditorEngineBlockDrag.ts",
+      "useBlockEditorEngineInsertActions.ts",
+      "useBlockEditorEngineSelectionEffects.ts",
+      "useBlockEditorEngineBlockSelectionUi.ts",
+      "useBlockEditorEngineDocumentOps.ts",
+    ]
+    const companionFiles = [
+      "blockEditorEngineDocumentModel.ts",
+      "useBlockEditorEngineControllerState.ts",
+      "useBlockEditorEngineControllerEditorHandlers.ts",
+      "useBlockEditorEngineBlockDragSessions.ts",
+      "useBlockEditorEngineInsertMediaActions.ts",
+      "useBlockEditorEngineQaActions.ts",
+      "useBlockEditorEngineSelectionBubbleEffects.ts",
+      "useBlockEditorEngineSelectionStateEffects.ts",
+      "useBlockEditorEngineBlockSelectionLayout.ts",
+    ]
+
+    for (const residualFile of residualFiles) {
+      const source = readFileSync(path.join(editorDir, residualFile), "utf8")
+      expect(source.split("\n").length, `${residualFile} should stay under the residual budget`).toBeLessThanOrEqual(600)
+    }
+
+    for (const companionFile of companionFiles) {
+      const companionPath = path.join(editorDir, companionFile)
+      expect(existsSync(companionPath), `${companionFile} should own extracted engine responsibility`).toBe(true)
+      const source = readFileSync(companionPath, "utf8")
+      expect(source.split("\n").length, `${companionFile} should stay under the companion budget`).toBeLessThanOrEqual(600)
+    }
+
+    const controllerSource = readFileSync(path.join(editorDir, "useBlockEditorEngineController.ts"), "utf8")
+    const blockDragSource = readFileSync(path.join(editorDir, "useBlockEditorEngineBlockDrag.ts"), "utf8")
+    const insertActionsSource = readFileSync(path.join(editorDir, "useBlockEditorEngineInsertActions.ts"), "utf8")
+    const selectionEffectsSource = readFileSync(path.join(editorDir, "useBlockEditorEngineSelectionEffects.ts"), "utf8")
+    const blockSelectionUiSource = readFileSync(path.join(editorDir, "useBlockEditorEngineBlockSelectionUi.ts"), "utf8")
+    const documentOpsSource = readFileSync(path.join(editorDir, "useBlockEditorEngineDocumentOps.ts"), "utf8")
+
+    expect(controllerSource).toContain('from "./useBlockEditorEngineControllerState"')
+    expect(controllerSource).toContain('from "./useBlockEditorEngineControllerEditorHandlers"')
+    expect(blockDragSource).toContain('from "./useBlockEditorEngineBlockDragSessions"')
+    expect(insertActionsSource).toContain('from "./useBlockEditorEngineInsertMediaActions"')
+    expect(insertActionsSource).toContain('from "./useBlockEditorEngineQaActions"')
+    expect(selectionEffectsSource).toContain('from "./useBlockEditorEngineSelectionBubbleEffects"')
+    expect(selectionEffectsSource).toContain('from "./useBlockEditorEngineSelectionStateEffects"')
+    expect(blockSelectionUiSource).toContain('from "./useBlockEditorEngineBlockSelectionLayout"')
+    expect(documentOpsSource).toContain('from "./blockEditorEngineDocumentModel"')
   })
 
   test("editor studio SSR은 작성자 카드에 공개 프로필 snapshot을 먼저 seed한다", () => {

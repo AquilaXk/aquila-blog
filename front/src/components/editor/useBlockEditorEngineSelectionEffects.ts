@@ -1,5 +1,4 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
-import { NodeSelection, TextSelection } from "@tiptap/pm/state"
 import { useEffect } from "react"
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react"
 import {
@@ -8,27 +7,23 @@ import {
   type BlockEditorDoc,
 } from "./serialization"
 import {
-  getEditableTextPositionForTopLevelBlock,
   getTopLevelBlockIndexFromSelection,
   isTabBlockSelectionEligible,
 } from "./blockSelectionModel"
-import { preserveWindowScrollForEditorPointerFocus } from "./blockHandleLayoutModel"
 import {
   LIST_ITEM_SELECTOR,
   type NestedListItemContext,
-  isSameNestedListItemContext,
   selectNestedListItemNode,
   selectNestedListItemTextAnchor,
 } from "./nestedListItemModel"
 import { isTableSelectionActive } from "./tableStructureModel"
 import {
-  areFloatingBubbleStatesEqual,
-  hideFloatingBubbleState,
-  resolveFloatingBubbleStateFromCoords,
   type FloatingBubbleState,
 } from "./useFloatingBubbleState"
 import type { BlockEditorSlashMenuState } from "./BlockEditorEngine.layers"
 import { downgradeDisabledFeatureNodes } from "./useBlockEditorEngineDocumentOps"
+import { useBlockEditorEngineSelectionBubbleEffects } from "./useBlockEditorEngineSelectionBubbleEffects"
+import { useBlockEditorEngineSelectionStateEffects } from "./useBlockEditorEngineSelectionStateEffects"
 
 type SetState<T> = Dispatch<SetStateAction<T>>
 
@@ -213,125 +208,7 @@ export const useBlockEditorEngineSelectionEffects = ({
     root.removeAttribute("data-keyboard-block-selection")
   }, [getContentRoot, keyboardBlockSelectionStickyRef, selectedBlockNodeIndex, selectionTick])
 
-  useEffect(() => {
-    if (!editor) return
-    let disposed = false
-
-    const notifySelection = () => {
-      const selection = editor.state.selection as typeof editor.state.selection & {
-        node?: { isBlock?: boolean }
-      }
-      const hasTextRangeSelection = selection instanceof TextSelection && !selection.empty
-      const liveSelectedNestedListItemContext = getNodeSelectedNestedListItemContext(editor)
-      const selectionAnchorNestedListItemContext = getSelectionAnchorNestedListItemContext(editor)
-      const effectiveSelectedNestedListItemContext = resolveEffectiveSelectedListItemContext(editor)
-      const shouldPreserveSelectedListItemContextForAnchorSelection = Boolean(
-        hasTextRangeSelection &&
-          selectionAnchorNestedListItemContext &&
-          effectiveSelectedNestedListItemContext &&
-          isSameNestedListItemContext(
-            selectionAnchorNestedListItemContext,
-            effectiveSelectedNestedListItemContext
-          )
-      )
-      const selectedNestedListItemContext =
-        liveSelectedNestedListItemContext?.listItemElement?.isConnected
-          ? liveSelectedNestedListItemContext
-          : shouldPreserveSelectedListItemContextForAnchorSelection
-            ? selectionAnchorNestedListItemContext
-            : effectiveSelectedNestedListItemContext
-      if (liveSelectedNestedListItemContext?.listItemElement?.isConnected) {
-        setSelectedListItemContext(liveSelectedNestedListItemContext)
-      } else if (shouldPreserveSelectedListItemContextForAnchorSelection && selectionAnchorNestedListItemContext) {
-        setSelectedListItemContext(selectionAnchorNestedListItemContext)
-      }
-      if (hasTextRangeSelection && keyboardBlockSelectionStickyRef.current) {
-        keyboardBlockSelectionStickyRef.current = false
-      }
-      const nextBlockIndex = getTopLevelBlockIndexFromSelection(editor)
-      const isTopLevelBlockNodeSelection = Boolean(
-        selection instanceof NodeSelection && selection.$from.depth === 0 && selection.node?.isBlock
-      )
-      const isNestedListItemNodeSelection = Boolean(selectedNestedListItemContext)
-      const inTableContext = isTableSelectionActive(editor) ? 1 : 0
-      const selectedNestedListItemSignature = selectedNestedListItemContext
-        ? `${selectedNestedListItemContext.listBlockIndex}:${selectedNestedListItemContext.listPath.join(".")}:${selectedNestedListItemContext.itemIndex}`
-        : "none"
-      const nextSignature = `${nextBlockIndex ?? "none"}:${hasTextRangeSelection ? 1 : 0}:${isTopLevelBlockNodeSelection ? 1 : 0}:${isNestedListItemNodeSelection ? 1 : 0}:${keyboardBlockSelectionStickyRef.current ? 1 : 0}:${inTableContext}:${selectedNestedListItemSignature}`
-      if (nextSignature === selectionUiSignatureRef.current) {
-        return
-      }
-      selectionUiSignatureRef.current = nextSignature
-      setSelectionTick((prev) => prev + 1)
-      setSelectedBlockIndex(nextBlockIndex)
-      if (hasTextRangeSelection && !selectedNestedListItemContext) {
-        setClickedBlockIndex(null)
-        setSelectedBlockNodeIndex(null)
-        setTextSelectionBlockIndex(nextBlockIndex)
-        setSelectedListItemContext(null)
-        return
-      }
-      setTextSelectionBlockIndex(null)
-      if (isNestedListItemNodeSelection) {
-        setClickedBlockIndex(null)
-        setSelectedBlockNodeIndex(null)
-        if (selectedNestedListItemContext?.listItemElement?.isConnected) {
-          setSelectedListItemContext(selectedNestedListItemContext)
-        }
-        return
-      }
-      if (isTopLevelBlockNodeSelection) {
-        setSelectedListItemContext(null)
-        if (keyboardBlockSelectionStickyRef.current) {
-          setClickedBlockIndex(null)
-          setSelectedBlockNodeIndex(nextBlockIndex)
-          return
-        }
-
-        const editablePos = getEditableTextPositionForTopLevelBlock(editor, nextBlockIndex)
-        if (editablePos !== null) {
-          const nextTextSelection = TextSelection.create(editor.state.doc, editablePos)
-          editor.view.dispatch(editor.state.tr.setSelection(nextTextSelection))
-        }
-        setSelectedBlockNodeIndex(null)
-        return
-      }
-      if (!keyboardBlockSelectionStickyRef.current) {
-        setSelectedBlockNodeIndex(null)
-      }
-    }
-
-    const notifyBlur = () => {
-      selectionUiSignatureRef.current = ""
-      setSelectionTick((prev) => prev + 1)
-      const finalizeBlur = () => {
-        if (disposed || editor.isFocused) return
-        setClickedBlockIndex(null)
-        setSelectedBlockIndex(null)
-        setTextSelectionBlockIndex(null)
-        if (!keyboardBlockSelectionStickyRef.current) {
-          setSelectedBlockNodeIndex(null)
-        }
-      }
-      if (typeof window !== "undefined") {
-        window.requestAnimationFrame(finalizeBlur)
-        return
-      }
-      finalizeBlur()
-    }
-
-    notifySelection()
-    editor.on("selectionUpdate", notifySelection)
-    editor.on("focus", notifySelection)
-    editor.on("blur", notifyBlur)
-    return () => {
-      disposed = true
-      editor.off("selectionUpdate", notifySelection)
-      editor.off("focus", notifySelection)
-      editor.off("blur", notifyBlur)
-      selectionUiSignatureRef.current = ""
-    }
-  }, [
+  useBlockEditorEngineSelectionStateEffects({
     editor,
     getNodeSelectedNestedListItemContext,
     getSelectionAnchorNestedListItemContext,
@@ -344,7 +221,7 @@ export const useBlockEditorEngineSelectionEffects = ({
     setSelectedListItemContext,
     setSelectionTick,
     setTextSelectionBlockIndex,
-  ])
+  })
 
   useEffect(() => {
     if (!editor) return
@@ -492,232 +369,7 @@ export const useBlockEditorEngineSelectionEffects = ({
     slashMenuState,
   ])
 
-  useEffect(() => {
-    const currentEditor = editorRef.current ?? editor
-    if (!currentEditor) return
-    let rafId: number | null = null
-
-    const syncBubble = () => {
-      const activeEditor = editorRef.current ?? currentEditor
-      if (!activeEditor) {
-        scheduleBubbleHide()
-        if (!tableMenuState) {
-          hideTableQuickRailImmediately()
-        }
-        return
-      }
-
-      let selection = activeEditor.state.selection
-      if (selection.empty && typeof window !== "undefined" && !isTableColumnRailResizeActive()) {
-        const domSelection = window.getSelection()
-        const range =
-          domSelection && domSelection.rangeCount > 0 ? domSelection.getRangeAt(0) : null
-        const commonAncestor =
-          range?.commonAncestorContainer instanceof Element
-            ? range.commonAncestorContainer
-            : range?.commonAncestorContainer?.parentElement ?? null
-
-        if (range && domSelection && !domSelection.isCollapsed && commonAncestor && activeEditor.view.dom.contains(commonAncestor)) {
-          const syncPmSelectionFromRange = (from: number, to: number) => {
-            if (!Number.isFinite(from) || !Number.isFinite(to) || from === to) return false
-            const nextSelection = TextSelection.create(
-              activeEditor.state.doc,
-              Math.min(from, to),
-              Math.max(from, to)
-            )
-            if (!nextSelection.eq(activeEditor.state.selection)) {
-              activeEditor.view.dispatch(activeEditor.state.tr.setSelection(nextSelection))
-              selection = activeEditor.state.selection
-            }
-            return true
-          }
-
-          let synced = false
-          try {
-            const from = activeEditor.view.posAtDOM(range.startContainer, range.startOffset)
-            const to = activeEditor.view.posAtDOM(range.endContainer, range.endOffset)
-            synced = syncPmSelectionFromRange(from, to)
-          } catch {
-            synced = false
-          }
-
-          if (!synced) {
-            const rangeRects = Array.from(range.getClientRects())
-            const startRect = rangeRects[0] ?? range.getBoundingClientRect()
-            const endRect = rangeRects[rangeRects.length - 1] ?? startRect
-            const startCoords = activeEditor.view.posAtCoords({
-              left: startRect.left + 1,
-              top: startRect.top + startRect.height / 2,
-            })
-            const endCoords = activeEditor.view.posAtCoords({
-              left: Math.max(endRect.left + 1, endRect.right - 1),
-              top: endRect.top + endRect.height / 2,
-            })
-            if (startCoords?.pos && endCoords?.pos) {
-              syncPmSelectionFromRange(startCoords.pos, endCoords.pos)
-            }
-          }
-        }
-      }
-
-      const isImageNodeSelected = activeEditor.isActive("resizableImage")
-      const isTableActive = isTableSelectionActive(activeEditor)
-      const isTableStructuralSelection = hasTableStructuralSelection(activeEditor)
-      const canShowTextToolbar =
-        !selection.empty &&
-        !isImageNodeSelected &&
-        !activeEditor.isActive("codeBlock") &&
-        !activeEditor.isActive("rawMarkdownBlock") &&
-        !isTableStructuralSelection
-
-      if (canShowTextToolbar && mouseTextSelectionInProgressRef.current) {
-        syncBubbleOnMouseUpRef.current = true
-        if (bubbleToolbarHoveredRef.current) return
-        setBubbleState((prev) =>
-          prev.visible && prev.mode === "text" ? hideFloatingBubbleState(prev) : prev
-        )
-        if (!tableMenuState) {
-          hideTableQuickRailImmediately()
-        }
-        return
-      }
-
-      if (!isImageNodeSelected && !canShowTextToolbar && !isTableActive) {
-        if (bubbleToolbarHoveredRef.current) return
-        scheduleBubbleHide()
-        if (!tableMenuState) {
-          scheduleTableQuickRailHide()
-        }
-        return
-      }
-
-      if (isTableActive && !canShowTextToolbar) {
-        cancelBubbleHide()
-        setBubbleState(hideFloatingBubbleState)
-        const anchorDom = activeEditor.view.domAtPos(selection.from).node
-        const anchorElement =
-          anchorDom instanceof Element ? anchorDom : anchorDom.parentElement
-        if (isTableStructuralSelection && anchorElement?.closest(".aq-table-shell, .tableWrapper, table")) {
-          syncTableQuickRailFromElement(anchorElement)
-          return
-        }
-        if (!tableMenuState) {
-          hideTableQuickRailImmediately()
-        }
-        return
-      }
-
-      cancelBubbleHide()
-      hideTableQuickRailImmediately()
-
-      const startCoords = activeEditor.view.coordsAtPos(selection.from)
-      const endCoords = activeEditor.view.coordsAtPos(isImageNodeSelected ? selection.from : selection.to)
-      const nextBubbleState = resolveFloatingBubbleStateFromCoords(
-        isImageNodeSelected ? "image" : "text",
-        startCoords,
-        endCoords
-      )
-      setBubbleState((prev) =>
-        areFloatingBubbleStatesEqual(prev, nextBubbleState) ? prev : nextBubbleState
-      )
-    }
-
-    const scheduleSyncBubble = () => {
-      if (typeof window === "undefined") {
-        syncBubble()
-        return
-      }
-      if (rafId !== null) return
-      rafId = window.requestAnimationFrame(() => {
-        rafId = null
-        syncBubble()
-      })
-    }
-
-    const handleDocumentSelectionChange = () => {
-      const activeEditor = editorRef.current ?? currentEditor
-      if (!activeEditor) return
-      if (isTableColumnRailResizeActive()) {
-        clearWindowTextSelection()
-        return
-      }
-      const selection = window.getSelection()
-      const anchorNode = selection?.anchorNode ?? null
-      const anchorElement =
-        anchorNode instanceof Element ? anchorNode : anchorNode?.parentElement ?? null
-      if (anchorElement && !activeEditor.view.dom.contains(anchorElement)) return
-      scheduleSyncBubble()
-    }
-
-    const handleEditorPointerDownCapture = (event: PointerEvent) => {
-      if (event.pointerType !== "mouse" || event.button !== 0) return
-      const activeEditor = editorRef.current ?? currentEditor
-      if (!activeEditor) return
-      if (!(event.target instanceof Node) || !activeEditor.view.dom.contains(event.target)) return
-      preserveWindowScrollForEditorPointerFocus(event.target, isTableSelectionActive(activeEditor))
-      if (tryStartTableColumnResizeFromDomHandle(event.target, event.pointerId, event.clientX)) {
-        event.preventDefault()
-        event.stopPropagation()
-        event.stopImmediatePropagation?.()
-        mouseTextSelectionInProgressRef.current = false
-        syncBubbleOnMouseUpRef.current = false
-        return
-      }
-      mouseTextSelectionInProgressRef.current = true
-      syncBubbleOnMouseUpRef.current = false
-      if (bubbleToolbarHoveredRef.current) return
-      setBubbleState((prev) =>
-        prev.visible && prev.mode === "text" ? hideFloatingBubbleState(prev) : prev
-      )
-    }
-
-    const handleEditorMouseDownCapture = (event: MouseEvent) => {
-      const activeEditor = editorRef.current ?? currentEditor
-      if (!activeEditor) return
-      if (!(event.target instanceof Node) || !activeEditor.view.dom.contains(event.target)) return
-      if (!(event.target instanceof Element) || !event.target.closest(".column-resize-handle")) return
-      event.preventDefault()
-      event.stopPropagation()
-      event.stopImmediatePropagation?.()
-    }
-
-    const handleWindowPointerUp = (event: PointerEvent) => {
-      if (!mouseTextSelectionInProgressRef.current) return
-      if (event.pointerType && event.pointerType !== "mouse") return
-      mouseTextSelectionInProgressRef.current = false
-      if (!syncBubbleOnMouseUpRef.current) return
-      syncBubbleOnMouseUpRef.current = false
-      scheduleSyncBubble()
-    }
-
-    scheduleSyncBubble()
-    currentEditor.on("selectionUpdate", scheduleSyncBubble)
-    currentEditor.on("focus", scheduleSyncBubble)
-    document.addEventListener("selectionchange", handleDocumentSelectionChange)
-    document.addEventListener("pointerdown", handleEditorPointerDownCapture, true)
-    document.addEventListener("mousedown", handleEditorMouseDownCapture, true)
-    window.addEventListener("scroll", scheduleSyncBubble, { capture: true, passive: true })
-    window.addEventListener("resize", scheduleSyncBubble, { passive: true })
-    window.addEventListener("pointerup", handleWindowPointerUp, true)
-    window.addEventListener("pointercancel", handleWindowPointerUp, true)
-    return () => {
-      currentEditor.off("selectionUpdate", scheduleSyncBubble)
-      currentEditor.off("focus", scheduleSyncBubble)
-      document.removeEventListener("selectionchange", handleDocumentSelectionChange)
-      document.removeEventListener("pointerdown", handleEditorPointerDownCapture, true)
-      document.removeEventListener("mousedown", handleEditorMouseDownCapture, true)
-      window.removeEventListener("scroll", scheduleSyncBubble, true)
-      window.removeEventListener("resize", scheduleSyncBubble)
-      window.removeEventListener("pointerup", handleWindowPointerUp, true)
-      window.removeEventListener("pointercancel", handleWindowPointerUp, true)
-      if (rafId !== null && typeof window !== "undefined") {
-        window.cancelAnimationFrame(rafId)
-      }
-      mouseTextSelectionInProgressRef.current = false
-      syncBubbleOnMouseUpRef.current = false
-      cancelBubbleHide()
-    }
-  }, [
+  useBlockEditorEngineSelectionBubbleEffects({
     bubbleToolbarHoveredRef,
     cancelBubbleHide,
     clearWindowTextSelection,
@@ -734,7 +386,7 @@ export const useBlockEditorEngineSelectionEffects = ({
     syncTableQuickRailFromElement,
     tableMenuState,
     tryStartTableColumnResizeFromDomHandle,
-  ])
+  })
 
   useEffect(() => {
     return () => {

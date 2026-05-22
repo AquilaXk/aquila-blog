@@ -254,6 +254,101 @@ test("public detail and feed file boundaries는 route/data/section/style module�
   expect(feedExplorerSource).not.toContain("const ExplorerCard = styled.section")
 })
 
+test("app shell and auth file boundaries는 data/view/style module로 분리된다", () => {
+  const sourceRoot = path.resolve(__dirname, "../src")
+  const headerRoot = path.join(sourceRoot, "layouts/RootLayout/Header")
+  const authRoot = path.join(sourceRoot, "components/auth")
+  const adminRoot = path.join(sourceRoot, "routes/Admin")
+  const requiredModules = [
+    path.join(headerRoot, "NotificationBellModel.ts"),
+    path.join(headerRoot, "NotificationBellPanel.tsx"),
+    path.join(headerRoot, "NotificationBell.styles.ts"),
+    path.join(authRoot, "AuthEntryModalModel.ts"),
+    path.join(authRoot, "AuthEntryModal.styles.ts"),
+    path.join(sourceRoot, "routes/About/AboutPageModel.ts"),
+    path.join(sourceRoot, "routes/About/AboutPageView.tsx"),
+    path.join(sourceRoot, "routes/About/AboutPage.styles.ts"),
+    path.join(adminRoot, "AdminProfileWorkspacePageModel.ts"),
+    path.join(adminRoot, "AdminProfileWorkspaceSectionRenderer.tsx"),
+  ]
+
+  for (const sourcePath of requiredModules) {
+    expect(existsSync(sourcePath), path.relative(sourceRoot, sourcePath)).toBe(true)
+  }
+
+  const boundedSourceFiles = [
+    path.join(headerRoot, "NotificationBell.tsx"),
+    path.join(headerRoot, "NavBar.tsx"),
+    path.join(authRoot, "AuthEntryModal.tsx"),
+    path.join(sourceRoot, "pages/login.tsx"),
+    path.join(sourceRoot, "pages/signup.tsx"),
+    path.join(sourceRoot, "pages/signup/verify.tsx"),
+    path.join(sourceRoot, "pages/about.tsx"),
+    path.join(sourceRoot, "routes/About/AboutPageModel.ts"),
+    path.join(sourceRoot, "routes/About/AboutPageView.tsx"),
+    path.join(sourceRoot, "routes/About/AboutPage.styles.ts"),
+    path.join(adminRoot, "AdminProfileWorkspacePage.tsx"),
+    path.join(adminRoot, "AdminProfileWorkspaceSections.tsx"),
+  ]
+
+  const oversizedBudgetFiles = boundedSourceFiles
+    .filter((sourcePath) => existsSync(sourcePath))
+    .map((sourcePath) => ({
+      sourcePath: path.relative(sourceRoot, sourcePath),
+      lineCount: readFileSync(sourcePath, "utf8").split("\n").length,
+    }))
+    .filter(({ lineCount }) => lineCount > 700)
+
+  expect(oversizedBudgetFiles).toEqual([])
+
+  const collectSourceFiles = (root: string): string[] =>
+    readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+      const sourcePath = path.join(root, entry.name)
+      if (entry.isDirectory()) return collectSourceFiles(sourcePath)
+      return /\.(?:ts|tsx)$/.test(entry.name) ? [sourcePath] : []
+    })
+
+  const appShellAuthFilesOverThousand = [
+    ...collectSourceFiles(headerRoot),
+    ...collectSourceFiles(authRoot),
+    path.join(sourceRoot, "pages/about.tsx"),
+    path.join(sourceRoot, "pages/login.tsx"),
+    path.join(sourceRoot, "pages/signup.tsx"),
+    path.join(sourceRoot, "pages/signup/verify.tsx"),
+    path.join(adminRoot, "AdminProfileWorkspacePage.tsx"),
+    path.join(adminRoot, "AdminProfileWorkspaceSections.tsx"),
+    ...readdirSync(adminRoot)
+      .filter((sourcePath) => /^AdminProfileWorkspace.*\.(?:ts|tsx)$/.test(sourcePath))
+      .map((sourcePath) => path.join(adminRoot, sourcePath)),
+  ]
+    .filter((sourcePath, index, all) => all.indexOf(sourcePath) === index)
+    .filter((sourcePath) => existsSync(sourcePath))
+    .map((sourcePath) => ({
+      sourcePath: path.relative(sourceRoot, sourcePath),
+      lineCount: readFileSync(sourcePath, "utf8").split("\n").length,
+    }))
+    .filter(({ lineCount }) => lineCount >= 1000)
+
+  expect(appShellAuthFilesOverThousand).toEqual([])
+
+  const notificationSource = readFileSync(path.join(headerRoot, "NotificationBell.tsx"), "utf8")
+  const notificationStateSource = readFileSync(path.join(headerRoot, "useNotificationBellState.ts"), "utf8")
+  const authModalSource = readFileSync(path.join(authRoot, "AuthEntryModal.tsx"), "utf8")
+  const aboutPageSource = readFileSync(path.join(sourceRoot, "pages/about.tsx"), "utf8")
+  const adminProfilePageSource = readFileSync(path.join(adminRoot, "AdminProfileWorkspacePage.tsx"), "utf8")
+  const adminProfileSectionsSource = readFileSync(path.join(adminRoot, "AdminProfileWorkspaceSections.tsx"), "utf8")
+
+  expect(notificationSource).toContain("NotificationBellPanel")
+  expect(notificationStateSource).toContain("NotificationBellModel")
+  expect(notificationSource).not.toContain("const StyledWrapper = styled.div")
+  expect(authModalSource).toContain("AuthEntryModalModel")
+  expect(authModalSource).not.toContain("const Backdrop = styled.div")
+  expect(aboutPageSource).toContain("AboutPageView")
+  expect(aboutPageSource).not.toContain("const StyledWrapper = styled.div")
+  expect(adminProfilePageSource).toContain("AdminProfileWorkspacePageModel")
+  expect(adminProfileSectionsSource).toContain("renderAdminProfileWorkspaceSection")
+})
+
 const mockAvatarAsset = async (page: Page) => {
   await page.route("**/avatar.png", async (route) => {
     await route.fulfill({

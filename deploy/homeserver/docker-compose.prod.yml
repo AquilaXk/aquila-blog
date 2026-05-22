@@ -296,7 +296,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${PROD___SPRING__DATASOURCE__PASSWORD}
+      POSTGRES_PASSWORD: ${PROD___POSTGRES__PASSWORD:-${PROD___SPRING__DATASOURCE__PASSWORD}}
       POSTGRES_DATABASE: postgres
       POSTGRES_DATABASES: ${DB_BASE_NAME:-blog}_prod
       TZ: Asia/Seoul

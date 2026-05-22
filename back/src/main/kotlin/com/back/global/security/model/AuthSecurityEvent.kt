@@ -20,8 +20,6 @@ import jakarta.persistence.Table
     name = "auth_security_event",
     indexes = [
         Index(name = "idx_auth_security_event_created_at", columnList = "created_at"),
-        Index(name = "idx_auth_security_event_event_type_created_at", columnList = "event_type,created_at"),
-        Index(name = "idx_auth_security_event_member_created_at", columnList = "member_id,created_at"),
     ],
 )
 class AuthSecurityEvent(

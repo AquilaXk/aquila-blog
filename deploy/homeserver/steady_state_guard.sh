@@ -58,6 +58,19 @@ normalize_non_negative_int() {
   fi
 }
 
+auth_probes_enabled() {
+  local value
+  value="$(trim_quotes "$(env_value "STEADY_GUARD_AUTH_PROBES_ENABLED")")"
+  case "${value,,}" in
+    1|true|yes|on)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 GRAFANA_DS_FAIL_COUNT=0
 GRAFANA_DS_LAST_RECREATE_EPOCH=0
 GRAFANA_EMBED_FAIL_COUNT=0
@@ -557,6 +570,10 @@ check_grafana_embed_route() {
   api_domain="$(trim_quotes "$(env_value "API_DOMAIN")")"
   grafana_domain="$(trim_quotes "$(env_value "GRAFANA_DOMAIN")")"
   path="$(monitoring_embed_candidate_path)"
+  if ! auth_probes_enabled; then
+    log "skip grafana origin route check (STEADY_GUARD_AUTH_PROBES_ENABLED is not enabled)"
+    return 0
+  fi
   admin_email="$(trim_quotes "$(env_value "CUSTOM__ADMIN__EMAIL")")"
   admin_password="$(trim_quotes "$(env_value "CUSTOM__ADMIN__PASSWORD")")"
   if [[ -z "${grafana_domain}" ]]; then
@@ -690,6 +707,10 @@ check_notification_sse_route() {
   if [[ -z "${api_domain}" ]]; then
     log "FAIL missing API_DOMAIN in ${ENV_FILE}"
     return 1
+  fi
+  if ! auth_probes_enabled; then
+    log "skip notification sse route check (STEADY_GUARD_AUTH_PROBES_ENABLED is not enabled)"
+    return 0
   fi
 
   local fail_threshold cooldown_seconds

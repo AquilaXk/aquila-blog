@@ -960,6 +960,8 @@ require_pinned_image_env_key() {
 validate_required_runtime_env() {
   require_nonempty_env_key "API_DOMAIN"
   require_nonempty_env_key "CF_TUNNEL_TOKEN"
+  require_nonempty_env_key "PROD___SPRING__DATASOURCE__USERNAME"
+  require_nonempty_env_key "PROD___SPRING__DATASOURCE__PASSWORD"
   ensure_image_env_key_from_local_digest "CLOUDFLARED_IMAGE" "cloudflare/cloudflared:latest"
   ensure_image_env_key_from_local_digest "DB_IMAGE" "jangka512/pgj:latest"
   ensure_image_env_key_from_local_digest "MINIO_IMAGE" "minio/minio:latest"
@@ -989,6 +991,20 @@ resolve_prod_db_name() {
     db_base_name="blog"
   fi
   echo "${db_base_name}_prod"
+}
+
+validate_db_runtime_role_env() {
+  local runtime_user
+  runtime_user="$(trim_quotes "$(env_value "PROD___SPRING__DATASOURCE__USERNAME")")"
+
+  if [[ -z "${runtime_user}" ]]; then
+    echo "runtime datasource user is missing: PROD___SPRING__DATASOURCE__USERNAME" >&2
+    return 1
+  fi
+  if [[ "${runtime_user}" == "postgres" ]]; then
+    echo "runtime datasource user must not be postgres" >&2
+    return 1
+  fi
 }
 
 ensure_db_runtime_guards() {
@@ -1766,6 +1782,7 @@ ensure_caddy_mount_sync
 check_cloudflared_runtime "${api_domain}"
 check_grafana_embed_origin_route
 warn_grafana_embed_public_route
+validate_db_runtime_role_env
 ensure_db_runtime_guards || true
 compose pull "${next_backend}"
 if ! compose_up_force_recreate_with_retry "${next_backend}"; then

@@ -323,6 +323,14 @@ test.describe("editor studio state", () => {
       : ""
     const blockEditorShellSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"), "utf8")
     const blockEditorEngineSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"), "utf8")
+    const blockEditorEngineStylesPath = path.resolve(
+      __dirname,
+      "../src/components/editor/BlockEditorEngine.styles.tsx"
+    )
+    expect(existsSync(blockEditorEngineStylesPath)).toBe(true)
+    const blockEditorEngineStylesSource = existsSync(blockEditorEngineStylesPath)
+      ? readFileSync(blockEditorEngineStylesPath, "utf8")
+      : ""
     const blockSelectionModelSource = readFileSync(
       path.resolve(__dirname, "../src/components/editor/blockSelectionModel.ts"),
       "utf8"
@@ -384,20 +392,20 @@ test.describe("editor studio state", () => {
     const dedicatedEditorTopBarStyle = dedicatedEditorSurfaceSource.match(
       /const EditorStudioTopBar = styled\.div`([\s\S]*?)`\n\nconst EditorExitAction/
     )?.[1] ?? ""
-    const blockEditorShellStyle = blockEditorEngineSource.match(
+    const blockEditorShellStyle = blockEditorEngineStylesSource.match(
       /const Shell = styled\.div`([\s\S]*?)`\n\nconst Toolbar/
     )?.[1] ?? ""
-    const toolbarStyle = blockEditorEngineSource.match(
+    const toolbarStyle = blockEditorEngineStylesSource.match(
       /const Toolbar = styled\.div`([\s\S]*?)`\n\nconst ToolbarActions/
     )?.[1] ?? ""
-    const toolbarActionsStyle = blockEditorEngineSource.match(
+    const toolbarActionsStyle = blockEditorEngineStylesSource.match(
       /const ToolbarActions = styled\.div`([\s\S]*?)`\n\nconst ToolbarGroup/
     )?.[1] ?? ""
-    const quickInsertActionsStyle = blockEditorEngineSource.match(
+    const quickInsertActionsStyle = blockEditorEngineStylesSource.match(
       /const QuickInsertActions = styled\.div`([\s\S]*?)`\n\nconst QuickInsertButton/
     )?.[1] ?? ""
-    const quickInsertButtonStyle = blockEditorEngineSource.match(
-      /const QuickInsertButton = styled\.button`([\s\S]*?)`\s*$/
+    const quickInsertButtonStyle = blockEditorEngineStylesSource.match(
+      /const QuickInsertButton = styled\.button`([\s\S]*?)`\s*export\s*\{/
     )?.[1] ?? ""
 
     expect(editorStudioSource).not.toContain("BLOCK_EDITOR_V2_ENABLED")
@@ -846,15 +854,21 @@ test.describe("editor studio state", () => {
     expect(blockEditorShellSource).toContain('import BlockEditorEngine from "./BlockEditorEngine"')
     expect(blockEditorShellSource).toContain('import type { BlockEditorEngineProps } from "./blockEditorEngineTypes"')
     expect(blockEditorShellSource).toContain("const BlockEditorShell = (props: BlockEditorEngineProps) => <BlockEditorEngine {...props} />")
+    expect(blockEditorEngineSource.split("\n").length).toBeLessThanOrEqual(8500)
+    expect(blockEditorEngineSource).toContain('} from "./BlockEditorEngine.styles"')
+    expect(blockEditorEngineSource).not.toContain("const Shell = styled.div`")
+    expect(blockEditorEngineSource).not.toContain("const Toolbar = styled.div`")
+    expect(blockEditorEngineSource).not.toContain("const EditorViewport = styled.div`")
+    expect(blockEditorEngineSource).not.toContain("const QuickInsertBar = styled.div`")
+    expect(blockEditorEngineStylesSource).toContain("const QuickInsertBar = styled.div`")
     expect(blockEditorEngineSource).not.toContain("Markdown 편집")
     expect(blockEditorEngineSource).not.toContain('label: "원문 블록"')
     expect(blockEditorEngineSource).not.toContain("buildStructuredInsertContent")
     expect(blockEditorEngineSource).not.toContain("insertRawMarkdownBlock")
-    expect(blockEditorEngineSource).toContain("const QuickInsertBar = styled.div`")
     expect(blockEditorEngineSource).not.toContain("슬래시(`/`)나 `+` 없이도 자주 쓰는 블록을 바로 넣을 수 있습니다.")
-    expect(blockEditorEngineSource).toContain(".aq-block-editor__content blockquote {")
-    expect(blockEditorEngineSource).toContain("border-left: 4px solid")
-    expect(blockEditorEngineSource).toContain("border-radius: 0;")
+    expect(blockEditorEngineStylesSource).toContain(".aq-block-editor__content blockquote {")
+    expect(blockEditorEngineStylesSource).toContain("border-left: 4px solid")
+    expect(blockEditorEngineStylesSource).toContain("border-radius: 0;")
     expect(blockEditorEngineSource).toContain('from "./blockSelectionModel"')
     expect(blockEditorEngineSource).toContain('from "./nestedListItemModel"')
     expect(blockEditorEngineSource).toContain('from "./useBlockEditorMarkdownCommit"')
@@ -1042,7 +1056,7 @@ test.describe("editor studio state", () => {
     expect(nestedListItemDragModelSource).toContain("export const createNestedListItemDropIndicatorState")
     expect(nestedListItemDragModelSource).toContain("export const hideNestedListItemDropIndicatorState")
     expect(nestedListItemDragModelSource).toContain("export const isNestedListItemContextInDraggedList")
-    const selectionRuleMatch = blockEditorEngineSource.match(/\.aq-block-editor__content ::selection\s*\{([^}]*)\}/)
+    const selectionRuleMatch = blockEditorEngineStylesSource.match(/\.aq-block-editor__content ::selection\s*\{([^}]*)\}/)
     expect(selectionRuleMatch?.[1]).toBeTruthy()
     expect(selectionRuleMatch?.[1]).not.toMatch(/\bcolor\s*:/)
   })
@@ -1219,6 +1233,10 @@ test.describe("editor studio state", () => {
   test("table resize metadata와 상세 렌더 계약은 colgroup width와 drag guide를 유지한다", () => {
     const blockEditorEngineSource = readFileSync(
       path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"),
+      "utf8"
+    )
+    const blockEditorEngineStylesSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.styles.tsx"),
       "utf8"
     )
     const tableAffordanceModelSource = readFileSync(
@@ -1404,7 +1422,7 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).toContain('data-testid="table-row-drag-shadow"')
     expect(blockEditorEngineSource).toContain('"table-row-reorder-indicator"')
     expect(blockEditorEngineSource).toContain('"table-column-reorder-indicator"')
-    expect(blockEditorEngineSource).toContain('const TableCellMenuButton = styled(TableHandleButton)`')
+    expect(blockEditorEngineStylesSource).toContain('const TableCellMenuButton = styled(TableHandleButton)`')
     expect(blockEditorEngineSource).toContain("const updateActiveTableOverflowMode = useCallback(")
     expect(blockEditorEngineSource).toContain("const reorderTableAxisAtPosition = useCallback(")
     expect(tableCornerGrowModelSource).toContain("export type TableCornerGrowState = {")
@@ -1426,7 +1444,7 @@ test.describe("editor studio state", () => {
     expect(tableStructureModelSource).toContain('overflowMode: getTableOverflowMode(tableNode)')
     expect(tableWidthModelSource).toContain("const maxActiveWidth = Math.max(TABLE_MIN_COLUMN_WIDTH_PX, safeBudget - otherColumnsWidth)")
     expect(blockEditorEngineSource).toContain("const tableCornerGrowSuppressClickRef = useRef(false)")
-    expect(blockEditorEngineSource).toContain('"grip" | "grow"')
+    expect(blockEditorEngineStylesSource).toContain('"grip" | "grow"')
     expect(blockEditorEngineSource).toContain("isCellMenuOpen,")
     expect(markdownRendererSource).toContain("const explicitTableWidth = useMemo(")
     expect(markdownRendererSource).toContain("minWidth: `${explicitTableWidth}px`")
@@ -1464,7 +1482,7 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).toContain("shouldShowColumnAddBar,")
     expect(blockEditorEngineSource).toContain("shouldShowRowAddBar,")
     expect(blockEditorEngineSource).toContain("findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)")
-    expect(blockEditorEngineSource).toContain("display: none !important;")
+    expect(blockEditorEngineStylesSource).toContain("display: none !important;")
     expect(editorStudioSource).toContain('import { useEditorStudioPersistence } from "./useEditorStudioPersistence"')
     expect(editorStudioPersistenceSource).toContain("const currentPostContent = postContentLiveRef.current")
     expect(markdownRendererRootSource.match(/table-layout: fixed;/g)?.length ?? 0).toBeGreaterThanOrEqual(2)

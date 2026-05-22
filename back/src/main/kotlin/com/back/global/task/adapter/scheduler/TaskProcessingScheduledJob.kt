@@ -156,11 +156,7 @@ class TaskProcessingScheduledJob(
             if (!dynamicConcurrencyEnabled) {
                 workerConcurrency
             } else {
-                val readyPending = taskRepository.countByStatusAndNextRetryAtLessThanEqual(TaskStatus.PENDING, Instant.now())
-                val backlogPerSlot = dynamicBacklogPerSlot.coerceAtLeast(1)
-                val scaled = ceil(readyPending.toDouble() / backlogPerSlot).toInt().coerceAtLeast(1)
-                val minConcurrency = dynamicMinConcurrent.coerceIn(1, workerConcurrency)
-                scaled.coerceIn(minConcurrency, workerConcurrency)
+                workerConcurrency
             }
 
         return (targetConcurrency - activeWorkers).coerceIn(0, workerConcurrency)
@@ -174,12 +170,6 @@ class TaskProcessingScheduledJob(
             return minOf(safeBatchSize, availableWorkerSlots)
         }
 
-        val now = Instant.now()
-        val readyPending = taskRepository.countByStatusAndNextRetryAtLessThanEqual(TaskStatus.PENDING, now).coerceAtLeast(0)
-        val backlogPerStep = dynamicBatchBacklogPerStep.coerceAtLeast(1)
-        val backlogSteps = ceil(readyPending.toDouble() / backlogPerStep).toInt().coerceAtLeast(1)
-        val backlogBoost = (backlogSteps - 1).coerceAtLeast(0)
-
         val avgHandlerMs = recentHandlerDurationMs.get().coerceAtLeast(1)
         val targetMs = dynamicBatchTargetHandlerDurationMs.coerceIn(100, 60_000)
         val latencyFactor =
@@ -188,12 +178,11 @@ class TaskProcessingScheduledJob(
                 else -> (targetMs.toDouble() / avgHandlerMs.toDouble()).coerceIn(0.35, 1.0)
             }
 
-        val minBatch = dynamicBatchMinSize.coerceIn(1, safeBatchSize)
-        val maxPrefetchMultiplier = dynamicBatchMaxPrefetchMultiplier.coerceIn(1, 8)
-        val maxPrefetch = minOf(safeBatchSize, availableWorkerSlots.coerceAtLeast(1) * maxPrefetchMultiplier)
-        val raw = ceil((availableWorkerSlots + backlogBoost).toDouble() * latencyFactor).toInt()
+        val maxClaim = minOf(safeBatchSize, availableWorkerSlots.coerceAtLeast(1))
+        val minClaim = minOf(dynamicBatchMinSize.coerceIn(1, safeBatchSize), maxClaim)
+        val raw = ceil(availableWorkerSlots.toDouble() * latencyFactor).toInt().coerceAtLeast(1)
 
-        return raw.coerceIn(minBatch, maxPrefetch.coerceAtLeast(minBatch))
+        return raw.coerceIn(minClaim, maxClaim)
     }
 
     private fun tryAcquirePerTypePermit(taskType: String): Boolean {
@@ -265,9 +254,7 @@ class TaskProcessingScheduledJob(
             return
         }
 
-        val now = Instant.now()
         val minConcurrent = perTypeAutoTuneMinConcurrent.coerceIn(1, workerConcurrency)
-        val backlogPerSlot = perTypeAutoTuneBacklogPerSlot.coerceAtLeast(1)
         val explicitReserved = explicitPerTypeMaxConcurrent.values.sum().coerceIn(0, workerConcurrency)
         val dynamicBudget = (workerConcurrency - explicitReserved).coerceAtLeast(0)
         if (dynamicBudget == 0) {
@@ -276,30 +263,21 @@ class TaskProcessingScheduledJob(
             return
         }
 
-        val readyBacklogByType =
-            dynamicTypes.associateWith { taskType ->
-                taskRepository.countByTaskTypeAndStatusAndNextRetryAtLessThanEqual(taskType, TaskStatus.PENDING, now)
-            }
+        val baseLimit = (dynamicBudget / dynamicTypes.size.coerceAtLeast(1)).coerceAtLeast(minConcurrent)
         val desiredByType =
-            readyBacklogByType
-                .mapValues { (_, readyPending) ->
-                    if (readyPending <= 0L) {
-                        0
-                    } else {
-                        val scaled = ceil(readyPending.toDouble() / backlogPerSlot).toInt().coerceAtLeast(minConcurrent)
-                        scaled.coerceIn(1, workerConcurrency)
-                    }
-                }.toMutableMap()
+            dynamicTypes
+                .associateWith { baseLimit.coerceIn(1, workerConcurrency) }
+                .toMutableMap()
 
         while (desiredByType.values.sum() > dynamicBudget) {
             val typeToReduce = desiredByType.maxByOrNull { it.value }?.key ?: break
             val current = desiredByType[typeToReduce] ?: break
-            if (current <= 0) break
+            if (current <= 1) break
             desiredByType[typeToReduce] = current - 1
         }
 
         perTypeDynamicLimits.clear()
-        perTypeDynamicLimits.putAll(desiredByType.filterValues { it > 0 })
+        perTypeDynamicLimits.putAll(desiredByType)
         perTypeDynamicRefreshedAtEpochMs = nowEpochMs
     }
 

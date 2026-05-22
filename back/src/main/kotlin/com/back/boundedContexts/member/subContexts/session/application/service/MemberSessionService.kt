@@ -14,6 +14,7 @@ import org.springframework.cache.annotation.Cacheable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 
 /**
  * 로그인 세션 생성/조회/폐기를 담당하는 서비스입니다.
@@ -28,6 +29,8 @@ class MemberSessionService(
     private val refreshTokenExpirationSeconds: Long = 2_592_000,
     @param:Value("\${custom.auth.session.maxActivePerMember:32}")
     private val maxActivePerMember: Int = 32,
+    @param:Value("\${custom.auth.session.revokedRetentionDays:30}")
+    private val revokedSessionRetentionDays: Int = 30,
 ) : MemberSessionUseCase {
     @Transactional
     override fun createSession(
@@ -174,6 +177,15 @@ class MemberSessionService(
         val session = memberSessionStorePort.findBySessionKeyAndRevokedAtIsNull(sessionKey) ?: return
         session.revoke()
         evictActiveSnapshot(session.member.id, sessionKey)
+    }
+
+    @Transactional
+    fun purgeExpiredRevokedSessions(
+        batchSize: Int,
+        now: Instant = Instant.now(),
+    ): Int {
+        val cutoff = now.minus(revokedSessionRetentionDays.coerceAtLeast(1).toLong(), ChronoUnit.DAYS)
+        return memberSessionStorePort.deleteRevokedBefore(cutoff, batchSize.coerceIn(1, 1_000))
     }
 
     private fun evictActiveSnapshot(

@@ -36,4 +36,9 @@ interface MemberSessionStorePort {
         keepLimit: Int,
         now: Instant,
     ): Int
+
+    fun deleteRevokedBefore(
+        cutoff: Instant,
+        limit: Int,
+    ): Int
 }

@@ -143,6 +143,14 @@ test.describe("editor studio state", () => {
     const dedicatedEditorSurfaceSource = existsSync(dedicatedEditorSurfacePath)
       ? readFileSync(dedicatedEditorSurfacePath, "utf8")
       : ""
+    const dedicatedEditorSurfacePartsPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioDedicatedEditorSurfaceParts.tsx"
+    )
+    expect(existsSync(dedicatedEditorSurfacePartsPath)).toBe(true)
+    const dedicatedEditorSurfacePartsSource = existsSync(dedicatedEditorSurfacePartsPath)
+      ? readFileSync(dedicatedEditorSurfacePartsPath, "utf8")
+      : ""
     const editorStudioStateSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/editorStudioState.ts"), "utf8")
     const editorStudioMetaModelPath = path.resolve(__dirname, "../src/routes/Admin/editorStudioMetaModel.ts")
     expect(existsSync(editorStudioMetaModelPath)).toBe(true)
@@ -301,6 +309,14 @@ test.describe("editor studio state", () => {
     const editorStudioPostListPanelSource = existsSync(editorStudioPostListPanelPath)
       ? readFileSync(editorStudioPostListPanelPath, "utf8")
       : ""
+    const editorStudioPostListPanelPartsPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioPostListPanelParts.tsx"
+    )
+    expect(existsSync(editorStudioPostListPanelPartsPath)).toBe(true)
+    const editorStudioPostListPanelPartsSource = existsSync(editorStudioPostListPanelPartsPath)
+      ? readFileSync(editorStudioPostListPanelPartsPath, "utf8")
+      : ""
     const editorStudioContentWorkspacePath = path.resolve(
       __dirname,
       "../src/routes/Admin/EditorStudioContentWorkspace.tsx"
@@ -356,6 +372,14 @@ test.describe("editor studio state", () => {
     expect(existsSync(editorStudioComposeWritingSurfacePath)).toBe(true)
     const editorStudioComposeWritingSurfaceSource = existsSync(editorStudioComposeWritingSurfacePath)
       ? readFileSync(editorStudioComposeWritingSurfacePath, "utf8")
+      : ""
+    const editorStudioComposeWritingSurfacePartsPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioComposeWritingSurfaceParts.tsx"
+    )
+    expect(existsSync(editorStudioComposeWritingSurfacePartsPath)).toBe(true)
+    const editorStudioComposeWritingSurfacePartsSource = existsSync(editorStudioComposeWritingSurfacePartsPath)
+      ? readFileSync(editorStudioComposeWritingSurfacePartsPath, "utf8")
       : ""
     const editorStudioComposeWorkspacePath = path.resolve(
       __dirname,
@@ -553,14 +577,14 @@ test.describe("editor studio state", () => {
     const floatingBubbleStateSource = existsSync(floatingBubbleStatePath) ? readFileSync(floatingBubbleStatePath, "utf8") : ""
     const writerEditorHostSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/WriterEditorHost.tsx"), "utf8")
     const rootLayoutSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/index.tsx"), "utf8")
-    const dedicatedEditorRootStyle = dedicatedEditorSurfaceSource.match(
-      /const EditorStudioRoot = styled\.main`([\s\S]*?)`\n\nconst EditorStudioLoadingState/
+    const dedicatedEditorRootStyle = dedicatedEditorSurfacePartsSource.match(
+      /export const EditorStudioRoot = styled\.main`([\s\S]*?)`\n\nexport const EditorStudioLoadingState/
     )?.[1] ?? ""
-    const dedicatedEditorFrameStyle = dedicatedEditorSurfaceSource.match(
-      /const EditorStudioFrame = styled\.div`([\s\S]*?)`\n\nconst EditorStudioWritingColumn/
+    const dedicatedEditorFrameStyle = dedicatedEditorSurfacePartsSource.match(
+      /export const EditorStudioFrame = styled\.div`([\s\S]*?)`\n\nexport const EditorStudioWritingColumn/
     )?.[1] ?? ""
-    const dedicatedEditorTopBarStyle = dedicatedEditorSurfaceSource.match(
-      /const EditorStudioTopBar = styled\.div`([\s\S]*?)`\n\nconst EditorExitAction/
+    const dedicatedEditorTopBarStyle = dedicatedEditorSurfacePartsSource.match(
+      /export const EditorStudioDedicatedTopBar = styled\.div`([\s\S]*?)`\n\nexport const EditorExitAction/
     )?.[1] ?? ""
     const blockEditorShellStyle = blockEditorEngineStylesSource.match(
       /const Shell = styled\.div`([\s\S]*?)`\n\nconst Toolbar/
@@ -607,7 +631,7 @@ test.describe("editor studio state", () => {
     expect(quickInsertActionsStyle).toContain("min-width: 0;")
     expect(quickInsertActionsStyle).toContain("max-width: 100%;")
     expect(quickInsertButtonStyle).toContain("white-space: nowrap;")
-    expect(dedicatedEditorSurfaceSource).toContain("grid-template-columns: minmax(0, 1fr);")
+    expect(dedicatedEditorSurfacePartsSource).toContain("grid-template-columns: minmax(0, 1fr);")
     expect(dedicatedEditorSurfaceSource).toContain('data-testid="editor-studio-frame"')
     expect(editorStudioSource).toContain('import { WriterEditorHost } from "./WriterEditorHost"')
     expect(editorStudioSource.match(/<WriterEditorHost/g)?.length).toBe(2)
@@ -623,10 +647,10 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).not.toContain('aria-label="미리보기 기기 폭"')
     expect(editorStudioSource).not.toContain('zoom: var(--preview-scale, 1);')
     expect(editorStudioSource).not.toContain("--preview-scale")
-    expect(dedicatedEditorSurfaceSource).toContain("const EditorExitAction = styled.button`")
-    expect(dedicatedEditorSurfaceSource).toContain("min-height: 42px;")
-    expect(dedicatedEditorSurfaceSource).toContain("const EditorStudioFrame = styled.div`")
-    expect(dedicatedEditorSurfaceSource).toContain("const EditorStudioWritingColumn = styled.section<{ $compact?: boolean }>`")
+    expect(dedicatedEditorSurfacePartsSource).toContain("export const EditorExitAction = styled.button`")
+    expect(dedicatedEditorSurfacePartsSource).toContain("min-height: 42px;")
+    expect(dedicatedEditorSurfacePartsSource).toContain("export const EditorStudioFrame = styled.div`")
+    expect(dedicatedEditorSurfacePartsSource).toContain("export const EditorStudioWritingColumn = styled.section<{ $compact?: boolean }>`")
     expect(editorStudioSource).not.toContain("type EditorMode =")
     expect(editorStudioSource).not.toContain("type PublishActionType =")
     expect(editorStudioSource).not.toContain("type PostVisibility =")
@@ -802,9 +826,9 @@ test.describe("editor studio state", () => {
       'import { EditorStudioPostListPanel } from "./EditorStudioPostListPanel"'
     )
     expect(editorStudioContentWorkspaceSource.match(/<EditorStudioPostListPanel/g)?.length).toBe(1)
-    expect(editorStudioPostListPanelSource).toContain("관리자 글 리스트")
-    expect(editorStudioPostListPanelSource).toContain("삭제 글 리스트")
-    expect(editorStudioPostListPanelSource).toContain("현재 목록 전체 선택")
+    expect(editorStudioPostListPanelPartsSource).toContain("관리자 글 리스트")
+    expect(editorStudioPostListPanelPartsSource).toContain("삭제 글 리스트")
+    expect(editorStudioPostListPanelPartsSource).toContain("현재 목록 전체 선택")
     expect(editorStudioSource).not.toContain("<ListPanel")
     expect(editorStudioSource).not.toContain("const ListPanel = styled.div`")
     expect(editorStudioSource).not.toContain("const ListTable = styled.table`")
@@ -935,9 +959,9 @@ test.describe("editor studio state", () => {
     expect(editorStudioComposeWorkspaceSource).toContain("const PrimaryButton = styled(Button)`")
     expect(editorStudioComposeWorkspaceSource).not.toContain("data-mobile-visible={!isCompactMobileLayout}")
     expect(editorStudioComposeWorkspaceSource).not.toContain('[data-mobile-visible="false"]')
-    expect(editorStudioComposeWritingSurfaceSource).toContain("const ComposeMainColumn = styled.div`")
-    expect(editorStudioComposeWritingSurfaceSource).toContain("const TitleInput = styled.textarea`")
-    expect(editorStudioComposeWritingSurfaceSource).toContain("const WriterFooterBar = styled.div`")
+    expect(editorStudioComposeWritingSurfacePartsSource).toContain("export const EditorStudioComposeMainColumn = styled.div`")
+    expect(editorStudioComposeWritingSurfacePartsSource).toContain("export const TitleInput = styled.textarea`")
+    expect(editorStudioComposeWritingSurfacePartsSource).toContain("export const EditorStudioComposeFooterBar = styled.div`")
     expect(editorStudioSource).not.toContain("const ComposeSurfaceSection = styled")
     expect(editorStudioSource).not.toContain("const ComposeStudioLayout = styled.div`")
     expect(editorStudioSource).not.toContain("const SubActionRow = styled.div`")
@@ -1873,5 +1897,76 @@ test.describe("editor studio state", () => {
     expect(qaHarnessSource).toContain('dynamic(() => import("src/components/editor/BlockEditorShell")')
     expect(qaHarnessSource).toContain("BlockEditorShell 엔진 QA")
     expect(qaHarnessSource).toContain("실제 글쓰기 화면 레이아웃과 제목 입력칸 회귀는")
+  })
+
+  test("editor studio workspace panel props는 하위 view contract로 분리된다", () => {
+    const routeAdminDir = path.resolve(__dirname, "../src/routes/Admin")
+    const targetFiles = [
+      "EditorStudioPostListPanel.tsx",
+      "EditorStudioPublishModal.tsx",
+      "EditorStudioComposeWritingSurface.tsx",
+      "EditorStudioDedicatedEditorSurface.tsx",
+    ]
+    const partFiles = [
+      "EditorStudioPostListPanelParts.tsx",
+      "EditorStudioPostListPanelStyles.tsx",
+      "EditorStudioPostListActionStyles.tsx",
+      "EditorStudioPublishModalParts.tsx",
+      "EditorStudioPublishModalStyles.tsx",
+      "EditorStudioComposeWritingSurfaceParts.tsx",
+      "EditorStudioDedicatedEditorSurfaceParts.tsx",
+    ]
+
+    for (const partFile of partFiles) {
+      expect(existsSync(path.join(routeAdminDir, partFile)), `${partFile} should own extracted panel views`).toBe(true)
+    }
+
+    for (const targetFile of targetFiles) {
+      const source = readFileSync(path.join(routeAdminDir, targetFile), "utf8")
+      expect(source.split("\n").length, `${targetFile} should stay under the panel root budget`).toBeLessThanOrEqual(600)
+      expect(source).not.toContain("apiFetch(")
+      expect(source).not.toContain("run(")
+      expect(source).not.toContain("setPost")
+      expect(source).not.toContain("WriterEditorHost")
+    }
+
+    for (const partFile of partFiles) {
+      const source = readFileSync(path.join(routeAdminDir, partFile), "utf8")
+      expect(source.split("\n").length, `${partFile} should stay under the companion budget`).toBeLessThanOrEqual(600)
+    }
+
+    const postListSource = readFileSync(path.join(routeAdminDir, "EditorStudioPostListPanel.tsx"), "utf8")
+    const postListPartsSource = readFileSync(path.join(routeAdminDir, "EditorStudioPostListPanelParts.tsx"), "utf8")
+    expect(postListSource).toContain('from "./EditorStudioPostListPanelParts"')
+    expect(postListPartsSource).toContain("export const EditorStudioPostListTable =")
+    expect(postListPartsSource).toContain("export const EditorStudioPostListMobileCards =")
+
+    const publishModalSource = readFileSync(path.join(routeAdminDir, "EditorStudioPublishModal.tsx"), "utf8")
+    const publishModalPartsSource = readFileSync(path.join(routeAdminDir, "EditorStudioPublishModalParts.tsx"), "utf8")
+    expect(publishModalSource).toContain('from "./EditorStudioPublishModalParts"')
+    expect(publishModalPartsSource).toContain("export const EditorStudioPublishVisibilitySection =")
+    expect(publishModalPartsSource).toContain("export const EditorStudioPublishPreviewCard =")
+    expect(publishModalPartsSource).toContain("export const EditorStudioPublishCardSettings =")
+
+    const composeSurfaceSource = readFileSync(path.join(routeAdminDir, "EditorStudioComposeWritingSurface.tsx"), "utf8")
+    const composeSurfacePartsSource = readFileSync(
+      path.join(routeAdminDir, "EditorStudioComposeWritingSurfaceParts.tsx"),
+      "utf8"
+    )
+    expect(composeSurfaceSource).toContain('from "./EditorStudioComposeWritingSurfaceParts"')
+    expect(composeSurfacePartsSource).toContain("export const EditorStudioComposeHeaderSection =")
+    expect(composeSurfacePartsSource).toContain("export const EditorStudioComposeMetadataSection =")
+    expect(composeSurfacePartsSource).toContain("export const EditorStudioComposeBodySection =")
+    expect(composeSurfacePartsSource).toContain("export const EditorStudioComposeFooterBar =")
+
+    const dedicatedSurfaceSource = readFileSync(path.join(routeAdminDir, "EditorStudioDedicatedEditorSurface.tsx"), "utf8")
+    const dedicatedSurfacePartsSource = readFileSync(
+      path.join(routeAdminDir, "EditorStudioDedicatedEditorSurfaceParts.tsx"),
+      "utf8"
+    )
+    expect(dedicatedSurfaceSource).toContain('from "./EditorStudioDedicatedEditorSurfaceParts"')
+    expect(dedicatedSurfacePartsSource).toContain("export const EditorStudioDedicatedTopBar =")
+    expect(dedicatedSurfacePartsSource).toContain("export const EditorStudioDedicatedMetaSection =")
+    expect(dedicatedSurfacePartsSource).toContain("export const EditorStudioDedicatedCanvasSection =")
   })
 })

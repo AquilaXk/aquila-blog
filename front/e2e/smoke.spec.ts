@@ -254,6 +254,52 @@ test("public detail and feed file boundaries는 route/data/section/style module�
   expect(feedExplorerSource).not.toContain("const ExplorerCard = styled.section")
 })
 
+test("public detail/feed residual file boundaries는 600 line companion budget을 유지한다", () => {
+  const detailRoot = path.resolve(__dirname, "../src/routes/Detail/PostDetail")
+  const feedPostListRoot = path.resolve(__dirname, "../src/routes/Feed/PostList")
+  const requiredDetailModules = [
+    "PostHeader.styles.ts",
+    "PostDetailSection.styles.ts",
+    "usePostDetailEngagementActions.ts",
+    "usePostDetailRelatedPosts.ts",
+  ]
+
+  for (const sourcePath of requiredDetailModules) {
+    expect(existsSync(path.join(detailRoot, sourcePath)), sourcePath).toBe(true)
+  }
+
+  const boundedSourceFiles = [
+    path.join(detailRoot, "index.tsx"),
+    path.join(detailRoot, "PostDetail.styles.ts"),
+    path.join(detailRoot, "PostHeader.tsx"),
+    path.join(detailRoot, "PostDetailSection.styles.ts"),
+    path.join(detailRoot, "PostHeader.styles.ts"),
+    path.join(detailRoot, "CommentBox/index.tsx"),
+    path.join(feedPostListRoot, "index.tsx"),
+  ]
+
+  const oversizedBudgetFiles = boundedSourceFiles
+    .filter((sourcePath) => existsSync(sourcePath))
+    .map((sourcePath) => ({
+      sourcePath: path.relative(path.resolve(__dirname, "../src"), sourcePath),
+      lineCount: readFileSync(sourcePath, "utf8").split("\n").length,
+    }))
+    .filter(({ lineCount }) => lineCount > 600)
+
+  expect(oversizedBudgetFiles).toEqual([])
+
+  const detailPageSource = readFileSync(path.join(detailRoot, "index.tsx"), "utf8")
+  const postHeaderSource = readFileSync(path.join(detailRoot, "PostHeader.tsx"), "utf8")
+  const postDetailStylesSource = readFileSync(path.join(detailRoot, "PostDetail.styles.ts"), "utf8")
+
+  expect(detailPageSource).toContain("usePostDetailEngagementActions")
+  expect(detailPageSource).toContain("usePostDetailRelatedPosts")
+  expect(postHeaderSource).toContain("PostHeader.styles")
+  expect(postHeaderSource).not.toContain("const StyledWrapper = styled.header")
+  expect(postDetailStylesSource).toContain("PostDetailSection.styles")
+  expect(postDetailStylesSource).not.toContain("export const RelatedSection = styled.section")
+})
+
 test("app shell and auth file boundaries는 data/view/style module로 분리된다", () => {
   const sourceRoot = path.resolve(__dirname, "../src")
   const headerRoot = path.join(sourceRoot, "layouts/RootLayout/Header")

@@ -1634,8 +1634,19 @@ test.describe("editor studio state", () => {
       path.resolve(__dirname, "../src/libs/markdown/components/MarkdownRendererRoot.tsx"),
       "utf8"
     )
+    const markdownRendererRootTableStylesSource = readFileSync(
+      path.resolve(
+        __dirname,
+        "../src/libs/markdown/components/MarkdownRendererRootTableToggleStyles.ts"
+      ),
+      "utf8"
+    )
     const markdownRendererSource = readFileSync(
       path.resolve(__dirname, "../src/libs/markdown/MarkdownRenderer.tsx"),
+      "utf8"
+    )
+    const markdownTableRendererSource = readFileSync(
+      path.resolve(__dirname, "../src/libs/markdown/MarkdownRendererTable.tsx"),
       "utf8"
     )
 
@@ -1781,10 +1792,12 @@ test.describe("editor studio state", () => {
     expect(blockEditorTableOverlayControllerSource).toContain("const tableCornerGrowSuppressClickRef = useRef(false)")
     expect(blockEditorEngineStylesSource).toContain('"grip" | "grow"')
     expect(blockEditorTableOverlayControllerSource).toContain("isCellMenuOpen,")
-    expect(markdownRendererSource).toContain("const explicitTableWidth = useMemo(")
-    expect(markdownRendererSource).toContain("minWidth: `${explicitTableWidth}px`")
-    expect(markdownRendererRootSource).toContain("width: auto;")
-    expect(markdownRendererRootSource).toContain("max-width: none;")
+    expect(markdownRendererSource).toContain("MarkdownTableRenderer")
+    expect(markdownTableRendererSource).toContain("const explicitTableWidth = useMemo(")
+    expect(markdownTableRendererSource).toContain("minWidth: `${explicitTableWidth}px`")
+    expect(markdownRendererRootSource).toContain("markdownRendererRootTableToggleStyles")
+    expect(markdownRendererRootTableStylesSource).toContain("width: auto;")
+    expect(markdownRendererRootTableStylesSource).toContain("max-width: none;")
     expect(blockEditorTableOverlayControllerSource).toContain("isRowMenuOpen,")
     expect(blockEditorTableOverlayControllerSource).toContain("isColumnMenuOpen,")
     expect(blockEditorTableOverlayLayerSource).toContain("activeTableStructureState.hasHeaderRow")
@@ -1822,8 +1835,10 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineStylesSource).toContain("display: none !important;")
     expect(editorStudioSource).toContain('import { useEditorStudioPersistence } from "./useEditorStudioPersistence"')
     expect(editorStudioPersistenceSource).toContain("const currentPostContent = postContentLiveRef.current")
-    expect(markdownRendererRootSource.match(/table-layout: fixed;/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
-    expect(markdownRendererRootSource).not.toContain("table-layout: auto;")
+    expect(
+      markdownRendererRootTableStylesSource.match(/table-layout: fixed;/g)?.length ?? 0
+    ).toBeGreaterThanOrEqual(2)
+    expect(markdownRendererRootTableStylesSource).not.toContain("table-layout: auto;")
   })
 
   test("editor studio SSR은 작성자 카드에 공개 프로필 snapshot을 먼저 seed한다", () => {

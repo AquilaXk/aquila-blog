@@ -8,6 +8,8 @@ const repoRoot = path.resolve(import.meta.dirname, "../..")
 const contractPath = path.join(repoRoot, "deploy/env/env.contract.json")
 const workflowPath = path.join(repoRoot, ".github/workflows/deploy.yml")
 const composePath = path.join(repoRoot, "deploy/homeserver/docker-compose.prod.yml")
+const applicationProdPath = path.join(repoRoot, "back/src/main/resources/application-prod.yaml")
+const deployScriptPath = path.join(repoRoot, "deploy/homeserver/blue_green_deploy.sh")
 
 const targetKeyNames = (contract, targetName) => {
   const target = contract.targets[targetName]
@@ -32,7 +34,9 @@ const baseHomeServerEnv = [
   "GRAFANA_ADMIN_USER=admin",
   "GRAFANA_ADMIN_PASSWORD=valid-grafana-password",
   "GRAFANA_ROOT_URL=https://grafana.aquilaxk.site",
+  "PROD___SPRING__DATASOURCE__USERNAME=blog_app",
   "PROD___SPRING__DATASOURCE__PASSWORD=valid-db-password",
+  "PROD___POSTGRES__PASSWORD=valid-postgres-password",
   "PROD___SPRING__DATA__REDIS__PASSWORD=valid-redis-password",
   "CUSTOM__JWT__SECRET_KEY=abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz",
   "CUSTOM__ADMIN__USERNAME=관리자",
@@ -151,4 +155,19 @@ test("runtime contract accounts for every compose env interpolation", async () =
   const missing = [...new Set(composeKeys)].filter((key) => !contractKeys.has(key)).sort()
 
   assert.deepEqual(missing, [])
+})
+
+test("prod datasource uses a non-superuser runtime role contract", () => {
+  const compose = readFileSync(composePath, "utf8")
+  const applicationProd = readFileSync(applicationProdPath, "utf8")
+  const deployScript = readFileSync(deployScriptPath, "utf8")
+
+  assert.match(applicationProd, /username:\s*"\$\{PROD___SPRING__DATASOURCE__USERNAME\}"/)
+  assert.match(compose, /POSTGRES_PASSWORD:\s*\$\{PROD___POSTGRES__PASSWORD:-\$\{PROD___SPRING__DATASOURCE__PASSWORD\}\}/)
+  assert(!compose.includes("POSTGRES_PASSWORD: ${PROD___SPRING__DATASOURCE__PASSWORD}"))
+  assert.match(deployScript, /validate_db_runtime_role_env/)
+  assert.match(deployScript, /runtime datasource user must not be postgres/)
+  assert(!deployScript.includes("ALTER ROLE"))
+  assert(!deployScript.includes("OWNER TO"))
+  assert(!deployScript.includes("GRANT SELECT"))
 })

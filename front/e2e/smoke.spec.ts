@@ -1,11 +1,67 @@
 import { expect, test, type Page } from "@playwright/test"
-import { readFileSync } from "fs"
+import { existsSync, readFileSync } from "fs"
 import path from "path"
 import { resolveStaticAdminProfileSeed } from "../src/libs/server/postDetailPage"
 
 const AVATAR_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlH0WkAAAAASUVORK5CYII="
 const AVATAR_PNG = Buffer.from(AVATAR_PNG_BASE64, "base64")
+
+test("Markdown renderer pipeline은 facade/component/parser/style module로 분리된다", () => {
+  const markdownRoot = path.resolve(__dirname, "../src/libs/markdown")
+  const requiredModules = [
+    "MarkdownRendererInline.tsx",
+    "MarkdownRendererImage.tsx",
+    "MarkdownRendererTable.tsx",
+    "MarkdownRendererSegments.tsx",
+    "renderingCodeModel.ts",
+    "renderingHtmlModel.ts",
+    "renderingImageModel.ts",
+    "renderingMarkdownModel.ts",
+    "renderingNormalizeModel.ts",
+    "renderingSegmentModel.ts",
+    "renderingTypes.ts",
+    "components/MarkdownRendererRootBaseStyles.ts",
+    "components/MarkdownRendererRootCardStyles.ts",
+    "components/MarkdownRendererRootCodeStyles.ts",
+    "components/MarkdownRendererRootMermaidStyles.ts",
+    "components/MarkdownRendererRootTableToggleStyles.ts",
+    "components/MarkdownRendererRootCalloutStyles.ts",
+  ]
+
+  for (const sourcePath of requiredModules) {
+    expect(existsSync(path.join(markdownRoot, sourcePath)), sourcePath).toBe(true)
+  }
+
+  const pipelineSourceFiles = [
+    "MarkdownRenderer.tsx",
+    "components/MarkdownRendererRoot.tsx",
+    "rendering.ts",
+    ...requiredModules,
+  ]
+  const oversizedFiles = pipelineSourceFiles
+    .map((sourcePath) => path.join(markdownRoot, sourcePath))
+    .map((sourcePath) => ({
+      sourcePath: path.relative(markdownRoot, sourcePath),
+      lineCount: readFileSync(sourcePath, "utf8").split("\n").length,
+    }))
+    .filter(({ lineCount }) => lineCount >= 1000)
+
+  expect(oversizedFiles).toEqual([])
+
+  const rendererSource = readFileSync(path.join(markdownRoot, "MarkdownRenderer.tsx"), "utf8")
+  const rootSource = readFileSync(path.join(markdownRoot, "components/MarkdownRendererRoot.tsx"), "utf8")
+  const renderingSource = readFileSync(path.join(markdownRoot, "rendering.ts"), "utf8")
+
+  expect(rendererSource).toContain("resolveMarkdownRenderModel")
+  expect(rendererSource).not.toContain("const MarkdownTableRenderer =")
+  expect(rendererSource).not.toContain("const MarkdownImageFigure =")
+  expect(rootSource).toContain("markdownRendererRootCodeStyles")
+  expect(rootSource).not.toContain(".aq-callout.aq-admonition-tip")
+  expect(renderingSource).toContain("resolveMarkdownRenderModel")
+  expect(renderingSource).not.toContain("const parseCalloutHeader =")
+  expect(renderingSource).not.toContain("const normalizeSplitInlineColorQuotedEmphasis =")
+})
 
 const mockAvatarAsset = async (page: Page) => {
   await page.route("**/avatar.png", async (route) => {

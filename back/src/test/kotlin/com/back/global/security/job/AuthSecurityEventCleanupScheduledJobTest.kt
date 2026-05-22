@@ -26,12 +26,39 @@ class AuthSecurityEventCleanupScheduledJobTest {
             AuthSecurityEventCleanupScheduledJob(
                 authSecurityEventService = service,
                 batchSize = 10,
+                maxBatches = 1,
             )
 
         job.cleanup()
 
         assertThat(store.events).isEmpty()
         assertThat(store.deletedEvents).containsExactly(expiredEvent)
+    }
+
+    @Test
+    fun `cleanup은 한 번의 스케줄에서 최대 batch 수만큼 반복 정리한다`() {
+        val now = Instant.now()
+        val store = RecordingAuthSecurityEventStore()
+        val first = authSecurityEventAt(now.minus(40, ChronoUnit.DAYS))
+        val second = authSecurityEventAt(now.minus(39, ChronoUnit.DAYS))
+        val third = authSecurityEventAt(now.minus(38, ChronoUnit.DAYS))
+        store.events += listOf(first, second, third)
+        val service =
+            AuthSecurityEventService(
+                authSecurityEventStore = store,
+                retentionDays = 30,
+            )
+        val job =
+            AuthSecurityEventCleanupScheduledJob(
+                authSecurityEventService = service,
+                batchSize = 1,
+                maxBatches = 2,
+            )
+
+        job.cleanup()
+
+        assertThat(store.deletedEvents).containsExactly(first, second)
+        assertThat(store.events).containsExactly(third)
     }
 
     private class RecordingAuthSecurityEventStore : AuthSecurityEventStore {

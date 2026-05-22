@@ -178,6 +178,33 @@ class MemberSessionServiceTest {
         assertThat(store.lastTouchedSessionId).isEqualTo(1L)
     }
 
+    @Test
+    fun `revoked session cleanup은 보존 기간을 지난 폐기 세션만 batch size 만큼 삭제한다`() {
+        val now = Instant.parse("2026-05-23T00:00:00Z")
+        val store = RecordingMemberSessionStorePort()
+        val service =
+            MemberSessionService(
+                memberSessionStorePort = store,
+                cacheManager = ConcurrentMapCacheManager(),
+                touchMinIntervalSeconds = 60,
+                revokedSessionRetentionDays = 30,
+            )
+        val member = Member(57L, "session-retention-user", null, "세션정리", "session-retention@example.com", MemberPolicy.genApiKey())
+        val expiredRevoked = memberSession(member, "expired-revoked").apply { revoke(now.minusSeconds(31 * 24 * 60 * 60)) }
+        val retainedRevoked = memberSession(member, "retained-revoked").apply { revoke(now.minusSeconds(29 * 24 * 60 * 60)) }
+        val active = memberSession(member, "active-session")
+        store.save(expiredRevoked)
+        store.save(retainedRevoked)
+        store.save(active)
+
+        val purgedCount = service.purgeExpiredRevokedSessions(batchSize = 1, now = now)
+
+        assertThat(purgedCount).isEqualTo(1)
+        assertThat(store.findBySessionKey("expired-revoked")).isNull()
+        assertThat(store.findBySessionKey("retained-revoked")).isSameAs(retainedRevoked)
+        assertThat(store.findBySessionKey("active-session")).isSameAs(active)
+    }
+
     private class RecordingMemberSessionStorePort : MemberSessionStorePort {
         var touchCallCount: Int = 0
         var lastTouchedSessionId: Long? = null
@@ -236,6 +263,19 @@ class MemberSessionServiceTest {
             return sessionsToRevoke.size
         }
 
+        override fun deleteRevokedBefore(
+            cutoff: Instant,
+            limit: Int,
+        ): Int {
+            val sessionsToDelete =
+                sessionsByKey.values
+                    .filter { session -> session.revokedAt?.isBefore(cutoff) == true }
+                    .sortedWith(compareBy<MemberSession> { it.revokedAt }.thenBy { it.id })
+                    .take(limit)
+            sessionsToDelete.forEach { sessionsByKey.remove(it.sessionKey) }
+            return sessionsToDelete.size
+        }
+
         fun activeSessionKeys(memberId: Long): List<String> =
             sessionsByKey.values
                 .filter { it.member.id == memberId && it.revokedAt == null }
@@ -252,4 +292,13 @@ class MemberSessionServiceTest {
                 lastAuthenticatedAt = lastAuthenticatedAt,
             )
     }
+
+    private fun memberSession(
+        member: Member,
+        sessionKey: String,
+    ): MemberSession =
+        MemberSession(
+            member = member,
+            sessionKey = sessionKey,
+        )
 }

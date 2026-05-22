@@ -1,20 +1,12 @@
-import styled from "@emotion/styled"
 import { useQueryClient } from "@tanstack/react-query"
-import { GetServerSideProps, NextPage } from "next"
-import { IncomingMessage } from "http"
+import { NextPage } from "next"
 import { useRouter } from "next/router"
 import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { invalidatePublicPostReadCaches } from "src/apis/backend/posts"
 import { apiFetch } from "src/apis/backend/client"
-import type { AuthMember } from "src/hooks/useAuthSession"
 import useAuthSession from "src/hooks/useAuthSession"
 import { pushRoute } from "src/libs/router"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
-import { AdminPageProps, buildAdminPagePropsFromMember, getAdminPageProps, readAdminProtectedBootstrap } from "src/libs/server/adminPage"
-import { hasServerAuthCookie } from "src/libs/server/authSession"
-import { serverApiFetch } from "src/libs/server/backend"
-import { readServerSnapshot } from "src/libs/server/serverSnapshotCache"
-import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import AdminShell from "./AdminShell"
 import { AdminPostsWorkspaceFeedbackLayer } from "./AdminPostsWorkspaceFeedbackLayer"
 import { AdminPostsWorkspaceFilterToolbar } from "./AdminPostsWorkspaceFilterToolbar"
@@ -26,7 +18,6 @@ import {
   DEFAULT_PAGE,
   DEFAULT_PAGE_SIZE,
   DEFAULT_SORT,
-  EDITOR_NEW_ROUTE_PATH,
   formatDateTime,
   POSTS_WORKSPACE_DEFERRED_PANEL_TIMEOUT_MS,
   POSTS_WORKSPACE_MOBILE_LIST_DELAY_MS,
@@ -46,225 +37,36 @@ import {
 } from "./AdminPostsWorkspaceModel"
 import { AdminPostsWorkspaceRecentWork } from "./AdminPostsWorkspaceRecentWork"
 import {
-  AdminRailCard,
-  AdminSectionHeading,
-  AdminTextActionButton,
-  AdminWorkspaceHero,
-  AdminWorkspaceHeroActions,
-  AdminWorkspaceHeroCopy,
-  AdminWorkspaceHeroLayout,
-} from "./AdminSurfacePrimitives"
+  EMPTY_INITIAL_SNAPSHOT,
+  POSTS_LIST_LOAD_ERROR_MESSAGE,
+  RECENT_POSTS_UNAVAILABLE_MESSAGE,
+  buildPostsWorkspacePageCommands,
+  type AdminPostsWorkspacePageProps,
+  type IdleWindow,
+} from "./AdminPostsWorkspacePageCommands"
+import {
+  AdminPostsWorkspaceMainSections,
+  DeferredPanelPlaceholder,
+  GhostButton,
+  HeroSection,
+  ListMeta,
+  ListSection,
+  Main,
+  MutedText,
+  PostsHeroCopy,
+  PrimaryCta,
+  RecentActionList,
+  RecentActionPanel,
+  SectionHeading,
+  WorkspaceBody,
+  WorkspaceMain,
+} from "./AdminPostsWorkspacePageSections"
+import { AdminWorkspaceHeroActions, AdminWorkspaceHeroLayout } from "./AdminSurfacePrimitives"
 
-type AdminPostsWorkspaceInitialSnapshot = {
-  recentPosts: AdminPostListItem[]
-  recentFetchedAt: string | null
-  listState: ListState | null
-}
+export { getAdminPostsWorkspacePageProps } from "./AdminPostsWorkspacePageCommands"
 
-type AdminPostsListSsrSnapshot = {
-  listSource: PageDto<AdminPostListItem>
-  fetchedAt: string
-}
-
-type AdminPostsBootstrapPayload = {
-  member: AuthMember
-  firstPage: PageDto<AdminPostListItem>
-}
-
-type IdleWindow = Window & {
-  requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number
-  cancelIdleCallback?: (handle: number) => void
-}
-
-type AdminPostsWorkspacePageProps = AdminPageProps & {
-  initialSnapshot: AdminPostsWorkspaceInitialSnapshot
-}
-
-const EMPTY_INITIAL_SNAPSHOT: AdminPostsWorkspaceInitialSnapshot = {
-  recentPosts: [],
-  recentFetchedAt: null,
-  listState: null,
-}
-const ADMIN_POSTS_SSR_LIST_CACHE_KEY = `admin-posts:list:${DEFAULT_SORT}:page=1:size=${DEFAULT_PAGE_SIZE}`
-const ADMIN_POSTS_SSR_LIST_CACHE_TTL_MS = 5_000
-const POSTS_LIST_LOAD_ERROR_MESSAGE = "글 목록 서버와 연결하지 못했습니다. 잠시 후 다시 시도해 주세요."
-const RECENT_POSTS_UNAVAILABLE_MESSAGE = "목록 연결 후 최근 수정 글을 표시합니다."
-
-const toEditorRoute = (query?: Record<string, string>) => {
-  if (query?.postId) {
-    return `/editor/${encodeURIComponent(query.postId)}`
-  }
-
-  const search = query ? new URLSearchParams(query).toString() : ""
-  return search ? `${EDITOR_NEW_ROUTE_PATH}?${search}` : EDITOR_NEW_ROUTE_PATH
-}
-
-const buildCanonicalPostUrl = (postId: string | number) => {
-  const path = toCanonicalPostPath(postId)
-  if (typeof window === "undefined") return path
-  return new URL(path, window.location.origin).toString()
-}
-
-async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | null> {
-  try {
-    const response = await serverApiFetch(req, path)
-    if (!response.ok) return null
-    const contentLength = response.headers.get("content-length")
-    if (contentLength === "0") return null
-    return (await response.json()) as T
-  } catch {
-    return null
-  }
-}
-
-export const getAdminPostsWorkspacePageProps: GetServerSideProps<AdminPostsWorkspacePageProps> = async (context) => {
-  const ssrStartedAt = performance.now()
-  const bootstrapResultPromise =
-    hasServerAuthCookie(context.req)
-      ? timed(() =>
-          readAdminProtectedBootstrap<AdminPostsBootstrapPayload>(
-            context.req,
-            "/post/api/v1/adm/posts/bootstrap",
-            "/admin/posts"
-          )
-        )
-      : null
-
-  const bootstrapResult = bootstrapResultPromise ? await bootstrapResultPromise : null
-  if (bootstrapResult?.ok && !bootstrapResult.value.ok && bootstrapResult.value.destination) {
-    return {
-      redirect: {
-        destination: bootstrapResult.value.destination,
-        permanent: false,
-      },
-    }
-  }
-
-  let baseProps: AdminPageProps
-  let authDurationMs = 0
-  let authDescription = "bootstrap"
-  let listSourceResult: { durationMs: number; ok: true; value: { value: AdminPostsListSsrSnapshot | null; source: string } }
-
-  if (bootstrapResult?.ok && bootstrapResult.value.ok) {
-    baseProps = buildAdminPagePropsFromMember(bootstrapResult.value.value.member)
-    listSourceResult = {
-      durationMs: bootstrapResult.durationMs,
-      ok: true,
-      value: {
-        value: {
-          listSource: bootstrapResult.value.value.firstPage,
-          fetchedAt: new Date().toISOString(),
-        },
-        source: "bootstrap",
-      },
-    }
-  } else {
-    const listSourceResultPromise =
-      hasServerAuthCookie(context.req)
-        ? timed(() =>
-            readServerSnapshot<AdminPostsListSsrSnapshot>(
-              ADMIN_POSTS_SSR_LIST_CACHE_KEY,
-              ADMIN_POSTS_SSR_LIST_CACHE_TTL_MS,
-              async () => {
-                const listSource = await readJsonIfOk<PageDto<AdminPostListItem>>(
-                  context.req,
-                  buildListEndpoint("active", {
-                    page: DEFAULT_PAGE,
-                    pageSize: DEFAULT_PAGE_SIZE,
-                    kw: "",
-                    sort: DEFAULT_SORT,
-                  })
-                )
-                if (!listSource) return null
-                return {
-                  listSource,
-                  fetchedAt: new Date().toISOString(),
-                }
-              }
-            )
-          )
-        : null
-
-    const baseResult = await timed(() => getAdminPageProps(context.req))
-    if (!baseResult.ok) throw baseResult.error
-    if ("redirect" in baseResult.value) return baseResult.value
-    if (!("props" in baseResult.value)) return baseResult.value
-    baseProps = await baseResult.value.props
-    authDurationMs = baseResult.durationMs
-    authDescription = "fallback"
-    const fallbackListSourceResult =
-      listSourceResultPromise
-        ? await listSourceResultPromise
-        : await timed(() =>
-            readServerSnapshot<AdminPostsListSsrSnapshot>(
-              ADMIN_POSTS_SSR_LIST_CACHE_KEY,
-              ADMIN_POSTS_SSR_LIST_CACHE_TTL_MS,
-              async () => {
-                const listSource = await readJsonIfOk<PageDto<AdminPostListItem>>(
-                  context.req,
-                  buildListEndpoint("active", {
-                    page: DEFAULT_PAGE,
-                    pageSize: DEFAULT_PAGE_SIZE,
-                    kw: "",
-                    sort: DEFAULT_SORT,
-                  })
-                )
-                if (!listSource) return null
-                return {
-                  listSource,
-                  fetchedAt: new Date().toISOString(),
-                }
-              }
-            )
-          )
-    if (!fallbackListSourceResult.ok) throw fallbackListSourceResult.error
-    listSourceResult = fallbackListSourceResult
-  }
-
-  const listSnapshot = listSourceResult.ok ? listSourceResult.value.value : null
-  const listSource = listSnapshot?.listSource ?? null
-  const fetchedAt = listSnapshot?.fetchedAt ?? null
-  const recentPosts = [...(listSource?.content || [])]
-    .sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime())
-    .slice(0, 5)
-  const listState =
-    listSource
-      ? {
-          rows: listSource.content || [],
-          total: listSource.pageable?.totalElements ?? listSource.content?.length ?? 0,
-          loadedAt: fetchedAt || new Date().toISOString(),
-        }
-      : null
-
-  appendSsrDebugTiming(context.req, context.res, [
-    {
-      name: "admin-posts-auth",
-      durationMs: authDurationMs,
-      description: authDescription,
-    },
-    {
-      name: "admin-posts-list",
-      durationMs: listSourceResult.durationMs,
-      description: listState ? (listSourceResult.ok ? listSourceResult.value.source : "ok") : "empty",
-    },
-    {
-      name: "admin-posts-ssr-total",
-      durationMs: performance.now() - ssrStartedAt,
-      description: "ready",
-    },
-  ])
-
-  return {
-    props: {
-      ...baseProps,
-      initialSnapshot: {
-        recentPosts,
-        recentFetchedAt: fetchedAt,
-        listState,
-      },
-    },
-  }
-}
+const postsWorkspaceCommands = buildPostsWorkspacePageCommands()
+void AdminPostsWorkspaceMainSections
 
 export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
   initialMember,
@@ -484,7 +286,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
 
   const openWriteRoute = useCallback(
     async (query?: Record<string, string>) => {
-      await pushRoute(router, toEditorRoute(query))
+      await pushRoute(router, postsWorkspaceCommands.toEditorRoute(query))
     },
     [router]
   )
@@ -499,7 +301,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
         showToast({ tone: "error", text: `#${row.id} ${buildRowTitle(row)}는 아직 공개 링크가 없습니다.` })
         return
       }
-      const url = buildCanonicalPostUrl(row.id)
+      const url = postsWorkspaceCommands.buildCanonicalPostUrl(row.id)
       try {
         if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
           await navigator.clipboard.writeText(url)
@@ -876,207 +678,3 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
 }
 
 export default AdminPostWorkspacePage
-
-const Main = styled.main`
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 1.2rem 1rem 2.8rem;
-  display: grid;
-  gap: 1rem;
-
-  @media (max-width: 767px) {
-    gap: 0.9rem;
-    padding: 1rem 0.85rem 2rem;
-  }
-`
-
-const HeroSection = styled(AdminWorkspaceHero)``
-
-const PostsHeroCopy = styled(AdminWorkspaceHeroCopy)`
-  min-width: 0;
-
-  h1 {
-    max-width: 100%;
-    overflow-wrap: anywhere;
-  }
-`
-
-const WorkspaceBody = styled.div`
-  display: grid;
-  gap: 1rem;
-`
-
-const WorkspaceMain = styled.div`
-  display: grid;
-  gap: 1rem;
-`
-
-const PrimaryCta = styled.button`
-  border: 0;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.blue9};
-  padding: 0;
-  font-size: 1rem;
-  font-weight: 800;
-  cursor: pointer;
-`
-
-const ListSection = styled.section`
-  display: grid;
-  gap: 0.8rem;
-`
-
-const SectionHeading = styled(AdminSectionHeading)`
-  h2 {
-    font-size: 1.22rem;
-    letter-spacing: -0.03em;
-  }
-`
-
-const ListMeta = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  flex-wrap: wrap;
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.84rem;
-  }
-`
-
-const GhostButton = styled(AdminTextActionButton)`
-  font-size: 0.88rem;
-  font-weight: 700;
-`
-
-const MutedText = styled.p`
-  margin: 0;
-  color: ${({ theme }) => theme.colors.gray10};
-  line-height: 1.55;
-`
-
-const DeferredPanelPlaceholder = styled(AdminRailCard)<{ "data-size": "activity" }>`
-  display: grid;
-  gap: 0.3rem;
-  padding: 0.92rem 1rem;
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) => theme.colors.gray2};
-  min-height: 92px;
-
-  strong {
-    font-size: 0.9rem;
-    letter-spacing: -0.01em;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.84rem;
-    line-height: 1.55;
-  }
-`
-
-const RecentActionPanel = styled(AdminRailCard)`
-  gap: 0.72rem;
-  padding: 0.92rem 1rem;
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-
-  .panelHead {
-    display: grid;
-    gap: 0.18rem;
-  }
-
-  .panelHead > strong {
-    font-size: 0.9rem;
-    letter-spacing: -0.01em;
-  }
-`
-
-const RecentActionList = styled.ul`
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.58rem;
-
-  li {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 0.72rem;
-    padding: 0.8rem 0.88rem;
-    border-radius: 14px;
-    border: 1px solid ${({ theme }) => theme.colors.gray5};
-    background: ${({ theme }) => theme.colors.gray1};
-  }
-
-  li[data-tone="error"] {
-    border-color: ${({ theme }) => theme.colors.statusDangerBorder};
-    background: ${({ theme }) => theme.colors.statusDangerSurface};
-  }
-
-  .copy {
-    min-width: 0;
-    display: grid;
-    gap: 0.16rem;
-  }
-
-  .headline {
-    display: inline-flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.48rem;
-  }
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.86rem;
-    font-weight: 800;
-  }
-
-  .stateLabel {
-    display: inline-flex;
-    align-items: center;
-    min-height: 24px;
-    padding: 0 0.56rem;
-    border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.72rem;
-    font-weight: 800;
-    letter-spacing: -0.01em;
-  }
-
-  li[data-tone="error"] .stateLabel {
-    border-color: ${({ theme }) => theme.colors.statusDangerBorder};
-    background: ${({ theme }) => theme.colors.statusDangerSurface};
-    color: ${({ theme }) => theme.colors.statusDangerText};
-  }
-
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.8rem;
-    line-height: 1.5;
-  }
-
-  .time {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.74rem;
-    font-weight: 700;
-    white-space: nowrap;
-  }
-
-  @media (max-width: 767px) {
-    li {
-      display: grid;
-    }
-
-    .time {
-      white-space: normal;
-    }
-  }
-`

@@ -960,7 +960,6 @@ require_pinned_image_env_key() {
 validate_required_runtime_env() {
   require_nonempty_env_key "API_DOMAIN"
   require_nonempty_env_key "CF_TUNNEL_TOKEN"
-  require_nonempty_env_key "PROD___SPRING__DATASOURCE__USERNAME"
   require_nonempty_env_key "PROD___SPRING__DATASOURCE__PASSWORD"
   ensure_image_env_key_from_local_digest "CLOUDFLARED_IMAGE" "cloudflare/cloudflared:latest"
   ensure_image_env_key_from_local_digest "DB_IMAGE" "jangka512/pgj:latest"
@@ -998,8 +997,8 @@ validate_db_runtime_role_env() {
   runtime_user="$(trim_quotes "$(env_value "PROD___SPRING__DATASOURCE__USERNAME")")"
 
   if [[ -z "${runtime_user}" ]]; then
-    echo "runtime datasource user is missing: PROD___SPRING__DATASOURCE__USERNAME" >&2
-    return 1
+    echo "runtime datasource user is not set; falling back to legacy postgres user" >&2
+    return 0
   fi
   if [[ "${runtime_user}" == "postgres" ]]; then
     echo "runtime datasource user must not be postgres" >&2

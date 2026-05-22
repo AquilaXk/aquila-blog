@@ -199,13 +199,20 @@ class UploadedFileRetentionService(
      * 애플리케이션 계층에서 트랜잭션 경계와 후속 처리(캐시/큐/이벤트)를 함께 관리합니다.
      */
     @Transactional
-    fun restoreDeletedPostAttachments(content: String) {
-        UploadedFileUrlCodec.extractObjectKeysFromContent(content).forEach { objectKey ->
-            val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: return@forEach
-            if (uploadedFile.status == UploadedFileStatus.DELETED) return@forEach
-            uploadedFile.restoreActive()
-            uploadedFileRepository.save(uploadedFile)
-        }
+    fun restoreDeletedPostAttachments(
+        postId: Long,
+        content: String,
+    ) {
+        restorePostAttachmentKeys(
+            postId = postId,
+            keys = UploadedFileUrlCodec.extractImageObjectKeysFromContent(content),
+            purpose = UploadedFilePurpose.POST_IMAGE,
+        )
+        restorePostAttachmentKeys(
+            postId = postId,
+            keys = UploadedFileUrlCodec.extractFileObjectKeysFromContent(content),
+            purpose = UploadedFilePurpose.POST_FILE,
+        )
     }
 
     private fun syncPostAttachmentKeys(
@@ -241,6 +248,19 @@ class UploadedFileRetentionService(
                 reason = UploadedFileRetentionReason.DELETED_POST_ATTACHMENT,
                 purgeAfter = Instant.now().plusSeconds(retentionProperties.deletedPostAttachmentSeconds),
             )
+        }
+    }
+
+    private fun restorePostAttachmentKeys(
+        postId: Long,
+        keys: Set<String>,
+        purpose: UploadedFilePurpose,
+    ) {
+        keys.forEach { objectKey ->
+            val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: return@forEach
+            if (uploadedFile.status == UploadedFileStatus.DELETED) return@forEach
+            uploadedFile.attachToPost(postId, purpose)
+            uploadedFileRepository.save(uploadedFile)
         }
     }
 

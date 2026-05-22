@@ -87,6 +87,19 @@ test("home-server-source contract accepts a complete deployment env without BACK
   assert.equal(result.ok, true, result.errors.map((error) => error.message).join("\n"))
 })
 
+test("home-server-source keeps DB runtime username optional until the role is provisioned", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const text = baseHomeServerEnv.replace(/^PROD___SPRING__DATASOURCE__USERNAME=.*\n/m, "")
+
+  const result = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text,
+  })
+
+  assert.equal(result.ok, true, result.errors.map((error) => error.message).join("\n"))
+})
+
 test("validator reports key-level failures without leaking secret values", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const text = baseHomeServerEnv
@@ -162,7 +175,7 @@ test("prod datasource uses a non-superuser runtime role contract", () => {
   const applicationProd = readFileSync(applicationProdPath, "utf8")
   const deployScript = readFileSync(deployScriptPath, "utf8")
 
-  assert.match(applicationProd, /username:\s*"\$\{PROD___SPRING__DATASOURCE__USERNAME\}"/)
+  assert.match(applicationProd, /username:\s*"\$\{PROD___SPRING__DATASOURCE__USERNAME:postgres\}"/)
   assert.match(compose, /POSTGRES_PASSWORD:\s*\$\{PROD___POSTGRES__PASSWORD:-\$\{PROD___SPRING__DATASOURCE__PASSWORD\}\}/)
   assert(!compose.includes("POSTGRES_PASSWORD: ${PROD___SPRING__DATASOURCE__PASSWORD}"))
   assert.match(deployScript, /validate_db_runtime_role_env/)

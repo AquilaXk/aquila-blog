@@ -48,8 +48,14 @@ test("grid design은 전 사용자-facing 화면 토큰을 사용하고 article 
   ].join("\n")
   const authShellSource = readSourceFile("src/components/auth/AuthShell.tsx")
   const errorSource = readSourceFile("src/routes/Error/index.tsx")
-  const editorComposeSource = readSourceFile("src/routes/Admin/EditorStudioComposeWritingSurface.tsx")
-  const editorDedicatedSource = readSourceFile("src/routes/Admin/EditorStudioDedicatedEditorSurface.tsx")
+  const editorComposeSource = [
+    readSourceFile("src/routes/Admin/EditorStudioComposeWritingSurface.tsx"),
+    readSourceFile("src/routes/Admin/EditorStudioComposeWritingSurfaceParts.tsx"),
+  ].join("\n")
+  const editorDedicatedSource = [
+    readSourceFile("src/routes/Admin/EditorStudioDedicatedEditorSurface.tsx"),
+    readSourceFile("src/routes/Admin/EditorStudioDedicatedEditorSurfaceParts.tsx"),
+  ].join("\n")
   const editorPreviewSource = readSourceFile("src/routes/Admin/EditorActualPreviewPage.tsx")
 
   expect(themeSource).toContain('blogDesign === "grid"')

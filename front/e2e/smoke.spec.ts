@@ -349,6 +349,60 @@ test("app shell and auth file boundaries는 data/view/style module로 분리된�
   expect(adminProfileSectionsSource).toContain("renderAdminProfileWorkspaceSection")
 })
 
+test("backend posts API client는 dto/mapper/request/cache module로 분리된다", () => {
+  const backendApiRoot = path.resolve(__dirname, "../src/apis/backend")
+  const postsModuleRoot = path.join(backendApiRoot, "posts")
+  const requiredModules = [
+    path.join(postsModuleRoot, "PostApiDtos.ts"),
+    path.join(postsModuleRoot, "PostApiMappers.ts"),
+    path.join(postsModuleRoot, "PostApiRequests.ts"),
+    path.join(postsModuleRoot, "PostApiCache.ts"),
+  ]
+
+  for (const sourcePath of requiredModules) {
+    expect(existsSync(sourcePath), path.relative(backendApiRoot, sourcePath)).toBe(true)
+  }
+
+  const boundedSourceFiles = [
+    path.join(backendApiRoot, "posts.ts"),
+    path.join(backendApiRoot, "client.ts"),
+  ]
+
+  const oversizedBudgetFiles = boundedSourceFiles
+    .filter((sourcePath) => existsSync(sourcePath))
+    .map((sourcePath) => ({
+      sourcePath: path.relative(backendApiRoot, sourcePath),
+      lineCount: readFileSync(sourcePath, "utf8").split("\n").length,
+    }))
+    .filter(({ lineCount }) => lineCount > 700)
+
+  expect(oversizedBudgetFiles).toEqual([])
+
+  const collectSourceFiles = (root: string): string[] =>
+    readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+      const sourcePath = path.join(root, entry.name)
+      if (entry.isDirectory()) return collectSourceFiles(sourcePath)
+      return /\.(?:ts|tsx)$/.test(entry.name) ? [sourcePath] : []
+    })
+
+  const apiClientFilesOverThousand = collectSourceFiles(backendApiRoot)
+    .map((sourcePath) => ({
+      sourcePath: path.relative(backendApiRoot, sourcePath),
+      lineCount: readFileSync(sourcePath, "utf8").split("\n").length,
+    }))
+    .filter(({ lineCount }) => lineCount >= 1000)
+
+  expect(apiClientFilesOverThousand).toEqual([])
+
+  const postsFacadeSource = readFileSync(path.join(backendApiRoot, "posts.ts"), "utf8")
+  expect(postsFacadeSource).toContain("PostApiRequests")
+  expect(postsFacadeSource).toContain("PostApiMappers")
+  expect(postsFacadeSource).toContain("PostApiCache")
+  expect(postsFacadeSource).not.toContain("type ApiPostDto =")
+  expect(postsFacadeSource).not.toContain("const toPost =")
+  expect(postsFacadeSource).not.toContain("export const invalidatePublicPostReadCaches =")
+})
+
 const mockAvatarAsset = async (page: Page) => {
   await page.route("**/avatar.png", async (route) => {
     await route.fulfill({

@@ -26,7 +26,7 @@ test("grid design은 전 사용자-facing 화면 토큰을 사용하고 article 
     "src/routes/Feed/ProfileCard.tsx",
     "src/routes/Feed/ServiceCard.tsx",
     "src/routes/Feed/ContactCard.tsx",
-    "src/pages/about.tsx",
+    "src/routes/About/AboutPage.styles.ts",
     "src/routes/Detail/PostDetail/PostDetail.styles.ts",
     "src/routes/Detail/PostDetail/PostHeader.tsx",
   ].map((sourcePath) => [sourcePath, readSourceFile(sourcePath)] as const)

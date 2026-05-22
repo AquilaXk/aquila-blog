@@ -1362,7 +1362,7 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).not.toMatch(/const\s+isTabBlockSelectionEligible\s*=/)
     expect(blockEditorEngineControllerSource).toContain('from "./blockHandleLayoutModel"')
     expect(blockEditorEngineControllerSource).toContain('from "./blockDragModel"')
-    expect(blockEditorTableOverlayControllerSource).toContain('from "./tableAxisDragModel"')
+    expect(blockEditorTableOverlayControllerSource).toContain('from "./useBlockEditorTableOverlayAxisDrag"')
     expect(blockEditorEngineSource).not.toMatch(/const\s+resolveBlockHandleAnchorTop\s*=/)
     expect(blockEditorEngineSource).not.toMatch(/const\s+resolveThinBlockHandleAnchorTop\s*=/)
     expect(blockEditorEngineSource).not.toMatch(/const\s+resolveBlockHandleRailLayout\s*=/)
@@ -1455,7 +1455,7 @@ test.describe("editor studio state", () => {
 
   test("editor studio는 SSR 관리자 스냅샷을 hydration auth race 동안 유지한다", () => {
     const editorStudioSource = readFileSync(
-      path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceController.tsx"),
+      path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceControllerRoot.tsx"),
       "utf8"
     )
     const editorStudioRoutingSource = readFileSync(
@@ -1614,7 +1614,7 @@ test.describe("editor studio state", () => {
 
   test("공개 글 저장 후 상세 재검증은 client cache eviction과 서버 revalidate를 함께 수행한다", () => {
     const editorStudioSource = readFileSync(
-      path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceController.tsx"),
+      path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceControllerRoot.tsx"),
       "utf8"
     )
     const revalidateApiSource = readFileSync(path.resolve(__dirname, "../src/pages/api/revalidate.ts"), "utf8")
@@ -1633,8 +1633,20 @@ test.describe("editor studio state", () => {
       path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tsx"),
       "utf8"
     )
+    const blockEditorEngineControllerSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/useBlockEditorEngineController.ts"),
+      "utf8"
+    )
     const blockEditorEngineStylesSource = readFileSync(
       path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.styles.tsx"),
+      "utf8"
+    )
+    const blockEditorEditorSurfaceStylesSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.editorSurfaceStyles.tsx"),
+      "utf8"
+    )
+    const blockEditorTableStylesSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/BlockEditorEngine.tableStyles.tsx"),
       "utf8"
     )
     const blockEditorEngineLayersSource = readFileSync(
@@ -1647,6 +1659,26 @@ test.describe("editor studio state", () => {
     )
     const blockEditorTableOverlayControllerSource = readFileSync(
       path.resolve(__dirname, "../src/components/editor/useBlockEditorTableOverlayController.ts"),
+      "utf8"
+    )
+    const blockEditorTableOverlayDomAdapterSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/useBlockEditorTableOverlayDomAdapter.ts"),
+      "utf8"
+    )
+    const blockEditorTableOverlayAxisDragSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/useBlockEditorTableOverlayAxisDrag.ts"),
+      "utf8"
+    )
+    const blockEditorTableOverlayResizeSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/useBlockEditorTableOverlayResize.ts"),
+      "utf8"
+    )
+    const blockEditorTableOverlayCornerGrowSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/useBlockEditorTableOverlayCornerGrow.ts"),
+      "utf8"
+    )
+    const blockEditorTableOverlayMenuSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/useBlockEditorTableOverlayMenu.ts"),
       "utf8"
     )
     const tableAffordanceModelSource = readFileSync(
@@ -1697,8 +1729,8 @@ test.describe("editor studio state", () => {
       path.resolve(__dirname, "../src/components/editor/tableCornerGrowModel.ts"),
       "utf8"
     )
-    const editorStudioSource = readFileSync(
-      path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceController.tsx"),
+    const editorStudioRootSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceControllerRoot.tsx"),
       "utf8"
     )
     const editorStudioPersistenceSource = readFileSync(
@@ -1727,7 +1759,8 @@ test.describe("editor studio state", () => {
 
     expect(blockEditorTableOverlayLayerSource).toContain('data-testid="table-column-drag-guide"')
     expect(blockEditorTableOverlayLayerSource).toContain('data-testid={`table-column-resize-boundary-${index}`}')
-    expect(blockEditorTableOverlayControllerSource).toContain('} from "./tableResizeInteractionModel"')
+    expect(blockEditorTableOverlayControllerSource).toContain('from "./useBlockEditorTableOverlayResize"')
+    expect(blockEditorTableOverlayResizeSource).toContain('} from "./tableResizeInteractionModel"')
     expect(tableResizeInteractionModelSource).toContain("export type TableRowResizeState = {")
     expect(tableResizeInteractionModelSource).toContain("export type TableColumnRailResizeState = {")
     expect(tableResizeInteractionModelSource).toContain("export type TableColumnDragGuideState = {")
@@ -1764,7 +1797,7 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).not.toContain("const syncTableColumnDragGuideForColumn = useCallback(")
     expect(blockEditorEngineSource).not.toContain("const startTableColumnResizeFromDomHandle = useCallback(")
     expect(blockEditorTableOverlayControllerSource).toContain('} from "./tableFloatingUiModel"')
-    expect(blockEditorTableOverlayControllerSource).toContain("const getActiveTableRectFromDom = useCallback(")
+    expect(blockEditorTableOverlayDomAdapterSource).toContain("const getActiveTableRectFromDom = useCallback(")
     expect(blockEditorTableOverlayLayerSource).toContain('import { createPortal } from "react-dom"')
     expect(blockEditorTableOverlayLayerSource).toContain("const tableOverlay = (")
     expect(blockEditorTableOverlayLayerSource).toContain("createPortal(tableOverlay, document.body)")
@@ -1843,29 +1876,30 @@ test.describe("editor studio state", () => {
     expect(blockEditorTableOverlayLayerSource).toContain('data-testid="table-row-drag-shadow"')
     expect(blockEditorTableOverlayLayerSource).toContain('"table-row-reorder-indicator"')
     expect(blockEditorTableOverlayLayerSource).toContain('"table-column-reorder-indicator"')
-    expect(blockEditorEngineStylesSource).toContain('const TableCellMenuButton = styled(TableHandleButton)`')
-    expect(blockEditorTableOverlayControllerSource).toContain("const updateActiveTableOverflowMode = useCallback(")
-    expect(blockEditorTableOverlayControllerSource).toContain("const reorderTableAxisAtPosition = useCallback(")
+    expect(blockEditorTableStylesSource).toContain('const TableCellMenuButton = styled(TableHandleButton)`')
+    expect(blockEditorTableOverlayMenuSource).toContain("const updateActiveTableOverflowMode = useCallback(")
+    expect(blockEditorTableOverlayAxisDragSource).toContain("const reorderTableAxisAtPosition = useCallback(")
     expect(tableCornerGrowModelSource).toContain("export type TableCornerGrowState = {")
     expect(tableCornerGrowModelSource).toContain("export type TableCornerPreviewState = {")
     expect(tableCornerGrowModelSource).toContain("export const resolveTableCornerPreviewState = (")
     expect(tableCornerGrowModelSource).toContain("export const resolveTableCornerGrowStepMetrics = (")
     expect(tableCornerGrowModelSource).toContain("export const resolveTableCornerGrowStepMetricsFromDataset = (")
-    expect(blockEditorTableOverlayControllerSource).toContain('} from "./tableCornerGrowModel"')
+    expect(blockEditorTableOverlayControllerSource).toContain('from "./useBlockEditorTableOverlayCornerGrow"')
+    expect(blockEditorTableOverlayCornerGrowSource).toContain('} from "./tableCornerGrowModel"')
     expect(blockEditorEngineSource).not.toContain("type TableCornerGrowState = {")
     expect(blockEditorEngineSource).not.toContain("type TableCornerPreviewState = {")
     expect(blockEditorEngineSource).not.toContain("const resolveTableCornerPreviewState = useCallback(")
     expect(blockEditorEngineSource).not.toContain("const getTableCornerGrowStepMetrics = useCallback(")
     expect(blockEditorEngineSource).not.toContain("const getTableCornerGrowStepMetricsFromHandle = useCallback(")
-    expect(blockEditorTableOverlayControllerSource).toContain("const applyTableCornerGrowSteps = useCallback(")
-    expect(blockEditorTableOverlayControllerSource).toContain("const shrinkTableAxisAtEnd = useCallback(")
-    expect(blockEditorTableOverlayControllerSource).toContain("const beginTableAxisDragFromPending = useCallback(")
-    expect(blockEditorTableOverlayControllerSource).toContain("const startPendingTableAxisDrag = useCallback(")
-    expect(blockEditorTableOverlayControllerSource).toContain("const selectTableAxisAtIndex = useCallback(")
+    expect(blockEditorTableOverlayCornerGrowSource).toContain("const applyTableCornerGrowSteps = useCallback(")
+    expect(blockEditorTableOverlayCornerGrowSource).toContain("const shrinkTableAxisAtEnd = useCallback(")
+    expect(blockEditorTableOverlayAxisDragSource).toContain("const beginTableAxisDragFromPending = useCallback(")
+    expect(blockEditorTableOverlayAxisDragSource).toContain("const startPendingTableAxisDrag = useCallback(")
+    expect(blockEditorTableOverlayAxisDragSource).toContain("const selectTableAxisAtIndex = useCallback(")
     expect(tableStructureModelSource).toContain('overflowMode: getTableOverflowMode(tableNode)')
     expect(tableWidthModelSource).toContain("const maxActiveWidth = Math.max(TABLE_MIN_COLUMN_WIDTH_PX, safeBudget - otherColumnsWidth)")
-    expect(blockEditorTableOverlayControllerSource).toContain("const tableCornerGrowSuppressClickRef = useRef(false)")
-    expect(blockEditorEngineStylesSource).toContain('"grip" | "grow"')
+    expect(blockEditorTableOverlayCornerGrowSource).toContain("const tableCornerGrowSuppressClickRef = useRef(false)")
+    expect(blockEditorTableStylesSource).toContain('"grip" | "grow"')
     expect(blockEditorTableOverlayControllerSource).toContain("isCellMenuOpen,")
     expect(markdownRendererSource).toContain("MarkdownTableRenderer")
     expect(markdownTableRendererSource).toContain("const explicitTableWidth = useMemo(")
@@ -1877,7 +1911,7 @@ test.describe("editor studio state", () => {
     expect(blockEditorTableOverlayControllerSource).toContain("isColumnMenuOpen,")
     expect(blockEditorTableOverlayLayerSource).toContain("activeTableStructureState.hasHeaderRow")
     expect(blockEditorTableOverlayLayerSource).toContain("activeTableStructureState.hasHeaderColumn")
-    expect(blockEditorTableOverlayControllerSource).toContain("const tableCornerGrowStepMetrics = resolveTableCornerGrowStepMetrics(tableAffordanceGeometry)")
+    expect(blockEditorTableOverlayCornerGrowSource).toContain("tableCornerGrowStepMetrics: resolveTableCornerGrowStepMetrics(tableAffordanceGeometry)")
     expect(blockEditorTableOverlayLayerSource).toContain("data-column-step={tableCornerGrowStepMetrics.columnStepPx}")
     expect(blockEditorTableOverlayLayerSource).toContain("data-row-step={tableCornerGrowStepMetrics.rowStepPx}")
     expect(blockEditorTableOverlayLayerSource).toContain('aria-label="표 구조 메뉴"')
@@ -1904,16 +1938,85 @@ test.describe("editor studio state", () => {
     expect(blockEditorTableOverlayControllerSource).toContain("isTableStructureMenuOpen,")
     expect(blockEditorTableOverlayControllerSource).toContain("shouldShowColumnAddBar,")
     expect(blockEditorTableOverlayControllerSource).toContain("shouldShowRowAddBar,")
-    expect(blockEditorTableOverlayControllerSource).toContain(
+    expect(blockEditorTableOverlayDomAdapterSource).toContain(
       "findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)"
     )
-    expect(blockEditorEngineStylesSource).toContain("display: none !important;")
-    expect(editorStudioSource).toContain('import { useEditorStudioPersistence } from "./useEditorStudioPersistence"')
+    expect(blockEditorEditorSurfaceStylesSource).toContain("display: none !important;")
+    expect(editorStudioRootSource).toContain('import { useEditorStudioPersistence } from "./useEditorStudioPersistence"')
     expect(editorStudioPersistenceSource).toContain("const currentPostContent = postContentLiveRef.current")
     expect(
       markdownRendererRootTableStylesSource.match(/table-layout: fixed;/g)?.length ?? 0
     ).toBeGreaterThanOrEqual(2)
     expect(markdownRendererRootTableStylesSource).not.toContain("table-layout: auto;")
+  })
+
+  test("table overlay controller는 책임별 module과 1000 line budget을 유지한다", () => {
+    const controllerPath = path.resolve(
+      __dirname,
+      "../src/components/editor/useBlockEditorTableOverlayController.ts"
+    )
+    const controllerSource = readFileSync(controllerPath, "utf8")
+    const moduleContracts = [
+      {
+        importPath: "./useBlockEditorTableOverlayDomAdapter",
+        path: "../src/components/editor/useBlockEditorTableOverlayDomAdapter.ts",
+        forbiddenInline: [
+          "const focusElementWithoutScroll =",
+          "const resolveDocPosSafe =",
+          "const getTableCellFromTarget = useCallback(",
+          "const getTableCellFromClientPoint = useCallback(",
+        ],
+      },
+      {
+        importPath: "./useBlockEditorTableOverlayAxisDrag",
+        path: "../src/components/editor/useBlockEditorTableOverlayAxisDrag.ts",
+        forbiddenInline: [
+          "const selectTableAxisAtIndex = useCallback(",
+          "const clearPendingTableAxisDrag = useCallback(",
+          "const beginTableAxisDragFromPending = useCallback(",
+          "const startPendingTableAxisDrag = useCallback(",
+        ],
+      },
+      {
+        importPath: "./useBlockEditorTableOverlayResize",
+        path: "../src/components/editor/useBlockEditorTableOverlayResize.ts",
+        forbiddenInline: [
+          "const startTableRowResize = useCallback(",
+          "const commitTableRowHeight = useCallback(",
+          "const resizeTableColumnByIndex = useCallback(",
+          "const startTableColumnRailResize = useCallback(",
+        ],
+      },
+      {
+        importPath: "./useBlockEditorTableOverlayCornerGrow",
+        path: "../src/components/editor/useBlockEditorTableOverlayCornerGrow.ts",
+        forbiddenInline: [
+          "const appendTableAxisAtEnd = useCallback(",
+          "const shrinkTableAxisAtEnd = useCallback(",
+          "const applyTableCornerGrowSteps = useCallback(",
+          "const startTableCornerGrow = useCallback(",
+        ],
+      },
+      {
+        importPath: "./useBlockEditorTableOverlayMenu",
+        path: "../src/components/editor/useBlockEditorTableOverlayMenu.ts",
+        forbiddenInline: [
+          "const updateActiveTableCellAttrs = useCallback(",
+          "const updateActiveTableOverflowMode = useCallback(",
+          "const openSelectionAwareTableMenu = useCallback(",
+          "const runTableMenuEditorAction = useCallback(",
+        ],
+      },
+    ]
+
+    expect(controllerSource.split("\n").length).toBeLessThanOrEqual(1000)
+    moduleContracts.forEach((contract) => {
+      expect(existsSync(path.resolve(__dirname, contract.path))).toBe(true)
+      expect(controllerSource).toContain(`from "${contract.importPath}"`)
+      contract.forbiddenInline.forEach((snippet) => {
+        expect(controllerSource).not.toContain(snippet)
+      })
+    })
   })
 
   test("editor studio SSR은 작성자 카드에 공개 프로필 snapshot을 먼저 seed한다", () => {
@@ -1928,7 +2031,7 @@ test.describe("editor studio state", () => {
 
   test("/editor/new는 temp draft bootstrap이 끝날 때까지 loading state를 먼저 유지한다", () => {
     const editorStudioSource = readFileSync(
-      path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceController.tsx"),
+      path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceControllerRoot.tsx"),
       "utf8"
     )
     const editorStudioDraftLifecycleSource = readFileSync(
@@ -1950,7 +2053,7 @@ test.describe("editor studio state", () => {
 
   test("썸네일 편집 패널은 클립보드 이미지 붙여넣기 업로드 계약을 유지한다", () => {
     const editorStudioSource = readFileSync(
-      path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceController.tsx"),
+      path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceControllerRoot.tsx"),
       "utf8"
     )
     const editorStudioThumbnailPanelsSource = readFileSync(

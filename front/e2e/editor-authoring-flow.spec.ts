@@ -3686,6 +3686,7 @@ test.describe("block editor authoring flow", () => {
     await page.keyboard.type("말머리 보호")
 
     const paragraph = editor.locator("p", { hasText: "말머리 보호" }).first()
+    await expect(paragraph).toBeVisible()
     const visibleParagraphBox = await expectVisibleBox(
       paragraph,
       "block handle rail 검증 문단 좌표를 계산할 수 없습니다."

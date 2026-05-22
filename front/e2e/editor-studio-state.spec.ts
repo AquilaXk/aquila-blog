@@ -355,6 +355,18 @@ test.describe("editor studio state", () => {
     const blockEditorTableOverlayControllerSource = existsSync(blockEditorTableOverlayControllerPath)
       ? readFileSync(blockEditorTableOverlayControllerPath, "utf8")
       : ""
+    const editorExtensionsPath = path.resolve(__dirname, "../src/components/editor/extensions.tsx")
+    const editorExtensionsSource = readFileSync(editorExtensionsPath, "utf8")
+    const codeBlockNodeViewPath = path.resolve(__dirname, "../src/components/editor/codeBlockNodeView.tsx")
+    expect(existsSync(codeBlockNodeViewPath)).toBe(true)
+    const codeBlockNodeViewSource = existsSync(codeBlockNodeViewPath)
+      ? readFileSync(codeBlockNodeViewPath, "utf8")
+      : ""
+    const mermaidNodeViewPath = path.resolve(__dirname, "../src/components/editor/mermaidNodeView.tsx")
+    expect(existsSync(mermaidNodeViewPath)).toBe(true)
+    const mermaidNodeViewSource = existsSync(mermaidNodeViewPath)
+      ? readFileSync(mermaidNodeViewPath, "utf8")
+      : ""
     const blockSelectionModelSource = readFileSync(
       path.resolve(__dirname, "../src/components/editor/blockSelectionModel.ts"),
       "utf8"
@@ -885,6 +897,17 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).toContain('} from "./useBlockEditorTableOverlayController"')
     expect(blockEditorTableOverlayLayerSource).toContain("export const BlockEditorTableOverlayLayer =")
     expect(blockEditorTableOverlayControllerSource).toContain("export const useBlockEditorTableOverlayController =")
+    expect(editorExtensionsSource).toContain('from "./codeBlockNodeView"')
+    expect(editorExtensionsSource).toContain('from "./mermaidNodeView"')
+    expect(editorExtensionsSource.split("\n").length).toBeLessThanOrEqual(2400)
+    expect(editorExtensionsSource).not.toContain("const CodeBlockView =")
+    expect(editorExtensionsSource).not.toContain("const MermaidBlockView =")
+    expect(editorExtensionsSource).not.toContain("const CodeLanguagePopover = styled.div`")
+    expect(editorExtensionsSource).not.toContain("const MermaidPreviewCard = styled.div`")
+    expect(codeBlockNodeViewSource).toContain("export const CodeBlockView =")
+    expect(codeBlockNodeViewSource).toContain("export const CodeBlockEditorStyles =")
+    expect(mermaidNodeViewSource).toContain("export const MermaidBlockView =")
+    expect(mermaidNodeViewSource).toContain("export const MermaidEditorStyles =")
     expect(blockEditorEngineLayersSource).toContain("export const BlockEditorToolbarLayer =")
     expect(blockEditorEngineLayersSource).toContain("export const BlockEditorQuickInsertLayer =")
     expect(blockEditorEngineLayersSource).toContain("export const BlockEditorSlashMenuLayer =")

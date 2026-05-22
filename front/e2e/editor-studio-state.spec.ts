@@ -407,6 +407,38 @@ test.describe("editor studio state", () => {
     const blockEditorEngineStylesSource = existsSync(blockEditorEngineStylesPath)
       ? readFileSync(blockEditorEngineStylesPath, "utf8")
       : ""
+    const blockEditorToolbarStylesPath = path.resolve(
+      __dirname,
+      "../src/components/editor/BlockEditorEngine.toolbarStyles.tsx"
+    )
+    expect(existsSync(blockEditorToolbarStylesPath)).toBe(true)
+    const blockEditorToolbarStylesSource = existsSync(blockEditorToolbarStylesPath)
+      ? readFileSync(blockEditorToolbarStylesPath, "utf8")
+      : ""
+    const blockEditorEditorSurfaceStylesPath = path.resolve(
+      __dirname,
+      "../src/components/editor/BlockEditorEngine.editorSurfaceStyles.tsx"
+    )
+    expect(existsSync(blockEditorEditorSurfaceStylesPath)).toBe(true)
+    const blockEditorEditorSurfaceStylesSource = existsSync(blockEditorEditorSurfaceStylesPath)
+      ? readFileSync(blockEditorEditorSurfaceStylesPath, "utf8")
+      : ""
+    const blockEditorTableStylesPath = path.resolve(
+      __dirname,
+      "../src/components/editor/BlockEditorEngine.tableStyles.tsx"
+    )
+    expect(existsSync(blockEditorTableStylesPath)).toBe(true)
+    const blockEditorTableStylesSource = existsSync(blockEditorTableStylesPath)
+      ? readFileSync(blockEditorTableStylesPath, "utf8")
+      : ""
+    const blockEditorBlockStylesPath = path.resolve(
+      __dirname,
+      "../src/components/editor/BlockEditorEngine.blockStyles.tsx"
+    )
+    expect(existsSync(blockEditorBlockStylesPath)).toBe(true)
+    const blockEditorBlockStylesSource = existsSync(blockEditorBlockStylesPath)
+      ? readFileSync(blockEditorBlockStylesPath, "utf8")
+      : ""
     const blockEditorEngineLayersPath = path.resolve(
       __dirname,
       "../src/components/editor/BlockEditorEngine.layers.tsx"
@@ -414,6 +446,14 @@ test.describe("editor studio state", () => {
     expect(existsSync(blockEditorEngineLayersPath)).toBe(true)
     const blockEditorEngineLayersSource = existsSync(blockEditorEngineLayersPath)
       ? readFileSync(blockEditorEngineLayersPath, "utf8")
+      : ""
+    const blockEditorViewportLayerPath = path.resolve(
+      __dirname,
+      "../src/components/editor/BlockEditorEngine.viewportLayer.tsx"
+    )
+    expect(existsSync(blockEditorViewportLayerPath)).toBe(true)
+    const blockEditorViewportLayerSource = existsSync(blockEditorViewportLayerPath)
+      ? readFileSync(blockEditorViewportLayerPath, "utf8")
       : ""
     const blockEditorTableOverlayLayerPath = path.resolve(
       __dirname,
@@ -594,20 +634,20 @@ test.describe("editor studio state", () => {
     const dedicatedEditorTopBarStyle = dedicatedEditorSurfacePartsSource.match(
       /export const EditorStudioDedicatedTopBar = styled\.div`([\s\S]*?)`\n\nexport const EditorExitAction/
     )?.[1] ?? ""
-    const blockEditorShellStyle = blockEditorEngineStylesSource.match(
-      /const Shell = styled\.div`([\s\S]*?)`\n\nconst Toolbar/
+    const blockEditorShellStyle = blockEditorToolbarStylesSource.match(
+      /export const Shell = styled\.div`([\s\S]*?)`\n\nexport const Toolbar/
     )?.[1] ?? ""
-    const toolbarStyle = blockEditorEngineStylesSource.match(
-      /const Toolbar = styled\.div`([\s\S]*?)`\n\nconst ToolbarActions/
+    const toolbarStyle = blockEditorToolbarStylesSource.match(
+      /export const Toolbar = styled\.div`([\s\S]*?)`\n\nexport const ToolbarActions/
     )?.[1] ?? ""
-    const toolbarActionsStyle = blockEditorEngineStylesSource.match(
-      /const ToolbarActions = styled\.div`([\s\S]*?)`\n\nconst ToolbarGroup/
+    const toolbarActionsStyle = blockEditorToolbarStylesSource.match(
+      /export const ToolbarActions = styled\.div`([\s\S]*?)`\n\nexport const ToolbarGroup/
     )?.[1] ?? ""
-    const quickInsertActionsStyle = blockEditorEngineStylesSource.match(
-      /const QuickInsertActions = styled\.div`([\s\S]*?)`\n\nconst QuickInsertButton/
+    const quickInsertActionsStyle = blockEditorBlockStylesSource.match(
+      /export const QuickInsertActions = styled\.div`([\s\S]*?)`\n\nexport const QuickInsertButton/
     )?.[1] ?? ""
-    const quickInsertButtonStyle = blockEditorEngineStylesSource.match(
-      /const QuickInsertButton = styled\.button`([\s\S]*?)`\s*export\s*\{/
+    const quickInsertButtonStyle = blockEditorBlockStylesSource.match(
+      /export const QuickInsertButton = styled\.button`([\s\S]*?)`\s*$/
     )?.[1] ?? ""
 
     expect(editorStudioSource).not.toContain("BLOCK_EDITOR_V2_ENABLED")
@@ -1090,11 +1130,24 @@ test.describe("editor studio state", () => {
     expect(blockEditorShellSource).toContain('import type { BlockEditorEngineProps } from "./blockEditorEngineTypes"')
     expect(blockEditorShellSource).toContain("const BlockEditorShell = (props: BlockEditorEngineProps) => <BlockEditorEngine {...props} />")
     expect(blockEditorEngineSource.split("\n").length).toBeLessThanOrEqual(1000)
+    expect(blockEditorEngineStylesSource.split("\n").length).toBeLessThanOrEqual(1000)
+    expect(blockEditorEngineLayersSource.split("\n").length).toBeLessThanOrEqual(1000)
+    expect(blockEditorToolbarStylesSource.split("\n").length).toBeLessThanOrEqual(1000)
+    expect(blockEditorEditorSurfaceStylesSource.split("\n").length).toBeLessThanOrEqual(1000)
+    expect(blockEditorTableStylesSource.split("\n").length).toBeLessThanOrEqual(1000)
+    expect(blockEditorBlockStylesSource.split("\n").length).toBeLessThanOrEqual(1000)
+    expect(blockEditorViewportLayerSource.split("\n").length).toBeLessThanOrEqual(1000)
     expect(blockEditorEngineSource).toContain('from "./useBlockEditorEngineController"')
     expect(blockEditorEngineControllerSource).toContain("export const useBlockEditorEngineController =")
     expect(blockEditorEngineSource).toContain('} from "./BlockEditorEngine.styles"')
     expect(blockEditorEngineSource).toContain('} from "./BlockEditorEngine.layers"')
     expect(blockEditorEngineSource).toContain('} from "./BlockEditorEngine.tableOverlayLayer"')
+    expect(blockEditorEngineStylesSource).toContain('from "./BlockEditorEngine.toolbarStyles"')
+    expect(blockEditorEngineStylesSource).toContain('from "./BlockEditorEngine.editorSurfaceStyles"')
+    expect(blockEditorEngineStylesSource).toContain('from "./BlockEditorEngine.tableStyles"')
+    expect(blockEditorEngineStylesSource).toContain('from "./BlockEditorEngine.blockStyles"')
+    expect(blockEditorEngineLayersSource).toContain('from "./BlockEditorEngine.viewportLayer"')
+    expect(blockEditorViewportLayerSource).toContain("export const BlockEditorViewportLayer =")
     expect(blockEditorEngineControllerSource).toContain('} from "./useBlockEditorTableOverlayController"')
     expect(blockEditorTableOverlayLayerSource).toContain("export const BlockEditorTableOverlayLayer =")
     expect(blockEditorTableOverlayControllerSource).toContain("export const useBlockEditorTableOverlayController =")
@@ -1171,11 +1224,13 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineLayersSource).toContain("export const BlockEditorToolbarLayer =")
     expect(blockEditorEngineLayersSource).toContain("export const BlockEditorQuickInsertLayer =")
     expect(blockEditorEngineLayersSource).toContain("export const BlockEditorSlashMenuLayer =")
-    expect(blockEditorEngineLayersSource).toContain("export const BlockEditorFloatingBubbleLayer =")
-    expect(blockEditorEngineLayersSource).toContain("export const BlockEditorBlockHandleLayer =")
+    expect(blockEditorEngineLayersSource).toContain("BlockEditorFloatingBubbleLayer,")
+    expect(blockEditorEngineLayersSource).toContain("BlockEditorBlockHandleLayer,")
+    expect(blockEditorViewportLayerSource).toContain("export const BlockEditorFloatingBubbleLayer =")
+    expect(blockEditorViewportLayerSource).toContain("export const BlockEditorBlockHandleLayer =")
     expect(blockEditorEngineLayersSource).toContain('data-testid="slash-menu"')
-    expect(blockEditorEngineLayersSource).toContain('data-testid="editor-text-bubble-toolbar"')
-    expect(blockEditorEngineLayersSource).toContain('"block-drag-handle"')
+    expect(blockEditorViewportLayerSource).toContain('data-testid="editor-text-bubble-toolbar"')
+    expect(blockEditorViewportLayerSource).toContain('"block-drag-handle"')
     expect(blockEditorEngineLayersSource).not.toContain("export const BlockEditorTableOverlayLayer =")
     expect(blockEditorEngineSource).not.toContain("<ToolbarActions>")
     expect(blockEditorEngineSource).not.toContain("<QuickInsertBar")
@@ -1187,15 +1242,15 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).not.toContain("const Toolbar = styled.div`")
     expect(blockEditorEngineSource).not.toContain("const EditorViewport = styled.div`")
     expect(blockEditorEngineSource).not.toContain("const QuickInsertBar = styled.div`")
-    expect(blockEditorEngineStylesSource).toContain("const QuickInsertBar = styled.div`")
+    expect(blockEditorBlockStylesSource).toContain("export const QuickInsertBar = styled.div`")
     expect(blockEditorEngineSource).not.toContain("Markdown 편집")
     expect(blockEditorEngineSource).not.toContain('label: "원문 블록"')
     expect(blockEditorEngineSource).not.toContain("buildStructuredInsertContent")
     expect(blockEditorEngineSource).not.toContain("insertRawMarkdownBlock")
     expect(blockEditorEngineSource).not.toContain("슬래시(`/`)나 `+` 없이도 자주 쓰는 블록을 바로 넣을 수 있습니다.")
-    expect(blockEditorEngineStylesSource).toContain(".aq-block-editor__content blockquote {")
-    expect(blockEditorEngineStylesSource).toContain("border-left: 4px solid")
-    expect(blockEditorEngineStylesSource).toContain("border-radius: 0;")
+    expect(blockEditorEditorSurfaceStylesSource).toContain(".aq-block-editor__content blockquote {")
+    expect(blockEditorEditorSurfaceStylesSource).toContain("border-left: 4px solid")
+    expect(blockEditorEditorSurfaceStylesSource).toContain("border-radius: 0;")
     expect(blockEditorEngineControllerSource).toContain('from "./blockSelectionModel"')
     expect(blockEditorEngineControllerSource).toContain('from "./nestedListItemModel"')
     expect(blockEditorEngineControllerSource).toContain('from "./useBlockEditorMarkdownCommit"')
@@ -1383,7 +1438,7 @@ test.describe("editor studio state", () => {
     expect(nestedListItemDragModelSource).toContain("export const createNestedListItemDropIndicatorState")
     expect(nestedListItemDragModelSource).toContain("export const hideNestedListItemDropIndicatorState")
     expect(nestedListItemDragModelSource).toContain("export const isNestedListItemContextInDraggedList")
-    const selectionRuleMatch = blockEditorEngineStylesSource.match(/\.aq-block-editor__content ::selection\s*\{([^}]*)\}/)
+    const selectionRuleMatch = blockEditorEditorSurfaceStylesSource.match(/\.aq-block-editor__content ::selection\s*\{([^}]*)\}/)
     expect(selectionRuleMatch?.[1]).toBeTruthy()
     expect(selectionRuleMatch?.[1]).not.toMatch(/\bcolor\s*:/)
   })

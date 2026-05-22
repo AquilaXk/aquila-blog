@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import { existsSync, readFileSync } from "fs"
+import { existsSync, readdirSync, readFileSync } from "fs"
 import path from "path"
 import { resolveStaticAdminProfileSeed } from "../src/libs/server/postDetailPage"
 
@@ -106,6 +106,80 @@ test("Markdown runtime effects는 Mermaid/Prism side effect module로 분리된�
   expect(prismHookSource).toContain("createPrismEffectRuntime")
   expect(prismHookSource).not.toContain("const extractLanguageFromClassList =")
   expect(prismHookSource).not.toContain("const highlightBlocks =")
+})
+
+test("admin workspace pages는 orchestration과 section/style module로 분리된다", () => {
+  const adminRoot = path.resolve(__dirname, "../src/routes/Admin")
+  const pageRoot = path.resolve(__dirname, "../src/pages/admin")
+  const requiredModules = [
+    "AdminPostsWorkspacePageCommands.ts",
+    "AdminPostsWorkspacePageSections.tsx",
+    "AdminProfileWorkspacePage.tsx",
+    "AdminProfileWorkspaceSections.tsx",
+    "AdminProfileWorkspace.styles.tokens.ts",
+    "AdminProfileWorkspace.styles.layout.ts",
+    "AdminProfileWorkspace.styles.sections.ts",
+    "AdminToolsWorkspacePage.tsx",
+    "AdminToolsWorkspaceSections.tsx",
+    "AdminToolsWorkspace.styles.tokens.ts",
+    "AdminToolsWorkspace.styles.layout.ts",
+    "AdminDashboardWorkspacePage.tsx",
+    "AdminDashboardWorkspaceSections.tsx",
+  ]
+
+  for (const sourcePath of requiredModules) {
+    expect(existsSync(path.join(adminRoot, sourcePath)), sourcePath).toBe(true)
+  }
+
+  const boundedSourceFiles = [
+    "AdminPostsWorkspacePage.tsx",
+    "AdminProfileWorkspace.styles.ts",
+    "AdminProfileWorkspace.styles.tokens.ts",
+    "AdminProfileWorkspace.styles.layout.ts",
+    "AdminProfileWorkspace.styles.sections.ts",
+    "AdminToolsWorkspace.styles.ts",
+    "AdminToolsWorkspace.styles.tokens.ts",
+    "AdminToolsWorkspace.styles.layout.ts",
+    "AdminDashboardWorkspace.styles.ts",
+  ].map((sourcePath) => path.join(adminRoot, sourcePath))
+
+  boundedSourceFiles.push(
+    path.join(pageRoot, "dashboard.tsx"),
+    path.join(pageRoot, "profile.tsx"),
+    path.join(pageRoot, "tools.tsx")
+  )
+
+  const oversizedFiles = boundedSourceFiles
+    .filter((sourcePath) => existsSync(sourcePath))
+    .map((sourcePath) => ({
+      sourcePath: path.relative(path.resolve(__dirname, "../src"), sourcePath),
+      lineCount: readFileSync(sourcePath, "utf8").split("\n").length,
+    }))
+    .filter(({ lineCount }) => lineCount > 700)
+
+  expect(oversizedFiles).toEqual([])
+
+  const adminWorkspaceFilesOverThousand = readdirSync(adminRoot)
+    .filter((sourcePath) => /^Admin(?:Posts|Profile|Tools|Dashboard)Workspace.*\.(?:ts|tsx)$/.test(sourcePath))
+    .map((sourcePath) => path.join(adminRoot, sourcePath))
+    .map((sourcePath) => ({
+      sourcePath: path.relative(adminRoot, sourcePath),
+      lineCount: readFileSync(sourcePath, "utf8").split("\n").length,
+    }))
+    .filter(({ lineCount }) => lineCount >= 1000)
+
+  expect(adminWorkspaceFilesOverThousand).toEqual([])
+
+  const postsPageSource = readFileSync(path.join(adminRoot, "AdminPostsWorkspacePage.tsx"), "utf8")
+  const profilePageSource = readFileSync(path.join(pageRoot, "profile.tsx"), "utf8")
+  const toolsPageSource = readFileSync(path.join(pageRoot, "tools.tsx"), "utf8")
+  const dashboardPageSource = readFileSync(path.join(pageRoot, "dashboard.tsx"), "utf8")
+
+  expect(postsPageSource).toContain("buildPostsWorkspacePageCommands")
+  expect(postsPageSource).toContain("AdminPostsWorkspaceMainSections")
+  expect(profilePageSource).toContain("AdminProfileWorkspacePage")
+  expect(toolsPageSource).toContain("AdminToolsWorkspacePage")
+  expect(dashboardPageSource).toContain("AdminDashboardWorkspacePage")
 })
 
 const mockAvatarAsset = async (page: Page) => {

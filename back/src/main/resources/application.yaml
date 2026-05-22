@@ -219,8 +219,8 @@ custom:
     securityEvent:
       retentionDays: ${CUSTOM__AUTH__SECURITY_EVENT__RETENTION_DAYS:30}
       cleanup:
-        batchSize: ${CUSTOM__AUTH__SECURITY_EVENT__CLEANUP__BATCH_SIZE:500}
-        maxBatches: ${CUSTOM__AUTH__SECURITY_EVENT__CLEANUP__MAX_BATCHES:20}
+        batchSize: ${CUSTOM__AUTH__SECURITY_EVENT__CLEANUP__BATCH_SIZE:1000}
+        maxBatches: ${CUSTOM__AUTH__SECURITY_EVENT__CLEANUP__MAX_BATCHES:100}
         fixedDelayMs: ${CUSTOM__AUTH__SECURITY_EVENT__CLEANUP__FIXED_DELAY_MS:3600000}
     login:
       maxAttempts: ${CUSTOM__AUTH__LOGIN__MAX_ATTEMPTS:5}

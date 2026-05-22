@@ -130,7 +130,11 @@ test.describe("editor studio state", () => {
   })
 
   test("editor studio는 v2 단일 경로와 단일 작성 모드 계약을 유지한다", () => {
-    const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
+    const editorStudioPageSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
+    const editorStudioSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceController.tsx"),
+      "utf8"
+    )
     const dedicatedEditorSurfacePath = path.resolve(
       __dirname,
       "../src/routes/Admin/EditorStudioDedicatedEditorSurface.tsx"
@@ -152,6 +156,46 @@ test.describe("editor studio state", () => {
     expect(existsSync(editorStudioStorageModelPath)).toBe(true)
     const editorStudioStorageModelSource = existsSync(editorStudioStorageModelPath)
       ? readFileSync(editorStudioStorageModelPath, "utf8")
+      : ""
+    const editorStudioAdminPostFlowPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/useEditorStudioAdminPostFlow.ts"
+    )
+    expect(existsSync(editorStudioAdminPostFlowPath)).toBe(true)
+    const editorStudioAdminPostFlowSource = existsSync(editorStudioAdminPostFlowPath)
+      ? readFileSync(editorStudioAdminPostFlowPath, "utf8")
+      : ""
+    const editorStudioUtilityCommandsPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/useEditorStudioUtilityCommands.ts"
+    )
+    expect(existsSync(editorStudioUtilityCommandsPath)).toBe(true)
+    const editorStudioUtilityCommandsSource = existsSync(editorStudioUtilityCommandsPath)
+      ? readFileSync(editorStudioUtilityCommandsPath, "utf8")
+      : ""
+    const editorStudioProfileCommandsPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/useEditorStudioProfileCommands.ts"
+    )
+    expect(existsSync(editorStudioProfileCommandsPath)).toBe(true)
+    const editorStudioProfileCommandsSource = existsSync(editorStudioProfileCommandsPath)
+      ? readFileSync(editorStudioProfileCommandsPath, "utf8")
+      : ""
+    const editorStudioMetaCatalogPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/useEditorStudioMetaCatalog.ts"
+    )
+    expect(existsSync(editorStudioMetaCatalogPath)).toBe(true)
+    const editorStudioMetaCatalogSource = existsSync(editorStudioMetaCatalogPath)
+      ? readFileSync(editorStudioMetaCatalogPath, "utf8")
+      : ""
+    const editorStudioPublishModalFlowPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/useEditorStudioPublishModalFlow.ts"
+    )
+    expect(existsSync(editorStudioPublishModalFlowPath)).toBe(true)
+    const editorStudioPublishModalFlowSource = existsSync(editorStudioPublishModalFlowPath)
+      ? readFileSync(editorStudioPublishModalFlowPath, "utf8")
       : ""
     const editorStudioThumbnailPreviewPath = path.resolve(
       __dirname,
@@ -950,6 +994,39 @@ test.describe("editor studio state", () => {
     expect(editorStudioStorageModelSource).toContain("export const persistLocalDraft =")
     expect(editorStudioStorageModelSource).toContain("export const removeLocalDraft =")
     expect(editorStudioSource).toContain('} from "./editorStudioStorageModel"')
+    expect(editorStudioSource).toContain('import { useEditorStudioAdminPostFlow } from "./useEditorStudioAdminPostFlow"')
+    expect(editorStudioSource).toContain('import { useEditorStudioUtilityCommands } from "./useEditorStudioUtilityCommands"')
+    expect(editorStudioSource).toContain('import { useEditorStudioProfileCommands } from "./useEditorStudioProfileCommands"')
+    expect(editorStudioSource).toContain('import { useEditorStudioMetaCatalog } from "./useEditorStudioMetaCatalog"')
+    expect(editorStudioSource).toContain('import { useEditorStudioPublishModalFlow } from "./useEditorStudioPublishModalFlow"')
+    expect(editorStudioPageSource).toContain('import { EditorStudioWorkspaceController } from "./EditorStudioWorkspaceController"')
+    expect(editorStudioPageSource.split("\n").length).toBeLessThanOrEqual(1500)
+    expect(editorStudioSource).not.toContain("const loadAdminPosts = useCallback(")
+    expect(editorStudioSource).not.toContain("const deletePostsFromList = async")
+    expect(editorStudioSource).not.toContain("const restoreDeletedPostFromList = useCallback(")
+    expect(editorStudioSource).not.toContain("const hardDeleteDeletedPostFromList = useCallback(")
+    expect(editorStudioSource).not.toContain("const handleListComments = () =>")
+    expect(editorStudioSource).not.toContain("const handleUploadMemberProfileImage = async")
+    expect(editorStudioSource).not.toContain("const refreshEditorMetaCatalog = useCallback(")
+    expect(editorStudioSource).not.toContain("const handleRecommendTags = useCallback(")
+    expect(editorStudioSource).not.toContain("const openPublishModal = useCallback(")
+    expect(editorStudioAdminPostFlowSource).toContain("export const useEditorStudioAdminPostFlow =")
+    expect(editorStudioAdminPostFlowSource).toContain("loadAdminPosts")
+    expect(editorStudioAdminPostFlowSource).toContain("deletePostsFromList")
+    expect(editorStudioAdminPostFlowSource).toContain("restoreDeletedPostFromList")
+    expect(editorStudioAdminPostFlowSource).toContain("hardDeleteDeletedPostFromList")
+    expect(editorStudioUtilityCommandsSource).toContain("export const useEditorStudioUtilityCommands =")
+    expect(editorStudioUtilityCommandsSource).toContain("handleListComments")
+    expect(editorStudioUtilityCommandsSource).toContain("handleReadSystemHealth")
+    expect(editorStudioProfileCommandsSource).toContain("export const useEditorStudioProfileCommands =")
+    expect(editorStudioProfileCommandsSource).toContain("handleUploadMemberProfileImage")
+    expect(editorStudioProfileCommandsSource).toContain("handleUpdateMemberProfileCard")
+    expect(editorStudioMetaCatalogSource).toContain("export const useEditorStudioMetaCatalog =")
+    expect(editorStudioMetaCatalogSource).toContain("refreshEditorMetaCatalog")
+    expect(editorStudioMetaCatalogSource).toContain("handleRecommendTags")
+    expect(editorStudioPublishModalFlowSource).toContain("export const useEditorStudioPublishModalFlow =")
+    expect(editorStudioPublishModalFlowSource).toContain("openPublishModal")
+    expect(editorStudioPublishModalFlowSource).toContain("handleConfirmPublish")
     expect(editorStudioSource).not.toContain("const normalizeMetaItems =")
     expect(editorStudioSource).not.toContain("const extractFirstMarkdownImage =")
     expect(editorStudioSource).not.toContain("const computeContentFingerprint =")
@@ -1278,7 +1355,10 @@ test.describe("editor studio state", () => {
   })
 
   test("editor studio는 SSR 관리자 스냅샷을 hydration auth race 동안 유지한다", () => {
-    const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
+    const editorStudioSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceController.tsx"),
+      "utf8"
+    )
     const editorStudioRoutingSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/useEditorStudioRouting.ts"),
       "utf8"
@@ -1434,7 +1514,10 @@ test.describe("editor studio state", () => {
   })
 
   test("공개 글 저장 후 상세 재검증은 client cache eviction과 서버 revalidate를 함께 수행한다", () => {
-    const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
+    const editorStudioSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceController.tsx"),
+      "utf8"
+    )
     const revalidateApiSource = readFileSync(path.resolve(__dirname, "../src/pages/api/revalidate.ts"), "utf8")
 
     expect(editorStudioSource).toContain("await invalidatePublicPostReadCaches(queryClient, resolvedPostId || undefined)")
@@ -1516,7 +1599,7 @@ test.describe("editor studio state", () => {
       "utf8"
     )
     const editorStudioSource = readFileSync(
-      path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"),
+      path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceController.tsx"),
       "utf8"
     )
     const editorStudioPersistenceSource = readFileSync(
@@ -1730,7 +1813,10 @@ test.describe("editor studio state", () => {
   })
 
   test("/editor/new는 temp draft bootstrap이 끝날 때까지 loading state를 먼저 유지한다", () => {
-    const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
+    const editorStudioSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceController.tsx"),
+      "utf8"
+    )
     const editorStudioDraftLifecycleSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/useEditorStudioDraftLifecycle.ts"),
       "utf8"
@@ -1749,7 +1835,10 @@ test.describe("editor studio state", () => {
   })
 
   test("썸네일 편집 패널은 클립보드 이미지 붙여넣기 업로드 계약을 유지한다", () => {
-    const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
+    const editorStudioSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceController.tsx"),
+      "utf8"
+    )
     const editorStudioThumbnailPanelsSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/EditorStudioThumbnailPanels.tsx"),
       "utf8"

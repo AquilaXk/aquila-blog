@@ -2319,6 +2319,46 @@ test.describe("editor studio state", () => {
     expect(documentOpsSource).toContain('from "./blockEditorEngineDocumentModel"')
   })
 
+  test("NodeView import pipeline은 600 line companion budget을 유지한다", () => {
+    const editorDir = path.resolve(__dirname, "../src/components/editor")
+    const residualFiles = [
+      "serializationHtmlImport.ts",
+      "mermaidNodeView.tsx",
+      "codeBlockNodeView.tsx",
+      "linkCardNodeViews.tsx",
+      "writerEditorPreset.ts",
+    ]
+    const companionFiles = [
+      "serializationHtmlImportLineParsers.ts",
+      "mermaidNodeViewModel.tsx",
+      "codeBlockNodeViewLanguageModel.ts",
+      "codeBlockNodeViewSelectionModel.ts",
+      "codeBlockNodeViewStyles.tsx",
+    ]
+
+    for (const residualFile of residualFiles) {
+      const source = readFileSync(path.join(editorDir, residualFile), "utf8")
+      expect(source.split("\n").length, `${residualFile} should stay under the NodeView/import budget`).toBeLessThanOrEqual(600)
+    }
+
+    for (const companionFile of companionFiles) {
+      const companionPath = path.join(editorDir, companionFile)
+      expect(existsSync(companionPath), `${companionFile} should own extracted NodeView/import responsibility`).toBe(true)
+      const source = readFileSync(companionPath, "utf8")
+      expect(source.split("\n").length, `${companionFile} should stay under the companion budget`).toBeLessThanOrEqual(600)
+    }
+
+    const htmlImportSource = readFileSync(path.join(editorDir, "serializationHtmlImport.ts"), "utf8")
+    const mermaidSource = readFileSync(path.join(editorDir, "mermaidNodeView.tsx"), "utf8")
+    const codeBlockSource = readFileSync(path.join(editorDir, "codeBlockNodeView.tsx"), "utf8")
+
+    expect(htmlImportSource).toContain('from "./serializationHtmlImportLineParsers"')
+    expect(mermaidSource).toContain('from "./mermaidNodeViewModel"')
+    expect(codeBlockSource).toContain('from "./codeBlockNodeViewLanguageModel"')
+    expect(codeBlockSource).toContain('from "./codeBlockNodeViewSelectionModel"')
+    expect(codeBlockSource).toContain('from "./codeBlockNodeViewStyles"')
+  })
+
   test("editor studio SSR은 작성자 카드에 공개 프로필 snapshot을 먼저 seed한다", () => {
     const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
 

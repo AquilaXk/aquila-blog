@@ -402,6 +402,61 @@ test.describe("editor studio state", () => {
     const resizableImageNodeViewSource = existsSync(resizableImageNodeViewPath)
       ? readFileSync(resizableImageNodeViewPath, "utf8")
       : ""
+    const serializationPath = path.resolve(__dirname, "../src/components/editor/serialization.ts")
+    const serializationSource = readFileSync(serializationPath, "utf8")
+    const serializationTypesPath = path.resolve(__dirname, "../src/components/editor/serializationTypes.ts")
+    expect(existsSync(serializationTypesPath)).toBe(true)
+    const serializationTypesSource = existsSync(serializationTypesPath)
+      ? readFileSync(serializationTypesPath, "utf8")
+      : ""
+    const serializationNodeFactoryPath = path.resolve(
+      __dirname,
+      "../src/components/editor/serializationNodeFactory.ts"
+    )
+    expect(existsSync(serializationNodeFactoryPath)).toBe(true)
+    const serializationNodeFactorySource = existsSync(serializationNodeFactoryPath)
+      ? readFileSync(serializationNodeFactoryPath, "utf8")
+      : ""
+    const serializationMarkdownExportPath = path.resolve(
+      __dirname,
+      "../src/components/editor/serializationMarkdownExport.ts"
+    )
+    expect(existsSync(serializationMarkdownExportPath)).toBe(true)
+    const serializationMarkdownExportSource = existsSync(serializationMarkdownExportPath)
+      ? readFileSync(serializationMarkdownExportPath, "utf8")
+      : ""
+    const serializationHtmlImportPath = path.resolve(
+      __dirname,
+      "../src/components/editor/serializationHtmlImport.ts"
+    )
+    expect(existsSync(serializationHtmlImportPath)).toBe(true)
+    const serializationHtmlImportSource = existsSync(serializationHtmlImportPath)
+      ? readFileSync(serializationHtmlImportPath, "utf8")
+      : ""
+    const serializationTableMetadataPath = path.resolve(
+      __dirname,
+      "../src/components/editor/serializationTableMetadata.ts"
+    )
+    expect(existsSync(serializationTableMetadataPath)).toBe(true)
+    const serializationTableMetadataSource = existsSync(serializationTableMetadataPath)
+      ? readFileSync(serializationTableMetadataPath, "utf8")
+      : ""
+    const serializationInlineNormalizationPath = path.resolve(
+      __dirname,
+      "../src/components/editor/serializationInlineNormalization.ts"
+    )
+    expect(existsSync(serializationInlineNormalizationPath)).toBe(true)
+    const serializationInlineNormalizationSource = existsSync(serializationInlineNormalizationPath)
+      ? readFileSync(serializationInlineNormalizationPath, "utf8")
+      : ""
+    const serializationLegacyRepairPath = path.resolve(
+      __dirname,
+      "../src/components/editor/serializationLegacyRepair.ts"
+    )
+    expect(existsSync(serializationLegacyRepairPath)).toBe(true)
+    const serializationLegacyRepairSource = existsSync(serializationLegacyRepairPath)
+      ? readFileSync(serializationLegacyRepairPath, "utf8")
+      : ""
     const blockSelectionModelSource = readFileSync(
       path.resolve(__dirname, "../src/components/editor/blockSelectionModel.ts"),
       "utf8"
@@ -977,6 +1032,31 @@ test.describe("editor studio state", () => {
     expect(rawMarkdownNodeViewSource).toContain("export const RawMarkdownNodeViewStyles =")
     expect(resizableImageNodeViewSource).toContain("export const ResizableImageView =")
     expect(resizableImageNodeViewSource).toContain("export const ResizableImageNodeViewStyles =")
+    expect(serializationSource).toContain('from "./serializationTypes"')
+    expect(serializationSource).toContain('from "./serializationNodeFactory"')
+    expect(serializationSource).toContain('from "./serializationMarkdownExport"')
+    expect(serializationSource).toContain('from "./serializationHtmlImport"')
+    expect(serializationSource).toContain('from "./serializationTableMetadata"')
+    expect(serializationSource).toContain('from "./serializationInlineNormalization"')
+    expect(serializationSource).toContain('from "./serializationLegacyRepair"')
+    expect(serializationSource.split("\n").length).toBeLessThanOrEqual(700)
+    expect(serializationSource).not.toContain("export const parseMarkdownToEditorDoc =")
+    expect(serializationSource).not.toContain("export const serializeNode =")
+    expect(serializationSource).not.toContain("const buildInlineContent =")
+    expect(serializationSource).not.toContain("const normalizeTableRows =")
+    expect(serializationSource).not.toContain("const restoreEditorDocCodeBlocksFromMarkdown =")
+    expect(serializationTypesSource).toContain("export type BlockEditorDoc =")
+    expect(serializationNodeFactorySource).toContain("export const createParagraphNode =")
+    expect(serializationHtmlImportSource).toContain("export const parseMarkdownToEditorDoc =")
+    expect(serializationHtmlImportSource).toContain("export const createCalloutNode =")
+    expect(serializationMarkdownExportSource).toContain("export const serializeNode =")
+    expect(serializationMarkdownExportSource).toContain("export const serializeEditorDocToMarkdown =")
+    expect(serializationTableMetadataSource).toContain("export const createTableNode =")
+    expect(serializationTableMetadataSource).toContain("export const serializeTable =")
+    expect(serializationInlineNormalizationSource).toContain("export const buildInlineContent =")
+    expect(serializationInlineNormalizationSource).toContain("export const serializeParagraphLikeNode =")
+    expect(serializationLegacyRepairSource).toContain("export const restoreEditorDocCodeBlocksFromMarkdown =")
+    expect(serializationLegacyRepairSource).toContain("export const detectUnsupportedMarkdownBlocks =")
     expect(blockEditorEngineLayersSource).toContain("export const BlockEditorToolbarLayer =")
     expect(blockEditorEngineLayersSource).toContain("export const BlockEditorQuickInsertLayer =")
     expect(blockEditorEngineLayersSource).toContain("export const BlockEditorSlashMenuLayer =")

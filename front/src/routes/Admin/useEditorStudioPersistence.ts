@@ -1,20 +1,12 @@
-import type { ChangeEvent, ClipboardEvent as ReactClipboardEvent } from "react"
 import {
   useCallback,
   type Dispatch,
   type MutableRefObject,
   type SetStateAction,
 } from "react"
-import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
-import {
-  buildImageOptimizationSummary,
-  normalizeProfileImageUploadError,
-  preparePostImageForUpload,
-} from "src/libs/profileImageUpload"
-import { stripThumbnailFocusFromUrl } from "src/libs/thumbnailFocus"
-import { parseStandaloneMarkdownImageLine } from "src/libs/markdown/rendering"
-import type { FileBlockAttrs, ImageBlockAttrs } from "src/components/editor/serialization"
+import { apiFetch } from "src/apis/backend/client"
 import { isTempDraftTitlePlaceholder } from "./editorTempDraft"
+import { useEditorStudioPersistenceUploads } from "./useEditorStudioPersistenceModel"
 
 type StudioSetState<T> = Dispatch<SetStateAction<T>>
 type NoticeTone = "idle" | "loading" | "success" | "error"
@@ -23,27 +15,6 @@ type PublishTarget = "page" | "modal"
 type EditorMode = "create" | "edit"
 type PublishActionType = "create" | "modify" | "temp"
 type PostVisibility = "PRIVATE" | "PUBLIC_UNLISTED" | "PUBLIC_LISTED"
-
-type UploadPostImageResponse = {
-  data?: {
-    url?: string
-    markdown?: string
-  }
-}
-
-type UploadPostImageResult = {
-  uploaded: UploadPostImageResponse
-  prepared: {
-    summary: string
-  }
-}
-
-type UploadPostFileResponse = {
-  data?: {
-    url?: string
-    name?: string
-  }
-}
 
 type RsData<T> = {
   data?: T
@@ -179,149 +150,18 @@ export const useEditorStudioPersistence = ({
   toFlags,
   uploadWithConflictRetry,
 }: UseEditorStudioPersistenceParams) => {
-  const uploadPostImageFile = useCallback(async (file: File): Promise<UploadPostImageResult> => {
-    const prepared = await preparePostImageForUpload(file)
-    const requestUpload = async () => {
-      const formData = new FormData()
-      formData.append("file", prepared.file, prepared.file.name)
-      return await fetch(`${getApiBaseUrl()}/post/api/v1/posts/images`, {
-        method: "POST",
-        credentials: "include",
-        body: formData,
-      })
-    }
-
-    const response = await uploadWithConflictRetry(requestUpload)
-
-    return {
-      uploaded: (await response.json()) as UploadPostImageResponse,
-      prepared: {
-        summary: buildImageOptimizationSummary(prepared),
-      },
-    }
-  }, [uploadWithConflictRetry])
-
-  const handleBlockEditorImageUpload = useCallback(async (file: File): Promise<ImageBlockAttrs> => {
-    setPublishStatus({
-      tone: "loading",
-      text: `이미지 "${file.name}" 최적화/업로드 중입니다. 완료되면 블록에 바로 삽입됩니다.`,
-    })
-
-    try {
-      const uploaded = await uploadPostImageFile(file)
-      const markdown = uploaded.uploaded.data?.markdown
-      if (!markdown) throw new Error("업로드 응답 형식이 올바르지 않습니다.")
-
-      const parsed = parseStandaloneMarkdownImageLine(markdown)
-      if (!parsed) throw new Error("이미지 markdown 메타데이터를 해석하지 못했습니다.")
-
-      setPublishStatus({
-        tone: "success",
-        text: `이미지 업로드가 완료되었습니다. ${uploaded.prepared.summary}`,
-      })
-
-      return {
-        src: parsed.src,
-        alt: parsed.alt,
-        title: parsed.title,
-        widthPx: parsed.widthPx,
-        align: parsed.align || "center",
-      }
-    } catch (error) {
-      const message = normalizeProfileImageUploadError(error)
-      setPublishStatus({
-        tone: "error",
-        text: `이미지 업로드 실패: ${message}`,
-      })
-      throw error
-    }
-  }, [setPublishStatus, uploadPostImageFile])
-
-  const uploadPostAttachmentFile = useCallback(async (file: File): Promise<UploadPostFileResponse> => {
-    const formData = new FormData()
-    formData.append("file", file, file.name)
-
-    const response = await uploadWithConflictRetry(async () =>
-      fetch(`${getApiBaseUrl()}/post/api/v1/posts/files`, {
-        method: "POST",
-        credentials: "include",
-        body: formData,
-      })
-    )
-
-    return (await response.json()) as UploadPostFileResponse
-  }, [uploadWithConflictRetry])
-
-  const handleBlockEditorFileUpload = useCallback(async (file: File): Promise<FileBlockAttrs> => {
-    setPublishStatus({
-      tone: "loading",
-      text: `첨부 파일 "${file.name}" 업로드 중입니다. 완료되면 파일 블록으로 삽입됩니다.`,
-    })
-
-    try {
-      const uploaded = await uploadPostAttachmentFile(file)
-      const uploadedUrl = String(uploaded.data?.url || "").trim()
-      const uploadedName = String(uploaded.data?.name || file.name).trim() || file.name
-      if (!uploadedUrl) throw new Error("업로드 응답 형식이 올바르지 않습니다.")
-
-      setPublishStatus({
-        tone: "success",
-        text: `첨부 파일 업로드가 완료되었습니다. ${uploadedName}`,
-      })
-
-      return {
-        url: uploadedUrl,
-        name: uploadedName,
-        description: "",
-        mimeType: file.type || "",
-        sizeBytes: file.size,
-      }
-    } catch (error) {
-      const message = normalizeProfileImageUploadError(error)
-      setPublishStatus({
-        tone: "error",
-        text: `첨부 파일 업로드 실패: ${message}`,
-      })
-      throw error
-    }
-  }, [setPublishStatus, uploadPostAttachmentFile])
-
-  const handleUploadThumbnailImage = useCallback(async (file: File) => {
-    try {
-      setLoadingKey("uploadThumbnail")
-      setPublishStatus({
-        tone: "loading",
-        text: `썸네일 "${file.name}" 최적화/업로드 중입니다...`,
-      })
-      const uploaded = await uploadPostImageFile(file)
-      const uploadedUrl = uploaded.uploaded.data?.url?.trim()
-      if (!uploadedUrl) throw new Error("업로드 응답 형식이 올바르지 않습니다.")
-      const safeUploadedUrl = normalizeSafeImageUrl(uploadedUrl)
-      if (!safeUploadedUrl) throw new Error("허용되지 않은 썸네일 URL 형식입니다.")
-
-      setPostThumbnailUrl(stripThumbnailFocusFromUrl(safeUploadedUrl))
-      setPostThumbnailFocusX(defaultThumbnailFocusX)
-      setPostThumbnailFocusY(defaultThumbnailFocusY)
-      setPostThumbnailZoom(defaultThumbnailZoom)
-      setPreviewThumbnailSourceUrl(stripThumbnailFocusFromUrl(safeUploadedUrl))
-      setIsPreviewThumbnailError(false)
-      setPublishStatus({
-        tone: "success",
-        text: `썸네일 파일 업로드가 완료되었습니다. ${uploaded.prepared.summary}`,
-      })
-    } catch (error) {
-      const message = normalizeProfileImageUploadError(error)
-      setPublishStatus({
-        tone: "error",
-        text: `썸네일 업로드 실패: ${message}`,
-      })
-    } finally {
-      setLoadingKey("")
-    }
-  }, [
+  const {
+    handleBlockEditorImageUpload,
+    handleBlockEditorFileUpload,
+    handleUploadThumbnailImage,
+    handleThumbnailImageFileChange,
+    handleThumbnailPaste,
+  } = useEditorStudioPersistenceUploads({
     defaultThumbnailFocusX,
     defaultThumbnailFocusY,
     defaultThumbnailZoom,
+    extractImageFileFromClipboard,
+    loadingKey,
     normalizeSafeImageUrl,
     setIsPreviewThumbnailError,
     setLoadingKey,
@@ -331,26 +171,9 @@ export const useEditorStudioPersistence = ({
     setPostThumbnailZoom,
     setPreviewThumbnailSourceUrl,
     setPublishStatus,
-    uploadPostImageFile,
-  ])
-
-  const handleThumbnailImageFileChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    event.target.value = ""
-    if (!file) return
-    setThumbnailImageFileName(file.name)
-    void handleUploadThumbnailImage(file)
-  }, [handleUploadThumbnailImage, setThumbnailImageFileName])
-
-  const handleThumbnailPaste = useCallback((event: ReactClipboardEvent<HTMLElement>) => {
-    const imageFile = extractImageFileFromClipboard(event.clipboardData)
-    if (!imageFile) return
-    if (loadingKey === "uploadThumbnail") return
-    event.preventDefault()
-    event.stopPropagation()
-    setThumbnailImageFileName(imageFile.name || "clipboard-image.png")
-    void handleUploadThumbnailImage(imageFile)
-  }, [extractImageFileFromClipboard, handleUploadThumbnailImage, loadingKey, setThumbnailImageFileName])
+    setThumbnailImageFileName,
+    uploadWithConflictRetry,
+  })
 
   const handleWritePost = useCallback(async (): Promise<boolean> => {
     const currentPostContent = postContentLiveRef.current

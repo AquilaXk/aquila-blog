@@ -12,10 +12,8 @@ interface AuthSecurityEventStore {
 
     fun findRecent(limit: Int): List<AuthSecurityEvent>
 
-    fun findExpired(
+    fun deleteExpiredBefore(
         cutoff: Instant,
         limit: Int,
-    ): List<AuthSecurityEvent>
-
-    fun deleteAll(events: List<AuthSecurityEvent>)
+    ): Int
 }

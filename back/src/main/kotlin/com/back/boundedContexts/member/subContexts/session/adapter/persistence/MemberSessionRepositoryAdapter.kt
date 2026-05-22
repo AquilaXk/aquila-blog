@@ -45,4 +45,9 @@ class MemberSessionRepositoryAdapter(
         keepLimit: Int,
         now: Instant,
     ): Int = memberSessionRepository.revokeActiveSessionsBeyondLimit(memberId, keepLimit.coerceAtLeast(1), now)
+
+    override fun deleteRevokedBefore(
+        cutoff: Instant,
+        limit: Int,
+    ): Int = memberSessionRepository.deleteRevokedBefore(cutoff, limit.coerceIn(1, 1_000))
 }

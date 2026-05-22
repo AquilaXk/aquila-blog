@@ -114,4 +114,24 @@ interface MemberSessionRepository : JpaRepository<MemberSession, Long> {
         @Param("keepLimit") keepLimit: Int,
         @Param("now") now: Instant,
     ): Int
+
+    @Modifying(flushAutomatically = true, clearAutomatically = false)
+    @Query(
+        value = """
+        delete from member_session
+        where id in (
+            select id
+            from member_session
+            where revoked_at is not null
+              and revoked_at < :cutoff
+            order by revoked_at asc, id asc
+            limit :limit
+        )
+        """,
+        nativeQuery = true,
+    )
+    fun deleteRevokedBefore(
+        @Param("cutoff") cutoff: Instant,
+        @Param("limit") limit: Int,
+    ): Int
 }

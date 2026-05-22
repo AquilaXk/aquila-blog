@@ -27,22 +27,8 @@ class AuthSecurityEventPersistenceAdapter(
         return authSecurityEventRepository.findAll(pageable).content
     }
 
-    override fun findExpired(
+    override fun deleteExpiredBefore(
         cutoff: Instant,
         limit: Int,
-    ): List<AuthSecurityEvent> {
-        val normalizedLimit = limit.coerceIn(1, 1_000)
-        val pageable =
-            PageRequest.of(
-                0,
-                normalizedLimit,
-                Sort.by(Sort.Order.asc("createdAt"), Sort.Order.asc("id")),
-            )
-
-        return authSecurityEventRepository.findByCreatedAtBefore(cutoff, pageable)
-    }
-
-    override fun deleteAll(events: List<AuthSecurityEvent>) {
-        authSecurityEventRepository.deleteAllInBatch(events)
-    }
+    ): Int = authSecurityEventRepository.deleteExpiredBefore(cutoff, limit.coerceIn(1, 1_000))
 }

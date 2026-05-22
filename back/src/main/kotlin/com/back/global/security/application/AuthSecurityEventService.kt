@@ -94,11 +94,7 @@ class AuthSecurityEventService(
         now: Instant = Instant.now(),
     ): Int {
         val cutoff = now.minus(retentionDays.coerceAtLeast(1).toLong(), ChronoUnit.DAYS)
-        val expiredEvents = authSecurityEventStore.findExpired(cutoff, batchSize.coerceIn(1, 1_000))
-        if (expiredEvents.isEmpty()) return 0
-
-        authSecurityEventStore.deleteAll(expiredEvents)
-        return expiredEvents.size
+        return authSecurityEventStore.deleteExpiredBefore(cutoff, batchSize.coerceIn(1, 1_000))
     }
 
     private fun AuthSecurityEvent.toDto(): AuthSecurityEventDto =

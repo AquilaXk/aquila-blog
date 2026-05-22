@@ -407,6 +407,22 @@ test.describe("editor studio state", () => {
     const blockEditorEngineControllerSource = existsSync(blockEditorEngineControllerPath)
       ? readFileSync(blockEditorEngineControllerPath, "utf8")
       : ""
+    const blockEditorEngineInsertActionsSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/useBlockEditorEngineInsertActions.ts"),
+      "utf8"
+    )
+    const blockEditorEngineSlashMenuSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/useBlockEditorEngineSlashMenu.ts"),
+      "utf8"
+    )
+    const blockEditorEngineBlockSelectionUiSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/useBlockEditorEngineBlockSelectionUi.ts"),
+      "utf8"
+    )
+    const blockEditorEngineBlockDragSource = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/useBlockEditorEngineBlockDrag.ts"),
+      "utf8"
+    )
     const blockEditorEngineStylesPath = path.resolve(
       __dirname,
       "../src/components/editor/BlockEditorEngine.styles.tsx"
@@ -1264,7 +1280,7 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineControllerSource).toContain('from "./blockSelectionModel"')
     expect(blockEditorEngineControllerSource).toContain('from "./nestedListItemModel"')
     expect(blockEditorEngineControllerSource).toContain('from "./useBlockEditorMarkdownCommit"')
-    expect(blockEditorEngineControllerSource).toContain('from "./slashMenuModel"')
+    expect(blockEditorEngineSlashMenuSource).toContain('from "./slashMenuModel"')
     expect(blockEditorEngineControllerSource).toContain('from "./blockToolbarModel"')
     expect(blockEditorEngineControllerSource).toContain('from "./inlineToolbarModel"')
     expect(blockEditorEngineControllerSource).toContain('from "./useFloatingBubbleState"')
@@ -1306,19 +1322,19 @@ test.describe("editor studio state", () => {
     expect(inlineToolbarModelSource).toContain("export const runInlineCode")
     expect(inlineToolbarModelSource).toContain("export const runInlineColor")
     expect(inlineToolbarModelSource).toContain("export const runInlineTextStyle")
-    expect(blockEditorEngineControllerSource).toContain('runInlineMarkCommand(editor, "bold")')
-    expect(blockEditorEngineControllerSource).toContain('runInlineMarkCommand(editor, "italic")')
-    expect(blockEditorEngineControllerSource).toContain('runInlineMarkCommand(editor, "strike")')
+    expect(blockEditorEngineInsertActionsSource).toContain('runInlineMarkCommand(editor, "bold")')
+    expect(blockEditorEngineInsertActionsSource).toContain('runInlineMarkCommand(editor, "italic")')
+    expect(blockEditorEngineInsertActionsSource).toContain('runInlineMarkCommand(editor, "strike")')
     expect(blockEditorEngineControllerSource).toContain('runBlockToolbarCommand(currentEditor, "heading-2")')
     expect(blockEditorEngineControllerSource).toContain('runBlockToolbarCommand(currentEditor, "heading-3")')
     expect(blockEditorEngineControllerSource).toContain('runBlockToolbarCommand(currentEditor, "ordered-list")')
     expect(blockEditorEngineControllerSource).toContain('runBlockToolbarCommand(currentEditor, "bullet-list")')
     expect(blockEditorEngineControllerSource).toContain('runBlockToolbarCommand(currentEditor, "quote")')
-    expect(blockEditorEngineControllerSource).toContain('runBlockToolbarCommand(editor, "heading-1")')
-    expect(blockEditorEngineControllerSource).toContain('runBlockToolbarCommand(editor, "bullet-list")')
-    expect(blockEditorEngineControllerSource).toContain("isToolbarBlockInsertActive(editor, item.id)")
-    expect(blockEditorEngineControllerSource).toContain("runInlineCode(editor)")
-    expect(blockEditorEngineControllerSource).toContain("runInlineColor(editor, color)")
+    expect(blockEditorEngineInsertActionsSource).toContain('runBlockToolbarCommand(editor, "heading-1")')
+    expect(blockEditorEngineInsertActionsSource).toContain('runBlockToolbarCommand(editor, "bullet-list")')
+    expect(blockEditorEngineInsertActionsSource).toContain("isToolbarBlockInsertActive(editor, item.id)")
+    expect(blockEditorEngineInsertActionsSource).toContain("runInlineCode(editor)")
+    expect(blockEditorEngineInsertActionsSource).toContain("runInlineColor(editor, color)")
     expect(blockEditorEngineSource).not.toContain("toggleBold().run()")
     expect(blockEditorEngineSource).not.toContain("toggleItalic().run()")
     expect(blockEditorEngineSource).not.toContain("toggleStrike().run()")
@@ -1360,8 +1376,8 @@ test.describe("editor studio state", () => {
     expect(blockEditorEngineSource).not.toMatch(/const\s+getEditableTextPositionForTopLevelBlock\s*=/)
     expect(blockEditorEngineSource).not.toMatch(/const\s+selectTopLevelBlockNode\s*=/)
     expect(blockEditorEngineSource).not.toMatch(/const\s+isTabBlockSelectionEligible\s*=/)
-    expect(blockEditorEngineControllerSource).toContain('from "./blockHandleLayoutModel"')
-    expect(blockEditorEngineControllerSource).toContain('from "./blockDragModel"')
+    expect(blockEditorEngineBlockSelectionUiSource).toContain('from "./blockHandleLayoutModel"')
+    expect(blockEditorEngineBlockDragSource).toContain('from "./blockDragModel"')
     expect(blockEditorTableOverlayControllerSource).toContain('from "./useBlockEditorTableOverlayAxisDrag"')
     expect(blockEditorEngineSource).not.toMatch(/const\s+resolveBlockHandleAnchorTop\s*=/)
     expect(blockEditorEngineSource).not.toMatch(/const\s+resolveThinBlockHandleAnchorTop\s*=/)
@@ -2013,6 +2029,105 @@ test.describe("editor studio state", () => {
     moduleContracts.forEach((contract) => {
       expect(existsSync(path.resolve(__dirname, contract.path))).toBe(true)
       expect(controllerSource).toContain(`from "${contract.importPath}"`)
+      contract.forbiddenInline.forEach((snippet) => {
+        expect(controllerSource).not.toContain(snippet)
+      })
+    })
+  })
+
+  test("engine controller는 책임별 module과 1000 line budget을 유지한다", () => {
+    const controllerPath = path.resolve(
+      __dirname,
+      "../src/components/editor/useBlockEditorEngineController.ts"
+    )
+    const controllerSource = readFileSync(controllerPath, "utf8")
+    const moduleContracts = [
+      {
+        importPath: "./useBlockEditorEngineDocumentOps",
+        path: "../src/components/editor/useBlockEditorEngineDocumentOps.ts",
+        forbiddenInline: [
+          "const insertDocContent = useCallback(",
+          "const mutateTopLevelBlocks = useCallback(",
+          "const transformCurrentParagraphViaSlash = useCallback(",
+        ],
+      },
+      {
+        importPath: "./useBlockEditorEngineInsertActions",
+        path: "../src/components/editor/useBlockEditorEngineInsertActions.ts",
+        forbiddenInline: [
+          "const insertCalloutBlock = useCallback(",
+          "const blockInsertCatalog = useMemo<BlockInsertCatalogItem[]>",
+          "const handleImageInputChange = async",
+        ],
+      },
+      {
+        importPath: "./useBlockEditorEngineSlashMenu",
+        path: "../src/components/editor/useBlockEditorEngineSlashMenu.ts",
+        forbiddenInline: [
+          "const resolveSlashMenuState = useCallback(",
+          "const handleSlashMenuKeyboard = useCallback(",
+          "const stopSlashKeyboardEvent =",
+        ],
+      },
+      {
+        importPath: "./useBlockEditorEngineSelectionEffects",
+        path: "../src/components/editor/useBlockEditorEngineSelectionEffects.ts",
+        forbiddenInline: [
+          "const syncBubble = () =>",
+          "const handleDocumentSelectionChange = () =>",
+          "const handleKeyDownCapture = (event: KeyboardEvent) =>",
+        ],
+      },
+      {
+        importPath: "./useBlockEditorEngineSelectionTools",
+        path: "../src/components/editor/useBlockEditorEngineSelectionTools.ts",
+        forbiddenInline: [
+          "const findTopLevelBlockIndexFromTarget = useCallback(",
+          "const resolveEffectiveSelectedListItemContext = useCallback(",
+          "const clearNativeTextSelection = useCallback(",
+        ],
+      },
+      {
+        importPath: "./useBlockEditorEngineBlockSelectionUi",
+        path: "../src/components/editor/useBlockEditorEngineBlockSelectionUi.ts",
+        forbiddenInline: [
+          "const syncViewportHoverState = useCallback(",
+          "useBlockSelectionLayoutEffect(() =>",
+          "const handleViewportPointerMove = useCallback(",
+        ],
+      },
+      {
+        importPath: "./useBlockEditorEngineBlockDrag",
+        path: "../src/components/editor/useBlockEditorEngineBlockDrag.ts",
+        forbiddenInline: [
+          "const beginBlockDragFromPending = useCallback(",
+          "const beginPendingNestedListItemHandleDrag = useCallback(",
+          "const handleViewportDragOver = useCallback(",
+        ],
+      },
+      {
+        importPath: "./useBlockEditorEngineBlockMenu",
+        path: "../src/components/editor/useBlockEditorEngineBlockMenu.ts",
+        forbiddenInline: [
+          "const moveBlockByStep = useCallback(",
+          "const handleBlockHandleKeyDown = useCallback(",
+          "const handleBlockDragHandlePointerDown = useCallback(",
+        ],
+      },
+    ]
+
+    expect(controllerSource.split("\n").length).toBeLessThanOrEqual(1000)
+    moduleContracts.forEach((contract) => {
+      const modulePath = path.resolve(__dirname, contract.path)
+      expect(existsSync(modulePath)).toBe(true)
+      const moduleSource = readFileSync(modulePath, "utf8")
+      expect(moduleSource.split("\n").length, `${contract.path} should stay under 1000 lines`).toBeLessThanOrEqual(1000)
+      const ownerPath =
+        contract.importPath === "./useBlockEditorEngineBlockMenu"
+          ? "../src/components/editor/useBlockEditorEngineBlockDrag.ts"
+          : "../src/components/editor/useBlockEditorEngineController.ts"
+      const ownerSource = readFileSync(path.resolve(__dirname, ownerPath), "utf8")
+      expect(ownerSource).toContain(`from "${contract.importPath}"`)
       contract.forbiddenInline.forEach((snippet) => {
         expect(controllerSource).not.toContain(snippet)
       })

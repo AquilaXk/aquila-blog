@@ -1,145 +1,77 @@
-import { dehydrate, type DehydratedState, useQueryClient } from "@tanstack/react-query"
-import { GetServerSideProps, NextPage } from "next"
-import { useRouter } from "next/router"
-import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { apiFetch } from "src/apis/backend/client"
-import AppIcon from "src/components/icons/AppIcon"
-import ProfileImage from "src/components/ProfileImage"
-import {
-  getProfileCardIconOptions,
-  isAllowedProfileLinkHref,
-  normalizeProfileLinkHref,
-  ProfileCardLinkItem,
-} from "src/constants/profileCardLinks"
-import { queryKey } from "src/constants/queryKey"
-import useAuthSession, { AuthMember } from "src/hooks/useAuthSession"
-import { setAdminProfileCache, toAdminProfile } from "src/hooks/useAdminProfile"
-import { setProfileWorkspaceCache, useProfileWorkspace } from "src/hooks/useProfileWorkspace"
-import useViewportImageEditor from "src/libs/imageEditor/useViewportImageEditor"
-import {
-  buildProfileWorkspaceAdminProfileCacheFields,
-  AboutProjectBlock,
-  normalizeProfileWorkspaceContent,
-  ProfileWorkspaceContent,
-  ProfileWorkspaceResponse,
-  serializeProfileWorkspaceContent,
-  AboutSectionBlock,
-} from "src/libs/profileWorkspace"
-import {
-  buildImageOptimizationSummary,
-  buildProfileImageEditedFile,
-  clampProfileImageEditFocusBySource,
-  clampProfileImageEditZoom,
-  normalizeProfileImageUploadError,
-  prepareProfileImageForUpload,
-  ProfileImageSourceSize,
-  PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_X,
-  PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_Y,
-  PROFILE_IMAGE_EDIT_MIN_ZOOM,
-  resolveProfileImageEditDrawRatios,
-} from "src/libs/profileImageUpload"
-import { createQueryClient } from "src/libs/react-query"
-import { saveProfileCardWithConflictRetry } from "src/libs/profileCardSave"
-import { readAdminProtectedBootstrap } from "src/libs/server/adminPage"
-import { guardAdminRequest } from "src/libs/server/adminGuard"
-import { hasServerAuthCookie } from "src/libs/server/authSession"
-import { fetchServerProfileWorkspace } from "src/libs/server/profileWorkspace"
-import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
-import { acquireBodyScrollLock } from "src/libs/utils/bodyScrollLock"
+import type { AuthMember } from "src/hooks/useAuthSession"
+import type { ProfileWorkspaceContent } from "src/libs/profileWorkspace"
+import { clampProfileImageEditZoom } from "src/libs/profileImageUpload"
 import AdminShell from "src/routes/Admin/AdminShell"
 import {
-  Main,
-  BaseButton,
-  GhostButton,
-  PublishButton,
-  MiniButton,
-  DangerButton,
-  PreviewAnchor,
-  WorkspaceHero,
-  WorkspaceShell,
-  SectionRail,
-  SectionRailButton,
+  DockPrimaryButton,
+  DockSecondaryButton,
+  EditorActionDock,
   EditorColumn,
   EditorPaneHeader,
-  SectionStateBadge,
   EditorSurface,
-  SectionStack,
-  AvatarWorkspaceCard,
-  FieldSectionCard,
-  SectionBlockHeader,
-  FieldGrid,
-  FieldBox,
-  FieldLabel,
-  Input,
-  TextArea,
-  AboutSectionList,
-  AboutSectionCard,
-  AboutProjectList,
-  AboutProjectCard,
-  AboutSectionCardHeader,
-  ItemList,
-  ItemRow,
-  InlineActionRow,
-  EmptyStateCard,
-  SegmentedControl,
-  SegmentButton,
-  LinkManagerHeader,
-  LinkCardList,
-  LinkRowCard,
-  DragHandleButton,
-  IconPickerField,
-  IconPickerButton,
-  IconPreview,
-  IconPickerCopy,
-  IconPickerPanel,
-  IconOptionButton,
-  IconOptionText,
-  LinkInputs,
-  EditorActionDock,
-  DockSecondaryButton,
-  DockPrimaryButton,
-  ToastStack,
+  Main,
+  SectionRail,
+  SectionRailButton,
+  SectionStateBadge,
   ToastCard,
-  AvatarFallback,
+  ToastStack,
+  WorkspaceHero,
+  WorkspaceShell,
 } from "src/routes/Admin/AdminProfileWorkspace.styles"
-import {
-  WORKSPACE_SECTIONS,
-  buildWorkspaceFallback,
-  createBlankAboutProject,
-  createBlankAboutSection,
-  createBlankLinkItem,
-  type LinkTab,
-  moveListItem,
-  type PreviewMode,
-  reorderListItem,
-  serializeWorkspaceSection,
-  toPayloadLinks,
-  validateLinkInputs,
-  type WorkspaceSectionId,
-} from "src/routes/Admin/AdminProfileWorkspaceModel"
+import { WORKSPACE_SECTIONS } from "src/routes/Admin/AdminProfileWorkspaceModel"
 import AdminProfileImageEditorModal from "src/routes/Admin/AdminProfileImageEditorModal"
 import AdminProfilePreviewRail from "src/routes/Admin/AdminProfilePreviewRail"
 import { renderAdminProfileWorkspaceSection } from "src/routes/Admin/AdminProfileWorkspaceSectionRenderer"
-import {
-  PROFILE_IMAGE_DRAFT_DEFAULT_SOURCE_SIZE,
-  PROFILE_IMAGE_UPLOAD_RETRY_DELAY_MS,
-  PROFILE_UNSAVED_CHANGES_MESSAGE,
-  parseResponseErrorBody,
-  readImageSourceSizeFromFile,
-  requestProfileImageUpload,
-  revalidatePublicBlogAppearance,
-  sleep,
-} from "src/routes/Admin/AdminProfilePersistenceModel"
 import {
   AdminWorkspaceActionDockInner,
   AdminWorkspaceHeroCopy,
   AdminWorkspaceHeroLayout,
 } from "src/routes/Admin/AdminSurfacePrimitives"
 
-type OpenIconPicker = `${LinkTab}:${number}` | null
-
 export const AdminProfileWorkspaceSections = (props: Record<string, any>) => {
-  const { initialMember, router, queryClient, sessionMember, fallbackWorkspace, workspaceQuery, activeSection, setActiveSection, linkTab, setLinkTab, previewMode, setPreviewMode, isPreviewExpanded, setIsPreviewExpanded, draggingLinkIndex, setDraggingLinkIndex, dragOverLinkIndex, setDragOverLinkIndex, dragOverLinkPosition, setDragOverLinkPosition, openIconPicker, setOpenIconPicker, loadingKey, setLoadingKey, workspaceNotice, setWorkspaceNotice, imageNotice, setImageNotice, displayNameInput, setDisplayNameInput, remoteDraft, setRemoteDraft, publishedSnapshot, setPublishedSnapshot, draft, setDraft, profileImageFileName, setProfileImageFileName, isProfileImageEditorOpen, setIsProfileImageEditorOpen, profileImageDraftFile, setProfileImageDraftFile, profileImageDraftPreviewUrl, setProfileImageDraftPreviewUrl, profileImageDraftFocusX, setProfileImageDraftFocusX, profileImageDraftFocusY, setProfileImageDraftFocusY, profileImageDraftZoom, setProfileImageDraftZoom, profileImageDraftSourceSize, setProfileImageDraftSourceSize, profileImageDraftNotice, setProfileImageDraftNotice, profileImageDraftFrameRef, profileImageFileInputRef, profileImageDraftFileSeqRef, syncPublishedAdminProfileCache, applyWorkspaceState, hasWorkspaceUnsavedChanges, hasDisplayNameDirty, hasUnsavedChanges, hasPublishedDiff, sectionStateMap, refreshWorkspace, persistDisplayName, validateDraftBeforePersistence, buildDraftPayload, saveWorkspaceDraft, updateDraft, updateLinkItem, appendLinkItem, removeLinkItem, moveLinkItem, reorderLinkItems, updateAboutSection, addAboutSection, removeAboutSection, moveAboutSection, addAboutItem, removeAboutItem, moveAboutItem, updateAboutProject, addAboutProject, removeAboutProject, moveAboutProject, applyProfileImageDraftPreviewStyle, normalizeProfileImageDraftTransform, computeAnchoredZoomTransform, computeDraggedProfileImageTransform, commitProfileImageDraftTransform, finalizeProfileImageDraftPointer, handleProfileImageDraftPointerDown, handleProfileImageDraftPointerMove, isProfileImageDraftDragging, resetProfileImageDraftInteractions, scheduleProfileImageDraftTransform, profileImageDraftTransformRef, clearProfileImageDraft, handleDraftFileChange, handleUploadMemberProfileImage, handleApplyProfileImageDraft, handleSaveDraft, handlePublish } = props as Record<string, any> & { initialMember: AuthMember; draft: ProfileWorkspaceContent; publishedSnapshot: ProfileWorkspaceContent; visibleLinks: ProfileCardLinkItem[] }
+  const {
+    activeSection,
+    displayNameInput,
+    draft,
+    finalizeProfileImageDraftPointer,
+    handleApplyProfileImageDraft,
+    handleDraftFileChange,
+    handleProfileImageDraftPointerDown,
+    handleProfileImageDraftPointerMove,
+    handlePublish,
+    handleSaveDraft,
+    hasPublishedDiff,
+    hasUnsavedChanges,
+    imageNotice,
+    initialMember,
+    isPreviewExpanded,
+    isProfileImageDraftDragging,
+    isProfileImageEditorOpen,
+    loadingKey,
+    previewMode,
+    profileImageDraftFile,
+    profileImageDraftFrameRef,
+    profileImageDraftNotice,
+    profileImageDraftPreviewUrl,
+    profileImageDraftTransformRef,
+    profileImageDraftZoom,
+    profileImageFileInputRef,
+    publishedSnapshot,
+    resetProfileImageDraftInteractions,
+    scheduleProfileImageDraftTransform,
+    sectionStateMap,
+    sessionMember,
+    setActiveSection,
+    setIsPreviewExpanded,
+    setIsProfileImageEditorOpen,
+    setPreviewMode,
+    workspaceNotice,
+    clearProfileImageDraft,
+  } = props as Record<string, any> & {
+    draft: ProfileWorkspaceContent
+    initialMember: AuthMember
+    publishedSnapshot: ProfileWorkspaceContent
+  }
   const displayName = displayNameInput.trim() || sessionMember.nickname || sessionMember.username || "관리자"
   const displayNameInitial = displayName.slice(0, 2).toUpperCase()
   const previewContent = previewMode === "published" ? publishedSnapshot : draft
@@ -151,7 +83,6 @@ export const AdminProfileWorkspaceSections = (props: Record<string, any>) => {
   if (!draft.homeIntroTitle.trim() || !draft.homeIntroDescription.trim()) missingExposureItems.push("메인 헤더 카피")
   const hasMissingExposureItems = missingExposureItems.length > 0
   const activeSectionMeta = WORKSPACE_SECTIONS.find((section) => section.id === activeSection) || WORKSPACE_SECTIONS[0]
-  const visibleLinks = linkTab === "service" ? draft.serviceLinks : draft.contactLinks
   const pageToasts = [workspaceNotice, imageNotice].filter(
     (notice) => notice.tone !== "idle" && notice.text.trim().length > 0
   )

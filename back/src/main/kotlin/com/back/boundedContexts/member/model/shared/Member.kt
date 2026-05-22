@@ -22,6 +22,11 @@ import java.util.Locale
 @Entity
 @DynamicUpdate
 @SQLRestriction("deleted_at IS NULL")
+@Table(
+    uniqueConstraints = [
+        UniqueConstraint(name = "uk_member_login_id", columnNames = ["login_id"]),
+    ],
+)
 @AfterDDL(
     """
     CREATE INDEX IF NOT EXISTS member_idx_created_at_desc
@@ -47,7 +52,7 @@ class Member(
     @field:GeneratedValue(strategy = SEQUENCE, generator = "member_seq_gen")
     override val id: Long = 0,
     @field:NaturalId
-    @field:Column(name = "login_id", unique = true, nullable = false)
+    @field:Column(name = "login_id", nullable = false)
     val username: String,
     @field:Column(nullable = true)
     var password: String? = null,

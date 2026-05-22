@@ -241,9 +241,6 @@ CREATE INDEX IF NOT EXISTS post_comment_idx_subtree_active
     ON post_comment (post_id, parent_comment_id, created_at ASC, id ASC)
     WHERE deleted_at IS NULL;
 
-CREATE INDEX IF NOT EXISTS post_like_uidx_liker_post
-    ON post_like (liker_id, post_id);
-
 CREATE INDEX IF NOT EXISTS member_notification_idx_receiver_created_at_desc
     ON member_notification (receiver_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS member_notification_idx_receiver_unread_created_at_desc

@@ -247,9 +247,6 @@ CREATE INDEX IF NOT EXISTS post_comment_idx_post_id
 CREATE INDEX IF NOT EXISTS post_comment_idx_parent_comment_id
     ON post_comment (parent_comment_id);
 
-CREATE INDEX IF NOT EXISTS post_like_uidx_liker_post
-    ON post_like (liker_id, post_id);
-
 CREATE INDEX IF NOT EXISTS member_notification_idx_receiver_created_at_desc
     ON member_notification (receiver_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS member_notification_idx_receiver_unread_created_at_desc

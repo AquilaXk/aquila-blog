@@ -19,15 +19,29 @@ class AuthSecurityEventCleanupScheduledJob(
     private val authSecurityEventService: AuthSecurityEventService,
     @param:Value("\${custom.auth.securityEvent.cleanup.batchSize:500}")
     private val batchSize: Int,
+    @param:Value("\${custom.auth.securityEvent.cleanup.maxBatches:20}")
+    private val maxBatches: Int,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
     @Scheduled(fixedDelayString = "\${custom.auth.securityEvent.cleanup.fixedDelayMs:3600000}")
     @SchedulerLock(name = "authSecurityEventCleanup", lockAtLeastFor = "PT1M")
     fun cleanup() {
-        val purgedCount = authSecurityEventService.purgeExpired(batchSize)
-        if (purgedCount > 0) {
-            log.info("Purged {} expired auth security events", purgedCount)
+        val normalizedBatchSize = batchSize.coerceIn(1, 1_000)
+        val normalizedMaxBatches = maxBatches.coerceIn(1, 100)
+        var totalPurged = 0
+        var completedBatches = 0
+
+        while (completedBatches < normalizedMaxBatches) {
+            val purgedCount = authSecurityEventService.purgeExpired(normalizedBatchSize)
+            if (purgedCount <= 0) break
+            totalPurged += purgedCount
+            completedBatches += 1
+            if (purgedCount < normalizedBatchSize) break
+        }
+
+        if (totalPurged > 0) {
+            log.info("Purged {} expired auth security events", totalPurged)
         }
     }
 }

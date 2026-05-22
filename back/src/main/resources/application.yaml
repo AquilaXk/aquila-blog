@@ -212,10 +212,15 @@ custom:
       freshLookupGraceSeconds: ${CUSTOM__AUTH__SESSION__FRESH_LOOKUP_GRACE_SECONDS:15}
       touchMinIntervalSeconds: ${CUSTOM__AUTH__SESSION__TOUCH_MIN_INTERVAL_SECONDS:60}
       maxActivePerMember: ${CUSTOM__AUTH__SESSION__MAX_ACTIVE_PER_MEMBER:32}
+      revokedRetentionDays: ${CUSTOM__AUTH__SESSION__REVOKED_RETENTION_DAYS:30}
+      cleanup:
+        batchSize: ${CUSTOM__AUTH__SESSION__CLEANUP__BATCH_SIZE:500}
+        fixedDelayMs: ${CUSTOM__AUTH__SESSION__CLEANUP__FIXED_DELAY_MS:3600000}
     securityEvent:
       retentionDays: ${CUSTOM__AUTH__SECURITY_EVENT__RETENTION_DAYS:30}
       cleanup:
         batchSize: ${CUSTOM__AUTH__SECURITY_EVENT__CLEANUP__BATCH_SIZE:500}
+        maxBatches: ${CUSTOM__AUTH__SECURITY_EVENT__CLEANUP__MAX_BATCHES:20}
         fixedDelayMs: ${CUSTOM__AUTH__SECURITY_EVENT__CLEANUP__FIXED_DELAY_MS:3600000}
     login:
       maxAttempts: ${CUSTOM__AUTH__LOGIN__MAX_ATTEMPTS:5}

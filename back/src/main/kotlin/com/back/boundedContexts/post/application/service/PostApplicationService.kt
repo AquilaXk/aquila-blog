@@ -912,7 +912,10 @@ class PostApplicationService(
         }
 
         runCatching {
-            uploadedFileRetentionService.restoreDeletedPostAttachments(snapshot.content)
+            uploadedFileRetentionService.restoreDeletedPostAttachments(
+                postId = id,
+                content = snapshot.content,
+            )
         }.onFailure { exception ->
             logger.warn("Failed to restore attachments for restored post id={}", id, exception)
         }

@@ -201,6 +201,24 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
         assertThat(uploadedFileRepository.findByObjectKey(unknownLegacyKey)).isNull()
     }
 
+    @Test
+    fun `삭제 글 복구 첨부파일은 활성화될 때 게시글 소유자를 다시 기록한다`() {
+        val restoredKey = "posts/2026/03/restored-image.png"
+        val content = "![](${UploadedFileUrlCodec.buildImageUrl(restoredKey)})"
+
+        uploadedFileRetentionService.registerTempUpload(restoredKey, "image/png", 100, UploadedFilePurpose.POST_IMAGE)
+        uploadedFileRetentionService.scheduleDeletedPostAttachments(content)
+
+        uploadedFileRetentionService.restoreDeletedPostAttachments(postId = 33, content = content)
+
+        val restoredFile = uploadedFileRepository.findByObjectKey(restoredKey)!!
+        assertThat(restoredFile.status).isEqualTo(UploadedFileStatus.ACTIVE)
+        assertThat(restoredFile.ownerType).isEqualTo(UploadedFileOwnerType.POST)
+        assertThat(restoredFile.ownerId).isEqualTo(33)
+        assertThat(restoredFile.retentionReason).isNull()
+        assertThat(restoredFile.purgeAfter).isNull()
+    }
+
     companion object {
         @JvmStatic
         @BeforeAll

@@ -56,7 +56,7 @@ spring:
         enabled: false
   datasource:
     url: jdbc:postgresql://${custom.site.dbHost}:${custom.site.dbPort}/${custom.site.dbName}?reWriteBatchedInserts=true
-    username: postgres
+    username: ${SPRING__DATASOURCE__USERNAME:postgres}
     password: ${SPRING__DATASOURCE__PASSWORD:}
     driver-class-name: org.postgresql.Driver
     hikari:

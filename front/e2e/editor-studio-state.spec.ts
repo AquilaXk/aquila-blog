@@ -143,6 +143,23 @@ test.describe("editor studio state", () => {
     const editorStudioSource = existsSync(editorStudioRootPath)
       ? readFileSync(editorStudioRootPath, "utf8")
       : editorStudioControllerSource
+    const editorStudioRootViewPath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/EditorStudioWorkspaceControllerRootView.tsx"
+    )
+    expect(existsSync(editorStudioRootViewPath)).toBe(true)
+    const editorStudioRootViewSource = existsSync(editorStudioRootViewPath)
+      ? readFileSync(editorStudioRootViewPath, "utf8")
+      : ""
+    const editorStudioRuntimePath = path.resolve(
+      __dirname,
+      "../src/routes/Admin/useEditorStudioWorkspaceControllerRuntime.ts"
+    )
+    expect(existsSync(editorStudioRuntimePath)).toBe(true)
+    const editorStudioRuntimeSource = existsSync(editorStudioRuntimePath)
+      ? readFileSync(editorStudioRuntimePath, "utf8")
+      : ""
+    const editorStudioPresentationSource = `${editorStudioSource}\n${editorStudioRootViewSource}\n${editorStudioRuntimeSource}`
     const dedicatedEditorSurfacePath = path.resolve(
       __dirname,
       "../src/routes/Admin/EditorStudioDedicatedEditorSurface.tsx"
@@ -677,8 +694,9 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).not.toContain("BLOCK_EDITOR_V2_ENABLED")
     expect(editorStudioSource).not.toContain("EditorStudioLegacyToolbar")
     expect(editorStudioSource).not.toContain("RawMarkdownTextarea")
-    expect(editorStudioSource).toContain("const isCompactSplitPreview = false")
-    expect(editorStudioSource).toContain("EditorStudioDedicatedEditorSurface")
+    expect(editorStudioPresentationSource).toContain('import { EditorStudioWorkspaceControllerRootView } from "./EditorStudioWorkspaceControllerRootView"')
+    expect(editorStudioRootViewSource).toContain("const isCompactSplitPreview = false")
+    expect(editorStudioRootViewSource).toContain("EditorStudioDedicatedEditorSurface")
     expect(editorStudioSource).not.toContain("const EditorStudioRoot")
     expect(dedicatedEditorRootStyle).toContain("width: 100vw;")
     expect(dedicatedEditorRootStyle).toContain("margin-left: calc(50% - 50vw);")
@@ -705,9 +723,9 @@ test.describe("editor studio state", () => {
     expect(quickInsertButtonStyle).toContain("white-space: nowrap;")
     expect(dedicatedEditorSurfacePartsSource).toContain("grid-template-columns: minmax(0, 1fr);")
     expect(dedicatedEditorSurfaceSource).toContain('data-testid="editor-studio-frame"')
-    expect(editorStudioSource).toContain('import { WriterEditorHost } from "./WriterEditorHost"')
-    expect(editorStudioSource.match(/<WriterEditorHost/g)?.length).toBe(2)
-    expect(editorStudioSource).not.toContain("<LazyBlockEditorShell")
+    expect(editorStudioRootViewSource).toContain('import { WriterEditorHost } from "./WriterEditorHost"')
+    expect(editorStudioRootViewSource.match(/<WriterEditorHost/g)?.length).toBe(2)
+    expect(editorStudioRootViewSource).not.toContain("<LazyBlockEditorShell")
     expect(editorStudioSource).not.toContain("EditorStudioPreviewColumn")
     expect(editorStudioSource).not.toContain('data-testid="editor-preview-body"')
     expect(editorStudioSource).not.toContain("LazyMarkdownRenderer")
@@ -732,8 +750,8 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).not.toContain("const publishActionButtonText =")
     expect(editorStudioSource).not.toContain("const publishActionTriggerDisabled =")
     expect(editorStudioSource).not.toContain("const mobilePrimaryActionLabel =")
-    expect(editorStudioSource).toContain('import { useEditorStudioThumbnailPreview } from "./useEditorStudioThumbnailPreview"')
-    expect(editorStudioSource).toContain('import { useEditorStudioThumbnailControls } from "./useEditorStudioThumbnailControls"')
+    expect(editorStudioPresentationSource).toContain('import { useEditorStudioThumbnailPreview } from "./useEditorStudioThumbnailPreview"')
+    expect(editorStudioPresentationSource).toContain('import { useEditorStudioThumbnailControls } from "./useEditorStudioThumbnailControls"')
     expect(editorStudioSource).not.toContain("type ThumbnailSourceSize =")
     expect(editorStudioSource).not.toContain("type ThumbnailTransformState =")
     expect(editorStudioSource).not.toContain("const thumbnailImageFileInputRef = useRef<HTMLInputElement>")
@@ -761,12 +779,12 @@ test.describe("editor studio state", () => {
     expect(editorStudioThumbnailControlsSource).toContain("const applyFirstBodyImageToThumbnail = useCallback")
     expect(editorStudioThumbnailPanelsSource).toContain("export const EditorStudioThumbnailEditorPanel =")
     expect(editorStudioThumbnailPanelsSource).toContain("export const EditorStudioThumbnailMetaPanel =")
-    expect(editorStudioSource).toContain('} from "./EditorStudioThumbnailPanels"')
+    expect(editorStudioPresentationSource).toContain('} from "./EditorStudioThumbnailPanels"')
     expect(editorStudioSource).not.toContain("const thumbnailEditorPanel = useMemo")
     expect(editorStudioSource).not.toContain("const previewMetaEditorPanel = useMemo")
     expect(editorStudioPublishModalSource).toContain("export const EditorStudioPublishModal =")
-    expect(editorStudioSource).toContain('import { EditorStudioPublishModal } from "./EditorStudioPublishModal"')
-    expect(editorStudioSource.match(/<EditorStudioPublishModal/g)?.length).toBe(2)
+    expect(editorStudioPresentationSource).toContain('import { EditorStudioPublishModal } from "./EditorStudioPublishModal"')
+    expect(editorStudioPresentationSource.match(/<EditorStudioPublishModal/g)?.length).toBe(2)
     expect(editorStudioSource).not.toContain("<PublishModal")
     expect(editorStudioSource).not.toContain("const PublishModal = styled.div`")
     expect(editorStudioSource).not.toContain("const PublishOverviewGrid = styled.div`")
@@ -790,10 +808,10 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).not.toContain("<strong>태그 정리</strong>")
     expect(editorStudioSource).not.toContain("<strong>보조 작업</strong>")
     expect(editorStudioContentWorkspaceSource).toContain("export const EditorStudioContentWorkspace =")
-    expect(editorStudioSource).toContain(
+    expect(editorStudioPresentationSource).toContain(
       'import { EditorStudioContentWorkspace } from "./EditorStudioContentWorkspace"'
     )
-    expect(editorStudioSource.match(/<EditorStudioContentWorkspace/g)?.length).toBe(1)
+    expect(editorStudioPresentationSource.match(/<EditorStudioContentWorkspace/g)?.length).toBe(1)
     expect(editorStudioSelectedPostToolsPanelSource).toContain("export const EditorStudioSelectedPostToolsPanel =")
     expect(editorStudioContentWorkspaceSource).toContain(
       'import { EditorStudioSelectedPostToolsPanel } from "./EditorStudioSelectedPostToolsPanel"'
@@ -806,8 +824,8 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).not.toContain("<strong>다른 글 직접 불러오기</strong>")
     expect(editorStudioSource).not.toContain("<strong>post id 직접 불러오기</strong>")
     expect(editorStudioSource).not.toContain("<strong>진단 도구</strong>")
-    expect(editorStudioSource).toContain("const handleSelectedPostIdChange = useCallback")
-    expect(editorStudioSource).toContain("onPostIdChange={handleSelectedPostIdChange}")
+    expect(editorStudioPresentationSource).toContain("const handleSelectedPostIdChange = useCallback")
+    expect(editorStudioPresentationSource).toContain("onPostIdChange={handleSelectedPostIdChange}")
     expect(editorStudioSelectedPostToolsPanelSource).not.toContain("apiFetch(")
     expect(editorStudioSelectedPostToolsPanelSource).not.toContain("setPostId")
     expect(editorStudioSelectedPostToolsPanelSource).not.toContain("setEditorMode")
@@ -830,20 +848,20 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).not.toContain("const SelectedPostPanel = styled.div`")
     expect(editorStudioSource).not.toContain("const SelectedPostHeader = styled.div`")
     expect(editorStudioSource).not.toContain("const SelectedPostStateCard = styled.div`")
-    expect(editorStudioSource).toContain("const handleContinueSelectedPostEditing = useCallback")
-    expect(editorStudioSource).toContain("onContinueEditing={handleContinueSelectedPostEditing}")
-    expect(editorStudioSource).toContain("onCreateNewPost={handleCreateNewPostFromSelectedPanel}")
-    expect(editorStudioSource).toContain("onDeletePost={handleDeleteSelectedPost}")
+    expect(editorStudioPresentationSource).toContain("const handleContinueSelectedPostEditing = useCallback")
+    expect(editorStudioPresentationSource).toContain("onContinueEditing={handleContinueSelectedPostEditing}")
+    expect(editorStudioPresentationSource).toContain("onCreateNewPost={handleCreateNewPostFromSelectedPanel}")
+    expect(editorStudioPresentationSource).toContain("onDeletePost={handleDeleteSelectedPost}")
     expect(editorStudioSelectedPostPanelSource).not.toContain("openPublishModal")
     expect(editorStudioSelectedPostPanelSource).not.toContain("switchToCreateMode")
     expect(editorStudioSelectedPostPanelSource).not.toContain("openDeleteConfirm")
     expect(editorStudioSelectedPostPanelSource).not.toContain("apiFetch(")
     expect(editorStudioSelectedPostPanelSource).not.toContain("run(")
     expect(editorStudioLegacyProfileSectionSource).toContain("export const EditorStudioLegacyProfileSection =")
-    expect(editorStudioSource).toContain(
+    expect(editorStudioPresentationSource).toContain(
       'import { EditorStudioLegacyProfileSection } from "./EditorStudioLegacyProfileSection"'
     )
-    expect(editorStudioSource.match(/<EditorStudioLegacyProfileSection/g)?.length).toBe(1)
+    expect(editorStudioPresentationSource.match(/<EditorStudioLegacyProfileSection/g)?.length).toBe(1)
     expect(editorStudioLegacyProfileSectionSource).toContain("Profile Studio")
     expect(editorStudioLegacyProfileSectionSource).toContain("프로필 이미지 선택")
     expect(editorStudioLegacyProfileSectionSource).toContain("역할/소개 저장")
@@ -856,10 +874,10 @@ test.describe("editor studio state", () => {
     expect(editorStudioLegacyProfileSectionSource).not.toContain("setProfileRoleInput")
     expect(editorStudioLegacyProfileSectionSource).not.toContain("setProfileBioInput")
     expect(editorStudioLegacyUtilityPanelSource).toContain("export const EditorStudioLegacyUtilityPanel =")
-    expect(editorStudioSource).toContain(
+    expect(editorStudioPresentationSource).toContain(
       'import { EditorStudioLegacyUtilityPanel } from "./EditorStudioLegacyUtilityPanel"'
     )
-    expect(editorStudioSource.match(/<EditorStudioLegacyUtilityPanel/g)?.length).toBe(1)
+    expect(editorStudioPresentationSource.match(/<EditorStudioLegacyUtilityPanel/g)?.length).toBe(1)
     expect(editorStudioLegacyUtilityPanelSource).toContain("댓글 테스트 도구")
     expect(editorStudioLegacyUtilityPanelSource).toContain("운영 점검 도구")
     expect(editorStudioSource).not.toContain("<UtilityGrid>")
@@ -870,10 +888,10 @@ test.describe("editor studio state", () => {
     expect(editorStudioLegacyUtilityPanelSource).not.toContain("setCommentId")
     expect(editorStudioLegacyUtilityPanelSource).not.toContain("setCommentContent")
     expect(editorStudioResultLogPanelSource).toContain("export const EditorStudioResultLogPanel =")
-    expect(editorStudioSource).toContain(
+    expect(editorStudioPresentationSource).toContain(
       'import { EditorStudioResultLogPanel } from "./EditorStudioResultLogPanel"'
     )
-    expect(editorStudioSource.match(/<EditorStudioResultLogPanel/g)?.length).toBe(2)
+    expect(editorStudioPresentationSource.match(/<EditorStudioResultLogPanel/g)?.length).toBe(2)
     expect(editorStudioSource).not.toContain("const ResultPanel = styled.pre`")
     expect(editorStudioSource).not.toContain("const DevConsoleSection = styled.section`")
     expect(editorStudioSource).not.toContain("const EditorStudioResultPanel = styled.section`")
@@ -955,8 +973,8 @@ test.describe("editor studio state", () => {
     expect(useEditorStudioListConditionsSource).toContain("export const LIST_SORT_OPTIONS =")
     expect(useEditorStudioListConditionsSource).toContain("export type PostListScope =")
     expect(useEditorStudioListConditionsSource).toContain("export type ListQuickPreset =")
-    expect(editorStudioSource).toContain('} from "./useEditorStudioListConditions"')
-    expect(editorStudioSource).toContain("useEditorStudioListConditions()")
+    expect(editorStudioPresentationSource).toContain('} from "./useEditorStudioListConditions"')
+    expect(editorStudioPresentationSource).toContain("useEditorStudioListConditions()")
     expect(editorStudioSource).not.toContain("const sanitizeNumberInput =")
     expect(editorStudioSource).not.toContain("const applyListQuickPreset = useCallback")
     expect(editorStudioSource).not.toContain("LIST_CONDITION_STORAGE_KEY")
@@ -968,10 +986,10 @@ test.describe("editor studio state", () => {
     expect(useEditorStudioListConditionsSource).not.toContain("openDeleteConfirm")
     expect(useEditorStudioListConditionsSource).not.toContain("deletePostsFromList")
     expect(editorStudioDeleteConfirmDialogSource).toContain("export const EditorStudioDeleteConfirmDialog =")
-    expect(editorStudioSource).toContain(
+    expect(editorStudioPresentationSource).toContain(
       'import { EditorStudioDeleteConfirmDialog } from "./EditorStudioDeleteConfirmDialog"'
     )
-    expect(editorStudioSource.match(/<EditorStudioDeleteConfirmDialog/g)?.length).toBe(1)
+    expect(editorStudioPresentationSource.match(/<EditorStudioDeleteConfirmDialog/g)?.length).toBe(1)
     expect(editorStudioDeleteConfirmDialogSource).toContain("글을 삭제할까요?")
     expect(editorStudioDeleteConfirmDialogSource).toContain("삭제 후에는 삭제 글 목록에서 복구할 수 있습니다.")
     expect(editorStudioSource).not.toContain("<ModalBackdrop")
@@ -996,11 +1014,11 @@ test.describe("editor studio state", () => {
     expect(editorStudioComposeMobileChromeSource).not.toContain("setPostVisibility")
     expect(editorStudioComposeWritingSurfaceSource).toContain("export const EditorStudioComposeWritingSurface =")
     expect(editorStudioComposeWorkspaceSource).toContain("export const EditorStudioComposeWorkspace =")
-    expect(editorStudioSource).toContain(
+    expect(editorStudioPresentationSource).toContain(
       'import { EditorStudioComposeWorkspace } from "./EditorStudioComposeWorkspace"'
     )
-    expect(editorStudioSource.match(/<EditorStudioComposeWorkspace/g)?.length).toBe(1)
-    expect(editorStudioSource).toContain("composeCallToActionLabel={composeCallToActionLabel}")
+    expect(editorStudioPresentationSource.match(/<EditorStudioComposeWorkspace/g)?.length).toBe(1)
+    expect(editorStudioPresentationSource).toContain("composeCallToActionLabel={composeCallToActionLabel}")
     expect(editorStudioSource).not.toContain(
       'import { EditorStudioComposeMobileChrome } from "./EditorStudioComposeMobileChrome"'
     )
@@ -1081,7 +1099,7 @@ test.describe("editor studio state", () => {
     expect(editorStudioMetaModelSource).toContain("export const composeEditorContent =")
     expect(editorStudioMetaModelSource).toContain("export const buildLocalDraftFingerprint =")
     expect(editorStudioMetaModelSource).toContain("export const detectPublishPlaceholderIssue =")
-    expect(editorStudioSource).toContain('} from "./editorStudioMetaModel"')
+    expect(editorStudioPresentationSource).toContain('} from "./editorStudioMetaModel"')
     expect(editorStudioStorageModelSource).toContain("export const TAG_CATALOG_STORAGE_KEY =")
     expect(editorStudioStorageModelSource).toContain("export const CATEGORY_CATALOG_STORAGE_KEY =")
     expect(editorStudioStorageModelSource).toContain("export const readStoredCatalog =")
@@ -1089,15 +1107,17 @@ test.describe("editor studio state", () => {
     expect(editorStudioStorageModelSource).toContain("export const readLocalDraft =")
     expect(editorStudioStorageModelSource).toContain("export const persistLocalDraft =")
     expect(editorStudioStorageModelSource).toContain("export const removeLocalDraft =")
-    expect(editorStudioSource).toContain('} from "./editorStudioStorageModel"')
-    expect(editorStudioSource).toContain('import { useEditorStudioAdminPostFlow } from "./useEditorStudioAdminPostFlow"')
-    expect(editorStudioSource).toContain('import { useEditorStudioUtilityCommands } from "./useEditorStudioUtilityCommands"')
-    expect(editorStudioSource).toContain('import { useEditorStudioProfileCommands } from "./useEditorStudioProfileCommands"')
-    expect(editorStudioSource).toContain('import { useEditorStudioMetaCatalog } from "./useEditorStudioMetaCatalog"')
-    expect(editorStudioSource).toContain('import { useEditorStudioPublishModalFlow } from "./useEditorStudioPublishModalFlow"')
+    expect(editorStudioPresentationSource).toContain('} from "./editorStudioStorageModel"')
+    expect(editorStudioPresentationSource).toContain('import { useEditorStudioAdminPostFlow } from "./useEditorStudioAdminPostFlow"')
+    expect(editorStudioPresentationSource).toContain('import { useEditorStudioUtilityCommands } from "./useEditorStudioUtilityCommands"')
+    expect(editorStudioPresentationSource).toContain('import { useEditorStudioProfileCommands } from "./useEditorStudioProfileCommands"')
+    expect(editorStudioPresentationSource).toContain('import { useEditorStudioMetaCatalog } from "./useEditorStudioMetaCatalog"')
+    expect(editorStudioPresentationSource).toContain('import { useEditorStudioPublishModalFlow } from "./useEditorStudioPublishModalFlow"')
     expect(editorStudioPageSource).toContain('import { EditorStudioWorkspaceController } from "./EditorStudioWorkspaceController"')
     expect(editorStudioPageSource.split("\n").length).toBeLessThanOrEqual(1500)
     expect(editorStudioControllerSource.split("\n").length).toBeLessThanOrEqual(1000)
+    expect(editorStudioSource.split("\n").length).toBeLessThanOrEqual(1000)
+    expect(editorStudioRootViewSource.split("\n").length).toBeLessThanOrEqual(1000)
     expect(editorStudioControllerSource).toContain('from "./EditorStudioWorkspaceControllerRoot"')
     expect(editorStudioSource).not.toContain("const loadAdminPosts = useCallback(")
     expect(editorStudioSource).not.toContain("const deletePostsFromList = async")
@@ -1633,11 +1653,16 @@ test.describe("editor studio state", () => {
       path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceControllerRoot.tsx"),
       "utf8"
     )
+    const editorStudioRuntimeSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/useEditorStudioWorkspaceControllerRuntime.ts"),
+      "utf8"
+    )
     const revalidateApiSource = readFileSync(path.resolve(__dirname, "../src/pages/api/revalidate.ts"), "utf8")
 
-    expect(editorStudioSource).toContain("await invalidatePublicPostReadCaches(queryClient, resolvedPostId || undefined)")
-    expect(editorStudioSource).toContain('const revalidateResponse = await fetch("/api/revalidate", {')
-    expect(editorStudioSource).toContain("paths: [toCanonicalPostPath(resolvedPostId)]")
+    expect(editorStudioSource).toContain('import { useEditorStudioWorkspaceControllerRuntime } from "./useEditorStudioWorkspaceControllerRuntime"')
+    expect(editorStudioRuntimeSource).toContain("await invalidatePublicPostReadCaches(queryClient, resolvedPostId || undefined)")
+    expect(editorStudioRuntimeSource).toContain('const revalidateResponse = await fetch("/api/revalidate", {')
+    expect(editorStudioRuntimeSource).toContain("paths: [toCanonicalPostPath(resolvedPostId)]")
     expect(revalidateApiSource).toContain('import { invalidatePublicPostReadCaches } from "src/apis/backend/posts"')
     expect(revalidateApiSource).toContain('import { fetchServerAdminSession } from "src/libs/server/authSession"')
     expect(revalidateApiSource).toContain("await invalidatePublicPostReadCaches()")
@@ -2157,13 +2182,18 @@ test.describe("editor studio state", () => {
       path.resolve(__dirname, "../src/routes/Admin/useEditorStudioRouting.ts"),
       "utf8"
     )
+    const editorStudioRootViewSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceControllerRootView.tsx"),
+      "utf8"
+    )
+    const editorStudioBootstrapSource = `${editorStudioSource}\n${editorStudioRootViewSource}`
 
-    expect(editorStudioSource).toContain("const isDedicatedNewEditorRoute = isDedicatedEditorRoute && router.pathname === EDITOR_NEW_ROUTE_PATH")
-    expect(editorStudioSource).toContain("const [isNewEditorBootstrapPending, setIsNewEditorBootstrapPending] = useState(isDedicatedNewEditorRoute)")
+    expect(editorStudioBootstrapSource).toContain("const isDedicatedNewEditorRoute = isDedicatedEditorRoute && router.pathname === EDITOR_NEW_ROUTE_PATH")
+    expect(editorStudioBootstrapSource).toContain("const [isNewEditorBootstrapPending, setIsNewEditorBootstrapPending] = useState(isDedicatedNewEditorRoute)")
     expect(editorStudioDraftLifecycleSource).toContain("if (options?.redirectToEditor && tempPost.id) {")
     expect(editorStudioDraftLifecycleSource).toContain("await replaceRoute(router, destination)")
     expect(editorStudioRoutingSource).toContain("setIsNewEditorBootstrapPending(true)")
-    expect(editorStudioSource).toContain("(isNewEditorBootstrapPending || loadingKey === \"postTemp\")")
+    expect(editorStudioBootstrapSource).toContain("(isNewEditorBootstrapPending || loadingKey === \"postTemp\")")
   })
 
   test("썸네일 편집 패널은 클립보드 이미지 붙여넣기 업로드 계약을 유지한다", () => {
@@ -2179,9 +2209,18 @@ test.describe("editor studio state", () => {
       path.resolve(__dirname, "../src/routes/Admin/useEditorStudioPersistence.ts"),
       "utf8"
     )
+    const editorStudioModelSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceControllerRootModel.ts"),
+      "utf8"
+    )
+    const editorStudioRootViewSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceControllerRootView.tsx"),
+      "utf8"
+    )
 
-    expect(editorStudioSource).toContain("const extractImageFileFromClipboard = (clipboardData: DataTransfer | null): File | null => {")
-    expect(editorStudioSource).toContain("onThumbnailPaste={handleThumbnailPaste}")
+    expect(editorStudioSource).toContain('from "./EditorStudioWorkspaceControllerRootModel"')
+    expect(editorStudioModelSource).toContain("const extractImageFileFromClipboard = (clipboardData: DataTransfer | null): File | null => {")
+    expect(editorStudioRootViewSource).toContain("onThumbnailPaste={handleThumbnailPaste}")
     expect(editorStudioThumbnailPanelsSource).toContain("<PreviewEditorSection onPasteCapture={onThumbnailPaste}>")
     expect(editorStudioThumbnailPanelsSource).toContain("onPaste={onThumbnailPaste}")
     expect(editorStudioPersistenceSource).toContain("const handleThumbnailPaste = useCallback(")

@@ -4,46 +4,128 @@ import { expect, test } from "@playwright/test"
 import { buildProfileWorkspaceAdminProfileCacheFields, normalizeProfileWorkspaceContent } from "src/libs/profileWorkspace"
 
 test.describe("admin profile state contract", () => {
+  test("admin profile workspace residual file boundaries는 600 line companion budget을 유지한다", () => {
+    const adminRoot = path.resolve(__dirname, "../src/routes/Admin")
+    const requiredModules = [
+      "AdminProfileWorkspaceSections.tsx",
+      "AdminProfileWorkspacePageDraftActions.ts",
+      "AdminProfileWorkspacePageImageDraft.ts",
+      "AdminProfileWorkspaceIdentitySection.tsx",
+      "AdminProfileWorkspaceAboutSection.tsx",
+      "AdminProfileWorkspaceHomeDesignSections.tsx",
+      "AdminProfileWorkspaceLinksSection.tsx",
+      "AdminProfileWorkspace.styles.links.ts",
+    ]
+
+    for (const sourcePath of requiredModules) {
+      expect(existsSync(path.join(adminRoot, sourcePath)), sourcePath).toBe(true)
+    }
+
+    const boundedSourceFiles = [
+      path.resolve(__dirname, "../src/pages/admin/profile.tsx"),
+      "AdminProfileWorkspacePageModel.ts",
+      "AdminProfileWorkspaceSections.tsx",
+      "AdminProfileWorkspacePageDraftActions.ts",
+      "AdminProfileWorkspacePageImageDraft.ts",
+      "AdminProfileWorkspaceSectionRenderer.tsx",
+      "AdminProfileWorkspaceIdentitySection.tsx",
+      "AdminProfileWorkspaceAboutSection.tsx",
+      "AdminProfileWorkspaceHomeDesignSections.tsx",
+      "AdminProfileWorkspaceLinksSection.tsx",
+      "AdminProfileWorkspace.styles.layout.ts",
+      "AdminProfileWorkspace.styles.links.ts",
+      "AdminProfileWorkspace.styles.sections.ts",
+    ].map((sourcePath) => (path.isAbsolute(sourcePath) ? sourcePath : path.join(adminRoot, sourcePath)))
+    const sourceRoot = path.resolve(__dirname, "../src")
+
+    const oversizedFiles = boundedSourceFiles
+      .filter((sourcePath) => existsSync(sourcePath))
+      .map((sourcePath) => ({
+        sourcePath: path.relative(sourceRoot, sourcePath),
+        lineCount: readFileSync(sourcePath, "utf8").split("\n").length,
+      }))
+      .filter(({ lineCount }) => lineCount > 600)
+
+    expect(oversizedFiles).toEqual([])
+
+    const pageModelSource = readFileSync(path.join(adminRoot, "AdminProfileWorkspacePageModel.ts"), "utf8")
+    const pageEntrySource = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+    const rendererSource = readFileSync(path.join(adminRoot, "AdminProfileWorkspaceSectionRenderer.tsx"), "utf8")
+    const layoutSource = readFileSync(path.join(adminRoot, "AdminProfileWorkspace.styles.layout.ts"), "utf8")
+
+    expect(pageEntrySource).toContain('export { default } from "src/routes/Admin/AdminProfileWorkspacePage"')
+    expect(pageEntrySource).not.toContain("useViewportImageEditor")
+    expect(pageEntrySource).not.toContain("AdminProfilePreviewRail")
+    expect(pageModelSource).toContain("useAdminProfileWorkspaceDraftActions")
+    expect(pageModelSource).toContain("useAdminProfileWorkspaceImageDraft")
+    expect(pageModelSource).not.toContain("const updateLinkItem = useCallback")
+    expect(pageModelSource).not.toContain("useViewportImageEditor")
+    expect(rendererSource).toContain("renderAdminProfileIdentitySection")
+    expect(rendererSource).toContain("renderAdminProfileLinksSection")
+    expect(rendererSource).not.toContain("<AvatarWorkspaceCard>")
+    expect(layoutSource).toContain("AdminProfileWorkspace.styles.links")
+    expect(layoutSource).not.toContain("export const LinkRowCard = styled.div")
+  })
+
   test("profile 작업공간은 공통 section nav/action dock primitive 위에서 반응형 분기를 유지한다", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
-    const styleSource = readFileSync(
-      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspace.styles.ts"),
+    const sectionSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceSections.tsx"),
       "utf8",
+    )
+    const identitySource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceIdentitySection.tsx"),
+      "utf8"
+    )
+    const pageModelSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspacePageModel.ts"),
+      "utf8"
+    )
+    const layoutStyleSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspace.styles.layout.ts"),
+      "utf8"
+    )
+    const sectionStyleSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspace.styles.sections.ts"),
+      "utf8"
     )
     const previewSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminProfilePreviewRail.tsx"),
       "utf8",
     )
+    const combinedWorkspaceSource = [sectionSource, identitySource, layoutStyleSource, sectionStyleSource].join("\n")
 
-    expect(styleSource).toContain("export const SectionRail = styled(AdminWorkspaceSectionNav)`")
-    expect(styleSource).toContain("@media (max-width: 1480px)")
-    expect(styleSource).toContain("export const SectionRailButton = styled(AdminWorkspaceSectionNavButton)`")
-    expect(source).toContain("role=\"tab\"")
-    expect(source).toContain("aria-selected={activeSection === section.id}")
-    expect(styleSource).toContain("export const EditorActionDock = styled(AdminWorkspaceActionDock)``")
-    expect(source).toContain("<AdminWorkspaceActionDockInner>")
-    expect(styleSource).toContain("export const PreviewViewport = styled(AdminInfoPanelCard)`")
+    expect(layoutStyleSource).toContain("export const SectionRail = styled(AdminWorkspaceSectionNav)`")
+    expect(layoutStyleSource).toContain("@media (max-width: 1480px)")
+    expect(layoutStyleSource).toContain("export const SectionRailButton = styled(AdminWorkspaceSectionNavButton)`")
+    expect(sectionSource).toContain("role=\"tab\"")
+    expect(sectionSource).toContain("aria-selected={activeSection === section.id}")
+    expect(sectionStyleSource).toContain("export const EditorActionDock = styled(AdminWorkspaceActionDock)``")
+    expect(sectionSource).toContain("<AdminWorkspaceActionDockInner>")
+    expect(sectionStyleSource).toContain("export const PreviewViewport = styled(AdminInfoPanelCard)`")
     expect(previewSource).toContain('className="identityRow"')
-    expect(source).toContain('id="profile-display-name"')
-    expect(source).toContain('apiFetch<AuthMember>(`/member/api/v1/adm/members/${memberId}/nickname`')
-    expect(styleSource).toContain("export const FieldSectionCard = styled.div`")
-    expect(styleSource).not.toContain("const MobileSectionRail = styled.div`")
-    expect(source).not.toContain("<PreviewActionDock>")
-    expect(styleSource).not.toContain("const LockedField = styled.div`")
-    expect(styleSource).not.toContain("const PreviewStatusRail = styled(AdminInfoStatusList)`")
-    expect(styleSource).not.toContain("const SectionStateDot = styled.span`")
-    expect(source).not.toContain("<h3>텍스트</h3>")
-    expect(source).not.toContain("공개 프로필 카드와 관리자 셸에 함께 표시됩니다.")
-    expect(styleSource).not.toContain("const PreviewStatusCard = styled(AdminRailCard)`")
-    expect(styleSource).not.toContain("const PreviewMeta = styled.small`")
-    expect(styleSource).not.toContain("const PreviewStatusText = styled.p`")
-    expect(styleSource).not.toContain("const PreviewStatusMeta = styled.small`")
-    expect(source).not.toContain('data-tone="synced">동기화됨')
-    expect(source).not.toContain("현재 이미지")
+    expect(identitySource).toContain('id="profile-display-name"')
+    expect(pageModelSource).toContain('apiFetch<AuthMember>(`/member/api/v1/adm/members/${memberId}/nickname`')
+    expect(layoutStyleSource).toContain("export const FieldSectionCard = styled.div`")
+    expect(combinedWorkspaceSource).not.toContain("const MobileSectionRail = styled.div`")
+    expect(combinedWorkspaceSource).not.toContain("<PreviewActionDock>")
+    expect(combinedWorkspaceSource).not.toContain("const LockedField = styled.div`")
+    expect(combinedWorkspaceSource).not.toContain("const PreviewStatusRail = styled(AdminInfoStatusList)`")
+    expect(combinedWorkspaceSource).not.toContain("const SectionStateDot = styled.span`")
+    expect(combinedWorkspaceSource).not.toContain("<h3>텍스트</h3>")
+    expect(combinedWorkspaceSource).not.toContain("공개 프로필 카드와 관리자 셸에 함께 표시됩니다.")
+    expect(combinedWorkspaceSource).not.toContain("const PreviewStatusCard = styled(AdminRailCard)`")
+    expect(combinedWorkspaceSource).not.toContain("const PreviewMeta = styled.small`")
+    expect(combinedWorkspaceSource).not.toContain("const PreviewStatusText = styled.p`")
+    expect(combinedWorkspaceSource).not.toContain("const PreviewStatusMeta = styled.small`")
+    expect(combinedWorkspaceSource).not.toContain('data-tone="synced">동기화됨')
+    expect(combinedWorkspaceSource).not.toContain("현재 이미지")
   })
 
   test("profile page는 workspace 순수 모델을 Admin route model로 위임한다", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+    const source = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspacePageModel.ts"),
+      "utf8"
+    )
     const modelPath = path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceModel.ts")
     expect(existsSync(modelPath)).toBe(true)
     const modelSource = existsSync(modelPath) ? readFileSync(modelPath, "utf8") : ""
@@ -67,7 +149,10 @@ test.describe("admin profile state contract", () => {
   })
 
   test("profile page는 persistence helper를 Admin route model로 위임한다", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+    const source = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspacePageModel.ts"),
+      "utf8"
+    )
     const modelPath = path.resolve(__dirname, "../src/routes/Admin/AdminProfilePersistenceModel.ts")
     expect(existsSync(modelPath)).toBe(true)
     const modelSource = existsSync(modelPath) ? readFileSync(modelPath, "utf8") : ""
@@ -87,7 +172,10 @@ test.describe("admin profile state contract", () => {
   })
 
   test("profile page는 preview rail 렌더링을 Admin route component로 위임한다", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+    const source = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceSections.tsx"),
+      "utf8"
+    )
     const previewPath = path.resolve(__dirname, "../src/routes/Admin/AdminProfilePreviewRail.tsx")
     expect(existsSync(previewPath)).toBe(true)
     const previewSource = existsSync(previewPath) ? readFileSync(previewPath, "utf8") : ""
@@ -109,7 +197,10 @@ test.describe("admin profile state contract", () => {
   })
 
   test("profile page는 이미지 편집 modal 렌더링을 Admin route component로 위임한다", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+    const source = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceSections.tsx"),
+      "utf8"
+    )
     const modalPath = path.resolve(__dirname, "../src/routes/Admin/AdminProfileImageEditorModal.tsx")
     expect(existsSync(modalPath)).toBe(true)
     const modalSource = existsSync(modalPath) ? readFileSync(modalPath, "utf8") : ""
@@ -131,7 +222,10 @@ test.describe("admin profile state contract", () => {
   })
 
   test("profile 작업공간은 공개 노출 기준의 상세형 hero와 rail copy를 사용한다", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+    const source = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceSections.tsx"),
+      "utf8"
+    )
 
     expect(source).toContain("메인과 About에 보일 인상을 다듬습니다")
     expect(source).not.toContain(
@@ -144,7 +238,10 @@ test.describe("admin profile state contract", () => {
   })
 
   test("profile 빠진 항목은 메인 헤더 제목 또는 설명 한쪽만 비어도 incomplete로 판정한다", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+    const source = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceSections.tsx"),
+      "utf8"
+    )
 
     expect(source).toContain(
       'if (!draft.homeIntroTitle.trim() || !draft.homeIntroDescription.trim()) missingExposureItems.push("메인 헤더 카피")'
@@ -153,7 +250,10 @@ test.describe("admin profile state contract", () => {
   })
 
   test("profile publish cache와 공개 about 페이지는 같은 about 필드를 공유한다", () => {
-    const profileSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+    const profileSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspacePageModel.ts"),
+      "utf8"
+    )
     const aboutSource = readFileSync(path.resolve(__dirname, "../src/pages/about.tsx"), "utf8")
 
     expect(profileSource).toContain("syncPublishedAdminProfileCache(normalizeProfileWorkspaceContent(nextWorkspace.published))")
@@ -242,7 +342,10 @@ test.describe("admin profile state contract", () => {
   })
 
   test("profile 화면은 전역 블로그 디자인 설정과 legacy 전용 scheme control을 가진다", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+    const source = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceHomeDesignSections.tsx"),
+      "utf8"
+    )
     const modelSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceModel.ts"),
       "utf8"
@@ -256,7 +359,14 @@ test.describe("admin profile state contract", () => {
   })
 
   test("profile 디자인 공개 적용은 primary action에서 저장 후 publish까지 처리한다", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+    const pageModelSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspacePageModel.ts"),
+      "utf8"
+    )
+    const sectionSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceSections.tsx"),
+      "utf8"
+    )
     const previewSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminProfilePreviewRail.tsx"), "utf8")
     const persistenceModelSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminProfilePersistenceModel.ts"),
@@ -265,16 +375,16 @@ test.describe("admin profile state contract", () => {
 
     expect(persistenceModelSource).toContain("export const revalidatePublicBlogAppearance = async (): Promise<boolean> => {")
     expect(persistenceModelSource).toContain('await fetch("/api/revalidate", {')
-    expect(source).toContain("const validateDraftBeforePersistence = useCallback(")
-    expect(source).toContain("const saveWorkspaceDraft = useCallback(")
-    expect(source).toContain("const shouldPublishWorkspace = workspaceForPublish?.dirtyFromPublished ?? hasPublishedDiff")
-    expect(source).toContain("const publicCacheRevalidated = await revalidatePublicBlogAppearance()")
-    expect(source).toContain("공개 적용과 공개 사이트 갱신을 완료했습니다.")
-    expect(source).toContain('hasUnsavedChanges ? "저장 후 공개 적용" : "공개 적용"')
-    expect(source).toContain("초안 저장")
+    expect(pageModelSource).toContain("const validateDraftBeforePersistence = useCallback(")
+    expect(pageModelSource).toContain("const saveWorkspaceDraft = useCallback(")
+    expect(pageModelSource).toContain("const shouldPublishWorkspace = workspaceForPublish?.dirtyFromPublished ?? hasPublishedDiff")
+    expect(pageModelSource).toContain("const publicCacheRevalidated = await revalidatePublicBlogAppearance()")
+    expect(pageModelSource).toContain("공개 적용과 공개 사이트 갱신을 완료했습니다.")
+    expect(sectionSource).toContain('hasUnsavedChanges ? "저장 후 공개 적용" : "공개 적용"')
+    expect(sectionSource).toContain("초안 저장")
     expect(previewSource).toContain("편집 중")
     expect(previewSource).toContain("현재 공개")
-    expect(source).not.toContain("로컬 변경 사항을 먼저 임시 저장한 뒤 공개할 수 있습니다.")
+    expect(sectionSource).not.toContain("로컬 변경 사항을 먼저 임시 저장한 뒤 공개할 수 있습니다.")
   })
 
   test("profile workspace 정규화는 structured 프로젝트가 있으면 legacy 프로젝트 상세 블록을 제거한다", () => {

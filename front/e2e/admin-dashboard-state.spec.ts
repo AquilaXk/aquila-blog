@@ -2,9 +2,12 @@ import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { expect, test } from "@playwright/test"
 
+const readDashboardRouteSource = (relativePath: string) =>
+  readFileSync(path.resolve(__dirname, "../src/routes/Admin", relativePath), "utf8")
+
 test.describe("admin dashboard state contract", () => {
   test("운영 대시보드 workspace model helper는 route-level model이 소유한다", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/dashboard.tsx"), "utf8")
+    const source = readDashboardRouteSource("AdminDashboardWorkspacePage.tsx")
     const modelPath = path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspaceModel.ts")
 
     if (!existsSync(modelPath)) {
@@ -33,7 +36,7 @@ test.describe("admin dashboard state contract", () => {
   })
 
   test("운영 대시보드 미수집 상태는 단일 요약 라벨과 중립 tone으로 분류한다", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/dashboard.tsx"), "utf8")
+    const source = readDashboardRouteSource("AdminDashboardWorkspacePage.tsx")
     const modelSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspaceModel.ts"), "utf8")
 
     expect(modelSource).toContain('export const DASHBOARD_DATA_MISSING_LABEL = "데이터 미수집"')

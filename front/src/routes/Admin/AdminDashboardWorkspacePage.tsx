@@ -1,9 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { NextPage } from "next"
-import Link from "next/link"
-import { useEffect, useRef, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
-import AppIcon from "src/components/icons/AppIcon"
 import type { AuthMember } from "src/hooks/useAuthSession"
 import useAuthSession from "src/hooks/useAuthSession"
 import {
@@ -12,7 +9,6 @@ import {
   buildMonitoringItems,
   getMonitoringEnv,
 } from "src/routes/Admin/adminMonitoring"
-import AdminShell from "src/routes/Admin/AdminShell"
 import {
   DASHBOARD_BACKEND_CHECK_LABEL,
   DASHBOARD_DATA_MISSING_LABEL,
@@ -32,60 +28,7 @@ import {
   type DashboardSnapshotPayload,
   type SystemHealthPayload,
 } from "src/routes/Admin/AdminDashboardWorkspaceModel"
-import {
-  Main,
-  Shell,
-  HeroPanel,
-  HeroTop,
-  HeroCopy,
-  PageEyebrow,
-  HeroActions,
-  StatusChip,
-  HeaderLink,
-  ServiceRail,
-  MetricCard,
-  MetricIcon,
-  MetricCopy,
-  PanelGrid,
-  PanelCard,
-  LeadPanelCard,
-  CompactPanelCard,
-  PanelHeader,
-  LaunchLink,
-  PanelBody,
-  SnapshotLeadBody,
-  PanelFrame,
-  CompactPanelBody,
-  CompactPanelSummary,
-  PanelFallback,
-  InsightRail,
-  LeadMetaGrid,
-  LeadMetaCard,
-  ActionList,
-  ActionListLinkCard,
-  SectionHeader,
-  PrioritySection,
-  ContextGrid,
-  ContextSection,
-  ContextLinkGrid,
-  ContextMonitoringLinkCard,
-  AdditionalPanelsSection,
-  AdditionalPanelsDisclosure,
-  AdditionalPanelsSummary,
-  AdditionalPanelsGrid,
-  PriorityTable,
-  PriorityCellCopy,
-  PrioritySummary,
-  PriorityLink,
-  InsightLink,
-} from "src/routes/Admin/AdminDashboardWorkspace.styles"
-import {
-  AdminInfoLinkCard,
-  AdminInfoList,
-  AdminInfoStatusItem,
-  AdminInfoStatusList,
-} from "src/routes/Admin/AdminSurfacePrimitives"
-import { renderMonitoringBrand } from "src/routes/Admin/AdminDashboardWorkspaceSections"
+import { AdminDashboardWorkspaceView } from "src/routes/Admin/AdminDashboardWorkspaceView"
 
 type AdminDashboardPageProps = {
   initialMember: AuthMember
@@ -93,102 +36,6 @@ type AdminDashboardPageProps = {
 }
 
 const env = getMonitoringEnv()
-const DASHBOARD_PANEL_STAGGER_MS = 640
-const DASHBOARD_INTERSECTION_ROOT_MARGIN = "0px"
-const DASHBOARD_IDLE_ACTIVATION_TIMEOUT_MS = 1400
-let dashboardPanelActivationCursor = 0
-
-const reserveDashboardPanelActivationDelay = (delayMs: number) => {
-  if (typeof performance === "undefined") return Math.max(0, delayMs)
-  const now = performance.now()
-  const requestedAt = now + Math.max(0, delayMs)
-  const scheduledAt = Math.max(requestedAt, dashboardPanelActivationCursor)
-  dashboardPanelActivationCursor = scheduledAt + DASHBOARD_PANEL_STAGGER_MS
-  return Math.max(0, Math.round(scheduledAt - now))
-}
-
-const DeferredPanelFrame: React.FC<{
-  eager?: boolean
-  activationDelayMs?: number
-  src: string
-  title: string
-}> = ({ eager = false, activationDelayMs = 0, src, title }) => {
-  const anchorRef = useRef<HTMLDivElement | null>(null)
-  const [isActivated, setIsActivated] = useState(eager)
-
-  useEffect(() => {
-    if (isActivated || !src || typeof window === "undefined") return
-
-    let observer: IntersectionObserver | null = null
-    let activationDelayId: number | null = null
-    let idleId: number | null = null
-    let activationQueued = false
-    const idleWindow = window as Window & {
-      requestIdleCallback?: (
-        callback: () => void,
-        options?: {
-          timeout?: number
-        }
-      ) => number
-      cancelIdleCallback?: (id: number) => void
-    }
-
-    const activate = () => {
-      setIsActivated(true)
-    }
-
-    const queueIdleActivation = () => {
-      if (typeof idleWindow.requestIdleCallback === "function") {
-        idleId = idleWindow.requestIdleCallback(activate, { timeout: DASHBOARD_IDLE_ACTIVATION_TIMEOUT_MS })
-        return
-      }
-      activate()
-    }
-
-    const scheduleActivation = (delayMs: number) => {
-      if (activationQueued) return
-      activationQueued = true
-      const nextDelayMs = eager ? 0 : reserveDashboardPanelActivationDelay(delayMs)
-      if (nextDelayMs <= 0) {
-        queueIdleActivation()
-        return
-      }
-      activationDelayId = window.setTimeout(queueIdleActivation, nextDelayMs)
-    }
-
-    if (anchorRef.current && typeof IntersectionObserver !== "undefined") {
-      observer = new IntersectionObserver(
-        (entries) => {
-          if (!entries.some((entry) => entry.isIntersecting)) return
-          scheduleActivation(activationDelayMs)
-          observer?.disconnect()
-        },
-        { root: null, rootMargin: DASHBOARD_INTERSECTION_ROOT_MARGIN }
-      )
-      observer.observe(anchorRef.current)
-    }
-
-    return () => {
-      observer?.disconnect()
-      if (idleId !== null && typeof idleWindow.cancelIdleCallback === "function") {
-        idleWindow.cancelIdleCallback(idleId)
-      }
-      if (activationDelayId !== null) {
-        window.clearTimeout(activationDelayId)
-      }
-    }
-  }, [activationDelayMs, eager, isActivated, src])
-
-  return (
-    <div ref={anchorRef}>
-      {isActivated ? (
-        <PanelFrame src={src} title={title} loading={eager ? "eager" : "lazy"} referrerPolicy="no-referrer" />
-      ) : (
-        <PanelFrame as="div" aria-hidden="true" data-pending="true" />
-      )}
-    </div>
-  )
-}
 
 const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
   initialMember,
@@ -451,250 +298,25 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
       ? "현재 URL은 인증이 필요한 private Grafana 대시보드라 iframe 대신 링크로만 제공합니다."
       : "현재 대시보드는 iframe 임베드를 지원하지 않아 새 창 링크로만 제공합니다."
     : "Grafana embed URL 또는 public dashboard 구성을 먼저 확인하세요."
-  const focusItems = [
-    ...leadFailureItems,
-  ]
 
   return (
-    <AdminShell currentSection="dashboard" member={sessionMember}>
-      <Main>
-        <Shell>
-          <HeroPanel>
-            <HeroTop>
-              <HeroCopy>
-                <PageEyebrow>운영 모니터링</PageEyebrow>
-                <h1>지금 확인해야 할 운영 상태</h1>
-              </HeroCopy>
-              <HeroActions>
-                <StatusChip data-tone={dashboardStatusTone}>{dashboardStatusLabel}</StatusChip>
-                <Link href="/admin/tools" passHref legacyBehavior>
-                  <HeaderLink>진단/실행 열기</HeaderLink>
-                </Link>
-              </HeroActions>
-            </HeroTop>
-          </HeroPanel>
-
-          <ServiceRail data-ui="monitoring-service-rail">
-            {kpiCards.map((item) => (
-              <MetricCard key={item.key} data-tone={item.tone}>
-                <MetricIcon data-tone={item.tone}>
-                  <AppIcon name={item.icon} aria-hidden="true" />
-                </MetricIcon>
-                <MetricCopy>
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
-                </MetricCopy>
-              </MetricCard>
-            ))}
-          </ServiceRail>
-
-          <PrioritySection>
-            <SectionHeader>
-              <h2>우선 점검 항목</h2>
-            </SectionHeader>
-
-            <PriorityTable>
-              <thead>
-                <tr>
-                  <th>항목</th>
-                  <th>현재 상태</th>
-                  <th>관리</th>
-                </tr>
-              </thead>
-              <tbody>
-                {priorityRows.map((row) => (
-                  <tr key={row.key}>
-                    <td>
-                      <PriorityCellCopy>
-                        <strong>{row.title}</strong>
-                      </PriorityCellCopy>
-                    </td>
-                    <td>
-                      <PrioritySummary data-tone={row.tone}>{row.summary}</PrioritySummary>
-                    </td>
-                    <td>
-                      {row.href ? (
-                        <PriorityLink
-                          href={row.href}
-                          target={row.href.startsWith("http") ? "_blank" : undefined}
-                          rel={row.href.startsWith("http") ? "noreferrer noopener" : undefined}
-                        >
-                          {row.actionLabel}
-                        </PriorityLink>
-                      ) : (
-                        <PriorityLink as="span">환경 확인</PriorityLink>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </PriorityTable>
-          </PrioritySection>
-
-          <PanelGrid data-ui="monitoring-panel-grid">
-            <LeadPanelCard data-ui="monitoring-panel-card">
-              <PanelHeader>
-                <div>
-                  <strong>최근 실패</strong>
-                </div>
-                <Link href="/admin/tools" passHref legacyBehavior>
-                  <LaunchLink>운영 도구</LaunchLink>
-                </Link>
-              </PanelHeader>
-              <SnapshotLeadBody>
-                <AdminInfoStatusList>
-                  {focusItems.map((item) => (
-                    <AdminInfoStatusItem key={item.key} data-tone={item.tone}>
-                      <span>{item.label}</span>
-                      <strong>{item.value}</strong>
-                    </AdminInfoStatusItem>
-                  ))}
-                </AdminInfoStatusList>
-                <LeadMetaGrid>
-                  {leadFailureMetaItems.map((item) => (
-                    <LeadMetaCard key={item.key}>
-                      <small>{item.label}</small>
-                      <strong>{item.value}</strong>
-                    </LeadMetaCard>
-                  ))}
-                </LeadMetaGrid>
-              </SnapshotLeadBody>
-            </LeadPanelCard>
-
-            <InsightRail>
-              <CompactPanelCard data-ui="monitoring-panel-card">
-                <PanelHeader>
-                  <div>
-                    <strong>런북</strong>
-                  </div>
-                </PanelHeader>
-                <CompactPanelBody>
-                  <ActionList>
-                    {quickActions.map((action) => (
-                      <Link key={action.key} href={action.href} passHref legacyBehavior>
-                        <ActionListLinkCard
-                          $withIcon={false}
-                          target={action.href.startsWith("http") ? "_blank" : undefined}
-                          rel={action.href.startsWith("http") ? "noreferrer noopener" : undefined}
-                        >
-                          <strong>{action.label}</strong>
-                        </ActionListLinkCard>
-                      </Link>
-                    ))}
-                  </ActionList>
-                </CompactPanelBody>
-              </CompactPanelCard>
-
-              <CompactPanelCard data-ui="monitoring-panel-card">
-                <PanelHeader>
-                  <div>
-                    <strong>즉시 이동</strong>
-                  </div>
-                </PanelHeader>
-                <CompactPanelBody>
-                  <CompactPanelSummary>
-                    <span>{monitoringItems.length ? `${monitoringItems.length}개 채널이 연결되어 있습니다.` : "연결 채널 설정을 먼저 확인하세요."}</span>
-                    {grafanaDashboardUrl ? (
-                      <InsightLink href={grafanaDashboardUrl} target="_blank" rel="noreferrer noopener">
-                        Grafana 열기
-                      </InsightLink>
-                    ) : (
-                      <InsightLink as="span">환경 확인</InsightLink>
-                    )}
-                  </CompactPanelSummary>
-                </CompactPanelBody>
-              </CompactPanelCard>
-            </InsightRail>
-          </PanelGrid>
-
-          {secondaryPanels.length ? (
-            <AdditionalPanelsSection>
-              <AdditionalPanelsDisclosure>
-                <AdditionalPanelsSummary>
-                  <div>
-                    <strong>추가 Grafana 패널</strong>
-                    <span>{secondaryPanels.length}개</span>
-                  </div>
-                  <small>열기</small>
-                </AdditionalPanelsSummary>
-                <AdditionalPanelsGrid>
-                  {secondaryPanels.map((panel, index) => {
-                    const panelUrl = grafanaPanelsCanEmbed ? buildGrafanaPanelEmbedUrl(grafanaDashboardUrl, panel.panelId) : ""
-                    return (
-                      <PanelCard key={`secondary-${panel.key}`} data-ui="monitoring-panel-card">
-                        <PanelHeader>
-                          <div>
-                            <strong>{panel.title}</strong>
-                          </div>
-                          {grafanaDashboardUrl ? (
-                            <LaunchLink href={panelUrl || grafanaDashboardUrl} target="_blank" rel="noreferrer noopener">
-                              새 창
-                            </LaunchLink>
-                          ) : null}
-                        </PanelHeader>
-                        <PanelBody>
-                          {panelUrl ? (
-                            <DeferredPanelFrame
-                              eager={false}
-                              activationDelayMs={index * DASHBOARD_PANEL_STAGGER_MS}
-                              src={panelUrl}
-                              title={panel.title}
-                            />
-                          ) : (
-                            <PanelFallback>
-                              <strong>{grafanaPanelFallbackTitle}</strong>
-                              <span>{grafanaPanelFallbackBody}</span>
-                            </PanelFallback>
-                          )}
-                        </PanelBody>
-                      </PanelCard>
-                    )
-                  })}
-                </AdditionalPanelsGrid>
-              </AdditionalPanelsDisclosure>
-            </AdditionalPanelsSection>
-          ) : null}
-
-          <ContextGrid>
-            <ContextSection>
-              <SectionHeader>
-                <h2>운영 링크</h2>
-              </SectionHeader>
-              <AdminInfoList>
-                {quickActions.map((action) => (
-                  <Link key={action.key} href={action.href} passHref legacyBehavior>
-                    <AdminInfoLinkCard
-                      $withIcon={false}
-                      target={action.href.startsWith("http") ? "_blank" : undefined}
-                      rel={action.href.startsWith("http") ? "noreferrer noopener" : undefined}
-                    >
-                      <strong>{action.label}</strong>
-                    </AdminInfoLinkCard>
-                  </Link>
-                ))}
-              </AdminInfoList>
-            </ContextSection>
-
-            <ContextSection>
-              <SectionHeader>
-                <h2>연결된 채널</h2>
-              </SectionHeader>
-              <ContextLinkGrid>
-                {monitoringItems.map((item) => (
-                  <ContextMonitoringLinkCard key={item.key} href={item.href} target="_blank" rel="noreferrer noopener">
-                    <span className="iconWrap">{renderMonitoringBrand(item.brand.icon, item.brand.fallbackIcon, item.title)}</span>
-                    <span className="copy">
-                      <strong>{item.title}</strong>
-                      <span>{item.status}</span>
-                    </span>
-                  </ContextMonitoringLinkCard>
-                ))}
-              </ContextLinkGrid>
-            </ContextSection>
-          </ContextGrid>
-        </Shell>
-      </Main>
-    </AdminShell>
+    <AdminDashboardWorkspaceView
+      buildGrafanaPanelEmbedUrl={buildGrafanaPanelEmbedUrl}
+      dashboardStatusLabel={dashboardStatusLabel}
+      dashboardStatusTone={dashboardStatusTone}
+      focusItems={leadFailureItems}
+      grafanaDashboardUrl={grafanaDashboardUrl}
+      grafanaPanelFallbackBody={grafanaPanelFallbackBody}
+      grafanaPanelFallbackTitle={grafanaPanelFallbackTitle}
+      grafanaPanelsCanEmbed={grafanaPanelsCanEmbed}
+      kpiCards={kpiCards}
+      leadFailureMetaItems={leadFailureMetaItems}
+      monitoringItems={monitoringItems}
+      priorityRows={priorityRows}
+      quickActions={quickActions}
+      secondaryPanels={secondaryPanels}
+      sessionMember={sessionMember}
+    />
   )
 }
 

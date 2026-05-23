@@ -171,12 +171,15 @@ test("admin workspace pages는 orchestration과 section/style module로 분리�
   expect(adminWorkspaceFilesOverThousand).toEqual([])
 
   const postsPageSource = readFileSync(path.join(adminRoot, "AdminPostsWorkspacePage.tsx"), "utf8")
+  const postsPageViewSource = readFileSync(path.join(adminRoot, "AdminPostsWorkspacePageView.tsx"), "utf8")
   const profilePageSource = readFileSync(path.join(pageRoot, "profile.tsx"), "utf8")
   const toolsPageSource = readFileSync(path.join(pageRoot, "tools.tsx"), "utf8")
   const dashboardPageSource = readFileSync(path.join(pageRoot, "dashboard.tsx"), "utf8")
 
   expect(postsPageSource).toContain("buildPostsWorkspacePageCommands")
-  expect(postsPageSource).toContain("AdminPostsWorkspaceMainSections")
+  expect(postsPageSource).toContain("AdminPostsWorkspacePageView")
+  expect(postsPageViewSource).toContain("AdminPostsWorkspacePageSections")
+  expect(postsPageViewSource).toContain("AdminPostsWorkspaceList")
   expect(profilePageSource).toContain("AdminProfileWorkspacePage")
   expect(toolsPageSource).toContain("AdminToolsWorkspacePage")
   expect(dashboardPageSource).toContain("AdminDashboardWorkspacePage")

@@ -10,6 +10,7 @@
   },
   "scripts": {
     "dev": "next dev",
+    "prebuild": "yarn check:refactor-boundaries",
     "build": "node scripts/with-test-lock.mjs --resource front-verify --label build -- next build",
     "postinstall": "node scripts/patch-lodash-template.cjs",
     "start": "next start",
@@ -32,6 +33,7 @@
     "storybook:gate": "node scripts/storybook/run-storybook-gate.mjs",
     "storybook:test": "HOME=$PWD/.storybook-home CI=1 STORYBOOK_DISABLE_TELEMETRY=1 STORYBOOK_DISABLE_UPDATE_CHECK=1 storybook test --watch=false",
     "check:bundle-size": "node scripts/with-test-lock.mjs --resource front-verify --label bundle-size -- node scripts/check-bundle-size.mjs",
+    "check:refactor-boundaries": "node scripts/check-refactor-boundaries.mjs",
     "check:runtime-guard": "node scripts/compare-runtime-guard-metrics.mjs",
     "postbuild": "echo \"skip next-sitemap (handled by pages/sitemap.xml.tsx)\"",
     "lint": "next lint"

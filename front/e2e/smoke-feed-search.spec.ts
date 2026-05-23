@@ -1,0 +1,270 @@
+import { expect, test } from "@playwright/test"
+import {
+  createExplorePage,
+  createExplorePost,
+  mockAvatarAsset,
+  mockFeedEndpoints,
+} from "./helpers/smokeFixtures"
+
+test.beforeEach(async ({ page }) => {
+  await mockAvatarAsset(page)
+})
+
+test.describe("core smoke feed and search", () => {
+  test("홈 피드 기본 UI가 렌더링된다", async ({ page }) => {
+  await page.setViewportSize({ width: 1680, height: 1200 })
+  await mockFeedEndpoints(page)
+
+  await page.goto("/")
+  await expect(page.getByLabel("Search posts by keyword")).toBeVisible()
+  await expect(page.getByRole("button", { name: "전체보기" })).toBeVisible()
+  await expect(page.locator('[data-ui="feed-service-section"]')).toBeVisible()
+  await expect(page.locator('[data-ui="feed-contact-section"]')).toBeVisible()
+  await expect(page.locator('[data-ui="feed-service-section"]').getByText("aquila-blog", { exact: true })).toBeVisible()
+  await expect(
+    page.locator('[data-ui="feed-contact-section"]').getByRole("link", { name: /github github\.com\/aquilaxk/i })
+  ).toBeVisible()
+
+  const sidebarStyles = await page.evaluate(() => {
+    const read = (selector: string) => {
+      const element = document.querySelector(selector) as HTMLElement | null
+      if (!element) return null
+      const styles = window.getComputedStyle(element)
+      return {
+        backgroundColor: styles.backgroundColor,
+        borderBottomWidth: styles.borderBottomWidth,
+      }
+    }
+
+    return {
+      service: read('[data-ui="feed-service-links"]'),
+      contact: read('[data-ui="feed-contact-links"]'),
+    }
+  })
+
+  expect(sidebarStyles.service?.backgroundColor).toBe("rgba(0, 0, 0, 0)")
+  expect(sidebarStyles.service?.borderBottomWidth).toBe("1px")
+  expect(sidebarStyles.contact?.backgroundColor).toBe("rgba(0, 0, 0, 0)")
+  expect(sidebarStyles.contact?.borderBottomWidth).toBe("1px")
+})
+
+  test("홈 새로고침 이후에도 레거시 기본 문구로 되돌아가지 않는다", async ({ page }) => {
+  await mockFeedEndpoints(page)
+
+  await page.goto("/")
+  await expect(page.getByRole("heading", { level: 1, name: "비밀스러운 IT 공작소" })).toBeVisible()
+  await expect(page.getByText("비밀스러운 지식들을 탐구하는데 목적을 두고 있습니다")).toBeVisible()
+  await expect(page.getByText("aquilaXk's Blog")).toHaveCount(0)
+
+  await page.reload()
+  await expect(page.getByRole("heading", { level: 1, name: "비밀스러운 IT 공작소" })).toBeVisible()
+  await expect(page.getByText("비밀스러운 지식들을 탐구하는데 목적을 두고 있습니다")).toBeVisible()
+  await expect(page.getByText("aquilaXk's Blog")).toHaveCount(0)
+})
+
+  test("피드 카드 요약의 escaped quote는 화면에서 정리되어 렌더된다", async ({ page }) => {
+  await page.route("**/post/api/v1/posts/feed**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(
+        createExplorePage("요약 정규화", "SSE", {
+          summary: 'SSE 알림이 \\\\\\"잠깐 되다가 멈추는\\\\\\" 현상 추적',
+        })
+      ),
+    })
+  })
+
+  await page.route("**/post/api/v1/posts/tags", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([{ tag: "SSE", count: 1 }]),
+    })
+  })
+
+  await page.goto("/")
+  await expect(page.getByText('SSE 알림이 "잠깐 되다가 멈추는" 현상 추적')).toBeVisible()
+  await expect(page.getByText('\\"잠깐 되다가 멈추는\\"')).toHaveCount(0)
+})
+
+  test("검색 입력은 search API의 kw 파라미터를 통해 백엔드 탐색으로 동작한다", async ({ page }) => {
+  const capturedKw: string[] = []
+
+  await mockFeedEndpoints(page)
+  await page.route("**/post/api/v1/posts/search**", async (route) => {
+    const url = new URL(route.request().url())
+    const kw = url.searchParams.get("kw") || ""
+    capturedKw.push(kw)
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(createExplorePage(kw ? `검색:${kw}` : "초기목록")),
+    })
+  })
+
+  await page.goto("/")
+  await expect(page.getByRole("button", { name: "전체보기" })).toBeVisible()
+  const searchInput = page.getByLabel("Search posts by keyword")
+  await searchInput.fill("alpha")
+
+  await expect.poll(() => capturedKw.some((value) => value === "alpha")).toBeTruthy()
+  await expect(page.getByText("검색:alpha")).toBeVisible()
+})
+
+  test("검색 모드는 백엔드가 반환한 순서를 그대로 유지한다", async ({ page }) => {
+  const capturedKw: string[] = []
+
+  await mockAvatarAsset(page)
+  await page.route("**/post/api/v1/posts/feed**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(createExplorePage("기본목록")),
+    })
+  })
+  await page.route("**/post/api/v1/posts/tags", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([{ tag: "테스트태그", count: 3 }]),
+    })
+  })
+  await page.route("**/post/api/v1/posts/search**", async (route) => {
+    const url = new URL(route.request().url())
+    const kw = url.searchParams.get("kw") || ""
+    capturedKw.push(kw)
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        content: [
+          createExplorePost({
+            id: 301,
+            title: "본문 exact phrase 매치",
+            summary: `백엔드 순위 1: ${kw}`,
+            tags: ["운영"],
+            createdAt: "2026-01-01T00:00:00Z",
+            modifiedAt: "2026-01-01T00:00:00Z",
+          }),
+          createExplorePost({
+            id: 302,
+            title: "alpha beta 제목 매치",
+            summary: "클라이언트 재정렬이면 앞으로 오면 안 된다",
+            tags: ["검색"],
+            createdAt: "2026-03-16T00:00:00Z",
+            modifiedAt: "2026-03-16T00:00:00Z",
+            likesCount: 80,
+            commentsCount: 20,
+            hitCount: 4000,
+          }),
+          createExplorePost({
+            id: 303,
+            title: "태그 매치",
+            summary: "태그로만 강한 문서",
+            tags: ["alpha", "beta"],
+            createdAt: "2026-03-15T00:00:00Z",
+            modifiedAt: "2026-03-15T00:00:00Z",
+          }),
+        ],
+        pageable: {
+          pageNumber: 0,
+          pageSize: 30,
+          totalElements: 3,
+          totalPages: 1,
+        },
+      }),
+    })
+  })
+
+  await page.goto("/")
+  await expect(page.getByRole("button", { name: "전체보기" })).toBeVisible()
+  const searchInput = page.getByLabel("Search posts by keyword")
+  await searchInput.fill("alpha beta")
+
+  await expect.poll(() => capturedKw.some((value) => value === "alpha beta")).toBeTruthy()
+  await expect(page.getByText("본문 exact phrase 매치")).toBeVisible()
+  const titles = await page.locator("a[href^='/posts/'] h2").evaluateAll((elements) =>
+    elements.map((element) => element.textContent?.trim() || "").filter(Boolean)
+  )
+  expect(titles.slice(0, 3)).toEqual([
+    "본문 exact phrase 매치",
+    "alpha beta 제목 매치",
+    "태그 매치",
+  ])
+})
+
+  test("태그 쿼리 파라미터는 explore API의 tag 파라미터로 백엔드 탐색을 요청한다", async ({ page }) => {
+  const capturedTag: string[] = []
+
+  await mockFeedEndpoints(page)
+  await page.route("**/post/api/v1/posts/explore**", async (route) => {
+    const url = new URL(route.request().url())
+    const tag = url.searchParams.get("tag") || ""
+    capturedTag.push(tag)
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(createExplorePage(tag ? `태그:${tag}` : "기본목록", tag || "테스트태그")),
+    })
+  })
+
+  await page.goto("/?tag=%ED%85%8C%EC%8A%A4%ED%8A%B8%ED%83%9C%EA%B7%B8")
+
+  await expect.poll(() => capturedTag.some((value) => value === "테스트태그")).toBeTruthy()
+  await expect(page.getByText("태그:테스트태그")).toBeVisible()
+})
+
+  test("메인 피드 탐색 요청은 최신순 정렬(sort=CREATED_AT)로 고정된다", async ({ page }) => {
+  const capturedSort: string[] = []
+
+  await page.route("**/post/api/v1/posts/feed**", async (route) => {
+    const url = new URL(route.request().url())
+    const sort = url.searchParams.get("sort") || "CREATED_AT"
+    capturedSort.push(sort)
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(createExplorePage(`정렬:${sort}`)),
+    })
+  })
+
+  await page.route("**/post/api/v1/posts/tags", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([{ tag: "테스트태그", count: 1 }]),
+    })
+  })
+
+  await page.goto("/")
+  await expect(page.getByRole("button", { name: "전체보기" })).toBeVisible()
+
+  await expect.poll(() => capturedSort.some((value) => value === "CREATED_AT")).toBeTruthy()
+  await expect(page.getByText("정렬:CREATED_AT")).toBeVisible()
+})
+
+  test("피드 카드 hover는 fallback 상세 _next/data prefetch를 만들지 않는다", async ({ page }) => {
+  const dataPrefetchRequests: string[] = []
+
+  await mockFeedEndpoints(page)
+  page.on("request", (request) => {
+    const url = request.url()
+    if (url.includes("/_next/data/") && url.includes("/posts/101.json")) {
+      dataPrefetchRequests.push(url)
+    }
+  })
+
+  await page.goto("/")
+  const firstCard = page.locator("a[href='/posts/101']").first()
+  await expect(firstCard).toBeVisible()
+
+  await firstCard.hover()
+  await page.waitForTimeout(1400)
+
+  expect(dataPrefetchRequests).toEqual([])
+})
+})

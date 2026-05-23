@@ -1,16 +1,25 @@
 import { expect, test, type Locator, type Page, type Response } from "@playwright/test"
+import {
+  adminEmail,
+  adminLegacyLoginId,
+  adminPassword,
+  buildLoginPayloadCandidates,
+  hasAuthCookie,
+  isInvalidLoginRequestBody,
+  isNavigationInterruptedError,
+  isRetriableLoginStatus,
+  isRetriableNetworkError,
+  liveLoginAttempts,
+  liveLoginTimeoutMs,
+  liveRetryBaseDelayMs,
+  liveUiRedirectTimeoutMs,
+  resolveApiBaseUrl,
+  sleep,
+  waitForApiReachability,
+} from "./helpers/liveAuth"
 
-const adminEmail = process.env.E2E_ADMIN_EMAIL?.trim() || ""
-const adminLegacyLoginId = process.env.E2E_ADMIN_USERNAME?.trim() || ""
-const adminPassword = process.env.E2E_ADMIN_PASSWORD?.trim() || ""
 const hasLiveCredentials = Boolean((adminEmail || adminLegacyLoginId) && adminPassword)
 const hasUiLoginCredentials = Boolean(adminEmail && adminPassword)
-const explicitApiBaseUrl = process.env.E2E_API_BASE_URL?.trim() || ""
-const liveApiProbeAttempts = Number.parseInt(process.env.E2E_LIVE_API_PROBE_ATTEMPTS || "4", 10)
-const liveLoginAttempts = Number.parseInt(process.env.E2E_LIVE_LOGIN_ATTEMPTS || "3", 10)
-const liveLoginTimeoutMs = Number.parseInt(process.env.E2E_LIVE_LOGIN_TIMEOUT_MS || "30000", 10)
-const liveRetryBaseDelayMs = Number.parseInt(process.env.E2E_LIVE_RETRY_BASE_DELAY_MS || "2000", 10)
-const liveUiRedirectTimeoutMs = Number.parseInt(process.env.E2E_LIVE_UI_REDIRECT_TIMEOUT_MS || "20000", 10)
 const adminLandingHeadingPattern = /(?:오늘 블로그 운영은 이 흐름으로 정리됩니다|관리자 (?:작업 공간|작업 진입점|운영 허브|허브))/
 const adminDashboardHeadingPattern = /(?:지금 확인해야 할 운영 상태|운영 대시보드)/
 const adminProfileHeadingPattern =
@@ -20,56 +29,12 @@ const adminToolsHeadingPattern =
 const adminPostsHeadingPattern = /(?:편집과 검수를 한 화면에서 이어갑니다|글 관리|글 작성)/
 const adminUrlPattern = /\/admin(\/|$|\?)/
 
-const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-const resolveApiBaseUrl = (currentUrl: string) => {
-  if (explicitApiBaseUrl) return stripTrailingSlash(explicitApiBaseUrl)
-
-  const parsed = new URL(currentUrl)
-
-  if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
-    const localApiPort = process.env.E2E_LOCAL_API_PORT?.trim() || "8080"
-    return `${parsed.protocol}//${parsed.hostname}:${localApiPort}`
-  }
-
-  if (parsed.hostname.startsWith("www.")) {
-    parsed.hostname = `api.${parsed.hostname.slice(4)}`
-    return `${parsed.protocol}//${parsed.host}`
-  }
-
-  parsed.hostname = `api.${parsed.hostname}`
-  return `${parsed.protocol}//${parsed.host}`
-}
-
-const isRetriableNetworkError = (error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error)
-  return /(timeout|econnreset|enotfound|etimedout|econnrefused)/i.test(message)
-}
 
 const isWebKitCorsAccessControlNoise = (message: string) =>
   /due to access control checks\./i.test(message) &&
   (/\/api\.[\w.-]+\//i.test(message) ||
     /\/(?:www\.)?[\w.-]+\/_next\/data\/[^/\s]+\/[^?\s]+\.json/i.test(message))
 
-const isRetriableLoginStatus = (status: number) => [502, 503, 504, 520, 522, 524, 530].includes(status)
-const isInvalidLoginRequestBody = (status: number, body: string) =>
-  status === 400 &&
-  /"resultCode"\s*:\s*"400-1"/.test(body) &&
-  /요청 본문이 올바르지 않습니다\./.test(body)
-
-const hasAuthCookie = async (page: Page) => {
-  const currentUrl = page.url()
-  const cookies = /^https?:\/\//.test(currentUrl)
-    ? await page.context().cookies([new URL(currentUrl).origin])
-    : await page.context().cookies()
-  return cookies.some((cookie) => cookie.name === "apiKey" || cookie.name === "accessToken")
-}
-
-const isNavigationInterruptedError = (error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error)
-  return /interrupted by another navigation/i.test(message)
-}
 
 const tryEnterAdminRoute = async (page: Page, timeoutMs: number) => {
   const tries = 3
@@ -184,30 +149,6 @@ const waitForUiLoginOutcome = async (
   return { kind: "timeout" }
 }
 
-const waitForApiReachability = async (page: Page, apiBaseUrl: string) => {
-  const probePaths = ["/actuator/health", "/member/api/v1/auth/me"]
-  let lastFailure = "unknown"
-
-  for (let attempt = 1; attempt <= liveApiProbeAttempts; attempt += 1) {
-    for (const path of probePaths) {
-      try {
-        const response = await page.request.get(`${apiBaseUrl}${path}`, { timeout: 15_000 })
-        if (response.status() > 0) return
-        lastFailure = `status=${response.status()} path=${path}`
-      } catch (error) {
-        lastFailure = error instanceof Error ? error.message : String(error)
-      }
-    }
-
-    if (attempt < liveApiProbeAttempts) {
-      await sleep(liveRetryBaseDelayMs * attempt)
-    }
-  }
-
-  throw new Error(
-    `API reachability probe failed. base=${apiBaseUrl} attempts=${liveApiProbeAttempts} last=${lastFailure}`
-  )
-}
 
 const openAdminNewPostEntry = async (page: Page) => {
   const buttonCta = page.getByRole("button", { name: /^새 글 작성/ }).first()
@@ -373,35 +314,6 @@ const expectLiveEditorHoverWheelScrollChain = async (page: Page, blockEditor: Lo
   )
 }
 
-type LoginPayloadCandidate = {
-  label: "email+policy" | "email" | "username"
-  data: Record<string, string | boolean>
-}
-
-const buildLoginPayloadCandidates = (
-  email: string,
-  legacyLoginId: string,
-  password: string
-): LoginPayloadCandidate[] => {
-  const candidates: LoginPayloadCandidate[] = []
-  if (email) {
-    candidates.push({
-      label: "email+policy",
-      data: { email, password, rememberMe: true, ipSecurity: false },
-    })
-    candidates.push({
-      label: "email",
-      data: { email, password },
-    })
-  }
-  if (legacyLoginId) {
-    candidates.push({
-      label: "username",
-      data: { username: legacyLoginId, password },
-    })
-  }
-  return candidates
-}
 
 const loginWithRetry = async (
   page: Page,

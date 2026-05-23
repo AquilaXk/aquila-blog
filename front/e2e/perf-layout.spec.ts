@@ -1,0 +1,492 @@
+import { expect, test } from "@playwright/test"
+import {
+  allowAdminDashboardLoginFallback,
+  applySchemePreference,
+  getDesktopTagRailMetrics,
+  getRailStickySnapshot,
+  getThemeSurfaceFingerprint,
+  getVisualLayoutFingerprint,
+  getWidthLockSnapshot,
+  gotoForPerf,
+  isSsrAuthBackendDisconnectedForPerf,
+  mockAdminMonitoringEndpoints,
+  mockDetailRailEndpoint,
+  mockFeedEndpoints,
+  reloadForPerf,
+  waitForHomeTagRailReady,
+} from "./helpers/perfFixtures"
+
+test.describe("perf layout and surface budgets", () => {
+  test("메인 레이아웃은 velog형 width tier(1728/1376/1024/100%)를 유지한다", async ({ page }) => {
+  await mockFeedEndpoints(page)
+
+  await page.setViewportSize({ width: 2000, height: 900 })
+  await gotoForPerf(page, "/")
+
+  const ultraWideSnapshot = await getWidthLockSnapshot(page)
+  expect(ultraWideSnapshot.mainWidth).toBeCloseTo(1728, 0)
+  expect(ultraWideSnapshot.headerWidth).toBeCloseTo(1728, 0)
+  await expect(page.locator(".rt")).toBeVisible()
+
+  await page.setViewportSize({ width: 1600, height: 900 })
+  await reloadForPerf(page)
+
+  const wideSnapshot = await getWidthLockSnapshot(page)
+  expect(wideSnapshot.mainWidth).toBeCloseTo(1376, 0)
+  expect(wideSnapshot.headerWidth).toBeCloseTo(1376, 0)
+  await expect(page.locator(".rt")).toBeVisible()
+
+  const checkpoints = [
+    { viewport: 1300, expectedLocked: 1024 },
+    { viewport: 1100, expectedLocked: 1024 },
+    { viewport: 1060, expectedLocked: 1024 },
+  ]
+
+  for (const checkpoint of checkpoints) {
+    await page.setViewportSize({ width: checkpoint.viewport, height: 900 })
+    await reloadForPerf(page)
+
+    const snapshot = await getWidthLockSnapshot(page)
+    expect(snapshot.mainWidth).toBeCloseTo(checkpoint.expectedLocked, 0)
+    expect(snapshot.headerWidth).toBeCloseTo(checkpoint.expectedLocked, 0)
+    await expect(page.locator(".rt")).toBeHidden()
+  }
+
+  await page.setViewportSize({ width: 1056, height: 900 })
+  await reloadForPerf(page)
+
+  const fluidSnapshot = await getWidthLockSnapshot(page)
+  const expectedFluidWidth = Math.min(fluidSnapshot.layoutViewport, fluidSnapshot.bodyViewport)
+  expect(fluidSnapshot.mainWidth).toBeGreaterThan(1024)
+  expect(fluidSnapshot.headerWidth).toBeGreaterThan(1024)
+  expect(fluidSnapshot.mainWidth).toBeCloseTo(expectedFluidWidth, 0)
+  expect(fluidSnapshot.headerWidth).toBeCloseTo(expectedFluidWidth, 0)
+  await expect(page.locator(".rt")).toBeHidden()
+})
+
+  test("피드 카드 hover lift는 content-visibility clipping 없이 상단을 그릴 수 있다", async ({ page }) => {
+  await mockFeedEndpoints(page)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await gotoForPerf(page, "/")
+
+  const firstRegularCard = page.locator('a[data-layout="regular"]').first()
+  await expect(firstRegularCard).toBeVisible()
+
+  const initialMetrics = await firstRegularCard.evaluate((card) => {
+    const article = card.querySelector("article")
+    if (!(article instanceof HTMLElement)) {
+      throw new Error("regular feed card article을 찾지 못했습니다.")
+    }
+
+    const cardStyle = window.getComputedStyle(card as HTMLElement)
+    const articleStyle = window.getComputedStyle(article)
+    return {
+      cardContentVisibility: cardStyle.contentVisibility,
+      articleTransform: articleStyle.transform,
+    }
+  })
+
+  expect(initialMetrics.cardContentVisibility).toBe("visible")
+  expect(initialMetrics.articleTransform).toBe("none")
+
+  await firstRegularCard.hover()
+  await page.waitForTimeout(320)
+
+  const hoverMetrics = await firstRegularCard.evaluate((card) => {
+    const article = card.querySelector("article")
+    if (!(article instanceof HTMLElement)) {
+      throw new Error("regular feed card article을 찾지 못했습니다.")
+    }
+
+    const cardRect = (card as HTMLElement).getBoundingClientRect()
+    const articleRect = article.getBoundingClientRect()
+    const articleStyle = window.getComputedStyle(article)
+
+    return {
+      cardTop: Number(cardRect.top.toFixed(2)),
+      articleTop: Number(articleRect.top.toFixed(2)),
+      articleTransform: articleStyle.transform,
+    }
+  })
+
+  expect(hoverMetrics.articleTransform).not.toBe("none")
+  expect(hoverMetrics.articleTop).toBeLessThan(hoverMetrics.cardTop)
+})
+
+  test("메인 태그 레일은 1200/1201 전환과 넓은 데스크톱에서 안전하게 전환된다", async ({ page }) => {
+  await mockFeedEndpoints(page)
+
+  await page.setViewportSize({ width: 1200, height: 900 })
+  await gotoForPerf(page, "/")
+  await expect(page.locator(".chipRail")).toBeVisible()
+  await expect(page.locator(".desktopPanel")).toBeHidden()
+
+  await page.setViewportSize({ width: 1201, height: 900 })
+  await reloadForPerf(page)
+  await expect(page.locator(".chipRail")).toBeHidden()
+  await expect(page.locator(".desktopPanel")).toBeVisible()
+  await expect
+    .poll(async () => {
+      const rect = await page.locator(".desktopPanel").boundingBox()
+      return rect?.x ?? -999
+    })
+    .toBeGreaterThanOrEqual(0)
+
+  await page.setViewportSize({ width: 1680, height: 900 })
+  await reloadForPerf(page)
+  await expect(page.locator(".desktopPanel")).toBeVisible()
+
+  const railRect = await page.locator(".desktopPanel").boundingBox()
+  expect(railRect).not.toBeNull()
+  expect((railRect?.x ?? -1)).toBeGreaterThanOrEqual(0)
+
+  const firstCardRect = await page.locator(".postColumn article").first().boundingBox()
+  expect(firstCardRect).not.toBeNull()
+  const railRight = (railRect?.x ?? 0) + (railRect?.width ?? 0)
+  const firstCardLeft = firstCardRect?.x ?? 0
+  expect(firstCardLeft).toBeGreaterThanOrEqual(railRight + 8)
+})
+
+  test("상세 좌/우 레일 sticky는 스크롤 전후 좌표를 안정적으로 유지한다", async ({ page }) => {
+  const postId = 991
+  await mockFeedEndpoints(page)
+  await mockDetailRailEndpoint(page, postId)
+
+  await page.setViewportSize({ width: 1440, height: 960 })
+  await gotoForPerf(page, `/posts/${postId}`, { readyText: "상세 레일 스티키 회귀 점검" })
+  await expect(page.getByText("상세 레일 스티키 회귀 점검")).toBeVisible()
+  await expect(page.locator(".rightRailInner")).toBeVisible()
+  await expect(page.locator(".leftRailInner")).toBeVisible()
+
+  await page.evaluate(() => window.scrollTo({ top: 1200, behavior: "auto" }))
+  await page.waitForTimeout(250)
+  const midSnapshot = await getRailStickySnapshot(page)
+
+  await page.evaluate(() => window.scrollTo({ top: 2200, behavior: "auto" }))
+  await page.waitForTimeout(250)
+  const deepSnapshot = await getRailStickySnapshot(page)
+
+  expect(midSnapshot.leftRail).not.toBeNull()
+  expect(midSnapshot.rightRail).not.toBeNull()
+  expect(deepSnapshot.leftRail).not.toBeNull()
+  expect(deepSnapshot.rightRail).not.toBeNull()
+
+  const topTolerance = 2.5
+  expect(Math.abs((midSnapshot.leftRail?.top ?? 0) - midSnapshot.expectedTop)).toBeLessThanOrEqual(topTolerance)
+  expect(Math.abs((midSnapshot.rightRail?.top ?? 0) - midSnapshot.expectedTop)).toBeLessThanOrEqual(topTolerance)
+  expect(Math.abs((deepSnapshot.leftRail?.top ?? 0) - deepSnapshot.expectedTop)).toBeLessThanOrEqual(topTolerance)
+  expect(Math.abs((deepSnapshot.rightRail?.top ?? 0) - deepSnapshot.expectedTop)).toBeLessThanOrEqual(topTolerance)
+
+  expect(Math.abs((midSnapshot.leftRail?.left ?? 0) - (deepSnapshot.leftRail?.left ?? 0))).toBeLessThanOrEqual(2)
+  expect(Math.abs((midSnapshot.rightRail?.left ?? 0) - (deepSnapshot.rightRail?.left ?? 0))).toBeLessThanOrEqual(2)
+})
+
+  test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지한다", async ({ page }) => {
+  await mockFeedEndpoints(page)
+  await mockDetailRailEndpoint(page, 991)
+  await mockAdminMonitoringEndpoints(page)
+
+  const scenarios = [
+    { name: "home-desktop-1440", viewport: { width: 1440, height: 900 }, route: "/" },
+    { name: "home-iphone15pro-393", viewport: { width: 393, height: 852 }, route: "/" },
+    { name: "home-ipad-mini-768", viewport: { width: 768, height: 1024 }, route: "/" },
+    { name: "detail-desktop-1440", viewport: { width: 1440, height: 900 }, route: "/posts/991" },
+    { name: "detail-iphone15pro-393", viewport: { width: 393, height: 852 }, route: "/posts/991" },
+    { name: "detail-ipad-mini-768", viewport: { width: 768, height: 1024 }, route: "/posts/991" },
+    { name: "admin-dashboard-ipad-mini-768", viewport: { width: 768, height: 1024 }, route: "/admin/dashboard" },
+  ] as const
+
+  for (const scenario of scenarios) {
+    await page.setViewportSize(scenario.viewport)
+    await gotoForPerf(page, scenario.route, {
+      readyText: scenario.route === "/posts/991" ? "상세 레일 스티키 회귀 점검" : undefined,
+    })
+    if (scenario.route === "/") {
+      await waitForHomeTagRailReady(page, scenario.viewport.width)
+    }
+    await page.waitForTimeout(160)
+    const snapshot = await getVisualLayoutFingerprint(page)
+
+    // Linux headless 환경의 scrollbar/layout viewport 편차로 home/detail desktop 1440은
+    // x/y 절대 좌표가 흔들릴 수 있어 구조/폭/스크롤폭 범위 검증으로 고정한다.
+    if (scenario.name === "home-desktop-1440") {
+      expect(snapshot.route).toBe("/")
+      expect(snapshot.viewport.width).toBe(1440)
+      expect(snapshot.viewport.height).toBe(900)
+      expect(snapshot.rails.desktopTag).toBe(true)
+      expect(snapshot.rails.leftReaction).toBe(false)
+      expect(snapshot.rails.rightToc).toBe(false)
+
+      expect(snapshot.searchRect).not.toBeNull()
+      expect(snapshot.firstCardRect).not.toBeNull()
+      const desktopTagRailMetrics = await getDesktopTagRailMetrics(page)
+      expect(desktopTagRailMetrics).not.toBeNull()
+
+      const searchWidth = snapshot.searchRect?.width ?? 0
+      const searchHeight = snapshot.searchRect?.height ?? 0
+      const firstCardWidth = snapshot.firstCardRect?.width ?? 0
+      const firstCardHeight = snapshot.firstCardRect?.height ?? 0
+      const railWidth = snapshot.desktopTagRailRect?.width ?? 0
+      const railHeight = desktopTagRailMetrics?.height ?? 0
+      const railScrollHeight = desktopTagRailMetrics?.scrollHeight ?? 0
+      const railPanelBottom = desktopTagRailMetrics?.panelBottom ?? 0
+      const htmlScrollWidth = snapshot.scrollWidth?.html ?? 0
+      const bodyScrollWidth = snapshot.scrollWidth?.body ?? 0
+
+      expect(searchWidth).toBeGreaterThanOrEqual(600)
+      expect(searchWidth).toBeLessThanOrEqual(680)
+      expect(searchHeight).toBe(36)
+      expect(firstCardWidth).toBeGreaterThanOrEqual(340)
+      expect(firstCardWidth).toBeLessThanOrEqual(380)
+      expect(firstCardHeight).toBeGreaterThanOrEqual(360)
+      expect(firstCardHeight).toBeLessThanOrEqual(400)
+      expect(railWidth).toBe(184)
+      expect(railHeight).toBeGreaterThanOrEqual(84)
+      expect(railHeight).toBeLessThanOrEqual(560)
+      expect(railScrollHeight).toBeGreaterThanOrEqual(railHeight)
+      expect(railPanelBottom).toBeLessThanOrEqual(snapshot.viewport.height)
+      expect(htmlScrollWidth).toBeLessThanOrEqual(1440)
+      expect(htmlScrollWidth).toBeGreaterThanOrEqual(1420)
+      expect(bodyScrollWidth).toBeLessThanOrEqual(1440)
+      expect(bodyScrollWidth).toBeGreaterThanOrEqual(1420)
+      continue
+    }
+
+    if (scenario.name === "home-iphone15pro-393") {
+      expect(snapshot.route).toBe("/")
+      expect(snapshot.viewport.width).toBe(393)
+      expect(snapshot.viewport.height).toBe(852)
+      expect(snapshot.rails.chip).toBe(true)
+      expect(snapshot.rails.desktopTag).toBe(false)
+      expect(snapshot.profileSidebarVisible).toBe(false)
+      expect(snapshot.searchRect).not.toBeNull()
+      expect(snapshot.firstCardRect).not.toBeNull()
+
+      const searchWidth = snapshot.searchRect?.width ?? 0
+      const searchHeight = snapshot.searchRect?.height ?? 0
+      const searchY = snapshot.searchRect?.y ?? 0
+      const firstCardWidth = snapshot.firstCardRect?.width ?? 0
+      const firstCardHeight = snapshot.firstCardRect?.height ?? 0
+      const firstCardY = snapshot.firstCardRect?.y ?? 0
+
+      expect(searchWidth).toBeGreaterThanOrEqual(320)
+      expect(searchWidth).toBeLessThanOrEqual(336)
+      expect(searchHeight).toBe(34)
+      expect(searchY).toBeGreaterThanOrEqual(156)
+      expect(searchY).toBeLessThanOrEqual(188)
+      expect(firstCardWidth).toBeGreaterThanOrEqual(360)
+      expect(firstCardWidth).toBeLessThanOrEqual(370)
+      expect(firstCardHeight).toBeGreaterThanOrEqual(388)
+      expect(firstCardHeight).toBeLessThanOrEqual(404)
+      expect(firstCardY).toBeGreaterThanOrEqual(298)
+      expect(firstCardY).toBeLessThanOrEqual(360)
+      continue
+    }
+
+    if (scenario.name === "home-ipad-mini-768") {
+      expect(snapshot.route).toBe("/")
+      expect(snapshot.viewport.width).toBe(768)
+      expect(snapshot.viewport.height).toBe(1024)
+      expect(snapshot.rails.chip).toBe(true)
+      expect(snapshot.rails.desktopTag).toBe(false)
+      expect(snapshot.profileSidebarVisible).toBe(false)
+      expect(snapshot.searchRect).not.toBeNull()
+      expect(snapshot.firstCardRect).not.toBeNull()
+
+      const searchWidth = snapshot.searchRect?.width ?? 0
+      const searchHeight = snapshot.searchRect?.height ?? 0
+      const searchY = snapshot.searchRect?.y ?? 0
+      const firstCardWidth = snapshot.firstCardRect?.width ?? 0
+      const firstCardHeight = snapshot.firstCardRect?.height ?? 0
+      const firstCardY = snapshot.firstCardRect?.y ?? 0
+
+      expect(searchWidth).toBeGreaterThanOrEqual(692)
+      expect(searchWidth).toBeLessThanOrEqual(710)
+      expect(searchHeight).toBe(34)
+      expect(searchY).toBeGreaterThanOrEqual(156)
+      expect(searchY).toBeLessThanOrEqual(190)
+      expect(firstCardWidth).toBeGreaterThanOrEqual(348)
+      expect(firstCardWidth).toBeLessThanOrEqual(360)
+      expect(firstCardHeight).toBeGreaterThanOrEqual(384)
+      expect(firstCardHeight).toBeLessThanOrEqual(398)
+      expect(firstCardY).toBeGreaterThanOrEqual(300)
+      expect(firstCardY).toBeLessThanOrEqual(334)
+      continue
+    }
+
+    if (scenario.name === "detail-desktop-1440") {
+      expect(snapshot.route).toBe("/posts/991")
+      expect(snapshot.viewport.width).toBe(1440)
+      expect(snapshot.viewport.height).toBe(900)
+      expect(snapshot.rails.desktopTag).toBe(false)
+      expect(snapshot.rails.leftReaction).toBe(true)
+      expect(snapshot.rails.rightToc).toBe(true)
+      expect(snapshot.profileSidebarVisible).toBe(false)
+      expect(snapshot.searchRect).toBeNull()
+      expect(snapshot.firstCardRect).toBeNull()
+      expect(snapshot.desktopTagRailRect).toBeNull()
+      expect(snapshot.leftRailRect).not.toBeNull()
+      expect(snapshot.rightRailRect).not.toBeNull()
+
+      const leftRailWidth = snapshot.leftRailRect?.width ?? 0
+      const leftRailHeight = snapshot.leftRailRect?.height ?? 0
+      const leftRailY = snapshot.leftRailRect?.y ?? 0
+      const rightRailWidth = snapshot.rightRailRect?.width ?? 0
+      const rightRailHeight = snapshot.rightRailRect?.height ?? 0
+      const rightRailY = snapshot.rightRailRect?.y ?? 0
+      const htmlScrollWidth = snapshot.scrollWidth?.html ?? 0
+      const bodyScrollWidth = snapshot.scrollWidth?.body ?? 0
+
+      expect(leftRailWidth).toBe(80)
+      expect(leftRailHeight).toBeGreaterThanOrEqual(128)
+      expect(leftRailHeight).toBeLessThanOrEqual(172)
+      expect(leftRailY).toBeGreaterThanOrEqual(84)
+      expect(leftRailY).toBeLessThanOrEqual(93)
+      expect(rightRailWidth).toBe(240)
+      expect(rightRailHeight).toBeGreaterThanOrEqual(280)
+      expect(rightRailHeight).toBeLessThanOrEqual(380)
+      expect(rightRailY).toBeGreaterThanOrEqual(84)
+      expect(rightRailY).toBeLessThanOrEqual(93)
+      expect(htmlScrollWidth).toBeLessThanOrEqual(1440)
+      expect(htmlScrollWidth).toBeGreaterThanOrEqual(1420)
+      expect(bodyScrollWidth).toBeLessThanOrEqual(1440)
+      expect(bodyScrollWidth).toBeGreaterThanOrEqual(1420)
+      continue
+    }
+
+    if (scenario.name === "admin-dashboard-ipad-mini-768") {
+      expect(snapshot.viewport.width).toBe(768)
+      expect(snapshot.viewport.height).toBe(1024)
+
+      // admin/dashboard는 SSR auth guard를 통과하지 못하면 /login fallback을 탈 수 있다.
+      // (예: perf CI의 backend 단절 모드, 로컬 미로그인 상태, SSR auth backend 비가용)
+      // 단, 이 fallback 허용은 명시 플래그(PERF_ALLOW_ADMIN_LOGIN_FALLBACK=true) 또는
+      // backend 단절 perf 모드에서만 허용한다. 기본은 dashboard 진입 실패를 테스트 실패로 본다.
+      if (snapshot.route === "/login") {
+        if (!allowAdminDashboardLoginFallback) {
+          throw new Error(
+            `[perf] admin-dashboard unexpected fallback=/login (set PERF_ALLOW_ADMIN_LOGIN_FALLBACK=true only when intentionally testing auth fallback)`
+          )
+        }
+        console.info(
+          `[perf] admin-dashboard fallback=/login backendDisconnected=${String(isSsrAuthBackendDisconnectedForPerf)} allowFallback=${String(allowAdminDashboardLoginFallback)}`
+        )
+        const htmlScrollWidth = snapshot.scrollWidth?.html ?? 0
+        const bodyScrollWidth = snapshot.scrollWidth?.body ?? 0
+        expect(htmlScrollWidth).toBeLessThanOrEqual(768)
+        expect(bodyScrollWidth).toBeLessThanOrEqual(768)
+        continue
+      }
+
+      expect(snapshot.route).toBe("/admin/dashboard")
+      expect(snapshot.dashboardServiceRailRect).not.toBeNull()
+      expect(snapshot.dashboardPrioritySectionRect).not.toBeNull()
+      expect(snapshot.dashboardPanelGridRect).not.toBeNull()
+      expect(snapshot.dashboardFirstPanelRect).not.toBeNull()
+
+      const serviceRailWidth = snapshot.dashboardServiceRailRect?.width ?? 0
+      const prioritySectionY = snapshot.dashboardPrioritySectionRect?.y ?? 0
+      const prioritySectionBottom =
+        (snapshot.dashboardPrioritySectionRect?.y ?? 0) + (snapshot.dashboardPrioritySectionRect?.height ?? 0)
+      const panelGridWidth = snapshot.dashboardPanelGridRect?.width ?? 0
+      const firstPanelWidth = snapshot.dashboardFirstPanelRect?.width ?? 0
+      const firstPanelY = snapshot.dashboardFirstPanelRect?.y ?? 0
+      const htmlScrollWidth = snapshot.scrollWidth?.html ?? 0
+      const bodyScrollWidth = snapshot.scrollWidth?.body ?? 0
+
+      // 헤드리스/스크롤바 폭 편차로 iPad mini 768 환경에서 2~3px 오차가 발생할 수 있다.
+      expect(serviceRailWidth).toBeGreaterThanOrEqual(716)
+      expect(serviceRailWidth).toBeLessThanOrEqual(744)
+      expect(prioritySectionY).toBeGreaterThanOrEqual(360)
+      expect(prioritySectionY).toBeLessThanOrEqual(470)
+      expect(panelGridWidth).toBeGreaterThanOrEqual(716)
+      expect(panelGridWidth).toBeLessThanOrEqual(744)
+      expect(firstPanelWidth).toBeGreaterThanOrEqual(716)
+      expect(firstPanelWidth).toBeLessThanOrEqual(744)
+      expect(firstPanelY).toBeGreaterThanOrEqual(prioritySectionBottom)
+      expect(firstPanelY).toBeLessThanOrEqual(650)
+      expect(htmlScrollWidth).toBeLessThanOrEqual(768)
+      expect(bodyScrollWidth).toBeLessThanOrEqual(768)
+      continue
+    }
+
+    expect(JSON.stringify(snapshot, null, 2)).toMatchSnapshot(`${scenario.name}.json`)
+  }
+})
+
+  test("public/auth 핵심 화면은 adminProfile grid 서피스 계층을 유지한다", async ({ page }) => {
+  test.setTimeout(60_000)
+  await mockFeedEndpoints(page, {
+    adminProfile: {
+      blogDesign: "grid",
+      legacyBlogScheme: "light",
+    },
+  })
+  await mockDetailRailEndpoint(page, 991)
+
+  const publicScenarios = [
+    { route: "/", viewport: { width: 1440, height: 900 } },
+    { route: "/", viewport: { width: 393, height: 852 } },
+    { route: "/", viewport: { width: 768, height: 1024 } },
+    { route: "/posts/991", viewport: { width: 1440, height: 900 } },
+    { route: "/posts/991", viewport: { width: 393, height: 852 } },
+    { route: "/posts/991", viewport: { width: 768, height: 1024 } },
+  ] as const
+  const authScenarios = [
+    { route: "/login", viewport: { width: 1440, height: 900 } },
+    { route: "/login", viewport: { width: 393, height: 852 } },
+    { route: "/login", viewport: { width: 768, height: 1024 } },
+  ] as const
+
+  for (const scenario of publicScenarios) {
+    await applySchemePreference(page, "light")
+    await page.setViewportSize(scenario.viewport)
+    await gotoForPerf(page, scenario.route, {
+      readyText: scenario.route === "/posts/991" ? "상세 레일 스티키 회귀 점검" : undefined,
+    })
+    await expect
+      .poll(async () => (await getThemeSurfaceFingerprint(page)).bodyBg, {
+        timeout: 8000,
+      })
+      .toBe("rgb(16, 18, 20)")
+
+    const fingerprint = await getThemeSurfaceFingerprint(page)
+
+    expect(fingerprint.route).toBe(scenario.route)
+    expect(fingerprint.themeToggleLabel).toBeNull()
+    expect(fingerprint.bodyBg).toBe("rgb(16, 18, 20)")
+    expect(fingerprint.headerBg).not.toBeNull()
+    expect(fingerprint.headerBg).not.toBe(fingerprint.bodyBg)
+
+    if (scenario.route === "/") {
+      expect(fingerprint.searchBg).toBe("rgb(23, 26, 29)")
+      expect(fingerprint.searchBorder).toBe("rgba(119, 102, 85, 0.4)")
+      expect(fingerprint.cardBg).toBe("rgb(23, 26, 29)")
+      expect(fingerprint.cardBorder).toBe("rgba(119, 102, 85, 0.4)")
+    }
+
+    if (scenario.route === "/posts/991") {
+      expect(fingerprint.summaryBg).toBeNull()
+      expect(fingerprint.summaryBorder).toBeNull()
+    }
+  }
+
+  for (const scenario of authScenarios) {
+    await applySchemePreference(page, "light")
+    await page.setViewportSize(scenario.viewport)
+    await gotoForPerf(page, scenario.route)
+    await expect
+      .poll(async () => (await getThemeSurfaceFingerprint(page)).bodyBg, {
+        timeout: 8000,
+      })
+      .toBe("rgb(16, 18, 20)")
+    const fingerprint = await getThemeSurfaceFingerprint(page)
+    expect(fingerprint.route).toBe(scenario.route)
+    expect(fingerprint.bodyBg).toBe("rgb(16, 18, 20)")
+    expect(fingerprint.headerBg).toBe("rgb(23, 26, 29)")
+    expect(fingerprint.themeToggleLabel).toBeNull()
+    expect(fingerprint.authShellBg).toBe("rgb(18, 20, 22)")
+    expect(fingerprint.authShellBorder).toBe("rgba(204, 170, 102, 0.533)")
+  }
+})
+})

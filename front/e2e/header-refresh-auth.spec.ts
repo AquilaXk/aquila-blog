@@ -1,6 +1,27 @@
 import { expect, test, type Page } from "@playwright/test"
+import { existsSync, readFileSync } from "fs"
+import path from "path"
 
 const HEADER_AUTH_SHELL_STORAGE_KEY = "header.auth-shell.v1"
+
+test("header notification and login residual files stay below the 600 line budget", () => {
+  const sourceRoot = path.resolve(__dirname, "../src")
+  const targetFiles = [
+    "layouts/RootLayout/Header/useNotificationBellState.ts",
+    "pages/login.tsx",
+  ]
+
+  const oversizedFiles = targetFiles
+    .map((relativePath) => path.join(sourceRoot, relativePath))
+    .filter((sourcePath) => existsSync(sourcePath))
+    .map((sourcePath) => ({
+      sourcePath: path.relative(sourceRoot, sourcePath),
+      lineCount: readFileSync(sourcePath, "utf8").split("\n").length,
+    }))
+    .filter(({ lineCount }) => lineCount > 600)
+
+  expect(oversizedFiles).toEqual([])
+})
 
 const createExplorePage = (title: string) => ({
   content: [

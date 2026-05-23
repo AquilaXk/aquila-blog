@@ -1,92 +1,11 @@
-import { readFileSync } from "node:fs"
-import path from "node:path"
-import { expect, test } from "@playwright/test"
+import type { Page } from "@playwright/test"
 
-const readSourceFile = (sourcePath: string) => readFileSync(path.resolve(__dirname, "..", sourcePath), "utf8")
+export const MOBILE_VIEWPORT = { width: 393, height: 852 }
+export const AVATAR_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlH0WkAAAAASUVORK5CYII="
+export const AVATAR_PNG = Buffer.from(AVATAR_PNG_BASE64, "base64")
 
-test.describe("mobile layout source boundaries", () => {
-  test("grid design은 전 사용자-facing 화면 토큰을 사용하고 article typography를 변경하지 않는다", () => {
-  const publicSurfaceSources = [
-    "src/layouts/RootLayout/Header/index.tsx",
-    "src/layouts/RootLayout/Header/Logo.tsx",
-    "src/routes/Feed/index.tsx",
-    "src/routes/Feed/PostList/PostCard.tsx",
-    "src/routes/Feed/SearchInput.tsx",
-    "src/routes/Feed/TagList.tsx",
-    "src/routes/Feed/ProfileCard.tsx",
-    "src/routes/Feed/ServiceCard.tsx",
-    "src/routes/Feed/ContactCard.tsx",
-    "src/routes/About/AboutPage.styles.ts",
-    "src/routes/Detail/PostDetail/PostDetail.styles.ts",
-    "src/routes/Detail/PostDetail/PostDetailSection.styles.ts",
-    "src/routes/Detail/PostDetail/PostHeader.styles.ts",
-  ].map((sourcePath) => [sourcePath, readSourceFile(sourcePath)] as const)
-  const themeSource = readSourceFile("src/styles/theme.ts")
-  const articleSurfaceSource = [
-    readSourceFile("src/routes/Detail/PostDetail/PostDetail.styles.ts"),
-    readSourceFile("src/routes/Detail/PostDetail/PostDetailSection.styles.ts"),
-    readSourceFile("src/routes/Detail/PostDetail/PostHeader.styles.ts"),
-  ].join("\n")
-  const rootLayoutSource = readSourceFile("src/layouts/RootLayout/index.tsx")
-  const adminSurfaceSource = readSourceFile("src/routes/Admin/AdminSurfacePrimitives.tsx")
-  const adminShellSource = readSourceFile("src/routes/Admin/AdminShell.tsx")
-  const adminToolsSource = [
-    readSourceFile("src/pages/admin/tools.tsx"),
-    readSourceFile("src/routes/Admin/AdminToolsWorkspace.styles.ts"),
-    readSourceFile("src/routes/Admin/AdminToolsWorkspace.styles.tokens.ts"),
-    readSourceFile("src/routes/Admin/AdminToolsWorkspace.styles.layout.ts"),
-  ].join("\n")
-  const adminDashboardSource = [
-    readSourceFile("src/pages/admin/dashboard.tsx"),
-    readSourceFile("src/routes/Admin/AdminDashboardWorkspace.styles.ts"),
-    readSourceFile("src/routes/Admin/AdminDashboardWorkspace.styles.layout.ts"),
-    readSourceFile("src/routes/Admin/AdminDashboardWorkspace.styles.priority.ts"),
-  ].join("\n")
-  const authShellSource = readSourceFile("src/components/auth/AuthShell.tsx")
-  const errorSource = readSourceFile("src/routes/Error/index.tsx")
-  const editorComposeSource = [
-    readSourceFile("src/routes/Admin/EditorStudioComposeWritingSurface.tsx"),
-    readSourceFile("src/routes/Admin/EditorStudioComposeWritingSurfaceParts.tsx"),
-  ].join("\n")
-  const editorDedicatedSource = [
-    readSourceFile("src/routes/Admin/EditorStudioDedicatedEditorSurface.tsx"),
-    readSourceFile("src/routes/Admin/EditorStudioDedicatedEditorSurfaceParts.tsx"),
-  ].join("\n")
-  const editorPreviewSource = readSourceFile("src/routes/Admin/EditorActualPreviewPage.tsx")
-
-  expect(themeSource).toContain('blogDesign === "grid"')
-  expect(themeSource).toContain("#101214")
-  expect(themeSource).toContain("#171a1d")
-  expect(themeSource).toContain("#ca6")
-  expect(themeSource).toContain("readableSurface")
-  expect(themeSource).toContain("operationSurface")
-  expect(themeSource).toContain("operationSurfaceElevated")
-  expect(rootLayoutSource).toContain("isDesignAwareRoute")
-  expect(rootLayoutSource).toContain('pathname[1] !== "_"')
-  expect(rootLayoutSource).toContain('effectiveBlogDesign === "legacy" && !isPublicBlogRoute')
-  expect(rootLayoutSource).toContain("resolvePublicBlogAppearance(isDesignAwareRoute ? adminProfile : null)")
-  expect(adminSurfaceSource).toContain("theme.publicDesign.operationSurface")
-  expect(adminSurfaceSource).toContain("theme.publicDesign.operationSurfaceElevated")
-  expect(adminShellSource).toContain("theme.publicDesign.operationSurface")
-  expect(adminToolsSource).toContain("theme.publicDesign.operationSurface")
-  expect(adminDashboardSource).toContain("theme.publicDesign.operationSurface")
-  expect(authShellSource).toContain("theme.publicDesign.readableSurface")
-  expect(errorSource).toContain("theme.publicDesign.readableSurface")
-  expect(editorComposeSource).toContain("theme.publicDesign.readableSurface")
-  expect(editorDedicatedSource).toContain("theme.publicDesign.readableSurface")
-  expect(editorPreviewSource).toContain("theme.publicDesign.readableSurface")
-  for (const [sourcePath, source] of publicSurfaceSources) {
-    expect(source, sourcePath).toContain("theme.publicDesign")
-  }
-  expect(articleSurfaceSource).toContain("theme.publicDesign.readableSurface")
-  expect(articleSurfaceSource).toContain("article::before")
-  expect(articleSurfaceSource).not.toContain("font-size: ${({ theme }) =>")
-  expect(articleSurfaceSource).not.toContain("line-height: ${({ theme }) =>")
-  expect(articleSurfaceSource).not.toContain("font-family: ${({ theme }) =>")
-  expect(articleSurfaceSource).not.toContain("max-width: ${({ theme }) => theme.blogDesign")
-})
-
-const mockAvatarAsset = async (page: Page) => {
+export const mockAvatarAsset = async (page: Page) => {
   await page.route("**/avatar.png", async (route) => {
     await route.fulfill({
       status: 200,
@@ -96,7 +15,7 @@ const mockAvatarAsset = async (page: Page) => {
   })
 }
 
-const mockAnonymousSession = async (page: Page) => {
+export const mockAnonymousSession = async (page: Page) => {
   await page.route("**/member/api/v1/auth/me", async (route) => {
     await route.fulfill({
       status: 401,
@@ -106,7 +25,7 @@ const mockAnonymousSession = async (page: Page) => {
   })
 }
 
-const addPublicAboutSnapshotCookie = async (page: Page) => {
+export const addPublicAboutSnapshotCookie = async (page: Page) => {
   await page.context().addCookies([
     {
       name: "admin_profile_snapshot_v1",
@@ -165,7 +84,7 @@ const addPublicAboutSnapshotCookie = async (page: Page) => {
   ])
 }
 
-const createExplorePage = (title: string, tag = "모바일테스트") => ({
+export const createExplorePage = (title: string, tag = "모바일테스트") => ({
   content: [
     {
       id: 1501,
@@ -194,12 +113,12 @@ const createExplorePage = (title: string, tag = "모바일테스트") => ({
   },
 })
 
-const MOBILE_TAG_ENTRIES = Array.from({ length: 14 }, (_, index) => ({
+export const MOBILE_TAG_ENTRIES = Array.from({ length: 14 }, (_, index) => ({
   tag: `모바일태그${String(index + 1).padStart(2, "0")}`,
   count: 14 - index,
 }))
 
-const ADMIN_MEMBER_FIXTURE = {
+export const ADMIN_MEMBER_FIXTURE = {
   id: 1,
   username: "aquila",
   nickname: "aquila",
@@ -208,7 +127,7 @@ const ADMIN_MEMBER_FIXTURE = {
   profileImageDirectUrl: "/avatar.png",
 }
 
-const ADMIN_POST_FIXTURES = Array.from({ length: 6 }, (_, index) => ({
+export const ADMIN_POST_FIXTURES = Array.from({ length: 6 }, (_, index) => ({
   id: 3200 + index,
   title: index === 0 ? "First fold 운영 점검" : `관리자 글 목록 회귀 ${index}`,
   authorName: "관리자",
@@ -220,7 +139,7 @@ const ADMIN_POST_FIXTURES = Array.from({ length: 6 }, (_, index) => ({
   modifiedAt: `2026-05-${String(20 - index).padStart(2, "0")}T08:30:00Z`,
 }))
 
-const createAdminPostPage = () => ({
+export const createAdminPostPage = () => ({
   content: ADMIN_POST_FIXTURES,
   pageable: {
     pageNumber: 0,
@@ -230,7 +149,7 @@ const createAdminPostPage = () => ({
   },
 })
 
-const mockAdminPostsWorkspaceEndpoints = async (page: Page) => {
+export const mockAdminPostsWorkspaceEndpoints = async (page: Page) => {
   await page.route("**/member/api/v1/auth/me", async (route) => {
     await route.fulfill({
       status: 200,
@@ -274,7 +193,7 @@ const mockAdminPostsWorkspaceEndpoints = async (page: Page) => {
   })
 }
 
-const mockFeedEndpoints = async (page: Page) => {
+export const mockFeedEndpoints = async (page: Page) => {
   await page.route("**/post/api/v1/posts/feed**", async (route) => {
     await route.fulfill({
       status: 200,
@@ -312,7 +231,7 @@ const mockFeedEndpoints = async (page: Page) => {
   })
 }
 
-type MockDetailOverrides = {
+export type MockDetailOverrides = {
   id?: number
   title?: string
   content?: string
@@ -324,7 +243,7 @@ type MockDetailOverrides = {
   actorCanDelete?: boolean
 }
 
-const DETAIL_CONTENT = [
+export const DETAIL_CONTENT = [
   "| 항목 | 설명 |",
   "| --- | --- |",
   "| 증상 | iPhone 15 Pro에서 가로 스크롤 없이 본문에 맞춰 표시되어야 한다 |",
@@ -340,7 +259,7 @@ const DETAIL_CONTENT = [
   "```",
 ].join("\n")
 
-const mockDetailEndpoint = async (page: Page, overrides: MockDetailOverrides = {}) => {
+export const mockDetailEndpoint = async (page: Page, overrides: MockDetailOverrides = {}) => {
   const {
     id: overrideId,
     title: overrideTitle,
@@ -394,7 +313,7 @@ const mockDetailEndpoint = async (page: Page, overrides: MockDetailOverrides = {
   })
 }
 
-const captureLayoutSnapshot = async (page: Page) =>
+export const captureLayoutSnapshot = async (page: Page) =>
   page.evaluate(() => {
     const viewportWidth = window.innerWidth
     const html = document.documentElement
@@ -470,9 +389,3 @@ const captureLayoutSnapshot = async (page: Page) =>
         : null,
     }
   })
-
-test.beforeEach(async ({ page }) => {
-  await mockAvatarAsset(page)
-  await mockAnonymousSession(page)
-})
-})

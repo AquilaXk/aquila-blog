@@ -405,6 +405,8 @@ test("backend posts API client는 dto/mapper/request/cache module로 분리된�
     path.join(postsModuleRoot, "PostApiDtos.ts"),
     path.join(postsModuleRoot, "PostApiMappers.ts"),
     path.join(postsModuleRoot, "PostApiRequests.ts"),
+    path.join(postsModuleRoot, "PostApiRequestModel.ts"),
+    path.join(postsModuleRoot, "PostApiDetailRequests.ts"),
     path.join(postsModuleRoot, "PostApiCache.ts"),
   ]
 
@@ -415,6 +417,7 @@ test("backend posts API client는 dto/mapper/request/cache module로 분리된�
   const boundedSourceFiles = [
     path.join(backendApiRoot, "posts.ts"),
     path.join(backendApiRoot, "client.ts"),
+    path.join(postsModuleRoot, "PostApiRequests.ts"),
   ]
 
   const oversizedBudgetFiles = boundedSourceFiles
@@ -423,7 +426,7 @@ test("backend posts API client는 dto/mapper/request/cache module로 분리된�
       sourcePath: path.relative(backendApiRoot, sourcePath),
       lineCount: readFileSync(sourcePath, "utf8").split("\n").length,
     }))
-    .filter(({ lineCount }) => lineCount > 700)
+    .filter(({ lineCount }) => lineCount > 600)
 
   expect(oversizedBudgetFiles).toEqual([])
 

@@ -5,12 +5,13 @@ import { expect, test } from "@playwright/test"
 test.describe("admin posts workspace link contract", () => {
   test("posts workspace uses detail-like hero copy and checklist rail labels", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePage.tsx"), "utf8")
+    const pageViewSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePageView.tsx"), "utf8")
     const recentWorkSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceRecentWork.tsx"),
       "utf8"
     )
 
-    expect(source).toContain("편집과 검수를 한 화면에서 이어갑니다")
+    expect(pageViewSource).toContain("편집과 검수를 한 화면에서 이어갑니다")
     expect(source).not.toContain("최근 초안 복귀, 공개 상태 점검, 목록 필터링까지 지금 필요한 글 작업 흐름을 한곳에 모읍니다.")
     expect(source).not.toContain("<h2>검수 체크리스트</h2>")
     expect(source).not.toContain("<h2>상태 의미</h2>")
@@ -22,18 +23,22 @@ test.describe("admin posts workspace link contract", () => {
   test("관리자 글 목록은 제목 링크 same-tab 진입과 링크 복사 액션을 유지한다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePage.tsx"), "utf8")
     const listSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceList.tsx"), "utf8")
+    const listStyleSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceList.styles.ts"), "utf8")
     const modelSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceModel.ts"), "utf8")
+    const commandsSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePageCommands.ts"), "utf8")
+    const pageViewSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePageView.tsx"), "utf8")
     const recentWorkSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceRecentWork.tsx"),
       "utf8"
     )
 
     expect(modelSource).toContain('if (visibility === "PUBLIC_UNLISTED") return "링크 공개"')
-    expect(source).toContain("const buildCanonicalPostUrl = (postId: string | number) => {")
+    expect(commandsSource).toContain("buildCanonicalPostUrl")
     expect(modelSource).toContain("export const canOpenCanonicalPost = (row:")
-    expect(listSource).toContain("AdminInlineActionRow,")
-    expect(listSource).toContain("AdminStatusPill,")
-    expect(listSource).toContain("AdminTextActionButton,")
+    expect(listSource).toContain('from "./AdminPostsWorkspaceList.styles"')
+    expect(listStyleSource).toContain("AdminInlineActionRow,")
+    expect(listStyleSource).toContain("AdminStatusPill,")
+    expect(listStyleSource).toContain("AdminTextActionButton,")
     expect(source).toContain("const openCanonicalPost = useCallback(")
     expect(listSource).toContain("<TitleAnchor href={toCanonicalPostPath(row.id)} onClick={(event) => onOpenCanonicalPost(event, row)}>")
     expect(listSource).toContain("<TitleText>{getWorkspaceRowTitle(row)}</TitleText>")
@@ -47,13 +52,13 @@ test.describe("admin posts workspace link contract", () => {
     expect(listSource).toContain("{renderAuthorMeta(row)}")
     expect(listSource).not.toContain("resolveWorkspaceAuthorAvatarSrc")
     expect(listSource).not.toContain('<div className="titleRow">')
-    expect(source).toContain("copyPostDetailLink(row)")
+    expect(pageViewSource).toContain("copyPostDetailLink(row)")
     expect(listSource).not.toContain("상세 열기")
     expect(listSource).toContain("링크 복사")
     expect(recentWorkSource).toContain("recentPosts.slice(0, 3)")
     expect(recentWorkSource).toContain("grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));")
-    expect(source).toContain("<h1>편집과 검수를 한 화면에서 이어갑니다</h1>")
-    expect(listSource).toContain("const AuthorAvatarFrame = styled.span`")
+    expect(pageViewSource).toContain("<h1>편집과 검수를 한 화면에서 이어갑니다</h1>")
+    expect(listStyleSource).toContain("export const AuthorAvatarFrame = styled.span`")
     expect(listSource).not.toContain("SecondaryLinkButton")
     expect(recentWorkSource).toContain('<ResumeCardButton type="button" onClick={() => onOpenWriteRoute({ source: "local-draft" })}>')
     expect(recentWorkSource).toContain("const ResumeCardButton = styled.button`")
@@ -81,7 +86,10 @@ test.describe("admin posts workspace link contract", () => {
   })
 
   test("관리자 작성 화면은 현재 편집 중인 글이면 visibility와 무관하게 canonical 링크 열기와 복사 액션을 노출한다", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
+    const source = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/EditorStudioWorkspaceControllerRootView.tsx"),
+      "utf8"
+    )
     const editorSurfaceSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/EditorStudioDedicatedEditorSurface.tsx"),
       "utf8"

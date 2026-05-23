@@ -2,9 +2,14 @@ import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { expect, test } from "@playwright/test"
 
+const readRouteSource = (relativePath: string) =>
+  readFileSync(path.resolve(__dirname, "../src/routes/Admin", relativePath), "utf8")
+
+const routeFileLineCount = (relativePath: string) => readRouteSource(relativePath).split("\n").length
+
 test.describe("admin tools state contract", () => {
   test("운영 도구 workspace model helper는 route-level model이 소유한다", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
+    const source = readRouteSource("AdminToolsWorkspacePage.tsx")
     const modelPath = path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspaceModel.ts")
 
     if (!existsSync(modelPath)) {
@@ -32,8 +37,8 @@ test.describe("admin tools state contract", () => {
   })
 
   test("운영 도구는 helper copy와 읽기 전용 pill 없이 요약 카드와 실행 버튼만 남긴다", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
-    const styleSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspace.styles.ts"), "utf8")
+    const source = readRouteSource("AdminToolsWorkspaceSections.tsx")
+    const styleSource = readRouteSource("AdminToolsWorkspace.styles.tokens.ts")
 
     expect(source).toContain("문제 확인과 복구를 같은 흐름에서 처리합니다")
     expect(styleSource).toContain("grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));")
@@ -47,7 +52,7 @@ test.describe("admin tools state contract", () => {
   })
 
   test("운영 도구는 최근 진단 결과 panel 렌더링을 Admin route component로 위임한다", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
+    const source = readRouteSource("AdminToolsWorkspaceSections.tsx")
     const resultsPanelPath = path.resolve(__dirname, "../src/routes/Admin/AdminToolsResultsPanel.tsx")
     expect(existsSync(resultsPanelPath)).toBe(true)
     const resultsPanelSource = existsSync(resultsPanelPath) ? readFileSync(resultsPanelPath, "utf8") : ""
@@ -71,7 +76,7 @@ test.describe("admin tools state contract", () => {
   })
 
   test("운영 도구는 execution rail 렌더링을 Admin route component로 위임한다", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
+    const source = readRouteSource("AdminToolsExecutionSection.tsx")
     const executionRailPath = path.resolve(__dirname, "../src/routes/Admin/AdminToolsExecutionRail.tsx")
     expect(existsSync(executionRailPath)).toBe(true)
     const executionRailSource = existsSync(executionRailPath) ? readFileSync(executionRailPath, "utf8") : ""
@@ -94,7 +99,7 @@ test.describe("admin tools state contract", () => {
   })
 
   test("운영 도구 fallback 상태는 미수집 라벨과 중립 tone으로 분류한다", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
+    const source = readRouteSource("AdminToolsWorkspacePage.tsx")
     const modelSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspaceModel.ts"), "utf8")
 
     expect(modelSource).toContain('export const DATA_MISSING_STATUS_LABEL = "데이터 미수집"')
@@ -110,7 +115,7 @@ test.describe("admin tools state contract", () => {
   })
 
   test("운영 도구 도메인별 fallback 상태는 공통 미수집 라벨을 반복하지 않는다", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
+    const source = readRouteSource("AdminToolsWorkspacePage.tsx")
     const modelSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspaceModel.ts"), "utf8")
 
     expect(modelSource).toContain('export const CONNECTION_UNAVAILABLE_STATUS_LABEL = "미연결"')
@@ -123,5 +128,69 @@ test.describe("admin tools state contract", () => {
     expect(source).toContain("getDiagnosticFallbackStatusLabel(isCleanupLoading, cleanupDiagnosticsError)")
     expect(source).toContain("getDiagnosticFallbackStatusLabel(isAuthLoading, authSecurityEventsError)")
     expect(source).not.toContain('? "갱신 중"\\n        : DATA_MISSING_STATUS_LABEL')
+  })
+
+  test("admin operational residual surfaces stay below the 600 line module budget", () => {
+    const requiredCompanionModules = [
+      "AdminToolsWorkspacePageState.ts",
+      "AdminToolsDiagnosticsSection.tsx",
+      "AdminToolsExecutionSection.tsx",
+      "AdminDashboardDeferredPanelFrame.tsx",
+      "AdminDashboardWorkspaceView.tsx",
+      "AdminDashboardWorkspace.styles.layout.ts",
+      "AdminDashboardWorkspace.styles.priority.ts",
+      "AdminPostsWorkspacePageView.tsx",
+      "AdminPostsWorkspaceList.styles.ts",
+      "AdminHubSurface.sections.tsx",
+      "AdminHubSurface.styles.ts",
+    ]
+
+    for (const relativePath of requiredCompanionModules) {
+      expect(
+        existsSync(path.resolve(__dirname, "../src/routes/Admin", relativePath)),
+        `${relativePath} should own a residual admin surface slice`
+      ).toBe(true)
+    }
+
+    const boundedModules = [
+      "AdminToolsWorkspacePage.tsx",
+      "AdminToolsWorkspaceSections.tsx",
+      "AdminToolsWorkspacePageState.ts",
+      "AdminToolsDiagnosticsSection.tsx",
+      "AdminToolsExecutionSection.tsx",
+      "AdminDashboardWorkspacePage.tsx",
+      "AdminDashboardDeferredPanelFrame.tsx",
+      "AdminDashboardWorkspaceView.tsx",
+      "AdminDashboardWorkspace.styles.ts",
+      "AdminDashboardWorkspace.styles.layout.ts",
+      "AdminDashboardWorkspace.styles.priority.ts",
+      "AdminPostsWorkspacePage.tsx",
+      "AdminPostsWorkspacePageView.tsx",
+      "AdminPostsWorkspaceList.tsx",
+      "AdminPostsWorkspaceList.styles.ts",
+      "AdminHubSurface.tsx",
+      "AdminHubSurface.sections.tsx",
+      "AdminHubSurface.styles.ts",
+    ]
+
+    for (const relativePath of boundedModules) {
+      expect(routeFileLineCount(relativePath), `${relativePath} should be <= 600 lines`).toBeLessThanOrEqual(600)
+    }
+
+    const toolsSectionsSource = readRouteSource("AdminToolsWorkspaceSections.tsx")
+    expect(toolsSectionsSource).toContain("<AdminToolsDiagnosticsSection")
+    expect(toolsSectionsSource).toContain("<AdminToolsExecutionSection")
+    expect(toolsSectionsSource).not.toContain("<MetricGrid>")
+    expect(toolsSectionsSource).not.toContain("<DangerPanel>")
+
+    const postsListSource = readRouteSource("AdminPostsWorkspaceList.tsx")
+    expect(postsListSource).toContain('from "./AdminPostsWorkspaceList.styles"')
+    expect(postsListSource).not.toContain("const ListSkeleton = styled.div`")
+
+    const hubSource = readRouteSource("AdminHubSurface.tsx")
+    const hubSectionsSource = readRouteSource("AdminHubSurface.sections.tsx")
+    expect(hubSource).toContain('from "./AdminHubSurface.sections"')
+    expect(hubSectionsSource).toContain('from "./AdminHubSurface.styles"')
+    expect(hubSource).not.toContain("const Main = styled.main`")
   })
 })

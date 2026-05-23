@@ -1,3 +1,5 @@
+import { restoreEmptyFencedCodeBlocks } from "./editorCodeFenceRecovery"
+
 export type BlockEditorLoadGuardState = {
   expectedBody: string
   ignoreUntilMs: number
@@ -69,3 +71,25 @@ export const markGuardEmptyUpdateIgnored = (
   ignoreUntilMs: 0,
   ignoredInitialEmpty: true,
 })
+
+export const restoreBlockEditorCodeLossUpdate = ({
+  nextMarkdown,
+  guardState,
+  editorFocused = false,
+  nowMs = Date.now(),
+}: {
+  nextMarkdown: string
+  guardState: BlockEditorLoadGuardState
+  editorFocused?: boolean
+  nowMs?: number
+}) => {
+  if (editorFocused || nowMs > guardState.ignoreUntilMs || !guardState.expectedBody) {
+    return { markdown: nextMarkdown, changed: false }
+  }
+
+  const restoredMarkdown = restoreEmptyFencedCodeBlocks(nextMarkdown, guardState.expectedBody)
+  return {
+    markdown: restoredMarkdown,
+    changed: normalizeEditorMarkdown(restoredMarkdown) !== normalizeEditorMarkdown(nextMarkdown),
+  }
+}

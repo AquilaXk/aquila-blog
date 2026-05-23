@@ -1245,7 +1245,9 @@ test.describe("editor studio state", () => {
     expect(editorExtensionsSource).not.toContain("const CodeLanguagePopover = styled.div`")
     expect(editorExtensionsSource).not.toContain("const MermaidPreviewCard = styled.div`")
     expect(codeBlockNodeViewSource).toContain("export const CodeBlockView =")
-    expect(codeBlockNodeViewSource).toContain("export const CodeBlockEditorStyles =")
+    expect(codeBlockNodeViewSource).toContain(
+      'export { CodeBlockEditorStyles } from "./codeBlockNodeViewStyles"'
+    )
     expect(mermaidNodeViewSource).toContain("export const MermaidBlockView =")
     expect(mermaidNodeViewSource).toContain("export const MermaidEditorStyles =")
     expect(editorExtensionsSource).toContain('from "./calloutNodeView"')

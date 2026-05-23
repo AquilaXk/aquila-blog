@@ -18,6 +18,7 @@ import {
   consumeGuardOnExpectedUpdate,
   createBlockEditorLoadGuardState,
   markGuardEmptyUpdateIgnored,
+  restoreBlockEditorCodeLossUpdate,
   shouldIgnoreBlockEditorEmptyUpdate,
   type BlockEditorLoadGuardState,
 } from "./editorLoadSyncGuard"
@@ -200,6 +201,20 @@ export const EditorStudioWorkspaceController = ({ initialMember }: AdminPageProp
       guardState: nextGuardState,
     })) {
       blockEditorLoadGuardStateRef.current = markGuardEmptyUpdateIgnored(nextGuardState)
+      return
+    }
+
+    const restoredCodeLossUpdate = restoreBlockEditorCodeLossUpdate({
+      nextMarkdown,
+      guardState: nextGuardState,
+      editorFocused: meta?.editorFocused === true,
+    })
+
+    if (restoredCodeLossUpdate.changed) {
+      const restoredMarkdown = restoredCodeLossUpdate.markdown
+      blockEditorLoadGuardStateRef.current = consumeGuardOnExpectedUpdate(nextGuardState, restoredMarkdown)
+      postContentLiveRef.current = restoredMarkdown
+      setPostContent(restoredMarkdown)
       return
     }
 

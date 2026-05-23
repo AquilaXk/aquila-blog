@@ -140,6 +140,8 @@ let preserveNextEditorPointerAfterTable = false
 
 const EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES = 72
 const EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS = 1_120
+const EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES = 4
+const EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MIN_MS = 64
 const EDITOR_POINTER_SCROLL_PRESERVE_SELECTOR = "[data-testid='block-editor-prosemirror'], .ProseMirror"
 const EDITOR_POINTER_SCROLL_CONTROL_SELECTOR =
   "button, input, textarea, select, summary, [role='button'], [contenteditable='false']"
@@ -156,24 +158,45 @@ const EDITOR_POINTER_SCROLL_RICH_BLOCK_SELECTOR = [
   ".aq-mermaid-stage",
 ].join(", ")
 
-export const preserveWindowScrollForEditorPointerFocus = (target: EventTarget | null, tableSelectionActive: boolean) => {
+export const preserveWindowScrollForEditorPointerFocus = (
+  target: EventTarget | null,
+  tableSelectionActive: boolean,
+  blockSelectionActive = false
+) => {
   const targetElement = target instanceof Element ? target : target instanceof Node ? target.parentElement : null
   const tablePointerTarget = Boolean(targetElement?.closest(".aq-table-shell, .tableWrapper, table"))
   const editorPointerTarget = Boolean(targetElement?.closest(EDITOR_POINTER_SCROLL_PRESERVE_SELECTOR))
   const editorControlTarget = Boolean(targetElement?.closest(EDITOR_POINTER_SCROLL_CONTROL_SELECTOR))
   const editorRichBlockTarget = Boolean(targetElement?.closest(EDITOR_POINTER_SCROLL_RICH_BLOCK_SELECTOR))
-  const shouldPreserveEditorPointer = editorPointerTarget && (editorRichBlockTarget || !editorControlTarget)
+  const shouldPreserveRichEditorPointer = editorPointerTarget && editorRichBlockTarget
+  const shouldPreserveBlockSelectionPointer = editorPointerTarget && blockSelectionActive && !editorControlTarget
+  const shouldPreserveGeneralEditorPointer =
+    editorPointerTarget && !editorRichBlockTarget && !editorControlTarget && !blockSelectionActive
   const shouldPreserveFollowUp = !tablePointerTarget && preserveNextEditorPointerAfterTable
   if (tablePointerTarget) {
     preserveNextEditorPointerAfterTable = true
   } else if (shouldPreserveFollowUp) {
     preserveNextEditorPointerAfterTable = false
   }
-  if (shouldPreserveEditorPointer || tablePointerTarget || tableSelectionActive || shouldPreserveFollowUp) {
+  if (
+    shouldPreserveRichEditorPointer ||
+    shouldPreserveBlockSelectionPointer ||
+    tablePointerTarget ||
+    tableSelectionActive ||
+    shouldPreserveFollowUp
+  ) {
     preserveWindowScrollAcrossFrames(
       EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES,
       4,
       EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS
+    )
+    return
+  }
+  if (shouldPreserveGeneralEditorPointer) {
+    preserveWindowScrollAcrossFrames(
+      EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES,
+      4,
+      EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MIN_MS
     )
   }
 }

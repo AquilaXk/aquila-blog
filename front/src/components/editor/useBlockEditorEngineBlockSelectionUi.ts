@@ -473,7 +473,15 @@ export const useBlockEditorEngineBlockSelectionUi = ({
         findTopLevelBlockIndexFromTarget(event.target) ??
         findTopLevelBlockIndexByClientPosition(event.clientX, event.clientY)
       const currentEditor = editorRef.current ?? editor
-      if (currentEditor) preserveWindowScrollForEditorPointerFocus(event.target, isTableSelectionActive(currentEditor))
+      if (currentEditor) {
+        preserveWindowScrollForEditorPointerFocus(
+          event.target,
+          isTableSelectionActive(currentEditor),
+          selectedBlockNodeIndex !== null ||
+            selectedBlockNodeIndexRef.current !== null ||
+            keyboardBlockSelectionStickyRef.current
+        )
+      }
       if (
         currentEditor &&
         isOuterListItemSelectionGesture(event, targetListItemContext) &&
@@ -543,6 +551,7 @@ export const useBlockEditorEngineBlockSelectionUi = ({
       keyboardBlockSelectionStickyRef,
       promoteTopLevelBlockSelection,
       selectedBlockNodeIndex,
+      selectedBlockNodeIndexRef,
       setClickedBlockIndex,
       setSelectedBlockNodeIndex,
       setSelectedListItemContext,

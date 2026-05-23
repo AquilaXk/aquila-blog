@@ -919,10 +919,11 @@ test("상단 내비 컨트롤은 공통 높이 토큰을 유지한다", async ({
 
 test("로그인 화면은 활성 소셜 provider가 없으면 빈 소셜 로그인 섹션을 렌더하지 않는다", async () => {
   const loginSource = readFileSync(path.resolve(__dirname, "../src/pages/login.tsx"), "utf8")
+  const loginFormSource = readFileSync(path.resolve(__dirname, "../src/components/auth/LoginPageForm.tsx"), "utf8")
 
   expect(loginSource).toContain("const hasSocialItems = socialItems.length > 0")
   expect(loginSource).toContain("if (!hasSocialItems || showSocialAuth")
-  expect(loginSource).toContain("{hasSocialItems ? (")
+  expect(loginFormSource).toContain("{hasSocialItems ? (")
 })
 
 test("로그인 화면은 visible 페이지 제목을 h1로 노출한다", async ({ page }) => {

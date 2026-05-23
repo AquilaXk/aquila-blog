@@ -1,62 +1,28 @@
 import { expect, test } from "@playwright/test"
+import {
+  adminEmail,
+  adminLegacyLoginId,
+  adminPassword,
+  buildLoginPayloadCandidates,
+  hasAuthCookie,
+  isInvalidLoginRequestBody,
+  isNavigationInterruptedError,
+  isRetriableLoginStatus,
+  isRetriableNetworkError,
+  liveLoginAttempts,
+  liveLoginTimeoutMs,
+  liveRetryBaseDelayMs,
+  liveUiRedirectTimeoutMs,
+  resolveApiBaseUrl,
+  sleep,
+  waitForApiReachability,
+} from "./helpers/liveAuth"
 
-const adminEmail = process.env.E2E_ADMIN_EMAIL?.trim() || ""
-const adminLegacyLoginId = process.env.E2E_ADMIN_USERNAME?.trim() || ""
-const adminPassword = process.env.E2E_ADMIN_PASSWORD?.trim() || ""
-const explicitApiBaseUrl = process.env.E2E_API_BASE_URL?.trim() || ""
 const hasUiLoginCredentials = Boolean(adminEmail && adminPassword)
-const liveApiProbeAttempts = Number.parseInt(process.env.E2E_LIVE_API_PROBE_ATTEMPTS || "4", 10)
-const liveLoginAttempts = Number.parseInt(process.env.E2E_LIVE_LOGIN_ATTEMPTS || "3", 10)
-const liveLoginTimeoutMs = Number.parseInt(process.env.E2E_LIVE_LOGIN_TIMEOUT_MS || "30000", 10)
-const liveRetryBaseDelayMs = Number.parseInt(process.env.E2E_LIVE_RETRY_BASE_DELAY_MS || "2000", 10)
-const liveUiRedirectTimeoutMs = Number.parseInt(process.env.E2E_LIVE_UI_REDIRECT_TIMEOUT_MS || "20000", 10)
 const editorOrAdminUrlPattern = /\/(admin|editor)(\/|$|\?)/
 const editorUrlPattern = /\/editor(\/|$|\?)/
 
-const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-const resolveApiBaseUrl = (currentUrl: string) => {
-  if (explicitApiBaseUrl) return stripTrailingSlash(explicitApiBaseUrl)
-
-  const parsed = new URL(currentUrl)
-  if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
-    const localApiPort = process.env.E2E_LOCAL_API_PORT?.trim() || "8080"
-    return `${parsed.protocol}//${parsed.hostname}:${localApiPort}`
-  }
-
-  if (parsed.hostname.startsWith("www.")) {
-    parsed.hostname = `api.${parsed.hostname.slice(4)}`
-    return `${parsed.protocol}//${parsed.host}`
-  }
-
-  parsed.hostname = `api.${parsed.hostname}`
-  return `${parsed.protocol}//${parsed.host}`
-}
-
-const isRetriableNetworkError = (error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error)
-  return /(timeout|econnreset|enotfound|etimedout|econnrefused)/i.test(message)
-}
-
-const isRetriableLoginStatus = (status: number) => [502, 503, 504, 520, 522, 524, 530].includes(status)
-const isInvalidLoginRequestBody = (status: number, body: string) =>
-  status === 400 &&
-  /"resultCode"\s*:\s*"400-1"/.test(body) &&
-  /요청 본문이 올바르지 않습니다\./.test(body)
-
-const hasAuthCookie = async (page: Parameters<typeof test>[0]["page"]) => {
-  const currentUrl = page.url()
-  const cookies = /^https?:\/\//.test(currentUrl)
-    ? await page.context().cookies([new URL(currentUrl).origin])
-    : await page.context().cookies()
-  return cookies.some((cookie) => cookie.name === "apiKey" || cookie.name === "accessToken")
-}
-
-const isNavigationInterruptedError = (error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error)
-  return /interrupted by another navigation/i.test(message)
-}
 
 const tryEnterEditorRoute = async (page: Parameters<typeof test>[0]["page"], timeoutMs: number) => {
   const tries = 3
@@ -159,56 +125,7 @@ const waitForUiLoginOutcome = async (
   return { kind: "timeout" }
 }
 
-const waitForApiReachability = async (page: Parameters<typeof test>[0]["page"], apiBaseUrl: string) => {
-  const probePaths = ["/actuator/health", "/member/api/v1/auth/me"]
-  let lastFailure = "unknown"
 
-  for (let attempt = 1; attempt <= liveApiProbeAttempts; attempt += 1) {
-    for (const path of probePaths) {
-      try {
-        const response = await page.request.get(`${apiBaseUrl}${path}`, { timeout: 15_000 })
-        if (response.status() > 0) return
-        lastFailure = `status=${response.status()} path=${path}`
-      } catch (error) {
-        lastFailure = error instanceof Error ? error.message : String(error)
-      }
-    }
-
-    if (attempt < liveApiProbeAttempts) await sleep(liveRetryBaseDelayMs * attempt)
-  }
-
-  throw new Error(`API reachability probe failed. base=${apiBaseUrl} last=${lastFailure}`)
-}
-
-type LoginPayloadCandidate = {
-  label: "email+policy" | "email" | "username"
-  data: Record<string, string | boolean>
-}
-
-const buildLoginPayloadCandidates = (
-  email: string,
-  legacyLoginId: string,
-  password: string
-): LoginPayloadCandidate[] => {
-  const candidates: LoginPayloadCandidate[] = []
-  if (email) {
-    candidates.push({
-      label: "email+policy",
-      data: { email, password, rememberMe: true, ipSecurity: false },
-    })
-    candidates.push({
-      label: "email",
-      data: { email, password },
-    })
-  }
-  if (legacyLoginId) {
-    candidates.push({
-      label: "username",
-      data: { username: legacyLoginId, password },
-    })
-  }
-  return candidates
-}
 
 const loginWithRetry = async (page: Parameters<typeof test>[0]["page"], apiBaseUrl: string) => {
   const payloadCandidates = buildLoginPayloadCandidates(adminEmail, adminLegacyLoginId, adminPassword)
@@ -363,12 +280,16 @@ const createHiddenEditorPost = async (
   title: string,
   content: string
 ) => {
-  const response = await page.request.post("/post/api/v1/posts", {
+  const apiBaseUrl = resolveApiBaseUrl(page.url())
+  const response = await page.request.post(`${apiBaseUrl}/post/api/v1/posts`, {
     data: {
       title,
       content,
       published: false,
       listed: false,
+    },
+    headers: {
+      "X-Aquila-CSRF": "1",
     },
   })
   const body = (await response.json().catch(() => null)) as LiveWriteResponse | null
@@ -380,7 +301,12 @@ const createHiddenEditorPost = async (
 }
 
 const deleteHiddenEditorPost = async (page: Parameters<typeof test>[0]["page"], postId: number) => {
-  const response = await page.request.delete(`/post/api/v1/posts/${postId}`)
+  const apiBaseUrl = resolveApiBaseUrl(page.url())
+  const response = await page.request.delete(`${apiBaseUrl}/post/api/v1/posts/${postId}`, {
+    headers: {
+      "X-Aquila-CSRF": "1",
+    },
+  })
   if (!response.ok()) {
     const body = await response.text().catch(() => "")
     throw new Error(`failed to delete live editor post ${postId}: status=${response.status()} body=${body.slice(0, 300)}`)
@@ -414,8 +340,8 @@ test.describe("editor live visual regression", () => {
     await page.keyboard.press("Enter")
     await page.keyboard.type("본문 정렬 확인")
 
-    const heading = editor.locator(".aq-block-editor__content h1").first()
-    const paragraph = editor.locator(".aq-block-editor__content p").filter({ hasText: "본문 정렬 확인" }).first()
+    const heading = editor.locator("h1").filter({ hasText: "헤딩 정렬 확인" }).first()
+    const paragraph = editor.locator("p").filter({ hasText: "본문 정렬 확인" }).first()
     await expect(heading).toBeVisible()
     await expect(paragraph).toBeVisible()
 
@@ -499,6 +425,8 @@ test.describe("editor live visual regression", () => {
     await expect(tableMenu.getByRole("button", { name: "페이지 너비에 맞춤" })).toBeVisible()
     await expect(tableMenu.getByRole("button", { name: "넓은 표" })).toBeVisible()
 
+    await page.keyboard.press("Escape")
+    await expect(tableMenu).toBeHidden()
     await page.mouse.move(tableBox.x + tableBox.width - 3, tableBox.y + tableBox.height - 3)
 
     await expect(columnAddButton).toBeVisible()

@@ -140,7 +140,7 @@ test.describe("editor authoring route rich block focus", () => {
               if (!event.target.closest("[data-testid='block-editor-prosemirror']")) return
               window.setTimeout(() => {
                 window.scrollTo(0, staleScrollTop)
-              }, 260)
+              }, 720)
             },
             { capture: true, once: true }
           )
@@ -152,7 +152,7 @@ test.describe("editor authoring route rich block focus", () => {
         targetBox.x + Math.min(clickOffset.x, Math.max(8, targetBox.width - 8)),
         targetBox.y + Math.min(clickOffset.y, Math.max(8, targetBox.height - 8))
       )
-      await page.waitForTimeout(420)
+      await page.waitForTimeout(1_000)
 
       const afterGeometry = await page.evaluate(
         ({ selector, text }) => {

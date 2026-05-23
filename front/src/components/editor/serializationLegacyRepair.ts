@@ -3,10 +3,15 @@ import type { JSONContent } from "@tiptap/core"
 import { parseMarkdownToEditorDoc } from "./serializationHtmlImport"
 import type { BlockEditorDoc, UnsupportedBlock } from "./serializationTypes"
 
+const INVISIBLE_CODE_PLACEHOLDER_REGEX = /[\u00A0\u200B-\u200D\u2060\uFEFF]/g
+
 const readPlainTextFromEditorNode = (node: JSONContent): string => {
   if (node.type === "text") return typeof node.text === "string" ? node.text : ""
   return (node.content || []).map((child) => readPlainTextFromEditorNode(child)).join("")
 }
+
+const hasVisibleCodeText = (value: string) =>
+  value.replace(INVISIBLE_CODE_PLACEHOLDER_REGEX, "").trim().length > 0
 
 const collectCodeBlockSnapshots = (doc: JSONContent) => {
   const blocks: Array<{ language: string | null; text: string }> = []
@@ -32,7 +37,7 @@ export const restoreEditorDocCodeBlocksFromMarkdown = (
   doc: BlockEditorDoc
 ): { doc: BlockEditorDoc; changed: boolean } => {
   const sourceBlocks = collectCodeBlockSnapshots(parseMarkdownToEditorDoc(sourceMarkdown))
-  if (sourceBlocks.every((block) => block.text.trim().length === 0)) {
+  if (sourceBlocks.every((block) => !hasVisibleCodeText(block.text))) {
     return { doc, changed: false }
   }
 
@@ -46,7 +51,7 @@ export const restoreEditorDocCodeBlocksFromMarkdown = (
 
       const currentText = readPlainTextFromEditorNode(node)
       const sourceText = sourceBlock?.text || ""
-      if (currentText.trim().length > 0 || sourceText.trim().length === 0) return node
+      if (hasVisibleCodeText(currentText) || !hasVisibleCodeText(sourceText)) return node
 
       changed = true
       const currentLanguage = typeof node.attrs?.language === "string" ? node.attrs.language : null

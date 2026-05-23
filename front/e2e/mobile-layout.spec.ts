@@ -49,6 +49,8 @@ test("grid design은 전 사용자-facing 화면 토큰을 사용하고 article 
   const adminDashboardSource = [
     readSourceFile("src/pages/admin/dashboard.tsx"),
     readSourceFile("src/routes/Admin/AdminDashboardWorkspace.styles.ts"),
+    readSourceFile("src/routes/Admin/AdminDashboardWorkspace.styles.layout.ts"),
+    readSourceFile("src/routes/Admin/AdminDashboardWorkspace.styles.priority.ts"),
   ].join("\n")
   const authShellSource = readSourceFile("src/components/auth/AuthShell.tsx")
   const errorSource = readSourceFile("src/routes/Error/index.tsx")

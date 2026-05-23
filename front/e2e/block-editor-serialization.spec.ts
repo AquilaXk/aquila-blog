@@ -1,6 +1,8 @@
-import { readFileSync } from "fs"
-import path from "path"
 import { expect, test } from "@playwright/test"
+import {
+  convertHtmlToMarkdownInPage,
+  normalizeStructuredMarkdownClipboardInPage,
+} from "./helpers/blockEditorSerializationFixtures"
 import {
   createBookmarkNode,
   createBlockquoteNode,
@@ -24,18 +26,6 @@ import {
 import { renderFormulaToHtml } from "src/libs/markdown/formula"
 import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
 import { resolveMarkdownRenderModel } from "src/libs/markdown/rendering"
-import ts from "typescript"
-
-const htmlToMarkdownModuleSource = readFileSync(
-  path.resolve(__dirname, "../src/libs/markdown/htmlToMarkdown.ts"),
-  "utf8"
-)
-const transpiledHtmlToMarkdownModule = ts.transpileModule(htmlToMarkdownModuleSource, {
-  compilerOptions: {
-    module: ts.ModuleKind.CommonJS,
-    target: ts.ScriptTarget.ES2020,
-  },
-}).outputText
 
 test.describe("block editor serialization", () => {
   test("mermaid 블록은 parse/serialize round-trip을 유지한다", () => {
@@ -214,16 +204,7 @@ test.describe("block editor serialization", () => {
       </div>
     `
 
-    const markdown = await page.evaluate(
-      ({ compiledSource, htmlSource }) => {
-        const module = { exports: {} as { convertHtmlToMarkdown?: (html: string) => string } }
-        const exports = module.exports
-        const runner = new Function("module", "exports", compiledSource)
-        runner(module, exports)
-        return module.exports.convertHtmlToMarkdown?.(htmlSource) || ""
-      },
-      { compiledSource: transpiledHtmlToMarkdownModule, htmlSource: html }
-    )
+    const markdown = await convertHtmlToMarkdownInPage(page, html)
 
     expect(markdown).toContain("# 문서 제목")
     expect(markdown).toContain("**굵게** 와 *기울임*")
@@ -257,16 +238,7 @@ test.describe("block editor serialization", () => {
       </pre>
     `
 
-    const markdown = await page.evaluate(
-      ({ compiledSource, htmlSource }) => {
-        const module = { exports: {} as { convertHtmlToMarkdown?: (html: string) => string } }
-        const exports = module.exports
-        const runner = new Function("module", "exports", compiledSource)
-        runner(module, exports)
-        return module.exports.convertHtmlToMarkdown?.(htmlSource) || ""
-      },
-      { compiledSource: transpiledHtmlToMarkdownModule, htmlSource: html }
-    )
+    const markdown = await convertHtmlToMarkdownInPage(page, html)
 
     expect(markdown).toContain(["```ts", "const answer = 42;", "return answer", "```"].join("\n"))
 
@@ -299,27 +271,7 @@ test.describe("block editor serialization", () => {
       "</aside>",
     ].join("\n")
 
-    const normalizedMarkdown = await page.evaluate(
-      ({ compiledSource, plainText }) => {
-        const module = {
-          exports: {} as {
-            normalizeStructuredMarkdownClipboard?: (value: string) => string
-            looksLikeStructuredMarkdownDocument?: (value: string) => boolean
-          },
-        }
-        const exports = module.exports
-        const runner = new Function("module", "exports", compiledSource)
-        runner(module, exports)
-
-        return {
-          normalized:
-            module.exports.normalizeStructuredMarkdownClipboard?.(plainText) || "",
-          looksStructured:
-            module.exports.looksLikeStructuredMarkdownDocument?.(plainText) || false,
-        }
-      },
-      { compiledSource: transpiledHtmlToMarkdownModule, plainText: markdownSource }
-    )
+    const normalizedMarkdown = await normalizeStructuredMarkdownClipboardInPage(page, markdownSource)
 
     expect(normalizedMarkdown.looksStructured).toBe(true)
     expect(normalizedMarkdown.normalized).toContain("# 시작하며")

@@ -138,8 +138,8 @@ export const preserveWindowScrollAcrossFrames = (frames = 6, tolerance = 4, minD
 
 let preserveNextEditorPointerAfterTable = false
 
-const EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES = 12
-const EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS = 520
+const EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES = 72
+const EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS = 1_120
 const EDITOR_POINTER_SCROLL_PRESERVE_SELECTOR = "[data-testid='block-editor-prosemirror'], .ProseMirror"
 const EDITOR_POINTER_SCROLL_CONTROL_SELECTOR =
   "button, input, textarea, select, summary, [role='button'], [contenteditable='false']"

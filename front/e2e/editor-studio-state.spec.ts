@@ -4,6 +4,7 @@ import {
   isPublishActionDisabled,
 } from "src/routes/Admin/editorStudioState"
 import { resolveEditorMetaSnapshot, restoreEmptyFencedCodeBlocks } from "src/routes/Admin/editorStudioMetaModel"
+import { createBlockEditorLoadGuardState, restoreBlockEditorCodeLossUpdate } from "src/routes/Admin/editorLoadSyncGuard"
 import { buildPreviewSummaryFromMarkdown, normalizeCardSummary, normalizePersistedSummary } from "src/libs/postSummary"
 import { restoreEditorDocCodeBlocksFromMarkdown } from "src/components/editor/serialization"
 
@@ -256,6 +257,66 @@ test.describe("editor studio state", () => {
 
     expect(restored.changed).toBe(true)
     expect(restored.doc.content?.[1]?.content?.[0]?.text).toBe("로그인 -> 세션 생성 -> 이후 요청에서 세션 확인")
+  })
+
+  test("초기 로드 guard는 서버 baseline보다 빈 code fence가 들어온 editor update를 복구한다", () => {
+    const expectedBody = [
+      "코드 손실 방지 대상입니다.",
+      "",
+      "```text",
+      "로그인 -> 세션 생성 -> 이후 요청에서 세션 확인",
+      "```",
+      "",
+      "```java",
+      "public Token login(User user) {",
+      "    return new Token(access, refresh);",
+      "}",
+      "```",
+      "",
+      "```mermaid",
+      "sequenceDiagram",
+      "    participant Client",
+      "    participant Server",
+      "```",
+      "",
+      "```ts",
+      "const access = createAccessToken(user)",
+      "```",
+    ].join("\n")
+    const staleEditorUpdate = [
+      "코드 손실 방지 대상입니다.",
+      "",
+      "```text",
+      "```",
+      "",
+      "```java",
+      "\u200B",
+      "```",
+      "",
+      "```mermaid",
+      "sequenceDiagram",
+      "    participant Client",
+      "    participant Server",
+      "```",
+      "",
+      "```ts",
+      "```",
+    ].join("\n")
+    const guardState = createBlockEditorLoadGuardState(expectedBody, 1_000, 1_200)
+
+    const restored = restoreBlockEditorCodeLossUpdate({
+      nextMarkdown: staleEditorUpdate,
+      guardState,
+      nowMs: 1_300,
+    })
+
+    expect(restored.changed).toBe(true)
+    expect(restored.markdown).toContain("로그인 -> 세션 생성 -> 이후 요청에서 세션 확인")
+    expect(restored.markdown).toContain("return new Token(access, refresh);")
+    expect(restored.markdown).toContain("const access = createAccessToken(user)")
+    expect(restored.markdown.indexOf("sequenceDiagram")).toBeLessThan(
+      restored.markdown.indexOf("const access = createAccessToken(user)")
+    )
   })
 
 })

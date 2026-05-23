@@ -32,7 +32,13 @@ const childEnv = {
 
 delete childEnv.NO_COLOR
 
-const child = spawn("yarn", ["playwright", "test", "e2e/perf.spec.ts", "--workers=1"], {
+const perfSpecFiles = fs
+  .readdirSync(path.join(frontRoot, "e2e"))
+  .filter((fileName) => /^perf.*\.spec\.ts$/.test(fileName))
+  .sort()
+  .map((fileName) => path.join("e2e", fileName))
+
+const child = spawn("yarn", ["playwright", "test", ...perfSpecFiles, "--workers=1"], {
   cwd: frontRoot,
   stdio: "inherit",
   env: childEnv,

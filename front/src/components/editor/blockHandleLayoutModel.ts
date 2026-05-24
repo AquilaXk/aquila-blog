@@ -192,6 +192,8 @@ export const markNextEditorPointerAfterTable = () => {
 
 const EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES = 72
 const EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS = 1_120
+const EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES = 144
+const EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS = 2_400
 const EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES = 4
 const EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MIN_MS = 64
 const EDITOR_POINTER_SCROLL_PRESERVE_SELECTOR = "[data-testid='block-editor-prosemirror'], .ProseMirror"
@@ -226,6 +228,14 @@ const preserveWindowScrollForTablePointerTextDrag = () => {
   )
 }
 
+const preserveWindowScrollForTableFollowUpPointer = () => {
+  preserveWindowScrollAcrossFrames(
+    EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES,
+    4,
+    EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS
+  )
+}
+
 export const preserveWindowScrollForEditorPointerFocus = (
   target: EventTarget | null,
   tableSelectionActive: boolean,
@@ -247,12 +257,15 @@ export const preserveWindowScrollForEditorPointerFocus = (
   } else if (shouldPreserveFollowUp) {
     preserveNextEditorPointerAfterTable = false
   }
+  if (shouldPreserveFollowUp) {
+    preserveWindowScrollForTableFollowUpPointer()
+    return
+  }
   if (
     shouldPreserveRichEditorPointer ||
     shouldPreserveBlockSelectionPointer ||
     shouldPreserveTableBlockSelectionPointer ||
-    tableSelectionActive ||
-    shouldPreserveFollowUp
+    tableSelectionActive
   ) {
     preserveWindowScrollForRichBlockSelectAll()
     return

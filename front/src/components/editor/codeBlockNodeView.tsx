@@ -46,7 +46,10 @@ import {
   selectDomTextOffsetRange,
 } from "./codeBlockNodeViewSelectionModel"
 import { focusElementWithoutScroll } from "./blockEditorEngineDocumentModel"
-import { preserveWindowScrollForRichBlockSelectAll } from "./blockHandleLayoutModel"
+import {
+  preserveWindowScrollForRichBlockSelectAll,
+  preserveWindowScrollPositionAcrossFrames,
+} from "./blockHandleLayoutModel"
 
 export { getPreferredCodeLanguage, normalizeCodeLanguage } from "./codeBlockNodeViewLanguageModel"
 export { CodeBlockEditorStyles } from "./codeBlockNodeViewStyles"
@@ -169,11 +172,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
 
   const applyCodeTextSelection = useCallback(
     (anchorPos: number, headPos: number) => {
-      const nextSelection = TextSelection.create(
-        editor.state.doc,
-        Math.min(anchorPos, headPos),
-        Math.max(anchorPos, headPos)
-      )
+      const nextSelection = TextSelection.create(editor.state.doc, Math.min(anchorPos, headPos), Math.max(anchorPos, headPos))
       if (nextSelection.eq(editor.state.selection)) return
       editor.view.dispatch(editor.state.tr.setSelection(nextSelection))
     },
@@ -193,13 +192,33 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
 
   const preserveCodeDomTextRange = useCallback(
     (contentRoot: HTMLElement | null, anchorPos: number, headPos: number) => {
+      const scrollAnchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
+      const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now()
+      let frame = 0
+      let cancelled = false
+      let cancelArmed = false
+      const shell = contentRoot?.closest(".aq-code-shell")
+      const cancel = (event: Event) => { if (cancelArmed && (!(event.target instanceof Node) || !shell?.contains(event.target))) cancelled = true }
       const selectRange = () => {
         if (!selectCodeDomTextRange(contentRoot, anchorPos, headPos)) {
           selectDomTextContents(contentRoot)
         }
+        shell?.setAttribute("data-code-drag-selection-text", window.getSelection()?.toString() || contentRoot?.textContent || "")
       }
-      selectRange()
-      window.requestAnimationFrame(selectRange)
+      const restore = () => {
+        if (cancelled) return
+        selectRange()
+        frame += 1
+        const elapsedMs = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt
+        if (frame < 168 || elapsedMs < 2_800) {
+          window.requestAnimationFrame(restore)
+        }
+      }
+      window.addEventListener("pointerdown", cancel, { capture: true, once: true })
+      window.addEventListener("mousedown", cancel, { capture: true, once: true })
+      preserveWindowScrollPositionAcrossFrames(scrollAnchor, 168, 4, 2_800, false, false)
+      window.requestAnimationFrame(() => { cancelArmed = true })
+      restore()
     },
     [selectCodeDomTextRange]
   )
@@ -207,8 +226,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
   const startCodeDragSelection = useCallback(
     (event: ReactMouseEvent<HTMLDivElement> | ReactPointerEvent<HTMLDivElement>) => {
       const shell = shellRef.current
-      const contentRoot =
-        shell?.querySelector<HTMLElement>(".aq-code-editor-content") ?? null
+      const contentRoot = shell?.querySelector<HTMLElement>(".aq-code-editor-content") ?? null
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
       if (!shell || !contentRoot || !(event.target instanceof Node) || !shell.contains(event.target)) return
       const targetElement = event.target instanceof Element ? event.target : event.target.parentElement

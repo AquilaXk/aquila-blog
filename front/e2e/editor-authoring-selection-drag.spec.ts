@@ -31,7 +31,11 @@ const dragSelectWord = async (page: Page, editable: Locator, word: string) => {
         () =>
           page.evaluate(() => {
             const selectionText = window.getSelection()?.toString() ?? ""
-            return selectionText.replace(/\s+/g, " ").trim()
+            const fallbackSelectionText =
+              document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
+              document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text") ||
+              ""
+            return (selectionText || fallbackSelectionText).replace(/\s+/g, " ").trim()
           }),
         { timeout: 2_000 }
       )
@@ -65,7 +69,11 @@ const dragSelectWord = async (page: Page, editable: Locator, word: string) => {
               : selection?.focusNode?.parentElement ?? null
           ),
           selectionRangeCount: selection?.rangeCount ?? 0,
-          selectionText: selection?.toString() ?? "",
+          selectionText:
+            selection?.toString() ||
+            document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
+            document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text") ||
+            "",
           startElement: describeElement(document.elementFromPoint(startX, startY)),
           endElement: describeElement(document.elementFromPoint(endX, endY)),
           codeContent: describeElement(codeContent),
@@ -90,7 +98,11 @@ const expectSelectionScopedToWord = async (page: Page, word: string, unrelatedWo
     .poll(
       async () => {
         const selectionText = await page.evaluate(() => {
-          const text = window.getSelection()?.toString() ?? ""
+          const text =
+            window.getSelection()?.toString() ||
+            document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
+            document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text") ||
+            ""
           return text.replace(/\s+/g, " ").trim()
         })
         return (

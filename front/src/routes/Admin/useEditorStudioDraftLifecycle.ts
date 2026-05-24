@@ -7,6 +7,7 @@ import {
 } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import { replaceRoute } from "src/libs/router"
+import { hasEmptyFencedCodeBlockBody, restoreEmptyFencedCodeBlocks } from "./editorCodeFenceRecovery"
 import { isServerTempDraftPost } from "./editorTempDraft"
 import { useEditorStudioLocalDraftLifecycle } from "./useEditorStudioDraftLifecycleModel"
 
@@ -347,15 +348,25 @@ export const useEditorStudioDraftLifecycle = ({
       const post = await apiFetch<PostForEditor>(`/post/api/v1/adm/posts/${targetPostId}`)
       let resolvedPost = post
 
-      if ((resolvedPost.content ?? "").trim().length === 0 && resolvedPost.contentHtml) {
+      const adminContent = resolvedPost.content ?? ""
+      const shouldFetchPublicPostFallback =
+        (adminContent.trim().length === 0 && resolvedPost.contentHtml) ||
+        hasEmptyFencedCodeBlockBody(adminContent)
+
+      if (shouldFetchPublicPostFallback) {
         try {
           const publicPost = await apiFetch<Pick<PostForEditor, "content" | "contentHtml">>(
             `/post/api/v1/posts/${targetPostId}`
           )
           if ((publicPost.content ?? "").trim().length > 0 || publicPost.contentHtml) {
+            const publicContent = publicPost.content ?? ""
+            const restoredContent =
+              adminContent.trim().length > 0 && publicContent.trim().length > 0
+                ? restoreEmptyFencedCodeBlocks(adminContent, publicContent)
+                : publicContent || post.content
             resolvedPost = {
               ...post,
-              content: publicPost.content ?? post.content,
+              content: restoredContent,
               contentHtml: publicPost.contentHtml ?? post.contentHtml,
             }
           }

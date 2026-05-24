@@ -86,6 +86,12 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       }
       return codeTextDragStartRef.current
     }
+    const findCodeShellTarget = (targetElement: Element | null | undefined, pointElements: Element[]) =>
+      targetElement?.closest(".aq-code-shell") ?? pointElements.find((element) => Boolean(element.closest(".aq-code-shell")))?.closest(".aq-code-shell")
+    const rememberCodeTextDragStartAtPoint = (event: MouseEvent | PointerEvent) => {
+      const targetElement = event.target instanceof Element ? event.target : event.target instanceof Node ? event.target.parentElement : null
+      return rememberCodeTextDragStart(findCodeShellTarget(targetElement, document.elementsFromPoint(event.clientX, event.clientY)), event)
+    }
 
     const rememberTableTextDragStart = (event: MouseEvent | PointerEvent, allowTableControlCellFallback = false) => {
       if (event.button !== 0) return null
@@ -113,11 +119,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
 
     const hasMovedTableTextDrag = (event: MouseEvent | PointerEvent) => {
       const tableTextDragStart = tableTextDragStartRef.current
-      return Boolean(
-        tableTextDragStart &&
-          (Math.abs(event.clientX - tableTextDragStart.x) > 4 ||
-            Math.abs(event.clientY - tableTextDragStart.y) > 4)
-      )
+      return Boolean(tableTextDragStart && (Math.abs(event.clientX - tableTextDragStart.x) > 4 || Math.abs(event.clientY - tableTextDragStart.y) > 4))
     }
 
     const restoreActiveTableTextDragSelection = (restoreWhenEmpty = false, forceStartedCellSelection = false) => {
@@ -220,11 +222,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
 
     const hasMovedCodeTextDrag = (event: MouseEvent | PointerEvent) => {
       const codeTextDragStart = codeTextDragStartRef.current
-      return Boolean(
-        codeTextDragStart &&
-          (Math.abs(event.clientX - codeTextDragStart.x) > 4 ||
-            Math.abs(event.clientY - codeTextDragStart.y) > 4)
-      )
+      return Boolean(codeTextDragStart && (Math.abs(event.clientX - codeTextDragStart.x) > 4 || Math.abs(event.clientY - codeTextDragStart.y) > 4))
     }
 
     const syncBubble = () => {
@@ -401,7 +399,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       const eventTarget = event.target
       const targetElement = eventTarget instanceof Element ? eventTarget : eventTarget instanceof Node ? eventTarget.parentElement : null
       const pointElements = document.elementsFromPoint(event.clientX, event.clientY)
-      const codeShellTarget = targetElement?.closest(".aq-code-shell") ?? pointElements.find((element) => Boolean(element.closest(".aq-code-shell")))?.closest(".aq-code-shell")
+      const codeShellTarget = findCodeShellTarget(targetElement, pointElements)
       const existingSelectionText = window.getSelection()?.toString().trim() ?? ""
       const allowTableControlCellFallback = Boolean(existingSelectionText) && !isTableSelectionActive(activeEditor)
       const targetTableControl = targetElement?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR)
@@ -453,7 +451,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       const eventTarget = event.target
       const targetElement = eventTarget instanceof Element ? eventTarget : eventTarget instanceof Node ? eventTarget.parentElement : null
       const pointElements = document.elementsFromPoint(event.clientX, event.clientY)
-      const codeShellTarget = targetElement?.closest(".aq-code-shell") ?? pointElements.find((element) => Boolean(element.closest(".aq-code-shell")))?.closest(".aq-code-shell")
+      const codeShellTarget = findCodeShellTarget(targetElement, pointElements)
       const pointInsideEditor = !targetElement?.closest("[data-table-menu-root='true']") && !targetElement?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR) && pointElements.some((element) => Boolean(element.closest(BLOCK_EDITOR_ROOT_SELECTOR)))
       const insideEditorDom = eventTarget instanceof Node && (activeEditor.view.dom.contains(eventTarget) || Boolean(targetElement?.closest(BLOCK_EDITOR_ROOT_SELECTOR)) || pointInsideEditor)
       if (!insideEditorDom && !codeShellTarget) return
@@ -477,6 +475,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
 
     const handleWindowPointerMove = (event: PointerEvent) => {
       if (event.pointerType && event.pointerType !== "mouse") return
+      if (!codeTextDragStartRef.current && event.buttons === 1 && !tableTextDragStartRef.current && rememberCodeTextDragStartAtPoint(event)) { event.preventDefault(); event.stopPropagation(); preserveActiveCodeTextDragScroll(); selectCodeDragRootWhenNativeSelectionIsMissing(); return }
       if (hasMovedCodeTextDrag(event)) {
         event.preventDefault()
         event.stopPropagation()
@@ -494,6 +493,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
     }
 
     const handleWindowMouseMove = (event: MouseEvent) => {
+      if (!codeTextDragStartRef.current && event.buttons === 1 && !tableTextDragStartRef.current && rememberCodeTextDragStartAtPoint(event)) { event.preventDefault(); event.stopPropagation(); preserveActiveCodeTextDragScroll(); selectCodeDragRootWhenNativeSelectionIsMissing(); return }
       if (hasMovedCodeTextDrag(event)) {
         event.preventDefault()
         event.stopPropagation()

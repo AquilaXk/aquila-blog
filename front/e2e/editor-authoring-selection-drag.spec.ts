@@ -88,23 +88,19 @@ const dragSelectWord = async (page: Page, editable: Locator, word: string) => {
 const expectSelectionScopedToWord = async (page: Page, word: string, unrelatedWords: string[]) => {
   await expect
     .poll(
-      () =>
-        page.evaluate(() => {
-          const selectionText = window.getSelection()?.toString() ?? ""
-          return selectionText.replace(/\s+/g, " ").trim()
-        }),
+      async () => {
+        const selectionText = await page.evaluate(() => {
+          const text = window.getSelection()?.toString() ?? ""
+          return text.replace(/\s+/g, " ").trim()
+        })
+        return (
+          selectionText.includes(word) &&
+          unrelatedWords.every((unrelatedWord) => !selectionText.includes(unrelatedWord))
+        )
+      },
       { timeout: 2_000 }
     )
-    .toContain(word)
-
-  const selectionText = await page.evaluate(() => {
-    const text = window.getSelection()?.toString() ?? ""
-    return text.replace(/\s+/g, " ").trim()
-  })
-
-  for (const unrelatedWord of unrelatedWords) {
-    expect(selectionText).not.toContain(unrelatedWord)
-  }
+    .toBe(true)
 }
 
 const expectCodeHighlightLayerAligned = async (page: Page, word: string) => {

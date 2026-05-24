@@ -723,30 +723,74 @@ test.describe("editor authoring route code recovery", () => {
     await expect(codeBlocks.nth(3).locator(".aq-code-highlight-layer")).toContainText("createAccessToken")
 
     const readScrollTop = () => page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
-    const closingParagraph = editor.locator("p", {
-      hasText: "Stateless는 “서버가 아무것도 안 하는 구조”가 아닙니다.",
-    }).first()
-    await closingParagraph.scrollIntoViewIfNeeded()
-    const paragraphBox = await closingParagraph.boundingBox()
-    if (!paragraphBox) throw new Error("live shape closing paragraph metrics are missing")
+    const readSelectionText = () =>
+      page.evaluate(
+        () =>
+          window.getSelection()?.toString() ||
+          document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
+          document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text") ||
+          ""
+      )
+    const readCellTextAtPoint = (x: number, y: number) =>
+      page.evaluate(
+        ({ x, y }) => document.elementFromPoint(x, y)?.closest("th, td")?.textContent?.trim() ?? "",
+        { x, y }
+      )
+    const accessTokenCell = editor.locator("td", { hasText: "Access Token" }).first()
+    await accessTokenCell.scrollIntoViewIfNeeded()
+    await accessTokenCell.evaluate((element) => {
+      element.scrollIntoView({ block: "center", inline: "nearest" })
+    })
+    await expect.poll(async () => {
+      const box = await accessTokenCell.boundingBox()
+      if (!box) return ""
+      return readCellTextAtPoint(box.x + 18, box.y + box.height / 2)
+    }).toContain("Access Token")
+    const accessTokenBox = await accessTokenCell.boundingBox()
+    if (!accessTokenBox) throw new Error("live shape access token table cell metrics are missing")
+    const accessTokenDragY = accessTokenBox.height / 2
+    const accessTokenDragEndX = Math.min(accessTokenBox.width - 18, 128)
+    const beforeAccessTokenDrag = await readScrollTop()
+    await accessTokenCell.hover({ position: { x: 18, y: accessTokenDragY } })
+    await page.mouse.down()
+    await accessTokenCell.hover({ position: { x: accessTokenDragEndX, y: accessTokenDragY } })
+    await page.mouse.up()
+    await page.waitForTimeout(560)
+    await expect.poll(readSelectionText).toContain("Access Token")
+    await expect.poll(readSelectionText).not.toContain("문제")
+    await expect.poll(readScrollTop).toBeLessThanOrEqual(beforeAccessTokenDrag + 24)
+    await expect.poll(readScrollTop).toBeGreaterThanOrEqual(beforeAccessTokenDrag - 24)
+    await page.waitForTimeout(240)
+
+    const closingParagraph = editor.locator("p", { hasText: "Stateless는 “서버가 아무것도 안 하는 구조”가 아닙니다." }).first()
+    await expect(closingParagraph).toBeVisible()
+    const paragraphPoint = await closingParagraph.evaluate((element) => {
+      element.scrollIntoView({ block: "center", inline: "nearest" })
+      const rect = element.getBoundingClientRect()
+      return {
+        x: rect.left + Math.min(rect.width / 2, 220),
+        y: rect.top + Math.min(rect.height / 2, 18),
+      }
+    })
     const beforeParagraphClick = await readScrollTop()
-    await page.mouse.click(
-      paragraphBox.x + Math.min(paragraphBox.width / 2, 220),
-      paragraphBox.y + Math.min(paragraphBox.height / 2, 18)
-    )
+    await page.mouse.click(paragraphPoint.x, paragraphPoint.y)
     await page.waitForTimeout(360)
     await expect.poll(readScrollTop).toBeLessThanOrEqual(beforeParagraphClick + 24)
     await expect.poll(readScrollTop).toBeGreaterThanOrEqual(beforeParagraphClick - 24)
 
     const tableCell = editor.locator("td", { hasText: "구현되어 있는가" }).first()
-    await tableCell.scrollIntoViewIfNeeded()
-    const tableBox = await tableCell.boundingBox()
-    if (!tableBox) throw new Error("live shape table cell metrics are missing")
+    await expect(tableCell).toBeVisible()
+    const tableCellPosition = await tableCell.evaluate((element) => {
+      element.scrollIntoView({ block: "center", inline: "nearest" })
+      const rect = element.getBoundingClientRect()
+      return {
+        x: Math.min(rect.width / 2, 160),
+        y: Math.min(rect.height / 2, 18),
+      }
+    })
+    await tableCell.hover({ position: tableCellPosition })
     const beforeTableClick = await readScrollTop()
-    await page.mouse.click(
-      tableBox.x + Math.min(tableBox.width / 2, 160),
-      tableBox.y + Math.min(tableBox.height / 2, 18)
-    )
+    await tableCell.click({ position: tableCellPosition })
     await page.waitForTimeout(560)
     await expect.poll(readScrollTop).toBeLessThanOrEqual(beforeTableClick + 24)
     await expect.poll(readScrollTop).toBeGreaterThanOrEqual(beforeTableClick - 24)

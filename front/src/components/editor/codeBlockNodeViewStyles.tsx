@@ -215,8 +215,8 @@ export const CodeBlockEditorSurface = styled.div`
 
   .aq-code-highlight-layer {
     pointer-events: none;
-    user-select: none;
-    -webkit-user-select: none;
+    user-select: text;
+    -webkit-user-select: text;
     background: transparent;
     color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray11 : "#a9b7c6")};
 

@@ -74,3 +74,8 @@ export const restoreEmptyFencedCodeBlocks = (content: string, recoveredContent: 
 
   return lines.join("\n")
 }
+
+export const hasEmptyFencedCodeBlockBody = (content: string) =>
+  parseFencedCodeBlocks(content.replace(/\r\n?/g, "\n")).some((block) =>
+    isCodeFenceBodyVisiblyEmpty(block.body)
+  )

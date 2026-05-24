@@ -761,7 +761,7 @@ test.describe("editor authoring route code recovery", () => {
     await expect.poll(readScrollTop).toBeLessThanOrEqual(beforeAccessTokenDrag + 24)
     await expect.poll(readScrollTop).toBeGreaterThanOrEqual(beforeAccessTokenDrag - 24)
     await page.waitForTimeout(240)
-
+    await page.mouse.wheel(0, 1).then(() => page.waitForTimeout(40))
     const closingParagraph = editor.locator("p", { hasText: "Stateless는 “서버가 아무것도 안 하는 구조”가 아닙니다." }).first()
     await expect(closingParagraph).toBeVisible()
     const paragraphPoint = await closingParagraph.evaluate((element) => {
@@ -777,7 +777,7 @@ test.describe("editor authoring route code recovery", () => {
     await page.waitForTimeout(360)
     await expect.poll(readScrollTop).toBeLessThanOrEqual(beforeParagraphClick + 24)
     await expect.poll(readScrollTop).toBeGreaterThanOrEqual(beforeParagraphClick - 24)
-
+    await page.mouse.wheel(0, 1).then(() => page.waitForTimeout(40))
     const tableCell = editor.locator("td", { hasText: "구현되어 있는가" }).first()
     await expect(tableCell).toBeVisible()
     const tableCellPosition = await tableCell.evaluate((element) => {

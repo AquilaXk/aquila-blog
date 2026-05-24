@@ -228,6 +228,13 @@ test.describe("editor authoring route live drag sequence", () => {
     await expect.poll(() => readSelectionText(page)).toContain("createAccessToken")
     await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforeCodeSelectAll + 24)
     await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforeCodeSelectAll - 24)
+    const codeDragStartBox = await codeContent.boundingBox()
+    if (!codeDragStartBox) throw new Error("code drag start metrics are missing")
+    await page.mouse.move(codeDragStartBox.x + 80, codeDragStartBox.y + codeDragMetrics.y)
+    await page.mouse.down()
+    await page.waitForTimeout(120)
+    await expect.poll(() => readSelectionText(page)).toContain("createAccessToken")
+    await page.mouse.up()
     const codeDrag = await dragLocatorText(page, codeContent, "token login code drag", {
       endX: codeDragMetrics.endX,
       startX: 80,

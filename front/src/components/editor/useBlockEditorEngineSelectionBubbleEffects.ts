@@ -170,7 +170,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       let restoring = false
       const restoreIfMissing = () => {
         if (!root.isConnected) return false
-        if (isSelectionInsideCodeDragRoot(root)) return true
+        if (isSelectionInsideCodeDragRoot(root) && window.getSelection()?.toString() === (root.innerText || root.textContent || "")) return true
         restoring = true
         selectCodeDragRoot(root)
         restoring = false
@@ -212,7 +212,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
     const selectCodeDragRootWhenNativeSelectionIsMissing = () => {
       const codeTextDragStart = codeTextDragStartRef.current
       if (!codeTextDragStart?.root.isConnected) return false
-      if (isSelectionInsideCodeDragRoot(codeTextDragStart.root)) return false
+      if (isSelectionInsideCodeDragRoot(codeTextDragStart.root)) { const rootText = codeTextDragStart.root.innerText || codeTextDragStart.root.textContent || ""; const selectionText = window.getSelection()?.toString() || ""; if (rootText && selectionText !== rootText) return selectCodeDragRoot(codeTextDragStart.root); codeTextDragStart.root.closest(".aq-code-shell")?.setAttribute("data-code-drag-selection-text", selectionText || rootText); return false }
       const selected = selectCodeDragRoot(codeTextDragStart.root)
       if (selected) {
         preserveCodeDragRootSelectionAcrossFrames(codeTextDragStart.root)

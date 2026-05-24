@@ -222,8 +222,15 @@ test.describe("editor authoring route live drag sequence", () => {
         endX: Math.min(rect.width - 8, 390),
       }
     })
+    const beforeCodeSelectAll = await readScrollTop(page)
+    await codeContent.click({ position: { x: 80, y: 28 } })
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
+    await expect.poll(() => readSelectionText(page)).toContain("createAccessToken")
+    await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforeCodeSelectAll + 24)
+    await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforeCodeSelectAll - 24)
     const codeDrag = await dragLocatorText(page, codeContent, "token login code drag", {
       endX: codeDragMetrics.endX,
+      startX: 80,
       y: codeDragMetrics.y,
       waitMs: 1_600,
     })

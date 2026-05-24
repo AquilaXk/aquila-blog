@@ -222,7 +222,7 @@ export const CodeBlockEditorSurface = styled.div`
 
     .line {
       display: block;
-      min-height: calc(0.88rem * 1.65);
+      min-height: 1.5em;
     }
 
     .token.comment,
@@ -286,6 +286,12 @@ export const CodeBlockEditorSurface = styled.div`
     }
   }
 
+  .aq-code-shell .aq-code-highlight-layer,
+  .aq-code-shell .aq-code-highlight-layer code {
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+
   .aq-code-editor-content {
     position: relative;
     z-index: 1;
@@ -338,6 +344,16 @@ export const CodeBlockEditorSurface = styled.div`
       font-size: 0.86rem;
       line-height: 1.54;
       padding: 0.86rem 0.74rem 1.1rem;
+    }
+
+    .aq-code-shell .aq-code-highlight-layer,
+    .aq-code-shell .aq-code-highlight-layer code {
+      font-size: 0.86rem;
+      line-height: 1.54;
+    }
+
+    .aq-code-shell .aq-code-highlight-layer .line {
+      min-height: 1.54em;
     }
   }
 `

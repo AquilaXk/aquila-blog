@@ -222,7 +222,7 @@ export const CodeBlockEditorSurface = styled.div`
 
     .line {
       display: block;
-      min-height: calc(0.88rem * 1.65);
+      min-height: 1.5em;
     }
 
     .token.comment,
@@ -284,6 +284,12 @@ export const CodeBlockEditorSurface = styled.div`
     .token.important {
       color: ${({ theme }) => (theme.scheme === "dark" ? "#bbb529" : "#92400e")};
     }
+  }
+
+  .aq-code-shell .aq-code-highlight-layer,
+  .aq-code-shell .aq-code-highlight-layer code {
+    font-size: 0.85rem;
+    line-height: 1.5;
   }
 
   .aq-code-editor-content {

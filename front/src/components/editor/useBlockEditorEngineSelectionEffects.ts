@@ -18,6 +18,10 @@ import {
 } from "./nestedListItemModel"
 import { isTableSelectionActive } from "./tableStructureModel"
 import {
+  isPrimarySelectAllKeyboardEvent,
+  selectActiveTableCellText,
+} from "./tableTextSelectionModel"
+import {
   type FloatingBubbleState,
 } from "./useFloatingBubbleState"
 import type { BlockEditorSlashMenuState } from "./BlockEditorEngine.layers"
@@ -298,6 +302,19 @@ export const useBlockEditorEngineSelectionEffects = ({
 
     const handleKeyDownCapture = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return
+      if (isPrimarySelectAllKeyboardEvent(event)) {
+        const currentEditor = editorRef.current
+        if (currentEditor && selectActiveTableCellText(currentEditor, event.target)) {
+          event.preventDefault()
+          event.stopPropagation()
+          event.stopImmediatePropagation?.()
+          clearStickyTopLevelBlockSelection()
+          setSelectedBlockNodeIndex(null)
+          syncSelectedBlockNodeSurface(null)
+          setSelectionTick((prev) => prev + 1)
+          return
+        }
+      }
       if (event.key !== "Tab" || event.metaKey || event.ctrlKey || event.altKey) return
       if (slashMenuState) return
 
@@ -364,9 +381,11 @@ export const useBlockEditorEngineSelectionEffects = ({
     findTopLevelBlockIndexFromTarget,
     hoveredBlockIndex,
     promoteTopLevelBlockSelection,
+    setSelectedBlockNodeIndex,
     resolveActiveListItemInteraction,
     setSelectionTick,
     slashMenuState,
+    syncSelectedBlockNodeSurface,
   ])
 
   useBlockEditorEngineSelectionBubbleEffects({

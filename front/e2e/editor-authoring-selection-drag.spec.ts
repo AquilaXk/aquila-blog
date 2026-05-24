@@ -85,6 +85,54 @@ const dragSelectWord = async (page: Page, editable: Locator, word: string) => {
   }
 }
 
+const expectSelectionScopedToWord = async (page: Page, word: string, unrelatedWords: string[]) => {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const selectionText = window.getSelection()?.toString() ?? ""
+          return selectionText.replace(/\s+/g, " ").trim()
+        }),
+      { timeout: 2_000 }
+    )
+    .toContain(word)
+
+  const selectionText = await page.evaluate(() => {
+    const text = window.getSelection()?.toString() ?? ""
+    return text.replace(/\s+/g, " ").trim()
+  })
+
+  for (const unrelatedWord of unrelatedWords) {
+    expect(selectionText).not.toContain(unrelatedWord)
+  }
+}
+
+const expectCodeHighlightLayerAligned = async (page: Page, word: string) => {
+  const metrics = await page.evaluate((targetWord) => {
+    const content = Array.from(document.querySelectorAll<HTMLElement>(".aq-code-editor-content")).find((element) =>
+      element.textContent?.includes(targetWord)
+    )
+    const shell = content?.closest(".aq-code-shell")
+    const highlightLine = shell?.querySelector<HTMLElement>(".aq-code-highlight-layer .line")
+    if (!content || !highlightLine) return null
+    const contentStyle = window.getComputedStyle(content)
+    const highlightLineStyle = window.getComputedStyle(highlightLine)
+    return {
+      contentLineHeight: Number.parseFloat(contentStyle.lineHeight || "0"),
+      highlightLineMinHeight: Number.parseFloat(highlightLineStyle.minHeight || "0"),
+    }
+  }, word)
+
+  if (!metrics) {
+    throw new Error(`code highlight metrics are missing for "${word}"`)
+  }
+
+  expect(
+    Math.abs(metrics.contentLineHeight - metrics.highlightLineMinHeight),
+    JSON.stringify(metrics)
+  ).toBeLessThanOrEqual(1)
+}
+
 test.describe("editor authoring route text selection drag", () => {
   test("실제 /editor/[id] 텍스트 드래그 선택은 code/table/body에서 에러 없이 유지된다", async ({
     page,
@@ -145,8 +193,17 @@ test.describe("editor authoring route text selection drag", () => {
     await expectEditorToContainLoadedText(editor, tableLabel)
 
     await dragSelectWord(page, editor.locator("p", { hasText: bodyLabel }).first(), bodyLabel)
+    await expectCodeHighlightLayerAligned(page, codeLabel)
     await dragSelectWord(page, editor.locator(".aq-code-editor-content", { hasText: codeLabel }).first(), codeLabel)
+    await expectSelectionScopedToWord(page, codeLabel, [bodyLabel, tableLabel])
     await dragSelectWord(page, editor.locator("table th, table td", { hasText: tableLabel }).first(), tableLabel)
+    await expectSelectionScopedToWord(page, tableLabel, [bodyLabel, codeLabel])
+
+    const tableCell = editor.locator("table th, table td", { hasText: tableLabel }).first()
+    const tableCellPoints = await getWordDragPoints(tableCell, tableLabel)
+    await page.mouse.click(tableCellPoints.startX, tableCellPoints.startY)
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
+    await expectSelectionScopedToWord(page, tableLabel, [bodyLabel, codeLabel])
 
     await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
     expect(runtimeErrors).toEqual([])

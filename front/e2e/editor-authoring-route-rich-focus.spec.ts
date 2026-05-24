@@ -107,31 +107,15 @@ test.describe("editor authoring route rich block focus", () => {
       })
       const targetBox = await expectVisibleBox(target, `${label} metrics are missing before click`)
 
-      const beforeGeometry = await page.evaluate(
-        ({ selector, text }) => {
-          const candidates = Array.from(document.querySelectorAll<HTMLElement>(selector))
-          const target =
-            candidates.find((element) => {
-              const elementText =
-                element instanceof HTMLTextAreaElement ? element.value : element.textContent ?? ""
-              return elementText.includes(text)
-            }) ??
-            candidates[0] ??
-            null
-          if (!target) return null
-          const rect = target.getBoundingClientRect()
-          return {
-            scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
-            targetTop: rect.top,
-            targetBottom: rect.bottom,
-            visible: rect.bottom > 0 && rect.top < window.innerHeight,
-          }
-        },
-        { selector: label === mermaidLabel ? ".aq-mermaid-code-input" : "[data-testid='block-editor-prosemirror'] *", text: label }
-      )
-      if (!beforeGeometry) {
-        throw new Error(`${label} geometry is missing before click`)
-      }
+      const beforeGeometry = await target.evaluate((element) => {
+        const rect = element.getBoundingClientRect()
+        return {
+          scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+          targetTop: rect.top,
+          targetBottom: rect.bottom,
+          visible: rect.bottom > 0 && rect.top < window.innerHeight,
+        }
+      })
       expect(beforeGeometry.visible).toBe(true)
       await page.evaluate(
         ({ staleScrollTop }) => {
@@ -157,30 +141,14 @@ test.describe("editor authoring route rich block focus", () => {
       )
       await page.waitForTimeout(1_000)
 
-      const afterGeometry = await page.evaluate(
-        ({ selector, text }) => {
-          const candidates = Array.from(document.querySelectorAll<HTMLElement>(selector))
-          const target =
-            candidates.find((element) => {
-              const elementText =
-                element instanceof HTMLTextAreaElement ? element.value : element.textContent ?? ""
-              return elementText.includes(text)
-            }) ??
-            candidates[0] ??
-            null
-          if (!target) return null
-          const rect = target.getBoundingClientRect()
-          return {
-            scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
-            targetTop: rect.top,
-            targetBottom: rect.bottom,
-          }
-        },
-        { selector: label === mermaidLabel ? ".aq-mermaid-code-input" : "[data-testid='block-editor-prosemirror'] *", text: label }
-      )
-      if (!afterGeometry) {
-        throw new Error(`${label} geometry is missing after click`)
-      }
+      const afterGeometry = await target.evaluate((element) => {
+        const rect = element.getBoundingClientRect()
+        return {
+          scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+          targetTop: rect.top,
+          targetBottom: rect.bottom,
+        }
+      })
 
       expect(Math.abs(afterGeometry.scrollTop - beforeGeometry.scrollTop)).toBeLessThanOrEqual(24)
       expect(Math.abs(afterGeometry.targetTop - beforeGeometry.targetTop)).toBeLessThanOrEqual(24)

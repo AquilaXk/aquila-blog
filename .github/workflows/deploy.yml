@@ -872,6 +872,7 @@ jobs:
       E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL || '' }}
       E2E_ADMIN_USERNAME: ${{ secrets.E2E_ADMIN_USERNAME || '' }}
       E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD || '' }}
+      E2E_EXPECTED_FRONT_COMMIT_SHA: ${{ needs.calculateTag.outputs.deploy_sha }}
 
     steps:
       - name: Checkout
@@ -1067,6 +1068,8 @@ jobs:
           PREFLIGHT_SLEEP_SECONDS="${E2E_PREFLIGHT_SLEEP_SECONDS:-3}"
           PREFLIGHT_CURL_RETRY="${E2E_PREFLIGHT_CURL_RETRY:-2}"
           PREFLIGHT_FORCE_IPV4="${E2E_PREFLIGHT_FORCE_IPV4:-true}"
+          FRONT_BUILD_METADATA_ATTEMPTS="${E2E_FRONT_BUILD_METADATA_ATTEMPTS:-20}"
+          FRONT_BUILD_METADATA_SLEEP_SECONDS="${E2E_FRONT_BUILD_METADATA_SLEEP_SECONDS:-6}"
 
           curl_args=(
             -sS
@@ -1129,6 +1132,32 @@ jobs:
           if [ "${front_ok}" -ne 1 ]; then
             echo "preflight failed for front-login: ${front_base}/login" >&2
             exit 1
+          fi
+
+          if [ -n "${E2E_EXPECTED_FRONT_COMMIT_SHA:-}" ]; then
+            front_build_ok=0
+            for attempt in $(seq 1 "${FRONT_BUILD_METADATA_ATTEMPTS}"); do
+              front_html="$(
+                curl "${curl_args[@]}" \
+                  -L \
+                  "${front_base}/login?next=%2Fadmin&frontBuildCheck=${E2E_EXPECTED_FRONT_COMMIT_SHA}" || true
+              )"
+              front_build_sha="$(
+                printf '%s' "${front_html}" |
+                  sed -nE 's/.*<meta name="aquila-build-sha" content="([^"]*)".*/\1/p' |
+                  head -n 1
+              )"
+              echo "[preflight] front-build-sha attempt=${attempt} expected=${E2E_EXPECTED_FRONT_COMMIT_SHA} actual=${front_build_sha:-missing}"
+              if [ "${front_build_sha}" = "${E2E_EXPECTED_FRONT_COMMIT_SHA}" ]; then
+                front_build_ok=1
+                break
+              fi
+              sleep "${FRONT_BUILD_METADATA_SLEEP_SECONDS}"
+            done
+            if [ "${front_build_ok}" -ne 1 ]; then
+              echo "preflight failed: live frontend build metadata does not match deploy sha" >&2
+              exit 1
+            fi
           fi
 
           api_ok=0

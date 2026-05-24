@@ -159,7 +159,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       range.selectNodeContents(root)
       selection.removeAllRanges()
       selection.addRange(range)
-      root.closest(".aq-code-shell")?.setAttribute("data-code-drag-selection-text", selection.toString())
+      root.closest(".aq-code-shell")?.setAttribute("data-code-drag-selection-text", selection.toString() || root.innerText || root.textContent || "")
       return true
     }
 

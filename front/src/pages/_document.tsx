@@ -91,6 +91,13 @@ const CLIENT_RUNTIME_RECOVERY_SCRIPT = `
 })();
 `
 
+const AQUILA_BUILD_SHA =
+  process.env.AQUILA_BUILD_SHA ||
+  process.env.NEXT_PUBLIC_AQUILA_BUILD_SHA ||
+  process.env.VERCEL_GIT_COMMIT_SHA ||
+  process.env.GITHUB_SHA ||
+  "unknown"
+
 class MyDocument extends Document {
   static async getInitialProps(ctx: DocumentContext): Promise<DocumentInitialProps> {
     const originalRenderPage = ctx.renderPage
@@ -137,6 +144,7 @@ class MyDocument extends Document {
             title="RSS 2.0"
             href="/feed"
           ></link>
+          <meta name="aquila-build-sha" content={AQUILA_BUILD_SHA} />
           {/* google search console */}
           {CONFIG.googleSearchConsole.enable === true && (
             <>

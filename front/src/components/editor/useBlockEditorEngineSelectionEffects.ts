@@ -19,6 +19,7 @@ import {
 import { isTableSelectionActive } from "./tableStructureModel"
 import {
   isPrimarySelectAllKeyboardEvent,
+  rememberActiveTableCellFromTarget,
   selectActiveTableCellText,
 } from "./tableTextSelectionModel"
 import {
@@ -231,6 +232,7 @@ export const useBlockEditorEngineSelectionEffects = ({
     if (!editor) return
 
     const handleEditorMouseDownCapture = (event: MouseEvent) => {
+      rememberActiveTableCellFromTarget(event.target, editor.view.dom as HTMLElement)
       const targetListItemContext = findNestedListItemContextFromTarget(event.target)
       const targetBlockIndex =
         findTopLevelBlockIndexFromTarget(event.target) ??

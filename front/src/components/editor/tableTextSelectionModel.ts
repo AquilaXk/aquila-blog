@@ -18,8 +18,8 @@ const resolveElement = (target: EventTarget | Node | null | undefined) => {
 }
 
 let lastActiveTableCell: HTMLElement | null = null
-const TABLE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES = 24
-const TABLE_TEXT_DRAG_SCROLL_PRESERVE_MIN_MS = 720
+const TABLE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES = 72
+const TABLE_TEXT_DRAG_SCROLL_PRESERVE_MIN_MS = 1_120
 
 export const rememberActiveTableCellFromTarget = (
   eventTarget: EventTarget | Node | null | undefined,

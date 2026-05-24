@@ -19,6 +19,7 @@ const isLocalResourceConsoleNoise = (text: string) =>
 const dragSelectWord = async (page: Page, editable: Locator, word: string) => {
   await editable.scrollIntoViewIfNeeded()
   const points = await getWordDragPoints(editable, word)
+  const beforeScrollTop = await page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
 
   await page.mouse.move(points.startX, points.startY)
   await page.mouse.down()
@@ -91,6 +92,8 @@ const dragSelectWord = async (page: Page, editable: Locator, word: string) => {
     )
     throw new Error(`drag selection did not include "${word}": ${JSON.stringify(diagnostics)}`)
   }
+  const afterScrollTop = await page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
+  expect(Math.abs(afterScrollTop - beforeScrollTop), `${word} drag 이후 scrollTop이 유지되어야 합니다`).toBeLessThanOrEqual(24)
 }
 
 const expectSelectionScopedToWord = async (page: Page, word: string, unrelatedWords: string[]) => {
@@ -206,7 +209,12 @@ test.describe("editor authoring route text selection drag", () => {
     await page.setViewportSize({ width: 980, height: 720 })
 
     await dragSelectWord(page, editor.locator("p", { hasText: bodyLabel }).first(), bodyLabel)
-    await dragSelectWord(page, editor.locator(".aq-code-editor-content", { hasText: codeLabel }).first(), codeLabel)
+    const codeContent = editor.locator(".aq-code-editor-content", { hasText: codeLabel }).first()
+    await dragSelectWord(page, codeContent, codeLabel)
+    await expectSelectionScopedToWord(page, codeLabel, [bodyLabel, tableLabel])
+    const codePoints = await getWordDragPoints(codeContent, codeLabel)
+    await page.mouse.click(codePoints.startX, codePoints.startY)
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
     await expectSelectionScopedToWord(page, codeLabel, [bodyLabel, tableLabel])
     await dragSelectWord(page, editor.locator("table th, table td", { hasText: tableLabel }).first(), tableLabel)
     await expectSelectionScopedToWord(page, tableLabel, [bodyLabel, codeLabel])

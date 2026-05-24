@@ -342,6 +342,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       } else if (lastActiveCodeBlockContentRoot === contentRoot) {
         lastActiveCodeBlockContentRoot = null
       }
+      if (!contentRoot.contains(target)) codeDragSelectionRef.current = null
     }
 
     const handleDocumentSelectAll = (event: KeyboardEvent) => {

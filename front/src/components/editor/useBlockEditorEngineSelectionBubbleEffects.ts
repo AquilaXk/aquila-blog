@@ -68,6 +68,17 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
     if (!currentEditor) return
     let rafId: number | null = null
     let codeDragSelectionPreserveRafId: number | null = null
+    let cleanupCodeDragSelectionPreserve: (() => void) | null = null
+    const clearImmediateWindowTextSelection = () => window.getSelection()?.removeAllRanges()
+    const cancelCodeDragSelectionPreserve = () => {
+      if (codeDragSelectionPreserveRafId !== null) {
+        window.cancelAnimationFrame(codeDragSelectionPreserveRafId)
+        codeDragSelectionPreserveRafId = null
+      }
+      cleanupCodeDragSelectionPreserve?.()
+      cleanupCodeDragSelectionPreserve = null
+      document.querySelectorAll("[data-code-drag-selection-text]").forEach((element) => element.removeAttribute("data-code-drag-selection-text"))
+    }
 
     const rememberTableTextDragStart = (event: MouseEvent | PointerEvent) => {
       if (event.button !== 0) return null
@@ -123,9 +134,8 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       const tableTextDragStart = tableTextDragStartRef.current
       if (!tableTextDragStart || tableTextDragStart.scrollPreserveStarted) return
       tableTextDragStart.scrollPreserveStarted = true
-      preserveWindowScrollPositionAcrossFrames(tableTextDragStart.scrollAnchor, 24, 4, 720, false, false)
+      preserveWindowScrollPositionAcrossFrames(tableTextDragStart.scrollAnchor, 72, 4, 1_120, false, false)
     }
-
     const isSelectionInsideCodeDragRoot = (root: HTMLElement) => {
       const selection = window.getSelection()
       if (!selection) return false
@@ -175,14 +185,9 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       const cleanupPreservedSelection = () => {
         document.removeEventListener("selectionchange", handlePreservedSelectionChange, true)
         window.removeEventListener("pointerdown", cancelPreservedSelection, true)
+        window.removeEventListener("mousedown", cancelPreservedSelection, true)
       }
-      const cancelPreservedSelection = () => {
-        if (codeDragSelectionPreserveRafId !== null) {
-          window.cancelAnimationFrame(codeDragSelectionPreserveRafId)
-        }
-        codeDragSelectionPreserveRafId = null
-        cleanupPreservedSelection()
-      }
+      const cancelPreservedSelection = () => cancelCodeDragSelectionPreserve()
       const restore = () => {
         if (!root.isConnected) {
           codeDragSelectionPreserveRafId = null
@@ -201,6 +206,8 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       }
       document.addEventListener("selectionchange", handlePreservedSelectionChange, true)
       window.addEventListener("pointerdown", cancelPreservedSelection, { capture: true, passive: true, once: true })
+      window.addEventListener("mousedown", cancelPreservedSelection, { capture: true, passive: true, once: true })
+      cleanupCodeDragSelectionPreserve = cleanupPreservedSelection
       restore()
     }
 
@@ -402,10 +409,10 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       const insideEditorDom = eventTarget instanceof Node && activeEditor.view.dom.contains(eventTarget)
       if (!insideEditorDom && !codeShellTarget) return
       if (codeShellTarget) {
-        const codeContentRoot = codeShellTarget.querySelector<HTMLElement>(".aq-code-editor-content")
+        cancelCodeDragSelectionPreserve()
         const codeSelectionRoot =
-          codeShellTarget.querySelector<HTMLElement>(".aq-code-highlight-layer") ?? codeContentRoot
-        codeShellTarget.removeAttribute("data-code-drag-selection-text")
+          codeShellTarget.querySelector<HTMLElement>(".aq-code-editor-content") ??
+          codeShellTarget.querySelector<HTMLElement>(".aq-code-highlight-layer")
         codeTextDragStartRef.current = codeSelectionRoot
           ? {
               root: codeSelectionRoot,
@@ -413,11 +420,13 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
               y: event.clientY,
             }
           : null
-        clearWindowTextSelection()
-        event.preventDefault()
-        event.stopPropagation()
+        clearImmediateWindowTextSelection()
       } else {
         codeTextDragStartRef.current = null
+        if (insideEditorDom) {
+          cancelCodeDragSelectionPreserve()
+          clearImmediateWindowTextSelection()
+        }
       }
       if (insideEditorDom) {
         rememberTableTextDragStart(event)
@@ -456,17 +465,12 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       const codeShellTarget = targetElement?.closest(".aq-code-shell")
       const insideEditorDom = eventTarget instanceof Node && activeEditor.view.dom.contains(eventTarget)
       if (!insideEditorDom && !codeShellTarget) return
-      if (codeTextDragStartRef.current && !codeShellTarget) {
-        event.preventDefault()
-        event.stopPropagation()
-        event.stopImmediatePropagation?.()
-        return
-      }
+      if (codeTextDragStartRef.current && !codeShellTarget) codeTextDragStartRef.current = null
       if (codeShellTarget) {
-        const codeContentRoot = codeShellTarget.querySelector<HTMLElement>(".aq-code-editor-content")
+        cancelCodeDragSelectionPreserve()
         const codeSelectionRoot =
-          codeShellTarget.querySelector<HTMLElement>(".aq-code-highlight-layer") ?? codeContentRoot
-        codeShellTarget.removeAttribute("data-code-drag-selection-text")
+          codeShellTarget.querySelector<HTMLElement>(".aq-code-editor-content") ??
+          codeShellTarget.querySelector<HTMLElement>(".aq-code-highlight-layer")
         codeTextDragStartRef.current = codeSelectionRoot
           ? {
               root: codeSelectionRoot,
@@ -474,7 +478,11 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
               y: event.clientY,
             }
           : null
-        clearWindowTextSelection()
+        clearImmediateWindowTextSelection()
+      } else if (insideEditorDom) {
+        codeTextDragStartRef.current = null
+        cancelCodeDragSelectionPreserve()
+        clearImmediateWindowTextSelection()
       }
       if (!insideEditorDom) return
       rememberTableTextDragStart(event)
@@ -491,7 +499,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       }
       if (!hasMovedTableTextDrag(event)) return
       preserveActiveTableTextDragScroll()
-      if (restoreActiveTableTextDragSelection(true)) {
+      if (restoreActiveTableTextDragSelection(true, true)) {
         syncBubbleOnMouseUpRef.current = true
       }
     }
@@ -502,16 +510,16 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       }
       if (!hasMovedTableTextDrag(event)) return
       preserveActiveTableTextDragScroll()
-      if (restoreActiveTableTextDragSelection(true)) {
+      if (restoreActiveTableTextDragSelection(true, true)) {
         syncBubbleOnMouseUpRef.current = true
       }
     }
 
-    const handleWindowPointerUp = (event: PointerEvent) => {
+    const completeTextDragSelection = (event: PointerEvent | MouseEvent) => {
       const tableTextDragStart = tableTextDragStartRef.current
       const codeTextDragStart = codeTextDragStartRef.current
       if (!mouseTextSelectionInProgressRef.current && !tableTextDragStart && !codeTextDragStart) return
-      if (event.pointerType && event.pointerType !== "mouse") return
+      if ("pointerType" in event && event.pointerType && event.pointerType !== "mouse") return
       const activeEditor = editorRef.current ?? currentEditor
       const tableTextDragMoved = hasMovedTableTextDrag(event)
       if (hasMovedCodeTextDrag(event)) {
@@ -543,8 +551,9 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
     window.addEventListener("resize", scheduleSyncBubble, { passive: true })
     window.addEventListener("pointermove", handleWindowPointerMove, true)
     window.addEventListener("mousemove", handleWindowMouseMove, true)
-    window.addEventListener("pointerup", handleWindowPointerUp, true)
-    window.addEventListener("pointercancel", handleWindowPointerUp, true)
+    window.addEventListener("pointerup", completeTextDragSelection, true)
+    window.addEventListener("pointercancel", completeTextDragSelection, true)
+    window.addEventListener("mouseup", completeTextDragSelection, true)
     return () => {
       currentEditor.off("selectionUpdate", scheduleSyncBubble)
       currentEditor.off("focus", scheduleSyncBubble)
@@ -555,14 +564,13 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       window.removeEventListener("resize", scheduleSyncBubble)
       window.removeEventListener("pointermove", handleWindowPointerMove, true)
       window.removeEventListener("mousemove", handleWindowMouseMove, true)
-      window.removeEventListener("pointerup", handleWindowPointerUp, true)
-      window.removeEventListener("pointercancel", handleWindowPointerUp, true)
+      window.removeEventListener("pointerup", completeTextDragSelection, true)
+      window.removeEventListener("pointercancel", completeTextDragSelection, true)
+      window.removeEventListener("mouseup", completeTextDragSelection, true)
       if (rafId !== null && typeof window !== "undefined") {
         window.cancelAnimationFrame(rafId)
       }
-      if (codeDragSelectionPreserveRafId !== null && typeof window !== "undefined") {
-        window.cancelAnimationFrame(codeDragSelectionPreserveRafId)
-      }
+      cancelCodeDragSelectionPreserve()
       mouseTextSelectionInProgressRef.current = false
       syncBubbleOnMouseUpRef.current = false
       tableTextDragStartRef.current = null

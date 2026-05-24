@@ -12,20 +12,8 @@ test.describe("editor authoring list affordances", () => {
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     const blockSelectionOverlay = page.getByTestId("keyboard-block-selection-overlay")
-    await editor.click()
-    await page.getByRole("button", { name: "목록" }).first().click()
-    await page.keyboard.type("1단계")
-    await page.keyboard.press("Enter")
-    await page.keyboard.type("2단계")
-    await page.keyboard.press("Enter")
-    await page.keyboard.type("3단계")
-
-    await editor.locator("li", { hasText: /^2단계$/ }).locator("p").first().click()
-    await page.keyboard.press("Tab")
-    await editor.locator("li", { hasText: /^3단계$/ }).locator("p").first().click()
-    await page.keyboard.press("Tab")
-    await page.keyboard.press("Tab")
-    await expect(blockSelectionOverlay).toHaveCount(0)
+    const clickListItemParagraph = (label: string) =>
+      editor.locator("li > p", { hasText: new RegExp(`^${label}$`) }).last().click()
     const countOwnLabel = (label: string) =>
       page.evaluate((targetLabel) => {
         const readOwnLabel = (item: HTMLElement) =>
@@ -39,11 +27,49 @@ test.describe("editor authoring list affordances", () => {
           document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")
         ).filter((item) => readOwnLabel(item) === targetLabel).length
       }, label)
+    const hasNestedChild = (parentLabel: string, childLabel: string) =>
+      page.evaluate(
+        ({ childLabel: expectedChildLabel, parentLabel: expectedParentLabel }) => {
+          const readOwnLabel = (item: HTMLElement) =>
+            Array.from(item.childNodes)
+              .filter((node) => !(node instanceof HTMLElement && ["UL", "OL"].includes(node.tagName)))
+              .map((node) => node.textContent || "")
+              .join(" ")
+              .replace(/\s+/g, " ")
+              .trim()
+          return Array.from(
+            document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")
+          ).some(
+            (item) =>
+              readOwnLabel(item) === expectedParentLabel &&
+              Array.from(item.querySelectorAll<HTMLElement>("li")).some(
+                (child) => readOwnLabel(child) === expectedChildLabel
+              )
+          )
+        },
+        { childLabel, parentLabel }
+      )
+    await editor.click()
+    await page.getByRole("button", { name: "목록" }).first().click()
+    await page.keyboard.type("1단계")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("2단계")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("3단계")
+
+    await clickListItemParagraph("2단계")
+    await page.keyboard.press("Tab")
+    await clickListItemParagraph("3단계")
+    await page.keyboard.press("Tab")
+    await expect.poll(() => countOwnLabel("3단계")).toBe(1)
+    await page.keyboard.press("Tab")
+    await expect.poll(() => hasNestedChild("2단계", "3단계")).toBe(true)
+    await expect(blockSelectionOverlay).toHaveCount(0)
     await expect.poll(() => countOwnLabel("1단계")).toBe(1)
     await expect.poll(() => countOwnLabel("2단계")).toBe(1)
     await expect.poll(() => countOwnLabel("3단계")).toBe(1)
 
-    await editor.locator("li", { hasText: /^3단계$/ }).locator("p").first().click()
+    await clickListItemParagraph("3단계")
     await page.keyboard.press("Shift+Tab")
     await expect(blockSelectionOverlay).toHaveCount(0)
     await expect.poll(() => countOwnLabel("3단계")).toBe(1)
@@ -54,20 +80,8 @@ test.describe("editor authoring list affordances", () => {
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     const blockSelectionOverlay = page.getByTestId("keyboard-block-selection-overlay")
-    await editor.click()
-    await page.getByRole("button", { name: "목록" }).first().click()
-    await page.keyboard.type("1단계")
-    await page.keyboard.press("Enter")
-    await page.keyboard.type("2단계")
-    await page.keyboard.press("Enter")
-    await page.keyboard.type("3단계")
-
-    await editor.locator("li", { hasText: /^2단계$/ }).locator("p").first().click()
-    await page.keyboard.press("Tab")
-    await editor.locator("li", { hasText: /^3단계$/ }).locator("p").first().click()
-    await page.keyboard.press("Tab")
-    await page.keyboard.press("Tab")
-    await expect(blockSelectionOverlay).toHaveCount(0)
+    const clickListItemParagraph = (label: string) =>
+      editor.locator("li > p", { hasText: new RegExp(`^${label}$`) }).last().click()
     const countOwnLabel = (label: string) =>
       page.evaluate((targetLabel) => {
         const readOwnLabel = (item: HTMLElement) =>
@@ -81,11 +95,49 @@ test.describe("editor authoring list affordances", () => {
           document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")
         ).filter((item) => readOwnLabel(item) === targetLabel).length
       }, label)
+    const hasNestedChild = (parentLabel: string, childLabel: string) =>
+      page.evaluate(
+        ({ childLabel: expectedChildLabel, parentLabel: expectedParentLabel }) => {
+          const readOwnLabel = (item: HTMLElement) =>
+            Array.from(item.childNodes)
+              .filter((node) => !(node instanceof HTMLElement && ["UL", "OL"].includes(node.tagName)))
+              .map((node) => node.textContent || "")
+              .join(" ")
+              .replace(/\s+/g, " ")
+              .trim()
+          return Array.from(
+            document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")
+          ).some(
+            (item) =>
+              readOwnLabel(item) === expectedParentLabel &&
+              Array.from(item.querySelectorAll<HTMLElement>("li")).some(
+                (child) => readOwnLabel(child) === expectedChildLabel
+              )
+          )
+        },
+        { childLabel, parentLabel }
+      )
+    await editor.click()
+    await page.getByRole("button", { name: "목록" }).first().click()
+    await page.keyboard.type("1단계")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("2단계")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("3단계")
+
+    await clickListItemParagraph("2단계")
+    await page.keyboard.press("Tab")
+    await clickListItemParagraph("3단계")
+    await page.keyboard.press("Tab")
+    await expect.poll(() => countOwnLabel("3단계")).toBe(1)
+    await page.keyboard.press("Tab")
+    await expect.poll(() => hasNestedChild("2단계", "3단계")).toBe(true)
+    await expect(blockSelectionOverlay).toHaveCount(0)
     await expect.poll(() => countOwnLabel("1단계")).toBe(1)
     await expect.poll(() => countOwnLabel("2단계")).toBe(1)
     await expect.poll(() => countOwnLabel("3단계")).toBe(1)
 
-    await editor.locator("li", { hasText: /^3단계$/ }).locator("p").first().click()
+    await clickListItemParagraph("3단계")
     await page.keyboard.press("Shift+Tab")
     await expect(blockSelectionOverlay).toHaveCount(0)
     await expect.poll(() => countOwnLabel("3단계")).toBe(1)

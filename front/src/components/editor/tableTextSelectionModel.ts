@@ -1,4 +1,5 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
+import { preserveWindowScrollForRichBlockSelectAll } from "./blockHandleLayoutModel"
 
 export const isPrimarySelectAllKeyboardEvent = (event: KeyboardEvent) => {
   if (event.defaultPrevented || event.altKey || event.shiftKey) return false
@@ -12,6 +13,23 @@ const resolveElement = (target: EventTarget | Node | null | undefined) => {
   return null
 }
 
+let lastActiveTableCell: HTMLElement | null = null
+
+export const rememberActiveTableCellFromTarget = (
+  eventTarget: EventTarget | Node | null | undefined,
+  editorRoot?: HTMLElement | null
+) => {
+  const targetElement = resolveElement(eventTarget)
+  const cell = targetElement?.closest("th, td")
+  if (cell instanceof HTMLElement && (!editorRoot || editorRoot.contains(cell))) {
+    lastActiveTableCell = cell
+    return
+  }
+  if (editorRoot && targetElement && editorRoot.contains(targetElement)) {
+    lastActiveTableCell = null
+  }
+}
+
 export const selectActiveTableCellText = (
   editor: TiptapEditor,
   eventTarget: EventTarget | null
@@ -23,16 +41,19 @@ export const selectActiveTableCellText = (
   const activeElement = resolveElement(document.activeElement)
   const anchorElement = resolveElement(selection.anchorNode)
   const targetElement = resolveElement(eventTarget)
+  const rememberedCell = lastActiveTableCell?.isConnected ? lastActiveTableCell : null
   const cell =
-    anchorElement?.closest("th, td") ??
+    targetElement?.closest("th, td") ??
     activeElement?.closest("th, td") ??
-    targetElement?.closest("th, td")
+    rememberedCell ??
+    anchorElement?.closest("th, td")
 
   if (!(cell instanceof HTMLElement)) return false
   if (!editor.view.dom.contains(cell)) return false
 
   const range = document.createRange()
   range.selectNodeContents(cell)
+  preserveWindowScrollForRichBlockSelectAll()
   selection.removeAllRanges()
   selection.addRange(range)
   return true

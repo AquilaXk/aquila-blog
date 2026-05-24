@@ -29,6 +29,48 @@ export const selectDomTextContents = (root: HTMLElement | null) => {
   return true
 }
 
+export const selectDomTextOffsetRange = (
+  root: HTMLElement | null,
+  fromOffset: number,
+  toOffset: number
+) => {
+  if (!root) return false
+  const selection = window.getSelection()
+  if (!selection) return false
+
+  const textLength = root.textContent?.length ?? 0
+  const startOffset = Math.max(0, Math.min(textLength, Math.min(fromOffset, toOffset)))
+  const endOffset = Math.max(0, Math.min(textLength, Math.max(fromOffset, toOffset)))
+  if (startOffset === endOffset) return false
+
+  const resolveTextPosition = (offset: number) => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    let remaining = offset
+    let current = walker.nextNode()
+    while (current) {
+      const currentLength = current.textContent?.length ?? 0
+      if (remaining <= currentLength) {
+        return { node: current, offset: remaining }
+      }
+      remaining -= currentLength
+      current = walker.nextNode()
+    }
+    return null
+  }
+
+  const start = resolveTextPosition(startOffset)
+  const end = resolveTextPosition(endOffset)
+  if (!start || !end) return false
+
+  const range = document.createRange()
+  range.setStart(start.node, start.offset)
+  range.setEnd(end.node, end.offset)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  root.focus()
+  return true
+}
+
 export const selectCodeBlockText = ({ editor, getPos, nodeSize }: CodeBlockPositionArgs) => {
   if (typeof getPos !== "function") return false
   const codeBlockPos = getPos()

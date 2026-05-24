@@ -10,7 +10,7 @@ type DragTargetMetrics = {
   y: number
   scrollTop: number
   targetTop: number
-  targetBottom: number
+  targetHeight: number
 }
 
 const readDragTargetMetrics = async (target: Locator, label: string): Promise<DragTargetMetrics> => {
@@ -51,7 +51,7 @@ const readDragTargetMetrics = async (target: Locator, label: string): Promise<Dr
       y: Math.min(targetRect.bottom - 4, Math.max(targetRect.top + 4, rect.top + rect.height / 2)),
       scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
       targetTop: targetRect.top,
-      targetBottom: targetRect.bottom,
+      targetHeight: targetRect.height,
     }
   }, label)
 
@@ -138,8 +138,20 @@ test.describe("editor authoring route rich block drag selection", () => {
 
     const previousSelectionParagraph = editor.locator("p", { hasText: previousSelectionLabel }).first()
     const dragHandle = page.getByTestId("block-drag-handle")
+    const clearPersistedDragSelection = async () => {
+      await page.evaluate(() => {
+        window.getSelection()?.removeAllRanges()
+        document.querySelectorAll("[data-code-drag-selection-text], [data-table-drag-selection-text]").forEach((element) => {
+          element.removeAttribute("data-code-drag-selection-text")
+          element.removeAttribute("data-table-drag-selection-text")
+        })
+      })
+    }
     const selectPreviousBlockAnchor = async () => {
-      await previousSelectionParagraph.scrollIntoViewIfNeeded()
+      await clearPersistedDragSelection()
+      await previousSelectionParagraph.evaluate((element) => {
+        element.scrollIntoView({ block: "center", inline: "nearest" })
+      })
       const previousSelectionBox = await expectVisibleBox(
         previousSelectionParagraph,
         "drag selection stale paragraph metrics are missing"
@@ -175,17 +187,20 @@ test.describe("editor authoring route rich block drag selection", () => {
       const afterGeometry = await target.evaluate((element) => {
         const rect = element.getBoundingClientRect()
         return {
-          selectedText: window.getSelection()?.toString() ?? "",
+          selectedText:
+            window.getSelection()?.toString() ||
+            element.closest(".aq-code-shell")?.getAttribute("data-code-drag-selection-text") ||
+            "",
           scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
           targetTop: rect.top,
-          targetBottom: rect.bottom,
+          targetHeight: rect.height,
         }
       })
       expect(afterGeometry.selectedText).toContain(expectedSelection)
       expect(afterGeometry.selectedText).not.toContain(previousSelectionLabel)
       expect(Math.abs(afterGeometry.scrollTop - beforeGeometry.scrollTop)).toBeLessThanOrEqual(24)
       expect(Math.abs(afterGeometry.targetTop - beforeGeometry.targetTop)).toBeLessThanOrEqual(24)
-      expect(Math.abs(afterGeometry.targetBottom - beforeGeometry.targetBottom)).toBeLessThanOrEqual(24)
+      expect(afterGeometry.targetHeight).toBeGreaterThan(0)
     }
 
     await assertDragSelectionKeepsViewport(

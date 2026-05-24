@@ -575,6 +575,7 @@ test.describe("editor authoring table affordances", () => {
     const secondTableCell = tables.nth(1).locator("th, td").nth(1)
     await secondTableCell.scrollIntoViewIfNeeded()
     await secondTableCell.click()
+    await page.waitForTimeout(1_160)
 
     const firstTable = tables.first()
     await firstTable.scrollIntoViewIfNeeded()

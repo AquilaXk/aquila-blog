@@ -109,7 +109,9 @@
     "prismjs": "1.30.0",
     "readdirp/picomatch": "2.3.2",
     "rimraf/glob/minimatch": "3.1.5",
+    "qs": "6.15.2",
     "tinyglobby/picomatch": "4.0.4",
+    "uuid": "11.1.1",
     "yaml": "1.10.3"
   },
   "devDependencies": {

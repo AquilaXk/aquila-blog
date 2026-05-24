@@ -13,6 +13,8 @@ import {
 
 type SetState<T> = Dispatch<SetStateAction<T>>
 
+const CODE_BLOCK_EDITOR_CONTENT_SELECTOR = ".aq-code-editor-content"
+
 type UseBlockEditorEngineSelectionBubbleEffectsArgs = {
   bubbleToolbarHoveredRef: RefObject<boolean>
   cancelBubbleHide: () => void
@@ -75,7 +77,18 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
             ? range.commonAncestorContainer
             : range?.commonAncestorContainer?.parentElement ?? null
 
-        if (range && domSelection && !domSelection.isCollapsed && commonAncestor && activeEditor.view.dom.contains(commonAncestor)) {
+        const isCodeBlockNodeViewSelection = Boolean(
+          commonAncestor?.closest(CODE_BLOCK_EDITOR_CONTENT_SELECTOR)
+        )
+
+        if (
+          range &&
+          domSelection &&
+          !domSelection.isCollapsed &&
+          commonAncestor &&
+          activeEditor.view.dom.contains(commonAncestor) &&
+          !isCodeBlockNodeViewSelection
+        ) {
           const syncPmSelectionFromRange = (from: number, to: number) => {
             if (!Number.isFinite(from) || !Number.isFinite(to) || from === to) return false
             const nextSelection = TextSelection.create(

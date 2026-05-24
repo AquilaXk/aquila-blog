@@ -113,10 +113,14 @@ export const preserveWindowScrollAcrossFrames = (frames = 6, tolerance = 4, minD
   }
   const cleanup = () => {
     window.removeEventListener("wheel", cancel, true)
+    window.removeEventListener("pointermove", cancel, true)
+    window.removeEventListener("mousemove", cancel, true)
     window.removeEventListener("touchmove", cancel, true)
     window.removeEventListener("keydown", cancel, true)
   }
   window.addEventListener("wheel", cancel, { capture: true, passive: true, once: true })
+  window.addEventListener("pointermove", cancel, { capture: true, passive: true, once: true })
+  window.addEventListener("mousemove", cancel, { capture: true, passive: true, once: true })
   window.addEventListener("touchmove", cancel, { capture: true, passive: true, once: true })
   window.addEventListener("keydown", cancel, { capture: true, once: true })
   const restore = () => {

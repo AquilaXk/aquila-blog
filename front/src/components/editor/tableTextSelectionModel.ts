@@ -18,8 +18,8 @@ const resolveElement = (target: EventTarget | Node | null | undefined) => {
 }
 
 let lastActiveTableCell: HTMLElement | null = null
-const TABLE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES = 72
-const TABLE_TEXT_DRAG_SCROLL_PRESERVE_MIN_MS = 1_120
+const TABLE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES = 168
+const TABLE_TEXT_DRAG_SCROLL_PRESERVE_MIN_MS = 2_800
 
 export const rememberActiveTableCellFromTarget = (
   eventTarget: EventTarget | Node | null | undefined,
@@ -93,19 +93,6 @@ export const restoreTableCellTextSelectionIfEscaped = (
   }
   if (!hasTextSelection && !restoreWhenEmpty) return false
 
-  const anchorCell = anchorElement?.closest("th, td")
-  const focusCell = focusElement?.closest("th, td")
-  const startedTable = startedCell.closest("table")
-  if (
-    hasTextSelection &&
-    !forceStartedCellSelection &&
-    startedTable &&
-    ((anchorCell && startedTable.contains(anchorCell)) ||
-      (focusCell && startedTable.contains(focusCell)))
-  ) {
-    return false
-  }
-
   const range = document.createRange()
   range.selectNodeContents(startedCell)
   selection.removeAllRanges()
@@ -124,4 +111,27 @@ export const restoreTableCellTextSelectionIfEscaped = (
     preserveWindowScrollForRichBlockSelectAll()
   }
   return true
+}
+
+export const preserveTableCellTextSelectionAcrossFrames = (
+  editor: TiptapEditor,
+  startedCell: HTMLElement,
+  scrollAnchor: WindowScrollAnchor
+) => {
+  const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now()
+  let frame = 0
+  let cancelled = false
+  const cancel = () => { cancelled = true }
+  window.addEventListener("pointerdown", cancel, { capture: true, once: true })
+  window.addEventListener("mousedown", cancel, { capture: true, once: true })
+  const restore = () => {
+    if (cancelled) return
+    restoreTableCellTextSelectionIfEscaped(editor, startedCell, scrollAnchor, true, true)
+    frame += 1
+    const elapsedMs = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt
+    if (startedCell.isConnected && (frame < TABLE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES || elapsedMs < TABLE_TEXT_DRAG_SCROLL_PRESERVE_MIN_MS)) {
+      window.requestAnimationFrame(restore)
+    }
+  }
+  restore()
 }

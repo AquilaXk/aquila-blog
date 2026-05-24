@@ -1,5 +1,9 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
-import { preserveWindowScrollForRichBlockSelectAll } from "./blockHandleLayoutModel"
+import {
+  preserveWindowScrollForRichBlockSelectAll,
+  preserveWindowScrollPositionAcrossFrames,
+  type WindowScrollAnchor,
+} from "./blockHandleLayoutModel"
 
 export const isPrimarySelectAllKeyboardEvent = (event: KeyboardEvent) => {
   if (event.defaultPrevented || event.altKey || event.shiftKey) return false
@@ -14,6 +18,8 @@ const resolveElement = (target: EventTarget | Node | null | undefined) => {
 }
 
 let lastActiveTableCell: HTMLElement | null = null
+const TABLE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES = 24
+const TABLE_TEXT_DRAG_SCROLL_PRESERVE_MIN_MS = 720
 
 export const rememberActiveTableCellFromTarget = (
   eventTarget: EventTarget | Node | null | undefined,
@@ -56,5 +62,66 @@ export const selectActiveTableCellText = (
   preserveWindowScrollForRichBlockSelectAll()
   selection.removeAllRanges()
   selection.addRange(range)
+  return true
+}
+
+export const restoreTableCellTextSelectionIfEscaped = (
+  editor: TiptapEditor,
+  startedCell: HTMLElement | null,
+  scrollAnchor?: WindowScrollAnchor | null,
+  restoreWhenEmpty = false,
+  forceStartedCellSelection = false
+) => {
+  if (typeof window === "undefined" || typeof document === "undefined") return false
+  if (!startedCell?.isConnected || !editor.view.dom.contains(startedCell)) return false
+
+  const selection = window.getSelection()
+  if (!selection) return false
+
+  const anchorElement = resolveElement(selection.anchorNode)
+  const focusElement = resolveElement(selection.focusNode)
+  const hasTextSelection = selection.toString().trim().length > 0
+  if (
+    hasTextSelection &&
+    ((anchorElement && startedCell.contains(anchorElement)) ||
+      (focusElement && startedCell.contains(focusElement)))
+  ) {
+    startedCell.setAttribute("data-table-drag-selection-text", selection.toString())
+    if (!forceStartedCellSelection) {
+      return true
+    }
+  }
+  if (!hasTextSelection && !restoreWhenEmpty) return false
+
+  const anchorCell = anchorElement?.closest("th, td")
+  const focusCell = focusElement?.closest("th, td")
+  const startedTable = startedCell.closest("table")
+  if (
+    hasTextSelection &&
+    !forceStartedCellSelection &&
+    startedTable &&
+    ((anchorCell && startedTable.contains(anchorCell)) ||
+      (focusCell && startedTable.contains(focusCell)))
+  ) {
+    return false
+  }
+
+  const range = document.createRange()
+  range.selectNodeContents(startedCell)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  startedCell.setAttribute("data-table-drag-selection-text", selection.toString())
+  if (scrollAnchor) {
+    preserveWindowScrollPositionAcrossFrames(
+      scrollAnchor,
+      TABLE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES,
+      4,
+      TABLE_TEXT_DRAG_SCROLL_PRESERVE_MIN_MS,
+      false,
+      false
+    )
+  } else {
+    preserveWindowScrollForRichBlockSelectAll()
+  }
   return true
 }

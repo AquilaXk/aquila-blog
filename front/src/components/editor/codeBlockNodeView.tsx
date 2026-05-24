@@ -1,9 +1,11 @@
 import CodeBlock from "@tiptap/extension-code-block"
-import { NodeSelection } from "@tiptap/pm/state"
+import { NodeSelection, TextSelection } from "@tiptap/pm/state"
 import { NodeViewContent, type NodeViewProps, ReactNodeViewRenderer } from "@tiptap/react"
 import {
   ClipboardEvent as ReactClipboardEvent,
   KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
   useId,
@@ -50,11 +52,19 @@ export { CodeBlockEditorStyles } from "./codeBlockNodeViewStyles"
 
 let lastActiveCodeBlockContentRoot: HTMLElement | null = null
 
+type CodeDragSelectionSession = {
+  active: boolean
+  anchorPos: number
+  startX: number
+  startY: number
+}
+
 export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos }: NodeViewProps) => {
   const menuId = useId()
   const menuRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const shellRef = useRef<HTMLDivElement>(null)
+  const codeDragSelectionRef = useRef<CodeDragSelectionSession | null>(null)
   const [draftLanguage, setDraftLanguage] = useState(normalizeCodeLanguage(String(node.attrs?.language || "")))
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false)
   const [languageSearch, setLanguageSearch] = useState("")
@@ -71,6 +81,170 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
     () => selectCodeBlockText({ editor, getPos, nodeSize: node.nodeSize }),
     [editor, getPos, node.nodeSize]
   )
+
+  const resolveCodeTextPosFromPointer = useCallback(
+    (clientX: number, clientY: number, contentRoot: HTMLElement | null) => {
+      if (typeof getPos !== "function") return
+      const codeBlockPos = getPos()
+      if (typeof codeBlockPos !== "number") return
+      const from = codeBlockPos + 1
+      const to = codeBlockPos + Math.max(1, node.nodeSize - 1)
+      let pointerPos: number | null = null
+      const ownerDocument = editor.view.dom.ownerDocument as Document & {
+        caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null
+        caretRangeFromPoint?: (x: number, y: number) => Range | null
+      }
+      const caretPosition = ownerDocument.caretPositionFromPoint?.(clientX, clientY)
+      const caretRange = caretPosition ? null : ownerDocument.caretRangeFromPoint?.(clientX, clientY)
+      const caretNode = caretPosition?.offsetNode ?? caretRange?.startContainer ?? null
+      const caretOffset = caretPosition?.offset ?? caretRange?.startOffset ?? null
+      const measureTextOffset = (root: Node, node: Node, offset: number) => {
+        const range = ownerDocument.createRange()
+        range.setStart(root, 0)
+        range.setEnd(node, offset)
+        return range.toString().length
+      }
+      const resolveContentTextDomPosition = (offset: number) => {
+        if (!contentRoot) return null
+        const walker = ownerDocument.createTreeWalker(contentRoot, NodeFilter.SHOW_TEXT)
+        let remaining = offset
+        let current = walker.nextNode()
+        while (current) {
+          const textLength = current.textContent?.length ?? 0
+          if (remaining <= textLength) {
+            return { node: current, offset: remaining }
+          }
+          remaining -= textLength
+          current = walker.nextNode()
+        }
+        return null
+      }
+      const resolveHighlightTextOffset = (node: Node, offset: number) => {
+        if (!contentRoot) return null
+        const highlightRoot = contentRoot
+          .closest(".aq-code-shell")
+          ?.querySelector<HTMLElement>(".aq-code-highlight-layer")
+        if (!highlightRoot?.contains(node)) return null
+        const highlightOffset = measureTextOffset(highlightRoot, node, offset)
+        const contentText = contentRoot.textContent ?? ""
+        const highlightText = highlightRoot.textContent ?? ""
+        const contentBaseOffset = highlightText ? Math.max(0, contentText.indexOf(highlightText)) : 0
+        return Math.min(contentText.length, contentBaseOffset + highlightOffset)
+      }
+
+      if (contentRoot && caretNode && typeof caretOffset === "number" && contentRoot.contains(caretNode)) {
+        try {
+          pointerPos = editor.view.posAtDOM(caretNode, caretOffset)
+        } catch {
+          pointerPos = null
+        }
+      }
+
+      if (pointerPos === null && caretNode && typeof caretOffset === "number") {
+        const highlightTextOffset = resolveHighlightTextOffset(caretNode, caretOffset)
+        const contentPosition =
+          typeof highlightTextOffset === "number"
+            ? resolveContentTextDomPosition(highlightTextOffset)
+            : null
+        if (contentPosition) {
+          try {
+            pointerPos = editor.view.posAtDOM(contentPosition.node, contentPosition.offset)
+          } catch {
+            pointerPos = null
+          }
+        }
+      }
+
+      if (pointerPos === null) {
+        const coords = editor.view.posAtCoords({ left: clientX, top: clientY })
+        pointerPos = coords?.pos ?? null
+      }
+
+      if (pointerPos === null) return
+      return Math.min(Math.max(pointerPos, from), to)
+    },
+    [editor, getPos, node.nodeSize]
+  )
+
+  const applyCodeTextSelection = useCallback(
+    (anchorPos: number, headPos: number) => {
+      const nextSelection = TextSelection.create(
+        editor.state.doc,
+        Math.min(anchorPos, headPos),
+        Math.max(anchorPos, headPos)
+      )
+      if (nextSelection.eq(editor.state.selection)) return
+      editor.view.dispatch(editor.state.tr.setSelection(nextSelection))
+    },
+    [editor]
+  )
+
+  const handleCodePointerDownCapture = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const contentRoot =
+        shellRef.current?.querySelector<HTMLElement>(".aq-code-editor-content") ?? null
+      lastActiveCodeBlockContentRoot = contentRoot
+    },
+    []
+  )
+
+  const handleCodeMouseDownCapture = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      const contentRoot =
+        shellRef.current?.querySelector<HTMLElement>(".aq-code-editor-content") ?? null
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+      if (!contentRoot || !(event.target instanceof Node) || !contentRoot.contains(event.target)) return
+      const anchorPos = resolveCodeTextPosFromPointer(event.clientX, event.clientY, contentRoot)
+      if (typeof anchorPos !== "number") return
+      event.preventDefault()
+      event.stopPropagation()
+      lastActiveCodeBlockContentRoot = contentRoot
+      codeDragSelectionRef.current = {
+        active: false,
+        anchorPos,
+        startX: event.clientX,
+        startY: event.clientY,
+      }
+      applyCodeTextSelection(anchorPos, anchorPos)
+      focusElementWithoutScroll(editor.view.dom as HTMLElement)
+    },
+    [applyCodeTextSelection, editor.view.dom, resolveCodeTextPosFromPointer]
+  )
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const handleWindowMouseMove = (event: MouseEvent) => {
+      const session = codeDragSelectionRef.current
+      if (!session) return
+      const contentRoot =
+        shellRef.current?.querySelector<HTMLElement>(".aq-code-editor-content") ?? null
+      const headPos = resolveCodeTextPosFromPointer(event.clientX, event.clientY, contentRoot)
+      if (typeof headPos !== "number") return
+      const distance = Math.hypot(event.clientX - session.startX, event.clientY - session.startY)
+      if (!session.active && distance < 3) return
+      session.active = true
+      event.preventDefault()
+      event.stopPropagation()
+      applyCodeTextSelection(session.anchorPos, headPos)
+    }
+
+    const handleWindowMouseUp = (event: MouseEvent) => {
+      const session = codeDragSelectionRef.current
+      if (!session) return
+      codeDragSelectionRef.current = null
+      if (!session.active) return
+      event.preventDefault()
+      event.stopPropagation()
+    }
+
+    window.addEventListener("mousemove", handleWindowMouseMove, true)
+    window.addEventListener("mouseup", handleWindowMouseUp, true)
+    return () => {
+      window.removeEventListener("mousemove", handleWindowMouseMove, true)
+      window.removeEventListener("mouseup", handleWindowMouseUp, true)
+    }
+  }, [applyCodeTextSelection, resolveCodeTextPosFromPointer])
 
   const ensureCodeDomTextSelection = useCallback((contentRoot: HTMLElement | null) => {
     if (!contentRoot || typeof window === "undefined") return
@@ -330,10 +504,8 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
         <div
           ref={shellRef}
           className="aq-code-shell"
-          onPointerDownCapture={() => {
-            lastActiveCodeBlockContentRoot =
-              shellRef.current?.querySelector<HTMLElement>(".aq-code-editor-content") ?? null
-          }}
+          onPointerDownCapture={handleCodePointerDownCapture}
+          onMouseDownCapture={handleCodeMouseDownCapture}
           onKeyDownCapture={handleCodeKeyDown}
           onPaste={handleCodePaste}
         >

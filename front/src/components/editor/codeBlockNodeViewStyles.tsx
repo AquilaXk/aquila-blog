@@ -291,8 +291,11 @@ export const CodeBlockEditorSurface = styled.div`
     z-index: 1;
     background: transparent;
     color: transparent !important;
+    cursor: text;
     caret-color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray12 : "#f8fafc")};
     text-shadow: none;
+    user-select: text;
+    -webkit-user-select: text;
     -webkit-text-fill-color: transparent !important;
   }
 
@@ -311,6 +314,8 @@ export const CodeBlockEditorSurface = styled.div`
     overflow-wrap: normal;
     word-break: normal;
     color: transparent !important;
+    user-select: text;
+    -webkit-user-select: text;
     -webkit-text-fill-color: transparent !important;
   }
 

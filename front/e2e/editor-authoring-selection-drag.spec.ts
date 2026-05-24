@@ -192,8 +192,12 @@ test.describe("editor authoring route text selection drag", () => {
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     await expectEditorToContainLoadedText(editor, tableLabel)
 
-    await dragSelectWord(page, editor.locator("p", { hasText: bodyLabel }).first(), bodyLabel)
     await expectCodeHighlightLayerAligned(page, codeLabel)
+    await page.setViewportSize({ width: 390, height: 720 })
+    await expectCodeHighlightLayerAligned(page, codeLabel)
+    await page.setViewportSize({ width: 980, height: 720 })
+
+    await dragSelectWord(page, editor.locator("p", { hasText: bodyLabel }).first(), bodyLabel)
     await dragSelectWord(page, editor.locator(".aq-code-editor-content", { hasText: codeLabel }).first(), codeLabel)
     await expectSelectionScopedToWord(page, codeLabel, [bodyLabel, tableLabel])
     await dragSelectWord(page, editor.locator("table th, table td", { hasText: tableLabel }).first(), tableLabel)

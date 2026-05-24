@@ -3,7 +3,7 @@ import type { Editor as TiptapEditor } from "@tiptap/core"
 export const isPrimarySelectAllKeyboardEvent = (event: KeyboardEvent) => {
   if (event.defaultPrevented || event.altKey || event.shiftKey) return false
   if (!(event.metaKey || event.ctrlKey)) return false
-  return event.key.toLowerCase() === "a"
+  return event.code === "KeyA" || event.key.toLowerCase() === "a"
 }
 
 const resolveElement = (target: EventTarget | Node | null | undefined) => {

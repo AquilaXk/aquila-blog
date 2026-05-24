@@ -345,6 +345,16 @@ export const CodeBlockEditorSurface = styled.div`
       line-height: 1.54;
       padding: 0.86rem 0.74rem 1.1rem;
     }
+
+    .aq-code-shell .aq-code-highlight-layer,
+    .aq-code-shell .aq-code-highlight-layer code {
+      font-size: 0.86rem;
+      line-height: 1.54;
+    }
+
+    .aq-code-shell .aq-code-highlight-layer .line {
+      min-height: 1.54em;
+    }
   }
 `
 

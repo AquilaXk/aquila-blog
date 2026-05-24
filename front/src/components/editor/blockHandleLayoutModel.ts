@@ -99,7 +99,12 @@ export const resolveBlockHandleRailLayoutForSurface = (
   }
 }
 
-export const preserveWindowScrollAcrossFrames = (frames = 6, tolerance = 4, minDurationMs = 0) => {
+export const preserveWindowScrollAcrossFrames = (
+  frames = 6,
+  tolerance = 4,
+  minDurationMs = 0,
+  cancelOnTextSelectionChange = false
+) => {
   if (typeof window === "undefined" || typeof document === "undefined") return
   const scrollingElement = document.scrollingElement
   const startX = window.scrollX
@@ -111,18 +116,26 @@ export const preserveWindowScrollAcrossFrames = (frames = 6, tolerance = 4, minD
     cancelled = true
     cleanup()
   }
+  const cancelForTextSelection = () => {
+    if (!cancelOnTextSelectionChange) return
+    cancel()
+  }
   const cleanup = () => {
     window.removeEventListener("wheel", cancel, true)
     window.removeEventListener("pointermove", cancel, true)
     window.removeEventListener("mousemove", cancel, true)
     window.removeEventListener("touchmove", cancel, true)
     window.removeEventListener("keydown", cancel, true)
+    document.removeEventListener("selectionchange", cancelForTextSelection, true)
   }
   window.addEventListener("wheel", cancel, { capture: true, passive: true, once: true })
   window.addEventListener("pointermove", cancel, { capture: true, passive: true, once: true })
   window.addEventListener("mousemove", cancel, { capture: true, passive: true, once: true })
   window.addEventListener("touchmove", cancel, { capture: true, passive: true, once: true })
   window.addEventListener("keydown", cancel, { capture: true, once: true })
+  if (cancelOnTextSelectionChange) {
+    document.addEventListener("selectionchange", cancelForTextSelection, true)
+  }
   const restore = () => {
     if (cancelled) return
     const currentY = scrollingElement?.scrollTop ?? window.scrollY
@@ -200,7 +213,8 @@ export const preserveWindowScrollForEditorPointerFocus = (
     preserveWindowScrollAcrossFrames(
       EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES,
       4,
-      EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MIN_MS
+      EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MIN_MS,
+      true
     )
   }
 }

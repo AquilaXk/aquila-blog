@@ -25,7 +25,7 @@ export const selectDomTextContents = (root: HTMLElement | null) => {
   range.selectNodeContents(root)
   selection.removeAllRanges()
   selection.addRange(range)
-  root.focus()
+  root.focus({ preventScroll: true })
   return true
 }
 
@@ -67,7 +67,7 @@ export const selectDomTextOffsetRange = (
   range.setEnd(end.node, end.offset)
   selection.removeAllRanges()
   selection.addRange(range)
-  root.focus()
+  root.focus({ preventScroll: true })
   return true
 }
 

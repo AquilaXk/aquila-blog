@@ -9,7 +9,7 @@ import {
   type WindowScrollAnchor,
 } from "./blockHandleLayoutModel"
 import { isTableSelectionActive } from "./tableStructureModel"
-import { restoreTableCellTextSelectionIfEscaped } from "./tableTextSelectionModel"
+import { preserveTableCellTextSelectionAcrossFrames, restoreTableCellTextSelectionIfEscaped } from "./tableTextSelectionModel"
 import {
   areFloatingBubbleStatesEqual,
   hideFloatingBubbleState,
@@ -20,6 +20,8 @@ import {
 type SetState<T> = Dispatch<SetStateAction<T>>
 
 const CODE_BLOCK_EDITOR_CONTENT_SELECTOR = ".aq-code-editor-content"
+const BLOCK_EDITOR_ROOT_SELECTOR = "[data-testid='block-editor-prosemirror'], .ProseMirror"
+const TABLE_TEXT_DRAG_CONTROL_SELECTOR = "[data-table-axis-rail='true'], [data-table-affordance], [data-table-menu-root='true'], [data-table-menu-trigger='true'], [data-testid^='table-column-resize-boundary-'], [data-testid='table-structure-menu-button'], [data-testid='table-corner-handle'], [data-testid='table-corner-grow-handle'], .column-resize-handle"
 
 type UseBlockEditorEngineSelectionBubbleEffectsArgs = {
   bubbleToolbarHoveredRef: RefObject<boolean>
@@ -58,9 +60,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
   tableMenuState,
   tryStartTableColumnResizeFromDomHandle,
 }: UseBlockEditorEngineSelectionBubbleEffectsArgs) => {
-  const tableTextDragStartRef = useRef<{
-    cell: HTMLElement; scrollPreserveStarted: boolean; scrollAnchor: WindowScrollAnchor; x: number; y: number
-  } | null>(null)
+  const tableTextDragStartRef = useRef<{ cell: HTMLElement; scrollPreserveStarted: boolean; scrollAnchor: WindowScrollAnchor; x: number; y: number } | null>(null)
   const codeTextDragStartRef = useRef<{ root: HTMLElement; x: number; y: number } | null>(null)
 
   useEffect(() => {
@@ -80,28 +80,27 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       document.querySelectorAll("[data-code-drag-selection-text]").forEach((element) => element.removeAttribute("data-code-drag-selection-text"))
     }
 
-    const rememberTableTextDragStart = (event: MouseEvent | PointerEvent) => {
+    const rememberTableTextDragStart = (event: MouseEvent | PointerEvent, allowTableControlCellFallback = false) => {
       if (event.button !== 0) return null
       const activeEditor = editorRef.current ?? currentEditor
       if (!activeEditor) return null
-      if (!(event.target instanceof Node) || !activeEditor.view.dom.contains(event.target)) {
+      const targetElement = event.target instanceof Element ? event.target : event.target instanceof Node ? event.target.parentElement : null
+      const pointElements = document.elementsFromPoint(event.clientX, event.clientY)
+      const pointInsideEditor = pointElements.some((element) => Boolean(element.closest(BLOCK_EDITOR_ROOT_SELECTOR)))
+      if (!(event.target instanceof Node) || (!activeEditor.view.dom.contains(event.target) && !targetElement?.closest(BLOCK_EDITOR_ROOT_SELECTOR) && !pointInsideEditor)) {
         tableTextDragStartRef.current = null
         return null
       }
-      const targetElement = event.target instanceof Element ? event.target : event.target.parentElement
-      const tableTextCell = targetElement?.closest("th, td")
-      const scrollAnchor = {
-        x: window.scrollX,
-        y: document.scrollingElement?.scrollTop ?? window.scrollY,
-      }
+      const pointElement = pointElements.find((element) => Boolean(element.closest("th, td"))) ?? document.elementFromPoint(event.clientX, event.clientY)
+      const tableTextCell = pointElement?.closest("th, td") ?? targetElement?.closest("th, td")
+      const tableControlTarget = targetElement?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR) ?? pointElements[0]?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR)
+      if (tableControlTarget && (!allowTableControlCellFallback || !(tableTextCell instanceof HTMLElement))) { tableTextDragStartRef.current = null; return null }
+      const scrollAnchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
       if (tableTextCell instanceof HTMLElement) {
         tableTextCell.removeAttribute("data-table-drag-selection-text")
         markNextEditorPointerAfterTable()
       }
-      tableTextDragStartRef.current =
-        tableTextCell instanceof HTMLElement
-          ? { cell: tableTextCell, scrollPreserveStarted: false, scrollAnchor, x: event.clientX, y: event.clientY }
-          : null
+      tableTextDragStartRef.current = tableTextCell instanceof HTMLElement ? { cell: tableTextCell, scrollPreserveStarted: false, scrollAnchor, x: event.clientX, y: event.clientY } : null
       return tableTextDragStartRef.current
     }
 
@@ -403,16 +402,18 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       const activeEditor = editorRef.current ?? currentEditor
       if (!activeEditor) return
       const eventTarget = event.target
-      const targetElement =
-        eventTarget instanceof Element ? eventTarget : eventTarget instanceof Node ? eventTarget.parentElement : null
+      const targetElement = eventTarget instanceof Element ? eventTarget : eventTarget instanceof Node ? eventTarget.parentElement : null
       const codeShellTarget = targetElement?.closest(".aq-code-shell")
-      const insideEditorDom = eventTarget instanceof Node && activeEditor.view.dom.contains(eventTarget)
+      const existingSelectionText = window.getSelection()?.toString().trim() ?? ""
+      const allowTableControlCellFallback = Boolean(existingSelectionText) && !isTableSelectionActive(activeEditor)
+      const targetTableControl = targetElement?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR)
+      const pointInsideEditor = !targetElement?.closest("[data-table-menu-root='true']") && (!targetTableControl || allowTableControlCellFallback) && document.elementsFromPoint(event.clientX, event.clientY).some((element) => Boolean(element.closest(BLOCK_EDITOR_ROOT_SELECTOR)))
+      const insideEditorDom = eventTarget instanceof Node && (activeEditor.view.dom.contains(eventTarget) || Boolean(targetElement?.closest(BLOCK_EDITOR_ROOT_SELECTOR)) || pointInsideEditor)
+      const tableTextDragStart = insideEditorDom ? rememberTableTextDragStart(event, allowTableControlCellFallback) : null
       if (!insideEditorDom && !codeShellTarget) return
       if (codeShellTarget) {
         cancelCodeDragSelectionPreserve()
-        const codeSelectionRoot =
-          codeShellTarget.querySelector<HTMLElement>(".aq-code-editor-content") ??
-          codeShellTarget.querySelector<HTMLElement>(".aq-code-highlight-layer")
+        const codeSelectionRoot = codeShellTarget.querySelector<HTMLElement>(".aq-code-editor-content") ?? codeShellTarget.querySelector<HTMLElement>(".aq-code-highlight-layer")
         codeTextDragStartRef.current = codeSelectionRoot
           ? {
               root: codeSelectionRoot,
@@ -425,19 +426,17 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         codeTextDragStartRef.current = null
         if (insideEditorDom) {
           cancelCodeDragSelectionPreserve()
-          clearImmediateWindowTextSelection()
+          if (!tableTextDragStart || !existingSelectionText) clearImmediateWindowTextSelection()
         }
       }
       if (insideEditorDom) {
-        rememberTableTextDragStart(event)
-        const blockSelectionActive = Boolean(
-          document.querySelector("[data-testid='keyboard-block-selection-overlay']")
-        )
-        preserveWindowScrollForEditorPointerFocus(
-          event.target,
-          isTableSelectionActive(activeEditor),
-          blockSelectionActive
-        )
+        if (tableTextDragStart && existingSelectionText) {
+          event.preventDefault()
+          event.stopPropagation()
+          restoreTableCellTextSelectionIfEscaped(activeEditor, tableTextDragStart.cell, tableTextDragStart.scrollAnchor, true, true)
+        }
+        const blockSelectionActive = Boolean(document.querySelector("[data-testid='keyboard-block-selection-overlay']"))
+        preserveWindowScrollForEditorPointerFocus(event.target, isTableSelectionActive(activeEditor), blockSelectionActive)
       }
       if (tryStartTableColumnResizeFromDomHandle(event.target, event.pointerId, event.clientX)) {
         event.preventDefault()
@@ -460,17 +459,15 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       const activeEditor = editorRef.current ?? currentEditor
       if (!activeEditor) return
       const eventTarget = event.target
-      const targetElement =
-        eventTarget instanceof Element ? eventTarget : eventTarget instanceof Node ? eventTarget.parentElement : null
+      const targetElement = eventTarget instanceof Element ? eventTarget : eventTarget instanceof Node ? eventTarget.parentElement : null
       const codeShellTarget = targetElement?.closest(".aq-code-shell")
-      const insideEditorDom = eventTarget instanceof Node && activeEditor.view.dom.contains(eventTarget)
+      const pointInsideEditor = !targetElement?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR) && document.elementsFromPoint(event.clientX, event.clientY).some((element) => Boolean(element.closest(BLOCK_EDITOR_ROOT_SELECTOR)))
+      const insideEditorDom = eventTarget instanceof Node && (activeEditor.view.dom.contains(eventTarget) || Boolean(targetElement?.closest(BLOCK_EDITOR_ROOT_SELECTOR)) || pointInsideEditor)
       if (!insideEditorDom && !codeShellTarget) return
       if (codeTextDragStartRef.current && !codeShellTarget) codeTextDragStartRef.current = null
       if (codeShellTarget) {
         cancelCodeDragSelectionPreserve()
-        const codeSelectionRoot =
-          codeShellTarget.querySelector<HTMLElement>(".aq-code-editor-content") ??
-          codeShellTarget.querySelector<HTMLElement>(".aq-code-highlight-layer")
+        const codeSelectionRoot = codeShellTarget.querySelector<HTMLElement>(".aq-code-editor-content") ?? codeShellTarget.querySelector<HTMLElement>(".aq-code-highlight-layer")
         codeTextDragStartRef.current = codeSelectionRoot
           ? {
               root: codeSelectionRoot,
@@ -485,7 +482,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         clearImmediateWindowTextSelection()
       }
       if (!insideEditorDom) return
-      rememberTableTextDragStart(event)
+      if (!tableTextDragStartRef.current) rememberTableTextDragStart(event)
       if (!targetElement?.closest(".column-resize-handle")) return
       event.preventDefault()
       event.stopPropagation()
@@ -498,6 +495,8 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         selectCodeDragRootWhenNativeSelectionIsMissing()
       }
       if (!hasMovedTableTextDrag(event)) return
+      event.preventDefault()
+      event.stopPropagation()
       preserveActiveTableTextDragScroll()
       if (restoreActiveTableTextDragSelection(true, true)) {
         syncBubbleOnMouseUpRef.current = true
@@ -509,6 +508,8 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         selectCodeDragRootWhenNativeSelectionIsMissing()
       }
       if (!hasMovedTableTextDrag(event)) return
+      event.preventDefault()
+      event.stopPropagation()
       preserveActiveTableTextDragScroll()
       if (restoreActiveTableTextDragSelection(true, true)) {
         syncBubbleOnMouseUpRef.current = true
@@ -525,12 +526,11 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       if (hasMovedCodeTextDrag(event)) {
         selectCodeDragRootWhenNativeSelectionIsMissing()
       }
-      if (
-        activeEditor &&
-          tableTextDragMoved &&
-          restoreActiveTableTextDragSelection(true, true)
-      ) {
+      if (activeEditor && tableTextDragStart && tableTextDragMoved && restoreActiveTableTextDragSelection(true, true)) {
+        event.preventDefault()
+        event.stopPropagation()
         preserveActiveTableTextDragScroll()
+        preserveTableCellTextSelectionAcrossFrames(activeEditor, tableTextDragStart.cell, tableTextDragStart.scrollAnchor)
         syncBubbleOnMouseUpRef.current = true
       }
       tableTextDragStartRef.current = null

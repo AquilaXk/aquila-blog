@@ -184,6 +184,15 @@ test.describe("editor authoring route rich block drag selection", () => {
       await page.mouse.up()
       await page.waitForTimeout(360)
 
+      await expect
+        .poll(async () =>
+          target.evaluate((element) =>
+            window.getSelection()?.toString() ||
+            element.closest(".aq-code-shell")?.getAttribute("data-code-drag-selection-text") ||
+            ""
+          )
+        )
+        .toContain(expectedSelection)
       const afterGeometry = await target.evaluate((element) => {
         const rect = element.getBoundingClientRect()
         return {

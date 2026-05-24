@@ -102,6 +102,9 @@ test.describe("editor authoring route rich block focus", () => {
       clickOffset = { x: 40, y: 24 }
     ) => {
       await target.scrollIntoViewIfNeeded()
+      await target.evaluate((element) => {
+        element.scrollIntoView({ block: "center", inline: "nearest" })
+      })
       const targetBox = await expectVisibleBox(target, `${label} metrics are missing before click`)
 
       const beforeGeometry = await page.evaluate(
@@ -256,6 +259,9 @@ test.describe("editor authoring route rich block focus", () => {
     const assertSelectionRevealKeepsViewport = async (target: Locator, label: string) => {
       await selectPreviousBlockAnchor()
       await target.scrollIntoViewIfNeeded()
+      await target.evaluate((element) => {
+        element.scrollIntoView({ block: "center", inline: "nearest" })
+      })
       const beforeGeometry = await target.evaluate((element) => {
         const rect = element.getBoundingClientRect()
         return {
@@ -403,6 +409,9 @@ test.describe("editor authoring route rich block focus", () => {
     ) => {
       await selectPreviousBlockAnchor()
       await target.scrollIntoViewIfNeeded()
+      await target.evaluate((element) => {
+        element.scrollIntoView({ block: "center", inline: "nearest" })
+      })
       const targetBox = await expectVisibleBox(target, `${label} metrics are missing before click`)
       const beforeGeometry = await target.evaluate((element) => {
         const rect = element.getBoundingClientRect()

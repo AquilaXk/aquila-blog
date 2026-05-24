@@ -175,6 +175,14 @@ const EDITOR_POINTER_SCROLL_RICH_BLOCK_SELECTOR = [
   ".aq-mermaid-stage",
 ].join(", ")
 
+export const preserveWindowScrollForRichBlockSelectAll = () => {
+  preserveWindowScrollAcrossFrames(
+    EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES,
+    4,
+    EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS
+  )
+}
+
 export const preserveWindowScrollForEditorPointerFocus = (
   target: EventTarget | null,
   tableSelectionActive: boolean,
@@ -202,11 +210,7 @@ export const preserveWindowScrollForEditorPointerFocus = (
     tableSelectionActive ||
     shouldPreserveFollowUp
   ) {
-    preserveWindowScrollAcrossFrames(
-      EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES,
-      4,
-      EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS
-    )
+    preserveWindowScrollForRichBlockSelectAll()
     return
   }
   if (shouldPreserveGeneralEditorPointer) {

@@ -42,9 +42,13 @@ import {
   selectCodeBlockText,
   selectDomTextContents,
 } from "./codeBlockNodeViewSelectionModel"
+import { focusElementWithoutScroll } from "./blockEditorEngineDocumentModel"
+import { preserveWindowScrollForRichBlockSelectAll } from "./blockHandleLayoutModel"
 
 export { getPreferredCodeLanguage, normalizeCodeLanguage } from "./codeBlockNodeViewLanguageModel"
 export { CodeBlockEditorStyles } from "./codeBlockNodeViewStyles"
+
+let lastActiveCodeBlockContentRoot: HTMLElement | null = null
 
 export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos }: NodeViewProps) => {
   const menuId = useId()
@@ -67,6 +71,17 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
     () => selectCodeBlockText({ editor, getPos, nodeSize: node.nodeSize }),
     [editor, getPos, node.nodeSize]
   )
+
+  const ensureCodeDomTextSelection = useCallback((contentRoot: HTMLElement | null) => {
+    if (!contentRoot || typeof window === "undefined") return
+    window.requestAnimationFrame(() => {
+      if (!contentRoot.isConnected) return
+      const selectedText = window.getSelection()?.toString() || ""
+      if (selectedText.trim()) return
+      if (!(contentRoot.textContent || "").trim()) return
+      selectDomTextContents(contentRoot)
+    })
+  }, [])
 
   useEffect(() => {
     setDraftLanguage(normalizeCodeLanguage(String(node.attrs?.language || "")))
@@ -93,6 +108,16 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
 
     syncLiveCodeSource()
 
+    const handleDocumentPointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (contentRoot.contains(target)) {
+        lastActiveCodeBlockContentRoot = contentRoot
+      } else if (lastActiveCodeBlockContentRoot === contentRoot) {
+        lastActiveCodeBlockContentRoot = null
+      }
+    }
+
     const handleDocumentSelectAll = (event: KeyboardEvent) => {
       if (event.altKey || event.shiftKey) return
       if (!(event.metaKey || event.ctrlKey)) return
@@ -105,12 +130,16 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
           : selection?.anchorNode?.parentElement ?? null
       const isInsideCodeBlock =
         (activeElement instanceof Element && contentRoot.contains(activeElement)) ||
-        (anchorElement instanceof Element && contentRoot.contains(anchorElement))
+        (anchorElement instanceof Element && contentRoot.contains(anchorElement)) ||
+        (lastActiveCodeBlockContentRoot === contentRoot && contentRoot.isConnected)
       if (!isInsideCodeBlock) return
       event.preventDefault()
       event.stopPropagation()
       event.stopImmediatePropagation()
-      if (selectCurrentCodeBlockText()) return
+      if (selectCurrentCodeBlockText()) {
+        ensureCodeDomTextSelection(contentRoot)
+        return
+      }
       selectDomTextContents(contentRoot)
     }
 
@@ -122,6 +151,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       })
     })
 
+    document.addEventListener("pointerdown", handleDocumentPointerDown, true)
     document.addEventListener("keydown", handleDocumentSelectAll, true)
     observer.observe(contentRoot, {
       childList: true,
@@ -130,13 +160,17 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
     })
 
     return () => {
+      document.removeEventListener("pointerdown", handleDocumentPointerDown, true)
       document.removeEventListener("keydown", handleDocumentSelectAll, true)
       observer.disconnect()
       if (frameId !== null) {
         window.cancelAnimationFrame(frameId)
       }
+      if (lastActiveCodeBlockContentRoot === contentRoot) {
+        lastActiveCodeBlockContentRoot = null
+      }
     }
-  }, [selectCurrentCodeBlockText, selected])
+  }, [ensureCodeDomTextSelection, selectCurrentCodeBlockText, selected])
 
   useEffect(() => {
     let disposed = false
@@ -222,18 +256,21 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
     event.preventDefault()
     event.stopPropagation()
 
-    if (selectCurrentCodeBlockText()) return
-
     const contentRoot = shellRef.current?.querySelector<HTMLElement>(".aq-code-editor-content") ?? null
+    if (selectCurrentCodeBlockText()) {
+      ensureCodeDomTextSelection(contentRoot)
+      return
+    }
     if (selectDomTextContents(contentRoot)) return
 
     if (typeof getPos !== "function") return
     const codeBlockPos = getPos()
     if (typeof codeBlockPos !== "number") return
     const tr = editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, Math.max(0, codeBlockPos)))
-    editor.view.dispatch(tr.scrollIntoView())
-    editor.view.focus()
-  }, [editor, getPos, selectCurrentCodeBlockText])
+    preserveWindowScrollForRichBlockSelectAll()
+    editor.view.dispatch(tr)
+    focusElementWithoutScroll(editor.view.dom as HTMLElement)
+  }, [editor, getPos, ensureCodeDomTextSelection, selectCurrentCodeBlockText])
 
   return (
     <CodeBlockEditorWrapper data-selected={selected} data-code-block-wrapper="true">
@@ -290,7 +327,16 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
         </CodeLanguagePicker>
       </CodeBlockEditorHeader>
       <CodeBlockEditorSurface>
-        <div ref={shellRef} className="aq-code-shell" onKeyDownCapture={handleCodeKeyDown} onPaste={handleCodePaste}>
+        <div
+          ref={shellRef}
+          className="aq-code-shell"
+          onPointerDownCapture={() => {
+            lastActiveCodeBlockContentRoot =
+              shellRef.current?.querySelector<HTMLElement>(".aq-code-editor-content") ?? null
+          }}
+          onKeyDownCapture={handleCodeKeyDown}
+          onPaste={handleCodePaste}
+        >
           <pre
             className="aq-code-highlight-layer"
             aria-hidden="true"

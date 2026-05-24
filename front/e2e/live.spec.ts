@@ -20,6 +20,7 @@ import {
 
 const hasLiveCredentials = Boolean((adminEmail || adminLegacyLoginId) && adminPassword)
 const hasUiLoginCredentials = Boolean(adminEmail && adminPassword)
+const expectedFrontendCommitSha = process.env.E2E_EXPECTED_FRONT_COMMIT_SHA?.trim() || ""
 const adminLandingHeadingPattern = /(?:오늘 블로그 운영은 이 흐름으로 정리됩니다|관리자 (?:작업 공간|작업 진입점|운영 허브|허브))/
 const adminDashboardHeadingPattern = /(?:지금 확인해야 할 운영 상태|운영 대시보드)/
 const adminProfileHeadingPattern =
@@ -502,6 +503,19 @@ test.describe("live critical error filter", () => {
     expect(
       isWebKitCorsAccessControlNoise("https://cdn.example.com/widget.js due to access control checks.")
     ).toBe(false)
+  })
+})
+
+test.describe("live frontend build metadata", () => {
+  test("custom domain이 배포 대상 commit의 front build를 서빙한다", async ({ page }) => {
+    test.skip(!expectedFrontendCommitSha, "E2E_EXPECTED_FRONT_COMMIT_SHA is required")
+
+    await page.goto("/login?next=%2Fadmin")
+
+    const buildSha = await page.evaluate(() =>
+      document.querySelector('meta[name="aquila-build-sha"]')?.getAttribute("content") ?? null
+    )
+    expect(buildSha).toBe(expectedFrontendCommitSha)
   })
 })
 

@@ -139,6 +139,24 @@ test.describe("editor authoring route live drag sequence", () => {
       const rect = element.getBoundingClientRect()
       return { y: rect.height / 2, endX: Math.min(rect.width - 8, 128) }
     })
+    await accessTokenCell.evaluate((element, metrics) => {
+      const rect = element.getBoundingClientRect()
+      const clientX = rect.left + 10
+      const clientY = rect.top + metrics.y
+      const selection = window.getSelection()
+      selection?.removeAllRanges()
+      const range = document.createRange()
+      range.selectNodeContents(element)
+      selection?.addRange(range)
+      element.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX, clientY }))
+    }, accessTokenBox)
+    expect(await readSelectionText(page)).toContain("Access Token")
+    await accessTokenCell.evaluate((element, metrics) => {
+      const rect = element.getBoundingClientRect()
+      const clientX = rect.left + 10
+      const clientY = rect.top + metrics.y
+      element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, buttons: 0, cancelable: true, clientX, clientY }))
+    }, accessTokenBox)
     await page.evaluate(() => {
       ;(window as typeof window & { __qaTableDragEvents?: unknown[] }).__qaTableDragEvents = []
       const record = (event: MouseEvent | PointerEvent) => {

@@ -300,6 +300,10 @@ export const TableQuickRailButton = styled.button`
     inset: -0.5rem;
   }
 
+  &[data-axis="row"]::after {
+    inset: -0.5rem 0 -0.5rem -0.5rem;
+  }
+
   &:hover,
   &:focus-visible {
     background: ${({ theme }) =>

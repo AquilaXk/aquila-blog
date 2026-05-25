@@ -72,11 +72,12 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
   const [draftLanguage, setDraftLanguage] = useState(normalizeCodeLanguage(String(node.attrs?.language || "")))
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false)
   const [languageSearch, setLanguageSearch] = useState("")
-  const initialCodeSource = node.textContent || ""
-  const [liveCodeSource, setLiveCodeSource] = useState(initialCodeSource)
+  const nodeCodeSource = node.textContent || ""
+  const nodeCodeSourceRef = useRef(nodeCodeSource)
+  const [liveCodeSource, setLiveCodeSource] = useState(nodeCodeSource)
   const [highlightedCodeHtml, setHighlightedCodeHtml] = useState(() =>
     renderImmediateCodeToHtml({
-      source: initialCodeSource,
+      source: nodeCodeSource,
       language: normalizeCodeLanguage(String(node.attrs?.language || "")),
     }).html
   )
@@ -135,7 +136,6 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
         const contentBaseOffset = highlightText ? Math.max(0, contentText.indexOf(highlightText)) : 0
         return Math.min(contentText.length, contentBaseOffset + highlightOffset)
       }
-
       if (contentRoot && caretNode && typeof caretOffset === "number" && contentRoot.contains(caretNode)) {
         try {
           pointerPos = editor.view.posAtDOM(caretNode, caretOffset)
@@ -143,7 +143,6 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
           pointerPos = null
         }
       }
-
       if (pointerPos === null && caretNode && typeof caretOffset === "number") {
         const highlightTextOffset = resolveHighlightTextOffset(caretNode, caretOffset)
         const contentPosition =
@@ -158,12 +157,10 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
           }
         }
       }
-
       if (pointerPos === null) {
         const coords = editor.view.posAtCoords({ left: clientX, top: clientY })
         pointerPos = coords?.pos ?? null
       }
-
       if (pointerPos === null) return
       return Math.min(Math.max(pointerPos, from), to)
     },
@@ -332,8 +329,9 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
   }, [node.attrs?.language])
 
   useEffect(() => {
-    setLiveCodeSource(node.textContent || "")
-  }, [node.textContent])
+    nodeCodeSourceRef.current = nodeCodeSource
+    setLiveCodeSource(nodeCodeSource)
+  }, [nodeCodeSource])
 
   useEffect(() => {
     const shell = shellRef.current
@@ -346,12 +344,13 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
     let frameId: number | null = null
 
     const syncLiveCodeSource = () => {
-      const nextValue = resolveEditorContent()?.textContent || ""
+      const contentText = resolveEditorContent()?.textContent || ""
+      const sourceFromNode = nodeCodeSourceRef.current
+      const nextValue = contentText.trim() || !sourceFromNode.trim() ? contentText : sourceFromNode
       setLiveCodeSource((current) => (current === nextValue ? current : nextValue))
     }
 
     syncLiveCodeSource()
-
     const handleDocumentPointerDown = (event: PointerEvent) => {
       const target = event.target
       if (!(target instanceof Node)) return

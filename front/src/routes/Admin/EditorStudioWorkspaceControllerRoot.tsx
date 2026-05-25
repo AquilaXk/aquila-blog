@@ -206,6 +206,7 @@ export const EditorStudioWorkspaceController = ({ initialMember }: AdminPageProp
 
     const restoredCodeLossUpdate = restoreBlockEditorCodeLossUpdate({
       nextMarkdown,
+      currentMarkdown: previousMarkdown,
       guardState: nextGuardState,
       editorFocused: meta?.editorFocused === true,
     })

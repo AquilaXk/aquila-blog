@@ -3,6 +3,7 @@ import {
   consumeGuardOnExpectedUpdate,
   createBlockEditorLoadGuardState,
   markGuardEmptyUpdateIgnored,
+  restoreBlockEditorCodeLossUpdate,
   shouldIgnoreBlockEditorEmptyUpdate,
 } from "src/routes/Admin/editorLoadSyncGuard"
 
@@ -83,5 +84,54 @@ test.describe("editor load sync guard", () => {
         nowMs: nowMs + 150,
       })
     ).toBe(false)
+  })
+
+  test("focus 없는 지연 code fence 손실은 hold 시간이 지나도 expected body로 복구한다", () => {
+    const nowMs = 4_000
+    const expectedBody = [
+      "코드 지연 복구 대상입니다.",
+      "",
+      "```java",
+      "public Token login(User user) {",
+      "    return createAccessToken(user);",
+      "}",
+      "```",
+    ].join("\n")
+    const staleUpdate = [
+      "코드 지연 복구 대상입니다.",
+      "",
+      "```java",
+      "```",
+    ].join("\n")
+    const guard = createBlockEditorLoadGuardState(expectedBody, nowMs, 1_200)
+
+    const restored = restoreBlockEditorCodeLossUpdate({
+      nextMarkdown: staleUpdate,
+      currentMarkdown: expectedBody,
+      guardState: guard,
+      nowMs: nowMs + 3_000,
+    })
+
+    expect(restored.changed).toBe(true)
+    expect(restored.markdown).toContain("createAccessToken(user)")
+
+    const focusedEdit = restoreBlockEditorCodeLossUpdate({
+      nextMarkdown: staleUpdate,
+      currentMarkdown: expectedBody,
+      guardState: guard,
+      editorFocused: true,
+      nowMs: nowMs + 3_000,
+    })
+
+    expect(focusedEdit.changed).toBe(false)
+
+    const afterUserEdit = restoreBlockEditorCodeLossUpdate({
+      nextMarkdown: staleUpdate,
+      currentMarkdown: expectedBody.replace("코드 지연 복구 대상입니다.", "사용자 수정 본문입니다."),
+      guardState: guard,
+      nowMs: nowMs + 3_000,
+    })
+
+    expect(afterUserEdit.changed).toBe(false)
   })
 })

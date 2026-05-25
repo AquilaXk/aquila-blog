@@ -233,6 +233,7 @@ test.describe("editor authoring route live drag sequence", () => {
     await expect.poll(() => readSelectionText(page)).toContain("createAccessToken")
     await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforeImmediateCodeSelectAll + 24)
     await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforeImmediateCodeSelectAll - 24)
+    await page.mouse.wheel(0, 1).then(() => page.waitForTimeout(40))
 
     const followUpBody = editor.locator("li", { hasText: "Access Token 은 요청마다" }).first()
     await followUpBody.evaluate((element) => {

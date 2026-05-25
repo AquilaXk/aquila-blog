@@ -49,7 +49,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
   tableMenuState,
   tryStartTableColumnResizeFromDomHandle,
 }: UseBlockEditorEngineSelectionBubbleEffectsArgs) => {
-  const tableTextDragStartRef = useRef<{ cell: HTMLElement; scrollPreserveStarted: boolean; scrollAnchor: WindowScrollAnchor; x: number; y: number } | null>(null)
+  const tableTextDragStartRef = useRef<{ cell: HTMLElement; coveredControlFallback: boolean; scrollPreserveStarted: boolean; scrollAnchor: WindowScrollAnchor; x: number; y: number } | null>(null)
   const codeTextDragStartRef = useRef<{ root: HTMLElement; scrollPreserveStarted: boolean; scrollAnchor: WindowScrollAnchor; x: number; y: number } | null>(null)
 
   useEffect(() => {
@@ -107,13 +107,14 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       const pointElement = pointElements.find((element) => Boolean(element.closest("th, td"))) ?? document.elementFromPoint(event.clientX, event.clientY)
       const tableTextCell = pointElement?.closest("th, td") ?? targetElement?.closest("th, td")
       const tableControlTarget = targetElement?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR) ?? pointElements[0]?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR)
-      if (tableControlTarget && (!allowTableControlCellFallback || !(tableTextCell instanceof HTMLElement))) { tableTextDragStartRef.current = null; return null }
+      const tableCellRect = tableTextCell instanceof HTMLElement ? tableTextCell.getBoundingClientRect() : null, coveredControlFallback = Boolean(tableCellRect && tableControlTarget?.getAttribute("data-table-affordance") === "row-handle" && event.clientX >= tableCellRect.left && event.clientX <= tableCellRect.right && event.clientY >= tableCellRect.top && event.clientY <= tableCellRect.bottom)
+      if (tableControlTarget && (!(allowTableControlCellFallback || coveredControlFallback) || !(tableTextCell instanceof HTMLElement))) { tableTextDragStartRef.current = null; return null }
       const scrollAnchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
       if (tableTextCell instanceof HTMLElement) {
         tableTextCell.removeAttribute("data-table-drag-selection-text")
         markNextEditorPointerAfterTable()
       }
-      tableTextDragStartRef.current = tableTextCell instanceof HTMLElement ? { cell: tableTextCell, scrollPreserveStarted: false, scrollAnchor, x: event.clientX, y: event.clientY } : null
+      tableTextDragStartRef.current = tableTextCell instanceof HTMLElement ? { cell: tableTextCell, coveredControlFallback, scrollPreserveStarted: false, scrollAnchor, x: event.clientX, y: event.clientY } : null
       return tableTextDragStartRef.current
     }
 
@@ -419,11 +420,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         }
       }
       if (insideEditorDom) {
-        if (tableTextDragStart && existingSelectionText) {
-          event.preventDefault()
-          event.stopPropagation()
-          restoreTableCellTextSelectionIfEscaped(activeEditor, tableTextDragStart.cell, tableTextDragStart.scrollAnchor, true, true)
-        }
+        if (tableTextDragStart && (existingSelectionText || tableTextDragStart.coveredControlFallback)) { event.preventDefault(); event.stopPropagation(); if (tableTextDragStart.coveredControlFallback) event.stopImmediatePropagation?.(); restoreTableCellTextSelectionIfEscaped(activeEditor, tableTextDragStart.cell, tableTextDragStart.scrollAnchor, true, true); if (tableTextDragStart.coveredControlFallback) { preserveTableCellTextSelectionAcrossFrames(activeEditor, tableTextDragStart.cell, tableTextDragStart.scrollAnchor); preserveActiveTableTextDragScroll() } }
         const blockSelectionActive = Boolean(document.querySelector("[data-testid='keyboard-block-selection-overlay']"))
         preserveWindowScrollForEditorPointerFocus(event.target, isTableSelectionActive(activeEditor), blockSelectionActive)
       }
@@ -450,9 +447,9 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       if (!activeEditor) return
       const eventTarget = event.target
       const targetElement = eventTarget instanceof Element ? eventTarget : eventTarget instanceof Node ? eventTarget.parentElement : null
-      const pointElements = document.elementsFromPoint(event.clientX, event.clientY), codeShellTarget = findCodeShellTarget(targetElement, pointElements), existingCodeSelectionText = (window.getSelection()?.toString().trim() || codeShellTarget?.getAttribute("data-code-drag-selection-text")?.trim() || "")
-      const pointInsideEditor = !targetElement?.closest("[data-table-menu-root='true']") && !targetElement?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR) && pointElements.some((element) => Boolean(element.closest(BLOCK_EDITOR_ROOT_SELECTOR)))
-      const insideEditorDom = eventTarget instanceof Node && (activeEditor.view.dom.contains(eventTarget) || Boolean(targetElement?.closest(BLOCK_EDITOR_ROOT_SELECTOR)) || pointInsideEditor)
+      const pointElements = document.elementsFromPoint(event.clientX, event.clientY), codeShellTarget = findCodeShellTarget(targetElement, pointElements), existingSelectionText = window.getSelection()?.toString().trim() ?? "", existingCodeSelectionText = existingSelectionText || codeShellTarget?.getAttribute("data-code-drag-selection-text")?.trim() || ""
+      const allowTableControlCellFallback = Boolean(existingSelectionText) && !isTableSelectionActive(activeEditor), targetTableControl = targetElement?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR)
+      const pointInsideEditor = !targetElement?.closest("[data-table-menu-root='true']") && (!targetTableControl || allowTableControlCellFallback) && pointElements.some((element) => Boolean(element.closest(BLOCK_EDITOR_ROOT_SELECTOR))), insideEditorDom = eventTarget instanceof Node && (activeEditor.view.dom.contains(eventTarget) || Boolean(targetElement?.closest(BLOCK_EDITOR_ROOT_SELECTOR)) || pointInsideEditor), columnResizeTarget = targetElement?.closest(".column-resize-handle"), tableTextDragStart = insideEditorDom && !codeShellTarget ? tableTextDragStartRef.current ?? rememberTableTextDragStart(event, allowTableControlCellFallback) : null
       if (!insideEditorDom && !codeShellTarget) return; if (codeTextDragStartRef.current && !codeShellTarget) codeTextDragStartRef.current = null
       if (codeShellTarget) {
         if (codeTextDragStartRef.current?.root.isConnected && (codeTextDragStartRef.current.scrollPreserveStarted || isSelectionInsideCodeDragRoot(codeTextDragStartRef.current.root))) { event.preventDefault(); event.stopPropagation(); preserveActiveCodeTextDragScroll(); selectCodeDragRoot(codeTextDragStartRef.current.root); preserveCodeDragRootSelectionAcrossFrames(codeTextDragStartRef.current.root); return }
@@ -461,13 +458,12 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         if (codeTextDragStart && existingCodeSelectionText) { event.preventDefault(); event.stopPropagation(); preserveActiveCodeTextDragScroll(); selectCodeDragRoot(codeTextDragStart.root); preserveCodeDragRootSelectionAcrossFrames(codeTextDragStart.root); return }
         clearImmediateWindowTextSelection()
       } else if (insideEditorDom) {
-        codeTextDragStartRef.current = null
-        cancelCodeDragSelectionPreserve()
-        clearImmediateWindowTextSelection()
+        codeTextDragStartRef.current = null; cancelCodeDragSelectionPreserve()
+        if (tableTextDragStart && tableTextDragStart.coveredControlFallback && !columnResizeTarget) { event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.(); restoreTableCellTextSelectionIfEscaped(activeEditor, tableTextDragStart.cell, tableTextDragStart.scrollAnchor, true, true); preserveTableCellTextSelectionAcrossFrames(activeEditor, tableTextDragStart.cell, tableTextDragStart.scrollAnchor); preserveActiveTableTextDragScroll() } else if (tableTextDragStart && existingSelectionText) restoreTableCellTextSelectionIfEscaped(activeEditor, tableTextDragStart.cell, tableTextDragStart.scrollAnchor, true, true); else if (!tableTextDragStart || !existingSelectionText) clearImmediateWindowTextSelection()
       }
       if (!insideEditorDom) return
-      if (!tableTextDragStartRef.current) rememberTableTextDragStart(event)
-      if (!targetElement?.closest(".column-resize-handle")) return
+      if (!tableTextDragStartRef.current) rememberTableTextDragStart(event, allowTableControlCellFallback)
+      if (!columnResizeTarget) return
       event.preventDefault()
       event.stopPropagation()
       event.stopImmediatePropagation?.()
@@ -527,7 +523,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
           preserveCodeDragRootSelectionAcrossFrames(codeTextDragStart.root)
         }
       }
-      if (activeEditor && tableTextDragStart && tableTextDragMoved && restoreActiveTableTextDragSelection(true, true)) {
+      if (activeEditor && tableTextDragStart && (tableTextDragMoved || tableTextDragStart.coveredControlFallback) && restoreActiveTableTextDragSelection(true, true)) {
         event.preventDefault()
         event.stopPropagation()
         preserveActiveTableTextDragScroll()

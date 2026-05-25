@@ -273,8 +273,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
 
   useEffect(() => {
     if (typeof window === "undefined") return
-
-    const handleWindowMouseMove = (event: MouseEvent) => {
+    const handleWindowMouseMove = (event: MouseEvent | PointerEvent) => {
       const session = codeDragSelectionRef.current
       if (!session) return
       const contentRoot =
@@ -289,8 +288,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       applyCodeTextSelection(session.anchorPos, headPos)
       preserveCodeDomTextRange(contentRoot, session.anchorPos, headPos)
     }
-
-    const handleWindowMouseUp = (event: MouseEvent) => {
+    const handleWindowMouseUp = (event: MouseEvent | PointerEvent) => {
       const session = codeDragSelectionRef.current
       if (!session) return
       codeDragSelectionRef.current = null
@@ -304,15 +302,19 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       event.preventDefault()
       event.stopPropagation()
     }
-
     window.addEventListener("mousemove", handleWindowMouseMove, true)
+    window.addEventListener("pointermove", handleWindowMouseMove, true)
     window.addEventListener("mouseup", handleWindowMouseUp, true)
+    window.addEventListener("pointerup", handleWindowMouseUp, true)
+    window.addEventListener("pointercancel", handleWindowMouseUp, true)
     return () => {
       window.removeEventListener("mousemove", handleWindowMouseMove, true)
+      window.removeEventListener("pointermove", handleWindowMouseMove, true)
       window.removeEventListener("mouseup", handleWindowMouseUp, true)
+      window.removeEventListener("pointerup", handleWindowMouseUp, true)
+      window.removeEventListener("pointercancel", handleWindowMouseUp, true)
     }
   }, [applyCodeTextSelection, preserveCodeDomTextRange, resolveCodeTextPosFromPointer])
-
   const ensureCodeDomTextSelection = useCallback((contentRoot: HTMLElement | null) => {
     if (!contentRoot || typeof window === "undefined") return
     window.requestAnimationFrame(() => {
@@ -323,7 +325,6 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       selectDomTextContents(contentRoot)
     })
   }, [])
-
   useEffect(() => {
     setDraftLanguage(normalizeCodeLanguage(String(node.attrs?.language || "")))
   }, [node.attrs?.language])

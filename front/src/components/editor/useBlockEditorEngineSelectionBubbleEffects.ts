@@ -450,15 +450,15 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       if (!activeEditor) return
       const eventTarget = event.target
       const targetElement = eventTarget instanceof Element ? eventTarget : eventTarget instanceof Node ? eventTarget.parentElement : null
-      const pointElements = document.elementsFromPoint(event.clientX, event.clientY)
-      const codeShellTarget = findCodeShellTarget(targetElement, pointElements)
+      const pointElements = document.elementsFromPoint(event.clientX, event.clientY), codeShellTarget = findCodeShellTarget(targetElement, pointElements), existingCodeSelectionText = (window.getSelection()?.toString().trim() || codeShellTarget?.getAttribute("data-code-drag-selection-text")?.trim() || "")
       const pointInsideEditor = !targetElement?.closest("[data-table-menu-root='true']") && !targetElement?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR) && pointElements.some((element) => Boolean(element.closest(BLOCK_EDITOR_ROOT_SELECTOR)))
       const insideEditorDom = eventTarget instanceof Node && (activeEditor.view.dom.contains(eventTarget) || Boolean(targetElement?.closest(BLOCK_EDITOR_ROOT_SELECTOR)) || pointInsideEditor)
       if (!insideEditorDom && !codeShellTarget) return; if (codeTextDragStartRef.current && !codeShellTarget) codeTextDragStartRef.current = null
       if (codeShellTarget) {
         if (codeTextDragStartRef.current?.root.isConnected && (codeTextDragStartRef.current.scrollPreserveStarted || isSelectionInsideCodeDragRoot(codeTextDragStartRef.current.root))) { event.preventDefault(); event.stopPropagation(); preserveActiveCodeTextDragScroll(); selectCodeDragRoot(codeTextDragStartRef.current.root); preserveCodeDragRootSelectionAcrossFrames(codeTextDragStartRef.current.root); return }
         cancelCodeDragSelectionPreserve()
-        rememberCodeTextDragStart(codeShellTarget, event)
+        const codeTextDragStart = rememberCodeTextDragStart(codeShellTarget, event)
+        if (codeTextDragStart && existingCodeSelectionText) { event.preventDefault(); event.stopPropagation(); preserveActiveCodeTextDragScroll(); selectCodeDragRoot(codeTextDragStart.root); preserveCodeDragRootSelectionAcrossFrames(codeTextDragStart.root); return }
         clearImmediateWindowTextSelection()
       } else if (insideEditorDom) {
         codeTextDragStartRef.current = null

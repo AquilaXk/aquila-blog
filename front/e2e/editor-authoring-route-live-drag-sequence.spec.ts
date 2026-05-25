@@ -293,6 +293,18 @@ test.describe("editor authoring route live drag sequence", () => {
       element.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, buttons: 0, cancelable: true, clientX, clientY, pointerType: "mouse" }))
       element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, buttons: 0, cancelable: true, clientX, clientY }))
     }, codeDragMetrics)
+    await codeContent.evaluate((element, metrics) => {
+      const rect = element.getBoundingClientRect()
+      const startX = rect.left + 80
+      const clientY = rect.top + metrics.y
+      const selection = window.getSelection()
+      selection?.removeAllRanges()
+      element.closest(".aq-code-shell")?.removeAttribute("data-code-drag-selection-text")
+      element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX: startX, clientY, pointerType: "mouse" }))
+      element.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX: rect.left + metrics.endX, clientY, pointerType: "mouse" }))
+      element.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, buttons: 0, cancelable: true, clientX: rect.left + metrics.endX, clientY, pointerType: "mouse" }))
+    }, codeDragMetrics)
+    await expect.poll(() => readSelectionText(page)).toContain("createAccessToken")
     const codeDragStartBox = await codeContent.boundingBox()
     if (!codeDragStartBox) throw new Error("code drag start metrics are missing")
     await page.evaluate(() => {

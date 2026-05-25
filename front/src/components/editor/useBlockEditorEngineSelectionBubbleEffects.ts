@@ -185,7 +185,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         window.removeEventListener("pointerdown", cancelPreservedSelection, true)
         window.removeEventListener("mousedown", cancelPreservedSelection, true)
       }
-      const cancelPreservedSelection = () => cancelCodeDragSelectionPreserve()
+      const isCurrentCodeDragEvent = (event: Event) => { const codeTextDragStart = codeTextDragStartRef.current; const targetElement = event.target instanceof Element ? event.target : event.target instanceof Node ? event.target.parentElement : null; const codeShell = root.closest(".aq-code-shell"); return Boolean(targetElement && (root.contains(targetElement) || codeShell?.contains(targetElement)) && ((codeTextDragStart?.scrollPreserveStarted && codeTextDragStart.root === root) || codeShell?.getAttribute("data-code-drag-selection-text")?.trim())) }, cancelPreservedSelection = (event: Event) => { if (!isCurrentCodeDragEvent(event)) cancelCodeDragSelectionPreserve() }
       const restore = () => {
         if (!root.isConnected) {
           codeDragSelectionPreserveRafId = null
@@ -400,7 +400,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       const targetElement = eventTarget instanceof Element ? eventTarget : eventTarget instanceof Node ? eventTarget.parentElement : null
       const pointElements = document.elementsFromPoint(event.clientX, event.clientY)
       const codeShellTarget = findCodeShellTarget(targetElement, pointElements)
-      const existingSelectionText = window.getSelection()?.toString().trim() ?? ""
+      const existingSelectionText = window.getSelection()?.toString().trim() ?? "", existingCodeSelectionText = existingSelectionText || codeShellTarget?.getAttribute("data-code-drag-selection-text")?.trim() || ""
       const allowTableControlCellFallback = Boolean(existingSelectionText) && !isTableSelectionActive(activeEditor)
       const targetTableControl = targetElement?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR)
       const pointInsideEditor = !targetElement?.closest("[data-table-menu-root='true']") && (!targetTableControl || allowTableControlCellFallback) && pointElements.some((element) => Boolean(element.closest(BLOCK_EDITOR_ROOT_SELECTOR)))
@@ -410,7 +410,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       if (codeShellTarget) {
         cancelCodeDragSelectionPreserve()
         const codeTextDragStart = rememberCodeTextDragStart(codeShellTarget, event)
-        if (codeTextDragStart && existingSelectionText) { event.preventDefault(); event.stopPropagation(); preserveActiveCodeTextDragScroll(); selectCodeDragRoot(codeTextDragStart.root); preserveCodeDragRootSelectionAcrossFrames(codeTextDragStart.root) } else clearImmediateWindowTextSelection()
+        if (codeTextDragStart && existingCodeSelectionText) { event.preventDefault(); event.stopPropagation(); preserveActiveCodeTextDragScroll(); selectCodeDragRoot(codeTextDragStart.root); preserveCodeDragRootSelectionAcrossFrames(codeTextDragStart.root) } else clearImmediateWindowTextSelection()
       } else {
         codeTextDragStartRef.current = null
         if (insideEditorDom) {
@@ -456,7 +456,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       const insideEditorDom = eventTarget instanceof Node && (activeEditor.view.dom.contains(eventTarget) || Boolean(targetElement?.closest(BLOCK_EDITOR_ROOT_SELECTOR)) || pointInsideEditor)
       if (!insideEditorDom && !codeShellTarget) return; if (codeTextDragStartRef.current && !codeShellTarget) codeTextDragStartRef.current = null
       if (codeShellTarget) {
-        if (codeTextDragStartRef.current?.root.isConnected && isSelectionInsideCodeDragRoot(codeTextDragStartRef.current.root)) { event.preventDefault(); event.stopPropagation(); preserveActiveCodeTextDragScroll(); selectCodeDragRoot(codeTextDragStartRef.current.root); preserveCodeDragRootSelectionAcrossFrames(codeTextDragStartRef.current.root); return }
+        if (codeTextDragStartRef.current?.root.isConnected && (codeTextDragStartRef.current.scrollPreserveStarted || isSelectionInsideCodeDragRoot(codeTextDragStartRef.current.root))) { event.preventDefault(); event.stopPropagation(); preserveActiveCodeTextDragScroll(); selectCodeDragRoot(codeTextDragStartRef.current.root); preserveCodeDragRootSelectionAcrossFrames(codeTextDragStartRef.current.root); return }
         cancelCodeDragSelectionPreserve()
         rememberCodeTextDragStart(codeShellTarget, event)
         clearImmediateWindowTextSelection()

@@ -74,16 +74,23 @@ export const markGuardEmptyUpdateIgnored = (
 
 export const restoreBlockEditorCodeLossUpdate = ({
   nextMarkdown,
+  currentMarkdown,
   guardState,
   editorFocused = false,
   nowMs = Date.now(),
 }: {
   nextMarkdown: string
+  currentMarkdown?: string
   guardState: BlockEditorLoadGuardState
   editorFocused?: boolean
   nowMs?: number
 }) => {
-  if (editorFocused || nowMs > guardState.ignoreUntilMs || !guardState.expectedBody) {
+  if (editorFocused || !guardState.expectedBody) {
+    return { markdown: nextMarkdown, changed: false }
+  }
+
+  const normalizedCurrent = normalizeEditorMarkdown(currentMarkdown ?? guardState.expectedBody)
+  if (nowMs > guardState.ignoreUntilMs && normalizedCurrent !== guardState.expectedBody) {
     return { markdown: nextMarkdown, changed: false }
   }
 

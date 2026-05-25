@@ -400,7 +400,14 @@ test.describe("editor authoring table structure and styles", () => {
     await expect(tableMenu.getByRole("button", { name: "넓은 표" })).toBeVisible()
     await expect(tableMenu.getByText("제목 행/열 토글은 행 메뉴와 열 메뉴에서 분리했습니다.")).toBeVisible()
 
-    await tableMenu.getByRole("button", { name: "표 삭제" }).click()
+    const deleteTableButton = tableMenu.getByRole("button", { name: "표 삭제" })
+    await expect(deleteTableButton).toBeVisible()
+    await deleteTableButton.evaluate((button) => {
+      if (!(button instanceof HTMLButtonElement)) {
+        throw new Error("table delete button is not attached")
+      }
+      button.click()
+    })
     await expect(page.locator(".aq-block-editor__content table")).toHaveCount(0)
     await expect(page.getByTestId("block-editor-prosemirror")).toBeVisible()
   })

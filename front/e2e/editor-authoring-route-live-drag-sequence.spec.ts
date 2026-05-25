@@ -232,6 +232,14 @@ test.describe("editor authoring route live drag sequence", () => {
       const rect = element.getBoundingClientRect()
       const clientX = rect.left + 80
       const clientY = rect.top + metrics.y
+      element.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX, clientY }))
+      element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, buttons: 0, cancelable: true, clientX, clientY }))
+    }, codeDragMetrics)
+    await expect.poll(() => readSelectionText(page)).toContain("createAccessToken")
+    await codeContent.evaluate((element, metrics) => {
+      const rect = element.getBoundingClientRect()
+      const clientX = rect.left + 80
+      const clientY = rect.top + metrics.y
       const selection = window.getSelection()
       selection?.removeAllRanges()
       const range = document.createRange()

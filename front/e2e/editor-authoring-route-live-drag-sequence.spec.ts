@@ -344,6 +344,10 @@ test.describe("editor authoring route live drag sequence", () => {
       throw new Error(`code mousedown cleared selection: ${JSON.stringify(diagnostics)}`)
     }
     await page.mouse.up()
+    await codeContent.evaluate((element) => {
+      window.getSelection()?.removeAllRanges()
+      element.closest(".aq-code-shell")?.removeAttribute("data-code-drag-selection-text")
+    })
     const codeDrag = await dragLocatorText(page, codeContent, "token login code drag", {
       endX: codeDragMetrics.endX,
       startX: 80,

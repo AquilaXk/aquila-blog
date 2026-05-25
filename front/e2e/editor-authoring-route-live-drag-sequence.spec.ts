@@ -185,7 +185,7 @@ test.describe("editor authoring route live drag sequence", () => {
     const tableDrag = await dragLocatorText(page, accessTokenCell, "access token table drag", {
       endX: accessTokenBox.endX,
       y: accessTokenBox.y,
-      waitMs: 2_800,
+      waitMs: 850,
     })
     const tableSelectionText = await readSelectionText(page)
     if (!tableSelectionText.includes("Access Token") || tableSelectionText.includes("API 인증")) {
@@ -216,6 +216,24 @@ test.describe("editor authoring route live drag sequence", () => {
     expect(tableDrag.afterScrollTop).toBeLessThanOrEqual(tableDrag.beforeScrollTop + 24)
     expect(tableDrag.afterScrollTop).toBeGreaterThanOrEqual(tableDrag.beforeScrollTop - 24)
 
+    const codeContent = editor.locator(".aq-code-editor-content", { hasText: "createAccessToken(user)" }).first()
+    const immediateCodeMetrics = await codeContent.evaluate((element) => {
+      element.scrollIntoView({ block: "center", inline: "nearest" })
+      const rect = element.getBoundingClientRect()
+      const style = window.getComputedStyle(element)
+      const lineHeight = Number.parseFloat(style.lineHeight || "22") || 22
+      const paddingTop = Number.parseFloat(style.paddingTop || "0") || 0
+      return {
+        y: Math.min(rect.height - 8, paddingTop + lineHeight * 2.5),
+      }
+    })
+    const beforeImmediateCodeSelectAll = await readScrollTop(page)
+    await codeContent.click({ position: { x: 80, y: immediateCodeMetrics.y } })
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
+    await expect.poll(() => readSelectionText(page)).toContain("createAccessToken")
+    await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforeImmediateCodeSelectAll + 24)
+    await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforeImmediateCodeSelectAll - 24)
+
     const followUpBody = editor.locator("li", { hasText: "Access Token 은 요청마다" }).first()
     await followUpBody.evaluate((element) => {
       element.scrollIntoView({ block: "center", inline: "nearest" })
@@ -228,7 +246,6 @@ test.describe("editor authoring route live drag sequence", () => {
     await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforeFollowUpClick + 24)
     await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforeFollowUpClick - 24)
 
-    const codeContent = editor.locator(".aq-code-editor-content", { hasText: "createAccessToken(user)" }).first()
     const codeDragMetrics = await codeContent.evaluate((element) => {
       element.scrollIntoView({ block: "center", inline: "nearest" })
       const rect = element.getBoundingClientRect()

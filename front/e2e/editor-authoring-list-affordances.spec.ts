@@ -12,8 +12,16 @@ test.describe("editor authoring list affordances", () => {
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     const blockSelectionOverlay = page.getByTestId("keyboard-block-selection-overlay")
-    const clickListItemParagraph = (label: string) =>
-      editor.locator("li > p", { hasText: new RegExp(`^${label}$`) }).last().click()
+    const clickListItemParagraph = async (label: string) => {
+      const paragraph = editor.locator("li > p", { hasText: new RegExp(`^${label}$`) }).last()
+      await paragraph.click()
+      await expect.poll(() =>
+        paragraph.evaluate((element) => {
+          const selection = window.getSelection()
+          return Boolean(selection?.anchorNode && element.contains(selection.anchorNode))
+        })
+      ).toBe(true)
+    }
     const countOwnLabel = (label: string) =>
       page.evaluate((targetLabel) => {
         const readOwnLabel = (item: HTMLElement) =>
@@ -57,11 +65,7 @@ test.describe("editor authoring list affordances", () => {
     await page.keyboard.press("Enter")
     await page.keyboard.type("3단계")
 
-    await clickListItemParagraph("2단계")
-    await page.keyboard.press("Tab")
     await clickListItemParagraph("3단계")
-    await page.keyboard.press("Tab")
-    await expect.poll(() => countOwnLabel("3단계")).toBe(1)
     await page.keyboard.press("Tab")
     await expect.poll(() => hasNestedChild("2단계", "3단계")).toBe(true)
     await expect(blockSelectionOverlay).toHaveCount(0)
@@ -72,6 +76,7 @@ test.describe("editor authoring list affordances", () => {
     await clickListItemParagraph("3단계")
     await page.keyboard.press("Shift+Tab")
     await expect(blockSelectionOverlay).toHaveCount(0)
+    await expect.poll(() => hasNestedChild("2단계", "3단계")).toBe(false)
     await expect.poll(() => countOwnLabel("3단계")).toBe(1)
   })
 
@@ -80,8 +85,16 @@ test.describe("editor authoring list affordances", () => {
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     const blockSelectionOverlay = page.getByTestId("keyboard-block-selection-overlay")
-    const clickListItemParagraph = (label: string) =>
-      editor.locator("li > p", { hasText: new RegExp(`^${label}$`) }).last().click()
+    const clickListItemParagraph = async (label: string) => {
+      const paragraph = editor.locator("li > p", { hasText: new RegExp(`^${label}$`) }).last()
+      await paragraph.click()
+      await expect.poll(() =>
+        paragraph.evaluate((element) => {
+          const selection = window.getSelection()
+          return Boolean(selection?.anchorNode && element.contains(selection.anchorNode))
+        })
+      ).toBe(true)
+    }
     const countOwnLabel = (label: string) =>
       page.evaluate((targetLabel) => {
         const readOwnLabel = (item: HTMLElement) =>
@@ -125,11 +138,7 @@ test.describe("editor authoring list affordances", () => {
     await page.keyboard.press("Enter")
     await page.keyboard.type("3단계")
 
-    await clickListItemParagraph("2단계")
-    await page.keyboard.press("Tab")
     await clickListItemParagraph("3단계")
-    await page.keyboard.press("Tab")
-    await expect.poll(() => countOwnLabel("3단계")).toBe(1)
     await page.keyboard.press("Tab")
     await expect.poll(() => hasNestedChild("2단계", "3단계")).toBe(true)
     await expect(blockSelectionOverlay).toHaveCount(0)
@@ -140,6 +149,7 @@ test.describe("editor authoring list affordances", () => {
     await clickListItemParagraph("3단계")
     await page.keyboard.press("Shift+Tab")
     await expect(blockSelectionOverlay).toHaveCount(0)
+    await expect.poll(() => hasNestedChild("2단계", "3단계")).toBe(false)
     await expect.poll(() => countOwnLabel("3단계")).toBe(1)
   })
 

@@ -116,21 +116,34 @@ export const restoreTableCellTextSelectionIfEscaped = (
 export const preserveTableCellTextSelectionAcrossFrames = (
   editor: TiptapEditor,
   startedCell: HTMLElement,
-  scrollAnchor: WindowScrollAnchor
+  _scrollAnchor: WindowScrollAnchor
 ) => {
   const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now()
   let frame = 0
   let cancelled = false
-  const cancel = () => { cancelled = true }
+  const cleanup = () => {
+    window.removeEventListener("pointerdown", cancel, true)
+    window.removeEventListener("mousedown", cancel, true)
+    window.removeEventListener("wheel", cancel, true)
+    window.removeEventListener("keydown", cancel, true)
+  }
+  const cancel = () => {
+    cancelled = true
+    cleanup()
+  }
   window.addEventListener("pointerdown", cancel, { capture: true, once: true })
   window.addEventListener("mousedown", cancel, { capture: true, once: true })
+  window.addEventListener("wheel", cancel, { capture: true, passive: true, once: true })
+  window.addEventListener("keydown", cancel, { capture: true, once: true })
   const restore = () => {
     if (cancelled) return
-    restoreTableCellTextSelectionIfEscaped(editor, startedCell, scrollAnchor, true, true)
+    restoreTableCellTextSelectionIfEscaped(editor, startedCell, null, true, true)
     frame += 1
     const elapsedMs = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt
     if (startedCell.isConnected && (frame < TABLE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES || elapsedMs < TABLE_TEXT_DRAG_SCROLL_PRESERVE_MIN_MS)) {
       window.requestAnimationFrame(restore)
+    } else {
+      cleanup()
     }
   }
   restore()

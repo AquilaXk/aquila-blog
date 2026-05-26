@@ -18,17 +18,38 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
 
       - name: Detect frontend-related changes
         id: changes
-        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
-        with:
-          filters: |
-            frontend:
-              - 'front/**'
-              - '.github/workflows/frontend-ci.yml'
-              - '.github/workflows/ci.yml'
-              - '.github/workflows/reusable-frontend-verify.yml'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+
+          if [ -z "${base}" ] || [[ "${base}" =~ ^0+$ ]]; then
+            base="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
+          fi
+
+          git diff --name-only "${base}" HEAD > "${RUNNER_TEMP}/changed-files.txt"
+
+          frontend=false
+          while IFS= read -r file; do
+            case "${file}" in
+              front/*|.github/workflows/frontend-ci.yml|.github/workflows/ci.yml|.github/workflows/reusable-frontend-verify.yml)
+                frontend=true
+                break
+                ;;
+            esac
+          done < "${RUNNER_TEMP}/changed-files.txt"
+
+          echo "frontend=${frontend}" >> "${GITHUB_OUTPUT}"
 
       - name: Skip frontend-heavy checks
         if: steps.changes.outputs.frontend != 'true'

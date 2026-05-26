@@ -94,6 +94,11 @@ test.describe("editor authoring route live drag sequence", () => {
       "}",
       "```",
       "",
+      "## 운영에서 가장 먼저 터지는 문제들",
+      "",
+      "- 짧은 TTL",
+      "- Refresh 관리",
+      "",
       ...filler("code 이후 본문", 8),
     ].join("\n")
 
@@ -271,19 +276,43 @@ test.describe("editor authoring route live drag sequence", () => {
     expect(codeDragDefaultAllowed.pointerDefaultAllowed).toBe(true)
     expect(codeDragDefaultAllowed.mouseDefaultAllowed).toBe(true)
     const codeShell = editor.locator(".aq-code-shell", { hasText: "createAccessToken(user)" }).first()
-    await codeShell.evaluate((shell, metrics) => {
+    const shellDispatchDiagnostics = await codeShell.evaluate(async (shell, metrics) => {
       const contentRoot = shell.querySelector<HTMLElement>(".aq-code-editor-content")
       if (!contentRoot) throw new Error("code shell content root is missing")
       const rect = contentRoot.getBoundingClientRect()
       const startX = rect.left + 80
       const endX = rect.left + metrics.endX
       const clientY = rect.top + metrics.y
+      const events: Array<{ type: string; selection: string; dataset: string | null }> = []
+      const record = (event: Event) => {
+        events.push({
+          type: event.type,
+          selection: window.getSelection()?.toString() ?? "",
+          dataset: shell.getAttribute("data-code-drag-selection-text"),
+        })
+      }
+      for (const type of ["pointerdown", "pointermove", "pointerup", "selectionchange"] as const) {
+        document.addEventListener(type, record, { capture: true })
+      }
       window.getSelection()?.removeAllRanges()
       shell.removeAttribute("data-code-drag-selection-text")
       shell.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX: startX, clientY, pointerType: "mouse" }))
       window.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX: endX, clientY, pointerType: "mouse" }))
       window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, buttons: 0, cancelable: true, clientX: endX, clientY, pointerType: "mouse" }))
+      await new Promise((resolve) => setTimeout(resolve, 220))
+      for (const type of ["pointerdown", "pointermove", "pointerup", "selectionchange"] as const) {
+        document.removeEventListener(type, record, true)
+      }
+      return {
+        events,
+        selection: window.getSelection()?.toString() ?? "",
+        dataset: shell.getAttribute("data-code-drag-selection-text"),
+        text: contentRoot.textContent,
+      }
     }, codeDragMetrics)
+    if (!(shellDispatchDiagnostics.selection || shellDispatchDiagnostics.dataset || "").includes("createAccessToken")) {
+      throw new Error(`code shell drag did not select code text: ${JSON.stringify(shellDispatchDiagnostics)}`)
+    }
     await expect.poll(() => readSelectionText(page)).toContain("createAccessToken")
     const beforeCodeSelectAll = await readScrollTop(page)
     await codeContent.click({ position: { x: 80, y: 28 } })
@@ -375,6 +404,31 @@ test.describe("editor authoring route live drag sequence", () => {
       window.getSelection()?.removeAllRanges()
       element.closest(".aq-code-shell")?.removeAttribute("data-code-drag-selection-text")
     })
+    const lowerBodyAnchor = editor.getByText("짧은 TTL", { exact: true }).first()
+    await lowerBodyAnchor.evaluate((element) => {
+      element.scrollIntoView({ block: "center", inline: "nearest" })
+    })
+    const lowerBodyBox = await lowerBodyAnchor.boundingBox()
+    if (!lowerBodyBox) throw new Error("lower body anchor metrics are missing")
+    await page.mouse.click(lowerBodyBox.x + Math.min(lowerBodyBox.width / 2, 96), lowerBodyBox.y + 12)
+    await page.waitForTimeout(40)
+    await lowerBodyAnchor.evaluate((element) => {
+      const selection = window.getSelection()
+      const textNode = Array.from(element.childNodes).find((node) => node.nodeType === Node.TEXT_NODE)
+      if (!selection || !textNode?.textContent) throw new Error("lower body anchor text node is missing")
+      const start = textNode.textContent.indexOf("TTL")
+      if (start < 0) throw new Error("TTL text is missing")
+      const range = document.createRange()
+      range.setStart(textNode, start)
+      range.setEnd(textNode, start + "TTL".length)
+      selection.removeAllRanges()
+      selection.addRange(range)
+    })
+    await expect.poll(() => readSelectionText(page)).toContain("TTL")
+    await codeContent.evaluate((element) => {
+      element.scrollIntoView({ block: "center", inline: "nearest" })
+      element.closest(".aq-code-shell")?.removeAttribute("data-code-drag-selection-text")
+    })
     const codeDrag = await dragLocatorText(page, codeContent, "token login code drag", {
       endX: codeDragMetrics.endX,
       startX: 80,
@@ -382,6 +436,7 @@ test.describe("editor authoring route live drag sequence", () => {
       waitMs: 1_600,
     })
     await expect.poll(() => readSelectionText(page)).toContain("createAccessToken")
+    expect(codeDrag.selectionText).not.toContain("TTL")
     expect(codeDrag.selectionText).not.toContain("Access Token")
     expect(codeDrag.afterScrollTop).toBeLessThanOrEqual(codeDrag.beforeScrollTop + 24)
     expect(codeDrag.afterScrollTop).toBeGreaterThanOrEqual(codeDrag.beforeScrollTop - 24)

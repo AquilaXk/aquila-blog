@@ -1,5 +1,5 @@
 import CodeBlock from "@tiptap/extension-code-block"
-import { NodeSelection, TextSelection } from "@tiptap/pm/state"
+import { NodeSelection } from "@tiptap/pm/state"
 import { NodeViewContent, type NodeViewProps, ReactNodeViewRenderer } from "@tiptap/react"
 import {
   ClipboardEvent as ReactClipboardEvent,
@@ -161,14 +161,6 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
     },
     [editor, getPos, node.nodeSize]
   )
-  const applyCodeTextSelection = useCallback(
-    (anchorPos: number, headPos: number) => {
-      const nextSelection = TextSelection.create(editor.state.doc, Math.min(anchorPos, headPos), Math.max(anchorPos, headPos))
-      if (nextSelection.eq(editor.state.selection)) return
-      editor.view.dispatch(editor.state.tr.setSelection(nextSelection))
-    },
-    [editor]
-  )
   const selectCodeDomTextRange = useCallback(
     (contentRoot: HTMLElement | null, anchorPos: number, headPos: number) => {
       if (typeof getPos !== "function" || !contentRoot) return false
@@ -218,24 +210,38 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
       if (!shell || !contentRoot || !(event.target instanceof Node) || !shell.contains(event.target)) return
       const targetElement = event.target instanceof Element ? event.target : event.target.parentElement
+      const contentRect = contentRoot.getBoundingClientRect()
+      const isInsideContentBox = event.clientX >= contentRect.left && event.clientX <= contentRect.right && event.clientY >= contentRect.top && event.clientY <= contentRect.bottom
       const isCodeTextSurfaceTarget =
-        contentRoot.contains(event.target) || Boolean(targetElement?.closest(".aq-code-highlight-layer"))
+        contentRoot.contains(event.target) ||
+        Boolean(targetElement?.closest(".aq-code-highlight-layer")) ||
+        (targetElement === shell && isInsideContentBox)
       if (!isCodeTextSurfaceTarget) return
       const anchorPos = resolveCodeTextPosFromPointer(event.clientX, event.clientY, contentRoot)
       if (typeof anchorPos !== "number") return
       event.stopPropagation()
       lastActiveCodeBlockContentRoot = contentRoot
-      window.getSelection()?.removeAllRanges()
+      const selection = window.getSelection(), persistedCodeSelectionText = shell.getAttribute("data-code-drag-selection-text")?.trim() || ""
+      const anchorElement = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null, focusElement = selection?.focusNode instanceof Element ? selection.focusNode : selection?.focusNode?.parentElement ?? null
+      const selectedText = selection?.toString().trim() || "", contentText = contentRoot.textContent?.trim() || ""
+      const existingCodeSelectionText = selectedText || persistedCodeSelectionText
+      const hasExistingCodeSelection = Boolean((selectedText && anchorElement && focusElement && contentRoot.contains(anchorElement) && contentRoot.contains(focusElement)) || (persistedCodeSelectionText && contentText.includes(persistedCodeSelectionText.slice(0, 48))))
+      if (hasExistingCodeSelection) {
+        shell.setAttribute("data-code-drag-selection-text", existingCodeSelectionText)
+        preserveCodeDomTextRange(contentRoot, anchorPos, anchorPos)
+      } else {
+        selection?.removeAllRanges()
+      }
+      preserveWindowScrollPositionAcrossFrames({ x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }, 168, 4, 2_800, false, false)
       codeDragSelectionRef.current = {
         active: false,
         anchorPos,
         startX: event.clientX,
         startY: event.clientY,
       }
-      applyCodeTextSelection(anchorPos, anchorPos)
-      focusElementWithoutScroll(editor.view.dom as HTMLElement)
+      focusElementWithoutScroll(contentRoot)
     },
-    [applyCodeTextSelection, editor.view.dom, resolveCodeTextPosFromPointer]
+    [preserveCodeDomTextRange, resolveCodeTextPosFromPointer]
   )
 
   const handleCodePointerDownCapture = useCallback(
@@ -279,8 +285,8 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       const headPos = typeof resolvedHeadPos === "number" ? resolvedHeadPos : resolveFallbackHeadPos(session.anchorPos)
       session.active = true
       session.lastHeadPos = headPos
+      event.preventDefault()
       event.stopPropagation()
-      applyCodeTextSelection(session.anchorPos, headPos)
       preserveCodeDomTextRange(contentRoot, session.anchorPos, headPos)
     }
     const handleWindowMouseUp = (event: MouseEvent | PointerEvent) => {
@@ -292,6 +298,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
         shellRef.current?.querySelector<HTMLElement>(".aq-code-editor-content") ?? null
       const resolvedHeadPos = resolveCodeTextPosFromPointer(event.clientX, event.clientY, contentRoot)
       const headPos = typeof resolvedHeadPos === "number" ? resolvedHeadPos : session.lastHeadPos ?? resolveFallbackHeadPos(session.anchorPos)
+      event.preventDefault()
       preserveCodeDomTextRange(contentRoot, session.anchorPos, headPos)
       event.stopPropagation()
     }
@@ -307,7 +314,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       window.removeEventListener("pointerup", handleWindowMouseUp, true)
       window.removeEventListener("pointercancel", handleWindowMouseUp, true)
     }
-  }, [applyCodeTextSelection, getPos, node.nodeSize, preserveCodeDomTextRange, resolveCodeTextPosFromPointer])
+  }, [getPos, node.nodeSize, preserveCodeDomTextRange, resolveCodeTextPosFromPointer])
   const ensureCodeDomTextSelection = useCallback((contentRoot: HTMLElement | null) => {
     if (!contentRoot || typeof window === "undefined") return
     window.requestAnimationFrame(() => {

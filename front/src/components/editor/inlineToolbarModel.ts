@@ -1,4 +1,5 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
+import { TextSelection } from "@tiptap/pm/state"
 import { normalizeInlineColorToken } from "src/libs/markdown/inlineColor"
 
 export type InlineTextStyleOption = {
@@ -111,11 +112,35 @@ export const isInlineCodeMarkActive = (
   editor: TiptapEditor | null | undefined
 ) => isInlineMarkCommandActive(editor, "code")
 
+const syncEditorSelectionFromDomSelection = (editor: TiptapEditor) => {
+  if (typeof window === "undefined") return
+  const domSelection = window.getSelection()
+  const range = domSelection && domSelection.rangeCount > 0 ? domSelection.getRangeAt(0) : null
+  const commonAncestor =
+    range?.commonAncestorContainer instanceof Element
+      ? range.commonAncestorContainer
+      : range?.commonAncestorContainer?.parentElement ?? null
+  if (!range || !domSelection || domSelection.isCollapsed || !commonAncestor || !editor.view.dom.contains(commonAncestor) || commonAncestor.closest(".aq-code-editor-content")) return
+
+  try {
+    const from = editor.view.posAtDOM(range.startContainer, range.startOffset)
+    const to = editor.view.posAtDOM(range.endContainer, range.endOffset)
+    if (!Number.isFinite(from) || !Number.isFinite(to) || from === to) return
+    const nextSelection = TextSelection.create(editor.state.doc, Math.min(from, to), Math.max(from, to))
+    if (!nextSelection.eq(editor.state.selection)) {
+      editor.view.dispatch(editor.state.tr.setSelection(nextSelection))
+    }
+  } catch {
+    // NodeView internals that do not map to the editor document keep the current PM selection.
+  }
+}
+
 export const runInlineMarkCommand = (
   editor: TiptapEditor | null | undefined,
   commandId: InlineMarkCommandId
 ) => {
   if (!editor) return false
+  syncEditorSelectionFromDomSelection(editor)
   INLINE_MARK_COMMANDS[commandId].run(editor)
   return true
 }

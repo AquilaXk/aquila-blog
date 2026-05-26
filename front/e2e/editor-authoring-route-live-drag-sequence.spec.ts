@@ -102,6 +102,19 @@ test.describe("editor authoring route live drag sequence", () => {
       "}",
       "```",
       "",
+      "## 재발급",
+      "",
+      "```java",
+      "public String reissue(String refreshToken) {",
+      "",
+      "    if (!isValid(refreshToken)) {",
+      "        throw new UnauthorizedException();",
+      "    }",
+      "",
+      "    return createAccessToken(getUser(refreshToken));",
+      "}",
+      "```",
+      "",
       "## 운영에서 가장 먼저 터지는 문제들",
       "",
       "- 짧은 TTL",
@@ -435,7 +448,51 @@ test.describe("editor authoring route live drag sequence", () => {
       selection.removeAllRanges()
       selection.addRange(range)
     })
-    await expect.poll(() => readSelectionText(page)).toContain("TTL")
+    try {
+      await expect.poll(() => readSelectionText(page)).toContain("TTL")
+    } catch (error) {
+      const diagnostics = await page.evaluate(() => {
+        const selection = window.getSelection()
+        const describeNode = (node: Node | null | undefined) => {
+          const element = node instanceof Element ? node : node?.parentElement ?? null
+          return {
+            className: String(element?.className ?? ""),
+            codeText: element?.closest(".aq-code-shell")?.textContent?.replace(/\s+/g, " ").trim().slice(0, 120) ?? null,
+            text: element?.textContent?.replace(/\s+/g, " ").trim().slice(0, 120) ?? null,
+          }
+        }
+        return {
+          selectionText: selection?.toString() ?? "",
+          anchor: describeNode(selection?.anchorNode),
+          focus: describeNode(selection?.focusNode),
+          codePersisted: Array.from(document.querySelectorAll("[data-code-drag-selection-text]")).map((element) => element.getAttribute("data-code-drag-selection-text")),
+          tablePersisted: Array.from(document.querySelectorAll("[data-table-drag-selection-text]")).map((element) => element.getAttribute("data-table-drag-selection-text")),
+          activeElement: String(document.activeElement?.className ?? ""),
+        }
+      })
+      throw new Error(`lower body selection restored stale code text: ${JSON.stringify(diagnostics)}\n${error instanceof Error ? error.message : String(error)}`)
+    }
+    const reissueCodeContent = editor.locator(".aq-code-editor-content", { hasText: "createAccessToken(getUser(refreshToken))" }).first()
+    const reissueClickMetrics = await reissueCodeContent.evaluate((element) => {
+      element.scrollIntoView({ block: "center", inline: "nearest" })
+      const rect = element.getBoundingClientRect()
+      const style = window.getComputedStyle(element)
+      const lineHeight = Number.parseFloat(style.lineHeight || "22") || 22
+      const paddingTop = Number.parseFloat(style.paddingTop || "0") || 0
+      return {
+        y: Math.min(rect.height - 8, paddingTop + lineHeight * 5.5),
+      }
+    })
+    const beforeLowerCodeClick = await readScrollTop(page)
+    await reissueCodeContent.click({ position: { x: 80, y: reissueClickMetrics.y } })
+    await page.waitForTimeout(2_600)
+    await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforeLowerCodeClick + 24)
+    await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforeLowerCodeClick - 24)
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
+    await expect.poll(() => readSelectionText(page)).toContain("createAccessToken(getUser")
+    await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforeLowerCodeClick + 24)
+    await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforeLowerCodeClick - 24)
+    await page.mouse.wheel(0, 1).then(() => page.waitForTimeout(40))
     await codeContent.evaluate((element) => {
       element.scrollIntoView({ block: "center", inline: "nearest" })
       element.closest(".aq-code-shell")?.removeAttribute("data-code-drag-selection-text")

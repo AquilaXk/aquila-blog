@@ -58,8 +58,10 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
     let rafId: number | null = null
     let codeDragSelectionPreserveRafId: number | null = null
     let cleanupCodeDragSelectionPreserve: (() => void) | null = null
+    let codeDragSelectionPreserveGeneration = 0
     const clearImmediateWindowTextSelection = () => window.getSelection()?.removeAllRanges()
     const cancelCodeDragSelectionPreserve = () => {
+      codeDragSelectionPreserveGeneration += 1
       if (codeDragSelectionPreserveRafId !== null) {
         window.cancelAnimationFrame(codeDragSelectionPreserveRafId)
         codeDragSelectionPreserveRafId = null
@@ -165,6 +167,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
     }
 
     const preserveCodeDragRootSelectionAcrossFrames = (root: HTMLElement) => {
+      const preserveGeneration = ++codeDragSelectionPreserveGeneration, isCurrentPreserveGeneration = () => preserveGeneration === codeDragSelectionPreserveGeneration
       if (codeDragSelectionPreserveRafId !== null) {
         window.cancelAnimationFrame(codeDragSelectionPreserveRafId); codeDragSelectionPreserveRafId = null; cleanupCodeDragSelectionPreserve?.(); cleanupCodeDragSelectionPreserve = null
       }
@@ -172,9 +175,9 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now()
       let frame = 0
       let restoring = false
-      const persistSelectionText = (currentRoot: HTMLElement) => currentRoot.closest(".aq-code-shell")?.setAttribute("data-code-drag-selection-text", window.getSelection()?.toString() || currentRoot.innerText || currentRoot.textContent || "")
+      const persistSelectionText = (currentRoot: HTMLElement) => { if (isCurrentPreserveGeneration()) currentRoot.closest(".aq-code-shell")?.setAttribute("data-code-drag-selection-text", window.getSelection()?.toString() || currentRoot.innerText || currentRoot.textContent || "") }
       const restoreIfMissing = () => {
-        const currentRoot = resolveCurrentRoot()
+        if (!isCurrentPreserveGeneration()) return false; const currentRoot = resolveCurrentRoot()
         persistSelectionText(currentRoot)
         if (!currentRoot.isConnected) return false; if (isSelectionInsideCodeDragRoot(currentRoot) && window.getSelection()?.toString() === (currentRoot.innerText || currentRoot.textContent || "")) return true
         restoring = true
@@ -183,14 +186,11 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         persistSelectionText(currentRoot)
         return true
       }
-      const handlePreservedSelectionChange = () => {
-        if (restoring) return
-        restoreIfMissing()
-      }
+      const handlePreservedSelectionChange = () => { if (restoring || !isCurrentPreserveGeneration()) return; const currentRoot = resolveCurrentRoot(), selection = window.getSelection(), anchor = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null, focus = selection?.focusNode instanceof Element ? selection.focusNode : selection?.focusNode?.parentElement ?? null; if (selection?.toString().trim() && (!anchor || !focus || !currentRoot.contains(anchor) || !currentRoot.contains(focus))) { cancelCodeDragSelectionPreserve(); return }; restoreIfMissing() }
       const cleanupPreservedSelection = () => { document.removeEventListener("selectionchange", handlePreservedSelectionChange, true); window.removeEventListener("pointerdown", cancelPreservedSelection, true); window.removeEventListener("mousedown", cancelPreservedSelection, true) }
-      const isCurrentCodeDragEvent = (event: Event) => { const codeTextDragStart = codeTextDragStartRef.current; const targetElement = event.target instanceof Element ? event.target : event.target instanceof Node ? event.target.parentElement : null; const currentRoot = resolveCurrentRoot(), currentShell = currentRoot.closest(".aq-code-shell") ?? codeShell; return Boolean(targetElement && (currentRoot.contains(targetElement) || currentShell?.contains(targetElement)) && ((codeTextDragStart?.scrollPreserveStarted && codeTextDragStart.root === currentRoot) || currentShell?.getAttribute("data-code-drag-selection-text")?.trim())) }, cancelPreservedSelection = (event: Event) => { if (!isCurrentCodeDragEvent(event)) cancelCodeDragSelectionPreserve() }
+      const isCurrentCodeDragEvent = (event: Event) => { const codeTextDragStart = codeTextDragStartRef.current; const targetElement = event.target instanceof Element ? event.target : event.target instanceof Node ? event.target.parentElement : null; const currentRoot = resolveCurrentRoot(), currentShell = currentRoot.closest(".aq-code-shell") ?? codeShell; return Boolean(targetElement && (currentRoot.contains(targetElement) || currentShell?.contains(targetElement)) && ((codeTextDragStart?.scrollPreserveStarted && codeTextDragStart.root === currentRoot) || currentShell?.getAttribute("data-code-drag-selection-text")?.trim())) }, cancelPreservedSelection = (event: Event) => { if (!isCurrentPreserveGeneration()) return; if (!isCurrentCodeDragEvent(event)) cancelCodeDragSelectionPreserve() }
       const restore = () => {
-        if (!resolveCurrentRoot().isConnected) { codeDragSelectionPreserveRafId = null; cleanupPreservedSelection(); return }
+        if (!isCurrentPreserveGeneration()) { cleanupPreservedSelection(); return }; if (!resolveCurrentRoot().isConnected) { codeDragSelectionPreserveRafId = null; codeDragSelectionPreserveGeneration += 1; cleanupPreservedSelection(); return }
         restoreIfMissing()
         frame += 1
         const elapsedMs = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt
@@ -198,12 +198,13 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
           codeDragSelectionPreserveRafId = window.requestAnimationFrame(restore)
         } else {
           codeDragSelectionPreserveRafId = null
+          codeDragSelectionPreserveGeneration += 1
           cleanupPreservedSelection()
         }
       }
       document.addEventListener("selectionchange", handlePreservedSelectionChange, true)
-      window.addEventListener("pointerdown", cancelPreservedSelection, { capture: true, passive: true, once: true })
-      window.addEventListener("mousedown", cancelPreservedSelection, { capture: true, passive: true, once: true })
+      window.addEventListener("pointerdown", cancelPreservedSelection, { capture: true, passive: true })
+      window.addEventListener("mousedown", cancelPreservedSelection, { capture: true, passive: true })
       cleanupCodeDragSelectionPreserve = cleanupPreservedSelection
       restore()
     }

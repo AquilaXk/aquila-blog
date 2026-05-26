@@ -50,7 +50,7 @@ import {
 } from "./blockHandleLayoutModel"
 export { getPreferredCodeLanguage, normalizeCodeLanguage } from "./codeBlockNodeViewLanguageModel"
 export { CodeBlockEditorStyles } from "./codeBlockNodeViewStyles"
-let lastActiveCodeBlockContentRoot: HTMLElement | null = null
+let lastActiveCodeBlockContentRoot: HTMLElement | null = null, codeDomTextRangePreserveGeneration = 0
 type CodeDragSelectionSession = { active: boolean; anchorPos: number; lastHeadPos?: number; startX: number; startY: number }
 export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos }: NodeViewProps) => {
   const menuId = useId()
@@ -164,29 +164,26 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
   const preserveCodeDomTextRange = useCallback(
     (contentRoot: HTMLElement | null, anchorPos: number, headPos: number) => {
       const scrollAnchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
-      const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now()
-      let frame = 0
-      let cancelled = false
-      let cancelArmed = false
+      const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now(), preserveGeneration = ++codeDomTextRangePreserveGeneration
+      let frame = 0, cancelled = false, cancelArmed = false
       const shell = contentRoot?.closest(".aq-code-shell")
-      const cancel = (event: Event) => { if (cancelArmed && (!(event.target instanceof Node) || !shell?.contains(event.target))) cancelled = true }
-      const selectRange = () => {
-        if (!selectCodeDomTextRange(contentRoot, anchorPos, headPos)) {
-          selectDomTextContents(contentRoot)
-        }
+      const cleanupCancel = () => { window.removeEventListener("pointerdown", cancel, true); window.removeEventListener("mousedown", cancel, true); document.removeEventListener("selectionchange", cancelOnSelectionChange, true) }
+      const cancelPreserve = () => { cancelled = true; codeDomTextRangePreserveGeneration += 1; shell?.removeAttribute("data-code-drag-selection-text"); cleanupCancel() }
+      const cancel = (event: Event) => { if (!cancelArmed) return; if (!(event.target instanceof Node) || !shell?.contains(event.target)) cancelPreserve() }
+      const cancelOnSelectionChange = () => { if (!cancelArmed) return; const selection = window.getSelection(), anchor = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null, focus = selection?.focusNode instanceof Element ? selection.focusNode : selection?.focusNode?.parentElement ?? null; if (selection?.toString().trim() && (!anchor || !focus || !shell?.contains(anchor) || !shell.contains(focus))) cancelPreserve() }
+      const selectRange = () => { if (!selectCodeDomTextRange(contentRoot, anchorPos, headPos)) selectDomTextContents(contentRoot)
         shell?.setAttribute("data-code-drag-selection-text", window.getSelection()?.toString() || contentRoot?.textContent || "")
       }
       const restore = () => {
-        if (cancelled) return
-        selectRange()
-        frame += 1
+        if (cancelled || preserveGeneration !== codeDomTextRangePreserveGeneration) return
+        selectRange(); frame += 1
         const elapsedMs = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt
-        if (frame < 168 || elapsedMs < 2_800) {
-          window.requestAnimationFrame(restore)
-        }
+        if (frame < 168 || elapsedMs < 2_800) window.requestAnimationFrame(restore)
+        else { codeDomTextRangePreserveGeneration += 1; cleanupCancel() }
       }
-      window.addEventListener("pointerdown", cancel, { capture: true, once: true })
-      window.addEventListener("mousedown", cancel, { capture: true, once: true })
+      window.addEventListener("pointerdown", cancel, { capture: true, passive: true })
+      window.addEventListener("mousedown", cancel, { capture: true, passive: true })
+      document.addEventListener("selectionchange", cancelOnSelectionChange, true)
       preserveWindowScrollPositionAcrossFrames(scrollAnchor, 168, 4, 2_800, false, false)
       window.requestAnimationFrame(() => { cancelArmed = true })
       restore()

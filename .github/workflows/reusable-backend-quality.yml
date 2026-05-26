@@ -223,7 +223,21 @@ jobs:
           comments_file="${RUNNER_TEMP}/pr-comments.json"
           changed_files="${RUNNER_TEMP}/changed-files.txt"
 
-          git diff --name-only "origin/${GITHUB_BASE_REF}...HEAD" > "${changed_files}"
+          api_url="${{ github.api_url }}/repos/${{ github.repository }}/pulls/${PR_NUMBER}/files?per_page=100"
+          : > "${changed_files}"
+          while [ -n "${api_url}" ]; do
+            response_headers="${RUNNER_TEMP}/jacoco-github-response-headers.txt"
+            response_body="${RUNNER_TEMP}/jacoco-github-response-body.json"
+            curl -fsSL \
+              -D "${response_headers}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${api_url}" > "${response_body}"
+            jq -r '.[].filename' "${response_body}" >> "${changed_files}"
+            api_url="$(
+              awk -F'[<>]' '/rel="next"/ { print $2 }' "${response_headers}" | tail -n 1
+            )"
+          done
 
           python3 tools/ci/comment-jacoco-summary.py \
             back/build/reports/jacoco/pr/jacocoPrReport.xml \
@@ -231,16 +245,21 @@ jobs:
             --changed-files "${changed_files}" \
             > "${summary_file}"
 
-          gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate > "${comments_file}"
-          comment_id="$(
-            python3 -c 'import json, sys; marker = "<!-- aquila-blog:jacoco-coverage-summary -->"; comments = json.load(open(sys.argv[1], encoding="utf-8")); print(next((item["id"] for item in comments if marker in item.get("body", "")), ""))' "${comments_file}"
-          )"
-
           body="$(cat "${summary_file}")"
-          if [[ -n "${comment_id}" ]]; then
-            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" --field body="${body}"
+          if gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate > "${comments_file}"; then
+            comment_id="$(
+              python3 -c 'import json, sys; marker = "<!-- aquila-blog:jacoco-coverage-summary -->"; comments = json.load(open(sys.argv[1], encoding="utf-8")); print(next((item["id"] for item in comments if marker in item.get("body", "")), ""))' "${comments_file}"
+            )"
+
+            if [[ -n "${comment_id}" ]]; then
+              gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" --field body="${body}" \
+                || echo "::warning title=Jacoco comment skipped::GitHub comment update failed; summary is available in the step summary."
+            else
+              gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --field body="${body}" \
+                || echo "::warning title=Jacoco comment skipped::GitHub comment creation failed; summary is available in the step summary."
+            fi
           else
-            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --field body="${body}"
+            echo "::warning title=Jacoco comment skipped::GitHub comment lookup failed; summary is available in the step summary."
           fi
 
           cat "${summary_file}" >> "${GITHUB_STEP_SUMMARY}"

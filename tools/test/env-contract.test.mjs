@@ -12,6 +12,8 @@ const applicationProdPath = path.join(repoRoot, "back/src/main/resources/applica
 const deployScriptPath = path.join(repoRoot, "deploy/homeserver/blue_green_deploy.sh")
 const hardeningScriptPath = path.join(repoRoot, "deploy/homeserver/hardening/setup_hardening.sh")
 const hardeningDocPath = path.join(repoRoot, "deploy/homeserver/HARDENING.md")
+const prometheusPath = path.join(repoRoot, "deploy/homeserver/monitoring/prometheus.yml")
+const taskAlertsPath = path.join(repoRoot, "deploy/homeserver/monitoring/rules/task-alerts.yml")
 
 const targetKeyNames = (contract, targetName) => {
   const target = contract.targets[targetName]
@@ -202,4 +204,24 @@ test("homeserver origin ingress is private behind Cloudflare Tunnel", () => {
   assert.match(hardeningScript, /Cloudflare Tunnel/)
   assert.match(hardeningDoc, /cloudflared egress/)
   assert.match(hardeningDoc, /80\/443.*loopback/)
+})
+
+test("ddos defense monitoring covers rate limit, docker runtime, redis, and memory pressure", () => {
+  const compose = readFileSync(composePath, "utf8")
+  const prometheus = readFileSync(prometheusPath, "utf8")
+  const taskAlerts = readFileSync(taskAlertsPath, "utf8")
+
+  assert.match(compose, /docker_runtime_probe:/)
+  assert.match(compose, /monitoring\/docker-runtime-probe\.mjs:\/app\/docker-runtime-probe\.mjs:ro/)
+  assert.match(compose, /\/var\/run\/docker\.sock:\/var\/run\/docker\.sock:ro/)
+  assert.match(prometheus, /job_name: docker_runtime_probe/)
+  assert.match(prometheus, /honor_labels:\s*true/)
+  assert.match(prometheus, /docker_runtime_probe:9920/)
+
+  assert.match(taskAlerts, /api_rate_limit_rejected_total/)
+  assert.match(taskAlerts, /status="429"/)
+  assert.match(taskAlerts, /AquilaDockerRuntimeProbeScrapeDown/)
+  assert.match(taskAlerts, /docker_container_restart_count\{[^}]*service="cloudflared"/)
+  assert.match(taskAlerts, /docker_container_memory_usage_bytes\{[^}]*service=~"back_.+"/)
+  assert.match(taskAlerts, /redis.*latency|lettuce.*duration|redis_commands_duration_seconds/i)
 })

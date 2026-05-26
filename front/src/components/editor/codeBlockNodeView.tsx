@@ -40,7 +40,7 @@ import {
   resolveCodeBlockPasteRange,
   resolveCodeBlockCopyText,
   selectCodeBlockText,
-  selectDomTextContents,
+  selectCodeDomTextContents, selectDomTextContents,
   selectDomTextOffsetRange,
 } from "./codeBlockNodeViewSelectionModel"
 import { focusElementWithoutScroll } from "./blockEditorEngineDocumentModel"
@@ -312,7 +312,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       const selectedText = window.getSelection()?.toString() || ""
       if (selectedText.trim()) return
       if (!(contentRoot.textContent || "").trim()) return
-      selectDomTextContents(contentRoot)
+      selectCodeDomTextContents(contentRoot)
     })
   }, [])
   useEffect(() => {
@@ -375,7 +375,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
         ensureCodeDomTextSelection(contentRoot)
         return
       }
-      selectDomTextContents(contentRoot)
+      selectCodeDomTextContents(contentRoot)
     }
 
     const observer = new MutationObserver(() => {
@@ -505,7 +505,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       ensureCodeDomTextSelection(contentRoot)
       return
     }
-    if (selectDomTextContents(contentRoot)) return
+    if (selectCodeDomTextContents(contentRoot)) return
 
     if (typeof getPos !== "function") return
     const codeBlockPos = getPos()

@@ -18,26 +18,38 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-        with:
-          fetch-depth: 0
 
       - name: Detect frontend-related changes
         id: changes
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            base="${{ github.event.pull_request.base.sha }}"
+            api_url="${{ github.api_url }}/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100"
+            changed_files="${RUNNER_TEMP}/changed-files.txt"
+            : > "${changed_files}"
+
+            while [ -n "${api_url}" ]; do
+              response_headers="${RUNNER_TEMP}/github-response-headers.txt"
+              response_body="${RUNNER_TEMP}/github-response-body.json"
+              curl -fsSL \
+                -D "${response_headers}" \
+                -H "Accept: application/vnd.github+json" \
+                -H "Authorization: Bearer ${GH_TOKEN}" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "${api_url}" > "${response_body}"
+              jq -r '.[].filename' "${response_body}" >> "${changed_files}"
+              api_url="$(
+                awk -F'[<>]' '/rel="next"/ { print $2 }' "${response_headers}" | tail -n 1
+              )"
+            done
           else
-            base="${{ github.event.before }}"
+            echo "frontend=true" >> "${GITHUB_OUTPUT}"
+            exit 0
           fi
-
-          if [ -z "${base}" ] || [[ "${base}" =~ ^0+$ ]]; then
-            base="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
-          fi
-
-          git diff --name-only "${base}" HEAD > "${RUNNER_TEMP}/changed-files.txt"
 
           frontend=false
           while IFS= read -r file; do

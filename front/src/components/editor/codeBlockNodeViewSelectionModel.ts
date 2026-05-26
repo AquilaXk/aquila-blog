@@ -115,6 +115,49 @@ export const selectCodeBlockText = ({ editor, getPos, nodeSize }: CodeBlockPosit
   return true
 }
 
+type CodeNativeDragEvent = {
+  target: EventTarget | null
+  nativeEvent?: Event
+  preventDefault: () => void
+  stopPropagation: () => void
+}
+
+const stopNativeCodeDrag = (event: CodeNativeDragEvent) => {
+  event.preventDefault()
+  event.stopPropagation()
+  event.nativeEvent?.stopImmediatePropagation()
+}
+
+export const preventNativeCodeDragStart = (event: CodeNativeDragEvent, shell: HTMLElement | null) => {
+  if (!(event.target instanceof Node) || !shell?.contains(event.target)) return false
+  stopNativeCodeDrag(event)
+  return true
+}
+
+export const preventInternalCodeDrop = (event: CodeNativeDragEvent, shell: HTMLElement | null) => {
+  const selection = window.getSelection()
+  const selectionText = selection?.toString().trim() ?? ""
+  const anchorElement =
+    selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null
+  const focusElement =
+    selection?.focusNode instanceof Element ? selection.focusNode : selection?.focusNode?.parentElement ?? null
+  const hasNativeCodeSelection = Boolean(
+    selectionText &&
+      shell &&
+      anchorElement &&
+      focusElement &&
+      shell.contains(anchorElement) &&
+      shell.contains(focusElement)
+  )
+  const persistedCodeSelectionText = shell?.getAttribute("data-code-drag-selection-text")?.trim()
+  const hasInternalCodeSelection = Boolean(
+    shell && (hasNativeCodeSelection || persistedCodeSelectionText)
+  )
+  if (!hasInternalCodeSelection) return false
+  stopNativeCodeDrag(event)
+  return true
+}
+
 export const resolveCodeBlockPasteRange = ({ editor, getPos, nodeSize }: CodeBlockPositionArgs) => {
   const { selection } = editor.state
 

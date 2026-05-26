@@ -108,7 +108,8 @@ export const preserveWindowScrollAcrossFrames = (
   tolerance = 4,
   minDurationMs = 0,
   cancelOnTextSelectionChange = false,
-  cancelOnPointerMove = true
+  cancelOnPointerMove = true,
+  cancelOnPointerDown = true
 ) => {
   if (typeof window === "undefined" || typeof document === "undefined") return
   const scrollingElement = document.scrollingElement
@@ -118,7 +119,8 @@ export const preserveWindowScrollAcrossFrames = (
     tolerance,
     minDurationMs,
     cancelOnTextSelectionChange,
-    cancelOnPointerMove
+    cancelOnPointerMove,
+    cancelOnPointerDown
   )
 }
 
@@ -128,7 +130,8 @@ export const preserveWindowScrollPositionAcrossFrames = (
   tolerance = 4,
   minDurationMs = 0,
   cancelOnTextSelectionChange = false,
-  cancelOnPointerMove = true
+  cancelOnPointerMove = true,
+  cancelOnPointerDown = true
 ) => {
   if (typeof window === "undefined" || typeof document === "undefined") return
   const scrollingElement = document.scrollingElement
@@ -145,9 +148,21 @@ export const preserveWindowScrollPositionAcrossFrames = (
     if (!cancelOnTextSelectionChange) return
     cancel()
   }
+  const restoreScrollPosition = () => {
+    const currentY = scrollingElement?.scrollTop ?? window.scrollY
+    if (Math.abs(window.scrollX - startX) > tolerance || Math.abs(currentY - startY) > tolerance) {
+      window.scrollTo(startX, startY)
+    }
+  }
+  const restoreOnScroll = () => {
+    if (!cancelled) restoreScrollPosition()
+  }
   const cleanup = () => {
     window.removeEventListener("wheel", cancel, true)
-    window.removeEventListener("pointerdown", cancel, true)
+    window.removeEventListener("scroll", restoreOnScroll, true)
+    if (cancelOnPointerDown) {
+      window.removeEventListener("pointerdown", cancel, true)
+    }
     if (cancelOnPointerMove) {
       window.removeEventListener("pointermove", cancel, true)
       window.removeEventListener("mousemove", cancel, true)
@@ -157,7 +172,10 @@ export const preserveWindowScrollPositionAcrossFrames = (
     document.removeEventListener("selectionchange", cancelForTextSelection, true)
   }
   window.addEventListener("wheel", cancel, { capture: true, passive: true, once: true })
-  window.addEventListener("pointerdown", cancel, { capture: true, passive: true, once: true })
+  window.addEventListener("scroll", restoreOnScroll, { capture: true, passive: true })
+  if (cancelOnPointerDown) {
+    window.addEventListener("pointerdown", cancel, { capture: true, passive: true, once: true })
+  }
   if (cancelOnPointerMove) {
     window.addEventListener("pointermove", cancel, { capture: true, passive: true, once: true })
     window.addEventListener("mousemove", cancel, { capture: true, passive: true, once: true })
@@ -169,10 +187,7 @@ export const preserveWindowScrollPositionAcrossFrames = (
   }
   const restore = () => {
     if (cancelled) return
-    const currentY = scrollingElement?.scrollTop ?? window.scrollY
-    if (Math.abs(window.scrollX - startX) > tolerance || Math.abs(currentY - startY) > tolerance) {
-      window.scrollTo(startX, startY)
-    }
+    restoreScrollPosition()
     frame += 1
     const elapsedMs = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt
     if (frame < frames || elapsedMs < minDurationMs) {
@@ -195,12 +210,14 @@ export const markNextEditorPointerAfterCodeSelection = () => {
   preserveNextEditorPointerAfterCodeSelection = true
 }
 
-const EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES = 72
-const EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS = 1_120
+const EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES = 168
+const EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS = 2_800
+const EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES = 192
+const EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS = 3_200
 const EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES = 144
 const EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS = 2_400
-const EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES = EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES
-const EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MIN_MS = EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS
+const EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES = 72
+const EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MIN_MS = 1_120
 const EDITOR_POINTER_SCROLL_PRESERVE_SELECTOR = "[data-testid='block-editor-prosemirror'], .ProseMirror"
 const EDITOR_POINTER_SCROLL_CONTROL_SELECTOR =
   "button, input, textarea, select, summary, [role='button'], [contenteditable='false']"
@@ -241,6 +258,17 @@ const preserveWindowScrollForTableFollowUpPointer = () => {
   )
 }
 
+export const preserveWindowScrollForCodePointerFocus = (cancelOnPointerDown = false) => {
+  preserveWindowScrollAcrossFrames(
+    EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES,
+    4,
+    EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS,
+    false,
+    false,
+    cancelOnPointerDown
+  )
+}
+
 export const preserveWindowScrollForEditorPointerFocus = (
   target: EventTarget | null,
   tableSelectionActive: boolean,
@@ -267,6 +295,10 @@ export const preserveWindowScrollForEditorPointerFocus = (
   } else if (shouldPreserveFollowUp) {
     preserveNextEditorPointerAfterTable = false
   }
+  if (shouldPreserveCodeSelectionFollowUp && !tablePointerTarget) {
+    preserveWindowScrollForCodePointerFocus()
+    return
+  }
   if (shouldPreserveFollowUp) {
     preserveWindowScrollForTableFollowUpPointer()
     return
@@ -289,7 +321,7 @@ export const preserveWindowScrollForEditorPointerFocus = (
       EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES,
       4,
       EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MIN_MS,
-      !shouldPreserveCodeSelectionFollowUp
+      true
     )
   }
 }

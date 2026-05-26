@@ -408,7 +408,7 @@ export const useBlockEditorEngineBlockSelectionUi = ({
         return
       }
 
-      if (event.defaultPrevented) return
+      if (event.defaultPrevented || (event.nativeEvent as Event & { __aqCodePointerHandled?: boolean }).__aqCodePointerHandled) return
       if (event.key !== "Tab" || event.metaKey || event.ctrlKey || event.altKey) return
       if (slashMenuState) return
       const activeListItemInteraction = resolveActiveListItemInteraction(currentEditor)
@@ -468,6 +468,7 @@ export const useBlockEditorEngineBlockSelectionUi = ({
         skipNextPointerDownSelectionClearRef.current = false
         return
       }
+      if (event.defaultPrevented) return
       const targetListItemContext = findNestedListItemContextFromTarget(event.target)
       const targetBlockIndex =
         findTopLevelBlockIndexFromTarget(event.target) ??

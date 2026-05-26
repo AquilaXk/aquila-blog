@@ -338,6 +338,11 @@ test.describe("editor authoring route live drag sequence", () => {
       throw new Error(`code shell drag did not select code text: ${JSON.stringify(shellDispatchDiagnostics)}`)
     }
     await expect.poll(() => readSelectionText(page)).toContain("createAccessToken")
+    await page.mouse.wheel(0, 1).then(() => page.waitForTimeout(40))
+    await codeContent.evaluate((element) => {
+      element.scrollIntoView({ block: "center", inline: "nearest" })
+    })
+    await page.waitForTimeout(120)
     const beforeCodeSelectAll = await readScrollTop(page)
     await codeContent.click({ position: { x: 80, y: 28 } })
     await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
@@ -485,7 +490,9 @@ test.describe("editor authoring route live drag sequence", () => {
     })
     await page.waitForTimeout(120)
     const beforeLowerCodeClick = await readScrollTop(page)
-    await reissueCodeContent.click({ position: { x: 80, y: reissueClickMetrics.y } })
+    const reissueCodeBox = await reissueCodeContent.boundingBox()
+    if (!reissueCodeBox) throw new Error("reissue code metrics are missing")
+    await page.mouse.click(reissueCodeBox.x + 80, reissueCodeBox.y + reissueClickMetrics.y)
     await page.waitForTimeout(2_600)
     await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforeLowerCodeClick + 24)
     await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforeLowerCodeClick - 24)
@@ -522,6 +529,14 @@ test.describe("editor authoring route live drag sequence", () => {
     if (!postCodeCurrentLowerBodyBox) throw new Error("post-code current lower body metrics are missing")
     await page.mouse.move(postCodeCurrentLowerBodyBox.x + 8, postCodeCurrentLowerBodyBox.y + postCodeCurrentLowerBodyBox.height / 2)
     await page.mouse.down()
+    const beforeInjectedBodyDragScroll = await readScrollTop(page)
+    const afterInjectedBodyDragScroll = await page.evaluate(() => {
+      window.scrollBy(0, 476)
+      return document.scrollingElement?.scrollTop ?? window.scrollY
+    })
+    expect(afterInjectedBodyDragScroll).toBeGreaterThan(beforeInjectedBodyDragScroll + 120)
+    await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforeInjectedBodyDragScroll + 24)
+    await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforeInjectedBodyDragScroll - 24)
     await page.mouse.move(
       postCodeCurrentLowerBodyBox.x + Math.max(24, postCodeCurrentLowerBodyBox.width - 8),
       postCodeCurrentLowerBodyBox.y + postCodeCurrentLowerBodyBox.height / 2,
@@ -532,6 +547,8 @@ test.describe("editor authoring route live drag sequence", () => {
     const postCodeBodySelection = await readSelectionText(page)
     expect(postCodeBodySelection).toContain("TTL")
     expect(postCodeBodySelection).not.toContain("createAccessToken")
+    await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforePostCodeBodyClick + 24)
+    await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforePostCodeBodyClick - 24)
     await page.mouse.wheel(0, 1).then(() => page.waitForTimeout(40))
     await codeContent.evaluate((element) => {
       element.scrollIntoView({ block: "center", inline: "nearest" })

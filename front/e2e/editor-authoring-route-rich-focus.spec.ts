@@ -101,6 +101,8 @@ test.describe("editor authoring route rich block focus", () => {
       label: string,
       clickOffset = { x: 40, y: 24 }
     ) => {
+      await page.mouse.wheel(0, 1)
+      await page.waitForTimeout(40)
       await target.scrollIntoViewIfNeeded()
       await target.evaluate((element) => {
         element.scrollIntoView({ block: "center", inline: "nearest" })

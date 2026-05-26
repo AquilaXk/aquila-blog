@@ -16,6 +16,34 @@ export type WindowScrollAnchor = {
   y: number
 }
 
+let preserveNextEditorPointerAfterTable = false
+let preserveNextEditorPointerAfterCodeSelection = false
+const activeTablePointerScrollPreserveCancels = new Set<() => void>()
+
+export const markNextEditorPointerAfterTable = () => {
+  preserveNextEditorPointerAfterTable = true
+}
+
+export const clearNextEditorPointerAfterTable = () => {
+  preserveNextEditorPointerAfterTable = false
+}
+
+export const cancelTablePointerScrollPreserves = () => {
+  clearNextEditorPointerAfterTable()
+  activeTablePointerScrollPreserveCancels.forEach((cancel) => cancel())
+  activeTablePointerScrollPreserveCancels.clear()
+}
+
+const trackTablePointerScrollPreserve = (cancel?: (() => void) | void) => {
+  if (!cancel) return
+  activeTablePointerScrollPreserveCancels.add(cancel)
+  window.setTimeout(() => activeTablePointerScrollPreserveCancels.delete(cancel), EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS + 250)
+}
+
+export const markNextEditorPointerAfterCodeSelection = () => {
+  preserveNextEditorPointerAfterCodeSelection = true
+}
+
 export const resolveBlockChromeLeft = (
   left: number,
   surfaceRect: BlockChromeSurfaceRect,
@@ -109,18 +137,24 @@ export const preserveWindowScrollAcrossFrames = (
   minDurationMs = 0,
   cancelOnTextSelectionChange = false,
   cancelOnPointerMove = true,
-  cancelOnPointerDown = true
+  cancelOnPointerDown = true,
+  cancelOnPointerUp = false,
+  cancelOnTextSelectionChangeRequiresText = false,
+  shouldCancelBeforeRestore?: () => boolean
 ) => {
   if (typeof window === "undefined" || typeof document === "undefined") return
   const scrollingElement = document.scrollingElement
-  preserveWindowScrollPositionAcrossFrames(
+  return preserveWindowScrollPositionAcrossFrames(
     { x: window.scrollX, y: scrollingElement?.scrollTop ?? window.scrollY },
     frames,
     tolerance,
     minDurationMs,
     cancelOnTextSelectionChange,
     cancelOnPointerMove,
-    cancelOnPointerDown
+    cancelOnPointerDown,
+    cancelOnPointerUp,
+    cancelOnTextSelectionChangeRequiresText,
+    shouldCancelBeforeRestore
   )
 }
 
@@ -131,7 +165,10 @@ export const preserveWindowScrollPositionAcrossFrames = (
   minDurationMs = 0,
   cancelOnTextSelectionChange = false,
   cancelOnPointerMove = true,
-  cancelOnPointerDown = true
+  cancelOnPointerDown = true,
+  cancelOnPointerUp = false,
+  cancelOnTextSelectionChangeRequiresText = false,
+  shouldCancelBeforeRestore?: () => boolean
 ) => {
   if (typeof window === "undefined" || typeof document === "undefined") return
   const scrollingElement = document.scrollingElement
@@ -144,9 +181,29 @@ export const preserveWindowScrollPositionAcrossFrames = (
     cancelled = true
     cleanup()
   }
+  const cancelIfRestoreIsNoLongerValid = () => {
+    if (!shouldCancelBeforeRestore) return false
+    let shouldCancel = false
+    try {
+      shouldCancel = shouldCancelBeforeRestore()
+    } catch {
+      shouldCancel = true
+    }
+    if (!shouldCancel) return false
+    cancel()
+    return true
+  }
   const cancelForTextSelection = () => {
     if (!cancelOnTextSelectionChange) return
-    cancel()
+    if (!cancelOnTextSelectionChangeRequiresText) {
+      cancel()
+      return
+    }
+    const selection = window.getSelection()
+    if (selection && !selection.isCollapsed && selection.toString().trim()) {
+      clearNextEditorPointerAfterTable()
+      cancel()
+    }
   }
   const restoreScrollPosition = () => {
     const currentY = scrollingElement?.scrollTop ?? window.scrollY
@@ -155,13 +212,18 @@ export const preserveWindowScrollPositionAcrossFrames = (
     }
   }
   const restoreOnScroll = () => {
-    if (!cancelled) restoreScrollPosition()
+    if (!cancelled && !cancelIfRestoreIsNoLongerValid()) restoreScrollPosition()
   }
   const cleanup = () => {
     window.removeEventListener("wheel", cancel, true)
     window.removeEventListener("scroll", restoreOnScroll, true)
     if (cancelOnPointerDown) {
       window.removeEventListener("pointerdown", cancel, true)
+    }
+    if (cancelOnPointerUp) {
+      window.removeEventListener("pointerup", cancel, true)
+      window.removeEventListener("pointercancel", cancel, true)
+      window.removeEventListener("mouseup", cancel, true)
     }
     if (cancelOnPointerMove) {
       window.removeEventListener("pointermove", cancel, true)
@@ -176,6 +238,11 @@ export const preserveWindowScrollPositionAcrossFrames = (
   if (cancelOnPointerDown) {
     window.addEventListener("pointerdown", cancel, { capture: true, passive: true, once: true })
   }
+  if (cancelOnPointerUp) {
+    window.addEventListener("pointerup", cancel, { capture: true, passive: true, once: true })
+    window.addEventListener("pointercancel", cancel, { capture: true, passive: true, once: true })
+    window.addEventListener("mouseup", cancel, { capture: true, passive: true, once: true })
+  }
   if (cancelOnPointerMove) {
     window.addEventListener("pointermove", cancel, { capture: true, passive: true, once: true })
     window.addEventListener("mousemove", cancel, { capture: true, passive: true, once: true })
@@ -187,6 +254,7 @@ export const preserveWindowScrollPositionAcrossFrames = (
   }
   const restore = () => {
     if (cancelled) return
+    if (cancelIfRestoreIsNoLongerValid()) return
     restoreScrollPosition()
     frame += 1
     const elapsedMs = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt
@@ -197,17 +265,7 @@ export const preserveWindowScrollPositionAcrossFrames = (
     }
   }
   restore()
-}
-
-let preserveNextEditorPointerAfterTable = false
-let preserveNextEditorPointerAfterCodeSelection = false
-
-export const markNextEditorPointerAfterTable = () => {
-  preserveNextEditorPointerAfterTable = true
-}
-
-export const markNextEditorPointerAfterCodeSelection = () => {
-  preserveNextEditorPointerAfterCodeSelection = true
+  return cancel
 }
 
 const EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES = 168
@@ -243,23 +301,30 @@ export const preserveWindowScrollForRichBlockSelectAll = () => {
 }
 
 const preserveWindowScrollForTablePointerTextDrag = () => {
-  preserveWindowScrollAcrossFrames(
+  // Keep collapsed click focus-reveal correction alive; real text drags cancel on selectionchange.
+  trackTablePointerScrollPreserve(preserveWindowScrollAcrossFrames(
     EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES,
     4,
     EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS,
+    true,
+    true,
+    true,
     false,
-    false
-  )
+    true
+  ))
 }
 
 const preserveWindowScrollForTableFollowUpPointer = () => {
-  preserveWindowScrollAcrossFrames(
+  trackTablePointerScrollPreserve(preserveWindowScrollAcrossFrames(
     EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES,
     4,
     EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS,
+    true,
+    true,
+    true,
     false,
-    false
-  )
+    true
+  ))
 }
 
 export const preserveWindowScrollForCodePointerFocus = (cancelOnPointerDown = false) => {

@@ -37,6 +37,7 @@ import {
 } from "./codeBlockNodeViewLanguageModel"
 import {
   isPrimarySelectAllShortcut,
+  preventInternalCodeDrop, preventNativeCodeDragStart,
   resolveCodeBlockPasteRange,
   resolveCodeBlockCopyText,
   selectCodeBlockText,
@@ -453,7 +454,6 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
     if (!isLanguageMenuOpen) return
     window.requestAnimationFrame(() => searchInputRef.current?.focus())
   }, [isLanguageMenuOpen])
-
   const filteredLanguageOptions = useMemo(() => filterCodeLanguageOptions(languageSearch), [languageSearch])
 
   const exactSearchMatch = hasExactCodeLanguageSearchMatch(filteredLanguageOptions, languageSearch)
@@ -493,7 +493,6 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
     event.stopPropagation()
     event.clipboardData.setData("text/plain", copyText)
   }, [])
-
   const handleCodeKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (!isPrimarySelectAllShortcut(event)) return
 
@@ -515,7 +514,6 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
     editor.view.dispatch(tr)
     focusElementWithoutScroll(editor.view.dom as HTMLElement)
   }, [editor, getPos, ensureCodeDomTextSelection, selectCurrentCodeBlockText])
-
   return (
     <CodeBlockEditorWrapper data-selected={selected} data-code-block-wrapper="true">
       <CodeBlockEditorHeader data-code-block-header="true">
@@ -577,6 +575,8 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
           onPointerDownCapture={handleCodePointerDownCapture}
           onMouseDownCapture={handleCodeMouseDownCapture}
           onKeyDownCapture={handleCodeKeyDown}
+          onDragStartCapture={(event) => preventNativeCodeDragStart(event, shellRef.current)}
+          onDropCapture={(event) => preventInternalCodeDrop(event, shellRef.current)}
           onCopy={handleCodeCopy}
           onPaste={handleCodePaste}
         >

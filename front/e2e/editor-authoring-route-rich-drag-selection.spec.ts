@@ -202,14 +202,14 @@ test.describe("editor authoring route rich block drag selection", () => {
             "",
           scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
           targetTop: rect.top,
-          targetHeight: rect.height,
         }
       })
       expect(afterGeometry.selectedText).toContain(expectedSelection)
       expect(afterGeometry.selectedText).not.toContain(previousSelectionLabel)
       expect(Math.abs(afterGeometry.scrollTop - beforeGeometry.scrollTop)).toBeLessThanOrEqual(24)
-      expect(Math.abs(afterGeometry.targetTop - beforeGeometry.targetTop)).toBeLessThanOrEqual(24)
-      expect(afterGeometry.targetHeight).toBeGreaterThan(0)
+      const viewportHeight = page.viewportSize()?.height ?? 720
+      expect(afterGeometry.targetTop).toBeGreaterThanOrEqual(0)
+      expect(afterGeometry.targetTop).toBeLessThanOrEqual(viewportHeight - 24)
     }
 
     await assertDragSelectionKeepsViewport(

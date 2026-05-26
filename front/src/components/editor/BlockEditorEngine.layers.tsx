@@ -294,6 +294,7 @@ export const BlockEditorToolbarLayer = ({
             aria-label="글자색"
             title="글자색"
             data-active={Boolean(activeInlineColor)}
+            onMouseDown={handleToolbarButtonMouseDown}
             onClick={(event: ReactMouseEvent<HTMLElement>) => {
               event.preventDefault()
               setIsInlineColorMenuOpen((prev) => !prev)

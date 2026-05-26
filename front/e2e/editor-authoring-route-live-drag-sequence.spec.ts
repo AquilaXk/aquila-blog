@@ -34,12 +34,15 @@ const dragLocatorText = async (
   label: string,
   options: { endX?: number; startX?: number; y?: number; waitMs?: number } = {}
 ) => {
-  await target.scrollIntoViewIfNeeded()
+  await target.waitFor({ state: "attached", timeout: 5_000 })
   await target.evaluate((element) => {
     element.scrollIntoView({ block: "center", inline: "nearest" })
   })
-  const box = await target.boundingBox()
-  if (!box) throw new Error(`${label} metrics are missing`)
+  const box = await target.evaluate((element) => {
+    const rect = element.getBoundingClientRect()
+    return { height: rect.height, width: rect.width, x: rect.left, y: rect.top }
+  })
+  if (box.width <= 0 || box.height <= 0) throw new Error(`${label} metrics are missing`)
   const y = options.y ?? Math.min(box.height / 2, 18)
   const startX = options.startX ?? 8
   const endX = options.endX ?? Math.min(box.width - 8, 360)
@@ -51,9 +54,7 @@ const dragLocatorText = async (
   await page.mouse.up()
   await page.waitForTimeout(options.waitMs ?? 720)
 
-  const afterScrollTop = await readScrollTop(page)
-  const selectionText = await readSelectionText(page)
-  return { beforeScrollTop, afterScrollTop, selectionText }
+  return { beforeScrollTop, afterScrollTop: await readScrollTop(page), selectionText: await readSelectionText(page) }
 }
 
 const dragLocatorTextRange = async (
@@ -64,33 +65,46 @@ const dragLocatorTextRange = async (
   options: { waitMs?: number } = {}
 ) => {
   await target.scrollIntoViewIfNeeded()
-  const metrics = await target.evaluate((element, { textToSelect, label }) => {
-    element.scrollIntoView({ block: "center", inline: "nearest" })
-    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
-    while (walker.nextNode()) {
-      const textNode = walker.currentNode as Text
-      const startOffset = textNode.data.indexOf(textToSelect)
-      if (startOffset < 0) continue
+  const measureTextRange = () =>
+    target.evaluate((element, { textToSelect, label }) => {
+      element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+      while (walker.nextNode()) {
+        const textNode = walker.currentNode as Text
+        const startOffset = textNode.data.indexOf(textToSelect)
+        if (startOffset < 0) continue
 
-      const range = document.createRange()
-      range.setStart(textNode, startOffset)
-      range.setEnd(textNode, startOffset + textToSelect.length)
-      const rect =
-        Array.from(range.getClientRects()).find(
-          (candidate) => candidate.width > 2 && candidate.height > 2
-        ) ?? range.getBoundingClientRect()
-      if (rect.width <= 2 || rect.height <= 2) {
-        throw new Error(`${label} text rect is too small`)
-      }
+        const range = document.createRange()
+        range.setStart(textNode, startOffset)
+        range.setEnd(textNode, startOffset + textToSelect.length)
+        const rect =
+          Array.from(range.getClientRects()).find(
+            (candidate) => candidate.width > 2 && candidate.height > 2
+          ) ?? range.getBoundingClientRect()
+        if (rect.width <= 2 || rect.height <= 2) {
+          throw new Error(`${label} text rect is too small`)
+        }
 
-      return {
-        endX: rect.right - 2,
-        startX: rect.left + 2,
-        y: rect.top + rect.height / 2,
+        return {
+          endX: rect.right - 2,
+          startX: rect.left + 2,
+          y: rect.top + rect.height / 2,
+        }
       }
-    }
-    throw new Error(`${label} text node is missing`)
-  }, { label, textToSelect: text })
+      throw new Error(`${label} text node is missing`)
+    }, { label, textToSelect: text })
+  let metrics = await measureTextRange()
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const viewport = page.viewportSize()
+    if (!viewport || (metrics.y >= 8 && metrics.y <= viewport.height - 8)) break
+    await page.mouse.wheel(0, metrics.y > viewport.height / 2 ? 360 : -360)
+    await page.waitForTimeout(160)
+    metrics = await measureTextRange()
+  }
+  const viewport = page.viewportSize()
+  if (viewport && (metrics.y < 8 || metrics.y > viewport.height - 8)) {
+    throw new Error(`${label} text rect is outside viewport: ${JSON.stringify(metrics)}`)
+  }
   const beforeScrollTop = await readScrollTop(page)
 
   await page.mouse.move(metrics.startX, metrics.y)
@@ -210,16 +224,21 @@ test.describe("editor authoring route live drag sequence", () => {
     expect(bodyDrag.selectionText).toContain("Stateless가 좋다는데")
     expect(Math.abs(bodyDrag.afterScrollTop - bodyDrag.beforeScrollTop)).toBeLessThanOrEqual(24)
 
-    const accessTokenCell = editor.locator("td", { hasText: "Access Token" }).first()
+    const accessTokenCell = editor.getByRole("cell", { name: "Access Token", exact: true })
     const accessTokenBox = await accessTokenCell.evaluate((element) => {
       element.scrollIntoView({ block: "center", inline: "nearest" })
       const rect = element.getBoundingClientRect()
-      return { y: rect.height / 2, endX: Math.min(rect.width - 8, 128) }
+      const y = rect.top + rect.height / 2
+      return {
+        endX: rect.left + Math.min(rect.width - 8, 128),
+        startX: rect.left + 8,
+        y,
+      }
     })
     await accessTokenCell.evaluate((element, metrics) => {
       const rect = element.getBoundingClientRect()
       const clientX = rect.left + 10
-      const clientY = rect.top + metrics.y
+      const clientY = metrics.y
       const selection = window.getSelection()
       selection?.removeAllRanges()
       const range = document.createRange()
@@ -231,7 +250,7 @@ test.describe("editor authoring route live drag sequence", () => {
     await accessTokenCell.evaluate((element, metrics) => {
       const rect = element.getBoundingClientRect()
       const clientX = rect.left + 10
-      const clientY = rect.top + metrics.y
+      const clientY = metrics.y
       element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, buttons: 0, cancelable: true, clientX, clientY }))
     }, accessTokenBox)
     await page.evaluate(() => {
@@ -261,11 +280,17 @@ test.describe("editor authoring route live drag sequence", () => {
       window.addEventListener("pointermove", record, { capture: true })
       window.addEventListener("mousemove", record, { capture: true })
     })
-    const tableDrag = await dragLocatorText(page, accessTokenCell, "access token table drag", {
-      endX: accessTokenBox.endX,
-      y: accessTokenBox.y,
-      waitMs: 850,
-    })
+    const beforeTableDragScrollTop = await readScrollTop(page)
+    await page.mouse.move(accessTokenBox.startX, accessTokenBox.y)
+    await page.mouse.down()
+    await page.mouse.move(accessTokenBox.endX, accessTokenBox.y)
+    await page.mouse.up()
+    await page.waitForTimeout(850)
+    const tableDrag = {
+      beforeScrollTop: beforeTableDragScrollTop,
+      afterScrollTop: await readScrollTop(page),
+      selectionText: await readSelectionText(page),
+    }
     const tableSelectionText = await readSelectionText(page)
     if (!tableSelectionText.includes("Access Token") || tableSelectionText.includes("API 인증")) {
       const diagnostics = await page.evaluate(() => {
@@ -306,6 +331,7 @@ test.describe("editor authoring route live drag sequence", () => {
         y: Math.min(rect.height - 8, paddingTop + lineHeight * 2.5),
       }
     })
+    await page.waitForTimeout(120)
     const beforeImmediateCodeSelectAll = await readScrollTop(page)
     await codeContent.click({ position: { x: 80, y: immediateCodeMetrics.y } })
     await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
@@ -687,14 +713,6 @@ test.describe("editor authoring route live drag sequence", () => {
     await expectEditorToContainLoadedText(editor, "Stateless 의미")
 
     const targetCell = editor.locator("td", { hasText: "Stateless 의미" }).first()
-    const cellDragMetrics = await targetCell.evaluate((element) => {
-      element.scrollIntoView({ block: "center", inline: "nearest" })
-      const rect = element.getBoundingClientRect()
-      return {
-        endX: Math.min(rect.width - 8, 144),
-        y: Math.min(rect.height / 2, 24),
-      }
-    })
     await page.evaluate(() => {
       ;(window as typeof window & { __qaLive507TableEvents?: unknown[] }).__qaLive507TableEvents = []
       const record = (event: MouseEvent | PointerEvent) => {
@@ -720,30 +738,13 @@ test.describe("editor authoring route live drag sequence", () => {
       document.addEventListener("mousemove", record, { capture: true, once: true })
       document.addEventListener("mouseup", record, { capture: true, once: true })
     })
-    const beforeTableDragScrollTop = await readScrollTop(page)
-    await targetCell.evaluate((element, metrics) => {
-      const rect = element.getBoundingClientRect()
-      const startX = rect.left + 8
-      const endX = rect.left + metrics.endX
-      const y = rect.top + metrics.y
-      const pointerInit = { bubbles: true, cancelable: true, button: 0, pointerId: 1, pointerType: "mouse" }
-      const mouseInit = { bubbles: true, cancelable: true, button: 0 }
-      element.dispatchEvent(new PointerEvent("pointerdown", { ...pointerInit, buttons: 1, clientX: startX, clientY: y }))
-      element.dispatchEvent(new MouseEvent("mousedown", { ...mouseInit, buttons: 1, clientX: startX, clientY: y }))
-      for (let step = 1; step <= 6; step += 1) {
-        const clientX = startX + ((endX - startX) * step) / 6
-        element.dispatchEvent(new PointerEvent("pointermove", { ...pointerInit, buttons: 1, clientX, clientY: y }))
-        element.dispatchEvent(new MouseEvent("mousemove", { ...mouseInit, buttons: 1, clientX, clientY: y }))
-      }
-      element.dispatchEvent(new PointerEvent("pointerup", { ...pointerInit, buttons: 0, clientX: endX, clientY: y }))
-      element.dispatchEvent(new MouseEvent("mouseup", { ...mouseInit, buttons: 0, clientX: endX, clientY: y }))
-    }, cellDragMetrics)
-    await page.waitForTimeout(900)
-    const tableDrag = {
-      beforeScrollTop: beforeTableDragScrollTop,
-      afterScrollTop: await readScrollTop(page),
-      selectionText: await readSelectionText(page),
-    }
+    const tableDrag = await dragLocatorTextRange(
+      page,
+      targetCell,
+      "live 507 table drag",
+      "Stateless 의미",
+      { waitMs: 900 }
+    )
     if (!tableDrag.selectionText.includes("Stateless 의미")) {
       const diagnostics = await page.evaluate(() => ({
         selectionText: window.getSelection()?.toString() ?? "",
@@ -769,10 +770,16 @@ test.describe("editor authoring route live drag sequence", () => {
         element.removeAttribute("data-table-drag-selection-text")
       })
     })
-    await page.mouse.wheel(0, 1)
-    await page.waitForTimeout(80)
+    await expect.poll(() => readSelectionText(page)).toBe("")
+    await page.mouse.wheel(0, 360)
+    await page.waitForTimeout(160)
 
     const lowerBody = editor.locator("p", { hasText: "하단 선택 대상 문단입니다" }).first()
+    await lowerBody.evaluate((element) => {
+      element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
+    })
+    await page.waitForTimeout(160)
+    await expect.poll(() => readSelectionText(page)).toBe("")
     const lowerBodyDrag = await dragLocatorTextRange(
       page,
       lowerBody,

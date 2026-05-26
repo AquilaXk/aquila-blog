@@ -185,9 +185,14 @@ export const preserveWindowScrollPositionAcrossFrames = (
 }
 
 let preserveNextEditorPointerAfterTable = false
+let preserveNextEditorPointerAfterCodeSelection = false
 
 export const markNextEditorPointerAfterTable = () => {
   preserveNextEditorPointerAfterTable = true
+}
+
+export const markNextEditorPointerAfterCodeSelection = () => {
+  preserveNextEditorPointerAfterCodeSelection = true
 }
 
 const EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES = 72
@@ -251,7 +256,12 @@ export const preserveWindowScrollForEditorPointerFocus = (
   const shouldPreserveTableBlockSelectionPointer = tablePointerTarget && blockSelectionActive
   const shouldPreserveGeneralEditorPointer =
     editorPointerTarget && !editorRichBlockTarget && !editorControlTarget && !blockSelectionActive
+  const shouldPreserveCodeSelectionFollowUp =
+    editorPointerTarget && !editorControlTarget && preserveNextEditorPointerAfterCodeSelection
   const shouldPreserveFollowUp = !tablePointerTarget && preserveNextEditorPointerAfterTable
+  if (shouldPreserveCodeSelectionFollowUp) {
+    preserveNextEditorPointerAfterCodeSelection = false
+  }
   if (tablePointerTarget) {
     markNextEditorPointerAfterTable()
   } else if (shouldPreserveFollowUp) {
@@ -279,7 +289,7 @@ export const preserveWindowScrollForEditorPointerFocus = (
       EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES,
       4,
       EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MIN_MS,
-      true
+      !shouldPreserveCodeSelectionFollowUp
     )
   }
 }

@@ -2,7 +2,10 @@ import type { Editor } from "@tiptap/core"
 import { NodeSelection, TextSelection } from "@tiptap/pm/state"
 import type { KeyboardEvent as ReactKeyboardEvent } from "react"
 import { focusElementWithoutScroll } from "./blockEditorEngineDocumentModel"
-import { preserveWindowScrollForRichBlockSelectAll } from "./blockHandleLayoutModel"
+import {
+  markNextEditorPointerAfterCodeSelection,
+  preserveWindowScrollForRichBlockSelectAll,
+} from "./blockHandleLayoutModel"
 
 type CodeBlockPositionArgs = {
   editor: Editor
@@ -96,6 +99,7 @@ export const selectCodeBlockText = ({ editor, getPos, nodeSize }: CodeBlockPosit
   const from = codeBlockPos + 1
   const to = codeBlockPos + Math.max(1, nodeSize - 1)
   const nextSelection = TextSelection.create(editor.state.doc, from, to)
+  markNextEditorPointerAfterCodeSelection()
   preserveWindowScrollForRichBlockSelectAll()
   editor.view.dispatch(editor.state.tr.setSelection(nextSelection))
   focusElementWithoutScroll(editor.view.dom as HTMLElement)

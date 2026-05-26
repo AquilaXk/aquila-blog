@@ -483,6 +483,7 @@ test.describe("editor authoring route live drag sequence", () => {
         y: Math.min(rect.height - 8, paddingTop + lineHeight * 5.5),
       }
     })
+    await page.waitForTimeout(120)
     const beforeLowerCodeClick = await readScrollTop(page)
     await reissueCodeContent.click({ position: { x: 80, y: reissueClickMetrics.y } })
     await page.waitForTimeout(2_600)
@@ -492,6 +493,27 @@ test.describe("editor authoring route live drag sequence", () => {
     await expect.poll(() => readSelectionText(page)).toContain("createAccessToken(getUser")
     await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforeLowerCodeClick + 24)
     await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforeLowerCodeClick - 24)
+    await page.evaluate(() => {
+      window.getSelection()?.removeAllRanges()
+      document.querySelectorAll("[data-code-drag-selection-text]").forEach((element) => {
+        element.removeAttribute("data-code-drag-selection-text")
+        element.closest(".aq-code-shell")?.removeAttribute("data-code-drag-selection-text")
+      })
+    })
+    await lowerBodyAnchor.evaluate((element) => {
+      element.scrollIntoView({ block: "center", inline: "nearest" })
+    })
+    await page.waitForTimeout(120)
+    const beforePostCodeBodyClick = await readScrollTop(page)
+    const postCodeLowerBodyBox = await lowerBodyAnchor.boundingBox()
+    if (!postCodeLowerBodyBox) throw new Error("post-code lower body metrics are missing")
+    await page.mouse.click(
+      postCodeLowerBodyBox.x + Math.min(postCodeLowerBodyBox.width / 2, 96),
+      postCodeLowerBodyBox.y + 12
+    )
+    await page.waitForTimeout(1_000)
+    await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforePostCodeBodyClick + 24)
+    await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforePostCodeBodyClick - 24)
     await page.mouse.wheel(0, 1).then(() => page.waitForTimeout(40))
     await codeContent.evaluate((element) => {
       element.scrollIntoView({ block: "center", inline: "nearest" })

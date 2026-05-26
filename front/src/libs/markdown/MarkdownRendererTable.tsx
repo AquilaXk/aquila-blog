@@ -58,17 +58,9 @@ export const MarkdownTableRenderer = ({
     () => normalizedColumnWidths.some((width) => typeof width === "number" && width > 0),
     [normalizedColumnWidths]
   )
-  const normalizedColumnWidthPercentages = useMemo(
-    () =>
-      !isWideOverflowTable && explicitTableWidth > 0
-        ? normalizedColumnWidths.map((width) =>
-            width ? `${((width / explicitTableWidth) * 100).toFixed(4)}%` : null
-          )
-        : [],
-    [explicitTableWidth, isWideOverflowTable, normalizedColumnWidths]
-  )
+  const usesExplicitNormalWidth = !isWideOverflowTable && explicitTableWidth > 0
   const tableStyle = useMemo<CSSProperties | undefined>(() => {
-    if (isWideOverflowTable && explicitTableWidth > 0) {
+    if ((isWideOverflowTable || usesExplicitNormalWidth) && explicitTableWidth > 0) {
       return {
         width: `${explicitTableWidth}px`,
         minWidth: `${explicitTableWidth}px`,
@@ -84,7 +76,7 @@ export const MarkdownTableRenderer = ({
     }
 
     return undefined
-  }, [explicitTableWidth, isWideOverflowTable])
+  }, [explicitTableWidth, isWideOverflowTable, usesExplicitNormalWidth])
   rowCursorRef.current = 0
   const contextValue = useMemo<MarkdownTableRenderContextValue>(
     () => ({
@@ -102,8 +94,14 @@ export const MarkdownTableRenderer = ({
 
   return (
     <MarkdownTableRenderContext.Provider value={contextValue}>
-      <div className="aq-table-shell">
-        <div className="aq-table-scroll">
+      <div
+        className="aq-table-shell"
+        data-table-width-mode={usesExplicitNormalWidth ? "explicit-normal" : undefined}
+      >
+        <div
+          className="aq-table-scroll"
+          data-table-width-mode={usesExplicitNormalWidth ? "explicit-normal" : undefined}
+        >
           <table
             className={[
               "aq-table",
@@ -123,11 +121,9 @@ export const MarkdownTableRenderer = ({
                     <col
                       key={`table-col-${index}`}
                       style={
-                        isWideOverflowTable
+                        isWideOverflowTable || usesExplicitNormalWidth
                           ? { width: `${width}px` }
-                          : normalizedColumnWidthPercentages[index]
-                            ? { width: normalizedColumnWidthPercentages[index] || undefined }
-                            : undefined
+                          : undefined
                       }
                     />
                   )

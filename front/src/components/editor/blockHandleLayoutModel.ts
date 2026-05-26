@@ -246,7 +246,9 @@ const preserveWindowScrollForTablePointerTextDrag = () => {
   preserveWindowScrollAcrossFrames(
     EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES,
     4,
-    EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS
+    EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS,
+    false,
+    false
   )
 }
 
@@ -254,7 +256,9 @@ const preserveWindowScrollForTableFollowUpPointer = () => {
   preserveWindowScrollAcrossFrames(
     EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES,
     4,
-    EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS
+    EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS,
+    false,
+    false
   )
 }
 

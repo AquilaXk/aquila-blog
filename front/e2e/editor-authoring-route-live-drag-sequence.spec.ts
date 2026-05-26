@@ -204,12 +204,14 @@ test.describe("editor authoring route live drag sequence", () => {
           stack,
         })
       }
-      document.addEventListener("pointerdown", record, { capture: true, once: true })
-      document.addEventListener("pointermove", record, { capture: true, once: true })
-      document.addEventListener("pointerup", record, { capture: true, once: true })
-      document.addEventListener("mousedown", record, { capture: true, once: true })
-      document.addEventListener("mousemove", record, { capture: true, once: true })
-      document.addEventListener("mouseup", record, { capture: true, once: true })
+      document.addEventListener("pointerdown", record, { capture: true })
+      document.addEventListener("pointermove", record, { capture: true })
+      document.addEventListener("pointerup", record, { capture: true })
+      document.addEventListener("mousedown", record, { capture: true })
+      document.addEventListener("mousemove", record, { capture: true })
+      document.addEventListener("mouseup", record, { capture: true })
+      window.addEventListener("pointermove", record, { capture: true })
+      window.addEventListener("mousemove", record, { capture: true })
     })
     const tableDrag = await dragLocatorText(page, accessTokenCell, "access token table drag", {
       endX: accessTokenBox.endX,
@@ -574,5 +576,162 @@ test.describe("editor authoring route live drag sequence", () => {
     expect(codeDrag.selectionText).not.toContain("Access Token")
     expect(codeDrag.afterScrollTop).toBeLessThanOrEqual(codeDrag.beforeScrollTop + 24)
     expect(codeDrag.afterScrollTop).toBeGreaterThanOrEqual(codeDrag.beforeScrollTop - 24)
+  })
+
+  test("live 507 형태의 하단 table/body drag는 focus reveal scroll로 튀지 않고 선택을 남긴다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1580, height: 900 })
+
+    const live507TableContent = [
+      "---",
+      'tags: ["Stateless", "인증", "JWT", "Refresh Token"]',
+      "---",
+      "",
+      "## 시작하며",
+      "",
+      "- “Stateless가 좋다는데, 왜 좋은 거지?”",
+      "- “세션이랑 JWT는 뭐가 다른 거야?”",
+      "",
+      ...filler("table 이전 본문", 96),
+      "",
+      '<!-- aq-table {"overflowMode":"normal","columnWidths":[119,192,210]} -->',
+      "| **영역** | **점검 항목** | **확인 기준** |",
+      "| --- | --- | --- |",
+      "| 개념 이해 | Stateless 의미 | 요청만으로 처리 가능한가 |",
+      "| 토큰 구조 | Access/Refresh 구분 | 역할 명확 |",
+      "| 보안 | HTTPS 사용 | 필수 |",
+      "| 저장소 | Refresh 저장 | DB/Redis |",
+      "| 만료 | Access 짧게 | 15~60분 |",
+      "| 흐름 | 재발급 로직 | 구현되어 있는가 |",
+      "",
+      ...filler("table 이후 본문", 24),
+      "",
+      "하단 선택 대상 문단입니다. 이 문장은 table drag 이후에도 같은 viewport에서 선택되어야 합니다.",
+    ].join("\n")
+
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(adminMember),
+      })
+    })
+    await page.route("**/post/api/v1/adm/posts/998", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 998,
+          version: 4,
+          title: "live 507 table body workflow 글",
+          content: live507TableContent,
+          contentHtml: null,
+          published: true,
+          listed: true,
+        }),
+      })
+    })
+
+    await page.goto("/editor/998")
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(
+      "live 507 table body workflow 글"
+    )
+    await expectEditorToContainLoadedText(editor, "Stateless 의미")
+
+    const targetCell = editor.locator("td", { hasText: "Stateless 의미" }).first()
+    const cellDragMetrics = await targetCell.evaluate((element) => {
+      element.scrollIntoView({ block: "center", inline: "nearest" })
+      const rect = element.getBoundingClientRect()
+      return {
+        endX: Math.min(rect.width - 8, 144),
+        y: Math.min(rect.height / 2, 24),
+      }
+    })
+    await page.evaluate(() => {
+      ;(window as typeof window & { __qaLive507TableEvents?: unknown[] }).__qaLive507TableEvents = []
+      const record = (event: MouseEvent | PointerEvent) => {
+        const pointElements = document.elementsFromPoint(event.clientX, event.clientY)
+        const cell = pointElements.find((element) => Boolean(element.closest("th, td")))?.closest("th, td")
+        ;(window as typeof window & { __qaLive507TableEvents?: unknown[] }).__qaLive507TableEvents?.push({
+          type: event.type,
+          buttons: "buttons" in event ? event.buttons : 0,
+          x: Math.round(event.clientX),
+          y: Math.round(event.clientY),
+          cellText: cell?.textContent?.replace(/\s+/g, " ").trim() ?? null,
+          selectionText: window.getSelection()?.toString() ?? "",
+          persisted: Array.from(document.querySelectorAll("[data-table-drag-selection-text]")).map(
+            (element) => element.getAttribute("data-table-drag-selection-text")
+          ),
+          scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+        })
+      }
+      document.addEventListener("pointerdown", record, { capture: true, once: true })
+      document.addEventListener("pointermove", record, { capture: true, once: true })
+      document.addEventListener("pointerup", record, { capture: true, once: true })
+      document.addEventListener("mousedown", record, { capture: true, once: true })
+      document.addEventListener("mousemove", record, { capture: true, once: true })
+      document.addEventListener("mouseup", record, { capture: true, once: true })
+    })
+    const beforeTableDragScrollTop = await readScrollTop(page)
+    await targetCell.evaluate((element, metrics) => {
+      const rect = element.getBoundingClientRect()
+      const startX = rect.left + 8
+      const endX = rect.left + metrics.endX
+      const y = rect.top + metrics.y
+      const pointerInit = { bubbles: true, cancelable: true, button: 0, pointerId: 1, pointerType: "mouse" }
+      const mouseInit = { bubbles: true, cancelable: true, button: 0 }
+      element.dispatchEvent(new PointerEvent("pointerdown", { ...pointerInit, buttons: 1, clientX: startX, clientY: y }))
+      element.dispatchEvent(new MouseEvent("mousedown", { ...mouseInit, buttons: 1, clientX: startX, clientY: y }))
+      for (let step = 1; step <= 6; step += 1) {
+        const clientX = startX + ((endX - startX) * step) / 6
+        element.dispatchEvent(new PointerEvent("pointermove", { ...pointerInit, buttons: 1, clientX, clientY: y }))
+        element.dispatchEvent(new MouseEvent("mousemove", { ...mouseInit, buttons: 1, clientX, clientY: y }))
+      }
+      element.dispatchEvent(new PointerEvent("pointerup", { ...pointerInit, buttons: 0, clientX: endX, clientY: y }))
+      element.dispatchEvent(new MouseEvent("mouseup", { ...mouseInit, buttons: 0, clientX: endX, clientY: y }))
+    }, cellDragMetrics)
+    await page.waitForTimeout(900)
+    const tableDrag = {
+      beforeScrollTop: beforeTableDragScrollTop,
+      afterScrollTop: await readScrollTop(page),
+      selectionText: await readSelectionText(page),
+    }
+    if (!tableDrag.selectionText.includes("Stateless 의미")) {
+      const diagnostics = await page.evaluate(() => ({
+        selectionText: window.getSelection()?.toString() ?? "",
+        persisted: Array.from(document.querySelectorAll("[data-table-drag-selection-text]")).map(
+          (element) => ({
+            text: element.textContent?.replace(/\s+/g, " ").trim() ?? "",
+            attr: element.getAttribute("data-table-drag-selection-text"),
+          })
+        ),
+        events: (window as typeof window & { __qaLive507TableEvents?: unknown[] }).__qaLive507TableEvents ?? [],
+        activeElement: document.activeElement?.tagName ?? null,
+        activeText: document.activeElement?.textContent?.replace(/\s+/g, " ").trim().slice(0, 80) ?? null,
+        scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+      }))
+      throw new Error(`live 507 table drag lost text selection: ${JSON.stringify({ tableDrag, diagnostics })}`)
+    }
+    expect(tableDrag.selectionText).toContain("Stateless 의미")
+    expect(tableDrag.afterScrollTop).toBeLessThanOrEqual(tableDrag.beforeScrollTop + 24)
+    expect(tableDrag.afterScrollTop).toBeGreaterThanOrEqual(tableDrag.beforeScrollTop - 24)
+    await page.evaluate(() => {
+      window.getSelection()?.removeAllRanges()
+      document.querySelectorAll("[data-table-drag-selection-text]").forEach((element) => {
+        element.removeAttribute("data-table-drag-selection-text")
+      })
+    })
+    await page.mouse.wheel(0, 1)
+    await page.waitForTimeout(80)
+
+    const lowerBody = editor.locator("p", { hasText: "하단 선택 대상 문단입니다" }).first()
+    const lowerBodyDrag = await dragLocatorText(page, lowerBody, "live 507 lower body drag", {
+      endX: 440,
+      y: 16,
+      waitMs: 900,
+    })
+    expect(lowerBodyDrag.selectionText).toContain("선택 대상 문단")
+    expect(lowerBodyDrag.afterScrollTop).toBeLessThanOrEqual(lowerBodyDrag.beforeScrollTop + 24)
+    expect(lowerBodyDrag.afterScrollTop).toBeGreaterThanOrEqual(lowerBodyDrag.beforeScrollTop - 24)
   })
 })

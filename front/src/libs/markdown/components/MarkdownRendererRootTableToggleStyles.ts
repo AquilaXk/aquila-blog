@@ -99,6 +99,13 @@ export const markdownRendererRootTableToggleStyles = (theme: Theme) => css`
     })()}
   }
 
+  .aq-table-shell[data-table-width-mode="explicit-normal"],
+  .aq-table-scroll[data-table-width-mode="explicit-normal"] {
+    width: fit-content;
+    max-width: 100%;
+    min-width: 0;
+  }
+
   table,
   .aq-table {
     width: auto;

@@ -20,6 +20,14 @@ const readSelectionText = (page: Page) =>
       ""
   )
 
+const readClipboardText = (page: Page) =>
+  page.evaluate(async () => navigator.clipboard?.readText?.() ?? "")
+
+const writeClipboardText = (page: Page, text: string) =>
+  page.evaluate(async (nextText) => {
+    await navigator.clipboard?.writeText?.(nextText)
+  }, text)
+
 const dragLocatorText = async (
   page: Page,
   target: Locator,
@@ -124,6 +132,9 @@ test.describe("editor authoring route live drag sequence", () => {
     })
 
     await page.goto("/editor/997")
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"], {
+      origin: new URL(page.url()).origin,
+    })
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue("live drag sequence 글")
@@ -436,6 +447,9 @@ test.describe("editor authoring route live drag sequence", () => {
       waitMs: 1_600,
     })
     await expect.poll(() => readSelectionText(page)).toContain("createAccessToken")
+    await writeClipboardText(page, "__AQUILA_SENTINEL__")
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+C" : "Control+C")
+    await expect.poll(() => readClipboardText(page)).toContain("createAccessToken")
     expect(codeDrag.selectionText).not.toContain("TTL")
     expect(codeDrag.selectionText).not.toContain("Access Token")
     expect(codeDrag.afterScrollTop).toBeLessThanOrEqual(codeDrag.beforeScrollTop + 24)

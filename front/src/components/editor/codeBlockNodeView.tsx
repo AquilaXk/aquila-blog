@@ -15,10 +15,7 @@ import {
 } from "react"
 import AppIcon from "src/components/icons/AppIcon"
 import { extractPlainTextFromHtml } from "src/libs/markdown/htmlToMarkdown"
-import {
-  highlightCodeToHtml,
-  renderImmediateCodeToHtml,
-} from "src/libs/markdown/prismRuntime"
+import { highlightCodeToHtml, renderImmediateCodeToHtml } from "src/libs/markdown/prismRuntime"
 import { toLanguageLabel } from "src/libs/markdown/rendering"
 import {
   CodeBlockEditorHeader,
@@ -41,6 +38,7 @@ import {
 import {
   isPrimarySelectAllShortcut,
   resolveCodeBlockPasteRange,
+  resolveCodeBlockCopyText,
   selectCodeBlockText,
   selectDomTextContents,
   selectDomTextOffsetRange,
@@ -53,13 +51,7 @@ import {
 export { getPreferredCodeLanguage, normalizeCodeLanguage } from "./codeBlockNodeViewLanguageModel"
 export { CodeBlockEditorStyles } from "./codeBlockNodeViewStyles"
 let lastActiveCodeBlockContentRoot: HTMLElement | null = null
-type CodeDragSelectionSession = {
-  active: boolean
-  anchorPos: number
-  lastHeadPos?: number
-  startX: number
-  startY: number
-}
+type CodeDragSelectionSession = { active: boolean; anchorPos: number; lastHeadPos?: number; startX: number; startY: number }
 export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos }: NodeViewProps) => {
   const menuId = useId()
   const menuRef = useRef<HTMLDivElement>(null)
@@ -72,12 +64,10 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
   const nodeCodeSource = node.textContent || ""
   const nodeCodeSourceRef = useRef(nodeCodeSource)
   const [liveCodeSource, setLiveCodeSource] = useState(nodeCodeSource)
-  const [highlightedCodeHtml, setHighlightedCodeHtml] = useState(() =>
-    renderImmediateCodeToHtml({
-      source: nodeCodeSource,
-      language: normalizeCodeLanguage(String(node.attrs?.language || "")),
-    }).html
-  )
+  const [highlightedCodeHtml, setHighlightedCodeHtml] = useState(() => renderImmediateCodeToHtml({
+    source: nodeCodeSource,
+    language: normalizeCodeLanguage(String(node.attrs?.language || "")),
+  }).html)
   const selectCurrentCodeBlockText = useCallback(
     () => selectCodeBlockText({ editor, getPos, nodeSize: node.nodeSize }),
     [editor, getPos, node.nodeSize]
@@ -495,6 +485,15 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
     editor.view.focus()
   }, [editor, getPos, node.nodeSize])
 
+  const handleCodeCopy = useCallback((event: ReactClipboardEvent<HTMLDivElement>) => {
+    const copyText = resolveCodeBlockCopyText(shellRef.current)
+    if (!copyText.trim()) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    event.clipboardData.setData("text/plain", copyText)
+  }, [])
+
   const handleCodeKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (!isPrimarySelectAllShortcut(event)) return
 
@@ -578,6 +577,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
           onPointerDownCapture={handleCodePointerDownCapture}
           onMouseDownCapture={handleCodeMouseDownCapture}
           onKeyDownCapture={handleCodeKeyDown}
+          onCopy={handleCodeCopy}
           onPaste={handleCodePaste}
         >
           <pre

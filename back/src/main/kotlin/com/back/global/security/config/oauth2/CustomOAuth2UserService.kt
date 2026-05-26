@@ -42,7 +42,8 @@ private enum class OAuth2Provider {
 @Service
 class CustomOAuth2UserService(
     private val memberUseCase: MemberUseCase,
-) : DefaultOAuth2UserService() {
+) : OAuth2UserService<OAuth2UserRequest, OAuth2User> {
+    internal var delegate: OAuth2UserService<OAuth2UserRequest, OAuth2User> = DefaultOAuth2UserService()
     private val logger = LoggerFactory.getLogger(javaClass)
 
     /**
@@ -51,7 +52,7 @@ class CustomOAuth2UserService(
      */
     @Transactional
     override fun loadUser(userRequest: OAuth2UserRequest): OAuth2User {
-        val oAuth2User = super.loadUser(userRequest)
+        val oAuth2User = delegate.loadUser(userRequest)
         val provider = OAuth2Provider.from(userRequest.clientRegistration.registrationId)
         val profilePayload =
             when (provider) {
@@ -66,7 +67,7 @@ class CustomOAuth2UserService(
 class CustomOidcUserService(
     private val memberUseCase: MemberUseCase,
 ) : OAuth2UserService<OidcUserRequest, OidcUser> {
-    private val delegate = OidcUserService()
+    internal var delegate: OAuth2UserService<OidcUserRequest, OidcUser> = OidcUserService()
     private val logger = LoggerFactory.getLogger(javaClass)
 
     @Transactional

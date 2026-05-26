@@ -26,13 +26,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
-          fetch-depth: 0
+          token: ""
 
       - name: Detect backend-related changes
         id: changes
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -47,7 +45,6 @@ jobs:
               curl -fsSL \
                 -D "${response_headers}" \
                 -H "Accept: application/vnd.github+json" \
-                -H "Authorization: Bearer ${GH_TOKEN}" \
                 -H "X-GitHub-Api-Version: 2022-11-28" \
                 "${api_url}" > "${response_body}"
               jq -r '.[].filename' "${response_body}" >> "${changed_files}"
@@ -102,7 +99,6 @@ jobs:
         if: github.event_name == 'pull_request' && steps.dependency_review.outputs.run_review == 'true'
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
@@ -111,7 +107,6 @@ jobs:
           report="${RUNNER_TEMP}/dependency-review.json"
           curl -fsSL \
             -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "${{ github.api_url }}/repos/${{ github.repository }}/dependency-graph/compare/${BASE_SHA}...${HEAD_SHA}" \
             > "${report}"

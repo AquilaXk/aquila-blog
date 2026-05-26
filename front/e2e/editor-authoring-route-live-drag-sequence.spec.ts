@@ -56,6 +56,54 @@ const dragLocatorText = async (
   return { beforeScrollTop, afterScrollTop, selectionText }
 }
 
+const dragLocatorTextRange = async (
+  page: Page,
+  target: Locator,
+  label: string,
+  text: string,
+  options: { waitMs?: number } = {}
+) => {
+  await target.scrollIntoViewIfNeeded()
+  const metrics = await target.evaluate((element, { textToSelect, label }) => {
+    element.scrollIntoView({ block: "center", inline: "nearest" })
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+    while (walker.nextNode()) {
+      const textNode = walker.currentNode as Text
+      const startOffset = textNode.data.indexOf(textToSelect)
+      if (startOffset < 0) continue
+
+      const range = document.createRange()
+      range.setStart(textNode, startOffset)
+      range.setEnd(textNode, startOffset + textToSelect.length)
+      const rect =
+        Array.from(range.getClientRects()).find(
+          (candidate) => candidate.width > 2 && candidate.height > 2
+        ) ?? range.getBoundingClientRect()
+      if (rect.width <= 2 || rect.height <= 2) {
+        throw new Error(`${label} text rect is too small`)
+      }
+
+      return {
+        endX: rect.right - 2,
+        startX: rect.left + 2,
+        y: rect.top + rect.height / 2,
+      }
+    }
+    throw new Error(`${label} text node is missing`)
+  }, { label, textToSelect: text })
+  const beforeScrollTop = await readScrollTop(page)
+
+  await page.mouse.move(metrics.startX, metrics.y)
+  await page.mouse.down()
+  await page.mouse.move(metrics.endX, metrics.y, { steps: 18 })
+  await page.mouse.up()
+  await page.waitForTimeout(options.waitMs ?? 720)
+
+  const afterScrollTop = await readScrollTop(page)
+  const selectionText = await readSelectionText(page)
+  return { beforeScrollTop, afterScrollTop, selectionText }
+}
+
 const filler = (label: string, count: number) =>
   Array.from({ length: count }, (_, index) => [
     `${label} ${index + 1}: 인증 흐름을 설명하는 긴 문단입니다.`,
@@ -725,11 +773,15 @@ test.describe("editor authoring route live drag sequence", () => {
     await page.waitForTimeout(80)
 
     const lowerBody = editor.locator("p", { hasText: "하단 선택 대상 문단입니다" }).first()
-    const lowerBodyDrag = await dragLocatorText(page, lowerBody, "live 507 lower body drag", {
-      endX: 440,
-      y: 16,
-      waitMs: 900,
-    })
+    const lowerBodyDrag = await dragLocatorTextRange(
+      page,
+      lowerBody,
+      "live 507 lower body drag",
+      "선택 대상 문단",
+      {
+        waitMs: 900,
+      }
+    )
     expect(lowerBodyDrag.selectionText).toContain("선택 대상 문단")
     expect(lowerBodyDrag.afterScrollTop).toBeLessThanOrEqual(lowerBodyDrag.beforeScrollTop + 24)
     expect(lowerBodyDrag.afterScrollTop).toBeGreaterThanOrEqual(lowerBodyDrag.beforeScrollTop - 24)

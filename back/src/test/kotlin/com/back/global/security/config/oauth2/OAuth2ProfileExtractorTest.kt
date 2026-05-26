@@ -48,6 +48,22 @@ class OAuth2ProfileExtractorTest {
     }
 
     @Test
+    fun `OIDC 표준 claims가 있으면 sub nickname picture로 매핑한다`() {
+        val attributes =
+            mapOf(
+                "sub" to "oidc-kakao-user-id",
+                "nickname" to "OIDC닉네임",
+                "picture" to "https://kakao.cdn/oidc-picture.png",
+            )
+
+        val payload = OAuth2ProfileExtractor.extractKakao(attributes, fallbackName = "fallback-name")
+
+        assertThat(payload.oauthUserId).isEqualTo("oidc-kakao-user-id")
+        assertThat(payload.nickname).isEqualTo("OIDC닉네임")
+        assertThat(payload.profileImgUrl).isEqualTo("https://kakao.cdn/oidc-picture.png")
+    }
+
+    @Test
     fun `nickname 필드가 모두 없으면 기본 닉네임으로 fallback한다`() {
         val attributes = mapOf<String, Any>()
 

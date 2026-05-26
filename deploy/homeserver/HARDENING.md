@@ -10,6 +10,7 @@
 1. 현재 SSH 키 접속이 되는지 확인
 2. 서버 콘솔(물리 접근 또는 원격 콘솔) 준비
 3. GitHub `HOME_SSH_PORT` 변경 필요 여부 확인
+4. Cloudflare Tunnel public hostname이 API/Grafana/monitoring 도메인을 Caddy origin으로 라우팅하는지 확인
 
 ## 실행
 
@@ -25,7 +26,8 @@ sudo ./deploy/homeserver/hardening/setup_hardening.sh 22 <your_linux_user>
 
 - SSH: root 로그인 차단, 비밀번호 로그인 차단, 키 로그인만 허용
 - SSH: `AllowUsers <your_linux_user>` 제한
-- UFW: 인바운드 `SSH`, `80`, `443`만 허용
+- UFW: 인바운드 `SSH`만 허용하고, public `80/443` ingress는 열지 않음
+- HTTP(S): `cloudflared egress`가 Docker 네트워크의 Caddy로 접근하며, host `80/443`은 compose에서 loopback 바인딩으로만 노출
 - fail2ban: sshd 브루트포스 차단
 
 ## 변경 파일(서버)
@@ -39,6 +41,9 @@ sudo ./deploy/homeserver/hardening/setup_hardening.sh 22 <your_linux_user>
 sudo ufw status verbose
 sudo fail2ban-client status sshd
 sudo sshd -t
+docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps caddy cloudflared
+ss -tulpen | grep -E '127\.0\.0\.1:(80|443)\b'
+curl -sS -o /dev/null -w '%{http_code}\n' https://<api_domain>/actuator/health
 ```
 
 ## 롤백

@@ -43,8 +43,8 @@ ufw --force reset
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow "${SSH_PORT}/tcp"
-ufw allow 80/tcp
-ufw allow 443/tcp
+# Cloudflare Tunnel is the public ingress. Do not open 80/443 on the host;
+# Caddy is bound to loopback and cloudflared reaches it through Docker networking.
 ufw --force enable
 
 echo "[4/6] Configure fail2ban"

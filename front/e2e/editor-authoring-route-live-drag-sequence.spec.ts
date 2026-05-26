@@ -518,6 +518,20 @@ test.describe("editor authoring route live drag sequence", () => {
     await page.waitForTimeout(1_000)
     await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforePostCodeBodyClick + 24)
     await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforePostCodeBodyClick - 24)
+    const postCodeCurrentLowerBodyBox = await lowerBodyAnchor.boundingBox()
+    if (!postCodeCurrentLowerBodyBox) throw new Error("post-code current lower body metrics are missing")
+    await page.mouse.move(postCodeCurrentLowerBodyBox.x + 8, postCodeCurrentLowerBodyBox.y + postCodeCurrentLowerBodyBox.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(
+      postCodeCurrentLowerBodyBox.x + Math.max(24, postCodeCurrentLowerBodyBox.width - 8),
+      postCodeCurrentLowerBodyBox.y + postCodeCurrentLowerBodyBox.height / 2,
+      { steps: 12 }
+    )
+    await page.mouse.up()
+    await page.waitForTimeout(720)
+    const postCodeBodySelection = await readSelectionText(page)
+    expect(postCodeBodySelection).toContain("TTL")
+    expect(postCodeBodySelection).not.toContain("createAccessToken")
     await page.mouse.wheel(0, 1).then(() => page.waitForTimeout(40))
     await codeContent.evaluate((element) => {
       element.scrollIntoView({ block: "center", inline: "nearest" })

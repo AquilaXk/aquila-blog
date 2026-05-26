@@ -100,7 +100,48 @@ jobs:
 
       - name: Dependency review
         if: github.event_name == 'pull_request' && steps.dependency_review.outputs.run_review == 'true'
-        uses: actions/dependency-review-action@v4.9.0
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          report="${RUNNER_TEMP}/dependency-review.json"
+          curl -fsSL \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/dependency-graph/compare/${BASE_SHA}...${HEAD_SHA}" \
+            > "${report}"
+
+          python3 - "${report}" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              dependencies = json.load(handle)
+
+          vulnerable = [
+              item
+              for item in dependencies
+              if item.get("change_type") in {"added", "changed"} and item.get("vulnerabilities")
+          ]
+
+          if vulnerable:
+              for item in vulnerable:
+                  name = item.get("name", "unknown")
+                  version = item.get("version", "unknown")
+                  vulns = ", ".join(
+                      vulnerability.get("advisory_ghsa_id", "unknown")
+                      for vulnerability in item.get("vulnerabilities", [])
+                  )
+                  print(f"vulnerable dependency: {name}@{version} ({vulns})")
+              sys.exit(1)
+
+          print("Dependency review passed: no vulnerable added or changed dependencies.")
+          PY
 
       - name: Skip backend-heavy checks
         if: steps.changes.outputs.backend != 'true'

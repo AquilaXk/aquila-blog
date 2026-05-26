@@ -199,6 +199,132 @@ groups:
           summary: "Search index async sync lag p95 is high"
           description: "post.search_index.task.lag p95 > 120s for 10m."
 
+  - name: aquila-ddos-defense
+    rules:
+      - alert: AquilaDockerRuntimeProbeScrapeDown
+        expr: min(up{job="docker_runtime_probe",service="aquila-docker-runtime-probe"}) < 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "docker runtime probe scrape is down"
+          description: "Prometheus cannot scrape docker_runtime_probe for 3m. Check probe container health and docker socket access."
+
+      - alert: AquilaApiRateLimitRejectedHigh
+        expr: sum(rate(api_rate_limit_rejected_total{job="back",service="aquila-back"}[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API rate-limit rejections are high"
+          description: "Backend Redis rate-limit backstop is rejecting more than 0.5 req/s for 5m. Check Cloudflare WAF/rate limit events and attack source distribution."
+
+      - alert: AquilaApi429RatioHigh
+        expr: |
+          (
+            sum(rate({__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back",status="429"}[5m]))
+            /
+            clamp_min(
+              sum(rate({__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back"}[5m])),
+              0.001
+            )
+          ) > 0.10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API 429 ratio is high"
+          description: "More than 10% of backend API responses are 429 for 5m. Verify Cloudflare edge limits and backend Redis backstop thresholds."
+
+      - alert: AquilaPublicReadRpsHigh
+        expr: |
+          sum(
+            rate(
+              {__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back",uri=~"/post/api/v1/posts(/feed|/feed/cursor|/explore|/explore/cursor|/search|/tags|/[0-9]+)?"}[5m]
+            )
+          ) > 50
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Public read API RPS is high"
+          description: "Public read endpoints exceeded 50 req/s for 10m. Check Cloudflare Security Events and edge cache hit behavior."
+
+      - alert: AquilaApiOrigin5xxRatioHigh
+        expr: |
+          (
+            sum(rate({__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back",status=~"5.."}[5m]))
+            /
+            clamp_min(
+              sum(rate({__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back"}[5m])),
+              0.001
+            )
+          ) > 0.02
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API origin 5xx ratio is high"
+          description: "Backend 5xx ratio exceeded 2% for 5m. Check whether DDoS pressure reached origin and consider Cloudflare emergency rules."
+
+      - alert: AquilaApiP99LatencyHigh
+        expr: |
+          (
+            histogram_quantile(
+              0.99,
+              sum by (le) (
+                rate({__name__=~"http_server_requests_seconds_bucket|http_server_request_duration_seconds_bucket",job="back",service="aquila-back",uri!~"/actuator.*"}[5m])
+              )
+            )
+            and on() (
+              sum(rate({__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back",uri!~"/actuator.*"}[5m])) > bool 0.2
+            )
+          ) > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p99 latency is high"
+          description: "API p99 latency stayed above 2s for 10m. Check origin saturation, Redis latency, and Cloudflare edge mitigation."
+
+      - alert: AquilaCloudflaredRestartCountHigh
+        expr: increase(docker_container_restart_count{job="docker_runtime_probe",service="cloudflared"}[15m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "cloudflared restarted recently"
+          description: "cloudflared restart_count increased in the last 15m. Check Tunnel health, Cloudflare edge connectivity, and host pressure."
+
+      - alert: AquilaBackendContainerMemoryHigh
+        expr: |
+          (
+            docker_container_memory_usage_bytes{job="docker_runtime_probe",service=~"back_.+"}
+            /
+            clamp_min(docker_container_memory_limit_bytes{job="docker_runtime_probe",service=~"back_.+"}, 1)
+          ) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Backend container memory usage is high"
+          description: "A backend container is using more than 85% of its Docker memory limit for 10m. Check DDoS pressure and runtime split sizing."
+
+      - alert: AquilaRedisCommandLatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate({__name__=~"redis_commands_duration_seconds_bucket|lettuce_command_completion_seconds_bucket|lettuce_command_duration_seconds_bucket",job="back",service="aquila-back"}[5m])
+            )
+          ) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis command latency is high"
+          description: "redis command latency p95 exceeded 50ms for 10m. Check API rate-limit pressure and Redis saturation."
+
   - name: aquila-notification-sse
     rules:
       - alert: AquilaNotificationSseEmitterSaturated

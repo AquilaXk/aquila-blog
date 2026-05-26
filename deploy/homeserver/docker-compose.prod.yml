@@ -138,6 +138,29 @@ services:
       retries: 5
       start_period: 20s
 
+  docker_runtime_probe:
+    image: node:20-alpine
+    restart: unless-stopped
+    working_dir: /app
+    command:
+      - "node"
+      - "/app/docker-runtime-probe.mjs"
+      - "--serve-port"
+      - "9920"
+      - "--project"
+      - "blog_home"
+      - "--services"
+      - "cloudflared,back_blue,back_green,back_read,back_admin,back_worker,redis_1"
+    volumes:
+      - ./monitoring/docker-runtime-probe.mjs:/app/docker-runtime-probe.mjs:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:9920/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
   back_blue:
     image: ${BACK_IMAGE:?BACK_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped

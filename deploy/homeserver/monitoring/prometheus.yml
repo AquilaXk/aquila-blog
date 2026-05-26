@@ -41,3 +41,11 @@ scrape_configs:
       - targets: ["public_edge_probe:9915"]
         labels:
           service: aquila-public-edge-probe
+
+  - job_name: docker_runtime_probe
+    honor_labels: true
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["docker_runtime_probe:9920"]
+        labels:
+          service: aquila-docker-runtime-probe

@@ -167,9 +167,10 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now(), preserveGeneration = ++codeDomTextRangePreserveGeneration
       let frame = 0, cancelled = false, cancelArmed = false
       const shell = contentRoot?.closest(".aq-code-shell")
-      const cleanupCancel = () => { window.removeEventListener("pointerdown", cancel, true); window.removeEventListener("mousedown", cancel, true); document.removeEventListener("selectionchange", cancelOnSelectionChange, true) }
+      const cleanupCancel = () => { window.removeEventListener("pointerdown", cancel, true); window.removeEventListener("mousedown", cancel, true); window.removeEventListener("keydown", cancelForKeydown, true); window.removeEventListener("wheel", cancelForKeydown, true); document.removeEventListener("selectionchange", cancelOnSelectionChange, true) }
       const cancelPreserve = () => { cancelled = true; codeDomTextRangePreserveGeneration += 1; shell?.removeAttribute("data-code-drag-selection-text"); cleanupCancel() }
       const cancel = (event: Event) => { if (!cancelArmed) return; if (!(event.target instanceof Node) || !shell?.contains(event.target)) cancelPreserve() }
+      const cancelForKeydown = () => { if (cancelArmed) cancelPreserve() }
       const cancelOnSelectionChange = () => { if (!cancelArmed) return; const selection = window.getSelection(), anchor = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null, focus = selection?.focusNode instanceof Element ? selection.focusNode : selection?.focusNode?.parentElement ?? null; if (selection?.toString().trim() && (!anchor || !focus || !shell?.contains(anchor) || !shell.contains(focus))) cancelPreserve() }
       const selectRange = () => { if (!selectCodeDomTextRange(contentRoot, anchorPos, headPos)) selectDomTextContents(contentRoot)
         shell?.setAttribute("data-code-drag-selection-text", window.getSelection()?.toString() || contentRoot?.textContent || "")
@@ -183,8 +184,10 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       }
       window.addEventListener("pointerdown", cancel, { capture: true, passive: true })
       window.addEventListener("mousedown", cancel, { capture: true, passive: true })
+      window.addEventListener("keydown", cancelForKeydown, true)
+      window.addEventListener("wheel", cancelForKeydown, { capture: true, passive: true })
       document.addEventListener("selectionchange", cancelOnSelectionChange, true)
-      preserveWindowScrollPositionAcrossFrames(scrollAnchor, 168, 4, 2_800, false, false)
+      preserveWindowScrollPositionAcrossFrames(scrollAnchor, 192, 4, 3_200, false, false, true)
       window.requestAnimationFrame(() => { cancelArmed = true })
       restore()
     },
@@ -194,7 +197,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
     (event: ReactMouseEvent<HTMLDivElement> | ReactPointerEvent<HTMLDivElement>) => {
       const shell = shellRef.current
       const contentRoot = shell?.querySelector<HTMLElement>(".aq-code-editor-content") ?? null
-      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.defaultPrevented || (event.nativeEvent as Event & { __aqCodePointerHandled?: boolean }).__aqCodePointerHandled) return
       if (!shell || !contentRoot || !(event.target instanceof Node) || !shell.contains(event.target)) return
       const targetElement = event.target instanceof Element ? event.target : event.target.parentElement
       const contentRect = contentRoot.getBoundingClientRect()
@@ -219,7 +222,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       } else {
         selection?.removeAllRanges()
       }
-      preserveWindowScrollPositionAcrossFrames({ x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }, 168, 4, 2_800, false, false)
+      preserveWindowScrollPositionAcrossFrames({ x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }, 192, 4, 3_200, false, false, true)
       codeDragSelectionRef.current = {
         active: false,
         anchorPos,

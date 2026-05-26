@@ -514,14 +514,20 @@ test.describe("editor authoring route live drag sequence", () => {
     const beforePostCodeBodyClick = await readScrollTop(page)
     const postCodeLowerBodyBox = await lowerBodyAnchor.boundingBox()
     if (!postCodeLowerBodyBox) throw new Error("post-code lower body metrics are missing")
-    await page.evaluate(() => {
-      window.setTimeout(() => document.dispatchEvent(new Event("selectionchange")), 16)
-      window.setTimeout(() => window.scrollBy(0, 476), 72)
-    })
-    await page.mouse.click(
+    await page.mouse.move(
       postCodeLowerBodyBox.x + Math.min(postCodeLowerBodyBox.width / 2, 96),
       postCodeLowerBodyBox.y + 12
     )
+    await page.mouse.down()
+    const afterSelectionChangeBodyClickScroll = await page.evaluate(() => {
+      document.dispatchEvent(new Event("selectionchange"))
+      window.scrollBy(0, 476)
+      return document.scrollingElement?.scrollTop ?? window.scrollY
+    })
+    expect(afterSelectionChangeBodyClickScroll).toBeGreaterThan(beforePostCodeBodyClick + 120)
+    await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforePostCodeBodyClick + 24)
+    await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforePostCodeBodyClick - 24)
+    await page.mouse.up()
     await page.waitForTimeout(1_000)
     await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforePostCodeBodyClick + 24)
     await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforePostCodeBodyClick - 24)

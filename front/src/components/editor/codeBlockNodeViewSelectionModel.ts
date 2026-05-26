@@ -32,6 +32,15 @@ export const selectDomTextContents = (root: HTMLElement | null) => {
   return true
 }
 
+export const selectCodeDomTextContents = (root: HTMLElement | null) => {
+  const selected = selectDomTextContents(root)
+  if (selected) {
+    markNextEditorPointerAfterCodeSelection()
+    preserveWindowScrollForRichBlockSelectAll()
+  }
+  return selected
+}
+
 export const selectDomTextOffsetRange = (
   root: HTMLElement | null,
   fromOffset: number,

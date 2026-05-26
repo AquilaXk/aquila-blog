@@ -507,6 +507,10 @@ test.describe("editor authoring route live drag sequence", () => {
     const beforePostCodeBodyClick = await readScrollTop(page)
     const postCodeLowerBodyBox = await lowerBodyAnchor.boundingBox()
     if (!postCodeLowerBodyBox) throw new Error("post-code lower body metrics are missing")
+    await page.evaluate(() => {
+      window.setTimeout(() => document.dispatchEvent(new Event("selectionchange")), 16)
+      window.setTimeout(() => window.scrollBy(0, 476), 72)
+    })
     await page.mouse.click(
       postCodeLowerBodyBox.x + Math.min(postCodeLowerBodyBox.width / 2, 96),
       postCodeLowerBodyBox.y + 12

@@ -99,7 +99,14 @@ import {
   type StudioSurface,
 } from "./EditorStudioWorkspaceControllerRootModel"
 
-export const EditorStudioWorkspaceController = ({ initialMember }: AdminPageProps) => {
+type EditorStudioWorkspaceControllerProps = AdminPageProps & {
+  initialEditorPost?: PostForEditor | null
+}
+
+export const EditorStudioWorkspaceController = ({
+  initialEditorPost = null,
+  initialMember,
+}: EditorStudioWorkspaceControllerProps) => {
   const router = useRouter()
   const queryClient = useQueryClient()
   const { me, authStatus, setMe } = useAuthSession()
@@ -692,6 +699,7 @@ export const EditorStudioWorkspaceController = ({ initialMember }: AdminPageProp
     router,
     authStatus,
     sessionMember,
+    initialEditorPost,
     postId,
     isDedicatedEditorRoute,
     isDedicatedNewEditorRoute,

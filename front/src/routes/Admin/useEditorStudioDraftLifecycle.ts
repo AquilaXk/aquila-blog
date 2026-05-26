@@ -74,6 +74,10 @@ type RsData<T> = {
   msg: string
 }
 
+type LoadPostForEditorOptions = {
+  initialPost?: PostForEditor | null
+}
+
 type EditorFingerprintPayload = {
   title: string
   content: string
@@ -342,10 +346,20 @@ export const useEditorStudioDraftLifecycle = ({
     setPostVersion,
   ])
 
-  const loadPostForEditor = useCallback(async (targetPostId: string = postId) => {
+  const loadPostForEditor = useCallback(async (
+    targetPostId: string = postId,
+    options: LoadPostForEditorOptions = {}
+  ) => {
     try {
       setLoadingKey("postOne")
-      const post = await apiFetch<PostForEditor>(`/post/api/v1/adm/posts/${targetPostId}`)
+      const normalizedTargetPostId = targetPostId.trim()
+      const initialPost =
+        String(options.initialPost?.id ?? "") === normalizedTargetPostId
+          ? options.initialPost
+          : null
+      const post =
+        initialPost ??
+        (await apiFetch<PostForEditor>(`/post/api/v1/adm/posts/${normalizedTargetPostId}`))
       let resolvedPost = post
 
       const adminContent = resolvedPost.content ?? ""

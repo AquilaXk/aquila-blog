@@ -24,8 +24,10 @@ services:
     restart: unless-stopped
     command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
     ports:
-      - "80:80"
-      - "443:443"
+      # Public ingress must terminate at Cloudflare Tunnel. Keep host binds on
+      # loopback only so direct internet traffic cannot bypass Cloudflare WAF/rate limits.
+      - "127.0.0.1:80:80"
+      - "127.0.0.1:443:443"
     volumes:
       - ./caddy:/etc/caddy:ro
       - caddy_data:/data
@@ -131,6 +133,29 @@ services:
       - public_edge_probe_data:/data
     healthcheck:
       test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:9915/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  docker_runtime_probe:
+    image: node:20-alpine
+    restart: unless-stopped
+    working_dir: /app
+    command:
+      - "node"
+      - "/app/docker-runtime-probe.mjs"
+      - "--serve-port"
+      - "9920"
+      - "--project"
+      - "blog_home"
+      - "--services"
+      - "cloudflared,back_blue,back_green,back_read,back_admin,back_worker,redis_1"
+    volumes:
+      - ./monitoring/docker-runtime-probe.mjs:/app/docker-runtime-probe.mjs:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:9920/healthz || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5

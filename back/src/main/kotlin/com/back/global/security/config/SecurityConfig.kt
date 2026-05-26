@@ -8,6 +8,7 @@ import com.back.global.rsData.RsData
 import com.back.global.security.config.oauth2.CustomOAuth2AuthorizationRequestResolver
 import com.back.global.security.config.oauth2.CustomOAuth2LoginSuccessHandler
 import com.back.global.security.config.oauth2.CustomOAuth2UserService
+import com.back.global.security.config.oauth2.CustomOidcUserService
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -35,6 +36,7 @@ class SecurityConfig(
     private val customOAuth2LoginSuccessHandler: CustomOAuth2LoginSuccessHandler,
     private val customOAuth2AuthorizationRequestResolver: CustomOAuth2AuthorizationRequestResolver,
     private val customOAuth2UserService: CustomOAuth2UserService,
+    private val customOidcUserService: CustomOidcUserService,
     private val authSecurityConfigurer: AuthSecurityConfigurer,
     private val memberSecurityConfigurer: MemberSecurityConfigurer,
     private val postSecurityConfigurer: PostSecurityConfigurer,
@@ -107,6 +109,7 @@ class SecurityConfig(
 
                 userInfoEndpoint {
                     userService = customOAuth2UserService
+                    oidcUserService = customOidcUserService
                 }
             }
 

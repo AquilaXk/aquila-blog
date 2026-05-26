@@ -24,8 +24,10 @@ services:
     restart: unless-stopped
     command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
     ports:
-      - "80:80"
-      - "443:443"
+      # Public ingress must terminate at Cloudflare Tunnel. Keep host binds on
+      # loopback only so direct internet traffic cannot bypass Cloudflare WAF/rate limits.
+      - "127.0.0.1:80:80"
+      - "127.0.0.1:443:443"
     volumes:
       - ./caddy:/etc/caddy:ro
       - caddy_data:/data

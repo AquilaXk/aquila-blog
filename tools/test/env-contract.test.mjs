@@ -10,6 +10,8 @@ const workflowPath = path.join(repoRoot, ".github/workflows/deploy.yml")
 const composePath = path.join(repoRoot, "deploy/homeserver/docker-compose.prod.yml")
 const applicationProdPath = path.join(repoRoot, "back/src/main/resources/application-prod.yaml")
 const deployScriptPath = path.join(repoRoot, "deploy/homeserver/blue_green_deploy.sh")
+const hardeningScriptPath = path.join(repoRoot, "deploy/homeserver/hardening/setup_hardening.sh")
+const hardeningDocPath = path.join(repoRoot, "deploy/homeserver/HARDENING.md")
 
 const targetKeyNames = (contract, targetName) => {
   const target = contract.targets[targetName]
@@ -183,4 +185,21 @@ test("prod datasource uses a non-superuser runtime role contract", () => {
   assert(!deployScript.includes("ALTER ROLE"))
   assert(!deployScript.includes("OWNER TO"))
   assert(!deployScript.includes("GRANT SELECT"))
+})
+
+test("homeserver origin ingress is private behind Cloudflare Tunnel", () => {
+  const compose = readFileSync(composePath, "utf8")
+  const hardeningScript = readFileSync(hardeningScriptPath, "utf8")
+  const hardeningDoc = readFileSync(hardeningDocPath, "utf8")
+
+  assert(!/^\s*-\s*['"]?80:80['"]?\s*$/m.test(compose))
+  assert(!/^\s*-\s*['"]?443:443['"]?\s*$/m.test(compose))
+  assert.match(compose, /^\s*-\s*['"]?127\.0\.0\.1:80:80['"]?\s*$/m)
+  assert.match(compose, /^\s*-\s*['"]?127\.0\.0\.1:443:443['"]?\s*$/m)
+
+  assert(!hardeningScript.includes("ufw allow 80/tcp"))
+  assert(!hardeningScript.includes("ufw allow 443/tcp"))
+  assert.match(hardeningScript, /Cloudflare Tunnel/)
+  assert.match(hardeningDoc, /cloudflared egress/)
+  assert.match(hardeningDoc, /80\/443.*loopback/)
 })

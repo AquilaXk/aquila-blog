@@ -258,6 +258,33 @@ test.describe("editor authoring route live drag sequence", () => {
         endX: Math.min(rect.width - 8, 390),
       }
     })
+    const codeDragDefaultAllowed = await codeContent.evaluate((element, metrics) => {
+      const rect = element.getBoundingClientRect()
+      const clientX = rect.left + 80
+      const clientY = rect.top + metrics.y
+      const pointerDefaultAllowed = element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX, clientY, pointerType: "mouse" }))
+      const mouseDefaultAllowed = element.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX, clientY }))
+      window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, buttons: 0, cancelable: true, clientX, clientY, pointerType: "mouse" }))
+      window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, buttons: 0, cancelable: true, clientX, clientY }))
+      return { mouseDefaultAllowed, pointerDefaultAllowed }
+    }, codeDragMetrics)
+    expect(codeDragDefaultAllowed.pointerDefaultAllowed).toBe(true)
+    expect(codeDragDefaultAllowed.mouseDefaultAllowed).toBe(true)
+    const codeShell = editor.locator(".aq-code-shell", { hasText: "createAccessToken(user)" }).first()
+    await codeShell.evaluate((shell, metrics) => {
+      const contentRoot = shell.querySelector<HTMLElement>(".aq-code-editor-content")
+      if (!contentRoot) throw new Error("code shell content root is missing")
+      const rect = contentRoot.getBoundingClientRect()
+      const startX = rect.left + 80
+      const endX = rect.left + metrics.endX
+      const clientY = rect.top + metrics.y
+      window.getSelection()?.removeAllRanges()
+      shell.removeAttribute("data-code-drag-selection-text")
+      shell.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX: startX, clientY, pointerType: "mouse" }))
+      window.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX: endX, clientY, pointerType: "mouse" }))
+      window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, buttons: 0, cancelable: true, clientX: endX, clientY, pointerType: "mouse" }))
+    }, codeDragMetrics)
+    await expect.poll(() => readSelectionText(page)).toContain("createAccessToken")
     const beforeCodeSelectAll = await readScrollTop(page)
     await codeContent.click({ position: { x: 80, y: 28 } })
     await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")

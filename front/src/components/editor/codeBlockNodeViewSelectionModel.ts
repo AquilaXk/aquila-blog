@@ -71,6 +71,24 @@ export const selectDomTextOffsetRange = (
   return true
 }
 
+export const resolveCodeBlockCopyText = (shell: HTMLElement | null) => {
+  const contentRoot = shell?.querySelector<HTMLElement>(".aq-code-editor-content") ?? null
+  const selection = window.getSelection()
+  const anchorElement = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null
+  const focusElement = selection?.focusNode instanceof Element ? selection.focusNode : selection?.focusNode?.parentElement ?? null
+  const selectionText = selection?.toString() || ""
+  const selectionInsideCode = Boolean(
+    selectionText &&
+    contentRoot &&
+    anchorElement &&
+    focusElement &&
+    contentRoot.contains(anchorElement) &&
+    contentRoot.contains(focusElement)
+  )
+  const fallbackText = shell?.getAttribute("data-code-drag-selection-text") || ""
+  return selectionInsideCode ? selectionText : fallbackText
+}
+
 export const selectCodeBlockText = ({ editor, getPos, nodeSize }: CodeBlockPositionArgs) => {
   if (typeof getPos !== "function") return false
   const codeBlockPos = getPos()

@@ -25,16 +25,18 @@ spring:
         registration:
           kakao:
             client-id: ${SPRING__SECURITY__OAUTH2__CLIENT__REGISTRATION__KAKAO__CLIENT_ID:}
-            scope: profile_nickname, profile_image
+            scope: openid, profile_nickname, profile_image
             client-name: Kakao
             authorization-grant-type: authorization_code
             redirect-uri: '${custom.site.backUrl}/login/oauth2/code/{registrationId}'
         provider:
           kakao:
+            issuer-uri: https://kauth.kakao.com
             authorization-uri: https://kauth.kakao.com/oauth/authorize
             token-uri: https://kauth.kakao.com/oauth/token
-            user-info-uri: https://kapi.kakao.com/v2/user/me
-            user-name-attribute: id
+            jwk-set-uri: https://kauth.kakao.com/.well-known/jwks.json
+            user-info-uri: https://kapi.kakao.com/v1/oidc/userinfo
+            user-name-attribute: sub
   mail:
     host: ${SPRING__MAIL__HOST:}
     port: ${SPRING__MAIL__PORT:587}

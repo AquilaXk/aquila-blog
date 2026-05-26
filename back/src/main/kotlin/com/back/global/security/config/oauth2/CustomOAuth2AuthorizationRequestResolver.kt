@@ -4,6 +4,7 @@ import com.back.global.security.config.oauth2.application.OAuth2State
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository
 import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizationRequestResolver
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestCustomizers
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest
@@ -22,7 +23,9 @@ class CustomOAuth2AuthorizationRequestResolver(
         DefaultOAuth2AuthorizationRequestResolver(
             clientRegistrationRepository,
             OAuth2AuthorizationRequestRedirectFilter.DEFAULT_AUTHORIZATION_REQUEST_BASE_URI,
-        )
+        ).apply {
+            setAuthorizationRequestCustomizer(OAuth2AuthorizationRequestCustomizers.withPkce())
+        }
 
     override fun resolve(request: HttpServletRequest): OAuth2AuthorizationRequest? =
         delegate.resolve(request)?.let { customizeState(it, request) }

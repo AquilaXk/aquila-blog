@@ -1,11 +1,20 @@
 package com.back.global.security.config.oauth2
 
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
+import com.back.boundedContexts.member.domain.shared.Member
 import com.back.global.security.domain.SecurityUser
 import com.back.global.security.domain.toGrantedAuthorities
+import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.springframework.security.core.GrantedAuthority
+import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest
+import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest
+import org.springframework.security.oauth2.client.userinfo.OAuth2UserService
+import org.springframework.security.oauth2.core.oidc.OidcIdToken
+import org.springframework.security.oauth2.core.oidc.OidcUserInfo
+import org.springframework.security.oauth2.core.oidc.user.OidcUser
 import org.springframework.security.oauth2.core.user.OAuth2User
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -33,7 +42,8 @@ private enum class OAuth2Provider {
 @Service
 class CustomOAuth2UserService(
     private val memberUseCase: MemberUseCase,
-) : DefaultOAuth2UserService() {
+) : OAuth2UserService<OAuth2UserRequest, OAuth2User> {
+    internal var delegate: OAuth2UserService<OAuth2UserRequest, OAuth2User> = DefaultOAuth2UserService()
     private val logger = LoggerFactory.getLogger(javaClass)
 
     /**
@@ -42,42 +52,108 @@ class CustomOAuth2UserService(
      */
     @Transactional
     override fun loadUser(userRequest: OAuth2UserRequest): OAuth2User {
-        val oAuth2User = super.loadUser(userRequest)
+        val oAuth2User = delegate.loadUser(userRequest)
         val provider = OAuth2Provider.from(userRequest.clientRegistration.registrationId)
-
         val profilePayload =
             when (provider) {
                 OAuth2Provider.KAKAO -> OAuth2ProfileExtractor.extractKakao(oAuth2User.attributes, oAuth2User.name)
             }
 
-        if (profilePayload.nickname == OAuth2ProfileExtractor.DEFAULT_KAKAO_NICKNAME) {
-            logger.warn(
-                "oauth2_kakao_profile_fallback_used provider={} oauthUserId={}",
-                provider.name.lowercase(),
-                profilePayload.oauthUserId,
-            )
-        }
+        return upsertMember(provider, profilePayload, memberUseCase, logger).toSecurityUser()
+    }
+}
 
-        val username = "${provider.name}__${profilePayload.oauthUserId}"
-        val password = ""
+@Service
+class CustomOidcUserService(
+    private val memberUseCase: MemberUseCase,
+) : OAuth2UserService<OidcUserRequest, OidcUser> {
+    internal var delegate: OAuth2UserService<OidcUserRequest, OidcUser> = OidcUserService()
+    private val logger = LoggerFactory.getLogger(javaClass)
 
-        val member =
-            memberUseCase
-                .modifyOrJoin(
-                    username,
-                    password,
-                    profilePayload.nickname,
-                    profilePayload.profileImgUrl,
-                ).data
+    @Transactional
+    override fun loadUser(userRequest: OidcUserRequest): OidcUser {
+        val oidcUser = delegate.loadUser(userRequest)
+        val provider = OAuth2Provider.from(userRequest.clientRegistration.registrationId)
+        val profilePayload =
+            when (provider) {
+                OAuth2Provider.KAKAO -> OAuth2ProfileExtractor.extractKakao(oidcUser.claims, oidcUser.name)
+            }
+        val member = upsertMember(provider, profilePayload, memberUseCase, logger)
 
-        return SecurityUser(
-            member.id,
-            member.username,
-            member.password ?: "",
-            member.name,
-            member.toGrantedAuthorities(),
+        return member.toSecurityOidcUser(oidcUser)
+    }
+}
+
+private fun upsertMember(
+    provider: OAuth2Provider,
+    profilePayload: OAuth2ProfilePayload,
+    memberUseCase: MemberUseCase,
+    logger: Logger,
+): Member {
+    if (profilePayload.nickname == OAuth2ProfileExtractor.DEFAULT_KAKAO_NICKNAME) {
+        logger.warn(
+            "oauth2_kakao_profile_fallback_used provider={} oauthUserId={}",
+            provider.name.lowercase(),
+            profilePayload.oauthUserId,
         )
     }
+
+    val username = "${provider.name}__${profilePayload.oauthUserId}"
+    val password = ""
+
+    return memberUseCase
+        .modifyOrJoin(
+            username,
+            password,
+            profilePayload.nickname,
+            profilePayload.profileImgUrl,
+        ).data
+}
+
+private fun Member.toSecurityUser(): SecurityUser =
+    SecurityUser(
+        id,
+        username,
+        password ?: "",
+        name,
+        toGrantedAuthorities(),
+    )
+
+private fun Member.toSecurityOidcUser(oidcUser: OidcUser): SecurityOidcUser =
+    SecurityOidcUser(
+        id,
+        username,
+        password ?: "",
+        name,
+        toGrantedAuthorities(),
+        oidcUser.idToken,
+        oidcUser.userInfo,
+    )
+
+private class SecurityOidcUser(
+    id: Long,
+    username: String,
+    password: String,
+    nickname: String,
+    authorities: Collection<GrantedAuthority>,
+    private val idToken: OidcIdToken,
+    userInfo: OidcUserInfo?,
+) : SecurityUser(id, username, password, nickname, authorities),
+    OidcUser {
+    private val userInfo = userInfo ?: OidcUserInfo(idToken.claims)
+    private val oidcClaims: Map<String, Any> =
+        buildMap {
+            putAll(this@SecurityOidcUser.userInfo.claims)
+            putAll(idToken.claims)
+        }
+
+    override fun getAttributes(): Map<String, Any> = oidcClaims
+
+    override fun getClaims(): Map<String, Any> = oidcClaims
+
+    override fun getUserInfo(): OidcUserInfo = userInfo
+
+    override fun getIdToken(): OidcIdToken = idToken
 }
 
 internal data class OAuth2ProfilePayload(
@@ -100,6 +176,7 @@ internal object OAuth2ProfileExtractor {
         val oauthUserId =
             firstNonBlank(
                 attributes["id"],
+                attributes["sub"],
                 fallbackName,
                 "unknown",
             )
@@ -108,6 +185,8 @@ internal object OAuth2ProfileExtractor {
                 properties?.get("nickname"),
                 accountProfile?.get("nickname"),
                 kakaoAccount?.get("name"),
+                attributes["nickname"],
+                attributes["name"],
                 DEFAULT_KAKAO_NICKNAME,
             )
         val profileImgUrl =
@@ -115,6 +194,7 @@ internal object OAuth2ProfileExtractor {
                 properties?.get("profile_image"),
                 accountProfile?.get("profile_image_url"),
                 accountProfile?.get("thumbnail_image_url"),
+                attributes["picture"],
             )
 
         return OAuth2ProfilePayload(

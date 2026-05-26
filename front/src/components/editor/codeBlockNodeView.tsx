@@ -223,7 +223,6 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       if (!isCodeTextSurfaceTarget) return
       const anchorPos = resolveCodeTextPosFromPointer(event.clientX, event.clientY, contentRoot)
       if (typeof anchorPos !== "number") return
-      event.preventDefault()
       event.stopPropagation()
       lastActiveCodeBlockContentRoot = contentRoot
       window.getSelection()?.removeAllRanges()
@@ -253,7 +252,6 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
   const handleCodeMouseDownCapture = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
       if (codeDragSelectionRef.current) {
-        event.preventDefault()
         event.stopPropagation()
         return
       }
@@ -281,7 +279,6 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       const headPos = typeof resolvedHeadPos === "number" ? resolvedHeadPos : resolveFallbackHeadPos(session.anchorPos)
       session.active = true
       session.lastHeadPos = headPos
-      event.preventDefault()
       event.stopPropagation()
       applyCodeTextSelection(session.anchorPos, headPos)
       preserveCodeDomTextRange(contentRoot, session.anchorPos, headPos)
@@ -296,7 +293,6 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       const resolvedHeadPos = resolveCodeTextPosFromPointer(event.clientX, event.clientY, contentRoot)
       const headPos = typeof resolvedHeadPos === "number" ? resolvedHeadPos : session.lastHeadPos ?? resolveFallbackHeadPos(session.anchorPos)
       preserveCodeDomTextRange(contentRoot, session.anchorPos, headPos)
-      event.preventDefault()
       event.stopPropagation()
     }
     window.addEventListener("mousemove", handleWindowMouseMove, true)

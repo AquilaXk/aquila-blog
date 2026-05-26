@@ -211,6 +211,7 @@ test.describe("editor authoring route text selection drag", () => {
     await dragSelectWord(page, editor.locator("p", { hasText: bodyLabel }).first(), bodyLabel)
     const codeContent = editor.locator(".aq-code-editor-content", { hasText: codeLabel }).first()
     await dragSelectWord(page, codeContent, codeLabel)
+    await expect(codeContent).toContainText(codeLabel)
     await expectSelectionScopedToWord(page, codeLabel, [bodyLabel, tableLabel])
     const codePoints = await getWordDragPoints(codeContent, codeLabel)
     await page.mouse.click(codePoints.startX, codePoints.startY)

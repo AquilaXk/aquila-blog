@@ -731,29 +731,30 @@ test.describe("editor authoring route code recovery", () => {
           document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text") ||
           ""
       )
-    const readCellTextAtPoint = (x: number, y: number) =>
-      page.evaluate(
-        ({ x, y }) => document.elementFromPoint(x, y)?.closest("th, td")?.textContent?.trim() ?? "",
-        { x, y }
-      )
     const accessTokenCell = editor.locator("td", { hasText: "Access Token" }).first()
     await accessTokenCell.scrollIntoViewIfNeeded()
     await accessTokenCell.evaluate((element) => {
       element.scrollIntoView({ block: "center", inline: "nearest" })
     })
-    await expect.poll(async () => {
-      const box = await accessTokenCell.boundingBox()
-      if (!box) return ""
-      return readCellTextAtPoint(box.x + 18, box.y + box.height / 2)
-    }).toContain("Access Token")
-    const accessTokenBox = await accessTokenCell.boundingBox()
-    if (!accessTokenBox) throw new Error("live shape access token table cell metrics are missing")
-    const accessTokenDragY = accessTokenBox.height / 2
-    const accessTokenDragEndX = Math.min(accessTokenBox.width - 18, 128)
+    const accessTokenDrag = await accessTokenCell.evaluate((element) => {
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+      while (walker.nextNode()) {
+        const textNode = walker.currentNode as Text
+        const startOffset = textNode.data.indexOf("Access Token")
+        if (startOffset < 0) continue
+        const range = document.createRange(); range.setStart(textNode, startOffset); range.setEnd(textNode, startOffset + "Access Token".length)
+        const rect = range.getBoundingClientRect()
+        if (rect.width <= 2 || rect.height <= 2) {
+          throw new Error("live shape access token text rect is too small")
+        }
+        return { endX: rect.right - 2, startX: rect.left + 2, y: rect.top + rect.height / 2 }
+      }
+      throw new Error("live shape access token text node is missing")
+    })
     const beforeAccessTokenDrag = await readScrollTop()
-    await accessTokenCell.hover({ position: { x: 18, y: accessTokenDragY } })
+    await page.mouse.move(accessTokenDrag.startX, accessTokenDrag.y)
     await page.mouse.down()
-    await accessTokenCell.hover({ position: { x: accessTokenDragEndX, y: accessTokenDragY } })
+    await page.mouse.move(accessTokenDrag.endX, accessTokenDrag.y, { steps: 8 })
     await page.mouse.up()
     await page.waitForTimeout(560)
     await expect.poll(readSelectionText).toContain("Access Token")

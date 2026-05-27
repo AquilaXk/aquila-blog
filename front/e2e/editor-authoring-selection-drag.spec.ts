@@ -229,4 +229,113 @@ test.describe("editor authoring route text selection drag", () => {
     await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
     expect(runtimeErrors).toEqual([])
   })
+
+  test("실제 /editor/[id] 테이블 다중 셀 텍스트 드래그는 마우스 업 이후에도 범위 선택을 유지한다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 1000 })
+    const tableMarkdown = [
+      '<!-- aq-table {"overflowMode":"normal","columnWidths":[160,220,240]} -->',
+      "| 영역 | 점검 항목 | 확인 기준 |",
+      "| --- | --- | --- |",
+      "| 개념 이해 | Stateless 의미 | 요청만으로 처리 가능한가 |",
+      "| 토큰 구조 | Access/Refresh 구분 | 역할 명확 |",
+      "| 보안 | HTTPS 사용 | 필수 |",
+      "| 저장소 | Refresh 저장 | DB/Redis |",
+      "| 만료 | Access 짧게 | 15~60분 |",
+      "| 흐름 | 재발급 로직 | 구현되어 있는가 |",
+    ].join("\n")
+    const content = [
+      "테이블 다중 셀 드래그 회귀 재현용 글입니다.",
+      tableMarkdown,
+      "테이블 아래 문단입니다.",
+    ].join("\n\n")
+
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(adminMember),
+      })
+    })
+    await page.route("**/post/api/v1/adm/posts/988", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 988,
+          version: 2,
+          title: "테이블 다중 셀 드래그 회귀 글",
+          content,
+          contentHtml: null,
+          published: true,
+          listed: true,
+        }),
+      })
+    })
+
+    await page.goto("/editor/988")
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(
+      "테이블 다중 셀 드래그 회귀 글"
+    )
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await expectEditorToContainLoadedText(editor, "구현되어 있는가")
+
+    const points = await page.evaluate(() => {
+      const cells = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          "[data-testid='block-editor-prosemirror'] th, [data-testid='block-editor-prosemirror'] td"
+        )
+      )
+      const table = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror'] table")
+      table?.scrollIntoView({ block: "center", inline: "nearest" })
+      const startCell = cells.find((cell) => cell.textContent?.includes("영역"))
+      const endCell = cells.find((cell) => cell.textContent?.includes("구현되어 있는가"))
+      if (!startCell || !endCell) return null
+      startCell.scrollIntoView({ block: "center", inline: "nearest" })
+      const startRect = startCell.getBoundingClientRect()
+      const endRect = endCell.getBoundingClientRect()
+      return {
+        startX: startRect.left + Math.min(startRect.width / 2, 80),
+        startY: startRect.top + startRect.height / 2,
+        endX: endRect.right - Math.min(endRect.width / 2, 80),
+        endY: endRect.top + endRect.height / 2,
+        scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+      }
+    })
+    if (!points) throw new Error("table multi-cell drag points are missing")
+
+    await page.mouse.move(points.startX, points.startY)
+    await page.mouse.down()
+    await page.mouse.move(points.endX, points.endY, { steps: 18 })
+    await page.mouse.up()
+
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const text =
+              window.getSelection()?.toString() ||
+              document.documentElement.getAttribute("data-table-drag-selection-text") ||
+              document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
+              ""
+            return text.replace(/\s+/g, " ").trim()
+          }),
+        { timeout: 2_000 }
+      )
+      .toContain("구현되어 있는가")
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const text =
+            window.getSelection()?.toString() ||
+            document.documentElement.getAttribute("data-table-drag-selection-text") ||
+            document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
+            ""
+          return text.replace(/\s+/g, " ").trim()
+        })
+      )
+      .toContain("영역")
+    await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
+    const afterScrollTop = await page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
+    expect(Math.abs(afterScrollTop - points.scrollTop)).toBeLessThanOrEqual(24)
+  })
 })

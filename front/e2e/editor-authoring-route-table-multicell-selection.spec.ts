@@ -15,6 +15,7 @@ const readSelectionText = (page: Page) =>
   page.evaluate(
     () =>
       window.getSelection()?.toString() ||
+      document.documentElement.getAttribute("data-table-drag-selection-text") ||
       document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
       ""
   )
@@ -30,7 +31,8 @@ const dragBetweenTextRanges = async (
   startTarget: Locator,
   endTarget: Locator,
   label: string,
-  texts: { end: string; start: string }
+  texts: { end: string; start: string },
+  options: { syntheticWithoutNativeSelection?: boolean } = {}
 ) => {
   await startTarget.scrollIntoViewIfNeeded()
   await endTarget.waitFor({ state: "attached", timeout: 5_000 })
@@ -76,6 +78,47 @@ const dragBetweenTextRanges = async (
     { endText: texts.end, label, startText: texts.start }
   )
   const beforeScrollTop = await readScrollTop(page)
+
+  if (options.syntheticWithoutNativeSelection) {
+    await page.evaluate(({ end, start }) => {
+      window.getSelection()?.removeAllRanges()
+      document.querySelectorAll("[data-table-drag-selection-text]").forEach((element) => {
+        element.removeAttribute("data-table-drag-selection-text")
+      })
+      document.documentElement.removeAttribute("data-table-drag-selection-text")
+      const dispatch = (type: string, point: { x: number; y: number }, buttons: number) => {
+        const target = document.elementFromPoint(point.x, point.y) ?? document
+        const init = {
+          bubbles: true,
+          button: 0,
+          buttons,
+          cancelable: true,
+          clientX: point.x,
+          clientY: point.y,
+          composed: true,
+          isPrimary: true,
+          pointerId: 1,
+          pointerType: "mouse",
+        }
+        target.dispatchEvent(new PointerEvent(type, init))
+      }
+      dispatch("pointerdown", start, 1)
+      dispatch("mousedown", start, 1)
+      for (let index = 1; index <= 36; index += 1) {
+        const ratio = index / 36
+        const point = {
+          x: start.x + (end.x - start.x) * ratio,
+          y: start.y + (end.y - start.y) * ratio,
+        }
+        dispatch("pointermove", point, 1)
+        dispatch("mousemove", point, 1)
+      }
+      dispatch("pointerup", end, 0)
+      dispatch("mouseup", end, 0)
+    }, metrics)
+    await page.waitForTimeout(1_000)
+    return { beforeScrollTop, afterScrollTop: await readScrollTop(page), selectionText: await readSelectionText(page) }
+  }
 
   await page.mouse.move(metrics.start.x, metrics.start.y)
   await page.mouse.down()
@@ -230,4 +273,30 @@ test("live 507 형태의 table multi-cell drag는 여러 셀 텍스트를 연속
   expect(selectedCellCount).toBe(0)
   expect(tableDrag.afterScrollTop).toBeLessThanOrEqual(tableDrag.beforeScrollTop + 24)
   expect(tableDrag.afterScrollTop).toBeGreaterThanOrEqual(tableDrag.beforeScrollTop - 24)
+
+  await page.evaluate(() => {
+    window.getSelection()?.removeAllRanges()
+    document.querySelectorAll("[data-table-drag-selection-text]").forEach((element) => {
+      element.removeAttribute("data-table-drag-selection-text")
+    })
+    document.documentElement.removeAttribute("data-table-drag-selection-text")
+  })
+
+  const emptyNativeMouseupDrag = await dragBetweenTextRanges(
+    page,
+    startCell,
+    endCell,
+    "live 507 table multi-cell drag with empty native mouseup selection",
+    {
+      end: "구현되어 있는가",
+      start: "영역",
+    },
+    { syntheticWithoutNativeSelection: true }
+  )
+
+  expect(emptyNativeMouseupDrag.selectionText).toContain("영역")
+  expect(emptyNativeMouseupDrag.selectionText).toContain("점검 항목")
+  expect(emptyNativeMouseupDrag.selectionText).toContain("확인 기준")
+  expect(emptyNativeMouseupDrag.selectionText).toContain("구현되어 있는가")
+  expect(await editor.locator(".selectedCell").count()).toBe(0)
 })

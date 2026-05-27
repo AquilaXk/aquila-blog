@@ -93,7 +93,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     window.addEventListener("pointerdown", rememberExplicitTableTextDragStart, true); window.addEventListener("mousedown", rememberExplicitTableTextDragStart, true)
     window.addEventListener("pointermove", (event) => { pendingTableTextSelectionRangeCells = event.buttons === 1 ? resolveTableTextSelectionRangeCells(event.clientX, event.clientY, event.target) ?? pendingTableTextSelectionRangeCells : null }, true)
     window.addEventListener("mousemove", (event) => { pendingTableTextSelectionRangeCells = event.buttons === 1 ? resolveTableTextSelectionRangeCells(event.clientX, event.clientY, event.target) ?? pendingTableTextSelectionRangeCells : null }, true)
-    window.addEventListener("pointerup", (event) => finalizeTableTextSelectionFromPoint(event.clientX, event.clientY, event.target), true); window.addEventListener("pointercancel", () => { explicitTableTextDragStart = null }, true); window.addEventListener("mouseup", (event) => finalizeTableTextSelectionFromPoint(event.clientX, event.clientY, event.target), true)
+    window.addEventListener("pointerup", (event) => finalizeTableTextSelectionFromPoint(event.clientX, event.clientY, event.target), true); window.addEventListener("mouseup", (event) => finalizeTableTextSelectionFromPoint(event.clientX, event.clientY, event.target), true); window.addEventListener("dragend", (event) => finalizeTableTextSelectionFromPoint(event.clientX, event.clientY, event.target), true)
   }
 }
 

@@ -8,6 +8,7 @@ import {
 } from "./BlockEditorEngine.layers"
 import { BlockEditorTableOverlayLayer } from "./BlockEditorEngine.tableOverlayLayer"
 import { Shell } from "./BlockEditorEngine.styles"
+import "./tableTextNativeDragGuard"
 import { useBlockEditorEngineController } from "./useBlockEditorEngineController"
 
 const BlockEditorEngine = (props: BlockEditorEngineProps) => {

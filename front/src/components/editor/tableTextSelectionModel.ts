@@ -19,8 +19,127 @@ const resolveElement = (target: EventTarget | Node | null | undefined) => {
   return null
 }
 
-const normalizeCellText = (cell: Element | null | undefined) =>
-  cell?.textContent?.replace(/\s+/g, " ").trim() ?? ""
+const TABLE_TEXT_SELECTION_CONTROL_SELECTOR = "[data-table-axis-rail='true'], [data-table-affordance], [data-table-menu-root='true'], [data-table-menu-trigger='true'], [data-testid^='table-column-resize-boundary-'], [data-testid='table-structure-menu-button'], [data-testid='table-corner-handle'], [data-testid='table-corner-grow-handle'], .column-resize-handle"
+export const resolveTableTextCellAtPoint = (clientX: number, clientY: number, target?: EventTarget | Node | null, options: { allowControlFallback?: boolean } = {}) => {
+  const pointElements = document.elementsFromPoint(clientX, clientY), targetElement = resolveElement(target)
+  return !options.allowControlFallback && (targetElement?.closest(TABLE_TEXT_SELECTION_CONTROL_SELECTOR) || pointElements[0]?.closest(TABLE_TEXT_SELECTION_CONTROL_SELECTOR)) ? null : pointElements.find((element) => Boolean(element.closest("th, td")))?.closest("th, td") ?? targetElement?.closest("th, td")
+}
+
+export const resolveTableTextSelectionRangeCells = (clientX: number, clientY: number, target?: EventTarget | Node | null) => {
+  const pointCell = resolveTableTextCellAtPoint(clientX, clientY, target)
+  const selection = window.getSelection()
+  const anchorElement = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null
+  const selectedText = selection?.toString().trim() ?? ""
+  const pointTable = pointCell?.closest("table")
+  const anchorCell = anchorElement?.closest("th, td") ?? Array.from(pointTable?.querySelectorAll<HTMLElement>("th, td") ?? []).find((cell) => {
+    const cellText = normalizeCellText(cell)
+    return cellText === selectedText || cellText.includes(selectedText) || selectedText.includes(cellText)
+  })
+  return pointCell instanceof HTMLElement && anchorCell instanceof HTMLElement && selectedText && pointTable === anchorCell.closest("table")
+    ? { anchorCell, pointCell }
+    : null
+}
+
+let pendingTableTextSelectionRangeCells: { anchorCell: HTMLElement; pointCell: HTMLElement } | null = null
+let activeTableTextRangePreserveCancel: (() => void) | null = null
+const TABLE_TEXT_HIGHLIGHT_NAME = "aq-table-text-selection"
+const clearTableTextRangeHighlight = () => { document.querySelectorAll("[data-table-drag-selection-text]").forEach((element) => element.removeAttribute("data-table-drag-selection-text")); document.documentElement.removeAttribute("data-table-drag-selection-text"); (CSS as typeof CSS & { highlights?: { delete: (name: string) => void } }).highlights?.delete(TABLE_TEXT_HIGHLIGHT_NAME) }
+const paintTableTextRangeHighlight = (range: Range) => { const HighlightCtor = (window as typeof window & { Highlight?: new (range: Range) => unknown }).Highlight, highlights = (CSS as typeof CSS & { highlights?: { set: (name: string, highlight: unknown) => void } }).highlights; if (!HighlightCtor || !highlights) return; if (!document.getElementById("aq-table-text-highlight-style")) { const style = document.createElement("style"); style.id = "aq-table-text-highlight-style"; style.textContent = `::highlight(${TABLE_TEXT_HIGHLIGHT_NAME}){background:#0a5b9d;color:white}`; document.head.append(style) } highlights.set(TABLE_TEXT_HIGHLIGHT_NAME, new HighlightCtor(range.cloneRange())) }
+
+const preserveTableTextRangeAcrossFrames = (anchorCell: HTMLElement, pointCell: HTMLElement) => {
+  activeTableTextRangePreserveCancel?.()
+  let cancelled = false, frame = 0
+  const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now()
+  const cleanup = () => {
+    window.removeEventListener("pointerdown", cancel, true); window.removeEventListener("mousedown", cancel, true); window.removeEventListener("wheel", cancel, true); window.removeEventListener("scroll", cancel, true); window.removeEventListener("keydown", cancel, true)
+    if (activeTableTextRangePreserveCancel === cancel) activeTableTextRangePreserveCancel = null
+  }
+  const cancel = () => { cancelled = true; clearTableTextRangeHighlight(); cleanup() }
+  const restore = () => {
+    if (cancelled) return
+    selectTableCellTextRange(anchorCell, pointCell)
+    frame += 1
+    const elapsedMs = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt
+    if (frame < 96 || elapsedMs < 1_600) {
+      window.requestAnimationFrame(restore)
+    }
+  }
+  activeTableTextRangePreserveCancel = cancel
+  window.addEventListener("pointerdown", cancel, { capture: true, once: true }); window.addEventListener("mousedown", cancel, { capture: true, once: true })
+  window.addEventListener("wheel", cancel, { capture: true, passive: true, once: true }); window.addEventListener("scroll", cancel, { capture: true, passive: true, once: true })
+  window.addEventListener("keydown", cancel, { capture: true, once: true })
+  window.requestAnimationFrame(restore)
+  return cancel
+}
+
+export const finalizeTableTextSelectionFromPoint = (clientX: number, clientY: number, target?: EventTarget | Node | null) => {
+  const pointCell = resolveTableTextCellAtPoint(clientX, clientY, target), rangeCells = resolveTableTextSelectionRangeCells(clientX, clientY, target) ?? (pointCell ? pendingTableTextSelectionRangeCells : null); pendingTableTextSelectionRangeCells = null
+  if (!rangeCells || rangeCells.anchorCell === rangeCells.pointCell) return false
+  cancelActiveTableCellTextSelectionPreserves()
+  const restore = () => selectTableCellTextRange(rangeCells.anchorCell, rangeCells.pointCell)
+  window.requestAnimationFrame(restore); window.setTimeout(restore, 80); window.setTimeout(restore, 180)
+  preserveTableTextRangeAcrossFrames(rangeCells.anchorCell, rangeCells.pointCell)
+  return true
+}
+
+if (typeof window !== "undefined" && typeof document !== "undefined") {
+  const tableSelectionWindow = window as typeof window & { __aqTableTextSelectionFinalizerInstalled?: boolean }
+  if (!tableSelectionWindow.__aqTableTextSelectionFinalizerInstalled) {
+    tableSelectionWindow.__aqTableTextSelectionFinalizerInstalled = true
+    window.addEventListener("mousemove", (event) => { pendingTableTextSelectionRangeCells = event.buttons === 1 ? resolveTableTextSelectionRangeCells(event.clientX, event.clientY, event.target) ?? pendingTableTextSelectionRangeCells : null }, true)
+    window.addEventListener("mouseup", (event) => finalizeTableTextSelectionFromPoint(event.clientX, event.clientY, event.target), true)
+  }
+}
+
+const normalizeCellText = (cell: Element | null | undefined) => cell?.textContent?.replace(/\s+/g, " ").trim() ?? ""
+
+const resolveCellTable = (cell: HTMLElement | null | undefined) => cell?.closest("table") ?? null
+
+const isConnectedTableCell = (cell: HTMLElement) =>
+  cell.isConnected && document.documentElement.contains(cell)
+
+const resolveCurrentTableTextRangeCells = (
+  startedCell: HTMLElement,
+  endCell: HTMLElement
+) => {
+  const startedTable = resolveCellTable(startedCell)
+  if (
+    isConnectedTableCell(startedCell) &&
+    isConnectedTableCell(endCell) &&
+    startedTable &&
+    resolveCellTable(endCell) === startedTable
+  ) {
+    return { endCell, startedCell }
+  }
+
+  const startedText = normalizeCellText(startedCell)
+  const endText = normalizeCellText(endCell)
+  if (!startedText || !endText) return null
+  const originalCells = startedTable ? Array.from(startedTable.querySelectorAll<HTMLElement>("th, td")) : []
+  const startedIndex = originalCells.indexOf(startedCell)
+  const endIndex = originalCells.indexOf(endCell)
+
+  for (const table of Array.from(document.querySelectorAll("table"))) {
+    const cells = Array.from(table.querySelectorAll<HTMLElement>("th, td"))
+    const indexedStartedCell = startedIndex >= 0 ? cells[startedIndex] : null
+    const indexedEndCell = endIndex >= 0 ? cells[endIndex] : null
+    if (
+      indexedStartedCell &&
+      indexedEndCell &&
+      normalizeCellText(indexedStartedCell) === startedText &&
+      normalizeCellText(indexedEndCell) === endText
+    ) {
+      return { endCell: indexedEndCell, startedCell: indexedStartedCell }
+    }
+
+    const textStartedCell = cells.find((cell) => normalizeCellText(cell) === startedText)
+    const textEndCell = cells.find((cell) => normalizeCellText(cell) === endText)
+    if (textStartedCell && textEndCell) {
+      return { endCell: textEndCell, startedCell: textStartedCell }
+    }
+  }
+  return null
+}
 
 const resolveConnectedTableCell = (
   editor: TiptapEditor,
@@ -40,6 +159,77 @@ const resolveConnectedTableCell = (
   )
 }
 
+const resolveOwnedTableRangeEndCell = (
+  editor: TiptapEditor,
+  startedCell: HTMLElement,
+  endCell: HTMLElement | null | undefined
+) => {
+  if (!endCell) return null
+  const currentCell = resolveConnectedTableCell(editor, endCell)
+  const startedTable = resolveCellTable(startedCell)
+  if (!currentCell || !startedTable || resolveCellTable(currentCell) !== startedTable) {
+    return null
+  }
+  return currentCell
+}
+
+const resolveTextBoundary = (element: HTMLElement, edge: "end" | "start") => {
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+  let firstText: Text | null = null
+  let lastText: Text | null = null
+  while (walker.nextNode()) {
+    const textNode = walker.currentNode as Text
+    if (!firstText) firstText = textNode
+    lastText = textNode
+  }
+  const textNode = edge === "start" ? firstText : lastText
+  if (textNode) {
+    return {
+      node: textNode,
+      offset: edge === "start" ? 0 : textNode.data.length,
+    }
+  }
+  return {
+    node: element,
+    offset: edge === "start" ? 0 : element.childNodes.length,
+  }
+}
+
+const isElementBeforeOrSame = (start: HTMLElement, end: HTMLElement) =>
+  start === end || Boolean(start.compareDocumentPosition(end) & Node.DOCUMENT_POSITION_FOLLOWING)
+
+export const selectTableCellTextRange = (
+  startedCell: HTMLElement,
+  endCell: HTMLElement
+) => {
+  const selection = window.getSelection()
+  if (!selection) return ""
+  const resolvedCells = resolveCurrentTableTextRangeCells(startedCell, endCell)
+  if (!resolvedCells) return ""
+  const range = document.createRange()
+  const forward = isElementBeforeOrSame(resolvedCells.startedCell, resolvedCells.endCell)
+  const rangeStartCell = forward ? resolvedCells.startedCell : resolvedCells.endCell, rangeEndCell = forward ? resolvedCells.endCell : resolvedCells.startedCell
+  const startBoundary = resolveTextBoundary(rangeStartCell, "start")
+  const endBoundary = resolveTextBoundary(rangeEndCell, "end")
+  range.setStart(startBoundary.node, startBoundary.offset)
+  range.setEnd(endBoundary.node, endBoundary.offset)
+  selection.removeAllRanges()
+  if (typeof selection.setBaseAndExtent === "function") selection.setBaseAndExtent(startBoundary.node, startBoundary.offset, endBoundary.node, endBoundary.offset)
+  else selection.addRange(range)
+  const selectedText = selection.toString() || range.toString()
+  resolvedCells.startedCell.setAttribute("data-table-drag-selection-text", selectedText || normalizeCellText(resolvedCells.startedCell))
+  document.documentElement.setAttribute("data-table-drag-selection-text", selectedText || normalizeCellText(resolvedCells.startedCell))
+  paintTableTextRangeHighlight(range)
+  return selectedText
+}
+
+const isSelectionInsideSameTable = (selection: Selection, table: Element | null) => {
+  if (!table) return false
+  const anchorElement = resolveElement(selection.anchorNode)
+  const focusElement = resolveElement(selection.focusNode)
+  return Boolean(anchorElement && focusElement && table.contains(anchorElement) && table.contains(focusElement))
+}
+
 let lastActiveTableCell: HTMLElement | null = null
 const activeTableCellScrollPreserveCancels = new Set<() => void>()
 const activeTableCellSelectionPreserveCancels = new Set<() => void>()
@@ -56,6 +246,7 @@ export const cancelActiveTableCellScrollPreserves = () => {
 export const cancelActiveTableCellTextSelectionPreserves = () => {
   activeTableCellSelectionPreserveCancels.forEach((cancel) => cancel())
   activeTableCellSelectionPreserveCancels.clear()
+  activeTableTextRangePreserveCancel?.(); clearTableTextRangeHighlight()
   cancelActiveTableCellScrollPreserves()
 }
 
@@ -66,17 +257,17 @@ const isWindowSelectionInsideEditorTable = (editorRoot: HTMLElement) => {
   const focusElement = resolveElement(selection.focusNode)
   const anchorCell = anchorElement?.closest("th, td")
   const focusCell = focusElement?.closest("th, td")
+  const anchorTable = anchorCell?.closest("table")
   return Boolean(
     anchorCell &&
       focusCell &&
-      anchorCell === focusCell &&
-      editorRoot.contains(anchorCell)
+      anchorTable &&
+      focusCell.closest("table") === anchorTable &&
+      editorRoot.contains(anchorTable)
   )
 }
 
-const hasTableTextSelectionState = (editorRoot: HTMLElement) =>
-  Boolean(editorRoot.querySelector(TABLE_DRAG_SELECTION_TEXT_SELECTOR)) ||
-  isWindowSelectionInsideEditorTable(editorRoot)
+const hasTableTextSelectionState = (editorRoot: HTMLElement) => Boolean(editorRoot.querySelector(TABLE_DRAG_SELECTION_TEXT_SELECTOR)) || isWindowSelectionInsideEditorTable(editorRoot)
 
 const resolveDomElementAtEditorPos = (editor: TiptapEditor, pos: number) => {
   const docSize = editor.state.doc.content.size
@@ -193,14 +384,7 @@ const hasOwnedTableCellTextSelection = (
 
   const selection = window.getSelection()
   if (!selection?.toString().trim()) return false
-  const anchorElement = resolveElement(selection.anchorNode)
-  const focusElement = resolveElement(selection.focusNode)
-  return Boolean(
-    anchorElement &&
-      focusElement &&
-      currentCell.contains(anchorElement) &&
-      currentCell.contains(focusElement)
-  )
+  return isSelectionInsideSameTable(selection, resolveCellTable(currentCell))
 }
 
 const clearOwnedTableCellDragSelectionText = (
@@ -262,12 +446,14 @@ export const restoreTableCellTextSelectionIfEscaped = (
   scrollAnchor?: WindowScrollAnchor | null,
   restoreWhenEmpty = false,
   forceStartedCellSelection = false,
-  preserveFallbackScroll = true
+  preserveFallbackScroll = true,
+  endCell: HTMLElement | null = null
 ) => {
   if (typeof window === "undefined" || typeof document === "undefined") return false
   if (!startedCell) return false
   const currentCell = resolveConnectedTableCell(editor, startedCell)
   if (!currentCell) return false
+  const rangeEndCell = resolveOwnedTableRangeEndCell(editor, currentCell, endCell)
 
   const selection = window.getSelection()
   if (!selection) return false
@@ -275,26 +461,34 @@ export const restoreTableCellTextSelectionIfEscaped = (
   const anchorElement = resolveElement(selection.anchorNode)
   const focusElement = resolveElement(selection.focusNode)
   const hasTextSelection = selection.toString().trim().length > 0
+  const table = resolveCellTable(currentCell)
+  const isOwnedTableSelection = isSelectionInsideSameTable(selection, table)
   if (
     hasTextSelection &&
-    ((anchorElement && currentCell.contains(anchorElement)) ||
+    (isOwnedTableSelection ||
+      (anchorElement && currentCell.contains(anchorElement)) ||
       (focusElement && currentCell.contains(focusElement)))
   ) {
     currentCell.setAttribute("data-table-drag-selection-text", selection.toString())
     clearNextEditorPointerAfterTable()
-    if (!forceStartedCellSelection) {
+    if (!forceStartedCellSelection || !rangeEndCell || rangeEndCell === currentCell) {
       return true
     }
   }
   if (!hasTextSelection && !restoreWhenEmpty) return false
 
-  const range = document.createRange()
-  range.selectNodeContents(currentCell)
-  selection.removeAllRanges()
-  selection.addRange(range)
+  let restoredRangeText = ""
+  if (rangeEndCell && rangeEndCell !== currentCell) {
+    restoredRangeText = selectTableCellTextRange(currentCell, rangeEndCell)
+  } else {
+    const range = document.createRange()
+    range.selectNodeContents(currentCell)
+    selection.removeAllRanges()
+    selection.addRange(range)
+  }
   currentCell.setAttribute(
     "data-table-drag-selection-text",
-    selection.toString() || normalizeCellText(currentCell)
+    restoredRangeText || selection.toString() || normalizeCellText(currentCell)
   )
   clearNextEditorPointerAfterTable()
   if (scrollAnchor) {
@@ -326,7 +520,8 @@ export const restoreTableCellTextSelectionIfEscaped = (
 export const preserveTableCellTextSelectionAcrossFrames = (
   editor: TiptapEditor,
   startedCell: HTMLElement,
-  _scrollAnchor: WindowScrollAnchor
+  _scrollAnchor: WindowScrollAnchor,
+  resolveEndCell?: () => HTMLElement | null
 ) => {
   const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now()
   let frame = 0
@@ -363,9 +558,7 @@ export const preserveTableCellTextSelectionAcrossFrames = (
       cancel()
       return
     }
-    const anchorElement = resolveElement(selection.anchorNode)
-    const focusElement = resolveElement(selection.focusNode)
-    if (!anchorElement || !focusElement || !currentCell.contains(anchorElement) || !currentCell.contains(focusElement)) {
+    if (!isSelectionInsideSameTable(selection, resolveCellTable(currentCell))) {
       cancel()
     }
   }
@@ -386,7 +579,7 @@ export const preserveTableCellTextSelectionAcrossFrames = (
       return
     }
     restoring = true
-    const restored = restoreTableCellTextSelectionIfEscaped(editor, startedCell, null, true, true, false)
+    const restored = restoreTableCellTextSelectionIfEscaped(editor, startedCell, null, true, true, false, resolveEndCell?.() ?? null)
     restoring = false
     if (!restored) {
       cancel()

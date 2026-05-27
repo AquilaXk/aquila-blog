@@ -328,7 +328,7 @@ test.describe("editor authoring table affordances", () => {
     })
     expect(Math.abs(rowRailRect.top + rowRailRect.height / 2 - (targetMetrics.top + targetMetrics.height / 2))).toBeLessThanOrEqual(8)
 
-    await rowHandle.click()
+    await page.mouse.click(rowRailRect.left + rowRailRect.width / 2, rowRailRect.top + rowRailRect.height / 2)
     const rowMenu = page.getByTestId("table-row-menu")
     await expect(rowMenu).toBeVisible()
     await expect(rowMenu.getByRole("button", { name: "행 삭제" })).toBeVisible()

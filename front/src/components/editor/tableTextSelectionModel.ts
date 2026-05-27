@@ -273,7 +273,7 @@ const isWindowSelectionInsideEditorTable = (editorRoot: HTMLElement) => {
   )
 }
 
-const hasTableTextSelectionState = (editorRoot: HTMLElement) => Boolean(editorRoot.querySelector(TABLE_DRAG_SELECTION_TEXT_SELECTOR)) || isWindowSelectionInsideEditorTable(editorRoot)
+const hasTableTextSelectionState = (editorRoot: HTMLElement) => Boolean(document.documentElement.getAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR)?.trim() || editorRoot.querySelector(TABLE_DRAG_SELECTION_TEXT_SELECTOR)) || isWindowSelectionInsideEditorTable(editorRoot)
 
 const resolveDomElementAtEditorPos = (editor: TiptapEditor, pos: number) => {
   const docSize = editor.state.doc.content.size

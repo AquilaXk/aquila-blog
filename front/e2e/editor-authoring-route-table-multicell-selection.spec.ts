@@ -309,6 +309,19 @@ test("live 507 형태의 table multi-cell drag는 여러 셀 텍스트를 연속
     { syntheticWithoutNativeSelection: true }
   )
 
+  if (!emptyNativeMouseupDrag.selectionText.includes("영역")) {
+    const diagnostics = await page.evaluate(() => ({
+      events: ((window as typeof window & { __qaMultiCellDragEvents?: unknown[] }).__qaMultiCellDragEvents ?? []).slice(-80),
+      htmlPersisted: document.documentElement.getAttribute("data-table-drag-selection-text"),
+      persisted: Array.from(document.querySelectorAll("[data-table-drag-selection-text]")).map((element) => ({
+        tagName: element.tagName,
+        text: element.textContent?.replace(/\s+/g, " ").trim().slice(0, 120),
+        value: element.getAttribute("data-table-drag-selection-text"),
+      })),
+      selectionText: window.getSelection()?.toString() ?? "",
+    }))
+    throw new Error(`empty native mouseup multi-cell drag lost selection: ${JSON.stringify({ diagnostics, emptyNativeMouseupDrag })}`)
+  }
   expect(emptyNativeMouseupDrag.selectionText).toContain("영역")
   expect(emptyNativeMouseupDrag.selectionText).toContain("점검 항목")
   expect(emptyNativeMouseupDrag.selectionText).toContain("확인 기준")

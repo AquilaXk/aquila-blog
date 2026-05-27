@@ -2,6 +2,7 @@ import type { Editor as TiptapEditor } from "@tiptap/core"
 import { TextSelection } from "@tiptap/pm/state"
 import { useEffect, useRef, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react"
 import { cancelTablePointerScrollPreserves, clearNextEditorPointerAfterTable, markNextEditorPointerAfterTable, preserveWindowScrollForCodePointerFocus, preserveWindowScrollForEditorPointerFocus, preserveWindowScrollPositionAcrossFrames, type WindowScrollAnchor } from "./blockHandleLayoutModel"
+import { resolveMultiCellTableDomSelectionBubbleState, resolvePersistedTableTextSelectionBubbleState } from "./floatingBubbleDomRangeModel"
 import { isTableSelectionActive } from "./tableStructureModel"
 import { cancelActiveTableCellTextSelectionPreserves, collapseStaleTableEditorSelection, preserveTableCellTextSelectionAcrossFrames, resolveTableTextCellAtPoint, resolveTableTextSelectionRangeCells, restoreTableCellTextSelectionIfEscaped, selectTableCellTextRange, watchTableCellTextSelectionExternalClear } from "./tableTextSelectionModel"
 import { areFloatingBubbleStatesEqual, hideFloatingBubbleState, resolveFloatingBubbleStateFromCoords, type FloatingBubbleState } from "./useFloatingBubbleState"
@@ -221,19 +222,15 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       }
 
       let selection = activeEditor.state.selection
+      const domSelection = typeof window !== "undefined" ? window.getSelection() : null
+      const range = domSelection && domSelection.rangeCount > 0 ? domSelection.getRangeAt(0) : null
+      const commonAncestor = range?.commonAncestorContainer instanceof Element ? range.commonAncestorContainer : range?.commonAncestorContainer?.parentElement ?? null
+      const isCodeBlockNodeViewSelection = Boolean(commonAncestor?.closest(CODE_BLOCK_EDITOR_CONTENT_SELECTOR))
+      const anchorCell = (domSelection?.anchorNode instanceof Element ? domSelection.anchorNode : domSelection?.anchorNode?.parentElement ?? null)?.closest("th, td"), focusCell = (domSelection?.focusNode instanceof Element ? domSelection.focusNode : domSelection?.focusNode?.parentElement ?? null)?.closest("th, td"), isMultiCellTableDomSelection = Boolean(anchorCell && focusCell && anchorCell !== focusCell && anchorCell.closest("table") === focusCell.closest("table"))
+      const multiCellTableBubbleState =
+        resolveMultiCellTableDomSelectionBubbleState(activeEditor.view.dom, CODE_BLOCK_EDITOR_CONTENT_SELECTOR) ??
+        resolvePersistedTableTextSelectionBubbleState(activeEditor.view.dom)
       if (selection.empty && typeof window !== "undefined" && !isTableColumnRailResizeActive()) {
-        const domSelection = window.getSelection()
-        const range =
-          domSelection && domSelection.rangeCount > 0 ? domSelection.getRangeAt(0) : null
-        const commonAncestor =
-          range?.commonAncestorContainer instanceof Element
-            ? range.commonAncestorContainer
-            : range?.commonAncestorContainer?.parentElement ?? null
-
-        const isCodeBlockNodeViewSelection = Boolean(
-          commonAncestor?.closest(CODE_BLOCK_EDITOR_CONTENT_SELECTOR)
-        )
-        const anchorCell = (domSelection?.anchorNode instanceof Element ? domSelection.anchorNode : domSelection?.anchorNode?.parentElement ?? null)?.closest("th, td"), focusCell = (domSelection?.focusNode instanceof Element ? domSelection.focusNode : domSelection?.focusNode?.parentElement ?? null)?.closest("th, td"), isMultiCellTableDomSelection = Boolean(anchorCell && focusCell && anchorCell !== focusCell && anchorCell.closest("table") === focusCell.closest("table"))
         if (
           range &&
           domSelection &&
@@ -288,14 +285,10 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       const isImageNodeSelected = activeEditor.isActive("resizableImage")
       const isTableActive = isTableSelectionActive(activeEditor)
       const isTableStructuralSelection = hasTableStructuralSelection(activeEditor)
-      const canShowTextToolbar =
-        !selection.empty &&
-        !isImageNodeSelected &&
-        !activeEditor.isActive("codeBlock") &&
-        !activeEditor.isActive("rawMarkdownBlock") &&
-        !isTableStructuralSelection
+      const canShowTextToolbar = !selection.empty && !isImageNodeSelected && !activeEditor.isActive("codeBlock") && !activeEditor.isActive("rawMarkdownBlock") && !isTableStructuralSelection
+      const canShowMultiCellTableTextToolbar = Boolean(multiCellTableBubbleState && !isImageNodeSelected && !activeEditor.isActive("codeBlock") && !activeEditor.isActive("rawMarkdownBlock") && !isTableStructuralSelection)
 
-      if (canShowTextToolbar && mouseTextSelectionInProgressRef.current) {
+      if ((canShowTextToolbar || canShowMultiCellTableTextToolbar) && mouseTextSelectionInProgressRef.current) {
         syncBubbleOnMouseUpRef.current = true
         if (bubbleToolbarHoveredRef.current) return
         setBubbleState((prev) =>
@@ -304,6 +297,13 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         if (!tableMenuState) {
           hideTableQuickRailImmediately()
         }
+        return
+      }
+
+      if (multiCellTableBubbleState && canShowMultiCellTableTextToolbar) {
+        cancelBubbleHide()
+        hideTableQuickRailImmediately()
+        setBubbleState((prev) => areFloatingBubbleStatesEqual(prev, multiCellTableBubbleState) ? prev : multiCellTableBubbleState)
         return
       }
 
@@ -410,7 +410,8 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       if (insideEditorDom) {
         if (tableTextDragStart && existingSelectionText) { event.preventDefault(); event.stopPropagation(); if (tableTextDragStart.coveredControlFallback) event.stopImmediatePropagation?.(); restoreTableCellTextSelectionIfEscaped(activeEditor, tableTextDragStart.cell, tableTextDragStart.scrollAnchor, true, true); if (tableTextDragStart.coveredControlFallback) { preserveActiveTableTextDragSelection(activeEditor); preserveActiveTableTextDragScroll() } }
       }
-      if (tryStartTableColumnResizeFromDomHandle(event.target, event.pointerId, event.clientX)) {
+      const columnResizeHandleTarget = pointElements.find((element) => Boolean(element.closest("[data-testid^='table-column-resize-boundary-']"))) ?? event.target
+      if (tryStartTableColumnResizeFromDomHandle(columnResizeHandleTarget, event.pointerId, event.clientX)) {
         event.preventDefault()
         event.stopPropagation()
         event.stopImmediatePropagation?.()
@@ -532,6 +533,8 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       tableTextDragPendingStartRef.current = null
       codeTextDragStartRef.current = null; nonTableTextDragStartRef.current = null
       mouseTextSelectionInProgressRef.current = false
+      window.setTimeout(scheduleSyncBubble, 96); window.setTimeout(scheduleSyncBubble, 200)
+      if (!syncBubbleOnMouseUpRef.current && document.documentElement.hasAttribute("data-table-drag-selection-text")) syncBubbleOnMouseUpRef.current = true
       if (!syncBubbleOnMouseUpRef.current) return
       syncBubbleOnMouseUpRef.current = false
       scheduleSyncBubble()

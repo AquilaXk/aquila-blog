@@ -299,4 +299,30 @@ test("live 507 형태의 table multi-cell drag는 여러 셀 텍스트를 연속
   expect(emptyNativeMouseupDrag.selectionText).toContain("확인 기준")
   expect(emptyNativeMouseupDrag.selectionText).toContain("구현되어 있는가")
   expect(await editor.locator(".selectedCell").count()).toBe(0)
+
+  await page.evaluate((selectionText) => {
+    window.getSelection()?.removeAllRanges()
+    document.documentElement.setAttribute("data-table-drag-selection-text", selectionText)
+    const table = Array.from(document.querySelectorAll("table")).find((candidate) =>
+      candidate.textContent?.includes("구현되어 있는가")
+    )
+    const startCell = Array.from(table?.querySelectorAll("th, td") ?? []).find((cell) =>
+      cell.textContent?.replace(/\s+/g, " ").trim().includes("영역")
+    )
+    startCell?.setAttribute("data-table-drag-selection-text", selectionText)
+    window.dispatchEvent(
+      new MouseEvent("mouseup", {
+        bubbles: true,
+        button: 0,
+        buttons: 0,
+        cancelable: true,
+        clientX: 0,
+        clientY: 0,
+      })
+    )
+  }, emptyNativeMouseupDrag.selectionText)
+  await page.waitForTimeout(100)
+  const afterTrailingMouseup = await readSelectionText(page)
+  expect(afterTrailingMouseup).toContain("영역")
+  expect(afterTrailingMouseup).toContain("구현되어 있는가")
 })

@@ -35,9 +35,7 @@ export const resolveTableTextSelectionRangeCells = (clientX: number, clientY: nu
     const cellText = normalizeCellText(cell)
     return cellText === selectedText || cellText.includes(selectedText) || selectedText.includes(cellText)
   })
-  return pointCell instanceof HTMLElement && anchorCell instanceof HTMLElement && selectedText && pointTable === anchorCell.closest("table")
-    ? { anchorCell, pointCell }
-    : null
+  return pointCell instanceof HTMLElement && anchorCell instanceof HTMLElement && selectedText && pointTable === anchorCell.closest("table") ? { anchorCell, pointCell } : null
 }
 
 let pendingTableTextSelectionRangeCells: { anchorCell: HTMLElement; pointCell: HTMLElement } | null = null, explicitTableTextDragStart: { cell: HTMLElement; x: number; y: number } | null = null
@@ -45,6 +43,8 @@ let activeTableTextRangePreserveCancel: (() => void) | null = null
 const TABLE_TEXT_HIGHLIGHT_NAME = "aq-table-text-selection"
 const clearTableTextRangeHighlight = () => { document.querySelectorAll("[data-table-drag-selection-text]").forEach((element) => element.removeAttribute("data-table-drag-selection-text")); document.documentElement.removeAttribute("data-table-drag-selection-text"); (CSS as typeof CSS & { highlights?: { delete: (name: string) => void } }).highlights?.delete(TABLE_TEXT_HIGHLIGHT_NAME) }
 const paintTableTextRangeHighlight = (range: Range) => { const HighlightCtor = (window as typeof window & { Highlight?: new (range: Range) => unknown }).Highlight, highlights = (CSS as typeof CSS & { highlights?: { set: (name: string, highlight: unknown) => void } }).highlights; if (!HighlightCtor || !highlights) return; if (!document.getElementById("aq-table-text-highlight-style")) { const style = document.createElement("style"); style.id = "aq-table-text-highlight-style"; style.textContent = `::highlight(${TABLE_TEXT_HIGHLIGHT_NAME}){background:#0a5b9d;color:white}`; document.head.append(style) } highlights.set(TABLE_TEXT_HIGHLIGHT_NAME, new HighlightCtor(range.cloneRange())) }
+const resolveExplicitTableTextSelectionRangeCells = (clientX: number, clientY: number, target?: EventTarget | Node | null, explicitDragStart = explicitTableTextDragStart) => { const pointCell = resolveTableTextCellAtPoint(clientX, clientY, target); return explicitDragStart && pointCell instanceof HTMLElement && pointCell.closest("table") === explicitDragStart.cell.closest("table") && (Math.abs(clientX - explicitDragStart.x) > 4 || Math.abs(clientY - explicitDragStart.y) > 4) ? { anchorCell: explicitDragStart.cell, pointCell } : null }
+const preserveExplicitTableTextSelectionFromPoint = (clientX: number, clientY: number, target?: EventTarget | Node | null) => { const rangeCells = resolveExplicitTableTextSelectionRangeCells(clientX, clientY, target); if (!rangeCells || rangeCells.anchorCell === rangeCells.pointCell) return false; pendingTableTextSelectionRangeCells = rangeCells; selectTableCellTextRange(rangeCells.anchorCell, rangeCells.pointCell); preserveTableTextRangeAcrossFrames(rangeCells.anchorCell, rangeCells.pointCell); return true }
 
 const preserveTableTextRangeAcrossFrames = (anchorCell: HTMLElement, pointCell: HTMLElement) => {
   activeTableTextRangePreserveCancel?.()
@@ -75,7 +75,7 @@ const preserveTableTextRangeAcrossFrames = (anchorCell: HTMLElement, pointCell: 
 export const finalizeTableTextSelectionFromPoint = (clientX: number, clientY: number, target?: EventTarget | Node | null) => {
   const explicitDragStart = explicitTableTextDragStart
   explicitTableTextDragStart = null
-  const pointCell = resolveTableTextCellAtPoint(clientX, clientY, target), explicitRangeCells = explicitDragStart && pointCell instanceof HTMLElement && pointCell.closest("table") === explicitDragStart.cell.closest("table") && (Math.abs(clientX - explicitDragStart.x) > 4 || Math.abs(clientY - explicitDragStart.y) > 4) ? { anchorCell: explicitDragStart.cell, pointCell } : null, rangeCells = resolveTableTextSelectionRangeCells(clientX, clientY, target) ?? (pointCell ? pendingTableTextSelectionRangeCells : null) ?? explicitRangeCells
+  const pointCell = resolveTableTextCellAtPoint(clientX, clientY, target), explicitRangeCells = resolveExplicitTableTextSelectionRangeCells(clientX, clientY, target, explicitDragStart), rangeCells = resolveTableTextSelectionRangeCells(clientX, clientY, target) ?? (pointCell ? pendingTableTextSelectionRangeCells : null) ?? explicitRangeCells
   pendingTableTextSelectionRangeCells = null
   if (!rangeCells || rangeCells.anchorCell === rangeCells.pointCell) return false
   cancelActiveTableCellTextSelectionPreserves()
@@ -93,6 +93,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     window.addEventListener("pointerdown", rememberExplicitTableTextDragStart, true); window.addEventListener("mousedown", rememberExplicitTableTextDragStart, true)
     window.addEventListener("pointermove", (event) => { pendingTableTextSelectionRangeCells = event.buttons === 1 ? resolveTableTextSelectionRangeCells(event.clientX, event.clientY, event.target) ?? pendingTableTextSelectionRangeCells : null }, true)
     window.addEventListener("mousemove", (event) => { pendingTableTextSelectionRangeCells = event.buttons === 1 ? resolveTableTextSelectionRangeCells(event.clientX, event.clientY, event.target) ?? pendingTableTextSelectionRangeCells : null }, true)
+    window.addEventListener("dragover", (event) => { if (preserveExplicitTableTextSelectionFromPoint(event.clientX, event.clientY, event.target)) event.preventDefault() }, true)
+    window.addEventListener("dragenter", (event) => { if (preserveExplicitTableTextSelectionFromPoint(event.clientX, event.clientY, event.target)) event.preventDefault() }, true)
     window.addEventListener("pointerup", (event) => finalizeTableTextSelectionFromPoint(event.clientX, event.clientY, event.target), true); window.addEventListener("mouseup", (event) => finalizeTableTextSelectionFromPoint(event.clientX, event.clientY, event.target), true); window.addEventListener("dragend", (event) => finalizeTableTextSelectionFromPoint(event.clientX, event.clientY, event.target), true); window.addEventListener("drop", (event) => finalizeTableTextSelectionFromPoint(event.clientX, event.clientY, event.target), true)
   }
 }
@@ -100,9 +102,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 const normalizeCellText = (cell: Element | null | undefined) => cell?.textContent?.replace(/\s+/g, " ").trim() ?? ""
 
 const resolveCellTable = (cell: HTMLElement | null | undefined) => cell?.closest("table") ?? null
-
-const isConnectedTableCell = (cell: HTMLElement) =>
-  cell.isConnected && document.documentElement.contains(cell)
+const isConnectedTableCell = (cell: HTMLElement) => cell.isConnected && document.documentElement.contains(cell)
 
 const resolveCurrentTableTextRangeCells = (
   startedCell: HTMLElement,

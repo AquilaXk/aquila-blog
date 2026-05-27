@@ -32,7 +32,7 @@ const dragBetweenTextRanges = async (
   endTarget: Locator,
   label: string,
   texts: { end: string; start: string },
-  options: { cancelAtStart?: boolean; cancelBeforeMouseup?: boolean; dropInsteadOfMouseup?: boolean; skipSyntheticMoves?: boolean; syntheticWithoutNativeSelection?: boolean } = {}
+  options: { cancelAtStart?: boolean; cancelBeforeMouseup?: boolean; dragOverBeforeRelease?: boolean; dropInsteadOfMouseup?: boolean; skipRelease?: boolean; skipSyntheticMoves?: boolean; syntheticWithoutNativeSelection?: boolean } = {}
 ) => {
   await startTarget.count()
   await endTarget.count()
@@ -88,7 +88,7 @@ const dragBetweenTextRanges = async (
   const beforeScrollTop = await readScrollTop(page)
 
   if (options.syntheticWithoutNativeSelection) {
-    await page.evaluate(({ cancelAtStart, cancelBeforeMouseup, dropInsteadOfMouseup, end, skipSyntheticMoves, start }) => {
+    await page.evaluate(({ cancelAtStart, cancelBeforeMouseup, dragOverBeforeRelease, dropInsteadOfMouseup, end, skipRelease, skipSyntheticMoves, start }) => {
       window.getSelection()?.removeAllRanges()
       document.querySelectorAll("[data-table-drag-selection-text]").forEach((element) => {
         element.removeAttribute("data-table-drag-selection-text")
@@ -123,11 +123,14 @@ const dragBetweenTextRanges = async (
           dispatch("mousemove", point, 1)
         }
       }
+      if (dragOverBeforeRelease) dispatch("dragover", end, 1)
       if (cancelBeforeMouseup) dispatch("pointercancel", cancelAtStart ? start : end, 0)
       else dispatch("pointerup", end, 0)
-      if (dropInsteadOfMouseup) dispatch("drop", end, 0)
-      else dispatch("mouseup", end, 0)
-    }, { ...metrics, cancelAtStart: options.cancelAtStart ?? false, cancelBeforeMouseup: options.cancelBeforeMouseup ?? false, dropInsteadOfMouseup: options.dropInsteadOfMouseup ?? false, skipSyntheticMoves: options.skipSyntheticMoves ?? false })
+      if (!skipRelease) {
+        if (dropInsteadOfMouseup) dispatch("drop", end, 0)
+        else dispatch("mouseup", end, 0)
+      }
+    }, { ...metrics, cancelAtStart: options.cancelAtStart ?? false, cancelBeforeMouseup: options.cancelBeforeMouseup ?? false, dragOverBeforeRelease: options.dragOverBeforeRelease ?? false, dropInsteadOfMouseup: options.dropInsteadOfMouseup ?? false, skipRelease: options.skipRelease ?? false, skipSyntheticMoves: options.skipSyntheticMoves ?? false })
     await page.waitForTimeout(1_000)
     return { beforeScrollTop, afterScrollTop: await readScrollTop(page), selectionText: await readSelectionText(page) }
   }
@@ -362,6 +365,32 @@ test("live 507 형태의 table multi-cell drag는 여러 셀 텍스트를 연속
   expect(dropReleaseDrag.selectionText).toContain("점검 항목")
   expect(dropReleaseDrag.selectionText).toContain("확인 기준")
   expect(dropReleaseDrag.selectionText).toContain("구현되어 있는가")
+  expect(await editor.locator(".selectedCell").count()).toBe(0)
+
+  await page.evaluate(() => {
+    window.getSelection()?.removeAllRanges()
+    document.querySelectorAll("[data-table-drag-selection-text]").forEach((element) => {
+      element.removeAttribute("data-table-drag-selection-text")
+    })
+    document.documentElement.removeAttribute("data-table-drag-selection-text")
+  })
+
+  const dragOverCancelDrag = await dragBetweenTextRanges(
+    page,
+    startCell,
+    endCell,
+    "live 507 table multi-cell drag with dragover before pointercancel",
+    {
+      end: "구현되어 있는가",
+      start: "영역",
+    },
+    { cancelAtStart: true, cancelBeforeMouseup: true, dragOverBeforeRelease: true, skipRelease: true, skipSyntheticMoves: true, syntheticWithoutNativeSelection: true }
+  )
+
+  expect(dragOverCancelDrag.selectionText).toContain("영역")
+  expect(dragOverCancelDrag.selectionText).toContain("점검 항목")
+  expect(dragOverCancelDrag.selectionText).toContain("확인 기준")
+  expect(dragOverCancelDrag.selectionText).toContain("구현되어 있는가")
   expect(await editor.locator(".selectedCell").count()).toBe(0)
 
   await page.evaluate((selectionText) => {

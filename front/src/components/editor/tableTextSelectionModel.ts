@@ -236,6 +236,8 @@ const isSelectionInsideSameTable = (selection: Selection, table: Element | null)
   return Boolean(anchorElement && focusElement && table.contains(anchorElement) && table.contains(focusElement))
 }
 
+const resolveWholeTableTextRangeCells = (cell: HTMLElement) => { const cells = Array.from(resolveCellTable(cell)?.querySelectorAll<HTMLElement>("th, td") ?? []).filter(isConnectedTableCell); return cells[0] && cells[cells.length - 1] ? { firstCell: cells[0], lastCell: cells[cells.length - 1] } : null }
+
 let lastActiveTableCell: HTMLElement | null = null
 const activeTableCellScrollPreserveCancels = new Set<() => void>()
 const activeTableCellSelectionPreserveCancels = new Set<() => void>()
@@ -272,8 +274,7 @@ const isWindowSelectionInsideEditorTable = (editorRoot: HTMLElement) => {
       editorRoot.contains(anchorTable)
   )
 }
-
-const hasTableTextSelectionState = (editorRoot: HTMLElement) => Boolean(editorRoot.querySelector(TABLE_DRAG_SELECTION_TEXT_SELECTOR)) || isWindowSelectionInsideEditorTable(editorRoot)
+const hasTableTextSelectionState = (editorRoot: HTMLElement) => Boolean(document.documentElement.getAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR)?.trim() || editorRoot.querySelector(TABLE_DRAG_SELECTION_TEXT_SELECTOR)) || isWindowSelectionInsideEditorTable(editorRoot)
 
 const resolveDomElementAtEditorPos = (editor: TiptapEditor, pos: number) => {
   const docSize = editor.state.doc.content.size
@@ -367,6 +368,7 @@ export const watchTableCellTextSelectionExternalClear = (
     attributes: true,
     subtree: true,
   })
+  observer?.observe(document.documentElement, { attributeFilter: [TABLE_DRAG_SELECTION_TEXT_ATTR], attributes: true })
   return {
     cancelIfCleared,
     dispose: () => {
@@ -422,8 +424,7 @@ export const selectActiveTableCellText = (
   eventTarget: EventTarget | null
 ) => {
   if (typeof window === "undefined" || typeof document === "undefined") return false
-  const selection = window.getSelection()
-  if (!selection) return false
+  const selection = window.getSelection(); if (!selection) return false
 
   const activeElement = resolveElement(document.activeElement)
   const anchorElement = resolveElement(selection.anchorNode)
@@ -435,14 +436,13 @@ export const selectActiveTableCellText = (
     rememberedCell ??
     anchorElement?.closest("th, td")
 
-  if (!(cell instanceof HTMLElement)) return false
-  if (!editor.view.dom.contains(cell)) return false
+  if (!(cell instanceof HTMLElement) || !editor.view.dom.contains(cell)) return false
 
-  const range = document.createRange()
-  range.selectNodeContents(cell)
+  const wholeTableRangeCells = resolveWholeTableTextRangeCells(cell)
+  if (!wholeTableRangeCells) return false
   preserveWindowScrollForRichBlockSelectAll()
-  selection.removeAllRanges()
-  selection.addRange(range)
+  selectTableCellTextRange(wholeTableRangeCells.firstCell, wholeTableRangeCells.lastCell)
+  preserveTableTextRangeAcrossFrames(wholeTableRangeCells.firstCell, wholeTableRangeCells.lastCell)
   return true
 }
 

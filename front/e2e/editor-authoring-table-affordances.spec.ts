@@ -173,7 +173,12 @@ test.describe("editor authoring table affordances", () => {
       [tableGrowHandle, tableStructureMenuButton].map((locator) =>
         locator.evaluate((element) => {
           const rect = element.getBoundingClientRect()
-          return { width: Math.round(rect.width), height: Math.round(rect.height) }
+          return {
+            height: Math.round(rect.height),
+            left: Math.round(rect.left),
+            top: Math.round(rect.top),
+            width: Math.round(rect.width),
+          }
         })
       )
     )
@@ -182,7 +187,10 @@ test.describe("editor authoring table affordances", () => {
     expect(structureMenuRect.width).toBeLessThanOrEqual(26)
     expect(structureMenuRect.height).toBeLessThanOrEqual(26)
 
-    await tableStructureMenuButton.click()
+    await page.mouse.click(
+      structureMenuRect.left + structureMenuRect.width / 2,
+      structureMenuRect.top + structureMenuRect.height / 2
+    )
     await expect(page.getByTestId("table-table-menu")).toBeVisible()
     await page.mouse.move(tableBox.x + tableBox.width - 8, tableBox.y + tableBox.height - 8)
     await expect(columnAddButton).toBeVisible()
@@ -328,7 +336,7 @@ test.describe("editor authoring table affordances", () => {
     })
     expect(Math.abs(rowRailRect.top + rowRailRect.height / 2 - (targetMetrics.top + targetMetrics.height / 2))).toBeLessThanOrEqual(8)
 
-    await rowHandle.click()
+    await page.mouse.click(rowRailRect.left + rowRailRect.width / 2, rowRailRect.top + rowRailRect.height / 2)
     const rowMenu = page.getByTestId("table-row-menu")
     await expect(rowMenu).toBeVisible()
     await expect(rowMenu.getByRole("button", { name: "행 삭제" })).toBeVisible()

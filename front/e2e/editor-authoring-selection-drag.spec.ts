@@ -1,7 +1,9 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import {
+  QA_WRITER_ROUTE,
   expectEditorToContainLoadedText,
   getWordDragPoints,
+  selectWordInEditable,
 } from "./helpers/editorAuthoringFlow"
 
 const adminMember = {
@@ -118,6 +120,29 @@ const expectSelectionScopedToWord = async (page: Page, word: string, unrelatedWo
     .toBe(true)
 }
 
+const expectSelectionContainsOnly = async (page: Page, includedWords: string[], excludedWords: string[]) => {
+  await expect
+    .poll(
+      async () => {
+        const selectionText = await page.evaluate(() => {
+          const text =
+            window.getSelection()?.toString() ||
+            document.documentElement.getAttribute("data-table-drag-selection-text") ||
+            document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
+            document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text") ||
+            ""
+          return text.replace(/\s+/g, " ").trim()
+        })
+        return (
+          includedWords.every((includedWord) => selectionText.includes(includedWord)) &&
+          excludedWords.every((excludedWord) => !selectionText.includes(excludedWord))
+        )
+      },
+      { timeout: 2_000 }
+    )
+    .toBe(true)
+}
+
 const expectCodeHighlightLayerAligned = async (page: Page, word: string) => {
   const metrics = await page.evaluate((targetWord) => {
     const content = Array.from(document.querySelectorAll<HTMLElement>(".aq-code-editor-content")).find((element) =>
@@ -145,6 +170,57 @@ const expectCodeHighlightLayerAligned = async (page: Page, word: string) => {
 }
 
 test.describe("editor authoring route text selection drag", () => {
+  test("writer table cell 기존 텍스트 선택 후 단순 클릭은 caret만 남긴다", async ({ page }) => {
+    await page.goto(QA_WRITER_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.getByRole("button", { name: "테이블", exact: true }).first().click()
+
+    const firstCell = page.locator("table th, table td").first()
+    await firstCell.click()
+    await page.keyboard.type("셀 커서 테스트")
+
+    await selectWordInEditable(page, firstCell, "커서")
+    await expect
+      .poll(async () => page.evaluate(() => window.getSelection()?.toString().replace(/\s+/g, " ").trim() ?? ""))
+      .toContain("커서")
+
+    const points = await getWordDragPoints(firstCell, "테스트")
+    await page.mouse.click(points.startX, points.startY)
+
+    await expect
+      .poll(async () =>
+        page.evaluate(() => {
+          const selection = window.getSelection()
+          const anchorElement =
+            selection?.anchorNode instanceof Element
+              ? selection.anchorNode
+              : selection?.anchorNode?.parentElement ?? null
+          const focusElement =
+            selection?.focusNode instanceof Element
+              ? selection.focusNode
+              : selection?.focusNode?.parentElement ?? null
+          return {
+            blockOverlayCount: document.querySelectorAll("[data-testid='keyboard-block-selection-overlay']").length,
+            inCell: Boolean(anchorElement?.closest("th, td") && focusElement?.closest("th, td")),
+            persistedText: document.documentElement.getAttribute("data-table-drag-selection-text") || "",
+            selectedCellCount: document.querySelectorAll(".selectedCell").length,
+            selectionCollapsed: selection?.isCollapsed ?? false,
+            selectionText: selection?.toString().replace(/\s+/g, " ").trim() ?? "",
+          }
+        })
+      )
+      .toEqual({
+        blockOverlayCount: 0,
+        inCell: true,
+        persistedText: "",
+        selectedCellCount: 0,
+        selectionCollapsed: true,
+        selectionText: "",
+      })
+  })
+
   test("실제 /editor/[id] 텍스트 드래그 선택은 code/table/body에서 에러 없이 유지된다", async ({
     page,
   }) => {
@@ -224,7 +300,7 @@ test.describe("editor authoring route text selection drag", () => {
     const tableCellPoints = await getWordDragPoints(tableCell, tableLabel)
     await page.mouse.click(tableCellPoints.startX, tableCellPoints.startY)
     await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
-    await expectSelectionScopedToWord(page, tableLabel, [bodyLabel, codeLabel])
+    await expectSelectionContainsOnly(page, ["구분", "값", tableLabel], [bodyLabel, codeLabel])
 
     await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
     expect(runtimeErrors).toEqual([])
@@ -337,5 +413,144 @@ test.describe("editor authoring route text selection drag", () => {
     await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
     const afterScrollTop = await page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
     expect(Math.abs(afterScrollTop - points.scrollTop)).toBeLessThanOrEqual(24)
+  })
+
+  test("table multi-cell 선택 toolbar는 이전 본문 selection anchor로 순간이동하지 않는다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+    const staleAnchorLabel = "이전 글 선택 anchor"
+    const filler = Array.from({ length: 54 }, (_, index) =>
+      index === 4
+        ? `${staleAnchorLabel} ${index + 1}. table 선택 전 이전 본문 selection anchor가 남아 있습니다.`
+        : `toolbar stale anchor filler ${index + 1}. 글 선택 toolbar 위치 회귀를 재현하기 위한 긴 본문입니다.`
+    )
+    const tableMarkdown = [
+      '<!-- aq-table {"overflowMode":"normal","columnWidths":[160,220,240]} -->',
+      "| 영역 | 점검 항목 | 확인 기준 |",
+      "| --- | --- | --- |",
+      "| 개념 이해 | Stateless 의미 | 요청만으로 처리 가능한가 |",
+      "| 토큰 구조 | Access/Refresh 구분 | 역할 명확 |",
+      "| 보안 | HTTPS 사용 | 필수 |",
+      "| 저장소 | Refresh 저장 | DB/Redis |",
+      "| 만료 | Access 짧게 | 15~60분 |",
+      "| 흐름 | 재발급 로직 | 구현되어 있는가 |",
+    ].join("\n")
+    const content = [
+      "글 선택 toolbar stale anchor 회귀 재현용 글입니다.",
+      ...filler,
+      tableMarkdown,
+      "테이블 아래 문단입니다.",
+    ].join("\n\n")
+
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(adminMember),
+      })
+    })
+    await page.route("**/post/api/v1/adm/posts/987", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 987,
+          version: 3,
+          title: "글 선택 toolbar stale anchor 회귀 글",
+          content,
+          contentHtml: null,
+          published: true,
+          listed: true,
+        }),
+      })
+    })
+
+    await page.goto("/editor/987")
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(
+      "글 선택 toolbar stale anchor 회귀 글"
+    )
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await expectEditorToContainLoadedText(editor, "구현되어 있는가")
+
+    const staleParagraph = editor.locator("p", { hasText: staleAnchorLabel }).first()
+    await selectWordInEditable(page, staleParagraph, staleAnchorLabel)
+    await expect(page.getByTestId("editor-text-bubble-toolbar")).toBeVisible()
+
+    const points = await page.evaluate(() => {
+      const cells = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          "[data-testid='block-editor-prosemirror'] th, [data-testid='block-editor-prosemirror'] td"
+        )
+      )
+      const table = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror'] table")
+      table?.scrollIntoView({ block: "center", inline: "nearest" })
+      const startCell = cells.find((cell) => cell.textContent?.includes("영역"))
+      const endCell = cells.find((cell) => cell.textContent?.includes("구현되어 있는가"))
+      if (!startCell || !endCell) return null
+      const startRect = startCell.getBoundingClientRect()
+      const endRect = endCell.getBoundingClientRect()
+      return {
+        startX: startRect.left + Math.min(startRect.width / 2, 80),
+        startY: startRect.top + startRect.height / 2,
+        endX: endRect.right - Math.min(endRect.width / 2, 80),
+        endY: endRect.top + endRect.height / 2,
+      }
+    })
+    if (!points) throw new Error("table multi-cell stale toolbar drag points are missing")
+
+    await page.mouse.move(points.startX, points.startY)
+    await page.mouse.down()
+    await page.mouse.move(points.endX, points.endY, { steps: 18 })
+    await page.mouse.up()
+
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const text =
+              window.getSelection()?.toString() ||
+              document.documentElement.getAttribute("data-table-drag-selection-text") ||
+              document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
+              ""
+            return text.replace(/\s+/g, " ").trim()
+          }),
+        { timeout: 2_000 }
+      )
+      .toContain("구현되어 있는가")
+
+    const textBubbleToolbar = page.getByTestId("editor-text-bubble-toolbar")
+    await expect(textBubbleToolbar).toBeVisible()
+    const toolbarGeometry = await page.evaluate(() => {
+      const toolbar = document.querySelector<HTMLElement>("[data-testid='editor-text-bubble-toolbar']")
+      const cells = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          "[data-testid='block-editor-prosemirror'] th, [data-testid='block-editor-prosemirror'] td"
+        )
+      )
+      const startCell = cells.find((cell) => cell.textContent?.includes("영역"))
+      const endCell = cells.find((cell) => cell.textContent?.includes("구현되어 있는가"))
+      if (!toolbar || !startCell || !endCell) return null
+      const toolbarRect = toolbar.getBoundingClientRect()
+      const startRect = startCell.getBoundingClientRect()
+      const endRect = endCell.getBoundingClientRect()
+      return {
+        selectionLeft: Math.min(startRect.left, endRect.left),
+        selectionRight: Math.max(startRect.right, endRect.right),
+        selectionTop: Math.min(startRect.top, endRect.top),
+        toolbarBottom: toolbarRect.bottom,
+        toolbarCenterX: toolbarRect.left + toolbarRect.width / 2,
+        toolbarTop: toolbarRect.top,
+      }
+    })
+    if (!toolbarGeometry) throw new Error("text bubble toolbar geometry is missing")
+    expect(toolbarGeometry.toolbarCenterX).toBeGreaterThanOrEqual(toolbarGeometry.selectionLeft - 24)
+    expect(toolbarGeometry.toolbarCenterX).toBeLessThanOrEqual(toolbarGeometry.selectionRight + 24)
+    expect(toolbarGeometry.toolbarTop).toBeLessThanOrEqual(toolbarGeometry.selectionTop + 24)
+    expect(toolbarGeometry.toolbarTop).toBeGreaterThanOrEqual(0)
+
+    const beforeClickScrollTop = await page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
+    await textBubbleToolbar.getByRole("button", { name: "굵게", exact: true }).click()
+    await page.waitForTimeout(180)
+    const afterClickScrollTop = await page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
+    expect(Math.abs(afterClickScrollTop - beforeClickScrollTop)).toBeLessThanOrEqual(24)
   })
 })

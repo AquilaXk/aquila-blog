@@ -128,6 +128,8 @@ test.describe("editor authoring table width budgets", () => {
 
     await page.mouse.move(startX, startY)
     await page.mouse.down()
+    await page.mouse.move(startX - 12, startY, { steps: 4 })
+    await expect(page.getByTestId("table-column-drag-guide")).toBeVisible()
     await page.mouse.move(startX - 72, startY, { steps: 8 })
     await page.mouse.up()
 

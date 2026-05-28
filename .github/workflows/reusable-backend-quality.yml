@@ -305,7 +305,7 @@ jobs:
             back/build/reports/jacoco/pr/jacocoPrReport.xml
             back/build/reports/jacoco/pr/html
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 3
 
       - name: Upload backend reports on failure
         if: failure() && steps.changes.outputs.backend == 'true'
@@ -317,4 +317,4 @@ jobs:
             back/build/test-results/test
             back/build/reports/ktlint
             back/build/reports/jacoco/pr
-          retention-days: 7
+          retention-days: 3

@@ -154,6 +154,7 @@ export const runInlineColor = (
   color?: string | null
 ) => {
   if (!editor) return false
+  syncEditorSelectionFromDomSelection(editor)
 
   const chain = editor.chain().focus().extendMarkRange("inlineColor")
   const normalizedColor = normalizeInlineColorToken(String(color || ""))
@@ -181,6 +182,7 @@ export const runInlineTextStyle = (
   styleId: InlineTextStyleOption["id"]
 ) => {
   if (!editor) return false
+  syncEditorSelectionFromDomSelection(editor)
   const option = INLINE_TEXT_STYLE_OPTIONS.find((entry) => entry.id === styleId)
   if (!option) return false
   option.run(editor)

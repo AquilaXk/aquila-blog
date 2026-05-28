@@ -135,9 +135,9 @@ test.describe("editor authoring table operations", () => {
     }
 
     await columnGrip.evaluate(async (element, payload) => {
-      const { pointerId, targetX } = payload as { pointerId: number; targetX: number }
+      const { pointerId, sourceX, targetX } = payload as { pointerId: number; sourceX: number; targetX: number }
       const rect = (element as HTMLElement).getBoundingClientRect()
-      const startX = rect.left + rect.width / 2
+      const startX = sourceX
       const startY = rect.top + rect.height / 2
       const waitForFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
       element.dispatchEvent(
@@ -179,7 +179,11 @@ test.describe("editor authoring table operations", () => {
         })
       )
       await waitForFrame()
-    }, { pointerId: 12, targetX: firstRowLastCellBox.x + firstRowLastCellBox.width + 48 })
+    }, {
+      pointerId: 12,
+      sourceX: reorderedFirstCellBox.x + reorderedFirstCellBox.width / 2,
+      targetX: firstRowLastCellBox.x + firstRowLastCellBox.width + 48,
+    })
 
     await expect
       .poll(async () => (await readTableGrid(page))[0])

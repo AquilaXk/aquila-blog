@@ -35,6 +35,7 @@ import {
 } from "./nestedListItemModel"
 
 type SetState<T> = Dispatch<SetStateAction<T>>
+type BlockDragCommittedPointerEvent = PointerEvent & { __aqBlockDragCommitted?: boolean }
 
 type UseBlockEditorEngineBlockDragSessionsArgs = {
   clearNativeTextSelection: () => void
@@ -98,6 +99,21 @@ export const useBlockEditorEngineBlockDragSessions = ({
     setDropIndicatorState(hideDropIndicatorState)
   }, [setDragGhostPosition, setDraggedBlockState, setDropIndicatorState])
 
+  const commitTopLevelBlockDrag = useCallback(
+    (sourceIndex: number, clientY: number) => {
+      const nextIndicator = resolveBlockDropIndicatorByClientY(getTopLevelBlockElements(), clientY)
+      const contentLength = ((editorRef.current?.getJSON() as BlockEditorDoc)?.content?.length ?? 0)
+      const normalizedInsertionIndex = Math.max(0, Math.min(nextIndicator.insertionIndex, contentLength))
+      const focusIndex =
+        normalizedInsertionIndex > sourceIndex ? normalizedInsertionIndex - 1 : normalizedInsertionIndex
+      mutateTopLevelBlocks(
+        (doc) => moveTopLevelBlockToInsertionIndex(doc, sourceIndex, normalizedInsertionIndex),
+        Math.max(0, Math.min(focusIndex, Math.max(contentLength - 1, 0)))
+      )
+    },
+    [editorRef, getTopLevelBlockElements, mutateTopLevelBlocks]
+  )
+
   const beginBlockDragFromPending = useCallback(
     (pending: PendingBlockDragState, clientX: number, clientY: number) => {
       const indicator = resolveBlockDropIndicatorByClientY(getTopLevelBlockElements(), clientY)
@@ -116,6 +132,9 @@ export const useBlockEditorEngineBlockDragSessions = ({
       }
       const handleEarlyPointerDone = (event: PointerEvent) => {
         if (event.pointerId !== pending.pointerId) return
+        const committedEvent = event as BlockDragCommittedPointerEvent
+        committedEvent.__aqBlockDragCommitted = true
+        commitTopLevelBlockDrag(pending.sourceIndex, event.clientY)
         clearBlockDragVisualState()
         cleanupEarlyPointerDone()
       }
@@ -124,7 +143,7 @@ export const useBlockEditorEngineBlockDragSessions = ({
       window.addEventListener("pointercancel", handleEarlyPointerDone, true)
       earlyPointerDoneTimeout = window.setTimeout(cleanupEarlyPointerDone, 30000)
     },
-    [clearBlockDragVisualState, getTopLevelBlockElements, setDragGhostPosition, setDraggedBlockState, setDropIndicatorState]
+    [clearBlockDragVisualState, commitTopLevelBlockDrag, getTopLevelBlockElements, setDragGhostPosition, setDraggedBlockState, setDropIndicatorState]
   )
 
   useEffect(() => {
@@ -139,18 +158,15 @@ export const useBlockEditorEngineBlockDragSessions = ({
 
     const handlePointerUp = (event: PointerEvent) => {
       if (event.pointerId !== draggedBlockState.pointerId) return
+      if ((event as BlockDragCommittedPointerEvent).__aqBlockDragCommitted) {
+        clearBlockDragVisualState()
+        window.removeEventListener("pointermove", handlePointerMove)
+        window.removeEventListener("pointerup", handlePointerUp)
+        window.removeEventListener("pointercancel", handlePointerUp)
+        return
+      }
 
-      const nextIndicator = resolveBlockDropIndicatorByClientY(getTopLevelBlockElements(), event.clientY)
-      const sourceIndex = draggedBlockState.sourceIndex
-      const normalizedInsertionIndex =
-        nextIndicator.insertionIndex > sourceIndex
-          ? nextIndicator.insertionIndex
-          : nextIndicator.insertionIndex
-
-      mutateTopLevelBlocks(
-        (doc) => moveTopLevelBlockToInsertionIndex(doc, sourceIndex, normalizedInsertionIndex),
-        Math.max(0, Math.min(nextIndicator.insertionIndex, ((editorRef.current?.getJSON() as BlockEditorDoc)?.content?.length || 1) - 1))
-      )
+      commitTopLevelBlockDrag(draggedBlockState.sourceIndex, event.clientY)
 
       setDraggedBlockState(null)
       setDragGhostPosition(null)
@@ -168,7 +184,7 @@ export const useBlockEditorEngineBlockDragSessions = ({
       window.removeEventListener("pointerup", handlePointerUp)
       window.removeEventListener("pointercancel", handlePointerUp)
     }
-  }, [draggedBlockState, editorRef, getTopLevelBlockElements, mutateTopLevelBlocks, setDragGhostPosition, setDraggedBlockState, setDropIndicatorState])
+  }, [clearBlockDragVisualState, commitTopLevelBlockDrag, draggedBlockState, getTopLevelBlockElements, setDragGhostPosition, setDraggedBlockState, setDropIndicatorState])
 
   useEffect(() => {
     if (typeof document === "undefined" || !draggedBlockState) return

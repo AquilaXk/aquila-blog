@@ -122,7 +122,7 @@ jobs:
           name: front-openapi-contract-report
           path: front/test-results/contracts-openapi
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 3
 
       - name: Check frontend bundle size budget (warn on PR / strict on main-release)
         if: steps.changes.outputs.frontend == 'true'
@@ -140,7 +140,7 @@ jobs:
           name: front-bundle-budget-report
           path: front/test-results/bundle-size
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 3
 
       - name: Check Storybook regression gate
         if: steps.changes.outputs.frontend == 'true'
@@ -157,7 +157,7 @@ jobs:
           name: front-storybook-gate-report
           path: front/test-results/storybook
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 3
 
       - name: Upload Storybook static build
         if: success() && steps.changes.outputs.frontend == 'true'
@@ -166,7 +166,7 @@ jobs:
           name: front-storybook-static
           path: front/storybook-static
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 3
 
       - name: Install Playwright browser
         if: steps.changes.outputs.frontend == 'true'
@@ -226,7 +226,7 @@ jobs:
           name: front-perf-e2e-report
           path: front/test-results/perf
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 3
 
       - name: Upload frontend reports on failure
         if: failure() && steps.changes.outputs.frontend == 'true'
@@ -236,4 +236,4 @@ jobs:
           path: |
             front/playwright-report
             front/test-results
-          retention-days: 7
+          retention-days: 1

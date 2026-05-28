@@ -52,7 +52,7 @@ test.describe("editor authoring table resize guide", () => {
 
     await page.mouse.move(startX, startY)
     await page.mouse.down()
-    await page.mouse.move(startX + 2, startY)
+    await page.mouse.move(startX + 8, startY, { steps: 4 })
 
     await expect(page.getByTestId("table-column-drag-guide")).toBeVisible()
     const readGuideBoundaryDelta = async () => {
@@ -317,7 +317,7 @@ test.describe("editor authoring table resize guide", () => {
     await page.mouse.move(startX, startY)
     await page.mouse.down()
     // Headless drag starts can miss the guide until the pointer crosses a tiny delta.
-    await page.mouse.move(startX + 2, startY)
+    await page.mouse.move(startX + 8, startY, { steps: 4 })
     await expect(page.getByTestId("table-column-drag-guide")).toBeVisible()
     await expect.poll(readGuideBoundaryDelta).toBeLessThanOrEqual(2)
 

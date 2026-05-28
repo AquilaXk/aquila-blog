@@ -138,8 +138,12 @@ export const resolvePersistedTableTextSelectionBubbleState = (
       rangeTable.contains(anchorElement) &&
       rangeTable.contains(focusElement)
   )
-  if (selection?.toString().trim() && !selection.isCollapsed && !selectionInsideRangeTable) return null
-  if (selection && (!selection.toString().trim() || selection.isCollapsed || selectionInsideRangeTable)) {
+  const selectedText = selection?.toString().trim() ?? ""
+  if (selection && selectedText && !selection.isCollapsed && selectionInsideRangeTable && selection.rangeCount > 0) {
+    return resolveBubbleStateFromRange(selection.getRangeAt(0))
+  }
+  if (selectedText && !selection?.isCollapsed && !selectionInsideRangeTable) return null
+  if (selection && (!selectedText || selection.isCollapsed)) {
     selection.removeAllRanges()
     if (typeof selection.setBaseAndExtent === "function") {
       selection.setBaseAndExtent(range.startContainer, range.startOffset, range.endContainer, range.endOffset)

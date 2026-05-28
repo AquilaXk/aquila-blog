@@ -102,15 +102,13 @@ export const useBlockEditorEngineBlockDragSessions = ({
   const commitTopLevelBlockDrag = useCallback(
     (sourceIndex: number, clientY: number) => {
       const nextIndicator = resolveBlockDropIndicatorByClientY(getTopLevelBlockElements(), clientY)
+      const contentLength = ((editorRef.current?.getJSON() as BlockEditorDoc)?.content?.length ?? 0)
+      const normalizedInsertionIndex = Math.max(0, Math.min(nextIndicator.insertionIndex, contentLength))
+      const focusIndex =
+        normalizedInsertionIndex > sourceIndex ? normalizedInsertionIndex - 1 : normalizedInsertionIndex
       mutateTopLevelBlocks(
-        (doc) => moveTopLevelBlockToInsertionIndex(doc, sourceIndex, nextIndicator.insertionIndex),
-        Math.max(
-          0,
-          Math.min(
-            nextIndicator.insertionIndex,
-            ((editorRef.current?.getJSON() as BlockEditorDoc)?.content?.length || 1) - 1
-          )
-        )
+        (doc) => moveTopLevelBlockToInsertionIndex(doc, sourceIndex, normalizedInsertionIndex),
+        Math.max(0, Math.min(focusIndex, Math.max(contentLength - 1, 0)))
       )
     },
     [editorRef, getTopLevelBlockElements, mutateTopLevelBlocks]

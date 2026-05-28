@@ -274,7 +274,6 @@ const isWindowSelectionInsideEditorTable = (editorRoot: HTMLElement) => {
       editorRoot.contains(anchorTable)
   )
 }
-
 const hasTableTextSelectionState = (editorRoot: HTMLElement) => Boolean(document.documentElement.getAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR)?.trim() || editorRoot.querySelector(TABLE_DRAG_SELECTION_TEXT_SELECTOR)) || isWindowSelectionInsideEditorTable(editorRoot)
 
 const resolveDomElementAtEditorPos = (editor: TiptapEditor, pos: number) => {
@@ -369,6 +368,7 @@ export const watchTableCellTextSelectionExternalClear = (
     attributes: true,
     subtree: true,
   })
+  observer?.observe(document.documentElement, { attributeFilter: [TABLE_DRAG_SELECTION_TEXT_ATTR], attributes: true })
   return {
     cancelIfCleared,
     dispose: () => {

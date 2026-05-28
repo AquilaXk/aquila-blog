@@ -378,7 +378,6 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       if (anchorElement && !activeEditor.view.dom.contains(anchorElement)) return
       scheduleSyncBubble()
     }
-
     const handleEditorPointerDownCapture = (event: PointerEvent) => {
       if (event.pointerType !== "mouse" || event.button !== 0) return
       const activeEditor = editorRef.current ?? currentEditor
@@ -408,7 +407,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         }
       }
       if (insideEditorDom) {
-        if (tableTextDragStart && existingSelectionText) { event.preventDefault(); event.stopPropagation(); if (tableTextDragStart.coveredControlFallback) event.stopImmediatePropagation?.(); restoreTableCellTextSelectionIfEscaped(activeEditor, tableTextDragStart.cell, tableTextDragStart.scrollAnchor, true, true); if (tableTextDragStart.coveredControlFallback) { preserveActiveTableTextDragSelection(activeEditor); preserveActiveTableTextDragScroll() } }
+        if (tableTextDragStart?.coveredControlFallback && existingSelectionText) { event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.(); restoreTableCellTextSelectionIfEscaped(activeEditor, tableTextDragStart.cell, tableTextDragStart.scrollAnchor, true, true); preserveActiveTableTextDragSelection(activeEditor); preserveActiveTableTextDragScroll() }
       }
       const columnResizeHandleTarget = pointElements.find((element) => Boolean(element.closest("[data-testid^='table-column-resize-boundary-']"))) ?? event.target
       if (tryStartTableColumnResizeFromDomHandle(columnResizeHandleTarget, event.pointerId, event.clientX)) {
@@ -450,7 +449,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         clearImmediateWindowTextSelection()
       } else if (insideEditorDom) {
         codeTextDragStartRef.current = null; cancelCodeDragSelectionPreserve()
-        if (tableTextDragStart && tableTextDragStart.coveredControlFallback && existingSelectionText && !columnResizeTarget) { event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.(); restoreTableCellTextSelectionIfEscaped(activeEditor, tableTextDragStart.cell, tableTextDragStart.scrollAnchor, true, true); preserveActiveTableTextDragSelection(activeEditor); preserveActiveTableTextDragScroll() } else if (tableTextDragStart && existingSelectionText) restoreTableCellTextSelectionIfEscaped(activeEditor, tableTextDragStart.cell, tableTextDragStart.scrollAnchor, true, true); else if (!tableTextDragStart) clearImmediateWindowTextSelection(); else if (!existingSelectionText) clearWindowTextSelectionOnly()
+        if (tableTextDragStart && tableTextDragStart.coveredControlFallback && existingSelectionText && !columnResizeTarget) { event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.(); restoreTableCellTextSelectionIfEscaped(activeEditor, tableTextDragStart.cell, tableTextDragStart.scrollAnchor, true, true); preserveActiveTableTextDragSelection(activeEditor); preserveActiveTableTextDragScroll() } else if (!tableTextDragStart) clearImmediateWindowTextSelection(); else if (!existingSelectionText) clearWindowTextSelectionOnly()
       }
       if (!insideEditorDom) return
       if (!tableTextDragStartRef.current) rememberTableTextDragStart(event, allowTableControlCellFallback)
@@ -528,6 +527,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
           preserveCodeDragRootSelectionAcrossFrames(codeTextDragStart.root)
         }
       }
+      if (activeEditor && tableTextDragStart && !tableTextDragMoved) { const selection = window.getSelection(), anchorElement = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null, focusElement = selection?.focusNode instanceof Element ? selection.focusNode : selection?.focusNode?.parentElement ?? null, anchorCell = anchorElement?.closest("th, td"), focusCell = focusElement?.closest("th, td"); if (selection?.toString().trim() && anchorCell && focusCell && anchorCell.closest("table") === focusCell.closest("table") && activeEditor.view.dom.contains(anchorCell)) syncBubbleOnMouseUpRef.current = true }
       if (activeEditor && tableTextDragStart && (tableTextDragMoved || tableTextDragStart.coveredControlFallback)) { const completedTableTextDrag = tableTextDragStart, completedMultiCellDrag = Boolean(completedTableTextDrag.endCell && completedTableTextDrag.endCell !== completedTableTextDrag.cell); cancelTableTextDragPreserves(); if (completedMultiCellDrag && completedTableTextDrag.endCell) { const endCell = completedTableTextDrag.endCell; selectTableCellTextRange(completedTableTextDrag.cell, endCell); cleanupTableDragSelectionPreserve = preserveTableCellTextSelectionAcrossFrames(activeEditor, completedTableTextDrag.cell, completedTableTextDrag.scrollAnchor, () => endCell); event.preventDefault(); event.stopPropagation(); syncBubbleOnMouseUpRef.current = true } else if (restoreActiveTableTextDragSelection(true, true, false)) { event.preventDefault(); event.stopPropagation(); syncBubbleOnMouseUpRef.current = true; window.requestAnimationFrame(() => restoreTableCellTextSelectionIfEscaped(activeEditor, completedTableTextDrag.cell, null, true, true, false, completedTableTextDrag.endCell)) } }
       tableTextDragStartRef.current = null
       tableTextDragPendingStartRef.current = null

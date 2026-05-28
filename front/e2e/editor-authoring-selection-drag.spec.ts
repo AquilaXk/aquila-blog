@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import {
+  QA_WRITER_ROUTE,
   expectEditorToContainLoadedText,
   getWordDragPoints,
   selectWordInEditable,
@@ -169,6 +170,57 @@ const expectCodeHighlightLayerAligned = async (page: Page, word: string) => {
 }
 
 test.describe("editor authoring route text selection drag", () => {
+  test("writer table cell 기존 텍스트 선택 후 단순 클릭은 caret만 남긴다", async ({ page }) => {
+    await page.goto(QA_WRITER_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.getByRole("button", { name: "테이블", exact: true }).first().click()
+
+    const firstCell = page.locator("table th, table td").first()
+    await firstCell.click()
+    await page.keyboard.type("셀 커서 테스트")
+
+    await selectWordInEditable(page, firstCell, "커서")
+    await expect
+      .poll(async () => page.evaluate(() => window.getSelection()?.toString().replace(/\s+/g, " ").trim() ?? ""))
+      .toContain("커서")
+
+    const points = await getWordDragPoints(firstCell, "테스트")
+    await page.mouse.click(points.startX, points.startY)
+
+    await expect
+      .poll(async () =>
+        page.evaluate(() => {
+          const selection = window.getSelection()
+          const anchorElement =
+            selection?.anchorNode instanceof Element
+              ? selection.anchorNode
+              : selection?.anchorNode?.parentElement ?? null
+          const focusElement =
+            selection?.focusNode instanceof Element
+              ? selection.focusNode
+              : selection?.focusNode?.parentElement ?? null
+          return {
+            blockOverlayCount: document.querySelectorAll("[data-testid='keyboard-block-selection-overlay']").length,
+            inCell: Boolean(anchorElement?.closest("th, td") && focusElement?.closest("th, td")),
+            persistedText: document.documentElement.getAttribute("data-table-drag-selection-text") || "",
+            selectedCellCount: document.querySelectorAll(".selectedCell").length,
+            selectionCollapsed: selection?.isCollapsed ?? false,
+            selectionText: selection?.toString().replace(/\s+/g, " ").trim() ?? "",
+          }
+        })
+      )
+      .toEqual({
+        blockOverlayCount: 0,
+        inCell: true,
+        persistedText: "",
+        selectedCellCount: 0,
+        selectionCollapsed: true,
+        selectionText: "",
+      })
+  })
+
   test("실제 /editor/[id] 텍스트 드래그 선택은 code/table/body에서 에러 없이 유지된다", async ({
     page,
   }) => {

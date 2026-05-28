@@ -232,19 +232,19 @@ test.describe("editor authoring table resize guide", () => {
 
     await page.mouse.move(startX, startY)
     await page.mouse.down()
+    await page.mouse.move(startX + 2, startY)
 
     await expect(page.getByTestId("table-column-drag-guide")).toBeVisible()
     await expect(page.getByTestId("table-column-resize-boundary-0")).toHaveCount(0)
     await expect
-      .poll(async () =>
-        page
-          .getByTestId("table-column-drag-guide")
-          .evaluate((element) => {
-            const rect = (element as HTMLElement).getBoundingClientRect()
-            return Math.round(rect.left + rect.width / 2)
-          })
-      )
-      .toBe(initialBoundaryCenter)
+      .poll(async () => {
+        const guideCenter = await page.getByTestId("table-column-drag-guide").evaluate((element) => {
+          const rect = (element as HTMLElement).getBoundingClientRect()
+          return Math.round(rect.left + rect.width / 2)
+        })
+        return Math.abs(guideCenter - initialBoundaryCenter)
+      })
+      .toBeLessThanOrEqual(2)
     await expect
       .poll(async () => {
         const [guideCenter, boundaryRight] = await Promise.all([
@@ -335,8 +335,8 @@ test.describe("editor authoring table resize guide", () => {
     const seedMarkdown = [
       "| 제목 | 내용 |",
       "| --- | --- |",
-      "| WebSocket | HTTP 요청/응답만으로는 채팅 같은 실시간 양방향 통신을 자연스럽게 처리하기 어렵다 |",
-      "| STOMP | Broker 기반 구독/배포 모델로 메시지를 주고받는다 |",
+      "| WebSocket | 실시간 양방향 통신을 처리한다 |",
+      "| STOMP | 메시지를 구독하고 배포한다 |",
     ].join("\n")
     const seedParam = encodeURIComponent(seedMarkdown.replace(/\n/g, "\\n"))
 

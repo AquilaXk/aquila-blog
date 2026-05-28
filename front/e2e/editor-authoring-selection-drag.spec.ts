@@ -119,6 +119,29 @@ const expectSelectionScopedToWord = async (page: Page, word: string, unrelatedWo
     .toBe(true)
 }
 
+const expectSelectionContainsOnly = async (page: Page, includedWords: string[], excludedWords: string[]) => {
+  await expect
+    .poll(
+      async () => {
+        const selectionText = await page.evaluate(() => {
+          const text =
+            window.getSelection()?.toString() ||
+            document.documentElement.getAttribute("data-table-drag-selection-text") ||
+            document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
+            document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text") ||
+            ""
+          return text.replace(/\s+/g, " ").trim()
+        })
+        return (
+          includedWords.every((includedWord) => selectionText.includes(includedWord)) &&
+          excludedWords.every((excludedWord) => !selectionText.includes(excludedWord))
+        )
+      },
+      { timeout: 2_000 }
+    )
+    .toBe(true)
+}
+
 const expectCodeHighlightLayerAligned = async (page: Page, word: string) => {
   const metrics = await page.evaluate((targetWord) => {
     const content = Array.from(document.querySelectorAll<HTMLElement>(".aq-code-editor-content")).find((element) =>
@@ -225,7 +248,7 @@ test.describe("editor authoring route text selection drag", () => {
     const tableCellPoints = await getWordDragPoints(tableCell, tableLabel)
     await page.mouse.click(tableCellPoints.startX, tableCellPoints.startY)
     await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
-    await expectSelectionScopedToWord(page, tableLabel, [bodyLabel, codeLabel])
+    await expectSelectionContainsOnly(page, ["구분", "값", tableLabel], [bodyLabel, codeLabel])
 
     await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
     expect(runtimeErrors).toEqual([])

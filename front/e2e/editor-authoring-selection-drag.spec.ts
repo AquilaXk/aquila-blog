@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test"
 import {
   QA_WRITER_ROUTE,
   expectEditorToContainLoadedText,
+  expectVisibleBox,
   getWordDragPoints,
   selectWordInEditable,
 } from "./helpers/editorAuthoringFlow"
@@ -186,8 +187,42 @@ test.describe("editor authoring route text selection drag", () => {
       .poll(async () => page.evaluate(() => window.getSelection()?.toString().replace(/\s+/g, " ").trim() ?? ""))
       .toContain("커서")
 
-    const points = await getWordDragPoints(firstCell, "테스트")
-    await page.mouse.click(points.startX, points.startY)
+    const points = await getWordDragPoints(firstCell, "커서")
+    await firstCell.evaluate(
+      (element, point) => {
+        const target = document.elementFromPoint(point.x, point.y) ?? element
+        const init = {
+          bubbles: true,
+          button: 0,
+          cancelable: true,
+          clientX: point.x,
+          clientY: point.y,
+        }
+        target.dispatchEvent(
+          new PointerEvent("pointerdown", {
+            ...init,
+            buttons: 1,
+            pointerId: 1,
+            pointerType: "mouse",
+          })
+        )
+        target.dispatchEvent(new MouseEvent("mousedown", { ...init, buttons: 1 }))
+        target.dispatchEvent(
+          new PointerEvent("pointerup", {
+            ...init,
+            buttons: 0,
+            pointerId: 1,
+            pointerType: "mouse",
+          })
+        )
+        target.dispatchEvent(new MouseEvent("mouseup", { ...init, buttons: 0 }))
+        target.dispatchEvent(new MouseEvent("click", { ...init, buttons: 0 }))
+      },
+      {
+        x: Math.round((points.startX + points.endX) / 2),
+        y: points.startY,
+      }
+    )
 
     await expect
       .poll(async () =>
@@ -217,6 +252,141 @@ test.describe("editor authoring route text selection drag", () => {
         persistedText: "",
         selectedCellCount: 0,
         selectionCollapsed: true,
+        selectionText: "",
+      })
+  })
+
+  test("실제 /editor/[id] table cell 클릭은 이전 block selection 대신 caret으로 진입한다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 980, height: 720 })
+    const previousSelectionLabel = "table caret previous block anchor"
+    const marker = "route-table-caret-marker"
+    const content = [
+      "table caret route 재현 문서",
+      ...Array.from({ length: 28 }, (_, index) =>
+        index === 8
+          ? `${previousSelectionLabel} ${index + 1}. 테이블 클릭 전 이전 block selection을 남깁니다.`
+          : `table caret lead paragraph ${index + 1}. 실제 수정 페이지에서 table caret 진입을 검증합니다.`
+      ),
+      [
+        '<!-- aq-table {"overflowMode":"normal","columnWidths":[180,240,220]} -->',
+        "| 영역 | 점검 항목 | 확인 기준 |",
+        "| --- | --- | --- |",
+        `| caret | ${marker} alpha | 클릭 후 caret |`,
+        "| result | beta | 선택 없음 |",
+      ].join("\n"),
+      "table caret trailing paragraph. 테이블 이후 본문입니다.",
+    ].join("\n\n")
+
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(adminMember),
+      })
+    })
+    await page.route("**/post/api/v1/adm/posts/989", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          content,
+          contentHtml: null,
+          id: 989,
+          listed: true,
+          published: true,
+          title: "table caret route 회귀 글",
+          version: 3,
+        }),
+      })
+    })
+
+    await page.goto("/editor/989")
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(
+      "table caret route 회귀 글"
+    )
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await expectEditorToContainLoadedText(editor, marker)
+
+    const previousSelectionParagraph = editor.locator("p", { hasText: previousSelectionLabel }).first()
+    await previousSelectionParagraph.scrollIntoViewIfNeeded()
+    const previousSelectionBox = await expectVisibleBox(
+      previousSelectionParagraph,
+      "table caret previous selection paragraph metrics are missing"
+    )
+    await page.mouse.move(
+      previousSelectionBox.x + Math.min(previousSelectionBox.width / 2, 240),
+      previousSelectionBox.y + Math.min(previousSelectionBox.height / 2, 18)
+    )
+    await previousSelectionParagraph.hover()
+    const dragHandle = page.getByTestId("block-drag-handle")
+    await expect(dragHandle).toBeVisible()
+    await dragHandle.click()
+    await expect(page.getByTestId("keyboard-block-selection-overlay")).toBeVisible()
+
+    const targetCell = editor.locator("table th, table td", { hasText: marker }).first()
+    await targetCell.scrollIntoViewIfNeeded()
+    const clickPoint = await targetCell.evaluate((element, text) => {
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+      while (walker.nextNode()) {
+        const textNode = walker.currentNode as Text
+        const index = textNode.data.indexOf(text)
+        if (index < 0) continue
+
+        const range = document.createRange()
+        range.setStart(textNode, index + 3)
+        range.setEnd(textNode, index + 4)
+        const rect = range.getBoundingClientRect()
+        if (rect.width <= 0 || rect.height <= 0) break
+        return {
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        }
+      }
+      return null
+    }, marker)
+
+    if (!clickPoint) {
+      throw new Error("route table caret click point is missing")
+    }
+
+    await page.mouse.click(clickPoint.x, clickPoint.y)
+    await page.waitForTimeout(260)
+
+    await expect
+      .poll(async () =>
+        page.evaluate((text) => {
+          const selection = window.getSelection()
+          const anchorElement =
+            selection?.anchorNode instanceof Element
+              ? selection.anchorNode
+              : selection?.anchorNode?.parentElement ?? null
+          const focusElement =
+            selection?.focusNode instanceof Element
+              ? selection.focusNode
+              : selection?.focusNode?.parentElement ?? null
+          return {
+            anchorInsideTargetCell: Boolean(anchorElement?.closest("th, td")?.textContent?.includes(text)),
+            blockOverlayCount: document.querySelectorAll("[data-testid='keyboard-block-selection-overlay']").length,
+            collapsed: selection?.isCollapsed ?? false,
+            focusInsideTargetCell: Boolean(focusElement?.closest("th, td")?.textContent?.includes(text)),
+            persistedText:
+              document.documentElement.getAttribute("data-table-drag-selection-text") ||
+              document
+                .querySelector("[data-table-drag-selection-text]")
+                ?.getAttribute("data-table-drag-selection-text") ||
+              "",
+            selectedCellCount: document.querySelectorAll(".selectedCell").length,
+            selectionText: selection?.toString().replace(/\s+/g, " ").trim() ?? "",
+          }
+        }, marker)
+      )
+      .toEqual({
+        anchorInsideTargetCell: true,
+        blockOverlayCount: 0,
+        collapsed: true,
+        focusInsideTargetCell: true,
+        persistedText: "",
+        selectedCellCount: 0,
         selectionText: "",
       })
   })

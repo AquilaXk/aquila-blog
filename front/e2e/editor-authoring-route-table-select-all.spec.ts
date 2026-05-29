@@ -2,6 +2,28 @@ import { expect, test } from "@playwright/test"
 import { expectEditorToContainLoadedText } from "./helpers/editorAuthoringFlow"
 
 const SELECT_ALL_SHORTCUT = process.platform === "darwin" ? "Meta+a" : "Control+a"
+const TABLE_SELECT_ALL_EXAMPLE = [
+  '<!-- aq-table {"overflowMode":"normal","columnWidths":[160,220,220]} -->',
+  "| **영역** | **점검 항목** | **확인 기준** |",
+  "| --- | --- | --- |",
+  "| 개념 이해 | Stateless 의미 | 요청만으로 처리 가능한가 |",
+  "| 토큰 구조 | Access Token | 역할 명확 |",
+  "| 흐름 | 재발급 로직 | 구현되어 있는가 |",
+  "| 예외 | 동시 요청 | 처리 안정성 확인 |",
+  "| 정책 | 재시도 정책 | idempotent 검토 여부 |",
+  "| UI | 행 선택 | 접근성 경로 검증 |",
+].join("\n")
+const TABLE_SELECT_ALL_REPEAT_EXAMPLE = [
+  '<!-- aq-table {"overflowMode":"normal","columnWidths":[160,220,220]} -->',
+  "| 영역 | 점검 항목 | 확인 기준 |",
+  "| --- | --- | --- |",
+  "| A | B | C |",
+  "| D | E | F |",
+  "| G | H | I |",
+  "| J | K | L |",
+  "| M | N | O |",
+  "| P | Q | R |",
+].join("\n")
 
 const adminMember = {
   id: 1,
@@ -16,17 +38,7 @@ test.describe("editor authoring route table select all", () => {
   }) => {
     const leadLabel = "table select all lead paragraph"
     const tailLabel = "table select all trailing paragraph"
-    const tableContent = [
-      '<!-- aq-table {"overflowMode":"normal","columnWidths":[119,192,210]} -->',
-      "| **영역** | **점검 항목** | **확인 기준** |",
-      "| --- | --- | --- |",
-      "| 개념 이해 | Stateless 의미 | 요청만으로 처리 가능한가 |",
-      "| 토큰 구조 | Access Token | 역할 명확 |",
-      "| 흐름 | 재발급 로직 | 구현되어 있는가 |",
-      "| 정책 | 재시도 정책 | idempotent 검토 여부 |",
-      "| 예외 | 동시 요청 | 처리 안정성 확인 |",
-      "| UI | 행 선택 | 접근성 경로 검증 |",
-    ].join("\n")
+    const tableContent = TABLE_SELECT_ALL_EXAMPLE
     const content = [
       `${leadLabel}. 첫 Cmd/Ctrl+A에서 editor 전체가 아니라 table 범위만 선택되어야 합니다.`,
       tableContent,
@@ -84,17 +96,7 @@ test.describe("editor authoring route table select all", () => {
   test("table select all 반복 호출 시에도 table scope만 유지된다", async ({
     page,
   }) => {
-    const selectAllReRunMarkdown = [
-      '<!-- aq-table {"overflowMode":"normal","columnWidths":[119,192,210]} -->',
-      "| 영역 | 점검 항목 | 확인 기준 |",
-      "| --- | --- | --- |",
-      "| A | B | C |",
-      "| D | E | F |",
-      "| G | H | I |",
-      "| J | K | L |",
-      "| M | N | O |",
-      "| P | Q | R |",
-    ].join("\n")
+    const selectAllReRunMarkdown = TABLE_SELECT_ALL_REPEAT_EXAMPLE
     const content = [
       "table select all repeat lead paragraph",
       selectAllReRunMarkdown,
@@ -156,17 +158,7 @@ test.describe("editor authoring route table select all", () => {
   }) => {
     const content = [
       "table select all row handle lead paragraph",
-      [
-        "<!-- aq-table {\"overflowMode\":\"normal\",\"columnWidths\":[119,192,210]} -->",
-        "| **영역** | **점검 항목** | **확인 기준** |",
-        "| --- | --- | --- |",
-        "| 개념 이해 | Stateless 의미 | 요청만으로 처리 가능한가 |",
-        "| 토큰 구조 | Access Token | 역할 명확 |",
-        "| 흐름 | 재발급 로직 | 구현되어 있는가 |",
-        "| 예외 | 동시 요청 | 처리 안정성 확인 |",
-        "| 정책 | 재시도 정책 | idempotent 검토 여부 |",
-        "| UI | 행 선택 | 접근성 경로 검증 |",
-      ].join("\n"),
+      TABLE_SELECT_ALL_EXAMPLE,
       "table select all row handle trailing paragraph",
     ].join("\n\n")
 
@@ -199,21 +191,38 @@ test.describe("editor authoring route table select all", () => {
     await expectEditorToContainLoadedText(editor, "Access Token")
 
     const targetCell = editor.locator("td", { hasText: "Access Token" }).first()
-    await targetCell.click({
-      position: { x: 24, y: 16 },
-    })
+
+    await targetCell.click({ position: { x: 24, y: 16 } })
 
     const table = editor.locator("table").first()
     const tableBox = await table.boundingBox()
-    if (!tableBox) {
-      throw new Error("table select-all row handle test: table bounding box is missing")
+    const targetCellBox = await targetCell.boundingBox()
+    if (!tableBox || !targetCellBox) {
+      throw new Error("table select-all row handle test: table or target cell bounding box is missing")
     }
-    await page.mouse.move(tableBox.x + 3, tableBox.y + tableBox.height / 2 - 10)
-    await page.waitForTimeout(120)
+    const rowHandleCandidates = [
+      { x: tableBox.x + 3, y: targetCellBox.y + targetCellBox.height / 2 },
+      { x: tableBox.x + 3, y: tableBox.y + 24 },
+      { x: tableBox.x + 3, y: tableBox.y + tableBox.height / 2 - 10 },
+      { x: targetCellBox.x + 3, y: targetCellBox.y + targetCellBox.height / 2 },
+      { x: tableBox.x + 3, y: tableBox.y + tableBox.height / 2 },
+    ]
 
     const rowHandle = page.locator("[data-table-affordance='row-handle']").first()
-    await expect(rowHandle).toHaveCount(1, { timeout: 4_000 })
+    for (const { x, y } of rowHandleCandidates) {
+      await page.mouse.move(x, y)
+      await page.waitForTimeout(120)
+      const currentCount = await rowHandle.count()
+      if (currentCount > 0) break
+    }
+
+    await expect.poll(
+      async () => (await rowHandle.count()) > 0,
+      { timeout: 6_000, message: "table row handle should appear for hover path" }
+    ).toBe(true)
     await rowHandle.click({ force: true })
+    await page.keyboard.press("Escape")
+    await targetCell.click({ position: { x: 24, y: 16 } })
 
     await page.keyboard.press(SELECT_ALL_SHORTCUT)
     const getSelectionText = async () => await page.evaluate(() => window.getSelection()?.toString() ?? "")

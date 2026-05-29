@@ -200,6 +200,9 @@ export const useBlockEditorTableOverlayControllerCommands = ({
     const activeColumnRight = activeCellRect?.right ?? tableRect.right
     const activeRowTopBound = activeRowRect?.top ?? tableRect.top
     const activeRowBottomBound = activeRowRect?.bottom ?? tableRect.bottom
+    const activeRowHeight = Math.max(1, activeRowBottomBound - activeRowTopBound)
+    const rowRailVerticalPadding = Math.max(6, Math.round(activeRowHeight * 0.15))
+    const rowRailHorizontalPadding = TABLE_AXIS_RAIL_EDGE_HOTZONE_PX + 6
     const visibleLeft = Math.round(tableRect.left)
     const visibleTop = Math.round(tableRect.top)
     const visibleRight = Math.round(tableRect.right)
@@ -237,9 +240,9 @@ export const useBlockEditorTableOverlayControllerCommands = ({
       hasHoverPoint &&
       Boolean(activeRowRect) &&
       hoverClientX >= visibleLeft - TABLE_ROW_GRIP_WIDTH_PX &&
-      hoverClientX <= visibleLeft + TABLE_AXIS_RAIL_EDGE_HOTZONE_PX &&
-      hoverClientY >= activeRowTopBound &&
-      hoverClientY <= activeRowBottomBound
+      hoverClientX <= visibleLeft + rowRailHorizontalPadding &&
+      hoverClientY >= activeRowTopBound - rowRailVerticalPadding &&
+      hoverClientY <= activeRowBottomBound + rowRailVerticalPadding
     const showCellMenu =
       hasHoverPoint &&
       Boolean(hoveredCell) &&

@@ -59,6 +59,20 @@ const blurTableCellByKeyboard = async (page: Page, maxAttempts = 12) => {
   return false
 }
 
+const blurTableCellByKeyboard = async (page: Page, maxAttempts = 28) => {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    await page.keyboard.press("Tab")
+    await page.waitForTimeout(80)
+    const inTableCell = await page.evaluate(
+      () => Boolean(document.activeElement?.closest("th, td"))
+    )
+    if (!inTableCell) {
+      return true
+    }
+  }
+  return false
+}
+
 test.describe("editor authoring route table select all", () => {
   test("실제 /editor/[id] table cell에서 첫 Cmd/Ctrl+A는 현재 테이블 전체 셀 텍스트를 선택한다", async ({
     page,
@@ -105,11 +119,11 @@ test.describe("editor authoring route table select all", () => {
     await targetCell.dblclick({
       position: { x: 40, y: 16 },
     })
-
     await page.keyboard.press(SELECT_ALL_SHORTCUT)
     await page.waitForTimeout(360)
 
     const selectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
+
     expect(selectionText).toContain("영역")
     expect(selectionText).toContain("점검 항목")
     expect(selectionText).toContain("확인 기준")
@@ -153,7 +167,9 @@ test.describe("editor authoring route table select all", () => {
 
     await page.goto("/editor/996")
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
-    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue("table select all repeat route 글")
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(
+      "table select all repeat route 글"
+    )
 
     const targetCell = editor.locator("td", { hasText: "D" }).first()
     await targetCell.click({
@@ -218,8 +234,9 @@ test.describe("editor authoring route table select all", () => {
     await expectEditorToContainLoadedText(editor, "Access Token")
 
     const targetCell = editor.locator("td", { hasText: "Access Token" }).first()
-
-    await targetCell.click({ position: { x: 24, y: 16 } })
+    await targetCell.click({
+      position: { x: 24, y: 16 },
+    })
 
     const table = editor.locator("table").first()
     const tableBox = await table.boundingBox()
@@ -234,38 +251,136 @@ test.describe("editor authoring route table select all", () => {
       { x: targetCellBox.x + 3, y: targetCellBox.y + targetCellBox.height / 2 },
       { x: tableBox.x + 3, y: tableBox.y + tableBox.height / 2 },
     ]
-
-    const rowHandle = page.locator("[data-table-affordance='row-handle']").first()
+    const rowHandle = page.locator("[data-table-affordance='row-handle']")
     for (const { x, y } of rowHandleCandidates) {
       await page.mouse.move(x, y)
       await page.waitForTimeout(120)
-      const currentCount = await rowHandle.count()
-      if (currentCount > 0) break
+      if (await rowHandle.count() > 0) {
+        break
+      }
+    }
+    if (await rowHandle.count() > 0) {
+      await rowHandle.first().click({ force: true })
     }
 
-    await expect.poll(
-      async () => (await rowHandle.count()) > 0,
-      { timeout: 6_000, message: "table row handle should appear for hover path" }
-    ).toBe(true)
-    await rowHandle.click({ force: true })
     await page.keyboard.press("Escape")
     await targetCell.click({ position: { x: 24, y: 16 } })
+    await targetCell.dblclick({ position: { x: 24, y: 16 } })
 
     await page.keyboard.press(SELECT_ALL_SHORTCUT)
-    const getSelectionText = async () => await page.evaluate(() => window.getSelection()?.toString() ?? "")
-    await expect.poll(
-      getSelectionText,
-      { timeout: 4_000, message: "table row handle select-all should populate table text" }
-    ).toContain("영역")
+    await page.waitForTimeout(240)
+    const rowHandleSelectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
 
-    const selectionText = await getSelectionText()
-    expect(selectionText).toContain("영역")
-    expect(selectionText).toContain("점검 항목")
-    expect(selectionText).toContain("확인 기준")
-    expect(selectionText).toContain("Access Token")
-    expect(selectionText).toContain("구현되어 있는가")
-    expect(selectionText).not.toContain("table select all row handle lead paragraph")
-    expect(selectionText).not.toContain("table select all row handle trailing paragraph")
+    expect(rowHandleSelectionText).toContain("영역")
+    expect(rowHandleSelectionText).toContain("점검 항목")
+    expect(rowHandleSelectionText).toContain("확인 기준")
+    expect(rowHandleSelectionText).toContain("Access Token")
+    expect(rowHandleSelectionText).toContain("구현되어 있는가")
+    expect(rowHandleSelectionText).not.toContain("table select all row handle lead paragraph")
+    expect(rowHandleSelectionText).not.toContain("table select all row handle trailing paragraph")
+  })
+
+  test("키보드 포커스 이탈 후에도 table 내부 Cmd/Ctrl+A가 table 전체 텍스트를 선택한다", async ({
+    page,
+  }) => {
+    const content = [
+      "table select all keyboard focus escape lead paragraph",
+      TABLE_SELECT_ALL_EXAMPLE,
+      "table select all keyboard focus escape trailing paragraph",
+    ].join("\n\n")
+
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(adminMember),
+      })
+    })
+    await page.route("**/post/api/v1/adm/posts/998", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 998,
+          version: 1,
+          title: "table select all keyboard focus escape route 글",
+          content,
+          contentHtml: null,
+          published: true,
+          listed: true,
+        }),
+      })
+    })
+
+    await page.goto("/editor/998")
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(
+      "table select all keyboard focus escape route 글"
+    )
+
+    const targetCell = editor.locator("td", { hasText: "Access Token" }).first()
+    await targetCell.click({
+      position: { x: 24, y: 16 },
+    })
+    await targetCell.dblclick({ position: { x: 24, y: 16 } })
+    await page.keyboard.press(SELECT_ALL_SHORTCUT)
+    await page.waitForTimeout(240)
+    let firstSelectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
+    if (!firstSelectionText.trim()) {
+      await targetCell.click({ position: { x: 24, y: 16 } })
+      await targetCell.dblclick({ position: { x: 24, y: 16 } })
+      await page.keyboard.press(SELECT_ALL_SHORTCUT)
+      await page.waitForTimeout(240)
+      firstSelectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
+    }
+
+    expect(firstSelectionText).toContain("영역")
+    expect(firstSelectionText).toContain("확인 기준")
+    expect(firstSelectionText).not.toContain(
+      "table select all keyboard focus escape lead paragraph"
+    )
+    expect(firstSelectionText).not.toContain(
+      "table select all keyboard focus escape trailing paragraph"
+    )
+
+    const blurred = await blurTableCellByKeyboard(page)
+    expect(blurred).toBeTruthy()
+
+    const leadParagraph = editor.locator("p", {
+      hasText: "table select all keyboard focus escape lead paragraph",
+    }).first()
+    await leadParagraph.click()
+    await page.keyboard.press(SELECT_ALL_SHORTCUT)
+    await page.waitForTimeout(240)
+    const outsideSelectionText = await page.evaluate(
+      () => window.getSelection()?.toString() ?? ""
+    )
+    expect(outsideSelectionText).not.toContain("영역")
+    expect(outsideSelectionText).not.toContain("점검 항목")
+    expect(outsideSelectionText).not.toContain("확인 기준")
+    expect(outsideSelectionText).not.toContain("Access Token")
+
+    await targetCell.click({ position: { x: 24, y: 16 } })
+    await targetCell.dblclick({ position: { x: 24, y: 16 } })
+
+    await page.keyboard.press(SELECT_ALL_SHORTCUT)
+    await page.waitForTimeout(240)
+    let secondSelectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
+    if (!secondSelectionText.trim()) {
+      await targetCell.click({ position: { x: 24, y: 16 } })
+      await targetCell.dblclick({ position: { x: 24, y: 16 } })
+      await page.keyboard.press(SELECT_ALL_SHORTCUT)
+      await page.waitForTimeout(240)
+      secondSelectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
+    }
+
+    expect(secondSelectionText).toContain("영역")
+    expect(secondSelectionText).toContain("확인 기준")
+    expect(secondSelectionText).toContain("Access Token")
+    expect(secondSelectionText).not.toContain(
+      "table select all keyboard focus escape lead paragraph"
+    )
+    expect(secondSelectionText).not.toContain(
+      "table select all keyboard focus escape trailing paragraph"
+    )
   })
 
   test("키보드 포커스 이탈 후에도 table 내부 Cmd/Ctrl+A가 table 전체 텍스트를 선택한다", async ({

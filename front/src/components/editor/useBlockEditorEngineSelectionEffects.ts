@@ -276,10 +276,16 @@ export const useBlockEditorEngineSelectionEffects = ({
       promoteTopLevelBlockSelection(targetBlockIndex)
     }
 
+    const handleEditorFocusInCapture = (event: FocusEvent) => {
+      rememberActiveTableCellFromTarget(event.target, editor.view.dom as HTMLElement)
+    }
+
     const editorDom = editor.view.dom
     editorDom.addEventListener("mousedown", handleEditorMouseDownCapture, true)
+    editorDom.addEventListener("focusin", handleEditorFocusInCapture, true)
     return () => {
       editorDom.removeEventListener("mousedown", handleEditorMouseDownCapture, true)
+      editorDom.removeEventListener("focusin", handleEditorFocusInCapture, true)
     }
   }, [
     clearNativeTextSelection,

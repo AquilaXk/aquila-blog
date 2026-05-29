@@ -88,16 +88,20 @@ export const finalizeTableTextSelectionFromPoint = (clientX: number, clientY: nu
 
 const rememberExplicitTableTextDragStart = (event: MouseEvent | PointerEvent) => { if (event.button !== 0 || ("pointerType" in event && event.pointerType && event.pointerType !== "mouse")) return; const startCell = resolveTableTextCellAtPoint(event.clientX, event.clientY, event.target); explicitTableTextDragStart = startCell instanceof HTMLElement ? { cell: startCell, x: event.clientX, y: event.clientY } : null }
 if (typeof window !== "undefined" && typeof document !== "undefined") {
-  const tableSelectionWindow = window as typeof window & { __aqTableTextSelectionFinalizerInstalled?: boolean }
-  if (!tableSelectionWindow.__aqTableTextSelectionFinalizerInstalled) {
-    tableSelectionWindow.__aqTableTextSelectionFinalizerInstalled = true
-    window.addEventListener("pointerdown", rememberExplicitTableTextDragStart, true); window.addEventListener("mousedown", rememberExplicitTableTextDragStart, true)
-    window.addEventListener("pointermove", preserveExplicitTableTextSelectionFromMoveEvent, true); window.addEventListener("mousemove", preserveExplicitTableTextSelectionFromMoveEvent, true)
-    window.addEventListener("dragover", (event) => { if (preserveExplicitTableTextSelectionFromPoint(event.clientX, event.clientY, event.target)) event.preventDefault() }, true)
-    window.addEventListener("dragenter", (event) => { if (preserveExplicitTableTextSelectionFromPoint(event.clientX, event.clientY, event.target)) event.preventDefault() }, true)
-    window.addEventListener("pointerup", (event) => finalizeTableTextSelectionFromPoint(event.clientX, event.clientY, event.target), true); window.addEventListener("mouseup", (event) => finalizeTableTextSelectionFromPoint(event.clientX, event.clientY, event.target), true); window.addEventListener("dragend", (event) => finalizeTableTextSelectionFromPoint(event.clientX, event.clientY, event.target), true); window.addEventListener("drop", (event) => finalizeTableTextSelectionFromPoint(event.clientX, event.clientY, event.target), true)
+    const tableSelectionWindow = window as typeof window & { __aqTableTextSelectionFinalizerInstalled?: boolean }
+    if (!tableSelectionWindow.__aqTableTextSelectionFinalizerInstalled) {
+      tableSelectionWindow.__aqTableTextSelectionFinalizerInstalled = true
+      window.addEventListener("pointerdown", rememberExplicitTableTextDragStart, true); window.addEventListener("mousedown", rememberExplicitTableTextDragStart, true)
+      window.addEventListener("pointermove", preserveExplicitTableTextSelectionFromMoveEvent, true); window.addEventListener("mousemove", preserveExplicitTableTextSelectionFromMoveEvent, true)
+      window.addEventListener("dragover", (event) => { if (preserveExplicitTableTextSelectionFromPoint(event.clientX, event.clientY, event.target)) event.preventDefault() }, true)
+      window.addEventListener("dragenter", (event) => { if (preserveExplicitTableTextSelectionFromPoint(event.clientX, event.clientY, event.target)) event.preventDefault() }, true)
+      window.addEventListener("pointerup", (event) => finalizeTableTextSelectionFromPoint(event.clientX, event.clientY, event.target), true)
+      window.addEventListener("pointercancel", (event) => finalizeTableTextSelectionFromPoint(event.clientX, event.clientY, event.target), true)
+      window.addEventListener("mouseup", (event) => finalizeTableTextSelectionFromPoint(event.clientX, event.clientY, event.target), true)
+      window.addEventListener("dragend", (event) => finalizeTableTextSelectionFromPoint(event.clientX, event.clientY, event.target), true)
+      window.addEventListener("drop", (event) => finalizeTableTextSelectionFromPoint(event.clientX, event.clientY, event.target), true)
+    }
   }
-}
 
 const normalizeCellText = (cell: Element | null | undefined) => cell?.textContent?.replace(/\s+/g, " ").trim() ?? ""
 

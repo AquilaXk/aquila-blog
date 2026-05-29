@@ -27,11 +27,15 @@ test.describe("editor authoring route rich block focus", () => {
     )
     const codeMarkdown = ["```ts", `const marker = "${codeLabel}";`, "console.log(marker);", "```"].join("\n")
     const tableMarkdown = [
-      '<!-- aq-table {"overflowMode":"normal","columnWidths":[160,220]} -->',
-      "| 구분 | 값 |",
-      "| --- | --- |",
-      `| table | ${tableLabel} |`,
-      "| expected | scroll 유지 |",
+      '<!-- aq-table {"overflowMode":"normal","columnWidths":[160,220,220]} -->',
+      "| 구분 | 값 | 확인 |",
+      "| --- | --- | --- |",
+      `| table | ${tableLabel} | scroll 유지 대상 |`,
+      "| expected | scroll 유지 | 동작 보존 |",
+      "| anchor | 이전 anchor | 다시 점프 금지 |",
+      "| viewport | 위치 계산 | 안정적이어야 함 |",
+      "| focus | 캐럿 이동 | 원복 없어야 함 |",
+      "| selection | 텍스트 추적 | 블록 밖 미침범 |",
     ].join("\n")
     const mermaidMarkdown = [
       "```mermaid",
@@ -193,6 +197,11 @@ test.describe("editor authoring route rich block focus", () => {
       "| --- | --- | --- |",
       `| 테이블 | ${tableLabel} | selection reveal이 scroll을 되돌리지 않음 |`,
       "| 코드 | focus side effect | 현재 viewport 유지 |",
+      "| 정책 | stale selection 정책 | 동작 회귀 차단 |",
+      "| 보안 | 권한 경계 | 블록 선택 영향 없음 |",
+      "| 연동 | 캐럿 좌표 | focus 복구 없음 |",
+      "| 회복 | 재입력 테스트 | 연속 노출 유지 |",
+      "| 성능 | 스크롤 동작 | jitter 금지 |",
     ].join("\n")
     const markdown = [
       "# selection reveal rich block 재현",
@@ -309,6 +318,9 @@ test.describe("editor authoring route rich block focus", () => {
       `| 개념 이해 | ${tableLabel} | 요청만으로 처리 가능한가 |`,
       "| 토큰 구조 | Access/Refresh 구분 | 역할 명확 |",
       "| 흐름 | 재발급 로직 | 구현되어 있는가 |",
+      "| 정책 | 정책 조회 | 우선순위 정합성 |",
+      "| 운영 | 모니터링 경보 | 스로틀 동작 검증 |",
+      "| 보안 | 키 교체 | 적절한 만료 적용 |",
     ].join("\n")
     const content = [
       "# rich block stale selection 재현",

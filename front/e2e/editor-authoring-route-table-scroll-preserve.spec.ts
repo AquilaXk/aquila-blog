@@ -23,12 +23,15 @@ test.describe("editor authoring route table scroll preserve", () => {
       `table scroll preserve lead paragraph ${index + 1}. table 상호작용 중 scroll coordinate 보존을 확인합니다.`
     )
     const tableMarkdown = [
-      '<!-- aq-table {"overflowMode":"normal","columnWidths":[119,192,210]} -->',
+      '<!-- aq-table {"overflowMode":"normal","columnWidths":[160,220,220]} -->',
       "| **영역** | **점검 항목** | **확인 기준** |",
       "| --- | --- | --- |",
       "| 개념 이해 | Stateless 의미 | 요청만으로 처리 가능한가 |",
       "| 토큰 구조 | Access Token | 역할 명확 |",
       "| 흐름 | 재발급 로직 | 구현되어 있는가 |",
+      "| 정책 | 재시도 정책 | 장애 대응이 설계되어 있는가 |",
+      "| 보안 | 인증 만료 | 오류 응답 처리가 적절한가 |",
+      "| 운영 | 모니터링 알림 | 임계치 기반 경보가 있는가 |",
     ].join("\n")
     const content = [
       "table scroll preserve route 글입니다.",
@@ -129,12 +132,15 @@ test.describe("editor authoring route table scroll preserve", () => {
       `table scroll preserve lead paragraph ${index + 1}. 캐럿 고정 점검용 시나리오입니다.`
     )
     const tableMarkdown = [
-      '<!-- aq-table {"overflowMode":"normal","columnWidths":[119,192,210]} -->',
+      '<!-- aq-table {"overflowMode":"normal","columnWidths":[160,220,220]} -->',
       "| **영역** | **점검 항목** | **확인 기준** |",
       "| --- | --- | --- |",
       "| 시작 | 캐럿 | 유지 |",
       "| 중간 | 스크롤 | 점검 |",
       "| 끝 | 반응성 | 확인 |",
+      "| 예외 | 입력 | 복원 |",
+      "| 회복 | 포커스 | 정합성 |",
+      "| 보강 | 트래킹 | 누락 없음 |",
     ].join("\n")
     const trailingParagraphs = Array.from({ length: 20 }, (_, index) =>
       `table scroll preserve trailing paragraph ${index + 1}. 스크롤 이동 후에도 캐럿 anchor는 유지되어야 합니다.`

@@ -99,32 +99,69 @@ export const getWordDragPoints = async (
 ): Promise<{ startX: number; startY: number; endX: number; endY: number }> => {
   const points = await editable.evaluate((element, targetWord) => {
     const root = element as HTMLElement
+    const textNodes: Text[] = []
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
-    let textNode: Text | null = null
-    let foundIndex = -1
+    let cursor: Text | null = null
 
     while (walker.nextNode()) {
       const current = walker.currentNode as Text
-      const index = current.data.indexOf(targetWord)
-      if (index >= 0) {
-        textNode = current
-        foundIndex = index
-        break
+      if (current.textContent?.includes(targetWord)) {
+        textNodes.push(current)
       }
     }
 
-    if (!textNode || foundIndex < 0) return null
-    const range = document.createRange()
-    range.setStart(textNode, foundIndex)
-    range.setEnd(textNode, foundIndex + targetWord.length)
-    const rect = range.getBoundingClientRect()
-    if (rect.width <= 0 || rect.height <= 0) return null
+    for (const node of textNodes) {
+      const index = node.data.indexOf(targetWord)
+      if (index < 0) continue
+      const range = document.createRange()
+      range.setStart(node, index)
+      range.setEnd(node, index + targetWord.length)
+
+      const rects = Array.from(range.getClientRects())
+      const rect = rects.find((entry) => entry.width > 0 && entry.height > 0) ?? range.getBoundingClientRect()
+      if (rect.width > 0 && rect.height > 0) {
+        return {
+          startX: Math.round(rect.left + 2),
+          startY: Math.round(rect.top + rect.height / 2),
+          endX: Math.round(rect.right - 2),
+          endY: Math.round(rect.top + rect.height / 2),
+        }
+      }
+
+      cursor = node
+    }
+
+    for (const node of textNodes) {
+      const index = node.data.indexOf(targetWord)
+      if (index < 0) continue
+      for (let offset = 0; offset < targetWord.length; offset += 1) {
+        const charRange = document.createRange()
+        charRange.setStart(node, index + offset)
+        charRange.setEnd(node, index + offset + 1)
+        const rect = charRange.getBoundingClientRect()
+        if (rect.width > 0 && rect.height > 0) {
+          return {
+            startX: Math.round(rect.left + 2),
+            startY: Math.round(rect.top + rect.height / 2),
+            endX: Math.round(rect.right - 2),
+            endY: Math.round(rect.top + rect.height / 2),
+          }
+        }
+      }
+      cursor = node
+    }
+
+    if (!cursor) return null
+
+    const fallbackElement = cursor.parentElement?.closest("th, td, p, div") ?? root
+    const fallbackRect = fallbackElement.getBoundingClientRect()
+    if (fallbackRect.width <= 0 || fallbackRect.height <= 0) return null
 
     return {
-      startX: Math.round(rect.left + 2),
-      startY: Math.round(rect.top + rect.height / 2),
-      endX: Math.round(rect.right - 2),
-      endY: Math.round(rect.top + rect.height / 2),
+      startX: Math.round(fallbackRect.left + fallbackRect.width / 2),
+      startY: Math.round(fallbackRect.top + fallbackRect.height / 2),
+      endX: Math.round(fallbackRect.left + fallbackRect.width / 2 + 20),
+      endY: Math.round(fallbackRect.top + fallbackRect.height / 2),
     }
   }, word)
 

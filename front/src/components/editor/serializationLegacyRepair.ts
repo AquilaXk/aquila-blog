@@ -37,9 +37,6 @@ export const restoreEditorDocCodeBlocksFromMarkdown = (
   doc: BlockEditorDoc
 ): { doc: BlockEditorDoc; changed: boolean } => {
   const sourceBlocks = collectCodeBlockSnapshots(parseMarkdownToEditorDoc(sourceMarkdown))
-  if (sourceBlocks.every((block) => !hasVisibleCodeText(block.text))) {
-    return { doc, changed: false }
-  }
 
   let codeBlockIndex = 0
   let changed = false

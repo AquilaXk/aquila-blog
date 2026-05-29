@@ -115,15 +115,53 @@ export const useBlockEditorTableOverlayDomAdapter = ({
   const getActiveTableRectFromDom = useCallback((activeEditor?: TiptapEditor | null) => {
     if (!activeEditor) return null
 
-    const tableElement = findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)
+    const tableElement = findActiveRenderedTable(
+      viewportRef.current,
+      tableAffordanceGeometryRef.current,
+      activeTableElementRef.current
+    )
+    const resolveRectFromTableElement = (domSource: HTMLElement | null) => {
+      if (!domSource) return null
+
+      let domPosition = 0
+      try {
+        domPosition = activeEditor.view.posAtDOM(domSource, 0)
+      } catch {
+        return null
+      }
+
+      const resolvedPosition = resolveDocPosSafe(activeEditor, domPosition)
+      if (!resolvedPosition) return null
+
+      for (let depth = resolvedPosition.depth; depth > 0; depth -= 1) {
+        if (resolvedPosition.node(depth).type.name !== "table") continue
+        const table = resolvedPosition.node(depth)
+        const tableStart = resolvedPosition.start(depth)
+        return {
+          map: TableMap.get(table),
+          table,
+          tableStart,
+        }
+      }
+
+      return null
+    }
+
     const firstCell = tableElement?.querySelector<HTMLElement>(
       "thead tr:first-of-type > th, thead tr:first-of-type > td, tbody tr:first-of-type > th, tbody tr:first-of-type > td, tr:first-of-type > th, tr:first-of-type > td"
     )
-    if (!tableElement || !firstCell) return null
+    if (!tableElement) return null
+
+    const fallbackFirstCell = tableElement.querySelector<HTMLElement>("th, td")
+    const firstRowCell = firstCell ?? fallbackFirstCell
+    if (!firstRowCell) return null
+
+    const tableRect = resolveRectFromTableElement(tableElement)
+    if (tableRect) return tableRect
 
     let domPosition = 0
     try {
-      domPosition = activeEditor.view.posAtDOM(firstCell, 0)
+      domPosition = activeEditor.view.posAtDOM(firstRowCell, 0)
     } catch {
       return null
     }
@@ -143,7 +181,7 @@ export const useBlockEditorTableOverlayDomAdapter = ({
     }
 
     return null
-  }, [tableAffordanceGeometryRef, viewportRef])
+  }, [activeTableElementRef, tableAffordanceGeometryRef, viewportRef])
 
   const getCurrentSelectedTableRect = useCallback((activeEditor?: TiptapEditor | null) => {
     if (!activeEditor) return null

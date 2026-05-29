@@ -1,3 +1,5 @@
+import type { TableAffordanceGeometry } from "./tableAffordanceModel"
+
 export type TableRowResizeState = {
   row: HTMLTableRowElement
   cells: HTMLTableCellElement[]
@@ -131,4 +133,31 @@ export const resolveTableColumnIndexFromResizeHandleTarget = (
 
   const columnIndex = Array.from(cell.parentElement.children).findIndex((candidate) => candidate === cell)
   return columnIndex >= 0 ? columnIndex : null
+}
+
+export const resolveTableColumnIndexFromBoundaryProbe = (
+  geometry: TableAffordanceGeometry,
+  clientX: number,
+  tolerance = 12
+) => {
+  if (!Number.isFinite(clientX) || !Array.isArray(geometry.columnSegments) || geometry.columnSegments.length === 0)
+    return null
+
+  let bestIndex = null
+  let bestDistance = Number.MAX_SAFE_INTEGER
+
+  geometry.columnSegments.forEach((segment, index) => {
+    if (!segment?.width || typeof segment.left !== "number" || !Number.isFinite(segment.left) || !Number.isFinite(segment.width)) {
+      return
+    }
+
+    const boundaryX = Math.round(geometry.tableLeft + segment.left + segment.width)
+    const distance = Math.abs(boundaryX - clientX)
+    if (distance < bestDistance) {
+      bestDistance = distance
+      bestIndex = index
+    }
+  })
+
+  return bestDistance <= Math.max(0, Math.round(tolerance)) ? bestIndex : null
 }

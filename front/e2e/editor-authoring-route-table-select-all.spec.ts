@@ -23,6 +23,9 @@ test.describe("editor authoring route table select all", () => {
       "| 개념 이해 | Stateless 의미 | 요청만으로 처리 가능한가 |",
       "| 토큰 구조 | Access Token | 역할 명확 |",
       "| 흐름 | 재발급 로직 | 구현되어 있는가 |",
+      "| 정책 | 재시도 정책 | idempotent 검토 여부 |",
+      "| 예외 | 동시 요청 | 처리 안정성 확인 |",
+      "| UI | 행 선택 | 접근성 경로 검증 |",
     ].join("\n")
     const content = [
       `${leadLabel}. 첫 Cmd/Ctrl+A에서 editor 전체가 아니라 table 범위만 선택되어야 합니다.`,
@@ -87,6 +90,10 @@ test.describe("editor authoring route table select all", () => {
       "| --- | --- | --- |",
       "| A | B | C |",
       "| D | E | F |",
+      "| G | H | I |",
+      "| J | K | L |",
+      "| M | N | O |",
+      "| P | Q | R |",
     ].join("\n")
     const content = [
       "table select all repeat lead paragraph",
@@ -156,6 +163,9 @@ test.describe("editor authoring route table select all", () => {
         "| 개념 이해 | Stateless 의미 | 요청만으로 처리 가능한가 |",
         "| 토큰 구조 | Access Token | 역할 명확 |",
         "| 흐름 | 재발급 로직 | 구현되어 있는가 |",
+        "| 예외 | 동시 요청 | 처리 안정성 확인 |",
+        "| 정책 | 재시도 정책 | idempotent 검토 여부 |",
+        "| UI | 행 선택 | 접근성 경로 검증 |",
       ].join("\n"),
       "table select all row handle trailing paragraph",
     ].join("\n\n")
@@ -206,9 +216,13 @@ test.describe("editor authoring route table select all", () => {
     await rowHandle.click({ force: true })
 
     await page.keyboard.press(SELECT_ALL_SHORTCUT)
-    await page.waitForTimeout(320)
+    const getSelectionText = async () => await page.evaluate(() => window.getSelection()?.toString() ?? "")
+    await expect.poll(
+      getSelectionText,
+      { timeout: 4_000, message: "table row handle select-all should populate table text" }
+    ).toContain("영역")
 
-    const selectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
+    const selectionText = await getSelectionText()
     expect(selectionText).toContain("영역")
     expect(selectionText).toContain("점검 항목")
     expect(selectionText).toContain("확인 기준")

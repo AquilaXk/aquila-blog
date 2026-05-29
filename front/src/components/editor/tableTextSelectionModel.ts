@@ -40,8 +40,17 @@ export const resolveTableTextSelectionRangeCells = (clientX: number, clientY: nu
 
 let pendingTableTextSelectionRangeCells: { anchorCell: HTMLElement; pointCell: HTMLElement } | null = null, explicitTableTextDragStart: { cell: HTMLElement; x: number; y: number } | null = null
 let activeTableTextRangePreserveCancel: (() => void) | null = null
+let hasActiveTableTextSelection = false
+let shouldClearActiveTableTextSelectionOnBlur = false
+let lastTableSelectionRoot: HTMLElement | null = null
 const TABLE_TEXT_HIGHLIGHT_NAME = "aq-table-text-selection"
-const clearTableTextRangeHighlight = () => { document.querySelectorAll("[data-table-drag-selection-text]").forEach((element) => element.removeAttribute("data-table-drag-selection-text")); document.documentElement.removeAttribute("data-table-drag-selection-text"); (CSS as typeof CSS & { highlights?: { delete: (name: string) => void } }).highlights?.delete(TABLE_TEXT_HIGHLIGHT_NAME) }
+const clearTableTextRangeHighlight = () => {
+  hasActiveTableTextSelection = false
+  shouldClearActiveTableTextSelectionOnBlur = false
+  document.querySelectorAll("[data-table-drag-selection-text]").forEach((element) => element.removeAttribute("data-table-drag-selection-text"))
+  document.documentElement.removeAttribute("data-table-drag-selection-text")
+  ;(CSS as typeof CSS & { highlights?: { delete: (name: string) => void } }).highlights?.delete(TABLE_TEXT_HIGHLIGHT_NAME)
+}
 const paintTableTextRangeHighlight = (range: Range) => { const HighlightCtor = (window as typeof window & { Highlight?: new (range: Range) => unknown }).Highlight, highlights = (CSS as typeof CSS & { highlights?: { set: (name: string, highlight: unknown) => void } }).highlights; if (!HighlightCtor || !highlights) return; if (!document.getElementById("aq-table-text-highlight-style")) { const style = document.createElement("style"); style.id = "aq-table-text-highlight-style"; style.textContent = `::highlight(${TABLE_TEXT_HIGHLIGHT_NAME}){background:#0a5b9d;color:white}`; document.head.append(style) } highlights.set(TABLE_TEXT_HIGHLIGHT_NAME, new HighlightCtor(range.cloneRange())) }
 const resolveExplicitTableTextSelectionRangeCells = (clientX: number, clientY: number, target?: EventTarget | Node | null, explicitDragStart = explicitTableTextDragStart) => { const pointCell = resolveTableTextCellAtPoint(clientX, clientY, target); return explicitDragStart && pointCell instanceof HTMLElement && pointCell.closest("table") === explicitDragStart.cell.closest("table") && (Math.abs(clientX - explicitDragStart.x) > 4 || Math.abs(clientY - explicitDragStart.y) > 4) ? { anchorCell: explicitDragStart.cell, pointCell } : null }
 const preserveExplicitTableTextSelectionFromPoint = (clientX: number, clientY: number, target?: EventTarget | Node | null) => { const rangeCells = resolveExplicitTableTextSelectionRangeCells(clientX, clientY, target); if (!rangeCells || rangeCells.anchorCell === rangeCells.pointCell) return false; pendingTableTextSelectionRangeCells = rangeCells; selectTableCellTextRange(rangeCells.anchorCell, rangeCells.pointCell); preserveTableTextRangeAcrossFrames(rangeCells.anchorCell, rangeCells.pointCell); return true }
@@ -228,6 +237,7 @@ export const selectTableCellTextRange = (
   if (!selection) return ""
   const resolvedCells = resolveCurrentTableTextRangeCells(startedCell, endCell)
   if (!resolvedCells) return ""
+  hasActiveTableTextSelection = true
   const range = document.createRange()
   const forward = isElementBeforeOrSame(resolvedCells.startedCell, resolvedCells.endCell)
   const rangeStartCell = forward ? resolvedCells.startedCell : resolvedCells.endCell, rangeEndCell = forward ? resolvedCells.endCell : resolvedCells.startedCell
@@ -479,6 +489,11 @@ export const rememberActiveTableCellFromTarget = (
   eventTarget: EventTarget | Node | null | undefined,
   editorRoot?: HTMLElement | null
 ) => {
+  if (editorRoot && editorRoot !== lastTableSelectionRoot) {
+    lastTableSelectionRoot = editorRoot
+    shouldClearActiveTableTextSelectionOnBlur = false
+    hasActiveTableTextSelection = false
+  }
   const targetElement = resolveElement(eventTarget)
   const cell = targetElement?.closest("th, td")
   if (cell instanceof HTMLElement && (!editorRoot || editorRoot.contains(cell))) {
@@ -492,6 +507,9 @@ export const rememberActiveTableCellFromTarget = (
 
   const currentTable = targetElement.closest("table")
   if (!currentTable) {
+    if (hasActiveTableTextSelection || hasTableTextSelectionState(editorRoot)) {
+      shouldClearActiveTableTextSelectionOnBlur = true
+    }
     lastActiveTableCell = null
     lastActiveTableCellPath = null
     return
@@ -541,22 +559,47 @@ export const selectActiveTableCellText = (
       activeTable &&
       (activeTable === targetTable || activeTable === focusTable)
   )
-  const hasRecoveredTableContext = Boolean(
-    (isSelectionInsideActiveTable || isEditorSelectionInsideCurrentTable) &&
-      rememberedTable &&
-      (targetTable === rememberedTable || activeTable === rememberedTable || focusTable === rememberedTable)
-  )
+  const focusCell = asTableCell(focusElement?.closest("th, td") || null)
   const hasExplicitTableContext = Boolean(
     targetCell ||
-    hasActiveCellContext ||
-    targetTable
+      hasActiveCellContext ||
+      focusCell ||
+      targetTable
   )
+  const hasTableContext = Boolean(
+    targetTable ||
+    targetCell ||
+    hasActiveCellContext ||
+    focusTable ||
+    activeTable
+  )
+  const hasRecoveredTableContext = Boolean(
+    (isSelectionInsideActiveTable || isEditorSelectionInsideCurrentTable) &&
+      hasTableContext &&
+      rememberedTable &&
+      (!targetTable || targetTable === rememberedTable)
+  )
+  const hasTableSelectionState = hasTableTextSelectionState(editor.view.dom)
   const hasTableSelectionContext = Boolean(
     hasExplicitTableContext ||
       hasRecoveredTableContext
   )
+  if (!hasTableSelectionContext && (hasTableSelectionState || shouldClearActiveTableTextSelectionOnBlur)) {
+    shouldClearActiveTableTextSelectionOnBlur = false
+    hasActiveTableTextSelection = false
+    const outsideParagraph = targetElement?.closest("p") || anchorElement?.closest("p") || focusElement?.closest("p")
+    selection.removeAllRanges()
+    clearTableTextRangeHighlight()
+    if (outsideParagraph) {
+      const paragraphRange = document.createRange()
+      paragraphRange.selectNodeContents(outsideParagraph)
+      selection.addRange(paragraphRange)
+    }
+    return true
+  }
   const selectedCell =
     targetCell ??
+    focusCell ??
     ((isSelectionInsideActiveTable || isEditorSelectionInsideCurrentTable) && hasExplicitTableContext ? activeCell : null) ??
     ((isSelectionInsideActiveTable || isEditorSelectionInsideCurrentTable) && hasExplicitTableContext ? anchorCell : null) ??
     (hasTableSelectionContext ? tableSelectionCandidate ?? rememberedCell : null) ??
@@ -583,6 +626,7 @@ export const selectActiveTableCellText = (
   preserveWindowScrollForRichBlockSelectAll()
   selectTableCellTextRange(wholeTableRangeCells.firstCell, wholeTableRangeCells.lastCell)
   preserveTableTextRangeAcrossFrames(wholeTableRangeCells.firstCell, wholeTableRangeCells.lastCell)
+  hasActiveTableTextSelection = true
   return true
 }
 

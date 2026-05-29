@@ -91,7 +91,7 @@ test("home-server-source contract accepts a complete deployment env without BACK
   assert.equal(result.ok, true, result.errors.map((error) => error.message).join("\n"))
 })
 
-test("home-server-source keeps DB runtime username optional until the role is provisioned", async () => {
+test("home-server-source requires DB runtime username after runtime-role cutover", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const text = baseHomeServerEnv.replace(/^PROD___SPRING__DATASOURCE__USERNAME=.*\n/m, "")
 
@@ -101,7 +101,8 @@ test("home-server-source keeps DB runtime username optional until the role is pr
     text,
   })
 
-  assert.equal(result.ok, true, result.errors.map((error) => error.message).join("\n"))
+  assert.equal(result.ok, false)
+  assert(result.errors.some((error) => error.key === "PROD___SPRING__DATASOURCE__USERNAME"))
 })
 
 test("validator reports key-level failures without leaking secret values", async () => {
@@ -179,14 +180,16 @@ test("prod datasource uses a non-superuser runtime role contract", () => {
   const applicationProd = readFileSync(applicationProdPath, "utf8")
   const deployScript = readFileSync(deployScriptPath, "utf8")
 
-  assert.match(applicationProd, /username:\s*"\$\{PROD___SPRING__DATASOURCE__USERNAME:postgres\}"/)
+  assert.match(applicationProd, /username:\s*"\$\{PROD___SPRING__DATASOURCE__USERNAME\}"/)
+  assert.match(applicationProd, /flyway:\n(?:.*\n)*\s+user:\s*"\$\{PROD___SPRING__FLYWAY__USER:postgres\}"/)
+  assert.match(applicationProd, /password:\s*"\$\{PROD___SPRING__FLYWAY__PASSWORD:\$\{PROD___POSTGRES__PASSWORD\}\}"/)
   assert.match(compose, /POSTGRES_PASSWORD:\s*\$\{PROD___POSTGRES__PASSWORD:-\$\{PROD___SPRING__DATASOURCE__PASSWORD\}\}/)
-  assert(!compose.includes("POSTGRES_PASSWORD: ${PROD___SPRING__DATASOURCE__PASSWORD}"))
   assert.match(deployScript, /validate_db_runtime_role_env/)
+  assert.match(deployScript, /provision_db_runtime_role/)
   assert.match(deployScript, /runtime datasource user must not be postgres/)
-  assert(!deployScript.includes("ALTER ROLE"))
-  assert(!deployScript.includes("OWNER TO"))
-  assert(!deployScript.includes("GRANT SELECT"))
+  assert.match(deployScript, /ALTER ROLE %I WITH NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS/)
+  assert.match(deployScript, /GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public/)
+  assert.match(deployScript, /GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public/)
 })
 
 test("homeserver origin ingress is private behind Cloudflare Tunnel", () => {

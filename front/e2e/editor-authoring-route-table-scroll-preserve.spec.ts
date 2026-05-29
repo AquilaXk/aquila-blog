@@ -119,4 +119,105 @@ test.describe("editor authoring route table scroll preserve", () => {
     expect(selectionText).toContain("Access Token")
     expect(selectionText).toContain("구현되어 있는가")
   })
+
+  test("테이블 caret 포커스 후 wheel scroll은 캐럿 위치를 보존하며 점프하지 않는다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 980, height: 720 })
+
+    const leadParagraphs = Array.from({ length: 60 }, (_, index) =>
+      `table scroll preserve lead paragraph ${index + 1}. 캐럿 고정 점검용 시나리오입니다.`
+    )
+    const tableMarkdown = [
+      '<!-- aq-table {"overflowMode":"normal","columnWidths":[119,192,210]} -->',
+      "| **영역** | **점검 항목** | **확인 기준** |",
+      "| --- | --- | --- |",
+      "| 시작 | 캐럿 | 유지 |",
+      "| 중간 | 스크롤 | 점검 |",
+      "| 끝 | 반응성 | 확인 |",
+    ].join("\n")
+    const trailingParagraphs = Array.from({ length: 20 }, (_, index) =>
+      `table scroll preserve trailing paragraph ${index + 1}. 스크롤 이동 후에도 캐럿 anchor는 유지되어야 합니다.`
+    )
+    const content = [
+      ...leadParagraphs,
+      tableMarkdown,
+      ...trailingParagraphs,
+    ].join("\n\n")
+
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(adminMember),
+      })
+    })
+    await page.route("**/post/api/v1/adm/posts/994", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 994,
+          version: 2,
+          title: "table caret scroll jump regress test",
+          content,
+          contentHtml: null,
+          published: true,
+          listed: true,
+        }),
+      })
+    })
+
+    await page.goto("/editor/994")
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(
+      "table caret scroll jump regress test"
+    )
+
+    const targetCell = editor.locator("td", { hasText: "캐럿" }).first()
+    await targetCell.scrollIntoViewIfNeeded()
+    await page.waitForTimeout(120)
+
+    const cellBox = await targetCell.boundingBox()
+    if (!cellBox) {
+      throw new Error("table caret scroll jump test target cell box is not available")
+    }
+
+    await page.mouse.move(cellBox.x + 24, cellBox.y + 16)
+    await page.mouse.down()
+    await page.mouse.up()
+    const caretStateAfterClick = await page.evaluate(() => {
+      const selection = window.getSelection()
+      return {
+        isCollapsed: selection?.isCollapsed ?? false,
+        text: selection?.toString() ?? "",
+      }
+    })
+    expect(caretStateAfterClick).toMatchObject({
+      isCollapsed: true,
+      text: "",
+    })
+
+    const beforeScrollTop = await readScrollTop(page)
+    await page.mouse.wheel(0, 240)
+    await page.waitForTimeout(220)
+    const afterFirstWheel = await readScrollTop(page)
+    expect(afterFirstWheel - beforeScrollTop).toBeGreaterThan(120)
+
+    await page.mouse.wheel(0, -240)
+    await page.waitForTimeout(220)
+    const afterSecondWheel = await readScrollTop(page)
+    expect(afterSecondWheel).toBeLessThan(beforeScrollTop + 140)
+    expect(Math.abs(afterSecondWheel - afterFirstWheel)).toBeGreaterThan(60)
+
+    const caretStateAfterScroll = await page.evaluate(() => {
+      const selection = window.getSelection()
+      return {
+        isCollapsed: selection?.isCollapsed ?? false,
+        text: selection?.toString() ?? "",
+      }
+    })
+    expect(caretStateAfterScroll).toMatchObject({
+      isCollapsed: true,
+      text: "",
+    })
+  })
 })

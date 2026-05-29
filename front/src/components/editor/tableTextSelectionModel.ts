@@ -577,7 +577,8 @@ export const selectActiveTableCellText = (
     (isSelectionInsideActiveTable || isEditorSelectionInsideCurrentTable) &&
       hasTableContext &&
       rememberedTable &&
-      (!targetTable || targetTable === rememberedTable)
+      (!targetTable || targetTable === rememberedTable) &&
+      !shouldClearActiveTableTextSelectionOnBlur
   )
   const hasTableSelectionState = hasTableTextSelectionState(editor.view.dom)
   const hasTableSelectionContext = Boolean(

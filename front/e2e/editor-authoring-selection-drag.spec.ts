@@ -389,6 +389,21 @@ test.describe("editor authoring route text selection drag", () => {
         selectedCellCount: 0,
         selectionText: "",
       })
+
+    await page.mouse.click(clickPoint.x, clickPoint.y)
+    await page.waitForTimeout(120)
+    const postClickState = await page.evaluate(() => ({
+      blockOverlayCount: document.querySelectorAll("[data-testid='keyboard-block-selection-overlay']").length,
+      selectedCellCount: document.querySelectorAll(".selectedCell").length,
+      selectionText: window.getSelection()?.toString().replace(/\s+/g, " ").trim() ?? "",
+      selectionCollapsed: window.getSelection()?.isCollapsed ?? true,
+    }))
+    expect(postClickState).toMatchObject({
+      blockOverlayCount: 0,
+      selectedCellCount: 0,
+      selectionText: "",
+      selectionCollapsed: true,
+    })
   })
 
   test("실제 /editor/[id] 텍스트 드래그 선택은 code/table/body에서 에러 없이 유지된다", async ({

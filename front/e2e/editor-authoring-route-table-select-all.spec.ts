@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 import { expectEditorToContainLoadedText } from "./helpers/editorAuthoringFlow"
 
 const SELECT_ALL_SHORTCUT = process.platform === "darwin" ? "Meta+a" : "Control+a"
@@ -30,6 +30,33 @@ const adminMember = {
   username: "qa-admin",
   nickname: "aquila",
   isAdmin: true,
+}
+const focusTableCellByKeyboard = async (page: Page, maxAttempts = 12) => {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const inTableCell = await page.evaluate(
+      () => Boolean(document.activeElement?.closest("th, td"))
+    )
+    if (inTableCell) {
+      return true
+    }
+    await page.keyboard.press("Tab")
+    await page.waitForTimeout(50)
+  }
+  return false
+}
+
+const blurTableCellByKeyboard = async (page: Page, maxAttempts = 12) => {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    await page.keyboard.press("Tab")
+    await page.waitForTimeout(50)
+    const inTableCell = await page.evaluate(
+      () => Boolean(document.activeElement?.closest("th, td"))
+    )
+    if (!inTableCell) {
+      return true
+    }
+  }
+  return false
 }
 
 test.describe("editor authoring route table select all", () => {
@@ -239,5 +266,73 @@ test.describe("editor authoring route table select all", () => {
     expect(selectionText).toContain("구현되어 있는가")
     expect(selectionText).not.toContain("table select all row handle lead paragraph")
     expect(selectionText).not.toContain("table select all row handle trailing paragraph")
+  })
+
+  test("키보드 포커스 이탈 후에도 table 내부 Cmd/Ctrl+A가 table 전체 텍스트를 선택한다", async ({
+    page,
+  }) => {
+    const content = [
+      "table select all keyboard focus escape lead paragraph",
+      TABLE_SELECT_ALL_EXAMPLE,
+      "table select all keyboard focus escape trailing paragraph",
+    ].join("\n\n")
+
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(adminMember),
+      })
+    })
+    await page.route("**/post/api/v1/adm/posts/998", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 998,
+          version: 1,
+          title: "table select all keyboard focus escape route 글",
+          content,
+          contentHtml: null,
+          published: true,
+          listed: true,
+        }),
+      })
+    })
+
+    await page.goto("/editor/998")
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(
+      "table select all keyboard focus escape route 글"
+    )
+
+    const enteredTable = await focusTableCellByKeyboard(page)
+    expect(enteredTable).toBeTruthy()
+
+    await page.keyboard.press(SELECT_ALL_SHORTCUT)
+    await page.waitForTimeout(240)
+    let selectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
+    expect(selectionText).toContain("영역")
+    expect(selectionText).toContain("확인 기준")
+    expect(selectionText).not.toContain(
+      "table select all keyboard focus escape lead paragraph"
+    )
+    expect(selectionText).not.toContain(
+      "table select all keyboard focus escape trailing paragraph"
+    )
+
+    const blurred = await blurTableCellByKeyboard(page)
+    expect(blurred).toBeTruthy()
+    const returnedToTable = await focusTableCellByKeyboard(page)
+    expect(returnedToTable).toBeTruthy()
+
+    await page.keyboard.press(SELECT_ALL_SHORTCUT)
+    await page.waitForTimeout(240)
+    selectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
+    expect(selectionText).toContain("영역")
+    expect(selectionText).toContain("확인 기준")
+    expect(selectionText).toContain("Access Token")
+    expect(selectionText).not.toContain("table select all keyboard focus escape lead paragraph")
+    expect(selectionText).not.toContain(
+      "table select all keyboard focus escape trailing paragraph"
+    )
   })
 })

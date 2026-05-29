@@ -480,6 +480,8 @@ export const rememberActiveTableCellFromTarget = (
     return
   }
   if (!editorRoot || !targetElement || !editorRoot.contains(targetElement)) {
+    lastActiveTableCell = null
+    lastActiveTableCellPath = null
     return
   }
 

@@ -289,7 +289,7 @@ export const cancelActiveTableCellTextSelectionPreserves = () => {
 
 const isWindowSelectionInsideEditorTable = (editorRoot: HTMLElement) => {
   const selection = window.getSelection()
-  if (!selection?.toString().trim()) return false
+  if (!selection || selection.rangeCount === 0) return false
   const anchorElement = resolveElement(selection.anchorNode)
   const focusElement = resolveElement(selection.focusNode)
   const anchorCell = anchorElement?.closest("th, td")
@@ -525,29 +525,31 @@ export const selectActiveTableCellText = (
   const anchorCell = asTableCell(anchorElement?.closest("th, td") || null)
   const isSelectionInsideActiveTable = isWindowSelectionInsideEditorTable(editor.view.dom)
   const activeCell = asTableCell(activeElement?.closest("th, td") || null)
-  const cell =
-    asTableCell(targetElement?.closest("th, td") || null) ??
+  const targetCell = asTableCell(targetElement?.closest("th, td") || null)
+  const hasTableSelectionContext = Boolean(targetCell || activeCell || anchorCell || isSelectionInsideActiveTable)
+  const selectedCell =
+    targetCell ??
     activeCell ??
     (isSelectionInsideActiveTable ? anchorCell : null) ??
-    rememberedCell ??
+    (hasTableSelectionContext ? tableSelectionCandidate ?? rememberedCell : null) ??
     null
-
-  const fallbackCell =
-    cell ??
-    (isSelectionInsideActiveTable ? tableSelectionCandidate : null)
-  if (!fallbackCell && !lastActiveTableCellPath) return false
-  if (!fallbackCell && tableSelectionCandidate) {
+  if (!selectedCell && hasTableSelectionContext && !tableSelectionCandidate && !rememberedCell) {
+    return false
+  }
+  if (!selectedCell && !hasTableSelectionContext) {
+    return false
+  }
+  if (!selectedCell && tableSelectionCandidate) {
     lastActiveTableCell = tableSelectionCandidate
   }
-  const selectedCell = fallbackCell
   if (!selectedCell || !selectedCell.isConnected) {
     return false
   }
 
   if (!editor.view.dom.contains(selectedCell)) return false
   if (activeCell && !activeCell.isConnected) return false
-  if (cell) {
-    lastActiveTableCell = cell
+  if (selectedCell) {
+    lastActiveTableCell = selectedCell
   }
 
   const wholeTableRangeCells = resolveWholeTableTextRangeCells(selectedCell)

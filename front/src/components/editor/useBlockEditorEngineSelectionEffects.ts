@@ -319,6 +319,9 @@ export const useBlockEditorEngineSelectionEffects = ({
         }
       }
       if (event.key !== "Tab" || event.metaKey || event.ctrlKey || event.altKey) return
+      queueMicrotask(() => {
+        rememberActiveTableCellFromTarget(document.activeElement, activeEditorForSelection.view.dom)
+      })
       if (slashMenuState) return
 
       const currentEditor = editorRef.current

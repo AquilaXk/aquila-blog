@@ -11,14 +11,14 @@ export const findActiveRenderedTable = (
   quickRailGeometry: TableAffordanceGeometry | null,
   preferredTable?: HTMLTableElement | null
 ) => {
-  if (!viewport || !quickRailGeometry) return null
-
-  if (preferredTable?.isConnected && viewport.contains(preferredTable)) {
-    return preferredTable
-  }
+  if (!viewport) return null
 
   const renderedTables = Array.from(viewport.querySelectorAll<HTMLTableElement>(RENDERED_TABLE_SELECTOR))
   if (!renderedTables.length) return null
+  if (preferredTable?.isConnected && viewport.contains(preferredTable)) {
+    return preferredTable
+  }
+  if (!quickRailGeometry) return renderedTables[0] ?? null
 
   const withinHorizontalTolerance = (left: number, right: number) =>
     Math.abs(left - quickRailGeometry.tableLeft) <= 6 &&

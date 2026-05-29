@@ -77,4 +77,70 @@ test.describe("editor authoring route table select all", () => {
     expect(selectionText).not.toContain("table select all trailing paragraph")
     await expect(editor.locator(".selectedCell")).toHaveCount(0)
   })
+
+  test("table select all 반복 호출 시에도 table scope만 유지된다", async ({
+    page,
+  }) => {
+    const selectAllReRunMarkdown = [
+      '<!-- aq-table {"overflowMode":"normal","columnWidths":[119,192,210]} -->',
+      "| 영역 | 점검 항목 | 확인 기준 |",
+      "| --- | --- | --- |",
+      "| A | B | C |",
+      "| D | E | F |",
+    ].join("\n")
+    const content = [
+      "table select all repeat lead paragraph",
+      selectAllReRunMarkdown,
+      "table select all repeat trailing paragraph",
+    ].join("\n\n")
+
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(adminMember),
+      })
+    })
+    await page.route("**/post/api/v1/adm/posts/996", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 996,
+          version: 1,
+          title: "table select all repeat route 글",
+          content,
+          contentHtml: null,
+          published: true,
+          listed: true,
+        }),
+      })
+    })
+
+    await page.goto("/editor/996")
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue("table select all repeat route 글")
+
+    const targetCell = editor.locator("td", { hasText: "D" }).first()
+    await targetCell.click({
+      position: { x: 24, y: 16 },
+    })
+    await page.keyboard.press(SELECT_ALL_SHORTCUT)
+    await page.waitForTimeout(280)
+    const firstSelectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
+    expect(firstSelectionText).toContain("영역")
+    expect(firstSelectionText).toContain("점검 항목")
+    expect(firstSelectionText).toContain("확인 기준")
+
+    await targetCell.dblclick({
+      position: { x: 24, y: 16 },
+    })
+    await page.keyboard.press(SELECT_ALL_SHORTCUT)
+    await page.waitForTimeout(280)
+    const secondSelectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
+    expect(secondSelectionText).toContain("영역")
+    expect(secondSelectionText).toContain("점검 항목")
+    expect(secondSelectionText).toContain("확인 기준")
+    expect(secondSelectionText).not.toContain("repeat lead paragraph")
+    expect(secondSelectionText).not.toContain("repeat trailing paragraph")
+    await expect(editor.locator(".selectedCell")).toHaveCount(0)
+  })
 })

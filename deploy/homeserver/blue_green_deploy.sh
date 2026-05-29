@@ -960,7 +960,9 @@ require_pinned_image_env_key() {
 validate_required_runtime_env() {
   require_nonempty_env_key "API_DOMAIN"
   require_nonempty_env_key "CF_TUNNEL_TOKEN"
+  require_nonempty_env_key "PROD___SPRING__DATASOURCE__USERNAME"
   require_nonempty_env_key "PROD___SPRING__DATASOURCE__PASSWORD"
+  require_nonempty_env_key "PROD___POSTGRES__PASSWORD"
   ensure_image_env_key_from_local_digest "CLOUDFLARED_IMAGE" "cloudflare/cloudflared:latest"
   ensure_image_env_key_from_local_digest "DB_IMAGE" "jangka512/pgj:latest"
   ensure_image_env_key_from_local_digest "MINIO_IMAGE" "minio/minio:latest"
@@ -993,17 +995,87 @@ resolve_prod_db_name() {
 }
 
 validate_db_runtime_role_env() {
-  local runtime_user
+  local runtime_user flyway_user
   runtime_user="$(trim_quotes "$(env_value "PROD___SPRING__DATASOURCE__USERNAME")")"
+  flyway_user="$(trim_quotes "$(env_value "PROD___SPRING__FLYWAY__USER")")"
+  if [[ -z "${flyway_user}" ]]; then
+    flyway_user="postgres"
+  fi
 
   if [[ -z "${runtime_user}" ]]; then
-    echo "runtime datasource user is not set; falling back to legacy postgres user" >&2
-    return 0
+    echo "runtime datasource user must be set (PROD___SPRING__DATASOURCE__USERNAME)" >&2
+    return 1
   fi
   if [[ "${runtime_user}" == "postgres" ]]; then
     echo "runtime datasource user must not be postgres" >&2
     return 1
   fi
+  if [[ "${runtime_user}" == "${flyway_user}" ]]; then
+    echo "runtime datasource user and flyway user must be separated" >&2
+    return 1
+  fi
+}
+
+provision_db_runtime_role() {
+  local runtime_user runtime_password flyway_user db_name
+  runtime_user="$(trim_quotes "$(env_value "PROD___SPRING__DATASOURCE__USERNAME")")"
+  runtime_password="$(trim_quotes "$(env_value "PROD___SPRING__DATASOURCE__PASSWORD")")"
+  flyway_user="$(trim_quotes "$(env_value "PROD___SPRING__FLYWAY__USER")")"
+  if [[ -z "${flyway_user}" ]]; then
+    flyway_user="postgres"
+  fi
+  db_name="$(resolve_prod_db_name)"
+
+  if [[ -z "${runtime_user}" || -z "${runtime_password}" ]]; then
+    echo "runtime datasource credential is incomplete" >&2
+    return 1
+  fi
+
+  if ! [[ "${runtime_user}" =~ ^[a-z_][a-z0-9_]*$ ]]; then
+    echo "runtime datasource user must match postgres identifier pattern: ${runtime_user}" >&2
+    return 1
+  fi
+  if ! [[ "${flyway_user}" =~ ^[a-z_][a-z0-9_]*$ ]]; then
+    echo "flyway user must match postgres identifier pattern: ${flyway_user}" >&2
+    return 1
+  fi
+
+  local provision_sql
+  provision_sql="$(cat <<'SQL'
+DO $$
+DECLARE
+  runtime_user text := :'runtime_user';
+  runtime_password text := :'runtime_password';
+  migration_user text := :'migration_user';
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = runtime_user) THEN
+    EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', runtime_user, runtime_password);
+  ELSE
+    EXECUTE format('ALTER ROLE %I WITH LOGIN PASSWORD %L', runtime_user, runtime_password);
+  END IF;
+
+  EXECUTE format('ALTER ROLE %I WITH NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS', runtime_user);
+  EXECUTE format('GRANT CONNECT, TEMP ON DATABASE %I TO %I', current_database(), runtime_user);
+  EXECUTE format('GRANT USAGE ON SCHEMA public TO %I', runtime_user);
+  EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO %I', runtime_user);
+  EXECUTE format('GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO %I', runtime_user);
+  EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %I', migration_user, runtime_user);
+  EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO %I', migration_user, runtime_user);
+END $$;
+SQL
+)"
+
+  if compose exec -T db_1 psql -U postgres -d "${db_name}" -v ON_ERROR_STOP=1 \
+    -v runtime_user="${runtime_user}" \
+    -v runtime_password="${runtime_password}" \
+    -v migration_user="${flyway_user}" \
+    -c "${provision_sql}" >/dev/null 2>&1; then
+    echo "runtime role provisioned in ${db_name}: runtime=${runtime_user}, migration=${flyway_user}"
+    return 0
+  fi
+
+  echo "runtime role provision failed in ${db_name}" >&2
+  return 1
 }
 
 ensure_db_runtime_guards() {
@@ -1782,6 +1854,7 @@ check_cloudflared_runtime "${api_domain}"
 check_grafana_embed_origin_route
 warn_grafana_embed_public_route
 validate_db_runtime_role_env
+provision_db_runtime_role
 ensure_db_runtime_guards || true
 compose pull "${next_backend}"
 if ! compose_up_force_recreate_with_retry "${next_backend}"; then

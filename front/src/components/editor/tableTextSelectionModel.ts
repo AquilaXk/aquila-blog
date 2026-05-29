@@ -245,7 +245,17 @@ const isSelectionInsideSameTable = (selection: Selection, table: Element | null)
   return Boolean(anchorElement && focusElement && table.contains(anchorElement) && table.contains(focusElement))
 }
 
-const resolveWholeTableTextRangeCells = (cell: HTMLElement) => { const cells = Array.from(resolveCellTable(cell)?.querySelectorAll<HTMLElement>("th, td") ?? []).filter(isConnectedTableCell); return cells[0] && cells[cells.length - 1] ? { firstCell: cells[0], lastCell: cells[cells.length - 1] } : null }
+const resolveWholeTableTextRangeCells = (cell: HTMLElement) => {
+  const table = resolveCellTable(cell)
+  if (!table) return null
+
+  const rows = Array.from(table.rows)
+  const cells = rows.flatMap((row) => Array.from(row.cells)).filter(isConnectedTableCell)
+
+  return cells[0] && cells[cells.length - 1]
+    ? { firstCell: cells[0], lastCell: cells[cells.length - 1] }
+    : null
+}
 
 let lastActiveTableCell: HTMLElement | null = null
 const activeTableCellScrollPreserveCancels = new Set<() => void>()
@@ -423,7 +433,18 @@ export const rememberActiveTableCellFromTarget = (
     lastActiveTableCell = cell
     return
   }
-  if (editorRoot && targetElement && editorRoot.contains(targetElement)) {
+  if (!editorRoot || !targetElement || !editorRoot.contains(targetElement)) {
+    return
+  }
+
+  const currentTable = targetElement.closest("table")
+  if (!currentTable) {
+    lastActiveTableCell = null
+    return
+  }
+
+  const existingCell = lastActiveTableCell?.isConnected ? lastActiveTableCell : null
+  if (!existingCell || existingCell.closest("table") !== currentTable) {
     lastActiveTableCell = null
   }
 }
@@ -437,18 +458,50 @@ export const selectActiveTableCellText = (
 
   const activeElement = resolveElement(document.activeElement)
   const anchorElement = resolveElement(selection.anchorNode)
+  const focusElement = resolveElement(selection.focusNode)
   const targetElement = resolveElement(eventTarget)
+  if (
+    targetElement?.closest(".aq-code-shell") ||
+    activeElement?.closest(".aq-code-shell") ||
+    anchorElement?.closest(".aq-code-shell")
+  ) {
+    return false
+  }
   const rememberedCell = lastActiveTableCell?.isConnected ? lastActiveTableCell : null
-  const cell =
-    targetElement?.closest("th, td") ??
-    activeElement?.closest("th, td") ??
-    rememberedCell ??
-    anchorElement?.closest("th, td")
+  const targetCell = targetElement?.closest("th, td")
+  const targetTable = targetElement?.closest("table")
+  const activeCell = activeElement?.closest("th, td")
+  const anchorCell = anchorElement?.closest("th, td")
+  const focusCell = focusElement?.closest("th, td")
+  const selectionTable =
+    targetCell?.closest("table") ??
+    targetTable ??
+    activeCell?.closest("table") ??
+    anchorCell?.closest("table")
 
-  if (!(cell instanceof HTMLElement) || !editor.view.dom.contains(cell)) return false
+  const selectionContainsTableCellAnchor = Boolean(
+    anchorCell &&
+      focusCell &&
+      anchorCell.closest("table") === focusCell.closest("table")
+  )
 
-  const wholeTableRangeCells = resolveWholeTableTextRangeCells(cell)
+  const rememberedCellInTable =
+    selectionTable && rememberedCell?.closest("table") === selectionTable
+      ? rememberedCell
+      : null
+
+  const resolvedCell =
+    targetCell ??
+    activeCell ??
+    rememberedCellInTable ??
+    (selectionContainsTableCellAnchor ? anchorCell : null)
+
+  const nextCell = resolvedCell
+  if (!(nextCell instanceof HTMLElement) || !editor.view.dom.contains(nextCell)) return false
+
+  const wholeTableRangeCells = resolveWholeTableTextRangeCells(nextCell)
   if (!wholeTableRangeCells) return false
+  clearNextEditorPointerAfterTable()
   preserveWindowScrollForRichBlockSelectAll()
   selectTableCellTextRange(wholeTableRangeCells.firstCell, wholeTableRangeCells.lastCell)
   preserveTableTextRangeAcrossFrames(wholeTableRangeCells.firstCell, wholeTableRangeCells.lastCell)

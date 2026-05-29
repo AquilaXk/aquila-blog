@@ -143,4 +143,78 @@ test.describe("editor authoring route table select all", () => {
     expect(secondSelectionText).not.toContain("repeat trailing paragraph")
     await expect(editor.locator(".selectedCell")).toHaveCount(0)
   })
+
+  test("table row handle 클릭 후 Cmd/Ctrl+A는 해당 table만 선택된다", async ({
+    page,
+  }) => {
+    const content = [
+      "table select all row handle lead paragraph",
+      [
+        "<!-- aq-table {\"overflowMode\":\"normal\",\"columnWidths\":[119,192,210]} -->",
+        "| **영역** | **점검 항목** | **확인 기준** |",
+        "| --- | --- | --- |",
+        "| 개념 이해 | Stateless 의미 | 요청만으로 처리 가능한가 |",
+        "| 토큰 구조 | Access Token | 역할 명확 |",
+        "| 흐름 | 재발급 로직 | 구현되어 있는가 |",
+      ].join("\n"),
+      "table select all row handle trailing paragraph",
+    ].join("\n\n")
+
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(adminMember),
+      })
+    })
+    await page.route("**/post/api/v1/adm/posts/997", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 997,
+          version: 3,
+          title: "table select all row handle route 글",
+          content,
+          contentHtml: null,
+          published: true,
+          listed: true,
+        }),
+      })
+    })
+
+    await page.goto("/editor/997")
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(
+      "table select all row handle route 글"
+    )
+    await expectEditorToContainLoadedText(editor, "Access Token")
+
+    const targetCell = editor.locator("td", { hasText: "Access Token" }).first()
+    await targetCell.click({
+      position: { x: 24, y: 16 },
+    })
+
+    const table = editor.locator("table").first()
+    const tableBox = await table.boundingBox()
+    if (!tableBox) {
+      throw new Error("table select-all row handle test: table bounding box is missing")
+    }
+    await page.mouse.move(tableBox.x + 3, tableBox.y + tableBox.height / 2 - 10)
+    await page.waitForTimeout(120)
+
+    const rowHandle = page.locator("[data-table-affordance='row-handle']").first()
+    await expect(rowHandle).toHaveCount(1, { timeout: 4_000 })
+    await rowHandle.click({ force: true })
+
+    await page.keyboard.press(SELECT_ALL_SHORTCUT)
+    await page.waitForTimeout(320)
+
+    const selectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
+    expect(selectionText).toContain("영역")
+    expect(selectionText).toContain("점검 항목")
+    expect(selectionText).toContain("확인 기준")
+    expect(selectionText).toContain("Access Token")
+    expect(selectionText).toContain("구현되어 있는가")
+    expect(selectionText).not.toContain("table select all row handle lead paragraph")
+    expect(selectionText).not.toContain("table select all row handle trailing paragraph")
+  })
 })

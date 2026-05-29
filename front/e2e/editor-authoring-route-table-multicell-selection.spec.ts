@@ -432,3 +432,61 @@ test("live 507 형태의 table multi-cell drag는 여러 셀 텍스트를 연속
   expect(afterTrailingMouseup).toContain("영역")
   expect(afterTrailingMouseup).toContain("구현되어 있는가")
 })
+
+test("pointercancel 이전후에도 table multi-cell drag 선택 텍스트가 비지 않는다", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1580, height: 900 })
+
+  const content = [
+    "## 멀티셀 보정",
+    ...filler("table multicell recovery", 40),
+    '',
+    '<!-- aq-table {"overflowMode":"normal","columnWidths":[119,192,210]} -->',
+    "| **영역** | **점검 항목** | **확인 기준** |",
+    "| --- | --- | --- |",
+    "| 시작 | A | B |",
+    "| 중간 | C | D |",
+    "| 끝 | E | F |",
+    '',
+    ...filler("table multicell recovery after", 10),
+  ].join("\n")
+
+  await page.route("**/member/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(adminMember),
+    })
+  })
+  await page.route("**/post/api/v1/adm/posts/998", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 998,
+        version: 1,
+        title: "table multicell recover route 글",
+        content,
+        contentHtml: null,
+        published: true,
+        listed: true,
+      }),
+    })
+  })
+
+  await page.goto("/editor/998")
+  const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+  await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue("table multicell recover route 글")
+  await expectEditorToContainLoadedText(editor, "점검 항목")
+
+  const startCell = editor.locator("th", { hasText: "시작" }).first()
+  const endCell = editor.locator("td", { hasText: "끝" }).first()
+  const tableDrag = await dragBetweenTextRanges(page, startCell, endCell, "live 507 table multi-cell drag restore", {
+    end: "끝",
+    start: "시작",
+  }, { cancelAtStart: true, cancelBeforeMouseup: true, skipSyntheticMoves: true, syntheticWithoutNativeSelection: true })
+
+  expect(tableDrag.selectionText).toContain("시작")
+  expect(tableDrag.selectionText).toContain("끝")
+  expect(await editor.locator(".selectedCell").count()).toBe(0)
+  expect(Math.abs(tableDrag.afterScrollTop - tableDrag.beforeScrollTop)).toBeLessThanOrEqual(24)
+})

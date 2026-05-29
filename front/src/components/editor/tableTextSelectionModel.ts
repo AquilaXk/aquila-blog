@@ -485,6 +485,7 @@ export const rememberActiveTableCellFromTarget = (
   const currentTable = targetElement.closest("table")
   if (!currentTable) {
     lastActiveTableCell = null
+    lastActiveTableCellPath = null
     return
   }
 

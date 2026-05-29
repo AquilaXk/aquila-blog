@@ -15,6 +15,7 @@ import {
   isRowResizeHandleTarget,
   resolveTableColumnDragGuideState,
   resolveTableColumnIndexFromResizeHandleTarget,
+  resolveTableColumnIndexFromBoundaryProbe,
 } from "./tableResizeInteractionModel"
 import { collectSimpleTableColumnCells } from "./tableStructureModel"
 import {
@@ -381,9 +382,14 @@ export const useBlockEditorTableOverlayResize = ({
 
   const startTableColumnRailResize = useCallback(
     (pointerId: number, columnIndex: number, clientX: number) => {
-      if (!selectTableColumnByIndex(columnIndex)) return
       const resizeContext = getCurrentTableColumnResizeContext(columnIndex)
       if (!resizeContext) return
+
+      if (!isCurrentTableColumnSelection(columnIndex) && !selectTableColumnByIndex(columnIndex)) {
+        // Fallback: avoid aborting the drag session when selection resolution is
+        // temporarily unstable. Resize context is still available from DOM+affordance.
+      }
+
       setIsTableColumnResizeActive(true)
       setTableAffordanceGeometry((prev) => ({ ...prev, columnIndex }))
       clearWindowTextSelection()
@@ -402,6 +408,7 @@ export const useBlockEditorTableOverlayResize = ({
       updateTableColumnDragGuideForColumn(columnIndex)
     },
     [
+      isCurrentTableColumnSelection,
       clearWindowTextSelection,
       getCurrentTableColumnResizeContext,
       selectTableColumnByIndex,
@@ -414,11 +421,19 @@ export const useBlockEditorTableOverlayResize = ({
   const tryStartTableColumnResizeFromDomHandle = useCallback(
     (target: EventTarget | null, pointerId: number, clientX: number) => {
       const columnIndex = resolveTableColumnIndexFromResizeHandleTarget(target)
-      if (columnIndex === null) return false
+      if (columnIndex === null) {
+        const fallbackIndex = resolveTableColumnIndexFromBoundaryProbe(
+          tableAffordanceGeometryRef.current,
+          clientX
+        )
+        if (fallbackIndex === null) return false
+        startTableColumnRailResize(pointerId, fallbackIndex, clientX)
+        return true
+      }
       startTableColumnRailResize(pointerId, columnIndex, clientX)
       return true
     },
-    [startTableColumnRailResize]
+    [startTableColumnRailResize, tableAffordanceGeometryRef]
   )
 
   const stopTableColumnRailResize = useCallback(() => {

@@ -129,10 +129,14 @@ const resolveCurrentTableTextRangeCells = (
 
   const startedText = normalizeCellText(startedCell)
   const endText = normalizeCellText(endCell)
-  if (!startedText || !endText) return null
+  const hasStartedText = Boolean(startedText)
+  const hasEndText = Boolean(endText)
   const originalCells = startedTable ? Array.from(startedTable.querySelectorAll<HTMLElement>("th, td")) : []
   const startedIndex = originalCells.indexOf(startedCell)
   const endIndex = originalCells.indexOf(endCell)
+  if ((!hasStartedText || !hasEndText) && startedIndex >= 0 && endIndex >= 0) {
+    return { endCell: originalCells[endIndex], startedCell: originalCells[startedIndex] }
+  }
   for (const table of Array.from(document.querySelectorAll("table"))) {
     const cells = Array.from(table.querySelectorAll<HTMLElement>("th, td"))
     const indexedStartedCell = startedIndex >= 0 ? cells[startedIndex] : null
@@ -144,6 +148,10 @@ const resolveCurrentTableTextRangeCells = (
       normalizeCellText(indexedEndCell) === endText
     ) {
       return { endCell: indexedEndCell, startedCell: indexedStartedCell }
+    }
+
+    if (!hasStartedText || !hasEndText) {
+      continue
     }
 
     const textStartedCell = cells.find((cell) => normalizeCellText(cell) === startedText)
@@ -520,20 +528,37 @@ export const selectActiveTableCellText = (
     ? lastActiveTableCell
     : tableSelectionCandidate
   const anchorCell = asTableCell(anchorElement?.closest("th, td") || null)
+  const isEditorSelectionInsideCurrentTable = isEditorSelectionInsideTable(editor)
+  const targetTable = targetElement?.closest("table")
+  const activeTable = activeElement?.closest("table")
+  const focusTable = focusElement?.closest("table")
+  const rememberedTable = rememberedCell?.closest("table")
   const isSelectionInsideActiveTable = isWindowSelectionInsideEditorTable(editor.view.dom)
   const activeCell = asTableCell(activeElement?.closest("th, td") || null)
   const targetCell = asTableCell(targetElement?.closest("th, td") || null)
-  const hasRecoveredTableContext = isSelectionInsideActiveTable && Boolean(rememberedCell)
+  const hasActiveCellContext = Boolean(
+    activeCell &&
+      activeTable &&
+      (activeTable === targetTable || activeTable === focusTable)
+  )
+  const hasRecoveredTableContext = Boolean(
+    (isSelectionInsideActiveTable || isEditorSelectionInsideCurrentTable) &&
+      rememberedTable &&
+      (targetTable === rememberedTable || activeTable === rememberedTable || focusTable === rememberedTable)
+  )
   const hasExplicitTableContext = Boolean(
     targetCell ||
-      activeCell ||
-      (hasRecoveredTableContext && anchorCell)
+    hasActiveCellContext ||
+    targetTable
   )
-  const hasTableSelectionContext = Boolean(hasExplicitTableContext || hasRecoveredTableContext)
+  const hasTableSelectionContext = Boolean(
+    hasExplicitTableContext ||
+      hasRecoveredTableContext
+  )
   const selectedCell =
     targetCell ??
-    (isSelectionInsideActiveTable && hasExplicitTableContext ? activeCell : null) ??
-    (isSelectionInsideActiveTable && hasExplicitTableContext ? anchorCell : null) ??
+    ((isSelectionInsideActiveTable || isEditorSelectionInsideCurrentTable) && hasExplicitTableContext ? activeCell : null) ??
+    ((isSelectionInsideActiveTable || isEditorSelectionInsideCurrentTable) && hasExplicitTableContext ? anchorCell : null) ??
     (hasTableSelectionContext ? tableSelectionCandidate ?? rememberedCell : null) ??
     null
   if (!selectedCell && hasTableSelectionContext && !tableSelectionCandidate && !rememberedCell) {

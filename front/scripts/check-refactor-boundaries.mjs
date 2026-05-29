@@ -37,6 +37,11 @@ const productionSoftAllowlist = {
     reason: "table style module is a style-only companion and remains below the 1,000 line style budget",
     expires: "split when table chrome tokens are promoted to shared primitives",
   },
+  "src/components/editor/tableTextSelectionModel.ts": {
+    issue: "#515",
+    reason: "table text-range drag recovery remains centralized while multi-cell regressions are stabilized",
+    expires: "split below 600 after explicit drag tracking and frame-preserve logic move into dedicated helpers",
+  },
 }
 
 const e2eRootAllowlist = {

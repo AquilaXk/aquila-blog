@@ -3,7 +3,6 @@ import { TextSelection } from "@tiptap/pm/state"
 import { useEffect, useRef, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react"
 import { cancelTablePointerScrollPreserves, clearNextEditorPointerAfterTable, markNextEditorPointerAfterTable, preserveWindowScrollForCodePointerFocus, preserveWindowScrollForEditorPointerFocus, preserveWindowScrollPositionAcrossFrames, type WindowScrollAnchor } from "./blockHandleLayoutModel"
 import { resolveMultiCellTableDomSelectionBubbleState, resolvePersistedTableTextSelectionBubbleState } from "./floatingBubbleDomRangeModel"
-import { TABLE_COLUMN_RESIZE_GUARD_PX } from "./tableResizeInteractionModel"
 import { collapseTableCellTextSelectionToPoint } from "./tableTextCaretModel"
 import { isTableSelectionActive } from "./tableStructureModel"
 import { cancelActiveTableCellTextSelectionPreserves, collapseStaleTableEditorSelection, preserveTableCellTextSelectionAcrossFrames, resolveTableTextCellAtPoint, resolveTableTextSelectionRangeCells, restoreTableCellTextSelectionIfEscaped, selectTableCellTextRange, watchTableCellTextSelectionExternalClear } from "./tableTextSelectionModel"
@@ -102,7 +101,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       const pointInsideEditor = pointElements.some((element) => Boolean(element.closest(BLOCK_EDITOR_ROOT_SELECTOR)))
       const tableTextCell = resolveTableTextCellAtPoint(event.clientX, event.clientY, event.target, { allowControlFallback: true })
       const tableControlTarget = targetElement?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR) ?? pointElements[0]?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR)
-      const tableCellRect = tableTextCell instanceof HTMLElement ? tableTextCell.getBoundingClientRect() : null, tableControlAffordance = tableControlTarget?.getAttribute("data-table-affordance") ?? "", coveredControlFallback = Boolean(tableCellRect && (tableControlAffordance === "row-handle" || (!tableControlAffordance && tableControlTarget?.getAttribute("data-testid") === "table-row-rail" && event.clientX <= tableCellRect.right - TABLE_COLUMN_RESIZE_GUARD_PX)) && event.clientX >= tableCellRect.left && event.clientX <= tableCellRect.right && event.clientY >= tableCellRect.top && event.clientY <= tableCellRect.bottom)
+      const tableCellRect = tableTextCell instanceof HTMLElement ? tableTextCell.getBoundingClientRect() : null, coveredControlFallback = Boolean(tableCellRect && tableControlTarget?.getAttribute("data-table-affordance") === "row-handle" && event.clientX >= tableCellRect.left && event.clientX <= tableCellRect.right && event.clientY >= tableCellRect.top && event.clientY <= tableCellRect.bottom)
       if (!(event.target instanceof Node) || (!activeEditor.view.dom.contains(event.target) && !targetElement?.closest(BLOCK_EDITOR_ROOT_SELECTOR) && !pointInsideEditor && !(allowOutsideCoveredControlFallback && coveredControlFallback))) { tableTextDragStartRef.current = null; return null }
       if (tableControlTarget && (!coveredControlFallback || !(tableTextCell instanceof HTMLElement))) { tableTextDragStartRef.current = null; return null }
       const scrollAnchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }

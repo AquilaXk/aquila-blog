@@ -100,7 +100,7 @@ test.describe("editor authoring route table select all", () => {
 
     const targetCell = editor.locator("td", { hasText: "Access Token" }).first()
     await targetCell.click({
-      position: { x: 24, y: 16 },
+      position: { x: 40, y: 16 },
     })
     await targetCell.dblclick({
       position: { x: 40, y: 16 },
@@ -159,7 +159,7 @@ test.describe("editor authoring route table select all", () => {
 
     const targetCell = editor.locator("td", { hasText: "D" }).first()
     await targetCell.click({
-      position: { x: 24, y: 16 },
+      position: { x: 40, y: 16 },
     })
     await page.keyboard.press(SELECT_ALL_SHORTCUT)
     await page.waitForTimeout(280)
@@ -169,7 +169,7 @@ test.describe("editor authoring route table select all", () => {
     expect(firstSelectionText).toContain("확인 기준")
 
     await targetCell.dblclick({
-      position: { x: 24, y: 16 },
+      position: { x: 40, y: 16 },
     })
     await page.keyboard.press(SELECT_ALL_SHORTCUT)
     await page.waitForTimeout(280)
@@ -221,7 +221,7 @@ test.describe("editor authoring route table select all", () => {
 
     const targetCell = editor.locator("td", { hasText: "Access Token" }).first()
     await targetCell.click({
-      position: { x: 24, y: 16 },
+      position: { x: 40, y: 16 },
     })
 
     const table = editor.locator("table").first()
@@ -250,8 +250,8 @@ test.describe("editor authoring route table select all", () => {
     }
 
     await page.keyboard.press("Escape")
-    await targetCell.click({ position: { x: 24, y: 16 } })
-    await targetCell.dblclick({ position: { x: 24, y: 16 } })
+    await targetCell.click({ position: { x: 40, y: 16 } })
+    await targetCell.dblclick({ position: { x: 40, y: 16 } })
 
     await page.keyboard.press(SELECT_ALL_SHORTCUT)
     await page.waitForTimeout(240)
@@ -304,15 +304,15 @@ test.describe("editor authoring route table select all", () => {
 
     const targetCell = editor.locator("td", { hasText: "Access Token" }).first()
     await targetCell.click({
-      position: { x: 24, y: 16 },
+      position: { x: 40, y: 16 },
     })
-    await targetCell.dblclick({ position: { x: 24, y: 16 } })
+    await targetCell.dblclick({ position: { x: 40, y: 16 } })
     await page.keyboard.press(SELECT_ALL_SHORTCUT)
     await page.waitForTimeout(240)
     let firstSelectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
     if (!firstSelectionText.trim()) {
-      await targetCell.click({ position: { x: 24, y: 16 } })
-      await targetCell.dblclick({ position: { x: 24, y: 16 } })
+      await targetCell.click({ position: { x: 40, y: 16 } })
+      await targetCell.dblclick({ position: { x: 40, y: 16 } })
       await page.keyboard.press(SELECT_ALL_SHORTCUT)
       await page.waitForTimeout(240)
       firstSelectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
@@ -344,15 +344,15 @@ test.describe("editor authoring route table select all", () => {
     expect(outsideSelectionText).not.toContain("확인 기준")
     expect(outsideSelectionText).not.toContain("Access Token")
 
-    await targetCell.click({ position: { x: 24, y: 16 } })
-    await targetCell.dblclick({ position: { x: 24, y: 16 } })
+    await targetCell.click({ position: { x: 40, y: 16 } })
+    await targetCell.dblclick({ position: { x: 40, y: 16 } })
 
     await page.keyboard.press(SELECT_ALL_SHORTCUT)
     await page.waitForTimeout(240)
     let secondSelectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
     if (!secondSelectionText.trim()) {
-      await targetCell.click({ position: { x: 24, y: 16 } })
-      await targetCell.dblclick({ position: { x: 24, y: 16 } })
+      await targetCell.click({ position: { x: 40, y: 16 } })
+      await targetCell.dblclick({ position: { x: 40, y: 16 } })
       await page.keyboard.press(SELECT_ALL_SHORTCUT)
       await page.waitForTimeout(240)
       secondSelectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")

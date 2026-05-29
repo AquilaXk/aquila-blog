@@ -304,9 +304,10 @@ export const useBlockEditorEngineSelectionEffects = ({
 
     const handleKeyDownCapture = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return
+      const activeEditorForSelection = editorRef.current ?? editor
+      rememberActiveTableCellFromTarget(event.target, activeEditorForSelection.view.dom)
       if (isPrimarySelectAllKeyboardEvent(event)) {
-        const currentEditor = editorRef.current
-        if (currentEditor && selectActiveTableCellText(currentEditor, event.target)) {
+        if (activeEditorForSelection && selectActiveTableCellText(activeEditorForSelection, event.target)) {
           event.preventDefault()
           event.stopPropagation()
           event.stopImmediatePropagation?.()

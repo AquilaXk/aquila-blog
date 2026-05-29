@@ -497,6 +497,7 @@ export const rememberActiveTableCellFromTarget = (
   const targetElement = resolveElement(eventTarget)
   const cell = targetElement?.closest("th, td")
   if (cell instanceof HTMLElement && (!editorRoot || editorRoot.contains(cell))) {
+    shouldClearActiveTableTextSelectionOnBlur = false
     lastActiveTableCell = cell
     lastActiveTableCellPath = captureActiveTableCellPath(editorRoot, cell)
     return
@@ -555,6 +556,7 @@ export const selectActiveTableCellText = (
   const activeCell = asTableCell(activeElement?.closest("th, td") || null)
   const targetCell = asTableCell(targetElement?.closest("th, td") || null)
   const hasActiveCellContext = Boolean(
+    !shouldClearActiveTableTextSelectionOnBlur &&
     activeCell &&
       activeTable &&
       (activeTable === targetTable || activeTable === focusTable)
@@ -569,9 +571,8 @@ export const selectActiveTableCellText = (
   const hasTableContext = Boolean(
     targetTable ||
     targetCell ||
-    hasActiveCellContext ||
-    focusTable ||
-    activeTable
+    (!shouldClearActiveTableTextSelectionOnBlur &&
+      (hasActiveCellContext || focusTable || activeTable))
   )
   const hasRecoveredTableContext = Boolean(
     (isSelectionInsideActiveTable || isEditorSelectionInsideCurrentTable) &&
@@ -600,7 +601,7 @@ export const selectActiveTableCellText = (
   }
   const selectedCell =
     targetCell ??
-    focusCell ??
+    (!shouldClearActiveTableTextSelectionOnBlur ? focusCell : null) ??
     ((isSelectionInsideActiveTable || isEditorSelectionInsideCurrentTable) && hasExplicitTableContext ? activeCell : null) ??
     ((isSelectionInsideActiveTable || isEditorSelectionInsideCurrentTable) && hasExplicitTableContext ? anchorCell : null) ??
     (hasTableSelectionContext ? tableSelectionCandidate ?? rememberedCell : null) ??

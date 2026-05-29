@@ -526,11 +526,13 @@ export const selectActiveTableCellText = (
   const isSelectionInsideActiveTable = isWindowSelectionInsideEditorTable(editor.view.dom)
   const activeCell = asTableCell(activeElement?.closest("th, td") || null)
   const targetCell = asTableCell(targetElement?.closest("th, td") || null)
-  const hasTableSelectionContext = Boolean(targetCell || activeCell || isSelectionInsideActiveTable)
+  const hasExplicitTableContext = Boolean(targetCell || activeCell)
+  const hasRecoveredTableContext = isSelectionInsideActiveTable && Boolean(rememberedCell)
+  const hasTableSelectionContext = Boolean(hasExplicitTableContext || hasRecoveredTableContext)
   const selectedCell =
     targetCell ??
-    (isSelectionInsideActiveTable ? activeCell : null) ??
-    (isSelectionInsideActiveTable ? anchorCell : null) ??
+    (isSelectionInsideActiveTable && hasExplicitTableContext ? activeCell : null) ??
+    (isSelectionInsideActiveTable && hasExplicitTableContext ? anchorCell : null) ??
     (hasTableSelectionContext ? tableSelectionCandidate ?? rememberedCell : null) ??
     null
   if (!selectedCell && hasTableSelectionContext && !tableSelectionCandidate && !rememberedCell) {

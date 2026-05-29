@@ -42,6 +42,11 @@ const productionSoftAllowlist = {
     reason: "table text-range drag recovery remains centralized while multi-cell regressions are stabilized",
     expires: "split below 600 after explicit drag tracking and frame-preserve logic move into dedicated helpers",
   },
+  "src/components/editor/codeBlockNodeView.tsx": {
+    issue: "#545",
+    reason: "editor table/cell selection and code-block selection interception regressions are fixed in-place without functional split yet",
+    expires: "split below 600 when code-block selection, drag-preserve, and scroll-jump fixes are extracted into dedicated helpers",
+  },
 }
 
 const e2eRootAllowlist = {

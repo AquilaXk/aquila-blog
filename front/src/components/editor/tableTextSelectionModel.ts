@@ -245,7 +245,17 @@ const isSelectionInsideSameTable = (selection: Selection, table: Element | null)
   return Boolean(anchorElement && focusElement && table.contains(anchorElement) && table.contains(focusElement))
 }
 
-const resolveWholeTableTextRangeCells = (cell: HTMLElement) => { const cells = Array.from(resolveCellTable(cell)?.querySelectorAll<HTMLElement>("th, td") ?? []).filter(isConnectedTableCell); return cells[0] && cells[cells.length - 1] ? { firstCell: cells[0], lastCell: cells[cells.length - 1] } : null }
+const resolveWholeTableTextRangeCells = (cell: HTMLElement) => {
+  const table = resolveCellTable(cell)
+  if (!table) return null
+
+  const rows = Array.from(table.rows)
+  const cells = rows.flatMap((row) => Array.from(row.cells)).filter(isConnectedTableCell)
+
+  return cells[0] && cells[cells.length - 1]
+    ? { firstCell: cells[0], lastCell: cells[cells.length - 1] }
+    : null
+}
 
 let lastActiveTableCell: HTMLElement | null = null
 const activeTableCellScrollPreserveCancels = new Set<() => void>()
@@ -438,6 +448,9 @@ export const selectActiveTableCellText = (
   const activeElement = resolveElement(document.activeElement)
   const anchorElement = resolveElement(selection.anchorNode)
   const targetElement = resolveElement(eventTarget)
+  if (targetElement?.closest(".aq-code-shell") || activeElement?.closest(".aq-code-shell") || anchorElement?.closest(".aq-code-shell")) {
+    return false
+  }
   const rememberedCell = lastActiveTableCell?.isConnected ? lastActiveTableCell : null
   const cell =
     targetElement?.closest("th, td") ??
@@ -449,6 +462,7 @@ export const selectActiveTableCellText = (
 
   const wholeTableRangeCells = resolveWholeTableTextRangeCells(cell)
   if (!wholeTableRangeCells) return false
+  clearNextEditorPointerAfterTable()
   preserveWindowScrollForRichBlockSelectAll()
   selectTableCellTextRange(wholeTableRangeCells.firstCell, wholeTableRangeCells.lastCell)
   preserveTableTextRangeAcrossFrames(wholeTableRangeCells.firstCell, wholeTableRangeCells.lastCell)

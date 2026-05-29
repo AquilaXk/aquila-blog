@@ -111,8 +111,18 @@ export const resolveTableColumnDragGuideState = (
 export const resolveTableColumnIndexFromResizeHandleTarget = (
   target: EventTarget | null
 ) => {
-  const handleElement = target instanceof Element ? target.closest(".column-resize-handle") : null
+  if (!(target instanceof Element)) return null
+
+  const handleElement =
+    target.closest(".column-resize-handle") ??
+    target.closest("[data-testid^='table-column-resize-boundary-']")
   if (!(handleElement instanceof HTMLElement)) return null
+
+  const handleTestId = handleElement.getAttribute("data-testid")
+  if (handleTestId?.startsWith("table-column-resize-boundary-")) {
+    const parsedIndex = Number(handleTestId.replace("table-column-resize-boundary-", ""))
+    return Number.isInteger(parsedIndex) && parsedIndex >= 0 ? parsedIndex : null
+  }
 
   const cell = handleElement.closest("th, td")
   if (!(cell instanceof HTMLElement) || !(cell.parentElement instanceof HTMLTableRowElement)) {

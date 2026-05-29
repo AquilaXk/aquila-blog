@@ -9,11 +9,14 @@ spring:
     baseline-on-migrate: true
     validate-on-migrate: true
     locations: classpath:db/migration
+    # Flyway는 migration credential을 별도 사용하고, runtime datasource는 최소권한 role로 고정한다.
+    user: "${PROD___SPRING__FLYWAY__USER:postgres}"
+    password: "${PROD___SPRING__FLYWAY__PASSWORD:${PROD___POSTGRES__PASSWORD}}"
   data:
     redis:
       password: "${PROD___SPRING__DATA__REDIS__PASSWORD}"
   datasource:
-    username: "${PROD___SPRING__DATASOURCE__USERNAME:postgres}"
+    username: "${PROD___SPRING__DATASOURCE__USERNAME}"
     password: "${PROD___SPRING__DATASOURCE__PASSWORD}"
     hikari:
       # 홈서버 환경에서 worker + API 동시 부하 시 커넥션 대기(수초~수십초)를 줄인다.

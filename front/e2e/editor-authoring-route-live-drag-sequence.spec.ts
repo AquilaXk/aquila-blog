@@ -229,15 +229,15 @@ test.describe("editor authoring route live drag sequence", () => {
       element.scrollIntoView({ block: "center", inline: "nearest" })
       const rect = element.getBoundingClientRect()
       const y = rect.top + rect.height / 2
+      const startX = rect.left + Math.min(rect.width - 18, 24)
       return {
         endX: rect.left + Math.min(rect.width - 8, 128),
-        startX: rect.left + 8,
+        startX,
         y,
       }
     })
     await accessTokenCell.evaluate((element, metrics) => {
-      const rect = element.getBoundingClientRect()
-      const clientX = rect.left + 10
+      const clientX = metrics.startX + 2
       const clientY = metrics.y
       const selection = window.getSelection()
       selection?.removeAllRanges()
@@ -248,8 +248,7 @@ test.describe("editor authoring route live drag sequence", () => {
     }, accessTokenBox)
     expect(await readSelectionText(page)).toContain("Access Token")
     await accessTokenCell.evaluate((element, metrics) => {
-      const rect = element.getBoundingClientRect()
-      const clientX = rect.left + 10
+      const clientX = metrics.startX + 2
       const clientY = metrics.y
       element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, buttons: 0, cancelable: true, clientX, clientY }))
     }, accessTokenBox)

@@ -563,14 +563,12 @@ export const selectActiveTableCellText = (
   const hasExplicitTableContext = Boolean(
     targetCell ||
       hasActiveCellContext ||
-      focusCell ||
       targetTable
   )
   const hasTableContext = Boolean(
     targetTable ||
     targetCell ||
     hasActiveCellContext ||
-    focusTable ||
     activeTable
   )
   const hasRecoveredTableContext = Boolean(

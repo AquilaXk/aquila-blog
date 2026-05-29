@@ -83,3 +83,93 @@ test.describe("editor authoring route table block drag", () => {
     expect(tableIndex).toBeGreaterThan(trailingIndex)
   })
 })
+
+test("table block drag 완료 후 후속 pointerup/mouseup에서도 scrollTop이 즉시 복귀하지 않는다", async ({
+  page,
+}) => {
+  const paragraphs = Array.from({ length: 30 }, (_, index) => `table block drag jump ${index + 1}`).join("\n\n")
+  const tableMarkdown = [
+    '<!-- aq-table {"overflowMode":"normal","columnWidths":[180,180]} -->',
+    "| 구분 | 값 |",
+    "| --- | --- |",
+    "| table-block-marker | 이동 대상 |",
+    "",
+    "| 구분 | 값 |",
+    "| --- | --- |",
+    "| table-block-marker | 이동 대상 |",
+  ].join("\n")
+  const content = [
+    paragraphs,
+    tableMarkdown,
+    paragraphs,
+  ].join("\n\n")
+
+  await page.route("**/member/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(adminMember),
+    })
+  })
+  await page.route("**/post/api/v1/adm/posts/997", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 997,
+        version: 1,
+        title: "table block drag follow-up preserve 검증 글",
+        content,
+        contentHtml: null,
+        published: true,
+        listed: true,
+      }),
+    })
+  })
+
+  await page.setViewportSize({ width: 980, height: 820 })
+  await page.goto("/editor/997")
+  const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+  await page.getByPlaceholder("제목을 입력하세요").first()
+  await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(
+    "table block drag follow-up preserve 검증 글"
+  )
+  await expectEditorToContainLoadedText(editor, "table-block-marker")
+
+  const table = editor.locator(".tableWrapper table").first()
+  await table.scrollIntoViewIfNeeded()
+  await page.waitForTimeout(120)
+  const tableBoxForHandle = await table.boundingBox()
+  if (!tableBoxForHandle) {
+    throw new Error("table block drag follow-up preserve 검증 table 좌표를 계산할 수 없습니다.")
+  }
+  await page.mouse.move(tableBoxForHandle.x + 24, tableBoxForHandle.y + 24)
+  const tableHandle = page.getByTestId("block-drag-handle")
+  await expect(tableHandle).toBeVisible()
+
+  const startScrollTop = await page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
+  const handleBox = await tableHandle.boundingBox()
+  if (!handleBox) {
+    throw new Error("table block drag follow-up preserve 검증 handle 좌표를 계산할 수 없습니다.")
+  }
+
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(handleBox.x + 40, handleBox.y + 260, { steps: 10 })
+  await page.mouse.up()
+  await page.waitForTimeout(260)
+
+  const postDragScrollTop = await page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
+  expect(Math.abs(postDragScrollTop - startScrollTop)).toBeLessThanOrEqual(24)
+
+  const tableRect = await table.boundingBox()
+  if (!tableRect) {
+    throw new Error("table block drag follow-up preserve 검증 table 좌표를 계산할 수 없습니다.")
+  }
+
+  await page.mouse.move(tableRect.x + 24, tableRect.y + 24)
+  await page.mouse.down()
+  await page.mouse.move(tableRect.x + 30, tableRect.y + 40, { steps: 5 })
+  await page.mouse.up()
+  await page.waitForTimeout(260)
+  const finalScrollTop = await page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
+  expect(Math.abs(finalScrollTop - postDragScrollTop)).toBeLessThanOrEqual(24)
+})

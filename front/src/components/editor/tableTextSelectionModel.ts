@@ -562,8 +562,9 @@ export const selectActiveTableCellText = (
   const focusCell = asTableCell(focusElement?.closest("th, td") || null)
   const hasExplicitTableContext = Boolean(
     targetCell ||
-      hasActiveCellContext ||
-      targetTable
+    hasActiveCellContext ||
+    targetTable ||
+    (!shouldClearActiveTableTextSelectionOnBlur && focusCell)
   )
   const hasTableContext = Boolean(
     targetTable ||

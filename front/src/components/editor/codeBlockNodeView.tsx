@@ -51,7 +51,7 @@ import {
 } from "./blockHandleLayoutModel"
 export { getPreferredCodeLanguage, normalizeCodeLanguage } from "./codeBlockNodeViewLanguageModel"
 export { CodeBlockEditorStyles } from "./codeBlockNodeViewStyles"
-let lastActiveCodeBlockContentRoot: HTMLElement | null = null, codeDomTextRangePreserveGeneration = 0
+let codeDomTextRangePreserveGeneration = 0
 type CodeDragSelectionSession = { active: boolean; anchorPos: number; lastHeadPos?: number; startX: number; startY: number }
 export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos }: NodeViewProps) => {
   const menuId = useId()
@@ -59,6 +59,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
   const searchInputRef = useRef<HTMLInputElement>(null)
   const shellRef = useRef<HTMLDivElement>(null)
   const codeDragSelectionRef = useRef<CodeDragSelectionSession | null>(null)
+  const isActiveCodeBlockRef = useRef(false)
   const [draftLanguage, setDraftLanguage] = useState(normalizeCodeLanguage(String(node.attrs?.language || "")))
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false)
   const [languageSearch, setLanguageSearch] = useState("")
@@ -211,7 +212,6 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       const anchorPos = resolveCodeTextPosFromPointer(event.clientX, event.clientY, contentRoot)
       if (typeof anchorPos !== "number") return
       event.stopPropagation()
-      lastActiveCodeBlockContentRoot = contentRoot
       const selection = window.getSelection(), persistedCodeSelectionText = shell.getAttribute("data-code-drag-selection-text")?.trim() || ""
       const anchorElement = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null, focusElement = selection?.focusNode instanceof Element ? selection.focusNode : selection?.focusNode?.parentElement ?? null
       const selectedText = selection?.toString().trim() || "", contentText = contentRoot.textContent?.trim() || ""
@@ -239,7 +239,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
     (event: ReactPointerEvent<HTMLDivElement>) => {
       const contentRoot =
         shellRef.current?.querySelector<HTMLElement>(".aq-code-editor-content") ?? null
-      lastActiveCodeBlockContentRoot = contentRoot
+      isActiveCodeBlockRef.current = contentRoot?.isConnected ?? false
       if (event.pointerType && event.pointerType !== "mouse") return
       startCodeDragSelection(event)
     },
@@ -347,9 +347,9 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       const target = event.target
       if (!(target instanceof Node)) return
       if (contentRoot.contains(target)) {
-        lastActiveCodeBlockContentRoot = contentRoot
-      } else if (lastActiveCodeBlockContentRoot === contentRoot) {
-        lastActiveCodeBlockContentRoot = null
+        isActiveCodeBlockRef.current = contentRoot.isConnected
+      } else if (isActiveCodeBlockRef.current) {
+        isActiveCodeBlockRef.current = false
       }
       if (!contentRoot.contains(target)) codeDragSelectionRef.current = null
     }
@@ -364,10 +364,16 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
         selection?.anchorNode instanceof Element
           ? selection.anchorNode
           : selection?.anchorNode?.parentElement ?? null
+      const codeShell = contentRoot.closest(".aq-code-shell")
+      const isActiveShellMatch =
+        isActiveCodeBlockRef.current &&
+        codeShell?.isConnected &&
+        activeElement instanceof Element &&
+        codeShell.contains(activeElement)
       const isInsideCodeBlock =
         (activeElement instanceof Element && contentRoot.contains(activeElement)) ||
         (anchorElement instanceof Element && contentRoot.contains(anchorElement)) ||
-        (lastActiveCodeBlockContentRoot === contentRoot && contentRoot.isConnected)
+        (isActiveShellMatch && contentRoot.isConnected)
       if (!isInsideCodeBlock) return
       event.preventDefault()
       event.stopPropagation()
@@ -402,8 +408,8 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       if (frameId !== null) {
         window.cancelAnimationFrame(frameId)
       }
-      if (lastActiveCodeBlockContentRoot === contentRoot) {
-        lastActiveCodeBlockContentRoot = null
+      if (isActiveCodeBlockRef.current) {
+        isActiveCodeBlockRef.current = false
       }
     }
   }, [ensureCodeDomTextSelection, selectCurrentCodeBlockText, selected])

@@ -96,6 +96,9 @@ test.describe("editor authoring route rich block drag selection", () => {
       "| 개념 이해 | Stateless 의미 | 요청만으로 처리 가능한가 |",
       `| 토큰 구조 | ${tableLabel} | 역할 명확 |`,
       "| 보안 | HTTPS 사용 | 필수 |",
+      "| 저장소 | Refresh 저장 | DB/Redis |",
+      "| 만료 | Access 짧게 | 15~60분 |",
+      "| 흐름 | 재발급 로직 | 구현되어 있는가 |",
     ].join("\n")
     const content = [
       "# rich block drag selection 재현",

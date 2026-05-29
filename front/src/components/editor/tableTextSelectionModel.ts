@@ -245,9 +245,29 @@ const isSelectionInsideSameTable = (selection: Selection, table: Element | null)
   return Boolean(anchorElement && focusElement && table.contains(anchorElement) && table.contains(focusElement))
 }
 
-const resolveWholeTableTextRangeCells = (cell: HTMLElement) => { const cells = Array.from(resolveCellTable(cell)?.querySelectorAll<HTMLElement>("th, td") ?? []).filter(isConnectedTableCell); return cells[0] && cells[cells.length - 1] ? { firstCell: cells[0], lastCell: cells[cells.length - 1] } : null }
+const resolveWholeTableTextRangeCells = (cell: HTMLElement) => {
+  const table = resolveCellTable(cell)
+  if (!table) return null
+
+  const rows = Array.from(table.rows)
+  const cells = rows.flatMap((row) => Array.from(row.cells)).filter(isConnectedTableCell)
+
+  return cells[0] && cells[cells.length - 1]
+    ? { firstCell: cells[0], lastCell: cells[cells.length - 1] }
+    : null
+}
+
+const asTableCell = (element: Element | null) =>
+  element instanceof HTMLElement ? element : null
+
+type ActiveTableCellPath = {
+  tableIndex: number
+  rowIndex: number
+  cellIndex: number
+}
 
 let lastActiveTableCell: HTMLElement | null = null
+let lastActiveTableCellPath: ActiveTableCellPath | null = null
 const activeTableCellScrollPreserveCancels = new Set<() => void>()
 const activeTableCellSelectionPreserveCancels = new Set<() => void>()
 const TABLE_DRAG_SELECTION_TEXT_ATTR = "data-table-drag-selection-text"
@@ -305,6 +325,41 @@ const isEditorSelectionInsideTable = (editor: TiptapEditor) => {
     fromElement?.closest("th, td") ||
       toElement?.closest("th, td")
   )
+}
+
+const captureActiveTableCellPath = (
+  editorRoot: HTMLElement | null | undefined,
+  cell: HTMLElement
+) => {
+  if (!editorRoot) return null
+  const table = cell.closest("table")
+  const row = cell.closest("tr")
+  if (!(table instanceof HTMLTableElement) || !(row instanceof HTMLTableRowElement)) return null
+  const tableNodes = Array.from(editorRoot.querySelectorAll("table"))
+  const rowNodes = Array.from(table.querySelectorAll("tr"))
+  const cellNodes = Array.from(row.querySelectorAll("th, td"))
+  const tableIndex = tableNodes.indexOf(table)
+  const rowIndex = rowNodes.indexOf(row)
+  const cellIndex = cellNodes.indexOf(cell)
+  if (tableIndex < 0 || rowIndex < 0 || cellIndex < 0) return null
+  return {
+    tableIndex,
+    rowIndex,
+    cellIndex,
+  }
+}
+
+const resolveActiveTableCellFromPath = (editorRoot: HTMLElement | null | undefined, path: ActiveTableCellPath | null) => {
+  if (!editorRoot || !path) return null
+  const tableNodes = Array.from(editorRoot.querySelectorAll("table"))
+  const table = tableNodes[path.tableIndex]
+  if (!(table instanceof HTMLTableElement)) return null
+  const rowNodes = Array.from(table.querySelectorAll("tr"))
+  const row = rowNodes[path.rowIndex]
+  if (!(row instanceof HTMLElement)) return null
+  const cellNodes = Array.from(row.querySelectorAll("th, td"))
+  const cell = cellNodes[path.cellIndex]
+  return cell instanceof HTMLElement && editorRoot.contains(cell) ? cell : null
 }
 
 export const collapseStaleTableEditorSelection = (editor: TiptapEditor) => {
@@ -421,10 +476,23 @@ export const rememberActiveTableCellFromTarget = (
   const cell = targetElement?.closest("th, td")
   if (cell instanceof HTMLElement && (!editorRoot || editorRoot.contains(cell))) {
     lastActiveTableCell = cell
+    lastActiveTableCellPath = captureActiveTableCellPath(editorRoot, cell)
     return
   }
-  if (editorRoot && targetElement && editorRoot.contains(targetElement)) {
+  if (!editorRoot || !targetElement || !editorRoot.contains(targetElement)) {
+    return
+  }
+
+  const currentTable = targetElement.closest("table")
+  if (!currentTable) {
     lastActiveTableCell = null
+    return
+  }
+
+  const existingCell = lastActiveTableCell?.isConnected ? lastActiveTableCell : null
+  if (!existingCell || existingCell.closest("table") !== currentTable) {
+    lastActiveTableCell = null
+    lastActiveTableCellPath = null
   }
 }
 
@@ -437,18 +505,51 @@ export const selectActiveTableCellText = (
 
   const activeElement = resolveElement(document.activeElement)
   const anchorElement = resolveElement(selection.anchorNode)
+  const focusElement = resolveElement(selection.focusNode)
   const targetElement = resolveElement(eventTarget)
-  const rememberedCell = lastActiveTableCell?.isConnected ? lastActiveTableCell : null
+  if (
+    targetElement?.closest(".aq-code-shell") ||
+    activeElement?.closest(".aq-code-shell") ||
+    anchorElement?.closest(".aq-code-shell")
+  ) {
+    return false
+  }
+
+  const tableSelectionCandidate = resolveActiveTableCellFromPath(editor.view.dom, lastActiveTableCellPath)
+  const rememberedCell = lastActiveTableCell?.isConnected
+    ? lastActiveTableCell
+    : tableSelectionCandidate
+  const anchorCell = asTableCell(anchorElement?.closest("th, td") || null)
+  const isSelectionInsideActiveTable = isWindowSelectionInsideEditorTable(editor.view.dom)
+  const activeCell = asTableCell(activeElement?.closest("th, td") || null)
   const cell =
-    targetElement?.closest("th, td") ??
-    activeElement?.closest("th, td") ??
+    asTableCell(targetElement?.closest("th, td") || null) ??
+    activeCell ??
+    (isSelectionInsideActiveTable ? anchorCell : null) ??
     rememberedCell ??
-    anchorElement?.closest("th, td")
+    null
 
-  if (!(cell instanceof HTMLElement) || !editor.view.dom.contains(cell)) return false
+  const fallbackCell =
+    cell ??
+    (isSelectionInsideActiveTable ? tableSelectionCandidate : null)
+  if (!fallbackCell && !lastActiveTableCellPath) return false
+  if (!fallbackCell && tableSelectionCandidate) {
+    lastActiveTableCell = tableSelectionCandidate
+  }
+  const selectedCell = fallbackCell
+  if (!selectedCell || !selectedCell.isConnected) {
+    return false
+  }
 
-  const wholeTableRangeCells = resolveWholeTableTextRangeCells(cell)
+  if (!editor.view.dom.contains(selectedCell)) return false
+  if (activeCell && !activeCell.isConnected) return false
+  if (cell) {
+    lastActiveTableCell = cell
+  }
+
+  const wholeTableRangeCells = resolveWholeTableTextRangeCells(selectedCell)
   if (!wholeTableRangeCells) return false
+  clearNextEditorPointerAfterTable()
   preserveWindowScrollForRichBlockSelectAll()
   selectTableCellTextRange(wholeTableRangeCells.firstCell, wholeTableRangeCells.lastCell)
   preserveTableTextRangeAcrossFrames(wholeTableRangeCells.firstCell, wholeTableRangeCells.lastCell)

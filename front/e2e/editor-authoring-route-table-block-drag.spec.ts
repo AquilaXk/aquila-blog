@@ -13,10 +13,16 @@ test.describe("editor authoring route table block drag", () => {
     page,
   }) => {
     const tableMarkdown = [
-      '<!-- aq-table {"overflowMode":"normal","columnWidths":[180,180]} -->',
-      "| 구분 | 값 |",
-      "| --- | --- |",
-      "| table-block-marker | 이동 대상 |",
+      '<!-- aq-table {"overflowMode":"normal","columnWidths":[160,220,220]} -->',
+      "| 구분 | 값 | 상태 |",
+      "| --- | --- | --- |",
+      "| table-block-marker | 이동 대상 | baseline |",
+      "| 행 | row-01 | stable |",
+      "| 행 | row-02 | stable |",
+      "| 행 | row-03 | stable |",
+      "| 행 | row-04 | stable |",
+      "| 행 | row-05 | stable |",
+      "| 행 | row-06 | stable |",
     ].join("\n")
     const content = [
       "테이블 위 문단",
@@ -89,14 +95,25 @@ test("table block drag 완료 후 후속 pointerup/mouseup에서도 scrollTop이
 }) => {
   const paragraphs = Array.from({ length: 30 }, (_, index) => `table block drag jump ${index + 1}`).join("\n\n")
   const tableMarkdown = [
-    '<!-- aq-table {"overflowMode":"normal","columnWidths":[180,180]} -->',
-    "| 구분 | 값 |",
-    "| --- | --- |",
-    "| table-block-marker | 이동 대상 |",
+    '<!-- aq-table {"overflowMode":"normal","columnWidths":[160,220,220]} -->',
+    "| 구분 | 값 | 상태 |",
+    "| --- | --- | --- |",
+    "| table-block-marker | 이동 대상 | baseline |",
+    "| 행 | row-01 | stable |",
+    "| 행 | row-02 | stable |",
+    "| 행 | row-03 | stable |",
+    "| 행 | row-04 | stable |",
+    "| 행 | row-05 | stable |",
     "",
-    "| 구분 | 값 |",
-    "| --- | --- |",
-    "| table-block-marker | 이동 대상 |",
+    '<!-- aq-table {"overflowMode":"normal","columnWidths":[160,220,220]} -->',
+    "| 구분 | 값 | 상태 |",
+    "| --- | --- | --- |",
+    "| table-block-marker | 이동 대상 | baseline |",
+    "| 행 | row-06 | stable |",
+    "| 행 | row-07 | stable |",
+    "| 행 | row-08 | stable |",
+    "| 행 | row-09 | stable |",
+    "| 행 | row-10 | stable |",
   ].join("\n")
   const content = [
     paragraphs,

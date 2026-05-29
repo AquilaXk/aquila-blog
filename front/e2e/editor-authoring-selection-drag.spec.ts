@@ -416,10 +416,15 @@ test.describe("editor authoring route text selection drag", () => {
     const tableLabel = "테이블드래그선택대상"
     const codeMarkdown = ["```ts", `const marker = "${codeLabel}";`, "console.log(marker);", "```"].join("\n")
     const tableMarkdown = [
-      '<!-- aq-table {"overflowMode":"normal","columnWidths":[180,220]} -->',
-      "| 구분 | 값 |",
-      "| --- | --- |",
-      `| inline code | \`${tableLabel}\` |`,
+      '<!-- aq-table {"overflowMode":"normal","columnWidths":[180,220,240]} -->',
+      "| 구분 | 값 | 상태 |",
+      "| --- | --- | --- |",
+      `| inline code | \`${tableLabel}\` | 상태 확인 |`,
+      `| 행-2 | 셀 비교 | 체크 |`,
+      `| 행-3 | 텍스트 점검 | 정상 |`,
+      `| 행-4 | 포인트 계산 | 검증 |`,
+      `| 행-5 | 드래그 영역 | 추적 |`,
+      `| 행-6 | 회귀 탐지 | 완료 |`,
     ].join("\n")
     const content = [
       "드래그 선택 회귀 재현용 글입니다.",

@@ -26,11 +26,15 @@ test.describe("editor authoring route rich block select all", () => {
         : `select all lead paragraph ${index + 1}. rich block 내부 선택 중 viewport 유지 회귀를 확인합니다.`
     )
     const tableMarkdown = [
-      '<!-- aq-table {"overflowMode":"normal","columnWidths":[180,260]} -->',
-      "| 영역 | 점검 항목 |",
-      "| --- | --- |",
-      `| 테이블 | ${tableLabel} |`,
-      "| 결과 | viewport 유지 |",
+      '<!-- aq-table {"overflowMode":"normal","columnWidths":[180,220,220]} -->',
+      "| 영역 | 점검 항목 | 확인 기준 |",
+      "| --- | --- | --- |",
+      `| 테이블 | ${tableLabel} | 셀 안쪽 선택 범위 |`,
+      "| 결과 | viewport 유지 | 회귀 탐지 |",
+      "| 행동작 | 캐럿 보존 | 선택 후 스크롤 |",
+      "| 정책 | 스코프 제한 | 바깥 본문 미포함 |",
+      "| 보안 | 권한 경로 | 선택 상태 정합성 |",
+      "| 예측 | 사용자 동작 | 포커스 이동 |",
     ].join("\n")
     const content = [
       "# rich block select all viewport 재현",

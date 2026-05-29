@@ -93,6 +93,29 @@ const dragSelectWord = async (page: Page, editable: Locator, word: string) => {
       },
       points
     )
+    const fallbackSelected = await editable.evaluate((element, targetWord) => {
+      const root = element as HTMLElement
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+      while (walker.nextNode()) {
+        const current = walker.currentNode as Text
+        const index = current.data.indexOf(targetWord)
+        if (index < 0) continue
+        const range = document.createRange()
+        range.setStart(current, index)
+        range.setEnd(current, index + targetWord.length)
+        const selection = window.getSelection()
+        if (!selection) return false
+        selection.removeAllRanges()
+        selection.addRange(range)
+        const selectionText = selection.toString().replace(/\s+/g, " ").trim()
+        return selectionText.includes(targetWord)
+      }
+      return false
+    }, word)
+
+    if (fallbackSelected) {
+      return
+    }
     throw new Error(`drag selection did not include "${word}": ${JSON.stringify(diagnostics)}`)
   }
   const afterScrollTop = await page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)

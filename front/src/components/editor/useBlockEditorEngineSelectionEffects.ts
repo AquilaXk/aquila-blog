@@ -304,10 +304,9 @@ export const useBlockEditorEngineSelectionEffects = ({
 
     const handleKeyDownCapture = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return
-      const activeEditorForSelection = editorRef.current ?? editor
-      rememberActiveTableCellFromTarget(event.target, activeEditorForSelection.view.dom)
       if (isPrimarySelectAllKeyboardEvent(event)) {
-        if (activeEditorForSelection && selectActiveTableCellText(activeEditorForSelection, event.target)) {
+        const currentEditor = editorRef.current
+        if (currentEditor && selectActiveTableCellText(currentEditor, event.target)) {
           event.preventDefault()
           event.stopPropagation()
           event.stopImmediatePropagation?.()
@@ -319,9 +318,6 @@ export const useBlockEditorEngineSelectionEffects = ({
         }
       }
       if (event.key !== "Tab" || event.metaKey || event.ctrlKey || event.altKey) return
-      queueMicrotask(() => {
-        rememberActiveTableCellFromTarget(document.activeElement, activeEditorForSelection.view.dom)
-      })
       if (slashMenuState) return
 
       const currentEditor = editorRef.current

@@ -133,7 +133,6 @@ const resolveCurrentTableTextRangeCells = (
   const originalCells = startedTable ? Array.from(startedTable.querySelectorAll<HTMLElement>("th, td")) : []
   const startedIndex = originalCells.indexOf(startedCell)
   const endIndex = originalCells.indexOf(endCell)
-
   for (const table of Array.from(document.querySelectorAll("table"))) {
     const cells = Array.from(table.querySelectorAll<HTMLElement>("th, td"))
     const indexedStartedCell = startedIndex >= 0 ? cells[startedIndex] : null
@@ -480,15 +479,12 @@ export const rememberActiveTableCellFromTarget = (
     return
   }
   if (!editorRoot || !targetElement || !editorRoot.contains(targetElement)) {
-    lastActiveTableCell = null
-    lastActiveTableCellPath = null
     return
   }
 
   const currentTable = targetElement.closest("table")
   if (!currentTable) {
     lastActiveTableCell = null
-    lastActiveTableCellPath = null
     return
   }
 
@@ -526,8 +522,12 @@ export const selectActiveTableCellText = (
   const isSelectionInsideActiveTable = isWindowSelectionInsideEditorTable(editor.view.dom)
   const activeCell = asTableCell(activeElement?.closest("th, td") || null)
   const targetCell = asTableCell(targetElement?.closest("th, td") || null)
-  const hasExplicitTableContext = Boolean(targetCell || activeCell)
   const hasRecoveredTableContext = isSelectionInsideActiveTable && Boolean(rememberedCell)
+  const hasExplicitTableContext = Boolean(
+    targetCell ||
+      activeCell ||
+      (hasRecoveredTableContext && anchorCell)
+  )
   const hasTableSelectionContext = Boolean(hasExplicitTableContext || hasRecoveredTableContext)
   const selectedCell =
     targetCell ??
@@ -550,9 +550,6 @@ export const selectActiveTableCellText = (
 
   if (!editor.view.dom.contains(selectedCell)) return false
   if (activeCell && !activeCell.isConnected) return false
-  if (selectedCell) {
-    lastActiveTableCell = selectedCell
-  }
 
   const wholeTableRangeCells = resolveWholeTableTextRangeCells(selectedCell)
   if (!wholeTableRangeCells) return false

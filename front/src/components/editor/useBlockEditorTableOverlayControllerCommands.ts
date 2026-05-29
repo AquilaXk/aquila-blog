@@ -24,6 +24,7 @@ import {
   TABLE_ROW_GRIP_WIDTH_PX,
   TABLE_TRAILING_ADD_EDGE_HOTZONE_PX,
 } from "./useBlockEditorTableOverlayControllerState"
+import { resolveTableAxisIndexFromPointer } from "./tableAxisDragModel"
 
 type UseBlockEditorTableOverlayControllerCommandsArgs = {
   activeTableElementRef: MutableRefObject<HTMLTableElement | null>
@@ -141,11 +142,59 @@ export const useBlockEditorTableOverlayControllerCommands = ({
           : Date.now()) + 280
     }
     cancelTableQuickRailHide()
-    const hoveredCell = element?.closest("th, td") as HTMLElement | null
+    const tableRows = Array.from(tableElement.querySelectorAll("tr")).filter(
+      (row): row is HTMLTableRowElement => row instanceof HTMLTableRowElement && row.cells.length > 0
+    )
+    const hoveredCellFromPoint: HTMLTableCellElement | null = hasHoverPoint
+      ? (() => {
+          const pointElement = document.elementFromPoint(hoverClientX as number, hoverClientY as number)
+          const pointCell = pointElement?.closest("th, td")
+          if (pointCell instanceof HTMLTableCellElement) return pointCell
+
+          const cells = Array.from(tableElement.querySelectorAll("th, td")).filter(
+            (cell): cell is HTMLTableCellElement => cell instanceof HTMLTableCellElement
+          )
+          return (
+            cells.find((cell) => {
+              const cellRect = cell.getBoundingClientRect()
+              return (
+                hoverClientX >= cellRect.left &&
+                hoverClientX <= cellRect.right &&
+                hoverClientY >= cellRect.top &&
+                hoverClientY <= cellRect.bottom
+              )
+            }) ?? null
+          )
+        })()
+      : null
+    const hoveredCell = element?.closest("th, td") as HTMLTableCellElement | null
+    const hoveredColumnIndex = hasHoverPoint
+      ? resolveTableAxisIndexFromPointer(tableElement, "column", hoverClientX as number, hoverClientY as number)
+      : null
+    const hoveredRowIndex = hasHoverPoint
+      ? resolveTableAxisIndexFromPointer(tableElement, "row", hoverClientX as number, hoverClientY as number)
+      : null
+    const hoveredCellFromSelectedRect: HTMLTableCellElement | null = hasHoverPoint && hoveredRowIndex !== null
+      ? tableRows[hoveredRowIndex]?.querySelector("th, td") ?? null
+      : null
     const selectedCell = resolveTableScopedSelectedCell(tableElement)
-    const activeCell = hoveredCell || selectedCell || (tableElement.querySelector("th, td") as HTMLElement | null)
+    const selectedRow = selectedCell?.closest("tr")
+    const fallbackRow = tableRows[hoveredRowIndex ?? 0] ?? tableRows[0] ?? selectedRow ?? null
+    const activeCellFromColumnIndex =
+      typeof hoveredColumnIndex === "number" && fallbackRow
+        ? Array.from(fallbackRow.children).find((cell, index): cell is HTMLTableCellElement => index === hoveredColumnIndex && cell instanceof HTMLTableCellElement)
+        : null
+    const activeCell: HTMLTableCellElement | null = hoveredCell ??
+      hoveredCellFromPoint ??
+      activeCellFromColumnIndex ??
+      hoveredCellFromSelectedRect ??
+      (selectedCell as HTMLTableCellElement | null) ??
+      (tableElement.querySelector("th, td") as HTMLTableCellElement | null)
     const activeCellRect = activeCell?.getBoundingClientRect()
-    const activeRow = activeCell?.closest("tr") as HTMLTableRowElement | null
+    const activeRow =
+      activeCell?.closest("tr") ??
+      tableRows[hoveredRowIndex ?? 0] ??
+      (selectedRow instanceof HTMLTableRowElement ? selectedRow : null)
     const activeRowRect = activeRow?.getBoundingClientRect()
     const activeColumnLeft = activeCellRect?.left ?? tableRect.left
     const activeColumnRight = activeCellRect?.right ?? tableRect.right
@@ -199,10 +248,14 @@ export const useBlockEditorTableOverlayControllerCommands = ({
       !showColumnAddBar &&
       !showRowAddBar &&
       !showCornerControls
-    const activeRowIndex = activeRow
+    const activeRowIndex = typeof hoveredRowIndex === "number"
+      ? hoveredRowIndex
+      : activeRow
       ? Array.from(tableElement.querySelectorAll("tr")).findIndex((row) => row === activeRow)
       : 0
-    const activeColumnIndex = activeCell?.parentElement
+    const activeColumnIndex = typeof hoveredColumnIndex === "number"
+      ? hoveredColumnIndex
+      : activeCell?.parentElement
       ? Array.from(activeCell.parentElement.children).findIndex((child) => child === activeCell)
       : 0
     if (hasHoverPoint) syncHoveredTableCellMenuLayout(tableElement, activeCell)

@@ -522,15 +522,18 @@ export const selectActiveTableCellText = (
   const rememberedCell = lastActiveTableCell?.isConnected
     ? lastActiveTableCell
     : tableSelectionCandidate
-  const anchorCell = asTableCell(anchorElement?.closest("th, td") || null)
   const isSelectionInsideActiveTable = isWindowSelectionInsideEditorTable(editor.view.dom)
   const activeCell = asTableCell(activeElement?.closest("th, td") || null)
   const targetCell = asTableCell(targetElement?.closest("th, td") || null)
-  const hasTableSelectionContext = Boolean(targetCell || isSelectionInsideActiveTable)
+  const hasTableSelectionContext = Boolean(
+    targetCell ||
+      activeCell ||
+      (isSelectionInsideActiveTable &&
+        (Boolean(tableSelectionCandidate) || Boolean(rememberedCell)))
+  )
   const selectedCell =
     targetCell ??
     (isSelectionInsideActiveTable ? activeCell : null) ??
-    (isSelectionInsideActiveTable ? anchorCell : null) ??
     (hasTableSelectionContext ? tableSelectionCandidate ?? rememberedCell : null) ??
     null
   if (!selectedCell && hasTableSelectionContext && !tableSelectionCandidate && !rememberedCell) {

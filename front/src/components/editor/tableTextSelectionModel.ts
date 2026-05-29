@@ -45,8 +45,13 @@ let shouldClearActiveTableTextSelectionOnBlur = false
 let lastTableSelectionRoot: HTMLElement | null = null
 const TABLE_TEXT_HIGHLIGHT_NAME = "aq-table-text-selection"
 const clearTableTextRangeHighlight = () => {
+  const shouldClearTableSelection =
+    hasActiveTableTextSelection ||
+    hasTableTextSelectionState(document.documentElement)
+  if (shouldClearTableSelection) {
+    shouldClearActiveTableTextSelectionOnBlur = true
+  }
   hasActiveTableTextSelection = false
-  shouldClearActiveTableTextSelectionOnBlur = false
   document.querySelectorAll("[data-table-drag-selection-text]").forEach((element) => element.removeAttribute("data-table-drag-selection-text"))
   document.documentElement.removeAttribute("data-table-drag-selection-text")
   ;(CSS as typeof CSS & { highlights?: { delete: (name: string) => void } }).highlights?.delete(TABLE_TEXT_HIGHLIGHT_NAME)

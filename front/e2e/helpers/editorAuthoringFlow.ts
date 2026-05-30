@@ -97,7 +97,36 @@ export const getWordDragPoints = async (
   editable: Locator,
   word: string
 ): Promise<{ startX: number; startY: number; endX: number; endY: number }> => {
-  const points = await editable.evaluate((element, targetWord) => {
+  const resolveDragPoints = async () =>
+    editable.evaluate((element, targetWord) => {
+      const normalizeWord = (value: string) => value.replace(/\s+/g, " ").trim()
+      const preferredTagPriority = (tagName: string) => {
+        switch (tagName) {
+          case "TH":
+          case "TD":
+            return 0
+          case "CODE":
+            return 1
+          case "P":
+            return 2
+          case "SPAN":
+            return 3
+          case "DIV":
+            return 4
+          default:
+            return 5
+        }
+      }
+      const toPoint = (rect: DOMRect) =>
+        rect.width > 0 && rect.height > 0
+          ? {
+              startX: Math.round(rect.left + 2),
+              startY: Math.round(rect.top + rect.height / 2),
+              endX: Math.round(rect.right - 2),
+              endY: Math.round(rect.top + rect.height / 2),
+            }
+          : null
+
     const root = element as HTMLElement
     const textNodes: Text[] = []
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
@@ -119,13 +148,9 @@ export const getWordDragPoints = async (
 
       const rects = Array.from(range.getClientRects())
       const rect = rects.find((entry) => entry.width > 0 && entry.height > 0) ?? range.getBoundingClientRect()
-      if (rect.width > 0 && rect.height > 0) {
-        return {
-          startX: Math.round(rect.left + 2),
-          startY: Math.round(rect.top + rect.height / 2),
-          endX: Math.round(rect.right - 2),
-          endY: Math.round(rect.top + rect.height / 2),
-        }
+      const points = toPoint(rect)
+      if (points) {
+        return points
       }
 
       cursor = node
@@ -139,13 +164,9 @@ export const getWordDragPoints = async (
         charRange.setStart(node, index + offset)
         charRange.setEnd(node, index + offset + 1)
         const rect = charRange.getBoundingClientRect()
-        if (rect.width > 0 && rect.height > 0) {
-          return {
-            startX: Math.round(rect.left + 2),
-            startY: Math.round(rect.top + rect.height / 2),
-            endX: Math.round(rect.right - 2),
-            endY: Math.round(rect.top + rect.height / 2),
-          }
+        const points = toPoint(rect)
+        if (points) {
+          return points
         }
       }
       cursor = node
@@ -155,15 +176,48 @@ export const getWordDragPoints = async (
 
     const fallbackElement = cursor.parentElement?.closest("th, td, p, div") ?? root
     const fallbackRect = fallbackElement.getBoundingClientRect()
-    if (fallbackRect.width <= 0 || fallbackRect.height <= 0) return null
+    const fallbackPoint = toPoint(fallbackRect)
+    if (fallbackPoint) {
+      return {
+        ...fallbackPoint,
+        endX: Math.round(fallbackPoint.startX + Math.min(fallbackRect.width, 24)),
+      }
+    }
 
+    const expectedWord = normalizeWord(targetWord)
+    const fallbackCandidates = Array.from(root.querySelectorAll<HTMLElement>("*"))
+      .filter((candidate) => normalizeWord(candidate.textContent || "").includes(expectedWord) && candidate.isConnected)
+      .map((candidate) => ({ candidate, rect: candidate.getBoundingClientRect() }))
+      .filter(({ rect }) => rect.width > 0 && rect.height > 0)
+      .map(({ candidate, rect }) => ({
+        candidate,
+        rect,
+        priority: preferredTagPriority(candidate.tagName),
+      }))
+      .sort((left, right) => {
+        if (left.priority !== right.priority) return left.priority - right.priority
+        const leftArea = left.rect.width * left.rect.height
+        const rightArea = right.rect.width * right.rect.height
+        return leftArea - rightArea
+      })
+
+    if (fallbackCandidates.length === 0) return null
+    const { rect } = fallbackCandidates[0]
     return {
-      startX: Math.round(fallbackRect.left + fallbackRect.width / 2),
-      startY: Math.round(fallbackRect.top + fallbackRect.height / 2),
-      endX: Math.round(fallbackRect.left + fallbackRect.width / 2 + 20),
-      endY: Math.round(fallbackRect.top + fallbackRect.height / 2),
+      startX: Math.round(rect.left + 2),
+      startY: Math.round(rect.top + rect.height / 2),
+      endX: Math.round(rect.right - 2),
+      endY: Math.round(rect.top + rect.height / 2),
     }
   }, word)
+
+  let points = await resolveDragPoints()
+  for (let retryCount = 0; !points && retryCount < 6; retryCount += 1) {
+    await new Promise((resolve) => {
+      setTimeout(resolve, 50 + retryCount * 50)
+    })
+    points = await resolveDragPoints()
+  }
 
   if (!points) {
     throw new Error(`could not resolve drag points for word: ${word}`)

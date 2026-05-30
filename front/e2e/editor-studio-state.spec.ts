@@ -259,6 +259,40 @@ test.describe("editor studio state", () => {
     expect(restored.doc.content?.[1]?.content?.[0]?.text).toBe("로그인 -> 세션 생성 -> 이후 요청에서 세션 확인")
   })
 
+  test("source/current 코드블럭 매핑이 어긋나면 빈 NodeView를 잘못한 source 본문으로 복구하지 않는다", () => {
+    const sourceMarkdown = [
+      "코드 본문 구조 이동 방지 대상입니다.",
+      "",
+      "```ts",
+      "const access = createAccessToken(user)",
+      "```",
+      "",
+      "```java",
+      "public Token login(User user) {",
+      "    return new Token(access, refresh);",
+      "}",
+      "```",
+    ].join("\n")
+    const staleDoc = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "코드 본문 구조 이동 방지 대상입니다." }],
+        },
+        { type: "codeBlock", attrs: { language: "java" }, content: [] },
+        { type: "codeBlock", attrs: { language: "ts" }, content: [] },
+      ],
+    }
+
+    const restored = restoreEditorDocCodeBlocksFromMarkdown(sourceMarkdown, staleDoc)
+
+    expect(restored.changed).toBe(false)
+    expect(restored.doc).toBe(staleDoc)
+    expect(restored.doc.content?.[1]?.content || []).toHaveLength(0)
+    expect(restored.doc.content?.[2]?.content || []).toHaveLength(0)
+  })
+
   test("초기 로드 guard는 서버 baseline보다 빈 code fence가 들어온 editor update를 복구한다", () => {
     const expectedBody = [
       "코드 손실 방지 대상입니다.",

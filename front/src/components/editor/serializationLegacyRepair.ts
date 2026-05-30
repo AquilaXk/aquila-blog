@@ -13,13 +13,21 @@ const readPlainTextFromEditorNode = (node: JSONContent): string => {
 const hasVisibleCodeText = (value: string) =>
   value.replace(INVISIBLE_CODE_PLACEHOLDER_REGEX, "").trim().length > 0
 
+const readCodeLanguage = (node: JSONContent): string | null => {
+  const language = typeof node.attrs?.language === "string" ? node.attrs.language.trim() : ""
+  return language || null
+}
+
+const areCodeLanguagesCompatible = (currentLanguage: string | null, sourceLanguage: string | null) =>
+  !currentLanguage || !sourceLanguage || currentLanguage.toLowerCase() === sourceLanguage.toLowerCase()
+
 const collectCodeBlockSnapshots = (doc: JSONContent) => {
   const blocks: Array<{ language: string | null; text: string }> = []
 
   const visit = (node: JSONContent) => {
     if (node.type === "codeBlock") {
       blocks.push({
-        language: typeof node.attrs?.language === "string" ? node.attrs.language : null,
+        language: readCodeLanguage(node),
         text: readPlainTextFromEditorNode(node),
       })
       return
@@ -37,6 +45,8 @@ export const restoreEditorDocCodeBlocksFromMarkdown = (
   doc: BlockEditorDoc
 ): { doc: BlockEditorDoc; changed: boolean } => {
   const sourceBlocks = collectCodeBlockSnapshots(parseMarkdownToEditorDoc(sourceMarkdown))
+  const currentBlocks = collectCodeBlockSnapshots(doc)
+  if (sourceBlocks.length !== currentBlocks.length) return { doc, changed: false }
 
   let codeBlockIndex = 0
   let changed = false
@@ -48,10 +58,11 @@ export const restoreEditorDocCodeBlocksFromMarkdown = (
 
       const currentText = readPlainTextFromEditorNode(node)
       const sourceText = sourceBlock?.text || ""
+      const currentLanguage = readCodeLanguage(node)
+      if (!areCodeLanguagesCompatible(currentLanguage, sourceBlock?.language || null)) return node
       if (hasVisibleCodeText(currentText) || !hasVisibleCodeText(sourceText)) return node
 
       changed = true
-      const currentLanguage = typeof node.attrs?.language === "string" ? node.attrs.language : null
       return {
         ...node,
         attrs: {

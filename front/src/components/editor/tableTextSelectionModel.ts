@@ -591,23 +591,6 @@ export const selectActiveTableCellText = (
     hasExplicitTableContext ||
       hasRecoveredTableContext
   )
-  const selectedTableSelectionCell = tableSelectionCandidate ?? rememberedCell
-  const selectedCell =
-    targetCell ??
-    (!shouldClearActiveTableTextSelectionOnBlur ? focusCell : null) ??
-    ((isSelectionInsideActiveTable || isEditorSelectionInsideCurrentTable) && hasExplicitTableContext ? activeCell : null) ??
-    ((isSelectionInsideActiveTable || isEditorSelectionInsideCurrentTable) && hasExplicitTableContext ? anchorCell : null) ??
-    (hasTableSelectionContext || shouldClearActiveTableTextSelectionOnBlur ? selectedTableSelectionCell : null) ??
-    null
-  if (!selectedCell && hasTableSelectionContext && !tableSelectionCandidate && !rememberedCell) {
-    return false
-  }
-  if (!selectedCell && !hasTableSelectionContext) {
-    return false
-  }
-  if (!selectedCell && tableSelectionCandidate) {
-    lastActiveTableCell = tableSelectionCandidate
-  }
   if (!hasTableSelectionContext && (hasTableSelectionState || shouldClearActiveTableTextSelectionOnBlur)) {
     shouldClearActiveTableTextSelectionOnBlur = false
     hasActiveTableTextSelection = false
@@ -620,6 +603,22 @@ export const selectActiveTableCellText = (
       selection.addRange(paragraphRange)
     }
     return true
+  }
+  const selectedCell =
+    targetCell ??
+    (!shouldClearActiveTableTextSelectionOnBlur ? focusCell : null) ??
+    ((isSelectionInsideActiveTable || isEditorSelectionInsideCurrentTable) && hasExplicitTableContext ? activeCell : null) ??
+    ((isSelectionInsideActiveTable || isEditorSelectionInsideCurrentTable) && hasExplicitTableContext ? anchorCell : null) ??
+    (hasTableSelectionContext ? tableSelectionCandidate ?? rememberedCell : null) ??
+    null
+  if (!selectedCell && hasTableSelectionContext && !tableSelectionCandidate && !rememberedCell) {
+    return false
+  }
+  if (!selectedCell && !hasTableSelectionContext) {
+    return false
+  }
+  if (!selectedCell && tableSelectionCandidate) {
+    lastActiveTableCell = tableSelectionCandidate
   }
   if (!selectedCell || !selectedCell.isConnected) {
     return false

@@ -44,11 +44,11 @@ let hasActiveTableTextSelection = false
 let shouldClearActiveTableTextSelectionOnBlur = false
 let lastTableSelectionRoot: HTMLElement | null = null
 const TABLE_TEXT_HIGHLIGHT_NAME = "aq-table-text-selection"
-const clearTableTextRangeHighlight = () => {
+const clearTableTextRangeHighlight = (options: { markBlur?: boolean } = {}) => {
   const shouldClearTableSelection =
     hasActiveTableTextSelection ||
     hasTableTextSelectionState(document.documentElement)
-  if (shouldClearTableSelection) {
+  if (shouldClearTableSelection && (options.markBlur ?? true)) {
     shouldClearActiveTableTextSelectionOnBlur = true
   }
   hasActiveTableTextSelection = false
@@ -69,7 +69,13 @@ const preserveTableTextRangeAcrossFrames = (anchorCell: HTMLElement, pointCell: 
     window.removeEventListener("pointerdown", cancel, true); window.removeEventListener("mousedown", cancel, true); window.removeEventListener("wheel", cancel, true); window.removeEventListener("scroll", cancel, true); window.removeEventListener("keydown", cancel, true)
     if (activeTableTextRangePreserveCancel === cancel) activeTableTextRangePreserveCancel = null
   }
-  const cancel = () => { cancelled = true; clearTableTextRangeHighlight(); cleanup() }
+  const cancel = (event?: Event) => {
+    cancelled = true
+    clearTableTextRangeHighlight({
+      markBlur: !(event instanceof KeyboardEvent),
+    })
+    cleanup()
+  }
   const restore = () => {
     if (cancelled) return
     selectTableCellTextRange(anchorCell, pointCell)
@@ -539,10 +545,16 @@ export const selectActiveTableCellText = (
   const anchorElement = resolveElement(selection.anchorNode)
   const focusElement = resolveElement(selection.focusNode)
   const targetElement = resolveElement(eventTarget)
+  const hasDirectTableCellContext = Boolean(
+    targetElement?.closest("th, td") ||
+      anchorElement?.closest("th, td") ||
+      focusElement?.closest("th, td")
+  )
   if (
     targetElement?.closest(".aq-code-shell") ||
-    activeElement?.closest(".aq-code-shell") ||
-    anchorElement?.closest(".aq-code-shell")
+    anchorElement?.closest(".aq-code-shell") ||
+    focusElement?.closest(".aq-code-shell") ||
+    (!hasDirectTableCellContext && activeElement?.closest(".aq-code-shell"))
   ) {
     return false
   }
@@ -560,13 +572,16 @@ export const selectActiveTableCellText = (
   const isSelectionInsideActiveTable = isWindowSelectionInsideEditorTable(editor.view.dom)
   const activeCell = asTableCell(activeElement?.closest("th, td") || null)
   const targetCell = asTableCell(targetElement?.closest("th, td") || null)
+  const focusCell = asTableCell(focusElement?.closest("th, td") || null)
+  if (targetCell || anchorCell || focusCell || isSelectionInsideActiveTable) {
+    shouldClearActiveTableTextSelectionOnBlur = false
+  }
   const hasActiveCellContext = Boolean(
     !shouldClearActiveTableTextSelectionOnBlur &&
     activeCell &&
       activeTable &&
       (activeTable === targetTable || activeTable === focusTable)
   )
-  const focusCell = asTableCell(focusElement?.closest("th, td") || null)
   const hasExplicitTableContext = Boolean(
     targetCell ||
     hasActiveCellContext ||

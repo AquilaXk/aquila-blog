@@ -212,7 +212,52 @@ test.describe("editor authoring code and mermaid blocks", () => {
       )
       .toContain("selectedLanguage")
 
+    await page.evaluate(() => {
+      const originalElementsFromPoint = document.elementsFromPoint.bind(document)
+      Object.defineProperty(document, "elementsFromPoint", {
+        configurable: true,
+        value: (x: number, y: number) => {
+          const elements = originalElementsFromPoint(x, y)
+          const topElement = elements[0]
+          const languageButton =
+            topElement instanceof Element ? topElement.closest("[data-code-block-header='true'] button[aria-haspopup='dialog']") : null
+          const codeShell = languageButton
+            ?.closest("[data-code-block-wrapper='true']")
+            ?.querySelector<HTMLElement>(".aq-code-shell")
+          if (!codeShell || elements.includes(codeShell)) return elements
+          return [topElement, codeShell, ...elements.filter((element) => element !== topElement)].filter(
+            Boolean
+          ) as Element[]
+        },
+      })
+      const diagnosticsWindow = window as typeof window & {
+        __aqCodeLanguagePointerDiagnostics?: Array<{ defaultPrevented: boolean; type: string }>
+      }
+      diagnosticsWindow.__aqCodeLanguagePointerDiagnostics = []
+      const recordLanguageControlPointer = (event: Event) => {
+        const target = event.target instanceof Element ? event.target : null
+        if (!target?.closest("[data-code-block-header='true'] button[aria-haspopup='dialog']")) return
+        diagnosticsWindow.__aqCodeLanguagePointerDiagnostics?.push({
+          defaultPrevented: event.defaultPrevented,
+          type: event.type,
+        })
+      }
+      document.addEventListener("pointerdown", recordLanguageControlPointer, true)
+      document.addEventListener("mousedown", recordLanguageControlPointer, true)
+    })
+
     await codeBlock.getByRole("button", { name: /TypeScript/i }).click()
+
+    const pointerDiagnostics = await page.evaluate(
+      () =>
+        (
+          window as typeof window & {
+            __aqCodeLanguagePointerDiagnostics?: Array<{ defaultPrevented: boolean; type: string }>
+          }
+        ).__aqCodeLanguagePointerDiagnostics ?? []
+    )
+    expect(pointerDiagnostics.map((event) => event.type)).toEqual(["pointerdown", "mousedown"])
+    expect(pointerDiagnostics.some((event) => event.defaultPrevented)).toBe(false)
 
     const languageDialog = page.getByRole("dialog", { name: "코드 언어 선택" })
     await expect(languageDialog).toBeVisible()

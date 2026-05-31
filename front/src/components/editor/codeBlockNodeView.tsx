@@ -528,7 +528,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
           <span data-tone="yellow" />
           <span data-tone="green" />
         </CodeWindowDots>
-        <CodeLanguagePicker ref={menuRef}>
+        <CodeLanguagePicker ref={menuRef} data-code-language-control="true">
           <CodeLanguageButton
             type="button"
             aria-haspopup="dialog"

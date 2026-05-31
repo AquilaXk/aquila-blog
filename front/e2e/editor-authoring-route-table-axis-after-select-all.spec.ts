@@ -88,13 +88,12 @@ test.describe("editor authoring route table axis after select all", () => {
     await page.keyboard.press("Escape")
     await targetCell.click({ position: { x: 40, y: 16 } })
     await page.evaluate(() => {
-      const tableElement = document.querySelector("[data-testid='block-editor-prosemirror'] table")
-      const tableShell = tableElement?.closest(".aq-table-shell, .tableWrapper, table")
+      const viewport = document.querySelector("[data-testid='block-editor-viewport']")
       const spacer = document.createElement("div")
       spacer.setAttribute("data-testid", "stale-table-shift-spacer")
       spacer.style.height = "96px"
       spacer.style.pointerEvents = "none"
-      tableShell?.before(spacer)
+      viewport?.before(spacer)
     })
     await page.waitForTimeout(50)
     const shiftedTableBox = await table.boundingBox()

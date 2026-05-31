@@ -46,8 +46,8 @@ let shouldClearActiveTableTextSelectionOnBlur = false
 let lastTableSelectionRoot: HTMLElement | null = null
 let lastTableSelectionExitTarget: Element | null = null
 const RECENT_TABLE_TEXT_SELECTION_CONTEXT_ATTR = "data-table-recent-text-selection-context"
-const TABLE_DRAG_SELECTION_TEXT_ATTR = "data-table-drag-selection-text"
-const TABLE_DRAG_SELECTION_TEXT_SELECTOR = `[${TABLE_DRAG_SELECTION_TEXT_ATTR}]`
+export const TABLE_DRAG_SELECTION_TEXT_ATTR = "data-table-drag-selection-text"
+export const TABLE_DRAG_SELECTION_TEXT_SELECTOR = `[${TABLE_DRAG_SELECTION_TEXT_ATTR}]`
 const TABLE_TEXT_HIGHLIGHT_NAME = "aq-table-text-selection"
 const clearTableDragSelectionTextAttributes = () => {
   document.querySelectorAll(TABLE_DRAG_SELECTION_TEXT_SELECTOR).forEach((element) => element.removeAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR))

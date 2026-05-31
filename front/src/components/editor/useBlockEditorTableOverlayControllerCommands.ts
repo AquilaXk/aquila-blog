@@ -26,6 +26,14 @@ import {
 } from "./useBlockEditorTableOverlayControllerState"
 import { resolveTableAxisIndexFromPointer } from "./tableAxisDragModel"
 
+const resolveElementsFromPoint = (clientX: number, clientY: number) => {
+  if (typeof document.elementsFromPoint === "function") {
+    return document.elementsFromPoint(clientX, clientY)
+  }
+  const pointElement = document.elementFromPoint(clientX, clientY)
+  return pointElement ? [pointElement] : []
+}
+
 type UseBlockEditorTableOverlayControllerCommandsArgs = {
   activeTableElementRef: MutableRefObject<HTMLTableElement | null>
   cancelTableQuickRailHide: () => void
@@ -147,7 +155,7 @@ export const useBlockEditorTableOverlayControllerCommands = ({
     )
     const hoveredCellFromPoint: HTMLTableCellElement | null = hasHoverPoint
       ? (() => {
-          const pointElements = document.elementsFromPoint(hoverClientX as number, hoverClientY as number)
+          const pointElements = resolveElementsFromPoint(hoverClientX as number, hoverClientY as number)
           const pointCell = pointElements
             .map((pointElement) => pointElement.closest("th, td"))
             .find(

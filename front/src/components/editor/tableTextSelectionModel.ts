@@ -300,8 +300,8 @@ const activeTableCellScrollPreserveCancels = new Set<() => void>()
 const activeTableCellSelectionPreserveCancels = new Set<() => void>()
 const TABLE_DRAG_SELECTION_TEXT_ATTR = "data-table-drag-selection-text"
 const TABLE_DRAG_SELECTION_TEXT_SELECTOR = `[${TABLE_DRAG_SELECTION_TEXT_ATTR}]`
-const TABLE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES = 168
-const TABLE_TEXT_DRAG_SCROLL_PRESERVE_MIN_MS = 2_800
+const TABLE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES = 48
+const TABLE_TEXT_DRAG_SCROLL_PRESERVE_MIN_MS = 800
 
 export const cancelActiveTableCellScrollPreserves = () => {
   activeTableCellScrollPreserveCancels.forEach((cancel) => cancel())

@@ -60,7 +60,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
     let codeDragSelectionPreserveGeneration = 0
     const cancelTableTextDragPreserves = () => { cleanupTableDragScrollPreserve?.(); cleanupTableDragScrollPreserve = null; cleanupTableDragSelectionPreserve?.(); cleanupTableDragSelectionPreserve = null; cancelActiveTableCellTextSelectionPreserves(); cancelTablePointerScrollPreserves(); clearNextEditorPointerAfterTable(); tableTextSelectionExternalClearWatcher?.reset() }
     const handleTableTextSelectionExternalClear = () => { cancelTableTextDragPreserves(); const activeEditor = editorRef.current ?? currentEditor, toolbarActive = Boolean(bubbleToolbarHoveredRef.current || document.querySelector("[data-testid='editor-text-bubble-toolbar']:hover, [data-testid='editor-text-bubble-toolbar'] details[open]")); if (activeEditor && !toolbarActive) collapseStaleTableEditorSelection(activeEditor) }
-    const clearWindowTextSelectionOnly = () => { window.getSelection()?.removeAllRanges(); document.querySelectorAll("[data-table-drag-selection-text]").forEach((element) => element.removeAttribute("data-table-drag-selection-text")) }
+    const clearWindowTextSelectionOnly = () => { window.getSelection()?.removeAllRanges(); document.querySelectorAll("[data-table-drag-selection-text]").forEach((element) => element.removeAttribute("data-table-drag-selection-text")); document.documentElement.removeAttribute("data-table-drag-selection-text") }
     const clearImmediateWindowTextSelection = () => { cancelTableTextDragPreserves(); clearWindowTextSelectionOnly() }
     const cancelCodeDragSelectionPreserve = () => {
       codeDragSelectionPreserveGeneration += 1
@@ -301,7 +301,6 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
 
       if (multiCellTableBubbleState && canShowMultiCellTableTextToolbar) {
         cancelBubbleHide()
-        hideTableQuickRailImmediately()
         setBubbleState((prev) => areFloatingBubbleStatesEqual(prev, multiCellTableBubbleState) ? prev : multiCellTableBubbleState)
         return
       }

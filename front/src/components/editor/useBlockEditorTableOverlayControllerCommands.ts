@@ -147,9 +147,14 @@ export const useBlockEditorTableOverlayControllerCommands = ({
     )
     const hoveredCellFromPoint: HTMLTableCellElement | null = hasHoverPoint
       ? (() => {
-          const pointElement = document.elementFromPoint(hoverClientX as number, hoverClientY as number)
-          const pointCell = pointElement?.closest("th, td")
-          if (pointCell instanceof HTMLTableCellElement) return pointCell
+          const pointElements = document.elementsFromPoint(hoverClientX as number, hoverClientY as number)
+          const pointCell = pointElements
+            .map((pointElement) => pointElement.closest("th, td"))
+            .find(
+              (cell): cell is HTMLTableCellElement =>
+                cell instanceof HTMLTableCellElement && tableElement.contains(cell)
+            )
+          if (pointCell) return pointCell
 
           const cells = Array.from(tableElement.querySelectorAll("th, td")).filter(
             (cell): cell is HTMLTableCellElement => cell instanceof HTMLTableCellElement

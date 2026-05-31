@@ -46,7 +46,13 @@ let shouldClearActiveTableTextSelectionOnBlur = false
 let lastTableSelectionRoot: HTMLElement | null = null
 let lastTableSelectionExitTarget: Element | null = null
 const RECENT_TABLE_TEXT_SELECTION_CONTEXT_ATTR = "data-table-recent-text-selection-context"
+const TABLE_DRAG_SELECTION_TEXT_ATTR = "data-table-drag-selection-text"
+const TABLE_DRAG_SELECTION_TEXT_SELECTOR = `[${TABLE_DRAG_SELECTION_TEXT_ATTR}]`
 const TABLE_TEXT_HIGHLIGHT_NAME = "aq-table-text-selection"
+const clearTableDragSelectionTextAttributes = () => {
+  document.querySelectorAll(TABLE_DRAG_SELECTION_TEXT_SELECTOR).forEach((element) => element.removeAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR))
+  document.documentElement.removeAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR)
+}
 const clearTableTextRangeHighlight = (options: { markBlur?: boolean } = {}) => {
   const shouldClearTableSelection =
     hasActiveTableTextSelection ||
@@ -55,8 +61,7 @@ const clearTableTextRangeHighlight = (options: { markBlur?: boolean } = {}) => {
     shouldClearActiveTableTextSelectionOnBlur = true
   }
   hasActiveTableTextSelection = false
-  document.querySelectorAll("[data-table-drag-selection-text]").forEach((element) => element.removeAttribute("data-table-drag-selection-text"))
-  document.documentElement.removeAttribute("data-table-drag-selection-text")
+  clearTableDragSelectionTextAttributes()
   ;(CSS as typeof CSS & { highlights?: { delete: (name: string) => void } }).highlights?.delete(TABLE_TEXT_HIGHLIGHT_NAME)
 }
 const paintTableTextRangeHighlight = (range: Range) => { const HighlightCtor = (window as typeof window & { Highlight?: new (range: Range) => unknown }).Highlight, highlights = (CSS as typeof CSS & { highlights?: { set: (name: string, highlight: unknown) => void } }).highlights; if (!HighlightCtor || !highlights) return; if (!document.getElementById("aq-table-text-highlight-style")) { const style = document.createElement("style"); style.id = "aq-table-text-highlight-style"; style.textContent = `::highlight(${TABLE_TEXT_HIGHLIGHT_NAME}){background:#0a5b9d;color:white}`; document.head.append(style) } highlights.set(TABLE_TEXT_HIGHLIGHT_NAME, new HighlightCtor(range.cloneRange())) }
@@ -263,8 +268,8 @@ export const selectTableCellTextRange = (
   if (typeof selection.setBaseAndExtent === "function") selection.setBaseAndExtent(startBoundary.node, startBoundary.offset, endBoundary.node, endBoundary.offset)
   else selection.addRange(range)
   const selectedText = selection.toString() || range.toString()
-  resolvedCells.startedCell.setAttribute("data-table-drag-selection-text", selectedText || normalizeCellText(resolvedCells.startedCell))
-  document.documentElement.setAttribute("data-table-drag-selection-text", selectedText || normalizeCellText(resolvedCells.startedCell))
+  resolvedCells.startedCell.setAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR, selectedText || normalizeCellText(resolvedCells.startedCell))
+  document.documentElement.setAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR, selectedText || normalizeCellText(resolvedCells.startedCell))
   paintTableTextRangeHighlight(range)
   return selectedText
 }
@@ -301,8 +306,6 @@ let lastActiveTableCell: HTMLElement | null = null
 let lastActiveTableCellPath: ActiveTableCellPath | null = null
 const activeTableCellScrollPreserveCancels = new Set<() => void>()
 const activeTableCellSelectionPreserveCancels = new Set<() => void>()
-const TABLE_DRAG_SELECTION_TEXT_ATTR = "data-table-drag-selection-text"
-const TABLE_DRAG_SELECTION_TEXT_SELECTOR = `[${TABLE_DRAG_SELECTION_TEXT_ATTR}]`
 const TABLE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES = 48
 const TABLE_TEXT_DRAG_SCROLL_PRESERVE_MIN_MS = 800
 
@@ -495,7 +498,7 @@ const hasOwnedTableCellTextSelection = (
 ) => {
   const currentCell = resolveConnectedTableCell(editor, startedCell)
   if (!currentCell) return false
-  if (currentCell.getAttribute("data-table-drag-selection-text")?.trim()) {
+  if (currentCell.getAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR)?.trim()) {
     return true
   }
 
@@ -508,9 +511,8 @@ const clearOwnedTableCellDragSelectionText = (
   editor: TiptapEditor,
   startedCell: HTMLElement
 ) => {
-  resolveConnectedTableCell(editor, startedCell)?.removeAttribute(
-    "data-table-drag-selection-text"
-  )
+  resolveConnectedTableCell(editor, startedCell)?.removeAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR)
+  clearTableDragSelectionTextAttributes()
 }
 
 export const rememberActiveTableCellFromTarget = (
@@ -741,7 +743,7 @@ export const restoreTableCellTextSelectionIfEscaped = (
       (anchorElement && currentCell.contains(anchorElement)) ||
       (focusElement && currentCell.contains(focusElement)))
   ) {
-    currentCell.setAttribute("data-table-drag-selection-text", selection.toString())
+    currentCell.setAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR, selection.toString())
     clearNextEditorPointerAfterTable()
     if (!forceStartedCellSelection || !rangeEndCell || rangeEndCell === currentCell) {
       return true
@@ -759,7 +761,7 @@ export const restoreTableCellTextSelectionIfEscaped = (
     selection.addRange(range)
   }
   currentCell.setAttribute(
-    "data-table-drag-selection-text",
+    TABLE_DRAG_SELECTION_TEXT_ATTR,
     restoredRangeText || selection.toString() || normalizeCellText(currentCell)
   )
   clearNextEditorPointerAfterTable()

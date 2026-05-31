@@ -5,7 +5,7 @@ import { CellSelection, selectedRect, TableMap } from "@tiptap/pm/tables"
 import type { MutableRefObject, RefObject } from "react"
 import { useCallback } from "react"
 import { getFirstEditableTextPositionInNode } from "./blockSelectionModel"
-import type { TableAffordanceGeometry } from "./tableAffordanceModel"
+import { TABLE_STALE_AXIS_HOTZONE_TOP_MARGIN_PX, type TableAffordanceGeometry } from "./tableAffordanceModel"
 import { findActiveRenderedTable, resolveTableScopedSelectedCell } from "./tableRenderedDomModel"
 import { isTableSelectionActive } from "./tableStructureModel"
 
@@ -119,9 +119,9 @@ export const useBlockEditorTableOverlayDomAdapter = ({
               const rect = activeTable.getBoundingClientRect()
               const hitTestMargin = 32
               const isInsideActiveTableSurface =
-                clientX >= rect.left - hitTestMargin &&
-                clientX <= rect.right + hitTestMargin &&
-                clientY >= rect.top - hitTestMargin &&
+                clientX >= rect.left &&
+                clientX <= rect.right &&
+                clientY >= rect.top - TABLE_STALE_AXIS_HOTZONE_TOP_MARGIN_PX &&
                 clientY <= rect.bottom + hitTestMargin
               return isInsideActiveTableSurface ? activeTable : null
             })()
@@ -140,7 +140,7 @@ export const useBlockEditorTableOverlayDomAdapter = ({
       const isNearTableSurface =
         clientX >= tableRect.left - TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX &&
         clientX <= tableRect.right + TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX &&
-        clientY >= tableRect.top - TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX &&
+        clientY >= tableRect.top - TABLE_STALE_AXIS_HOTZONE_TOP_MARGIN_PX &&
         clientY <= tableRect.bottom + TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX
       if (!isNearTableSurface) return null
 

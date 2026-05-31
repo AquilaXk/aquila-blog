@@ -5,6 +5,7 @@ import {
   TABLE_ADD_BAR_VIEWPORT_PADDING_PX,
   TABLE_CELL_MENU_BUTTON_SIZE_PX,
   TABLE_EDGE_ADD_BUTTON_SIZE_PX,
+  TABLE_STALE_AXIS_HOTZONE_TOP_MARGIN_PX,
   clampViewportPosition,
   type TableAffordanceGeometry,
 } from "./tableAffordanceModel"
@@ -249,7 +250,7 @@ export const useBlockEditorTableOverlayControllerCommands = ({
       hasHoverPoint &&
       Boolean(activeCellRect) &&
       !showCornerControls &&
-      hoverClientY >= visibleTop - TABLE_COLUMN_GRIP_HEIGHT_PX &&
+      hoverClientY >= visibleTop - TABLE_STALE_AXIS_HOTZONE_TOP_MARGIN_PX &&
       hoverClientY <= visibleTop + TABLE_AXIS_RAIL_EDGE_HOTZONE_PX &&
       hoverClientX >= activeColumnLeft &&
       hoverClientX <= activeColumnRight

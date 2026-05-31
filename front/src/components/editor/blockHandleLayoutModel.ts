@@ -11,6 +11,7 @@ export type BlockHandleRailLayout = {
 
 export type BlockChromePositionMode = "editor-local" | "viewport"
 type BlockChromeSurfaceRect = Pick<DOMRect, "left" | "top"> | null
+type BlockHandleProtectedRect = Pick<DOMRect, "bottom" | "left" | "right" | "top">
 export type WindowScrollAnchor = {
   x: number
   y: number
@@ -95,9 +96,10 @@ export const resolveBlockHandleRailLayout = (
   rect: DOMRect,
   railWidth: number,
   railHeight: number,
-  anchoredTop: number
+  anchoredTop: number,
+  gutterBoundaryLeft = rect.left
 ): BlockHandleRailLayout => {
-  const gutterLeft = rect.left - railWidth - BLOCK_HANDLE_GUTTER_GAP_PX
+  const gutterLeft = gutterBoundaryLeft - railWidth - BLOCK_HANDLE_GUTTER_GAP_PX
   if (gutterLeft >= BLOCK_HANDLE_VIEWPORT_PADDING_PX || typeof window === "undefined") {
     return {
       left: Math.max(BLOCK_HANDLE_VIEWPORT_PADDING_PX, gutterLeft),
@@ -116,15 +118,132 @@ export const resolveBlockHandleRailLayout = (
   }
 }
 
+const resolveBlockHandleGutterBoundaryLeft = (blockElement?: HTMLElement | null) => {
+  if (!blockElement || typeof document === "undefined" || typeof NodeFilter === "undefined") return null
+  if (!blockElement.matches("li, blockquote")) return null
+
+  const walker = document.createTreeWalker(blockElement, NodeFilter.SHOW_TEXT)
+  while (walker.nextNode()) {
+    const textNode = walker.currentNode as Text
+    const trimmed = textNode.data.trim()
+    if (!trimmed) continue
+
+    const textOffset = textNode.data.indexOf(trimmed)
+    const range = document.createRange()
+    range.setStart(textNode, textOffset)
+    range.setEnd(textNode, textOffset + Math.min(trimmed.length, 6))
+    const textRect = range.getBoundingClientRect()
+    if (textRect.width <= 0 || textRect.height <= 0) return null
+
+    const elementRect = blockElement.getBoundingClientRect()
+    return Math.min(elementRect.left, textRect.left - 56)
+  }
+
+  return null
+}
+
+const collectBlockHandleProtectedRects = (protectedRoot?: HTMLElement | null): BlockHandleProtectedRect[] => {
+  if (!protectedRoot || typeof document === "undefined" || typeof NodeFilter === "undefined") return []
+
+  return Array.from(protectedRoot.querySelectorAll<HTMLElement>("li, blockquote")).flatMap((element) => {
+    const boundaryLeft = resolveBlockHandleGutterBoundaryLeft(element)
+    if (boundaryLeft === null) return []
+
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+    while (walker.nextNode()) {
+      const textNode = walker.currentNode as Text
+      const trimmed = textNode.data.trim()
+      if (!trimmed) continue
+
+      const textOffset = textNode.data.indexOf(trimmed)
+      const range = document.createRange()
+      range.setStart(textNode, textOffset)
+      range.setEnd(textNode, textOffset + Math.min(trimmed.length, 6))
+      const textRect = range.getBoundingClientRect()
+      if (textRect.width <= 0 || textRect.height <= 0) return []
+
+      return [
+        {
+          bottom: textRect.bottom,
+          left: boundaryLeft,
+          right: textRect.left,
+          top: textRect.top,
+        },
+        {
+          bottom: textRect.bottom,
+          left: textRect.left,
+          right: textRect.right,
+          top: textRect.top,
+        },
+      ]
+    }
+
+    return []
+  })
+}
+
+const resolvePrefixSafeBlockHandleRailLayout = (
+  railLayout: BlockHandleRailLayout,
+  railWidth: number,
+  railHeight: number,
+  protectedRoot?: HTMLElement | null
+): BlockHandleRailLayout => {
+  if (typeof window === "undefined") return railLayout
+
+  const protectedRects = collectBlockHandleProtectedRects(protectedRoot).filter(
+    (protectedRect) =>
+      protectedRect.bottom >= -railHeight &&
+      protectedRect.top <= window.innerHeight + railHeight &&
+      railLayout.left < protectedRect.right &&
+      railLayout.left + railWidth > protectedRect.left
+  )
+  if (!protectedRects.length) return railLayout
+
+  const hasCollision = (top: number) =>
+    protectedRects.some(
+      (protectedRect) =>
+        top < protectedRect.bottom &&
+        top + railHeight > protectedRect.top
+    )
+  if (!hasCollision(railLayout.top)) return railLayout
+
+  const minTop = BLOCK_HANDLE_VIEWPORT_PADDING_PX
+  const maxTop = Math.max(minTop, window.innerHeight - railHeight - BLOCK_HANDLE_VIEWPORT_PADDING_PX)
+  const clampTop = (top: number) => Math.min(Math.max(minTop, top), maxTop)
+  const candidates = new Set<number>()
+  protectedRects.forEach((protectedRect) => {
+    candidates.add(clampTop(protectedRect.top - railHeight - BLOCK_HANDLE_STACKED_GAP_PX))
+    candidates.add(clampTop(protectedRect.bottom + BLOCK_HANDLE_STACKED_GAP_PX))
+  })
+
+  const safeTop = Array.from(candidates)
+    .sort((a, b) => Math.abs(a - railLayout.top) - Math.abs(b - railLayout.top) || a - b)
+    .find((top) => !hasCollision(top))
+
+  return typeof safeTop === "number" ? { ...railLayout, top: safeTop } : railLayout
+}
+
 export const resolveBlockHandleRailLayoutForSurface = (
   rect: DOMRect,
   railWidth: number,
   railHeight: number,
   anchoredTop: number,
   surfaceRect: BlockChromeSurfaceRect,
-  mode: BlockChromePositionMode
+  mode: BlockChromePositionMode,
+  gutterBoundaryElement?: HTMLElement | null
 ): BlockHandleRailLayout => {
-  const railLayout = resolveBlockHandleRailLayout(rect, railWidth, railHeight, anchoredTop)
+  const railLayout = resolvePrefixSafeBlockHandleRailLayout(
+    resolveBlockHandleRailLayout(
+      rect,
+      railWidth,
+      railHeight,
+      anchoredTop,
+      resolveBlockHandleGutterBoundaryLeft(gutterBoundaryElement) ?? rect.left
+    ),
+    railWidth,
+    railHeight,
+    gutterBoundaryElement?.closest(".aq-block-editor__content") as HTMLElement | null
+  )
   return {
     left: resolveBlockChromeLeft(railLayout.left, surfaceRect, mode),
     top: resolveBlockChromeTop(railLayout.top, surfaceRect, mode),

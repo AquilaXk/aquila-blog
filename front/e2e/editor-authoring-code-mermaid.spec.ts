@@ -218,8 +218,12 @@ test.describe("editor authoring code and mermaid blocks", () => {
     await expect(languageDialog).toBeVisible()
     await languageDialog.getByRole("button", { name: "Python", exact: true }).click()
 
-    await expect(codeBlock.getByRole("button", { name: /Python/i })).toBeVisible()
-    await expect(page.getByRole("dialog", { name: "코드 언어 선택" })).toHaveCount(0)
+    await expect(languageDialog).toHaveCount(0)
+    await expect(
+      codeBlock
+        .locator("[data-code-block-header='true']")
+        .getByRole("button", { name: "Python", exact: true })
+    ).toBeVisible()
   })
 
   test("머메이드 블록 코드를 바꾸면 preview가 이전 템플릿이 아니라 최신 source로 즉시 다시 렌더된다", async ({ page }) => {

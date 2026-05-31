@@ -25,8 +25,13 @@ export const resolveTableTextCellAtPoint = (clientX: number, clientY: number, ta
   return !options.allowControlFallback && (targetElement?.closest(TABLE_TEXT_SELECTION_CONTROL_SELECTOR) || pointElements[0]?.closest(TABLE_TEXT_SELECTION_CONTROL_SELECTOR)) ? null : pointElements.find((element) => Boolean(element.closest("th, td")))?.closest("th, td") ?? targetElement?.closest("th, td")
 }
 
-export const resolveTableTextSelectionRangeCells = (clientX: number, clientY: number, target?: EventTarget | Node | null) => {
-  const pointCell = resolveTableTextCellAtPoint(clientX, clientY, target)
+export const resolveTableTextSelectionRangeCells = (
+  clientX: number,
+  clientY: number,
+  target?: EventTarget | Node | null,
+  options: { allowControlFallback?: boolean } = {}
+) => {
+  const pointCell = resolveTableTextCellAtPoint(clientX, clientY, target, options)
   const selection = window.getSelection()
   const anchorElement = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null
   const selectedText = selection?.toString().trim() ?? ""
@@ -65,8 +70,14 @@ const clearTableTextRangeHighlight = (options: { markBlur?: boolean } = {}) => {
   ;(CSS as typeof CSS & { highlights?: { delete: (name: string) => void } }).highlights?.delete(TABLE_TEXT_HIGHLIGHT_NAME)
 }
 const paintTableTextRangeHighlight = (range: Range) => { const HighlightCtor = (window as typeof window & { Highlight?: new (range: Range) => unknown }).Highlight, highlights = (CSS as typeof CSS & { highlights?: { set: (name: string, highlight: unknown) => void } }).highlights; if (!HighlightCtor || !highlights) return; if (!document.getElementById("aq-table-text-highlight-style")) { const style = document.createElement("style"); style.id = "aq-table-text-highlight-style"; style.textContent = `::highlight(${TABLE_TEXT_HIGHLIGHT_NAME}){background:#0a5b9d;color:white}`; document.head.append(style) } highlights.set(TABLE_TEXT_HIGHLIGHT_NAME, new HighlightCtor(range.cloneRange())) }
-const resolveExplicitTableTextSelectionRangeCells = (clientX: number, clientY: number, target?: EventTarget | Node | null, explicitDragStart = explicitTableTextDragStart) => { const pointCell = resolveTableTextCellAtPoint(clientX, clientY, target); return explicitDragStart && pointCell instanceof HTMLElement && pointCell.closest("table") === explicitDragStart.cell.closest("table") && (Math.abs(clientX - explicitDragStart.x) > 4 || Math.abs(clientY - explicitDragStart.y) > 4) ? { anchorCell: explicitDragStart.cell, pointCell } : null }
-const preserveExplicitTableTextSelectionFromPoint = (clientX: number, clientY: number, target?: EventTarget | Node | null) => { const rangeCells = resolveExplicitTableTextSelectionRangeCells(clientX, clientY, target); if (!rangeCells || rangeCells.anchorCell === rangeCells.pointCell) return false; pendingTableTextSelectionRangeCells = rangeCells; selectTableCellTextRange(rangeCells.anchorCell, rangeCells.pointCell); preserveTableTextRangeAcrossFrames(rangeCells.anchorCell, rangeCells.pointCell); return true }
+const resolveExplicitTableTextSelectionRangeCells = (
+  clientX: number,
+  clientY: number,
+  target?: EventTarget | Node | null,
+  explicitDragStart = explicitTableTextDragStart,
+  options: { allowControlFallback?: boolean } = {}
+) => { const pointCell = resolveTableTextCellAtPoint(clientX, clientY, target, options); return explicitDragStart && pointCell instanceof HTMLElement && pointCell.closest("table") === explicitDragStart.cell.closest("table") && (Math.abs(clientX - explicitDragStart.x) > 4 || Math.abs(clientY - explicitDragStart.y) > 4) ? { anchorCell: explicitDragStart.cell, pointCell } : null }
+const preserveExplicitTableTextSelectionFromPoint = (clientX: number, clientY: number, target?: EventTarget | Node | null) => { const rangeCells = resolveExplicitTableTextSelectionRangeCells(clientX, clientY, target, explicitTableTextDragStart, { allowControlFallback: Boolean(explicitTableTextDragStart) }); if (!rangeCells || rangeCells.anchorCell === rangeCells.pointCell) return false; pendingTableTextSelectionRangeCells = rangeCells; selectTableCellTextRange(rangeCells.anchorCell, rangeCells.pointCell); preserveTableTextRangeAcrossFrames(rangeCells.anchorCell, rangeCells.pointCell); return true }
 const preserveExplicitTableTextSelectionFromMoveEvent = (event: MouseEvent | PointerEvent) => { if (event.buttons !== 1) { pendingTableTextSelectionRangeCells = null; return } if (preserveExplicitTableTextSelectionFromPoint(event.clientX, event.clientY, event.target)) { event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation(); return } pendingTableTextSelectionRangeCells = resolveTableTextSelectionRangeCells(event.clientX, event.clientY, event.target) ?? pendingTableTextSelectionRangeCells }
 
 const preserveTableTextRangeAcrossFrames = (anchorCell: HTMLElement, pointCell: HTMLElement) => {
@@ -104,7 +115,8 @@ const preserveTableTextRangeAcrossFrames = (anchorCell: HTMLElement, pointCell: 
 export const finalizeTableTextSelectionFromPoint = (clientX: number, clientY: number, target?: EventTarget | Node | null) => {
   const explicitDragStart = explicitTableTextDragStart
   explicitTableTextDragStart = null
-  const pointCell = resolveTableTextCellAtPoint(clientX, clientY, target), explicitRangeCells = resolveExplicitTableTextSelectionRangeCells(clientX, clientY, target, explicitDragStart), rangeCells = resolveTableTextSelectionRangeCells(clientX, clientY, target) ?? (pointCell ? pendingTableTextSelectionRangeCells : null) ?? explicitRangeCells
+  const allowControlFallback = Boolean(explicitDragStart || pendingTableTextSelectionRangeCells)
+  const pointCell = resolveTableTextCellAtPoint(clientX, clientY, target, { allowControlFallback }), explicitRangeCells = resolveExplicitTableTextSelectionRangeCells(clientX, clientY, target, explicitDragStart, { allowControlFallback }), rangeCells = resolveTableTextSelectionRangeCells(clientX, clientY, target, { allowControlFallback }) ?? (pointCell ? pendingTableTextSelectionRangeCells : null) ?? explicitRangeCells
   pendingTableTextSelectionRangeCells = null
   if (!rangeCells || rangeCells.anchorCell === rangeCells.pointCell) return false
   cancelActiveTableCellTextSelectionPreserves()

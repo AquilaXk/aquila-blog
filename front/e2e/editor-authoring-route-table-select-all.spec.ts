@@ -1,29 +1,9 @@
 import { expect, test, type Page } from "@playwright/test"
 import { expectEditorToContainLoadedText } from "./helpers/editorAuthoringFlow"
+import { editorSevenByThreeTableMarkdown } from "./helpers/editorTableFixtures"
 
 const SELECT_ALL_SHORTCUT = process.platform === "darwin" ? "Meta+a" : "Control+a"
-const TABLE_SELECT_ALL_EXAMPLE = [
-  '<!-- aq-table {"overflowMode":"normal","columnWidths":[160,220,220]} -->',
-  "| **영역** | **점검 항목** | **확인 기준** |",
-  "| --- | --- | --- |",
-  "| 개념 이해 | Stateless 의미 | 요청만으로 처리 가능한가 |",
-  "| 토큰 구조 | Access Token | 역할 명확 |",
-  "| 흐름 | 재발급 로직 | 구현되어 있는가 |",
-  "| 예외 | 동시 요청 | 처리 안정성 확인 |",
-  "| 정책 | 재시도 정책 | idempotent 검토 여부 |",
-  "| UI | 행 선택 | 접근성 경로 검증 |",
-].join("\n")
-const TABLE_SELECT_ALL_REPEAT_EXAMPLE = [
-  '<!-- aq-table {"overflowMode":"normal","columnWidths":[160,220,220]} -->',
-  "| 영역 | 점검 항목 | 확인 기준 |",
-  "| --- | --- | --- |",
-  "| A | B | C |",
-  "| D | E | F |",
-  "| G | H | I |",
-  "| J | K | L |",
-  "| M | N | O |",
-  "| P | Q | R |",
-].join("\n")
+const TABLE_SELECT_ALL_EXAMPLE = editorSevenByThreeTableMarkdown
 
 const adminMember = {
   id: 1,
@@ -31,20 +11,6 @@ const adminMember = {
   nickname: "aquila",
   isAdmin: true,
 }
-const focusTableCellByKeyboard = async (page: Page, maxAttempts = 12) => {
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const inTableCell = await page.evaluate(
-      () => Boolean(document.activeElement?.closest("th, td"))
-    )
-    if (inTableCell) {
-      return true
-    }
-    await page.keyboard.press("Tab")
-    await page.waitForTimeout(50)
-  }
-  return false
-}
-
 const blurTableCellByKeyboard = async (page: Page, maxAttempts = 28) => {
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     await page.keyboard.press("Tab")
@@ -82,6 +48,12 @@ const expectNativeSelectionAnchoredInParagraph = async (
       }, paragraphText)
     )
     .toBe(true)
+}
+
+const expectSevenByThreeTableShape = async (page: Page) => {
+  const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+  await expect(editor.locator("table tr")).toHaveCount(7)
+  await expect(editor.locator("table tr").first().locator("th, td")).toHaveCount(3)
 }
 
 test.describe("editor authoring route table select all", () => {
@@ -122,6 +94,7 @@ test.describe("editor authoring route table select all", () => {
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue("table select all live route 글")
     await expectEditorToContainLoadedText(editor, "Access Token")
+    await expectSevenByThreeTableShape(page)
 
     const targetCell = editor.locator("td", { hasText: "Access Token" }).first()
     await targetCell.click({
@@ -148,10 +121,9 @@ test.describe("editor authoring route table select all", () => {
   test("table select all 반복 호출 시에도 table scope만 유지된다", async ({
     page,
   }) => {
-    const selectAllReRunMarkdown = TABLE_SELECT_ALL_REPEAT_EXAMPLE
     const content = [
       "table select all repeat lead paragraph",
-      selectAllReRunMarkdown,
+      TABLE_SELECT_ALL_EXAMPLE,
       "table select all repeat trailing paragraph",
     ].join("\n\n")
 
@@ -181,8 +153,9 @@ test.describe("editor authoring route table select all", () => {
     await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(
       "table select all repeat route 글"
     )
+    await expectSevenByThreeTableShape(page)
 
-    const targetCell = editor.locator("td", { hasText: "D" }).first()
+    const targetCell = editor.locator("td", { hasText: "Access Token" }).first()
     await targetCell.click({
       position: { x: 40, y: 16 },
     })
@@ -243,6 +216,7 @@ test.describe("editor authoring route table select all", () => {
       "table select all row handle route 글"
     )
     await expectEditorToContainLoadedText(editor, "Access Token")
+    await expectSevenByThreeTableShape(page)
 
     const targetCell = editor.locator("td", { hasText: "Access Token" }).first()
     await targetCell.click({
@@ -326,6 +300,7 @@ test.describe("editor authoring route table select all", () => {
     await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(
       "table select all keyboard focus escape route 글"
     )
+    await expectSevenByThreeTableShape(page)
 
     const targetCell = editor.locator("td", { hasText: "Access Token" }).first()
     await targetCell.click({
@@ -334,14 +309,7 @@ test.describe("editor authoring route table select all", () => {
     await targetCell.dblclick({ position: { x: 40, y: 16 } })
     await page.keyboard.press(SELECT_ALL_SHORTCUT)
     await page.waitForTimeout(240)
-    let firstSelectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
-    if (!firstSelectionText.trim()) {
-      await targetCell.click({ position: { x: 40, y: 16 } })
-      await targetCell.dblclick({ position: { x: 40, y: 16 } })
-      await page.keyboard.press(SELECT_ALL_SHORTCUT)
-      await page.waitForTimeout(240)
-      firstSelectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
-    }
+    const firstSelectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
 
     expect(firstSelectionText).toContain("영역")
     expect(firstSelectionText).toContain("확인 기준")
@@ -380,14 +348,7 @@ test.describe("editor authoring route table select all", () => {
 
     await page.keyboard.press(SELECT_ALL_SHORTCUT)
     await page.waitForTimeout(240)
-    let secondSelectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
-    if (!secondSelectionText.trim()) {
-      await targetCell.click({ position: { x: 40, y: 16 } })
-      await targetCell.dblclick({ position: { x: 40, y: 16 } })
-      await page.keyboard.press(SELECT_ALL_SHORTCUT)
-      await page.waitForTimeout(240)
-      secondSelectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
-    }
+    const secondSelectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
 
     expect(secondSelectionText).toContain("영역")
     expect(secondSelectionText).toContain("확인 기준")

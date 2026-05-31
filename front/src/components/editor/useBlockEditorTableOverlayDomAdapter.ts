@@ -17,6 +17,8 @@ const resolveElementsFromPoint = (clientX: number, clientY: number) => {
   return pointElement ? [pointElement] : []
 }
 
+const TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX = 32
+
 type UseBlockEditorTableOverlayDomAdapterArgs = {
   activeTableElementRef: MutableRefObject<HTMLTableElement | null>
   editorRef: MutableRefObject<TiptapEditor | null>
@@ -128,11 +130,46 @@ export const useBlockEditorTableOverlayDomAdapter = ({
       const cells = Array.from(tableElement.querySelectorAll("th, td")).filter(
         (cell): cell is HTMLTableCellElement => cell instanceof HTMLTableCellElement
       )
+      const strictCell = cells.find((cell) => {
+        const rect = cell.getBoundingClientRect()
+        return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom
+      })
+      if (strictCell) return strictCell
+
+      const tableRect = tableElement.getBoundingClientRect()
+      const isNearTableSurface =
+        clientX >= tableRect.left - TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX &&
+        clientX <= tableRect.right + TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX &&
+        clientY >= tableRect.top - TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX &&
+        clientY <= tableRect.bottom + TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX
+      if (!isNearTableSurface) return null
+
+      const rows = Array.from(tableElement.querySelectorAll("tr")).filter(
+        (row): row is HTMLTableRowElement => row instanceof HTMLTableRowElement && row.cells.length > 0
+      )
+      const firstRowCells = Array.from(rows[0]?.cells ?? []).filter(
+        (cell): cell is HTMLTableCellElement => cell instanceof HTMLTableCellElement
+      )
+      const topAxisCell =
+        clientY <= tableRect.top + TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX
+          ? firstRowCells.find((cell) => {
+              const rect = cell.getBoundingClientRect()
+              return clientX >= rect.left && clientX <= rect.right
+            }) ?? firstRowCells[0] ?? null
+          : null
+      if (topAxisCell) return topAxisCell
+
+      const leftAxisRow =
+        clientX <= tableRect.left + TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX
+          ? rows.find((row) => {
+              const rect = row.getBoundingClientRect()
+              return clientY >= rect.top && clientY <= rect.bottom
+            }) ?? rows[0] ?? null
+          : null
       return (
-        cells.find((cell) => {
-          const rect = cell.getBoundingClientRect()
-          return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom
-        }) ?? null
+        Array.from(leftAxisRow?.cells ?? []).find(
+          (cell): cell is HTMLTableCellElement => cell instanceof HTMLTableCellElement
+        ) ?? null
       )
     },
     [activeTableElementRef, getTableCellFromTarget, tableAffordanceGeometryRef, viewportRef]

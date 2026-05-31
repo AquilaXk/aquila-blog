@@ -20,6 +20,7 @@ import {
 import type { TableMenuState } from "./tableFloatingUiModel"
 import { findActiveRenderedTable } from "./tableRenderedDomModel"
 import { buildReorderedSimpleTableNode } from "./tableStructureModel"
+import { clearTableTextSelectionForStructuralSelection } from "./tableTextSelectionModel"
 import { focusElementWithoutScroll, resolveDocPosSafe, type TableOverlaySelectionRect } from "./useBlockEditorTableOverlayDomAdapter"
 
 type UseBlockEditorTableOverlayAxisDragArgs = {
@@ -74,10 +75,12 @@ export const useBlockEditorTableOverlayAxisDrag = ({
         if (!anchorResolved || !headResolved) return false
 
         clearStickyTopLevelBlockSelection()
+        clearTableTextSelectionForStructuralSelection()
         activeEditor.view.dispatch(
           activeEditor.state.tr.setSelection(CellSelection.colSelection(anchorResolved, headResolved))
         )
         focusElementWithoutScroll(activeEditor.view.dom)
+        clearTableTextSelectionForStructuralSelection()
         return true
       }
 
@@ -89,10 +92,12 @@ export const useBlockEditorTableOverlayAxisDrag = ({
       if (!anchorResolved || !headResolved) return false
 
       clearStickyTopLevelBlockSelection()
+      clearTableTextSelectionForStructuralSelection()
       activeEditor.view.dispatch(
         activeEditor.state.tr.setSelection(CellSelection.rowSelection(anchorResolved, headResolved))
       )
       focusElementWithoutScroll(activeEditor.view.dom)
+      clearTableTextSelectionForStructuralSelection()
       return true
     },
     [clearStickyTopLevelBlockSelection]

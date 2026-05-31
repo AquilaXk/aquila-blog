@@ -123,10 +123,19 @@ test.describe("editor authoring table operations", () => {
       throw new Error("table reordered first cell metrics are missing")
     }
 
-    await page.mouse.move(
-      reorderedFirstCellBox.x + reorderedFirstCellBox.width / 2,
-      reorderedFirstCellBox.y + 3
-    )
+    const showColumnGripAfterRowReorder = async () => {
+      const anchorX = reorderedFirstCellBox.x + reorderedFirstCellBox.width / 2
+      for (const yOffset of [12, 6, 3, 1]) {
+        await page.mouse.move(anchorX, reorderedFirstCellBox.y + reorderedFirstCellBox.height + 18)
+        await page.mouse.move(anchorX, reorderedFirstCellBox.y + yOffset)
+        await page.waitForTimeout(80)
+        if (await columnGrip.isVisible().catch(() => false)) {
+          return
+        }
+      }
+    }
+
+    await showColumnGripAfterRowReorder()
     await expect(columnGrip).toBeVisible()
     await expect(columnGrip).toBeVisible()
     const firstRowLastCellBox = await page.locator("table tr").first().locator("th, td").nth(2).boundingBox()

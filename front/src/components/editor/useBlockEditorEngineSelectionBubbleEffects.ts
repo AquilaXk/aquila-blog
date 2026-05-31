@@ -5,7 +5,7 @@ import { cancelTablePointerScrollPreserves, clearNextEditorPointerAfterTable, ma
 import { resolveMultiCellTableDomSelectionBubbleState, resolvePersistedTableTextSelectionBubbleState } from "./floatingBubbleDomRangeModel"
 import { collapseTableCellTextSelectionToPoint } from "./tableTextCaretModel"
 import { isTableSelectionActive } from "./tableStructureModel"
-import { cancelActiveTableCellTextSelectionPreserves, collapseStaleTableEditorSelection, preserveTableCellTextSelectionAcrossFrames, resolveTableTextCellAtPoint, resolveTableTextSelectionRangeCells, restoreTableCellTextSelectionIfEscaped, selectTableCellTextRange, watchTableCellTextSelectionExternalClear } from "./tableTextSelectionModel"
+import { TABLE_DRAG_SELECTION_TEXT_ATTR, TABLE_DRAG_SELECTION_TEXT_SELECTOR, cancelActiveTableCellTextSelectionPreserves, collapseStaleTableEditorSelection, preserveTableCellTextSelectionAcrossFrames, resolveTableTextCellAtPoint, resolveTableTextSelectionRangeCells, restoreTableCellTextSelectionIfEscaped, selectTableCellTextRange, watchTableCellTextSelectionExternalClear } from "./tableTextSelectionModel"
 import { areFloatingBubbleStatesEqual, hasNativeEditorTextSelection, hideFloatingBubbleState, resolveFloatingBubbleStateFromCoords, resolveHeadingSelectionBubbleState, type FloatingBubbleState } from "./useFloatingBubbleState"
 const CODE_BLOCK_EDITOR_CONTENT_SELECTOR = ".aq-code-editor-content"
 const BLOCK_EDITOR_ROOT_SELECTOR = "[data-testid='block-editor-prosemirror'], .ProseMirror"
@@ -60,7 +60,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
     let codeDragSelectionPreserveGeneration = 0
     const cancelTableTextDragPreserves = () => { cleanupTableDragScrollPreserve?.(); cleanupTableDragScrollPreserve = null; cleanupTableDragSelectionPreserve?.(); cleanupTableDragSelectionPreserve = null; cancelActiveTableCellTextSelectionPreserves(); cancelTablePointerScrollPreserves(); clearNextEditorPointerAfterTable(); tableTextSelectionExternalClearWatcher?.reset() }
     const handleTableTextSelectionExternalClear = () => { cancelTableTextDragPreserves(); const activeEditor = editorRef.current ?? currentEditor, toolbarActive = Boolean(bubbleToolbarHoveredRef.current || document.querySelector("[data-testid='editor-text-bubble-toolbar']:hover, [data-testid='editor-text-bubble-toolbar'] details[open]")); if (activeEditor && !toolbarActive) collapseStaleTableEditorSelection(activeEditor) }
-    const clearWindowTextSelectionOnly = () => { window.getSelection()?.removeAllRanges(); document.querySelectorAll("[data-table-drag-selection-text]").forEach((element) => element.removeAttribute("data-table-drag-selection-text")); document.documentElement.removeAttribute("data-table-drag-selection-text") }
+    const clearWindowTextSelectionOnly = () => { window.getSelection()?.removeAllRanges(); document.querySelectorAll(TABLE_DRAG_SELECTION_TEXT_SELECTOR).forEach((element) => element.removeAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR)); document.documentElement.removeAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR) }
     const clearImmediateWindowTextSelection = () => { cancelTableTextDragPreserves(); clearWindowTextSelectionOnly() }
     const cancelCodeDragSelectionPreserve = () => {
       codeDragSelectionPreserveGeneration += 1

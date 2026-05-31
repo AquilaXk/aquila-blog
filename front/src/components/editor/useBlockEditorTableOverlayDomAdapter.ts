@@ -9,6 +9,14 @@ import type { TableAffordanceGeometry } from "./tableAffordanceModel"
 import { findActiveRenderedTable, resolveTableScopedSelectedCell } from "./tableRenderedDomModel"
 import { isTableSelectionActive } from "./tableStructureModel"
 
+const resolveElementsFromPoint = (clientX: number, clientY: number) => {
+  if (typeof document.elementsFromPoint === "function") {
+    return document.elementsFromPoint(clientX, clientY)
+  }
+  const pointElement = document.elementFromPoint(clientX, clientY)
+  return pointElement ? [pointElement] : []
+}
+
 type UseBlockEditorTableOverlayDomAdapterArgs = {
   activeTableElementRef: MutableRefObject<HTMLTableElement | null>
   editorRef: MutableRefObject<TiptapEditor | null>
@@ -83,7 +91,7 @@ export const useBlockEditorTableOverlayDomAdapter = ({
       if (targetCell) return targetCell
       if (typeof document === "undefined") return null
 
-      const pointElements = document.elementsFromPoint(clientX, clientY)
+      const pointElements = resolveElementsFromPoint(clientX, clientY)
       const pointCell = pointElements
         .map((element) => element.closest("td, th"))
         .find((cell): cell is HTMLTableCellElement => cell instanceof HTMLTableCellElement)

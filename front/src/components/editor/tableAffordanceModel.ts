@@ -1,6 +1,7 @@
 export const TABLE_ADD_BAR_VIEWPORT_PADDING_PX = 8
 export const TABLE_EDGE_ADD_BUTTON_SIZE_PX = 24
 export const TABLE_CELL_MENU_BUTTON_SIZE_PX = 22
+export const TABLE_STALE_AXIS_HOTZONE_TOP_MARGIN_PX = 128
 
 export type TableOverlayAnchor = {
   left: number

@@ -5,6 +5,7 @@ import {
   TABLE_ADD_BAR_VIEWPORT_PADDING_PX,
   TABLE_CELL_MENU_BUTTON_SIZE_PX,
   TABLE_EDGE_ADD_BUTTON_SIZE_PX,
+  TABLE_STALE_AXIS_HOTZONE_TOP_MARGIN_PX,
   clampViewportPosition,
   type TableAffordanceGeometry,
 } from "./tableAffordanceModel"
@@ -35,7 +36,6 @@ const resolveElementsFromPoint = (clientX: number, clientY: number) => {
 }
 
 const TABLE_AXIS_HOVER_LOCK_MS = 280
-const TABLE_STALE_AXIS_HOTZONE_TOP_MARGIN_PX = 128
 
 type UseBlockEditorTableOverlayControllerCommandsArgs = {
   activeTableElementRef: MutableRefObject<HTMLTableElement | null>

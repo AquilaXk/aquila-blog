@@ -85,11 +85,21 @@ export const restoreBlockEditorCodeLossUpdate = ({
   editorFocused?: boolean
   nowMs?: number
 }) => {
-  if (editorFocused || !guardState.expectedBody) {
+  if (!guardState.expectedBody) {
     return { markdown: nextMarkdown, changed: false }
   }
 
   const normalizedCurrent = normalizeEditorMarkdown(currentMarkdown ?? guardState.expectedBody)
+  const isInitialFocusedSyntheticUpdate =
+    editorFocused &&
+    !guardState.ignoredInitialEmpty &&
+    nowMs <= guardState.ignoreUntilMs &&
+    normalizedCurrent === guardState.expectedBody
+
+  if (editorFocused && !isInitialFocusedSyntheticUpdate) {
+    return { markdown: nextMarkdown, changed: false }
+  }
+
   if (nowMs > guardState.ignoreUntilMs && normalizedCurrent !== guardState.expectedBody) {
     return { markdown: nextMarkdown, changed: false }
   }

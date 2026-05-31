@@ -134,4 +134,44 @@ test.describe("editor load sync guard", () => {
 
     expect(afterUserEdit.changed).toBe(false)
   })
+
+  test("초기 focused synthetic code fence 손실은 사용자 편집으로 보지 않고 expected body로 복구한다", () => {
+    const nowMs = 5_000
+    const expectedBody = [
+      "초기 focused 복구 대상입니다.",
+      "",
+      "```ts",
+      "const token = createAccessToken(user)",
+      "console.log(token)",
+      "```",
+    ].join("\n")
+    const staleUpdate = [
+      "초기 focused 복구 대상입니다.",
+      "",
+      "```ts",
+      "```",
+    ].join("\n")
+    const guard = createBlockEditorLoadGuardState(expectedBody, nowMs, 1_200)
+
+    const restored = restoreBlockEditorCodeLossUpdate({
+      nextMarkdown: staleUpdate,
+      currentMarkdown: expectedBody,
+      guardState: guard,
+      editorFocused: true,
+      nowMs: nowMs + 300,
+    })
+
+    expect(restored.changed).toBe(true)
+    expect(restored.markdown).toContain("createAccessToken(user)")
+
+    const focusedUserEditAfterHold = restoreBlockEditorCodeLossUpdate({
+      nextMarkdown: staleUpdate,
+      currentMarkdown: expectedBody,
+      guardState: guard,
+      editorFocused: true,
+      nowMs: nowMs + 3_000,
+    })
+
+    expect(focusedUserEditAfterHold.changed).toBe(false)
+  })
 })

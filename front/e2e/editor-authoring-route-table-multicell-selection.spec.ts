@@ -95,7 +95,8 @@ const dragBetweenTextRanges = async (
   const beforeScrollTop = await readScrollTop(page)
 
   if (options.syntheticWithoutNativeSelection) {
-    await page.evaluate(({ cancelAtStart, cancelBeforeMouseup, dragOverBeforeRelease, dropInsteadOfMouseup, end, skipRelease, skipSyntheticMoves, start }) => {
+    await page.evaluate(({ cancelAtStart, cancelBeforeMouseup, dragOverBeforeRelease, dropInsteadOfMouseup, end, endAtCellRightEdge, endCellRightEdge, skipRelease, skipSyntheticMoves, start }) => {
+      const releasePoint = endAtCellRightEdge ? endCellRightEdge : end
       window.getSelection()?.removeAllRanges()
       document.querySelectorAll("[data-table-drag-selection-text]").forEach((element) => {
         element.removeAttribute("data-table-drag-selection-text")
@@ -130,14 +131,14 @@ const dragBetweenTextRanges = async (
           dispatch("mousemove", point, 1)
         }
       }
-      if (dragOverBeforeRelease) dispatch("dragover", end, 1)
-      if (cancelBeforeMouseup) dispatch("pointercancel", cancelAtStart ? start : end, 0)
-      else dispatch("pointerup", end, 0)
+      if (dragOverBeforeRelease) dispatch("dragover", releasePoint, 1)
+      if (cancelBeforeMouseup) dispatch("pointercancel", cancelAtStart ? start : releasePoint, 0)
+      else dispatch("pointerup", releasePoint, 0)
       if (!skipRelease) {
-        if (dropInsteadOfMouseup) dispatch("drop", end, 0)
-        else dispatch("mouseup", end, 0)
+        if (dropInsteadOfMouseup) dispatch("drop", releasePoint, 0)
+        else dispatch("mouseup", releasePoint, 0)
       }
-    }, { ...metrics, cancelAtStart: options.cancelAtStart ?? false, cancelBeforeMouseup: options.cancelBeforeMouseup ?? false, dragOverBeforeRelease: options.dragOverBeforeRelease ?? false, dropInsteadOfMouseup: options.dropInsteadOfMouseup ?? false, skipRelease: options.skipRelease ?? false, skipSyntheticMoves: options.skipSyntheticMoves ?? false })
+    }, { ...metrics, cancelAtStart: options.cancelAtStart ?? false, cancelBeforeMouseup: options.cancelBeforeMouseup ?? false, dragOverBeforeRelease: options.dragOverBeforeRelease ?? false, dropInsteadOfMouseup: options.dropInsteadOfMouseup ?? false, endAtCellRightEdge: options.endAtCellRightEdge ?? false, skipRelease: options.skipRelease ?? false, skipSyntheticMoves: options.skipSyntheticMoves ?? false })
     await page.waitForTimeout(1_000)
     return { beforeScrollTop, afterScrollTop: await readScrollTop(page), selectionText: await readSelectionText(page) }
   }

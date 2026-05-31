@@ -6,7 +6,7 @@ import { resolveMultiCellTableDomSelectionBubbleState, resolvePersistedTableText
 import { collapseTableCellTextSelectionToPoint } from "./tableTextCaretModel"
 import { isTableSelectionActive } from "./tableStructureModel"
 import { cancelActiveTableCellTextSelectionPreserves, collapseStaleTableEditorSelection, preserveTableCellTextSelectionAcrossFrames, resolveTableTextCellAtPoint, resolveTableTextSelectionRangeCells, restoreTableCellTextSelectionIfEscaped, selectTableCellTextRange, watchTableCellTextSelectionExternalClear } from "./tableTextSelectionModel"
-import { areFloatingBubbleStatesEqual, hideFloatingBubbleState, resolveFloatingBubbleStateFromCoords, type FloatingBubbleState } from "./useFloatingBubbleState"
+import { areFloatingBubbleStatesEqual, hasNativeEditorTextSelection, hideFloatingBubbleState, resolveFloatingBubbleStateFromCoords, resolveHeadingSelectionBubbleState, type FloatingBubbleState } from "./useFloatingBubbleState"
 const CODE_BLOCK_EDITOR_CONTENT_SELECTOR = ".aq-code-editor-content"
 const BLOCK_EDITOR_ROOT_SELECTOR = "[data-testid='block-editor-prosemirror'], .ProseMirror"
 const TABLE_TEXT_DRAG_CONTROL_SELECTOR = "[data-table-axis-rail='true'], [data-table-affordance], [data-table-menu-root='true'], [data-table-menu-trigger='true'], [data-testid^='table-column-resize-boundary-'], [data-testid='table-structure-menu-button'], [data-testid='table-corner-handle'], [data-testid='table-corner-grow-handle'], .column-resize-handle"
@@ -53,7 +53,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
   useEffect(() => {
     const currentEditor = editorRef.current ?? editor
     if (!currentEditor) return
-    let rafId: number | null = null
+    let rafId: number | null = null, bubbleSettleTimeoutId: number | null = null
     let codeDragSelectionPreserveRafId: number | null = null
     let cleanupCodeDragSelectionPreserve: (() => void) | null = null, cleanupTableDragScrollPreserve: (() => void) | null = null, cleanupTableDragSelectionPreserve: (() => void) | null = null
     let tableTextSelectionExternalClearWatcher: ReturnType<typeof watchTableCellTextSelectionExternalClear> | null = null
@@ -336,11 +336,12 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
 
       const startCoords = activeEditor.view.coordsAtPos(selection.from)
       const endCoords = activeEditor.view.coordsAtPos(isImageNodeSelected ? selection.from : selection.to)
-      const nextBubbleState = resolveFloatingBubbleStateFromCoords(
+      const baseBubbleState = resolveFloatingBubbleStateFromCoords(
         isImageNodeSelected ? "image" : "text",
         startCoords,
         endCoords
       )
+      const nextBubbleState = resolveHeadingSelectionBubbleState(baseBubbleState, activeEditor.view.dom)
       setBubbleState((prev) =>
         areFloatingBubbleStatesEqual(prev, nextBubbleState) ? prev : nextBubbleState
       )
@@ -357,7 +358,6 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         syncBubble()
       })
     }
-
     const handleDocumentSelectionChange = () => {
       const activeEditor = editorRef.current ?? currentEditor
       if (!activeEditor) return
@@ -532,11 +532,11 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       tableTextDragPendingStartRef.current = null
       codeTextDragStartRef.current = null; nonTableTextDragStartRef.current = null
       mouseTextSelectionInProgressRef.current = false
-      window.setTimeout(scheduleSyncBubble, 96); window.setTimeout(scheduleSyncBubble, 200)
+      if (!syncBubbleOnMouseUpRef.current && activeEditor && hasNativeEditorTextSelection(activeEditor.view.dom)) syncBubbleOnMouseUpRef.current = true
       if (!syncBubbleOnMouseUpRef.current && document.documentElement.hasAttribute("data-table-drag-selection-text")) syncBubbleOnMouseUpRef.current = true
       if (!syncBubbleOnMouseUpRef.current) return
       syncBubbleOnMouseUpRef.current = false
-      scheduleSyncBubble()
+      scheduleSyncBubble(); if (bubbleSettleTimeoutId === null) bubbleSettleTimeoutId = window.setTimeout(() => { bubbleSettleTimeoutId = null; scheduleSyncBubble() }, 96)
     }
     const resolveCodeDragCopyText = () => { const selection = window.getSelection(), selectedText = selection?.toString().trim() ?? "", anchorElement = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null, focusElement = selection?.focusNode instanceof Element ? selection.focusNode : selection?.focusNode?.parentElement ?? null, activeElement = document.activeElement instanceof Element ? document.activeElement : null, anchorShell = anchorElement?.closest(".aq-code-shell") ?? null, focusShell = focusElement?.closest(".aq-code-shell") ?? null, activeShell = activeElement?.closest(".aq-code-shell") ?? null, codeShell = anchorShell && anchorShell === focusShell ? anchorShell : activeShell?.getAttribute("data-code-drag-selection-text")?.trim() ? activeShell : null; if (!codeShell) return ""; return selectedText && anchorShell === codeShell && focusShell === codeShell ? selectedText : codeShell.getAttribute("data-code-drag-selection-text")?.trim() || "" }, handleDocumentCopyCapture = (event: ClipboardEvent) => { const copyText = resolveCodeDragCopyText(); if (!copyText) return; event.preventDefault(); event.clipboardData?.setData("text/plain", copyText) }, handleDocumentCopyKeyDown = (event: KeyboardEvent) => { if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== "c") return; const copyText = resolveCodeDragCopyText(); if (!copyText) return; event.preventDefault(); void navigator.clipboard?.writeText(copyText) }
 
@@ -568,7 +568,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       window.removeEventListener("pointercancel", completeTextDragSelection, true)
       window.removeEventListener("mouseup", completeTextDragSelection, true)
       tableTextSelectionExternalClearWatcher?.dispose()
-      if (rafId !== null && typeof window !== "undefined") window.cancelAnimationFrame(rafId)
+      if (rafId !== null && typeof window !== "undefined") window.cancelAnimationFrame(rafId); if (bubbleSettleTimeoutId !== null && typeof window !== "undefined") window.clearTimeout(bubbleSettleTimeoutId)
       cancelTableTextDragPreserves()
       cancelCodeDragSelectionPreserve()
       mouseTextSelectionInProgressRef.current = false

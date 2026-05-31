@@ -49,6 +49,28 @@ export const areFloatingBubbleStatesEqual = (
 export const hideFloatingBubbleState = (state: FloatingBubbleState) =>
   state.visible ? { ...state, visible: false } : state
 
+const HEADING_SELECTION_SELECTOR = "h1, h2, h3, h4, h5, h6"
+const resolveSelectionElement = (node: Node | null | undefined) => node instanceof Element ? node : node?.parentElement ?? null
+
+export const hasNativeEditorTextSelection = (editorRoot: HTMLElement) => {
+  const selection = typeof window !== "undefined" ? window.getSelection() : null
+  const anchorElement = resolveSelectionElement(selection?.anchorNode)
+  const focusElement = resolveSelectionElement(selection?.focusNode)
+  return Boolean(selection?.toString().trim() && anchorElement && focusElement && editorRoot.contains(anchorElement) && editorRoot.contains(focusElement))
+}
+
+export const resolveHeadingSelectionBubbleState = (state: FloatingBubbleState, editorRoot: HTMLElement) => {
+  if (state.mode !== "text") return state
+  const selection = typeof window !== "undefined" ? window.getSelection() : null
+  if (!selection || selection.isCollapsed || !selection.toString().trim()) return state
+  const anchorHeading = resolveSelectionElement(selection.anchorNode)?.closest<HTMLElement>(HEADING_SELECTION_SELECTOR)
+  const focusHeading = resolveSelectionElement(selection.focusNode)?.closest<HTMLElement>(HEADING_SELECTION_SELECTOR)
+  if (!anchorHeading || anchorHeading !== focusHeading || !editorRoot.contains(anchorHeading)) return state
+  const headingRect = anchorHeading.getBoundingClientRect()
+  if (!Number.isFinite(headingRect.left) || headingRect.width <= 0) return state
+  return { ...state, anchor: "left" as const, left: Math.max(12, Math.round(headingRect.left)) }
+}
+
 export const useFloatingBubbleState = () => {
   const [bubbleState, setBubbleState] = useState<FloatingBubbleState>(
     INITIAL_FLOATING_BUBBLE_STATE

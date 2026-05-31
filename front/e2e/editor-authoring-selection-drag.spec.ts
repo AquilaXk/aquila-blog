@@ -195,15 +195,30 @@ const expectCodeHighlightLayerAligned = async (page: Page, word: string) => {
 
 test.describe("editor authoring route text selection drag", () => {
   test("writer table cell 기존 텍스트 선택 후 단순 클릭은 caret만 남긴다", async ({ page }) => {
+    const tableMarkdown = [
+      '<!-- aq-table {"overflowMode":"normal","columnWidths":[160,220,240]} -->',
+      "| 영역 | 점검 항목 | 확인 기준 |",
+      "| --- | --- | --- |",
+      "| caret | 셀 커서 테스트 | 단순 클릭 |",
+      "| drag | 기존 선택 | 유지 |",
+      "| focus | caret 복귀 | 확인 |",
+      "| scroll | viewport | 안정 |",
+      "| bubble | toolbar | 닫힘 |",
+      "| result | selection | 정리 |",
+    ].join("\n")
     await page.goto(QA_WRITER_ROUTE)
-
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     await editor.click()
-    await page.getByRole("button", { name: "테이블", exact: true }).first().click()
+    await editor.evaluate((element, markdown) => {
+      const data = new DataTransfer()
+      data.setData("text/plain", markdown)
+      const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true })
+      Object.defineProperty(event, "clipboardData", { value: data })
+      element.dispatchEvent(event)
+    }, tableMarkdown)
 
-    const firstCell = page.locator("table th, table td").first()
+    const firstCell = page.locator("table th, table td", { hasText: "셀 커서 테스트" }).first()
     await firstCell.click()
-    await page.keyboard.type("셀 커서 테스트")
 
     await selectWordInEditable(page, firstCell, "커서")
     await expect
@@ -298,6 +313,10 @@ test.describe("editor authoring route text selection drag", () => {
         "| --- | --- | --- |",
         `| caret | ${marker} alpha | 클릭 후 caret |`,
         "| result | beta | 선택 없음 |",
+        "| focus | gamma | 캐럿 유지 |",
+        "| scroll | delta | viewport 안정 |",
+        "| bubble | epsilon | toolbar 정리 |",
+        "| final | zeta | block overlay 없음 |",
       ].join("\n"),
       "table caret trailing paragraph. 테이블 이후 본문입니다.",
     ].join("\n\n")

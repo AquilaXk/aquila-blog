@@ -35,6 +35,7 @@ const resolveElementsFromPoint = (clientX: number, clientY: number) => {
 }
 
 const TABLE_AXIS_HOVER_LOCK_MS = 280
+const TABLE_STALE_AXIS_HOTZONE_TOP_MARGIN_PX = 128
 
 type UseBlockEditorTableOverlayControllerCommandsArgs = {
   activeTableElementRef: MutableRefObject<HTMLTableElement | null>
@@ -249,7 +250,7 @@ export const useBlockEditorTableOverlayControllerCommands = ({
       hasHoverPoint &&
       Boolean(activeCellRect) &&
       !showCornerControls &&
-      hoverClientY >= visibleTop - TABLE_COLUMN_GRIP_HEIGHT_PX &&
+      hoverClientY >= visibleTop - TABLE_STALE_AXIS_HOTZONE_TOP_MARGIN_PX &&
       hoverClientY <= visibleTop + TABLE_AXIS_RAIL_EDGE_HOTZONE_PX &&
       hoverClientX >= activeColumnLeft &&
       hoverClientX <= activeColumnRight

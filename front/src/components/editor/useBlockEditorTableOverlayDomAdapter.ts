@@ -18,6 +18,7 @@ const resolveElementsFromPoint = (clientX: number, clientY: number) => {
 }
 
 const TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX = 32
+const TABLE_STALE_AXIS_HOTZONE_CELL_FALLBACK_TOP_MARGIN_PX = 128
 
 type UseBlockEditorTableOverlayDomAdapterArgs = {
   activeTableElementRef: MutableRefObject<HTMLTableElement | null>
@@ -119,9 +120,9 @@ export const useBlockEditorTableOverlayDomAdapter = ({
               const rect = activeTable.getBoundingClientRect()
               const hitTestMargin = 32
               const isInsideActiveTableSurface =
-                clientX >= rect.left - hitTestMargin &&
-                clientX <= rect.right + hitTestMargin &&
-                clientY >= rect.top - hitTestMargin &&
+                clientX >= rect.left &&
+                clientX <= rect.right &&
+                clientY >= rect.top - TABLE_STALE_AXIS_HOTZONE_CELL_FALLBACK_TOP_MARGIN_PX &&
                 clientY <= rect.bottom + hitTestMargin
               return isInsideActiveTableSurface ? activeTable : null
             })()
@@ -140,7 +141,7 @@ export const useBlockEditorTableOverlayDomAdapter = ({
       const isNearTableSurface =
         clientX >= tableRect.left - TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX &&
         clientX <= tableRect.right + TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX &&
-        clientY >= tableRect.top - TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX &&
+        clientY >= tableRect.top - TABLE_STALE_AXIS_HOTZONE_CELL_FALLBACK_TOP_MARGIN_PX &&
         clientY <= tableRect.bottom + TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX
       if (!isNearTableSurface) return null
 

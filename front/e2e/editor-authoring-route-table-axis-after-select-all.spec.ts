@@ -53,6 +53,64 @@ test.describe("editor authoring route table axis after select all", () => {
     await expect(editor.locator(".selectedCell")).toHaveCount(7)
   })
 
+  test("실제 /editor/[id] 7x3 table은 row reset 뒤 scroll 보정으로 stale column hotzone에 남아도 열 선택을 연다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1580, height: 900 })
+    const { editor } = await mockEditorRouteWithSevenByThreeTable(page, {
+      postId: 995,
+      title: "7x3 table stale row reset column route 글",
+      lead: "table live lead paragraph",
+      tail: "table live trailing paragraph",
+    })
+    const { columnHandle, rowHandle } = getTableAffordances(page)
+
+    const table = editor.locator("table").first()
+    const targetCell = editor.locator("td", { hasText: "Access Token" }).first()
+    await targetCell.click({ position: { x: 40, y: 16 } })
+    await targetCell.dblclick({ position: { x: 40, y: 16 } })
+    await page.evaluate(() => window.scrollBy(0, 120))
+    await page.waitForTimeout(50)
+
+    const staleTableBox = await table.boundingBox()
+    const staleCellBox = await targetCell.boundingBox()
+    if (!staleTableBox || !staleCellBox) {
+      throw new Error("7x3 route stale row reset metrics are missing")
+    }
+
+    await page.mouse.move(staleTableBox.x + 3, staleCellBox.y + staleCellBox.height / 2)
+    await page.waitForTimeout(140)
+    await expect(rowHandle).toBeVisible()
+    await rowHandle.click()
+    await expect(page.getByTestId("table-row-selection-outline")).toBeVisible()
+    await expect(editor.locator(".selectedCell")).toHaveCount(3)
+
+    await page.keyboard.press("Escape")
+    await targetCell.click({ position: { x: 40, y: 16 } })
+    await page.evaluate(() => {
+      const tableElement = document.querySelector("[data-testid='block-editor-prosemirror'] table")
+      const tableShell = tableElement?.closest(".aq-table-shell, .tableWrapper, table")
+      const spacer = document.createElement("div")
+      spacer.setAttribute("data-testid", "stale-table-shift-spacer")
+      spacer.style.height = "96px"
+      spacer.style.pointerEvents = "none"
+      tableShell?.before(spacer)
+    })
+    await page.waitForTimeout(50)
+    const shiftedTableBox = await table.boundingBox()
+    if (!shiftedTableBox || shiftedTableBox.y - staleTableBox.y < 48) {
+      throw new Error("7x3 route stale row reset scroll shift is missing")
+    }
+    await page.mouse.move(staleCellBox.x + staleCellBox.width / 2, staleTableBox.y + 3)
+    await page.waitForTimeout(180)
+
+    await expect(columnHandle).toBeVisible()
+    await columnHandle.click()
+    await expect(page.getByTestId("table-column-selection-outline")).toBeVisible()
+    await expect(page.getByTestId("table-column-menu")).toBeVisible()
+    await expect(editor.locator(".selectedCell")).toHaveCount(7)
+  })
+
   test("실제 /editor/[id] 7x3 table은 table-wide Cmd/Ctrl+A 직후 column grip을 첫 축 선택으로 연다", async ({
     page,
   }) => {

@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test"
 import {
   QA_ENGINE_ROUTE,
   QA_WRITER_ROUTE,
+  expectEditorToContainLoadedText,
   expectVisibleBox,
 } from "./helpers/editorAuthoringFlow"
 
@@ -512,5 +513,139 @@ test.describe("editor authoring block selection and drag", () => {
       railBox.y + railBox.height > paragraphBox.y
 
     expect(overlapsParagraph).toBe(false)
+  })
+
+  test("실제 /editor/[id] 수정 route block handle rail은 list/quote 말머리를 덮지 않는다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 760, height: 760 })
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 1,
+          username: "qa-admin",
+          nickname: "aquila",
+          isAdmin: true,
+        }),
+      })
+    })
+    await page.route("**/post/api/v1/adm/posts/997", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 997,
+          version: 2,
+          title: "말머리 handle overlap 회귀 글",
+          content: [
+            "- JWT 쓰면 로그인 상태가 유지되는 거야?",
+            "- Refresh Token은 왜 또 따로 있어?",
+            "",
+            "> 세션 = 서버 저장",
+          ].join("\n"),
+          contentHtml: "",
+          published: true,
+          listed: true,
+        }),
+      })
+    })
+
+    await page.goto("/editor/997")
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await expectEditorToContainLoadedText(editor, "Refresh Token은 왜 또 따로 있어?")
+
+    const assertRailDoesNotCoverPrefix = async (targetSelector: string, targetText: string) => {
+      const target = editor.locator(targetSelector, { hasText: targetText }).first()
+      await expect(target).toBeVisible()
+      await target.hover()
+
+      const handleRail = page.locator("[data-block-handle-rail='true'][data-visible='true']").first()
+      await expect(handleRail).toBeVisible()
+
+      const metrics = await page.evaluate(
+        ({ selector, text }) => {
+          const targetElement = Array.from(document.querySelectorAll<HTMLElement>(selector)).find((element) =>
+            element.textContent?.includes(text)
+          )
+          const rail = document.querySelector<HTMLElement>("[data-block-handle-rail='true'][data-visible='true']")
+          if (!targetElement || !rail) return null
+
+          const railRect = rail.getBoundingClientRect()
+          const railBox = {
+            bottom: railRect.bottom,
+            left: railRect.left,
+            right: railRect.right,
+            top: railRect.top,
+          }
+          const resolveProtectedRects = (element: HTMLElement) => {
+            const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+            let textNode: Text | null = null
+            let textOffset = -1
+            let label = ""
+            while (walker.nextNode()) {
+              const current = walker.currentNode as Text
+              const trimmed = current.data.trim()
+              if (!trimmed) continue
+              textNode = current
+              textOffset = current.data.indexOf(trimmed)
+              label = trimmed
+              break
+            }
+            if (!textNode || textOffset < 0) return []
+
+            const range = document.createRange()
+            range.setStart(textNode, textOffset)
+            range.setEnd(textNode, textOffset + Math.min(label.length, 6))
+            const elementRect = element.getBoundingClientRect()
+            const textRect = range.getBoundingClientRect()
+            const prefixLeft = Math.min(elementRect.left, textRect.left - 56)
+            return [
+              {
+                bottom: textRect.bottom,
+                kind: "prefix",
+                label,
+                left: prefixLeft,
+                right: textRect.left,
+                top: textRect.top,
+              },
+              {
+                bottom: textRect.bottom,
+                kind: "text",
+                label,
+                left: textRect.left,
+                right: textRect.right,
+                top: textRect.top,
+              },
+            ]
+          }
+          const protectedRects = Array.from(
+            document.querySelectorAll<HTMLElement>(
+              "[data-testid='block-editor-prosemirror'] li, [data-testid='block-editor-prosemirror'] blockquote"
+            )
+          ).flatMap(resolveProtectedRects)
+          const collisions = protectedRects.filter(
+            (entry) =>
+              railBox.left < entry.right &&
+              railBox.right > entry.left &&
+              railBox.top < entry.bottom &&
+              railBox.bottom > entry.top
+          )
+          return { collisions, protectedRects, rail: railBox }
+        },
+        { selector: targetSelector, text: targetText }
+      )
+
+      if (!metrics || metrics.protectedRects.length === 0) {
+        throw new Error(`말머리 overlap 좌표를 계산할 수 없습니다: ${targetText}`)
+      }
+
+      expect({ collisions: metrics.collisions, metrics, targetText }).toMatchObject({
+        collisions: [],
+      })
+    }
+
+    await assertRailDoesNotCoverPrefix("li", "Refresh Token은 왜 또 따로 있어?")
+    await assertRailDoesNotCoverPrefix("blockquote", "세션 = 서버 저장")
   })
 })

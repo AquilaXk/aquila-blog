@@ -166,7 +166,8 @@ export const useBlockEditorEngineBlockSelectionLayout = ({
         railHeight,
         resolveBlockHandleAnchorTop(activeListItemContext.listItemElement, railHeight),
         viewportRect,
-        handlePositionMode
+        handlePositionMode,
+        activeListItemContext.listItemElement
       )
       const nextState: TopLevelBlockHandleState = {
         visible: true,
@@ -208,7 +209,8 @@ export const useBlockEditorEngineBlockSelectionLayout = ({
       railHeight,
       anchoredTop,
       viewportRect,
-      handlePositionMode
+      handlePositionMode,
+      blockElement
     )
     const nextState: TopLevelBlockHandleState = {
       visible: true,

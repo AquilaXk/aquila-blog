@@ -4,6 +4,7 @@ import {
   QA_WRITER_ROUTE,
   getTableAffordances,
 } from "./helpers/editorAuthoringFlow"
+import { mockEditorRouteWithSevenByThreeTable } from "./helpers/editorTableFixtures"
 
 test.describe("editor authoring table affordances", () => {
   test("wide table hover 중 wheel 입력은 page scroll chain을 유지한다", async ({ page }) => {
@@ -269,14 +270,39 @@ test.describe("editor authoring table affordances", () => {
     await page.keyboard.press("Escape")
     await expect(page.getByTestId("table-column-menu")).toHaveCount(0)
 
-    await page.mouse.move(tableBox.x + 24, tableBox.y + 24)
-
     const blockDragHandle = page.getByTestId("block-drag-handle")
+    const moveToBlockHandleHotzone = async () => {
+      for (const point of [
+        { x: 24, y: 24 },
+        { x: 18, y: 18 },
+        { x: 32, y: 28 },
+        { x: -24, y: 24 },
+        { x: -36, y: 32 },
+      ]) {
+        await page.mouse.move(tableBox.x + tableBox.width / 2, tableBox.y + tableBox.height / 2)
+        await page.mouse.move(tableBox.x + point.x, tableBox.y + point.y, { steps: 4 })
+        await page.waitForTimeout(80)
+        if (await blockDragHandle.isVisible().catch(() => false)) return
+      }
+    }
+    await moveToBlockHandleHotzone()
     await expect(blockDragHandle).toBeVisible()
     await blockDragHandle.click()
     await expect(page.getByTestId("keyboard-block-selection-overlay")).toBeVisible()
 
-    await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
+    const moveToColumnGripHotzone = async () => {
+      for (const point of [
+        { x: 3, y: 3 },
+        { x: 6, y: 3 },
+        { x: 12, y: 3 },
+      ]) {
+        await page.mouse.move(tableBox.x + tableBox.width / 2, tableBox.y + tableBox.height / 2)
+        await page.mouse.move(tableBox.x + point.x, tableBox.y + point.y, { steps: 4 })
+        await page.waitForTimeout(80)
+        if (await columnHandle.isVisible().catch(() => false)) return
+      }
+    }
+    await moveToColumnGripHotzone()
     await expect(columnHandle).toBeVisible()
     await columnHandle.click()
     await expect(page.getByTestId("table-column-selection-outline")).toBeVisible()
@@ -298,6 +324,71 @@ test.describe("editor authoring table affordances", () => {
     await expect
       .poll(async () => page.evaluate(() => window.getSelection()?.toString() || ""))
       .toBe("")
+  })
+
+  test("실제 /editor/[id] 7x3 table은 셀 텍스트 선택 뒤 row/column grip 클릭으로 축 선택을 연다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 920 })
+    const { editor } = await mockEditorRouteWithSevenByThreeTable(page, {
+      postId: 993,
+      title: "7x3 table axis route 글",
+    })
+    const { columnHandle, rowHandle } = getTableAffordances(page)
+
+    const table = editor.locator("table").first()
+    const targetCell = editor.locator("td", { hasText: "Access Token" }).first()
+    const expectAccessTokenNativeSelection = async () => {
+      await expect
+        .poll(async () => page.evaluate(() => window.getSelection()?.toString() || ""))
+        .toContain("Access Token")
+    }
+    await targetCell.click({ position: { x: 36, y: 16 } })
+    await targetCell.dblclick({ position: { x: 36, y: 16 } })
+    await expectAccessTokenNativeSelection()
+
+    const moveToRowGripHotzone = async () => {
+      const tableBox = await table.boundingBox()
+      const cellBox = await targetCell.boundingBox()
+      if (!tableBox || !cellBox) {
+        throw new Error("7x3 route row grip metrics are missing")
+      }
+      await page.mouse.move(tableBox.x + 4, cellBox.y + cellBox.height / 2)
+    }
+
+    await moveToRowGripHotzone()
+    await expect(rowHandle).toBeVisible()
+    await rowHandle.click()
+
+    await expect(page.getByTestId("table-row-selection-outline")).toBeVisible()
+    await expect(page.getByTestId("table-row-menu")).toBeVisible()
+    await expect(page.getByTestId("table-row-menu").getByRole("button", { name: "행 삭제" })).toBeVisible()
+    await expect(editor.locator(".selectedCell")).toHaveCount(3)
+    await expect.poll(async () => page.evaluate(() => window.getSelection()?.toString() || "")).toBe("")
+
+    await page.keyboard.press("Escape")
+    await targetCell.click({ position: { x: 36, y: 16 } })
+    await targetCell.dblclick({ position: { x: 36, y: 16 } })
+    await expectAccessTokenNativeSelection()
+
+    const moveToColumnGripHotzone = async () => {
+      const tableBox = await table.boundingBox()
+      const cellBox = await targetCell.boundingBox()
+      if (!tableBox || !cellBox) {
+        throw new Error("7x3 route column grip metrics are missing")
+      }
+      await page.mouse.move(cellBox.x + cellBox.width / 2, tableBox.y + 4)
+    }
+
+    await moveToColumnGripHotzone()
+    await expect(columnHandle).toBeVisible()
+    await columnHandle.click()
+
+    await expect(page.getByTestId("table-column-selection-outline")).toBeVisible()
+    await expect(page.getByTestId("table-column-menu")).toBeVisible()
+    await expect(page.getByTestId("table-column-menu").getByRole("button", { name: "열 삭제" })).toBeVisible()
+    await expect(editor.locator(".selectedCell")).toHaveCount(7)
+    await expect.poll(async () => page.evaluate(() => window.getSelection()?.toString() || "")).toBe("")
   })
 
   test("table axis rail hover 전환 중에도 target axis anchor가 끊기지 않는다", async ({ page }) => {

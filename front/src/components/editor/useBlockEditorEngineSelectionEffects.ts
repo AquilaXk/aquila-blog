@@ -231,11 +231,17 @@ export const useBlockEditorEngineSelectionEffects = ({
   useEffect(() => {
     if (!editor) return
 
+    const resolvePreciseMouseTarget = (event: MouseEvent) => {
+      if (event.target !== editor.view.dom) return event.target
+      return document.elementFromPoint(event.clientX, event.clientY) ?? event.target
+    }
+
     const handleEditorMouseDownCapture = (event: MouseEvent) => {
-      rememberActiveTableCellFromTarget(event.target, editor.view.dom as HTMLElement)
-      const targetListItemContext = findNestedListItemContextFromTarget(event.target)
+      const eventTarget = resolvePreciseMouseTarget(event)
+      rememberActiveTableCellFromTarget(eventTarget, editor.view.dom as HTMLElement)
+      const targetListItemContext = findNestedListItemContextFromTarget(eventTarget)
       const targetBlockIndex =
-        findTopLevelBlockIndexFromTarget(event.target) ??
+        findTopLevelBlockIndexFromTarget(eventTarget) ??
         findTopLevelBlockIndexByClientPosition(event.clientX, event.clientY)
       const isOuterListItemGesture = isOuterListItemSelectionGesture(event, targetListItemContext)
       const isOuterSelectionGesture = isOuterBlockSelectionGesture(event, targetBlockIndex)

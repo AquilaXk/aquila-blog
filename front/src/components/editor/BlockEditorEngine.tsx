@@ -8,14 +8,55 @@ import {
 } from "./BlockEditorEngine.layers"
 import { BlockEditorTableOverlayLayer } from "./BlockEditorEngine.tableOverlayLayer"
 import { Shell } from "./BlockEditorEngine.styles"
+import { TABLE_STALE_AXIS_HOTZONE_TOP_MARGIN_PX } from "./tableAffordanceModel"
 import "./tableTextNativeDragGuard"
 import { useBlockEditorEngineController } from "./useBlockEditorEngineController"
 
+const SHELL_TABLE_STALE_AXIS_HOTZONE_BOTTOM_PX = 32
+const RENDERED_TABLE_SELECTOR =
+  ".aq-block-editor__content .tableWrapper table, .aq-block-editor__content table"
+
 const BlockEditorEngine = (props: BlockEditorEngineProps) => {
   const controller = useBlockEditorEngineController(props)
+  const isViewportEventTarget = (target: EventTarget | null) =>
+    target instanceof Element && Boolean(target.closest("[data-testid='block-editor-viewport']"))
+  const isShellStaleTableHotzone = (shell: HTMLElement, clientX: number, clientY: number) => {
+    const viewportRect = shell
+      .querySelector<HTMLElement>("[data-testid='block-editor-viewport']")
+      ?.getBoundingClientRect()
+    if (viewportRect && clientY >= viewportRect.top && clientY <= viewportRect.bottom) return false
+
+    return Array.from(shell.querySelectorAll<HTMLTableElement>(RENDERED_TABLE_SELECTOR)).some((table) => {
+      const rect = table.getBoundingClientRect()
+      return (
+        clientX >= rect.left &&
+        clientX <= rect.right &&
+        clientY >= rect.top - TABLE_STALE_AXIS_HOTZONE_TOP_MARGIN_PX &&
+        clientY <= rect.top + SHELL_TABLE_STALE_AXIS_HOTZONE_BOTTOM_PX
+      )
+    })
+  }
 
   return (
-    <Shell className={props.className}>
+    <Shell
+      className={props.className}
+      onMouseMove={(event) => {
+        if (
+          !isViewportEventTarget(event.target) &&
+          isShellStaleTableHotzone(event.currentTarget, event.clientX, event.clientY)
+        ) {
+          controller.handleViewportMouseMove(event)
+        }
+      }}
+      onPointerMove={(event) => {
+        if (
+          !isViewportEventTarget(event.target) &&
+          isShellStaleTableHotzone(event.currentTarget, event.clientX, event.clientY)
+        ) {
+          controller.handleViewportPointerMove(event)
+        }
+      }}
+    >
       <BlockEditorToolbarLayer
         activeInlineColor={controller.activeInlineColor}
         applyInlineColor={controller.applyInlineColor}

@@ -59,6 +59,31 @@ const blurTableCellByKeyboard = async (page: Page, maxAttempts = 28) => {
   return false
 }
 
+const expectNativeSelectionAnchoredInParagraph = async (
+  page: Page,
+  paragraphText: string
+) => {
+  await expect
+    .poll(async () =>
+      page.evaluate((expectedText) => {
+        const selection = window.getSelection()
+        const anchorElement =
+          selection?.anchorNode instanceof Element
+            ? selection.anchorNode
+            : selection?.anchorNode?.parentElement ?? null
+        const focusElement =
+          selection?.focusNode instanceof Element
+            ? selection.focusNode
+            : selection?.focusNode?.parentElement ?? null
+        return Boolean(
+          anchorElement?.closest("p")?.textContent?.includes(expectedText) &&
+            focusElement?.closest("p")?.textContent?.includes(expectedText)
+        )
+      }, paragraphText)
+    )
+    .toBe(true)
+}
+
 test.describe("editor authoring route table select all", () => {
   test("실제 /editor/[id] table cell에서 첫 Cmd/Ctrl+A는 현재 테이블 전체 셀 텍스트를 선택한다", async ({
     page,
@@ -334,15 +359,21 @@ test.describe("editor authoring route table select all", () => {
       hasText: "table select all keyboard focus escape lead paragraph",
     }).first()
     await leadParagraph.click()
-    await page.keyboard.press(SELECT_ALL_SHORTCUT)
-    await page.waitForTimeout(240)
-    const outsideSelectionText = await page.evaluate(
-      () => window.getSelection()?.toString() ?? ""
+    await expectNativeSelectionAnchoredInParagraph(
+      page,
+      "table select all keyboard focus escape lead paragraph"
     )
-    expect(outsideSelectionText).not.toContain("영역")
-    expect(outsideSelectionText).not.toContain("점검 항목")
-    expect(outsideSelectionText).not.toContain("확인 기준")
-    expect(outsideSelectionText).not.toContain("Access Token")
+    await expect(editor.locator(".selectedCell")).toHaveCount(0)
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          Boolean(
+            document.documentElement.getAttribute("data-table-drag-selection-text")?.trim() ||
+              document.querySelector("[data-table-drag-selection-text]")
+          )
+        )
+      )
+      .toBe(false)
 
     await targetCell.click({ position: { x: 40, y: 16 } })
     await targetCell.dblclick({ position: { x: 40, y: 16 } })

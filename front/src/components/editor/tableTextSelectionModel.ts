@@ -41,8 +41,11 @@ export const resolveTableTextSelectionRangeCells = (clientX: number, clientY: nu
 let pendingTableTextSelectionRangeCells: { anchorCell: HTMLElement; pointCell: HTMLElement } | null = null, explicitTableTextDragStart: { cell: HTMLElement; x: number; y: number } | null = null
 let activeTableTextRangePreserveCancel: (() => void) | null = null
 let hasActiveTableTextSelection = false
+let hasRecentTableTextSelectionContext = false
 let shouldClearActiveTableTextSelectionOnBlur = false
 let lastTableSelectionRoot: HTMLElement | null = null
+let lastTableSelectionExitTarget: Element | null = null
+const RECENT_TABLE_TEXT_SELECTION_CONTEXT_ATTR = "data-table-recent-text-selection-context"
 const TABLE_TEXT_HIGHLIGHT_NAME = "aq-table-text-selection"
 const clearTableTextRangeHighlight = (options: { markBlur?: boolean } = {}) => {
   const shouldClearTableSelection =
@@ -315,6 +318,20 @@ export const cancelActiveTableCellTextSelectionPreserves = () => {
   cancelActiveTableCellScrollPreserves()
 }
 
+export const clearTableTextSelectionForStructuralSelection = () => {
+  pendingTableTextSelectionRangeCells = null
+  explicitTableTextDragStart = null
+  hasRecentTableTextSelectionContext = false
+  cancelActiveTableCellTextSelectionPreserves()
+  shouldClearActiveTableTextSelectionOnBlur = false
+  lastTableSelectionExitTarget = null
+  clearTableTextRangeHighlight({ markBlur: false })
+  document.documentElement.removeAttribute(RECENT_TABLE_TEXT_SELECTION_CONTEXT_ATTR)
+  if (typeof window !== "undefined") {
+    window.getSelection()?.removeAllRanges()
+  }
+}
+
 const isWindowSelectionInsideEditorTable = (editorRoot: HTMLElement) => {
   const selection = window.getSelection()
   if (!selection || selection.rangeCount === 0) return false
@@ -509,6 +526,7 @@ export const rememberActiveTableCellFromTarget = (
   const cell = targetElement?.closest("th, td")
   if (cell instanceof HTMLElement && (!editorRoot || editorRoot.contains(cell))) {
     shouldClearActiveTableTextSelectionOnBlur = false
+    lastTableSelectionExitTarget = null
     lastActiveTableCell = cell
     lastActiveTableCellPath = captureActiveTableCellPath(editorRoot, cell)
     return
@@ -519,8 +537,26 @@ export const rememberActiveTableCellFromTarget = (
 
   const currentTable = targetElement.closest("table")
   if (!currentTable) {
-    if (hasActiveTableTextSelection || hasTableTextSelectionState(editorRoot)) {
+    if (targetElement === editorRoot) {
+      return
+    }
+    const currentCodeShell = targetElement.closest(".aq-code-shell")
+    if (currentCodeShell) {
+      hasRecentTableTextSelectionContext = false
+      lastTableSelectionExitTarget = null
+      document.documentElement.removeAttribute(RECENT_TABLE_TEXT_SELECTION_CONTEXT_ATTR)
+    }
+    if (
+      (!currentCodeShell &&
+        (hasActiveTableTextSelection ||
+          hasRecentTableTextSelectionContext ||
+          document.documentElement.hasAttribute(RECENT_TABLE_TEXT_SELECTION_CONTEXT_ATTR) ||
+          hasTableTextSelectionState(editorRoot) ||
+          lastActiveTableCell ||
+          lastActiveTableCellPath))
+    ) {
       shouldClearActiveTableTextSelectionOnBlur = true
+      lastTableSelectionExitTarget = targetElement
     }
     lastActiveTableCell = null
     lastActiveTableCellPath = null
@@ -573,6 +609,38 @@ export const selectActiveTableCellText = (
   const activeCell = asTableCell(activeElement?.closest("th, td") || null)
   const targetCell = asTableCell(targetElement?.closest("th, td") || null)
   const focusCell = asTableCell(focusElement?.closest("th, td") || null)
+  const hasTableSelectionState = hasTableTextSelectionState(editor.view.dom)
+  const clearStaleTableTextSelection = (exitTarget?: Element | null) => {
+    shouldClearActiveTableTextSelectionOnBlur = false
+    hasActiveTableTextSelection = false
+    hasRecentTableTextSelectionContext = false
+    lastTableSelectionExitTarget = null
+    document.documentElement.removeAttribute(RECENT_TABLE_TEXT_SELECTION_CONTEXT_ATTR)
+    const outsideParagraph =
+      exitTarget?.closest("p") ||
+      targetElement?.closest("p") ||
+      (!anchorElement?.closest("table") ? anchorElement?.closest("p") : null) ||
+      (!focusElement?.closest("table") ? focusElement?.closest("p") : null) ||
+      activeElement?.closest("p")
+    selection.removeAllRanges()
+    clearTableTextRangeHighlight()
+    if (outsideParagraph) {
+      const paragraphRange = document.createRange()
+      paragraphRange.selectNodeContents(outsideParagraph)
+      selection.addRange(paragraphRange)
+    }
+  }
+  const exitTarget =
+    lastTableSelectionExitTarget?.isConnected &&
+    editor.view.dom.contains(lastTableSelectionExitTarget) &&
+    !lastTableSelectionExitTarget.closest("table") &&
+    !lastTableSelectionExitTarget.closest(".aq-code-shell")
+      ? lastTableSelectionExitTarget
+      : null
+  if (shouldClearActiveTableTextSelectionOnBlur && exitTarget) {
+    clearStaleTableTextSelection(exitTarget)
+    return true
+  }
   if (targetCell || anchorCell || focusCell || isSelectionInsideActiveTable) {
     shouldClearActiveTableTextSelectionOnBlur = false
   }
@@ -601,22 +669,12 @@ export const selectActiveTableCellText = (
       (!targetTable || targetTable === rememberedTable) &&
       !shouldClearActiveTableTextSelectionOnBlur
   )
-  const hasTableSelectionState = hasTableTextSelectionState(editor.view.dom)
   const hasTableSelectionContext = Boolean(
     hasExplicitTableContext ||
       hasRecoveredTableContext
   )
   if (!hasTableSelectionContext && (hasTableSelectionState || shouldClearActiveTableTextSelectionOnBlur)) {
-    shouldClearActiveTableTextSelectionOnBlur = false
-    hasActiveTableTextSelection = false
-    const outsideParagraph = targetElement?.closest("p") || anchorElement?.closest("p") || focusElement?.closest("p")
-    selection.removeAllRanges()
-    clearTableTextRangeHighlight()
-    if (outsideParagraph) {
-      const paragraphRange = document.createRange()
-      paragraphRange.selectNodeContents(outsideParagraph)
-      selection.addRange(paragraphRange)
-    }
+    clearStaleTableTextSelection()
     return true
   }
   const selectedCell =
@@ -649,6 +707,8 @@ export const selectActiveTableCellText = (
   selectTableCellTextRange(wholeTableRangeCells.firstCell, wholeTableRangeCells.lastCell)
   preserveTableTextRangeAcrossFrames(wholeTableRangeCells.firstCell, wholeTableRangeCells.lastCell)
   hasActiveTableTextSelection = true
+  hasRecentTableTextSelectionContext = true
+  document.documentElement.setAttribute(RECENT_TABLE_TEXT_SELECTION_CONTEXT_ATTR, "true")
   return true
 }
 

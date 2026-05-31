@@ -112,9 +112,11 @@ export const useBlockEditorTableOverlayDomAdapter = ({
           ? tableSurfaceElement
           : (tableSurfaceElement?.querySelector("table") as HTMLTableElement | null) ??
             (() => {
-              const activeTable =
-                activeTableElementRef.current ??
-                findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)
+              const activeTable = findActiveRenderedTable(
+                viewportRef.current,
+                tableAffordanceGeometryRef.current,
+                activeTableElementRef.current
+              )
               if (!activeTable?.isConnected) return null
               const rect = activeTable.getBoundingClientRect()
               const hitTestMargin = 32

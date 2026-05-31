@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test"
 import {
+  expectEditorToContainLoadedText,
   QA_ENGINE_ROUTE,
   QA_WRITER_ROUTE,
 } from "./helpers/editorAuthoringFlow"
@@ -120,6 +121,109 @@ test.describe("editor authoring code and mermaid blocks", () => {
         return optionRect.y - headerRect.y - headerRect.height
       })
       .toBeGreaterThanOrEqual(8)
+  })
+
+  test("실제 /editor/[id] 수정 route 코드 언어 선택은 dialog를 열고 언어를 갱신한다", async ({
+    page,
+  }) => {
+    const adminMember = {
+      id: 1,
+      username: "qa-admin",
+      nickname: "aquila",
+      isAdmin: true,
+    }
+    const content = [
+      "코드 언어 선택 회귀 대상입니다.",
+      "",
+      "```ts",
+      "const selectedLanguage = true",
+      "```",
+      "",
+      "언어 선택 뒤 문단입니다.",
+    ].join("\n")
+
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(adminMember),
+      })
+    })
+    await page.route("**/post/api/v1/adm/posts/998", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 998,
+          version: 3,
+          title: "코드 언어 선택 회귀 글",
+          content,
+          contentHtml: "",
+          published: true,
+          listed: true,
+        }),
+      })
+    })
+
+    await page.goto("/editor/998")
+
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue("코드 언어 선택 회귀 글")
+    await expectEditorToContainLoadedText(
+      page.locator("[data-testid='block-editor-prosemirror']").first(),
+      "언어 선택 뒤 문단입니다."
+    )
+
+    const codeBlock = page.locator("[data-code-block-wrapper='true']").first()
+    await expect(codeBlock).toBeVisible({ timeout: 15_000 })
+    await expect(codeBlock.locator(".aq-code-highlight-layer")).toContainText("const selectedLanguage")
+
+    const codeContent = codeBlock.locator(".aq-code-editor-content").first()
+    const dragPoints = await codeContent.evaluate((element) => {
+      const targetText = "selectedLanguage"
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+      while (walker.nextNode()) {
+        const current = walker.currentNode as Text
+        const startOffset = current.data.indexOf(targetText)
+        if (startOffset < 0) continue
+        const range = document.createRange()
+        range.setStart(current, startOffset)
+        range.setEnd(current, startOffset + targetText.length)
+        const rect = range.getBoundingClientRect()
+        if (rect.width <= 2 || rect.height <= 2) break
+        return {
+          endX: rect.right - 1,
+          startX: rect.left + 1,
+          y: rect.top + rect.height / 2,
+        }
+      }
+      throw new Error("code language regression selection target is missing")
+    })
+    await page.mouse.move(dragPoints.startX, dragPoints.y)
+    await page.mouse.down()
+    await page.mouse.move(dragPoints.endX, dragPoints.y, { steps: 12 })
+    await page.mouse.up()
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const selectionText = window.getSelection()?.toString() ?? ""
+          const persistedCodeSelectionText =
+            document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text") ??
+            ""
+          return (selectionText || persistedCodeSelectionText).replace(/\s+/g, " ").trim()
+        })
+      )
+      .toContain("selectedLanguage")
+
+    await codeBlock.getByRole("button", { name: /TypeScript/i }).click()
+
+    const languageDialog = page.getByRole("dialog", { name: "코드 언어 선택" })
+    await expect(languageDialog).toBeVisible()
+    await languageDialog.getByRole("button", { name: "Python", exact: true }).click()
+
+    await expect(languageDialog).toHaveCount(0)
+    await expect(
+      codeBlock
+        .locator("[data-code-block-header='true']")
+        .getByRole("button", { name: "Python", exact: true })
+    ).toBeVisible()
   })
 
   test("머메이드 블록 코드를 바꾸면 preview가 이전 템플릿이 아니라 최신 source로 즉시 다시 렌더된다", async ({ page }) => {

@@ -56,6 +56,7 @@ export const useBlockEditorTableOverlayController = ({
     tableAffordanceGeometryRef,
     tableAffordanceVisibility,
     tableAffordanceVisibilityRef,
+    tableAxisHoverLockUntilRef,
     tableHoverAnchorLockUntilRef,
     tableMenuState,
   } = useBlockEditorTableOverlayControllerState({ viewportRef })
@@ -95,6 +96,7 @@ export const useBlockEditorTableOverlayController = ({
     isNarrowTableViewport,
     setTableAffordanceVisibility,
     tableAffordanceGeometryRef,
+    tableAxisHoverLockUntilRef,
     viewportRef,
   })
   const {
@@ -139,6 +141,7 @@ export const useBlockEditorTableOverlayController = ({
     setSelectionTick,
     setTableAffordanceGeometry,
     setTableAffordanceVisibility,
+    tableAxisHoverLockUntilRef,
     tableHoverAnchorLockUntilRef,
     viewportRef,
   })

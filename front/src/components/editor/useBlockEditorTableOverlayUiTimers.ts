@@ -1,6 +1,10 @@
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import type { TableAffordanceGeometry, TableAffordanceVisibility } from "./tableAffordanceModel"
+import {
+  INITIAL_TABLE_AFFORDANCE_VISIBILITY,
+  type TableAffordanceGeometry,
+  type TableAffordanceVisibility,
+} from "./tableAffordanceModel"
 import { resolveActiveRenderedTableForFloatingUi } from "./tableRenderedDomModel"
 import {
   TABLE_OVERFLOW_COACHMARK_DISMISS_MS,
@@ -16,6 +20,7 @@ type UseBlockEditorTableOverlayUiTimersArgs = {
   isNarrowTableViewport: boolean
   setTableAffordanceVisibility: Dispatch<SetStateAction<TableAffordanceVisibility>>
   tableAffordanceGeometryRef: MutableRefObject<TableAffordanceGeometry>
+  tableAxisHoverLockUntilRef: MutableRefObject<number>
   viewportRef: RefObject<HTMLDivElement>
 }
 
@@ -27,6 +32,7 @@ export const useBlockEditorTableOverlayUiTimers = ({
   isNarrowTableViewport,
   setTableAffordanceVisibility,
   tableAffordanceGeometryRef,
+  tableAxisHoverLockUntilRef,
   viewportRef,
 }: UseBlockEditorTableOverlayUiTimersArgs) => {
   const tableQuickRailHideTimerRef = useRef<number | null>(null)
@@ -80,12 +86,18 @@ export const useBlockEditorTableOverlayUiTimers = ({
     scheduleTableOverflowCoachmarkHide()
   }, [cornerButtonSize, isCoarsePointer, isNarrowTableViewport, scheduleTableOverflowCoachmarkHide, tableAffordanceGeometryRef, viewportRef])
 
-  const hideTableQuickRailImmediately = useCallback(() => {
-    if (tableQuickRailHideTimerRef.current !== null && typeof window !== "undefined") {
-      window.clearTimeout(tableQuickRailHideTimerRef.current)
-      tableQuickRailHideTimerRef.current = null
-    }
-    setTableAffordanceVisibility((prev) => (prev.visible ? { ...prev, visible: false } : prev))
+  const clearTableQuickRailVisibility = useCallback(() => {
+    setTableAffordanceVisibility((prev) =>
+      prev.visible ||
+      prev.showColumnRail ||
+      prev.showRowRail ||
+      prev.showColumnAddBar ||
+      prev.showRowAddBar ||
+      prev.showCornerControls ||
+      prev.showCellMenu
+        ? INITIAL_TABLE_AFFORDANCE_VISIBILITY
+        : prev
+    )
   }, [setTableAffordanceVisibility])
 
   const cancelTableQuickRailHide = useCallback(() => {
@@ -98,11 +110,40 @@ export const useBlockEditorTableOverlayUiTimers = ({
   const scheduleTableQuickRailHide = useCallback((delayMs = TABLE_QUICK_RAIL_HIDE_DELAY_MS) => {
     cancelTableQuickRailHide()
     if (typeof window === "undefined") return
-    tableQuickRailHideTimerRef.current = window.setTimeout(() => {
-      setTableAffordanceVisibility((prev) => (prev.visible ? { ...prev, visible: false } : prev))
+    const runHide = () => {
+      const now =
+        typeof window.performance !== "undefined"
+          ? window.performance.now()
+          : Date.now()
+      const remainingAxisHoverLockMs = tableAxisHoverLockUntilRef.current - now
+      if (remainingAxisHoverLockMs > 0) {
+        tableQuickRailHideTimerRef.current = window.setTimeout(runHide, remainingAxisHoverLockMs + 16)
+        return
+      }
       tableQuickRailHideTimerRef.current = null
-    }, delayMs)
-  }, [cancelTableQuickRailHide, setTableAffordanceVisibility])
+      clearTableQuickRailVisibility()
+    }
+    tableQuickRailHideTimerRef.current = window.setTimeout(runHide, delayMs)
+  }, [cancelTableQuickRailHide, clearTableQuickRailVisibility, tableAxisHoverLockUntilRef])
+
+  const hideTableQuickRailImmediately = useCallback(() => {
+    const now =
+      typeof window !== "undefined" && typeof window.performance !== "undefined"
+        ? window.performance.now()
+        : Date.now()
+    const remainingAxisHoverLockMs = tableAxisHoverLockUntilRef.current - now
+    if (remainingAxisHoverLockMs > 0) {
+      scheduleTableQuickRailHide(remainingAxisHoverLockMs + 16)
+      return
+    }
+    cancelTableQuickRailHide()
+    clearTableQuickRailVisibility()
+  }, [
+    cancelTableQuickRailHide,
+    clearTableQuickRailVisibility,
+    scheduleTableQuickRailHide,
+    tableAxisHoverLockUntilRef,
+  ])
 
   return {
     cancelTableOverflowCoachmarkHide,

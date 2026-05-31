@@ -578,6 +578,8 @@ test.describe("editor authoring block selection and drag", () => {
             right: railRect.right,
             top: railRect.top,
           }
+          const blockHandleGutterGapPx = 10
+          const blockHandleViewportPaddingPx = 12
           const resolveProtectedRects = (element: HTMLElement) => {
             const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
             let textNode: Text | null = null
@@ -599,7 +601,7 @@ test.describe("editor authoring block selection and drag", () => {
             range.setEnd(textNode, textOffset + Math.min(label.length, 6))
             const elementRect = element.getBoundingClientRect()
             const textRect = range.getBoundingClientRect()
-            const prefixLeft = Math.min(elementRect.left, textRect.left - 56)
+            const prefixLeft = Math.min(elementRect.left, textRect.left - (railRect.width + blockHandleGutterGapPx))
             return [
               {
                 bottom: textRect.bottom,
@@ -631,7 +633,16 @@ test.describe("editor authoring block selection and drag", () => {
               railBox.top < entry.bottom &&
               railBox.bottom > entry.top
           )
-          return { collisions, protectedRects, rail: railBox }
+          return {
+            collisions,
+            protectedRects,
+            rail: railBox,
+            viewport: {
+              height: window.innerHeight,
+              padding: blockHandleViewportPaddingPx,
+              width: window.innerWidth,
+            },
+          }
         },
         { selector: targetSelector, text: targetText }
       )
@@ -640,6 +651,11 @@ test.describe("editor authoring block selection and drag", () => {
         throw new Error(`말머리 overlap 좌표를 계산할 수 없습니다: ${targetText}`)
       }
 
+      const viewportTolerancePx = 1
+      expect(metrics.rail.left).toBeGreaterThanOrEqual(metrics.viewport.padding - viewportTolerancePx)
+      expect(metrics.rail.top).toBeGreaterThanOrEqual(metrics.viewport.padding - viewportTolerancePx)
+      expect(metrics.rail.right).toBeLessThanOrEqual(metrics.viewport.width - metrics.viewport.padding + viewportTolerancePx)
+      expect(metrics.rail.bottom).toBeLessThanOrEqual(metrics.viewport.height - metrics.viewport.padding + viewportTolerancePx)
       expect({ collisions: metrics.collisions, metrics, targetText }).toMatchObject({
         collisions: [],
       })

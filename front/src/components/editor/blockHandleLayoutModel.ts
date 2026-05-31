@@ -118,7 +118,10 @@ export const resolveBlockHandleRailLayout = (
   }
 }
 
-const resolveBlockHandleGutterBoundaryLeft = (blockElement?: HTMLElement | null) => {
+const resolveBlockHandleGutterBoundaryLeft = (
+  blockElement: HTMLElement | null | undefined,
+  railWidth: number
+) => {
   if (!blockElement || typeof document === "undefined" || typeof NodeFilter === "undefined") return null
   if (!blockElement.matches("li, blockquote")) return null
 
@@ -136,17 +139,70 @@ const resolveBlockHandleGutterBoundaryLeft = (blockElement?: HTMLElement | null)
     if (textRect.width <= 0 || textRect.height <= 0) return null
 
     const elementRect = blockElement.getBoundingClientRect()
-    return Math.min(elementRect.left, textRect.left - 56)
+    return Math.min(elementRect.left, textRect.left - (railWidth + BLOCK_HANDLE_GUTTER_GAP_PX))
   }
 
   return null
 }
 
-const collectBlockHandleProtectedRects = (protectedRoot?: HTMLElement | null): BlockHandleProtectedRect[] => {
-  if (!protectedRoot || typeof document === "undefined" || typeof NodeFilter === "undefined") return []
+const BLOCK_HANDLE_PROTECTED_SIBLING_WINDOW = 2
 
-  return Array.from(protectedRoot.querySelectorAll<HTMLElement>("li, blockquote")).flatMap((element) => {
-    const boundaryLeft = resolveBlockHandleGutterBoundaryLeft(element)
+const isBlockHandleProtectedElement = (element: Element | null): element is HTMLElement =>
+  typeof HTMLElement !== "undefined" && element instanceof HTMLElement && element.matches("li, blockquote")
+
+const collectBlockHandleProtectedElements = (protectedAnchor?: HTMLElement | null) => {
+  if (!protectedAnchor) return []
+
+  const elements: HTMLElement[] = []
+  const seen = new Set<HTMLElement>()
+  const push = (element: Element | null) => {
+    if (!isBlockHandleProtectedElement(element) || seen.has(element)) return
+    seen.add(element)
+    elements.push(element)
+  }
+  const pushDescendants = (element: Element | null, edge: "all" | "end" | "start") => {
+    if (!(element instanceof HTMLElement) || element.matches("li, blockquote")) return
+
+    const descendants = Array.from(element.children).flatMap((child) => {
+      if (isBlockHandleProtectedElement(child)) return [child]
+      if (!(child instanceof HTMLElement) || !child.matches("ul, ol")) return []
+      return Array.from(child.children).filter(isBlockHandleProtectedElement)
+    })
+    const boundedDescendants =
+      edge === "end"
+        ? descendants.slice(-BLOCK_HANDLE_PROTECTED_SIBLING_WINDOW)
+        : edge === "start"
+          ? descendants.slice(0, BLOCK_HANDLE_PROTECTED_SIBLING_WINDOW)
+          : descendants.slice(0, BLOCK_HANDLE_PROTECTED_SIBLING_WINDOW * 2 + 1)
+    boundedDescendants.forEach(push)
+  }
+  const pushCandidate = (element: Element | null, edge: "all" | "end" | "start" = "all") => {
+    push(element)
+    pushDescendants(element, edge)
+  }
+
+  pushCandidate(protectedAnchor)
+
+  let previousSibling = protectedAnchor.previousElementSibling
+  let nextSibling = protectedAnchor.nextElementSibling
+  for (let index = 0; index < BLOCK_HANDLE_PROTECTED_SIBLING_WINDOW; index += 1) {
+    pushCandidate(previousSibling, "end")
+    pushCandidate(nextSibling, "start")
+    previousSibling = previousSibling?.previousElementSibling ?? null
+    nextSibling = nextSibling?.nextElementSibling ?? null
+  }
+
+  return elements
+}
+
+const collectBlockHandleProtectedRects = (
+  protectedAnchor: HTMLElement | null | undefined,
+  railWidth: number
+): BlockHandleProtectedRect[] => {
+  if (!protectedAnchor || typeof document === "undefined" || typeof NodeFilter === "undefined") return []
+
+  return collectBlockHandleProtectedElements(protectedAnchor).flatMap((element) => {
+    const boundaryLeft = resolveBlockHandleGutterBoundaryLeft(element, railWidth)
     if (boundaryLeft === null) return []
 
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
@@ -190,7 +246,7 @@ const resolvePrefixSafeBlockHandleRailLayout = (
 ): BlockHandleRailLayout => {
   if (typeof window === "undefined") return railLayout
 
-  const protectedRects = collectBlockHandleProtectedRects(protectedRoot).filter(
+  const protectedRects = collectBlockHandleProtectedRects(protectedRoot, railWidth).filter(
     (protectedRect) =>
       protectedRect.bottom >= -railHeight &&
       protectedRect.top <= window.innerHeight + railHeight &&
@@ -238,11 +294,11 @@ export const resolveBlockHandleRailLayoutForSurface = (
       railWidth,
       railHeight,
       anchoredTop,
-      resolveBlockHandleGutterBoundaryLeft(gutterBoundaryElement) ?? rect.left
+      resolveBlockHandleGutterBoundaryLeft(gutterBoundaryElement, railWidth) ?? rect.left
     ),
     railWidth,
     railHeight,
-    gutterBoundaryElement?.closest(".aq-block-editor__content") as HTMLElement | null
+    gutterBoundaryElement
   )
   return {
     left: resolveBlockChromeLeft(railLayout.left, surfaceRect, mode),

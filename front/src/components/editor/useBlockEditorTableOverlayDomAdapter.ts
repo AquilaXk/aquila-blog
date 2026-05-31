@@ -9,6 +9,14 @@ import type { TableAffordanceGeometry } from "./tableAffordanceModel"
 import { findActiveRenderedTable, resolveTableScopedSelectedCell } from "./tableRenderedDomModel"
 import { isTableSelectionActive } from "./tableStructureModel"
 
+const resolveElementsFromPoint = (clientX: number, clientY: number) => {
+  if (typeof document.elementsFromPoint === "function") {
+    return document.elementsFromPoint(clientX, clientY)
+  }
+  const pointElement = document.elementFromPoint(clientX, clientY)
+  return pointElement ? [pointElement] : []
+}
+
 type UseBlockEditorTableOverlayDomAdapterArgs = {
   activeTableElementRef: MutableRefObject<HTMLTableElement | null>
   editorRef: MutableRefObject<TiptapEditor | null>
@@ -83,15 +91,19 @@ export const useBlockEditorTableOverlayDomAdapter = ({
       if (targetCell) return targetCell
       if (typeof document === "undefined") return null
 
-      const pointElement = document.elementFromPoint(clientX, clientY)
-      const pointCell = pointElement?.closest("td, th")
-      if (pointCell instanceof HTMLTableCellElement) return pointCell
+      const pointElements = resolveElementsFromPoint(clientX, clientY)
+      const pointCell = pointElements
+        .map((element) => element.closest("td, th"))
+        .find((cell): cell is HTMLTableCellElement => cell instanceof HTMLTableCellElement)
+      if (pointCell) return pointCell
 
       const normalizedTarget =
         target instanceof Element ? target : target instanceof Node ? target.parentElement : null
       const tableSurfaceElement =
         normalizedTarget?.closest(".aq-table-shell, .tableWrapper, table") ??
-        pointElement?.closest(".aq-table-shell, .tableWrapper, table") ??
+        pointElements
+          .map((element) => element.closest(".aq-table-shell, .tableWrapper, table"))
+          .find((surface): surface is Element => surface instanceof Element) ??
         null
       const tableElement =
         tableSurfaceElement instanceof HTMLTableElement

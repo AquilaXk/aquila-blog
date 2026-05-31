@@ -111,6 +111,56 @@ test.describe("editor authoring route table axis after select all", () => {
     await expect(editor.locator(".selectedCell")).toHaveCount(7)
   })
 
+  test("실제 /editor/[id] 7x3 table은 stale active DOM ref가 끊겨도 현재 rendered table로 column hotzone을 복구한다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1580, height: 900 })
+    const { editor } = await mockEditorRouteWithSevenByThreeTable(page, {
+      postId: 996,
+      title: "7x3 table disconnected ref stale hotzone route 글",
+      lead: "table live lead paragraph",
+      tail: "table live trailing paragraph",
+    })
+    const { columnHandle } = getTableAffordances(page)
+
+    const table = editor.locator("table").first()
+    const targetCell = editor.locator("td", { hasText: "Access Token" }).first()
+    await targetCell.click({ position: { x: 40, y: 16 } })
+    await targetCell.dblclick({ position: { x: 40, y: 16 } })
+
+    const staleTableBox = await table.boundingBox()
+    const staleCellBox = await targetCell.boundingBox()
+    if (!staleTableBox || !staleCellBox) {
+      throw new Error("7x3 route disconnected ref metrics are missing")
+    }
+
+    await page.mouse.move(staleCellBox.x + staleCellBox.width / 2, staleCellBox.y + staleCellBox.height / 2)
+    await page.waitForTimeout(140)
+    await page.evaluate(() => {
+      const tableElement = document.querySelector("[data-testid='block-editor-prosemirror'] table")
+      const tableShell = tableElement?.closest(".aq-table-shell, .tableWrapper, table")
+      if (!tableShell) throw new Error("table shell is missing")
+      const clone = tableShell.cloneNode(true) as HTMLElement
+      const spacer = document.createElement("div")
+      spacer.setAttribute("data-testid", "stale-active-table-ref-shift-spacer")
+      spacer.style.height = "96px"
+      spacer.style.pointerEvents = "none"
+      tableShell.before(spacer)
+      tableShell.replaceWith(clone)
+    })
+    await page.waitForTimeout(50)
+
+    const shiftedTableBox = await table.boundingBox()
+    if (!shiftedTableBox || shiftedTableBox.y - staleTableBox.y < 48) {
+      throw new Error("7x3 route disconnected ref shift is missing")
+    }
+
+    await page.mouse.move(staleCellBox.x + staleCellBox.width / 2, staleTableBox.y + 3)
+    await page.waitForTimeout(180)
+
+    await expect(columnHandle).toBeVisible()
+  })
+
   test("실제 /editor/[id] 7x3 table은 table-wide Cmd/Ctrl+A 직후 column grip을 첫 축 선택으로 연다", async ({
     page,
   }) => {

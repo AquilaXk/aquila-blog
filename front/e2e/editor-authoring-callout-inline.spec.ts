@@ -269,6 +269,44 @@ test.describe("editor authoring callout and inline formatting", () => {
       .toBe(0)
   })
 
+  test("writer heading 시작부 선택 bubble은 block rail 영역으로 밀리지 않는다", async ({ page }) => {
+    await page.goto(QA_WRITER_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("버블헤딩 오버랩 회피")
+    await selectWordInEditable(page, editor, "버블헤딩")
+    await page.getByRole("button", { name: "제목 2" }).first().click()
+    await expect(editor.locator("h2", { hasText: "버블헤딩" }).first()).toBeVisible()
+
+    const heading = editor.locator("h2", { hasText: "버블헤딩" }).first()
+    await selectWordInEditable(page, heading, "버블헤딩")
+    const textBubbleToolbar = page.getByTestId("editor-text-bubble-toolbar")
+    await expect(textBubbleToolbar).toBeVisible()
+
+    const metrics = await page.evaluate(() => {
+      const toolbar = document.querySelector<HTMLElement>("[data-testid='editor-text-bubble-toolbar']")
+      const bubbleRoot = toolbar?.parentElement
+      const heading = Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] h2"))
+        .find((element) => element.textContent?.includes("버블헤딩"))
+      if (!toolbar || !bubbleRoot || !heading) return null
+      const toolbarRect = toolbar.getBoundingClientRect()
+      const headingRect = heading.getBoundingClientRect()
+      return {
+        anchor: bubbleRoot.getAttribute("data-anchor"),
+        headingLeft: headingRect.left,
+        headingTop: headingRect.top,
+        toolbarBottom: toolbarRect.bottom,
+        toolbarLeft: toolbarRect.left,
+      }
+    })
+
+    if (!metrics) throw new Error("heading bubble metrics are missing")
+    expect(metrics.anchor).toBe("left")
+    expect(metrics.toolbarLeft).toBeGreaterThanOrEqual(metrics.headingLeft - 4)
+    expect(metrics.toolbarBottom).toBeLessThanOrEqual(metrics.headingTop - 4)
+  })
+
   test("writer surface에서는 마우스 드래그 선택 중 버블을 숨기고 mouseup 이후에만 노출한다", async ({
     page,
   }) => {

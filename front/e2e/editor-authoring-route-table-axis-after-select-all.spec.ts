@@ -5,6 +5,91 @@ import { mockEditorRouteWithSevenByThreeTable } from "./helpers/editorTableFixtu
 const SELECT_ALL_SHORTCUT = process.platform === "darwin" ? "Meta+a" : "Control+a"
 
 test.describe("editor authoring route table axis after select all", () => {
+  test("실제 /editor/[id] 7x3 table은 table-wide Cmd/Ctrl+A 직후 column grip을 첫 축 선택으로 연다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1580, height: 900 })
+    const { editor } = await mockEditorRouteWithSevenByThreeTable(page, {
+      postId: 993,
+      title: "7x3 table select-all column route 글",
+      lead: "table live lead paragraph",
+      tail: "table live trailing paragraph",
+    })
+    const { columnHandle } = getTableAffordances(page)
+
+    const table = editor.locator("table").first()
+    const targetCell = editor.locator("td", { hasText: "Access Token" }).first()
+    await targetCell.click({ position: { x: 40, y: 16 } })
+    await targetCell.dblclick({ position: { x: 40, y: 16 } })
+    await page.keyboard.press(SELECT_ALL_SHORTCUT)
+    await expect.poll(async () => page.evaluate(() => window.getSelection()?.toString() || "")).toContain("영역")
+    await expect.poll(async () => page.evaluate(() => window.getSelection()?.toString() || "")).toContain("구현되어 있는가")
+
+    const tableBox = await table.boundingBox()
+    const cellBox = await targetCell.boundingBox()
+    if (!tableBox || !cellBox) {
+      throw new Error("7x3 route column grip metrics are missing after table-wide select-all")
+    }
+    await page.mouse.move(cellBox.x + cellBox.width / 2, cellBox.y + cellBox.height / 2)
+    await page.evaluate(
+      ({ left, top, width }) => {
+        const doc = document as Document & {
+          __aqOriginalElementFromPoint?: typeof document.elementFromPoint
+          __aqOriginalElementsFromPoint?: typeof document.elementsFromPoint
+        }
+        const cover = document.createElement("div")
+        cover.setAttribute("data-testid", "table-hotzone-cover")
+        Object.assign(cover.style, {
+          background: "transparent",
+          height: "24px",
+          left: `${left}px`,
+          pointerEvents: "auto",
+          position: "fixed",
+          top: `${top}px`,
+          width: `${width}px`,
+          zIndex: "2147483647",
+        })
+        document.querySelector("[data-testid='block-editor-viewport']")?.appendChild(cover)
+        doc.__aqOriginalElementsFromPoint = document.elementsFromPoint.bind(document)
+        doc.__aqOriginalElementFromPoint = document.elementFromPoint.bind(document)
+        document.elementsFromPoint = ((clientX: number, clientY: number) => {
+          const rect = cover.getBoundingClientRect()
+          if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+            return [cover]
+          }
+          return doc.__aqOriginalElementsFromPoint?.(clientX, clientY) ?? []
+        }) as typeof document.elementsFromPoint
+        document.elementFromPoint = ((clientX: number, clientY: number) => {
+          const rect = cover.getBoundingClientRect()
+          if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+            return cover
+          }
+          return doc.__aqOriginalElementFromPoint?.(clientX, clientY) ?? null
+        }) as typeof document.elementFromPoint
+      },
+      { left: tableBox.x, top: tableBox.y, width: tableBox.width }
+    )
+    await page.mouse.move(cellBox.x + cellBox.width / 2, tableBox.y + 3)
+    await page.waitForTimeout(180)
+
+    await expect(columnHandle).toBeVisible()
+    await page.getByTestId("table-hotzone-cover").evaluate((element) => {
+      const doc = document as Document & {
+        __aqOriginalElementFromPoint?: typeof document.elementFromPoint
+        __aqOriginalElementsFromPoint?: typeof document.elementsFromPoint
+      }
+      if (doc.__aqOriginalElementsFromPoint) document.elementsFromPoint = doc.__aqOriginalElementsFromPoint
+      if (doc.__aqOriginalElementFromPoint) document.elementFromPoint = doc.__aqOriginalElementFromPoint
+      delete doc.__aqOriginalElementsFromPoint
+      delete doc.__aqOriginalElementFromPoint
+      element.remove()
+    })
+    await columnHandle.click()
+    await expect(page.getByTestId("table-column-selection-outline")).toBeVisible()
+    await expect(page.getByTestId("table-column-menu")).toBeVisible()
+    await expect(editor.locator(".selectedCell")).toHaveCount(7)
+  })
+
   test("실제 /editor/[id] 7x3 table은 table-wide Cmd/Ctrl+A 직후 row/column grip으로 축 선택을 연다", async ({
     page,
   }) => {

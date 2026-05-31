@@ -108,7 +108,21 @@ export const useBlockEditorTableOverlayDomAdapter = ({
       const tableElement =
         tableSurfaceElement instanceof HTMLTableElement
           ? tableSurfaceElement
-          : (tableSurfaceElement?.querySelector("table") as HTMLTableElement | null)
+          : (tableSurfaceElement?.querySelector("table") as HTMLTableElement | null) ??
+            (() => {
+              const activeTable =
+                activeTableElementRef.current ??
+                findActiveRenderedTable(viewportRef.current, tableAffordanceGeometryRef.current)
+              if (!activeTable?.isConnected) return null
+              const rect = activeTable.getBoundingClientRect()
+              const hitTestMargin = 32
+              const isInsideActiveTableSurface =
+                clientX >= rect.left - hitTestMargin &&
+                clientX <= rect.right + hitTestMargin &&
+                clientY >= rect.top - hitTestMargin &&
+                clientY <= rect.bottom + hitTestMargin
+              return isInsideActiveTableSurface ? activeTable : null
+            })()
       if (!tableElement) return null
 
       const cells = Array.from(tableElement.querySelectorAll("th, td")).filter(
@@ -121,7 +135,7 @@ export const useBlockEditorTableOverlayDomAdapter = ({
         }) ?? null
       )
     },
-    [getTableCellFromTarget]
+    [activeTableElementRef, getTableCellFromTarget, tableAffordanceGeometryRef, viewportRef]
   )
 
   const getActiveTableRectFromDom = useCallback((activeEditor?: TiptapEditor | null) => {

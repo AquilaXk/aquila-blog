@@ -34,6 +34,8 @@ const resolveElementsFromPoint = (clientX: number, clientY: number) => {
   return pointElement ? [pointElement] : []
 }
 
+const TABLE_AXIS_HOVER_LOCK_MS = 280
+
 type UseBlockEditorTableOverlayControllerCommandsArgs = {
   activeTableElementRef: MutableRefObject<HTMLTableElement | null>
   cancelTableQuickRailHide: () => void
@@ -53,6 +55,7 @@ type UseBlockEditorTableOverlayControllerCommandsArgs = {
     showCornerControls: boolean
     showCellMenu: boolean
   }>>
+  tableAxisHoverLockUntilRef: MutableRefObject<number>
   tableHoverAnchorLockUntilRef: MutableRefObject<number>
   viewportRef: RefObject<HTMLDivElement>
 }
@@ -68,6 +71,7 @@ export const useBlockEditorTableOverlayControllerCommands = ({
   setSelectionTick,
   setTableAffordanceGeometry,
   setTableAffordanceVisibility,
+  tableAxisHoverLockUntilRef,
   tableHoverAnchorLockUntilRef,
 }: UseBlockEditorTableOverlayControllerCommandsArgs) => {
   const clearWindowTextSelection = useCallback(() => {
@@ -136,18 +140,24 @@ export const useBlockEditorTableOverlayControllerCommands = ({
     if (!tableElement || !tableRect) {
       activeTableElementRef.current = null
       hoveredTableElementRef.current = null
+      tableAxisHoverLockUntilRef.current = 0
       tableHoverAnchorLockUntilRef.current = 0
       setHoveredTableCellMenuLayout(null)
       hideTableQuickRailImmediately()
       return
     }
     activeTableElementRef.current = tableElement
+    const now =
+      typeof window !== "undefined" && typeof window.performance !== "undefined"
+        ? window.performance.now()
+        : Date.now()
+    const isRecentHoverAnchorSync =
+      !hasHoverPoint &&
+      hoveredTableElementRef.current === tableElement &&
+      now <= tableHoverAnchorLockUntilRef.current
     if (hasHoverPoint) {
       hoveredTableElementRef.current = tableElement
-      tableHoverAnchorLockUntilRef.current =
-        (typeof window !== "undefined" && typeof window.performance !== "undefined"
-          ? window.performance.now()
-          : Date.now()) + 280
+      tableHoverAnchorLockUntilRef.current = now + TABLE_AXIS_HOVER_LOCK_MS
     }
     cancelTableQuickRailHide()
     const tableRows = Array.from(tableElement.querySelectorAll("tr")).filter(
@@ -264,6 +274,12 @@ export const useBlockEditorTableOverlayControllerCommands = ({
       !showColumnAddBar &&
       !showRowAddBar &&
       !showCornerControls
+    if (hasHoverPoint) {
+      tableAxisHoverLockUntilRef.current =
+        showColumnRail || showRowRail || showColumnAddBar || showRowAddBar || showCornerControls
+          ? now + TABLE_AXIS_HOVER_LOCK_MS
+          : 0
+    }
     const activeRowIndex = typeof hoveredRowIndex === "number"
       ? hoveredRowIndex
       : activeRow
@@ -387,15 +403,17 @@ export const useBlockEditorTableOverlayControllerCommands = ({
       cellMenuAnchor,
       columnSegments: firstRowCells,
     })
-    setTableAffordanceVisibility((prev) => ({
-      visible: true,
-      showColumnRail: hasHoverPoint ? showColumnRail : prev.showColumnRail,
-      showRowRail: hasHoverPoint ? showRowRail : prev.showRowRail,
-      showColumnAddBar: hasHoverPoint ? showColumnAddBar : prev.showColumnAddBar,
-      showRowAddBar: hasHoverPoint ? showRowAddBar : prev.showRowAddBar,
-      showCornerControls: hasHoverPoint ? showCornerControls : prev.showCornerControls,
-      showCellMenu: hasHoverPoint ? showCellMenu : prev.showCellMenu,
-    }))
+    if (!isRecentHoverAnchorSync) {
+      setTableAffordanceVisibility((prev) => ({
+        visible: true,
+        showColumnRail: hasHoverPoint ? showColumnRail : prev.showColumnRail,
+        showRowRail: hasHoverPoint ? showRowRail : prev.showRowRail,
+        showColumnAddBar: hasHoverPoint ? showColumnAddBar : prev.showColumnAddBar,
+        showRowAddBar: hasHoverPoint ? showRowAddBar : prev.showRowAddBar,
+        showCornerControls: hasHoverPoint ? showCornerControls : prev.showCornerControls,
+        showCellMenu: hasHoverPoint ? showCellMenu : prev.showCellMenu,
+      }))
+    }
   }, [
     activeTableElementRef,
     cancelTableQuickRailHide,
@@ -406,6 +424,7 @@ export const useBlockEditorTableOverlayControllerCommands = ({
     setTableAffordanceVisibility,
     syncHoveredTableCellMenuLayout,
     tableHoverAnchorLockUntilRef,
+    tableAxisHoverLockUntilRef,
   ])
 
   const stabilizeTableSelectionSurface = useCallback((nextEditor?: TiptapEditor | null) => {

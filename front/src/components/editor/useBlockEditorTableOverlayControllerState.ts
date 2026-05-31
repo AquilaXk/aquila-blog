@@ -32,6 +32,7 @@ export const useBlockEditorTableOverlayControllerState = ({
 }: UseBlockEditorTableOverlayControllerStateArgs) => {
   const activeTableElementRef = useRef<HTMLTableElement | null>(null)
   const hoveredTableElementRef = useRef<HTMLTableElement | null>(null)
+  const tableAxisHoverLockUntilRef = useRef(0)
   const tableHoverAnchorLockUntilRef = useRef(0)
   const [isNarrowTableViewport, setIsNarrowTableViewport] = useState(false)
   const [tableAffordanceGeometry, setTableAffordanceGeometry] = useState<TableAffordanceGeometry>(
@@ -92,6 +93,7 @@ export const useBlockEditorTableOverlayControllerState = ({
     tableAffordanceGeometryRef,
     tableAffordanceVisibility,
     tableAffordanceVisibilityRef,
+    tableAxisHoverLockUntilRef,
     tableHoverAnchorLockUntilRef,
     tableMenuState,
   }

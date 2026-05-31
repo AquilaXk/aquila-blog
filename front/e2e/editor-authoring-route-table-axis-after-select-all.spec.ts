@@ -5,6 +5,54 @@ import { mockEditorRouteWithSevenByThreeTable } from "./helpers/editorTableFixtu
 const SELECT_ALL_SHORTCUT = process.platform === "darwin" ? "Meta+a" : "Control+a"
 
 test.describe("editor authoring route table axis after select all", () => {
+  test("실제 /editor/[id] 7x3 table은 row 선택 해제 직후 column hotzone direct hover로 열 선택을 연다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1580, height: 900 })
+    const { editor } = await mockEditorRouteWithSevenByThreeTable(page, {
+      postId: 994,
+      title: "7x3 table row reset column route 글",
+      lead: "table live lead paragraph",
+      tail: "table live trailing paragraph",
+    })
+    const { columnHandle, rowHandle } = getTableAffordances(page)
+
+    const table = editor.locator("table").first()
+    const targetCell = editor.locator("td", { hasText: "Access Token" }).first()
+    await targetCell.click({ position: { x: 40, y: 16 } })
+    await targetCell.dblclick({ position: { x: 40, y: 16 } })
+
+    const tableBox = await table.boundingBox()
+    const cellBox = await targetCell.boundingBox()
+    if (!tableBox || !cellBox) {
+      throw new Error("7x3 route row reset metrics are missing")
+    }
+
+    await page.mouse.move(tableBox.x + 3, cellBox.y + cellBox.height / 2)
+    await page.waitForTimeout(140)
+    await expect(rowHandle).toBeVisible()
+    await rowHandle.click()
+    await expect(page.getByTestId("table-row-selection-outline")).toBeVisible()
+    await expect(page.getByTestId("table-row-menu")).toBeVisible()
+    await expect(editor.locator(".selectedCell")).toHaveCount(3)
+
+    await page.keyboard.press("Escape")
+    await targetCell.click({ position: { x: 40, y: 16 } })
+    const tableBoxAfterReset = await table.boundingBox()
+    const cellBoxAfterReset = await targetCell.boundingBox()
+    if (!tableBoxAfterReset || !cellBoxAfterReset) {
+      throw new Error("7x3 route row reset column metrics are missing")
+    }
+    await page.mouse.move(cellBoxAfterReset.x + cellBoxAfterReset.width / 2, tableBoxAfterReset.y + 3)
+    await page.waitForTimeout(180)
+
+    await expect(columnHandle).toBeVisible()
+    await columnHandle.click()
+    await expect(page.getByTestId("table-column-selection-outline")).toBeVisible()
+    await expect(page.getByTestId("table-column-menu")).toBeVisible()
+    await expect(editor.locator(".selectedCell")).toHaveCount(7)
+  })
+
   test("실제 /editor/[id] 7x3 table은 table-wide Cmd/Ctrl+A 직후 column grip을 첫 축 선택으로 연다", async ({
     page,
   }) => {

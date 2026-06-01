@@ -69,7 +69,7 @@ const resolvePost507FinalTableColumnMetrics = async (page: Page) => {
     await page.waitForTimeout(60)
   }
 
-  throw new Error("7x3 route row reset column metrics are missing")
+  throw new Error("post 507 final table row reset column metrics are missing")
 }
 
 test.describe("editor authoring route post 507 final table axis after cell text select all", () => {
@@ -91,7 +91,7 @@ test.describe("editor authoring route post 507 final table axis after cell text 
     const tableBox = await table.boundingBox()
     const cellBox = await targetCell.boundingBox()
     if (!tableBox || !cellBox) {
-      throw new Error("7x3 route row reset metrics are missing")
+      throw new Error("post 507 final table row reset metrics are missing")
     }
 
     await page.mouse.move(tableBox.x + 3, cellBox.y + cellBox.height / 2)
@@ -113,7 +113,7 @@ test.describe("editor authoring route post 507 final table axis after cell text 
       await page.mouse.move(columnMetrics.hoverX, columnMetrics.hoverY, { steps: 4 })
       await page.waitForTimeout(220)
       if (await columnHandle.isVisible().catch(() => false)) break
-      if (attempt === 4) throw new Error("7x3 route column handle did not appear after row reset")
+      if (attempt === 4) throw new Error("post 507 final table column handle did not appear after row reset")
     }
 
     await expect(columnHandle).toBeVisible()
@@ -145,7 +145,7 @@ test.describe("editor authoring route post 507 final table axis after cell text 
     const tableBox = await table.boundingBox()
     const cellBox = await targetCell.boundingBox()
     if (!tableBox || !cellBox) {
-      throw new Error("7x3 route column grip metrics are missing after cell-local select-all")
+      throw new Error("post 507 final table column grip metrics are missing after cell-local select-all")
     }
     await page.mouse.move(cellBox.x + cellBox.width / 2, cellBox.y + cellBox.height / 2)
     await page.evaluate(
@@ -239,7 +239,7 @@ test.describe("editor authoring route post 507 final table axis after cell text 
       const tableBox = await table.boundingBox()
       const cellBox = await targetCell.boundingBox()
       if (!tableBox || !cellBox) {
-        throw new Error("7x3 route row grip metrics are missing after cell-local select-all")
+        throw new Error("post 507 final table row grip metrics are missing after cell-local select-all")
       }
       const points = [
         { x: tableBox.x + 4, y: cellBox.y + cellBox.height / 2 },

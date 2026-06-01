@@ -21,6 +21,190 @@ export const POST_507_FINAL_TABLE_FORBIDDEN_TEXTS = [
   "Access 길게 보안 위험",
 ] as const
 
+export const POST_507_REAL_FEATURE_CONTRACT = {
+  auxiliaryRouteBoundary:
+    "QA routes and synthetic documents are auxiliary/unit contracts; editor user-bug close gates must use post 507 copied content on /editor/[id].",
+  editorRoute: "/editor/[id]",
+  fixtureFile: "front/e2e/helpers/post507Fixtures.ts",
+  fixtureName: "post507Markdown",
+  requiredCoverage: [
+    {
+      id: "code-block-initial-render",
+      issueSymptom: "code block body appears late or empty on first render",
+      requiredSourceFragments: ["507 contentHtml 코드블럭", "POST_507_TITLE", "/editor/584"],
+      routeContract: "507-contentHtml-copy",
+      specFile: "editor-authoring-route-code-initial-render.spec.ts",
+    },
+    {
+      id: "code-block-language-picker",
+      issueSymptom: "code language picker dead-clicks or scrolls instead of opening",
+      requiredSourceFragments: ["mockEditorRouteWithPost507", "userId", "코드 언어 선택"],
+      routeContract: "507-copy-route",
+      specFile: "editor-authoring-code-mermaid.spec.ts",
+    },
+    {
+      id: "table-axis-selection",
+      issueSymptom: "row/column structural selection flickers or leaves stale overlays",
+      requiredSourceFragments: [
+        "mockEditorRouteWithPost507",
+        "table-column-selection-outline",
+        "table-row-selection-outline",
+      ],
+      routeContract: "507-copy-route",
+      specFile: "editor-authoring-route-table-axis-after-select-all.spec.ts",
+    },
+    {
+      id: "table-cmd-a",
+      issueSymptom: "Cmd/Ctrl+A in a table cell fails to select the current table text",
+      requiredSourceFragments: ["mockEditorRouteWithPost507", "expectPost507FinalTableTextSelected", "SELECT_ALL_SHORTCUT"],
+      routeContract: "507-copy-route",
+      specFile: "editor-authoring-route-table-select-all.spec.ts",
+    },
+    {
+      id: "table-text-drag",
+      issueSymptom: "mouse drag inside table cells does not leave native text selection",
+      requiredSourceFragments: ["post507Markdown", "single-cell native drag", "multi-cell"],
+      routeContract: "507-copy-route",
+      specFile: "editor-authoring-route-table-multicell-selection.spec.ts",
+    },
+    {
+      id: "list-item-block-selection",
+      issueSymptom: "list item block selection paints inside the bullet/content instead of the item overlay",
+      requiredSourceFragments: ["mockEditorRouteWithPost507", "실제 /editor/[id] 507 리스트 항목"],
+      routeContract: "507-copy-route",
+      specFile: "editor-authoring-list-affordances.spec.ts",
+    },
+    {
+      id: "body-text-selection",
+      issueSymptom: "body text drag selection jumps scroll or leaves block overlay state behind",
+      requiredSourceFragments: ["post507Markdown", "Stateless가 좋다는데", "bodyDrag.selectionText"],
+      routeContract: "507-copy-route",
+      specFile: "editor-authoring-route-live-drag-sequence.spec.ts",
+    },
+    {
+      id: "block-selection",
+      issueSymptom: "top-level block selection competes with code/list/table text selection",
+      requiredSourceFragments: ["mockEditorRouteWithPost507", "코드블럭 block handle", "keyboard-block-selection-overlay"],
+      routeContract: "507-copy-route",
+      specFile: "editor-authoring-code-mermaid.spec.ts",
+    },
+    {
+      id: "scroll-jump-lock",
+      issueSymptom: "selection or drag leaves scrollTop jumped or locked",
+      requiredSourceFragments: ["post507Markdown", "live 507", "scrollTop"],
+      routeContract: "507-copy-route",
+      specFile: "editor-authoring-route-live-drag-sequence.spec.ts",
+    },
+  ],
+} as const
+
+export type Post507EditorDiagnosticSnapshot = {
+  activeElement: string | null
+  activePreserveOwner: string | null
+  domSnapshot: {
+    blockOverlayCount: number
+    codeBlockCount: number
+    editorTextSample: string
+    selectedCellCount: number
+    tableCount: number
+  }
+  focusedElement: string | null
+  overlayRects: Array<{
+    bottom: number
+    height: number
+    left: number
+    selector: string
+    testId: string | null
+    top: number
+    width: number
+  }>
+  preserveAttributes: Array<{ element: string; name: string; value: string }>
+  scrollTopTimeline: Array<{ label: string; scrollTop: number }>
+  selectionText: string
+  url: string
+}
+
+export const readPost507EditorDiagnostics = async (
+  page: Page,
+  label = "snapshot"
+): Promise<Post507EditorDiagnosticSnapshot> =>
+  page.evaluate((snapshotLabel) => {
+    const describeElement = (element: Element | null) => {
+      if (!element) return null
+      const id = element.id ? `#${element.id}` : ""
+      const testId = element.getAttribute("data-testid")
+      const testIdSuffix = testId ? `[data-testid="${testId}"]` : ""
+      const className = typeof element.className === "string" ? element.className.trim().replace(/\s+/g, ".") : ""
+      return `${element.tagName.toLowerCase()}${id}${className ? `.${className}` : ""}${testIdSuffix}`
+    }
+    const toRect = (element: Element, selector: string) => {
+      const rect = element.getBoundingClientRect()
+      return {
+        bottom: Math.round(rect.bottom),
+        height: Math.round(rect.height),
+        left: Math.round(rect.left),
+        selector,
+        testId: element.getAttribute("data-testid"),
+        top: Math.round(rect.top),
+        width: Math.round(rect.width),
+      }
+    }
+    const overlaySelectors = [
+      "[data-testid='keyboard-block-selection-overlay']",
+      "[data-testid='table-column-selection-outline']",
+      "[data-testid='table-row-selection-outline']",
+      "[data-testid='block-drag-drop-indicator']",
+      "[data-block-drag-ghost='true']",
+      "[data-table-affordance]",
+    ]
+    const overlayRects = overlaySelectors.flatMap((selector) =>
+      Array.from(document.querySelectorAll(selector)).map((element) => toRect(element, selector))
+    )
+    const preserveAttributes = Array.from(document.querySelectorAll<HTMLElement>("*"))
+      .flatMap((element) =>
+        Array.from(element.attributes)
+          .filter((attribute) => /preserve|scroll|selection/i.test(attribute.name))
+          .map((attribute) => ({
+            element: describeElement(element) || element.tagName.toLowerCase(),
+            name: attribute.name,
+            value: attribute.value.slice(0, 160),
+          }))
+      )
+      .slice(0, 40)
+    const editor = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
+    const selectionText =
+      window.getSelection()?.toString() ||
+      document.documentElement.getAttribute("data-table-drag-selection-text") ||
+      document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
+      ""
+
+    return {
+      activeElement: describeElement(document.activeElement),
+      activePreserveOwner:
+        document.documentElement.getAttribute("data-editor-scroll-preserve-owner") ||
+        document.documentElement.getAttribute("data-editor-active-preserve-owner") ||
+        null,
+      domSnapshot: {
+        blockOverlayCount: document.querySelectorAll("[data-testid='keyboard-block-selection-overlay']").length,
+        codeBlockCount: document.querySelectorAll("[data-code-block-wrapper='true'], .aq-code-shell").length,
+        editorTextSample: (editor?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 240),
+        selectedCellCount: document.querySelectorAll(".selectedCell").length,
+        tableCount: document.querySelectorAll("table").length,
+      },
+      focusedElement: describeElement(document.querySelector(":focus")),
+      overlayRects,
+      preserveAttributes,
+      scrollTopTimeline: [
+        {
+          label: snapshotLabel,
+          scrollTop: Math.round(document.scrollingElement?.scrollTop ?? window.scrollY),
+        },
+      ],
+      selectionText,
+      url: `${window.location.pathname}${window.location.search}`,
+    }
+  }, label)
+
 export const expectPost507FinalTableTextSelected = (selectionText: string) => {
   const normalizedSelectionText = selectionText.replace(/\s+/g, " ").trim()
   for (const requiredText of POST_507_FINAL_TABLE_REQUIRED_TEXTS) {

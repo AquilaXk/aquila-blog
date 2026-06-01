@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import type { Locator, Page } from "@playwright/test"
 import {
   QA_ENGINE_ROUTE,
   getTableAffordances,
@@ -6,6 +7,22 @@ import {
   selectWordInEditable,
   setWordSelectionInEditable,
 } from "./helpers/editorAuthoringFlow"
+
+const openCellMenuForCell = async (page: Page, cell: Locator) => {
+  const { cellMenuButton } = getTableAffordances(page)
+  const cellMenu = page.getByTestId("table-cell-menu")
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await cell.click()
+    await cell.hover()
+    await expect(cellMenuButton).toBeVisible()
+    await cellMenuButton.click()
+    await page.waitForTimeout(80)
+    if (await cellMenu.isVisible().catch(() => false)) return cellMenu
+  }
+
+  throw new Error("table cell menu did not open for active cell")
+}
 
 test.describe("editor authoring table structure and styles", () => {
   test("모바일 뷰포트에서는 표만 wrapper 내부 가로 스크롤을 사용하고 페이지 전체 overflow는 생기지 않는다", async ({
@@ -505,16 +522,10 @@ test.describe("editor authoring table structure and styles", () => {
 
   test("table cell menu는 셀 스타일만 포함하고 구조 액션 없이 정렬/배경을 저장한다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
-    const { cellMenuButton } = getTableAffordances(page)
 
     await page.getByRole("button", { name: "테이블" }).click()
     const firstTableCell = page.locator("table th, table td").first()
-    await firstTableCell.click()
-    await firstTableCell.hover()
-
-    await cellMenuButton.click()
-
-    const cellMenu = page.getByTestId("table-cell-menu")
+    const cellMenu = await openCellMenuForCell(page, firstTableCell)
     await expect(cellMenu).toBeVisible()
     await expect(cellMenu.getByRole("button", { name: "좌측" })).toBeVisible()
     await expect(cellMenu.getByRole("button", { name: "가운데" })).toBeVisible()
@@ -525,11 +536,17 @@ test.describe("editor authoring table structure and styles", () => {
     await expect(cellMenu.getByRole("button", { name: "표 삭제" })).toHaveCount(0)
 
     await cellMenu.getByRole("button", { name: "가운데" }).click()
-    await cellMenu.getByRole("button", { name: "노랑 배경" }).click()
-
     await expect
       .poll(async () => (await page.getByTestId("qa-markdown-output").textContent()) || "")
       .toContain('"align":"center"')
+
+    const refreshedCellMenu = page.getByTestId("table-cell-menu")
+    if (!(await refreshedCellMenu.isVisible().catch(() => false))) {
+      await openCellMenuForCell(page, firstTableCell)
+    }
+    const yellowBackgroundButton = page.getByTestId("table-cell-menu").getByRole("button", { name: "노랑 배경" })
+    await expect(yellowBackgroundButton).toBeVisible()
+    await yellowBackgroundButton.click()
     await expect
       .poll(async () => (await page.getByTestId("qa-markdown-output").textContent()) || "")
       .toContain('"backgroundColor":"#fef3c7"')

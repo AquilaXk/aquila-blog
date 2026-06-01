@@ -48,8 +48,8 @@ export type BlockEditorTableOverlayLayerProps = {
   draggedTableAxisState: DraggedTableAxisState
   editor: TiptapEditor | null
   growTableFromCorner: () => void
-  handleTableColumnRailSegmentClick: (columnIndex: number, anchorRect: DOMRect) => void
-  handleTableRowGripClick: (rowIndex: number, anchorRect: DOMRect) => void
+  handleTableColumnRailSegmentClick: (columnIndex: number, anchorRect: DOMRect) => boolean
+  handleTableRowGripClick: (rowIndex: number, anchorRect: DOMRect) => boolean
   handleToolbarButtonMouseDown: ToolbarMouseDownHandler
   hideTableOverflowCoachmark: () => void
   hoveredTableCellMenuLayout: Pick<TableRailLayout, "cellMenuLeft" | "cellMenuTop"> | null
@@ -81,7 +81,8 @@ export type BlockEditorTableOverlayLayerProps = {
     axisIndex: number,
     pointerId: number,
     clientX: number,
-    clientY: number
+    clientY: number,
+    completeClickWithoutDrag?: () => boolean
   ) => void
   startTableColumnRailResize: (pointerId: number, columnIndex: number, clientX: number) => void
   startTableCornerGrow: (

@@ -67,6 +67,13 @@ export const useBlockEditorTableOverlayAxisDrag = ({
       viewWithInput.input.mouseDown = null
     }
   }
+  const clearStructuralSelectionNativeText = useCallback(() => {
+    clearTableTextSelectionForStructuralSelection()
+    if (typeof window === "undefined") return
+    window.requestAnimationFrame(() => {
+      clearTableTextSelectionForStructuralSelection()
+    })
+  }, [])
   const selectTableAxisAtIndex = useCallback(
     (activeEditor: TiptapEditor, tablePos: number, axis: "row" | "column", axisIndex: number) => {
       const tableNode = activeEditor.state.doc.nodeAt(tablePos)
@@ -91,7 +98,7 @@ export const useBlockEditorTableOverlayAxisDrag = ({
             .setMeta(tableEditingKey, anchorResolved.pos)
         )
         setSelectionTick((prev) => prev + 1)
-        clearTableTextSelectionForStructuralSelection({ clearWindowSelection: false })
+        clearStructuralSelectionNativeText()
         return true
       }
 
@@ -112,10 +119,10 @@ export const useBlockEditorTableOverlayAxisDrag = ({
           .setMeta(tableEditingKey, anchorResolved.pos)
       )
       setSelectionTick((prev) => prev + 1)
-      clearTableTextSelectionForStructuralSelection({ clearWindowSelection: false })
+      clearStructuralSelectionNativeText()
       return true
     },
-    [clearStickyTopLevelBlockSelection, setSelectionTick]
+    [clearStickyTopLevelBlockSelection, clearStructuralSelectionNativeText, setSelectionTick]
   )
 
   const clearPendingTableAxisDrag = useCallback(() => {
@@ -233,7 +240,14 @@ export const useBlockEditorTableOverlayAxisDrag = ({
   )
 
   const startPendingTableAxisDrag = useCallback(
-    (axis: TableAxis, sourceIndex: number, pointerId: number, clientX: number, clientY: number) => {
+    (
+      axis: TableAxis,
+      sourceIndex: number,
+      pointerId: number,
+      clientX: number,
+      clientY: number,
+      completeClickWithoutDrag?: () => boolean
+    ) => {
       const currentEditor = editorRef.current
       if (!currentEditor) return
 
@@ -325,6 +339,17 @@ export const useBlockEditorTableOverlayAxisDrag = ({
 
         const pending = pendingTableAxisDragRef.current
         if (!pending || doneEvent.pointerId !== pending.pointerId) return
+        if (doneEvent.type !== "pointerup") {
+          clearPendingTableAxisDrag()
+          return
+        }
+        const completedClick = completeClickWithoutDrag?.() ?? false
+        if (completedClick) {
+          tableAxisDragSuppressClickRef.current = true
+          window.setTimeout(() => {
+            tableAxisDragSuppressClickRef.current = false
+          }, 0)
+        }
         clearPendingTableAxisDrag()
       }
 

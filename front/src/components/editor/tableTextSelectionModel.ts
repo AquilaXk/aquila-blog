@@ -51,10 +51,17 @@ let hasRecentTableTextSelectionContext = false
 let shouldClearActiveTableTextSelectionOnBlur = false
 let lastTableSelectionRoot: HTMLElement | null = null
 let lastTableSelectionExitTarget: Element | null = null
+let tableTextSelectionClearGeneration = 0
+let tableTextSelectionFinalizeSuppressedUntil = 0
 const RECENT_TABLE_TEXT_SELECTION_CONTEXT_ATTR = "data-table-recent-text-selection-context"
 export const TABLE_DRAG_SELECTION_TEXT_ATTR = "data-table-drag-selection-text"
 export const TABLE_DRAG_SELECTION_TEXT_SELECTOR = `[${TABLE_DRAG_SELECTION_TEXT_ATTR}]`
 const TABLE_TEXT_HIGHLIGHT_NAME = "aq-table-text-selection"
+export const getTableTextSelectionClearGeneration = () => tableTextSelectionClearGeneration
+export const isTableTextSelectionClearGenerationCurrent = (generation: number) =>
+  generation === tableTextSelectionClearGeneration
+const getNow = () => (typeof performance !== "undefined" ? performance.now() : Date.now())
+const isTableTextSelectionFinalizeSuppressed = () => getNow() < tableTextSelectionFinalizeSuppressedUntil
 const clearTableDragSelectionTextAttributes = () => {
   document.querySelectorAll(TABLE_DRAG_SELECTION_TEXT_SELECTOR).forEach((element) => element.removeAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR))
   document.documentElement.removeAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR)
@@ -85,6 +92,7 @@ const preserveTableTextRangeAcrossFrames = (anchorCell: HTMLElement, pointCell: 
   activeTableTextRangePreserveCancel?.()
   let cancelled = false, frame = 0
   const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now()
+  const clearGeneration = tableTextSelectionClearGeneration
   const cleanup = () => {
     window.removeEventListener("pointerdown", cancel, true); window.removeEventListener("mousedown", cancel, true); window.removeEventListener("wheel", cancel, true); window.removeEventListener("scroll", cancel, true); window.removeEventListener("keydown", cancel, true)
     if (activeTableTextRangePreserveCancel === cancel) activeTableTextRangePreserveCancel = null
@@ -98,6 +106,10 @@ const preserveTableTextRangeAcrossFrames = (anchorCell: HTMLElement, pointCell: 
   }
   const restore = () => {
     if (cancelled) return
+    if (!isTableTextSelectionClearGenerationCurrent(clearGeneration)) {
+      cancel()
+      return
+    }
     selectTableCellTextRange(anchorCell, pointCell)
     frame += 1
     const elapsedMs = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt
@@ -114,6 +126,11 @@ const preserveTableTextRangeAcrossFrames = (anchorCell: HTMLElement, pointCell: 
 }
 
 export const finalizeTableTextSelectionFromPoint = (clientX: number, clientY: number, target?: EventTarget | Node | null) => {
+  if (isTableTextSelectionFinalizeSuppressed()) {
+    pendingTableTextSelectionRangeCells = null
+    explicitTableTextDragStart = null
+    return false
+  }
   const explicitDragStart = explicitTableTextDragStart
   explicitTableTextDragStart = null
   const allowControlFallback = Boolean(explicitDragStart || pendingTableTextSelectionRangeCells)
@@ -121,7 +138,11 @@ export const finalizeTableTextSelectionFromPoint = (clientX: number, clientY: nu
   pendingTableTextSelectionRangeCells = null
   if (!rangeCells || rangeCells.anchorCell === rangeCells.pointCell) return false
   cancelActiveTableCellTextSelectionPreserves()
-  const restore = () => selectTableCellTextRange(rangeCells.anchorCell, rangeCells.pointCell)
+  const clearGeneration = tableTextSelectionClearGeneration
+  const restore = () => {
+    if (!isTableTextSelectionClearGenerationCurrent(clearGeneration)) return
+    selectTableCellTextRange(rangeCells.anchorCell, rangeCells.pointCell)
+  }
   window.requestAnimationFrame(restore); window.setTimeout(restore, 80); window.setTimeout(restore, 180)
   preserveTableTextRangeAcrossFrames(rangeCells.anchorCell, rangeCells.pointCell)
   return true
@@ -335,6 +356,8 @@ export const cancelActiveTableCellTextSelectionPreserves = () => {
 export const clearTableTextSelectionForStructuralSelection = (
   options: { clearWindowSelection?: boolean } = {}
 ) => {
+  tableTextSelectionClearGeneration += 1
+  tableTextSelectionFinalizeSuppressedUntil = getNow() + 180
   pendingTableTextSelectionRangeCells = null
   explicitTableTextDragStart = null
   hasRecentTableTextSelectionContext = false
@@ -817,6 +840,7 @@ export const preserveTableCellTextSelectionAcrossFrames = (
   resolveEndCell?: () => HTMLElement | null
 ) => {
   const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now()
+  const clearGeneration = tableTextSelectionClearGeneration
   let frame = 0
   let cancelled = false
   let restoring = false
@@ -861,6 +885,10 @@ export const preserveTableCellTextSelectionAcrossFrames = (
   activeTableCellSelectionPreserveCancels.add(cancel)
   const restore = () => {
     if (cancelled) return
+    if (!isTableTextSelectionClearGenerationCurrent(clearGeneration)) {
+      cancel()
+      return
+    }
     if (frame > 0 && !hasOwnedTableCellTextSelection(editor, startedCell)) {
       cancel()
       return

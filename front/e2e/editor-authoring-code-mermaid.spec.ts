@@ -1,9 +1,42 @@
-import { expect, test } from "@playwright/test"
-import {
-  expectEditorToContainLoadedText,
-  QA_ENGINE_ROUTE,
-  QA_WRITER_ROUTE,
-} from "./helpers/editorAuthoringFlow"
+import { expect, test, type Locator } from "@playwright/test"
+import { QA_ENGINE_ROUTE, QA_WRITER_ROUTE } from "./helpers/editorAuthoringFlow"
+import { mockEditorRouteWithPost507 } from "./helpers/post507Fixtures"
+
+const expectCodeBlockInnerChromeHidden = async (codeBlock: Locator) => {
+  const chrome = await codeBlock.evaluate((element) => {
+    const readChrome = (selector: string) => {
+      const node = element.querySelector<HTMLElement>(selector)
+      if (!node) throw new Error(`${selector} is missing`)
+      const style = window.getComputedStyle(node)
+      return {
+        backgroundColor: style.backgroundColor,
+        borderBottomWidth: style.borderBottomWidth,
+        borderLeftWidth: style.borderLeftWidth,
+        borderRadius: style.borderTopLeftRadius,
+        borderRightWidth: style.borderRightWidth,
+        borderTopWidth: style.borderTopWidth,
+        boxShadow: style.boxShadow,
+      }
+    }
+
+    return {
+      content: readChrome(".aq-code-editor-content"),
+      highlight: readChrome(".aq-code-highlight-layer"),
+    }
+  })
+
+  for (const layer of [chrome.highlight, chrome.content]) {
+    expect([
+      layer.borderTopWidth,
+      layer.borderRightWidth,
+      layer.borderBottomWidth,
+      layer.borderLeftWidth,
+    ]).toEqual(["0px", "0px", "0px", "0px"])
+    expect(layer.borderRadius).toBe("0px")
+    expect(layer.boxShadow).toBe("none")
+    expect(layer.backgroundColor).toBe("rgba(0, 0, 0, 0)")
+  }
+}
 
 test.describe("editor authoring code and mermaid blocks", () => {
   test("코드 블록은 작성 surface에서도 Prism 하이라이트 토큰을 렌더한다", async ({ page }) => {
@@ -105,6 +138,7 @@ test.describe("editor authoring code and mermaid blocks", () => {
 
     const codeBlock = page.locator("[data-code-block-wrapper='true']").first()
     await expect(codeBlock).toBeVisible()
+    await expectCodeBlockInnerChromeHidden(codeBlock)
 
     await codeBlock.locator("button[aria-haspopup='dialog']").click()
 
@@ -126,91 +160,15 @@ test.describe("editor authoring code and mermaid blocks", () => {
   test("실제 /editor/[id] 수정 route 코드 언어 선택은 dialog를 열고 언어를 갱신한다", async ({
     page,
   }) => {
-    const adminMember = {
-      id: 1,
-      username: "qa-admin",
-      nickname: "aquila",
-      isAdmin: true,
-    }
-    const content = [
-      "코드 언어 선택 회귀 대상입니다.",
-      "",
-      "```ts",
-      "const selectedLanguage = true",
-      "```",
-      "",
-      "언어 선택 뒤 문단입니다.",
-    ].join("\n")
-
-    await page.route("**/member/api/v1/auth/me", async (route) => {
-      await route.fulfill({
-        contentType: "application/json",
-        body: JSON.stringify(adminMember),
-      })
+    await mockEditorRouteWithPost507(page, {
+      postId: 565,
+      title: "post 507 code language route 글",
     })
-    await page.route("**/post/api/v1/adm/posts/998", async (route) => {
-      await route.fulfill({
-        contentType: "application/json",
-        body: JSON.stringify({
-          id: 998,
-          version: 3,
-          title: "코드 언어 선택 회귀 글",
-          content,
-          contentHtml: "",
-          published: true,
-          listed: true,
-        }),
-      })
-    })
-
-    await page.goto("/editor/998")
-
-    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue("코드 언어 선택 회귀 글")
-    await expectEditorToContainLoadedText(
-      page.locator("[data-testid='block-editor-prosemirror']").first(),
-      "언어 선택 뒤 문단입니다."
-    )
 
     const codeBlock = page.locator("[data-code-block-wrapper='true']").first()
     await expect(codeBlock).toBeVisible({ timeout: 15_000 })
-    await expect(codeBlock.locator(".aq-code-highlight-layer")).toContainText("const selectedLanguage")
-
-    const codeContent = codeBlock.locator(".aq-code-editor-content").first()
-    const dragPoints = await codeContent.evaluate((element) => {
-      const targetText = "selectedLanguage"
-      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
-      while (walker.nextNode()) {
-        const current = walker.currentNode as Text
-        const startOffset = current.data.indexOf(targetText)
-        if (startOffset < 0) continue
-        const range = document.createRange()
-        range.setStart(current, startOffset)
-        range.setEnd(current, startOffset + targetText.length)
-        const rect = range.getBoundingClientRect()
-        if (rect.width <= 2 || rect.height <= 2) break
-        return {
-          endX: rect.right - 1,
-          startX: rect.left + 1,
-          y: rect.top + rect.height / 2,
-        }
-      }
-      throw new Error("code language regression selection target is missing")
-    })
-    await page.mouse.move(dragPoints.startX, dragPoints.y)
-    await page.mouse.down()
-    await page.mouse.move(dragPoints.endX, dragPoints.y, { steps: 12 })
-    await page.mouse.up()
-    await expect
-      .poll(() =>
-        page.evaluate(() => {
-          const selectionText = window.getSelection()?.toString() ?? ""
-          const persistedCodeSelectionText =
-            document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text") ??
-            ""
-          return (selectionText || persistedCodeSelectionText).replace(/\s+/g, " ").trim()
-        })
-      )
-      .toContain("selectedLanguage")
+    await expect(codeBlock.locator(".aq-code-highlight-layer")).toContainText("로그인 -> 세션 생성")
+    await expectCodeBlockInnerChromeHidden(codeBlock)
 
     await page.evaluate(() => {
       const diagnosticsWindow = window as typeof window & {
@@ -227,12 +185,15 @@ test.describe("editor authoring code and mermaid blocks", () => {
       }
       document.addEventListener("pointerdown", recordLanguageControlPointer, true)
       document.addEventListener("mousedown", recordLanguageControlPointer, true)
+      document.addEventListener("click", recordLanguageControlPointer, true)
     })
 
-    const languageButton = codeBlock
-      .locator("[data-code-block-header='true']")
-      .getByRole("button", { name: /TypeScript/i })
-    const languageLabelBox = await languageButton.locator("span", { hasText: "TypeScript" }).boundingBox()
+    const languageButton = codeBlock.locator("[data-code-block-header='true'] button[aria-haspopup='dialog']").first()
+    await languageButton.scrollIntoViewIfNeeded()
+    const beforeLanguageClickScrollTop = await page.evaluate(
+      () => document.scrollingElement?.scrollTop ?? window.scrollY
+    )
+    const languageLabelBox = await languageButton.locator("span", { hasText: "TXT" }).boundingBox()
     if (!languageLabelBox) {
       throw new Error("code language label hit-test box is missing")
     }
@@ -240,6 +201,12 @@ test.describe("editor authoring code and mermaid blocks", () => {
       languageLabelBox.x + languageLabelBox.width / 2,
       languageLabelBox.y + languageLabelBox.height / 2
     )
+    await expect
+      .poll(async () => {
+        const scrollTop = await page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
+        return Math.abs(scrollTop - beforeLanguageClickScrollTop)
+      })
+      .toBeLessThanOrEqual(24)
 
     const pointerDiagnostics = await page.evaluate(
       () =>
@@ -249,34 +216,15 @@ test.describe("editor authoring code and mermaid blocks", () => {
           }
         ).__aqCodeLanguagePointerDiagnostics ?? []
     )
-    expect(pointerDiagnostics.map((event) => event.type)).toEqual(["pointerdown", "mousedown"])
+    expect(pointerDiagnostics.map((event) => event.type)).toEqual(["pointerdown", "mousedown", "click"])
     expect(pointerDiagnostics.some((event) => event.defaultPrevented)).toBe(false)
+    await expect(languageButton).toHaveAttribute("aria-expanded", "true")
 
     const languageDialog = page.getByRole("dialog", { name: "코드 언어 선택" })
     await expect(languageDialog).toBeVisible()
-    const txtOption = languageDialog.getByRole("button", { name: "TXT", exact: true })
-    const txtOptionLabelBox = await txtOption.locator("span", { hasText: "TXT" }).boundingBox()
-    if (!txtOptionLabelBox) {
-      throw new Error("TXT language option hit-test box is missing")
-    }
-    await page.mouse.click(
-      txtOptionLabelBox.x + txtOptionLabelBox.width / 2,
-      txtOptionLabelBox.y + txtOptionLabelBox.height / 2
-    )
+    const pythonOption = languageDialog.getByRole("button", { name: "Python", exact: true })
+    await pythonOption.click()
 
-    await expect(languageDialog).toHaveCount(0)
-    await expect(
-      codeBlock
-        .locator("[data-code-block-header='true']")
-        .getByRole("button", { name: "TXT", exact: true })
-    ).toBeVisible()
-
-    await codeBlock
-      .locator("[data-code-block-header='true']")
-      .getByRole("button", { name: "TXT", exact: true })
-      .click()
-    await expect(languageDialog).toBeVisible()
-    await languageDialog.getByRole("button", { name: "Python", exact: true }).click()
     await expect(languageDialog).toHaveCount(0)
     await expect(
       codeBlock

@@ -545,7 +545,7 @@ export const preserveWindowScrollForEditorPointerFocus = (
   const shouldPreserveRichEditorPointer = editorPointerTarget && editorRichBlockTarget && !tablePointerTarget
   const shouldPreserveTableBlockSelectionPointer = tablePointerTarget && blockSelectionActive
   const shouldPreserveGeneralEditorPointer =
-    editorPointerTarget && !editorRichBlockTarget && !editorControlTarget && !blockSelectionActive
+    editorPointerTarget && !editorRichBlockTarget && !editorControlTarget
   const shouldPreserveCodeSelectionFollowUp =
     editorPointerTarget && !editorControlTarget && preserveNextEditorPointerAfterCodeSelection
   const shouldPreserveFollowUp = !tablePointerTarget && preserveNextEditorPointerAfterTable

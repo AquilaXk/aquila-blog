@@ -7,9 +7,53 @@ import {
 
 const SELECT_ALL_SHORTCUT = process.platform === "darwin" ? "Meta+a" : "Control+a"
 
+const resolvePost507FinalTableRowMetrics = async (page: Page) => {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const metrics = await page.evaluate((targetCellText) => {
+      const editor = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
+      const tables = Array.from(editor?.querySelectorAll<HTMLElement>("table") ?? []).filter((candidate) => {
+        const text = candidate.textContent ?? ""
+        return text.includes(targetCellText) && text.includes("재발급 로직")
+      })
+      const table = tables[tables.length - 1]
+      const targetCell = Array.from(table?.querySelectorAll<HTMLElement>("td, th") ?? []).find((candidate) =>
+        candidate.textContent?.includes(targetCellText)
+      )
+      if (!table || !targetCell) return null
+
+      const tableRect = table.getBoundingClientRect()
+      const cellRect = targetCell.getBoundingClientRect()
+      if (
+        tableRect.width <= 0 ||
+        tableRect.height <= 0 ||
+        cellRect.width <= 0 ||
+        cellRect.height <= 0 ||
+        cellRect.bottom <= 8 ||
+        cellRect.top >= window.innerHeight - 8
+      ) {
+        return null
+      }
+
+      const clickX = cellRect.left + Math.min(36, Math.max(8, cellRect.width / 3))
+      const clickY = cellRect.top + Math.min(16, Math.max(6, cellRect.height / 2))
+      return {
+        cellX: clickX,
+        cellY: clickY,
+        hoverX: tableRect.left + 4,
+        hoverY: clickY,
+      }
+    }, POST_507_FINAL_TABLE_TARGET_CELL)
+
+    if (metrics) return metrics
+    await page.waitForTimeout(100)
+  }
+
+  throw new Error("post 507 final table row metrics are missing")
+}
+
 const resolvePost507FinalTableColumnMetrics = async (page: Page) => {
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const metrics = await page.evaluate(async (targetCellText) => {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const metrics = await page.evaluate((targetCellText) => {
       const editor = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
       const tables = Array.from(editor?.querySelectorAll<HTMLElement>("table") ?? []).filter((candidate) => {
         const text = candidate.textContent ?? ""
@@ -18,55 +62,37 @@ const resolvePost507FinalTableColumnMetrics = async (page: Page) => {
       const table = tables[tables.length - 1]
       if (!table) return null
 
-      const centerTableInViewport = () => {
-        const rect = table.getBoundingClientRect()
-        const targetTop = Math.round(window.innerHeight * 0.42)
-        if (rect.top < 96 || rect.top > window.innerHeight - 180) {
-          let scrollRoot: Element = document.scrollingElement ?? document.documentElement
-          for (let parent = table.parentElement; parent; parent = parent.parentElement) {
-            const style = window.getComputedStyle(parent)
-            const canScrollY = /(auto|scroll|overlay)/.test(style.overflowY)
-            if (canScrollY && parent.scrollHeight > parent.clientHeight) {
-              scrollRoot = parent
-              break
-            }
-          }
-          scrollRoot.scrollTop += rect.top - targetTop
-        }
-      }
-
-      centerTableInViewport()
-      await new Promise<void>((resolve) => {
-        requestAnimationFrame(() => resolve())
-      })
-
       const tableRect = table.getBoundingClientRect()
       const headerCells = Array.from(table.querySelectorAll<HTMLElement>("thead th, tr:first-child th, tr:first-child td"))
       const headerCell =
         headerCells.find((candidate) => candidate.textContent?.includes("점검 항목")) ?? headerCells[1] ?? headerCells[0]
       if (!headerCell) return null
       const headerRect = headerCell.getBoundingClientRect()
+      const clampYToViewport = (value: number) => Math.min(Math.max(value, 12), window.innerHeight - 12)
+      const headerClickOffsetY = Math.min(16, Math.max(6, headerRect.height / 2))
+      const hoverY = clampYToViewport(tableRect.top + 6)
+      const cellY = clampYToViewport(headerRect.top + headerClickOffsetY)
       if (
         tableRect.width <= 0 ||
         tableRect.height <= 0 ||
         headerRect.width <= 0 ||
         headerRect.height <= 0 ||
-        tableRect.top < 64 ||
-        tableRect.top > window.innerHeight - 80
+        headerRect.bottom <= 8 ||
+        headerRect.top >= window.innerHeight - 8
       ) {
         return null
       }
 
       return {
         cellX: headerRect.left + Math.min(40, Math.max(8, headerRect.width / 2)),
-        cellY: Math.min(headerRect.top + 16, headerRect.bottom - 8),
+        cellY,
         hoverX: headerRect.left + headerRect.width / 2,
-        hoverY: tableRect.top + 6,
+        hoverY,
       }
     }, POST_507_FINAL_TABLE_TARGET_CELL)
 
     if (metrics) return metrics
-    await page.waitForTimeout(60)
+    await page.waitForTimeout(100)
   }
 
   throw new Error("post 507 final table row reset column metrics are missing")
@@ -83,19 +109,19 @@ test.describe("editor authoring route post 507 final table axis after cell text 
     })
     const { columnHandle, rowHandle } = getTableAffordances(page)
 
-    const table = finalTable
     const targetCell = finalTable.locator("td", { hasText: POST_507_FINAL_TABLE_TARGET_CELL }).first()
     await targetCell.click({ position: { x: 40, y: 16 } })
     await targetCell.dblclick({ position: { x: 40, y: 16 } })
 
-    const tableBox = await table.boundingBox()
-    const cellBox = await targetCell.boundingBox()
-    if (!tableBox || !cellBox) {
-      throw new Error("post 507 final table row reset metrics are missing")
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const rowMetrics = await resolvePost507FinalTableRowMetrics(page)
+      await page.mouse.move(rowMetrics.cellX, rowMetrics.cellY)
+      await page.mouse.move(rowMetrics.hoverX, rowMetrics.hoverY, { steps: 4 })
+      await page.waitForTimeout(140)
+      if (await rowHandle.isVisible().catch(() => false)) break
+      if (attempt === 4) throw new Error("post 507 final table row handle did not appear before row reset")
     }
 
-    await page.mouse.move(tableBox.x + 3, cellBox.y + cellBox.height / 2)
-    await page.waitForTimeout(140)
     await expect(rowHandle).toBeVisible()
     await rowHandle.click()
     await expect(page.getByTestId("table-row-selection-outline")).toBeVisible()
@@ -106,6 +132,7 @@ test.describe("editor authoring route post 507 final table axis after cell text 
     await page.waitForTimeout(160)
     const resetMetrics = await resolvePost507FinalTableColumnMetrics(page)
     await page.mouse.click(resetMetrics.cellX, resetMetrics.cellY)
+    await expect(editor.locator(".selectedCell")).toHaveCount(0)
     await page.waitForTimeout(120)
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const columnMetrics = await resolvePost507FinalTableColumnMetrics(page)
@@ -225,8 +252,15 @@ test.describe("editor authoring route post 507 final table axis after cell text 
         .last()
         .locator("td", { hasText: POST_507_FINAL_TABLE_TARGET_CELL })
         .first()
-      await currentTargetCell.click({ force: true, position: { x: 36, y: 16 } })
-      await currentTargetCell.dblclick({ force: true, position: { x: 36, y: 16 } })
+      await currentTargetCell.scrollIntoViewIfNeeded()
+      const currentTargetBox = await currentTargetCell.boundingBox()
+      if (!currentTargetBox) {
+        throw new Error("post 507 final table target cell metrics are missing before select-all")
+      }
+      const clickX = currentTargetBox.x + Math.min(36, Math.max(8, currentTargetBox.width / 3))
+      const clickY = currentTargetBox.y + Math.min(16, Math.max(6, currentTargetBox.height / 2))
+      await page.mouse.click(clickX, clickY)
+      await page.mouse.dblclick(clickX, clickY)
       await page.keyboard.press(SELECT_ALL_SHORTCUT)
       await expect
         .poll(async () => page.evaluate(() => (window.getSelection()?.toString() || "").replace(/\s+/g, " ").trim()))

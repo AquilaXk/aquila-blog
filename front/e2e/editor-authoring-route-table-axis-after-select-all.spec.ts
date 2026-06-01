@@ -2,10 +2,25 @@ import { expect, test, type Page } from "@playwright/test"
 import { getTableAffordances } from "./helpers/editorAuthoringFlow"
 import {
   POST_507_FINAL_TABLE_TARGET_CELL,
+  expectPost507FinalTableTextSelected,
   mockEditorRouteWithPost507,
 } from "./helpers/post507Fixtures"
 
 const SELECT_ALL_SHORTCUT = process.platform === "darwin" ? "Meta+a" : "Control+a"
+
+const expectPost507FinalTableSelectionOnPage = async (page: Page) => {
+  await expect
+    .poll(async () => {
+      const selectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
+      try {
+        expectPost507FinalTableTextSelected(selectionText)
+        return true
+      } catch {
+        return false
+      }
+    })
+    .toBe(true)
+}
 
 const resolvePost507FinalTableRowMetrics = async (page: Page) => {
   for (let attempt = 0; attempt < 12; attempt += 1) {
@@ -98,6 +113,58 @@ const resolvePost507FinalTableColumnMetrics = async (page: Page) => {
   throw new Error("post 507 final table row reset column metrics are missing")
 }
 
+const resolvePost507FinalTableColumnCoverMetrics = async (page: Page) => {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const metrics = await page.evaluate((targetCellText) => {
+      const editor = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
+      const tables = Array.from(editor?.querySelectorAll<HTMLElement>("table") ?? []).filter((candidate) => {
+        const text = candidate.textContent ?? ""
+        return text.includes(targetCellText) && text.includes("재발급 로직")
+      })
+      const table = tables[tables.length - 1]
+      if (!table) return null
+
+      const tableRect = table.getBoundingClientRect()
+      const targetCell = Array.from(table.querySelectorAll<HTMLElement>("td, th")).find((candidate) =>
+        candidate.textContent?.includes(targetCellText)
+      )
+      const headerCells = Array.from(table.querySelectorAll<HTMLElement>("thead th, tr:first-child th, tr:first-child td"))
+      const headerCell =
+        headerCells.find((candidate) => candidate.textContent?.includes("점검 항목")) ?? headerCells[1] ?? headerCells[0]
+      if (!targetCell || !headerCell) return null
+      const targetRect = targetCell.getBoundingClientRect()
+      const headerRect = headerCell.getBoundingClientRect()
+      if (
+        tableRect.width <= 0 ||
+        tableRect.height <= 0 ||
+        targetRect.width <= 0 ||
+        targetRect.height <= 0 ||
+        headerRect.width <= 0 ||
+        headerRect.height <= 0 ||
+        targetRect.bottom <= 8 ||
+        targetRect.top >= window.innerHeight - 8
+      ) {
+        return null
+      }
+
+      return {
+        cellX: targetRect.left + targetRect.width / 2,
+        cellY: targetRect.top + targetRect.height / 2,
+        coverLeft: tableRect.left,
+        coverTop: tableRect.top,
+        coverWidth: tableRect.width,
+        hoverX: headerRect.left + headerRect.width / 2,
+        hoverY: tableRect.top + 3,
+      }
+    }, POST_507_FINAL_TABLE_TARGET_CELL)
+
+    if (metrics) return metrics
+    await page.waitForTimeout(100)
+  }
+
+  throw new Error("post 507 final table column cover metrics are missing")
+}
+
 test.describe("editor authoring route post 507 final table axis after cell text select all", () => {
   test("실제 /editor/[id] post 507 마지막 7x3 table은 row 선택 해제 직후 column hotzone direct hover로 열 선택을 연다", async ({
     page,
@@ -150,7 +217,7 @@ test.describe("editor authoring route post 507 final table axis after cell text 
     await expect(editor.locator(".selectedCell")).toHaveCount(7)
   })
 
-  test("실제 /editor/[id] post 507 마지막 7x3 table은 cell-local Cmd/Ctrl+A 직후 column grip을 첫 축 선택으로 연다", async ({
+  test("실제 /editor/[id] post 507 마지막 7x3 table은 table-wide Cmd/Ctrl+A 직후 column grip을 첫 축 선택으로 연다", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1580, height: 900 })
@@ -160,21 +227,14 @@ test.describe("editor authoring route post 507 final table axis after cell text 
     })
     const { columnHandle } = getTableAffordances(page)
 
-    const table = finalTable
     const targetCell = finalTable.locator("td", { hasText: POST_507_FINAL_TABLE_TARGET_CELL }).first()
     await targetCell.click({ position: { x: 40, y: 16 } })
     await targetCell.dblclick({ position: { x: 40, y: 16 } })
     await page.keyboard.press(SELECT_ALL_SHORTCUT)
-    await expect
-      .poll(async () => page.evaluate(() => (window.getSelection()?.toString() || "").replace(/\s+/g, " ").trim()))
-      .toBe(POST_507_FINAL_TABLE_TARGET_CELL)
+    await expectPost507FinalTableSelectionOnPage(page)
 
-    const tableBox = await table.boundingBox()
-    const cellBox = await targetCell.boundingBox()
-    if (!tableBox || !cellBox) {
-      throw new Error("post 507 final table column grip metrics are missing after cell-local select-all")
-    }
-    await page.mouse.move(cellBox.x + cellBox.width / 2, cellBox.y + cellBox.height / 2)
+    const columnCoverMetrics = await resolvePost507FinalTableColumnCoverMetrics(page)
+    await page.mouse.move(columnCoverMetrics.cellX, columnCoverMetrics.cellY)
     await page.evaluate(
       ({ left, top, width }) => {
         const doc = document as Document & {
@@ -211,10 +271,19 @@ test.describe("editor authoring route post 507 final table axis after cell text 
           return doc.__aqOriginalElementFromPoint?.(clientX, clientY) ?? null
         }) as typeof document.elementFromPoint
       },
-      { left: tableBox.x, top: tableBox.y, width: tableBox.width }
+      {
+        left: columnCoverMetrics.coverLeft,
+        top: columnCoverMetrics.coverTop,
+        width: columnCoverMetrics.coverWidth,
+      }
     )
-    await page.mouse.move(cellBox.x + cellBox.width / 2, tableBox.y + 3)
-    await page.waitForTimeout(180)
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await page.mouse.move(columnCoverMetrics.cellX, columnCoverMetrics.cellY)
+      await page.mouse.move(columnCoverMetrics.hoverX, columnCoverMetrics.hoverY, { steps: 4 })
+      await page.waitForTimeout(220)
+      if (await columnHandle.isVisible().catch(() => false)) break
+      if (attempt === 4) throw new Error("post 507 final table column handle did not appear after select-all")
+    }
 
     await expect(columnHandle).toBeVisible()
     await page.getByTestId("table-hotzone-cover").evaluate((element) => {
@@ -234,7 +303,7 @@ test.describe("editor authoring route post 507 final table axis after cell text 
     await expect(editor.locator(".selectedCell")).toHaveCount(7)
   })
 
-  test("실제 /editor/[id] post 507 마지막 7x3 table은 cell-local Cmd/Ctrl+A 직후 row grip으로 축 선택을 연다", async ({
+  test("실제 /editor/[id] post 507 마지막 7x3 table은 table-wide Cmd/Ctrl+A 직후 row grip으로 축 선택을 연다", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1580, height: 920 })
@@ -244,8 +313,7 @@ test.describe("editor authoring route post 507 final table axis after cell text 
     })
     const { rowHandle } = getTableAffordances(page)
 
-    const table = finalTable
-    const targetCell = finalTable.locator("td", { hasText: POST_507_FINAL_TABLE_TARGET_CELL }).first()
+    await expect(finalTable.locator("td", { hasText: POST_507_FINAL_TABLE_TARGET_CELL }).first()).toBeVisible()
     const selectCurrentCellText = async () => {
       const currentTargetCell = editor
         .locator("table")
@@ -262,26 +330,18 @@ test.describe("editor authoring route post 507 final table axis after cell text 
       await page.mouse.click(clickX, clickY)
       await page.mouse.dblclick(clickX, clickY)
       await page.keyboard.press(SELECT_ALL_SHORTCUT)
-      await expect
-        .poll(async () => page.evaluate(() => (window.getSelection()?.toString() || "").replace(/\s+/g, " ").trim()))
-        .toBe(POST_507_FINAL_TABLE_TARGET_CELL)
+      await expectPost507FinalTableSelectionOnPage(page)
     }
 
     const moveToRowGripHotzone = async () => {
-      await expect(targetCell).toBeVisible()
-      await targetCell.scrollIntoViewIfNeeded()
-      const tableBox = await table.boundingBox()
-      const cellBox = await targetCell.boundingBox()
-      if (!tableBox || !cellBox) {
-        throw new Error("post 507 final table row grip metrics are missing after cell-local select-all")
-      }
+      const rowMetrics = await resolvePost507FinalTableRowMetrics(page)
       const points = [
-        { x: tableBox.x + 4, y: cellBox.y + cellBox.height / 2 },
-        { x: tableBox.x + 8, y: cellBox.y + cellBox.height / 2 },
-        { x: tableBox.x + 4, y: tableBox.y + tableBox.height / 2 },
+        { x: rowMetrics.hoverX, y: rowMetrics.hoverY },
+        { x: rowMetrics.hoverX + 4, y: rowMetrics.hoverY },
+        { x: rowMetrics.hoverX, y: rowMetrics.cellY },
       ]
       for (const point of points) {
-        await page.mouse.move(cellBox.x + cellBox.width / 2, cellBox.y + cellBox.height / 2)
+        await page.mouse.move(rowMetrics.cellX, rowMetrics.cellY)
         await page.mouse.move(point.x, point.y, { steps: 4 })
         await page.waitForTimeout(80)
         if (await rowHandle.isVisible().catch(() => false)) return

@@ -533,7 +533,11 @@ test.describe("editor authoring route text selection drag", () => {
     const tableCellPoints = await getWordDragPoints(tableCell, tableLabel)
     await page.mouse.click(tableCellPoints.startX, tableCellPoints.startY)
     await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
-    await expectSelectionContainsOnly(page, [tableLabel], ["구분", "값", bodyLabel, codeLabel])
+    await expectSelectionContainsOnly(
+      page,
+      ["구분", "값", tableLabel, "상태 확인", "회귀 탐지", "완료"],
+      [bodyLabel, codeLabel]
+    )
 
     await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
     expect(runtimeErrors).toEqual([])

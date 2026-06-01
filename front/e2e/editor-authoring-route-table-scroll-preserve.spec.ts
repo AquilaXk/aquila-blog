@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import {
   POST_507_FINAL_TABLE_TARGET_CELL,
+  expectPost507FinalTableTextSelected,
   mockEditorRouteWithPost507,
 } from "./helpers/post507Fixtures"
 
@@ -76,11 +77,7 @@ test.describe("editor authoring route table scroll preserve", () => {
     expect(Math.abs(afterSelectAllScrollTop - beforeSelectAllScrollTop)).toBeLessThanOrEqual(24)
 
     const selectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
-    expect(selectionText.replace(/\s+/g, " ").trim()).toBe(POST_507_FINAL_TABLE_TARGET_CELL)
-    expect(selectionText).not.toContain("영역")
-    expect(selectionText).not.toContain("점검 항목")
-    expect(selectionText).not.toContain("확인 기준")
-    expect(selectionText).not.toContain("구현되어 있는가")
+    expectPost507FinalTableTextSelected(selectionText)
   })
 
   test("테이블 caret 포커스 후 wheel scroll은 캐럿 위치를 보존하며 점프하지 않는다", async ({

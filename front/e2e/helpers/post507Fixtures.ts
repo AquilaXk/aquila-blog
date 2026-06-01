@@ -5,6 +5,31 @@ export const POST_507_TITLE = "Stateless란 무엇인가?"
 export const POST_507_FINAL_TABLE_TARGET_CELL = "Stateless 의미"
 export const POST_507_FINAL_TABLE_END_CELL = "구현되어 있는가"
 export const POST_507_FINAL_TABLE_HEADER_CELL = "영역"
+export const POST_507_FINAL_TABLE_REQUIRED_TEXTS = [
+  POST_507_FINAL_TABLE_HEADER_CELL,
+  "점검 항목",
+  "확인 기준",
+  "개념 이해",
+  POST_507_FINAL_TABLE_TARGET_CELL,
+  "요청만으로 처리 가능한가",
+  "Access/Refresh 구분",
+  POST_507_FINAL_TABLE_END_CELL,
+] as const
+export const POST_507_FINAL_TABLE_FORBIDDEN_TEXTS = [
+  "서버가 사용자의 로그인한 상태를 기억",
+  "Access Token API 인증",
+  "Access 길게 보안 위험",
+] as const
+
+export const expectPost507FinalTableTextSelected = (selectionText: string) => {
+  const normalizedSelectionText = selectionText.replace(/\s+/g, " ").trim()
+  for (const requiredText of POST_507_FINAL_TABLE_REQUIRED_TEXTS) {
+    expect(normalizedSelectionText).toContain(requiredText)
+  }
+  for (const forbiddenText of POST_507_FINAL_TABLE_FORBIDDEN_TEXTS) {
+    expect(normalizedSelectionText).not.toContain(forbiddenText)
+  }
+}
 
 export const post507FinalTableMarkdown = [
   '<!-- aq-table {"overflowMode":"normal","columnWidths":[119,192,210]} -->',

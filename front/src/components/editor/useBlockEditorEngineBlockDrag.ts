@@ -376,6 +376,7 @@ export const useBlockEditorEngineBlockDrag = ({
       }
       event.preventDefault()
       const sourceIndex = blockHandleState.blockIndex
+      promoteTopLevelBlockSelection(sourceIndex)
       const sourceElement = getTopLevelBlockElementByIndex(sourceIndex)
       const preview = createBlockDragPreview(sourceElement, window.innerWidth)
       const pendingState = createPendingBlockDragState(

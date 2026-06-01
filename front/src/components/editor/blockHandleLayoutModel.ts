@@ -55,7 +55,7 @@ export const resolveBlockChromeTop = (
 ) => (mode === "editor-local" ? top - (surfaceRect?.top ?? 0) : top)
 
 export const resolveBlockSelectionOverlayLayout = (
-  rect: DOMRect,
+  rect: Pick<DOMRect, "height" | "left" | "top" | "width">,
   surfaceRect: BlockChromeSurfaceRect
 ) => ({
   visible: true,

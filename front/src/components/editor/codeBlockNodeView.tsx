@@ -13,22 +13,15 @@ import {
   useRef,
   useState,
 } from "react"
-import AppIcon from "src/components/icons/AppIcon"
 import { extractPlainTextFromHtml } from "src/libs/markdown/htmlToMarkdown"
 import { highlightCodeToHtml, renderImmediateCodeToHtml } from "src/libs/markdown/prismRuntime"
-import { toLanguageLabel } from "src/libs/markdown/rendering"
 import {
   CodeBlockEditorHeader,
   CodeBlockEditorSurface,
   CodeBlockEditorWrapper,
-  CodeLanguageButton,
-  CodeLanguageOptionButton,
-  CodeLanguageOptionList,
-  CodeLanguagePicker,
-  CodeLanguagePopover,
-  CodeLanguageSearchInput,
   CodeWindowDots,
 } from "./codeBlockNodeViewStyles"
+import { CodeLanguageControl } from "./CodeLanguageControl"
 import {
   filterCodeLanguageOptions,
   hasExactCodeLanguageSearchMatch,
@@ -464,14 +457,19 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
 
   const exactSearchMatch = hasExactCodeLanguageSearchMatch(filteredLanguageOptions, languageSearch)
 
-  const applyLanguage = (value: string) => {
+  const toggleLanguageMenu = useCallback(() => {
+    setIsLanguageMenuOpen((prev) => !prev)
+    setLanguageSearch("")
+  }, [])
+
+  const applyLanguage = useCallback((value: string) => {
     const normalizedLanguage = normalizeCodeLanguage(value)
     setDraftLanguage(normalizedLanguage)
     rememberPreferredCodeLanguage(normalizedLanguage)
     updateAttributes({ language: normalizedLanguage || null })
     setIsLanguageMenuOpen(false)
     setLanguageSearch("")
-  }
+  }, [updateAttributes])
 
   const handleCodePaste = useCallback((event: ReactClipboardEvent<HTMLDivElement>) => {
     const plainText = event.clipboardData.getData("text/plain") || ""
@@ -528,51 +526,19 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
           <span data-tone="yellow" />
           <span data-tone="green" />
         </CodeWindowDots>
-        <CodeLanguagePicker ref={menuRef} data-code-language-control="true">
-          <CodeLanguageButton
-            type="button"
-            aria-haspopup="dialog"
-            aria-expanded={isLanguageMenuOpen}
-            aria-controls={`${menuId}-language-menu`}
-            onClick={() => {
-              setIsLanguageMenuOpen((prev) => !prev)
-              setLanguageSearch("")
-            }}
-          >
-            <span>{toLanguageLabel(draftLanguage)}</span>
-            <AppIcon name="chevron-down" aria-hidden="true" />
-          </CodeLanguageButton>
-          {isLanguageMenuOpen ? (
-            <CodeLanguagePopover id={`${menuId}-language-menu`} role="dialog" aria-label="코드 언어 선택">
-              <CodeLanguageSearchInput
-                ref={searchInputRef}
-                value={languageSearch}
-                placeholder="언어를 검색하세요"
-                aria-label="언어 검색"
-                onChange={(event) => setLanguageSearch(event.target.value)}
-              />
-              <CodeLanguageOptionList>
-                {filteredLanguageOptions.map((option) => (
-                  <CodeLanguageOptionButton
-                    key={option.value}
-                    type="button"
-                    data-active={draftLanguage === option.value}
-                    onClick={() => applyLanguage(option.value)}
-                  >
-                    <span>{option.label}</span>
-                    {draftLanguage === option.value ? <AppIcon name="check-circle" aria-hidden="true" /> : null}
-                  </CodeLanguageOptionButton>
-                ))}
-                {languageSearch.trim() && !exactSearchMatch ? (
-                  <CodeLanguageOptionButton type="button" onClick={() => applyLanguage(languageSearch)}>
-                    <span>{languageSearch.trim()}</span>
-                    <small>직접 입력</small>
-                  </CodeLanguageOptionButton>
-                ) : null}
-              </CodeLanguageOptionList>
-            </CodeLanguagePopover>
-          ) : null}
-        </CodeLanguagePicker>
+        <CodeLanguageControl
+          applyLanguage={applyLanguage}
+          draftLanguage={draftLanguage}
+          exactSearchMatch={exactSearchMatch}
+          filteredLanguageOptions={filteredLanguageOptions}
+          isLanguageMenuOpen={isLanguageMenuOpen}
+          languageSearch={languageSearch}
+          menuId={menuId}
+          menuRef={menuRef}
+          searchInputRef={searchInputRef}
+          setLanguageSearch={setLanguageSearch}
+          toggleLanguageMenu={toggleLanguageMenu}
+        />
       </CodeBlockEditorHeader>
       <CodeBlockEditorSurface>
         <div

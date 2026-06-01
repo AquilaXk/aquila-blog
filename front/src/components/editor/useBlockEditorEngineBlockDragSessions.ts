@@ -1,5 +1,5 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
-import { useCallback, useEffect } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import type { Dispatch, DragEvent as ReactDragEvent, MutableRefObject, RefObject, SetStateAction } from "react"
 import {
   moveNestedListItemToInsertionIndex,
@@ -93,11 +93,20 @@ export const useBlockEditorEngineBlockDragSessions = ({
   setNestedListItemDropIndicatorState,
   setSelectedListItemContext,
 }: UseBlockEditorEngineBlockDragSessionsArgs) => {
+  const topLevelBlockEarlyPointerDoneCleanupRef = useRef<(() => void) | null>(null)
+
   const clearBlockDragVisualState = useCallback(() => {
     setDraggedBlockState(null)
     setDragGhostPosition(null)
     setDropIndicatorState(hideDropIndicatorState)
   }, [setDragGhostPosition, setDraggedBlockState, setDropIndicatorState])
+
+  const cleanupTopLevelBlockEarlyPointerDone = useCallback(() => {
+    const cleanup = topLevelBlockEarlyPointerDoneCleanupRef.current
+    if (!cleanup) return
+    topLevelBlockEarlyPointerDoneCleanupRef.current = null
+    cleanup()
+  }, [])
 
   const commitTopLevelBlockDrag = useCallback(
     (sourceIndex: number, clientY: number) => {
@@ -116,6 +125,7 @@ export const useBlockEditorEngineBlockDragSessions = ({
 
   const beginBlockDragFromPending = useCallback(
     (pending: PendingBlockDragState, clientX: number, clientY: number) => {
+      cleanupTopLevelBlockEarlyPointerDone()
       const indicator = resolveBlockDropIndicatorByClientY(getTopLevelBlockElements(), clientY)
       setDraggedBlockState(createDraggedBlockState(pending))
       setDragGhostPosition({ x: clientX, y: clientY })
@@ -129,9 +139,17 @@ export const useBlockEditorEngineBlockDragSessions = ({
           window.clearTimeout(earlyPointerDoneTimeout)
           earlyPointerDoneTimeout = null
         }
+        if (topLevelBlockEarlyPointerDoneCleanupRef.current === cleanupEarlyPointerDone) {
+          topLevelBlockEarlyPointerDoneCleanupRef.current = null
+        }
       }
       const handleEarlyPointerDone = (event: PointerEvent) => {
         if (event.pointerId !== pending.pointerId) return
+        if (event.type === "pointercancel") {
+          clearBlockDragVisualState()
+          cleanupEarlyPointerDone()
+          return
+        }
         const committedEvent = event as BlockDragCommittedPointerEvent
         committedEvent.__aqBlockDragCommitted = true
         commitTopLevelBlockDrag(pending.sourceIndex, event.clientY)
@@ -141,50 +159,103 @@ export const useBlockEditorEngineBlockDragSessions = ({
 
       window.addEventListener("pointerup", handleEarlyPointerDone, true)
       window.addEventListener("pointercancel", handleEarlyPointerDone, true)
-      earlyPointerDoneTimeout = window.setTimeout(cleanupEarlyPointerDone, 30000)
+      topLevelBlockEarlyPointerDoneCleanupRef.current = cleanupEarlyPointerDone
+      earlyPointerDoneTimeout = window.setTimeout(cleanupEarlyPointerDone, 1500)
     },
-    [clearBlockDragVisualState, commitTopLevelBlockDrag, getTopLevelBlockElements, setDragGhostPosition, setDraggedBlockState, setDropIndicatorState]
+    [
+      cleanupTopLevelBlockEarlyPointerDone,
+      clearBlockDragVisualState,
+      commitTopLevelBlockDrag,
+      getTopLevelBlockElements,
+      setDragGhostPosition,
+      setDraggedBlockState,
+      setDropIndicatorState,
+    ]
   )
 
   useEffect(() => {
     if (typeof window === "undefined" || !draggedBlockState) return
+    const activeDraggedBlockState = draggedBlockState
 
-    const handlePointerMove = (event: PointerEvent) => {
-      if (event.pointerId !== draggedBlockState.pointerId) return
+    let cleanedUp = false
+    let scheduledBlurCancelTimeout: number | null = null
+    function cleanupListeners() {
+      if (cleanedUp) return
+      cleanedUp = true
+      cleanupTopLevelBlockEarlyPointerDone()
+      clearScheduledBlurCancel()
+      window.removeEventListener("pointermove", handlePointerMove)
+      window.removeEventListener("pointerup", handlePointerUp)
+      window.removeEventListener("pointercancel", handlePointerCancel)
+      window.removeEventListener("blur", handleBlurCancelDragSession, true)
+      window.removeEventListener("keydown", handleKeyDown, true)
+      window.removeEventListener("wheel", cancelDragSession, true)
+      document.removeEventListener("visibilitychange", handleVisibilityChange, true)
+    }
+
+    function cancelDragSession() {
+      clearBlockDragVisualState()
+      cleanupListeners()
+    }
+    function clearScheduledBlurCancel() {
+      if (scheduledBlurCancelTimeout === null) return
+      window.clearTimeout(scheduledBlurCancelTimeout)
+      scheduledBlurCancelTimeout = null
+    }
+    function scheduleBlurCancel() {
+      clearScheduledBlurCancel()
+      scheduledBlurCancelTimeout = window.setTimeout(() => {
+        scheduledBlurCancelTimeout = null
+        cancelDragSession()
+      }, 1500)
+    }
+    function handlePointerMove(event: PointerEvent) {
+      if (event.pointerId !== activeDraggedBlockState.pointerId) return
+      clearScheduledBlurCancel()
       const nextIndicator = resolveBlockDropIndicatorByClientY(getTopLevelBlockElements(), event.clientY)
       setDropIndicatorState(createDropIndicatorState(nextIndicator))
       setDragGhostPosition({ x: event.clientX, y: event.clientY })
     }
-
-    const handlePointerUp = (event: PointerEvent) => {
-      if (event.pointerId !== draggedBlockState.pointerId) return
+    function handlePointerUp(event: PointerEvent) {
+      if (event.pointerId !== activeDraggedBlockState.pointerId) return
+      clearScheduledBlurCancel()
       if ((event as BlockDragCommittedPointerEvent).__aqBlockDragCommitted) {
         clearBlockDragVisualState()
-        window.removeEventListener("pointermove", handlePointerMove)
-        window.removeEventListener("pointerup", handlePointerUp)
-        window.removeEventListener("pointercancel", handlePointerUp)
+        cleanupListeners()
         return
       }
 
-      commitTopLevelBlockDrag(draggedBlockState.sourceIndex, event.clientY)
+      commitTopLevelBlockDrag(activeDraggedBlockState.sourceIndex, event.clientY)
 
-      setDraggedBlockState(null)
-      setDragGhostPosition(null)
-      setDropIndicatorState(hideDropIndicatorState)
-      window.removeEventListener("pointermove", handlePointerMove)
-      window.removeEventListener("pointerup", handlePointerUp)
-      window.removeEventListener("pointercancel", handlePointerUp)
+      clearBlockDragVisualState()
+      cleanupListeners()
+    }
+    function handlePointerCancel(event: PointerEvent) {
+      if (event.pointerId !== activeDraggedBlockState.pointerId) return
+      cancelDragSession()
+    }
+    function handleBlurCancelDragSession() {
+      scheduleBlurCancel()
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return
+      cancelDragSession()
+    }
+    function handleVisibilityChange() {
+      if (document.visibilityState === "hidden") cancelDragSession()
     }
 
     window.addEventListener("pointermove", handlePointerMove)
     window.addEventListener("pointerup", handlePointerUp)
-    window.addEventListener("pointercancel", handlePointerUp)
+    window.addEventListener("pointercancel", handlePointerCancel)
+    window.addEventListener("blur", handleBlurCancelDragSession, true)
+    window.addEventListener("keydown", handleKeyDown, true)
+    window.addEventListener("wheel", cancelDragSession, { capture: true, passive: true })
+    document.addEventListener("visibilitychange", handleVisibilityChange, true)
     return () => {
-      window.removeEventListener("pointermove", handlePointerMove)
-      window.removeEventListener("pointerup", handlePointerUp)
-      window.removeEventListener("pointercancel", handlePointerUp)
+      cleanupListeners()
     }
-  }, [clearBlockDragVisualState, commitTopLevelBlockDrag, draggedBlockState, getTopLevelBlockElements, setDragGhostPosition, setDraggedBlockState, setDropIndicatorState])
+  }, [cleanupTopLevelBlockEarlyPointerDone, clearBlockDragVisualState, commitTopLevelBlockDrag, draggedBlockState, getTopLevelBlockElements, setDragGhostPosition, setDropIndicatorState])
 
   useEffect(() => {
     if (typeof document === "undefined" || !draggedBlockState) return
@@ -265,22 +336,60 @@ export const useBlockEditorEngineBlockDragSessions = ({
     setNestedListItemDropIndicatorState(hideNestedListItemDropIndicatorState)
   }, [setDragGhostPosition, setDraggedNestedListItemState, setNestedListItemDropIndicatorState])
 
+  const cancelNestedListItemDragSession = useCallback(() => {
+    const pending = pendingNestedListItemHandleDragRef.current
+    if (pending?.context.listItemElement.isConnected) pending.context.listItemElement.setAttribute("draggable", "true")
+    clearNestedListItemDragState()
+    clearPendingNestedListItemHandleDrag()
+  }, [clearNestedListItemDragState, clearPendingNestedListItemHandleDrag, pendingNestedListItemHandleDragRef])
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !draggedNestedListItemState) return
+    let scheduledBlurCancelTimeout: number | null = null
+
+    const clearScheduledBlurCancel = () => {
+      if (scheduledBlurCancelTimeout === null) return
+      window.clearTimeout(scheduledBlurCancelTimeout)
+      scheduledBlurCancelTimeout = null
+    }
+    const handleBlurCancelDragSession = () => {
+      clearScheduledBlurCancel()
+      scheduledBlurCancelTimeout = window.setTimeout(() => {
+        scheduledBlurCancelTimeout = null
+        cancelNestedListItemDragSession()
+      }, 1500)
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      clearScheduledBlurCancel()
+      cancelNestedListItemDragSession()
+    }
+    const handleVisibilityChange = () => {
+      clearScheduledBlurCancel()
+      if (document.visibilityState === "hidden") cancelNestedListItemDragSession()
+    }
+
+    window.addEventListener("blur", handleBlurCancelDragSession, true)
+    window.addEventListener("keydown", handleKeyDown, true)
+    window.addEventListener("wheel", cancelNestedListItemDragSession, { capture: true, passive: true })
+    document.addEventListener("visibilitychange", handleVisibilityChange, true)
+    return () => {
+      clearScheduledBlurCancel()
+      window.removeEventListener("blur", handleBlurCancelDragSession, true)
+      window.removeEventListener("keydown", handleKeyDown, true)
+      window.removeEventListener("wheel", cancelNestedListItemDragSession, true)
+      document.removeEventListener("visibilitychange", handleVisibilityChange, true)
+    }
+  }, [cancelNestedListItemDragSession, draggedNestedListItemState])
+
   const beginPendingNestedListItemHandleDrag = useCallback(
     (pointerId: number, startX: number, startY: number, context: NestedListItemContext) => {
       clearPendingNestedListItemHandleDrag()
       flushPendingMarkdownCommit()
       const sourceElement = context.listItemElement
-      if (sourceElement.isConnected) {
-        sourceElement.setAttribute("draggable", "false")
-      }
+      if (sourceElement.isConnected) sourceElement.setAttribute("draggable", "false")
       const preview = createNestedListItemDragPreview(sourceElement, window.innerWidth)
-      pendingNestedListItemHandleDragRef.current = createPendingNestedListItemHandleDragState(
-        pointerId,
-        startX,
-        startY,
-        context,
-        preview
-      )
+      pendingNestedListItemHandleDragRef.current = createPendingNestedListItemHandleDragState(pointerId, startX, startY, context, preview)
       clearStickyTopLevelBlockSelection()
       const currentEditor = editorRef.current ?? editor
       if (currentEditor) {
@@ -288,9 +397,16 @@ export const useBlockEditorEngineBlockDragSessions = ({
         clearNativeTextSelection()
       }
 
+      let scheduledPendingBlurCancelTimeout: number | null = null
+      const clearScheduledPendingBlurCancel = () => {
+        if (scheduledPendingBlurCancelTimeout === null) return
+        window.clearTimeout(scheduledPendingBlurCancelTimeout)
+        scheduledPendingBlurCancelTimeout = null
+      }
       const handlePointerMove = (moveEvent: PointerEvent) => {
         const pending = pendingNestedListItemHandleDragRef.current
         if (!pending || moveEvent.pointerId !== pending.pointerId) return
+        clearScheduledPendingBlurCancel()
         const distance = Math.hypot(moveEvent.clientX - pending.startX, moveEvent.clientY - pending.startY)
         if (!pending.started) {
           if (distance < 5) return
@@ -328,6 +444,8 @@ export const useBlockEditorEngineBlockDragSessions = ({
       const handlePointerDone = (doneEvent: PointerEvent) => {
         const pending = pendingNestedListItemHandleDragRef.current
         if (!pending || doneEvent.pointerId !== pending.pointerId) return
+        clearScheduledPendingBlurCancel()
+        if (doneEvent.type === "pointercancel") return cancelNestedListItemDragSession()
         if (!pending.started) {
           if (pending.context.listItemElement.isConnected) {
             pending.context.listItemElement.setAttribute("draggable", "true")
@@ -371,18 +489,45 @@ export const useBlockEditorEngineBlockDragSessions = ({
         clearNestedListItemDragState()
         clearPendingNestedListItemHandleDrag()
       }
+      const handleCancelPendingDragSession = () => {
+        clearScheduledPendingBlurCancel()
+        cancelNestedListItemDragSession()
+      }
+      const handlePendingBlurCancel = () => {
+        clearScheduledPendingBlurCancel()
+        scheduledPendingBlurCancelTimeout = window.setTimeout(() => {
+          scheduledPendingBlurCancelTimeout = null
+          cancelNestedListItemDragSession()
+        }, 1500)
+      }
+      const handlePendingKeyDown = (event: KeyboardEvent) => {
+        if (event.key === "Escape") handleCancelPendingDragSession()
+      }
+      const handlePendingVisibilityChange = () => {
+        if (document.visibilityState === "hidden") handleCancelPendingDragSession()
+      }
 
       window.addEventListener("pointermove", handlePointerMove)
       window.addEventListener("pointerup", handlePointerDone)
       window.addEventListener("pointercancel", handlePointerDone)
+      window.addEventListener("blur", handlePendingBlurCancel, true)
+      window.addEventListener("keydown", handlePendingKeyDown, true)
+      window.addEventListener("wheel", handleCancelPendingDragSession, { capture: true, passive: true })
+      document.addEventListener("visibilitychange", handlePendingVisibilityChange, true)
 
       pendingNestedListItemHandleDragCleanupRef.current = () => {
+        clearScheduledPendingBlurCancel()
         window.removeEventListener("pointermove", handlePointerMove)
         window.removeEventListener("pointerup", handlePointerDone)
         window.removeEventListener("pointercancel", handlePointerDone)
+        window.removeEventListener("blur", handlePendingBlurCancel, true)
+        window.removeEventListener("keydown", handlePendingKeyDown, true)
+        window.removeEventListener("wheel", handleCancelPendingDragSession, true)
+        document.removeEventListener("visibilitychange", handlePendingVisibilityChange, true)
       }
     },
     [
+      cancelNestedListItemDragSession,
       clearNativeTextSelection,
       clearNestedListItemDragState,
       clearPendingNestedListItemHandleDrag,
@@ -435,8 +580,8 @@ export const useBlockEditorEngineBlockDragSessions = ({
   )
 
   const handleViewportDragEnd = useCallback(() => {
-    clearNestedListItemDragState()
-  }, [clearNestedListItemDragState])
+    cancelNestedListItemDragSession()
+  }, [cancelNestedListItemDragSession])
 
   return {
     beginBlockDragFromPending,

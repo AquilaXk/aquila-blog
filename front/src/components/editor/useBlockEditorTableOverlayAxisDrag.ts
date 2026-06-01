@@ -1,5 +1,5 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
-import { CellSelection, selectedRect, TableMap } from "@tiptap/pm/tables"
+import { CellSelection, selectedRect, TableMap, tableEditingKey } from "@tiptap/pm/tables"
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { TableAffordanceGeometry } from "./tableAffordanceModel"
@@ -59,7 +59,14 @@ export const useBlockEditorTableOverlayAxisDrag = ({
   const [tableAxisDragGhostPosition, setTableAxisDragGhostPosition] = useState<TableAxisDragGhostPosition>(null)
   const [tableAxisReorderIndicatorState, setTableAxisReorderIndicatorState] =
     useState<TableAxisReorderIndicatorState>(createHiddenTableAxisReorderIndicatorState)
-
+  const clearEditorMouseDownSelectionSyncDeferral = (activeEditor: TiptapEditor) => {
+    const viewWithInput = activeEditor.view as typeof activeEditor.view & {
+      input?: { mouseDown?: unknown }
+    }
+    if (viewWithInput.input) {
+      viewWithInput.input.mouseDown = null
+    }
+  }
   const selectTableAxisAtIndex = useCallback(
     (activeEditor: TiptapEditor, tablePos: number, axis: "row" | "column", axisIndex: number) => {
       const tableNode = activeEditor.state.doc.nodeAt(tablePos)
@@ -76,11 +83,15 @@ export const useBlockEditorTableOverlayAxisDrag = ({
 
         clearStickyTopLevelBlockSelection()
         clearTableTextSelectionForStructuralSelection()
-        activeEditor.view.dispatch(
-          activeEditor.state.tr.setSelection(CellSelection.colSelection(anchorResolved, headResolved))
-        )
         focusElementWithoutScroll(activeEditor.view.dom)
-        clearTableTextSelectionForStructuralSelection()
+        clearEditorMouseDownSelectionSyncDeferral(activeEditor)
+        activeEditor.view.dispatch(
+          activeEditor.state.tr
+            .setSelection(CellSelection.colSelection(anchorResolved, headResolved))
+            .setMeta(tableEditingKey, anchorResolved.pos)
+        )
+        setSelectionTick((prev) => prev + 1)
+        clearTableTextSelectionForStructuralSelection({ clearWindowSelection: false })
         return true
       }
 
@@ -93,14 +104,18 @@ export const useBlockEditorTableOverlayAxisDrag = ({
 
       clearStickyTopLevelBlockSelection()
       clearTableTextSelectionForStructuralSelection()
-      activeEditor.view.dispatch(
-        activeEditor.state.tr.setSelection(CellSelection.rowSelection(anchorResolved, headResolved))
-      )
       focusElementWithoutScroll(activeEditor.view.dom)
-      clearTableTextSelectionForStructuralSelection()
+      clearEditorMouseDownSelectionSyncDeferral(activeEditor)
+      activeEditor.view.dispatch(
+        activeEditor.state.tr
+          .setSelection(CellSelection.rowSelection(anchorResolved, headResolved))
+          .setMeta(tableEditingKey, anchorResolved.pos)
+      )
+      setSelectionTick((prev) => prev + 1)
+      clearTableTextSelectionForStructuralSelection({ clearWindowSelection: false })
       return true
     },
-    [clearStickyTopLevelBlockSelection]
+    [clearStickyTopLevelBlockSelection, setSelectionTick]
   )
 
   const clearPendingTableAxisDrag = useCallback(() => {

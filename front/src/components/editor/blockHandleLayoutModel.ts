@@ -119,8 +119,7 @@ export const resolveBlockHandleRailLayout = (
 }
 
 const resolveBlockHandleGutterBoundaryLeft = (
-  blockElement: HTMLElement | null | undefined,
-  railWidth: number
+  blockElement: HTMLElement | null | undefined
 ) => {
   if (!blockElement || typeof document === "undefined" || typeof NodeFilter === "undefined") return null
   if (!blockElement.matches("li, blockquote")) return null
@@ -139,7 +138,7 @@ const resolveBlockHandleGutterBoundaryLeft = (
     if (textRect.width <= 0 || textRect.height <= 0) return null
 
     const elementRect = blockElement.getBoundingClientRect()
-    return Math.min(elementRect.left, textRect.left - (railWidth + BLOCK_HANDLE_GUTTER_GAP_PX))
+    return Math.min(elementRect.left, textRect.left)
   }
 
   return null
@@ -196,13 +195,12 @@ const collectBlockHandleProtectedElements = (protectedAnchor?: HTMLElement | nul
 }
 
 const collectBlockHandleProtectedRects = (
-  protectedAnchor: HTMLElement | null | undefined,
-  railWidth: number
+  protectedAnchor: HTMLElement | null | undefined
 ): BlockHandleProtectedRect[] => {
   if (!protectedAnchor || typeof document === "undefined" || typeof NodeFilter === "undefined") return []
 
   return collectBlockHandleProtectedElements(protectedAnchor).flatMap((element) => {
-    const boundaryLeft = resolveBlockHandleGutterBoundaryLeft(element, railWidth)
+    const boundaryLeft = resolveBlockHandleGutterBoundaryLeft(element)
     if (boundaryLeft === null) return []
 
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
@@ -246,7 +244,7 @@ const resolvePrefixSafeBlockHandleRailLayout = (
 ): BlockHandleRailLayout => {
   if (typeof window === "undefined") return railLayout
 
-  const protectedRects = collectBlockHandleProtectedRects(protectedRoot, railWidth).filter(
+  const protectedRects = collectBlockHandleProtectedRects(protectedRoot).filter(
     (protectedRect) =>
       protectedRect.bottom >= -railHeight &&
       protectedRect.top <= window.innerHeight + railHeight &&
@@ -294,7 +292,7 @@ export const resolveBlockHandleRailLayoutForSurface = (
       railWidth,
       railHeight,
       anchoredTop,
-      resolveBlockHandleGutterBoundaryLeft(gutterBoundaryElement, railWidth) ?? rect.left
+      resolveBlockHandleGutterBoundaryLeft(gutterBoundaryElement) ?? rect.left
     ),
     railWidth,
     railHeight,

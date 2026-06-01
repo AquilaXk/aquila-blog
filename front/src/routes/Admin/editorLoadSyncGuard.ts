@@ -68,7 +68,6 @@ export const markGuardEmptyUpdateIgnored = (
   guardState: BlockEditorLoadGuardState
 ): BlockEditorLoadGuardState => ({
   ...guardState,
-  ignoreUntilMs: 0,
   ignoredInitialEmpty: true,
 })
 
@@ -92,7 +91,6 @@ export const restoreBlockEditorCodeLossUpdate = ({
   const normalizedCurrent = normalizeEditorMarkdown(currentMarkdown ?? guardState.expectedBody)
   const isInitialFocusedSyntheticUpdate =
     editorFocused &&
-    !guardState.ignoredInitialEmpty &&
     nowMs <= guardState.ignoreUntilMs &&
     normalizedCurrent === guardState.expectedBody
 

@@ -293,18 +293,6 @@ const isSelectionInsideSameTable = (selection: Selection, table: Element | null)
   return Boolean(anchorElement && focusElement && table.contains(anchorElement) && table.contains(focusElement))
 }
 
-const resolveWholeTableTextRangeCells = (cell: HTMLElement) => {
-  const table = resolveCellTable(cell)
-  if (!table) return null
-
-  const rows = Array.from(table.rows)
-  const cells = rows.flatMap((row) => Array.from(row.cells)).filter(isConnectedTableCell)
-
-  return cells[0] && cells[cells.length - 1]
-    ? { firstCell: cells[0], lastCell: cells[cells.length - 1] }
-    : null
-}
-
 const asTableCell = (element: Element | null) =>
   element instanceof HTMLElement ? element : null
 
@@ -333,7 +321,9 @@ export const cancelActiveTableCellTextSelectionPreserves = () => {
   cancelActiveTableCellScrollPreserves()
 }
 
-export const clearTableTextSelectionForStructuralSelection = () => {
+export const clearTableTextSelectionForStructuralSelection = (
+  options: { clearWindowSelection?: boolean } = {}
+) => {
   pendingTableTextSelectionRangeCells = null
   explicitTableTextDragStart = null
   hasRecentTableTextSelectionContext = false
@@ -342,7 +332,7 @@ export const clearTableTextSelectionForStructuralSelection = () => {
   lastTableSelectionExitTarget = null
   clearTableTextRangeHighlight({ markBlur: false })
   document.documentElement.removeAttribute(RECENT_TABLE_TEXT_SELECTION_CONTEXT_ATTR)
-  if (typeof window !== "undefined") {
+  if (options.clearWindowSelection !== false && typeof window !== "undefined") {
     window.getSelection()?.removeAllRanges()
   }
 }
@@ -683,9 +673,16 @@ export const selectActiveTableCellText = (
       (!targetTable || targetTable === rememberedTable) &&
       !shouldClearActiveTableTextSelectionOnBlur
   )
+  const hasRememberedTableContext = Boolean(
+    rememberedCell &&
+      rememberedTable &&
+      (!targetTable || targetTable === rememberedTable) &&
+      !shouldClearActiveTableTextSelectionOnBlur
+  )
   const hasTableSelectionContext = Boolean(
     hasExplicitTableContext ||
-      hasRecoveredTableContext
+      hasRecoveredTableContext ||
+      hasRememberedTableContext
   )
   if (!hasTableSelectionContext && (hasTableSelectionState || shouldClearActiveTableTextSelectionOnBlur)) {
     clearStaleTableTextSelection()
@@ -714,12 +711,9 @@ export const selectActiveTableCellText = (
   if (!editor.view.dom.contains(selectedCell)) return false
   if (activeCell && !activeCell.isConnected) return false
 
-  const wholeTableRangeCells = resolveWholeTableTextRangeCells(selectedCell)
-  if (!wholeTableRangeCells) return false
   clearNextEditorPointerAfterTable()
   preserveWindowScrollForRichBlockSelectAll()
-  selectTableCellTextRange(wholeTableRangeCells.firstCell, wholeTableRangeCells.lastCell)
-  preserveTableTextRangeAcrossFrames(wholeTableRangeCells.firstCell, wholeTableRangeCells.lastCell)
+  selectTableCellTextRange(selectedCell, selectedCell)
   hasActiveTableTextSelection = true
   hasRecentTableTextSelectionContext = true
   document.documentElement.setAttribute(RECENT_TABLE_TEXT_SELECTION_CONTEXT_ATTR, "true")

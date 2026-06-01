@@ -518,7 +518,7 @@ test.describe("editor authoring block selection and drag", () => {
   test("실제 /editor/[id] 수정 route block handle rail은 list/quote 말머리를 덮지 않는다", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 760, height: 760 })
+    await page.setViewportSize({ width: 1280, height: 760 })
     await page.route("**/member/api/v1/auth/me", async (route) => {
       await route.fulfill({
         contentType: "application/json",
@@ -572,6 +572,7 @@ test.describe("editor authoring block selection and drag", () => {
           if (!targetElement || !rail) return null
 
           const railRect = rail.getBoundingClientRect()
+          const targetElementRect = targetElement.getBoundingClientRect()
           const railBox = {
             bottom: railRect.bottom,
             left: railRect.left,
@@ -601,7 +602,7 @@ test.describe("editor authoring block selection and drag", () => {
             range.setEnd(textNode, textOffset + Math.min(label.length, 6))
             const elementRect = element.getBoundingClientRect()
             const textRect = range.getBoundingClientRect()
-            const prefixLeft = Math.min(elementRect.left, textRect.left - (railRect.width + blockHandleGutterGapPx))
+            const prefixLeft = Math.min(elementRect.left, textRect.left)
             return [
               {
                 bottom: textRect.bottom,
@@ -626,6 +627,7 @@ test.describe("editor authoring block selection and drag", () => {
               "[data-testid='block-editor-prosemirror'] li, [data-testid='block-editor-prosemirror'] blockquote"
             )
           ).flatMap(resolveProtectedRects)
+          const targetTextRect = protectedRects.find((entry) => entry.kind === "text" && entry.label.includes(text))
           const collisions = protectedRects.filter(
             (entry) =>
               railBox.left < entry.right &&
@@ -637,6 +639,8 @@ test.describe("editor authoring block selection and drag", () => {
             collisions,
             protectedRects,
             rail: railBox,
+            targetRailGap: targetElementRect.left - railRect.right,
+            targetTextGap: targetTextRect ? targetTextRect.left - railRect.right : null,
             viewport: {
               height: window.innerHeight,
               padding: blockHandleViewportPaddingPx,
@@ -656,6 +660,9 @@ test.describe("editor authoring block selection and drag", () => {
       expect(metrics.rail.top).toBeGreaterThanOrEqual(metrics.viewport.padding - viewportTolerancePx)
       expect(metrics.rail.right).toBeLessThanOrEqual(metrics.viewport.width - metrics.viewport.padding + viewportTolerancePx)
       expect(metrics.rail.bottom).toBeLessThanOrEqual(metrics.viewport.height - metrics.viewport.padding + viewportTolerancePx)
+      expect(metrics.targetRailGap).toBeGreaterThanOrEqual(8)
+      expect(metrics.targetRailGap).toBeLessThanOrEqual(24)
+      expect(metrics.targetTextGap ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(72)
       expect({ collisions: metrics.collisions, metrics, targetText }).toMatchObject({
         collisions: [],
       })

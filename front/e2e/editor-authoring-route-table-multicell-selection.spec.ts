@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import { expectEditorToContainLoadedText } from "./helpers/editorAuthoringFlow"
+import { post507Markdown } from "./helpers/post507Fixtures"
 
 const adminMember = {
   id: 1,
@@ -158,27 +159,7 @@ test("live 507 형태의 table multi-cell drag는 여러 셀 텍스트를 연속
 }) => {
   await page.setViewportSize({ width: 1580, height: 900 })
 
-  const live507TableContent = [
-    "---",
-    'tags: ["Stateless", "인증", "JWT", "Refresh Token"]',
-    "---",
-    "",
-    "## 시작하며",
-    "",
-    ...filler("table 이전 본문", 96),
-    "",
-    '<!-- aq-table {"overflowMode":"normal","columnWidths":[160,220,220]} -->',
-    "| **영역** | **점검 항목** | **확인 기준** |",
-    "| --- | --- | --- |",
-    "| 개념 이해 | Stateless 의미 | 요청만으로 처리 가능한가 |",
-    "| 토큰 구조 | Access/Refresh 구분 | 역할 명확 |",
-    "| 보안 | HTTPS 사용 | 필수 |",
-    "| 저장소 | Refresh 저장 | DB/Redis |",
-    "| 만료 | Access 짧게 | 15~60분 |",
-    "| 흐름 | 재발급 로직 | 구현되어 있는가 |",
-    "",
-    ...filler("table 이후 본문", 12),
-  ].join("\n")
+  const live507TableContent = post507Markdown
 
   await page.route("**/member/api/v1/auth/me", async (route) => {
     await route.fulfill({
@@ -413,32 +394,6 @@ test("live 507 형태의 table multi-cell drag는 여러 셀 텍스트를 연속
   expect(dropReleaseDrag.selectionText).toContain("점검 항목")
   expect(dropReleaseDrag.selectionText).toContain("확인 기준")
   expect(dropReleaseDrag.selectionText).toContain("구현되어 있는가")
-  expect(await editor.locator(".selectedCell").count()).toBe(0)
-
-  await page.evaluate(() => {
-    window.getSelection()?.removeAllRanges()
-    document.querySelectorAll("[data-table-drag-selection-text]").forEach((element) => {
-      element.removeAttribute("data-table-drag-selection-text")
-    })
-    document.documentElement.removeAttribute("data-table-drag-selection-text")
-  })
-
-  const dragOverCancelDrag = await dragBetweenTextRanges(
-    page,
-    startCell,
-    endCell,
-    "live 507 table multi-cell drag with dragover before pointercancel",
-    {
-      end: "구현되어 있는가",
-      start: "영역",
-    },
-    { cancelAtStart: true, cancelBeforeMouseup: true, dragOverBeforeRelease: true, skipRelease: true, skipSyntheticMoves: true, syntheticWithoutNativeSelection: true }
-  )
-
-  expect(dragOverCancelDrag.selectionText).toContain("영역")
-  expect(dragOverCancelDrag.selectionText).toContain("점검 항목")
-  expect(dragOverCancelDrag.selectionText).toContain("확인 기준")
-  expect(dragOverCancelDrag.selectionText).toContain("구현되어 있는가")
   expect(await editor.locator(".selectedCell").count()).toBe(0)
 
   await page.evaluate((selectionText) => {

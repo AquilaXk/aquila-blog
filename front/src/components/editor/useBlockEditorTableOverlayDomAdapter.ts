@@ -250,6 +250,12 @@ export const useBlockEditorTableOverlayDomAdapter = ({
 
   const getCurrentSelectedTableRect = useCallback((activeEditor?: TiptapEditor | null) => {
     if (!activeEditor) return null
+    const currentGeometry = tableAffordanceGeometryRef.current
+    const hasRenderedTableHint =
+      currentGeometry.width > 0 && currentGeometry.height > 0 && currentGeometry.columnSegments.length > 0
+    const domRect = hasRenderedTableHint ? getActiveTableRectFromDom(activeEditor) : null
+    if (domRect) return domRect
+
     if (isTableSelectionActive(activeEditor)) {
       try {
         return selectedRect(activeEditor.state)
@@ -259,7 +265,7 @@ export const useBlockEditorTableOverlayDomAdapter = ({
     }
 
     return getActiveTableRectFromDom(activeEditor)
-  }, [getActiveTableRectFromDom])
+  }, [getActiveTableRectFromDom, tableAffordanceGeometryRef])
 
   const resolveTableNodePosition = useCallback((activeEditor: TiptapEditor, tableNode: ProseMirrorNode) => {
     let tablePos: number | null = null

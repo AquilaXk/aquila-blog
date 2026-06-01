@@ -181,8 +181,16 @@ export const useBlockEditorTableOverlayMenu = ({
 
   useEffect(() => {
     if (isTableStructuralSelection) return
-    setTableMenuState(null)
-  }, [isTableStructuralSelection, setTableMenuState])
+    if (typeof window === "undefined") {
+      setTableMenuState(null)
+      return
+    }
+    const closeTimer = window.setTimeout(() => {
+      if (editor?.state.selection instanceof CellSelection) return
+      setTableMenuState(null)
+    }, 360)
+    return () => window.clearTimeout(closeTimer)
+  }, [editor, isTableStructuralSelection, setTableMenuState])
 
   const closeTableMenu = useCallback(() => setTableMenuState(null), [setTableMenuState])
 
@@ -200,11 +208,11 @@ export const useBlockEditorTableOverlayMenu = ({
     [closeTableMenu, editor, stabilizeTableSelectionSurface]
   )
 
-  const openTableMenu = useCallback((kind: TableMenuKind, anchorRect: DOMRect) => {
+  const openTableMenu = useCallback((kind: TableMenuKind, anchorRect: DOMRect, options: { forceOpen?: boolean } = {}) => {
     cancelTableQuickRailHide()
     setTableMenuState((prev) =>
       resolveTableMenuState(
-        prev,
+        options.forceOpen ? null : prev,
         kind,
         anchorRect,
         typeof window === "undefined"

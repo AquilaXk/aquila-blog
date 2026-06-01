@@ -346,12 +346,13 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
     const handleDocumentPointerDown = (event: PointerEvent) => {
       const target = event.target
       if (!(target instanceof Node)) return
-      if (contentRoot.contains(target)) {
+      const codeShell = contentRoot.closest(".aq-code-shell")
+      if (contentRoot.contains(target) || Boolean(codeShell?.contains(target))) {
         isActiveCodeBlockRef.current = contentRoot.isConnected
       } else if (isActiveCodeBlockRef.current) {
         isActiveCodeBlockRef.current = false
       }
-      if (!contentRoot.contains(target)) codeDragSelectionRef.current = null
+      if (!codeShell?.contains(target)) codeDragSelectionRef.current = null
     }
 
     const handleDocumentSelectAll = (event: KeyboardEvent) => {
@@ -368,8 +369,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       const isActiveShellMatch =
         isActiveCodeBlockRef.current &&
         codeShell?.isConnected &&
-        activeElement instanceof Element &&
-        codeShell.contains(activeElement)
+        contentRoot.isConnected
       const isInsideCodeBlock =
         (activeElement instanceof Element && contentRoot.contains(activeElement)) ||
         (anchorElement instanceof Element && contentRoot.contains(anchorElement)) ||

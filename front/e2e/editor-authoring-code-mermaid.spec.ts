@@ -213,23 +213,6 @@ test.describe("editor authoring code and mermaid blocks", () => {
       .toContain("selectedLanguage")
 
     await page.evaluate(() => {
-      const originalElementsFromPoint = document.elementsFromPoint.bind(document)
-      Object.defineProperty(document, "elementsFromPoint", {
-        configurable: true,
-        value: (x: number, y: number) => {
-          const elements = originalElementsFromPoint(x, y)
-          const topElement = elements[0]
-          const languageButton =
-            topElement instanceof Element ? topElement.closest("[data-code-block-header='true'] button[aria-haspopup='dialog']") : null
-          const codeShell = languageButton
-            ?.closest("[data-code-block-wrapper='true']")
-            ?.querySelector<HTMLElement>(".aq-code-shell")
-          if (!codeShell || elements.includes(codeShell)) return elements
-          return [topElement, codeShell, ...elements.filter((element) => element !== topElement)].filter(
-            Boolean
-          ) as Element[]
-        },
-      })
       const diagnosticsWindow = window as typeof window & {
         __aqCodeLanguagePointerDiagnostics?: Array<{ defaultPrevented: boolean; type: string }>
       }
@@ -246,7 +229,17 @@ test.describe("editor authoring code and mermaid blocks", () => {
       document.addEventListener("mousedown", recordLanguageControlPointer, true)
     })
 
-    await codeBlock.getByRole("button", { name: /TypeScript/i }).click()
+    const languageButton = codeBlock
+      .locator("[data-code-block-header='true']")
+      .getByRole("button", { name: /TypeScript/i })
+    const languageLabelBox = await languageButton.locator("span", { hasText: "TypeScript" }).boundingBox()
+    if (!languageLabelBox) {
+      throw new Error("code language label hit-test box is missing")
+    }
+    await page.mouse.click(
+      languageLabelBox.x + languageLabelBox.width / 2,
+      languageLabelBox.y + languageLabelBox.height / 2
+    )
 
     const pointerDiagnostics = await page.evaluate(
       () =>
@@ -261,8 +254,29 @@ test.describe("editor authoring code and mermaid blocks", () => {
 
     const languageDialog = page.getByRole("dialog", { name: "코드 언어 선택" })
     await expect(languageDialog).toBeVisible()
-    await languageDialog.getByRole("button", { name: "Python", exact: true }).click()
+    const txtOption = languageDialog.getByRole("button", { name: "TXT", exact: true })
+    const txtOptionLabelBox = await txtOption.locator("span", { hasText: "TXT" }).boundingBox()
+    if (!txtOptionLabelBox) {
+      throw new Error("TXT language option hit-test box is missing")
+    }
+    await page.mouse.click(
+      txtOptionLabelBox.x + txtOptionLabelBox.width / 2,
+      txtOptionLabelBox.y + txtOptionLabelBox.height / 2
+    )
 
+    await expect(languageDialog).toHaveCount(0)
+    await expect(
+      codeBlock
+        .locator("[data-code-block-header='true']")
+        .getByRole("button", { name: "TXT", exact: true })
+    ).toBeVisible()
+
+    await codeBlock
+      .locator("[data-code-block-header='true']")
+      .getByRole("button", { name: "TXT", exact: true })
+      .click()
+    await expect(languageDialog).toBeVisible()
+    await languageDialog.getByRole("button", { name: "Python", exact: true }).click()
     await expect(languageDialog).toHaveCount(0)
     await expect(
       codeBlock

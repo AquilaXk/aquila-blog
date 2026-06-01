@@ -459,7 +459,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       event.stopImmediatePropagation?.()
     }
     const handleWindowPointerMove = (event: PointerEvent) => {
-      if (event.pointerType && event.pointerType !== "mouse") return; if (event.buttons === 0) { prepareNonTableEditorPointerTarget(event); return }
+      if (event.pointerType && event.pointerType !== "mouse") return; if (event.buttons === 0) { prepareNonTableEditorPointerTarget(event); return } { const staleNonTableStart = nonTableTextDragStartRef.current; if (staleNonTableStart && event.buttons === 1 && resolveTableTextCellAtPoint(staleNonTableStart.x, staleNonTableStart.y, document.elementFromPoint(staleNonTableStart.x, staleNonTableStart.y))) nonTableTextDragStartRef.current = null }
       if (!nonTableTextDragStartRef.current && !codeTextDragStartRef.current && event.buttons === 1 && !tableTextDragStartRef.current && rememberCodeTextDragStartAtPoint(event)) { event.preventDefault(); event.stopPropagation(); preserveActiveCodeTextDragScroll(); selectCodeDragRootWhenNativeSelectionIsMissing(); return }
       if (hasMovedCodeTextDrag(event)) {
         event.preventDefault()
@@ -484,7 +484,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
     }
 
     const handleWindowMouseMove = (event: MouseEvent) => {
-      if (event.buttons === 0) { prepareNonTableEditorPointerTarget(event); return } if (!nonTableTextDragStartRef.current && !codeTextDragStartRef.current && event.buttons === 1 && !tableTextDragStartRef.current && rememberCodeTextDragStartAtPoint(event)) { event.preventDefault(); event.stopPropagation(); preserveActiveCodeTextDragScroll(); selectCodeDragRootWhenNativeSelectionIsMissing(); return }
+      if (event.buttons === 0) { prepareNonTableEditorPointerTarget(event); return } { const staleNonTableStart = nonTableTextDragStartRef.current; if (staleNonTableStart && event.buttons === 1 && resolveTableTextCellAtPoint(staleNonTableStart.x, staleNonTableStart.y, document.elementFromPoint(staleNonTableStart.x, staleNonTableStart.y))) nonTableTextDragStartRef.current = null } if (!nonTableTextDragStartRef.current && !codeTextDragStartRef.current && event.buttons === 1 && !tableTextDragStartRef.current && rememberCodeTextDragStartAtPoint(event)) { event.preventDefault(); event.stopPropagation(); preserveActiveCodeTextDragScroll(); selectCodeDragRootWhenNativeSelectionIsMissing(); return }
       if (hasMovedCodeTextDrag(event)) {
         event.preventDefault()
         event.stopPropagation()

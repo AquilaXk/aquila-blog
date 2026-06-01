@@ -4,10 +4,6 @@ import { mockEditorRouteWithPost507 } from "./helpers/post507Fixtures"
 const readScrollTop = (page: Page) =>
   page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
 
-const scrollDocumentBy = async (page: Page, deltaY: number) => {
-  await page.evaluate((nextDeltaY) => window.scrollBy(0, nextDeltaY), deltaY)
-}
-
 const resolveTextRangeBox = async (locator: Locator, text: string) =>
   locator.evaluate((element, targetText) => {
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
@@ -57,7 +53,7 @@ test.describe("editor authoring route 507 selection scroll owner", () => {
 
     await page.mouse.click(targetBox.x + Math.min(targetBox.width / 2, 160), targetBox.y + targetBox.height / 2)
     const beforeScrollTop = await readScrollTop(page)
-    await scrollDocumentBy(page, 260)
+    await page.mouse.wheel(0, 260)
     await page.waitForTimeout(120)
     const afterScrollTop = await readScrollTop(page)
 
@@ -90,9 +86,37 @@ test.describe("editor authoring route 507 selection scroll owner", () => {
     expect(selectionText).toContain("JWT 구조를 이해하면")
 
     const beforeScrollTop = await readScrollTop(page)
-    await scrollDocumentBy(page, 220)
+    await page.mouse.wheel(0, 220)
     await page.waitForTimeout(120)
     const afterScrollTop = await readScrollTop(page)
     expect(afterScrollTop).toBeGreaterThan(beforeScrollTop + 100)
+  })
+
+  test("실제 /editor/[id] post 507 code block follow-up focus는 click 보정 후 사용자 wheel scroll을 막지 않는다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 980, height: 720 })
+
+    const { editor } = await mockEditorRouteWithPost507(page, {
+      postId: 997,
+      title: "post 507 code follow-up focus route 글",
+      version: 5,
+    })
+
+    const codeBlock = editor.locator(".aq-code-shell", { hasText: "public Token login" }).first()
+    await codeBlock.scrollIntoViewIfNeeded()
+    await page.waitForTimeout(120)
+
+    const codeEditorContent = codeBlock.locator(".aq-code-editor-content").first()
+    const beforeClickScrollTop = await readScrollTop(page)
+    await codeEditorContent.click({ position: { x: 28, y: 18 } })
+    await page.waitForTimeout(220)
+    const afterClickScrollTop = await readScrollTop(page)
+    expect(Math.abs(afterClickScrollTop - beforeClickScrollTop)).toBeLessThanOrEqual(24)
+
+    await page.mouse.wheel(0, 260)
+    await page.waitForTimeout(160)
+    const afterWheelScrollTop = await readScrollTop(page)
+    expect(afterWheelScrollTop).toBeGreaterThan(afterClickScrollTop + 100)
   })
 })

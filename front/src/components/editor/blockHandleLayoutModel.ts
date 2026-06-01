@@ -580,7 +580,7 @@ export const preserveWindowScrollForEditorPointerFocus = (
     return
   }
   if (shouldPreserveGeneralEditorPointer && !isGeneralEditorPointerPreserveSuppressed()) {
-    preserveWindowScrollAcrossFrames(EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES, 4, EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MIN_MS, true)
+    preserveWindowScrollAcrossFrames(EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES, 4, EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MIN_MS, true, false, true, false, true)
   }
 }
 

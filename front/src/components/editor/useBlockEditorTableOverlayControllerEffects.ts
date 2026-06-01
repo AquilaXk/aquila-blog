@@ -1,4 +1,5 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
+import { CellSelection } from "@tiptap/pm/tables"
 import type { Dispatch, MutableRefObject, SetStateAction } from "react"
 import { useEffect } from "react"
 import { flushSync } from "react-dom"
@@ -148,8 +149,9 @@ export const useBlockEditorTableOverlayControllerEffects = ({
     const tableElement = anchorCell?.closest("table") as HTMLTableElement | null
     const tableVisible = intersectsViewportBounds(tableElement?.getBoundingClientRect() ?? null)
     const anchorVisible = intersectsViewportBounds(anchorCell?.getBoundingClientRect() ?? null)
-    if (tableMenuState && isTableStructuralSelection) {
-      const currentEditor = editorRef.current
+    const currentEditor = editorRef.current
+    const hasStructuralSelection = isTableStructuralSelection || currentEditor?.state.selection instanceof CellSelection
+    if (tableMenuState && hasStructuralSelection) {
       const anchorDom = currentEditor?.view.domAtPos(currentEditor.state.selection.from).node
       const fallbackAnchor = anchorDom instanceof Element ? anchorDom : anchorDom?.parentElement ?? null
       const fallbackTable = fallbackAnchor?.closest("table")
@@ -266,13 +268,31 @@ export const useBlockEditorTableOverlayControllerEffects = ({
     if (typeof window === "undefined" || !tableMenuState) return
     const scrollOptions: AddEventListenerOptions = { capture: true, passive: true }
     const resizeOptions: AddEventListenerOptions = { passive: true }
-    const closeOnViewportChange = (event: Event) => {
+    const isStructuralAxisMenu =
+      isTableStructuralSelection && (tableMenuState.kind === "row" || tableMenuState.kind === "column")
+    const openedAt = typeof performance !== "undefined" ? performance.now() : Date.now()
+    let lastPointerOutsideTableSurfaceAt = 0
+    const getNow = () => (typeof performance !== "undefined" ? performance.now() : Date.now())
+    const rememberPointerIntent = (event: PointerEvent) => {
+      const target = document.elementFromPoint(event.clientX, event.clientY)
       if (
-        event.type === "scroll" &&
-        isTableStructuralSelection &&
-        (tableMenuState.kind === "row" || tableMenuState.kind === "column")
+        !target?.closest(
+          "[data-table-axis-rail='true'], [data-table-affordance], [data-table-menu-root='true'], .aq-table-shell, .tableWrapper, table"
+        )
       ) {
-        return
+        lastPointerOutsideTableSurfaceAt = getNow()
+      }
+    }
+    const closeOnViewportChange = (event: Event) => {
+      if (event.type === "scroll") {
+        const now = getNow()
+        const elapsed = now - openedAt
+        if (isStructuralAxisMenu) {
+          const hasRecentOutsidePointerIntent = now - lastPointerOutsideTableSurfaceAt < 650
+          if (!hasRecentOutsidePointerIntent && elapsed < 2_400) return
+        } else if (elapsed < 240) {
+          return
+        }
       }
       setHoveredTableCellMenuLayout(null)
       setIsTableQuickRailHovered(false)
@@ -280,9 +300,19 @@ export const useBlockEditorTableOverlayControllerEffects = ({
       hideTableQuickRailImmediately()
     }
     window.addEventListener("scroll", closeOnViewportChange, scrollOptions)
+    window.addEventListener("pointermove", rememberPointerIntent, scrollOptions)
+    window.addEventListener("wheel", closeOnViewportChange, scrollOptions)
+    document.addEventListener("wheel", closeOnViewportChange, scrollOptions)
+    document.documentElement.addEventListener("wheel", closeOnViewportChange, scrollOptions)
+    document.body?.addEventListener("wheel", closeOnViewportChange, scrollOptions)
     window.addEventListener("resize", closeOnViewportChange, resizeOptions)
     return () => {
       window.removeEventListener("scroll", closeOnViewportChange, scrollOptions)
+      window.removeEventListener("pointermove", rememberPointerIntent, scrollOptions)
+      window.removeEventListener("wheel", closeOnViewportChange, scrollOptions)
+      document.removeEventListener("wheel", closeOnViewportChange, scrollOptions)
+      document.documentElement.removeEventListener("wheel", closeOnViewportChange, scrollOptions)
+      document.body?.removeEventListener("wheel", closeOnViewportChange, scrollOptions)
       window.removeEventListener("resize", closeOnViewportChange, resizeOptions)
     }
   }, [

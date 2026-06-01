@@ -61,6 +61,7 @@ export const BlockEditorTableOverlayRails = ({
   tableCornerGrowSuppressClickRef,
   tableCornerPreviewState,
   tableEdgeHandleInsetPx,
+  tableMenuState,
 }: BlockEditorTableOverlayLayerProps) => (
   <>
     {draggedTableAxisState?.axis === "row" && tableAxisDragGhostPosition ? (
@@ -149,7 +150,7 @@ export const BlockEditorTableOverlayRails = ({
       : null}
     {shouldRenderTableAffordanceOverlay ? (
       <>
-        {isCurrentTableColumnSelection(tableAffordanceGeometry.columnIndex) ? (
+        {tableMenuState?.kind === "column" && isCurrentTableColumnSelection(tableAffordanceGeometry.columnIndex) ? (
           <TableAxisSelectionOutline
             data-axis="column"
             data-testid="table-column-selection-outline"
@@ -161,7 +162,7 @@ export const BlockEditorTableOverlayRails = ({
             }}
           />
         ) : null}
-        {isCurrentTableRowSelection(tableAffordanceGeometry.rowIndex) ? (
+        {tableMenuState?.kind === "row" && isCurrentTableRowSelection(tableAffordanceGeometry.rowIndex) ? (
           <TableAxisSelectionOutline
             data-axis="row"
             data-testid="table-row-selection-outline"
@@ -282,7 +283,10 @@ export const BlockEditorTableOverlayRails = ({
                 if (event.button !== 0) return
                 event.preventDefault()
                 event.stopPropagation()
-                startPendingTableAxisDrag("row", tableAffordanceGeometry.rowIndex, event.pointerId, event.clientX, event.clientY)
+                const anchorRect = event.currentTarget.getBoundingClientRect()
+                startPendingTableAxisDrag("row", tableAffordanceGeometry.rowIndex, event.pointerId, event.clientX, event.clientY, () =>
+                  handleTableRowGripClick(tableAffordanceGeometry.rowIndex, anchorRect)
+                )
               }}
               onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                 event.preventDefault()
@@ -325,7 +329,10 @@ export const BlockEditorTableOverlayRails = ({
                 if (event.button !== 0) return
                 event.preventDefault()
                 event.stopPropagation()
-                startPendingTableAxisDrag("column", tableAffordanceGeometry.columnIndex, event.pointerId, event.clientX, event.clientY)
+                const anchorRect = event.currentTarget.getBoundingClientRect()
+                startPendingTableAxisDrag("column", tableAffordanceGeometry.columnIndex, event.pointerId, event.clientX, event.clientY, () =>
+                  handleTableColumnRailSegmentClick(tableAffordanceGeometry.columnIndex, anchorRect)
+                )
               }}
               onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                 event.preventDefault()

@@ -38,34 +38,22 @@ export const useBlockEditorTableOverlayInteractionHandlers = ({
 }: UseBlockEditorTableOverlayInteractionHandlersArgs) => {
   const handleTableColumnRailSegmentClick = useCallback(
     (columnIndex: number, anchorRect: DOMRect) => {
-      const applyColumnSelection = () => {
-        const selected = selectTableColumnByIndex(columnIndex)
-        if (!selected) return
-        setTableAffordanceGeometry((prev) => ({ ...prev, columnIndex }))
-        openTableMenu("column", anchorRect, { forceOpen: true })
-      }
-      if (typeof window === "undefined") {
-        applyColumnSelection()
-        return
-      }
-      window.requestAnimationFrame(applyColumnSelection)
+      const selected = selectTableColumnByIndex(columnIndex)
+      if (!selected) return false
+      setTableAffordanceGeometry((prev) => ({ ...prev, columnIndex }))
+      openTableMenu("column", anchorRect, { forceOpen: true })
+      return true
     },
     [openTableMenu, selectTableColumnByIndex, setTableAffordanceGeometry]
   )
 
   const handleTableRowGripClick = useCallback(
     (rowIndex: number, anchorRect: DOMRect) => {
-      const applyRowSelection = () => {
-        const selected = selectTableRowByIndex(rowIndex)
-        if (!selected) return
-        setTableAffordanceGeometry((prev) => ({ ...prev, rowIndex }))
-        openTableMenu("row", anchorRect, { forceOpen: true })
-      }
-      if (typeof window === "undefined") {
-        applyRowSelection()
-        return
-      }
-      window.requestAnimationFrame(applyRowSelection)
+      const selected = selectTableRowByIndex(rowIndex)
+      if (!selected) return false
+      setTableAffordanceGeometry((prev) => ({ ...prev, rowIndex }))
+      openTableMenu("row", anchorRect, { forceOpen: true })
+      return true
     },
     [openTableMenu, selectTableRowByIndex, setTableAffordanceGeometry]
   )

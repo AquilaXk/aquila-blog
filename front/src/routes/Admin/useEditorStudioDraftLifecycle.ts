@@ -357,9 +357,19 @@ export const useEditorStudioDraftLifecycle = ({
         String(options.initialPost?.id ?? "") === normalizedTargetPostId
           ? options.initialPost
           : null
-      const post =
+      let post =
         initialPost ??
         (await apiFetch<PostForEditor>(`/post/api/v1/adm/posts/${normalizedTargetPostId}`))
+      if (initialPost) {
+        try {
+          const freshPost = await apiFetch<PostForEditor>(`/post/api/v1/adm/posts/${normalizedTargetPostId}`)
+          if ((freshPost.content ?? "").trim().length > 0 || freshPost.contentHtml) {
+            post = freshPost
+          }
+        } catch {
+          // SSR initialPost is still a valid fallback when the client-side refresh fails.
+        }
+      }
       let resolvedPost = post
 
       const adminContent = resolvedPost.content ?? ""

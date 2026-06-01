@@ -233,6 +233,43 @@ test.describe("editor authoring code and mermaid blocks", () => {
     ).toBeVisible()
   })
 
+  test("실제 /editor/[id] 수정 route 코드블럭 block handle은 코드 text capture에 막히지 않는다", async ({
+    page,
+  }) => {
+    await mockEditorRouteWithPost507(page, {
+      postId: 591,
+      title: "post 507 code block selection route 글",
+    })
+
+    const codeBlock = page.locator("[data-code-block-wrapper='true']").first()
+    await expect(codeBlock).toBeVisible({ timeout: 15_000 })
+    await expect(codeBlock.locator(".aq-code-highlight-layer")).toContainText("로그인 -> 세션 생성")
+
+    await codeBlock.scrollIntoViewIfNeeded()
+    const codeBlockBox = await codeBlock.boundingBox()
+    if (!codeBlockBox) {
+      throw new Error("code block hit-test box is missing")
+    }
+
+    await page.mouse.move(codeBlockBox.x + 32, codeBlockBox.y + 36)
+    const blockHandle = page.getByTestId("block-drag-handle")
+    await expect(blockHandle).toBeVisible()
+    await blockHandle.click()
+
+    const blockSelectionOverlay = page.getByTestId("keyboard-block-selection-overlay")
+    await expect(blockSelectionOverlay).toBeVisible()
+    const selectedOverlayBox = await blockSelectionOverlay.boundingBox()
+    const selectedCodeBlockBox = await codeBlock.boundingBox()
+    if (!selectedOverlayBox || !selectedCodeBlockBox) {
+      throw new Error("code block selection overlay metrics are missing")
+    }
+    expect(Math.abs(selectedOverlayBox.y - selectedCodeBlockBox.y)).toBeLessThanOrEqual(8)
+    expect(Math.abs(selectedOverlayBox.height - selectedCodeBlockBox.height)).toBeLessThanOrEqual(12)
+    await expect
+      .poll(async () => page.evaluate(() => window.getSelection()?.toString() ?? ""))
+      .toBe("")
+  })
+
   test("머메이드 블록 코드를 바꾸면 preview가 이전 템플릿이 아니라 최신 source로 즉시 다시 렌더된다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
     await expect(page.getByTestId("qa-editor-ready")).toHaveCount(1)

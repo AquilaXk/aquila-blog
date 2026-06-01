@@ -21,6 +21,15 @@ const readSelectionText = (page: Page) =>
       ""
   )
 
+const readNativeSelectionState = (page: Page) =>
+  page.evaluate(() => ({
+    nativeText: window.getSelection()?.toString() ?? "",
+    persistedText:
+      document.documentElement.getAttribute("data-table-drag-selection-text") ||
+      document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
+      "",
+  }))
+
 const filler = (label: string, count: number) =>
   Array.from({ length: count }, (_, index) => [
     `${label} ${index + 1}: 인증 흐름을 설명하는 긴 문단입니다.`,
@@ -153,6 +162,92 @@ const dragBetweenTextRanges = async (
 
   return { beforeScrollTop, afterScrollTop: await readScrollTop(page), selectionText: await readSelectionText(page) }
 }
+
+test("live 507 형태의 table 단일 셀 내부 drag는 native 텍스트 선택을 남긴다", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1580, height: 900 })
+
+  await page.route("**/member/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(adminMember),
+    })
+  })
+  await page.route("**/post/api/v1/adm/posts/997", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 997,
+        version: 1,
+        title: "live 507 table single cell selection 글",
+        content: post507Markdown,
+        contentHtml: null,
+        published: true,
+        listed: true,
+      }),
+    })
+  })
+
+  await page.goto("/editor/997")
+  const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+  await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(
+    "live 507 table single cell selection 글"
+  )
+  await expectEditorToContainLoadedText(editor, "구현되어 있는가")
+
+  const targetCell = editor.locator("td", { hasText: "Stateless 의미" }).first()
+  await page.evaluate(() => {
+    window.getSelection()?.removeAllRanges()
+    document.querySelectorAll("[data-table-drag-selection-text]").forEach((element) => {
+      element.removeAttribute("data-table-drag-selection-text")
+    })
+    document.documentElement.removeAttribute("data-table-drag-selection-text")
+    ;(window as typeof window & { __qaSingleCellDragEvents?: unknown[] }).__qaSingleCellDragEvents = []
+    const record = (event: MouseEvent | PointerEvent) => {
+      const cell = document.elementsFromPoint(event.clientX, event.clientY)
+        .find((element) => Boolean(element.closest("th, td")))
+        ?.closest("th, td")
+      ;(window as typeof window & { __qaSingleCellDragEvents?: unknown[] }).__qaSingleCellDragEvents?.push({
+        cellText: cell?.textContent?.replace(/\s+/g, " ").trim() ?? null,
+        selectionText: window.getSelection()?.toString() ?? "",
+        type: event.type,
+        x: Math.round(event.clientX),
+        y: Math.round(event.clientY),
+      })
+    }
+    for (const type of ["pointerdown", "pointermove", "pointerup", "mousedown", "mousemove", "mouseup"] as const) {
+      window.addEventListener(type, record, { capture: true })
+    }
+  })
+
+  const tableDrag = await dragBetweenTextRanges(
+    page,
+    targetCell,
+    targetCell,
+    "live 507 table single-cell native drag",
+    {
+      end: "Stateless 의미",
+      start: "Stateless 의미",
+    }
+  )
+  const selectionState = await readNativeSelectionState(page)
+
+  if (!selectionState.nativeText.replace(/\s+/g, " ").trim().includes("Stateless 의미")) {
+    const diagnostics = await page.evaluate(() => ({
+      activeElementText: document.activeElement?.textContent?.replace(/\s+/g, " ").trim().slice(0, 120) ?? null,
+      events: ((window as typeof window & { __qaSingleCellDragEvents?: unknown[] }).__qaSingleCellDragEvents ?? []).slice(-80),
+      htmlPersisted: document.documentElement.getAttribute("data-table-drag-selection-text"),
+      selectionText: window.getSelection()?.toString() ?? "",
+    }))
+    throw new Error(`single-cell native drag lost selection: ${JSON.stringify({ diagnostics, selectionState, tableDrag })}`)
+  }
+  expect(selectionState.nativeText.replace(/\s+/g, " ").trim()).toContain("Stateless 의미")
+  expect(selectionState.persistedText).toBe("")
+  expect(tableDrag.afterScrollTop).toBeLessThanOrEqual(tableDrag.beforeScrollTop + 24)
+  expect(tableDrag.afterScrollTop).toBeGreaterThanOrEqual(tableDrag.beforeScrollTop - 24)
+  expect(await editor.locator(".selectedCell").count()).toBe(0)
+})
 
 test("live 507 형태의 table multi-cell drag는 여러 셀 텍스트를 연속 선택한다", async ({
   page,

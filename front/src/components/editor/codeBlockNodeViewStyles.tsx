@@ -204,6 +204,10 @@ export const CodeBlockEditorSurface = styled.div`
     max-width: none;
     grid-area: 1 / 1;
     margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
     overflow: visible;
     padding: 1.05rem 1.18rem 1.6rem;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
@@ -211,6 +215,14 @@ export const CodeBlockEditorSurface = styled.div`
     font-size: 0.85rem;
     line-height: 1.5;
     white-space: pre;
+  }
+
+  .aq-code-shell > pre.aq-code-highlight-layer,
+  .aq-code-shell > .aq-code-editor-content {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .aq-code-highlight-layer {

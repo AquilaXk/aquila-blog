@@ -61,7 +61,7 @@ test.describe("editor load sync guard", () => {
     ).toBe(false)
   })
 
-  test("초기 빈 업데이트는 한 번만 무시하고 곧바로 guard를 닫는다", () => {
+  test("초기 빈 업데이트는 한 번만 무시하고 code-loss hold는 유지한다", () => {
     const nowMs = 3_000
     const guard = createBlockEditorLoadGuardState("기존 본문", nowMs)
 
@@ -75,6 +75,7 @@ test.describe("editor load sync guard", () => {
     ).toBe(true)
 
     const closedGuard = markGuardEmptyUpdateIgnored(guard)
+    expect(closedGuard.ignoreUntilMs).toBe(guard.ignoreUntilMs)
 
     expect(
       shouldIgnoreBlockEditorEmptyUpdate({
@@ -84,6 +85,47 @@ test.describe("editor load sync guard", () => {
         nowMs: nowMs + 150,
       })
     ).toBe(false)
+  })
+
+  test("초기 빈 업데이트 직후 focused code fence 손실은 expected body로 복구한다", () => {
+    const nowMs = 3_500
+    const expectedBody = [
+      "초기 empty 뒤 focused 복구 대상입니다.",
+      "",
+      "```ts",
+      "const accessToken = createAccessToken(user)",
+      "return accessToken",
+      "```",
+    ].join("\n")
+    const staleFocusedUpdate = [
+      "초기 empty 뒤 focused 복구 대상입니다.",
+      "",
+      "```ts",
+      "```",
+    ].join("\n")
+    const guard = createBlockEditorLoadGuardState(expectedBody, nowMs, 1_200)
+
+    expect(
+      shouldIgnoreBlockEditorEmptyUpdate({
+        nextMarkdown: "",
+        currentMarkdown: expectedBody,
+        guardState: guard,
+        nowMs: nowMs + 120,
+      })
+    ).toBe(true)
+
+    const guardAfterInitialEmpty = markGuardEmptyUpdateIgnored(guard)
+    const restored = restoreBlockEditorCodeLossUpdate({
+      nextMarkdown: staleFocusedUpdate,
+      currentMarkdown: expectedBody,
+      guardState: guardAfterInitialEmpty,
+      editorFocused: true,
+      nowMs: nowMs + 240,
+    })
+
+    expect(restored.changed).toBe(true)
+    expect(restored.markdown).toContain("createAccessToken(user)")
+    expect(restored.markdown).toContain("return accessToken")
   })
 
   test("focus 없는 지연 code fence 손실은 hold 시간이 지나도 expected body로 복구한다", () => {

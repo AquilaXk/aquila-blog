@@ -148,6 +148,16 @@ export const useBlockEditorTableOverlayControllerEffects = ({
     const tableElement = anchorCell?.closest("table") as HTMLTableElement | null
     const tableVisible = intersectsViewportBounds(tableElement?.getBoundingClientRect() ?? null)
     const anchorVisible = intersectsViewportBounds(anchorCell?.getBoundingClientRect() ?? null)
+    if (tableMenuState && isTableStructuralSelection) {
+      const currentEditor = editorRef.current
+      const anchorDom = currentEditor?.view.domAtPos(currentEditor.state.selection.from).node
+      const fallbackAnchor = anchorDom instanceof Element ? anchorDom : anchorDom?.parentElement ?? null
+      const fallbackTable = fallbackAnchor?.closest("table")
+      if (intersectsViewportBounds((fallbackTable ?? tableElement)?.getBoundingClientRect() ?? null)) {
+        syncTableQuickRailFromElement(fallbackAnchor ?? anchorCell ?? tableElement)
+        return
+      }
+    }
     if (!anchorCell || !tableElement || !tableVisible || (!anchorVisible && !isTableQuickRailHovered)) {
       setHoveredTableCellMenuLayout(null)
       setIsTableQuickRailHovered(false)
@@ -164,8 +174,10 @@ export const useBlockEditorTableOverlayControllerEffects = ({
     syncTableQuickRailFromElement(anchorCell)
   }, [
     hideTableQuickRailImmediately,
+    editorRef,
     isTableColumnResizeActive,
     isTableQuickRailHovered,
+    isTableStructuralSelection,
     resolveTableQuickRailAnchorElement,
     selectionTick,
     scheduleTableQuickRailHide,
@@ -254,7 +266,14 @@ export const useBlockEditorTableOverlayControllerEffects = ({
     if (typeof window === "undefined" || !tableMenuState) return
     const scrollOptions: AddEventListenerOptions = { capture: true, passive: true }
     const resizeOptions: AddEventListenerOptions = { passive: true }
-    const closeOnViewportChange = () => {
+    const closeOnViewportChange = (event: Event) => {
+      if (
+        event.type === "scroll" &&
+        isTableStructuralSelection &&
+        (tableMenuState.kind === "row" || tableMenuState.kind === "column")
+      ) {
+        return
+      }
       setHoveredTableCellMenuLayout(null)
       setIsTableQuickRailHovered(false)
       setTableMenuState(null)
@@ -266,7 +285,14 @@ export const useBlockEditorTableOverlayControllerEffects = ({
       window.removeEventListener("scroll", closeOnViewportChange, scrollOptions)
       window.removeEventListener("resize", closeOnViewportChange, resizeOptions)
     }
-  }, [hideTableQuickRailImmediately, setHoveredTableCellMenuLayout, setIsTableQuickRailHovered, setTableMenuState, tableMenuState])
+  }, [
+    hideTableQuickRailImmediately,
+    isTableStructuralSelection,
+    setHoveredTableCellMenuLayout,
+    setIsTableQuickRailHovered,
+    setTableMenuState,
+    tableMenuState,
+  ])
 
   useEffect(() => {
     if (typeof window === "undefined" || !tableMenuState) return

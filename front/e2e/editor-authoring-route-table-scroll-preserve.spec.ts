@@ -1,5 +1,8 @@
 import { expect, test, type Page } from "@playwright/test"
-import { expectEditorToContainLoadedText } from "./helpers/editorAuthoringFlow"
+import {
+  POST_507_FINAL_TABLE_TARGET_CELL,
+  mockEditorRouteWithPost507,
+} from "./helpers/post507Fixtures"
 
 const SELECT_ALL_SHORTCUT = process.platform === "darwin" ? "Meta+a" : "Control+a"
 
@@ -14,61 +17,18 @@ const readScrollTop = (page: Page) =>
   page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
 
 test.describe("editor authoring route table scroll preserve", () => {
-  test("실제 /editor/[id] table cell 클릭/텍스트 선택/Cmd+A 중 scrollTop이 튀지 않는다", async ({
+  test("실제 /editor/[id] post 507 마지막 table cell 클릭/텍스트 선택/Cmd+A 중 scrollTop이 튀지 않는다", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 980, height: 720 })
 
-    const leadParagraphs = Array.from({ length: 72 }, (_, index) =>
-      `table scroll preserve lead paragraph ${index + 1}. table 상호작용 중 scroll coordinate 보존을 확인합니다.`
-    )
-    const tableMarkdown = [
-      '<!-- aq-table {"overflowMode":"normal","columnWidths":[160,220,220]} -->',
-      "| **영역** | **점검 항목** | **확인 기준** |",
-      "| --- | --- | --- |",
-      "| 개념 이해 | Stateless 의미 | 요청만으로 처리 가능한가 |",
-      "| 토큰 구조 | Access Token | 역할 명확 |",
-      "| 흐름 | 재발급 로직 | 구현되어 있는가 |",
-      "| 정책 | 재시도 정책 | 장애 대응이 설계되어 있는가 |",
-      "| 보안 | 인증 만료 | 오류 응답 처리가 적절한가 |",
-      "| 운영 | 모니터링 알림 | 임계치 기반 경보가 있는가 |",
-    ].join("\n")
-    const content = [
-      "table scroll preserve route 글입니다.",
-      ...leadParagraphs,
-      tableMarkdown,
-      "table scroll preserve trailing paragraph. 상호작용 후에도 viewport가 유지되어야 합니다.",
-    ].join("\n\n")
-
-    await page.route("**/member/api/v1/auth/me", async (route) => {
-      await route.fulfill({
-        contentType: "application/json",
-        body: JSON.stringify(adminMember),
-      })
-    })
-    await page.route("**/post/api/v1/adm/posts/993", async (route) => {
-      await route.fulfill({
-        contentType: "application/json",
-        body: JSON.stringify({
-          id: 993,
-          version: 2,
-          title: "table scroll preserve live route 글",
-          content,
-          contentHtml: null,
-          published: true,
-          listed: true,
-        }),
-      })
+    const { finalTable } = await mockEditorRouteWithPost507(page, {
+      postId: 993,
+      title: "post 507 table scroll preserve live route 글",
+      version: 2,
     })
 
-    await page.goto("/editor/993")
-    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
-    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(
-      "table scroll preserve live route 글"
-    )
-    await expectEditorToContainLoadedText(editor, "Access Token")
-
-    const targetCell = editor.locator("td", { hasText: "Access Token" }).first()
+    const targetCell = finalTable.locator("td", { hasText: POST_507_FINAL_TABLE_TARGET_CELL }).first()
     await targetCell.scrollIntoViewIfNeeded()
     await page.waitForTimeout(120)
 
@@ -82,11 +42,11 @@ test.describe("editor authoring route table scroll preserve", () => {
       const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
       while (walker.nextNode()) {
         const textNode = walker.currentNode as Text
-        const startOffset = textNode.data.indexOf("Access Token")
+        const startOffset = textNode.data.indexOf("Stateless 의미")
         if (startOffset < 0) continue
         const range = document.createRange()
         range.setStart(textNode, startOffset)
-        range.setEnd(textNode, startOffset + "Access Token".length)
+        range.setEnd(textNode, startOffset + "Stateless 의미".length)
         const rect = Array.from(range.getClientRects()).find((candidate) => candidate.width > 2 && candidate.height > 2) ?? range.getBoundingClientRect()
         if (rect.width <= 2 || rect.height <= 2) {
           throw new Error("table scroll preserve text rect is too small")
@@ -116,11 +76,11 @@ test.describe("editor authoring route table scroll preserve", () => {
     expect(Math.abs(afterSelectAllScrollTop - beforeSelectAllScrollTop)).toBeLessThanOrEqual(24)
 
     const selectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
-    expect(selectionText).toContain("영역")
-    expect(selectionText).toContain("점검 항목")
-    expect(selectionText).toContain("확인 기준")
-    expect(selectionText).toContain("Access Token")
-    expect(selectionText).toContain("구현되어 있는가")
+    expect(selectionText.replace(/\s+/g, " ").trim()).toBe(POST_507_FINAL_TABLE_TARGET_CELL)
+    expect(selectionText).not.toContain("영역")
+    expect(selectionText).not.toContain("점검 항목")
+    expect(selectionText).not.toContain("확인 기준")
+    expect(selectionText).not.toContain("구현되어 있는가")
   })
 
   test("테이블 caret 포커스 후 wheel scroll은 캐럿 위치를 보존하며 점프하지 않는다", async ({

@@ -6,6 +6,7 @@ import {
   getWordDragPoints,
   selectWordInEditable,
 } from "./helpers/editorAuthoringFlow"
+import { post507FinalTableMarkdown, post507Markdown } from "./helpers/post507Fixtures"
 
 const adminMember = {
   id: 1,
@@ -532,7 +533,7 @@ test.describe("editor authoring route text selection drag", () => {
     const tableCellPoints = await getWordDragPoints(tableCell, tableLabel)
     await page.mouse.click(tableCellPoints.startX, tableCellPoints.startY)
     await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
-    await expectSelectionContainsOnly(page, ["구분", "값", tableLabel], [bodyLabel, codeLabel])
+    await expectSelectionContainsOnly(page, [tableLabel], ["구분", "값", bodyLabel, codeLabel])
 
     await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
     expect(runtimeErrors).toEqual([])
@@ -542,22 +543,7 @@ test.describe("editor authoring route text selection drag", () => {
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 1000 })
-    const tableMarkdown = [
-      '<!-- aq-table {"overflowMode":"normal","columnWidths":[160,220,240]} -->',
-      "| 영역 | 점검 항목 | 확인 기준 |",
-      "| --- | --- | --- |",
-      "| 개념 이해 | Stateless 의미 | 요청만으로 처리 가능한가 |",
-      "| 토큰 구조 | Access/Refresh 구분 | 역할 명확 |",
-      "| 보안 | HTTPS 사용 | 필수 |",
-      "| 저장소 | Refresh 저장 | DB/Redis |",
-      "| 만료 | Access 짧게 | 15~60분 |",
-      "| 흐름 | 재발급 로직 | 구현되어 있는가 |",
-    ].join("\n")
-    const content = [
-      "테이블 다중 셀 드래그 회귀 재현용 글입니다.",
-      tableMarkdown,
-      "테이블 아래 문단입니다.",
-    ].join("\n\n")
+    const content = post507Markdown
 
     await page.route("**/member/api/v1/auth/me", async (route) => {
       await route.fulfill({
@@ -587,33 +573,17 @@ test.describe("editor authoring route text selection drag", () => {
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     await expectEditorToContainLoadedText(editor, "구현되어 있는가")
 
-    const points = await page.evaluate(() => {
-      const cells = Array.from(
-        document.querySelectorAll<HTMLElement>(
-          "[data-testid='block-editor-prosemirror'] th, [data-testid='block-editor-prosemirror'] td"
-        )
-      )
-      const table = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror'] table")
-      table?.scrollIntoView({ block: "center", inline: "nearest" })
-      const startCell = cells.find((cell) => cell.textContent?.includes("영역"))
-      const endCell = cells.find((cell) => cell.textContent?.includes("구현되어 있는가"))
-      if (!startCell || !endCell) return null
-      startCell.scrollIntoView({ block: "center", inline: "nearest" })
-      const startRect = startCell.getBoundingClientRect()
-      const endRect = endCell.getBoundingClientRect()
-      return {
-        startX: startRect.left + Math.min(startRect.width / 2, 80),
-        startY: startRect.top + startRect.height / 2,
-        endX: endRect.right - Math.min(endRect.width / 2, 80),
-        endY: endRect.top + endRect.height / 2,
-        scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
-      }
-    })
-    if (!points) throw new Error("table multi-cell drag points are missing")
+    const finalTable = editor.locator("table").last()
+    const startCell = finalTable.locator("th", { hasText: "영역" }).first()
+    const endCell = finalTable.locator("td", { hasText: "구현되어 있는가" }).first()
+    await finalTable.scrollIntoViewIfNeeded()
+    const startPoints = await getWordDragPoints(startCell, "영역")
+    const endPoints = await getWordDragPoints(endCell, "구현되어 있는가")
+    const beforeScrollTop = await page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
 
-    await page.mouse.move(points.startX, points.startY)
+    await page.mouse.move(startPoints.startX, startPoints.startY)
     await page.mouse.down()
-    await page.mouse.move(points.endX, points.endY, { steps: 18 })
+    await page.mouse.move(endPoints.endX, endPoints.endY, { steps: 36 })
     await page.mouse.up()
 
     await expect
@@ -644,7 +614,7 @@ test.describe("editor authoring route text selection drag", () => {
       .toContain("영역")
     await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
     const afterScrollTop = await page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
-    expect(Math.abs(afterScrollTop - points.scrollTop)).toBeLessThanOrEqual(24)
+    expect(Math.abs(afterScrollTop - beforeScrollTop)).toBeLessThanOrEqual(24)
   })
 
   test("table multi-cell 선택 toolbar는 이전 본문 selection anchor로 순간이동하지 않는다", async ({
@@ -657,21 +627,10 @@ test.describe("editor authoring route text selection drag", () => {
         ? `${staleAnchorLabel} ${index + 1}. table 선택 전 이전 본문 selection anchor가 남아 있습니다.`
         : `toolbar stale anchor filler ${index + 1}. 글 선택 toolbar 위치 회귀를 재현하기 위한 긴 본문입니다.`
     )
-    const tableMarkdown = [
-      '<!-- aq-table {"overflowMode":"normal","columnWidths":[160,220,240]} -->',
-      "| 영역 | 점검 항목 | 확인 기준 |",
-      "| --- | --- | --- |",
-      "| 개념 이해 | Stateless 의미 | 요청만으로 처리 가능한가 |",
-      "| 토큰 구조 | Access/Refresh 구분 | 역할 명확 |",
-      "| 보안 | HTTPS 사용 | 필수 |",
-      "| 저장소 | Refresh 저장 | DB/Redis |",
-      "| 만료 | Access 짧게 | 15~60분 |",
-      "| 흐름 | 재발급 로직 | 구현되어 있는가 |",
-    ].join("\n")
     const content = [
       "글 선택 toolbar stale anchor 회귀 재현용 글입니다.",
       ...filler,
-      tableMarkdown,
+      post507FinalTableMarkdown,
       "테이블 아래 문단입니다.",
     ].join("\n\n")
 
@@ -708,13 +667,10 @@ test.describe("editor authoring route text selection drag", () => {
     await expect(page.getByTestId("editor-text-bubble-toolbar")).toBeVisible()
 
     const points = await page.evaluate(() => {
-      const cells = Array.from(
-        document.querySelectorAll<HTMLElement>(
-          "[data-testid='block-editor-prosemirror'] th, [data-testid='block-editor-prosemirror'] td"
-        )
-      )
-      const table = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror'] table")
+      const tables = document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] table")
+      const table = tables[tables.length - 1]
       table?.scrollIntoView({ block: "center", inline: "nearest" })
+      const cells = Array.from(table?.querySelectorAll<HTMLElement>("th, td") ?? [])
       const startCell = cells.find((cell) => cell.textContent?.includes("영역"))
       const endCell = cells.find((cell) => cell.textContent?.includes("구현되어 있는가"))
       if (!startCell || !endCell) return null

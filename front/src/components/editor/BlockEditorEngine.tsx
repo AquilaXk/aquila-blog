@@ -153,7 +153,6 @@ const BlockEditorEngine = (props: BlockEditorEngineProps) => {
         runItalicAction={controller.runItalicAction}
         runStrikeAction={controller.runStrikeAction}
         scheduleBubbleHide={controller.scheduleBubbleHide}
-        selectedListItemContext={controller.selectedListItemContext}
         setIsBubbleInlineColorMenuOpen={controller.setIsBubbleInlineColorMenuOpen}
         setIsBubbleTextStyleMenuOpen={controller.setIsBubbleTextStyleMenuOpen}
         viewportRef={controller.viewportRef}

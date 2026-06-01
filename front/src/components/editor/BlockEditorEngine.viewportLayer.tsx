@@ -406,7 +406,6 @@ export const BlockEditorViewportLayer = ({
   runItalicAction,
   runStrikeAction,
   scheduleBubbleHide,
-  selectedListItemContext,
   setIsBubbleInlineColorMenuOpen,
   setIsBubbleTextStyleMenuOpen,
   viewportRef,
@@ -469,7 +468,6 @@ export const BlockEditorViewportLayer = ({
   runItalicAction: () => void
   runStrikeAction: () => void
   scheduleBubbleHide: () => void
-  selectedListItemContext: unknown
   setIsBubbleInlineColorMenuOpen: Dispatch<SetStateAction<boolean>>
   setIsBubbleTextStyleMenuOpen: Dispatch<SetStateAction<boolean>>
   viewportRef: RefObject<HTMLDivElement | null>
@@ -552,10 +550,7 @@ export const BlockEditorViewportLayer = ({
         </DraggedBlockGhost>
       )
     })()}
-    {blockSelectionOverlayState.visible &&
-    !draggedBlockState &&
-    !draggedNestedListItemState &&
-    !selectedListItemContext ? (
+    {blockSelectionOverlayState.visible && !draggedBlockState && !draggedNestedListItemState ? (
       <BlockSelectionOverlay
         aria-hidden="true"
         data-testid="keyboard-block-selection-overlay"

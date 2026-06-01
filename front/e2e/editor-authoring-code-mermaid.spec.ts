@@ -4,9 +4,7 @@ import { mockEditorRouteWithPost507 } from "./helpers/post507Fixtures"
 
 const expectCodeBlockInnerChromeHidden = async (codeBlock: Locator) => {
   const chrome = await codeBlock.evaluate((element) => {
-    const readChrome = (selector: string) => {
-      const node = element.querySelector<HTMLElement>(selector)
-      if (!node) throw new Error(`${selector} is missing`)
+    const readNodeChrome = (node: HTMLElement, selector: string) => {
       const style = window.getComputedStyle(node)
       return {
         backgroundColor: style.backgroundColor,
@@ -16,25 +14,44 @@ const expectCodeBlockInnerChromeHidden = async (codeBlock: Locator) => {
         borderRightWidth: style.borderRightWidth,
         borderTopWidth: style.borderTopWidth,
         boxShadow: style.boxShadow,
+        selector,
+        tagName: node.tagName,
       }
     }
+    const readChrome = (selector: string) => {
+      const node = element.querySelector<HTMLElement>(selector)
+      if (!node) throw new Error(`${selector} is missing`)
+      return readNodeChrome(node, selector)
+    }
+    const readAllChrome = (selector: string) =>
+      Array.from(element.querySelectorAll<HTMLElement>(selector)).map((node) =>
+        readNodeChrome(node, selector)
+      )
 
     return {
       content: readChrome(".aq-code-editor-content"),
+      contentDescendants: [
+        ...readAllChrome(".aq-code-editor-content > *"),
+        ...readAllChrome(".aq-code-editor-content pre"),
+        ...readAllChrome(".aq-code-editor-content code"),
+        ...readAllChrome(".aq-code-highlight-layer code"),
+      ],
       highlight: readChrome(".aq-code-highlight-layer"),
     }
   })
 
-  for (const layer of [chrome.highlight, chrome.content]) {
+  for (const layer of [chrome.highlight, chrome.content, ...chrome.contentDescendants]) {
     expect([
       layer.borderTopWidth,
       layer.borderRightWidth,
       layer.borderBottomWidth,
       layer.borderLeftWidth,
-    ]).toEqual(["0px", "0px", "0px", "0px"])
-    expect(layer.borderRadius).toBe("0px")
-    expect(layer.boxShadow).toBe("none")
-    expect(layer.backgroundColor).toBe("rgba(0, 0, 0, 0)")
+    ], `${layer.selector} ${layer.tagName} border should be reset`).toEqual(["0px", "0px", "0px", "0px"])
+    expect(layer.borderRadius, `${layer.selector} ${layer.tagName} radius should be reset`).toBe("0px")
+    expect(layer.boxShadow, `${layer.selector} ${layer.tagName} shadow should be reset`).toBe("none")
+    expect(layer.backgroundColor, `${layer.selector} ${layer.tagName} background should be reset`).toBe(
+      "rgba(0, 0, 0, 0)"
+    )
   }
 }
 
@@ -169,6 +186,11 @@ test.describe("editor authoring code and mermaid blocks", () => {
     await expect(codeBlock).toBeVisible({ timeout: 15_000 })
     await expect(codeBlock.locator(".aq-code-highlight-layer")).toContainText("로그인 -> 세션 생성")
     await expectCodeBlockInnerChromeHidden(codeBlock)
+
+    const jwtCodeBlock = page.locator("[data-code-block-wrapper='true']").filter({ hasText: "\"userId\": 123" })
+    await expect(jwtCodeBlock).toHaveCount(1)
+    await expect(jwtCodeBlock.locator(".aq-code-highlight-layer")).toContainText("\"role\": \"USER\"")
+    await expectCodeBlockInnerChromeHidden(jwtCodeBlock)
 
     await page.evaluate(() => {
       const diagnosticsWindow = window as typeof window & {

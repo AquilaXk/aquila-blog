@@ -6,8 +6,9 @@ import type { MutableRefObject, RefObject } from "react"
 import { useCallback } from "react"
 import { getFirstEditableTextPositionInNode } from "./blockSelectionModel"
 import { TABLE_STALE_AXIS_HOTZONE_TOP_MARGIN_PX, type TableAffordanceGeometry } from "./tableAffordanceModel"
-import { findActiveRenderedTable, resolveTableScopedSelectedCell } from "./tableRenderedDomModel"
+import { findActiveRenderedTable, RENDERED_TABLE_SELECTOR, resolveTableScopedSelectedCell } from "./tableRenderedDomModel"
 import { isTableSelectionActive } from "./tableStructureModel"
+import { TABLE_DRAG_SELECTION_TEXT_ATTR } from "./tableTextSelectionModel"
 
 const resolveElementsFromPoint = (clientX: number, clientY: number) => {
   if (typeof document.elementsFromPoint === "function") {
@@ -18,6 +19,50 @@ const resolveElementsFromPoint = (clientX: number, clientY: number) => {
 }
 
 const TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX = 32
+
+const resolveElementFromSelectionNode = (node: Node | null | undefined) =>
+  node instanceof Element ? node : node?.parentElement ?? null
+
+const normalizeTableText = (text: string | null | undefined) => text?.replace(/\s+/g, " ").trim() ?? ""
+
+const resolveSelectionTableElement = (viewport: HTMLElement | null) => {
+  if (typeof window === "undefined" || !viewport) return null
+  const selection = window.getSelection()
+  const selectionElements = [
+    resolveElementFromSelectionNode(selection?.anchorNode),
+    resolveElementFromSelectionNode(selection?.focusNode),
+  ]
+  return (
+    selectionElements
+      .map((element) => element?.closest("table"))
+      .find((table): table is HTMLTableElement => table instanceof HTMLTableElement && viewport.contains(table)) ?? null
+  )
+}
+
+const resolvePersistedSelectionTableElement = (viewport: HTMLElement | null) => {
+  if (!viewport) return null
+  const persistedSelectionText = normalizeTableText(
+    document.documentElement.getAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR)
+  )
+  if (!persistedSelectionText) return null
+  const renderedTables = Array.from(viewport.querySelectorAll<HTMLTableElement>(RENDERED_TABLE_SELECTOR))
+  return (
+    renderedTables.find((table) => {
+      const tableText = normalizeTableText(table.textContent)
+      const matchedCellTextCount = Array.from(table.querySelectorAll("th, td")).filter((cell) => {
+        const cellText = normalizeTableText(cell.textContent)
+        return Boolean(cellText && persistedSelectionText.includes(cellText))
+      }).length
+      // Require multiple cells so a common single-cell label does not bind the wrong table after DOM replacement.
+      return Boolean(
+        tableText &&
+          (persistedSelectionText.includes(tableText) ||
+            tableText.includes(persistedSelectionText) ||
+            matchedCellTextCount >= 2)
+      )
+    }) ?? null
+  )
+}
 
 type UseBlockEditorTableOverlayDomAdapterArgs = {
   activeTableElementRef: MutableRefObject<HTMLTableElement | null>
@@ -111,6 +156,8 @@ export const useBlockEditorTableOverlayDomAdapter = ({
         tableSurfaceElement instanceof HTMLTableElement
           ? tableSurfaceElement
           : (tableSurfaceElement?.querySelector("table") as HTMLTableElement | null) ??
+            resolveSelectionTableElement(viewportRef.current) ??
+            resolvePersistedSelectionTableElement(viewportRef.current) ??
             (() => {
               const activeTable = findActiveRenderedTable(
                 viewportRef.current,

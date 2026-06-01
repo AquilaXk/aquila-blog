@@ -3,6 +3,7 @@ import { TextSelection } from "@tiptap/pm/state"
 import {
   clearNextEditorPointerAfterTable,
   preserveWindowScrollForRichBlockSelectAll,
+  preserveWindowScrollForTableSelectAll,
   preserveWindowScrollPositionAcrossFrames,
   type WindowScrollAnchor,
 } from "./blockHandleLayoutModel"
@@ -152,6 +153,16 @@ const normalizeCellText = (cell: Element | null | undefined) => cell?.textConten
 
 const resolveCellTable = (cell: HTMLElement | null | undefined) => cell?.closest("table") ?? null
 const isConnectedTableCell = (cell: HTMLElement) => cell.isConnected && document.documentElement.contains(cell)
+const resolveTableSelectAllRangeCells = (cell: HTMLElement) => {
+  const table = resolveCellTable(cell)
+  if (!table) return null
+  const cells = Array.from(table.querySelectorAll<HTMLElement>("th, td")).filter(
+    (candidate) => candidate.closest("table") === table && isConnectedTableCell(candidate)
+  )
+  const startedCell = cells[0]
+  const endCell = cells[cells.length - 1]
+  return startedCell && endCell ? { endCell, startedCell } : null
+}
 
 const resolveCurrentTableTextRangeCells = (
   startedCell: HTMLElement,
@@ -712,8 +723,10 @@ export const selectActiveTableCellText = (
   if (activeCell && !activeCell.isConnected) return false
 
   clearNextEditorPointerAfterTable()
-  preserveWindowScrollForRichBlockSelectAll()
-  selectTableCellTextRange(selectedCell, selectedCell)
+  const tableRangeCells = resolveTableSelectAllRangeCells(selectedCell)
+  if (!tableRangeCells) return false
+  preserveWindowScrollForTableSelectAll()
+  selectTableCellTextRange(tableRangeCells.startedCell, tableRangeCells.endCell)
   hasActiveTableTextSelection = true
   hasRecentTableTextSelectionContext = true
   document.documentElement.setAttribute(RECENT_TABLE_TEXT_SELECTION_CONTEXT_ATTR, "true")

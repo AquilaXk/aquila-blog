@@ -1,7 +1,7 @@
 import { TABLE_MIN_COLUMN_WIDTH_PX } from "src/libs/markdown/tableMetadata"
 import type { TableAffordanceGeometry } from "./tableAffordanceModel"
 
-const RENDERED_TABLE_SELECTOR =
+export const RENDERED_TABLE_SELECTOR =
   ".aq-block-editor__content .tableWrapper table, .aq-block-editor__content table"
 const FIRST_ROW_CELL_SELECTOR =
   "thead tr:first-of-type > th, thead tr:first-of-type > td, tbody tr:first-of-type > th, tbody tr:first-of-type > td, tr:first-of-type > th, tr:first-of-type > td"

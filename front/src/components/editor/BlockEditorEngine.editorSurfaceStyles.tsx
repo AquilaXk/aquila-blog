@@ -118,10 +118,9 @@ export const EditorViewport = styled.div`
 
   .aq-block-editor__content li[data-list-item="true"][data-block-selected="true"],
   .aq-block-editor__content li[data-task-item="true"][data-block-selected="true"] {
-    background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(59, 130, 246, 0.12)" : "rgba(59, 130, 246, 0.1)"};
-    box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.2);
-    border-radius: 10px;
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
   }
 
   .aq-block-editor__content > *[data-block-dragging="true"] {

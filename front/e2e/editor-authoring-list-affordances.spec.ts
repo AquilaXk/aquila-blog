@@ -1,12 +1,85 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 import {
   QA_ENGINE_ROUTE,
   QA_WRITER_ROUTE,
   expectListItemHandleReady,
   hoverListItemGutter,
 } from "./helpers/editorAuthoringFlow"
+import { mockEditorRouteWithPost507 } from "./helpers/post507Fixtures"
+
+const POST_507_FIRST_LIST_ITEM = "“Stateless가 좋다는데, 왜 좋은 거지?”"
+
+const readListItemSelectionOverlayMetrics = async (page: Page, label: string) =>
+  page.evaluate((targetLabel) => {
+    const readOwnLabel = (item: HTMLElement) =>
+      Array.from(item.childNodes)
+        .filter((node) => !(node instanceof HTMLElement && ["UL", "OL"].includes(node.tagName)))
+        .map((node) => node.textContent || "")
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim()
+
+    const targetItem =
+      Array.from(
+        document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")
+      ).find((item) => readOwnLabel(item) === targetLabel) ?? null
+    const overlay = document.querySelector<HTMLElement>("[data-testid='keyboard-block-selection-overlay']")
+    if (!targetItem || !overlay) return null
+
+    const itemRect = targetItem.getBoundingClientRect()
+    const overlayRect = overlay.getBoundingClientRect()
+    const listRect = targetItem.closest("ul, ol")?.getBoundingClientRect() ?? itemRect
+    const itemStyle = window.getComputedStyle(targetItem)
+    return {
+      itemBackgroundColor: itemStyle.backgroundColor,
+      itemBoxShadow: itemStyle.boxShadow,
+      itemHeight: itemRect.height,
+      itemRight: itemRect.right,
+      itemTop: itemRect.top,
+      markerAwareLeft: Math.min(itemRect.left, listRect.left),
+      markerAwareRight: Math.max(itemRect.right, listRect.right),
+      overlayHeight: overlayRect.height,
+      overlayLeft: overlayRect.left,
+      overlayRight: overlayRect.right,
+      overlayTop: overlayRect.top,
+    }
+  }, label)
 
 test.describe("editor authoring list affordances", () => {
+  test("실제 /editor/[id] 507 리스트 항목 block selection은 글머리 안쪽 paint가 아니라 fixed overlay로 표시된다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 980, height: 720 })
+
+    const { editor } = await mockEditorRouteWithPost507(page, {
+      postId: 590,
+      title: "post 507 list item selection route 글",
+      version: 2,
+    })
+
+    const targetItem = editor.locator("li", { hasText: "Stateless가 좋다는데" }).first()
+    await expect(targetItem).toBeVisible()
+    await targetItem.scrollIntoViewIfNeeded()
+    await hoverListItemGutter(page, POST_507_FIRST_LIST_ITEM)
+
+    const { handleBox } = await expectListItemHandleReady(page, POST_507_FIRST_LIST_ITEM, "목록 항목 이동")
+    await page.mouse.click(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2)
+
+    const blockSelectionOverlay = page.getByTestId("keyboard-block-selection-overlay")
+    await expect(blockSelectionOverlay).toBeVisible()
+    const metrics = await readListItemSelectionOverlayMetrics(page, POST_507_FIRST_LIST_ITEM)
+    if (!metrics) {
+      throw new Error("post 507 list item selection overlay metrics are missing")
+    }
+
+    expect(Math.abs(metrics.overlayTop - metrics.itemTop)).toBeLessThanOrEqual(8)
+    expect(Math.abs(metrics.overlayHeight - metrics.itemHeight)).toBeLessThanOrEqual(12)
+    expect(metrics.overlayLeft).toBeLessThanOrEqual(metrics.markerAwareLeft + 4)
+    expect(metrics.overlayRight).toBeGreaterThanOrEqual(metrics.markerAwareRight - 4)
+    expect(metrics.itemBoxShadow).toBe("none")
+    expect(metrics.itemBackgroundColor).toBe("rgba(0, 0, 0, 0)")
+  })
+
   test("리스트 항목 안의 Tab/Shift+Tab은 Notion처럼 단계 승강으로 동작한다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 
@@ -313,7 +386,7 @@ test.describe("editor authoring list affordances", () => {
     await expectListItemHandleReady(page, "Retry", "목록 항목 이동")
   })
 
-  test("writer surface의 선택된 리스트 항목 affordance는 파란 rail 없이 말머리 바깥에 유지된다", async ({
+  test("writer surface의 선택된 리스트 항목 affordance는 내부 paint 없이 fixed overlay로 표시된다", async ({
     page,
   }) => {
     await page.goto(QA_WRITER_ROUTE)
@@ -331,13 +404,22 @@ test.describe("editor authoring list affordances", () => {
 
     const { handleBox: dragHandleBox } = await expectListItemHandleReady(page, "Retry", "목록 항목 이동")
     await page.mouse.click(dragHandleBox.x + dragHandleBox.width / 2, dragHandleBox.y + dragHandleBox.height / 2)
-    await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
+    await expect(page.getByTestId("keyboard-block-selection-overlay")).toBeVisible()
     const selectedDragHandle = page.getByRole("button", { name: "목록 항목 이동" })
     await expect(selectedDragHandle).toBeVisible()
     const selectedMetrics = await expectListItemHandleReady(page, "Retry", "목록 항목 이동")
+    const overlayMetrics = await readListItemSelectionOverlayMetrics(page, "Retry")
+    if (!overlayMetrics) {
+      throw new Error("writer list item selection overlay metrics are missing")
+    }
     const selectedHandleBox = selectedMetrics.handleBox
 
+    expect(Math.abs(overlayMetrics.overlayTop - overlayMetrics.itemTop)).toBeLessThanOrEqual(8)
+    expect(Math.abs(overlayMetrics.overlayHeight - overlayMetrics.itemHeight)).toBeLessThanOrEqual(12)
+    expect(overlayMetrics.overlayLeft).toBeLessThanOrEqual(overlayMetrics.markerAwareLeft + 4)
+    expect(overlayMetrics.overlayRight).toBeGreaterThanOrEqual(overlayMetrics.markerAwareRight - 4)
     expect(selectedMetrics.boxShadow).toBe("none")
+    expect(overlayMetrics.itemBackgroundColor).toBe("rgba(0, 0, 0, 0)")
     expect(selectedMetrics.textLeft).not.toBeNull()
     expect(selectedHandleBox.x + selectedHandleBox.width + 6).toBeLessThanOrEqual(
       selectedMetrics.itemLeft
@@ -547,6 +629,6 @@ test.describe("editor authoring list affordances", () => {
         })
       )
       .toEqual(["Retry", "Access", "Refresh"])
-    await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
+    await expect(page.getByTestId("keyboard-block-selection-overlay")).toBeVisible()
   })
 })

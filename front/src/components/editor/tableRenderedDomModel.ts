@@ -15,10 +15,9 @@ export const findActiveRenderedTable = (
 
   const renderedTables = Array.from(viewport.querySelectorAll<HTMLTableElement>(RENDERED_TABLE_SELECTOR))
   if (!renderedTables.length) return null
-  if (preferredTable?.isConnected && viewport.contains(preferredTable)) {
-    return preferredTable
-  }
-  if (!quickRailGeometry) return renderedTables[0] ?? null
+  const connectedPreferredTable =
+    preferredTable?.isConnected && viewport.contains(preferredTable) ? preferredTable : null
+  if (!quickRailGeometry) return connectedPreferredTable ?? renderedTables[0] ?? null
 
   const withinHorizontalTolerance = (left: number, right: number) =>
     Math.abs(left - quickRailGeometry.tableLeft) <= 6 &&
@@ -34,7 +33,7 @@ export const findActiveRenderedTable = (
     renderedTables.find((table) => {
       const rect = table.getBoundingClientRect()
       return withinHorizontalTolerance(rect.left, rect.right)
-    }) ?? renderedTables[0] ?? null
+    }) ?? connectedPreferredTable ?? renderedTables[0] ?? null
   )
 }
 

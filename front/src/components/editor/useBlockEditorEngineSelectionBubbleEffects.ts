@@ -7,8 +7,7 @@ import { collapseTableCellTextSelectionToPoint } from "./tableTextCaretModel"
 import { isTableSelectionActive } from "./tableStructureModel"
 import { TABLE_DRAG_SELECTION_TEXT_ATTR, TABLE_DRAG_SELECTION_TEXT_SELECTOR, cancelActiveTableCellTextSelectionPreserves, collapseStaleTableEditorSelection, preserveTableCellTextSelectionAcrossFrames, resolveTableTextCellAtPoint, resolveTableTextSelectionRangeCells, restoreTableCellTextSelectionIfEscaped, selectTableCellTextRange, watchTableCellTextSelectionExternalClear } from "./tableTextSelectionModel"
 import { areFloatingBubbleStatesEqual, hasNativeEditorTextSelection, hideFloatingBubbleState, resolveFloatingBubbleStateFromCoords, resolveHeadingSelectionBubbleState, type FloatingBubbleState } from "./useFloatingBubbleState"
-const CODE_BLOCK_EDITOR_CONTENT_SELECTOR = ".aq-code-editor-content", CODE_BLOCK_INTERACTIVE_CONTROL_SELECTOR = "[data-code-language-control='true']"
-const BLOCK_EDITOR_ROOT_SELECTOR = "[data-testid='block-editor-prosemirror'], .ProseMirror"
+const CODE_BLOCK_EDITOR_CONTENT_SELECTOR = ".aq-code-editor-content", CODE_BLOCK_INTERACTIVE_CONTROL_SELECTOR = "[data-code-language-control='true']", BLOCK_EDITOR_ROOT_SELECTOR = "[data-testid='block-editor-prosemirror'], .ProseMirror"
 const TABLE_TEXT_DRAG_CONTROL_SELECTOR = "[data-table-axis-rail='true'], [data-table-affordance], [data-table-menu-root='true'], [data-table-menu-trigger='true'], [data-testid^='table-column-resize-boundary-'], [data-testid='table-structure-menu-button'], [data-testid='table-corner-handle'], [data-testid='table-corner-grow-handle'], .column-resize-handle"
 type UseBlockEditorEngineSelectionBubbleEffectsArgs = {
   bubbleToolbarHoveredRef: RefObject<boolean>
@@ -100,8 +99,8 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       const pointElements = document.elementsFromPoint(event.clientX, event.clientY)
       const pointInsideEditor = pointElements.some((element) => Boolean(element.closest(BLOCK_EDITOR_ROOT_SELECTOR)))
       const tableTextCell = resolveTableTextCellAtPoint(event.clientX, event.clientY, event.target, { allowControlFallback: true })
-      const tableControlTarget = targetElement?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR) ?? pointElements[0]?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR)
-      const tableCellRect = tableTextCell instanceof HTMLElement ? tableTextCell.getBoundingClientRect() : null, coveredControlFallback = Boolean(tableCellRect && tableControlTarget?.getAttribute("data-table-affordance") === "row-handle" && event.clientX >= tableCellRect.left && event.clientX <= tableCellRect.right && event.clientY >= tableCellRect.top && event.clientY <= tableCellRect.bottom)
+      const tableControlTarget = targetElement?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR) ?? pointElements[0]?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR), tableControlKind = tableControlTarget?.getAttribute("data-table-affordance")
+      const tableCellRect = tableTextCell instanceof HTMLElement ? tableTextCell.getBoundingClientRect() : null, coveredControlFallback = Boolean(tableCellRect && (tableControlKind === "row-handle" || tableControlKind === "column-handle") && event.clientX >= tableCellRect.left && event.clientX <= tableCellRect.right && event.clientY >= tableCellRect.top && event.clientY <= tableCellRect.bottom)
       if (!(event.target instanceof Node) || (!activeEditor.view.dom.contains(event.target) && !targetElement?.closest(BLOCK_EDITOR_ROOT_SELECTOR) && !pointInsideEditor && !(allowOutsideCoveredControlFallback && coveredControlFallback))) { tableTextDragStartRef.current = null; return null }
       if (tableControlTarget && (!coveredControlFallback || !(tableTextCell instanceof HTMLElement))) { tableTextDragStartRef.current = null; return null }
       const scrollAnchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
@@ -225,11 +224,12 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       const range = domSelection && domSelection.rangeCount > 0 ? domSelection.getRangeAt(0) : null
       const commonAncestor = range?.commonAncestorContainer instanceof Element ? range.commonAncestorContainer : range?.commonAncestorContainer?.parentElement ?? null
       const isCodeBlockNodeViewSelection = Boolean(commonAncestor?.closest(CODE_BLOCK_EDITOR_CONTENT_SELECTOR))
-      const anchorCell = (domSelection?.anchorNode instanceof Element ? domSelection.anchorNode : domSelection?.anchorNode?.parentElement ?? null)?.closest("th, td"), focusCell = (domSelection?.focusNode instanceof Element ? domSelection.focusNode : domSelection?.focusNode?.parentElement ?? null)?.closest("th, td"), isMultiCellTableDomSelection = Boolean(anchorCell && focusCell && anchorCell !== focusCell && anchorCell.closest("table") === focusCell.closest("table"))
+      const anchorCell = (domSelection?.anchorNode instanceof Element ? domSelection.anchorNode : domSelection?.anchorNode?.parentElement ?? null)?.closest("th, td"), focusCell = (domSelection?.focusNode instanceof Element ? domSelection.focusNode : domSelection?.focusNode?.parentElement ?? null)?.closest("th, td"), isMultiCellTableDomSelection = Boolean(anchorCell && focusCell && anchorCell !== focusCell && anchorCell.closest("table") === focusCell.closest("table")), isSingleCellTableDomSelection = Boolean(anchorCell && focusCell && anchorCell === focusCell && activeEditor.view.dom.contains(anchorCell))
+      const isTableStructuralSelection = hasTableStructuralSelection(activeEditor)
       const multiCellTableBubbleState =
         resolveMultiCellTableDomSelectionBubbleState(activeEditor.view.dom, CODE_BLOCK_EDITOR_CONTENT_SELECTOR) ??
         resolvePersistedTableTextSelectionBubbleState(activeEditor.view.dom)
-      if (selection.empty && typeof window !== "undefined" && !isTableColumnRailResizeActive()) {
+      if (selection.empty && ((!anchorCell && !focusCell) || isSingleCellTableDomSelection) && !isTableStructuralSelection && typeof window !== "undefined" && !isTableColumnRailResizeActive()) {
         if (
           range &&
           domSelection &&
@@ -283,7 +283,6 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
 
       const isImageNodeSelected = activeEditor.isActive("resizableImage")
       const isTableActive = isTableSelectionActive(activeEditor)
-      const isTableStructuralSelection = hasTableStructuralSelection(activeEditor)
       const canShowTextToolbar = !selection.empty && !isImageNodeSelected && !activeEditor.isActive("codeBlock") && !activeEditor.isActive("rawMarkdownBlock") && !isTableStructuralSelection
       const canShowMultiCellTableTextToolbar = Boolean(multiCellTableBubbleState && !isImageNodeSelected && !activeEditor.isActive("codeBlock") && !activeEditor.isActive("rawMarkdownBlock") && !isTableStructuralSelection)
 
@@ -386,12 +385,11 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       const pointElements = document.elementsFromPoint(event.clientX, event.clientY)
       const codeShellTarget = findCodeShellTarget(targetElement, pointElements)
       const existingSelectionText = window.getSelection()?.toString().trim() ?? "", existingCodeSelectionText = resolveCurrentCodeSelectionText(codeShellTarget)
-      const allowTableControlCellFallback = Boolean(existingSelectionText) && !isTableSelectionActive(activeEditor)
-      const targetTableControl = targetElement?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR)
-      const pointInsideEditor = !targetElement?.closest("[data-table-menu-root='true']") && (!targetTableControl || allowTableControlCellFallback) && pointElements.some((element) => Boolean(element.closest(BLOCK_EDITOR_ROOT_SELECTOR)))
-      const insideEditorDom = eventTarget instanceof Node && (activeEditor.view.dom.contains(eventTarget) || Boolean(targetElement?.closest(BLOCK_EDITOR_ROOT_SELECTOR)) || pointInsideEditor)
-      const tableTextDragStart = insideEditorDom ? rememberTableTextDragStart(event, allowTableControlCellFallback) : null
-      if (!insideEditorDom && !codeShellTarget) { nonTableTextDragStartRef.current = null; if (targetTableControl?.getAttribute("data-table-affordance") === "row-handle") { const pending = rememberTableTextDragStart(event, false, true); tableTextDragPendingStartRef.current = pending?.coveredControlFallback ? pending : null; tableTextDragStartRef.current = null } return }
+      const allowTableControlCellFallback = Boolean(existingSelectionText) && !isTableSelectionActive(activeEditor), targetTableControl = targetElement?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR)
+      const pointInsideEditor = !targetElement?.closest("[data-table-menu-root='true']") && (!targetTableControl || allowTableControlCellFallback) && pointElements.some((element) => Boolean(element.closest(BLOCK_EDITOR_ROOT_SELECTOR))), insideEditorDom = eventTarget instanceof Node && (activeEditor.view.dom.contains(eventTarget) || Boolean(targetElement?.closest(BLOCK_EDITOR_ROOT_SELECTOR)) || pointInsideEditor)
+      let tableTextDragStart = insideEditorDom ? rememberTableTextDragStart(event, allowTableControlCellFallback) : null
+      if (tableTextDragStart?.coveredControlFallback && targetTableControl?.getAttribute("data-table-affordance")?.endsWith("-handle")) { tableTextDragPendingStartRef.current = tableTextDragStart; tableTextDragStartRef.current = null; tableTextDragStart = null }
+      if (!insideEditorDom && !codeShellTarget) { nonTableTextDragStartRef.current = null; if (targetTableControl?.getAttribute("data-table-affordance")?.endsWith("-handle")) { const pending = rememberTableTextDragStart(event, false, true); tableTextDragPendingStartRef.current = pending?.coveredControlFallback ? pending : null; tableTextDragStartRef.current = null } return }
       if (insideEditorDom && !codeShellTarget && !tableTextDragStart) { nonTableTextDragStartRef.current = { x: event.clientX, y: event.clientY }; collapseStaleTableEditorSelection(activeEditor) } else if (tableTextDragStart) nonTableTextDragStartRef.current = null; if (codeShellTarget) preserveWindowScrollForCodePointerFocus(true); else if (insideEditorDom) { const blockSelectionActive = Boolean(document.querySelector("[data-testid='keyboard-block-selection-overlay']")); preserveWindowScrollForEditorPointerFocus(event.target, isTableSelectionActive(activeEditor), blockSelectionActive) }
       if (codeShellTarget) {
         cancelCodeDragSelectionPreserve()
@@ -436,8 +434,10 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       if (targetElement?.closest(CODE_BLOCK_INTERACTIVE_CONTROL_SELECTOR)) { codeTextDragStartRef.current = null; nonTableTextDragStartRef.current = null; cancelCodeDragSelectionPreserve(); return }
       const pointElements = document.elementsFromPoint(event.clientX, event.clientY), codeShellTarget = findCodeShellTarget(targetElement, pointElements), existingSelectionText = window.getSelection()?.toString().trim() ?? "", existingCodeSelectionText = resolveCurrentCodeSelectionText(codeShellTarget)
       const allowTableControlCellFallback = Boolean(existingSelectionText) && !isTableSelectionActive(activeEditor), targetTableControl = targetElement?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR)
-      const pointInsideEditor = !targetElement?.closest("[data-table-menu-root='true']") && (!targetTableControl || allowTableControlCellFallback) && pointElements.some((element) => Boolean(element.closest(BLOCK_EDITOR_ROOT_SELECTOR))), insideEditorDom = eventTarget instanceof Node && (activeEditor.view.dom.contains(eventTarget) || Boolean(targetElement?.closest(BLOCK_EDITOR_ROOT_SELECTOR)) || pointInsideEditor), columnResizeTarget = targetElement?.closest(".column-resize-handle"), tableTextDragStart = insideEditorDom && !codeShellTarget ? tableTextDragStartRef.current ?? rememberTableTextDragStart(event, allowTableControlCellFallback) : null
-      if (!insideEditorDom && !codeShellTarget) { nonTableTextDragStartRef.current = null; if (targetTableControl?.getAttribute("data-table-affordance") === "row-handle") { const pending = rememberTableTextDragStart(event, false, true); tableTextDragPendingStartRef.current = pending?.coveredControlFallback ? pending : null; tableTextDragStartRef.current = null } return }
+      const pointInsideEditor = !targetElement?.closest("[data-table-menu-root='true']") && (!targetTableControl || allowTableControlCellFallback) && pointElements.some((element) => Boolean(element.closest(BLOCK_EDITOR_ROOT_SELECTOR))), insideEditorDom = eventTarget instanceof Node && (activeEditor.view.dom.contains(eventTarget) || Boolean(targetElement?.closest(BLOCK_EDITOR_ROOT_SELECTOR)) || pointInsideEditor), columnResizeTarget = targetElement?.closest(".column-resize-handle")
+      let tableTextDragStart = insideEditorDom && !codeShellTarget ? tableTextDragStartRef.current ?? rememberTableTextDragStart(event, allowTableControlCellFallback) : null
+      if (tableTextDragStart?.coveredControlFallback && targetTableControl?.getAttribute("data-table-affordance")?.endsWith("-handle")) { tableTextDragPendingStartRef.current = tableTextDragStart; tableTextDragStartRef.current = null; tableTextDragStart = null }
+      if (!insideEditorDom && !codeShellTarget) { nonTableTextDragStartRef.current = null; if (targetTableControl?.getAttribute("data-table-affordance")?.endsWith("-handle")) { const pending = rememberTableTextDragStart(event, false, true); tableTextDragPendingStartRef.current = pending?.coveredControlFallback ? pending : null; tableTextDragStartRef.current = null } return }
       if (insideEditorDom && !codeShellTarget && !tableTextDragStart) { nonTableTextDragStartRef.current = nonTableTextDragStartRef.current ?? { x: event.clientX, y: event.clientY }; collapseStaleTableEditorSelection(activeEditor) } else if (tableTextDragStart) nonTableTextDragStartRef.current = null; if (codeTextDragStartRef.current && !codeShellTarget) codeTextDragStartRef.current = null
       if (codeShellTarget) {
         if (codeTextDragStartRef.current && !codeTextDragStartRef.current.root.isConnected) { const nextCodeTextDragStart = rememberCodeTextDragStart(codeShellTarget, event); if (nextCodeTextDragStart) { event.preventDefault(); event.stopPropagation(); preserveActiveCodeTextDragScroll(); selectCodeDragRoot(nextCodeTextDragStart.root); preserveCodeDragRootSelectionAcrossFrames(nextCodeTextDragStart.root); return } }
@@ -452,7 +452,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         if (tableTextDragStart && tableTextDragStart.coveredControlFallback && existingSelectionText && !columnResizeTarget) { event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.(); restoreTableCellTextSelectionIfEscaped(activeEditor, tableTextDragStart.cell, tableTextDragStart.scrollAnchor, true, true); preserveActiveTableTextDragSelection(activeEditor); preserveActiveTableTextDragScroll() } else if (!tableTextDragStart) clearImmediateWindowTextSelection(); else if (!existingSelectionText) clearWindowTextSelectionOnly()
       }
       if (!insideEditorDom) return
-      if (!tableTextDragStartRef.current) rememberTableTextDragStart(event, allowTableControlCellFallback)
+      if (!tableTextDragStartRef.current && !tableTextDragPendingStartRef.current) rememberTableTextDragStart(event, allowTableControlCellFallback)
       if (!columnResizeTarget) return; nonTableTextDragStartRef.current = null
       event.preventDefault()
       event.stopPropagation()

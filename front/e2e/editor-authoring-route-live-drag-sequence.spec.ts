@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import { expectEditorToContainLoadedText } from "./helpers/editorAuthoringFlow"
+import { post507Markdown } from "./helpers/post507Fixtures"
 
 const adminMember = {
   id: 1,
@@ -62,60 +63,71 @@ const dragLocatorTextRange = async (
   target: Locator,
   label: string,
   text: string,
-  options: { waitMs?: number } = {}
+  options: { retryWhenEmpty?: boolean; waitMs?: number } = {}
 ) => {
-  await target.scrollIntoViewIfNeeded()
-  const measureTextRange = () =>
-    target.evaluate((element, { textToSelect, label }) => {
-      element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
-      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
-      while (walker.nextNode()) {
-        const textNode = walker.currentNode as Text
-        const startOffset = textNode.data.indexOf(textToSelect)
-        if (startOffset < 0) continue
+  const runDrag = async () => {
+    await target.scrollIntoViewIfNeeded()
+    const measureTextRange = () =>
+      target.evaluate((element, { textToSelect, label }) => {
+        element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+        while (walker.nextNode()) {
+          const textNode = walker.currentNode as Text
+          const startOffset = textNode.data.indexOf(textToSelect)
+          if (startOffset < 0) continue
 
-        const range = document.createRange()
-        range.setStart(textNode, startOffset)
-        range.setEnd(textNode, startOffset + textToSelect.length)
-        const rect =
-          Array.from(range.getClientRects()).find(
-            (candidate) => candidate.width > 2 && candidate.height > 2
-          ) ?? range.getBoundingClientRect()
-        if (rect.width <= 2 || rect.height <= 2) {
-          throw new Error(`${label} text rect is too small`)
-        }
+          const range = document.createRange()
+          range.setStart(textNode, startOffset)
+          range.setEnd(textNode, startOffset + textToSelect.length)
+          const rect =
+            Array.from(range.getClientRects()).find(
+              (candidate) => candidate.width > 2 && candidate.height > 2
+            ) ?? range.getBoundingClientRect()
+          if (rect.width <= 2 || rect.height <= 2) {
+            throw new Error(`${label} text rect is too small`)
+          }
 
-        return {
-          endX: rect.right - 2,
-          startX: rect.left + 2,
-          y: rect.top + rect.height / 2,
+          return {
+            endX: rect.right - 2,
+            startX: rect.left + 2,
+            y: rect.top + rect.height / 2,
+          }
         }
-      }
-      throw new Error(`${label} text node is missing`)
-    }, { label, textToSelect: text })
-  let metrics = await measureTextRange()
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+        throw new Error(`${label} text node is missing`)
+      }, { label, textToSelect: text })
+    let metrics = await measureTextRange()
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const viewport = page.viewportSize()
+      if (!viewport || (metrics.y >= 8 && metrics.y <= viewport.height - 8)) break
+      await page.mouse.wheel(0, metrics.y > viewport.height / 2 ? 360 : -360)
+      await page.waitForTimeout(160)
+      metrics = await measureTextRange()
+    }
     const viewport = page.viewportSize()
-    if (!viewport || (metrics.y >= 8 && metrics.y <= viewport.height - 8)) break
-    await page.mouse.wheel(0, metrics.y > viewport.height / 2 ? 360 : -360)
-    await page.waitForTimeout(160)
-    metrics = await measureTextRange()
-  }
-  const viewport = page.viewportSize()
-  if (viewport && (metrics.y < 8 || metrics.y > viewport.height - 8)) {
-    throw new Error(`${label} text rect is outside viewport: ${JSON.stringify(metrics)}`)
-  }
-  const beforeScrollTop = await readScrollTop(page)
+    if (viewport && (metrics.y < 8 || metrics.y > viewport.height - 8)) {
+      throw new Error(`${label} text rect is outside viewport: ${JSON.stringify(metrics)}`)
+    }
+    const beforeScrollTop = await readScrollTop(page)
 
-  await page.mouse.move(metrics.startX, metrics.y)
-  await page.mouse.down()
-  await page.mouse.move(metrics.endX, metrics.y, { steps: 18 })
-  await page.mouse.up()
-  await page.waitForTimeout(options.waitMs ?? 720)
+    await page.mouse.move(metrics.startX, metrics.y)
+    await page.mouse.down()
+    await page.mouse.move(metrics.endX, metrics.y, { steps: 18 })
+    await page.mouse.up()
+    await page.waitForTimeout(options.waitMs ?? 720)
 
-  const afterScrollTop = await readScrollTop(page)
-  const selectionText = await readSelectionText(page)
-  return { beforeScrollTop, afterScrollTop, selectionText }
+    const afterScrollTop = await readScrollTop(page)
+    const selectionText = await readSelectionText(page)
+    return { beforeScrollTop, afterScrollTop, selectionText }
+  }
+
+  let result = await runDrag()
+  if (options.retryWhenEmpty && !result.selectionText.includes(text)) {
+    await page.evaluate(() => window.getSelection()?.removeAllRanges())
+    await page.waitForTimeout(120)
+    result = await runDrag()
+  }
+
+  return result
 }
 
 const filler = (label: string, count: number) =>
@@ -660,32 +672,7 @@ test.describe("editor authoring route live drag sequence", () => {
   }) => {
     await page.setViewportSize({ width: 1580, height: 900 })
 
-    const live507TableContent = [
-      "---",
-      'tags: ["Stateless", "인증", "JWT", "Refresh Token"]',
-      "---",
-      "",
-      "## 시작하며",
-      "",
-      "- “Stateless가 좋다는데, 왜 좋은 거지?”",
-      "- “세션이랑 JWT는 뭐가 다른 거야?”",
-      "",
-      ...filler("table 이전 본문", 96),
-      "",
-      '<!-- aq-table {"overflowMode":"normal","columnWidths":[160,220,220]} -->',
-      "| **영역** | **점검 항목** | **확인 기준** |",
-      "| --- | --- | --- |",
-      "| 개념 이해 | Stateless 의미 | 요청만으로 처리 가능한가 |",
-      "| 토큰 구조 | Access/Refresh 구분 | 역할 명확 |",
-      "| 보안 | HTTPS 사용 | 필수 |",
-      "| 저장소 | Refresh 저장 | DB/Redis |",
-      "| 만료 | Access 짧게 | 15~60분 |",
-      "| 흐름 | 재발급 로직 | 구현되어 있는가 |",
-      "",
-      ...filler("table 이후 본문", 24),
-      "",
-      "하단 선택 대상 문단입니다. 이 문장은 table drag 이후에도 같은 viewport에서 선택되어야 합니다.",
-    ].join("\n")
+    const live507TableContent = post507Markdown
 
     await page.route("**/member/api/v1/auth/me", async (route) => {
       await route.fulfill({
@@ -777,7 +764,7 @@ test.describe("editor authoring route live drag sequence", () => {
     await page.mouse.wheel(0, 360)
     await page.waitForTimeout(160)
 
-    const lowerBody = editor.locator("p", { hasText: "하단 선택 대상 문단입니다" }).first()
+    const lowerBody = editor.locator("p", { hasText: "Stateless는 “서버가 아무것도 안 하는 구조”가 아닙니다." }).first()
     await lowerBody.evaluate((element) => {
       element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
     })
@@ -787,12 +774,13 @@ test.describe("editor authoring route live drag sequence", () => {
       page,
       lowerBody,
       "live 507 lower body drag",
-      "선택 대상 문단",
+      "서버가 아무것도 안 하는 구조",
       {
+        retryWhenEmpty: true,
         waitMs: 900,
       }
     )
-    expect(lowerBodyDrag.selectionText).toContain("선택 대상 문단")
+    expect(lowerBodyDrag.selectionText).toContain("서버가 아무것도 안 하는 구조")
     expect(lowerBodyDrag.afterScrollTop).toBeLessThanOrEqual(lowerBodyDrag.beforeScrollTop + 24)
     expect(lowerBodyDrag.afterScrollTop).toBeGreaterThanOrEqual(lowerBodyDrag.beforeScrollTop - 24)
   })

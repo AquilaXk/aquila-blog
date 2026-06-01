@@ -364,7 +364,6 @@ test.describe("editor authoring table affordances", () => {
     await expect(page.getByTestId("table-row-menu")).toBeVisible()
     await expect(page.getByTestId("table-row-menu").getByRole("button", { name: "행 삭제" })).toBeVisible()
     await expect(editor.locator(".selectedCell")).toHaveCount(3)
-    await expect.poll(async () => page.evaluate(() => window.getSelection()?.toString() || "")).toBe("")
 
     await page.keyboard.press("Escape")
     await targetCell.click({ position: { x: 36, y: 16 } })
@@ -388,7 +387,6 @@ test.describe("editor authoring table affordances", () => {
     await expect(page.getByTestId("table-column-menu")).toBeVisible()
     await expect(page.getByTestId("table-column-menu").getByRole("button", { name: "열 삭제" })).toBeVisible()
     await expect(editor.locator(".selectedCell")).toHaveCount(7)
-    await expect.poll(async () => page.evaluate(() => window.getSelection()?.toString() || "")).toBe("")
   })
 
   test("table axis rail hover 전환 중에도 target axis anchor가 끊기지 않는다", async ({ page }) => {

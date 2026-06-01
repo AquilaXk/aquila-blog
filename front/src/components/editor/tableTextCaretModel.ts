@@ -35,6 +35,28 @@ const resolveCaretRangeFromPoint = (clientX: number, clientY: number) => {
   return range ?? null
 }
 
+const resolveFallbackCaretRangeInCell = (cell: HTMLElement, clientX: number) => {
+  const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT)
+  const textNodes: Text[] = []
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text
+    if (node.data.length > 0) textNodes.push(node)
+  }
+  if (textNodes.length === 0) {
+    const range = document.createRange()
+    range.setStart(cell, 0)
+    range.collapse(true)
+    return range
+  }
+
+  const cellRect = cell.getBoundingClientRect()
+  const textNode = clientX > cellRect.left + cellRect.width / 2 ? textNodes[textNodes.length - 1] : textNodes[0]
+  const range = document.createRange()
+  range.setStart(textNode, clientX > cellRect.left + cellRect.width / 2 ? textNode.data.length : 0)
+  range.collapse(true)
+  return range
+}
+
 const isWindowSelectionInsideTable = (selection: Selection, table: Element | null) => {
   if (!table) return false
   const anchorElement = resolveElement(selection.anchorNode)
@@ -89,8 +111,12 @@ export const collapseTableCellTextSelectionToPoint = (
     return false
   }
 
-  const caretRange = resolveCaretRangeFromPoint(clientX, clientY)
-  const caretElement = resolveElement(caretRange?.startContainer)
+  let caretRange = resolveCaretRangeFromPoint(clientX, clientY)
+  let caretElement = resolveElement(caretRange?.startContainer)
+  if (!caretRange || !caretElement || !cell.contains(caretElement)) {
+    caretRange = resolveFallbackCaretRangeInCell(cell, clientX)
+    caretElement = resolveElement(caretRange.startContainer)
+  }
   if (!caretRange || !caretElement || !cell.contains(caretElement)) return false
 
   cancelActiveTableCellTextSelectionPreserves()

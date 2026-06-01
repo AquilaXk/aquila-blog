@@ -412,7 +412,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
         isActiveCodeBlockRef.current = false
       }
     }
-  }, [ensureCodeDomTextSelection, selectCurrentCodeBlockText, selected])
+  }, [ensureCodeDomTextSelection, selectCurrentCodeBlockText])
 
   useEffect(() => {
     let disposed = false

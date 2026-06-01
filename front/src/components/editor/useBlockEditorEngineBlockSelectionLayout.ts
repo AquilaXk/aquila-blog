@@ -56,6 +56,23 @@ type UseBlockEditorEngineBlockSelectionLayoutArgs = {
 
 const useBlockSelectionLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect
 
+const resolveNestedListItemSelectionRect = (
+  listItemElement: HTMLElement
+): Pick<DOMRect, "height" | "left" | "top" | "width"> => {
+  const itemRect = listItemElement.getBoundingClientRect()
+  const listRect = listItemElement.closest("ul, ol")?.getBoundingClientRect()
+  if (!listRect) return itemRect
+
+  const left = Math.min(itemRect.left, listRect.left)
+  const right = Math.max(itemRect.right, listRect.right)
+  return {
+    height: itemRect.height,
+    left,
+    top: itemRect.top,
+    width: Math.max(0, right - left),
+  }
+}
+
 export const useBlockEditorEngineBlockSelectionLayout = ({
   blockHandleRailMetricsRef,
   blockSelectionLayoutRectCacheRef,
@@ -100,7 +117,7 @@ export const useBlockEditorEngineBlockSelectionLayout = ({
       return next
     }
     if (selectedNestedListItemContext?.listItemElement?.isConnected) {
-      const rect = selectedNestedListItemContext.listItemElement.getBoundingClientRect()
+      const rect = resolveNestedListItemSelectionRect(selectedNestedListItemContext.listItemElement)
       const nextOverlayState: BlockSelectionOverlayState = resolveBlockSelectionOverlayLayout(rect, viewportRect)
       setBlockSelectionOverlayState((prev) =>
         isStableBlockSelectionOverlayState(prev, nextOverlayState) ? prev : nextOverlayState

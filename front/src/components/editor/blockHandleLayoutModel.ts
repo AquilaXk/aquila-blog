@@ -310,7 +310,8 @@ export const preserveWindowScrollAcrossFrames = (
   cancelOnPointerDown = true,
   cancelOnPointerUp = false,
   cancelOnTextSelectionChangeRequiresText = false,
-  shouldCancelBeforeRestore?: () => boolean
+  shouldCancelBeforeRestore?: () => boolean,
+  cancelOnTextSelectionChangeAfterMs = Number.POSITIVE_INFINITY
 ) => {
   if (typeof window === "undefined" || typeof document === "undefined") return
   const scrollingElement = document.scrollingElement
@@ -325,7 +326,8 @@ export const preserveWindowScrollAcrossFrames = (
     cancelOnPointerUp,
     cancelOnTextSelectionChangeRequiresText,
     shouldCancelBeforeRestore,
-    true
+    true,
+    cancelOnTextSelectionChangeAfterMs
   )
 }
 
@@ -340,7 +342,8 @@ export const preserveWindowScrollPositionAcrossFrames = (
   cancelOnPointerUp = false,
   cancelOnTextSelectionChangeRequiresText = false,
   shouldCancelBeforeRestore?: () => boolean,
-  replaceActivePreserve = false
+  replaceActivePreserve = false,
+  cancelOnTextSelectionChangeAfterMs = Number.POSITIVE_INFINITY
 ) => {
   if (typeof window === "undefined" || typeof document === "undefined") return
   const scrollingElement = document.scrollingElement
@@ -372,7 +375,8 @@ export const preserveWindowScrollPositionAcrossFrames = (
       return
     }
     const selection = window.getSelection()
-    if (selection && !selection.isCollapsed && selection.toString().trim()) {
+    const hasTextSelection = selection && !selection.isCollapsed && selection.toString().trim()
+    if (hasTextSelection || getScrollPreserveNow() - startedAt > cancelOnTextSelectionChangeAfterMs) {
       clearNextEditorPointerAfterTable()
       cancel()
     }
@@ -455,31 +459,13 @@ const EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES = 192
 const EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS = 3_200
 const EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES = 144
 const EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS = 2_400
-const EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES = 72
-const EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MIN_MS = 1_120
+const EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES = 72, EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MAX_MS = 72
 const EDITOR_POINTER_SCROLL_PRESERVE_SELECTOR = "[data-testid='block-editor-prosemirror'], .ProseMirror"
 const EDITOR_POINTER_SCROLL_CONTROL_SELECTOR =
   "button, input, textarea, select, summary, [role='button'], [contenteditable='false']"
-const EDITOR_POINTER_SCROLL_RICH_BLOCK_SELECTOR = [
-  ".aq-code-shell",
-  ".aq-code-editor-content",
-  "[data-code-block-wrapper='true']",
-  ".aq-table-shell",
-  ".tableWrapper",
-  "table",
-  "[data-mermaid-block]",
-  ".aq-mermaid-code-input",
-  ".aq-mermaid",
-  ".aq-mermaid-stage",
-].join(", ")
+const EDITOR_POINTER_SCROLL_RICH_BLOCK_SELECTOR = ".aq-code-shell, .aq-code-editor-content, [data-code-block-wrapper='true'], .aq-table-shell, .tableWrapper, table, [data-mermaid-block], .aq-mermaid-code-input, .aq-mermaid, .aq-mermaid-stage"
 
-export const preserveWindowScrollForRichBlockSelectAll = () => {
-  preserveWindowScrollAcrossFrames(
-    EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES,
-    4,
-    EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS
-  )
-}
+export const preserveWindowScrollForRichBlockSelectAll = () => { preserveWindowScrollAcrossFrames(EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES, 4, EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS) }
 
 export const preserveWindowScrollForTableSelectAll = () => {
   preserveWindowScrollAcrossFrames(
@@ -580,7 +566,19 @@ export const preserveWindowScrollForEditorPointerFocus = (
     return
   }
   if (shouldPreserveGeneralEditorPointer && !isGeneralEditorPointerPreserveSuppressed()) {
-    preserveWindowScrollAcrossFrames(EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES, 4, EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MIN_MS, true, false, true, false, true)
+    const startedAt = getScrollPreserveNow()
+    preserveWindowScrollAcrossFrames(
+      EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES,
+      4,
+      EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MAX_MS,
+      true,
+      false,
+      true,
+      false,
+      true,
+      () => getScrollPreserveNow() - startedAt > EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MAX_MS,
+      20
+    )
   }
 }
 

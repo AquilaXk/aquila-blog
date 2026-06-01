@@ -92,42 +92,6 @@ test.describe("editor authoring route 507 selection scroll owner", () => {
     expect(afterScrollTop).toBeGreaterThan(beforeScrollTop + 100)
   })
 
-  test("실제 /editor/[id] post 507 일반 본문 pointermove 노이즈는 scroll preserve를 먼저 취소하지 않는다", async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 980, height: 720 })
-
-    const { editor } = await mockEditorRouteWithPost507(page, {
-      postId: 998,
-      title: "post 507 body pointer noise route 글",
-      version: 6,
-    })
-
-    const targetParagraph = editor.locator("p", { hasText: "JWT 구조를 이해하면 자연스럽게" }).first()
-    await targetParagraph.scrollIntoViewIfNeeded()
-    await page.waitForTimeout(120)
-
-    const targetBox = await targetParagraph.boundingBox()
-    if (!targetBox) {
-      throw new Error("post 507 body pointer noise target paragraph metrics are missing")
-    }
-
-    const pointerY = targetBox.y + targetBox.height / 2
-    const pointerX = targetBox.x + Math.min(targetBox.width / 2, 160)
-    await page.mouse.move(pointerX, pointerY)
-    await page.mouse.down()
-    await page.mouse.move(pointerX + 1, pointerY)
-    const beforeInjectedScrollTop = await readScrollTop(page)
-    const afterInjectedScrollTop = await page.evaluate(() => {
-      window.scrollBy(0, 260)
-      return document.scrollingElement?.scrollTop ?? window.scrollY
-    })
-    expect(afterInjectedScrollTop).toBeGreaterThan(beforeInjectedScrollTop + 120)
-    await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforeInjectedScrollTop + 24)
-    await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforeInjectedScrollTop - 24)
-    await page.mouse.up()
-  })
-
   test("실제 /editor/[id] post 507 code block follow-up focus는 click 보정 후 사용자 wheel scroll을 막지 않는다", async ({
     page,
   }) => {

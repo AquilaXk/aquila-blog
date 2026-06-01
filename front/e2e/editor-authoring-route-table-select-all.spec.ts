@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import {
   POST_507_FINAL_TABLE_TARGET_CELL,
+  expectPost507FinalTableTextSelected,
   mockEditorRouteWithPost507,
 } from "./helpers/post507Fixtures"
 
@@ -50,17 +51,8 @@ const expectPost507FinalTableShape = async (finalTable: Locator) => {
   await expect(finalTable.locator("tr").first().locator("th, td")).toHaveCount(3)
 }
 
-const expectOnlyPost507TargetCellSelected = (selectionText: string) => {
-  const normalizedSelectionText = selectionText.replace(/\s+/g, " ").trim()
-  expect(normalizedSelectionText).toBe(POST_507_FINAL_TABLE_TARGET_CELL)
-  expect(selectionText).not.toContain("영역")
-  expect(selectionText).not.toContain("확인 기준")
-  expect(selectionText).not.toContain("구현되어 있는가")
-  expect(selectionText).not.toContain("Access/Refresh 구분")
-}
-
 test.describe("editor authoring route post 507 final table select all", () => {
-  test("실제 /editor/[id] post 507 마지막 table cell에서 첫 Cmd/Ctrl+A는 현재 cell 내부 텍스트만 선택한다", async ({
+  test("실제 /editor/[id] post 507 마지막 table cell에서 첫 Cmd/Ctrl+A는 현재 table 전체 셀 텍스트를 선택한다", async ({
     page,
   }) => {
     const { editor, finalTable } = await mockEditorRouteWithPost507(page, {
@@ -77,11 +69,11 @@ test.describe("editor authoring route post 507 final table select all", () => {
     await page.waitForTimeout(360)
 
     const selectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
-    expectOnlyPost507TargetCellSelected(selectionText)
+    expectPost507FinalTableTextSelected(selectionText)
     await expect(editor.locator(".selectedCell")).toHaveCount(0)
   })
 
-  test("post 507 마지막 table cell Cmd/Ctrl+A 반복 호출 시에도 현재 cell scope만 유지된다", async ({
+  test("post 507 마지막 table cell Cmd/Ctrl+A 반복 호출 시에도 현재 table 전체 셀 텍스트만 유지된다", async ({
     page,
   }) => {
     const { editor, finalTable } = await mockEditorRouteWithPost507(page, {
@@ -94,19 +86,19 @@ test.describe("editor authoring route post 507 final table select all", () => {
     await targetCell.click({ position: { x: 40, y: 16 } })
     await page.keyboard.press(SELECT_ALL_SHORTCUT)
     await page.waitForTimeout(280)
-    expectOnlyPost507TargetCellSelected(
+    expectPost507FinalTableTextSelected(
       await page.evaluate(() => window.getSelection()?.toString() ?? "")
     )
 
     await page.keyboard.press(SELECT_ALL_SHORTCUT)
     await page.waitForTimeout(280)
-    expectOnlyPost507TargetCellSelected(
+    expectPost507FinalTableTextSelected(
       await page.evaluate(() => window.getSelection()?.toString() ?? "")
     )
     await expect(editor.locator(".selectedCell")).toHaveCount(0)
   })
 
-  test("키보드 포커스 이탈 후에도 post 507 마지막 table 내부 Cmd/Ctrl+A가 현재 cell 텍스트만 선택한다", async ({
+  test("키보드 포커스 이탈 후에도 post 507 마지막 table 내부 Cmd/Ctrl+A가 현재 table 전체 셀 텍스트를 선택한다", async ({
     page,
   }) => {
     const { editor, finalTable } = await mockEditorRouteWithPost507(page, {
@@ -120,7 +112,7 @@ test.describe("editor authoring route post 507 final table select all", () => {
     await targetCell.dblclick({ position: { x: 40, y: 16 } })
     await page.keyboard.press(SELECT_ALL_SHORTCUT)
     await page.waitForTimeout(240)
-    expectOnlyPost507TargetCellSelected(
+    expectPost507FinalTableTextSelected(
       await page.evaluate(() => window.getSelection()?.toString() ?? "")
     )
 
@@ -149,7 +141,7 @@ test.describe("editor authoring route post 507 final table select all", () => {
     await page.keyboard.press(SELECT_ALL_SHORTCUT)
     await page.waitForTimeout(240)
 
-    expectOnlyPost507TargetCellSelected(
+    expectPost507FinalTableTextSelected(
       await page.evaluate(() => window.getSelection()?.toString() ?? "")
     )
   })

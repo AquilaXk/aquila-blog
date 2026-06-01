@@ -3,6 +3,8 @@ import type { Locator, Page } from "@playwright/test"
 
 export const QA_ENGINE_ROUTE = "/_qa/block-editor-slash?surface=engine"
 export const QA_WRITER_ROUTE = "/_qa/block-editor-slash?surface=writer"
+export const QA_ROUTE_PURPOSE =
+  "auxiliary-only: QA routes are for isolated helper/unit smoke coverage, not editor user-bug close gates"
 export const UNDO_SHORTCUT = process.platform === "darwin" ? "Meta+z" : "Control+z"
 
 export const expectVisibleBox = async (locator: Locator, errorMessage: string) => {

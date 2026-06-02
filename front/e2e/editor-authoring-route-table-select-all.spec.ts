@@ -25,8 +25,8 @@ const expectPost507FinalTableSelectionStable = async (page: Page) => {
 
 const expectWheelScrollRemainsUsable = async (page: Page) => {
   const before = await readPageScrollState(page)
-  const scrollDelta =
-    before.scrollTop + before.viewportHeight >= before.scrollHeight - 320 ? -260 : 260
+  const nearBottom = before.scrollTop + before.viewportHeight >= before.scrollHeight - 320
+  const scrollDelta = nearBottom && before.scrollTop >= 320 ? -260 : 260
 
   await page.mouse.wheel(0, scrollDelta)
 

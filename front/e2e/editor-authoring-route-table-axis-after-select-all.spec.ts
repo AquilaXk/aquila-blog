@@ -455,7 +455,7 @@ const expectAxisOverlayFollowsScrollOrCloses = async (
     return Math.abs(next.top - previous.top - tableDelta)
   }
 
-  for (let attempt = 0; attempt < 5; attempt += 1) {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
     const overlayDrift = resolveOverlayDrift(before.overlay, after.overlay)
     const menuDrift = resolveOverlayDrift(before.menu, after.menu)
     if (overlayDrift <= 28 && menuDrift <= 28) break

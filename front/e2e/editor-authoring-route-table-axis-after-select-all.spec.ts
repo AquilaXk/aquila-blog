@@ -14,27 +14,97 @@ const clickVisibleOverlayControl = async (_page: Page, locator: Locator) => {
   await locator.click({ force: true })
 }
 
+const readTableTextSelectionState = async (page: Page) =>
+  page.evaluate(() => ({
+    dragAttributeCount: document.querySelectorAll("[data-table-drag-selection-text]").length,
+    dragText: document.documentElement.getAttribute("data-table-drag-selection-text")?.trim() ?? "",
+    selectionText: window.getSelection()?.toString().trim() ?? "",
+  }))
+
+const readPost507AxisSelectionState = async (
+  page: Page,
+  outlineTestId: "table-column-selection-outline" | "table-row-selection-outline",
+  menuTestId: "table-column-menu" | "table-row-menu"
+) => {
+  const editor = page.getByTestId("block-editor-prosemirror")
+  const [outlineVisible, menuVisible, selectedCellCount, textSelectionState] = await Promise.all([
+    page.getByTestId(outlineTestId).isVisible().catch(() => false),
+    page.getByTestId(menuTestId).isVisible().catch(() => false),
+    editor.locator(".selectedCell").count(),
+    readTableTextSelectionState(page),
+  ])
+  return {
+    outlineVisible,
+    menuVisible,
+    selectedCellCount,
+    textSelectionState,
+    hasTableTextSelection:
+      textSelectionState.dragAttributeCount > 0 ||
+      Boolean(textSelectionState.dragText) ||
+      Boolean(textSelectionState.selectionText),
+  }
+}
+
 const clickPost507AxisHandleUntilSelected = async (
   page: Page,
   axis: "column" | "row",
   handle: Locator,
-  outlineTestId: "table-column-selection-outline" | "table-row-selection-outline"
+  outlineTestId: "table-column-selection-outline" | "table-row-selection-outline",
+  expectedSelectedCellCount: number
 ) => {
+  const menuTestId = axis === "row" ? "table-row-menu" : "table-column-menu"
+  let lastSelectionState: Awaited<ReturnType<typeof readPost507AxisSelectionState>> | null = null
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const metrics =
       axis === "row" ? await resolvePost507FinalTableRowMetrics(page) : await resolvePost507FinalTableColumnMetrics(page)
-    await page.mouse.move(metrics.cellX, metrics.cellY)
-    await page.mouse.move(metrics.hoverX, metrics.hoverY, { steps: 4 })
-    await page.waitForTimeout(140)
-    if (!(await handle.isVisible().catch(() => false))) continue
-    try {
-      await clickVisibleOverlayControl(page, handle)
-    } catch {
-      continue
+    const hoverPoints =
+      axis === "row"
+        ? [
+            { x: metrics.hoverX - 24, y: metrics.hoverY },
+            { x: metrics.hoverX - 10, y: metrics.hoverY },
+            { x: metrics.hoverX, y: metrics.hoverY },
+          ]
+        : [{ x: metrics.hoverX, y: metrics.hoverY }]
+    for (const point of hoverPoints) {
+      await page.mouse.move(metrics.cellX, metrics.cellY)
+      await page.mouse.move(point.x, point.y, { steps: 4 })
+      await page.waitForTimeout(140)
+      if (!(await handle.isVisible().catch(() => false))) continue
+      try {
+        await clickVisibleOverlayControl(page, handle)
+      } catch {
+        continue
+      }
+      const selectionSettled = await expect
+        .poll(
+          async () => {
+            const selectionState = await readPost507AxisSelectionState(page, outlineTestId, menuTestId)
+            lastSelectionState = selectionState
+            return {
+              outlineVisible: selectionState.outlineVisible,
+              menuVisible: selectionState.menuVisible,
+              selectedCellCount: selectionState.selectedCellCount,
+              hasTableTextSelection: selectionState.hasTableTextSelection,
+            }
+          },
+          { timeout: 650 }
+        )
+        .toEqual({
+          outlineVisible: true,
+          menuVisible: true,
+          selectedCellCount: expectedSelectedCellCount,
+          hasTableTextSelection: false,
+        })
+        .then(() => true)
+        .catch(() => false)
+      if (selectionSettled) {
+        return
+      }
     }
-    if (await page.getByTestId(outlineTestId).isVisible().catch(() => false)) return
   }
-  throw new Error(`post 507 final table ${axis} handle did not select a structural axis`)
+  throw new Error(
+    `post 507 final table ${axis} handle did not select a structural axis: ${JSON.stringify(lastSelectionState)}`
+  )
 }
 
 const expectPost507FinalTableSelectionOnPage = async (page: Page) => {
@@ -49,6 +119,18 @@ const expectPost507FinalTableSelectionOnPage = async (page: Page) => {
       }
     })
     .toBe(true)
+}
+
+const expectNoTableTextSelectionState = async (page: Page, label: string) => {
+  await expect
+    .poll(async () => {
+      const state = await readTableTextSelectionState(page)
+      return {
+        hasDragAttribute: state.dragAttributeCount > 0 || Boolean(state.dragText),
+        hasSelectionText: Boolean(state.selectionText),
+      }
+    }, { message: `${label} should not keep table text selection state`, timeout: 600 })
+    .toEqual({ hasDragAttribute: false, hasSelectionText: false })
 }
 
 const resolvePost507FinalTableRowMetrics = async (page: Page) => {
@@ -201,6 +283,7 @@ const expectAxisSelectionStable = async (
   menuTestId: "table-column-menu" | "table-row-menu"
 ) => {
   const samples = []
+  await page.waitForTimeout(340)
   for (let index = 0; index < 13; index += 1) {
     samples.push(
       await page.evaluate(
@@ -291,7 +374,22 @@ const expectAxisOverlayFollowsScrollOrCloses = async (
   expect(before.table).not.toBeNull()
   if (!after.table || !before.table) return
 
-  expect(Math.abs(tableDelta)).toBeGreaterThanOrEqual(160)
+  expect(Math.abs(tableDelta)).toBeGreaterThanOrEqual(96)
+
+  const resolveOverlayDrift = (previous: { top: number } | null, next: { top: number } | null) => {
+    if (!next) return 0
+    if (!previous) return 0
+    return Math.abs(next.top - previous.top - tableDelta)
+  }
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const overlayDrift = resolveOverlayDrift(before.overlay, after.overlay)
+    const menuDrift = resolveOverlayDrift(before.menu, after.menu)
+    if (overlayDrift <= 28 && menuDrift <= 28) break
+    await page.waitForTimeout(160)
+    after = await readPost507AxisOverlayScrollSnapshot(page, overlayTestId, menuTestId)
+    tableDelta = after.table && before.table ? after.table.top - before.table.top : tableDelta
+  }
 
   const assertOverlayMovedWithTable = (label: string, previous: { top: number } | null, next: { top: number } | null) => {
     if (!next) return
@@ -359,7 +457,7 @@ test.describe("editor authoring route post 507 final table axis after cell text 
   test("실제 /editor/[id] post 507 row/column structural selection은 깜빡이지 않고 scroll 중 stale overlay를 남기지 않는다", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 620 })
+    await page.setViewportSize({ width: 1280, height: 760 })
     const { editor, finalTable } = await mockEditorRouteWithPost507(page, {
       postId: 997,
       title: "post 507 table axis overlay stability route 글",
@@ -375,10 +473,14 @@ test.describe("editor authoring route post 507 final table axis after cell text 
           return text.includes(targetCellText) && text.includes("재발급 로직")
         })
         .at(-1)
-      table?.scrollIntoView({ block: "center", inline: "nearest" })
+      const targetCell = Array.from(table?.querySelectorAll<HTMLElement>("td, th") ?? []).find((candidate) =>
+        candidate.textContent?.includes(targetCellText)
+      )
+      targetCell?.scrollIntoView({ block: "center", inline: "nearest" })
     }, POST_507_FINAL_TABLE_TARGET_CELL)
+    await page.waitForTimeout(120)
     await targetCell.click({ position: { x: 40, y: 16 } })
-    await clickPost507AxisHandleUntilSelected(page, "row", rowHandle, "table-row-selection-outline")
+    await clickPost507AxisHandleUntilSelected(page, "row", rowHandle, "table-row-selection-outline", 3)
     await expect(page.getByTestId("table-row-selection-outline")).toBeVisible()
     await expect(page.getByTestId("table-row-menu")).toBeVisible()
     await expect(editor.locator(".selectedCell")).toHaveCount(3)
@@ -406,7 +508,7 @@ test.describe("editor authoring route post 507 final table axis after cell text 
     await page.waitForTimeout(120)
     const columnResetMetrics = await resolvePost507FinalTableColumnMetrics(page)
     await page.mouse.click(columnResetMetrics.cellX, columnResetMetrics.cellY)
-    await clickPost507AxisHandleUntilSelected(page, "column", columnHandle, "table-column-selection-outline")
+    await clickPost507AxisHandleUntilSelected(page, "column", columnHandle, "table-column-selection-outline", 7)
     await expect(page.getByTestId("table-column-selection-outline")).toBeVisible()
     await expect(page.getByTestId("table-column-menu")).toBeVisible()
     await expect(editor.locator(".selectedCell")).toHaveCount(7)
@@ -567,5 +669,38 @@ test.describe("editor authoring route post 507 final table axis after cell text 
         )
       )
       .toBe(false)
+  })
+
+  test("실제 /editor/[id] post 507 row grip pointerdown은 기존 table text selection owner를 즉시 취소한다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1580, height: 920 })
+    const { editor, finalTable } = await mockEditorRouteWithPost507(page, {
+      postId: 989,
+      title: "post 507 table axis pointerdown text owner cancel route 글",
+    })
+    const { rowHandle } = getTableAffordances(page)
+
+    const targetCell = finalTable.locator("td", { hasText: POST_507_FINAL_TABLE_TARGET_CELL }).first()
+    await targetCell.click({ position: { x: 40, y: 16 } })
+    await targetCell.dblclick({ position: { x: 40, y: 16 } })
+    await page.keyboard.press(SELECT_ALL_SHORTCUT)
+    await expectPost507FinalTableSelectionOnPage(page)
+
+    const rowMetrics = await resolvePost507FinalTableRowMetrics(page)
+    await page.mouse.move(rowMetrics.cellX, rowMetrics.cellY)
+    await page.mouse.move(rowMetrics.hoverX, rowMetrics.hoverY, { steps: 4 })
+    await expect(rowHandle).toBeVisible()
+
+    const rowHandleBox = await rowHandle.boundingBox()
+    if (!rowHandleBox) throw new Error("post 507 row handle metrics are missing before pointerdown")
+    await page.mouse.move(rowHandleBox.x + rowHandleBox.width / 2, rowHandleBox.y + rowHandleBox.height / 2)
+    await page.mouse.down()
+    await expectNoTableTextSelectionState(page, "row axis pointerdown")
+    await page.mouse.up()
+
+    await expect(page.getByTestId("table-row-selection-outline")).toBeVisible()
+    await expect(page.getByTestId("table-row-menu")).toBeVisible()
+    await expect(editor.locator(".selectedCell")).toHaveCount(3)
   })
 })

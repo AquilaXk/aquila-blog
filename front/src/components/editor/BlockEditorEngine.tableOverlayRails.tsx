@@ -22,6 +22,7 @@ export const BlockEditorTableOverlayRails = ({
   appendTableAxisAtEnd,
   cancelTableQuickRailHide,
   compactTableAffordanceKind,
+  currentTableAxisSelection,
   desktopTableRailLayout,
   draggedTableAxisState,
   growTableFromCorner,
@@ -150,19 +151,34 @@ export const BlockEditorTableOverlayRails = ({
       : null}
     {shouldRenderTableAffordanceOverlay ? (
       <>
-        {tableMenuState?.kind === "column" && isCurrentTableColumnSelection(tableAffordanceGeometry.columnIndex) ? (
+        {tableMenuState?.kind === "column" ? (
           <TableAxisSelectionOutline
             data-axis="column"
             data-testid="table-column-selection-outline"
             style={{
-              left: `${Math.round(tableAffordanceGeometry.columnLeft)}px`,
+              left: `${Math.round(
+                tableAffordanceGeometry.tableLeft +
+                  (tableAffordanceGeometry.columnSegments[
+                    currentTableAxisSelection?.axis === "column"
+                      ? currentTableAxisSelection.index
+                      : tableAffordanceGeometry.columnIndex
+                  ]?.left ??
+                    tableAffordanceGeometry.columnLeft - tableAffordanceGeometry.tableLeft)
+              )}px`,
               top: `${Math.round(tableAffordanceGeometry.tableTop)}px`,
-              width: `${Math.round(tableAffordanceGeometry.columnWidth)}px`,
+              width: `${Math.round(
+                tableAffordanceGeometry.columnSegments[
+                  currentTableAxisSelection?.axis === "column"
+                    ? currentTableAxisSelection.index
+                    : tableAffordanceGeometry.columnIndex
+                ]?.width ??
+                  tableAffordanceGeometry.columnWidth
+              )}px`,
               height: `${Math.round(tableAffordanceGeometry.height)}px`,
             }}
           />
         ) : null}
-        {tableMenuState?.kind === "row" && isCurrentTableRowSelection(tableAffordanceGeometry.rowIndex) ? (
+        {tableMenuState?.kind === "row" ? (
           <TableAxisSelectionOutline
             data-axis="row"
             data-testid="table-row-selection-outline"

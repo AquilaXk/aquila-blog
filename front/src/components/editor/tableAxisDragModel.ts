@@ -43,6 +43,73 @@ export type TableAxisDragGhostPosition = {
   y: number
 } | null
 
+export type TableAxisSelectionState = {
+  axis: TableAxis
+  index: number
+}
+
+export const resolveSyncedTableAxisGeometryFromDom = (
+  previous: TableAffordanceGeometry,
+  tableElement: Element,
+  selection: TableAxisSelectionState
+): TableAffordanceGeometry | null => {
+  const tableRect = tableElement.getBoundingClientRect()
+  if (tableRect.width <= 0 || tableRect.height <= 0) return null
+  const rows = Array.from(tableElement.querySelectorAll("tr")).filter(
+    (row): row is HTMLTableRowElement => row instanceof HTMLTableRowElement && row.cells.length > 0
+  )
+  if (selection.axis === "row" && (selection.index < 0 || selection.index >= rows.length)) return null
+  const selectedRow = rows[selection.axis === "row" ? selection.index : 0] ?? rows[0] ?? null
+  const firstRowCells = Array.from(rows[0]?.cells ?? []).filter(
+    (cell): cell is HTMLTableCellElement => cell instanceof HTMLTableCellElement
+  )
+  if (selection.axis === "column" && (selection.index < 0 || selection.index >= firstRowCells.length)) return null
+  const selectedCell =
+    selection.axis === "column" ? firstRowCells[selection.index] ?? null : selectedRow?.cells[0] ?? null
+  const rowRect = selectedRow?.getBoundingClientRect()
+  const cellRect = selectedCell?.getBoundingClientRect()
+  const tableLeft = Math.round(tableRect.left), tableTop = Math.round(tableRect.top)
+  const deltaLeft = tableLeft - previous.tableLeft, deltaTop = tableTop - previous.tableTop
+  const rowTop = Math.round(rowRect?.top ?? previous.rowTop + deltaTop)
+  const columnLeft = Math.round(cellRect?.left ?? previous.columnLeft + deltaLeft)
+  const moveAnchor = (anchor: { left: number; top: number }) => ({ left: Math.round(anchor.left + deltaLeft), top: Math.round(anchor.top + deltaTop) })
+  return {
+    ...previous,
+    left: Math.round(previous.left + deltaLeft),
+    top: Math.round(previous.top + deltaTop),
+    tableLeft,
+    tableTop,
+    tableRight: Math.round(tableRect.right),
+    tableBottom: Math.round(tableRect.bottom),
+    width: Math.round(tableRect.width),
+    height: Math.round(tableRect.height),
+    surfaceLeft: tableLeft,
+    surfaceTop: tableTop,
+    surfaceWidth: Math.round(tableRect.width),
+    surfaceHeight: Math.round(tableRect.height),
+    cellLeft: Math.round(cellRect?.left ?? previous.cellLeft + deltaLeft),
+    cellTop: Math.round(cellRect?.top ?? previous.cellTop + deltaTop),
+    cellWidth: Math.round(cellRect?.width ?? previous.cellWidth),
+    cellHeight: Math.round(cellRect?.height ?? previous.cellHeight),
+    rowIndex: selection.axis === "row" ? selection.index : previous.rowIndex,
+    rowTop,
+    rowHeight: Math.round(rowRect?.height ?? previous.rowHeight),
+    columnLeft,
+    columnWidth: Math.round(cellRect?.width ?? previous.columnWidth),
+    columnIndex: selection.axis === "column" ? selection.index : previous.columnIndex,
+    rowHandleAnchor: moveAnchor(previous.rowHandleAnchor),
+    columnHandleAnchor: moveAnchor(previous.columnHandleAnchor),
+    rowAddAnchor: moveAnchor(previous.rowAddAnchor),
+    columnAddAnchor: moveAnchor(previous.columnAddAnchor),
+    cornerAnchor: moveAnchor(previous.cornerAnchor),
+    cellMenuAnchor: moveAnchor(previous.cellMenuAnchor),
+    columnSegments: firstRowCells.map((cell) => {
+      const rect = cell.getBoundingClientRect()
+      return { left: Math.round(Math.max(0, rect.left - tableRect.left)), width: Math.round(rect.width) }
+    }),
+  }
+}
+
 export const createHiddenTableAxisReorderIndicatorState = (
   axis: TableAxis = "row",
   insertionIndex = 0

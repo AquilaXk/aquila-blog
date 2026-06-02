@@ -108,6 +108,7 @@ export const useBlockEditorTableOverlayController = ({
     selectTableColumnByIndex,
     selectTableRowByIndex,
     startPendingTableAxisDrag,
+    suppressTableAxisMenuKeepAlive,
     tableAxisDragGhostPosition,
     tableAxisDragSuppressClickRef,
     tableAxisReorderIndicatorState,
@@ -264,6 +265,7 @@ export const useBlockEditorTableOverlayController = ({
     setSelectionTick,
     setTableMenuState,
     stabilizeTableSelectionSurface,
+    suppressTableAxisMenuKeepAlive,
     tableMenuState,
   })
   useBlockEditorTableOverlayControllerEffects({
@@ -283,6 +285,7 @@ export const useBlockEditorTableOverlayController = ({
     setIsTableQuickRailHovered,
     setSelectionTick,
     setTableMenuState,
+    suppressTableAxisMenuKeepAlive,
     syncTableQuickRailFromElement,
     tableAffordanceGeometry,
     tableAffordanceVisibility,
@@ -318,7 +321,9 @@ export const useBlockEditorTableOverlayController = ({
     shouldShowRowAddBar ||
     shouldShowColumnAddBar ||
     shouldShowStructureMenuButton ||
-    shouldShowTableCellMenu
+    shouldShowTableCellMenu ||
+    currentTableAxisSelection !== null ||
+    isTableStructuralSelection
   const desktopTableRailLayout = useMemo(() => {
     if (typeof window === "undefined") return null
     return resolveDesktopTableRailLayout(tableAffordanceGeometry)
@@ -392,6 +397,7 @@ export const useBlockEditorTableOverlayController = ({
       cancelTableOverflowCoachmarkHide,
       cancelTableQuickRailHide,
       compactTableAffordanceKind,
+      currentTableAxisSelection,
       desktopTableRailLayout,
       draggedTableAxisState,
       editor,

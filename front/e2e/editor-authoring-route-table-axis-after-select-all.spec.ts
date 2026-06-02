@@ -13,8 +13,8 @@ const SELECT_ALL_SHORTCUT = process.platform === "darwin" ? "Meta+a" : "Control+
 
 const clickVisibleOverlayControl = async (_page: Page, locator: Locator) => {
   void _page
-  await expect(locator).toBeVisible()
-  await locator.click({ force: true })
+  await expect(locator).toBeVisible({ timeout: 900 })
+  await locator.click({ force: true, timeout: 900 })
 }
 
 const readTableTextSelectionState = async (page: Page) =>
@@ -48,6 +48,15 @@ const readPost507AxisSelectionState = async (
   }
 }
 
+const readPost507AxisAttemptDebug = async (page: Page) =>
+  page.evaluate(() => {
+    const editor = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
+    const count = (selector: string) => document.querySelectorAll(selector).length
+    const visibleCount = (selector: string) =>
+      Array.from(document.querySelectorAll<HTMLElement>(selector)).filter((element) => { const rect = element.getBoundingClientRect(); return rect.width > 0 && rect.height > 0 }).length
+    return { columnMenuCount: count("[data-testid='table-column-menu']"), columnOutlineCount: count("[data-testid='table-column-selection-outline']"), columnRailVisibleCount: visibleCount("[data-testid='table-column-rail']"), dragAttributeCount: count("[data-table-drag-selection-text]"), rootDragText: document.documentElement.getAttribute("data-table-drag-selection-text")?.trim() ?? "", rowMenuCount: count("[data-testid='table-row-menu']"), rowOutlineCount: count("[data-testid='table-row-selection-outline']"), rowRailVisibleCount: visibleCount("[data-testid='table-row-rail']"), scrollTop: Math.round(document.scrollingElement?.scrollTop ?? window.scrollY), selectedCellCount: editor?.querySelectorAll(".selectedCell").length ?? 0, selectionText: window.getSelection()?.toString().trim() ?? "" }
+  })
+
 const clickPost507AxisHandleUntilSelected = async (
   page: Page,
   axis: "column" | "row",
@@ -57,6 +66,8 @@ const clickPost507AxisHandleUntilSelected = async (
 ) => {
   const menuTestId = axis === "row" ? "table-row-menu" : "table-column-menu"
   let lastSelectionState: Awaited<ReturnType<typeof readPost507AxisSelectionState>> | null = null
+  let lastAttemptDebug: Awaited<ReturnType<typeof readPost507AxisAttemptDebug>> | null = null
+  let lastClickError = ""
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const metrics =
       axis === "row" ? await resolvePost507FinalTableRowMetrics(page) : await resolvePost507FinalTableColumnMetrics(page)
@@ -72,11 +83,16 @@ const clickPost507AxisHandleUntilSelected = async (
       await page.mouse.move(metrics.cellX, metrics.cellY)
       await page.mouse.move(point.x, point.y, { steps: 4 })
       await page.waitForTimeout(140)
-      if (!(await handle.isVisible().catch(() => false))) continue
+      if (!(await handle.isVisible().catch(() => false))) {
+        lastAttemptDebug = await readPost507AxisAttemptDebug(page)
+        continue
+      }
       try {
         await installPost507InteractionTelemetry(page)
         await clickVisibleOverlayControl(page, handle)
       } catch {
+        lastClickError = "overlay control was visible but did not accept click within 900ms"
+        lastAttemptDebug = await readPost507AxisAttemptDebug(page)
         continue
       }
       const selectionSettled = await expect
@@ -100,14 +116,21 @@ const clickPost507AxisHandleUntilSelected = async (
           hasTableTextSelection: false,
         })
         .then(() => true)
-        .catch(() => false)
+        .catch(async () => {
+          lastAttemptDebug = await readPost507AxisAttemptDebug(page)
+          return false
+        })
       if (selectionSettled) {
         return
       }
     }
   }
   throw new Error(
-    `post 507 final table ${axis} handle did not select a structural axis: ${JSON.stringify(lastSelectionState)}`
+    `post 507 final table ${axis} handle did not select a structural axis: ${JSON.stringify({
+      lastAttemptDebug,
+      lastClickError,
+      lastSelectionState,
+    })}`
   )
 }
 

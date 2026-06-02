@@ -319,7 +319,12 @@ test.describe("editor authoring table structure and styles", () => {
     const trailingCell = page.locator("table tr").nth(before.rows - 1).locator("th, td").nth(before.columns - 1)
     await trailingCell.click()
     await page.keyboard.type("keep")
+    await expect(trailingCell).toContainText("keep")
+    await expect
+      .poll(async () => (await page.getByTestId("qa-markdown-output").textContent()) || "")
+      .toContain("keep")
     await hoverTableCorner()
+    await expect(growHandle).toBeVisible()
 
     await growHandle.evaluate(async (element, payload) => {
       const { pointerId, padding } = payload as {

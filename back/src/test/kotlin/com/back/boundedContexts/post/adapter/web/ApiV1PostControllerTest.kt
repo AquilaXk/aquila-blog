@@ -243,17 +243,19 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
 
         @Test
         fun `비로그인 상세 조회는 merged snapshot cache를 채운다`() {
-            val post = postFacade.findPagedByKw("", PostSearchSortType1.CREATED_AT, 1, 1).content.first()
-            cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT)?.evict(post.id)
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+            val post = postFacade.write(actor, "스냅샷 캐시 테스트 글", "작은 공개 본문", true, true)
+            val snapshotCache =
+                cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT)
+                    ?: error("detail public snapshot cache is missing")
+            snapshotCache.evict(post.id)
 
             mvc.get("/post/api/v1/posts/${post.id}").andExpect {
                 status { isOk() }
             }
 
             val snapshot =
-                cacheManager
-                    .getCache(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT)
-                    ?.get(post.id, PublicPostDetailSnapshotCacheDto::class.java)
+                snapshotCache.get(post.id, PublicPostDetailSnapshotCacheDto::class.java)
 
             assertThat(snapshot).isNotNull
             assertThat(snapshot?.id).isEqualTo(post.id)

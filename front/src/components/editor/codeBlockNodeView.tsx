@@ -53,6 +53,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
   const shellRef = useRef<HTMLDivElement>(null)
   const codeDragSelectionRef = useRef<CodeDragSelectionSession | null>(null)
   const isActiveCodeBlockRef = useRef(false)
+  const lastCodePointerContentRootRef = useRef<HTMLElement | null>(null)
   const [draftLanguage, setDraftLanguage] = useState(normalizeCodeLanguage(String(node.attrs?.language || "")))
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false)
   const [languageSearch, setLanguageSearch] = useState("")
@@ -167,8 +168,8 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       const cancel = (event: Event) => { if (!cancelArmed) return; if (!(event.target instanceof Node) || !shell?.contains(event.target)) cancelPreserve() }
       const cancelForKeydown = () => { if (cancelArmed) cancelPreserve() }
       const cancelOnSelectionChange = () => { if (!cancelArmed) return; const selection = window.getSelection(), anchor = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null, focus = selection?.focusNode instanceof Element ? selection.focusNode : selection?.focusNode?.parentElement ?? null; if (selection?.toString().trim() && (!anchor || !focus || !shell?.contains(anchor) || !shell.contains(focus))) cancelPreserve() }
-      const selectRange = () => { if (!selectCodeDomTextRange(contentRoot, anchorPos, headPos)) selectDomTextContents(contentRoot)
-        shell?.setAttribute("data-code-drag-selection-text", window.getSelection()?.toString() || contentRoot?.textContent || "")
+      const selectRange = () => { if (!selectCodeDomTextRange(contentRoot, anchorPos, headPos) && anchorPos !== headPos) selectDomTextContents(contentRoot)
+        const selectedText = window.getSelection()?.toString() || ""; if (selectedText) shell?.setAttribute("data-code-drag-selection-text", selectedText); else shell?.removeAttribute("data-code-drag-selection-text")
       }
       const restore = () => {
         if (cancelled || preserveGeneration !== codeDomTextRangePreserveGeneration) return
@@ -233,6 +234,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       const contentRoot =
         shellRef.current?.querySelector<HTMLElement>(".aq-code-editor-content") ?? null
       isActiveCodeBlockRef.current = contentRoot?.isConnected ?? false
+      lastCodePointerContentRootRef.current = contentRoot?.isConnected ? contentRoot : null
       if (event.pointerType && event.pointerType !== "mouse") return
       startCodeDragSelection(event)
     },
@@ -342,8 +344,10 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       const codeShell = contentRoot.closest(".aq-code-shell")
       if (contentRoot.contains(target) || Boolean(codeShell?.contains(target))) {
         isActiveCodeBlockRef.current = contentRoot.isConnected
+        lastCodePointerContentRootRef.current = contentRoot
       } else if (isActiveCodeBlockRef.current) {
         isActiveCodeBlockRef.current = false
+        lastCodePointerContentRootRef.current = null
       }
       if (!codeShell?.contains(target)) codeDragSelectionRef.current = null
     }
@@ -360,7 +364,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
           : selection?.anchorNode?.parentElement ?? null
       const codeShell = contentRoot.closest(".aq-code-shell")
       const isActiveShellMatch =
-        isActiveCodeBlockRef.current &&
+        (isActiveCodeBlockRef.current || lastCodePointerContentRootRef.current === contentRoot) &&
         codeShell?.isConnected &&
         contentRoot.isConnected
       const isInsideCodeBlock =
@@ -404,6 +408,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       if (isActiveCodeBlockRef.current) {
         isActiveCodeBlockRef.current = false
       }
+      lastCodePointerContentRootRef.current = null
     }
   }, [ensureCodeDomTextSelection, selectCurrentCodeBlockText])
 

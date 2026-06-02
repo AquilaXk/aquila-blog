@@ -53,8 +53,6 @@ export const selectDomTextOffsetRange = (
   const textLength = root.textContent?.length ?? 0
   const startOffset = Math.max(0, Math.min(textLength, Math.min(fromOffset, toOffset)))
   const endOffset = Math.max(0, Math.min(textLength, Math.max(fromOffset, toOffset)))
-  if (startOffset === endOffset) return false
-
   const resolveTextPosition = (offset: number) => {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
     let remaining = offset

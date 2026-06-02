@@ -103,7 +103,7 @@ test.describe("editor authoring route 507 selection scroll owner", () => {
       version: 5,
     })
 
-    const codeBlock = editor.locator(".aq-code-shell", { hasText: "public Token login" }).first()
+    const codeBlock = editor.locator(".aq-code-shell", { hasText: "로그인 -> 세션 생성" }).first()
     await codeBlock.scrollIntoViewIfNeeded()
     await page.waitForTimeout(120)
 

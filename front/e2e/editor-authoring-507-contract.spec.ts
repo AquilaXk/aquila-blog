@@ -81,5 +81,16 @@ test.describe("editor 507 real feature E2E contract", () => {
     )
     expect(Object.hasOwn(diagnostics, "focusedElement")).toBe(true)
     expect(diagnostics.focusedElement === null || typeof diagnostics.focusedElement === "string").toBe(true)
+    expect(
+      (diagnostics as unknown as { interactionTelemetry?: unknown }).interactionTelemetry,
+      "507 diagnostics must expose interaction telemetry so tests can fail on timeline churn"
+    ).toEqual(
+      expect.objectContaining({
+        fallbackTimeline: expect.any(Array),
+        menuTimeline: expect.any(Array),
+        scrollToCalls: expect.any(Array),
+        selectionTimeline: expect.any(Array),
+      })
+    )
   })
 })

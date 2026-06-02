@@ -24,6 +24,28 @@ const openCellMenuForCell = async (page: Page, cell: Locator) => {
   throw new Error("table cell menu did not open for active cell")
 }
 
+const clickStableCellMenuButton = async (page: Page, cell: Locator, name: string) => {
+  const cellMenu = page.getByTestId("table-cell-menu")
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const menu =
+      attempt === 0 && (await cellMenu.isVisible().catch(() => false))
+        ? cellMenu
+        : await openCellMenuForCell(page, cell)
+    const button = menu.getByRole("button", { name })
+    try {
+      await expect(button).toBeVisible({ timeout: 1_000 })
+      await expect(button).toBeEnabled({ timeout: 1_000 })
+      await button.click({ timeout: 1_000 })
+      return
+    } catch (error) {
+      if (attempt === 3) throw error
+      await page.keyboard.press("Escape").catch(() => {})
+      await cellMenu.waitFor({ state: "hidden", timeout: 500 }).catch(() => {})
+    }
+  }
+}
+
 test.describe("editor authoring table structure and styles", () => {
   test("모바일 뷰포트에서는 표만 wrapper 내부 가로 스크롤을 사용하고 페이지 전체 overflow는 생기지 않는다", async ({
     page,
@@ -540,18 +562,12 @@ test.describe("editor authoring table structure and styles", () => {
     await expect(cellMenu.getByRole("button", { name: "제목 행" })).toHaveCount(0)
     await expect(cellMenu.getByRole("button", { name: "표 삭제" })).toHaveCount(0)
 
-    await cellMenu.getByRole("button", { name: "가운데" }).click()
+    await clickStableCellMenuButton(page, firstTableCell, "가운데")
     await expect
       .poll(async () => (await page.getByTestId("qa-markdown-output").textContent()) || "")
       .toContain('"align":"center"')
 
-    const refreshedCellMenu = page.getByTestId("table-cell-menu")
-    if (!(await refreshedCellMenu.isVisible().catch(() => false))) {
-      await openCellMenuForCell(page, firstTableCell)
-    }
-    const yellowBackgroundButton = page.getByTestId("table-cell-menu").getByRole("button", { name: "노랑 배경" })
-    await expect(yellowBackgroundButton).toBeVisible()
-    await yellowBackgroundButton.click()
+    await clickStableCellMenuButton(page, firstTableCell, "노랑 배경")
     await expect
       .poll(async () => (await page.getByTestId("qa-markdown-output").textContent()) || "")
       .toContain('"backgroundColor":"#fef3c7"')

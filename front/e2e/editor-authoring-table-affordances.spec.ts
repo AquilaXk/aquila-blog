@@ -434,7 +434,16 @@ test.describe("editor authoring table affordances", () => {
 
     await targetCell.click()
     await targetCell.hover()
-    await page.mouse.move(targetMetrics.left + targetMetrics.width / 2, tableBox.y + 6)
+    const columnTargetMetrics = await targetCell.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      return { left: Math.round(rect.left), width: Math.round(rect.width) }
+    })
+    const columnTableBox = await page.locator(".aq-block-editor__content .tableWrapper table").boundingBox()
+    if (!columnTableBox) {
+      throw new Error("table bounding box is missing before column axis hover")
+    }
+    const columnTargetCenter = columnTargetMetrics.left + columnTargetMetrics.width / 2
+    await page.mouse.move(columnTargetCenter, columnTableBox.y + 6)
     await expect(columnHandle).toBeVisible()
     const columnRailRect = await columnHandle.evaluate((element) => {
       const rect = element.getBoundingClientRect()
@@ -445,7 +454,7 @@ test.describe("editor authoring table affordances", () => {
         height: Math.round(rect.height),
       }
     })
-    expect(Math.abs(columnRailRect.left + columnRailRect.width / 2 - (targetMetrics.left + targetMetrics.width / 2))).toBeLessThanOrEqual(8)
+    expect(Math.abs(columnRailRect.left + columnRailRect.width / 2 - columnTargetCenter)).toBeLessThanOrEqual(8)
   })
 
   test("table menu는 좁은 뷰포트에서도 화면 내부에 배치된다", async ({ page }) => {

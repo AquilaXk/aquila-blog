@@ -339,20 +339,8 @@ test.describe("editor authoring callout and inline formatting", () => {
     await page.keyboard.type("전체 선택 테두리 방지")
 
     const paragraph = editor.locator("p", { hasText: "전체 선택 테두리 방지" }).first()
-    const paragraphBox = await expectVisibleBox(
-      paragraph,
-      "본문 첫 글자 더블클릭 좌표를 계산할 수 없습니다."
-    )
-
-    await paragraph.dispatchEvent("mousedown", {
-      button: 0,
-      buttons: 1,
-      clientX: paragraphBox.x + 2,
-      clientY: paragraphBox.y + paragraphBox.height / 2,
-      detail: 2,
-      bubbles: true,
-      cancelable: true,
-    })
+    await expect(paragraph).toBeVisible()
+    await paragraph.dblclick({ position: { x: 2, y: 8 } })
 
     await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
     await expect

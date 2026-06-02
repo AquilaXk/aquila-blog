@@ -302,10 +302,7 @@ export const EditorViewport = styled.div`
     overscroll-behavior-x: contain;
     overscroll-behavior-y: auto;
     touch-action: pan-x pan-y;
-    transition:
-      border-color 140ms ease,
-      box-shadow 140ms ease,
-      background 140ms ease;
+    transition: none;
       `
     }}
   }

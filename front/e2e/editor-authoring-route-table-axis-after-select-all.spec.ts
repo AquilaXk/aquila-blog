@@ -2,8 +2,11 @@ import { expect, test, type Locator, type Page } from "@playwright/test"
 import { getTableAffordances } from "./helpers/editorAuthoringFlow"
 import {
   POST_507_FINAL_TABLE_TARGET_CELL,
+  clearPost507InteractionTelemetry,
   expectPost507FinalTableTextSelected,
+  installPost507InteractionTelemetry,
   mockEditorRouteWithPost507,
+  readPost507InteractionTelemetry,
 } from "./helpers/post507Fixtures"
 
 const SELECT_ALL_SHORTCUT = process.platform === "darwin" ? "Meta+a" : "Control+a"
@@ -71,6 +74,7 @@ const clickPost507AxisHandleUntilSelected = async (
       await page.waitForTimeout(140)
       if (!(await handle.isVisible().catch(() => false))) continue
       try {
+        await installPost507InteractionTelemetry(page)
         await clickVisibleOverlayControl(page, handle)
       } catch {
         continue
@@ -314,6 +318,52 @@ const expectAxisSelectionStable = async (
   )
 }
 
+const countMenuCloseTransitions = (menuCounts: number[]) => {
+  let sawOpen = false
+  let closeCount = 0
+  for (let index = 0; index < menuCounts.length; index += 1) {
+    const count = menuCounts[index] ?? 0
+    const previousCount = index > 0 ? menuCounts[index - 1] ?? 0 : 0
+    if (count > 0) sawOpen = true
+    if (sawOpen && previousCount > 0 && count === 0) closeCount += 1
+  }
+  return closeCount
+}
+
+const countMenuReopenTransitions = (menuCounts: number[]) => {
+  let sawCloseAfterOpen = false
+  let reopenCount = 0
+  for (let index = 0; index < menuCounts.length; index += 1) {
+    const count = menuCounts[index] ?? 0
+    const previousCount = index > 0 ? menuCounts[index - 1] ?? 0 : 0
+    if (previousCount > 0 && count === 0) sawCloseAfterOpen = true
+    if (sawCloseAfterOpen && previousCount === 0 && count > 0) reopenCount += 1
+  }
+  return reopenCount
+}
+
+const expectNoPost507MenuChurn = (
+  telemetry: Awaited<ReturnType<typeof readPost507InteractionTelemetry>>,
+  axis: "column" | "row",
+  label: string
+) => {
+  const menuCounts = telemetry.menuTimeline.map((sample) =>
+    axis === "row" ? sample.rowMenuCount : sample.columnMenuCount
+  )
+  const fallbackSamples = telemetry.fallbackTimeline.filter(
+    (sample) =>
+      sample.codeFallbackCount > 0 ||
+      sample.tableFallbackCount > 0 ||
+      Boolean(sample.codeFallbackText) ||
+      Boolean(sample.tableFallbackText)
+  )
+  expect(menuCounts.some((count) => count > 0), `${label} should record an opened ${axis} menu`).toBe(true)
+  expect(countMenuCloseTransitions(menuCounts), `${label} should not close the ${axis} menu after opening`).toBe(0)
+  expect(countMenuReopenTransitions(menuCounts), `${label} should not reopen the ${axis} menu after closing`).toBe(0)
+  expect(telemetry.scrollToCalls, `${label} should not preserve-scroll rollback during stable axis selection`).toEqual([])
+  expect(fallbackSamples, `${label} should not leave code/table text fallback selection markers`).toEqual([])
+}
+
 const readPost507AxisOverlayScrollSnapshot = async (
   page: Page,
   overlayTestId: "table-column-selection-outline" | "table-row-selection-outline",
@@ -454,15 +504,15 @@ test.describe("editor authoring route post 507 final table axis after cell text 
     await expect(editor.locator(".selectedCell")).toHaveCount(7)
   })
 
-  test("실제 /editor/[id] post 507 row/column structural selection은 깜빡이지 않고 scroll 중 stale overlay를 남기지 않는다", async ({
+  test("실제 /editor/[id] post 507 row structural selection은 깜빡이지 않고 scroll 중 stale overlay를 남기지 않는다", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 760 })
     const { editor, finalTable } = await mockEditorRouteWithPost507(page, {
       postId: 997,
-      title: "post 507 table axis overlay stability route 글",
+      title: "post 507 table row axis overlay stability route 글",
     })
-    const { columnHandle, rowHandle } = getTableAffordances(page)
+    const { rowHandle } = getTableAffordances(page)
 
     const targetCell = finalTable.locator("td", { hasText: POST_507_FINAL_TABLE_TARGET_CELL }).first()
     await page.evaluate((targetCellText) => {
@@ -485,13 +535,25 @@ test.describe("editor authoring route post 507 final table axis after cell text 
     await expect(page.getByTestId("table-row-menu")).toBeVisible()
     await expect(editor.locator(".selectedCell")).toHaveCount(3)
     await expectAxisSelectionStable(page, 3, "table-row-selection-outline", "table-row-menu")
+    expectNoPost507MenuChurn(await readPost507InteractionTelemetry(page, "row-axis-stable"), "row", "post 507 row axis")
+    await clearPost507InteractionTelemetry(page)
     await expectAxisOverlayFollowsScrollOrCloses(
       page,
       await readPost507AxisOverlayScrollSnapshot(page, "table-row-selection-outline", "table-row-menu"),
       "table-row-selection-outline",
       "table-row-menu"
     )
+  })
 
+  test("실제 /editor/[id] post 507 column structural selection은 깜빡이지 않고 scroll 중 stale overlay를 남기지 않는다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 760 })
+    const { editor } = await mockEditorRouteWithPost507(page, {
+      postId: 998,
+      title: "post 507 table column axis overlay stability route 글",
+    })
+    const { columnHandle } = getTableAffordances(page)
     await page.evaluate((targetCellText) => {
       const editor = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
       const table = Array.from(editor?.querySelectorAll<HTMLElement>("table") ?? [])
@@ -513,6 +575,12 @@ test.describe("editor authoring route post 507 final table axis after cell text 
     await expect(page.getByTestId("table-column-menu")).toBeVisible()
     await expect(editor.locator(".selectedCell")).toHaveCount(7)
     await expectAxisSelectionStable(page, 7, "table-column-selection-outline", "table-column-menu")
+    expectNoPost507MenuChurn(
+      await readPost507InteractionTelemetry(page, "column-axis-stable"),
+      "column",
+      "post 507 column axis"
+    )
+    await clearPost507InteractionTelemetry(page)
     await expectAxisOverlayFollowsScrollOrCloses(
       page,
       await readPost507AxisOverlayScrollSnapshot(page, "table-column-selection-outline", "table-column-menu"),

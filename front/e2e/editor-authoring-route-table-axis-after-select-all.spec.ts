@@ -348,7 +348,7 @@ const expectNoPost507MenuChurn = (
   label: string
 ) => {
   const menuCounts = telemetry.menuTimeline.map((sample) =>
-    axis === "row" ? sample.rowMenuCount : sample.columnMenuCount
+    axis === "row" ? sample.rowMenuVisibleCount : sample.columnMenuVisibleCount
   )
   const fallbackSamples = telemetry.fallbackTimeline.filter(
     (sample) =>

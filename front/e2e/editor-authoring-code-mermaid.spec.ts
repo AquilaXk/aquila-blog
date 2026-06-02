@@ -292,6 +292,76 @@ test.describe("editor authoring code and mermaid blocks", () => {
       .toBe("")
   })
 
+  test("실제 /editor/[id] 수정 route 코드블럭 native 캐럿 클릭은 전체 root preserve로 승격되지 않는다", async ({
+    page,
+  }) => {
+    await mockEditorRouteWithPost507(page, {
+      postId: 609,
+      title: "post 507 code block native selection route 글",
+    })
+
+    const codeBlock = page.locator("[data-code-block-wrapper='true']").first()
+    const codeContent = codeBlock.locator(".aq-code-editor-content").first()
+    await expect(codeBlock).toBeVisible({ timeout: 15_000 })
+    await expect(codeBlock.locator(".aq-code-highlight-layer")).toContainText("로그인 -> 세션 생성")
+
+    await codeContent.scrollIntoViewIfNeeded()
+    const codeContentBox = await codeContent.boundingBox()
+    if (!codeContentBox) {
+      throw new Error("code block content hit-test box is missing")
+    }
+
+    const partialSelectionText = await codeContent.evaluate((element) => {
+      const root = element as HTMLElement
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+      let textNode: Text | null = null
+      while (walker.nextNode()) {
+        const candidate = walker.currentNode as Text
+        if ((candidate.textContent || "").trim().length >= 8) {
+          textNode = candidate
+          break
+        }
+      }
+      if (!textNode) throw new Error("code block text node is missing")
+      const rawText = textNode.textContent || ""
+      const start = Math.max(0, rawText.indexOf("로그인"))
+      const end = start + "로그인 -> 세션".length
+      const range = document.createRange()
+      range.setStart(textNode, start)
+      range.setEnd(textNode, Math.min(rawText.length, end))
+      const selection = window.getSelection()
+      selection?.removeAllRanges()
+      selection?.addRange(range)
+      return selection?.toString() || ""
+    })
+    expect(partialSelectionText).toBe("로그인 -> 세션")
+
+    await page.mouse.click(codeContentBox.x + 180, codeContentBox.y + 28)
+
+    await expect
+      .poll(async () =>
+        codeContent.evaluate((element) => {
+          const root = element as HTMLElement
+          const shell = root.closest<HTMLElement>(".aq-code-shell")
+          const rootText = (root.innerText || root.textContent || "").trim()
+          const selection = window.getSelection()
+          const selectionText = selection?.toString() || ""
+          return {
+            fallbackText: shell?.getAttribute("data-code-drag-selection-text") || "",
+            isCollapsed: Boolean(selection?.isCollapsed),
+            isFullRootSelection: Boolean(rootText && selectionText.trim() === rootText),
+            selectionText,
+          }
+        })
+      )
+      .toEqual({
+        fallbackText: "",
+        isCollapsed: true,
+        isFullRootSelection: false,
+        selectionText: "",
+      })
+  })
+
   test("머메이드 블록 코드를 바꾸면 preview가 이전 템플릿이 아니라 최신 source로 즉시 다시 렌더된다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
     await expect(page.getByTestId("qa-editor-ready")).toHaveCount(1)

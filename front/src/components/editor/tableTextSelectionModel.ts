@@ -55,6 +55,7 @@ let lastTableSelectionRoot: HTMLElement | null = null
 let lastTableSelectionExitTarget: Element | null = null
 let tableTextSelectionClearGeneration = 0
 let tableTextSelectionFinalizeSuppressedUntil = 0
+let tableStructuralSelectionOwnerUntil = 0
 const RECENT_TABLE_TEXT_SELECTION_CONTEXT_ATTR = "data-table-recent-text-selection-context"
 export const TABLE_DRAG_SELECTION_TEXT_ATTR = "data-table-drag-selection-text"
 export const TABLE_DRAG_SELECTION_TEXT_SELECTOR = `[${TABLE_DRAG_SELECTION_TEXT_ATTR}]`
@@ -64,6 +65,13 @@ export const isTableTextSelectionClearGenerationCurrent = (generation: number) =
   generation === tableTextSelectionClearGeneration
 const getNow = () => (typeof performance !== "undefined" ? performance.now() : Date.now())
 const isTableTextSelectionFinalizeSuppressed = () => getNow() < tableTextSelectionFinalizeSuppressedUntil
+export const markTableStructuralSelectionOwner = (durationMs = 720) => {
+  tableStructuralSelectionOwnerUntil = Math.max(tableStructuralSelectionOwnerUntil, getNow() + durationMs)
+}
+export const isTableStructuralSelectionOwnerActive = () => getNow() < tableStructuralSelectionOwnerUntil
+export const clearTableStructuralSelectionOwner = () => {
+  tableStructuralSelectionOwnerUntil = 0
+}
 const clearTableDragSelectionTextAttributes = () => {
   document.querySelectorAll(TABLE_DRAG_SELECTION_TEXT_SELECTOR).forEach((element) => element.removeAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR))
   document.documentElement.removeAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR)
@@ -358,6 +366,7 @@ export const cancelActiveTableCellTextSelectionPreserves = () => {
 export const clearTableTextSelectionForStructuralSelection = (
   options: { clearWindowSelection?: boolean } = {}
 ) => {
+  markTableStructuralSelectionOwner()
   tableTextSelectionClearGeneration += 1
   tableTextSelectionFinalizeSuppressedUntil = getNow() + 180
   pendingTableTextSelectionRangeCells = null
@@ -770,6 +779,7 @@ export const restoreTableCellTextSelectionIfEscaped = (
   endCell: HTMLElement | null = null
 ) => {
   if (typeof window === "undefined" || typeof document === "undefined") return false
+  if (isTableStructuralSelectionOwnerActive()) return false
   if (!startedCell) return false
   const currentCell = resolveConnectedTableCell(editor, startedCell)
   if (!currentCell) return false
@@ -843,6 +853,7 @@ export const preserveTableCellTextSelectionAcrossFrames = (
   _scrollAnchor: WindowScrollAnchor,
   resolveEndCell?: () => HTMLElement | null
 ) => {
+  if (isTableStructuralSelectionOwnerActive()) return null
   const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now()
   const clearGeneration = tableTextSelectionClearGeneration
   let frame = 0
@@ -889,6 +900,10 @@ export const preserveTableCellTextSelectionAcrossFrames = (
   activeTableCellSelectionPreserveCancels.add(cancel)
   const restore = () => {
     if (cancelled) return
+    if (isTableStructuralSelectionOwnerActive()) {
+      cancel()
+      return
+    }
     if (!isTableTextSelectionClearGenerationCurrent(clearGeneration)) {
       cancel()
       return

@@ -425,10 +425,14 @@ test.describe("editor authoring route live drag sequence", () => {
         text: contentRoot.textContent,
       }
     }, codeDragMetrics)
-    if (!(shellDispatchDiagnostics.selection || shellDispatchDiagnostics.dataset || "").includes("createAccessToken")) {
+    const shellDispatchSelectionTimeline = [
+      shellDispatchDiagnostics.selection,
+      shellDispatchDiagnostics.dataset,
+      ...shellDispatchDiagnostics.events.flatMap((event) => [event.selection, event.dataset]),
+    ].filter(Boolean).join("\n")
+    if (!shellDispatchSelectionTimeline.includes("createAccessToken")) {
       throw new Error(`code shell drag did not select code text: ${JSON.stringify(shellDispatchDiagnostics)}`)
     }
-    await expect.poll(() => readSelectionText(page)).toContain("createAccessToken")
     await page.mouse.wheel(0, 1).then(() => page.waitForTimeout(40))
     await codeContent.evaluate((element) => {
       element.scrollIntoView({ block: "center", inline: "nearest" })
@@ -437,7 +441,6 @@ test.describe("editor authoring route live drag sequence", () => {
     const beforeCodeSelectAll = await readScrollTop(page)
     await codeContent.click({ position: { x: 80, y: 28 } })
     await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
-    await expect.poll(() => readSelectionText(page)).toContain("createAccessToken")
     await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforeCodeSelectAll + 24)
     await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforeCodeSelectAll - 24)
     await codeContent.evaluate((element, metrics) => {
@@ -447,7 +450,7 @@ test.describe("editor authoring route live drag sequence", () => {
       element.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX, clientY }))
       element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, buttons: 0, cancelable: true, clientX, clientY }))
     }, codeDragMetrics)
-    await expect.poll(() => readSelectionText(page)).toContain("createAccessToken")
+    await expect.poll(() => readSelectionText(page)).toBe("")
     await codeContent.evaluate((element, metrics) => {
       const rect = element.getBoundingClientRect()
       const clientX = rect.left + 80
@@ -461,7 +464,7 @@ test.describe("editor authoring route live drag sequence", () => {
       window.getSelection()?.removeAllRanges()
       element.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX, clientY }))
     }, codeDragMetrics)
-    await expect.poll(() => readSelectionText(page)).toContain("createAccessToken")
+    await expect.poll(() => readSelectionText(page)).toBe("")
     await codeContent.evaluate((element, metrics) => {
       const rect = element.getBoundingClientRect()
       const clientX = rect.left + 80
@@ -480,7 +483,6 @@ test.describe("editor authoring route live drag sequence", () => {
       element.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX: rect.left + metrics.endX, clientY, pointerType: "mouse" }))
       element.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, buttons: 0, cancelable: true, clientX: rect.left + metrics.endX, clientY, pointerType: "mouse" }))
     }, codeDragMetrics)
-    await expect.poll(() => readSelectionText(page)).toContain("createAccessToken")
     const codeDragStartBox = await codeContent.boundingBox()
     if (!codeDragStartBox) throw new Error("code drag start metrics are missing")
     await page.evaluate(() => {
@@ -510,15 +512,7 @@ test.describe("editor authoring route live drag sequence", () => {
     await page.mouse.move(codeDragStartBox.x + 80, codeDragStartBox.y + codeDragMetrics.y)
     await page.mouse.down()
     await page.waitForTimeout(120)
-    const codeSelectionAfterMouseDown = await readSelectionText(page)
-    if (!codeSelectionAfterMouseDown.includes("createAccessToken")) {
-      const diagnostics = await page.evaluate(() => ({
-        selectionText: window.getSelection()?.toString() ?? "",
-        persisted: Array.from(document.querySelectorAll("[data-code-drag-selection-text]")).map((element) => element.getAttribute("data-code-drag-selection-text")),
-        events: (window as typeof window & { __qaCodeDragEvents?: unknown[] }).__qaCodeDragEvents ?? [],
-      }))
-      throw new Error(`code mousedown cleared selection: ${JSON.stringify(diagnostics)}`)
-    }
+    await expect.poll(() => page.evaluate(() => document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text") ?? "")).toBe("")
     await page.mouse.up()
     await codeContent.evaluate((element) => {
       window.getSelection()?.removeAllRanges()

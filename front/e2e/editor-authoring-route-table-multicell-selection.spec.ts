@@ -22,13 +22,30 @@ const readSelectionText = (page: Page) =>
   )
 
 const readNativeSelectionState = (page: Page) =>
-  page.evaluate(() => ({
-    nativeText: window.getSelection()?.toString() ?? "",
-    persistedText:
-      document.documentElement.getAttribute("data-table-drag-selection-text") ||
-      document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
-      "",
-  }))
+  page.evaluate(() => {
+    const selection = window.getSelection()
+    const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
+    const visibleRects = range
+      ? Array.from(range.getClientRects()).filter((rect) => rect.width > 1 && rect.height > 1)
+      : []
+    const closestCellText = (node: Node | null | undefined) => {
+      const element = node instanceof Element ? node : node?.parentElement
+      return element?.closest("th, td")?.textContent?.replace(/\s+/g, " ").trim() ?? ""
+    }
+
+    return {
+      anchorCellText: closestCellText(selection?.anchorNode),
+      focusCellText: closestCellText(selection?.focusNode),
+      isCollapsed: selection?.isCollapsed ?? true,
+      nativeText: selection?.toString() ?? "",
+      persistedText:
+        document.documentElement.getAttribute("data-table-drag-selection-text") ||
+        document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
+        "",
+      rangeCount: selection?.rangeCount ?? 0,
+      visibleRectCount: visibleRects.length,
+    }
+  })
 
 const filler = (label: string, count: number) =>
   Array.from({ length: count }, (_, index) => [
@@ -244,6 +261,11 @@ test("live 507 형태의 table 단일 셀 내부 drag는 native 텍스트 선택
   }
   expect(selectionState.nativeText.replace(/\s+/g, " ").trim()).toContain("Stateless 의미")
   expect(selectionState.persistedText).toBe("")
+  expect(selectionState.isCollapsed).toBe(false)
+  expect(selectionState.rangeCount).toBeGreaterThan(0)
+  expect(selectionState.visibleRectCount).toBeGreaterThan(0)
+  expect(selectionState.anchorCellText).toContain("Stateless 의미")
+  expect(selectionState.focusCellText).toContain("Stateless 의미")
   expect(tableDrag.afterScrollTop).toBeLessThanOrEqual(tableDrag.beforeScrollTop + 24)
   expect(tableDrag.afterScrollTop).toBeGreaterThanOrEqual(tableDrag.beforeScrollTop - 24)
   expect(await editor.locator(".selectedCell").count()).toBe(0)

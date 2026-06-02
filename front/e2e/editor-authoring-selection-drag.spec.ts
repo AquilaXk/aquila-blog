@@ -617,8 +617,12 @@ test.describe("editor authoring route text selection drag", () => {
       )
       .toContain("영역")
     await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
-    const afterScrollTop = await page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
-    expect(Math.abs(afterScrollTop - beforeScrollTop)).toBeLessThanOrEqual(24)
+    await expect
+      .poll(async () => {
+        const afterScrollTop = await page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
+        return Math.abs(afterScrollTop - beforeScrollTop)
+      })
+      .toBeLessThanOrEqual(24)
   })
 
   test("table multi-cell 선택 toolbar는 이전 본문 selection anchor로 순간이동하지 않는다", async ({

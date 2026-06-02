@@ -88,6 +88,7 @@ test.describe("editor 507 real feature E2E contract", () => {
       expect.objectContaining({
         fallbackTimeline: expect.any(Array),
         menuTimeline: expect.any(Array),
+        scrollTopTimeline: expect.any(Array),
         scrollToCalls: expect.any(Array),
         selectionTimeline: expect.any(Array),
       })

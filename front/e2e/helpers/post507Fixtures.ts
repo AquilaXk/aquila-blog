@@ -137,9 +137,12 @@ export type Post507InteractionTelemetrySnapshot = {
   }>
   menuTimeline: Array<{
     columnMenuCount: number
+    columnMenuVisibleCount: number
     label: string
     rowMenuCount: number
+    rowMenuVisibleCount: number
     structureMenuCount: number
+    structureMenuVisibleCount: number
   }>
   scrollToCalls: Array<{ elapsedMs: number; targetX: number; targetY: number }>
   scrollTopTimeline: Array<{ elapsedMs: number; label: string; scrollTop: number }>
@@ -220,11 +223,27 @@ export const readPost507EditorDiagnostics = async (
         tableFallbackText: tableFallbackText.slice(0, 160),
       }
     }
+    const isElementVisible = (element: Element) => {
+      const className = typeof element.className === "string" ? element.className.toLowerCase() : ""
+      const style = (element.getAttribute("style") || "").toLowerCase()
+      return (
+        element.getAttribute("aria-hidden") !== "true" &&
+        element.getAttribute("data-state") !== "closed" &&
+        !element.hasAttribute("hidden") &&
+        !/\b(hidden|invisible|opacity-0)\b/.test(className) &&
+        !/(display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0(?:[;\s]|$))/.test(style)
+      )
+    }
+    const countVisibleElements = (selector: string) =>
+      Array.from(document.querySelectorAll(selector)).filter(isElementVisible).length
     const readMenuSample = (sampleLabel: string) => ({
       columnMenuCount: document.querySelectorAll("[data-testid='table-column-menu']").length,
+      columnMenuVisibleCount: countVisibleElements("[data-testid='table-column-menu']"),
       label: sampleLabel,
       rowMenuCount: document.querySelectorAll("[data-testid='table-row-menu']").length,
+      rowMenuVisibleCount: countVisibleElements("[data-testid='table-row-menu']"),
       structureMenuCount: document.querySelectorAll("[data-testid='table-structure-menu'], [data-table-menu-root='true']").length,
+      structureMenuVisibleCount: countVisibleElements("[data-testid='table-structure-menu'], [data-table-menu-root='true']"),
     })
     const resolveSelectionOwner = (): Post507InteractionTelemetrySnapshot["selectionTimeline"][number]["owner"] => {
       const selection = window.getSelection()
@@ -338,11 +357,27 @@ export const installPost507InteractionTelemetry = async (page: Page) =>
         tableFallbackText: tableFallbackText.slice(0, 160),
       }
     }
+    const isElementVisible = (element: Element) => {
+      const className = typeof element.className === "string" ? element.className.toLowerCase() : ""
+      const style = (element.getAttribute("style") || "").toLowerCase()
+      return (
+        element.getAttribute("aria-hidden") !== "true" &&
+        element.getAttribute("data-state") !== "closed" &&
+        !element.hasAttribute("hidden") &&
+        !/\b(hidden|invisible|opacity-0)\b/.test(className) &&
+        !/(display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0(?:[;\s]|$))/.test(style)
+      )
+    }
+    const countVisibleElements = (selector: string) =>
+      Array.from(document.querySelectorAll(selector)).filter(isElementVisible).length
     const readMenuSample = (label: string) => ({
       columnMenuCount: document.querySelectorAll("[data-testid='table-column-menu']").length,
+      columnMenuVisibleCount: countVisibleElements("[data-testid='table-column-menu']"),
       label,
       rowMenuCount: document.querySelectorAll("[data-testid='table-row-menu']").length,
+      rowMenuVisibleCount: countVisibleElements("[data-testid='table-row-menu']"),
       structureMenuCount: document.querySelectorAll("[data-testid='table-structure-menu'], [data-table-menu-root='true']").length,
+      structureMenuVisibleCount: countVisibleElements("[data-testid='table-structure-menu'], [data-table-menu-root='true']"),
     })
     const resolveSelectionOwner = (): Post507InteractionTelemetrySnapshot["selectionTimeline"][number]["owner"] => {
       const selection = window.getSelection()

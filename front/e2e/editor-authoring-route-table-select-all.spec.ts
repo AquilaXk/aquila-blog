@@ -7,6 +7,40 @@ import {
 
 const SELECT_ALL_SHORTCUT = process.platform === "darwin" ? "Meta+a" : "Control+a"
 
+const readPageScrollState = (page: Page) =>
+  page.evaluate(() => ({
+    scrollHeight: document.scrollingElement?.scrollHeight ?? document.body.scrollHeight,
+    scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+    viewportHeight: window.innerHeight,
+  }))
+
+const expectPost507FinalTableSelectionStable = async (page: Page) => {
+  for (let sample = 0; sample < 5; sample += 1) {
+    await page.waitForTimeout(120)
+    expectPost507FinalTableTextSelected(
+      await page.evaluate(() => window.getSelection()?.toString() ?? "")
+    )
+  }
+}
+
+const expectWheelScrollRemainsUsable = async (page: Page) => {
+  const before = await readPageScrollState(page)
+  const scrollDelta =
+    before.scrollTop + before.viewportHeight >= before.scrollHeight - 320 ? -260 : 260
+
+  await page.mouse.wheel(0, scrollDelta)
+
+  if (scrollDelta > 0) {
+    await expect
+      .poll(async () => (await readPageScrollState(page)).scrollTop)
+      .toBeGreaterThan(before.scrollTop + 80)
+  } else {
+    await expect
+      .poll(async () => (await readPageScrollState(page)).scrollTop)
+      .toBeLessThan(before.scrollTop - 80)
+  }
+}
+
 const blurTableCellByKeyboard = async (page: Page, maxAttempts = 28) => {
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     await page.keyboard.press("Tab")
@@ -66,10 +100,12 @@ test.describe("editor authoring route post 507 final table select all", () => {
     await targetCell.click({ position: { x: 40, y: 16 } })
     await targetCell.dblclick({ position: { x: 40, y: 16 } })
     await page.keyboard.press(SELECT_ALL_SHORTCUT)
-    await page.waitForTimeout(360)
 
-    const selectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
-    expectPost507FinalTableTextSelected(selectionText)
+    await expectPost507FinalTableSelectionStable(page)
+    await expectWheelScrollRemainsUsable(page)
+    expectPost507FinalTableTextSelected(
+      await page.evaluate(() => window.getSelection()?.toString() ?? "")
+    )
     await expect(editor.locator(".selectedCell")).toHaveCount(0)
   })
 

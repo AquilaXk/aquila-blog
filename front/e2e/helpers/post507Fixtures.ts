@@ -46,7 +46,9 @@ export const POST_507_REAL_FEATURE_CONTRACT = {
       id: "table-axis-selection",
       issueSymptom: "row/column structural selection flickers or leaves stale overlays",
       requiredSourceFragments: [
+        "installPost507InteractionTelemetry",
         "mockEditorRouteWithPost507",
+        "expectNoPost507MenuChurn",
         "table-column-selection-outline",
         "table-row-selection-outline",
       ],
@@ -109,6 +111,7 @@ export type Post507EditorDiagnosticSnapshot = {
     tableCount: number
   }
   focusedElement: string | null
+  interactionTelemetry: Post507InteractionTelemetrySnapshot
   overlayRects: Array<{
     bottom: number
     height: number
@@ -122,6 +125,33 @@ export type Post507EditorDiagnosticSnapshot = {
   scrollTopTimeline: Array<{ label: string; scrollTop: number }>
   selectionText: string
   url: string
+}
+
+export type Post507InteractionTelemetrySnapshot = {
+  fallbackTimeline: Array<{
+    codeFallbackCount: number
+    codeFallbackText: string
+    label: string
+    tableFallbackCount: number
+    tableFallbackText: string
+  }>
+  menuTimeline: Array<{
+    columnMenuCount: number
+    columnMenuVisibleCount: number
+    label: string
+    rowMenuCount: number
+    rowMenuVisibleCount: number
+    structureMenuCount: number
+    structureMenuVisibleCount: number
+  }>
+  scrollToCalls: Array<{ elapsedMs: number; targetX: number; targetY: number }>
+  scrollTopTimeline: Array<{ elapsedMs: number; label: string; scrollTop: number }>
+  selectionTimeline: Array<{
+    label: string
+    owner: "block" | "body" | "code" | "none" | "table"
+    textLength: number
+    textSample: string
+  }>
 }
 
 export const readPost507EditorDiagnostics = async (
@@ -177,6 +207,73 @@ export const readPost507EditorDiagnostics = async (
       document.documentElement.getAttribute("data-table-drag-selection-text") ||
       document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
       ""
+    const readFallbackSample = (sampleLabel: string) => {
+      const codeFallbackText =
+        document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text")?.trim() ||
+        ""
+      const tableFallbackText =
+        document.documentElement.getAttribute("data-table-drag-selection-text")?.trim() ||
+        document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text")?.trim() ||
+        ""
+      return {
+        codeFallbackCount: document.querySelectorAll("[data-code-drag-selection-text]").length,
+        codeFallbackText: codeFallbackText.slice(0, 160),
+        label: sampleLabel,
+        tableFallbackCount: document.querySelectorAll("[data-table-drag-selection-text]").length,
+        tableFallbackText: tableFallbackText.slice(0, 160),
+      }
+    }
+    const isElementVisible = (element: Element) => {
+      const className = typeof element.className === "string" ? element.className.toLowerCase() : ""
+      const style = (element.getAttribute("style") || "").toLowerCase()
+      return (
+        element.getAttribute("aria-hidden") !== "true" &&
+        element.getAttribute("data-state") !== "closed" &&
+        !element.hasAttribute("hidden") &&
+        !/\b(hidden|invisible|opacity-0)\b/.test(className) &&
+        !/(display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0(?:[;\s]|$))/.test(style)
+      )
+    }
+    const countVisibleElements = (selector: string) =>
+      Array.from(document.querySelectorAll(selector)).filter(isElementVisible).length
+    const readMenuSample = (sampleLabel: string) => ({
+      columnMenuCount: document.querySelectorAll("[data-testid='table-column-menu']").length,
+      columnMenuVisibleCount: countVisibleElements("[data-testid='table-column-menu']"),
+      label: sampleLabel,
+      rowMenuCount: document.querySelectorAll("[data-testid='table-row-menu']").length,
+      rowMenuVisibleCount: countVisibleElements("[data-testid='table-row-menu']"),
+      structureMenuCount: document.querySelectorAll("[data-testid='table-structure-menu'], [data-table-menu-root='true']").length,
+      structureMenuVisibleCount: countVisibleElements("[data-testid='table-structure-menu'], [data-table-menu-root='true']"),
+    })
+    const resolveSelectionOwner = (): Post507InteractionTelemetrySnapshot["selectionTimeline"][number]["owner"] => {
+      const selection = window.getSelection()
+      const elements = [selection?.anchorNode, selection?.focusNode]
+        .map((node) => (node instanceof Element ? node : node?.parentElement ?? null))
+        .filter((element): element is Element => Boolean(element))
+      if (elements.some((element) => element.closest(".aq-code-shell, .aq-code-editor-content"))) return "code"
+      if (elements.some((element) => element.closest("td, th, .tableWrapper"))) return "table"
+      if (document.querySelector("[data-testid='keyboard-block-selection-overlay']")) return "block"
+      if (selection?.toString().trim()) return "body"
+      return "none"
+    }
+    const readSelectionSample = (sampleLabel: string) => {
+      const text = window.getSelection()?.toString() || ""
+      return {
+        label: sampleLabel,
+        owner: resolveSelectionOwner(),
+        textLength: text.length,
+        textSample: text.replace(/\s+/g, " ").trim().slice(0, 160),
+      }
+    }
+    const readScrollTopSample = (sampleLabel: string) => ({
+      elapsedMs: 0,
+      label: sampleLabel,
+      scrollTop: Math.round(document.scrollingElement?.scrollTop ?? window.scrollY),
+    })
+    const telemetryWindow = window as typeof window & {
+      __aqPost507InteractionTelemetry?: Post507InteractionTelemetrySnapshot
+    }
+    const recordedTelemetry = telemetryWindow.__aqPost507InteractionTelemetry
 
     return {
       activeElement: describeElement(document.activeElement),
@@ -192,6 +289,21 @@ export const readPost507EditorDiagnostics = async (
         tableCount: document.querySelectorAll("table").length,
       },
       focusedElement: describeElement(document.querySelector(":focus")),
+      interactionTelemetry: recordedTelemetry
+        ? {
+            fallbackTimeline: recordedTelemetry.fallbackTimeline.slice(-120),
+            menuTimeline: recordedTelemetry.menuTimeline.slice(-120),
+            scrollToCalls: recordedTelemetry.scrollToCalls.slice(-120),
+            scrollTopTimeline: recordedTelemetry.scrollTopTimeline.slice(-120),
+            selectionTimeline: recordedTelemetry.selectionTimeline.slice(-120),
+          }
+        : {
+            fallbackTimeline: [readFallbackSample(snapshotLabel)],
+            menuTimeline: [readMenuSample(snapshotLabel)],
+            scrollToCalls: [],
+            scrollTopTimeline: [readScrollTopSample(snapshotLabel)],
+            selectionTimeline: [readSelectionSample(snapshotLabel)],
+          },
       overlayRects,
       preserveAttributes,
       scrollTopTimeline: [
@@ -204,6 +316,165 @@ export const readPost507EditorDiagnostics = async (
       url: `${window.location.pathname}${window.location.search}`,
     }
   }, label)
+
+export const installPost507InteractionTelemetry = async (page: Page) =>
+  page.evaluate(() => {
+    type TelemetryWindow = typeof window & {
+      __aqPost507InteractionTelemetry?: Post507InteractionTelemetrySnapshot
+      __aqPost507InteractionTelemetryCleanup?: () => void
+      __aqPost507OriginalScrollTo?: typeof window.scrollTo
+    }
+    const telemetryWindow = window as TelemetryWindow
+    telemetryWindow.__aqPost507InteractionTelemetryCleanup?.()
+
+    const startedAt = performance.now()
+    const elapsedMs = () => Math.round(performance.now() - startedAt)
+    const limit = 120
+    const trim = <T>(items: T[]) => {
+      if (items.length > limit) items.splice(0, items.length - limit)
+    }
+    const telemetry: Post507InteractionTelemetrySnapshot = {
+      fallbackTimeline: [],
+      menuTimeline: [],
+      scrollToCalls: [],
+      scrollTopTimeline: [],
+      selectionTimeline: [],
+    }
+
+    const readFallbackSample = (label: string) => {
+      const codeFallbackText =
+        document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text")?.trim() ||
+        ""
+      const tableFallbackText =
+        document.documentElement.getAttribute("data-table-drag-selection-text")?.trim() ||
+        document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text")?.trim() ||
+        ""
+      return {
+        codeFallbackCount: document.querySelectorAll("[data-code-drag-selection-text]").length,
+        codeFallbackText: codeFallbackText.slice(0, 160),
+        label,
+        tableFallbackCount: document.querySelectorAll("[data-table-drag-selection-text]").length,
+        tableFallbackText: tableFallbackText.slice(0, 160),
+      }
+    }
+    const isElementVisible = (element: Element) => {
+      const className = typeof element.className === "string" ? element.className.toLowerCase() : ""
+      const style = (element.getAttribute("style") || "").toLowerCase()
+      return (
+        element.getAttribute("aria-hidden") !== "true" &&
+        element.getAttribute("data-state") !== "closed" &&
+        !element.hasAttribute("hidden") &&
+        !/\b(hidden|invisible|opacity-0)\b/.test(className) &&
+        !/(display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0(?:[;\s]|$))/.test(style)
+      )
+    }
+    const countVisibleElements = (selector: string) =>
+      Array.from(document.querySelectorAll(selector)).filter(isElementVisible).length
+    const readMenuSample = (label: string) => ({
+      columnMenuCount: document.querySelectorAll("[data-testid='table-column-menu']").length,
+      columnMenuVisibleCount: countVisibleElements("[data-testid='table-column-menu']"),
+      label,
+      rowMenuCount: document.querySelectorAll("[data-testid='table-row-menu']").length,
+      rowMenuVisibleCount: countVisibleElements("[data-testid='table-row-menu']"),
+      structureMenuCount: document.querySelectorAll("[data-testid='table-structure-menu'], [data-table-menu-root='true']").length,
+      structureMenuVisibleCount: countVisibleElements("[data-testid='table-structure-menu'], [data-table-menu-root='true']"),
+    })
+    const resolveSelectionOwner = (): Post507InteractionTelemetrySnapshot["selectionTimeline"][number]["owner"] => {
+      const selection = window.getSelection()
+      const elements = [selection?.anchorNode, selection?.focusNode]
+        .map((node) => (node instanceof Element ? node : node?.parentElement ?? null))
+        .filter((element): element is Element => Boolean(element))
+      if (elements.some((element) => element.closest(".aq-code-shell, .aq-code-editor-content"))) return "code"
+      if (elements.some((element) => element.closest("td, th, .tableWrapper"))) return "table"
+      if (document.querySelector("[data-testid='keyboard-block-selection-overlay']")) return "block"
+      if (selection?.toString().trim()) return "body"
+      return "none"
+    }
+    const readSelectionSample = (label: string) => {
+      const text = window.getSelection()?.toString() || ""
+      return {
+        label,
+        owner: resolveSelectionOwner(),
+        textLength: text.length,
+        textSample: text.replace(/\s+/g, " ").trim().slice(0, 160),
+      }
+    }
+    const readScrollTopSample = (label: string) => ({
+      elapsedMs: elapsedMs(),
+      label,
+      scrollTop: Math.round(document.scrollingElement?.scrollTop ?? window.scrollY),
+    })
+    const recordSnapshot = (label: string) => {
+      telemetry.fallbackTimeline.push(readFallbackSample(label))
+      telemetry.menuTimeline.push(readMenuSample(label))
+      telemetry.selectionTimeline.push(readSelectionSample(label))
+      trim(telemetry.fallbackTimeline)
+      trim(telemetry.menuTimeline)
+      trim(telemetry.selectionTimeline)
+    }
+    const recordScrollTop = (label: string) => {
+      telemetry.scrollTopTimeline.push(readScrollTopSample(label))
+      trim(telemetry.scrollTopTimeline)
+    }
+
+    const originalScrollTo =
+      telemetryWindow.__aqPost507OriginalScrollTo ?? (window.scrollTo.bind(window) as typeof window.scrollTo)
+    telemetryWindow.__aqPost507OriginalScrollTo = originalScrollTo
+    window.scrollTo = ((xOrOptions?: number | ScrollToOptions, y?: number) => {
+      const targetX = typeof xOrOptions === "object" ? Number(xOrOptions.left ?? window.scrollX) : Number(xOrOptions ?? window.scrollX)
+      const targetY = typeof xOrOptions === "object" ? Number(xOrOptions.top ?? window.scrollY) : Number(y ?? window.scrollY)
+      telemetry.scrollToCalls.push({ elapsedMs: elapsedMs(), targetX: Math.round(targetX), targetY: Math.round(targetY) })
+      trim(telemetry.scrollToCalls)
+      if (typeof xOrOptions === "object") return originalScrollTo(xOrOptions)
+      return originalScrollTo(xOrOptions ?? window.scrollX, y ?? window.scrollY)
+    }) as typeof window.scrollTo
+
+    const mutationObserver = new MutationObserver(() => recordSnapshot("mutation"))
+    mutationObserver.observe(document.documentElement, {
+      attributeFilter: [
+        "aria-expanded",
+        "class",
+        "data-code-drag-selection-text",
+        "data-table-drag-selection-text",
+        "data-testid",
+        "style",
+      ],
+      attributes: true,
+      childList: true,
+      subtree: true,
+    })
+    const handleSelectionChange = () => {
+      telemetry.selectionTimeline.push(readSelectionSample("selectionchange"))
+      trim(telemetry.selectionTimeline)
+    }
+    const handleScroll = () => recordScrollTop("scroll")
+    document.addEventListener("selectionchange", handleSelectionChange)
+    window.addEventListener("scroll", handleScroll, true)
+    recordSnapshot("installed")
+    recordScrollTop("installed")
+
+    telemetryWindow.__aqPost507InteractionTelemetry = telemetry
+    telemetryWindow.__aqPost507InteractionTelemetryCleanup = () => {
+      window.scrollTo = originalScrollTo
+      mutationObserver.disconnect()
+      document.removeEventListener("selectionchange", handleSelectionChange)
+      window.removeEventListener("scroll", handleScroll, true)
+      delete telemetryWindow.__aqPost507InteractionTelemetryCleanup
+    }
+  })
+
+export const readPost507InteractionTelemetry = async (page: Page, label = "interaction") =>
+  (await readPost507EditorDiagnostics(page, label)).interactionTelemetry
+
+export const clearPost507InteractionTelemetry = async (page: Page) =>
+  page.evaluate(() => {
+    const telemetryWindow = window as typeof window & {
+      __aqPost507InteractionTelemetry?: Post507InteractionTelemetrySnapshot
+      __aqPost507InteractionTelemetryCleanup?: () => void
+    }
+    telemetryWindow.__aqPost507InteractionTelemetryCleanup?.()
+    delete telemetryWindow.__aqPost507InteractionTelemetry
+  })
 
 export const expectPost507FinalTableTextSelected = (selectionText: string) => {
   const normalizedSelectionText = selectionText.replace(/\s+/g, " ").trim()

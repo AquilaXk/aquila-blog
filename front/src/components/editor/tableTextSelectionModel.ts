@@ -1,6 +1,7 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
 import { TextSelection } from "@tiptap/pm/state"
 import {
+  cancelActiveWindowScrollPreserve,
   cancelTablePointerScrollPreserves,
   clearNextEditorPointerAfterTable,
   preserveWindowScrollForRichBlockSelectAll,
@@ -363,6 +364,7 @@ export const clearTableTextSelectionForStructuralSelection = (
   explicitTableTextDragStart = null
   hasRecentTableTextSelectionContext = false
   cancelActiveTableCellTextSelectionPreserves()
+  cancelActiveWindowScrollPreserve()
   cancelTablePointerScrollPreserves()
   shouldClearActiveTableTextSelectionOnBlur = false
   lastTableSelectionExitTarget = null

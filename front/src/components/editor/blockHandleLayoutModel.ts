@@ -24,6 +24,8 @@ export const markNextEditorPointerAfterTable = () => { preserveNextEditorPointer
 
 export const clearNextEditorPointerAfterTable = () => { preserveNextEditorPointerAfterTable = false }
 
+export const cancelActiveWindowScrollPreserve = () => { activeWindowScrollPreserveCancel?.(); activeWindowScrollPreserveCancel = null }
+
 export const cancelTablePointerScrollPreserves = () => {
   clearNextEditorPointerAfterTable()
   activeTablePointerScrollPreserveCancels.forEach((cancel) => cancel())

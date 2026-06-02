@@ -96,7 +96,15 @@ const resolveExplicitTableTextSelectionRangeCells = (
   options: { allowControlFallback?: boolean } = {}
 ) => { const pointCell = resolveTableTextCellAtPoint(clientX, clientY, target, options); return explicitDragStart && pointCell instanceof HTMLElement && pointCell.closest("table") === explicitDragStart.cell.closest("table") && (Math.abs(clientX - explicitDragStart.x) > 4 || Math.abs(clientY - explicitDragStart.y) > 4) ? { anchorCell: explicitDragStart.cell, pointCell } : null }
 const preserveExplicitTableTextSelectionFromPoint = (clientX: number, clientY: number, target?: EventTarget | Node | null) => { const rangeCells = resolveExplicitTableTextSelectionRangeCells(clientX, clientY, target, explicitTableTextDragStart, { allowControlFallback: Boolean(explicitTableTextDragStart) }); if (!rangeCells || rangeCells.anchorCell === rangeCells.pointCell) return false; pendingTableTextSelectionRangeCells = rangeCells; selectTableCellTextRange(rangeCells.anchorCell, rangeCells.pointCell); preserveTableTextRangeAcrossFrames(rangeCells.anchorCell, rangeCells.pointCell); return true }
-const preserveExplicitTableTextSelectionFromMoveEvent = (event: MouseEvent | PointerEvent) => { if (event.buttons !== 1) { pendingTableTextSelectionRangeCells = null; return } if (preserveExplicitTableTextSelectionFromPoint(event.clientX, event.clientY, event.target)) { event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation(); return } pendingTableTextSelectionRangeCells = resolveTableTextSelectionRangeCells(event.clientX, event.clientY, event.target) ?? pendingTableTextSelectionRangeCells }
+const preserveExplicitTableTextSelectionFromMoveEvent = (event: MouseEvent | PointerEvent) => {
+  if (event.buttons !== 1) { pendingTableTextSelectionRangeCells = null; return }
+  const rangeCells = resolveExplicitTableTextSelectionRangeCells(event.clientX, event.clientY, event.target, explicitTableTextDragStart, { allowControlFallback: Boolean(explicitTableTextDragStart) }) ?? resolveTableTextSelectionRangeCells(event.clientX, event.clientY, event.target, { allowControlFallback: Boolean(explicitTableTextDragStart) })
+  if (rangeCells && rangeCells.anchorCell !== rangeCells.pointCell) {
+    pendingTableTextSelectionRangeCells = rangeCells; selectTableCellTextRange(rangeCells.anchorCell, rangeCells.pointCell); preserveTableTextRangeAcrossFrames(rangeCells.anchorCell, rangeCells.pointCell)
+    event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation(); return
+  }
+  pendingTableTextSelectionRangeCells = rangeCells ?? pendingTableTextSelectionRangeCells
+}
 
 const preserveTableTextRangeAcrossFrames = (anchorCell: HTMLElement, pointCell: HTMLElement) => {
   activeTableTextRangePreserveCancel?.()
@@ -144,7 +152,7 @@ export const finalizeTableTextSelectionFromPoint = (clientX: number, clientY: nu
   const explicitDragStart = explicitTableTextDragStart
   explicitTableTextDragStart = null
   const allowControlFallback = Boolean(explicitDragStart || pendingTableTextSelectionRangeCells)
-  const pointCell = resolveTableTextCellAtPoint(clientX, clientY, target, { allowControlFallback }), explicitRangeCells = resolveExplicitTableTextSelectionRangeCells(clientX, clientY, target, explicitDragStart, { allowControlFallback }), rangeCells = resolveTableTextSelectionRangeCells(clientX, clientY, target, { allowControlFallback }) ?? (pointCell ? pendingTableTextSelectionRangeCells : null) ?? explicitRangeCells
+  const explicitRangeCells = resolveExplicitTableTextSelectionRangeCells(clientX, clientY, target, explicitDragStart, { allowControlFallback }), rangeCells = resolveTableTextSelectionRangeCells(clientX, clientY, target, { allowControlFallback }) ?? pendingTableTextSelectionRangeCells ?? explicitRangeCells
   pendingTableTextSelectionRangeCells = null
   if (!rangeCells || rangeCells.anchorCell === rangeCells.pointCell) return false
   cancelActiveTableCellTextSelectionPreserves()
@@ -333,6 +341,11 @@ const isSelectionInsideSameTable = (selection: Selection, table: Element | null)
   const anchorElement = resolveElement(selection.anchorNode)
   const focusElement = resolveElement(selection.focusNode)
   return Boolean(anchorElement && focusElement && table.contains(anchorElement) && table.contains(focusElement))
+}
+const isTableCellEndpointSelection = (selection: Selection, cell: HTMLElement) => {
+  const anchorElement = resolveElement(selection.anchorNode)
+  const focusElement = resolveElement(selection.focusNode)
+  return Boolean(anchorElement && focusElement && cell.contains(anchorElement) && cell.contains(focusElement))
 }
 
 const asTableCell = (element: Element | null) =>
@@ -788,16 +801,12 @@ export const restoreTableCellTextSelectionIfEscaped = (
   const selection = window.getSelection()
   if (!selection) return false
 
-  const anchorElement = resolveElement(selection.anchorNode)
-  const focusElement = resolveElement(selection.focusNode)
   const hasTextSelection = selection.toString().trim().length > 0
   const table = resolveCellTable(currentCell)
   const isOwnedTableSelection = isSelectionInsideSameTable(selection, table)
   if (
     hasTextSelection &&
-    (isOwnedTableSelection ||
-      (anchorElement && currentCell.contains(anchorElement)) ||
-      (focusElement && currentCell.contains(focusElement)))
+    (isOwnedTableSelection || isTableCellEndpointSelection(selection, currentCell))
   ) {
     currentCell.setAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR, selection.toString())
     clearNextEditorPointerAfterTable()

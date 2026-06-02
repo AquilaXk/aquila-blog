@@ -21,11 +21,7 @@ import {
 import type { TableMenuState } from "./tableFloatingUiModel"
 import { findActiveRenderedTable } from "./tableRenderedDomModel"
 import { buildReorderedSimpleTableNode } from "./tableStructureModel"
-import {
-  TABLE_DRAG_SELECTION_TEXT_ATTR,
-  TABLE_DRAG_SELECTION_TEXT_SELECTOR,
-  clearTableTextSelectionForStructuralSelection,
-} from "./tableTextSelectionModel"
+import { TABLE_DRAG_SELECTION_TEXT_ATTR, TABLE_DRAG_SELECTION_TEXT_SELECTOR, clearTableStructuralSelectionOwner, clearTableTextSelectionForStructuralSelection, markTableStructuralSelectionOwner } from "./tableTextSelectionModel"
 import { focusElementWithoutScroll, resolveDocPosSafe, type TableOverlaySelectionRect } from "./useBlockEditorTableOverlayDomAdapter"
 
 const getTableAxisMenuNow = () => (typeof performance !== "undefined" ? performance.now() : Date.now())
@@ -150,7 +146,7 @@ export const useBlockEditorTableOverlayAxisDrag = ({
     window.setTimeout(clearIfTableAxisSelectionIsNotActive, 80)
     window.setTimeout(clearIfTableAxisSelectionIsNotActive, 180)
   }, [clearNativeTableTextSelectionOnly, editorRef, isActiveTableAxisSelection])
-  const suppressTableAxisMenuKeepAlive = useCallback((durationMs = 1_000) => { tableAxisMenuStabilizationTokenRef.current += 1; tableAxisMenuSuppressUntilRef.current = durationMs === Number.POSITIVE_INFINITY ? Number.POSITIVE_INFINITY : getTableAxisMenuNow() + durationMs; tableAxisMenuKeepAliveUntilRef.current = 0; tableAxisMenuKeepAliveSelectionRef.current = null; setTableMenuState(null) }, [setTableMenuState])
+  const suppressTableAxisMenuKeepAlive = useCallback((durationMs = 1_000) => { tableAxisMenuStabilizationTokenRef.current += 1; tableAxisMenuSuppressUntilRef.current = durationMs === Number.POSITIVE_INFINITY ? Number.POSITIVE_INFINITY : getTableAxisMenuNow() + durationMs; tableAxisMenuKeepAliveUntilRef.current = 0; tableAxisMenuKeepAliveSelectionRef.current = null; clearTableStructuralSelectionOwner(); setTableMenuState(null) }, [setTableMenuState])
   useEffect(() => {
     if (typeof window === "undefined") return
     const cancelAxisMenuStabilization = (event: KeyboardEvent) => {
@@ -318,6 +314,7 @@ export const useBlockEditorTableOverlayAxisDrag = ({
   const beginTableAxisDragFromPending = useCallback(
     (pending: PendingTableAxisDragState, clientX: number, clientY: number) => {
       const nextDragState = createDraggedTableAxisState(pending)
+      markTableStructuralSelectionOwner(1_200)
       tableAxisDragSuppressClickRef.current = true
       const currentEditor = editorRef.current
       if (currentEditor) {
@@ -362,6 +359,7 @@ export const useBlockEditorTableOverlayAxisDrag = ({
       if (!withinBounds) return
 
       clearStructuralSelectionNativeText()
+      markTableStructuralSelectionOwner(1_200)
       clearPendingTableAxisDrag()
       tableAxisDragSuppressClickRef.current = false
 
@@ -449,6 +447,7 @@ export const useBlockEditorTableOverlayAxisDrag = ({
         }
         const completedClick = completeClickWithoutDrag?.() ?? false
         if (completedClick) {
+          markTableStructuralSelectionOwner(1_200)
           const stabilizationToken = tableAxisMenuStabilizationTokenRef.current
           tableAxisMenuKeepAliveUntilRef.current = getTableAxisMenuNow() + 3_000
           const stabilizeCompletedAxisSelection = () => {

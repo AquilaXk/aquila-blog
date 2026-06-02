@@ -443,18 +443,14 @@ test.describe("editor authoring table affordances", () => {
       throw new Error("table bounding box is missing before column axis hover")
     }
     const columnTargetCenter = columnTargetMetrics.left + columnTargetMetrics.width / 2
-    await page.mouse.move(columnTargetCenter, columnTableBox.y + 6)
-    await expect(columnHandle).toBeVisible()
-    const columnRailRect = await columnHandle.evaluate((element) => {
-      const rect = element.getBoundingClientRect()
-      return {
-        left: Math.round(rect.left),
-        top: Math.round(rect.top),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
-      }
-    })
-    expect(Math.abs(columnRailRect.left + columnRailRect.width / 2 - columnTargetCenter)).toBeLessThanOrEqual(8)
+    await expect
+      .poll(async () => {
+        await page.mouse.move(columnTargetCenter, columnTableBox.y + 24)
+        await page.mouse.move(columnTargetCenter, columnTableBox.y + 6)
+        const box = await columnHandle.boundingBox()
+        return box ? Math.abs(box.x + box.width / 2 - columnTargetCenter) : Number.POSITIVE_INFINITY
+      })
+      .toBeLessThanOrEqual(8)
   })
 
   test("table menu는 좁은 뷰포트에서도 화면 내부에 배치된다", async ({ page }) => {

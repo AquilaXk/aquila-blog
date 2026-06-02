@@ -1,7 +1,7 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
 import type { MouseEventHandler, MutableRefObject, RefObject } from "react"
 import type { TableAffordanceGeometry } from "./tableAffordanceModel"
-import type { DraggedTableAxisState, TableAxis, TableAxisDragGhostPosition, TableAxisReorderIndicatorState } from "./tableAxisDragModel"
+import type { DraggedTableAxisState, TableAxis, TableAxisDragGhostPosition, TableAxisReorderIndicatorState, TableAxisSelectionState } from "./tableAxisDragModel"
 import type { TableCornerGrowStepMetrics, TableCornerPreviewState } from "./tableCornerGrowModel"
 import type { CompactTableAffordanceKind, TableMenuKind, TableMenuState, TableOverflowCoachmarkState } from "./tableFloatingUiModel"
 import type { TableColumnDragGuideState } from "./tableResizeInteractionModel"
@@ -44,6 +44,7 @@ export type BlockEditorTableOverlayLayerProps = {
   cancelTableOverflowCoachmarkHide: () => void
   cancelTableQuickRailHide: () => void
   compactTableAffordanceKind: CompactTableAffordanceKind
+  currentTableAxisSelection: TableAxisSelectionState | null
   desktopTableRailLayout: TableRailLayout | null
   draggedTableAxisState: DraggedTableAxisState
   editor: TiptapEditor | null

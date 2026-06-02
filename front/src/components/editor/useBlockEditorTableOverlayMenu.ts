@@ -5,6 +5,7 @@ import type { Dispatch, SetStateAction } from "react"
 import { useCallback, useEffect, useMemo } from "react"
 import { getTopLevelBlockIndexFromSelection, getTopLevelBlockPosition } from "./blockSelectionModel"
 import { resolveTableMenuState, type TableMenuKind, type TableMenuState } from "./tableFloatingUiModel"
+import { clearTableTextSelectionForStructuralSelection } from "./tableTextSelectionModel"
 import { getTableOverflowMode } from "./tableWidthModel"
 import { focusElementWithoutScroll, resolveDocPosSafe, type TableOverlaySelectionRect } from "./useBlockEditorTableOverlayDomAdapter"
 
@@ -17,6 +18,7 @@ type UseBlockEditorTableOverlayMenuArgs = {
   setSelectionTick: Dispatch<SetStateAction<number>>
   setTableMenuState: Dispatch<SetStateAction<TableMenuState>>
   stabilizeTableSelectionSurface: (nextEditor?: TiptapEditor | null) => void
+  suppressTableAxisMenuKeepAlive: (durationMs?: number) => void
   tableMenuState: TableMenuState
 }
 
@@ -29,6 +31,7 @@ export const useBlockEditorTableOverlayMenu = ({
   setSelectionTick,
   setTableMenuState,
   stabilizeTableSelectionSurface,
+  suppressTableAxisMenuKeepAlive,
   tableMenuState,
 }: UseBlockEditorTableOverlayMenuArgs) => {
   const updateActiveTableCellAttrs = useCallback(
@@ -140,10 +143,13 @@ export const useBlockEditorTableOverlayMenu = ({
           : CellSelection.colSelection(anchorResolved, headResolved)
 
       clearStickyTopLevelBlockSelection()
+      clearTableTextSelectionForStructuralSelection()
       editor.view.dispatch(editor.state.tr.setSelection(selection))
       focusElementWithoutScroll(editor.view.dom)
+      window.getSelection()?.removeAllRanges()
+      setSelectionTick((prev) => prev + 1)
     },
-    [clearStickyTopLevelBlockSelection, editor]
+    [clearStickyTopLevelBlockSelection, editor, setSelectionTick]
   )
 
   const selectActiveTableBlock = useCallback(() => {
@@ -202,10 +208,11 @@ export const useBlockEditorTableOverlayMenu = ({
       }
 
       action(editor)
+      suppressTableAxisMenuKeepAlive(Number.POSITIVE_INFINITY)
       closeTableMenu()
       stabilizeTableSelectionSurface(editor)
     },
-    [closeTableMenu, editor, stabilizeTableSelectionSurface]
+    [closeTableMenu, editor, stabilizeTableSelectionSurface, suppressTableAxisMenuKeepAlive]
   )
 
   const openTableMenu = useCallback((kind: TableMenuKind, anchorRect: DOMRect, options: { forceOpen?: boolean } = {}) => {
@@ -228,15 +235,17 @@ export const useBlockEditorTableOverlayMenu = ({
   const openSelectionAwareTableMenu = useCallback(
     (kind: TableMenuKind, anchorRect: DOMRect) => {
       if (kind === "row") {
+        suppressTableAxisMenuKeepAlive(0)
         selectCurrentTableAxis("row")
       } else if (kind === "column") {
+        suppressTableAxisMenuKeepAlive(0)
         selectCurrentTableAxis("column")
       } else {
         selectActiveTableBlock()
       }
       openTableMenu(kind, anchorRect)
     },
-    [openTableMenu, selectActiveTableBlock, selectCurrentTableAxis]
+    [openTableMenu, selectActiveTableBlock, selectCurrentTableAxis, suppressTableAxisMenuKeepAlive]
   )
 
   return {

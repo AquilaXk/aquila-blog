@@ -1,4 +1,5 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
+import { TextSelection } from "@tiptap/pm/state"
 import { CellSelection } from "@tiptap/pm/tables"
 import type { Dispatch, MutableRefObject, SetStateAction } from "react"
 import { useEffect } from "react"
@@ -26,6 +27,7 @@ type UseBlockEditorTableOverlayControllerEffectsArgs = {
   setIsTableQuickRailHovered: Dispatch<SetStateAction<boolean>>
   setSelectionTick: Dispatch<SetStateAction<number>>
   setTableMenuState: Dispatch<SetStateAction<TableMenuState>>
+  suppressTableAxisMenuKeepAlive: () => void
   syncTableQuickRailFromElement: (element: Element | null, hoverClientX?: number, hoverClientY?: number) => void
   tableAffordanceGeometry: TableAffordanceGeometry
   tableAffordanceVisibility: TableAffordanceVisibility
@@ -53,6 +55,7 @@ export const useBlockEditorTableOverlayControllerEffects = ({
   setIsTableQuickRailHovered,
   setSelectionTick,
   setTableMenuState,
+  suppressTableAxisMenuKeepAlive,
   syncTableQuickRailFromElement,
   tableAffordanceGeometry,
   tableAffordanceVisibility,
@@ -134,9 +137,15 @@ export const useBlockEditorTableOverlayControllerEffects = ({
       schedule(Math.max(0, remainingDelayMs))
     }
     window.addEventListener("scroll", sync, scrollOptions)
+    document.addEventListener("scroll", sync, scrollOptions)
+    document.documentElement.addEventListener("scroll", sync, scrollOptions)
+    document.body?.addEventListener("scroll", sync, scrollOptions)
     window.addEventListener("resize", sync, resizeOptions)
     return () => {
       window.removeEventListener("scroll", sync, scrollOptions)
+      document.removeEventListener("scroll", sync, scrollOptions)
+      document.documentElement.removeEventListener("scroll", sync, scrollOptions)
+      document.body?.removeEventListener("scroll", sync, scrollOptions)
       window.removeEventListener("resize", sync, resizeOptions)
       if (rafId !== null) window.cancelAnimationFrame(rafId)
       if (timeoutId !== null) window.clearTimeout(timeoutId)
@@ -154,11 +163,12 @@ export const useBlockEditorTableOverlayControllerEffects = ({
     if (tableMenuState && hasStructuralSelection) {
       const anchorDom = currentEditor?.view.domAtPos(currentEditor.state.selection.from).node
       const fallbackAnchor = anchorDom instanceof Element ? anchorDom : anchorDom?.parentElement ?? null
-      const fallbackTable = fallbackAnchor?.closest("table")
+      const selectedCellTable = currentEditor?.view.dom.querySelector(".selectedCell")?.closest("table") ?? null
+      const fallbackTable = fallbackAnchor?.closest("table") ?? selectedCellTable
       if (intersectsViewportBounds((fallbackTable ?? tableElement)?.getBoundingClientRect() ?? null)) {
-        syncTableQuickRailFromElement(fallbackAnchor ?? anchorCell ?? tableElement)
-        return
+        syncTableQuickRailFromElement(fallbackAnchor ?? selectedCellTable ?? anchorCell ?? tableElement)
       }
+      return
     }
     if (!anchorCell || !tableElement || !tableVisible || (!anchorVisible && !isTableQuickRailHovered)) {
       setHoveredTableCellMenuLayout(null)
@@ -268,8 +278,11 @@ export const useBlockEditorTableOverlayControllerEffects = ({
     if (typeof window === "undefined" || !tableMenuState) return
     const scrollOptions: AddEventListenerOptions = { capture: true, passive: true }
     const resizeOptions: AddEventListenerOptions = { passive: true }
-    const isStructuralAxisMenu =
-      isTableStructuralSelection && (tableMenuState.kind === "row" || tableMenuState.kind === "column")
+    const isStructuralAxisMenu = () => {
+      if (tableMenuState.kind !== "row" && tableMenuState.kind !== "column") return false
+      const currentEditor = editorRef.current
+      return isTableStructuralSelection || currentEditor?.state.selection instanceof CellSelection
+    }
     const openedAt = typeof performance !== "undefined" ? performance.now() : Date.now()
     let lastPointerOutsideTableSurfaceAt = 0
     const getNow = () => (typeof performance !== "undefined" ? performance.now() : Date.now())
@@ -287,12 +300,19 @@ export const useBlockEditorTableOverlayControllerEffects = ({
       if (event.type === "scroll") {
         const now = getNow()
         const elapsed = now - openedAt
-        if (isStructuralAxisMenu) {
+        if (isStructuralAxisMenu()) {
           const hasRecentOutsidePointerIntent = now - lastPointerOutsideTableSurfaceAt < 650
-          if (!hasRecentOutsidePointerIntent && elapsed < 2_400) return
+          if (!hasRecentOutsidePointerIntent || elapsed < 240) return
         } else if (elapsed < 240) {
           return
         }
+      }
+      suppressTableAxisMenuKeepAlive()
+      const currentEditor = editorRef.current
+      // User-intent viewport changes exit axis selection so selectedCell cannot reopen a stale fixed overlay.
+      if (currentEditor?.state.selection instanceof CellSelection) {
+        const resolvedPos = currentEditor.state.doc.resolve(currentEditor.state.selection.from)
+        currentEditor.view.dispatch(currentEditor.state.tr.setSelection(TextSelection.near(resolvedPos)))
       }
       setHoveredTableCellMenuLayout(null)
       setIsTableQuickRailHovered(false)
@@ -300,6 +320,9 @@ export const useBlockEditorTableOverlayControllerEffects = ({
       hideTableQuickRailImmediately()
     }
     window.addEventListener("scroll", closeOnViewportChange, scrollOptions)
+    document.addEventListener("scroll", closeOnViewportChange, scrollOptions)
+    document.documentElement.addEventListener("scroll", closeOnViewportChange, scrollOptions)
+    document.body?.addEventListener("scroll", closeOnViewportChange, scrollOptions)
     window.addEventListener("pointermove", rememberPointerIntent, scrollOptions)
     window.addEventListener("wheel", closeOnViewportChange, scrollOptions)
     document.addEventListener("wheel", closeOnViewportChange, scrollOptions)
@@ -308,6 +331,9 @@ export const useBlockEditorTableOverlayControllerEffects = ({
     window.addEventListener("resize", closeOnViewportChange, resizeOptions)
     return () => {
       window.removeEventListener("scroll", closeOnViewportChange, scrollOptions)
+      document.removeEventListener("scroll", closeOnViewportChange, scrollOptions)
+      document.documentElement.removeEventListener("scroll", closeOnViewportChange, scrollOptions)
+      document.body?.removeEventListener("scroll", closeOnViewportChange, scrollOptions)
       window.removeEventListener("pointermove", rememberPointerIntent, scrollOptions)
       window.removeEventListener("wheel", closeOnViewportChange, scrollOptions)
       document.removeEventListener("wheel", closeOnViewportChange, scrollOptions)
@@ -317,10 +343,12 @@ export const useBlockEditorTableOverlayControllerEffects = ({
     }
   }, [
     hideTableQuickRailImmediately,
+    editorRef,
     isTableStructuralSelection,
     setHoveredTableCellMenuLayout,
     setIsTableQuickRailHovered,
     setTableMenuState,
+    suppressTableAxisMenuKeepAlive,
     tableMenuState,
   ])
 

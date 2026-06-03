@@ -235,6 +235,32 @@ test.describe("editor studio state", () => {
     expect(body).toContain(["```ts", "secondUniqueLine();", "```"].join("\n"))
     expect(body.match(/firstUniqueLine/g)?.length).toBe(1)
     expect(body.match(/secondUniqueLine/g)?.length).toBe(1)
+    expect(body.indexOf(["```java", "firstUniqueLine();", "```"].join("\n"))).toBeLessThan(
+      body.indexOf(["```ts", "secondUniqueLine();", "```"].join("\n"))
+    )
+  })
+
+  test("contentHtml fallback은 wrapper-only raw와 child code language를 같은 fence로 복구한다", () => {
+    const staleContent = [
+      "언어 보강 대상입니다.",
+      "",
+      "```ts",
+      "",
+      "```",
+    ].join("\n")
+    const prettyCodeHtml = [
+      '<div class="aq-code-block" data-raw-code="childLanguageOnly();">',
+      '<pre class="aq-code aq-pretty-pre">',
+      '<code class="language-ts">',
+      '</code>',
+      '</pre>',
+      '</div>',
+    ].join("")
+
+    const body = resolveEditorMetaSnapshot(staleContent, prettyCodeHtml).body
+
+    expect(body).toContain(["```ts", "childLanguageOnly();", "```"].join("\n"))
+    expect(body).not.toContain(["```", "childLanguageOnly();", "```"].join("\n"))
   })
 
   test("초기 editor doc의 빈 코드블럭은 source markdown의 non-empty fence로 복구한다", () => {

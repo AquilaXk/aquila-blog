@@ -65,22 +65,7 @@ const EDITOR_BODY_PLACEHOLDER = "내용을 입력하세요."
 const EDITOR_TOGGLE_TITLE_PLACEHOLDER = "토글 제목"
 const HTML_TAG_REGEX = /<\/?([a-z][a-z0-9:-]*)\b([^>]*)>/gi
 const HTML_ATTRIBUTE_REGEX = /\s([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>`]+)))?/g
-const HTML_VOID_TAG_NAMES = new Set([
-  "area",
-  "base",
-  "br",
-  "col",
-  "embed",
-  "hr",
-  "img",
-  "input",
-  "link",
-  "meta",
-  "param",
-  "source",
-  "track",
-  "wbr",
-])
+const HTML_VOID_TAG_NAMES = new Set("area base br col embed hr img input link meta param source track wbr".split(" "))
 export const PREVIEW_SUMMARY_MAX_LENGTH = 150
 export const PREVIEW_SUMMARY_MAX_CONTENT_LENGTH = 50_000
 
@@ -348,6 +333,21 @@ const resolveCodeLanguageFromHtmlAttributes = (attributes: Map<string, string>) 
   return (className.match(/(?:^|\s)language-([a-zA-Z0-9_-]+)/)?.[1] || "").trim()
 }
 
+const backfillLatestRawCodeBlockLanguage = (
+  blocks: Array<{ codeSource: string; language: string }>,
+  codeSource: string,
+  language: string
+) => {
+  if (!language) return
+
+  for (let index = blocks.length - 1; index >= 0; index -= 1) {
+    const previousBlock = blocks[index]
+    if (previousBlock.codeSource !== codeSource) continue
+    if (!previousBlock.language) previousBlock.language = language
+    break
+  }
+}
+
 const extractRawCodeFencedBlocksFromHtml = (contentHtml?: string | null) => {
   if (!contentHtml?.trim()) return ""
 
@@ -364,6 +364,7 @@ const extractRawCodeFencedBlocksFromHtml = (contentHtml?: string | null) => {
     }
 
     const attributes = readHtmlAttributes(String(rawAttributes))
+    const language = resolveCodeLanguageFromHtmlAttributes(attributes)
     const codeSource = (
       attributes.get("data-raw-code") ||
       attributes.get("data-prism-source") ||
@@ -372,21 +373,20 @@ const extractRawCodeFencedBlocksFromHtml = (contentHtml?: string | null) => {
     const isSelfClosing = /\/\s*>$/.test(String(_match)) || HTML_VOID_TAG_NAMES.has(tagName)
     const stackEntry: { rawCodeSource?: string; tagName: string } = { tagName }
     if (codeSource.trim()) {
-      const language = resolveCodeLanguageFromHtmlAttributes(attributes)
       const hasSameRawCodeAncestor = elementStack.some((entry) => entry.rawCodeSource === codeSource)
       if (hasSameRawCodeAncestor) {
-        if (language) {
-          for (let index = blocks.length - 1; index >= 0; index -= 1) {
-            const previousBlock = blocks[index]
-            if (previousBlock.codeSource !== codeSource) continue
-            if (!previousBlock.language) previousBlock.language = language
-            break
-          }
-        }
+        backfillLatestRawCodeBlockLanguage(blocks, codeSource, language)
       } else {
         blocks.push({ codeSource, language })
       }
       stackEntry.rawCodeSource = codeSource
+    } else if (language) {
+      for (let index = elementStack.length - 1; index >= 0; index -= 1) {
+        const ancestorSource = elementStack[index]?.rawCodeSource
+        if (!ancestorSource) continue
+        backfillLatestRawCodeBlockLanguage(blocks, ancestorSource, language)
+        break
+      }
     }
     if (!isSelfClosing) elementStack.push(stackEntry)
     return _match

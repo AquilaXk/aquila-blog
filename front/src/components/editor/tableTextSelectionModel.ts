@@ -361,8 +361,8 @@ let lastActiveTableCell: HTMLElement | null = null
 let lastActiveTableCellPath: ActiveTableCellPath | null = null
 const activeTableCellScrollPreserveCancels = new Set<() => void>()
 const activeTableCellSelectionPreserveCancels = new Set<() => void>()
-const TABLE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES = 48
-const TABLE_TEXT_DRAG_SCROLL_PRESERVE_MIN_MS = 800
+const TABLE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES = 72
+const TABLE_TEXT_DRAG_SCROLL_PRESERVE_MIN_MS = 1_200
 
 export const cancelActiveTableCellScrollPreserves = () => {
   activeTableCellScrollPreserveCancels.forEach((cancel) => cancel())
@@ -859,7 +859,7 @@ export const restoreTableCellTextSelectionIfEscaped = (
 export const preserveTableCellTextSelectionAcrossFrames = (
   editor: TiptapEditor,
   startedCell: HTMLElement,
-  _scrollAnchor: WindowScrollAnchor,
+  scrollAnchor: WindowScrollAnchor,
   resolveEndCell?: () => HTMLElement | null
 ) => {
   if (isTableStructuralSelectionOwnerActive()) return null
@@ -868,8 +868,27 @@ export const preserveTableCellTextSelectionAcrossFrames = (
   let frame = 0
   let cancelled = false
   let restoring = false
+  const cancelScrollPreserve = preserveWindowScrollPositionAcrossFrames(
+    scrollAnchor,
+    TABLE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES,
+    4,
+    TABLE_TEXT_DRAG_SCROLL_PRESERVE_MIN_MS,
+    true,
+    false,
+    true,
+    false,
+    false,
+    () => !hasOwnedTableCellTextSelection(editor, startedCell)
+  )
+  if (cancelScrollPreserve) {
+    activeTableCellScrollPreserveCancels.add(cancelScrollPreserve)
+  }
   const cleanup = () => {
     activeTableCellSelectionPreserveCancels.delete(cancel)
+    if (cancelScrollPreserve) {
+      activeTableCellScrollPreserveCancels.delete(cancelScrollPreserve)
+      cancelScrollPreserve()
+    }
     window.removeEventListener("pointerdown", cancel, true)
     window.removeEventListener("mousedown", cancel, true)
     window.removeEventListener("wheel", cancel, true)

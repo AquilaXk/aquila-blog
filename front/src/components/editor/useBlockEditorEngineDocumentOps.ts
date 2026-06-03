@@ -269,6 +269,7 @@ export const useBlockEditorEngineDocumentOps = ({
       syncSerializedDoc(nextDoc)
 
       if (typeof window !== "undefined") {
+        if (focusIndex === null) return
         window.requestAnimationFrame(() => {
           if (typeof focusIndex === "number") {
             focusTopLevelBlock(focusIndex)

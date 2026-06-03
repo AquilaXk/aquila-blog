@@ -376,7 +376,6 @@ export const useBlockEditorEngineBlockDrag = ({
       }
       event.preventDefault()
       const sourceIndex = blockHandleState.blockIndex
-      promoteTopLevelBlockSelection(sourceIndex)
       const sourceElement = getTopLevelBlockElementByIndex(sourceIndex)
       const preview = createBlockDragPreview(sourceElement, window.innerWidth)
       const pendingState = createPendingBlockDragState(
@@ -401,7 +400,6 @@ export const useBlockEditorEngineBlockDrag = ({
         )
         if (distance < DRAG_THRESHOLD_PX) return
 
-        promoteTopLevelBlockSelection(pending.sourceIndex)
         clearPendingBlockDrag()
         beginBlockDragFromPending(pending, moveEvent.clientX, moveEvent.clientY)
       }
@@ -434,7 +432,6 @@ export const useBlockEditorEngineBlockDrag = ({
       hoveredListItemContext,
       pendingBlockDragCleanupRef,
       pendingBlockDragRef,
-      promoteTopLevelBlockSelection,
       resolveBlockHandleListItemContext,
       resolveEffectiveSelectedListItemContext,
       selectedListItemContextRef,

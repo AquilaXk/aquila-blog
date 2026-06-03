@@ -200,6 +200,43 @@ test.describe("editor studio state", () => {
     )
   })
 
+  test("contentHtml fallback은 wrapper/code 중복 raw attribute가 있어도 여러 빈 코드블럭을 순서대로 복구한다", () => {
+    const staleContent = [
+      "첫 번째 코드입니다.",
+      "",
+      "```java",
+      "",
+      "```",
+      "",
+      "두 번째 코드입니다.",
+      "",
+      "```ts",
+      "",
+      "```",
+    ].join("\n")
+    const prettyCodeHtml = [
+      '<div class="aq-code-block" data-language="java" data-raw-code="firstUniqueLine();">',
+      '<pre class="aq-code aq-pretty-pre">',
+      '<code class="language-java" data-raw-code="firstUniqueLine();">',
+      '</code>',
+      '</pre>',
+      '</div>',
+      '<div class="aq-code-block" data-language="ts" data-raw-code="secondUniqueLine();">',
+      '<pre class="aq-code aq-pretty-pre">',
+      '<code class="language-ts" data-raw-code="secondUniqueLine();">',
+      '</code>',
+      '</pre>',
+      '</div>',
+    ].join("")
+
+    const body = resolveEditorMetaSnapshot(staleContent, prettyCodeHtml).body
+
+    expect(body).toContain(["```java", "firstUniqueLine();", "```"].join("\n"))
+    expect(body).toContain(["```ts", "secondUniqueLine();", "```"].join("\n"))
+    expect(body.match(/firstUniqueLine/g)?.length).toBe(1)
+    expect(body.match(/secondUniqueLine/g)?.length).toBe(1)
+  })
+
   test("초기 editor doc의 빈 코드블럭은 source markdown의 non-empty fence로 복구한다", () => {
     const sourceMarkdown = [
       "코드 본문 보존 대상입니다.",

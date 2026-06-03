@@ -63,9 +63,9 @@ const LEADING_EDITOR_METADATA_LINE_REGEX =
   /^\s*(tags?|categories?|summary|thumbnail|thumb|cover|coverimage|cover_image)\s*:\s*(.+)\s*$/i
 const EDITOR_BODY_PLACEHOLDER = "내용을 입력하세요."
 const EDITOR_TOGGLE_TITLE_PLACEHOLDER = "토글 제목"
-const HTML_CODE_RAW_ATTRIBUTE_TAG_REGEX =
-  /<([a-z][a-z0-9:-]*)\b([^>]*(?:data-raw-code|data-prism-source)[^>]*)>/gi
+const HTML_TAG_REGEX = /<\/?([a-z][a-z0-9:-]*)\b([^>]*)>/gi
 const HTML_ATTRIBUTE_REGEX = /\s([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>`]+)))?/g
+const HTML_VOID_TAG_NAMES = new Set("area base br col embed hr img input link meta param source track wbr".split(" "))
 export const PREVIEW_SUMMARY_MAX_LENGTH = 150
 export const PREVIEW_SUMMARY_MAX_CONTENT_LENGTH = 50_000
 
@@ -333,25 +333,68 @@ const resolveCodeLanguageFromHtmlAttributes = (attributes: Map<string, string>) 
   return (className.match(/(?:^|\s)language-([a-zA-Z0-9_-]+)/)?.[1] || "").trim()
 }
 
+const backfillLatestRawCodeBlockLanguage = (
+  blocks: Array<{ codeSource: string; language: string }>,
+  codeSource: string,
+  language: string
+) => {
+  if (!language) return
+
+  for (let index = blocks.length - 1; index >= 0; index -= 1) {
+    const previousBlock = blocks[index]
+    if (previousBlock.codeSource !== codeSource) continue
+    if (!previousBlock.language) previousBlock.language = language
+    break
+  }
+}
+
 const extractRawCodeFencedBlocksFromHtml = (contentHtml?: string | null) => {
   if (!contentHtml?.trim()) return ""
 
-  const blocks: string[] = []
-  contentHtml.replace(HTML_CODE_RAW_ATTRIBUTE_TAG_REGEX, (_match, _tagName, rawAttributes) => {
+  const blocks: Array<{ codeSource: string; language: string }> = []
+  const elementStack: Array<{ rawCodeSource?: string; tagName: string }> = []
+  contentHtml.replace(HTML_TAG_REGEX, (_match, rawTagName, rawAttributes) => {
+    const tagName = String(rawTagName).toLowerCase()
+    if (String(_match).startsWith("</")) {
+      for (let index = elementStack.length - 1; index >= 0; index -= 1) {
+        const current = elementStack.pop()
+        if (current?.tagName === tagName) break
+      }
+      return _match
+    }
+
     const attributes = readHtmlAttributes(String(rawAttributes))
+    const language = resolveCodeLanguageFromHtmlAttributes(attributes)
     const codeSource = (
       attributes.get("data-raw-code") ||
       attributes.get("data-prism-source") ||
       ""
     ).trimEnd()
-    if (!codeSource.trim()) return _match
-
-    const language = resolveCodeLanguageFromHtmlAttributes(attributes)
-    blocks.push(`\`\`\`${language}\n${codeSource}\n\`\`\``)
+    const isSelfClosing = /\/\s*>$/.test(String(_match)) || HTML_VOID_TAG_NAMES.has(tagName)
+    const stackEntry: { rawCodeSource?: string; tagName: string } = { tagName }
+    if (codeSource.trim()) {
+      const hasSameRawCodeAncestor = elementStack.some((entry) => entry.rawCodeSource === codeSource)
+      if (hasSameRawCodeAncestor) {
+        backfillLatestRawCodeBlockLanguage(blocks, codeSource, language)
+      } else {
+        blocks.push({ codeSource, language })
+      }
+      stackEntry.rawCodeSource = codeSource
+    } else if (language) {
+      for (let index = elementStack.length - 1; index >= 0; index -= 1) {
+        const ancestorSource = elementStack[index]?.rawCodeSource
+        if (!ancestorSource) continue
+        backfillLatestRawCodeBlockLanguage(blocks, ancestorSource, language)
+        break
+      }
+    }
+    if (!isSelfClosing) elementStack.push(stackEntry)
     return _match
   })
 
-  return blocks.join("\n\n")
+  return blocks
+    .map(({ codeSource, language }) => `\`\`\`${language}\n${codeSource}\n\`\`\``)
+    .join("\n\n")
 }
 
 export const resolveEditorMetaSnapshot = (content: string, contentHtml?: string | null): ResolvedEditorMetaSnapshot => {

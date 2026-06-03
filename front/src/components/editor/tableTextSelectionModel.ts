@@ -873,7 +873,7 @@ export const preserveTableCellTextSelectionAcrossFrames = (
     TABLE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES,
     4,
     TABLE_TEXT_DRAG_SCROLL_PRESERVE_MIN_MS,
-    true,
+    false,
     false,
     true,
     false,

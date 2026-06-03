@@ -992,8 +992,18 @@ export const setupPost507ModifyRequestCapture = async (
 ): Promise<Post507ModifyRequestCapture> => {
   const snapshots: Post507ModifyRequestSnapshot[] = []
 
-  await page.route(`**/post/api/v1/posts/${postId}`, async (route) => {
+  await page.route(`**/post/api/v1/posts/${postId}**`, async (route) => {
     const request = route.request()
+    const corsHeaders = {
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Allow-Headers": request.headers()["access-control-request-headers"] || "content-type,x-aquila-csrf",
+      "Access-Control-Allow-Methods": "PUT,OPTIONS",
+      "Access-Control-Allow-Origin": request.headers().origin || "*",
+    }
+    if (request.method() === "OPTIONS") {
+      await route.fulfill({ status: 204, headers: corsHeaders })
+      return
+    }
     if (request.method() !== "PUT") {
       await route.fallback()
       return
@@ -1019,6 +1029,7 @@ export const setupPost507ModifyRequestCapture = async (
 
     await route.fulfill({
       contentType: "application/json",
+      headers: corsHeaders,
       body: JSON.stringify({
         resultCode: "200-1",
         msg: "OK",
@@ -1026,6 +1037,16 @@ export const setupPost507ModifyRequestCapture = async (
           id: postId,
           version: (snapshot.version ?? 1) + 1,
         },
+      }),
+    })
+  })
+  await page.route("**/api/revalidate", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        revalidated: true,
+        count: 1,
+        paths: [`/posts/${postId}`],
       }),
     })
   })
@@ -1132,6 +1153,7 @@ export const expectPost507CodeGateSatisfied = async (
   await expect
     .poll(() => modifyCapture.read(), { timeout: 5_000 })
     .toEqual(expect.objectContaining({ method: "PUT" }))
+  await expect(page.getByRole("heading", { name: "수정 설정" })).toBeHidden({ timeout: 5_000 })
   const captured = modifyCapture.read()
   expect(captured).not.toBeNull()
   if (!captured) return
@@ -1374,18 +1396,57 @@ const expectPost507WheelScrollsWithoutLock = async (page: Page, label: string) =
 const expectPost507LowerBodyBlockDragStarts = async (page: Page, editor: Locator) => {
   const lowerBody = editor
     .locator("p", { hasText: "Stateless는 “서버가 아무것도 안 하는 구조”가 아닙니다." })
-    .first()
+    .last()
   await lowerBody.evaluate((element) => {
     element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
   })
-  await page.waitForTimeout(160)
+  let lowerBodyVisible = false
+  let lowerBodyVisibilitySnapshot: unknown = null
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    await lowerBody.evaluate((element) => {
+      element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
+    })
+    await page.waitForTimeout(120)
+    const box = await lowerBody.boundingBox()
+    const viewport = page.viewportSize() ?? { height: 760, width: 1280 }
+    lowerBodyVisible = Boolean(box && box.y + box.height > 120 && box.y < viewport.height - 120)
+    lowerBodyVisibilitySnapshot = { attempt, box, viewport }
+    if (lowerBodyVisible) break
+  }
+  if (!lowerBodyVisible) {
+    throw new Error(
+      `post 507 lower body did not enter viewport: ${JSON.stringify({
+        diagnostics: await readPost507EditorDiagnostics(page, "lower-body-scroll-into-view"),
+        lowerBodyCount: await lowerBody.count(),
+        snapshot: lowerBodyVisibilitySnapshot,
+      })}`
+    )
+  }
   const bodyBox = await lowerBody.boundingBox()
   if (!bodyBox) throw new Error("post 507 lower body block metrics are missing")
-  await page.mouse.move(bodyBox.x + 24, bodyBox.y + Math.min(18, bodyBox.height / 2))
   const handle = page.getByTestId("block-drag-handle")
-  await expect(handle).toBeVisible({ timeout: 5_000 })
+  await expect
+    .poll(
+      async () => {
+        const currentBox = await lowerBody.boundingBox()
+        if (!currentBox) return false
+        await page.mouse.move(currentBox.x + currentBox.width / 2, currentBox.y + Math.min(18, currentBox.height / 2))
+        await page.mouse.move(currentBox.x + 24, currentBox.y + Math.min(18, currentBox.height / 2))
+        await page.waitForTimeout(80)
+        return (await handle.count()) > 0 && Boolean(await handle.boundingBox())
+      },
+      { timeout: 5_000 }
+    )
+    .toBe(true)
   const handleBox = await handle.boundingBox()
-  if (!handleBox) throw new Error("post 507 lower body block handle metrics are missing")
+  if (!handleBox) {
+    throw new Error(
+      `post 507 lower body block handle metrics are missing: ${JSON.stringify({
+        bodyBox,
+        diagnostics: await readPost507EditorDiagnostics(page, "lower-body-block-handle-missing"),
+      })}`
+    )
+  }
   const beforeScrollTop = await readPost507ScrollTop(page)
   await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2)
   await page.mouse.down()
@@ -1466,6 +1527,7 @@ export const runPost507LowerRealWorkflowGate = async (
   }
 
   await clearPost507SelectionState(page)
+  await page.waitForTimeout(1_300)
   await expectPost507LowerBodyBlockDragStarts(page, editor)
 }
 

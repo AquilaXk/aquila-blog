@@ -12,6 +12,12 @@ const adminMember = {
 const readScrollTop = (page: Page) =>
   page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
 
+const releaseKeyboardModifiers = async (page: Page) => {
+  for (const key of ["Alt", "Control", "Meta", "Shift"]) {
+    await page.keyboard.up(key).catch(() => {})
+  }
+}
+
 const readSelectionText = (page: Page) =>
   page.evaluate(
     () =>
@@ -61,25 +67,40 @@ const dragBetweenTextRanges = async (
   texts: { end: string; start: string },
   options: { cancelAtStart?: boolean; cancelBeforeMouseup?: boolean; dragOverBeforeRelease?: boolean; dropInsteadOfMouseup?: boolean; endAtCellRightEdge?: boolean; skipRelease?: boolean; skipSyntheticMoves?: boolean; syntheticWithoutNativeSelection?: boolean } = {}
 ) => {
+  await releaseKeyboardModifiers(page)
   await startTarget.count()
   await endTarget.count()
+  const dragToken = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  await startTarget.evaluate((element, token) => element.setAttribute("data-qa-table-drag-start", token), dragToken)
+  await endTarget.evaluate((element, token) => element.setAttribute("data-qa-table-drag-end", token), dragToken)
   const metrics = await page.evaluate(
-    ({ endText, label, startText }) => {
-      const table = Array.from(document.querySelectorAll("table")).find((candidate) => {
+    ({ dragToken, endText, label, startText }) => {
+      const markedStart = document.querySelector(`[data-qa-table-drag-start="${dragToken}"]`)
+      const markedEnd = document.querySelector(`[data-qa-table-drag-end="${dragToken}"]`)
+      const table = markedStart?.closest("table") ?? Array.from(document.querySelectorAll("table")).find((candidate) => {
         const text = candidate.textContent?.replace(/\s+/g, " ").trim() ?? ""
         return text.includes(startText) && text.includes(endText)
       })
       const cells = Array.from(table?.querySelectorAll("th, td") ?? [])
-      const startElement = cells.find((candidate) =>
+      const startElement = markedStart && table?.contains(markedStart) ? markedStart : cells.find((candidate) =>
         candidate.textContent?.replace(/\s+/g, " ").trim().includes(startText)
       )
-      const endElement = cells.find((candidate) =>
+      const endElement = markedEnd && table?.contains(markedEnd) ? markedEnd : cells.find((candidate) =>
         candidate.textContent?.replace(/\s+/g, " ").trim().includes(endText)
       )
       if (!startElement) throw new Error(`${label} start cell is missing`)
       if (!endElement) throw new Error(`${label} end cell is missing`)
       table?.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
 
+      const cellInteriorPoint = (element: Element, edge: "end" | "start") => {
+        const rect = element.getBoundingClientRect()
+        return {
+          x: edge === "start" ? rect.left + Math.min(12, rect.width / 2) : rect.right - Math.min(12, rect.width / 2),
+          y: rect.top + rect.height / 2,
+        }
+      }
+      const isPointInsideCell = (element: Element, point: { x: number; y: number }) =>
+        document.elementsFromPoint(point.x, point.y).some((pointElement) => pointElement.closest("th, td") === element)
       const measureText = (element: Element, textToSelect: string, edge: "end" | "start") => {
         const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
         while (walker.nextNode()) {
@@ -97,10 +118,11 @@ const dragBetweenTextRanges = async (
           if (rect.width <= 2 || rect.height <= 2) {
             throw new Error(`${label} ${edge} text rect is too small`)
           }
-          return {
+          const point = {
             x: edge === "start" ? rect.left + 2 : rect.right - 2,
             y: rect.top + rect.height / 2,
           }
+          return isPointInsideCell(element, point) ? point : cellInteriorPoint(element, edge)
         }
         throw new Error(`${label} ${edge} text node is missing`)
       }
@@ -117,9 +139,42 @@ const dragBetweenTextRanges = async (
         start: measureText(startElement, startText, "start"),
       }
     },
-    { endText: texts.end, label, startText: texts.start }
+    { dragToken, endText: texts.end, label, startText: texts.start }
   )
   const beforeScrollTop = await readScrollTop(page)
+  const resolveCurrentEndPoint = () =>
+    page.evaluate(
+      ({ dragToken, endAtCellRightEdge, endText, label, startText }) => {
+        const markedStart = document.querySelector(`[data-qa-table-drag-start="${dragToken}"]`)
+        const markedEnd = document.querySelector(`[data-qa-table-drag-end="${dragToken}"]`)
+        const table = markedStart?.closest("table") ?? Array.from(document.querySelectorAll("table")).find((candidate) => {
+          const text = candidate.textContent?.replace(/\s+/g, " ").trim() ?? ""
+          return text.includes(startText) && text.includes(endText)
+        })
+        const endElement = markedEnd && table?.contains(markedEnd) ? markedEnd : Array.from(table?.querySelectorAll("th, td") ?? []).find((candidate) =>
+          candidate.textContent?.replace(/\s+/g, " ").trim().includes(endText)
+        )
+        if (!endElement) throw new Error(`${label} current end cell is missing`)
+        const cellRect = endElement.getBoundingClientRect()
+        if (endAtCellRightEdge) return { x: cellRect.right - 8, y: cellRect.top + cellRect.height / 2 }
+        const walker = document.createTreeWalker(endElement, NodeFilter.SHOW_TEXT)
+        while (walker.nextNode()) {
+          const textNode = walker.currentNode as Text
+          const startOffset = textNode.data.indexOf(endText)
+          if (startOffset < 0) continue
+          const range = document.createRange()
+          range.setStart(textNode, startOffset)
+          range.setEnd(textNode, startOffset + endText.length)
+          const rect = Array.from(range.getClientRects()).find((candidate) => candidate.width > 2 && candidate.height > 2) ?? range.getBoundingClientRect()
+          const point = { x: rect.right - 2, y: rect.top + rect.height / 2 }
+          return document.elementsFromPoint(point.x, point.y).some((pointElement) => pointElement.closest("th, td") === endElement)
+            ? point
+            : { x: cellRect.right - Math.min(12, cellRect.width / 2), y: cellRect.top + cellRect.height / 2 }
+        }
+        throw new Error(`${label} current end text node is missing`)
+      },
+      { dragToken, endAtCellRightEdge: options.endAtCellRightEdge ?? false, endText: texts.end, label, startText: texts.start }
+    )
 
   if (options.syntheticWithoutNativeSelection) {
     await page.evaluate(({ cancelAtStart, cancelBeforeMouseup, dragOverBeforeRelease, dropInsteadOfMouseup, end, endAtCellRightEdge, endCellRightEdge, skipRelease, skipSyntheticMoves, start }) => {
@@ -167,15 +222,19 @@ const dragBetweenTextRanges = async (
       }
     }, { ...metrics, cancelAtStart: options.cancelAtStart ?? false, cancelBeforeMouseup: options.cancelBeforeMouseup ?? false, dragOverBeforeRelease: options.dragOverBeforeRelease ?? false, dropInsteadOfMouseup: options.dropInsteadOfMouseup ?? false, endAtCellRightEdge: options.endAtCellRightEdge ?? false, skipRelease: options.skipRelease ?? false, skipSyntheticMoves: options.skipSyntheticMoves ?? false })
     await page.waitForTimeout(1_000)
+    await page.evaluate((token) => document.querySelectorAll(`[data-qa-table-drag-start="${token}"], [data-qa-table-drag-end="${token}"]`).forEach((element) => { element.removeAttribute("data-qa-table-drag-start"); element.removeAttribute("data-qa-table-drag-end") }), dragToken)
     return { beforeScrollTop, afterScrollTop: await readScrollTop(page), selectionText: await readSelectionText(page) }
   }
 
   const endPoint = options.endAtCellRightEdge ? metrics.endCellRightEdge : metrics.end
   await page.mouse.move(metrics.start.x, metrics.start.y)
   await page.mouse.down()
-  await page.mouse.move(endPoint.x, endPoint.y, { steps: 36 })
+  const shouldRecheckEndPoint = options.endAtCellRightEdge || texts.start !== texts.end
+  const stableEndPoint = shouldRecheckEndPoint ? await resolveCurrentEndPoint().catch(() => endPoint) : endPoint
+  await page.mouse.move(stableEndPoint.x, stableEndPoint.y, { steps: 36 })
   await page.mouse.up()
   await page.waitForTimeout(1_000)
+  await page.evaluate((token) => document.querySelectorAll(`[data-qa-table-drag-start="${token}"], [data-qa-table-drag-end="${token}"]`).forEach((element) => { element.removeAttribute("data-qa-table-drag-start"); element.removeAttribute("data-qa-table-drag-end") }), dragToken)
 
   return { beforeScrollTop, afterScrollTop: await readScrollTop(page), selectionText: await readSelectionText(page) }
 }

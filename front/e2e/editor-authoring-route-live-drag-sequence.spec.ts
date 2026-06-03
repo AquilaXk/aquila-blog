@@ -567,18 +567,15 @@ test.describe("editor authoring route live drag sequence", () => {
       element.scrollIntoView({ block: "center", inline: "nearest" })
     })
     await page.waitForTimeout(120)
-    const reissueClickPoint = await reissueCodeContent.evaluate((element) => {
+    const reissueClickY = await reissueCodeContent.evaluate((element) => {
       const rect = element.getBoundingClientRect()
       const style = window.getComputedStyle(element)
       const lineHeight = Number.parseFloat(style.lineHeight || "22") || 22
       const paddingTop = Number.parseFloat(style.paddingTop || "0") || 0
-      return {
-        x: rect.left + 80,
-        y: rect.top + Math.min(rect.height - 8, paddingTop + lineHeight * 5.5),
-      }
+      return Math.min(rect.height - 8, paddingTop + lineHeight * 5.5)
     })
     const beforeLowerCodeClick = await readScrollTop(page)
-    await page.mouse.click(reissueClickPoint.x, reissueClickPoint.y)
+    await reissueCodeContent.click({ position: { x: 80, y: reissueClickY } })
     await page.waitForTimeout(2_600)
     await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforeLowerCodeClick + 24)
     await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforeLowerCodeClick - 24)

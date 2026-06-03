@@ -1040,13 +1040,19 @@ provision_db_runtime_role() {
     return 1
   fi
 
-  local provision_sql
-  provision_sql="$(cat <<'SQL'
+  if compose exec -T db_1 psql -U postgres -d "${db_name}" -v ON_ERROR_STOP=1 \
+    -v runtime_user="${runtime_user}" \
+    -v runtime_password="${runtime_password}" \
+    -v migration_user="${flyway_user}" >/dev/null 2>&1 <<'SQL'; then
+SELECT set_config('app.runtime_user', :'runtime_user', false);
+SELECT set_config('app.runtime_password', :'runtime_password', false);
+SELECT set_config('app.migration_user', :'migration_user', false);
+
 DO $$
 DECLARE
-  runtime_user text := :'runtime_user';
-  runtime_password text := :'runtime_password';
-  migration_user text := :'migration_user';
+  runtime_user text := current_setting('app.runtime_user');
+  runtime_password text := current_setting('app.runtime_password');
+  migration_user text := current_setting('app.migration_user');
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = runtime_user) THEN
     EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', runtime_user, runtime_password);
@@ -1063,13 +1069,6 @@ BEGIN
   EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO %I', migration_user, runtime_user);
 END $$;
 SQL
-)"
-
-  if compose exec -T db_1 psql -U postgres -d "${db_name}" -v ON_ERROR_STOP=1 \
-    -v runtime_user="${runtime_user}" \
-    -v runtime_password="${runtime_password}" \
-    -v migration_user="${flyway_user}" \
-    -c "${provision_sql}" >/dev/null 2>&1; then
     echo "runtime role provisioned in ${db_name}: runtime=${runtime_user}, migration=${flyway_user}"
     return 0
   fi

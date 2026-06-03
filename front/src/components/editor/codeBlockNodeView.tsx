@@ -45,6 +45,7 @@ import {
 export { getPreferredCodeLanguage, normalizeCodeLanguage } from "./codeBlockNodeViewLanguageModel"
 export { CodeBlockEditorStyles } from "./codeBlockNodeViewStyles"
 let codeDomTextRangePreserveGeneration = 0
+const CODE_SCROLL_PRESERVE_MIN_MS = 4_800
 type CodeDragSelectionSession = { active: boolean; anchorPos: number; lastHeadPos?: number; startX: number; startY: number }
 export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos }: NodeViewProps) => {
   const menuId = useId()
@@ -68,6 +69,11 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
     () => selectCodeBlockText({ editor, getPos, nodeSize: node.nodeSize }),
     [editor, getPos, node.nodeSize]
   )
+  const preserveCodeSelectAllScroll = useCallback(() => {
+    const scrollAnchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
+    preserveWindowScrollPositionAcrossFrames(scrollAnchor, 192, 4, CODE_SCROLL_PRESERVE_MIN_MS, false, true, true)
+    return scrollAnchor
+  }, [])
   const resolveCodeTextPosFromPointer = useCallback(
     (clientX: number, clientY: number, contentRoot: HTMLElement | null) => {
       if (typeof getPos !== "function") return
@@ -183,7 +189,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       window.addEventListener("keydown", cancelForKeydown, true)
       window.addEventListener("wheel", cancelForKeydown, { capture: true, passive: true })
       document.addEventListener("selectionchange", cancelOnSelectionChange, true)
-      preserveWindowScrollPositionAcrossFrames(scrollAnchor, 192, 4, 3_200, false, false, true)
+      preserveWindowScrollPositionAcrossFrames(scrollAnchor, 192, 4, CODE_SCROLL_PRESERVE_MIN_MS, false, true, true)
       window.requestAnimationFrame(() => { cancelArmed = true })
       restore()
     },
@@ -217,7 +223,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       } else {
         selection?.removeAllRanges()
       }
-      preserveWindowScrollPositionAcrossFrames({ x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }, 192, 4, 3_200, false, false, true)
+      preserveWindowScrollPositionAcrossFrames({ x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }, 192, 4, CODE_SCROLL_PRESERVE_MIN_MS, false, false, true)
       codeDragSelectionRef.current = {
         active: false,
         anchorPos,
@@ -301,14 +307,16 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       window.removeEventListener("pointercancel", handleWindowMouseUp, true)
     }
   }, [getPos, node.nodeSize, preserveCodeDomTextRange, resolveCodeTextPosFromPointer])
-  const ensureCodeDomTextSelection = useCallback((contentRoot: HTMLElement | null) => {
+  const ensureCodeDomTextSelection = useCallback((contentRoot: HTMLElement | null, scrollAnchor?: { x: number; y: number }) => {
     if (!contentRoot || typeof window === "undefined") return
+    if (scrollAnchor) preserveWindowScrollPositionAcrossFrames(scrollAnchor, 192, 4, CODE_SCROLL_PRESERVE_MIN_MS, false, true, true)
     window.requestAnimationFrame(() => {
       if (!contentRoot.isConnected) return
       const selectedText = window.getSelection()?.toString() || ""
       if (selectedText.trim()) return
       if (!(contentRoot.textContent || "").trim()) return
       selectCodeDomTextContents(contentRoot)
+      if (scrollAnchor) preserveWindowScrollPositionAcrossFrames(scrollAnchor, 192, 4, CODE_SCROLL_PRESERVE_MIN_MS, false, true, true)
     })
   }, [])
   useEffect(() => {
@@ -357,6 +365,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       if (!(event.metaKey || event.ctrlKey)) return
       if (event.key.toLowerCase() !== "a") return
       const activeElement = document.activeElement
+      const scrollAnchor = preserveCodeSelectAllScroll()
       const selection = window.getSelection()
       const anchorElement =
         selection?.anchorNode instanceof Element
@@ -376,7 +385,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       event.stopPropagation()
       event.stopImmediatePropagation()
       if (selectCurrentCodeBlockText()) {
-        ensureCodeDomTextSelection(contentRoot)
+        ensureCodeDomTextSelection(contentRoot, scrollAnchor)
         return
       }
       selectCodeDomTextContents(contentRoot)
@@ -410,7 +419,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       }
       lastCodePointerContentRootRef.current = null
     }
-  }, [ensureCodeDomTextSelection, selectCurrentCodeBlockText])
+  }, [ensureCodeDomTextSelection, preserveCodeSelectAllScroll, selectCurrentCodeBlockText])
 
   useEffect(() => {
     let disposed = false
@@ -509,8 +518,9 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
     event.stopPropagation()
 
     const contentRoot = shellRef.current?.querySelector<HTMLElement>(".aq-code-editor-content") ?? null
+    const scrollAnchor = preserveCodeSelectAllScroll()
     if (selectCurrentCodeBlockText()) {
-      ensureCodeDomTextSelection(contentRoot)
+      ensureCodeDomTextSelection(contentRoot, scrollAnchor)
       return
     }
     if (selectCodeDomTextContents(contentRoot)) return
@@ -522,7 +532,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
     preserveWindowScrollForRichBlockSelectAll()
     editor.view.dispatch(tr)
     focusElementWithoutScroll(editor.view.dom as HTMLElement)
-  }, [editor, getPos, ensureCodeDomTextSelection, selectCurrentCodeBlockText])
+  }, [editor, getPos, ensureCodeDomTextSelection, preserveCodeSelectAllScroll, selectCurrentCodeBlockText])
   return (
     <CodeBlockEditorWrapper data-selected={selected} data-code-block-wrapper="true">
       <CodeBlockEditorHeader data-code-block-header="true">

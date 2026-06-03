@@ -14,18 +14,17 @@ test.describe("editor authoring route post 507 lower real workflow gate", () => 
   }) => {
     await page.setViewportSize({ width: 1580, height: 900 })
     const postId = 990
-    const modifyCapture = await setupPost507ModifyRequestCapture(page, postId)
     const { editor, finalTable } = await mockEditorRouteWithPost507(page, {
       postId,
       title: "post 507 lower real workflow gate 글",
     })
+    const modifyCapture = await setupPost507ModifyRequestCapture(page, postId)
 
     await installPost507InteractionTelemetry(page)
-
-    await expectPost507CodeGateSatisfied(page, modifyCapture)
 
     // cell text drag -> row axis selection -> column axis selection -> wheel scroll -> lower body/block state
     await runPost507LowerRealWorkflowGate(page, { editor, finalTable })
     await expectPost507LowerGateTelemetryStable(page, "post-507-lower-real-workflow")
+    await expectPost507CodeGateSatisfied(page, modifyCapture)
   })
 })

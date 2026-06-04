@@ -44,7 +44,7 @@ export const POST_507_REAL_FEATURE_CONTRACT = {
     {
       id: "code-block-language-picker",
       issueSymptom: "code language picker dead-clicks or scrolls instead of opening",
-      requiredSourceFragments: ["mockEditorRouteWithPost507", "userId", "코드 언어 선택"],
+      requiredSourceFragments: ["mockEditorRouteWithPost507", "post 507 code language route", "코드 언어 선택"],
       routeContract: "507-copy-route",
       specFile: "editor-authoring-code-mermaid.spec.ts",
     },

@@ -523,8 +523,9 @@ export const useBlockEditorTableOverlayAxisDrag = ({
     if (typeof window === "undefined") return
     const keepAliveAxisSelection = currentTableAxisSelection ?? tableAxisMenuKeepAliveSelectionRef.current
     if (!keepAliveAxisSelection) return
-    let timeoutId: number | null = null
+    const stabilizationToken = tableAxisMenuStabilizationTokenRef.current; let timeoutId: number | null = null
     const stabilizeAxisMenu = () => {
+      if (tableAxisMenuStabilizationTokenRef.current !== stabilizationToken) return
       const now = getTableAxisMenuNow(); if (now < tableAxisMenuSuppressUntilRef.current || (!currentTableAxisSelection && now > tableAxisMenuKeepAliveUntilRef.current)) return
       const activeEditor = editorRef.current
       const keepAliveSelection = tableAxisMenuKeepAliveSelectionRef.current

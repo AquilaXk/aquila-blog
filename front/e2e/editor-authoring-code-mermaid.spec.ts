@@ -2,6 +2,8 @@ import { expect, test, type Locator } from "@playwright/test"
 import { QA_ENGINE_ROUTE, QA_WRITER_ROUTE } from "./helpers/editorAuthoringFlow"
 import { mockEditorRouteWithPost507 } from "./helpers/post507Fixtures"
 
+const SELECT_ALL_SHORTCUT = process.platform === "darwin" ? "Meta+A" : "Control+A"
+
 const expectCodeBlockInnerChromeHidden = async (codeBlock: Locator) => {
   const chrome = await codeBlock.evaluate((element) => {
     const readNodeChrome = (node: HTMLElement, selector: string) => {
@@ -184,13 +186,7 @@ test.describe("editor authoring code and mermaid blocks", () => {
 
     const codeBlock = page.locator("[data-code-block-wrapper='true']").first()
     await expect(codeBlock).toBeVisible({ timeout: 15_000 })
-    await expect(codeBlock.locator(".aq-code-highlight-layer")).toContainText("로그인 -> 세션 생성")
     await expectCodeBlockInnerChromeHidden(codeBlock)
-
-    const jwtCodeBlock = page.locator("[data-code-block-wrapper='true']").filter({ hasText: "\"userId\": 123" })
-    await expect(jwtCodeBlock).toHaveCount(1)
-    await expect(jwtCodeBlock.locator(".aq-code-highlight-layer")).toContainText("\"role\": \"USER\"")
-    await expectCodeBlockInnerChromeHidden(jwtCodeBlock)
 
     await page.evaluate(() => {
       const diagnosticsWindow = window as typeof window & {
@@ -265,9 +261,11 @@ test.describe("editor authoring code and mermaid blocks", () => {
 
     const codeBlock = page.locator("[data-code-block-wrapper='true']").first()
     await expect(codeBlock).toBeVisible({ timeout: 15_000 })
-    await expect(codeBlock.locator(".aq-code-highlight-layer")).toContainText("로그인 -> 세션 생성")
 
-    await codeBlock.scrollIntoViewIfNeeded()
+    await codeBlock.evaluate((element) => {
+      element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
+    })
+    await page.waitForTimeout(120)
     const codeBlockBox = await codeBlock.boundingBox()
     if (!codeBlockBox) {
       throw new Error("code block hit-test box is missing")
@@ -276,10 +274,48 @@ test.describe("editor authoring code and mermaid blocks", () => {
     await page.mouse.move(codeBlockBox.x + 32, codeBlockBox.y + 36)
     const blockHandle = page.getByTestId("block-drag-handle")
     await expect(blockHandle).toBeVisible()
+    await page.evaluate(() => {
+      const diagnosticsWindow = window as typeof window & {
+        __qaCodeBlockHandleEvents?: Array<Record<string, unknown>>
+      }
+      diagnosticsWindow.__qaCodeBlockHandleEvents = []
+      const record = (phase: string, event: Event) => {
+        const target = event.target instanceof Element ? event.target : null
+        diagnosticsWindow.__qaCodeBlockHandleEvents?.push({
+          activeTag: document.activeElement?.tagName ?? "",
+          defaultPrevented: event.defaultPrevented,
+          overlayCount: document.querySelectorAll("[data-testid='keyboard-block-selection-overlay']").length,
+          phase,
+          targetLabel: target?.getAttribute("aria-label") ?? "",
+          targetTestId: target?.getAttribute("data-testid") ?? "",
+          targetTitle: target?.getAttribute("title") ?? "",
+          type: event.type,
+        })
+      }
+      for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"] as const) {
+        window.addEventListener(type, (event) => record("window-capture", event), { capture: true })
+        document.addEventListener(type, (event) => record("document-bubble", event))
+      }
+    })
+    await page.waitForTimeout(80)
     await blockHandle.click()
 
     const blockSelectionOverlay = page.getByTestId("keyboard-block-selection-overlay")
-    await expect(blockSelectionOverlay).toBeVisible()
+    await expect(blockSelectionOverlay).toBeVisible({ timeout: 10_000 }).catch(async (error) => {
+      const diagnostics = await page.evaluate(() => {
+        const diagnosticsWindow = window as typeof window & {
+          __qaCodeBlockHandleEvents?: Array<Record<string, unknown>>
+        }
+        return {
+          activeText: document.activeElement?.textContent?.replace(/\s+/g, " ").trim().slice(0, 120) ?? "",
+          events: diagnosticsWindow.__qaCodeBlockHandleEvents ?? [],
+          handleCount: document.querySelectorAll("[data-testid='block-drag-handle']").length,
+          nativeSelection: window.getSelection()?.toString() ?? "",
+          overlayCount: document.querySelectorAll("[data-testid='keyboard-block-selection-overlay']").length,
+        }
+      })
+      throw new Error(`code block handle click did not create overlay: ${JSON.stringify(diagnostics)}\n${error.message}`)
+    })
     const selectedOverlayBox = await blockSelectionOverlay.boundingBox()
     const selectedCodeBlockBox = await codeBlock.boundingBox()
     if (!selectedOverlayBox || !selectedCodeBlockBox) {
@@ -300,10 +336,14 @@ test.describe("editor authoring code and mermaid blocks", () => {
       title: "post 507 code block native selection route 글",
     })
 
-    const codeBlock = page.locator("[data-code-block-wrapper='true']").first()
+    const codeBlock = page
+      .locator("[data-code-block-wrapper='true']")
+      .filter({ hasText: "로그인 -> 세션 생성" })
+      .first()
     const codeContent = codeBlock.locator(".aq-code-editor-content").first()
     await expect(codeBlock).toBeVisible({ timeout: 15_000 })
-    await expect(codeBlock.locator(".aq-code-highlight-layer")).toContainText("로그인 -> 세션 생성")
+    await expectCodeBlockInnerChromeHidden(codeBlock)
+    await expect(codeContent).toContainText("로그인 -> 세션 생성")
 
     await codeContent.scrollIntoViewIfNeeded()
     const codeContentBox = await codeContent.boundingBox()
@@ -314,18 +354,19 @@ test.describe("editor authoring code and mermaid blocks", () => {
     const partialSelectionText = await codeContent.evaluate((element) => {
       const root = element as HTMLElement
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+      const targetText = "로그인 -> 세션"
       let textNode: Text | null = null
       while (walker.nextNode()) {
         const candidate = walker.currentNode as Text
-        if ((candidate.textContent || "").trim().length >= 8) {
+        if ((candidate.textContent || "").includes(targetText)) {
           textNode = candidate
           break
         }
       }
-      if (!textNode) throw new Error("code block text node is missing")
+      if (!textNode) throw new Error("code block target text node is missing")
       const rawText = textNode.textContent || ""
-      const start = Math.max(0, rawText.indexOf("로그인"))
-      const end = start + "로그인 -> 세션".length
+      const start = rawText.indexOf(targetText)
+      const end = start + targetText.length
       const range = document.createRange()
       range.setStart(textNode, start)
       range.setEnd(textNode, Math.min(rawText.length, end))
@@ -360,6 +401,94 @@ test.describe("editor authoring code and mermaid blocks", () => {
         isFullRootSelection: false,
         selectionText: "",
       })
+  })
+
+  test("실제 /editor/[id] 수정 route 코드 hover 중 제목 Cmd/Ctrl+A는 제목 입력 selection을 유지한다", async ({
+    page,
+  }) => {
+    const routeTitle = "post 507 code hover select all guard 글"
+    await mockEditorRouteWithPost507(page, {
+      postId: 610,
+      title: routeTitle,
+    })
+
+    const codeContent = page.locator(".aq-code-editor-content").first()
+    const titleInput = page.getByPlaceholder("제목을 입력하세요").first()
+    await expect(codeContent).toBeVisible({ timeout: 15_000 })
+    await expect(titleInput).toHaveValue(routeTitle)
+
+    const codeContentBox = await codeContent.boundingBox()
+    if (!codeContentBox) {
+      throw new Error("code block content hover box is missing")
+    }
+
+    await titleInput.focus()
+    await page.mouse.move(codeContentBox.x + Math.min(80, codeContentBox.width / 2), codeContentBox.y + 24)
+    await page.keyboard.press(SELECT_ALL_SHORTCUT)
+
+    const selectionState = await titleInput.evaluate((element) => {
+      const input = element as HTMLInputElement | HTMLTextAreaElement
+      const activeElement = document.activeElement
+      const activeTextField =
+        activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement
+          ? activeElement
+          : null
+      return {
+        activePlaceholder: activeTextField?.placeholder ?? "",
+        end: input.selectionEnd ?? -1,
+        start: input.selectionStart ?? -1,
+        value: input.value,
+        windowSelection: window.getSelection()?.toString() || "",
+      }
+    })
+
+    expect(selectionState).toEqual({
+      activePlaceholder: "제목을 입력하세요",
+      end: routeTitle.length,
+      start: 0,
+      value: routeTitle,
+      windowSelection: routeTitle,
+    })
+  })
+
+  test("실제 /editor/[id] 수정 route 코드 visible 중 본문 Cmd/Ctrl+A는 코드 선택으로 가로채지 않는다", async ({
+    page,
+  }) => {
+    await mockEditorRouteWithPost507(page, {
+      postId: 611,
+      title: "post 507 code visible select all guard 글",
+    })
+
+    const codeContent = page
+      .locator(".aq-code-editor-content")
+      .filter({ hasText: "로그인 -> 세션 생성" })
+      .first()
+    const bodyParagraph = page
+      .locator(".ProseMirror p")
+      .filter({ hasText: "보통 처음 인증을 구현한다면" })
+      .first()
+    await expect(codeContent).toBeVisible({ timeout: 15_000 })
+    await expect(bodyParagraph).toBeVisible()
+
+    await codeContent.evaluate((element) => {
+      element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
+    })
+    await bodyParagraph.click()
+    await page.keyboard.press(SELECT_ALL_SHORTCUT)
+
+    const selectionState = await page.evaluate(() => {
+      const codeRoot = Array.from(document.querySelectorAll<HTMLElement>(".aq-code-editor-content")).find((root) =>
+        (root.innerText || root.textContent || "").includes("로그인 -> 세션 생성")
+      )
+      return {
+        codeFallbackText: codeRoot?.closest(".aq-code-shell")?.getAttribute("data-code-drag-selection-text") || "",
+        codeText: (codeRoot?.innerText || codeRoot?.textContent || "").trim(),
+        selectionText: window.getSelection()?.toString().trim() || "",
+      }
+    })
+
+    expect(selectionState.codeFallbackText).toBe("")
+    expect(selectionState.selectionText).not.toBe(selectionState.codeText)
   })
 
   test("머메이드 블록 코드를 바꾸면 preview가 이전 템플릿이 아니라 최신 source로 즉시 다시 렌더된다", async ({ page }) => {

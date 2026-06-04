@@ -1,7 +1,7 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
 import { TextSelection } from "@tiptap/pm/state"
 import { useEffect, useRef, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react"
-import { cancelTablePointerScrollPreserves, clearNextEditorPointerAfterTable, markNextEditorPointerAfterTable, preserveWindowScrollForCodePointerFocus, preserveWindowScrollForEditorPointerFocus, preserveWindowScrollPositionAcrossFrames, type WindowScrollAnchor } from "./blockHandleLayoutModel"
+import { cancelTablePointerScrollPreserves, clearNextEditorPointerAfterTable, markNextEditorPointerAfterCodeSelection, markNextEditorPointerAfterTable, preserveWindowScrollForCodePointerFocus, preserveWindowScrollForEditorPointerFocus, preserveWindowScrollPositionAcrossFrames, type WindowScrollAnchor } from "./blockHandleLayoutModel"
 import { resolveMultiCellTableDomSelectionBubbleState, resolvePersistedTableTextSelectionBubbleState } from "./floatingBubbleDomRangeModel"
 import { collapseTableCellTextSelectionToPoint } from "./tableTextCaretModel"
 import { isTableSelectionActive } from "./tableStructureModel"
@@ -142,6 +142,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       root.focus({ preventScroll: true })
       const range = document.createRange()
       range.selectNodeContents(root)
+      markNextEditorPointerAfterCodeSelection()
       selection.removeAllRanges()
       selection.addRange(range)
       root.closest(".aq-code-shell")?.setAttribute("data-code-drag-selection-text", selection.toString() || root.innerText || root.textContent || "")
@@ -168,8 +169,8 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         return true
       }
       const handlePreservedSelectionChange = () => { if (restoring || !isCurrentPreserveGeneration()) return; const currentRoot = resolveCurrentRoot(), selection = window.getSelection(), anchor = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null, focus = selection?.focusNode instanceof Element ? selection.focusNode : selection?.focusNode?.parentElement ?? null; if (selection?.toString().trim() && (!anchor || !focus || !currentRoot.contains(anchor) || !currentRoot.contains(focus))) { cancelCodeDragSelectionPreserve(); return }; restoreIfMissing() }
-      const cleanupPreservedSelection = () => { document.removeEventListener("selectionchange", handlePreservedSelectionChange, true); window.removeEventListener("pointerdown", cancelPreservedSelection, true); window.removeEventListener("mousedown", cancelPreservedSelection, true); window.removeEventListener("keydown", cancelPreservedSelectionForKeydown, true); window.removeEventListener("wheel", cancelPreservedSelectionForKeydown, true) }
-      const isCurrentCodeDragEvent = (event: Event) => { const codeTextDragStart = codeTextDragStartRef.current; const targetElement = event.target instanceof Element ? event.target : event.target instanceof Node ? event.target.parentElement : null; const currentRoot = resolveCurrentRoot(), currentShell = currentRoot.closest(".aq-code-shell") ?? codeShell; return Boolean(targetElement && (currentRoot.contains(targetElement) || currentShell?.contains(targetElement)) && ((codeTextDragStart?.scrollPreserveStarted && codeTextDragStart.root === currentRoot) || currentShell?.getAttribute("data-code-drag-selection-text")?.trim())) }, cancelPreservedSelection = (event: Event) => { if (!isCurrentPreserveGeneration()) return; if (!isCurrentCodeDragEvent(event)) cancelCodeDragSelectionPreserve() }
+      const cleanupPreservedSelection = () => { document.removeEventListener("selectionchange", handlePreservedSelectionChange, true); window.removeEventListener("pointerdown", cancelPreservedSelection, true); window.removeEventListener("mousedown", cancelPreservedSelection, true); window.removeEventListener("click", cancelPreservedSelection, true); window.removeEventListener("keydown", cancelPreservedSelectionForKeydown, true); window.removeEventListener("wheel", cancelPreservedSelectionForKeydown, true) }
+      const isCurrentCodeDragEvent = (event: Event) => { const codeTextDragStart = codeTextDragStartRef.current; const targetElement = event.target instanceof Element ? event.target : event.target instanceof Node ? event.target.parentElement : null; const currentRoot = resolveCurrentRoot(), currentShell = currentRoot.closest(".aq-code-shell") ?? codeShell; return Boolean(targetElement && (currentRoot.contains(targetElement) || currentShell?.contains(targetElement)) && codeTextDragStart?.scrollPreserveStarted && codeTextDragStart.root === currentRoot) }, cancelPreservedSelection = (event: Event) => { if (!isCurrentPreserveGeneration()) return; if (!isCurrentCodeDragEvent(event)) cancelCodeDragSelectionPreserve() }
       const cancelPreservedSelectionForKeydown = () => { if (isCurrentPreserveGeneration()) cancelCodeDragSelectionPreserve() }
       const restore = () => {
         if (!isCurrentPreserveGeneration()) { cleanupPreservedSelection(); return }; if (!resolveCurrentRoot().isConnected) { codeDragSelectionPreserveRafId = null; codeDragSelectionPreserveGeneration += 1; cleanupPreservedSelection(); return }
@@ -187,6 +188,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       document.addEventListener("selectionchange", handlePreservedSelectionChange, true)
       window.addEventListener("pointerdown", cancelPreservedSelection, { capture: true, passive: true })
       window.addEventListener("mousedown", cancelPreservedSelection, { capture: true, passive: true })
+      window.addEventListener("click", cancelPreservedSelection, true)
       window.addEventListener("keydown", cancelPreservedSelectionForKeydown, true)
       window.addEventListener("wheel", cancelPreservedSelectionForKeydown, { capture: true, passive: true })
       cleanupCodeDragSelectionPreserve = cleanupPreservedSelection
@@ -196,16 +198,9 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       const codeTextDragStart = codeTextDragStartRef.current
       if (!codeTextDragStart?.root.isConnected) return false
       if (isSelectionInsideCodeDragRoot(codeTextDragStart.root)) { const rootText = codeTextDragStart.root.innerText || codeTextDragStart.root.textContent || ""; const selectionText = window.getSelection()?.toString() || ""; if (rootText && normalizeCodeSelectionText(selectionText) !== normalizeCodeSelectionText(rootText)) return false; codeTextDragStart.root.closest(".aq-code-shell")?.setAttribute("data-code-drag-selection-text", selectionText || rootText); return true }
-      const selected = selectCodeDragRoot(codeTextDragStart.root)
-      if (selected) {
-        preserveCodeDragRootSelectionAcrossFrames(codeTextDragStart.root)
-      }
-      return selected
+      const selected = selectCodeDragRoot(codeTextDragStart.root); if (selected) preserveCodeDragRootSelectionAcrossFrames(codeTextDragStart.root); return selected
     }
-    const hasMovedCodeTextDrag = (event: MouseEvent | PointerEvent) => {
-      const codeTextDragStart = codeTextDragStartRef.current
-      return Boolean(codeTextDragStart && (Math.abs(event.clientX - codeTextDragStart.x) > 4 || Math.abs(event.clientY - codeTextDragStart.y) > 4))
-    }
+    const hasMovedCodeTextDrag = (event: MouseEvent | PointerEvent) => { const codeTextDragStart = codeTextDragStartRef.current; return Boolean(codeTextDragStart && (Math.abs(event.clientX - codeTextDragStart.x) > 4 || Math.abs(event.clientY - codeTextDragStart.y) > 4)) }
     const syncBubble = () => {
       const activeEditor = editorRef.current ?? currentEditor
       if (!activeEditor) {
@@ -511,7 +506,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       const pendingTableTextDragStart = tableTextDragPendingStartRef.current
       const codeTextDragStart = codeTextDragStartRef.current
       const activeEditor = editorRef.current ?? currentEditor, rawNativeTableRangeSnapshot = activeEditor ? resolveTableTextSelectionRangeCells(event.clientX, event.clientY, event.target) : null, nativeTableRangeSnapshot = rawNativeTableRangeSnapshot?.anchorCell !== rawNativeTableRangeSnapshot?.pointCell ? rawNativeTableRangeSnapshot : null
-      if (isTableStructuralSelectionOwnerActive()) { tableTextDragStartRef.current = null; tableTextDragPendingStartRef.current = null; nonTableTextDragStartRef.current = null; mouseTextSelectionInProgressRef.current = false; cancelTableTextDragPreserves(); cancelActiveTableCellTextSelectionPreserves(); return }
+      if (isTableStructuralSelectionOwnerActive() && !tableTextDragStart && !pendingTableTextDragStart) { tableTextDragStartRef.current = null; tableTextDragPendingStartRef.current = null; nonTableTextDragStartRef.current = null; mouseTextSelectionInProgressRef.current = false; cancelTableTextDragPreserves(); cancelActiveTableCellTextSelectionPreserves(); return }
       const activeWindowSelection = window.getSelection()
       if (activeEditor && hasTableStructuralSelection(activeEditor) && (activeWindowSelection?.toString().trim() || tableTextDragStart)) { const nativeTableRange = activeWindowSelection && activeWindowSelection.rangeCount > 0 ? activeWindowSelection.getRangeAt(0).cloneRange() : null, completedTableTextDrag = tableTextDragStart, restoreNativeTableRange = () => { try { const nextSelection = window.getSelection(); nextSelection?.removeAllRanges(); if (nativeTableRange) nextSelection?.addRange(nativeTableRange.cloneRange()); else if (completedTableTextDrag?.cell.isConnected) { const range = document.createRange(); range.selectNodeContents(completedTableTextDrag.cell); nextSelection?.addRange(range) } document.querySelectorAll(TABLE_DRAG_SELECTION_TEXT_SELECTOR).forEach((element) => element.removeAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR)); document.documentElement.removeAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR) } catch {} }; tableTextDragStartRef.current = null; tableTextDragPendingStartRef.current = null; nonTableTextDragStartRef.current = null; mouseTextSelectionInProgressRef.current = false; cancelTableTextDragPreserves(); collapseStaleTableEditorSelection(activeEditor); restoreNativeTableRange(); window.requestAnimationFrame(restoreNativeTableRange); window.setTimeout(restoreNativeTableRange, 40); tableTextSelectionExternalClearWatcher?.markActive(); syncBubbleOnMouseUpRef.current = true; return }
       if (!mouseTextSelectionInProgressRef.current && !tableTextDragStart && !pendingTableTextDragStart && !codeTextDragStart && !nativeTableRangeSnapshot) return
@@ -529,7 +524,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         if (selectedCodeFallback && codeTextDragStart?.root.isConnected) preserveCodeDragRootSelectionAcrossFrames(codeTextDragStart.root)
       }
       if (activeEditor && tableTextDragStart && !tableTextDragMoved) { const selection = window.getSelection(), currentSelectionText = selection?.toString().trim() ?? "", collapsedTableCaret = event.type === "pointerup" && currentSelectionText === tableTextDragInitialSelectionTextRef.current && collapseTableCellTextSelectionToPoint(activeEditor, event.clientX, event.clientY, event.target); if (!collapsedTableCaret) { const anchorElement = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null, focusElement = selection?.focusNode instanceof Element ? selection.focusNode : selection?.focusNode?.parentElement ?? null, anchorCell = anchorElement?.closest("th, td"), focusCell = focusElement?.closest("th, td"); if (currentSelectionText && anchorCell && focusCell && anchorCell.closest("table") === focusCell.closest("table") && activeEditor.view.dom.contains(anchorCell)) syncBubbleOnMouseUpRef.current = true } }
-      if (activeEditor && tableTextDragStart && (tableTextDragMoved || tableTextDragStart.coveredControlFallback)) { const completedTableTextDrag = tableTextDragStart, completedMultiCellDrag = Boolean(completedTableTextDrag.endCell && completedTableTextDrag.endCell !== completedTableTextDrag.cell); cancelTableTextDragPreserves(); if (completedMultiCellDrag && completedTableTextDrag.endCell) { const endCell = completedTableTextDrag.endCell; selectTableCellTextRange(completedTableTextDrag.cell, endCell); cleanupTableDragSelectionPreserve = preserveTableCellTextSelectionAcrossFrames(activeEditor, completedTableTextDrag.cell, completedTableTextDrag.scrollAnchor, () => endCell); event.preventDefault(); event.stopPropagation(); syncBubbleOnMouseUpRef.current = true } else { const restored = restoreActiveTableTextDragSelection(true, true, false), preservedSingleCell = preservePendingSingleCellNativeTextSelectionAcrossFrames(completedTableTextDrag.cell); if (restored || preservedSingleCell) { event.preventDefault(); event.stopPropagation(); syncBubbleOnMouseUpRef.current = true; if (!preservedSingleCell) window.requestAnimationFrame(() => restoreTableCellTextSelectionIfEscaped(activeEditor, completedTableTextDrag.cell, null, true, true, false, completedTableTextDrag.endCell)) } } }
+      if (activeEditor && tableTextDragStart && (tableTextDragMoved || tableTextDragStart.coveredControlFallback)) { const completedTableTextDrag = tableTextDragStart, completedMultiCellDrag = Boolean(completedTableTextDrag.endCell && completedTableTextDrag.endCell !== completedTableTextDrag.cell); cancelTableTextDragPreserves(); if (completedMultiCellDrag && completedTableTextDrag.endCell) { const endCell = completedTableTextDrag.endCell; selectTableCellTextRange(completedTableTextDrag.cell, endCell); cleanupTableDragSelectionPreserve = preserveTableCellTextSelectionAcrossFrames(activeEditor, completedTableTextDrag.cell, completedTableTextDrag.scrollAnchor, () => endCell); event.preventDefault(); event.stopPropagation(); syncBubbleOnMouseUpRef.current = true } else { const restoreSingleCellAfterRelease = () => preservePendingSingleCellNativeTextSelectionAcrossFrames(completedTableTextDrag.cell, completedTableTextDrag.scrollAnchor), restored = restoreActiveTableTextDragSelection(true, true, false), preservedSingleCell = preservePendingSingleCellNativeTextSelectionAcrossFrames(completedTableTextDrag.cell, completedTableTextDrag.scrollAnchor); preserveWindowScrollPositionAcrossFrames(completedTableTextDrag.scrollAnchor, 420, 4, 7_000, false, false, true); window.requestAnimationFrame(restoreSingleCellAfterRelease); window.setTimeout(restoreSingleCellAfterRelease, 80); window.setTimeout(restoreSingleCellAfterRelease, 240); if (restored || preservedSingleCell) { event.preventDefault(); event.stopPropagation(); syncBubbleOnMouseUpRef.current = true; if (!preservedSingleCell) window.requestAnimationFrame(() => restoreTableCellTextSelectionIfEscaped(activeEditor, completedTableTextDrag.cell, null, true, true, false, completedTableTextDrag.endCell)) } } }
       tableTextDragStartRef.current = null; tableTextDragInitialSelectionTextRef.current = ""
       tableTextDragPendingStartRef.current = null
       codeTextDragStartRef.current = null; nonTableTextDragStartRef.current = null
@@ -578,22 +573,5 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       codeTextDragStartRef.current = null; nonTableTextDragStartRef.current = null
       cancelBubbleHide()
     }
-  }, [
-    bubbleToolbarHoveredRef,
-    cancelBubbleHide,
-    clearWindowTextSelection,
-    editor,
-    editorRef,
-    hasTableStructuralSelection,
-    hideTableQuickRailImmediately,
-    isTableColumnRailResizeActive,
-    mouseTextSelectionInProgressRef,
-    scheduleBubbleHide,
-    scheduleTableQuickRailHide,
-    setBubbleState,
-    syncBubbleOnMouseUpRef,
-    syncTableQuickRailFromElement,
-    tableMenuState,
-    tryStartTableColumnResizeFromDomHandle,
-  ])
+  }, [bubbleToolbarHoveredRef, cancelBubbleHide, clearWindowTextSelection, editor, editorRef, hasTableStructuralSelection, hideTableQuickRailImmediately, isTableColumnRailResizeActive, mouseTextSelectionInProgressRef, scheduleBubbleHide, scheduleTableQuickRailHide, setBubbleState, syncBubbleOnMouseUpRef, syncTableQuickRailFromElement, tableMenuState, tryStartTableColumnResizeFromDomHandle])
 }

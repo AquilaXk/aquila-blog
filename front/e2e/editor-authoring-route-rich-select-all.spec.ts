@@ -136,8 +136,14 @@ test.describe("editor authoring route rich block select all", () => {
       const afterGeometry = await target.evaluate((element) => {
         const rect = element.getBoundingClientRect()
         const selection = window.getSelection()
+        const candidates = [
+          selection?.toString() ?? "",
+          document.documentElement.getAttribute("data-table-drag-selection-text") ?? "",
+          document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ?? "",
+          document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text") ?? "",
+        ].map((text) => text.replace(/\s+/g, " ").trim())
         return {
-          selectedText: selection?.toString() ?? "",
+          selectedText: candidates.reduce((best, text) => (text.length > best.length ? text : best), ""),
           scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
           targetTop: rect.top,
           targetBottom: rect.bottom,

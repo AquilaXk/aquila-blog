@@ -15,6 +15,7 @@ type UseBlockEditorTableOverlayMenuArgs = {
   editor: TiptapEditor | null
   getCurrentSelectedTableRect: (activeEditor?: TiptapEditor | null) => TableOverlaySelectionRect | null
   isTableStructuralSelection: boolean
+  selectionTick: number
   setSelectionTick: Dispatch<SetStateAction<number>>
   setTableMenuState: Dispatch<SetStateAction<TableMenuState>>
   stabilizeTableSelectionSurface: (nextEditor?: TiptapEditor | null) => void
@@ -28,6 +29,7 @@ export const useBlockEditorTableOverlayMenu = ({
   editor,
   getCurrentSelectedTableRect,
   isTableStructuralSelection,
+  selectionTick,
   setSelectionTick,
   setTableMenuState,
   stabilizeTableSelectionSurface,
@@ -186,6 +188,7 @@ export const useBlockEditorTableOverlayMenu = ({
   }, [editor])
 
   useEffect(() => {
+    void selectionTick
     const isTableNodeSelection = () =>
       editor?.state.selection instanceof NodeSelection && editor.state.selection.node.type.name === "table"
     if (isTableStructuralSelection || (tableMenuState?.kind === "table" && isTableNodeSelection())) return
@@ -199,7 +202,7 @@ export const useBlockEditorTableOverlayMenu = ({
       setTableMenuState(null)
     }, 360)
     return () => window.clearTimeout(closeTimer)
-  }, [editor, isTableStructuralSelection, setTableMenuState, tableMenuState?.kind])
+  }, [editor, isTableStructuralSelection, selectionTick, setTableMenuState, tableMenuState?.kind])
 
   const closeTableMenu = useCallback(() => setTableMenuState(null), [setTableMenuState])
 

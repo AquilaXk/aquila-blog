@@ -129,11 +129,7 @@ test.describe("editor authoring route 507 selection scroll owner", () => {
     await page.waitForTimeout(120)
 
     const codeEditorContent = codeBlock.locator(".aq-code-editor-content").first()
-    if (!((await codeEditorContent.textContent()) || "").trim()) {
-      await codeEditorContent.click({ position: { x: 28, y: 18 } })
-      await page.keyboard.insertText("login session flow sample")
-      await expect.poll(async () => ((await codeEditorContent.textContent()) || "").trim()).not.toBe("")
-    }
+    await expect.poll(async () => ((await codeEditorContent.textContent()) || "").trim()).not.toBe("")
     const beforeClickScrollTop = await readScrollTop(page)
     await codeEditorContent.click({ position: { x: 28, y: 18 } })
     await page.waitForTimeout(220)

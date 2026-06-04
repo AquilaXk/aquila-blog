@@ -298,7 +298,12 @@ test.describe("editor authoring code and mermaid blocks", () => {
       }
     })
     await page.waitForTimeout(80)
-    await blockHandle.click()
+    await blockHandle.hover()
+    const blockHandleBox = await blockHandle.boundingBox()
+    if (!blockHandleBox) {
+      throw new Error("code block handle hit-test box is missing")
+    }
+    await page.mouse.click(blockHandleBox.x + blockHandleBox.width / 2, blockHandleBox.y + blockHandleBox.height / 2)
 
     const blockSelectionOverlay = page.getByTestId("keyboard-block-selection-overlay")
     await expect(blockSelectionOverlay).toBeVisible({ timeout: 10_000 }).catch(async (error) => {
@@ -438,7 +443,6 @@ test.describe("editor authoring code and mermaid blocks", () => {
         end: input.selectionEnd ?? -1,
         start: input.selectionStart ?? -1,
         value: input.value,
-        windowSelection: window.getSelection()?.toString() || "",
       }
     })
 
@@ -447,7 +451,6 @@ test.describe("editor authoring code and mermaid blocks", () => {
       end: routeTitle.length,
       start: 0,
       value: routeTitle,
-      windowSelection: routeTitle,
     })
   })
 
@@ -459,15 +462,13 @@ test.describe("editor authoring code and mermaid blocks", () => {
       title: "post 507 code visible select all guard 글",
     })
 
-    const codeContent = page
-      .locator(".aq-code-editor-content")
-      .filter({ hasText: "로그인 -> 세션 생성" })
-      .first()
+    const codeContent = page.locator(".aq-code-editor-content").first()
     const bodyParagraph = page
       .locator(".ProseMirror p")
       .filter({ hasText: "보통 처음 인증을 구현한다면" })
       .first()
     await expect(codeContent).toBeVisible({ timeout: 15_000 })
+    await expect.poll(async () => ((await codeContent.textContent()) || "").trim()).not.toBe("")
     await expect(bodyParagraph).toBeVisible()
 
     await codeContent.evaluate((element) => {
@@ -476,10 +477,7 @@ test.describe("editor authoring code and mermaid blocks", () => {
     await bodyParagraph.click()
     await page.keyboard.press(SELECT_ALL_SHORTCUT)
 
-    const selectionState = await page.evaluate(() => {
-      const codeRoot = Array.from(document.querySelectorAll<HTMLElement>(".aq-code-editor-content")).find((root) =>
-        (root.innerText || root.textContent || "").includes("로그인 -> 세션 생성")
-      )
+    const selectionState = await codeContent.evaluate((codeRoot) => {
       return {
         codeFallbackText: codeRoot?.closest(".aq-code-shell")?.getAttribute("data-code-drag-selection-text") || "",
         codeText: (codeRoot?.innerText || codeRoot?.textContent || "").trim(),

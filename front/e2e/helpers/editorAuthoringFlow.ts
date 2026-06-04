@@ -9,21 +9,22 @@ export const UNDO_SHORTCUT = process.platform === "darwin" ? "Meta+z" : "Control
 
 export const expectVisibleBox = async (locator: Locator, errorMessage: string) => {
   await expect(locator).toBeVisible({ timeout: 15_000 })
+  let visibleBox: Awaited<ReturnType<Locator["boundingBox"]>> | null = null
   await expect
     .poll(
       async () => {
         const box = await locator.boundingBox()
-        return Boolean(box && box.width > 0 && box.height > 0)
+        if (box && box.width > 0 && box.height > 0) visibleBox = box
+        return Boolean(visibleBox)
       },
       { timeout: 15_000 }
     )
     .toBe(true)
 
-  const box = await locator.boundingBox()
-  if (!box) {
+  if (!visibleBox) {
     throw new Error(errorMessage)
   }
-  return box
+  return visibleBox
 }
 
 export const expectEditorToContainLoadedText = async (editor: Locator, text: string) => {

@@ -55,7 +55,14 @@ let lastCodePointerAt = 0
 let activeCodeSelectionOwnerRoot: HTMLElement | null = null
 const CODE_SCROLL_PRESERVE_MIN_MS = 4_800
 const CODE_SELECT_ALL_ACTIVE_GRACE_MS = 4_000
-type CodeDragSelectionSession = { active: boolean; anchorPos: number; lastHeadPos?: number; startX: number; startY: number }
+type CodeDragSelectionSession = {
+  active: boolean
+  anchorPos: number
+  lastHeadPos?: number
+  scrollAnchor: { x: number; y: number }
+  startX: number
+  startY: number
+}
 export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos }: NodeViewProps) => {
   const menuId = useId()
   const menuRef = useRef<HTMLDivElement>(null)
@@ -97,6 +104,10 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
     const scrollAnchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
     preserveWindowScrollPositionAcrossFrames(scrollAnchor, 240, 4, CODE_SCROLL_PRESERVE_MIN_MS, false, false, true, false, false, undefined, true)
     return scrollAnchor
+  }, [])
+  const preserveCodePointerFocusScroll = useCallback((scrollAnchor: { x: number; y: number }) => {
+    preserveWindowScrollPositionAcrossFrames(scrollAnchor, 240, 4, CODE_SCROLL_PRESERVE_MIN_MS, false, false, true, false, false, undefined, true)
+    preserveWindowScrollPositionAcrossFrames(scrollAnchor, 240, 4, CODE_SCROLL_PRESERVE_MIN_MS, false, false, true)
   }, [])
   const resolveCodeTextPosFromPointer = useCallback(
     (clientX: number, clientY: number, contentRoot: HTMLElement | null) => {
@@ -229,11 +240,11 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       window.addEventListener("keydown", cancelForKeydown, true)
       window.addEventListener("wheel", cancelForKeydown, { capture: true, passive: true })
       document.addEventListener("selectionchange", cancelOnSelectionChange, true)
-      preserveWindowScrollPositionAcrossFrames(scrollAnchor, 240, 4, CODE_SCROLL_PRESERVE_MIN_MS, false, false, true, false, false, undefined, true)
+      preserveCodePointerFocusScroll(scrollAnchor)
       window.requestAnimationFrame(() => { cancelArmed = true })
       restore()
     },
-    [persistCodeSelectionText, selectCodeDomTextRange]
+    [persistCodeSelectionText, preserveCodePointerFocusScroll, selectCodeDomTextRange]
   )
   const startCodeDragSelection = useCallback(
     (event: ReactMouseEvent<HTMLDivElement> | ReactPointerEvent<HTMLDivElement>) => {
@@ -253,7 +264,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       if (typeof anchorPos !== "number") return
       event.stopPropagation()
       const scrollAnchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
-      preserveWindowScrollPositionAcrossFrames(scrollAnchor, 240, 4, CODE_SCROLL_PRESERVE_MIN_MS, false, false, true, false, false, undefined, true)
+      preserveCodePointerFocusScroll(scrollAnchor)
       const selection = window.getSelection(), persistedCodeSelectionText = shell.getAttribute("data-code-drag-selection-text")?.trim() || ""
       const anchorElement = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null, focusElement = selection?.focusNode instanceof Element ? selection.focusNode : selection?.focusNode?.parentElement ?? null
       const selectedText = selection?.toString().trim() || "", contentText = contentRoot.textContent?.trim() || ""
@@ -269,12 +280,13 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       codeDragSelectionRef.current = {
         active: false,
         anchorPos,
+        scrollAnchor,
         startX: event.clientX,
         startY: event.clientY,
       }
       if (hasExistingCodeSelection) focusElementWithoutScroll(contentRoot)
     },
-    [preserveCodeDomTextRange, resolveCodeTextPosFromPointer, selectCodeDomTextRange]
+    [preserveCodeDomTextRange, preserveCodePointerFocusScroll, resolveCodeTextPosFromPointer, selectCodeDomTextRange]
   )
 
   const handleCodePointerDownCapture = useCallback(
@@ -297,6 +309,50 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
     },
     [rememberActiveCodeContentRoot, startCodeDragSelection]
   )
+
+  useEffect(() => {
+    const shell = shellRef.current
+    if (!shell) return
+    const preserveNativeCodeTextPointerScroll = (event: MouseEvent | PointerEvent) => {
+      if (event.button !== 0 || ("pointerType" in event && event.pointerType && event.pointerType !== "mouse")) return
+      const contentRoot = shell.querySelector<HTMLElement>(".aq-code-editor-content")
+      if (!contentRoot || !(event.target instanceof Node) || !shell.contains(event.target)) return
+      const targetElement = event.target instanceof Element ? event.target : event.target.parentElement
+      if (targetElement?.closest("[data-code-block-header='true'], button, input, textarea, select")) return
+      const contentRect = contentRoot.getBoundingClientRect()
+      const insideContentBox =
+        event.clientX >= contentRect.left &&
+        event.clientX <= contentRect.right &&
+        event.clientY >= contentRect.top &&
+        event.clientY <= contentRect.bottom
+      const isCodeTextTarget =
+        contentRoot.contains(event.target) ||
+        Boolean(targetElement?.closest(".aq-code-highlight-layer")) ||
+        (targetElement === shell && insideContentBox)
+      if (!isCodeTextTarget) return
+      if (!event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
+        const selection = window.getSelection()
+        const anchorElement = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null
+        const focusElement = selection?.focusNode instanceof Element ? selection.focusNode : selection?.focusNode?.parentElement ?? null
+        const hasNativeCodeTextSelection = Boolean(
+          selection?.toString().trim() &&
+            (contentRoot.contains(anchorElement) || contentRoot.contains(focusElement))
+        )
+        const hasPersistedCodeSelection = Boolean(shell.getAttribute("data-code-drag-selection-text")?.trim())
+        if (hasNativeCodeTextSelection || hasPersistedCodeSelection) {
+          selection?.removeAllRanges()
+          shell.removeAttribute("data-code-drag-selection-text")
+        }
+      }
+      preserveCodePointerFocusScroll({ x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY })
+    }
+    shell.addEventListener("pointerdown", preserveNativeCodeTextPointerScroll, true)
+    shell.addEventListener("mousedown", preserveNativeCodeTextPointerScroll, true)
+    return () => {
+      shell.removeEventListener("pointerdown", preserveNativeCodeTextPointerScroll, true)
+      shell.removeEventListener("mousedown", preserveNativeCodeTextPointerScroll, true)
+    }
+  }, [preserveCodePointerFocusScroll])
 
   const handleCodeClickCapture = useCallback(() => {
     const contentRoot = rememberActiveCodeContentRoot()
@@ -361,7 +417,9 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
             element.removeAttribute("data-code-drag-selection-text")
           })
         }
+        preserveCodePointerFocusScroll(session.scrollAnchor)
         focusCodeTextPosition(session.anchorPos)
+        preserveCodePointerFocusScroll(session.scrollAnchor)
         return
       }
       const resolvedHeadPos = resolveCodeTextPosFromPointer(event.clientX, event.clientY, contentRoot)
@@ -382,7 +440,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       window.removeEventListener("pointerup", handleWindowMouseUp, true)
       window.removeEventListener("pointercancel", handleWindowMouseUp, true)
     }
-  }, [focusCodeTextPosition, getPos, node.nodeSize, preserveCodeDomTextRange, resolveCodeTextPosFromPointer])
+  }, [focusCodeTextPosition, getPos, node.nodeSize, preserveCodeDomTextRange, preserveCodePointerFocusScroll, resolveCodeTextPosFromPointer])
   const ensureCodeDomTextSelection = useCallback((contentRoot: HTMLElement | null, scrollAnchor?: { x: number; y: number }) => {
     if (!contentRoot || typeof window === "undefined") return
     if (scrollAnchor) preserveWindowScrollPositionAcrossFrames(scrollAnchor, 240, 4, CODE_SCROLL_PRESERVE_MIN_MS, false, false, true, false, false, undefined, true)

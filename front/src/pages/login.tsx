@@ -144,7 +144,9 @@ const LoginPage = () => {
       const shouldNavigate = nextPathname !== currentPathname
 
       if (shouldNavigate && router.asPath !== next) {
-        await replaceRoute(router, next)
+        await replaceRoute(router, next, {
+          preferHardNavigation: nextPathname.startsWith("/editor/"),
+        })
       }
     } catch (authError) {
       setError(toAuthErrorMessage("login", authError, "로그인에 실패했습니다."))

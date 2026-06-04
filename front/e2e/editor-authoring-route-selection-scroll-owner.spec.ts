@@ -1,8 +1,27 @@
+import { readFileSync } from "fs"
 import { expect, test, type Locator, type Page } from "@playwright/test"
-import { mockEditorRouteWithPost507 } from "./helpers/post507Fixtures"
+import { mockEditorRouteWithPost507, POST_507_CODE_REQUIRED_TEXTS } from "./helpers/post507Fixtures"
 
 const readScrollTop = (page: Page) =>
   page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
+
+const resolvePost507CodeShell = async (page: Page) =>
+  page.evaluate((requiredTexts) => {
+    const codeShells = Array.from(document.querySelectorAll<HTMLElement>(".aq-code-shell"))
+    const codeShell =
+      codeShells.find((shell) => requiredTexts.every((text) => shell.textContent?.includes(text))) ??
+      codeShells[0] ??
+      null
+    if (!codeShell) return null
+    const contentRoot = codeShell.querySelector<HTMLElement>(".aq-code-editor-content")
+    codeShell.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
+    const rect = (contentRoot ?? codeShell).getBoundingClientRect()
+    return {
+      text: (codeShell.textContent || "").trim(),
+      x: rect.left + Math.min(28, Math.max(8, rect.width / 2)),
+      y: rect.top + Math.min(18, Math.max(8, rect.height / 2)),
+    }
+  }, [...POST_507_CODE_REQUIRED_TEXTS])
 
 const resolveTextRangeBox = async (locator: Locator, text: string) =>
   locator.evaluate((element, targetText) => {
@@ -55,6 +74,24 @@ const dragTextRangeAndReadSelection = async (
 }
 
 test.describe("editor authoring route 507 selection scroll owner", () => {
+  test("code selection follow-up scroll preserve source contract는 다음 사용자 pointerdown으로 취소된다", () => {
+    const source = readFileSync("src/components/editor/blockHandleLayoutModel.ts", "utf8")
+    const followUpBranch =
+      source.match(/if \(shouldPreserveCodeSelectionFollowUp && !tablePointerTarget\) \{[\s\S]*?\n  \}/)?.[0] ??
+      ""
+
+    expect(followUpBranch).toContain("preserveWindowScrollForCodePointerFocus(true)")
+  })
+
+  test("code text click scroll preserve source contract는 active 교체와 독립 restore를 같이 유지한다", () => {
+    const source = readFileSync("src/components/editor/codeBlockNodeView.tsx", "utf8")
+    const helper =
+      source.match(/const preserveCodePointerFocusScroll = useCallback\([\s\S]*?\n  \}, \[\]\)/)?.[0] ?? ""
+
+    expect(helper).toContain("CODE_SCROLL_PRESERVE_MIN_MS, false, false, true, false, false, undefined, true")
+    expect(helper).toContain("CODE_SCROLL_PRESERVE_MIN_MS, false, false, true)")
+  })
+
   test("실제 /editor/[id] post 507 일반 본문 클릭 직후 scroll 이벤트가 이전 anchor로 되돌아가지 않는다", async ({
     page,
   }) => {
@@ -121,16 +158,17 @@ test.describe("editor authoring route 507 selection scroll owner", () => {
       version: 5,
     })
 
-    const codeEditorContent = editor.locator(".aq-code-editor-content", { hasText: /\S/ }).first()
-    await expect(codeEditorContent).toBeVisible({ timeout: 15_000 })
-    await codeEditorContent.evaluate((element) => {
-      element.closest(".aq-code-shell")?.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
-    })
+    const codeShell = await expect
+      .poll(() => resolvePost507CodeShell(page), { timeout: 20_000 })
+      .not.toBeNull()
+      .then(() => resolvePost507CodeShell(page))
+    if (!codeShell) {
+      throw new Error("post 507 code follow-up shell is missing")
+    }
     await page.waitForTimeout(120)
 
-    await expect.poll(async () => ((await codeEditorContent.textContent()) || "").trim()).not.toBe("")
     const beforeClickScrollTop = await readScrollTop(page)
-    await codeEditorContent.click({ position: { x: 28, y: 18 } })
+    await page.mouse.click(codeShell.x, codeShell.y)
     await page.waitForTimeout(220)
     const afterClickScrollTop = await readScrollTop(page)
     expect(Math.abs(afterClickScrollTop - beforeClickScrollTop)).toBeLessThanOrEqual(24)
@@ -140,4 +178,5 @@ test.describe("editor authoring route 507 selection scroll owner", () => {
     const afterWheelScrollTop = await readScrollTop(page)
     expect(afterWheelScrollTop).toBeGreaterThan(afterClickScrollTop + 100)
   })
+
 })

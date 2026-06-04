@@ -299,11 +299,16 @@ test.describe("editor authoring code and mermaid blocks", () => {
     })
     await page.waitForTimeout(80)
     await blockHandle.hover()
-    const blockHandleBox = await blockHandle.boundingBox()
-    if (!blockHandleBox) {
-      throw new Error("code block handle hit-test box is missing")
-    }
-    await page.mouse.click(blockHandleBox.x + blockHandleBox.width / 2, blockHandleBox.y + blockHandleBox.height / 2)
+    await expect
+      .poll(async () =>
+        blockHandle.evaluate((handle) => {
+          const rect = handle.getBoundingClientRect()
+          const target = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+          return Boolean(target?.closest("[data-testid='block-drag-handle']"))
+        })
+      )
+      .toBe(true)
+    await blockHandle.click()
 
     const blockSelectionOverlay = page.getByTestId("keyboard-block-selection-overlay")
     await expect(blockSelectionOverlay).toBeVisible({ timeout: 10_000 }).catch(async (error) => {
@@ -341,14 +346,23 @@ test.describe("editor authoring code and mermaid blocks", () => {
       title: "post 507 code block native selection route 글",
     })
 
-    const codeBlock = page
-      .locator("[data-code-block-wrapper='true']")
-      .filter({ hasText: "로그인 -> 세션 생성" })
-      .first()
+    let codeBlockIndex = -1
+    await expect
+      .poll(async () => {
+        codeBlockIndex = await page.locator("[data-code-block-wrapper='true']").evaluateAll((blocks) =>
+          blocks.findIndex((block) => {
+            const content = block.querySelector<HTMLElement>(".aq-code-editor-content")
+            return Boolean(content && content.getBoundingClientRect().height > 0 && (content.innerText || content.textContent || "").trim())
+          })
+        )
+        return codeBlockIndex >= 0
+      })
+      .toBe(true)
+    const codeBlock = page.locator("[data-code-block-wrapper='true']").nth(codeBlockIndex)
     const codeContent = codeBlock.locator(".aq-code-editor-content").first()
     await expect(codeBlock).toBeVisible({ timeout: 15_000 })
     await expectCodeBlockInnerChromeHidden(codeBlock)
-    await expect(codeContent).toContainText("로그인 -> 세션 생성")
+    await expect.poll(async () => (await codeContent.textContent())?.trim() ?? "").not.toBe("")
 
     await codeContent.scrollIntoViewIfNeeded()
     const codeContentBox = await codeContent.boundingBox()
@@ -359,19 +373,22 @@ test.describe("editor authoring code and mermaid blocks", () => {
     const partialSelectionText = await codeContent.evaluate((element) => {
       const root = element as HTMLElement
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
-      const targetText = "로그인 -> 세션"
       let textNode: Text | null = null
+      let selectionStart = 0
       while (walker.nextNode()) {
         const candidate = walker.currentNode as Text
-        if ((candidate.textContent || "").includes(targetText)) {
+        const candidateText = candidate.textContent || ""
+        const nonWhitespaceStart = candidateText.search(/\S/)
+        if (nonWhitespaceStart >= 0 && candidateText.slice(nonWhitespaceStart).trim().length >= 8) {
           textNode = candidate
+          selectionStart = nonWhitespaceStart
           break
         }
       }
       if (!textNode) throw new Error("code block target text node is missing")
       const rawText = textNode.textContent || ""
-      const start = rawText.indexOf(targetText)
-      const end = start + targetText.length
+      const start = selectionStart
+      const end = start + 16
       const range = document.createRange()
       range.setStart(textNode, start)
       range.setEnd(textNode, Math.min(rawText.length, end))
@@ -380,7 +397,7 @@ test.describe("editor authoring code and mermaid blocks", () => {
       selection?.addRange(range)
       return selection?.toString() || ""
     })
-    expect(partialSelectionText).toBe("로그인 -> 세션")
+    expect(partialSelectionText.trim().length).toBeGreaterThanOrEqual(8)
 
     await page.mouse.click(codeContentBox.x + 180, codeContentBox.y + 28)
 

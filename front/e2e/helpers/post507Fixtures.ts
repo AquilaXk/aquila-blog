@@ -1300,8 +1300,36 @@ const clickPost507AxisHandle = async (
   const handleSelector = `[data-table-affordance='${axis === "row" ? "row-handle" : "column-handle"}']`
   const outlineTestId = axis === "row" ? "table-row-selection-outline" : "table-column-selection-outline"
   const menuTestId = axis === "row" ? "table-row-menu" : "table-column-menu"
-  const handle = page.locator(handleSelector).first()
   let lastDebug: unknown = null
+  const resolveViewportHandlePoint = () =>
+    page.locator(handleSelector).evaluateAll((handles) => {
+      const candidates = handles
+        .map((handle) => {
+          const rect = handle.getBoundingClientRect()
+          const style = window.getComputedStyle(handle)
+          return {
+            active: handle.getAttribute("data-active") === "true",
+            height: rect.height,
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2,
+            visible:
+              rect.width > 0 &&
+              rect.height > 0 &&
+              rect.right > 4 &&
+              rect.left < window.innerWidth - 4 &&
+              rect.bottom > 4 &&
+              rect.top < window.innerHeight - 4 &&
+              style.visibility !== "hidden" &&
+              style.display !== "none" &&
+              Number(style.opacity || "1") > 0,
+          }
+        })
+        .filter((candidate) => candidate.visible)
+      return candidates.find((candidate) => candidate.active) ?? candidates[0] ?? null
+    })
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const metrics =
@@ -1309,11 +1337,12 @@ const clickPost507AxisHandle = async (
     await page.mouse.move(metrics.cellX, metrics.cellY)
     await page.mouse.move(metrics.hoverX, metrics.hoverY, { steps: 4 })
     await page.waitForTimeout(160)
-    if (!(await handle.isVisible().catch(() => false))) {
+    const handlePoint = await resolveViewportHandlePoint()
+    if (!handlePoint) {
       lastDebug = await readPost507EditorDiagnostics(page, `${axis}-axis-handle-missing`)
       continue
     }
-    await handle.click({ force: true, timeout: 900 })
+    await page.mouse.click(handlePoint.x, handlePoint.y)
     const selected = await expect
       .poll(
         async () => ({
@@ -1371,18 +1400,24 @@ const expectPost507WheelScrollsWithoutLock = async (page: Page, label: string) =
     viewportHeight: Math.round(window.innerHeight),
   }))
   const viewport = page.viewportSize() ?? { height: 760, width: 1280 }
-  await page.mouse.move(Math.max(32, viewport.width - 120), Math.max(32, viewport.height - 120))
-  const primaryDelta =
-    beforeState.scrollTop + beforeState.viewportHeight >= beforeState.scrollHeight - 32 ? -420 : 420
-  const attempts = [primaryDelta, -primaryDelta]
+  await page.mouse.move(Math.max(32, Math.round(viewport.width / 2)), Math.max(32, viewport.height - 120))
   const samples: Array<{ beforeAttempt: number; delta: number; scrollTop: number }> = []
-  for (const delta of attempts) {
-    const beforeAttempt = await readPost507ScrollTop(page)
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const attemptState = await page.evaluate(() => ({
+      scrollHeight: Math.round(document.scrollingElement?.scrollHeight ?? document.documentElement.scrollHeight),
+      scrollTop: Math.round(document.scrollingElement?.scrollTop ?? window.scrollY),
+      viewportHeight: Math.round(window.innerHeight),
+    }))
+    const maxScrollTop = Math.max(0, attemptState.scrollHeight - attemptState.viewportHeight)
+    const delta =
+      attemptState.scrollTop >= maxScrollTop - 32 ? -420 : attemptState.scrollTop <= 32 ? 420 : attempt % 2 === 0 ? 420 : -420
+    const beforeAttempt = attemptState.scrollTop
     await page.mouse.wheel(0, delta)
-    await page.waitForTimeout(260)
+    await page.waitForTimeout(360)
     const afterAttempt = await readPost507ScrollTop(page)
     samples.push({ beforeAttempt, delta, scrollTop: afterAttempt })
     if (Math.abs(afterAttempt - beforeAttempt) > 80) return
+    await page.waitForTimeout(140)
   }
   throw new Error(
     `${label} wheel did not move page scroll: ${JSON.stringify({

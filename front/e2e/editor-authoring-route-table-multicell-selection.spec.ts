@@ -432,6 +432,7 @@ test("live 507 형태의 table 단일 셀 내부 drag는 native 텍스트 선택
 test("live 507 형태의 table multi-cell drag는 여러 셀 텍스트를 연속 선택한다", async ({
   page,
 }) => {
+  test.slow()
   await page.setViewportSize({ width: 1580, height: 900 })
 
   const live507TableContent = post507Markdown

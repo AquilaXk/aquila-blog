@@ -118,6 +118,34 @@ const emptyJavaFenceContent = [
   "```",
 ].join("\n")
 
+const contentOnlyPost507CodeMarkdown = [
+  "## 왜 이 문제가 중요한가",
+  "",
+  "보통 처음 인증을 구현한다면 이런 식으로 할 것 입니다",
+  "",
+  "```text",
+  "로그인 -> 세션 생성 -> 이후 요청에서 세션 확인",
+  "```",
+  "",
+  "### JWT 내부 예시",
+  "",
+  "```java",
+  "{",
+  "  \"sub\": \"user-id\",",
+  "  \"iat\": 1710000000",
+  "}",
+  "```",
+  "",
+  "### 구현 예시",
+  "",
+  "```java",
+  "public Token login(User user) {",
+  "    String access = createAccessToken(user);",
+  "    return new Token(access, refresh);",
+  "}",
+  "```",
+].join("\n")
+
 const installInitialCodeSnapshotProbe = async (page: Page) => {
   await page.addInitScript(() => {
     const windowWithSnapshots = window as typeof window & {
@@ -321,5 +349,119 @@ test.describe("editor authoring route code initial render", () => {
     expect(firstCodeSnapshot, JSON.stringify(snapshots.slice(0, 8), null, 2)).toBeTruthy()
     expect(firstCodeSnapshot?.codeText).toContain("createAccessToken(user)")
     expect(firstCodeSnapshot?.shellText).toContain("return new Token(access, refresh);")
+  })
+
+  test("507 content-only markdown 코드블럭은 login redirect 이후 code shell text를 유지한다", async ({
+    page,
+  }) => {
+    await installInitialCodeSnapshotProbe(page)
+
+    await page.route("**/member/api/v1/auth/login", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          resultCode: "200",
+          msg: "OK",
+          data: {},
+        }),
+      })
+    })
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 1,
+          username: "qa-admin",
+          nickname: "aquila",
+          isAdmin: true,
+        }),
+      })
+    })
+    await page.route("**/_next/data/**/editor/583.json**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          pageProps: {
+            dehydratedState: { mutations: [], queries: [] },
+            initialMember: {
+              id: 1,
+              username: "qa-admin",
+              nickname: "aquila",
+              isAdmin: true,
+            },
+            initialProfileSnapshot: null,
+            initialEditorPost: {
+              id: 583,
+              version: 1,
+              title: POST_507_TITLE,
+              content: contentOnlyPost507CodeMarkdown,
+              contentHtml: "",
+              published: true,
+              listed: true,
+            },
+          },
+          __N_SSP: true,
+        }),
+      })
+    })
+    await page.route("**/post/api/v1/adm/posts/583", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 900))
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 583,
+          version: 1,
+          title: POST_507_TITLE,
+          content: contentOnlyPost507CodeMarkdown,
+          contentHtml: "",
+          published: true,
+          listed: true,
+        }),
+      })
+    })
+    await page.route("**/post/api/v1/posts/583", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          content: contentOnlyPost507CodeMarkdown,
+          contentHtml: "",
+        }),
+      })
+    })
+
+    const editorDocumentRequests: string[] = []
+    page.on("request", (request) => {
+      if (request.resourceType() !== "document") return
+      if (!new URL(request.url()).pathname.endsWith("/editor/583")) return
+      editorDocumentRequests.push(request.url())
+    })
+
+    await page.goto("/login?next=%2Feditor%2F583")
+    await page.locator("#email").fill("qa-admin@example.test")
+    await page.locator("#password").fill("local-password")
+    await page.getByRole("button", { name: /^로그인$/ }).click()
+    await page.waitForURL("**/editor/583")
+    await expect.poll(() => editorDocumentRequests.length).toBeGreaterThan(0)
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(POST_507_TITLE)
+    const codeShells = page.locator(".aq-code-shell")
+    await expect(codeShells.first()).toBeVisible()
+    await expect(codeShells.first()).toContainText("로그인 -> 세션 생성 -> 이후 요청에서 세션 확인")
+    await expect(codeShells.nth(1)).toContainText('"sub": "user-id"')
+    await expect(codeShells.nth(2)).toContainText("createAccessToken(user)")
+
+    const snapshots = await page.evaluate(() => {
+      const windowWithSnapshots = window as typeof window & {
+        __aqInitialCodeSnapshots?: InitialCodeSnapshot[]
+      }
+      return windowWithSnapshots.__aqInitialCodeSnapshots || []
+    })
+    const firstCodeSnapshot = snapshots.find((snapshot) => snapshot.lineCount > 0)
+
+    expect(firstCodeSnapshot, JSON.stringify(snapshots.slice(0, 8), null, 2)).toBeTruthy()
+    expect(firstCodeSnapshot?.codeText).toContain("로그인 -> 세션 생성")
   })
 })

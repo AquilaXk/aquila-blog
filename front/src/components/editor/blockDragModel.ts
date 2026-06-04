@@ -1,3 +1,8 @@
+import {
+  preserveWindowScrollPositionAcrossFrames,
+  type WindowScrollAnchor,
+} from "./blockHandleLayoutModel"
+
 export type BlockDragPreview = {
   previewWidth: number
   previewHeight: number
@@ -32,6 +37,11 @@ export type DropIndicatorState = {
 }
 
 export type DropIndicatorGeometry = Omit<DropIndicatorState, "visible">
+
+const captureWindowScrollAnchor = (): WindowScrollAnchor | null => {
+  if (typeof window === "undefined" || typeof document === "undefined") return null
+  return { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
+}
 
 const createHiddenDropIndicatorGeometry = (): DropIndicatorGeometry => ({
   insertionIndex: 0,
@@ -99,6 +109,24 @@ export const createDropIndicatorState = (geometry: DropIndicatorGeometry): DropI
 
 export const hideDropIndicatorState = (state: DropIndicatorState): DropIndicatorState =>
   state.visible ? { ...state, visible: false } : state
+
+export const preserveTopLevelBlockDragScroll = () => {
+  const anchor = captureWindowScrollAnchor()
+  if (!anchor) return
+  preserveWindowScrollPositionAcrossFrames(
+    anchor,
+    72,
+    4,
+    1_200,
+    false,
+    false,
+    true,
+    false,
+    false,
+    undefined,
+    true
+  )
+}
 
 export const resolveBlockDropIndicatorByClientY = (
   elements: HTMLElement[],

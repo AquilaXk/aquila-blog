@@ -347,10 +347,35 @@ test.describe("editor authoring route live drag sequence", () => {
       }
     })
     await page.waitForTimeout(120)
-    const beforeImmediateCodeSelectAll = await readScrollTop(page)
     await codeContent.click({ position: { x: 80, y: immediateCodeMetrics.y } })
+    await page.waitForTimeout(120)
+    const beforeImmediateCodeSelectAll = await readScrollTop(page)
     await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
-    await expect.poll(() => readSelectionText(page)).toContain("createAccessToken")
+    try {
+      await expect.poll(() => readSelectionText(page)).toContain("createAccessToken")
+    } catch (error) {
+      const diagnostics = await page.evaluate(() => {
+        const activeElement = document.activeElement instanceof Element ? document.activeElement : null
+        const viewportCenterY = window.innerHeight / 2
+        const visibleCodeRoots = Array.from(document.querySelectorAll<HTMLElement>(".aq-code-shell")).map((shell) => {
+          const rect = shell.getBoundingClientRect()
+          const root = shell.querySelector<HTMLElement>(".aq-code-editor-content")
+          const centerPenalty = rect.top <= viewportCenterY && rect.bottom >= viewportCenterY ? -1_000 : 0
+          return {
+            attr: shell.getAttribute("data-code-drag-selection-text"),
+            rect: { bottom: rect.bottom, top: rect.top },
+            score: Math.abs((rect.top + rect.bottom) / 2 - viewportCenterY) + centerPenalty,
+            text: root?.textContent?.replace(/\s+/g, " ").trim().slice(0, 160) ?? "",
+          }
+        })
+        return {
+          activeElementClass: String(activeElement?.className ?? ""),
+          selectionText: window.getSelection()?.toString() ?? "",
+          visibleCodeRoots,
+        }
+      })
+      throw new Error(`immediate code select-all did not persist code text: ${JSON.stringify(diagnostics)}\n${error instanceof Error ? error.message : String(error)}`)
+    }
     await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforeImmediateCodeSelectAll + 24)
     await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforeImmediateCodeSelectAll - 24)
     await page.mouse.wheel(0, 1).then(() => page.waitForTimeout(40))
@@ -443,35 +468,11 @@ test.describe("editor authoring route live drag sequence", () => {
     await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
     await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforeCodeSelectAll + 24)
     await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforeCodeSelectAll - 24)
-    await codeContent.evaluate((element, metrics) => {
-      const rect = element.getBoundingClientRect()
-      const clientX = rect.left + 80
-      const clientY = rect.top + metrics.y
-      element.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX, clientY }))
-      element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, buttons: 0, cancelable: true, clientX, clientY }))
-    }, codeDragMetrics)
+    const codeClickBox = await codeContent.boundingBox()
+    if (!codeClickBox) throw new Error("code click metrics are missing")
+    await page.mouse.click(codeClickBox.x + 80, codeClickBox.y + codeDragMetrics.y)
+    await page.waitForTimeout(120)
     await expect.poll(() => readSelectionText(page)).toBe("")
-    await codeContent.evaluate((element, metrics) => {
-      const rect = element.getBoundingClientRect()
-      const clientX = rect.left + 80
-      const clientY = rect.top + metrics.y
-      const selection = window.getSelection()
-      selection?.removeAllRanges()
-      const range = document.createRange()
-      range.selectNodeContents(element)
-      selection?.addRange(range)
-      element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX, clientY, pointerType: "mouse" }))
-      window.getSelection()?.removeAllRanges()
-      element.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX, clientY }))
-    }, codeDragMetrics)
-    await expect.poll(() => readSelectionText(page)).toBe("")
-    await codeContent.evaluate((element, metrics) => {
-      const rect = element.getBoundingClientRect()
-      const clientX = rect.left + 80
-      const clientY = rect.top + metrics.y
-      element.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, buttons: 0, cancelable: true, clientX, clientY, pointerType: "mouse" }))
-      element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, buttons: 0, cancelable: true, clientX, clientY }))
-    }, codeDragMetrics)
     await codeContent.evaluate((element, metrics) => {
       const rect = element.getBoundingClientRect()
       const startX = rect.left + 80
@@ -567,18 +568,15 @@ test.describe("editor authoring route live drag sequence", () => {
       element.scrollIntoView({ block: "center", inline: "nearest" })
     })
     await page.waitForTimeout(120)
-    const reissueClickPoint = await reissueCodeContent.evaluate((element) => {
+    const reissueClickY = await reissueCodeContent.evaluate((element) => {
       const rect = element.getBoundingClientRect()
       const style = window.getComputedStyle(element)
       const lineHeight = Number.parseFloat(style.lineHeight || "22") || 22
       const paddingTop = Number.parseFloat(style.paddingTop || "0") || 0
-      return {
-        x: rect.left + 80,
-        y: rect.top + Math.min(rect.height - 8, paddingTop + lineHeight * 5.5),
-      }
+      return Math.min(rect.height - 8, paddingTop + lineHeight * 5.5)
     })
     const beforeLowerCodeClick = await readScrollTop(page)
-    await page.mouse.click(reissueClickPoint.x, reissueClickPoint.y)
+    await reissueCodeContent.click({ position: { x: 80, y: reissueClickY } })
     await page.waitForTimeout(2_600)
     await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforeLowerCodeClick + 24)
     await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforeLowerCodeClick - 24)

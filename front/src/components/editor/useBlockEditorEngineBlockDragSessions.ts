@@ -13,6 +13,7 @@ import {
   createDraggedBlockState,
   createDropIndicatorState,
   hideDropIndicatorState,
+  preserveTopLevelBlockDragScroll,
   resolveBlockDropIndicatorByClientY,
 } from "./blockDragModel"
 import {
@@ -113,11 +114,9 @@ export const useBlockEditorEngineBlockDragSessions = ({
       const nextIndicator = resolveBlockDropIndicatorByClientY(getTopLevelBlockElements(), clientY)
       const contentLength = ((editorRef.current?.getJSON() as BlockEditorDoc)?.content?.length ?? 0)
       const normalizedInsertionIndex = Math.max(0, Math.min(nextIndicator.insertionIndex, contentLength))
-      const focusIndex =
-        normalizedInsertionIndex > sourceIndex ? normalizedInsertionIndex - 1 : normalizedInsertionIndex
       mutateTopLevelBlocks(
         (doc) => moveTopLevelBlockToInsertionIndex(doc, sourceIndex, normalizedInsertionIndex),
-        Math.max(0, Math.min(focusIndex, Math.max(contentLength - 1, 0)))
+        null
       )
     },
     [editorRef, getTopLevelBlockElements, mutateTopLevelBlocks]
@@ -126,6 +125,9 @@ export const useBlockEditorEngineBlockDragSessions = ({
   const beginBlockDragFromPending = useCallback(
     (pending: PendingBlockDragState, clientX: number, clientY: number) => {
       cleanupTopLevelBlockEarlyPointerDone()
+      clearStickyTopLevelBlockSelection()
+      clearNativeTextSelection()
+      preserveTopLevelBlockDragScroll()
       const indicator = resolveBlockDropIndicatorByClientY(getTopLevelBlockElements(), clientY)
       setDraggedBlockState(createDraggedBlockState(pending))
       setDragGhostPosition({ x: clientX, y: clientY })
@@ -163,6 +165,8 @@ export const useBlockEditorEngineBlockDragSessions = ({
       earlyPointerDoneTimeout = window.setTimeout(cleanupEarlyPointerDone, 1500)
     },
     [
+      clearNativeTextSelection,
+      clearStickyTopLevelBlockSelection,
       cleanupTopLevelBlockEarlyPointerDone,
       clearBlockDragVisualState,
       commitTopLevelBlockDrag,

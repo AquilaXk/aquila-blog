@@ -16,7 +16,7 @@ export type WindowScrollAnchor = { x: number; y: number }
 
 let preserveNextEditorPointerAfterTable = false
 let preserveNextEditorPointerAfterCodeSelection = false
-let activeWindowScrollPreserveCancel: (() => void) | null = null
+let activeWindowScrollPreserveCancel: (() => void) | null = null, windowScrollPreserveGeneration = 0
 let suppressGeneralEditorPointerPreserveUntil = 0
 const activeTablePointerScrollPreserveCancels = new Set<() => void>()
 
@@ -25,6 +25,8 @@ export const markNextEditorPointerAfterTable = () => { preserveNextEditorPointer
 export const clearNextEditorPointerAfterTable = () => { preserveNextEditorPointerAfterTable = false }
 
 export const cancelActiveWindowScrollPreserve = () => { activeWindowScrollPreserveCancel?.(); activeWindowScrollPreserveCancel = null }
+
+export const cancelAllWindowScrollPreserves = () => { windowScrollPreserveGeneration += 1; cancelActiveWindowScrollPreserve() }
 
 export const cancelTablePointerScrollPreserves = () => {
   clearNextEditorPointerAfterTable()
@@ -349,16 +351,14 @@ export const preserveWindowScrollPositionAcrossFrames = (
 ) => {
   if (typeof window === "undefined" || typeof document === "undefined") return
   const scrollingElement = document.scrollingElement
-  const startX = anchor.x
-  const startY = anchor.y
-  const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now()
-  let cancelled = false
-  let frame = 0
+  const startX = anchor.x, startY = anchor.y, startedAt = typeof performance !== "undefined" ? performance.now() : Date.now(), preserveGeneration = windowScrollPreserveGeneration
+  let cancelled = false, frame = 0
   const cancel = () => {
     cancelled = true
     cleanup()
   }
   const cancelIfRestoreIsNoLongerValid = () => {
+    if (preserveGeneration !== windowScrollPreserveGeneration) { cancel(); return true }
     if (!shouldCancelBeforeRestore) return false
     let shouldCancel = false
     try {
@@ -457,8 +457,8 @@ const EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES = 168
 const EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS = 2_800
 const EDITOR_POINTER_TABLE_SELECT_ALL_SCROLL_PRESERVE_FRAMES = 24
 const EDITOR_POINTER_TABLE_SELECT_ALL_SCROLL_PRESERVE_MIN_MS = 320
-const EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES = 192
-const EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS = 3_200
+const EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES = 8
+const EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS = 180
 const EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES = 144
 const EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS = 2_400
 const EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES = 72, EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MAX_MS = 72

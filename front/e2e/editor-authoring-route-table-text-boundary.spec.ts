@@ -65,12 +65,19 @@ test.describe("editor authoring route table text drag boundary", () => {
         }
         dispatch("pointerdown", start, 1)
         dispatch("mousedown", start, 1)
-        const leakedRange = document.createRange()
-        leakedRange.setStart(startNode, startNode.data.indexOf(tableText))
-        leakedRange.setEnd(outsideNode, outsideNode.data.indexOf(forbiddenText) + forbiddenText.length)
         const selection = window.getSelection()
         selection?.removeAllRanges()
-        selection?.addRange(leakedRange)
+        const tableOffset = startNode.data.indexOf(tableText)
+        const outsideOffset = outsideNode.data.indexOf(forbiddenText) + forbiddenText.length
+        if (selection && typeof selection.setBaseAndExtent === "function") {
+          selection.setBaseAndExtent(startNode, tableOffset, outsideNode, outsideOffset)
+        } else {
+          const leakedRange = document.createRange()
+          leakedRange.setStart(startNode, tableOffset)
+          leakedRange.setEnd(outsideNode, outsideOffset)
+          selection?.addRange(leakedRange)
+        }
+        document.dispatchEvent(new Event("selectionchange"))
         dispatch("pointermove", outside, 1)
         dispatch("mousemove", outside, 1)
         dispatch("pointerup", outside, 0)

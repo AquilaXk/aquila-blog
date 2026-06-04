@@ -145,27 +145,69 @@ const expectSelectionScopedToWord = async (page: Page, word: string, unrelatedWo
     .toBe(true)
 }
 
+const readBestSelectionText = () => {
+  const nativeText = window.getSelection()?.toString() ?? ""
+  const tableText =
+    document.documentElement.getAttribute("data-table-drag-selection-text") ??
+    document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ??
+    ""
+  const candidates = (tableText
+    ? [nativeText, tableText]
+    : [nativeText, document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text") ?? ""]
+  ).map((text) => text.replace(/\s+/g, " ").trim())
+  return candidates.reduce((best, text) => (text.length > best.length ? text : best), "")
+}
+
 const expectSelectionContainsOnly = async (page: Page, includedWords: string[], excludedWords: string[]) => {
-  await expect
-    .poll(
-      async () => {
-        const selectionText = await page.evaluate(() => {
-          const text =
-            window.getSelection()?.toString() ||
-            document.documentElement.getAttribute("data-table-drag-selection-text") ||
-            document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
-            document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text") ||
-            ""
-          return text.replace(/\s+/g, " ").trim()
-        })
-        return (
-          includedWords.every((includedWord) => selectionText.includes(includedWord)) &&
-          excludedWords.every((excludedWord) => !selectionText.includes(excludedWord))
-        )
-      },
-      { timeout: 2_000 }
-    )
-    .toBe(true)
+  try {
+    await expect
+      .poll(
+        async () => {
+          const selectionText = await page.evaluate(readBestSelectionText)
+          return (
+            includedWords.every((includedWord) => selectionText.includes(includedWord)) &&
+            excludedWords.every((excludedWord) => !selectionText.includes(excludedWord))
+          )
+        },
+        { timeout: 2_000 }
+      )
+      .toBe(true)
+  } catch (error) {
+    const diagnostics = await page.evaluate(() => {
+      const describe = (element: Element | null | undefined) => ({
+        tag: element?.tagName ?? "",
+        className: element instanceof HTMLElement ? element.className : "",
+        text: element?.textContent?.replace(/\s+/g, " ").trim().slice(0, 160) ?? "",
+      })
+      const selection = window.getSelection()
+      const anchor = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement
+      const focus = selection?.focusNode instanceof Element ? selection.focusNode : selection?.focusNode?.parentElement
+      const nativeText = selection?.toString().replace(/\s+/g, " ").trim() ?? ""
+      const tableRootAttr = document.documentElement.getAttribute("data-table-drag-selection-text") ?? ""
+      const tableCellAttr =
+        document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ?? ""
+      const codeAttr = document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text") ?? ""
+      const tableText = tableRootAttr || tableCellAttr
+      const selectionText = (tableText ? [nativeText, tableText] : [nativeText, codeAttr])
+        .map((text) => text.replace(/\s+/g, " ").trim())
+        .reduce((best, text) => (text.length > best.length ? text : best), "")
+      return {
+        selectionText,
+        nativeText,
+        tableRootAttr,
+        tableCellAttr,
+        codeAttr,
+        recentTableContext: document.documentElement.hasAttribute("data-table-recent-text-selection-context"),
+        active: describe(document.activeElement),
+        anchor: describe(anchor),
+        focus: describe(focus),
+        hoverCell: describe(document.querySelector("th:hover, td:hover")),
+      }
+    })
+    throw new Error(`selection scope mismatch: ${JSON.stringify({ includedWords, excludedWords, diagnostics })}`, {
+      cause: error,
+    })
+  }
 }
 
 const expectCodeHighlightLayerAligned = async (page: Page, word: string) => {
@@ -530,8 +572,13 @@ test.describe("editor authoring route text selection drag", () => {
     await expectSelectionScopedToWord(page, tableLabel, [bodyLabel, codeLabel])
 
     const tableCell = editor.locator("table th, table td", { hasText: tableLabel }).first()
-    const tableCellPoints = await getWordDragPoints(tableCell, tableLabel)
-    await page.mouse.click(tableCellPoints.startX, tableCellPoints.startY)
+    const tableCellBox = await expectVisibleBox(tableCell, "table Cmd+A target cell metrics are missing")
+    await tableCell.click({
+      position: {
+        x: Math.min(24, Math.max(8, tableCellBox.width - 8)),
+        y: Math.min(16, Math.max(8, tableCellBox.height - 8)),
+      },
+    })
     await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
     await expectSelectionContainsOnly(
       page,
@@ -592,29 +639,12 @@ test.describe("editor authoring route text selection drag", () => {
 
     await expect
       .poll(
-        () =>
-          page.evaluate(() => {
-            const text =
-              window.getSelection()?.toString() ||
-              document.documentElement.getAttribute("data-table-drag-selection-text") ||
-              document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
-              ""
-            return text.replace(/\s+/g, " ").trim()
-          }),
+        () => page.evaluate(readBestSelectionText),
         { timeout: 2_000 }
       )
       .toContain("구현되어 있는가")
     await expect
-      .poll(() =>
-        page.evaluate(() => {
-          const text =
-            window.getSelection()?.toString() ||
-            document.documentElement.getAttribute("data-table-drag-selection-text") ||
-            document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
-            ""
-          return text.replace(/\s+/g, " ").trim()
-        })
-      )
+      .poll(() => page.evaluate(readBestSelectionText))
       .toContain("영역")
     await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
     await expect

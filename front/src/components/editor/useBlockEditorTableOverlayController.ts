@@ -262,6 +262,7 @@ export const useBlockEditorTableOverlayController = ({
     editor,
     getCurrentSelectedTableRect,
     isTableStructuralSelection,
+    selectionTick,
     setSelectionTick,
     setTableMenuState,
     stabilizeTableSelectionSurface,

@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test"
+import { expect, type Locator, type Page } from "@playwright/test"
 import { expectEditorToContainLoadedText } from "./editorAuthoringFlow"
 
 export const POST_507_TITLE = "Stateless란 무엇인가?"
@@ -20,6 +20,12 @@ export const POST_507_FINAL_TABLE_FORBIDDEN_TEXTS = [
   "Access Token API 인증",
   "Access 길게 보안 위험",
 ] as const
+export const POST_507_CODE_REQUIRED_TEXTS = [
+  "public Token login(User user)",
+  "createAccessToken(user)",
+  "createRefreshToken(user)",
+  "return new Token(access, refresh);",
+] as const
 
 export const POST_507_REAL_FEATURE_CONTRACT = {
   auxiliaryRouteBoundary:
@@ -38,7 +44,7 @@ export const POST_507_REAL_FEATURE_CONTRACT = {
     {
       id: "code-block-language-picker",
       issueSymptom: "code language picker dead-clicks or scrolls instead of opening",
-      requiredSourceFragments: ["mockEditorRouteWithPost507", "userId", "코드 언어 선택"],
+      requiredSourceFragments: ["mockEditorRouteWithPost507", "post 507 code language route", "코드 언어 선택"],
       routeContract: "507-copy-route",
       specFile: "editor-authoring-code-mermaid.spec.ts",
     },
@@ -97,6 +103,20 @@ export const POST_507_REAL_FEATURE_CONTRACT = {
       routeContract: "507-copy-route",
       specFile: "editor-authoring-route-live-drag-sequence.spec.ts",
     },
+    {
+      id: "lower-real-workflow-gate",
+      issueSymptom:
+        "code block body and final table scroll/selection regressions only appear when the lower 507 workflow runs as one user sequence",
+      requiredSourceFragments: [
+        "setupPost507ModifyRequestCapture",
+        "expectPost507CodeGateSatisfied",
+        "runPost507LowerRealWorkflowGate",
+        "expectPost507LowerGateTelemetryStable",
+        "cell text drag -> row axis selection -> column axis selection -> wheel scroll -> lower body/block state",
+      ],
+      routeContract: "507-copy-route",
+      specFile: "editor-authoring-route-real-507-lower-gate.spec.ts",
+    },
   ],
 } as const
 
@@ -144,6 +164,11 @@ export type Post507InteractionTelemetrySnapshot = {
     structureMenuCount: number
     structureMenuVisibleCount: number
   }>
+  menuEverVisible: {
+    column: boolean
+    row: boolean
+    structure: boolean
+  }
   scrollToCalls: Array<{ elapsedMs: number; targetX: number; targetY: number }>
   scrollTopTimeline: Array<{ elapsedMs: number; label: string; scrollTop: number }>
   selectionTimeline: Array<{
@@ -292,6 +317,7 @@ export const readPost507EditorDiagnostics = async (
       interactionTelemetry: recordedTelemetry
         ? {
             fallbackTimeline: recordedTelemetry.fallbackTimeline.slice(-120),
+            menuEverVisible: recordedTelemetry.menuEverVisible,
             menuTimeline: recordedTelemetry.menuTimeline.slice(-120),
             scrollToCalls: recordedTelemetry.scrollToCalls.slice(-120),
             scrollTopTimeline: recordedTelemetry.scrollTopTimeline.slice(-120),
@@ -299,6 +325,11 @@ export const readPost507EditorDiagnostics = async (
           }
         : {
             fallbackTimeline: [readFallbackSample(snapshotLabel)],
+            menuEverVisible: {
+              column: countVisibleElements("[data-testid='table-column-menu']") > 0,
+              row: countVisibleElements("[data-testid='table-row-menu']") > 0,
+              structure: countVisibleElements("[data-testid='table-structure-menu'], [data-table-menu-root='true']") > 0,
+            },
             menuTimeline: [readMenuSample(snapshotLabel)],
             scrollToCalls: [],
             scrollTopTimeline: [readScrollTopSample(snapshotLabel)],
@@ -335,6 +366,11 @@ export const installPost507InteractionTelemetry = async (page: Page) =>
     }
     const telemetry: Post507InteractionTelemetrySnapshot = {
       fallbackTimeline: [],
+      menuEverVisible: {
+        column: false,
+        row: false,
+        structure: false,
+      },
       menuTimeline: [],
       scrollToCalls: [],
       scrollTopTimeline: [],
@@ -405,8 +441,12 @@ export const installPost507InteractionTelemetry = async (page: Page) =>
       scrollTop: Math.round(document.scrollingElement?.scrollTop ?? window.scrollY),
     })
     const recordSnapshot = (label: string) => {
+      const menuSample = readMenuSample(label)
+      telemetry.menuEverVisible.column ||= menuSample.columnMenuVisibleCount > 0
+      telemetry.menuEverVisible.row ||= menuSample.rowMenuVisibleCount > 0
+      telemetry.menuEverVisible.structure ||= menuSample.structureMenuVisibleCount > 0
       telemetry.fallbackTimeline.push(readFallbackSample(label))
-      telemetry.menuTimeline.push(readMenuSample(label))
+      telemetry.menuTimeline.push(menuSample)
       telemetry.selectionTimeline.push(readSelectionSample(label))
       trim(telemetry.fallbackTimeline)
       trim(telemetry.menuTimeline)
@@ -929,4 +969,602 @@ export const mockEditorRouteWithPost507 = async (
   await expect(finalTable.locator("tr").first().locator("th, td")).toHaveCount(3)
 
   return { content: post507Markdown, editor, finalTable }
+}
+
+export type Post507ModifyRequestSnapshot = {
+  content: string
+  listed: boolean | null
+  method: string
+  published: boolean | null
+  title: string
+  version: number | null
+}
+
+export type Post507ModifyRequestCapture = {
+  postId: number
+  read: () => Post507ModifyRequestSnapshot | null
+  readAll: () => Post507ModifyRequestSnapshot[]
+}
+
+export const setupPost507ModifyRequestCapture = async (
+  page: Page,
+  postId: number
+): Promise<Post507ModifyRequestCapture> => {
+  const snapshots: Post507ModifyRequestSnapshot[] = []
+
+  await page.route(`**/post/api/v1/posts/${postId}**`, async (route) => {
+    const request = route.request()
+    const corsHeaders = {
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Allow-Headers": request.headers()["access-control-request-headers"] || "content-type,x-aquila-csrf",
+      "Access-Control-Allow-Methods": "PUT,OPTIONS",
+      "Access-Control-Allow-Origin": request.headers().origin || "*",
+    }
+    if (request.method() === "OPTIONS") {
+      await route.fulfill({ status: 204, headers: corsHeaders })
+      return
+    }
+    if (request.method() !== "PUT") {
+      await route.fallback()
+      return
+    }
+
+    const rawBody = request.postData() || "{}"
+    const body = JSON.parse(rawBody) as {
+      content?: unknown
+      listed?: unknown
+      published?: unknown
+      title?: unknown
+      version?: unknown
+    }
+    const snapshot = {
+      content: typeof body.content === "string" ? body.content : "",
+      listed: typeof body.listed === "boolean" ? body.listed : null,
+      method: request.method(),
+      published: typeof body.published === "boolean" ? body.published : null,
+      title: typeof body.title === "string" ? body.title : "",
+      version: typeof body.version === "number" ? body.version : null,
+    } satisfies Post507ModifyRequestSnapshot
+    snapshots.push(snapshot)
+
+    await route.fulfill({
+      contentType: "application/json",
+      headers: corsHeaders,
+      body: JSON.stringify({
+        resultCode: "200-1",
+        msg: "OK",
+        data: {
+          id: postId,
+          version: (snapshot.version ?? 1) + 1,
+        },
+      }),
+    })
+  })
+  await page.route("**/api/revalidate", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        revalidated: true,
+        count: 1,
+        paths: [`/posts/${postId}`],
+      }),
+    })
+  })
+
+  return {
+    postId,
+    read: () => snapshots.at(-1) ?? null,
+    readAll: () => [...snapshots],
+  }
+}
+
+const readPost507ScrollTop = (page: Page) =>
+  page.evaluate(() => Math.round(document.scrollingElement?.scrollTop ?? window.scrollY))
+
+const readPost507SelectionText = (page: Page) =>
+  page.evaluate(
+    () =>
+      window.getSelection()?.toString() ||
+      document.documentElement.getAttribute("data-table-drag-selection-text") ||
+      document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
+      document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text") ||
+      ""
+  )
+
+const clearPost507SelectionState = (page: Page) =>
+  page.evaluate(() => {
+    window.getSelection()?.removeAllRanges()
+    document.documentElement.removeAttribute("data-table-drag-selection-text")
+    document.querySelectorAll("[data-table-drag-selection-text]").forEach((element) => {
+      element.removeAttribute("data-table-drag-selection-text")
+    })
+    document.querySelectorAll("[data-code-drag-selection-text]").forEach((element) => {
+      element.removeAttribute("data-code-drag-selection-text")
+    })
+  })
+
+const readPost507CodeGateState = (page: Page) =>
+  page.evaluate((requiredTexts) => {
+    const codeShells = Array.from(document.querySelectorAll<HTMLElement>(".aq-code-shell"))
+    const codeShell =
+      codeShells.find((shell) => requiredTexts.every((text) => shell.textContent?.includes(text))) ??
+      codeShells.find((shell) => shell.textContent?.includes("createAccessToken")) ??
+      codeShells[0] ??
+      null
+    const visibleText = (codeShell?.innerText || codeShell?.textContent || "").replace(/\s+$/g, "")
+    const highlightText = (
+      codeShell?.querySelector<HTMLElement>(".aq-code-highlight-layer")?.textContent ||
+      codeShell?.querySelector<HTMLElement>("pre > code")?.textContent ||
+      ""
+    ).replace(/\s+$/g, "")
+    const editableText = (
+      codeShell?.querySelector<HTMLElement>(".aq-code-editor-content")?.textContent ||
+      codeShell?.querySelector<HTMLElement>("pre > code")?.textContent ||
+      ""
+    ).replace(/\s+$/g, "")
+    return {
+      editableText,
+      emptyShellCount: codeShells.filter((shell) => !(shell.textContent || "").trim()).length,
+      highlightText,
+      shellCount: codeShells.length,
+      visibleText,
+    }
+  }, [...POST_507_CODE_REQUIRED_TEXTS])
+
+const expectTextSetContainsPost507Code = (value: string, label: string) => {
+  for (const requiredText of POST_507_CODE_REQUIRED_TEXTS) {
+    expect(value, `${label} should contain ${requiredText}`).toContain(requiredText)
+  }
+}
+
+export const expectPost507CodeGateSatisfied = async (
+  page: Page,
+  modifyCapture: Post507ModifyRequestCapture
+) => {
+  await expect(page.locator(".aq-code-shell").first()).toBeVisible({ timeout: 15_000 })
+  const codeState = await expect
+    .poll(async () => {
+      const nextState = await readPost507CodeGateState(page)
+      return {
+        ...nextState,
+        hasEditableCode: POST_507_CODE_REQUIRED_TEXTS.every((text) => nextState.editableText.includes(text)),
+        hasHighlightCode: POST_507_CODE_REQUIRED_TEXTS.every((text) => nextState.highlightText.includes(text)),
+        hasVisibleCode: POST_507_CODE_REQUIRED_TEXTS.every((text) => nextState.visibleText.includes(text)),
+      }
+    }, { timeout: 15_000 })
+    .toEqual(
+      expect.objectContaining({
+        hasEditableCode: true,
+        hasHighlightCode: true,
+        hasVisibleCode: true,
+      })
+    )
+    .then(() => readPost507CodeGateState(page))
+  expect(codeState.shellCount).toBeGreaterThanOrEqual(2)
+  expect(codeState.emptyShellCount).toBe(0)
+  expectTextSetContainsPost507Code(codeState.visibleText, "visible code shell text")
+  expectTextSetContainsPost507Code(codeState.highlightText, "highlight code text")
+  expectTextSetContainsPost507Code(codeState.editableText, "editable code text")
+
+  await page.getByRole("button", { name: "수정 반영" }).click()
+  await expect(page.getByRole("heading", { name: "수정 설정" })).toBeVisible({ timeout: 5_000 })
+  await page.getByRole("button", { name: "변경 반영" }).click()
+
+  await expect
+    .poll(() => modifyCapture.read(), { timeout: 5_000 })
+    .toEqual(expect.objectContaining({ method: "PUT" }))
+  await expect(page.getByRole("heading", { name: "수정 설정" })).toBeHidden({ timeout: 5_000 })
+  const captured = modifyCapture.read()
+  expect(captured).not.toBeNull()
+  if (!captured) return
+  expectTextSetContainsPost507Code(captured.content, "pre-save PUT content")
+  expect(captured.content).toContain(post507FinalTableMarkdown)
+}
+
+const resolvePost507TextDragMetrics = async (
+  target: Locator,
+  label: string,
+  text: string
+): Promise<{ endX: number; startX: number; y: number }> =>
+  target.evaluate(
+    (element, { label, text }) => {
+      element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+      while (walker.nextNode()) {
+        const textNode = walker.currentNode as Text
+        const startOffset = textNode.data.indexOf(text)
+        if (startOffset < 0) continue
+        const range = document.createRange()
+        range.setStart(textNode, startOffset)
+        range.setEnd(textNode, startOffset + text.length)
+        const rect =
+          Array.from(range.getClientRects()).find((candidate) => candidate.width > 2 && candidate.height > 2) ??
+          range.getBoundingClientRect()
+        if (rect.width <= 2 || rect.height <= 2) {
+          throw new Error(`${label} text rect is too small`)
+        }
+        return {
+          endX: rect.right - 2,
+          startX: rect.left + 2,
+          y: rect.top + rect.height / 2,
+        }
+      }
+      throw new Error(`${label} text node is missing`)
+    },
+    { label, text }
+  )
+
+const dragPost507TextRange = async (page: Page, target: Locator, label: string, text: string) => {
+  const metrics = await resolvePost507TextDragMetrics(target, label, text)
+  const beforeScrollTop = await readPost507ScrollTop(page)
+  await page.mouse.move(metrics.startX, metrics.y)
+  await page.mouse.down()
+  await page.mouse.move(metrics.endX, metrics.y, { steps: 18 })
+  await page.mouse.up()
+  await page.waitForTimeout(900)
+  return {
+    afterScrollTop: await readPost507ScrollTop(page),
+    beforeScrollTop,
+    selectionText: await readPost507SelectionText(page),
+  }
+}
+
+const resolvePost507FinalTableRowMetrics = async (page: Page) => {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const metrics = await page.evaluate((targetCellText) => {
+      const editor = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
+      const table = Array.from(editor?.querySelectorAll<HTMLElement>("table") ?? [])
+        .filter((candidate) => {
+          const text = candidate.textContent ?? ""
+          return text.includes(targetCellText) && text.includes("재발급 로직")
+        })
+        .at(-1)
+      const targetCell = Array.from(table?.querySelectorAll<HTMLElement>("td, th") ?? []).find((candidate) =>
+        candidate.textContent?.includes(targetCellText)
+      )
+      if (!table || !targetCell) return null
+      const tableRect = table.getBoundingClientRect()
+      const cellRect = targetCell.getBoundingClientRect()
+      if (
+        tableRect.width <= 0 ||
+        tableRect.height <= 0 ||
+        cellRect.width <= 0 ||
+        cellRect.height <= 0 ||
+        cellRect.bottom <= 8 ||
+        cellRect.top >= window.innerHeight - 8
+      ) {
+        return null
+      }
+      const clickY = cellRect.top + Math.min(16, Math.max(6, cellRect.height / 2))
+      return {
+        cellX: cellRect.left + Math.min(36, Math.max(8, cellRect.width / 3)),
+        cellY: clickY,
+        hoverX: tableRect.left + 4,
+        hoverY: clickY,
+      }
+    }, POST_507_FINAL_TABLE_TARGET_CELL)
+
+    if (metrics) return metrics
+    await page.waitForTimeout(100)
+  }
+  throw new Error("post 507 final table row metrics are missing")
+}
+
+const resolvePost507FinalTableColumnMetrics = async (page: Page) => {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const metrics = await page.evaluate((targetCellText) => {
+      const editor = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
+      const table = Array.from(editor?.querySelectorAll<HTMLElement>("table") ?? [])
+        .filter((candidate) => {
+          const text = candidate.textContent ?? ""
+          return text.includes(targetCellText) && text.includes("재발급 로직")
+        })
+        .at(-1)
+      if (!table) return null
+      const tableRect = table.getBoundingClientRect()
+      const headerCells = Array.from(table.querySelectorAll<HTMLElement>("thead th, tr:first-child th, tr:first-child td"))
+      const headerCell =
+        headerCells.find((candidate) => candidate.textContent?.includes("점검 항목")) ?? headerCells[1] ?? headerCells[0]
+      if (!headerCell) return null
+      const headerRect = headerCell.getBoundingClientRect()
+      if (
+        tableRect.width <= 0 ||
+        tableRect.height <= 0 ||
+        headerRect.width <= 0 ||
+        headerRect.height <= 0 ||
+        headerRect.bottom <= 8 ||
+        headerRect.top >= window.innerHeight - 8
+      ) {
+        return null
+      }
+      const clampYToViewport = (value: number) => Math.min(Math.max(value, 12), window.innerHeight - 12)
+      return {
+        cellX: headerRect.left + Math.min(40, Math.max(8, headerRect.width / 2)),
+        cellY: clampYToViewport(headerRect.top + Math.min(16, Math.max(6, headerRect.height / 2))),
+        hoverX: headerRect.left + headerRect.width / 2,
+        hoverY: clampYToViewport(tableRect.top + 6),
+      }
+    }, POST_507_FINAL_TABLE_TARGET_CELL)
+
+    if (metrics) return metrics
+    await page.waitForTimeout(100)
+  }
+  throw new Error("post 507 final table column metrics are missing")
+}
+
+const clickPost507AxisHandle = async (
+  page: Page,
+  axis: "column" | "row",
+  expectedSelectedCellCount: number
+) => {
+  const handleSelector = `[data-table-affordance='${axis === "row" ? "row-handle" : "column-handle"}']`
+  const outlineTestId = axis === "row" ? "table-row-selection-outline" : "table-column-selection-outline"
+  const menuTestId = axis === "row" ? "table-row-menu" : "table-column-menu"
+  const handle = page.locator(handleSelector).first()
+  let lastDebug: unknown = null
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const metrics =
+      axis === "row" ? await resolvePost507FinalTableRowMetrics(page) : await resolvePost507FinalTableColumnMetrics(page)
+    await page.mouse.move(metrics.cellX, metrics.cellY)
+    await page.mouse.move(metrics.hoverX, metrics.hoverY, { steps: 4 })
+    await page.waitForTimeout(160)
+    if (!(await handle.isVisible().catch(() => false))) {
+      lastDebug = await readPost507EditorDiagnostics(page, `${axis}-axis-handle-missing`)
+      continue
+    }
+    await handle.click({ force: true, timeout: 900 })
+    const selected = await expect
+      .poll(
+        async () => ({
+          menuVisible: await page.getByTestId(menuTestId).isVisible().catch(() => false),
+          outlineVisible: await page.getByTestId(outlineTestId).isVisible().catch(() => false),
+          selectedCellCount: await page.getByTestId("block-editor-prosemirror").locator(".selectedCell").count(),
+          selectionText: (await readPost507SelectionText(page)).trim(),
+        }),
+        { timeout: 900 }
+      )
+      .toEqual({
+        menuVisible: true,
+        outlineVisible: true,
+        selectedCellCount: expectedSelectedCellCount,
+        selectionText: "",
+      })
+      .then(() => true)
+      .catch(async () => {
+        lastDebug = await readPost507EditorDiagnostics(page, `${axis}-axis-not-selected`)
+        return false
+      })
+    if (selected) return
+  }
+  throw new Error(`post 507 ${axis} axis selection did not settle: ${JSON.stringify(lastDebug)}`)
+}
+
+const scrollPost507FinalTableTargetIntoView = async (page: Page) => {
+  await expect
+    .poll(
+      () =>
+        page.evaluate((targetCellText) => {
+          const editor = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
+          const table = Array.from(editor?.querySelectorAll<HTMLElement>("table") ?? [])
+            .filter((candidate) => {
+              const text = candidate.textContent ?? ""
+              return text.includes(targetCellText) && text.includes("재발급 로직")
+            })
+            .at(-1)
+          const targetCell = Array.from(table?.querySelectorAll<HTMLElement>("td, th") ?? []).find((candidate) =>
+            candidate.textContent?.includes(targetCellText)
+          )
+          targetCell?.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
+          const rect = targetCell?.getBoundingClientRect()
+          return Boolean(rect && rect.width > 0 && rect.height > 0 && rect.top >= 8 && rect.bottom <= window.innerHeight - 8)
+        }, POST_507_FINAL_TABLE_TARGET_CELL),
+      { timeout: 5_000 }
+    )
+    .toBe(true)
+}
+
+const expectPost507WheelScrollsWithoutLock = async (page: Page, label: string) => {
+  const beforeState = await page.evaluate(() => ({
+    scrollHeight: Math.round(document.scrollingElement?.scrollHeight ?? document.documentElement.scrollHeight),
+    scrollTop: Math.round(document.scrollingElement?.scrollTop ?? window.scrollY),
+    viewportHeight: Math.round(window.innerHeight),
+  }))
+  const viewport = page.viewportSize() ?? { height: 760, width: 1280 }
+  await page.mouse.move(Math.max(32, viewport.width - 120), Math.max(32, viewport.height - 120))
+  const primaryDelta =
+    beforeState.scrollTop + beforeState.viewportHeight >= beforeState.scrollHeight - 32 ? -420 : 420
+  const attempts = [primaryDelta, -primaryDelta]
+  const samples: Array<{ beforeAttempt: number; delta: number; scrollTop: number }> = []
+  for (const delta of attempts) {
+    const beforeAttempt = await readPost507ScrollTop(page)
+    await page.mouse.wheel(0, delta)
+    await page.waitForTimeout(260)
+    const afterAttempt = await readPost507ScrollTop(page)
+    samples.push({ beforeAttempt, delta, scrollTop: afterAttempt })
+    if (Math.abs(afterAttempt - beforeAttempt) > 80) return
+  }
+  throw new Error(
+    `${label} wheel did not move page scroll: ${JSON.stringify({
+      beforeState,
+      diagnostics: await readPost507EditorDiagnostics(page, `${label}-wheel-locked`),
+      samples,
+    })}`
+  )
+}
+
+const expectPost507LowerBodyBlockDragStarts = async (page: Page, editor: Locator) => {
+  const lowerBody = editor
+    .locator("p", { hasText: "Stateless는 “서버가 아무것도 안 하는 구조”가 아닙니다." })
+    .last()
+  await lowerBody.evaluate((element) => {
+    element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
+  })
+  let lowerBodyVisible = false
+  let lowerBodyVisibilitySnapshot: unknown = null
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    await lowerBody.evaluate((element) => {
+      element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
+    })
+    await page.waitForTimeout(120)
+    const box = await lowerBody.boundingBox()
+    const viewport = page.viewportSize() ?? { height: 760, width: 1280 }
+    lowerBodyVisible = Boolean(box && box.y + box.height > 120 && box.y < viewport.height - 120)
+    lowerBodyVisibilitySnapshot = { attempt, box, viewport }
+    if (lowerBodyVisible) break
+  }
+  if (!lowerBodyVisible) {
+    throw new Error(
+      `post 507 lower body did not enter viewport: ${JSON.stringify({
+        diagnostics: await readPost507EditorDiagnostics(page, "lower-body-scroll-into-view"),
+        lowerBodyCount: await lowerBody.count(),
+        snapshot: lowerBodyVisibilitySnapshot,
+      })}`
+    )
+  }
+  const bodyBox = await lowerBody.boundingBox()
+  if (!bodyBox) throw new Error("post 507 lower body block metrics are missing")
+  const handle = page.getByTestId("block-drag-handle")
+  await expect
+    .poll(
+      async () => {
+        const currentBox = await lowerBody.boundingBox()
+        if (!currentBox) return false
+        await page.mouse.move(currentBox.x + currentBox.width / 2, currentBox.y + Math.min(18, currentBox.height / 2))
+        await page.mouse.move(currentBox.x + 24, currentBox.y + Math.min(18, currentBox.height / 2))
+        await page.waitForTimeout(80)
+        return (await handle.count()) > 0 && Boolean(await handle.boundingBox())
+      },
+      { timeout: 5_000 }
+    )
+    .toBe(true)
+  const handleBox = await handle.boundingBox()
+  if (!handleBox) {
+    throw new Error(
+      `post 507 lower body block handle metrics are missing: ${JSON.stringify({
+        bodyBox,
+        diagnostics: await readPost507EditorDiagnostics(page, "lower-body-block-handle-missing"),
+      })}`
+    )
+  }
+  const beforeScrollTop = await readPost507ScrollTop(page)
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2 + 96, { steps: 8 })
+  await expect(page.getByTestId("block-drag-ghost")).toBeVisible({ timeout: 2_000 })
+  await page.mouse.up()
+  await page.waitForTimeout(260)
+  await expect(page.getByTestId("block-drag-ghost")).toHaveCount(0)
+  await expect(editor.locator(".selectedCell")).toHaveCount(0)
+  const afterScrollTop = await readPost507ScrollTop(page)
+  const scrollDelta = afterScrollTop - beforeScrollTop
+  if (Math.abs(scrollDelta) > 48) {
+    throw new Error(
+      `lower body block drag should not rollback scroll: ${JSON.stringify({
+        afterScrollTop,
+        beforeScrollTop,
+        bodyAfterBox: await lowerBody.boundingBox().catch(() => null),
+        bodyBeforeBox: bodyBox,
+        diagnostics: await readPost507EditorDiagnostics(page, "lower-body-block-drag-scroll-jump"),
+        scrollDelta,
+      })}`
+    )
+  }
+}
+
+export const runPost507LowerRealWorkflowGate = async (
+  page: Page,
+  {
+    editor,
+    finalTable,
+  }: {
+    editor: Locator
+    finalTable: Locator
+  }
+) => {
+  await expect(finalTable.locator("td", { hasText: POST_507_FINAL_TABLE_TARGET_CELL }).first()).toBeVisible()
+  const resolveCurrentFinalTable = () =>
+    editor
+      .locator("table")
+      .filter({ hasText: POST_507_FINAL_TABLE_TARGET_CELL })
+      .filter({ hasText: "재발급 로직" })
+      .last()
+
+  for (let cycle = 1; cycle <= 2; cycle += 1) {
+    await clearPost507SelectionState(page)
+    const currentFinalTable = resolveCurrentFinalTable()
+    await expect(currentFinalTable).toBeVisible({ timeout: 5_000 })
+    await scrollPost507FinalTableTargetIntoView(page)
+    await page.waitForTimeout(120)
+    const targetCell = currentFinalTable.locator("td", { hasText: POST_507_FINAL_TABLE_TARGET_CELL }).first()
+    const tableDrag = await dragPost507TextRange(
+      page,
+      targetCell,
+      `post 507 final table text drag cycle ${cycle}`,
+      POST_507_FINAL_TABLE_TARGET_CELL
+    )
+    if (!tableDrag.selectionText.includes(POST_507_FINAL_TABLE_TARGET_CELL)) {
+      throw new Error(
+        `post 507 final table text drag lost selection: ${JSON.stringify({
+          diagnostics: await readPost507EditorDiagnostics(page, `table-text-drag-cycle-${cycle}`),
+          tableDrag,
+        })}`
+      )
+    }
+    expect(Math.abs(tableDrag.afterScrollTop - tableDrag.beforeScrollTop)).toBeLessThanOrEqual(24)
+
+    await clearPost507SelectionState(page)
+    await clickPost507AxisHandle(page, "row", 3)
+    await expectPost507WheelScrollsWithoutLock(page, `row axis cycle ${cycle}`)
+
+    await page.keyboard.press("Escape")
+    await clearPost507SelectionState(page)
+    await scrollPost507FinalTableTargetIntoView(page)
+    await page.waitForTimeout(120)
+    await clickPost507AxisHandle(page, "column", 7)
+    await expectPost507WheelScrollsWithoutLock(page, `column axis cycle ${cycle}`)
+    await page.keyboard.press("Escape")
+  }
+
+  await clearPost507SelectionState(page)
+  await page.waitForTimeout(1_300)
+  await expectPost507LowerBodyBlockDragStarts(page, editor)
+}
+
+const countMenuReopenTransitions = (menuCounts: number[]) => {
+  let sawCloseAfterOpen = false
+  let reopenCount = 0
+  for (let index = 0; index < menuCounts.length; index += 1) {
+    const count = menuCounts[index] ?? 0
+    const previousCount = index > 0 ? menuCounts[index - 1] ?? 0 : 0
+    if (previousCount > 0 && count === 0) sawCloseAfterOpen = true
+    if (sawCloseAfterOpen && previousCount === 0 && count > 0) reopenCount += 1
+  }
+  return reopenCount
+}
+
+export const expectPost507LowerGateTelemetryStable = async (page: Page, label: string) => {
+  const diagnostics = await readPost507EditorDiagnostics(page, label)
+  const telemetry = diagnostics.interactionTelemetry
+  const rowMenuCounts = telemetry.menuTimeline.map((sample) => sample.rowMenuVisibleCount)
+  const columnMenuCounts = telemetry.menuTimeline.map((sample) => sample.columnMenuVisibleCount)
+  const fallbackTail = telemetry.fallbackTimeline.slice(-8).filter(
+    (sample) =>
+      sample.codeFallbackCount > 0 ||
+      sample.tableFallbackCount > 0 ||
+      Boolean(sample.codeFallbackText.trim()) ||
+      Boolean(sample.tableFallbackText.trim())
+  )
+
+  expect(telemetry.menuEverVisible.row || rowMenuCounts.some((count) => count > 0), `${label} should open a row axis menu`).toBe(true)
+  expect(
+    telemetry.menuEverVisible.column || columnMenuCounts.some((count) => count > 0),
+    `${label} should open a column axis menu`
+  ).toBe(true)
+  expect(countMenuReopenTransitions(rowMenuCounts), `${label} row menu should not flicker closed/reopened`).toBe(0)
+  expect(countMenuReopenTransitions(columnMenuCounts), `${label} column menu should not flicker closed/reopened`).toBe(0)
+  expect(fallbackTail, `${label} should leave no trailing table/code fallback selection markers`).toEqual([])
+  expect(diagnostics.domSnapshot.selectedCellCount, `${label} should finish without sticky structural cells`).toBe(0)
+  expect(diagnostics.domSnapshot.blockOverlayCount, `${label} should finish without sticky block selection overlay`).toBe(0)
+  expect(diagnostics.focusedElement === null || typeof diagnostics.focusedElement === "string").toBe(true)
 }

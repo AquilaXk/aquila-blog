@@ -300,7 +300,7 @@ export const useBlockEditorEngineBlockSelectionUi = ({
       }
       if (isTableStructuralSelection) {
         setHoveredListItemContext(null)
-        setHoveredBlockIndex(null)
+        setHoveredBlockIndex(hoveredTableElement ? null : targetBlockIndex)
         return
       }
       if (target?.closest("[data-block-handle-rail='true']") || target?.closest("[data-block-menu-root='true']")) {

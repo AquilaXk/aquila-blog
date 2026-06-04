@@ -26,6 +26,7 @@ test.describe("editor 507 real feature E2E contract", () => {
       "body-text-selection",
       "block-selection",
       "scroll-jump-lock",
+      "lower-real-workflow-gate",
     ]
     expect(POST_507_REAL_FEATURE_CONTRACT.requiredCoverage.map((entry) => entry.id)).toEqual(requiredIds)
 

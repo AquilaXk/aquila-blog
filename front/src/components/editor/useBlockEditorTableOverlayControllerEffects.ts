@@ -353,6 +353,34 @@ export const useBlockEditorTableOverlayControllerEffects = ({
   ])
 
   useEffect(() => {
+    if (typeof window === "undefined" || !isTableStructuralSelection) return
+    const clearStructuralSelectionForViewportIntent = () => {
+      suppressTableAxisMenuKeepAlive()
+      const currentEditor = editorRef.current
+      if (currentEditor?.state.selection instanceof CellSelection) {
+        const resolvedPos = currentEditor.state.doc.resolve(currentEditor.state.selection.from)
+        currentEditor.view.dispatch(currentEditor.state.tr.setSelection(TextSelection.near(resolvedPos)))
+      }
+      setHoveredTableCellMenuLayout(null)
+      setIsTableQuickRailHovered(false)
+      setTableMenuState(null)
+      hideTableQuickRailImmediately()
+    }
+    window.addEventListener("wheel", clearStructuralSelectionForViewportIntent, { capture: true, passive: true })
+    return () => {
+      window.removeEventListener("wheel", clearStructuralSelectionForViewportIntent, true)
+    }
+  }, [
+    editorRef,
+    hideTableQuickRailImmediately,
+    isTableStructuralSelection,
+    setHoveredTableCellMenuLayout,
+    setIsTableQuickRailHovered,
+    setTableMenuState,
+    suppressTableAxisMenuKeepAlive,
+  ])
+
+  useEffect(() => {
     if (typeof window === "undefined" || !tableMenuState) return
     const close = (event: PointerEvent | KeyboardEvent) => {
       if (event instanceof PointerEvent) {

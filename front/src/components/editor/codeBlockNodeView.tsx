@@ -181,7 +181,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
         if (cancelled || preserveGeneration !== codeDomTextRangePreserveGeneration) return
         selectRange(); frame += 1
         const elapsedMs = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt
-        if (frame < 168 || elapsedMs < 2_800) window.requestAnimationFrame(restore)
+        if (frame < 168 || elapsedMs < CODE_SCROLL_PRESERVE_MIN_MS) window.requestAnimationFrame(restore)
         else { codeDomTextRangePreserveGeneration += 1; cleanupCancel() }
       }
       window.addEventListener("pointerdown", cancel, { capture: true, passive: true })
@@ -365,7 +365,6 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       if (!(event.metaKey || event.ctrlKey)) return
       if (event.key.toLowerCase() !== "a") return
       const activeElement = document.activeElement
-      const scrollAnchor = preserveCodeSelectAllScroll()
       const selection = window.getSelection()
       const anchorElement =
         selection?.anchorNode instanceof Element
@@ -381,6 +380,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
         (anchorElement instanceof Element && contentRoot.contains(anchorElement)) ||
         (isActiveShellMatch && contentRoot.isConnected)
       if (!isInsideCodeBlock) return
+      const scrollAnchor = preserveCodeSelectAllScroll()
       event.preventDefault()
       event.stopPropagation()
       event.stopImmediatePropagation()

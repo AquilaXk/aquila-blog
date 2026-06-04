@@ -339,8 +339,8 @@ test.describe("editor authoring table structure and styles", () => {
     await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(before.columns)
 
     const trailingCell = page.locator("table tr").nth(before.rows - 1).locator("th, td").nth(before.columns - 1)
-    await trailingCell.click()
-    await page.keyboard.type("keep")
+    await trailingCell.locator("p").first().click({ position: { x: 8, y: 8 } })
+    await page.keyboard.insertText("keep")
     await expect(trailingCell).toContainText("keep")
     await expect
       .poll(async () => (await page.getByTestId("qa-markdown-output").textContent()) || "")
@@ -425,13 +425,7 @@ test.describe("editor authoring table structure and styles", () => {
 
     const structureMenuButton = page.getByTestId("table-structure-menu-button")
     await expect(structureMenuButton).toBeVisible()
-    await page.evaluate(() => {
-      const button = document.querySelector('[data-testid="table-structure-menu-button"]')
-      if (!(button instanceof HTMLButtonElement)) {
-        throw new Error("table structure menu button is not attached")
-      }
-      button.click()
-    })
+    await structureMenuButton.click()
     const tableMenu = page.getByTestId("table-table-menu")
     await expect(tableMenu).toBeVisible()
     await expect(page.locator("table tr").first().locator("th")).toHaveCount(3)
@@ -446,12 +440,8 @@ test.describe("editor authoring table structure and styles", () => {
 
     const deleteTableButton = tableMenu.getByRole("button", { name: "표 삭제" })
     await expect(deleteTableButton).toBeVisible()
-    await deleteTableButton.evaluate((button) => {
-      if (!(button instanceof HTMLButtonElement)) {
-        throw new Error("table delete button is not attached")
-      }
-      button.click()
-    })
+    await expect(deleteTableButton).toBeEnabled()
+    await deleteTableButton.click()
     await expect(page.locator(".aq-block-editor__content table")).toHaveCount(0)
     await expect(page.getByTestId("block-editor-prosemirror")).toBeVisible()
   })
@@ -473,21 +463,14 @@ test.describe("editor authoring table structure and styles", () => {
     }
 
     const clickVisibleStructureMenuButton = async () => {
-      await expect
-        .poll(() =>
-          page.evaluate(() => {
-            const button = document.querySelector('[data-testid="table-structure-menu-button"]')
-            return button instanceof HTMLButtonElement
-          })
-        )
-        .toBe(true)
-      await page.evaluate(() => {
-        const button = document.querySelector('[data-testid="table-structure-menu-button"]')
-        if (!(button instanceof HTMLButtonElement)) {
-          throw new Error("table structure menu button is not attached")
-        }
-        button.click()
-      })
+      const button = page.getByTestId("table-structure-menu-button")
+      await expect(button).toBeVisible()
+      await button.click()
+    }
+    const clickVisibleTableMenuButton = async (testId: string) => {
+      const button = page.getByTestId("table-table-menu").getByTestId(testId)
+      await expect(button).toBeVisible()
+      await button.click()
     }
 
     await page.goto(QA_ENGINE_ROUTE)
@@ -504,10 +487,12 @@ test.describe("editor authoring table structure and styles", () => {
     await clickVisibleStructureMenuButton()
     const tableMenu = page.getByTestId("table-table-menu")
     await expect(tableMenu).toBeVisible()
+    await expect(tableMenu.getByTestId("table-overflow-mode-normal")).toBeVisible()
+    await expect(tableMenu.getByTestId("table-overflow-mode-wide")).toBeVisible()
     await expect(tableMenu.getByTestId("table-overflow-mode-normal")).toHaveAttribute("data-active", "true")
     await expect(tableMenu.getByTestId("table-overflow-mode-wide")).toHaveAttribute("data-active", "false")
 
-    await tableMenu.getByRole("button", { name: "넓은 표" }).click()
+    await clickVisibleTableMenuButton("table-overflow-mode-wide")
     await expect(table).toHaveAttribute("data-overflow-mode", "wide")
     await expect(page.getByTestId("qa-markdown-output")).toContainText('"overflowMode":"wide"')
 
@@ -528,10 +513,12 @@ test.describe("editor authoring table structure and styles", () => {
     await clickVisibleStructureMenuButton()
     const reloadedTableMenu = page.getByTestId("table-table-menu")
     await expect(reloadedTableMenu).toBeVisible()
+    await expect(reloadedTableMenu.getByTestId("table-overflow-mode-normal")).toBeVisible()
+    await expect(reloadedTableMenu.getByTestId("table-overflow-mode-wide")).toBeVisible()
     await expect(reloadedTableMenu.getByTestId("table-overflow-mode-normal")).toHaveAttribute("data-active", "false")
     await expect(reloadedTableMenu.getByTestId("table-overflow-mode-wide")).toHaveAttribute("data-active", "true")
 
-    await reloadedTableMenu.getByRole("button", { name: "페이지 너비에 맞춤" }).click()
+    await clickVisibleTableMenuButton("table-overflow-mode-normal")
     await expect(page.locator(".aq-block-editor__content .tableWrapper table").first()).not.toHaveAttribute(
       "data-overflow-mode",
       "wide"

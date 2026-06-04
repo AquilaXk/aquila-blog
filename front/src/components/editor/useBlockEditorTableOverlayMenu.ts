@@ -186,17 +186,20 @@ export const useBlockEditorTableOverlayMenu = ({
   }, [editor])
 
   useEffect(() => {
-    if (isTableStructuralSelection) return
+    const isTableNodeSelection = () =>
+      editor?.state.selection instanceof NodeSelection && editor.state.selection.node.type.name === "table"
+    if (isTableStructuralSelection || (tableMenuState?.kind === "table" && isTableNodeSelection())) return
     if (typeof window === "undefined") {
       setTableMenuState(null)
       return
     }
     const closeTimer = window.setTimeout(() => {
       if (editor?.state.selection instanceof CellSelection) return
+      if (tableMenuState?.kind === "table" && isTableNodeSelection()) return
       setTableMenuState(null)
     }, 360)
     return () => window.clearTimeout(closeTimer)
-  }, [editor, isTableStructuralSelection, setTableMenuState])
+  }, [editor, isTableStructuralSelection, setTableMenuState, tableMenuState?.kind])
 
   const closeTableMenu = useCallback(() => setTableMenuState(null), [setTableMenuState])
 

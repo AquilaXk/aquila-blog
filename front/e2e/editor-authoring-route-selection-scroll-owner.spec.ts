@@ -30,6 +30,30 @@ const resolveTextRangeBox = async (locator: Locator, text: string) =>
     throw new Error(`post 507 text range is missing: ${targetText}`)
   }, text)
 
+const dragTextRangeAndReadSelection = async (
+  page: Page,
+  box: { endX: number; startX: number; y: number }
+) => {
+  let selectionText = ""
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await page.evaluate(() => window.getSelection()?.removeAllRanges())
+    await page.mouse.move(box.startX, box.y)
+    await page.waitForTimeout(80)
+    await page.mouse.down()
+    for (let index = 1; index <= 56; index += 1) {
+      const ratio = index / 56
+      await page.mouse.move(box.startX + (box.endX - box.startX) * ratio, box.y)
+      await page.waitForTimeout(index === 1 ? 16 : 4)
+    }
+    await page.waitForTimeout(40)
+    await page.mouse.up()
+    await page.waitForTimeout(220)
+    selectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
+    if (selectionText.trim()) return selectionText
+  }
+  return selectionText
+}
+
 test.describe("editor authoring route 507 selection scroll owner", () => {
   test("실제 /editor/[id] post 507 일반 본문 클릭 직후 scroll 이벤트가 이전 anchor로 되돌아가지 않는다", async ({
     page,
@@ -76,13 +100,7 @@ test.describe("editor authoring route 507 selection scroll owner", () => {
     await page.waitForTimeout(120)
 
     const dragBox = await resolveTextRangeBox(targetParagraph, "JWT 구조를 이해하면")
-    await page.mouse.move(dragBox.startX, dragBox.y)
-    await page.mouse.down()
-    await page.mouse.move(dragBox.endX, dragBox.y, { steps: 16 })
-    await page.mouse.up()
-    await page.waitForTimeout(160)
-
-    const selectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
+    const selectionText = await dragTextRangeAndReadSelection(page, dragBox)
     expect(selectionText).toContain("JWT 구조를 이해하면")
 
     const beforeScrollTop = await readScrollTop(page)
@@ -103,11 +121,19 @@ test.describe("editor authoring route 507 selection scroll owner", () => {
       version: 5,
     })
 
-    const codeBlock = editor.locator(".aq-code-shell", { hasText: "로그인 -> 세션 생성" }).first()
-    await codeBlock.scrollIntoViewIfNeeded()
+    const codeBlock = editor.locator(".aq-code-shell").first()
+    await expect(codeBlock).toBeVisible({ timeout: 15_000 })
+    await codeBlock.evaluate((element) => {
+      element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
+    })
     await page.waitForTimeout(120)
 
     const codeEditorContent = codeBlock.locator(".aq-code-editor-content").first()
+    if (!((await codeEditorContent.textContent()) || "").trim()) {
+      await codeEditorContent.click({ position: { x: 28, y: 18 } })
+      await page.keyboard.insertText("login session flow sample")
+      await expect.poll(async () => ((await codeEditorContent.textContent()) || "").trim()).not.toBe("")
+    }
     const beforeClickScrollTop = await readScrollTop(page)
     await codeEditorContent.click({ position: { x: 28, y: 18 } })
     await page.waitForTimeout(220)

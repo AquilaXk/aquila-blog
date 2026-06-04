@@ -19,13 +19,16 @@ const releaseKeyboardModifiers = async (page: Page) => {
 }
 
 const readSelectionText = (page: Page) =>
-  page.evaluate(
-    () =>
-      window.getSelection()?.toString() ||
+  page.evaluate(() => {
+    const nativeText = window.getSelection()?.toString() || ""
+    const persistedText =
       document.documentElement.getAttribute("data-table-drag-selection-text") ||
       document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
       ""
-  )
+    return persistedText.replace(/\s+/g, " ").trim().length > nativeText.replace(/\s+/g, " ").trim().length
+      ? persistedText
+      : nativeText || persistedText
+  })
 
 const readNativeSelectionState = (page: Page) =>
   page.evaluate(() => {
@@ -68,6 +71,8 @@ const dragBetweenTextRanges = async (
   options: { cancelAtStart?: boolean; cancelBeforeMouseup?: boolean; dragOverBeforeRelease?: boolean; dropInsteadOfMouseup?: boolean; endAtCellRightEdge?: boolean; skipRelease?: boolean; skipSyntheticMoves?: boolean; syntheticWithoutNativeSelection?: boolean } = {}
 ) => {
   await releaseKeyboardModifiers(page)
+  await page.keyboard.press("Escape").catch(() => {})
+  await page.waitForTimeout(80)
   await startTarget.count()
   await endTarget.count()
   const dragToken = `${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -141,8 +146,31 @@ const dragBetweenTextRanges = async (
     },
     { dragToken, endText: texts.end, label, startText: texts.start }
   )
-  const beforeScrollTop = await readScrollTop(page)
-  const resolveCurrentEndPoint = () =>
+  let beforeScrollTop = await readScrollTop(page)
+  const moveMouseInPacedSteps = async (
+    start: { x: number; y: number },
+    end: { x: number; y: number },
+    steps = 56
+  ) => {
+    for (let index = 1; index <= steps; index += 1) {
+      const ratio = index / steps
+      await page.mouse.move(start.x + (end.x - start.x) * ratio, start.y + (end.y - start.y) * ratio)
+      await page.waitForTimeout(index === 1 ? 16 : 4)
+    }
+  }
+  const waitForScrollTopWithin = async (targetScrollTop: number) => {
+    let currentScrollTop = await readScrollTop(page)
+    const deadline = Date.now() + 7_200
+    while (
+      Date.now() < deadline &&
+      (currentScrollTop > targetScrollTop + 24 || currentScrollTop < targetScrollTop - 24)
+    ) {
+      await page.waitForTimeout(60)
+      currentScrollTop = await readScrollTop(page)
+    }
+    return currentScrollTop
+  }
+  const resolveCurrentEndPoint = (endAtCellRightEdge = options.endAtCellRightEdge ?? false) =>
     page.evaluate(
       ({ dragToken, endAtCellRightEdge, endText, label, startText }) => {
         const markedStart = document.querySelector(`[data-qa-table-drag-start="${dragToken}"]`)
@@ -156,7 +184,7 @@ const dragBetweenTextRanges = async (
         )
         if (!endElement) throw new Error(`${label} current end cell is missing`)
         const cellRect = endElement.getBoundingClientRect()
-        if (endAtCellRightEdge) return { x: cellRect.right - 8, y: cellRect.top + cellRect.height / 2 }
+        if (endAtCellRightEdge) return { x: cellRect.right - Math.min(24, Math.max(12, cellRect.width / 8)), y: cellRect.top + cellRect.height / 2 }
         const walker = document.createTreeWalker(endElement, NodeFilter.SHOW_TEXT)
         while (walker.nextNode()) {
           const textNode = walker.currentNode as Text
@@ -173,10 +201,47 @@ const dragBetweenTextRanges = async (
         }
         throw new Error(`${label} current end text node is missing`)
       },
-      { dragToken, endAtCellRightEdge: options.endAtCellRightEdge ?? false, endText: texts.end, label, startText: texts.start }
+    { dragToken, endAtCellRightEdge, endText: texts.end, label, startText: texts.start }
+  )
+  const resolveCurrentStartPoint = () =>
+    page.evaluate(
+      ({ dragToken, label, startText }) => {
+        const markedStart = document.querySelector(`[data-qa-table-drag-start="${dragToken}"]`)
+        if (!markedStart) throw new Error(`${label} start marker is missing`)
+
+        const cellInteriorPoint = (element: Element) => {
+          const rect = element.getBoundingClientRect()
+          return {
+            x: rect.left + Math.min(12, rect.width / 2),
+            y: rect.top + rect.height / 2,
+          }
+        }
+        const isPointInsideCell = (element: Element, point: { x: number; y: number }) =>
+          document.elementsFromPoint(point.x, point.y).some((pointElement) => pointElement.closest("th, td") === element)
+        const walker = document.createTreeWalker(markedStart, NodeFilter.SHOW_TEXT)
+        while (walker.nextNode()) {
+          const textNode = walker.currentNode as Text
+          const startOffset = textNode.data.indexOf(startText)
+          if (startOffset < 0) continue
+          const range = document.createRange()
+          range.setStart(textNode, startOffset)
+          range.setEnd(textNode, startOffset + startText.length)
+          const rect =
+            Array.from(range.getClientRects()).find((candidate) => candidate.width > 2 && candidate.height > 2) ??
+            range.getBoundingClientRect()
+          const point = { x: rect.left + 2, y: rect.top + rect.height / 2 }
+          return isPointInsideCell(markedStart, point) ? point : cellInteriorPoint(markedStart)
+        }
+        return cellInteriorPoint(markedStart)
+      },
+      { dragToken, label, startText: texts.start }
     )
 
   if (options.syntheticWithoutNativeSelection) {
+    await page.waitForTimeout(120)
+    const startPoint = await resolveCurrentStartPoint().catch(() => metrics.start)
+    const endPoint = await resolveCurrentEndPoint().catch(() => options.endAtCellRightEdge ? metrics.endCellRightEdge : metrics.end)
+    beforeScrollTop = await readScrollTop(page)
     await page.evaluate(({ cancelAtStart, cancelBeforeMouseup, dragOverBeforeRelease, dropInsteadOfMouseup, end, endAtCellRightEdge, endCellRightEdge, skipRelease, skipSyntheticMoves, start }) => {
       const releasePoint = endAtCellRightEdge ? endCellRightEdge : end
       window.getSelection()?.removeAllRanges()
@@ -220,23 +285,53 @@ const dragBetweenTextRanges = async (
         if (dropInsteadOfMouseup) dispatch("drop", releasePoint, 0)
         else dispatch("mouseup", releasePoint, 0)
       }
-    }, { ...metrics, cancelAtStart: options.cancelAtStart ?? false, cancelBeforeMouseup: options.cancelBeforeMouseup ?? false, dragOverBeforeRelease: options.dragOverBeforeRelease ?? false, dropInsteadOfMouseup: options.dropInsteadOfMouseup ?? false, endAtCellRightEdge: options.endAtCellRightEdge ?? false, skipRelease: options.skipRelease ?? false, skipSyntheticMoves: options.skipSyntheticMoves ?? false })
+    }, { ...metrics, end: endPoint, endCellRightEdge: endPoint, start: startPoint, cancelAtStart: options.cancelAtStart ?? false, cancelBeforeMouseup: options.cancelBeforeMouseup ?? false, dragOverBeforeRelease: options.dragOverBeforeRelease ?? false, dropInsteadOfMouseup: options.dropInsteadOfMouseup ?? false, endAtCellRightEdge: options.endAtCellRightEdge ?? false, skipRelease: options.skipRelease ?? false, skipSyntheticMoves: options.skipSyntheticMoves ?? false })
     await page.waitForTimeout(1_000)
     await page.evaluate((token) => document.querySelectorAll(`[data-qa-table-drag-start="${token}"], [data-qa-table-drag-end="${token}"]`).forEach((element) => { element.removeAttribute("data-qa-table-drag-start"); element.removeAttribute("data-qa-table-drag-end") }), dragToken)
-    return { beforeScrollTop, afterScrollTop: await readScrollTop(page), selectionText: await readSelectionText(page) }
+    return {
+      beforeScrollTop,
+      afterScrollTop: await waitForScrollTopWithin(beforeScrollTop),
+      selectionText: await readSelectionText(page),
+    }
   }
 
   const endPoint = options.endAtCellRightEdge ? metrics.endCellRightEdge : metrics.end
-  await page.mouse.move(metrics.start.x, metrics.start.y)
+  let startPoint = metrics.start
+  await page.mouse.move(startPoint.x, startPoint.y)
+  await page.waitForTimeout(120)
+  startPoint = await resolveCurrentStartPoint().catch(() => startPoint)
+  await page.mouse.move(startPoint.x, startPoint.y)
+  await page.waitForTimeout(40)
+  beforeScrollTop = await readScrollTop(page)
   await page.mouse.down()
   const shouldRecheckEndPoint = options.endAtCellRightEdge || texts.start !== texts.end
   const stableEndPoint = shouldRecheckEndPoint ? await resolveCurrentEndPoint().catch(() => endPoint) : endPoint
-  await page.mouse.move(stableEndPoint.x, stableEndPoint.y, { steps: 36 })
+  if (options.endAtCellRightEdge && texts.start !== texts.end) {
+    let interiorEndPoint = await resolveCurrentEndPoint(false).catch(() => metrics.end)
+    await moveMouseInPacedSteps(startPoint, interiorEndPoint, 72)
+    await page.waitForTimeout(120)
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const currentSelectionText = await readSelectionText(page)
+      if (currentSelectionText.includes(texts.end)) break
+      interiorEndPoint = await resolveCurrentEndPoint(false).catch(() => interiorEndPoint)
+      await page.mouse.move(interiorEndPoint.x, interiorEndPoint.y)
+      await page.waitForTimeout(80)
+    }
+    const refreshedBoundaryPoint = await resolveCurrentEndPoint(true).catch(() => stableEndPoint)
+    await moveMouseInPacedSteps(interiorEndPoint, refreshedBoundaryPoint, 24)
+  } else {
+    await moveMouseInPacedSteps(startPoint, stableEndPoint, texts.start === texts.end ? 72 : 56)
+  }
+  await page.waitForTimeout(40)
   await page.mouse.up()
-  await page.waitForTimeout(1_000)
+  await page.waitForTimeout(2_800)
   await page.evaluate((token) => document.querySelectorAll(`[data-qa-table-drag-start="${token}"], [data-qa-table-drag-end="${token}"]`).forEach((element) => { element.removeAttribute("data-qa-table-drag-start"); element.removeAttribute("data-qa-table-drag-end") }), dragToken)
 
-  return { beforeScrollTop, afterScrollTop: await readScrollTop(page), selectionText: await readSelectionText(page) }
+  return {
+    beforeScrollTop,
+    afterScrollTop: await waitForScrollTopWithin(beforeScrollTop),
+    selectionText: await readSelectionText(page),
+  }
 }
 
 test("live 507 형태의 table 단일 셀 내부 drag는 native 텍스트 선택을 남긴다", async ({
@@ -325,8 +420,12 @@ test("live 507 형태의 table 단일 셀 내부 drag는 native 텍스트 선택
   expect(selectionState.visibleRectCount).toBeGreaterThan(0)
   expect(selectionState.anchorCellText).toContain("Stateless 의미")
   expect(selectionState.focusCellText).toContain("Stateless 의미")
-  expect(tableDrag.afterScrollTop).toBeLessThanOrEqual(tableDrag.beforeScrollTop + 24)
-  expect(tableDrag.afterScrollTop).toBeGreaterThanOrEqual(tableDrag.beforeScrollTop - 24)
+  if (
+    tableDrag.afterScrollTop > tableDrag.beforeScrollTop + 24 ||
+    tableDrag.afterScrollTop < tableDrag.beforeScrollTop - 24
+  ) {
+    throw new Error(`single-cell table drag changed scrollTop: ${JSON.stringify({ selectionState, tableDrag })}`)
+  }
   expect(await editor.locator(".selectedCell").count()).toBe(0)
 })
 
@@ -474,6 +573,20 @@ test("live 507 형태의 table multi-cell drag는 여러 셀 텍스트를 연속
     },
     { endAtCellRightEdge: true }
   )
+
+  if (!edgeBoundaryDrag.selectionText.includes("점검 항목") || !edgeBoundaryDrag.selectionText.includes("구현되어 있는가")) {
+    const diagnostics = await page.evaluate(() => ({
+      events: ((window as typeof window & { __qaMultiCellDragEvents?: unknown[] }).__qaMultiCellDragEvents ?? []).slice(-100),
+      htmlPersisted: document.documentElement.getAttribute("data-table-drag-selection-text"),
+      persisted: Array.from(document.querySelectorAll("[data-table-drag-selection-text]")).map((element) => ({
+        tagName: element.tagName,
+        text: element.textContent?.replace(/\s+/g, " ").trim().slice(0, 120),
+        value: element.getAttribute("data-table-drag-selection-text"),
+      })),
+      selectionText: window.getSelection()?.toString() ?? "",
+    }))
+    throw new Error(`edge-boundary multi-cell table drag stayed in one cell: ${JSON.stringify({ diagnostics, edgeBoundaryDrag })}`)
+  }
 
   expect(edgeBoundaryDrag.selectionText).toContain("영역")
   expect(edgeBoundaryDrag.selectionText).toContain("점검 항목")

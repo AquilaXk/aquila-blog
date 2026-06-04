@@ -121,14 +121,13 @@ test.describe("editor authoring route 507 selection scroll owner", () => {
       version: 5,
     })
 
-    const codeBlock = editor.locator(".aq-code-shell").first()
-    await expect(codeBlock).toBeVisible({ timeout: 15_000 })
-    await codeBlock.evaluate((element) => {
-      element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
+    const codeEditorContent = editor.locator(".aq-code-editor-content", { hasText: /\S/ }).first()
+    await expect(codeEditorContent).toBeVisible({ timeout: 15_000 })
+    await codeEditorContent.evaluate((element) => {
+      element.closest(".aq-code-shell")?.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
     })
     await page.waitForTimeout(120)
 
-    const codeEditorContent = codeBlock.locator(".aq-code-editor-content").first()
     await expect.poll(async () => ((await codeEditorContent.textContent()) || "").trim()).not.toBe("")
     const beforeClickScrollTop = await readScrollTop(page)
     await codeEditorContent.click({ position: { x: 28, y: 18 } })

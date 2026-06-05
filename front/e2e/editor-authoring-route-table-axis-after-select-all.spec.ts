@@ -17,6 +17,21 @@ const clickVisibleOverlayControl = async (_page: Page, locator: Locator) => {
   await locator.click({ force: true, timeout: 900 })
 }
 
+const moveToPost507RowGripHotzone = async (page: Page, rowHandle: Locator) => {
+  const rowMetrics = await resolvePost507FinalTableRowMetrics(page)
+  const points = [
+    { x: rowMetrics.hoverX, y: rowMetrics.hoverY },
+    { x: rowMetrics.hoverX + 4, y: rowMetrics.hoverY },
+    { x: rowMetrics.hoverX, y: rowMetrics.cellY },
+  ]
+  for (const point of points) {
+    await page.mouse.move(rowMetrics.cellX, rowMetrics.cellY)
+    await page.mouse.move(point.x, point.y, { steps: 4 })
+    await page.waitForTimeout(80)
+    if (await rowHandle.isVisible().catch(() => false)) return
+  }
+}
+
 const readTableTextSelectionState = async (page: Page) =>
   page.evaluate(() => ({
     dragAttributeCount: document.querySelectorAll("[data-table-drag-selection-text]").length,
@@ -184,6 +199,7 @@ const resolvePost507FinalTableRowMetrics = async (page: Page) => {
         cellRect.bottom <= 8 ||
         cellRect.top >= window.innerHeight - 8
       ) {
+        targetCell.scrollIntoView({ block: "center", inline: "nearest" })
         return null
       }
 
@@ -728,23 +744,8 @@ test.describe("editor authoring route post 507 final table axis after cell text 
       await expectPost507FinalTableSelectionOnPage(page)
     }
 
-    const moveToRowGripHotzone = async () => {
-      const rowMetrics = await resolvePost507FinalTableRowMetrics(page)
-      const points = [
-        { x: rowMetrics.hoverX, y: rowMetrics.hoverY },
-        { x: rowMetrics.hoverX + 4, y: rowMetrics.hoverY },
-        { x: rowMetrics.hoverX, y: rowMetrics.cellY },
-      ]
-      for (const point of points) {
-        await page.mouse.move(rowMetrics.cellX, rowMetrics.cellY)
-        await page.mouse.move(point.x, point.y, { steps: 4 })
-        await page.waitForTimeout(80)
-        if (await rowHandle.isVisible().catch(() => false)) return
-      }
-    }
-
     await selectCurrentCellText()
-    await moveToRowGripHotzone()
+    await moveToPost507RowGripHotzone(page, rowHandle)
     await expect(rowHandle).toBeVisible()
     await clickVisibleOverlayControl(page, rowHandle)
     await expect(page.getByTestId("table-row-selection-outline")).toBeVisible()
@@ -778,9 +779,7 @@ test.describe("editor authoring route post 507 final table axis after cell text 
     await page.keyboard.press(SELECT_ALL_SHORTCUT)
     await expectPost507FinalTableSelectionOnPage(page)
 
-    const rowMetrics = await resolvePost507FinalTableRowMetrics(page)
-    await page.mouse.move(rowMetrics.cellX, rowMetrics.cellY)
-    await page.mouse.move(rowMetrics.hoverX, rowMetrics.hoverY, { steps: 4 })
+    await moveToPost507RowGripHotzone(page, rowHandle)
     await expect(rowHandle).toBeVisible()
 
     const rowHandleBox = await rowHandle.boundingBox()

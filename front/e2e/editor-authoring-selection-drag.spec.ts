@@ -566,7 +566,7 @@ test.describe("editor authoring route text selection drag", () => {
     await expectSelectionScopedToWord(page, codeLabel, [bodyLabel, tableLabel])
     const codePoints = await getWordDragPoints(codeContent, codeLabel)
     await page.mouse.click(codePoints.startX, codePoints.startY)
-    await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
+    await page.keyboard.press("ControlOrMeta+A")
     await expectSelectionScopedToWord(page, codeLabel, [bodyLabel, tableLabel])
     await dragSelectWord(page, editor.locator("table th, table td", { hasText: tableLabel }).first(), tableLabel)
     await expectSelectionScopedToWord(page, tableLabel, [bodyLabel, codeLabel])
@@ -579,7 +579,7 @@ test.describe("editor authoring route text selection drag", () => {
         y: Math.min(16, Math.max(8, tableCellBox.height - 8)),
       },
     })
-    await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
+    await page.keyboard.press("ControlOrMeta+A")
     await expectSelectionContainsOnly(
       page,
       ["구분", "값", tableLabel, "상태 확인", "회귀 탐지", "완료"],

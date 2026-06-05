@@ -88,8 +88,29 @@ test.describe("editor authoring route 507 selection scroll owner", () => {
     const helper =
       source.match(/const preserveCodePointerFocusScroll = useCallback\([\s\S]*?\n  \}, \[\]\)/)?.[0] ?? ""
 
-    expect(helper).toContain("CODE_SCROLL_PRESERVE_MIN_MS, false, false, true, false, false, undefined, true")
-    expect(helper).toContain("CODE_SCROLL_PRESERVE_MIN_MS, false, false, true)")
+    expect(helper).toContain(
+      "CODE_SCROLL_PRESERVE_MIN_MS, false, false, true, false, false, shouldCancelCodeScrollPreserve(scrollAnchor), true"
+    )
+    expect(helper).toContain(
+      "CODE_SCROLL_PRESERVE_MIN_MS, false, false, true, false, false, shouldCancelCodeScrollPreserve(scrollAnchor))"
+    )
+  })
+
+  test("code text drag scroll preserve source contract는 먼 사용자 이동에서 취소된다", () => {
+    const source = readFileSync("src/components/editor/useBlockEditorEngineSelectionBubbleEffects.ts", "utf8")
+
+    expect(source).toContain("shouldCancelCodeTextScrollPreserve(codeTextDragStart.scrollAnchor)")
+  })
+
+  test("table single-cell native preserve source contract는 range 재삽입 전에 먼 이동을 취소한다", () => {
+    const source = readFileSync("src/components/editor/tableTextSelectionModel.ts", "utf8")
+    const restore =
+      source.match(/const restore = \(\) => \{ if \(cancelled\)[\s\S]*?frame \+= 1/)?.[0] ?? ""
+
+    expect(restore.indexOf("if (shouldCancelForFarScroll())")).toBeGreaterThanOrEqual(0)
+    expect(restore.indexOf("if (shouldCancelForFarScroll())")).toBeLessThan(
+      restore.indexOf("selection?.addRange")
+    )
   })
 
   test("실제 /editor/[id] post 507 일반 본문 클릭 직후 scroll 이벤트가 이전 anchor로 되돌아가지 않는다", async ({

@@ -184,7 +184,13 @@ const dragBetweenTextRanges = async (
         )
         if (!endElement) throw new Error(`${label} current end cell is missing`)
         const cellRect = endElement.getBoundingClientRect()
-        if (endAtCellRightEdge) return { x: cellRect.right - Math.min(24, Math.max(12, cellRect.width / 8)), y: cellRect.top + cellRect.height / 2 }
+        const isInsideEndCell = (point: { x: number; y: number }) =>
+          document.elementsFromPoint(point.x, point.y).some((pointElement) => pointElement.closest("th, td") === endElement)
+        const requireInsideEndCell = (point: { x: number; y: number }) => {
+          if (isInsideEndCell(point)) return point
+          throw new Error(`${label} current end point is outside end cell`)
+        }
+        if (endAtCellRightEdge) return requireInsideEndCell({ x: cellRect.right - Math.min(24, Math.max(12, cellRect.width / 8)), y: cellRect.top + cellRect.height / 2 })
         const walker = document.createTreeWalker(endElement, NodeFilter.SHOW_TEXT)
         while (walker.nextNode()) {
           const textNode = walker.currentNode as Text
@@ -195,9 +201,7 @@ const dragBetweenTextRanges = async (
           range.setEnd(textNode, startOffset + endText.length)
           const rect = Array.from(range.getClientRects()).find((candidate) => candidate.width > 2 && candidate.height > 2) ?? range.getBoundingClientRect()
           const point = { x: rect.right - 2, y: rect.top + rect.height / 2 }
-          return document.elementsFromPoint(point.x, point.y).some((pointElement) => pointElement.closest("th, td") === endElement)
-            ? point
-            : { x: cellRect.right - Math.min(12, cellRect.width / 2), y: cellRect.top + cellRect.height / 2 }
+          return isInsideEndCell(point) ? point : requireInsideEndCell({ x: cellRect.right - Math.min(12, cellRect.width / 2), y: cellRect.top + cellRect.height / 2 })
         }
         throw new Error(`${label} current end text node is missing`)
       },

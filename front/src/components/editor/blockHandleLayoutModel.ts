@@ -17,6 +17,7 @@ export type WindowScrollAnchor = { x: number; y: number }
 let preserveNextEditorPointerAfterTable = false
 let preserveNextEditorPointerAfterCodeSelection = false
 let activeWindowScrollPreserveCancel: (() => void) | null = null, windowScrollPreserveGeneration = 0
+let activeWindowScrollPreserveOwner: string | null = null
 let suppressGeneralEditorPointerPreserveUntil = 0
 const activeTablePointerScrollPreserveCancels = new Set<() => void>()
 
@@ -24,9 +25,20 @@ export const markNextEditorPointerAfterTable = () => { preserveNextEditorPointer
 
 export const clearNextEditorPointerAfterTable = () => { preserveNextEditorPointerAfterTable = false }
 
+const setActiveWindowScrollPreserveOwner = (owner: string | null) => {
+  activeWindowScrollPreserveOwner = owner
+  if (typeof document === "undefined") return
+  if (owner) document.documentElement.setAttribute("data-editor-scroll-preserve-owner", owner)
+  else document.documentElement.removeAttribute("data-editor-scroll-preserve-owner")
+}
+
 export const cancelActiveWindowScrollPreserve = () => { activeWindowScrollPreserveCancel?.(); activeWindowScrollPreserveCancel = null }
 
 export const cancelAllWindowScrollPreserves = () => { windowScrollPreserveGeneration += 1; cancelActiveWindowScrollPreserve() }
+
+export const cancelActiveTableWindowScrollPreserve = () => {
+  if (activeWindowScrollPreserveOwner === "table") cancelActiveWindowScrollPreserve()
+}
 
 export const cancelTablePointerScrollPreserves = () => {
   clearNextEditorPointerAfterTable()
@@ -347,7 +359,8 @@ export const preserveWindowScrollPositionAcrossFrames = (
   cancelOnTextSelectionChangeRequiresText = false,
   shouldCancelBeforeRestore?: () => boolean,
   replaceActivePreserve = false,
-  cancelOnTextSelectionChangeAfterMs = Number.POSITIVE_INFINITY
+  cancelOnTextSelectionChangeAfterMs = Number.POSITIVE_INFINITY,
+  preserveOwner: string | null = null
 ) => {
   if (typeof window === "undefined" || typeof document === "undefined") return
   const scrollingElement = document.scrollingElement
@@ -412,11 +425,13 @@ export const preserveWindowScrollPositionAcrossFrames = (
     document.removeEventListener("selectionchange", cancelForTextSelection, true)
     if (replaceActivePreserve && activeWindowScrollPreserveCancel === cancel) {
       activeWindowScrollPreserveCancel = null
+      setActiveWindowScrollPreserveOwner(null)
     }
   }
   if (replaceActivePreserve) {
     activeWindowScrollPreserveCancel?.()
     activeWindowScrollPreserveCancel = cancel
+    setActiveWindowScrollPreserveOwner(preserveOwner)
   }
   window.addEventListener("wheel", cancel, { capture: true, passive: true, once: true })
   window.addEventListener("scroll", restoreOnScroll, { capture: true, passive: true })
@@ -461,63 +476,34 @@ const EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES = 192
 const EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS = 3_200
 const EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES = 144
 const EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS = 2_400
-const EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES = 72, EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MAX_MS = 72
+const EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES = 72, EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MAX_MS = 72, EDITOR_POINTER_SCROLL_PRESERVE_CANCEL_DISTANCE_PX = 3_200
 const EDITOR_POINTER_SCROLL_PRESERVE_SELECTOR = "[data-testid='block-editor-prosemirror'], .ProseMirror"
 const EDITOR_POINTER_SCROLL_CONTROL_SELECTOR =
   "button, input, textarea, select, summary, [role='button'], [contenteditable='false']"
 const EDITOR_POINTER_SCROLL_RICH_BLOCK_SELECTOR = ".aq-code-shell, .aq-code-editor-content, [data-code-block-wrapper='true'], .aq-table-shell, .tableWrapper, table, [data-mermaid-block], .aq-mermaid-code-input, .aq-mermaid, .aq-mermaid-stage"
+const shouldCancelEditorPointerScrollPreserve = (anchor: WindowScrollAnchor) => () => Math.abs(window.scrollX - anchor.x) > EDITOR_POINTER_SCROLL_PRESERVE_CANCEL_DISTANCE_PX || Math.abs((document.scrollingElement?.scrollTop ?? window.scrollY) - anchor.y) > EDITOR_POINTER_SCROLL_PRESERVE_CANCEL_DISTANCE_PX
 
-export const preserveWindowScrollForRichBlockSelectAll = () => { preserveWindowScrollAcrossFrames(EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES, 4, EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS) }
+export const preserveWindowScrollForRichBlockSelectAll = () => { const anchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }; preserveWindowScrollPositionAcrossFrames(anchor, EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES, 4, EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS, false, true, true, false, false, shouldCancelEditorPointerScrollPreserve(anchor), true) }
 
 export const preserveWindowScrollForTableSelectAll = () => {
-  preserveWindowScrollAcrossFrames(
-    EDITOR_POINTER_TABLE_SELECT_ALL_SCROLL_PRESERVE_FRAMES,
-    4,
-    EDITOR_POINTER_TABLE_SELECT_ALL_SCROLL_PRESERVE_MIN_MS,
-    false,
-    true,
-    true,
-    true,
-    true
-  )
+  const anchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
+  preserveWindowScrollPositionAcrossFrames(anchor, EDITOR_POINTER_TABLE_SELECT_ALL_SCROLL_PRESERVE_FRAMES, 4, EDITOR_POINTER_TABLE_SELECT_ALL_SCROLL_PRESERVE_MIN_MS, false, true, true, true, true, shouldCancelEditorPointerScrollPreserve(anchor), true)
 }
 
 const preserveWindowScrollForTablePointerTextDrag = () => {
   // Keep collapsed click focus-reveal correction alive; real text drags cancel on selectionchange.
-  trackTablePointerScrollPreserve(preserveWindowScrollAcrossFrames(
-    EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES,
-    4,
-    EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS,
-    true,
-    true,
-    true,
-    false,
-    true
-  ))
+  const anchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
+  trackTablePointerScrollPreserve(preserveWindowScrollPositionAcrossFrames(anchor, EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES, 4, EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS, true, true, true, false, true, shouldCancelEditorPointerScrollPreserve(anchor), true, Number.POSITIVE_INFINITY, "table"))
 }
 
 const preserveWindowScrollForTableFollowUpPointer = () => {
-  trackTablePointerScrollPreserve(preserveWindowScrollAcrossFrames(
-    EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES,
-    4,
-    EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS,
-    true,
-    true,
-    true,
-    false,
-    true
-  ))
+  const anchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
+  trackTablePointerScrollPreserve(preserveWindowScrollPositionAcrossFrames(anchor, EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES, 4, EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS, true, true, true, false, true, shouldCancelEditorPointerScrollPreserve(anchor), true, Number.POSITIVE_INFINITY, "table"))
 }
 
 export const preserveWindowScrollForCodePointerFocus = (cancelOnPointerDown = false) => {
-  preserveWindowScrollAcrossFrames(
-    EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES,
-    4,
-    EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS,
-    false,
-    false,
-    cancelOnPointerDown
-  )
+  const anchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
+  preserveWindowScrollPositionAcrossFrames(anchor, EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES, 4, EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS, false, false, cancelOnPointerDown, false, false, shouldCancelEditorPointerScrollPreserve(anchor), true)
 }
 
 export const preserveWindowScrollForEditorPointerFocus = (
@@ -569,18 +555,8 @@ export const preserveWindowScrollForEditorPointerFocus = (
   }
   if (shouldPreserveGeneralEditorPointer && !isGeneralEditorPointerPreserveSuppressed()) {
     const startedAt = getScrollPreserveNow()
-    preserveWindowScrollAcrossFrames(
-      EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES,
-      4,
-      EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MAX_MS,
-      true,
-      false,
-      true,
-      false,
-      true,
-      () => getScrollPreserveNow() - startedAt > EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MAX_MS,
-      20
-    )
+    const anchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
+    preserveWindowScrollPositionAcrossFrames(anchor, EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES, 4, EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MAX_MS, true, false, true, false, true, () => shouldCancelEditorPointerScrollPreserve(anchor)() || getScrollPreserveNow() - startedAt > EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MAX_MS, true, 20)
   }
 }
 

@@ -4,11 +4,13 @@ export type FloatingBubbleState = {
   visible: boolean
   mode: "text" | "image"
   anchor: "center" | "left"
+  placement: "above" | "below" | "side"
   left: number
   top: number
 }
 
 type FloatingBubbleCoords = {
+  bottom: number
   left: number
   right: number
   top: number
@@ -20,6 +22,7 @@ export const INITIAL_FLOATING_BUBBLE_STATE: FloatingBubbleState = {
   visible: false,
   mode: "text",
   anchor: "center",
+  placement: "above",
   left: 0,
   top: 0,
 }
@@ -32,6 +35,7 @@ export const resolveFloatingBubbleStateFromCoords = (
   visible: true,
   mode,
   anchor: "center",
+  placement: "above",
   left: Math.round((startCoords.left + endCoords.right) / 2),
   top: Math.round(Math.min(startCoords.top, endCoords.top)),
 })
@@ -43,6 +47,7 @@ export const areFloatingBubbleStatesEqual = (
   left.visible === right.visible &&
   left.mode === right.mode &&
   left.anchor === right.anchor &&
+  left.placement === right.placement &&
   left.left === right.left &&
   left.top === right.top
 
@@ -50,6 +55,11 @@ export const hideFloatingBubbleState = (state: FloatingBubbleState) =>
   state.visible ? { ...state, visible: false } : state
 
 const HEADING_SELECTION_SELECTOR = "h1, h2, h3, h4, h5, h6"
+const TEXT_BUBBLE_OCCLUSION_SELECTOR = "p, h1, h2, h3, h4, h5, h6, blockquote, li, th, td, pre"
+const TEXT_BUBBLE_COLLISION_GAP_PX = 10
+const TEXT_BUBBLE_ESTIMATED_HEIGHT_PX = 50
+const TEXT_BUBBLE_ESTIMATED_WIDTH_PX = 340
+const TEXT_BUBBLE_VIEWPORT_PADDING_PX = 12
 const resolveSelectionElement = (node: Node | null | undefined) => node instanceof Element ? node : node?.parentElement ?? null
 
 export const hasNativeEditorTextSelection = (editorRoot: HTMLElement) => {
@@ -69,6 +79,57 @@ export const resolveHeadingSelectionBubbleState = (state: FloatingBubbleState, e
   const headingRect = anchorHeading.getBoundingClientRect()
   if (!Number.isFinite(headingRect.left) || headingRect.width <= 0) return state
   return { ...state, anchor: "left" as const, left: Math.max(12, Math.round(headingRect.left)) }
+}
+
+export const resolveOcclusionAwareTextBubbleState = (state: FloatingBubbleState, editorRoot: HTMLElement) => {
+  if (state.mode !== "text" || state.placement !== "above") return state
+  if (typeof window === "undefined") return state
+  const selection = window.getSelection()
+  if (!selection || selection.isCollapsed || !selection.toString().trim() || selection.rangeCount === 0) return state
+  const range = selection.getRangeAt(0)
+  const selectionRect = range.getBoundingClientRect()
+  if (!Number.isFinite(selectionRect.top) || selectionRect.width <= 0 || selectionRect.height <= 0) return state
+
+  const anchorElement = resolveSelectionElement(selection.anchorNode)
+  const focusElement = resolveSelectionElement(selection.focusNode)
+  const selectedContainers = [anchorElement, focusElement].filter(Boolean) as Element[]
+  const toolbarTop =
+    Math.min(selectionRect.top, state.top) - TEXT_BUBBLE_ESTIMATED_HEIGHT_PX - TEXT_BUBBLE_COLLISION_GAP_PX
+  const toolbarBottom = Math.min(selectionRect.top, state.top) - TEXT_BUBBLE_COLLISION_GAP_PX
+  const collidesWithReadableContent = Array.from(
+    editorRoot.querySelectorAll<HTMLElement>(TEXT_BUBBLE_OCCLUSION_SELECTOR)
+  ).some((candidate) => {
+    if (selectedContainers.some((selected) => candidate.contains(selected))) return false
+    const rect = candidate.getBoundingClientRect()
+    if (!Number.isFinite(rect.top) || rect.width <= 0 || rect.height <= 0) return false
+    const overlapsToolbarY = rect.bottom > toolbarTop && rect.top < toolbarBottom
+    const overlapsSelectionX = rect.right > selectionRect.left - 8 && rect.left < selectionRect.right + 8
+    return overlapsToolbarY && overlapsSelectionX
+  })
+
+  if (!collidesWithReadableContent) return state
+
+  const sideLeft = Math.round(selectionRect.right)
+  const sideTop = Math.round(selectionRect.top + selectionRect.height / 2)
+  const sideFits =
+    sideLeft + TEXT_BUBBLE_COLLISION_GAP_PX + TEXT_BUBBLE_ESTIMATED_WIDTH_PX <=
+    window.innerWidth - TEXT_BUBBLE_VIEWPORT_PADDING_PX
+
+  if (sideFits) {
+    return {
+      ...state,
+      anchor: "left" as const,
+      placement: "side" as const,
+      left: Math.max(TEXT_BUBBLE_VIEWPORT_PADDING_PX, sideLeft),
+      top: sideTop,
+    }
+  }
+
+  return {
+    ...state,
+    placement: "below" as const,
+    top: Math.round(selectionRect.bottom),
+  }
 }
 
 export const useFloatingBubbleState = () => {

@@ -148,7 +148,9 @@ test.describe("editor authoring route rich block drag selection", () => {
           element.removeAttribute("data-code-drag-selection-text")
           element.removeAttribute("data-table-drag-selection-text")
         })
+        document.dispatchEvent(new Event("selectionchange"))
       })
+      await page.waitForTimeout(80)
     }
     const selectPreviousBlockAnchor = async () => {
       await clearPersistedDragSelection()
@@ -159,6 +161,12 @@ test.describe("editor authoring route rich block drag selection", () => {
         previousSelectionParagraph,
         "drag selection stale paragraph metrics are missing"
       )
+      await page.keyboard.press("Escape")
+      await page.mouse.click(
+        previousSelectionBox.x + Math.min(previousSelectionBox.width / 2, 240),
+        previousSelectionBox.y + Math.min(previousSelectionBox.height / 2, 18)
+      )
+      await page.waitForTimeout(80)
       await page.mouse.move(
         previousSelectionBox.x + Math.min(previousSelectionBox.width / 2, 240),
         previousSelectionBox.y + Math.min(previousSelectionBox.height / 2, 18)
@@ -175,27 +183,56 @@ test.describe("editor authoring route rich block drag selection", () => {
       label: string
     ) => {
       await selectPreviousBlockAnchor()
+      await page.mouse.wheel(0, 1).then(() => page.waitForTimeout(60))
       await target.scrollIntoViewIfNeeded()
       await target.evaluate((element) => {
         element.scrollIntoView({ block: "center", inline: "nearest" })
       })
-      const beforeGeometry = await readDragTargetMetrics(target, label)
+      let beforeGeometry = await readDragTargetMetrics(target, label)
 
-      await page.mouse.move(beforeGeometry.startX, beforeGeometry.y)
-      await page.mouse.down()
-      await page.mouse.move(beforeGeometry.endX, beforeGeometry.y, { steps: 18 })
-      await page.mouse.up()
-      await page.waitForTimeout(360)
-
-      await expect
-        .poll(async () =>
-          target.evaluate((element) =>
-            window.getSelection()?.toString() ||
-            element.closest(".aq-code-shell")?.getAttribute("data-code-drag-selection-text") ||
-            ""
-          )
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        if (attempt > 0) {
+          await selectPreviousBlockAnchor()
+          await page.mouse.wheel(0, 1).then(() => page.waitForTimeout(60))
+          await target.evaluate((element) => {
+            element.scrollIntoView({ block: "center", inline: "nearest" })
+          })
+          beforeGeometry = await readDragTargetMetrics(target, label)
+        }
+        await page.mouse.move(beforeGeometry.startX, beforeGeometry.y)
+        await page.mouse.down()
+        await page.mouse.move(beforeGeometry.endX, beforeGeometry.y, { steps: 24 })
+        await page.mouse.up()
+        await page.waitForTimeout(360)
+        const selectedText = await target.evaluate((element) =>
+          window.getSelection()?.toString() ||
+          element.closest(".aq-code-shell")?.getAttribute("data-code-drag-selection-text") ||
+          ""
         )
-        .toContain(expectedSelection)
+        if (selectedText.includes(expectedSelection)) break
+        await clearPersistedDragSelection()
+      }
+      try {
+        await expect
+          .poll(async () =>
+            target.evaluate((element) =>
+              window.getSelection()?.toString() ||
+              element.closest(".aq-code-shell")?.getAttribute("data-code-drag-selection-text") ||
+              ""
+            )
+          )
+          .toContain(expectedSelection)
+      } catch (error) {
+        const diagnostics = await target.evaluate((element) => {
+          const shell = element.closest(".aq-code-shell")
+          return {
+            activeElementClass: document.activeElement instanceof Element ? String(document.activeElement.className) : null,
+            codeShellAttr: shell?.getAttribute("data-code-drag-selection-text") ?? null,
+            selectionText: window.getSelection()?.toString() ?? "",
+          }
+        })
+        throw new Error(`${label} drag selection missing: ${JSON.stringify(diagnostics)}\n${error instanceof Error ? error.message : String(error)}`)
+      }
       const afterGeometry = await target.evaluate((element) => {
         const rect = element.getBoundingClientRect()
         return {

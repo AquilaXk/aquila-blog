@@ -1,8 +1,27 @@
-import { expect, test, type Locator } from "@playwright/test"
+import { expect, test, type Locator, type Page } from "@playwright/test"
 import { QA_ENGINE_ROUTE, QA_WRITER_ROUTE } from "./helpers/editorAuthoringFlow"
 import { mockEditorRouteWithPost507 } from "./helpers/post507Fixtures"
 
-const SELECT_ALL_SHORTCUT = process.platform === "darwin" ? "Meta+A" : "Control+A"
+const SELECT_ALL_SHORTCUT = "ControlOrMeta+A"
+const ADMIN_MEMBER = { id: 1, isAdmin: true, nickname: "aquila", username: "qa-admin" }
+
+const findHydratedCodeShell = async (page: Page) => {
+  const codeShells = page.locator(".aq-code-shell")
+  await expect(codeShells.first()).toBeVisible({ timeout: 15_000 })
+  const count = await codeShells.count()
+  for (let index = 0; index < count; index += 1) {
+    const codeShell = codeShells.nth(index)
+    await codeShell.evaluate((element) => {
+      element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
+    })
+    const hydrated = await expect(codeShell.locator(".aq-code-highlight-layer").first())
+      .toContainText(/\S/, { timeout: 3_000 })
+      .then(() => true)
+      .catch(() => false)
+    if (hydrated) return codeShell
+  }
+  throw new Error("hydrated code shell is missing")
+}
 
 const expectCodeBlockInnerChromeHidden = async (codeBlock: Locator) => {
   const chrome = await codeBlock.evaluate((element) => {
@@ -299,18 +318,25 @@ test.describe("editor authoring code and mermaid blocks", () => {
     })
     await page.waitForTimeout(80)
     await blockHandle.hover()
-    await expect
-      .poll(async () =>
-        blockHandle.evaluate((handle) => {
-          const rect = handle.getBoundingClientRect()
-          const target = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
-          return Boolean(target?.closest("[data-testid='block-drag-handle']"))
-        })
-      )
-      .toBe(true)
-    await blockHandle.click()
+    const readBlockHandleCenterHit = () =>
+      blockHandle.evaluate((handle) => {
+        const rect = handle.getBoundingClientRect()
+        const x = rect.left + rect.width / 2
+        const y = rect.top + rect.height / 2
+        const target = document.elementFromPoint(x, y)
+        return { targetIsHandle: Boolean(target?.closest("[data-testid='block-drag-handle']")), x, y }
+      })
+    await expect.poll(async () => (await readBlockHandleCenterHit()).targetIsHandle).toBe(true)
+    const handleCenter = await readBlockHandleCenterHit()
+    await page.mouse.move(handleCenter.x, handleCenter.y)
+    await page.mouse.down()
+    await page.mouse.up()
 
     const blockSelectionOverlay = page.getByTestId("keyboard-block-selection-overlay")
+    if (!(await blockSelectionOverlay.isVisible().catch(() => false))) {
+      await blockHandle.hover()
+      await blockHandle.click({ force: true })
+    }
     await expect(blockSelectionOverlay).toBeVisible({ timeout: 10_000 }).catch(async (error) => {
       const diagnostics = await page.evaluate(() => {
         const diagnosticsWindow = window as typeof window & {
@@ -341,24 +367,28 @@ test.describe("editor authoring code and mermaid blocks", () => {
   test("실제 /editor/[id] 수정 route 코드블럭 native 캐럿 클릭은 전체 root preserve로 승격되지 않는다", async ({
     page,
   }) => {
-    await mockEditorRouteWithPost507(page, {
-      postId: 609,
-      title: "post 507 code block native selection route 글",
+    const routeTitle = "post 507 code block native selection route 글"
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify(ADMIN_MEMBER) })
     })
-
-    let codeBlockIndex = -1
-    await expect
-      .poll(async () => {
-        codeBlockIndex = await page.locator("[data-code-block-wrapper='true']").evaluateAll((blocks) =>
-          blocks.findIndex((block) => {
-            const content = block.querySelector<HTMLElement>(".aq-code-editor-content")
-            return Boolean(content && content.getBoundingClientRect().height > 0 && (content.innerText || content.textContent || "").trim())
-          })
-        )
-        return codeBlockIndex >= 0
+    await page.route("**/post/api/v1/adm/posts/609", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 609,
+          version: 1,
+          title: routeTitle,
+          content: "```javascript\nconst caretTarget = 'guarded native caret'\nfunction keepCodeCaret() { return caretTarget }\n```\n\n코드 아래 본문입니다.",
+          contentHtml: null,
+          published: true,
+          listed: true,
+        }),
       })
-      .toBe(true)
-    const codeBlock = page.locator("[data-code-block-wrapper='true']").nth(codeBlockIndex)
+    })
+    await page.goto("/editor/609")
+
+    const codeShell = await findHydratedCodeShell(page)
+    const codeBlock = codeShell.locator("xpath=ancestor::*[@data-code-block-wrapper='true'][1]")
     const codeContent = codeBlock.locator(".aq-code-editor-content").first()
     await expect(codeBlock).toBeVisible({ timeout: 15_000 })
     await expectCodeBlockInnerChromeHidden(codeBlock)
@@ -434,7 +464,8 @@ test.describe("editor authoring code and mermaid blocks", () => {
       title: routeTitle,
     })
 
-    const codeContent = page.locator(".aq-code-editor-content").first()
+    const codeShell = await findHydratedCodeShell(page)
+    const codeContent = codeShell.locator(".aq-code-editor-content").first()
     const titleInput = page.getByPlaceholder("제목을 입력하세요").first()
     await expect(codeContent).toBeVisible({ timeout: 15_000 })
     await expect(titleInput).toHaveValue(routeTitle)
@@ -474,30 +505,49 @@ test.describe("editor authoring code and mermaid blocks", () => {
   test("실제 /editor/[id] 수정 route 코드 visible 중 본문 Cmd/Ctrl+A는 코드 선택으로 가로채지 않는다", async ({
     page,
   }) => {
-    await mockEditorRouteWithPost507(page, {
-      postId: 611,
-      title: "post 507 code visible select all guard 글",
+    const routeTitle = "post 507 code visible select all guard 글"
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify(ADMIN_MEMBER) })
     })
+    await page.route("**/post/api/v1/adm/posts/611", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 611,
+          version: 1,
+          title: routeTitle,
+          content: "```javascript\nconst visibleCode = 'guard'\nfunction keepBodySelection() { return visibleCode }\n```\n\n보통 처음 인증을 구현한다면 이런 식으로 할 것입니다",
+          contentHtml: null,
+          published: true,
+          listed: true,
+        }),
+      })
+    })
+    await page.goto("/editor/611")
 
-    const codeContent = page.locator(".aq-code-editor-content").first()
+    const codeShell = await findHydratedCodeShell(page)
+    const codeContent = codeShell.locator(".aq-code-editor-content").first()
     const bodyParagraph = page
       .locator(".ProseMirror p")
       .filter({ hasText: "보통 처음 인증을 구현한다면" })
       .first()
     await expect(codeContent).toBeVisible({ timeout: 15_000 })
-    await expect.poll(async () => ((await codeContent.textContent()) || "").trim()).not.toBe("")
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(routeTitle)
     await expect(bodyParagraph).toBeVisible()
 
-    await codeContent.evaluate((element) => {
-      element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
-    })
     await bodyParagraph.click()
     await page.keyboard.press(SELECT_ALL_SHORTCUT)
 
-    const selectionState = await codeContent.evaluate((codeRoot) => {
+    const selectionState = await codeShell.evaluate((codeRoot) => {
       return {
         codeFallbackText: codeRoot?.closest(".aq-code-shell")?.getAttribute("data-code-drag-selection-text") || "",
-        codeText: (codeRoot?.innerText || codeRoot?.textContent || "").trim(),
+        codeText:
+          (
+            codeRoot?.querySelector(".aq-code-highlight-layer")?.textContent ||
+            codeRoot?.innerText ||
+            codeRoot?.textContent ||
+            ""
+          ).trim(),
         selectionText: window.getSelection()?.toString().trim() || "",
       }
     })

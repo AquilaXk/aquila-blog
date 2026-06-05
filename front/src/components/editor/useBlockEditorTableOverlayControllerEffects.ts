@@ -314,9 +314,12 @@ export const useBlockEditorTableOverlayControllerEffects = ({
         const resolvedPos = currentEditor.state.doc.resolve(currentEditor.state.selection.from)
         currentEditor.view.dispatch(currentEditor.state.tr.setSelection(TextSelection.near(resolvedPos)))
       }
-      setHoveredTableCellMenuLayout(null)
-      setIsTableQuickRailHovered(false)
-      setTableMenuState(null)
+      flushSync(() => {
+        setSelectionTick((prev) => prev + 1)
+        setHoveredTableCellMenuLayout(null)
+        setIsTableQuickRailHovered(false)
+        setTableMenuState(null)
+      })
       hideTableQuickRailImmediately()
     }
     window.addEventListener("scroll", closeOnViewportChange, scrollOptions)
@@ -347,6 +350,7 @@ export const useBlockEditorTableOverlayControllerEffects = ({
     isTableStructuralSelection,
     setHoveredTableCellMenuLayout,
     setIsTableQuickRailHovered,
+    setSelectionTick,
     setTableMenuState,
     suppressTableAxisMenuKeepAlive,
     tableMenuState,
@@ -361,9 +365,12 @@ export const useBlockEditorTableOverlayControllerEffects = ({
         const resolvedPos = currentEditor.state.doc.resolve(currentEditor.state.selection.from)
         currentEditor.view.dispatch(currentEditor.state.tr.setSelection(TextSelection.near(resolvedPos)))
       }
-      setHoveredTableCellMenuLayout(null)
-      setIsTableQuickRailHovered(false)
-      setTableMenuState(null)
+      flushSync(() => {
+        setSelectionTick((prev) => prev + 1)
+        setHoveredTableCellMenuLayout(null)
+        setIsTableQuickRailHovered(false)
+        setTableMenuState(null)
+      })
       hideTableQuickRailImmediately()
     }
     window.addEventListener("wheel", clearStructuralSelectionForViewportIntent, { capture: true, passive: true })
@@ -376,6 +383,7 @@ export const useBlockEditorTableOverlayControllerEffects = ({
     isTableStructuralSelection,
     setHoveredTableCellMenuLayout,
     setIsTableQuickRailHovered,
+    setSelectionTick,
     setTableMenuState,
     suppressTableAxisMenuKeepAlive,
   ])

@@ -1058,10 +1058,10 @@ export const setupPost507ModifyRequestCapture = async (
   }
 }
 
-const readPost507ScrollTop = (page: Page) =>
+export const readPost507ScrollTop = (page: Page) =>
   page.evaluate(() => Math.round(document.scrollingElement?.scrollTop ?? window.scrollY))
 
-const readPost507SelectionText = (page: Page) =>
+export const readPost507SelectionText = (page: Page) =>
   page.evaluate(
     () =>
       window.getSelection()?.toString() ||
@@ -1071,7 +1071,7 @@ const readPost507SelectionText = (page: Page) =>
       ""
   )
 
-const clearPost507SelectionState = (page: Page) =>
+export const clearPost507SelectionState = (page: Page) =>
   page.evaluate(() => {
     window.getSelection()?.removeAllRanges()
     document.documentElement.removeAttribute("data-table-drag-selection-text")
@@ -1194,7 +1194,7 @@ const resolvePost507TextDragMetrics = async (
     { label, text }
   )
 
-const dragPost507TextRange = async (page: Page, target: Locator, label: string, text: string) => {
+export const dragPost507TextRange = async (page: Page, target: Locator, label: string, text: string) => {
   const metrics = await resolvePost507TextDragMetrics(target, label, text)
   const beforeScrollTop = await readPost507ScrollTop(page)
   await page.mouse.move(metrics.startX, metrics.y)
@@ -1292,7 +1292,7 @@ const resolvePost507FinalTableColumnMetrics = async (page: Page) => {
   throw new Error("post 507 final table column metrics are missing")
 }
 
-const clickPost507AxisHandle = async (
+export const clickPost507AxisHandle = async (
   page: Page,
   axis: "column" | "row",
   expectedSelectedCellCount: number
@@ -1369,7 +1369,7 @@ const clickPost507AxisHandle = async (
   throw new Error(`post 507 ${axis} axis selection did not settle: ${JSON.stringify(lastDebug)}`)
 }
 
-const scrollPost507FinalTableTargetIntoView = async (page: Page) => {
+export const scrollPost507FinalTableTargetIntoView = async (page: Page) => {
   await expect
     .poll(
       () =>
@@ -1393,7 +1393,7 @@ const scrollPost507FinalTableTargetIntoView = async (page: Page) => {
     .toBe(true)
 }
 
-const expectPost507WheelScrollsWithoutLock = async (page: Page, label: string) => {
+export const expectPost507WheelScrollsWithoutLock = async (page: Page, label: string) => {
   const beforeState = await page.evaluate(() => ({
     scrollHeight: Math.round(document.scrollingElement?.scrollHeight ?? document.documentElement.scrollHeight),
     scrollTop: Math.round(document.scrollingElement?.scrollTop ?? window.scrollY),

@@ -669,6 +669,18 @@ export const FloatingBubbleToolbar = styled.div`
     transform: translate(0, calc(-100% - 0.65rem));
   }
 
+  &[data-placement="below"] {
+    transform: translate(-50%, 0.65rem);
+  }
+
+  &[data-anchor="left"][data-placement="below"] {
+    transform: translate(0, 0.65rem);
+  }
+
+  &[data-placement="side"] {
+    transform: translate(0.65rem, -50%);
+  }
+
   > * {
     pointer-events: auto;
   }

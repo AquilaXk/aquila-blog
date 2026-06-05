@@ -40,6 +40,22 @@ export const useBlockEditorEngineQaActions = ({
 }: UseBlockEditorEngineQaActionsArgs) => {
   useEffect(() => {
     if (!onQaActionsReady) return
+    const runTableStructureAction = (
+      axis: "row" | "column",
+      command: (activeEditor: TiptapEditor) => boolean
+    ) => {
+      const currentEditor = editorRef.current ?? editor
+      if (!currentEditor) return
+      selectCurrentTableAxis(axis)
+      const previousDoc = currentEditor.state.doc
+      const applied = command(currentEditor)
+      if (applied && currentEditor.state.doc !== previousDoc) return
+      if (typeof window === "undefined") return
+      window.requestAnimationFrame(() => {
+        selectCurrentTableAxis(axis)
+        command(currentEditor)
+      })
+    }
 
     onQaActionsReady({
       selectTableAxis: (axis) => {
@@ -58,16 +74,16 @@ export const useBlockEditorEngineQaActions = ({
         updateActiveTableCellAttrs({ backgroundColor: color })
       },
       addTableRowAfter: () => {
-        editor?.chain().focus().addRowAfter().run()
+        runTableStructureAction("row", (activeEditor) => activeEditor.commands.addRowAfter())
       },
       addTableColumnAfter: () => {
-        editor?.chain().focus().addColumnAfter().run()
+        runTableStructureAction("column", (activeEditor) => activeEditor.commands.addColumnAfter())
       },
       deleteSelectedTableRow: () => {
-        editor?.chain().focus().deleteRow().run()
+        runTableStructureAction("row", (activeEditor) => activeEditor.commands.deleteRow())
       },
       deleteSelectedTableColumn: () => {
-        editor?.chain().focus().deleteColumn().run()
+        runTableStructureAction("column", (activeEditor) => activeEditor.commands.deleteColumn())
       },
       resizeFirstTableRow: (deltaPx) => {
         resizeFirstTableRowBy(deltaPx)
@@ -76,7 +92,8 @@ export const useBlockEditorEngineQaActions = ({
         resizeFirstTableColumnBy(deltaPx)
       },
       focusDocumentEnd: () => {
-        editor?.chain().focus("end").run()
+        const currentEditor = editorRef.current ?? editor
+        currentEditor?.chain().focus("end").run()
       },
       appendCalloutBlock: () => {
         const currentEditor = editorRef.current

@@ -267,7 +267,8 @@ export const useBlockEditorTableOverlayAxisDrag = ({
       const rect = getCurrentSelectedTableRect(currentEditor)
       if (!rect || columnIndex < 0 || columnIndex >= rect.map.width) return false
 
-      return selectTableAxisAtIndex(currentEditor, rect.tableStart - 1, "column", columnIndex)
+      const tablePos = rect.tableStart - 1
+      return selectTableAxisAtIndex(currentEditor, tablePos, "column", columnIndex) ? { axis: "column" as const, index: columnIndex, tablePos } : false
     },
     [editorRef, getCurrentSelectedTableRect, selectTableAxisAtIndex]
   )
@@ -279,7 +280,8 @@ export const useBlockEditorTableOverlayAxisDrag = ({
       const rect = getCurrentSelectedTableRect(currentEditor)
       if (!rect || rowIndex < 0 || rowIndex >= rect.map.height) return false
 
-      return selectTableAxisAtIndex(currentEditor, rect.tableStart - 1, "row", rowIndex)
+      const tablePos = rect.tableStart - 1
+      return selectTableAxisAtIndex(currentEditor, tablePos, "row", rowIndex) ? { axis: "row" as const, index: rowIndex, tablePos } : false
     },
     [editorRef, getCurrentSelectedTableRect, selectTableAxisAtIndex]
   )
@@ -454,11 +456,8 @@ export const useBlockEditorTableOverlayAxisDrag = ({
             if (tableAxisMenuStabilizationTokenRef.current !== stabilizationToken) return
             const activeEditor = editorRef.current
             if (!activeEditor) return
-            const anchor =
-              pending.axis === "row"
-                ? tableAffordanceGeometryRef.current.rowHandleAnchor
-                : tableAffordanceGeometryRef.current.columnHandleAnchor
-            setTableMenuState({ kind: pending.axis, left: Math.round(anchor.left), top: Math.round(anchor.top + 28) })
+            const anchor = pending.axis === "row" ? tableAffordanceGeometryRef.current.rowHandleAnchor : tableAffordanceGeometryRef.current.columnHandleAnchor
+            setTableMenuState({ kind: pending.axis, left: Math.round(anchor.left), top: Math.round(anchor.top + 28), axisTarget: { axis: pending.axis, index: pending.sourceIndex, tablePos: pending.tablePos } })
             setSelectionTick((prev) => prev + 1)
           }
           stabilizeCompletedAxisSelection()
@@ -544,13 +543,12 @@ export const useBlockEditorTableOverlayAxisDrag = ({
       if (!nextGeometry) return
       tableAffordanceGeometryRef.current = nextGeometry
       setTableAffordanceGeometry(nextGeometry)
-      const anchor =
-        keepAliveAxisSelection.axis === "row"
-          ? nextGeometry.rowHandleAnchor
-          : nextGeometry.columnHandleAnchor
-      const nextState = { kind: keepAliveAxisSelection.axis, left: Math.round(anchor.left), top: Math.round(anchor.top + 28) } as const
+      const anchor = keepAliveAxisSelection.axis === "row" ? nextGeometry.rowHandleAnchor : nextGeometry.columnHandleAnchor
+      const nextState = { kind: keepAliveAxisSelection.axis, left: Math.round(anchor.left), top: Math.round(anchor.top + 28), axisTarget: keepAliveSelection ? { axis: keepAliveSelection.axis, index: keepAliveSelection.index, tablePos: keepAliveSelection.tablePos } : undefined } as const
       setTableMenuState((prev) =>
-        prev?.kind === nextState.kind && prev.left === nextState.left && prev.top === nextState.top ? prev : nextState
+        prev?.kind === nextState.kind && prev.left === nextState.left && prev.top === nextState.top && prev.axisTarget?.axis === nextState.axisTarget?.axis && prev.axisTarget?.index === nextState.axisTarget?.index && prev.axisTarget?.tablePos === nextState.axisTarget?.tablePos
+          ? prev
+          : nextState
       )
       if (timeoutId !== null) window.clearTimeout(timeoutId); timeoutId = window.setTimeout(() => { timeoutId = null; stabilizeAxisMenu() }, 80)
     }

@@ -309,7 +309,10 @@ const dragBetweenTextRanges = async (
   beforeScrollTop = await readScrollTop(page)
   await page.mouse.down()
   const shouldRecheckEndPoint = options.endAtCellRightEdge || texts.start !== texts.end
-  const stableEndPoint = shouldRecheckEndPoint ? await resolveCurrentEndPoint().catch(() => endPoint) : endPoint
+  const recheckedEndPoint = shouldRecheckEndPoint ? await resolveCurrentEndPoint().catch(() => endPoint) : endPoint
+  const viewportHeight = page.viewportSize()?.height ?? 900
+  const stableEndPoint =
+    recheckedEndPoint.y < 96 || recheckedEndPoint.y > viewportHeight - 8 ? endPoint : recheckedEndPoint
   if (options.endAtCellRightEdge && texts.start !== texts.end) {
     let interiorEndPoint = await resolveCurrentEndPoint(false).catch(() => metrics.end)
     await moveMouseInPacedSteps(startPoint, interiorEndPoint, 72)

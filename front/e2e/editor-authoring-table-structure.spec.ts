@@ -4,6 +4,7 @@ import {
   QA_ENGINE_ROUTE,
   getTableAffordances,
   getWordDragPoints,
+  moveToTableCellAxisHotzone,
   selectWordInEditable,
   setWordSelectionInEditable,
 } from "./helpers/editorAuthoringFlow"
@@ -609,11 +610,7 @@ test.describe("editor authoring table structure and styles", () => {
     await page.getByRole("button", { name: "테이블" }).click()
     const firstTableCell = page.locator("table th, table td").first()
     await firstTableCell.click()
-    const tableBox = await page.locator(".aq-block-editor__content .tableWrapper table").boundingBox()
-    if (!tableBox) {
-      throw new Error("table axis menu metrics are missing")
-    }
-    await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
+    await moveToTableCellAxisHotzone(page, { axis: "row", cellText: "", label: "table structure row menu" })
 
     await expect(rowMenuButton).toBeVisible()
     await rowMenuButton.click()
@@ -661,7 +658,7 @@ test.describe("editor authoring table structure and styles", () => {
       initialHeaderRowVisual?.firstRowSecondBackground
     )
 
-    await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
+    await moveToTableCellAxisHotzone(page, { axis: "column", cellText: "", label: "table structure column menu" })
     await expect(columnMenuButton).toBeVisible()
     await columnMenuButton.click()
     const columnMenu = page.getByTestId("table-column-menu")

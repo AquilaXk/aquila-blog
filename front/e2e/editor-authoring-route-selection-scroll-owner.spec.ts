@@ -51,10 +51,14 @@ const resolveTextRangeBox = async (locator: Locator, text: string) =>
 
 const dragTextRangeAndReadSelection = async (
   page: Page,
-  box: { endX: number; startX: number; y: number }
+  locator: Locator,
+  text: string
 ) => {
   let selectionText = ""
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await locator.scrollIntoViewIfNeeded()
+    await page.waitForTimeout(80)
+    const box = await resolveTextRangeBox(locator, text)
     await page.evaluate(() => window.getSelection()?.removeAllRanges())
     await page.mouse.move(box.startX, box.y)
     await page.waitForTimeout(80)
@@ -68,7 +72,7 @@ const dragTextRangeAndReadSelection = async (
     await page.mouse.up()
     await page.waitForTimeout(220)
     selectionText = await page.evaluate(() => window.getSelection()?.toString() ?? "")
-    if (selectionText.trim()) return selectionText
+    if (selectionText.includes(text)) return selectionText
   }
   return selectionText
 }
@@ -157,8 +161,7 @@ test.describe("editor authoring route 507 selection scroll owner", () => {
     await targetParagraph.scrollIntoViewIfNeeded()
     await page.waitForTimeout(120)
 
-    const dragBox = await resolveTextRangeBox(targetParagraph, "JWT 구조를 이해하면")
-    const selectionText = await dragTextRangeAndReadSelection(page, dragBox)
+    const selectionText = await dragTextRangeAndReadSelection(page, targetParagraph, "JWT 구조를 이해하면")
     expect(selectionText).toContain("JWT 구조를 이해하면")
 
     const beforeScrollTop = await readScrollTop(page)

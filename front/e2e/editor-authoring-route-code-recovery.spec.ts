@@ -1,8 +1,6 @@
 import { expect, test } from "@playwright/test"
-import {
-  expectEditorToContainLoadedText,
-} from "./helpers/editorAuthoringFlow"
-
+import { expectEditorToContainLoadedText } from "./helpers/editorAuthoringFlow"
+import { collectEditorSelectionRuntimeErrors } from "./helpers/editorSelectionRuntimeGuard"
 test.describe("editor authoring route code recovery", () => {
   test("실제 /editor/[id] 수정 진입은 pretty-code 원문으로 빈 코드블럭을 복구한다", async ({
     page,
@@ -278,6 +276,7 @@ test.describe("editor authoring route code recovery", () => {
     page,
   }) => {
     await page.setViewportSize({ width: 980, height: 720 })
+    const selectionRuntimeErrors = collectEditorSelectionRuntimeErrors(page)
     const adminMember = {
       id: 1,
       username: "qa-admin",
@@ -765,16 +764,16 @@ test.describe("editor authoring route code recovery", () => {
     await page.mouse.wheel(0, 1).then(() => page.waitForTimeout(40))
     const closingParagraph = editor.locator("p", { hasText: "Stateless는 “서버가 아무것도 안 하는 구조”가 아닙니다." }).first()
     await expect(closingParagraph).toBeVisible()
+    await closingParagraph.scrollIntoViewIfNeeded()
     const paragraphPoint = await closingParagraph.evaluate((element) => {
-      element.scrollIntoView({ block: "center", inline: "nearest" })
       const rect = element.getBoundingClientRect()
       return {
-        x: rect.left + Math.min(rect.width / 2, 220),
-        y: rect.top + Math.min(rect.height / 2, 18),
+        x: Math.min(rect.width / 2, 220),
+        y: Math.min(rect.height / 2, 18),
       }
     })
     const beforeParagraphClick = await readScrollTop()
-    await page.mouse.click(paragraphPoint.x, paragraphPoint.y)
+    await closingParagraph.click({ position: paragraphPoint })
     await page.waitForTimeout(360)
     await expect.poll(readScrollTop).toBeLessThanOrEqual(beforeParagraphClick + 24)
     await expect.poll(readScrollTop).toBeGreaterThanOrEqual(beforeParagraphClick - 24)
@@ -795,5 +794,6 @@ test.describe("editor authoring route code recovery", () => {
     await page.waitForTimeout(560)
     await expect.poll(readScrollTop).toBeLessThanOrEqual(beforeTableClick + 24)
     await expect.poll(readScrollTop).toBeGreaterThanOrEqual(beforeTableClick - 24)
+    expect(selectionRuntimeErrors).toEqual([])
   })
 })

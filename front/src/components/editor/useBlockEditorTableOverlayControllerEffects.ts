@@ -8,6 +8,7 @@ import { intersectsViewportBounds, type TableAffordanceGeometry, type TableAffor
 import type { DraggedTableAxisState, TableAxisReorderIndicatorState } from "./tableAxisDragModel"
 import type { TableMenuState } from "./tableFloatingUiModel"
 import type { TableColumnDragGuideState, TableColumnRailResizeState, TableRowResizeState } from "./tableResizeInteractionModel"
+import { dispatchEditorSelectionSafely } from "./tableSelectionDispatchModel"
 import { TABLE_OVERFLOW_MODE_WIDE } from "./tableWidthModel"
 
 type UseBlockEditorTableOverlayControllerEffectsArgs = {
@@ -311,8 +312,10 @@ export const useBlockEditorTableOverlayControllerEffects = ({
       const currentEditor = editorRef.current
       // User-intent viewport changes exit axis selection so selectedCell cannot reopen a stale fixed overlay.
       if (currentEditor?.state.selection instanceof CellSelection) {
-        const resolvedPos = currentEditor.state.doc.resolve(currentEditor.state.selection.from)
-        currentEditor.view.dispatch(currentEditor.state.tr.setSelection(TextSelection.near(resolvedPos)))
+        dispatchEditorSelectionSafely(currentEditor, (state) => {
+          const pos = Math.max(0, Math.min(state.selection.from, state.doc.content.size))
+          return TextSelection.near(state.doc.resolve(pos))
+        })
       }
       flushSync(() => {
         setSelectionTick((prev) => prev + 1)
@@ -362,8 +365,10 @@ export const useBlockEditorTableOverlayControllerEffects = ({
       suppressTableAxisMenuKeepAlive()
       const currentEditor = editorRef.current
       if (currentEditor?.state.selection instanceof CellSelection) {
-        const resolvedPos = currentEditor.state.doc.resolve(currentEditor.state.selection.from)
-        currentEditor.view.dispatch(currentEditor.state.tr.setSelection(TextSelection.near(resolvedPos)))
+        dispatchEditorSelectionSafely(currentEditor, (state) => {
+          const pos = Math.max(0, Math.min(state.selection.from, state.doc.content.size))
+          return TextSelection.near(state.doc.resolve(pos))
+        })
       }
       flushSync(() => {
         setSelectionTick((prev) => prev + 1)

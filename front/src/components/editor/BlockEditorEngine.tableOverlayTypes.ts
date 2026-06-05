@@ -1,7 +1,7 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
 import type { MouseEventHandler, MutableRefObject, RefObject } from "react"
 import type { TableAffordanceGeometry } from "./tableAffordanceModel"
-import type { DraggedTableAxisState, TableAxis, TableAxisDragGhostPosition, TableAxisReorderIndicatorState, TableAxisSelectionState } from "./tableAxisDragModel"
+import type { DraggedTableAxisState, TableAxis, TableAxisDragGhostPosition, TableAxisReorderIndicatorState, TableAxisSelectionState, TableAxisSelectionTarget } from "./tableAxisDragModel"
 import type { TableCornerGrowStepMetrics, TableCornerPreviewState } from "./tableCornerGrowModel"
 import type { CompactTableAffordanceKind, TableMenuKind, TableMenuState, TableOverflowCoachmarkState } from "./tableFloatingUiModel"
 import type { TableColumnDragGuideState } from "./tableResizeInteractionModel"
@@ -65,6 +65,14 @@ export type BlockEditorTableOverlayLayerProps = {
   runTableMenuEditorAction: (action: (activeEditor: TiptapEditor) => void) => void
   scheduleTableOverflowCoachmarkHide: (delayMs?: number) => void
   scheduleTableQuickRailHide: (delayMs?: number) => void
+  selectTableAxisAtIndex: (
+    activeEditor: TiptapEditor,
+    tablePos: number,
+    axis: TableAxis,
+    axisIndex: number
+  ) => boolean
+  selectTableColumnByIndex: (columnIndex: number) => TableAxisSelectionTarget | false
+  selectTableRowByIndex: (rowIndex: number) => TableAxisSelectionTarget | false
   shouldPersistTableHandles: boolean
   shouldRenderTableAffordanceOverlay: boolean
   shouldShowCellMergeSection: boolean

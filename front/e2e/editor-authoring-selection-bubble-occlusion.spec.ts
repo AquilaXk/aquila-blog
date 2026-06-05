@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test"
 import { expectEditorToContainLoadedText } from "./helpers/editorAuthoringFlow"
+import { collectEditorSelectionRuntimeErrors } from "./helpers/editorSelectionRuntimeGuard"
 import {
   POST_507_FINAL_TABLE_TARGET_CELL,
   POST_507_TITLE,
@@ -148,12 +149,20 @@ test.describe("editor authoring selection bubble occlusion", () => {
   test("사용자 507 하단 본문/table 드래그 플로우는 selection과 toolbar를 블록 안에 유지한다", async ({
     page,
   }) => {
+    const staleSelectionErrors = collectEditorSelectionRuntimeErrors(page)
+
     await page.setViewportSize({ width: 1280, height: 900 })
     const { editor, finalTable } = await mockEditorRouteWithPost507(page, {
       postId: 987,
       title: POST_507_TITLE,
       version: 3,
     })
+    const resolveCurrentFinalTable = () =>
+      editor
+        .locator("table")
+        .filter({ hasText: POST_507_FINAL_TABLE_TARGET_CELL })
+        .filter({ hasText: "재발급 로직" })
+        .last()
     await installPost507InteractionTelemetry(page)
     await expectEditorToContainLoadedText(editor, "구현되어 있는가")
 
@@ -301,7 +310,7 @@ test.describe("editor authoring selection bubble occlusion", () => {
 
     await clearPost507SelectionState(page)
     await scrollPost507FinalTableTargetIntoView(page)
-    const targetCell = finalTable.locator("td", { hasText: POST_507_FINAL_TABLE_TARGET_CELL }).first()
+    const targetCell = resolveCurrentFinalTable().locator("td", { hasText: POST_507_FINAL_TABLE_TARGET_CELL }).first()
     await targetCell.click({ position: { x: 40, y: 16 } })
     await targetCell.dblclick({ position: { x: 40, y: 16 } })
     await page.keyboard.press(SELECT_ALL_SHORTCUT)
@@ -333,7 +342,9 @@ test.describe("editor authoring selection bubble occlusion", () => {
     await page.keyboard.press("Escape")
     await clearPost507SelectionState(page)
     await scrollPost507FinalTableTargetIntoView(page)
-    const tableBox = await finalTable.boundingBox()
+    const currentFinalTable = resolveCurrentFinalTable()
+    await expect(currentFinalTable).toBeVisible()
+    const tableBox = await currentFinalTable.boundingBox()
     if (!tableBox) throw new Error("507 final table block selection metrics are missing")
     await page.mouse.move(tableBox.x + 24, tableBox.y + 24)
     const dragHandle = page.getByTestId("block-drag-handle")
@@ -345,5 +356,6 @@ test.describe("editor authoring selection bubble occlusion", () => {
     expect(finalDiagnostics.domSnapshot.selectedCellCount).toBe(0)
     expect(finalDiagnostics.domSnapshot.blockOverlayCount).toBe(1)
     await expectPost507WheelScrollsWithoutLock(page, "507 user flow table block selection")
+    expect(staleSelectionErrors).toEqual([])
   })
 })

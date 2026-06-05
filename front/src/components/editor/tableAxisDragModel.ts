@@ -48,6 +48,10 @@ export type TableAxisSelectionState = {
   index: number
 }
 
+export type TableAxisSelectionTarget = TableAxisSelectionState & {
+  tablePos: number
+}
+
 export const resolveSyncedTableAxisGeometryFromDom = (
   previous: TableAffordanceGeometry,
   tableElement: Element,

@@ -6,6 +6,7 @@ import {
   markNextEditorPointerAfterCodeSelection,
   preserveWindowScrollForRichBlockSelectAll,
   preserveWindowScrollPositionAcrossFrames,
+  type WindowScrollAnchor,
 } from "./blockHandleLayoutModel"
 
 type CodeBlockPositionArgs = {
@@ -15,6 +16,8 @@ type CodeBlockPositionArgs = {
 }
 
 const CODE_BLOCK_EDITOR_CONTENT_SELECTOR = ".aq-code-editor-content"
+const CODE_SCROLL_PRESERVE_CANCEL_DISTANCE_PX = 3_200
+const shouldCancelCodeScrollPreserve = (scrollAnchor: WindowScrollAnchor) => () => Math.abs(window.scrollX - scrollAnchor.x) > CODE_SCROLL_PRESERVE_CANCEL_DISTANCE_PX || Math.abs((document.scrollingElement?.scrollTop ?? window.scrollY) - scrollAnchor.y) > CODE_SCROLL_PRESERVE_CANCEL_DISTANCE_PX
 
 export const isPrimarySelectAllShortcut = (event: ReactKeyboardEvent<HTMLElement>) => {
   if (event.altKey || event.shiftKey) return false
@@ -44,11 +47,11 @@ export const selectCodeDomTextContents = (root: HTMLElement | null) => {
   return selected
 }
 
-export const resolveVisibleCodeRootForSelectAll = (options: { ignoreTableAnchor?: boolean } = {}) => {
+export const resolveVisibleCodeRootForSelectAll = (options: { ignoreTableAnchor?: boolean; ignoreTableDragSelectionText?: boolean } = {}) => {
   const activeElement = document.activeElement instanceof Element ? document.activeElement : null
   const selection = window.getSelection()
   const anchorElement = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null
-  if (activeElement?.closest("th, td") || (!options.ignoreTableAnchor && anchorElement?.closest("th, td")) || document.documentElement.hasAttribute("data-table-drag-selection-text")) return null
+  if (activeElement?.closest("th, td") || (!options.ignoreTableAnchor && anchorElement?.closest("th, td")) || (!options.ignoreTableDragSelectionText && document.documentElement.hasAttribute("data-table-drag-selection-text"))) return null
   const activeRoot = activeElement?.closest<HTMLElement>(CODE_BLOCK_EDITOR_CONTENT_SELECTOR)
   if (activeRoot) return activeRoot
   const selectionRoot = anchorElement?.closest<HTMLElement>(CODE_BLOCK_EDITOR_CONTENT_SELECTOR)
@@ -58,6 +61,13 @@ export const resolveVisibleCodeRootForSelectAll = (options: { ignoreTableAnchor?
     activeElement.classList.contains("ProseMirror")
   const hoveredRoot = document.querySelector<HTMLElement>(`${CODE_BLOCK_EDITOR_CONTENT_SELECTOR}:hover`)
   if (hoveredRoot && canResolveHoveredCodeRoot) return hoveredRoot
+  if (canResolveHoveredCodeRoot) {
+    const viewportCenterY = window.innerHeight / 2
+    return Array.from(document.querySelectorAll<HTMLElement>(CODE_BLOCK_EDITOR_CONTENT_SELECTOR)).find((root) => {
+      const rect = root.getBoundingClientRect()
+      return rect.top <= viewportCenterY && rect.bottom >= viewportCenterY
+    }) ?? null
+  }
   return null
 }
 
@@ -130,7 +140,7 @@ export const selectCodeBlockText = ({ editor, getPos, nodeSize }: CodeBlockPosit
   markNextEditorPointerAfterCodeSelection()
   preserveWindowScrollForRichBlockSelectAll()
   editor.view.dispatch(editor.state.tr.setSelection(nextSelection))
-  preserveWindowScrollPositionAcrossFrames(scrollAnchor, 240, 4, 4_800, false, false, true, false, false, undefined, true)
+  preserveWindowScrollPositionAcrossFrames(scrollAnchor, 240, 4, 4_800, false, false, true, false, false, shouldCancelCodeScrollPreserve(scrollAnchor), true)
   window.scrollTo(scrollAnchor.x, scrollAnchor.y)
   focusElementWithoutScroll(editor.view.dom as HTMLElement)
   return true

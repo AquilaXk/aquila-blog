@@ -52,13 +52,16 @@ const restoreTableAxisMenuSelection = ({
   axis: TableAxisMenuKind
   fallbackIndex: number
   selectTableAxisAtIndex: BlockEditorTableOverlayLayerProps["selectTableAxisAtIndex"]
-  selectTableByIndex: (axisIndex: number) => unknown
+  selectTableByIndex: (
+    axisIndex: number,
+    options?: { clearNativeText?: boolean }
+  ) => unknown
   tableMenuState: BlockEditorTableOverlayLayerProps["tableMenuState"]
 }) => {
   const axisTarget = tableMenuState?.kind === axis ? tableMenuState.axisTarget : null
   return axisTarget
-    ? selectTableAxisAtIndex(activeEditor, axisTarget.tablePos, axis, axisTarget.index)
-    : Boolean(selectTableByIndex(fallbackIndex))
+    ? selectTableAxisAtIndex(activeEditor, axisTarget.tablePos, axis, axisTarget.index, { clearNativeText: false })
+    : Boolean(selectTableByIndex(fallbackIndex, { clearNativeText: false }))
 }
 
 const runRestoredTableAxisCommand = (
@@ -81,6 +84,7 @@ const runTableAxisMenuActionOnMouseDown = (
   event: ReactMouseEvent<HTMLButtonElement>,
   action: () => void
 ) => {
+  if (event.button !== 0) return
   event.preventDefault()
   action()
 }

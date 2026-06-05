@@ -1,4 +1,5 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
+import { TextSelection } from "@tiptap/pm/state"
 import { CellSelection, selectedRect, TableMap, tableEditingKey } from "@tiptap/pm/tables"
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -20,11 +21,14 @@ import {
 } from "./tableAxisDragModel"
 import type { TableMenuState } from "./tableFloatingUiModel"
 import { findActiveRenderedTable } from "./tableRenderedDomModel"
+import { dispatchEditorSelectionSafely } from "./tableSelectionDispatchModel"
 import { buildReorderedSimpleTableNode } from "./tableStructureModel"
 import { TABLE_DRAG_SELECTION_TEXT_ATTR, TABLE_DRAG_SELECTION_TEXT_SELECTOR, clearTableStructuralSelectionOwner, clearTableTextSelectionForStructuralSelection, markTableStructuralSelectionOwner } from "./tableTextSelectionModel"
 import { focusElementWithoutScroll, resolveDocPosSafe, type TableOverlaySelectionRect } from "./useBlockEditorTableOverlayDomAdapter"
 
 const getTableAxisMenuNow = () => (typeof performance !== "undefined" ? performance.now() : Date.now())
+
+type SelectTableAxisOptions = { clearNativeText?: boolean }
 
 type UseBlockEditorTableOverlayAxisDragArgs = {
   cancelTableQuickRailHide: () => void
@@ -121,7 +125,7 @@ export const useBlockEditorTableOverlayAxisDrag = ({
     if (!activeEditor || !preservedCellSelection || typeof window === "undefined") return
     const restoreCellSelection = () => {
       if (!activeEditor.view.dom.isConnected) return
-      activeEditor.view.dispatch(activeEditor.state.tr.setSelection(preservedCellSelection))
+      if (!dispatchEditorSelectionSafely(activeEditor, () => preservedCellSelection)) return
       clearDomSelection()
       setSelectionTick((prev) => prev + 1)
     }
@@ -152,10 +156,11 @@ export const useBlockEditorTableOverlayAxisDrag = ({
     const cancelAxisMenuStabilization = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return
       suppressTableAxisMenuKeepAlive(Number.POSITIVE_INFINITY)
+      const activeEditor = editorRef.current ?? editor; if (activeEditor && isActiveTableAxisSelection(activeEditor) && dispatchEditorSelectionSafely(activeEditor, (state) => TextSelection.near(state.selection.$to, -1))) setSelectionTick((prev) => prev + 1)
     }
     window.addEventListener("keydown", cancelAxisMenuStabilization)
     return () => window.removeEventListener("keydown", cancelAxisMenuStabilization)
-  }, [suppressTableAxisMenuKeepAlive])
+  }, [editor, editorRef, isActiveTableAxisSelection, setSelectionTick, suppressTableAxisMenuKeepAlive])
   useEffect(() => {
     if (typeof window === "undefined") return
     const cancelAxisMenuKeepAlive = (event: PointerEvent) => {
@@ -167,37 +172,16 @@ export const useBlockEditorTableOverlayAxisDrag = ({
     return () => window.removeEventListener("pointerdown", cancelAxisMenuKeepAlive, true)
   }, [suppressTableAxisMenuKeepAlive])
   const selectTableAxisAtIndex = useCallback(
-    (activeEditor: TiptapEditor, tablePos: number, axis: "row" | "column", axisIndex: number) => {
+    (activeEditor: TiptapEditor, tablePos: number, axis: "row" | "column", axisIndex: number, options: SelectTableAxisOptions = {}) => {
       const tableNode = activeEditor.state.doc.nodeAt(tablePos)
       if (!tableNode || tableNode.type.name !== "table") return false
 
       const map = TableMap.get(tableNode)
-      if (axis === "column") {
-        if (axisIndex < 0 || axisIndex >= map.width) return false
-        const anchorCellPos = tablePos + 1 + map.positionAt(0, axisIndex, tableNode)
-        const headCellPos = tablePos + 1 + map.positionAt(map.height - 1, axisIndex, tableNode)
-        const anchorResolved = resolveDocPosSafe(activeEditor, anchorCellPos)
-        const headResolved = resolveDocPosSafe(activeEditor, headCellPos)
-        if (!anchorResolved || !headResolved) return false
-
-        clearStickyTopLevelBlockSelection()
-        clearTableTextSelectionForStructuralSelection()
-        focusElementWithoutScroll(activeEditor.view.dom)
-        clearEditorMouseDownSelectionSyncDeferral(activeEditor)
-        activeEditor.view.dispatch(
-          activeEditor.state.tr
-            .setSelection(CellSelection.colSelection(anchorResolved, headResolved))
-            .setMeta(tableEditingKey, anchorResolved.pos)
-        )
-        setTableAffordanceGeometry((prev) => ({ ...prev, columnIndex: axisIndex }))
-        setSelectionTick((prev) => prev + 1)
-        clearStructuralSelectionNativeText()
-        return true
-      }
-
-      if (axisIndex < 0 || axisIndex >= map.height) return false
-      const anchorCellPos = tablePos + 1 + map.positionAt(axisIndex, 0, tableNode)
-      const headCellPos = tablePos + 1 + map.positionAt(axisIndex, map.width - 1, tableNode)
+      const isColumn = axis === "column"
+      const axisSize = isColumn ? map.width : map.height
+      if (axisIndex < 0 || axisIndex >= axisSize) return false
+      const anchorCellPos = tablePos + 1 + (isColumn ? map.positionAt(0, axisIndex, tableNode) : map.positionAt(axisIndex, 0, tableNode))
+      const headCellPos = tablePos + 1 + (isColumn ? map.positionAt(map.height - 1, axisIndex, tableNode) : map.positionAt(axisIndex, map.width - 1, tableNode))
       const anchorResolved = resolveDocPosSafe(activeEditor, anchorCellPos)
       const headResolved = resolveDocPosSafe(activeEditor, headCellPos)
       if (!anchorResolved || !headResolved) return false
@@ -208,12 +192,12 @@ export const useBlockEditorTableOverlayAxisDrag = ({
       clearEditorMouseDownSelectionSyncDeferral(activeEditor)
       activeEditor.view.dispatch(
         activeEditor.state.tr
-          .setSelection(CellSelection.rowSelection(anchorResolved, headResolved))
+          .setSelection(isColumn ? CellSelection.colSelection(anchorResolved, headResolved) : CellSelection.rowSelection(anchorResolved, headResolved))
           .setMeta(tableEditingKey, anchorResolved.pos)
       )
-      setTableAffordanceGeometry((prev) => ({ ...prev, rowIndex: axisIndex }))
+      setTableAffordanceGeometry((prev) => isColumn ? { ...prev, columnIndex: axisIndex } : { ...prev, rowIndex: axisIndex })
       setSelectionTick((prev) => prev + 1)
-      clearStructuralSelectionNativeText()
+      if (options.clearNativeText !== false) clearStructuralSelectionNativeText()
       return true
     },
     [clearStickyTopLevelBlockSelection, clearStructuralSelectionNativeText, setSelectionTick, setTableAffordanceGeometry]
@@ -261,27 +245,27 @@ export const useBlockEditorTableOverlayAxisDrag = ({
   }, [editorRef])
 
   const selectTableColumnByIndex = useCallback(
-    (columnIndex: number) => {
+    (columnIndex: number, options: SelectTableAxisOptions = {}) => {
       const currentEditor = editorRef.current
       if (!currentEditor) return false
       const rect = getCurrentSelectedTableRect(currentEditor)
       if (!rect || columnIndex < 0 || columnIndex >= rect.map.width) return false
 
       const tablePos = rect.tableStart - 1
-      return selectTableAxisAtIndex(currentEditor, tablePos, "column", columnIndex) ? { axis: "column" as const, index: columnIndex, tablePos } : false
+      return selectTableAxisAtIndex(currentEditor, tablePos, "column", columnIndex, options) ? { axis: "column" as const, index: columnIndex, tablePos } : false
     },
     [editorRef, getCurrentSelectedTableRect, selectTableAxisAtIndex]
   )
 
   const selectTableRowByIndex = useCallback(
-    (rowIndex: number) => {
+    (rowIndex: number, options: SelectTableAxisOptions = {}) => {
       const currentEditor = editorRef.current
       if (!currentEditor) return false
       const rect = getCurrentSelectedTableRect(currentEditor)
       if (!rect || rowIndex < 0 || rowIndex >= rect.map.height) return false
 
       const tablePos = rect.tableStart - 1
-      return selectTableAxisAtIndex(currentEditor, tablePos, "row", rowIndex) ? { axis: "row" as const, index: rowIndex, tablePos } : false
+      return selectTableAxisAtIndex(currentEditor, tablePos, "row", rowIndex, options) ? { axis: "row" as const, index: rowIndex, tablePos } : false
     },
     [editorRef, getCurrentSelectedTableRect, selectTableAxisAtIndex]
   )
@@ -302,6 +286,9 @@ export const useBlockEditorTableOverlayAxisDrag = ({
       )
 
       const selected = selectTableAxisAtIndex(currentEditor, tablePos, axis, reorderedTable.nextIndex)
+      if (selected) {
+        tableAxisMenuKeepAliveSelectionRef.current = { axis, index: reorderedTable.nextIndex, tablePos }
+      }
       setTableAffordanceGeometry((prev) =>
         axis === "row"
           ? { ...prev, rowIndex: reorderedTable.nextIndex }
@@ -530,6 +517,16 @@ export const useBlockEditorTableOverlayAxisDrag = ({
       const keepAliveSelection = tableAxisMenuKeepAliveSelectionRef.current
       if (!activeEditor || (!isActiveTableAxisSelection(activeEditor) && !keepAliveSelection)) return
       if (!isActiveTableAxisSelection(activeEditor) && keepAliveSelection) selectTableAxisAtIndex(activeEditor, keepAliveSelection.tablePos, keepAliveSelection.axis, keepAliveSelection.index)
+      const currentAxisTarget = (() => {
+        if (!currentTableAxisSelection) return keepAliveSelection
+        try {
+          const rect = selectedRect(activeEditor.state)
+          return { ...currentTableAxisSelection, tablePos: rect.tableStart - 1 }
+        } catch {
+          return keepAliveSelection
+        }
+      })()
+      if (currentAxisTarget) tableAxisMenuKeepAliveSelectionRef.current = currentAxisTarget
       let tableElement: Element | null = null
       try {
         const anchorDom = activeEditor.view.domAtPos(activeEditor.state.selection.from).node
@@ -544,7 +541,7 @@ export const useBlockEditorTableOverlayAxisDrag = ({
       tableAffordanceGeometryRef.current = nextGeometry
       setTableAffordanceGeometry(nextGeometry)
       const anchor = keepAliveAxisSelection.axis === "row" ? nextGeometry.rowHandleAnchor : nextGeometry.columnHandleAnchor
-      const nextState = { kind: keepAliveAxisSelection.axis, left: Math.round(anchor.left), top: Math.round(anchor.top + 28), axisTarget: keepAliveSelection ? { axis: keepAliveSelection.axis, index: keepAliveSelection.index, tablePos: keepAliveSelection.tablePos } : undefined } as const
+      const nextState = { kind: keepAliveAxisSelection.axis, left: Math.round(anchor.left), top: Math.round(anchor.top + 28), axisTarget: currentAxisTarget ?? undefined } as const
       setTableMenuState((prev) =>
         prev?.kind === nextState.kind && prev.left === nextState.left && prev.top === nextState.top && prev.axisTarget?.axis === nextState.axisTarget?.axis && prev.axisTarget?.index === nextState.axisTarget?.index && prev.axisTarget?.tablePos === nextState.axisTarget?.tablePos
           ? prev

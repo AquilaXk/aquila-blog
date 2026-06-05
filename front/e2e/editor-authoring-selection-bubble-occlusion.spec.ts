@@ -168,10 +168,12 @@ test.describe("editor authoring selection bubble occlusion", () => {
 
     const bottomBodyLabel = "Stateless는 “서버가 아무것도 안 하는 구조”가 아닙니다."
     const resolveBodyPoints = () =>
-      page.evaluate((label) => {
+      page.evaluate(async (label) => {
         const paragraph = Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] p"))
           .find((element) => element.textContent?.includes(label))
         paragraph?.scrollIntoView({ block: "center", inline: "nearest" })
+        await new Promise((resolve) => requestAnimationFrame(resolve))
+        await new Promise((resolve) => requestAnimationFrame(resolve))
         const rect = paragraph?.getBoundingClientRect()
         if (!rect) return null
         return {
@@ -188,6 +190,7 @@ test.describe("editor authoring selection bubble occlusion", () => {
       const bodyPoints = await resolveBodyPoints()
       if (!bodyPoints) throw new Error("507 lower body drag points are missing")
       await page.mouse.move(bodyPoints.startX, bodyPoints.startY)
+      await page.waitForTimeout(40)
       await page.mouse.down()
       await page.mouse.move(bodyPoints.endX, bodyPoints.endY, { steps: 18 })
       await page.mouse.up()
@@ -342,9 +345,15 @@ test.describe("editor authoring selection bubble occlusion", () => {
     await page.keyboard.press("Escape")
     await clearPost507SelectionState(page)
     await scrollPost507FinalTableTargetIntoView(page)
-    const currentFinalTable = resolveCurrentFinalTable()
-    await expect(currentFinalTable).toBeVisible()
-    const tableBox = await currentFinalTable.boundingBox()
+    let tableBox: { height: number; width: number; x: number; y: number } | null = null
+    for (let attempt = 0; attempt < 3 && !tableBox; attempt += 1) {
+      await scrollPost507FinalTableTargetIntoView(page)
+      const currentFinalTable = resolveCurrentFinalTable()
+      await expect(currentFinalTable).toBeVisible()
+      await currentFinalTable.scrollIntoViewIfNeeded()
+      await page.waitForTimeout(80)
+      tableBox = await currentFinalTable.boundingBox()
+    }
     if (!tableBox) throw new Error("507 final table block selection metrics are missing")
     await page.mouse.move(tableBox.x + 24, tableBox.y + 24)
     const dragHandle = page.getByTestId("block-drag-handle")

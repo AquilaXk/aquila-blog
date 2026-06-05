@@ -5,7 +5,7 @@ import {
 } from "./helpers/editorAuthoringFlow"
 
 test.describe("editor authoring route scroll and selection", () => {
-  test("실제 /editor/[id] 텍스트 선택 후 block handle은 wheel scroll 중 선택 문단을 따라간다", async ({
+  test("실제 /editor/[id] 텍스트 선택 후 block handle 없이 wheel scroll chain을 유지한다", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 980, height: 720 })
@@ -16,10 +16,11 @@ test.describe("editor authoring route scroll and selection", () => {
       isAdmin: true,
     }
     const targetLabel = "edit route text selection scroll anchor"
+    const selectionNeedle = "route text selection scroll anchor"
     const paragraphs = Array.from({ length: 38 }, (_, index) =>
       index === 10
-        ? `${targetLabel} ${index + 1}. 선택한 텍스트의 좌측 block handle이 scroll 동안 같은 문단에 붙어야 합니다.`
-        : `text selection scroll paragraph ${index + 1}. 좌측 block handle scroll anchoring을 확인합니다.`
+        ? `${targetLabel} ${index + 1}. 선택한 텍스트는 좌측 block handle 없이 scroll 동안 같은 선택 범위를 유지해야 합니다.`
+        : `text selection scroll paragraph ${index + 1}. 좌측 block handle 없는 scroll chain을 확인합니다.`
     )
     const content = paragraphs.join("\n\n")
     const contentHtml = paragraphs.map((paragraph) => `<p>${paragraph}</p>`).join("")
@@ -62,56 +63,44 @@ test.describe("editor authoring route scroll and selection", () => {
     await page.mouse.up()
 
     const dragHandle = page.getByTestId("block-drag-handle")
-    await expect(dragHandle).toBeVisible()
-    const handleBox = await dragHandle.boundingBox()
-    if (!handleBox) {
-      throw new Error("text selection block handle metrics are missing")
-    }
-    await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2)
+    await expect(dragHandle).toHaveCount(0)
 
-    const readHandleGeometry = async () =>
+    const readSelectionGeometry = async () =>
       page.evaluate((label) => {
         const paragraph =
           Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] p")).find(
             (element) => element.textContent?.includes(label)
           ) ?? null
-        const handle = document.querySelector<HTMLElement>("[data-testid='block-drag-handle']")
-        if (!paragraph || !handle) return null
+        if (!paragraph) return null
         const paragraphRect = paragraph.getBoundingClientRect()
-        const handleRect = handle.getBoundingClientRect()
-        const handleStyle = window.getComputedStyle(handle)
         return {
+          blockHandleCount: document.querySelectorAll("[data-testid='block-drag-handle']").length,
           scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+          selectionText: window.getSelection()?.toString().replace(/\s+/g, " ").trim() ?? "",
           paragraphTop: paragraphRect.top,
-          handleTop: handleRect.top,
-          handleVisible:
-            handleRect.width > 0 &&
-            handleRect.height > 0 &&
-            handleStyle.display !== "none" &&
-            handleStyle.visibility !== "hidden" &&
-            Number.parseFloat(handleStyle.opacity || "1") > 0.5,
         }
       }, targetLabel)
 
-    const beforeGeometry = await readHandleGeometry()
+    const beforeGeometry = await readSelectionGeometry()
     if (!beforeGeometry) {
-      throw new Error("text selection handle geometry is missing before scroll")
+      throw new Error("text selection geometry is missing before scroll")
     }
+    expect(beforeGeometry.selectionText).toContain(selectionNeedle)
+    expect(beforeGeometry.blockHandleCount).toBe(0)
 
     await page.mouse.wheel(0, 360)
     await page.waitForTimeout(360)
 
-    const afterGeometry = await readHandleGeometry()
+    const afterGeometry = await readSelectionGeometry()
     if (!afterGeometry) {
-      throw new Error("text selection handle geometry is missing after scroll")
+      throw new Error("text selection geometry is missing after scroll")
     }
-    const paragraphDelta = afterGeometry.paragraphTop - beforeGeometry.paragraphTop
     expect(afterGeometry.scrollTop).toBeGreaterThan(beforeGeometry.scrollTop + 80)
-    expect(afterGeometry.handleVisible).toBe(true)
-    expect(Math.abs(afterGeometry.handleTop - beforeGeometry.handleTop - paragraphDelta)).toBeLessThanOrEqual(12)
+    expect(afterGeometry.selectionText).toContain(selectionNeedle)
+    expect(afterGeometry.blockHandleCount).toBe(0)
   })
 
-  test("실제 /editor/[id] 본문 클릭과 텍스트 선택 상태의 wheel scroll chain을 유지한다", async ({
+  test("실제 /editor/[id] 본문 클릭과 텍스트 선택 상태의 wheel scroll chain은 handle 없이 유지한다", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 980, height: 720 })
@@ -122,9 +111,10 @@ test.describe("editor authoring route scroll and selection", () => {
       isAdmin: true,
     }
     const targetLabel = "edit route body-selected wheel anchor"
+    const selectionNeedle = "route body-selected wheel anchor"
     const paragraphs = Array.from({ length: 42 }, (_, index) =>
       index === 12
-        ? `${targetLabel} ${index + 1}. 선택된 글의 좌측 block handle은 본문 위 wheel 중에도 글과 같이 움직여야 합니다.`
+        ? `${targetLabel} ${index + 1}. 선택된 글은 좌측 block handle 없이 본문 위 wheel 중에도 선택 범위를 유지해야 합니다.`
         : `body click wheel regression paragraph ${index + 1}. 본문 클릭 후 wheel scroll chain 회귀를 확인합니다.`
     )
     const content = paragraphs.join("\n\n")
@@ -181,7 +171,7 @@ test.describe("editor authoring route scroll and selection", () => {
     await page.mouse.up()
 
     const dragHandle = page.getByTestId("block-drag-handle")
-    await expect(dragHandle).toBeVisible()
+    await expect(dragHandle).toHaveCount(0)
 
     const readSelectionGeometry = async () =>
       page.evaluate((label) => {
@@ -189,28 +179,22 @@ test.describe("editor authoring route scroll and selection", () => {
           Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] p")).find(
             (element) => element.textContent?.includes(label)
           ) ?? null
-        const handle = document.querySelector<HTMLElement>("[data-testid='block-drag-handle']")
-        if (!paragraph || !handle) return null
+        if (!paragraph) return null
         const paragraphRect = paragraph.getBoundingClientRect()
-        const handleRect = handle.getBoundingClientRect()
-        const handleStyle = window.getComputedStyle(handle)
         return {
+          blockHandleCount: document.querySelectorAll("[data-testid='block-drag-handle']").length,
           scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+          selectionText: window.getSelection()?.toString().replace(/\s+/g, " ").trim() ?? "",
           paragraphTop: paragraphRect.top,
-          handleTop: handleRect.top,
-          handleVisible:
-            handleRect.width > 0 &&
-            handleRect.height > 0 &&
-            handleStyle.display !== "none" &&
-            handleStyle.visibility !== "hidden" &&
-            Number.parseFloat(handleStyle.opacity || "1") > 0.5,
         }
       }, targetLabel)
 
     const beforeGeometry = await readSelectionGeometry()
     if (!beforeGeometry) {
-      throw new Error("body-selected text handle geometry is missing before scroll")
+      throw new Error("body-selected text selection geometry is missing before scroll")
     }
+    expect(beforeGeometry.selectionText).toContain(selectionNeedle)
+    expect(beforeGeometry.blockHandleCount).toBe(0)
 
     const immediateGeometry = await page.evaluate((label) => {
       const read = () => {
@@ -218,45 +202,33 @@ test.describe("editor authoring route scroll and selection", () => {
           Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] p")).find(
             (element) => element.textContent?.includes(label)
           ) ?? null
-        const handle = document.querySelector<HTMLElement>("[data-testid='block-drag-handle']")
-        if (!paragraph || !handle) return null
+        if (!paragraph) return null
         const paragraphRect = paragraph.getBoundingClientRect()
-        const handleRect = handle.getBoundingClientRect()
-        const handleStyle = window.getComputedStyle(handle)
         return {
+          blockHandleCount: document.querySelectorAll("[data-testid='block-drag-handle']").length,
           scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+          selectionText: window.getSelection()?.toString().replace(/\s+/g, " ").trim() ?? "",
           paragraphTop: paragraphRect.top,
-          handleTop: handleRect.top,
-          handleVisible:
-            handleRect.width > 0 &&
-            handleRect.height > 0 &&
-            handleStyle.display !== "none" &&
-            handleStyle.visibility !== "hidden" &&
-            Number.parseFloat(handleStyle.opacity || "1") > 0.5,
         }
       }
       window.scrollBy(0, 160)
       return read()
     }, targetLabel)
     if (!immediateGeometry) {
-      throw new Error("body-selected text handle geometry is missing during immediate scroll")
+      throw new Error("body-selected text selection geometry is missing during immediate scroll")
     }
-    const immediateParagraphDelta = immediateGeometry.paragraphTop - beforeGeometry.paragraphTop
     expect(immediateGeometry.scrollTop).toBeGreaterThan(beforeGeometry.scrollTop + 80)
-    expect(immediateGeometry.handleVisible).toBe(true)
-    expect(
-      Math.abs(immediateGeometry.handleTop - beforeGeometry.handleTop - immediateParagraphDelta)
-    ).toBeLessThanOrEqual(12)
+    expect(immediateGeometry.selectionText).toContain(selectionNeedle)
+    expect(immediateGeometry.blockHandleCount).toBe(0)
 
     await page.evaluate(
-      ({ label, base }) => {
+      ({ label }) => {
         const win = window as Window & {
           __bodySelectedWheelSamples?: Array<{
+            blockHandleCount: number
             scrollTop: number
             paragraphTop: number
-            handleTop: number
-            handleError: number
-            handleVisible: boolean
+            selectionText: string
           }>
           __bodySelectedWheelCleanup?: () => void
         }
@@ -269,23 +241,13 @@ test.describe("editor authoring route scroll and selection", () => {
             Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] p")).find(
               (element) => element.textContent?.includes(label)
             ) ?? null
-          const handle = document.querySelector<HTMLElement>("[data-testid='block-drag-handle']")
-          if (!paragraph || !handle) return null
+          if (!paragraph) return null
           const paragraphRect = paragraph.getBoundingClientRect()
-          const handleRect = handle.getBoundingClientRect()
-          const handleStyle = window.getComputedStyle(handle)
-          const paragraphDelta = paragraphRect.top - base.paragraphTop
           return {
+            blockHandleCount: document.querySelectorAll("[data-testid='block-drag-handle']").length,
             scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
             paragraphTop: paragraphRect.top,
-            handleTop: handleRect.top,
-            handleError: Math.abs(handleRect.top - base.handleTop - paragraphDelta),
-            handleVisible:
-              handleRect.width > 0 &&
-              handleRect.height > 0 &&
-              handleStyle.display !== "none" &&
-              handleStyle.visibility !== "hidden" &&
-              Number.parseFloat(handleStyle.opacity || "1") > 0.5,
+            selectionText: window.getSelection()?.toString().replace(/\s+/g, " ").trim() ?? "",
           }
         }
         const record = () => {
@@ -302,7 +264,7 @@ test.describe("editor authoring route scroll and selection", () => {
           window.cancelAnimationFrame(rafId)
         }
       },
-      { label: targetLabel, base: beforeGeometry }
+      { label: targetLabel }
     )
 
     await page.mouse.wheel(0, 140)
@@ -318,9 +280,9 @@ test.describe("editor authoring route scroll and selection", () => {
     const scrollSamples = await page.evaluate(() => {
       const win = window as Window & {
         __bodySelectedWheelSamples?: Array<{
+          blockHandleCount: number
           scrollTop: number
-          handleError: number
-          handleVisible: boolean
+          selectionText: string
         }>
         __bodySelectedWheelCleanup?: () => void
       }
@@ -329,16 +291,15 @@ test.describe("editor authoring route scroll and selection", () => {
     })
     const movedSamples = scrollSamples.filter((sample) => sample.scrollTop > beforeGeometry.scrollTop + 20)
     expect(movedSamples.length).toBeGreaterThan(0)
-    expect(movedSamples.every((sample) => sample.handleVisible)).toBe(true)
-    expect(Math.max(...movedSamples.map((sample) => sample.handleError))).toBeLessThanOrEqual(12)
+    expect(movedSamples.every((sample) => sample.selectionText.includes(selectionNeedle))).toBe(true)
+    expect(movedSamples.every((sample) => sample.blockHandleCount === 0)).toBe(true)
 
     const afterGeometry = await readSelectionGeometry()
     if (!afterGeometry) {
-      throw new Error("body-selected text handle geometry is missing after scroll")
+      throw new Error("body-selected text selection geometry is missing after scroll")
     }
-    const paragraphDelta = afterGeometry.paragraphTop - beforeGeometry.paragraphTop
-    expect(afterGeometry.handleVisible).toBe(true)
-    expect(Math.abs(afterGeometry.handleTop - beforeGeometry.handleTop - paragraphDelta)).toBeLessThanOrEqual(12)
+    expect(afterGeometry.selectionText).toContain(selectionNeedle)
+    expect(afterGeometry.blockHandleCount).toBe(0)
   })
 
   test("실제 /editor/[id] 테이블 클릭 후 하단 본문 클릭은 scrollTop을 다른 본문 위치로 되돌리지 않는다", async ({

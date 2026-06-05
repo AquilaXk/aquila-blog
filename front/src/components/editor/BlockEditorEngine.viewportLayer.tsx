@@ -109,6 +109,7 @@ export const BlockEditorFloatingBubbleLayer = ({
   editor && bubbleState.visible && (bubbleState.mode === "text" || bubbleState.mode === "image") ? (
     <FloatingBubbleToolbar
       data-anchor={bubbleState.anchor}
+      data-placement={bubbleState.placement}
       onPointerEnter={() => {
         bubbleToolbarHoveredRef.current = true
         cancelBubbleHide()

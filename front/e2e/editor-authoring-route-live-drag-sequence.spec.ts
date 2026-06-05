@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
-import { expectEditorToContainLoadedText } from "./helpers/editorAuthoringFlow"
+import { expectEditorToContainLoadedText, expectVisibleBox } from "./helpers/editorAuthoringFlow"
 import { post507Markdown } from "./helpers/post507Fixtures"
 
 const adminMember = {
@@ -8,6 +8,7 @@ const adminMember = {
   nickname: "aquila",
   isAdmin: true,
 }
+const pressSelectAll = async (page: Page) => page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
 
 const readScrollTop = (page: Page) =>
   page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
@@ -121,7 +122,7 @@ const dragLocatorTextRange = async (
   }
 
   let result = await runDrag()
-  if (options.retryWhenEmpty && !result.selectionText.includes(text)) {
+  for (let attempt = 1; options.retryWhenEmpty && !result.selectionText.includes(text) && attempt < 3; attempt += 1) {
     await page.evaluate(() => window.getSelection()?.removeAllRanges())
     await page.waitForTimeout(120)
     result = await runDrag()
@@ -336,6 +337,7 @@ test.describe("editor authoring route live drag sequence", () => {
     expect(tableDrag.afterScrollTop).toBeGreaterThanOrEqual(tableDrag.beforeScrollTop - 24)
 
     const codeContent = editor.locator(".aq-code-editor-content", { hasText: "createAccessToken(user)" }).first()
+    await page.mouse.wheel(0, 1).then(() => page.waitForTimeout(60))
     const immediateCodeMetrics = await codeContent.evaluate((element) => {
       element.scrollIntoView({ block: "center", inline: "nearest" })
       const rect = element.getBoundingClientRect()
@@ -346,11 +348,18 @@ test.describe("editor authoring route live drag sequence", () => {
         y: Math.min(rect.height - 8, paddingTop + lineHeight * 2.5),
       }
     })
-    await page.waitForTimeout(120)
-    await codeContent.click({ position: { x: 80, y: immediateCodeMetrics.y } })
-    await page.waitForTimeout(120)
+    await expect.poll(async () => {
+      const box = await codeContent.boundingBox()
+      const viewportHeight = page.viewportSize()?.height ?? 720
+      return Boolean(box && box.y >= 0 && box.y <= viewportHeight - 24)
+    }).toBe(true)
+    const immediateCodeBox = await codeContent.boundingBox()
+    if (!immediateCodeBox) throw new Error("immediate code metrics are missing")
+    await page.mouse.move(immediateCodeBox.x + 80, immediateCodeBox.y + immediateCodeMetrics.y)
+    await page.mouse.click(immediateCodeBox.x + 80, immediateCodeBox.y + immediateCodeMetrics.y)
+    await page.waitForTimeout(40)
     const beforeImmediateCodeSelectAll = await readScrollTop(page)
-    await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
+    await pressSelectAll(page)
     try {
       await expect.poll(() => readSelectionText(page)).toContain("createAccessToken")
     } catch (error) {
@@ -370,6 +379,7 @@ test.describe("editor authoring route live drag sequence", () => {
         })
         return {
           activeElementClass: String(activeElement?.className ?? ""),
+          hasTableDragSelectionText: document.documentElement.hasAttribute("data-table-drag-selection-text"),
           selectionText: window.getSelection()?.toString() ?? "",
           visibleCodeRoots,
         }
@@ -465,7 +475,7 @@ test.describe("editor authoring route live drag sequence", () => {
     await page.waitForTimeout(120)
     const beforeCodeSelectAll = await readScrollTop(page)
     await codeContent.click({ position: { x: 80, y: 28 } })
-    await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
+    await pressSelectAll(page)
     await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforeCodeSelectAll + 24)
     await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforeCodeSelectAll - 24)
     const codeClickBox = await codeContent.boundingBox()
@@ -484,8 +494,9 @@ test.describe("editor authoring route live drag sequence", () => {
       element.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX: rect.left + metrics.endX, clientY, pointerType: "mouse" }))
       element.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, buttons: 0, cancelable: true, clientX: rect.left + metrics.endX, clientY, pointerType: "mouse" }))
     }, codeDragMetrics)
-    const codeDragStartBox = await codeContent.boundingBox()
-    if (!codeDragStartBox) throw new Error("code drag start metrics are missing")
+    const freshCodeContent = editor.locator(".aq-code-editor-content", { hasText: "createAccessToken(user)" }).first()
+    await freshCodeContent.waitFor({ state: "visible", timeout: 5_000 })
+    const codeDragStartBox = await expectVisibleBox(freshCodeContent, "code drag start metrics are missing")
     await page.evaluate(() => {
       ;(window as typeof window & { __qaCodeDragEvents?: unknown[] }).__qaCodeDragEvents = []
       const record = (event: Event) => {
@@ -513,9 +524,20 @@ test.describe("editor authoring route live drag sequence", () => {
     await page.mouse.move(codeDragStartBox.x + 80, codeDragStartBox.y + codeDragMetrics.y)
     await page.mouse.down()
     await page.waitForTimeout(120)
-    await expect.poll(() => page.evaluate(() => document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text") ?? "")).toBe("")
+    try {
+      await expect.poll(() => page.evaluate(() => document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text") ?? "")).toBe("")
+    } catch (error) {
+      const diagnostics = await page.evaluate(() => ({
+        events: (window as typeof window & { __qaCodeDragEvents?: unknown[] }).__qaCodeDragEvents ?? [],
+        persisted: Array.from(document.querySelectorAll("[data-code-drag-selection-text]")).map((element) => ({
+          className: String(element.className),
+          text: element.getAttribute("data-code-drag-selection-text")?.slice(0, 120) ?? "",
+        })),
+      }))
+      throw new Error(`code drag pointerdown did not clear stale selection: ${JSON.stringify(diagnostics)}\n${error instanceof Error ? error.message : String(error)}`)
+    }
     await page.mouse.up()
-    await codeContent.evaluate((element) => {
+    await freshCodeContent.evaluate((element) => {
       window.getSelection()?.removeAllRanges()
       element.closest(".aq-code-shell")?.removeAttribute("data-code-drag-selection-text")
     })
@@ -576,11 +598,12 @@ test.describe("editor authoring route live drag sequence", () => {
       return Math.min(rect.height - 8, paddingTop + lineHeight * 5.5)
     })
     const beforeLowerCodeClick = await readScrollTop(page)
-    await reissueCodeContent.click({ position: { x: 80, y: reissueClickY } })
+    const reissueCodeBox = await reissueCodeContent.boundingBox()
+    if (!reissueCodeBox) throw new Error("lower code click metrics are missing"); await page.mouse.click(reissueCodeBox.x + 80, reissueCodeBox.y + reissueClickY)
     await page.waitForTimeout(2_600)
     await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforeLowerCodeClick + 24)
     await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforeLowerCodeClick - 24)
-    await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
+    await pressSelectAll(page)
     await expect.poll(() => readSelectionText(page)).toContain("createAccessToken(getUser")
     await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforeLowerCodeClick + 24)
     await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforeLowerCodeClick - 24)

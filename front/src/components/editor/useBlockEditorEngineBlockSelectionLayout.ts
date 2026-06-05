@@ -23,6 +23,7 @@ import {
   isSameNestedListItemContext,
 } from "./nestedListItemModel"
 import type { DraggedBlockState, DropIndicatorState } from "./blockDragModel"
+import { hasNativeEditorTextSelection } from "./useFloatingBubbleState"
 
 type SetState<T> = Dispatch<SetStateAction<T>>
 
@@ -174,6 +175,12 @@ export const useBlockEditorEngineBlockSelectionLayout = ({
       hideBlockHandle()
       return
     }
+    const contentRoot = !isCoarsePointer && textSelectionBlockIndex !== null ? getContentRoot() : null
+    const nativeTextSelectionActive = Boolean(contentRoot && hasNativeEditorTextSelection(contentRoot))
+    if (nativeTextSelectionActive && !stickySelectionActive) {
+      hideBlockHandle()
+      return
+    }
     const { width: railWidth, height: railHeight } = blockHandleRailMetricsRef.current
     if (activeListItemContext?.listItemElement?.isConnected) {
       const rect = activeListItemContext.listItemElement.getBoundingClientRect()
@@ -248,6 +255,7 @@ export const useBlockEditorEngineBlockSelectionLayout = ({
     blockSelectionLayoutRectCacheRef,
     clickedBlockIndex,
     editor,
+    getContentRoot,
     getTopLevelBlockElementByIndex,
     hoveredBlockIndex,
     hoveredListItemContext,

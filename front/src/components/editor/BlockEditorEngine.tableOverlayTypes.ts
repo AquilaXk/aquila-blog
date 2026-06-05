@@ -69,10 +69,17 @@ export type BlockEditorTableOverlayLayerProps = {
     activeEditor: TiptapEditor,
     tablePos: number,
     axis: TableAxis,
-    axisIndex: number
+    axisIndex: number,
+    options?: { clearNativeText?: boolean }
   ) => boolean
-  selectTableColumnByIndex: (columnIndex: number) => TableAxisSelectionTarget | false
-  selectTableRowByIndex: (rowIndex: number) => TableAxisSelectionTarget | false
+  selectTableColumnByIndex: (
+    columnIndex: number,
+    options?: { clearNativeText?: boolean }
+  ) => TableAxisSelectionTarget | false
+  selectTableRowByIndex: (
+    rowIndex: number,
+    options?: { clearNativeText?: boolean }
+  ) => TableAxisSelectionTarget | false
   shouldPersistTableHandles: boolean
   shouldRenderTableAffordanceOverlay: boolean
   shouldShowCellMergeSection: boolean

@@ -16,6 +16,7 @@ export type WindowScrollAnchor = { x: number; y: number }
 
 let preserveNextEditorPointerAfterTable = false
 let preserveNextEditorPointerAfterCodeSelection = false
+let preserveNextEditorPointerAfterCodeSelectionReentryUntil = 0
 let activeWindowScrollPreserveCancel: (() => void) | null = null, windowScrollPreserveGeneration = 0
 let activeWindowScrollPreserveOwner: string | null = null
 let suppressGeneralEditorPointerPreserveUntil = 0
@@ -56,7 +57,7 @@ const getScrollPreserveNow = () => (typeof performance !== "undefined" ? perform
 const suppressGeneralEditorPointerPreserve = () => { suppressGeneralEditorPointerPreserveUntil = getScrollPreserveNow() + 120 }
 const isGeneralEditorPointerPreserveSuppressed = () => getScrollPreserveNow() < suppressGeneralEditorPointerPreserveUntil
 
-export const markNextEditorPointerAfterCodeSelection = () => { preserveNextEditorPointerAfterCodeSelection = true }
+export const markNextEditorPointerAfterCodeSelection = () => { preserveNextEditorPointerAfterCodeSelection = true; preserveNextEditorPointerAfterCodeSelectionReentryUntil = 0 }
 
 export const resolveBlockChromeLeft = (
   left: number,
@@ -360,12 +361,14 @@ export const preserveWindowScrollPositionAcrossFrames = (
   shouldCancelBeforeRestore?: () => boolean,
   replaceActivePreserve = false,
   cancelOnTextSelectionChangeAfterMs = Number.POSITIVE_INFINITY,
-  preserveOwner: string | null = null
+  preserveOwner: string | null = null,
+  deferPointerDownCancel = false
 ) => {
   if (typeof window === "undefined" || typeof document === "undefined") return
   const scrollingElement = document.scrollingElement
   const startX = anchor.x, startY = anchor.y, startedAt = typeof performance !== "undefined" ? performance.now() : Date.now(), preserveGeneration = windowScrollPreserveGeneration
   let cancelled = false, frame = 0
+  let deferredPointerDownCancelId: number | null = null
   const cancel = () => {
     cancelled = true
     cleanup()
@@ -408,6 +411,10 @@ export const preserveWindowScrollPositionAcrossFrames = (
   const cleanup = () => {
     window.removeEventListener("wheel", cancel, true)
     window.removeEventListener("scroll", restoreOnScroll, true)
+    if (deferredPointerDownCancelId !== null) {
+      window.clearTimeout(deferredPointerDownCancelId)
+      deferredPointerDownCancelId = null
+    }
     if (cancelOnPointerDown) {
       window.removeEventListener("pointerdown", cancel, true)
     }
@@ -436,7 +443,17 @@ export const preserveWindowScrollPositionAcrossFrames = (
   window.addEventListener("wheel", cancel, { capture: true, passive: true, once: true })
   window.addEventListener("scroll", restoreOnScroll, { capture: true, passive: true })
   if (cancelOnPointerDown) {
-    window.addEventListener("pointerdown", cancel, { capture: true, passive: true, once: true })
+    const attachPointerDownCancel = () => {
+      deferredPointerDownCancelId = null
+      if (!cancelled) {
+        window.addEventListener("pointerdown", cancel, { capture: true, passive: true, once: true })
+      }
+    }
+    if (deferPointerDownCancel) {
+      deferredPointerDownCancelId = window.setTimeout(attachPointerDownCancel, 0)
+    } else {
+      attachPointerDownCancel()
+    }
   }
   if (cancelOnPointerUp) {
     window.addEventListener("pointerup", cancel, { capture: true, passive: true, once: true })
@@ -474,6 +491,7 @@ const EDITOR_POINTER_TABLE_SELECT_ALL_SCROLL_PRESERVE_FRAMES = 24
 const EDITOR_POINTER_TABLE_SELECT_ALL_SCROLL_PRESERVE_MIN_MS = 320
 const EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES = 192
 const EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS = 3_200
+const EDITOR_POINTER_CODE_FOLLOW_UP_REENTRY_MS = 160
 const EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES = 144
 const EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS = 2_400
 const EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES = 72, EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MAX_MS = 72, EDITOR_POINTER_SCROLL_PRESERVE_CANCEL_DISTANCE_PX = 3_200
@@ -503,7 +521,7 @@ const preserveWindowScrollForTableFollowUpPointer = () => {
 
 export const preserveWindowScrollForCodePointerFocus = (cancelOnPointerDown = false) => {
   const anchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
-  preserveWindowScrollPositionAcrossFrames(anchor, EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES, 4, EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS, false, false, cancelOnPointerDown, false, false, shouldCancelEditorPointerScrollPreserve(anchor), true)
+  preserveWindowScrollPositionAcrossFrames(anchor, EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES, 4, EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS, false, false, cancelOnPointerDown, false, false, shouldCancelEditorPointerScrollPreserve(anchor), true, Number.POSITIVE_INFINITY, null, cancelOnPointerDown)
 }
 
 export const preserveWindowScrollForEditorPointerFocus = (
@@ -520,11 +538,16 @@ export const preserveWindowScrollForEditorPointerFocus = (
   const shouldPreserveTableBlockSelectionPointer = tablePointerTarget && blockSelectionActive
   const shouldPreserveGeneralEditorPointer =
     editorPointerTarget && !editorRichBlockTarget && !editorControlTarget
+  const codeSelectionFollowUpReentryActive = getScrollPreserveNow() < preserveNextEditorPointerAfterCodeSelectionReentryUntil
   const shouldPreserveCodeSelectionFollowUp =
-    editorPointerTarget && !editorControlTarget && preserveNextEditorPointerAfterCodeSelection
+    editorPointerTarget &&
+    !editorControlTarget &&
+    (preserveNextEditorPointerAfterCodeSelection || codeSelectionFollowUpReentryActive)
   const shouldPreserveFollowUp = !tablePointerTarget && preserveNextEditorPointerAfterTable
   if (shouldPreserveCodeSelectionFollowUp) {
     preserveNextEditorPointerAfterCodeSelection = false
+    preserveNextEditorPointerAfterCodeSelectionReentryUntil =
+      getScrollPreserveNow() + EDITOR_POINTER_CODE_FOLLOW_UP_REENTRY_MS
   }
   if (tablePointerTarget) {
     markNextEditorPointerAfterTable()

@@ -28,6 +28,10 @@ import {
   selectNestedListItemTextAnchor,
 } from "./nestedListItemModel"
 import { isTableSelectionActive } from "./tableStructureModel"
+import {
+  TABLE_DRAG_SELECTION_TEXT_SELECTOR,
+  clearTableTextSelectionForStructuralSelection,
+} from "./tableTextSelectionModel"
 import type { DraggedBlockState, DropIndicatorState } from "./blockDragModel"
 import type { BlockEditorBlockMenuState, BlockEditorSlashMenuState } from "./BlockEditorEngine.layers"
 import { useBlockEditorEngineBlockSelectionLayout } from "./useBlockEditorEngineBlockSelectionLayout"
@@ -218,6 +222,23 @@ export const useBlockEditorEngineBlockSelectionUi = ({
     textSelectionBlockIndex,
     viewportRef,
   })
+
+  const clearTextSelectionForTopLevelBlockSelection = useCallback(() => {
+    const selection = typeof window !== "undefined" ? window.getSelection() : null
+    const anchorElement =
+      selection?.anchorNode instanceof Element
+        ? selection.anchorNode
+        : selection?.anchorNode?.parentElement ?? null
+    if (
+      typeof document !== "undefined" &&
+      (anchorElement?.closest("td, th") ||
+        document.querySelector(TABLE_DRAG_SELECTION_TEXT_SELECTOR))
+    ) {
+      clearTableTextSelectionForStructuralSelection()
+      return
+    }
+    clearNativeTextSelection()
+  }, [clearNativeTextSelection])
 
   const syncViewportHoverState = useCallback(
     (targetEvent: EventTarget | null, clientX: number, clientY: number) => {
@@ -441,10 +462,12 @@ export const useBlockEditorEngineBlockSelectionUi = ({
 
       event.preventDefault()
       event.stopPropagation()
+      clearTextSelectionForTopLevelBlockSelection()
       promoteTopLevelBlockSelection(targetBlockIndex)
     },
     [
       clearNativeTextSelection,
+      clearTextSelectionForTopLevelBlockSelection,
       clearStickyTopLevelBlockSelection,
       editorRef,
       findTopLevelBlockIndexFromTarget,
@@ -503,6 +526,7 @@ export const useBlockEditorEngineBlockSelectionUi = ({
         if (targetBlockIndex === null) return
         event.preventDefault()
         event.stopPropagation()
+        clearTextSelectionForTopLevelBlockSelection()
         promoteTopLevelBlockSelection(targetBlockIndex)
         return
       }
@@ -549,6 +573,7 @@ export const useBlockEditorEngineBlockSelectionUi = ({
       isTableColumnRailResizeActive,
       isTableRowResizeActive,
       isTableRowResizeHandleTarget,
+      clearTextSelectionForTopLevelBlockSelection,
       keyboardBlockSelectionStickyRef,
       promoteTopLevelBlockSelection,
       selectedBlockNodeIndex,

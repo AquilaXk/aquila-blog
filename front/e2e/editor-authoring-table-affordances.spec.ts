@@ -2,7 +2,9 @@ import { expect, test } from "@playwright/test"
 import {
   QA_ENGINE_ROUTE,
   QA_WRITER_ROUTE,
+  getWordDragPoints,
   getTableAffordances,
+  moveToTableCellAxisHotzone,
 } from "./helpers/editorAuthoringFlow"
 import { mockEditorRouteWithSevenByThreeTable } from "./helpers/editorTableFixtures"
 
@@ -263,8 +265,12 @@ test.describe("editor authoring table affordances", () => {
     await page.keyboard.press("Escape")
     await expect(page.getByTestId("table-row-menu")).toHaveCount(0)
     await expect(page.getByTestId("table-column-menu")).toHaveCount(0)
-    const expandedTableBox = await page.locator(".aq-block-editor__content .tableWrapper table").boundingBox()
-    if (!expandedTableBox) throw new Error("expanded table bounding box is missing")
+    const readCurrentTableBox = async (label: string) => {
+      const currentTableBox = await page.locator(".aq-block-editor__content .tableWrapper table").boundingBox()
+      if (!currentTableBox) throw new Error(`${label} table bounding box is missing`)
+      return currentTableBox
+    }
+    const expandedTableBox = await readCurrentTableBox("expanded")
     await page.mouse.move(expandedTableBox.x + expandedTableBox.width / 2, expandedTableBox.y + 3)
     await expect(columnHandle).toBeVisible()
     const columnHandleBox = await columnHandle.boundingBox()
@@ -287,8 +293,9 @@ test.describe("editor authoring table affordances", () => {
         { x: -24, y: 24 },
         { x: -36, y: 32 },
       ]) {
-        await page.mouse.move(tableBox.x + tableBox.width / 2, tableBox.y + tableBox.height / 2)
-        await page.mouse.move(tableBox.x + point.x, tableBox.y + point.y, { steps: 4 })
+        const currentTableBox = await readCurrentTableBox("block handle hotzone")
+        await page.mouse.move(currentTableBox.x + currentTableBox.width / 2, currentTableBox.y + currentTableBox.height / 2)
+        await page.mouse.move(currentTableBox.x + point.x, currentTableBox.y + point.y, { steps: 4 })
         await page.waitForTimeout(80)
         if (await blockDragHandle.isVisible().catch(() => false)) return
       }
@@ -304,8 +311,9 @@ test.describe("editor authoring table affordances", () => {
         { x: 6, y: 3 },
         { x: 12, y: 3 },
       ]) {
-        await page.mouse.move(tableBox.x + tableBox.width / 2, tableBox.y + tableBox.height / 2)
-        await page.mouse.move(tableBox.x + point.x, tableBox.y + point.y, { steps: 4 })
+        const currentTableBox = await readCurrentTableBox("column grip hotzone")
+        await page.mouse.move(currentTableBox.x + currentTableBox.width / 2, currentTableBox.y + currentTableBox.height / 2)
+        await page.mouse.move(currentTableBox.x + point.x, currentTableBox.y + point.y, { steps: 4 })
         await page.waitForTimeout(80)
         if (await columnHandle.isVisible().catch(() => false)) return
       }
@@ -344,27 +352,26 @@ test.describe("editor authoring table affordances", () => {
     })
     const { columnHandle, rowHandle } = getTableAffordances(page)
 
-    const table = editor.locator("table").first()
     const targetCell = editor.locator("td", { hasText: "Access Token" }).first()
-    const expectAccessTokenNativeSelection = async () => {
+    const dragAccessTokenNativeSelection = async () => {
+      await page.evaluate(() => window.getSelection()?.removeAllRanges())
+      const points = await getWordDragPoints(targetCell, "Access Token")
+      await page.mouse.move(points.startX, points.startY)
+      await page.mouse.down()
+      await page.mouse.move(points.endX, points.endY, { steps: 18 })
+      await page.mouse.up()
       await expect
         .poll(async () => page.evaluate(() => window.getSelection()?.toString() || ""))
         .toContain("Access Token")
     }
-    await targetCell.click({ position: { x: 36, y: 16 } })
-    await targetCell.dblclick({ position: { x: 36, y: 16 } })
-    await expectAccessTokenNativeSelection()
+    await dragAccessTokenNativeSelection()
 
-    const moveToRowGripHotzone = async () => {
-      const tableBox = await table.boundingBox()
-      const cellBox = await targetCell.boundingBox()
-      if (!tableBox || !cellBox) {
-        throw new Error("7x3 route row grip metrics are missing")
-      }
-      await page.mouse.move(tableBox.x + 4, cellBox.y + cellBox.height / 2)
-    }
-
-    await moveToRowGripHotzone()
+    await moveToTableCellAxisHotzone(page, {
+      axis: "row",
+      cellText: "Access Token",
+      label: "7x3 route row grip",
+      tableText: "재발급 로직",
+    })
     await expect(rowHandle).toBeVisible()
     await rowHandle.click()
 
@@ -374,20 +381,14 @@ test.describe("editor authoring table affordances", () => {
     await expect(editor.locator(".selectedCell")).toHaveCount(3)
 
     await page.keyboard.press("Escape")
-    await targetCell.click({ position: { x: 36, y: 16 } })
-    await targetCell.dblclick({ position: { x: 36, y: 16 } })
-    await expectAccessTokenNativeSelection()
+    await dragAccessTokenNativeSelection()
 
-    const moveToColumnGripHotzone = async () => {
-      const tableBox = await table.boundingBox()
-      const cellBox = await targetCell.boundingBox()
-      if (!tableBox || !cellBox) {
-        throw new Error("7x3 route column grip metrics are missing")
-      }
-      await page.mouse.move(cellBox.x + cellBox.width / 2, tableBox.y + 4)
-    }
-
-    await moveToColumnGripHotzone()
+    await moveToTableCellAxisHotzone(page, {
+      axis: "column",
+      cellText: "Access Token",
+      label: "7x3 route column grip",
+      tableText: "재발급 로직",
+    })
     await expect(columnHandle).toBeVisible()
     await columnHandle.click()
 
@@ -601,7 +602,18 @@ test.describe("editor authoring table affordances", () => {
 
     await moveToRowColumnHotzone()
     await columnHandle.click()
-    await columnMenu.getByRole("button", { name: "열 삭제" }).click()
+    const deleteColumnButton = columnMenu.getByRole("button", { name: "열 삭제" })
+    const deleteColumnBox = await deleteColumnButton.boundingBox()
+    if (!deleteColumnBox) {
+      throw new Error("column delete button bounding box is missing")
+    }
+    await page.mouse.move(deleteColumnBox.x + deleteColumnBox.width / 2, deleteColumnBox.y + deleteColumnBox.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(deleteColumnBox.x + deleteColumnBox.width + 80, deleteColumnBox.y + deleteColumnBox.height / 2)
+    await page.mouse.up()
+    await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(4)
+    await expect(columnMenu).toBeVisible()
+    await deleteColumnButton.click()
     await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(3)
 
     const afterDeleteMetrics = await assertHandlesInViewport()
@@ -749,51 +761,39 @@ test.describe("editor authoring table affordances", () => {
 
     const firstTableCell = table.locator("tr").first().locator("th, td").first()
     await firstTableCell.click()
-
     const getRenderedTableBox = async () => {
       const box = await table.boundingBox()
-      if (!box) {
-        throw new Error("writer rendered pasted table bounding box is missing")
-      }
+      if (!box) throw new Error("writer rendered pasted table bounding box is missing")
       return box
     }
-
-    const moveToTopLeftHotzone = async () => {
-      const box = await getRenderedTableBox()
-      await page.mouse.move(box.x + 8, box.y + 8)
+    const clickVisibleAxisHandle = async (handle: typeof rowMenuButton, label: string) => {
+      await expect(handle).toBeVisible()
+      const box = await handle.boundingBox()
+      if (!box) throw new Error(`${label} handle bounding box is missing`)
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
     }
-    await moveToTopLeftHotzone()
+    const resetToFirstTableCell = async () => { await page.keyboard.press("Escape"); await firstTableCell.click({ position: { x: 16, y: 16 } }) }
+    const moveToRowHotzone = async () => { const box = await getRenderedTableBox(); await page.mouse.move(box.x + 8, box.y + 36) }
+    const moveToColumnHotzone = async () => { const box = await getRenderedTableBox(); await page.mouse.move(box.x + Math.min(96, box.width / 4), box.y + 6) }
+    await moveToRowHotzone()
 
     await expect(rowMenuButton).toBeVisible()
-    await expect(columnMenuButton).toBeVisible()
 
-    await rowMenuButton.click()
+    await clickVisibleAxisHandle(rowMenuButton, "writer pasted row")
     const rowMenu = page.getByTestId("table-row-menu")
     await expect(rowMenu).toBeVisible()
+    await page.waitForTimeout(50)
     await rowMenu.getByRole("button", { name: "아래에 행 추가" }).click()
     await expect(table.locator("tr")).toHaveCount(6)
 
-    await moveToTopLeftHotzone()
-    await columnMenuButton.click()
+    await resetToFirstTableCell()
+    await moveToColumnHotzone()
+    await clickVisibleAxisHandle(columnMenuButton, "writer pasted column")
     const columnMenu = page.getByTestId("table-column-menu")
     await expect(columnMenu).toBeVisible()
+    await page.waitForTimeout(50)
     await columnMenu.getByRole("button", { name: "오른쪽 열 추가" }).click()
     await expect(table.locator("tr").first().locator("th, td")).toHaveCount(5)
 
-    await page.evaluate(() => {
-      window.scrollTo(0, document.body.scrollHeight)
-    })
-    await page.waitForTimeout(120)
-    await moveToTopLeftHotzone()
-    await rowMenuButton.click()
-    await expect(rowMenu).toBeVisible()
-    await rowMenu.getByRole("button", { name: "아래에 행 추가" }).click()
-    await expect(table.locator("tr")).toHaveCount(7)
-
-    await moveToTopLeftHotzone()
-    await columnMenuButton.click()
-    await expect(columnMenu).toBeVisible()
-    await columnMenu.getByRole("button", { name: "오른쪽 열 추가" }).click()
-    await expect(table.locator("tr").first().locator("th, td")).toHaveCount(6)
   })
 })

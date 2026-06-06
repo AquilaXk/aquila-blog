@@ -1,15 +1,20 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react"
 import { useCallback } from "react"
 import type { TableAffordanceGeometry } from "./tableAffordanceModel"
+import type { TableAxisSelectionTarget } from "./tableAxisDragModel"
 import type { TableMenuKind } from "./tableFloatingUiModel"
 
 type UseBlockEditorTableOverlayInteractionHandlersArgs = {
   activeTableElementRef: MutableRefObject<HTMLTableElement | null>
   hoveredTableElementRef: MutableRefObject<HTMLTableElement | null>
-  openTableMenu: (kind: TableMenuKind, anchorRect: DOMRect, options?: { forceOpen?: boolean }) => void
+  openTableMenu: (
+    kind: TableMenuKind,
+    anchorRect: DOMRect,
+    options?: { axisTarget?: TableAxisSelectionTarget; forceOpen?: boolean }
+  ) => void
   scheduleTableQuickRailHide: (delayMs?: number) => void
-  selectTableColumnByIndex: (columnIndex: number) => boolean
-  selectTableRowByIndex: (rowIndex: number) => boolean
+  selectTableColumnByIndex: (columnIndex: number) => TableAxisSelectionTarget | false
+  selectTableRowByIndex: (rowIndex: number) => TableAxisSelectionTarget | false
   setHoveredTableCellMenuLayout: Dispatch<SetStateAction<{ cellMenuLeft: number; cellMenuTop: number } | null>>
   setIsTableQuickRailHovered: Dispatch<SetStateAction<boolean>>
   setTableAffordanceGeometry: Dispatch<SetStateAction<TableAffordanceGeometry>>
@@ -41,7 +46,7 @@ export const useBlockEditorTableOverlayInteractionHandlers = ({
       const selected = selectTableColumnByIndex(columnIndex)
       if (!selected) return false
       setTableAffordanceGeometry((prev) => ({ ...prev, columnIndex }))
-      openTableMenu("column", anchorRect, { forceOpen: true })
+      openTableMenu("column", anchorRect, { axisTarget: selected, forceOpen: true })
       return true
     },
     [openTableMenu, selectTableColumnByIndex, setTableAffordanceGeometry]
@@ -52,7 +57,7 @@ export const useBlockEditorTableOverlayInteractionHandlers = ({
       const selected = selectTableRowByIndex(rowIndex)
       if (!selected) return false
       setTableAffordanceGeometry((prev) => ({ ...prev, rowIndex }))
-      openTableMenu("row", anchorRect, { forceOpen: true })
+      openTableMenu("row", anchorRect, { axisTarget: selected, forceOpen: true })
       return true
     },
     [openTableMenu, selectTableRowByIndex, setTableAffordanceGeometry]

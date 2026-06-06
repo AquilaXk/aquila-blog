@@ -2,6 +2,7 @@ import type { Editor as TiptapEditor } from "@tiptap/core"
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { TableAffordanceGeometry } from "./tableAffordanceModel"
+import type { TableAxisSelectionTarget } from "./tableAxisDragModel"
 import {
   type TableCornerGrowState,
   type TableCornerGrowStepMetrics,
@@ -22,8 +23,8 @@ type UseBlockEditorTableOverlayCornerGrowArgs = {
   editorRef: MutableRefObject<TiptapEditor | null>
   focusRenderedTableCell: (cell: HTMLTableCellElement) => boolean
   getCurrentSelectedTableRect: (activeEditor?: TiptapEditor | null) => TableOverlaySelectionRect | null
-  selectTableColumnByIndex: (columnIndex: number) => boolean
-  selectTableRowByIndex: (rowIndex: number) => boolean
+  selectTableColumnByIndex: (columnIndex: number) => TableAxisSelectionTarget | false
+  selectTableRowByIndex: (rowIndex: number) => TableAxisSelectionTarget | false
   setSelectionTick: Dispatch<SetStateAction<number>>
   tableAffordanceGeometry: TableAffordanceGeometry
   tableAffordanceGeometryRef: MutableRefObject<TableAffordanceGeometry>

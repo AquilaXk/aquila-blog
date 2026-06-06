@@ -3,6 +3,7 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model"
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { TableAffordanceGeometry } from "./tableAffordanceModel"
+import type { TableAxisSelectionTarget } from "./tableAxisDragModel"
 import { findActiveRenderedTable, readRenderedColumnWidths, resolveActiveRenderedTableForFloatingUi } from "./tableRenderedDomModel"
 import {
   type TableColumnDragGuideState,
@@ -42,7 +43,7 @@ type UseBlockEditorTableOverlayResizeArgs = {
   hideTableOverflowCoachmark: () => void
   isCurrentTableColumnSelection: (columnIndex: number) => boolean
   resolveTableNodePosition: (activeEditor: TiptapEditor, tableNode: ProseMirrorNode) => number | null
-  selectTableColumnByIndex: (columnIndex: number) => boolean
+  selectTableColumnByIndex: (columnIndex: number) => TableAxisSelectionTarget | false
   setSelectionTick: Dispatch<SetStateAction<number>>
   setTableAffordanceGeometry: Dispatch<SetStateAction<TableAffordanceGeometry>>
   setViewportRowResizeHot: (enabled: boolean) => void

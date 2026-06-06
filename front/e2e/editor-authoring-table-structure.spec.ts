@@ -457,6 +457,49 @@ test.describe("editor authoring table structure and styles", () => {
     await expect(page.getByTestId("block-editor-prosemirror")).toBeVisible()
   })
 
+  test("table 구조 메뉴는 표 밖 selection 이동 후 stale 상태로 남지 않는다", async ({
+    page,
+  }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    await page.getByRole("button", { name: "테이블" }).click()
+    const firstTableCell = page.locator("table th, table td").first()
+    await firstTableCell.click()
+
+    const table = page.locator(".aq-block-editor__content .tableWrapper table").first()
+    const tableBox = await table.boundingBox()
+    if (!tableBox) {
+      throw new Error("table bounding box is missing before stale menu check")
+    }
+    await page.mouse.move(tableBox.x + tableBox.width - 6, tableBox.y + 6)
+
+    const structureMenuButton = page.getByTestId("table-structure-menu-button")
+    await expect(structureMenuButton).toBeVisible()
+    await structureMenuButton.click()
+
+    const tableMenu = page.getByTestId("table-table-menu")
+    await expect(tableMenu).toBeVisible()
+    await page.waitForTimeout(450)
+    await expect(tableMenu).toBeVisible()
+
+    const movedOutsideTable = await page.evaluate(() => {
+      const qaWindow = window as typeof window & {
+        __qaGetSelectionSnapshot?: () => {
+          docChildTypes: string[]
+        } | null
+        __qaSelectBlockAtIndex?: (blockIndex: number) => void
+      }
+      const paragraphIndex = qaWindow
+        .__qaGetSelectionSnapshot?.()
+        ?.docChildTypes.findIndex((type) => type === "paragraph")
+      if (paragraphIndex === undefined || paragraphIndex < 0) return false
+      qaWindow.__qaSelectBlockAtIndex?.(paragraphIndex)
+      return true
+    })
+    expect(movedOutsideTable).toBe(true)
+    await expect(tableMenu).toHaveCount(0)
+  })
+
   test("table 구조 메뉴의 폭 정책 UI는 wide/fit-to-page를 토글하고 재진입 후에도 유지된다", async ({
     page,
   }) => {

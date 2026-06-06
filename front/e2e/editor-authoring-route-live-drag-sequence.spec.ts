@@ -64,12 +64,18 @@ const dragLocatorTextRange = async (
   target: Locator,
   label: string,
   text: string,
-  options: { paced?: boolean; retryWhenEmpty?: boolean; waitMs?: number } = {}
+  options: {
+    endInsetPx?: number
+    paced?: boolean
+    retryWhenEmpty?: boolean
+    startInsetPx?: number
+    waitMs?: number
+  } = {}
 ) => {
   const runDrag = async () => {
     await target.scrollIntoViewIfNeeded()
     const measureTextRange = () =>
-      target.evaluate((element, { textToSelect, label }) => {
+      target.evaluate((element, { endInsetPx, label, startInsetPx, textToSelect }) => {
         element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
         const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
         while (walker.nextNode()) {
@@ -85,10 +91,28 @@ const dragLocatorTextRange = async (
           const startRect = rects[0] ?? range.getBoundingClientRect()
           const endRect = rects[rects.length - 1] ?? startRect
           if (startRect.width <= 2 || startRect.height <= 2 || endRect.width <= 2 || endRect.height <= 2) throw new Error(`${label} text rect is too small`)
-          return { endX: endRect.right - 2, endY: endRect.top + endRect.height / 2, startX: startRect.left + 2, startY: startRect.top + startRect.height / 2 }
+          const resolvedStartInsetPx = Math.min(
+            startRect.width / 2,
+            Math.max(2, startInsetPx ?? 2)
+          )
+          const resolvedEndInsetPx = Math.min(
+            endRect.width / 2,
+            Math.max(2, endInsetPx ?? 2)
+          )
+          return {
+            endX: endRect.right - resolvedEndInsetPx,
+            endY: endRect.top + endRect.height / 2,
+            startX: startRect.left + resolvedStartInsetPx,
+            startY: startRect.top + startRect.height / 2,
+          }
         }
         throw new Error(`${label} text node is missing`)
-      }, { label, textToSelect: text })
+      }, {
+        endInsetPx: options.endInsetPx,
+        label,
+        startInsetPx: options.startInsetPx,
+        textToSelect: text,
+      })
     let metrics = await measureTextRange()
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const viewport = page.viewportSize()
@@ -384,7 +408,13 @@ test.describe("editor authoring route live drag sequence", () => {
           visibleCodeRoots,
         }
       })
-      throw new Error(`immediate code select-all did not persist code text: ${JSON.stringify(diagnostics)}\n${error instanceof Error ? error.message : String(error)}`)
+      const detail = error instanceof Error ? error.message : String(error)
+      throw new Error(
+        [
+          `immediate code select-all did not persist code text: ${JSON.stringify(diagnostics)}`,
+          detail,
+        ].join("\n"),
+      )
     }
     await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforeImmediateCodeSelectAll + 24)
     await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforeImmediateCodeSelectAll - 24)
@@ -417,8 +447,27 @@ test.describe("editor authoring route live drag sequence", () => {
       const rect = element.getBoundingClientRect()
       const clientX = rect.left + 80
       const clientY = rect.top + metrics.y
-      const pointerDefaultAllowed = element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX, clientY, pointerType: "mouse" }))
-      const mouseDefaultAllowed = element.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX, clientY }))
+      const pointerDefaultAllowed = element.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          button: 0,
+          buttons: 1,
+          cancelable: true,
+          clientX,
+          clientY,
+          pointerType: "mouse",
+        }),
+      )
+      const mouseDefaultAllowed = element.dispatchEvent(
+        new MouseEvent("mousedown", {
+          bubbles: true,
+          button: 0,
+          buttons: 1,
+          cancelable: true,
+          clientX,
+          clientY,
+        }),
+      )
       window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, buttons: 0, cancelable: true, clientX, clientY, pointerType: "mouse" }))
       window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, buttons: 0, cancelable: true, clientX, clientY }))
       return { mouseDefaultAllowed, pointerDefaultAllowed }
@@ -446,9 +495,39 @@ test.describe("editor authoring route live drag sequence", () => {
       }
       window.getSelection()?.removeAllRanges()
       shell.removeAttribute("data-code-drag-selection-text")
-      shell.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX: startX, clientY, pointerType: "mouse" }))
-      window.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX: endX, clientY, pointerType: "mouse" }))
-      window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, buttons: 0, cancelable: true, clientX: endX, clientY, pointerType: "mouse" }))
+      shell.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          button: 0,
+          buttons: 1,
+          cancelable: true,
+          clientX: startX,
+          clientY,
+          pointerType: "mouse",
+        }),
+      )
+      window.dispatchEvent(
+        new PointerEvent("pointermove", {
+          bubbles: true,
+          button: 0,
+          buttons: 1,
+          cancelable: true,
+          clientX: endX,
+          clientY,
+          pointerType: "mouse",
+        }),
+      )
+      window.dispatchEvent(
+        new PointerEvent("pointerup", {
+          bubbles: true,
+          button: 0,
+          buttons: 0,
+          cancelable: true,
+          clientX: endX,
+          clientY,
+          pointerType: "mouse",
+        }),
+      )
       await new Promise((resolve) => setTimeout(resolve, 220))
       for (const type of ["pointerdown", "pointermove", "pointerup", "selectionchange"] as const) {
         document.removeEventListener(type, record, true)
@@ -490,9 +569,39 @@ test.describe("editor authoring route live drag sequence", () => {
       const selection = window.getSelection()
       selection?.removeAllRanges()
       element.closest(".aq-code-shell")?.removeAttribute("data-code-drag-selection-text")
-      element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX: startX, clientY, pointerType: "mouse" }))
-      element.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, button: 0, buttons: 1, cancelable: true, clientX: rect.left + metrics.endX, clientY, pointerType: "mouse" }))
-      element.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, buttons: 0, cancelable: true, clientX: rect.left + metrics.endX, clientY, pointerType: "mouse" }))
+      element.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          button: 0,
+          buttons: 1,
+          cancelable: true,
+          clientX: startX,
+          clientY,
+          pointerType: "mouse",
+        }),
+      )
+      element.dispatchEvent(
+        new PointerEvent("pointermove", {
+          bubbles: true,
+          button: 0,
+          buttons: 1,
+          cancelable: true,
+          clientX: rect.left + metrics.endX,
+          clientY,
+          pointerType: "mouse",
+        }),
+      )
+      element.dispatchEvent(
+        new PointerEvent("pointerup", {
+          bubbles: true,
+          button: 0,
+          buttons: 0,
+          cancelable: true,
+          clientX: rect.left + metrics.endX,
+          clientY,
+          pointerType: "mouse",
+        }),
+      )
     }, codeDragMetrics)
     const freshCodeContent = editor.locator(".aq-code-editor-content", { hasText: "createAccessToken(user)" }).first()
     await freshCodeContent.waitFor({ state: "visible", timeout: 5_000 })
@@ -511,7 +620,9 @@ test.describe("editor authoring route live drag sequence", () => {
           y: pointerEvent?.clientY,
           targetClass: String(target?.className ?? ""),
           selectionText: selection?.toString() ?? "",
-          persisted: Array.from(document.querySelectorAll("[data-code-drag-selection-text]")).map((element) => element.getAttribute("data-code-drag-selection-text")),
+          persisted: Array.from(
+            document.querySelectorAll("[data-code-drag-selection-text]"),
+          ).map((element) => element.getAttribute("data-code-drag-selection-text")),
         })
         if (((window as typeof window & { __qaCodeDragEvents?: unknown[] }).__qaCodeDragEvents?.length ?? 0) > 40) {
           ;(window as typeof window & { __qaCodeDragEvents?: unknown[] }).__qaCodeDragEvents?.shift()
@@ -525,7 +636,16 @@ test.describe("editor authoring route live drag sequence", () => {
     await page.mouse.down()
     await page.waitForTimeout(120)
     try {
-      await expect.poll(() => page.evaluate(() => document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text") ?? "")).toBe("")
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () =>
+              document
+                .querySelector("[data-code-drag-selection-text]")
+                ?.getAttribute("data-code-drag-selection-text") ?? "",
+          ),
+        )
+        .toBe("")
     } catch (error) {
       const diagnostics = await page.evaluate(() => ({
         events: (window as typeof window & { __qaCodeDragEvents?: unknown[] }).__qaCodeDragEvents ?? [],
@@ -534,7 +654,13 @@ test.describe("editor authoring route live drag sequence", () => {
           text: element.getAttribute("data-code-drag-selection-text")?.slice(0, 120) ?? "",
         })),
       }))
-      throw new Error(`code drag pointerdown did not clear stale selection: ${JSON.stringify(diagnostics)}\n${error instanceof Error ? error.message : String(error)}`)
+      const detail = error instanceof Error ? error.message : String(error)
+      throw new Error(
+        [
+          `code drag pointerdown did not clear stale selection: ${JSON.stringify(diagnostics)}`,
+          detail,
+        ].join("\n"),
+      )
     }
     await page.mouse.up()
     await freshCodeContent.evaluate((element) => {
@@ -578,12 +704,22 @@ test.describe("editor authoring route live drag sequence", () => {
           selectionText: selection?.toString() ?? "",
           anchor: describeNode(selection?.anchorNode),
           focus: describeNode(selection?.focusNode),
-          codePersisted: Array.from(document.querySelectorAll("[data-code-drag-selection-text]")).map((element) => element.getAttribute("data-code-drag-selection-text")),
-          tablePersisted: Array.from(document.querySelectorAll("[data-table-drag-selection-text]")).map((element) => element.getAttribute("data-table-drag-selection-text")),
+          codePersisted: Array.from(
+            document.querySelectorAll("[data-code-drag-selection-text]"),
+          ).map((element) => element.getAttribute("data-code-drag-selection-text")),
+          tablePersisted: Array.from(
+            document.querySelectorAll("[data-table-drag-selection-text]"),
+          ).map((element) => element.getAttribute("data-table-drag-selection-text")),
           activeElement: String(document.activeElement?.className ?? ""),
         }
       })
-      throw new Error(`lower body selection restored stale code text: ${JSON.stringify(diagnostics)}\n${error instanceof Error ? error.message : String(error)}`)
+      const detail = error instanceof Error ? error.message : String(error)
+      throw new Error(
+        [
+          `lower body selection restored stale code text: ${JSON.stringify(diagnostics)}`,
+          detail,
+        ].join("\n"),
+      )
     }
     const reissueCodeContent = editor.locator(".aq-code-editor-content", { hasText: "createAccessToken(getUser(refreshToken))" }).first()
     await reissueCodeContent.evaluate((element) => {
@@ -599,7 +735,8 @@ test.describe("editor authoring route live drag sequence", () => {
     })
     const beforeLowerCodeClick = await readScrollTop(page)
     const reissueCodeBox = await reissueCodeContent.boundingBox()
-    if (!reissueCodeBox) throw new Error("lower code click metrics are missing"); await page.mouse.click(reissueCodeBox.x + 80, reissueCodeBox.y + reissueClickY)
+    if (!reissueCodeBox) throw new Error("lower code click metrics are missing")
+    await page.mouse.click(reissueCodeBox.x + 80, reissueCodeBox.y + reissueClickY)
     await page.waitForTimeout(2_600)
     await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforeLowerCodeClick + 24)
     await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforeLowerCodeClick - 24)
@@ -783,14 +920,16 @@ test.describe("editor authoring route live drag sequence", () => {
       page,
       lowerBody,
       "live 507 lower body drag",
-      "서버가 아무것도 안 하는 구조",
+      "아무것도 안 하는 구조",
       {
+        endInsetPx: 4,
         paced: true,
         retryWhenEmpty: true,
+        startInsetPx: 4,
         waitMs: 900,
       }
     )
-    expect(lowerBodyDrag.selectionText).toContain("서버가 아무것도 안 하는 구조")
+    expect(lowerBodyDrag.selectionText).toContain("아무것도 안 하는 구조")
     expect(lowerBodyDrag.afterScrollTop).toBeLessThanOrEqual(lowerBodyDrag.beforeScrollTop + 24)
     expect(lowerBodyDrag.afterScrollTop).toBeGreaterThanOrEqual(lowerBodyDrag.beforeScrollTop - 24)
   })

@@ -19,6 +19,7 @@ import {
   preserveWindowScrollPositionAcrossFrames,
   type WindowScrollAnchor,
 } from "./blockHandleLayoutModel"
+import { BLOCK_SELECTION_CONTROL_SELECTOR } from "./blockSelectionModel"
 import {
   resolveMultiCellTableDomSelectionBubbleState,
   resolvePersistedTableTextSelectionBubbleState,
@@ -30,6 +31,7 @@ import {
   TABLE_DRAG_SELECTION_TEXT_SELECTOR,
   cancelActiveTableCellScrollPreserves,
   cancelActiveTableCellTextSelectionPreserves,
+  clearTableStructuralSelectionOwner,
   clearTableTextSelectionForStructuralSelection,
   collapseStaleTableEditorSelection,
   getTableTextSelectionClearGeneration,
@@ -237,6 +239,74 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
           element.removeAttribute("data-code-drag-selection-text")
         )
     }
+    const markCodeSelectionFollowUpIfActive = () => {
+      const selection = window.getSelection()
+      const selectionText = selection?.toString().trim() ?? ""
+      const anchorElement =
+        selection?.anchorNode instanceof Element
+          ? selection.anchorNode
+          : selection?.anchorNode?.parentElement ?? null
+      const focusElement =
+        selection?.focusNode instanceof Element
+          ? selection.focusNode
+          : selection?.focusNode?.parentElement ?? null
+      const anchorCodeShell = anchorElement?.closest(".aq-code-shell") ?? null
+      const focusCodeShell = focusElement?.closest(".aq-code-shell") ?? null
+      const hasNativeCodeSelection = Boolean(
+        selectionText && anchorCodeShell && anchorCodeShell === focusCodeShell
+      )
+      const hasPersistedCodeSelection = Boolean(
+        document.querySelector("[data-code-drag-selection-text]")
+      )
+      if (hasNativeCodeSelection || hasPersistedCodeSelection) {
+        markNextEditorPointerAfterCodeSelection()
+      }
+    }
+    const releaseTableStructuralOwnerForCellPointer = (
+      activeEditor: TiptapEditor,
+      event: MouseEvent | PointerEvent,
+      targetElement: Element | null,
+      pointElements: Element[]
+    ) => {
+      const tableControlTarget =
+        targetElement?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR) ??
+        pointElements[0]?.closest(TABLE_TEXT_DRAG_CONTROL_SELECTOR)
+      if (tableControlTarget) return false
+
+      const pointCell = resolveTableTextCellAtPoint(
+        event.clientX,
+        event.clientY,
+        event.target
+      )
+      if (!(pointCell instanceof HTMLElement)) return false
+      if (!activeEditor.view.dom.contains(pointCell)) return false
+
+      clearTableStructuralSelectionOwner()
+      return true
+    }
+    const preserveCollapsedTableCaretAcrossClickFrames = (
+      activeEditor: TiptapEditor,
+      cell: HTMLElement,
+      event: MouseEvent | PointerEvent
+    ) => {
+      const restore = () => {
+        if (!cell.isConnected || !activeEditor.view.dom.contains(cell)) {
+          return false
+        }
+        return collapseTableCellTextSelectionToPoint(
+          activeEditor,
+          event.clientX,
+          event.clientY,
+          cell,
+          { requireSelectionContext: false }
+        )
+      }
+
+      restore()
+      window.requestAnimationFrame(restore)
+      window.setTimeout(restore, 0)
+      window.setTimeout(restore, 40)
+    }
 
     const rememberCodeTextDragStart = (
       codeShellTarget: Element | null | undefined,
@@ -348,6 +418,17 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         toolbarOrControlTarget
       )
         return false
+      markCodeSelectionFollowUpIfActive()
+      const blockSelectionActive = Boolean(
+        document.querySelector("[data-testid='keyboard-block-selection-overlay']")
+      )
+      preserveWindowScrollForEditorPointerFocus(
+        event.target,
+        isTableSelectionActive(activeEditor),
+        blockSelectionActive,
+        true,
+        true
+      )
       nonTableTextDragStartRef.current = { x: event.clientX, y: event.clientY }
       cancelTableTextDragPreserves()
       collapseStaleTableEditorSelection(activeEditor, event)
@@ -1147,6 +1228,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         return
       }
       const selection = window.getSelection()
+      markCodeSelectionFollowUpIfActive()
       const anchorNode = selection?.anchorNode ?? null
       const anchorElement =
         anchorNode instanceof Element
@@ -1201,6 +1283,12 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         syncBubbleOnMouseUpRef.current = false
         return
       }
+      releaseTableStructuralOwnerForCellPointer(
+        activeEditor,
+        event,
+        targetElement,
+        pointElements
+      )
       const pointInsideEditor =
           !targetElement?.closest("[data-table-menu-root='true']") &&
           (!targetTableControl || allowTableControlCellFallback) &&
@@ -1241,6 +1329,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         return
       }
       if (insideEditorDom && !codeShellTarget && !tableTextDragStart) {
+        markCodeSelectionFollowUpIfActive()
         nonTableTextDragStartRef.current = {
           x: event.clientX,
           y: event.clientY,
@@ -1264,7 +1353,8 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         preserveWindowScrollForEditorPointerFocus(
           event.target,
           isTableSelectionActive(activeEditor),
-          blockSelectionActive
+          blockSelectionActive,
+          true
         )
       }
       if (codeShellTarget) {
@@ -1402,6 +1492,12 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         syncBubbleOnMouseUpRef.current = false
         return
       }
+      releaseTableStructuralOwnerForCellPointer(
+        activeEditor,
+        event,
+        targetElement,
+        pointElements
+      )
       const pointInsideEditor =
           !targetElement?.closest("[data-table-menu-root='true']") &&
           (!targetTableControl || allowTableControlCellFallback) &&
@@ -1798,6 +1894,54 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         hasTableStructuralSelection(activeEditor) &&
         tableTextDragStart
       ) {
+        const targetElement =
+            event.target instanceof Element
+              ? event.target
+              : event.target instanceof Node
+              ? event.target.parentElement
+              : null,
+          blockSelectionControlTarget = targetElement?.closest(
+            BLOCK_SELECTION_CONTROL_SELECTOR
+          )
+        if (blockSelectionControlTarget) {
+          tableTextDragStartRef.current = null
+          tableTextDragPendingStartRef.current = null
+          nonTableTextDragStartRef.current = null
+          mouseTextSelectionInProgressRef.current = false
+          cancelTableTextDragPreserves()
+          cancelActiveTableCellTextSelectionPreserves()
+          clearWindowTextSelectionOnly()
+          collapseStaleTableEditorSelection(activeEditor, event)
+          syncBubbleOnMouseUpRef.current = false
+          return
+        }
+        const collapsedStructuralTableCaret =
+          event.type === "pointerup" &&
+          !hasMovedTableTextDrag(event) &&
+          collapseTableCellTextSelectionToPoint(
+            activeEditor,
+            event.clientX,
+            event.clientY,
+            event.target,
+            { requireSelectionContext: false }
+          )
+        if (collapsedStructuralTableCaret) {
+          tableTextDragStartRef.current = null
+          tableTextDragPendingStartRef.current = null
+          nonTableTextDragStartRef.current = null
+          mouseTextSelectionInProgressRef.current = false
+          cancelTableTextDragPreserves()
+          event.preventDefault()
+          event.stopPropagation()
+          preserveCollapsedTableCaretAcrossClickFrames(
+            activeEditor,
+            tableTextDragStart.cell,
+            event
+          )
+          syncBubbleOnMouseUpRef.current = false
+          return
+        }
+
         const nativeTableRange =
             activeWindowSelection && activeWindowSelection.rangeCount > 0
               ? activeWindowSelection.getRangeAt(0).cloneRange()

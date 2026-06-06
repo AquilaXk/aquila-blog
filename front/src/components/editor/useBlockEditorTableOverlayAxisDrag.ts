@@ -1,11 +1,11 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
-import { TextSelection } from "@tiptap/pm/state"
 import {
   CellSelection,
   selectedRect,
   TableMap,
   tableEditingKey,
 } from "@tiptap/pm/tables"
+import { NodeSelection } from "@tiptap/pm/state"
 import type {
   Dispatch,
   MutableRefObject,
@@ -13,6 +13,7 @@ import type {
   SetStateAction,
 } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { BLOCK_SELECTION_CONTROL_SELECTOR } from "./blockSelectionModel"
 import type { TableAffordanceGeometry } from "./tableAffordanceModel"
 import {
   type DraggedTableAxisState,
@@ -32,12 +33,17 @@ import {
 import type { TableMenuState } from "./tableFloatingUiModel"
 import { findActiveRenderedTable } from "./tableRenderedDomModel"
 import { dispatchEditorSelectionSafely } from "./tableSelectionDispatchModel"
-import { buildReorderedSimpleTableNode } from "./tableStructureModel"
 import {
+  buildReorderedSimpleTableNode,
+  createSafeTextSelectionOutsideTable,
+} from "./tableStructureModel"
+import {
+  TABLE_AXIS_SELECTION_SURFACE_CANCEL_EVENT,
   TABLE_DRAG_SELECTION_TEXT_ATTR,
   TABLE_DRAG_SELECTION_TEXT_SELECTOR,
   clearTableStructuralSelectionOwner,
   clearTableTextSelectionForStructuralSelection,
+  getTableAxisSelectionRestoreGeneration,
   markTableStructuralSelectionOwner,
 } from "./tableTextSelectionModel"
 import {
@@ -136,6 +142,8 @@ export const useBlockEditorTableOverlayAxisDrag = ({
         activeEditor?.state.selection instanceof CellSelection
           ? activeEditor.state.selection
           : null
+      const restoreToken = tableAxisMenuStabilizationTokenRef.current
+      const restoreGeneration = getTableAxisSelectionRestoreGeneration()
       const viewWithDomObserver = activeEditor?.view as
         | (TiptapEditor["view"] & {
             domObserver?: {
@@ -186,6 +194,10 @@ export const useBlockEditorTableOverlayAxisDrag = ({
         return
       const restoreCellSelection = () => {
         if (!activeEditor.view.dom.isConnected) return
+        if (tableAxisMenuStabilizationTokenRef.current !== restoreToken) return
+        if (getTableAxisSelectionRestoreGeneration() !== restoreGeneration)
+          return
+        if (activeEditor.state.selection instanceof NodeSelection) return
         if (
           !dispatchEditorSelectionSafely(
             activeEditor,
@@ -249,6 +261,21 @@ export const useBlockEditorTableOverlayAxisDrag = ({
   )
   useEffect(() => {
     if (typeof window === "undefined") return
+    const suppressCancelledSurface = () =>
+      suppressTableAxisMenuKeepAlive(Number.POSITIVE_INFINITY)
+    window.addEventListener(
+      TABLE_AXIS_SELECTION_SURFACE_CANCEL_EVENT,
+      suppressCancelledSurface
+    )
+    return () =>
+      window.removeEventListener(
+        TABLE_AXIS_SELECTION_SURFACE_CANCEL_EVENT,
+        suppressCancelledSurface
+      )
+  }, [suppressTableAxisMenuKeepAlive])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
     const cancelAxisMenuStabilization = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return
       suppressTableAxisMenuKeepAlive(Number.POSITIVE_INFINITY)
@@ -257,7 +284,7 @@ export const useBlockEditorTableOverlayAxisDrag = ({
         activeEditor &&
         isActiveTableAxisSelection(activeEditor) &&
         dispatchEditorSelectionSafely(activeEditor, (state) =>
-          TextSelection.near(state.selection.$to, -1)
+          createSafeTextSelectionOutsideTable(state.doc, state.selection.to, -1)
         )
       )
         setSelectionTick((prev) => prev + 1)
@@ -281,6 +308,10 @@ export const useBlockEditorTableOverlayAxisDrag = ({
           : event.target instanceof Node
           ? event.target.parentElement
           : null
+      if (target?.closest(BLOCK_SELECTION_CONTROL_SELECTOR)) {
+        suppressTableAxisMenuKeepAlive()
+        return
+      }
       if (
         target?.closest(
           "[data-table-axis-rail='true'], [data-table-affordance='row-handle'], [data-table-affordance='column-handle'], [data-table-menu-root='true']"
@@ -328,6 +359,7 @@ export const useBlockEditorTableOverlayAxisDrag = ({
       clearTableTextSelectionForStructuralSelection()
       focusElementWithoutScroll(activeEditor.view.dom)
       clearEditorMouseDownSelectionSyncDeferral(activeEditor)
+      tableAxisMenuStabilizationTokenRef.current += 1
       activeEditor.view.dispatch(
         activeEditor.state.tr
           .setSelection(
@@ -711,10 +743,17 @@ export const useBlockEditorTableOverlayAxisDrag = ({
           markTableStructuralSelectionOwner(1_200)
           clearTableTextSelectionForStructuralSelection()
           const stabilizationToken = tableAxisMenuStabilizationTokenRef.current
+          const stabilizationGeneration =
+            getTableAxisSelectionRestoreGeneration()
           tableAxisMenuKeepAliveUntilRef.current = getTableAxisMenuNow() + 3_000
           const stabilizeCompletedAxisSelection = () => {
             if (
               tableAxisMenuStabilizationTokenRef.current !== stabilizationToken
+            )
+              return
+            if (
+              getTableAxisSelectionRestoreGeneration() !==
+              stabilizationGeneration
             )
               return
             const activeEditor = editorRef.current
@@ -812,9 +851,14 @@ export const useBlockEditorTableOverlayAxisDrag = ({
       currentTableAxisSelection ?? tableAxisMenuKeepAliveSelectionRef.current
     if (!keepAliveAxisSelection) return
     const stabilizationToken = tableAxisMenuStabilizationTokenRef.current
+    const stabilizationGeneration = getTableAxisSelectionRestoreGeneration()
     let timeoutId: number | null = null
     const stabilizeAxisMenu = () => {
       if (tableAxisMenuStabilizationTokenRef.current !== stabilizationToken)
+        return
+      if (
+        getTableAxisSelectionRestoreGeneration() !== stabilizationGeneration
+      )
         return
       const now = getTableAxisMenuNow()
       if (

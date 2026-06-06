@@ -6,6 +6,14 @@ export type BlockEditorChangeMeta = {
 }
 
 export type BlockEditorQaActions = {
+  getSelectionSnapshot: () => {
+    docChildTypes: string[]
+    from: number
+    selectionType: string
+    tableEditingState: string
+    to: number
+  } | null
+  selectBlockAtIndex: (blockIndex: number) => void
   selectTableAxis: (axis: "row" | "column") => void
   selectTableColumnViaDomFallback: (columnIndex: number) => void
   setActiveTableCellAlign: (align: "left" | "center" | "right" | null) => void

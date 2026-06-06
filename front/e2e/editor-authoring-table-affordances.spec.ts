@@ -85,17 +85,32 @@ test.describe("editor authoring table affordances", () => {
     await expect(columnAddButton).toHaveCount(0)
     await expect(rowAddButton).toHaveCount(0)
 
-    await firstTableCell.hover()
+    const firstTableCellBox = await firstTableCell.boundingBox()
+    if (!firstTableCellBox) {
+      throw new Error("first table cell metrics are missing before hover")
+    }
+    await page.mouse.move(
+      firstTableCellBox.x + firstTableCellBox.width + 32,
+      firstTableCellBox.y + firstTableCellBox.height + 24
+    )
+    const firstTableCellHoverX = firstTableCellBox.x + firstTableCellBox.width / 2
+    const firstTableCellHoverY =
+      firstTableCellBox.y +
+      Math.max(
+        8,
+        Math.min(firstTableCellBox.height - 6, firstTableCellBox.height * 0.7)
+      )
+    await page.mouse.move(firstTableCellHoverX, firstTableCellHoverY)
 
     await expect(columnHandle).toHaveCount(0)
     await expect(rowHandle).toHaveCount(0)
     await expect(page.getByTestId("table-corner-handle")).toHaveCount(0)
     await expect(tableGrowHandle).toHaveCount(0)
     await expect(tableStructureMenuButton).toHaveCount(0)
-    await expect(tableCellMenuButton).toBeVisible()
     await expect(columnAddButton).toHaveCount(0)
     await expect(rowAddButton).toHaveCount(0)
     await expect(page.getByTestId("table-bubble-toolbar")).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "블록 추가" })).toBeVisible()
 
     const tableWidthShape = await page.evaluate(() => {
       const contentRoot = document.querySelector<HTMLElement>(".aq-block-editor__content")
@@ -270,8 +285,30 @@ test.describe("editor authoring table affordances", () => {
       if (!currentTableBox) throw new Error(`${label} table bounding box is missing`)
       return currentTableBox
     }
+    const moveToColumnGripHotzone = async () => {
+      for (const point of [
+        { x: 3, y: 3 },
+        { x: 6, y: 3 },
+        { x: 12, y: 3 },
+      ]) {
+        const currentTableBox = await readCurrentTableBox("column grip hotzone")
+        await page.mouse.move(
+          currentTableBox.x + currentTableBox.width / 2,
+          currentTableBox.y + currentTableBox.height / 2
+        )
+        await page.mouse.move(currentTableBox.x + point.x, currentTableBox.y + point.y, {
+          steps: 4,
+        })
+        await page.waitForTimeout(80)
+        if (await columnHandle.isVisible().catch(() => false)) return
+      }
+    }
     const expandedTableBox = await readCurrentTableBox("expanded")
-    await page.mouse.move(expandedTableBox.x + expandedTableBox.width / 2, expandedTableBox.y + 3)
+    await page.mouse.move(
+      expandedTableBox.x + expandedTableBox.width / 2,
+      expandedTableBox.y + 3
+    )
+    await moveToColumnGripHotzone()
     await expect(columnHandle).toBeVisible()
     const columnHandleBox = await columnHandle.boundingBox()
     if (!columnHandleBox) throw new Error("column handle bounding box is missing")
@@ -305,24 +342,102 @@ test.describe("editor authoring table affordances", () => {
     await blockDragHandle.click()
     await expect(page.getByTestId("keyboard-block-selection-overlay")).toBeVisible()
 
-    const moveToColumnGripHotzone = async () => {
-      for (const point of [
-        { x: 3, y: 3 },
-        { x: 6, y: 3 },
-        { x: 12, y: 3 },
-      ]) {
-        const currentTableBox = await readCurrentTableBox("column grip hotzone")
-        await page.mouse.move(currentTableBox.x + currentTableBox.width / 2, currentTableBox.y + currentTableBox.height / 2)
-        await page.mouse.move(currentTableBox.x + point.x, currentTableBox.y + point.y, { steps: 4 })
-        await page.waitForTimeout(80)
-        if (await columnHandle.isVisible().catch(() => false)) return
-      }
-    }
     await moveToColumnGripHotzone()
     await expect(columnHandle).toBeVisible()
     await columnHandle.click()
     await expect(page.getByTestId("table-column-selection-outline")).toBeVisible()
     await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
+  })
+
+  test("table-only 문서도 table block selection collapse 때 CellSelection을 해제한다", async ({
+    page,
+  }) => {
+    const tableOnlyMarkdown = [
+      "| A | B |",
+      "| --- | --- |",
+      "| a | b |",
+    ].join("\n")
+    await page.goto(
+      `${QA_ENGINE_ROUTE}&seed=${encodeURIComponent(tableOnlyMarkdown)}`
+    )
+    const { rowHandle } = getTableAffordances(page)
+    const editor = page
+      .locator("[data-testid='block-editor-prosemirror']")
+      .first()
+    const table = editor.locator(".tableWrapper table").first()
+    await expect(table).toBeVisible()
+    await expect(table.locator("tr")).toHaveCount(2)
+
+    const readTableBox = async (label: string) => {
+      const tableBox = await table.boundingBox()
+      if (!tableBox) throw new Error(`${label} table bounding box is missing`)
+      return tableBox
+    }
+    const tableBox = await readTableBox("table-only")
+    await page.mouse.move(tableBox.x + 4, tableBox.y + tableBox.height / 2)
+    await expect(rowHandle).toBeVisible()
+    const rowHandleBox = await rowHandle.boundingBox()
+    if (!rowHandleBox) {
+      throw new Error("table-only row handle bounding box is missing")
+    }
+    await page.mouse.click(
+      rowHandleBox.x + rowHandleBox.width / 2,
+      rowHandleBox.y + rowHandleBox.height / 2
+    )
+    await expect(page.getByTestId("table-row-menu")).toBeVisible()
+    await expect
+      .poll(async () => editor.locator(".selectedCell").count())
+      .toBeGreaterThan(0)
+    const preCollapseSelection = await page.evaluate(() =>
+      (
+        window as unknown as {
+          __qaGetSelectionSnapshot?: () => {
+            docChildTypes: string[]
+          } | null
+        }
+      ).__qaGetSelectionSnapshot?.()
+    )
+    expect(preCollapseSelection?.docChildTypes[0]).toBe("table")
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          typeof (window as unknown as { __qaSelectBlockAtIndex?: unknown })
+            .__qaSelectBlockAtIndex
+        )
+      )
+      .toBe("function")
+    await page.evaluate(() => {
+      ;(
+        window as unknown as { __qaSelectBlockAtIndex?: (index: number) => void }
+      ).__qaSelectBlockAtIndex?.(0)
+    })
+    const postCollapseSelection = await page.evaluate(() =>
+      (
+        window as unknown as {
+          __qaGetSelectionSnapshot?: () => {
+            selectionType: string
+            tableEditingState: string
+          } | null
+        }
+      ).__qaGetSelectionSnapshot?.()
+    )
+    expect(postCollapseSelection?.selectionType).not.toBe("CellSelection")
+    expect(postCollapseSelection?.tableEditingState).toBe("null")
+    await page.waitForTimeout(200)
+    const lateCollapseSelection = await page.evaluate(() =>
+      (
+        window as unknown as {
+          __qaGetSelectionSnapshot?: () => {
+            selectionType: string
+            tableEditingState: string
+          } | null
+        }
+      ).__qaGetSelectionSnapshot?.()
+    )
+    expect(lateCollapseSelection?.selectionType).not.toBe("CellSelection")
+    expect(lateCollapseSelection?.tableEditingState).toBe("null")
+    await expect(page.getByTestId("table-row-menu")).toHaveCount(0)
+    await expect(editor.locator(".selectedCell")).toHaveCount(0)
   })
 
   test("table rail segment selection은 fallback rect에서도 native text selection 없이 전체 열을 선택한다", async ({
@@ -670,7 +785,7 @@ test.describe("editor authoring table affordances", () => {
     page,
   }) => {
     await page.goto(QA_WRITER_ROUTE)
-    const { cellMenuButton } = getTableAffordances(page)
+    const { cellMenuButton, rowHandle } = getTableAffordances(page)
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     await editor.click()
@@ -728,6 +843,25 @@ test.describe("editor authoring table affordances", () => {
 
     await page.mouse.move(firstTableBox.x + 24, firstTableBox.y + 24)
     await expect(page.getByTestId("block-drag-handle")).toBeVisible()
+
+    await expect(firstTable.locator("tr")).toHaveCount(3)
+    await expect(tables.nth(1).locator("tr")).toHaveCount(3)
+
+    await page.mouse.move(firstTableBox.x + 4, firstTableBox.y + firstTableBox.height / 2)
+    await expect(rowHandle).toBeVisible()
+    const rowHandleBox = await rowHandle.boundingBox()
+    if (!rowHandleBox) {
+      throw new Error("writer first table row handle bounding box is missing")
+    }
+    await page.mouse.click(
+      rowHandleBox.x + rowHandleBox.width / 2,
+      rowHandleBox.y + rowHandleBox.height / 2
+    )
+    await expect(page.getByTestId("table-row-menu")).toBeVisible()
+    await page.getByRole("button", { name: "행 삭제" }).click()
+
+    await expect(firstTable.locator("tr")).toHaveCount(2)
+    await expect(tables.nth(1).locator("tr")).toHaveCount(3)
   })
 
   test("writer surface의 pasted 4열 table에서도 row/column menu가 계속 동작한다", async ({ page }) => {
@@ -741,10 +875,17 @@ test.describe("editor authoring table affordances", () => {
     const tableMarkdown = [
       "| 축 | 대표 지표 | 의미 | 자주 하는 오해 |",
       "| --- | --- | --- | --- |",
-      "| 처리량 | TPS / RPS | 초당 얼마나 많은 요청과 트랜잭션을 처리하는가 | 처리량이 높으면 시스템이 건강하다고 생각함 |",
+      [
+        "| 처리량 | TPS / RPS | 초당 얼마나 많은 요청과 트랜잭션을 처리하는가",
+        "| 처리량이 높으면 시스템이 건강하다고 생각함 |",
+      ].join(" "),
       "| 지연 | P95 / P99 | 느린 요청의 꼬리 지연을 확인 | 평균 응답 시간만 보고 빠르다고 결론냄 |",
       "| 안정성 | Error Rate | 타임아웃, 5xx, 재시도 증가를 포함해 실패를 측정 | 에러를 일시적 네트워크 문제로만 봄 |",
-      "| 자원 | CPU, 메모리, 스레드, 커넥션 | 병목이 애플리케이션인지 인프라인지 좁히는 단서 | 리소스가 남아 있으면 안전하다고 생각함 |",
+      [
+        "| 자원 | CPU, 메모리, 스레드, 커넥션",
+        "| 병목이 애플리케이션인지 인프라인지 좁히는 단서",
+        "| 리소스가 남아 있으면 안전하다고 생각함 |",
+      ].join(" "),
     ].join("\n")
 
     await editor.evaluate((element, markdown) => {

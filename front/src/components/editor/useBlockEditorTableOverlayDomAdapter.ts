@@ -5,8 +5,15 @@ import { CellSelection, selectedRect, TableMap } from "@tiptap/pm/tables"
 import type { MutableRefObject, RefObject } from "react"
 import { useCallback } from "react"
 import { getFirstEditableTextPositionInNode } from "./blockSelectionModel"
-import { TABLE_STALE_AXIS_HOTZONE_TOP_MARGIN_PX, type TableAffordanceGeometry } from "./tableAffordanceModel"
-import { findActiveRenderedTable, RENDERED_TABLE_SELECTOR, resolveTableScopedSelectedCell } from "./tableRenderedDomModel"
+import {
+  TABLE_STALE_AXIS_HOTZONE_TOP_MARGIN_PX,
+  type TableAffordanceGeometry,
+} from "./tableAffordanceModel"
+import {
+  findActiveRenderedTable,
+  RENDERED_TABLE_SELECTOR,
+  resolveTableScopedSelectedCell,
+} from "./tableRenderedDomModel"
 import { isTableSelectionActive } from "./tableStructureModel"
 import { TABLE_DRAG_SELECTION_TEXT_ATTR } from "./tableTextSelectionModel"
 
@@ -23,7 +30,8 @@ const TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX = 32
 const resolveElementFromSelectionNode = (node: Node | null | undefined) =>
   node instanceof Element ? node : node?.parentElement ?? null
 
-const normalizeTableText = (text: string | null | undefined) => text?.replace(/\s+/g, " ").trim() ?? ""
+const normalizeTableText = (text: string | null | undefined) =>
+  text?.replace(/\s+/g, " ").trim() ?? ""
 
 const resolveSelectionTableElement = (viewport: HTMLElement | null) => {
   if (typeof window === "undefined" || !viewport) return null
@@ -35,21 +43,30 @@ const resolveSelectionTableElement = (viewport: HTMLElement | null) => {
   return (
     selectionElements
       .map((element) => element?.closest("table"))
-      .find((table): table is HTMLTableElement => table instanceof HTMLTableElement && viewport.contains(table)) ?? null
+      .find(
+        (table): table is HTMLTableElement =>
+          table instanceof HTMLTableElement && viewport.contains(table)
+      ) ?? null
   )
 }
 
-const resolvePersistedSelectionTableElement = (viewport: HTMLElement | null) => {
+const resolvePersistedSelectionTableElement = (
+  viewport: HTMLElement | null
+) => {
   if (!viewport) return null
   const persistedSelectionText = normalizeTableText(
     document.documentElement.getAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR)
   )
   if (!persistedSelectionText) return null
-  const renderedTables = Array.from(viewport.querySelectorAll<HTMLTableElement>(RENDERED_TABLE_SELECTOR))
+  const renderedTables = Array.from(
+    viewport.querySelectorAll<HTMLTableElement>(RENDERED_TABLE_SELECTOR)
+  )
   return (
     renderedTables.find((table) => {
       const tableText = normalizeTableText(table.textContent)
-      const matchedCellTextCount = Array.from(table.querySelectorAll("th, td")).filter((cell) => {
+      const matchedCellTextCount = Array.from(
+        table.querySelectorAll("th, td")
+      ).filter((cell) => {
         const cellText = normalizeTableText(cell.textContent)
         return Boolean(cellText && persistedSelectionText.includes(cellText))
       }).length
@@ -98,7 +115,10 @@ export const focusElementWithoutScroll = (element: HTMLElement | null) => {
   } catch {
     element.focus()
   }
-  if (window.scrollX !== previousScrollX || window.scrollY !== previousScrollY) {
+  if (
+    window.scrollX !== previousScrollX ||
+    window.scrollY !== previousScrollY
+  ) {
     window.scrollTo(previousScrollX, previousScrollY)
   }
 }
@@ -125,7 +145,11 @@ export const useBlockEditorTableOverlayDomAdapter = ({
 }: UseBlockEditorTableOverlayDomAdapterArgs) => {
   const getTableCellFromTarget = useCallback((target: EventTarget | null) => {
     const normalizedTarget =
-      target instanceof Element ? target : target instanceof Node ? target.parentElement : null
+      target instanceof Element
+        ? target
+        : target instanceof Node
+        ? target.parentElement
+        : null
     if (!(normalizedTarget instanceof Element)) return null
     const cell = normalizedTarget.closest("td, th")
     if (!(cell instanceof HTMLTableCellElement)) return null
@@ -141,21 +165,32 @@ export const useBlockEditorTableOverlayDomAdapter = ({
       const pointElements = resolveElementsFromPoint(clientX, clientY)
       const pointCell = pointElements
         .map((element) => element.closest("td, th"))
-        .find((cell): cell is HTMLTableCellElement => cell instanceof HTMLTableCellElement)
+        .find(
+          (cell): cell is HTMLTableCellElement =>
+            cell instanceof HTMLTableCellElement
+        )
       if (pointCell) return pointCell
 
       const normalizedTarget =
-        target instanceof Element ? target : target instanceof Node ? target.parentElement : null
+        target instanceof Element
+          ? target
+          : target instanceof Node
+          ? target.parentElement
+          : null
       const tableSurfaceElement =
         normalizedTarget?.closest(".aq-table-shell, .tableWrapper, table") ??
         pointElements
-          .map((element) => element.closest(".aq-table-shell, .tableWrapper, table"))
+          .map((element) =>
+            element.closest(".aq-table-shell, .tableWrapper, table")
+          )
           .find((surface): surface is Element => surface instanceof Element) ??
         null
       const tableElement =
         tableSurfaceElement instanceof HTMLTableElement
           ? tableSurfaceElement
-          : (tableSurfaceElement?.querySelector("table") as HTMLTableElement | null) ??
+          : (tableSurfaceElement?.querySelector(
+              "table"
+            ) as HTMLTableElement | null) ??
             resolveSelectionTableElement(viewportRef.current) ??
             resolvePersistedSelectionTableElement(viewportRef.current) ??
             (() => {
@@ -177,34 +212,46 @@ export const useBlockEditorTableOverlayDomAdapter = ({
       if (!tableElement) return null
 
       const cells = Array.from(tableElement.querySelectorAll("th, td")).filter(
-        (cell): cell is HTMLTableCellElement => cell instanceof HTMLTableCellElement
+        (cell): cell is HTMLTableCellElement =>
+          cell instanceof HTMLTableCellElement
       )
       const strictCell = cells.find((cell) => {
         const rect = cell.getBoundingClientRect()
-        return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom
+        return (
+          clientX >= rect.left &&
+          clientX <= rect.right &&
+          clientY >= rect.top &&
+          clientY <= rect.bottom
+        )
       })
       if (strictCell) return strictCell
 
       const tableRect = tableElement.getBoundingClientRect()
       const isNearTableSurface =
-        clientX >= tableRect.left - TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX &&
-        clientX <= tableRect.right + TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX &&
+        clientX >=
+          tableRect.left - TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX &&
+        clientX <=
+          tableRect.right + TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX &&
         clientY >= tableRect.top - TABLE_STALE_AXIS_HOTZONE_TOP_MARGIN_PX &&
         clientY <= tableRect.bottom + TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX
       if (!isNearTableSurface) return null
 
       const rows = Array.from(tableElement.querySelectorAll("tr")).filter(
-        (row): row is HTMLTableRowElement => row instanceof HTMLTableRowElement && row.cells.length > 0
+        (row): row is HTMLTableRowElement =>
+          row instanceof HTMLTableRowElement && row.cells.length > 0
       )
       const firstRowCells = Array.from(rows[0]?.cells ?? []).filter(
-        (cell): cell is HTMLTableCellElement => cell instanceof HTMLTableCellElement
+        (cell): cell is HTMLTableCellElement =>
+          cell instanceof HTMLTableCellElement
       )
       const topAxisCell =
         clientY <= tableRect.top + TABLE_AXIS_HOTZONE_CELL_FALLBACK_MARGIN_PX
           ? firstRowCells.find((cell) => {
               const rect = cell.getBoundingClientRect()
               return clientX >= rect.left && clientX <= rect.right
-            }) ?? firstRowCells[0] ?? null
+            }) ??
+            firstRowCells[0] ??
+            null
           : null
       if (topAxisCell) return topAxisCell
 
@@ -213,31 +260,84 @@ export const useBlockEditorTableOverlayDomAdapter = ({
           ? rows.find((row) => {
               const rect = row.getBoundingClientRect()
               return clientY >= rect.top && clientY <= rect.bottom
-            }) ?? rows[0] ?? null
+            }) ??
+            rows[0] ??
+            null
           : null
       return (
         Array.from(leftAxisRow?.cells ?? []).find(
-          (cell): cell is HTMLTableCellElement => cell instanceof HTMLTableCellElement
+          (cell): cell is HTMLTableCellElement =>
+            cell instanceof HTMLTableCellElement
         ) ?? null
       )
     },
-    [activeTableElementRef, getTableCellFromTarget, tableAffordanceGeometryRef, viewportRef]
+    [
+      activeTableElementRef,
+      getTableCellFromTarget,
+      tableAffordanceGeometryRef,
+      viewportRef,
+    ]
   )
 
-  const getActiveTableRectFromDom = useCallback((activeEditor?: TiptapEditor | null) => {
-    if (!activeEditor) return null
+  const getActiveTableRectFromDom = useCallback(
+    (activeEditor?: TiptapEditor | null) => {
+      if (!activeEditor) return null
 
-    const tableElement = findActiveRenderedTable(
-      viewportRef.current,
-      tableAffordanceGeometryRef.current,
-      activeTableElementRef.current
-    )
-    const resolveRectFromTableElement = (domSource: HTMLElement | null) => {
-      if (!domSource) return null
+      const tableElement = findActiveRenderedTable(
+        viewportRef.current,
+        tableAffordanceGeometryRef.current,
+        activeTableElementRef.current
+      )
+      const resolveRectFromTableElement = (domSource: HTMLElement | null) => {
+        if (!domSource) return null
+
+        let domPosition = 0
+        try {
+          domPosition = activeEditor.view.posAtDOM(domSource, 0)
+        } catch {
+          return null
+        }
+
+        const resolvedPosition = resolveDocPosSafe(activeEditor, domPosition)
+        if (!resolvedPosition) return null
+
+        for (let depth = resolvedPosition.depth; depth > 0; depth -= 1) {
+          if (resolvedPosition.node(depth).type.name !== "table") continue
+          const table = resolvedPosition.node(depth)
+          const tableStart = resolvedPosition.start(depth)
+          return {
+            map: TableMap.get(table),
+            table,
+            tableStart,
+          }
+        }
+
+        return null
+      }
+
+      const firstRowCellSelector = [
+        "thead tr:first-of-type > th",
+        "thead tr:first-of-type > td",
+        "tbody tr:first-of-type > th",
+        "tbody tr:first-of-type > td",
+        "tr:first-of-type > th",
+        "tr:first-of-type > td",
+      ].join(", ")
+      const firstCell =
+        tableElement?.querySelector<HTMLElement>(firstRowCellSelector)
+      if (!tableElement) return null
+
+      const fallbackFirstCell =
+        tableElement.querySelector<HTMLElement>("th, td")
+      const firstRowCell = firstCell ?? fallbackFirstCell
+      if (!firstRowCell) return null
+
+      const tableRect = resolveRectFromTableElement(tableElement)
+      if (tableRect) return tableRect
 
       let domPosition = 0
       try {
-        domPosition = activeEditor.view.posAtDOM(domSource, 0)
+        domPosition = activeEditor.view.posAtDOM(firstRowCell, 0)
       } catch {
         return null
       }
@@ -257,108 +357,104 @@ export const useBlockEditorTableOverlayDomAdapter = ({
       }
 
       return null
-    }
+    },
+    [activeTableElementRef, tableAffordanceGeometryRef, viewportRef]
+  )
 
-    const firstCell = tableElement?.querySelector<HTMLElement>(
-      "thead tr:first-of-type > th, thead tr:first-of-type > td, tbody tr:first-of-type > th, tbody tr:first-of-type > td, tr:first-of-type > th, tr:first-of-type > td"
-    )
-    if (!tableElement) return null
+  const getCurrentSelectedTableRect = useCallback(
+    (activeEditor?: TiptapEditor | null) => {
+      if (!activeEditor) return null
 
-    const fallbackFirstCell = tableElement.querySelector<HTMLElement>("th, td")
-    const firstRowCell = firstCell ?? fallbackFirstCell
-    if (!firstRowCell) return null
+      const viewport = viewportRef.current
+      const currentGeometry = tableAffordanceGeometryRef.current
+      const activeRenderedTable =
+        activeTableElementRef.current?.isConnected &&
+        viewport?.contains(activeTableElementRef.current)
+      const hasRenderedTableGeometry =
+        currentGeometry.width > 0 &&
+        currentGeometry.height > 0 &&
+        currentGeometry.columnSegments.length > 0
+      const renderedTableRect =
+        activeRenderedTable || hasRenderedTableGeometry
+          ? getActiveTableRectFromDom(activeEditor)
+          : null
+      if (renderedTableRect) return renderedTableRect
 
-    const tableRect = resolveRectFromTableElement(tableElement)
-    if (tableRect) return tableRect
-
-    let domPosition = 0
-    try {
-      domPosition = activeEditor.view.posAtDOM(firstRowCell, 0)
-    } catch {
-      return null
-    }
-
-    const resolvedPosition = resolveDocPosSafe(activeEditor, domPosition)
-    if (!resolvedPosition) return null
-
-    for (let depth = resolvedPosition.depth; depth > 0; depth -= 1) {
-      if (resolvedPosition.node(depth).type.name !== "table") continue
-      const table = resolvedPosition.node(depth)
-      const tableStart = resolvedPosition.start(depth)
-      return {
-        map: TableMap.get(table),
-        table,
-        tableStart,
+      if (isTableSelectionActive(activeEditor)) {
+        try {
+          return selectedRect(activeEditor.state)
+        } catch {
+          return getActiveTableRectFromDom(activeEditor)
+        }
       }
-    }
 
-    return null
-  }, [activeTableElementRef, tableAffordanceGeometryRef, viewportRef])
+      return getActiveTableRectFromDom(activeEditor)
+    },
+    [
+      activeTableElementRef,
+      getActiveTableRectFromDom,
+      tableAffordanceGeometryRef,
+      viewportRef,
+    ]
+  )
 
-  const getCurrentSelectedTableRect = useCallback((activeEditor?: TiptapEditor | null) => {
-    if (!activeEditor) return null
-    const currentGeometry = tableAffordanceGeometryRef.current
-    const hasRenderedTableHint =
-      currentGeometry.width > 0 && currentGeometry.height > 0 && currentGeometry.columnSegments.length > 0
-    const domRect = hasRenderedTableHint ? getActiveTableRectFromDom(activeEditor) : null
-    if (domRect) return domRect
+  const resolveTableNodePosition = useCallback(
+    (activeEditor: TiptapEditor, tableNode: ProseMirrorNode) => {
+      let tablePos: number | null = null
+      activeEditor.state.doc.descendants(
+        (node: ProseMirrorNode, pos: number) => {
+          if (node === tableNode) {
+            tablePos = pos
+            return false
+          }
+          return true
+        }
+      )
+      return tablePos
+    },
+    []
+  )
 
-    if (isTableSelectionActive(activeEditor)) {
+  const focusRenderedTableCell = useCallback(
+    (cell: HTMLTableCellElement) => {
+      const currentEditor = editorRef.current
+      if (!currentEditor) return false
+
+      let domPosition = 0
       try {
-        return selectedRect(activeEditor.state)
+        domPosition = currentEditor.view.posAtDOM(cell, 0)
       } catch {
-        return getActiveTableRectFromDom(activeEditor)
-      }
-    }
-
-    return getActiveTableRectFromDom(activeEditor)
-  }, [getActiveTableRectFromDom, tableAffordanceGeometryRef])
-
-  const resolveTableNodePosition = useCallback((activeEditor: TiptapEditor, tableNode: ProseMirrorNode) => {
-    let tablePos: number | null = null
-    activeEditor.state.doc.descendants((node: ProseMirrorNode, pos: number) => {
-      if (node === tableNode) {
-        tablePos = pos
         return false
       }
-      return true
-    })
-    return tablePos
-  }, [])
 
-  const focusRenderedTableCell = useCallback((cell: HTMLTableCellElement) => {
-    const currentEditor = editorRef.current
-    if (!currentEditor) return false
+      const resolvedPosition = resolveDocPosSafe(currentEditor, domPosition)
+      if (!resolvedPosition) return false
 
-    let domPosition = 0
-    try {
-      domPosition = currentEditor.view.posAtDOM(cell, 0)
-    } catch {
+      for (let depth = resolvedPosition.depth; depth > 0; depth -= 1) {
+        const node = resolvedPosition.node(depth)
+        if (node.type.name !== "tableCell" && node.type.name !== "tableHeader")
+          continue
+
+        const cellPosition = resolvedPosition.before(depth)
+        const cellNode = currentEditor.state.doc.nodeAt(cellPosition)
+        if (!cellNode) return false
+
+        const selectionPos =
+          getFirstEditableTextPositionInNode(cellNode, cellPosition) ??
+          Math.max(1, cellPosition + 1)
+        currentEditor.view.dispatch(
+          currentEditor.state.tr.setSelection(
+            TextSelection.create(currentEditor.state.doc, selectionPos)
+          )
+        )
+        focusElementWithoutScroll(currentEditor.view.dom)
+        return true
+      }
+
       return false
-    }
-
-    const resolvedPosition = resolveDocPosSafe(currentEditor, domPosition)
-    if (!resolvedPosition) return false
-
-    for (let depth = resolvedPosition.depth; depth > 0; depth -= 1) {
-      const node = resolvedPosition.node(depth)
-      if (node.type.name !== "tableCell" && node.type.name !== "tableHeader") continue
-
-      const cellPosition = resolvedPosition.before(depth)
-      const cellNode = currentEditor.state.doc.nodeAt(cellPosition)
-      if (!cellNode) return false
-
-      const selectionPos =
-        getFirstEditableTextPositionInNode(cellNode, cellPosition) ?? Math.max(1, cellPosition + 1)
-      currentEditor.view.dispatch(
-        currentEditor.state.tr.setSelection(TextSelection.create(currentEditor.state.doc, selectionPos))
-      )
-      focusElementWithoutScroll(currentEditor.view.dom)
-      return true
-    }
-
-    return false
-  }, [editorRef])
+    },
+    [editorRef]
+  )
 
   const resolveTableQuickRailAnchorElement = useCallback(() => {
     const viewport = viewportRef.current
@@ -392,13 +488,21 @@ export const useBlockEditorTableOverlayDomAdapter = ({
     const row = rows[tableAffordanceGeometryRef.current.rowIndex] ?? null
     if (!row) return renderedTable.querySelector("th, td") as HTMLElement | null
 
-    const cells = Array.from(row.children).filter((node): node is HTMLElement => node instanceof HTMLElement)
+    const cells = Array.from(row.children).filter(
+      (node): node is HTMLElement => node instanceof HTMLElement
+    )
     return (
       cells[tableAffordanceGeometryRef.current.columnIndex] ??
       (row.querySelector("th, td") as HTMLElement | null) ??
       (renderedTable.querySelector("th, td") as HTMLElement | null)
     )
-  }, [activeTableElementRef, hoveredTableElementRef, tableAffordanceGeometryRef, tableHoverAnchorLockUntilRef, viewportRef])
+  }, [
+    activeTableElementRef,
+    hoveredTableElementRef,
+    tableAffordanceGeometryRef,
+    tableHoverAnchorLockUntilRef,
+    viewportRef,
+  ])
 
   return {
     focusRenderedTableCell,

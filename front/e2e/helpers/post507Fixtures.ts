@@ -143,6 +143,12 @@ export type Post507EditorDiagnosticSnapshot = {
   }>
   preserveAttributes: Array<{ element: string; name: string; value: string }>
   scrollTopTimeline: Array<{ label: string; scrollTop: number }>
+  selectionDebug: {
+    elementFallbackText: string
+    owner: Post507InteractionTelemetrySnapshot["selectionTimeline"][number]["owner"]
+    rootFallbackText: string
+    windowText: string
+  }
   selectionText: string
   url: string
 }
@@ -227,11 +233,11 @@ export const readPost507EditorDiagnostics = async (
       )
       .slice(0, 40)
     const editor = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
-    const selectionText =
-      window.getSelection()?.toString() ||
-      document.documentElement.getAttribute("data-table-drag-selection-text") ||
-      document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
-      ""
+    const windowSelectionText = window.getSelection()?.toString() || ""
+    const rootFallbackText = document.documentElement.getAttribute("data-table-drag-selection-text") || ""
+    const elementFallbackText =
+      document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") || ""
+    const selectionText = windowSelectionText || rootFallbackText || elementFallbackText
     const readFallbackSample = (sampleLabel: string) => {
       const codeFallbackText =
         document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text")?.trim() ||
@@ -343,6 +349,12 @@ export const readPost507EditorDiagnostics = async (
           scrollTop: Math.round(document.scrollingElement?.scrollTop ?? window.scrollY),
         },
       ],
+      selectionDebug: {
+        elementFallbackText: elementFallbackText.replace(/\s+/g, " ").trim().slice(0, 160),
+        owner: readSelectionSample(snapshotLabel).owner,
+        rootFallbackText: rootFallbackText.replace(/\s+/g, " ").trim().slice(0, 160),
+        windowText: windowSelectionText.replace(/\s+/g, " ").trim().slice(0, 160),
+      },
       selectionText,
       url: `${window.location.pathname}${window.location.search}`,
     }

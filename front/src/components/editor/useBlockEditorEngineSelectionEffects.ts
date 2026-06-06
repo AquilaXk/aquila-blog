@@ -1,6 +1,11 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
 import { useEffect } from "react"
-import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react"
+import type {
+  Dispatch,
+  MutableRefObject,
+  RefObject,
+  SetStateAction,
+} from "react"
 import {
   parseMarkdownToEditorDoc,
   restoreEditorDocCodeBlocksFromMarkdown,
@@ -22,9 +27,7 @@ import {
   rememberActiveTableCellFromTarget,
   selectActiveTableCellText,
 } from "./tableTextSelectionModel"
-import {
-  type FloatingBubbleState,
-} from "./useFloatingBubbleState"
+import { type FloatingBubbleState } from "./useFloatingBubbleState"
 import type { BlockEditorSlashMenuState } from "./BlockEditorEngine.layers"
 import { downgradeDisabledFeatureNodes } from "./useBlockEditorEngineDocumentOps"
 import { useBlockEditorEngineSelectionBubbleEffects } from "./useBlockEditorEngineSelectionBubbleEffects"
@@ -52,26 +55,50 @@ type UseBlockEditorEngineSelectionEffectsArgs = {
   editor: TiptapEditor | null
   editorRef: RefObject<TiptapEditor | null>
   enableMermaidBlocks: boolean
-  findNestedListItemContextFromTarget: (target: EventTarget | null) => NestedListItemContext | null
-  findTopLevelBlockIndexByClientPosition: (clientX: number, clientY: number) => number | null
-  findTopLevelBlockIndexFromTarget: (target: EventTarget | null) => number | null
+  findNestedListItemContextFromTarget: (
+    target: EventTarget | null
+  ) => NestedListItemContext | null
+  findTopLevelBlockIndexByClientPosition: (
+    clientX: number,
+    clientY: number
+  ) => number | null
+  findTopLevelBlockIndexFromTarget: (
+    target: EventTarget | null
+  ) => number | null
   flushPendingMarkdownCommit: () => void
   getContentRoot: () => HTMLElement | null
-  getNodeSelectedNestedListItemContext: (editor: TiptapEditor) => NestedListItemContext | null
-  getSelectionAnchorNestedListItemContext: (editor: TiptapEditor) => NestedListItemContext | null
+  getNodeSelectedNestedListItemContext: (
+    editor: TiptapEditor
+  ) => NestedListItemContext | null
+  getSelectionAnchorNestedListItemContext: (
+    editor: TiptapEditor
+  ) => NestedListItemContext | null
   hasExternalMarkdownChanged: (value: string) => boolean
   hasTableStructuralSelection: (editor: TiptapEditor) => boolean
   hideTableQuickRailImmediately: () => void
   hoveredBlockIndex: number | null
-  isOuterBlockSelectionGesture: (event: MouseEvent, targetBlockIndex: number | null) => boolean
-  isOuterListItemSelectionGesture: (event: MouseEvent, targetListItem: NestedListItemContext | null) => boolean
+  isOuterBlockSelectionGesture: (
+    event: MouseEvent,
+    targetBlockIndex: number | null
+  ) => boolean
+  isOuterListItemSelectionGesture: (
+    event: MouseEvent,
+    targetListItem: NestedListItemContext | null
+  ) => boolean
   isTableColumnRailResizeActive: () => boolean
   keyboardBlockSelectionStickyRef: MutableRefObject<boolean>
   mouseTextSelectionInProgressRef: MutableRefObject<boolean>
   promoteTopLevelBlockSelection: (blockIndex: number) => boolean
-  replaceEditorDocFromExternalValue: (nextDoc: BlockEditorDoc, fallbackEditor?: TiptapEditor | null) => void
-  resolveActiveListItemInteraction: (editor: TiptapEditor) => ActiveListItemInteraction
-  resolveEffectiveSelectedListItemContext: (editor?: TiptapEditor | null) => NestedListItemContext | null
+  replaceEditorDocFromExternalValue: (
+    nextDoc: BlockEditorDoc,
+    fallbackEditor?: TiptapEditor | null
+  ) => void
+  resolveActiveListItemInteraction: (
+    editor: TiptapEditor
+  ) => ActiveListItemInteraction
+  resolveEffectiveSelectedListItemContext: (
+    editor?: TiptapEditor | null
+  ) => NestedListItemContext | null
   scheduleBubbleHide: () => void
   scheduleTableQuickRailHide: () => void
   selectedBlockNodeIndex: number | null
@@ -90,9 +117,17 @@ type UseBlockEditorEngineSelectionEffectsArgs = {
   slashMenuState: BlockEditorSlashMenuState
   syncBubbleOnMouseUpRef: MutableRefObject<boolean>
   syncSelectedBlockNodeSurface: (blockIndex: number | null) => void
-  syncTableQuickRailFromElement: (element: Element, clientX?: number, clientY?: number) => void
+  syncTableQuickRailFromElement: (
+    element: Element,
+    clientX?: number,
+    clientY?: number
+  ) => void
   tableMenuState: unknown
-  tryStartTableColumnResizeFromDomHandle: (target: EventTarget | null, pointerId: number, clientX: number) => boolean
+  tryStartTableColumnResizeFromDomHandle: (
+    target: EventTarget | null,
+    pointerId: number,
+    clientX: number
+  ) => boolean
   value: string
 }
 
@@ -175,7 +210,9 @@ export const useBlockEditorEngineSelectionEffects = ({
     const root = getContentRoot()
     if (!root || !editor) return
 
-    const listItems = Array.from(root.querySelectorAll<HTMLElement>(LIST_ITEM_SELECTOR))
+    const listItems = Array.from(
+      root.querySelectorAll<HTMLElement>(LIST_ITEM_SELECTOR)
+    )
     listItems.forEach((element) => {
       element.removeAttribute("data-block-selected")
       if (element.getAttribute("data-task-item") !== "true") {
@@ -183,10 +220,17 @@ export const useBlockEditorEngineSelectionEffects = ({
       }
     })
 
-    const selectedNestedListItemContext = resolveEffectiveSelectedListItemContext(editor)
+    const selectedNestedListItemContext =
+      resolveEffectiveSelectedListItemContext(editor)
     if (selectedNestedListItemContext?.listItemElement?.isConnected) {
-      selectedNestedListItemContext.listItemElement.setAttribute("data-block-selected", "true")
-      selectedNestedListItemContext.listItemElement.setAttribute("draggable", "true")
+      selectedNestedListItemContext.listItemElement.setAttribute(
+        "data-block-selected",
+        "true"
+      )
+      selectedNestedListItemContext.listItemElement.setAttribute(
+        "draggable",
+        "true"
+      )
     }
 
     return () => {
@@ -197,7 +241,13 @@ export const useBlockEditorEngineSelectionEffects = ({
         }
       })
     }
-  }, [editor, getContentRoot, resolveEffectiveSelectedListItemContext, selectedListItemContext, selectionTick])
+  }, [
+    editor,
+    getContentRoot,
+    resolveEffectiveSelectedListItemContext,
+    selectedListItemContext,
+    selectionTick,
+  ])
 
   useEffect(() => {
     selectedBlockNodeIndexRef.current = selectedBlockNodeIndex
@@ -206,12 +256,20 @@ export const useBlockEditorEngineSelectionEffects = ({
   useEffect(() => {
     const root = getContentRoot()
     if (!root) return
-    if (selectedBlockNodeIndex !== null && keyboardBlockSelectionStickyRef.current) {
+    if (
+      selectedBlockNodeIndex !== null &&
+      keyboardBlockSelectionStickyRef.current
+    ) {
       root.setAttribute("data-keyboard-block-selection", "true")
       return
     }
     root.removeAttribute("data-keyboard-block-selection")
-  }, [getContentRoot, keyboardBlockSelectionStickyRef, selectedBlockNodeIndex, selectionTick])
+  }, [
+    getContentRoot,
+    keyboardBlockSelectionStickyRef,
+    selectedBlockNodeIndex,
+    selectionTick,
+  ])
 
   useBlockEditorEngineSelectionStateEffects({
     editor,
@@ -233,19 +291,36 @@ export const useBlockEditorEngineSelectionEffects = ({
 
     const resolvePreciseMouseTarget = (event: MouseEvent) => {
       if (event.target !== editor.view.dom) return event.target
-      return document.elementFromPoint(event.clientX, event.clientY) ?? event.target
+      return (
+        document.elementFromPoint(event.clientX, event.clientY) ?? event.target
+      )
     }
 
     const handleEditorMouseDownCapture = (event: MouseEvent) => {
       const eventTarget = resolvePreciseMouseTarget(event)
-      rememberActiveTableCellFromTarget(eventTarget, editor.view.dom as HTMLElement)
-      const targetListItemContext = findNestedListItemContextFromTarget(eventTarget)
+      rememberActiveTableCellFromTarget(
+        eventTarget,
+        editor.view.dom as HTMLElement
+      )
+      const targetListItemContext =
+        findNestedListItemContextFromTarget(eventTarget)
       const targetBlockIndex =
         findTopLevelBlockIndexFromTarget(eventTarget) ??
         findTopLevelBlockIndexByClientPosition(event.clientX, event.clientY)
-      const isOuterListItemGesture = isOuterListItemSelectionGesture(event, targetListItemContext)
-      const isOuterSelectionGesture = isOuterBlockSelectionGesture(event, targetBlockIndex)
-      if (isTableSelectionActive(editor) && !isOuterSelectionGesture && !isOuterListItemGesture) return
+      const isOuterListItemGesture = isOuterListItemSelectionGesture(
+        event,
+        targetListItemContext
+      )
+      const isOuterSelectionGesture = isOuterBlockSelectionGesture(
+        event,
+        targetBlockIndex
+      )
+      if (
+        isTableSelectionActive(editor) &&
+        !isOuterSelectionGesture &&
+        !isOuterListItemGesture
+      )
+        return
       if (!isOuterSelectionGesture && !isOuterListItemGesture) {
         const shouldReleaseStickyBlockSelection =
           event.button === 0 &&
@@ -256,9 +331,7 @@ export const useBlockEditorEngineSelectionEffects = ({
           keyboardBlockSelectionStickyRef.current &&
           selectedBlockNodeIndexRef.current !== null
         if (shouldReleaseStickyBlockSelection) {
-          keyboardBlockSelectionStickyRef.current = false
-          setSelectedBlockNodeIndex(null)
-          syncSelectedBlockNodeSurface(null)
+          clearStickyTopLevelBlockSelection()
         }
         return
       }
@@ -283,17 +356,25 @@ export const useBlockEditorEngineSelectionEffects = ({
     }
 
     const handleEditorFocusInCapture = (event: FocusEvent) => {
-      rememberActiveTableCellFromTarget(event.target, editor.view.dom as HTMLElement)
+      rememberActiveTableCellFromTarget(
+        event.target,
+        editor.view.dom as HTMLElement
+      )
     }
 
     const editorDom = editor.view.dom
     editorDom.addEventListener("mousedown", handleEditorMouseDownCapture, true)
     editorDom.addEventListener("focusin", handleEditorFocusInCapture, true)
     return () => {
-      editorDom.removeEventListener("mousedown", handleEditorMouseDownCapture, true)
+      editorDom.removeEventListener(
+        "mousedown",
+        handleEditorMouseDownCapture,
+        true
+      )
       editorDom.removeEventListener("focusin", handleEditorFocusInCapture, true)
     }
   }, [
+    clearStickyTopLevelBlockSelection,
     clearNativeTextSelection,
     editor,
     findNestedListItemContextFromTarget,
@@ -312,13 +393,21 @@ export const useBlockEditorEngineSelectionEffects = ({
   ])
 
   useEffect(() => {
-    if (!editor || typeof document === "undefined" || typeof window === "undefined") return
+    if (
+      !editor ||
+      typeof document === "undefined" ||
+      typeof window === "undefined"
+    )
+      return
 
     const handleKeyDownCapture = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return
       if (isPrimarySelectAllKeyboardEvent(event)) {
         const currentEditor = editorRef.current
-        if (currentEditor && selectActiveTableCellText(currentEditor, event.target)) {
+        if (
+          currentEditor &&
+          selectActiveTableCellText(currentEditor, event.target)
+        ) {
           event.preventDefault()
           event.stopPropagation()
           event.stopImmediatePropagation?.()
@@ -329,12 +418,14 @@ export const useBlockEditorEngineSelectionEffects = ({
           return
         }
       }
-      if (event.key !== "Tab" || event.metaKey || event.ctrlKey || event.altKey) return
+      if (event.key !== "Tab" || event.metaKey || event.ctrlKey || event.altKey)
+        return
       if (slashMenuState) return
 
       const currentEditor = editorRef.current
       if (!currentEditor) return
-      const activeListItemInteraction = resolveActiveListItemInteraction(currentEditor)
+      const activeListItemInteraction =
+        resolveActiveListItemInteraction(currentEditor)
       if (activeListItemInteraction.listItemName) {
         event.preventDefault()
         event.stopPropagation()
@@ -343,12 +434,19 @@ export const useBlockEditorEngineSelectionEffects = ({
           activeListItemInteraction.shouldRestoreNodeSelection &&
           activeListItemInteraction.context
         ) {
-          selectNestedListItemTextAnchor(currentEditor, activeListItemInteraction.context)
+          selectNestedListItemTextAnchor(
+            currentEditor,
+            activeListItemInteraction.context
+          )
           clearNativeTextSelection()
         }
         const handled = event.shiftKey
-          ? currentEditor.commands.liftListItem(activeListItemInteraction.listItemName)
-          : currentEditor.commands.sinkListItem(activeListItemInteraction.listItemName)
+          ? currentEditor.commands.liftListItem(
+              activeListItemInteraction.listItemName
+            )
+          : currentEditor.commands.sinkListItem(
+              activeListItemInteraction.listItemName
+            )
         if (handled) {
           setSelectionTick((prev) => prev + 1)
         }
@@ -362,15 +460,19 @@ export const useBlockEditorEngineSelectionEffects = ({
           ? domSelection.anchorNode
           : domSelection?.anchorNode?.parentElement ?? null
       const selectionInsideEditor =
-        (activeElement instanceof Element && editorDom.contains(activeElement)) ||
+        (activeElement instanceof Element &&
+          editorDom.contains(activeElement)) ||
         (anchorElement instanceof Element && editorDom.contains(anchorElement))
       const targetBlockIndex =
         hoveredBlockIndex ??
-        findTopLevelBlockIndexFromTarget(anchorElement ?? activeElement ?? event.target) ??
+        findTopLevelBlockIndexFromTarget(
+          anchorElement ?? activeElement ?? event.target
+        ) ??
         getTopLevelBlockIndexFromSelection(currentEditor)
       if (!selectionInsideEditor && hoveredBlockIndex === null) return
       if (!isTabBlockSelectionEligible(currentEditor, targetBlockIndex)) return
-      const selection = currentEditor.state.selection as typeof currentEditor.state.selection & {
+      const selection = currentEditor.state
+        .selection as typeof currentEditor.state.selection & {
         node?: { isBlock?: boolean }
       }
       const isTopLevelBlockNodeSelection = Boolean(
@@ -432,7 +534,13 @@ export const useBlockEditorEngineSelectionEffects = ({
   useEffect(() => {
     if (!editor || !hasExternalMarkdownChanged(value)) return
     discardPendingMarkdownCommit()
-    const nextDoc = restoreEditorDocCodeBlocksFromMarkdown(value, downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(value), enableMermaidBlocks)).doc
+    const nextDoc = restoreEditorDocCodeBlocksFromMarkdown(
+      value,
+      downgradeDisabledFeatureNodes(
+        parseMarkdownToEditorDoc(value),
+        enableMermaidBlocks
+      )
+    ).doc
     replaceEditorDocFromExternalValue(nextDoc, editor)
   }, [
     discardPendingMarkdownCommit,
@@ -444,11 +552,22 @@ export const useBlockEditorEngineSelectionEffects = ({
   ])
 
   useEffect(() => {
-    const restored = editor && value.trim() ? restoreEditorDocCodeBlocksFromMarkdown(value, editor.getJSON() as BlockEditorDoc) : null
+    const restored =
+      editor && value.trim()
+        ? restoreEditorDocCodeBlocksFromMarkdown(
+            value,
+            editor.getJSON() as BlockEditorDoc
+          )
+        : null
     if (!restored?.changed) return
     discardPendingMarkdownCommit()
     replaceEditorDocFromExternalValue(restored.doc, editor!)
-  }, [discardPendingMarkdownCommit, editor, replaceEditorDocFromExternalValue, value])
+  }, [
+    discardPendingMarkdownCommit,
+    editor,
+    replaceEditorDocFromExternalValue,
+    value,
+  ])
 
   useEffect(
     () => () => {

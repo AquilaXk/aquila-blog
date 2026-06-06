@@ -339,8 +339,18 @@ test.describe("editor authoring table structure and styles", () => {
     await expect(page.locator("table tr")).toHaveCount(before.rows)
     await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(before.columns)
 
-    const trailingCell = page.locator("table tr").nth(before.rows - 1).locator("th, td").nth(before.columns - 1)
-    await trailingCell.locator("p").first().click({ position: { x: 8, y: 8 } })
+    const trailingCell = page
+      .locator("table tr")
+      .nth(before.rows - 1)
+      .locator("th, td")
+      .nth(before.columns - 1)
+    const trailingCellBox = await trailingCell.boundingBox()
+    if (!trailingCellBox)
+      throw new Error("table grow trailing cell metrics are missing")
+    await page.mouse.click(
+      trailingCellBox.x + Math.min(18, trailingCellBox.width / 2),
+      trailingCellBox.y + Math.min(18, trailingCellBox.height / 2)
+    )
     await page.keyboard.insertText("keep")
     await expect(trailingCell).toContainText("keep")
     await expect

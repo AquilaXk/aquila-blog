@@ -26,6 +26,8 @@ let windowScrollPreserveGeneration = 0
 let activeWindowScrollPreserveOwner: string | null = null
 let suppressGeneralEditorPointerPreserveUntil = 0
 const activeTablePointerScrollPreserveCancels = new Set<() => void>()
+const CODE_SELECTION_FOLLOW_UP_UNTIL_ATTR =
+  "data-editor-code-selection-follow-up-until"
 
 export const markNextEditorPointerAfterTable = () => {
   preserveNextEditorPointerAfterTable = true
@@ -88,10 +90,31 @@ const isGeneralEditorPointerPreserveSuppressed = () =>
   getScrollPreserveNow() < suppressGeneralEditorPointerPreserveUntil
 
 export const markNextEditorPointerAfterCodeSelection = () => {
+  const followUpUntil =
+    getScrollPreserveNow() + EDITOR_POINTER_CODE_FOLLOW_UP_RECENT_MS
   preserveNextEditorPointerAfterCodeSelection = true
   preserveNextEditorPointerAfterCodeSelectionReentryUntil = 0
-  preserveNextEditorPointerAfterCodeSelectionUntil =
-    getScrollPreserveNow() + EDITOR_POINTER_CODE_FOLLOW_UP_RECENT_MS
+  preserveNextEditorPointerAfterCodeSelectionUntil = followUpUntil
+  if (typeof document !== "undefined") {
+    document.documentElement.setAttribute(
+      CODE_SELECTION_FOLLOW_UP_UNTIL_ATTR,
+      String(Math.round(followUpUntil))
+    )
+  }
+}
+
+const readCodeSelectionFollowUpUntil = (now: number) => {
+  if (typeof document === "undefined") return 0
+  const rawValue = document.documentElement.getAttribute(
+    CODE_SELECTION_FOLLOW_UP_UNTIL_ATTR
+  )
+  const domUntil = rawValue ? Number(rawValue) : 0
+  if (!Number.isFinite(domUntil) || domUntil <= 0) return 0
+  if (now >= domUntil) {
+    document.documentElement.removeAttribute(CODE_SELECTION_FOLLOW_UP_UNTIL_ATTR)
+    return 0
+  }
+  return domUntil
 }
 
 export const resolveBlockChromeLeft = (
@@ -786,7 +809,9 @@ export const preserveWindowScrollForCodePointerFocus = (
 export const preserveWindowScrollForEditorPointerFocus = (
   target: EventTarget | null,
   tableSelectionActive: boolean,
-  blockSelectionActive = false
+  blockSelectionActive = false,
+  forceEditorPointerTarget = false,
+  codeSelectionFollowUpOnly = false
 ) => {
   const targetElement =
     target instanceof Element
@@ -798,7 +823,8 @@ export const preserveWindowScrollForEditorPointerFocus = (
     targetElement?.closest(".aq-table-shell, .tableWrapper, table")
   )
   const editorPointerTarget = Boolean(
-    targetElement?.closest(EDITOR_POINTER_SCROLL_PRESERVE_SELECTOR)
+    forceEditorPointerTarget ||
+      targetElement?.closest(EDITOR_POINTER_SCROLL_PRESERVE_SELECTOR)
   )
   const editorControlTarget = Boolean(
     targetElement?.closest(EDITOR_POINTER_SCROLL_CONTROL_SELECTOR)
@@ -815,8 +841,13 @@ export const preserveWindowScrollForEditorPointerFocus = (
   const now = getScrollPreserveNow()
   const codeSelectionFollowUpReentryActive =
     now < preserveNextEditorPointerAfterCodeSelectionReentryUntil
+  const codeSelectionFollowUpDomUntil = readCodeSelectionFollowUpUntil(now)
   const codeSelectionFollowUpRecent =
-    now < preserveNextEditorPointerAfterCodeSelectionUntil
+    now <
+    Math.max(
+      preserveNextEditorPointerAfterCodeSelectionUntil,
+      codeSelectionFollowUpDomUntil
+    )
   const shouldPreserveCodeSelectionFollowUp =
     editorPointerTarget &&
     !editorControlTarget &&
@@ -825,6 +856,7 @@ export const preserveWindowScrollForEditorPointerFocus = (
       codeSelectionFollowUpRecent)
   const shouldPreserveFollowUp =
     !tablePointerTarget && preserveNextEditorPointerAfterTable
+  if (codeSelectionFollowUpOnly && !shouldPreserveCodeSelectionFollowUp) return
   if (shouldPreserveCodeSelectionFollowUp) {
     preserveNextEditorPointerAfterCodeSelection = false
     preserveNextEditorPointerAfterCodeSelectionReentryUntil =
@@ -837,9 +869,10 @@ export const preserveWindowScrollForEditorPointerFocus = (
   }
   if (shouldPreserveCodeSelectionFollowUp && !tablePointerTarget) {
     suppressGeneralEditorPointerPreserve()
-    preserveWindowScrollForCodePointerFocus(true)
+    preserveWindowScrollForCodePointerFocus(!codeSelectionFollowUpOnly)
     return
   }
+  if (codeSelectionFollowUpOnly) return
   if (shouldPreserveFollowUp) {
     suppressGeneralEditorPointerPreserve()
     preserveWindowScrollForTableFollowUpPointer()

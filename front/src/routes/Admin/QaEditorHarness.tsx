@@ -35,9 +35,16 @@ export const QaEditorHarness = ({ seedMarkdown }: QaEditorHarnessProps) => {
   useEffect(() => {
     if (typeof window === "undefined") return
     const qaWindow = window as unknown as {
+      __qaGetSelectionSnapshot?: BlockEditorQaActions["getSelectionSnapshot"]
+      __qaSelectBlockAtIndex?: (blockIndex: number) => void
       __qaMoveTaskItemInFirstTaskList?: (sourceIndex: number, insertionIndex: number) => void
       __qaScrollCurrentSelectionIntoView?: () => void
       __qaGetUndoDepth?: () => number
+    }
+    qaWindow.__qaGetSelectionSnapshot = () =>
+      qaActionsRef.current?.getSelectionSnapshot() ?? null
+    qaWindow.__qaSelectBlockAtIndex = (blockIndex) => {
+      qaActionsRef.current?.selectBlockAtIndex(blockIndex)
     }
     qaWindow.__qaMoveTaskItemInFirstTaskList =
       (sourceIndex, insertionIndex) => {
@@ -49,6 +56,8 @@ export const QaEditorHarness = ({ seedMarkdown }: QaEditorHarnessProps) => {
     qaWindow.__qaGetUndoDepth = () => qaActionsRef.current?.getUndoDepth() ?? 0
 
     return () => {
+      delete qaWindow.__qaGetSelectionSnapshot
+      delete qaWindow.__qaSelectBlockAtIndex
       delete qaWindow.__qaMoveTaskItemInFirstTaskList
       delete qaWindow.__qaScrollCurrentSelectionIntoView
       delete qaWindow.__qaGetUndoDepth

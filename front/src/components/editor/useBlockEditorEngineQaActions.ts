@@ -1,4 +1,5 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
+import { tableEditingKey } from "@tiptap/pm/tables"
 import { useEffect } from "react"
 import type { RefObject } from "react"
 import type { BlockEditorQaActions } from "./blockEditorContract"
@@ -6,6 +7,7 @@ import type { BlockEditorDoc } from "./serialization"
 import { createCalloutNode, createFormulaNode } from "./serialization"
 import { getEditorUndoDepth } from "./editorHistoryModel"
 import { refocusEditorForSelectionReveal } from "./editorScrollSelectionGuard"
+import { selectTopLevelBlockNode } from "./blockSelectionModel"
 
 type UseBlockEditorEngineQaActionsArgs = {
   editor: TiptapEditor | null
@@ -15,14 +17,19 @@ type UseBlockEditorEngineQaActionsArgs = {
     blocks: NonNullable<BlockEditorDoc["content"]>,
     focusIndex?: number
   ) => void
-  moveTaskItemInFirstTaskList: (sourceIndex: number, insertionIndex: number) => void
+  moveTaskItemInFirstTaskList: (
+    sourceIndex: number,
+    insertionIndex: number
+  ) => void
   onQaActionsReady: ((actions: BlockEditorQaActions | null) => void) | undefined
   resizeFirstTableColumnBy: (deltaPx: number) => void
   resizeFirstTableRowBy: (deltaPx: number) => void
-  selectCurrentTableAxis: (axis: "row" | "column") => void
-  selectTableColumnByIndex: (columnIndex: number) => void
+  selectCurrentTableAxis: (axis: "row" | "column") => boolean
+  selectTableColumnByIndex: (columnIndex: number) => unknown
   updateActiveTableCellAttrs: (attrs: Record<string, unknown>) => void
-  withTrailingParagraph: (blocks: BlockEditorDoc[]) => NonNullable<BlockEditorDoc["content"]>
+  withTrailingParagraph: (
+    blocks: BlockEditorDoc[]
+  ) => NonNullable<BlockEditorDoc["content"]>
 }
 
 export const useBlockEditorEngineQaActions = ({
@@ -46,7 +53,7 @@ export const useBlockEditorEngineQaActions = ({
     ) => {
       const currentEditor = editorRef.current ?? editor
       if (!currentEditor) return
-      selectCurrentTableAxis(axis)
+      if (!selectCurrentTableAxis(axis)) return
       const previousDoc = currentEditor.state.doc
       const applied = command(currentEditor)
       if (applied && currentEditor.state.doc !== previousDoc) return
@@ -54,12 +61,34 @@ export const useBlockEditorEngineQaActions = ({
       window.requestAnimationFrame(() => {
         const retryEditor = editorRef.current ?? editor
         if (!retryEditor) return
-        selectCurrentTableAxis(axis)
+        if (!selectCurrentTableAxis(axis)) return
         command(retryEditor)
       })
     }
 
     onQaActionsReady({
+      getSelectionSnapshot: () => {
+        const currentEditor = editorRef.current ?? editor
+        if (!currentEditor) return null
+        const { selection } = currentEditor.state
+        return {
+          docChildTypes: Array.from(
+            { length: currentEditor.state.doc.childCount },
+            (_value, index) => currentEditor.state.doc.child(index).type.name
+          ),
+          from: selection.from,
+          selectionType: selection.constructor.name,
+          tableEditingState: String(
+            tableEditingKey.getState(currentEditor.state) ?? "null"
+          ),
+          to: selection.to,
+        }
+      },
+      selectBlockAtIndex: (blockIndex) => {
+        const currentEditor = editorRef.current ?? editor
+        if (!currentEditor) return
+        selectTopLevelBlockNode(currentEditor, blockIndex)
+      },
       selectTableAxis: (axis) => {
         selectCurrentTableAxis(axis)
       },
@@ -76,16 +105,24 @@ export const useBlockEditorEngineQaActions = ({
         updateActiveTableCellAttrs({ backgroundColor: color })
       },
       addTableRowAfter: () => {
-        runTableStructureAction("row", (activeEditor) => activeEditor.commands.addRowAfter())
+        runTableStructureAction("row", (activeEditor) =>
+          activeEditor.commands.addRowAfter()
+        )
       },
       addTableColumnAfter: () => {
-        runTableStructureAction("column", (activeEditor) => activeEditor.commands.addColumnAfter())
+        runTableStructureAction("column", (activeEditor) =>
+          activeEditor.commands.addColumnAfter()
+        )
       },
       deleteSelectedTableRow: () => {
-        runTableStructureAction("row", (activeEditor) => activeEditor.commands.deleteRow())
+        runTableStructureAction("row", (activeEditor) =>
+          activeEditor.commands.deleteRow()
+        )
       },
       deleteSelectedTableColumn: () => {
-        runTableStructureAction("column", (activeEditor) => activeEditor.commands.deleteColumn())
+        runTableStructureAction("column", (activeEditor) =>
+          activeEditor.commands.deleteColumn()
+        )
       },
       resizeFirstTableRow: (deltaPx) => {
         resizeFirstTableRowBy(deltaPx)
@@ -126,7 +163,8 @@ export const useBlockEditorEngineQaActions = ({
       moveTaskItemInFirstTaskList: (sourceIndex, insertionIndex) => {
         moveTaskItemInFirstTaskList(sourceIndex, insertionIndex)
       },
-      scrollCurrentSelectionIntoView: () => refocusEditorForSelectionReveal(editorRef.current ?? editor),
+      scrollCurrentSelectionIntoView: () =>
+        refocusEditorForSelectionReveal(editorRef.current ?? editor),
       getUndoDepth: () => {
         const currentEditor = editorRef.current ?? editor
         return currentEditor ? getEditorUndoDepth(currentEditor) : 0

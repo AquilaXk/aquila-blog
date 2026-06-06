@@ -117,6 +117,7 @@ export const BlockEditorTableOverlayMenus = ({
   canMergeSelectedTableCells,
   canSplitSelectedTableCell,
   cancelTableOverflowCoachmarkHide,
+  deleteActiveTable,
   editor,
   handleToolbarButtonMouseDown,
   hideTableOverflowCoachmark,
@@ -547,7 +548,7 @@ export const BlockEditorTableOverlayMenus = ({
                 onMouseDown={handleToolbarButtonMouseDown}
                 onClick={() =>
                   runTableMenuEditorAction((activeEditor) => {
-                    activeEditor.chain().focus().deleteTable().run()
+                    deleteActiveTable(activeEditor)
                   })
                 }
               >

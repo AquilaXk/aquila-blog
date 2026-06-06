@@ -1,5 +1,5 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
-import { TextSelection } from "@tiptap/pm/state"
+import { NodeSelection } from "@tiptap/pm/state"
 import {
   cancelAllWindowScrollPreserves,
   cancelActiveWindowScrollPreserve,
@@ -10,6 +10,7 @@ import {
   preserveWindowScrollPositionAcrossFrames,
   type WindowScrollAnchor,
 } from "./blockHandleLayoutModel"
+import { createSafeTextSelectionOutsideTable } from "./tableStructureModel"
 
 export const isPrimarySelectAllKeyboardEvent = (event: KeyboardEvent) => {
   if (event.defaultPrevented || event.altKey || event.shiftKey) return false
@@ -155,6 +156,8 @@ const RECENT_TABLE_TEXT_SELECTION_CONTEXT_ATTR =
   "data-table-recent-text-selection-context"
 export const TABLE_DRAG_SELECTION_TEXT_ATTR = "data-table-drag-selection-text"
 export const TABLE_DRAG_SELECTION_TEXT_SELECTOR = `[${TABLE_DRAG_SELECTION_TEXT_ATTR}]`
+export const TABLE_AXIS_SELECTION_SURFACE_CANCEL_EVENT =
+  "aq-table-axis-selection-surface-cancel"
 const TABLE_TEXT_HIGHLIGHT_NAME = "aq-table-text-selection"
 const SINGLE_CELL_NATIVE_SELECTION_PRESERVE_FRAMES = 540,
   SINGLE_CELL_NATIVE_SELECTION_PRESERVE_MIN_MS = 9_000
@@ -1542,10 +1545,25 @@ type ActiveTableCellPath = {
 
 let lastActiveTableCell: HTMLElement | null = null
 let lastActiveTableCellPath: ActiveTableCellPath | null = null
+let tableAxisSelectionRestoreGeneration = 0
 const activeTableCellScrollPreserveCancels = new Set<() => void>()
 const activeTableCellSelectionPreserveCancels = new Set<() => void>()
 const TABLE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES = 540
 const TABLE_TEXT_DRAG_SCROLL_PRESERVE_MIN_MS = 9_000
+
+export const cancelTableAxisSelectionRestore = () => {
+  tableAxisSelectionRestoreGeneration += 1
+}
+
+export const cancelTableAxisSelectionSurface = () => {
+  cancelTableAxisSelectionRestore()
+  clearTableStructuralSelectionOwner()
+  if (typeof window === "undefined") return
+  window.dispatchEvent(new Event(TABLE_AXIS_SELECTION_SURFACE_CANCEL_EVENT))
+}
+
+export const getTableAxisSelectionRestoreGeneration = () =>
+  tableAxisSelectionRestoreGeneration
 
 export const cancelActiveTableCellScrollPreserves = () => {
   activeTableCellScrollPreserveCancels.forEach((cancel) => cancel())
@@ -1565,6 +1583,7 @@ export const cancelActiveTableCellTextSelectionPreserves = () => {
 export const clearTableTextSelectionForStructuralSelection = (
   options: { clearWindowSelection?: boolean } = {}
 ) => {
+  cancelTableAxisSelectionRestore()
   markTableStructuralSelectionOwner()
   tableTextSelectionClearGeneration += 1
   tableTextSelectionFinalizeSuppressedUntil = getNow() + 180
@@ -1705,10 +1724,12 @@ export const collapseStaleTableEditorSelection = (
     Math.min(doc.content.size, pointerPos ?? selection.to)
   )
   try {
-    const nextSelection = TextSelection.near(
-      doc.resolve(collapsePos),
+    const nextSelection = createSafeTextSelectionOutsideTable(
+      doc,
+      collapsePos,
       pointerPos === null ? -1 : 1
     )
+    if (!nextSelection) return false
     editor.view.dispatch(editor.state.tr.setSelection(nextSelection))
     if (editor.view.dom instanceof HTMLElement) {
       editor.view.dom.focus({ preventScroll: true })
@@ -2115,6 +2136,7 @@ export const restoreTableCellTextSelectionIfEscaped = (
   if (typeof window === "undefined" || typeof document === "undefined")
     return false
   if (isTableStructuralSelectionOwnerActive()) return false
+  if (editor.state.selection instanceof NodeSelection) return false
   if (!startedCell) return false
   const currentCell = resolveConnectedTableCell(editor, startedCell)
   if (!currentCell) return false

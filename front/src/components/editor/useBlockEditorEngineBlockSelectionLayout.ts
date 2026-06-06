@@ -1,8 +1,14 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
 import { useEffect, useLayoutEffect } from "react"
-import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react"
+import type {
+  Dispatch,
+  MutableRefObject,
+  RefObject,
+  SetStateAction,
+} from "react"
 import type { BlockEditorDoc } from "./serialization"
 import {
+  getTopLevelBlockIndexFromSelection,
   isStableBlockHandleState,
   isStableBlockSelectionOverlayState,
   type BlockSelectionOverlayState,
@@ -29,7 +35,9 @@ type SetState<T> = Dispatch<SetStateAction<T>>
 
 type UseBlockEditorEngineBlockSelectionLayoutArgs = {
   blockHandleRailMetricsRef: MutableRefObject<{ width: number; height: number }>
-  blockSelectionLayoutRectCacheRef: MutableRefObject<Map<number, { element: HTMLElement; rect: DOMRect }>>
+  blockSelectionLayoutRectCacheRef: MutableRefObject<
+    Map<number, { element: HTMLElement; rect: DOMRect }>
+  >
   clickedBlockIndex: number | null
   draggedBlockState: DraggedBlockState
   dropIndicatorState: DropIndicatorState
@@ -44,7 +52,9 @@ type UseBlockEditorEngineBlockSelectionLayoutArgs = {
   isTableStructuralSelection: boolean
   isTopLevelBlockHandleEligible: (blockIndex: number) => boolean
   keyboardBlockSelectionStickyRef: MutableRefObject<boolean>
-  resolveEffectiveSelectedListItemContext: (editor?: TiptapEditor | null) => NestedListItemContext | null
+  resolveEffectiveSelectedListItemContext: (
+    editor?: TiptapEditor | null
+  ) => NestedListItemContext | null
   selectedBlockIndex: number | null
   selectedBlockNodeIndex: number | null
   selectionTick: number
@@ -55,7 +65,8 @@ type UseBlockEditorEngineBlockSelectionLayoutArgs = {
   viewportRef: RefObject<HTMLDivElement | null>
 }
 
-const useBlockSelectionLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect
+const useBlockSelectionLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect
 
 const resolveNestedListItemSelectionRect = (
   listItemElement: HTMLElement
@@ -107,7 +118,8 @@ export const useBlockEditorEngineBlockSelectionLayout = ({
     const handlePositionMode = isCoarsePointer ? "viewport" : "editor-local"
     const rectCache = blockSelectionLayoutRectCacheRef.current
     rectCache.clear()
-    const selectedNestedListItemContext = resolveEffectiveSelectedListItemContext(editor)
+    const selectedNestedListItemContext =
+      resolveEffectiveSelectedListItemContext(editor)
     const resolveCachedBlockRect = (index: number) => {
       const cached = rectCache.get(index)
       if (cached) return cached
@@ -118,10 +130,15 @@ export const useBlockEditorEngineBlockSelectionLayout = ({
       return next
     }
     if (selectedNestedListItemContext?.listItemElement?.isConnected) {
-      const rect = resolveNestedListItemSelectionRect(selectedNestedListItemContext.listItemElement)
-      const nextOverlayState: BlockSelectionOverlayState = resolveBlockSelectionOverlayLayout(rect, viewportRect)
+      const rect = resolveNestedListItemSelectionRect(
+        selectedNestedListItemContext.listItemElement
+      )
+      const nextOverlayState: BlockSelectionOverlayState =
+        resolveBlockSelectionOverlayLayout(rect, viewportRect)
       setBlockSelectionOverlayState((prev) =>
-        isStableBlockSelectionOverlayState(prev, nextOverlayState) ? prev : nextOverlayState
+        isStableBlockSelectionOverlayState(prev, nextOverlayState)
+          ? prev
+          : nextOverlayState
       )
     } else {
       const overlayIndex =
@@ -129,39 +146,56 @@ export const useBlockEditorEngineBlockSelectionLayout = ({
           ? selectedBlockNodeIndex
           : clickedBlockIndex
       if (overlayIndex === null) {
-        setBlockSelectionOverlayState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
+        setBlockSelectionOverlayState((prev) =>
+          prev.visible ? { ...prev, visible: false } : prev
+        )
       } else {
         const overlayTarget = resolveCachedBlockRect(overlayIndex)
         if (!overlayTarget) {
-          setBlockSelectionOverlayState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
+          setBlockSelectionOverlayState((prev) =>
+            prev.visible ? { ...prev, visible: false } : prev
+          )
         } else {
           const { rect } = overlayTarget
-          const nextOverlayState: BlockSelectionOverlayState = resolveBlockSelectionOverlayLayout(rect, viewportRect)
+          const nextOverlayState: BlockSelectionOverlayState =
+            resolveBlockSelectionOverlayLayout(rect, viewportRect)
           setBlockSelectionOverlayState((prev) =>
-            isStableBlockSelectionOverlayState(prev, nextOverlayState) ? prev : nextOverlayState
+            isStableBlockSelectionOverlayState(prev, nextOverlayState)
+              ? prev
+              : nextOverlayState
           )
         }
       }
     }
 
     const stickySelectionActive =
-      !isCoarsePointer && selectedBlockNodeIndex !== null && keyboardBlockSelectionStickyRef.current
-    const effectiveSelectedListItemContext = resolveEffectiveSelectedListItemContext(editor)
-    const activeListItemContext =
-      hoveredListItemContext?.listItemElement?.isConnected
-        ? hoveredListItemContext
-        : effectiveSelectedListItemContext?.listItemElement?.isConnected
-          ? effectiveSelectedListItemContext
-          : null
+      !isCoarsePointer &&
+      selectedBlockNodeIndex !== null &&
+      keyboardBlockSelectionStickyRef.current
+    const structuralSelectionBlockIndex = isTableStructuralSelection
+      ? selectedBlockIndex ?? getTopLevelBlockIndexFromSelection(editor)
+      : null
+    const effectiveSelectedListItemContext =
+      resolveEffectiveSelectedListItemContext(editor)
+    const activeListItemContext = hoveredListItemContext?.listItemElement
+      ?.isConnected
+      ? hoveredListItemContext
+      : effectiveSelectedListItemContext?.listItemElement?.isConnected
+      ? effectiveSelectedListItemContext
+      : null
     const blockIndex = activeListItemContext
       ? activeListItemContext.listBlockIndex
       : isCoarsePointer
-        ? selectedBlockIndex
-        : stickySelectionActive
-          ? selectedBlockNodeIndex
-          : textSelectionBlockIndex ?? hoveredBlockIndex
+      ? selectedBlockIndex
+      : stickySelectionActive
+      ? selectedBlockNodeIndex
+      : textSelectionBlockIndex ??
+        hoveredBlockIndex ??
+        structuralSelectionBlockIndex
     const hideBlockHandle = () =>
-      setBlockHandleState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
+      setBlockHandleState((prev) =>
+        prev.visible ? { ...prev, visible: false } : prev
+      )
     const hasOuterBlockSelectionIntent = blockIndex !== null
     if (
       (isTableStructuralSelection && !hasOuterBlockSelectionIntent) ||
@@ -175,20 +209,29 @@ export const useBlockEditorEngineBlockSelectionLayout = ({
       hideBlockHandle()
       return
     }
-    const contentRoot = !isCoarsePointer && textSelectionBlockIndex !== null ? getContentRoot() : null
-    const nativeTextSelectionActive = Boolean(contentRoot && hasNativeEditorTextSelection(contentRoot))
+    const contentRoot =
+      !isCoarsePointer && textSelectionBlockIndex !== null
+        ? getContentRoot()
+        : null
+    const nativeTextSelectionActive = Boolean(
+      contentRoot && hasNativeEditorTextSelection(contentRoot)
+    )
     if (nativeTextSelectionActive && !stickySelectionActive) {
       hideBlockHandle()
       return
     }
-    const { width: railWidth, height: railHeight } = blockHandleRailMetricsRef.current
+    const { width: railWidth, height: railHeight } =
+      blockHandleRailMetricsRef.current
     if (activeListItemContext?.listItemElement?.isConnected) {
       const rect = activeListItemContext.listItemElement.getBoundingClientRect()
       const railLayout = resolveBlockHandleRailLayoutForSurface(
         rect,
         railWidth,
         railHeight,
-        resolveBlockHandleAnchorTop(activeListItemContext.listItemElement, railHeight),
+        resolveBlockHandleAnchorTop(
+          activeListItemContext.listItemElement,
+          railHeight
+        ),
         viewportRect,
         handlePositionMode,
         activeListItemContext.listItemElement
@@ -201,10 +244,16 @@ export const useBlockEditorEngineBlockSelectionLayout = ({
         itemIndex: activeListItemContext.itemIndex,
         left: railLayout.left,
         top: railLayout.top,
-        bottom: resolveBlockChromeTop(rect.bottom + 12, viewportRect, handlePositionMode),
+        bottom: resolveBlockChromeTop(
+          rect.bottom + 12,
+          viewportRect,
+          handlePositionMode
+        ),
         width: rect.width,
       }
-      setBlockHandleState((prev) => (isStableBlockHandleState(prev, nextState) ? prev : nextState))
+      setBlockHandleState((prev) =>
+        isStableBlockHandleState(prev, nextState) ? prev : nextState
+      )
       rectCache.clear()
       return
     }
@@ -212,7 +261,14 @@ export const useBlockEditorEngineBlockSelectionLayout = ({
     const blockTarget = resolveCachedBlockRect(blockIndex)
     const blockElement = blockTarget?.element ?? null
     const canShowHandle = isTopLevelBlockHandleEligible(blockIndex)
-    const shouldShow = Boolean(blockElement && canShowHandle && (isCoarsePointer || stickySelectionActive || textSelectionBlockIndex !== null || hoveredBlockIndex !== null))
+    const shouldShow = Boolean(
+      blockElement &&
+        canShowHandle &&
+        (isCoarsePointer ||
+          stickySelectionActive ||
+          textSelectionBlockIndex !== null ||
+          hoveredBlockIndex !== null)
+    )
 
     if (!shouldShow || !blockElement) {
       hideBlockHandle()
@@ -220,13 +276,14 @@ export const useBlockEditorEngineBlockSelectionLayout = ({
     }
 
     const rect = blockTarget?.rect ?? blockElement.getBoundingClientRect()
-    const blocks = ((editor.getJSON() as BlockEditorDoc).content ?? []) as BlockEditorDoc[]
+    const blocks = ((editor.getJSON() as BlockEditorDoc).content ??
+      []) as BlockEditorDoc[]
     const blockNode = blocks[blockIndex]
     const anchoredTop = shouldUseThinBlockHandleAnchor(blockNode)
       ? resolveThinBlockHandleAnchorTop(blockElement, railHeight)
       : shouldCenterBlockHandleForNode(blockNode)
-        ? resolveBlockHandleAnchorTop(blockElement, railHeight)
-        : rect.top + 6
+      ? resolveBlockHandleAnchorTop(blockElement, railHeight)
+      : rect.top + 6
     const railLayout = resolveBlockHandleRailLayoutForSurface(
       rect,
       railWidth,
@@ -244,11 +301,17 @@ export const useBlockEditorEngineBlockSelectionLayout = ({
       itemIndex: null,
       left: railLayout.left,
       top: railLayout.top,
-      bottom: resolveBlockChromeTop(rect.bottom + 12, viewportRect, handlePositionMode),
+      bottom: resolveBlockChromeTop(
+        rect.bottom + 12,
+        viewportRect,
+        handlePositionMode
+      ),
       width: rect.width,
     }
 
-    setBlockHandleState((prev) => (isStableBlockHandleState(prev, nextState) ? prev : nextState))
+    setBlockHandleState((prev) =>
+      isStableBlockHandleState(prev, nextState) ? prev : nextState
+    )
     rectCache.clear()
   }, [
     blockHandleRailMetricsRef,
@@ -278,7 +341,9 @@ export const useBlockEditorEngineBlockSelectionLayout = ({
   useEffect(() => {
     const elements = getTopLevelBlockElements()
     const root = getContentRoot()
-    const listItems = root ? Array.from(root.querySelectorAll<HTMLElement>(LIST_ITEM_SELECTOR)) : []
+    const listItems = root
+      ? Array.from(root.querySelectorAll<HTMLElement>(LIST_ITEM_SELECTOR))
+      : []
 
     elements.forEach((element, index) => {
       if (hoveredListItemContext) {
@@ -331,5 +396,12 @@ export const useBlockEditorEngineBlockSelectionLayout = ({
         element.removeAttribute("data-block-drop-target")
       })
     }
-  }, [draggedBlockState, dropIndicatorState.insertionIndex, getContentRoot, getTopLevelBlockElements, hoveredBlockIndex, hoveredListItemContext])
+  }, [
+    draggedBlockState,
+    dropIndicatorState.insertionIndex,
+    getContentRoot,
+    getTopLevelBlockElements,
+    hoveredBlockIndex,
+    hoveredListItemContext,
+  ])
 }

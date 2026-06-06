@@ -1,9 +1,14 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
-import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model"
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model"
 import { NodeSelection, TextSelection } from "@tiptap/pm/state"
+import { CellSelection, tableEditingKey } from "@tiptap/pm/tables"
 import type { BlockEditorDoc } from "./serialization"
 import { shouldCenterBlockHandleForNode } from "./blockHandleLayoutModel"
-import { isTableSelectionActive } from "./tableStructureModel"
+import {
+  createSafeTextSelectionOutsideTable,
+  isTableSelectionActive,
+} from "./tableStructureModel"
+import { cancelTableAxisSelectionSurface } from "./tableTextSelectionModel"
 
 export type TopLevelBlockHandleState = {
   visible: boolean
@@ -43,6 +48,26 @@ export const BLOCK_HANDLE_POSITION_EPSILON_PX = 0.4
 export const BLOCK_OUTER_SELECT_LEFT_GUTTER_PX = 76
 export const BLOCK_OUTER_SELECT_LEFT_EDGE_GAP_PX = 2
 export const BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX = 10
+export const BLOCK_SELECTION_CONTROL_SELECTOR = [
+  "[data-block-handle-rail='true']",
+  "[data-testid='block-drag-handle']",
+].join(", ")
+
+const createTableBlockSelectionCollapse = (
+  doc: ProseMirrorNode,
+  pos: number,
+  bias = -1
+) => {
+  const safeOutsideSelection = createSafeTextSelectionOutsideTable(
+    doc,
+    pos,
+    bias
+  )
+  if (safeOutsideSelection) return safeOutsideSelection
+
+  const safePos = Math.max(0, Math.min(pos, doc.content.size))
+  return TextSelection.near(doc.resolve(safePos), bias)
+}
 
 const sameListPath = (left: number[], right: number[]) =>
   left.length === right.length &&
@@ -93,6 +118,11 @@ export const getTopLevelBlockPosition = (
   }
   return position
 }
+
+export const getTopLevelBlockNodePosition = (
+  editor: TiptapEditor,
+  blockIndex: number
+) => Math.max(0, getTopLevelBlockPosition(editor, blockIndex) - 1)
 
 export const getFirstEditableTextPositionInNode = (
   node: ProseMirrorNode | null | undefined,
@@ -164,40 +194,58 @@ const focusEditorViewWithoutScroll = (editor: TiptapEditor) => {
   }
 }
 
-const isResolvedPositionInsideTable = ($pos: ResolvedPos) => {
-  for (let depth = $pos.depth; depth > 0; depth -= 1) {
-    if (
-      ["table", "tableRow", "tableCell", "tableHeader"].includes(
-        $pos.node(depth).type.name
-      )
-    ) {
-      return true
-    }
-  }
-  return false
+const resolveTableSelectedCellMarkerRoots = (editor: TiptapEditor) => {
+  const roots = new Set<ParentNode>()
+  roots.add(editor.view.dom)
+  const editorSurface = editor.view.dom.closest(
+    "[data-testid='block-editor-prosemirror']"
+  )
+  const editorContent = editor.view.dom.closest(".aq-block-editor__content")
+  if (editorSurface) roots.add(editorSurface)
+  if (editorContent) roots.add(editorContent)
+  return Array.from(roots)
 }
 
-const createSafeTextSelectionOutsideTable = (
-  doc: ProseMirrorNode,
-  pos: number,
-  bias = -1
-) => {
-  const maxPos = doc.content.size
-  const startPos = Math.max(0, Math.min(pos, maxPos))
-  const scan = (step: 1 | -1) => {
-    for (
-      let nextPos = startPos;
-      nextPos >= 0 && nextPos <= maxPos;
-      nextPos += step
-    ) {
-      const $pos = doc.resolve(nextPos)
-      if ($pos.parent.inlineContent && !isResolvedPositionInsideTable($pos)) {
-        return TextSelection.create(doc, nextPos)
-      }
+const clearTableSelectedCellDomMarkers = (editor: TiptapEditor) => {
+  if (typeof document === "undefined") return
+  const clearMarkers = () => {
+    if (tableEditingKey.getState(editor.state) !== null) {
+      editor.view.dispatch(editor.state.tr.setMeta(tableEditingKey, -1))
     }
-    return null
+    if (editor.state.selection instanceof CellSelection) return
+    resolveTableSelectedCellMarkerRoots(editor).forEach((root) => {
+      root
+        .querySelectorAll(".selectedCell")
+        .forEach((element) => element.classList.remove("selectedCell"))
+    })
   }
-  return scan(bias < 0 ? -1 : 1) ?? scan(bias < 0 ? 1 : -1)
+  clearMarkers()
+  if (typeof window === "undefined") return
+  const startedAt = performance.now()
+  const observedRoot =
+    editor.view.dom.closest("[data-testid='block-editor-prosemirror']") ??
+    editor.view.dom
+  const observer =
+    typeof MutationObserver === "undefined"
+      ? null
+      : new MutationObserver(clearMarkers)
+  observer?.observe(observedRoot, {
+    attributeFilter: ["class"],
+    attributes: true,
+    subtree: true,
+  })
+  const maintain = () => {
+    if (
+      !editor.view.dom.isConnected ||
+      performance.now() - startedAt > 650
+    ) {
+      observer?.disconnect()
+      return
+    }
+    clearMarkers()
+    window.requestAnimationFrame(maintain)
+  }
+  window.requestAnimationFrame(maintain)
 }
 
 export const selectTopLevelBlockNode = (
@@ -207,20 +255,106 @@ export const selectTopLevelBlockNode = (
   const { doc } = editor.state
   if (doc.childCount === 0) return
   const clampedIndex = Math.max(0, Math.min(blockIndex, doc.childCount - 1))
+  const topLevelBlock = doc.child(clampedIndex)
+  const isTableBlockSelection = topLevelBlock.type.name === "table"
+  cancelTableAxisSelectionSurface()
+  clearTableSelectedCellDomMarkers(editor)
   if (isTableSelectionActive(editor)) {
-    const collapseSelection = createSafeTextSelectionOutsideTable(
+    cancelTableAxisSelectionSurface()
+    const collapseSelection = createTableBlockSelectionCollapse(
       doc,
       editor.state.selection.to,
+      -1
+    )
+    editor.view.dispatch(
+      editor.state.tr
+        .setSelection(collapseSelection)
+        .setMeta(tableEditingKey, -1)
+    )
+    clearTableSelectedCellDomMarkers(editor)
+  }
+  const collapseTableBlockSelection = () => {
+    cancelTableAxisSelectionSurface()
+    const collapseSelection = createTableBlockSelectionCollapse(
+      editor.state.doc,
+      getTopLevelBlockPosition(editor, clampedIndex),
+      -1
+    )
+    editor.view.dispatch(
+      editor.state.tr
+        .setSelection(collapseSelection)
+        .setMeta(tableEditingKey, -1)
+    )
+    clearTableSelectedCellDomMarkers(editor)
+    return getTopLevelBlockNodePosition(editor, clampedIndex)
+  }
+  const dispatchNodeSelection = () => {
+    if (isTableBlockSelection) return collapseTableBlockSelection()
+    const nextPosition = getTopLevelBlockNodePosition(editor, clampedIndex)
+    const selection = NodeSelection.create(editor.state.doc, nextPosition)
+    editor.view.dispatch(editor.state.tr.setSelection(selection))
+    return nextPosition
+  }
+  dispatchNodeSelection()
+  focusEditorViewWithoutScroll(editor)
+
+  if (typeof window === "undefined") return
+
+  const startedAt = performance.now()
+  const clearNativeSelection = () => {
+    window.getSelection()?.removeAllRanges()
+    document.documentElement.removeAttribute("data-table-drag-selection-text")
+    document
+      .querySelectorAll("[data-table-drag-selection-text]")
+      .forEach((element) =>
+        element.removeAttribute("data-table-drag-selection-text")
+      )
+  }
+  const isBlockSelectionSurfaceActive = () => {
+    const blockElement = editor.view.dom.children[clampedIndex]
+    return (
+      blockElement instanceof HTMLElement &&
+      blockElement.getAttribute("data-block-selected") === "true"
+    )
+  }
+  const preserveTopLevelSelection = () => {
+    if (!editor.view.dom.isConnected || performance.now() - startedAt > 220) {
+      return
+    }
+    if (!isBlockSelectionSurfaceActive()) return
+    const nextPosition = getTopLevelBlockNodePosition(editor, clampedIndex)
+    const { selection } = editor.state
+    if (isTableBlockSelection) {
+      if (isTableSelectionActive(editor)) {
+        collapseTableBlockSelection()
+        focusEditorViewWithoutScroll(editor)
+      }
+      clearNativeSelection()
+      return
+    }
+    if (selection instanceof NodeSelection && selection.from === nextPosition) {
+      clearNativeSelection()
+      return
+    }
+    if (!isTableSelectionActive(editor)) return
+
+    const collapseSelection = createSafeTextSelectionOutsideTable(
+      editor.state.doc,
+      selection.to,
       -1
     )
     if (collapseSelection) {
       editor.view.dispatch(editor.state.tr.setSelection(collapseSelection))
     }
+    dispatchNodeSelection()
+    clearNativeSelection()
+    focusEditorViewWithoutScroll(editor)
   }
-  const position = getTopLevelBlockPosition(editor, clampedIndex)
-  const selection = NodeSelection.create(editor.state.doc, position)
-  editor.view.dispatch(editor.state.tr.setSelection(selection))
-  focusEditorViewWithoutScroll(editor)
+  window.requestAnimationFrame(preserveTopLevelSelection)
+  window.setTimeout(preserveTopLevelSelection, 0)
+  window.setTimeout(preserveTopLevelSelection, 80)
+  window.setTimeout(preserveTopLevelSelection, 180)
+  window.setTimeout(preserveTopLevelSelection, 220)
 }
 
 export const isTabBlockSelectionEligible = (

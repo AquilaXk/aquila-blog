@@ -1,9 +1,24 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
 import type { MouseEventHandler, MutableRefObject, RefObject } from "react"
 import type { TableAffordanceGeometry } from "./tableAffordanceModel"
-import type { DraggedTableAxisState, TableAxis, TableAxisDragGhostPosition, TableAxisReorderIndicatorState, TableAxisSelectionState, TableAxisSelectionTarget } from "./tableAxisDragModel"
-import type { TableCornerGrowStepMetrics, TableCornerPreviewState } from "./tableCornerGrowModel"
-import type { CompactTableAffordanceKind, TableMenuKind, TableMenuState, TableOverflowCoachmarkState } from "./tableFloatingUiModel"
+import type {
+  DraggedTableAxisState,
+  TableAxis,
+  TableAxisDragGhostPosition,
+  TableAxisReorderIndicatorState,
+  TableAxisSelectionState,
+  TableAxisSelectionTarget,
+} from "./tableAxisDragModel"
+import type {
+  TableCornerGrowStepMetrics,
+  TableCornerPreviewState,
+} from "./tableCornerGrowModel"
+import type {
+  CompactTableAffordanceKind,
+  TableMenuKind,
+  TableMenuState,
+  TableOverflowCoachmarkState,
+} from "./tableFloatingUiModel"
 import type { TableColumnDragGuideState } from "./tableResizeInteractionModel"
 import { TABLE_OVERFLOW_MODE_WIDE } from "./tableWidthModel"
 
@@ -49,20 +64,33 @@ export type BlockEditorTableOverlayLayerProps = {
   draggedTableAxisState: DraggedTableAxisState
   editor: TiptapEditor | null
   growTableFromCorner: () => void
-  handleTableColumnRailSegmentClick: (columnIndex: number, anchorRect: DOMRect) => boolean
+  handleTableColumnRailSegmentClick: (
+    columnIndex: number,
+    anchorRect: DOMRect
+  ) => boolean
   handleTableRowGripClick: (rowIndex: number, anchorRect: DOMRect) => boolean
   handleToolbarButtonMouseDown: ToolbarMouseDownHandler
   hideTableOverflowCoachmark: () => void
-  hoveredTableCellMenuLayout: Pick<TableRailLayout, "cellMenuLeft" | "cellMenuTop"> | null
+  hoveredTableCellMenuLayout: Pick<
+    TableRailLayout,
+    "cellMenuLeft" | "cellMenuTop"
+  > | null
   isCurrentTableColumnSelection: (columnIndex: number) => boolean
   isCurrentTableRowSelection: (rowIndex: number) => boolean
   isTableCornerGrowActive: boolean
   isTableQuickRailHovered: boolean
   normalizeTableColorInputValue: (value: unknown) => string
-  openSelectionAwareTableMenu: (kind: TableMenuKind, anchorRect: DOMRect) => void
+  openSelectionAwareTableMenu: (
+    kind: TableMenuKind,
+    anchorRect: DOMRect
+  ) => void
   openTableMenu: (kind: TableMenuKind, anchorRect: DOMRect) => void
-  resolveTableCornerGrowStepMetricsFromHandle: (handle: HTMLElement) => TableCornerGrowStepMetrics
-  runTableMenuEditorAction: (action: (activeEditor: TiptapEditor) => void) => void
+  resolveTableCornerGrowStepMetricsFromHandle: (
+    handle: HTMLElement
+  ) => TableCornerGrowStepMetrics
+  runTableMenuEditorAction: (
+    action: (activeEditor: TiptapEditor) => void
+  ) => void
   scheduleTableOverflowCoachmarkHide: (delayMs?: number) => void
   scheduleTableQuickRailHide: (delayMs?: number) => void
   selectTableAxisAtIndex: (
@@ -100,7 +128,11 @@ export type BlockEditorTableOverlayLayerProps = {
     clientY: number,
     completeClickWithoutDrag?: () => boolean
   ) => void
-  startTableColumnRailResize: (pointerId: number, columnIndex: number, clientX: number) => void
+  startTableColumnRailResize: (
+    pointerId: number,
+    columnIndex: number,
+    clientX: number
+  ) => void
   startTableCornerGrow: (
     pointerId: number,
     clientX: number,
@@ -121,6 +153,7 @@ export type BlockEditorTableOverlayLayerProps = {
   tableMenuKind: TableMenuKind
   tableMenuState: TableMenuState
   tableOverflowCoachmarkState: TableOverflowCoachmarkState
+  deleteActiveTable: (activeEditor: TiptapEditor) => boolean
   updateActiveTableCellAttrs: (attrs: Partial<ActiveTableCellAttrs>) => void
   updateActiveTableOverflowMode: (
     activeEditor: TiptapEditor,

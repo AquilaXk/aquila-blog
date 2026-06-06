@@ -206,7 +206,11 @@ export const useBlockEditorTableOverlayControllerCommands = ({
     const fallbackRow = tableRows[hoveredRowIndex ?? 0] ?? tableRows[0] ?? selectedRow ?? null
     const activeCellFromColumnIndex =
       typeof hoveredColumnIndex === "number" && fallbackRow
-        ? Array.from(fallbackRow.children).find((cell, index): cell is HTMLTableCellElement => index === hoveredColumnIndex && cell instanceof HTMLTableCellElement)
+        ? Array.from(fallbackRow.children).find(
+            (cell, index): cell is HTMLTableCellElement =>
+              index === hoveredColumnIndex &&
+              cell instanceof HTMLTableCellElement
+          )
         : null
     const activeCell: HTMLTableCellElement | null = hoveredCell ??
       hoveredCellFromPoint ??

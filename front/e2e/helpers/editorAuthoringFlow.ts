@@ -183,10 +183,7 @@ export const getWordDragPoints = async (
       const fallbackRect = fallbackElement.getBoundingClientRect()
       const fallbackPoint = toPoint(fallbackRect)
       if (fallbackPoint) {
-        return {
-          ...fallbackPoint,
-          endX: Math.round(fallbackPoint.startX + Math.min(fallbackRect.width, 24)),
-        }
+        return fallbackPoint
       }
 
       const expectedWord = normalizeWord(targetWord)

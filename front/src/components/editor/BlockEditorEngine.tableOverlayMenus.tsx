@@ -59,9 +59,15 @@ const restoreTableAxisMenuSelection = ({
   tableMenuState: BlockEditorTableOverlayLayerProps["tableMenuState"]
 }) => {
   const axisTarget = tableMenuState?.kind === axis ? tableMenuState.axisTarget : null
-  return axisTarget
-    ? selectTableAxisAtIndex(activeEditor, axisTarget.tablePos, axis, axisTarget.index, { clearNativeText: false })
-    : Boolean(selectTableByIndex(fallbackIndex, { clearNativeText: false }))
+  if (
+    axisTarget &&
+    selectTableAxisAtIndex(activeEditor, axisTarget.tablePos, axis, axisTarget.index, {
+      clearNativeText: false,
+    })
+  ) {
+    return true
+  }
+  return Boolean(selectTableByIndex(fallbackIndex, { clearNativeText: false }))
 }
 
 const runRestoredTableAxisCommand = (

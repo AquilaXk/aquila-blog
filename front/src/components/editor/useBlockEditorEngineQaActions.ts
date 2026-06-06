@@ -52,8 +52,10 @@ export const useBlockEditorEngineQaActions = ({
       if (applied && currentEditor.state.doc !== previousDoc) return
       if (typeof window === "undefined") return
       window.requestAnimationFrame(() => {
+        const retryEditor = editorRef.current ?? editor
+        if (!retryEditor) return
         selectCurrentTableAxis(axis)
-        command(currentEditor)
+        command(retryEditor)
       })
     }
 

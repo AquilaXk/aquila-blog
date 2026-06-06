@@ -11,6 +11,10 @@ const CODE_BLOCK_EDITOR_CONTENT_SELECTOR = ".aq-code-editor-content", CODE_BLOCK
 const TABLE_TEXT_DRAG_CONTROL_SELECTOR = "[data-table-axis-rail='true'], [data-table-affordance], [data-table-menu-root='true'], [data-table-menu-trigger='true'], [data-testid^='table-column-resize-boundary-'], [data-testid='table-structure-menu-button'], [data-testid='table-corner-handle'], [data-testid='table-corner-grow-handle'], .column-resize-handle"
 const CODE_TEXT_SCROLL_PRESERVE_CANCEL_DISTANCE_PX = 3_200
 const TABLE_TEXT_SCROLL_PRESERVE_CANCEL_DISTANCE_PX = 3_200
+const CODE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES = 192
+const CODE_TEXT_DRAG_SCROLL_PRESERVE_MIN_MS = 3_200
+const TABLE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES = 168
+const TABLE_TEXT_DRAG_SCROLL_PRESERVE_MIN_MS = 2_800
 const shouldCancelCodeTextScrollPreserve = (scrollAnchor: WindowScrollAnchor) => () => Math.abs(window.scrollX - scrollAnchor.x) > CODE_TEXT_SCROLL_PRESERVE_CANCEL_DISTANCE_PX || Math.abs((document.scrollingElement?.scrollTop ?? window.scrollY) - scrollAnchor.y) > CODE_TEXT_SCROLL_PRESERVE_CANCEL_DISTANCE_PX
 const shouldCancelTableTextScrollPreserve = (scrollAnchor: WindowScrollAnchor) => () => {
   const currentY = document.scrollingElement?.scrollTop ?? window.scrollY
@@ -124,7 +128,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
     const preserveActiveTableTextDragScroll = () => {
       const tableTextDragStart = tableTextDragStartRef.current
       if (!tableTextDragStart || tableTextDragStart.scrollPreserveStarted) return
-      tableTextDragStart.scrollPreserveStarted = true; cleanupTableDragScrollPreserve?.(); cleanupTableDragScrollPreserve = preserveWindowScrollPositionAcrossFrames(tableTextDragStart.scrollAnchor, 72, 4, 1_120, false, false, true, true, false, shouldCancelTableTextScrollPreserve(tableTextDragStart.scrollAnchor)) ?? null
+      tableTextDragStart.scrollPreserveStarted = true; cleanupTableDragScrollPreserve?.(); cleanupTableDragScrollPreserve = preserveWindowScrollPositionAcrossFrames(tableTextDragStart.scrollAnchor, TABLE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES, 4, TABLE_TEXT_DRAG_SCROLL_PRESERVE_MIN_MS, false, false, true, true, false, shouldCancelTableTextScrollPreserve(tableTextDragStart.scrollAnchor), true, Number.POSITIVE_INFINITY, "table") ?? null
     }
     const preserveActiveTableTextDragSelection = (activeEditor: TiptapEditor) => {
       const tableTextDragStart = tableTextDragStartRef.current
@@ -135,7 +139,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       const codeTextDragStart = codeTextDragStartRef.current
       if (!codeTextDragStart || codeTextDragStart.scrollPreserveStarted) return
       codeTextDragStart.scrollPreserveStarted = true
-      preserveWindowScrollPositionAcrossFrames(codeTextDragStart.scrollAnchor, 192, 4, 3_200, false, false, true, false, false, shouldCancelCodeTextScrollPreserve(codeTextDragStart.scrollAnchor))
+      preserveWindowScrollPositionAcrossFrames(codeTextDragStart.scrollAnchor, CODE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES, 4, CODE_TEXT_DRAG_SCROLL_PRESERVE_MIN_MS, false, false, true, false, false, shouldCancelCodeTextScrollPreserve(codeTextDragStart.scrollAnchor), true, Number.POSITIVE_INFINITY, "code", true)
     }
     const isSelectionInsideCodeDragRoot = (root: HTMLElement) => {
       const selection = window.getSelection()

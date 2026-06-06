@@ -265,8 +265,12 @@ test.describe("editor authoring table affordances", () => {
     await page.keyboard.press("Escape")
     await expect(page.getByTestId("table-row-menu")).toHaveCount(0)
     await expect(page.getByTestId("table-column-menu")).toHaveCount(0)
-    const expandedTableBox = await page.locator(".aq-block-editor__content .tableWrapper table").boundingBox()
-    if (!expandedTableBox) throw new Error("expanded table bounding box is missing")
+    const readCurrentTableBox = async (label: string) => {
+      const currentTableBox = await page.locator(".aq-block-editor__content .tableWrapper table").boundingBox()
+      if (!currentTableBox) throw new Error(`${label} table bounding box is missing`)
+      return currentTableBox
+    }
+    const expandedTableBox = await readCurrentTableBox("expanded")
     await page.mouse.move(expandedTableBox.x + expandedTableBox.width / 2, expandedTableBox.y + 3)
     await expect(columnHandle).toBeVisible()
     const columnHandleBox = await columnHandle.boundingBox()
@@ -289,8 +293,9 @@ test.describe("editor authoring table affordances", () => {
         { x: -24, y: 24 },
         { x: -36, y: 32 },
       ]) {
-        await page.mouse.move(tableBox.x + tableBox.width / 2, tableBox.y + tableBox.height / 2)
-        await page.mouse.move(tableBox.x + point.x, tableBox.y + point.y, { steps: 4 })
+        const currentTableBox = await readCurrentTableBox("block handle hotzone")
+        await page.mouse.move(currentTableBox.x + currentTableBox.width / 2, currentTableBox.y + currentTableBox.height / 2)
+        await page.mouse.move(currentTableBox.x + point.x, currentTableBox.y + point.y, { steps: 4 })
         await page.waitForTimeout(80)
         if (await blockDragHandle.isVisible().catch(() => false)) return
       }
@@ -306,8 +311,9 @@ test.describe("editor authoring table affordances", () => {
         { x: 6, y: 3 },
         { x: 12, y: 3 },
       ]) {
-        await page.mouse.move(tableBox.x + tableBox.width / 2, tableBox.y + tableBox.height / 2)
-        await page.mouse.move(tableBox.x + point.x, tableBox.y + point.y, { steps: 4 })
+        const currentTableBox = await readCurrentTableBox("column grip hotzone")
+        await page.mouse.move(currentTableBox.x + currentTableBox.width / 2, currentTableBox.y + currentTableBox.height / 2)
+        await page.mouse.move(currentTableBox.x + point.x, currentTableBox.y + point.y, { steps: 4 })
         await page.waitForTimeout(80)
         if (await columnHandle.isVisible().catch(() => false)) return
       }

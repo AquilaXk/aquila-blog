@@ -30,6 +30,7 @@ import {
   selectNestedListItemTextAnchor,
 } from "./nestedListItemModel"
 import type { BlockEditorBlockMenuState } from "./BlockEditorEngine.layers"
+import { clearTableTextSelectionForStructuralSelection } from "./tableTextSelectionModel"
 import { useBlockEditorEngineBlockMenu } from "./useBlockEditorEngineBlockMenu"
 import { useBlockEditorEngineBlockDragSessions } from "./useBlockEditorEngineBlockDragSessions"
 
@@ -331,6 +332,7 @@ export const useBlockEditorEngineBlockDrag = ({
         }
         return
       }
+      clearTableTextSelectionForStructuralSelection()
       promoteTopLevelBlockSelection(blockHandleState.blockIndex)
     },
     [
@@ -407,7 +409,12 @@ export const useBlockEditorEngineBlockDrag = ({
       const handlePendingPointerDone = (doneEvent: PointerEvent) => {
         const pending = pendingBlockDragRef.current
         if (!pending || doneEvent.pointerId !== pending.pointerId) return
+        const shouldSelectReleasedBlock = doneEvent.type === "pointerup"
         clearPendingBlockDrag()
+        if (shouldSelectReleasedBlock) {
+          clearTableTextSelectionForStructuralSelection()
+          promoteTopLevelBlockSelection(pending.sourceIndex)
+        }
       }
 
       window.addEventListener("pointermove", handlePendingPointerMove)
@@ -432,6 +439,7 @@ export const useBlockEditorEngineBlockDrag = ({
       hoveredListItemContext,
       pendingBlockDragCleanupRef,
       pendingBlockDragRef,
+      promoteTopLevelBlockSelection,
       resolveBlockHandleListItemContext,
       resolveEffectiveSelectedListItemContext,
       selectedListItemContextRef,

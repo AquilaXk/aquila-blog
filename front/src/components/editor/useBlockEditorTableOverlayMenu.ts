@@ -4,10 +4,12 @@ import { CellSelection, selectedRect } from "@tiptap/pm/tables"
 import type { Dispatch, SetStateAction } from "react"
 import { useCallback, useEffect, useMemo } from "react"
 import { getTopLevelBlockIndexFromSelection, getTopLevelBlockPosition } from "./blockSelectionModel"
+import type { TableAxisSelectionTarget } from "./tableAxisDragModel"
 import { resolveTableMenuState, type TableMenuKind, type TableMenuState } from "./tableFloatingUiModel"
+import { dispatchEditorSelectionSafely } from "./tableSelectionDispatchModel"
 import { clearTableTextSelectionForStructuralSelection } from "./tableTextSelectionModel"
 import { getTableOverflowMode } from "./tableWidthModel"
-import { focusElementWithoutScroll, resolveDocPosSafe, type TableOverlaySelectionRect } from "./useBlockEditorTableOverlayDomAdapter"
+import { focusElementWithoutScroll, type TableOverlaySelectionRect } from "./useBlockEditorTableOverlayDomAdapter"
 
 type UseBlockEditorTableOverlayMenuArgs = {
   cancelTableQuickRailHide: () => void
@@ -122,34 +124,29 @@ export const useBlockEditorTableOverlayMenu = ({
 
   const selectCurrentTableAxis = useCallback(
     (axis: "row" | "column") => {
-      if (!editor) return
-
-      let anchorCellPos = -1
-      let headCellPos = -1
-      try {
-        const rect = selectedRect(editor.state)
-        if (rect.bottom <= rect.top || rect.right <= rect.left) return
-        anchorCellPos = rect.tableStart + rect.map.positionAt(rect.top, rect.left, rect.table)
-        headCellPos = rect.tableStart + rect.map.positionAt(rect.bottom - 1, rect.right - 1, rect.table)
-      } catch {
-        return
-      }
-
-      const anchorResolved = resolveDocPosSafe(editor, anchorCellPos)
-      const headResolved = resolveDocPosSafe(editor, headCellPos)
-      if (!anchorResolved || !headResolved) return
-
-      const selection =
-        axis === "row"
-          ? CellSelection.rowSelection(anchorResolved, headResolved)
-          : CellSelection.colSelection(anchorResolved, headResolved)
+      if (!editor) return false
 
       clearStickyTopLevelBlockSelection()
       clearTableTextSelectionForStructuralSelection()
-      editor.view.dispatch(editor.state.tr.setSelection(selection))
+      if (!dispatchEditorSelectionSafely(editor, (state) => {
+        try {
+          const rect = selectedRect(state)
+          if (rect.bottom <= rect.top || rect.right <= rect.left) return null
+          const anchorCellPos = rect.tableStart + rect.map.positionAt(rect.top, rect.left, rect.table)
+          const headCellPos = rect.tableStart + rect.map.positionAt(rect.bottom - 1, rect.right - 1, rect.table)
+          const anchorResolved = state.doc.resolve(anchorCellPos)
+          const headResolved = state.doc.resolve(headCellPos)
+          return axis === "row"
+            ? CellSelection.rowSelection(anchorResolved, headResolved)
+            : CellSelection.colSelection(anchorResolved, headResolved)
+        } catch {
+          return null
+        }
+      })) return false
       focusElementWithoutScroll(editor.view.dom)
       window.getSelection()?.removeAllRanges()
       setSelectionTick((prev) => prev + 1)
+      return true
     },
     [clearStickyTopLevelBlockSelection, editor, setSelectionTick]
   )
@@ -160,8 +157,7 @@ export const useBlockEditorTableOverlayMenu = ({
     const position = getTopLevelBlockPosition(editor, blockIndex)
     const targetNode = editor.state.doc.nodeAt(position)
     if (!targetNode || targetNode.type.name !== "table") return
-    const selection = NodeSelection.create(editor.state.doc, position)
-    editor.view.dispatch(editor.state.tr.setSelection(selection))
+    if (!dispatchEditorSelectionSafely(editor, (state) => NodeSelection.create(state.doc, position))) return
     focusElementWithoutScroll(editor.view.dom)
   }, [editor])
 
@@ -221,7 +217,7 @@ export const useBlockEditorTableOverlayMenu = ({
     [closeTableMenu, editor, stabilizeTableSelectionSurface, suppressTableAxisMenuKeepAlive]
   )
 
-  const openTableMenu = useCallback((kind: TableMenuKind, anchorRect: DOMRect, options: { forceOpen?: boolean } = {}) => {
+  const openTableMenu = useCallback((kind: TableMenuKind, anchorRect: DOMRect, options: { axisTarget?: TableAxisSelectionTarget; forceOpen?: boolean } = {}) => {
     cancelTableQuickRailHide()
     setTableMenuState((prev) =>
       resolveTableMenuState(
@@ -233,7 +229,8 @@ export const useBlockEditorTableOverlayMenu = ({
           : {
               width: window.innerWidth,
               height: window.innerHeight,
-            }
+            },
+        { axisTarget: options.axisTarget }
       )
     )
   }, [cancelTableQuickRailHide, setTableMenuState])
@@ -242,10 +239,10 @@ export const useBlockEditorTableOverlayMenu = ({
     (kind: TableMenuKind, anchorRect: DOMRect) => {
       if (kind === "row") {
         suppressTableAxisMenuKeepAlive(0)
-        selectCurrentTableAxis("row")
+        if (!selectCurrentTableAxis("row")) return
       } else if (kind === "column") {
         suppressTableAxisMenuKeepAlive(0)
-        selectCurrentTableAxis("column")
+        if (!selectCurrentTableAxis("column")) return
       } else {
         selectActiveTableBlock()
       }

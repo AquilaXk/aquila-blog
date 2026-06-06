@@ -1,4 +1,5 @@
-import type { CSSProperties } from "react"
+import type { Editor as TiptapEditor } from "@tiptap/core"
+import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react"
 import { TABLE_OVERFLOW_MODE_WIDE } from "./tableWidthModel"
 import type { BlockEditorTableOverlayLayerProps } from "./BlockEditorEngine.tableOverlayTypes"
 import {
@@ -37,6 +38,70 @@ const TABLE_CELL_COLOR_PRESETS = [
   { label: "회색", value: "#e2e8f0" },
 ]
 
+type TableAxisMenuKind = "row" | "column"
+
+const restoreTableAxisMenuSelection = ({
+  activeEditor,
+  axis,
+  fallbackIndex,
+  selectTableAxisAtIndex,
+  selectTableByIndex,
+  tableMenuState,
+}: {
+  activeEditor: TiptapEditor
+  axis: TableAxisMenuKind
+  fallbackIndex: number
+  selectTableAxisAtIndex: BlockEditorTableOverlayLayerProps["selectTableAxisAtIndex"]
+  selectTableByIndex: (
+    axisIndex: number,
+    options?: { clearNativeText?: boolean }
+  ) => unknown
+  tableMenuState: BlockEditorTableOverlayLayerProps["tableMenuState"]
+}) => {
+  const axisTarget = tableMenuState?.kind === axis ? tableMenuState.axisTarget : null
+  if (
+    axisTarget &&
+    selectTableAxisAtIndex(activeEditor, axisTarget.tablePos, axis, axisTarget.index, {
+      clearNativeText: false,
+    })
+  ) {
+    return true
+  }
+  return Boolean(selectTableByIndex(fallbackIndex, { clearNativeText: false }))
+}
+
+const runRestoredTableAxisCommand = (
+  restoreSelection: () => boolean,
+  activeEditor: TiptapEditor,
+  command: (editor: TiptapEditor) => boolean
+) => {
+  if (!restoreSelection()) return
+  const previousDoc = activeEditor.state.doc
+  const applied = command(activeEditor)
+  if (applied && activeEditor.state.doc !== previousDoc) return
+  if (typeof window === "undefined") return
+  window.requestAnimationFrame(() => {
+    if (!restoreSelection()) return
+    command(activeEditor)
+  })
+}
+
+const preserveTableAxisMenuSelectionOnMouseDown = (event: ReactMouseEvent<HTMLButtonElement>) => {
+  if (event.button !== 0) return
+  event.preventDefault()
+  event.stopPropagation()
+}
+
+const runTableAxisMenuActionOnClick = (
+  event: ReactMouseEvent<HTMLButtonElement>,
+  action: () => void
+) => {
+  if (event.button !== 0) return
+  event.preventDefault()
+  event.stopPropagation()
+  action()
+}
+
 export const BlockEditorTableOverlayMenus = ({
   activeTableCellAttrs,
   activeTableStructureState,
@@ -49,8 +114,12 @@ export const BlockEditorTableOverlayMenus = ({
   normalizeTableColorInputValue,
   runTableMenuEditorAction,
   scheduleTableOverflowCoachmarkHide,
+  selectTableAxisAtIndex,
+  selectTableColumnByIndex,
+  selectTableRowByIndex,
   shouldShowCellMergeSection,
   stabilizeTableSelectionSurface,
+  tableAffordanceGeometry,
   tableMenuKind,
   tableMenuState,
   tableOverflowCoachmarkState,
@@ -243,15 +312,41 @@ export const BlockEditorTableOverlayMenus = ({
             insertAfterLabel="아래에 행 추가"
             insertBeforeLabel="위에 행 추가"
             titleLabel="제목 행"
-            onDelete={() => runTableMenuEditorAction((activeEditor) => activeEditor.chain().focus().deleteRow().run())}
+            onDelete={() =>
+              runTableMenuEditorAction((activeEditor) =>
+                runRestoredTableAxisCommand(
+                  () => restoreTableAxisMenuSelection({ activeEditor, axis: "row", fallbackIndex: tableAffordanceGeometry.rowIndex, selectTableAxisAtIndex, selectTableByIndex: selectTableRowByIndex, tableMenuState }),
+                  activeEditor,
+                  (editor) => editor.commands.deleteRow()
+                )
+              )
+            }
             onInsertAfter={() =>
-              runTableMenuEditorAction((activeEditor) => activeEditor.chain().focus().addRowAfter().run())
+              runTableMenuEditorAction((activeEditor) =>
+                runRestoredTableAxisCommand(
+                  () => restoreTableAxisMenuSelection({ activeEditor, axis: "row", fallbackIndex: tableAffordanceGeometry.rowIndex, selectTableAxisAtIndex, selectTableByIndex: selectTableRowByIndex, tableMenuState }),
+                  activeEditor,
+                  (editor) => editor.commands.addRowAfter()
+                )
+              )
             }
             onInsertBefore={() =>
-              runTableMenuEditorAction((activeEditor) => activeEditor.chain().focus().addRowBefore().run())
+              runTableMenuEditorAction((activeEditor) =>
+                runRestoredTableAxisCommand(
+                  () => restoreTableAxisMenuSelection({ activeEditor, axis: "row", fallbackIndex: tableAffordanceGeometry.rowIndex, selectTableAxisAtIndex, selectTableByIndex: selectTableRowByIndex, tableMenuState }),
+                  activeEditor,
+                  (editor) => editor.commands.addRowBefore()
+                )
+              )
             }
             onToggleHeader={() =>
-              runTableMenuEditorAction((activeEditor) => activeEditor.chain().focus().toggleHeaderRow().run())
+              runTableMenuEditorAction((activeEditor) =>
+                runRestoredTableAxisCommand(
+                  () => restoreTableAxisMenuSelection({ activeEditor, axis: "row", fallbackIndex: tableAffordanceGeometry.rowIndex, selectTableAxisAtIndex, selectTableByIndex: selectTableRowByIndex, tableMenuState }),
+                  activeEditor,
+                  (editor) => editor.commands.toggleHeaderRow()
+                )
+              )
             }
           />
         ) : tableMenuKind === "column" ? (
@@ -263,15 +358,41 @@ export const BlockEditorTableOverlayMenus = ({
             insertAfterLabel="오른쪽 열 추가"
             insertBeforeLabel="왼쪽 열 추가"
             titleLabel="제목 열"
-            onDelete={() => runTableMenuEditorAction((activeEditor) => activeEditor.chain().focus().deleteColumn().run())}
+            onDelete={() =>
+              runTableMenuEditorAction((activeEditor) =>
+                runRestoredTableAxisCommand(
+                  () => restoreTableAxisMenuSelection({ activeEditor, axis: "column", fallbackIndex: tableAffordanceGeometry.columnIndex, selectTableAxisAtIndex, selectTableByIndex: selectTableColumnByIndex, tableMenuState }),
+                  activeEditor,
+                  (editor) => editor.commands.deleteColumn()
+                )
+              )
+            }
             onInsertAfter={() =>
-              runTableMenuEditorAction((activeEditor) => activeEditor.chain().focus().addColumnAfter().run())
+              runTableMenuEditorAction((activeEditor) =>
+                runRestoredTableAxisCommand(
+                  () => restoreTableAxisMenuSelection({ activeEditor, axis: "column", fallbackIndex: tableAffordanceGeometry.columnIndex, selectTableAxisAtIndex, selectTableByIndex: selectTableColumnByIndex, tableMenuState }),
+                  activeEditor,
+                  (editor) => editor.commands.addColumnAfter()
+                )
+              )
             }
             onInsertBefore={() =>
-              runTableMenuEditorAction((activeEditor) => activeEditor.chain().focus().addColumnBefore().run())
+              runTableMenuEditorAction((activeEditor) =>
+                runRestoredTableAxisCommand(
+                  () => restoreTableAxisMenuSelection({ activeEditor, axis: "column", fallbackIndex: tableAffordanceGeometry.columnIndex, selectTableAxisAtIndex, selectTableByIndex: selectTableColumnByIndex, tableMenuState }),
+                  activeEditor,
+                  (editor) => editor.commands.addColumnBefore()
+                )
+              )
             }
             onToggleHeader={() =>
-              runTableMenuEditorAction((activeEditor) => activeEditor.chain().focus().toggleHeaderColumn().run())
+              runTableMenuEditorAction((activeEditor) =>
+                runRestoredTableAxisCommand(
+                  () => restoreTableAxisMenuSelection({ activeEditor, axis: "column", fallbackIndex: tableAffordanceGeometry.columnIndex, selectTableAxisAtIndex, selectTableByIndex: selectTableColumnByIndex, tableMenuState }),
+                  activeEditor,
+                  (editor) => editor.commands.toggleHeaderColumn()
+                )
+              )
             }
           />
         ) : (
@@ -356,13 +477,26 @@ const TableAxisMenu = ({
     <TableMenuCompactSection>
       <TableMenuSectionTitle>{axisLabel} 액션</TableMenuSectionTitle>
       <TableMenuCompactList>
-        <TableMenuCompactAction type="button" data-active={active} onClick={onToggleHeader}>
+        <TableMenuCompactAction
+          type="button"
+          data-active={active}
+          onMouseDown={preserveTableAxisMenuSelectionOnMouseDown}
+          onClick={(event) => runTableAxisMenuActionOnClick(event, onToggleHeader)}
+        >
           {titleLabel}
         </TableMenuCompactAction>
-        <TableMenuCompactAction type="button" onClick={onInsertBefore}>
+        <TableMenuCompactAction
+          type="button"
+          onMouseDown={preserveTableAxisMenuSelectionOnMouseDown}
+          onClick={(event) => runTableAxisMenuActionOnClick(event, onInsertBefore)}
+        >
           {insertBeforeLabel}
         </TableMenuCompactAction>
-        <TableMenuCompactAction type="button" onClick={onInsertAfter}>
+        <TableMenuCompactAction
+          type="button"
+          onMouseDown={preserveTableAxisMenuSelectionOnMouseDown}
+          onClick={(event) => runTableAxisMenuActionOnClick(event, onInsertAfter)}
+        >
           {insertAfterLabel}
         </TableMenuCompactAction>
       </TableMenuCompactList>
@@ -370,7 +504,12 @@ const TableAxisMenu = ({
     <TableMenuHint>{hint}</TableMenuHint>
     <FloatingBlockMenuDivider />
     <TableMenuCompactList>
-      <TableMenuCompactAction type="button" data-variant="danger" onClick={onDelete}>
+      <TableMenuCompactAction
+        type="button"
+        data-variant="danger"
+        onMouseDown={preserveTableAxisMenuSelectionOnMouseDown}
+        onClick={(event) => runTableAxisMenuActionOnClick(event, onDelete)}
+      >
         {deleteLabel}
       </TableMenuCompactAction>
     </TableMenuCompactList>

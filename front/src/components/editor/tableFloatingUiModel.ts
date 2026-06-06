@@ -2,7 +2,7 @@ import type {
   TableAffordanceVisibility,
   TableOverlayAnchor,
 } from "./tableAffordanceModel"
-import type { TableAxis } from "./tableAxisDragModel"
+import type { TableAxis, TableAxisSelectionTarget } from "./tableAxisDragModel"
 
 export type TableMenuKind = "row" | "column" | "table" | "cell"
 
@@ -11,6 +11,7 @@ export type TableMenuState =
       kind: TableMenuKind
       left: number
       top: number
+      axisTarget?: TableAxisSelectionTarget
     }
   | null
 
@@ -28,6 +29,9 @@ type ViewportSize = {
 }
 
 type TableMenuAnchorRect = Pick<DOMRect, "left" | "bottom">
+type TableMenuOptions = {
+  axisTarget?: TableAxisSelectionTarget
+}
 
 type TableCoachmarkRect = Pick<DOMRect, "right" | "top"> | null
 
@@ -90,7 +94,8 @@ export const resolveTableMenuState = (
   currentState: TableMenuState,
   kind: TableMenuKind,
   anchorRect: TableMenuAnchorRect,
-  viewport: ViewportSize | null
+  viewport: ViewportSize | null,
+  options: TableMenuOptions = {}
 ): TableMenuState => {
   const nextLeft = viewport
     ? Math.min(
@@ -117,6 +122,7 @@ export const resolveTableMenuState = (
         kind,
         left: nextLeft,
         top: nextTop,
+        axisTarget: options.axisTarget,
       }
 }
 

@@ -246,6 +246,37 @@ export const getTableAffordances = (page: Page) => ({
   cellMenuButton: page.locator("[data-table-affordance='cell-menu']").first(),
 })
 
+export const moveToTableCellAxisHotzone = async (
+  page: Page,
+  options: { axis: "column" | "row"; cellText: string; label: string; tableText?: string }
+) => {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const point = await page.evaluate(({ axis, cellText, tableText }) => {
+      const editor = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
+      const table = Array.from(editor?.querySelectorAll<HTMLElement>("table") ?? []).find((candidate) => {
+        const text = candidate.textContent?.replace(/\s+/g, " ").trim() ?? ""
+        return text.includes(cellText) && (!tableText || text.includes(tableText))
+      })
+      const cell = Array.from(table?.querySelectorAll<HTMLElement>("th, td") ?? []).find((candidate) =>
+        (candidate.textContent ?? "").includes(cellText)
+      )
+      if (!table || !cell) return null
+      const tableRect = table.getBoundingClientRect()
+      const cellRect = cell.getBoundingClientRect()
+      if (tableRect.width <= 0 || tableRect.height <= 0 || cellRect.width <= 0 || cellRect.height <= 0) return null
+      return axis === "row"
+        ? { x: tableRect.left + 4, y: cellRect.top + cellRect.height / 2 }
+        : { x: cellRect.left + cellRect.width / 2, y: tableRect.top + 4 }
+    }, options)
+    if (point) {
+      await page.mouse.move(point.x, point.y)
+      return
+    }
+    await page.waitForTimeout(80)
+  }
+  throw new Error(`${options.label} table cell axis hotzone metrics are missing`)
+}
+
 export type ListItemHandleMetrics = {
   itemLeft: number
   itemCenterY: number

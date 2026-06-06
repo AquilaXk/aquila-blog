@@ -143,6 +143,12 @@ export type Post507EditorDiagnosticSnapshot = {
   }>
   preserveAttributes: Array<{ element: string; name: string; value: string }>
   scrollTopTimeline: Array<{ label: string; scrollTop: number }>
+  selectionDebug: {
+    elementFallbackText: string
+    owner: Post507InteractionTelemetrySnapshot["selectionTimeline"][number]["owner"]
+    rootFallbackText: string
+    windowText: string
+  }
   selectionText: string
   url: string
 }
@@ -227,11 +233,11 @@ export const readPost507EditorDiagnostics = async (
       )
       .slice(0, 40)
     const editor = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
-    const selectionText =
-      window.getSelection()?.toString() ||
-      document.documentElement.getAttribute("data-table-drag-selection-text") ||
-      document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
-      ""
+    const windowSelectionText = window.getSelection()?.toString() || ""
+    const rootFallbackText = document.documentElement.getAttribute("data-table-drag-selection-text") || ""
+    const elementFallbackText =
+      document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") || ""
+    const selectionText = windowSelectionText || rootFallbackText || elementFallbackText
     const readFallbackSample = (sampleLabel: string) => {
       const codeFallbackText =
         document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text")?.trim() ||
@@ -343,6 +349,12 @@ export const readPost507EditorDiagnostics = async (
           scrollTop: Math.round(document.scrollingElement?.scrollTop ?? window.scrollY),
         },
       ],
+      selectionDebug: {
+        elementFallbackText: elementFallbackText.replace(/\s+/g, " ").trim().slice(0, 160),
+        owner: readSelectionSample(snapshotLabel).owner,
+        rootFallbackText: rootFallbackText.replace(/\s+/g, " ").trim().slice(0, 160),
+        windowText: windowSelectionText.replace(/\s+/g, " ").trim().slice(0, 160),
+      },
       selectionText,
       url: `${window.location.pathname}${window.location.search}`,
     }
@@ -1369,6 +1381,112 @@ export const clickPost507AxisHandle = async (
   throw new Error(`post 507 ${axis} axis selection did not settle: ${JSON.stringify(lastDebug)}`)
 }
 
+export const expectPost507AxisSelectionNoVisibleNativeTextChurn = async (
+  page: Page,
+  axis: "column" | "row",
+  expectedSelectedCellCount: number,
+  label: string
+) => {
+  const outlineTestId = axis === "row" ? "table-row-selection-outline" : "table-column-selection-outline"
+  const menuTestId = axis === "row" ? "table-row-menu" : "table-column-menu"
+  const samples: Array<{
+    fallbackText: string
+    menuVisible: boolean
+    outlineVisible: boolean
+    selectedCellCount: number
+    selectedCellNativeSelectionHidden: boolean
+    selectionInsideSelectedCells: boolean
+    selectionText: string
+  }> = []
+
+  for (let index = 0; index < 8; index += 1) {
+    samples.push(
+      await page.evaluate(
+        ({ menuTestId, outlineTestId }) => {
+          const isVisible = (element: Element | null) => {
+            if (!element) return false
+            const rect = element.getBoundingClientRect()
+            const style = window.getComputedStyle(element)
+            return (
+              rect.width > 0 &&
+              rect.height > 0 &&
+              style.display !== "none" &&
+              style.visibility !== "hidden" &&
+              Number(style.opacity || "1") > 0
+            )
+          }
+          const fallbackText =
+            document.documentElement.getAttribute("data-table-drag-selection-text") ||
+            document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
+            ""
+          const selection = window.getSelection()
+          const elementFromNode = (node: Node | null) =>
+            node?.nodeType === Node.ELEMENT_NODE ? (node as Element) : node?.parentElement ?? null
+          let selectionInsideSelectedCells = true
+          if (selection && selection.rangeCount > 0 && !selection.isCollapsed) {
+            for (let rangeIndex = 0; rangeIndex < selection.rangeCount; rangeIndex += 1) {
+              const range = selection.getRangeAt(rangeIndex)
+              const startCell = elementFromNode(range.startContainer)?.closest(".selectedCell")
+              const endCell = elementFromNode(range.endContainer)?.closest(".selectedCell")
+              if (!startCell || !endCell) {
+                selectionInsideSelectedCells = false
+                break
+              }
+            }
+          }
+          const selectedCell = document.querySelector<HTMLElement>(".selectedCell")
+          const selectedTextElement =
+            selectedCell?.querySelector<HTMLElement>("p, span, strong, em, code, div") ?? selectedCell
+          const selectionStyle = selectedTextElement ? window.getComputedStyle(selectedTextElement, "::selection") : null
+          const selectionBackground = selectionStyle?.backgroundColor || ""
+
+          return {
+            fallbackText: fallbackText.replace(/\s+/g, " ").trim(),
+            menuVisible: isVisible(document.querySelector(`[data-testid='${menuTestId}']`)),
+            outlineVisible: isVisible(document.querySelector(`[data-testid='${outlineTestId}']`)),
+            selectedCellCount: document.querySelectorAll(".selectedCell").length,
+            selectedCellNativeSelectionHidden:
+              selectionBackground === "rgba(0, 0, 0, 0)" || selectionBackground === "transparent",
+            selectionInsideSelectedCells,
+            selectionText: (window.getSelection()?.toString() || "").replace(/\s+/g, " ").trim(),
+          }
+        },
+        { menuTestId, outlineTestId }
+      )
+    )
+    await page.waitForTimeout(90)
+  }
+
+  expect(
+    samples,
+    `${label} should keep structural axis selection without visible native text selection churn`
+  ).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        fallbackText: "",
+        menuVisible: true,
+        outlineVisible: true,
+        selectedCellCount: expectedSelectedCellCount,
+        selectedCellNativeSelectionHidden: true,
+        selectionInsideSelectedCells: true,
+      }),
+    ])
+  )
+  expect(
+    samples.every(
+      (sample) =>
+        sample.fallbackText === "" &&
+        sample.menuVisible &&
+        sample.outlineVisible &&
+        sample.selectedCellCount === expectedSelectedCellCount &&
+        sample.selectedCellNativeSelectionHidden &&
+        sample.selectionInsideSelectedCells &&
+        !POST_507_FINAL_TABLE_FORBIDDEN_TEXTS.some((forbiddenText) => sample.selectionText.includes(forbiddenText))
+    ),
+    `${label} axis samples: ${JSON.stringify(samples)}`
+  ).toBe(true)
+}
+
 export const scrollPost507FinalTableTargetIntoView = async (page: Page) => {
   await expect
     .poll(
@@ -1550,6 +1668,7 @@ export const runPost507LowerRealWorkflowGate = async (
 
     await clearPost507SelectionState(page)
     await clickPost507AxisHandle(page, "row", 3)
+    await expectPost507AxisSelectionNoVisibleNativeTextChurn(page, "row", 3, `post 507 row axis cycle ${cycle}`)
     await expectPost507WheelScrollsWithoutLock(page, `row axis cycle ${cycle}`)
 
     await page.keyboard.press("Escape")
@@ -1557,6 +1676,7 @@ export const runPost507LowerRealWorkflowGate = async (
     await scrollPost507FinalTableTargetIntoView(page)
     await page.waitForTimeout(120)
     await clickPost507AxisHandle(page, "column", 7)
+    await expectPost507AxisSelectionNoVisibleNativeTextChurn(page, "column", 7, `post 507 column axis cycle ${cycle}`)
     await expectPost507WheelScrollsWithoutLock(page, `column axis cycle ${cycle}`)
     await page.keyboard.press("Escape")
   }

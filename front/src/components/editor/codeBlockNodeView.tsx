@@ -621,6 +621,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
         activeCodeSelectionOwnerRoot = null
       }
       if (!codeShell?.contains(target) && ownsActiveCodeSelection) {
+        markNextEditorPointerAfterCodeSelection()
         codeDragSelectionRef.current = null
         window.getSelection()?.removeAllRanges()
         document.querySelectorAll("[data-code-drag-selection-text]").forEach((element) => {

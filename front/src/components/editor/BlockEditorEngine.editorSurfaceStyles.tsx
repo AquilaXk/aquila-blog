@@ -1,6 +1,13 @@
 import styled from "@emotion/styled"
-import { articleTypographyScale, markdownContentTypography } from "src/libs/markdown/contentTypography"
-import { getTableChromePalette, TABLE_SHARED_MARGIN_Y, TABLE_SHARED_RADIUS_PX } from "src/libs/markdown/tableChrome"
+import {
+  articleTypographyScale,
+  markdownContentTypography,
+} from "src/libs/markdown/contentTypography"
+import {
+  getTableChromePalette,
+  TABLE_SHARED_MARGIN_Y,
+  TABLE_SHARED_RADIUS_PX,
+} from "src/libs/markdown/tableChrome"
 import {
   TABLE_MIN_COLUMN_WIDTH_PX,
   TABLE_MIN_ROW_HEIGHT_PX,
@@ -26,20 +33,21 @@ export const EditorViewport = styled.div`
     overflow-x: hidden;
   }
 
-  ${({ theme }) => markdownContentTypography(".aq-block-editor__content", theme)}
+  ${({ theme }) =>
+    markdownContentTypography(".aq-block-editor__content", theme)}
 
   .aq-block-editor__content > * {
     width: 100%;
-    max-width: var(--compose-pane-readable-width, var(--article-readable-width, 48rem));
+    max-width: var(
+      --compose-pane-readable-width,
+      var(--article-readable-width, 48rem)
+    );
     min-width: 0;
     margin-left: auto;
     margin-right: auto;
     border-radius: 0.9rem;
-    transition:
-      background-color 140ms ease,
-      box-shadow 140ms ease,
-      transform 140ms ease,
-      opacity 140ms ease;
+    transition: background-color 140ms ease, box-shadow 140ms ease,
+      transform 140ms ease, opacity 140ms ease;
   }
 
   .aq-block-editor__content h1,
@@ -51,7 +59,10 @@ export const EditorViewport = styled.div`
 
   .aq-block-editor__content blockquote {
     width: 100%;
-    max-width: var(--compose-pane-readable-width, var(--article-readable-width, 48rem));
+    max-width: var(
+      --compose-pane-readable-width,
+      var(--article-readable-width, 48rem)
+    );
     box-sizing: border-box;
     margin: 0.95rem auto;
     padding: 0.12rem 0 0.12rem 1rem;
@@ -98,26 +109,36 @@ export const EditorViewport = styled.div`
 
   .aq-block-editor__content > *[data-block-hovered="true"] {
     background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(59, 130, 246, 0.08)" : "rgba(59, 130, 246, 0.08)"};
+      theme.scheme === "dark"
+        ? "rgba(59, 130, 246, 0.08)"
+        : "rgba(59, 130, 246, 0.08)"};
     box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.18);
   }
 
   .aq-block-editor__content > *[data-block-selected="true"] {
     background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(59, 130, 246, 0.12)" : "rgba(59, 130, 246, 0.1)"};
+      theme.scheme === "dark"
+        ? "rgba(59, 130, 246, 0.12)"
+        : "rgba(59, 130, 246, 0.1)"};
     box-shadow: none;
   }
 
-  .aq-block-editor__content li[data-list-item="true"][data-block-hovered="true"],
-  .aq-block-editor__content li[data-task-item="true"][data-block-hovered="true"] {
+  .aq-block-editor__content
+    li[data-list-item="true"][data-block-hovered="true"],
+  .aq-block-editor__content
+    li[data-task-item="true"][data-block-hovered="true"] {
     background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(59, 130, 246, 0.08)" : "rgba(59, 130, 246, 0.08)"};
+      theme.scheme === "dark"
+        ? "rgba(59, 130, 246, 0.08)"
+        : "rgba(59, 130, 246, 0.08)"};
     box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.18);
     border-radius: 10px;
   }
 
-  .aq-block-editor__content li[data-list-item="true"][data-block-selected="true"],
-  .aq-block-editor__content li[data-task-item="true"][data-block-selected="true"] {
+  .aq-block-editor__content
+    li[data-list-item="true"][data-block-selected="true"],
+  .aq-block-editor__content
+    li[data-task-item="true"][data-block-selected="true"] {
     background: transparent;
     box-shadow: none;
     border-radius: 0;
@@ -127,9 +148,10 @@ export const EditorViewport = styled.div`
     opacity: 0.34;
     transform: scale(0.994);
     background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(59, 130, 246, 0.14)" : "rgba(59, 130, 246, 0.12)"};
-    box-shadow:
-      inset 0 0 0 1px rgba(59, 130, 246, 0.28),
+      theme.scheme === "dark"
+        ? "rgba(59, 130, 246, 0.14)"
+        : "rgba(59, 130, 246, 0.12)"};
+    box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.28),
       0 0 0 1px rgba(59, 130, 246, 0.2);
     filter: saturate(0.9);
   }
@@ -158,15 +180,15 @@ export const EditorViewport = styled.div`
     background: rgba(255, 255, 255, 0.03);
     color: var(--color-gray12);
     padding: 1rem 1.1rem;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-      "Courier New", monospace;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+      "Liberation Mono", "Courier New", monospace;
     font-size: ${articleTypographyScale.codeFontSize};
     line-height: ${articleTypographyScale.codeLineHeight};
   }
 
   .aq-block-editor__content code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-      "Courier New", monospace;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+      "Liberation Mono", "Courier New", monospace;
     font-size: ${articleTypographyScale.codeFontSize};
     line-height: ${articleTypographyScale.codeLineHeight};
     border-radius: 0.42rem;
@@ -199,7 +221,10 @@ export const EditorViewport = styled.div`
   .aq-block-editor__content ul[data-type="taskList"],
   .aq-block-editor__content ul[data-task-list="true"] {
     width: 100%;
-    max-width: var(--compose-pane-readable-width, var(--article-readable-width, 48rem));
+    max-width: var(
+      --compose-pane-readable-width,
+      var(--article-readable-width, 48rem)
+    );
     list-style: none;
     padding-left: 0;
   }
@@ -212,9 +237,7 @@ export const EditorViewport = styled.div`
     margin: 0.45rem 0;
     cursor: grab;
     border-radius: 0.8rem;
-    transition:
-      background-color 140ms ease,
-      box-shadow 140ms ease;
+    transition: background-color 140ms ease, box-shadow 140ms ease;
   }
 
   .aq-block-editor__content li[data-type="taskItem"]:active,
@@ -225,7 +248,9 @@ export const EditorViewport = styled.div`
   .aq-block-editor__content li[data-type="taskItem"]:hover,
   .aq-block-editor__content li[data-task-item="true"]:hover {
     background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(59, 130, 246, 0.06)" : "rgba(59, 130, 246, 0.06)"};
+      theme.scheme === "dark"
+        ? "rgba(59, 130, 246, 0.06)"
+        : "rgba(59, 130, 246, 0.06)"};
     box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.14);
   }
 
@@ -239,12 +264,19 @@ export const EditorViewport = styled.div`
     flex-shrink: 0;
   }
 
-  .aq-block-editor__content li[data-type="taskItem"] > label input[type="checkbox"],
-  .aq-block-editor__content li[data-task-item="true"] > label input[type="checkbox"] {
+  .aq-block-editor__content
+    li[data-type="taskItem"]
+    > label
+    input[type="checkbox"],
+  .aq-block-editor__content
+    li[data-task-item="true"]
+    > label
+    input[type="checkbox"] {
     margin: 0.22rem 0 0;
     width: 0.95rem;
     height: 0.95rem;
-    accent-color: ${({ theme }) => (theme.scheme === "dark" ? "#4493f8" : "#0969da")};
+    accent-color: ${({ theme }) =>
+      theme.scheme === "dark" ? "#4493f8" : "#0969da"};
   }
 
   .aq-block-editor__content li[data-type="taskItem"] > div,
@@ -355,7 +387,9 @@ export const EditorViewport = styled.div`
     ${({ theme }) => {
       const tableChrome = getTableChromePalette(theme)
       const headerColumnBackground =
-        theme.scheme === "dark" ? "rgba(51, 65, 85, 0.46)" : "rgba(241, 245, 249, 0.96)"
+        theme.scheme === "dark"
+          ? "rgba(51, 65, 85, 0.46)"
+          : "rgba(241, 245, 249, 0.96)"
       return `
     background: ${headerColumnBackground};
     color: ${theme.colors.gray12};
@@ -369,7 +403,9 @@ export const EditorViewport = styled.div`
     ${({ theme }) => {
       const tableChrome = getTableChromePalette(theme)
       const headerRowBackground =
-        theme.scheme === "dark" ? "rgba(71, 85, 105, 0.56)" : "rgba(226, 232, 240, 0.98)"
+        theme.scheme === "dark"
+          ? "rgba(71, 85, 105, 0.56)"
+          : "rgba(226, 232, 240, 0.98)"
       return `
     background: ${headerRowBackground};
     border-bottom: 2px solid ${tableChrome.headerRule};
@@ -382,7 +418,10 @@ export const EditorViewport = styled.div`
     border-right: 0;
   }
 
-  .aq-block-editor__content .tableWrapper > table[data-overflow-mode="wide"] :is(th, td) {
+  .aq-block-editor__content
+    .tableWrapper
+    > table[data-overflow-mode="wide"]
+    :is(th, td) {
     min-width: max(${TABLE_WIDE_COLUMN_MIN_WIDTH_PX}px, 12ch);
     white-space: normal;
     overflow-wrap: break-word;
@@ -399,6 +438,12 @@ export const EditorViewport = styled.div`
 
   .aq-block-editor__content .selectedCell::after {
     background: rgba(148, 163, 184, 0.12);
+  }
+
+  .aq-block-editor__content .selectedCell::selection,
+  .aq-block-editor__content .selectedCell *::selection {
+    background: transparent;
+    color: inherit;
   }
 
   .aq-block-editor__content .column-resize-handle {
@@ -443,9 +488,13 @@ export const BubbleToolbar = styled.div`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 0.9rem;
   background: ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(15, 18, 24, 0.96)" : "rgba(255, 255, 255, 0.98)"};
+    theme.scheme === "dark"
+      ? "rgba(15, 18, 24, 0.96)"
+      : "rgba(255, 255, 255, 0.98)"};
   box-shadow: ${({ theme }) =>
-    theme.scheme === "dark" ? "0 10px 18px rgba(0, 0, 0, 0.16)" : "0 10px 18px rgba(15, 23, 42, 0.1)"};
+    theme.scheme === "dark"
+      ? "0 10px 18px rgba(0, 0, 0, 0.16)"
+      : "0 10px 18px rgba(15, 23, 42, 0.1)"};
 
   &[data-layout="table"] {
     max-width: min(92vw, 40rem);
@@ -460,9 +509,13 @@ export const TextBubbleToolbar = styled.div`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 0.95rem;
   background: ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(28, 28, 28, 0.98)" : "rgba(255, 255, 255, 0.98)"};
+    theme.scheme === "dark"
+      ? "rgba(28, 28, 28, 0.98)"
+      : "rgba(255, 255, 255, 0.98)"};
   box-shadow: ${({ theme }) =>
-    theme.scheme === "dark" ? "0 16px 30px rgba(0, 0, 0, 0.26)" : "0 16px 30px rgba(15, 23, 42, 0.16)"};
+    theme.scheme === "dark"
+      ? "0 16px 30px rgba(0, 0, 0, 0.26)"
+      : "0 16px 30px rgba(15, 23, 42, 0.16)"};
   backdrop-filter: blur(10px);
 `
 
@@ -489,13 +542,17 @@ export const TextBubbleIconButton = styled.button`
 
   &[data-active="true"] {
     background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(148, 163, 184, 0.16)" : "rgba(15, 23, 42, 0.09)"};
+      theme.scheme === "dark"
+        ? "rgba(148, 163, 184, 0.16)"
+        : "rgba(15, 23, 42, 0.09)"};
     color: ${({ theme }) => theme.colors.gray12};
   }
 
   &:hover {
     background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(148, 163, 184, 0.1)" : "rgba(15, 23, 42, 0.06)"};
+      theme.scheme === "dark"
+        ? "rgba(148, 163, 184, 0.1)"
+        : "rgba(15, 23, 42, 0.06)"};
     color: ${({ theme }) => theme.colors.gray12};
   }
 
@@ -509,7 +566,9 @@ export const TextBubbleDivider = styled.span`
   width: 1px;
   height: 1.35rem;
   background: ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(148, 163, 184, 0.22)" : "rgba(15, 23, 42, 0.16)"};
+    theme.scheme === "dark"
+      ? "rgba(148, 163, 184, 0.22)"
+      : "rgba(15, 23, 42, 0.16)"};
 `
 
 export const TextBubbleDisclosure = styled.details`
@@ -535,13 +594,17 @@ export const TextBubbleDisclosure = styled.details`
 
   summary[data-active="true"] {
     background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(148, 163, 184, 0.16)" : "rgba(15, 23, 42, 0.09)"};
+      theme.scheme === "dark"
+        ? "rgba(148, 163, 184, 0.16)"
+        : "rgba(15, 23, 42, 0.09)"};
     color: ${({ theme }) => theme.colors.gray12};
   }
 
   summary:hover {
     background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(148, 163, 184, 0.1)" : "rgba(15, 23, 42, 0.06)"};
+      theme.scheme === "dark"
+        ? "rgba(148, 163, 184, 0.1)"
+        : "rgba(15, 23, 42, 0.06)"};
     color: ${({ theme }) => theme.colors.gray12};
   }
 
@@ -561,9 +624,13 @@ export const TextBubbleDisclosure = styled.details`
     border-radius: 0.8rem;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(28, 28, 28, 0.98)" : "rgba(255, 255, 255, 0.99)"};
+      theme.scheme === "dark"
+        ? "rgba(28, 28, 28, 0.98)"
+        : "rgba(255, 255, 255, 0.99)"};
     box-shadow: ${({ theme }) =>
-      theme.scheme === "dark" ? "0 16px 30px rgba(0, 0, 0, 0.26)" : "0 16px 30px rgba(15, 23, 42, 0.16)"};
+      theme.scheme === "dark"
+        ? "0 16px 30px rgba(0, 0, 0, 0.26)"
+        : "0 16px 30px rgba(15, 23, 42, 0.16)"};
   }
 `
 
@@ -623,7 +690,9 @@ export const TextBubbleMenuButton = styled.button`
   border-radius: 0.62rem;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(18, 21, 26, 0.52)" : "rgba(255, 255, 255, 0.98)"};
+    theme.scheme === "dark"
+      ? "rgba(18, 21, 26, 0.52)"
+      : "rgba(255, 255, 255, 0.98)"};
   color: var(--color-gray12);
   padding: 0 0.58rem;
   display: inline-flex;
@@ -643,14 +712,20 @@ export const TextBubbleMenuButton = styled.button`
 
   &[data-active="true"] {
     border-color: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(59, 130, 246, 0.34)" : "rgba(37, 99, 235, 0.25)"};
+      theme.scheme === "dark"
+        ? "rgba(59, 130, 246, 0.34)"
+        : "rgba(37, 99, 235, 0.25)"};
     background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(37, 99, 235, 0.12)" : "rgba(37, 99, 235, 0.09)"};
+      theme.scheme === "dark"
+        ? "rgba(37, 99, 235, 0.12)"
+        : "rgba(37, 99, 235, 0.09)"};
   }
 
   &:hover {
     border-color: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(148, 163, 184, 0.3)" : "rgba(15, 23, 42, 0.22)"};
+      theme.scheme === "dark"
+        ? "rgba(148, 163, 184, 0.3)"
+        : "rgba(15, 23, 42, 0.22)"};
   }
 
   &:disabled {

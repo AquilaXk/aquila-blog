@@ -15,9 +15,7 @@ import {
   type BlockInsertCatalogItem,
   createWriterEditorExtensions,
 } from "./writerEditorPreset"
-import {
-  TABLE_WIDTH_BUDGET_META_KEY,
-} from "./tableWidthModel"
+import { TABLE_WIDTH_BUDGET_META_KEY } from "./tableWidthModel"
 import {
   normalizeRenderedTableWidthsToReadableBudget,
   normalizeTableWidthsToReadableBudget,
@@ -56,35 +54,107 @@ export const useBlockEditorEngineController = ({
   enableMermaidBlocks = false,
   onQaActionsReady,
 }: BlockEditorEngineProps) => {
-  const isWriterSurface = typeof className === "string" && className.includes("aq-block-editor--writer-surface")
+  const isWriterSurface =
+    typeof className === "string" &&
+    className.includes("aq-block-editor--writer-surface")
   const {
-    attachmentFileInputRef, blockHandleRailMetricsRef, blockHandleRailRef, blockHandleState,
-    blockMenuState, blockSelectionLayoutRectCacheRef, blockSelectionOverlayState, bubbleInlineColorMenuRef,
-    bubbleState, bubbleTextStyleMenuRef, bubbleToolbarHoveredRef, cancelBubbleHide, cancelHoveredBlockClear,
-    clickedBlockIndex, dragGhostPosition, draggedBlockState, draggedNestedListItemState, dropIndicatorState,
-    editorRef, hoveredBlockIndex, hoveredListItemContext, imageFileInputRef, inlineColorMenuRef,
-    isBubbleInlineColorMenuOpen, isBubbleTextStyleMenuOpen, isCoarsePointer, isInlineColorMenuOpen,
-    isPreviewOpen, isSlashImeComposing, isSlashMenuOpen, isToolbarMoreOpen, keyboardBlockSelectionStickyRef,
-    mouseTextSelectionInProgressRef, nestedListItemDropIndicatorState, pendingAttachmentInsertIndexRef,
-    pendingBlockDragCleanupRef, pendingBlockDragRef, pendingImageInsertIndexRef,
-    pendingNestedListItemHandleDragCleanupRef, pendingNestedListItemHandleDragRef, recentSlashItemIds,
-    scheduleBubbleHide, scheduleHoveredBlockClear, selectedBlockIndex, selectedBlockNodeIndex,
-    selectedBlockNodeIndexRef, selectedListItemContext, selectedListItemContextRef, selectedSlashIndex,
-    selectionTick, selectionUiSignatureRef, setBlockHandleState, setBlockMenuState,
-    setBlockSelectionOverlayState, setBubbleState, setClickedBlockIndex, setDragGhostPosition,
-    setDraggedBlockState, setDraggedNestedListItemState, setDropIndicatorState, setHoveredBlockIndex,
-    setHoveredListItemContext, setIsBubbleInlineColorMenuOpen, setIsBubbleTextStyleMenuOpen,
-    setIsInlineColorMenuOpen, setIsPreviewOpen, setIsSlashImeComposing, setIsSlashMenuOpen,
-    setIsToolbarMoreOpen, setNestedListItemDropIndicatorState, setRecentSlashItemIds,
-    setSelectedBlockIndex, setSelectedBlockNodeIndex, setSelectedListItemContext, setSelectedSlashIndex,
-    setSelectionTick, setSlashInteractionMode, setSlashMenuState, setSlashQuery, setTextSelectionBlockIndex,
-    skipNextPointerDownSelectionClearRef, slashInteractionMode, slashMenuRef, slashMenuState,
-    slashPointerResumeAtRef, slashQuery, syncBubbleOnMouseUpRef, tableViewportBudgetNormalizeFrameRef,
-    textSelectionBlockIndex, viewportRef,
+    attachmentFileInputRef,
+    blockHandleRailMetricsRef,
+    blockHandleRailRef,
+    blockHandleState,
+    blockMenuState,
+    blockSelectionLayoutRectCacheRef,
+    blockSelectionOverlayState,
+    bubbleInlineColorMenuRef,
+    bubbleState,
+    bubbleTextStyleMenuRef,
+    bubbleToolbarHoveredRef,
+    cancelBubbleHide,
+    cancelHoveredBlockClear,
+    clickedBlockIndex,
+    dragGhostPosition,
+    draggedBlockState,
+    draggedNestedListItemState,
+    dropIndicatorState,
+    editorRef,
+    hoveredBlockIndex,
+    hoveredListItemContext,
+    imageFileInputRef,
+    inlineColorMenuRef,
+    isBubbleInlineColorMenuOpen,
+    isBubbleTextStyleMenuOpen,
+    isCoarsePointer,
+    isInlineColorMenuOpen,
+    isPreviewOpen,
+    isSlashImeComposing,
+    isSlashMenuOpen,
+    isToolbarMoreOpen,
+    keyboardBlockSelectionStickyRef,
+    mouseTextSelectionInProgressRef,
+    nestedListItemDropIndicatorState,
+    pendingAttachmentInsertIndexRef,
+    pendingBlockDragCleanupRef,
+    pendingBlockDragRef,
+    pendingImageInsertIndexRef,
+    pendingNestedListItemHandleDragCleanupRef,
+    pendingNestedListItemHandleDragRef,
+    recentSlashItemIds,
+    scheduleBubbleHide,
+    scheduleHoveredBlockClear,
+    selectedBlockIndex,
+    selectedBlockNodeIndex,
+    selectedBlockNodeIndexRef,
+    selectedListItemContext,
+    selectedListItemContextRef,
+    selectedSlashIndex,
+    selectionTick,
+    selectionUiSignatureRef,
+    setBlockHandleState,
+    setBlockMenuState,
+    setBlockSelectionOverlayState,
+    setBubbleState,
+    setClickedBlockIndex,
+    setDragGhostPosition,
+    setDraggedBlockState,
+    setDraggedNestedListItemState,
+    setDropIndicatorState,
+    setHoveredBlockIndex,
+    setHoveredListItemContext,
+    setIsBubbleInlineColorMenuOpen,
+    setIsBubbleTextStyleMenuOpen,
+    setIsInlineColorMenuOpen,
+    setIsPreviewOpen,
+    setIsSlashImeComposing,
+    setIsSlashMenuOpen,
+    setIsToolbarMoreOpen,
+    setNestedListItemDropIndicatorState,
+    setRecentSlashItemIds,
+    setSelectedBlockIndex,
+    setSelectedBlockNodeIndex,
+    setSelectedListItemContext,
+    setSelectedSlashIndex,
+    setSelectionTick,
+    setSlashInteractionMode,
+    setSlashMenuState,
+    setSlashQuery,
+    setTextSelectionBlockIndex,
+    skipNextPointerDownSelectionClearRef,
+    slashInteractionMode,
+    slashMenuRef,
+    slashMenuState,
+    slashPointerResumeAtRef,
+    slashQuery,
+    syncBubbleOnMouseUpRef,
+    tableViewportBudgetNormalizeFrameRef,
+    textSelectionBlockIndex,
+    viewportRef,
   } = useBlockEditorEngineControllerState()
 
   const cancelScheduledTableViewportBudgetNormalize = useCallback(() => {
-    if (tableViewportBudgetNormalizeFrameRef.current !== null && typeof window !== "undefined") {
+    if (
+      tableViewportBudgetNormalizeFrameRef.current !== null &&
+      typeof window !== "undefined"
+    ) {
       window.cancelAnimationFrame(tableViewportBudgetNormalizeFrameRef.current)
       tableViewportBudgetNormalizeFrameRef.current = null
     }
@@ -94,14 +164,19 @@ export const useBlockEditorEngineController = ({
     (nextEditor: TiptapEditor) => {
       if (typeof window === "undefined") return
       cancelScheduledTableViewportBudgetNormalize()
-      tableViewportBudgetNormalizeFrameRef.current = window.requestAnimationFrame(() => {
-        tableViewportBudgetNormalizeFrameRef.current = null
-        const targetEditor = editorRef.current ?? nextEditor
-        syncRenderedTableOverflowModes(targetEditor)
-        normalizeRenderedTableWidthsToReadableBudget(targetEditor)
-      })
+      tableViewportBudgetNormalizeFrameRef.current =
+        window.requestAnimationFrame(() => {
+          tableViewportBudgetNormalizeFrameRef.current = null
+          const targetEditor = editorRef.current ?? nextEditor
+          syncRenderedTableOverflowModes(targetEditor)
+          normalizeRenderedTableWidthsToReadableBudget(targetEditor)
+        })
     },
-    [cancelScheduledTableViewportBudgetNormalize, editorRef, tableViewportBudgetNormalizeFrameRef]
+    [
+      cancelScheduledTableViewportBudgetNormalize,
+      editorRef,
+      tableViewportBudgetNormalizeFrameRef,
+    ]
   )
 
   const {
@@ -114,7 +189,15 @@ export const useBlockEditorEngineController = ({
     scheduleMarkdownCommit,
     syncSerializedDoc,
   } = useBlockEditorMarkdownCommit({ value, onChange })
-  const initialDocRef = useRef(restoreEditorDocCodeBlocksFromMarkdown(value, downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(value), enableMermaidBlocks)).doc)
+  const initialDocRef = useRef(
+    restoreEditorDocCodeBlocksFromMarkdown(
+      value,
+      downgradeDisabledFeatureNodes(
+        parseMarkdownToEditorDoc(value),
+        enableMermaidBlocks
+      )
+    ).doc
+  )
   const emptyHistoryStateRef = useRef<EditorHistorySnapshot | null>(null)
 
   const {
@@ -143,17 +226,39 @@ export const useBlockEditorEngineController = ({
   })
 
   const {
-    clearNativeTextSelection, clearStickyTopLevelBlockSelection, findNestedListItemContextByClientPosition,
-    findNestedListItemContextFromTarget, findTopLevelBlockIndexByClientPosition, findTopLevelBlockIndexFromTarget,
-    getNodeSelectedNestedListItemContext, getSelectionAnchorNestedListItemContext, isOuterBlockSelectionGesture,
-    isOuterListItemSelectionGesture, isTopLevelBlockHandleEligible, promoteTopLevelBlockSelection,
-    resolveActiveListItemInteraction, resolveEffectiveSelectedListItemContext, resolveNestedListItemContextByIndices,
+    clearNativeTextSelection,
+    clearStickyTopLevelBlockSelection,
+    findNestedListItemContextByClientPosition,
+    findNestedListItemContextFromTarget,
+    findTopLevelBlockIndexByClientPosition,
+    findTopLevelBlockIndexFromTarget,
+    getNodeSelectedNestedListItemContext,
+    getSelectionAnchorNestedListItemContext,
+    isOuterBlockSelectionGesture,
+    isOuterListItemSelectionGesture,
+    isTopLevelBlockHandleEligible,
+    promoteTopLevelBlockSelection,
+    resolveActiveListItemInteraction,
+    resolveEffectiveSelectedListItemContext,
+    resolveNestedListItemContextByIndices,
     resolveNestedListItemDropIndicatorByClientY,
   } = useBlockEditorEngineSelectionTools({
-    clearSelectedBlockNodeIndex: setSelectedBlockNodeIndex, editorRef, getContentRoot, getTopLevelBlockElementByIndex,
-    getTopLevelBlockElements, keyboardBlockSelectionStickyRef, selectedBlockNodeIndexRef, selectedListItemContext,
-    selectedListItemContextRef, setClickedBlockIndex, setSelectedBlockIndex, setSelectedListItemContext,
-    setSelectionTick, setTextSelectionBlockIndex, syncSelectedBlockNodeSurface, viewportRef,
+    clearSelectedBlockNodeIndex: setSelectedBlockNodeIndex,
+    editorRef,
+    getContentRoot,
+    getTopLevelBlockElementByIndex,
+    getTopLevelBlockElements,
+    keyboardBlockSelectionStickyRef,
+    selectedBlockNodeIndexRef,
+    selectedListItemContext,
+    selectedListItemContextRef,
+    setClickedBlockIndex,
+    setSelectedBlockIndex,
+    setSelectedListItemContext,
+    setSelectionTick,
+    setTextSelectionBlockIndex,
+    syncSelectedBlockNodeSurface,
+    viewportRef,
   })
 
   const editorExtensions = useMemo(
@@ -170,7 +275,8 @@ export const useBlockEditorEngineController = ({
     editable: true,
     onCreate: ({ editor: createdEditor }) => {
       editorRef.current = createdEditor
-      emptyHistoryStateRef.current = captureEmptyEditorHistoryState(createdEditor)
+      emptyHistoryStateRef.current =
+        captureEmptyEditorHistoryState(createdEditor)
       createdEditor.setEditable(!disabled)
       promoteLargeTablesToWideOverflowMode(createdEditor)
       scheduleTableViewportBudgetNormalize(createdEditor)
@@ -182,7 +288,12 @@ export const useBlockEditorEngineController = ({
         scheduleTableViewportBudgetNormalize(nextEditor)
         return
       }
-      if (rebalanceStructurallyChangedNormalTableWidths(nextEditor, transaction.before)) {
+      if (
+        rebalanceStructurallyChangedNormalTableWidths(
+          nextEditor,
+          transaction.before
+        )
+      ) {
         scheduleTableViewportBudgetNormalize(nextEditor)
         return
       }
@@ -195,7 +306,12 @@ export const useBlockEditorEngineController = ({
       editorRef.current = null
     },
     editorProps: {
-      handleScrollToSelection: (view) => shouldSuppressStickySelectionScrollToSelection(view, selectedBlockNodeIndexRef.current, keyboardBlockSelectionStickyRef.current),
+      handleScrollToSelection: (view) =>
+        shouldSuppressStickySelectionScrollToSelection(
+          view,
+          selectedBlockNodeIndexRef.current,
+          keyboardBlockSelectionStickyRef.current
+        ),
       attributes: {
         class: "aq-block-editor__content",
         "data-testid": "block-editor-prosemirror",
@@ -238,10 +354,13 @@ export const useBlockEditorEngineController = ({
       },
     },
     onUpdate: ({ editor: nextEditor }) => {
-      const commitStartedAt = typeof window !== "undefined" ? performance.now() : 0
+      const commitStartedAt =
+        typeof window !== "undefined" ? performance.now() : 0
       scheduleMarkdownCommit(nextEditor)
       if (typeof window !== "undefined") {
-        recordEditorCommitDurationForRuntimeGuard(performance.now() - commitStartedAt)
+        recordEditorCommitDurationForRuntimeGuard(
+          performance.now() - commitStartedAt
+        )
       }
     },
   })
@@ -363,59 +482,194 @@ export const useBlockEditorEngineController = ({
         })
       }
     },
-    [editor, setIsSlashMenuOpen, setSelectedSlashIndex, setSlashMenuState, setSlashQuery]
+    [
+      editor,
+      setIsSlashMenuOpen,
+      setSelectedSlashIndex,
+      setSlashMenuState,
+      setSlashQuery,
+    ]
   )
 
   const insertActions = useBlockEditorEngineInsertActions({
-    attachmentFileInputRef, closeSlashMenu, createInitialTableNode, disabled, editor, editorRef,
-    enableMermaidBlocks, focusNearestInsertedCalloutBody, imageFileInputRef, insertBlocksAtIndex,
-    insertDocContent, isSelectionInEmptyParagraph, isTableMode, isTopLevelInsertBlockedByTableUi,
-    mutateTopLevelBlocks, onQaActionsReady, onUploadFile, onUploadImage, pendingAttachmentInsertIndexRef,
-    pendingImageInsertIndexRef, resizeFirstTableColumnBy, resizeFirstTableRowBy, selectCurrentTableAxis,
-    selectTableColumnByIndex, selectionTick, setIsBubbleInlineColorMenuOpen, setIsBubbleTextStyleMenuOpen,
-    setIsInlineColorMenuOpen, setIsToolbarMoreOpen, updateActiveTableCellAttrs,
+    attachmentFileInputRef,
+    closeSlashMenu,
+    createInitialTableNode,
+    disabled,
+    editor,
+    editorRef,
+    enableMermaidBlocks,
+    focusNearestInsertedCalloutBody,
+    imageFileInputRef,
+    insertBlocksAtIndex,
+    insertDocContent,
+    isSelectionInEmptyParagraph,
+    isTableMode,
+    isTopLevelInsertBlockedByTableUi,
+    mutateTopLevelBlocks,
+    onQaActionsReady,
+    onUploadFile,
+    onUploadImage,
+    pendingAttachmentInsertIndexRef,
+    pendingImageInsertIndexRef,
+    resizeFirstTableColumnBy,
+    resizeFirstTableRowBy,
+    selectCurrentTableAxis,
+    selectTableColumnByIndex,
+    selectionTick,
+    setIsBubbleInlineColorMenuOpen,
+    setIsBubbleTextStyleMenuOpen,
+    setIsInlineColorMenuOpen,
+    setIsToolbarMoreOpen,
+    updateActiveTableCellAttrs,
   })
-  const { blockInsertCatalog, insertCardBlockFromUrl, insertInlineFormula, insertFormulaBlock, isHttpUrl, openLinkPrompt } = insertActions
+  const {
+    blockInsertCatalog,
+    insertCardBlockFromUrl,
+    insertInlineFormula,
+    insertFormulaBlock,
+    isHttpUrl,
+    openLinkPrompt,
+  } = insertActions
 
   const slashMenu = useBlockEditorEngineSlashMenu({
-    blockInsertCatalog, closeSlashMenu, editor, editorRef, isSlashImeComposing, isSlashMenuOpen,
-    recentSlashItemIds, selectedSlashIndex, setIsSlashMenuOpen, setRecentSlashItemIds, setSelectedSlashIndex,
-    setSlashInteractionMode, setSlashMenuState, setSlashQuery, slashMenuRef, slashMenuState,
-    slashPointerResumeAtRef, slashQuery, transformCurrentParagraphViaSlash,
+    blockInsertCatalog,
+    closeSlashMenu,
+    editor,
+    editorRef,
+    isSlashImeComposing,
+    isSlashMenuOpen,
+    recentSlashItemIds,
+    selectedSlashIndex,
+    setIsSlashMenuOpen,
+    setRecentSlashItemIds,
+    setSelectedSlashIndex,
+    setSlashInteractionMode,
+    setSlashMenuState,
+    setSlashQuery,
+    slashMenuRef,
+    slashMenuState,
+    slashPointerResumeAtRef,
+    slashQuery,
+    transformCurrentParagraphViaSlash,
   })
-  const { applyResolvedSlashMenuState, resolveSlashMenuState, syncSlashMenuWhileComposing } = slashMenu
+  const {
+    applyResolvedSlashMenuState,
+    resolveSlashMenuState,
+    syncSlashMenuWhileComposing,
+  } = slashMenu
 
   const blockSelectionUi = useBlockEditorEngineBlockSelectionUi({
-    blockHandleRailMetricsRef, blockHandleState, blockSelectionLayoutRectCacheRef, cancelHoveredBlockClear,
-    cancelTableQuickRailHide, clearNativeTextSelection, clearStickyTopLevelBlockSelection, clearTrackedTableHover,
+    blockHandleRailMetricsRef,
+    blockHandleState,
+    blockSelectionLayoutRectCacheRef,
+    cancelHoveredBlockClear,
+    cancelTableQuickRailHide,
+    clearNativeTextSelection,
+    clearStickyTopLevelBlockSelection,
+    clearTrackedTableHover,
     clickedBlockIndex,
-    currentTableAxisSelection, draggedBlockState, dropIndicatorState, editor, editorRef,
-    findNestedListItemContextByClientPosition, findNestedListItemContextFromTarget, findTopLevelBlockIndexByClientPosition,
-    findTopLevelBlockIndexFromTarget, focusRenderedTableCell, getContentRoot, getTableCellFromClientPoint,
-    getTopLevelBlockElementByIndex, getTopLevelBlockElements, handleTableViewportPointerLeave, hasTableStructuralSelection,
-    hideTableQuickRailImmediately, hoveredBlockIndex, hoveredListItemContext, isCoarsePointer, isOuterBlockSelectionGesture,
-    isOuterListItemSelectionGesture, isTableAffordanceVisible, isTableAxisDragActive, isTableColumnRailResizeActive,
-    isTableRowResizeActive, isTableRowResizeHandleTarget, isTableStructuralSelection, isTopLevelBlockHandleEligible,
-    isWriterSurface, keyboardBlockSelectionStickyRef, mutateTopLevelBlocks, promoteTopLevelBlockSelection,
-    resolveActiveListItemInteraction, resolveEffectiveSelectedListItemContext, scheduleHoveredBlockClear, scheduleTableQuickRailHide,
-    selectedBlockIndex, selectedBlockNodeIndex, selectedBlockNodeIndexRef, selectionTick, setBlockHandleState,
-    setBlockMenuState, setBlockSelectionOverlayState, setClickedBlockIndex, setHoveredBlockIndex, setHoveredListItemContext,
-    setSelectedBlockNodeIndex, setSelectedListItemContext, setSelectionTick, setTableQuickRailHovered, setViewportRowResizeHot,
-    shouldPersistTableHandles, skipNextPointerDownSelectionClearRef, slashMenuState, startTableRowResize,
-    syncSelectedBlockNodeSurface, syncTableQuickRailFromElement, syncTrackedHoveredTableCellMenuLayout, tableMenuState,
-    textSelectionBlockIndex, viewportRef,
+    currentTableAxisSelection,
+    draggedBlockState,
+    dropIndicatorState,
+    editor,
+    editorRef,
+    findNestedListItemContextByClientPosition,
+    findNestedListItemContextFromTarget,
+    findTopLevelBlockIndexByClientPosition,
+    findTopLevelBlockIndexFromTarget,
+    focusRenderedTableCell,
+    getContentRoot,
+    getTableCellFromClientPoint,
+    getTopLevelBlockElementByIndex,
+    getTopLevelBlockElements,
+    handleTableViewportPointerLeave,
+    hasTableStructuralSelection,
+    hideTableQuickRailImmediately,
+    hoveredBlockIndex,
+    hoveredListItemContext,
+    isCoarsePointer,
+    isOuterBlockSelectionGesture,
+    isOuterListItemSelectionGesture,
+    isTableAffordanceVisible,
+    isTableAxisDragActive,
+    isTableColumnRailResizeActive,
+    isTableRowResizeActive,
+    isTableRowResizeHandleTarget,
+    isTableStructuralSelection,
+    isTopLevelBlockHandleEligible,
+    isWriterSurface,
+    keyboardBlockSelectionStickyRef,
+    mutateTopLevelBlocks,
+    promoteTopLevelBlockSelection,
+    resolveActiveListItemInteraction,
+    resolveEffectiveSelectedListItemContext,
+    scheduleHoveredBlockClear,
+    scheduleTableQuickRailHide,
+    selectedBlockIndex,
+    selectedBlockNodeIndex,
+    selectedBlockNodeIndexRef,
+    selectionTick,
+    setBlockHandleState,
+    setBlockMenuState,
+    setBlockSelectionOverlayState,
+    setClickedBlockIndex,
+    setHoveredBlockIndex,
+    setHoveredListItemContext,
+    setSelectedBlockNodeIndex,
+    setSelectedListItemContext,
+    setSelectionTick,
+    setTableQuickRailHovered,
+    setViewportRowResizeHot,
+    shouldPersistTableHandles,
+    skipNextPointerDownSelectionClearRef,
+    slashMenuState,
+    startTableRowResize,
+    syncSelectedBlockNodeSurface,
+    syncTableQuickRailFromElement,
+    syncTrackedHoveredTableCellMenuLayout,
+    tableMenuState,
+    textSelectionBlockIndex,
+    viewportRef,
   })
 
   const blockDrag = useBlockEditorEngineBlockDrag({
-    blockHandleState, blockMenuState, cancelHoveredBlockClear, clearNativeTextSelection, clearStickyTopLevelBlockSelection,
-    draggedBlockState, draggedNestedListItemState, editor, editorRef, findNestedListItemContextFromTarget,
-    flushPendingMarkdownCommit, getTopLevelBlockElementByIndex, getTopLevelBlockElements, hoveredListItemContext,
-    isTableStructuralSelection, mutateTopLevelBlocks, pendingBlockDragCleanupRef, pendingBlockDragRef, pendingNestedListItemHandleDragCleanupRef,
-    pendingNestedListItemHandleDragRef, promoteTopLevelBlockSelection, resolveEffectiveSelectedListItemContext,
-    resolveNestedListItemContextByIndices, resolveNestedListItemDropIndicatorByClientY, scheduleHoveredBlockClear,
-    selectedListItemContextRef, setBlockMenuState, setDragGhostPosition, setDraggedBlockState, setDraggedNestedListItemState,
-    setDropIndicatorState, setHoveredBlockIndex, setHoveredListItemContext, setNestedListItemDropIndicatorState,
-    setSelectedListItemContext, setSelectionTick,
+    blockHandleState,
+    blockMenuState,
+    cancelHoveredBlockClear,
+    clearNativeTextSelection,
+    clearStickyTopLevelBlockSelection,
+    draggedBlockState,
+    draggedNestedListItemState,
+    editor,
+    editorRef,
+    findNestedListItemContextFromTarget,
+    flushPendingMarkdownCommit,
+    getTopLevelBlockElementByIndex,
+    getTopLevelBlockElements,
+    hoveredListItemContext,
+    isTableStructuralSelection,
+    mutateTopLevelBlocks,
+    pendingBlockDragCleanupRef,
+    pendingBlockDragRef,
+    pendingNestedListItemHandleDragCleanupRef,
+    pendingNestedListItemHandleDragRef,
+    promoteTopLevelBlockSelection,
+    resolveEffectiveSelectedListItemContext,
+    resolveNestedListItemContextByIndices,
+    resolveNestedListItemDropIndicatorByClientY,
+    scheduleHoveredBlockClear,
+    selectedListItemContextRef,
+    setBlockMenuState,
+    setDragGhostPosition,
+    setDraggedBlockState,
+    setDraggedNestedListItemState,
+    setDropIndicatorState,
+    setHoveredBlockIndex,
+    setHoveredListItemContext,
+    setNestedListItemDropIndicatorState,
+    setSelectedListItemContext,
+    setSelectionTick,
   })
 
   const isSlashActionDisabled = useCallback(
@@ -445,7 +699,11 @@ export const useBlockEditorEngineController = ({
     requestAnimationFrame(() => {
       applyResolvedSlashMenuState(resolveSlashMenuState())
     })
-  }, [applyResolvedSlashMenuState, resolveSlashMenuState, setIsSlashImeComposing])
+  }, [
+    applyResolvedSlashMenuState,
+    resolveSlashMenuState,
+    setIsSlashImeComposing,
+  ])
 
   return {
     ...insertActions,
@@ -468,7 +726,9 @@ export const useBlockEditorEngineController = ({
     draggedNestedListItemState,
     dropIndicatorState,
     editor,
-    handleEditorViewportCompositionEnd, handleEditorViewportCompositionStart, handleEditorViewportCompositionUpdate,
+    handleEditorViewportCompositionEnd,
+    handleEditorViewportCompositionStart,
+    handleEditorViewportCompositionUpdate,
     imageFileInputRef,
     inlineColorMenuRef,
     isBubbleInlineColorMenuOpen,
@@ -485,8 +745,11 @@ export const useBlockEditorEngineController = ({
     scheduleBubbleHide,
     selectedListItemContext,
     selectedSlashIndex,
-    setIsBubbleInlineColorMenuOpen, setIsBubbleTextStyleMenuOpen, setIsInlineColorMenuOpen,
-    setIsPreviewOpen, setIsToolbarMoreOpen,
+    setIsBubbleInlineColorMenuOpen,
+    setIsBubbleTextStyleMenuOpen,
+    setIsInlineColorMenuOpen,
+    setIsPreviewOpen,
+    setIsToolbarMoreOpen,
     slashInteractionMode,
     slashMenuRef,
     slashMenuState,

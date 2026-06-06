@@ -70,11 +70,17 @@ type UseBlockEditorEngineInsertActionsArgs = {
     blocks: NonNullable<BlockEditorDoc["content"]>,
     focusIndex?: number
   ) => void
-  insertDocContent: (doc: BlockEditorDoc, replaceCurrentEmptyParagraph?: boolean) => boolean
+  insertDocContent: (
+    doc: BlockEditorDoc,
+    replaceCurrentEmptyParagraph?: boolean
+  ) => boolean
   isSelectionInEmptyParagraph: () => boolean
   isTableMode: boolean
   isTopLevelInsertBlockedByTableUi: () => boolean
-  mutateTopLevelBlocks: (mutator: (doc: BlockEditorDoc) => BlockEditorDoc, focusIndex?: number | null) => void
+  mutateTopLevelBlocks: (
+    mutator: (doc: BlockEditorDoc) => BlockEditorDoc,
+    focusIndex?: number | null
+  ) => void
   onQaActionsReady: ((actions: BlockEditorQaActions | null) => void) | undefined
   onUploadFile: BlockEditorEngineProps["onUploadFile"]
   onUploadImage: BlockEditorEngineProps["onUploadImage"]
@@ -82,8 +88,8 @@ type UseBlockEditorEngineInsertActionsArgs = {
   pendingImageInsertIndexRef: MutableRefObject<number | null>
   resizeFirstTableColumnBy: (deltaPx: number) => void
   resizeFirstTableRowBy: (deltaPx: number) => void
-  selectCurrentTableAxis: (axis: "row" | "column") => void
-  selectTableColumnByIndex: (columnIndex: number) => void
+  selectCurrentTableAxis: (axis: "row" | "column") => boolean
+  selectTableColumnByIndex: (columnIndex: number) => unknown
   selectionTick: number
   setIsBubbleInlineColorMenuOpen: SetBoolean
   setIsBubbleTextStyleMenuOpen: SetBoolean
@@ -129,7 +135,10 @@ export const useBlockEditorEngineInsertActions = ({
   }, [editor])
 
   const withTrailingParagraph = useCallback(
-    (blocks: BlockEditorDoc[]): NonNullable<BlockEditorDoc["content"]> => [...blocks, createParagraphNode()],
+    (blocks: BlockEditorDoc[]): NonNullable<BlockEditorDoc["content"]> => [
+      ...blocks,
+      createParagraphNode(),
+    ],
     []
   )
 
@@ -187,13 +196,18 @@ export const useBlockEditorEngineInsertActions = ({
     if (!canInsertTopLevelBlockAtSelection()) return
     if (!enableMermaidBlocks) return
     insertBlocksAtCursor([createMermaidNode("")], true)
-  }, [canInsertTopLevelBlockAtSelection, enableMermaidBlocks, insertBlocksAtCursor])
+  }, [
+    canInsertTopLevelBlockAtSelection,
+    enableMermaidBlocks,
+    insertBlocksAtCursor,
+  ])
 
   const insertCalloutBlock = useCallback(() => {
     const currentEditor = editorRef.current ?? editor
     if (!currentEditor || isTableSelectionActive(currentEditor)) return
 
-    const selectionIndexBeforeInsert = getTopLevelBlockIndexFromSelection(currentEditor)
+    const selectionIndexBeforeInsert =
+      getTopLevelBlockIndexFromSelection(currentEditor)
     insertDocContent(
       {
         type: "doc",
@@ -234,7 +248,10 @@ export const useBlockEditorEngineInsertActions = ({
 
   const insertChecklistBlock = useCallback(() => {
     if (!canInsertTopLevelBlockAtSelection()) return
-    insertBlocksAtCursorExact([createTaskListNode([{ checked: false, text: "" }])], true)
+    insertBlocksAtCursorExact(
+      [createTaskListNode([{ checked: false, text: "" }])],
+      true
+    )
   }, [canInsertTopLevelBlockAtSelection, insertBlocksAtCursorExact])
 
   const insertBookmarkBlock = useCallback(() => {
@@ -291,20 +308,29 @@ export const useBlockEditorEngineInsertActions = ({
     editor
       .chain()
       .focus()
-      .insertContent(createInlineFormulaNode({ formula: selectedText || "x^2" }))
+      .insertContent(
+        createInlineFormulaNode({ formula: selectedText || "x^2" })
+      )
       .run()
   }, [editor])
 
   const insertTableBlock = useCallback(() => {
     if (!canInsertTopLevelBlockAtSelection()) return
     insertBlocksAtCursor([createInitialTableNode()], true)
-  }, [canInsertTopLevelBlockAtSelection, createInitialTableNode, insertBlocksAtCursor])
+  }, [
+    canInsertTopLevelBlockAtSelection,
+    createInitialTableNode,
+    insertBlocksAtCursor,
+  ])
 
   const canInsertTable = canInsertTopLevelBlockAtSelection()
 
   const insertCodeBlock = useCallback(() => {
     if (!canInsertTopLevelBlockAtSelection()) return
-    insertBlocksAtCursor([createCodeBlockNode(getPreferredCodeLanguage(), "")], true)
+    insertBlocksAtCursor(
+      [createCodeBlockNode(getPreferredCodeLanguage(), "")],
+      true
+    )
   }, [canInsertTopLevelBlockAtSelection, insertBlocksAtCursor])
 
   const {
@@ -334,12 +360,20 @@ export const useBlockEditorEngineInsertActions = ({
       editor.chain().focus().extendMarkRange("link").unsetLink().run()
       return
     }
-    editor.chain().focus().extendMarkRange("link").setLink({ href: href.trim() }).run()
+    editor
+      .chain()
+      .focus()
+      .extendMarkRange("link")
+      .setLink({ href: href.trim() })
+      .run()
   }, [editor])
 
-  const handleToolbarButtonMouseDown = useCallback((event: ReactMouseEvent<HTMLElement>) => {
-    event.preventDefault()
-  }, [])
+  const handleToolbarButtonMouseDown = useCallback(
+    (event: ReactMouseEvent<HTMLElement>) => {
+      event.preventDefault()
+    },
+    []
+  )
 
   const runBoldAction = useCallback(() => {
     runInlineMarkCommand(editor, "bold")
@@ -388,15 +422,26 @@ export const useBlockEditorEngineInsertActions = ({
       const currentEditor = editorRef.current
       if (!currentEditor) return
       const doc = currentEditor.getJSON() as BlockEditorDoc
-      const blocks = Array.isArray(doc.content) ? (doc.content as BlockEditorDoc[]) : []
+      const blocks = Array.isArray(doc.content)
+        ? (doc.content as BlockEditorDoc[])
+        : []
       const firstListIndex = blocks.findIndex(
-        (block) => block?.type === "taskList" || block?.type === "bulletList" || block?.type === "orderedList"
+        (block) =>
+          block?.type === "taskList" ||
+          block?.type === "bulletList" ||
+          block?.type === "orderedList"
       )
       if (firstListIndex < 0) return
 
       mutateTopLevelBlocks(
         (nextDoc) =>
-          moveNestedListItemToInsertionIndex(nextDoc, firstListIndex, [], sourceIndex, insertionIndex),
+          moveNestedListItemToInsertionIndex(
+            nextDoc,
+            firstListIndex,
+            [],
+            sourceIndex,
+            insertionIndex
+          ),
         firstListIndex
       )
     },
@@ -487,44 +532,133 @@ export const useBlockEditorEngineInsertActions = ({
     if (typeof window === "undefined") return false
     void selectionTick
 
-    const activeElement = document.activeElement instanceof Element ? document.activeElement : null
-    if (activeElement?.closest(".aq-block-editor__content td, .aq-block-editor__content th")) {
+    const activeElement =
+      document.activeElement instanceof Element ? document.activeElement : null
+    if (
+      activeElement?.closest(
+        ".aq-block-editor__content td, .aq-block-editor__content th"
+      )
+    ) {
       return true
     }
 
     const domSelection = window.getSelection()
     const anchorNode = domSelection?.anchorNode ?? null
     const anchorElement =
-      anchorNode instanceof Element ? anchorNode : anchorNode?.parentElement ?? null
+      anchorNode instanceof Element
+        ? anchorNode
+        : anchorNode?.parentElement ?? null
 
-    return Boolean(anchorElement?.closest(".aq-block-editor__content td, .aq-block-editor__content th"))
+    return Boolean(
+      anchorElement?.closest(
+        ".aq-block-editor__content td, .aq-block-editor__content th"
+      )
+    )
   }, [selectionTick])
 
   const isQuickInsertActionDisabled = useCallback(
     (action: BlockInsertCatalogItem) =>
       Boolean(
         disabled ||
-        action.disabled ||
-        ((isTableMode || hasRenderedTableEditingContext) &&
-          TABLE_CONTEXT_BLOCKED_INSERT_IDS.has(action.id))
+          action.disabled ||
+          ((isTableMode || hasRenderedTableEditingContext) &&
+            TABLE_CONTEXT_BLOCKED_INSERT_IDS.has(action.id))
       ),
     [disabled, hasRenderedTableEditingContext, isTableMode]
   )
 
   const toolbarActions: BlockEditorToolbarAction[] = [
-    { id: "heading-1", label: "H1", ariaLabel: "제목 1", run: () => runBlockToolbarCommand(editor, "heading-1"), active: isBlockToolbarCommandActive(editor, "heading-1") },
-    { id: "heading-2", label: "H2", ariaLabel: "제목 2", run: () => runBlockToolbarCommand(editor, "heading-2"), active: isBlockToolbarCommandActive(editor, "heading-2") },
-    { id: "heading-3", label: "H3", ariaLabel: "제목 3", run: () => runBlockToolbarCommand(editor, "heading-3"), active: isBlockToolbarCommandActive(editor, "heading-3") },
-    { id: "heading-4", label: "H4", ariaLabel: "제목 4", run: () => runBlockToolbarCommand(editor, "heading-4"), active: isBlockToolbarCommandActive(editor, "heading-4") },
-    { id: "bold", label: "B", ariaLabel: "굵게", run: runBoldAction, active: isInlineMarkCommandActive(editor, "bold") },
-    { id: "italic", label: createElement(AppIcon, { name: "italic", "aria-hidden": "true" }), ariaLabel: "기울임", run: runItalicAction, active: isInlineMarkCommandActive(editor, "italic") },
-    { id: "bullet-list", label: createElement(AppIcon, { name: "list", "aria-hidden": "true" }), ariaLabel: "목록", run: () => runBlockToolbarCommand(editor, "bullet-list"), active: isBlockToolbarCommandActive(editor, "bullet-list") },
-    { id: "quote", label: createElement("span", { "aria-hidden": "true" }, "❞"), ariaLabel: "인용문", run: () => runBlockToolbarCommand(editor, "quote"), active: isBlockToolbarCommandActive(editor, "quote") },
-    { id: "link", label: createElement(AppIcon, { name: "link", "aria-hidden": "true" }), ariaLabel: "링크", run: openLinkPrompt, active: editor?.isActive("link") ?? false },
-    { id: "inline-code", label: createElement("span", { "aria-hidden": "true" }, "</>"), ariaLabel: "인라인 코드", run: runInlineCodeAction, active: isInlineCodeActive },
-    { id: "inline-formula", label: createElement("span", { "aria-hidden": "true" }, "ƒx"), ariaLabel: "인라인 수식", run: insertInlineFormula, active: editor?.isActive("inlineFormula") ?? false },
-    { id: "image", label: createElement(AppIcon, { name: "camera", "aria-hidden": "true" }), ariaLabel: "이미지 추가", run: () => imageFileInputRef.current?.click(), active: false },
-    { id: "code-block", label: createElement("span", { "aria-hidden": "true" }, "</>"), ariaLabel: "코드 블록", run: insertCodeBlock, active: editor?.isActive("codeBlock") ?? false },
+    {
+      id: "heading-1",
+      label: "H1",
+      ariaLabel: "제목 1",
+      run: () => runBlockToolbarCommand(editor, "heading-1"),
+      active: isBlockToolbarCommandActive(editor, "heading-1"),
+    },
+    {
+      id: "heading-2",
+      label: "H2",
+      ariaLabel: "제목 2",
+      run: () => runBlockToolbarCommand(editor, "heading-2"),
+      active: isBlockToolbarCommandActive(editor, "heading-2"),
+    },
+    {
+      id: "heading-3",
+      label: "H3",
+      ariaLabel: "제목 3",
+      run: () => runBlockToolbarCommand(editor, "heading-3"),
+      active: isBlockToolbarCommandActive(editor, "heading-3"),
+    },
+    {
+      id: "heading-4",
+      label: "H4",
+      ariaLabel: "제목 4",
+      run: () => runBlockToolbarCommand(editor, "heading-4"),
+      active: isBlockToolbarCommandActive(editor, "heading-4"),
+    },
+    {
+      id: "bold",
+      label: "B",
+      ariaLabel: "굵게",
+      run: runBoldAction,
+      active: isInlineMarkCommandActive(editor, "bold"),
+    },
+    {
+      id: "italic",
+      label: createElement(AppIcon, { name: "italic", "aria-hidden": "true" }),
+      ariaLabel: "기울임",
+      run: runItalicAction,
+      active: isInlineMarkCommandActive(editor, "italic"),
+    },
+    {
+      id: "bullet-list",
+      label: createElement(AppIcon, { name: "list", "aria-hidden": "true" }),
+      ariaLabel: "목록",
+      run: () => runBlockToolbarCommand(editor, "bullet-list"),
+      active: isBlockToolbarCommandActive(editor, "bullet-list"),
+    },
+    {
+      id: "quote",
+      label: createElement("span", { "aria-hidden": "true" }, "❞"),
+      ariaLabel: "인용문",
+      run: () => runBlockToolbarCommand(editor, "quote"),
+      active: isBlockToolbarCommandActive(editor, "quote"),
+    },
+    {
+      id: "link",
+      label: createElement(AppIcon, { name: "link", "aria-hidden": "true" }),
+      ariaLabel: "링크",
+      run: openLinkPrompt,
+      active: editor?.isActive("link") ?? false,
+    },
+    {
+      id: "inline-code",
+      label: createElement("span", { "aria-hidden": "true" }, "</>"),
+      ariaLabel: "인라인 코드",
+      run: runInlineCodeAction,
+      active: isInlineCodeActive,
+    },
+    {
+      id: "inline-formula",
+      label: createElement("span", { "aria-hidden": "true" }, "ƒx"),
+      ariaLabel: "인라인 수식",
+      run: insertInlineFormula,
+      active: editor?.isActive("inlineFormula") ?? false,
+    },
+    {
+      id: "image",
+      label: createElement(AppIcon, { name: "camera", "aria-hidden": "true" }),
+      ariaLabel: "이미지 추가",
+      run: () => imageFileInputRef.current?.click(),
+      active: false,
+    },
+    {
+      id: "code-block",
+      label: createElement("span", { "aria-hidden": "true" }, "</>"),
+      ariaLabel: "코드 블록",
+      run: insertCodeBlock,
+      active: editor?.isActive("codeBlock") ?? false,
+    },
   ]
 
   const toolbarMoreActions: BlockEditorToolbarAction[] = [

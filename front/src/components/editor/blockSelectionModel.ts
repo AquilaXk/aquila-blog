@@ -150,6 +150,23 @@ export const getFirstEditableTextPositionInNode = (
   return null
 }
 
+export const createFirstEditableTextSelectionInNode = (
+  doc: ProseMirrorNode,
+  node: ProseMirrorNode | null | undefined,
+  startPos: number
+): TextSelection | null => {
+  const position = getFirstEditableTextPositionInNode(node, startPos)
+  if (position === null) return null
+
+  try {
+    const resolvedPosition = doc.resolve(position)
+    if (!resolvedPosition.parent.inlineContent) return null
+    return TextSelection.create(doc, position)
+  } catch {
+    return null
+  }
+}
+
 export const getEditableTextPositionForTopLevelBlock = (
   editor: TiptapEditor,
   blockIndex: number

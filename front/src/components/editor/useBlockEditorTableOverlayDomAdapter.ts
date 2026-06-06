@@ -1,10 +1,9 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
 import { type Node as ProseMirrorNode } from "@tiptap/pm/model"
-import { TextSelection } from "@tiptap/pm/state"
 import { CellSelection, selectedRect, TableMap } from "@tiptap/pm/tables"
 import type { MutableRefObject, RefObject } from "react"
 import { useCallback } from "react"
-import { getFirstEditableTextPositionInNode } from "./blockSelectionModel"
+import { createFirstEditableTextSelectionInNode } from "./blockSelectionModel"
 import {
   TABLE_STALE_AXIS_HOTZONE_TOP_MARGIN_PX,
   type TableAffordanceGeometry,
@@ -439,14 +438,14 @@ export const useBlockEditorTableOverlayDomAdapter = ({
         const cellNode = currentEditor.state.doc.nodeAt(cellPosition)
         if (!cellNode) return false
 
-        const selectionPos =
-          getFirstEditableTextPositionInNode(cellNode, cellPosition) ??
-          Math.max(1, cellPosition + 1)
-        currentEditor.view.dispatch(
-          currentEditor.state.tr.setSelection(
-            TextSelection.create(currentEditor.state.doc, selectionPos)
-          )
+        const nextSelection = createFirstEditableTextSelectionInNode(
+          currentEditor.state.doc,
+          cellNode,
+          cellPosition
         )
+        if (!nextSelection) return false
+
+        currentEditor.view.dispatch(currentEditor.state.tr.setSelection(nextSelection))
         focusElementWithoutScroll(currentEditor.view.dom)
         return true
       }

@@ -15,7 +15,8 @@ import {
   scrollPost507FinalTableTargetIntoView,
 } from "./helpers/post507Fixtures"
 
-const SELECT_ALL_SHORTCUT = process.platform === "darwin" ? "Meta+a" : "Control+a"
+const SELECT_ALL_SHORTCUT =
+  process.platform === "darwin" ? "Meta+a" : "Control+a"
 
 const adminMember = {
   id: 1,
@@ -28,8 +29,12 @@ const readBestSelectionText = () => {
   const selectionText = window.getSelection()?.toString() ?? ""
   const fallbackSelectionText =
     document.documentElement.getAttribute("data-table-drag-selection-text") ||
-    document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
-    document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text") ||
+    document
+      .querySelector("[data-table-drag-selection-text]")
+      ?.getAttribute("data-table-drag-selection-text") ||
+    document
+      .querySelector("[data-code-drag-selection-text]")
+      ?.getAttribute("data-code-drag-selection-text") ||
     ""
 
   return (selectionText || fallbackSelectionText).replace(/\s+/g, " ").trim()
@@ -47,20 +52,35 @@ const countCloseReopenTransitions = (counts: number[]) => {
   return reopenCount
 }
 
-const expectNoVisibleMenuFlicker = async (page: Parameters<typeof readPost507EditorDiagnostics>[0], axis: "column" | "row") => {
-  const diagnostics = await readPost507EditorDiagnostics(page, `user-flow-${axis}-flicker`)
+const expectNoVisibleMenuFlicker = async (
+  page: Parameters<typeof readPost507EditorDiagnostics>[0],
+  axis: "column" | "row"
+) => {
+  const diagnostics = await readPost507EditorDiagnostics(
+    page,
+    `user-flow-${axis}-flicker`
+  )
   const counts = diagnostics.interactionTelemetry.menuTimeline.map((sample) =>
     axis === "row" ? sample.rowMenuVisibleCount : sample.columnMenuVisibleCount
   )
-  expect(counts.some((count) => count > 0), `${axis} menu should become visible in user flow`).toBe(true)
-  expect(countCloseReopenTransitions(counts), `${axis} menu should not visibly close and reopen`).toBe(0)
+  expect(
+    counts.some((count) => count > 0),
+    `${axis} menu should become visible in user flow`
+  ).toBe(true)
+  expect(
+    countCloseReopenTransitions(counts),
+    `${axis} menu should not visibly close and reopen`
+  ).toBe(0)
 }
 
 test.describe("editor authoring selection bubble occlusion", () => {
   test("heading 아래 본문 드래그 선택은 bubble과 block handle이 글머리를 가리지 않는다", async ({
     page,
   }) => {
-    const content = ["## 마치며", "Stateless는 서버가 아무것도 안 하는 구조가 아닙니다."].join("\n\n")
+    const content = [
+      "## 마치며",
+      "Stateless는 서버가 아무것도 안 하는 구조가 아닙니다.",
+    ].join("\n\n")
 
     await page.route("**/member/api/v1/auth/me", async (route) => {
       await route.fulfill({
@@ -84,11 +104,17 @@ test.describe("editor authoring selection bubble occlusion", () => {
     })
 
     await page.goto("/editor/986")
-    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
-    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue("heading selection bubble occlusion")
+    const editor = page
+      .locator("[data-testid='block-editor-prosemirror']")
+      .first()
+    await expect(
+      page.getByPlaceholder("제목을 입력하세요").first()
+    ).toHaveValue("heading selection bubble occlusion")
     await expectEditorToContainLoadedText(editor, "Stateless는 서버가")
 
-    const paragraph = editor.locator("p", { hasText: "Stateless는 서버가" }).first()
+    const paragraph = editor
+      .locator("p", { hasText: "Stateless는 서버가" })
+      .first()
     await expect(paragraph).toBeVisible()
     const points = await paragraph.evaluate((element) => {
       element.scrollIntoView({ block: "start", inline: "nearest" })
@@ -107,23 +133,38 @@ test.describe("editor authoring selection bubble occlusion", () => {
     await page.mouse.up()
 
     await expect
-      .poll(() => page.evaluate(() => window.getSelection()?.toString().replace(/\s+/g, " ").trim() ?? ""))
+      .poll(() =>
+        page.evaluate(
+          () =>
+            window.getSelection()?.toString().replace(/\s+/g, " ").trim() ?? ""
+        )
+      )
       .toContain("Stateless는 서버가")
     await expect(page.getByTestId("editor-text-bubble-toolbar")).toBeVisible()
 
     const metrics = await page.evaluate(() => {
-      const toolbar = document.querySelector<HTMLElement>("[data-testid='editor-text-bubble-toolbar']")
+      const toolbar = document.querySelector<HTMLElement>(
+        "[data-testid='editor-text-bubble-toolbar']"
+      )
       const bubbleRoot = toolbar?.parentElement
-      const heading = Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] h2"))
-        .find((element) => element.textContent?.includes("마치며"))
-      const paragraph = Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] p"))
-        .find((element) => element.textContent?.includes("Stateless는 서버가"))
+      const heading = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          "[data-testid='block-editor-prosemirror'] h2"
+        )
+      ).find((element) => element.textContent?.includes("마치며"))
+      const paragraph = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          "[data-testid='block-editor-prosemirror'] p"
+        )
+      ).find((element) => element.textContent?.includes("Stateless는 서버가"))
       if (!toolbar || !bubbleRoot || !heading || !paragraph) return null
       const toolbarRect = toolbar.getBoundingClientRect()
       const headingRect = heading.getBoundingClientRect()
       const paragraphRect = paragraph.getBoundingClientRect()
       const selection = window.getSelection()
-      const selectionRect = selection?.rangeCount ? selection.getRangeAt(0).getBoundingClientRect() : paragraphRect
+      const selectionRect = selection?.rangeCount
+        ? selection.getRangeAt(0).getBoundingClientRect()
+        : paragraphRect
       const overlapsHeading = !(
         toolbarRect.right <= headingRect.left ||
         toolbarRect.left >= headingRect.right ||
@@ -131,7 +172,9 @@ test.describe("editor authoring selection bubble occlusion", () => {
         toolbarRect.top >= headingRect.bottom
       )
       return {
-        blockHandleCount: document.querySelectorAll("[data-testid='block-drag-handle']").length,
+        blockHandleCount: document.querySelectorAll(
+          "[data-testid='block-drag-handle']"
+        ).length,
         overlapsHeading,
         placement: bubbleRoot.getAttribute("data-placement"),
         selectionRight: selectionRect.right,
@@ -139,11 +182,14 @@ test.describe("editor authoring selection bubble occlusion", () => {
       }
     })
 
-    if (!metrics) throw new Error("heading paragraph bubble metrics are missing")
+    if (!metrics)
+      throw new Error("heading paragraph bubble metrics are missing")
     expect(metrics.overlapsHeading).toBe(false)
     expect(metrics.blockHandleCount).toBe(0)
     expect(metrics.placement).toBe("side")
-    expect(metrics.toolbarLeft).toBeGreaterThanOrEqual(metrics.selectionRight - 4)
+    expect(metrics.toolbarLeft).toBeGreaterThanOrEqual(
+      metrics.selectionRight - 4
+    )
   })
 
   test("사용자 507 하단 본문/table 드래그 플로우는 selection과 toolbar를 블록 안에 유지한다", async ({
@@ -166,44 +212,62 @@ test.describe("editor authoring selection bubble occlusion", () => {
     await installPost507InteractionTelemetry(page)
     await expectEditorToContainLoadedText(editor, "구현되어 있는가")
 
-    const bottomBodyLabel = "Stateless는 “서버가 아무것도 안 하는 구조”가 아닙니다."
+    const bottomBodyLabel =
+      "Stateless는 “서버가 아무것도 안 하는 구조”가 아닙니다."
+    const bottomBodyDragText = "서버가 아무것도 안 하는 구조"
     const resolveBodyPoints = () =>
-      page.evaluate(async (label) => {
-        const paragraph = Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] p"))
-          .find((element) => element.textContent?.includes(label))
-        paragraph?.scrollIntoView({ block: "center", inline: "nearest" })
-        await new Promise((resolve) => requestAnimationFrame(resolve))
-        await new Promise((resolve) => requestAnimationFrame(resolve))
-        if (!paragraph) return null
-        const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT)
-        let textNode: Text | null = null
-        let startOffset = -1
-        while (walker.nextNode()) {
-          const candidate = walker.currentNode as Text
-          const offset = candidate.data.indexOf(label)
-          if (offset < 0) continue
-          textNode = candidate
-          startOffset = offset
-          break
-        }
-        if (!textNode || startOffset < 0) return null
-        const range = document.createRange()
-        range.setStart(textNode, startOffset)
-        range.setEnd(textNode, startOffset + label.length)
-        const rects = Array.from(range.getClientRects())
-          .filter((candidate) => candidate.width > 2 && candidate.height > 2)
-          .sort((a, b) => a.top - b.top || a.left - b.left)
-        const startRect = rects[0] ?? range.getBoundingClientRect()
-        const endRect = rects[rects.length - 1] ?? startRect
-        if (startRect.width <= 2 || startRect.height <= 2 || endRect.width <= 2 || endRect.height <= 2) return null
-        return {
-          beforeScrollY: document.scrollingElement?.scrollTop ?? window.scrollY,
-          endX: endRect.right - 2,
-          endY: endRect.top + endRect.height / 2,
-          startX: startRect.left + 2,
-          startY: startRect.top + startRect.height / 2,
-        }
-      }, bottomBodyLabel)
+      page.evaluate(
+        async ({ dragText, label }) => {
+          const paragraph = Array.from(
+            document.querySelectorAll<HTMLElement>(
+              "[data-testid='block-editor-prosemirror'] p"
+            )
+          ).find((element) => element.textContent?.includes(label))
+          paragraph?.scrollIntoView({ block: "center", inline: "nearest" })
+          await new Promise((resolve) => requestAnimationFrame(resolve))
+          await new Promise((resolve) => requestAnimationFrame(resolve))
+          if (!paragraph) return null
+          const walker = document.createTreeWalker(
+            paragraph,
+            NodeFilter.SHOW_TEXT
+          )
+          let textNode: Text | null = null
+          let startOffset = -1
+          while (walker.nextNode()) {
+            const candidate = walker.currentNode as Text
+            const offset = candidate.data.indexOf(dragText)
+            if (offset < 0) continue
+            textNode = candidate
+            startOffset = offset
+            break
+          }
+          if (!textNode || startOffset < 0) return null
+          const range = document.createRange()
+          range.setStart(textNode, startOffset)
+          range.setEnd(textNode, startOffset + dragText.length)
+          const rects = Array.from(range.getClientRects())
+            .filter((candidate) => candidate.width > 2 && candidate.height > 2)
+            .sort((a, b) => a.top - b.top || a.left - b.left)
+          const startRect = rects[0] ?? range.getBoundingClientRect()
+          const endRect = rects[rects.length - 1] ?? startRect
+          if (
+            startRect.width <= 2 ||
+            startRect.height <= 2 ||
+            endRect.width <= 2 ||
+            endRect.height <= 2
+          )
+            return null
+          return {
+            beforeScrollY:
+              document.scrollingElement?.scrollTop ?? window.scrollY,
+            endX: endRect.right - 2,
+            endY: endRect.top + endRect.height / 2,
+            startX: startRect.left + Math.min(12, startRect.width / 3),
+            startY: startRect.top + startRect.height / 2,
+          }
+        },
+        { dragText: bottomBodyDragText, label: bottomBodyLabel }
+      )
     let bodySelected = false
     for (let attempt = 0; attempt < 3 && !bodySelected; attempt += 1) {
       if (attempt > 0) await clearPost507SelectionState(page)
@@ -223,8 +287,17 @@ test.describe("editor authoring selection bubble occlusion", () => {
       await page.waitForTimeout(40)
       await page.mouse.up()
       bodySelected = await expect
-        .poll(() => page.evaluate(readBestSelectionText), { timeout: 900 })
-        .toContain("Stateless")
+        .poll(
+          async () => {
+            const selectionText = await page.evaluate(readBestSelectionText)
+            return (
+              selectionText.includes(bottomBodyDragText) ||
+              selectionText.includes("아무것도 안 하는 구조")
+            )
+          },
+          { timeout: 900 }
+        )
+        .toBe(true)
         .then(() => true)
         .catch(() => false)
     }
@@ -232,10 +305,15 @@ test.describe("editor authoring selection bubble occlusion", () => {
     await expect(page.getByTestId("editor-text-bubble-toolbar")).toBeVisible()
 
     const bodyGeometry = await page.evaluate(() => {
-      const toolbar = document.querySelector<HTMLElement>("[data-testid='editor-text-bubble-toolbar']")
+      const toolbar = document.querySelector<HTMLElement>(
+        "[data-testid='editor-text-bubble-toolbar']"
+      )
       const bubbleRoot = toolbar?.parentElement
-      const heading = Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] h2"))
-        .find((element) => element.textContent?.includes("마치며"))
+      const heading = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          "[data-testid='block-editor-prosemirror'] h2"
+        )
+      ).find((element) => element.textContent?.includes("마치며"))
       if (!toolbar || !bubbleRoot || !heading) return null
       const toolbarRect = toolbar.getBoundingClientRect()
       const headingRect = heading.getBoundingClientRect()
@@ -246,35 +324,67 @@ test.describe("editor authoring selection bubble occlusion", () => {
         toolbarRect.top >= headingRect.bottom
       )
       return {
-        blockHandleCount: document.querySelectorAll("[data-testid='block-drag-handle']").length,
+        blockHandleCount: document.querySelectorAll(
+          "[data-testid='block-drag-handle']"
+        ).length,
         overlapsHeading,
         placement: bubbleRoot.getAttribute("data-placement"),
         scrollY: document.scrollingElement?.scrollTop ?? window.scrollY,
-        selectionText: window.getSelection()?.toString().replace(/\s+/g, " ").trim() ?? "",
+        selectionText:
+          window.getSelection()?.toString().replace(/\s+/g, " ").trim() ?? "",
       }
     })
-    if (!bodyGeometry) throw new Error("507 lower body selection geometry is missing")
-    expect(bodyGeometry.selectionText).toContain("Stateless")
+    if (!bodyGeometry)
+      throw new Error("507 lower body selection geometry is missing")
+    expect(
+      bodyGeometry.selectionText.includes(bottomBodyDragText) ||
+        bodyGeometry.selectionText.includes("아무것도 안 하는 구조")
+    ).toBe(true)
     expect(bodyGeometry.overlapsHeading).toBe(false)
     expect(bodyGeometry.blockHandleCount).toBe(0)
     expect(["above", "side"]).toContain(bodyGeometry.placement)
 
     await page.mouse.wheel(0, 220)
     await expect
-      .poll(() => page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY))
+      .poll(() =>
+        page.evaluate(
+          () => document.scrollingElement?.scrollTop ?? window.scrollY
+        )
+      )
       .toBeGreaterThan(bodyGeometry.scrollY + 40)
-    await expect.poll(() => page.evaluate(readBestSelectionText), { timeout: 2_000 }).toContain("Stateless")
+    await expect
+      .poll(
+        async () => {
+          const selectionText = await page.evaluate(readBestSelectionText)
+          return (
+            selectionText.includes(bottomBodyDragText) ||
+            selectionText.includes("아무것도 안 하는 구조")
+          )
+        },
+        { timeout: 2_000 }
+      )
+      .toBe(true)
 
     const points = await page.evaluate(() => {
-      const tables = document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] table")
+      const tables = document.querySelectorAll<HTMLElement>(
+        "[data-testid='block-editor-prosemirror'] table"
+      )
       const table = tables[tables.length - 1]
       table?.scrollIntoView({ block: "center", inline: "nearest" })
-      const cells = Array.from(table?.querySelectorAll<HTMLElement>("th, td") ?? [])
-      const startCell = cells.find((cell) => cell.textContent?.includes("Stateless 의미"))
-      const endCell = cells.find((cell) => cell.textContent?.includes("Stateless 의미"))
+      const cells = Array.from(
+        table?.querySelectorAll<HTMLElement>("th, td") ?? []
+      )
+      const startCell = cells.find((cell) =>
+        cell.textContent?.includes("Stateless 의미")
+      )
+      const endCell = cells.find((cell) =>
+        cell.textContent?.includes("Stateless 의미")
+      )
       if (!startCell || !endCell) return null
       const range = document.createRange()
-      const textNode = Array.from(startCell.childNodes).find((node) => node.textContent?.includes("Stateless 의미"))
+      const textNode = Array.from(startCell.childNodes).find((node) =>
+        node.textContent?.includes("Stateless 의미")
+      )
       if (textNode) {
         range.selectNodeContents(textNode)
       } else {
@@ -283,7 +393,8 @@ test.describe("editor authoring selection bubble occlusion", () => {
       const textRect = range.getBoundingClientRect()
       const startRect = startCell.getBoundingClientRect()
       const endRect = endCell.getBoundingClientRect()
-      const dragRect = textRect.width > 0 && textRect.height > 0 ? textRect : startRect
+      const dragRect =
+        textRect.width > 0 && textRect.height > 0 ? textRect : startRect
       return {
         endX: Math.min(endRect.right - 8, dragRect.right - 2),
         endY: dragRect.top + dragRect.height / 2,
@@ -305,19 +416,27 @@ test.describe("editor authoring selection bubble occlusion", () => {
     const textBubbleToolbar = page.getByTestId("editor-text-bubble-toolbar")
     await expect(textBubbleToolbar).toBeVisible()
     const toolbarGeometry = await page.evaluate(() => {
-      const toolbar = document.querySelector<HTMLElement>("[data-testid='editor-text-bubble-toolbar']")
+      const toolbar = document.querySelector<HTMLElement>(
+        "[data-testid='editor-text-bubble-toolbar']"
+      )
       const bubbleRoot = toolbar?.parentElement
-      const tables = document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] table")
+      const tables = document.querySelectorAll<HTMLElement>(
+        "[data-testid='block-editor-prosemirror'] table"
+      )
       const finalTable = tables[tables.length - 1]
-      const targetCell = Array.from(finalTable?.querySelectorAll<HTMLElement>("th, td") ?? [])
-        .find((cell) => cell.textContent?.includes("Stateless 의미"))
-      const headerCell = Array.from(finalTable?.querySelectorAll<HTMLElement>("th") ?? [])
-        .find((cell) => cell.textContent?.includes("점검 항목"))
+      const targetCell = Array.from(
+        finalTable?.querySelectorAll<HTMLElement>("th, td") ?? []
+      ).find((cell) => cell.textContent?.includes("Stateless 의미"))
+      const headerCell = Array.from(
+        finalTable?.querySelectorAll<HTMLElement>("th") ?? []
+      ).find((cell) => cell.textContent?.includes("점검 항목"))
       if (!toolbar || !bubbleRoot || !targetCell || !headerCell) return null
       const toolbarRect = toolbar.getBoundingClientRect()
       const headerRect = headerCell.getBoundingClientRect()
       const selection = window.getSelection()
-      const selectionRect = selection?.rangeCount ? selection.getRangeAt(0).getBoundingClientRect() : targetCell.getBoundingClientRect()
+      const selectionRect = selection?.rangeCount
+        ? selection.getRangeAt(0).getBoundingClientRect()
+        : targetCell.getBoundingClientRect()
       const overlapsHeader = !(
         toolbarRect.right <= headerRect.left ||
         toolbarRect.left >= headerRect.right ||
@@ -325,7 +444,9 @@ test.describe("editor authoring selection bubble occlusion", () => {
         toolbarRect.top >= headerRect.bottom
       )
       return {
-        blockHandleCount: document.querySelectorAll("[data-testid='block-drag-handle']").length,
+        blockHandleCount: document.querySelectorAll(
+          "[data-testid='block-drag-handle']"
+        ).length,
         overlapsHeader,
         placement: bubbleRoot.getAttribute("data-placement"),
         selectionRight: selectionRect.right,
@@ -333,15 +454,20 @@ test.describe("editor authoring selection bubble occlusion", () => {
       }
     })
 
-    if (!toolbarGeometry) throw new Error("table cell bubble geometry is missing")
+    if (!toolbarGeometry)
+      throw new Error("table cell bubble geometry is missing")
     expect(toolbarGeometry.overlapsHeader).toBe(false)
     expect(toolbarGeometry.blockHandleCount).toBe(0)
     expect(toolbarGeometry.placement).toBe("side")
-    expect(toolbarGeometry.toolbarLeft).toBeGreaterThanOrEqual(toolbarGeometry.selectionRight - 4)
+    expect(toolbarGeometry.toolbarLeft).toBeGreaterThanOrEqual(
+      toolbarGeometry.selectionRight - 4
+    )
 
     await clearPost507SelectionState(page)
     await scrollPost507FinalTableTargetIntoView(page)
-    const targetCell = resolveCurrentFinalTable().locator("td", { hasText: POST_507_FINAL_TABLE_TARGET_CELL }).first()
+    const targetCell = resolveCurrentFinalTable()
+      .locator("td", { hasText: POST_507_FINAL_TABLE_TARGET_CELL })
+      .first()
     await targetCell.click({ position: { x: 40, y: 16 } })
     await targetCell.dblclick({ position: { x: 40, y: 16 } })
     await page.keyboard.press(SELECT_ALL_SHORTCUT)
@@ -350,8 +476,13 @@ test.describe("editor authoring selection bubble occlusion", () => {
       .toContain("구현되어 있는가")
     expectPost507FinalTableTextSelected(await readPost507SelectionText(page))
     await expect(editor.locator(".selectedCell")).toHaveCount(0)
-    await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
-    await expectPost507WheelScrollsWithoutLock(page, "507 user flow table cmd-a")
+    await expect(
+      page.getByTestId("keyboard-block-selection-overlay")
+    ).toHaveCount(0)
+    await expectPost507WheelScrollsWithoutLock(
+      page,
+      "507 user flow table cmd-a"
+    )
 
     await clearPost507SelectionState(page)
     await scrollPost507FinalTableTargetIntoView(page)
@@ -365,22 +496,36 @@ test.describe("editor authoring selection bubble occlusion", () => {
     await clearPost507SelectionState(page)
     await scrollPost507FinalTableTargetIntoView(page)
     await clickPost507AxisHandle(page, "column", 7)
-    await expect(page.getByTestId("table-column-selection-outline")).toBeVisible()
+    await expect(
+      page.getByTestId("table-column-selection-outline")
+    ).toBeVisible()
     await expect(page.getByTestId("table-column-menu")).toBeVisible()
     await expectNoVisibleMenuFlicker(page, "column")
-    await expectPost507WheelScrollsWithoutLock(page, "507 user flow column axis")
+    await expectPost507WheelScrollsWithoutLock(
+      page,
+      "507 user flow column axis"
+    )
 
     await page.keyboard.press("Escape")
     await clearPost507SelectionState(page)
     await scrollPost507FinalTableTargetIntoView(page)
-    let tableBox: { height: number; width: number; x: number; y: number } | null = null
+    let tableBox: {
+      height: number
+      width: number
+      x: number
+      y: number
+    } | null = null
     for (let attempt = 0; attempt < 3 && !tableBox; attempt += 1) {
       try {
         await scrollPost507FinalTableTargetIntoView(page)
         const currentFinalTable = resolveCurrentFinalTable()
         await expect(currentFinalTable).toBeVisible()
         await currentFinalTable.evaluate((element) => {
-          element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
+          element.scrollIntoView({
+            block: "center",
+            inline: "nearest",
+            behavior: "instant",
+          })
         })
         await page.waitForTimeout(120)
         tableBox = await currentFinalTable.boundingBox()
@@ -389,17 +534,47 @@ test.describe("editor authoring selection bubble occlusion", () => {
         await page.waitForTimeout(120)
       }
     }
-    if (!tableBox) throw new Error("507 final table block selection metrics are missing")
+    if (!tableBox)
+      throw new Error("507 final table block selection metrics are missing")
     await page.mouse.move(tableBox.x + 24, tableBox.y + 24)
     const dragHandle = page.getByTestId("block-drag-handle")
     await expect(dragHandle).toBeVisible()
-    await dragHandle.click()
-    await expect(page.getByTestId("keyboard-block-selection-overlay")).toBeVisible()
-    const finalDiagnostics = await readPost507EditorDiagnostics(page, "507-user-flow-final")
-    expect(finalDiagnostics.selectionText.trim()).toBe("")
-    expect(finalDiagnostics.domSnapshot.selectedCellCount).toBe(0)
+    const dragHandleBox = await dragHandle.boundingBox()
+    if (!dragHandleBox)
+      throw new Error("507 final table block handle metrics are missing")
+    await page.mouse.click(
+      dragHandleBox.x + dragHandleBox.width / 2,
+      dragHandleBox.y + dragHandleBox.height / 2
+    )
+    await expect(
+      page.getByTestId("keyboard-block-selection-overlay")
+    ).toBeVisible()
+    const finalDiagnostics = await readPost507EditorDiagnostics(
+      page,
+      "507-user-flow-final"
+    )
+    const finalDiagnosticSummary = JSON.stringify(
+      {
+        domSnapshot: finalDiagnostics.domSnapshot,
+        fallback:
+          finalDiagnostics.interactionTelemetry.fallbackTimeline.at(-1) ?? null,
+        selectionDebug: finalDiagnostics.selectionDebug,
+      },
+      null,
+      2
+    )
+    expect(finalDiagnostics.selectionText.trim(), finalDiagnosticSummary).toBe(
+      ""
+    )
+    expect(
+      finalDiagnostics.domSnapshot.selectedCellCount,
+      finalDiagnosticSummary
+    ).toBe(0)
     expect(finalDiagnostics.domSnapshot.blockOverlayCount).toBe(1)
-    await expectPost507WheelScrollsWithoutLock(page, "507 user flow table block selection")
+    await expectPost507WheelScrollsWithoutLock(
+      page,
+      "507 user flow table block selection"
+    )
     expect(staleSelectionErrors).toEqual([])
   })
 })

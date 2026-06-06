@@ -1,5 +1,7 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
+import type { ResolvedPos } from "@tiptap/pm/model"
 import { TextSelection } from "@tiptap/pm/state"
+import { getFirstEditableTextPositionInNode } from "./blockSelectionModel"
 import { clearNextEditorPointerAfterTable } from "./blockHandleLayoutModel"
 import {
   cancelActiveTableCellTextSelectionPreserves,
@@ -8,6 +10,34 @@ import {
 
 const TABLE_DRAG_SELECTION_TEXT_ATTR = "data-table-drag-selection-text"
 const TABLE_DRAG_SELECTION_TEXT_SELECTOR = `[${TABLE_DRAG_SELECTION_TEXT_ATTR}]`
+const TABLE_CELL_FORCED_CARET_COLLAPSE_CLICK_FRAME_MS = 140
+
+let forceNextTableCellCaretCollapseUntil = 0
+let forceTableCellCaretCollapseClickFrameUntil = 0
+
+const getNow = () =>
+  typeof performance !== "undefined" ? performance.now() : Date.now()
+
+export const markNextTableCellPointerCaretCollapse = (durationMs = 1200) => {
+  forceNextTableCellCaretCollapseUntil = Math.max(
+    forceNextTableCellCaretCollapseUntil,
+    getNow() + durationMs
+  )
+}
+
+export const shouldForceTableCellPointerCaretCollapse = () => {
+  const now = getNow()
+  return (
+    now < forceNextTableCellCaretCollapseUntil ||
+    now < forceTableCellCaretCollapseClickFrameUntil
+  )
+}
+
+export const markTableCellPointerCaretCollapseApplied = () => {
+  forceNextTableCellCaretCollapseUntil = 0
+  forceTableCellCaretCollapseClickFrameUntil =
+    getNow() + TABLE_CELL_FORCED_CARET_COLLAPSE_CLICK_FRAME_MS
+}
 
 const resolveElement = (target: EventTarget | Node | null | undefined) => {
   if (target instanceof Element) return target
@@ -44,24 +74,108 @@ const resolveFallbackCaretRangeInCell = (cell: HTMLElement, clientX: number) => 
   }
   if (textNodes.length === 0) {
     const range = document.createRange()
-    range.setStart(cell, 0)
+    const editableBlock = cell.querySelector<HTMLElement>("p, div, span")
+    range.setStart(editableBlock ?? cell, 0)
     range.collapse(true)
     return range
   }
 
   const cellRect = cell.getBoundingClientRect()
-  const textNode = clientX > cellRect.left + cellRect.width / 2 ? textNodes[textNodes.length - 1] : textNodes[0]
+  const shouldPlaceAtEnd = clientX > cellRect.left + cellRect.width / 2
+  const textNode = shouldPlaceAtEnd
+    ? textNodes[textNodes.length - 1]
+    : textNodes[0]
   const range = document.createRange()
-  range.setStart(textNode, clientX > cellRect.left + cellRect.width / 2 ? textNode.data.length : 0)
+  range.setStart(textNode, shouldPlaceAtEnd ? textNode.data.length : 0)
   range.collapse(true)
   return range
 }
 
-const isWindowSelectionInsideTable = (selection: Selection, table: Element | null) => {
+const isWindowSelectionInsideTable = (
+  selection: Selection,
+  table: Element | null
+) => {
   if (!table) return false
   const anchorElement = resolveElement(selection.anchorNode)
   const focusElement = resolveElement(selection.focusNode)
-  return Boolean(anchorElement && focusElement && table.contains(anchorElement) && table.contains(focusElement))
+  return Boolean(
+    anchorElement &&
+      focusElement &&
+      table.contains(anchorElement) &&
+      table.contains(focusElement)
+  )
+}
+
+const clampEditorPos = (editor: TiptapEditor, pos: number) =>
+  Math.max(0, Math.min(editor.state.doc.content.size, pos))
+
+const isEditorDomPositionInsideCell = (
+  editor: TiptapEditor,
+  pos: number,
+  cell: HTMLElement
+) => {
+  try {
+    const domAtPos = editor.view.domAtPos(clampEditorPos(editor, pos))
+    return Boolean(resolveElement(domAtPos.node)?.closest("th, td") === cell)
+  } catch {
+    return false
+  }
+}
+
+const resolveFallbackEditorCaretPosInCell = (
+  editor: TiptapEditor,
+  cell: HTMLElement
+) => {
+  let domPosition = 0
+  try {
+    domPosition = editor.view.posAtDOM(cell, 0)
+  } catch {
+    return null
+  }
+
+  const safeDomPosition = clampEditorPos(editor, domPosition)
+  let resolvedPosition: ResolvedPos
+  try {
+    resolvedPosition = editor.state.doc.resolve(safeDomPosition)
+  } catch {
+    return null
+  }
+
+  for (let depth = resolvedPosition.depth; depth > 0; depth -= 1) {
+    const node = resolvedPosition.node(depth)
+    if (node.type.name !== "tableCell" && node.type.name !== "tableHeader") {
+      continue
+    }
+
+    const cellPosition = resolvedPosition.before(depth)
+    const cellNode = editor.state.doc.nodeAt(cellPosition)
+    return (
+      getFirstEditableTextPositionInNode(cellNode, cellPosition) ??
+      Math.max(1, cellPosition + 1)
+    )
+  }
+
+  return null
+}
+
+const resolveEditorCaretPosInCell = (
+  editor: TiptapEditor,
+  cell: HTMLElement,
+  clientX: number,
+  clientY: number
+) => {
+  const pointPos = editor.view.posAtCoords({
+    left: clientX,
+    top: clientY,
+  })?.pos
+  if (
+    typeof pointPos === "number" &&
+    isEditorDomPositionInsideCell(editor, pointPos, cell)
+  ) {
+    return clampEditorPos(editor, pointPos)
+  }
+
+  return resolveFallbackEditorCaretPosInCell(editor, cell)
 }
 
 const isEditorSelectionInsideTable = (editor: TiptapEditor) => {
@@ -91,7 +205,8 @@ export const collapseTableCellTextSelectionToPoint = (
   editor: TiptapEditor,
   clientX: number,
   clientY: number,
-  target?: EventTarget | Node | null
+  target?: EventTarget | Node | null,
+  options: { requireSelectionContext?: boolean } = {}
 ) => {
   const cell = resolveTableTextCellAtPoint(clientX, clientY, target)
   if (!(cell instanceof HTMLElement) || !editor.view.dom.contains(cell)) return false
@@ -107,7 +222,12 @@ export const collapseTableCellTextSelectionToPoint = (
       cell.getAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR)?.trim() ||
       cell.querySelector(TABLE_DRAG_SELECTION_TEXT_SELECTOR)
   )
-  if (!hasOwnedWindowSelection && !hasPersistedTableSelection && !isEditorSelectionInsideTable(editor)) {
+  const requiresSelectionContext = options.requireSelectionContext ?? true
+  const hasSelectionContext =
+    hasOwnedWindowSelection ||
+    hasPersistedTableSelection ||
+    isEditorSelectionInsideTable(editor)
+  if (requiresSelectionContext && !hasSelectionContext) {
     return false
   }
 
@@ -125,11 +245,15 @@ export const collapseTableCellTextSelectionToPoint = (
     editor.view.dom.focus({ preventScroll: true })
   }
 
-  const pointPos = editor.view.posAtCoords({ left: clientX, top: clientY })?.pos
+  const pointPos = resolveEditorCaretPosInCell(editor, cell, clientX, clientY)
   if (typeof pointPos === "number") {
-    const safePos = Math.max(0, Math.min(editor.state.doc.content.size, pointPos))
+    const safePos = clampEditorPos(editor, pointPos)
     try {
-      editor.view.dispatch(editor.state.tr.setSelection(TextSelection.near(editor.state.doc.resolve(safePos))))
+      editor.view.dispatch(
+        editor.state.tr.setSelection(
+          TextSelection.near(editor.state.doc.resolve(safePos))
+        )
+      )
     } catch {
       // The DOM caret range below is still enough to leave native text selection collapsed.
     }

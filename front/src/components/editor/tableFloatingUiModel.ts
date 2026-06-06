@@ -6,14 +6,13 @@ import type { TableAxis, TableAxisSelectionTarget } from "./tableAxisDragModel"
 
 export type TableMenuKind = "row" | "column" | "table" | "cell"
 
-export type TableMenuState =
-  | {
-      kind: TableMenuKind
-      left: number
-      top: number
-      axisTarget?: TableAxisSelectionTarget
-    }
-  | null
+export type TableMenuState = {
+  kind: TableMenuKind
+  left: number
+  top: number
+  axisTarget?: TableAxisSelectionTarget
+  tablePos?: number
+} | null
 
 export type TableOverflowCoachmarkState = {
   visible: boolean
@@ -31,6 +30,7 @@ type ViewportSize = {
 type TableMenuAnchorRect = Pick<DOMRect, "left" | "bottom">
 type TableMenuOptions = {
   axisTarget?: TableAxisSelectionTarget
+  tablePos?: number
 }
 
 type TableCoachmarkRect = Pick<DOMRect, "right" | "top"> | null
@@ -45,15 +45,17 @@ export const TABLE_MENU_EDGE_PADDING_PX = 16
 export const TABLE_MENU_ESTIMATED_WIDTH_PX = 272
 export const TABLE_MENU_ESTIMATED_HEIGHT_PX = 420
 
-export const createHiddenTableOverflowCoachmarkState = (): TableOverflowCoachmarkState => ({
-  visible: false,
-  left: 0,
-  top: 0,
-})
+export const createHiddenTableOverflowCoachmarkState =
+  (): TableOverflowCoachmarkState => ({
+    visible: false,
+    left: 0,
+    top: 0,
+  })
 
 export const hideTableOverflowCoachmarkState = (
   state: TableOverflowCoachmarkState
-): TableOverflowCoachmarkState => (state.visible ? { ...state, visible: false } : state)
+): TableOverflowCoachmarkState =>
+  state.visible ? { ...state, visible: false } : state
 
 export const resolveTableOverflowCoachmarkState = ({
   tableRect,
@@ -68,13 +70,20 @@ export const resolveTableOverflowCoachmarkState = ({
   viewportHeight: number
   cornerButtonSize: number
 }): TableOverflowCoachmarkState => {
-  const anchorRight = tableRect ? tableRect.right : fallbackAnchor.left + cornerButtonSize
+  const anchorRight = tableRect
+    ? tableRect.right
+    : fallbackAnchor.left + cornerButtonSize
   const anchorTop = tableRect ? tableRect.top : fallbackAnchor.top
   const nextLeft = Math.min(
-    Math.max(TABLE_MENU_EDGE_PADDING_PX, Math.round(anchorRight - TABLE_OVERFLOW_COACHMARK_ESTIMATED_WIDTH_PX)),
     Math.max(
       TABLE_MENU_EDGE_PADDING_PX,
-      viewportWidth - TABLE_OVERFLOW_COACHMARK_ESTIMATED_WIDTH_PX - TABLE_MENU_EDGE_PADDING_PX
+      Math.round(anchorRight - TABLE_OVERFLOW_COACHMARK_ESTIMATED_WIDTH_PX)
+    ),
+    Math.max(
+      TABLE_MENU_EDGE_PADDING_PX,
+      viewportWidth -
+        TABLE_OVERFLOW_COACHMARK_ESTIMATED_WIDTH_PX -
+        TABLE_MENU_EDGE_PADDING_PX
     )
   )
   const preferredTop = Math.round(anchorTop - 54)
@@ -102,7 +111,9 @@ export const resolveTableMenuState = (
         Math.max(TABLE_MENU_EDGE_PADDING_PX, Math.round(anchorRect.left)),
         Math.max(
           TABLE_MENU_EDGE_PADDING_PX,
-          viewport.width - TABLE_MENU_ESTIMATED_WIDTH_PX - TABLE_MENU_EDGE_PADDING_PX
+          viewport.width -
+            TABLE_MENU_ESTIMATED_WIDTH_PX -
+            TABLE_MENU_EDGE_PADDING_PX
         )
       )
     : Math.round(anchorRect.left)
@@ -111,7 +122,9 @@ export const resolveTableMenuState = (
         Math.max(TABLE_MENU_EDGE_PADDING_PX, Math.round(anchorRect.bottom + 8)),
         Math.max(
           TABLE_MENU_EDGE_PADDING_PX,
-          viewport.height - TABLE_MENU_ESTIMATED_HEIGHT_PX - TABLE_MENU_EDGE_PADDING_PX
+          viewport.height -
+            TABLE_MENU_ESTIMATED_HEIGHT_PX -
+            TABLE_MENU_EDGE_PADDING_PX
         )
       )
     : Math.round(anchorRect.bottom + 8)
@@ -123,6 +136,7 @@ export const resolveTableMenuState = (
         left: nextLeft,
         top: nextTop,
         axisTarget: options.axisTarget,
+        tablePos: options.tablePos,
       }
 }
 
@@ -161,11 +175,25 @@ export const resolveCompactTableAffordanceKind = ({
   hasActiveTableCellContext: boolean
 }): CompactTableAffordanceKind => {
   if (!shouldUseCompactTableAffordance) return null
-  if (currentTableAxisSelection?.axis === "row" || draggedTableAxis === "row" || isRowMenuOpen) return "row"
-  if (currentTableAxisSelection?.axis === "column" || draggedTableAxis === "column" || isColumnMenuOpen) {
+  if (
+    currentTableAxisSelection?.axis === "row" ||
+    draggedTableAxis === "row" ||
+    isRowMenuOpen
+  )
+    return "row"
+  if (
+    currentTableAxisSelection?.axis === "column" ||
+    draggedTableAxis === "column" ||
+    isColumnMenuOpen
+  ) {
     return "column"
   }
-  if (tableAffordanceVisible || shouldPersistTableHandles || isTableStructureMenuOpen || hasActiveTableCellContext) {
+  if (
+    tableAffordanceVisible ||
+    shouldPersistTableHandles ||
+    isTableStructureMenuOpen ||
+    hasActiveTableCellContext
+  ) {
     return "table"
   }
   return null
@@ -203,7 +231,9 @@ export const resolveTableHandleVisibility = ({
         draggedTableAxis === "row" ||
         isRowMenuOpen)),
   shouldShowColumnAddBar:
-    shouldShowDesktopTableHandles && (tableAffordanceVisibility.showColumnAddBar || isColumnMenuOpen),
+    shouldShowDesktopTableHandles &&
+    (tableAffordanceVisibility.showColumnAddBar || isColumnMenuOpen),
   shouldShowRowAddBar:
-    shouldShowDesktopTableHandles && (tableAffordanceVisibility.showRowAddBar || isRowMenuOpen),
+    shouldShowDesktopTableHandles &&
+    (tableAffordanceVisibility.showRowAddBar || isRowMenuOpen),
 })

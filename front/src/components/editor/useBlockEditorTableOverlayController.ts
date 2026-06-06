@@ -1,11 +1,23 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
 import { NodeSelection } from "@tiptap/pm/state"
 import { CellSelection } from "@tiptap/pm/tables"
-import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react"
+import type {
+  Dispatch,
+  MutableRefObject,
+  RefObject,
+  SetStateAction,
+} from "react"
 import { useCallback, useEffect, useMemo } from "react"
 import { resolveDesktopTableRailLayout } from "./tableAffordanceModel"
-import { resolveCompactTableAffordanceKind, resolveTableHandleVisibility, resolveTableMenuFlags } from "./tableFloatingUiModel"
-import { getActiveTableStructureState, isTableSelectionActive } from "./tableStructureModel"
+import {
+  resolveCompactTableAffordanceKind,
+  resolveTableHandleVisibility,
+  resolveTableMenuFlags,
+} from "./tableFloatingUiModel"
+import {
+  getActiveTableStructureState,
+  isTableSelectionActive,
+} from "./tableStructureModel"
 import { useBlockEditorTableOverlayAxisDrag } from "./useBlockEditorTableOverlayAxisDrag"
 import { useBlockEditorTableOverlayCornerGrow } from "./useBlockEditorTableOverlayCornerGrow"
 import { useBlockEditorTableOverlayControllerEffects } from "./useBlockEditorTableOverlayControllerEffects"
@@ -209,14 +221,23 @@ export const useBlockEditorTableOverlayController = ({
   const hasActiveTableCellContext = useMemo(() => {
     if (!editor || isTableStructuralSelection) return false
     void selectionTick
-    return Boolean(editor.isActive("tableCell") || editor.isActive("tableHeader"))
+    return Boolean(
+      editor.isActive("tableCell") || editor.isActive("tableHeader")
+    )
   }, [editor, isTableStructuralSelection, selectionTick])
   const shouldPersistTableHandles =
-    isTableStructuralSelection || isAnyTableMenuOpen || Boolean(draggedTableAxisState) || isTableCornerGrowActive
-  const shouldUseCompactTableAffordance = isCoarsePointer || isNarrowTableViewport
+    isTableStructuralSelection ||
+    isAnyTableMenuOpen ||
+    Boolean(draggedTableAxisState) ||
+    isTableCornerGrowActive
+  const shouldUseCompactTableAffordance =
+    isCoarsePointer || isNarrowTableViewport
   const shouldShowDesktopTableHandles =
     !shouldUseCompactTableAffordance &&
-    (tableAffordanceVisibility.visible || isTableQuickRailHovered || shouldPersistTableHandles || isTableColumnResizeActive)
+    (tableAffordanceVisibility.visible ||
+      isTableQuickRailHovered ||
+      shouldPersistTableHandles ||
+      isTableColumnResizeActive)
   const compactTableAffordanceKind = resolveCompactTableAffordanceKind({
     shouldUseCompactTableAffordance,
     currentTableAxisSelection,
@@ -244,8 +265,10 @@ export const useBlockEditorTableOverlayController = ({
   })
   const activeTableStructureState = useMemo(() => {
     void selectionTick
-    return getActiveTableStructureState(editor)
-  }, [editor, selectionTick])
+    const tableMenuTarget =
+      tableMenuState?.kind === "table" ? tableMenuState.tablePos : null
+    return getActiveTableStructureState(editor, tableMenuTarget)
+  }, [editor, selectionTick, tableMenuState])
   const {
     activeTableCellAttrs,
     canMergeSelectedTableCells,
@@ -254,6 +277,7 @@ export const useBlockEditorTableOverlayController = ({
     openTableMenu,
     runTableMenuEditorAction,
     selectCurrentTableAxis,
+    deleteActiveTable,
     updateActiveTableCellAttrs,
     updateActiveTableOverflowMode,
   } = useBlockEditorTableOverlayMenu({
@@ -314,7 +338,8 @@ export const useBlockEditorTableOverlayController = ({
       isTableCornerGrowActive ||
       (isTableStructuralSelection && currentTableAxisSelection === null))
   const shouldShowGrowHandle = shouldShowCornerControls
-  const shouldShowStructureMenuButton = compactTableAffordanceKind === "table" || shouldShowCornerControls
+  const shouldShowStructureMenuButton =
+    compactTableAffordanceKind === "table" || shouldShowCornerControls
   const shouldRenderTableAffordanceOverlay =
     shouldShowDesktopTableHandles ||
     shouldShowRowRail ||
@@ -329,7 +354,8 @@ export const useBlockEditorTableOverlayController = ({
     if (typeof window === "undefined") return null
     return resolveDesktopTableRailLayout(tableAffordanceGeometry)
   }, [tableAffordanceGeometry])
-  const shouldShowCellMergeSection = canMergeSelectedTableCells || canSplitSelectedTableCell
+  const shouldShowCellMergeSection =
+    canMergeSelectedTableCells || canSplitSelectedTableCell
   const {
     clearHoveredTableCellMenuLayout,
     clearTrackedTableHover,
@@ -358,16 +384,21 @@ export const useBlockEditorTableOverlayController = ({
     if (shouldShowDesktopTableHandles) return
     hideTableColumnDragGuide()
   }, [hideTableColumnDragGuide, shouldShowDesktopTableHandles])
-  const hasTableStructuralSelection = useCallback((activeEditor?: TiptapEditor | null) => {
-    if (!activeEditor) return false
-    const selection = activeEditor.state.selection
-    return Boolean(
-      selection instanceof CellSelection ||
-        (selection instanceof NodeSelection && selection.node.type.name === "table")
-    )
-  }, [])
+  const hasTableStructuralSelection = useCallback(
+    (activeEditor?: TiptapEditor | null) => {
+      if (!activeEditor) return false
+      const selection = activeEditor.state.selection
+      return Boolean(
+        selection instanceof CellSelection ||
+          (selection instanceof NodeSelection &&
+            selection.node.type.name === "table")
+      )
+    },
+    []
+  )
   const isTopLevelInsertBlockedByTableUi = useCallback(
-    () => tableAffordanceVisibilityRef.current.visible || tableMenuState !== null,
+    () =>
+      tableAffordanceVisibilityRef.current.visible || tableMenuState !== null,
     [tableAffordanceVisibilityRef, tableMenuState]
   )
   return {
@@ -449,6 +480,7 @@ export const useBlockEditorTableOverlayController = ({
       tableMenuKind: tableMenuKind ?? tableMenuState?.kind ?? "table",
       tableMenuState,
       tableOverflowCoachmarkState,
+      deleteActiveTable,
       updateActiveTableCellAttrs,
       updateActiveTableOverflowMode,
     },

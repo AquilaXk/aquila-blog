@@ -19,9 +19,7 @@ import {
   type BlockSelectionPointerEventLike,
   type TopLevelBlockHandleState,
 } from "./blockSelectionModel"
-import {
-  preserveWindowScrollForEditorPointerFocus,
-} from "./blockHandleLayoutModel"
+import { preserveWindowScrollForEditorPointerFocus } from "./blockHandleLayoutModel"
 import {
   type NestedListItemContext,
   selectNestedListItemNode,
@@ -33,7 +31,10 @@ import {
   clearTableTextSelectionForStructuralSelection,
 } from "./tableTextSelectionModel"
 import type { DraggedBlockState, DropIndicatorState } from "./blockDragModel"
-import type { BlockEditorBlockMenuState, BlockEditorSlashMenuState } from "./BlockEditorEngine.layers"
+import type {
+  BlockEditorBlockMenuState,
+  BlockEditorSlashMenuState,
+} from "./BlockEditorEngine.layers"
 import { useBlockEditorEngineBlockSelectionLayout } from "./useBlockEditorEngineBlockSelectionLayout"
 
 type SetState<T> = Dispatch<SetStateAction<T>>
@@ -47,7 +48,9 @@ type ActiveListItemInteraction = {
 type UseBlockEditorEngineBlockSelectionUiArgs = {
   blockHandleRailMetricsRef: MutableRefObject<{ width: number; height: number }>
   blockHandleState: TopLevelBlockHandleState
-  blockSelectionLayoutRectCacheRef: MutableRefObject<Map<number, { element: HTMLElement; rect: DOMRect }>>
+  blockSelectionLayoutRectCacheRef: MutableRefObject<
+    Map<number, { element: HTMLElement; rect: DOMRect }>
+  >
   cancelHoveredBlockClear: () => void
   cancelTableQuickRailHide: () => void
   clearNativeTextSelection: () => void
@@ -58,10 +61,20 @@ type UseBlockEditorEngineBlockSelectionUiArgs = {
   dropIndicatorState: DropIndicatorState
   editor: TiptapEditor | null
   editorRef: RefObject<TiptapEditor | null>
-  findNestedListItemContextByClientPosition: (clientX: number, clientY: number) => NestedListItemContext | null
-  findNestedListItemContextFromTarget: (target: EventTarget | null) => NestedListItemContext | null
-  findTopLevelBlockIndexByClientPosition: (clientX: number, clientY: number) => number | null
-  findTopLevelBlockIndexFromTarget: (target: EventTarget | null) => number | null
+  findNestedListItemContextByClientPosition: (
+    clientX: number,
+    clientY: number
+  ) => NestedListItemContext | null
+  findNestedListItemContextFromTarget: (
+    target: EventTarget | null
+  ) => NestedListItemContext | null
+  findTopLevelBlockIndexByClientPosition: (
+    clientX: number,
+    clientY: number
+  ) => number | null
+  findTopLevelBlockIndexFromTarget: (
+    target: EventTarget | null
+  ) => number | null
   focusRenderedTableCell: (cell: HTMLTableCellElement) => void
   getContentRoot: () => HTMLElement | null
   getTableCellFromClientPoint: (
@@ -78,21 +91,38 @@ type UseBlockEditorEngineBlockSelectionUiArgs = {
   hoveredBlockIndex: number | null
   hoveredListItemContext: NestedListItemContext | null
   isCoarsePointer: boolean
-  isOuterBlockSelectionGesture: (event: BlockSelectionPointerEventLike, targetBlockIndex: number | null) => boolean
-  isOuterListItemSelectionGesture: (event: BlockSelectionPointerEventLike, targetListItem: NestedListItemContext | null) => boolean
+  isOuterBlockSelectionGesture: (
+    event: BlockSelectionPointerEventLike,
+    targetBlockIndex: number | null
+  ) => boolean
+  isOuterListItemSelectionGesture: (
+    event: BlockSelectionPointerEventLike,
+    targetListItem: NestedListItemContext | null
+  ) => boolean
   isTableAffordanceVisible: boolean
   isTableAxisDragActive: boolean
   isTableColumnRailResizeActive: () => boolean
   isTableRowResizeActive: () => boolean
-  isTableRowResizeHandleTarget: (cell: HTMLTableCellElement | null, clientX: number, clientY: number) => boolean
+  isTableRowResizeHandleTarget: (
+    cell: HTMLTableCellElement | null,
+    clientX: number,
+    clientY: number
+  ) => boolean
   isTableStructuralSelection: boolean
   isTopLevelBlockHandleEligible: (blockIndex: number) => boolean
   isWriterSurface: boolean
   keyboardBlockSelectionStickyRef: MutableRefObject<boolean>
-  mutateTopLevelBlocks: (mutator: (doc: BlockEditorDoc) => BlockEditorDoc, focusIndex?: number | null) => void
+  mutateTopLevelBlocks: (
+    mutator: (doc: BlockEditorDoc) => BlockEditorDoc,
+    focusIndex?: number | null
+  ) => void
   promoteTopLevelBlockSelection: (blockIndex: number) => boolean
-  resolveActiveListItemInteraction: (editor: TiptapEditor) => ActiveListItemInteraction
-  resolveEffectiveSelectedListItemContext: (editor?: TiptapEditor | null) => NestedListItemContext | null
+  resolveActiveListItemInteraction: (
+    editor: TiptapEditor
+  ) => ActiveListItemInteraction
+  resolveEffectiveSelectedListItemContext: (
+    editor?: TiptapEditor | null
+  ) => NestedListItemContext | null
   scheduleHoveredBlockClear: () => void
   scheduleTableQuickRailHide: () => void
   selectedBlockIndex: number | null
@@ -115,7 +145,11 @@ type UseBlockEditorEngineBlockSelectionUiArgs = {
   slashMenuState: BlockEditorSlashMenuState
   startTableRowResize: (cell: HTMLTableCellElement, clientY: number) => void
   syncSelectedBlockNodeSurface: (blockIndex: number | null) => void
-  syncTableQuickRailFromElement: (element: Element, clientX?: number, clientY?: number) => void
+  syncTableQuickRailFromElement: (
+    element: Element,
+    clientX?: number,
+    clientY?: number
+  ) => void
   syncTrackedHoveredTableCellMenuLayout: () => void
   tableMenuState: unknown
   textSelectionBlockIndex: number | null
@@ -224,7 +258,8 @@ export const useBlockEditorEngineBlockSelectionUi = ({
   })
 
   const clearTextSelectionForTopLevelBlockSelection = useCallback(() => {
-    const selection = typeof window !== "undefined" ? window.getSelection() : null
+    const selection =
+      typeof window !== "undefined" ? window.getSelection() : null
     const anchorElement =
       selection?.anchorNode instanceof Element
         ? selection.anchorNode
@@ -259,7 +294,11 @@ export const useBlockEditorEngineBlockSelectionUi = ({
       }
       if (isCoarsePointer) return
       const target =
-        targetEvent instanceof Element ? targetEvent : targetEvent instanceof Node ? targetEvent.parentElement : null
+        targetEvent instanceof Element
+          ? targetEvent
+          : targetEvent instanceof Node
+          ? targetEvent.parentElement
+          : null
       const cell = getTableCellFromClientPoint(clientX, clientY, targetEvent)
       const targetListItemContext =
         findNestedListItemContextFromTarget(targetEvent) ??
@@ -268,18 +307,26 @@ export const useBlockEditorEngineBlockSelectionUi = ({
         findTopLevelBlockIndexFromTarget(targetEvent) ??
         findTopLevelBlockIndexByClientPosition(clientX, clientY)
       const targetBlockElement =
-        targetBlockIndex !== null ? getTopLevelBlockElementByIndex(targetBlockIndex) : null
-      const targetBlockRect = targetBlockElement?.getBoundingClientRect() ?? null
+        targetBlockIndex !== null
+          ? getTopLevelBlockElementByIndex(targetBlockIndex)
+          : null
+      const targetBlockRect =
+        targetBlockElement?.getBoundingClientRect() ?? null
       const isFarLeftTableBlockGutter = Boolean(
-        targetBlockElement?.querySelector(".aq-table-shell, .tableWrapper, table") &&
+        targetBlockElement?.querySelector(
+          ".aq-table-shell, .tableWrapper, table"
+        ) &&
           targetBlockRect &&
-          clientY >= targetBlockRect.top - BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX &&
-          clientY <= targetBlockRect.bottom + BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX &&
+          clientY >=
+            targetBlockRect.top - BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX &&
+          clientY <=
+            targetBlockRect.bottom + BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX &&
           clientX <= targetBlockRect.left - 12
       )
       if (
         target?.closest("[data-table-menu-root='true']") ||
-        (target?.closest("[data-table-axis-rail='true']") && !isFarLeftTableBlockGutter) ||
+        (target?.closest("[data-table-axis-rail='true']") &&
+          !isFarLeftTableBlockGutter) ||
         target?.closest("[data-table-corner-handle='true']") ||
         target?.closest("[data-table-column-rail-track='true']") ||
         target?.closest("[data-table-menu-trigger='true']")
@@ -288,7 +335,11 @@ export const useBlockEditorEngineBlockSelectionUi = ({
         setTableQuickRailHovered(true)
         syncTrackedHoveredTableCellMenuLayout()
         setHoveredListItemContext(null)
-        if (isWriterSurface || currentTableAxisSelection !== null) {
+        if (
+          isWriterSurface ||
+          currentTableAxisSelection !== null ||
+          isTableStructuralSelection
+        ) {
           setHoveredBlockIndex(targetBlockIndex)
         }
         return
@@ -301,14 +352,26 @@ export const useBlockEditorEngineBlockSelectionUi = ({
         setHoveredBlockIndex(targetBlockIndex)
         return
       }
-      const hoveredTableElement = cell?.closest(".aq-table-shell, .tableWrapper, table") ?? target?.closest(".aq-table-shell, .tableWrapper, table") ?? null
+      const hoveredTableElement =
+        cell?.closest(".aq-table-shell, .tableWrapper, table") ??
+        target?.closest(".aq-table-shell, .tableWrapper, table") ??
+        null
       if (hoveredTableElement) {
-        syncTableQuickRailFromElement(cell ?? target ?? hoveredTableElement, clientX, clientY)
+        syncTableQuickRailFromElement(
+          cell ?? target ?? hoveredTableElement,
+          clientX,
+          clientY
+        )
         setTableQuickRailHovered(true)
-        setViewportRowResizeHot(isTableRowResizeHandleTarget(cell, clientX, clientY))
+        setViewportRowResizeHot(
+          isTableRowResizeHandleTarget(cell, clientX, clientY)
+        )
         setHoveredListItemContext(null)
-        setHoveredBlockIndex(isWriterSurface || currentTableAxisSelection !== null ? targetBlockIndex : null)
-        if (selectedBlockNodeIndex !== null && !keyboardBlockSelectionStickyRef.current) {
+        setHoveredBlockIndex(targetBlockIndex)
+        if (
+          selectedBlockNodeIndex !== null &&
+          !keyboardBlockSelectionStickyRef.current
+        ) {
           keyboardBlockSelectionStickyRef.current = false
           setSelectedBlockNodeIndex(null)
           syncSelectedBlockNodeSurface(null)
@@ -324,7 +387,10 @@ export const useBlockEditorEngineBlockSelectionUi = ({
         setHoveredBlockIndex(hoveredTableElement ? null : targetBlockIndex)
         return
       }
-      if (target?.closest("[data-block-handle-rail='true']") || target?.closest("[data-block-menu-root='true']")) {
+      if (
+        target?.closest("[data-block-handle-rail='true']") ||
+        target?.closest("[data-block-menu-root='true']")
+      ) {
         if (blockHandleState.visible) {
           if (blockHandleState.kind === "list-item" && hoveredListItemContext) {
             setHoveredListItemContext(hoveredListItemContext)
@@ -333,13 +399,18 @@ export const useBlockEditorEngineBlockSelectionUi = ({
         }
         return
       }
-      setViewportRowResizeHot(isTableRowResizeHandleTarget(cell, clientX, clientY))
+      setViewportRowResizeHot(
+        isTableRowResizeHandleTarget(cell, clientX, clientY)
+      )
       setHoveredListItemContext(targetListItemContext)
       setHoveredBlockIndex(
         findTopLevelBlockIndexByClientPosition(clientX, clientY) ??
           findTopLevelBlockIndexFromTarget(targetEvent)
       )
-      if (selectedBlockNodeIndex !== null && !keyboardBlockSelectionStickyRef.current) {
+      if (
+        selectedBlockNodeIndex !== null &&
+        !keyboardBlockSelectionStickyRef.current
+      ) {
         keyboardBlockSelectionStickyRef.current = false
         setSelectedBlockNodeIndex(null)
         syncSelectedBlockNodeSurface(null)
@@ -418,9 +489,16 @@ export const useBlockEditorEngineBlockSelectionUi = ({
         event.preventDefault()
         event.stopPropagation()
         const blockIndex = selectedBlockNodeIndexRef.current
-        const contentLength = (currentEditor.getJSON() as BlockEditorDoc).content?.length ?? 0
-        const nextFocusIndex = Math.max(0, Math.min(blockIndex, Math.max(contentLength - 2, 0)))
-        mutateTopLevelBlocks((doc) => deleteTopLevelBlockAt(doc, blockIndex), nextFocusIndex)
+        const contentLength =
+          (currentEditor.getJSON() as BlockEditorDoc).content?.length ?? 0
+        const nextFocusIndex = Math.max(
+          0,
+          Math.min(blockIndex, Math.max(contentLength - 2, 0))
+        )
+        mutateTopLevelBlocks(
+          (doc) => deleteTopLevelBlockAt(doc, blockIndex),
+          nextFocusIndex
+        )
         setBlockMenuState(null)
         keyboardBlockSelectionStickyRef.current = false
         setSelectedBlockNodeIndex(null)
@@ -429,10 +507,17 @@ export const useBlockEditorEngineBlockSelectionUi = ({
         return
       }
 
-      if (event.defaultPrevented || (event.nativeEvent as Event & { __aqCodePointerHandled?: boolean }).__aqCodePointerHandled) return
-      if (event.key !== "Tab" || event.metaKey || event.ctrlKey || event.altKey) return
+      if (
+        event.defaultPrevented ||
+        (event.nativeEvent as Event & { __aqCodePointerHandled?: boolean })
+          .__aqCodePointerHandled
+      )
+        return
+      if (event.key !== "Tab" || event.metaKey || event.ctrlKey || event.altKey)
+        return
       if (slashMenuState) return
-      const activeListItemInteraction = resolveActiveListItemInteraction(currentEditor)
+      const activeListItemInteraction =
+        resolveActiveListItemInteraction(currentEditor)
       if (activeListItemInteraction.listItemName) {
         event.preventDefault()
         event.stopPropagation()
@@ -441,12 +526,19 @@ export const useBlockEditorEngineBlockSelectionUi = ({
           activeListItemInteraction.shouldRestoreNodeSelection &&
           activeListItemInteraction.context
         ) {
-          selectNestedListItemTextAnchor(currentEditor, activeListItemInteraction.context)
+          selectNestedListItemTextAnchor(
+            currentEditor,
+            activeListItemInteraction.context
+          )
           clearNativeTextSelection()
         }
         const handled = event.shiftKey
-          ? currentEditor.commands.liftListItem(activeListItemInteraction.listItemName)
-          : currentEditor.commands.sinkListItem(activeListItemInteraction.listItemName)
+          ? currentEditor.commands.liftListItem(
+              activeListItemInteraction.listItemName
+            )
+          : currentEditor.commands.sinkListItem(
+              activeListItemInteraction.listItemName
+            )
         if (handled) {
           setSelectionTick((prev) => prev + 1)
         }
@@ -492,7 +584,9 @@ export const useBlockEditorEngineBlockSelectionUi = ({
         return
       }
       if (event.defaultPrevented) return
-      const targetListItemContext = findNestedListItemContextFromTarget(event.target)
+      const targetListItemContext = findNestedListItemContextFromTarget(
+        event.target
+      )
       const targetBlockIndex =
         findTopLevelBlockIndexFromTarget(event.target) ??
         findTopLevelBlockIndexByClientPosition(event.clientX, event.clientY)
@@ -536,11 +630,19 @@ export const useBlockEditorEngineBlockSelectionUi = ({
         setSelectedBlockNodeIndex(null)
         syncSelectedBlockNodeSurface(null)
       }
-      if (isCoarsePointer || isTableRowResizeActive() || isTableColumnRailResizeActive()) return
-      const cell = getTableCellFromClientPoint(event.clientX, event.clientY, event.target)
+      if (
+        isCoarsePointer ||
+        isTableRowResizeActive() ||
+        isTableColumnRailResizeActive()
+      )
+        return
+      const cell = getTableCellFromClientPoint(
+        event.clientX,
+        event.clientY,
+        event.target
+      )
       const hasActiveTableStructuralSelection = Boolean(
-        currentEditor &&
-          hasTableStructuralSelection(currentEditor)
+        currentEditor && hasTableStructuralSelection(currentEditor)
       )
       if (cell) {
         setTableQuickRailHovered(false)
@@ -548,10 +650,18 @@ export const useBlockEditorEngineBlockSelectionUi = ({
           hideTableQuickRailImmediately()
         }
       }
-      if (cell && hasActiveTableStructuralSelection && !isTableRowResizeHandleTarget(cell, event.clientX, event.clientY)) {
+      if (
+        cell &&
+        hasActiveTableStructuralSelection &&
+        !isTableRowResizeHandleTarget(cell, event.clientX, event.clientY)
+      ) {
         focusRenderedTableCell(cell)
       }
-      if (!isTableRowResizeHandleTarget(cell, event.clientX, event.clientY) || !cell) return
+      if (
+        !isTableRowResizeHandleTarget(cell, event.clientX, event.clientY) ||
+        !cell
+      )
+        return
       event.preventDefault()
       event.stopPropagation()
       startTableRowResize(cell, event.clientY)

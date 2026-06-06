@@ -58,12 +58,19 @@ const restoreTableAxisMenuSelection = ({
   ) => unknown
   tableMenuState: BlockEditorTableOverlayLayerProps["tableMenuState"]
 }) => {
-  const axisTarget = tableMenuState?.kind === axis ? tableMenuState.axisTarget : null
+  const axisTarget =
+    tableMenuState?.kind === axis ? tableMenuState.axisTarget : null
   if (
     axisTarget &&
-    selectTableAxisAtIndex(activeEditor, axisTarget.tablePos, axis, axisTarget.index, {
-      clearNativeText: false,
-    })
+    selectTableAxisAtIndex(
+      activeEditor,
+      axisTarget.tablePos,
+      axis,
+      axisTarget.index,
+      {
+        clearNativeText: false,
+      }
+    )
   ) {
     return true
   }
@@ -86,7 +93,9 @@ const runRestoredTableAxisCommand = (
   })
 }
 
-const preserveTableAxisMenuSelectionOnMouseDown = (event: ReactMouseEvent<HTMLButtonElement>) => {
+const preserveTableAxisMenuSelectionOnMouseDown = (
+  event: ReactMouseEvent<HTMLButtonElement>
+) => {
   if (event.button !== 0) return
   event.preventDefault()
   event.stopPropagation()
@@ -108,6 +117,7 @@ export const BlockEditorTableOverlayMenus = ({
   canMergeSelectedTableCells,
   canSplitSelectedTableCell,
   cancelTableOverflowCoachmarkHide,
+  deleteActiveTable,
   editor,
   handleToolbarButtonMouseDown,
   hideTableOverflowCoachmark,
@@ -138,7 +148,9 @@ export const BlockEditorTableOverlayMenus = ({
         onPointerLeave={() => scheduleTableOverflowCoachmarkHide(2400)}
       >
         <TableOverflowCoachmarkBody>
-          <TableOverflowCoachmarkTitle>페이지 너비에 맞춤 유지 중</TableOverflowCoachmarkTitle>
+          <TableOverflowCoachmarkTitle>
+            페이지 너비에 맞춤 유지 중
+          </TableOverflowCoachmarkTitle>
           <TableOverflowCoachmarkDescription>
             더 넓게 편집하려면 넓은 표로 전환하세요.
           </TableOverflowCoachmarkDescription>
@@ -172,28 +184,28 @@ export const BlockEditorTableOverlayMenus = ({
             {tableMenuKind === "row"
               ? "Axis"
               : tableMenuKind === "column"
-                ? "Axis"
-                : tableMenuKind === "cell"
-                  ? "Cell"
-                  : "Table"}
+              ? "Axis"
+              : tableMenuKind === "cell"
+              ? "Cell"
+              : "Table"}
           </TableMenuHeaderEyebrow>
           <TableMenuHeaderTitle>
             {tableMenuKind === "row"
               ? "행 메뉴"
               : tableMenuKind === "column"
-                ? "열 메뉴"
-                : tableMenuKind === "cell"
-                  ? "셀 스타일"
-                  : "표 구조"}
+              ? "열 메뉴"
+              : tableMenuKind === "cell"
+              ? "셀 스타일"
+              : "표 구조"}
           </TableMenuHeaderTitle>
           <TableMenuHeaderDescription>
             {tableMenuKind === "row"
               ? "현재 행에만 적용되는 삽입과 헤더 설정"
               : tableMenuKind === "column"
-                ? "현재 열에만 적용되는 삽입과 헤더 설정"
-                : tableMenuKind === "cell"
-                  ? "정렬과 배경, 필요할 때만 셀 결합"
-                  : "표 수준 폭 정책과 삭제만 유지"}
+              ? "현재 열에만 적용되는 삽입과 헤더 설정"
+              : tableMenuKind === "cell"
+              ? "정렬과 배경, 필요할 때만 셀 결합"
+              : "표 수준 폭 정책과 삭제만 유지"}
           </TableMenuHeaderDescription>
         </TableMenuHeader>
         {tableMenuKind === "cell" ? (
@@ -205,7 +217,9 @@ export const BlockEditorTableOverlayMenus = ({
                   type="button"
                   data-active={activeTableCellAttrs.textAlign === "left"}
                   onMouseDown={handleToolbarButtonMouseDown}
-                  onClick={() => updateActiveTableCellAttrs({ textAlign: "left" })}
+                  onClick={() =>
+                    updateActiveTableCellAttrs({ textAlign: "left" })
+                  }
                 >
                   좌측
                 </TableMenuSegmentedButton>
@@ -213,7 +227,9 @@ export const BlockEditorTableOverlayMenus = ({
                   type="button"
                   data-active={activeTableCellAttrs.textAlign === "center"}
                   onMouseDown={handleToolbarButtonMouseDown}
-                  onClick={() => updateActiveTableCellAttrs({ textAlign: "center" })}
+                  onClick={() =>
+                    updateActiveTableCellAttrs({ textAlign: "center" })
+                  }
                 >
                   가운데
                 </TableMenuSegmentedButton>
@@ -221,7 +237,9 @@ export const BlockEditorTableOverlayMenus = ({
                   type="button"
                   data-active={activeTableCellAttrs.textAlign === "right"}
                   onMouseDown={handleToolbarButtonMouseDown}
-                  onClick={() => updateActiveTableCellAttrs({ textAlign: "right" })}
+                  onClick={() =>
+                    updateActiveTableCellAttrs({ textAlign: "right" })
+                  }
                 >
                   우측
                 </TableMenuSegmentedButton>
@@ -232,16 +250,22 @@ export const BlockEditorTableOverlayMenus = ({
               <TableMenuSegmentedRow data-columns="2">
                 <TableMenuSegmentedButton
                   type="button"
-                  data-active={activeTableCellAttrs.backgroundColor === "#f8fafc"}
+                  data-active={
+                    activeTableCellAttrs.backgroundColor === "#f8fafc"
+                  }
                   onMouseDown={handleToolbarButtonMouseDown}
-                  onClick={() => updateActiveTableCellAttrs({ backgroundColor: "#f8fafc" })}
+                  onClick={() =>
+                    updateActiveTableCellAttrs({ backgroundColor: "#f8fafc" })
+                  }
                 >
                   기본
                 </TableMenuSegmentedButton>
                 <TableMenuSegmentedButton
                   type="button"
                   onMouseDown={handleToolbarButtonMouseDown}
-                  onClick={() => updateActiveTableCellAttrs({ backgroundColor: null })}
+                  onClick={() =>
+                    updateActiveTableCellAttrs({ backgroundColor: null })
+                  }
                 >
                   배경 해제
                 </TableMenuSegmentedButton>
@@ -253,17 +277,29 @@ export const BlockEditorTableOverlayMenus = ({
                     type="button"
                     title={preset.label}
                     aria-label={`${preset.label} 배경`}
-                    data-active={activeTableCellAttrs.backgroundColor === preset.value}
-                    style={{ "--table-swatch-color": preset.value } as CSSProperties}
-                    onClick={() => updateActiveTableCellAttrs({ backgroundColor: preset.value })}
+                    data-active={
+                      activeTableCellAttrs.backgroundColor === preset.value
+                    }
+                    style={
+                      { "--table-swatch-color": preset.value } as CSSProperties
+                    }
+                    onClick={() =>
+                      updateActiveTableCellAttrs({
+                        backgroundColor: preset.value,
+                      })
+                    }
                   />
                 ))}
                 <TableColorInput
                   type="color"
                   aria-label="표 셀 배경색 선택"
-                  value={normalizeTableColorInputValue(activeTableCellAttrs.backgroundColor)}
+                  value={normalizeTableColorInputValue(
+                    activeTableCellAttrs.backgroundColor
+                  )}
                   onChange={(event) =>
-                    updateActiveTableCellAttrs({ backgroundColor: event.currentTarget.value })
+                    updateActiveTableCellAttrs({
+                      backgroundColor: event.currentTarget.value,
+                    })
                   }
                 />
               </TablePresetSwatches>
@@ -315,7 +351,15 @@ export const BlockEditorTableOverlayMenus = ({
             onDelete={() =>
               runTableMenuEditorAction((activeEditor) =>
                 runRestoredTableAxisCommand(
-                  () => restoreTableAxisMenuSelection({ activeEditor, axis: "row", fallbackIndex: tableAffordanceGeometry.rowIndex, selectTableAxisAtIndex, selectTableByIndex: selectTableRowByIndex, tableMenuState }),
+                  () =>
+                    restoreTableAxisMenuSelection({
+                      activeEditor,
+                      axis: "row",
+                      fallbackIndex: tableAffordanceGeometry.rowIndex,
+                      selectTableAxisAtIndex,
+                      selectTableByIndex: selectTableRowByIndex,
+                      tableMenuState,
+                    }),
                   activeEditor,
                   (editor) => editor.commands.deleteRow()
                 )
@@ -324,7 +368,15 @@ export const BlockEditorTableOverlayMenus = ({
             onInsertAfter={() =>
               runTableMenuEditorAction((activeEditor) =>
                 runRestoredTableAxisCommand(
-                  () => restoreTableAxisMenuSelection({ activeEditor, axis: "row", fallbackIndex: tableAffordanceGeometry.rowIndex, selectTableAxisAtIndex, selectTableByIndex: selectTableRowByIndex, tableMenuState }),
+                  () =>
+                    restoreTableAxisMenuSelection({
+                      activeEditor,
+                      axis: "row",
+                      fallbackIndex: tableAffordanceGeometry.rowIndex,
+                      selectTableAxisAtIndex,
+                      selectTableByIndex: selectTableRowByIndex,
+                      tableMenuState,
+                    }),
                   activeEditor,
                   (editor) => editor.commands.addRowAfter()
                 )
@@ -333,7 +385,15 @@ export const BlockEditorTableOverlayMenus = ({
             onInsertBefore={() =>
               runTableMenuEditorAction((activeEditor) =>
                 runRestoredTableAxisCommand(
-                  () => restoreTableAxisMenuSelection({ activeEditor, axis: "row", fallbackIndex: tableAffordanceGeometry.rowIndex, selectTableAxisAtIndex, selectTableByIndex: selectTableRowByIndex, tableMenuState }),
+                  () =>
+                    restoreTableAxisMenuSelection({
+                      activeEditor,
+                      axis: "row",
+                      fallbackIndex: tableAffordanceGeometry.rowIndex,
+                      selectTableAxisAtIndex,
+                      selectTableByIndex: selectTableRowByIndex,
+                      tableMenuState,
+                    }),
                   activeEditor,
                   (editor) => editor.commands.addRowBefore()
                 )
@@ -342,7 +402,15 @@ export const BlockEditorTableOverlayMenus = ({
             onToggleHeader={() =>
               runTableMenuEditorAction((activeEditor) =>
                 runRestoredTableAxisCommand(
-                  () => restoreTableAxisMenuSelection({ activeEditor, axis: "row", fallbackIndex: tableAffordanceGeometry.rowIndex, selectTableAxisAtIndex, selectTableByIndex: selectTableRowByIndex, tableMenuState }),
+                  () =>
+                    restoreTableAxisMenuSelection({
+                      activeEditor,
+                      axis: "row",
+                      fallbackIndex: tableAffordanceGeometry.rowIndex,
+                      selectTableAxisAtIndex,
+                      selectTableByIndex: selectTableRowByIndex,
+                      tableMenuState,
+                    }),
                   activeEditor,
                   (editor) => editor.commands.toggleHeaderRow()
                 )
@@ -361,7 +429,15 @@ export const BlockEditorTableOverlayMenus = ({
             onDelete={() =>
               runTableMenuEditorAction((activeEditor) =>
                 runRestoredTableAxisCommand(
-                  () => restoreTableAxisMenuSelection({ activeEditor, axis: "column", fallbackIndex: tableAffordanceGeometry.columnIndex, selectTableAxisAtIndex, selectTableByIndex: selectTableColumnByIndex, tableMenuState }),
+                  () =>
+                    restoreTableAxisMenuSelection({
+                      activeEditor,
+                      axis: "column",
+                      fallbackIndex: tableAffordanceGeometry.columnIndex,
+                      selectTableAxisAtIndex,
+                      selectTableByIndex: selectTableColumnByIndex,
+                      tableMenuState,
+                    }),
                   activeEditor,
                   (editor) => editor.commands.deleteColumn()
                 )
@@ -370,7 +446,15 @@ export const BlockEditorTableOverlayMenus = ({
             onInsertAfter={() =>
               runTableMenuEditorAction((activeEditor) =>
                 runRestoredTableAxisCommand(
-                  () => restoreTableAxisMenuSelection({ activeEditor, axis: "column", fallbackIndex: tableAffordanceGeometry.columnIndex, selectTableAxisAtIndex, selectTableByIndex: selectTableColumnByIndex, tableMenuState }),
+                  () =>
+                    restoreTableAxisMenuSelection({
+                      activeEditor,
+                      axis: "column",
+                      fallbackIndex: tableAffordanceGeometry.columnIndex,
+                      selectTableAxisAtIndex,
+                      selectTableByIndex: selectTableColumnByIndex,
+                      tableMenuState,
+                    }),
                   activeEditor,
                   (editor) => editor.commands.addColumnAfter()
                 )
@@ -379,7 +463,15 @@ export const BlockEditorTableOverlayMenus = ({
             onInsertBefore={() =>
               runTableMenuEditorAction((activeEditor) =>
                 runRestoredTableAxisCommand(
-                  () => restoreTableAxisMenuSelection({ activeEditor, axis: "column", fallbackIndex: tableAffordanceGeometry.columnIndex, selectTableAxisAtIndex, selectTableByIndex: selectTableColumnByIndex, tableMenuState }),
+                  () =>
+                    restoreTableAxisMenuSelection({
+                      activeEditor,
+                      axis: "column",
+                      fallbackIndex: tableAffordanceGeometry.columnIndex,
+                      selectTableAxisAtIndex,
+                      selectTableByIndex: selectTableColumnByIndex,
+                      tableMenuState,
+                    }),
                   activeEditor,
                   (editor) => editor.commands.addColumnBefore()
                 )
@@ -388,7 +480,15 @@ export const BlockEditorTableOverlayMenus = ({
             onToggleHeader={() =>
               runTableMenuEditorAction((activeEditor) =>
                 runRestoredTableAxisCommand(
-                  () => restoreTableAxisMenuSelection({ activeEditor, axis: "column", fallbackIndex: tableAffordanceGeometry.columnIndex, selectTableAxisAtIndex, selectTableByIndex: selectTableColumnByIndex, tableMenuState }),
+                  () =>
+                    restoreTableAxisMenuSelection({
+                      activeEditor,
+                      axis: "column",
+                      fallbackIndex: tableAffordanceGeometry.columnIndex,
+                      selectTableAxisAtIndex,
+                      selectTableByIndex: selectTableColumnByIndex,
+                      tableMenuState,
+                    }),
                   activeEditor,
                   (editor) => editor.commands.toggleHeaderColumn()
                 )
@@ -403,7 +503,11 @@ export const BlockEditorTableOverlayMenus = ({
                 <TableMenuSegmentedButton
                   type="button"
                   data-testid="table-overflow-mode-normal"
-                  data-active={activeTableStructureState.overflowMode !== TABLE_OVERFLOW_MODE_WIDE}
+                  data-active={
+                    activeTableStructureState.overflowMode !==
+                    TABLE_OVERFLOW_MODE_WIDE
+                  }
+                  onMouseDown={handleToolbarButtonMouseDown}
                   onClick={() =>
                     runTableMenuEditorAction((activeEditor) => {
                       updateActiveTableOverflowMode(activeEditor, "normal")
@@ -415,10 +519,17 @@ export const BlockEditorTableOverlayMenus = ({
                 <TableMenuSegmentedButton
                   type="button"
                   data-testid="table-overflow-mode-wide"
-                  data-active={activeTableStructureState.overflowMode === TABLE_OVERFLOW_MODE_WIDE}
+                  data-active={
+                    activeTableStructureState.overflowMode ===
+                    TABLE_OVERFLOW_MODE_WIDE
+                  }
+                  onMouseDown={handleToolbarButtonMouseDown}
                   onClick={() =>
                     runTableMenuEditorAction((activeEditor) => {
-                      updateActiveTableOverflowMode(activeEditor, TABLE_OVERFLOW_MODE_WIDE)
+                      updateActiveTableOverflowMode(
+                        activeEditor,
+                        TABLE_OVERFLOW_MODE_WIDE
+                      )
                     })
                   }
                 >
@@ -426,15 +537,18 @@ export const BlockEditorTableOverlayMenus = ({
                 </TableMenuSegmentedButton>
               </TableMenuSegmentedRow>
             </TableMenuCompactSection>
-            <TableMenuHint>제목 행/열 토글은 행 메뉴와 열 메뉴에서 분리했습니다.</TableMenuHint>
+            <TableMenuHint>
+              제목 행/열 토글은 행 메뉴와 열 메뉴에서 분리했습니다.
+            </TableMenuHint>
             <FloatingBlockMenuDivider />
             <TableMenuCompactList>
               <TableMenuCompactAction
                 type="button"
                 data-variant="danger"
+                onMouseDown={handleToolbarButtonMouseDown}
                 onClick={() =>
                   runTableMenuEditorAction((activeEditor) => {
-                    activeEditor.chain().focus().deleteTable().run()
+                    deleteActiveTable(activeEditor)
                   })
                 }
               >
@@ -481,21 +595,27 @@ const TableAxisMenu = ({
           type="button"
           data-active={active}
           onMouseDown={preserveTableAxisMenuSelectionOnMouseDown}
-          onClick={(event) => runTableAxisMenuActionOnClick(event, onToggleHeader)}
+          onClick={(event) =>
+            runTableAxisMenuActionOnClick(event, onToggleHeader)
+          }
         >
           {titleLabel}
         </TableMenuCompactAction>
         <TableMenuCompactAction
           type="button"
           onMouseDown={preserveTableAxisMenuSelectionOnMouseDown}
-          onClick={(event) => runTableAxisMenuActionOnClick(event, onInsertBefore)}
+          onClick={(event) =>
+            runTableAxisMenuActionOnClick(event, onInsertBefore)
+          }
         >
           {insertBeforeLabel}
         </TableMenuCompactAction>
         <TableMenuCompactAction
           type="button"
           onMouseDown={preserveTableAxisMenuSelectionOnMouseDown}
-          onClick={(event) => runTableAxisMenuActionOnClick(event, onInsertAfter)}
+          onClick={(event) =>
+            runTableAxisMenuActionOnClick(event, onInsertAfter)
+          }
         >
           {insertAfterLabel}
         </TableMenuCompactAction>

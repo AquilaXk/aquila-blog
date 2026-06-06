@@ -46,19 +46,28 @@ type UseBlockEditorEngineBlockDragArgs = {
   draggedNestedListItemState: DraggedNestedListItemState
   editor: TiptapEditor | null
   editorRef: RefObject<TiptapEditor | null>
-  findNestedListItemContextFromTarget: (target: EventTarget | null) => NestedListItemContext | null
+  findNestedListItemContextFromTarget: (
+    target: EventTarget | null
+  ) => NestedListItemContext | null
   flushPendingMarkdownCommit: () => void
   getTopLevelBlockElementByIndex: (blockIndex: number) => HTMLElement | null
   getTopLevelBlockElements: () => HTMLElement[]
   hoveredListItemContext: NestedListItemContext | null
   isTableStructuralSelection: boolean
-  mutateTopLevelBlocks: (mutator: (doc: BlockEditorDoc) => BlockEditorDoc, focusIndex?: number | null) => void
+  mutateTopLevelBlocks: (
+    mutator: (doc: BlockEditorDoc) => BlockEditorDoc,
+    focusIndex?: number | null
+  ) => void
   pendingBlockDragCleanupRef: MutableRefObject<(() => void) | null>
   pendingBlockDragRef: MutableRefObject<PendingBlockDragState | null>
-  pendingNestedListItemHandleDragCleanupRef: MutableRefObject<(() => void) | null>
+  pendingNestedListItemHandleDragCleanupRef: MutableRefObject<
+    (() => void) | null
+  >
   pendingNestedListItemHandleDragRef: MutableRefObject<PendingNestedListItemHandleDragState | null>
   promoteTopLevelBlockSelection: (blockIndex: number) => boolean
-  resolveEffectiveSelectedListItemContext: (editor?: TiptapEditor | null) => NestedListItemContext | null
+  resolveEffectiveSelectedListItemContext: (
+    editor?: TiptapEditor | null
+  ) => NestedListItemContext | null
   resolveNestedListItemContextByIndices: (
     listBlockIndex: number,
     listPath: number[],
@@ -148,7 +157,10 @@ export const useBlockEditorEngineBlockDrag = ({
       pendingNestedListItemHandleDragCleanupRef.current()
       pendingNestedListItemHandleDragCleanupRef.current = null
     }
-  }, [pendingNestedListItemHandleDragCleanupRef, pendingNestedListItemHandleDragRef])
+  }, [
+    pendingNestedListItemHandleDragCleanupRef,
+    pendingNestedListItemHandleDragRef,
+  ])
 
   useEffect(() => {
     return () => {
@@ -202,17 +214,24 @@ export const useBlockEditorEngineBlockDrag = ({
   const resolveBlockHandleListItemContext = useCallback(() => {
     if (blockHandleState.kind !== "list-item") return null
 
-    const currentHandleListItemContext = resolveNestedListItemContextFromBlockHandleState()
+    const currentHandleListItemContext =
+      resolveNestedListItemContextFromBlockHandleState()
     if (currentHandleListItemContext) {
       return currentHandleListItemContext
     }
 
-    const effectiveSelectedListItemContext = resolveEffectiveSelectedListItemContext(editor)
+    const effectiveSelectedListItemContext =
+      resolveEffectiveSelectedListItemContext(editor)
     const matchingSelectedListItemContext =
       effectiveSelectedListItemContext &&
-      effectiveSelectedListItemContext.listBlockIndex === blockHandleState.blockIndex &&
-      effectiveSelectedListItemContext.itemIndex === blockHandleState.itemIndex &&
-      sameListPath(effectiveSelectedListItemContext.listPath, blockHandleState.listPath)
+      effectiveSelectedListItemContext.listBlockIndex ===
+        blockHandleState.blockIndex &&
+      effectiveSelectedListItemContext.itemIndex ===
+        blockHandleState.itemIndex &&
+      sameListPath(
+        effectiveSelectedListItemContext.listPath,
+        blockHandleState.listPath
+      )
         ? effectiveSelectedListItemContext
         : null
 
@@ -251,8 +270,14 @@ export const useBlockEditorEngineBlockDrag = ({
 
       const currentEditor = editorRef.current ?? editor
       const currentHandleListItemContext = resolveBlockHandleListItemContext()
-      const activeListItemName = getListItemNameFromContext(currentHandleListItemContext)
-      if (!currentEditor || !currentHandleListItemContext || !activeListItemName) {
+      const activeListItemName = getListItemNameFromContext(
+        currentHandleListItemContext
+      )
+      if (
+        !currentEditor ||
+        !currentHandleListItemContext ||
+        !activeListItemName
+      ) {
         return
       }
 
@@ -262,7 +287,10 @@ export const useBlockEditorEngineBlockDrag = ({
       setHoveredListItemContext(currentHandleListItemContext)
       selectedListItemContextRef.current = currentHandleListItemContext
       setSelectedListItemContext(currentHandleListItemContext)
-      selectNestedListItemTextAnchor(currentEditor, currentHandleListItemContext)
+      selectNestedListItemTextAnchor(
+        currentEditor,
+        currentHandleListItemContext
+      )
       clearNativeTextSelection()
 
       const handled = event.shiftKey
@@ -291,14 +319,25 @@ export const useBlockEditorEngineBlockDrag = ({
     if (blockHandleState.kind === "top-level") {
       setHoveredBlockIndex(blockHandleState.blockIndex)
     }
-  }, [blockHandleState.blockIndex, blockHandleState.kind, cancelHoveredBlockClear, setHoveredBlockIndex])
+  }, [
+    blockHandleState.blockIndex,
+    blockHandleState.kind,
+    cancelHoveredBlockClear,
+    setHoveredBlockIndex,
+  ])
 
-  const handleBlockHandleRailPointerLeave = useCallback(() => scheduleHoveredBlockClear(), [scheduleHoveredBlockClear])
+  const handleBlockHandleRailPointerLeave = useCallback(
+    () => scheduleHoveredBlockClear(),
+    [scheduleHoveredBlockClear]
+  )
 
   const handleBlockHandleAddClick = useCallback(
     (event: ReactMouseEvent<HTMLButtonElement>) => {
       event.stopPropagation()
-      openBlockMenu(blockHandleState.blockIndex, event.currentTarget.getBoundingClientRect())
+      openBlockMenu(
+        blockHandleState.blockIndex,
+        event.currentTarget.getBoundingClientRect()
+      )
     },
     [blockHandleState.blockIndex, openBlockMenu]
   )
@@ -318,7 +357,9 @@ export const useBlockEditorEngineBlockDrag = ({
       clearPendingBlockDrag()
       if (blockHandleState.kind === "list-item" && editor) {
         const currentHandleListItemContext =
-          (hoveredListItemContext?.listItemElement?.isConnected ? hoveredListItemContext : null) ??
+          (hoveredListItemContext?.listItemElement?.isConnected
+            ? hoveredListItemContext
+            : null) ??
           resolveBlockHandleListItemContext() ??
           resolveEffectiveSelectedListItemContext(editor)
         if (currentHandleListItemContext) {
@@ -358,7 +399,9 @@ export const useBlockEditorEngineBlockDrag = ({
       event.stopPropagation()
       if (blockHandleState.kind === "list-item") {
         const currentHandleListItemContext =
-          (hoveredListItemContext?.listItemElement?.isConnected ? hoveredListItemContext : null) ??
+          (hoveredListItemContext?.listItemElement?.isConnected
+            ? hoveredListItemContext
+            : null) ??
           resolveBlockHandleListItemContext() ??
           resolveEffectiveSelectedListItemContext(editor)
         if (editor && currentHandleListItemContext) {
@@ -377,6 +420,7 @@ export const useBlockEditorEngineBlockDrag = ({
         return
       }
       event.preventDefault()
+      clearTableTextSelectionForStructuralSelection()
       const sourceIndex = blockHandleState.blockIndex
       const sourceElement = getTopLevelBlockElementByIndex(sourceIndex)
       const preview = createBlockDragPreview(sourceElement, window.innerWidth)
@@ -454,7 +498,10 @@ export const useBlockEditorEngineBlockDrag = ({
     setHoveredBlockIndex(blockMenuState.blockIndex)
   }, [blockMenuState, cancelHoveredBlockClear, setHoveredBlockIndex])
 
-  const handleBlockMenuPointerLeave = useCallback(() => scheduleHoveredBlockClear(), [scheduleHoveredBlockClear])
+  const handleBlockMenuPointerLeave = useCallback(
+    () => scheduleHoveredBlockClear(),
+    [scheduleHoveredBlockClear]
+  )
 
   return {
     closeBlockMenus,

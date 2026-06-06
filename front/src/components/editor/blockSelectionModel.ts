@@ -1,6 +1,6 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model"
-import { NodeSelection } from "@tiptap/pm/state"
+import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model"
+import { NodeSelection, TextSelection } from "@tiptap/pm/state"
 import type { BlockEditorDoc } from "./serialization"
 import { shouldCenterBlockHandleForNode } from "./blockHandleLayoutModel"
 import { isTableSelectionActive } from "./tableStructureModel"
@@ -45,7 +45,8 @@ export const BLOCK_OUTER_SELECT_LEFT_EDGE_GAP_PX = 2
 export const BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX = 10
 
 const sameListPath = (left: number[], right: number[]) =>
-  left.length === right.length && left.every((value, index) => value === right[index])
+  left.length === right.length &&
+  left.every((value, index) => value === right[index])
 
 const isWithinBlockHandleEpsilon = (prev: number, next: number) =>
   Math.abs(prev - next) <= BLOCK_HANDLE_POSITION_EPSILON_PX
@@ -79,7 +80,10 @@ export const getTopLevelBlockIndexFromSelection = (editor: TiptapEditor) => {
   return Math.max(0, selection.$from.index(0))
 }
 
-export const getTopLevelBlockPosition = (editor: TiptapEditor, blockIndex: number) => {
+export const getTopLevelBlockPosition = (
+  editor: TiptapEditor,
+  blockIndex: number
+) => {
   const { doc } = editor.state
   if (doc.childCount === 0) return 1
   const clampedIndex = Math.max(0, Math.min(blockIndex, doc.childCount - 1))
@@ -116,7 +120,10 @@ export const getFirstEditableTextPositionInNode = (
   return null
 }
 
-export const getEditableTextPositionForTopLevelBlock = (editor: TiptapEditor, blockIndex: number) => {
+export const getEditableTextPositionForTopLevelBlock = (
+  editor: TiptapEditor,
+  blockIndex: number
+) => {
   const { doc } = editor.state
   if (doc.childCount === 0) return null
   const clampedIndex = Math.max(0, Math.min(blockIndex, doc.childCount - 1))
@@ -149,24 +156,80 @@ const focusEditorViewWithoutScroll = (editor: TiptapEditor) => {
   const previousScrollX = window.scrollX
   const previousScrollY = window.scrollY
   editor.view.focus()
-  if (window.scrollX !== previousScrollX || window.scrollY !== previousScrollY) {
+  if (
+    window.scrollX !== previousScrollX ||
+    window.scrollY !== previousScrollY
+  ) {
     window.scrollTo(previousScrollX, previousScrollY)
   }
 }
 
-export const selectTopLevelBlockNode = (editor: TiptapEditor, blockIndex: number) => {
-  const { doc, tr } = editor.state
+const isResolvedPositionInsideTable = ($pos: ResolvedPos) => {
+  for (let depth = $pos.depth; depth > 0; depth -= 1) {
+    if (
+      ["table", "tableRow", "tableCell", "tableHeader"].includes(
+        $pos.node(depth).type.name
+      )
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
+const createSafeTextSelectionOutsideTable = (
+  doc: ProseMirrorNode,
+  pos: number,
+  bias = -1
+) => {
+  const maxPos = doc.content.size
+  const startPos = Math.max(0, Math.min(pos, maxPos))
+  const scan = (step: 1 | -1) => {
+    for (
+      let nextPos = startPos;
+      nextPos >= 0 && nextPos <= maxPos;
+      nextPos += step
+    ) {
+      const $pos = doc.resolve(nextPos)
+      if ($pos.parent.inlineContent && !isResolvedPositionInsideTable($pos)) {
+        return TextSelection.create(doc, nextPos)
+      }
+    }
+    return null
+  }
+  return scan(bias < 0 ? -1 : 1) ?? scan(bias < 0 ? 1 : -1)
+}
+
+export const selectTopLevelBlockNode = (
+  editor: TiptapEditor,
+  blockIndex: number
+) => {
+  const { doc } = editor.state
   if (doc.childCount === 0) return
   const clampedIndex = Math.max(0, Math.min(blockIndex, doc.childCount - 1))
+  if (isTableSelectionActive(editor)) {
+    const collapseSelection = createSafeTextSelectionOutsideTable(
+      doc,
+      editor.state.selection.to,
+      -1
+    )
+    if (collapseSelection) {
+      editor.view.dispatch(editor.state.tr.setSelection(collapseSelection))
+    }
+  }
   const position = getTopLevelBlockPosition(editor, clampedIndex)
-  const selection = NodeSelection.create(doc, position)
-  editor.view.dispatch(tr.setSelection(selection))
+  const selection = NodeSelection.create(editor.state.doc, position)
+  editor.view.dispatch(editor.state.tr.setSelection(selection))
   focusEditorViewWithoutScroll(editor)
 }
 
-export const isTabBlockSelectionEligible = (editor: TiptapEditor, blockIndex: number | null) => {
+export const isTabBlockSelectionEligible = (
+  editor: TiptapEditor,
+  blockIndex: number | null
+) => {
   if (blockIndex === null || isTableSelectionActive(editor)) return false
-  const blocks = ((editor.getJSON() as BlockEditorDoc).content ?? []) as BlockEditorDoc[]
+  const blocks = ((editor.getJSON() as BlockEditorDoc).content ??
+    []) as BlockEditorDoc[]
   return shouldCenterBlockHandleForNode(blocks[blockIndex] ?? null)
 }
 
@@ -179,12 +242,19 @@ const isSelectionPointerGesture = (event: BlockSelectionPointerEventLike) =>
   !event.shiftKey
 
 const getEventTargetElement = (target: EventTarget | null) =>
-  target instanceof Element ? target : target instanceof Node ? target.parentElement : null
+  target instanceof Element
+    ? target
+    : target instanceof Node
+    ? target.parentElement
+    : null
 
 const hasClosestTarget = (target: Element | null, selectors: string[]) =>
   Boolean(target && selectors.some((selector) => target.closest(selector)))
 
-const isOuterSelectionHit = (event: BlockSelectionPointerEventLike, rect: BlockSelectionRect) => {
+const isOuterSelectionHit = (
+  event: BlockSelectionPointerEventLike,
+  rect: BlockSelectionRect
+) => {
   const withinVerticalRange =
     event.clientY >= rect.top - BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX &&
     event.clientY <= rect.bottom + BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX

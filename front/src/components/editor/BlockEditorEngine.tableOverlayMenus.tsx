@@ -86,20 +86,20 @@ const runRestoredTableAxisCommand = (
   })
 }
 
-const runTableAxisMenuActionOnMouseDown = (
+const preserveTableAxisMenuSelectionOnMouseDown = (event: ReactMouseEvent<HTMLButtonElement>) => {
+  if (event.button !== 0) return
+  event.preventDefault()
+  event.stopPropagation()
+}
+
+const runTableAxisMenuActionOnClick = (
   event: ReactMouseEvent<HTMLButtonElement>,
   action: () => void
 ) => {
   if (event.button !== 0) return
   event.preventDefault()
+  event.stopPropagation()
   action()
-}
-
-const runTableAxisMenuActionOnKeyboardClick = (
-  event: ReactMouseEvent<HTMLButtonElement>,
-  action: () => void
-) => {
-  if (event.detail === 0) action()
 }
 
 export const BlockEditorTableOverlayMenus = ({
@@ -477,13 +477,26 @@ const TableAxisMenu = ({
     <TableMenuCompactSection>
       <TableMenuSectionTitle>{axisLabel} 액션</TableMenuSectionTitle>
       <TableMenuCompactList>
-        <TableMenuCompactAction type="button" data-active={active} onMouseDown={(event) => runTableAxisMenuActionOnMouseDown(event, onToggleHeader)} onClick={(event) => runTableAxisMenuActionOnKeyboardClick(event, onToggleHeader)}>
+        <TableMenuCompactAction
+          type="button"
+          data-active={active}
+          onMouseDown={preserveTableAxisMenuSelectionOnMouseDown}
+          onClick={(event) => runTableAxisMenuActionOnClick(event, onToggleHeader)}
+        >
           {titleLabel}
         </TableMenuCompactAction>
-        <TableMenuCompactAction type="button" onMouseDown={(event) => runTableAxisMenuActionOnMouseDown(event, onInsertBefore)} onClick={(event) => runTableAxisMenuActionOnKeyboardClick(event, onInsertBefore)}>
+        <TableMenuCompactAction
+          type="button"
+          onMouseDown={preserveTableAxisMenuSelectionOnMouseDown}
+          onClick={(event) => runTableAxisMenuActionOnClick(event, onInsertBefore)}
+        >
           {insertBeforeLabel}
         </TableMenuCompactAction>
-        <TableMenuCompactAction type="button" onMouseDown={(event) => runTableAxisMenuActionOnMouseDown(event, onInsertAfter)} onClick={(event) => runTableAxisMenuActionOnKeyboardClick(event, onInsertAfter)}>
+        <TableMenuCompactAction
+          type="button"
+          onMouseDown={preserveTableAxisMenuSelectionOnMouseDown}
+          onClick={(event) => runTableAxisMenuActionOnClick(event, onInsertAfter)}
+        >
           {insertAfterLabel}
         </TableMenuCompactAction>
       </TableMenuCompactList>
@@ -491,7 +504,12 @@ const TableAxisMenu = ({
     <TableMenuHint>{hint}</TableMenuHint>
     <FloatingBlockMenuDivider />
     <TableMenuCompactList>
-      <TableMenuCompactAction type="button" data-variant="danger" onMouseDown={(event) => runTableAxisMenuActionOnMouseDown(event, onDelete)} onClick={(event) => runTableAxisMenuActionOnKeyboardClick(event, onDelete)}>
+      <TableMenuCompactAction
+        type="button"
+        data-variant="danger"
+        onMouseDown={preserveTableAxisMenuSelectionOnMouseDown}
+        onClick={(event) => runTableAxisMenuActionOnClick(event, onDelete)}
+      >
         {deleteLabel}
       </TableMenuCompactAction>
     </TableMenuCompactList>

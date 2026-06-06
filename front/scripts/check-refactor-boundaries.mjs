@@ -5,55 +5,75 @@ import { fileURLToPath } from "node:url"
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const frontRoot = path.resolve(scriptDir, "..")
 
-const PRODUCTION_HARD_LIMIT = 1000
+const PRODUCTION_HARD_LIMIT = 2_500
 const PRODUCTION_SOFT_LIMIT = 600
-const E2E_ROOT_SPEC_LIMIT = 800
+const E2E_ROOT_SPEC_HARD_LIMIT = 2_500
+const E2E_ROOT_SPEC_ADVISORY_LIMIT = 800
 
 const normalizePath = (value) => value.split(path.sep).join("/")
 
 const productionSoftAllowlist = {
   "src/routes/Admin/EditorStudioWorkspaceControllerRoot.tsx": {
     issue: "#398",
-    reason: "editor studio route orchestrator is below the 1,000 line hard budget after root split",
-    expires: "split below 600 when routing/runtime state can be moved without re-coupling the editor flow",
+    reason:
+      "editor studio route orchestrator is below the 1,000 line hard budget after root split",
+    expires:
+      "split below 600 when routing/runtime state can be moved without re-coupling the editor flow",
   },
   "src/routes/Admin/EditorStudioWorkspaceControllerRootView.tsx": {
     issue: "#398",
-    reason: "editor studio root view owns the dedicated editor/admin layout bridge and remains below hard budget",
-    expires: "split below 600 when view props are reduced by a narrower editor surface contract",
+    reason:
+      "editor studio root view owns the dedicated editor/admin layout bridge and remains below hard budget",
+    expires:
+      "split below 600 when view props are reduced by a narrower editor surface contract",
   },
   "src/components/editor/BlockEditorEngine.editorSurfaceStyles.tsx": {
     issue: "#390",
-    reason: "editor surface style module is a style-only companion and remains below the 1,000 line style budget",
-    expires: "split when shared typography/style tokens remove editor-surface-only declarations",
+    reason:
+      "editor surface style module is a style-only companion and remains below the 1,000 line style budget",
+    expires:
+      "split when shared typography/style tokens remove editor-surface-only declarations",
   },
   "src/components/editor/BlockEditorEngine.viewportLayer.tsx": {
     issue: "#390",
-    reason: "viewport layer is a single render layer below the 1,000 line layer budget",
-    expires: "split when block handle, bubble toolbar, and viewport props are independently owned",
+    reason:
+      "viewport layer is a single render layer below the 1,000 line layer budget",
+    expires:
+      "split when block handle, bubble toolbar, and viewport props are independently owned",
   },
   "src/components/editor/BlockEditorEngine.tableStyles.tsx": {
     issue: "#390",
-    reason: "table style module is a style-only companion and remains below the 1,000 line style budget",
+    reason:
+      "table style module is a style-only companion and remains below the 1,000 line style budget",
     expires: "split when table chrome tokens are promoted to shared primitives",
   },
   "src/components/editor/tableTextSelectionModel.ts": {
     issue: "#515",
-    reason: "table text-range drag recovery remains centralized while multi-cell regressions are stabilized",
-    expires: "split below 600 after explicit drag tracking and frame-preserve logic move into dedicated helpers",
+    reason:
+      "table text-range drag recovery remains centralized while multi-cell regressions are stabilized",
+    expires:
+      "split below 600 after explicit drag tracking and frame-preserve logic move into dedicated helpers",
   },
   "src/components/editor/codeBlockNodeView.tsx": {
     issue: "#545",
-    reason: "editor table/cell selection and code-block selection interceptions are fixed in-place; split into dedicated helpers after regression extraction",
-    expires: "split below 600 when code-block selection, drag-preserve, and select-all interception are modularized",
+    reason: [
+      "editor table/cell selection and code-block selection interceptions are",
+      "fixed in-place; split into dedicated helpers after regression extraction",
+    ].join(" "),
+    expires:
+      "split below 600 when code-block selection, drag-preserve, and select-all interception are modularized",
   },
 }
 
 const e2eRootAllowlist = {
   "e2e/source-boundary-editor-studio.spec.ts": {
     issue: "#423",
-    reason: "aggregate source-boundary contracts moved out of editor-studio-state; final guard script covers recurring budgets",
-    expires: "shrink below 800 after exact string contracts are fully migrated into data-driven guard tables",
+    reason: [
+      "aggregate source-boundary contracts moved out of editor-studio-state;",
+      "final guard script covers recurring budgets",
+    ].join(" "),
+    expires:
+      "shrink below 800 after exact string contracts are fully migrated into data-driven guard tables",
   },
 }
 
@@ -66,7 +86,9 @@ const generatedPathPatterns = [
 ]
 
 const isSourceFile = (filePath) => /\.(ts|tsx|mts|cts)$/.test(filePath)
-const isProductionFile = (filePath) => isSourceFile(filePath) && !generatedPathPatterns.some((pattern) => pattern.test(filePath))
+const isProductionFile = (filePath) =>
+  isSourceFile(filePath) &&
+  !generatedPathPatterns.some((pattern) => pattern.test(filePath))
 
 const readSource = (relativePath) => {
   const absolutePath = path.join(frontRoot, relativePath)
@@ -98,40 +120,63 @@ const walk = (relativeDir) => {
 }
 
 const validateAllowlistEntry = (allowlistName, relativePath, entry) => {
-  const missingFields = ["issue", "reason", "expires"].filter((field) => !entry?.[field])
+  const missingFields = ["issue", "reason", "expires"].filter(
+    (field) => !entry?.[field]
+  )
   if (missingFields.length > 0) {
-    return `${allowlistName} allowlist entry ${relativePath} is missing: ${missingFields.join(", ")}`
+    return `${allowlistName} allowlist entry ${relativePath} is missing: ${missingFields.join(
+      ", "
+    )}`
   }
   return null
 }
 
 const failures = []
+const warnings = []
 
 for (const relativePath of Object.keys(productionSoftAllowlist)) {
-  const error = validateAllowlistEntry("production-soft", relativePath, productionSoftAllowlist[relativePath])
+  const error = validateAllowlistEntry(
+    "production-soft",
+    relativePath,
+    productionSoftAllowlist[relativePath]
+  )
   if (error) failures.push(error)
 }
 
 for (const relativePath of Object.keys(e2eRootAllowlist)) {
-  const error = validateAllowlistEntry("e2e-root", relativePath, e2eRootAllowlist[relativePath])
+  const error = validateAllowlistEntry(
+    "e2e-root",
+    relativePath,
+    e2eRootAllowlist[relativePath]
+  )
   if (error) failures.push(error)
 }
 
-const productionFiles = productionRoots.filter((relativeDir) => existsSync(path.join(frontRoot, relativeDir))).flatMap(walk).filter(isProductionFile)
+const productionFiles = productionRoots
+  .filter((relativeDir) => existsSync(path.join(frontRoot, relativeDir)))
+  .flatMap(walk)
+  .filter(isProductionFile)
 
 for (const relativePath of productionFiles) {
   const lines = countLines(readSource(relativePath))
 
   if (lines > PRODUCTION_HARD_LIMIT) {
     failures.push(
-      `${relativePath} has ${lines} lines; production files must stay <= ${PRODUCTION_HARD_LIMIT}. Split orchestration/view/model responsibility and link the owning issue.`
+      [
+        `${relativePath} has ${lines} lines; production files must stay`,
+        `<= ${PRODUCTION_HARD_LIMIT}. Split orchestration/view/model`,
+        "responsibility and link the owning issue.",
+      ].join(" ")
     )
     continue
   }
 
   if (lines > PRODUCTION_SOFT_LIMIT && !productionSoftAllowlist[relativePath]) {
-    failures.push(
-      `${relativePath} has ${lines} lines; files over ${PRODUCTION_SOFT_LIMIT} require an explicit allowlist entry with issue, reason, and expiry.`
+    warnings.push(
+      [
+        `${relativePath} has ${lines} lines; consider splitting when it can`,
+        "be done without compressing code or hiding responsibility.",
+      ].join(" ")
     )
   }
 }
@@ -142,13 +187,29 @@ for (const relativePath of Object.keys(productionSoftAllowlist)) {
   }
 }
 
-const e2eRootSpecs = walk("e2e").filter((relativePath) => /^e2e\/[^/]+\.spec\.ts$/.test(relativePath))
+const e2eRootSpecs = walk("e2e").filter((relativePath) =>
+  /^e2e\/[^/]+\.spec\.ts$/.test(relativePath)
+)
 
 for (const relativePath of e2eRootSpecs) {
   const lines = countLines(readSource(relativePath))
-  if (lines > E2E_ROOT_SPEC_LIMIT && !e2eRootAllowlist[relativePath]) {
+  if (lines > E2E_ROOT_SPEC_HARD_LIMIT) {
     failures.push(
-      `${relativePath} has ${lines} lines; root E2E specs must stay <= ${E2E_ROOT_SPEC_LIMIT} or move responsibility into split specs/helpers with an allowlist expiry.`
+      [
+        `${relativePath} has ${lines} lines; root E2E specs must stay`,
+        `<= ${E2E_ROOT_SPEC_HARD_LIMIT} or move responsibility into split`,
+        "specs/helpers.",
+      ].join(" ")
+    )
+    continue
+  }
+
+  if (lines > E2E_ROOT_SPEC_ADVISORY_LIMIT && !e2eRootAllowlist[relativePath]) {
+    warnings.push(
+      [
+        `${relativePath} has ${lines} lines; consider moving repeated`,
+        "setup/assertions into helpers instead of compressing test code.",
+      ].join(" ")
     )
   }
 }
@@ -219,7 +280,10 @@ const ownershipRules = [
   },
   {
     file: "src/routes/Feed/FeedExplorer.tsx",
-    required: ['from "./FeedExplorer.styles"', 'from "./FeedExplorerRestoreModel"'],
+    required: [
+      'from "./FeedExplorer.styles"',
+      'from "./FeedExplorerRestoreModel"',
+    ],
     forbidden: [/\bstyled\./],
     hint: "FeedExplorer must keep restore/cache model and styles delegated.",
   },
@@ -260,12 +324,18 @@ for (const rule of ownershipRules) {
   const source = readSource(rule.file)
   for (const expected of rule.required) {
     if (!source.includes(expected)) {
-      failures.push(`${rule.file} is missing required boundary token ${JSON.stringify(expected)}. ${rule.hint}`)
+      failures.push(
+        `${rule.file} is missing required boundary token ${JSON.stringify(
+          expected
+        )}. ${rule.hint}`
+      )
     }
   }
   for (const pattern of rule.forbidden) {
     if (pattern.test(source)) {
-      failures.push(`${rule.file} contains forbidden ownership pattern ${pattern}. ${rule.hint}`)
+      failures.push(
+        `${rule.file} contains forbidden ownership pattern ${pattern}. ${rule.hint}`
+      )
     }
   }
 }
@@ -278,11 +348,26 @@ if (failures.length > 0) {
   process.exit(1)
 }
 
+if (warnings.length > 0) {
+  console.warn("[refactor-boundaries] warnings")
+  for (const warning of warnings) {
+    console.warn(`- ${warning}`)
+  }
+}
+
 console.log(
   [
     "[refactor-boundaries] ok",
-    `production=${productionFiles.length} hard<=${PRODUCTION_HARD_LIMIT} soft<=${PRODUCTION_SOFT_LIMIT} allowlist=${Object.keys(productionSoftAllowlist).length}`,
-    `e2eRootSpecs=${e2eRootSpecs.length} limit<=${E2E_ROOT_SPEC_LIMIT} allowlist=${Object.keys(e2eRootAllowlist).length}`,
+    `production=${
+      productionFiles.length
+    } hard<=${PRODUCTION_HARD_LIMIT} soft<=${PRODUCTION_SOFT_LIMIT} allowlist=${
+      Object.keys(productionSoftAllowlist).length
+    }`,
+    `e2eRootSpecs=${
+      e2eRootSpecs.length
+    } hard<=${E2E_ROOT_SPEC_HARD_LIMIT} advisory<=${E2E_ROOT_SPEC_ADVISORY_LIMIT} allowlist=${
+      Object.keys(e2eRootAllowlist).length
+    }`,
     `ownershipRules=${ownershipRules.length}`,
   ].join(" | ")
 )

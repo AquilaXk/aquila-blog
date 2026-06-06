@@ -64,7 +64,7 @@ const dragLocatorTextRange = async (
   target: Locator,
   label: string,
   text: string,
-  options: { retryWhenEmpty?: boolean; waitMs?: number } = {}
+  options: { paced?: boolean; retryWhenEmpty?: boolean; waitMs?: number } = {}
 ) => {
   const runDrag = async () => {
     await target.scrollIntoViewIfNeeded()
@@ -76,46 +76,47 @@ const dragLocatorTextRange = async (
           const textNode = walker.currentNode as Text
           const startOffset = textNode.data.indexOf(textToSelect)
           if (startOffset < 0) continue
-
           const range = document.createRange()
           range.setStart(textNode, startOffset)
           range.setEnd(textNode, startOffset + textToSelect.length)
-          const rect =
-            Array.from(range.getClientRects()).find(
-              (candidate) => candidate.width > 2 && candidate.height > 2
-            ) ?? range.getBoundingClientRect()
-          if (rect.width <= 2 || rect.height <= 2) {
-            throw new Error(`${label} text rect is too small`)
-          }
-
-          return {
-            endX: rect.right - 2,
-            startX: rect.left + 2,
-            y: rect.top + rect.height / 2,
-          }
+          const rects = Array.from(range.getClientRects())
+            .filter((candidate) => candidate.width > 2 && candidate.height > 2)
+            .sort((a, b) => a.top - b.top || a.left - b.left)
+          const startRect = rects[0] ?? range.getBoundingClientRect()
+          const endRect = rects[rects.length - 1] ?? startRect
+          if (startRect.width <= 2 || startRect.height <= 2 || endRect.width <= 2 || endRect.height <= 2) throw new Error(`${label} text rect is too small`)
+          return { endX: endRect.right - 2, endY: endRect.top + endRect.height / 2, startX: startRect.left + 2, startY: startRect.top + startRect.height / 2 }
         }
         throw new Error(`${label} text node is missing`)
       }, { label, textToSelect: text })
     let metrics = await measureTextRange()
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const viewport = page.viewportSize()
-      if (!viewport || (metrics.y >= 8 && metrics.y <= viewport.height - 8)) break
-      await page.mouse.wheel(0, metrics.y > viewport.height / 2 ? 360 : -360)
+      if (!viewport || (metrics.startY >= 8 && metrics.endY >= 8 && metrics.startY <= viewport.height - 8 && metrics.endY <= viewport.height - 8)) break
+      await page.mouse.wheel(0, Math.max(metrics.startY, metrics.endY) > viewport.height / 2 ? 360 : -360)
       await page.waitForTimeout(160)
       metrics = await measureTextRange()
     }
     const viewport = page.viewportSize()
-    if (viewport && (metrics.y < 8 || metrics.y > viewport.height - 8)) {
+    if (viewport && (metrics.startY < 8 || metrics.endY < 8 || metrics.startY > viewport.height - 8 || metrics.endY > viewport.height - 8)) {
       throw new Error(`${label} text rect is outside viewport: ${JSON.stringify(metrics)}`)
     }
     const beforeScrollTop = await readScrollTop(page)
-
-    await page.mouse.move(metrics.startX, metrics.y)
+    await page.mouse.move(metrics.startX, metrics.startY)
+    if (options.paced) await page.waitForTimeout(80)
     await page.mouse.down()
-    await page.mouse.move(metrics.endX, metrics.y, { steps: 18 })
+    if (options.paced) {
+      for (let index = 1; index <= 28; index += 1) {
+        const ratio = index / 28
+        await page.mouse.move(metrics.startX + (metrics.endX - metrics.startX) * ratio, metrics.startY + (metrics.endY - metrics.startY) * ratio)
+        await page.waitForTimeout(index === 1 ? 16 : 4)
+      }
+      await page.waitForTimeout(40)
+    } else {
+      await page.mouse.move(metrics.endX, metrics.endY, { steps: 18 })
+    }
     await page.mouse.up()
     await page.waitForTimeout(options.waitMs ?? 720)
-
     const afterScrollTop = await readScrollTop(page)
     const selectionText = await readSelectionText(page)
     return { beforeScrollTop, afterScrollTop, selectionText }
@@ -127,7 +128,6 @@ const dragLocatorTextRange = async (
     await page.waitForTimeout(120)
     result = await runDrag()
   }
-
   return result
 }
 
@@ -785,6 +785,7 @@ test.describe("editor authoring route live drag sequence", () => {
       "live 507 lower body drag",
       "서버가 아무것도 안 하는 구조",
       {
+        paced: true,
         retryWhenEmpty: true,
         waitMs: 900,
       }

@@ -521,7 +521,7 @@ const preserveWindowScrollForTableFollowUpPointer = () => {
 
 export const preserveWindowScrollForCodePointerFocus = (cancelOnPointerDown = false) => {
   const anchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
-  preserveWindowScrollPositionAcrossFrames(anchor, EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES, 4, EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS, false, false, cancelOnPointerDown, false, false, shouldCancelEditorPointerScrollPreserve(anchor), true, Number.POSITIVE_INFINITY, null, cancelOnPointerDown)
+  preserveWindowScrollPositionAcrossFrames(anchor, EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES, 4, EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS, false, false, cancelOnPointerDown, false, false, shouldCancelEditorPointerScrollPreserve(anchor), true, Number.POSITIVE_INFINITY, "code", cancelOnPointerDown)
 }
 
 export const preserveWindowScrollForEditorPointerFocus = (

@@ -602,7 +602,18 @@ test.describe("editor authoring table affordances", () => {
 
     await moveToRowColumnHotzone()
     await columnHandle.click()
-    await columnMenu.getByRole("button", { name: "열 삭제" }).click()
+    const deleteColumnButton = columnMenu.getByRole("button", { name: "열 삭제" })
+    const deleteColumnBox = await deleteColumnButton.boundingBox()
+    if (!deleteColumnBox) {
+      throw new Error("column delete button bounding box is missing")
+    }
+    await page.mouse.move(deleteColumnBox.x + deleteColumnBox.width / 2, deleteColumnBox.y + deleteColumnBox.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(deleteColumnBox.x + deleteColumnBox.width + 80, deleteColumnBox.y + deleteColumnBox.height / 2)
+    await page.mouse.up()
+    await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(4)
+    await expect(columnMenu).toBeVisible()
+    await deleteColumnButton.click()
     await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(3)
 
     const afterDeleteMetrics = await assertHandlesInViewport()

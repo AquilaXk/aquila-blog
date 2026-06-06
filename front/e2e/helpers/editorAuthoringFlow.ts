@@ -130,89 +130,98 @@ export const getWordDragPoints = async (
             }
           : null
 
-    const root = element as HTMLElement
-    const textNodes: Text[] = []
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
-    let cursor: Text | null = null
+      const root = element as HTMLElement
+      const textNodes: Text[] = []
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+      let cursor: Text | null = null
 
-    while (walker.nextNode()) {
-      const current = walker.currentNode as Text
-      if (current.textContent?.includes(targetWord)) {
-        textNodes.push(current)
-      }
-    }
-
-    for (const node of textNodes) {
-      const index = node.data.indexOf(targetWord)
-      if (index < 0) continue
-      const range = document.createRange()
-      range.setStart(node, index)
-      range.setEnd(node, index + targetWord.length)
-
-      const rects = Array.from(range.getClientRects())
-      const rect = rects.find((entry) => entry.width > 0 && entry.height > 0) ?? range.getBoundingClientRect()
-      const points = toPoint(rect)
-      if (points) {
-        return points
+      while (walker.nextNode()) {
+        const current = walker.currentNode as Text
+        if (current.textContent?.includes(targetWord)) {
+          textNodes.push(current)
+        }
       }
 
-      cursor = node
-    }
+      for (const node of textNodes) {
+        const index = node.data.indexOf(targetWord)
+        if (index < 0) continue
+        const range = document.createRange()
+        range.setStart(node, index)
+        range.setEnd(node, index + targetWord.length)
 
-    for (const node of textNodes) {
-      const index = node.data.indexOf(targetWord)
-      if (index < 0) continue
-      for (let offset = 0; offset < targetWord.length; offset += 1) {
-        const charRange = document.createRange()
-        charRange.setStart(node, index + offset)
-        charRange.setEnd(node, index + offset + 1)
-        const rect = charRange.getBoundingClientRect()
+        const rects = Array.from(range.getClientRects())
+        const rect =
+          rects.find((entry) => entry.width > 0 && entry.height > 0) ??
+          range.getBoundingClientRect()
         const points = toPoint(rect)
         if (points) {
           return points
         }
+
+        cursor = node
       }
-      cursor = node
-    }
 
-    if (!cursor) return null
+      for (const node of textNodes) {
+        const index = node.data.indexOf(targetWord)
+        if (index < 0) continue
+        for (let offset = 0; offset < targetWord.length; offset += 1) {
+          const charRange = document.createRange()
+          charRange.setStart(node, index + offset)
+          charRange.setEnd(node, index + offset + 1)
+          const rect = charRange.getBoundingClientRect()
+          const points = toPoint(rect)
+          if (points) {
+            return points
+          }
+        }
+        cursor = node
+      }
 
-    const fallbackElement = cursor.parentElement?.closest("th, td, p, div") ?? root
-    const fallbackRect = fallbackElement.getBoundingClientRect()
-    const fallbackPoint = toPoint(fallbackRect)
-    if (fallbackPoint) {
+      if (!cursor) return null
+
+      const fallbackElement = cursor.parentElement?.closest("th, td, p, div") ?? root
+      const fallbackRect = fallbackElement.getBoundingClientRect()
+      const fallbackPoint = toPoint(fallbackRect)
+      if (fallbackPoint) {
+        return {
+          ...fallbackPoint,
+          endX: Math.round(fallbackPoint.startX + Math.min(fallbackRect.width, 24)),
+        }
+      }
+
+      const expectedWord = normalizeWord(targetWord)
+      const fallbackCandidates = Array.from(root.querySelectorAll<HTMLElement>("*"))
+        .filter(
+          (candidate) =>
+            normalizeWord(candidate.textContent || "").includes(expectedWord) &&
+            candidate.isConnected
+        )
+        .map((candidate) => ({
+          candidate,
+          rect: candidate.getBoundingClientRect(),
+        }))
+        .filter(({ rect }) => rect.width > 0 && rect.height > 0)
+        .map(({ candidate, rect }) => ({
+          candidate,
+          rect,
+          priority: preferredTagPriority(candidate.tagName),
+        }))
+        .sort((left, right) => {
+          if (left.priority !== right.priority) return left.priority - right.priority
+          const leftArea = left.rect.width * left.rect.height
+          const rightArea = right.rect.width * right.rect.height
+          return leftArea - rightArea
+        })
+
+      if (fallbackCandidates.length === 0) return null
+      const { rect } = fallbackCandidates[0]
       return {
-        ...fallbackPoint,
-        endX: Math.round(fallbackPoint.startX + Math.min(fallbackRect.width, 24)),
+        startX: Math.round(rect.left + 2),
+        startY: Math.round(rect.top + rect.height / 2),
+        endX: Math.round(rect.right - 2),
+        endY: Math.round(rect.top + rect.height / 2),
       }
-    }
-
-    const expectedWord = normalizeWord(targetWord)
-    const fallbackCandidates = Array.from(root.querySelectorAll<HTMLElement>("*"))
-      .filter((candidate) => normalizeWord(candidate.textContent || "").includes(expectedWord) && candidate.isConnected)
-      .map((candidate) => ({ candidate, rect: candidate.getBoundingClientRect() }))
-      .filter(({ rect }) => rect.width > 0 && rect.height > 0)
-      .map(({ candidate, rect }) => ({
-        candidate,
-        rect,
-        priority: preferredTagPriority(candidate.tagName),
-      }))
-      .sort((left, right) => {
-        if (left.priority !== right.priority) return left.priority - right.priority
-        const leftArea = left.rect.width * left.rect.height
-        const rightArea = right.rect.width * right.rect.height
-        return leftArea - rightArea
-      })
-
-    if (fallbackCandidates.length === 0) return null
-    const { rect } = fallbackCandidates[0]
-    return {
-      startX: Math.round(rect.left + 2),
-      startY: Math.round(rect.top + rect.height / 2),
-      endX: Math.round(rect.right - 2),
-      endY: Math.round(rect.top + rect.height / 2),
-    }
-  }, word)
+    }, word)
 
   let points = await resolveDragPoints()
   for (let retryCount = 0; !points && retryCount < 6; retryCount += 1) {
@@ -227,6 +236,102 @@ export const getWordDragPoints = async (
   }
 
   return points
+}
+
+type TableAxis = "column" | "row"
+
+const axisHandleSelector = (axis: TableAxis) =>
+  `[data-table-affordance='${axis === "row" ? "row-handle" : "column-handle"}']`
+
+export const readNativeSelectionText = async (page: Page) =>
+  page.evaluate(() => window.getSelection()?.toString() || "")
+
+export const dragWordNativeSelection = async (
+  page: Page,
+  target: Locator,
+  word: string,
+  label: string
+) => {
+  let lastSelectionText = ""
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    await expect(target, `${label} target should be visible`).toBeVisible()
+    await target.scrollIntoViewIfNeeded()
+    await page.evaluate(() => window.getSelection()?.removeAllRanges())
+
+    const points = await getWordDragPoints(target, word)
+    await page.mouse.move(points.startX, points.startY)
+    await page.mouse.down()
+    await page.mouse.move(points.endX, points.endY, { steps: 18 + attempt * 4 })
+    await page.mouse.up()
+
+    const selected = await expect
+      .poll(async () => readNativeSelectionText(page), { timeout: 1_200 })
+      .toContain(word)
+      .then(() => true)
+      .catch(async () => {
+        lastSelectionText = await readNativeSelectionText(page)
+        return false
+      })
+    if (selected) return
+
+    await page.waitForTimeout(120)
+  }
+
+  throw new Error(`${label} native selection did not include "${word}": ${lastSelectionText}`)
+}
+
+const readVisibleAxisHandlePoint = async (page: Page, axis: TableAxis) =>
+  page.locator(axisHandleSelector(axis)).evaluateAll((handles) => {
+    const candidates = handles
+      .map((handle) => {
+        const rect = handle.getBoundingClientRect()
+        const style = window.getComputedStyle(handle)
+        return {
+          active: handle.getAttribute("data-active") === "true",
+          visible:
+            rect.width > 0 &&
+            rect.height > 0 &&
+            rect.right > 4 &&
+            rect.left < window.innerWidth - 4 &&
+            rect.bottom > 4 &&
+            rect.top < window.innerHeight - 4 &&
+            style.visibility !== "hidden" &&
+            style.display !== "none" &&
+            Number(style.opacity || "1") > 0,
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        }
+      })
+      .filter((candidate) => candidate.visible)
+
+    return candidates.find((candidate) => candidate.active) ?? candidates[0] ?? null
+  })
+
+export const clickVisibleTableAxisHandle = async (
+  page: Page,
+  options: {
+    axis: TableAxis
+    cellText: string
+    label: string
+    tableText?: string
+  }
+) => {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await moveToTableCellAxisHotzone(page, options)
+    await page.waitForTimeout(140)
+
+    const handlePoint = await readVisibleAxisHandlePoint(page, options.axis)
+    if (!handlePoint) {
+      await page.waitForTimeout(80)
+      continue
+    }
+
+    await page.mouse.click(handlePoint.x, handlePoint.y)
+    return
+  }
+
+  throw new Error(`${options.label} visible ${options.axis} handle point is missing`)
 }
 
 export const readTableGrid = async (page: Page) =>

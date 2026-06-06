@@ -2,9 +2,10 @@ import { expect, test } from "@playwright/test"
 import {
   QA_ENGINE_ROUTE,
   QA_WRITER_ROUTE,
+  clickVisibleTableAxisHandle,
+  dragWordNativeSelection,
   getWordDragPoints,
   getTableAffordances,
-  moveToTableCellAxisHotzone,
 } from "./helpers/editorAuthoringFlow"
 import { mockEditorRouteWithSevenByThreeTable } from "./helpers/editorTableFixtures"
 
@@ -465,30 +466,18 @@ test.describe("editor authoring table affordances", () => {
       postId: 993,
       title: "7x3 table axis route 글",
     })
-    const { columnHandle, rowHandle } = getTableAffordances(page)
-
     const targetCell = editor.locator("td", { hasText: "Access Token" }).first()
     const dragAccessTokenNativeSelection = async () => {
-      await page.evaluate(() => window.getSelection()?.removeAllRanges())
-      const points = await getWordDragPoints(targetCell, "Access Token")
-      await page.mouse.move(points.startX, points.startY)
-      await page.mouse.down()
-      await page.mouse.move(points.endX, points.endY, { steps: 18 })
-      await page.mouse.up()
-      await expect
-        .poll(async () => page.evaluate(() => window.getSelection()?.toString() || ""))
-        .toContain("Access Token")
+      await dragWordNativeSelection(page, targetCell, "Access Token", "7x3 route access-token")
     }
     await dragAccessTokenNativeSelection()
 
-    await moveToTableCellAxisHotzone(page, {
+    await clickVisibleTableAxisHandle(page, {
       axis: "row",
       cellText: "Access Token",
       label: "7x3 route row grip",
       tableText: "재발급 로직",
     })
-    await expect(rowHandle).toBeVisible()
-    await rowHandle.click()
 
     await expect(page.getByTestId("table-row-selection-outline")).toBeVisible()
     await expect(page.getByTestId("table-row-menu")).toBeVisible()
@@ -496,16 +485,15 @@ test.describe("editor authoring table affordances", () => {
     await expect(editor.locator(".selectedCell")).toHaveCount(3)
 
     await page.keyboard.press("Escape")
+    await expect(page.getByTestId("table-row-menu")).toHaveCount(0)
     await dragAccessTokenNativeSelection()
 
-    await moveToTableCellAxisHotzone(page, {
+    await clickVisibleTableAxisHandle(page, {
       axis: "column",
       cellText: "Access Token",
       label: "7x3 route column grip",
       tableText: "재발급 로직",
     })
-    await expect(columnHandle).toBeVisible()
-    await columnHandle.click()
 
     await expect(page.getByTestId("table-column-selection-outline")).toBeVisible()
     await expect(page.getByTestId("table-column-menu")).toBeVisible()

@@ -208,9 +208,14 @@ const resolveTableSelectedCellMarkerRoots = (editor: TiptapEditor) => {
 
 const clearTableSelectedCellDomMarkers = (editor: TiptapEditor) => {
   if (typeof document === "undefined") return
+  let tableEditingMetaCleared = false
   const clearMarkers = () => {
-    if (tableEditingKey.getState(editor.state) !== null) {
+    if (
+      !tableEditingMetaCleared &&
+      tableEditingKey.getState(editor.state) !== null
+    ) {
       editor.view.dispatch(editor.state.tr.setMeta(tableEditingKey, -1))
+      tableEditingMetaCleared = true
     }
     if (editor.state.selection instanceof CellSelection) return
     resolveTableSelectedCellMarkerRoots(editor).forEach((root) => {

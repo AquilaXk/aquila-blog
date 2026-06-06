@@ -2,7 +2,7 @@ import type { Editor as TiptapEditor } from "@tiptap/core"
 import { NodeSelection } from "@tiptap/pm/state"
 import { CellSelection, selectedRect } from "@tiptap/pm/tables"
 import type { Dispatch, SetStateAction } from "react"
-import { useCallback, useEffect, useMemo } from "react"
+import { useCallback, useEffect, useMemo, useRef } from "react"
 import {
   getTopLevelBlockIndexFromSelection,
   getTopLevelBlockNodePosition,
@@ -51,6 +51,8 @@ export const useBlockEditorTableOverlayMenu = ({
   suppressTableAxisMenuKeepAlive,
   tableMenuState,
 }: UseBlockEditorTableOverlayMenuArgs) => {
+  const tableMenuOpenedSelectionTickRef = useRef<number | null>(null)
+
   const updateActiveTableCellAttrs = useCallback(
     (attrs: Record<string, unknown>) => {
       if (!editor) return
@@ -337,9 +339,30 @@ export const useBlockEditorTableOverlayMenu = ({
       ) {
         return false
       }
-      return (
-        editor.state.doc.nodeAt(tableMenuState.tablePos)?.type.name === "table"
-      )
+      const tablePos = tableMenuState.tablePos
+      if (editor.state.doc.nodeAt(tablePos)?.type.name !== "table") {
+        return false
+      }
+      if (tableMenuOpenedSelectionTickRef.current === selectionTick) {
+        return true
+      }
+
+      const { selection } = editor.state
+      if (selection instanceof NodeSelection) {
+        return (
+          selection.from === tablePos && selection.node.type.name === "table"
+        )
+      }
+      if (selection instanceof CellSelection) {
+        try {
+          return selectedRect(editor.state).tableStart - 1 === tablePos
+        } catch {
+          return false
+        }
+      }
+
+      const tableRect = getCurrentSelectedTableRect(editor)
+      return tableRect ? tableRect.tableStart - 1 === tablePos : false
     }
     const isTableNodeSelection = () =>
       editor?.state.selection instanceof NodeSelection &&
@@ -358,6 +381,7 @@ export const useBlockEditorTableOverlayMenu = ({
     return () => window.clearTimeout(closeTimer)
   }, [
     editor,
+    getCurrentSelectedTableRect,
     isTableStructuralSelection,
     selectionTick,
     setTableMenuState,
@@ -401,8 +425,8 @@ export const useBlockEditorTableOverlayMenu = ({
       } = {}
     ) => {
       cancelTableQuickRailHide()
-      setTableMenuState((prev) =>
-        resolveTableMenuState(
+      setTableMenuState((prev) => {
+        const nextState = resolveTableMenuState(
           options.forceOpen ? null : prev,
           kind,
           anchorRect,
@@ -417,9 +441,12 @@ export const useBlockEditorTableOverlayMenu = ({
             tablePos: options.tablePos,
           }
         )
-      )
+        tableMenuOpenedSelectionTickRef.current =
+          nextState?.kind === "table" ? selectionTick : null
+        return nextState
+      })
     },
-    [cancelTableQuickRailHide, setTableMenuState]
+    [cancelTableQuickRailHide, selectionTick, setTableMenuState]
   )
 
   const openSelectionAwareTableMenu = useCallback(

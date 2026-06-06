@@ -24,7 +24,11 @@ import {
   resolveMultiCellTableDomSelectionBubbleState,
   resolvePersistedTableTextSelectionBubbleState,
 } from "./floatingBubbleDomRangeModel"
-import { collapseTableCellTextSelectionToPoint } from "./tableTextCaretModel"
+import {
+  collapseTableCellTextSelectionToPoint,
+  markTableCellPointerCaretCollapseApplied,
+  shouldForceTableCellPointerCaretCollapse,
+} from "./tableTextCaretModel"
 import { isTableSelectionActive } from "./tableStructureModel"
 import {
   TABLE_DRAG_SELECTION_TEXT_ATTR,
@@ -306,6 +310,47 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       window.requestAnimationFrame(restore)
       window.setTimeout(restore, 0)
       window.setTimeout(restore, 40)
+    }
+
+    const forceMarkedTableCellCaretCollapse = (
+      activeEditor: TiptapEditor,
+      event: MouseEvent | PointerEvent
+    ) => {
+      if (!shouldForceTableCellPointerCaretCollapse()) return false
+      const pointCell = resolveTableTextCellAtPoint(
+        event.clientX,
+        event.clientY,
+        event.target
+      )
+      if (!(pointCell instanceof HTMLElement)) return false
+      if (!activeEditor.view.dom.contains(pointCell)) return false
+      if (
+        !collapseTableCellTextSelectionToPoint(
+          activeEditor,
+          event.clientX,
+          event.clientY,
+          pointCell,
+          { requireSelectionContext: false }
+        )
+      ) {
+        return false
+      }
+
+      markTableCellPointerCaretCollapseApplied()
+      preserveCollapsedTableCaretAcrossClickFrames(
+        activeEditor,
+        pointCell,
+        event
+      )
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation?.()
+      tableTextDragStartRef.current = null
+      tableTextDragPendingStartRef.current = null
+      nonTableTextDragStartRef.current = null
+      mouseTextSelectionInProgressRef.current = false
+      syncBubbleOnMouseUpRef.current = false
+      return true
     }
 
     const rememberCodeTextDragStart = (
@@ -1289,6 +1334,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         targetElement,
         pointElements
       )
+      if (forceMarkedTableCellCaretCollapse(activeEditor, event)) return
       const pointInsideEditor =
           !targetElement?.closest("[data-table-menu-root='true']") &&
           (!targetTableControl || allowTableControlCellFallback) &&
@@ -1498,6 +1544,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         targetElement,
         pointElements
       )
+      if (forceMarkedTableCellCaretCollapse(activeEditor, event)) return
       const pointInsideEditor =
           !targetElement?.closest("[data-table-menu-root='true']") &&
           (!targetTableControl || allowTableControlCellFallback) &&

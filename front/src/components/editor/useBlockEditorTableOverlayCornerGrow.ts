@@ -1,8 +1,10 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
+import { TextSelection } from "@tiptap/pm/state"
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { TableAffordanceGeometry } from "./tableAffordanceModel"
 import type { TableAxisSelectionTarget } from "./tableAxisDragModel"
+import { getFirstEditableTextPositionInNode } from "./blockSelectionModel"
 import {
   type TableCornerGrowState,
   type TableCornerGrowStepMetrics,
@@ -17,6 +19,8 @@ import {
   countShrinkableRenderedTableAxisAtEnd,
   countShrinkableTableAxisAtEnd,
 } from "./tableStructureModel"
+import { clearTableStructuralSelectionOwner } from "./tableTextSelectionModel"
+import { markNextTableCellPointerCaretCollapse } from "./tableTextCaretModel"
 import type { TableOverlaySelectionRect } from "./useBlockEditorTableOverlayDomAdapter"
 
 type UseBlockEditorTableOverlayCornerGrowArgs = {
@@ -150,6 +154,49 @@ export const useBlockEditorTableOverlayCornerGrow = ({
     return appendedColumn || appendedRow
   }, [appendTableAxisAtEnd])
 
+  const focusTrailingRenderedTableCell = useCallback(() => {
+    const currentEditor = editorRef.current
+    const rect = currentEditor
+      ? getCurrentSelectedTableRect(currentEditor)
+      : null
+    if (currentEditor && rect && rect.map.width > 0 && rect.map.height > 0) {
+      const trailingCellPos =
+        rect.tableStart +
+        rect.map.positionAt(rect.map.height - 1, rect.map.width - 1, rect.table)
+      const trailingCellNode = currentEditor.state.doc.nodeAt(trailingCellPos)
+      const selectionPos =
+        getFirstEditableTextPositionInNode(trailingCellNode, trailingCellPos) ??
+        Math.max(1, trailingCellPos + 1)
+      clearTableStructuralSelectionOwner()
+      currentEditor.view.dispatch(
+        currentEditor.state.tr.setSelection(
+          TextSelection.create(currentEditor.state.doc, selectionPos)
+        )
+      )
+      if (currentEditor.view.dom instanceof HTMLElement) {
+        currentEditor.view.dom.focus({ preventScroll: true })
+      }
+      return true
+    }
+
+    const renderedTable = findActiveRenderedTable(
+      viewportRef.current,
+      tableAffordanceGeometryRef.current
+    )
+    const trailingCell = renderedTable?.querySelector<HTMLTableCellElement>(
+      "tr:last-child > th:last-child, tr:last-child > td:last-child"
+    )
+    if (!trailingCell) return false
+    clearTableStructuralSelectionOwner()
+    return focusRenderedTableCell(trailingCell)
+  }, [
+    editorRef,
+    focusRenderedTableCell,
+    getCurrentSelectedTableRect,
+    tableAffordanceGeometryRef,
+    viewportRef,
+  ])
+
   const applyTableCornerGrowSteps = useCallback(
     (columnSteps: number, rowSteps: number) => {
       let appliedColumnSteps = 0
@@ -170,6 +217,8 @@ export const useBlockEditorTableOverlayCornerGrow = ({
       }
 
       if (appliedColumnSteps !== 0 || appliedRowSteps !== 0) {
+        focusTrailingRenderedTableCell()
+        markNextTableCellPointerCaretCollapse()
         setSelectionTick((prev) => prev + 1)
       }
 
@@ -178,7 +227,12 @@ export const useBlockEditorTableOverlayCornerGrow = ({
         appliedRowSteps,
       }
     },
-    [appendTableAxisAtEnd, setSelectionTick, shrinkTableAxisAtEnd]
+    [
+      appendTableAxisAtEnd,
+      focusTrailingRenderedTableCell,
+      setSelectionTick,
+      shrinkTableAxisAtEnd,
+    ]
   )
 
   const resolveCurrentTableCornerGrowStepMetrics = useCallback(

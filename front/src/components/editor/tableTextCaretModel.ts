@@ -10,6 +10,34 @@ import {
 
 const TABLE_DRAG_SELECTION_TEXT_ATTR = "data-table-drag-selection-text"
 const TABLE_DRAG_SELECTION_TEXT_SELECTOR = `[${TABLE_DRAG_SELECTION_TEXT_ATTR}]`
+const TABLE_CELL_FORCED_CARET_COLLAPSE_CLICK_FRAME_MS = 140
+
+let forceNextTableCellCaretCollapseUntil = 0
+let forceTableCellCaretCollapseClickFrameUntil = 0
+
+const getNow = () =>
+  typeof performance !== "undefined" ? performance.now() : Date.now()
+
+export const markNextTableCellPointerCaretCollapse = (durationMs = 1200) => {
+  forceNextTableCellCaretCollapseUntil = Math.max(
+    forceNextTableCellCaretCollapseUntil,
+    getNow() + durationMs
+  )
+}
+
+export const shouldForceTableCellPointerCaretCollapse = () => {
+  const now = getNow()
+  return (
+    now < forceNextTableCellCaretCollapseUntil ||
+    now < forceTableCellCaretCollapseClickFrameUntil
+  )
+}
+
+export const markTableCellPointerCaretCollapseApplied = () => {
+  forceNextTableCellCaretCollapseUntil = 0
+  forceTableCellCaretCollapseClickFrameUntil =
+    getNow() + TABLE_CELL_FORCED_CARET_COLLAPSE_CLICK_FRAME_MS
+}
 
 const resolveElement = (target: EventTarget | Node | null | undefined) => {
   if (target instanceof Element) return target

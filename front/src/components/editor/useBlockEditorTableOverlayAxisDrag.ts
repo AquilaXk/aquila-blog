@@ -129,8 +129,10 @@ export const useBlockEditorTableOverlayAxisDrag = ({
       clearDomSelection()
       setSelectionTick((prev) => prev + 1)
     }
+    const clearStartedAt = getTableAxisMenuNow(), keepDomSelectionCleared = () => { if (!activeEditor.view.dom.isConnected || !isActiveTableAxisSelection(activeEditor) || getTableAxisMenuNow() - clearStartedAt > 1_200) return; clearDomSelection(); window.requestAnimationFrame(keepDomSelectionCleared) }
     window.requestAnimationFrame(restoreCellSelection); window.setTimeout(restoreCellSelection, 0); window.setTimeout(restoreCellSelection, 40)
-  }, [setSelectionTick])
+    window.requestAnimationFrame(keepDomSelectionCleared)
+  }, [isActiveTableAxisSelection, setSelectionTick])
   const clearStructuralSelectionNativeText = useCallback(() => {
     const clearIfTableAxisSelectionIsNotActive = () => {
       const activeEditor = editorRef.current
@@ -437,6 +439,7 @@ export const useBlockEditorTableOverlayAxisDrag = ({
         const completedClick = completeClickWithoutDrag?.() ?? false
         if (completedClick) {
           markTableStructuralSelectionOwner(1_200)
+          clearTableTextSelectionForStructuralSelection()
           const stabilizationToken = tableAxisMenuStabilizationTokenRef.current
           tableAxisMenuKeepAliveUntilRef.current = getTableAxisMenuNow() + 3_000
           const stabilizeCompletedAxisSelection = () => {

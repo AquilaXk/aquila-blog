@@ -11,34 +11,57 @@ export type BlockHandleRailLayout = {
 
 export type BlockChromePositionMode = "editor-local" | "viewport"
 type BlockChromeSurfaceRect = Pick<DOMRect, "left" | "top"> | null
-type BlockHandleProtectedRect = Pick<DOMRect, "bottom" | "left" | "right" | "top">
+type BlockHandleProtectedRect = Pick<
+  DOMRect,
+  "bottom" | "left" | "right" | "top"
+>
 export type WindowScrollAnchor = { x: number; y: number }
 
 let preserveNextEditorPointerAfterTable = false
 let preserveNextEditorPointerAfterCodeSelection = false
 let preserveNextEditorPointerAfterCodeSelectionReentryUntil = 0
-let activeWindowScrollPreserveCancel: (() => void) | null = null, windowScrollPreserveGeneration = 0
+let preserveNextEditorPointerAfterCodeSelectionUntil = 0
+let activeWindowScrollPreserveCancel: (() => void) | null = null
+let windowScrollPreserveGeneration = 0
 let activeWindowScrollPreserveOwner: string | null = null
 let suppressGeneralEditorPointerPreserveUntil = 0
 const activeTablePointerScrollPreserveCancels = new Set<() => void>()
 
-export const markNextEditorPointerAfterTable = () => { preserveNextEditorPointerAfterTable = true }
+export const markNextEditorPointerAfterTable = () => {
+  preserveNextEditorPointerAfterTable = true
+}
 
-export const clearNextEditorPointerAfterTable = () => { preserveNextEditorPointerAfterTable = false }
+export const clearNextEditorPointerAfterTable = () => {
+  preserveNextEditorPointerAfterTable = false
+}
 
 const setActiveWindowScrollPreserveOwner = (owner: string | null) => {
   activeWindowScrollPreserveOwner = owner
   if (typeof document === "undefined") return
-  if (owner) document.documentElement.setAttribute("data-editor-scroll-preserve-owner", owner)
-  else document.documentElement.removeAttribute("data-editor-scroll-preserve-owner")
+  if (owner)
+    document.documentElement.setAttribute(
+      "data-editor-scroll-preserve-owner",
+      owner
+    )
+  else
+    document.documentElement.removeAttribute(
+      "data-editor-scroll-preserve-owner"
+    )
 }
 
-export const cancelActiveWindowScrollPreserve = () => { activeWindowScrollPreserveCancel?.(); activeWindowScrollPreserveCancel = null }
+export const cancelActiveWindowScrollPreserve = () => {
+  activeWindowScrollPreserveCancel?.()
+  activeWindowScrollPreserveCancel = null
+}
 
-export const cancelAllWindowScrollPreserves = () => { windowScrollPreserveGeneration += 1; cancelActiveWindowScrollPreserve() }
+export const cancelAllWindowScrollPreserves = () => {
+  windowScrollPreserveGeneration += 1
+  cancelActiveWindowScrollPreserve()
+}
 
 export const cancelActiveTableWindowScrollPreserve = () => {
-  if (activeWindowScrollPreserveOwner === "table") cancelActiveWindowScrollPreserve()
+  if (activeWindowScrollPreserveOwner === "table")
+    cancelActiveWindowScrollPreserve()
 }
 
 export const cancelTablePointerScrollPreserves = () => {
@@ -50,14 +73,26 @@ export const cancelTablePointerScrollPreserves = () => {
 const trackTablePointerScrollPreserve = (cancel?: (() => void) | void) => {
   if (!cancel) return
   activeTablePointerScrollPreserveCancels.add(cancel)
-  window.setTimeout(() => activeTablePointerScrollPreserveCancels.delete(cancel), EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS + 250)
+  window.setTimeout(
+    () => activeTablePointerScrollPreserveCancels.delete(cancel),
+    EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS + 250
+  )
 }
 
-const getScrollPreserveNow = () => (typeof performance !== "undefined" ? performance.now() : Date.now())
-const suppressGeneralEditorPointerPreserve = () => { suppressGeneralEditorPointerPreserveUntil = getScrollPreserveNow() + 120 }
-const isGeneralEditorPointerPreserveSuppressed = () => getScrollPreserveNow() < suppressGeneralEditorPointerPreserveUntil
+const getScrollPreserveNow = () =>
+  typeof performance !== "undefined" ? performance.now() : Date.now()
+const suppressGeneralEditorPointerPreserve = () => {
+  suppressGeneralEditorPointerPreserveUntil = getScrollPreserveNow() + 120
+}
+const isGeneralEditorPointerPreserveSuppressed = () =>
+  getScrollPreserveNow() < suppressGeneralEditorPointerPreserveUntil
 
-export const markNextEditorPointerAfterCodeSelection = () => { preserveNextEditorPointerAfterCodeSelection = true; preserveNextEditorPointerAfterCodeSelectionReentryUntil = 0 }
+export const markNextEditorPointerAfterCodeSelection = () => {
+  preserveNextEditorPointerAfterCodeSelection = true
+  preserveNextEditorPointerAfterCodeSelectionReentryUntil = 0
+  preserveNextEditorPointerAfterCodeSelectionUntil =
+    getScrollPreserveNow() + EDITOR_POINTER_CODE_FOLLOW_UP_RECENT_MS
+}
 
 export const resolveBlockChromeLeft = (
   left: number,
@@ -82,26 +117,35 @@ export const resolveBlockSelectionOverlayLayout = (
   height: rect.height + 8,
 })
 
-export const resolveBlockHandleAnchorTop = (blockElement: HTMLElement, railHeight: number) => {
+export const resolveBlockHandleAnchorTop = (
+  blockElement: HTMLElement,
+  railHeight: number
+) => {
   const rect = blockElement.getBoundingClientRect()
   if (typeof window === "undefined") return rect.top + 6
 
   const lineAnchorElement =
     (blockElement.matches("p, h1, h2, h3, h4, blockquote")
       ? blockElement
-      : blockElement.querySelector(":scope > p, :scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > blockquote")) ||
-    blockElement
+      : blockElement.querySelector(
+          ":scope > p, :scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > blockquote"
+        )) || blockElement
 
   const computedStyle = window.getComputedStyle(lineAnchorElement as Element)
   const fontSize = Number.parseFloat(computedStyle.fontSize || "16")
   const parsedLineHeight = Number.parseFloat(computedStyle.lineHeight || "")
   const lineHeight =
-    Number.isFinite(parsedLineHeight) && parsedLineHeight > 0 ? parsedLineHeight : fontSize * 1.42
+    Number.isFinite(parsedLineHeight) && parsedLineHeight > 0
+      ? parsedLineHeight
+      : fontSize * 1.42
 
   return rect.top + Math.max(0, (lineHeight - railHeight) / 2)
 }
 
-export const resolveThinBlockHandleAnchorTop = (blockElement: HTMLElement, railHeight: number) => {
+export const resolveThinBlockHandleAnchorTop = (
+  blockElement: HTMLElement,
+  railHeight: number
+) => {
   const rect = blockElement.getBoundingClientRect()
   return Math.max(0, rect.top + rect.height / 2 - railHeight / 2)
 }
@@ -114,7 +158,10 @@ export const resolveBlockHandleRailLayout = (
   gutterBoundaryLeft = rect.left
 ): BlockHandleRailLayout => {
   const gutterLeft = gutterBoundaryLeft - railWidth - BLOCK_HANDLE_GUTTER_GAP_PX
-  if (gutterLeft >= BLOCK_HANDLE_VIEWPORT_PADDING_PX || typeof window === "undefined") {
+  if (
+    gutterLeft >= BLOCK_HANDLE_VIEWPORT_PADDING_PX ||
+    typeof window === "undefined"
+  ) {
     return {
       left: Math.max(BLOCK_HANDLE_VIEWPORT_PADDING_PX, gutterLeft),
       top: anchoredTop,
@@ -127,7 +174,10 @@ export const resolveBlockHandleRailLayout = (
   )
 
   return {
-    left: Math.min(Math.max(BLOCK_HANDLE_VIEWPORT_PADDING_PX, rect.left), maxLeft),
+    left: Math.min(
+      Math.max(BLOCK_HANDLE_VIEWPORT_PADDING_PX, rect.left),
+      maxLeft
+    ),
     top: rect.top - railHeight - BLOCK_HANDLE_STACKED_GAP_PX,
   }
 }
@@ -135,7 +185,12 @@ export const resolveBlockHandleRailLayout = (
 const resolveBlockHandleGutterBoundaryLeft = (
   blockElement: HTMLElement | null | undefined
 ) => {
-  if (!blockElement || typeof document === "undefined" || typeof NodeFilter === "undefined") return null
+  if (
+    !blockElement ||
+    typeof document === "undefined" ||
+    typeof NodeFilter === "undefined"
+  )
+    return null
   if (!blockElement.matches("li, blockquote")) return null
 
   const walker = document.createTreeWalker(blockElement, NodeFilter.SHOW_TEXT)
@@ -160,10 +215,16 @@ const resolveBlockHandleGutterBoundaryLeft = (
 
 const BLOCK_HANDLE_PROTECTED_SIBLING_WINDOW = 2
 
-const isBlockHandleProtectedElement = (element: Element | null): element is HTMLElement =>
-  typeof HTMLElement !== "undefined" && element instanceof HTMLElement && element.matches("li, blockquote")
+const isBlockHandleProtectedElement = (
+  element: Element | null
+): element is HTMLElement =>
+  typeof HTMLElement !== "undefined" &&
+  element instanceof HTMLElement &&
+  element.matches("li, blockquote")
 
-const collectBlockHandleProtectedElements = (protectedAnchor?: HTMLElement | null) => {
+const collectBlockHandleProtectedElements = (
+  protectedAnchor?: HTMLElement | null
+) => {
   if (!protectedAnchor) return []
 
   const elements: HTMLElement[] = []
@@ -173,8 +234,12 @@ const collectBlockHandleProtectedElements = (protectedAnchor?: HTMLElement | nul
     seen.add(element)
     elements.push(element)
   }
-  const pushDescendants = (element: Element | null, edge: "all" | "end" | "start") => {
-    if (!(element instanceof HTMLElement) || element.matches("li, blockquote")) return
+  const pushDescendants = (
+    element: Element | null,
+    edge: "all" | "end" | "start"
+  ) => {
+    if (!(element instanceof HTMLElement) || element.matches("li, blockquote"))
+      return
 
     const descendants = Array.from(element.children).flatMap((child) => {
       if (isBlockHandleProtectedElement(child)) return [child]
@@ -185,11 +250,14 @@ const collectBlockHandleProtectedElements = (protectedAnchor?: HTMLElement | nul
       edge === "end"
         ? descendants.slice(-BLOCK_HANDLE_PROTECTED_SIBLING_WINDOW)
         : edge === "start"
-          ? descendants.slice(0, BLOCK_HANDLE_PROTECTED_SIBLING_WINDOW)
-          : descendants.slice(0, BLOCK_HANDLE_PROTECTED_SIBLING_WINDOW * 2 + 1)
+        ? descendants.slice(0, BLOCK_HANDLE_PROTECTED_SIBLING_WINDOW)
+        : descendants.slice(0, BLOCK_HANDLE_PROTECTED_SIBLING_WINDOW * 2 + 1)
     boundedDescendants.forEach(push)
   }
-  const pushCandidate = (element: Element | null, edge: "all" | "end" | "start" = "all") => {
+  const pushCandidate = (
+    element: Element | null,
+    edge: "all" | "end" | "start" = "all"
+  ) => {
     push(element)
     pushDescendants(element, edge)
   }
@@ -198,7 +266,11 @@ const collectBlockHandleProtectedElements = (protectedAnchor?: HTMLElement | nul
 
   let previousSibling = protectedAnchor.previousElementSibling
   let nextSibling = protectedAnchor.nextElementSibling
-  for (let index = 0; index < BLOCK_HANDLE_PROTECTED_SIBLING_WINDOW; index += 1) {
+  for (
+    let index = 0;
+    index < BLOCK_HANDLE_PROTECTED_SIBLING_WINDOW;
+    index += 1
+  ) {
     pushCandidate(previousSibling, "end")
     pushCandidate(nextSibling, "start")
     previousSibling = previousSibling?.previousElementSibling ?? null
@@ -211,43 +283,50 @@ const collectBlockHandleProtectedElements = (protectedAnchor?: HTMLElement | nul
 const collectBlockHandleProtectedRects = (
   protectedAnchor: HTMLElement | null | undefined
 ): BlockHandleProtectedRect[] => {
-  if (!protectedAnchor || typeof document === "undefined" || typeof NodeFilter === "undefined") return []
-
-  return collectBlockHandleProtectedElements(protectedAnchor).flatMap((element) => {
-    const boundaryLeft = resolveBlockHandleGutterBoundaryLeft(element)
-    if (boundaryLeft === null) return []
-
-    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
-    while (walker.nextNode()) {
-      const textNode = walker.currentNode as Text
-      const trimmed = textNode.data.trim()
-      if (!trimmed) continue
-
-      const textOffset = textNode.data.indexOf(trimmed)
-      const range = document.createRange()
-      range.setStart(textNode, textOffset)
-      range.setEnd(textNode, textOffset + Math.min(trimmed.length, 6))
-      const textRect = range.getBoundingClientRect()
-      if (textRect.width <= 0 || textRect.height <= 0) return []
-
-      return [
-        {
-          bottom: textRect.bottom,
-          left: boundaryLeft,
-          right: textRect.left,
-          top: textRect.top,
-        },
-        {
-          bottom: textRect.bottom,
-          left: textRect.left,
-          right: textRect.right,
-          top: textRect.top,
-        },
-      ]
-    }
-
+  if (
+    !protectedAnchor ||
+    typeof document === "undefined" ||
+    typeof NodeFilter === "undefined"
+  )
     return []
-  })
+
+  return collectBlockHandleProtectedElements(protectedAnchor).flatMap(
+    (element) => {
+      const boundaryLeft = resolveBlockHandleGutterBoundaryLeft(element)
+      if (boundaryLeft === null) return []
+
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+      while (walker.nextNode()) {
+        const textNode = walker.currentNode as Text
+        const trimmed = textNode.data.trim()
+        if (!trimmed) continue
+
+        const textOffset = textNode.data.indexOf(trimmed)
+        const range = document.createRange()
+        range.setStart(textNode, textOffset)
+        range.setEnd(textNode, textOffset + Math.min(trimmed.length, 6))
+        const textRect = range.getBoundingClientRect()
+        if (textRect.width <= 0 || textRect.height <= 0) return []
+
+        return [
+          {
+            bottom: textRect.bottom,
+            left: boundaryLeft,
+            right: textRect.left,
+            top: textRect.top,
+          },
+          {
+            bottom: textRect.bottom,
+            left: textRect.left,
+            right: textRect.right,
+            top: textRect.top,
+          },
+        ]
+      }
+
+      return []
+    }
+  )
 }
 
 const resolvePrefixSafeBlockHandleRailLayout = (
@@ -270,25 +349,34 @@ const resolvePrefixSafeBlockHandleRailLayout = (
   const hasCollision = (top: number) =>
     protectedRects.some(
       (protectedRect) =>
-        top < protectedRect.bottom &&
-        top + railHeight > protectedRect.top
+        top < protectedRect.bottom && top + railHeight > protectedRect.top
     )
   if (!hasCollision(railLayout.top)) return railLayout
 
   const minTop = BLOCK_HANDLE_VIEWPORT_PADDING_PX
-  const maxTop = Math.max(minTop, window.innerHeight - railHeight - BLOCK_HANDLE_VIEWPORT_PADDING_PX)
+  const maxTop = Math.max(
+    minTop,
+    window.innerHeight - railHeight - BLOCK_HANDLE_VIEWPORT_PADDING_PX
+  )
   const clampTop = (top: number) => Math.min(Math.max(minTop, top), maxTop)
   const candidates = new Set<number>()
   protectedRects.forEach((protectedRect) => {
-    candidates.add(clampTop(protectedRect.top - railHeight - BLOCK_HANDLE_STACKED_GAP_PX))
+    candidates.add(
+      clampTop(protectedRect.top - railHeight - BLOCK_HANDLE_STACKED_GAP_PX)
+    )
     candidates.add(clampTop(protectedRect.bottom + BLOCK_HANDLE_STACKED_GAP_PX))
   })
 
   const safeTop = Array.from(candidates)
-    .sort((a, b) => Math.abs(a - railLayout.top) - Math.abs(b - railLayout.top) || a - b)
+    .sort(
+      (a, b) =>
+        Math.abs(a - railLayout.top) - Math.abs(b - railLayout.top) || a - b
+    )
     .find((top) => !hasCollision(top))
 
-  return typeof safeTop === "number" ? { ...railLayout, top: safeTop } : railLayout
+  return typeof safeTop === "number"
+    ? { ...railLayout, top: safeTop }
+    : railLayout
 }
 
 export const resolveBlockHandleRailLayoutForSurface = (
@@ -366,15 +454,23 @@ export const preserveWindowScrollPositionAcrossFrames = (
 ) => {
   if (typeof window === "undefined" || typeof document === "undefined") return
   const scrollingElement = document.scrollingElement
-  const startX = anchor.x, startY = anchor.y, startedAt = typeof performance !== "undefined" ? performance.now() : Date.now(), preserveGeneration = windowScrollPreserveGeneration
-  let cancelled = false, frame = 0
+  const startX = anchor.x,
+    startY = anchor.y,
+    startedAt =
+      typeof performance !== "undefined" ? performance.now() : Date.now(),
+    preserveGeneration = windowScrollPreserveGeneration
+  let cancelled = false,
+    frame = 0
   let deferredPointerDownCancelId: number | null = null
   const cancel = () => {
     cancelled = true
     cleanup()
   }
   const cancelIfRestoreIsNoLongerValid = () => {
-    if (preserveGeneration !== windowScrollPreserveGeneration) { cancel(); return true }
+    if (preserveGeneration !== windowScrollPreserveGeneration) {
+      cancel()
+      return true
+    }
     if (!shouldCancelBeforeRestore) return false
     let shouldCancel = false
     try {
@@ -393,15 +489,22 @@ export const preserveWindowScrollPositionAcrossFrames = (
       return
     }
     const selection = window.getSelection()
-    const hasTextSelection = selection && !selection.isCollapsed && selection.toString().trim()
-    if (hasTextSelection || getScrollPreserveNow() - startedAt > cancelOnTextSelectionChangeAfterMs) {
+    const hasTextSelection =
+      selection && !selection.isCollapsed && selection.toString().trim()
+    if (
+      hasTextSelection ||
+      getScrollPreserveNow() - startedAt > cancelOnTextSelectionChangeAfterMs
+    ) {
       clearNextEditorPointerAfterTable()
       cancel()
     }
   }
   const restoreScrollPosition = () => {
     const currentY = scrollingElement?.scrollTop ?? window.scrollY
-    if (Math.abs(window.scrollX - startX) > tolerance || Math.abs(currentY - startY) > tolerance) {
+    if (
+      Math.abs(window.scrollX - startX) > tolerance ||
+      Math.abs(currentY - startY) > tolerance
+    ) {
       window.scrollTo(startX, startY)
     }
   }
@@ -429,7 +532,11 @@ export const preserveWindowScrollPositionAcrossFrames = (
       window.removeEventListener("touchmove", cancel, true)
     }
     window.removeEventListener("keydown", cancel, true)
-    document.removeEventListener("selectionchange", cancelForTextSelection, true)
+    document.removeEventListener(
+      "selectionchange",
+      cancelForTextSelection,
+      true
+    )
     if (replaceActivePreserve && activeWindowScrollPreserveCancel === cancel) {
       activeWindowScrollPreserveCancel = null
       setActiveWindowScrollPreserveOwner(null)
@@ -440,30 +547,68 @@ export const preserveWindowScrollPositionAcrossFrames = (
     activeWindowScrollPreserveCancel = cancel
     setActiveWindowScrollPreserveOwner(preserveOwner)
   }
-  window.addEventListener("wheel", cancel, { capture: true, passive: true, once: true })
-  window.addEventListener("scroll", restoreOnScroll, { capture: true, passive: true })
+  window.addEventListener("wheel", cancel, {
+    capture: true,
+    passive: true,
+    once: true,
+  })
+  window.addEventListener("scroll", restoreOnScroll, {
+    capture: true,
+    passive: true,
+  })
   if (cancelOnPointerDown) {
     const attachPointerDownCancel = () => {
       deferredPointerDownCancelId = null
       if (!cancelled) {
-        window.addEventListener("pointerdown", cancel, { capture: true, passive: true, once: true })
+        window.addEventListener("pointerdown", cancel, {
+          capture: true,
+          passive: true,
+          once: true,
+        })
       }
     }
     if (deferPointerDownCancel) {
-      deferredPointerDownCancelId = window.setTimeout(attachPointerDownCancel, 0)
+      deferredPointerDownCancelId = window.setTimeout(
+        attachPointerDownCancel,
+        0
+      )
     } else {
       attachPointerDownCancel()
     }
   }
   if (cancelOnPointerUp) {
-    window.addEventListener("pointerup", cancel, { capture: true, passive: true, once: true })
-    window.addEventListener("pointercancel", cancel, { capture: true, passive: true, once: true })
-    window.addEventListener("mouseup", cancel, { capture: true, passive: true, once: true })
+    window.addEventListener("pointerup", cancel, {
+      capture: true,
+      passive: true,
+      once: true,
+    })
+    window.addEventListener("pointercancel", cancel, {
+      capture: true,
+      passive: true,
+      once: true,
+    })
+    window.addEventListener("mouseup", cancel, {
+      capture: true,
+      passive: true,
+      once: true,
+    })
   }
   if (cancelOnPointerMove) {
-    window.addEventListener("pointermove", cancel, { capture: true, passive: true, once: true })
-    window.addEventListener("mousemove", cancel, { capture: true, passive: true, once: true })
-    window.addEventListener("touchmove", cancel, { capture: true, passive: true, once: true })
+    window.addEventListener("pointermove", cancel, {
+      capture: true,
+      passive: true,
+      once: true,
+    })
+    window.addEventListener("mousemove", cancel, {
+      capture: true,
+      passive: true,
+      once: true,
+    })
+    window.addEventListener("touchmove", cancel, {
+      capture: true,
+      passive: true,
+      once: true,
+    })
   }
   window.addEventListener("keydown", cancel, { capture: true, once: true })
   if (cancelOnTextSelectionChange) {
@@ -474,7 +619,9 @@ export const preserveWindowScrollPositionAcrossFrames = (
     if (cancelIfRestoreIsNoLongerValid()) return
     restoreScrollPosition()
     frame += 1
-    const elapsedMs = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt
+    const elapsedMs =
+      (typeof performance !== "undefined" ? performance.now() : Date.now()) -
+      startedAt
     if (frame < frames || elapsedMs < minDurationMs) {
       window.requestAnimationFrame(restore)
     } else {
@@ -491,37 +638,149 @@ const EDITOR_POINTER_TABLE_SELECT_ALL_SCROLL_PRESERVE_FRAMES = 24
 const EDITOR_POINTER_TABLE_SELECT_ALL_SCROLL_PRESERVE_MIN_MS = 320
 const EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES = 192
 const EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS = 3_200
-const EDITOR_POINTER_CODE_FOLLOW_UP_REENTRY_MS = 160
+const EDITOR_POINTER_CODE_FOLLOW_UP_REENTRY_MS = 1_200
+const EDITOR_POINTER_CODE_FOLLOW_UP_RECENT_MS = 8_000
 const EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES = 144
 const EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS = 2_400
-const EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES = 72, EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MAX_MS = 72, EDITOR_POINTER_SCROLL_PRESERVE_CANCEL_DISTANCE_PX = 3_200
-const EDITOR_POINTER_SCROLL_PRESERVE_SELECTOR = "[data-testid='block-editor-prosemirror'], .ProseMirror"
+const EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES = 72
+const EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MAX_MS = 72
+const EDITOR_POINTER_SCROLL_PRESERVE_CANCEL_DISTANCE_PX = 3_200
+const EDITOR_POINTER_SCROLL_PRESERVE_SELECTOR =
+  "[data-testid='block-editor-prosemirror'], .ProseMirror"
 const EDITOR_POINTER_SCROLL_CONTROL_SELECTOR =
   "button, input, textarea, select, summary, [role='button'], [contenteditable='false']"
-const EDITOR_POINTER_SCROLL_RICH_BLOCK_SELECTOR = ".aq-code-shell, .aq-code-editor-content, [data-code-block-wrapper='true'], .aq-table-shell, .tableWrapper, table, [data-mermaid-block], .aq-mermaid-code-input, .aq-mermaid, .aq-mermaid-stage"
-const shouldCancelEditorPointerScrollPreserve = (anchor: WindowScrollAnchor) => () => Math.abs(window.scrollX - anchor.x) > EDITOR_POINTER_SCROLL_PRESERVE_CANCEL_DISTANCE_PX || Math.abs((document.scrollingElement?.scrollTop ?? window.scrollY) - anchor.y) > EDITOR_POINTER_SCROLL_PRESERVE_CANCEL_DISTANCE_PX
+const EDITOR_POINTER_SCROLL_RICH_BLOCK_SELECTOR = [
+  ".aq-code-shell",
+  ".aq-code-editor-content",
+  "[data-code-block-wrapper='true']",
+  ".aq-table-shell",
+  ".tableWrapper",
+  "table",
+  "[data-mermaid-block]",
+  ".aq-mermaid-code-input",
+  ".aq-mermaid",
+  ".aq-mermaid-stage",
+].join(", ")
+const shouldCancelEditorPointerScrollPreserve =
+  (anchor: WindowScrollAnchor) => () =>
+    Math.abs(window.scrollX - anchor.x) >
+      EDITOR_POINTER_SCROLL_PRESERVE_CANCEL_DISTANCE_PX ||
+    Math.abs(
+      (document.scrollingElement?.scrollTop ?? window.scrollY) - anchor.y
+    ) > EDITOR_POINTER_SCROLL_PRESERVE_CANCEL_DISTANCE_PX
 
-export const preserveWindowScrollForRichBlockSelectAll = () => { const anchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }; preserveWindowScrollPositionAcrossFrames(anchor, EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES, 4, EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS, false, true, true, false, false, shouldCancelEditorPointerScrollPreserve(anchor), true) }
+export const preserveWindowScrollForRichBlockSelectAll = () => {
+  const anchor = {
+    x: window.scrollX,
+    y: document.scrollingElement?.scrollTop ?? window.scrollY,
+  }
+  preserveWindowScrollPositionAcrossFrames(
+    anchor,
+    EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES,
+    4,
+    EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS,
+    false,
+    true,
+    true,
+    false,
+    false,
+    shouldCancelEditorPointerScrollPreserve(anchor),
+    true
+  )
+}
 
 export const preserveWindowScrollForTableSelectAll = () => {
-  const anchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
-  preserveWindowScrollPositionAcrossFrames(anchor, EDITOR_POINTER_TABLE_SELECT_ALL_SCROLL_PRESERVE_FRAMES, 4, EDITOR_POINTER_TABLE_SELECT_ALL_SCROLL_PRESERVE_MIN_MS, false, true, true, true, true, shouldCancelEditorPointerScrollPreserve(anchor), true)
+  const anchor = {
+    x: window.scrollX,
+    y: document.scrollingElement?.scrollTop ?? window.scrollY,
+  }
+  preserveWindowScrollPositionAcrossFrames(
+    anchor,
+    EDITOR_POINTER_TABLE_SELECT_ALL_SCROLL_PRESERVE_FRAMES,
+    4,
+    EDITOR_POINTER_TABLE_SELECT_ALL_SCROLL_PRESERVE_MIN_MS,
+    false,
+    true,
+    true,
+    true,
+    true,
+    shouldCancelEditorPointerScrollPreserve(anchor),
+    true
+  )
 }
 
 const preserveWindowScrollForTablePointerTextDrag = () => {
   // Keep collapsed click focus-reveal correction alive; real text drags cancel on selectionchange.
-  const anchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
-  trackTablePointerScrollPreserve(preserveWindowScrollPositionAcrossFrames(anchor, EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES, 4, EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS, true, true, true, false, true, shouldCancelEditorPointerScrollPreserve(anchor), true, Number.POSITIVE_INFINITY, "table"))
+  const anchor = {
+    x: window.scrollX,
+    y: document.scrollingElement?.scrollTop ?? window.scrollY,
+  }
+  trackTablePointerScrollPreserve(
+    preserveWindowScrollPositionAcrossFrames(
+      anchor,
+      EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_FRAMES,
+      4,
+      EDITOR_POINTER_FOCUS_SCROLL_PRESERVE_MIN_MS,
+      true,
+      true,
+      true,
+      false,
+      true,
+      shouldCancelEditorPointerScrollPreserve(anchor),
+      true,
+      Number.POSITIVE_INFINITY,
+      "table"
+    )
+  )
 }
 
 const preserveWindowScrollForTableFollowUpPointer = () => {
-  const anchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
-  trackTablePointerScrollPreserve(preserveWindowScrollPositionAcrossFrames(anchor, EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES, 4, EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS, true, true, true, false, true, shouldCancelEditorPointerScrollPreserve(anchor), true, Number.POSITIVE_INFINITY, "table"))
+  const anchor = {
+    x: window.scrollX,
+    y: document.scrollingElement?.scrollTop ?? window.scrollY,
+  }
+  trackTablePointerScrollPreserve(
+    preserveWindowScrollPositionAcrossFrames(
+      anchor,
+      EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES,
+      4,
+      EDITOR_POINTER_TABLE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS,
+      true,
+      true,
+      true,
+      false,
+      true,
+      shouldCancelEditorPointerScrollPreserve(anchor),
+      true,
+      Number.POSITIVE_INFINITY,
+      "table"
+    )
+  )
 }
 
-export const preserveWindowScrollForCodePointerFocus = (cancelOnPointerDown = false) => {
-  const anchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
-  preserveWindowScrollPositionAcrossFrames(anchor, EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES, 4, EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS, false, false, cancelOnPointerDown, false, false, shouldCancelEditorPointerScrollPreserve(anchor), true, Number.POSITIVE_INFINITY, "code", cancelOnPointerDown)
+export const preserveWindowScrollForCodePointerFocus = (
+  cancelOnPointerDown = false
+) => {
+  const anchor = {
+    x: window.scrollX,
+    y: document.scrollingElement?.scrollTop ?? window.scrollY,
+  }
+  preserveWindowScrollPositionAcrossFrames(
+    anchor,
+    EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_FRAMES,
+    4,
+    EDITOR_POINTER_CODE_FOLLOW_UP_SCROLL_PRESERVE_MIN_MS,
+    false,
+    false,
+    cancelOnPointerDown,
+    false,
+    false,
+    shouldCancelEditorPointerScrollPreserve(anchor),
+    true,
+    Number.POSITIVE_INFINITY,
+    "code",
+    cancelOnPointerDown
+  )
 }
 
 export const preserveWindowScrollForEditorPointerFocus = (
@@ -529,21 +788,43 @@ export const preserveWindowScrollForEditorPointerFocus = (
   tableSelectionActive: boolean,
   blockSelectionActive = false
 ) => {
-  const targetElement = target instanceof Element ? target : target instanceof Node ? target.parentElement : null
-  const tablePointerTarget = Boolean(targetElement?.closest(".aq-table-shell, .tableWrapper, table"))
-  const editorPointerTarget = Boolean(targetElement?.closest(EDITOR_POINTER_SCROLL_PRESERVE_SELECTOR))
-  const editorControlTarget = Boolean(targetElement?.closest(EDITOR_POINTER_SCROLL_CONTROL_SELECTOR))
-  const editorRichBlockTarget = Boolean(targetElement?.closest(EDITOR_POINTER_SCROLL_RICH_BLOCK_SELECTOR))
-  const shouldPreserveRichEditorPointer = editorPointerTarget && editorRichBlockTarget && !tablePointerTarget
-  const shouldPreserveTableBlockSelectionPointer = tablePointerTarget && blockSelectionActive
+  const targetElement =
+    target instanceof Element
+      ? target
+      : target instanceof Node
+      ? target.parentElement
+      : null
+  const tablePointerTarget = Boolean(
+    targetElement?.closest(".aq-table-shell, .tableWrapper, table")
+  )
+  const editorPointerTarget = Boolean(
+    targetElement?.closest(EDITOR_POINTER_SCROLL_PRESERVE_SELECTOR)
+  )
+  const editorControlTarget = Boolean(
+    targetElement?.closest(EDITOR_POINTER_SCROLL_CONTROL_SELECTOR)
+  )
+  const editorRichBlockTarget = Boolean(
+    targetElement?.closest(EDITOR_POINTER_SCROLL_RICH_BLOCK_SELECTOR)
+  )
+  const shouldPreserveRichEditorPointer =
+    editorPointerTarget && editorRichBlockTarget && !tablePointerTarget
+  const shouldPreserveTableBlockSelectionPointer =
+    tablePointerTarget && blockSelectionActive
   const shouldPreserveGeneralEditorPointer =
     editorPointerTarget && !editorRichBlockTarget && !editorControlTarget
-  const codeSelectionFollowUpReentryActive = getScrollPreserveNow() < preserveNextEditorPointerAfterCodeSelectionReentryUntil
+  const now = getScrollPreserveNow()
+  const codeSelectionFollowUpReentryActive =
+    now < preserveNextEditorPointerAfterCodeSelectionReentryUntil
+  const codeSelectionFollowUpRecent =
+    now < preserveNextEditorPointerAfterCodeSelectionUntil
   const shouldPreserveCodeSelectionFollowUp =
     editorPointerTarget &&
     !editorControlTarget &&
-    (preserveNextEditorPointerAfterCodeSelection || codeSelectionFollowUpReentryActive)
-  const shouldPreserveFollowUp = !tablePointerTarget && preserveNextEditorPointerAfterTable
+    (preserveNextEditorPointerAfterCodeSelection ||
+      codeSelectionFollowUpReentryActive ||
+      codeSelectionFollowUpRecent)
+  const shouldPreserveFollowUp =
+    !tablePointerTarget && preserveNextEditorPointerAfterTable
   if (shouldPreserveCodeSelectionFollowUp) {
     preserveNextEditorPointerAfterCodeSelection = false
     preserveNextEditorPointerAfterCodeSelectionReentryUntil =
@@ -576,10 +857,32 @@ export const preserveWindowScrollForEditorPointerFocus = (
     preserveWindowScrollForTablePointerTextDrag()
     return
   }
-  if (shouldPreserveGeneralEditorPointer && !isGeneralEditorPointerPreserveSuppressed()) {
+  if (
+    shouldPreserveGeneralEditorPointer &&
+    !isGeneralEditorPointerPreserveSuppressed()
+  ) {
     const startedAt = getScrollPreserveNow()
-    const anchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
-    preserveWindowScrollPositionAcrossFrames(anchor, EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES, 4, EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MAX_MS, true, false, true, false, true, () => shouldCancelEditorPointerScrollPreserve(anchor)() || getScrollPreserveNow() - startedAt > EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MAX_MS, true, 20)
+    const anchor = {
+      x: window.scrollX,
+      y: document.scrollingElement?.scrollTop ?? window.scrollY,
+    }
+    preserveWindowScrollPositionAcrossFrames(
+      anchor,
+      EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_FRAMES,
+      4,
+      EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MAX_MS,
+      true,
+      false,
+      true,
+      false,
+      true,
+      () =>
+        shouldCancelEditorPointerScrollPreserve(anchor)() ||
+        getScrollPreserveNow() - startedAt >
+          EDITOR_POINTER_GENERAL_SCROLL_PRESERVE_MAX_MS,
+      true,
+      20
+    )
   }
 }
 

@@ -401,6 +401,12 @@ export const EditorViewport = styled.div`
     background: rgba(148, 163, 184, 0.12);
   }
 
+  .aq-block-editor__content .selectedCell::selection,
+  .aq-block-editor__content .selectedCell *::selection {
+    background: transparent;
+    color: inherit;
+  }
+
   .aq-block-editor__content .column-resize-handle {
     display: none !important;
     pointer-events: none !important;

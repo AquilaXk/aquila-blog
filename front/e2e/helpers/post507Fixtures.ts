@@ -175,7 +175,11 @@ export type Post507InteractionTelemetrySnapshot = {
     row: boolean
     structure: boolean
   }
-  scrollToCalls: Array<{ elapsedMs: number; targetX: number; targetY: number }>
+  scrollToCalls: Array<{
+    elapsedMs: number
+    targetX: number
+    targetY: number
+  }>
   scrollTopTimeline: Array<{ elapsedMs: number; label: string; scrollTop: number }>
   selectionTimeline: Array<{
     label: string
@@ -475,7 +479,11 @@ export const installPost507InteractionTelemetry = async (page: Page) =>
     window.scrollTo = ((xOrOptions?: number | ScrollToOptions, y?: number) => {
       const targetX = typeof xOrOptions === "object" ? Number(xOrOptions.left ?? window.scrollX) : Number(xOrOptions ?? window.scrollX)
       const targetY = typeof xOrOptions === "object" ? Number(xOrOptions.top ?? window.scrollY) : Number(y ?? window.scrollY)
-      telemetry.scrollToCalls.push({ elapsedMs: elapsedMs(), targetX: Math.round(targetX), targetY: Math.round(targetY) })
+      telemetry.scrollToCalls.push({
+        elapsedMs: elapsedMs(),
+        targetX: Math.round(targetX),
+        targetY: Math.round(targetY),
+      })
       trim(telemetry.scrollToCalls)
       if (typeof xOrOptions === "object") return originalScrollTo(xOrOptions)
       return originalScrollTo(xOrOptions ?? window.scrollX, y ?? window.scrollY)
@@ -1279,13 +1287,19 @@ const resolvePost507FinalTableColumnMetrics = async (page: Page) => {
         headerCells.find((candidate) => candidate.textContent?.includes("점검 항목")) ?? headerCells[1] ?? headerCells[0]
       if (!headerCell) return null
       const headerRect = headerCell.getBoundingClientRect()
+      if (headerRect.bottom <= 8 || headerRect.top >= window.innerHeight - 8) {
+        headerCell.scrollIntoView({
+          block: "center",
+          inline: "nearest",
+          behavior: "instant",
+        })
+        return null
+      }
       if (
         tableRect.width <= 0 ||
         tableRect.height <= 0 ||
         headerRect.width <= 0 ||
-        headerRect.height <= 0 ||
-        headerRect.bottom <= 8 ||
-        headerRect.top >= window.innerHeight - 8
+        headerRect.height <= 0
       ) {
         return null
       }

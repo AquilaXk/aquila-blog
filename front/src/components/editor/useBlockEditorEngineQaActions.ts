@@ -1,6 +1,7 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
 import { tableEditingKey } from "@tiptap/pm/tables"
-import { useEffect } from "react"
+import { TextSelection } from "@tiptap/pm/state"
+import { useEffect, useRef } from "react"
 import type { RefObject } from "react"
 import type { BlockEditorQaActions } from "./blockEditorContract"
 import type { BlockEditorDoc } from "./serialization"
@@ -45,6 +46,11 @@ export const useBlockEditorEngineQaActions = ({
   updateActiveTableCellAttrs,
   withTrailingParagraph,
 }: UseBlockEditorEngineQaActionsArgs) => {
+  const lastQaTableAxisTargetRef = useRef<{
+    axis: "row" | "column"
+    index: number | null
+  } | null>(null)
+
   useEffect(() => {
     if (!onQaActionsReady) return
     const runTableStructureAction = (
@@ -63,6 +69,37 @@ export const useBlockEditorEngineQaActions = ({
         if (!retryEditor) return
         if (!selectCurrentTableAxis(axis)) return
         command(retryEditor)
+      })
+    }
+    const runTableCellAttrsAction = (attrs: Record<string, unknown>) => {
+      const applyAttrs = () => {
+        const currentEditor = editorRef.current ?? editor
+        if (!currentEditor) return false
+        const previousDoc = currentEditor.state.doc
+        updateActiveTableCellAttrs(attrs)
+        return currentEditor.state.doc !== previousDoc
+      }
+      const restoreLastQaTableAxisSelection = () => {
+        const lastTarget = lastQaTableAxisTargetRef.current
+        if (!lastTarget) return false
+        if (
+          lastTarget.axis === "column" &&
+          typeof lastTarget.index === "number"
+        ) {
+          return Boolean(selectTableColumnByIndex(lastTarget.index))
+        }
+        return selectCurrentTableAxis(lastTarget.axis)
+      }
+
+      if (applyAttrs()) return
+      if (restoreLastQaTableAxisSelection() && applyAttrs()) return
+      updateActiveTableCellAttrs(attrs)
+      if (typeof window === "undefined") return
+      window.requestAnimationFrame(() => {
+        if (applyAttrs()) return
+        if (restoreLastQaTableAxisSelection()) {
+          applyAttrs()
+        }
       })
     }
 
@@ -90,19 +127,33 @@ export const useBlockEditorEngineQaActions = ({
         selectTopLevelBlockNode(currentEditor, blockIndex)
       },
       selectTableAxis: (axis) => {
-        selectCurrentTableAxis(axis)
+        if (selectCurrentTableAxis(axis)) {
+          lastQaTableAxisTargetRef.current = {
+            axis,
+            index: null,
+          }
+        }
       },
       selectTableColumnViaDomFallback: (columnIndex) => {
         const currentEditor = editorRef.current ?? editor
         if (!currentEditor) return
-        currentEditor.chain().focus("end").run()
-        selectTableColumnByIndex(columnIndex)
+        currentEditor.view.dispatch(
+          currentEditor.state.tr
+            .setSelection(TextSelection.atEnd(currentEditor.state.doc))
+            .setMeta("addToHistory", false)
+        )
+        if (selectTableColumnByIndex(columnIndex)) {
+          lastQaTableAxisTargetRef.current = {
+            axis: "column",
+            index: columnIndex,
+          }
+        }
       },
       setActiveTableCellAlign: (align) => {
-        updateActiveTableCellAttrs({ textAlign: align })
+        runTableCellAttrsAction({ textAlign: align })
       },
       setActiveTableCellBackground: (color) => {
-        updateActiveTableCellAttrs({ backgroundColor: color })
+        runTableCellAttrsAction({ backgroundColor: color })
       },
       addTableRowAfter: () => {
         runTableStructureAction("row", (activeEditor) =>

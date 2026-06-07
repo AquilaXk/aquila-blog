@@ -126,12 +126,20 @@ test.describe("editor authoring route 507 selection scroll owner", () => {
       source.match(
         /const preserveCodePointerFocusScroll = useCallback\([\s\S]*?\n  \}, \[\]\)/
       )?.[0] ?? ""
+    const sharedHelper =
+      source.match(
+        /const preserveCodeScrollAcrossFrames = \([\s\S]*?\n\) => \{[\s\S]*?\n\}/
+      )?.[0] ?? ""
 
+    expect(sharedHelper).toContain("replaceActivePreserve = false")
+    expect(sharedHelper).toContain("CODE_SCROLL_PRESERVE_MIN_MS")
+    expect(sharedHelper).toContain("shouldCancelCodeScrollPreserve(scrollAnchor)")
+    expect(sharedHelper).toContain("replaceActivePreserve")
     expect(helper).toContain(
-      "CODE_SCROLL_PRESERVE_MIN_MS, false, false, true, false, false, shouldCancelCodeScrollPreserve(scrollAnchor), true"
+      "preserveCodeScrollAcrossFrames(scrollAnchor, true)"
     )
     expect(helper).toContain(
-      "CODE_SCROLL_PRESERVE_MIN_MS, false, false, true, false, false, shouldCancelCodeScrollPreserve(scrollAnchor))"
+      "preserveCodeScrollAcrossFrames(scrollAnchor)"
     )
   })
 

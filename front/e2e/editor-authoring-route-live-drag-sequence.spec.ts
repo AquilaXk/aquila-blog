@@ -342,20 +342,40 @@ const expectPost507FinalTableBlockOverlayFollowsScroll = async (
   expect(Math.abs(before.overlayWidth - (before.blockWidth + 12))).toBeLessThanOrEqual(8)
 
   const scrollState = await page.evaluate(() => {
-    const scrollTop = document.scrollingElement?.scrollTop ?? window.scrollY
-    const scrollHeight = document.scrollingElement?.scrollHeight ?? document.documentElement.scrollHeight
+    const scroller = document.scrollingElement ?? document.documentElement
+    const scrollTop = scroller.scrollTop || window.scrollY
+    const scrollHeight = scroller.scrollHeight || document.documentElement.scrollHeight
     return { maxScrollTop: scrollHeight - window.innerHeight, scrollTop }
   })
-  const scrollDelta = scrollState.scrollTop < scrollState.maxScrollTop - 240 ? 180 : -180
-  await page.evaluate((deltaY) => {
-    window.scrollBy(0, deltaY)
-  }, scrollDelta)
-  await expect
-    .poll(async () => {
-      const current = await readPost507FinalTableBlockOverlayMetrics(page)
-      return current ? Math.abs(current.scrollTop - before.scrollTop) : 0
-    })
-    .toBeGreaterThan(40)
+  const scrollDeltas =
+    scrollState.scrollTop < scrollState.maxScrollTop - 240 ? [180, 360] : [-180, -360]
+  let scrolled = false
+  for (const scrollDelta of scrollDeltas) {
+    const currentTableBox = await finalTable.boundingBox()
+    if (currentTableBox) {
+      await page.mouse.move(
+        currentTableBox.x + Math.min(Math.max(currentTableBox.width / 2, 12), currentTableBox.width - 12),
+        currentTableBox.y + Math.min(Math.max(currentTableBox.height / 2, 12), currentTableBox.height - 12)
+      )
+    }
+    await page.mouse.wheel(0, scrollDelta)
+    await page.waitForTimeout(160)
+    const current = await readPost507FinalTableBlockOverlayMetrics(page)
+    if (current && Math.abs(current.scrollTop - before.scrollTop) > 40) {
+      scrolled = true
+      break
+    }
+  }
+  if (!scrolled) {
+    const current = await readPost507FinalTableBlockOverlayMetrics(page)
+    throw new Error(
+      `post 507 final table overlay scroll did not move: ${JSON.stringify(
+        { before, current, scrollState },
+        null,
+        2
+      )}`
+    )
+  }
   const after = await readPost507FinalTableBlockOverlayMetrics(page)
   if (!after) throw new Error("post 507 final table overlay metrics are missing after scroll")
   expect(Math.abs(after.gapTop - before.gapTop)).toBeLessThanOrEqual(3)
@@ -416,12 +436,14 @@ const dragLocatorTextRange = async (
 ) => {
   const isDetachedError = (error: unknown) =>
     error instanceof Error &&
-    /not attached to the DOM|Element is not attached/i.test(error.message)
+    /not attached to the DOM|Element is not attached|text rect is too small|text range is not hit-testable/i.test(error.message)
   const runDrag = async () => {
-    await target.scrollIntoViewIfNeeded()
-    const measureTextRange = () =>
-      target.evaluate((element, { endInsetPx, label, startInsetPx, textToSelect }) => {
+    const measureTextRange = async () => {
+      await target.evaluate((element) => {
         element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
+      })
+      await page.waitForTimeout(80)
+      return target.evaluate((element, { endInsetPx, label, startInsetPx, textToSelect }) => {
         const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
         while (walker.nextNode()) {
           const textNode = walker.currentNode as Text
@@ -458,6 +480,24 @@ const dragLocatorTextRange = async (
         startInsetPx: options.startInsetPx,
         textToSelect: text,
       })
+    }
+    const pointHitsTargetText = (metrics: Awaited<ReturnType<typeof measureTextRange>>) =>
+      page.evaluate(
+        ({ endX, endY, startX, startY, textToSelect }) => {
+          const isExpectedPoint = (x: number, y: number) => {
+            const element = document.elementFromPoint(x, y)
+            return Boolean(element?.textContent?.includes(textToSelect))
+          }
+          return isExpectedPoint(startX, startY) && isExpectedPoint(endX, endY)
+        },
+        {
+          endX: metrics.endX,
+          endY: metrics.endY,
+          startX: metrics.startX,
+          startY: metrics.startY,
+          textToSelect: text,
+        }
+      )
     let metrics = await measureTextRange()
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const viewport = page.viewportSize()
@@ -466,6 +506,13 @@ const dragLocatorTextRange = async (
       await page.waitForTimeout(160)
       metrics = await measureTextRange()
     }
+    let pointHit = await pointHitsTargetText(metrics)
+    for (let attempt = 0; !pointHit && attempt < 4; attempt += 1) {
+      await page.waitForTimeout(120 + attempt * 80)
+      metrics = await measureTextRange()
+      pointHit = await pointHitsTargetText(metrics)
+    }
+    if (!pointHit) throw new Error(`${label} text range is not hit-testable`)
     const viewport = page.viewportSize()
     if (viewport && (metrics.startY < 8 || metrics.endY < 8 || metrics.startY > viewport.height - 8 || metrics.endY > viewport.height - 8)) {
       throw new Error(`${label} text rect is outside viewport: ${JSON.stringify(metrics)}`)

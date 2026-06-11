@@ -342,6 +342,7 @@ export const useBlockEditorEngineSelectionEffects = ({
       )
     }
     let suppressNextListTextMouseDownUntil = 0
+    let deferListTextResidueMouseEventsUntil = 0
     let lateTableSelectionGuardToken = 0
     const cancelLateTableSelectionGuard = () => {
       lateTableSelectionGuardToken += 1
@@ -492,6 +493,26 @@ export const useBlockEditorEngineSelectionEffects = ({
       selection.addRange(range)
       return true
     }
+    const clearListTextSelectionResidue = (
+      listItemContext: NestedListItemContext,
+      clientX: number,
+      clientY: number,
+      target?: EventTarget | Node | null
+    ) => {
+      selectedListItemContextRef.current = null
+      setSelectedListItemContext(null)
+      setSelectedBlockNodeIndex(null)
+      syncSelectedBlockNodeSurface(null)
+      clearStickyTopLevelBlockSelection()
+      cancelAllWindowScrollPreserves()
+      collapseStaleTableEditorSelection(editor, {
+        clientX,
+        clientY,
+        target: target ?? listItemContext.listItemElement,
+      })
+      clearTableTextSelectionForBlockSelection({ clearWindowSelection: false })
+      clearTableSelectedCellDomMarkers(editor.view.dom as HTMLElement, editor)
+    }
     const restoreListTextSelectionAtPoint = (
       listItemContext: NestedListItemContext,
       clientX: number,
@@ -505,19 +526,7 @@ export const useBlockEditorEngineSelectionEffects = ({
         clientY,
         target
       )
-      selectedListItemContextRef.current = null
-      setSelectedListItemContext(null)
-      setSelectedBlockNodeIndex(null)
-      syncSelectedBlockNodeSurface(null)
-      clearStickyTopLevelBlockSelection()
-      cancelAllWindowScrollPreserves()
-      collapseStaleTableEditorSelection(editor, {
-        clientX,
-        clientY,
-        target: target ?? liveListItemContext.listItemElement,
-      })
-      clearTableTextSelectionForBlockSelection({ clearWindowSelection: false })
-      clearTableSelectedCellDomMarkers(editor.view.dom as HTMLElement, editor)
+      clearListTextSelectionResidue(liveListItemContext, clientX, clientY, target)
       const restoredAtPoint = selectNestedListItemTextAtPoint(
         editor,
         liveListItemContext,
@@ -596,8 +605,16 @@ export const useBlockEditorEngineSelectionEffects = ({
             hasNativeListTextRangeSelection(liveListItemContext) ||
             hasNativeListCaretSelection(liveListItemContext)
           ) {
+            deferListTextResidueMouseEventsUntil = 0
+            clearListTextSelectionResidue(
+              liveListItemContext,
+              clientX,
+              clientY,
+              target
+            )
             return
           }
+          deferListTextResidueMouseEventsUntil = 0
           restoreListTextSelectionAtPoint(
             liveListItemContext,
             clientX,
@@ -751,26 +768,8 @@ export const useBlockEditorEngineSelectionEffects = ({
         !isListControlGesture &&
         shouldRestoreListTextSelection
       ) {
-        selectedListItemContextRef.current = null
-        setSelectedListItemContext(null)
-        setSelectedBlockNodeIndex(null)
-        syncSelectedBlockNodeSurface(null)
-        clearStickyTopLevelBlockSelection()
-        cancelAllWindowScrollPreserves()
-        collapseStaleTableEditorSelection(editor, {
-          clientX: event.clientX,
-          clientY: event.clientY,
-          target: eventTarget,
-        })
-        clearTableTextSelectionForBlockSelection({ clearWindowSelection: false })
-        clearTableSelectedCellDomMarkers(editor.view.dom as HTMLElement, editor)
         lateTableSelectionGuardToken += 1
-        restoreListTextSelectionAtPoint(
-          targetListItemContext,
-          event.clientX,
-          event.clientY,
-          eventTarget
-        )
+        deferListTextResidueMouseEventsUntil = now + 900
         scheduleListClickCaretRestoreAfterPointer(
           targetListItemContext,
           event.clientX,
@@ -784,6 +783,16 @@ export const useBlockEditorEngineSelectionEffects = ({
           900,
           { restoreCaret: false }
         )
+        return
+      }
+      if (
+        event.type !== "pointerdown" &&
+        targetListItemContext &&
+        !isListControlGesture &&
+        !isOuterListItemGesture &&
+        shouldRestoreListTextSelection &&
+        now < deferListTextResidueMouseEventsUntil
+      ) {
         return
       }
       if (

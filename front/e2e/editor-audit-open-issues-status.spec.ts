@@ -33,7 +33,7 @@ const ISSUE_CLOSURE_CONTRACTS: readonly AuditClosureContract[] = [
       },
       {
         file: "src/components/editor/useBlockEditorMarkdownCommit.ts",
-        contains: ["fallbackEditor?: TiptapEditor | null", "flushPendingNodeViewAttributeCommits()"],
+        contains: ["fallbackEditor?: TiptapEditor | null", "flushPendingNodeViewAttributeCommits(pendingEditor.view.dom)"],
       },
       {
         file: "src/components/editor/useBlockEditorEngineController.ts",
@@ -64,19 +64,25 @@ const ISSUE_CLOSURE_CONTRACTS: readonly AuditClosureContract[] = [
     evidence: [
       {
         file: "src/components/editor/editorNodeViewCommitRegistry.ts",
-        contains: ["export const registerPendingNodeViewCommitFlusher", "export const flushPendingNodeViewAttributeCommits = () =>"],
+        contains: [
+          "export type NodeViewCommitFlusher = () => void",
+          "export const registerPendingNodeViewCommitFlusher",
+          "scopedPendingNodeViewCommitFlushers",
+          "export const flushPendingNodeViewAttributeCommits = (scope?: object | null)",
+        ],
       },
       {
         file: "src/components/editor/editorNodeViewShared.ts",
-        contains: ["registerPendingNodeViewCommitFlusher(flush)"],
+        contains: ["flushScope?: object | null", "registerPendingNodeViewCommitFlusher(flush, flushScope)"],
       },
       {
         file: "src/components/editor/mermaidNodeViewModel.tsx",
-        contains: ["registerPendingNodeViewCommitFlusher(flush)"],
+        contains: ['export { useDebouncedAttributeCommit } from "./editorNodeViewShared"'],
+        excludes: ["registerPendingNodeViewCommitFlusher"],
       },
       {
         file: "src/components/editor/useBlockEditorMarkdownCommit.ts",
-        contains: ["flushPendingNodeViewAttributeCommits()"],
+        contains: ["flushPendingNodeViewAttributeCommits(pendingEditor.view.dom)"],
       },
       {
         file: "e2e/editor-temp-draft.spec.ts",
@@ -94,7 +100,11 @@ const ISSUE_CLOSURE_CONTRACTS: readonly AuditClosureContract[] = [
       },
       {
         file: "src/components/editor/serializationMarkdownExport.ts",
-        contains: ["const getMarkdownFence = (content: string) =>", "const serializeList = (node: JSONContent, depth = 0): string =>", "serializeList(child, depth + 1)"],
+        contains: [
+          "const getMarkdownFence = (content: string) =>",
+          "const serializeList = (node: JSONContent, indent = \"\"): string =>",
+          "serializeList(child, childIndent)",
+        ],
       },
       {
         file: "src/components/editor/serializationHtmlImport.ts",

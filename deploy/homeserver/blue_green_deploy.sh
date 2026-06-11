@@ -35,6 +35,7 @@ AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB="${AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB:-2048
 AUTO_MEMORY_TUNER_MIN_BUDGET_MB="${AUTO_MEMORY_TUNER_MIN_BUDGET_MB:-1280}"
 LAST_COMPOSE_UP_SERVICES=""
 LAST_COMPOSE_UP_OUTPUT=""
+AUTOHEAL_PAUSED="false"
 
 run_diagnostic_command() {
   local timeout_seconds="${DIAGNOSTIC_TIMEOUT_SECONDS:-15}"
@@ -161,6 +162,32 @@ acquire_deploy_lock() {
 
 release_deploy_lock() {
   rm -rf "${DEPLOY_LOCK_DIR}" 2>/dev/null || true
+}
+
+is_compose_service_running() {
+  local service="$1"
+  compose ps --status running --services 2>/dev/null | grep -qx "${service}"
+}
+
+pause_autoheal_for_blue_green() {
+  if ! is_compose_service_running "autoheal"; then
+    echo "autoheal is not running; skip blue/green autoheal pause"
+    return 0
+  fi
+
+  echo "pausing autoheal during blue/green candidate readiness"
+  compose stop autoheal
+  AUTOHEAL_PAUSED="true"
+}
+
+resume_autoheal_if_paused() {
+  if [[ "${AUTOHEAL_PAUSED}" != "true" ]]; then
+    return 0
+  fi
+
+  echo "resuming autoheal after blue/green candidate readiness"
+  compose up -d autoheal || true
+  AUTOHEAL_PAUSED="false"
 }
 
 require_supported_docker_engine() {
@@ -1812,7 +1839,7 @@ fi
 if ! acquire_deploy_lock; then
   exit 1
 fi
-trap 'release_deploy_lock' EXIT INT TERM
+trap 'resume_autoheal_if_paused; release_deploy_lock' EXIT INT TERM
 
 require_supported_docker_engine
 validate_storage_env
@@ -1855,6 +1882,7 @@ warn_grafana_embed_public_route
 validate_db_runtime_role_env
 provision_db_runtime_role
 ensure_db_runtime_guards || true
+pause_autoheal_for_blue_green
 compose pull "${next_backend}"
 if ! compose_up_force_recreate_with_retry "${next_backend}"; then
   emit_backend_diagnostics "${next_backend}" >&2 || true

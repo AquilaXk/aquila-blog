@@ -196,6 +196,24 @@ test("prod datasource uses a non-superuser runtime role contract", () => {
   assert.match(deployScript, /GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public/)
 })
 
+test("blue-green deploy pauses autoheal while staging a candidate backend", () => {
+  const deployScript = readFileSync(deployScriptPath, "utf8")
+  const pauseCallIndex = deployScript.indexOf("\npause_autoheal_for_blue_green\n")
+  const candidateRecreateIndex = deployScript.indexOf('compose_up_force_recreate_with_retry "${next_backend}"')
+
+  assert.match(deployScript, /pause_autoheal_for_blue_green\(\)/)
+  assert.match(deployScript, /resume_autoheal_if_paused\(\)/)
+  assert.match(deployScript, /trap 'resume_autoheal_if_paused; release_deploy_lock' EXIT INT TERM/)
+  assert.match(deployScript, /compose stop autoheal/)
+  assert.match(deployScript, /compose up -d autoheal/)
+  assert(pauseCallIndex > 0, "deploy script must call pause_autoheal_for_blue_green before staging")
+  assert(candidateRecreateIndex > 0, "deploy script must recreate the candidate backend")
+  assert(
+    pauseCallIndex < candidateRecreateIndex,
+    "autoheal must be paused before candidate backend force-recreate",
+  )
+})
+
 test("homeserver origin ingress is private behind Cloudflare Tunnel", () => {
   const compose = readFileSync(composePath, "utf8")
   const hardeningScript = readFileSync(hardeningScriptPath, "utf8")

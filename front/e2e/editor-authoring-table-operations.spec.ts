@@ -35,6 +35,48 @@ test.describe("editor authoring table operations", () => {
     await expect(page.locator("table tr")).toHaveCount(3)
   })
 
+  test("multi-table 상태의 QA fallback 열 선택은 첫 표를 임의 선택하지 않는다", async ({
+    page,
+  }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    const twoTableMarkdown = [
+      "| 첫 표 A | 첫 표 B |",
+      "| --- | --- |",
+      "| first-1 | first-2 |",
+      "",
+      "중간 문단",
+      "",
+      "| 둘째 표 A | 둘째 표 B |",
+      "| --- | --- |",
+      "| second-1 | second-2 |",
+    ].join("\n")
+
+    await editor.evaluate((element, markdown) => {
+      const data = new DataTransfer()
+      data.setData("text/plain", markdown)
+      const event = new ClipboardEvent("paste", {
+        bubbles: true,
+        cancelable: true,
+      })
+      Object.defineProperty(event, "clipboardData", { value: data })
+      element.dispatchEvent(event)
+    }, twoTableMarkdown)
+
+    const tables = page.locator(".aq-block-editor__content .tableWrapper table")
+    await expect(tables).toHaveCount(2)
+    await expect(tables.first().locator("tr")).toHaveCount(2)
+    await expect(tables.nth(1).locator("tr")).toHaveCount(2)
+
+    await page.evaluate(() => window.scrollBy(0, 80))
+    await page.getByRole("button", { name: "QA fallback 열 선택" }).click()
+
+    await expect(page.locator("table .selectedCell")).toHaveCount(0)
+    await expect(page.getByTestId("table-column-menu")).toHaveCount(0)
+  })
+
   test("table row/column grip drag는 축을 재정렬하고 seed 재진입 후에도 순서를 유지한다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
     const { rowHandle: rowGrip, columnHandle: columnGrip } = getTableAffordances(page)

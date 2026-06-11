@@ -33,6 +33,7 @@ import {
 import type { TableMenuState } from "./tableFloatingUiModel"
 import {
   findActiveRenderedTable,
+  findRenderedTableMatchingGeometry,
   RENDERED_TABLE_SELECTOR,
 } from "./tableRenderedDomModel"
 import { dispatchEditorSelectionSafely } from "./tableSelectionDispatchModel"
@@ -66,6 +67,10 @@ const TABLE_AXIS_FOCUS_SCROLL_TOLERANCE_PX = 4
 
 type SelectTableAxisOptions = { clearNativeText?: boolean }
 type ClearNativeTableTextSelectionOptions = { restoreCellSelection?: boolean }
+type RenderedTableSelectionTarget = {
+  renderedTable: HTMLTableElement
+  selectionRect: TableOverlaySelectionRect
+}
 
 const resolveTableAxisSelectionSink = () => {
   let selectionSink = document.getElementById(TABLE_AXIS_SELECTION_SINK_ID)
@@ -266,49 +271,66 @@ export const useBlockEditorTableOverlayAxisDrag = ({
     },
     []
   )
-  const resolveAxisPointerTableRect = useCallback(
+  const resolveRenderedTableSelectionTarget = useCallback(
+    (
+      activeEditor: TiptapEditor,
+      tableElement: HTMLTableElement | null
+    ): RenderedTableSelectionTarget | null => {
+      if (!tableElement) return null
+      const selectionRect = resolveRenderedTableSelectionRect(
+        activeEditor,
+        tableElement
+      )
+      return selectionRect
+        ? { renderedTable: tableElement, selectionRect }
+        : null
+    },
+    [resolveRenderedTableSelectionRect]
+  )
+  const resolveAxisPointerTableTarget = useCallback(
     (
       activeEditor: TiptapEditor,
       axis: TableAxis,
       clientX: number,
       clientY: number
-    ) => {
+    ): RenderedTableSelectionTarget | null => {
       const viewport = viewportRef.current
       if (!viewport) return null
 
       const renderedTables = Array.from(
         viewport.querySelectorAll<HTMLTableElement>(RENDERED_TABLE_SELECTOR)
       )
-      const pointerTable =
-        renderedTables.find((table) => {
-          const rect = table.getBoundingClientRect()
-          if (rect.width <= 0 || rect.height <= 0) return false
+      const pointerTable = renderedTables.find((table) => {
+        const rect = table.getBoundingClientRect()
+        if (rect.width <= 0 || rect.height <= 0) return false
 
-          if (axis === "row") {
-            return (
-              clientY >= rect.top - TABLE_AXIS_POINTER_TABLE_EDGE_TOLERANCE_PX &&
-              clientY <= rect.bottom + TABLE_AXIS_POINTER_TABLE_EDGE_TOLERANCE_PX &&
-              clientX >= rect.left - TABLE_AXIS_POINTER_TABLE_MATCH_MARGIN_PX &&
-              clientX <= rect.left + TABLE_AXIS_POINTER_TABLE_MATCH_MARGIN_PX
-            )
-          }
-
+        if (axis === "row") {
           return (
-            clientX >= rect.left - TABLE_AXIS_POINTER_TABLE_EDGE_TOLERANCE_PX &&
-            clientX <= rect.right + TABLE_AXIS_POINTER_TABLE_EDGE_TOLERANCE_PX &&
-            clientY >= rect.top - TABLE_AXIS_POINTER_TABLE_MATCH_MARGIN_PX &&
-            clientY <= rect.top + TABLE_AXIS_POINTER_TABLE_MATCH_MARGIN_PX
+            clientY >= rect.top - TABLE_AXIS_POINTER_TABLE_EDGE_TOLERANCE_PX &&
+            clientY <= rect.bottom + TABLE_AXIS_POINTER_TABLE_EDGE_TOLERANCE_PX &&
+            clientX >= rect.left - TABLE_AXIS_POINTER_TABLE_MATCH_MARGIN_PX &&
+            clientX <= rect.left + TABLE_AXIS_POINTER_TABLE_MATCH_MARGIN_PX
           )
-        }) ??
-        findActiveRenderedTable(
-          viewport,
-          tableAffordanceGeometryRef.current
-        )
+        }
 
-      return resolveRenderedTableSelectionRect(activeEditor, pointerTable)
+        return (
+          clientX >= rect.left - TABLE_AXIS_POINTER_TABLE_EDGE_TOLERANCE_PX &&
+          clientX <= rect.right + TABLE_AXIS_POINTER_TABLE_EDGE_TOLERANCE_PX &&
+          clientY >= rect.top - TABLE_AXIS_POINTER_TABLE_MATCH_MARGIN_PX &&
+          clientY <= rect.top + TABLE_AXIS_POINTER_TABLE_MATCH_MARGIN_PX
+        )
+      })
+      const activeGeometryTable = findRenderedTableMatchingGeometry(
+        viewport,
+        tableAffordanceGeometryRef.current
+      )
+      return resolveRenderedTableSelectionTarget(
+        activeEditor,
+        pointerTable ?? activeGeometryTable
+      )
     },
     [
-      resolveRenderedTableSelectionRect,
+      resolveRenderedTableSelectionTarget,
       tableAffordanceGeometryRef,
       viewportRef,
     ]
@@ -318,7 +340,7 @@ export const useBlockEditorTableOverlayAxisDrag = ({
       const viewport = viewportRef.current
       if (!viewport) return null
 
-      const activeRenderedTable = findActiveRenderedTable(
+      const activeRenderedTable = findRenderedTableMatchingGeometry(
         viewport,
         tableAffordanceGeometryRef.current
       )
@@ -828,18 +850,20 @@ export const useBlockEditorTableOverlayAxisDrag = ({
       const currentEditor = editorRef.current
       if (!currentEditor) return
 
+      const pointerTarget = resolveAxisPointerTableTarget(
+        currentEditor,
+        axis,
+        clientX,
+        clientY
+      )
       const tableRect =
-        resolveAxisPointerTableRect(currentEditor, axis, clientX, clientY) ??
+        pointerTarget?.selectionRect ??
         getCurrentSelectedTableRect(currentEditor)
       const tablePos = tableRect ? Math.max(0, tableRect.tableStart - 1) : null
       if (!tableRect || tablePos === null) return
-      const renderedTable = findActiveRenderedTable(
-        viewportRef.current,
-        tableAffordanceGeometryRef.current
-      )
       const resolvedSourceIndex =
         resolveTableAxisIndexFromPointer(
-          renderedTable,
+          pointerTarget?.renderedTable ?? null,
           axis,
           clientX,
           clientY
@@ -853,6 +877,19 @@ export const useBlockEditorTableOverlayAxisDrag = ({
             resolvedSourceIndex < tableRect.map.width
       if (!withinBounds) return
 
+      const sourceGeometry = pointerTarget?.renderedTable
+        ? resolveSyncedTableAxisGeometryFromDom(
+            tableAffordanceGeometryRef.current,
+            pointerTarget.renderedTable,
+            { axis, index: resolvedSourceIndex }
+          ) ?? tableAffordanceGeometryRef.current
+        : tableAffordanceGeometryRef.current
+
+      if (sourceGeometry !== tableAffordanceGeometryRef.current) {
+        tableAffordanceGeometryRef.current = sourceGeometry
+        setTableAffordanceGeometry(sourceGeometry)
+      }
+
       clearStructuralSelectionNativeText()
       markTableStructuralSelectionOwner(1_200)
       clearPendingTableAxisDrag()
@@ -865,7 +902,7 @@ export const useBlockEditorTableOverlayAxisDrag = ({
         tablePos,
         clientX,
         clientY,
-        tableAffordanceGeometryRef.current
+        sourceGeometry
       )
       tableAxisMenuStabilizationTokenRef.current += 1
       tableAxisMenuSuppressUntilRef.current = 0
@@ -1029,8 +1066,9 @@ export const useBlockEditorTableOverlayAxisDrag = ({
       editorRef,
       getCurrentSelectedTableRect,
       reorderTableAxisAtPosition,
-      resolveAxisPointerTableRect,
+      resolveAxisPointerTableTarget,
       selectTableAxisAtIndex,
+      setTableAffordanceGeometry,
       setSelectionTick,
       setTableMenuState,
       tableAffordanceGeometryRef,

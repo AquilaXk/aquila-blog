@@ -37,6 +37,9 @@ export const escapeMarkdownInlineText = (text: string) =>
       Array.from(match, (character) => `\\${character}`).join("")
     )
 
+export const unescapeMarkdownInlineText = (text: string) =>
+  text.replace(/\\([\\`*_{}\[\]()!$~>#+\-.])/g, "$1")
+
 export const buildTextNode = (text: string, marks?: EditorTextMark[]): EditorTextNode => ({
   type: "text",
   text,
@@ -205,13 +208,13 @@ export const buildInlineContent = (text: string): JSONContent[] => {
         })
       )
     } else if (nextPattern.name === "bold") {
-      nodes.push(buildTextNode(first, [{ type: "bold" }]))
+      nodes.push(buildTextNode(unescapeMarkdownInlineText(first), [{ type: "bold" }]))
     } else if (nextPattern.name === "italic") {
-      nodes.push(buildTextNode(first, [{ type: "italic" }]))
+      nodes.push(buildTextNode(unescapeMarkdownInlineText(first), [{ type: "italic" }]))
     } else if (nextPattern.name === "strike") {
-      nodes.push(buildTextNode(first, [{ type: "strike" }]))
+      nodes.push(buildTextNode(unescapeMarkdownInlineText(first), [{ type: "strike" }]))
     } else if (nextPattern.name === "code") {
-      nodes.push(buildTextNode(first, [{ type: "code" }]))
+      nodes.push(buildTextNode(unescapeMarkdownInlineText(first), [{ type: "code" }]))
     } else if (nextPattern.name === "inlineFormula") {
       nodes.push(buildInlineFormulaNode(first))
     }

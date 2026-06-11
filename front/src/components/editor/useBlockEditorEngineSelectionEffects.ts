@@ -552,18 +552,53 @@ export const useBlockEditorEngineSelectionEffects = ({
       clientY: number
     ) => {
       const token = lateTableSelectionGuardToken
+      const timeoutIds = new Set<number>()
+      let rafId: number | null = null
+      let disposed = false
+      const cleanup = () => {
+        if (disposed) return
+        disposed = true
+        if (rafId !== null) {
+          window.cancelAnimationFrame(rafId)
+          rafId = null
+        }
+        timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId))
+        timeoutIds.clear()
+        window.removeEventListener("keydown", cleanup, true)
+        window.removeEventListener("beforeinput", cleanup, true)
+        window.removeEventListener("input", cleanup, true)
+        window.removeEventListener("compositionstart", cleanup, true)
+      }
       const restore = () => {
-        if (token !== lateTableSelectionGuardToken) return
-        if (!editor.view.dom.isConnected) return
+        if (disposed) return
+        if (token !== lateTableSelectionGuardToken || !editor.view.dom.isConnected) {
+          cleanup()
+          return
+        }
         applyListDomCaretAtPoint(listItemContext, clientX, clientY)
       }
+      const scheduleRestore = (delayMs: number) => {
+        const timeoutId = window.setTimeout(() => {
+          timeoutIds.delete(timeoutId)
+          restore()
+          if (delayMs >= 500) cleanup()
+        }, delayMs)
+        timeoutIds.add(timeoutId)
+      }
+      window.addEventListener("keydown", cleanup, true)
+      window.addEventListener("beforeinput", cleanup, true)
+      window.addEventListener("input", cleanup, true)
+      window.addEventListener("compositionstart", cleanup, true)
       restore()
-      window.requestAnimationFrame(restore)
-      window.setTimeout(restore, 0)
-      window.setTimeout(restore, 60)
-      window.setTimeout(restore, 140)
-      window.setTimeout(restore, 320)
-      window.setTimeout(restore, 500)
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null
+        restore()
+      })
+      scheduleRestore(0)
+      scheduleRestore(60)
+      scheduleRestore(140)
+      scheduleRestore(320)
+      scheduleRestore(500)
     }
     const scheduleListClickCaretRestoreAfterPointer = (
       listItemContext: NestedListItemContext,

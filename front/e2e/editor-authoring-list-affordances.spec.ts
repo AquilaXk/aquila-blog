@@ -13,6 +13,64 @@ const POST_507_FIRST_LIST_ITEM = "“Stateless가 좋다는데, 왜 좋은 거�
 const readSelectionText = (page: Page) =>
   page.evaluate(() => window.getSelection()?.toString() ?? "")
 
+const clickDocumentTextRangeStart = async (
+  page: Page,
+  selector: string,
+  text: string
+) => {
+  const point = await page.evaluate(({ selector: targetSelector, text: targetText }) => {
+    const element =
+      Array.from(document.querySelectorAll<HTMLElement>(targetSelector)).find(
+        (candidate) => candidate.textContent?.includes(targetText)
+      ) ?? null
+    if (!element) return null
+    element.scrollIntoView({ block: "center", inline: "nearest" })
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+    while (walker.nextNode()) {
+      const textNode = walker.currentNode as Text
+      const startOffset = textNode.data.indexOf(targetText)
+      if (startOffset < 0) continue
+      const range = document.createRange()
+      range.setStart(textNode, startOffset)
+      range.setEnd(textNode, startOffset + targetText.length)
+      const rect = range.getClientRects()[0] ?? range.getBoundingClientRect()
+      if (rect.width <= 2 || rect.height <= 2) continue
+      return {
+        x: rect.left + Math.min(rect.width / 2, 3),
+        y: rect.top + rect.height / 2,
+      }
+    }
+    return null
+  }, { selector, text })
+  if (!point) throw new Error(`text range start is missing: ${text}`)
+
+  await page.mouse.click(point.x, point.y)
+}
+
+const preventNextNativeCaretForListText = async (page: Page, text: string) => {
+  await page.evaluate((targetText) => {
+    let preventedCount = 0
+    const cleanup = () => {
+      document.removeEventListener("pointerdown", preventNativeCaret, true)
+      document.removeEventListener("mousedown", preventNativeCaret, true)
+    }
+    const preventNativeCaret = (event: MouseEvent | PointerEvent) => {
+      const target =
+        event.target instanceof Element
+          ? event.target
+          : event.target instanceof Node
+            ? event.target.parentElement
+            : null
+      if (!target?.closest("li")?.textContent?.includes(targetText)) return
+      event.preventDefault()
+      preventedCount += 1
+      if (preventedCount >= 2 || event.type === "mousedown") cleanup()
+    }
+    document.addEventListener("pointerdown", preventNativeCaret, true)
+    document.addEventListener("mousedown", preventNativeCaret, true)
+  }, text)
+}
+
 const dragDocumentTextRange = async (
   page: Page,
   selector: string,
@@ -317,6 +375,44 @@ test.describe("editor authoring list affordances", () => {
     )
 
     expect(selectionText).toContain("드래그 선택")
+    await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
+  })
+
+  test("block selection 직후 리스트 클릭 지연 restore는 keyboard 입력 위치를 되돌리지 않는다", async ({
+    page,
+  }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("이전 블록")
+    await page.keyboard.press("Enter")
+    await page.getByRole("button", { name: "목록" }).first().click()
+    await page.keyboard.type("alpha beta gamma")
+
+    const previousParagraph = editor.locator("p", { hasText: "이전 블록" }).first()
+    await previousParagraph.hover()
+    const dragHandle = page.getByTestId("block-drag-handle")
+    await expect(dragHandle).toBeVisible()
+    await dragHandle.click()
+    await expect(page.getByTestId("keyboard-block-selection-overlay")).toBeVisible()
+
+    const listParagraph = editor.locator("li > p", { hasText: "alpha beta gamma" }).first()
+    await expect(listParagraph).toBeVisible()
+    await preventNextNativeCaretForListText(page, "alpha beta gamma")
+    await clickDocumentTextRangeStart(
+      page,
+      "[data-testid='block-editor-prosemirror'] li > p",
+      "alpha"
+    )
+    await page.waitForTimeout(80)
+    await page.keyboard.type("Z")
+    await page.waitForTimeout(650)
+    await page.keyboard.type("Y")
+
+    const listText = await editor.locator("li > p").first().innerText()
+    expect(listText).toContain("ZY")
+    expect(listText).not.toContain("YZ")
     await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
   })
 

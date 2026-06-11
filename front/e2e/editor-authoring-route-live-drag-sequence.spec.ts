@@ -21,13 +21,22 @@ const readScrollTop = (page: Page) =>
   page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
 
 const readSelectionText = (page: Page) =>
-  page.evaluate(
-    () =>
-      window.getSelection()?.toString() ||
-      document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
-      document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text") ||
-      ""
-  )
+  page.evaluate(() => {
+    const candidates = [
+      window.getSelection()?.toString() ?? "",
+      document.documentElement.getAttribute("data-table-drag-selection-text") ??
+        "",
+      document
+        .querySelector("[data-table-drag-selection-text]")
+        ?.getAttribute("data-table-drag-selection-text") ?? "",
+      document.documentElement.getAttribute("data-code-drag-selection-text") ??
+        "",
+      document
+        .querySelector("[data-code-drag-selection-text]")
+        ?.getAttribute("data-code-drag-selection-text") ?? "",
+    ].filter((value) => value.trim().length > 0)
+    return candidates.sort((left, right) => right.length - left.length)[0] ?? ""
+  })
 
 const readSelectionResidueState = (page: Page) =>
   page.evaluate(() => {
@@ -79,40 +88,75 @@ const hasNestedListChild = (page: Page, parentLabel: string, childLabel: string)
     { childLabel, parentLabel }
   )
 
-const clickListItemParagraph = async (page: Page, editor: Locator, label: string) => {
+const clickListItemParagraph = async (
+  page: Page,
+  editor: Locator,
+  label: string,
+  caretNeedle?: string
+) => {
   const paragraph = editor.locator("li > p", { hasText: label }).first()
   await paragraph.scrollIntoViewIfNeeded()
-  const clickPoint = await paragraph.evaluate((element) => {
+  const clickPoint = await paragraph.evaluate((element, needle) => {
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
     while (walker.nextNode()) {
       const textNode = walker.currentNode as Text
       if (!textNode.data.trim()) continue
-      const startOffset = textNode.data.search(/\S/)
+      const needleOffset = needle ? textNode.data.indexOf(needle) : -1
+      const startOffset =
+        needleOffset >= 0 ? needleOffset : textNode.data.search(/\S/)
       const range = document.createRange()
       range.setStart(textNode, Math.max(0, startOffset))
-      range.setEnd(textNode, Math.min(textNode.data.length, Math.max(0, startOffset) + 2))
+      range.setEnd(
+        textNode,
+        Math.min(
+          textNode.data.length,
+          Math.max(0, startOffset) + Math.max(2, needle?.length ?? 0)
+        )
+      )
       const rect = range.getBoundingClientRect()
       if (rect.width > 0 && rect.height > 0) {
-        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+        const elementRect = element.getBoundingClientRect()
+        const absoluteX = rect.left + rect.width / 2
+        const absoluteY = rect.top + rect.height / 2
+        return {
+          expectedMaxOffset:
+            needleOffset >= 0 ? needleOffset + Math.max(needle?.length ?? 0, 1) + 2 : null,
+          expectedMinOffset: needleOffset >= 0 ? Math.max(0, needleOffset - 2) : null,
+          relativeX: absoluteX - elementRect.left,
+          relativeY: absoluteY - elementRect.top,
+        }
       }
     }
     const rect = element.getBoundingClientRect()
-    return { x: rect.left + Math.min(rect.width / 2, 120), y: rect.top + Math.min(rect.height / 2, 14) }
+    return {
+      expectedMaxOffset: null,
+      expectedMinOffset: null,
+      relativeX: Math.min(rect.width / 2, 120),
+      relativeY: Math.min(rect.height / 2, 14),
+    }
+  }, caretNeedle ?? null)
+  await paragraph.click({
+    position: { x: clickPoint.relativeX, y: clickPoint.relativeY },
   })
-  await page.mouse.click(clickPoint.x, clickPoint.y)
   const readCaretState = () =>
     paragraph.evaluate(
       (element, point) => {
+        const rect = element.getBoundingClientRect()
         const selection = window.getSelection()
         const anchorNode = selection?.anchorNode ?? null
         const anchorElement =
           anchorNode instanceof Element
             ? anchorNode
             : anchorNode instanceof Node
-              ? anchorNode.parentElement
-              : null
-        const pointElement = document.elementFromPoint(point.x, point.y)
+            ? anchorNode.parentElement
+            : null
+        const pointElement = document.elementFromPoint(
+          rect.left + point.relativeX,
+          rect.top + point.relativeY
+        )
         const editor = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
+        const anchorOffset =
+          anchorNode instanceof Text ? selection?.anchorOffset ?? null : null
         return {
           activeElement:
             document.activeElement instanceof HTMLElement
@@ -124,6 +168,7 @@ const clickListItemParagraph = async (page: Page, editor: Locator, label: string
                   testId: document.activeElement.getAttribute("data-testid"),
                 }
               : null,
+          anchorOffset,
           anchorElementText: anchorElement?.textContent?.replace(/\s+/g, " ").trim().slice(0, 120) ?? null,
           anchorInsideParagraph: Boolean(anchorNode && element.contains(anchorNode)),
           anchorNodeName: anchorNode?.nodeName ?? null,
@@ -141,6 +186,21 @@ const clickListItemParagraph = async (page: Page, editor: Locator, label: string
     )
   try {
     await expect.poll(async () => (await readCaretState()).anchorInsideParagraph).toBe(true)
+    if (
+      clickPoint.expectedMinOffset !== null &&
+      clickPoint.expectedMaxOffset !== null
+    ) {
+      await expect
+        .poll(async () => {
+          const state = await readCaretState()
+          return (
+            state.anchorOffset !== null &&
+            state.anchorOffset >= clickPoint.expectedMinOffset! &&
+            state.anchorOffset <= clickPoint.expectedMaxOffset!
+          )
+        })
+        .toBe(true)
+    }
   } catch (error) {
     const state = await readCaretState()
     throw new Error(`${error instanceof Error ? error.message : String(error)}\n${JSON.stringify(state, null, 2)}`)
@@ -791,9 +851,12 @@ test.describe("editor authoring route live drag sequence", () => {
     await page.waitForTimeout(120)
     const beforeCodeSelectAll = await readScrollTop(page)
     await codeContent.click({ position: { x: 80, y: 28 } })
+    await page.mouse.wheel(0, 260)
+    await expect.poll(() => readScrollTop(page)).toBeGreaterThan(beforeCodeSelectAll + 120)
+    const afterUserCodeScroll = await readScrollTop(page)
     await pressSelectAll(page)
-    await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(beforeCodeSelectAll + 24)
-    await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(beforeCodeSelectAll - 24)
+    await expect.poll(() => readScrollTop(page)).toBeLessThanOrEqual(afterUserCodeScroll + 24)
+    await expect.poll(() => readScrollTop(page)).toBeGreaterThanOrEqual(afterUserCodeScroll - 24)
     const codeClickBox = await codeContent.boundingBox()
     if (!codeClickBox) throw new Error("code click metrics are missing")
     await page.mouse.click(codeClickBox.x + 80, codeClickBox.y + codeDragMetrics.y)
@@ -847,7 +910,12 @@ test.describe("editor authoring route live drag sequence", () => {
       ;(window as typeof window & { __qaCodeDragEvents?: unknown[] }).__qaCodeDragEvents = []
       const record = (event: Event) => {
         const pointerEvent = event instanceof MouseEvent || event instanceof PointerEvent ? event : null
-        const target = event.target instanceof Element ? event.target : event.target?.parentElement
+          const target =
+            event.target instanceof Element
+              ? event.target
+              : event.target instanceof Node
+                ? event.target.parentElement
+                : null
         const selection = window.getSelection()
         ;(window as typeof window & { __qaCodeDragEvents?: unknown[] }).__qaCodeDragEvents?.push({
           type: event.type,
@@ -1259,11 +1327,11 @@ test.describe("editor authoring route live drag sequence", () => {
 
     await expectPost507FinalTableBlockOverlayFollowsScroll(page, finalTable)
 
-    await clickListItemParagraph(page, editor, POST_507_SECOND_LIST_ITEM)
+    await clickListItemParagraph(page, editor, POST_507_SECOND_LIST_ITEM, "JWT")
     await page.keyboard.press("Tab")
     await expect.poll(() => hasNestedListChild(page, POST_507_FIRST_LIST_ITEM, POST_507_SECOND_LIST_ITEM)).toBe(true)
     await expectNoTextSelectionResidue(page, "list tab after table overlay scroll")
-    await clickListItemParagraph(page, editor, POST_507_SECOND_LIST_ITEM)
+    await clickListItemParagraph(page, editor, POST_507_SECOND_LIST_ITEM, "JWT")
     await page.keyboard.press("Shift+Tab")
     await expect.poll(() => hasNestedListChild(page, POST_507_FIRST_LIST_ITEM, POST_507_SECOND_LIST_ITEM)).toBe(false)
     await expectNoTextSelectionResidue(page, "list shift tab after table overlay scroll")

@@ -1,5 +1,6 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
 import { NodeSelection } from "@tiptap/pm/state"
+import { CellSelection, tableEditingKey } from "@tiptap/pm/tables"
 import {
   cancelAllWindowScrollPreserves,
   cancelTablePointerScrollPreserves,
@@ -199,6 +200,67 @@ export const isTableStructuralSelectionOwnerActive = () =>
   getNow() < tableStructuralSelectionOwnerUntil
 export const clearTableStructuralSelectionOwner = () => {
   tableStructuralSelectionOwnerUntil = 0
+}
+const resolveTableSelectedCellMarkerRoots = (editorRoot: HTMLElement) => {
+  const roots = new Set<ParentNode>()
+  roots.add(editorRoot)
+  if (typeof document !== "undefined") roots.add(document)
+  const editorSurface = editorRoot.closest(
+    "[data-testid='block-editor-prosemirror']"
+  )
+  const editorContent = editorRoot.closest(".aq-block-editor__content")
+  if (editorSurface) roots.add(editorSurface)
+  if (editorContent) roots.add(editorContent)
+  return Array.from(roots)
+}
+export const hasTableSelectedCellDomMarkers = (editorRoot: HTMLElement) =>
+  resolveTableSelectedCellMarkerRoots(editorRoot).some((root) =>
+    root.querySelector(".selectedCell")
+  )
+export const clearTableSelectedCellDomMarkers = (
+  editorRoot: HTMLElement,
+  editor?: TiptapEditor | null
+) => {
+  let tableEditingMetaCleared = false
+  const clearMarkers = () => {
+    if (
+      editor &&
+      !tableEditingMetaCleared &&
+      tableEditingKey.getState(editor.state) !== null
+    ) {
+      editor.view.dispatch(editor.state.tr.setMeta(tableEditingKey, -1))
+      tableEditingMetaCleared = true
+    }
+    if (editor?.state.selection instanceof CellSelection) return
+    resolveTableSelectedCellMarkerRoots(editorRoot).forEach((root) => {
+      root
+        .querySelectorAll(".selectedCell")
+        .forEach((element) => element.classList.remove("selectedCell"))
+    })
+  }
+  clearMarkers()
+  if (!editor || typeof window === "undefined") return
+  const startedAt = performance.now()
+  const observedRoot =
+    editorRoot.closest("[data-testid='block-editor-prosemirror']") ?? editorRoot
+  const observer =
+    typeof MutationObserver === "undefined"
+      ? null
+      : new MutationObserver(clearMarkers)
+  observer?.observe(observedRoot, {
+    attributeFilter: ["class"],
+    attributes: true,
+    subtree: true,
+  })
+  const maintain = () => {
+    if (!editor.view.dom.isConnected || performance.now() - startedAt > 650) {
+      observer?.disconnect()
+      return
+    }
+    clearMarkers()
+    window.requestAnimationFrame(maintain)
+  }
+  window.requestAnimationFrame(maintain)
 }
 const clearTableDragSelectionTextAttributes = () => {
   document

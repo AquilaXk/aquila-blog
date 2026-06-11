@@ -65,6 +65,7 @@ let lastCodeDragSelectionCompletedY = 0
 const CODE_SCROLL_PRESERVE_MIN_MS = 4_800
 const CODE_SCROLL_PRESERVE_CANCEL_DISTANCE_PX = 3_200
 const CODE_SELECT_ALL_ACTIVE_GRACE_MS = 4_000
+const CODE_SELECT_ALL_SCROLL_ANCHOR_TOLERANCE_PX = 8
 const shouldCancelCodeScrollPreserve =
   (scrollAnchor: WindowScrollAnchor) => () =>
     Math.abs(window.scrollX - scrollAnchor.x) >
@@ -77,13 +78,25 @@ const rememberCodePointerScrollAnchor = (scrollAnchor: WindowScrollAnchor) => {
   lastCodePointerScrollAnchorAt =
     typeof performance !== "undefined" ? performance.now() : Date.now()
 }
+const isCurrentWindowScrollNearAnchor = (scrollAnchor: WindowScrollAnchor) =>
+  Math.abs(window.scrollX - scrollAnchor.x) <=
+    CODE_SELECT_ALL_SCROLL_ANCHOR_TOLERANCE_PX &&
+  Math.abs(
+    (document.scrollingElement?.scrollTop ?? window.scrollY) - scrollAnchor.y
+  ) <= CODE_SELECT_ALL_SCROLL_ANCHOR_TOLERANCE_PX
 const resolveRecentCodePointerScrollAnchor = () => {
   if (!lastCodePointerScrollAnchor) return null
   const now =
     typeof performance !== "undefined" ? performance.now() : Date.now()
-  return now - lastCodePointerScrollAnchorAt <= CODE_SELECT_ALL_ACTIVE_GRACE_MS
-    ? lastCodePointerScrollAnchor
-    : null
+  if (now - lastCodePointerScrollAnchorAt > CODE_SELECT_ALL_ACTIVE_GRACE_MS) {
+    lastCodePointerScrollAnchor = null
+    return null
+  }
+  if (!isCurrentWindowScrollNearAnchor(lastCodePointerScrollAnchor)) {
+    lastCodePointerScrollAnchor = null
+    return null
+  }
+  return lastCodePointerScrollAnchor
 }
 const isSyntheticClickAfterCodeDragRelease = (
   clientX: number,

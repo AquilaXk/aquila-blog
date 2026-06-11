@@ -31,6 +31,20 @@ export const LIST_ITEM_SELECTOR =
 export const LIST_CONTAINER_SELECTOR =
   "ul[data-type='taskList'], ul[data-task-list='true'], ul[data-type='bulletList'], ol[data-type='orderedList'], ul, ol"
 
+const LIST_ITEM_CONTROL_SELECTOR = [
+  "input",
+  "button",
+  "select",
+  "textarea",
+  "label",
+  "a[href]",
+  "[role='button']",
+  "[role='checkbox']",
+  "[role='menuitem']",
+  "[role='switch']",
+  "[contenteditable='false']",
+].join(", ")
+
 export const isListContainerNodeName = (nodeName: string | undefined | null) =>
   nodeName === "bulletList" || nodeName === "orderedList" || nodeName === "taskList"
 
@@ -85,6 +99,23 @@ const getTargetElement = (target: EventTarget | null) => {
   if (typeof Element !== "undefined" && target instanceof Element) return target
   if (typeof Node !== "undefined" && target instanceof Node) return target.parentElement
   return null
+}
+
+export const isNestedListItemControlTarget = (
+  target: EventTarget | Node | null | undefined,
+  context: NestedListItemContext | null | undefined
+) => {
+  if (!context || typeof Element === "undefined") return false
+  const targetElement =
+    target instanceof Element
+      ? target
+      : target instanceof Node
+        ? target.parentElement
+        : null
+  const controlElement = targetElement?.closest(LIST_ITEM_CONTROL_SELECTOR)
+  return Boolean(
+    controlElement && context.listItemElement.contains(controlElement)
+  )
 }
 
 const getDirectListItemElements = (listElement: HTMLElement) =>

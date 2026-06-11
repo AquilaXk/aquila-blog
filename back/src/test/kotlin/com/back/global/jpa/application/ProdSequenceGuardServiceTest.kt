@@ -5,12 +5,27 @@ import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.contains
 import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
+import org.springframework.boot.ApplicationArguments
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.jdbc.core.JdbcTemplate
 
 class ProdSequenceGuardServiceTest {
+    @Test
+    fun `startup guard는 owner 권한이 필요한 ALTER 없이 setval만 수행한다`() {
+        val jdbcTemplate = mock(JdbcTemplate::class.java)
+        val service = ProdSequenceGuardService(jdbcTemplate, sequenceGuardOnStartup = true)
+
+        service.run(mock(ApplicationArguments::class.java))
+
+        verify(jdbcTemplate, never()).execute(contains("ALTER SEQUENCE"))
+        verify(jdbcTemplate).execute(
+            "SELECT setval('public.post_seq', COALESCE((SELECT MAX(id) FROM public.post), 0) + 50, false)",
+        )
+    }
+
     @Test
     fun `post_pkey 충돌이면 allocation 정렬 setval로 보정한다`() {
         val jdbcTemplate = mock(JdbcTemplate::class.java)
@@ -78,6 +93,26 @@ class ProdSequenceGuardServiceTest {
         verify(jdbcTemplate).execute("ALTER SEQUENCE IF EXISTS public.uploaded_file_seq INCREMENT BY 1")
         verify(jdbcTemplate).execute(
             "SELECT setval('public.uploaded_file_seq', COALESCE((SELECT MAX(id) FROM public.uploaded_file), 0) + 1, false)",
+        )
+    }
+
+    @Test
+    fun `일반 시퀀스 보정도 ALTER 권한 실패 시 setval-only fallback으로 복구한다`() {
+        val jdbcTemplate = mock(JdbcTemplate::class.java)
+        doThrow(RuntimeException("must be owner of sequence post_seq"))
+            .`when`(jdbcTemplate)
+            .execute(contains("ALTER SEQUENCE IF EXISTS public.post_seq"))
+        val service = ProdSequenceGuardService(jdbcTemplate, sequenceGuardOnStartup = false)
+
+        val repaired =
+            service.repairIfSequenceDrift(
+                DataIntegrityViolationException("duplicate key value violates unique constraint \"post_pkey\""),
+            )
+
+        assertThat(repaired).isTrue()
+        verify(jdbcTemplate).execute("ALTER SEQUENCE IF EXISTS public.post_seq INCREMENT BY 50")
+        verify(jdbcTemplate).execute(
+            "SELECT setval('public.post_seq', COALESCE((SELECT MAX(id) FROM public.post), 0) + 50, false)",
         )
     }
 

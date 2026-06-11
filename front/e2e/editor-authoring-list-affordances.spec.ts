@@ -6,6 +6,7 @@ import {
   hoverListItemGutter,
 } from "./helpers/editorAuthoringFlow"
 import { mockEditorRouteWithPost507 } from "./helpers/post507Fixtures"
+import { LIST_ITEM_SELECTOR } from "../src/components/editor/nestedListItemModel"
 
 const POST_507_FIRST_LIST_ITEM = "“Stateless가 좋다는데, 왜 좋은 거지?”"
 
@@ -46,6 +47,30 @@ const readListItemSelectionOverlayMetrics = async (page: Page, label: string) =>
   }, label)
 
 test.describe("editor authoring list affordances", () => {
+  test("plain li fallback selector는 nested list 손자를 direct child로 포함하지 않는다", async ({
+    page,
+  }) => {
+    await page.setContent(`
+      <main>
+        <ul id="plain-list-root">
+          <li id="plain-parent">Parent<ul><li id="plain-child">Child</li></ul></li>
+          <li id="plain-sibling">Sibling</li>
+        </ul>
+      </main>
+    `)
+
+    const directIds = await page.evaluate((selector) => {
+      const root = document.querySelector<HTMLElement>("#plain-list-root")
+      return root
+        ? Array.from(root.querySelectorAll<HTMLElement>(`:scope > ${selector}`)).map(
+            (element) => element.id
+          )
+        : []
+    }, LIST_ITEM_SELECTOR)
+
+    expect(directIds).toEqual(["plain-parent", "plain-sibling"])
+  })
+
   test("실제 /editor/[id] 507 리스트 항목 block selection은 글머리 안쪽 paint가 아니라 fixed overlay로 표시된다", async ({
     page,
   }) => {

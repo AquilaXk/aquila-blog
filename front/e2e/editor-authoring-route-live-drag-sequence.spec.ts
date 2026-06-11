@@ -88,58 +88,83 @@ const hasNestedListChild = (page: Page, parentLabel: string, childLabel: string)
     { childLabel, parentLabel }
   )
 
+const isDetachedElementError = (error: unknown) =>
+  error instanceof Error &&
+  /not attached to the DOM|Element is not attached/i.test(error.message)
+
+const retryDetachedLocatorAction = async <T>(
+  page: Page,
+  resolveLocator: () => Locator,
+  action: (locator: Locator) => Promise<T>
+) => {
+  let lastError: unknown = null
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const locator = resolveLocator()
+    try {
+      return await action(locator)
+    } catch (error) {
+      if (!isDetachedElementError(error)) throw error
+      lastError = error
+      await page.waitForTimeout(120)
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError))
+}
+
 const clickListItemParagraph = async (
   page: Page,
   editor: Locator,
   label: string,
   caretNeedle?: string
 ) => {
-  const paragraph = editor.locator("li > p", { hasText: label }).first()
-  await paragraph.scrollIntoViewIfNeeded()
-  const clickPoint = await paragraph.evaluate((element, needle) => {
-    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
-    while (walker.nextNode()) {
-      const textNode = walker.currentNode as Text
-      if (!textNode.data.trim()) continue
-      const needleOffset = needle ? textNode.data.indexOf(needle) : -1
-      const startOffset =
-        needleOffset >= 0 ? needleOffset : textNode.data.search(/\S/)
-      const range = document.createRange()
-      range.setStart(textNode, Math.max(0, startOffset))
-      range.setEnd(
-        textNode,
-        Math.min(
-          textNode.data.length,
-          Math.max(0, startOffset) + Math.max(2, needle?.length ?? 0)
+  const resolveParagraph = () => editor.locator("li > p", { hasText: label }).first()
+  const clickPoint = await retryDetachedLocatorAction(page, resolveParagraph, async (paragraph) => {
+    await paragraph.scrollIntoViewIfNeeded()
+    return paragraph.evaluate((element, needle) => {
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+      while (walker.nextNode()) {
+        const textNode = walker.currentNode as Text
+        if (!textNode.data.trim()) continue
+        const needleOffset = needle ? textNode.data.indexOf(needle) : -1
+        const startOffset =
+          needleOffset >= 0 ? needleOffset : textNode.data.search(/\S/)
+        const range = document.createRange()
+        range.setStart(textNode, Math.max(0, startOffset))
+        range.setEnd(
+          textNode,
+          Math.min(
+            textNode.data.length,
+            Math.max(0, startOffset) + Math.max(2, needle?.length ?? 0)
+          )
         )
-      )
-      const rect = range.getBoundingClientRect()
-      if (rect.width > 0 && rect.height > 0) {
-        const elementRect = element.getBoundingClientRect()
-        const absoluteX = rect.left + rect.width / 2
-        const absoluteY = rect.top + rect.height / 2
-        return {
-          expectedMaxOffset:
-            needleOffset >= 0 ? needleOffset + Math.max(needle?.length ?? 0, 1) + 2 : null,
-          expectedMinOffset: needleOffset >= 0 ? Math.max(0, needleOffset - 2) : null,
-          relativeX: absoluteX - elementRect.left,
-          relativeY: absoluteY - elementRect.top,
+        const rect = range.getBoundingClientRect()
+        if (rect.width > 0 && rect.height > 0) {
+          const elementRect = element.getBoundingClientRect()
+          const absoluteX = rect.left + rect.width / 2
+          const absoluteY = rect.top + rect.height / 2
+          return {
+            expectedMaxOffset:
+              needleOffset >= 0 ? needleOffset + Math.max(needle?.length ?? 0, 1) + 2 : null,
+            expectedMinOffset: needleOffset >= 0 ? Math.max(0, needleOffset - 2) : null,
+            relativeX: absoluteX - elementRect.left,
+            relativeY: absoluteY - elementRect.top,
+          }
         }
       }
-    }
-    const rect = element.getBoundingClientRect()
-    return {
-      expectedMaxOffset: null,
-      expectedMinOffset: null,
-      relativeX: Math.min(rect.width / 2, 120),
-      relativeY: Math.min(rect.height / 2, 14),
-    }
-  }, caretNeedle ?? null)
-  await paragraph.click({
-    position: { x: clickPoint.relativeX, y: clickPoint.relativeY },
+      const rect = element.getBoundingClientRect()
+      return {
+        expectedMaxOffset: null,
+        expectedMinOffset: null,
+        relativeX: Math.min(rect.width / 2, 120),
+        relativeY: Math.min(rect.height / 2, 14),
+      }
+    }, caretNeedle ?? null)
   })
+  await retryDetachedLocatorAction(page, resolveParagraph, (paragraph) => paragraph.click({
+    position: { x: clickPoint.relativeX, y: clickPoint.relativeY },
+  }))
   const readCaretState = () =>
-    paragraph.evaluate(
+    resolveParagraph().evaluate(
       (element, point) => {
         const rect = element.getBoundingClientRect()
         const selection = window.getSelection()
@@ -1325,7 +1350,29 @@ test.describe("editor authoring route live drag sequence", () => {
     expect(Math.abs(lowerBodyDrag.afterScrollTop - lowerBodyDrag.beforeScrollTop)).toBeLessThanOrEqual(24)
     await expectNoTextSelectionResidue(page, "lower body after code select all")
 
+    const listTextDrag = await dragLocatorTextRange(
+      page,
+      editor.locator("li", { hasText: POST_507_SECOND_LIST_ITEM }).first(),
+      "post 507 list text drag after regular non-empty selection",
+      "세션이랑 JWT",
+      { paced: true, retryWhenEmpty: true, waitMs: 1_000 }
+    )
+    const listTextSelectionText = await readSelectionText(page)
+    expect(listTextSelectionText).toContain("세션이랑 JWT")
+    expect(listTextSelectionText).not.toContain("서버가 아무것도 안 하는 구조")
+    expect(listTextSelectionText).not.toContain(POST_507_FINAL_TABLE_TARGET_CELL)
+    expect(Math.abs(listTextDrag.afterScrollTop - listTextDrag.beforeScrollTop)).toBeLessThanOrEqual(24)
+    await expectNoTextSelectionResidue(page, "list text drag after regular non-empty selection")
+
     await expectPost507FinalTableBlockOverlayFollowsScroll(page, finalTable)
+
+    await clickListItemParagraph(page, editor, POST_507_SECOND_LIST_ITEM, "JWT")
+    await targetCell.scrollIntoViewIfNeeded()
+    await targetCell.click()
+    await pressSelectAll(page)
+    const tableSelectionAfterListRecovery = await readSelectionText(page)
+    expect(tableSelectionAfterListRecovery).toContain(POST_507_FINAL_TABLE_TARGET_CELL)
+    expect(tableSelectionAfterListRecovery).not.toContain("세션이랑 JWT")
 
     await clickListItemParagraph(page, editor, POST_507_SECOND_LIST_ITEM, "JWT")
     await page.keyboard.press("Tab")

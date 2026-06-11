@@ -1225,6 +1225,7 @@ jobs:
         env:
           PLAYWRIGHT_LIVE_FAIL_FAST: "true"
           PLAYWRIGHT_LIVE_MULTI_BROWSER: "false"
+          E2E_LIVE_EDITOR_507_CANARY: "true"
         shell: bash
         run: |
           set -euo pipefail
@@ -1243,7 +1244,7 @@ jobs:
           }
           trap cleanup EXIT
 
-          npx playwright test e2e/live.spec.ts \
+          npx playwright test e2e/live.spec.ts e2e/editor-live-visual.spec.ts \
             --workers=1 \
             --reporter=line \
             --max-failures=1

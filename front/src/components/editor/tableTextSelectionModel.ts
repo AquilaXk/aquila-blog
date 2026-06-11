@@ -24,6 +24,15 @@ const resolveElement = (target: EventTarget | Node | null | undefined) => {
   return null
 }
 
+const TABLE_TEXT_OWNER_ROOT_SELECTOR =
+  "[data-testid='block-editor-prosemirror'], .aq-block-editor__content"
+const resolveTableTextOwnerRoot = (
+  element: Element | null | undefined
+) => {
+  const ownerRoot = element?.closest(TABLE_TEXT_OWNER_ROOT_SELECTOR)
+  return ownerRoot instanceof HTMLElement ? ownerRoot : null
+}
+
 const TABLE_TEXT_SELECTION_CONTROL_SELECTOR = [
   "[data-table-axis-rail='true']",
   "[data-table-affordance]",
@@ -93,6 +102,7 @@ export const resolveTableTextSelectionRangeCells = (
 
 type SingleCellTableCellIdentity = {
   cellIndex: number
+  ownerRoot: HTMLElement | null
   table: HTMLTableElement | null
   tableText: string
 }
@@ -500,6 +510,7 @@ const createSingleCellTableIdentity = (
       : []
   return {
     cellIndex: cells.indexOf(cell),
+    ownerRoot: resolveTableTextOwnerRoot(cell),
     table,
     tableText: normalizeCellText(table),
   }
@@ -516,8 +527,12 @@ const resolveSingleCellByIdentity = (
       ? readCellAtIndex(identity.table)
       : null
   if (sameTableCell || !identity.tableText) return sameTableCell
+  const ownerRoot = identity.ownerRoot?.isConnected
+    ? identity.ownerRoot
+    : null
+  if (!ownerRoot) return null
   for (const table of Array.from(
-    document.querySelectorAll<HTMLTableElement>("table")
+    ownerRoot.querySelectorAll<HTMLTableElement>("table")
   )) {
     if (normalizeCellText(table) !== identity.tableText) continue
     const candidate = readCellAtIndex(table)
@@ -1413,7 +1428,14 @@ const resolveCurrentTableTextRangeCells = (
       startedCell: originalCells[startedIndex],
     }
   }
-  for (const table of Array.from(document.querySelectorAll("table"))) {
+  const ownerRoot =
+    resolveTableTextOwnerRoot(startedCell) ??
+    resolveTableTextOwnerRoot(endCell) ??
+    (lastTableSelectionRoot?.isConnected ? lastTableSelectionRoot : null)
+  if (!ownerRoot) return null
+  for (const table of Array.from(
+    ownerRoot.querySelectorAll<HTMLTableElement>("table")
+  )) {
     const cells = Array.from(table.querySelectorAll<HTMLElement>("th, td"))
     const indexedStartedCell = startedIndex >= 0 ? cells[startedIndex] : null
     const indexedEndCell = endIndex >= 0 ? cells[endIndex] : null

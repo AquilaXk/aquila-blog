@@ -817,6 +817,11 @@ test.describe("editor authoring table affordances", () => {
     }
     await page.mouse.move(firstTableCellBox.x + firstTableCellBox.width / 2, firstTableCellBox.y + firstTableCellBox.height / 2)
 
+    const activeFirstTableBox = await firstTable.boundingBox()
+    if (!activeFirstTableBox) {
+      throw new Error("writer active first table bounding box is missing")
+    }
+
     const cellMenuMetrics = await cellMenuButton.evaluate((element) => {
       const rect = element.getBoundingClientRect()
       return {
@@ -826,16 +831,16 @@ test.describe("editor authoring table affordances", () => {
       }
     })
 
-    expect(cellMenuMetrics.top).toBeGreaterThanOrEqual(Math.round(firstTableBox.y) - 12)
-    expect(cellMenuMetrics.bottom).toBeLessThanOrEqual(Math.round(firstTableBox.y + firstTableBox.height) + 24)
+    expect(cellMenuMetrics.top).toBeGreaterThanOrEqual(Math.round(activeFirstTableBox.y) - 12)
+    expect(cellMenuMetrics.bottom).toBeLessThanOrEqual(Math.round(activeFirstTableBox.y + activeFirstTableBox.height) + 24)
 
-    await page.mouse.move(firstTableBox.x + 24, firstTableBox.y + 24)
+    await page.mouse.move(activeFirstTableBox.x + 24, activeFirstTableBox.y + 24)
     await expect(page.getByTestId("block-drag-handle")).toBeVisible()
 
     await expect(firstTable.locator("tr")).toHaveCount(3)
     await expect(tables.nth(1).locator("tr")).toHaveCount(3)
 
-    await page.mouse.move(firstTableBox.x + 4, firstTableBox.y + firstTableBox.height / 2)
+    await page.mouse.move(activeFirstTableBox.x + 4, activeFirstTableBox.y + activeFirstTableBox.height / 2)
     await expect(rowHandle).toBeVisible()
     const rowHandleBox = await rowHandle.boundingBox()
     if (!rowHandleBox) {

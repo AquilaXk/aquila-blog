@@ -510,11 +510,58 @@ test.describe("block editor serialization", () => {
     const serialized = serializeEditorDocToMarkdown(doc)
     const reparsed = parseMarkdownToEditorDoc(serialized)
 
+    expect(serialized).toContain("`$CODE`")
+    expect(serialized).not.toContain("`\\$CODE`")
     expect(reparsed.content?.[0]?.content).toEqual([
       { type: "text", text: "$PATH _env [x]", marks: [{ type: "bold" }] },
       { type: "text", text: " " },
       { type: "text", text: "$CODE", marks: [{ type: "code" }] },
     ])
+  })
+
+  test("inline code mark 는 markdown escape 를 code span 내부 데이터로 저장하지 않는다", () => {
+    const doc = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "$CODE", marks: [{ type: "code" }] },
+            { type: "text", text: " " },
+            { type: "text", text: "*", marks: [{ type: "code" }] },
+            { type: "text", text: " " },
+            { type: "text", text: String.raw`\*`, marks: [{ type: "code" }] },
+            { type: "text", text: " " },
+            { type: "text", text: "`tick`", marks: [{ type: "code" }] },
+          ],
+        },
+      ],
+    }
+
+    const serialized = serializeEditorDocToMarkdown(doc)
+    const reparsed = parseMarkdownToEditorDoc(serialized)
+
+    expect(serialized).toContain("`$CODE`")
+    expect(serialized).toContain("`*`")
+    expect(serialized).toContain("`\\*`")
+    expect(serialized).toContain("`` `tick` ``")
+    expect(reparsed.content?.[0]?.content).toEqual(doc.content[0].content)
+  })
+
+  test("기존 inline code span 의 backslash 는 reload 후에도 code text 로 보존된다", () => {
+    const markdown = ["값: ", "`\\*`", " and ", "`$CODE`"].join("")
+
+    const doc = parseMarkdownToEditorDoc(markdown)
+    const serialized = serializeEditorDocToMarkdown(doc)
+    const reparsed = parseMarkdownToEditorDoc(serialized)
+
+    expect(doc.content?.[0]?.content).toEqual([
+      { type: "text", text: "값: " },
+      { type: "text", text: String.raw`\*`, marks: [{ type: "code" }] },
+      { type: "text", text: " and " },
+      { type: "text", text: "$CODE", marks: [{ type: "code" }] },
+    ])
+    expect(reparsed.content?.[0]?.content).toEqual(doc.content?.[0]?.content)
   })
 
   test("code 와 mermaid block 내부 fence line 은 더 긴 fence 로 보존된다", () => {

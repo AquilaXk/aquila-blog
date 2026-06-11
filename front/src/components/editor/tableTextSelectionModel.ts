@@ -2,7 +2,6 @@ import type { Editor as TiptapEditor } from "@tiptap/core"
 import { NodeSelection } from "@tiptap/pm/state"
 import {
   cancelAllWindowScrollPreserves,
-  cancelActiveWindowScrollPreserve,
   cancelTablePointerScrollPreserves,
   clearNextEditorPointerAfterTable,
   preserveWindowScrollForRichBlockSelectAll,
@@ -1581,10 +1580,17 @@ export const cancelActiveTableCellTextSelectionPreserves = () => {
 }
 
 export const clearTableTextSelectionForStructuralSelection = (
-  options: { clearWindowSelection?: boolean } = {}
+  options: {
+    clearWindowSelection?: boolean
+    markStructuralSelectionOwner?: boolean
+  } = {}
 ) => {
   cancelTableAxisSelectionRestore()
-  markTableStructuralSelectionOwner()
+  if (options.markStructuralSelectionOwner === false) {
+    clearTableStructuralSelectionOwner()
+  } else {
+    markTableStructuralSelectionOwner()
+  }
   tableTextSelectionClearGeneration += 1
   tableTextSelectionFinalizeSuppressedUntil = getNow() + 180
   clearPendingTableTextSelectionState()
@@ -1603,6 +1609,14 @@ export const clearTableTextSelectionForStructuralSelection = (
     window.getSelection()?.removeAllRanges()
   }
 }
+
+export const clearTableTextSelectionForBlockSelection = (
+  options: { clearWindowSelection?: boolean } = {}
+) =>
+  clearTableTextSelectionForStructuralSelection({
+    ...options,
+    markStructuralSelectionOwner: false,
+  })
 
 const isWindowSelectionInsideEditorTable = (editorRoot: HTMLElement) => {
   const selection = window.getSelection()
@@ -2110,9 +2124,12 @@ export const selectActiveTableCellText = (
   if (!editor.view.dom.contains(selectedCell)) return false
   if (activeCell && !activeCell.isConnected) return false
 
-  clearNextEditorPointerAfterTable()
   const tableRangeCells = resolveTableSelectAllRangeCells(selectedCell)
   if (!tableRangeCells) return false
+  cancelAllWindowScrollPreserves()
+  cancelActiveTableCellTextSelectionPreserves()
+  cancelTablePointerScrollPreserves()
+  clearNextEditorPointerAfterTable()
   preserveWindowScrollForTableSelectAll()
   selectTableCellTextRange(tableRangeCells.startedCell, tableRangeCells.endCell)
   hasActiveTableTextSelection = true

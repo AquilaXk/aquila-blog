@@ -56,6 +56,8 @@ let lastActiveCodeSelectionAt = 0
 let lastCodePointerClientX = 0
 let lastCodePointerClientY = 0
 let lastCodePointerAt = 0
+let lastCodePointerScrollAnchor: WindowScrollAnchor | null = null
+let lastCodePointerScrollAnchorAt = 0
 let activeCodeSelectionOwnerRoot: HTMLElement | null = null
 let lastCodeDragSelectionCompletedAt = 0
 let lastCodeDragSelectionCompletedX = 0
@@ -70,6 +72,19 @@ const shouldCancelCodeScrollPreserve =
     Math.abs(
       (document.scrollingElement?.scrollTop ?? window.scrollY) - scrollAnchor.y
     ) > CODE_SCROLL_PRESERVE_CANCEL_DISTANCE_PX
+const rememberCodePointerScrollAnchor = (scrollAnchor: WindowScrollAnchor) => {
+  lastCodePointerScrollAnchor = scrollAnchor
+  lastCodePointerScrollAnchorAt =
+    typeof performance !== "undefined" ? performance.now() : Date.now()
+}
+const resolveRecentCodePointerScrollAnchor = () => {
+  if (!lastCodePointerScrollAnchor) return null
+  const now =
+    typeof performance !== "undefined" ? performance.now() : Date.now()
+  return now - lastCodePointerScrollAnchorAt <= CODE_SELECT_ALL_ACTIVE_GRACE_MS
+    ? lastCodePointerScrollAnchor
+    : null
+}
 const isSyntheticClickAfterCodeDragRelease = (
   clientX: number,
   clientY: number
@@ -157,7 +172,11 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
   )
   const preserveCodeSelectAllScroll = useCallback(() => {
     lastCodeDragSelectionCompletedAt = 0
-    const scrollAnchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
+    const scrollAnchor =
+      resolveRecentCodePointerScrollAnchor() ?? {
+        x: window.scrollX,
+        y: document.scrollingElement?.scrollTop ?? window.scrollY,
+      }
     preserveCodeScrollAcrossFrames(scrollAnchor, true)
     return scrollAnchor
   }, [])
@@ -410,6 +429,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       if (typeof anchorPos !== "number") return
       event.stopPropagation()
       const scrollAnchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
+      rememberCodePointerScrollAnchor(scrollAnchor)
       preserveCodePointerFocusScroll(scrollAnchor)
       const selection = window.getSelection()
       const persistedCodeSelectionText =
@@ -513,7 +533,9 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
           shell.removeAttribute("data-code-drag-selection-text")
         }
       }
-      preserveCodePointerFocusScroll({ x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY })
+      const scrollAnchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
+      rememberCodePointerScrollAnchor(scrollAnchor)
+      preserveCodePointerFocusScroll(scrollAnchor)
     }
     shell.addEventListener("pointerdown", preserveNativeCodeTextPointerScroll, true)
     shell.addEventListener("mousedown", preserveNativeCodeTextPointerScroll, true)

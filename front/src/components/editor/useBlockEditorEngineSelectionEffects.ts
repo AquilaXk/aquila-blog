@@ -493,6 +493,11 @@ export const useBlockEditorEngineSelectionEffects = ({
       selection.addRange(range)
       return true
     }
+    const clearSelectedBlockNodeResidue = () => {
+      selectedBlockNodeIndexRef.current = null
+      setSelectedBlockNodeIndex(null)
+      syncSelectedBlockNodeSurface(null)
+    }
     const clearListTextSelectionResidue = (
       listItemContext: NestedListItemContext,
       clientX: number,
@@ -501,8 +506,7 @@ export const useBlockEditorEngineSelectionEffects = ({
     ) => {
       selectedListItemContextRef.current = null
       setSelectedListItemContext(null)
-      setSelectedBlockNodeIndex(null)
-      syncSelectedBlockNodeSurface(null)
+      clearSelectedBlockNodeResidue()
       clearStickyTopLevelBlockSelection()
       cancelAllWindowScrollPreserves()
       collapseStaleTableEditorSelection(editor, {
@@ -690,8 +694,7 @@ export const useBlockEditorEngineSelectionEffects = ({
         if (hasTableSelectedCellDomMarkers(editor.view.dom as HTMLElement)) {
           selectedListItemContextRef.current = null
           setSelectedListItemContext(null)
-          setSelectedBlockNodeIndex(null)
-          syncSelectedBlockNodeSurface(null)
+          clearSelectedBlockNodeResidue()
           clearStickyTopLevelBlockSelection()
           cancelAllWindowScrollPreserves()
           collapseStaleTableEditorSelection(editor, {
@@ -871,8 +874,7 @@ export const useBlockEditorEngineSelectionEffects = ({
         event.stopImmediatePropagation?.()
         selectedListItemContextRef.current = null
         setSelectedListItemContext(null)
-        setSelectedBlockNodeIndex(null)
-        syncSelectedBlockNodeSurface(null)
+        clearSelectedBlockNodeResidue()
         clearStickyTopLevelBlockSelection()
         cancelAllWindowScrollPreserves()
         collapseStaleTableEditorSelection(editor, {
@@ -946,8 +948,7 @@ export const useBlockEditorEngineSelectionEffects = ({
             event.stopPropagation()
             selectedListItemContextRef.current = null
             setSelectedListItemContext(null)
-            setSelectedBlockNodeIndex(null)
-            syncSelectedBlockNodeSurface(null)
+            clearSelectedBlockNodeResidue()
             collapseStaleTableEditorSelection(editor, {
               clientX: event.clientX,
               clientY: event.clientY,
@@ -985,8 +986,7 @@ export const useBlockEditorEngineSelectionEffects = ({
         skipNextPointerDownSelectionClearRef.current = true
         setClickedBlockIndex(null)
         keyboardBlockSelectionStickyRef.current = false
-        setSelectedBlockNodeIndex(null)
-        syncSelectedBlockNodeSurface(null)
+        clearSelectedBlockNodeResidue()
         setSelectedListItemContext(targetListItemContext)
         selectNestedListItemNode(editor, targetListItemContext)
         clearNativeTextSelection()
@@ -1068,6 +1068,7 @@ export const useBlockEditorEngineSelectionEffects = ({
           event.stopPropagation()
           event.stopImmediatePropagation?.()
           clearStickyTopLevelBlockSelection()
+          selectedBlockNodeIndexRef.current = null
           setSelectedBlockNodeIndex(null)
           syncSelectedBlockNodeSurface(null)
           setSelectionTick((prev) => prev + 1)
@@ -1153,6 +1154,7 @@ export const useBlockEditorEngineSelectionEffects = ({
     findTopLevelBlockIndexFromTarget,
     hoveredBlockIndex,
     promoteTopLevelBlockSelection,
+    selectedBlockNodeIndexRef,
     setSelectedBlockNodeIndex,
     resolveActiveListItemInteraction,
     setSelectionTick,

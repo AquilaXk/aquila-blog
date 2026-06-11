@@ -27,11 +27,14 @@ import {
   type NestedListItemContext,
   selectNestedListItemNode,
   selectNestedListItemTextAnchor,
+  selectNestedListItemTextAtPoint,
 } from "./nestedListItemModel"
 import { isTableSelectionActive } from "./tableStructureModel"
 import {
   TABLE_DRAG_SELECTION_TEXT_SELECTOR,
+  clearTableSelectedCellDomMarkers,
   clearTableTextSelectionForBlockSelection,
+  hasTableSelectedCellDomMarkers,
 } from "./tableTextSelectionModel"
 import type { DraggedBlockState, DropIndicatorState } from "./blockDragModel"
 import type {
@@ -131,6 +134,7 @@ type UseBlockEditorEngineBlockSelectionUiArgs = {
   selectedBlockIndex: number | null
   selectedBlockNodeIndex: number | null
   selectedBlockNodeIndexRef: MutableRefObject<number | null>
+  selectedListItemContextRef: MutableRefObject<NestedListItemContext | null>
   selectionTick: number
   setBlockHandleState: SetState<TopLevelBlockHandleState>
   setBlockMenuState: SetState<BlockEditorBlockMenuState>
@@ -209,6 +213,7 @@ export const useBlockEditorEngineBlockSelectionUi = ({
   selectedBlockIndex,
   selectedBlockNodeIndex,
   selectedBlockNodeIndexRef,
+  selectedListItemContextRef,
   selectionTick,
   setBlockHandleState,
   setBlockMenuState,
@@ -598,13 +603,18 @@ export const useBlockEditorEngineBlockSelectionUi = ({
         selectedBlockNodeIndex !== null ||
         selectedBlockNodeIndexRef.current !== null ||
         keyboardBlockSelectionStickyRef.current
-      const isListTextPointerAfterBlockSelection = Boolean(
+      const hasTableSelectionResidue = Boolean(
+        currentEditor &&
+          (isTableSelectionActive(currentEditor) ||
+            hasTableSelectedCellDomMarkers(currentEditor.view.dom as HTMLElement))
+      )
+      const isListTextPointerAfterSelectionResidue = Boolean(
         currentEditor &&
           targetListItemContext &&
-          hasActiveBlockSelection &&
+          (hasActiveBlockSelection || hasTableSelectionResidue) &&
           !isOuterListItemSelectionGesture(event, targetListItemContext)
       )
-      if (currentEditor && !isListTextPointerAfterBlockSelection) {
+      if (currentEditor && !isListTextPointerAfterSelectionResidue) {
         preserveWindowScrollForEditorPointerFocus(
           event.target,
           isTableSelectionActive(currentEditor),
@@ -645,14 +655,36 @@ export const useBlockEditorEngineBlockSelectionUi = ({
       if (
         currentEditor &&
         targetListItemContext &&
-        isListTextPointerAfterBlockSelection
+        isListTextPointerAfterSelectionResidue
       ) {
+        event.preventDefault()
+        event.stopPropagation()
+        setClickedBlockIndex(null)
+        keyboardBlockSelectionStickyRef.current = false
+        selectedBlockNodeIndexRef.current = null
+        selectedListItemContextRef.current = null
+        setSelectedBlockNodeIndex(null)
+        setSelectedListItemContext(null)
+        syncSelectedBlockNodeSurface(null)
         cancelAllWindowScrollPreserves()
-        selectNestedListItemTextAnchor(currentEditor, targetListItemContext)
-        window.requestAnimationFrame(() => {
+        clearTableTextSelectionForBlockSelection({ clearWindowSelection: false })
+        clearTableSelectedCellDomMarkers(
+          currentEditor.view.dom as HTMLElement,
+          currentEditor
+        )
+        const restoreListTextSelection = () => {
           if (!currentEditor.view.dom.isConnected) return
-          selectNestedListItemTextAnchor(currentEditor, targetListItemContext)
-        })
+          selectNestedListItemTextAtPoint(
+            currentEditor,
+            targetListItemContext,
+            event.clientX,
+            event.clientY
+          )
+        }
+        restoreListTextSelection()
+        window.requestAnimationFrame(restoreListTextSelection)
+        window.setTimeout(restoreListTextSelection, 0)
+        window.setTimeout(restoreListTextSelection, 60)
         return
       }
       if (
@@ -713,6 +745,7 @@ export const useBlockEditorEngineBlockSelectionUi = ({
       promoteTopLevelBlockSelection,
       selectedBlockNodeIndex,
       selectedBlockNodeIndexRef,
+      selectedListItemContextRef,
       setClickedBlockIndex,
       setSelectedBlockNodeIndex,
       setSelectedListItemContext,

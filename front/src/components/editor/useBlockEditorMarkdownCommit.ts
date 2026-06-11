@@ -5,6 +5,7 @@ import {
   serializeEditorDocToMarkdown,
   type BlockEditorDoc,
 } from "./serialization"
+import { flushPendingNodeViewAttributeCommits } from "./editorNodeViewCommitRegistry"
 
 const MARKDOWN_COMMIT_DEBOUNCE_MS = 140
 const MARKDOWN_COMMIT_IDLE_TIMEOUT_MS = 220
@@ -102,6 +103,7 @@ export const useBlockEditorMarkdownCommit = ({
     if (!hasPendingEditor) {
       pendingCommitFocusedRef.current = pendingEditor.isFocused
     }
+    flushPendingNodeViewAttributeCommits()
 
     const markdown = serializeEditorDocToMarkdown(
       pendingEditor.getJSON() as BlockEditorDoc

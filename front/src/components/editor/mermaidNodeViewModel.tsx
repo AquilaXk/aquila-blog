@@ -1,5 +1,6 @@
-import type { NodeViewProps } from "@tiptap/react"
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react"
+import type { NodeViewProps } from "@tiptap/react"
+import { registerPendingNodeViewCommitFlusher } from "./editorNodeViewCommitRegistry"
 
 export const TEXTAREA_DEBOUNCE_MS = 180
 export const MERMAID_TEMPLATE = ["flowchart TD", "  A[사용자 요청] --> B{검증}", "  B -->|OK| C[처리]", "  B -->|Fail| D[오류 반환]"].join(
@@ -210,29 +211,21 @@ export const useDebouncedAttributeCommit = (
   const debounceRef = useRef<number | null>(null)
   const latestAttrsRef = useRef<Record<string, unknown> | null>(null)
 
-  useEffect(() => {
-    return () => {
-      if (typeof window !== "undefined" && debounceRef.current !== null) {
-        window.clearTimeout(debounceRef.current)
-      }
-    }
-  }, [])
-
-  const cancel = () => {
+  const cancel = useCallback(() => {
     if (typeof window !== "undefined" && debounceRef.current !== null) {
       window.clearTimeout(debounceRef.current)
       debounceRef.current = null
     }
-  }
+  }, [])
 
-  const flush = () => {
+  const flush = useCallback(() => {
     if (!latestAttrsRef.current) return
     cancel()
     updateAttributes(latestAttrsRef.current)
     latestAttrsRef.current = null
-  }
+  }, [cancel, updateAttributes])
 
-  const schedule = (attrs: Record<string, unknown>) => {
+  const schedule = useCallback((attrs: Record<string, unknown>) => {
     latestAttrsRef.current = attrs
     if (typeof window === "undefined") {
       updateAttributes(attrs)
@@ -248,7 +241,15 @@ export const useDebouncedAttributeCommit = (
       }
       debounceRef.current = null
     }, delay)
-  }
+  }, [cancel, delay, updateAttributes])
+
+  useEffect(() => {
+    const unregister = registerPendingNodeViewCommitFlusher(flush)
+    return () => {
+      unregister()
+      flush()
+    }
+  }, [flush])
 
   return {
     schedule,

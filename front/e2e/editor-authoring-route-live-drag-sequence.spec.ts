@@ -1,6 +1,11 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import { expectEditorToContainLoadedText, expectVisibleBox } from "./helpers/editorAuthoringFlow"
-import { post507Markdown } from "./helpers/post507Fixtures"
+import {
+  expectPost507FinalTableTextSelected,
+  mockEditorRouteWithPost507,
+  post507Markdown,
+  POST_507_FINAL_TABLE_TARGET_CELL,
+} from "./helpers/post507Fixtures"
 
 const adminMember = {
   id: 1,
@@ -8,6 +13,8 @@ const adminMember = {
   nickname: "aquila",
   isAdmin: true,
 }
+const POST_507_FIRST_LIST_ITEM = "“Stateless가 좋다는데, 왜 좋은 거지?”"
+const POST_507_SECOND_LIST_ITEM = "“세션이랑 JWT는 뭐가 다른 거야?”"
 const pressSelectAll = async (page: Page) => page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
 
 const readScrollTop = (page: Page) =>
@@ -21,6 +28,217 @@ const readSelectionText = (page: Page) =>
       document.querySelector("[data-code-drag-selection-text]")?.getAttribute("data-code-drag-selection-text") ||
       ""
   )
+
+const readSelectionResidueState = (page: Page) =>
+  page.evaluate(() => {
+    const editor = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
+    const tableDragText =
+      document.documentElement.getAttribute("data-table-drag-selection-text") ||
+      document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
+      ""
+    return {
+      activePreserveOwner: document.documentElement.getAttribute("data-editor-scroll-preserve-owner"),
+      blockOverlayCount: document.querySelectorAll("[data-testid='keyboard-block-selection-overlay']").length,
+      keyboardBlockSelection: editor?.getAttribute("data-keyboard-block-selection") ?? null,
+      selectedCellCount: document.querySelectorAll(".selectedCell").length,
+      tableDragText,
+    }
+  })
+
+const expectNoTextSelectionResidue = async (page: Page, label: string) => {
+  const state = await readSelectionResidueState(page)
+  expect(state.blockOverlayCount, `${label}: block selection overlay should not remain`).toBe(0)
+  expect(state.keyboardBlockSelection, `${label}: keyboard block selection should not remain`).not.toBe("true")
+  expect(state.selectedCellCount, `${label}: selectedCell should not remain`).toBe(0)
+  expect(state.activePreserveOwner, `${label}: table scroll preserve should not remain`).not.toBe("table")
+  expect(state.tableDragText, `${label}: stale table drag text should not remain`).not.toContain(
+    POST_507_FINAL_TABLE_TARGET_CELL
+  )
+}
+
+const hasNestedListChild = (page: Page, parentLabel: string, childLabel: string) =>
+  page.evaluate(
+    ({ childLabel: expectedChildLabel, parentLabel: expectedParentLabel }) => {
+      const readOwnLabel = (item: HTMLElement) =>
+        Array.from(item.childNodes)
+          .filter((node) => !(node instanceof HTMLElement && ["UL", "OL"].includes(node.tagName)))
+          .map((node) => node.textContent || "")
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim()
+      return Array.from(
+        document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")
+      ).some(
+        (item) =>
+          readOwnLabel(item) === expectedParentLabel &&
+          Array.from(item.querySelectorAll<HTMLElement>("li")).some(
+            (child) => readOwnLabel(child) === expectedChildLabel
+          )
+      )
+    },
+    { childLabel, parentLabel }
+  )
+
+const clickListItemParagraph = async (page: Page, editor: Locator, label: string) => {
+  const paragraph = editor.locator("li > p", { hasText: label }).first()
+  await paragraph.scrollIntoViewIfNeeded()
+  const clickPoint = await paragraph.evaluate((element) => {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+    while (walker.nextNode()) {
+      const textNode = walker.currentNode as Text
+      if (!textNode.data.trim()) continue
+      const startOffset = textNode.data.search(/\S/)
+      const range = document.createRange()
+      range.setStart(textNode, Math.max(0, startOffset))
+      range.setEnd(textNode, Math.min(textNode.data.length, Math.max(0, startOffset) + 2))
+      const rect = range.getBoundingClientRect()
+      if (rect.width > 0 && rect.height > 0) {
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+      }
+    }
+    const rect = element.getBoundingClientRect()
+    return { x: rect.left + Math.min(rect.width / 2, 120), y: rect.top + Math.min(rect.height / 2, 14) }
+  })
+  await page.mouse.click(clickPoint.x, clickPoint.y)
+  const readCaretState = () =>
+    paragraph.evaluate(
+      (element, point) => {
+        const selection = window.getSelection()
+        const anchorNode = selection?.anchorNode ?? null
+        const anchorElement =
+          anchorNode instanceof Element
+            ? anchorNode
+            : anchorNode instanceof Node
+              ? anchorNode.parentElement
+              : null
+        const pointElement = document.elementFromPoint(point.x, point.y)
+        const editor = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
+        return {
+          activeElement:
+            document.activeElement instanceof HTMLElement
+              ? {
+                  ariaLabel: document.activeElement.getAttribute("aria-label"),
+                  className: document.activeElement.className,
+                  role: document.activeElement.getAttribute("role"),
+                  tagName: document.activeElement.tagName,
+                  testId: document.activeElement.getAttribute("data-testid"),
+                }
+              : null,
+          anchorElementText: anchorElement?.textContent?.replace(/\s+/g, " ").trim().slice(0, 120) ?? null,
+          anchorInsideParagraph: Boolean(anchorNode && element.contains(anchorNode)),
+          anchorNodeName: anchorNode?.nodeName ?? null,
+          blockOverlayCount: document.querySelectorAll("[data-testid='keyboard-block-selection-overlay']").length,
+          editorKeyboardBlockSelection: editor?.getAttribute("data-keyboard-block-selection") ?? null,
+          pointElementText: pointElement?.textContent?.replace(/\s+/g, " ").trim().slice(0, 120) ?? null,
+          pointElementTagName: pointElement?.tagName ?? null,
+          preserveOwner: document.documentElement.getAttribute("data-editor-scroll-preserve-owner"),
+          rangeCount: selection?.rangeCount ?? 0,
+          selectedCellCount: document.querySelectorAll(".selectedCell").length,
+          selectionText: selection?.toString() ?? "",
+        }
+      },
+      clickPoint
+    )
+  try {
+    await expect.poll(async () => (await readCaretState()).anchorInsideParagraph).toBe(true)
+  } catch (error) {
+    const state = await readCaretState()
+    throw new Error(`${error instanceof Error ? error.message : String(error)}\n${JSON.stringify(state, null, 2)}`)
+  }
+}
+
+const readPost507FinalTableBlockOverlayMetrics = (page: Page) =>
+  page.evaluate((targetCellText) => {
+    const table =
+      Array.from(document.querySelectorAll<HTMLElement>("table")).find((candidate) =>
+        candidate.textContent?.includes(targetCellText)
+      ) ?? null
+    const block = (table?.closest(".tableWrapper") as HTMLElement | null) ?? table
+    const overlay = document.querySelector<HTMLElement>("[data-testid='keyboard-block-selection-overlay']")
+    if (!block || !overlay) return null
+    const blockRect = block.getBoundingClientRect()
+    const overlayRect = overlay.getBoundingClientRect()
+    return {
+      blockBottom: blockRect.bottom,
+      blockLeft: blockRect.left,
+      blockTop: blockRect.top,
+      blockWidth: blockRect.width,
+      gapLeft: overlayRect.left - blockRect.left,
+      gapTop: overlayRect.top - blockRect.top,
+      overlayBottom: overlayRect.bottom,
+      overlayLeft: overlayRect.left,
+      overlayTop: overlayRect.top,
+      overlayWidth: overlayRect.width,
+      scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
+    }
+  }, POST_507_FINAL_TABLE_TARGET_CELL)
+
+const expectPost507FinalTableBlockOverlayFollowsScroll = async (
+  page: Page,
+  finalTable: Locator
+) => {
+  await finalTable.evaluate((element) => {
+    element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
+  })
+  await page.waitForTimeout(160)
+  await page.keyboard.press("Escape")
+  await page.evaluate(() => {
+    window.getSelection()?.removeAllRanges()
+    document.dispatchEvent(new Event("selectionchange"))
+  })
+  await page.mouse.wheel(0, 1)
+  await page.waitForTimeout(120)
+  await finalTable.evaluate((element) => {
+    element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
+  })
+  await page.waitForTimeout(160)
+  const tableBox = await finalTable.boundingBox()
+  if (!tableBox) throw new Error("post 507 final table block metrics are missing")
+
+  const blockHandle = page.getByTestId("block-drag-handle")
+  for (const point of [
+    { x: 24, y: 24 },
+    { x: 18, y: 18 },
+    { x: 32, y: 28 },
+    { x: -24, y: 24 },
+    { x: -36, y: 32 },
+  ]) {
+    const currentTableBox = await finalTable.boundingBox()
+    if (!currentTableBox) break
+    await page.mouse.move(currentTableBox.x + currentTableBox.width / 2, currentTableBox.y + currentTableBox.height / 2)
+    await page.mouse.move(currentTableBox.x + point.x, currentTableBox.y + point.y, { steps: 4 })
+    await page.waitForTimeout(80)
+    if (await blockHandle.isVisible().catch(() => false)) break
+  }
+  await expect(blockHandle).toBeVisible()
+  await blockHandle.click()
+  await expect(page.getByTestId("keyboard-block-selection-overlay")).toBeVisible()
+
+  const before = await readPost507FinalTableBlockOverlayMetrics(page)
+  if (!before) throw new Error("post 507 final table overlay metrics are missing before scroll")
+  expect(Math.abs(before.gapTop + 4)).toBeLessThanOrEqual(8)
+  expect(Math.abs(before.overlayWidth - (before.blockWidth + 12))).toBeLessThanOrEqual(8)
+
+  const scrollState = await page.evaluate(() => {
+    const scrollTop = document.scrollingElement?.scrollTop ?? window.scrollY
+    const scrollHeight = document.scrollingElement?.scrollHeight ?? document.documentElement.scrollHeight
+    return { maxScrollTop: scrollHeight - window.innerHeight, scrollTop }
+  })
+  const wheelDelta = scrollState.scrollTop < scrollState.maxScrollTop - 240 ? 360 : -360
+  await page.mouse.wheel(0, wheelDelta)
+  await expect
+    .poll(async () => {
+      const current = await readPost507FinalTableBlockOverlayMetrics(page)
+      return current ? Math.abs(current.scrollTop - before.scrollTop) : 0
+    })
+    .toBeGreaterThan(40)
+  const after = await readPost507FinalTableBlockOverlayMetrics(page)
+  if (!after) throw new Error("post 507 final table overlay metrics are missing after scroll")
+  expect(Math.abs(after.gapTop - before.gapTop)).toBeLessThanOrEqual(3)
+  expect(Math.abs(after.gapLeft - before.gapLeft)).toBeLessThanOrEqual(3)
+  expect(Math.abs(after.blockTop - before.blockTop - (after.overlayTop - before.overlayTop))).toBeLessThanOrEqual(3)
+  expect(Math.abs(after.blockLeft - before.blockLeft - (after.overlayLeft - before.overlayLeft))).toBeLessThanOrEqual(3)
+}
 
 const readClipboardText = (page: Page) =>
   page.evaluate(async () => navigator.clipboard?.readText?.() ?? "")
@@ -72,6 +290,9 @@ const dragLocatorTextRange = async (
     waitMs?: number
   } = {}
 ) => {
+  const isDetachedError = (error: unknown) =>
+    error instanceof Error &&
+    /not attached to the DOM|Element is not attached/i.test(error.message)
   const runDrag = async () => {
     await target.scrollIntoViewIfNeeded()
     const measureTextRange = () =>
@@ -146,11 +367,27 @@ const dragLocatorTextRange = async (
     return { beforeScrollTop, afterScrollTop, selectionText }
   }
 
-  let result = await runDrag()
+  let result: Awaited<ReturnType<typeof runDrag>> | null = null
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      result = await runDrag()
+      break
+    } catch (error) {
+      if (!isDetachedError(error) || attempt === 2) throw error
+      await page.waitForTimeout(160)
+    }
+  }
+  if (!result) throw new Error(`${label} drag did not start`)
   for (let attempt = 1; options.retryWhenEmpty && !result.selectionText.includes(text) && attempt < 3; attempt += 1) {
     await page.evaluate(() => window.getSelection()?.removeAllRanges())
     await page.waitForTimeout(120)
-    result = await runDrag()
+    try {
+      result = await runDrag()
+    } catch (error) {
+      if (!isDetachedError(error) || attempt === 2) throw error
+      await page.waitForTimeout(160)
+      result = await runDrag()
+    }
   }
   return result
 }
@@ -932,5 +1169,103 @@ test.describe("editor authoring route live drag sequence", () => {
     expect(lowerBodyDrag.selectionText).toContain("아무것도 안 하는 구조")
     expect(lowerBodyDrag.afterScrollTop).toBeLessThanOrEqual(lowerBodyDrag.beforeScrollTop + 24)
     expect(lowerBodyDrag.afterScrollTop).toBeGreaterThanOrEqual(lowerBodyDrag.beforeScrollTop - 24)
+  })
+
+  test("실제 507 하단 table Cmd+A 뒤 code/body drag selection은 stale table 선택에 잡히지 않는다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1580, height: 900 })
+
+    const { editor, finalTable } = await mockEditorRouteWithPost507(page, {
+      postId: 999,
+      title: "post 507 table code body chained selection 글",
+      version: 7,
+    })
+
+    const targetCell = finalTable.locator("td", { hasText: POST_507_FINAL_TABLE_TARGET_CELL }).first()
+    const tableDrag = await dragLocatorTextRange(
+      page,
+      targetCell,
+      "post 507 chained final table drag",
+      POST_507_FINAL_TABLE_TARGET_CELL,
+      { paced: true, retryWhenEmpty: true, waitMs: 900 }
+    )
+    expect(tableDrag.selectionText).toContain(POST_507_FINAL_TABLE_TARGET_CELL)
+
+    await pressSelectAll(page)
+    await expect
+      .poll(() => readSelectionText(page))
+      .toContain("구현되어 있는가")
+    expectPost507FinalTableTextSelected(await readSelectionText(page))
+
+    const immediateLowerBody = editor
+      .locator("p", { hasText: "Stateless는 “서버가 아무것도 안 하는 구조”가 아닙니다." })
+      .first()
+    const immediateBodyDrag = await dragLocatorTextRange(
+      page,
+      immediateLowerBody,
+      "post 507 immediate lower body drag after table select all",
+      "서버가 아무것도 안 하는 구조",
+      { paced: true, retryWhenEmpty: true, waitMs: 1_000 }
+    )
+    const immediateBodySelectionText = await readSelectionText(page)
+    expect(immediateBodySelectionText).toContain("서버가 아무것도 안 하는 구조")
+    expect(immediateBodySelectionText).not.toContain(POST_507_FINAL_TABLE_TARGET_CELL)
+    expect(immediateBodySelectionText).not.toContain("구현되어 있는가")
+    expect(Math.abs(immediateBodyDrag.afterScrollTop - immediateBodyDrag.beforeScrollTop)).toBeLessThanOrEqual(24)
+    await expectNoTextSelectionResidue(page, "immediate lower body after table select all")
+
+    const codeContent = editor.locator(".aq-code-editor-content", { hasText: "createAccessToken(user)" }).first()
+    await codeContent.evaluate((element) => {
+      element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
+    })
+    await page.waitForTimeout(160)
+    const codeDrag = await dragLocatorTextRange(
+      page,
+      codeContent,
+      "post 507 chained code drag",
+      "createAccessToken(user)",
+      { paced: true, retryWhenEmpty: true, waitMs: 1_000 }
+    )
+    const codeSelectionText = await readSelectionText(page)
+    expect(codeSelectionText).toContain("createAccessToken(user)")
+    expect(codeSelectionText).not.toContain(POST_507_FINAL_TABLE_TARGET_CELL)
+    expect(codeSelectionText).not.toContain("구현되어 있는가")
+    expect(Math.abs(codeDrag.afterScrollTop - codeDrag.beforeScrollTop)).toBeLessThanOrEqual(24)
+    await expectNoTextSelectionResidue(page, "code drag after table select all")
+
+    await pressSelectAll(page)
+    await expect.poll(() => readSelectionText(page)).toContain("return new Token")
+    const codeSelectAllText = await readSelectionText(page)
+    expect(codeSelectAllText).toContain("createRefreshToken(user)")
+    expect(codeSelectAllText).not.toContain(POST_507_FINAL_TABLE_TARGET_CELL)
+
+    const lowerBody = editor
+      .locator("p", { hasText: "Stateless는 “서버가 아무것도 안 하는 구조”가 아닙니다." })
+      .first()
+    const lowerBodyDrag = await dragLocatorTextRange(
+      page,
+      lowerBody,
+      "post 507 chained lower body drag",
+      "서버가 아무것도 안 하는 구조",
+      { paced: true, retryWhenEmpty: true, waitMs: 1_000 }
+    )
+    const lowerBodySelectionText = await readSelectionText(page)
+    expect(lowerBodySelectionText).toContain("서버가 아무것도 안 하는 구조")
+    expect(lowerBodySelectionText).not.toContain("createAccessToken")
+    expect(lowerBodySelectionText).not.toContain(POST_507_FINAL_TABLE_TARGET_CELL)
+    expect(Math.abs(lowerBodyDrag.afterScrollTop - lowerBodyDrag.beforeScrollTop)).toBeLessThanOrEqual(24)
+    await expectNoTextSelectionResidue(page, "lower body after code select all")
+
+    await expectPost507FinalTableBlockOverlayFollowsScroll(page, finalTable)
+
+    await clickListItemParagraph(page, editor, POST_507_SECOND_LIST_ITEM)
+    await page.keyboard.press("Tab")
+    await expect.poll(() => hasNestedListChild(page, POST_507_FIRST_LIST_ITEM, POST_507_SECOND_LIST_ITEM)).toBe(true)
+    await expectNoTextSelectionResidue(page, "list tab after table overlay scroll")
+    await clickListItemParagraph(page, editor, POST_507_SECOND_LIST_ITEM)
+    await page.keyboard.press("Shift+Tab")
+    await expect.poll(() => hasNestedListChild(page, POST_507_FIRST_LIST_ITEM, POST_507_SECOND_LIST_ITEM)).toBe(false)
+    await expectNoTextSelectionResidue(page, "list shift tab after table overlay scroll")
   })
 })

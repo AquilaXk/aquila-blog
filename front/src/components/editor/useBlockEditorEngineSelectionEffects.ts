@@ -15,6 +15,7 @@ import {
   getTopLevelBlockIndexFromSelection,
   isTabBlockSelectionEligible,
 } from "./blockSelectionModel"
+import { cancelAllWindowScrollPreserves } from "./blockHandleLayoutModel"
 import {
   LIST_ITEM_SELECTOR,
   type NestedListItemContext,
@@ -328,10 +329,21 @@ export const useBlockEditorEngineSelectionEffects = ({
           !event.ctrlKey &&
           !event.altKey &&
           !event.shiftKey &&
-          keyboardBlockSelectionStickyRef.current &&
-          selectedBlockNodeIndexRef.current !== null
+          (keyboardBlockSelectionStickyRef.current ||
+            selectedBlockNodeIndexRef.current !== null)
         if (shouldReleaseStickyBlockSelection) {
           clearStickyTopLevelBlockSelection()
+          if (targetListItemContext) {
+            event.preventDefault()
+            event.stopPropagation()
+            cancelAllWindowScrollPreserves()
+            selectNestedListItemTextAnchor(editor, targetListItemContext)
+            window.requestAnimationFrame(() => {
+              if (!editor.view.dom.isConnected) return
+              selectNestedListItemTextAnchor(editor, targetListItemContext)
+            })
+            return
+          }
         }
         return
       }

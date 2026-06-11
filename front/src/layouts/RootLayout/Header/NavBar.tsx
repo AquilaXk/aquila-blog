@@ -146,20 +146,14 @@ const NavBar: React.FC = () => {
     }
   }
 
-  const handleUnavailableAuthLogin = async () => {
-    const target = toLoginPath(nextPath)
-    await replaceRoute(router, target, { preferHardNavigation: true })
-  }
-
   const openLoginModal = () => {
     preloadAuthEntryModal()
     setAuthModalOpen(true)
   }
 
-  const showImmediateLoginAction = authStatus === "anonymous" || (authStatus === "loading" && !shellAuthenticated)
-  const showUnavailableAuthAction = authStatus === "unavailable" && !me
+  const showLoginAction =
+    authStatus === "anonymous" || authStatus === "unavailable" || (authStatus === "loading" && !shellAuthenticated)
   const shouldShowAuthenticatedShell = isAuthenticated || (authStatus === "loading" && shellAuthenticated)
-  const loginButtonClassName = showUnavailableAuthAction ? "navPill navPill--warning navAction--login" : "navPill navAction--login"
 
   return (
     <StyledWrapper ref={rootRef}>
@@ -182,17 +176,11 @@ const NavBar: React.FC = () => {
         <div className="authSlot authSlot--login">
           <button
             type="button"
-            className={loginButtonClassName}
+            className="navPill navAction--login"
             data-ui="nav-control"
             onMouseEnter={preloadAuthEntryModal}
             onFocus={preloadAuthEntryModal}
-            onClick={() => {
-              if (showUnavailableAuthAction) {
-                void handleUnavailableAuthLogin()
-                return
-              }
-              openLoginModal()
-            }}
+            onClick={openLoginModal}
           >
             Login
           </button>
@@ -209,8 +197,6 @@ const NavBar: React.FC = () => {
             Logout
           </button>
         </div>
-
-        {showUnavailableAuthAction && <span className="authNotice">Auth check failed</span>}
 
         <button
           ref={menuTriggerRef}
@@ -236,17 +222,13 @@ const NavBar: React.FC = () => {
                   </Link>
                 ))}
 
-                {(showImmediateLoginAction || showUnavailableAuthAction) && (
+                {showLoginAction && (
                   <button
                     type="button"
                     role="menuitem"
                     onClick={() => {
                       setMobileMenuOpen(false)
-                      if (showUnavailableAuthAction) {
-                        void handleUnavailableAuthLogin()
-                      } else {
-                        openLoginModal()
-                      }
+                      openLoginModal()
                     }}
                   >
                     Login
@@ -427,16 +409,6 @@ const StyledWrapper = styled.div`
     display: inline-flex;
   }
 
-  .authNotice {
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.76rem;
-    white-space: nowrap;
-  }
-
-  .navPill--warning {
-    color: ${({ theme }) => theme.colors.blue10};
-  }
-
   .mobileMenuTrigger {
     display: none;
     min-height: ${({ theme }) => theme.variables.navControl.height}px;
@@ -459,16 +431,9 @@ const StyledWrapper = styled.div`
     }
   }
 
-  @media (max-width: 980px) {
-    .authNotice {
-      display: none;
-    }
-  }
-
   @media (max-width: 860px) {
     .primaryLinks,
-    .authSlot,
-    .authNotice {
+    .authSlot {
       display: none;
     }
 

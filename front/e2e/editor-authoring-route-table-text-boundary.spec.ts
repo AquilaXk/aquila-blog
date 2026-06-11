@@ -14,6 +14,14 @@ test.describe("editor authoring route table text drag boundary", () => {
     expect(source).not.toContain("(focusElement && currentCell.contains(focusElement)))")
   })
 
+  test("table text restore source contract는 disconnected fallback을 editor root로 제한한다", () => {
+    const source = readFileSync("src/components/editor/tableTextSelectionModel.ts", "utf8")
+    expect(source).toContain("resolveTableTextOwnerRoot")
+    expect(source).toContain('ownerRoot.querySelectorAll<HTMLTableElement>("table")')
+    expect(source).not.toContain('document.querySelectorAll<HTMLTableElement>("table")')
+    expect(source).not.toContain('document.querySelectorAll("table")')
+  })
+
   test("실제 /editor/[id] 507 table text drag는 table 밖 body selection을 owner로 인정하지 않는다", async ({
     page,
   }) => {

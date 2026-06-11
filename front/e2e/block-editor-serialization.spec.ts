@@ -453,7 +453,7 @@ test.describe("block editor serialization", () => {
   })
 
   test("literal markdown text 는 inline delimiter 로 재파싱되지 않는다", () => {
-    const literalText = "**literal** [x](https://example.com) `code` $price$ {{color:red|x}}"
+    const literalText = "**literal** [x](https://example.com) `code` $price$ ~~strike~~ {{color:red|x}}"
     const doc = {
       type: "doc",
       content: [
@@ -470,7 +470,26 @@ test.describe("block editor serialization", () => {
     expect(serialized).not.toBe(literalText)
     expect(serialized).toContain(String.raw`\*\*literal\*\*`)
     expect(serialized).toContain(String.raw`\[x\]\(https://example.com\)`)
+    expect(serialized).toContain(String.raw`\~\~strike\~\~`)
     expect(reparsed.content?.[0]?.content).toEqual([{ type: "text", text: literalText }])
+  })
+
+  test("single tilde text 는 저장 markdown 에서 과하게 escape 하지 않는다", () => {
+    const doc = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "15~60분" }],
+        },
+      ],
+    }
+
+    const serialized = serializeEditorDocToMarkdown(doc)
+    const reparsed = parseMarkdownToEditorDoc(serialized)
+
+    expect(serialized).toBe("15~60분")
+    expect(reparsed.content?.[0]?.content).toEqual([{ type: "text", text: "15~60분" }])
   })
 
   test("code 와 mermaid block 내부 fence line 은 더 긴 fence 로 보존된다", () => {

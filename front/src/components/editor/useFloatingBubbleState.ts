@@ -95,6 +95,22 @@ const addTextBubbleOcclusionCandidate = (
   candidates.add(candidate)
 }
 
+const addTextBubbleOcclusionDescendantCandidates = (
+  candidates: Set<HTMLElement>,
+  candidateRoot: Element | null | undefined,
+  editorRoot: HTMLElement,
+  selectedContainers: Element[]
+) => {
+  if (!(candidateRoot instanceof HTMLElement)) return
+  addTextBubbleOcclusionCandidate(candidates, candidateRoot, editorRoot, selectedContainers)
+  if (candidates.size >= MAX_TEXT_BUBBLE_OCCLUSION_CANDIDATES) return
+  Array.from(candidateRoot.querySelectorAll<HTMLElement>(TEXT_BUBBLE_OCCLUSION_SELECTOR))
+    .slice(0, MAX_TEXT_BUBBLE_OCCLUSION_CANDIDATES - candidates.size)
+    .forEach((candidate) => {
+      addTextBubbleOcclusionCandidate(candidates, candidate, editorRoot, selectedContainers)
+    })
+}
+
 const collectTextBubbleOcclusionCandidates = (
   editorRoot: HTMLElement,
   selectedContainers: Element[]
@@ -102,9 +118,47 @@ const collectTextBubbleOcclusionCandidates = (
   const candidates = new Set<HTMLElement>()
   selectedContainers.forEach((selected) => {
     const readable = selected.closest(TEXT_BUBBLE_OCCLUSION_SELECTOR)
+    const tableCell = selected.closest("th, td")
     addTextBubbleOcclusionCandidate(candidates, readable?.previousElementSibling, editorRoot, selectedContainers)
     addTextBubbleOcclusionCandidate(candidates, readable?.nextElementSibling, editorRoot, selectedContainers)
     addTextBubbleOcclusionCandidate(candidates, readable?.parentElement, editorRoot, selectedContainers)
+    addTextBubbleOcclusionCandidate(candidates, tableCell, editorRoot, selectedContainers)
+    addTextBubbleOcclusionDescendantCandidates(
+      candidates,
+      tableCell?.previousElementSibling,
+      editorRoot,
+      selectedContainers
+    )
+    addTextBubbleOcclusionDescendantCandidates(
+      candidates,
+      tableCell?.nextElementSibling,
+      editorRoot,
+      selectedContainers
+    )
+    addTextBubbleOcclusionDescendantCandidates(
+      candidates,
+      tableCell?.parentElement?.previousElementSibling,
+      editorRoot,
+      selectedContainers
+    )
+    addTextBubbleOcclusionDescendantCandidates(
+      candidates,
+      tableCell?.parentElement?.nextElementSibling,
+      editorRoot,
+      selectedContainers
+    )
+    addTextBubbleOcclusionDescendantCandidates(
+      candidates,
+      readable?.parentElement?.previousElementSibling,
+      editorRoot,
+      selectedContainers
+    )
+    addTextBubbleOcclusionDescendantCandidates(
+      candidates,
+      readable?.parentElement?.nextElementSibling,
+      editorRoot,
+      selectedContainers
+    )
 
     let previous = readable?.previousElementSibling ?? null
     let next = readable?.nextElementSibling ?? null
@@ -116,6 +170,34 @@ const collectTextBubbleOcclusionCandidates = (
     }
   })
   return Array.from(candidates)
+}
+
+const resolveSideTextBubbleTop = (
+  selectionRect: DOMRect | ClientRect,
+  sideLeft: number,
+  candidates: HTMLElement[]
+) => {
+  const estimatedHalfHeight = TEXT_BUBBLE_ESTIMATED_HEIGHT_PX / 2
+  const toolbarLeft = sideLeft + TEXT_BUBBLE_COLLISION_GAP_PX
+  const toolbarRight = toolbarLeft + TEXT_BUBBLE_ESTIMATED_WIDTH_PX
+  const selectionCenterTop = Math.round(selectionRect.top + selectionRect.height / 2)
+  const minTop = candidates.reduce((nextMinTop, candidate) => {
+    const rect = candidate.getBoundingClientRect()
+    if (!Number.isFinite(rect.top) || rect.width <= 0 || rect.height <= 0) return nextMinTop
+    const overlapsToolbarX = rect.right > toolbarLeft && rect.left < toolbarRight
+    if (!overlapsToolbarX) return nextMinTop
+    const overlapsCandidateY =
+      rect.bottom + TEXT_BUBBLE_COLLISION_GAP_PX > selectionCenterTop - estimatedHalfHeight &&
+      rect.top - TEXT_BUBBLE_COLLISION_GAP_PX < selectionCenterTop + estimatedHalfHeight
+    if (!overlapsCandidateY || rect.top > selectionCenterTop) return nextMinTop
+    return Math.max(nextMinTop, rect.bottom + TEXT_BUBBLE_COLLISION_GAP_PX + estimatedHalfHeight)
+  }, TEXT_BUBBLE_VIEWPORT_PADDING_PX)
+
+  return clampTextBubbleViewport(
+    Math.round(Math.max(selectionCenterTop, minTop)),
+    TEXT_BUBBLE_VIEWPORT_PADDING_PX,
+    window.innerHeight - TEXT_BUBBLE_VIEWPORT_PADDING_PX
+  )
 }
 
 export const hasNativeEditorTextSelection = (editorRoot: HTMLElement) => {
@@ -153,10 +235,11 @@ export const resolveOcclusionAwareTextBubbleState = (state: FloatingBubbleState,
   const toolbarTop =
     Math.min(selectionRect.top, state.top) - TEXT_BUBBLE_ESTIMATED_HEIGHT_PX - TEXT_BUBBLE_COLLISION_GAP_PX
   const toolbarBottom = Math.min(selectionRect.top, state.top) - TEXT_BUBBLE_COLLISION_GAP_PX
-  const collidesWithReadableContent = collectTextBubbleOcclusionCandidates(
+  const occlusionCandidates = collectTextBubbleOcclusionCandidates(
     editorRoot,
     selectedContainers
-  ).some((candidate) => {
+  )
+  const collidesWithReadableContent = occlusionCandidates.some((candidate) => {
     const rect = candidate.getBoundingClientRect()
     if (!Number.isFinite(rect.top) || rect.width <= 0 || rect.height <= 0) return false
     const overlapsToolbarY = rect.bottom > toolbarTop && rect.top < toolbarBottom
@@ -167,11 +250,7 @@ export const resolveOcclusionAwareTextBubbleState = (state: FloatingBubbleState,
   if (!collidesWithReadableContent) return state
 
   const sideLeft = Math.round(selectionRect.right)
-  const sideTop = clampTextBubbleViewport(
-    Math.round(selectionRect.top + selectionRect.height / 2),
-    TEXT_BUBBLE_VIEWPORT_PADDING_PX,
-    window.innerHeight - TEXT_BUBBLE_VIEWPORT_PADDING_PX
-  )
+  const sideTop = resolveSideTextBubbleTop(selectionRect, sideLeft, occlusionCandidates)
   const sideFits =
     sideLeft + TEXT_BUBBLE_COLLISION_GAP_PX + TEXT_BUBBLE_ESTIMATED_WIDTH_PX <=
     window.innerWidth - TEXT_BUBBLE_VIEWPORT_PADDING_PX

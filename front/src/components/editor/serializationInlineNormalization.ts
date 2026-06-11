@@ -24,13 +24,18 @@ const MARKDOWN_ESCAPABLE_INLINE_CHARS = new Set([
   ">",
 ])
 const INLINE_PATTERN_PREFIXES = ["{{", "[", "**", "~~", "`", "$", "*"]
-const MARKDOWN_ESCAPE_PATTERN = /[\\`*_{}\[\]()!$~]/g
+const MARKDOWN_ESCAPE_PATTERN = /[\\`*_{}\[\]()!$]/g
+const MARKDOWN_TILDE_RUN_PATTERN = /~{2,}/g
 
 const isEscapedMarkdownCharacter = (character: string | undefined) =>
   Boolean(character && MARKDOWN_ESCAPABLE_INLINE_CHARS.has(character))
 
 export const escapeMarkdownInlineText = (text: string) =>
-  text.replace(MARKDOWN_ESCAPE_PATTERN, "\\$&")
+  text
+    .replace(MARKDOWN_ESCAPE_PATTERN, "\\$&")
+    .replace(MARKDOWN_TILDE_RUN_PATTERN, (match) =>
+      Array.from(match, (character) => `\\${character}`).join("")
+    )
 
 export const buildTextNode = (text: string, marks?: EditorTextMark[]): EditorTextNode => ({
   type: "text",

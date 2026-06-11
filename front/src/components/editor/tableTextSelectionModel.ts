@@ -1591,7 +1591,7 @@ export const clearTableTextSelectionForStructuralSelection = (
   hasRecentTableTextSelectionContext = false
   cancelActiveTableCellTextSelectionPreserves()
   suppressSingleCellNativeTextSelectionPreserve(1_200)
-  cancelActiveWindowScrollPreserve()
+  cancelAllWindowScrollPreserves()
   cancelTablePointerScrollPreserves()
   shouldClearActiveTableTextSelectionOnBlur = false
   lastTableSelectionExitTarget = null

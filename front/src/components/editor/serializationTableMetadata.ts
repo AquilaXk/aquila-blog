@@ -201,7 +201,7 @@ export const createEmptyTableNode = (
   layout?: MarkdownTableLayout | null
 ): JSONContent => createTableNode(createEmptyTableRows(rowCount, columnCount), layout)
 
-export const escapePipeText = (text: string) => text.replace(/\\/g, "\\\\").replace(/\|/g, "\\|")
+export const escapePipeText = (text: string) => text.replace(/\|/g, "\\|")
 
 type TableMatrixEntry = {
   node: JSONContent

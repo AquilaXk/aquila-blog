@@ -17,6 +17,7 @@ import {
   createInlineFormulaNode,
   createMermaidNode,
   createOrderedListNode,
+  createParagraphNode,
   createTableNode,
   createToggleNode,
   detectUnsupportedMarkdownBlocks,
@@ -449,6 +450,105 @@ test.describe("block editor serialization", () => {
     const serialized = serializeEditorDocToMarkdown(doc)
 
     expect(serialized).toBe(markdown)
+  })
+
+  test("literal markdown text 는 inline delimiter 로 재파싱되지 않는다", () => {
+    const literalText = "**literal** [x](https://example.com) `code` $price$ {{color:red|x}}"
+    const doc = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: literalText }],
+        },
+      ],
+    }
+
+    const serialized = serializeEditorDocToMarkdown(doc)
+    const reparsed = parseMarkdownToEditorDoc(serialized)
+
+    expect(serialized).not.toBe(literalText)
+    expect(serialized).toContain(String.raw`\*\*literal\*\*`)
+    expect(serialized).toContain(String.raw`\[x\]\(https://example.com\)`)
+    expect(reparsed.content?.[0]?.content).toEqual([{ type: "text", text: literalText }])
+  })
+
+  test("code 와 mermaid block 내부 fence line 은 더 긴 fence 로 보존된다", () => {
+    const codeContent = ["before", "```", "after"].join("\n")
+    const mermaidSource = ["flowchart TD", "```", "A --> B"].join("\n")
+    const doc = {
+      type: "doc",
+      content: [
+        createCodeBlockNode("ts", codeContent),
+        createMermaidNode(mermaidSource),
+      ],
+    }
+
+    const serialized = serializeEditorDocToMarkdown(doc)
+    const reparsed = parseMarkdownToEditorDoc(serialized)
+
+    expect(serialized).toContain(["````ts", "before", "```", "after", "````"].join("\n"))
+    expect(serialized).toContain(["````mermaid", "flowchart TD", "```", "A --> B", "````"].join("\n"))
+    expect(reparsed.content?.[0]?.content?.[0]?.text).toBe(codeContent)
+    expect(reparsed.content?.[1]?.attrs?.source).toBe(mermaidSource)
+  })
+
+  test("nested bullet/task list 는 serialize 후 재파싱해도 하위 item 을 보존한다", () => {
+    const doc = {
+      type: "doc",
+      content: [
+        {
+          type: "bulletList",
+          content: [
+            {
+              type: "listItem",
+              content: [
+                createParagraphNode("상위 항목"),
+                {
+                  type: "bulletList",
+                  content: [
+                    {
+                      type: "listItem",
+                      content: [createParagraphNode("하위 항목")],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: "taskList",
+          content: [
+            {
+              type: "taskItem",
+              attrs: { checked: false },
+              content: [
+                createParagraphNode("상위 작업"),
+                {
+                  type: "taskList",
+                  content: [
+                    {
+                      type: "taskItem",
+                      attrs: { checked: true },
+                      content: [createParagraphNode("하위 작업")],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+
+    const serialized = serializeEditorDocToMarkdown(doc)
+    const reparsed = parseMarkdownToEditorDoc(serialized)
+
+    expect(serialized).toContain(["- 상위 항목", "  - 하위 항목"].join("\n"))
+    expect(serialized).toContain(["- [ ] 상위 작업", "  - [x] 하위 작업"].join("\n"))
+    expect(reparsed.content?.[0]?.content?.[0]?.content?.some((node) => node.type === "bulletList")).toBe(true)
+    expect(reparsed.content?.[1]?.content?.[0]?.content?.some((node) => node.type === "taskList")).toBe(true)
   })
 
   test("GFM 테이블은 parse/serialize round-trip 을 유지한다", () => {

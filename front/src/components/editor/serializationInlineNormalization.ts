@@ -3,6 +3,35 @@ import type { JSONContent } from "@tiptap/core"
 import { normalizeInlineColorToken } from "src/libs/markdown/inlineColor"
 import type { EditorTextMark, EditorTextNode } from "./serializationTypes"
 
+const MARKDOWN_ESCAPABLE_INLINE_CHARS = new Set([
+  "\\",
+  "`",
+  "*",
+  "_",
+  "{",
+  "}",
+  "[",
+  "]",
+  "(",
+  ")",
+  "#",
+  "+",
+  "-",
+  ".",
+  "!",
+  "$",
+  "~",
+  ">",
+])
+const INLINE_PATTERN_PREFIXES = ["{{", "[", "**", "~~", "`", "$", "*"]
+const MARKDOWN_ESCAPE_PATTERN = /[\\`*_{}\[\]()!$~]/g
+
+const isEscapedMarkdownCharacter = (character: string | undefined) =>
+  Boolean(character && MARKDOWN_ESCAPABLE_INLINE_CHARS.has(character))
+
+export const escapeMarkdownInlineText = (text: string) =>
+  text.replace(MARKDOWN_ESCAPE_PATTERN, "\\$&")
+
 export const buildTextNode = (text: string, marks?: EditorTextMark[]): EditorTextNode => ({
   type: "text",
   text,
@@ -11,6 +40,11 @@ export const buildTextNode = (text: string, marks?: EditorTextMark[]): EditorTex
 
 export const pushPlainText = (nodes: JSONContent[], text: string) => {
   if (!text) return
+  const previousNode = nodes[nodes.length - 1]
+  if (previousNode?.type === "text" && !previousNode.marks) {
+    previousNode.text = `${previousNode.text || ""}${text}`
+    return
+  }
   nodes.push(buildTextNode(text))
 }
 
@@ -42,18 +76,17 @@ export const matchInlineFormula = (value: string) => {
 }
 
 export const findNextInlinePatternStart = (value: string) => {
-  const candidates = [
-    value.indexOf("{{"),
-    value.indexOf("["),
-    value.indexOf("**"),
-    value.indexOf("~~"),
-    value.indexOf("`"),
-    value.indexOf("$"),
-    value.indexOf("*"),
-  ].filter((index) => index >= 0)
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] === "\\" && isEscapedMarkdownCharacter(value[index + 1])) {
+      return index
+    }
 
-  if (candidates.length === 0) return -1
-  return Math.min(...candidates)
+    if (INLINE_PATTERN_PREFIXES.some((prefix) => value.startsWith(prefix, index))) {
+      return index
+    }
+  }
+
+  return -1
 }
 
 export const buildInlineContent = (text: string): JSONContent[] => {
@@ -63,6 +96,12 @@ export const buildInlineContent = (text: string): JSONContent[] => {
   let index = 0
 
   while (index < text.length) {
+    if (text[index] === "\\" && isEscapedMarkdownCharacter(text[index + 1])) {
+      pushPlainText(nodes, text[index + 1] || "")
+      index += 2
+      continue
+    }
+
     const nextPatterns = [
       {
         name: "inlineColor",
@@ -186,7 +225,7 @@ export const serializeTextNode = (node: JSONContent) => {
   const inlineColorMark = marks.find((mark) => mark.type === "inlineColor" && mark.attrs?.color)
   const otherMarks = marks.filter((mark) => mark !== linkMark && mark !== inlineColorMark)
 
-  let text = rawText
+  let text = escapeMarkdownInlineText(rawText)
 
   for (const mark of otherMarks) {
     if (mark.type === "bold") text = `**${text}**`

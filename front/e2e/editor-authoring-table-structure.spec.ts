@@ -14,12 +14,19 @@ const openCellMenuForCell = async (page: Page, cell: Locator) => {
   const cellMenu = page.getByTestId("table-cell-menu")
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    await cell.click()
-    await cell.hover()
-    await expect(cellMenuButton).toBeVisible()
-    await cellMenuButton.click()
-    await page.waitForTimeout(80)
-    if (await cellMenu.isVisible().catch(() => false)) return cellMenu
+    try {
+      await cell.click()
+      await page.mouse.move(16, 16)
+      await cell.hover()
+      await expect(cellMenuButton).toBeVisible({ timeout: 1_500 })
+      await cellMenuButton.click()
+      await page.waitForTimeout(80)
+      if (await cellMenu.isVisible().catch(() => false)) return cellMenu
+    } catch (error) {
+      if (attempt === 2) throw error
+      await page.keyboard.press("Escape").catch(() => {})
+      await cellMenu.waitFor({ state: "hidden", timeout: 500 }).catch(() => {})
+    }
   }
 
   throw new Error("table cell menu did not open for active cell")

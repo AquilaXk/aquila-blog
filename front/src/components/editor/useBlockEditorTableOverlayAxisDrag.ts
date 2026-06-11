@@ -1,4 +1,5 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
+import type { ResolvedPos } from "@tiptap/pm/model"
 import {
   CellSelection,
   selectedRect,
@@ -287,6 +288,48 @@ export const useBlockEditorTableOverlayAxisDrag = ({
     },
     [resolveRenderedTableSelectionRect]
   )
+  const resolveTableSelectionRectFromResolvedPosition = useCallback(
+    (resolvedPosition: ResolvedPos): TableOverlaySelectionRect | null => {
+      for (let depth = resolvedPosition.depth; depth > 0; depth -= 1) {
+        const tableNode = resolvedPosition.node(depth)
+        if (tableNode.type.name !== "table") continue
+        return {
+          map: TableMap.get(tableNode),
+          table: tableNode,
+          tableStart: resolvedPosition.start(depth),
+        }
+      }
+
+      return null
+    },
+    []
+  )
+  const resolveTableSelectionRectFromEditorContext = useCallback(
+    (activeEditor: TiptapEditor): TableOverlaySelectionRect | null => {
+      const { selection } = activeEditor.state
+      if (selection instanceof CellSelection) {
+        try {
+          return selectedRect(activeEditor.state)
+        } catch {
+          return null
+        }
+      }
+
+      if (selection instanceof NodeSelection && selection.node.type.name === "table") {
+        return {
+          map: TableMap.get(selection.node),
+          table: selection.node,
+          tableStart: selection.from + 1,
+        }
+      }
+
+      return (
+        resolveTableSelectionRectFromResolvedPosition(selection.$from) ??
+        resolveTableSelectionRectFromResolvedPosition(selection.$to)
+      )
+    },
+    [resolveTableSelectionRectFromResolvedPosition]
+  )
   const resolveAxisPointerTableTarget = useCallback(
     (
       activeEditor: TiptapEditor,
@@ -368,6 +411,15 @@ export const useBlockEditorTableOverlayAxisDrag = ({
       resolveRenderedTableSelectionRect,
       tableAffordanceGeometryRef,
       viewportRef,
+    ]
+  )
+  const resolveTableAxisSelectionRect = useCallback(
+    (activeEditor: TiptapEditor) =>
+      resolveTableSelectionRectFromEditorContext(activeEditor) ??
+      resolveVisibleRenderedTableSelectionRect(activeEditor),
+    [
+      resolveTableSelectionRectFromEditorContext,
+      resolveVisibleRenderedTableSelectionRect,
     ]
   )
   const clearNativeTableTextSelectionOnly = useCallback(
@@ -678,9 +730,7 @@ export const useBlockEditorTableOverlayAxisDrag = ({
     (columnIndex: number, options: SelectTableAxisOptions = {}) => {
       const currentEditor = editorRef.current
       if (!currentEditor) return false
-      const rect =
-        getCurrentSelectedTableRect(currentEditor) ??
-        resolveVisibleRenderedTableSelectionRect(currentEditor)
+      const rect = resolveTableAxisSelectionRect(currentEditor)
       if (!rect || columnIndex < 0 || columnIndex >= rect.map.width)
         return false
 
@@ -697,8 +747,7 @@ export const useBlockEditorTableOverlayAxisDrag = ({
     },
     [
       editorRef,
-      getCurrentSelectedTableRect,
-      resolveVisibleRenderedTableSelectionRect,
+      resolveTableAxisSelectionRect,
       selectTableAxisAtIndex,
     ]
   )
@@ -707,9 +756,7 @@ export const useBlockEditorTableOverlayAxisDrag = ({
     (rowIndex: number, options: SelectTableAxisOptions = {}) => {
       const currentEditor = editorRef.current
       if (!currentEditor) return false
-      const rect =
-        getCurrentSelectedTableRect(currentEditor) ??
-        resolveVisibleRenderedTableSelectionRect(currentEditor)
+      const rect = resolveTableAxisSelectionRect(currentEditor)
       if (!rect || rowIndex < 0 || rowIndex >= rect.map.height) return false
 
       const tablePos = rect.tableStart - 1
@@ -725,8 +772,7 @@ export const useBlockEditorTableOverlayAxisDrag = ({
     },
     [
       editorRef,
-      getCurrentSelectedTableRect,
-      resolveVisibleRenderedTableSelectionRect,
+      resolveTableAxisSelectionRect,
       selectTableAxisAtIndex,
     ]
   )

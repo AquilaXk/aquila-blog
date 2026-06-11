@@ -24,28 +24,64 @@ import {
 } from "./serializationInlineNormalization"
 import { serializeTable } from "./serializationTableMetadata"
 
-const serializeList = (node: JSONContent) => {
+const LIST_ITEM_INDENT = "  "
+
+const getMarkdownFence = (content: string) => {
+  const maxBacktickRun = (content.match(/`+/g) || []).reduce(
+    (max, run) => Math.max(max, run.length),
+    0
+  )
+  return "`".repeat(Math.max(3, maxBacktickRun + 1))
+}
+
+const getRawTextContent = (content?: JSONContent[]) =>
+  (content || [])
+    .map((child) => (child.type === "text" ? child.text || "" : serializeNode(child)))
+    .join("")
+
+const isListNode = (node: JSONContent) =>
+  node.type === "bulletList" || node.type === "orderedList" || node.type === "taskList"
+
+const indentMarkdown = (markdown: string, depth: number) => {
+  const indent = LIST_ITEM_INDENT.repeat(depth)
+  return markdown
+    .split("\n")
+    .map((line) => `${indent}${line}`)
+    .join("\n")
+}
+
+const serializeList = (node: JSONContent, depth = 0): string => {
   const items = node.content || []
   const orderedStart =
     node.type === "orderedList" ? Number.parseInt(String(node.attrs?.start || 1), 10) || 1 : 1
 
   return items
     .map((item, index) => {
-      const paragraph = item.content?.[0]
+      const children = item.content || []
+      const paragraphIndex = children.findIndex((child) => child.type === "paragraph")
+      const paragraph = paragraphIndex >= 0 ? children[paragraphIndex] : null
       const text = serializeParagraphLikeNode(paragraph || { type: "paragraph", content: [] })
-      return node.type === "orderedList" ? `${orderedStart + index}. ${text}` : `- ${text}`
+      const marker =
+        node.type === "orderedList"
+          ? `${orderedStart + index}.`
+          : node.type === "taskList"
+            ? `- [${item.attrs?.checked ? "x" : " "}]`
+            : "-"
+      const prefix = LIST_ITEM_INDENT.repeat(depth)
+      const nestedBlocks = children
+        .filter((_, childIndex) => childIndex !== paragraphIndex)
+        .map((child) => {
+          const serialized = isListNode(child)
+            ? serializeList(child, depth + 1)
+            : indentMarkdown(serializeNode(child), depth + 1)
+          return serialized.trimEnd()
+        })
+        .filter(Boolean)
+
+      return [`${prefix}${marker} ${text}`.trimEnd(), ...nestedBlocks].join("\n")
     })
     .join("\n")
 }
-
-const serializeTaskList = (node: JSONContent) =>
-  (node.content || [])
-    .map((item) => {
-      const paragraph = item.content?.find((child) => child.type === "paragraph")
-      const text = serializeParagraphLikeNode(paragraph || { type: "paragraph", content: [] })
-      return `- [${item.attrs?.checked ? "x" : " "}] ${text}`.trimEnd()
-    })
-    .join("\n")
 
 const serializeChecklistBlock = (attrs: Partial<ChecklistBlockAttrs>) =>
   (attrs.items || [])
@@ -77,7 +113,8 @@ const serializeToggleBlock = (attrs: Partial<ToggleBlockAttrs>) => {
 
 const serializeMermaidBlock = (attrs: Partial<MermaidBlockAttrs>) => {
   const source = String(attrs.source || "").trim()
-  return ["```mermaid", source, "```"].join("\n")
+  const fence = getMarkdownFence(source)
+  return [`${fence}mermaid`, source, fence].join("\n")
 }
 
 const serializeDirectiveBlock = (
@@ -132,7 +169,7 @@ export const serializeNode = (node: JSONContent): string => {
     case "orderedList":
       return serializeList(node)
     case "taskList":
-      return serializeTaskList(node)
+      return serializeList(node)
     case "checklistBlock":
       return serializeChecklistBlock(node.attrs as ChecklistBlockAttrs)
     case "blockquote": {
@@ -144,8 +181,9 @@ export const serializeNode = (node: JSONContent): string => {
     }
     case "codeBlock": {
       const language = (node.attrs?.language as string | null | undefined)?.trim() || ""
-      const content = (node.content || []).map((child) => serializeNode(child)).join("")
-      return `\`\`\`${language}\n${content}\n\`\`\``
+      const content = getRawTextContent(node.content)
+      const fence = getMarkdownFence(content)
+      return `${fence}${language}\n${content}\n${fence}`
     }
     case "horizontalRule":
       return "---"

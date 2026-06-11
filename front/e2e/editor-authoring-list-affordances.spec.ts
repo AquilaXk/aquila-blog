@@ -6,8 +6,132 @@ import {
   hoverListItemGutter,
 } from "./helpers/editorAuthoringFlow"
 import { mockEditorRouteWithPost507 } from "./helpers/post507Fixtures"
+import { LIST_ITEM_SELECTOR } from "../src/components/editor/nestedListItemModel"
 
 const POST_507_FIRST_LIST_ITEM = "“Stateless가 좋다는데, 왜 좋은 거지?”"
+
+const readSelectionText = (page: Page) =>
+  page.evaluate(() => window.getSelection()?.toString() ?? "")
+
+const clickDocumentTextRangeStart = async (
+  page: Page,
+  selector: string,
+  text: string
+) => {
+  const point = await page.evaluate(({ selector: targetSelector, text: targetText }) => {
+    const element =
+      Array.from(document.querySelectorAll<HTMLElement>(targetSelector)).find(
+        (candidate) => candidate.textContent?.includes(targetText)
+      ) ?? null
+    if (!element) return null
+    element.scrollIntoView({ block: "center", inline: "nearest" })
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+    while (walker.nextNode()) {
+      const textNode = walker.currentNode as Text
+      const startOffset = textNode.data.indexOf(targetText)
+      if (startOffset < 0) continue
+      const range = document.createRange()
+      range.setStart(textNode, startOffset)
+      range.setEnd(textNode, startOffset + targetText.length)
+      const rect = range.getClientRects()[0] ?? range.getBoundingClientRect()
+      if (rect.width <= 2 || rect.height <= 2) continue
+      return {
+        x: rect.left + Math.min(rect.width / 2, 3),
+        y: rect.top + rect.height / 2,
+      }
+    }
+    return null
+  }, { selector, text })
+  if (!point) throw new Error(`text range start is missing: ${text}`)
+
+  await page.mouse.click(point.x, point.y)
+}
+
+const preventNextNativeCaretForListText = async (page: Page, text: string) => {
+  await page.evaluate((targetText) => {
+    let preventedCount = 0
+    const cleanup = () => {
+      document.removeEventListener("pointerdown", preventNativeCaret, true)
+      document.removeEventListener("mousedown", preventNativeCaret, true)
+    }
+    const preventNativeCaret = (event: MouseEvent | PointerEvent) => {
+      const target =
+        event.target instanceof Element
+          ? event.target
+          : event.target instanceof Node
+            ? event.target.parentElement
+            : null
+      if (!target?.closest("li")?.textContent?.includes(targetText)) return
+      event.preventDefault()
+      preventedCount += 1
+      if (preventedCount >= 2 || event.type === "mousedown") cleanup()
+    }
+    document.addEventListener("pointerdown", preventNativeCaret, true)
+    document.addEventListener("mousedown", preventNativeCaret, true)
+  }, text)
+}
+
+const dragDocumentTextRange = async (
+  page: Page,
+  selector: string,
+  text: string
+) => {
+  const points = await page.evaluate(({ selector: targetSelector, text: targetText }) => {
+    const element =
+      Array.from(document.querySelectorAll<HTMLElement>(targetSelector)).find(
+        (candidate) => candidate.textContent?.includes(targetText)
+      ) ?? null
+    if (!element) return null
+    element.scrollIntoView({ block: "center", inline: "nearest" })
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+    while (walker.nextNode()) {
+      const textNode = walker.currentNode as Text
+      const startOffset = textNode.data.indexOf(targetText)
+      if (startOffset < 0) continue
+      const endOffset = startOffset + targetText.length
+      const range = document.createRange()
+      range.setStart(textNode, startOffset)
+      range.setEnd(textNode, endOffset)
+      const rects = Array.from(range.getClientRects())
+        .filter((candidate) => candidate.width > 2 && candidate.height > 2)
+        .sort((a, b) => a.top - b.top || a.left - b.left)
+      const startRect = rects[0] ?? range.getBoundingClientRect()
+      const endRect = rects[rects.length - 1] ?? startRect
+      if (
+        startRect.width <= 2 ||
+        startRect.height <= 2 ||
+        endRect.width <= 2 ||
+        endRect.height <= 2
+      ) {
+        continue
+      }
+      return {
+        endX: endRect.right - Math.min(endRect.width / 2, 3),
+        endY: endRect.top + endRect.height / 2,
+        startX: startRect.left + Math.min(startRect.width / 2, 3),
+        startY: startRect.top + startRect.height / 2,
+      }
+    }
+    return null
+  }, { selector, text })
+  if (!points) throw new Error(`text range is missing: ${text}`)
+
+  await page.mouse.move(points.startX, points.startY)
+  await page.waitForTimeout(80)
+  await page.mouse.down()
+  for (let index = 1; index <= 28; index += 1) {
+    const ratio = index / 28
+    await page.mouse.move(
+      points.startX + (points.endX - points.startX) * ratio,
+      points.startY + (points.endY - points.startY) * ratio
+    )
+    await page.waitForTimeout(index === 1 ? 16 : 4)
+  }
+  await page.waitForTimeout(40)
+  await page.mouse.up()
+  await page.waitForTimeout(720)
+  return readSelectionText(page)
+}
 
 const readListItemSelectionOverlayMetrics = async (page: Page, label: string) =>
   page.evaluate((targetLabel) => {
@@ -46,6 +170,30 @@ const readListItemSelectionOverlayMetrics = async (page: Page, label: string) =>
   }, label)
 
 test.describe("editor authoring list affordances", () => {
+  test("plain li fallback selector는 nested list 손자를 direct child로 포함하지 않는다", async ({
+    page,
+  }) => {
+    await page.setContent(`
+      <main>
+        <ul id="plain-list-root">
+          <li id="plain-parent">Parent<ul><li id="plain-child">Child</li></ul></li>
+          <li id="plain-sibling">Sibling</li>
+        </ul>
+      </main>
+    `)
+
+    const directIds = await page.evaluate((selector) => {
+      const root = document.querySelector<HTMLElement>("#plain-list-root")
+      return root
+        ? Array.from(root.querySelectorAll<HTMLElement>(`:scope > ${selector}`)).map(
+            (element) => element.id
+          )
+        : []
+    }, LIST_ITEM_SELECTOR)
+
+    expect(directIds).toEqual(["plain-parent", "plain-sibling"])
+  })
+
   test("실제 /editor/[id] 507 리스트 항목 block selection은 글머리 안쪽 paint가 아니라 fixed overlay로 표시된다", async ({
     page,
   }) => {
@@ -78,6 +226,194 @@ test.describe("editor authoring list affordances", () => {
     expect(metrics.overlayRight).toBeGreaterThanOrEqual(metrics.markerAwareRight - 4)
     expect(metrics.itemBoxShadow).toBe("none")
     expect(metrics.itemBackgroundColor).toBe("rgba(0, 0, 0, 0)")
+  })
+
+  test("실제 /editor/[id] 507 리스트 항목 더블클릭은 native 텍스트 선택을 caret으로 접지 않는다", async ({
+    page,
+  }) => {
+    const { editor } = await mockEditorRouteWithPost507(page, {
+      postId: 591,
+      title: "post 507 list item double click route 글",
+      version: 2,
+    })
+
+    const paragraph = editor.locator("li > p", { hasText: "세션이랑 JWT" }).first()
+    await paragraph.scrollIntoViewIfNeeded()
+    const clickPoint = await paragraph.evaluate((element) => {
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+      while (walker.nextNode()) {
+        const textNode = walker.currentNode as Text
+        const startOffset = textNode.data.indexOf("JWT")
+        if (startOffset < 0) continue
+        const range = document.createRange()
+        range.setStart(textNode, startOffset)
+        range.setEnd(textNode, startOffset + 3)
+        const rect = range.getBoundingClientRect()
+        if (rect.width > 0 && rect.height > 0) {
+          return {
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2,
+          }
+        }
+      }
+      return null
+    })
+    if (!clickPoint) {
+      throw new Error("post 507 JWT double click point is missing")
+    }
+
+    await page.mouse.dblclick(clickPoint.x, clickPoint.y)
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const selection = window.getSelection()
+          return {
+            isCollapsed: selection?.isCollapsed ?? true,
+            selectedCellCount: document.querySelectorAll(".selectedCell").length,
+            selectionText: selection?.toString() ?? "",
+          }
+        })
+      )
+      .toMatchObject({
+        isCollapsed: false,
+        selectedCellCount: 0,
+        selectionText: expect.stringContaining("JWT"),
+      })
+  })
+
+  test("체크리스트 checkbox 클릭은 list caret 복구에 가로채이지 않고 토글된다", async ({
+    page,
+  }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.getByRole("button", { name: "체크리스트", exact: true }).click()
+    await page.keyboard.type("컨트롤 클릭 보존")
+
+    const checkbox = editor.locator("li[data-task-item='true'] input[type='checkbox']").first()
+    await expect(checkbox).toBeVisible()
+    const wasChecked = await checkbox.isChecked()
+
+    await page.evaluate(() => window.getSelection()?.removeAllRanges())
+    await checkbox.click()
+
+    await expect.poll(() => checkbox.isChecked()).toBe(!wasChecked)
+  })
+
+  test("리스트 내부 contenteditable=false 컨트롤 클릭은 list caret 복구에 가로채이지 않는다", async ({
+    page,
+  }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.getByRole("button", { name: "목록" }).first().click()
+    await page.keyboard.type("컨트롤 항목")
+
+    const clickedCount = await page.evaluate(() => {
+      const item = document.querySelector<HTMLElement>(
+        "[data-testid='block-editor-prosemirror'] li"
+      )
+      if (!item) throw new Error("list control host item is missing")
+      const button = document.createElement("button")
+      button.type = "button"
+      button.textContent = "내부 컨트롤"
+      button.setAttribute("contenteditable", "false")
+      button.setAttribute("data-testid", "qa-list-inline-control")
+      button.addEventListener("click", () => {
+        ;(window as typeof window & { __qaListInlineControlClicks?: number }).__qaListInlineControlClicks =
+          ((window as typeof window & { __qaListInlineControlClicks?: number }).__qaListInlineControlClicks ?? 0) + 1
+      })
+      item.appendChild(button)
+      window.getSelection()?.removeAllRanges()
+      const rect = button.getBoundingClientRect()
+      button.dispatchEvent(
+        new MouseEvent("click", {
+          bubbles: true,
+          button: 0,
+          cancelable: true,
+          clientX: rect.left + Math.max(1, rect.width / 2),
+          clientY: rect.top + Math.max(1, rect.height / 2),
+        })
+      )
+      return (
+        (window as typeof window & { __qaListInlineControlClicks?: number })
+          .__qaListInlineControlClicks ?? 0
+      )
+    })
+
+    expect(clickedCount).toBe(1)
+  })
+
+  test("block selection 직후 리스트 텍스트 drag는 caret 복구에 접히지 않는다", async ({
+    page,
+  }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("이전 블록")
+    await page.keyboard.press("Enter")
+    await page.getByRole("button", { name: "목록" }).first().click()
+    await page.keyboard.type("리스트 드래그 선택 복구 대상")
+
+    const previousParagraph = editor.locator("p", { hasText: "이전 블록" }).first()
+    await previousParagraph.hover()
+    const dragHandle = page.getByTestId("block-drag-handle")
+    await expect(dragHandle).toBeVisible()
+    await dragHandle.click()
+    await expect(page.getByTestId("keyboard-block-selection-overlay")).toBeVisible()
+
+    await expect(
+      editor.locator("li > p", { hasText: "리스트 드래그 선택 복구 대상" }).first()
+    ).toBeVisible()
+    const selectionText = await dragDocumentTextRange(
+      page,
+      "[data-testid='block-editor-prosemirror'] li > p",
+      "드래그 선택"
+    )
+
+    expect(selectionText).toContain("드래그 선택")
+    await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
+  })
+
+  test("block selection 직후 리스트 클릭 지연 restore는 keyboard 입력 위치를 되돌리지 않는다", async ({
+    page,
+  }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("이전 블록")
+    await page.keyboard.press("Enter")
+    await page.getByRole("button", { name: "목록" }).first().click()
+    await page.keyboard.type("alpha beta gamma")
+
+    const previousParagraph = editor.locator("p", { hasText: "이전 블록" }).first()
+    await previousParagraph.hover()
+    const dragHandle = page.getByTestId("block-drag-handle")
+    await expect(dragHandle).toBeVisible()
+    await dragHandle.click()
+    await expect(page.getByTestId("keyboard-block-selection-overlay")).toBeVisible()
+
+    const listParagraph = editor.locator("li > p", { hasText: "alpha beta gamma" }).first()
+    await expect(listParagraph).toBeVisible()
+    await preventNextNativeCaretForListText(page, "alpha beta gamma")
+    await clickDocumentTextRangeStart(
+      page,
+      "[data-testid='block-editor-prosemirror'] li > p",
+      "alpha"
+    )
+    await page.waitForTimeout(80)
+    await page.keyboard.type("Z")
+    await page.waitForTimeout(650)
+    await page.keyboard.type("Y")
+
+    const listText = await editor.locator("li > p").first().innerText()
+    expect(listText).toContain("ZY")
+    expect(listText).not.toContain("YZ")
+    await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
   })
 
   test("리스트 항목 안의 Tab/Shift+Tab은 Notion처럼 단계 승강으로 동작한다", async ({ page }) => {

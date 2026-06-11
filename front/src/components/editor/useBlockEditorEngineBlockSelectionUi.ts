@@ -19,16 +19,20 @@ import {
   type BlockSelectionPointerEventLike,
   type TopLevelBlockHandleState,
 } from "./blockSelectionModel"
-import { preserveWindowScrollForEditorPointerFocus } from "./blockHandleLayoutModel"
+import {
+  preserveWindowScrollForEditorPointerFocus,
+} from "./blockHandleLayoutModel"
 import {
   type NestedListItemContext,
+  isNestedListItemControlTarget,
   selectNestedListItemNode,
   selectNestedListItemTextAnchor,
 } from "./nestedListItemModel"
 import { isTableSelectionActive } from "./tableStructureModel"
 import {
   TABLE_DRAG_SELECTION_TEXT_SELECTOR,
-  clearTableTextSelectionForStructuralSelection,
+  clearTableTextSelectionForBlockSelection,
+  hasTableSelectedCellDomMarkers,
 } from "./tableTextSelectionModel"
 import type { DraggedBlockState, DropIndicatorState } from "./blockDragModel"
 import type {
@@ -128,6 +132,7 @@ type UseBlockEditorEngineBlockSelectionUiArgs = {
   selectedBlockIndex: number | null
   selectedBlockNodeIndex: number | null
   selectedBlockNodeIndexRef: MutableRefObject<number | null>
+  selectedListItemContextRef: MutableRefObject<NestedListItemContext | null>
   selectionTick: number
   setBlockHandleState: SetState<TopLevelBlockHandleState>
   setBlockMenuState: SetState<BlockEditorBlockMenuState>
@@ -206,6 +211,7 @@ export const useBlockEditorEngineBlockSelectionUi = ({
   selectedBlockIndex,
   selectedBlockNodeIndex,
   selectedBlockNodeIndexRef,
+  selectedListItemContextRef,
   selectionTick,
   setBlockHandleState,
   setBlockMenuState,
@@ -269,7 +275,7 @@ export const useBlockEditorEngineBlockSelectionUi = ({
       (anchorElement?.closest("td, th") ||
         document.querySelector(TABLE_DRAG_SELECTION_TEXT_SELECTOR))
     ) {
-      clearTableTextSelectionForStructuralSelection()
+      clearTableTextSelectionForBlockSelection()
       return
     }
     clearNativeTextSelection()
@@ -591,13 +597,27 @@ export const useBlockEditorEngineBlockSelectionUi = ({
         findTopLevelBlockIndexFromTarget(event.target) ??
         findTopLevelBlockIndexByClientPosition(event.clientX, event.clientY)
       const currentEditor = editorRef.current ?? editor
-      if (currentEditor) {
+      const hasActiveBlockSelection =
+        selectedBlockNodeIndex !== null ||
+        selectedBlockNodeIndexRef.current !== null ||
+        keyboardBlockSelectionStickyRef.current
+      const hasTableSelectionResidue = Boolean(
+        currentEditor &&
+          (isTableSelectionActive(currentEditor) ||
+            hasTableSelectedCellDomMarkers(currentEditor.view.dom as HTMLElement))
+      )
+      const isListTextPointerAfterSelectionResidue = Boolean(
+        currentEditor &&
+          targetListItemContext &&
+          !isNestedListItemControlTarget(event.target, targetListItemContext) &&
+          (hasActiveBlockSelection || hasTableSelectionResidue) &&
+          !isOuterListItemSelectionGesture(event, targetListItemContext)
+      )
+      if (currentEditor && !isListTextPointerAfterSelectionResidue) {
         preserveWindowScrollForEditorPointerFocus(
           event.target,
           isTableSelectionActive(currentEditor),
-          selectedBlockNodeIndex !== null ||
-            selectedBlockNodeIndexRef.current !== null ||
-            keyboardBlockSelectionStickyRef.current
+          hasActiveBlockSelection
         )
       }
       if (
@@ -625,10 +645,18 @@ export const useBlockEditorEngineBlockSelectionUi = ({
         return
       }
       setClickedBlockIndex(null)
-      if (selectedBlockNodeIndex !== null) {
+      if (hasActiveBlockSelection) {
         keyboardBlockSelectionStickyRef.current = false
+        selectedBlockNodeIndexRef.current = null
         setSelectedBlockNodeIndex(null)
         syncSelectedBlockNodeSurface(null)
+      }
+      if (
+        currentEditor &&
+        targetListItemContext &&
+        isListTextPointerAfterSelectionResidue
+      ) {
+        return
       }
       if (
         isCoarsePointer ||

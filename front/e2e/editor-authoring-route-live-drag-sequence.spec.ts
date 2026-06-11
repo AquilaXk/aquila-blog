@@ -65,6 +65,21 @@ const expectNoTextSelectionResidue = async (page: Page, label: string) => {
   )
 }
 
+const clearDragSelectionResidueForRetry = (page: Page) =>
+  page.evaluate(() => {
+    window.getSelection()?.removeAllRanges()
+    document.documentElement.removeAttribute("data-table-drag-selection-text")
+    document.documentElement.removeAttribute("data-code-drag-selection-text")
+    document
+      .querySelectorAll<HTMLElement>(
+        "[data-table-drag-selection-text], [data-code-drag-selection-text]"
+      )
+      .forEach((element) => {
+        element.removeAttribute("data-table-drag-selection-text")
+        element.removeAttribute("data-code-drag-selection-text")
+      })
+  })
+
 const hasNestedListChild = (page: Page, parentLabel: string, childLabel: string) =>
   page.evaluate(
     ({ childLabel: expectedChildLabel, parentLabel: expectedParentLabel }) => {
@@ -478,7 +493,7 @@ const dragLocatorTextRange = async (
   }
   if (!result) throw new Error(`${label} drag did not start`)
   for (let attempt = 1; options.retryWhenEmpty && !result.selectionText.includes(text) && attempt < 3; attempt += 1) {
-    await page.evaluate(() => window.getSelection()?.removeAllRanges())
+    await clearDragSelectionResidueForRetry(page)
     await page.waitForTimeout(120)
     try {
       result = await runDrag()

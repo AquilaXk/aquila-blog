@@ -415,8 +415,8 @@ export const useBlockEditorTableOverlayAxisDrag = ({
   )
   const resolveTableAxisSelectionRect = useCallback(
     (activeEditor: TiptapEditor) =>
-      resolveTableSelectionRectFromEditorContext(activeEditor) ??
-      resolveVisibleRenderedTableSelectionRect(activeEditor),
+      resolveVisibleRenderedTableSelectionRect(activeEditor) ??
+      resolveTableSelectionRectFromEditorContext(activeEditor),
     [
       resolveTableSelectionRectFromEditorContext,
       resolveVisibleRenderedTableSelectionRect,

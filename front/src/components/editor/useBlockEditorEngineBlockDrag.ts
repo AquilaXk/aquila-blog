@@ -30,7 +30,8 @@ import {
   selectNestedListItemTextAnchor,
 } from "./nestedListItemModel"
 import type { BlockEditorBlockMenuState } from "./BlockEditorEngine.layers"
-import { clearTableTextSelectionForStructuralSelection } from "./tableTextSelectionModel"
+import { cancelAllWindowScrollPreserves } from "./blockHandleLayoutModel"
+import { clearTableTextSelectionForBlockSelection } from "./tableTextSelectionModel"
 import { useBlockEditorEngineBlockMenu } from "./useBlockEditorEngineBlockMenu"
 import { useBlockEditorEngineBlockDragSessions } from "./useBlockEditorEngineBlockDragSessions"
 
@@ -354,6 +355,7 @@ export const useBlockEditorEngineBlockDrag = ({
     (event: ReactMouseEvent<HTMLButtonElement>) => {
       event.preventDefault()
       event.stopPropagation()
+      cancelAllWindowScrollPreserves()
       clearPendingBlockDrag()
       if (blockHandleState.kind === "list-item" && editor) {
         const currentHandleListItemContext =
@@ -373,7 +375,7 @@ export const useBlockEditorEngineBlockDrag = ({
         }
         return
       }
-      clearTableTextSelectionForStructuralSelection()
+      clearTableTextSelectionForBlockSelection()
       promoteTopLevelBlockSelection(blockHandleState.blockIndex)
     },
     [
@@ -420,7 +422,8 @@ export const useBlockEditorEngineBlockDrag = ({
         return
       }
       event.preventDefault()
-      clearTableTextSelectionForStructuralSelection()
+      cancelAllWindowScrollPreserves()
+      clearTableTextSelectionForBlockSelection()
       const sourceIndex = blockHandleState.blockIndex
       const sourceElement = getTopLevelBlockElementByIndex(sourceIndex)
       const preview = createBlockDragPreview(sourceElement, window.innerWidth)
@@ -456,7 +459,8 @@ export const useBlockEditorEngineBlockDrag = ({
         const shouldSelectReleasedBlock = doneEvent.type === "pointerup"
         clearPendingBlockDrag()
         if (shouldSelectReleasedBlock) {
-          clearTableTextSelectionForStructuralSelection()
+          cancelAllWindowScrollPreserves()
+          clearTableTextSelectionForBlockSelection()
           promoteTopLevelBlockSelection(pending.sourceIndex)
         }
       }

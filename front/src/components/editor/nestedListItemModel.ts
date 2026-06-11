@@ -26,10 +26,24 @@ export type NestedListItemDropIndicatorGeometry = {
 }
 
 export const LIST_ITEM_SELECTOR =
-  "li[data-type='taskItem'], li[data-task-item='true'], li[data-list-item='true'], li[data-type='listItem']"
+  ":is(li[data-type='taskItem'], li[data-task-item='true'], li[data-list-item='true'], li[data-type='listItem'], li)"
 
 export const LIST_CONTAINER_SELECTOR =
   "ul[data-type='taskList'], ul[data-task-list='true'], ul[data-type='bulletList'], ol[data-type='orderedList'], ul, ol"
+
+const LIST_ITEM_CONTROL_SELECTOR = [
+  "input",
+  "button",
+  "select",
+  "textarea",
+  "label",
+  "a[href]",
+  "[role='button']",
+  "[role='checkbox']",
+  "[role='menuitem']",
+  "[role='switch']",
+  "[contenteditable='false']",
+].join(", ")
 
 export const isListContainerNodeName = (nodeName: string | undefined | null) =>
   nodeName === "bulletList" || nodeName === "orderedList" || nodeName === "taskList"
@@ -85,6 +99,23 @@ const getTargetElement = (target: EventTarget | null) => {
   if (typeof Element !== "undefined" && target instanceof Element) return target
   if (typeof Node !== "undefined" && target instanceof Node) return target.parentElement
   return null
+}
+
+export const isNestedListItemControlTarget = (
+  target: EventTarget | Node | null | undefined,
+  context: NestedListItemContext | null | undefined
+) => {
+  if (!context || typeof Element === "undefined") return false
+  const targetElement =
+    target instanceof Element
+      ? target
+      : target instanceof Node
+        ? target.parentElement
+        : null
+  const controlElement = targetElement?.closest(LIST_ITEM_CONTROL_SELECTOR)
+  return Boolean(
+    controlElement && context.listItemElement.contains(controlElement)
+  )
 }
 
 const getDirectListItemElements = (listElement: HTMLElement) =>
@@ -435,5 +466,189 @@ export const selectNestedListItemTextAnchor = (editor: TiptapEditor, context: Ne
     return true
   } catch {
     return selectNestedListItemNode(editor, context)
+  }
+}
+
+export const selectNestedListItemTextAtPoint = (
+  editor: TiptapEditor,
+  context: NestedListItemContext,
+  clientX: number,
+  clientY: number
+) => {
+  if (
+    typeof HTMLElement === "undefined" ||
+    !(context.listItemElement instanceof HTMLElement)
+  ) {
+    return false
+  }
+
+  const createDomCaretPosition = (textNode: Text, offset: number) => {
+    if (!context.listItemElement.contains(textNode)) return null
+    try {
+      return {
+        offset,
+        pos: editor.view.posAtDOM(textNode, offset),
+        textNode,
+      }
+    } catch {
+      return null
+    }
+  }
+  const resolveNearestTextCaretPosition = () => {
+    if (typeof document === "undefined") return null
+    const walker = document.createTreeWalker(
+      context.listItemElement,
+      NodeFilter.SHOW_TEXT
+    )
+    type TextCaretCandidate = { distance: number; offset: number; textNode: Text }
+    let best: TextCaretCandidate | null = null
+    while (walker.nextNode()) {
+      const textNode = walker.currentNode
+      if (!(textNode instanceof Text) || !textNode.data.trim()) continue
+      for (let index = 0; index < textNode.data.length; index += 1) {
+        const range = document.createRange()
+        range.setStart(textNode, index)
+        range.setEnd(textNode, index + 1)
+        for (const rect of Array.from(range.getClientRects())) {
+          if (rect.width <= 0 || rect.height <= 0) continue
+          const offset = clientX <= rect.left + rect.width / 2 ? index : index + 1
+          const dx =
+            clientX < rect.left
+              ? rect.left - clientX
+              : clientX > rect.right
+                ? clientX - rect.right
+                : 0
+          const dy =
+            clientY < rect.top
+              ? rect.top - clientY
+              : clientY > rect.bottom
+                ? clientY - rect.bottom
+                : 0
+          const distance = dx * dx + dy * dy
+          if (!best || distance < best.distance) {
+            best = { distance, offset, textNode }
+          }
+        }
+      }
+    }
+    const candidate = best
+    return candidate
+      ? createDomCaretPosition(candidate.textNode, candidate.offset)
+      : null
+  }
+  const resolveDomCaretPosition = () => {
+    if (typeof document === "undefined") return null
+    const caretDocument = document as Document & {
+      caretPositionFromPoint?: (
+        x: number,
+        y: number
+      ) => { offsetNode: Node; offset: number } | null
+      caretRangeFromPoint?: (x: number, y: number) => Range | null
+    }
+    const caretPosition = caretDocument.caretPositionFromPoint?.(clientX, clientY)
+    const caretRange = caretPosition
+      ? null
+      : caretDocument.caretRangeFromPoint?.(clientX, clientY)
+    const offsetNode = caretPosition?.offsetNode ?? caretRange?.startContainer
+    const offset = caretPosition?.offset ?? caretRange?.startOffset
+    if (!(offsetNode instanceof Text) || typeof offset !== "number") return null
+    return createDomCaretPosition(offsetNode, offset)
+  }
+  const domCaretPosition =
+    resolveDomCaretPosition() ?? resolveNearestTextCaretPosition()
+  type DomCaretPosition = NonNullable<ReturnType<typeof createDomCaretPosition>>
+  const restoreDomCaretSelection = (caretPosition: DomCaretPosition | null) => {
+    if (!caretPosition || typeof window === "undefined") return
+    if (!context.listItemElement.contains(caretPosition.textNode)) return
+    const selection = window.getSelection()
+    if (!selection) return
+    const range = document.createRange()
+    const offset = Math.max(
+      0,
+      Math.min(caretPosition.offset, caretPosition.textNode.data.length)
+    )
+    range.setStart(caretPosition.textNode, offset)
+    range.collapse(true)
+    selection.removeAllRanges()
+    selection.addRange(range)
+  }
+  const selectFallbackTextCaret = () => {
+    const fallbackCaret = domCaretPosition ?? resolveNearestTextCaretPosition()
+    const fallbackPos =
+      fallbackCaret?.pos ??
+      editor.view.posAtCoords({ left: clientX, top: clientY })?.pos ??
+      null
+    if (fallbackPos === null) {
+      restoreDomCaretSelection(fallbackCaret)
+      return Boolean(fallbackCaret)
+    }
+    try {
+      const selection = TextSelection.create(editor.state.doc, fallbackPos)
+      editor.view.dispatch(editor.state.tr.setSelection(selection))
+      focusEditorViewWithoutScroll(editor)
+      restoreDomCaretSelection(fallbackCaret)
+      return true
+    } catch {
+      try {
+        const selection = TextSelection.near(
+          editor.state.doc.resolve(fallbackPos),
+          1
+        )
+        if (!(selection instanceof TextSelection)) {
+          restoreDomCaretSelection(fallbackCaret)
+          return Boolean(fallbackCaret)
+        }
+        editor.view.dispatch(editor.state.tr.setSelection(selection))
+        focusEditorViewWithoutScroll(editor)
+        restoreDomCaretSelection(fallbackCaret)
+        return true
+      } catch {
+        restoreDomCaretSelection(fallbackCaret)
+        return Boolean(fallbackCaret)
+      }
+    }
+  }
+  const pointPosition =
+    domCaretPosition !== null
+      ? { pos: domCaretPosition.pos }
+      : editor.view.posAtCoords({ left: clientX, top: clientY })
+  const listItemPos = resolveListItemNodeSelectionPos(editor, context)
+  const listItemNode =
+    listItemPos !== null ? editor.state.doc.nodeAt(listItemPos) : null
+  if (
+    !pointPosition ||
+    listItemPos === null ||
+    !listItemNode ||
+    !isListItemNodeName(listItemNode.type.name)
+  ) {
+    return selectFallbackTextCaret()
+  }
+
+  const minPos = listItemPos + 1
+  const maxPos = Math.max(minPos, listItemPos + listItemNode.nodeSize - 1)
+  const selectionPos = Math.max(minPos, Math.min(pointPosition.pos, maxPos))
+
+  try {
+    const selection = TextSelection.create(editor.state.doc, selectionPos)
+    editor.view.dispatch(editor.state.tr.setSelection(selection))
+    focusEditorViewWithoutScroll(editor)
+    restoreDomCaretSelection(domCaretPosition)
+    return true
+  } catch {
+    try {
+      const selection = TextSelection.near(
+        editor.state.doc.resolve(selectionPos),
+        1
+      )
+      if (!(selection instanceof TextSelection)) {
+        return selectFallbackTextCaret()
+      }
+      editor.view.dispatch(editor.state.tr.setSelection(selection))
+      focusEditorViewWithoutScroll(editor)
+      restoreDomCaretSelection(domCaretPosition)
+      return true
+    } catch {
+      return selectFallbackTextCaret()
+    }
   }
 }

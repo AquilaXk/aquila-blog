@@ -733,6 +733,7 @@ allocate_runtime_split_memory_limits() {
   local worker
   local total
 
+  # 2816 is the original runtime-split scaling reference; the active cap is AUTO_MEMORY_TUNER_MAX_BUDGET_MB.
   blue="$(scaled_limit_mb 512 "${budget_mb}" 2816 "${blue_min}")"
   read="$(scaled_limit_mb 640 "${budget_mb}" 2816 "${read_min}")"
   admin="$(scaled_limit_mb 512 "${budget_mb}" 2816 "${admin_min}")"

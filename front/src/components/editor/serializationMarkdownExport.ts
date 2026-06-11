@@ -42,15 +42,14 @@ const getRawTextContent = (content?: JSONContent[]) =>
 const isListNode = (node: JSONContent) =>
   node.type === "bulletList" || node.type === "orderedList" || node.type === "taskList"
 
-const indentMarkdown = (markdown: string, depth: number) => {
-  const indent = LIST_ITEM_INDENT.repeat(depth)
+const indentMarkdown = (markdown: string, indent: string) => {
   return markdown
     .split("\n")
     .map((line) => `${indent}${line}`)
     .join("\n")
 }
 
-const serializeList = (node: JSONContent, depth = 0): string => {
+const serializeList = (node: JSONContent, indent = ""): string => {
   const items = node.content || []
   const orderedStart =
     node.type === "orderedList" ? Number.parseInt(String(node.attrs?.start || 1), 10) || 1 : 1
@@ -63,22 +62,23 @@ const serializeList = (node: JSONContent, depth = 0): string => {
       const text = serializeParagraphLikeNode(paragraph || { type: "paragraph", content: [] })
       const marker =
         node.type === "orderedList"
-          ? `${orderedStart + index}.`
-          : node.type === "taskList"
-            ? `- [${item.attrs?.checked ? "x" : " "}]`
-            : "-"
-      const prefix = LIST_ITEM_INDENT.repeat(depth)
+            ? `${orderedStart + index}.`
+            : node.type === "taskList"
+              ? `- [${item.attrs?.checked ? "x" : " "}]`
+              : "-"
+      const childIndent =
+        node.type === "orderedList" ? `${indent}${" ".repeat(marker.length + 1)}` : `${indent}${LIST_ITEM_INDENT}`
       const nestedBlocks = children
         .filter((_, childIndex) => childIndex !== paragraphIndex)
         .map((child) => {
           const serialized = isListNode(child)
-            ? serializeList(child, depth + 1)
-            : indentMarkdown(serializeNode(child), depth + 1)
+            ? serializeList(child, childIndent)
+            : indentMarkdown(serializeNode(child), childIndent)
           return serialized.trimEnd()
         })
         .filter(Boolean)
 
-      return [`${prefix}${marker} ${text}`.trimEnd(), ...nestedBlocks].join("\n")
+      return [`${indent}${marker} ${text}`.trimEnd(), ...nestedBlocks].join("\n")
     })
     .join("\n")
 }

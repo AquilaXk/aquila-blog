@@ -386,7 +386,7 @@ const dragLocatorTextRange = async (
     } catch (error) {
       if (!isDetachedError(error) || attempt === 2) throw error
       await page.waitForTimeout(160)
-      result = await runDrag()
+      continue
     }
   }
   return result

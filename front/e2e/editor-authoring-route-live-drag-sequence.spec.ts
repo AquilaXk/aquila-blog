@@ -338,8 +338,10 @@ const expectPost507FinalTableBlockOverlayFollowsScroll = async (
     const scrollHeight = document.scrollingElement?.scrollHeight ?? document.documentElement.scrollHeight
     return { maxScrollTop: scrollHeight - window.innerHeight, scrollTop }
   })
-  const wheelDelta = scrollState.scrollTop < scrollState.maxScrollTop - 240 ? 360 : -360
-  await page.mouse.wheel(0, wheelDelta)
+  const scrollDelta = scrollState.scrollTop < scrollState.maxScrollTop - 240 ? 180 : -180
+  await page.evaluate((deltaY) => {
+    window.scrollBy(0, deltaY)
+  }, scrollDelta)
   await expect
     .poll(async () => {
       const current = await readPost507FinalTableBlockOverlayMetrics(page)
@@ -492,16 +494,26 @@ const dragLocatorTextRange = async (
     }
   }
   if (!result) throw new Error(`${label} drag did not start`)
-  for (let attempt = 1; options.retryWhenEmpty && !result.selectionText.includes(text) && attempt < 3; attempt += 1) {
+  for (let attempt = 1; options.retryWhenEmpty && !result.selectionText.includes(text) && attempt < 5; attempt += 1) {
     await clearDragSelectionResidueForRetry(page)
-    await page.waitForTimeout(120)
+    await page.waitForTimeout(120 + attempt * 80)
     try {
       result = await runDrag()
     } catch (error) {
-      if (!isDetachedError(error) || attempt === 2) throw error
+      if (!isDetachedError(error) || attempt === 4) throw error
       await page.waitForTimeout(160)
       continue
     }
+  }
+  if (options.retryWhenEmpty && !result.selectionText.includes(text)) {
+    const residueState = await readSelectionResidueState(page)
+    throw new Error(
+      `${label} drag did not select expected text after retries: ${JSON.stringify(
+        { residueState, selectionText: result.selectionText },
+        null,
+        2
+      )}`
+    )
   }
   return result
 }
@@ -1330,7 +1342,7 @@ test.describe("editor authoring route live drag sequence", () => {
       "서버가 아무것도 안 하는 구조",
       { paced: true, retryWhenEmpty: true, waitMs: 1_000 }
     )
-    const immediateBodySelectionText = await readSelectionText(page)
+    const immediateBodySelectionText = immediateBodyDrag.selectionText
     expect(immediateBodySelectionText).toContain("서버가 아무것도 안 하는 구조")
     expect(immediateBodySelectionText).not.toContain(POST_507_FINAL_TABLE_TARGET_CELL)
     expect(immediateBodySelectionText).not.toContain("구현되어 있는가")
@@ -1349,7 +1361,7 @@ test.describe("editor authoring route live drag sequence", () => {
       "createAccessToken(user)",
       { paced: true, retryWhenEmpty: true, waitMs: 1_000 }
     )
-    const codeSelectionText = await readSelectionText(page)
+    const codeSelectionText = codeDrag.selectionText
     expect(codeSelectionText).toContain("createAccessToken(user)")
     expect(codeSelectionText).not.toContain(POST_507_FINAL_TABLE_TARGET_CELL)
     expect(codeSelectionText).not.toContain("구현되어 있는가")
@@ -1372,7 +1384,7 @@ test.describe("editor authoring route live drag sequence", () => {
       "서버가 아무것도 안 하는 구조",
       { paced: true, retryWhenEmpty: true, waitMs: 1_000 }
     )
-    const lowerBodySelectionText = await readSelectionText(page)
+    const lowerBodySelectionText = lowerBodyDrag.selectionText
     expect(lowerBodySelectionText).toContain("서버가 아무것도 안 하는 구조")
     expect(lowerBodySelectionText).not.toContain("createAccessToken")
     expect(lowerBodySelectionText).not.toContain(POST_507_FINAL_TABLE_TARGET_CELL)
@@ -1386,7 +1398,7 @@ test.describe("editor authoring route live drag sequence", () => {
       "세션이랑 JWT",
       { paced: true, retryWhenEmpty: true, waitMs: 1_000 }
     )
-    const listTextSelectionText = await readSelectionText(page)
+    const listTextSelectionText = listTextDrag.selectionText
     expect(listTextSelectionText).toContain("세션이랑 JWT")
     expect(listTextSelectionText).not.toContain("서버가 아무것도 안 하는 구조")
     expect(listTextSelectionText).not.toContain(POST_507_FINAL_TABLE_TARGET_CELL)
@@ -1410,7 +1422,7 @@ test.describe("editor authoring route live drag sequence", () => {
       "세션이랑 JWT",
       { paced: true, retryWhenEmpty: true, waitMs: 1_000 }
     )
-    const immediateListTextAfterTable = await readSelectionText(page)
+    const immediateListTextAfterTable = immediateListTextDragAfterTable.selectionText
     expect(immediateListTextAfterTable).toContain("세션이랑 JWT")
     expect(immediateListTextAfterTable).not.toContain(POST_507_FINAL_TABLE_TARGET_CELL)
     expect(Math.abs(immediateListTextDragAfterTable.afterScrollTop - immediateListTextDragAfterTable.beforeScrollTop)).toBeLessThanOrEqual(24)

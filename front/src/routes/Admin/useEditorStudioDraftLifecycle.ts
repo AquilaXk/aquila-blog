@@ -97,6 +97,7 @@ type UseEditorStudioDraftLifecycleParams = {
   postId: string
   postTitle: string
   postContent: string
+  getCurrentPostContent: () => string
   postSummary: string
   postThumbnailUrl: string
   postThumbnailFocusX: number
@@ -176,6 +177,7 @@ export const useEditorStudioDraftLifecycle = ({
   persistLocalDraft,
   postCategory,
   postContent,
+  getCurrentPostContent,
   postId,
   postSummary,
   postTags,
@@ -234,6 +236,7 @@ export const useEditorStudioDraftLifecycle = ({
     persistLocalDraft,
     postCategory,
     postContent,
+    getCurrentPostContent,
     postSummary,
     postTags,
     postThumbnailFocusX,

@@ -5,6 +5,8 @@ export type BlockEditorChangeMeta = {
   editorFocused: boolean
 }
 
+export type BlockEditorMarkdownFlush = () => string
+
 export type BlockEditorQaActions = {
   getSelectionSnapshot: () => {
     docChildTypes: string[]
@@ -48,5 +50,6 @@ export type BlockEditorProps = BlockEditorUploadAdapters &
     disabled?: boolean
     className?: string
     preview?: ReactNode
+    onFlushMarkdownReady?: (flush: BlockEditorMarkdownFlush | null) => void
     onQaActionsReady?: (actions: BlockEditorQaActions | null) => void
   }

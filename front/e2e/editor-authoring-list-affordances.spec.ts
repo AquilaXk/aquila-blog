@@ -105,6 +105,59 @@ test.describe("editor authoring list affordances", () => {
     expect(metrics.itemBackgroundColor).toBe("rgba(0, 0, 0, 0)")
   })
 
+  test("실제 /editor/[id] 507 리스트 항목 더블클릭은 native 텍스트 선택을 caret으로 접지 않는다", async ({
+    page,
+  }) => {
+    const { editor } = await mockEditorRouteWithPost507(page, {
+      postId: 591,
+      title: "post 507 list item double click route 글",
+      version: 2,
+    })
+
+    const paragraph = editor.locator("li > p", { hasText: "세션이랑 JWT" }).first()
+    await paragraph.scrollIntoViewIfNeeded()
+    const clickPoint = await paragraph.evaluate((element) => {
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+      while (walker.nextNode()) {
+        const textNode = walker.currentNode as Text
+        const startOffset = textNode.data.indexOf("JWT")
+        if (startOffset < 0) continue
+        const range = document.createRange()
+        range.setStart(textNode, startOffset)
+        range.setEnd(textNode, startOffset + 3)
+        const rect = range.getBoundingClientRect()
+        if (rect.width > 0 && rect.height > 0) {
+          return {
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2,
+          }
+        }
+      }
+      return null
+    })
+    if (!clickPoint) {
+      throw new Error("post 507 JWT double click point is missing")
+    }
+
+    await page.mouse.dblclick(clickPoint.x, clickPoint.y)
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const selection = window.getSelection()
+          return {
+            isCollapsed: selection?.isCollapsed ?? true,
+            selectedCellCount: document.querySelectorAll(".selectedCell").length,
+            selectionText: selection?.toString() ?? "",
+          }
+        })
+      )
+      .toMatchObject({
+        isCollapsed: false,
+        selectedCellCount: 0,
+        selectionText: expect.stringContaining("JWT"),
+      })
+  })
+
   test("리스트 항목 안의 Tab/Shift+Tab은 Notion처럼 단계 승강으로 동작한다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 

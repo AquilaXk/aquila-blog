@@ -843,6 +843,7 @@ export const useBlockEditorEngineSelectionEffects = ({
       if (
         event.type === "click" &&
         event.button === 0 &&
+        event.detail <= 1 &&
         targetListItemContext &&
         !isOuterListItemGesture &&
         hasNativeListTextRangeSelection(targetListItemContext)

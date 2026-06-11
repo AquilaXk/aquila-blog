@@ -105,7 +105,9 @@ const hasNestedListChild = (page: Page, parentLabel: string, childLabel: string)
 
 const isDetachedElementError = (error: unknown) =>
   error instanceof Error &&
-  /not attached to the DOM|Element is not attached/i.test(error.message)
+  /not attached to the DOM|Element is not attached|list paragraph click metrics are missing/i.test(
+    error.message
+  )
 
 const retryDetachedLocatorAction = async <T>(
   page: Page,
@@ -134,8 +136,8 @@ const clickListItemParagraph = async (
 ) => {
   const resolveParagraph = () => editor.locator("li > p", { hasText: label }).first()
   const clickPoint = await retryDetachedLocatorAction(page, resolveParagraph, async (paragraph) => {
-    await paragraph.scrollIntoViewIfNeeded()
     return paragraph.evaluate((element, needle) => {
+      element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
       const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
       while (walker.nextNode()) {
         const textNode = walker.currentNode as Text
@@ -176,21 +178,27 @@ const clickListItemParagraph = async (
     }, caretNeedle ?? null)
   })
   await retryDetachedLocatorAction(page, resolveParagraph, async (paragraph) => {
-    const box = await paragraph.boundingBox()
-    if (!box) throw new Error("list paragraph click metrics are missing")
-    const clickX = box.x + clickPoint.relativeX
-    const clickY = box.y + clickPoint.relativeY
+    const clickMetrics = await paragraph.evaluate((element, point) => {
+      element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
+      const rect = element.getBoundingClientRect()
+      if (rect.width <= 0 || rect.height <= 0) return null
+      return {
+        x: rect.left + Math.min(Math.max(point.relativeX, 1), Math.max(rect.width - 1, 1)),
+        y: rect.top + Math.min(Math.max(point.relativeY, 1), Math.max(rect.height - 1, 1)),
+      }
+    }, clickPoint)
+    if (!clickMetrics) throw new Error("list paragraph click metrics are missing")
     await expect
       .poll(() =>
         page.evaluate(
           ({ expectedLabel, x, y }) =>
             document.elementFromPoint(x, y)?.textContent?.includes(expectedLabel) ??
             false,
-          { expectedLabel: label, x: clickX, y: clickY }
+          { expectedLabel: label, x: clickMetrics.x, y: clickMetrics.y }
         )
       )
       .toBe(true)
-    await page.mouse.click(clickX, clickY)
+    await page.mouse.click(clickMetrics.x, clickMetrics.y)
   })
   const readCaretState = () =>
     resolveParagraph().evaluate(

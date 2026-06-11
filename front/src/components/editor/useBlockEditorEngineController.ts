@@ -1,6 +1,6 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
 import { useEditor } from "@tiptap/react"
-import { useCallback, useMemo, useRef } from "react"
+import { useCallback, useEffect, useMemo, useRef } from "react"
 import {
   parseMarkdownToEditorDoc,
   restoreEditorDocCodeBlocksFromMarkdown,
@@ -52,6 +52,7 @@ export const useBlockEditorEngineController = ({
   className,
   preview,
   enableMermaidBlocks = false,
+  onFlushMarkdownReady,
   onQaActionsReady,
 }: BlockEditorEngineProps) => {
   const isWriterSurface =
@@ -364,6 +365,18 @@ export const useBlockEditorEngineController = ({
       }
     },
   })
+
+  const flushCurrentMarkdown = useCallback(
+    () => flushPendingMarkdownCommit(editorRef.current ?? editor),
+    [editor, editorRef, flushPendingMarkdownCommit]
+  )
+
+  useEffect(() => {
+    onFlushMarkdownReady?.(flushCurrentMarkdown)
+    return () => {
+      onFlushMarkdownReady?.(null)
+    }
+  }, [flushCurrentMarkdown, onFlushMarkdownReady])
 
   const tableOverlayController = useBlockEditorTableOverlayController({
     clearStickyTopLevelBlockSelection,

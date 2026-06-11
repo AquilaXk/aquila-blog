@@ -15,6 +15,7 @@ type WriterEditorHostProps = Pick<BlockEditorProps, "disabled"> & {
   canvasId: string
   markdown: string
   onMarkdownChange: BlockEditorProps["onChange"]
+  onFlushMarkdownReady: NonNullable<BlockEditorProps["onFlushMarkdownReady"]>
   onImageUpload: BlockEditorUploadAdapters["onUploadImage"]
   onFileUpload?: BlockEditorUploadAdapters["onUploadFile"]
   mermaidEnabled: NonNullable<BlockEditorFeatureOptions["enableMermaidBlocks"]>
@@ -25,6 +26,7 @@ export const WriterEditorHost = ({
   canvasId,
   markdown,
   onMarkdownChange,
+  onFlushMarkdownReady,
   onImageUpload,
   onFileUpload,
   mermaidEnabled,
@@ -41,6 +43,7 @@ export const WriterEditorHost = ({
       className="aq-block-editor--writer-surface"
       value={markdown}
       onChange={onMarkdownChange}
+      onFlushMarkdownReady={onFlushMarkdownReady}
       onUploadImage={onImageUpload}
       onUploadFile={onFileUpload}
       enableMermaidBlocks={mermaidEnabled}

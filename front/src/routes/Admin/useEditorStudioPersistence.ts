@@ -54,7 +54,7 @@ type UseEditorStudioPersistenceParams = {
   postVisibility: PostVisibility
   effectiveThumbnailUrl: string
   loadingKey: string
-  postContentLiveRef: MutableRefObject<string>
+  getCurrentPostContent: () => string
   lastWriteFingerprintRef: MutableRefObject<string>
   lastWriteIdempotencyKeyRef: MutableRefObject<string>
   lastLocalDraftFingerprintRef: MutableRefObject<string>
@@ -115,7 +115,7 @@ export const useEditorStudioPersistence = ({
   loadingKey,
   normalizeSafeImageUrl,
   postCategory,
-  postContentLiveRef,
+  getCurrentPostContent,
   postId,
   postSummary,
   postTags,
@@ -176,7 +176,7 @@ export const useEditorStudioPersistence = ({
   })
 
   const handleWritePost = useCallback(async (): Promise<boolean> => {
-    const currentPostContent = postContentLiveRef.current
+    const currentPostContent = getCurrentPostContent()
     if (editorMode === "edit" || postId.trim()) {
       const message = "현재는 수정 모드입니다. 새 글을 만들려면 먼저 '새 글 모드 전환'을 눌러주세요."
       setPublishStatus({ tone: "error", text: message })
@@ -291,11 +291,11 @@ export const useEditorStudioPersistence = ({
     editorMode,
     effectiveThumbnailUrl,
     generateIdempotencyKey,
+    getCurrentPostContent,
     lastLocalDraftFingerprintRef,
     lastWriteFingerprintRef,
     lastWriteIdempotencyKeyRef,
     postCategory,
-    postContentLiveRef,
     postId,
     postSummary,
     postTags,
@@ -322,7 +322,7 @@ export const useEditorStudioPersistence = ({
   ])
 
   const handleModifyPost = useCallback(async (): Promise<boolean> => {
-    const currentPostContent = postContentLiveRef.current
+    const currentPostContent = getCurrentPostContent()
     if (editorMode !== "edit" || !postId.trim()) {
       const message = "수정할 글 ID를 먼저 선택해주세요."
       setPublishStatus({ tone: "error", text: message })
@@ -410,8 +410,8 @@ export const useEditorStudioPersistence = ({
     detectPublishPlaceholderIssue,
     editorMode,
     effectiveThumbnailUrl,
+    getCurrentPostContent,
     postCategory,
-    postContentLiveRef,
     postId,
     postSummary,
     postTags,
@@ -435,7 +435,7 @@ export const useEditorStudioPersistence = ({
   ])
 
   const handlePublishTempDraft = useCallback(async (): Promise<boolean> => {
-    const currentPostContent = postContentLiveRef.current
+    const currentPostContent = getCurrentPostContent()
     if (editorMode !== "edit" || !postId.trim()) {
       const message = "작성할 새 글을 먼저 불러와주세요."
       setPublishStatus({ tone: "error", text: message })
@@ -521,8 +521,8 @@ export const useEditorStudioPersistence = ({
     detectPublishPlaceholderIssue,
     editorMode,
     effectiveThumbnailUrl,
+    getCurrentPostContent,
     postCategory,
-    postContentLiveRef,
     postId,
     postSummary,
     postTags,

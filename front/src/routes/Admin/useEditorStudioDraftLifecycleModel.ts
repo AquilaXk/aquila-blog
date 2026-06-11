@@ -31,6 +31,7 @@ type LocalDraftPayload = {
 type UseEditorStudioLocalDraftLifecycleParams = {
   postTitle: string
   postContent: string
+  getCurrentPostContent: () => string
   postSummary: string
   postThumbnailUrl: string
   postThumbnailFocusX: number
@@ -78,6 +79,7 @@ export const useEditorStudioLocalDraftLifecycle = ({
   persistLocalDraft,
   postCategory,
   postContent,
+  getCurrentPostContent,
   postSummary,
   postTags,
   postThumbnailFocusX,
@@ -142,17 +144,23 @@ export const useEditorStudioLocalDraftLifecycle = ({
   )
 
   const saveLocalDraft = useCallback((options?: { silent?: boolean }) => {
-    if (lastLocalDraftFingerprintRef.current === localDraftFingerprint) {
+    const currentLocalDraftCore = {
+      ...localDraftCore,
+      content: getCurrentPostContent(),
+    }
+    const currentLocalDraftFingerprint = buildLocalDraftFingerprint(currentLocalDraftCore)
+
+    if (lastLocalDraftFingerprintRef.current === currentLocalDraftFingerprint) {
       return
     }
 
     const payload: LocalDraftPayload = {
-      ...localDraftCore,
+      ...currentLocalDraftCore,
       savedAt: new Date().toISOString(),
     }
 
     persistLocalDraft(payload)
-    lastLocalDraftFingerprintRef.current = localDraftFingerprint
+    lastLocalDraftFingerprintRef.current = currentLocalDraftFingerprint
     setLocalDraftSavedAt(payload.savedAt)
 
     if (!options?.silent) {
@@ -165,9 +173,10 @@ export const useEditorStudioLocalDraftLifecycle = ({
       )
     }
   }, [
+    buildLocalDraftFingerprint,
+    getCurrentPostContent,
     lastLocalDraftFingerprintRef,
     localDraftCore,
-    localDraftFingerprint,
     persistLocalDraft,
     setLocalDraftSavedAt,
     setPublishStatus,

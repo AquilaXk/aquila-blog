@@ -59,6 +59,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
     handleDeleteComment,
     handleDeleteSelectedPost,
     handleExitDedicatedEditor,
+    handleFlushMarkdownReady,
     handleHitPost,
     handleLikePost,
     handleListComments,
@@ -467,6 +468,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
         canvasId="editor-dedicated-canvas"
         markdown={postContent}
         onMarkdownChange={handleBlockEditorChange}
+        onFlushMarkdownReady={handleFlushMarkdownReady}
         onImageUpload={handleBlockEditorImageUpload}
         onFileUpload={handleBlockEditorFileUpload}
         mermaidEnabled={BLOCK_EDITOR_V2_MERMAID_ENABLED}
@@ -478,6 +480,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
       handleBlockEditorChange,
       handleBlockEditorFileUpload,
       handleBlockEditorImageUpload,
+      handleFlushMarkdownReady,
       handleEditorCommitDuration,
       isBlockEditorDisabled,
       postContent,
@@ -489,6 +492,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
         canvasId="editor-compose-canvas"
         markdown={postContent}
         onMarkdownChange={handleBlockEditorChange}
+        onFlushMarkdownReady={handleFlushMarkdownReady}
         onImageUpload={handleBlockEditorImageUpload}
         onFileUpload={handleBlockEditorFileUpload}
         mermaidEnabled={BLOCK_EDITOR_V2_MERMAID_ENABLED}
@@ -500,6 +504,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
       handleBlockEditorChange,
       handleBlockEditorFileUpload,
       handleBlockEditorImageUpload,
+      handleFlushMarkdownReady,
       handleEditorCommitDuration,
       isBlockEditorDisabled,
       postContent,

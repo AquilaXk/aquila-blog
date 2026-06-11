@@ -9,6 +9,7 @@ import {
   useState,
   useTransition,
 } from "react"
+import type { BlockEditorMarkdownFlush } from "src/components/editor/blockEditorContract"
 import useAuthSession from "src/hooks/useAuthSession"
 import {
   compareCategoryValues,
@@ -164,6 +165,7 @@ export const EditorStudioWorkspaceController = ({
   const [isComposeAssistOpen, setIsComposeAssistOpen] = useState(false)
   const [isComposeUtilityOpen, setIsComposeUtilityOpen] = useState(false)
   const postContentLiveRef = useRef(postContent)
+  const flushEditorMarkdownRef = useRef<BlockEditorMarkdownFlush | null>(null)
   const deferredContentDerivedCacheRef = useRef<{
     fingerprint: string
     summary: string
@@ -244,6 +246,19 @@ export const EditorStudioWorkspaceController = ({
     postContentLiveRef.current = nextMarkdown
     setPostContent(nextMarkdown)
   }, [startPostContentTransition])
+
+  const handleFlushMarkdownReady = useCallback((flush: BlockEditorMarkdownFlush | null) => {
+    flushEditorMarkdownRef.current = flush
+  }, [])
+
+  const getCurrentPostContent = useCallback(() => {
+    const flushedMarkdown = flushEditorMarkdownRef.current?.()
+    if (typeof flushedMarkdown === "string") {
+      postContentLiveRef.current = flushedMarkdown
+      return flushedMarkdown
+    }
+    return postContentLiveRef.current
+  }, [])
 
   const {
     listPage,
@@ -422,6 +437,7 @@ export const EditorStudioWorkspaceController = ({
     postId,
     postTitle,
     postContent,
+    getCurrentPostContent,
     postSummary,
     postThumbnailUrl,
     postThumbnailFocusX,
@@ -613,7 +629,7 @@ export const EditorStudioWorkspaceController = ({
     postVisibility,
     effectiveThumbnailUrl,
     loadingKey,
-    postContentLiveRef,
+    getCurrentPostContent,
     lastWriteFingerprintRef,
     lastWriteIdempotencyKeyRef,
     lastLocalDraftFingerprintRef,
@@ -807,7 +823,7 @@ export const EditorStudioWorkspaceController = ({
         deletedListNotice,
         deleteTagFromCatalog, disabled, editorMode, finalizePreviewThumbPointer, globalNotice,
         handleBlockEditorChange, handleBlockEditorFileUpload, handleBlockEditorImageUpload, handleConfirmPublish, handleContinueSelectedPostEditing,
-        handleCreateNewPostFromSelectedPanel, handleDeleteComment, handleDeleteSelectedPost, handleExitDedicatedEditor, handleHitPost,
+        handleCreateNewPostFromSelectedPanel, handleDeleteComment, handleDeleteSelectedPost, handleExitDedicatedEditor, handleFlushMarkdownReady, handleHitPost,
         handleLikePost, handleListComments, handleListPageChange, handleListPageSizeChange, handleListSortChange,
         handleLoadOrCreateTempPost, handleModifyComment, handlePreviewThumbPointerDown, handlePreviewThumbPointerMove, handleProfileImageSelected,
         handleReadComment, handleReadPostCount, handleReadSystemHealth, handleRecommendTags, handleRefreshAdminProfile,

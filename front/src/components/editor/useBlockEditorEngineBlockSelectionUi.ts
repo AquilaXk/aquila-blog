@@ -20,7 +20,6 @@ import {
   type TopLevelBlockHandleState,
 } from "./blockSelectionModel"
 import {
-  cancelAllWindowScrollPreserves,
   preserveWindowScrollForEditorPointerFocus,
 } from "./blockHandleLayoutModel"
 import {
@@ -28,12 +27,10 @@ import {
   isNestedListItemControlTarget,
   selectNestedListItemNode,
   selectNestedListItemTextAnchor,
-  selectNestedListItemTextAtPoint,
 } from "./nestedListItemModel"
 import { isTableSelectionActive } from "./tableStructureModel"
 import {
   TABLE_DRAG_SELECTION_TEXT_SELECTOR,
-  clearTableSelectedCellDomMarkers,
   clearTableTextSelectionForBlockSelection,
   hasTableSelectedCellDomMarkers,
 } from "./tableTextSelectionModel"
@@ -659,34 +656,6 @@ export const useBlockEditorEngineBlockSelectionUi = ({
         targetListItemContext &&
         isListTextPointerAfterSelectionResidue
       ) {
-        event.preventDefault()
-        event.stopPropagation()
-        setClickedBlockIndex(null)
-        keyboardBlockSelectionStickyRef.current = false
-        selectedBlockNodeIndexRef.current = null
-        selectedListItemContextRef.current = null
-        setSelectedBlockNodeIndex(null)
-        setSelectedListItemContext(null)
-        syncSelectedBlockNodeSurface(null)
-        cancelAllWindowScrollPreserves()
-        clearTableTextSelectionForBlockSelection({ clearWindowSelection: false })
-        clearTableSelectedCellDomMarkers(
-          currentEditor.view.dom as HTMLElement,
-          currentEditor
-        )
-        const restoreListTextSelection = () => {
-          if (!currentEditor.view.dom.isConnected) return
-          selectNestedListItemTextAtPoint(
-            currentEditor,
-            targetListItemContext,
-            event.clientX,
-            event.clientY
-          )
-        }
-        restoreListTextSelection()
-        window.requestAnimationFrame(restoreListTextSelection)
-        window.setTimeout(restoreListTextSelection, 0)
-        window.setTimeout(restoreListTextSelection, 60)
         return
       }
       if (
@@ -747,7 +716,6 @@ export const useBlockEditorEngineBlockSelectionUi = ({
       promoteTopLevelBlockSelection,
       selectedBlockNodeIndex,
       selectedBlockNodeIndexRef,
-      selectedListItemContextRef,
       setClickedBlockIndex,
       setSelectedBlockNodeIndex,
       setSelectedListItemContext,

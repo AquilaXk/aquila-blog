@@ -10,6 +10,71 @@ import { LIST_ITEM_SELECTOR } from "../src/components/editor/nestedListItemModel
 
 const POST_507_FIRST_LIST_ITEM = "“Stateless가 좋다는데, 왜 좋은 거지?”"
 
+const readSelectionText = (page: Page) =>
+  page.evaluate(() => window.getSelection()?.toString() ?? "")
+
+const dragDocumentTextRange = async (
+  page: Page,
+  selector: string,
+  text: string
+) => {
+  const points = await page.evaluate(({ selector: targetSelector, text: targetText }) => {
+    const element =
+      Array.from(document.querySelectorAll<HTMLElement>(targetSelector)).find(
+        (candidate) => candidate.textContent?.includes(targetText)
+      ) ?? null
+    if (!element) return null
+    element.scrollIntoView({ block: "center", inline: "nearest" })
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+    while (walker.nextNode()) {
+      const textNode = walker.currentNode as Text
+      const startOffset = textNode.data.indexOf(targetText)
+      if (startOffset < 0) continue
+      const endOffset = startOffset + targetText.length
+      const range = document.createRange()
+      range.setStart(textNode, startOffset)
+      range.setEnd(textNode, endOffset)
+      const rects = Array.from(range.getClientRects())
+        .filter((candidate) => candidate.width > 2 && candidate.height > 2)
+        .sort((a, b) => a.top - b.top || a.left - b.left)
+      const startRect = rects[0] ?? range.getBoundingClientRect()
+      const endRect = rects[rects.length - 1] ?? startRect
+      if (
+        startRect.width <= 2 ||
+        startRect.height <= 2 ||
+        endRect.width <= 2 ||
+        endRect.height <= 2
+      ) {
+        continue
+      }
+      return {
+        endX: endRect.right - Math.min(endRect.width / 2, 3),
+        endY: endRect.top + endRect.height / 2,
+        startX: startRect.left + Math.min(startRect.width / 2, 3),
+        startY: startRect.top + startRect.height / 2,
+      }
+    }
+    return null
+  }, { selector, text })
+  if (!points) throw new Error(`text range is missing: ${text}`)
+
+  await page.mouse.move(points.startX, points.startY)
+  await page.waitForTimeout(80)
+  await page.mouse.down()
+  for (let index = 1; index <= 28; index += 1) {
+    const ratio = index / 28
+    await page.mouse.move(
+      points.startX + (points.endX - points.startX) * ratio,
+      points.startY + (points.endY - points.startY) * ratio
+    )
+    await page.waitForTimeout(index === 1 ? 16 : 4)
+  }
+  await page.waitForTimeout(40)
+  await page.mouse.up()
+  await page.waitForTimeout(720)
+  return readSelectionText(page)
+}
+
 const readListItemSelectionOverlayMetrics = async (page: Page, label: string) =>
   page.evaluate((targetLabel) => {
     const readOwnLabel = (item: HTMLElement) =>
@@ -221,6 +286,38 @@ test.describe("editor authoring list affordances", () => {
     })
 
     expect(clickedCount).toBe(1)
+  })
+
+  test("block selection 직후 리스트 텍스트 drag는 caret 복구에 접히지 않는다", async ({
+    page,
+  }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("이전 블록")
+    await page.keyboard.press("Enter")
+    await page.getByRole("button", { name: "목록" }).first().click()
+    await page.keyboard.type("리스트 드래그 선택 복구 대상")
+
+    const previousParagraph = editor.locator("p", { hasText: "이전 블록" }).first()
+    await previousParagraph.hover()
+    const dragHandle = page.getByTestId("block-drag-handle")
+    await expect(dragHandle).toBeVisible()
+    await dragHandle.click()
+    await expect(page.getByTestId("keyboard-block-selection-overlay")).toBeVisible()
+
+    await expect(
+      editor.locator("li > p", { hasText: "리스트 드래그 선택 복구 대상" }).first()
+    ).toBeVisible()
+    const selectionText = await dragDocumentTextRange(
+      page,
+      "[data-testid='block-editor-prosemirror'] li > p",
+      "드래그 선택"
+    )
+
+    expect(selectionText).toContain("드래그 선택")
+    await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
   })
 
   test("리스트 항목 안의 Tab/Shift+Tab은 Notion처럼 단계 승강으로 동작한다", async ({ page }) => {

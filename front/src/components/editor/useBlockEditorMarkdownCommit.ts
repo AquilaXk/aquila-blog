@@ -103,7 +103,7 @@ export const useBlockEditorMarkdownCommit = ({
     if (!hasPendingEditor) {
       pendingCommitFocusedRef.current = pendingEditor.isFocused
     }
-    flushPendingNodeViewAttributeCommits()
+    flushPendingNodeViewAttributeCommits(pendingEditor.view.dom)
 
     const markdown = serializeEditorDocToMarkdown(
       pendingEditor.getJSON() as BlockEditorDoc

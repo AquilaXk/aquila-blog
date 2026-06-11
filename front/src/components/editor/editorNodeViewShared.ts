@@ -128,7 +128,8 @@ export const useAutosizeTextarea = (
 
 export const useDebouncedAttributeCommit = (
   updateAttributes: NodeViewProps["updateAttributes"],
-  delay = TEXTAREA_DEBOUNCE_MS
+  delay = TEXTAREA_DEBOUNCE_MS,
+  flushScope?: object | null
 ) => {
   const debounceRef = useRef<number | null>(null)
   const latestAttrsRef = useRef<Record<string, unknown> | null>(null)
@@ -166,12 +167,12 @@ export const useDebouncedAttributeCommit = (
   }, [cancel, delay, updateAttributes])
 
   useEffect(() => {
-    const unregister = registerPendingNodeViewCommitFlusher(flush)
+    const unregister = registerPendingNodeViewCommitFlusher(flush, flushScope)
     return () => {
       unregister()
       flush()
     }
-  }, [flush])
+  }, [flush, flushScope])
 
   return {
     schedule,

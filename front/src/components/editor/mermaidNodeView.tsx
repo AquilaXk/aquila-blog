@@ -13,14 +13,18 @@ import {
   useDebouncedAttributeCommit,
 } from "./mermaidNodeViewModel"
 
-export const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
+export const MermaidBlockView = ({ node, updateAttributes, selected, editor }: NodeViewProps) => {
   const [draftSource, setDraftSource] = useState(String(node.attrs?.source || MERMAID_TEMPLATE))
   const [viewMode, setViewMode] = useState<MermaidEditorViewMode>("split")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const codeHighlightRef = useRef<HTMLPreElement>(null)
   const previewRootRef = useRef<HTMLDivElement>(null)
   const scrollSyncFrameRef = useRef<number | null>(null)
-  const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
+  const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(
+    updateAttributes,
+    undefined,
+    editor.view.dom
+  )
 
   useAutosizeTextarea(textareaRef, draftSource, selected)
 

@@ -1,4 +1,5 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
+import { TextSelection } from "@tiptap/pm/state"
 import { tableEditingKey } from "@tiptap/pm/tables"
 import { useEffect } from "react"
 import type {
@@ -344,13 +345,286 @@ export const useBlockEditorEngineSelectionEffects = ({
     const cancelLateTableSelectionGuard = () => {
       lateTableSelectionGuardToken += 1
     }
+    const hasNativeListTextRangeSelection = (
+      listItemContext: NestedListItemContext | null | undefined
+    ) => {
+      if (!listItemContext) return false
+      const domSelection = window.getSelection()
+      if (!domSelection || domSelection.isCollapsed) return false
+      if (!domSelection.toString().trim()) return false
+      const anchorNode = domSelection.anchorNode
+      const focusNode = domSelection.focusNode
+      return Boolean(
+        anchorNode &&
+          focusNode &&
+          listItemContext.listItemElement.contains(anchorNode) &&
+          listItemContext.listItemElement.contains(focusNode)
+      )
+    }
+    const hasNativeListCaretSelection = (
+      listItemContext: NestedListItemContext | null | undefined
+    ) => {
+      if (!listItemContext) return false
+      const domSelection = window.getSelection()
+      if (!domSelection || !domSelection.isCollapsed) return false
+      const anchorNode = domSelection.anchorNode
+      return Boolean(
+        anchorNode && listItemContext.listItemElement.contains(anchorNode)
+      )
+    }
+    const resolveLiveListItemContext = (
+      listItemContext: NestedListItemContext,
+      clientX: number,
+      clientY: number,
+      target?: EventTarget | Node | null
+    ) => {
+      if (listItemContext.listItemElement.isConnected) {
+        return listItemContext
+      }
+      const pointTarget =
+        target ?? document.elementFromPoint(clientX, clientY) ?? null
+      return (
+        findNestedListItemContextFromTarget(pointTarget) ??
+        findNestedListItemContextByClientPosition(clientX, clientY) ??
+        listItemContext
+      )
+    }
+    const resolveListDomCaretAtPoint = (
+      listItemContext: NestedListItemContext,
+      clientX: number,
+      clientY: number
+    ) => {
+      if (typeof document === "undefined") return null
+      const createCaret = (textNode: Text, offset: number) => {
+        if (!listItemContext.listItemElement.contains(textNode)) return null
+        return {
+          offset: Math.max(0, Math.min(offset, textNode.data.length)),
+          textNode,
+        }
+      }
+      const caretDocument = document as Document & {
+        caretPositionFromPoint?: (
+          x: number,
+          y: number
+        ) => { offsetNode: Node; offset: number } | null
+        caretRangeFromPoint?: (x: number, y: number) => Range | null
+      }
+      const pointCaret = caretDocument.caretPositionFromPoint?.(
+        clientX,
+        clientY
+      )
+      if (pointCaret?.offsetNode instanceof Text) {
+        const caret = createCaret(pointCaret.offsetNode, pointCaret.offset)
+        if (caret) return caret
+      }
+      const pointRange = caretDocument.caretRangeFromPoint?.(clientX, clientY)
+      if (pointRange?.startContainer instanceof Text) {
+        const caret = createCaret(
+          pointRange.startContainer,
+          pointRange.startOffset
+        )
+        if (caret) return caret
+      }
+      const walker = document.createTreeWalker(
+        listItemContext.listItemElement,
+        NodeFilter.SHOW_TEXT
+      )
+      let best:
+        | { distance: number; offset: number; textNode: Text }
+        | null = null
+      while (walker.nextNode()) {
+        const textNode = walker.currentNode
+        if (!(textNode instanceof Text) || !textNode.data.trim()) continue
+        for (let index = 0; index < textNode.data.length; index += 1) {
+          const range = document.createRange()
+          range.setStart(textNode, index)
+          range.setEnd(textNode, index + 1)
+          for (const rect of Array.from(range.getClientRects())) {
+            if (rect.width <= 0 || rect.height <= 0) continue
+            const offset = clientX <= rect.left + rect.width / 2 ? index : index + 1
+            const dx =
+              clientX < rect.left
+                ? rect.left - clientX
+                : clientX > rect.right
+                  ? clientX - rect.right
+                  : 0
+            const dy =
+              clientY < rect.top
+                ? rect.top - clientY
+                : clientY > rect.bottom
+                  ? clientY - rect.bottom
+                  : 0
+            const distance = dx * dx + dy * dy
+            if (!best || distance < best.distance) {
+              best = { distance, offset, textNode }
+            }
+          }
+        }
+      }
+      return best ? createCaret(best.textNode, best.offset) : null
+    }
+    const applyListDomCaretAtPoint = (
+      listItemContext: NestedListItemContext,
+      clientX: number,
+      clientY: number
+    ) => {
+      const caret = resolveListDomCaretAtPoint(listItemContext, clientX, clientY)
+      if (!caret) {
+        return false
+      }
+      try {
+        const pos = editor.view.posAtDOM(caret.textNode, caret.offset)
+        const selection = TextSelection.create(editor.state.doc, pos)
+        editor.view.dispatch(editor.state.tr.setSelection(selection))
+      } catch {
+        // DOM caret is still restored below when ProseMirror cannot map the node.
+      }
+      if (editor.view.dom instanceof HTMLElement) {
+        editor.view.dom.focus({ preventScroll: true })
+      }
+      const selection = window.getSelection()
+      if (!selection) return false
+      const range = document.createRange()
+      range.setStart(caret.textNode, caret.offset)
+      range.collapse(true)
+      selection.removeAllRanges()
+      selection.addRange(range)
+      return true
+    }
+    const restoreListTextSelectionAtPoint = (
+      listItemContext: NestedListItemContext,
+      clientX: number,
+      clientY: number,
+      target?: EventTarget | Node | null
+    ) => {
+      if (!editor.view.dom.isConnected) return
+      const liveListItemContext = resolveLiveListItemContext(
+        listItemContext,
+        clientX,
+        clientY,
+        target
+      )
+      selectedListItemContextRef.current = null
+      setSelectedListItemContext(null)
+      setSelectedBlockNodeIndex(null)
+      syncSelectedBlockNodeSurface(null)
+      clearStickyTopLevelBlockSelection()
+      cancelAllWindowScrollPreserves()
+      collapseStaleTableEditorSelection(editor, {
+        clientX,
+        clientY,
+        target: target ?? liveListItemContext.listItemElement,
+      })
+      clearTableTextSelectionForBlockSelection({ clearWindowSelection: false })
+      clearTableSelectedCellDomMarkers(editor.view.dom as HTMLElement, editor)
+      const restoredAtPoint = selectNestedListItemTextAtPoint(
+        editor,
+        liveListItemContext,
+        clientX,
+        clientY
+      )
+      const restoredDomCaret = applyListDomCaretAtPoint(
+        liveListItemContext,
+        clientX,
+        clientY
+      )
+      if (
+        !restoredDomCaret &&
+        (!restoredAtPoint || !hasNativeListCaretSelection(liveListItemContext))
+      ) {
+        selectNestedListItemTextAnchor(editor, liveListItemContext)
+      }
+      clearTableSelectedCellDomMarkers(editor.view.dom as HTMLElement, editor)
+    }
+    const maintainListDomCaretAtPoint = (
+      listItemContext: NestedListItemContext,
+      clientX: number,
+      clientY: number
+    ) => {
+      const token = lateTableSelectionGuardToken
+      const restore = () => {
+        if (token !== lateTableSelectionGuardToken) return
+        if (!editor.view.dom.isConnected) return
+        applyListDomCaretAtPoint(listItemContext, clientX, clientY)
+      }
+      restore()
+      window.requestAnimationFrame(restore)
+      window.setTimeout(restore, 0)
+      window.setTimeout(restore, 60)
+      window.setTimeout(restore, 140)
+      window.setTimeout(restore, 320)
+      window.setTimeout(restore, 500)
+    }
+    const scheduleListClickCaretRestoreAfterPointer = (
+      listItemContext: NestedListItemContext,
+      clientX: number,
+      clientY: number,
+      target?: EventTarget | Node | null
+    ) => {
+      if (typeof window === "undefined") return
+      const startX = clientX
+      const startY = clientY
+      let movedEnoughForDrag = false
+      let disposed = false
+      const cleanup = () => {
+        if (disposed) return
+        disposed = true
+        window.removeEventListener("pointermove", handlePointerMove, true)
+        window.removeEventListener("pointerup", handlePointerUp, true)
+        window.removeEventListener("pointercancel", cleanup, true)
+      }
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        if (
+          Math.abs(moveEvent.clientX - startX) > 4 ||
+          Math.abs(moveEvent.clientY - startY) > 4
+        ) {
+          movedEnoughForDrag = true
+        }
+      }
+      const handlePointerUp = () => {
+        cleanup()
+        window.requestAnimationFrame(() => {
+          const liveListItemContext = resolveLiveListItemContext(
+            listItemContext,
+            clientX,
+            clientY,
+            target
+          )
+          if (
+            movedEnoughForDrag ||
+            hasNativeListTextRangeSelection(liveListItemContext) ||
+            hasNativeListCaretSelection(liveListItemContext)
+          ) {
+            return
+          }
+          restoreListTextSelectionAtPoint(
+            liveListItemContext,
+            clientX,
+            clientY,
+            target
+          )
+          maintainListDomCaretAtPoint(liveListItemContext, clientX, clientY)
+          guardListTextCaretAgainstLateTableSelection(
+            liveListItemContext,
+            clientX,
+            clientY
+          )
+        })
+      }
+      window.addEventListener("pointermove", handlePointerMove, true)
+      window.addEventListener("pointerup", handlePointerUp, true)
+      window.addEventListener("pointercancel", cleanup, true)
+      window.setTimeout(cleanup, 900)
+    }
     const guardListTextCaretAgainstLateTableSelection = (
       targetListItemContext: NestedListItemContext,
       clientX: number,
       clientY: number,
-      maxDurationMs = 12_000
+      maxDurationMs = 12_000,
+      options: { restoreCaret?: boolean } = {}
     ) => {
       if (typeof window === "undefined") return
+      const shouldRestoreCaret = options.restoreCaret ?? true
       const token = lateTableSelectionGuardToken
       const startedAt = performance.now()
       const maintain = () => {
@@ -372,25 +646,30 @@ export const useBlockEditorEngineSelectionEffects = ({
             clientY,
             target: targetListItemContext.listItemElement,
           })
-          const restored = selectNestedListItemTextAtPoint(
-            editor,
-            targetListItemContext,
-            clientX,
-            clientY
-          )
-          if (!restored) {
-            selectNestedListItemTextAnchor(editor, targetListItemContext)
-          }
           clearTableTextSelectionForBlockSelection({
             clearWindowSelection: false,
           })
+          if (shouldRestoreCaret) {
+            const restored = selectNestedListItemTextAtPoint(
+              editor,
+              targetListItemContext,
+              clientX,
+              clientY
+            )
+            if (!restored) {
+              selectNestedListItemTextAnchor(editor, targetListItemContext)
+            }
+          }
           clearTableSelectedCellDomMarkers(
             editor.view.dom as HTMLElement,
             editor
           )
-          suppressNextListTextMouseDownUntil =
-            (typeof performance !== "undefined" ? performance.now() : Date.now()) +
-            240
+          if (shouldRestoreCaret) {
+            suppressNextListTextMouseDownUntil =
+              (typeof performance !== "undefined"
+                ? performance.now()
+                : Date.now()) + 240
+          }
         }
         window.requestAnimationFrame(maintain)
       }
@@ -448,7 +727,14 @@ export const useBlockEditorEngineSelectionEffects = ({
           targetListItemContext,
           event.clientX,
           event.clientY,
-          900
+          900,
+          { restoreCaret: false }
+        )
+        scheduleListClickCaretRestoreAfterPointer(
+          targetListItemContext,
+          event.clientX,
+          event.clientY,
+          eventTarget
         )
       }
       if (
@@ -457,9 +743,6 @@ export const useBlockEditorEngineSelectionEffects = ({
         targetListItemContext &&
         shouldRestoreListTextSelection
       ) {
-        event.preventDefault()
-        event.stopPropagation()
-        event.stopImmediatePropagation?.()
         selectedListItemContextRef.current = null
         setSelectedListItemContext(null)
         setSelectedBlockNodeIndex(null)
@@ -474,44 +757,55 @@ export const useBlockEditorEngineSelectionEffects = ({
         clearTableTextSelectionForBlockSelection({ clearWindowSelection: false })
         clearTableSelectedCellDomMarkers(editor.view.dom as HTMLElement, editor)
         lateTableSelectionGuardToken += 1
-        suppressNextListTextMouseDownUntil = now + 240
-        const restoreListTextSelection = () => {
-          if (!editor.view.dom.isConnected) return
-          const restored = selectNestedListItemTextAtPoint(
-            editor,
-            targetListItemContext,
-            event.clientX,
-            event.clientY
-          )
-          if (!restored) {
-            selectNestedListItemTextAnchor(editor, targetListItemContext)
-          }
-          clearTableSelectedCellDomMarkers(editor.view.dom as HTMLElement, editor)
-        }
-        restoreListTextSelection()
-        window.requestAnimationFrame(restoreListTextSelection)
-        window.setTimeout(restoreListTextSelection, 0)
-        window.setTimeout(restoreListTextSelection, 60)
+        restoreListTextSelectionAtPoint(
+          targetListItemContext,
+          event.clientX,
+          event.clientY,
+          eventTarget
+        )
+        scheduleListClickCaretRestoreAfterPointer(
+          targetListItemContext,
+          event.clientX,
+          event.clientY,
+          eventTarget
+        )
+        guardListTextCaretAgainstLateTableSelection(
+          targetListItemContext,
+          event.clientX,
+          event.clientY,
+          900,
+          { restoreCaret: false }
+        )
+        return
+      }
+      if (
+        event.type === "click" &&
+        event.button === 0 &&
+        targetListItemContext &&
+        !isOuterListItemGesture &&
+        !hasNativeListTextRangeSelection(targetListItemContext) &&
+        !hasNativeListCaretSelection(targetListItemContext)
+      ) {
+        event.preventDefault()
+        event.stopPropagation()
+        event.stopImmediatePropagation?.()
+        restoreListTextSelectionAtPoint(
+          targetListItemContext,
+          event.clientX,
+          event.clientY,
+          eventTarget
+        )
+        maintainListDomCaretAtPoint(
+          targetListItemContext,
+          event.clientX,
+          event.clientY
+        )
         guardListTextCaretAgainstLateTableSelection(
           targetListItemContext,
           event.clientX,
           event.clientY
         )
         return
-      }
-      const hasNativeListTextRangeSelection = () => {
-        if (!targetListItemContext) return false
-        const domSelection = window.getSelection()
-        if (!domSelection || domSelection.isCollapsed) return false
-        if (!domSelection.toString().trim()) return false
-        const anchorNode = domSelection.anchorNode
-        const focusNode = domSelection.focusNode
-        return Boolean(
-          anchorNode &&
-            focusNode &&
-            targetListItemContext.listItemElement.contains(anchorNode) &&
-            targetListItemContext.listItemElement.contains(focusNode)
-        )
       }
       if (
         event.type !== "pointerdown" &&
@@ -551,7 +845,7 @@ export const useBlockEditorEngineSelectionEffects = ({
         event.button === 0 &&
         targetListItemContext &&
         !isOuterListItemGesture &&
-        hasNativeListTextRangeSelection()
+        hasNativeListTextRangeSelection(targetListItemContext)
       ) {
         event.preventDefault()
         event.stopPropagation()

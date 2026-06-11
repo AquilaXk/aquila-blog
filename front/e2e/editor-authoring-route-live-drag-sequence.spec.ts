@@ -160,9 +160,23 @@ const clickListItemParagraph = async (
       }
     }, caretNeedle ?? null)
   })
-  await retryDetachedLocatorAction(page, resolveParagraph, (paragraph) => paragraph.click({
-    position: { x: clickPoint.relativeX, y: clickPoint.relativeY },
-  }))
+  await retryDetachedLocatorAction(page, resolveParagraph, async (paragraph) => {
+    const box = await paragraph.boundingBox()
+    if (!box) throw new Error("list paragraph click metrics are missing")
+    const clickX = box.x + clickPoint.relativeX
+    const clickY = box.y + clickPoint.relativeY
+    await expect
+      .poll(() =>
+        page.evaluate(
+          ({ expectedLabel, x, y }) =>
+            document.elementFromPoint(x, y)?.textContent?.includes(expectedLabel) ??
+            false,
+          { expectedLabel: label, x: clickX, y: clickY }
+        )
+      )
+      .toBe(true)
+    await page.mouse.click(clickX, clickY)
+  })
   const readCaretState = () =>
     resolveParagraph().evaluate(
       (element, point) => {
@@ -1373,6 +1387,24 @@ test.describe("editor authoring route live drag sequence", () => {
     const tableSelectionAfterListRecovery = await readSelectionText(page)
     expect(tableSelectionAfterListRecovery).toContain(POST_507_FINAL_TABLE_TARGET_CELL)
     expect(tableSelectionAfterListRecovery).not.toContain("세션이랑 JWT")
+
+    const immediateListTextDragAfterTable = await dragLocatorTextRange(
+      page,
+      editor.locator("li", { hasText: POST_507_SECOND_LIST_ITEM }).first(),
+      "post 507 list text drag immediately after table select all",
+      "세션이랑 JWT",
+      { paced: true, retryWhenEmpty: true, waitMs: 1_000 }
+    )
+    const immediateListTextAfterTable = await readSelectionText(page)
+    expect(immediateListTextAfterTable).toContain("세션이랑 JWT")
+    expect(immediateListTextAfterTable).not.toContain(POST_507_FINAL_TABLE_TARGET_CELL)
+    expect(Math.abs(immediateListTextDragAfterTable.afterScrollTop - immediateListTextDragAfterTable.beforeScrollTop)).toBeLessThanOrEqual(24)
+    await expectNoTextSelectionResidue(page, "list text drag immediately after table select all")
+
+    await targetCell.scrollIntoViewIfNeeded()
+    await targetCell.click()
+    await pressSelectAll(page)
+    await expect.poll(() => readSelectionText(page)).toContain(POST_507_FINAL_TABLE_TARGET_CELL)
 
     await clickListItemParagraph(page, editor, POST_507_SECOND_LIST_ITEM, "JWT")
     await page.keyboard.press("Tab")

@@ -25,6 +25,7 @@ import {
 } from "./blockHandleLayoutModel"
 import {
   type NestedListItemContext,
+  isNestedListItemControlTarget,
   selectNestedListItemNode,
   selectNestedListItemTextAnchor,
   selectNestedListItemTextAtPoint,
@@ -611,6 +612,7 @@ export const useBlockEditorEngineBlockSelectionUi = ({
       const isListTextPointerAfterSelectionResidue = Boolean(
         currentEditor &&
           targetListItemContext &&
+          !isNestedListItemControlTarget(event.target, targetListItemContext) &&
           (hasActiveBlockSelection || hasTableSelectionResidue) &&
           !isOuterListItemSelectionGesture(event, targetListItemContext)
       )

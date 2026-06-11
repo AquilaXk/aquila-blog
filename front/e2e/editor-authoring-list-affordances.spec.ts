@@ -158,6 +158,71 @@ test.describe("editor authoring list affordances", () => {
       })
   })
 
+  test("체크리스트 checkbox 클릭은 list caret 복구에 가로채이지 않고 토글된다", async ({
+    page,
+  }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.getByRole("button", { name: "체크리스트", exact: true }).click()
+    await page.keyboard.type("컨트롤 클릭 보존")
+
+    const checkbox = editor.locator("li[data-task-item='true'] input[type='checkbox']").first()
+    await expect(checkbox).toBeVisible()
+    const wasChecked = await checkbox.isChecked()
+
+    await page.evaluate(() => window.getSelection()?.removeAllRanges())
+    await checkbox.click()
+
+    await expect.poll(() => checkbox.isChecked()).toBe(!wasChecked)
+  })
+
+  test("리스트 내부 contenteditable=false 컨트롤 클릭은 list caret 복구에 가로채이지 않는다", async ({
+    page,
+  }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.getByRole("button", { name: "목록" }).first().click()
+    await page.keyboard.type("컨트롤 항목")
+
+    const clickedCount = await page.evaluate(() => {
+      const item = document.querySelector<HTMLElement>(
+        "[data-testid='block-editor-prosemirror'] li"
+      )
+      if (!item) throw new Error("list control host item is missing")
+      const button = document.createElement("button")
+      button.type = "button"
+      button.textContent = "내부 컨트롤"
+      button.setAttribute("contenteditable", "false")
+      button.setAttribute("data-testid", "qa-list-inline-control")
+      button.addEventListener("click", () => {
+        ;(window as typeof window & { __qaListInlineControlClicks?: number }).__qaListInlineControlClicks =
+          ((window as typeof window & { __qaListInlineControlClicks?: number }).__qaListInlineControlClicks ?? 0) + 1
+      })
+      item.appendChild(button)
+      window.getSelection()?.removeAllRanges()
+      const rect = button.getBoundingClientRect()
+      button.dispatchEvent(
+        new MouseEvent("click", {
+          bubbles: true,
+          button: 0,
+          cancelable: true,
+          clientX: rect.left + Math.max(1, rect.width / 2),
+          clientY: rect.top + Math.max(1, rect.height / 2),
+        })
+      )
+      return (
+        (window as typeof window & { __qaListInlineControlClicks?: number })
+          .__qaListInlineControlClicks ?? 0
+      )
+    })
+
+    expect(clickedCount).toBe(1)
+  })
+
   test("리스트 항목 안의 Tab/Shift+Tab은 Notion처럼 단계 승강으로 동작한다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 

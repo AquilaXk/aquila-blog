@@ -21,6 +21,7 @@ import { cancelAllWindowScrollPreserves } from "./blockHandleLayoutModel"
 import {
   LIST_ITEM_SELECTOR,
   type NestedListItemContext,
+  isNestedListItemControlTarget,
   selectNestedListItemNode,
   selectNestedListItemTextAnchor,
   selectNestedListItemTextAtPoint,
@@ -699,6 +700,10 @@ export const useBlockEditorEngineSelectionEffects = ({
         event,
         targetBlockIndex
       )
+      const isListControlGesture = isNestedListItemControlTarget(
+        eventTarget,
+        targetListItemContext
+      )
       const now =
         typeof performance !== "undefined" ? performance.now() : Date.now()
       const hasTableSelectionResidue =
@@ -712,6 +717,7 @@ export const useBlockEditorEngineSelectionEffects = ({
         selectedListItemContextRef.current !== null
       const shouldRestoreListTextSelection = Boolean(
         targetListItemContext &&
+          !isListControlGesture &&
           !isOuterListItemGesture &&
           (hasTableSelectionResidue || hasBlockSelectionResidue)
       )
@@ -719,6 +725,7 @@ export const useBlockEditorEngineSelectionEffects = ({
         event.type === "pointerdown" &&
         event.button === 0 &&
         targetListItemContext &&
+        !isListControlGesture &&
         !isOuterListItemGesture &&
         !shouldRestoreListTextSelection
       ) {
@@ -741,6 +748,7 @@ export const useBlockEditorEngineSelectionEffects = ({
         event.type === "pointerdown" &&
         event.button === 0 &&
         targetListItemContext &&
+        !isListControlGesture &&
         shouldRestoreListTextSelection
       ) {
         selectedListItemContextRef.current = null
@@ -782,6 +790,7 @@ export const useBlockEditorEngineSelectionEffects = ({
         event.type === "click" &&
         event.button === 0 &&
         targetListItemContext &&
+        !isListControlGesture &&
         !isOuterListItemGesture &&
         !hasNativeListTextRangeSelection(targetListItemContext) &&
         !hasNativeListCaretSelection(targetListItemContext)
@@ -810,6 +819,7 @@ export const useBlockEditorEngineSelectionEffects = ({
       if (
         event.type !== "pointerdown" &&
         targetListItemContext &&
+        !isListControlGesture &&
         now < suppressNextListTextMouseDownUntil
       ) {
         event.preventDefault()
@@ -845,6 +855,7 @@ export const useBlockEditorEngineSelectionEffects = ({
         event.button === 0 &&
         event.detail <= 1 &&
         targetListItemContext &&
+        !isListControlGesture &&
         !isOuterListItemGesture &&
         hasNativeListTextRangeSelection(targetListItemContext)
       ) {

@@ -8,6 +8,7 @@ import { createQueryClient } from "src/libs/react-query"
 import { normalizeNextPath, toLoginPath } from "src/libs/router"
 import { serverApiFetch } from "./backend"
 import { guardAdminRequest } from "./adminGuard"
+import { hasServerAuthCookie } from "./authSession"
 import {
   buildStaticAdminProfileSnapshot,
   fetchServerAdminProfile,
@@ -80,16 +81,19 @@ export const readAdminProtectedBootstrap = async <T>(
 ): Promise<AdminProtectedBootstrapResult<T>> => {
   try {
     const response = await serverApiFetch(req, path)
+    const shouldDeferRedirectToFallback = hasServerAuthCookie(req)
     if (response.status === 401) {
       return {
         ok: false,
-        destination: toLoginPath(normalizeNextPath(req.url, fallbackPath), fallbackPath),
+        destination: shouldDeferRedirectToFallback
+          ? null
+          : toLoginPath(normalizeNextPath(req.url, fallbackPath), fallbackPath),
       }
     }
     if (response.status === 403) {
       return {
         ok: false,
-        destination: "/",
+        destination: shouldDeferRedirectToFallback ? null : "/",
       }
     }
     if (!response.ok) {

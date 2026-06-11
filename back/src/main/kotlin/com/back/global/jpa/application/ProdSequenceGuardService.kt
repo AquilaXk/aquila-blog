@@ -46,7 +46,7 @@ class ProdSequenceGuardService(
 
     fun repairAllKnownSequences() {
         sequenceTargetsByConstraint.values.distinctBy { it.table }.forEach { target ->
-            repairSequence(target)
+            repairSequenceBySetvalOnly(target)
         }
     }
 
@@ -83,8 +83,17 @@ class ProdSequenceGuardService(
                 )
             }.getOrElse { false }
 
-        if (fullRepairSucceeded || !allowSetvalOnlyFallback) return fullRepairSucceeded
-        return repairSequenceBySetvalOnly(target)
+        if (fullRepairSucceeded) return true
+        return repairSequenceBySetvalOnly(target).also { fallbackSucceeded ->
+            if (!fallbackSucceeded && allowSetvalOnlyFallback) {
+                log.warn(
+                    "setval-only fallback did not repair sequence drift: table={}, sequence={}, allocationSize={}",
+                    target.table,
+                    target.sequence,
+                    target.allocationSize,
+                )
+            }
+        }
     }
 
     private fun repairSequenceBySetvalOnly(target: SequenceTarget): Boolean =

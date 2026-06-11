@@ -214,6 +214,22 @@ test("blue-green deploy pauses autoheal while staging a candidate backend", () =
   )
 })
 
+test("runtime-split memory tuner keeps backend color startup headroom", () => {
+  const deployScript = readFileSync(deployScriptPath, "utf8")
+  const splitAllocator = deployScript.slice(
+    deployScript.indexOf("allocate_runtime_split_memory_limits()"),
+    deployScript.indexOf("allocate_single_runtime_memory_limits()"),
+  )
+
+  assert.match(
+    deployScript,
+    /AUTO_MEMORY_TUNER_MAX_BUDGET_MB="\$\{AUTO_MEMORY_TUNER_MAX_BUDGET_MB:-4096\}"/,
+  )
+  assert.match(splitAllocator, /local blue_min=640/)
+  assert.match(deployScript, /mode_min_budget_mb=3200/)
+  assert(!splitAllocator.includes("local blue_min=384"))
+})
+
 test("homeserver origin ingress is private behind Cloudflare Tunnel", () => {
   const compose = readFileSync(composePath, "utf8")
   const hardeningScript = readFileSync(hardeningScriptPath, "utf8")

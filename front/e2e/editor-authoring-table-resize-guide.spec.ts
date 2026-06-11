@@ -26,10 +26,13 @@ test.describe("editor authoring table resize guide", () => {
       )
       .not.toBe(beforeMarkdown)
 
-    const afterWidth = await firstHeaderCell.evaluate((element) =>
-      Math.round((element as HTMLElement).getBoundingClientRect().width)
-    )
-    expect(afterWidth).toBeGreaterThanOrEqual(beforeWidth)
+    await expect
+      .poll(async () =>
+        firstHeaderCell.evaluate((element) =>
+          Math.round((element as HTMLElement).getBoundingClientRect().width)
+        )
+      )
+      .toBeGreaterThanOrEqual(beforeWidth)
     await expect(markdownOutput).toContainText('"columnWidths"')
   })
 

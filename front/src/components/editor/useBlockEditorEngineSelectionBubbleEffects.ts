@@ -60,6 +60,7 @@ import {
   resolveOcclusionAwareTextBubbleState,
   type FloatingBubbleState,
 } from "./useFloatingBubbleState"
+import { markRecentCodePointerFollowUp, promoteRecentCodePointerFollowUp } from "./codePointerFollowUpModel"
 const CODE_BLOCK_EDITOR_CONTENT_SELECTOR = ".aq-code-editor-content"
 const CODE_BLOCK_TEXT_SURFACE_SELECTOR = [
   CODE_BLOCK_EDITOR_CONTENT_SELECTOR,
@@ -180,6 +181,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       x: number
       y: number
     } | null>(null),
+    recentCodePointerUntilRef = useRef(0),
     nonTableTextDragStartRef = useRef<{ x: number; y: number } | null>(null)
   useEffect(() => {
     const currentEditor = editorRef.current ?? editor
@@ -1376,6 +1378,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       }
       if (insideEditorDom && !codeShellTarget && !tableTextDragStart) {
         markCodeSelectionFollowUpIfActive()
+        promoteRecentCodePointerFollowUp(recentCodePointerUntilRef)
         nonTableTextDragStartRef.current = {
           x: event.clientX,
           y: event.clientY,
@@ -1389,8 +1392,10 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         nonTableTextDragStartRef.current = null
         preserveActiveTableTextDragScroll()
       }
-      if (codeShellTarget) preserveWindowScrollForCodePointerFocus(true)
-      else if (insideEditorDom && !tableTextDragStart) {
+      if (codeShellTarget) {
+        markRecentCodePointerFollowUp(recentCodePointerUntilRef)
+        preserveWindowScrollForCodePointerFocus(true)
+      } else if (insideEditorDom && !tableTextDragStart) {
         const blockSelectionActive = Boolean(
           document.querySelector(
             "[data-testid='keyboard-block-selection-overlay']"
@@ -1588,6 +1593,20 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         return
       }
       if (insideEditorDom && !codeShellTarget && !tableTextDragStart) {
+        markCodeSelectionFollowUpIfActive()
+        promoteRecentCodePointerFollowUp(recentCodePointerUntilRef)
+        const blockSelectionActive = Boolean(
+          document.querySelector(
+            "[data-testid='keyboard-block-selection-overlay']"
+          )
+        )
+        preserveWindowScrollForEditorPointerFocus(
+          event.target,
+          isTableSelectionActive(activeEditor),
+          blockSelectionActive,
+          true,
+          true
+        )
         nonTableTextDragStartRef.current = nonTableTextDragStartRef.current ?? {
           x: event.clientX,
           y: event.clientY,
@@ -1604,6 +1623,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       if (codeTextDragStartRef.current && !codeShellTarget)
         codeTextDragStartRef.current = null
       if (codeShellTarget) {
+        markRecentCodePointerFollowUp(recentCodePointerUntilRef)
         cancelTableTextDragPreserves()
         const codeTextSurfaceTarget = findCodeTextSurfaceTarget(
           targetElement,

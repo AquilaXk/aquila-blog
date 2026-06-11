@@ -1,5 +1,5 @@
 import dynamic from "next/dynamic"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type MouseEvent } from "react"
 import type { BlockEditorQaActions } from "src/components/editor/blockEditorContract"
 
 const LazyBlockEditorShell = dynamic(() => import("src/components/editor/BlockEditorShell"), {
@@ -22,6 +22,12 @@ const LazyBlockEditorShell = dynamic(() => import("src/components/editor/BlockEd
 const QA_IMAGE_DATA_URL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlH0WkAAAAASUVORK5CYII="
 const QA_EXTERNAL_POST_MARKDOWN = "# 선택 글 제목\n\n선택 글 본문\n\n선택 글 둘째 문단"
+
+const preserveEditorSelectionOnButtonMouseDown = (
+  event: MouseEvent<HTMLButtonElement>
+) => {
+  event.preventDefault()
+}
 
 type QaEditorHarnessProps = {
   seedMarkdown: string
@@ -91,34 +97,74 @@ export const QaEditorHarness = ({ seedMarkdown }: QaEditorHarnessProps) => {
           gap: "0.65rem",
         }}
       >
-        <button type="button" onClick={() => qaActionsRef.current?.selectTableAxis("column")}>
+        <button
+          type="button"
+          onMouseDown={preserveEditorSelectionOnButtonMouseDown}
+          onClick={() => qaActionsRef.current?.selectTableAxis("column")}
+        >
           QA 열 선택
         </button>
-        <button type="button" onClick={() => qaActionsRef.current?.selectTableColumnViaDomFallback(0)}>
+        <button
+          type="button"
+          onMouseDown={preserveEditorSelectionOnButtonMouseDown}
+          onClick={() => qaActionsRef.current?.selectTableColumnViaDomFallback(0)}
+        >
           QA fallback 열 선택
         </button>
-        <button type="button" onClick={() => qaActionsRef.current?.setActiveTableCellAlign("center")}>
+        <button
+          type="button"
+          onMouseDown={preserveEditorSelectionOnButtonMouseDown}
+          onClick={() => qaActionsRef.current?.setActiveTableCellAlign("center")}
+        >
           QA 가운데
         </button>
-        <button type="button" onClick={() => qaActionsRef.current?.setActiveTableCellBackground("#fef3c7")}>
+        <button
+          type="button"
+          onMouseDown={preserveEditorSelectionOnButtonMouseDown}
+          onClick={() => qaActionsRef.current?.setActiveTableCellBackground("#fef3c7")}
+        >
           QA 노랑 배경
         </button>
-        <button type="button" onClick={() => qaActionsRef.current?.addTableRowAfter()}>
+        <button
+          type="button"
+          onMouseDown={preserveEditorSelectionOnButtonMouseDown}
+          onClick={() => qaActionsRef.current?.addTableRowAfter()}
+        >
           QA 행 추가
         </button>
-        <button type="button" onClick={() => qaActionsRef.current?.addTableColumnAfter()}>
+        <button
+          type="button"
+          onMouseDown={preserveEditorSelectionOnButtonMouseDown}
+          onClick={() => qaActionsRef.current?.addTableColumnAfter()}
+        >
           QA 열 추가
         </button>
-        <button type="button" onClick={() => qaActionsRef.current?.deleteSelectedTableRow()}>
+        <button
+          type="button"
+          onMouseDown={preserveEditorSelectionOnButtonMouseDown}
+          onClick={() => qaActionsRef.current?.deleteSelectedTableRow()}
+        >
           QA 행 삭제
         </button>
-        <button type="button" onClick={() => qaActionsRef.current?.deleteSelectedTableColumn()}>
+        <button
+          type="button"
+          onMouseDown={preserveEditorSelectionOnButtonMouseDown}
+          onClick={() => qaActionsRef.current?.deleteSelectedTableColumn()}
+        >
           QA 열 삭제
         </button>
-        <button type="button" onClick={() => qaActionsRef.current?.resizeFirstTableRow(28)}>
+        <button
+          type="button"
+          onMouseDown={preserveEditorSelectionOnButtonMouseDown}
+          onClick={() => qaActionsRef.current?.resizeFirstTableRow(28)}
+        >
           QA 행 리사이즈
         </button>
-        <button type="button" onClick={() => qaActionsRef.current?.resizeFirstTableColumn(28)}>
+        <button
+          type="button"
+          onMouseDown={preserveEditorSelectionOnButtonMouseDown}
+          onClick={() => qaActionsRef.current?.resizeFirstTableColumn(28)}
+        >
           QA 열 리사이즈
         </button>
         <button type="button" onClick={() => qaActionsRef.current?.focusDocumentEnd()}>

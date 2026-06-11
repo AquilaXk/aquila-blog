@@ -31,12 +31,14 @@ import {
 } from "./codeBlockNodeViewLanguageModel"
 import {
   isPrimarySelectAllShortcut,
-  preventInternalCodeDrop, preventNativeCodeDragStart,
+  preventInternalCodeDrop,
+  preventNativeCodeDragStart,
   resolveCodeBlockPasteRange,
   resolveCodeBlockCopyText,
   resolveVisibleCodeRootForSelectAll,
   selectCodeBlockText,
-  selectCodeDomTextContents, selectDomTextContents,
+  selectCodeDomTextContents,
+  selectDomTextContents,
   selectDomTextOffsetRange,
 } from "./codeBlockNodeViewSelectionModel"
 import { focusElementWithoutScroll } from "./blockEditorEngineDocumentModel"
@@ -55,12 +57,59 @@ let lastCodePointerClientX = 0
 let lastCodePointerClientY = 0
 let lastCodePointerAt = 0
 let activeCodeSelectionOwnerRoot: HTMLElement | null = null
-let lastCodeDragSelectionCompletedAt = 0, lastCodeDragSelectionCompletedX = 0, lastCodeDragSelectionCompletedY = 0
+let lastCodeDragSelectionCompletedAt = 0
+let lastCodeDragSelectionCompletedX = 0
+let lastCodeDragSelectionCompletedY = 0
 const CODE_SCROLL_PRESERVE_MIN_MS = 4_800
 const CODE_SCROLL_PRESERVE_CANCEL_DISTANCE_PX = 3_200
 const CODE_SELECT_ALL_ACTIVE_GRACE_MS = 4_000
-const shouldCancelCodeScrollPreserve = (scrollAnchor: WindowScrollAnchor) => () => Math.abs(window.scrollX - scrollAnchor.x) > CODE_SCROLL_PRESERVE_CANCEL_DISTANCE_PX || Math.abs((document.scrollingElement?.scrollTop ?? window.scrollY) - scrollAnchor.y) > CODE_SCROLL_PRESERVE_CANCEL_DISTANCE_PX
-const isSyntheticClickAfterCodeDragRelease = (clientX: number, clientY: number) => { const now = typeof performance !== "undefined" ? performance.now() : Date.now(), completedAt = lastCodeDragSelectionCompletedAt, matches = now - completedAt < 600 && Math.hypot(clientX - lastCodeDragSelectionCompletedX, clientY - lastCodeDragSelectionCompletedY) <= 8; if (matches) window.setTimeout(() => { if (lastCodeDragSelectionCompletedAt === completedAt) lastCodeDragSelectionCompletedAt = 0 }, 0); return matches }
+const shouldCancelCodeScrollPreserve =
+  (scrollAnchor: WindowScrollAnchor) => () =>
+    Math.abs(window.scrollX - scrollAnchor.x) >
+      CODE_SCROLL_PRESERVE_CANCEL_DISTANCE_PX ||
+    Math.abs(
+      (document.scrollingElement?.scrollTop ?? window.scrollY) - scrollAnchor.y
+    ) > CODE_SCROLL_PRESERVE_CANCEL_DISTANCE_PX
+const isSyntheticClickAfterCodeDragRelease = (
+  clientX: number,
+  clientY: number
+) => {
+  const now =
+    typeof performance !== "undefined" ? performance.now() : Date.now()
+  const completedAt = lastCodeDragSelectionCompletedAt
+  const matches =
+    now - completedAt < 600 &&
+    Math.hypot(
+      clientX - lastCodeDragSelectionCompletedX,
+      clientY - lastCodeDragSelectionCompletedY
+    ) <= 8
+  if (matches) {
+    window.setTimeout(() => {
+      if (lastCodeDragSelectionCompletedAt === completedAt) {
+        lastCodeDragSelectionCompletedAt = 0
+      }
+    }, 0)
+  }
+  return matches
+}
+const preserveCodeScrollAcrossFrames = (
+  scrollAnchor: WindowScrollAnchor,
+  replaceActivePreserve = false
+) => {
+  preserveWindowScrollPositionAcrossFrames(
+    scrollAnchor,
+    240,
+    4,
+    CODE_SCROLL_PRESERVE_MIN_MS,
+    false,
+    false,
+    true,
+    false,
+    false,
+    shouldCancelCodeScrollPreserve(scrollAnchor),
+    replaceActivePreserve
+  )
+}
 type CodeDragSelectionSession = {
   active: boolean
   anchorPos: number
@@ -109,12 +158,12 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
   const preserveCodeSelectAllScroll = useCallback(() => {
     lastCodeDragSelectionCompletedAt = 0
     const scrollAnchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
-    preserveWindowScrollPositionAcrossFrames(scrollAnchor, 240, 4, CODE_SCROLL_PRESERVE_MIN_MS, false, false, true, false, false, shouldCancelCodeScrollPreserve(scrollAnchor), true)
+    preserveCodeScrollAcrossFrames(scrollAnchor, true)
     return scrollAnchor
   }, [])
   const preserveCodePointerFocusScroll = useCallback((scrollAnchor: { x: number; y: number }) => {
-    preserveWindowScrollPositionAcrossFrames(scrollAnchor, 240, 4, CODE_SCROLL_PRESERVE_MIN_MS, false, false, true, false, false, shouldCancelCodeScrollPreserve(scrollAnchor), true)
-    preserveWindowScrollPositionAcrossFrames(scrollAnchor, 240, 4, CODE_SCROLL_PRESERVE_MIN_MS, false, false, true, false, false, shouldCancelCodeScrollPreserve(scrollAnchor))
+    preserveCodeScrollAcrossFrames(scrollAnchor, true)
+    preserveCodeScrollAcrossFrames(scrollAnchor)
   }, [])
   const resolveCodeTextPosFromPointer = useCallback(
     (clientX: number, clientY: number, contentRoot: HTMLElement | null) => {
@@ -232,28 +281,87 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
   const preserveCodeDomTextRange = useCallback(
     (contentRoot: HTMLElement | null, anchorPos: number, headPos: number) => {
       const scrollAnchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
-      const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now(), preserveGeneration = ++codeDomTextRangePreserveGeneration
-      let frame = 0, cancelled = false, cancelArmed = false
+      const startedAt =
+        typeof performance !== "undefined" ? performance.now() : Date.now()
+      const preserveGeneration = ++codeDomTextRangePreserveGeneration
+      let frame = 0
+      let cancelled = false
+      let cancelArmed = false
       const shell = contentRoot?.closest(".aq-code-shell")
-      const rootTextSnapshot = (contentRoot?.innerText || contentRoot?.textContent || "").replace(/\s+/g, " ").trim()
+      const rootTextSnapshot = (
+        contentRoot?.innerText ||
+        contentRoot?.textContent ||
+        ""
+      ).replace(/\s+/g, " ").trim()
       const resolveCurrentRoot = () => {
         if (shell?.isConnected) return shell.querySelector<HTMLElement>(".aq-code-editor-content") ?? contentRoot
         const textProbe = rootTextSnapshot.slice(0, 48)
-        return Array.from(document.querySelectorAll<HTMLElement>(".aq-code-editor-content")).find((candidate) => (candidate.innerText || candidate.textContent || "").replace(/\s+/g, " ").trim().includes(textProbe)) ?? contentRoot
+        return Array.from(
+          document.querySelectorAll<HTMLElement>(".aq-code-editor-content")
+        ).find((candidate) =>
+          (candidate.innerText || candidate.textContent || "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .includes(textProbe)
+        ) ?? contentRoot
       }
       const resolveCurrentShell = () => resolveCurrentRoot()?.closest(".aq-code-shell") ?? shell
-      const cleanupCancel = () => { window.removeEventListener("pointerdown", cancel, true); window.removeEventListener("mousedown", cancel, true); window.removeEventListener("keydown", cancelForKeydown, true); window.removeEventListener("wheel", cancelForKeydown, true); document.removeEventListener("selectionchange", cancelOnSelectionChange, true) }
-      const cancelPreserve = () => { cancelled = true; codeDomTextRangePreserveGeneration += 1; resolveCurrentShell()?.removeAttribute("data-code-drag-selection-text"); cleanupCancel() }
-      const cancel = (event: Event) => { if (!cancelArmed) return; const currentShell = resolveCurrentShell(); if (!(event.target instanceof Node) || !currentShell?.contains(event.target)) cancelPreserve() }
+      const cleanupCancel = () => {
+        window.removeEventListener("pointerdown", cancel, true)
+        window.removeEventListener("mousedown", cancel, true)
+        window.removeEventListener("keydown", cancelForKeydown, true)
+        window.removeEventListener("wheel", cancelForKeydown, true)
+        document.removeEventListener("selectionchange", cancelOnSelectionChange, true)
+      }
+      const cancelPreserve = () => {
+        cancelled = true
+        codeDomTextRangePreserveGeneration += 1
+        resolveCurrentShell()?.removeAttribute("data-code-drag-selection-text")
+        cleanupCancel()
+      }
+      const cancel = (event: Event) => {
+        if (!cancelArmed) return
+        const currentShell = resolveCurrentShell()
+        if (!(event.target instanceof Node) || !currentShell?.contains(event.target)) {
+          cancelPreserve()
+        }
+      }
       const cancelForKeydown = () => { if (cancelArmed) cancelPreserve() }
-      const cancelOnSelectionChange = () => { if (!cancelArmed) return; const selection = window.getSelection(), anchor = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null, focus = selection?.focusNode instanceof Element ? selection.focusNode : selection?.focusNode?.parentElement ?? null, currentShell = resolveCurrentShell(); if (selection?.toString().trim() && (!anchor || !focus || !currentShell?.contains(anchor) || !currentShell.contains(focus))) cancelPreserve() }
-      const selectRange = () => { const currentRoot = resolveCurrentRoot(); if (!currentRoot?.isConnected) return; if (!selectCodeDomTextRange(currentRoot, anchorPos, headPos) && anchorPos !== headPos) selectDomTextContents(currentRoot)
+      const cancelOnSelectionChange = () => {
+        if (!cancelArmed) return
+        const selection = window.getSelection()
+        const anchor =
+          selection?.anchorNode instanceof Element
+            ? selection.anchorNode
+            : selection?.anchorNode?.parentElement ?? null
+        const focus =
+          selection?.focusNode instanceof Element
+            ? selection.focusNode
+            : selection?.focusNode?.parentElement ?? null
+        const currentShell = resolveCurrentShell()
+        const selectionLeftCode =
+          selection?.toString().trim() &&
+          (!anchor ||
+            !focus ||
+            !currentShell?.contains(anchor) ||
+            !currentShell.contains(focus))
+        if (selectionLeftCode) cancelPreserve()
+      }
+      const selectRange = () => {
+        const currentRoot = resolveCurrentRoot()
+        if (!currentRoot?.isConnected) return
+        if (!selectCodeDomTextRange(currentRoot, anchorPos, headPos) && anchorPos !== headPos) {
+          selectDomTextContents(currentRoot)
+        }
         persistCodeSelectionText(currentRoot, { allowContentFallback: true })
       }
       const restore = () => {
         if (cancelled || preserveGeneration !== codeDomTextRangePreserveGeneration) return
-        selectRange(); frame += 1
-        const elapsedMs = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt
+        selectRange()
+        frame += 1
+        const elapsedMs =
+          (typeof performance !== "undefined" ? performance.now() : Date.now()) -
+          startedAt
         if (frame < 168 || elapsedMs < CODE_SCROLL_PRESERVE_MIN_MS) window.requestAnimationFrame(restore)
         else { codeDomTextRangePreserveGeneration += 1; cleanupCancel() }
       }
@@ -272,11 +380,27 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
     (event: ReactMouseEvent<HTMLDivElement> | ReactPointerEvent<HTMLDivElement>) => {
       const shell = shellRef.current
       const contentRoot = shell?.querySelector<HTMLElement>(".aq-code-editor-content") ?? null
-      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.defaultPrevented || (event.nativeEvent as Event & { __aqCodePointerHandled?: boolean }).__aqCodePointerHandled) return
+      const codePointerHandled = (
+        event.nativeEvent as Event & { __aqCodePointerHandled?: boolean }
+      ).__aqCodePointerHandled
+      if (
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.shiftKey ||
+        event.defaultPrevented ||
+        codePointerHandled
+      )
+        return
       if (!shell || !contentRoot || !(event.target instanceof Node) || !shell.contains(event.target)) return
       const targetElement = event.target instanceof Element ? event.target : event.target.parentElement
       const contentRect = contentRoot.getBoundingClientRect()
-      const isInsideContentBox = event.clientX >= contentRect.left && event.clientX <= contentRect.right && event.clientY >= contentRect.top && event.clientY <= contentRect.bottom
+      const isInsideContentBox =
+        event.clientX >= contentRect.left &&
+        event.clientX <= contentRect.right &&
+        event.clientY >= contentRect.top &&
+        event.clientY <= contentRect.bottom
       const isCodeTextSurfaceTarget =
         contentRoot.contains(event.target) ||
         Boolean(targetElement?.closest(".aq-code-highlight-layer")) ||
@@ -287,11 +411,29 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       event.stopPropagation()
       const scrollAnchor = { x: window.scrollX, y: document.scrollingElement?.scrollTop ?? window.scrollY }
       preserveCodePointerFocusScroll(scrollAnchor)
-      const selection = window.getSelection(), persistedCodeSelectionText = shell.getAttribute("data-code-drag-selection-text")?.trim() || ""
-      const anchorElement = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null, focusElement = selection?.focusNode instanceof Element ? selection.focusNode : selection?.focusNode?.parentElement ?? null
-      const selectedText = selection?.toString().trim() || "", contentText = contentRoot.textContent?.trim() || ""
+      const selection = window.getSelection()
+      const persistedCodeSelectionText =
+        shell.getAttribute("data-code-drag-selection-text")?.trim() || ""
+      const anchorElement =
+        selection?.anchorNode instanceof Element
+          ? selection.anchorNode
+          : selection?.anchorNode?.parentElement ?? null
+      const focusElement =
+        selection?.focusNode instanceof Element
+          ? selection.focusNode
+          : selection?.focusNode?.parentElement ?? null
+      const selectedText = selection?.toString().trim() || ""
+      const contentText = contentRoot.textContent?.trim() || ""
       const existingCodeSelectionText = selectedText || persistedCodeSelectionText
-      const hasExistingCodeSelection = Boolean((selectedText && anchorElement && focusElement && contentRoot.contains(anchorElement) && contentRoot.contains(focusElement)) || (persistedCodeSelectionText && contentText.includes(persistedCodeSelectionText.slice(0, 48))))
+      const hasExistingCodeSelection = Boolean(
+        (selectedText &&
+          anchorElement &&
+          focusElement &&
+          contentRoot.contains(anchorElement) &&
+          contentRoot.contains(focusElement)) ||
+          (persistedCodeSelectionText &&
+            contentText.includes(persistedCodeSelectionText.slice(0, 48)))
+      )
       if (hasExistingCodeSelection) {
         codeDomTextRangePreserveGeneration += 1
         selection?.removeAllRanges()
@@ -302,7 +444,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       } else {
         if (!selectCodeDomTextRange(contentRoot, anchorPos, anchorPos)) selection?.removeAllRanges()
       }
-      preserveWindowScrollPositionAcrossFrames(scrollAnchor, 240, 4, CODE_SCROLL_PRESERVE_MIN_MS, false, false, true, false, false, shouldCancelCodeScrollPreserve(scrollAnchor), true)
+      preserveCodeScrollAcrossFrames(scrollAnchor, true)
       codeDragSelectionRef.current = {
         active: false,
         anchorPos,
@@ -473,17 +615,33 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       window.removeEventListener("pointercancel", handleWindowMouseUp, true)
     }
   }, [focusCodeTextPosition, getPos, node.nodeSize, preserveCodeDomTextRange, preserveCodePointerFocusScroll, resolveCodeTextPosFromPointer])
-  const ensureCodeDomTextSelection = useCallback((contentRoot: HTMLElement | null, scrollAnchor?: { x: number; y: number }) => {
+  const ensureCodeDomTextSelection = useCallback((
+    contentRoot: HTMLElement | null,
+    scrollAnchor?: { x: number; y: number }
+  ) => {
     if (!contentRoot || typeof window === "undefined") return
-    if (scrollAnchor) preserveWindowScrollPositionAcrossFrames(scrollAnchor, 240, 4, CODE_SCROLL_PRESERVE_MIN_MS, false, false, true, false, false, shouldCancelCodeScrollPreserve(scrollAnchor), true)
+    if (scrollAnchor) preserveCodeScrollAcrossFrames(scrollAnchor, true)
     const codeShell = contentRoot.closest(".aq-code-shell")
-    const rootTextSnapshot = (contentRoot.innerText || contentRoot.textContent || "").replace(/\s+/g, " ").trim()
+    const rootTextSnapshot = (
+      contentRoot.innerText ||
+      contentRoot.textContent ||
+      ""
+    ).replace(/\s+/g, " ").trim()
     const resolveCurrentRoot = () => {
       if (codeShell?.isConnected) return codeShell.querySelector<HTMLElement>(".aq-code-editor-content") ?? contentRoot
       const textProbe = rootTextSnapshot.slice(0, 48)
-      return Array.from(document.querySelectorAll<HTMLElement>(".aq-code-editor-content")).find((candidate) => (candidate.innerText || candidate.textContent || "").replace(/\s+/g, " ").trim().includes(textProbe)) ?? contentRoot
+      return Array.from(
+        document.querySelectorAll<HTMLElement>(".aq-code-editor-content")
+      ).find((candidate) =>
+        (candidate.innerText || candidate.textContent || "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .includes(textProbe)
+      ) ?? contentRoot
     }
-    const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now(), preserveGeneration = ++codeDomTextRangePreserveGeneration
+    const startedAt =
+      typeof performance !== "undefined" ? performance.now() : Date.now()
+    const preserveGeneration = ++codeDomTextRangePreserveGeneration
     let cancelled = false
     let frameId: number | null = null
     let armed = false
@@ -498,7 +656,11 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
     }
     const cancel = (event?: Event) => {
       if (!armed) return
-      if (event?.type === "pointerdown" || event?.type === "mousedown" || event?.type === "click") {
+      if (
+        event?.type === "pointerdown" ||
+        event?.type === "mousedown" ||
+        event?.type === "click"
+      ) {
         const currentRoot = resolveCurrentRoot()
         currentRoot?.closest(".aq-code-shell")?.removeAttribute("data-code-drag-selection-text")
         window.getSelection()?.removeAllRanges()
@@ -506,24 +668,37 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
         lastActiveCodeSelectionAt = 0
         activeCodeSelectionOwnerRoot = null
       }
-      cancelled = true; codeDomTextRangePreserveGeneration += 1
+      cancelled = true
+      codeDomTextRangePreserveGeneration += 1
       cleanup()
     }
     const restore = () => {
       if (cancelled) return
       const currentRoot = resolveCurrentRoot()
-      if (!currentRoot.isConnected || preserveGeneration !== codeDomTextRangePreserveGeneration) { cleanup(); return }
+      if (
+        !currentRoot.isConnected ||
+        preserveGeneration !== codeDomTextRangePreserveGeneration
+      ) {
+        cleanup()
+        return
+      }
       const selection = window.getSelection()
       const anchorElement = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null
       const focusElement = selection?.focusNode instanceof Element ? selection.focusNode : selection?.focusNode?.parentElement ?? null
-      const selectionInsideCode = Boolean(selection?.toString().trim() && anchorElement && focusElement && currentRoot.contains(anchorElement) && currentRoot.contains(focusElement))
+      const selectionInsideCode = Boolean(
+        selection?.toString().trim() &&
+          anchorElement &&
+          focusElement &&
+          currentRoot.contains(anchorElement) &&
+          currentRoot.contains(focusElement)
+      )
       if (selectionInsideCode) {
         persistCodeSelectionText(currentRoot)
       } else if (persistCodeSelectionText(currentRoot, { allowContentFallback: true }).trim()) {
         selectCodeDomTextContents(currentRoot)
         persistCodeSelectionText(currentRoot)
       }
-      if (scrollAnchor) preserveWindowScrollPositionAcrossFrames(scrollAnchor, 240, 4, CODE_SCROLL_PRESERVE_MIN_MS, false, false, true, false, false, shouldCancelCodeScrollPreserve(scrollAnchor), true)
+      if (scrollAnchor) preserveCodeScrollAcrossFrames(scrollAnchor, true)
       const elapsedMs = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt
       if (elapsedMs < 240) {
         frameId = window.requestAnimationFrame(restore)
@@ -532,8 +707,14 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       }
     }
     armed = true
-    window.addEventListener("pointerdown", cancel, true); window.addEventListener("mousedown", cancel, true); window.addEventListener("click", cancel, true); window.addEventListener("wheel", cancel, { capture: true, passive: true })
-    frameId = window.requestAnimationFrame(() => { window.addEventListener("keydown", cancel, true); restore() })
+    window.addEventListener("pointerdown", cancel, true)
+    window.addEventListener("mousedown", cancel, true)
+    window.addEventListener("click", cancel, true)
+    window.addEventListener("wheel", cancel, { capture: true, passive: true })
+    frameId = window.requestAnimationFrame(() => {
+      window.addEventListener("keydown", cancel, true)
+      restore()
+    })
   }, [persistCodeSelectionText])
   useEffect(() => {
     setDraftLanguage(normalizeCodeLanguage(String(node.attrs?.language || "")))
@@ -608,12 +789,38 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
           event.clientY >= shellRect.top &&
           event.clientY <= shellRect.bottom
       )
-      const isInsideCodePointer = contentRoot.contains(target) || Boolean(codeShell?.contains(target)) || Boolean(pointTarget && (contentRoot.contains(pointTarget) || codeShell?.contains(pointTarget))) || isInsideContentPoint || isInsideShellPoint
-      if (event.type !== "click" && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && isInsideCodePointer && (window.getSelection()?.toString().trim() || codeShell?.getAttribute("data-code-drag-selection-text")?.trim())) {
-        codeDomTextRangePreserveGeneration += 1; window.getSelection()?.removeAllRanges(); codeShell?.removeAttribute("data-code-drag-selection-text")
-        lastActiveCodeSelectionText = ""; lastActiveCodeSelectionAt = 0; activeCodeSelectionOwnerRoot = null
+      const isInsideCodePointer =
+        contentRoot.contains(target) ||
+        Boolean(codeShell?.contains(target)) ||
+        Boolean(
+          pointTarget &&
+            (contentRoot.contains(pointTarget) || codeShell?.contains(pointTarget))
+        ) ||
+        isInsideContentPoint ||
+        isInsideShellPoint
+      const hasCodeTextSelection =
+        window.getSelection()?.toString().trim() ||
+        codeShell?.getAttribute("data-code-drag-selection-text")?.trim()
+      if (
+        event.type !== "click" &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        isInsideCodePointer &&
+        hasCodeTextSelection
+      ) {
+        codeDomTextRangePreserveGeneration += 1
+        window.getSelection()?.removeAllRanges()
+        codeShell?.removeAttribute("data-code-drag-selection-text")
+        lastActiveCodeSelectionText = ""
+        lastActiveCodeSelectionAt = 0
+        activeCodeSelectionOwnerRoot = null
       }
       if (isInsideCodePointer) {
+        if (event.type === "pointerdown" || event.type === "mousedown") {
+          markNextEditorPointerAfterCodeSelection()
+        }
         rememberActiveCodeContentRoot()
       } else if (isActiveCodeBlockRef.current && ownsActiveCodeSelection) {
         isActiveCodeBlockRef.current = false
@@ -649,15 +856,30 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
           ? selection.anchorNode
           : selection?.anchorNode?.parentElement ?? null
       const codeShell = contentRoot.closest(".aq-code-shell")
-      const isProseMirrorRootFocused = activeElement instanceof HTMLElement && activeElement.classList.contains("ProseMirror")
+      const isProseMirrorRootFocused =
+        activeElement instanceof HTMLElement &&
+        activeElement.classList.contains("ProseMirror")
       const anchorTableCell = anchorElement?.closest("th, td")
-      const hasTableDragSelectionText = document.documentElement.hasAttribute("data-table-drag-selection-text")
-      if ((activeElement instanceof Element && activeElement.closest("th, td")) || (hasTableDragSelectionText && !isProseMirrorRootFocused) || (anchorTableCell && !isProseMirrorRootFocused)) return
+      const hasTableDragSelectionText = document.documentElement.hasAttribute(
+        "data-table-drag-selection-text"
+      )
+      if (
+        (activeElement instanceof Element && activeElement.closest("th, td")) ||
+        (hasTableDragSelectionText && !isProseMirrorRootFocused) ||
+        (anchorTableCell && !isProseMirrorRootFocused)
+      )
+        return
       if (isProseMirrorRootFocused) {
-        const visibleCodeRoot = resolveVisibleCodeRootForSelectAll({ ignoreTableAnchor: true, ignoreTableDragSelectionText: true })
+        const visibleCodeRoot = resolveVisibleCodeRootForSelectAll({
+          ignoreTableAnchor: true,
+          ignoreTableDragSelectionText: true,
+        })
         if (!visibleCodeRoot) return
         const now = typeof performance !== "undefined" ? performance.now() : Date.now()
-        const visibleCodeRect = (visibleCodeRoot.closest<HTMLElement>(".aq-code-shell") ?? visibleCodeRoot).getBoundingClientRect()
+        const visibleCodeRect = (
+          visibleCodeRoot.closest<HTMLElement>(".aq-code-shell") ??
+          visibleCodeRoot
+        ).getBoundingClientRect()
         const recentCodePointerInsideVisibleRoot =
           now - lastCodePointerAt <= CODE_SELECT_ALL_ACTIVE_GRACE_MS &&
           lastCodePointerClientX >= visibleCodeRect.left &&
@@ -670,7 +892,8 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
         event.preventDefault()
         event.stopPropagation()
         event.stopImmediatePropagation()
-        const preserveAfterSelectAll = () => preserveWindowScrollPositionAcrossFrames(scrollAnchor, 240, 4, CODE_SCROLL_PRESERVE_MIN_MS, false, false, true, false, false, shouldCancelCodeScrollPreserve(scrollAnchor), true)
+        const preserveAfterSelectAll = () =>
+          preserveCodeScrollAcrossFrames(scrollAnchor, true)
         if (selectCodeDomTextContents(visibleCodeRoot)) {
           persistCodeSelectionText(visibleCodeRoot, { allowContentFallback: true })
           preserveAfterSelectAll()
@@ -722,10 +945,12 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
         isRootFocusedWhileCodeHovered
       if (!isInsideCodeBlock) return
       const scrollAnchor = preserveCodeSelectAllScroll()
+      markNextEditorPointerAfterCodeSelection()
       event.preventDefault()
       event.stopPropagation()
       event.stopImmediatePropagation()
-      const preserveAfterSelectAll = () => preserveWindowScrollPositionAcrossFrames(scrollAnchor, 240, 4, CODE_SCROLL_PRESERVE_MIN_MS, false, false, true, false, false, shouldCancelCodeScrollPreserve(scrollAnchor), true)
+      const preserveAfterSelectAll = () =>
+        preserveCodeScrollAcrossFrames(scrollAnchor, true)
       if (selectCodeDomTextContents(contentRoot)) {
         persistCodeSelectionText(contentRoot, { allowContentFallback: true })
         preserveAfterSelectAll()
@@ -911,7 +1136,8 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
 
     const contentRoot = shellRef.current?.querySelector<HTMLElement>(".aq-code-editor-content") ?? null
     const scrollAnchor = preserveCodeSelectAllScroll()
-    const preserveAfterSelectAll = () => preserveWindowScrollPositionAcrossFrames(scrollAnchor, 240, 4, CODE_SCROLL_PRESERVE_MIN_MS, false, false, true, false, false, shouldCancelCodeScrollPreserve(scrollAnchor), true)
+    const preserveAfterSelectAll = () =>
+      preserveCodeScrollAcrossFrames(scrollAnchor, true)
     if (selectCodeDomTextContents(contentRoot)) {
       persistCodeSelectionText(contentRoot, { allowContentFallback: true })
       preserveAfterSelectAll()

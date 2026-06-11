@@ -4,7 +4,14 @@ import { type NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tip
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import useMermaidEffect from "src/libs/markdown/hooks/useMermaidEffect"
 import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
-import { MERMAID_TEMPLATE, MERMAID_VIEW_MODE_OPTIONS, type MermaidEditorViewMode, renderMermaidHighlightedSource, useAutosizeTextarea, useDebouncedAttributeCommit } from "./mermaidNodeViewModel"
+import {
+  MERMAID_TEMPLATE,
+  MERMAID_VIEW_MODE_OPTIONS,
+  type MermaidEditorViewMode,
+  renderMermaidHighlightedSource,
+  useAutosizeTextarea,
+  useDebouncedAttributeCommit,
+} from "./mermaidNodeViewModel"
 
 export const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
   const [draftSource, setDraftSource] = useState(String(node.attrs?.source || MERMAID_TEMPLATE))
@@ -126,7 +133,7 @@ export const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewP
         {showCodePane ? (
           <MermaidCodePane>
             <MermaidPaneLabel>Mermaid 코드</MermaidPaneLabel>
-            <MermaidCodeEditorShell>
+            <MermaidCodeEditorShell data-view-mode={viewMode}>
               <MermaidCodeHighlight
                 className="aq-mermaid-code-highlight"
                 ref={codeHighlightRef}
@@ -168,7 +175,7 @@ export const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewP
         {showPreviewPane ? (
           <MermaidPreviewPane ref={previewRootRef}>
             <MermaidPaneLabel>Mermaid 결과</MermaidPaneLabel>
-            <MermaidPreviewCard>
+            <MermaidPreviewCard data-view-mode={viewMode}>
               {normalizedSource ? (
                 <pre
                   className="aq-mermaid"
@@ -235,15 +242,23 @@ const MermaidBlockTextarea = styled.textarea<{ rows?: number }>`
 `
 
 const MermaidPreviewCard = styled.div`
+  height: clamp(14rem, 38vh, 22rem);
   min-height: 12rem;
   border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.06)")};
   border-radius: 0.95rem;
   background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(10, 12, 16, 0.98)")};
+  overflow: auto;
+  overscroll-behavior: contain;
   padding: 0.95rem 1rem;
+  scrollbar-width: thin;
+
+  &[data-view-mode="preview"] {
+    height: clamp(20rem, 62vh, 36rem);
+  }
 
   .aq-mermaid {
     margin: 0;
-    min-height: 8rem;
+    min-height: 100%;
   }
 
   .aq-mermaid-stage > svg foreignObject,
@@ -419,11 +434,17 @@ const MermaidCodePane = styled.div`
 
 const MermaidCodeEditorShell = styled.div`
   position: relative;
+  height: 13rem;
   min-height: 13rem;
   border-radius: 0.95rem;
   border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.06)")};
   background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(10, 12, 16, 0.98)")};
   overflow: hidden;
+
+  &[data-view-mode="code"] {
+    height: 22rem;
+    min-height: 22rem;
+  }
 `
 
 const MermaidCodeHighlight = styled.pre`
@@ -467,6 +488,7 @@ const MermaidCodeHighlight = styled.pre`
 const MermaidCodeTextarea = styled(MermaidBlockTextarea)`
   position: relative;
   z-index: 1;
+  height: 100% !important;
   min-height: 13rem;
   overflow: auto;
   border: 0;
@@ -486,6 +508,7 @@ const MermaidCodeTextarea = styled(MermaidBlockTextarea)`
   -webkit-text-fill-color: transparent !important;
 
   &[data-view-mode="code"] {
+    height: 22rem !important;
     min-height: 22rem;
   }
 

@@ -11,10 +11,11 @@ import {
 
 const SELECT_ALL_SHORTCUT = process.platform === "darwin" ? "Meta+a" : "Control+a"
 
-const clickVisibleOverlayControl = async (_page: Page, locator: Locator) => {
-  void _page
+const clickVisibleOverlayControl = async (page: Page, locator: Locator) => {
   await expect(locator).toBeVisible({ timeout: 900 })
-  await locator.click({ force: true, timeout: 900 })
+  const box = await locator.boundingBox()
+  if (!box) throw new Error("visible overlay control has no bounding box")
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
 }
 
 const moveToPost507RowGripHotzone = async (page: Page, rowHandle: Locator) => {
@@ -68,8 +69,24 @@ const readPost507AxisAttemptDebug = async (page: Page) =>
     const editor = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
     const count = (selector: string) => document.querySelectorAll(selector).length
     const visibleCount = (selector: string) =>
-      Array.from(document.querySelectorAll<HTMLElement>(selector)).filter((element) => { const rect = element.getBoundingClientRect(); return rect.width > 0 && rect.height > 0 }).length
-    return { columnMenuCount: count("[data-testid='table-column-menu']"), columnOutlineCount: count("[data-testid='table-column-selection-outline']"), columnRailVisibleCount: visibleCount("[data-testid='table-column-rail']"), dragAttributeCount: count("[data-table-drag-selection-text]"), rootDragText: document.documentElement.getAttribute("data-table-drag-selection-text")?.trim() ?? "", rowMenuCount: count("[data-testid='table-row-menu']"), rowOutlineCount: count("[data-testid='table-row-selection-outline']"), rowRailVisibleCount: visibleCount("[data-testid='table-row-rail']"), scrollTop: Math.round(document.scrollingElement?.scrollTop ?? window.scrollY), selectedCellCount: editor?.querySelectorAll(".selectedCell").length ?? 0, selectionText: window.getSelection()?.toString().trim() ?? "" }
+      Array.from(document.querySelectorAll<HTMLElement>(selector)).filter((element) => {
+        const rect = element.getBoundingClientRect()
+        return rect.width > 0 && rect.height > 0
+      }).length
+
+    return {
+      columnMenuCount: count("[data-testid='table-column-menu']"),
+      columnOutlineCount: count("[data-testid='table-column-selection-outline']"),
+      columnRailVisibleCount: visibleCount("[data-testid='table-column-rail']"),
+      dragAttributeCount: count("[data-table-drag-selection-text]"),
+      rootDragText: document.documentElement.getAttribute("data-table-drag-selection-text")?.trim() ?? "",
+      rowMenuCount: count("[data-testid='table-row-menu']"),
+      rowOutlineCount: count("[data-testid='table-row-selection-outline']"),
+      rowRailVisibleCount: visibleCount("[data-testid='table-row-rail']"),
+      scrollTop: Math.round(document.scrollingElement?.scrollTop ?? window.scrollY),
+      selectedCellCount: editor?.querySelectorAll(".selectedCell").length ?? 0,
+      selectionText: window.getSelection()?.toString().trim() ?? "",
+    }
   })
 
 const clickPost507AxisHandleUntilSelected = async (
@@ -161,6 +178,45 @@ const expectPost507FinalTableSelectionOnPage = async (page: Page) => {
       }
     })
     .toBe(true)
+}
+
+const readPost507FinalTableViewportSample = (page: Page) =>
+  page.evaluate((targetCellText) => {
+    const editor = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
+    const table = Array.from(editor?.querySelectorAll<HTMLElement>("table") ?? [])
+      .filter((candidate) => {
+        const text = candidate.textContent ?? ""
+        return text.includes(targetCellText) && text.includes("재발급 로직")
+      })
+      .at(-1)
+    const rect = table?.getBoundingClientRect()
+    const scrollTop = Math.round(document.scrollingElement?.scrollTop ?? window.scrollY)
+    const tableTop = rect ? Math.round(rect.top) : null
+    return {
+      scrollTop,
+      tableDocumentTop: tableTop === null ? null : scrollTop + tableTop,
+      tableTop,
+    }
+  }, POST_507_FINAL_TABLE_TARGET_CELL)
+
+const waitForPost507FinalTableViewportStable = async (page: Page) => {
+  let lastSamples: Awaited<ReturnType<typeof readPost507FinalTableViewportSample>>[] = []
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const samples = []
+    for (let index = 0; index < 5; index += 1) {
+      samples.push(await readPost507FinalTableViewportSample(page))
+      await page.waitForTimeout(50)
+    }
+    const documentTops = samples
+      .map((sample) => sample.tableDocumentTop)
+      .filter((value): value is number => typeof value === "number")
+    const stable =
+      documentTops.length === samples.length &&
+      Math.max(...documentTops) - Math.min(...documentTops) <= 8
+    if (stable) return
+    lastSamples = samples
+  }
+  throw new Error(`post 507 final table viewport did not stabilize: ${JSON.stringify(lastSamples)}`)
 }
 
 const expectNoTableTextSelectionState = async (page: Page, label: string) => {
@@ -355,6 +411,76 @@ const expectAxisSelectionStable = async (
       selectedCellCount: expectedSelectedCellCount,
     }))
   )
+}
+
+const expectAxisSelectionViewportStableImmediately = async (
+  page: Page,
+  expectedSelectedCellCount: number,
+  overlayTestId: "table-column-selection-outline" | "table-row-selection-outline"
+) => {
+  const samples = []
+  for (let index = 0; index < 24; index += 1) {
+    samples.push(
+      await page.evaluate(
+        ({ overlayTestId }) => {
+          const editor = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
+          const selectedCells = Array.from(editor?.querySelectorAll<HTMLElement>(".selectedCell") ?? [])
+          const table = selectedCells[0]?.closest("table") ?? null
+          const mermaidHeights = Array.from(
+            editor?.querySelectorAll<HTMLElement>(".node-mermaidBlock") ?? []
+          ).map((element, mermaidIndex) => ({
+            height: Math.round(element.getBoundingClientRect().height),
+            index: mermaidIndex,
+            offsetTop: element.offsetTop,
+          }))
+          const rect = table?.getBoundingClientRect()
+          const scrollTop = Math.round(document.scrollingElement?.scrollTop ?? window.scrollY)
+          const tableTop = rect ? Math.round(rect.top) : null
+
+          return {
+            documentScrollHeight: document.scrollingElement?.scrollHeight ?? null,
+            mermaidHeights,
+            overlayCount: document.querySelectorAll(`[data-testid='${overlayTestId}']`).length,
+            scrollPreserveOwner: document.documentElement.getAttribute("data-editor-scroll-preserve-owner"),
+            scrollTop,
+            selectedCellCount: selectedCells.length,
+            selectionTextLength: window.getSelection()?.toString().trim().length ?? 0,
+            tableDocumentTop: tableTop === null ? null : scrollTop + tableTop,
+            tableTop,
+          }
+        },
+        {
+          overlayTestId,
+        }
+      )
+    )
+    await page.waitForTimeout(50)
+  }
+
+  const first = samples[0]
+  expect(first?.tableTop, "first axis viewport sample should include the final table").not.toBeNull()
+  for (const sample of samples) {
+    expect(sample.overlayCount).toBe(1)
+    expect(sample.selectedCellCount).toBe(expectedSelectedCellCount)
+    expect(sample.selectionTextLength).toBe(0)
+    expect(sample.tableDocumentTop).not.toBeNull()
+  }
+  const scrollTops = samples.map((sample) => sample.scrollTop)
+  const tableTops = samples.map((sample) => sample.tableTop ?? Number.NaN)
+  const documentScrollHeights = samples.map((sample) => sample.documentScrollHeight ?? Number.NaN)
+  const tableDocumentTops = samples.map((sample) => sample.tableDocumentTop ?? Number.NaN)
+  const maxScrollDelta = Math.max(...scrollTops) - Math.min(...scrollTops)
+  const maxTableTopDelta = Math.max(...tableTops) - Math.min(...tableTops)
+  const maxDocumentScrollHeightDelta =
+    Math.max(...documentScrollHeights) - Math.min(...documentScrollHeights)
+  const maxTableDocumentTopDelta = Math.max(...tableDocumentTops) - Math.min(...tableDocumentTops)
+  expect(maxScrollDelta, `axis viewport scroll samples: ${JSON.stringify(samples)}`).toBeLessThanOrEqual(16)
+  expect(maxTableTopDelta, `axis viewport table samples: ${JSON.stringify(samples)}`).toBeLessThanOrEqual(32)
+  expect(
+    maxDocumentScrollHeightDelta,
+    `axis document height samples: ${JSON.stringify(samples)}`
+  ).toBeLessThanOrEqual(32)
+  expect(maxTableDocumentTopDelta, `axis document table samples: ${JSON.stringify(samples)}`).toBeLessThanOrEqual(32)
 }
 
 const countMenuCloseTransitions = (menuCounts: number[]) => {
@@ -745,12 +871,14 @@ test.describe("editor authoring route post 507 final table axis after cell text 
     }
 
     await selectCurrentCellText()
+    await waitForPost507FinalTableViewportStable(page)
     await moveToPost507RowGripHotzone(page, rowHandle)
     await expect(rowHandle).toBeVisible()
     await clickVisibleOverlayControl(page, rowHandle)
     await expect(page.getByTestId("table-row-selection-outline")).toBeVisible()
     await expect(page.getByTestId("table-row-menu")).toBeVisible()
     await expect(editor.locator(".selectedCell")).toHaveCount(3)
+    await expectAxisSelectionViewportStableImmediately(page, 3, "table-row-selection-outline")
     await expect
       .poll(async () =>
         page.evaluate(() =>

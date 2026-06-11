@@ -26,7 +26,7 @@ export type NestedListItemDropIndicatorGeometry = {
 }
 
 export const LIST_ITEM_SELECTOR =
-  "li[data-type='taskItem'], li[data-task-item='true'], li[data-list-item='true'], li[data-type='listItem'], li"
+  ":is(li[data-type='taskItem'], li[data-task-item='true'], li[data-list-item='true'], li[data-type='listItem'], li)"
 
 export const LIST_CONTAINER_SELECTOR =
   "ul[data-type='taskList'], ul[data-task-list='true'], ul[data-type='bulletList'], ol[data-type='orderedList'], ul, ol"

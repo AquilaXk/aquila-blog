@@ -26,9 +26,11 @@ import {
 } from "./nestedListItemModel"
 import { isTableSelectionActive } from "./tableStructureModel"
 import {
+  collapseStaleTableEditorSelection,
   clearTableSelectedCellDomMarkers,
   isPrimarySelectAllKeyboardEvent,
   rememberActiveTableCellFromTarget,
+  TABLE_DRAG_SELECTION_TEXT_ATTR,
   clearTableTextSelectionForBlockSelection,
   hasTableSelectedCellDomMarkers,
   selectActiveTableCellText,
@@ -313,18 +315,49 @@ export const useBlockEditorEngineSelectionEffects = ({
       editor.view.dom
     const isTargetInsideEditorSurface = (target: EventTarget | null) =>
       target instanceof Node && editorSurface.contains(target)
+    const isNodeInsideEditorTable = (node: Node | null | undefined) => {
+      const element =
+        node instanceof Element
+          ? node
+          : node instanceof Node
+            ? node.parentElement
+            : null
+      return Boolean(
+        element &&
+          editorSurface.contains(element) &&
+          element.closest("th, td, table")
+      )
+    }
+    const hasNativeTableSelectionResidue = () => {
+      if (typeof window === "undefined" || typeof document === "undefined")
+        return false
+      const selection = window.getSelection()
+      return Boolean(
+        document.documentElement.getAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR) ||
+          editorSurface.querySelector(`[${TABLE_DRAG_SELECTION_TEXT_ATTR}]`) ||
+          isNodeInsideEditorTable(selection?.anchorNode) ||
+          isNodeInsideEditorTable(selection?.focusNode)
+      )
+    }
     let suppressNextListTextMouseDownUntil = 0
+    let lateTableSelectionGuardToken = 0
+    const cancelLateTableSelectionGuard = () => {
+      lateTableSelectionGuardToken += 1
+    }
     const guardListTextCaretAgainstLateTableSelection = (
       targetListItemContext: NestedListItemContext,
       clientX: number,
-      clientY: number
+      clientY: number,
+      maxDurationMs = 12_000
     ) => {
       if (typeof window === "undefined") return
+      const token = lateTableSelectionGuardToken
       const startedAt = performance.now()
       const maintain = () => {
         if (
+          token !== lateTableSelectionGuardToken ||
           !editor.view.dom.isConnected ||
-          performance.now() - startedAt > 12_000
+          performance.now() - startedAt > maxDurationMs
         )
           return
         if (hasTableSelectedCellDomMarkers(editor.view.dom as HTMLElement)) {
@@ -334,12 +367,20 @@ export const useBlockEditorEngineSelectionEffects = ({
           syncSelectedBlockNodeSurface(null)
           clearStickyTopLevelBlockSelection()
           cancelAllWindowScrollPreserves()
-          selectNestedListItemTextAtPoint(
+          collapseStaleTableEditorSelection(editor, {
+            clientX,
+            clientY,
+            target: targetListItemContext.listItemElement,
+          })
+          const restored = selectNestedListItemTextAtPoint(
             editor,
             targetListItemContext,
             clientX,
             clientY
           )
+          if (!restored) {
+            selectNestedListItemTextAnchor(editor, targetListItemContext)
+          }
           clearTableTextSelectionForBlockSelection({
             clearWindowSelection: false,
           })
@@ -357,6 +398,9 @@ export const useBlockEditorEngineSelectionEffects = ({
     }
     const handleEditorMouseDownCapture = (event: MouseEvent) => {
       const eventTarget = resolvePreciseMouseTarget(event)
+      if (event.type === "pointerdown") {
+        cancelLateTableSelectionGuard()
+      }
       if (!isTargetInsideEditorSurface(eventTarget)) return
       rememberActiveTableCellFromTarget(
         eventTarget,
@@ -378,26 +422,40 @@ export const useBlockEditorEngineSelectionEffects = ({
       )
       const now =
         typeof performance !== "undefined" ? performance.now() : Date.now()
+      const hasTableSelectionResidue =
+        isTableSelectionActive(editor) ||
+        tableEditingKey.getState(editor.state) !== null ||
+        hasTableSelectedCellDomMarkers(editor.view.dom as HTMLElement) ||
+        hasNativeTableSelectionResidue()
+      const hasBlockSelectionResidue =
+        keyboardBlockSelectionStickyRef.current ||
+        selectedBlockNodeIndexRef.current !== null ||
+        selectedListItemContextRef.current !== null
+      const shouldRestoreListTextSelection = Boolean(
+        targetListItemContext &&
+          !isOuterListItemGesture &&
+          (hasTableSelectionResidue || hasBlockSelectionResidue)
+      )
       if (
         event.type === "pointerdown" &&
+        event.button === 0 &&
         targetListItemContext &&
-        !isOuterListItemGesture
+        !isOuterListItemGesture &&
+        !shouldRestoreListTextSelection
       ) {
-        clearTableTextSelectionForBlockSelection({ clearWindowSelection: false })
-        clearTableSelectedCellDomMarkers(editor.view.dom as HTMLElement, editor)
+        lateTableSelectionGuardToken += 1
         guardListTextCaretAgainstLateTableSelection(
           targetListItemContext,
           event.clientX,
-          event.clientY
+          event.clientY,
+          900
         )
       }
       if (
         event.type === "pointerdown" &&
         event.button === 0 &&
         targetListItemContext &&
-        !isOuterListItemGesture &&
-        (!editor.state.selection.empty ||
-          tableEditingKey.getState(editor.state) !== null)
+        shouldRestoreListTextSelection
       ) {
         event.preventDefault()
         event.stopPropagation()
@@ -408,22 +466,37 @@ export const useBlockEditorEngineSelectionEffects = ({
         syncSelectedBlockNodeSurface(null)
         clearStickyTopLevelBlockSelection()
         cancelAllWindowScrollPreserves()
+        collapseStaleTableEditorSelection(editor, {
+          clientX: event.clientX,
+          clientY: event.clientY,
+          target: eventTarget,
+        })
         clearTableTextSelectionForBlockSelection({ clearWindowSelection: false })
         clearTableSelectedCellDomMarkers(editor.view.dom as HTMLElement, editor)
+        lateTableSelectionGuardToken += 1
         suppressNextListTextMouseDownUntil = now + 240
         const restoreListTextSelection = () => {
           if (!editor.view.dom.isConnected) return
-          selectNestedListItemTextAtPoint(
+          const restored = selectNestedListItemTextAtPoint(
             editor,
             targetListItemContext,
             event.clientX,
             event.clientY
           )
+          if (!restored) {
+            selectNestedListItemTextAnchor(editor, targetListItemContext)
+          }
+          clearTableSelectedCellDomMarkers(editor.view.dom as HTMLElement, editor)
         }
         restoreListTextSelection()
         window.requestAnimationFrame(restoreListTextSelection)
         window.setTimeout(restoreListTextSelection, 0)
         window.setTimeout(restoreListTextSelection, 60)
+        guardListTextCaretAgainstLateTableSelection(
+          targetListItemContext,
+          event.clientX,
+          event.clientY
+        )
         return
       }
       const hasNativeListTextRangeSelection = () => {
@@ -454,14 +527,23 @@ export const useBlockEditorEngineSelectionEffects = ({
         syncSelectedBlockNodeSurface(null)
         clearStickyTopLevelBlockSelection()
         cancelAllWindowScrollPreserves()
+        collapseStaleTableEditorSelection(editor, {
+          clientX: event.clientX,
+          clientY: event.clientY,
+          target: eventTarget,
+        })
         clearTableTextSelectionForBlockSelection({ clearWindowSelection: false })
         clearTableSelectedCellDomMarkers(editor.view.dom as HTMLElement, editor)
-        selectNestedListItemTextAtPoint(
+        const restored = selectNestedListItemTextAtPoint(
           editor,
           targetListItemContext,
           event.clientX,
           event.clientY
         )
+        if (!restored) {
+          selectNestedListItemTextAnchor(editor, targetListItemContext)
+        }
+        clearTableSelectedCellDomMarkers(editor.view.dom as HTMLElement, editor)
         return
       }
       if (
@@ -480,18 +562,18 @@ export const useBlockEditorEngineSelectionEffects = ({
         cancelAllWindowScrollPreserves()
         clearTableTextSelectionForBlockSelection({ clearWindowSelection: false })
         clearTableSelectedCellDomMarkers(editor.view.dom as HTMLElement, editor)
-        selectNestedListItemTextAtPoint(
+        const restored = selectNestedListItemTextAtPoint(
           editor,
           targetListItemContext,
           event.clientX,
           event.clientY
         )
+        if (!restored) {
+          selectNestedListItemTextAnchor(editor, targetListItemContext)
+        }
+        clearTableSelectedCellDomMarkers(editor.view.dom as HTMLElement, editor)
         return
       }
-      const hasTableSelectionResidue =
-        isTableSelectionActive(editor) ||
-        tableEditingKey.getState(editor.state) !== null ||
-        hasTableSelectedCellDomMarkers(editor.view.dom as HTMLElement)
       if (
         hasTableSelectionResidue &&
         !isOuterSelectionGesture &&
@@ -506,32 +588,37 @@ export const useBlockEditorEngineSelectionEffects = ({
           !event.ctrlKey &&
           !event.altKey &&
           !event.shiftKey &&
-          (keyboardBlockSelectionStickyRef.current ||
-            selectedBlockNodeIndexRef.current !== null)
-        const shouldRestoreListTextSelection =
-          targetListItemContext &&
-          (shouldReleaseStickyBlockSelection || hasTableSelectionResidue)
+          hasBlockSelectionResidue
         if (shouldReleaseStickyBlockSelection || shouldRestoreListTextSelection) {
           clearStickyTopLevelBlockSelection()
-          if (shouldRestoreListTextSelection) {
+          if (shouldRestoreListTextSelection && targetListItemContext) {
             event.preventDefault()
             event.stopPropagation()
             selectedListItemContextRef.current = null
             setSelectedListItemContext(null)
             setSelectedBlockNodeIndex(null)
             syncSelectedBlockNodeSurface(null)
+            collapseStaleTableEditorSelection(editor, {
+              clientX: event.clientX,
+              clientY: event.clientY,
+              target: eventTarget,
+            })
             clearTableTextSelectionForBlockSelection({ clearWindowSelection: false })
             cancelAllWindowScrollPreserves()
             clearTableSelectedCellDomMarkers(editor.view.dom as HTMLElement, editor)
             suppressNextListTextMouseDownUntil = now + 240
             const restoreListTextSelection = () => {
               if (!editor.view.dom.isConnected) return
-              selectNestedListItemTextAtPoint(
+              const restored = selectNestedListItemTextAtPoint(
                 editor,
                 targetListItemContext,
                 event.clientX,
                 event.clientY
               )
+              if (!restored) {
+                selectNestedListItemTextAnchor(editor, targetListItemContext)
+              }
+              clearTableSelectedCellDomMarkers(editor.view.dom as HTMLElement, editor)
             }
             restoreListTextSelection()
             window.requestAnimationFrame(restoreListTextSelection)

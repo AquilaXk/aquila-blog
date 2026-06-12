@@ -139,6 +139,10 @@ test("external backup root must stay strictly inside the default or configured s
     "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/backups",
     "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data",
   )
+  const insideMinioData = baseHomeServerEnv.replace(
+    "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/backups",
+    "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/minio/backups",
+  )
 
   const outsideResult = validateEnvText({
     contract: loadContract(contractPath),
@@ -150,11 +154,18 @@ test("external backup root must stay strictly inside the default or configured s
     target: "home-server-source",
     text: sameAsExternalRoot,
   })
+  const insideMinioResult = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text: insideMinioData,
+  })
 
   assert.equal(outsideResult.ok, false)
   assert(outsideResult.errors.some((error) => error.key === "AQUILA_BACKUP_ROOT"))
   assert.equal(sameResult.ok, false)
   assert(sameResult.errors.some((error) => error.key === "AQUILA_BACKUP_ROOT"))
+  assert.equal(insideMinioResult.ok, false)
+  assert(insideMinioResult.errors.some((error) => error.key === "AQUILA_BACKUP_ROOT"))
 })
 
 test("home-server-source requires DB runtime username after runtime-role cutover", async () => {
@@ -224,11 +235,12 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
   assert.match(workflow, /export HOME_SERVER_ENV/)
   assert(workflow.indexOf("export HOME_SERVER_ENV") < workflow.indexOf("create_external_backup.sh"))
   assert.match(workflow, /restart_external_backup_legacy_minio_if_needed/)
-  assert.match(workflow, /rm -rf -- "\$\{migrated_minio_dir\}"/)
+  assert.match(workflow, /keeping migrated MinIO copy available/)
   assert(
     workflow.indexOf("restart_external_backup_legacy_minio_if_needed") <
       workflow.indexOf("run_backup_rollback"),
   )
+  assert(workflow.indexOf("trap 'status=\\$\\?; if \\[ \"\\$\\{status\\}\" -ne 0 \\]; then restart_external_backup_legacy_minio_if_needed; fi' EXIT") < workflow.indexOf("create_external_backup.sh"))
   assert(workflow.indexOf("run_backup_rollback") < workflow.indexOf("restart_external_backup_legacy_minio_if_needed", workflow.indexOf("run_backup_rollback")))
   assert(workflow.lastIndexOf("rm -f deploy/homeserver/.external-minio-migration-stopped") < workflow.indexOf('DEPLOY_COMPLETED="true"'))
 })

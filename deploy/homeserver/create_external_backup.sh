@@ -118,6 +118,12 @@ validate_paths() {
     "${EXTERNAL_STORAGE_ROOT}"/*) ;;
     *) fail "AQUILA_BACKUP_ROOT must be inside AQUILA_EXTERNAL_STORAGE_ROOT" ;;
   esac
+  case "${BACKUP_ROOT}" in
+    "${EXTERNAL_STORAGE_ROOT}/minio"|\
+    "${EXTERNAL_STORAGE_ROOT}/minio"/*)
+      fail "AQUILA_BACKUP_ROOT must not be inside the MinIO data directory"
+      ;;
+  esac
   if [[ "${AQUILA_EXTERNAL_STORAGE_ALLOW_TEST_ROOT:-false}" != "true" && "${EXTERNAL_STORAGE_ROOT}" != "${DEFAULT_EXTERNAL_STORAGE_ROOT}" ]]; then
     fail "external storage root must be ${DEFAULT_EXTERNAL_STORAGE_ROOT}"
   fi

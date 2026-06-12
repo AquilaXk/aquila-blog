@@ -15,6 +15,7 @@ import type {
 } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { BLOCK_SELECTION_CONTROL_SELECTOR } from "./blockSelectionModel"
+import { preserveWindowScrollPositionAcrossFrames } from "./blockHandleLayoutModel"
 import type { TableAffordanceGeometry } from "./tableAffordanceModel"
 import {
   type DraggedTableAxisState,
@@ -64,9 +65,15 @@ const TABLE_AXIS_POINTER_TABLE_MATCH_MARGIN_PX = 96
 const TABLE_AXIS_POINTER_TABLE_EDGE_TOLERANCE_PX = 12
 const TABLE_AXIS_SELECTION_SINK_ID = "aq-table-axis-selection-sink"
 const TABLE_AXIS_FOCUS_SCROLL_PRESERVE_MS = 240
+const TABLE_AXIS_TEXT_SELECTION_SCROLL_PRESERVE_MS = 1_400
 const TABLE_AXIS_FOCUS_SCROLL_TOLERANCE_PX = 4
+const TABLE_AXIS_TEXT_SELECTION_SCROLL_PRESERVE_FRAMES = 96
+type TableAxisFocusScrollPreserveMode = "brief" | "text-selection"
 
-type SelectTableAxisOptions = { clearNativeText?: boolean }
+type SelectTableAxisOptions = {
+  clearNativeText?: boolean
+  scrollPreserveMode?: TableAxisFocusScrollPreserveMode
+}
 type ClearNativeTableTextSelectionOptions = { restoreCellSelection?: boolean }
 type RenderedTableSelectionTarget = {
   renderedTable: HTMLTableElement
@@ -92,7 +99,9 @@ const resolveTableAxisSelectionSink = () => {
   return selectionSink
 }
 
-const preserveTableAxisFocusScrollBriefly = () => {
+const preserveTableAxisFocusScrollBriefly = (
+  mode: TableAxisFocusScrollPreserveMode = "brief"
+) => {
   if (typeof window === "undefined") return
   const scrollingElement = document.scrollingElement
   const startX = window.scrollX
@@ -101,18 +110,52 @@ const preserveTableAxisFocusScrollBriefly = () => {
   let cancelled = false
   let intervalId: number | null = null
   let rafId: number | null = null
+  const cancelActiveScrollPreserve =
+    mode === "text-selection"
+      ? preserveWindowScrollPositionAcrossFrames(
+          { x: startX, y: startY },
+          TABLE_AXIS_TEXT_SELECTION_SCROLL_PRESERVE_FRAMES,
+          TABLE_AXIS_FOCUS_SCROLL_TOLERANCE_PX,
+          TABLE_AXIS_TEXT_SELECTION_SCROLL_PRESERVE_MS,
+          false,
+          false,
+          false,
+          false,
+          false,
+          undefined,
+          true,
+          Number.POSITIVE_INFINITY,
+          "table-axis"
+        )
+      : undefined
 
   const restoreScrollPosition = () => {
     const currentY = Math.round(scrollingElement?.scrollTop ?? window.scrollY)
-    if (Math.abs(currentY - startY) <= TABLE_AXIS_FOCUS_SCROLL_TOLERANCE_PX)
+    const shouldRestoreX =
+      Math.abs(window.scrollX - startX) > TABLE_AXIS_FOCUS_SCROLL_TOLERANCE_PX
+    const shouldRestoreY =
+      Math.abs(currentY - startY) > TABLE_AXIS_FOCUS_SCROLL_TOLERANCE_PX
+    if (!shouldRestoreX && !shouldRestoreY)
       return
+    if (mode === "text-selection") {
+      try {
+        window.scrollTo({
+          behavior: "instant" as ScrollBehavior,
+          left: startX,
+          top: startY,
+        })
+      } catch {
+        window.scrollTo(startX, startY)
+      }
+    }
     if (scrollingElement) {
       scrollingElement.scrollTop = startY
+      scrollingElement.scrollLeft = startX
     } else {
       document.documentElement.scrollTop = startY
       document.body.scrollTop = startY
     }
-    if (Math.abs(window.scrollX - startX) > TABLE_AXIS_FOCUS_SCROLL_TOLERANCE_PX) {
+    if (shouldRestoreX) {
       document.documentElement.scrollLeft = startX
       document.body.scrollLeft = startX
     }
@@ -125,10 +168,15 @@ const preserveTableAxisFocusScrollBriefly = () => {
     window.removeEventListener("keydown", cleanup, true)
     if (intervalId !== null) window.clearInterval(intervalId)
     if (rafId !== null) window.cancelAnimationFrame(rafId)
+    cancelActiveScrollPreserve?.()
   }
   const tick = () => {
     if (cancelled) return
-    if (getTableAxisMenuNow() - startedAt > TABLE_AXIS_FOCUS_SCROLL_PRESERVE_MS) {
+    const preserveMs =
+      mode === "text-selection"
+        ? TABLE_AXIS_TEXT_SELECTION_SCROLL_PRESERVE_MS
+        : TABLE_AXIS_FOCUS_SCROLL_PRESERVE_MS
+    if (getTableAxisMenuNow() - startedAt > preserveMs) {
       cleanup()
       return
     }
@@ -150,9 +198,51 @@ const preserveTableAxisFocusScrollBriefly = () => {
   })
   window.addEventListener("pointerdown", cleanup, { capture: true, once: true })
   window.addEventListener("keydown", cleanup, { capture: true, once: true })
-  intervalId = window.setInterval(restoreScrollPosition, 8)
+  intervalId = window.setInterval(
+    restoreScrollPosition,
+    mode === "text-selection" ? 4 : 8
+  )
   rafId = window.requestAnimationFrame(tick)
+  return restoreScrollPosition
 }
+
+const hasActiveTableTextSelectionForAxisDrag = () => {
+  if (typeof document === "undefined" || typeof window === "undefined")
+    return false
+  if (
+    document.documentElement
+      .getAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR)
+      ?.trim()
+  )
+    return true
+  if (document.querySelector(TABLE_DRAG_SELECTION_TEXT_SELECTOR)) return true
+  return Boolean(window.getSelection()?.toString().trim())
+}
+
+const isCurrentCellSelectionSingleAxis = (editor: TiptapEditor) => {
+  if (!(editor.state.selection instanceof CellSelection)) return false
+  try {
+    const rect = selectedRect(editor.state)
+    const isRowAxis =
+      rect.left === 0 &&
+      rect.right === rect.map.width &&
+      rect.bottom === rect.top + 1
+    const isColumnAxis =
+      rect.top === 0 &&
+      rect.bottom === rect.map.height &&
+      rect.right === rect.left + 1
+    return isRowAxis || isColumnAxis
+  } catch {
+    return false
+  }
+}
+
+const shouldPreserveTableAxisTextSelectionScroll = (
+  editor: TiptapEditor
+) =>
+  hasActiveTableTextSelectionForAxisDrag() ||
+  (editor.state.selection instanceof CellSelection &&
+    !isCurrentCellSelectionSingleAxis(editor))
 
 type UseBlockEditorTableOverlayAxisDragArgs = {
   cancelTableQuickRailHide: () => void
@@ -636,12 +726,19 @@ export const useBlockEditorTableOverlayAxisDrag = ({
       const anchorResolved = resolveDocPosSafe(activeEditor, anchorCellPos)
       const headResolved = resolveDocPosSafe(activeEditor, headCellPos)
       if (!anchorResolved || !headResolved) return false
+      const scrollPreserveMode =
+        options.scrollPreserveMode ??
+        (shouldPreserveTableAxisTextSelectionScroll(activeEditor)
+          ? "text-selection"
+          : "brief")
       clearStickyTopLevelBlockSelection()
       clearTableTextSelectionForStructuralSelection()
       focusElementWithoutScroll(activeEditor.view.dom)
       clearEditorMouseDownSelectionSyncDeferral(activeEditor)
       tableAxisMenuStabilizationTokenRef.current += 1
-      preserveTableAxisFocusScrollBriefly()
+      const restoreAxisFocusScroll = preserveTableAxisFocusScrollBriefly(
+        scrollPreserveMode
+      )
       activeEditor.view.dispatch(
         activeEditor.state.tr
           .setSelection(
@@ -652,6 +749,7 @@ export const useBlockEditorTableOverlayAxisDrag = ({
           .setMeta(tableEditingKey, anchorResolved.pos)
       )
       activeEditor.view.dom.blur()
+      restoreAxisFocusScroll?.()
       setTableAffordanceGeometry((prev) =>
         isColumn
           ? { ...prev, columnIndex: axisIndex }
@@ -936,6 +1034,10 @@ export const useBlockEditorTableOverlayAxisDrag = ({
         setTableAffordanceGeometry(sourceGeometry)
       }
 
+      const scrollPreserveMode: TableAxisFocusScrollPreserveMode =
+        shouldPreserveTableAxisTextSelectionScroll(currentEditor)
+          ? "text-selection"
+          : "brief"
       clearStructuralSelectionNativeText()
       markTableStructuralSelectionOwner(1_200)
       clearPendingTableAxisDrag()
@@ -957,7 +1059,15 @@ export const useBlockEditorTableOverlayAxisDrag = ({
         index: resolvedSourceIndex,
         tablePos,
       }
-      selectTableAxisAtIndex(currentEditor, tablePos, axis, resolvedSourceIndex)
+      selectTableAxisAtIndex(
+        currentEditor,
+        tablePos,
+        axis,
+        resolvedSourceIndex,
+        {
+          scrollPreserveMode,
+        }
+      )
 
       const DRAG_THRESHOLD_PX = 5
       let activeDragState: Exclude<DraggedTableAxisState, null> | null = null
@@ -1049,6 +1159,11 @@ export const useBlockEditorTableOverlayAxisDrag = ({
         }
         const completedClick = completeClickWithoutDrag?.() ?? false
         if (completedClick) {
+          const restoreCompletedAxisScroll =
+            scrollPreserveMode === "text-selection"
+              ? preserveTableAxisFocusScrollBriefly("text-selection")
+              : undefined
+          restoreCompletedAxisScroll?.()
           markTableStructuralSelectionOwner(1_200)
           const stabilizationToken = tableAxisMenuStabilizationTokenRef.current
           const stabilizationGeneration =

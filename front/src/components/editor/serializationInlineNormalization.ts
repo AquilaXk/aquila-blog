@@ -26,6 +26,8 @@ const MARKDOWN_ESCAPABLE_INLINE_CHARS = new Set([
 const INLINE_PATTERN_PREFIXES = ["{{", "[", "**", "~~", "`", "$", "*"]
 const MARKDOWN_ESCAPE_PATTERN = /[\\`*_{}\[\]()!$]/g
 const MARKDOWN_TILDE_RUN_PATTERN = /~{2,}/g
+const MARKDOWN_ORDERED_BLOCK_START_PATTERN = /^( {0,3})(\d+)(\.)(?=\s|$)/
+const MARKDOWN_DIVIDER_BLOCK_START_PATTERN = /^( {0,3})(-)(?:\s*-){2,}\s*$/
 
 const isEscapedMarkdownCharacter = (character: string | undefined) =>
   Boolean(character && MARKDOWN_ESCAPABLE_INLINE_CHARS.has(character))
@@ -39,6 +41,31 @@ export const escapeMarkdownInlineText = (text: string) =>
 
 export const unescapeMarkdownInlineText = (text: string) =>
   text.replace(/\\([\\`*_{}\[\]()!$~>#+\-.])/g, "$1")
+
+const escapeMarkdownBlockStartLine = (line: string) => {
+  if (MARKDOWN_DIVIDER_BLOCK_START_PATTERN.test(line)) {
+    return line.replace(/^( {0,3})(-)/, "$1\\$2")
+  }
+  if (/^( {0,3})(#{1,6})(?=\s|$)/.test(line)) {
+    return line.replace(/^( {0,3})(#)/, "$1\\$2")
+  }
+  if (/^( {0,3})([-+])(?=\s|$)/.test(line)) {
+    return line.replace(/^( {0,3})([-+])/, "$1\\$2")
+  }
+  if (MARKDOWN_ORDERED_BLOCK_START_PATTERN.test(line)) {
+    return line.replace(
+      MARKDOWN_ORDERED_BLOCK_START_PATTERN,
+      "$1$2\\$3"
+    )
+  }
+  if (/^(\s*)(>)/.test(line)) {
+    return line.replace(/^(\s*)(>)/, "$1\\$2")
+  }
+  return line
+}
+
+const escapeMarkdownBlockStartText = (text: string) =>
+  text.split("\n").map(escapeMarkdownBlockStartLine).join("\n")
 
 const getMaxBacktickRun = (text: string) =>
   (text.match(/`+/g) || []).reduce(
@@ -336,5 +363,5 @@ export const serializeInlineContent = (content?: JSONContent[]) =>
 
 export const serializeParagraphLikeNode = (node: JSONContent) => {
   if (!node.content || node.content.length === 0) return ""
-  return serializeInlineContent(node.content)
+  return escapeMarkdownBlockStartText(serializeInlineContent(node.content))
 }

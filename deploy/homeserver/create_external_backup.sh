@@ -12,7 +12,9 @@ DEFAULT_EXTERNAL_STORAGE_ROOT="/mnt/aquila-blog-data"
 TIMESTAMP="${AQUILA_BACKUP_TIMESTAMP:-$(date +%Y%m%d-%H%M%S)}"
 BACKUP_LOG_FILE=""
 STOPPED_LEGACY_MINIO_CONTAINERS=()
+STOPPED_BACKUP_MINIO_CONTAINERS=()
 LEGACY_MINIO_STOPPED_FOR_MIGRATION="false"
+MINIO_STOPPED_FOR_BACKUP="false"
 MIGRATED_MINIO_DIR_THIS_RUN=""
 
 read_key_from_text() {
@@ -277,6 +279,44 @@ restart_stopped_legacy_minio_on_failure() {
   rm -f -- "${MIGRATION_STOPPED_FILE}"
 }
 
+stop_minio_for_consistent_backup() {
+  local stop_timeout="${AQUILA_MINIO_BACKUP_STOP_TIMEOUT_SECONDS:-60}"
+  local cid
+
+  STOPPED_BACKUP_MINIO_CONTAINERS=()
+  while IFS= read -r cid; do
+    [[ -n "${cid}" ]] || continue
+    log "stopping minio container for consistent filesystem backup: ${cid}"
+    docker stop -t "${stop_timeout}" "${cid}" >/dev/null
+    STOPPED_BACKUP_MINIO_CONTAINERS+=("${cid}")
+  done < <(
+    docker ps -q \
+      --filter "label=com.docker.compose.project=blog_home" \
+      --filter "label=com.docker.compose.service=minio_1"
+  )
+
+  if [[ "${#STOPPED_BACKUP_MINIO_CONTAINERS[@]}" -gt 0 ]]; then
+    MINIO_STOPPED_FOR_BACKUP="true"
+  fi
+}
+
+restart_minio_after_consistent_backup() {
+  local cid
+  local failed="false"
+
+  for cid in "${STOPPED_BACKUP_MINIO_CONTAINERS[@]}"; do
+    log "restarting minio container after filesystem backup: ${cid}"
+    if ! docker start "${cid}" >/dev/null; then
+      log "failed to restart minio container after backup: ${cid}"
+      failed="true"
+    fi
+  done
+
+  STOPPED_BACKUP_MINIO_CONTAINERS=()
+  MINIO_STOPPED_FOR_BACKUP="false"
+  [[ "${failed}" != "true" ]]
+}
+
 write_stopped_legacy_minio_marker() {
   local minio_dir="$1"
   if [[ "${#STOPPED_LEGACY_MINIO_CONTAINERS[@]}" -eq 0 ]]; then
@@ -294,10 +334,15 @@ write_stopped_legacy_minio_marker() {
 
 cleanup_on_exit() {
   local status=$?
-  if [[ "${status}" -ne 0 && "${LEGACY_MINIO_STOPPED_FOR_MIGRATION}" == "true" ]]; then
-    restart_stopped_legacy_minio_on_failure
-    if [[ -n "${MIGRATED_MINIO_DIR_THIS_RUN}" && "${MIGRATED_MINIO_DIR_THIS_RUN}" != "/" && -d "${MIGRATED_MINIO_DIR_THIS_RUN}" ]]; then
-      rm -rf -- "${MIGRATED_MINIO_DIR_THIS_RUN}"
+  if [[ "${status}" -ne 0 ]]; then
+    if [[ "${MINIO_STOPPED_FOR_BACKUP}" == "true" ]]; then
+      restart_minio_after_consistent_backup || true
+    fi
+    if [[ "${LEGACY_MINIO_STOPPED_FOR_MIGRATION}" == "true" ]]; then
+      restart_stopped_legacy_minio_on_failure
+      if [[ -n "${MIGRATED_MINIO_DIR_THIS_RUN}" && "${MIGRATED_MINIO_DIR_THIS_RUN}" != "/" && -d "${MIGRATED_MINIO_DIR_THIS_RUN}" ]]; then
+        rm -rf -- "${MIGRATED_MINIO_DIR_THIS_RUN}"
+      fi
     fi
   fi
   exit "${status}"
@@ -349,7 +394,7 @@ backup_minio() {
   local class="$1"
   local target_dir="${BACKUP_ROOT}/minio/${class}/${TIMESTAMP}"
   local minio_dir="${EXTERNAL_STORAGE_ROOT}/minio"
-  local mode="filesystem-snapshot"
+  local mode="offline-filesystem-copy"
   mkdir -p "${target_dir}"
 
   if [[ "${AQUILA_BACKUP_SKIP_MINIO:-false}" == "true" ]]; then
@@ -361,7 +406,15 @@ backup_minio() {
   prepare_external_minio_dir
   [[ -d "${minio_dir}" ]] || fail "missing minio data directory: ${minio_dir}"
 
-  tar -C "${minio_dir}" -czf "${target_dir}/minio-data.tar.gz" .
+  stop_minio_for_consistent_backup
+  if [[ "${#STOPPED_BACKUP_MINIO_CONTAINERS[@]}" -gt 0 ]]; then
+    mode="stopped-filesystem-copy"
+  fi
+  if ! tar -C "${minio_dir}" -czf "${target_dir}/minio-data.tar.gz" .; then
+    restart_minio_after_consistent_backup || true
+    fail "failed to archive minio data directory: ${minio_dir}"
+  fi
+  restart_minio_after_consistent_backup || fail "failed to restart minio after backup"
   write_metadata "${class}" "${target_dir}" "${mode}"
 }
 
@@ -375,11 +428,6 @@ validate_paths
 mkdir -p "${BACKUP_ROOT}/logs"
 BACKUP_LOG_FILE="${BACKUP_ROOT}/logs/${TIMESTAMP}.log"
 check_free_space "${MIN_FREE_PERCENT}"
-
-mapfile_available="true"
-if ! command -v mapfile >/dev/null 2>&1; then
-  mapfile_available="false"
-fi
 
 classes=()
 while IFS= read -r class; do

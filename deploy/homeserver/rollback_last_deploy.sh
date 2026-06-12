@@ -606,7 +606,7 @@ repair_back_image_if_missing
 persist_single_runtime_caddy_upstreams "${target_backend}"
 
 warn_unsupported_docker_engine
-services_to_boot=(db_1 redis_1 caddy cloudflared uptime_kuma autoheal)
+services_to_boot=(db_1 redis_1 minio_1 caddy cloudflared uptime_kuma autoheal)
 if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
   services_to_boot+=(back_read back_admin back_worker)
 fi

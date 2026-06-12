@@ -345,7 +345,11 @@ services:
       TZ: Asia/Seoul
     command: server /data --console-address ":9001"
     volumes:
-      - ${AQUILA_EXTERNAL_STORAGE_ROOT:-/mnt/aquila-blog-data}/minio:/data
+      - type: bind
+        source: ${AQUILA_EXTERNAL_STORAGE_ROOT:-/mnt/aquila-blog-data}/minio
+        target: /data
+        bind:
+          create_host_path: false
     networks:
       default:
         aliases:

@@ -235,12 +235,14 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
   assert.match(workflow, /export HOME_SERVER_ENV/)
   assert(workflow.indexOf("export HOME_SERVER_ENV") < workflow.indexOf("create_external_backup.sh"))
   assert.match(workflow, /restart_external_backup_legacy_minio_if_needed/)
-  assert.match(workflow, /keeping migrated MinIO copy available/)
+  assert.match(workflow, /backup created \(pre-checkout\)/)
+  assert.match(workflow, /removing migrated MinIO copy after rollback to legacy volume/)
+  assert(workflow.indexOf("backup created (pre-checkout)") < workflow.indexOf('git checkout --force "${HOME_DEPLOY_SHA}"'))
   assert(
     workflow.indexOf("restart_external_backup_legacy_minio_if_needed") <
       workflow.indexOf("run_backup_rollback"),
   )
-  assert(workflow.indexOf("trap 'status=\\$\\?; if \\[ \"\\$\\{status\\}\" -ne 0 \\]; then restart_external_backup_legacy_minio_if_needed; fi' EXIT") < workflow.indexOf("create_external_backup.sh"))
+  assert(workflow.indexOf('rollback_from_backup_if_needed "unexpected_exit_status_${status}"') < workflow.indexOf("EXTERNAL_BACKUP_DIR="))
   assert(workflow.indexOf("run_backup_rollback") < workflow.indexOf("restart_external_backup_legacy_minio_if_needed", workflow.indexOf("run_backup_rollback")))
   assert(workflow.lastIndexOf("rm -f deploy/homeserver/.external-minio-migration-stopped") < workflow.indexOf('DEPLOY_COMPLETED="true"'))
 })

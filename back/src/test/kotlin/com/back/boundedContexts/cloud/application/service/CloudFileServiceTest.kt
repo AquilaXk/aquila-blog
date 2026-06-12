@@ -10,6 +10,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.io.ByteArrayInputStream
 import java.time.Clock
 import java.time.Instant
@@ -109,6 +110,126 @@ class CloudFileServiceTest {
     }
 
     @Test
+    @DisplayName("업로드 시 빈 파일과 미지원 파일 형식을 storage 저장 전에 차단한다")
+    fun `upload는 빈 파일과 미지원 파일 형식을 storage 저장 전에 차단한다`() {
+        assertThatThrownBy {
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "empty.pdf",
+                contentType = "application/pdf",
+                bytes = byteArrayOf(),
+                folderPath = "docs",
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("비어 있습니다")
+
+        assertThatThrownBy {
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "unknown.bin",
+                contentType = "application/octet-stream",
+                bytes = "plain".toByteArray(),
+                folderPath = "docs",
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("지원하지 않는 클라우드 파일 형식")
+
+        assertThat(storage.uploaded).isEmpty()
+        assertThat(repository.savedFiles).isEmpty()
+    }
+
+    @Test
+    @DisplayName("업로드 시 지원하는 문서 사진 동영상 시그니처를 mediaKind로 분류한다")
+    fun `upload는 지원하는 문서 사진 동영상 시그니처를 mediaKind로 분류한다`() {
+        val cases =
+            listOf(
+                SignatureCase("alias.jpg", "image/jpg", byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte()), CloudFileMediaKind.PHOTO),
+                SignatureCase("photo.png", "image/x-png", PNG_BYTES, CloudFileMediaKind.PHOTO),
+                SignatureCase("anim.gif", "image/gif", "GIF89a".toByteArray(), CloudFileMediaKind.PHOTO),
+                SignatureCase("asset.webp", "image/x-webp", "RIFFxxxxWEBP".toByteArray(), CloudFileMediaKind.PHOTO),
+                SignatureCase("movie.mp4", null, byteArrayOf(0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70, 0, 0, 0, 0), CloudFileMediaKind.VIDEO),
+                SignatureCase("clip.webm", "video/webm", byteArrayOf(0x1A, 0x45, 0xDF.toByte(), 0xA3.toByte()), CloudFileMediaKind.VIDEO),
+            )
+
+        cases.forEachIndexed { index, case ->
+            val result =
+                service.upload(
+                    ownerMemberId = 7L,
+                    originalFilename = "unsafe/${case.filename}\n",
+                    contentType = case.contentType,
+                    bytes = case.bytes,
+                    folderPath = "/media $index/",
+                )
+
+            assertThat(result.mediaKind).isEqualTo(case.mediaKind)
+            assertThat(result.folderPath).isEqualTo("media $index")
+            assertThat(result.originalFilename).doesNotContain("/")
+        }
+
+        assertThat(storage.uploaded).hasSize(cases.size)
+    }
+
+    @Test
+    @DisplayName("업로드 시 파일명이 없으면 기본 파일명과 root folder를 사용한다")
+    fun `upload는 파일명이 없으면 기본 파일명과 root folder를 사용한다`() {
+        val result =
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = null,
+                contentType = "application/pdf",
+                bytes = "%PDF-1.7".toByteArray(),
+                folderPath = null,
+            )
+
+        assertThat(result.originalFilename).isEqualTo("cloud-file")
+        assertThat(result.folderPath).isEmpty()
+        assertThat(repository.savedFiles.single().objectKey).startsWith("cloud/7/2026/06/12/")
+    }
+
+    @Test
+    @DisplayName("목록과 단건 조회는 owner folder keyword mediaKind 조건을 적용한다")
+    fun `목록과 단건 조회는 owner folder keyword mediaKind 조건을 적용한다`() {
+        repository.assignAuditTimestamps = true
+        val manual =
+            repository.save(
+                cloudFile(
+                    ownerMemberId = 7L,
+                    objectKey = "cloud/7/docs/manual.pdf",
+                    originalFilename = "Manual.pdf",
+                    mediaKind = CloudFileMediaKind.DOCUMENT,
+                    folderPath = "docs",
+                ),
+            )
+        repository.save(
+            cloudFile(
+                ownerMemberId = 7L,
+                objectKey = "cloud/7/photos/photo.png",
+                originalFilename = "photo.png",
+                mediaKind = CloudFileMediaKind.PHOTO,
+                folderPath = "photos",
+            ),
+        )
+
+        val files =
+            service.listFiles(
+                ownerMemberId = 7L,
+                folderPath = " docs ",
+                keyword = "manual",
+                mediaKind = CloudFileMediaKind.DOCUMENT,
+            )
+        val dto = service.get(ownerMemberId = 7L, fileId = manual.id)
+        val allFiles = service.listFiles(ownerMemberId = 7L, folderPath = "", keyword = " ", mediaKind = null)
+
+        assertThat(files).extracting("id").containsExactly(manual.id)
+        assertThat(dto.createdAt).isEqualTo(Instant.parse("2026-06-12T00:00:00Z"))
+        assertThat(allFiles).hasSize(2)
+        assertThatThrownBy {
+            service.get(ownerMemberId = 8L, fileId = manual.id)
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("파일을 찾을 수 없습니다")
+    }
+
+    @Test
     @DisplayName("content 조회 시 owner match 없이는 저장소 stream을 열지 않는다")
     fun `content 조회는 owner match 없이는 저장소를 열지 않는다`() {
         val saved =
@@ -131,6 +252,28 @@ class CloudFileServiceTest {
             .hasMessageContaining("파일을 찾을 수 없습니다")
 
         assertThat(storage.openedObjectKeys).isEmpty()
+    }
+
+    @Test
+    @DisplayName("content 조회 시 metadata는 있지만 object가 없으면 404로 실패한다")
+    fun `content 조회는 metadata는 있지만 object가 없으면 실패한다`() {
+        val saved =
+            repository.save(
+                cloudFile(
+                    ownerMemberId = 7L,
+                    objectKey = "cloud/7/docs/missing.pdf",
+                    originalFilename = "missing.pdf",
+                    mediaKind = CloudFileMediaKind.DOCUMENT,
+                    folderPath = "docs",
+                ),
+            )
+
+        assertThatThrownBy {
+            service.openContent(ownerMemberId = 7L, fileId = saved.id)
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("파일을 찾을 수 없습니다")
+
+        assertThat(storage.openedObjectKeys).containsExactly(saved.objectKey)
     }
 
     @Test
@@ -192,6 +335,63 @@ class CloudFileServiceTest {
     }
 
     @Test
+    @DisplayName("delete 시 transaction commit 이후 object 삭제를 실행한다")
+    fun `delete는 transaction commit 이후 object 삭제를 실행한다`() {
+        val saved =
+            repository.save(
+                cloudFile(
+                    ownerMemberId = 7L,
+                    objectKey = "cloud/7/docs/tx.pdf",
+                    originalFilename = "tx.pdf",
+                    mediaKind = CloudFileMediaKind.DOCUMENT,
+                    folderPath = "docs",
+                ),
+            )
+
+        TransactionSynchronizationManager.initSynchronization()
+        try {
+            service.delete(ownerMemberId = 7L, fileId = saved.id)
+            val synchronizations = TransactionSynchronizationManager.getSynchronizations()
+
+            assertThat(storage.deletedObjectKeys).isEmpty()
+            synchronizations.single().afterCommit()
+            assertThat(storage.deletedObjectKeys).containsExactly(saved.objectKey)
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization()
+        }
+    }
+
+    @Test
+    @DisplayName("delete 후 commit 이후 object 삭제 실패는 요청 성공 이후 로그로만 남긴다")
+    fun `delete 후 commit 이후 object 삭제 실패는 요청 성공 이후 로그로만 남긴다`() {
+        val saved =
+            repository.save(
+                cloudFile(
+                    ownerMemberId = 7L,
+                    objectKey = "cloud/7/docs/delete-fail.pdf",
+                    originalFilename = "delete-fail.pdf",
+                    mediaKind = CloudFileMediaKind.DOCUMENT,
+                    folderPath = "docs",
+                ),
+            )
+        storage.deleteFailure = IllegalStateException("delete failed")
+
+        TransactionSynchronizationManager.initSynchronization()
+        try {
+            service.delete(ownerMemberId = 7L, fileId = saved.id)
+            val synchronization = TransactionSynchronizationManager.getSynchronizations().single()
+
+            synchronization.afterCommit()
+
+            assertThat(repository.findActiveByIdAndOwner(saved.id, 7L)).isNull()
+            assertThat(storage.deletedObjectKeys).containsExactly(saved.objectKey)
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization()
+            storage.deleteFailure = null
+        }
+    }
+
+    @Test
     @DisplayName("delete 시 owner mismatch이면 metadata와 object를 삭제하지 않는다")
     fun `delete는 owner mismatch에서 metadata와 object를 삭제하지 않는다`() {
         val saved =
@@ -218,6 +418,18 @@ class CloudFileServiceTest {
     }
 
     @Test
+    @DisplayName("delete 시 파일이 없으면 metadata와 object를 삭제하지 않는다")
+    fun `delete는 파일이 없으면 metadata와 object를 삭제하지 않는다`() {
+        assertThatThrownBy {
+            service.delete(ownerMemberId = 7L, fileId = 404L)
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("파일을 찾을 수 없습니다")
+
+        assertThat(repository.savedFiles).isEmpty()
+        assertThat(storage.deletedObjectKeys).isEmpty()
+    }
+
+    @Test
     @DisplayName("UploadRequest는 bytes 내용을 기준으로 동일성을 비교한다")
     fun `UploadRequest는 bytes 내용을 기준으로 동일성을 비교한다`() {
         val first =
@@ -237,11 +449,50 @@ class CloudFileServiceTest {
 
         assertThat(first).isEqualTo(second)
         assertThat(first.hashCode()).isEqualTo(second.hashCode())
+        assertThat(first.objectKey).isEqualTo("cloud/7/docs/file.pdf")
+        assertThat(first.bytes).containsExactly(*"%PDF-1.7".toByteArray())
+        assertThat(first.contentType).isEqualTo("application/pdf")
+        assertThat(first.originalFilename).isEqualTo("file.pdf")
+        assertThat(first).isNotEqualTo(
+            CloudStoragePort.UploadRequest(
+                objectKey = "cloud/7/docs/other.pdf",
+                bytes = "%PDF-1.7".toByteArray(),
+                contentType = "application/pdf",
+                originalFilename = "file.pdf",
+            ),
+        )
+        assertThat(first.toString()).contains("bytes=8 bytes")
     }
+
+    @Test
+    @DisplayName("StoredObject close는 내부 inputStream을 닫는다")
+    fun `StoredObject close는 내부 inputStream을 닫는다`() {
+        val inputStream = CloseAwareInputStream("stream".toByteArray())
+        val storedObject =
+            CloudStoragePort.StoredObject(
+                inputStream = inputStream,
+                contentType = "application/pdf",
+                contentLength = 6L,
+                originalFilename = "stream.pdf",
+            )
+
+        storedObject.close()
+
+        assertThat(inputStream.closed).isTrue()
+        assertThat(storedObject.originalFilename).isEqualTo("stream.pdf")
+    }
+
+    private data class SignatureCase(
+        val filename: String,
+        val contentType: String?,
+        val bytes: ByteArray,
+        val mediaKind: CloudFileMediaKind,
+    )
 
     private class FakeCloudFileRepository : CloudFileRepositoryPort {
         val savedFiles = mutableListOf<CloudFile>()
         var onSave: ((CloudFile) -> Unit)? = null
+        var assignAuditTimestamps: Boolean = false
         private var nextId = 1L
 
         override fun save(file: CloudFile): CloudFile {
@@ -261,6 +512,10 @@ class CloudFileServiceTest {
                 } else {
                     file
                 }
+            if (assignAuditTimestamps) {
+                stored.createdAt = Instant.parse("2026-06-12T00:00:00Z")
+                stored.modifiedAt = Instant.parse("2026-06-12T00:00:00Z")
+            }
             onSave?.invoke(stored)
             savedFiles.removeIf { it.id == stored.id }
             savedFiles += stored
@@ -297,6 +552,7 @@ class CloudFileServiceTest {
         val openedObjectKeys = mutableListOf<String>()
         val deletedObjectKeys = mutableListOf<String>()
         val objects = mutableMapOf<String, CloudStoragePort.StoredObject>()
+        var deleteFailure: RuntimeException? = null
 
         override fun upload(request: CloudStoragePort.UploadRequest): CloudStoragePort.UploadResult {
             uploaded += request
@@ -313,6 +569,55 @@ class CloudFileServiceTest {
 
         override fun delete(objectKey: String) {
             deletedObjectKeys += objectKey
+            deleteFailure?.let { throw it }
         }
+    }
+
+    private class CloseAwareInputStream(
+        bytes: ByteArray,
+    ) : ByteArrayInputStream(bytes) {
+        var closed: Boolean = false
+
+        override fun close() {
+            closed = true
+            super.close()
+        }
+    }
+
+    companion object {
+        private val PNG_BYTES =
+            byteArrayOf(
+                0x89.toByte(),
+                0x50,
+                0x4E,
+                0x47,
+                0x0D,
+                0x0A,
+                0x1A,
+                0x0A,
+            )
+
+        private fun cloudFile(
+            ownerMemberId: Long,
+            objectKey: String,
+            originalFilename: String,
+            mediaKind: CloudFileMediaKind,
+            folderPath: String,
+        ): CloudFile =
+            CloudFile.create(
+                ownerMemberId = ownerMemberId,
+                objectKey = objectKey,
+                originalFilename = originalFilename,
+                contentType =
+                    when (mediaKind) {
+                        CloudFileMediaKind.DOCUMENT -> "application/pdf"
+                        CloudFileMediaKind.PHOTO -> "image/png"
+                        CloudFileMediaKind.VIDEO -> "video/mp4"
+                    },
+                byteSize = 9L,
+                mediaKind = mediaKind,
+                folderPath = folderPath,
+                checksumSha256 = null,
+            )
     }
 }

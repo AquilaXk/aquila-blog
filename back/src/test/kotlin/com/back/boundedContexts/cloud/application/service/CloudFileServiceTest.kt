@@ -5,6 +5,7 @@ import com.back.boundedContexts.cloud.model.CloudFile
 import com.back.boundedContexts.cloud.model.CloudFileMediaKind
 import com.back.global.exception.application.AppException
 import com.back.global.storage.application.port.output.CloudStoragePort
+import com.back.global.storage.config.CloudStorageProperties
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
@@ -82,6 +83,32 @@ class CloudFileServiceTest {
     }
 
     @Test
+    @DisplayName("업로드 시 설정된 최대 크기를 넘으면 storage에 저장하지 않는다")
+    fun `upload는 설정된 최대 크기를 넘으면 storage에 저장하지 않는다`() {
+        val limitedService =
+            CloudFileService(
+                cloudFileRepository = repository,
+                cloudStoragePort = storage,
+                cloudStorageProperties = CloudStorageProperties(maxFileSizeBytes = 5),
+                clock = Clock.fixed(Instant.parse("2026-06-12T00:00:00Z"), ZoneOffset.UTC),
+            )
+
+        assertThatThrownBy {
+            limitedService.upload(
+                ownerMemberId = 7L,
+                originalFilename = "large.pdf",
+                contentType = "application/pdf",
+                bytes = "%PDF-1.7".toByteArray(),
+                folderPath = "docs",
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("클라우드 파일은")
+
+        assertThat(storage.uploaded).isEmpty()
+        assertThat(repository.savedFiles).isEmpty()
+    }
+
+    @Test
     @DisplayName("content 조회 시 owner match 없이는 저장소 stream을 열지 않는다")
     fun `content 조회는 owner match 없이는 저장소를 열지 않는다`() {
         val saved =
@@ -138,6 +165,33 @@ class CloudFileServiceTest {
     }
 
     @Test
+    @DisplayName("delete 시 metadata 삭제 표시 저장 후 object를 삭제한다")
+    fun `delete는 metadata 삭제 표시 저장 후 object를 삭제한다`() {
+        val saved =
+            repository.save(
+                CloudFile.create(
+                    ownerMemberId = 7L,
+                    objectKey = "cloud/7/docs/file.pdf",
+                    originalFilename = "file.pdf",
+                    contentType = "application/pdf",
+                    byteSize = 9L,
+                    mediaKind = CloudFileMediaKind.DOCUMENT,
+                    folderPath = "docs",
+                    checksumSha256 = null,
+                ),
+            )
+        repository.onSave = { file ->
+            assertThat(file.deletedAt).isNotNull()
+            assertThat(storage.deletedObjectKeys).isEmpty()
+        }
+
+        service.delete(ownerMemberId = 7L, fileId = saved.id)
+
+        assertThat(repository.findActiveByIdAndOwner(saved.id, 7L)).isNull()
+        assertThat(storage.deletedObjectKeys).containsExactly(saved.objectKey)
+    }
+
+    @Test
     @DisplayName("delete 시 owner mismatch이면 metadata와 object를 삭제하지 않는다")
     fun `delete는 owner mismatch에서 metadata와 object를 삭제하지 않는다`() {
         val saved =
@@ -163,8 +217,31 @@ class CloudFileServiceTest {
         assertThat(storage.deletedObjectKeys).isEmpty()
     }
 
+    @Test
+    @DisplayName("UploadRequest는 bytes 내용을 기준으로 동일성을 비교한다")
+    fun `UploadRequest는 bytes 내용을 기준으로 동일성을 비교한다`() {
+        val first =
+            CloudStoragePort.UploadRequest(
+                objectKey = "cloud/7/docs/file.pdf",
+                bytes = "%PDF-1.7".toByteArray(),
+                contentType = "application/pdf",
+                originalFilename = "file.pdf",
+            )
+        val second =
+            CloudStoragePort.UploadRequest(
+                objectKey = "cloud/7/docs/file.pdf",
+                bytes = "%PDF-1.7".toByteArray(),
+                contentType = "application/pdf",
+                originalFilename = "file.pdf",
+            )
+
+        assertThat(first).isEqualTo(second)
+        assertThat(first.hashCode()).isEqualTo(second.hashCode())
+    }
+
     private class FakeCloudFileRepository : CloudFileRepositoryPort {
         val savedFiles = mutableListOf<CloudFile>()
+        var onSave: ((CloudFile) -> Unit)? = null
         private var nextId = 1L
 
         override fun save(file: CloudFile): CloudFile {
@@ -184,6 +261,7 @@ class CloudFileServiceTest {
                 } else {
                     file
                 }
+            onSave?.invoke(stored)
             savedFiles.removeIf { it.id == stored.id }
             savedFiles += stored
             return stored

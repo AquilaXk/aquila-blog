@@ -168,6 +168,16 @@ export const validateEnvText = ({ contract, target, text }) => {
         errors.push(safeError(check.childKey, `must be inside ${check.parentKey}`))
       }
     }
+
+    if (check.type === "pathNotWithin") {
+      const parentPath = (valueOf(env, check.parentKey) || check.defaultParent || "").replace(/\/+$/, "")
+      const relativeParent = (check.relativeParent || "").replace(/^\/+|\/+$/g, "")
+      const forbiddenPath = relativeParent ? `${parentPath}/${relativeParent}` : parentPath
+      const childPath = valueOf(env, check.childKey).replace(/\/+$/, "")
+      if (forbiddenPath && childPath && (childPath === forbiddenPath || childPath.startsWith(`${forbiddenPath}/`))) {
+        errors.push(safeError(check.childKey, `must not be inside ${check.parentKey}/${relativeParent}`))
+      }
+    }
   }
 
   return { ok: errors.length === 0, target, errors, warnings }

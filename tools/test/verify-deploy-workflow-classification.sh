@@ -39,3 +39,5 @@ reject_pattern 'git diff-tree --no-commit-id --name-only -r "\$\{DEPLOY_SHA\}"' 
 require_pattern 'needs\.calculateTag\.outputs\.backend_deploy' "backend jobs must be gated by backend_deploy"
 require_pattern 'needs\.calculateTag\.outputs\.front_live_verify' "frontend live verification must be gated by front_live_verify"
 require_pattern 'always\(\)[[:space:]]*&&' "frontLiveE2E must handle skipped backend deploy dependencies explicitly"
+require_pattern 'create_external_backup\.sh' "homeserver deploy must create an external storage backup before rollout mutation"
+require_pattern 'prune_external_backups\.sh' "homeserver deploy must prune external backups after backup creation"

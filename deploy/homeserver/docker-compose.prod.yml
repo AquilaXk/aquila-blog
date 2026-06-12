@@ -345,7 +345,7 @@ services:
       TZ: Asia/Seoul
     command: server /data --console-address ":9001"
     volumes:
-      - minio_data:/data
+      - ${AQUILA_EXTERNAL_STORAGE_ROOT:-/mnt/aquila-blog-data}/minio:/data
     networks:
       default:
         aliases:
@@ -355,7 +355,6 @@ volumes:
   db_data:
   caddy_data:
   caddy_config:
-  minio_data:
   uptime_kuma_data:
   prometheus_data:
   grafana_data:

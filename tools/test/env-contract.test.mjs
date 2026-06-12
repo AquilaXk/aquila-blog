@@ -33,6 +33,12 @@ const baseHomeServerEnv = [
   "CLOUDFLARED_IMAGE=cloudflare/cloudflared:2026.5.0",
   "DB_IMAGE=jangka512/pgj:2026.05.21",
   "MINIO_IMAGE=minio/minio:RELEASE.2026-05-21T00-00-00Z",
+  "AQUILA_EXTERNAL_STORAGE_ROOT=/mnt/aquila-blog-data",
+  "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/backups",
+  "AQUILA_BACKUP_RETENTION_DAILY=14",
+  "AQUILA_BACKUP_RETENTION_WEEKLY=8",
+  "AQUILA_BACKUP_RETENTION_MONTHLY=6",
+  "AQUILA_BACKUP_MIN_FREE_PERCENT=15",
   "PROMETHEUS_BASIC_AUTH_USER=promviewer",
   "PROMETHEUS_BASIC_AUTH_HASH=$$2y$$05$$abcdefghijklmnopqrstuvABCDEFGHIJKLMNOPQRSTUVabcdefghi",
   "GRAFANA_ADMIN_USER=admin",
@@ -89,6 +95,37 @@ test("home-server-source contract accepts a complete deployment env without BACK
   })
 
   assert.equal(result.ok, true, result.errors.map((error) => error.message).join("\n"))
+})
+
+test("home-server runtime contract covers external storage backup keys", async () => {
+  const { loadContract } = await import("../env/validate-env.mjs")
+  const keys = new Set(targetKeyNames(loadContract(contractPath), "home-server-runtime"))
+
+  assert(keys.has("AQUILA_EXTERNAL_STORAGE_ROOT"))
+  assert(keys.has("AQUILA_BACKUP_ROOT"))
+  assert(keys.has("AQUILA_BACKUP_RETENTION_DAILY"))
+  assert(keys.has("AQUILA_BACKUP_RETENTION_WEEKLY"))
+  assert(keys.has("AQUILA_BACKUP_RETENTION_MONTHLY"))
+  assert(keys.has("AQUILA_BACKUP_MIN_FREE_PERCENT"))
+})
+
+test("external storage values reject unsafe paths and non-positive retention", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const text = baseHomeServerEnv
+    .replace("AQUILA_EXTERNAL_STORAGE_ROOT=/mnt/aquila-blog-data", "AQUILA_EXTERNAL_STORAGE_ROOT=/")
+    .replace("AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/backups", "AQUILA_BACKUP_ROOT=../backups")
+    .replace("AQUILA_BACKUP_RETENTION_DAILY=14", "AQUILA_BACKUP_RETENTION_DAILY=0")
+
+  const result = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text,
+  })
+
+  assert.equal(result.ok, false)
+  assert(result.errors.some((error) => error.key === "AQUILA_EXTERNAL_STORAGE_ROOT"))
+  assert(result.errors.some((error) => error.key === "AQUILA_BACKUP_ROOT"))
+  assert(result.errors.some((error) => error.key === "AQUILA_BACKUP_RETENTION_DAILY"))
 })
 
 test("home-server-source requires DB runtime username after runtime-role cutover", async () => {
@@ -173,6 +210,14 @@ test("runtime contract accounts for every compose env interpolation", async () =
   const missing = [...new Set(composeKeys)].filter((key) => !contractKeys.has(key)).sort()
 
   assert.deepEqual(missing, [])
+})
+
+test("minio production data is bound to the approved external disk", () => {
+  const compose = readFileSync(composePath, "utf8")
+
+  assert.match(compose, /\$\{AQUILA_EXTERNAL_STORAGE_ROOT:-\/mnt\/aquila-blog-data\}\/minio:\/data/)
+  assert(!compose.includes("minio_data:/data"))
+  assert(!/^\s*minio_data:\s*$/m.test(compose))
 })
 
 test("prod datasource uses a non-superuser runtime role contract", () => {

@@ -135,6 +135,25 @@ fi
 [[ ! -d "${LOW_SPACE_BACKUP_ROOT}/postgres/daily/20260102-000000" ]]
 [[ -d "${LOW_SPACE_BACKUP_ROOT}/postgres/daily/20260103-000000" ]]
 
+MINIO_ROOT="${WORK_DIR}/minio-root"
+MINIO_BACKUP_ROOT="${MINIO_ROOT}/minio/backups"
+mkdir -p "${MINIO_BACKUP_ROOT}/postgres/daily/20260101-000000"
+
+if AQUILA_EXTERNAL_STORAGE_ALLOW_TEST_ROOT=true \
+  AQUILA_EXTERNAL_STORAGE_SKIP_MOUNT_CHECK=true \
+  AQUILA_EXTERNAL_STORAGE_ROOT="${MINIO_ROOT}" \
+  AQUILA_BACKUP_ROOT="${MINIO_BACKUP_ROOT}" \
+  AQUILA_BACKUP_RETENTION_DAILY=1 \
+  AQUILA_BACKUP_RETENTION_WEEKLY=1 \
+  AQUILA_BACKUP_RETENTION_MONTHLY=1 \
+  AQUILA_BACKUP_MIN_FREE_PERCENT=0 \
+    "${PRUNE_SCRIPT}" --dry-run >/dev/null 2>&1; then
+  echo "prune unexpectedly allowed backup root inside MinIO data" >&2
+  exit 1
+fi
+
+[[ -d "${MINIO_BACKUP_ROOT}/postgres/daily/20260101-000000" ]]
+
 grep -q "stop_legacy_minio_for_migration" "${CREATE_SCRIPT}"
 grep -q "docker stop" "${CREATE_SCRIPT}"
 grep -q "MIGRATION_STOPPED_FILE" "${CREATE_SCRIPT}"
@@ -143,5 +162,6 @@ grep -q "LEGACY_MINIO_STOPPED_FOR_MIGRATION" "${CREATE_SCRIPT}"
 grep -q "minio_dir=" "${CREATE_SCRIPT}"
 grep -q "env_value_from_current_file CUSTOM_PROD_DBNAME" "${CREATE_SCRIPT}"
 grep -q "^umask 077$" "${CREATE_SCRIPT}"
+grep -q "AQUILA_BACKUP_ROOT must not be inside the MinIO data directory" "${PRUNE_SCRIPT}"
 
 echo "[external-storage-retention] ok"

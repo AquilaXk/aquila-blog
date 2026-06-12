@@ -125,6 +125,10 @@ export const validateEnvText = ({ contract, target, text }) => {
       continue
     }
 
+    if (definition.allowedValues && !definition.allowedValues.includes(value)) {
+      errors.push(safeError(definition.name, `must be one of: ${definition.allowedValues.join(", ")}`))
+    }
+
     if (definition.minLength && value.length < definition.minLength) {
       errors.push(safeError(definition.name, `must be at least ${definition.minLength} characters`))
     }

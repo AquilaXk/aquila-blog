@@ -132,6 +132,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/system/api/v1/adm/cloud/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listFiles"];
+        put?: never;
+        post: operations["upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/post/api/v1/posts": {
         parameters: {
             query?: never;
@@ -558,6 +574,38 @@ export interface paths {
             cookie?: never;
         };
         get: operations["dashboardSnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/api/v1/adm/cloud/files/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getFile"];
+        put?: never;
+        post?: never;
+        delete: operations["delete_2"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/api/v1/adm/cloud/files/{id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["content"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1348,6 +1396,28 @@ export interface components {
                 [key: string]: string;
             };
         };
+        CloudFileDto: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            ownerMemberId?: number;
+            originalFilename?: string;
+            contentType?: string;
+            /** Format: int64 */
+            byteSize?: number;
+            /** @enum {string} */
+            mediaKind?: "DOCUMENT" | "PHOTO" | "VIDEO";
+            folderPath?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            modifiedAt?: string;
+        };
+        RsDataCloudFileDto: {
+            resultCode?: string;
+            msg?: string;
+            data?: components["schemas"]["CloudFileDto"];
+        };
         PostWriteRequest: {
             title: string;
             content: string;
@@ -1853,6 +1923,9 @@ export interface components {
             latestFailureAt?: string;
             latestFailureMessage?: string;
         };
+        CloudFileListResBody: {
+            files?: components["schemas"]["CloudFileDto"][];
+        };
         AdminSystemBootstrapResBody: {
             member?: components["schemas"]["AuthSessionMemberDto"];
             health?: components["schemas"]["HealthResBody"];
@@ -2346,6 +2419,59 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["RsDataMapStringString"];
+                };
+            };
+        };
+    };
+    listFiles: {
+        parameters: {
+            query?: {
+                folderPath?: string;
+                kw?: string;
+                mediaKind?: "DOCUMENT" | "PHOTO" | "VIDEO";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CloudFileListResBody"];
+                };
+            };
+        };
+    };
+    upload: {
+        parameters: {
+            query?: {
+                folderPath?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RsDataCloudFileDto"];
                 };
             };
         };
@@ -3018,6 +3144,72 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["AdminDashboardSnapshot"];
+                };
+            };
+        };
+    };
+    getFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CloudFileDto"];
+                };
+            };
+        };
+    };
+    delete_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RsDataVoid"];
+                };
+            };
+        };
+    };
+    content: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
                 };
             };
         };

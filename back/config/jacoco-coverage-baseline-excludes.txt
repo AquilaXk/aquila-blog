@@ -175,6 +175,7 @@ com/back/global/security/domain/SecurityUser.class
 com/back/global/security/model/AuthSecurityEvent.class
 com/back/global/storage/application/UploadedFileRetentionService.class
 com/back/global/storage/application/UploadedFileUrlCodec.class
+com/back/global/storage/adapter/CloudStorageAdapter.class
 com/back/global/storage/model/UploadedFile.class
 com/back/global/system/adapter/web/ApiV1AdmSystemController$SearchEngineMirrorForceDisableRequest.class
 com/back/global/system/adapter/web/ApiV1AdmSystemController$SearchPipelineForceControlRequest.class

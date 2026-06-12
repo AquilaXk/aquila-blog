@@ -5,6 +5,7 @@ import {
   serializeEditorDocToMarkdown,
   type BlockEditorDoc,
 } from "./serialization"
+import { flushPendingNodeViewAttributeCommits } from "./editorNodeViewCommitRegistry"
 
 const MARKDOWN_COMMIT_DEBOUNCE_MS = 140
 const MARKDOWN_COMMIT_IDLE_TIMEOUT_MS = 220
@@ -93,11 +94,16 @@ export const useBlockEditorMarkdownCommit = ({
     )
   }, [])
 
-  const flushPendingMarkdownCommit = useCallback(() => {
+  const flushPendingMarkdownCommit = useCallback((fallbackEditor?: TiptapEditor | null) => {
     cancelPendingMarkdownCommit()
     clearPendingMarkdownCommitMaxWait()
-    const pendingEditor = pendingCommitEditorRef.current
-    if (!pendingEditor) return
+    const hasPendingEditor = pendingCommitEditorRef.current !== null
+    const pendingEditor = pendingCommitEditorRef.current ?? fallbackEditor ?? null
+    if (!pendingEditor) return lastCommittedMarkdownRef.current
+    if (!hasPendingEditor) {
+      pendingCommitFocusedRef.current = pendingEditor.isFocused
+    }
+    flushPendingNodeViewAttributeCommits(pendingEditor.view.dom)
 
     const markdown = serializeEditorDocToMarkdown(
       pendingEditor.getJSON() as BlockEditorDoc
@@ -106,11 +112,12 @@ export const useBlockEditorMarkdownCommit = ({
     pendingCommitEditorRef.current = null
 
     if (normalized === lastCommittedMarkdownRef.current) {
-      return
+      return markdown
     }
 
     lastCommittedMarkdownRef.current = normalized
     onChange(markdown, { editorFocused: pendingCommitFocusedRef.current })
+    return markdown
   }, [cancelPendingMarkdownCommit, clearPendingMarkdownCommitMaxWait, onChange])
 
   const scheduleMarkdownCommit = useCallback(

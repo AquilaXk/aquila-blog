@@ -21,14 +21,18 @@ const CALLOUT_KIND_OPTIONS: Array<{ value: CalloutKind; label: string; emoji: st
   { value: "summary", label: "요약", emoji: "📚" },
 ]
 
-export const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
+export const CalloutBlockView = ({ node, updateAttributes, selected, editor }: NodeViewProps) => {
   const [draftKind, setDraftKind] = useState<CalloutKind>((node.attrs?.kind as CalloutKind) || "tip")
   const [draftTitle, setDraftTitle] = useState(String(node.attrs?.title || ""))
   const pickerRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
   const pickerId = useId()
   const [isKindMenuOpen, setIsKindMenuOpen] = useState(false)
-  const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
+  const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(
+    updateAttributes,
+    undefined,
+    editor.view.dom
+  )
 
   useEffect(() => {
     setDraftKind((node.attrs?.kind as CalloutKind) || "tip")

@@ -10,10 +10,14 @@ import {
   useDebouncedAttributeCommit,
 } from "./editorNodeViewShared"
 
-export const FormulaBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
+export const FormulaBlockView = ({ node, updateAttributes, selected, editor }: NodeViewProps) => {
   const [draftFormula, setDraftFormula] = useState(String(node.attrs?.formula || ""))
   const formulaRef = useRef<HTMLTextAreaElement>(null)
-  const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
+  const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(
+    updateAttributes,
+    undefined,
+    editor.view.dom
+  )
 
   useAutosizeTextarea(formulaRef, draftFormula, selected)
 

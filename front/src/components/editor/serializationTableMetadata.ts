@@ -32,17 +32,14 @@ export const splitTableCells = (line: string) => {
   const trimmed = line.trim().replace(/^\|/, "").replace(/\|$/, "")
   const cells: string[] = []
   let current = ""
-  let escaped = false
 
-  for (const character of trimmed) {
-    if (escaped) {
-      current += character
-      escaped = false
-      continue
-    }
+  for (let index = 0; index < trimmed.length; index += 1) {
+    const character = trimmed[index]
+    const nextCharacter = trimmed[index + 1]
 
-    if (character === "\\") {
-      escaped = true
+    if (character === "\\" && nextCharacter === "|") {
+      current += "|"
+      index += 1
       continue
     }
 
@@ -53,10 +50,6 @@ export const splitTableCells = (line: string) => {
     }
 
     current += character
-  }
-
-  if (escaped) {
-    current += "\\"
   }
 
   cells.push(current.trim())
@@ -201,7 +194,7 @@ export const createEmptyTableNode = (
   layout?: MarkdownTableLayout | null
 ): JSONContent => createTableNode(createEmptyTableRows(rowCount, columnCount), layout)
 
-export const escapePipeText = (text: string) => text.replace(/\\/g, "\\\\").replace(/\|/g, "\\|")
+export const escapePipeText = (text: string) => text.replace(/\|/g, "\\|")
 
 type TableMatrixEntry = {
   node: JSONContent

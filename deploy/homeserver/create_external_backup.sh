@@ -7,10 +7,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 ENV_FILE="${SCRIPT_DIR}/.env.prod"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
+MIGRATION_STOPPED_FILE="${SCRIPT_DIR}/.external-minio-migration-stopped"
 DEFAULT_EXTERNAL_STORAGE_ROOT="/mnt/aquila-blog-data"
 TIMESTAMP="${AQUILA_BACKUP_TIMESTAMP:-$(date +%Y%m%d-%H%M%S)}"
 BACKUP_LOG_FILE=""
 STOPPED_LEGACY_MINIO_CONTAINERS=()
+LEGACY_MINIO_STOPPED_FOR_MIGRATION="false"
+MIGRATED_MINIO_DIR_THIS_RUN=""
 
 read_key_from_text() {
   local key="$1"
@@ -57,6 +60,18 @@ env_value() {
       return 0
     fi
   fi
+  value="$(read_key_from_file "${key}" "${ENV_FILE}")"
+  if [[ -n "${value}" ]]; then
+    printf '%s' "${value}"
+    return 0
+  fi
+  printf '%s' "${default_value}"
+}
+
+env_value_from_current_file() {
+  local key="$1"
+  local default_value="${2:-}"
+  local value
   value="$(read_key_from_file "${key}" "${ENV_FILE}")"
   if [[ -n "${value}" ]]; then
     printf '%s' "${value}"
@@ -259,11 +274,41 @@ restart_stopped_legacy_minio_on_failure() {
   for cid in "${STOPPED_LEGACY_MINIO_CONTAINERS[@]}"; do
     docker start "${cid}" >/dev/null 2>&1 || true
   done
+  rm -f -- "${MIGRATION_STOPPED_FILE}"
 }
+
+write_stopped_legacy_minio_marker() {
+  local minio_dir="$1"
+  if [[ "${#STOPPED_LEGACY_MINIO_CONTAINERS[@]}" -eq 0 ]]; then
+    return 0
+  fi
+  {
+    printf 'minio_dir=%s\n' "${minio_dir}"
+    local cid
+    for cid in "${STOPPED_LEGACY_MINIO_CONTAINERS[@]}"; do
+      printf 'cid=%s\n' "${cid}"
+    done
+  } > "${MIGRATION_STOPPED_FILE}"
+  LEGACY_MINIO_STOPPED_FOR_MIGRATION="true"
+}
+
+cleanup_on_exit() {
+  local status=$?
+  if [[ "${status}" -ne 0 && "${LEGACY_MINIO_STOPPED_FOR_MIGRATION}" == "true" ]]; then
+    restart_stopped_legacy_minio_on_failure
+    if [[ -n "${MIGRATED_MINIO_DIR_THIS_RUN}" && "${MIGRATED_MINIO_DIR_THIS_RUN}" != "/" && -d "${MIGRATED_MINIO_DIR_THIS_RUN}" ]]; then
+      rm -rf -- "${MIGRATED_MINIO_DIR_THIS_RUN}"
+    fi
+  fi
+  exit "${status}"
+}
+
+trap cleanup_on_exit EXIT
 
 prepare_external_minio_dir() {
   local minio_dir="${EXTERNAL_STORAGE_ROOT}/minio"
   local legacy_volume="${AQUILA_LEGACY_MINIO_VOLUME:-blog_home_minio_data}"
+  local tmp_dir="${EXTERNAL_STORAGE_ROOT}/.minio-migration-${TIMESTAMP}.tmp"
 
   mkdir -p "${minio_dir}"
 
@@ -277,11 +322,26 @@ prepare_external_minio_dir() {
 
   if docker volume inspect "${legacy_volume}" >/dev/null 2>&1; then
     log "external minio directory is empty; copying legacy Docker volume ${legacy_volume}"
+    rm -rf -- "${tmp_dir}"
+    mkdir -p "${tmp_dir}"
     stop_legacy_minio_for_migration
-    if ! copy_docker_volume_to_dir "${legacy_volume}" "${minio_dir}"; then
+    if ! copy_docker_volume_to_dir "${legacy_volume}" "${tmp_dir}"; then
+      rm -rf -- "${tmp_dir}"
       restart_stopped_legacy_minio_on_failure
       fail "failed to copy legacy Docker volume ${legacy_volume}"
     fi
+    if [[ -d "${minio_dir}" ]] && ! rmdir "${minio_dir}"; then
+      rm -rf -- "${tmp_dir}"
+      restart_stopped_legacy_minio_on_failure
+      fail "external minio directory changed during migration: ${minio_dir}"
+    fi
+    if ! mv "${tmp_dir}" "${minio_dir}"; then
+      rm -rf -- "${tmp_dir}"
+      restart_stopped_legacy_minio_on_failure
+      fail "failed to activate migrated MinIO directory: ${minio_dir}"
+    fi
+    MIGRATED_MINIO_DIR_THIS_RUN="${minio_dir}"
+    write_stopped_legacy_minio_marker "${minio_dir}"
   fi
 }
 
@@ -308,7 +368,8 @@ backup_minio() {
 EXTERNAL_STORAGE_ROOT="$(env_value AQUILA_EXTERNAL_STORAGE_ROOT "${DEFAULT_EXTERNAL_STORAGE_ROOT}")"
 BACKUP_ROOT="$(env_value AQUILA_BACKUP_ROOT "${EXTERNAL_STORAGE_ROOT}/backups")"
 MIN_FREE_PERCENT="$(env_value AQUILA_BACKUP_MIN_FREE_PERCENT "15")"
-POSTGRES_DB_NAME="$(env_value CUSTOM_PROD_DBNAME "$(env_value DB_BASE_NAME "blog")_prod")"
+CURRENT_DB_BASE_NAME="$(env_value_from_current_file DB_BASE_NAME "blog")"
+POSTGRES_DB_NAME="$(env_value_from_current_file CUSTOM_PROD_DBNAME "${CURRENT_DB_BASE_NAME}_prod")"
 
 validate_paths
 mkdir -p "${BACKUP_ROOT}/logs"

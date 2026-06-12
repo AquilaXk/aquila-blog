@@ -200,5 +200,7 @@ for category in postgres minio deploy; do
   done
 done
 
-check_free_space "${MIN_FREE_PERCENT}"
+if [[ "${DRY_RUN}" != "true" ]]; then
+  check_free_space "${MIN_FREE_PERCENT}"
+fi
 echo "[external-backup-prune] ok root=${BACKUP_ROOT} dry_run=${DRY_RUN}"

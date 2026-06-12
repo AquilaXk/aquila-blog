@@ -422,6 +422,90 @@
         }
       }
     },
+    "/system/api/v1/adm/cloud/files" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-cloud-controller" ],
+        "operationId" : "listFiles",
+        "parameters" : [ {
+          "name" : "folderPath",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : ""
+          }
+        }, {
+          "name" : "kw",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : ""
+          }
+        }, {
+          "name" : "mediaKind",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "DOCUMENT", "PHOTO", "VIDEO" ]
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CloudFileListResBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "api-v-1-adm-cloud-controller" ],
+        "operationId" : "upload",
+        "parameters" : [ {
+          "name" : "folderPath",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : ""
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "type" : "object",
+                "properties" : {
+                  "file" : {
+                    "type" : "string",
+                    "format" : "binary"
+                  }
+                },
+                "required" : [ "file" ]
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataCloudFileDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/post/api/v1/posts" : {
       "get" : {
         "tags" : [ "api-v-1-post-controller" ],
@@ -1253,6 +1337,89 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/AdminDashboardSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/system/api/v1/adm/cloud/files/{id}" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-cloud-controller" ],
+        "operationId" : "getFile",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CloudFileDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "api-v-1-adm-cloud-controller" ],
+        "operationId" : "delete_2",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/system/api/v1/adm/cloud/files/{id}/content" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-cloud-controller" ],
+        "operationId" : "content",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "format" : "binary"
                 }
               }
             }
@@ -2985,6 +3152,58 @@
           }
         }
       },
+      "CloudFileDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "ownerMemberId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "originalFilename" : {
+            "type" : "string"
+          },
+          "contentType" : {
+            "type" : "string"
+          },
+          "byteSize" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "mediaKind" : {
+            "type" : "string",
+            "enum" : [ "DOCUMENT", "PHOTO", "VIDEO" ]
+          },
+          "folderPath" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "modifiedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "RsDataCloudFileDto" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/CloudFileDto"
+          }
+        }
+      },
       "PostWriteRequest" : {
         "type" : "object",
         "properties" : {
@@ -4335,6 +4554,17 @@
           },
           "latestFailureMessage" : {
             "type" : "string"
+          }
+        }
+      },
+      "CloudFileListResBody" : {
+        "type" : "object",
+        "properties" : {
+          "files" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/CloudFileDto"
+            }
           }
         }
       },

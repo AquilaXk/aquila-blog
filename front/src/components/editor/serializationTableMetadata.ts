@@ -35,15 +35,22 @@ export const splitTableCells = (line: string) => {
 
   for (let index = 0; index < trimmed.length; index += 1) {
     const character = trimmed[index]
-    const nextCharacter = trimmed[index + 1]
-
-    if (character === "\\" && nextCharacter === "|") {
-      current += "|"
-      index += 1
-      continue
-    }
 
     if (character === "|") {
+      let backslashRunLength = 0
+      for (
+        let cursor = current.length - 1;
+        cursor >= 0 && current[cursor] === "\\";
+        cursor -= 1
+      ) {
+        backslashRunLength += 1
+      }
+
+      if (backslashRunLength % 2 === 1) {
+        current = `${current.slice(0, -1)}|`
+        continue
+      }
+
       cells.push(current.trim())
       current = ""
       continue

@@ -10,6 +10,8 @@ const workflowPath = path.join(repoRoot, ".github/workflows/deploy.yml")
 const composePath = path.join(repoRoot, "deploy/homeserver/docker-compose.prod.yml")
 const applicationProdPath = path.join(repoRoot, "back/src/main/resources/application-prod.yaml")
 const deployScriptPath = path.join(repoRoot, "deploy/homeserver/blue_green_deploy.sh")
+const deployBackupScriptPath = path.join(repoRoot, "deploy/homeserver/create_deploy_backup.sh")
+const externalBackupScriptPath = path.join(repoRoot, "deploy/homeserver/create_external_backup.sh")
 const hardeningScriptPath = path.join(repoRoot, "deploy/homeserver/hardening/setup_hardening.sh")
 const hardeningDocPath = path.join(repoRoot, "deploy/homeserver/HARDENING.md")
 const prometheusPath = path.join(repoRoot, "deploy/homeserver/monitoring/prometheus.yml")
@@ -33,6 +35,12 @@ const baseHomeServerEnv = [
   "CLOUDFLARED_IMAGE=cloudflare/cloudflared:2026.5.0",
   "DB_IMAGE=jangka512/pgj:2026.05.21",
   "MINIO_IMAGE=minio/minio:RELEASE.2026-05-21T00-00-00Z",
+  "AQUILA_EXTERNAL_STORAGE_ROOT=/mnt/aquila-blog-data",
+  "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/backups",
+  "AQUILA_BACKUP_RETENTION_DAILY=14",
+  "AQUILA_BACKUP_RETENTION_WEEKLY=8",
+  "AQUILA_BACKUP_RETENTION_MONTHLY=6",
+  "AQUILA_BACKUP_MIN_FREE_PERCENT=15",
   "PROMETHEUS_BASIC_AUTH_USER=promviewer",
   "PROMETHEUS_BASIC_AUTH_HASH=$$2y$$05$$abcdefghijklmnopqrstuvABCDEFGHIJKLMNOPQRSTUVabcdefghi",
   "GRAFANA_ADMIN_USER=admin",
@@ -89,6 +97,98 @@ test("home-server-source contract accepts a complete deployment env without BACK
   })
 
   assert.equal(result.ok, true, result.errors.map((error) => error.message).join("\n"))
+})
+
+test("home-server runtime contract covers external storage backup keys", async () => {
+  const { loadContract } = await import("../env/validate-env.mjs")
+  const keys = new Set(targetKeyNames(loadContract(contractPath), "home-server-runtime"))
+
+  assert(keys.has("AQUILA_EXTERNAL_STORAGE_ROOT"))
+  assert(keys.has("AQUILA_BACKUP_ROOT"))
+  assert(keys.has("AQUILA_BACKUP_RETENTION_DAILY"))
+  assert(keys.has("AQUILA_BACKUP_RETENTION_WEEKLY"))
+  assert(keys.has("AQUILA_BACKUP_RETENTION_MONTHLY"))
+  assert(keys.has("AQUILA_BACKUP_MIN_FREE_PERCENT"))
+})
+
+test("external storage values reject unsafe paths and non-positive retention", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const text = baseHomeServerEnv
+    .replace("AQUILA_EXTERNAL_STORAGE_ROOT=/mnt/aquila-blog-data", "AQUILA_EXTERNAL_STORAGE_ROOT=/")
+    .replace("AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/backups", "AQUILA_BACKUP_ROOT=../backups")
+    .replace("AQUILA_BACKUP_RETENTION_DAILY=14", "AQUILA_BACKUP_RETENTION_DAILY=0")
+
+  const result = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text,
+  })
+
+  assert.equal(result.ok, false)
+  assert(result.errors.some((error) => error.key === "AQUILA_EXTERNAL_STORAGE_ROOT"))
+  assert(result.errors.some((error) => error.key === "AQUILA_BACKUP_ROOT"))
+  assert(result.errors.some((error) => error.key === "AQUILA_BACKUP_RETENTION_DAILY"))
+})
+
+test("external backup root must stay strictly inside the default or configured storage root", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const withoutExternalRoot = baseHomeServerEnv.replace(/^AQUILA_EXTERNAL_STORAGE_ROOT=.*\n/m, "")
+  const outsideDefaultRoot = withoutExternalRoot.replace(
+    "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/backups",
+    "AQUILA_BACKUP_ROOT=/other/backups",
+  )
+  const sameAsExternalRoot = baseHomeServerEnv.replace(
+    "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/backups",
+    "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data",
+  )
+  const insideMinioData = baseHomeServerEnv.replace(
+    "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/backups",
+    "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/minio/backups",
+  )
+  const repeatedSeparatorInsideMinioData = baseHomeServerEnv.replace(
+    "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/backups",
+    "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data//minio/backups",
+  )
+  const nonDefaultStorageRoot = baseHomeServerEnv
+    .replace("AQUILA_EXTERNAL_STORAGE_ROOT=/mnt/aquila-blog-data", "AQUILA_EXTERNAL_STORAGE_ROOT=/mnt/other-disk")
+    .replace("AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/backups", "AQUILA_BACKUP_ROOT=/mnt/other-disk/backups")
+
+  const outsideResult = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text: outsideDefaultRoot,
+  })
+  const sameResult = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text: sameAsExternalRoot,
+  })
+  const insideMinioResult = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text: insideMinioData,
+  })
+  const repeatedSeparatorInsideMinioResult = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text: repeatedSeparatorInsideMinioData,
+  })
+  const nonDefaultStorageRootResult = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text: nonDefaultStorageRoot,
+  })
+
+  assert.equal(outsideResult.ok, false)
+  assert(outsideResult.errors.some((error) => error.key === "AQUILA_BACKUP_ROOT"))
+  assert.equal(sameResult.ok, false)
+  assert(sameResult.errors.some((error) => error.key === "AQUILA_BACKUP_ROOT"))
+  assert.equal(insideMinioResult.ok, false)
+  assert(insideMinioResult.errors.some((error) => error.key === "AQUILA_BACKUP_ROOT"))
+  assert.equal(repeatedSeparatorInsideMinioResult.ok, false)
+  assert(repeatedSeparatorInsideMinioResult.errors.some((error) => error.key === "AQUILA_BACKUP_ROOT"))
+  assert.equal(nonDefaultStorageRootResult.ok, false)
+  assert(nonDefaultStorageRootResult.errors.some((error) => error.key === "AQUILA_EXTERNAL_STORAGE_ROOT"))
 })
 
 test("home-server-source requires DB runtime username after runtime-role cutover", async () => {
@@ -155,6 +255,21 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
   assert.match(workflow, /Validate HOME_SERVER_ENV contract/)
   assert.match(workflow, /tools\/env\/validate-env\.mjs --target home-server-source/)
   assert(workflow.indexOf("Validate HOME_SERVER_ENV contract") < workflow.indexOf("Deploy over SSH"))
+  assert.match(workflow, /export HOME_SERVER_ENV/)
+  assert(workflow.indexOf("export HOME_SERVER_ENV") < workflow.indexOf("create_external_backup.sh"))
+  assert.match(workflow, /restart_external_backup_legacy_minio_if_needed/)
+  assert.match(workflow, /backup created \(pre-checkout\)/)
+  assert.match(workflow, /keeping migrated MinIO copy for manual reconciliation after rollback/)
+  assert(!workflow.includes("removing migrated MinIO copy after rollback to legacy volume"))
+  assert(workflow.indexOf("backup created (pre-checkout)") < workflow.indexOf('git checkout --force "${HOME_DEPLOY_SHA}"'))
+  assert(workflow.indexOf("umask 077") < workflow.indexOf("backup created (pre-checkout)"))
+  assert(
+    workflow.indexOf("restart_external_backup_legacy_minio_if_needed") <
+      workflow.indexOf("run_backup_rollback"),
+  )
+  assert(workflow.indexOf('rollback_from_backup_if_needed "unexpected_exit_status_${status}"') < workflow.indexOf("EXTERNAL_BACKUP_DIR="))
+  assert(workflow.indexOf("run_backup_rollback") < workflow.indexOf("restart_external_backup_legacy_minio_if_needed", workflow.indexOf("run_backup_rollback")))
+  assert(workflow.lastIndexOf("rm -f deploy/homeserver/.external-minio-migration-stopped") < workflow.indexOf('DEPLOY_COMPLETED="true"'))
 })
 
 test("required secret check does not inject multi-line HOME_SERVER_ENV into shell", () => {
@@ -173,6 +288,27 @@ test("runtime contract accounts for every compose env interpolation", async () =
   const missing = [...new Set(composeKeys)].filter((key) => !contractKeys.has(key)).sort()
 
   assert.deepEqual(missing, [])
+})
+
+test("minio production data is bound to the approved external disk", () => {
+  const compose = readFileSync(composePath, "utf8")
+
+  assert.match(compose, /type:\s*bind/)
+  assert.match(compose, /source:\s*\$\{AQUILA_EXTERNAL_STORAGE_ROOT:-\/mnt\/aquila-blog-data\}\/minio/)
+  assert.match(compose, /target:\s*\/data/)
+  assert.match(compose, /create_host_path:\s*false/)
+  assert(!compose.includes("minio_data:/data"))
+  assert(!/^\s*minio_data:\s*$/m.test(compose))
+})
+
+test("secret-bearing homeserver backups use private file permissions", () => {
+  const externalBackupScript = readFileSync(externalBackupScriptPath, "utf8")
+  const deployBackupScript = readFileSync(deployBackupScriptPath, "utf8")
+
+  assert.match(externalBackupScript, /^umask 077$/m)
+  assert.match(deployBackupScript, /^umask 077$/m)
+  assert(externalBackupScript.indexOf("umask 077") < externalBackupScript.indexOf('mkdir -p "${BACKUP_ROOT}/logs"'))
+  assert(deployBackupScript.indexOf("umask 077") < deployBackupScript.indexOf('mkdir -p "${BACKUP_DIR}"'))
 })
 
 test("prod datasource uses a non-superuser runtime role contract", () => {

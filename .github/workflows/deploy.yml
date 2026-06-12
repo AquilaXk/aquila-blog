@@ -378,6 +378,7 @@ jobs:
           HOME_AI_SUMMARY_ENABLED="$(decode_b64 "${HOME_AI_SUMMARY_ENABLED_B64:-}")"
           HOME_AI_SUMMARY_GEMINI_API_KEY="$(decode_b64 "${HOME_AI_SUMMARY_GEMINI_API_KEY_B64:-}")"
           HOME_AI_SUMMARY_GEMINI_MODEL="$(decode_b64 "${HOME_AI_SUMMARY_GEMINI_MODEL_B64:-}")"
+          export HOME_SERVER_ENV
 
           upsert_env_key() {
             local key="$1"
@@ -404,12 +405,64 @@ jobs:
             fi
           }
 
+          restart_external_backup_legacy_minio_if_needed() {
+            local marker="deploy/homeserver/.external-minio-migration-stopped"
+            local migrated_minio_dir=""
+            local cid
+            local line
+            if [ ! -f "${marker}" ]; then
+              return 0
+            fi
+            while IFS= read -r line; do
+              [ -n "${line}" ] || continue
+              case "${line}" in
+                minio_dir=*)
+                  migrated_minio_dir="${line#minio_dir=}"
+                  continue
+                  ;;
+                cid=*)
+                  cid="${line#cid=}"
+                  ;;
+                *)
+                  cid="${line}"
+                  ;;
+              esac
+              echo "restarting legacy minio container before rollback: ${cid}" >&2
+              docker start "${cid}" >/dev/null 2>&1 || true
+            done < "${marker}"
+            case "${migrated_minio_dir}" in
+              "")
+                ;;
+              /mnt/aquila-blog-data/minio)
+                echo "keeping migrated MinIO copy for manual reconciliation after rollback: ${migrated_minio_dir}" >&2
+                ;;
+              *)
+                echo "keeping unexpected migrated MinIO path from marker: ${migrated_minio_dir}" >&2
+                ;;
+            esac
+            rm -f "${marker}"
+          }
+
           cd "${HOME_APP_DIR}"
+
+          DEPLOY_COMPLETED="false"
+          ROLLBACK_IN_PROGRESS="false"
+          ROLLBACK_RUNTIME_SPLIT_ENABLED="false"
+          BACKUP_DIR=""
 
           if [ -z "${HOME_DEPLOY_SHA:-}" ]; then
             echo "HOME_DEPLOY_SHA is empty. abort deploy." >&2
             exit 1
           fi
+
+          umask 077
+          if [ ! -f deploy/homeserver/create_deploy_backup.sh ]; then
+            echo "deploy backup script missing before checkout: deploy/homeserver/create_deploy_backup.sh" >&2
+            exit 1
+          fi
+          chmod +x deploy/homeserver/create_deploy_backup.sh
+          BACKUP_DIR="$(./deploy/homeserver/create_deploy_backup.sh)"
+          echo "backup created (pre-checkout): ${BACKUP_DIR}"
 
           git fetch origin main --prune
           if ! git cat-file -e "${HOME_DEPLOY_SHA}^{commit}" 2>/dev/null; then
@@ -429,19 +482,14 @@ jobs:
 
           chmod +x \
             deploy/homeserver/create_deploy_backup.sh \
+            deploy/homeserver/create_external_backup.sh \
+            deploy/homeserver/prune_external_backups.sh \
             deploy/homeserver/blue_green_deploy.sh \
             deploy/homeserver/pgroonga_precheck.sh \
             deploy/homeserver/post_precheck_env_guard.sh \
             deploy/homeserver/rollback_last_deploy.sh \
             deploy/homeserver/steady_state_guard.sh \
             deploy/homeserver/install_steady_state_guard_cron.sh
-
-          BACKUP_DIR="$(./deploy/homeserver/create_deploy_backup.sh)"
-          echo "backup created (pre-env-mutation): ${BACKUP_DIR}"
-
-          DEPLOY_COMPLETED="false"
-          ROLLBACK_IN_PROGRESS="false"
-          ROLLBACK_RUNTIME_SPLIT_ENABLED="false"
 
           restore_backup_files_minimally() {
             local backup_dir="$1"
@@ -476,9 +524,15 @@ jobs:
               echo "minimal backup restore failed before rollback script: ${BACKUP_DIR}" >&2
             fi
 
+            local rollback_status=0
             if ! env -u BACK_IMAGE RUNTIME_SPLIT_ENABLED="${ROLLBACK_RUNTIME_SPLIT_ENABLED}" ./deploy/homeserver/rollback_last_deploy.sh "${BACKUP_DIR}"; then
               echo "rollback script failed after minimal backup restore: ${BACKUP_DIR} (reason=${reason})" >&2
+              rollback_status=1
             fi
+            if [ "${rollback_status}" -eq 0 ]; then
+              restart_external_backup_legacy_minio_if_needed
+            fi
+            return "${rollback_status}"
           }
 
           rollback_from_backup_if_needed() {
@@ -493,6 +547,13 @@ jobs:
           }
 
           trap 'status=$?; if [ "${status}" -ne 0 ]; then rollback_from_backup_if_needed "unexpected_exit_status_${status}"; fi' EXIT
+
+          ./deploy/homeserver/prune_external_backups.sh --dry-run
+          ./deploy/homeserver/prune_external_backups.sh
+          EXTERNAL_BACKUP_DIR="$(./deploy/homeserver/create_external_backup.sh)"
+          echo "external backup created (pre-env-mutation): ${EXTERNAL_BACKUP_DIR}"
+          ./deploy/homeserver/prune_external_backups.sh --dry-run
+          ./deploy/homeserver/prune_external_backups.sh
 
           if [ -n "${HOME_SERVER_ENV:-}" ]; then
             printf '%s\n' "${HOME_SERVER_ENV}" > deploy/homeserver/.env.prod
@@ -840,6 +901,7 @@ jobs:
             rollback_and_exit "post_public_read_canary_detail_failed"
           fi
 
+          rm -f deploy/homeserver/.external-minio-migration-stopped
           DEPLOY_COMPLETED="true"
           trap - EXIT
           REMOTE

@@ -86,6 +86,12 @@ const validateKind = (definition, value) => {
       return hostnamePattern.test(value) ? null : "must be a hostname"
     case "integer":
       return /^-?\d+$/.test(value) ? null : "must be an integer"
+    case "safe-absolute-path":
+      if (!value.startsWith("/")) return "must be an absolute path"
+      if (value === "/") return "must not be filesystem root"
+      if (/\/{2,}/.test(value)) return "must not contain repeated path separators"
+      if (/(^|\/)\.\.?($|\/)/.test(value)) return "must not contain traversal path segments"
+      return null
     case "url":
       return isUrl(value) ? null : "must be a URL"
     case "https-url":
@@ -120,12 +126,26 @@ export const validateEnvText = ({ contract, target, text }) => {
       continue
     }
 
+    if (definition.allowedValues && !definition.allowedValues.includes(value)) {
+      errors.push(safeError(definition.name, `must be one of: ${definition.allowedValues.join(", ")}`))
+    }
+
     if (definition.minLength && value.length < definition.minLength) {
       errors.push(safeError(definition.name, `must be at least ${definition.minLength} characters`))
     }
 
     const kindError = validateKind(definition, value)
     if (kindError) errors.push(safeError(definition.name, kindError))
+
+    if (!kindError && definition.kind === "integer") {
+      const numericValue = Number(value)
+      if (Number.isInteger(definition.min) && numericValue < definition.min) {
+        errors.push(safeError(definition.name, `must be greater than or equal to ${definition.min}`))
+      }
+      if (Number.isInteger(definition.max) && numericValue > definition.max) {
+        errors.push(safeError(definition.name, `must be less than or equal to ${definition.max}`))
+      }
+    }
   }
 
   for (const check of resolved.crossChecks || []) {
@@ -142,6 +162,25 @@ export const validateEnvText = ({ contract, target, text }) => {
       const urlHost = hostOf(valueOf(env, check.urlKey))
       if (cookieDomain && urlHost && urlHost !== cookieDomain && !urlHost.endsWith(`.${cookieDomain}`)) {
         errors.push(safeError(check.domainKey, `must cover ${check.urlKey} host`))
+      }
+    }
+
+    if (check.type === "pathWithin") {
+      const parentPath = (valueOf(env, check.parentKey) || check.defaultParent || "").replace(/\/+$/, "")
+      const childPath = valueOf(env, check.childKey).replace(/\/+$/, "")
+      const samePathDisallowed = check.strict !== false && parentPath && childPath && childPath === parentPath
+      if (samePathDisallowed || (parentPath && childPath && !childPath.startsWith(`${parentPath}/`))) {
+        errors.push(safeError(check.childKey, `must be inside ${check.parentKey}`))
+      }
+    }
+
+    if (check.type === "pathNotWithin") {
+      const parentPath = (valueOf(env, check.parentKey) || check.defaultParent || "").replace(/\/+$/, "")
+      const relativeParent = (check.relativeParent || "").replace(/^\/+|\/+$/g, "")
+      const forbiddenPath = relativeParent ? `${parentPath}/${relativeParent}` : parentPath
+      const childPath = valueOf(env, check.childKey).replace(/\/+$/, "")
+      if (forbiddenPath && childPath && (childPath === forbiddenPath || childPath.startsWith(`${forbiddenPath}/`))) {
+        errors.push(safeError(check.childKey, `must not be inside ${check.parentKey}/${relativeParent}`))
       }
     }
   }

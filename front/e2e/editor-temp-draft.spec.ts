@@ -104,4 +104,141 @@ test.describe("editor temp draft", () => {
     await page.waitForTimeout(600)
     expect(tempDraftRequestCount).toBe(0)
   })
+
+  test("브라우저 임시저장은 editor debounce commit 전에도 최신 본문을 저장한다", async ({ page }) => {
+    const adminMember = {
+      id: 1,
+      username: "qa-admin",
+      nickname: "aquila",
+      isAdmin: true,
+    }
+    const pendingBody = `pending flush body ${Date.now()}`
+
+    await page.addInitScript(() => {
+      const originalSetTimeout = window.setTimeout.bind(window)
+      window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
+        if (timeout === 140 || timeout === 700) {
+          return originalSetTimeout(handler, 60_000, ...args)
+        }
+        return originalSetTimeout(handler, timeout, ...args)
+      }) as typeof window.setTimeout
+    })
+
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(adminMember),
+      })
+    })
+    await page.route("**/post/api/v1/posts/tags", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify([]),
+      })
+    })
+    await page.route("**/post/api/v1/posts/temp", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          resultCode: "200-1",
+          msg: "temp draft",
+          data: {
+            id: 991,
+            title: "임시글",
+            content: "",
+            version: 1,
+            published: false,
+            listed: false,
+            tempDraft: true,
+          },
+        }),
+      })
+    })
+
+    await page.goto("/_qa/block-editor-slash?surface=writer")
+
+    await page.getByPlaceholder("제목을 입력하세요").first().fill("pending flush draft")
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await expect(editor).toBeVisible()
+    await editor.click()
+    await page.keyboard.type(pendingBody)
+    await page.getByRole("button", { name: /^(브라우저 )?임시 ?저장$/ }).first().click()
+
+    const savedDraft = await page.evaluate(() => {
+      const raw = window.localStorage.getItem("admin.editor.localDraft.v1")
+      return raw ? JSON.parse(raw) as { content?: string } : null
+    })
+    expect(savedDraft?.content).toContain(pendingBody)
+  })
+
+  test("브라우저 임시저장은 node-view debounce commit 전에도 최신 수식 본문을 저장한다", async ({ page }) => {
+    const adminMember = {
+      id: 1,
+      username: "qa-admin",
+      nickname: "aquila",
+      isAdmin: true,
+    }
+    const pendingFormula = `x_${Date.now()}^2 + y^2`
+
+    await page.addInitScript(() => {
+      const originalSetTimeout = window.setTimeout.bind(window)
+      window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
+        if (timeout === 140 || timeout === 180 || timeout === 700) {
+          return originalSetTimeout(handler, 60_000, ...args)
+        }
+        return originalSetTimeout(handler, timeout, ...args)
+      }) as typeof window.setTimeout
+    })
+
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(adminMember),
+      })
+    })
+    await page.route("**/post/api/v1/posts/tags", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify([]),
+      })
+    })
+    await page.route("**/post/api/v1/posts/temp", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          resultCode: "200-1",
+          msg: "temp draft",
+          data: {
+            id: 992,
+            title: "임시글",
+            content: "",
+            version: 1,
+            published: false,
+            listed: false,
+            tempDraft: true,
+          },
+        }),
+      })
+    })
+
+    await page.goto("/_qa/block-editor-slash?surface=writer")
+
+    await page.getByPlaceholder("제목을 입력하세요").first().fill("pending formula draft")
+    await page.getByRole("button", { name: "수식" }).last().click()
+    const formulaInput = page.getByPlaceholder("\\int_0^1 x^2 \\, dx").first()
+    await expect(formulaInput).toBeVisible()
+    await formulaInput.fill(pendingFormula)
+    await page.evaluate(() => {
+      const saveButton = Array.from(document.querySelectorAll("button")).find((button) =>
+        /^(브라우저 )?임시 ?저장$/.test(button.textContent?.trim() || "")
+      )
+      saveButton?.click()
+    })
+
+    const savedDraft = await page.evaluate(() => {
+      const raw = window.localStorage.getItem("admin.editor.localDraft.v1")
+      return raw ? JSON.parse(raw) as { content?: string } : null
+    })
+    expect(savedDraft?.content).toContain(pendingFormula)
+  })
 })

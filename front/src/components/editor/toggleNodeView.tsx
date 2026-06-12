@@ -9,12 +9,16 @@ import {
   useDebouncedAttributeCommit,
 } from "./editorNodeViewShared"
 
-export const ToggleBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
+export const ToggleBlockView = ({ node, updateAttributes, selected, editor }: NodeViewProps) => {
   const [draftTitle, setDraftTitle] = useState(String(node.attrs?.title || ""))
   const [draftBody, setDraftBody] = useState(String(node.attrs?.body || ""))
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const bodyRef = useRef<HTMLTextAreaElement>(null)
-  const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
+  const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(
+    updateAttributes,
+    undefined,
+    editor.view.dom
+  )
 
   useAutosizeTextarea(bodyRef, draftBody, `${selected}-${isPreviewOpen}`)
 

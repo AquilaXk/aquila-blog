@@ -62,6 +62,21 @@ let activeCodeSelectionOwnerRoot: HTMLElement | null = null
 let lastCodeDragSelectionCompletedAt = 0
 let lastCodeDragSelectionCompletedX = 0
 let lastCodeDragSelectionCompletedY = 0
+type CodeBlockGlobalEventProvider = {
+  handleDocumentCodePointer: (event: MouseEvent | PointerEvent) => void
+  handleDocumentSelectAll: (event: KeyboardEvent) => void
+  shell: HTMLElement
+}
+type CodeBlockWindowDragHandlers = {
+  handleWindowMouseMove: (event: MouseEvent | PointerEvent) => void
+  handleWindowMouseUp: (event: MouseEvent | PointerEvent) => void
+}
+type CodeBlockWindowDragProvider = () => CodeBlockWindowDragHandlers | null
+const codeBlockGlobalEventProviders = new Map<HTMLElement, CodeBlockGlobalEventProvider>()
+let activeCodeBlockGlobalEventProvider: CodeBlockGlobalEventProvider | null = null
+let activeCodeBlockWindowDragProvider: CodeBlockWindowDragProvider | null = null
+let codeBlockGlobalEventsInstalled = false
+let codeBlockWindowDragEventsInstalled = false
 const CODE_SCROLL_PRESERVE_MIN_MS = 4_800
 const CODE_SCROLL_PRESERVE_CANCEL_DISTANCE_PX = 3_200
 const CODE_SELECT_ALL_ACTIVE_GRACE_MS = 4_000
@@ -120,6 +135,109 @@ const isSyntheticClickAfterCodeDragRelease = (
   }
   return matches
 }
+const resolveCodeEventElement = (target: EventTarget | Node | null | undefined) => {
+  if (target instanceof Element) return target
+  if (target instanceof Node) return target.parentElement
+  return null
+}
+const resolveCodeShellFromPoint = (event: MouseEvent | PointerEvent) => {
+  const targetElement = resolveCodeEventElement(event.target)
+  const targetShell = targetElement?.closest<HTMLElement>(".aq-code-shell")
+  if (targetShell) return targetShell
+  const pointElement =
+    Number.isFinite(event.clientX) && Number.isFinite(event.clientY)
+      ? document.elementFromPoint(event.clientX, event.clientY)
+      : null
+  return pointElement?.closest<HTMLElement>(".aq-code-shell") ?? null
+}
+const resolveCodeShellForGlobalSelectAll = () => {
+  const activeElement = resolveCodeEventElement(document.activeElement)
+  const selection = window.getSelection()
+  const anchorElement = resolveCodeEventElement(selection?.anchorNode)
+  const focusElement = resolveCodeEventElement(selection?.focusNode)
+  return (
+    activeElement?.closest<HTMLElement>(".aq-code-shell") ??
+    anchorElement?.closest<HTMLElement>(".aq-code-shell") ??
+    focusElement?.closest<HTMLElement>(".aq-code-shell") ??
+    activeCodeSelectionOwnerRoot?.closest<HTMLElement>(".aq-code-shell") ??
+    resolveVisibleCodeRootForSelectAll({
+      ignoreTableAnchor: true,
+      ignoreTableDragSelectionText: true,
+    })?.closest<HTMLElement>(".aq-code-shell") ??
+    null
+  )
+}
+const dispatchCodeBlockGlobalPointer = (event: MouseEvent | PointerEvent) => {
+  const shell = resolveCodeShellFromPoint(event)
+  const provider =
+    (shell ? codeBlockGlobalEventProviders.get(shell) : null) ??
+    activeCodeBlockGlobalEventProvider
+  provider?.handleDocumentCodePointer(event)
+}
+const dispatchCodeBlockGlobalSelectAll = (event: KeyboardEvent) => {
+  const shell = resolveCodeShellForGlobalSelectAll()
+  const provider =
+    (shell ? codeBlockGlobalEventProviders.get(shell) : null) ??
+    activeCodeBlockGlobalEventProvider
+  provider?.handleDocumentSelectAll(event)
+}
+const ensureCodeBlockGlobalEventListeners = () => {
+  if (codeBlockGlobalEventsInstalled || typeof window === "undefined") return
+  window.addEventListener("pointerdown", dispatchCodeBlockGlobalPointer, true)
+  window.addEventListener("mousedown", dispatchCodeBlockGlobalPointer, true)
+  window.addEventListener("click", dispatchCodeBlockGlobalPointer, true)
+  window.addEventListener("keydown", dispatchCodeBlockGlobalSelectAll, true)
+  codeBlockGlobalEventsInstalled = true
+}
+const registerCodeBlockGlobalEventProvider = (
+  provider: CodeBlockGlobalEventProvider
+) => {
+  ensureCodeBlockGlobalEventListeners()
+  codeBlockGlobalEventProviders.set(provider.shell, provider)
+  return () => {
+    codeBlockGlobalEventProviders.delete(provider.shell)
+    if (activeCodeBlockGlobalEventProvider === provider) {
+      activeCodeBlockGlobalEventProvider = null
+    }
+  }
+}
+const activateCodeBlockGlobalEventProvider = (
+  provider: CodeBlockGlobalEventProvider | null | undefined
+) => {
+  if (provider?.shell.isConnected) activeCodeBlockGlobalEventProvider = provider
+}
+const dispatchCodeBlockWindowDragMove = (event: MouseEvent | PointerEvent) => {
+  const handlers = activeCodeBlockWindowDragProvider?.() ?? null
+  if (!handlers) {
+    activeCodeBlockWindowDragProvider = null
+    return
+  }
+  handlers.handleWindowMouseMove(event)
+}
+const dispatchCodeBlockWindowDragEnd = (event: MouseEvent | PointerEvent) => {
+  const handlers = activeCodeBlockWindowDragProvider?.() ?? null
+  if (!handlers) {
+    activeCodeBlockWindowDragProvider = null
+    return
+  }
+  handlers.handleWindowMouseUp(event)
+}
+const ensureCodeBlockWindowDragListeners = () => {
+  if (codeBlockWindowDragEventsInstalled || typeof window === "undefined") return
+  window.addEventListener("mousemove", dispatchCodeBlockWindowDragMove, true)
+  window.addEventListener("pointermove", dispatchCodeBlockWindowDragMove, true)
+  window.addEventListener("mouseup", dispatchCodeBlockWindowDragEnd, true)
+  window.addEventListener("pointerup", dispatchCodeBlockWindowDragEnd, true)
+  window.addEventListener("pointercancel", dispatchCodeBlockWindowDragEnd, true)
+  codeBlockWindowDragEventsInstalled = true
+}
+const activateCodeBlockWindowDragProvider = (
+  provider: CodeBlockWindowDragProvider | null | undefined
+) => {
+  if (!provider) return
+  ensureCodeBlockWindowDragListeners()
+  activeCodeBlockWindowDragProvider = provider
+}
 const preserveCodeScrollAcrossFrames = (
   scrollAnchor: WindowScrollAnchor,
   replaceActivePreserve = false
@@ -152,6 +270,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
   const searchInputRef = useRef<HTMLInputElement>(null)
   const shellRef = useRef<HTMLDivElement>(null)
   const codeDragSelectionRef = useRef<CodeDragSelectionSession | null>(null)
+  const codeBlockWindowDragProviderRef = useRef<CodeBlockWindowDragProvider | null>(null)
   const isActiveCodeBlockRef = useRef(false)
   const lastCodePointerContentRootRef = useRef<HTMLElement | null>(null)
   const [draftLanguage, setDraftLanguage] = useState(normalizeCodeLanguage(String(node.attrs?.language || "")))
@@ -485,6 +604,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
         startX: event.clientX,
         startY: event.clientY,
       }
+      activateCodeBlockWindowDragProvider(codeBlockWindowDragProviderRef.current)
       if (hasExistingCodeSelection) focusElementWithoutScroll(contentRoot)
     },
     [preserveCodePointerFocusScroll, resolveCodeTextPosFromPointer, selectCodeDomTextRange]
@@ -637,17 +757,18 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       lastCodeDragSelectionCompletedX = event.clientX; lastCodeDragSelectionCompletedY = event.clientY
       event.stopPropagation()
     }
-    window.addEventListener("mousemove", handleWindowMouseMove, true)
-    window.addEventListener("pointermove", handleWindowMouseMove, true)
-    window.addEventListener("mouseup", handleWindowMouseUp, true)
-    window.addEventListener("pointerup", handleWindowMouseUp, true)
-    window.addEventListener("pointercancel", handleWindowMouseUp, true)
+    const provider: CodeBlockWindowDragProvider = () =>
+      codeDragSelectionRef.current
+        ? { handleWindowMouseMove, handleWindowMouseUp }
+        : null
+    codeBlockWindowDragProviderRef.current = provider
     return () => {
-      window.removeEventListener("mousemove", handleWindowMouseMove, true)
-      window.removeEventListener("pointermove", handleWindowMouseMove, true)
-      window.removeEventListener("mouseup", handleWindowMouseUp, true)
-      window.removeEventListener("pointerup", handleWindowMouseUp, true)
-      window.removeEventListener("pointercancel", handleWindowMouseUp, true)
+      if (activeCodeBlockWindowDragProvider === provider) {
+        activeCodeBlockWindowDragProvider = null
+      }
+      if (codeBlockWindowDragProviderRef.current === provider) {
+        codeBlockWindowDragProviderRef.current = null
+      }
     }
   }, [focusCodeTextPosition, getPos, node.nodeSize, preserveCodeDomTextRange, preserveCodePointerFocusScroll, resolveCodeTextPosFromPointer])
   const ensureCodeDomTextSelection = useCallback((
@@ -875,6 +996,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       }
     }
     const handleShellPointerCapture = () => {
+      activateCodeBlockGlobalEventProvider(globalProvider)
       rememberActiveCodeContentRoot()
     }
 
@@ -1009,18 +1131,17 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
         syncLiveCodeSource()
       })
     })
+    const globalProvider: CodeBlockGlobalEventProvider = {
+      handleDocumentCodePointer,
+      handleDocumentSelectAll,
+      shell,
+    }
+    const unregisterGlobalProvider =
+      registerCodeBlockGlobalEventProvider(globalProvider)
 
     shell.addEventListener("pointerdown", handleShellPointerCapture, true)
     shell.addEventListener("mousedown", handleShellPointerCapture, true)
     shell.addEventListener("click", handleShellPointerCapture, true)
-    window.addEventListener("pointerdown", handleDocumentCodePointer, true)
-    window.addEventListener("mousedown", handleDocumentCodePointer, true)
-    window.addEventListener("click", handleDocumentCodePointer, true)
-    document.addEventListener("pointerdown", handleDocumentCodePointer, true)
-    document.addEventListener("mousedown", handleDocumentCodePointer, true)
-    document.addEventListener("click", handleDocumentCodePointer, true)
-    window.addEventListener("keydown", handleDocumentSelectAll, true)
-    document.addEventListener("keydown", handleDocumentSelectAll, true)
     observer.observe(shell, {
       childList: true,
       subtree: true,
@@ -1031,14 +1152,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       shell.removeEventListener("pointerdown", handleShellPointerCapture, true)
       shell.removeEventListener("mousedown", handleShellPointerCapture, true)
       shell.removeEventListener("click", handleShellPointerCapture, true)
-      window.removeEventListener("pointerdown", handleDocumentCodePointer, true)
-      window.removeEventListener("mousedown", handleDocumentCodePointer, true)
-      window.removeEventListener("click", handleDocumentCodePointer, true)
-      document.removeEventListener("pointerdown", handleDocumentCodePointer, true)
-      document.removeEventListener("mousedown", handleDocumentCodePointer, true)
-      document.removeEventListener("click", handleDocumentCodePointer, true)
-      window.removeEventListener("keydown", handleDocumentSelectAll, true)
-      document.removeEventListener("keydown", handleDocumentSelectAll, true)
+      unregisterGlobalProvider()
       observer.disconnect()
       if (frameId !== null) {
         window.cancelAnimationFrame(frameId)

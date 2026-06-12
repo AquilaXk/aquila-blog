@@ -26,6 +26,7 @@ type LinkCardEditorProps = NodeViewProps & {
 const LinkCardEditorView = ({
   node,
   updateAttributes,
+  editor,
   selected,
   kindLabel,
   urlPlaceholder,
@@ -44,7 +45,11 @@ const LinkCardEditorView = ({
   const [draftEmbedUrl, setDraftEmbedUrl] = useState(String(node.attrs?.embedUrl || ""))
   const [isUnfurling, setIsUnfurling] = useState(false)
   const bodyRef = useRef<HTMLTextAreaElement>(null)
-  const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
+  const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(
+    updateAttributes,
+    undefined,
+    editor.view.dom
+  )
 
   useAutosizeTextarea(bodyRef, draftBody, selected)
 

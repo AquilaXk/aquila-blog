@@ -8,15 +8,12 @@ import {
   type BlockEditorDoc,
   type BookmarkBlockAttrs,
   type CalloutBlockInput,
-  type ChecklistBlockItem,
   type EmbedBlockAttrs,
   type FileBlockAttrs,
 } from "./serializationTypes"
 import {
   createBlockquoteNode,
   createBookmarkNode,
-  createBulletListNode,
-  createChecklistNode,
   createCodeBlockNode,
   createEmbedNode,
   createFileBlockNode,
@@ -24,7 +21,6 @@ import {
   createHeadingNode,
   createHorizontalRuleNode,
   createMermaidNode,
-  createOrderedListNode,
   createParagraphNode,
   createRawBlockNode,
   createToggleNode,
@@ -38,7 +34,23 @@ import {
   parseTableAlignments,
   splitTableCells,
 } from "./serializationTableMetadata"
-import { CUSTOM_DIRECTIVE_PATTERN, FORMULA_BLOCK_START_PATTERN, collectParagraphLines, isBlankLine, isBlockquoteLine, isBulletListItem, isDividerLine, isFenceEnd, isFenceStart, isHeadingLine, isOrderedListItem, isTaskListItem, parseAsideStart, parseCalloutStart, parseCardMetadataComment, parseSingleLineFormulaBlock, parseToggleStart, promoteCalloutTitle } from "./serializationHtmlImportLineParsers"
+import {
+  CUSTOM_DIRECTIVE_PATTERN,
+  FORMULA_BLOCK_START_PATTERN,
+  collectParagraphLines,
+  isBlankLine,
+  isBlockquoteLine,
+  isDividerLine,
+  isFenceEnd,
+  isFenceStart,
+  isHeadingLine,
+  parseAsideStart,
+  parseCalloutStart,
+  parseCardMetadataComment,
+  parseSingleLineFormulaBlock,
+  parseToggleStart,
+  promoteCalloutTitle,
+} from "./serializationHtmlImportLineParsers"
 
 const createCalloutBodyContent = (body: string): JSONContent[] => {
   const normalized = body.replace(/\r\n?/g, "\n").trim()
@@ -59,6 +71,113 @@ export const createCalloutNode = (input: CalloutBlockInput): JSONContent => {
     attrs,
     content: normalizedContent,
   }
+}
+
+type ParsedMarkdownListLine = {
+  indent: number
+  kind: "bullet" | "ordered" | "task"
+  text: string
+  checked?: boolean
+  order?: number
+}
+
+const getListNodeType = (line: ParsedMarkdownListLine) => {
+  if (line.kind === "task") return "taskList"
+  if (line.kind === "ordered") return "orderedList"
+  return "bulletList"
+}
+
+const getListIndent = (rawIndent: string) => rawIndent.replace(/\t/g, "  ").length
+
+const parseMarkdownListLine = (line: string): ParsedMarkdownListLine | null => {
+  const task = line.match(/^(\s*)[-*+]\s+\[( |x|X)\]\s+(.*)$/)
+  if (task) {
+    return {
+      indent: getListIndent(task[1] || ""),
+      kind: "task",
+      checked: (task[2] || "").toLowerCase() === "x",
+      text: task[3] || "",
+    }
+  }
+
+  const ordered = line.match(/^(\s*)(\d+)\.\s+(.*)$/)
+  if (ordered) {
+    return {
+      indent: getListIndent(ordered[1] || ""),
+      kind: "ordered",
+      order: Number.parseInt(ordered[2] || "1", 10) || 1,
+      text: ordered[3] || "",
+    }
+  }
+
+  const bullet = line.match(/^(\s*)[-*+]\s+(.*)$/)
+  if (bullet) {
+    return {
+      indent: getListIndent(bullet[1] || ""),
+      kind: "bullet",
+      text: bullet[2] || "",
+    }
+  }
+
+  return null
+}
+
+const createListContainer = (line: ParsedMarkdownListLine): JSONContent => {
+  const type = getListNodeType(line)
+  return {
+    type,
+    ...(type === "orderedList" && line.order && line.order > 1 ? { attrs: { start: line.order } } : {}),
+    content: [],
+  }
+}
+
+const createListItemFromLine = (line: ParsedMarkdownListLine): JSONContent => ({
+  type: line.kind === "task" ? "taskItem" : "listItem",
+  ...(line.kind === "task" ? { attrs: { checked: line.checked === true } } : {}),
+  content: [createParagraphNode(line.text.trim())],
+})
+
+const parseMarkdownListBlock = (
+  lines: string[],
+  startIndex: number
+): { node: JSONContent; nextIndex: number } | null => {
+  const firstLine = parseMarkdownListLine(lines[startIndex] || "")
+  if (!firstLine) return null
+
+  const parseListAt = (
+    index: number,
+    expectedType: string,
+    expectedIndent: number
+  ): { node: JSONContent; nextIndex: number } => {
+    const initialLine = parseMarkdownListLine(lines[index] || "") || firstLine
+    const node = createListContainer(initialLine)
+    let pointer = index
+
+    while (pointer < lines.length) {
+      const currentLine = parseMarkdownListLine(lines[pointer] || "")
+      if (!currentLine) break
+      const currentType = getListNodeType(currentLine)
+
+      if (currentLine.indent < expectedIndent) break
+      if (currentLine.indent > expectedIndent) {
+        const currentContent = node.content || []
+        const lastItem = currentContent[currentContent.length - 1]
+        if (!lastItem) break
+        const nested = parseListAt(pointer, currentType, currentLine.indent)
+        lastItem.content = [...(lastItem.content || []), nested.node]
+        pointer = nested.nextIndex
+        continue
+      }
+      if (currentType !== expectedType) break
+
+      node.content = [...(node.content || []), createListItemFromLine(currentLine)]
+      pointer += 1
+    }
+
+    return { node, nextIndex: pointer }
+  }
+
+  return parseListAt(startIndex, getListNodeType(firstLine), firstLine.indent)
 }
 
 export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
@@ -500,54 +619,11 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
       continue
     }
 
-    const taskListItem = isTaskListItem(line)
-    if (taskListItem) {
+    const markdownList = parseMarkdownListBlock(lines, index)
+    if (markdownList) {
       pendingDirectiveMetadata = null
-      const items: ChecklistBlockItem[] = []
-      let pointer = index
-
-      while (pointer < lines.length) {
-        const item = isTaskListItem(lines[pointer])
-        if (!item) break
-        items.push(item)
-        pointer += 1
-      }
-
-      content.push(createChecklistNode(items))
-      index = pointer
-      continue
-    }
-
-    const bulletItem = isBulletListItem(line)
-    if (bulletItem !== null) {
-      pendingDirectiveMetadata = null
-      const items: string[] = []
-      let pointer = index
-      while (pointer < lines.length) {
-        const itemText = isBulletListItem(lines[pointer])
-        if (itemText === null) break
-        items.push(itemText)
-        pointer += 1
-      }
-      content.push(createBulletListNode(items))
-      index = pointer
-      continue
-    }
-
-    const orderedItem = isOrderedListItem(line)
-    if (orderedItem) {
-      pendingDirectiveMetadata = null
-      const items: string[] = []
-      const start = orderedItem.order
-      let pointer = index
-      while (pointer < lines.length) {
-        const item = isOrderedListItem(lines[pointer])
-        if (!item) break
-        items.push(item.text)
-        pointer += 1
-      }
-      content.push(createOrderedListNode(items, start))
-      index = pointer
+      content.push(markdownList.node)
+      index = markdownList.nextIndex
       continue
     }
 

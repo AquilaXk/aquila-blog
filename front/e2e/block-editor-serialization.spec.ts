@@ -17,6 +17,7 @@ import {
   createInlineFormulaNode,
   createMermaidNode,
   createOrderedListNode,
+  createParagraphNode,
   createTableNode,
   createToggleNode,
   detectUnsupportedMarkdownBlocks,
@@ -451,6 +452,220 @@ test.describe("block editor serialization", () => {
     expect(serialized).toBe(markdown)
   })
 
+  test("literal markdown text 는 inline delimiter 로 재파싱되지 않는다", () => {
+    const literalText = "**literal** [x](https://example.com) `code` $price$ ~~strike~~ {{color:red|x}}"
+    const doc = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: literalText }],
+        },
+      ],
+    }
+
+    const serialized = serializeEditorDocToMarkdown(doc)
+    const reparsed = parseMarkdownToEditorDoc(serialized)
+
+    expect(serialized).not.toBe(literalText)
+    expect(serialized).toContain(String.raw`\*\*literal\*\*`)
+    expect(serialized).toContain(String.raw`\[x\]\(https://example.com\)`)
+    expect(serialized).toContain(String.raw`\~\~strike\~\~`)
+    expect(reparsed.content?.[0]?.content).toEqual([{ type: "text", text: literalText }])
+  })
+
+  test("single tilde text 는 저장 markdown 에서 과하게 escape 하지 않는다", () => {
+    const doc = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "15~60분" }],
+        },
+      ],
+    }
+
+    const serialized = serializeEditorDocToMarkdown(doc)
+    const reparsed = parseMarkdownToEditorDoc(serialized)
+
+    expect(serialized).toBe("15~60분")
+    expect(reparsed.content?.[0]?.content).toEqual([{ type: "text", text: "15~60분" }])
+  })
+
+  test("mark 내부 escaped inline text 는 reload 후 원문 text 로 복구된다", () => {
+    const doc = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "$PATH _env [x]", marks: [{ type: "bold" }] },
+            { type: "text", text: " " },
+            { type: "text", text: "$CODE", marks: [{ type: "code" }] },
+          ],
+        },
+      ],
+    }
+
+    const serialized = serializeEditorDocToMarkdown(doc)
+    const reparsed = parseMarkdownToEditorDoc(serialized)
+
+    expect(serialized).toContain("`$CODE`")
+    expect(serialized).not.toContain("`\\$CODE`")
+    expect(reparsed.content?.[0]?.content).toEqual([
+      { type: "text", text: "$PATH _env [x]", marks: [{ type: "bold" }] },
+      { type: "text", text: " " },
+      { type: "text", text: "$CODE", marks: [{ type: "code" }] },
+    ])
+  })
+
+  test("inline code mark 는 markdown escape 를 code span 내부 데이터로 저장하지 않는다", () => {
+    const doc = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "$CODE", marks: [{ type: "code" }] },
+            { type: "text", text: " " },
+            { type: "text", text: "*", marks: [{ type: "code" }] },
+            { type: "text", text: " " },
+            { type: "text", text: String.raw`\*`, marks: [{ type: "code" }] },
+            { type: "text", text: " " },
+            { type: "text", text: "`tick`", marks: [{ type: "code" }] },
+          ],
+        },
+      ],
+    }
+
+    const serialized = serializeEditorDocToMarkdown(doc)
+    const reparsed = parseMarkdownToEditorDoc(serialized)
+
+    expect(serialized).toContain("`$CODE`")
+    expect(serialized).toContain("`*`")
+    expect(serialized).toContain("`\\*`")
+    expect(serialized).toContain("`` `tick` ``")
+    expect(reparsed.content?.[0]?.content).toEqual(doc.content[0].content)
+  })
+
+  test("기존 inline code span 의 backslash 는 reload 후에도 code text 로 보존된다", () => {
+    const markdown = ["값: ", "`\\*`", " and ", "`$CODE`"].join("")
+
+    const doc = parseMarkdownToEditorDoc(markdown)
+    const serialized = serializeEditorDocToMarkdown(doc)
+    const reparsed = parseMarkdownToEditorDoc(serialized)
+
+    expect(doc.content?.[0]?.content).toEqual([
+      { type: "text", text: "값: " },
+      { type: "text", text: String.raw`\*`, marks: [{ type: "code" }] },
+      { type: "text", text: " and " },
+      { type: "text", text: "$CODE", marks: [{ type: "code" }] },
+    ])
+    expect(reparsed.content?.[0]?.content).toEqual(doc.content?.[0]?.content)
+  })
+
+  test("code 와 mermaid block 내부 fence line 은 더 긴 fence 로 보존된다", () => {
+    const codeContent = ["before", "```", "after"].join("\n")
+    const mermaidSource = ["flowchart TD", "```", "A --> B"].join("\n")
+    const doc = {
+      type: "doc",
+      content: [
+        createCodeBlockNode("ts", codeContent),
+        createMermaidNode(mermaidSource),
+      ],
+    }
+
+    const serialized = serializeEditorDocToMarkdown(doc)
+    const reparsed = parseMarkdownToEditorDoc(serialized)
+
+    expect(serialized).toContain(["````ts", "before", "```", "after", "````"].join("\n"))
+    expect(serialized).toContain(["````mermaid", "flowchart TD", "```", "A --> B", "````"].join("\n"))
+    expect(reparsed.content?.[0]?.content?.[0]?.text).toBe(codeContent)
+    expect(reparsed.content?.[1]?.attrs?.source).toBe(mermaidSource)
+  })
+
+  test("nested bullet/task list 는 serialize 후 재파싱해도 하위 item 을 보존한다", () => {
+    const doc = {
+      type: "doc",
+      content: [
+        {
+          type: "bulletList",
+          content: [
+            {
+              type: "listItem",
+              content: [
+                createParagraphNode("상위 항목"),
+                {
+                  type: "bulletList",
+                  content: [
+                    {
+                      type: "listItem",
+                      content: [createParagraphNode("하위 항목")],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: "orderedList",
+          attrs: { start: 1 },
+          content: [
+            {
+              type: "listItem",
+              content: [
+                createParagraphNode("상위 번호"),
+                {
+                  type: "orderedList",
+                  attrs: { start: 1 },
+                  content: [
+                    {
+                      type: "listItem",
+                      content: [createParagraphNode("하위 번호")],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: "taskList",
+          content: [
+            {
+              type: "taskItem",
+              attrs: { checked: false },
+              content: [
+                createParagraphNode("상위 작업"),
+                {
+                  type: "taskList",
+                  content: [
+                    {
+                      type: "taskItem",
+                      attrs: { checked: true },
+                      content: [createParagraphNode("하위 작업")],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+
+    const serialized = serializeEditorDocToMarkdown(doc)
+    const reparsed = parseMarkdownToEditorDoc(serialized)
+
+    expect(serialized).toContain(["- 상위 항목", "  - 하위 항목"].join("\n"))
+    expect(serialized).toContain(["1. 상위 번호", "   1. 하위 번호"].join("\n"))
+    expect(serialized).toContain(["- [ ] 상위 작업", "  - [x] 하위 작업"].join("\n"))
+    expect(reparsed.content?.[0]?.content?.[0]?.content?.some((node) => node.type === "bulletList")).toBe(true)
+    expect(reparsed.content?.[1]?.content?.[0]?.content?.some((node) => node.type === "orderedList")).toBe(true)
+    expect(reparsed.content?.[2]?.content?.[0]?.content?.some((node) => node.type === "taskList")).toBe(true)
+  })
+
   test("GFM 테이블은 parse/serialize round-trip 을 유지한다", () => {
     const markdown = [
       "| 항목 | 값 |",
@@ -491,6 +706,23 @@ test.describe("block editor serialization", () => {
 
     expect(serialized).toContain("| 경로 | C:\\\\temp\\\\\\|draft |")
     expect(serializeEditorDocToMarkdown(reparsed)).toBe(serialized)
+  })
+
+  test("GFM 테이블 셀의 literal backslash before markdown char 는 round-trip 보존된다", () => {
+    const doc = parseMarkdownToEditorDoc(["| 항목 | 값 |", "| --- | --- |", "| escape | sample |"].join("\n"))
+
+    const tableRow = doc.content?.[0]?.content?.[1]
+    const cellNode = tableRow?.content?.[1]?.content?.[0]?.content?.[0]
+    if (cellNode && cellNode.type === "text") {
+      cellNode.text = String.raw`\* and \$`
+    }
+
+    const serialized = serializeEditorDocToMarkdown(doc)
+    const reparsed = parseMarkdownToEditorDoc(serialized)
+    const reparsedTableRow = reparsed.content?.[0]?.content?.[1]
+    const reparsedCellNode = reparsedTableRow?.content?.[1]?.content?.[0]?.content?.[0]
+
+    expect(reparsedCellNode).toEqual({ type: "text", text: String.raw`\* and \$` })
   })
 
   test("정렬 지정 GFM 테이블은 table block 으로 승격되고 정렬 메타를 유지한다", () => {

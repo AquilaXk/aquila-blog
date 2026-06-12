@@ -429,6 +429,8 @@ jobs:
 
           chmod +x \
             deploy/homeserver/create_deploy_backup.sh \
+            deploy/homeserver/create_external_backup.sh \
+            deploy/homeserver/prune_external_backups.sh \
             deploy/homeserver/blue_green_deploy.sh \
             deploy/homeserver/pgroonga_precheck.sh \
             deploy/homeserver/post_precheck_env_guard.sh \
@@ -438,6 +440,10 @@ jobs:
 
           BACKUP_DIR="$(./deploy/homeserver/create_deploy_backup.sh)"
           echo "backup created (pre-env-mutation): ${BACKUP_DIR}"
+          EXTERNAL_BACKUP_DIR="$(./deploy/homeserver/create_external_backup.sh)"
+          echo "external backup created (pre-env-mutation): ${EXTERNAL_BACKUP_DIR}"
+          ./deploy/homeserver/prune_external_backups.sh --dry-run
+          ./deploy/homeserver/prune_external_backups.sh
 
           DEPLOY_COMPLETED="false"
           ROLLBACK_IN_PROGRESS="false"

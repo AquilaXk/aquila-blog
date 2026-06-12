@@ -14,7 +14,9 @@ if [[ ! -x "${PRUNE_SCRIPT}" ]]; then
   exit 1
 fi
 
-WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/aquila-external-backup-retention.XXXXXX")"
+TMP_BASE="${TMPDIR:-/tmp}"
+TMP_BASE="${TMP_BASE%/}"
+WORK_DIR="$(mktemp -d "${TMP_BASE}/aquila-external-backup-retention.XXXXXX")"
 trap 'rm -rf "${WORK_DIR}"' EXIT
 
 BACKUP_ROOT="${WORK_DIR}/backups"
@@ -153,6 +155,21 @@ if AQUILA_EXTERNAL_STORAGE_ALLOW_TEST_ROOT=true \
 fi
 
 [[ -d "${MINIO_BACKUP_ROOT}/postgres/daily/20260101-000000" ]]
+
+MINIO_DOUBLE_SLASH_BACKUP_ROOT="${MINIO_ROOT}//minio/backups"
+
+if AQUILA_EXTERNAL_STORAGE_ALLOW_TEST_ROOT=true \
+  AQUILA_EXTERNAL_STORAGE_SKIP_MOUNT_CHECK=true \
+  AQUILA_EXTERNAL_STORAGE_ROOT="${MINIO_ROOT}" \
+  AQUILA_BACKUP_ROOT="${MINIO_DOUBLE_SLASH_BACKUP_ROOT}" \
+  AQUILA_BACKUP_RETENTION_DAILY=1 \
+  AQUILA_BACKUP_RETENTION_WEEKLY=1 \
+  AQUILA_BACKUP_RETENTION_MONTHLY=1 \
+  AQUILA_BACKUP_MIN_FREE_PERCENT=0 \
+    "${PRUNE_SCRIPT}" --dry-run >/dev/null 2>&1; then
+  echo "prune unexpectedly allowed backup root inside MinIO data via repeated slash" >&2
+  exit 1
+fi
 
 grep -q "stop_legacy_minio_for_migration" "${CREATE_SCRIPT}"
 grep -q "docker stop" "${CREATE_SCRIPT}"

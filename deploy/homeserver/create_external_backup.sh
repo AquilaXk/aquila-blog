@@ -101,6 +101,7 @@ is_safe_absolute_path() {
   local value="$1"
   [[ "${value}" == /* ]] || return 1
   [[ "${value}" != "/" ]] || return 1
+  [[ "${value}" != *"//"* ]] || return 1
   [[ ! "${value}" =~ (^|/)\.\.?($|/) ]] || return 1
 }
 

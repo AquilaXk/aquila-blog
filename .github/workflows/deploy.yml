@@ -405,6 +405,39 @@ jobs:
             fi
           }
 
+          EXTERNAL_MINIO_ROLLOUT_STARTED="false"
+          restart_external_backup_legacy_minio_if_needed() {
+            local marker="deploy/homeserver/.external-minio-migration-stopped"
+            local migrated_minio_dir=""
+            local cid
+            local line
+            if [ ! -f "${marker}" ]; then
+              return 0
+            fi
+            while IFS= read -r line; do
+              [ -n "${line}" ] || continue
+              case "${line}" in
+                minio_dir=*)
+                  migrated_minio_dir="${line#minio_dir=}"
+                  continue
+                  ;;
+                cid=*)
+                  cid="${line#cid=}"
+                  ;;
+                *)
+                  cid="${line}"
+                  ;;
+              esac
+              echo "restarting legacy minio container before rollback: ${cid}" >&2
+              docker start "${cid}" >/dev/null 2>&1 || true
+            done < "${marker}"
+            if [ -n "${migrated_minio_dir}" ] && [ "${migrated_minio_dir}" != "/" ] && [ -d "${migrated_minio_dir}" ]; then
+              echo "removing pre-rollout migrated MinIO copy before retry: ${migrated_minio_dir}" >&2
+              rm -rf -- "${migrated_minio_dir}"
+            fi
+            rm -f "${marker}"
+          }
+
           cd "${HOME_APP_DIR}"
 
           if [ -z "${HOME_DEPLOY_SHA:-}" ]; then
@@ -492,6 +525,9 @@ jobs:
             local reason="${1:-unexpected_exit}"
             if [ "${DEPLOY_COMPLETED}" = "true" ] || [ "${ROLLBACK_IN_PROGRESS}" = "true" ]; then
               return 0
+            fi
+            if [ "${EXTERNAL_MINIO_ROLLOUT_STARTED}" != "true" ]; then
+              restart_external_backup_legacy_minio_if_needed
             fi
             if [ -n "${BACKUP_DIR:-}" ] && [ -d "${BACKUP_DIR}" ]; then
               ROLLBACK_IN_PROGRESS="true"
@@ -674,9 +710,11 @@ jobs:
             exit 1
           }
 
+          EXTERNAL_MINIO_ROLLOUT_STARTED="true"
           if ! RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}" RUNTIME_SPLIT_STAGE="${RUNTIME_SPLIT_STAGE_VALUE}" HEALTHCHECK_PATH=/actuator/health/readiness HEALTHCHECK_LOG_EVERY_N_TRIES=1 ./deploy/homeserver/blue_green_deploy.sh; then
             rollback_and_exit "blue_green_deploy_failed"
           fi
+          rm -f deploy/homeserver/.external-minio-migration-stopped
 
           API_DOMAIN="$(awk -F= '$1=="API_DOMAIN"{print substr($0, index($0, "=")+1)}' deploy/homeserver/.env.prod)"
           if [ -z "${API_DOMAIN}" ]; then

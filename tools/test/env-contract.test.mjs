@@ -223,6 +223,12 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
   assert(workflow.indexOf("Validate HOME_SERVER_ENV contract") < workflow.indexOf("Deploy over SSH"))
   assert.match(workflow, /export HOME_SERVER_ENV/)
   assert(workflow.indexOf("export HOME_SERVER_ENV") < workflow.indexOf("create_external_backup.sh"))
+  assert.match(workflow, /restart_external_backup_legacy_minio_if_needed/)
+  assert.match(workflow, /rm -rf -- "\$\{migrated_minio_dir\}"/)
+  assert(
+    workflow.indexOf("restart_external_backup_legacy_minio_if_needed") <
+      workflow.indexOf("blue_green_deploy.sh"),
+  )
 })
 
 test("required secret check does not inject multi-line HOME_SERVER_ENV into shell", () => {

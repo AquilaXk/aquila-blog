@@ -213,7 +213,6 @@ class CloudFileService(
                     segment.replace(Regex("[^A-Za-z0-9._ -]"), "_").take(80)
                 }.take(500)
 
-        if (cleaned.isBlank()) throw AppException("400-1", "유효하지 않은 폴더 경로입니다.")
         return cleaned
     }
 

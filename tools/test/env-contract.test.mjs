@@ -145,6 +145,10 @@ test("external backup root must stay strictly inside the default or configured s
     "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/backups",
     "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/minio/backups",
   )
+  const repeatedSeparatorInsideMinioData = baseHomeServerEnv.replace(
+    "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/backups",
+    "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data//minio/backups",
+  )
   const nonDefaultStorageRoot = baseHomeServerEnv
     .replace("AQUILA_EXTERNAL_STORAGE_ROOT=/mnt/aquila-blog-data", "AQUILA_EXTERNAL_STORAGE_ROOT=/mnt/other-disk")
     .replace("AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/backups", "AQUILA_BACKUP_ROOT=/mnt/other-disk/backups")
@@ -164,6 +168,11 @@ test("external backup root must stay strictly inside the default or configured s
     target: "home-server-source",
     text: insideMinioData,
   })
+  const repeatedSeparatorInsideMinioResult = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text: repeatedSeparatorInsideMinioData,
+  })
   const nonDefaultStorageRootResult = validateEnvText({
     contract: loadContract(contractPath),
     target: "home-server-source",
@@ -176,6 +185,8 @@ test("external backup root must stay strictly inside the default or configured s
   assert(sameResult.errors.some((error) => error.key === "AQUILA_BACKUP_ROOT"))
   assert.equal(insideMinioResult.ok, false)
   assert(insideMinioResult.errors.some((error) => error.key === "AQUILA_BACKUP_ROOT"))
+  assert.equal(repeatedSeparatorInsideMinioResult.ok, false)
+  assert(repeatedSeparatorInsideMinioResult.errors.some((error) => error.key === "AQUILA_BACKUP_ROOT"))
   assert.equal(nonDefaultStorageRootResult.ok, false)
   assert(nonDefaultStorageRootResult.errors.some((error) => error.key === "AQUILA_EXTERNAL_STORAGE_ROOT"))
 })

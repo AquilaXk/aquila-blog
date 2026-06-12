@@ -89,6 +89,7 @@ const validateKind = (definition, value) => {
     case "safe-absolute-path":
       if (!value.startsWith("/")) return "must be an absolute path"
       if (value === "/") return "must not be filesystem root"
+      if (/\/{2,}/.test(value)) return "must not contain repeated path separators"
       if (/(^|\/)\.\.?($|\/)/.test(value)) return "must not contain traversal path segments"
       return null
     case "url":

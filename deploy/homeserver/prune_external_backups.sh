@@ -193,7 +193,6 @@ MIN_FREE_PERCENT="$(env_value AQUILA_BACKUP_MIN_FREE_PERCENT "15")"
 
 validate_paths
 mkdir -p "${BACKUP_ROOT}"
-check_free_space "${MIN_FREE_PERCENT}"
 
 for category in postgres minio deploy; do
   for class in daily weekly monthly; do
@@ -201,4 +200,5 @@ for category in postgres minio deploy; do
   done
 done
 
+check_free_space "${MIN_FREE_PERCENT}"
 echo "[external-backup-prune] ok root=${BACKUP_ROOT} dry_run=${DRY_RUN}"

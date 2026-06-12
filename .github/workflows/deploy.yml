@@ -378,6 +378,7 @@ jobs:
           HOME_AI_SUMMARY_ENABLED="$(decode_b64 "${HOME_AI_SUMMARY_ENABLED_B64:-}")"
           HOME_AI_SUMMARY_GEMINI_API_KEY="$(decode_b64 "${HOME_AI_SUMMARY_GEMINI_API_KEY_B64:-}")"
           HOME_AI_SUMMARY_GEMINI_MODEL="$(decode_b64 "${HOME_AI_SUMMARY_GEMINI_MODEL_B64:-}")"
+          export HOME_SERVER_ENV
 
           upsert_env_key() {
             local key="$1"

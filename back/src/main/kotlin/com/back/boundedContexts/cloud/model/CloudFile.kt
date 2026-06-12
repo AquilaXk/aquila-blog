@@ -28,6 +28,13 @@ enum class CloudFileMediaKind {
     WHERE deleted_at IS NULL
     """,
 )
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS cloud_file_idx_owner_media_created_active
+    ON cloud_file (owner_member_id, media_kind, created_at DESC, id DESC)
+    WHERE deleted_at IS NULL
+    """,
+)
 class CloudFile(
     @field:Id
     @field:SequenceGenerator(name = "cloud_file_seq_gen", sequenceName = "cloud_file_seq", allocationSize = 1)

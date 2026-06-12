@@ -6,6 +6,7 @@ import com.back.boundedContexts.cloud.model.CloudFileMediaKind
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.security.domain.SecurityUser
+import io.swagger.v3.oas.annotations.responses.ApiResponse
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.constraints.Positive
 import org.springframework.core.io.InputStreamResource
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RequestPart
+import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
 import java.io.EOFException
@@ -63,6 +65,8 @@ class ApiV1AdmCloudController(
         )
 
     @PostMapping("/files", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
+    @ApiResponse(responseCode = "201", description = "Created")
+    @ResponseStatus(HttpStatus.CREATED)
     fun upload(
         @AuthenticationPrincipal securityUser: SecurityUser,
         @RequestPart("file") file: MultipartFile,
@@ -117,7 +121,7 @@ class ApiV1AdmCloudController(
         // 동영상 seek 호환을 위해 단일 byte range만 허용하고 multi-range는 거절한다.
         if (!rangeHeader.isNullOrBlank()) {
             if (totalLength <= 0) {
-                storedObject.inputStream.close()
+                storedObject.close()
                 return noStoreHeaders(
                     ResponseEntity
                         .status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
@@ -127,7 +131,7 @@ class ApiV1AdmCloudController(
 
             val range = parseSingleRange(rangeHeader, totalLength)
             if (range == null) {
-                storedObject.inputStream.close()
+                storedObject.close()
                 return noStoreHeaders(
                     ResponseEntity
                         .status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)

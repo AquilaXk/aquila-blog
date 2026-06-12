@@ -5,8 +5,12 @@ import com.back.boundedContexts.cloud.model.CloudFile
 import com.back.boundedContexts.cloud.model.CloudFileMediaKind
 import com.back.global.exception.application.AppException
 import com.back.global.storage.application.port.output.CloudStoragePort
+import com.back.global.storage.config.CloudStorageProperties
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -35,8 +39,11 @@ data class CloudFileContent(
 class CloudFileService(
     private val cloudFileRepository: CloudFileRepositoryPort,
     private val cloudStoragePort: CloudStoragePort,
+    private val cloudStorageProperties: CloudStorageProperties = CloudStorageProperties(),
     private val clock: Clock = Clock.systemUTC(),
 ) {
+    private val logger = LoggerFactory.getLogger(javaClass)
+
     @Transactional
     fun upload(
         ownerMemberId: Long,
@@ -46,6 +53,12 @@ class CloudFileService(
         folderPath: String?,
     ): CloudFileDto {
         if (bytes.isEmpty()) throw AppException("400-1", "클라우드 파일이 비어 있습니다.")
+        if (bytes.size.toLong() > cloudStorageProperties.maxFileSizeBytes) {
+            throw AppException(
+                "413-1",
+                "클라우드 파일은 ${formatFileSizeLimit(cloudStorageProperties.maxFileSizeBytes)} 이하여야 합니다.",
+            )
+        }
 
         val normalizedFolderPath = normalizeFolderPath(folderPath)
         val safeFilename = normalizeFilename(originalFilename)
@@ -138,9 +151,32 @@ class CloudFileService(
             cloudFileRepository.findActiveByIdAndOwner(fileId, ownerMemberId)
                 ?: throw AppException("404-1", "클라우드 파일을 찾을 수 없습니다.")
 
-        cloudStoragePort.delete(file.objectKey)
+        val objectKey = file.objectKey
         file.markDeleted(clock.instant())
         cloudFileRepository.save(file)
+        deleteObjectAfterCommit(objectKey)
+    }
+
+    private fun deleteObjectAfterCommit(objectKey: String) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            cloudStoragePort.delete(objectKey)
+            return
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(
+            object : TransactionSynchronization {
+                override fun afterCommit() {
+                    runCatching { cloudStoragePort.delete(objectKey) }
+                        .onFailure {
+                            logger.error(
+                                "Cloud file object delete failed after metadata commit (objectKey={})",
+                                objectKey,
+                                it,
+                            )
+                        }
+                }
+            },
+        )
     }
 
     private fun CloudFile.toDto(): CloudFileDto =
@@ -198,6 +234,11 @@ class CloudFileService(
                 .trim()
 
         return cleaned.ifBlank { fallback }
+    }
+
+    private fun formatFileSizeLimit(maxFileSizeBytes: Long): String {
+        val limitMb = (maxFileSizeBytes + (1024 * 1024) - 1) / (1024 * 1024)
+        return "${limitMb}MB"
     }
 
     private fun buildObjectKey(

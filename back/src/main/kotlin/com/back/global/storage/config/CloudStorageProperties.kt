@@ -12,4 +12,5 @@ data class CloudStorageProperties(
     val secretKey: String = "",
     val pathStyleAccess: Boolean = true,
     val cloudKeyPrefix: String = "cloud",
+    val maxFileSizeBytes: Long = 10 * 1024 * 1024,
 )

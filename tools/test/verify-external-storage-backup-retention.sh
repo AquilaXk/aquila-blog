@@ -142,5 +142,6 @@ grep -q ".minio-migration" "${CREATE_SCRIPT}"
 grep -q "LEGACY_MINIO_STOPPED_FOR_MIGRATION" "${CREATE_SCRIPT}"
 grep -q "minio_dir=" "${CREATE_SCRIPT}"
 grep -q "env_value_from_current_file CUSTOM_PROD_DBNAME" "${CREATE_SCRIPT}"
+grep -q "^umask 077$" "${CREATE_SCRIPT}"
 
 echo "[external-storage-retention] ok"

@@ -10,6 +10,8 @@ const workflowPath = path.join(repoRoot, ".github/workflows/deploy.yml")
 const composePath = path.join(repoRoot, "deploy/homeserver/docker-compose.prod.yml")
 const applicationProdPath = path.join(repoRoot, "back/src/main/resources/application-prod.yaml")
 const deployScriptPath = path.join(repoRoot, "deploy/homeserver/blue_green_deploy.sh")
+const deployBackupScriptPath = path.join(repoRoot, "deploy/homeserver/create_deploy_backup.sh")
+const externalBackupScriptPath = path.join(repoRoot, "deploy/homeserver/create_external_backup.sh")
 const hardeningScriptPath = path.join(repoRoot, "deploy/homeserver/hardening/setup_hardening.sh")
 const hardeningDocPath = path.join(repoRoot, "deploy/homeserver/HARDENING.md")
 const prometheusPath = path.join(repoRoot, "deploy/homeserver/monitoring/prometheus.yml")
@@ -274,6 +276,16 @@ test("minio production data is bound to the approved external disk", () => {
   assert.match(compose, /create_host_path:\s*false/)
   assert(!compose.includes("minio_data:/data"))
   assert(!/^\s*minio_data:\s*$/m.test(compose))
+})
+
+test("secret-bearing homeserver backups use private file permissions", () => {
+  const externalBackupScript = readFileSync(externalBackupScriptPath, "utf8")
+  const deployBackupScript = readFileSync(deployBackupScriptPath, "utf8")
+
+  assert.match(externalBackupScript, /^umask 077$/m)
+  assert.match(deployBackupScript, /^umask 077$/m)
+  assert(externalBackupScript.indexOf("umask 077") < externalBackupScript.indexOf('mkdir -p "${BACKUP_ROOT}/logs"'))
+  assert(deployBackupScript.indexOf("umask 077") < deployBackupScript.indexOf('mkdir -p "${BACKUP_DIR}"'))
 })
 
 test("prod datasource uses a non-superuser runtime role contract", () => {

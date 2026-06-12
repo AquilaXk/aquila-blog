@@ -10,6 +10,7 @@ COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
 DEFAULT_EXTERNAL_STORAGE_ROOT="/mnt/aquila-blog-data"
 TIMESTAMP="${AQUILA_BACKUP_TIMESTAMP:-$(date +%Y%m%d-%H%M%S)}"
 BACKUP_LOG_FILE=""
+STOPPED_LEGACY_MINIO_CONTAINERS=()
 
 read_key_from_text() {
   local key="$1"
@@ -237,6 +238,29 @@ copy_docker_volume_to_dir() {
     sh -c 'cd /from && tar cf - . | tar xf - -C /to'
 }
 
+stop_legacy_minio_for_migration() {
+  local stop_timeout="${AQUILA_MINIO_MIGRATION_STOP_TIMEOUT_SECONDS:-60}"
+  local cid
+
+  while IFS= read -r cid; do
+    [[ -n "${cid}" ]] || continue
+    log "stopping legacy minio container before external storage migration: ${cid}"
+    docker stop -t "${stop_timeout}" "${cid}" >/dev/null
+    STOPPED_LEGACY_MINIO_CONTAINERS+=("${cid}")
+  done < <(
+    docker ps -q \
+      --filter "label=com.docker.compose.project=blog_home" \
+      --filter "label=com.docker.compose.service=minio_1"
+  )
+}
+
+restart_stopped_legacy_minio_on_failure() {
+  local cid
+  for cid in "${STOPPED_LEGACY_MINIO_CONTAINERS[@]}"; do
+    docker start "${cid}" >/dev/null 2>&1 || true
+  done
+}
+
 prepare_external_minio_dir() {
   local minio_dir="${EXTERNAL_STORAGE_ROOT}/minio"
   local legacy_volume="${AQUILA_LEGACY_MINIO_VOLUME:-blog_home_minio_data}"
@@ -253,7 +277,11 @@ prepare_external_minio_dir() {
 
   if docker volume inspect "${legacy_volume}" >/dev/null 2>&1; then
     log "external minio directory is empty; copying legacy Docker volume ${legacy_volume}"
-    copy_docker_volume_to_dir "${legacy_volume}" "${minio_dir}"
+    stop_legacy_minio_for_migration
+    if ! copy_docker_volume_to_dir "${legacy_volume}" "${minio_dir}"; then
+      restart_stopped_legacy_minio_on_failure
+      fail "failed to copy legacy Docker volume ${legacy_volume}"
+    fi
   fi
 }
 

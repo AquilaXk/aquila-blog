@@ -128,6 +128,35 @@ test("external storage values reject unsafe paths and non-positive retention", a
   assert(result.errors.some((error) => error.key === "AQUILA_BACKUP_RETENTION_DAILY"))
 })
 
+test("external backup root must stay strictly inside the default or configured storage root", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const withoutExternalRoot = baseHomeServerEnv.replace(/^AQUILA_EXTERNAL_STORAGE_ROOT=.*\n/m, "")
+  const outsideDefaultRoot = withoutExternalRoot.replace(
+    "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/backups",
+    "AQUILA_BACKUP_ROOT=/other/backups",
+  )
+  const sameAsExternalRoot = baseHomeServerEnv.replace(
+    "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/backups",
+    "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data",
+  )
+
+  const outsideResult = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text: outsideDefaultRoot,
+  })
+  const sameResult = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text: sameAsExternalRoot,
+  })
+
+  assert.equal(outsideResult.ok, false)
+  assert(outsideResult.errors.some((error) => error.key === "AQUILA_BACKUP_ROOT"))
+  assert.equal(sameResult.ok, false)
+  assert(sameResult.errors.some((error) => error.key === "AQUILA_BACKUP_ROOT"))
+})
+
 test("home-server-source requires DB runtime username after runtime-role cutover", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const text = baseHomeServerEnv.replace(/^PROD___SPRING__DATASOURCE__USERNAME=.*\n/m, "")
@@ -192,6 +221,8 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
   assert.match(workflow, /Validate HOME_SERVER_ENV contract/)
   assert.match(workflow, /tools\/env\/validate-env\.mjs --target home-server-source/)
   assert(workflow.indexOf("Validate HOME_SERVER_ENV contract") < workflow.indexOf("Deploy over SSH"))
+  assert.match(workflow, /export HOME_SERVER_ENV/)
+  assert(workflow.indexOf("export HOME_SERVER_ENV") < workflow.indexOf("create_external_backup.sh"))
 })
 
 test("required secret check does not inject multi-line HOME_SERVER_ENV into shell", () => {

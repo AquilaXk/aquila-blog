@@ -40,4 +40,21 @@ require_pattern 'needs\.calculateTag\.outputs\.backend_deploy' "backend jobs mus
 require_pattern 'needs\.calculateTag\.outputs\.front_live_verify' "frontend live verification must be gated by front_live_verify"
 require_pattern 'always\(\)[[:space:]]*&&' "frontLiveE2E must handle skipped backend deploy dependencies explicitly"
 require_pattern 'create_external_backup\.sh' "homeserver deploy must create an external storage backup before rollout mutation"
-require_pattern 'prune_external_backups\.sh' "homeserver deploy must prune external backups after backup creation"
+require_pattern 'prune_external_backups\.sh' "homeserver deploy must prune external backups around backup creation"
+
+external_create_line="$(grep -n 'EXTERNAL_BACKUP_DIR=.*create_external_backup\.sh' "${workflow}" | head -n 1 | cut -d: -f1)"
+first_prune_line="$(grep -n '^[[:space:]]*\./deploy/homeserver/prune_external_backups\.sh' "${workflow}" | head -n 1 | cut -d: -f1)"
+last_prune_line="$(grep -n '^[[:space:]]*\./deploy/homeserver/prune_external_backups\.sh' "${workflow}" | tail -n 1 | cut -d: -f1)"
+
+if [[ -z "${external_create_line}" || -z "${first_prune_line}" || -z "${last_prune_line}" ]]; then
+  echo "unexpected: external backup create/prune invocation not found" >&2
+  exit 1
+fi
+if [[ "${first_prune_line}" -ge "${external_create_line}" ]]; then
+  echo "unexpected: external backup prune must run before backup creation to free old backups" >&2
+  exit 1
+fi
+if [[ "${last_prune_line}" -le "${external_create_line}" ]]; then
+  echo "unexpected: external backup prune must run after backup creation to enforce retention" >&2
+  exit 1
+fi

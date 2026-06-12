@@ -227,8 +227,10 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
   assert.match(workflow, /rm -rf -- "\$\{migrated_minio_dir\}"/)
   assert(
     workflow.indexOf("restart_external_backup_legacy_minio_if_needed") <
-      workflow.indexOf("blue_green_deploy.sh"),
+      workflow.indexOf("run_backup_rollback"),
   )
+  assert(workflow.indexOf("run_backup_rollback") < workflow.indexOf("restart_external_backup_legacy_minio_if_needed", workflow.indexOf("run_backup_rollback")))
+  assert(workflow.lastIndexOf("rm -f deploy/homeserver/.external-minio-migration-stopped") < workflow.indexOf('DEPLOY_COMPLETED="true"'))
 })
 
 test("required secret check does not inject multi-line HOME_SERVER_ENV into shell", () => {
@@ -252,7 +254,10 @@ test("runtime contract accounts for every compose env interpolation", async () =
 test("minio production data is bound to the approved external disk", () => {
   const compose = readFileSync(composePath, "utf8")
 
-  assert.match(compose, /\$\{AQUILA_EXTERNAL_STORAGE_ROOT:-\/mnt\/aquila-blog-data\}\/minio:\/data/)
+  assert.match(compose, /type:\s*bind/)
+  assert.match(compose, /source:\s*\$\{AQUILA_EXTERNAL_STORAGE_ROOT:-\/mnt\/aquila-blog-data\}\/minio/)
+  assert.match(compose, /target:\s*\/data/)
+  assert.match(compose, /create_host_path:\s*false/)
   assert(!compose.includes("minio_data:/data"))
   assert(!/^\s*minio_data:\s*$/m.test(compose))
 })

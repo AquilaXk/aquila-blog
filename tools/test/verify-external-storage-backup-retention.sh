@@ -14,7 +14,7 @@ if [[ ! -x "${PRUNE_SCRIPT}" ]]; then
   exit 1
 fi
 
-WORK_DIR="$(mktemp -d)"
+WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/aquila-external-backup-retention.XXXXXX")"
 trap 'rm -rf "${WORK_DIR}"' EXIT
 
 BACKUP_ROOT="${WORK_DIR}/backups"
@@ -27,7 +27,21 @@ make_backups() {
   local dir
 
   for index in $(seq 1 "${count}"); do
-    printf -v dir "${pattern}" "${index}"
+    case "${pattern}" in
+      "202601%02d-000000")
+        printf -v dir '202601%02d-000000' "${index}"
+        ;;
+      "202602%02d-000000")
+        printf -v dir '202602%02d-000000' "${index}"
+        ;;
+      "2026%02d01-000000")
+        printf -v dir '2026%02d01-000000' "${index}"
+        ;;
+      *)
+        echo "unsupported backup fixture pattern: ${pattern}" >&2
+        exit 1
+        ;;
+    esac
     mkdir -p "${BACKUP_ROOT}/${category}/${class}/${dir}"
     printf '%s\n' "${category}/${class}/${dir}" > "${BACKUP_ROOT}/${category}/${class}/${dir}/metadata.env"
   done

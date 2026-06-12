@@ -434,12 +434,7 @@ jobs:
               "")
                 ;;
               /mnt/aquila-blog-data/minio)
-                if [ -n "${BACKUP_DIR:-}" ] && [ -f "${BACKUP_DIR}/docker-compose.prod.yml" ] && grep -q 'minio_data:/data' "${BACKUP_DIR}/docker-compose.prod.yml"; then
-                  echo "removing migrated MinIO copy after rollback to legacy volume: ${migrated_minio_dir}" >&2
-                  rm -rf -- "${migrated_minio_dir}"
-                else
-                  echo "keeping migrated MinIO copy because rollback backup uses external storage or is unavailable: ${migrated_minio_dir}" >&2
-                fi
+                echo "keeping migrated MinIO copy for manual reconciliation after rollback: ${migrated_minio_dir}" >&2
                 ;;
               *)
                 echo "keeping unexpected migrated MinIO path from marker: ${migrated_minio_dir}" >&2
@@ -460,6 +455,7 @@ jobs:
             exit 1
           fi
 
+          umask 077
           if [ ! -f deploy/homeserver/create_deploy_backup.sh ]; then
             echo "deploy backup script missing before checkout: deploy/homeserver/create_deploy_backup.sh" >&2
             exit 1

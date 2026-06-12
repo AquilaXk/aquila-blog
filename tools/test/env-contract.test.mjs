@@ -145,6 +145,9 @@ test("external backup root must stay strictly inside the default or configured s
     "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/backups",
     "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/minio/backups",
   )
+  const nonDefaultStorageRoot = baseHomeServerEnv
+    .replace("AQUILA_EXTERNAL_STORAGE_ROOT=/mnt/aquila-blog-data", "AQUILA_EXTERNAL_STORAGE_ROOT=/mnt/other-disk")
+    .replace("AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/backups", "AQUILA_BACKUP_ROOT=/mnt/other-disk/backups")
 
   const outsideResult = validateEnvText({
     contract: loadContract(contractPath),
@@ -161,6 +164,11 @@ test("external backup root must stay strictly inside the default or configured s
     target: "home-server-source",
     text: insideMinioData,
   })
+  const nonDefaultStorageRootResult = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text: nonDefaultStorageRoot,
+  })
 
   assert.equal(outsideResult.ok, false)
   assert(outsideResult.errors.some((error) => error.key === "AQUILA_BACKUP_ROOT"))
@@ -168,6 +176,8 @@ test("external backup root must stay strictly inside the default or configured s
   assert(sameResult.errors.some((error) => error.key === "AQUILA_BACKUP_ROOT"))
   assert.equal(insideMinioResult.ok, false)
   assert(insideMinioResult.errors.some((error) => error.key === "AQUILA_BACKUP_ROOT"))
+  assert.equal(nonDefaultStorageRootResult.ok, false)
+  assert(nonDefaultStorageRootResult.errors.some((error) => error.key === "AQUILA_EXTERNAL_STORAGE_ROOT"))
 })
 
 test("home-server-source requires DB runtime username after runtime-role cutover", async () => {
@@ -238,8 +248,10 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
   assert(workflow.indexOf("export HOME_SERVER_ENV") < workflow.indexOf("create_external_backup.sh"))
   assert.match(workflow, /restart_external_backup_legacy_minio_if_needed/)
   assert.match(workflow, /backup created \(pre-checkout\)/)
-  assert.match(workflow, /removing migrated MinIO copy after rollback to legacy volume/)
+  assert.match(workflow, /keeping migrated MinIO copy for manual reconciliation after rollback/)
+  assert(!workflow.includes("removing migrated MinIO copy after rollback to legacy volume"))
   assert(workflow.indexOf("backup created (pre-checkout)") < workflow.indexOf('git checkout --force "${HOME_DEPLOY_SHA}"'))
+  assert(workflow.indexOf("umask 077") < workflow.indexOf("backup created (pre-checkout)"))
   assert(
     workflow.indexOf("restart_external_backup_legacy_minio_if_needed") <
       workflow.indexOf("run_backup_rollback"),

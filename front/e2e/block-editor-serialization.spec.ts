@@ -492,6 +492,48 @@ test.describe("block editor serialization", () => {
     expect(reparsed.content?.[0]?.content).toEqual([{ type: "text", text: "15~60분" }])
   })
 
+  test("escaped block marker 문단은 저장 후에도 block 으로 재해석되지 않는다", () => {
+    const markdown = [
+      String.raw`\# not a heading`,
+      String.raw`\- not a bullet`,
+      String.raw`\+ not a bullet`,
+      String.raw`1\. not ordered`,
+      String.raw`1234567890\. not ordered`,
+      String.raw`\> not quote`,
+      String.raw`\>todo`,
+    ].join("\n\n")
+
+    const doc = parseMarkdownToEditorDoc(markdown)
+    const serialized = serializeEditorDocToMarkdown(doc)
+    const reparsed = parseMarkdownToEditorDoc(serialized)
+
+    expect(serialized).toContain(String.raw`\# not a heading`)
+    expect(serialized).toContain(String.raw`\- not a bullet`)
+    expect(serialized).toContain(String.raw`\+ not a bullet`)
+    expect(serialized).toContain(String.raw`1\. not ordered`)
+    expect(serialized).toContain(String.raw`1234567890\. not ordered`)
+    expect(serialized).toContain(String.raw`\> not quote`)
+    expect(serialized).toContain(String.raw`\>todo`)
+    expect(reparsed.content?.map((node) => node.type)).toEqual([
+      "paragraph",
+      "paragraph",
+      "paragraph",
+      "paragraph",
+      "paragraph",
+      "paragraph",
+      "paragraph",
+    ])
+    expect(reparsed.content?.map((node) => node.content?.[0]?.text)).toEqual([
+      "# not a heading",
+      "- not a bullet",
+      "+ not a bullet",
+      "1. not ordered",
+      "1234567890. not ordered",
+      "> not quote",
+      ">todo",
+    ])
+  })
+
   test("mark 내부 escaped inline text 는 reload 후 원문 text 로 복구된다", () => {
     const doc = {
       type: "doc",
@@ -723,6 +765,23 @@ test.describe("block editor serialization", () => {
     const reparsedCellNode = reparsedTableRow?.content?.[1]?.content?.[0]?.content?.[0]
 
     expect(reparsedCellNode).toEqual({ type: "text", text: String.raw`\* and \$` })
+  })
+
+  test("compact GFM 테이블은 짝수 backslash 뒤 pipe 를 셀 구분자로 처리한다", () => {
+    const markdown = [String.raw`| 항목 | 값 |`, String.raw`| --- | --- |`, String.raw`| 경로 \\| next |`].join("\n")
+
+    const doc = parseMarkdownToEditorDoc(markdown)
+    const tableRow = doc.content?.[0]?.content?.[1]
+    const firstCellText = tableRow?.content?.[0]?.content?.[0]?.content?.[0]?.text
+    const secondCellText = tableRow?.content?.[1]?.content?.[0]?.content?.[0]?.text
+    const serialized = serializeEditorDocToMarkdown(doc)
+    const reparsed = parseMarkdownToEditorDoc(serialized)
+    const reparsedRow = reparsed.content?.[0]?.content?.[1]
+
+    expect(firstCellText).toBe("경로 \\")
+    expect(secondCellText).toBe("next")
+    expect(reparsedRow?.content?.[0]?.content?.[0]?.content?.[0]?.text).toBe("경로 \\")
+    expect(reparsedRow?.content?.[1]?.content?.[0]?.content?.[0]?.text).toBe("next")
   })
 
   test("정렬 지정 GFM 테이블은 table block 으로 승격되고 정렬 메타를 유지한다", () => {

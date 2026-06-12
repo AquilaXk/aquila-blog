@@ -630,11 +630,25 @@ test.describe("editor authoring route text selection drag", () => {
     await finalTable.scrollIntoViewIfNeeded()
     const startPoints = await getWordDragPoints(startCell, "영역")
     const endPoints = await getWordDragPoints(endCell, "구현되어 있는가")
+    const endCellBox = await expectVisibleBox(endCell, "table multi-cell drag end cell metrics are missing")
+    const endDragX = Math.min(
+      endCellBox.x + endCellBox.width - 10,
+      Math.max(endPoints.endX, endCellBox.x + endCellBox.width * 0.82)
+    )
+    const endDragY = Math.min(
+      endCellBox.y + endCellBox.height - 8,
+      Math.max(endPoints.endY, endCellBox.y + endCellBox.height * 0.62)
+    )
     const beforeScrollTop = await page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
 
     await page.mouse.move(startPoints.startX, startPoints.startY)
     await page.mouse.down()
-    await page.mouse.move(endPoints.endX, endPoints.endY, { steps: 36 })
+    await page.mouse.move(
+      (startPoints.startX + endDragX) / 2,
+      (startPoints.startY + endDragY) / 2,
+      { steps: 18 }
+    )
+    await page.mouse.move(endDragX, endDragY, { steps: 36 })
     await page.mouse.up()
 
     await expect

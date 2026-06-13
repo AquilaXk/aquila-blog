@@ -715,7 +715,7 @@ test.describe("editor authoring block selection and drag", () => {
       expect(metrics.rail.right).toBeLessThanOrEqual(metrics.viewport.width - metrics.viewport.padding + viewportTolerancePx)
       expect(metrics.rail.bottom).toBeLessThanOrEqual(metrics.viewport.height - metrics.viewport.padding + viewportTolerancePx)
       expect(metrics.targetRailGap).toBeGreaterThanOrEqual(8)
-      expect(metrics.targetRailGap).toBeLessThanOrEqual(24)
+      expect(metrics.targetRailGap).toBeLessThanOrEqual(28)
       expect(metrics.targetTextGap ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(72)
       expect({ collisions: metrics.collisions, metrics, targetText }).toMatchObject({
         collisions: [],

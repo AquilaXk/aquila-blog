@@ -211,10 +211,7 @@ export const useBlockEditorEngineBlockSelectionLayout = ({
       hideBlockHandle()
       return
     }
-    const contentRoot =
-      !isCoarsePointer && textSelectionBlockIndex !== null
-        ? getContentRoot()
-        : null
+    const contentRoot = !isCoarsePointer ? getContentRoot() : null
     const nativeTextSelectionActive = Boolean(
       contentRoot && hasNativeEditorTextSelection(contentRoot)
     )

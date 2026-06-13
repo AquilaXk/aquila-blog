@@ -578,6 +578,49 @@ const readFinalTableOverlayMetrics = (page: Page) =>
     }
   }, post507FinalTableTargetCell)
 
+const readFinalTableHoverTarget = (finalTable: Locator) =>
+  finalTable.evaluate((tableElement, targetCellText) => {
+    const table = tableElement as HTMLElement
+    const block = (table.closest(".tableWrapper") as HTMLElement | null) ?? table
+
+    const targetCell =
+      Array.from(table.querySelectorAll<HTMLElement>("td, th")).find((candidate) =>
+        candidate.textContent?.includes(targetCellText)
+      ) ?? null
+    const blockRect = block.getBoundingClientRect()
+    const cellRect = targetCell?.getBoundingClientRect() ?? null
+    const clamp = (value: number, min: number, max: number) =>
+      Math.min(Math.max(value, min), max)
+    const minInteractiveY = Math.min(96, Math.max(8, window.innerHeight - 24))
+    const maxInteractiveY = Math.max(minInteractiveY, window.innerHeight - 24)
+    const visibleTop = Math.max(blockRect.top, cellRect?.top ?? blockRect.top, minInteractiveY)
+    const visibleBottom = Math.min(
+      blockRect.bottom,
+      cellRect?.bottom ?? blockRect.bottom,
+      maxInteractiveY
+    )
+    const preferredY = cellRect
+      ? cellRect.top + cellRect.height / 2
+      : blockRect.top + Math.min(Math.max(blockRect.height / 2, 16), blockRect.height - 16)
+    const hoverY =
+      visibleBottom > visibleTop
+        ? visibleTop + (visibleBottom - visibleTop) / 2
+        : clamp(preferredY, minInteractiveY, maxInteractiveY)
+    const clampX = (value: number) => clamp(value, 4, window.innerWidth - 4)
+    const contentX = blockRect.left + Math.min(Math.max(blockRect.width / 2, 12), blockRect.width - 12)
+
+    return {
+      anchor: {
+        x: clampX(contentX),
+        y: hoverY,
+      },
+      points: [24, 18, 32, -24, -36].map((offsetX) => ({
+        x: clampX(blockRect.left + offsetX),
+        y: hoverY,
+      })),
+    }
+  }, post507FinalTableTargetCell)
+
 const readFinalTableHandleMetrics = (page: Page) =>
   page.evaluate((targetCellText) => {
     const table =
@@ -629,7 +672,8 @@ const finalTableHandleIsRetargeted = (
   )
 
 const expectFinalTableOverlayFollowsScroll = async (page: Page, finalTable: Locator) => {
-  await finalTable.evaluate((element) => {
+  const targetCell = finalTable.locator("td, th", { hasText: post507FinalTableTargetCell }).first()
+  await targetCell.evaluate((element) => {
     element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
   })
   await page.waitForTimeout(160)
@@ -640,20 +684,11 @@ const expectFinalTableOverlayFollowsScroll = async (page: Page, finalTable: Loca
 
   const blockHandle = page.getByTestId("block-drag-handle")
   let lastHandleMetrics: Awaited<ReturnType<typeof readFinalTableHandleMetrics>> = null
-  for (const point of [
-    { x: 24, y: 24 },
-    { x: 18, y: 18 },
-    { x: 32, y: 28 },
-    { x: -24, y: 24 },
-    { x: -36, y: 32 },
-  ]) {
-    const currentTableBox = await finalTable.boundingBox()
-    if (!currentTableBox) break
-    await page.mouse.move(
-      currentTableBox.x + currentTableBox.width / 2,
-      currentTableBox.y + currentTableBox.height / 2
-    )
-    await page.mouse.move(currentTableBox.x + point.x, currentTableBox.y + point.y, { steps: 4 })
+  const hoverTarget = await readFinalTableHoverTarget(finalTable)
+  if (!hoverTarget) throw new Error("live 507 final table hover target metrics are missing")
+  for (const point of hoverTarget.points) {
+    await page.mouse.move(hoverTarget.anchor.x, hoverTarget.anchor.y)
+    await page.mouse.move(point.x, point.y, { steps: 4 })
     await page.waitForTimeout(80)
     lastHandleMetrics = await readFinalTableHandleMetrics(page)
     if (finalTableHandleIsRetargeted(lastHandleMetrics)) break

@@ -98,6 +98,9 @@ export const createWriterEditorExtensions = ({
     openOnClick: false,
     autolink: false,
     linkOnPaste: true,
+    HTMLAttributes: {
+      draggable: "false",
+    },
   }),
   InlineColorMark,
   Placeholder.configure({

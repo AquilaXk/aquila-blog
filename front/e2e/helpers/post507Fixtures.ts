@@ -1110,6 +1110,11 @@ export const clearPost507SelectionState = (page: Page) =>
     })
   })
 
+const cancelPost507ScrollPreserveBeforeProgrammaticScroll = async (page: Page) => {
+  await page.mouse.wheel(0, 1)
+  await page.waitForTimeout(80)
+}
+
 const readPost507CodeGateState = (page: Page) =>
   page.evaluate((requiredTexts) => {
     const codeShells = Array.from(document.querySelectorAll<HTMLElement>(".aq-code-shell"))
@@ -1831,6 +1836,7 @@ const expectPost507LowerBodyTextSelectionAfterTableAxes = async (page: Page, edi
 export const expectPost507FinalReferenceTextSelectionStable = async (page: Page, editor: Locator) => {
   const finalReference = editor.locator("li", { hasText: POST_507_FINAL_REFERENCE_TEXT }).last()
   await expect(finalReference).toBeVisible({ timeout: 5_000 })
+  await cancelPost507ScrollPreserveBeforeProgrammaticScroll(page)
   const referenceDrag = await dragPost507TextRangeWithArtifactSamples(
     page,
     finalReference,

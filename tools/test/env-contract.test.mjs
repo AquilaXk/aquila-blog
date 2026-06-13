@@ -291,6 +291,16 @@ test("deploy workflow는 editor live canary를 editor 변경 또는 명시적 fo
   assert.doesNotMatch(workflow, /E2E_LIVE_EDITOR_507_CANARY:\s*['"]?true['"]?/)
 })
 
+test("deploy workflow는 frontend 변경에서만 live frontend SHA를 현재 commit으로 기대한다", () => {
+  const workflow = readFileSync(workflowPath, "utf8")
+
+  assert.match(workflow, /expected_front_commit_sha: \$\{\{ steps\.meta\.outputs\.expected_front_commit_sha \}\}/)
+  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*\^front\//)
+  assert.match(workflow, /EXPECTED_FRONT_COMMIT_SHA="\$\{DEPLOY_SHA\}"/)
+  assert.match(workflow, /E2E_EXPECTED_FRONT_COMMIT_SHA: \$\{\{ needs\.calculateTag\.outputs\.expected_front_commit_sha \}\}/)
+  assert.doesNotMatch(workflow, /E2E_EXPECTED_FRONT_COMMIT_SHA:\s*\$\{\{ needs\.calculateTag\.outputs\.deploy_sha \}\}/)
+})
+
 test("runtime contract accounts for every compose env interpolation", async () => {
   const { loadContract } = await import("../env/validate-env.mjs")
   const contractKeys = new Set(targetKeyNames(loadContract(contractPath), "home-server-runtime"))

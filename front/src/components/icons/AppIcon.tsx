@@ -28,6 +28,7 @@ export type IconName =
   | "laptop"
   | "spark"
   | "briefcase"
+  | "cloud"
   | "camera"
   | "question"
   | "rocket"
@@ -146,6 +147,13 @@ const AppIcon: React.FC<Props> = ({ name, className, ...props }) => {
         <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
           <rect x="3.5" y="7" width="17" height="11.5" rx="2" />
           <path d="M9 7V5.8A1.8 1.8 0 0 1 10.8 4h2.4A1.8 1.8 0 0 1 15 5.8V7M3.5 11.2h17" />
+        </svg>
+      )
+    case "cloud":
+      return (
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
+          <path d="M7.2 18.5h9.9a4 4 0 0 0 .3-8 5.6 5.6 0 0 0-10.8-1.6 4.8 4.8 0 0 0 .6 9.6Z" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M8.2 14.4h7.6M10.6 11.8h4" strokeLinecap="round" />
         </svg>
       )
     case "camera":

@@ -17,7 +17,7 @@ export const Shell = styled.div`
   margin: 0 auto;
   padding: 16px 0 72px;
   display: grid;
-  gap: 10px;
+  gap: 8px;
 
   @media (max-width: 768px) {
     width: min(calc(100% - 24px), 1380px);
@@ -28,8 +28,8 @@ export const Shell = styled.div`
 
 export const HeroPanel = styled.section`
   display: grid;
-  gap: 8px;
-  padding: 0 0 12px;
+  gap: 6px;
+  padding: 0 0 9px;
   border-bottom: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray5)};
 
   @media (max-width: 820px) {
@@ -57,24 +57,16 @@ export const HeroCopy = styled.div`
   h1 {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: clamp(1.52rem, 2.5vw, 2rem);
+    font-size: clamp(1.16rem, 2vw, 1.42rem);
     line-height: 1.1;
-    letter-spacing: -0.03em;
+    letter-spacing: 0;
     font-weight: 800;
   }
   @media (max-width: 768px) {
     h1 {
-      font-size: clamp(1.46rem, 7vw, 1.88rem);
+      font-size: clamp(1.16rem, 6vw, 1.42rem);
     }
   }
-`
-
-export const PageEyebrow = styled.span`
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 `
 
 export const HeroActions = styled.div`
@@ -141,10 +133,10 @@ export const MetricCard = styled.article`
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
   padding: 12px;
-  border-radius: 12px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
   background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray1)};
-  box-shadow: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.shadow : "0 14px 30px rgba(15, 23, 42, 0.05)")};
+  box-shadow: none;
 
   &[data-tone="good"] {
     border-color: ${({ theme }) => theme.colors.green7};
@@ -162,14 +154,14 @@ export const MetricCard = styled.article`
   @media (max-width: 720px) {
     gap: 7px;
     padding: 8px;
-    border-radius: 16px;
+    border-radius: 2px;
   }
 `
 
 export const MetricIcon = styled.div`
   width: 42px;
   height: 42px;
-  border-radius: 15px;
+  border-radius: 2px;
   display: grid;
   place-items: center;
   background: ${({ theme }) =>
@@ -191,7 +183,7 @@ export const MetricIcon = styled.div`
   @media (max-width: 720px) {
     width: 30px;
     height: 30px;
-    border-radius: 11px;
+    border-radius: 2px;
   }
 `
 
@@ -255,9 +247,9 @@ export const PanelGrid = styled.section`
 `
 
 export const PanelCard = styled(AdminPlainCard)`
-  border-radius: 16px;
+  border-radius: 2px;
   overflow: hidden;
-  box-shadow: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.shadow : "0 12px 30px rgba(15, 23, 42, 0.06)")};
+  box-shadow: none;
 `
 
 export const LeadPanelCard = styled(PanelCard)`
@@ -331,7 +323,7 @@ export const SnapshotLeadBody = styled(PanelBody)`
 export const LeadMetaCard = styled(AdminInfoPanelCard)`
   gap: 0.38rem;
   padding: 0.72rem;
-  border-radius: 14px;
+  border-radius: 2px;
 `
 
 export const PanelFrame = styled.iframe`
@@ -425,5 +417,5 @@ export const ActionList = styled(AdminInfoList)`
 
 export const ActionListLinkCard = styled(AdminInfoLinkCard)`
   padding: 0.64rem 0.72rem;
-  border-radius: 14px;
+  border-radius: 2px;
 `

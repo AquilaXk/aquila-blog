@@ -12,7 +12,7 @@ export const AdminPostsWorkspaceMainSections = Symbol("AdminPostsWorkspaceMainSe
 export const Main = styled.main`
   max-width: 1120px;
   margin: 0 auto;
-  padding: 1.2rem 1rem 2.8rem;
+  padding: 0.85rem 1rem 2.4rem;
   display: grid;
   gap: 1rem;
 
@@ -92,7 +92,7 @@ export const DeferredPanelPlaceholder = styled(AdminRailCard)<{ "data-size": "ac
   display: grid;
   gap: 0.3rem;
   padding: 0.92rem 1rem;
-  border-radius: 14px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
   min-height: 92px;
@@ -112,7 +112,7 @@ export const DeferredPanelPlaceholder = styled(AdminRailCard)<{ "data-size": "ac
 export const RecentActionPanel = styled(AdminRailCard)`
   gap: 0.72rem;
   padding: 0.92rem 1rem;
-  border-radius: 14px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
 
   .panelHead {
@@ -139,7 +139,7 @@ export const RecentActionList = styled.ul`
     justify-content: space-between;
     gap: 0.72rem;
     padding: 0.8rem 0.88rem;
-    border-radius: 14px;
+    border-radius: 2px;
     border: 1px solid ${({ theme }) => theme.colors.gray5};
     background: ${({ theme }) => theme.colors.gray1};
   }

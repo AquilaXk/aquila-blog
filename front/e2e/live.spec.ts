@@ -21,14 +21,12 @@ import {
 const hasLiveCredentials = Boolean((adminEmail || adminLegacyLoginId) && adminPassword)
 const hasUiLoginCredentials = Boolean(adminEmail && adminPassword)
 const expectedFrontendCommitSha = process.env.E2E_EXPECTED_FRONT_COMMIT_SHA?.trim() || ""
-const adminLandingHeadingPattern = /(?:오늘 블로그 운영은 이 흐름으로 정리됩니다|관리자 (?:작업 공간|작업 진입점|운영 허브|허브))/
-const adminDashboardHeadingPattern = /(?:지금 확인해야 할 운영 상태|운영 대시보드)/
-const adminCloudHeadingPattern = /관리자 클라우드/
-const adminProfileHeadingPattern =
-  /(?:메인과 About에 보일 인상을 다듬습니다|프로필 워크스페이스|운영 프로필|관리자 프로필 관리|프로필 관리|프로필 설정)/
-const adminToolsHeadingPattern =
-  /(?:문제 확인과 복구를 같은 흐름에서 처리합니다|운영 (?:센터|도구|진단|점검 도구)|서비스 상태)/
-const adminPostsHeadingPattern = /(?:편집과 검수를 한 화면에서 이어갑니다|글 관리|글 작성)/
+const adminLandingHeadingPattern = /^관리자$/
+const adminDashboardHeadingPattern = /^운영 상태$/
+const adminCloudHeadingPattern = /^내 파일$/
+const adminProfileHeadingPattern = /^프로필$/
+const adminToolsHeadingPattern = /^운영 도구$/
+const adminPostsHeadingPattern = /^글 관리$/
 const adminUrlPattern = /\/admin(\/|$|\?)/
 
 

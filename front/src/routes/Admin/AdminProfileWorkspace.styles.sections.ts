@@ -272,7 +272,7 @@ export const ToastStack = styled.div`
 `
 
 export const ToastCard = styled.div`
-  border-radius: 14px;
+  border-radius: 2px;
   padding: 0.78rem 0.9rem;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
@@ -329,7 +329,7 @@ export const ModalCard = styled.section`
   width: min(640px, 100%);
   max-height: min(92vh, 860px);
   overflow: auto;
-  border-radius: 12px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.42);
@@ -444,7 +444,7 @@ export const ModalSliderWrap = styled.div`
 
 export const ModalEmptyState = styled.div`
   padding: 1rem;
-  border-radius: 16px;
+  border-radius: 2px;
   border: 1px dashed ${({ theme }) => theme.colors.gray6};
   color: ${({ theme }) => theme.colors.gray11};
   text-align: center;

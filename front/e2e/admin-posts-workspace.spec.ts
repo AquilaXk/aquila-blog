@@ -11,7 +11,7 @@ test.describe("admin posts workspace link contract", () => {
       "utf8"
     )
 
-    expect(pageViewSource).toContain("편집과 검수를 한 화면에서 이어갑니다")
+    expect(pageViewSource).toContain("<h1>글 관리</h1>")
     expect(source).not.toContain("최근 초안 복귀, 공개 상태 점검, 목록 필터링까지 지금 필요한 글 작업 흐름을 한곳에 모읍니다.")
     expect(source).not.toContain("<h2>검수 체크리스트</h2>")
     expect(source).not.toContain("<h2>상태 의미</h2>")
@@ -57,7 +57,7 @@ test.describe("admin posts workspace link contract", () => {
     expect(listSource).toContain("링크 복사")
     expect(recentWorkSource).toContain("recentPosts.slice(0, 3)")
     expect(recentWorkSource).toContain("grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));")
-    expect(pageViewSource).toContain("<h1>편집과 검수를 한 화면에서 이어갑니다</h1>")
+    expect(pageViewSource).toContain("<h1>글 관리</h1>")
     expect(listStyleSource).toContain("export const AuthorAvatarFrame = styled.span`")
     expect(listSource).not.toContain("SecondaryLinkButton")
     expect(recentWorkSource).toContain('<ResumeCardButton type="button" onClick={() => onOpenWriteRoute({ source: "local-draft" })}>')

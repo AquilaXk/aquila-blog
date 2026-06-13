@@ -44,7 +44,6 @@ import {
   HeroPanel,
   HeroTop,
   HeroCopy,
-  PageEyebrow,
   HeroActions,
   StatusChip,
   HeaderLink,

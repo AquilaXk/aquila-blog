@@ -1,7 +1,7 @@
 import type { BlockEditorDoc } from "./serialization"
 
 export const BLOCK_HANDLE_VIEWPORT_PADDING_PX = 12
-export const BLOCK_HANDLE_GUTTER_GAP_PX = 20.7
+export const BLOCK_HANDLE_GUTTER_GAP_PX = 22.75
 export const BLOCK_HANDLE_STACKED_GAP_PX = 8
 
 export type BlockHandleRailLayout = {
@@ -866,13 +866,10 @@ export const preserveWindowScrollForEditorPointerFocus = (
   const shouldPreserveCodeSelectionFollowUp =
     editorPointerTarget &&
     !editorControlTarget &&
-    codePointerTarget &&
+    !tablePointerTarget &&
     (preserveNextEditorPointerAfterCodeSelection ||
       codeSelectionFollowUpReentryActive ||
       codeSelectionFollowUpRecent)
-  if (editorPointerTarget && !codePointerTarget && codeSelectionFollowUpRecent) {
-    clearNextEditorPointerAfterCodeSelection()
-  }
   const shouldPreserveFollowUp =
     !tablePointerTarget && preserveNextEditorPointerAfterTable
   if (codeSelectionFollowUpOnly && !shouldPreserveCodeSelectionFollowUp) return

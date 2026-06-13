@@ -61,6 +61,7 @@ jobs:
       backend_deploy: ${{ steps.meta.outputs.backend_deploy }}
       front_live_verify: ${{ steps.meta.outputs.front_live_verify }}
       editor_live_canary: ${{ steps.meta.outputs.editor_live_canary }}
+      expected_front_commit_sha: ${{ steps.meta.outputs.expected_front_commit_sha }}
 
     steps:
       - name: Checkout
@@ -96,9 +97,11 @@ jobs:
           BACKEND_DEPLOY="false"
           FRONT_LIVE_VERIFY="false"
           EDITOR_LIVE_CANARY="false"
+          EXPECTED_FRONT_COMMIT_SHA=""
           CHANGE_SOURCE="first-parent-diff"
           BACKEND_DEPLOY_PATHS_PATTERN='^(back/|deploy/homeserver/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
           FRONT_LIVE_VERIFY_PATHS_PATTERN='^(front/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/frontend-ci\.yml|\.github/workflows/reusable-frontend-verify\.yml)'
+          FRONT_BUILD_SHA_PATHS_PATTERN='^front/'
           EDITOR_LIVE_CANARY_PATHS_PATTERN='^(front/src/components/editor/|front/src/pages/editor/|front/src/routes/Admin/(Editor|WriterEditor|QaEditor|editor)|front/e2e/editor-|front/e2e/helpers/(authoringPlaywright|post507Fixtures)\.ts)'
           CHANGED_FILES=""
           CHANGED_FILES="$(git diff --name-only "${DEPLOY_SHA}^1" "${DEPLOY_SHA}" 2>/dev/null || true)"
@@ -118,6 +121,10 @@ jobs:
             fi
             if echo "${CHANGED_FILES}" | grep -Eq "${FRONT_LIVE_VERIFY_PATHS_PATTERN}"; then
               FRONT_LIVE_VERIFY="true"
+            fi
+            if echo "${CHANGED_FILES}" | grep -Eq "${FRONT_BUILD_SHA_PATHS_PATTERN}"; then
+              # Vercel can keep the previous frontend build for workflow/backend-only commits.
+              EXPECTED_FRONT_COMMIT_SHA="${DEPLOY_SHA}"
             fi
             if echo "${CHANGED_FILES}" | grep -Eq "${EDITOR_LIVE_CANARY_PATHS_PATTERN}"; then
               EDITOR_LIVE_CANARY="true"
@@ -147,6 +154,7 @@ jobs:
           echo "backend_deploy=${BACKEND_DEPLOY}" >> "$GITHUB_OUTPUT"
           echo "front_live_verify=${FRONT_LIVE_VERIFY}" >> "$GITHUB_OUTPUT"
           echo "editor_live_canary=${EDITOR_LIVE_CANARY}" >> "$GITHUB_OUTPUT"
+          echo "expected_front_commit_sha=${EXPECTED_FRONT_COMMIT_SHA}" >> "$GITHUB_OUTPUT"
 
           {
             echo "## Deploy Boundary"
@@ -162,6 +170,11 @@ jobs:
             fi
             if [ "${FRONT_LIVE_VERIFY}" = "true" ]; then
               echo "- frontend result: live frontend verification will run"
+              if [ -n "${EXPECTED_FRONT_COMMIT_SHA}" ]; then
+                echo "- frontend build sha: ${EXPECTED_FRONT_COMMIT_SHA}"
+              else
+                echo "- frontend build sha: not asserted for non-frontend deploy"
+              fi
               echo "- editor live canary: ${EDITOR_LIVE_CANARY}"
             else
               echo "- frontend result: live frontend verification skipped because frontend/backend deploy paths did not change"
@@ -954,7 +967,7 @@ jobs:
       E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL || '' }}
       E2E_ADMIN_USERNAME: ${{ secrets.E2E_ADMIN_USERNAME || '' }}
       E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD || '' }}
-      E2E_EXPECTED_FRONT_COMMIT_SHA: ${{ needs.calculateTag.outputs.deploy_sha }}
+      E2E_EXPECTED_FRONT_COMMIT_SHA: ${{ needs.calculateTag.outputs.expected_front_commit_sha }}
       E2E_LIVE_EDITOR_507_CANARY: ${{ needs.calculateTag.outputs.editor_live_canary }}
 
     steps:

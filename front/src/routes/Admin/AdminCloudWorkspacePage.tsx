@@ -511,8 +511,8 @@ const AdminCloudWorkspacePage = () => {
   const emptyTitle = filesQuery.isFetching
     ? "파일을 불러오는 중입니다."
     : keyword || filter !== "ALL"
-      ? "조건에 맞는 파일이 없습니다."
-      : "아직 올린 파일이 없습니다."
+      ? "선택한 조건에 맞는 파일이 없습니다."
+      : "표시할 파일이 없습니다."
 
   return (
     <CloudMain>

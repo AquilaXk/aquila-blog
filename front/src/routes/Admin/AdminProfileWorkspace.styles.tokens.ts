@@ -26,20 +26,21 @@ import {
 } from "src/routes/Admin/adminColorTokens"
 
 export const Main = styled.main`
-  max-width: 1420px;
-  margin: 0 auto;
-  padding: 1.6rem 1rem 2.8rem;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 1.05rem 1.45rem 2.8rem;
   display: grid;
   gap: 1rem;
 
   @media (max-width: 760px) {
-    padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+    padding: 0.85rem 0.82rem calc(2rem + env(safe-area-inset-bottom, 0px));
   }
 `
 
 export const BaseButton = styled.button`
   min-height: 38px;
-  border-radius: 9px;
+  border-radius: 4px;
   border: 1px solid ${adminBorder};
   background: ${adminSurfaceRaised};
   color: ${adminTextSecondary};

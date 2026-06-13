@@ -18,11 +18,10 @@ import {
 } from "src/routes/Admin/adminColorTokens"
 
 export const Main = styled.main`
-  max-width: 1440px;
   width: 100%;
   min-width: 0;
-  margin: 0 auto;
-  padding: 0.9rem 1rem 2.6rem;
+  margin: 0;
+  padding: 1.05rem 1.45rem 2.6rem;
   display: grid;
   gap: 1.25rem;
 `

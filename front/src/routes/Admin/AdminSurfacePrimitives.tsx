@@ -3,8 +3,6 @@ import styled from "@emotion/styled"
 import {
   adminAccentSurface,
   adminCardBorder,
-  adminElevatedBorderDark,
-  adminElevatedSurfaceTop,
   adminFocusRing,
   adminGold,
   adminMutedSurface,
@@ -14,26 +12,16 @@ import {
   adminRaisedSurface,
   adminSecondaryText,
   adminStrongBorder,
-  adminSurface,
-  usesDarkAdminSurface,
 } from "src/routes/Admin/adminColorTokens"
 
 export const adminElevatedSurface = (theme: Theme) =>
-  theme.blogDesign === "grid"
-    ? `linear-gradient(180deg, ${theme.publicDesign.operationSurfaceElevated} 0%, ${theme.publicDesign.operationSurface} 100%)`
-    : usesDarkAdminSurface(theme)
-      ? `linear-gradient(180deg, ${adminElevatedSurfaceTop} 0%, ${adminSurface} 100%)`
-      : "linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 248, 249, 0.94) 100%)"
+  adminPlainSurface(theme)
 
 export const adminElevatedBorder = (theme: Theme) =>
-  theme.blogDesign === "grid" ? theme.publicDesign.border : usesDarkAdminSurface(theme) ? adminElevatedBorderDark : theme.colors.gray5
+  adminCardBorder(theme)
 
-export const adminElevatedShadow = (theme: Theme) =>
-  theme.blogDesign === "grid"
-    ? "none"
-    : usesDarkAdminSurface(theme)
-      ? "none"
-      : "none"
+export const adminElevatedShadow = (_theme: Theme) =>
+  "none"
 
 export const adminInteractiveFocusRing = (theme: Theme) =>
   adminFocusRing(theme)
@@ -146,7 +134,7 @@ export const AdminWorkspaceHeroLabel = styled.span`
   min-height: 28px;
   align-items: center;
   padding: 0 0.72rem;
-  border-radius: 999px;
+  border-radius: 4px;
   border: 1px solid ${({ theme }) => adminCardBorder(theme)};
   background: ${({ theme }) => adminRaisedSurface(theme)};
   color: ${({ theme }) => adminSecondaryText(theme)};
@@ -258,7 +246,7 @@ export const AdminWorkspaceSectionNavButton = styled.button`
   gap: 0.42rem;
   min-height: 42px;
   padding: 0 0.9rem;
-  border-radius: 999px;
+  border-radius: 4px;
   border: 1px solid ${({ theme }) => adminCardBorder(theme)};
   background: ${({ theme }) => adminRaisedSurface(theme)};
   color: ${({ theme }) => adminMutedText(theme)};
@@ -304,7 +292,7 @@ export const AdminWorkspaceSectionNavButton = styled.button`
     top: 7px;
     bottom: 7px;
     width: 3px;
-    border-radius: 999px;
+    border-radius: 2px;
     background: ${({ theme }) => theme.colors.gray7};
   }
 
@@ -464,7 +452,7 @@ export const AdminStatusPill = styled.span<{ $size?: "sm" | "md" }>`
   justify-content: center;
   min-height: ${({ $size = "md" }) => ($size === "sm" ? "28px" : "32px")};
   padding: ${({ $size = "md" }) => ($size === "sm" ? "0 0.62rem" : "0 0.72rem")};
-  border-radius: ${({ $size = "md" }) => ($size === "sm" ? "10px" : "999px")};
+  border-radius: 4px;
   border: 1px solid ${({ theme }) => adminCardBorder(theme)};
   background: ${({ theme }) => adminRaisedSurface(theme)};
   color: ${({ theme }) => adminSecondaryText(theme)};

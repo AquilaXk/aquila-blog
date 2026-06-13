@@ -32,7 +32,7 @@ test.describe("admin hub state contract", () => {
     expect(source).toContain("supportRailGroups={supportRailGroups}")
   })
 
-  test("admin hub uses backstage landing copy instead of generic management labels", () => {
+  test("관리자 허브는 범용 관리 문구 대신 경계선형 작업 구조를 사용한다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminHubSurface.tsx"), "utf8")
     const sectionSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminHubSurface.sections.tsx"), "utf8")
     const styleSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminHubSurface.styles.ts"), "utf8")
@@ -47,7 +47,9 @@ test.describe("admin hub state contract", () => {
     expect(styleSource).toContain("export const BorderlessSection = styled.section`")
     expect(styleSource).toContain("export const BorderlessPanelLink = styled.a`")
     expect(styleSource).toContain("export const BorderlessSupportSection = styled.section`")
-    expect(styleSource).toContain("border-radius: 2px;")
+    expect(styleSource).toContain("border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};")
+    expect(styleSource).toContain("border-radius: 0;")
+    expect(styleSource).not.toContain("transform: translateY")
     expect(source).toContain("priorityActions: AdminHubNextAction[]")
     expect(source).toContain("handoffActions: AdminHubNextAction[]")
     expect(source).not.toContain("새 글 작성, 최근 초안 복귀, 프로필 점검, 운영 상태 확인까지 지금 필요한 흐름만 먼저 보여줍니다.")
@@ -61,7 +63,7 @@ test.describe("admin hub state contract", () => {
     expect(source).not.toContain("requestIdleCallback")
   })
 
-  test("dashboard first fold uses main-like priority copy and explicit rail labels", () => {
+  test("대시보드 first fold는 우선순위 문구와 명시적 레일 라벨을 사용한다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspaceView.tsx"), "utf8")
     const styleSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspace.styles.layout.ts"),

@@ -1,70 +1,107 @@
 import type { Theme } from "@emotion/react"
 
-export const adminTextPrimary = "#f3f1ea"
-export const adminTextSecondary = "#c8c1ae"
-export const adminTextMuted = "#918b7d"
-export const adminBorder = "#34322d"
-export const adminBorderStrong = "#6d6040"
-export const adminSurface = "#171817"
-export const adminShellSurface = "#151614"
-export const adminSurfaceRaised = "#20211f"
-export const adminSurfaceMuted = "#242520"
-export const adminSurfaceAccent = "#2d291a"
-export const adminElevatedSurfaceTop = "#1b1c1a"
-export const adminElevatedBorderDark = "#30322e"
-export const adminGold = "#d0b46c"
-export const adminTeal = "#3f8f86"
-export const adminTealHover = "#347b73"
-export const adminControlText = "#f8fffc"
-export const adminTealBorder = "rgba(63, 143, 134, 0.58)"
-export const adminTealBorderHover = "rgba(63, 143, 134, 0.72)"
-export const adminGoldTintSubtle = "rgba(208, 180, 108, 0.14)"
-export const adminGoldTintFocus = "rgba(208, 180, 108, 0.18)"
-export const adminGoldTintFocusStrong = "rgba(208, 180, 108, 0.24)"
-export const adminGoldTintLine = "rgba(208, 180, 108, 0.2)"
-export const adminActionGroupDarkSurface = "rgba(24, 24, 24, 0.86)"
-export const adminActionGroupLightSurface = "rgba(255, 255, 255, 0.82)"
+export const adminSystemThemeVariables = `
+  color-scheme: light;
+  --admin-app-bg: #ffffff;
+  --admin-sidebar-bg: #f6f7fb;
+  --admin-surface: #ffffff;
+  --admin-surface-raised: #f3f5f9;
+  --admin-surface-muted: #eef2f7;
+  --admin-surface-accent: #f7f1e3;
+  --admin-elevated-top: #ffffff;
+  --admin-border: #e5e9f1;
+  --admin-border-strong: #c8d1df;
+  --admin-text-primary: #20242b;
+  --admin-text-secondary: #4d5562;
+  --admin-text-muted: #87909d;
+  --admin-primary: #b9954f;
+  --admin-primary-hover: #9d7d3f;
+  --admin-primary-border: rgba(185, 149, 79, 0.36);
+  --admin-primary-border-hover: rgba(185, 149, 79, 0.58);
+  --admin-control-text: #ffffff;
+  --admin-focus-ring: rgba(185, 149, 79, 0.18);
+  --admin-focus-ring-strong: rgba(185, 149, 79, 0.26);
+  --admin-action-group-surface: rgba(255, 255, 255, 0.88);
 
-export const usesDarkAdminSurface = (theme: Theme) => theme.blogDesign === "grid" || theme.scheme !== "light"
+  @media (prefers-color-scheme: dark) {
+    color-scheme: dark;
+    --admin-app-bg: #121212;
+    --admin-sidebar-bg: #181818;
+    --admin-surface: #121212;
+    --admin-surface-raised: #1b1b1b;
+    --admin-surface-muted: #222222;
+    --admin-surface-accent: #2d291a;
+    --admin-elevated-top: #181818;
+    --admin-border: #2f333a;
+    --admin-border-strong: #4a5464;
+    --admin-text-primary: #f5f6f8;
+    --admin-text-secondary: #c8ced7;
+    --admin-text-muted: #8f99a7;
+    --admin-primary: #d0b46c;
+    --admin-primary-hover: #e0c984;
+    --admin-primary-border: rgba(208, 180, 108, 0.42);
+    --admin-primary-border-hover: rgba(208, 180, 108, 0.62);
+    --admin-control-text: #101214;
+    --admin-focus-ring: rgba(208, 180, 108, 0.22);
+    --admin-focus-ring-strong: rgba(208, 180, 108, 0.3);
+    --admin-action-group-surface: rgba(18, 18, 18, 0.88);
+  }
+`
+
+export const adminAppBackground = "var(--admin-app-bg, #ffffff)"
+export const adminTextPrimary = "var(--admin-text-primary, #20242b)"
+export const adminTextSecondary = "var(--admin-text-secondary, #4d5562)"
+export const adminTextMuted = "var(--admin-text-muted, #87909d)"
+export const adminBorder = "var(--admin-border, #e5e9f1)"
+export const adminBorderStrong = "var(--admin-border-strong, #c8d1df)"
+export const adminSurface = "var(--admin-surface, #ffffff)"
+export const adminShellSurface = "var(--admin-sidebar-bg, #f6f7fb)"
+export const adminSurfaceRaised = "var(--admin-surface-raised, #f3f5f9)"
+export const adminSurfaceMuted = "var(--admin-surface-muted, #eef2f7)"
+export const adminSurfaceAccent = "var(--admin-surface-accent, #eaf1ff)"
+export const adminElevatedSurfaceTop = "var(--admin-elevated-top, #ffffff)"
+export const adminElevatedBorderDark = "var(--admin-border, #e5e9f1)"
+export const adminGold = "var(--admin-primary, #b9954f)"
+export const adminTeal = "var(--admin-primary, #b9954f)"
+export const adminTealHover = "var(--admin-primary-hover, #9d7d3f)"
+export const adminControlText = "var(--admin-control-text, #ffffff)"
+export const adminTealBorder = "var(--admin-primary-border, rgba(185, 149, 79, 0.36))"
+export const adminTealBorderHover = "var(--admin-primary-border-hover, rgba(185, 149, 79, 0.58))"
+export const adminGoldTintSubtle = "var(--admin-surface-accent, #f7f1e3)"
+export const adminGoldTintFocus = "var(--admin-focus-ring, rgba(185, 149, 79, 0.18))"
+export const adminGoldTintFocusStrong = "var(--admin-focus-ring-strong, rgba(185, 149, 79, 0.26))"
+export const adminGoldTintLine = "var(--admin-primary-border, rgba(185, 149, 79, 0.36))"
+export const adminActionGroupDarkSurface = "var(--admin-action-group-surface, rgba(18, 18, 18, 0.88))"
+export const adminActionGroupLightSurface = "var(--admin-action-group-surface, rgba(255, 255, 255, 0.88))"
+
+export const usesDarkAdminSurface = (theme: Theme) => theme.scheme !== "light"
 
 export const adminPrimaryText = (theme: Theme) =>
-  usesDarkAdminSurface(theme) ? adminTextPrimary : theme.colors.gray12
+  adminTextPrimary
 
 export const adminSecondaryText = (theme: Theme) =>
-  usesDarkAdminSurface(theme) ? adminTextSecondary : theme.colors.gray11
+  adminTextSecondary
 
 export const adminMutedText = (theme: Theme) =>
-  usesDarkAdminSurface(theme) ? adminTextMuted : theme.colors.gray10
+  adminTextMuted
 
 export const adminCardBorder = (theme: Theme) =>
-  theme.blogDesign === "grid"
-    ? theme.publicDesign.border
-    : usesDarkAdminSurface(theme)
-      ? adminBorder
-      : theme.colors.gray5
+  adminBorder
 
 export const adminStrongBorder = (theme: Theme) =>
-  usesDarkAdminSurface(theme) ? adminBorderStrong : theme.colors.gray7
+  adminBorderStrong
 
 export const adminPlainSurface = (theme: Theme) =>
-  theme.blogDesign === "grid"
-    ? theme.publicDesign.operationSurface
-    : usesDarkAdminSurface(theme)
-      ? adminSurface
-      : theme.colors.gray1
+  adminSurface
 
 export const adminRaisedSurface = (theme: Theme) =>
-  theme.blogDesign === "grid"
-    ? theme.publicDesign.operationSurfaceElevated
-    : usesDarkAdminSurface(theme)
-      ? adminSurfaceRaised
-      : theme.colors.gray2
+  adminSurfaceRaised
 
 export const adminMutedSurface = (theme: Theme) =>
-  usesDarkAdminSurface(theme) ? adminSurfaceMuted : theme.colors.gray3
+  adminSurfaceMuted
 
 export const adminAccentSurface = (theme: Theme) =>
-  usesDarkAdminSurface(theme) ? adminSurfaceAccent : theme.colors.accentSurfaceSubtle
+  adminSurfaceAccent
 
 export const adminWarningBadgeBorder = () => adminBorderStrong
 export const adminWarningBadgeSurface = () => adminSurfaceAccent
@@ -76,8 +113,4 @@ export const adminFocusRing = (theme: Theme, width = 3) =>
     : `0 0 0 ${width}px ${adminGoldTintFocusStrong}`
 
 export const adminActionGroupSurface = (theme: Theme) =>
-  theme.blogDesign === "grid"
-    ? theme.publicDesign.operationSurfaceElevated
-    : theme.scheme === "light"
-      ? adminActionGroupLightSurface
-      : adminActionGroupDarkSurface
+  theme.scheme === "light" ? adminActionGroupLightSurface : adminActionGroupDarkSurface

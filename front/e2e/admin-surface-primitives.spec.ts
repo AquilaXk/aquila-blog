@@ -3,6 +3,61 @@ import path from "node:path"
 import { expect, test } from "@playwright/test"
 
 test.describe("admin surface primitives contract", () => {
+  test("관리자 표면은 MYBOX형 화이트 우선 시스템 테마 토큰을 공유한다", () => {
+    const colorTokenSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/adminColorTokens.ts"), "utf8")
+    const shellSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminShell.tsx"), "utf8")
+    const utilitySource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminUtilityBar.tsx"), "utf8")
+    const cloudStyleSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminCloudWorkspace.styles.ts"), "utf8")
+    const cloudPageSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminCloudWorkspacePage.tsx"), "utf8")
+    const primitiveSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminSurfacePrimitives.tsx"),
+      "utf8",
+    )
+    const hubStyleSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminHubSurface.styles.ts"), "utf8")
+
+    expect(colorTokenSource).toContain("export const adminSystemThemeVariables =")
+    expect(colorTokenSource).toContain("@media (prefers-color-scheme: dark)")
+    expect(colorTokenSource).toContain("--admin-primary: #b9954f;")
+    expect(colorTokenSource).toContain("--admin-primary: #d0b46c;")
+    expect(colorTokenSource).toContain('export const adminSurface = "var(--admin-surface')
+    expect(colorTokenSource).toContain('export const adminTeal = "var(--admin-primary')
+    expect(colorTokenSource).toContain('export const usesDarkAdminSurface = (theme: Theme) => theme.scheme !== "light"')
+    expect(colorTokenSource).not.toContain("#4f74ff")
+
+    expect(shellSource).toContain("${adminSystemThemeVariables}")
+    expect(shellSource).toContain("grid-template-columns: 17.5rem minmax(0, 1fr);")
+    expect(shellSource).toContain("background: ${adminAppBackground};")
+    expect(shellSource).not.toContain("border-radius: 14px;")
+
+    expect(utilitySource).toContain("border-bottom: 1px solid ${adminBorder};")
+    expect(utilitySource).not.toContain("backdrop-filter")
+    expect(utilitySource).not.toContain("border-radius: 14px;")
+
+    expect(cloudStyleSource).toContain("background: ${surface};")
+    expect(cloudStyleSource).toContain("grid-template-columns: minmax(0, 1fr) minmax(18rem, 21rem);")
+    expect(cloudPageSource).toContain('선택한 조건에 맞는 파일이 없습니다.')
+    expect(cloudPageSource).not.toContain("아직 올린 파일이 없습니다.")
+
+    expect(primitiveSource).toContain("adminPlainSurface(theme)")
+    expect(primitiveSource).not.toContain("linear-gradient")
+    expect(hubStyleSource).not.toContain("transform: translateY")
+  })
+
+  test("관리자 프로필은 대표 heading과 내부 섹션 heading 텍스트를 중복하지 않는다", () => {
+    const profileSectionSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceSections.tsx"),
+      "utf8",
+    )
+    const profileModelSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceModel.ts"),
+      "utf8",
+    )
+
+    expect(profileSectionSource).toContain("<h1>프로필</h1>")
+    expect(profileModelSource).toContain('label: "기본 정보"')
+    expect(profileModelSource).not.toContain('label: "프로필"')
+  })
+
   test("shared admin primitives own focus-visible and mobile snap contracts", () => {
     const source = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminSurfacePrimitives.tsx"),

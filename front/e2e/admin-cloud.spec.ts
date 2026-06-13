@@ -208,8 +208,10 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByRole("row", { name: /deploy-walkthrough\.mp4/ })).toBeVisible()
     await expect(page.getByText("표시할 파일이 없습니다.")).toHaveCount(0)
     await expect(page.getByText("계정 소유주만 볼 수 있음").first()).toBeVisible()
+    await expect(page.getByRole("button", { name: "운영 점검 리포트.pdf 즐겨찾기 기능 준비 중" })).toBeDisabled()
 
-    await page.getByPlaceholder("파일, 확장자, 폴더 경로 검색").fill("deploy")
+    const searchInput = page.getByLabel("클라우드 파일 검색")
+    await searchInput.fill("deploy")
     await expect(page.getByRole("row", { name: /deploy-walkthrough\.mp4/ })).toBeVisible()
 
     await page.getByLabel("파일 종류 필터").getByRole("button", { name: "동영상" }).click()
@@ -223,7 +225,7 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByRole("row", { name: /필터 제외 문서\.pdf/ })).toHaveCount(0)
 
     await page.getByLabel("파일 종류 필터").getByRole("button", { name: "전체" }).click()
-    await page.getByPlaceholder("파일, 확장자, 폴더 경로 검색").fill("")
+    await searchInput.fill("")
     await page.getByLabel("클라우드 파일 업로드").setInputFiles([
       {
         name: "신규 운영 문서.pdf",
@@ -265,6 +267,8 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByText("PDF.js canvas 렌더링")).toBeVisible()
     await page.getByRole("button", { name: "상세 패널 닫기" }).click()
     await expect(page.getByText("미리 볼 파일을 선택하세요.")).toBeVisible()
+    await page.getByRole("button", { name: "상세 패널 보기" }).click()
+    await expect(page.getByRole("heading", { name: "문서 뷰어" })).toBeVisible()
 
     await page.getByRole("button", { name: "home-server-rack.png 미리보기" }).click()
     await expect(page.getByRole("heading", { name: "사진 보기" })).toBeVisible()

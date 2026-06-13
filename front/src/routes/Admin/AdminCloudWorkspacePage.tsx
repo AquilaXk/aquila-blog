@@ -496,11 +496,12 @@ const AdminCloudWorkspacePage = () => {
             <CloudSearchField>
               <AppIcon name="search" />
               <SearchInput
+                aria-label="클라우드 파일 검색"
                 placeholder="파일, 확장자, 폴더 경로 검색"
                 value={keyword}
                 onChange={(event) => setKeyword(event.target.value)}
               />
-              <SearchDetail>상세</SearchDetail>
+              <SearchDetail aria-hidden="true">상세</SearchDetail>
             </CloudSearchField>
           </CloudTitleBar>
 
@@ -553,7 +554,15 @@ const AdminCloudWorkspacePage = () => {
               <IconButton type="button" aria-label="리스트 보기" data-active="true">
                 ☷
               </IconButton>
-              <IconButton type="button" aria-label="상세 패널 보기" data-active={selectedFile ? "true" : "false"}>
+              <IconButton
+                type="button"
+                aria-label="상세 패널 보기"
+                data-active={selectedFile ? "true" : "false"}
+                onClick={() => {
+                  setIsDetailPanelOpen(true)
+                  setSelectedFileId((current) => current ?? files[0]?.id ?? null)
+                }}
+              >
                 ⓘ
               </IconButton>
             </ActionGroup>
@@ -596,7 +605,11 @@ const AdminCloudWorkspacePage = () => {
                           />
                         </SelectBoxCell>
                         <td>
-                          <FavoriteButton type="button" aria-label={`${file.originalFilename} 즐겨찾기`}>
+                          <FavoriteButton
+                            type="button"
+                            aria-label={`${file.originalFilename} 즐겨찾기 기능 준비 중`}
+                            disabled
+                          >
                             ☆
                           </FavoriteButton>
                         </td>
@@ -647,7 +660,6 @@ const AdminCloudWorkspacePage = () => {
               aria-label="상세 패널 닫기"
               onClick={() => {
                 setIsDetailPanelOpen(false)
-                setSelectedFileId(null)
               }}
             >
               ×

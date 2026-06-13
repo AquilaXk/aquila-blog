@@ -13,6 +13,8 @@ import {
   normalizeStructuredMarkdownClipboard,
 } from "src/libs/markdown/htmlToMarkdown"
 import type { BlockEditorEngineProps } from "./blockEditorEngineTypes"
+import { syncNativeEditorTextSelectionToProseMirror } from "./editorNativeTextSelectionPreserveModel"
+import { getActiveListItemName } from "./nestedListItemModel"
 import { normalizeTableContextPasteText } from "./tablePasteModel"
 import { isTableSelectionActive } from "./tableStructureModel"
 import { getCurrentEditorReadableWidthPx } from "./tableWidthRuntime"
@@ -71,6 +73,31 @@ export const handleBlockEditorEngineKeyDown = ({
   const isTopLevelBlockNodeSelection = Boolean(
     selection.$from.depth === 0 && selection.node?.isBlock
   )
+
+  if (
+    !hasPrimaryModifier &&
+    !event.altKey &&
+    event.key === "Tab" &&
+    !isTopLevelBlockNodeSelection
+  ) {
+    syncNativeEditorTextSelectionToProseMirror(currentEditor, {
+      allowCollapsed: true,
+      excludeSelector: "th, td, .aq-code-shell",
+    })
+    const activeListItemName = getActiveListItemName(currentEditor)
+    if (activeListItemName) {
+      event.preventDefault()
+      const handled = event.shiftKey
+        ? currentEditor.commands.liftListItem(activeListItemName)
+        : currentEditor.commands.sinkListItem(activeListItemName)
+      if (handled) {
+        keyboardBlockSelectionStickyRef.current = false
+        setSelectedBlockNodeIndex(null)
+        syncSelectedBlockNodeSurface(null)
+      }
+      return handled
+    }
+  }
 
   if (
     !hasPrimaryModifier &&

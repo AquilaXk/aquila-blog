@@ -37,6 +37,10 @@ export type TableAffordanceGeometry = {
   columnAddAnchor: TableOverlayAnchor
   cornerAnchor: TableOverlayAnchor
   cellMenuAnchor: TableOverlayAnchor
+  rowSegments: Array<{
+    height: number
+    top: number
+  }>
   columnSegments: Array<{
     left: number
     width: number
@@ -82,6 +86,7 @@ export const INITIAL_TABLE_AFFORDANCE_GEOMETRY: TableAffordanceGeometry = {
   columnAddAnchor: { left: 0, top: 0 },
   cornerAnchor: { left: 0, top: 0 },
   cellMenuAnchor: { left: 0, top: 0 },
+  rowSegments: [],
   columnSegments: [],
 }
 

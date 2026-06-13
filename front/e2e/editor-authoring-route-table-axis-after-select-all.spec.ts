@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from "@playwright/test"
+import { expect, test, type Locator, type Page } from "./helpers/authoringPlaywright"
 import { getTableAffordances } from "./helpers/editorAuthoringFlow"
 import {
   POST_507_FINAL_TABLE_TARGET_CELL,
@@ -46,15 +46,23 @@ const readPost507AxisSelectionState = async (
   menuTestId: "table-column-menu" | "table-row-menu"
 ) => {
   const editor = page.getByTestId("block-editor-prosemirror")
-  const [outlineVisible, menuVisible, selectedCellCount, textSelectionState] = await Promise.all([
+  const [outlineVisible, menuVisible, selectedCellCount, textSelectionState, outlineRange] = await Promise.all([
     page.getByTestId(outlineTestId).isVisible().catch(() => false),
     page.getByTestId(menuTestId).isVisible().catch(() => false),
     editor.locator(".selectedCell").count(),
     readTableTextSelectionState(page),
+    page
+      .getByTestId(outlineTestId)
+      .evaluate((element) => ({
+        fromIndex: element.getAttribute("data-from-index"),
+        toIndex: element.getAttribute("data-to-index"),
+      }))
+      .catch(() => null),
   ])
   return {
     outlineVisible,
     menuVisible,
+    outlineRange,
     selectedCellCount,
     textSelectionState,
     hasTableTextSelection:
@@ -375,6 +383,141 @@ const resolvePost507FinalTableColumnCoverMetrics = async (page: Page) => {
   throw new Error("post 507 final table column cover metrics are missing")
 }
 
+const resolvePost507FinalTableAxisHotzoneMetrics = async (
+  page: Page,
+  axis: "column" | "row",
+  axisIndex: number
+) => {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const metrics = await page.evaluate(
+      ({ axis, axisIndex, targetCellText }) => {
+        const editor = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
+        const table = Array.from(editor?.querySelectorAll<HTMLElement>("table") ?? [])
+          .filter((candidate) => {
+            const text = candidate.textContent ?? ""
+            return text.includes(targetCellText) && text.includes("재발급 로직")
+          })
+          .at(-1)
+        const rows = Array.from(table?.querySelectorAll<HTMLTableRowElement>("tr") ?? []).filter(
+          (row) => row.cells.length > 0
+        )
+        if (!table || rows.length === 0) return null
+
+        const tableRect = table.getBoundingClientRect()
+        if (axis === "row") {
+          const row = rows[axisIndex]
+          const cell = row?.cells[0] ?? null
+          if (!row || !cell) return null
+          const rowRect = row.getBoundingClientRect()
+          const cellRect = cell.getBoundingClientRect()
+          if (
+            tableRect.width <= 0 ||
+            tableRect.height <= 0 ||
+            rowRect.width <= 0 ||
+            rowRect.height <= 0 ||
+            rowRect.bottom <= 8 ||
+            rowRect.top >= window.innerHeight - 8
+          ) {
+            row.scrollIntoView({ block: "center", inline: "nearest" })
+            return null
+          }
+          const y = rowRect.top + rowRect.height / 2
+          return {
+            cellX: cellRect.left + Math.min(36, Math.max(8, cellRect.width / 3)),
+            cellY: y,
+            hoverX: tableRect.left + 4,
+            hoverY: y,
+          }
+        }
+
+        const firstRowCells = Array.from(rows[0]?.cells ?? [])
+        const cell = firstRowCells[axisIndex] ?? null
+        if (!cell) return null
+        const cellRect = cell.getBoundingClientRect()
+        if (
+          tableRect.width <= 0 ||
+          tableRect.height <= 0 ||
+          cellRect.width <= 0 ||
+          cellRect.height <= 0 ||
+          cellRect.bottom <= 8 ||
+          cellRect.top >= window.innerHeight - 8
+        ) {
+          cell.scrollIntoView({ block: "center", inline: "nearest" })
+          return null
+        }
+        return {
+          cellX: cellRect.left + cellRect.width / 2,
+          cellY: cellRect.top + Math.min(16, Math.max(6, cellRect.height / 2)),
+          hoverX: cellRect.left + cellRect.width / 2,
+          hoverY: tableRect.top + 6,
+        }
+      },
+      { axis, axisIndex, targetCellText: POST_507_FINAL_TABLE_TARGET_CELL }
+    )
+
+    if (metrics) return metrics
+    await page.waitForTimeout(100)
+  }
+
+  throw new Error(`post 507 final table ${axis} ${axisIndex} hotzone metrics are missing`)
+}
+
+const clickPost507AxisIndexHandleUntilSelected = async (
+  page: Page,
+  axis: "column" | "row",
+  axisIndex: number,
+  handle: Locator,
+  expectedSelectedCellCount: number,
+  options: { shift?: boolean } = {}
+) => {
+  const outlineTestId = axis === "row" ? "table-row-selection-outline" : "table-column-selection-outline"
+  const menuTestId = axis === "row" ? "table-row-menu" : "table-column-menu"
+  let lastSelectionState: Awaited<ReturnType<typeof readPost507AxisSelectionState>> | null = null
+  if (options.shift) await page.keyboard.down("Shift")
+  try {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const metrics = await resolvePost507FinalTableAxisHotzoneMetrics(page, axis, axisIndex)
+      await page.mouse.move(metrics.cellX, metrics.cellY)
+      await page.mouse.move(metrics.hoverX, metrics.hoverY, { steps: 4 })
+      await page.waitForTimeout(180)
+      if (!options.shift && !(await handle.isVisible().catch(() => false))) continue
+      if (options.shift) {
+        await page.mouse.click(metrics.hoverX, metrics.hoverY)
+      } else {
+        await clickVisibleOverlayControl(page, handle)
+      }
+      const selected = await expect
+        .poll(
+          async () => {
+            const selectionState = await readPost507AxisSelectionState(page, outlineTestId, menuTestId)
+            lastSelectionState = selectionState
+            return {
+              menuVisible: selectionState.menuVisible,
+              outlineVisible: selectionState.outlineVisible,
+              selectedCellCount: selectionState.selectedCellCount,
+            }
+          },
+          { timeout: 900 }
+        )
+        .toEqual({
+          menuVisible: true,
+          outlineVisible: true,
+          selectedCellCount: expectedSelectedCellCount,
+        })
+        .then(() => true)
+        .catch(() => false)
+      if (selected) return
+    }
+  } finally {
+    if (options.shift) await page.keyboard.up("Shift")
+  }
+  throw new Error(
+    `post 507 final table ${axis} ${axisIndex} handle did not select expected range: ${JSON.stringify(
+      lastSelectionState
+    )}`
+  )
+}
+
 const expectAxisSelectionStable = async (
   page: Page,
   expectedSelectedCellCount: number,
@@ -618,6 +761,46 @@ const expectAxisOverlayFollowsScrollOrCloses = async (
 }
 
 test.describe("editor authoring route post 507 final table axis after cell text select all", () => {
+  test("실제 /editor/[id] post 507 마지막 7x3 table은 Shift+click으로 여러 행과 여러 열을 range 선택한다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1580, height: 920 })
+    const { editor } = await mockEditorRouteWithPost507(page, {
+      postId: 996,
+      title: "post 507 table shift range axis route 글",
+    })
+    const { columnHandle, rowHandle } = getTableAffordances(page)
+
+    await page.evaluate((targetCellText) => {
+      const editor = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
+      const table = Array.from(editor?.querySelectorAll<HTMLElement>("table") ?? [])
+        .filter((candidate) => {
+          const text = candidate.textContent ?? ""
+          return text.includes(targetCellText) && text.includes("재발급 로직")
+        })
+        .at(-1)
+      table?.scrollIntoView({ block: "center", inline: "nearest" })
+    }, POST_507_FINAL_TABLE_TARGET_CELL)
+    await page.waitForTimeout(120)
+
+    await clickPost507AxisIndexHandleUntilSelected(page, "row", 2, rowHandle, 3)
+    await clickPost507AxisIndexHandleUntilSelected(page, "row", 5, rowHandle, 12, { shift: true })
+    await expect(page.getByTestId("table-row-selection-outline")).toHaveAttribute("data-from-index", "2")
+    await expect(page.getByTestId("table-row-selection-outline")).toHaveAttribute("data-to-index", "5")
+    await expect(editor.locator(".selectedCell")).toHaveCount(12)
+    await expectAxisSelectionStable(page, 12, "table-row-selection-outline", "table-row-menu")
+
+    await page.keyboard.press("Escape")
+    await page.waitForTimeout(160)
+    await clickPost507AxisIndexHandleUntilSelected(page, "column", 0, columnHandle, 7)
+    await clickPost507AxisIndexHandleUntilSelected(page, "column", 2, columnHandle, 21, { shift: true })
+    await expect(page.getByTestId("table-column-selection-outline")).toHaveAttribute("data-from-index", "0")
+    await expect(page.getByTestId("table-column-selection-outline")).toHaveAttribute("data-to-index", "2")
+    await expect(editor.locator(".selectedCell")).toHaveCount(21)
+    await expectAxisSelectionStable(page, 21, "table-column-selection-outline", "table-column-menu")
+    await expectNoTableTextSelectionState(page, "shift range axis selection")
+  })
+
   test("실제 /editor/[id] post 507 마지막 7x3 table은 row 선택 해제 직후 column hotzone direct hover로 열 선택을 연다", async ({
     page,
   }) => {

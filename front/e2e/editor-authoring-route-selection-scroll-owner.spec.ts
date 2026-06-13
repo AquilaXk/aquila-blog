@@ -1,5 +1,5 @@
 import { readFileSync } from "fs"
-import { expect, test, type Locator, type Page } from "@playwright/test"
+import { expect, test, type Locator, type Page } from "./helpers/authoringPlaywright"
 import {
   mockEditorRouteWithPost507,
   POST_507_CODE_REQUIRED_TEXTS,

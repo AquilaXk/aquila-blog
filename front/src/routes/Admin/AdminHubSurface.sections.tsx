@@ -70,7 +70,7 @@ export const AdminHubSurfaceSections = ({
     <HeroPanel>
       <HeroHeader>
         <HeroCopy>
-          <HeroHeading>오늘 블로그 운영은 이 흐름으로 정리됩니다</HeroHeading>
+          <HeroHeading>관리자</HeroHeading>
         </HeroCopy>
         <HeroActions>
           <Link href={primaryAction.href} passHref legacyBehavior>

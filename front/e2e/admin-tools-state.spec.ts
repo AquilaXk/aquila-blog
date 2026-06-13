@@ -40,7 +40,7 @@ test.describe("admin tools state contract", () => {
     const source = readRouteSource("AdminToolsWorkspaceSections.tsx")
     const styleSource = readRouteSource("AdminToolsWorkspace.styles.tokens.ts")
 
-    expect(source).toContain("문제 확인과 복구를 같은 흐름에서 처리합니다")
+    expect(source).toContain("<h1>운영 도구</h1>")
     expect(styleSource).toContain("grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));")
     expect(source).not.toContain("메일, 작업 큐, 정리 상태, 보안 이벤트처럼 장애와 직접 연결되는 항목만 우선 다룹니다.")
     expect(source).not.toContain("<ReadonlyPill>읽기 전용</ReadonlyPill>")

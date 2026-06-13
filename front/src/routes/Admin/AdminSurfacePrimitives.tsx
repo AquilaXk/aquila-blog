@@ -30,29 +30,29 @@ export const adminElevatedBorder = (theme: Theme) =>
 
 export const adminElevatedShadow = (theme: Theme) =>
   theme.blogDesign === "grid"
-    ? theme.publicDesign.shadow
+    ? "none"
     : usesDarkAdminSurface(theme)
-      ? "0 20px 44px rgba(0, 0, 0, 0.2)"
-      : "0 18px 42px rgba(15, 23, 42, 0.06)"
+      ? "none"
+      : "none"
 
 export const adminInteractiveFocusRing = (theme: Theme) =>
   adminFocusRing(theme)
 
 export const AdminElevatedCard = styled.section`
-  border-radius: 14px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => adminElevatedBorder(theme)};
   background: ${({ theme }) => adminElevatedSurface(theme)};
   box-shadow: ${({ theme }) => adminElevatedShadow(theme)};
 `
 
 export const AdminPlainCard = styled.section`
-  border-radius: 12px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => adminCardBorder(theme)};
   background: ${({ theme }) => adminPlainSurface(theme)};
 `
 
 export const AdminSubtleCard = styled.section`
-  border-radius: 12px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => adminCardBorder(theme)};
   background: ${({ theme }) => adminRaisedSurface(theme)};
 `
@@ -135,8 +135,8 @@ export const AdminLandingSectionLead = styled.p`
 
 export const AdminWorkspaceHero = styled.section`
   display: grid;
-  gap: 0.72rem;
-  padding: 0 0 0.92rem;
+  gap: 0.4rem;
+  padding: 0 0 0.56rem;
   border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};
 `
 
@@ -171,9 +171,9 @@ export const AdminWorkspaceHeroCopy = styled.div`
 
   h1 {
     margin: 0;
-    font-size: clamp(1.42rem, 2.5vw, 1.86rem);
+    font-size: clamp(1.12rem, 1.8vw, 1.36rem);
     line-height: 1.1;
-    letter-spacing: -0.03em;
+    letter-spacing: 0;
     color: ${({ theme }) => adminPrimaryText(theme)};
   }
 
@@ -220,7 +220,7 @@ export const AdminWorkspaceSectionNav = styled(AdminStickyRail)`
 export const AdminWorkspaceSectionNavStatus = styled(AdminRailCard)`
   gap: 0.22rem;
   padding: 0.88rem 0.96rem;
-  border-radius: 10px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => adminCardBorder(theme)};
 
   small {
@@ -342,7 +342,7 @@ export const AdminWorkspaceActionDockInner = styled.div`
   justify-content: flex-end;
   gap: 0.65rem;
   padding: 0.7rem 0.9rem;
-  border-radius: 12px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => adminCardBorder(theme)};
   background: ${({ theme }) => adminRaisedSurface(theme)};
 
@@ -362,7 +362,7 @@ export const AdminInfoLinkCard = styled.a<{ $withIcon?: boolean }>`
   gap: ${({ $withIcon = true }) => ($withIcon ? "0.7rem" : "0.18rem")};
   align-items: center;
   padding: 0.82rem 0.88rem;
-  border-radius: 10px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => adminCardBorder(theme)};
   background: ${({ theme }) => adminRaisedSurface(theme)};
   color: inherit;
@@ -383,7 +383,7 @@ export const AdminInfoLinkCard = styled.a<{ $withIcon?: boolean }>`
     display: ${({ $withIcon = true }) => ($withIcon ? "grid" : "none")};
     width: 2.35rem;
     height: 2.35rem;
-    border-radius: 8px;
+    border-radius: 2px;
     place-items: center;
     background: ${({ theme }) => adminMutedSurface(theme)};
     color: ${({ theme }) => adminSecondaryText(theme)};
@@ -423,7 +423,7 @@ export const AdminInfoStatusItem = styled.div`
   justify-content: space-between;
   gap: 0.72rem;
   padding: 0.74rem 0.82rem;
-  border-radius: 10px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => adminCardBorder(theme)};
   background: ${({ theme }) => adminRaisedSurface(theme)};
 
@@ -453,7 +453,7 @@ export const AdminInfoPanelCard = styled.div`
   display: grid;
   gap: 0.68rem;
   padding: 0.92rem;
-  border-radius: 10px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => adminCardBorder(theme)};
   background: ${({ theme }) => adminPlainSurface(theme)};
 `
@@ -514,7 +514,7 @@ export const AdminTextActionButton = styled.button`
   min-height: 0;
   padding: 0;
   border: 0;
-  border-radius: 0.36rem;
+  border-radius: 2px;
   background: transparent;
   color: ${({ theme }) => adminSecondaryText(theme)};
   font-size: 0.84rem;
@@ -548,7 +548,7 @@ export const AdminTextActionLink = styled.a`
   display: inline-flex;
   align-items: center;
   min-height: 0;
-  border-radius: 0.36rem;
+  border-radius: 2px;
   color: ${({ theme }) => adminSecondaryText(theme)};
   font-size: 0.84rem;
   font-weight: 700;
@@ -577,7 +577,7 @@ export const AdminActionCardButton = styled.button`
   display: grid;
   gap: 0.16rem;
   padding: 0.82rem 0.88rem;
-  border-radius: 10px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => adminCardBorder(theme)};
   background: transparent;
   color: ${({ theme }) => adminPrimaryText(theme)};

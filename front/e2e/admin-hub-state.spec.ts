@@ -34,18 +34,20 @@ test.describe("admin hub state contract", () => {
 
   test("admin hub uses backstage landing copy instead of generic management labels", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminHubSurface.tsx"), "utf8")
+    const sectionSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminHubSurface.sections.tsx"), "utf8")
+    const styleSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminHubSurface.styles.ts"), "utf8")
 
-    expect(source).toContain("오늘 블로그 운영은 이 흐름으로 정리됩니다")
-    expect(source).toContain("<h2>지금 할 일</h2>")
-    expect(source).toContain("<h2>최근 작업</h2>")
-    expect(source).toContain("<h2>공개 노출 상태</h2>")
-    expect(source).toContain('aria-label="허브 지원 정보"')
-    expect(source).toContain("resolvedSupportRailGroups.map((group) => (")
-    expect(source).toContain("<h3>{group.title}</h3>")
-    expect(source).toContain("const BorderlessSection = styled.section`")
-    expect(source).toContain("const BorderlessPanelLink = styled.a`")
-    expect(source).toContain("const BorderlessSupportSection = styled.section`")
-    expect(source).toContain("border-radius: 12px;")
+    expect(sectionSource).toContain("<HeroHeading>관리자</HeroHeading>")
+    expect(sectionSource).toContain("<h2>지금 할 일</h2>")
+    expect(sectionSource).toContain("<h2>최근 작업</h2>")
+    expect(sectionSource).toContain("<h2>공개 노출 상태</h2>")
+    expect(sectionSource).toContain('aria-label="허브 지원 정보"')
+    expect(sectionSource).toContain("resolvedSupportRailGroups.map((group) => (")
+    expect(sectionSource).toContain("<h3>{group.title}</h3>")
+    expect(styleSource).toContain("export const BorderlessSection = styled.section`")
+    expect(styleSource).toContain("export const BorderlessPanelLink = styled.a`")
+    expect(styleSource).toContain("export const BorderlessSupportSection = styled.section`")
+    expect(styleSource).toContain("border-radius: 2px;")
     expect(source).toContain("priorityActions: AdminHubNextAction[]")
     expect(source).toContain("handoffActions: AdminHubNextAction[]")
     expect(source).not.toContain("새 글 작성, 최근 초안 복귀, 프로필 점검, 운영 상태 확인까지 지금 필요한 흐름만 먼저 보여줍니다.")
@@ -60,13 +62,13 @@ test.describe("admin hub state contract", () => {
   })
 
   test("dashboard first fold uses main-like priority copy and explicit rail labels", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/dashboard.tsx"), "utf8")
+    const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspaceView.tsx"), "utf8")
     const styleSource = readFileSync(
-      path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspace.styles.ts"),
+      path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspace.styles.layout.ts"),
       "utf8",
     )
 
-    expect(source).toContain("지금 확인해야 할 운영 상태")
+    expect(source).toContain("<h1>운영 상태</h1>")
     expect(source).toContain("<strong>최근 실패</strong>")
     expect(source).toContain("<strong>런북</strong>")
     expect(source).toContain("<strong>즉시 이동</strong>")
@@ -78,9 +80,9 @@ test.describe("admin hub state contract", () => {
   })
 
   test("dashboard 연결된 채널 카드는 좁은 폭에서도 제목이 세로로 쪼개지지 않는 레이아웃 계약을 사용한다", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/pages/admin/dashboard.tsx"), "utf8")
+    const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspaceView.tsx"), "utf8")
     const styleSource = readFileSync(
-      path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspace.styles.ts"),
+      path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspace.styles.priority.ts"),
       "utf8",
     )
 

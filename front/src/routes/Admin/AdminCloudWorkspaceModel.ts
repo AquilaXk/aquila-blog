@@ -1,6 +1,11 @@
 import type { CloudFile, CloudMediaKind } from "src/apis/backend/cloud"
 
 export type CloudMediaFilter = "ALL" | CloudMediaKind
+export type UploadQueueStatus = "queued" | "uploading" | "done" | "failed" | "cancelled"
+export type CloudSearchParams = {
+  folderPath: string
+  keyword: string
+}
 
 export const CLOUD_FILTERS: Array<{ value: CloudMediaFilter; label: string }> = [
   { value: "ALL", label: "전체" },
@@ -37,6 +42,12 @@ export const getCloudKindBadge = (file: CloudFile) => {
   return "MP4"
 }
 
+export const getCloudKindIconLabel = (file: CloudFile) => {
+  if (file.mediaKind === "DOCUMENT") return "문"
+  if (file.mediaKind === "PHOTO") return "사"
+  return "동"
+}
+
 export const formatCloudFileSize = (bytes: number) => {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B"
   const units = ["B", "KB", "MB", "GB"] as const
@@ -54,11 +65,62 @@ export const formatCloudDate = (value?: string) => {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return "날짜 없음"
   return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
   }).format(date)
+}
+
+export const getUploadStatusLabel = (status: UploadQueueStatus) => {
+  if (status === "queued") return "대기"
+  if (status === "uploading") return "업로드 중"
+  if (status === "done") return "완료"
+  if (status === "failed") return "실패"
+  return "취소됨"
+}
+
+export const isUploadActive = (status: UploadQueueStatus) => status === "queued" || status === "uploading"
+
+export const normalizeCloudFolderPathSearch = (value: string) => value.trim().replace(/^\/+|\/+$/g, "")
+
+export const resolveCloudSearchParams = (value: string): CloudSearchParams => {
+  const normalized = value.trim()
+  if (!normalized.startsWith("/")) return { folderPath: "", keyword: normalized }
+
+  return {
+    folderPath: normalizeCloudFolderPathSearch(normalized),
+    keyword: "",
+  }
+}
+
+export const doesCloudFileMatchFilters = (
+  file: CloudFile,
+  filter: CloudMediaFilter,
+  searchText: string,
+) => {
+  const searchParams = resolveCloudSearchParams(searchText)
+  const normalizedKeyword = searchParams.keyword.toLowerCase()
+  const matchesKind = filter === "ALL" || file.mediaKind === filter
+  const matchesFolderPath =
+    !searchParams.folderPath ||
+    normalizeCloudFolderPathSearch(file.folderPath) === searchParams.folderPath
+  const matchesKeyword = !normalizedKeyword || file.originalFilename.toLowerCase().includes(normalizedKeyword)
+  return matchesKind && matchesFolderPath && matchesKeyword
+}
+
+export const mergeCloudFiles = (primary: CloudFile[], secondary: CloudFile[]) => {
+  const seen = new Set<number>()
+  const merged: CloudFile[] = []
+
+  ;[...primary, ...secondary].forEach((file) => {
+    if (seen.has(file.id)) return
+    seen.add(file.id)
+    merged.push(file)
+  })
+
+  return merged
 }
 
 export const getCloudSummary = (files: CloudFile[]) => {

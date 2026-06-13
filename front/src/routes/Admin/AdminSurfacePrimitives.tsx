@@ -1,44 +1,60 @@
 import type { Theme } from "@emotion/react"
 import styled from "@emotion/styled"
+import {
+  adminAccentSurface,
+  adminCardBorder,
+  adminElevatedBorderDark,
+  adminElevatedSurfaceTop,
+  adminFocusRing,
+  adminGold,
+  adminMutedSurface,
+  adminMutedText,
+  adminPlainSurface,
+  adminPrimaryText,
+  adminRaisedSurface,
+  adminSecondaryText,
+  adminStrongBorder,
+  adminSurface,
+  usesDarkAdminSurface,
+} from "src/routes/Admin/adminColorTokens"
 
 export const adminElevatedSurface = (theme: Theme) =>
   theme.blogDesign === "grid"
     ? `linear-gradient(180deg, ${theme.publicDesign.operationSurfaceElevated} 0%, ${theme.publicDesign.operationSurface} 100%)`
-    : theme.scheme === "light"
-      ? "linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 248, 249, 0.94) 100%)"
-      : "linear-gradient(180deg, rgba(23, 23, 24, 0.96) 0%, rgba(17, 17, 18, 0.94) 100%)"
+    : usesDarkAdminSurface(theme)
+      ? `linear-gradient(180deg, ${adminElevatedSurfaceTop} 0%, ${adminSurface} 100%)`
+      : "linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 248, 249, 0.94) 100%)"
 
 export const adminElevatedBorder = (theme: Theme) =>
-  theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray5
+  theme.blogDesign === "grid" ? theme.publicDesign.border : usesDarkAdminSurface(theme) ? adminElevatedBorderDark : theme.colors.gray5
 
 export const adminElevatedShadow = (theme: Theme) =>
   theme.blogDesign === "grid"
     ? theme.publicDesign.shadow
-    : theme.scheme === "light"
-      ? "0 18px 42px rgba(15, 23, 42, 0.06)"
-      : "0 20px 44px rgba(0, 0, 0, 0.2)"
+    : usesDarkAdminSurface(theme)
+      ? "0 20px 44px rgba(0, 0, 0, 0.2)"
+      : "0 18px 42px rgba(15, 23, 42, 0.06)"
 
 export const adminInteractiveFocusRing = (theme: Theme) =>
-  theme.scheme === "light" ? "0 0 0 3px rgba(59, 130, 246, 0.18)" : "0 0 0 3px rgba(96, 165, 250, 0.28)"
+  adminFocusRing(theme)
 
 export const AdminElevatedCard = styled.section`
-  border-radius: 24px;
+  border-radius: 14px;
   border: 1px solid ${({ theme }) => adminElevatedBorder(theme)};
   background: ${({ theme }) => adminElevatedSurface(theme)};
   box-shadow: ${({ theme }) => adminElevatedShadow(theme)};
 `
 
 export const AdminPlainCard = styled.section`
-  border-radius: 20px;
-  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
-  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray1)};
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  background: ${({ theme }) => adminPlainSurface(theme)};
 `
 
 export const AdminSubtleCard = styled.section`
-  border-radius: 20px;
-  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray5)};
-  background: ${({ theme }) =>
-    theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2};
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  background: ${({ theme }) => adminRaisedSurface(theme)};
 `
 
 export const AdminRailCard = styled(AdminSubtleCard)`
@@ -75,7 +91,7 @@ export const AdminSectionTitleStack = styled.div`
   h2,
   h3 {
     margin: 0;
-    color: ${({ theme }) => theme.colors.gray12};
+    color: ${({ theme }) => adminPrimaryText(theme)};
     font-size: 1.05rem;
     font-weight: 800;
     letter-spacing: -0.02em;
@@ -83,7 +99,7 @@ export const AdminSectionTitleStack = styled.div`
 
   p {
     margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
+    color: ${({ theme }) => adminMutedText(theme)};
     font-size: 0.84rem;
     line-height: 1.55;
   }
@@ -93,18 +109,18 @@ export const AdminPaneHeader = styled.div`
   display: grid;
   gap: 0.22rem;
   padding-bottom: 0.95rem;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+  border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};
 
   h2 {
     margin: 0;
     font-size: clamp(1.24rem, 2vw, 1.5rem);
     line-height: 1.2;
-    color: ${({ theme }) => theme.colors.gray12};
+    color: ${({ theme }) => adminPrimaryText(theme)};
   }
 
   p {
     margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
+    color: ${({ theme }) => adminMutedText(theme)};
     font-size: 0.86rem;
     line-height: 1.55;
   }
@@ -112,7 +128,7 @@ export const AdminPaneHeader = styled.div`
 
 export const AdminLandingSectionLead = styled.p`
   margin: 0;
-  color: ${({ theme }) => theme.colors.gray10};
+  color: ${({ theme }) => adminMutedText(theme)};
   font-size: 0.86rem;
   line-height: 1.58;
 `
@@ -121,7 +137,7 @@ export const AdminWorkspaceHero = styled.section`
   display: grid;
   gap: 0.72rem;
   padding: 0 0 0.92rem;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+  border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};
 `
 
 export const AdminWorkspaceHeroLabel = styled.span`
@@ -131,9 +147,9 @@ export const AdminWorkspaceHeroLabel = styled.span`
   align-items: center;
   padding: 0 0.72rem;
   border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray11};
+  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  background: ${({ theme }) => adminRaisedSurface(theme)};
+  color: ${({ theme }) => adminSecondaryText(theme)};
   font-size: 0.74rem;
   font-weight: 800;
 `
@@ -158,13 +174,13 @@ export const AdminWorkspaceHeroCopy = styled.div`
     font-size: clamp(1.42rem, 2.5vw, 1.86rem);
     line-height: 1.1;
     letter-spacing: -0.03em;
-    color: ${({ theme }) => theme.colors.gray12};
+    color: ${({ theme }) => adminPrimaryText(theme)};
   }
 
   p {
     margin: 0;
     max-width: 36rem;
-    color: ${({ theme }) => theme.colors.gray10};
+    color: ${({ theme }) => adminMutedText(theme)};
     font-size: 0.88rem;
     line-height: 1.58;
   }
@@ -204,26 +220,26 @@ export const AdminWorkspaceSectionNav = styled(AdminStickyRail)`
 export const AdminWorkspaceSectionNavStatus = styled(AdminRailCard)`
   gap: 0.22rem;
   padding: 0.88rem 0.96rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
 
   small {
-    color: ${({ theme }) => theme.colors.gray10};
+    color: ${({ theme }) => adminMutedText(theme)};
     font-size: 0.72rem;
     font-weight: 800;
     letter-spacing: 0.03em;
   }
 
   strong {
-    color: ${({ theme }) => theme.colors.gray12};
+    color: ${({ theme }) => adminPrimaryText(theme)};
     font-size: 0.92rem;
     font-weight: 780;
     letter-spacing: -0.02em;
   }
 
   &[data-jumping="true"] {
-    border-color: ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray1};
+    border-color: ${({ theme }) => adminStrongBorder(theme)};
+    background: ${({ theme }) => adminAccentSurface(theme)};
   }
 
   @media (max-width: 1180px) {
@@ -243,9 +259,9 @@ export const AdminWorkspaceSectionNavButton = styled.button`
   min-height: 42px;
   padding: 0 0.9rem;
   border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray10};
+  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  background: ${({ theme }) => adminRaisedSurface(theme)};
+  color: ${({ theme }) => adminMutedText(theme)};
   font-size: 0.84rem;
   font-weight: 700;
   text-align: left;
@@ -259,14 +275,14 @@ export const AdminWorkspaceSectionNavButton = styled.button`
 
   &:focus-visible {
     outline: none;
-    border-color: ${({ theme }) => theme.colors.blue8};
+    border-color: ${({ theme }) => adminStrongBorder(theme)};
     box-shadow: ${({ theme }) => adminInteractiveFocusRing(theme)};
   }
 
   &[data-active="true"] {
-    color: ${({ theme }) => theme.colors.gray12};
-    border-color: ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray1};
+    color: ${adminGold};
+    border-color: ${({ theme }) => adminStrongBorder(theme)};
+    background: ${({ theme }) => adminAccentSurface(theme)};
   }
 
   &[data-freshness="fresh"] {
@@ -326,9 +342,9 @@ export const AdminWorkspaceActionDockInner = styled.div`
   justify-content: flex-end;
   gap: 0.65rem;
   padding: 0.7rem 0.9rem;
-  border-radius: 20px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  background: ${({ theme }) => adminRaisedSurface(theme)};
 
   @media (max-width: 760px) {
     justify-content: space-between;
@@ -346,10 +362,9 @@ export const AdminInfoLinkCard = styled.a<{ $withIcon?: boolean }>`
   gap: ${({ $withIcon = true }) => ($withIcon ? "0.7rem" : "0.18rem")};
   align-items: center;
   padding: 0.82rem 0.88rem;
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(255, 255, 255, 0.84)" : "rgba(31, 31, 31, 0.88)"};
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  background: ${({ theme }) => adminRaisedSurface(theme)};
   color: inherit;
   text-decoration: none;
   min-width: 0;
@@ -360,7 +375,7 @@ export const AdminInfoLinkCard = styled.a<{ $withIcon?: boolean }>`
 
   &:focus-visible {
     outline: none;
-    border-color: ${({ theme }) => theme.colors.blue8};
+    border-color: ${({ theme }) => adminStrongBorder(theme)};
     box-shadow: ${({ theme }) => adminInteractiveFocusRing(theme)};
   }
 
@@ -368,10 +383,10 @@ export const AdminInfoLinkCard = styled.a<{ $withIcon?: boolean }>`
     display: ${({ $withIcon = true }) => ($withIcon ? "grid" : "none")};
     width: 2.35rem;
     height: 2.35rem;
-    border-radius: 14px;
+    border-radius: 8px;
     place-items: center;
-    background: ${({ theme }) => theme.colors.gray2};
-    color: ${({ theme }) => theme.colors.gray11};
+    background: ${({ theme }) => adminMutedSurface(theme)};
+    color: ${({ theme }) => adminSecondaryText(theme)};
   }
 
   .copy {
@@ -382,7 +397,7 @@ export const AdminInfoLinkCard = styled.a<{ $withIcon?: boolean }>`
 
   .copy strong,
   > strong {
-    color: ${({ theme }) => theme.colors.gray12};
+    color: ${({ theme }) => adminPrimaryText(theme)};
     font-size: 0.86rem;
     font-weight: 780;
     overflow-wrap: anywhere;
@@ -390,7 +405,7 @@ export const AdminInfoLinkCard = styled.a<{ $withIcon?: boolean }>`
 
   .copy span,
   > span {
-    color: ${({ theme }) => theme.colors.gray10};
+    color: ${({ theme }) => adminMutedText(theme)};
     font-size: 0.75rem;
     font-weight: 700;
     overflow-wrap: anywhere;
@@ -408,10 +423,9 @@ export const AdminInfoStatusItem = styled.div`
   justify-content: space-between;
   gap: 0.72rem;
   padding: 0.74rem 0.82rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(255, 255, 255, 0.82)" : "rgba(31, 31, 31, 0.88)"};
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  background: ${({ theme }) => adminRaisedSurface(theme)};
 
   &[data-tone="good"] {
     border-color: ${({ theme }) => theme.colors.green7};
@@ -422,13 +436,13 @@ export const AdminInfoStatusItem = styled.div`
   }
 
   span {
-    color: ${({ theme }) => theme.colors.gray10};
+    color: ${({ theme }) => adminMutedText(theme)};
     font-size: 0.76rem;
     font-weight: 700;
   }
 
   strong {
-    color: ${({ theme }) => theme.colors.gray12};
+    color: ${({ theme }) => adminPrimaryText(theme)};
     font-size: 0.82rem;
     font-weight: 780;
     text-align: right;
@@ -439,9 +453,9 @@ export const AdminInfoPanelCard = styled.div`
   display: grid;
   gap: 0.68rem;
   padding: 0.92rem;
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  background: ${({ theme }) => adminPlainSurface(theme)};
 `
 
 export const AdminStatusPill = styled.span<{ $size?: "sm" | "md" }>`
@@ -451,23 +465,23 @@ export const AdminStatusPill = styled.span<{ $size?: "sm" | "md" }>`
   min-height: ${({ $size = "md" }) => ($size === "sm" ? "28px" : "32px")};
   padding: ${({ $size = "md" }) => ($size === "sm" ? "0 0.62rem" : "0 0.72rem")};
   border-radius: ${({ $size = "md" }) => ($size === "sm" ? "10px" : "999px")};
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray11};
+  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  background: ${({ theme }) => adminRaisedSurface(theme)};
+  color: ${({ theme }) => adminSecondaryText(theme)};
   font-size: ${({ $size = "md" }) => ($size === "sm" ? "0.76rem" : "0.78rem")};
   font-weight: 800;
   line-height: 1;
 
   &[data-tone="neutral"] {
-    border-color: ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
-    color: ${({ theme }) => theme.colors.gray10};
+    border-color: ${({ theme }) => adminCardBorder(theme)};
+    background: ${({ theme }) => adminRaisedSurface(theme)};
+    color: ${({ theme }) => adminMutedText(theme)};
   }
 
   &[data-tone="accent"] {
-    border-color: ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray1};
-    color: ${({ theme }) => theme.colors.gray12};
+    border-color: ${({ theme }) => adminStrongBorder(theme)};
+    background: ${({ theme }) => adminAccentSurface(theme)};
+    color: ${adminGold};
   }
 
   &[data-tone="success"] {
@@ -502,7 +516,7 @@ export const AdminTextActionButton = styled.button`
   border: 0;
   border-radius: 0.36rem;
   background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
+  color: ${({ theme }) => adminSecondaryText(theme)};
   font-size: 0.84rem;
   font-weight: 700;
   cursor: pointer;
@@ -521,7 +535,7 @@ export const AdminTextActionButton = styled.button`
   }
 
   &[data-tone="primary"] {
-    color: ${({ theme }) => theme.colors.gray12};
+    color: ${adminGold};
     font-weight: 800;
   }
 
@@ -535,7 +549,7 @@ export const AdminTextActionLink = styled.a`
   align-items: center;
   min-height: 0;
   border-radius: 0.36rem;
-  color: ${({ theme }) => theme.colors.gray11};
+  color: ${({ theme }) => adminSecondaryText(theme)};
   font-size: 0.84rem;
   font-weight: 700;
   text-decoration: none;
@@ -549,7 +563,7 @@ export const AdminTextActionLink = styled.a`
   }
 
   &[data-tone="primary"] {
-    color: ${({ theme }) => theme.colors.gray12};
+    color: ${adminGold};
     font-weight: 800;
   }
 
@@ -563,10 +577,10 @@ export const AdminActionCardButton = styled.button`
   display: grid;
   gap: 0.16rem;
   padding: 0.82rem 0.88rem;
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
   background: transparent;
-  color: ${({ theme }) => theme.colors.gray12};
+  color: ${({ theme }) => adminPrimaryText(theme)};
   cursor: pointer;
   transition:
     border-color 0.18s ease,
@@ -575,7 +589,7 @@ export const AdminActionCardButton = styled.button`
 
   &:focus-visible {
     outline: none;
-    border-color: ${({ theme }) => theme.colors.blue8};
+    border-color: ${({ theme }) => adminStrongBorder(theme)};
     box-shadow: ${({ theme }) => adminInteractiveFocusRing(theme)};
   }
 
@@ -590,7 +604,7 @@ export const AdminActionCardButton = styled.button`
   }
 
   small {
-    color: ${({ theme }) => theme.colors.gray10};
+    color: ${({ theme }) => adminMutedText(theme)};
     line-height: 1.55;
   }
 `

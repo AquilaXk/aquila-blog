@@ -11,7 +11,12 @@ import {
   AdminWorkspaceHero,
   adminInteractiveFocusRing,
 } from "src/routes/Admin/AdminSurfacePrimitives"
-
+import {
+  adminActionGroupSurface,
+  adminWarningBadgeBorder,
+  adminWarningBadgeSurface,
+  adminWarningBadgeText,
+} from "src/routes/Admin/adminColorTokens"
 
 export const InlineNotice = styled.p`
   margin: 0;
@@ -23,9 +28,9 @@ export const InlineNotice = styled.p`
   line-height: 1.6;
 
   &[data-tone="warning"] {
-    border-color: ${({ theme }) => theme.colors.indigo8};
-    background: ${({ theme }) => theme.colors.indigo3};
-    color: ${({ theme }) => theme.colors.indigo11};
+    border-color: ${adminWarningBadgeBorder()};
+    background: ${adminWarningBadgeSurface()};
+    color: ${adminWarningBadgeText()};
   }
 
   &[data-tone="danger"] {
@@ -147,8 +152,7 @@ export const ActionGroupCard = styled(AdminRailCard)`
   gap: 0.8rem;
   border-radius: 18px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(255, 255, 255, 0.82)" : "rgba(24, 24, 24, 0.86)"};
+  background: ${({ theme }) => adminActionGroupSurface(theme)};
 `
 
 export const CardSectionHeading = styled.div`
@@ -511,4 +515,3 @@ export const EmptyResultState = styled.p`
   color: ${({ theme }) => theme.colors.gray10};
   line-height: 1.6;
 `
-

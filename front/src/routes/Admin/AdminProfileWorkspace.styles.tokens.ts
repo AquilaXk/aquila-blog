@@ -10,7 +10,20 @@ import {
   AdminWorkspaceSectionNav,
   AdminWorkspaceSectionNavButton,
 } from "src/routes/Admin/AdminSurfacePrimitives"
-
+import {
+  adminBorder,
+  adminBorderStrong,
+  adminControlText,
+  adminGold,
+  adminSurfaceMuted,
+  adminSurfaceRaised,
+  adminTeal,
+  adminTealBorder,
+  adminTealBorderHover,
+  adminTealHover,
+  adminTextPrimary,
+  adminTextSecondary,
+} from "src/routes/Admin/adminColorTokens"
 
 export const Main = styled.main`
   max-width: 1420px;
@@ -26,10 +39,10 @@ export const Main = styled.main`
 
 export const BaseButton = styled.button`
   min-height: 38px;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray11};
+  border-radius: 9px;
+  border: 1px solid ${adminBorder};
+  background: ${adminSurfaceRaised};
+  color: ${adminTextSecondary};
   padding: 0.7rem 0.96rem;
   font-size: 0.92rem;
   font-weight: 700;
@@ -41,9 +54,9 @@ export const BaseButton = styled.button`
     transform 0.18s ease;
 
   &:hover:not(:disabled) {
-    border-color: ${({ theme }) => theme.colors.gray8};
-    background: ${({ theme }) => theme.colors.gray3};
-    color: ${({ theme }) => theme.colors.gray12};
+    border-color: ${adminBorderStrong};
+    background: ${adminSurfaceMuted};
+    color: ${adminTextPrimary};
     transform: translateY(-1px);
   }
 
@@ -71,14 +84,14 @@ export const GhostButton = styled(BaseButton)`
 `
 
 export const PrimaryButton = styled(BaseButton)`
-  border-color: ${({ theme }) => theme.colors.blue8};
-  background: ${({ theme }) => theme.colors.blue3};
-  color: ${({ theme }) => theme.colors.blue11};
+  border-color: ${adminTealBorder};
+  background: ${adminTeal};
+  color: ${adminControlText};
 
   &:hover:not(:disabled) {
-    border-color: ${({ theme }) => theme.colors.blue9};
-    background: ${({ theme }) => theme.colors.blue4};
-    color: ${({ theme }) => theme.colors.blue12};
+    border-color: ${adminTealBorderHover};
+    background: ${adminTealHover};
+    color: ${adminControlText};
   }
 `
 
@@ -128,9 +141,8 @@ export const PreviewAnchor = styled.a`
   padding: 0;
   border: 0;
   background: transparent;
-  color: ${({ theme }) => theme.colors.blue9};
+  color: ${adminGold};
   font-size: 0.8rem;
   font-weight: 700;
   text-decoration: none;
 `
-

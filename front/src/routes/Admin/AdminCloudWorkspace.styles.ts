@@ -1,16 +1,17 @@
 import styled from "@emotion/styled"
-
-const textPrimary = "#f3f1ea"
-const textSecondary = "#c8c1ae"
-const textMuted = "#918b7d"
-const border = "#34322d"
-const borderStrong = "#6d6040"
-const surface = "#171817"
-const surfaceRaised = "#20211f"
-const surfaceMuted = "#242520"
-const surfaceAccent = "#2d291a"
-const accentGold = "#d0b46c"
-const accentTeal = "#3f8f86"
+import {
+  adminBorder as border,
+  adminBorderStrong as borderStrong,
+  adminGold as accentGold,
+  adminSurface as surface,
+  adminSurfaceAccent as surfaceAccent,
+  adminSurfaceMuted as surfaceMuted,
+  adminSurfaceRaised as surfaceRaised,
+  adminTeal as accentTeal,
+  adminTextMuted as textMuted,
+  adminTextPrimary as textPrimary,
+  adminTextSecondary as textSecondary,
+} from "src/routes/Admin/adminColorTokens"
 
 export const CloudMain = styled.main`
   display: grid;

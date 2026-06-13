@@ -10,6 +10,12 @@ import {
   AdminWorkspaceSectionNav,
   AdminWorkspaceSectionNavButton,
 } from "src/routes/Admin/AdminSurfacePrimitives"
+import {
+  adminFocusRing,
+  adminWarningBadgeBorder,
+  adminWarningBadgeSurface,
+  adminWarningBadgeText,
+} from "src/routes/Admin/adminColorTokens"
 
 
 export const WorkspaceHero = styled(AdminWorkspaceHero)``
@@ -108,9 +114,9 @@ export const SectionStateBadge = styled.span`
   }
 
   &[data-tone="published"] {
-    border-color: #6d6040;
-    color: #d0b46c;
-    background: #2d291a;
+    border-color: ${adminWarningBadgeBorder()};
+    color: ${adminWarningBadgeText()};
+    background: ${adminWarningBadgeSurface()};
   }
 
   &[data-tone="synced"] {
@@ -252,7 +258,7 @@ export const Input = styled.input`
   &:focus-visible {
     outline: none;
     border-color: ${({ theme }) => theme.colors.accentBorder};
-    box-shadow: 0 0 0 3px rgba(208, 180, 108, 0.18);
+    box-shadow: ${({ theme }) => adminFocusRing(theme)};
   }
 `
 
@@ -275,7 +281,7 @@ export const TextArea = styled.textarea`
   &:focus-visible {
     outline: none;
     border-color: ${({ theme }) => theme.colors.accentBorder};
-    box-shadow: 0 0 0 3px rgba(208, 180, 108, 0.18);
+    box-shadow: ${({ theme }) => adminFocusRing(theme)};
   }
 `
 

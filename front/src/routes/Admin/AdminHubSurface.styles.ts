@@ -1,16 +1,19 @@
 import styled from "@emotion/styled"
 import { AdminSectionTitleStack } from "./AdminSurfacePrimitives"
-
-const adminTextPrimary = "#f3f1ea"
-const adminTextSecondary = "#c8c1ae"
-const adminTextMuted = "#918b7d"
-const adminBorder = "#34322d"
-const adminBorderStrong = "#6d6040"
-const adminSurface = "#171817"
-const adminSurfaceRaised = "#20211f"
-const adminSurfaceAccent = "#2d291a"
-const adminGold = "#d0b46c"
-const adminTeal = "#3f8f86"
+import {
+  adminBorder,
+  adminBorderStrong,
+  adminControlText,
+  adminGold,
+  adminSurface,
+  adminSurfaceAccent,
+  adminSurfaceRaised,
+  adminTeal,
+  adminTealBorder,
+  adminTextMuted,
+  adminTextPrimary,
+  adminTextSecondary,
+} from "src/routes/Admin/adminColorTokens"
 
 export const Main = styled.main`
   display: grid;
@@ -92,10 +95,10 @@ export const PrimaryActionLink = styled.a`
   min-width: 6rem;
   min-height: 2.65rem;
   padding: 0 1rem;
-  border: 1px solid rgba(63, 143, 134, 0.58);
+  border: 1px solid ${adminTealBorder};
   border-radius: 999px;
   background: ${adminTeal};
-  color: #f8fffc;
+  color: ${adminControlText};
   text-decoration: none;
   font-size: 0.94rem;
   font-weight: 800;

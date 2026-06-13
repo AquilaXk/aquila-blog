@@ -10,14 +10,20 @@ import {
   AdminWorkspaceSectionNav,
   AdminWorkspaceSectionNavButton,
 } from "src/routes/Admin/AdminSurfacePrimitives"
-
-const adminTextPrimary = "#f3f1ea"
-const adminTextSecondary = "#c8c1ae"
-const adminBorder = "#34322d"
-const adminBorderStrong = "#6d6040"
-const adminSurfaceRaised = "#20211f"
-const adminGold = "#d0b46c"
-const adminTeal = "#3f8f86"
+import {
+  adminBorder,
+  adminBorderStrong,
+  adminControlText,
+  adminGold,
+  adminSurfaceMuted,
+  adminSurfaceRaised,
+  adminTeal,
+  adminTealBorder,
+  adminTealBorderHover,
+  adminTealHover,
+  adminTextPrimary,
+  adminTextSecondary,
+} from "src/routes/Admin/adminColorTokens"
 
 export const Main = styled.main`
   max-width: 1420px;
@@ -49,7 +55,7 @@ export const BaseButton = styled.button`
 
   &:hover:not(:disabled) {
     border-color: ${adminBorderStrong};
-    background: #242520;
+    background: ${adminSurfaceMuted};
     color: ${adminTextPrimary};
     transform: translateY(-1px);
   }
@@ -78,14 +84,14 @@ export const GhostButton = styled(BaseButton)`
 `
 
 export const PrimaryButton = styled(BaseButton)`
-  border-color: rgba(63, 143, 134, 0.58);
+  border-color: ${adminTealBorder};
   background: ${adminTeal};
-  color: #f8fffc;
+  color: ${adminControlText};
 
   &:hover:not(:disabled) {
-    border-color: rgba(63, 143, 134, 0.72);
-    background: #347b73;
-    color: #f8fffc;
+    border-color: ${adminTealBorderHover};
+    background: ${adminTealHover};
+    color: ${adminControlText};
   }
 `
 

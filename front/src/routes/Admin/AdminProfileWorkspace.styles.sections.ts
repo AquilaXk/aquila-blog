@@ -10,6 +10,11 @@ import {
   AdminWorkspaceSectionNav,
   AdminWorkspaceSectionNavButton,
 } from "src/routes/Admin/AdminSurfacePrimitives"
+import {
+  adminWarningBadgeBorder,
+  adminWarningBadgeSurface,
+  adminWarningBadgeText,
+} from "src/routes/Admin/adminColorTokens"
 import { BaseButton, PublishButton } from "./AdminProfileWorkspace.styles.tokens"
 
 
@@ -288,9 +293,9 @@ export const ToastCard = styled.div`
   }
 
   &[data-tone="loading"] {
-    border-color: #6d6040;
-    background: #2d291a;
-    color: #d0b46c;
+    border-color: ${adminWarningBadgeBorder()};
+    background: ${adminWarningBadgeSurface()};
+    color: ${adminWarningBadgeText()};
   }
 `
 

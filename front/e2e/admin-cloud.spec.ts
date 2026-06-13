@@ -88,11 +88,17 @@ const getUploadFileMetadata = (name: string) => {
   return { contentType: "application/pdf", mediaKind: "DOCUMENT" as const }
 }
 
-const setupAdminCloudMocks = async (page: Page) => {
+const setupAdminCloudMocks = async (
+  page: Page,
+  options: {
+    failDeleteIds?: string[]
+  } = {}
+) => {
   const requestedKinds: string[] = []
   const uploadedNames: string[] = []
   const deletedIds: string[] = []
   const uploadedFiles: CloudFileFixture[] = []
+  const failedDeleteIds = new Set(options.failDeleteIds ?? [])
   let nextUploadId = 204
 
   await page.route("**/_next/image**", async (route) => {
@@ -108,6 +114,10 @@ const setupAdminCloudMocks = async (page: Page) => {
     const id = url.pathname.match(/\/files\/(\d+)$/)?.[1] ?? ""
 
     if (method === "DELETE" && id) {
+      if (failedDeleteIds.has(id)) {
+        await fulfillJson(route, { resultCode: "500-1", msg: "클라우드 파일 삭제에 실패했습니다." }, 500)
+        return
+      }
       deletedIds.push(id)
       await fulfillJson(route, { resultCode: "200-1", msg: "클라우드 파일이 삭제되었습니다." })
       return
@@ -123,6 +133,10 @@ const setupAdminCloudMocks = async (page: Page) => {
     const mediaKind = url.searchParams.get("mediaKind") || "ALL"
 
     if (request.method() === "DELETE" && id) {
+      if (failedDeleteIds.has(id)) {
+        await fulfillJson(route, { resultCode: "500-1", msg: "클라우드 파일 삭제에 실패했습니다." }, 500)
+        return
+      }
       deletedIds.push(id)
       await fulfillJson(route, { resultCode: "200-1", msg: "클라우드 파일이 삭제되었습니다." })
       return
@@ -168,9 +182,10 @@ const setupAdminCloudMocks = async (page: Page) => {
     requestedKinds.push(mediaKind)
     const keyword = (url.searchParams.get("kw") || "").toLowerCase()
     const files = [...uploadedFiles, ...CLOUD_FILES].filter((file) => {
+      const isDeleted = deletedIds.includes(String(file.id))
       const kindMatches = mediaKind === "ALL" || file.mediaKind === mediaKind
       const keywordMatches = !keyword || file.originalFilename.toLowerCase().includes(keyword)
-      return kindMatches && keywordMatches
+      return !isDeleted && kindMatches && keywordMatches
     })
     await fulfillJson(route, { files })
   })
@@ -283,5 +298,21 @@ test.describe("관리자 클라우드", () => {
 
     await page.getByRole("button", { name: "deploy-walkthrough.mp4 삭제" }).click()
     await expect.poll(() => mocks.deletedIds).toContain("103")
+  })
+
+  test("선택 삭제 일부 실패 시 성공 항목만 목록에서 제거하고 실패 알림을 유지한다", async ({ page }) => {
+    const mocks = await setupAdminCloudMocks(page, { failDeleteIds: ["102"] })
+
+    await page.goto("/admin/cloud")
+
+    await page.getByRole("checkbox", { name: "운영 점검 리포트.pdf 선택" }).check()
+    await page.getByRole("checkbox", { name: "home-server-rack.png 선택" }).check()
+    await page.getByRole("button", { name: "선택 삭제" }).click()
+
+    await expect.poll(() => mocks.deletedIds).toContain("101")
+    await expect(page.getByText("1개 삭제 완료, 1개 실패")).toBeVisible()
+    await expect(page.getByRole("row", { name: /운영 점검 리포트\.pdf/ })).toHaveCount(0)
+    await expect(page.getByRole("row", { name: /home-server-rack\.png/ })).toBeVisible()
+    await expect(page.getByRole("checkbox", { name: "home-server-rack.png 선택" })).toBeChecked()
   })
 })

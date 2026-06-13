@@ -11,7 +11,11 @@ import {
   AdminWorkspaceHero,
   adminInteractiveFocusRing,
 } from "src/routes/Admin/AdminSurfacePrimitives"
-
+import {
+  adminWarningBadgeBorder,
+  adminWarningBadgeSurface,
+  adminWarningBadgeText,
+} from "src/routes/Admin/adminColorTokens"
 
 export const Main = styled.main`
   max-width: 1440px;
@@ -211,9 +215,9 @@ export const SectionHeading = styled(AdminSectionHeading)`
 export const StatusBadge = styled(AdminStatusPill)`
   min-height: 34px;
   padding: 0 0.78rem;
-  border-color: #6d6040;
-  background: #2d291a;
-  color: #d0b46c;
+  border-color: ${adminWarningBadgeBorder()};
+  background: ${adminWarningBadgeSurface()};
+  color: ${adminWarningBadgeText()};
 
   &[data-tone="success"] {
     border-color: ${({ theme }) => theme.colors.statusSuccessBorder};

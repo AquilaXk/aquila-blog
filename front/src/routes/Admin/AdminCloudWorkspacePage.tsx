@@ -447,25 +447,62 @@ const AdminCloudWorkspacePage = () => {
     setSelectedFileId(fileId)
   }
 
+  const removeDeletedFilesFromCloudCaches = (deletedIds: Set<number>) => {
+    queryClient.getQueriesData<CloudFile[]>({ queryKey: [CLOUD_QUERY_KEY] }).forEach(([queryKey, current]) => {
+      if (!Array.isArray(current)) return
+      queryClient.setQueryData(
+        queryKey,
+        current.filter((file) => !deletedIds.has(file.id))
+      )
+    })
+  }
+
   const handleDelete = async (file: CloudFile) => {
-    await deleteCloudFile(file.id)
-    setNotice(`${file.originalFilename} 삭제 완료`)
-    setOptimisticFiles((current) => current.filter((item) => item.id !== file.id))
-    setCheckedFileIds((current) => current.filter((id) => id !== file.id))
-    if (selectedFileId === file.id) setSelectedFileId(null)
-    await queryClient.invalidateQueries({ queryKey: [CLOUD_QUERY_KEY] })
+    try {
+      await deleteCloudFile(file.id)
+      const deletedIds = new Set([file.id])
+      setNotice(`${file.originalFilename} 삭제 완료`)
+      setOptimisticFiles((current) => current.filter((item) => item.id !== file.id))
+      setCheckedFileIds((current) => current.filter((id) => id !== file.id))
+      removeDeletedFilesFromCloudCaches(deletedIds)
+      if (selectedFileId === file.id) setSelectedFileId(null)
+    } catch {
+      setNotice(`${file.originalFilename} 삭제 실패`)
+    } finally {
+      await queryClient.invalidateQueries({ queryKey: [CLOUD_QUERY_KEY] })
+    }
   }
 
   const handleDeleteSelected = async () => {
     const targets = files.filter((file) => checkedFileIds.includes(file.id))
     if (targets.length === 0) return
 
-    await Promise.all(targets.map((file) => deleteCloudFile(file.id)))
-    const deletedIds = new Set(targets.map((file) => file.id))
-    setOptimisticFiles((current) => current.filter((file) => !deletedIds.has(file.id)))
-    setCheckedFileIds([])
-    if (selectedFileId && deletedIds.has(selectedFileId)) setSelectedFileId(null)
-    setNotice(`${targets.length}개 파일 삭제 완료`)
+    const results = await Promise.allSettled(
+      targets.map(async (file) => {
+        await deleteCloudFile(file.id)
+        return file
+      })
+    )
+    const deletedFiles = results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []))
+    const deletedIds = new Set(deletedFiles.map((file) => file.id))
+    const failedCount = targets.length - deletedIds.size
+
+    if (deletedIds.size > 0) {
+      setOptimisticFiles((current) => current.filter((file) => !deletedIds.has(file.id)))
+      setCheckedFileIds((current) => current.filter((id) => !deletedIds.has(id)))
+      removeDeletedFilesFromCloudCaches(deletedIds)
+      if (selectedFileId && deletedIds.has(selectedFileId)) setSelectedFileId(null)
+    }
+
+    if (failedCount > 0) {
+      setNotice(
+        deletedIds.size > 0
+          ? `${deletedIds.size}개 삭제 완료, ${failedCount}개 실패`
+          : `${failedCount}개 파일 삭제 실패`
+      )
+    } else {
+      setNotice(`${deletedIds.size}개 파일 삭제 완료`)
+    }
     await queryClient.invalidateQueries({ queryKey: [CLOUD_QUERY_KEY] })
   }
 

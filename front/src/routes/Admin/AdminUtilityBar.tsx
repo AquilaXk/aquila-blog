@@ -4,6 +4,17 @@ import { useRouter } from "next/router"
 import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import AppIcon, { type IconName } from "src/components/icons/AppIcon"
 import { pushRoute } from "src/libs/router"
+import {
+  adminBorder,
+  adminBorderStrong,
+  adminFocusRing,
+  adminGold,
+  adminSurfaceAccent,
+  adminSurfaceRaised,
+  adminTextMuted,
+  adminTextPrimary,
+  adminTextSecondary,
+} from "src/routes/Admin/adminColorTokens"
 
 type UtilityNavItem = {
   key: string
@@ -23,15 +34,6 @@ type ShortcutItem = {
   label: string
   icon: IconName
 }
-
-const adminTextPrimary = "#f3f1ea"
-const adminTextSecondary = "#c8c1ae"
-const adminTextMuted = "#918b7d"
-const adminBorder = "#34322d"
-const adminBorderStrong = "#6d6040"
-const adminSurfaceRaised = "#20211f"
-const adminSurfaceAccent = "#2d291a"
-const adminGold = "#d0b46c"
 
 const normalize = (value: string) => value.trim().toLowerCase()
 
@@ -271,7 +273,7 @@ const SearchInput = styled.input`
   &:focus {
     outline: none;
     border-color: ${adminBorderStrong};
-    box-shadow: 0 0 0 4px rgba(208, 180, 108, 0.14);
+    box-shadow: ${({ theme }) => adminFocusRing(theme, 4)};
   }
 `
 
@@ -310,7 +312,7 @@ const SearchToggleButton = styled.button`
 
     &:focus-visible {
       outline: none;
-      box-shadow: 0 0 0 4px rgba(208, 180, 108, 0.14);
+      box-shadow: ${({ theme }) => adminFocusRing(theme, 4)};
     }
   }
 `

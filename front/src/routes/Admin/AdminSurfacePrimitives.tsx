@@ -1,44 +1,32 @@
 import type { Theme } from "@emotion/react"
 import styled from "@emotion/styled"
-
-const adminTextPrimary = "#f3f1ea"
-const adminTextSecondary = "#c8c1ae"
-const adminTextMuted = "#918b7d"
-const adminBorder = "#34322d"
-const adminBorderStrong = "#6d6040"
-const adminSurface = "#171817"
-const adminSurfaceRaised = "#20211f"
-const adminSurfaceMuted = "#242520"
-const adminSurfaceAccent = "#2d291a"
-const adminGold = "#d0b46c"
-
-const usesDarkAdminSurface = (theme: Theme) => theme.blogDesign === "grid" || theme.scheme !== "light"
-const adminPrimaryText = (theme: Theme) => usesDarkAdminSurface(theme) ? adminTextPrimary : theme.colors.gray12
-const adminSecondaryText = (theme: Theme) => usesDarkAdminSurface(theme) ? adminTextSecondary : theme.colors.gray11
-const adminMutedText = (theme: Theme) => usesDarkAdminSurface(theme) ? adminTextMuted : theme.colors.gray10
-const adminCardBorder = (theme: Theme) => theme.blogDesign === "grid" ? theme.publicDesign.border : usesDarkAdminSurface(theme) ? adminBorder : theme.colors.gray5
-const adminStrongBorder = (theme: Theme) => usesDarkAdminSurface(theme) ? adminBorderStrong : theme.colors.gray7
-const adminPlainSurface = (theme: Theme) =>
-  theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : usesDarkAdminSurface(theme) ? adminSurface : theme.colors.gray1
-const adminRaisedSurface = (theme: Theme) =>
-  theme.blogDesign === "grid"
-    ? theme.publicDesign.operationSurfaceElevated
-    : usesDarkAdminSurface(theme)
-      ? adminSurfaceRaised
-      : theme.colors.gray2
-const adminMutedSurface = (theme: Theme) => usesDarkAdminSurface(theme) ? adminSurfaceMuted : theme.colors.gray3
-const adminAccentSurface = (theme: Theme) =>
-  usesDarkAdminSurface(theme) ? adminSurfaceAccent : theme.colors.accentSurfaceSubtle
+import {
+  adminAccentSurface,
+  adminCardBorder,
+  adminElevatedBorderDark,
+  adminElevatedSurfaceTop,
+  adminFocusRing,
+  adminGold,
+  adminMutedSurface,
+  adminMutedText,
+  adminPlainSurface,
+  adminPrimaryText,
+  adminRaisedSurface,
+  adminSecondaryText,
+  adminStrongBorder,
+  adminSurface,
+  usesDarkAdminSurface,
+} from "src/routes/Admin/adminColorTokens"
 
 export const adminElevatedSurface = (theme: Theme) =>
   theme.blogDesign === "grid"
     ? `linear-gradient(180deg, ${theme.publicDesign.operationSurfaceElevated} 0%, ${theme.publicDesign.operationSurface} 100%)`
     : usesDarkAdminSurface(theme)
-      ? `linear-gradient(180deg, #1b1c1a 0%, ${adminSurface} 100%)`
+      ? `linear-gradient(180deg, ${adminElevatedSurfaceTop} 0%, ${adminSurface} 100%)`
       : "linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 248, 249, 0.94) 100%)"
 
 export const adminElevatedBorder = (theme: Theme) =>
-  theme.blogDesign === "grid" ? theme.publicDesign.border : usesDarkAdminSurface(theme) ? "#30322e" : theme.colors.gray5
+  theme.blogDesign === "grid" ? theme.publicDesign.border : usesDarkAdminSurface(theme) ? adminElevatedBorderDark : theme.colors.gray5
 
 export const adminElevatedShadow = (theme: Theme) =>
   theme.blogDesign === "grid"
@@ -48,7 +36,7 @@ export const adminElevatedShadow = (theme: Theme) =>
       : "0 18px 42px rgba(15, 23, 42, 0.06)"
 
 export const adminInteractiveFocusRing = (theme: Theme) =>
-  theme.scheme === "light" ? "0 0 0 3px rgba(208, 180, 108, 0.18)" : "0 0 0 3px rgba(208, 180, 108, 0.24)"
+  adminFocusRing(theme)
 
 export const AdminElevatedCard = styled.section`
   border-radius: 14px;

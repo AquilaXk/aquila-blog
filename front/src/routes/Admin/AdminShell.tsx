@@ -5,6 +5,22 @@ import { type ReactNode } from "react"
 import AppIcon, { type IconName } from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
 import type { AuthMember } from "src/hooks/useAuthSession"
+import {
+  adminBorder,
+  adminBorderStrong,
+  adminControlText,
+  adminGold,
+  adminGoldTintSubtle,
+  adminShellSurface,
+  adminSurfaceAccent,
+  adminSurfaceRaised,
+  adminTeal,
+  adminTealBorder,
+  adminTealHover,
+  adminTextMuted,
+  adminTextPrimary,
+  adminTextSecondary,
+} from "src/routes/Admin/adminColorTokens"
 
 type AdminShellProfileSnapshot = Pick<
   AuthMember,
@@ -70,17 +86,6 @@ const AdminUtilityBar = dynamic(() => import("./AdminUtilityBar"), {
   ssr: false,
   loading: () => <UtilityBarFallback aria-hidden="true" />,
 })
-
-const adminTextPrimary = "#f3f1ea"
-const adminTextSecondary = "#c8c1ae"
-const adminTextMuted = "#918b7d"
-const adminBorder = "#34322d"
-const adminBorderStrong = "#6d6040"
-const adminSurface = "#151614"
-const adminSurfaceRaised = "#20211f"
-const adminSurfaceAccent = "#2d291a"
-const adminGold = "#d0b46c"
-const adminTeal = "#3f8f86"
 
 const AdminShell = ({ currentSection, member, profileSnapshot = null, children }: AdminShellProps) => {
   const currentNav = NAV_ITEMS.find((item) => item.id === currentSection) ?? NAV_ITEMS[0]
@@ -192,7 +197,7 @@ const Sidebar = styled.aside`
   border-right: 1px solid ${adminBorder};
   border-radius: 0;
   background: ${({ theme }) =>
-    theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : adminSurface};
+    theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : adminShellSurface};
 
   @media (max-width: 1100px) {
     position: static;
@@ -341,7 +346,7 @@ const NavLink = styled.a`
   }
 
   &[data-active="true"] .navIcon {
-    background: rgba(208, 180, 108, 0.14);
+    background: ${adminGoldTintSubtle};
     color: ${adminGold};
   }
 
@@ -371,16 +376,16 @@ const SidebarPrimaryAction = styled.a`
   min-height: 2.9rem;
   padding: 0.7rem 0.9rem;
   border-radius: 8px;
-  border: 1px solid rgba(63, 143, 134, 0.58);
+  border: 1px solid ${adminTealBorder};
   background: ${adminTeal};
-  color: #f8fffc;
+  color: ${adminControlText};
   text-decoration: none;
   font-size: 0.88rem;
   font-weight: 760;
 
   &:hover {
     background: ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : "#347b73"};
+      theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : adminTealHover};
   }
 `
 

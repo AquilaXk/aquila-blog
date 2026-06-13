@@ -39,7 +39,7 @@ export const ContextSection = styled(AdminPlainCard)`
   display: grid;
   gap: 12px;
   padding: 16px 18px;
-  border-radius: 24px;
+  border-radius: 12px;
 `
 
 export const ContextLinkGrid = styled(AdminInfoList)`
@@ -72,7 +72,7 @@ export const ContextMonitoringLinkCard = styled(AdminInfoLinkCard)`
 
 export const AdditionalPanelsSection = styled(AdminPlainCard)`
   padding: 14px 16px;
-  border-radius: 24px;
+  border-radius: 12px;
 `
 
 export const AdditionalPanelsDisclosure = styled.details`

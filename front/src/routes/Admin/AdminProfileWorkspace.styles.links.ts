@@ -1,4 +1,10 @@
 import styled from "@emotion/styled"
+import {
+  adminGold,
+  adminGoldTintLine,
+  adminWarningBadgeBorder,
+  adminWarningBadgeSurface,
+} from "src/routes/Admin/adminColorTokens"
 
 export const LinkManagerHeader = styled.div`
   display: flex;
@@ -49,8 +55,8 @@ export const LinkRowCard = styled.div`
   }
 
   &[data-drop-target="true"] {
-    border-color: ${({ theme }) => theme.colors.blue8};
-    background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
+    border-color: ${adminWarningBadgeBorder()};
+    background: ${adminWarningBadgeSurface()};
   }
 
   &[data-drop-target="true"]::before {
@@ -60,8 +66,8 @@ export const LinkRowCard = styled.div`
     right: 0.72rem;
     height: 3px;
     border-radius: 999px;
-    background: ${({ theme }) => theme.colors.blue8};
-    box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.2);
+    background: ${adminGold};
+    box-shadow: 0 0 0 1px ${adminGoldTintLine};
   }
 
   &[data-drop-target="true"][data-drop-position="before"]::before {
@@ -207,8 +213,8 @@ export const IconOptionButton = styled.button`
   align-items: center;
 
   &[data-selected="true"] {
-    border-color: ${({ theme }) => theme.colors.blue8};
-    background: ${({ theme }) => theme.colors.blue3};
+    border-color: ${adminWarningBadgeBorder()};
+    background: ${adminWarningBadgeSurface()};
   }
 `
 
@@ -242,4 +248,3 @@ export const LinkInputs = styled.div`
     grid-template-columns: 1fr;
   }
 `
-

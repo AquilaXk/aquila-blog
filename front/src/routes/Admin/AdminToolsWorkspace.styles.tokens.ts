@@ -11,7 +11,11 @@ import {
   AdminWorkspaceHero,
   adminInteractiveFocusRing,
 } from "src/routes/Admin/AdminSurfacePrimitives"
-
+import {
+  adminWarningBadgeBorder,
+  adminWarningBadgeSurface,
+  adminWarningBadgeText,
+} from "src/routes/Admin/adminColorTokens"
 
 export const Main = styled.main`
   max-width: 1440px;
@@ -186,7 +190,7 @@ export const WorkspaceSection = styled.section`
   display: grid;
   gap: 0.82rem;
   padding: 0.92rem;
-  border-radius: 20px;
+  border-radius: 12px;
   background: ${({ theme }) =>
     theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2};
   border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray5)};
@@ -211,9 +215,9 @@ export const SectionHeading = styled(AdminSectionHeading)`
 export const StatusBadge = styled(AdminStatusPill)`
   min-height: 34px;
   padding: 0 0.78rem;
-  border-color: ${({ theme }) => theme.colors.indigo8};
-  background: ${({ theme }) => theme.colors.indigo3};
-  color: ${({ theme }) => theme.colors.indigo11};
+  border-color: ${adminWarningBadgeBorder()};
+  background: ${adminWarningBadgeSurface()};
+  color: ${adminWarningBadgeText()};
 
   &[data-tone="success"] {
     border-color: ${({ theme }) => theme.colors.statusSuccessBorder};
@@ -407,4 +411,3 @@ export const MetricCard = styled.div`
     overflow-wrap: anywhere;
   }
 `
-

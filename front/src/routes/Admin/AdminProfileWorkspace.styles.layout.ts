@@ -10,6 +10,12 @@ import {
   AdminWorkspaceSectionNav,
   AdminWorkspaceSectionNavButton,
 } from "src/routes/Admin/AdminSurfacePrimitives"
+import {
+  adminFocusRing,
+  adminWarningBadgeBorder,
+  adminWarningBadgeSurface,
+  adminWarningBadgeText,
+} from "src/routes/Admin/adminColorTokens"
 
 
 export const WorkspaceHero = styled(AdminWorkspaceHero)``
@@ -108,9 +114,9 @@ export const SectionStateBadge = styled.span`
   }
 
   &[data-tone="published"] {
-    border-color: ${({ theme }) => theme.colors.blue7};
-    color: ${({ theme }) => theme.colors.blue10};
-    background: ${({ theme }) => theme.colors.blue2};
+    border-color: ${adminWarningBadgeBorder()};
+    color: ${adminWarningBadgeText()};
+    background: ${adminWarningBadgeSurface()};
   }
 
   &[data-tone="synced"] {
@@ -172,7 +178,7 @@ export const FieldSectionCard = styled.div`
   display: grid;
   gap: 0.82rem;
   padding: 1rem;
-  border-radius: 22px;
+  border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray1};
 
@@ -252,7 +258,7 @@ export const Input = styled.input`
   &:focus-visible {
     outline: none;
     border-color: ${({ theme }) => theme.colors.accentBorder};
-    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
+    box-shadow: ${({ theme }) => adminFocusRing(theme)};
   }
 `
 
@@ -275,7 +281,7 @@ export const TextArea = styled.textarea`
   &:focus-visible {
     outline: none;
     border-color: ${({ theme }) => theme.colors.accentBorder};
-    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
+    box-shadow: ${({ theme }) => adminFocusRing(theme)};
   }
 `
 

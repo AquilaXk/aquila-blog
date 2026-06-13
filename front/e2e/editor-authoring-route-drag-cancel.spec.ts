@@ -83,9 +83,17 @@ test.describe("editor authoring route drag cancel cleanup", () => {
     await expect(dragHandle).toBeVisible()
     const [handleBox, destinationBox] = await Promise.all([
       dragHandle.boundingBox(),
-      destinationParagraph.boundingBox(),
+      destinationParagraph.evaluate((element) => {
+        const rect = element.getBoundingClientRect()
+        return {
+          height: rect.height,
+          width: rect.width,
+          x: rect.left,
+          y: rect.top,
+        }
+      }),
     ])
-    if (!handleBox || !destinationBox) {
+    if (!handleBox || destinationBox.width <= 0 || destinationBox.height <= 0) {
       throw new Error("live 507 top-level drag cancel 좌표를 계산할 수 없습니다.")
     }
 

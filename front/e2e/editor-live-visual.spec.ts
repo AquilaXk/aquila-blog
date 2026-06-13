@@ -578,6 +578,56 @@ const readFinalTableOverlayMetrics = (page: Page) =>
     }
   }, post507FinalTableTargetCell)
 
+const readFinalTableHandleMetrics = (page: Page) =>
+  page.evaluate((targetCellText) => {
+    const table =
+      Array.from(document.querySelectorAll<HTMLElement>("table")).find((candidate) =>
+        candidate.textContent?.includes(targetCellText)
+      ) ?? null
+    const block = (table?.closest(".tableWrapper") as HTMLElement | null) ?? table
+    const handle = document.querySelector<HTMLElement>("[data-testid='block-drag-handle']")
+    if (!block || !handle) return null
+
+    const blockRect = block.getBoundingClientRect()
+    const handleRect = handle.getBoundingClientRect()
+    const handleCenterX = handleRect.left + handleRect.width / 2
+    const handleCenterY = handleRect.top + handleRect.height / 2
+    const style = window.getComputedStyle(handle)
+    const handleVisible =
+      handleRect.width > 0 &&
+      handleRect.height > 0 &&
+      style.display !== "none" &&
+      style.visibility !== "hidden" &&
+      Number(style.opacity || "1") > 0
+
+    return {
+      blockBottom: blockRect.bottom,
+      blockLeft: blockRect.left,
+      blockTop: blockRect.top,
+      handleCenterX,
+      handleCenterY,
+      handleRight: handleRect.right,
+      handleVisible,
+      verticalDistanceToBlock:
+        handleCenterY < blockRect.top
+          ? blockRect.top - handleCenterY
+          : handleCenterY > blockRect.bottom
+            ? handleCenterY - blockRect.bottom
+            : 0,
+    }
+  }, post507FinalTableTargetCell)
+
+const finalTableHandleIsRetargeted = (
+  metrics: Awaited<ReturnType<typeof readFinalTableHandleMetrics>>
+) =>
+  Boolean(
+    metrics &&
+      metrics.handleVisible &&
+      metrics.verticalDistanceToBlock <= 24 &&
+      metrics.handleCenterX < metrics.blockLeft + 32 &&
+      metrics.handleRight > metrics.blockLeft - 96
+  )
+
 const expectFinalTableOverlayFollowsScroll = async (page: Page, finalTable: Locator) => {
   await finalTable.evaluate((element) => {
     element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
@@ -589,6 +639,7 @@ const expectFinalTableOverlayFollowsScroll = async (page: Page, finalTable: Loca
   if (!tableBox) throw new Error("live 507 final table metrics are missing")
 
   const blockHandle = page.getByTestId("block-drag-handle")
+  let lastHandleMetrics: Awaited<ReturnType<typeof readFinalTableHandleMetrics>> = null
   for (const point of [
     { x: 24, y: 24 },
     { x: 18, y: 18 },
@@ -604,9 +655,15 @@ const expectFinalTableOverlayFollowsScroll = async (page: Page, finalTable: Loca
     )
     await page.mouse.move(currentTableBox.x + point.x, currentTableBox.y + point.y, { steps: 4 })
     await page.waitForTimeout(80)
-    if (await blockHandle.isVisible().catch(() => false)) break
+    lastHandleMetrics = await readFinalTableHandleMetrics(page)
+    if (finalTableHandleIsRetargeted(lastHandleMetrics)) break
   }
-  await expect(blockHandle).toBeVisible()
+  await expect
+    .poll(async () => {
+      lastHandleMetrics = await readFinalTableHandleMetrics(page)
+      return finalTableHandleIsRetargeted(lastHandleMetrics)
+    }, { timeout: 2_500 })
+    .toBe(true)
   await blockHandle.click()
   await expect(page.getByTestId("keyboard-block-selection-overlay")).toBeVisible()
 

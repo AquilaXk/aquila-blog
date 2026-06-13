@@ -1,6 +1,7 @@
 import { test } from "./helpers/authoringPlaywright"
 import {
   expectPost507CodeGateSatisfied,
+  expectPost507FinalReferenceTextSelectionStable,
   expectPost507LowerGateTelemetryStable,
   installPost507InteractionTelemetry,
   mockEditorRouteWithPost507,
@@ -22,8 +23,9 @@ test.describe("editor authoring route post 507 lower real workflow gate", () => 
 
     await installPost507InteractionTelemetry(page)
 
-    // cell text drag -> code block internal Cmd/Ctrl+A -> row axis selection -> column axis selection -> lower body text selection -> lower body block drag
+    // cell text drag -> code block internal Cmd/Ctrl+A -> row axis selection -> column axis selection -> lower body text selection -> lower body block drag -> final reference text selection
     await runPost507LowerRealWorkflowGate(page, { editor, finalTable })
+    await expectPost507FinalReferenceTextSelectionStable(page, editor)
     await expectPost507LowerGateTelemetryStable(page, "post-507-lower-real-workflow")
     await expectPost507CodeGateSatisfied(page, modifyCapture)
   })

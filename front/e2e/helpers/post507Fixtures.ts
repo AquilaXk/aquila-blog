@@ -5,6 +5,7 @@ export const POST_507_TITLE = "Stateless란 무엇인가?"
 export const POST_507_FINAL_TABLE_TARGET_CELL = "Stateless 의미"
 export const POST_507_FINAL_TABLE_END_CELL = "구현되어 있는가"
 export const POST_507_FINAL_TABLE_HEADER_CELL = "영역"
+export const POST_507_FINAL_REFERENCE_TEXT = "https://datatracker.ietf.org/doc/html/rfc7519"
 export const POST_507_FINAL_TABLE_REQUIRED_TEXTS = [
   POST_507_FINAL_TABLE_HEADER_CELL,
   "점검 항목",
@@ -126,7 +127,9 @@ export type Post507EditorDiagnosticSnapshot = {
   activePreserveOwner: string | null
   domSnapshot: {
     blockOverlayCount: number
+    blockGhostCount: number
     codeBlockCount: number
+    dropIndicatorCount: number
     editorTextSample: string
     selectedCellCount: number
     tableCount: number
@@ -219,7 +222,8 @@ export const readPost507EditorDiagnostics = async (
       "[data-testid='keyboard-block-selection-overlay']",
       "[data-testid='table-column-selection-outline']",
       "[data-testid='table-row-selection-outline']",
-      "[data-testid='block-drag-drop-indicator']",
+      "[data-testid='block-drop-indicator']",
+      "[data-testid='block-drag-ghost']",
       "[data-block-drag-ghost='true']",
       "[data-table-affordance]",
     ]
@@ -319,7 +323,9 @@ export const readPost507EditorDiagnostics = async (
         null,
       domSnapshot: {
         blockOverlayCount: document.querySelectorAll("[data-testid='keyboard-block-selection-overlay']").length,
+        blockGhostCount: document.querySelectorAll("[data-testid='block-drag-ghost'], [data-block-drag-ghost='true']").length,
         codeBlockCount: document.querySelectorAll("[data-code-block-wrapper='true'], .aq-code-shell").length,
+        dropIndicatorCount: document.querySelectorAll("[data-testid='block-drop-indicator']").length,
         editorTextSample: (editor?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 240),
         selectedCellCount: document.querySelectorAll(".selectedCell").length,
         tableCount: document.querySelectorAll("table").length,
@@ -1230,6 +1236,72 @@ export const dragPost507TextRange = async (page: Page, target: Locator, label: s
   }
 }
 
+type Post507SelectionArtifactSample = {
+  blockGhostCount: number
+  blockOverlayCount: number
+  dropIndicatorCount: number
+  label: string
+  selectedCellCount: number
+}
+
+const readPost507SelectionArtifactSample = (page: Page, label: string) =>
+  page.evaluate((sampleLabel) => {
+    const countUnique = (selectors: string[]) => {
+      const elements = new Set<Element>()
+      for (const selector of selectors) {
+        document.querySelectorAll(selector).forEach((element) => elements.add(element))
+      }
+      return elements.size
+    }
+    return {
+      blockGhostCount: countUnique(["[data-testid='block-drag-ghost']", "[data-block-drag-ghost='true']"]),
+      blockOverlayCount: document.querySelectorAll("[data-testid='keyboard-block-selection-overlay']").length,
+      dropIndicatorCount: document.querySelectorAll("[data-testid='block-drop-indicator']").length,
+      label: sampleLabel,
+      selectedCellCount: document.querySelectorAll(".selectedCell").length,
+    }
+  }, label)
+
+const dragPost507TextRangeWithArtifactSamples = async (
+  page: Page,
+  target: Locator,
+  label: string,
+  text: string,
+  options: { endPaddingPx?: number } = {}
+) => {
+  const metrics = await resolvePost507TextDragMetrics(target, label, text)
+  const beforeScrollTop = await readPost507ScrollTop(page)
+  const artifactSamples: Post507SelectionArtifactSample[] = []
+  const sample = async (sampleLabel: string) => {
+    artifactSamples.push(await readPost507SelectionArtifactSample(page, `${label}:${sampleLabel}`))
+  }
+
+  await page.mouse.move(metrics.startX, metrics.y)
+  await sample("before-down")
+  await page.mouse.down()
+  await sample("after-down")
+  for (let step = 1; step <= 18; step += 1) {
+    const progress = step / 18
+    const targetEndX = metrics.endX + (options.endPaddingPx ?? 0)
+    const x = metrics.startX + (targetEndX - metrics.startX) * progress
+    await page.mouse.move(x, metrics.y)
+    if (step === 1 || step === 6 || step === 12 || step === 18) {
+      await sample(`move-${step}`)
+    }
+  }
+  await page.mouse.up()
+  await sample("after-up")
+  await page.waitForTimeout(900)
+  await sample("settled")
+
+  return {
+    afterScrollTop: await readPost507ScrollTop(page),
+    artifactSamples,
+    beforeScrollTop,
+    selectionText: await readPost507SelectionText(page),
+  }
+}
+
 const resolvePost507FinalTableRowMetrics = async (page: Page) => {
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const metrics = await page.evaluate((targetCellText) => {
@@ -1754,6 +1826,84 @@ const expectPost507LowerBodyTextSelectionAfterTableAxes = async (page: Page, edi
   await expect(page.getByTestId("editor-text-bubble-toolbar")).toBeVisible({ timeout: 2_000 })
   await expect(editor.locator(".selectedCell")).toHaveCount(0)
   await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
+}
+
+export const expectPost507FinalReferenceTextSelectionStable = async (page: Page, editor: Locator) => {
+  const finalReference = editor.locator("li", { hasText: POST_507_FINAL_REFERENCE_TEXT }).last()
+  await expect(finalReference).toBeVisible({ timeout: 5_000 })
+  const referenceDrag = await dragPost507TextRangeWithArtifactSamples(
+    page,
+    finalReference,
+    "post 507 final reference text selection",
+    POST_507_FINAL_REFERENCE_TEXT,
+    { endPaddingPx: 24 }
+  )
+  const diagnostics = await readPost507EditorDiagnostics(page, "final-reference-text-selection")
+  const artifactLeaks = referenceDrag.artifactSamples.filter(
+    (sample) =>
+      sample.blockGhostCount > 0 ||
+      sample.blockOverlayCount > 0 ||
+      sample.dropIndicatorCount > 0 ||
+      sample.selectedCellCount > 0
+  )
+  const fallbackTail = diagnostics.interactionTelemetry.fallbackTimeline.slice(-8).filter(
+    (sample) =>
+      sample.codeFallbackCount > 0 ||
+      sample.tableFallbackCount > 0 ||
+      Boolean(sample.codeFallbackText.trim()) ||
+      Boolean(sample.tableFallbackText.trim())
+  )
+  const ownerState = await page.evaluate((targetText) => {
+    const readOwnLabel = (item: HTMLElement) =>
+      Array.from(item.childNodes)
+        .filter((node) => !(node instanceof HTMLElement && ["UL", "OL"].includes(node.tagName)))
+        .map((node) => node.textContent || "")
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim()
+    const targetItem =
+      Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")).find(
+        (item) => readOwnLabel(item) === targetText
+      ) ?? null
+    const selection = window.getSelection()
+    const anchorElement =
+      selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null
+    const focusElement =
+      selection?.focusNode instanceof Element ? selection.focusNode : selection?.focusNode?.parentElement ?? null
+    return {
+      anchorInTarget: Boolean(targetItem && anchorElement && targetItem.contains(anchorElement)),
+      focusInTarget: Boolean(targetItem && focusElement && targetItem.contains(focusElement)),
+      selectionText: selection?.toString().replace(/\s+/g, " ").trim() ?? "",
+      targetFound: Boolean(targetItem),
+    }
+  }, POST_507_FINAL_REFERENCE_TEXT)
+
+  if (!referenceDrag.selectionText.includes("rfc7519")) {
+    throw new Error(
+      `post 507 final reference text selection lost: ${JSON.stringify({
+        diagnostics,
+        ownerState,
+        referenceDrag,
+      })}`
+    )
+  }
+  if (!ownerState.targetFound || !ownerState.anchorInTarget || !ownerState.focusInTarget) {
+    throw new Error(
+      `post 507 final reference caret owner escaped target item: ${JSON.stringify({
+        diagnostics,
+        ownerState,
+        referenceDrag,
+      })}`
+    )
+  }
+  expect(Math.abs(referenceDrag.afterScrollTop - referenceDrag.beforeScrollTop)).toBeLessThanOrEqual(24)
+  expect(artifactLeaks, "final reference text drag should not show block/table artifacts").toEqual([])
+  expect(fallbackTail, "final reference text drag should leave no table/code fallback markers").toEqual([])
+  expect(diagnostics.domSnapshot.dropIndicatorCount).toBe(0)
+  expect(diagnostics.domSnapshot.blockGhostCount).toBe(0)
+  expect(diagnostics.domSnapshot.blockOverlayCount).toBe(0)
+  expect(diagnostics.domSnapshot.selectedCellCount).toBe(0)
+  expect(diagnostics.selectionDebug.owner).toBe("body")
 }
 
 export const runPost507LowerRealWorkflowGate = async (

@@ -168,6 +168,11 @@ export const EditorViewport = styled.div`
     background: rgba(59, 130, 246, 0.24);
   }
 
+  .aq-block-editor__content a {
+    user-select: text;
+    -webkit-user-drag: none;
+  }
+
   .aq-block-editor__content[data-keyboard-block-selection="true"] ::selection {
     background: transparent;
     color: inherit;

@@ -11,6 +11,7 @@ import type {
 import { deleteTopLevelBlockAt } from "./blockDocumentOps"
 import type { BlockEditorDoc } from "./serialization"
 import {
+  BLOCK_OUTER_SELECT_LEFT_EDGE_GAP_PX,
   BLOCK_OUTER_SELECT_LEFT_GUTTER_PX,
   BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX,
   getTopLevelBlockIndexFromSelection,
@@ -22,6 +23,7 @@ import {
 import {
   preserveWindowScrollForEditorPointerFocus,
 } from "./blockHandleLayoutModel"
+import { syncNativeEditorTextSelectionToProseMirror } from "./editorNativeTextSelectionPreserveModel"
 import {
   type NestedListItemContext,
   isNestedListItemControlTarget,
@@ -49,8 +51,11 @@ type ActiveListItemInteraction = {
   shouldRestoreNodeSelection: boolean
 }
 
+const BLOCK_HANDLE_LEADING_EDGE_HOVER_PX = 48
+
 type UseBlockEditorEngineBlockSelectionUiArgs = {
   blockHandleRailMetricsRef: MutableRefObject<{ width: number; height: number }>
+  blockHandleGutterHoverBlockIndex: number | null
   blockHandleState: TopLevelBlockHandleState
   blockSelectionLayoutRectCacheRef: MutableRefObject<
     Map<number, { element: HTMLElement; rect: DOMRect }>
@@ -135,6 +140,7 @@ type UseBlockEditorEngineBlockSelectionUiArgs = {
   selectedListItemContextRef: MutableRefObject<NestedListItemContext | null>
   selectionTick: number
   setBlockHandleState: SetState<TopLevelBlockHandleState>
+  setBlockHandleGutterHoverBlockIndex: SetState<number | null>
   setBlockMenuState: SetState<BlockEditorBlockMenuState>
   setBlockSelectionOverlayState: SetState<BlockSelectionOverlayState>
   setClickedBlockIndex: SetState<number | null>
@@ -163,6 +169,7 @@ type UseBlockEditorEngineBlockSelectionUiArgs = {
 
 export const useBlockEditorEngineBlockSelectionUi = ({
   blockHandleRailMetricsRef,
+  blockHandleGutterHoverBlockIndex,
   blockHandleState,
   blockSelectionLayoutRectCacheRef,
   cancelHoveredBlockClear,
@@ -214,6 +221,7 @@ export const useBlockEditorEngineBlockSelectionUi = ({
   selectedListItemContextRef,
   selectionTick,
   setBlockHandleState,
+  setBlockHandleGutterHoverBlockIndex,
   setBlockMenuState,
   setBlockSelectionOverlayState,
   setClickedBlockIndex,
@@ -237,6 +245,7 @@ export const useBlockEditorEngineBlockSelectionUi = ({
 }: UseBlockEditorEngineBlockSelectionUiArgs) => {
   useBlockEditorEngineBlockSelectionLayout({
     blockHandleRailMetricsRef,
+    blockHandleGutterHoverBlockIndex,
     blockSelectionLayoutRectCacheRef,
     clickedBlockIndex,
     draggedBlockState,
@@ -318,6 +327,25 @@ export const useBlockEditorEngineBlockSelectionUi = ({
           : null
       const targetBlockRect =
         targetBlockElement?.getBoundingClientRect() ?? null
+      const isBlockHandleGutterHover = Boolean(
+        targetBlockIndex !== null &&
+          targetBlockRect &&
+          clientY >=
+            targetBlockRect.top - BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX &&
+          clientY <=
+            targetBlockRect.bottom + BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX &&
+          clientX >=
+            targetBlockRect.left - BLOCK_OUTER_SELECT_LEFT_GUTTER_PX &&
+          clientX <=
+            targetBlockRect.left + BLOCK_HANDLE_LEADING_EDGE_HOVER_PX &&
+          !(
+            clientX > targetBlockRect.left - BLOCK_OUTER_SELECT_LEFT_EDGE_GAP_PX &&
+            clientX < targetBlockRect.left
+          )
+      )
+      setBlockHandleGutterHoverBlockIndex(
+        isBlockHandleGutterHover ? targetBlockIndex : null
+      )
       const isFarLeftTableBlockGutter = Boolean(
         targetBlockElement?.querySelector(
           ".aq-table-shell, .tableWrapper, table"
@@ -398,6 +426,7 @@ export const useBlockEditorEngineBlockSelectionUi = ({
         target?.closest("[data-block-menu-root='true']")
       ) {
         if (blockHandleState.visible) {
+          setBlockHandleGutterHoverBlockIndex(blockHandleState.blockIndex)
           if (blockHandleState.kind === "list-item" && hoveredListItemContext) {
             setHoveredListItemContext(hoveredListItemContext)
           }
@@ -447,6 +476,7 @@ export const useBlockEditorEngineBlockSelectionUi = ({
       keyboardBlockSelectionStickyRef,
       scheduleTableQuickRailHide,
       selectedBlockNodeIndex,
+      setBlockHandleGutterHoverBlockIndex,
       setHoveredBlockIndex,
       setHoveredListItemContext,
       setSelectedBlockNodeIndex,
@@ -522,6 +552,10 @@ export const useBlockEditorEngineBlockSelectionUi = ({
       if (event.key !== "Tab" || event.metaKey || event.ctrlKey || event.altKey)
         return
       if (slashMenuState) return
+      syncNativeEditorTextSelectionToProseMirror(currentEditor, {
+        allowCollapsed: true,
+        excludeSelector: "th, td, .aq-code-shell",
+      })
       const activeListItemInteraction =
         resolveActiveListItemInteraction(currentEditor)
       if (activeListItemInteraction.listItemName) {

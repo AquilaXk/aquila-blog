@@ -18,6 +18,7 @@ import {
   isTabBlockSelectionEligible,
 } from "./blockSelectionModel"
 import { cancelAllWindowScrollPreserves } from "./blockHandleLayoutModel"
+import { syncNativeEditorTextSelectionToProseMirror } from "./editorNativeTextSelectionPreserveModel"
 import {
   LIST_ITEM_SELECTOR,
   type NestedListItemContext,
@@ -1081,6 +1082,10 @@ export const useBlockEditorEngineSelectionEffects = ({
 
       const currentEditor = editorRef.current
       if (!currentEditor) return
+      syncNativeEditorTextSelectionToProseMirror(currentEditor, {
+        allowCollapsed: true,
+        excludeSelector: "th, td, .aq-code-shell",
+      })
       const activeListItemInteraction =
         resolveActiveListItemInteraction(currentEditor)
       if (activeListItemInteraction.listItemName) {

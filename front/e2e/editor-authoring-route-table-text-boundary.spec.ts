@@ -1,5 +1,5 @@
 import { readFileSync } from "fs"
-import { expect, test } from "@playwright/test"
+import { expect, test } from "./helpers/authoringPlaywright"
 import {
   POST_507_FINAL_TABLE_FORBIDDEN_TEXTS,
   POST_507_FINAL_TABLE_TARGET_CELL,

@@ -135,6 +135,48 @@ export const useBlockEditorTableOverlayControllerEffects = ({
     syncTableQuickRailFromElement,
   ])
 
+  useEffect(() => {
+    const hasAxisMenu =
+      tableMenuState?.kind === "row" || tableMenuState?.kind === "column"
+    if (
+      typeof window === "undefined" ||
+      (!isTableStructuralSelection && !hasAxisMenu)
+    )
+      return
+    let rafId: number | null = null
+    let pendingPoint: { x: number; y: number } | null = null
+    const syncAxisMenuRangeHover = (event: PointerEvent) => {
+      pendingPoint = { x: event.clientX, y: event.clientY }
+      if (rafId !== null) return
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null
+        const point = pendingPoint
+        pendingPoint = null
+        if (!point) return
+        const target = document.elementFromPoint(point.x, point.y)
+        const tableSurface = target?.closest(".aq-table-shell, .tableWrapper, table")
+        const editorRoot = editorRef.current?.view.dom
+        if (!tableSurface || !editorRoot?.contains(tableSurface)) return
+        syncTableQuickRailFromElement(tableSurface, point.x, point.y)
+        setIsTableQuickRailHovered(true)
+      })
+    }
+    window.addEventListener("pointermove", syncAxisMenuRangeHover, {
+      capture: true,
+      passive: true,
+    })
+    return () => {
+      if (rafId !== null) window.cancelAnimationFrame(rafId)
+      window.removeEventListener("pointermove", syncAxisMenuRangeHover, true)
+    }
+  }, [
+    editorRef,
+    isTableStructuralSelection,
+    setIsTableQuickRailHovered,
+    syncTableQuickRailFromElement,
+    tableMenuState,
+  ])
+
   const shouldTrackSelectionLayoutSync =
     tableAffordanceVisibility.visible ||
     isTableQuickRailHovered ||

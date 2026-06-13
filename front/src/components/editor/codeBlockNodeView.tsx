@@ -48,6 +48,7 @@ import {
   preserveWindowScrollPositionAcrossFrames,
   type WindowScrollAnchor,
 } from "./blockHandleLayoutModel"
+import { clearTableTextSelectionForBlockSelection } from "./tableTextSelectionModel"
 export { getPreferredCodeLanguage, normalizeCodeLanguage } from "./codeBlockNodeViewLanguageModel"
 export { CodeBlockEditorStyles } from "./codeBlockNodeViewStyles"
 let codeDomTextRangePreserveGeneration = 0
@@ -81,6 +82,21 @@ const CODE_SCROLL_PRESERVE_MIN_MS = 4_800
 const CODE_SCROLL_PRESERVE_CANCEL_DISTANCE_PX = 3_200
 const CODE_SELECT_ALL_ACTIVE_GRACE_MS = 4_000
 const CODE_SELECT_ALL_SCROLL_ANCHOR_TOLERANCE_PX = 8
+const clearTableTextSelectionBeforeCodeInteraction = () => {
+  if (typeof document === "undefined" || typeof window === "undefined") return
+  const selection = window.getSelection()
+  const anchorElement =
+    selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null
+  const focusElement =
+    selection?.focusNode instanceof Element ? selection.focusNode : selection?.focusNode?.parentElement ?? null
+  const hasTableTextResidue =
+    document.documentElement.hasAttribute("data-table-drag-selection-text") ||
+    Boolean(document.querySelector("[data-table-drag-selection-text]")) ||
+    Boolean(anchorElement?.closest("th, td")) ||
+    Boolean(focusElement?.closest("th, td")) ||
+    Boolean(document.querySelector(".selectedCell"))
+  if (hasTableTextResidue) clearTableTextSelectionForBlockSelection()
+}
 const shouldCancelCodeScrollPreserve =
   (scrollAnchor: WindowScrollAnchor) => () =>
     Math.abs(window.scrollX - scrollAnchor.x) >
@@ -557,6 +573,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
         Boolean(targetElement?.closest(".aq-code-highlight-layer")) ||
         (targetElement === shell && isInsideContentBox)
       if (!isCodeTextSurfaceTarget) return
+      clearTableTextSelectionBeforeCodeInteraction()
       const anchorPos = resolveCodeTextPosFromPointer(event.clientX, event.clientY, contentRoot)
       if (typeof anchorPos !== "number") return
       event.stopPropagation()
@@ -651,6 +668,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
         Boolean(targetElement?.closest(".aq-code-highlight-layer")) ||
         (targetElement === shell && insideContentBox)
       if (!isCodeTextTarget) return
+      clearTableTextSelectionBeforeCodeInteraction()
       if (!event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
         const selection = window.getSelection()
         const anchorElement = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement ?? null
@@ -957,6 +975,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
       const hasCodeTextSelection =
         window.getSelection()?.toString().trim() ||
         codeShell?.getAttribute("data-code-drag-selection-text")?.trim()
+      if (isInsideCodePointer) clearTableTextSelectionBeforeCodeInteraction()
       if (
         event.type !== "click" &&
         !event.metaKey &&
@@ -1013,6 +1032,21 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
           ? selection.anchorNode
           : selection?.anchorNode?.parentElement ?? null
       const codeShell = contentRoot.closest(".aq-code-shell")
+      const now = typeof performance !== "undefined" ? performance.now() : Date.now()
+      const contentRect = contentRoot.getBoundingClientRect()
+      const shellRect = codeShell?.getBoundingClientRect()
+      const activePointerPointMatch = Boolean(
+        now - lastCodePointerAt <= CODE_SELECT_ALL_ACTIVE_GRACE_MS &&
+          ((lastCodePointerClientX >= contentRect.left &&
+            lastCodePointerClientX <= contentRect.right &&
+            lastCodePointerClientY >= contentRect.top &&
+            lastCodePointerClientY <= contentRect.bottom) ||
+            (shellRect &&
+              lastCodePointerClientX >= shellRect.left &&
+              lastCodePointerClientX <= shellRect.right &&
+              lastCodePointerClientY >= shellRect.top &&
+              lastCodePointerClientY <= shellRect.bottom))
+      )
       const isProseMirrorRootFocused =
         activeElement instanceof HTMLElement &&
         activeElement.classList.contains("ProseMirror")
@@ -1021,9 +1055,11 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
         "data-table-drag-selection-text"
       )
       if (
-        (activeElement instanceof Element && activeElement.closest("th, td")) ||
-        (hasTableDragSelectionText && !isProseMirrorRootFocused) ||
-        (anchorTableCell && !isProseMirrorRootFocused)
+        ((activeElement instanceof Element && activeElement.closest("th, td")) ||
+          hasTableDragSelectionText ||
+          anchorTableCell) &&
+        !isProseMirrorRootFocused &&
+        !activePointerPointMatch
       )
         return
       if (isProseMirrorRootFocused) {
@@ -1061,21 +1097,6 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
         preserveAfterSelectAll()
         return
       }
-      const now = typeof performance !== "undefined" ? performance.now() : Date.now()
-      const contentRect = contentRoot.getBoundingClientRect()
-      const shellRect = codeShell?.getBoundingClientRect()
-      const activePointerPointMatch = Boolean(
-        now - lastCodePointerAt <= CODE_SELECT_ALL_ACTIVE_GRACE_MS &&
-          ((lastCodePointerClientX >= contentRect.left &&
-            lastCodePointerClientX <= contentRect.right &&
-            lastCodePointerClientY >= contentRect.top &&
-            lastCodePointerClientY <= contentRect.bottom) ||
-            (shellRect &&
-              lastCodePointerClientX >= shellRect.left &&
-              lastCodePointerClientX <= shellRect.right &&
-              lastCodePointerClientY >= shellRect.top &&
-              lastCodePointerClientY <= shellRect.bottom))
-      )
       const activeCodeTextProbe = lastActiveCodeSelectionText.trim().slice(0, 48)
       const activeCodeTextMatch = Boolean(
         activeCodeTextProbe &&
@@ -1101,6 +1122,7 @@ export const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos
         (isActiveShellMatch && contentRoot.isConnected) ||
         isRootFocusedWhileCodeHovered
       if (!isInsideCodeBlock) return
+      clearTableTextSelectionBeforeCodeInteraction()
       const scrollAnchor = preserveCodeSelectAllScroll()
       markNextEditorPointerAfterCodeSelection()
       event.preventDefault()

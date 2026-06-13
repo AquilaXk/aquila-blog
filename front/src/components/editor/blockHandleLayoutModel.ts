@@ -1,7 +1,7 @@
 import type { BlockEditorDoc } from "./serialization"
 
 export const BLOCK_HANDLE_VIEWPORT_PADDING_PX = 12
-export const BLOCK_HANDLE_GUTTER_GAP_PX = 10
+export const BLOCK_HANDLE_GUTTER_GAP_PX = 20.7
 export const BLOCK_HANDLE_STACKED_GAP_PX = 8
 
 export type BlockHandleRailLayout = {
@@ -37,6 +37,15 @@ export const clearNextEditorPointerAfterTable = () => {
   preserveNextEditorPointerAfterTable = false
 }
 
+export const clearNextEditorPointerAfterCodeSelection = () => {
+  preserveNextEditorPointerAfterCodeSelection = false
+  preserveNextEditorPointerAfterCodeSelectionReentryUntil = 0
+  preserveNextEditorPointerAfterCodeSelectionUntil = 0
+  if (typeof document !== "undefined") {
+    document.documentElement.removeAttribute(CODE_SELECTION_FOLLOW_UP_UNTIL_ATTR)
+  }
+}
+
 const setActiveWindowScrollPreserveOwner = (owner: string | null) => {
   activeWindowScrollPreserveOwner = owner
   if (typeof document === "undefined") return
@@ -58,6 +67,7 @@ export const cancelActiveWindowScrollPreserve = () => {
 
 export const cancelAllWindowScrollPreserves = () => {
   windowScrollPreserveGeneration += 1
+  clearNextEditorPointerAfterCodeSelection()
   cancelActiveWindowScrollPreserve()
 }
 
@@ -834,6 +844,11 @@ export const preserveWindowScrollForEditorPointerFocus = (
   )
   const shouldPreserveRichEditorPointer =
     editorPointerTarget && editorRichBlockTarget && !tablePointerTarget
+  const codePointerTarget = Boolean(
+    targetElement?.closest(
+      ".aq-code-shell, .aq-code-editor-content, [data-code-block-wrapper='true']"
+    )
+  )
   const shouldPreserveTableBlockSelectionPointer =
     tablePointerTarget && blockSelectionActive
   const shouldPreserveGeneralEditorPointer =
@@ -851,9 +866,13 @@ export const preserveWindowScrollForEditorPointerFocus = (
   const shouldPreserveCodeSelectionFollowUp =
     editorPointerTarget &&
     !editorControlTarget &&
+    codePointerTarget &&
     (preserveNextEditorPointerAfterCodeSelection ||
       codeSelectionFollowUpReentryActive ||
       codeSelectionFollowUpRecent)
+  if (editorPointerTarget && !codePointerTarget && codeSelectionFollowUpRecent) {
+    clearNextEditorPointerAfterCodeSelection()
+  }
   const shouldPreserveFollowUp =
     !tablePointerTarget && preserveNextEditorPointerAfterTable
   if (codeSelectionFollowUpOnly && !shouldPreserveCodeSelectionFollowUp) return

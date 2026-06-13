@@ -1,15 +1,9 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
 import { NodeSelection } from "@tiptap/pm/state"
 import { CellSelection, tableEditingKey } from "@tiptap/pm/tables"
-import {
-  cancelAllWindowScrollPreserves,
-  cancelTablePointerScrollPreserves,
-  clearNextEditorPointerAfterTable,
-  preserveWindowScrollForRichBlockSelectAll,
-  preserveWindowScrollForTableSelectAll,
-  preserveWindowScrollPositionAcrossFrames,
-  type WindowScrollAnchor,
-} from "./blockHandleLayoutModel"
+import { cancelAllWindowScrollPreserves, cancelTablePointerScrollPreserves, clearNextEditorPointerAfterTable, preserveWindowScrollForRichBlockSelectAll, preserveWindowScrollForTableSelectAll, preserveWindowScrollPositionAcrossFrames, type WindowScrollAnchor } from "./blockHandleLayoutModel"
+import { clearRecentExplicitTableTextRange, rememberRecentExplicitTableTextRange, resolveRecentExplicitTableTextRange, restoreRecentExplicitTableTextRangeIfEndpointMissing } from "./tableTextExplicitRangeModel"
+import { resolveClosestTableCellAtPoint } from "./tableTextGeometryModel"
 import { createSafeTextSelectionOutsideTable } from "./tableStructureModel"
 
 export const isPrimarySelectAllKeyboardEvent = (event: KeyboardEvent) => {
@@ -26,9 +20,7 @@ const resolveElement = (target: EventTarget | Node | null | undefined) => {
 
 const TABLE_TEXT_OWNER_ROOT_SELECTOR =
   "[data-testid='block-editor-prosemirror'], .aq-block-editor__content"
-const resolveTableTextOwnerRoot = (
-  element: Element | null | undefined
-) => {
+const resolveTableTextOwnerRoot = (element: Element | null | undefined) => {
   const ownerRoot = element?.closest(TABLE_TEXT_OWNER_ROOT_SELECTOR)
   return ownerRoot instanceof HTMLElement ? ownerRoot : null
 }
@@ -51,16 +43,22 @@ export const resolveTableTextCellAtPoint = (
   options: { allowControlFallback?: boolean } = {}
 ) => {
   const pointElements = document.elementsFromPoint(clientX, clientY),
-    targetElement = resolveElement(target)
-  return !options.allowControlFallback &&
-    (targetElement?.closest(TABLE_TEXT_SELECTION_CONTROL_SELECTOR) ||
-      pointElements[0]?.closest(TABLE_TEXT_SELECTION_CONTROL_SELECTOR))
+    targetElement = resolveElement(target),
+    caretRange =
+      "caretRangeFromPoint" in document
+        ? document.caretRangeFromPoint(clientX, clientY)
+        : null,
+    caretPosition = caretRange ? null : document.caretPositionFromPoint?.(clientX, clientY),
+    caretCell =
+      resolveElement(caretRange?.startContainer ?? caretPosition?.offsetNode)
+        ?.closest("th, td") ?? null,
+    pointCell = pointElements.find((element) => Boolean(element.closest("th, td")))?.closest("th, td") ?? null,
+    hitTestTable = (pointCell ?? caretCell ?? targetElement?.closest("th, td"))?.closest("table"),
+    geometryCell = resolveClosestTableCellAtPoint(hitTestTable, clientX, clientY)
+  return !options.allowControlFallback && (targetElement?.closest(TABLE_TEXT_SELECTION_CONTROL_SELECTOR) || pointElements[0]?.closest(TABLE_TEXT_SELECTION_CONTROL_SELECTOR))
     ? null
-    : pointElements
-        .find((element) => Boolean(element.closest("th, td")))
-        ?.closest("th, td") ?? targetElement?.closest("th, td")
+    : geometryCell ?? pointCell ?? caretCell ?? targetElement?.closest("th, td")
 }
-
 export const resolveTableTextSelectionRangeCells = (
   clientX: number,
   clientY: number,
@@ -152,7 +150,9 @@ let pendingTableTextSelectionRangeCells: {
   lastObservedSingleCellNativeTextSelection: SingleCellNativeTextSelectionSnapshot | null =
     null,
   suppressSingleCellNativeTextSelectionUntil = 0
-let activeTableTextRangePreserveCancel: (() => void) | null = null
+type TableTextRangePreserveCancel = (event?: Event, options?: { clearHighlight?: boolean; markBlur?: boolean }) => void
+let activeTableTextRangePreserveCancel: TableTextRangePreserveCancel | null =
+  null
 let activeSingleCellNativeTextSelectionCancel: (() => void) | null = null
 let hasActiveTableTextSelection = false
 let hasRecentTableTextSelectionContext = false
@@ -282,6 +282,7 @@ const clearTableDragSelectionTextAttributes = () => {
 }
 const clearPendingTableTextSelectionState = () => {
   pendingTableTextSelectionRangeCells = null
+  clearRecentExplicitTableTextRange()
   explicitTableTextDragStart = null
   pendingSingleCellNativeTextSelection = null
   lastObservedSingleCellNativeTextSelection = null
@@ -394,10 +395,11 @@ const preserveExplicitTableTextSelectionFromPoint = (
   if (!rangeCells || rangeCells.anchorCell === rangeCells.pointCell)
     return false
   pendingTableTextSelectionRangeCells = rangeCells
-  selectTableCellTextRange(rangeCells.anchorCell, rangeCells.pointCell)
+  const rememberedRangeCells = rememberRecentExplicitTableTextRange(rangeCells)
+  selectTableCellTextRange(rememberedRangeCells.anchorCell, rememberedRangeCells.pointCell)
   preserveTableTextRangeAcrossFrames(
-    rangeCells.anchorCell,
-    rangeCells.pointCell
+    rememberedRangeCells.anchorCell,
+    rememberedRangeCells.pointCell
   )
   return true
 }
@@ -410,6 +412,8 @@ const preserveExplicitTableTextSelectionFromMoveEvent = (
       event.clientY,
       event.target
     )
+    if (hoverCell instanceof HTMLElement)
+      activeTableTextRangePreserveCancel?.(undefined, { clearHighlight: false })
     lastTableTextPointerHover =
       hoverCell instanceof HTMLElement
         ? {
@@ -464,10 +468,11 @@ const preserveExplicitTableTextSelectionFromMoveEvent = (
     pendingSingleCellNativeTextSelection = null
     lastObservedSingleCellNativeTextSelection = null
     pendingTableTextSelectionRangeCells = rangeCells
-    selectTableCellTextRange(rangeCells.anchorCell, rangeCells.pointCell)
+    const rememberedRangeCells = rememberRecentExplicitTableTextRange(rangeCells)
+    selectTableCellTextRange(rememberedRangeCells.anchorCell, rememberedRangeCells.pointCell)
     preserveTableTextRangeAcrossFrames(
-      rangeCells.anchorCell,
-      rangeCells.pointCell
+      rememberedRangeCells.anchorCell,
+      rememberedRangeCells.pointCell
     )
     event.preventDefault()
     event.stopPropagation()
@@ -930,6 +935,7 @@ const preserveEscapedTableEndpointSelection = () => {
     rememberSingleCellNativeTextSelection(anchorCell)
     return
   }
+  if (restoreRecentExplicitTableTextRangeIfEndpointMissing(selection, selectTableCellTextRange, preserveTableTextRangeAcrossFrames)) return
   const escapedSelectionCell =
     anchorCell && !focusCell
       ? anchorCell
@@ -946,7 +952,7 @@ const preserveTableTextRangeAcrossFrames = (
   activeSingleCellNativeTextSelectionCancel?.()
   pendingSingleCellNativeTextSelection = null
   lastObservedSingleCellNativeTextSelection = null
-  activeTableTextRangePreserveCancel?.()
+  activeTableTextRangePreserveCancel?.(undefined, { clearHighlight: false })
   let cancelled = false,
     frame = 0
   const startedAt =
@@ -961,11 +967,13 @@ const preserveTableTextRangeAcrossFrames = (
     if (activeTableTextRangePreserveCancel === cancel)
       activeTableTextRangePreserveCancel = null
   }
-  const cancel = (event?: Event) => {
+  const cancel: TableTextRangePreserveCancel = (event, options = {}) => {
     cancelled = true
-    clearTableTextRangeHighlight({
-      markBlur: !(event instanceof KeyboardEvent),
-    })
+    if (options.clearHighlight !== false) {
+      clearTableTextRangeHighlight({
+        markBlur: options.markBlur ?? !(event instanceof KeyboardEvent),
+      })
+    }
     cleanup()
   }
   const restore = () => {
@@ -1076,11 +1084,13 @@ export const finalizeTableTextSelectionFromPoint = (
       target,
       { allowControlFallback }
     ),
+    recentRangeCells = resolveRecentExplicitTableTextRange(directRangeCells),
     rangeCells =
       (explicitRangeCells &&
       explicitRangeCells.anchorCell !== explicitRangeCells.pointCell
         ? explicitRangeCells
         : null) ??
+      recentRangeCells ??
       directRangeCells ??
       pendingTableTextSelectionRangeCells ??
       explicitRangeCells
@@ -1110,18 +1120,19 @@ export const finalizeTableTextSelectionFromPoint = (
   lastSingleCellTextDragStart = null
   pendingSingleCellNativeTextSelection = null
   lastObservedSingleCellNativeTextSelection = null
+  const rememberedRangeCells = rememberRecentExplicitTableTextRange(rangeCells)
   cancelActiveTableCellTextSelectionPreserves()
   const clearGeneration = tableTextSelectionClearGeneration
   const restore = () => {
     if (!isTableTextSelectionClearGenerationCurrent(clearGeneration)) return
-    selectTableCellTextRange(rangeCells.anchorCell, rangeCells.pointCell)
+    selectTableCellTextRange(rememberedRangeCells.anchorCell, rememberedRangeCells.pointCell)
   }
   window.requestAnimationFrame(restore)
   window.setTimeout(restore, 80)
   window.setTimeout(restore, 180)
   preserveTableTextRangeAcrossFrames(
-    rangeCells.anchorCell,
-    rangeCells.pointCell
+    rememberedRangeCells.anchorCell,
+    rememberedRangeCells.pointCell
   )
   return true
 }
@@ -1158,9 +1169,8 @@ export const resolveTableTextDragScrollAnchorFromEvent = (
         : null,
     resolvedStartCell =
       startCell ??
-      (directStartCell instanceof HTMLElement
-        ? directStartCell
-        : hoverCell?.cell ?? null),
+      (directStartCell instanceof HTMLElement ? directStartCell : null) ??
+      hoverCell?.cell,
     startCellText = normalizeCellText(resolvedStartCell),
     hoverAnchor =
       hoverCell &&
@@ -1197,6 +1207,9 @@ const rememberExplicitTableTextDragStart = (
     Math.abs(event.clientY - explicitTableTextDragStart.y) <= 4
   )
     return
+  activeTableTextRangePreserveCancel?.(undefined, { clearHighlight: false })
+  pendingTableTextSelectionRangeCells = null
+  clearRecentExplicitTableTextRange()
   pendingSingleCellNativeTextSelection = null
   lastObservedSingleCellNativeTextSelection = null
   const hoverCell =
@@ -1213,9 +1226,8 @@ const rememberExplicitTableTextDragStart = (
       event.target
     ),
     startCell =
-      directStartCell instanceof HTMLElement
-        ? directStartCell
-        : hoverCell?.cell ?? null,
+      (directStartCell instanceof HTMLElement ? directStartCell : null) ??
+      hoverCell?.cell,
     startCellText = normalizeCellText(startCell),
     scrollAnchor = resolveTableTextDragScrollAnchorFromEvent(
       event,
@@ -1534,8 +1546,19 @@ export const selectTableCellTextRange = (
   const selection = window.getSelection()
   activeSingleCellNativeTextSelectionCancel?.()
   if (!selection) return ""
-  const resolvedCells = resolveCurrentTableTextRangeCells(startedCell, endCell)
+  let resolvedCells = resolveCurrentTableTextRangeCells(startedCell, endCell)
   if (!resolvedCells) return ""
+  if (resolvedCells.startedCell !== resolvedCells.endCell) {
+    const rememberedRangeCells = rememberRecentExplicitTableTextRange({
+      anchorCell: resolvedCells.startedCell,
+      pointCell: resolvedCells.endCell,
+    })
+    resolvedCells =
+      resolveCurrentTableTextRangeCells(
+        rememberedRangeCells.anchorCell,
+        rememberedRangeCells.pointCell
+      ) ?? resolvedCells
+  }
   hasActiveTableTextSelection = true
   const range = document.createRange()
   const forward = isElementBeforeOrSame(
@@ -1561,6 +1584,12 @@ export const selectTableCellTextRange = (
   else selection.addRange(range)
   let nativeSelectedText = selection.toString()
   const rangeSelectedText = range.toString(),
+    nativeVisibleRectCount =
+      selection.rangeCount > 0
+        ? Array.from(selection.getRangeAt(0).getClientRects()).filter(
+            (rect) => rect.width > 1 && rect.height > 1
+          ).length
+        : 0,
     normalizedNativeSelectedText = nativeSelectedText
       .replace(/\s+/g, " ")
       .trim(),
@@ -1568,7 +1597,8 @@ export const selectTableCellTextRange = (
     shouldUseRangeSelection =
       rangeStartCell !== rangeEndCell &&
       Boolean(normalizedRangeSelectedText) &&
-      normalizedNativeSelectedText !== normalizedRangeSelectedText
+      (normalizedNativeSelectedText !== normalizedRangeSelectedText ||
+        nativeVisibleRectCount === 0)
   if (shouldUseRangeSelection) {
     selection.removeAllRanges()
     selection.addRange(range.cloneRange())
@@ -1790,18 +1820,18 @@ const resolveActiveTableCellFromPath = (
 }
 export const collapseStaleTableEditorSelection = (
   editor: TiptapEditor,
-  pointer?: {
-    clientX: number
-    clientY: number
-    target?: EventTarget | Node | null
-  }
+  pointer?: { clientX: number; clientY: number; target?: EventTarget | Node | null }
 ) => {
-  if (!isEditorSelectionInsideTable(editor)) return false
+  const targetElement = resolveElement(pointer?.target),
+    pointerTableTarget = Boolean(targetElement?.closest("th, td, table, .tableWrapper, .aq-table-shell"))
+  if (!isEditorSelectionInsideTable(editor)) {
+    if (pointer && !pointerTableTarget && hasTableSelectedCellDomMarkers(editor.view.dom)) {
+      clearTableSelectedCellDomMarkers(editor.view.dom, editor)
+      return true
+    }
+    return false
+  }
   const { doc, selection } = editor.state,
-    targetElement = resolveElement(pointer?.target),
-    pointerTableTarget = Boolean(
-      targetElement?.closest("th, td, table, .tableWrapper, .aq-table-shell")
-    ),
     pointerPos =
       pointer && !pointerTableTarget
         ? editor.view.posAtCoords({
@@ -1829,6 +1859,7 @@ export const collapseStaleTableEditorSelection = (
     )
     if (!nextSelection) return false
     editor.view.dispatch(editor.state.tr.setSelection(nextSelection))
+    clearTableSelectedCellDomMarkers(editor.view.dom, editor)
     if (editor.view.dom instanceof HTMLElement) {
       editor.view.dom.focus({ preventScroll: true })
     }
@@ -2250,18 +2281,16 @@ export const restoreTableCellTextSelectionIfEscaped = (
   const selection = window.getSelection()
   if (!selection) return false
 
-  const hasTextSelection = selection.toString().trim().length > 0
+  const selectionText = selection.toString().trim(), hasTextSelection = selectionText.length > 0
   const table = resolveCellTable(currentCell)
   const isOwnedTableSelection = isSelectionInsideSameTable(selection, table)
   if (
     hasTextSelection &&
     (isOwnedTableSelection ||
-      isTableCellEndpointSelection(selection, currentCell))
+      isTableCellEndpointSelection(selection, currentCell)) &&
+    !(forceStartedCellSelection && rangeEndCell === currentCell && selectionText.replace(/\s+/g, " ").trim().length <= 1 && normalizeCellText(currentCell).length > 1)
   ) {
-    currentCell.setAttribute(
-      TABLE_DRAG_SELECTION_TEXT_ATTR,
-      selection.toString()
-    )
+    currentCell.setAttribute(TABLE_DRAG_SELECTION_TEXT_ATTR, selectionText)
     clearNextEditorPointerAfterTable()
     if (
       !forceStartedCellSelection ||
@@ -2329,6 +2358,16 @@ export const preserveTableCellTextSelectionAcrossFrames = (
   let cancelled = false,
     restoring = false,
     lastUserScrollIntentAt = 0
+  const hasRestorableRangeEnd = () => {
+    const currentCell = resolveConnectedTableCell(editor, startedCell),
+      rangeEndCell = currentCell
+        ? resolveOwnedTableRangeEndCell(editor, currentCell, resolveEndCell?.() ?? null)
+        : null
+    return Boolean(rangeEndCell && rangeEndCell !== currentCell)
+  }
+  const shouldCancelMissingStartedCell = () =>
+    !hasOwnedTableCellTextSelection(editor, startedCell) &&
+    !hasRestorableRangeEnd()
   const cancelScrollPreserve = preserveWindowScrollPositionAcrossFrames(
     scrollAnchor,
     TABLE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES,
@@ -2341,7 +2380,7 @@ export const preserveTableCellTextSelectionAcrossFrames = (
     false,
     () =>
       shouldCancelTableTextScrollPreserve(scrollAnchor)() ||
-      !hasOwnedTableCellTextSelection(editor, startedCell)
+      shouldCancelMissingStartedCell()
   )
   if (cancelScrollPreserve) {
     activeTableCellScrollPreserveCancels.add(cancelScrollPreserve)
@@ -2403,23 +2442,13 @@ export const preserveTableCellTextSelectionAcrossFrames = (
     once: true,
   })
   window.addEventListener("keydown", cancel, { capture: true, once: true })
-  window.addEventListener("touchstart", rememberUserScrollIntent, {
-    capture: true,
-    passive: true,
-  })
-  window.addEventListener("touchmove", rememberUserScrollIntent, {
-    capture: true,
-    passive: true,
-  })
+  window.addEventListener("touchstart", rememberUserScrollIntent, { capture: true, passive: true })
+  window.addEventListener("touchmove", rememberUserScrollIntent, { capture: true, passive: true })
   window.addEventListener("scroll", cancelIfRecentUserScrollIntent, {
     capture: true,
     passive: true,
   })
-  document.addEventListener(
-    "selectionchange",
-    cancelIfSelectionLeavesCell,
-    true
-  )
+  document.addEventListener("selectionchange", cancelIfSelectionLeavesCell, true)
   activeTableCellSelectionPreserveCancels.add(cancel)
   const restore = () => {
     if (cancelled) return
@@ -2431,7 +2460,7 @@ export const preserveTableCellTextSelectionAcrossFrames = (
       cancel()
       return
     }
-    if (frame > 0 && !hasOwnedTableCellTextSelection(editor, startedCell)) {
+    if (frame > 0 && shouldCancelMissingStartedCell()) {
       cancel()
       return
     }

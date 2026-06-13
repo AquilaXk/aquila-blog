@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test } from "./helpers/authoringPlaywright"
 import { expectEditorToContainLoadedText } from "./helpers/editorAuthoringFlow"
 import { collectEditorSelectionRuntimeErrors } from "./helpers/editorSelectionRuntimeGuard"
 test.describe("editor authoring route code recovery", () => {

@@ -54,7 +54,7 @@ const restoreTableAxisMenuSelection = ({
   selectTableAxisAtIndex: BlockEditorTableOverlayLayerProps["selectTableAxisAtIndex"]
   selectTableByIndex: (
     axisIndex: number,
-    options?: { clearNativeText?: boolean }
+    options?: { clearNativeText?: boolean; rangeAnchorIndex?: number }
   ) => unknown
   tableMenuState: BlockEditorTableOverlayLayerProps["tableMenuState"]
 }) => {
@@ -69,6 +69,7 @@ const restoreTableAxisMenuSelection = ({
       axisTarget.index,
       {
         clearNativeText: false,
+        rangeAnchorIndex: axisTarget.anchorIndex,
       }
     )
   ) {
@@ -172,6 +173,7 @@ export const BlockEditorTableOverlayMenus = ({
     ) : null}
     {tableMenuState ? (
       <FloatingTableMenu
+        data-table-menu-kind={tableMenuState.kind}
         data-table-menu-root="true"
         data-testid={`table-${tableMenuState.kind}-menu`}
         style={{

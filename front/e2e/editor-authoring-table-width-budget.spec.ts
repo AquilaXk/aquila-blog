@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test } from "./helpers/authoringPlaywright"
 import {
   QA_ENGINE_ROUTE,
 } from "./helpers/editorAuthoringFlow"

@@ -34,6 +34,7 @@ import { hasNativeEditorTextSelection } from "./useFloatingBubbleState"
 type SetState<T> = Dispatch<SetStateAction<T>>
 
 type UseBlockEditorEngineBlockSelectionLayoutArgs = {
+  blockHandleGutterHoverBlockIndex: number | null
   blockHandleRailMetricsRef: MutableRefObject<{ width: number; height: number }>
   blockSelectionLayoutRectCacheRef: MutableRefObject<
     Map<number, { element: HTMLElement; rect: DOMRect }>
@@ -86,6 +87,7 @@ const resolveNestedListItemSelectionRect = (
 }
 
 export const useBlockEditorEngineBlockSelectionLayout = ({
+  blockHandleGutterHoverBlockIndex,
   blockHandleRailMetricsRef,
   blockSelectionLayoutRectCacheRef,
   clickedBlockIndex,
@@ -217,8 +219,10 @@ export const useBlockEditorEngineBlockSelectionLayout = ({
       contentRoot && hasNativeEditorTextSelection(contentRoot)
     )
     if (nativeTextSelectionActive && !stickySelectionActive) {
-      hideBlockHandle()
-      return
+      if (blockHandleGutterHoverBlockIndex !== blockIndex) {
+        hideBlockHandle()
+        return
+      }
     }
     const { width: railWidth, height: railHeight } =
       blockHandleRailMetricsRef.current
@@ -315,6 +319,7 @@ export const useBlockEditorEngineBlockSelectionLayout = ({
     rectCache.clear()
   }, [
     blockHandleRailMetricsRef,
+    blockHandleGutterHoverBlockIndex,
     blockSelectionLayoutRectCacheRef,
     clickedBlockIndex,
     editor,

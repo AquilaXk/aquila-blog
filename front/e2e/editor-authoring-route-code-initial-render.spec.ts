@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type Page } from "./helpers/authoringPlaywright"
 import { mockAvatarAsset } from "./helpers/smokeFixtures"
 import { POST_507_TITLE } from "./helpers/post507Fixtures"
 import { resolveMarkdownRenderModel } from "src/libs/markdown/rendering"

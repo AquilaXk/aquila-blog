@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type Page } from "./helpers/authoringPlaywright"
 import {
   POST_507_FINAL_TABLE_TARGET_CELL,
   expectPost507FinalTableTextSelected,

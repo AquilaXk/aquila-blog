@@ -61,54 +61,17 @@ import {
   type FloatingBubbleState,
 } from "./useFloatingBubbleState"
 import { markRecentCodePointerFollowUp, promoteRecentCodePointerFollowUp } from "./codePointerFollowUpModel"
+import { captureEditorNativeTextSelectionRestore, syncNativeEditorTextSelectionToProseMirror, type EditorNativeTextSelectionRestore } from "./editorNativeTextSelectionPreserveModel"
+import { shouldCancelCodeTextScrollPreserve, shouldCancelTableTextScrollPreserve } from "./editorTextScrollPreserveModel"
 const CODE_BLOCK_EDITOR_CONTENT_SELECTOR = ".aq-code-editor-content"
-const CODE_BLOCK_TEXT_SURFACE_SELECTOR = [
-  CODE_BLOCK_EDITOR_CONTENT_SELECTOR,
-  ".aq-code-highlight-layer",
-].join(", ")
-const CODE_BLOCK_INTERACTIVE_CONTROL_SELECTOR = [
-  "[data-code-language-control='true']",
-  "[data-block-handle-rail='true']",
-  "[data-block-menu-root='true']",
-].join(", ")
-const BLOCK_EDITOR_ROOT_SELECTOR = [
-  "[data-testid='block-editor-prosemirror']",
-  ".ProseMirror",
-].join(", ")
-const TABLE_TEXT_DRAG_CONTROL_SELECTOR = [
-  "[data-table-axis-rail='true']",
-  "[data-table-affordance]",
-  "[data-table-menu-root='true']",
-  "[data-table-menu-trigger='true']",
-  "[data-testid^='table-column-resize-boundary-']",
-  "[data-testid='table-structure-menu-button']",
-  "[data-testid='table-corner-handle']",
-  "[data-testid='table-corner-grow-handle']",
-  ".column-resize-handle",
-].join(", ")
-const CODE_TEXT_SCROLL_PRESERVE_CANCEL_DISTANCE_PX = 3_200
-const TABLE_TEXT_SCROLL_PRESERVE_CANCEL_DISTANCE_PX = 3_200
+const CODE_BLOCK_TEXT_SURFACE_SELECTOR = [CODE_BLOCK_EDITOR_CONTENT_SELECTOR, ".aq-code-highlight-layer"].join(", ")
+const CODE_BLOCK_INTERACTIVE_CONTROL_SELECTOR = ["[data-code-language-control='true']", "[data-block-handle-rail='true']", "[data-block-menu-root='true']"].join(", ")
+const BLOCK_EDITOR_ROOT_SELECTOR = ["[data-testid='block-editor-prosemirror']", ".ProseMirror"].join(", ")
+const TABLE_TEXT_DRAG_CONTROL_SELECTOR = ["[data-table-axis-rail='true']", "[data-table-affordance]", "[data-table-menu-root='true']", "[data-table-menu-trigger='true']", "[data-testid^='table-column-resize-boundary-']", "[data-testid='table-structure-menu-button']", "[data-testid='table-corner-handle']", "[data-testid='table-corner-grow-handle']", ".column-resize-handle"].join(", ")
 const CODE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES = 192
 const CODE_TEXT_DRAG_SCROLL_PRESERVE_MIN_MS = 3_200
 const TABLE_TEXT_DRAG_SCROLL_PRESERVE_FRAMES = 168
 const TABLE_TEXT_DRAG_SCROLL_PRESERVE_MIN_MS = 2_800
-const shouldCancelCodeTextScrollPreserve =
-  (scrollAnchor: WindowScrollAnchor) => () =>
-    Math.abs(window.scrollX - scrollAnchor.x) >
-      CODE_TEXT_SCROLL_PRESERVE_CANCEL_DISTANCE_PX ||
-    Math.abs(
-      (document.scrollingElement?.scrollTop ?? window.scrollY) - scrollAnchor.y
-    ) > CODE_TEXT_SCROLL_PRESERVE_CANCEL_DISTANCE_PX
-const shouldCancelTableTextScrollPreserve =
-  (scrollAnchor: WindowScrollAnchor) => () => {
-    const currentY = document.scrollingElement?.scrollTop ?? window.scrollY
-    return (
-      Math.abs(window.scrollX - scrollAnchor.x) >
-        TABLE_TEXT_SCROLL_PRESERVE_CANCEL_DISTANCE_PX ||
-      Math.abs(currentY - scrollAnchor.y) >
-        TABLE_TEXT_SCROLL_PRESERVE_CANCEL_DISTANCE_PX
-    )
-  }
 type UseBlockEditorEngineSelectionBubbleEffectsArgs = {
   bubbleToolbarHoveredRef: RefObject<boolean>
   cancelBubbleHide: () => void
@@ -182,7 +145,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       y: number
     } | null>(null),
     recentCodePointerUntilRef = useRef(0),
-    nonTableTextDragStartRef = useRef<{ x: number; y: number } | null>(null)
+    nonTableTextDragStartRef = useRef<{ x: number; y: number } | null>(null), nonTableTextSelectionRestoreRef = useRef<EditorNativeTextSelectionRestore | null>(null)
   useEffect(() => {
     const currentEditor = editorRef.current ?? editor
     if (!currentEditor) return
@@ -203,6 +166,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       cleanupTableDragSelectionPreserve = null
       cancelActiveTableCellTextSelectionPreserves()
       cancelTablePointerScrollPreserves()
+      cancelActiveTableWindowScrollPreserve()
       clearNextEditorPointerAfterTable()
       tableTextSelectionExternalClearWatcher?.reset()
     }
@@ -347,7 +311,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       event.preventDefault()
       event.stopPropagation()
       event.stopImmediatePropagation?.()
-      tableTextDragStartRef.current = null
+      tableTextDragStartRef.current = { cell: pointCell, coveredControlFallback: false, endCell: pointCell, scrollPreserveStarted: false, selectionPreserveStarted: false, scrollAnchor: resolveTableTextDragScrollAnchorFromEvent(event, pointCell), x: event.clientX, y: event.clientY }
       tableTextDragPendingStartRef.current = null
       nonTableTextDragStartRef.current = null
       mouseTextSelectionInProgressRef.current = false
@@ -473,7 +437,6 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         event.target,
         isTableSelectionActive(activeEditor),
         blockSelectionActive,
-        true,
         true
       )
       nonTableTextDragStartRef.current = { x: event.clientX, y: event.clientY }
@@ -540,12 +503,13 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         x: event.clientX,
         y: event.clientY,
       }
-      return tableTextDragStartRef.current
+      return tableTextDragStartRef.current && !tableTextDragStartRef.current.coveredControlFallback ? (tableTextDragPendingStartRef.current = tableTextDragStartRef.current) : tableTextDragStartRef.current
     }
     const restoreTableTextDragSelectionFromNativeRange = (
       event: MouseEvent | PointerEvent
     ) => {
       if (isTableStructuralSelectionOwnerActive()) return false
+      if (tableTextDragStartRef.current) return false
       const activeEditor = editorRef.current ?? currentEditor,
         rangeCells = resolveTableTextSelectionRangeCells(
           event.clientX,
@@ -1270,11 +1234,18 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         scheduleSyncBubble()
         return
       }
-      if (restoreActiveTableTextDragSelection()) {
+      if (restoreActiveTableTextDragSelection(true, true)) {
         syncBubbleOnMouseUpRef.current = true
         return
       }
       const selection = window.getSelection()
+      if (nonTableTextDragStartRef.current && hasNativeEditorTextSelection(activeEditor.view.dom)) {
+        const restore = captureEditorNativeTextSelectionRestore(activeEditor.view.dom as HTMLElement, { excludeSelector: "th, td, .aq-code-shell" })
+        if (restore && restore.textLength >= (nonTableTextSelectionRestoreRef.current?.textLength ?? 0)) {
+          nonTableTextSelectionRestoreRef.current = restore
+          syncNativeEditorTextSelectionToProseMirror(activeEditor, { excludeSelector: "th, td, .aq-code-shell" })
+        }
+      }
       markCodeSelectionFollowUpIfActive()
       const anchorNode = selection?.anchorNode ?? null
       const anchorElement =
@@ -1377,8 +1348,6 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         return
       }
       if (insideEditorDom && !codeShellTarget && !tableTextDragStart) {
-        markCodeSelectionFollowUpIfActive()
-        promoteRecentCodePointerFollowUp(recentCodePointerUntilRef)
         nonTableTextDragStartRef.current = {
           x: event.clientX,
           y: event.clientY,
@@ -1593,8 +1562,6 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         return
       }
       if (insideEditorDom && !codeShellTarget && !tableTextDragStart) {
-        markCodeSelectionFollowUpIfActive()
-        promoteRecentCodePointerFollowUp(recentCodePointerUntilRef)
         const blockSelectionActive = Boolean(
           document.querySelector(
             "[data-testid='keyboard-block-selection-overlay']"
@@ -1604,7 +1571,6 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
           event.target,
           isTableSelectionActive(activeEditor),
           blockSelectionActive,
-          true,
           true
         )
         nonTableTextDragStartRef.current = nonTableTextDragStartRef.current ?? {
@@ -1726,13 +1692,14 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       event.stopImmediatePropagation?.()
     }
     const handleWindowPointerMove = (event: PointerEvent) => {
-      if (isTableStructuralSelectionOwnerActive()) {
+      if (isTableStructuralSelectionOwnerActive() && !tableTextDragStartRef.current && !tableTextDragPendingStartRef.current) {
         tableTextDragStartRef.current = null
         tableTextDragPendingStartRef.current = null
         nonTableTextDragStartRef.current = null
         return
-      }
+      } else if (isTableStructuralSelectionOwnerActive()) clearTableStructuralSelectionOwner()
       if (event.pointerType && event.pointerType !== "mouse") return
+      if (!tableTextDragStartRef.current && tableTextDragPendingStartRef.current && !tableTextDragPendingStartRef.current.coveredControlFallback && event.buttons === 1) tableTextDragStartRef.current = tableTextDragPendingStartRef.current
       if (event.buttons === 0) {
         prepareNonTableEditorPointerTarget(event)
         return
@@ -1827,16 +1794,17 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
     }
 
     const handleWindowMouseMove = (event: MouseEvent) => {
-      if (isTableStructuralSelectionOwnerActive()) {
+      if (isTableStructuralSelectionOwnerActive() && !tableTextDragStartRef.current && !tableTextDragPendingStartRef.current) {
         tableTextDragStartRef.current = null
         tableTextDragPendingStartRef.current = null
         nonTableTextDragStartRef.current = null
         return
-      }
+      } else if (isTableStructuralSelectionOwnerActive()) clearTableStructuralSelectionOwner()
       if (event.buttons === 0) {
         prepareNonTableEditorPointerTarget(event)
         return
       }
+      if (!tableTextDragStartRef.current && tableTextDragPendingStartRef.current && !tableTextDragPendingStartRef.current.coveredControlFallback && event.buttons === 1) tableTextDragStartRef.current = tableTextDragPendingStartRef.current
       {
         const staleNonTableStart = nonTableTextDragStartRef.current
         if (
@@ -1926,8 +1894,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       if (activeEditor) preserveActiveTableTextDragSelection(activeEditor)
     }
     const completeTextDragSelection = (event: PointerEvent | MouseEvent) => {
-      let tableTextDragStart = tableTextDragStartRef.current
-      const pendingTableTextDragStart = tableTextDragPendingStartRef.current
+      let tableTextDragStart = tableTextDragStartRef.current; const pendingTableTextDragStart = tableTextDragPendingStartRef.current
       const codeTextDragStart = codeTextDragStartRef.current
       const activeEditor = editorRef.current ?? currentEditor,
         rawNativeTableRangeSnapshot = activeEditor
@@ -2075,6 +2042,15 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         event.pointerType !== "mouse"
       )
         return
+      const currentNonTableTextSelectionRestore =
+        activeEditor && nonTableTextDragStartRef.current
+          ? captureEditorNativeTextSelectionRestore(activeEditor.view.dom as HTMLElement, { excludeSelector: "th, td, .aq-code-shell", fallbackPoints: { endX: event.clientX, endY: event.clientY, startX: nonTableTextDragStartRef.current.x, startY: nonTableTextDragStartRef.current.y } })
+          : null
+      const restoreNonTableTextSelectionAfterRelease =
+        currentNonTableTextSelectionRestore &&
+        currentNonTableTextSelectionRestore.textLength >= (nonTableTextSelectionRestoreRef.current?.textLength ?? 0)
+          ? currentNonTableTextSelectionRestore
+          : nonTableTextSelectionRestoreRef.current
       if (activeEditor && hasTableStructuralSelection(activeEditor)) {
         tableTextDragStartRef.current = null
         tableTextDragPendingStartRef.current = null
@@ -2113,7 +2089,8 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
         tableTextDragStartRef.current = pendingTableTextDragStart
         tableTextDragStart = pendingTableTextDragStart
       }
-      if (activeEditor && nativeTableRangeSnapshot) {
+      if (!tableTextDragStart && pendingTableTextDragStart && nativeTableRangeSnapshot && pendingTableTextDragStart.cell.closest("table") === nativeTableRangeSnapshot.anchorCell.closest("table")) tableTextDragStart = tableTextDragStartRef.current = { ...pendingTableTextDragStart, endCell: nativeTableRangeSnapshot.pointCell }
+      if (activeEditor && nativeTableRangeSnapshot && !tableTextDragStart) {
         const targetElement =
             event.target instanceof Element
               ? event.target
@@ -2215,8 +2192,8 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
           )
         cancelTableTextDragPreserves()
         if (completedMultiCellDrag && completedTableTextDrag.endCell) {
-          const endCell = completedTableTextDrag.endCell
-          selectTableCellTextRange(completedTableTextDrag.cell, endCell)
+          const endCell = completedTableTextDrag.endCell, selectionBeforeTableRestore = window.getSelection(), longerTableRestore = selectionBeforeTableRestore?.rangeCount ? { range: selectionBeforeTableRestore.getRangeAt(0).cloneRange(), text: selectionBeforeTableRestore.toString() } : null
+          const restoreCompletedTableTextRange = () => { const text = selectTableCellTextRange(completedTableTextDrag.cell, endCell); if (longerTableRestore?.text && text && longerTableRestore.text.length > text.length && longerTableRestore.text.includes(text)) { const selection = window.getSelection(); selection?.removeAllRanges(); selection?.addRange(longerTableRestore.range.cloneRange()); return longerTableRestore.text } return text }; restoreCompletedTableTextRange(); window.requestAnimationFrame(restoreCompletedTableTextRange); window.setTimeout(restoreCompletedTableTextRange, 80)
           cleanupTableDragSelectionPreserve =
             preserveTableCellTextSelectionAcrossFrames(
               activeEditor,
@@ -2327,6 +2304,12 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       codeTextDragStartRef.current = null
       nonTableTextDragStartRef.current = null
       mouseTextSelectionInProgressRef.current = false
+      restoreNonTableTextSelectionAfterRelease?.restore(() =>
+        activeEditor
+          ? syncNativeEditorTextSelectionToProseMirror(activeEditor, { excludeSelector: "th, td, .aq-code-shell" })
+          : undefined
+      )
+      nonTableTextSelectionRestoreRef.current = null
       if (
         !syncBubbleOnMouseUpRef.current &&
         activeEditor &&
@@ -2476,6 +2459,7 @@ export const useBlockEditorEngineSelectionBubbleEffects = ({
       tableTextDragPendingStartRef.current = null
       codeTextDragStartRef.current = null
       nonTableTextDragStartRef.current = null
+      nonTableTextSelectionRestoreRef.current = null
       cancelBubbleHide()
     }
   }, [

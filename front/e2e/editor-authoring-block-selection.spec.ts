@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test } from "./helpers/authoringPlaywright"
 import {
   QA_ENGINE_ROUTE,
   QA_WRITER_ROUTE,
@@ -183,6 +183,60 @@ test.describe("editor authoring block selection and drag", () => {
         })
       )
       .toBe("")
+  })
+
+  test("거터 hover 중 같은 블록 텍스트 선택은 block handle을 유지한다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 980, height: 720 })
+    const targetText =
+      "gutter hover text selection target preserves block handle visibility"
+    const seed = encodeURIComponent(
+      [
+        "before gutter hover paragraph",
+        `${targetText} while selecting native text in the same block.`,
+        "after gutter hover paragraph",
+      ].join("\\n\\n")
+    )
+    await page.goto(`${QA_ENGINE_ROUTE}&seed=${seed}`)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    const paragraph = editor.locator("p", { hasText: targetText }).first()
+    await expect(paragraph).toBeVisible()
+    const paragraphBox = await expectVisibleBox(
+      paragraph,
+      "거터 hover 테스트 문단 좌표를 계산할 수 없습니다."
+    )
+
+    await page.mouse.move(
+      paragraphBox.x + Math.min(40, paragraphBox.width / 3),
+      paragraphBox.y + paragraphBox.height / 2
+    )
+    const handleRail = page.locator("[data-block-handle-rail='true'][data-visible='true']").first()
+    await expect(handleRail).toBeVisible()
+    const railBox = await expectVisibleBox(
+      handleRail,
+      "거터 hover rail 좌표를 계산할 수 없습니다."
+    )
+    await page.mouse.move(
+      railBox.x + railBox.width / 2,
+      railBox.y + railBox.height / 2
+    )
+    await expect(page.getByTestId("block-drag-handle")).toBeVisible()
+
+    const startX = paragraphBox.x + Math.min(40, paragraphBox.width / 3)
+    const endX =
+      paragraphBox.x + Math.min(paragraphBox.width - 16, Math.max(220, paragraphBox.width / 2))
+    const dragY = paragraphBox.y + paragraphBox.height / 2
+    await page.mouse.move(startX, dragY)
+    await page.mouse.down()
+    await page.mouse.move(endX, dragY, { steps: 12 })
+    await page.mouse.up()
+
+    await expect
+      .poll(() => page.evaluate(() => window.getSelection()?.toString() ?? ""))
+      .toContain("hover text selection")
+    await expect(page.getByTestId("block-drag-handle")).toBeVisible()
   })
 
   test("블록 내부 클릭/텍스트 더블클릭은 편집만 유지하고 좌측 외곽 더블클릭에서만 블록 선택된다", async ({ page }) => {

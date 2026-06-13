@@ -67,6 +67,7 @@ export const useBlockEditorEngineControllerState = () => {
   const [blockMenuState, setBlockMenuState] = useState<BlockEditorBlockMenuState>(null)
   const [isCoarsePointer, setIsCoarsePointer] = useState(false)
   const [hoveredBlockIndex, setHoveredBlockIndex] = useState<number | null>(null)
+  const [blockHandleGutterHoverBlockIndex, setBlockHandleGutterHoverBlockIndex] = useState<number | null>(null)
   const [hoveredListItemContext, setHoveredListItemContext] = useState<NestedListItemContext | null>(null)
   const [selectedListItemContext, setSelectedListItemContext] = useState<NestedListItemContext | null>(null)
   const [selectedBlockIndex, setSelectedBlockIndex] = useState<number | null>(null)
@@ -135,6 +136,7 @@ export const useBlockEditorEngineControllerState = () => {
     if (typeof window === "undefined") return
     hoveredBlockClearTimerRef.current = window.setTimeout(() => {
       setHoveredBlockIndex(null)
+      setBlockHandleGutterHoverBlockIndex(null)
       setHoveredListItemContext(null)
       hoveredBlockClearTimerRef.current = null
     }, 260)
@@ -213,6 +215,7 @@ export const useBlockEditorEngineControllerState = () => {
 
   return {
     attachmentFileInputRef,
+    blockHandleGutterHoverBlockIndex,
     blockHandleRailMetricsRef,
     blockHandleRailRef,
     blockHandleState,
@@ -264,6 +267,7 @@ export const useBlockEditorEngineControllerState = () => {
     selectionTick,
     selectionUiSignatureRef,
     setBlockHandleState,
+    setBlockHandleGutterHoverBlockIndex,
     setBlockMenuState,
     setBlockSelectionOverlayState,
     setBubbleState,

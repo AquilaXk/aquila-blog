@@ -4,6 +4,8 @@ import type { TableAffordanceGeometry } from "./tableAffordanceModel"
 import type { TableAxisSelectionTarget } from "./tableAxisDragModel"
 import type { TableMenuKind } from "./tableFloatingUiModel"
 
+type TableAxisRangeClickOptions = { rangeAnchorIndex?: number }
+
 type UseBlockEditorTableOverlayInteractionHandlersArgs = {
   activeTableElementRef: MutableRefObject<HTMLTableElement | null>
   hoveredTableElementRef: MutableRefObject<HTMLTableElement | null>
@@ -13,8 +15,8 @@ type UseBlockEditorTableOverlayInteractionHandlersArgs = {
     options?: { axisTarget?: TableAxisSelectionTarget; forceOpen?: boolean }
   ) => void
   scheduleTableQuickRailHide: (delayMs?: number) => void
-  selectTableColumnByIndex: (columnIndex: number) => TableAxisSelectionTarget | false
-  selectTableRowByIndex: (rowIndex: number) => TableAxisSelectionTarget | false
+  selectTableColumnByIndex: (columnIndex: number, options?: TableAxisRangeClickOptions) => TableAxisSelectionTarget | false
+  selectTableRowByIndex: (rowIndex: number, options?: TableAxisRangeClickOptions) => TableAxisSelectionTarget | false
   setHoveredTableCellMenuLayout: Dispatch<SetStateAction<{ cellMenuLeft: number; cellMenuTop: number } | null>>
   setIsTableQuickRailHovered: Dispatch<SetStateAction<boolean>>
   setTableAffordanceGeometry: Dispatch<SetStateAction<TableAffordanceGeometry>>
@@ -42,8 +44,8 @@ export const useBlockEditorTableOverlayInteractionHandlers = ({
   tableRowResizeRef,
 }: UseBlockEditorTableOverlayInteractionHandlersArgs) => {
   const handleTableColumnRailSegmentClick = useCallback(
-    (columnIndex: number, anchorRect: DOMRect) => {
-      const selected = selectTableColumnByIndex(columnIndex)
+    (columnIndex: number, anchorRect: DOMRect, options: TableAxisRangeClickOptions = {}) => {
+      const selected = selectTableColumnByIndex(columnIndex, options)
       if (!selected) return false
       setTableAffordanceGeometry((prev) => ({ ...prev, columnIndex }))
       openTableMenu("column", anchorRect, { axisTarget: selected, forceOpen: true })
@@ -53,8 +55,8 @@ export const useBlockEditorTableOverlayInteractionHandlers = ({
   )
 
   const handleTableRowGripClick = useCallback(
-    (rowIndex: number, anchorRect: DOMRect) => {
-      const selected = selectTableRowByIndex(rowIndex)
+    (rowIndex: number, anchorRect: DOMRect, options: TableAxisRangeClickOptions = {}) => {
+      const selected = selectTableRowByIndex(rowIndex, options)
       if (!selected) return false
       setTableAffordanceGeometry((prev) => ({ ...prev, rowIndex }))
       openTableMenu("row", anchorRect, { axisTarget: selected, forceOpen: true })

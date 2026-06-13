@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from "@playwright/test"
+import { expect, test, type Locator, type Page } from "./helpers/authoringPlaywright"
 import { QA_ENGINE_ROUTE, QA_WRITER_ROUTE } from "./helpers/editorAuthoringFlow"
 import { mockEditorRouteWithPost507 } from "./helpers/post507Fixtures"
 

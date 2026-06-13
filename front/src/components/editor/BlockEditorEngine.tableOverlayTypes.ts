@@ -66,9 +66,14 @@ export type BlockEditorTableOverlayLayerProps = {
   growTableFromCorner: () => void
   handleTableColumnRailSegmentClick: (
     columnIndex: number,
-    anchorRect: DOMRect
+    anchorRect: DOMRect,
+    options?: { rangeAnchorIndex?: number }
   ) => boolean
-  handleTableRowGripClick: (rowIndex: number, anchorRect: DOMRect) => boolean
+  handleTableRowGripClick: (
+    rowIndex: number,
+    anchorRect: DOMRect,
+    options?: { rangeAnchorIndex?: number }
+  ) => boolean
   handleToolbarButtonMouseDown: ToolbarMouseDownHandler
   hideTableOverflowCoachmark: () => void
   hoveredTableCellMenuLayout: Pick<
@@ -98,15 +103,15 @@ export type BlockEditorTableOverlayLayerProps = {
     tablePos: number,
     axis: TableAxis,
     axisIndex: number,
-    options?: { clearNativeText?: boolean }
+    options?: { clearNativeText?: boolean; rangeAnchorIndex?: number }
   ) => boolean
   selectTableColumnByIndex: (
     columnIndex: number,
-    options?: { clearNativeText?: boolean }
+    options?: { clearNativeText?: boolean; rangeAnchorIndex?: number }
   ) => TableAxisSelectionTarget | false
   selectTableRowByIndex: (
     rowIndex: number,
-    options?: { clearNativeText?: boolean }
+    options?: { clearNativeText?: boolean; rangeAnchorIndex?: number }
   ) => TableAxisSelectionTarget | false
   shouldPersistTableHandles: boolean
   shouldRenderTableAffordanceOverlay: boolean
@@ -126,7 +131,8 @@ export type BlockEditorTableOverlayLayerProps = {
     pointerId: number,
     clientX: number,
     clientY: number,
-    completeClickWithoutDrag?: () => boolean
+    completeClickWithoutDrag?: (options?: { rangeAnchorIndex?: number }) => boolean,
+    options?: { extendRange?: boolean; rangeAnchorIndex?: number }
   ) => void
   startTableColumnRailResize: (
     pointerId: number,

@@ -307,6 +307,13 @@ export const useBlockEditorTableOverlayControllerCommands = ({
           width: Math.round(cellRect.width),
         }
       })
+    const rowSegments = tableRows.map((row) => {
+        const rowRect = row.getBoundingClientRect()
+        return {
+          height: Math.round(rowRect.height),
+          top: Math.round(Math.max(0, rowRect.top - tableRect.top)),
+        }
+      })
     const tableLeft = Math.round(tableRect.left)
     const tableTop = Math.round(tableRect.top)
     const tableWidth = Math.round(tableRect.width)
@@ -406,6 +413,7 @@ export const useBlockEditorTableOverlayControllerCommands = ({
       columnAddAnchor,
       cornerAnchor,
       cellMenuAnchor,
+      rowSegments,
       columnSegments: firstRowCells,
     })
     if (!isRecentHoverAnchorSync) {

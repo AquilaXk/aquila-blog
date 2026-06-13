@@ -1,6 +1,7 @@
-import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react"
-import { TABLE_EDGE_ADD_BUTTON_SIZE_PX } from "./tableAffordanceModel"
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react"
+import { TABLE_EDGE_ADD_BUTTON_SIZE_PX, type TableAffordanceGeometry } from "./tableAffordanceModel"
 import type { BlockEditorTableOverlayLayerProps } from "./BlockEditorEngine.tableOverlayTypes"
+import type { TableAxis, TableAxisSelectionState } from "./tableAxisDragModel"
 import {
   TableAxisRail,
   TableAxisReorderIndicator,
@@ -17,6 +18,89 @@ import {
   TableRowDragShadow,
   TableTrailingAddBar,
 } from "./BlockEditorEngine.styles"
+
+const resolveShiftRangeAnchorIndex = (
+  axis: TableAxis,
+  currentSelection: TableAxisSelectionState | null,
+  fallbackIndex: number,
+  shiftKey: boolean
+) => (shiftKey && currentSelection?.axis === axis ? currentSelection.anchorIndex : fallbackIndex)
+
+const resolveColumnSelectionOutline = (
+  geometry: TableAffordanceGeometry,
+  selection: TableAxisSelectionState | null
+) => {
+  const startIndex = selection?.axis === "column" ? selection.fromIndex : geometry.columnIndex
+  const endIndex = selection?.axis === "column" ? selection.toIndex : startIndex
+  const firstSegment = geometry.columnSegments[startIndex]
+  const lastSegment = geometry.columnSegments[endIndex]
+  const fallbackLeft = geometry.columnLeft - geometry.tableLeft
+  const left = firstSegment?.left ?? fallbackLeft
+  const right = lastSegment ? lastSegment.left + lastSegment.width : left + geometry.columnWidth
+  return {
+    left: Math.round(geometry.tableLeft + left),
+    top: Math.round(geometry.tableTop),
+    width: Math.round(Math.max(1, right - left)),
+    height: Math.round(geometry.height),
+  }
+}
+
+const resolveRowSelectionOutline = (
+  geometry: TableAffordanceGeometry,
+  selection: TableAxisSelectionState | null
+) => {
+  const startIndex = selection?.axis === "row" ? selection.fromIndex : geometry.rowIndex
+  const endIndex = selection?.axis === "row" ? selection.toIndex : startIndex
+  const firstSegment = geometry.rowSegments[startIndex]
+  const lastSegment = geometry.rowSegments[endIndex]
+  const fallbackTop = geometry.rowTop - geometry.tableTop
+  const top = firstSegment?.top ?? fallbackTop
+  const bottom = lastSegment ? lastSegment.top + lastSegment.height : top + geometry.rowHeight
+  return {
+    left: Math.round(geometry.tableLeft),
+    top: Math.round(geometry.tableTop + top),
+    width: Math.round(geometry.width),
+    height: Math.round(Math.max(1, bottom - top)),
+  }
+}
+
+const TABLE_AXIS_RANGE_TRACK_THICKNESS_PX = 56
+const TABLE_AXIS_RANGE_TRACK_INSET_PX = 16
+
+const resolveAxisIndexFromPointer = (
+  axis: TableAxis,
+  geometry: TableAffordanceGeometry,
+  clientX: number,
+  clientY: number
+) => {
+  const fallbackIndex = axis === "row" ? geometry.rowIndex : geometry.columnIndex
+  const segments =
+    axis === "row"
+      ? geometry.rowSegments.map((segment) => ({
+          size: segment.height,
+          start: segment.top,
+        }))
+      : geometry.columnSegments.map((segment) => ({
+          size: segment.width,
+          start: segment.left,
+        }))
+  const pointerOffset =
+    axis === "row" ? clientY - geometry.tableTop : clientX - geometry.tableLeft
+  if (!segments.length) return fallbackIndex
+  const matchedIndex = segments.findIndex(
+    (segment) =>
+      pointerOffset >= segment.start && pointerOffset <= segment.start + segment.size
+  )
+  if (matchedIndex >= 0) return matchedIndex
+  return segments.reduce(
+    (nearest, segment, index) => {
+      const center = segment.start + segment.size / 2
+      const distance = Math.abs(pointerOffset - center)
+      return distance < nearest.distance ? { distance, index } : nearest
+    },
+    { distance: Number.POSITIVE_INFINITY, index: fallbackIndex }
+  ).index
+}
 
 export const BlockEditorTableOverlayRails = ({
   appendTableAxisAtEnd,
@@ -63,7 +147,38 @@ export const BlockEditorTableOverlayRails = ({
   tableCornerPreviewState,
   tableEdgeHandleInsetPx,
   tableMenuState,
-}: BlockEditorTableOverlayLayerProps) => (
+}: BlockEditorTableOverlayLayerProps) => {
+  const [isShiftRangeTrackActive, setIsShiftRangeTrackActive] = useState(false)
+  const shiftRangeTrackActiveRef = useRef(false)
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Shift") return
+      shiftRangeTrackActiveRef.current = true
+      setIsShiftRangeTrackActive(true)
+    }
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key !== "Shift") return
+      shiftRangeTrackActiveRef.current = false
+      setIsShiftRangeTrackActive(false)
+    }
+    const handleBlur = () => {
+      shiftRangeTrackActiveRef.current = false
+      setIsShiftRangeTrackActive(false)
+    }
+    document.addEventListener("keydown", handleKeyDown)
+    document.addEventListener("keyup", handleKeyUp)
+    window.addEventListener("blur", handleBlur)
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown)
+      document.removeEventListener("keyup", handleKeyUp)
+      window.removeEventListener("blur", handleBlur)
+    }
+  }, [])
+  const isShiftRangeEventActive = (shiftKey: boolean) =>
+    shiftKey || isShiftRangeTrackActive || shiftRangeTrackActiveRef.current
+
+  return (
   <>
     {draggedTableAxisState?.axis === "row" && tableAxisDragGhostPosition ? (
       <TableRowDragShadow
@@ -154,39 +269,119 @@ export const BlockEditorTableOverlayRails = ({
         {tableMenuState?.kind === "column" ? (
           <TableAxisSelectionOutline
             data-axis="column"
+            data-from-index={currentTableAxisSelection?.axis === "column" ? currentTableAxisSelection.fromIndex : undefined}
+            data-to-index={currentTableAxisSelection?.axis === "column" ? currentTableAxisSelection.toIndex : undefined}
             data-testid="table-column-selection-outline"
             style={{
-              left: `${Math.round(
-                tableAffordanceGeometry.tableLeft +
-                  (tableAffordanceGeometry.columnSegments[
-                    currentTableAxisSelection?.axis === "column"
-                      ? currentTableAxisSelection.index
-                      : tableAffordanceGeometry.columnIndex
-                  ]?.left ??
-                    tableAffordanceGeometry.columnLeft - tableAffordanceGeometry.tableLeft)
-              )}px`,
-              top: `${Math.round(tableAffordanceGeometry.tableTop)}px`,
-              width: `${Math.round(
-                tableAffordanceGeometry.columnSegments[
-                  currentTableAxisSelection?.axis === "column"
-                    ? currentTableAxisSelection.index
-                    : tableAffordanceGeometry.columnIndex
-                ]?.width ??
-                  tableAffordanceGeometry.columnWidth
-              )}px`,
-              height: `${Math.round(tableAffordanceGeometry.height)}px`,
+              left: `${resolveColumnSelectionOutline(tableAffordanceGeometry, currentTableAxisSelection).left}px`,
+              top: `${resolveColumnSelectionOutline(tableAffordanceGeometry, currentTableAxisSelection).top}px`,
+              width: `${resolveColumnSelectionOutline(tableAffordanceGeometry, currentTableAxisSelection).width}px`,
+              height: `${resolveColumnSelectionOutline(tableAffordanceGeometry, currentTableAxisSelection).height}px`,
             }}
           />
         ) : null}
         {tableMenuState?.kind === "row" ? (
           <TableAxisSelectionOutline
             data-axis="row"
+            data-from-index={currentTableAxisSelection?.axis === "row" ? currentTableAxisSelection.fromIndex : undefined}
+            data-to-index={currentTableAxisSelection?.axis === "row" ? currentTableAxisSelection.toIndex : undefined}
             data-testid="table-row-selection-outline"
             style={{
+              left: `${resolveRowSelectionOutline(tableAffordanceGeometry, currentTableAxisSelection).left}px`,
+              top: `${resolveRowSelectionOutline(tableAffordanceGeometry, currentTableAxisSelection).top}px`,
+              width: `${resolveRowSelectionOutline(tableAffordanceGeometry, currentTableAxisSelection).width}px`,
+              height: `${resolveRowSelectionOutline(tableAffordanceGeometry, currentTableAxisSelection).height}px`,
+            }}
+          />
+        ) : null}
+        {tableMenuState?.kind === "row" && currentTableAxisSelection?.axis === "row" ? (
+          <div
+            aria-hidden="true"
+            data-axis="row"
+            data-range-anchor-index={currentTableAxisSelection.anchorIndex}
+            data-table-axis-rail="true"
+            data-table-affordance="row-range-track"
+            data-testid="table-row-range-track"
+            onPointerDown={(event: ReactPointerEvent<HTMLDivElement>) => {
+              if (event.button !== 0 || !isShiftRangeEventActive(event.shiftKey)) return
+              event.preventDefault()
+              event.stopPropagation()
+              const rowIndex = resolveAxisIndexFromPointer(
+                "row",
+                tableAffordanceGeometry,
+                event.clientX,
+                event.clientY
+              )
+              const rangeAnchorIndex = Number.parseInt(
+                event.currentTarget.getAttribute("data-range-anchor-index") ?? "",
+                10
+              )
+              const anchorRect = event.currentTarget.getBoundingClientRect()
+              startPendingTableAxisDrag(
+                "row",
+                rowIndex,
+                event.pointerId,
+                event.clientX,
+                event.clientY,
+                (selectionOptions) => handleTableRowGripClick(rowIndex, anchorRect, selectionOptions),
+                { rangeAnchorIndex: Number.isFinite(rangeAnchorIndex) ? rangeAnchorIndex : undefined }
+              )
+            }}
+            style={{
+              cursor: "default",
+              height: `${Math.round(tableAffordanceGeometry.height)}px`,
+              left: `${Math.round(tableAffordanceGeometry.tableLeft - TABLE_AXIS_RANGE_TRACK_THICKNESS_PX)}px`,
+              pointerEvents: isShiftRangeTrackActive ? "auto" : "none",
+              position: "fixed",
+              top: `${Math.round(tableAffordanceGeometry.tableTop)}px`,
+              width: `${TABLE_AXIS_RANGE_TRACK_THICKNESS_PX + TABLE_AXIS_RANGE_TRACK_INSET_PX}px`,
+              zIndex: 59,
+            }}
+          />
+        ) : null}
+        {tableMenuState?.kind === "column" && currentTableAxisSelection?.axis === "column" ? (
+          <div
+            aria-hidden="true"
+            data-axis="column"
+            data-range-anchor-index={currentTableAxisSelection.anchorIndex}
+            data-table-axis-rail="true"
+            data-table-affordance="column-range-track"
+            data-testid="table-column-range-track"
+            onPointerDown={(event: ReactPointerEvent<HTMLDivElement>) => {
+              if (event.button !== 0 || !isShiftRangeEventActive(event.shiftKey)) return
+              event.preventDefault()
+              event.stopPropagation()
+              const columnIndex = resolveAxisIndexFromPointer(
+                "column",
+                tableAffordanceGeometry,
+                event.clientX,
+                event.clientY
+              )
+              const rangeAnchorIndex = Number.parseInt(
+                event.currentTarget.getAttribute("data-range-anchor-index") ?? "",
+                10
+              )
+              const anchorRect = event.currentTarget.getBoundingClientRect()
+              startPendingTableAxisDrag(
+                "column",
+                columnIndex,
+                event.pointerId,
+                event.clientX,
+                event.clientY,
+                (selectionOptions) =>
+                  handleTableColumnRailSegmentClick(columnIndex, anchorRect, selectionOptions),
+                { rangeAnchorIndex: Number.isFinite(rangeAnchorIndex) ? rangeAnchorIndex : undefined }
+              )
+            }}
+            style={{
+              cursor: "default",
+              height: `${TABLE_AXIS_RANGE_TRACK_THICKNESS_PX + TABLE_AXIS_RANGE_TRACK_INSET_PX}px`,
               left: `${Math.round(tableAffordanceGeometry.tableLeft)}px`,
-              top: `${Math.round(tableAffordanceGeometry.rowTop)}px`,
+              pointerEvents: isShiftRangeTrackActive ? "auto" : "none",
+              position: "fixed",
+              top: `${Math.round(tableAffordanceGeometry.tableTop - TABLE_AXIS_RANGE_TRACK_THICKNESS_PX)}px`,
               width: `${Math.round(tableAffordanceGeometry.width)}px`,
-              height: `${Math.round(tableAffordanceGeometry.rowHeight)}px`,
+              zIndex: 59,
             }}
           />
         ) : null}
@@ -289,6 +484,7 @@ export const BlockEditorTableOverlayRails = ({
             <TableQuickRailButton
               type="button"
               data-axis="row"
+              data-axis-index={tableAffordanceGeometry.rowIndex}
               data-table-affordance="row-handle"
               data-active={isCurrentTableRowSelection(tableAffordanceGeometry.rowIndex)}
               data-compact={compactTableAffordanceKind === "row"}
@@ -299,9 +495,17 @@ export const BlockEditorTableOverlayRails = ({
                 if (event.button !== 0) return
                 event.preventDefault()
                 event.stopPropagation()
+                const shouldExtendRange = isShiftRangeEventActive(event.shiftKey)
                 const anchorRect = event.currentTarget.getBoundingClientRect()
-                startPendingTableAxisDrag("row", tableAffordanceGeometry.rowIndex, event.pointerId, event.clientX, event.clientY, () =>
-                  handleTableRowGripClick(tableAffordanceGeometry.rowIndex, anchorRect)
+                startPendingTableAxisDrag(
+                  "row",
+                  tableAffordanceGeometry.rowIndex,
+                  event.pointerId,
+                  event.clientX,
+                  event.clientY,
+                  (selectionOptions) =>
+                    handleTableRowGripClick(tableAffordanceGeometry.rowIndex, anchorRect, selectionOptions),
+                  { extendRange: shouldExtendRange }
                 )
               }}
               onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -311,7 +515,14 @@ export const BlockEditorTableOverlayRails = ({
                   tableAxisDragSuppressClickRef.current = false
                   return
                 }
-                handleTableRowGripClick(tableAffordanceGeometry.rowIndex, event.currentTarget.getBoundingClientRect())
+                handleTableRowGripClick(tableAffordanceGeometry.rowIndex, event.currentTarget.getBoundingClientRect(), {
+                  rangeAnchorIndex: resolveShiftRangeAnchorIndex(
+                    "row",
+                    currentTableAxisSelection,
+                    tableAffordanceGeometry.rowIndex,
+                    isShiftRangeEventActive(event.shiftKey)
+                  ),
+                })
               }}
             >
               <TableHandleIcon kind="grip" />
@@ -335,6 +546,7 @@ export const BlockEditorTableOverlayRails = ({
             <TableQuickRailButton
               type="button"
               data-axis="column"
+              data-axis-index={tableAffordanceGeometry.columnIndex}
               data-table-affordance="column-handle"
               data-active={isCurrentTableColumnSelection(tableAffordanceGeometry.columnIndex)}
               data-compact={compactTableAffordanceKind === "column"}
@@ -345,9 +557,17 @@ export const BlockEditorTableOverlayRails = ({
                 if (event.button !== 0) return
                 event.preventDefault()
                 event.stopPropagation()
+                const shouldExtendRange = isShiftRangeEventActive(event.shiftKey)
                 const anchorRect = event.currentTarget.getBoundingClientRect()
-                startPendingTableAxisDrag("column", tableAffordanceGeometry.columnIndex, event.pointerId, event.clientX, event.clientY, () =>
-                  handleTableColumnRailSegmentClick(tableAffordanceGeometry.columnIndex, anchorRect)
+                startPendingTableAxisDrag(
+                  "column",
+                  tableAffordanceGeometry.columnIndex,
+                  event.pointerId,
+                  event.clientX,
+                  event.clientY,
+                  (selectionOptions) =>
+                    handleTableColumnRailSegmentClick(tableAffordanceGeometry.columnIndex, anchorRect, selectionOptions),
+                  { extendRange: shouldExtendRange }
                 )
               }}
               onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -357,7 +577,18 @@ export const BlockEditorTableOverlayRails = ({
                   tableAxisDragSuppressClickRef.current = false
                   return
                 }
-                handleTableColumnRailSegmentClick(tableAffordanceGeometry.columnIndex, event.currentTarget.getBoundingClientRect())
+                handleTableColumnRailSegmentClick(
+                  tableAffordanceGeometry.columnIndex,
+                  event.currentTarget.getBoundingClientRect(),
+                  {
+                    rangeAnchorIndex: resolveShiftRangeAnchorIndex(
+                      "column",
+                      currentTableAxisSelection,
+                      tableAffordanceGeometry.columnIndex,
+                      isShiftRangeEventActive(event.shiftKey)
+                    ),
+                  }
+                )
               }}
             >
               <TableHandleIcon kind="grip" />
@@ -449,4 +680,5 @@ export const BlockEditorTableOverlayRails = ({
       </>
     ) : null}
   </>
-)
+  )
+}

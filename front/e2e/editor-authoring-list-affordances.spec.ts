@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type Page } from "./helpers/authoringPlaywright"
 import {
   QA_ENGINE_ROUTE,
   QA_WRITER_ROUTE,
@@ -9,6 +9,17 @@ import { mockEditorRouteWithPost507 } from "./helpers/post507Fixtures"
 import { LIST_ITEM_SELECTOR } from "../src/components/editor/nestedListItemModel"
 
 const POST_507_FIRST_LIST_ITEM = "“Stateless가 좋다는데, 왜 좋은 거지?”"
+const POST_507_REFERENCE_LIST_ITEMS = [
+  "https://d2.naver.com/helloworld/59361",
+  "https://engineering.linecorp.com/ko/blog/line-login-session-management",
+  "https://auth0.com/docs/tokens",
+  "https://datatracker.ietf.org/doc/html/rfc7519",
+] as const
+
+const escapeRegExp = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+const exactTextPattern = (value: string) => new RegExp(`^${escapeRegExp(value)}$`)
 
 const readSelectionText = (page: Page) =>
   page.evaluate(() => window.getSelection()?.toString() ?? "")
@@ -228,6 +239,71 @@ test.describe("editor authoring list affordances", () => {
     expect(metrics.itemBackgroundColor).toBe("rgba(0, 0, 0, 0)")
   })
 
+  test("실제 /editor/[id] 507 하단 참고 리스트 handle은 marker를 덮지 않고 선택 항목만 따라간다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1504, height: 760 })
+    await mockEditorRouteWithPost507(page, {
+      postId: 507,
+      title: "post 507 reference list handle route 글",
+    })
+
+    const targetLabel = POST_507_REFERENCE_LIST_ITEMS[2]
+    await page.evaluate((label) => {
+      const readOwnLabel = (item: HTMLElement) =>
+        Array.from(item.childNodes)
+          .filter((node) => !(node instanceof HTMLElement && ["UL", "OL"].includes(node.tagName)))
+          .map((node) => node.textContent || "")
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim()
+      const item =
+        Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")).find(
+          (candidate) => readOwnLabel(candidate) === label
+        ) ?? null
+      item?.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
+    }, targetLabel)
+    await hoverListItemGutter(page, targetLabel)
+    const handleMetrics = await expectListItemHandleReady(page, targetLabel, "목록 항목 이동")
+    const markerMetrics = await page.evaluate((label) => {
+      const readOwnLabel = (item: HTMLElement) =>
+        Array.from(item.childNodes)
+          .filter((node) => !(node instanceof HTMLElement && ["UL", "OL"].includes(node.tagName)))
+          .map((node) => node.textContent || "")
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim()
+      const item =
+        Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")).find(
+          (candidate) => readOwnLabel(candidate) === label
+        ) ?? null
+      if (!item) return null
+      const itemRect = item.getBoundingClientRect()
+      const listRect = item.closest("ul, ol")?.getBoundingClientRect() ?? itemRect
+      const textRect = item.querySelector("p")?.getBoundingClientRect() ?? itemRect
+      return {
+        markerAwareLeft: Math.min(itemRect.left, listRect.left, textRect.left),
+        textLeft: textRect.left,
+      }
+    }, targetLabel)
+    if (!markerMetrics) throw new Error("post 507 reference list marker metrics are missing")
+    expect(handleMetrics.handleBox.x + handleMetrics.handleBox.width + 6).toBeLessThanOrEqual(
+      markerMetrics.markerAwareLeft
+    )
+    expect(handleMetrics.handleBox.x + handleMetrics.handleBox.width + 6).toBeLessThanOrEqual(markerMetrics.textLeft)
+
+    await page.mouse.click(
+      handleMetrics.handleBox.x + handleMetrics.handleBox.width / 2,
+      handleMetrics.handleBox.y + handleMetrics.handleBox.height / 2
+    )
+    await expect(page.getByTestId("keyboard-block-selection-overlay")).toBeVisible()
+    const targetOverlay = await readListItemSelectionOverlayMetrics(page, targetLabel)
+    const firstOverlay = await readListItemSelectionOverlayMetrics(page, POST_507_REFERENCE_LIST_ITEMS[0])
+    if (!targetOverlay || !firstOverlay) throw new Error("post 507 reference list overlay metrics are missing")
+    expect(Math.abs(targetOverlay.overlayTop - targetOverlay.itemTop)).toBeLessThanOrEqual(8)
+    expect(Math.abs(firstOverlay.overlayTop - firstOverlay.itemTop)).toBeGreaterThan(32)
+  })
+
   test("실제 /editor/[id] 507 리스트 항목 더블클릭은 native 텍스트 선택을 caret으로 접지 않는다", async ({
     page,
   }) => {
@@ -422,7 +498,7 @@ test.describe("editor authoring list affordances", () => {
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     const blockSelectionOverlay = page.getByTestId("keyboard-block-selection-overlay")
     const clickListItemParagraph = async (label: string) => {
-      const paragraph = editor.locator("li > p", { hasText: new RegExp(`^${label}$`) }).last()
+      const paragraph = editor.locator("li > p", { hasText: exactTextPattern(label) }).last()
       await paragraph.click()
       await expect.poll(() =>
         paragraph.evaluate((element) => {
@@ -489,13 +565,73 @@ test.describe("editor authoring list affordances", () => {
     await expect.poll(() => countOwnLabel("3단계")).toBe(1)
   })
 
+  test("리스트 항목은 3단계까지 Tab으로 중첩되고 Shift+Tab으로 단계별 복귀한다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    const clickListItemParagraph = async (label: string) => {
+      const paragraph = editor.locator("li > p", { hasText: exactTextPattern(label) }).last()
+      await paragraph.click()
+      await expect.poll(() =>
+        paragraph.evaluate((element) => {
+          const selection = window.getSelection()
+          return Boolean(selection?.anchorNode && element.contains(selection.anchorNode))
+        })
+      ).toBe(true)
+    }
+    const readDepth = (label: string) =>
+      page.evaluate((targetLabel) => {
+        const readOwnLabel = (item: HTMLElement) =>
+          Array.from(item.childNodes)
+            .filter((node) => !(node instanceof HTMLElement && ["UL", "OL"].includes(node.tagName)))
+            .map((node) => node.textContent || "")
+            .join(" ")
+            .replace(/\s+/g, " ")
+            .trim()
+        const item =
+          Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")).find(
+            (candidate) => readOwnLabel(candidate) === targetLabel
+          ) ?? null
+        let depth = 0
+        for (let parent = item?.parentElement; parent; parent = parent.parentElement) {
+          if (parent.matches("ul, ol")) depth += 1
+          if (parent.matches("[data-testid='block-editor-prosemirror']")) break
+        }
+        return item ? depth : -1
+      }, label)
+
+    await editor.click()
+    await page.getByRole("button", { name: "목록" }).first().click()
+    for (const label of ["1단계", "2단계", "3단계", "4단계"]) {
+      await page.keyboard.type(label)
+      if (label !== "4단계") await page.keyboard.press("Enter")
+    }
+
+    await clickListItemParagraph("3단계")
+    await page.keyboard.press("Tab")
+    await expect.poll(() => readDepth("3단계")).toBe(2)
+    await clickListItemParagraph("4단계")
+    for (const expectedDepth of [2, 3]) {
+      await page.keyboard.press("Tab")
+      await expect.poll(() => readDepth("4단계")).toBe(expectedDepth)
+    }
+    await expect.poll(() => readDepth("4단계")).toBe(3)
+
+    for (const expectedDepth of [2, 1]) {
+      await clickListItemParagraph("4단계")
+      await page.keyboard.press("Shift+Tab")
+      await expect.poll(() => readDepth("4단계")).toBe(expectedDepth)
+    }
+    await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
+  })
+
   test("writer surface의 리스트 항목 안 Tab/Shift+Tab도 단계 승강으로 동작한다", async ({ page }) => {
     await page.goto(QA_WRITER_ROUTE)
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     const blockSelectionOverlay = page.getByTestId("keyboard-block-selection-overlay")
     const clickListItemParagraph = async (label: string) => {
-      const paragraph = editor.locator("li > p", { hasText: new RegExp(`^${label}$`) }).last()
+      const paragraph = editor.locator("li > p", { hasText: exactTextPattern(label) }).last()
       await paragraph.click()
       await expect.poll(() =>
         paragraph.evaluate((element) => {

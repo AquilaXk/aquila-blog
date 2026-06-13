@@ -1,5 +1,5 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
-import { useCallback } from "react"
+import { useCallback, useRef } from "react"
 import type {
   Dispatch,
   KeyboardEvent as ReactKeyboardEvent,
@@ -243,6 +243,8 @@ export const useBlockEditorEngineBlockSelectionUi = ({
   textSelectionBlockIndex,
   viewportRef,
 }: UseBlockEditorEngineBlockSelectionUiArgs) => {
+  const blockHandleRailHoverBlockIndexRef = useRef<number | null>(null)
+
   useBlockEditorEngineBlockSelectionLayout({
     blockHandleRailMetricsRef,
     blockHandleGutterHoverBlockIndex,
@@ -291,7 +293,12 @@ export const useBlockEditorEngineBlockSelectionUi = ({
   }, [clearNativeTextSelection])
 
   const syncViewportHoverState = useCallback(
-    (targetEvent: EventTarget | null, clientX: number, clientY: number) => {
+    (
+      targetEvent: EventTarget | null,
+      clientX: number,
+      clientY: number,
+      buttons = 0
+    ) => {
       cancelHoveredBlockClear()
       const rowResizeState = isTableRowResizeActive()
       const columnResizeState = isTableColumnRailResizeActive()
@@ -343,8 +350,31 @@ export const useBlockEditorEngineBlockSelectionUi = ({
             clientX < targetBlockRect.left
           )
       )
+      const hasBlockHandleRailHover = Boolean(
+        target?.closest("[data-block-handle-rail='true']") ||
+          target?.closest("[data-block-menu-root='true']")
+      )
+      const isPrimaryPointerButtonDown = (buttons & 1) === 1
+      if (
+        blockHandleRailHoverBlockIndexRef.current !== null &&
+        blockHandleRailHoverBlockIndexRef.current !== targetBlockIndex &&
+        !hasBlockHandleRailHover
+      ) {
+        blockHandleRailHoverBlockIndexRef.current = null
+      }
+      const shouldKeepCurrentBlockHandleHover =
+        !isBlockHandleGutterHover &&
+        blockHandleRailHoverBlockIndexRef.current === targetBlockIndex &&
+        blockHandleState.visible &&
+        blockHandleState.blockIndex === targetBlockIndex
+      const shouldUseBlockHandleGutterHover =
+        isBlockHandleGutterHover &&
+        (!isPrimaryPointerButtonDown ||
+          blockHandleRailHoverBlockIndexRef.current === targetBlockIndex)
       setBlockHandleGutterHoverBlockIndex(
-        isBlockHandleGutterHover ? targetBlockIndex : null
+        shouldUseBlockHandleGutterHover || shouldKeepCurrentBlockHandleHover
+          ? targetBlockIndex
+          : null
       )
       const isFarLeftTableBlockGutter = Boolean(
         targetBlockElement?.querySelector(
@@ -426,6 +456,7 @@ export const useBlockEditorEngineBlockSelectionUi = ({
         target?.closest("[data-block-menu-root='true']")
       ) {
         if (blockHandleState.visible) {
+          blockHandleRailHoverBlockIndexRef.current = blockHandleState.blockIndex
           setBlockHandleGutterHoverBlockIndex(blockHandleState.blockIndex)
           if (blockHandleState.kind === "list-item" && hoveredListItemContext) {
             setHoveredListItemContext(hoveredListItemContext)
@@ -491,14 +522,24 @@ export const useBlockEditorEngineBlockSelectionUi = ({
 
   const handleViewportPointerMove = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      syncViewportHoverState(event.target, event.clientX, event.clientY)
+      syncViewportHoverState(
+        event.target,
+        event.clientX,
+        event.clientY,
+        event.buttons
+      )
     },
     [syncViewportHoverState]
   )
 
   const handleViewportMouseMove = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
-      syncViewportHoverState(event.target, event.clientX, event.clientY)
+      syncViewportHoverState(
+        event.target,
+        event.clientX,
+        event.clientY,
+        event.buttons
+      )
     },
     [syncViewportHoverState]
   )
@@ -630,6 +671,22 @@ export const useBlockEditorEngineBlockSelectionUi = ({
       const targetBlockIndex =
         findTopLevelBlockIndexFromTarget(event.target) ??
         findTopLevelBlockIndexByClientPosition(event.clientX, event.clientY)
+      const targetElement =
+        event.target instanceof Element
+          ? event.target
+          : event.target instanceof Node
+          ? event.target.parentElement
+          : null
+      const hasBlockHandleRailPointerTarget = Boolean(
+        targetElement?.closest("[data-block-handle-rail='true']") ||
+          targetElement?.closest("[data-block-menu-root='true']")
+      )
+      if (
+        !hasBlockHandleRailPointerTarget &&
+        blockHandleRailHoverBlockIndexRef.current !== targetBlockIndex
+      ) {
+        setBlockHandleGutterHoverBlockIndex(null)
+      }
       const currentEditor = editorRef.current ?? editor
       const hasActiveBlockSelection =
         selectedBlockNodeIndex !== null ||
@@ -751,6 +808,7 @@ export const useBlockEditorEngineBlockSelectionUi = ({
       selectedBlockNodeIndex,
       selectedBlockNodeIndexRef,
       setClickedBlockIndex,
+      setBlockHandleGutterHoverBlockIndex,
       setSelectedBlockNodeIndex,
       setSelectedListItemContext,
       setTableQuickRailHovered,

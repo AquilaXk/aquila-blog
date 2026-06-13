@@ -77,7 +77,9 @@ const RootLayout = ({
   const { events, pathname } = useRouter()
   const isPublicBlogRoute = pathname === "/" || pathname === "/about" || pathname === "/posts/[id]"
   const isDedicatedEditorRoute = pathname === "/editor/[id]" || pathname === "/editor/new"
-  const isDesignAwareRoute = pathname[1] !== "_" && pathname !== "/sitemap.xml"
+  const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/")
+  const isFullBleedRoute = isDedicatedEditorRoute || isAdminRoute
+  const isDesignAwareRoute = !isAdminRoute && pathname[1] !== "_" && pathname !== "/sitemap.xml"
   const adminProfile = usePublicAdminProfile(initialAdminProfile, {
     enabled: isDesignAwareRoute || initialAdminProfileShouldRefetch,
     refetchOnMount: isDesignAwareRoute,
@@ -190,7 +192,7 @@ const RootLayout = ({
       {/* {metaConfig.type !== "Paper" && <Header />} */}
       <Header fullWidth={false} showThemeToggle={effectiveBlogDesign === "legacy" && !isPublicBlogRoute} blogTitle={headerBlogTitle} />
       <RouteProgress data-busy={isNavigating} aria-hidden="true" />
-      <StyledMain $fullBleed={isDedicatedEditorRoute}>{children}</StyledMain>
+      <StyledMain $fullBleed={isFullBleedRoute}>{children}</StyledMain>
     </ThemeProvider>
   )
 }

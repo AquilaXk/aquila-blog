@@ -168,12 +168,12 @@ const AdminShell = ({ currentSection, member, profileSnapshot = null, children }
 export default AdminShell
 
 const ShellFrame = styled.div`
-  ${adminSystemThemeVariables}
+  ${({ theme }) => adminSystemThemeVariables(theme)}
   display: grid;
   grid-template-columns: 17.5rem minmax(0, 1fr);
   gap: 0;
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
+  width: 100%;
+  margin: 0;
   min-height: calc(100vh - var(--app-header-height, 73px) - 1rem);
   padding: 0;
   background: ${adminAppBackground};
@@ -181,7 +181,6 @@ const ShellFrame = styled.div`
   @media (max-width: 1100px) {
     grid-template-columns: minmax(0, 1fr);
     width: 100%;
-    margin-left: 0;
   }
 `
 
@@ -383,7 +382,7 @@ const ContentColumn = styled.div`
 
 const UtilityBarFallback = styled.div`
   position: sticky;
-  top: calc(var(--app-header-height, 73px) + 0.85rem);
+  top: var(--app-header-height, 73px);
   z-index: 5;
   height: 4.85rem;
   border: 0;
@@ -393,7 +392,7 @@ const UtilityBarFallback = styled.div`
   box-shadow: none;
 
   @media (max-width: 720px) {
-    top: calc(var(--app-header-height, 73px) + 0.65rem);
+    top: var(--app-header-height, 73px);
     height: 8.15rem;
   }
 `

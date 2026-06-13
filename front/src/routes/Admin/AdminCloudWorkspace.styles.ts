@@ -753,8 +753,8 @@ export const StatusPill = styled.span`
   }
 
   &[data-status="cancelled"] {
-    background: ${surfaceMuted};
-    color: ${textMuted};
+    background: ${({ theme }) => theme.colors.gray3};
+    color: ${({ theme }) => theme.colors.gray10};
   }
 
   &[data-status="done"] {

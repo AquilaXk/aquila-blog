@@ -227,7 +227,7 @@ test.describe("admin profile state contract", () => {
       "utf8"
     )
 
-    expect(source).toContain("메인과 About에 보일 인상을 다듬습니다")
+    expect(source).toContain("<h1>프로필</h1>")
     expect(source).not.toContain(
       "프로필 이미지, 소개 문구, 헤더 카피, 외부 링크를 공개 화면 문맥에서 바로 조정합니다."
     )

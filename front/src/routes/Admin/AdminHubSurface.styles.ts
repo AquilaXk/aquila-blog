@@ -17,11 +17,11 @@ import {
 
 export const Main = styled.main`
   display: grid;
-  gap: 1.1rem;
+  gap: 0.72rem;
   align-items: start;
   width: min(100%, 1088px);
   margin: 0 auto;
-  padding: 1.15rem 0 2.4rem;
+  padding: 0.72rem 0 2rem;
 
   @media (max-width: 768px) {
     padding-top: 0.8rem;
@@ -31,8 +31,8 @@ export const Main = styled.main`
 
 export const HeroPanel = styled.section`
   display: grid;
-  gap: 0.82rem;
-  padding: 0 0 0.96rem;
+  gap: 0.5rem;
+  padding: 0 0 0.6rem;
   border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};
 `
 
@@ -61,14 +61,14 @@ export const HeroHeading = styled.h1`
   margin: 0;
   min-width: 0;
   color: ${({ theme }) => adminPrimaryText(theme)};
-  font-size: clamp(1.56rem, 2.6vw, 2.1rem);
+  font-size: clamp(1.18rem, 2vw, 1.48rem);
   line-height: 1.1;
   font-weight: 800;
   letter-spacing: 0;
   word-break: keep-all;
 
   @media (max-width: 768px) {
-    font-size: clamp(1.48rem, 7vw, 1.92rem);
+    font-size: clamp(1.18rem, 6vw, 1.42rem);
   }
 `
 
@@ -187,7 +187,7 @@ export const BorderlessPanel = styled.div`
   gap: 0.24rem;
   min-width: 0;
   padding: 0.78rem 0.84rem;
-  border-radius: 12px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => adminCardBorder(theme)};
   background: ${({ theme }) => adminPlainSurface(theme)};
 
@@ -222,7 +222,7 @@ export const BorderlessPanelLink = styled.a`
   min-width: 0;
   min-height: 3.75rem;
   padding: 0.82rem 0.88rem;
-  border-radius: 12px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => adminCardBorder(theme)};
   background: ${({ theme }) => adminPlainSurface(theme)};
   color: inherit;
@@ -319,7 +319,7 @@ export const BorderlessMetricRow = styled.div`
   gap: 0.24rem;
   min-width: 0;
   padding: 0.78rem 0.84rem;
-  border-radius: 12px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => adminCardBorder(theme)};
   background: ${({ theme }) => adminPlainSurface(theme)};
 

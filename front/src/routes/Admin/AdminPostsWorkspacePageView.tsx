@@ -78,7 +78,7 @@ export const AdminPostsWorkspacePageView = (props: Record<string, any>) => {
         <HeroSection>
           <AdminWorkspaceHeroLayout>
             <PostsHeroCopy>
-              <h1>편집과 검수를 한 화면에서 이어갑니다</h1>
+              <h1>글 관리</h1>
             </PostsHeroCopy>
             <AdminWorkspaceHeroActions>
               <PrimaryCta type="button" onClick={() => void openWriteRoute()}>
@@ -174,8 +174,7 @@ export const AdminPostsWorkspacePageView = (props: Record<string, any>) => {
                 </RecentActionPanel>
               ) : (
                 <DeferredPanelPlaceholder data-size="activity">
-                  <strong>작업 기록 준비 중</strong>
-                  <span>목록이 안정된 뒤 최근 변경 이력을 이어서 불러옵니다.</span>
+                  <strong>작업 기록</strong>
                 </DeferredPanelPlaceholder>
               )}
             </ListSection>

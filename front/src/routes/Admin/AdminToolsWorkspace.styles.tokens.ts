@@ -22,15 +22,15 @@ export const Main = styled.main`
   width: 100%;
   min-width: 0;
   margin: 0 auto;
-  padding: 1.5rem 1rem 3rem;
+  padding: 0.9rem 1rem 2.6rem;
   display: grid;
   gap: 1.25rem;
 `
 
 export const OpsOverview = styled(AdminWorkspaceHero)`
   display: grid;
-  gap: 0.88rem;
-  padding-bottom: 0.92rem;
+  gap: 0.58rem;
+  padding-bottom: 0.58rem;
 `
 
 export const OverviewHeader = styled.div`
@@ -41,9 +41,9 @@ export const OverviewHeader = styled.div`
 
   h1 {
     margin: 0;
-    font-size: clamp(1.46rem, 2.8vw, 1.96rem);
+    font-size: clamp(1.16rem, 2vw, 1.42rem);
     line-height: 1.1;
-    letter-spacing: -0.03em;
+    letter-spacing: 0;
   }
 
   @media (max-width: 960px) {
@@ -91,7 +91,7 @@ export const FeaturedStatusCard = styled.button`
   text-align: left;
   display: grid;
   gap: 0.55rem;
-  border-radius: 16px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
   background: ${({ theme }) =>
     theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2};
@@ -138,7 +138,7 @@ export const StatusCardButton = styled.button`
   text-align: left;
   display: grid;
   gap: 0.22rem;
-  border-radius: 16px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
   background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray1)};
   padding: 0.82rem 0.9rem;
@@ -190,7 +190,7 @@ export const WorkspaceSection = styled.section`
   display: grid;
   gap: 0.82rem;
   padding: 0.92rem;
-  border-radius: 12px;
+  border-radius: 2px;
   background: ${({ theme }) =>
     theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2};
   border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray5)};
@@ -276,7 +276,7 @@ export const SubSectionHeading = styled.div`
 `
 
 export const DetailsPanel = styled.details`
-  border-radius: 16px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
 
@@ -395,7 +395,7 @@ export const MetricCard = styled.div`
   display: grid;
   gap: 0.22rem;
   padding: 0.82rem 0.88rem;
-  border-radius: 14px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
 

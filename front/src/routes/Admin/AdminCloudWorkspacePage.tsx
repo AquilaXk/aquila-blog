@@ -34,7 +34,6 @@ import {
   ActionGroup,
   CloudContent,
   CloudMain,
-  CloudNoticeBar,
   CloudSearchField,
   CloudTitleBar,
   CloudWorkspace,
@@ -282,8 +281,7 @@ const PreviewDrawer = ({ file }: PreviewDrawerProps) => {
   if (!file) {
     return (
       <EmptyState>
-        <strong>미리 볼 파일을 선택하세요.</strong>
-        <p>파일명을 누르면 문서, 사진, 동영상 미리보기가 이 영역에 표시됩니다.</p>
+        <strong>파일 선택</strong>
       </EmptyState>
     )
   }
@@ -515,24 +513,14 @@ const AdminCloudWorkspacePage = () => {
     : keyword || filter !== "ALL"
       ? "조건에 맞는 파일이 없습니다."
       : "아직 올린 파일이 없습니다."
-  const emptyDescription =
-    activeUploadCount > 0
-      ? "업로드가 끝나면 이 목록에 자동으로 표시됩니다."
-      : "상단의 올리기 버튼으로 문서, 사진, 동영상을 여러 개 선택해 업로드하세요."
 
   return (
     <CloudMain>
-      <CloudNoticeBar>
-        <span>관리자 클라우드는 public URL을 만들지 않습니다.</span>
-        <strong>계정 소유주만 접근</strong>
-      </CloudNoticeBar>
-
       <CloudWorkspace>
         <CloudContent>
           <CloudTitleBar>
             <div>
-              <h1>관리자 클라우드</h1>
-              <p>MYBOX형 파일 관리자 화면입니다. 문서, 사진, 동영상은 모두 관리자 계정 소유주만 볼 수 있습니다.</p>
+              <h1>내 파일</h1>
             </div>
             <CloudSearchField>
               <AppIcon name="search" />
@@ -613,10 +601,11 @@ const AdminCloudWorkspacePage = () => {
             {files.length === 0 ? (
               <EmptyTableState>
                 <strong>{emptyTitle}</strong>
-                <p>{emptyDescription}</p>
-                <PrimaryButton type="button" aria-label="파일 업로드" onClick={() => uploadInputRef.current?.click()}>
-                  ⤴ 올리기
-                </PrimaryButton>
+                {activeUploadCount > 0 ? null : (
+                  <PrimaryButton type="button" aria-label="파일 업로드" onClick={() => uploadInputRef.current?.click()}>
+                    ⤴ 올리기
+                  </PrimaryButton>
+                )}
               </EmptyTableState>
             ) : (
               <FileTable aria-busy={filesQuery.isFetching ? "true" : "false"}>
@@ -648,7 +637,7 @@ const AdminCloudWorkspacePage = () => {
                         <td>
                           <FavoriteButton
                             type="button"
-                            aria-label={`${file.originalFilename} 즐겨찾기 기능 준비 중`}
+                            aria-label={`${file.originalFilename} 즐겨찾기 (준비 중)`}
                             disabled
                           >
                             ☆
@@ -695,7 +684,7 @@ const AdminCloudWorkspacePage = () => {
 
         <DetailPanel aria-label="클라우드 상세정보">
           <DetailHeader>
-            <h2>내 파일</h2>
+            <h2>파일 정보</h2>
             <IconButton
               type="button"
               aria-label="상세 패널 닫기"

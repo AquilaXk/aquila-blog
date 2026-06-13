@@ -75,7 +75,7 @@ export const SectionRailButton = styled(AdminWorkspaceSectionNavButton)`
     min-height: 46px;
     justify-content: flex-start;
     padding: 0.78rem 0.94rem;
-    border-radius: 16px;
+    border-radius: 2px;
   }
 `
 
@@ -147,7 +147,7 @@ export const AvatarWorkspaceCard = styled.div`
   justify-items: center;
   gap: 0.58rem;
   padding: 0.92rem;
-  border-radius: 18px;
+  border-radius: 2px;
   background: ${({ theme }) => theme.colors.gray2};
   border: 1px solid ${({ theme }) => theme.colors.gray7};
 
@@ -178,7 +178,7 @@ export const FieldSectionCard = styled.div`
   display: grid;
   gap: 0.82rem;
   padding: 1rem;
-  border-radius: 12px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray1};
 
@@ -244,7 +244,7 @@ export const FieldLabel = styled.label`
 export const Input = styled.input`
   width: 100%;
   min-height: 42px;
-  border-radius: 12px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => theme.colors.gray7};
   background: ${({ theme }) => theme.colors.gray3};
   color: ${({ theme }) => theme.colors.gray12};
@@ -265,7 +265,7 @@ export const Input = styled.input`
 export const TextArea = styled.textarea`
   width: 100%;
   min-height: 132px;
-  border-radius: 14px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => theme.colors.gray7};
   background: ${({ theme }) => theme.colors.gray3};
   color: ${({ theme }) => theme.colors.gray12};
@@ -294,7 +294,7 @@ export const AboutSectionCard = styled.div`
   display: grid;
   gap: 0.72rem;
   padding: 0.9rem;
-  border-radius: 16px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => theme.colors.gray7};
   background: ${({ theme }) => theme.colors.gray2};
 `
@@ -373,7 +373,7 @@ export const InlineActionRow = styled.div`
 
 export const EmptyStateCard = styled.div`
   padding: 1rem;
-  border-radius: 16px;
+  border-radius: 2px;
   border: 1px dashed ${({ theme }) => theme.colors.gray7};
   background: ${({ theme }) => theme.colors.gray2};
   display: grid;

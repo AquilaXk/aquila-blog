@@ -107,7 +107,7 @@ export const AdminProfileWorkspaceSections = (props: Record<string, any>) => {
       <WorkspaceHero>
         <AdminWorkspaceHeroLayout>
           <AdminWorkspaceHeroCopy>
-            <h1>메인과 About에 보일 인상을 다듬습니다</h1>
+            <h1>프로필</h1>
           </AdminWorkspaceHeroCopy>
         </AdminWorkspaceHeroLayout>
       </WorkspaceHero>

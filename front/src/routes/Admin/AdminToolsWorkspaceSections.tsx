@@ -53,7 +53,7 @@ export const AdminToolsWorkspaceSections = (props: Record<string, any>) => {
         <OpsOverview id={SECTION_IDS.overview} data-ops-section="overview">
           <OverviewHeader>
             <div>
-              <h1>문제 확인과 복구를 같은 흐름에서 처리합니다</h1>
+              <h1>운영 도구</h1>
             </div>
             <OverviewMeta>
               <StatusBadge data-tone={getStatusTone(overviewStatusLabel)}>{overviewStatusLabel}</StatusBadge>

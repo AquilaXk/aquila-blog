@@ -17,7 +17,7 @@ export const PrioritySection = styled(AdminPlainCard)`
   display: grid;
   gap: 10px;
   padding: 14px 16px;
-  border-radius: 18px;
+  border-radius: 2px;
 
   @media (max-width: 720px) {
     gap: 8px;
@@ -39,7 +39,7 @@ export const ContextSection = styled(AdminPlainCard)`
   display: grid;
   gap: 12px;
   padding: 16px 18px;
-  border-radius: 12px;
+  border-radius: 2px;
 `
 
 export const ContextLinkGrid = styled(AdminInfoList)`
@@ -72,7 +72,7 @@ export const ContextMonitoringLinkCard = styled(AdminInfoLinkCard)`
 
 export const AdditionalPanelsSection = styled(AdminPlainCard)`
   padding: 14px 16px;
-  border-radius: 12px;
+  border-radius: 2px;
 `
 
 export const AdditionalPanelsDisclosure = styled.details`
@@ -191,7 +191,7 @@ export const PrioritySummary = styled.div`
   align-items: center;
   min-height: 34px;
   padding: 0.32rem 0.72rem;
-  border-radius: 14px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray12};

@@ -33,7 +33,6 @@ import {
   MetricCard,
   MetricCopy,
   MetricIcon,
-  PageEyebrow,
   PanelBody,
   PanelCard,
   PanelFallback,
@@ -85,8 +84,7 @@ export const AdminDashboardWorkspaceView = (props: Record<string, any>) => {
           <HeroPanel>
             <HeroTop>
               <HeroCopy>
-                <PageEyebrow>운영 모니터링</PageEyebrow>
-                <h1>지금 확인해야 할 운영 상태</h1>
+                <h1>운영 상태</h1>
               </HeroCopy>
               <HeroActions>
                 <StatusChip data-tone={dashboardStatusTone}>{dashboardStatusLabel}</StatusChip>

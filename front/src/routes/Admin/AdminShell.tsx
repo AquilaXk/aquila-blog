@@ -10,7 +10,6 @@ import {
   adminBorderStrong,
   adminControlText,
   adminGold,
-  adminGoldTintSubtle,
   adminShellSurface,
   adminSurfaceAccent,
   adminSurfaceRaised,
@@ -136,7 +135,6 @@ const AdminShell = ({ currentSection, member, profileSnapshot = null, children }
         </SidebarTop>
 
         <SidebarNavSection>
-          <SidebarSectionLabel>관리 메뉴</SidebarSectionLabel>
           <SidebarNav aria-label="관리자 내비게이션">
             {NAV_ITEMS.map((item) => (
               <Link key={item.id} href={item.href} passHref legacyBehavior>
@@ -185,14 +183,14 @@ const ShellFrame = styled.div`
 
 const Sidebar = styled.aside`
   display: grid;
-  gap: 1rem;
+  gap: 0.65rem;
   align-content: start;
   min-width: 0;
   position: sticky;
   top: calc(var(--app-header-height, 73px) + 0.85rem);
   min-height: calc(100vh - var(--app-header-height, 73px) - 1.7rem);
   height: fit-content;
-  padding: 0.85rem 0.72rem;
+  padding: 0.72rem 0.35rem;
   border: 0;
   border-right: 1px solid ${adminBorder};
   border-radius: 0;
@@ -202,7 +200,7 @@ const Sidebar = styled.aside`
   @media (max-width: 1100px) {
     position: static;
     padding: 0.72rem 0.82rem;
-    border-radius: 14px;
+    border-radius: 2px;
     display: none;
   }
 `
@@ -223,7 +221,7 @@ const BrandBlock = styled.div`
   display: flex;
   align-items: center;
   gap: 0.78rem;
-  padding: 0.1rem 0.2rem 0.35rem;
+  padding: 0.1rem 0.42rem 0.35rem;
 
   @media (max-width: 1100px) {
     flex-shrink: 0;
@@ -233,7 +231,7 @@ const BrandBlock = styled.div`
 const BrandMark = styled.div`
   width: 2.95rem;
   height: 2.95rem;
-  border-radius: 11px;
+  border-radius: 2px;
   display: grid;
   place-items: center;
   position: relative;
@@ -275,21 +273,13 @@ const BrandCopy = styled.div`
 
 const SidebarNavSection = styled.section`
   display: grid;
-  gap: 0.68rem;
-  padding-top: 0.35rem;
-`
-
-const SidebarSectionLabel = styled.small`
-  color: ${adminTextMuted};
-  font-size: 0.74rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  padding: 0 0.35rem;
+  gap: 0.3rem;
+  padding-top: 0.1rem;
 `
 
 const SidebarNav = styled.nav`
   display: grid;
-  gap: 0.45rem;
+  gap: 0.08rem;
 
   @media (max-width: 1100px) {
     grid-auto-flow: column;
@@ -308,26 +298,26 @@ const SidebarNav = styled.nav`
 const NavLink = styled.a`
   display: flex;
   align-items: center;
-  gap: 0.82rem;
+  gap: 0.62rem;
   min-width: 0;
-  min-height: 2.65rem;
-  padding: 0.5rem 0.62rem;
-  border-radius: 8px;
-  border: 1px solid transparent;
+  min-height: 2.38rem;
+  padding: 0.38rem 0.55rem;
+  border-radius: 0;
+  border: 0;
+  border-left: 3px solid transparent;
   color: inherit;
   text-decoration: none;
   transition: border-color 140ms ease, background 140ms ease;
 
   .navIcon {
-    width: 2.3rem;
-    height: 2.3rem;
-    border-radius: 7px;
+    width: 1.55rem;
+    height: 1.55rem;
+    border-radius: 0;
     display: grid;
     place-items: center;
     flex-shrink: 0;
     color: ${adminTextSecondary};
-    background: ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : adminSurfaceRaised};
+    background: transparent;
   }
 
   .navLabel {
@@ -339,19 +329,17 @@ const NavLink = styled.a`
   }
 
   &[data-active="true"] {
-    border-color: ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : adminBorderStrong};
+    border-left-color: ${adminGold};
     background: ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : adminSurfaceAccent};
+      theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : adminSurfaceAccent};
   }
 
   &[data-active="true"] .navIcon {
-    background: ${adminGoldTintSubtle};
+    background: transparent;
     color: ${adminGold};
   }
 
   &:hover {
-    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : adminBorder)};
     background: ${({ theme }) =>
       theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : adminSurfaceRaised};
   }
@@ -373,9 +361,9 @@ const SidebarPrimaryAction = styled.a`
   justify-content: center;
   gap: 0.46rem;
   width: 100%;
-  min-height: 2.9rem;
-  padding: 0.7rem 0.9rem;
-  border-radius: 8px;
+  min-height: 2.38rem;
+  padding: 0.56rem 0.72rem;
+  border-radius: 2px;
   border: 1px solid ${adminTealBorder};
   background: ${adminTeal};
   color: ${adminControlText};
@@ -392,7 +380,7 @@ const SidebarPrimaryAction = styled.a`
 const ContentColumn = styled.div`
   display: grid;
   align-content: start;
-  gap: 1rem;
+  gap: 0.65rem;
   min-width: 0;
 `
 
@@ -402,10 +390,10 @@ const UtilityBarFallback = styled.div`
   z-index: 5;
   height: 4.85rem;
   border: 1px solid ${adminBorder};
-  border-radius: 14px;
+  border-radius: 0;
   background: ${({ theme }) =>
     theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : "rgba(23, 24, 23, 0.86)"};
-  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.2);
+  box-shadow: none;
 
   @media (max-width: 720px) {
     top: calc(var(--app-header-height, 73px) + 0.65rem);

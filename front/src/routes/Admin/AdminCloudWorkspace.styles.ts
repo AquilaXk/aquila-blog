@@ -18,40 +18,16 @@ export const CloudMain = styled.main`
   min-width: 0;
   color: ${textPrimary};
   background: ${surface};
-  border: 1px solid ${border};
-  border-radius: 14px;
+  border: 0;
+  border-radius: 0;
   overflow: hidden;
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
-`
-
-export const CloudNoticeBar = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.55rem;
-  min-height: 2.8rem;
-  padding: 0.55rem 1rem;
-  border-bottom: 1px solid ${border};
-  background: #1d1e1b;
-  color: ${textSecondary};
-  font-size: 0.86rem;
-  font-weight: 700;
-
-  strong {
-    color: ${accentGold};
-    font-weight: 850;
-  }
-
-  @media (max-width: 760px) {
-    justify-content: flex-start;
-    text-align: left;
-  }
+  box-shadow: none;
 `
 
 export const CloudWorkspace = styled.section`
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(18rem, 21rem);
-  min-height: calc(100vh - var(--app-header-height, 73px) - 7rem);
+  min-height: calc(100vh - var(--app-header-height, 73px) - 3.2rem);
 
   @media (max-width: 1260px) {
     grid-template-columns: minmax(0, 1fr) minmax(17rem, 19rem);
@@ -98,7 +74,7 @@ export const CloudNavButton = styled.button`
   align-items: center;
   gap: 0.55rem;
   border: 0;
-  border-radius: 8px;
+  border-radius: 0;
   padding: 0.35rem 0.45rem;
   background: transparent;
   color: ${textPrimary};
@@ -171,12 +147,13 @@ export const CloudTitleBar = styled.header`
   grid-template-columns: minmax(0, 1fr) minmax(18rem, 26rem);
   gap: 1rem;
   align-items: center;
-  padding: 1.35rem 1.5rem 0.95rem;
+  padding: 1rem 1.25rem 0.72rem;
+  border-bottom: 1px solid ${border};
 
   h1 {
     margin: 0;
     color: ${textPrimary};
-    font-size: 1.32rem;
+    font-size: 1.08rem;
     line-height: 1.2;
     font-weight: 850;
     letter-spacing: 0;
@@ -243,7 +220,7 @@ export const ActionBar = styled.div`
   justify-content: space-between;
   gap: 0.8rem;
   min-width: 0;
-  padding: 0.55rem 1.5rem 1rem;
+  padding: 0.65rem 1.25rem;
   border-bottom: 1px solid ${border};
 
   @media (max-width: 760px) {
@@ -482,23 +459,15 @@ export const RowActions = styled.div`
 export const EmptyTableState = styled.div`
   display: grid;
   place-items: center;
-  gap: 0.7rem;
+  gap: 0.62rem;
   min-height: 20rem;
-  padding: 2rem;
+  padding: 1.25rem;
   color: ${textMuted};
   text-align: center;
 
   strong {
     color: ${textPrimary};
     font-size: 1rem;
-  }
-
-  p {
-    margin: 0;
-    max-width: 26rem;
-    color: ${textMuted};
-    font-size: 0.84rem;
-    line-height: 1.55;
   }
 `
 
@@ -698,12 +667,12 @@ export const QueuePanel = styled.section`
   z-index: 30;
   width: min(26rem, calc(100vw - 2rem));
   display: grid;
-  gap: 0.72rem;
-  padding: 0.9rem;
+  gap: 0.55rem;
+  padding: 0.72rem;
   border: 1px solid ${borderStrong};
-  border-radius: 12px;
+  border-radius: 2px;
   background: rgba(23, 24, 23, 0.96);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
+  box-shadow: none;
 `
 
 export const QueueHeader = styled.div`
@@ -743,9 +712,9 @@ export const QueueItem = styled.li`
   gap: 0.5rem 0.75rem;
   align-items: center;
   min-width: 0;
-  padding: 0.62rem;
+  padding: 0.55rem;
   border: 1px solid ${border};
-  border-radius: 9px;
+  border-radius: 2px;
   background: ${surfaceRaised};
 
   strong {

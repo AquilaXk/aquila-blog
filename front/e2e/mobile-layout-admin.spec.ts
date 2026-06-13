@@ -21,7 +21,7 @@ test.describe("mobile layout admin", () => {
   test("모바일 어드민 유틸리티는 검색을 접어 first fold를 보존한다", async ({ page }) => {
   await page.goto("/admin/tools")
 
-  await expect(page.getByRole("heading", { name: /문제 확인과 복구/ })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "운영 도구" })).toBeVisible()
   await expect(page.getByRole("navigation", { name: "관리자 바로가기" })).toBeVisible()
   await expect(page.getByRole("link", { name: "글 관리" })).toBeVisible()
 

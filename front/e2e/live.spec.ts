@@ -586,7 +586,7 @@ test.describe("live production e2e", () => {
 
     await page.goto("/admin/cloud")
     await expect(page.getByRole("heading", { name: adminCloudHeadingPattern })).toBeVisible()
-    await expect(page.getByRole("button", { name: /파일 업로드|업로드 중/ })).toBeVisible()
+    await expect(page.getByRole("button", { name: /^(파일 업로드|업로드 중)$/ })).toBeVisible()
 
     await page.goto("/admin/tools")
     await expect(page.getByRole("heading", { name: adminToolsHeadingPattern })).toBeVisible()

@@ -16,8 +16,8 @@ import {
   waitForHomeTagRailReady,
 } from "./helpers/perfFixtures"
 
-test.describe("perf layout and surface budgets", () => {
-  test("메인 레이아웃은 velog형 width tier(1728/1376/1024/100%)를 유지한다", async ({ page }) => {
+test.describe("성능 레이아웃과 표면 예산", () => {
+  test("메인 레이아웃은 velog형 폭 단계(1728/1376/1024/100%)를 유지한다", async ({ page }) => {
   await mockFeedEndpoints(page)
 
   await page.setViewportSize({ width: 2000, height: 900 })
@@ -64,7 +64,7 @@ test.describe("perf layout and surface budgets", () => {
   await expect(page.locator(".rt")).toBeHidden()
 })
 
-  test("피드 카드 hover lift는 content-visibility clipping 없이 상단을 그릴 수 있다", async ({ page }) => {
+  test("피드 카드 호버 상승은 콘텐츠 표시 잘림 없이 상단을 그릴 수 있다", async ({ page }) => {
   await mockFeedEndpoints(page)
   await page.setViewportSize({ width: 1440, height: 900 })
   await gotoForPerf(page, "/")
@@ -147,7 +147,7 @@ test.describe("perf layout and surface budgets", () => {
   expect(firstCardLeft).toBeGreaterThanOrEqual(railRight + 8)
 })
 
-  test("상세 좌/우 레일 sticky는 스크롤 전후 좌표를 안정적으로 유지한다", async ({ page }) => {
+  test("상세 좌/우 고정 레일은 스크롤 전후 좌표를 안정적으로 유지한다", async ({ page }) => {
   const postId = 991
   await mockFeedEndpoints(page)
   await mockDetailRailEndpoint(page, postId)
@@ -181,7 +181,7 @@ test.describe("perf layout and surface budgets", () => {
   expect(Math.abs((midSnapshot.rightRail?.left ?? 0) - (deepSnapshot.rightRail?.left ?? 0))).toBeLessThanOrEqual(2)
 })
 
-  test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지한다", async ({ page }) => {
+  test("핵심 화면 레이아웃 스냅샷(데스크톱/iPhone15/iPad mini)을 유지한다", async ({ page }) => {
   await mockFeedEndpoints(page)
   await mockDetailRailEndpoint(page, 991)
   await mockAdminMonitoringEndpoints(page)
@@ -394,14 +394,15 @@ test.describe("perf layout and surface budgets", () => {
       const htmlScrollWidth = snapshot.scrollWidth?.html ?? 0
       const bodyScrollWidth = snapshot.scrollWidth?.body ?? 0
 
-      // 헤드리스/스크롤바 폭 편차로 iPad mini 768 환경에서 2~3px 오차가 발생할 수 있다.
-      expect(serviceRailWidth).toBeGreaterThanOrEqual(716)
+      // MYBOX형 관리자 first fold는 iPad mini 768 환경에서 우선 점검 영역을 350px 전후로 당긴다.
+      // 관리자 route는 full-bleed 작업 공간이므로 콘텐츠 폭은 742px 안팎으로 고정한다.
+      expect(serviceRailWidth).toBeGreaterThanOrEqual(738)
       expect(serviceRailWidth).toBeLessThanOrEqual(744)
-      expect(prioritySectionY).toBeGreaterThanOrEqual(360)
-      expect(prioritySectionY).toBeLessThanOrEqual(470)
-      expect(panelGridWidth).toBeGreaterThanOrEqual(716)
+      expect(prioritySectionY).toBeGreaterThanOrEqual(340)
+      expect(prioritySectionY).toBeLessThanOrEqual(370)
+      expect(panelGridWidth).toBeGreaterThanOrEqual(738)
       expect(panelGridWidth).toBeLessThanOrEqual(744)
-      expect(firstPanelWidth).toBeGreaterThanOrEqual(716)
+      expect(firstPanelWidth).toBeGreaterThanOrEqual(738)
       expect(firstPanelWidth).toBeLessThanOrEqual(744)
       expect(firstPanelY).toBeGreaterThanOrEqual(prioritySectionBottom)
       expect(firstPanelY).toBeLessThanOrEqual(650)
@@ -414,7 +415,7 @@ test.describe("perf layout and surface budgets", () => {
   }
 })
 
-  test("public/auth 핵심 화면은 adminProfile grid 서피스 계층을 유지한다", async ({ page }) => {
+  test("공개와 인증 핵심 화면은 관리자 프로필 그리드 표면 계층을 유지한다", async ({ page }) => {
   test.setTimeout(60_000)
   await mockFeedEndpoints(page, {
     adminProfile: {

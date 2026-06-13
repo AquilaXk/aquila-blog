@@ -17,8 +17,8 @@ test.beforeEach(async ({ page }) => {
   await mockAnonymousSession(page)
 })
 
-test.describe("mobile layout admin", () => {
-  test("모바일 어드민 유틸리티는 검색을 접어 first fold를 보존한다", async ({ page }) => {
+test.describe("모바일 관리자 레이아웃", () => {
+  test("모바일 어드민 유틸리티는 검색을 접어 첫 화면을 보존한다", async ({ page }) => {
   await page.goto("/admin/tools")
 
   await expect(page.getByRole("heading", { name: "운영 도구" })).toBeVisible()
@@ -57,7 +57,7 @@ test.describe("mobile layout admin", () => {
   await expect(page).toHaveURL(/\/admin\/posts(?:$|\?)/)
 })
 
-  test("어드민 글 목록 first fold는 목록 본문을 보조 패널보다 먼저 노출한다", async ({ page }) => {
+  test("어드민 글 목록 첫 화면은 목록 본문을 보조 패널보다 먼저 노출한다", async ({ page }) => {
   await mockAdminPostsWorkspaceEndpoints(page)
 
   await page.goto("/admin/posts")

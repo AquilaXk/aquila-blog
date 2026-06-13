@@ -12,17 +12,20 @@ import {
   adminInteractiveFocusRing,
 } from "src/routes/Admin/AdminSurfacePrimitives"
 import {
+  adminBorder,
+  adminBorderStrong,
+  adminSurface,
+  adminSurfaceRaised,
   adminWarningBadgeBorder,
   adminWarningBadgeSurface,
   adminWarningBadgeText,
 } from "src/routes/Admin/adminColorTokens"
 
 export const Main = styled.main`
-  max-width: 1440px;
   width: 100%;
   min-width: 0;
-  margin: 0 auto;
-  padding: 0.9rem 1rem 2.6rem;
+  margin: 0;
+  padding: 1.05rem 1.45rem 2.6rem;
   display: grid;
   gap: 1.25rem;
 `
@@ -92,14 +95,13 @@ export const FeaturedStatusCard = styled.button`
   display: grid;
   gap: 0.55rem;
   border-radius: 2px;
-  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
-  background: ${({ theme }) =>
-    theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2};
+  border: 1px solid ${adminBorder};
+  background: ${adminSurfaceRaised};
   padding: 1rem;
   cursor: pointer;
 
   &:hover {
-    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray7)};
+    border-color: ${adminBorderStrong};
   }
 `
 
@@ -139,13 +141,13 @@ export const StatusCardButton = styled.button`
   display: grid;
   gap: 0.22rem;
   border-radius: 2px;
-  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
-  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray1)};
+  border: 1px solid ${adminBorder};
+  background: ${adminSurface};
   padding: 0.82rem 0.9rem;
   cursor: pointer;
 
   &:hover {
-    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray7)};
+    border-color: ${adminBorderStrong};
   }
 
   small {
@@ -191,15 +193,14 @@ export const WorkspaceSection = styled.section`
   gap: 0.82rem;
   padding: 0.92rem;
   border-radius: 2px;
-  background: ${({ theme }) =>
-    theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2};
-  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray5)};
+  background: ${adminSurfaceRaised};
+  border: 1px solid ${adminBorder};
   content-visibility: auto;
   contain-intrinsic-size: 720px;
 
   &[data-emphasis="secondary"] {
-    background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray1)};
-    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray4)};
+    background: ${adminSurface};
+    border-color: ${adminBorder};
   }
 
   &[data-tone="danger"] {

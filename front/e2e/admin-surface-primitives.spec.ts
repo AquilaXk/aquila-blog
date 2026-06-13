@@ -2,8 +2,75 @@ import { readFileSync } from "node:fs"
 import path from "node:path"
 import { expect, test } from "@playwright/test"
 
-test.describe("admin surface primitives contract", () => {
-  test("shared admin primitives own focus-visible and mobile snap contracts", () => {
+test.describe("관리자 표면 공통 계약", () => {
+  test("관리자 표면은 MYBOX형 화이트 우선 시스템 테마 토큰을 공유한다", () => {
+    const colorTokenSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/adminColorTokens.ts"), "utf8")
+    const shellSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminShell.tsx"), "utf8")
+    const rootLayoutSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/index.tsx"), "utf8")
+    const utilitySource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminUtilityBar.tsx"), "utf8")
+    const cloudStyleSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminCloudWorkspace.styles.ts"), "utf8")
+    const cloudPageSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminCloudWorkspacePage.tsx"), "utf8")
+    const primitiveSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminSurfacePrimitives.tsx"),
+      "utf8",
+    )
+    const hubStyleSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminHubSurface.styles.ts"), "utf8")
+
+    expect(colorTokenSource).toContain("export const adminSystemThemeVariables =")
+    expect(colorTokenSource).toContain('theme.scheme === "dark" ? adminDarkThemeVariables : adminLightThemeVariables')
+    expect(colorTokenSource).toContain("--admin-primary: #b9954f;")
+    expect(colorTokenSource).toContain("--admin-primary: #d0b46c;")
+    expect(colorTokenSource).toContain("--admin-accent-text: #6f5524;")
+    expect(colorTokenSource).toContain("--admin-control-text: #101214;")
+    expect(colorTokenSource).toContain("--admin-text-muted: #566273;")
+    expect(colorTokenSource).toContain('export const adminTextMuted = "var(--admin-text-muted, #566273)"')
+    expect(colorTokenSource).toContain('export const adminSurface = "var(--admin-surface')
+    expect(colorTokenSource).toContain('export const adminSurfaceAccent = "var(--admin-surface-accent, #f7f1e3)"')
+    expect(colorTokenSource).toContain('export const adminGold = "var(--admin-accent-text, #6f5524)"')
+    expect(colorTokenSource).toContain('export const adminTeal = "var(--admin-primary')
+    expect(colorTokenSource).toContain('export const usesDarkAdminSurface = (theme: Theme) => theme.scheme !== "light"')
+    expect(colorTokenSource).not.toContain("#4f74ff")
+
+    expect(rootLayoutSource).toContain('const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/")')
+    expect(rootLayoutSource).toContain('const isDesignAwareRoute = !isAdminRoute && pathname[1] !== "_" && pathname !== "/sitemap.xml"')
+    expect(rootLayoutSource).toContain("const effectiveScheme = isDesignAwareRoute ? publicAppearance.scheme : scheme")
+    expect(shellSource).toContain("${({ theme }) => adminSystemThemeVariables(theme)}")
+    expect(shellSource).toContain("grid-template-columns: 17.5rem minmax(0, 1fr);")
+    expect(shellSource).toContain("width: 100%;")
+    expect(shellSource).not.toContain("width: 100vw;")
+    expect(shellSource).toContain("background: ${adminAppBackground};")
+    expect(shellSource).not.toContain("border-radius: 14px;")
+
+    expect(utilitySource).toContain("border-bottom: 1px solid ${adminBorder};")
+    expect(utilitySource).not.toContain("backdrop-filter")
+    expect(utilitySource).not.toContain("border-radius: 14px;")
+
+    expect(cloudStyleSource).toContain("background: ${surface};")
+    expect(cloudStyleSource).toContain("grid-template-columns: minmax(0, 1fr) minmax(18rem, 21rem);")
+    expect(cloudPageSource).toContain('선택한 조건에 맞는 파일이 없습니다.')
+    expect(cloudPageSource).not.toContain("아직 올린 파일이 없습니다.")
+
+    expect(primitiveSource).toContain("adminPlainSurface(theme)")
+    expect(primitiveSource).not.toContain("linear-gradient")
+    expect(hubStyleSource).not.toContain("transform: translateY")
+  })
+
+  test("관리자 프로필은 대표 제목과 내부 섹션 제목 텍스트를 중복하지 않는다", () => {
+    const profileSectionSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceSections.tsx"),
+      "utf8",
+    )
+    const profileModelSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceModel.ts"),
+      "utf8",
+    )
+
+    expect(profileSectionSource).toContain("<h1>프로필</h1>")
+    expect(profileModelSource).toContain('label: "기본 정보"')
+    expect(profileModelSource).not.toContain('label: "프로필"')
+  })
+
+  test("관리자 공통 프리미티브는 포커스 표시와 모바일 스냅 계약을 가진다", () => {
     const source = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminSurfacePrimitives.tsx"),
       "utf8",
@@ -22,7 +89,7 @@ test.describe("admin surface primitives contract", () => {
     expect(source).toContain("export const AdminWorkspaceHero = styled.section`")
   })
 
-  test("dashboard context rail yields priority earlier on tablet widths", () => {
+  test("대시보드 컨텍스트 레일은 태블릿 폭에서 우선 영역을 먼저 노출한다", () => {
     const workspaceSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspacePage.tsx"),
       "utf8",
@@ -62,7 +129,7 @@ test.describe("admin surface primitives contract", () => {
     expect(`${layoutStyleSource}\n${priorityStyleSource}`).not.toContain("${AdminInfoLinkCard}")
   })
 
-  test("posts/tools reuse shared badge and action primitives", () => {
+  test("글 관리와 운영 도구는 공통 배지와 액션 프리미티브를 재사용한다", () => {
     const postsListSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceList.tsx"), "utf8")
     const postsListStyleSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceList.styles.ts"),
@@ -99,7 +166,7 @@ test.describe("admin surface primitives contract", () => {
     expect(`${toolsTokenStyleSource}\n${toolsLayoutStyleSource}`).not.toContain("const SectionNavButton = styled(AdminWorkspaceSectionNavButton)``")
   })
 
-  test("large admin pages move style-heavy surface definitions out of orchestration pages", () => {
+  test("큰 관리자 페이지는 스타일 정의를 오케스트레이션 페이지 밖으로 분리한다", () => {
     const profileSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
     const profileSectionSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceSections.tsx"),
@@ -158,7 +225,7 @@ test.describe("admin surface primitives contract", () => {
     expect(dashboardSource.split("\n").length).toBeLessThan(1050)
   })
 
-  test("posts workspace splits repeated UI regions out of the orchestration page", () => {
+  test("글 관리 작업공간은 반복 UI 영역을 페이지에서 분리한다", () => {
     const postsSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePageView.tsx"), "utf8")
     const controllerSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePage.tsx"), "utf8")
     const recentWorkSource = readFileSync(
@@ -198,7 +265,7 @@ test.describe("admin surface primitives contract", () => {
     expect(feedbackSource).toContain("export const AdminPostsWorkspaceFeedbackLayer")
   })
 
-  test("remaining admin pages avoid oversized slab card radii", () => {
+  test("나머지 관리자 페이지는 과도한 카드 반경을 쓰지 않는다", () => {
     const dashboardSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/dashboard.tsx"), "utf8")
     const profileSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
     const toolsSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
@@ -222,7 +289,7 @@ test.describe("admin surface primitives contract", () => {
     }
   })
 
-  test("tools workspace uses detail-like hero copy and ops rail labels", () => {
+  test("운영 도구 작업공간은 상세형 대표 문구와 작업 레일 라벨을 사용한다", () => {
     const toolsPageSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspacePage.tsx"), "utf8")
     const toolsSectionsSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspaceSections.tsx"),
@@ -279,7 +346,7 @@ test.describe("admin surface primitives contract", () => {
     expect(toolsLayoutStyleSource).toContain("box-shadow: ${({ theme }) => adminInteractiveFocusRing(theme)};")
   })
 
-  test("admin utility bar keeps explicit current-view context and tablet compact nav without extra account CTA", () => {
+  test("관리자 상단 바는 현재 화면 맥락과 태블릿 축약 내비게이션만 유지한다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminUtilityBar.tsx"), "utf8")
 
     expect(source).toContain("<CurrentViewChip aria-label=\"현재 화면\">")
@@ -291,7 +358,7 @@ test.describe("admin surface primitives contract", () => {
     expect(source).not.toContain('<AppIcon name="camera" />')
   })
 
-  test("admin shell sidebar uses member profile identity before current task and nav", () => {
+  test("관리자 사이드바는 현재 작업보다 사용자 정체성을 먼저 보여준다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminShell.tsx"), "utf8")
 
     expect(source).toContain('import ProfileImage from "src/components/ProfileImage"')
@@ -312,7 +379,7 @@ test.describe("admin surface primitives contract", () => {
     expect(source).not.toContain('<AppIcon name="service" />')
   })
 
-  test("admin hub removes duplicated status and shortcut rails in favor of a single primary workflow", () => {
+  test("관리자 허브는 중복 상태와 바로가기 레일 대신 주요 작업 흐름 하나를 둔다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminHubSurface.tsx"), "utf8")
     const sectionSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminHubSurface.sections.tsx"), "utf8")
     const styleSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminHubSurface.styles.ts"), "utf8")
@@ -330,7 +397,7 @@ test.describe("admin surface primitives contract", () => {
     expect(styleSource).not.toContain("border-radius: 24px;")
   })
 
-  test("shared admin landing primitives expose a dedicated lead sentence style", () => {
+  test("공통 관리자 랜딩 프리미티브는 전용 리드 문장 스타일을 제공한다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminSurfacePrimitives.tsx"), "utf8")
 
     expect(source).toContain("export const AdminLandingSectionLead = styled.p`")

@@ -4,8 +4,8 @@ import { expect, test } from "@playwright/test"
 
 const readSourceFile = (sourcePath: string) => readFileSync(path.resolve(__dirname, "..", sourcePath), "utf8")
 
-test.describe("mobile layout source boundaries", () => {
-  test("grid design은 전 사용자-facing 화면 토큰을 사용하고 article typography를 변경하지 않는다", () => {
+test.describe("모바일 레이아웃 소스 경계", () => {
+  test("그리드 디자인은 공개 화면 토큰과 관리자 MYBOX 토큰을 분리하고 본문 타이포그래피를 변경하지 않는다", () => {
   const publicSurfaceSources = [
     "src/layouts/RootLayout/Header/index.tsx",
     "src/layouts/RootLayout/Header/Logo.tsx",
@@ -28,6 +28,7 @@ test.describe("mobile layout source boundaries", () => {
     readSourceFile("src/routes/Detail/PostDetail/PostHeader.styles.ts"),
   ].join("\n")
   const rootLayoutSource = readSourceFile("src/layouts/RootLayout/index.tsx")
+  const adminColorTokenSource = readSourceFile("src/routes/Admin/adminColorTokens.ts")
   const adminSurfaceSource = readSourceFile("src/routes/Admin/AdminSurfacePrimitives.tsx")
   const adminShellSource = readSourceFile("src/routes/Admin/AdminShell.tsx")
   const adminToolsSource = [
@@ -61,15 +62,22 @@ test.describe("mobile layout source boundaries", () => {
   expect(themeSource).toContain("readableSurface")
   expect(themeSource).toContain("operationSurface")
   expect(themeSource).toContain("operationSurfaceElevated")
-  expect(rootLayoutSource).toContain("isDesignAwareRoute")
-  expect(rootLayoutSource).toContain('pathname[1] !== "_"')
+  expect(rootLayoutSource).toContain('const isDesignAwareRoute = !isAdminRoute && pathname[1] !== "_" && pathname !== "/sitemap.xml"')
   expect(rootLayoutSource).toContain('effectiveBlogDesign === "legacy" && !isPublicBlogRoute')
+  expect(rootLayoutSource).toContain('const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/")')
+  expect(rootLayoutSource).toContain("const isFullBleedRoute = isDedicatedEditorRoute || isAdminRoute")
+  expect(rootLayoutSource).toContain("<StyledMain $fullBleed={isFullBleedRoute}>")
   expect(rootLayoutSource).toContain("resolvePublicBlogAppearance(isDesignAwareRoute ? adminProfile : null)")
-  expect(adminSurfaceSource).toContain("theme.publicDesign.operationSurface")
-  expect(adminSurfaceSource).toContain("theme.publicDesign.operationSurfaceElevated")
-  expect(adminShellSource).toContain("theme.publicDesign.operationSurface")
-  expect(adminToolsSource).toContain("theme.publicDesign.operationSurface")
-  expect(adminDashboardSource).toContain("theme.publicDesign.operationSurface")
+  expect(adminColorTokenSource).toContain("export const adminSystemThemeVariables = (theme: Theme) =>")
+  expect(adminColorTokenSource).toContain('theme.scheme === "dark" ? adminDarkThemeVariables : adminLightThemeVariables')
+  expect(adminColorTokenSource).toContain("--admin-app-bg: #ffffff;")
+  expect(adminColorTokenSource).toContain("--admin-app-bg: #121212;")
+  expect(adminSurfaceSource).toContain("adminPlainSurface(theme)")
+  expect(adminShellSource).toContain("adminSystemThemeVariables(theme)")
+  expect(adminShellSource).toContain("background: ${adminAppBackground};")
+  expect(adminToolsSource).toContain("adminSurface")
+  expect(adminToolsSource).toContain("adminSurfaceRaised")
+  expect(adminDashboardSource).toContain("adminSurface")
   expect(authShellSource).toContain("theme.publicDesign.readableSurface")
   expect(errorSource).toContain("theme.publicDesign.readableSurface")
   expect(editorComposeSource).toContain("theme.publicDesign.readableSurface")

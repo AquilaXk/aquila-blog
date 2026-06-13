@@ -1,16 +1,15 @@
 import styled from "@emotion/styled"
 import { AdminSectionTitleStack } from "./AdminSurfacePrimitives"
 import {
+  adminAppBackground,
   adminAccentSurface,
   adminCardBorder,
   adminControlText,
   adminGold,
   adminMutedText,
-  adminPlainSurface,
   adminPrimaryText,
   adminRaisedSurface,
   adminSecondaryText,
-  adminStrongBorder,
   adminTeal,
   adminTealBorder,
 } from "src/routes/Admin/adminColorTokens"
@@ -19,9 +18,11 @@ export const Main = styled.main`
   display: grid;
   gap: 0.72rem;
   align-items: start;
-  width: min(100%, 1088px);
-  margin: 0 auto;
-  padding: 0.72rem 0 2rem;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 1.05rem 1.45rem 2.4rem;
+  background: ${adminAppBackground};
 
   @media (max-width: 768px) {
     padding-top: 0.8rem;
@@ -96,7 +97,7 @@ export const PrimaryActionLink = styled.a`
   min-height: 2.65rem;
   padding: 0 1rem;
   border: 1px solid ${adminTealBorder};
-  border-radius: 999px;
+  border-radius: 4px;
   background: ${adminTeal};
   color: ${adminControlText};
   text-decoration: none;
@@ -111,7 +112,7 @@ export const SecondaryActionLink = styled.a`
   min-height: 2.65rem;
   padding: 0 0.9rem;
   border: 1px solid ${({ theme }) => adminCardBorder(theme)};
-  border-radius: 999px;
+  border-radius: 4px;
   background: ${({ theme }) => adminRaisedSurface(theme)};
   color: ${({ theme }) => adminSecondaryText(theme)};
   text-decoration: none;
@@ -186,10 +187,11 @@ export const BorderlessPanel = styled.div`
   display: grid;
   gap: 0.24rem;
   min-width: 0;
-  padding: 0.78rem 0.84rem;
-  border-radius: 2px;
-  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
-  background: ${({ theme }) => adminPlainSurface(theme)};
+  padding: 0.72rem 0.2rem;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  border-radius: 0;
+  background: transparent;
 
   &[data-tone="good"] {
     border-color: ${({ theme }) => theme.colors.green7};
@@ -221,20 +223,21 @@ export const BorderlessPanelLink = styled.a`
   align-items: center;
   min-width: 0;
   min-height: 3.75rem;
-  padding: 0.82rem 0.88rem;
-  border-radius: 2px;
-  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
-  background: ${({ theme }) => adminPlainSurface(theme)};
+  padding: 0.72rem 0.2rem;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  border-radius: 0;
+  background: transparent;
   color: inherit;
   text-decoration: none;
   transition:
-    transform 0.16s ease,
     border-color 0.16s ease,
     background 0.16s ease;
 
   &[data-featured="true"] {
-    border-color: ${({ theme }) => adminStrongBorder(theme)};
+    box-shadow: inset 3px 0 0 ${adminGold};
     background: ${({ theme }) => adminAccentSurface(theme)};
+    padding-left: 0.82rem;
   }
 
   &[data-tone="good"] {
@@ -246,8 +249,6 @@ export const BorderlessPanelLink = styled.a`
   }
 
   &:hover {
-    transform: translateY(-1px);
-    border-color: ${({ theme }) => adminStrongBorder(theme)};
     background: ${({ theme }) => adminRaisedSurface(theme)};
   }
 
@@ -318,10 +319,11 @@ export const BorderlessMetricRow = styled.div`
   display: grid;
   gap: 0.24rem;
   min-width: 0;
-  padding: 0.78rem 0.84rem;
-  border-radius: 2px;
-  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
-  background: ${({ theme }) => adminPlainSurface(theme)};
+  padding: 0.72rem 0.2rem;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  border-radius: 0;
+  background: transparent;
 
   &[data-tone="good"] {
     border-color: ${({ theme }) => theme.colors.green7};
@@ -361,7 +363,7 @@ export const ProfileFrame = styled.div`
   position: relative;
   width: 4.25rem;
   height: 4.25rem;
-  border-radius: 999px;
+  border-radius: 50%;
   overflow: hidden;
   background: ${({ theme }) => adminRaisedSurface(theme)};
 `
@@ -411,7 +413,7 @@ export const RailActionLink = styled.a`
   justify-content: center;
   min-height: 40px;
   padding: 0 0.95rem;
-  border-radius: 999px;
+  border-radius: 4px;
   border: 1px solid ${({ theme }) => adminCardBorder(theme)};
   background: ${({ theme }) => adminRaisedSurface(theme)};
   color: ${({ theme }) => (theme.scheme === "light" ? adminPrimaryText(theme) : adminGold)};

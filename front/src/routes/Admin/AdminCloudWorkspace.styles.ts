@@ -1,7 +1,9 @@
 import styled from "@emotion/styled"
 import {
+  adminAppBackground as appBackground,
   adminBorder as border,
   adminBorderStrong as borderStrong,
+  adminControlText as controlText,
   adminGold as accentGold,
   adminSurface as surface,
   adminSurfaceAccent as surfaceAccent,
@@ -17,7 +19,7 @@ export const CloudMain = styled.main`
   display: grid;
   min-width: 0;
   color: ${textPrimary};
-  background: ${surface};
+  background: ${appBackground};
   border: 0;
   border-radius: 0;
   overflow: hidden;
@@ -27,7 +29,7 @@ export const CloudMain = styled.main`
 export const CloudWorkspace = styled.section`
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(18rem, 21rem);
-  min-height: calc(100vh - var(--app-header-height, 73px) - 3.2rem);
+  min-height: calc(100vh - var(--app-header-height, 73px) - 3.95rem);
 
   @media (max-width: 1260px) {
     grid-template-columns: minmax(0, 1fr) minmax(17rem, 19rem);
@@ -45,7 +47,7 @@ export const CloudNavigationRail = styled.aside`
   min-width: 0;
   padding: 1.25rem 1rem;
   border-right: 1px solid ${border};
-  background: #141514;
+  background: ${surfaceRaised};
 
   @media (max-width: 840px) {
     border-right: 0;
@@ -131,7 +133,7 @@ export const StorageMeter = styled.div`
     display: block;
     height: 0.28rem;
     border-radius: 999px;
-    background: linear-gradient(90deg, ${accentGold} 0 22%, #3b3931 22% 100%);
+    background: linear-gradient(90deg, ${accentGold} 0 22%, ${surfaceMuted} 22% 100%);
   }
 `
 
@@ -191,7 +193,7 @@ export const SearchInput = styled.input`
   border: 0;
   border-radius: 999px;
   padding: 0 3.25rem 0 2.45rem;
-  background: #22231f;
+  background: ${surfaceRaised};
   color: ${textPrimary};
   font-size: 0.86rem;
   font-weight: 700;
@@ -202,7 +204,7 @@ export const SearchInput = styled.input`
 
   &:focus {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(208, 180, 108, 0.2);
+    box-shadow: 0 0 0 3px var(--admin-focus-ring, rgba(185, 149, 79, 0.18));
   }
 `
 
@@ -255,7 +257,7 @@ export const PrimaryButton = styled.button`
   justify-content: center;
   gap: 0.4rem;
   background: ${accentTeal};
-  color: #f5f2e8;
+  color: ${controlText};
   font-size: 0.84rem;
   font-weight: 850;
   cursor: pointer;
@@ -267,7 +269,7 @@ export const PrimaryButton = styled.button`
 
   &:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(63, 143, 134, 0.25);
+    box-shadow: 0 0 0 3px var(--admin-focus-ring, rgba(185, 149, 79, 0.18));
   }
 `
 
@@ -374,7 +376,7 @@ export const FileTable = styled.table`
     height: 2.25rem;
     padding: 0 0.7rem;
     color: ${textMuted};
-    background: #1d1e1b;
+    background: ${surfaceRaised};
     font-size: 0.75rem;
     font-weight: 800;
   }
@@ -388,11 +390,11 @@ export const FileTable = styled.table`
   }
 
   tbody tr[data-selected="true"] {
-    background: #242319;
+    background: ${surfaceAccent};
   }
 
   tbody tr:hover {
-    background: #20211f;
+    background: ${surfaceMuted};
   }
 `
 
@@ -411,7 +413,7 @@ export const FavoriteButton = styled.button`
   height: 1.75rem;
   border: 0;
   background: transparent;
-  color: #a0a8b4;
+  color: ${textMuted};
   cursor: pointer;
   font-size: 1.15rem;
 `
@@ -422,8 +424,8 @@ export const FileTypeIcon = styled.span`
   display: inline-grid;
   place-items: center;
   border-radius: 4px;
-  background: #3c756f;
-  color: #f5f2e8;
+  background: ${surfaceAccent};
+  color: ${accentGold};
   font-size: 0.63rem;
   font-weight: 900;
 `
@@ -590,7 +592,7 @@ export const PdfCanvas = styled.canvas`
   max-height: 18rem;
   border: 1px solid ${border};
   border-radius: 8px;
-  background: #1b1c1a;
+  background: ${surfaceRaised};
 `
 
 export const PhotoFrame = styled.div`
@@ -603,7 +605,7 @@ export const PhotoFrame = styled.div`
     max-height: 18rem;
     object-fit: contain;
     border-radius: 8px;
-    background: #090a09;
+    background: ${surfaceMuted};
   }
 `
 
@@ -617,7 +619,7 @@ export const ThumbnailStrip = styled.div`
     min-height: 2.7rem;
     border-radius: 6px;
     border: 1px solid ${border};
-    background: #1b1c1a;
+    background: ${surfaceRaised};
   }
 `
 
@@ -630,7 +632,7 @@ export const VideoFrame = styled.div`
     width: 100%;
     aspect-ratio: 16 / 9;
     border-radius: 8px;
-    background: #020617;
+    background: ${surfaceMuted};
   }
 `
 
@@ -642,7 +644,7 @@ export const PlayerBar = styled.div`
 export const Timeline = styled.div`
   height: 0.45rem;
   border-radius: 999px;
-  background: linear-gradient(90deg, ${accentGold} 0 34%, ${accentTeal} 34% 36%, #3b3931 36% 100%);
+  background: linear-gradient(90deg, ${accentGold} 0 34%, ${accentTeal} 34% 36%, ${surfaceMuted} 36% 100%);
 `
 
 export const InlineList = styled.div`
@@ -671,7 +673,7 @@ export const QueuePanel = styled.section`
   padding: 0.72rem;
   border: 1px solid ${borderStrong};
   border-radius: 2px;
-  background: rgba(23, 24, 23, 0.96);
+  background: ${surface};
   box-shadow: none;
 `
 
@@ -746,18 +748,18 @@ export const StatusPill = styled.span`
   text-align: center;
 
   &[data-status="failed"] {
-    background: #321b20;
-    color: #f87171;
+    background: ${({ theme }) => theme.colors.statusDangerSurface};
+    color: ${({ theme }) => theme.colors.statusDangerText};
   }
 
   &[data-status="cancelled"] {
-    background: #252622;
-    color: ${textMuted};
+    background: ${({ theme }) => theme.colors.gray3};
+    color: ${({ theme }) => theme.colors.gray10};
   }
 
   &[data-status="done"] {
-    background: #16342f;
-    color: #5eead4;
+    background: ${({ theme }) => theme.colors.statusSuccessSurface};
+    color: ${({ theme }) => theme.colors.statusSuccessText};
   }
 `
 
@@ -766,7 +768,7 @@ export const ProgressTrack = styled.div`
   height: 0.28rem;
   overflow: hidden;
   border-radius: 999px;
-  background: #3b3931;
+  background: ${surfaceMuted};
 
   span {
     display: block;

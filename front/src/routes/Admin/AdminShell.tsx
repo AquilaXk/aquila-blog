@@ -11,7 +11,7 @@ type AdminShellProfileSnapshot = Pick<
   "blogTitle" | "profileImageDirectUrl" | "profileImageUrl"
 >
 
-export type AdminShellSection = "hub" | "dashboard" | "posts" | "profile" | "tools"
+export type AdminShellSection = "hub" | "dashboard" | "posts" | "cloud" | "profile" | "tools"
 
 type AdminShellProps = {
   currentSection: AdminShellSection
@@ -45,6 +45,12 @@ const NAV_ITEMS: NavItem[] = [
     href: "/admin/posts",
     label: "글 관리",
     icon: "edit",
+  },
+  {
+    id: "cloud",
+    href: "/admin/cloud",
+    label: "클라우드",
+    icon: "cloud",
   },
   {
     id: "profile",

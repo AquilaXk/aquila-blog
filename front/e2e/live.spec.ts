@@ -23,6 +23,7 @@ const hasUiLoginCredentials = Boolean(adminEmail && adminPassword)
 const expectedFrontendCommitSha = process.env.E2E_EXPECTED_FRONT_COMMIT_SHA?.trim() || ""
 const adminLandingHeadingPattern = /(?:오늘 블로그 운영은 이 흐름으로 정리됩니다|관리자 (?:작업 공간|작업 진입점|운영 허브|허브))/
 const adminDashboardHeadingPattern = /(?:지금 확인해야 할 운영 상태|운영 대시보드)/
+const adminCloudHeadingPattern = /관리자 클라우드/
 const adminProfileHeadingPattern =
   /(?:메인과 About에 보일 인상을 다듬습니다|프로필 워크스페이스|운영 프로필|관리자 프로필 관리|프로필 관리|프로필 설정)/
 const adminToolsHeadingPattern =
@@ -582,6 +583,10 @@ test.describe("live production e2e", () => {
     await expect(dashboardKpiRail).toBeVisible()
     await expect(dashboardKpiRail.getByText("서비스 상태")).toBeVisible()
     await expect(page.getByRole("heading", { name: "우선 점검 항목" })).toBeVisible()
+
+    await page.goto("/admin/cloud")
+    await expect(page.getByRole("heading", { name: adminCloudHeadingPattern })).toBeVisible()
+    await expect(page.getByRole("button", { name: /파일 업로드|업로드 중/ })).toBeVisible()
 
     await page.goto("/admin/tools")
     await expect(page.getByRole("heading", { name: adminToolsHeadingPattern })).toBeVisible()

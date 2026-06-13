@@ -280,6 +280,17 @@ test("required secret check does not inject multi-line HOME_SERVER_ENV into shel
   assert.match(workflow, /value="\$\{!key:-\}"/)
 })
 
+test("deploy workflow는 editor live canary를 editor 변경 또는 명시적 force로 제한한다", () => {
+  const workflow = readFileSync(workflowPath, "utf8")
+
+  assert.match(workflow, /editor_live_canary: \$\{\{ steps\.meta\.outputs\.editor_live_canary \}\}/)
+  assert.match(workflow, /EDITOR_LIVE_CANARY_PATHS_PATTERN=.*front\/src\/components\/editor\//)
+  assert.match(workflow, /EDITOR_LIVE_CANARY_PATHS_PATTERN=.*front\/src\/pages\/editor\//)
+  assert.match(workflow, /force_editor_live_canary:\s*\n/)
+  assert.match(workflow, /E2E_LIVE_EDITOR_507_CANARY: \$\{\{ needs\.calculateTag\.outputs\.editor_live_canary \}\}/)
+  assert.doesNotMatch(workflow, /E2E_LIVE_EDITOR_507_CANARY:\s*['"]?true['"]?/)
+})
+
 test("runtime contract accounts for every compose env interpolation", async () => {
   const { loadContract } = await import("../env/validate-env.mjs")
   const contractKeys = new Set(targetKeyNames(loadContract(contractPath), "home-server-runtime"))

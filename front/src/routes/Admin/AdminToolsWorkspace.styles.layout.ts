@@ -23,9 +23,9 @@ export const InlineNotice = styled.p`
   line-height: 1.6;
 
   &[data-tone="warning"] {
-    border-color: ${({ theme }) => theme.colors.indigo8};
-    background: ${({ theme }) => theme.colors.indigo3};
-    color: ${({ theme }) => theme.colors.indigo11};
+    border-color: #6d6040;
+    background: #2d291a;
+    color: #d0b46c;
   }
 
   &[data-tone="danger"] {
@@ -147,8 +147,7 @@ export const ActionGroupCard = styled(AdminRailCard)`
   gap: 0.8rem;
   border-radius: 18px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(255, 255, 255, 0.82)" : "rgba(24, 24, 24, 0.86)"};
+  background: rgba(24, 24, 24, 0.86);
 `
 
 export const CardSectionHeading = styled.div`
@@ -511,4 +510,3 @@ export const EmptyResultState = styled.p`
   color: ${({ theme }) => theme.colors.gray10};
   line-height: 1.6;
 `
-

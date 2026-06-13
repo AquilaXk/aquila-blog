@@ -288,9 +288,9 @@ export const ToastCard = styled.div`
   }
 
   &[data-tone="loading"] {
-    border-color: ${({ theme }) => theme.colors.blue8};
-    background: ${({ theme }) => theme.colors.blue3};
-    color: ${({ theme }) => theme.colors.blue11};
+    border-color: #6d6040;
+    background: #2d291a;
+    color: #d0b46c;
   }
 `
 
@@ -324,7 +324,7 @@ export const ModalCard = styled.section`
   width: min(640px, 100%);
   max-height: min(92vh, 860px);
   overflow: auto;
-  border-radius: 20px;
+  border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.42);

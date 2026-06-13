@@ -71,6 +71,17 @@ const AdminUtilityBar = dynamic(() => import("./AdminUtilityBar"), {
   loading: () => <UtilityBarFallback aria-hidden="true" />,
 })
 
+const adminTextPrimary = "#f3f1ea"
+const adminTextSecondary = "#c8c1ae"
+const adminTextMuted = "#918b7d"
+const adminBorder = "#34322d"
+const adminBorderStrong = "#6d6040"
+const adminSurface = "#151614"
+const adminSurfaceRaised = "#20211f"
+const adminSurfaceAccent = "#2d291a"
+const adminGold = "#d0b46c"
+const adminTeal = "#3f8f86"
+
 const AdminShell = ({ currentSection, member, profileSnapshot = null, children }: AdminShellProps) => {
   const currentNav = NAV_ITEMS.find((item) => item.id === currentSection) ?? NAV_ITEMS[0]
   const utilityNavItems = NAV_ITEMS.map((item) => ({
@@ -152,13 +163,17 @@ export default AdminShell
 
 const ShellFrame = styled.div`
   display: grid;
-  grid-template-columns: minmax(14.5rem, 16rem) minmax(0, 1fr);
-  gap: 1rem;
+  grid-template-columns: minmax(14.5rem, 16.5rem) minmax(0, 1fr);
+  gap: 0.85rem;
+  width: min(1760px, calc(100vw - 2rem));
+  margin-left: calc(50% - 50vw + 1rem);
   min-height: calc(100vh - var(--app-header-height, 73px) - 1rem);
-  padding: 1rem 0 2rem;
+  padding: 0.85rem 0 2rem;
 
   @media (max-width: 1100px) {
     grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    margin-left: 0;
     padding-top: 0.85rem;
   }
 `
@@ -170,19 +185,19 @@ const Sidebar = styled.aside`
   min-width: 0;
   position: sticky;
   top: calc(var(--app-header-height, 73px) + 0.85rem);
+  min-height: calc(100vh - var(--app-header-height, 73px) - 1.7rem);
   height: fit-content;
-  padding: 1.05rem;
-  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray4)};
-  border-radius: 24px;
+  padding: 0.85rem 0.72rem;
+  border: 0;
+  border-right: 1px solid ${adminBorder};
+  border-radius: 0;
   background: ${({ theme }) =>
-    theme.blogDesign === "grid"
-      ? `linear-gradient(180deg, ${theme.publicDesign.operationSurfaceElevated} 0%, ${theme.publicDesign.operationSurface} 100%)`
-      : theme.colors.gray1};
+    theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : adminSurface};
 
   @media (max-width: 1100px) {
     position: static;
     padding: 0.72rem 0.82rem;
-    border-radius: 22px;
+    border-radius: 14px;
     display: none;
   }
 `
@@ -203,7 +218,7 @@ const BrandBlock = styled.div`
   display: flex;
   align-items: center;
   gap: 0.78rem;
-  padding: 0.1rem 0.1rem 0;
+  padding: 0.1rem 0.2rem 0.35rem;
 
   @media (max-width: 1100px) {
     flex-shrink: 0;
@@ -211,17 +226,18 @@ const BrandBlock = styled.div`
 `
 
 const BrandMark = styled.div`
-  width: 3.25rem;
-  height: 3.25rem;
-  border-radius: 16px;
+  width: 2.95rem;
+  height: 2.95rem;
+  border-radius: 11px;
   display: grid;
   place-items: center;
   position: relative;
   overflow: hidden;
-  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray6)};
+  border: 1px solid ${({ theme }) =>
+    theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : adminBorderStrong};
   background: ${({ theme }) =>
-    theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray12};
+    theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : adminSurfaceAccent};
+  color: ${adminGold};
 
   span {
     font-size: 0.9rem;
@@ -235,14 +251,14 @@ const BrandCopy = styled.div`
   gap: 0.16rem;
 
   strong {
-    color: ${({ theme }) => theme.colors.gray12};
+    color: ${adminTextPrimary};
     font-size: 1.18rem;
     font-weight: 800;
     letter-spacing: -0.03em;
   }
 
   span {
-    color: ${({ theme }) => theme.colors.gray10};
+    color: ${adminTextMuted};
     font-size: 0.8rem;
     font-weight: 700;
   }
@@ -254,16 +270,16 @@ const BrandCopy = styled.div`
 
 const SidebarNavSection = styled.section`
   display: grid;
-  gap: 0.7rem;
-  padding-top: 0.25rem;
+  gap: 0.68rem;
+  padding-top: 0.35rem;
 `
 
 const SidebarSectionLabel = styled.small`
-  color: ${({ theme }) => theme.colors.gray10};
+  color: ${adminTextMuted};
   font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.02em;
-  padding: 0 0.22rem;
+  padding: 0 0.35rem;
 `
 
 const SidebarNav = styled.nav`
@@ -289,9 +305,10 @@ const NavLink = styled.a`
   align-items: center;
   gap: 0.82rem;
   min-width: 0;
-  padding: 0.78rem 0.84rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray3)};
+  min-height: 2.65rem;
+  padding: 0.5rem 0.62rem;
+  border-radius: 8px;
+  border: 1px solid transparent;
   color: inherit;
   text-decoration: none;
   transition: border-color 140ms ease, background 140ms ease;
@@ -299,17 +316,17 @@ const NavLink = styled.a`
   .navIcon {
     width: 2.3rem;
     height: 2.3rem;
-    border-radius: 13px;
+    border-radius: 7px;
     display: grid;
     place-items: center;
     flex-shrink: 0;
-    color: ${({ theme }) => theme.colors.gray11};
+    color: ${adminTextSecondary};
     background: ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2};
+      theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : adminSurfaceRaised};
   }
 
   .navLabel {
-    color: ${({ theme }) => theme.colors.gray12};
+    color: ${adminTextPrimary};
     font-size: 0.92rem;
     font-weight: 760;
     letter-spacing: -0.02em;
@@ -317,21 +334,21 @@ const NavLink = styled.a`
   }
 
   &[data-active="true"] {
-    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray6)};
+    border-color: ${({ theme }) =>
+      theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : adminBorderStrong};
     background: ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2};
+      theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : adminSurfaceAccent};
   }
 
   &[data-active="true"] .navIcon {
-    background: ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.gray3};
-    color: ${({ theme }) => theme.colors.gray12};
+    background: rgba(208, 180, 108, 0.14);
+    color: ${adminGold};
   }
 
   &:hover {
-    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray6)};
+    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : adminBorder)};
     background: ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2};
+      theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : adminSurfaceRaised};
   }
 
   @media (max-width: 1100px) {
@@ -352,19 +369,18 @@ const SidebarPrimaryAction = styled.a`
   gap: 0.46rem;
   width: 100%;
   min-height: 2.9rem;
-  padding: 0.78rem 0.9rem;
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray6)};
-  background: ${({ theme }) =>
-    theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray12};
+  padding: 0.7rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid rgba(63, 143, 134, 0.58);
+  background: ${adminTeal};
+  color: #f8fffc;
   text-decoration: none;
   font-size: 0.88rem;
   font-weight: 760;
 
   &:hover {
     background: ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray3};
+      theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : "#347b73"};
   }
 `
 
@@ -380,14 +396,11 @@ const UtilityBarFallback = styled.div`
   top: calc(var(--app-header-height, 73px) + 0.85rem);
   z-index: 5;
   height: 4.85rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  border-radius: 24px;
+  border: 1px solid ${adminBorder};
+  border-radius: 14px;
   background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(255, 255, 255, 0.84)" : "rgba(18, 18, 18, 0.84)"};
-  box-shadow: ${({ theme }) =>
-    theme.scheme === "light"
-      ? "0 16px 36px rgba(15, 23, 42, 0.06)"
-      : "0 18px 36px rgba(0, 0, 0, 0.2)"};
+    theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : "rgba(23, 24, 23, 0.86)"};
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.2);
 
   @media (max-width: 720px) {
     top: calc(var(--app-header-height, 73px) + 0.65rem);

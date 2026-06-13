@@ -108,9 +108,9 @@ export const SectionStateBadge = styled.span`
   }
 
   &[data-tone="published"] {
-    border-color: ${({ theme }) => theme.colors.blue7};
-    color: ${({ theme }) => theme.colors.blue10};
-    background: ${({ theme }) => theme.colors.blue2};
+    border-color: #6d6040;
+    color: #d0b46c;
+    background: #2d291a;
   }
 
   &[data-tone="synced"] {
@@ -172,7 +172,7 @@ export const FieldSectionCard = styled.div`
   display: grid;
   gap: 0.82rem;
   padding: 1rem;
-  border-radius: 22px;
+  border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray1};
 
@@ -252,7 +252,7 @@ export const Input = styled.input`
   &:focus-visible {
     outline: none;
     border-color: ${({ theme }) => theme.colors.accentBorder};
-    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
+    box-shadow: 0 0 0 3px rgba(208, 180, 108, 0.18);
   }
 `
 
@@ -275,7 +275,7 @@ export const TextArea = styled.textarea`
   &:focus-visible {
     outline: none;
     border-color: ${({ theme }) => theme.colors.accentBorder};
-    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
+    box-shadow: 0 0 0 3px rgba(208, 180, 108, 0.18);
   }
 `
 

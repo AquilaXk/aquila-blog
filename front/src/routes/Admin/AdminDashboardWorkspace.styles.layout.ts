@@ -141,7 +141,7 @@ export const MetricCard = styled.article`
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
   padding: 12px;
-  border-radius: 22px;
+  border-radius: 12px;
   border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
   background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray1)};
   box-shadow: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.shadow : "0 14px 30px rgba(15, 23, 42, 0.05)")};

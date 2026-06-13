@@ -49,8 +49,8 @@ export const LinkRowCard = styled.div`
   }
 
   &[data-drop-target="true"] {
-    border-color: ${({ theme }) => theme.colors.blue8};
-    background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
+    border-color: #6d6040;
+    background: #2d291a;
   }
 
   &[data-drop-target="true"]::before {
@@ -60,8 +60,8 @@ export const LinkRowCard = styled.div`
     right: 0.72rem;
     height: 3px;
     border-radius: 999px;
-    background: ${({ theme }) => theme.colors.blue8};
-    box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.2);
+    background: #d0b46c;
+    box-shadow: 0 0 0 1px rgba(208, 180, 108, 0.2);
   }
 
   &[data-drop-target="true"][data-drop-position="before"]::before {
@@ -207,8 +207,8 @@ export const IconOptionButton = styled.button`
   align-items: center;
 
   &[data-selected="true"] {
-    border-color: ${({ theme }) => theme.colors.blue8};
-    background: ${({ theme }) => theme.colors.blue3};
+    border-color: #6d6040;
+    background: #2d291a;
   }
 `
 
@@ -242,4 +242,3 @@ export const LinkInputs = styled.div`
     grid-template-columns: 1fr;
   }
 `
-

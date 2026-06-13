@@ -61,7 +61,11 @@ export const listCloudFiles = async ({
   return (response.files || []).map(normalizeCloudFile).filter((file) => file.id > 0)
 }
 
-export const uploadCloudFile = async (file: File, folderPath = ""): Promise<CloudFile> => {
+export const uploadCloudFile = async (
+  file: File,
+  folderPath = "",
+  signal?: AbortSignal,
+): Promise<CloudFile> => {
   const formData = new FormData()
   formData.append("file", file)
   const response = await apiFetch<RsDataCloudFileDto>(
@@ -69,6 +73,7 @@ export const uploadCloudFile = async (file: File, folderPath = ""): Promise<Clou
     {
       method: "POST",
       body: formData,
+      signal,
     }
   )
   return normalizeCloudFile(response.data || {})

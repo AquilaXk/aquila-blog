@@ -24,6 +24,15 @@ type ShortcutItem = {
   icon: IconName
 }
 
+const adminTextPrimary = "#f3f1ea"
+const adminTextSecondary = "#c8c1ae"
+const adminTextMuted = "#918b7d"
+const adminBorder = "#34322d"
+const adminBorderStrong = "#6d6040"
+const adminSurfaceRaised = "#20211f"
+const adminSurfaceAccent = "#2d291a"
+const adminGold = "#d0b46c"
+
 const normalize = (value: string) => value.trim().toLowerCase()
 
 const matchesShortcut = (item: ShortcutItem, query: string) => {
@@ -138,15 +147,11 @@ const UtilityBar = styled.header`
   justify-content: space-between;
   gap: 0.72rem;
   padding: 0.72rem 0.85rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray4};
-  border-radius: 20px;
+  border: 1px solid ${adminBorder};
+  border-radius: 14px;
   backdrop-filter: blur(18px);
-  background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(255, 255, 255, 0.78)" : "rgba(18, 18, 18, 0.76)"};
-  box-shadow: ${({ theme }) =>
-    theme.scheme === "light"
-      ? "0 10px 24px rgba(15, 23, 42, 0.05)"
-      : "0 12px 28px rgba(0, 0, 0, 0.18)"};
+  background: rgba(23, 24, 23, 0.82);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
 
   @media (max-width: 720px) {
     top: calc(var(--app-header-height, 73px) + 0.65rem);
@@ -154,7 +159,7 @@ const UtilityBar = styled.header`
     align-items: center;
     gap: 0.48rem;
     padding: 0.58rem 0.64rem;
-    border-radius: 18px;
+    border-radius: 14px;
 
     &[data-search-open="true"] {
       margin-bottom: 3.15rem;
@@ -189,20 +194,19 @@ const CompactNav = styled.nav`
 const CompactNavLink = styled.a`
   width: 2.75rem;
   height: 2.75rem;
-  border-radius: 15px;
+  border-radius: 10px;
   display: grid;
   place-items: center;
   flex-shrink: 0;
   border: 1px solid transparent;
-  background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(243, 246, 250, 0.92)" : "rgba(31, 31, 31, 0.92)"};
-  color: ${({ theme }) => theme.colors.gray11};
+  background: ${adminSurfaceRaised};
+  color: ${adminTextSecondary};
   text-decoration: none;
 
   &[data-active="true"] {
-    border-color: ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray1};
-    color: ${({ theme }) => theme.colors.gray12};
+    border-color: ${adminBorderStrong};
+    background: ${adminSurfaceAccent};
+    color: ${adminGold};
   }
 `
 
@@ -232,7 +236,7 @@ const SearchField = styled.div`
   .searchIcon {
     position: absolute;
     left: 0.9rem;
-    color: ${({ theme }) => theme.colors.gray10};
+    color: ${adminTextMuted};
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -253,22 +257,21 @@ const SearchInput = styled.input`
   min-width: 0;
   height: 2.75rem;
   padding: 0 0.92rem 0 2.55rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray4};
+  border: 1px solid ${adminBorder};
   border-radius: 999px;
-  background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(243, 246, 250, 0.82)" : "rgba(24, 24, 24, 0.82)"};
-  color: ${({ theme }) => theme.colors.gray12};
+  background: rgba(32, 33, 31, 0.82);
+  color: ${adminTextPrimary};
   font-size: 0.88rem;
   font-weight: 600;
 
   &::placeholder {
-    color: ${({ theme }) => theme.colors.gray10};
+    color: ${adminTextMuted};
   }
 
   &:focus {
     outline: none;
-    border-color: ${({ theme }) => theme.colors.gray6};
-    box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.16);
+    border-color: ${adminBorderStrong};
+    box-shadow: 0 0 0 4px rgba(208, 180, 108, 0.14);
   }
 `
 
@@ -290,25 +293,24 @@ const SearchToggleButton = styled.button`
   @media (max-width: 720px) {
     width: 2.75rem;
     height: 2.75rem;
-    border: 1px solid ${({ theme }) => theme.colors.gray4};
-    border-radius: 15px;
+    border: 1px solid ${adminBorder};
+    border-radius: 10px;
     display: grid;
     place-items: center;
     flex-shrink: 0;
-    background: ${({ theme }) =>
-      theme.scheme === "light" ? "rgba(243, 246, 250, 0.92)" : "rgba(31, 31, 31, 0.92)"};
-    color: ${({ theme }) => theme.colors.gray11};
+    background: ${adminSurfaceRaised};
+    color: ${adminTextSecondary};
     cursor: pointer;
 
     &[aria-expanded="true"] {
-      border-color: ${({ theme }) => theme.colors.gray6};
-      background: ${({ theme }) => theme.colors.gray1};
-      color: ${({ theme }) => theme.colors.gray12};
+      border-color: ${adminBorderStrong};
+      background: ${adminSurfaceAccent};
+      color: ${adminGold};
     }
 
     &:focus-visible {
       outline: none;
-      box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.16);
+      box-shadow: 0 0 0 4px rgba(208, 180, 108, 0.14);
     }
   }
 `
@@ -322,18 +324,18 @@ const CurrentViewChip = styled.div`
   border-radius: 999px;
   border: none;
   background: transparent;
-  color: ${({ theme }) => theme.colors.gray10};
+  color: ${adminTextMuted};
   text-decoration: none;
 
   span {
-    color: ${({ theme }) => theme.colors.gray10};
+    color: ${adminTextMuted};
     font-size: 0.7rem;
     font-weight: 700;
     white-space: nowrap;
   }
 
   strong {
-    color: ${({ theme }) => theme.colors.gray10};
+    color: ${adminTextMuted};
     font-size: 0.78rem;
     font-weight: 740;
     white-space: nowrap;

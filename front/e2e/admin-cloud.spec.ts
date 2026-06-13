@@ -214,6 +214,13 @@ test.describe("관리자 클라우드", () => {
 
     await page.getByLabel("파일 종류 필터").getByRole("button", { name: "동영상" }).click()
     await expect.poll(() => mocks.requestedKinds).toContain("VIDEO")
+    await page.getByLabel("클라우드 파일 업로드").setInputFiles({
+      name: "필터 제외 문서.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4 filtered cache guard"),
+    })
+    await expect.poll(() => mocks.uploadedNames).toContain("필터 제외 문서.pdf")
+    await expect(page.getByRole("row", { name: /필터 제외 문서\.pdf/ })).toHaveCount(0)
 
     await page.getByLabel("파일 종류 필터").getByRole("button", { name: "전체" }).click()
     await page.getByPlaceholder("파일, 확장자, 폴더 경로 검색").fill("")
@@ -256,6 +263,8 @@ test.describe("관리자 클라우드", () => {
     await page.getByRole("button", { name: "운영 점검 리포트.pdf 미리보기" }).click()
     await expect(page.getByRole("heading", { name: "문서 뷰어" })).toBeVisible()
     await expect(page.getByText("PDF.js canvas 렌더링")).toBeVisible()
+    await page.getByRole("button", { name: "상세 패널 닫기" }).click()
+    await expect(page.getByText("미리 볼 파일을 선택하세요.")).toBeVisible()
 
     await page.getByRole("button", { name: "home-server-rack.png 미리보기" }).click()
     await expect(page.getByRole("heading", { name: "사진 보기" })).toBeVisible()

@@ -96,6 +96,14 @@ type UploadQueueItem = {
 const mediaKindFromFilter = (filter: CloudMediaFilter): CloudMediaKind | undefined =>
   filter === "ALL" ? undefined : filter
 
+const isCloudMediaFilter = (value: unknown): value is CloudMediaFilter =>
+  CLOUD_FILTERS.some((item) => item.value === value)
+
+const getCachedCloudQueryFilters = (queryKey: readonly unknown[]) => ({
+  filter: isCloudMediaFilter(queryKey[1]) ? queryKey[1] : ("ALL" as CloudMediaFilter),
+  keyword: typeof queryKey[2] === "string" ? queryKey[2] : "",
+})
+
 const createUploadQueueItem = (file: File): UploadQueueItem => ({
   id: `${Date.now()}-${file.name}-${file.size}-${Math.random().toString(36).slice(2)}`,
   file,
@@ -296,6 +304,7 @@ const AdminCloudWorkspacePage = () => {
   const [notice, setNotice] = useState("")
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([])
   const [optimisticFiles, setOptimisticFiles] = useState<CloudFile[]>([])
+  const [isDetailPanelOpen, setIsDetailPanelOpen] = useState(true)
 
   const filesQuery = useQuery({
     queryKey: [CLOUD_QUERY_KEY, filter, keyword],
@@ -314,15 +323,18 @@ const AdminCloudWorkspacePage = () => {
     () => mergeCloudFiles(visibleOptimisticFiles, serverFiles),
     [serverFiles, visibleOptimisticFiles]
   )
-  const selectedFile = files.find((file) => file.id === selectedFileId) || files[0] || null
+  const selectedFile = isDetailPanelOpen
+    ? files.find((file) => file.id === selectedFileId) || files[0] || null
+    : null
   const activeUploadCount = uploadQueue.filter((item) => isUploadActive(item.status)).length
   const completedUploadCount = uploadQueue.filter((item) => item.status === "done").length
   const allVisibleChecked = files.length > 0 && files.every((file) => checkedFileIds.includes(file.id))
 
   useEffect(() => {
+    if (!isDetailPanelOpen) return
     if (selectedFileId && files.some((file) => file.id === selectedFileId)) return
     setSelectedFileId(files[0]?.id ?? null)
-  }, [files, selectedFileId])
+  }, [files, isDetailPanelOpen, selectedFileId])
 
   useEffect(() => {
     setCheckedFileIds((current) => current.filter((id) => files.some((file) => file.id === id)))
@@ -349,10 +361,13 @@ const AdminCloudWorkspacePage = () => {
         if (controller.signal.aborted) throw new DOMException("Upload aborted", "AbortError")
 
         setOptimisticFiles((current) => mergeCloudFiles([uploaded], current))
-        queryClient.setQueriesData<CloudFile[]>({ queryKey: [CLOUD_QUERY_KEY] }, (current) => {
-          if (!Array.isArray(current)) return current
-          return mergeCloudFiles([uploaded], current)
+        queryClient.getQueriesData<CloudFile[]>({ queryKey: [CLOUD_QUERY_KEY] }).forEach(([queryKey, current]) => {
+          if (!Array.isArray(current)) return
+          const cachedFilters = getCachedCloudQueryFilters(queryKey)
+          if (!doesCloudFileMatchFilters(uploaded, cachedFilters.filter, cachedFilters.keyword)) return
+          queryClient.setQueryData(queryKey, mergeCloudFiles([uploaded], current))
         })
+        setIsDetailPanelOpen(true)
         setSelectedFileId(uploaded.id)
         setNotice(`${uploaded.originalFilename} 업로드 완료`)
         setUploadQueue((current) =>
@@ -425,6 +440,11 @@ const AdminCloudWorkspacePage = () => {
     setCheckedFileIds((current) =>
       current.includes(fileId) ? current.filter((id) => id !== fileId) : [...current, fileId]
     )
+  }
+
+  const handlePreviewFile = (fileId: number) => {
+    setIsDetailPanelOpen(true)
+    setSelectedFileId(fileId)
   }
 
   const handleDelete = async (file: CloudFile) => {
@@ -586,7 +606,7 @@ const AdminCloudWorkspacePage = () => {
                           </FileTypeIcon>
                         </td>
                         <td>
-                          <FileNameButton type="button" onClick={() => setSelectedFileId(file.id)}>
+                          <FileNameButton type="button" onClick={() => handlePreviewFile(file.id)}>
                             <strong>{file.originalFilename}</strong>
                           </FileNameButton>
                         </td>
@@ -597,7 +617,7 @@ const AdminCloudWorkspacePage = () => {
                             <GhostButton
                               type="button"
                               aria-label={`${file.originalFilename} 미리보기`}
-                              onClick={() => setSelectedFileId(file.id)}
+                              onClick={() => handlePreviewFile(file.id)}
                             >
                               <AppIcon name="eye" />
                             </GhostButton>
@@ -622,7 +642,16 @@ const AdminCloudWorkspacePage = () => {
         <DetailPanel aria-label="클라우드 상세정보">
           <DetailHeader>
             <h2>내 파일</h2>
-            <IconButton type="button" aria-label="상세 패널 닫기">×</IconButton>
+            <IconButton
+              type="button"
+              aria-label="상세 패널 닫기"
+              onClick={() => {
+                setIsDetailPanelOpen(false)
+                setSelectedFileId(null)
+              }}
+            >
+              ×
+            </IconButton>
           </DetailHeader>
           <DetailTabs>
             <DetailTab type="button" data-active="true">

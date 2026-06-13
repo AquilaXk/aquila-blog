@@ -277,14 +277,28 @@ export const useBlockEditorEngineBlockDragSessions = ({
     (event: ReactDragEvent<HTMLDivElement>) => {
       const listItemContext = findNestedListItemContextFromTarget(event.target)
       if (!listItemContext) return
-
+      const targetElement = event.target instanceof Element ? event.target : null
       const currentEditor = editorRef.current ?? editor
+      const selectedListItemContext = currentEditor
+        ? resolveEffectiveSelectedListItemContext(currentEditor)
+        : null
+      const dragStartsFromSelectedListItem = Boolean(
+        selectedListItemContext &&
+          isSameNestedListItemContext(selectedListItemContext, listItemContext) &&
+          listItemContext.listItemElement.getAttribute("data-block-selected") === "true"
+      )
+      const dragStartsFromHandle = Boolean(targetElement?.closest("[data-block-handle-rail='true']"))
+      if (!dragStartsFromHandle && !dragStartsFromSelectedListItem) {
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
+
       if (currentEditor) {
-        const currentSelectedListItemContext = resolveEffectiveSelectedListItemContext(currentEditor)
         setSelectedListItemContext(listItemContext)
         if (
-          !currentSelectedListItemContext ||
-          !isSameNestedListItemContext(currentSelectedListItemContext, listItemContext)
+          !selectedListItemContext ||
+          !isSameNestedListItemContext(selectedListItemContext, listItemContext)
         ) {
           selectNestedListItemNode(currentEditor, listItemContext)
           clearNativeTextSelection()

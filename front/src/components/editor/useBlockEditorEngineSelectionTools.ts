@@ -302,10 +302,12 @@ export const useBlockEditorEngineSelectionTools = ({
 
   const resolveActiveListItemInteraction = useCallback(
     (activeEditor: TiptapEditor) => {
-      const activeListItemContext = resolveEffectiveSelectedListItemContext(activeEditor)
       const liveSelectionListItemContext =
         getNodeSelectedNestedListItemContext(activeEditor) ??
         getSelectionAnchorNestedListItemContext(activeEditor)
+      const activeListItemContext =
+        liveSelectionListItemContext ??
+        resolveEffectiveSelectedListItemContext(activeEditor)
       const shouldRestoreSelectedListItemContext = Boolean(
         activeListItemContext &&
           (!liveSelectionListItemContext ||

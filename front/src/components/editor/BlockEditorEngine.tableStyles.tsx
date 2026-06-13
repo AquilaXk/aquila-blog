@@ -445,6 +445,11 @@ export const FloatingTableMenu = styled.div`
     theme.scheme === "dark" ? "rgba(15, 18, 24, 0.96)" : "rgba(255, 255, 255, 0.98)"};
   box-shadow: ${({ theme }) =>
     theme.scheme === "dark" ? "0 12px 18px rgba(0, 0, 0, 0.16)" : "0 12px 18px rgba(15, 23, 42, 0.1)"};
+
+  &[data-table-menu-kind="row"] {
+    transform: translate(calc(-100% - 0.55rem), -0.55rem);
+  }
+
 `
 
 export const TableOverflowCoachmark = styled.div`

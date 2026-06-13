@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from "@playwright/test"
+import { expect, test, type Locator, type Page } from "./helpers/authoringPlaywright"
 import { expectEditorToContainLoadedText } from "./helpers/editorAuthoringFlow"
 import { post507Markdown } from "./helpers/post507Fixtures"
 
@@ -56,11 +56,71 @@ const readNativeSelectionState = (page: Page) =>
     }
   })
 
+const readTableDragSelectionSample = (page: Page, phase: string) =>
+  page.evaluate((phase) => {
+    const nativeText = (window.getSelection()?.toString() ?? "").replace(/\s+/g, " ").trim()
+    const persistedText = (
+      document.documentElement.getAttribute("data-table-drag-selection-text") ||
+      document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
+      ""
+    )
+      .replace(/\s+/g, " ")
+      .trim()
+    const range =
+      window.getSelection() && window.getSelection()!.rangeCount > 0
+        ? window.getSelection()!.getRangeAt(0)
+        : null
+    const visibleRectCount = range
+      ? Array.from(range.getClientRects()).filter((rect) => rect.width > 1 && rect.height > 1).length
+      : 0
+    const tableHighlightActive = Boolean(
+      (CSS as typeof CSS & { highlights?: { has: (name: string) => boolean } }).highlights?.has("aq-table-text-selection")
+    )
+    return {
+      phase,
+      selectedCellCount: document.querySelectorAll(".selectedCell").length,
+      selectionText: persistedText.length > nativeText.length ? persistedText : nativeText || persistedText,
+      tableHighlightActive,
+      visibleRectCount,
+    }
+  }, phase)
+
 const filler = (label: string, count: number) =>
   Array.from({ length: count }, (_, index) => [
     `${label} ${index + 1}: 인증 흐름을 설명하는 긴 문단입니다.`,
     "",
   ]).flat()
+
+const expectTableDragFeedbackStable = (
+  samples: Array<{
+    phase: string
+    selectedCellCount: number
+    selectionText: string
+    tableHighlightActive: boolean
+    visibleRectCount: number
+  }>,
+  label: string,
+  startText: string,
+  endText: string
+) => {
+  expect(samples.length, `${label} should record drag feedback samples`).toBeGreaterThanOrEqual(5)
+  const movingSamples = samples.filter((sample) => sample.phase.startsWith("move-"))
+  const firstTextSampleIndex = movingSamples.findIndex((sample) => sample.selectionText.includes(startText))
+  expect(firstTextSampleIndex, `${label} should include the drag start cell before mouseup: ${JSON.stringify(samples)}`).toBeGreaterThanOrEqual(0)
+  const samplesAfterStartFeedback = movingSamples.slice(firstTextSampleIndex)
+  expect(
+    samplesAfterStartFeedback.every((sample) => sample.selectionText.includes(startText)),
+    `${label} should not drop the first selected cell while dragging: ${JSON.stringify(samples)}`
+  ).toBe(true)
+  expect(
+    samplesAfterStartFeedback.some((sample) => sample.selectionText.includes(endText) && (sample.visibleRectCount > 0 || sample.tableHighlightActive)),
+    `${label} should show live text selection before mouseup: ${JSON.stringify(samples)}`
+  ).toBe(true)
+  const finalSample = samples.at(-1)
+  expect(finalSample?.selectionText, `${label} should keep selection after idle: ${JSON.stringify(samples)}`).toContain(startText)
+  expect(finalSample?.selectionText, `${label} should keep selection after idle: ${JSON.stringify(samples)}`).toContain(endText)
+  expect(samples.every((sample) => sample.selectedCellCount === 0), `${label} should stay text selection, not structural cell selection`).toBe(true)
+}
 
 const dragBetweenTextRanges = async (
   page: Page,
@@ -68,7 +128,7 @@ const dragBetweenTextRanges = async (
   endTarget: Locator,
   label: string,
   texts: { end: string; start: string },
-  options: { cancelAtStart?: boolean; cancelBeforeMouseup?: boolean; dragOverBeforeRelease?: boolean; dropInsteadOfMouseup?: boolean; endAtCellRightEdge?: boolean; skipRelease?: boolean; skipSyntheticMoves?: boolean; syntheticWithoutNativeSelection?: boolean } = {}
+  options: { cancelAtStart?: boolean; cancelBeforeMouseup?: boolean; dragOverBeforeRelease?: boolean; dropInsteadOfMouseup?: boolean; endAtCellRightEdge?: boolean; sampleDuringDrag?: boolean; skipRelease?: boolean; skipSyntheticMoves?: boolean; syntheticWithoutNativeSelection?: boolean } = {}
 ) => {
   await releaseKeyboardModifiers(page)
   await page.keyboard.press("Escape").catch(() => {})
@@ -96,6 +156,11 @@ const dragBetweenTextRanges = async (
       if (!startElement) throw new Error(`${label} start cell is missing`)
       if (!endElement) throw new Error(`${label} end cell is missing`)
       table?.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
+      const startBeforeEnd =
+        startElement === endElement ||
+        Boolean(startElement.compareDocumentPosition(endElement) & Node.DOCUMENT_POSITION_FOLLOWING)
+      const startEdge = startBeforeEnd ? "start" : "end"
+      const endEdge = startBeforeEnd ? "end" : "start"
 
       const cellInteriorPoint = (element: Element, edge: "end" | "start") => {
         const rect = element.getBoundingClientRect()
@@ -133,7 +198,7 @@ const dragBetweenTextRanges = async (
       }
 
       return {
-        end: measureText(endElement, endText, "end"),
+        end: measureText(endElement, endText, endEdge),
         endCellRightEdge: (() => {
           const rect = endElement.getBoundingClientRect()
           return {
@@ -141,12 +206,19 @@ const dragBetweenTextRanges = async (
             y: rect.top + rect.height / 2,
           }
         })(),
-        start: measureText(startElement, startText, "start"),
+        start: measureText(startElement, startText, startEdge),
       }
     },
     { dragToken, endText: texts.end, label, startText: texts.start }
   )
   let beforeScrollTop = await readScrollTop(page)
+  const selectionSamples: Array<{
+    phase: string
+    selectedCellCount: number
+    selectionText: string
+    tableHighlightActive: boolean
+    visibleRectCount: number
+  }> = []
   const moveMouseInPacedSteps = async (
     start: { x: number; y: number },
     end: { x: number; y: number },
@@ -156,6 +228,9 @@ const dragBetweenTextRanges = async (
       const ratio = index / steps
       await page.mouse.move(start.x + (end.x - start.x) * ratio, start.y + (end.y - start.y) * ratio)
       await page.waitForTimeout(index === 1 ? 16 : 4)
+      if (options.sampleDuringDrag && (index === 1 || index % 8 === 0 || index === steps)) {
+        selectionSamples.push(await readTableDragSelectionSample(page, `move-${index}`))
+      }
     }
   }
   const waitForScrollTopWithin = async (targetScrollTop: number) => {
@@ -182,8 +257,15 @@ const dragBetweenTextRanges = async (
         const endElement = markedEnd && table?.contains(markedEnd) ? markedEnd : Array.from(table?.querySelectorAll("th, td") ?? []).find((candidate) =>
           candidate.textContent?.replace(/\s+/g, " ").trim().includes(endText)
         )
+        const startElement = markedStart && table?.contains(markedStart) ? markedStart : Array.from(table?.querySelectorAll("th, td") ?? []).find((candidate) =>
+          candidate.textContent?.replace(/\s+/g, " ").trim().includes(startText)
+        )
         if (!endElement) throw new Error(`${label} current end cell is missing`)
+        if (!startElement) throw new Error(`${label} current start cell is missing`)
         const cellRect = endElement.getBoundingClientRect()
+        const startBeforeEnd =
+          startElement === endElement ||
+          Boolean(startElement.compareDocumentPosition(endElement) & Node.DOCUMENT_POSITION_FOLLOWING)
         const isInsideEndCell = (point: { x: number; y: number }) =>
           document.elementsFromPoint(point.x, point.y).some((pointElement) => pointElement.closest("th, td") === endElement)
         const requireInsideEndCell = (point: { x: number; y: number }) => {
@@ -200,8 +282,8 @@ const dragBetweenTextRanges = async (
           range.setStart(textNode, startOffset)
           range.setEnd(textNode, startOffset + endText.length)
           const rect = Array.from(range.getClientRects()).find((candidate) => candidate.width > 2 && candidate.height > 2) ?? range.getBoundingClientRect()
-          const point = { x: rect.right - 2, y: rect.top + rect.height / 2 }
-          return isInsideEndCell(point) ? point : requireInsideEndCell({ x: cellRect.right - Math.min(12, cellRect.width / 2), y: cellRect.top + cellRect.height / 2 })
+          const point = { x: startBeforeEnd ? rect.right - 2 : rect.left + 2, y: rect.top + rect.height / 2 }
+          return isInsideEndCell(point) ? point : requireInsideEndCell({ x: startBeforeEnd ? cellRect.right - Math.min(12, cellRect.width / 2) : cellRect.left + Math.min(12, cellRect.width / 2), y: cellRect.top + cellRect.height / 2 })
         }
         throw new Error(`${label} current end text node is missing`)
       },
@@ -295,6 +377,7 @@ const dragBetweenTextRanges = async (
     return {
       beforeScrollTop,
       afterScrollTop: await waitForScrollTopWithin(beforeScrollTop),
+      selectionSamples,
       selectionText: await readSelectionText(page),
     }
   }
@@ -331,12 +414,15 @@ const dragBetweenTextRanges = async (
   }
   await page.waitForTimeout(40)
   await page.mouse.up()
+  if (options.sampleDuringDrag) selectionSamples.push(await readTableDragSelectionSample(page, "mouseup"))
   await page.waitForTimeout(2_800)
+  if (options.sampleDuringDrag) selectionSamples.push(await readTableDragSelectionSample(page, "idle-after-mouseup"))
   await page.evaluate((token) => document.querySelectorAll(`[data-qa-table-drag-start="${token}"], [data-qa-table-drag-end="${token}"]`).forEach((element) => { element.removeAttribute("data-qa-table-drag-start"); element.removeAttribute("data-qa-table-drag-end") }), dragToken)
 
   return {
     beforeScrollTop,
     afterScrollTop: await waitForScrollTopWithin(beforeScrollTop),
+    selectionSamples,
     selectionText: await readSelectionText(page),
   }
 }
@@ -718,6 +804,96 @@ test("live 507 형태의 table multi-cell drag는 여러 셀 텍스트를 연속
   const afterTrailingMouseup = await readSelectionText(page)
   expect(afterTrailingMouseup).toContain("영역")
   expect(afterTrailingMouseup).toContain("구현되어 있는가")
+})
+
+test("live 507 마지막 table multi-cell drag는 양방향 모두 첫 셀 feedback과 idle selection을 유지한다", async ({
+  page,
+}) => {
+  test.slow()
+  await page.setViewportSize({ width: 1580, height: 900 })
+
+  await page.route("**/member/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(adminMember),
+    })
+  })
+  await page.route("**/post/api/v1/adm/posts/996", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 996,
+        version: 1,
+        title: "live 507 table bidirectional drag feedback 글",
+        content: post507Markdown,
+        contentHtml: null,
+        published: true,
+        listed: true,
+      }),
+    })
+  })
+
+  await page.goto("/editor/996")
+  const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+  await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(
+    "live 507 table bidirectional drag feedback 글"
+  )
+  await expectEditorToContainLoadedText(editor, "구현되어 있는가")
+
+  const finalTable = editor
+    .locator("table")
+    .filter({ hasText: "재발급 로직" })
+    .filter({ hasText: "구현되어 있는가" })
+    .last()
+  const topStartCell = finalTable.locator("th, td", { hasText: "영역" }).first()
+  const bottomEndCell = finalTable.locator("th, td", { hasText: "구현되어 있는가" }).first()
+
+  const topToBottomDrag = await dragBetweenTextRanges(
+    page,
+    topStartCell,
+    bottomEndCell,
+    "post 507 final table top-to-bottom drag feedback",
+    {
+      end: "구현되어 있는가",
+      start: "영역",
+    },
+    { sampleDuringDrag: true }
+  )
+  expect(topToBottomDrag.selectionText).toContain("영역")
+  expect(topToBottomDrag.selectionText).toContain("구현되어 있는가")
+  expectTableDragFeedbackStable(topToBottomDrag.selectionSamples, "top-to-bottom final table drag", "영역", "구현되어 있는가")
+  await page.waitForTimeout(1_800)
+  const topToBottomIdleText = await readSelectionText(page)
+  expect(topToBottomIdleText).toContain("영역")
+  expect(topToBottomIdleText).toContain("구현되어 있는가")
+
+  await page.evaluate(() => {
+    window.getSelection()?.removeAllRanges()
+    document.querySelectorAll("[data-table-drag-selection-text]").forEach((element) => {
+      element.removeAttribute("data-table-drag-selection-text")
+    })
+    document.documentElement.removeAttribute("data-table-drag-selection-text")
+  })
+
+  const bottomToTopDrag = await dragBetweenTextRanges(
+    page,
+    bottomEndCell,
+    topStartCell,
+    "post 507 final table bottom-to-top drag feedback",
+    {
+      end: "영역",
+      start: "구현되어 있는가",
+    },
+    { sampleDuringDrag: true }
+  )
+  expect(bottomToTopDrag.selectionText).toContain("영역")
+  expect(bottomToTopDrag.selectionText, JSON.stringify(bottomToTopDrag.selectionSamples)).toContain("구현되어 있는가")
+  expectTableDragFeedbackStable(bottomToTopDrag.selectionSamples, "bottom-to-top final table drag", "구현되어 있는가", "영역")
+  await page.waitForTimeout(1_800)
+  const bottomToTopIdleText = await readSelectionText(page)
+  expect(bottomToTopIdleText).toContain("영역")
+  expect(bottomToTopIdleText).toContain("구현되어 있는가")
+  expect(await editor.locator(".selectedCell").count()).toBe(0)
 })
 
 test("pointercancel 이전후에도 table multi-cell drag 선택 텍스트가 비지 않는다", async ({

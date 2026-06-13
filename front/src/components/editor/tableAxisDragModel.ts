@@ -5,6 +5,7 @@ export type TableAxis = "row" | "column"
 export type PendingTableAxisDragState = {
   axis: TableAxis
   sourceIndex: number
+  rangeAnchorIndex: number
   pointerId: number
   tablePos: number
   startX: number
@@ -19,6 +20,7 @@ export type DraggedTableAxisState =
   | {
       axis: TableAxis
       sourceIndex: number
+      rangeAnchorIndex: number
       pointerId: number
       tablePos: number
       previewLeft: number
@@ -45,7 +47,10 @@ export type TableAxisDragGhostPosition = {
 
 export type TableAxisSelectionState = {
   axis: TableAxis
+  anchorIndex: number
+  fromIndex: number
   index: number
+  toIndex: number
 }
 
 export type TableAxisSelectionTarget = TableAxisSelectionState & {
@@ -63,7 +68,11 @@ export const resolveSyncedTableAxisGeometryFromDom = (
     (row): row is HTMLTableRowElement => row instanceof HTMLTableRowElement && row.cells.length > 0
   )
   if (selection.axis === "row" && (selection.index < 0 || selection.index >= rows.length)) return null
-  const selectedRow = rows[selection.axis === "row" ? selection.index : 0] ?? rows[0] ?? null
+  const selectedRowIndex =
+    selection.axis === "row"
+      ? Math.max(0, Math.min(selection.index, rows.length - 1))
+      : 0
+  const selectedRow = rows[selectedRowIndex] ?? rows[0] ?? null
   const firstRowCells = Array.from(rows[0]?.cells ?? []).filter(
     (cell): cell is HTMLTableCellElement => cell instanceof HTMLTableCellElement
   )
@@ -107,6 +116,10 @@ export const resolveSyncedTableAxisGeometryFromDom = (
     columnAddAnchor: moveAnchor(previous.columnAddAnchor),
     cornerAnchor: moveAnchor(previous.cornerAnchor),
     cellMenuAnchor: moveAnchor(previous.cellMenuAnchor),
+    rowSegments: rows.map((row) => {
+      const rect = row.getBoundingClientRect()
+      return { height: Math.round(rect.height), top: Math.round(Math.max(0, rect.top - tableRect.top)) }
+    }),
     columnSegments: firstRowCells.map((cell) => {
       const rect = cell.getBoundingClientRect()
       return { left: Math.round(Math.max(0, rect.left - tableRect.left)), width: Math.round(rect.width) }
@@ -130,6 +143,7 @@ export const createHiddenTableAxisReorderIndicatorState = (
 export const createPendingTableAxisDragState = (
   axis: TableAxis,
   sourceIndex: number,
+  rangeAnchorIndex: number,
   pointerId: number,
   tablePos: number,
   startX: number,
@@ -138,6 +152,7 @@ export const createPendingTableAxisDragState = (
 ): PendingTableAxisDragState => ({
   axis,
   sourceIndex,
+  rangeAnchorIndex,
   pointerId,
   tablePos,
   startX,
@@ -153,6 +168,7 @@ export const createDraggedTableAxisState = (
 ): Exclude<DraggedTableAxisState, null> => ({
   axis: pending.axis,
   sourceIndex: pending.sourceIndex,
+  rangeAnchorIndex: pending.rangeAnchorIndex,
   pointerId: pending.pointerId,
   tablePos: pending.tablePos,
   previewLeft: pending.previewLeft,

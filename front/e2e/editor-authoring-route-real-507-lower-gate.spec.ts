@@ -1,4 +1,4 @@
-import { test } from "@playwright/test"
+import { test } from "./helpers/authoringPlaywright"
 import {
   expectPost507CodeGateSatisfied,
   expectPost507LowerGateTelemetryStable,
@@ -22,7 +22,7 @@ test.describe("editor authoring route post 507 lower real workflow gate", () => 
 
     await installPost507InteractionTelemetry(page)
 
-    // cell text drag -> row axis selection -> column axis selection -> wheel scroll -> lower body/block state
+    // cell text drag -> code block internal Cmd/Ctrl+A -> row axis selection -> column axis selection -> lower body text selection -> lower body block drag
     await runPost507LowerRealWorkflowGate(page, { editor, finalTable })
     await expectPost507LowerGateTelemetryStable(page, "post-507-lower-real-workflow")
     await expectPost507CodeGateSatisfied(page, modifyCapture)

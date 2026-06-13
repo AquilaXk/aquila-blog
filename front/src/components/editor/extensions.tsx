@@ -10,6 +10,8 @@ import TaskItem from "@tiptap/extension-task-item"
 import TaskList from "@tiptap/extension-task-list"
 import { normalizeInlineColorToken } from "src/libs/markdown/inlineColor"
 import { TABLE_MIN_ROW_HEIGHT_PX } from "src/libs/markdown/tableMetadata"
+import { syncNativeEditorTextSelectionToProseMirror } from "./editorNativeTextSelectionPreserveModel"
+import { getActiveListItemName } from "./nestedListItemModel"
 
 export { CalloutBlock } from "./calloutNodeView"
 export { EditorCodeBlock, getPreferredCodeLanguage, normalizeCodeLanguage } from "./codeBlockNodeView"
@@ -204,8 +206,35 @@ export const EditorTaskList = TaskList.extend({
   },
 })
 
+const getParentKeyboardShortcuts = (extensionContext: unknown) =>
+  (extensionContext as { parent?: () => Record<string, () => boolean> }).parent?.() ??
+  {}
+
+const runSyncedListIndentCommand = (
+  editor: Parameters<typeof getActiveListItemName>[0],
+  direction: "in" | "out"
+) => {
+  syncNativeEditorTextSelectionToProseMirror(editor, {
+    allowCollapsed: true,
+    excludeSelector: "th, td, .aq-code-shell",
+  })
+  const listItemName = getActiveListItemName(editor)
+  if (!listItemName) return false
+  return direction === "out"
+    ? editor.commands.liftListItem(listItemName)
+    : editor.commands.sinkListItem(listItemName)
+}
+
 export const EditorTaskItem = TaskItem.extend({
   draggable: true,
+
+  addKeyboardShortcuts() {
+    return {
+      ...getParentKeyboardShortcuts(this),
+      Tab: () => runSyncedListIndentCommand(this.editor, "in"),
+      "Shift-Tab": () => runSyncedListIndentCommand(this.editor, "out"),
+    }
+  },
 }).configure({
   nested: true,
   HTMLAttributes: {
@@ -216,6 +245,14 @@ export const EditorTaskItem = TaskItem.extend({
 
 export const EditorListItem = ListItem.extend({
   draggable: true,
+
+  addKeyboardShortcuts() {
+    return {
+      ...getParentKeyboardShortcuts(this),
+      Tab: () => runSyncedListIndentCommand(this.editor, "in"),
+      "Shift-Tab": () => runSyncedListIndentCommand(this.editor, "out"),
+    }
+  },
 }).configure({
   HTMLAttributes: {
     draggable: "true",
@@ -223,4 +260,14 @@ export const EditorListItem = ListItem.extend({
   },
 })
 
-export const EditorListKeymap = ListKeymap
+export const EditorListKeymap = ListKeymap.extend({
+  priority: 1000,
+
+  addKeyboardShortcuts() {
+    return {
+      ...getParentKeyboardShortcuts(this),
+      Tab: () => runSyncedListIndentCommand(this.editor, "in"),
+      "Shift-Tab": () => runSyncedListIndentCommand(this.editor, "out"),
+    }
+  },
+})

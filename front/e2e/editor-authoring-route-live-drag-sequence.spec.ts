@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from "@playwright/test"
+import { expect, test, type Locator, type Page } from "./helpers/authoringPlaywright"
 import { expectEditorToContainLoadedText, expectVisibleBox } from "./helpers/editorAuthoringFlow"
 import {
   expectPost507FinalTableTextSelected,

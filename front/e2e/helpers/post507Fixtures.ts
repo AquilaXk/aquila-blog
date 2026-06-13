@@ -26,6 +26,7 @@ export const POST_507_CODE_REQUIRED_TEXTS = [
   "createRefreshToken(user)",
   "return new Token(access, refresh);",
 ] as const
+const SELECT_ALL_SHORTCUT = process.platform === "darwin" ? "Meta+a" : "Control+a"
 
 export const POST_507_REAL_FEATURE_CONTRACT = {
   auxiliaryRouteBoundary:
@@ -112,7 +113,7 @@ export const POST_507_REAL_FEATURE_CONTRACT = {
         "expectPost507CodeGateSatisfied",
         "runPost507LowerRealWorkflowGate",
         "expectPost507LowerGateTelemetryStable",
-        "cell text drag -> row axis selection -> column axis selection -> wheel scroll -> lower body/block state",
+        "cell text drag -> code block internal Cmd/Ctrl+A -> row axis selection -> column axis selection -> lower body text selection -> lower body block drag",
       ],
       routeContract: "507-copy-route",
       specFile: "editor-authoring-route-real-507-lower-gate.spec.ts",
@@ -1639,6 +1640,122 @@ const expectPost507LowerBodyBlockDragStarts = async (page: Page, editor: Locator
   }
 }
 
+const expectPost507CodeBlockSelectAllInsideWorkflow = async (page: Page, editor: Locator) => {
+  const codeContent = editor.locator(".aq-code-editor-content", { hasText: "createAccessToken(user)" }).first()
+  await expect(codeContent).toBeVisible({ timeout: 15_000 })
+  let codeInViewport = false
+  for (let attempt = 0; attempt < 56; attempt += 1) {
+    const codeViewportState = await codeContent.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      const viewportTop = 96
+      const viewportBottom = window.innerHeight - 120
+      return {
+        bottom: rect.bottom,
+        inViewport: rect.width > 0 && rect.height > 0 && rect.top >= viewportTop && rect.top <= viewportBottom,
+        viewportBottom,
+        viewportTop,
+        top: rect.top,
+      }
+    })
+    codeInViewport = codeViewportState.inViewport
+    if (codeInViewport) break
+    const deltaY = codeViewportState.top < codeViewportState.viewportTop ? -360 : 360
+    await page.mouse.wheel(0, deltaY)
+    await page.waitForTimeout(90)
+  }
+  if (!codeInViewport) {
+    throw new Error(
+      `post 507 lower workflow could not wheel back to code block: ${JSON.stringify({
+        diagnostics: await readPost507EditorDiagnostics(page, "code-select-all-scroll-from-table"),
+      })}`
+    )
+  }
+  const codeBox = await codeContent.boundingBox()
+  if (!codeBox) throw new Error("post 507 lower workflow code block metrics are missing")
+
+  await page.mouse.click(codeBox.x + Math.min(180, codeBox.width / 2), codeBox.y + Math.min(28, codeBox.height / 3))
+  await page.keyboard.press(SELECT_ALL_SHORTCUT)
+
+  const readCodeSelectionState = () =>
+    codeContent.evaluate((element, requiredTexts) => {
+      const shell = element.closest<HTMLElement>(".aq-code-shell")
+      const nativeSelection = window.getSelection()?.toString() ?? ""
+      const fallbackSelection = shell?.getAttribute("data-code-drag-selection-text") ?? ""
+      const selectionText = (nativeSelection || fallbackSelection).replace(/\s+/g, " ").trim()
+      const rect = element.getBoundingClientRect()
+      const pointElement = document.elementFromPoint(rect.left + Math.min(180, rect.width / 2), rect.top + Math.min(28, rect.height / 3))
+      const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null
+      return {
+        activeClass: String(activeElement?.className ?? ""),
+        activeTag: activeElement?.tagName ?? "",
+        blockOverlayCount: document.querySelectorAll("[data-testid='keyboard-block-selection-overlay']").length,
+        codeRect: { bottom: rect.bottom, left: rect.left, top: rect.top },
+        hasAllCodeText: requiredTexts.every((text) => selectionText.includes(text)),
+        hasFinalTableText: selectionText.includes("Stateless 의미") || selectionText.includes("구현되어 있는가"),
+        pointClass: String((pointElement as HTMLElement | null)?.className ?? ""),
+        pointTag: pointElement?.tagName ?? "",
+        selectedCellCount: document.querySelectorAll(".selectedCell").length,
+        tableDragAttr: document.documentElement.getAttribute("data-table-drag-selection-text") ?? "",
+        tableDragElementCount: document.querySelectorAll("[data-table-drag-selection-text]").length,
+        selectionText,
+      }
+    }, [...POST_507_CODE_REQUIRED_TEXTS])
+  try {
+    await expect
+      .poll(
+        async () => {
+          const state = await readCodeSelectionState()
+          return {
+            blockOverlayCount: state.blockOverlayCount,
+            hasAllCodeText: state.hasAllCodeText,
+            hasFinalTableText: state.hasFinalTableText,
+            selectedCellCount: state.selectedCellCount,
+          }
+        },
+        { timeout: 2_000 }
+      )
+      .toEqual({
+        blockOverlayCount: 0,
+        hasAllCodeText: true,
+        hasFinalTableText: false,
+        selectedCellCount: 0,
+      })
+  } catch (error) {
+    throw new Error(
+      `post 507 code Cmd/Ctrl+A kept stale table selection: ${JSON.stringify({
+        diagnostics: await readPost507EditorDiagnostics(page, "code-select-all-stale-table-selection"),
+        error: error instanceof Error ? error.message : String(error),
+        state: await readCodeSelectionState(),
+      })}`
+    )
+  }
+}
+
+const expectPost507LowerBodyTextSelectionAfterTableAxes = async (page: Page, editor: Locator) => {
+  const lowerBody = editor
+    .locator("p", { hasText: "Stateless는 “서버가 아무것도 안 하는 구조”가 아닙니다." })
+    .last()
+  await expect(lowerBody).toBeVisible({ timeout: 5_000 })
+  const bodyDrag = await dragPost507TextRange(
+    page,
+    lowerBody,
+    "post 507 lower body text selection after table axes",
+    "서버가 아무것도 안 하는 구조"
+  )
+  if (!bodyDrag.selectionText.includes("서버가 아무것도 안 하는 구조")) {
+    throw new Error(
+      `post 507 lower body text selection lost after table axes: ${JSON.stringify({
+        bodyDrag,
+        diagnostics: await readPost507EditorDiagnostics(page, "lower-body-text-after-table-axes"),
+      })}`
+    )
+  }
+  expect(Math.abs(bodyDrag.afterScrollTop - bodyDrag.beforeScrollTop)).toBeLessThanOrEqual(24)
+  await expect(page.getByTestId("editor-text-bubble-toolbar")).toBeVisible({ timeout: 2_000 })
+  await expect(editor.locator(".selectedCell")).toHaveCount(0)
+  await expect(page.getByTestId("keyboard-block-selection-overlay")).toHaveCount(0)
+}
+
 export const runPost507LowerRealWorkflowGate = async (
   page: Page,
   {
@@ -1680,7 +1797,12 @@ export const runPost507LowerRealWorkflowGate = async (
     }
     expect(Math.abs(tableDrag.afterScrollTop - tableDrag.beforeScrollTop)).toBeLessThanOrEqual(24)
 
-    await clearPost507SelectionState(page)
+    await expectPost507CodeBlockSelectAllInsideWorkflow(page, editor)
+    await page.mouse.wheel(0, 720)
+    await page.waitForTimeout(180)
+    await scrollPost507FinalTableTargetIntoView(page)
+    await page.waitForTimeout(120)
+
     await clickPost507AxisHandle(page, "row", 3)
     await expectPost507AxisSelectionNoVisibleNativeTextChurn(page, "row", 3, `post 507 row axis cycle ${cycle}`)
     await expectPost507WheelScrollsWithoutLock(page, `row axis cycle ${cycle}`)
@@ -1695,8 +1817,8 @@ export const runPost507LowerRealWorkflowGate = async (
     await page.keyboard.press("Escape")
   }
 
-  await clearPost507SelectionState(page)
   await page.waitForTimeout(1_300)
+  await expectPost507LowerBodyTextSelectionAfterTableAxes(page, editor)
   await expectPost507LowerBodyBlockDragStarts(page, editor)
 }
 

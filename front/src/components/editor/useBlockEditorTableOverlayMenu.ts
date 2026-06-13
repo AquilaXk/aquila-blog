@@ -233,17 +233,26 @@ export const useBlockEditorTableOverlayMenu = ({
           menuAxisTarget?.index ??
           (axis === "row" ? sourceTop : sourceLeft) ??
           0
+        const anchorIndex = menuAxisTarget?.anchorIndex ?? sourceIndex
         const rowIndex =
           axis === "row"
             ? Math.max(0, Math.min(sourceIndex, tableRect.map.height - 1))
+            : 0
+        const anchorRowIndex =
+          axis === "row"
+            ? Math.max(0, Math.min(anchorIndex, tableRect.map.height - 1))
             : 0
         const columnIndex =
           axis === "column"
             ? Math.max(0, Math.min(sourceIndex, tableRect.map.width - 1))
             : 0
+        const anchorColumnIndex =
+          axis === "column"
+            ? Math.max(0, Math.min(anchorIndex, tableRect.map.width - 1))
+            : 0
         const anchorCellPos =
           tableRect.tableStart +
-          tableRect.map.positionAt(rowIndex, columnIndex, tableRect.table)
+          tableRect.map.positionAt(anchorRowIndex, anchorColumnIndex, tableRect.table)
         const headCellPos =
           tableRect.tableStart +
           tableRect.map.positionAt(

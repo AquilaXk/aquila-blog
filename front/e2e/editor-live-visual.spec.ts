@@ -17,6 +17,7 @@ import {
   sleep,
   waitForApiReachability,
 } from "./helpers/liveAuth"
+import { expectPost507FinalReferenceTextSelectionStable } from "./helpers/post507Fixtures"
 
 const uiLoginId = adminEmail || adminLegacyLoginId
 const hasUiLoginCredentials = Boolean(uiLoginId && adminPassword)
@@ -994,6 +995,7 @@ test.describe("editor live visual regression", () => {
     expect(Math.abs(listTextDrag.afterScrollTop - listTextDrag.beforeScrollTop)).toBeLessThanOrEqual(24)
     await expectNoSelectionResidue(page, "live 507 list text after code select all")
 
+    await expectPost507FinalReferenceTextSelectionStable(page, editor)
     await expectFinalTableOverlayFollowsScroll(page, finalTable)
   })
 })

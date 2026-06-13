@@ -33,11 +33,17 @@ reject_pattern 'cancel-in-progress:[[:space:]]*true' "homeserver deploy must not
 
 require_pattern 'backend_deploy:' "workflow must expose a backend_deploy output"
 require_pattern 'front_live_verify:' "workflow must expose a front_live_verify output"
+require_pattern 'editor_live_canary:' "workflow must expose an editor_live_canary output"
 require_pattern 'git diff-tree --no-commit-id --name-only -r -m "\$\{DEPLOY_SHA\}"' "merge commit changed-file detection must use -m fallback"
 reject_pattern 'git diff-tree --no-commit-id --name-only -r "\$\{DEPLOY_SHA\}"' "single-parent diff-tree form can return empty changed files for merge commits"
 
 require_pattern 'needs\.calculateTag\.outputs\.backend_deploy' "backend jobs must be gated by backend_deploy"
 require_pattern 'needs\.calculateTag\.outputs\.front_live_verify' "frontend live verification must be gated by front_live_verify"
+require_pattern 'needs\.calculateTag\.outputs\.editor_live_canary' "editor seeded live canary must be gated by editor_live_canary"
+require_pattern 'EDITOR_LIVE_CANARY_PATHS_PATTERN=.*front/src/components/editor/' "editor canary path classification must include editor component changes"
+require_pattern 'EDITOR_LIVE_CANARY_PATHS_PATTERN=.*front/src/pages/editor/' "editor canary path classification must include editor page changes"
+require_pattern 'force_editor_live_canary:[[:space:]]*$' "workflow_dispatch must expose force_editor_live_canary input key"
+reject_pattern "E2E_LIVE_EDITOR_507_CANARY:[[:space:]]*['\"]?true['\"]?" "editor seeded live canary must not be hardcoded true"
 require_pattern 'always\(\)[[:space:]]*&&' "frontLiveE2E must handle skipped backend deploy dependencies explicitly"
 require_pattern 'create_external_backup\.sh' "homeserver deploy must create an external storage backup before rollout mutation"
 require_pattern 'prune_external_backups\.sh' "homeserver deploy must prune external backups around backup creation"

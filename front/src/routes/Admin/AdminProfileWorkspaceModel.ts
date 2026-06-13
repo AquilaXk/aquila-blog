@@ -27,7 +27,7 @@ export const WORKSPACE_SECTIONS: {
 }[] = [
   {
     id: "identity",
-    label: "프로필",
+    label: "기본 정보",
   },
   {
     id: "about",

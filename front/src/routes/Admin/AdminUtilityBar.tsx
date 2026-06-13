@@ -9,6 +9,7 @@ import {
   adminBorderStrong,
   adminFocusRing,
   adminGold,
+  adminSurface,
   adminSurfaceAccent,
   adminSurfaceRaised,
   adminTextMuted,
@@ -142,26 +143,24 @@ export default AdminUtilityBar
 
 const UtilityBar = styled.header`
   position: sticky;
-  top: calc(var(--app-header-height, 73px) + 0.85rem);
+  top: var(--app-header-height, 73px);
   z-index: 5;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.72rem;
-  padding: 0.72rem 0.85rem;
-  border: 1px solid ${adminBorder};
-  border-radius: 14px;
-  backdrop-filter: blur(18px);
-  background: rgba(23, 24, 23, 0.82);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+  min-height: 3.95rem;
+  padding: 0.62rem 1.45rem;
+  border-bottom: 1px solid ${adminBorder};
+  background: ${adminSurfaceRaised};
+  box-shadow: none;
 
   @media (max-width: 720px) {
-    top: calc(var(--app-header-height, 73px) + 0.65rem);
+    top: var(--app-header-height, 73px);
     position: sticky;
     align-items: center;
     gap: 0.48rem;
-    padding: 0.58rem 0.64rem;
-    border-radius: 14px;
+    padding: 0.58rem 0.82rem;
 
     &[data-search-open="true"] {
       margin-bottom: 3.15rem;
@@ -196,12 +195,12 @@ const CompactNav = styled.nav`
 const CompactNavLink = styled.a`
   width: 2.75rem;
   height: 2.75rem;
-  border-radius: 10px;
+  border-radius: 4px;
   display: grid;
   place-items: center;
   flex-shrink: 0;
   border: 1px solid transparent;
-  background: ${adminSurfaceRaised};
+  background: transparent;
   color: ${adminTextSecondary};
   text-decoration: none;
 
@@ -257,11 +256,11 @@ const SearchField = styled.div`
 const SearchInput = styled.input`
   width: 100%;
   min-width: 0;
-  height: 2.75rem;
+  height: 2.58rem;
   padding: 0 0.92rem 0 2.55rem;
   border: 1px solid ${adminBorder};
   border-radius: 999px;
-  background: rgba(32, 33, 31, 0.82);
+  background: ${adminSurface};
   color: ${adminTextPrimary};
   font-size: 0.88rem;
   font-weight: 600;
@@ -296,7 +295,7 @@ const SearchToggleButton = styled.button`
     width: 2.75rem;
     height: 2.75rem;
     border: 1px solid ${adminBorder};
-    border-radius: 10px;
+    border-radius: 4px;
     display: grid;
     place-items: center;
     flex-shrink: 0;

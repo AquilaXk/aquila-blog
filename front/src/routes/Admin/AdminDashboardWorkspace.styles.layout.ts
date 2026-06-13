@@ -5,23 +5,30 @@ import {
   AdminInfoPanelCard,
   AdminPlainCard,
 } from "src/routes/Admin/AdminSurfacePrimitives"
+import {
+  adminAppBackground,
+  adminBorder,
+  adminSurface,
+  adminSurfaceRaised,
+  adminTextPrimary,
+  adminTextSecondary,
+} from "src/routes/Admin/adminColorTokens"
 
 export const Main = styled.main`
   min-height: 100vh;
-  background: ${({ theme }) =>
-    theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray2};
+  background: ${adminAppBackground};
 `
 
 export const Shell = styled.div`
-  width: min(1380px, calc(100% - 40px));
-  margin: 0 auto;
-  padding: 16px 0 72px;
+  width: 100%;
+  margin: 0;
+  padding: 1.05rem 1.45rem 4.5rem;
   display: grid;
   gap: 8px;
 
   @media (max-width: 768px) {
-    width: min(calc(100% - 24px), 1380px);
-    padding-top: 6px;
+    width: 100%;
+    padding: 0.85rem 0.82rem 3rem;
     gap: 8px;
   }
 `
@@ -30,7 +37,7 @@ export const HeroPanel = styled.section`
   display: grid;
   gap: 6px;
   padding: 0 0 9px;
-  border-bottom: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray5)};
+  border-bottom: 1px solid ${adminBorder};
 
   @media (max-width: 820px) {
     gap: 6px;
@@ -56,7 +63,7 @@ export const HeroCopy = styled.div`
 
   h1 {
     margin: 0;
-    color: ${({ theme }) => theme.colors.gray12};
+    color: ${adminTextPrimary};
     font-size: clamp(1.16rem, 2vw, 1.42rem);
     line-height: 1.1;
     letter-spacing: 0;
@@ -85,10 +92,10 @@ export const StatusChip = styled.span`
   align-items: center;
   min-height: 38px;
   padding: 0 15px;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
-  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray1)};
-  color: ${({ theme }) => theme.colors.gray12};
+  border-radius: 4px;
+  border: 1px solid ${adminBorder};
+  background: ${adminSurface};
+  color: ${adminTextPrimary};
   font-size: 0.84rem;
   font-weight: 800;
 
@@ -107,10 +114,10 @@ export const HeaderLink = styled.a`
   align-items: center;
   min-height: 38px;
   padding: 0 15px;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
-  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray1)};
-  color: ${({ theme }) => theme.colors.gray12};
+  border-radius: 4px;
+  border: 1px solid ${adminBorder};
+  background: ${adminSurface};
+  color: ${adminTextPrimary};
   text-decoration: none;
   font-size: 0.84rem;
   font-weight: 780;
@@ -134,8 +141,8 @@ export const MetricCard = styled.article`
   align-items: start;
   padding: 12px;
   border-radius: 2px;
-  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
-  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray1)};
+  border: 1px solid ${adminBorder};
+  background: ${adminSurface};
   box-shadow: none;
 
   &[data-tone="good"] {
@@ -164,9 +171,8 @@ export const MetricIcon = styled.div`
   border-radius: 2px;
   display: grid;
   place-items: center;
-  background: ${({ theme }) =>
-    theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray11};
+  background: ${adminSurfaceRaised};
+  color: ${adminTextSecondary};
 
   &[data-tone="good"] {
     background: ${({ theme }) =>
@@ -266,11 +272,11 @@ export const PanelHeader = styled.div`
   align-items: flex-start;
   gap: 16px;
   padding: 14px 16px 10px;
-  border-bottom: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray4)};
+  border-bottom: 1px solid ${adminBorder};
 
   strong {
     display: block;
-    color: ${({ theme }) => theme.colors.gray12};
+    color: ${adminTextPrimary};
     font-size: 1.02rem;
     font-weight: 840;
     letter-spacing: -0.03em;
@@ -297,17 +303,16 @@ export const LaunchLink = styled.a`
   min-width: 68px;
   min-height: 38px;
   padding: 0 14px;
-  border-radius: 999px;
-  background: ${({ theme }) =>
-    theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray12};
+  border-radius: 4px;
+  background: ${adminSurfaceRaised};
+  color: ${adminTextPrimary};
   text-decoration: none;
   font-size: 0.88rem;
   font-weight: 780;
 `
 
 export const PanelBody = styled.div`
-  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray1)};
+  background: ${adminSurface};
 `
 
 export const SnapshotLeadBody = styled(PanelBody)`
@@ -331,7 +336,7 @@ export const PanelFrame = styled.iframe`
   width: 100%;
   height: 304px;
   border: 0;
-  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray1)};
+  background: ${adminSurface};
 `
 
 export const CompactPanelBody = styled(PanelBody)`

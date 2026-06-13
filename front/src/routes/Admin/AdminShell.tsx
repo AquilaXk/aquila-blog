@@ -6,16 +6,19 @@ import AppIcon, { type IconName } from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
 import type { AuthMember } from "src/hooks/useAuthSession"
 import {
+  adminAppBackground,
   adminBorder,
   adminBorderStrong,
   adminControlText,
   adminGold,
   adminShellSurface,
+  adminSurface,
   adminSurfaceAccent,
   adminSurfaceRaised,
   adminTeal,
   adminTealBorder,
   adminTealHover,
+  adminSystemThemeVariables,
   adminTextMuted,
   adminTextPrimary,
   adminTextSecondary,
@@ -165,19 +168,19 @@ const AdminShell = ({ currentSection, member, profileSnapshot = null, children }
 export default AdminShell
 
 const ShellFrame = styled.div`
+  ${({ theme }) => adminSystemThemeVariables(theme)}
   display: grid;
-  grid-template-columns: minmax(14.5rem, 16.5rem) minmax(0, 1fr);
-  gap: 0.85rem;
-  width: min(1760px, calc(100vw - 2rem));
-  margin-left: calc(50% - 50vw + 1rem);
+  grid-template-columns: 17.5rem minmax(0, 1fr);
+  gap: 0;
+  width: 100%;
+  margin: 0;
   min-height: calc(100vh - var(--app-header-height, 73px) - 1rem);
-  padding: 0.85rem 0 2rem;
+  padding: 0;
+  background: ${adminAppBackground};
 
   @media (max-width: 1100px) {
     grid-template-columns: minmax(0, 1fr);
     width: 100%;
-    margin-left: 0;
-    padding-top: 0.85rem;
   }
 `
 
@@ -187,20 +190,17 @@ const Sidebar = styled.aside`
   align-content: start;
   min-width: 0;
   position: sticky;
-  top: calc(var(--app-header-height, 73px) + 0.85rem);
-  min-height: calc(100vh - var(--app-header-height, 73px) - 1.7rem);
+  top: var(--app-header-height, 73px);
+  min-height: calc(100vh - var(--app-header-height, 73px));
   height: fit-content;
-  padding: 0.72rem 0.35rem;
+  padding: 1.05rem 1.25rem 1.15rem;
   border: 0;
   border-right: 1px solid ${adminBorder};
   border-radius: 0;
-  background: ${({ theme }) =>
-    theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : adminShellSurface};
+  background: ${adminShellSurface};
 
   @media (max-width: 1100px) {
     position: static;
-    padding: 0.72rem 0.82rem;
-    border-radius: 2px;
     display: none;
   }
 `
@@ -221,7 +221,7 @@ const BrandBlock = styled.div`
   display: flex;
   align-items: center;
   gap: 0.78rem;
-  padding: 0.1rem 0.42rem 0.35rem;
+  padding: 0.1rem 0 0.35rem;
 
   @media (max-width: 1100px) {
     flex-shrink: 0;
@@ -236,10 +236,8 @@ const BrandMark = styled.div`
   place-items: center;
   position: relative;
   overflow: hidden;
-  border: 1px solid ${({ theme }) =>
-    theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : adminBorderStrong};
-  background: ${({ theme }) =>
-    theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : adminSurfaceAccent};
+  border: 1px solid ${adminBorderStrong};
+  background: ${adminSurfaceAccent};
   color: ${adminGold};
 
   span {
@@ -330,8 +328,7 @@ const NavLink = styled.a`
 
   &[data-active="true"] {
     border-left-color: ${adminGold};
-    background: ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : adminSurfaceAccent};
+    background: ${adminSurfaceAccent};
   }
 
   &[data-active="true"] .navIcon {
@@ -340,8 +337,7 @@ const NavLink = styled.a`
   }
 
   &:hover {
-    background: ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : adminSurfaceRaised};
+    background: ${adminSurfaceRaised};
   }
 
   @media (max-width: 1100px) {
@@ -372,31 +368,31 @@ const SidebarPrimaryAction = styled.a`
   font-weight: 760;
 
   &:hover {
-    background: ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : adminTealHover};
+    background: ${adminTealHover};
   }
 `
 
 const ContentColumn = styled.div`
   display: grid;
   align-content: start;
-  gap: 0.65rem;
+  gap: 0;
   min-width: 0;
+  background: ${adminAppBackground};
 `
 
 const UtilityBarFallback = styled.div`
   position: sticky;
-  top: calc(var(--app-header-height, 73px) + 0.85rem);
+  top: var(--app-header-height, 73px);
   z-index: 5;
   height: 4.85rem;
-  border: 1px solid ${adminBorder};
+  border: 0;
+  border-bottom: 1px solid ${adminBorder};
   border-radius: 0;
-  background: ${({ theme }) =>
-    theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : "rgba(23, 24, 23, 0.86)"};
+  background: ${adminSurface};
   box-shadow: none;
 
   @media (max-width: 720px) {
-    top: calc(var(--app-header-height, 73px) + 0.65rem);
+    top: var(--app-header-height, 73px);
     height: 8.15rem;
   }
 `

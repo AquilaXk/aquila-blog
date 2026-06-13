@@ -10,15 +10,16 @@ import {
 export const AdminPostsWorkspaceMainSections = Symbol("AdminPostsWorkspaceMainSections")
 
 export const Main = styled.main`
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 0.85rem 1rem 2.4rem;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 1.05rem 1.45rem 2.4rem;
   display: grid;
   gap: 1rem;
 
   @media (max-width: 767px) {
     gap: 0.9rem;
-    padding: 1rem 0.85rem 2rem;
+    padding: 0.85rem 0.82rem 2rem;
   }
 `
 

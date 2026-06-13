@@ -2,6 +2,10 @@ import type { CloudFile, CloudMediaKind } from "src/apis/backend/cloud"
 
 export type CloudMediaFilter = "ALL" | CloudMediaKind
 export type UploadQueueStatus = "queued" | "uploading" | "done" | "failed" | "cancelled"
+export type CloudSearchParams = {
+  folderPath: string
+  keyword: string
+}
 
 export const CLOUD_FILTERS: Array<{ value: CloudMediaFilter; label: string }> = [
   { value: "ALL", label: "전체" },
@@ -79,18 +83,31 @@ export const getUploadStatusLabel = (status: UploadQueueStatus) => {
 
 export const isUploadActive = (status: UploadQueueStatus) => status === "queued" || status === "uploading"
 
+export const normalizeCloudFolderPathSearch = (value: string) => value.trim().replace(/^\/+|\/+$/g, "")
+
+export const resolveCloudSearchParams = (value: string): CloudSearchParams => {
+  const normalized = value.trim()
+  if (!normalized.startsWith("/")) return { folderPath: "", keyword: normalized }
+
+  return {
+    folderPath: normalizeCloudFolderPathSearch(normalized),
+    keyword: "",
+  }
+}
+
 export const doesCloudFileMatchFilters = (
   file: CloudFile,
   filter: CloudMediaFilter,
-  keyword: string,
+  searchText: string,
 ) => {
-  const normalizedKeyword = keyword.trim().toLowerCase()
+  const searchParams = resolveCloudSearchParams(searchText)
+  const normalizedKeyword = searchParams.keyword.toLowerCase()
   const matchesKind = filter === "ALL" || file.mediaKind === filter
-  const matchesKeyword =
-    !normalizedKeyword ||
-    file.originalFilename.toLowerCase().includes(normalizedKeyword) ||
-    file.folderPath.toLowerCase().includes(normalizedKeyword)
-  return matchesKind && matchesKeyword
+  const matchesFolderPath =
+    !searchParams.folderPath ||
+    normalizeCloudFolderPathSearch(file.folderPath) === searchParams.folderPath
+  const matchesKeyword = !normalizedKeyword || file.originalFilename.toLowerCase().includes(normalizedKeyword)
+  return matchesKind && matchesFolderPath && matchesKeyword
 }
 
 export const mergeCloudFiles = (primary: CloudFile[], secondary: CloudFile[]) => {

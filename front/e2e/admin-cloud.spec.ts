@@ -88,6 +88,8 @@ const getUploadFileMetadata = (name: string) => {
   return { contentType: "application/pdf", mediaKind: "DOCUMENT" as const }
 }
 
+const normalizeFolderPathParam = (value: string) => value.trim().replace(/^\/+|\/+$/g, "")
+
 const setupAdminCloudMocks = async (
   page: Page,
   options: {
@@ -95,6 +97,7 @@ const setupAdminCloudMocks = async (
   } = {}
 ) => {
   const requestedKinds: string[] = []
+  const requestedFolderPaths: string[] = []
   const uploadedNames: string[] = []
   const deletedIds: string[] = []
   const uploadedFiles: CloudFileFixture[] = []
@@ -131,6 +134,7 @@ const setupAdminCloudMocks = async (
     const url = new URL(request.url())
     const id = url.pathname.match(/\/files\/(\d+)$/)?.[1] ?? ""
     const mediaKind = url.searchParams.get("mediaKind") || "ALL"
+    const folderPath = normalizeFolderPathParam(url.searchParams.get("folderPath") || "")
 
     if (request.method() === "DELETE" && id) {
       if (failedDeleteIds.has(id)) {
@@ -180,12 +184,14 @@ const setupAdminCloudMocks = async (
     }
 
     requestedKinds.push(mediaKind)
+    requestedFolderPaths.push(folderPath)
     const keyword = (url.searchParams.get("kw") || "").toLowerCase()
     const files = [...uploadedFiles, ...CLOUD_FILES].filter((file) => {
       const isDeleted = deletedIds.includes(String(file.id))
       const kindMatches = mediaKind === "ALL" || file.mediaKind === mediaKind
+      const folderMatches = !folderPath || normalizeFolderPathParam(file.folderPath) === folderPath
       const keywordMatches = !keyword || file.originalFilename.toLowerCase().includes(keyword)
-      return !isDeleted && kindMatches && keywordMatches
+      return !isDeleted && kindMatches && folderMatches && keywordMatches
     })
     await fulfillJson(route, { files })
   })
@@ -207,7 +213,7 @@ const setupAdminCloudMocks = async (
     })
   })
 
-  return { requestedKinds, uploadedNames, deletedIds }
+  return { requestedKinds, requestedFolderPaths, uploadedNames, deletedIds }
 }
 
 test.describe("관리자 클라우드", () => {
@@ -226,6 +232,11 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByRole("button", { name: "운영 점검 리포트.pdf 즐겨찾기 기능 준비 중" })).toBeDisabled()
 
     const searchInput = page.getByLabel("클라우드 파일 검색")
+    await searchInput.fill("/photos")
+    await expect.poll(() => mocks.requestedFolderPaths).toContain("photos")
+    await expect(page.getByRole("row", { name: /home-server-rack\.png/ })).toBeVisible()
+    await expect(page.getByRole("row", { name: /운영 점검 리포트\.pdf/ })).toHaveCount(0)
+
     await searchInput.fill("deploy")
     await expect(page.getByRole("row", { name: /deploy-walkthrough\.mp4/ })).toBeVisible()
 

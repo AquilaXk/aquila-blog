@@ -25,6 +25,7 @@ import {
   getUploadStatusLabel,
   isUploadActive,
   mergeCloudFiles,
+  resolveCloudSearchParams,
   type CloudMediaFilter,
   type UploadQueueStatus,
 } from "./AdminCloudWorkspaceModel"
@@ -308,11 +309,14 @@ const AdminCloudWorkspacePage = () => {
 
   const filesQuery = useQuery({
     queryKey: [CLOUD_QUERY_KEY, filter, keyword],
-    queryFn: () =>
-      listCloudFiles({
-        keyword,
+    queryFn: () => {
+      const searchParams = resolveCloudSearchParams(keyword)
+      return listCloudFiles({
+        folderPath: searchParams.folderPath,
+        keyword: searchParams.keyword,
         mediaKind: mediaKindFromFilter(filter),
-      }),
+      })
+    },
   })
   const serverFiles = filesQuery.data ?? EMPTY_CLOUD_FILES
   const visibleOptimisticFiles = useMemo(
@@ -534,7 +538,7 @@ const AdminCloudWorkspacePage = () => {
               <AppIcon name="search" />
               <SearchInput
                 aria-label="클라우드 파일 검색"
-                placeholder="파일, 확장자, 폴더 경로 검색"
+                placeholder="파일명 또는 /폴더 경로 검색"
                 value={keyword}
                 onChange={(event) => setKeyword(event.target.value)}
               />

@@ -53,7 +53,7 @@ export const hasAuthCookie = async (page: Page) => {
 
 export const isNavigationInterruptedError = (error: unknown) => {
   const message = error instanceof Error ? error.message : String(error)
-  return /interrupted by another navigation/i.test(message)
+  return /(interrupted by another navigation|net::ERR_ABORTED)/i.test(message)
 }
 
 export const waitForApiReachability = async (page: Page, apiBaseUrl: string) => {

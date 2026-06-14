@@ -67,6 +67,35 @@ test.describe("admin profile state contract", () => {
     expect(layoutSource).not.toContain("export const LinkRowCard = styled.div")
   })
 
+  test("프로필 이미지는 저장된 URL 로드 실패 시 기본 이미지를 한 번만 fallback 한다", () => {
+    const profileImageSource = readFileSync(
+      path.resolve(__dirname, "../src/components/ProfileImage.tsx"),
+      "utf8"
+    )
+    const identitySource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceIdentitySection.tsx"),
+      "utf8"
+    )
+    const previewSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfilePreviewRail.tsx"),
+      "utf8"
+    )
+
+    expect(profileImageSource).not.toContain('import { CONFIG } from "site.config"')
+    expect(profileImageSource).toContain("fallbackSrc,")
+    expect(profileImageSource).toContain("const requestedSrc = src || fallbackSrc")
+    expect(profileImageSource).toContain("const [resolvedSrc, setResolvedSrc] = React.useState(requestedSrc)")
+    expect(profileImageSource).toContain("const fallbackAttemptSourceRef = React.useRef<string | undefined>(undefined)")
+    expect(profileImageSource).toContain("fallbackAttemptSourceRef.current = undefined")
+    expect(profileImageSource).toContain("setResolvedSrc(requestedSrc)")
+    expect(profileImageSource).toContain("}, [requestedSrc])")
+    expect(profileImageSource).toContain("fallbackAttemptSourceRef.current === requestedSrc")
+    expect(profileImageSource).toContain("fallbackAttemptSourceRef.current = requestedSrc")
+    expect(profileImageSource).toContain("setResolvedSrc(fallbackSrc)")
+    expect(identitySource).toContain("fallbackSrc={CONFIG.profile.image}")
+    expect(previewSource).toContain("fallbackSrc={CONFIG.profile.image}")
+  })
+
   test("profile 작업공간은 공통 section nav/action dock primitive 위에서 반응형 분기를 유지한다", () => {
     const sectionSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceSections.tsx"),

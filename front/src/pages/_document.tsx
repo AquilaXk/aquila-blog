@@ -23,14 +23,15 @@ const AQUILA_SCHEME_BOOTSTRAP_SCRIPT = `
     systemDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
   } catch (_) {}
   var nextScheme = cachedScheme || (systemDark ? "dark" : "light");
-  var background = nextScheme === "dark" ? "#111318" : "#f7f9fc";
+  var background = nextScheme === "dark" ? "#121212" : "#f3f5f8";
   var foreground = nextScheme === "dark" ? "#f4f6fb" : "#101214";
   document.documentElement.dataset.aquilaScheme = nextScheme;
+  document.documentElement.setAttribute("data-aquila-scheme-bootstrap", nextScheme);
   document.documentElement.style.colorScheme = nextScheme;
   document.documentElement.style.backgroundColor = background;
   var style = document.createElement("style");
-  style.setAttribute("data-aquila-scheme-bootstrap", nextScheme);
-  style.textContent = "html,body{background:" + background + ";color:" + foreground + ";color-scheme:" + nextScheme + ";}";
+  style.setAttribute("data-aquila-scheme-bootstrap-style", "true");
+  style.textContent = "html[data-aquila-scheme-bootstrap]{background:" + background + ";color-scheme:" + nextScheme + ";}html[data-aquila-scheme-bootstrap] body{background:" + background + ";color:" + foreground + ";color-scheme:" + nextScheme + ";}";
   document.head.appendChild(style);
 })();
 `

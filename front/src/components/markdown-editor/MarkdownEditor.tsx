@@ -57,6 +57,20 @@ const tableSnippet = [
 ].join("\n")
 
 const codeBlockSnippet = ["", "```", "", "```", ""].join("\n")
+const WHEEL_DELTA_PIXEL = 0
+const WHEEL_DELTA_LINE = 1
+const WHEEL_DELTA_PAGE = 2
+const DEFAULT_WHEEL_LINE_HEIGHT_PX = 16
+
+const getWheelDeltaYPixels = (event: ReactWheelEvent<HTMLElement>, element: HTMLElement) => {
+  if (event.deltaMode === WHEEL_DELTA_PIXEL) return event.deltaY
+  if (event.deltaMode === WHEEL_DELTA_PAGE) return event.deltaY * element.clientHeight
+  if (event.deltaMode !== WHEEL_DELTA_LINE) return event.deltaY
+
+  const lineHeight = Number.parseFloat(window.getComputedStyle(element).lineHeight)
+  const resolvedLineHeight = Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : DEFAULT_WHEEL_LINE_HEIGHT_PX
+  return event.deltaY * resolvedLineHeight
+}
 
 export const MarkdownEditor = ({
   value,
@@ -148,13 +162,23 @@ export const MarkdownEditor = ({
   )
 
   const handlePreviewWheel = useCallback((event: ReactWheelEvent<HTMLElement>) => {
-    if (event.deltaY === 0 && event.deltaX === 0) return
+    if (event.deltaY === 0) return
+
+    const preview = event.currentTarget
+    const deltaYPixels = getWheelDeltaYPixels(event, preview)
+    const maxScrollTop = preview.scrollHeight - preview.clientHeight
+    const nextScrollTop = preview.scrollTop + deltaYPixels
+    if (nextScrollTop >= 0 && nextScrollTop <= maxScrollTop) return
 
     event.preventDefault()
 
+    const clampedScrollTop = Math.max(0, Math.min(nextScrollTop, maxScrollTop))
+    const remainingDeltaY = nextScrollTop - clampedScrollTop
+    preview.scrollTop = clampedScrollTop
+    if (remainingDeltaY === 0) return
+
     window.scrollBy({
-      top: event.deltaY,
-      left: event.deltaX,
+      top: remainingDeltaY,
     })
   }, [])
 

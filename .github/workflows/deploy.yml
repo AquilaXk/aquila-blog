@@ -607,6 +607,13 @@ jobs:
           remove_env_key "SPRING_SQL_INIT_CONTINUE_ON_ERROR" "deploy/homeserver/.env.prod"
           upsert_env_key "SPRING_SQL_INIT_MODE" "never" "deploy/homeserver/.env.prod"
 
+          # Live auth cookies must cover both www.aquilaxk.site and api.aquilaxk.site.
+          # HOME_SERVER_ENV can lag behind custom-domain changes, so pin the deployed
+          # prod site scope immediately before rollout.
+          upsert_env_key "CUSTOM_PROD_COOKIEDOMAIN" "aquilaxk.site" "deploy/homeserver/.env.prod"
+          upsert_env_key "CUSTOM_PROD_FRONTURL" "https://www.aquilaxk.site" "deploy/homeserver/.env.prod"
+          upsert_env_key "CUSTOM_PROD_BACKURL" "https://api.aquilaxk.site" "deploy/homeserver/.env.prod"
+
           if [ -z "${HOME_BACK_IMAGE:-}" ]; then
             echo "HOME_BACK_IMAGE is empty. abort deploy to avoid stale image rollout." >&2
             exit 1

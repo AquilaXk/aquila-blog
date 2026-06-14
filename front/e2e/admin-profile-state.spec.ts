@@ -92,8 +92,12 @@ test.describe("admin profile state contract", () => {
     expect(profileImageSource).toContain("fallbackAttemptSourceRef.current === requestedSrc")
     expect(profileImageSource).toContain("fallbackAttemptSourceRef.current = requestedSrc")
     expect(profileImageSource).toContain("setResolvedSrc(fallbackSrc)")
+    expect(identitySource).toContain("src={draft.profileImageUrl || undefined}")
     expect(identitySource).toContain("fallbackSrc={CONFIG.profile.image}")
+    expect(identitySource).not.toContain("<AvatarFallback>")
+    expect(previewSource).toContain("src={previewContent.profileImageUrl || undefined}")
     expect(previewSource).toContain("fallbackSrc={CONFIG.profile.image}")
+    expect(previewSource).not.toContain("<AvatarFallback>")
   })
 
   test("profile 작업공간은 공통 section nav/action dock primitive 위에서 반응형 분기를 유지한다", () => {

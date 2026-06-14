@@ -3,7 +3,6 @@ import ProfileImage from "src/components/ProfileImage"
 import { CONFIG } from "site.config"
 import type { ProfileWorkspaceContent } from "src/libs/profileWorkspace"
 import {
-  AvatarFallback,
   PreviewAboutCard,
   PreviewBody,
   PreviewCardShell,
@@ -24,7 +23,6 @@ export type AdminProfilePreviewRailProps = {
   activeSection: WorkspaceSectionId
   activeSectionLabel: string
   displayName: string
-  displayNameInitial: string
   hasMissingExposureItems: boolean
   isPreviewExpanded: boolean
   onPreviewModeChange: (mode: PreviewMode) => void
@@ -37,7 +35,6 @@ export default function AdminProfilePreviewRail({
   activeSection,
   activeSectionLabel,
   displayName,
-  displayNameInitial,
   hasMissingExposureItems,
   isPreviewExpanded,
   onPreviewModeChange,
@@ -81,18 +78,14 @@ export default function AdminProfilePreviewRail({
               <PreviewProfileCard>
                 <div className="identityRow">
                   <div className="avatar">
-                    {previewContent.profileImageUrl ? (
-                      <ProfileImage
-                        src={previewContent.profileImageUrl}
-                        fallbackSrc={CONFIG.profile.image}
-                        alt={displayName}
-                        width={72}
-                        height={72}
-                        priority
-                      />
-                    ) : (
-                      <AvatarFallback>{displayNameInitial}</AvatarFallback>
-                    )}
+                    <ProfileImage
+                      src={previewContent.profileImageUrl || undefined}
+                      fallbackSrc={CONFIG.profile.image}
+                      alt={displayName}
+                      width={72}
+                      height={72}
+                      priority
+                    />
                   </div>
                   <div className="identityCopy">
                     <strong>{displayName}</strong>

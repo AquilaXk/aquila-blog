@@ -104,7 +104,7 @@ jobs:
           BACKEND_DEPLOY_PATHS_PATTERN='^(back/|deploy/homeserver/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
           FRONT_LIVE_VERIFY_PATHS_PATTERN='^(front/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/frontend-ci\.yml|\.github/workflows/reusable-frontend-verify\.yml)'
           FRONT_BUILD_SHA_PATHS_PATTERN='^front/(src/|public/|packages/|scripts/(check-refactor-boundaries\.mjs|with-test-lock\.mjs|patch-lodash-template\.cjs)|site\.config\.js|next-sitemap\.config\.js|next\.config\.js|tsconfig\.json|package\.json|yarn\.lock|Dockerfile|index\.d\.ts|next-env\.d\.ts)'
-          EDITOR_LIVE_CANARY_PATHS_PATTERN='^(front/src/components/editor/|front/src/pages/editor/|front/src/routes/Admin/(Editor|WriterEditor|QaEditor|editor)|front/e2e/editor-|front/e2e/helpers/(authoringPlaywright|post507Fixtures)\.ts)'
+          EDITOR_LIVE_CANARY_PATHS_PATTERN='^(front/src/pages/editor/|front/src/routes/Admin/(Editor|WriterEditor|Markdown|markdown|editor)|front/src/components/markdown-editor/|front/e2e/editor-|front/e2e/helpers/authoringPlaywright\.ts)'
           CHANGED_FILES=""
           if [ -n "${CURRENT_MAIN_SHA}" ] && [ "${CURRENT_MAIN_SHA}" != "${DEPLOY_SHA}" ]; then
             echo "stale workflow_run payload: deploy_sha=${DEPLOY_SHA} current_main_sha=${CURRENT_MAIN_SHA}"

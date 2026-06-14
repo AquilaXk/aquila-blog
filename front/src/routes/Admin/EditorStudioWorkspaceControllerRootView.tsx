@@ -51,8 +51,8 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
     finalizePreviewThumbPointer,
     globalNotice,
     handleMarkdownEditorChange,
-    handleBlockEditorFileUpload,
-    handleBlockEditorImageUpload,
+    handleMarkdownEditorFileUpload,
+    handleMarkdownEditorImageUpload,
     handleConfirmPublish,
     handleContinueSelectedPostEditing,
     handleCreateNewPostFromSelectedPanel,
@@ -458,7 +458,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
       : editorPrimaryActionType === "temp"
         ? "새 글 작성"
         : "발행"
-  const isBlockEditorDisabled = loadingKey.length > 0
+  const isMarkdownEditorDisabled = loadingKey.length > 0
   const handleEditorCommitDuration = useCallback((actualDuration: number) => {
     recordEditorCommitDurationForRuntimeGuard(actualDuration)
   }, [])
@@ -469,20 +469,20 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
         markdown={postContent}
         onMarkdownChange={handleMarkdownEditorChange}
         onFlushMarkdownReady={handleFlushMarkdownReady}
-        onImageUpload={handleBlockEditorImageUpload}
-        onFileUpload={handleBlockEditorFileUpload}
+        onImageUpload={handleMarkdownEditorImageUpload}
+        onFileUpload={handleMarkdownEditorFileUpload}
         mermaidEnabled={MARKDOWN_EDITOR_MERMAID_ENABLED}
-        disabled={isBlockEditorDisabled}
+        disabled={isMarkdownEditorDisabled}
         onCommitDuration={handleEditorCommitDuration}
       />
     ),
     [
       handleMarkdownEditorChange,
-      handleBlockEditorFileUpload,
-      handleBlockEditorImageUpload,
+      handleMarkdownEditorFileUpload,
+      handleMarkdownEditorImageUpload,
       handleFlushMarkdownReady,
       handleEditorCommitDuration,
-      isBlockEditorDisabled,
+      isMarkdownEditorDisabled,
       postContent,
     ]
   )
@@ -493,20 +493,20 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
         markdown={postContent}
         onMarkdownChange={handleMarkdownEditorChange}
         onFlushMarkdownReady={handleFlushMarkdownReady}
-        onImageUpload={handleBlockEditorImageUpload}
-        onFileUpload={handleBlockEditorFileUpload}
+        onImageUpload={handleMarkdownEditorImageUpload}
+        onFileUpload={handleMarkdownEditorFileUpload}
         mermaidEnabled={MARKDOWN_EDITOR_MERMAID_ENABLED}
-        disabled={isBlockEditorDisabled}
+        disabled={isMarkdownEditorDisabled}
         onCommitDuration={handleEditorCommitDuration}
       />
     ),
     [
       handleMarkdownEditorChange,
-      handleBlockEditorFileUpload,
-      handleBlockEditorImageUpload,
+      handleMarkdownEditorFileUpload,
+      handleMarkdownEditorImageUpload,
       handleFlushMarkdownReady,
       handleEditorCommitDuration,
-      isBlockEditorDisabled,
+      isMarkdownEditorDisabled,
       postContent,
     ]
   )

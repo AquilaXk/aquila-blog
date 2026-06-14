@@ -6,9 +6,6 @@ export const clsBudget = Number(process.env.CLS_BUDGET || 0.1)
 export const homeClsBudget = Number(process.env.CLS_BUDGET_HOME || 0.12)
 export const clsAssertionEpsilon = Number(process.env.CLS_ASSERTION_EPSILON || 0.005)
 export const jitterBudgetPx = Number(process.env.JITTER_BUDGET_PX || 2)
-export const editorTypingP95BudgetMs = Number(process.env.PERF_EDITOR_TYPING_P95_BUDGET_MS || 36)
-export const editorCommitP95BudgetMs = Number(process.env.PERF_EDITOR_COMMIT_P95_BUDGET_MS || 28)
-export const editorInputLongTaskRatioBudget = Number(process.env.PERF_EDITOR_INPUT_LONGTASK_RATIO_BUDGET || 0.1)
 export const feedScrollMaxFrameGapBudgetMs = Number(process.env.PERF_FEED_SCROLL_MAX_FRAME_GAP_BUDGET_MS || 120)
 export const feedScrollLongFrameRatioBudget = Number(process.env.PERF_FEED_SCROLL_LONG_FRAME_RATIO_BUDGET || 0.15)
 export const detailEntryBudgetMs = Number(process.env.PERF_DETAIL_ENTRY_BUDGET_MS || 1800)
@@ -26,17 +23,12 @@ export const isSsrAuthBackendDisconnectedForPerf =
 export const allowAdminDashboardLoginFallback =
   process.env.PERF_ALLOW_ADMIN_LOGIN_FALLBACK === "true" || isSsrAuthBackendDisconnectedForPerf
 export const refreshCheckRoutes = ["/", "/about", "/admin", "/admin/dashboard", "/admin/profile", "/admin/posts", "/admin/tools"]
-export const QA_ENGINE_ROUTE = "/_qa/block-editor-slash?surface=engine"
 
 export type RuntimeGuardMetricName =
   | "home_first_contentful_paint_ms"
-  | "editor_input_latency"
-  | "editor_render_commit_p95_ms"
-  | "editor_input_longtask_ratio"
   | "feed_scroll_blocking.max_frame_gap_ms"
   | "feed_scroll_blocking.long_frame_ratio"
   | "detail_enter_cost"
-  | "editor.typing.p95_ms"
   | "feed.scroll.max_frame_gap_ms"
   | "feed.scroll.long_frame_ratio"
   | "detail.entry.ms"
@@ -44,16 +36,9 @@ export type RuntimeGuardMetricName =
 export type RuntimeGuardMetricMeta = {
   unit: "ms" | "ratio"
   route: string
-  section: "editor" | "feed" | "detail"
+  section: "feed" | "detail"
   sampleCount?: number
   extra?: Record<string, number>
-}
-
-export type RuntimeGuardWindow = Window & {
-  __AQ_RUNTIME_GUARD_ENABLED__?: boolean
-  __AQ_RUNTIME_GUARD__?: {
-    editorCommitSamples?: number[]
-  }
 }
 
 export const PERF_RUNTIME_GUARD_TRIALS = 3
@@ -658,27 +643,6 @@ export const waitForPageReady = async (page: Page, options?: { waitAuth?: boolea
   if (options?.waitAuth !== false) {
     await waitForStableHeaderAuthState(page)
   }
-}
-
-export const waitForQaEditorReady = async (page: Page): Promise<Locator> => {
-  const readyMarker = page.getByTestId("qa-editor-ready")
-  const editor = page.getByTestId("github-markdown-write-pane").locator(".cm-content").first()
-
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    await expect(readyMarker).toHaveCount(1, { timeout: 12_000 }).catch(() => {})
-    if ((await readyMarker.count()) > 0) {
-      await expect(editor).toBeVisible()
-      return editor
-    }
-
-    if (attempt === 0) {
-      await reloadForPerf(page, { waitAuth: false })
-    }
-  }
-
-  await expect(readyMarker).toHaveCount(1, { timeout: 12_000 })
-  await expect(editor).toBeVisible()
-  return editor
 }
 
 export const waitForFeedCardLink = async (page: Page, postId: number): Promise<Locator> => {

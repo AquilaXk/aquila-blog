@@ -151,8 +151,8 @@ export const useEditorStudioPersistence = ({
   uploadWithConflictRetry,
 }: UseEditorStudioPersistenceParams) => {
   const {
-    handleBlockEditorImageUpload,
-    handleBlockEditorFileUpload,
+    handleMarkdownEditorImageUpload,
+    handleMarkdownEditorFileUpload,
     handleUploadThumbnailImage,
     handleThumbnailImageFileChange,
     handleThumbnailPaste,
@@ -546,8 +546,8 @@ export const useEditorStudioPersistence = ({
   ])
 
   return {
-    handleBlockEditorImageUpload,
-    handleBlockEditorFileUpload,
+    handleMarkdownEditorImageUpload,
+    handleMarkdownEditorFileUpload,
     handleUploadThumbnailImage,
     handleThumbnailImageFileChange,
     handleThumbnailPaste,

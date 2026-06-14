@@ -179,11 +179,11 @@ const liveEditorSmokeMarkdown = [
   "| aa | bb | cc | dd | ee | ff | gg |",
 ].join("\n")
 
-const appendMarkdownToGitHubEditor = async (page: Page, markdown: string) => {
-  const editorRoot = page.getByTestId("github-markdown-editor")
-  const writePane = page.getByTestId("github-markdown-write-pane")
-  const previewPane = page.getByTestId("github-markdown-preview-pane")
-  const editorContent = writePane.locator(".cm-content").first()
+const appendMarkdownToEditor = async (page: Page, markdown: string) => {
+  const editorRoot = page.getByTestId("markdown-editor")
+  const writePane = page.getByTestId("markdown-editor-write-pane")
+  const previewPane = page.getByTestId("markdown-editor-preview-pane")
+  const editorContent = writePane.locator("textarea").first()
 
   await expect(editorRoot).toBeVisible()
   await expect(writePane).toBeVisible()
@@ -194,7 +194,7 @@ const appendMarkdownToGitHubEditor = async (page: Page, markdown: string) => {
   await page.keyboard.press(process.platform === "darwin" ? "Meta+End" : "Control+End")
   await page.keyboard.insertText(`\n\n${markdown}`)
 
-  await expect(editorContent).toContainText("라이브 E2E 편집 확인")
+  await expect(editorContent).toHaveValue(/라이브 E2E 편집 확인/)
   await expect(previewPane.locator("pre").first()).toContainText("const liveHoverWheel = true")
   await expect(previewPane.locator("table").first()).toContainText("aa")
 
@@ -567,7 +567,7 @@ test.describe("live production e2e", () => {
     } else {
       await expect(legacyTitleInput).toBeVisible()
     }
-    const previewPane = await appendMarkdownToGitHubEditor(page, liveEditorSmokeMarkdown)
+    const previewPane = await appendMarkdownToEditor(page, liveEditorSmokeMarkdown)
     await expectLiveEditorHoverWheelScrollChain(page, previewPane)
 
     await page.getByRole("button", { name: "Logout", exact: true }).click()

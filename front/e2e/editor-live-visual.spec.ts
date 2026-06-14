@@ -327,19 +327,18 @@ const deleteHiddenEditorPost = async (page: Page, postId: number) => {
 }
 
 const expectMarkdownEditorShell = async (page: Page) => {
-  await expect(page.getByTestId("github-markdown-editor")).toBeVisible()
-  await expect(page.getByTestId("github-markdown-write-pane")).toBeVisible()
-  await expect(page.getByTestId("github-markdown-preview-pane")).toBeVisible()
-  await expect(page.locator("[data-testid='block-editor-prosemirror']")).toHaveCount(0)
+  await expect(page.getByTestId("markdown-editor")).toBeVisible()
+  await expect(page.getByTestId("markdown-editor-write-pane")).toBeVisible()
+  await expect(page.getByTestId("markdown-editor-preview-pane")).toBeVisible()
   await expect(page.locator("[data-testid='keyboard-block-selection-overlay']")).toHaveCount(0)
   await expect(page.locator("[data-testid='block-drag-handle']")).toHaveCount(0)
   await expect(page.locator("[data-table-affordance]")).toHaveCount(0)
 }
 
 const focusMarkdownEditor = async (page: Page) => {
-  const writePane = page.getByTestId("github-markdown-write-pane")
+  const writePane = page.getByTestId("markdown-editor-write-pane")
   await expect(writePane).toBeVisible()
-  const content = writePane.locator(".cm-content")
+  const content = writePane.locator("textarea")
   await content.click()
   await expect(content).toBeFocused()
   return content
@@ -352,7 +351,10 @@ const replaceMarkdown = async (page: Page, markdown: string) => {
 }
 
 const readEditorSelection = async (page: Page) =>
-  page.evaluate(() => window.getSelection()?.toString().replace(/\s+/g, " ").trim() ?? "")
+  page.getByTestId("markdown-editor-write-pane").locator("textarea").evaluate((textarea) => {
+    const element = textarea as HTMLTextAreaElement
+    return element.value.slice(element.selectionStart, element.selectionEnd).replace(/\s+/g, " ").trim()
+  })
 
 test.describe("editor live visual regression", () => {
   test.skip(!hasUiLoginCredentials, "E2E_ADMIN_EMAIL 또는 E2E_ADMIN_USERNAME / E2E_ADMIN_PASSWORD가 필요합니다.")
@@ -373,7 +375,7 @@ test.describe("editor live visual regression", () => {
     await page.getByPlaceholder("제목을 입력하세요").first().fill("실화면 Markdown editor 회귀 점검")
     await replaceMarkdown(page, markdownCanary)
 
-    const preview = page.getByTestId("github-markdown-preview-pane")
+    const preview = page.getByTestId("markdown-editor-preview-pane")
     await expect(preview.getByRole("heading", { name: "Live Markdown editor" })).toBeVisible()
     await expect(preview.locator("table")).toContainText(post507FinalTableTargetCell)
     await expect(preview.locator("pre")).toContainText(post507CodeText)
@@ -397,11 +399,11 @@ test.describe("editor live visual regression", () => {
       await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(title)
       await expectMarkdownEditorShell(page)
 
-      const writePane = page.getByTestId("github-markdown-write-pane")
-      await expect(writePane.locator(".cm-content")).toContainText(post507FinalTableTargetCell)
-      await expect(writePane.locator(".cm-content")).toContainText(post507CodeText)
+      const writePane = page.getByTestId("markdown-editor-write-pane")
+      await expect(writePane.locator("textarea")).toHaveValue(new RegExp(post507FinalTableTargetCell))
+      await expect(writePane.locator("textarea")).toHaveValue(new RegExp(post507CodeText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
 
-      const preview = page.getByTestId("github-markdown-preview-pane")
+      const preview = page.getByTestId("markdown-editor-preview-pane")
       await expect(preview.locator("table")).toContainText(post507FinalTableSelectAllNeedle)
       await expect(preview.locator("pre")).toContainText(post507CodeText)
       await expect(preview.getByText(post507ListText)).toBeVisible()
@@ -439,7 +441,7 @@ test.describe("editor live visual regression", () => {
     }
 
     await expectMarkdownEditorShell(page)
-    const preview = page.getByTestId("github-markdown-preview-pane")
+    const preview = page.getByTestId("markdown-editor-preview-pane")
     const finalReferenceTable = preview.locator("table").filter({ hasText: post507FinalTableTargetCell }).first()
     const tokenCodeBlock = preview.locator("pre").filter({ hasText: post507CodeText }).first()
     await expect(finalReferenceTable).toContainText(post507FinalTableTargetCell, { timeout: 30_000 })

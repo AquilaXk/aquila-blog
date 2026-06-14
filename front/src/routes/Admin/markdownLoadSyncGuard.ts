@@ -1,6 +1,6 @@
 import { restoreEmptyFencedCodeBlocks } from "./editorCodeFenceRecovery"
 
-export type BlockEditorLoadGuardState = {
+export type MarkdownEditorLoadGuardState = {
   expectedBody: string
   ignoreUntilMs: number
   ignoredInitialEmpty: boolean
@@ -10,11 +10,11 @@ const DEFAULT_GUARD_HOLD_MS = 1_200
 
 export const normalizeEditorMarkdown = (value: string) => value.replace(/\r\n?/g, "\n").trim()
 
-export const createBlockEditorLoadGuardState = (
+export const createMarkdownEditorLoadGuardState = (
   resolvedBody: string,
   nowMs: number = Date.now(),
   holdMs: number = DEFAULT_GUARD_HOLD_MS
-): BlockEditorLoadGuardState => {
+): MarkdownEditorLoadGuardState => {
   const normalizedBody = normalizeEditorMarkdown(resolvedBody)
   if (!normalizedBody) {
     return { expectedBody: "", ignoreUntilMs: 0, ignoredInitialEmpty: false }
@@ -27,7 +27,7 @@ export const createBlockEditorLoadGuardState = (
   }
 }
 
-export const shouldIgnoreBlockEditorEmptyUpdate = ({
+export const shouldIgnoreMarkdownEditorEmptyUpdate = ({
   nextMarkdown,
   currentMarkdown,
   guardState,
@@ -35,7 +35,7 @@ export const shouldIgnoreBlockEditorEmptyUpdate = ({
 }: {
   nextMarkdown: string
   currentMarkdown: string
-  guardState: BlockEditorLoadGuardState
+  guardState: MarkdownEditorLoadGuardState
   nowMs?: number
 }) => {
   const normalizedNext = normalizeEditorMarkdown(nextMarkdown)
@@ -51,9 +51,9 @@ export const shouldIgnoreBlockEditorEmptyUpdate = ({
 }
 
 export const consumeGuardOnExpectedUpdate = (
-  guardState: BlockEditorLoadGuardState,
+  guardState: MarkdownEditorLoadGuardState,
   nextMarkdown: string
-): BlockEditorLoadGuardState => {
+): MarkdownEditorLoadGuardState => {
   const normalizedNext = normalizeEditorMarkdown(nextMarkdown)
   if (normalizedNext.length > 0 && normalizedNext === guardState.expectedBody) {
     return {
@@ -65,13 +65,13 @@ export const consumeGuardOnExpectedUpdate = (
 }
 
 export const markGuardEmptyUpdateIgnored = (
-  guardState: BlockEditorLoadGuardState
-): BlockEditorLoadGuardState => ({
+  guardState: MarkdownEditorLoadGuardState
+): MarkdownEditorLoadGuardState => ({
   ...guardState,
   ignoredInitialEmpty: true,
 })
 
-export const restoreBlockEditorCodeLossUpdate = ({
+export const restoreMarkdownEditorCodeLossUpdate = ({
   nextMarkdown,
   currentMarkdown,
   guardState,
@@ -80,7 +80,7 @@ export const restoreBlockEditorCodeLossUpdate = ({
 }: {
   nextMarkdown: string
   currentMarkdown?: string
-  guardState: BlockEditorLoadGuardState
+  guardState: MarkdownEditorLoadGuardState
   editorFocused?: boolean
   nowMs?: number
 }) => {

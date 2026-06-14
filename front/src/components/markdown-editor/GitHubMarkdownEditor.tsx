@@ -96,7 +96,9 @@ export const GitHubMarkdownEditor = ({
   onUploadImage,
 }: GitHubMarkdownEditorProps) => {
   const [mode, setMode] = useState<EditorMode>("split")
+  const [uploadError, setUploadError] = useState("")
   const editorViewRef = useRef<EditorView | null>(null)
+  const valueRef = useRef(value)
   const extensions = useMemo(
     () => [
       history(),
@@ -111,12 +113,18 @@ export const GitHubMarkdownEditor = ({
   )
 
   useEffect(() => {
-    onFlushMarkdownReady?.(() => value)
+    valueRef.current = value
+  }, [value])
+
+  useEffect(() => {
+    onFlushMarkdownReady?.(() => valueRef.current)
     return () => onFlushMarkdownReady?.(null)
-  }, [onFlushMarkdownReady, value])
+  }, [onFlushMarkdownReady])
 
   const commitMarkdown = useCallback(
     (nextMarkdown: string, editorFocused = false) => {
+      valueRef.current = nextMarkdown
+      setUploadError("")
       onChange(nextMarkdown, { editorFocused })
     },
     [onChange]
@@ -148,21 +156,32 @@ export const GitHubMarkdownEditor = ({
   const applySnippet = useCallback(
     (before: string, after = "") => {
       if (insertMarkdownAtEditorSelection(before, after)) return
-      commitMarkdown(`${value}${before}${after}`, true)
+      const currentMarkdown = editorViewRef.current?.state.doc.toString() ?? valueRef.current
+      commitMarkdown(`${currentMarkdown}${before}${after}`, true)
     },
-    [commitMarkdown, insertMarkdownAtEditorSelection, value]
+    [commitMarkdown, insertMarkdownAtEditorSelection]
   )
 
   const handleImageInput = useCallback(
     async (file: File | null) => {
       if (!file || !onUploadImage) return
-      const uploaded = await onUploadImage(file)
+      let uploaded: MarkdownUploadResult
+      try {
+        uploaded = await onUploadImage(file)
+      } catch {
+        setUploadError("이미지 업로드에 실패했습니다.")
+        return
+      }
       const src = uploaded.url || uploaded.src || ""
-      if (!src) return
+      if (!src) {
+        setUploadError("이미지 업로드 결과 URL을 확인할 수 없습니다.")
+        return
+      }
       const alt = uploaded.alt || uploaded.title || file.name
-      commitMarkdown(`${value}\n\n![${alt}](${src})\n`, true)
+      const currentMarkdown = editorViewRef.current?.state.doc.toString() ?? valueRef.current
+      commitMarkdown(`${currentMarkdown}\n\n![${alt}](${src})\n`, true)
     },
-    [commitMarkdown, onUploadImage, value]
+    [commitMarkdown, onUploadImage]
   )
 
   return (
@@ -223,6 +242,7 @@ export const GitHubMarkdownEditor = ({
           </ImageUploadButton>
         </ToolbarGroup>
       </EditorToolbar>
+      {uploadError ? <ToolbarError role="alert">{uploadError}</ToolbarError> : null}
       <EditorBody data-mode={mode}>
         {mode !== "preview" ? (
           <WritePane data-testid="github-markdown-write-pane">
@@ -357,6 +377,15 @@ const ImageUploadButton = styled.label`
     opacity: 0;
     pointer-events: none;
   }
+`
+
+const ToolbarError = styled.div`
+  padding: 0.55rem 0.85rem;
+  border-bottom: 1px solid rgba(248, 81, 73, 0.35);
+  background: rgba(248, 81, 73, 0.1);
+  color: #ffb4ad;
+  font-size: 0.86rem;
+  font-weight: 600;
 `
 
 const EditorBody = styled.div`

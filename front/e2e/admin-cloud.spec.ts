@@ -282,7 +282,7 @@ test.describe("관리자 클라우드", () => {
 
     const uploadPanel = page.getByLabel("업로드 중인 파일")
     await expect(uploadPanel).toHaveCSS("position", "fixed")
-    await expect(uploadPanel).toHaveCSS("z-index", "35")
+    await expect(uploadPanel).toHaveCSS("z-index", "29")
     await expect(uploadPanel.getByRole("heading", { name: /항목 .* 업로드/ })).toBeVisible()
     await expect(uploadPanel.getByText("신규 운영 문서.pdf")).toBeVisible()
     await expect(uploadPanel.getByText("배포 캡처.png")).toBeVisible()

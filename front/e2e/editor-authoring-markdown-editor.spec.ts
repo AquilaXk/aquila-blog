@@ -194,6 +194,37 @@ test.describe("GitHub Markdown editor replacement", () => {
     expect(previewContract.renderedWidth).toBeLessThanOrEqual(768)
   })
 
+  test("narrow split mode keeps the write pane primary and shows detail preview through the Preview tab", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 760, height: 900 })
+    await routeAuthenticatedEditor(page)
+
+    await page.goto("/editor/new?source=local-draft")
+
+    const writePane = page.getByTestId("github-markdown-write-pane")
+    const previewPane = page.getByTestId("github-markdown-preview-pane")
+
+    await expect(writePane).toBeVisible()
+    await expect(previewPane).toBeHidden()
+
+    await page.getByRole("tab", { name: "Preview" }).click()
+
+    await expect(writePane).toHaveCount(0)
+    await expect(previewPane).toBeVisible()
+    const previewContract = await previewPane.locator(".aq-markdown").evaluate((markdownRoot) => {
+      const style = window.getComputedStyle(markdownRoot)
+      const rect = markdownRoot.getBoundingClientRect()
+      return {
+        maxWidth: style.maxWidth,
+        renderedWidth: rect.width,
+      }
+    })
+
+    expect(previewContract.maxWidth).toBe("768px")
+    expect(previewContract.renderedWidth).toBeLessThanOrEqual(728)
+  })
+
   test("toolbar snippets insert at the CodeMirror caret instead of appending at the document end", async ({
     page,
   }) => {

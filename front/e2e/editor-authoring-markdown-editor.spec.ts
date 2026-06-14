@@ -103,6 +103,9 @@ test.describe("Markdown editor replacement", () => {
       joinParts("block", "-", "editor", "-", "prose", "mirror"),
       joinParts("_qa/", "block", "-", "editor", "-", "slash"),
       joinParts(".aq-", "block", "-", "editor", "__content"),
+      "aq-code-editor-content",
+      "aq-code-highlight-layer",
+      "data-code-block-wrapper",
     ]
     const allowedFiles = new Set(["editor-authoring-markdown-editor.spec.ts"])
     const violations: string[] = []

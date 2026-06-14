@@ -1,4 +1,5 @@
 import {
+  type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -29,6 +30,11 @@ type MarkdownEditorProps = {
 }
 
 type EditorMode = "write" | "preview" | "split"
+
+type TextareaSelection = {
+  from: number
+  to: number
+}
 
 const toolbarMarkdownSnippets = [
   { label: "H", title: "제목", before: "## ", after: "" },
@@ -61,15 +67,19 @@ export const MarkdownEditor = ({
 }: MarkdownEditorProps) => {
   const [mode, setMode] = useState<EditorMode>("split")
   const [uploadError, setUploadError] = useState("")
+  const [draftValue, setDraftValue] = useState(value)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const valueRef = useRef(value)
+  const selectionRef = useRef<TextareaSelection>({ from: 0, to: 0 })
   const lineNumbers = useMemo(
-    () => Array.from({ length: Math.max(1, value.split("\n").length) }, (_, index) => index + 1),
-    [value]
+    () => Array.from({ length: Math.max(1, draftValue.split("\n").length) }, (_, index) => index + 1),
+    [draftValue]
   )
 
   useEffect(() => {
+    if (value === valueRef.current) return
     valueRef.current = value
+    setDraftValue(value)
   }, [value])
 
   useEffect(() => {
@@ -80,10 +90,53 @@ export const MarkdownEditor = ({
   const commitMarkdown = useCallback(
     (nextMarkdown: string, editorFocused = false) => {
       valueRef.current = nextMarkdown
+      setDraftValue(nextMarkdown)
       setUploadError("")
       onChange(nextMarkdown, { editorFocused })
     },
     [onChange]
+  )
+
+  const rememberTextareaSelection = useCallback(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return selectionRef.current
+
+    selectionRef.current = {
+      from: textarea.selectionStart,
+      to: textarea.selectionEnd,
+    }
+    return selectionRef.current
+  }, [])
+
+  const setTextareaSelection = useCallback((from: number, to = from) => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    const length = valueRef.current.length
+    const nextSelection = {
+      from: Math.max(0, Math.min(from, length)),
+      to: Math.max(0, Math.min(to, length)),
+    }
+    textarea.setSelectionRange(nextSelection.from, nextSelection.to)
+    selectionRef.current = nextSelection
+  }, [])
+
+  const handleTextareaKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.shiftKey || (!event.metaKey && !event.ctrlKey)) return
+
+      if (event.key === "Home") {
+        event.preventDefault()
+        setTextareaSelection(0)
+        return
+      }
+
+      if (event.key === "End") {
+        event.preventDefault()
+        setTextareaSelection(valueRef.current.length)
+      }
+    },
+    [setTextareaSelection]
   )
 
   const insertMarkdownAtEditorSelection = useCallback(
@@ -91,8 +144,8 @@ export const MarkdownEditor = ({
       const textarea = textareaRef.current
       if (!textarea || disabled) return false
 
-      const selectionStart = textarea.selectionStart
-      const selectionEnd = textarea.selectionEnd
+      const { from: selectionStart, to: selectionEnd } =
+        document.activeElement === textarea ? rememberTextareaSelection() : selectionRef.current
       const selectedMarkdown = valueRef.current.slice(selectionStart, selectionEnd)
       const insertedMarkdown = `${before}${selectedMarkdown}${after}`
       const nextCursorFrom = selectionStart + before.length
@@ -106,7 +159,7 @@ export const MarkdownEditor = ({
       })
       return true
     },
-    [commitMarkdown, disabled]
+    [commitMarkdown, disabled, rememberTextareaSelection]
   )
 
   const applySnippet = useCallback(
@@ -160,6 +213,7 @@ export const MarkdownEditor = ({
               title={snippet.title}
               aria-label={snippet.title}
               disabled={disabled}
+              onMouseDown={(event) => event.preventDefault()}
               onClick={() => applySnippet(snippet.before, snippet.after)}
             >
               {snippet.label}
@@ -169,6 +223,7 @@ export const MarkdownEditor = ({
             type="button"
             aria-label="코드 블록"
             disabled={disabled}
+            onMouseDown={(event) => event.preventDefault()}
             onClick={() => applySnippet(codeBlockSnippet)}
           >
             Code block
@@ -177,6 +232,7 @@ export const MarkdownEditor = ({
             type="button"
             aria-label="표"
             disabled={disabled}
+            onMouseDown={(event) => event.preventDefault()}
             onClick={() => applySnippet(tableSnippet)}
           >
             Table
@@ -211,8 +267,19 @@ export const MarkdownEditor = ({
                 aria-label="Markdown 본문"
                 spellCheck={false}
                 disabled={disabled}
-                value={value}
-                onChange={(event) => commitMarkdown(event.currentTarget.value, true)}
+                value={draftValue}
+                onChange={(event) => {
+                  selectionRef.current = {
+                    from: event.currentTarget.selectionStart,
+                    to: event.currentTarget.selectionEnd,
+                  }
+                  commitMarkdown(event.currentTarget.value, true)
+                }}
+                onFocus={rememberTextareaSelection}
+                onKeyDown={handleTextareaKeyDown}
+                onKeyUp={rememberTextareaSelection}
+                onMouseUp={rememberTextareaSelection}
+                onSelect={rememberTextareaSelection}
               />
             </WriteEditorFrame>
           </WritePane>

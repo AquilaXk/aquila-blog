@@ -264,7 +264,7 @@ export const GitHubMarkdownEditor = ({
       {uploadError ? <ToolbarError role="alert">{uploadError}</ToolbarError> : null}
       <EditorBody data-mode={mode}>
         {mode !== "preview" ? (
-          <WritePane data-testid="github-markdown-write-pane">
+          <WritePane data-pane="write" data-testid="github-markdown-write-pane">
             <CodeMirror
               value={value}
               height="100%"
@@ -283,7 +283,7 @@ export const GitHubMarkdownEditor = ({
           </WritePane>
         ) : null}
         {mode !== "write" ? (
-          <PreviewPane data-testid="github-markdown-preview-pane">
+          <PreviewPane data-pane="preview" data-testid="github-markdown-preview-pane">
             <PreviewHeader>Preview</PreviewHeader>
             <PreviewArticle>
               <MarkdownRenderer content={value} disableMermaid={disableMermaid} />
@@ -420,6 +420,16 @@ const EditorBody = styled.div`
 
   @media (max-width: 980px) {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  @media (max-width: 768px) {
+    &[data-mode="split"] [data-pane="preview"] {
+      display: none;
+    }
+
+    &[data-mode="split"] [data-pane="write"] {
+      border-bottom: 0;
+    }
   }
 `
 

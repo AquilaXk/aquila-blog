@@ -11,6 +11,7 @@ export type UploadQueueItem = {
   progress: number
   message: string
   uploadedFileId?: number
+  retryCount?: number
 }
 export type CloudSearchParams = {
   folderPath: string

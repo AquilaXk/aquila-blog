@@ -20,6 +20,7 @@ type AdminCloudUploadQueueProps = {
   activeUploadCount: number
   completedUploadCount: number
   onCancelUpload: (item: UploadQueueItem) => void
+  onRetryUpload: (item: UploadQueueItem) => void
   onClearFinishedUploads: () => void
 }
 
@@ -28,6 +29,7 @@ const AdminCloudUploadQueue = ({
   activeUploadCount,
   completedUploadCount,
   onCancelUpload,
+  onRetryUpload,
   onClearFinishedUploads,
 }: AdminCloudUploadQueueProps) => {
   if (uploadQueue.length === 0) return null
@@ -63,6 +65,11 @@ const AdminCloudUploadQueue = ({
             {isUploadActive(item.status) ? (
               <GhostButton type="button" aria-label={`${item.name} 업로드 취소`} onClick={() => onCancelUpload(item)}>
                 취소
+              </GhostButton>
+            ) : null}
+            {item.status === "failed" ? (
+              <GhostButton type="button" aria-label={`${item.name} 업로드 다시 시도`} onClick={() => onRetryUpload(item)}>
+                다시 시도
               </GhostButton>
             ) : null}
             <ProgressTrack style={{ "--progress": `${item.progress}%` } as CSSProperties}>

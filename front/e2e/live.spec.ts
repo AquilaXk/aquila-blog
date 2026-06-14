@@ -166,102 +166,39 @@ const openAdminNewPostEntry = async (page: Page) => {
   throw new Error("관리자 글 작업 공간에서 '새 글 작성' CTA를 찾지 못했습니다.")
 }
 
-const appendTextToBlockEditor = async (page: Page, text: string) => {
-  const blockEditor = page.locator(".aq-block-editor__content[contenteditable='true']").first()
-  await expect(blockEditor).toBeVisible()
-  await expect(blockEditor).toHaveAttribute("contenteditable", "true")
-  await blockEditor.click({ position: { x: 24, y: 24 } })
-  await expect
-    .poll(async () => {
-      return blockEditor.evaluate((node) => {
-        if (!(node instanceof HTMLElement)) return false
-        const active = document.activeElement
-        return active === node || !!active?.closest(".aq-block-editor__content[contenteditable='true']")
-      })
-    })
-    .toBe(true)
-
-  await blockEditor.evaluate((node) => {
-    if (!(node instanceof HTMLElement)) return
-    node.focus()
-    const selection = window.getSelection()
-    if (!selection) return
-    const range = document.createRange()
-
-    const textWalker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT)
-    let lastTextNode: Text | null = null
-    while (textWalker.nextNode()) {
-      const candidate = textWalker.currentNode
-      if (candidate instanceof Text) {
-        lastTextNode = candidate
-      }
-    }
-
-    if (lastTextNode) {
-      range.setStart(lastTextNode, lastTextNode.textContent?.length ?? 0)
-    } else {
-      const fallbackBlock = node.querySelector("p, li, h1, h2, h3, h4, blockquote, pre") ?? node
-      range.selectNodeContents(fallbackBlock)
-    }
-    range.collapse(false)
-    selection.removeAllRanges()
-    selection.addRange(range)
-  })
-
-  await page.keyboard.type(text)
-  await expect
-    .poll(async () => {
-      return blockEditor.evaluate((node) => {
-        if (!(node instanceof HTMLElement)) return ""
-        return (node.textContent || "").trim()
-      })
-    })
-    .toContain(text)
-
-  return blockEditor
-}
-
-const liveHoverWheelTableMarkdown = [
+const liveEditorSmokeMarkdown = [
+  "라이브 E2E 편집 확인",
+  "",
+  "```ts",
+  "const liveHoverWheel = true",
+  "```",
+  "",
   "| A | B | C | D | E | F | G |",
   "| --- | --- | --- | --- | --- | --- | --- |",
   "| 1 | 2 | 3 | 4 | 5 | 6 | 7 |",
   "| aa | bb | cc | dd | ee | ff | gg |",
 ].join("\n")
 
-const pasteMarkdownIntoBlockEditor = async (blockEditor: Locator, markdown: string) => {
-  await blockEditor.evaluate((element, payload) => {
-    const data = new DataTransfer()
-    data.setData("text/plain", payload)
-    const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true })
-    Object.defineProperty(event, "clipboardData", { value: data })
-    element.dispatchEvent(event)
-  }, markdown)
-}
+const appendMarkdownToGitHubEditor = async (page: Page, markdown: string) => {
+  const editorRoot = page.getByTestId("github-markdown-editor")
+  const writePane = page.getByTestId("github-markdown-write-pane")
+  const previewPane = page.getByTestId("github-markdown-preview-pane")
+  const editorContent = writePane.locator(".cm-content").first()
 
-const ensureLiveHoverWheelFixture = async (page: Page, blockEditor: Locator) => {
-  await blockEditor.click({ position: { x: 24, y: 24 } })
-  await page.keyboard.press("Enter")
+  await expect(editorRoot).toBeVisible()
+  await expect(writePane).toBeVisible()
+  await expect(previewPane).toBeVisible()
+  await expect(editorContent).toBeVisible()
 
-  const codeButton = page.getByRole("button", { name: "코드", exact: true }).first()
-  if (await codeButton.isVisible().catch(() => false)) {
-    await codeButton.click()
-  } else {
-    await page.keyboard.type("/코드")
-    await page.keyboard.press("Enter")
-  }
+  await editorContent.click()
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+End" : "Control+End")
+  await page.keyboard.insertText(`\n\n${markdown}`)
 
-  await expect(page.locator("[data-code-block-wrapper='true']").first()).toBeVisible()
-  await expect(page.locator(".aq-code-shell").first()).toBeVisible()
-  await page.keyboard.type("const liveHoverWheel = true")
+  await expect(editorContent).toContainText("라이브 E2E 편집 확인")
+  await expect(previewPane.locator("pre").first()).toContainText("const liveHoverWheel = true")
+  await expect(previewPane.locator("table").first()).toContainText("aa")
 
-  const tableButton = page.getByRole("button", { name: "테이블", exact: true }).first()
-  if (await tableButton.isVisible().catch(() => false)) {
-    await tableButton.click()
-  } else {
-    await pasteMarkdownIntoBlockEditor(blockEditor, liveHoverWheelTableMarkdown)
-  }
-
-  await expect(page.locator(".aq-block-editor__content .tableWrapper").first()).toBeVisible()
+  return previewPane
 }
 
 const readDocumentScrollTop = (page: Page) =>
@@ -300,18 +237,13 @@ const expectHoverWheelChainsToPageScroll = async (page: Page, target: Locator, l
   await expect.poll(() => readDocumentScrollTop(page)).toBeGreaterThan(beforeScrollTop + 80)
 }
 
-const expectLiveEditorHoverWheelScrollChain = async (page: Page, blockEditor: Locator) => {
-  await ensureLiveHoverWheelFixture(page, blockEditor)
+const expectLiveEditorHoverWheelScrollChain = async (page: Page, previewPane: Locator) => {
   await expectHoverWheelChainsToPageScroll(
     page,
-    page.locator("[data-code-block-wrapper='true']").first(),
+    previewPane.locator("pre").first(),
     "live code block"
   )
-  await expectHoverWheelChainsToPageScroll(
-    page,
-    page.locator(".aq-block-editor__content .tableWrapper").first(),
-    "live table wrapper"
-  )
+  await expectHoverWheelChainsToPageScroll(page, previewPane.locator("table").first(), "live table")
 }
 
 
@@ -635,8 +567,8 @@ test.describe("live production e2e", () => {
     } else {
       await expect(legacyTitleInput).toBeVisible()
     }
-    const blockEditor = await appendTextToBlockEditor(page, "라이브 E2E 편집 확인")
-    await expectLiveEditorHoverWheelScrollChain(page, blockEditor)
+    const previewPane = await appendMarkdownToGitHubEditor(page, liveEditorSmokeMarkdown)
+    await expectLiveEditorHoverWheelScrollChain(page, previewPane)
 
     await page.getByRole("button", { name: "Logout", exact: true }).click()
     await expect(page).toHaveURL(/\/login/)

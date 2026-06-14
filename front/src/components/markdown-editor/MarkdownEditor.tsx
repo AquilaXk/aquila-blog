@@ -1,12 +1,11 @@
-import CodeMirror from "@uiw/react-codemirror"
-import { markdown } from "@codemirror/lang-markdown"
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands"
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language"
-import { markdownLanguage } from "@codemirror/lang-markdown"
-import { EditorState, type Extension } from "@codemirror/state"
-import { EditorView, keymap } from "@codemirror/view"
-import { tags } from "@lezer/highlight"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import styled from "@emotion/styled"
 import MarkdownRenderer from "src/libs/markdown/MarkdownRenderer"
 
@@ -21,7 +20,7 @@ type MarkdownUploadResult = {
   src?: string
 }
 
-type GitHubMarkdownEditorProps = {
+type MarkdownEditorProps = {
   value: string
   disabled?: boolean
   disableMermaid?: boolean
@@ -31,6 +30,11 @@ type GitHubMarkdownEditorProps = {
 }
 
 type EditorMode = "write" | "preview" | "split"
+
+type TextareaSelection = {
+  from: number
+  to: number
+}
 
 const toolbarMarkdownSnippets = [
   { label: "H", title: "제목", before: "## ", after: "" },
@@ -53,101 +57,29 @@ const tableSnippet = [
 
 const codeBlockSnippet = ["", "```", "", "```", ""].join("\n")
 
-const markdownHighlightStyle = HighlightStyle.define([
-  { tag: tags.heading, color: "#79c0ff", fontWeight: "700" },
-  { tag: tags.strong, color: "#ffa657", fontWeight: "700" },
-  { tag: tags.emphasis, color: "#d2a8ff", fontStyle: "italic" },
-  { tag: tags.link, color: "#58a6ff", textDecoration: "underline" },
-  { tag: tags.url, color: "#a5d6ff" },
-  { tag: tags.monospace, color: "#a5d6ff" },
-  { tag: tags.quote, color: "#8b949e", fontStyle: "italic" },
-  { tag: tags.meta, color: "#7d8590" },
-  { tag: tags.punctuation, color: "#8b949e" },
-])
-
-const markdownEditorTheme: Extension = EditorView.theme(
-  {
-    "&.cm-editor": {
-      minHeight: "100%",
-      backgroundColor: "#0d1117",
-      color: "#e6edf3",
-      fontSize: "14px",
-    },
-    ".cm-scroller": {
-      backgroundColor: "#0d1117",
-      color: "#e6edf3",
-      fontFamily:
-        "ui-monospace, SFMono-Regular, SF Mono, Consolas, Liberation Mono, Menlo, monospace",
-      lineHeight: "1.55",
-    },
-    ".cm-content": {
-      minHeight: "560px",
-      padding: "16px",
-      backgroundColor: "#0d1117",
-      color: "#e6edf3",
-      caretColor: "#e6edf3",
-    },
-    ".cm-line": {
-      color: "#e6edf3",
-    },
-    ".cm-gutters": {
-      backgroundColor: "#0d1117",
-      borderRight: "1px solid #30363d",
-      color: "#7d8590",
-    },
-    ".cm-gutter": {
-      backgroundColor: "#0d1117",
-      color: "#7d8590",
-    },
-    ".cm-activeLine": {
-      backgroundColor: "rgba(110, 118, 129, 0.12)",
-    },
-    ".cm-activeLineGutter": {
-      backgroundColor: "rgba(110, 118, 129, 0.12)",
-    },
-    "&.cm-focused": {
-      outline: "none",
-    },
-    ".cm-cursor": {
-      borderLeftColor: "#e6edf3",
-    },
-    ".cm-placeholder": {
-      color: "#7d8590",
-    },
-    "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
-      backgroundColor: "rgba(56, 139, 253, 0.45)",
-    },
-  },
-  { dark: true }
-)
-
-export const GitHubMarkdownEditor = ({
+export const MarkdownEditor = ({
   value,
   disabled = false,
   disableMermaid = false,
   onChange,
   onFlushMarkdownReady,
   onUploadImage,
-}: GitHubMarkdownEditorProps) => {
+}: MarkdownEditorProps) => {
   const [mode, setMode] = useState<EditorMode>("split")
   const [uploadError, setUploadError] = useState("")
-  const editorViewRef = useRef<EditorView | null>(null)
+  const [draftValue, setDraftValue] = useState(value)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const valueRef = useRef(value)
-  const extensions = useMemo(
-    () => [
-      history(),
-      keymap.of([...defaultKeymap, ...historyKeymap]),
-      markdown({ base: markdownLanguage }),
-      syntaxHighlighting(markdownHighlightStyle),
-      EditorView.lineWrapping,
-      EditorState.tabSize.of(2),
-      EditorView.editable.of(!disabled),
-    ],
-    [disabled]
+  const selectionRef = useRef<TextareaSelection>({ from: 0, to: 0 })
+  const lineNumbers = useMemo(
+    () => Array.from({ length: Math.max(1, draftValue.split("\n").length) }, (_, index) => index + 1),
+    [draftValue]
   )
 
   useEffect(() => {
+    if (value === valueRef.current) return
     valueRef.current = value
+    setDraftValue(value)
   }, [value])
 
   useEffect(() => {
@@ -158,40 +90,82 @@ export const GitHubMarkdownEditor = ({
   const commitMarkdown = useCallback(
     (nextMarkdown: string, editorFocused = false) => {
       valueRef.current = nextMarkdown
+      setDraftValue(nextMarkdown)
       setUploadError("")
       onChange(nextMarkdown, { editorFocused })
     },
     [onChange]
   )
 
+  const rememberTextareaSelection = useCallback(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return selectionRef.current
+
+    selectionRef.current = {
+      from: textarea.selectionStart,
+      to: textarea.selectionEnd,
+    }
+    return selectionRef.current
+  }, [])
+
+  const setTextareaSelection = useCallback((from: number, to = from) => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    const length = valueRef.current.length
+    const nextSelection = {
+      from: Math.max(0, Math.min(from, length)),
+      to: Math.max(0, Math.min(to, length)),
+    }
+    textarea.setSelectionRange(nextSelection.from, nextSelection.to)
+    selectionRef.current = nextSelection
+  }, [])
+
+  const handleTextareaKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.shiftKey || (!event.metaKey && !event.ctrlKey)) return
+
+      if (event.key === "Home") {
+        event.preventDefault()
+        setTextareaSelection(0)
+        return
+      }
+
+      if (event.key === "End") {
+        event.preventDefault()
+        setTextareaSelection(valueRef.current.length)
+      }
+    },
+    [setTextareaSelection]
+  )
+
   const insertMarkdownAtEditorSelection = useCallback(
     (before: string, after = "") => {
-      const editorView = editorViewRef.current
-      if (!editorView || disabled) return false
+      const textarea = textareaRef.current
+      if (!textarea || disabled) return false
 
-      const selection = editorView.state.selection.main
-      const selectedMarkdown = editorView.state.sliceDoc(selection.from, selection.to)
+      const { from: selectionStart, to: selectionEnd } =
+        document.activeElement === textarea ? rememberTextareaSelection() : selectionRef.current
+      const selectedMarkdown = valueRef.current.slice(selectionStart, selectionEnd)
       const insertedMarkdown = `${before}${selectedMarkdown}${after}`
-      const nextCursorFrom = selection.from + before.length
+      const nextCursorFrom = selectionStart + before.length
       const nextCursorTo = nextCursorFrom + selectedMarkdown.length
+      const nextMarkdown = `${valueRef.current.slice(0, selectionStart)}${insertedMarkdown}${valueRef.current.slice(selectionEnd)}`
 
-      editorView.dispatch({
-        changes: { from: selection.from, to: selection.to, insert: insertedMarkdown },
-        selection: { anchor: nextCursorFrom, head: nextCursorTo },
-        scrollIntoView: true,
+      commitMarkdown(nextMarkdown, true)
+      window.requestAnimationFrame(() => {
+        textarea.focus()
+        textarea.setSelectionRange(nextCursorFrom, nextCursorTo)
       })
-      editorView.focus()
-      commitMarkdown(editorView.state.doc.toString(), true)
       return true
     },
-    [commitMarkdown, disabled]
+    [commitMarkdown, disabled, rememberTextareaSelection]
   )
 
   const applySnippet = useCallback(
     (before: string, after = "") => {
       if (insertMarkdownAtEditorSelection(before, after)) return
-      const currentMarkdown = editorViewRef.current?.state.doc.toString() ?? valueRef.current
-      commitMarkdown(`${currentMarkdown}${before}${after}`, true)
+      commitMarkdown(`${valueRef.current}${before}${after}`, true)
     },
     [commitMarkdown, insertMarkdownAtEditorSelection]
   )
@@ -212,14 +186,13 @@ export const GitHubMarkdownEditor = ({
         return
       }
       const alt = uploaded.alt || uploaded.title || file.name
-      const currentMarkdown = editorViewRef.current?.state.doc.toString() ?? valueRef.current
-      commitMarkdown(`${currentMarkdown}\n\n![${alt}](${src})\n`, true)
+      commitMarkdown(`${valueRef.current}\n\n![${alt}](${src})\n`, true)
     },
     [commitMarkdown, onUploadImage]
   )
 
   return (
-    <EditorRoot data-testid="github-markdown-editor">
+    <EditorRoot data-testid="markdown-editor">
       <EditorToolbar aria-label="Markdown 작성 도구">
         <ModeTabs role="tablist" aria-label="Markdown editor mode">
           <ModeTab type="button" role="tab" aria-selected={mode === "write"} onClick={() => setMode("write")}>
@@ -240,6 +213,7 @@ export const GitHubMarkdownEditor = ({
               title={snippet.title}
               aria-label={snippet.title}
               disabled={disabled}
+              onMouseDown={(event) => event.preventDefault()}
               onClick={() => applySnippet(snippet.before, snippet.after)}
             >
               {snippet.label}
@@ -249,6 +223,7 @@ export const GitHubMarkdownEditor = ({
             type="button"
             aria-label="코드 블록"
             disabled={disabled}
+            onMouseDown={(event) => event.preventDefault()}
             onClick={() => applySnippet(codeBlockSnippet)}
           >
             Code block
@@ -257,6 +232,7 @@ export const GitHubMarkdownEditor = ({
             type="button"
             aria-label="표"
             disabled={disabled}
+            onMouseDown={(event) => event.preventDefault()}
             onClick={() => applySnippet(tableSnippet)}
           >
             Table
@@ -279,26 +255,37 @@ export const GitHubMarkdownEditor = ({
       {uploadError ? <ToolbarError role="alert">{uploadError}</ToolbarError> : null}
       <EditorBody data-mode={mode}>
         {mode !== "preview" ? (
-          <WritePane data-pane="write" data-testid="github-markdown-write-pane">
-            <CodeMirror
-              value={value}
-              height="100%"
-              basicSetup={{
-                foldGutter: false,
-                highlightActiveLine: true,
-                highlightSelectionMatches: false,
-              }}
-              theme={markdownEditorTheme}
-              extensions={extensions}
-              onCreateEditor={(editorView) => {
-                editorViewRef.current = editorView
-              }}
-              onChange={(nextValue) => commitMarkdown(nextValue, true)}
-            />
+          <WritePane data-pane="write" data-testid="markdown-editor-write-pane">
+            <WriteEditorFrame data-testid="markdown-textarea-frame">
+              <LineNumberGutter aria-hidden="true" data-testid="markdown-line-number-gutter">
+                {lineNumbers.map((lineNumber) => (
+                  <span key={lineNumber}>{lineNumber}</span>
+                ))}
+              </LineNumberGutter>
+              <MarkdownTextarea
+                ref={textareaRef}
+                aria-label="Markdown 본문"
+                spellCheck={false}
+                disabled={disabled}
+                value={draftValue}
+                onChange={(event) => {
+                  selectionRef.current = {
+                    from: event.currentTarget.selectionStart,
+                    to: event.currentTarget.selectionEnd,
+                  }
+                  commitMarkdown(event.currentTarget.value, true)
+                }}
+                onFocus={rememberTextareaSelection}
+                onKeyDown={handleTextareaKeyDown}
+                onKeyUp={rememberTextareaSelection}
+                onMouseUp={rememberTextareaSelection}
+                onSelect={rememberTextareaSelection}
+              />
+            </WriteEditorFrame>
           </WritePane>
         ) : null}
         {mode !== "write" ? (
-          <PreviewPane data-pane="preview" data-testid="github-markdown-preview-pane">
+          <PreviewPane data-pane="preview" data-testid="markdown-editor-preview-pane">
             <PreviewHeader>Preview</PreviewHeader>
             <PreviewArticle>
               <MarkdownRenderer content={value} disableMermaid={disableMermaid} />
@@ -311,11 +298,11 @@ export const GitHubMarkdownEditor = ({
 }
 
 const EditorRoot = styled.section`
-  border: 1px solid #30363d;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 6px;
   overflow: hidden;
-  background: #0d1117;
-  color: #e6edf3;
+  background: ${({ theme }) => theme.publicDesign.readableSurface};
+  color: ${({ theme }) => theme.colors.gray12};
 `
 
 const EditorToolbar = styled.div`
@@ -325,8 +312,8 @@ const EditorToolbar = styled.div`
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.5rem;
-  border-bottom: 1px solid #30363d;
-  background: #161b22;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
   flex-wrap: wrap;
 `
 
@@ -342,19 +329,19 @@ const ModeTab = styled.button`
   min-height: 32px;
   padding: 0 0.75rem;
   background: transparent;
-  color: #7d8590;
+  color: ${({ theme }) => theme.colors.gray10};
   font-size: 0.86rem;
   font-weight: 600;
   cursor: pointer;
 
   &[aria-selected="true"] {
-    background: #0d1117;
-    border-color: #30363d;
-    color: #e6edf3;
+    background: ${({ theme }) => theme.publicDesign.readableSurface};
+    border-color: ${({ theme }) => theme.colors.gray6};
+    color: ${({ theme }) => theme.colors.gray12};
   }
 
   &:focus-visible {
-    outline: 2px solid #2f81f7;
+    outline: 2px solid ${({ theme }) => theme.colors.blue8};
     outline-offset: 2px;
   }
 `
@@ -373,14 +360,14 @@ const ToolbarButton = styled.button`
   min-height: 32px;
   padding: 0 0.58rem;
   background: transparent;
-  color: #7d8590;
+  color: ${({ theme }) => theme.colors.gray10};
   font-size: 0.78rem;
   font-weight: 700;
   cursor: pointer;
 
   &:hover:not(:disabled) {
-    background: #21262d;
-    color: #e6edf3;
+    background: ${({ theme }) => theme.colors.gray3};
+    color: ${({ theme }) => theme.colors.gray12};
   }
 
   &:disabled {
@@ -395,14 +382,14 @@ const ImageUploadButton = styled.label`
   display: inline-flex;
   align-items: center;
   padding: 0 0.58rem;
-  color: #7d8590;
+  color: ${({ theme }) => theme.colors.gray10};
   font-size: 0.78rem;
   font-weight: 700;
   cursor: pointer;
 
   &:hover {
-    background: #21262d;
-    color: #e6edf3;
+    background: ${({ theme }) => theme.colors.gray3};
+    color: ${({ theme }) => theme.colors.gray12};
   }
 
   input {
@@ -451,18 +438,73 @@ const EditorBody = styled.div`
 const WritePane = styled.div`
   min-width: 0;
   min-height: 640px;
-  border-right: 1px solid #30363d;
+  border-right: 1px solid ${({ theme }) => theme.colors.gray6};
 
   @media (max-width: 980px) {
     border-right: 0;
-    border-bottom: 1px solid #30363d;
+    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  }
+`
+
+const WriteEditorFrame = styled.div`
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr);
+  min-height: 640px;
+  background: ${({ theme }) => theme.publicDesign.readableSurface};
+  color: ${({ theme }) => theme.colors.gray12};
+`
+
+const LineNumberGutter = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
+  padding: 16px 0.62rem 16px 0.4rem;
+  border-right: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.publicDesign.readableSurface};
+  color: ${({ theme }) => theme.colors.gray10};
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 14px;
+  line-height: 1.55;
+  user-select: none;
+
+  span {
+    height: 1.55em;
+  }
+`
+
+const MarkdownTextarea = styled.textarea`
+  width: 100%;
+  min-height: 640px;
+  max-width: var(--article-readable-width, 48rem);
+  padding: 16px;
+  border: 0;
+  outline: none;
+  resize: vertical;
+  background: ${({ theme }) => theme.publicDesign.readableSurface};
+  color: ${({ theme }) => theme.colors.gray12};
+  caret-color: ${({ theme }) => theme.colors.gray12};
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 14px;
+  line-height: 1.55;
+  tab-size: 2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+
+  &::selection {
+    background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(56, 139, 253, 0.45)" : "rgba(9, 105, 218, 0.24)")};
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
   }
 `
 
 const PreviewPane = styled.div`
   min-width: 0;
   min-height: 640px;
-  background: #0d1117;
+  background: ${({ theme }) => theme.publicDesign.readableSurface};
 `
 
 const PreviewHeader = styled.div`
@@ -470,21 +512,21 @@ const PreviewHeader = styled.div`
   display: flex;
   align-items: center;
   padding: 0 1rem;
-  border-bottom: 1px solid #30363d;
-  color: #7d8590;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  color: ${({ theme }) => theme.colors.gray10};
   font-size: 0.8rem;
   font-weight: 700;
 `
 
 const PreviewArticle = styled.article`
-  padding: 1.25rem 1rem 2rem;
-  background: #0d1117;
+  padding: 0 1rem 2rem;
+  background: ${({ theme }) => theme.publicDesign.readableSurface};
 
   .aq-markdown {
     width: min(100%, var(--article-readable-width, 48rem));
     max-width: var(--article-readable-width, 48rem);
     margin-inline: auto;
-    color: #e6edf3;
+    color: ${({ theme }) => theme.colors.gray12};
   }
 
   @media (max-width: 980px) {

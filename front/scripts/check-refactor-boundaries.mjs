@@ -27,55 +27,9 @@ const productionSoftAllowlist = {
     expires:
       "split below 600 when view props are reduced by a narrower editor surface contract",
   },
-  "src/components/editor/BlockEditorEngine.editorSurfaceStyles.tsx": {
-    issue: "#390",
-    reason:
-      "editor surface style module is a style-only companion and remains below the 1,000 line style budget",
-    expires:
-      "split when shared typography/style tokens remove editor-surface-only declarations",
-  },
-  "src/components/editor/BlockEditorEngine.viewportLayer.tsx": {
-    issue: "#390",
-    reason:
-      "viewport layer is a single render layer below the 1,000 line layer budget",
-    expires:
-      "split when block handle, bubble toolbar, and viewport props are independently owned",
-  },
-  "src/components/editor/BlockEditorEngine.tableStyles.tsx": {
-    issue: "#390",
-    reason:
-      "table style module is a style-only companion and remains below the 1,000 line style budget",
-    expires: "split when table chrome tokens are promoted to shared primitives",
-  },
-  "src/components/editor/tableTextSelectionModel.ts": {
-    issue: "#515",
-    reason:
-      "table text-range drag recovery remains centralized while multi-cell regressions are stabilized",
-    expires:
-      "split below 600 after explicit drag tracking and frame-preserve logic move into dedicated helpers",
-  },
-  "src/components/editor/codeBlockNodeView.tsx": {
-    issue: "#545",
-    reason: [
-      "editor table/cell selection and code-block selection interceptions are",
-      "fixed in-place; split into dedicated helpers after regression extraction",
-    ].join(" "),
-    expires:
-      "split below 600 when code-block selection, drag-preserve, and select-all interception are modularized",
-  },
 }
 
-const e2eRootAllowlist = {
-  "e2e/source-boundary-editor-studio.spec.ts": {
-    issue: "#423",
-    reason: [
-      "aggregate source-boundary contracts moved out of editor-studio-state;",
-      "final guard script covers recurring budgets",
-    ].join(" "),
-    expires:
-      "shrink below 800 after exact string contracts are fully migrated into data-driven guard tables",
-  },
-}
+const e2eRootAllowlist = {}
 
 const productionRoots = ["src", "pages"]
 const generatedPathPatterns = [
@@ -221,30 +175,6 @@ for (const relativePath of Object.keys(e2eRootAllowlist)) {
 }
 
 const ownershipRules = [
-  {
-    file: "src/components/editor/BlockEditorEngine.tsx",
-    required: [
-      'from "./useBlockEditorEngineController"',
-      'from "./BlockEditorEngine.layers"',
-      'from "./BlockEditorEngine.tableOverlayLayer"',
-      'from "./BlockEditorEngine.styles"',
-    ],
-    forbidden: [/\bstyled\./, /\buseEditor\(/, /\buseEffect\(/],
-    hint: "BlockEditorEngine must remain a render wrapper; controller, layers, and styles own the heavy work.",
-  },
-  {
-    file: "src/components/editor/useBlockEditorEngineController.ts",
-    required: [
-      'from "./useBlockEditorTableOverlayController"',
-      'from "./useBlockEditorEngineBlockDrag"',
-      'from "./useBlockEditorEngineBlockSelectionUi"',
-      'from "./useBlockEditorEngineControllerState"',
-      'from "./useBlockEditorEngineInsertActions"',
-      'from "./useBlockEditorEngineSlashMenu"',
-    ],
-    forbidden: [/\bstyled\./],
-    hint: "The engine controller must delegate table, drag, selection, insert, and slash responsibilities.",
-  },
   {
     file: "src/routes/Admin/EditorStudioWorkspaceController.tsx",
     required: ['from "./EditorStudioWorkspaceControllerRoot"'],

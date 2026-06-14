@@ -17,15 +17,15 @@ export const PublishModalBackdrop = styled.div`
 `
 
 export const PublishDialog = styled.div`
-  width: min(920px, calc(100vw - 2rem));
-  max-height: min(86vh, 920px);
+  width: min(1120px, calc(100vw - 2rem));
+  max-height: min(88vh, 940px);
   overflow: auto;
-  border-radius: 16px;
+  border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
-  padding: 1rem 1rem 0;
+  padding: 1.1rem 1.15rem 0;
   display: grid;
-  gap: 0.8rem;
+  gap: 0.95rem;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
 
   &[data-variant="drawer"] {
@@ -59,8 +59,9 @@ export const PublishModalHeader = styled.div`
   h4 {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1.04rem;
+    font-size: 1.1rem;
     font-weight: 750;
+    line-height: 1.28;
   }
 `
 

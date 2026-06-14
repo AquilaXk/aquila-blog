@@ -6,6 +6,7 @@ import AppIcon, { type IconName } from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
 import type { AuthMember } from "src/hooks/useAuthSession"
 import {
+  adminAccentText,
   adminAppBackground,
   adminBorder,
   adminBorderStrong,
@@ -237,7 +238,7 @@ const BrandMark = styled.div`
   overflow: hidden;
   border: 1px solid ${adminBorderStrong};
   background: ${adminSurfaceAccent};
-  color: ${adminTeal};
+  color: ${adminAccentText};
 
   span {
     font-size: 0.9rem;

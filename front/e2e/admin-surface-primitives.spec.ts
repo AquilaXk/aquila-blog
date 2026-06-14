@@ -2,6 +2,23 @@ import { readFileSync } from "node:fs"
 import path from "node:path"
 import { expect, test } from "@playwright/test"
 
+const getRelativeLuminance = (hexColor: string) => {
+  const [red, green, blue] = hexColor
+    .replace("#", "")
+    .match(/.{2}/g)!
+    .map((channel) => {
+      const value = Number.parseInt(channel, 16) / 255
+      return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+    })
+
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+}
+
+const getContrastRatio = (foreground: string, background: string) => {
+  const [lighter, darker] = [getRelativeLuminance(foreground), getRelativeLuminance(background)].sort((a, b) => b - a)
+  return (lighter + 0.05) / (darker + 0.05)
+}
+
 test.describe("관리자 표면 공통 계약", () => {
   test("관리자 표면은 MYBOX형 화이트 우선 시스템 테마 토큰을 공유한다", () => {
     const colorTokenSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/adminColorTokens.ts"), "utf8")
@@ -26,7 +43,8 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(colorTokenSource).toContain('export const adminTextMuted = "var(--admin-text-muted, #566273)"')
     expect(colorTokenSource).toContain('export const adminSurface = "var(--admin-surface')
     expect(colorTokenSource).toContain('export const adminSurfaceAccent = "var(--admin-surface-accent, #edf3ff)"')
-    expect(colorTokenSource).toContain('export const adminGold = "var(--admin-accent-text, #315fd8)"')
+    expect(colorTokenSource).toContain('export const adminAccentText = "var(--admin-accent-text, #315fd8)"')
+    expect(colorTokenSource).toContain("export const adminGold = adminAccentText")
     expect(colorTokenSource).toContain('export const adminTeal = "var(--admin-primary')
     expect(colorTokenSource).toContain('export const usesDarkAdminSurface = (theme: Theme) => theme.scheme !== "light"')
     expect(colorTokenSource).not.toContain("#4f74ff")
@@ -393,7 +411,10 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(tokenSource).not.toContain("#f7f1e3")
     expect(tokenSource).not.toContain("#2d291a")
     expect(tokenSource).toContain("--admin-primary: #4f7cff;")
-    expect(tokenSource).toContain("--admin-primary-hover: #3f6df2;")
+    expect(tokenSource).toContain("--admin-primary-hover: #5f8aff;")
+    expect(getContrastRatio("#315fd8", "#edf3ff")).toBeGreaterThanOrEqual(4.5)
+    expect(getContrastRatio("#101214", "#5f8aff")).toBeGreaterThanOrEqual(4.5)
+    expect(shellSource).toContain("adminAccentText")
     expect(shellSource).not.toContain("adminGold")
   })
 

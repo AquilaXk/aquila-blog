@@ -15,7 +15,7 @@ const adminLightThemeVariables = `
   --admin-text-secondary: #4d5562;
   --admin-text-muted: #566273;
   --admin-primary: #4f7cff;
-  --admin-primary-hover: #3f6df2;
+  --admin-primary-hover: #5f8aff;
   --admin-accent-text: #315fd8;
   --admin-primary-border: rgba(79, 124, 255, 0.32);
   --admin-primary-border-hover: rgba(79, 124, 255, 0.52);
@@ -66,9 +66,10 @@ export const adminSurfaceMuted = "var(--admin-surface-muted, #eef2f7)"
 export const adminSurfaceAccent = "var(--admin-surface-accent, #edf3ff)"
 export const adminElevatedSurfaceTop = "var(--admin-elevated-top, #ffffff)"
 export const adminElevatedBorderDark = "var(--admin-border, #e5e9f1)"
-export const adminGold = "var(--admin-accent-text, #315fd8)"
+export const adminAccentText = "var(--admin-accent-text, #315fd8)"
+export const adminGold = adminAccentText
 export const adminTeal = "var(--admin-primary, #4f7cff)"
-export const adminTealHover = "var(--admin-primary-hover, #3f6df2)"
+export const adminTealHover = "var(--admin-primary-hover, #5f8aff)"
 export const adminControlText = "var(--admin-control-text, #101214)"
 export const adminTealBorder = "var(--admin-primary-border, rgba(79, 124, 255, 0.32))"
 export const adminTealBorderHover = "var(--admin-primary-border-hover, rgba(79, 124, 255, 0.52))"

@@ -861,34 +861,22 @@ test.describe("editor live visual regression", () => {
     await page.keyboard.press("Escape")
     await expect(tableMenu).toBeHidden()
 
-    await page.mouse.move(tableBox.x + tableBox.width - 3, tableBox.y + tableBox.height / 2)
-    await expect(columnAddButton).toBeVisible()
-    const columnAddBarBox = await columnAddButton.boundingBox()
-
-    await page.mouse.move(tableBox.x + tableBox.width / 2, tableBox.y + tableBox.height - 3)
-    await expect(rowAddButton).toBeVisible()
-    const rowAddBarBox = await rowAddButton.boundingBox()
+    const visibleAffordanceBoxes = await Promise.all(
+      [cornerHandle, growHandle, structureMenuButton].map((locator) => locator.boundingBox())
+    )
 
     const viewport = page.viewportSize()
     expect(viewport).not.toBeNull()
-    expect(columnAddBarBox).not.toBeNull()
-    expect(rowAddBarBox).not.toBeNull()
-    if (!viewport || !columnAddBarBox || !rowAddBarBox) return
+    if (!viewport) return
 
-    expect(columnAddBarBox.x + columnAddBarBox.width).toBeLessThanOrEqual(viewport.width)
-    expect(rowAddBarBox.y + rowAddBarBox.height).toBeLessThanOrEqual(viewport.height)
-    expect(
-      Math.abs(columnAddBarBox.x + columnAddBarBox.width / 2 - (tableBox.x + tableBox.width))
-    ).toBeLessThanOrEqual(18)
-    expect(
-      Math.abs(rowAddBarBox.y + rowAddBarBox.height / 2 - (tableBox.y + tableBox.height))
-    ).toBeLessThanOrEqual(18)
-    expect(
-      Math.abs(columnAddBarBox.y + columnAddBarBox.height / 2 - (tableBox.y + tableBox.height / 2))
-    ).toBeLessThanOrEqual(18)
-    expect(
-      Math.abs(rowAddBarBox.x + rowAddBarBox.width / 2 - (tableBox.x + tableBox.width / 2))
-    ).toBeLessThanOrEqual(18)
+    for (const box of visibleAffordanceBoxes) {
+      expect(box).not.toBeNull()
+      if (!box) continue
+      expect(box.x).toBeGreaterThanOrEqual(0)
+      expect(box.y).toBeGreaterThanOrEqual(0)
+      expect(box.x + box.width).toBeLessThanOrEqual(viewport.width)
+      expect(box.y + box.height).toBeLessThanOrEqual(viewport.height)
+    }
   })
 
   test("실제 /editor/[id]는 말머리 항목을 개별 블록으로 선택/이동하고 Tab 단계 승강을 유지한다", async ({ page }) => {

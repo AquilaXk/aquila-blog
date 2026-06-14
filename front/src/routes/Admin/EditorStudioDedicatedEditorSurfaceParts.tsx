@@ -1,7 +1,6 @@
-import styled from "@emotion/styled"
-import { articleTypographyScale } from "src/libs/markdown/contentTypography"
-
-export const EditorStudioRoot = styled.main`
+import styled from "@emotion/styled";
+import { articleTypographyScale } from "src/libs/markdown/contentTypography";
+export const EditorStudioRoot = styled.main `
   box-sizing: border-box;
   width: 100vw;
   margin-left: calc(50% - 50vw);
@@ -10,10 +9,7 @@ export const EditorStudioRoot = styled.main`
   display: grid;
   gap: 1.2rem;
   overflow-x: clip;
-  background: ${({ theme }) =>
-    theme.blogDesign === "grid"
-      ? `linear-gradient(180deg, color-mix(in srgb, ${theme.publicDesign.surfaceElevated} 44%, transparent), transparent 18rem)`
-      : "transparent"};
+  background: ${({ theme }) => "transparent"};
 
   @media (max-width: 1024px) {
     padding: 1rem 1rem 1.4rem;
@@ -25,9 +21,8 @@ export const EditorStudioRoot = styled.main`
     padding-left: max(0.82rem, env(safe-area-inset-left, 0px));
     padding-right: max(0.82rem, env(safe-area-inset-right, 0px));
   }
-`
-
-export const EditorStudioLoadingState = styled.div`
+`;
+export const EditorStudioLoadingState = styled.div `
   min-height: calc(100vh - 10rem);
   display: grid;
   place-content: center;
@@ -43,9 +38,8 @@ export const EditorStudioLoadingState = styled.div`
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.9rem;
   }
-`
-
-export const EditorStudioDedicatedTopBar = styled.div`
+`;
+export const EditorStudioDedicatedTopBar = styled.div `
   width: min(100%, 1600px);
   margin: 0 auto;
   display: flex;
@@ -67,9 +61,8 @@ export const EditorStudioDedicatedTopBar = styled.div`
     flex-direction: column;
     gap: 0.7rem;
   }
-`
-
-export const EditorExitAction = styled.button`
+`;
+export const EditorExitAction = styled.button `
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -89,20 +82,19 @@ export const EditorExitAction = styled.button`
     color 0.18s ease;
 
   &:hover {
-    background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.gray3)};
+    background: ${({ theme }) => (theme.colors.gray3)};
   }
 
   &:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 3px ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.blue4)};
+    box-shadow: 0 0 0 3px ${({ theme }) => (theme.colors.blue4)};
   }
 
   @media (max-width: 1200px) {
     justify-content: flex-start;
   }
-`
-
-export const EditorStudioTopBarActions = styled.div`
+`;
+export const EditorStudioTopBarActions = styled.div `
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -122,9 +114,8 @@ export const EditorStudioTopBarActions = styled.div`
     justify-content: flex-end;
     flex-wrap: wrap;
   }
-`
-
-export const EditorStudioSaveState = styled.span`
+`;
+export const EditorStudioSaveState = styled.span `
   color: ${({ theme }) => theme.colors.gray10};
   font-size: 0.84rem;
   font-weight: 600;
@@ -146,14 +137,13 @@ export const EditorStudioSaveState = styled.span`
   @media (max-width: 680px) {
     width: 100%;
   }
-`
-
-const Button = styled.button`
-  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
+`;
+const Button = styled.button `
+  border: 1px solid ${({ theme }) => (theme.colors.gray6)};
   border-radius: 8px;
   padding: 0.62rem 0.92rem;
   min-height: 44px;
-  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : "transparent")};
+  background: ${({ theme }) => ("transparent")};
   color: ${({ theme }) => theme.colors.gray10};
   cursor: pointer;
   font-size: 0.84rem;
@@ -165,39 +155,37 @@ const Button = styled.button`
     box-shadow 0.18s ease;
 
   &:hover:not(:disabled) {
-    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray8)};
-    background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.gray3)};
+    border-color: ${({ theme }) => (theme.colors.gray8)};
+    background: ${({ theme }) => (theme.colors.gray3)};
     color: ${({ theme }) => theme.colors.gray12};
   }
 
   &:focus-visible {
     outline: none;
-    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.blue8)};
-    box-shadow: 0 0 0 3px ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.blue4)};
+    border-color: ${({ theme }) => (theme.colors.blue8)};
+    box-shadow: 0 0 0 3px ${({ theme }) => (theme.colors.blue4)};
   }
 
   &:disabled {
     opacity: 0.45;
     cursor: not-allowed;
   }
-`
-
-export const PrimaryButton = styled(Button)`
+`;
+export const PrimaryButton = styled(Button) `
   border-radius: 8px;
   padding: 0.6rem 0.88rem;
-  border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.blue9)};
-  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.blue9)};
-  color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.pageBackgroundColor : theme.colors.gray1)};
+  border-color: ${({ theme }) => (theme.colors.blue9)};
+  background: ${({ theme }) => (theme.colors.blue9)};
+  color: ${({ theme }) => (theme.colors.gray1)};
   font-weight: 700;
 
   &:hover:not(:disabled) {
-    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.blue10)};
-    background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.blue10)};
-    color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.pageBackgroundColor : theme.colors.gray1)};
+    border-color: ${({ theme }) => (theme.colors.blue10)};
+    background: ${({ theme }) => (theme.colors.blue10)};
+    color: ${({ theme }) => (theme.colors.gray1)};
   }
-`
-
-export const EditorStudioFrame = styled.div`
+`;
+export const EditorStudioFrame = styled.div `
   width: min(100%, 1600px);
   margin: 0 auto;
   display: grid;
@@ -211,37 +199,39 @@ export const EditorStudioFrame = styled.div`
     grid-template-columns: minmax(0, 1fr);
     gap: 1.4rem;
   }
-`
-
-export const EditorStudioWritingColumn = styled.section<{ $compact?: boolean }>`
+`;
+export const EditorStudioWritingColumn = styled.section<{
+    $compact?: boolean;
+}> `
   display: grid;
   min-width: 0;
   gap: ${({ $compact }) => ($compact ? "0.88rem" : "1rem")};
   overflow-x: visible;
-`
-
-export const EditorStudioDedicatedMetaSection = styled.section<{ $compact?: boolean }>`
+`;
+export const EditorStudioDedicatedMetaSection = styled.section<{
+    $compact?: boolean;
+}> `
   width: 100%;
   max-width: var(--article-readable-width, 48rem);
   min-width: 0;
   margin-inline: auto;
   display: grid;
   gap: ${({ $compact }) => ($compact ? "0.72rem" : "0.9rem")};
-  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : "transparent")};
-  border-radius: ${({ theme }) => (theme.blogDesign === "grid" ? "8px" : "0")};
-  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.readableSurface : "transparent")};
-  padding: ${({ theme, $compact }) => (theme.blogDesign === "grid" ? ($compact ? "0.8rem" : "1rem") : "0")};
-`
-
-export const EditorTagRow = styled.div<{ $compact?: boolean }>`
+  border: 1px solid ${({ theme }) => ("transparent")};
+  border-radius: ${({ theme }) => ("0")};
+  background: ${({ theme }) => ("transparent")};
+  padding: ${({ theme, $compact }) => ("0")};
+`;
+export const EditorTagRow = styled.div<{
+    $compact?: boolean;
+}> `
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: ${({ $compact }) => ($compact ? "0.44rem" : "0.55rem")};
   min-height: 32px;
-`
-
-export const SelectedTagChip = styled.span`
+`;
+export const SelectedTagChip = styled.span `
   display: inline-flex;
   align-items: stretch;
   gap: 0;
@@ -301,9 +291,8 @@ export const SelectedTagChip = styled.span`
       color: ${({ theme }) => theme.colors.gray12};
     }
   }
-`
-
-export const InlineMetaInput = styled.input`
+`;
+export const InlineMetaInput = styled.input `
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
@@ -329,9 +318,10 @@ export const InlineMetaInput = styled.input`
     border-color: ${({ theme }) => theme.colors.blue8};
     box-shadow: 0 0 0 4px ${({ theme }) => theme.colors.blue4};
   }
-`
-
-export const TitleInput = styled.textarea<{ $compact?: boolean }>`
+`;
+export const TitleInput = styled.textarea<{
+    $compact?: boolean;
+}> `
   width: 100%;
   min-width: 0;
   border: 0;
@@ -363,34 +353,32 @@ export const TitleInput = styled.textarea<{ $compact?: boolean }>`
     font-size: ${articleTypographyScale.postTitleFontSizeMobile};
     line-height: ${articleTypographyScale.postTitleLineHeightMobile};
   }
-`
-
-export const EditorHeaderMetaRow = styled.div`
+`;
+export const EditorHeaderMetaRow = styled.div `
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 0.85rem;
   min-width: 0;
-`
-
-export const EditorHeaderMetaActions = styled.div`
+`;
+export const EditorHeaderMetaActions = styled.div `
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 0.45rem;
   min-width: 0;
-`
-
-export const EditorHeaderAuthor = styled.div`
+`;
+export const EditorHeaderAuthor = styled.div `
   display: inline-flex;
   align-items: center;
   gap: 0.85rem;
   min-width: 0;
-`
-
-export const EditorHeaderAvatar = styled.div<{ $compact?: boolean }>`
+`;
+export const EditorHeaderAvatar = styled.div<{
+    $compact?: boolean;
+}> `
   position: relative;
   width: ${({ $compact }) => ($compact ? "40px" : "48px")};
   height: ${({ $compact }) => ($compact ? "40px" : "48px")};
@@ -410,9 +398,10 @@ export const EditorHeaderAvatar = styled.div<{ $compact?: boolean }>`
     font-weight: 800;
     letter-spacing: 0.04em;
   }
-`
-
-export const EditorHeaderAuthorText = styled.div<{ $compact?: boolean }>`
+`;
+export const EditorHeaderAuthorText = styled.div<{
+    $compact?: boolean;
+}> `
   display: grid;
   gap: ${({ $compact }) => ($compact ? "0.12rem" : "0.18rem")};
   min-width: 0;
@@ -429,9 +418,10 @@ export const EditorHeaderAuthorText = styled.div<{ $compact?: boolean }>`
     font-size: ${({ $compact }) => ($compact ? "0.82rem" : "0.9rem")};
     font-weight: 500;
   }
-`
-
-export const EditorHeaderMetaPill = styled.span<{ $compact?: boolean }>`
+`;
+export const EditorHeaderMetaPill = styled.span<{
+    $compact?: boolean;
+}> `
   display: inline-flex;
   align-items: center;
   min-height: ${({ $compact }) => ($compact ? "30px" : "34px")};
@@ -443,16 +433,14 @@ export const EditorHeaderMetaPill = styled.span<{ $compact?: boolean }>`
   font-size: ${({ $compact }) => ($compact ? "0.74rem" : "0.82rem")};
   font-weight: 650;
   line-height: 1;
-`
-
-export const EditorHeaderActionButton = styled(Button)`
+`;
+export const EditorHeaderActionButton = styled(Button) `
   min-height: 34px;
   padding: 0.45rem 0.7rem;
   border-radius: 999px;
   font-size: 0.78rem;
-`
-
-export const EditorStudioDedicatedCanvasSection = styled.section`
+`;
+export const EditorStudioDedicatedCanvasSection = styled.section `
   --compose-pane-readable-width: var(--article-readable-width, 48rem);
   width: 100%;
   max-width: var(--article-readable-width, 48rem);
@@ -462,14 +450,13 @@ export const EditorStudioDedicatedCanvasSection = styled.section`
   display: grid;
   gap: 0.72rem;
   overflow-x: visible;
-  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : "transparent")};
-  border-radius: ${({ theme }) => (theme.blogDesign === "grid" ? "8px" : "0")};
-  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.readableSurface : "transparent")};
-  padding: ${({ theme }) => (theme.blogDesign === "grid" ? "1rem" : "0")};
-  box-shadow: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.shadow : "none")};
-`
-
-export const PublishNotice = styled.div`
+  border: 1px solid ${({ theme }) => ("transparent")};
+  border-radius: ${({ theme }) => ("0")};
+  background: ${({ theme }) => ("transparent")};
+  padding: ${({ theme }) => ("0")};
+  box-shadow: ${({ theme }) => ("none")};
+`;
+export const PublishNotice = styled.div `
   margin: 0;
   padding: 0.55rem 0.7rem;
   border-radius: 10px;
@@ -505,4 +492,4 @@ export const PublishNotice = styled.div`
   @media (max-width: 720px) {
     width: 100%;
   }
-`
+`;

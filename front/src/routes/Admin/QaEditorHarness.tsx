@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useState } from "react"
 import { WriterEditorHost } from "./WriterEditorHost"
 
 const QA_IMAGE_DATA_URL =
@@ -14,12 +14,6 @@ export const QaEditorHarness = ({ seedMarkdown }: QaEditorHarnessProps) => {
   const [editorReady, setEditorReady] = useState(false)
   const [commitSamples, setCommitSamples] = useState<number[]>([])
   const [flushMarkdown, setFlushMarkdown] = useState<(() => string) | null>(null)
-
-  useEffect(() => {
-    if (!editorReady) return
-    const readyTimer = window.setTimeout(() => setEditorReady(true), 0)
-    return () => window.clearTimeout(readyTimer)
-  }, [editorReady])
 
   const handleMarkdownChange = useCallback((nextMarkdown: string) => {
     setMarkdown(nextMarkdown)

@@ -860,14 +860,16 @@ test.describe("editor live visual regression", () => {
 
     await page.keyboard.press("Escape")
     await expect(tableMenu).toBeHidden()
-    await page.mouse.move(tableBox.x + tableBox.width - 3, tableBox.y + tableBox.height - 3)
 
+    await page.mouse.move(tableBox.x + tableBox.width - 3, tableBox.y + tableBox.height / 2)
     await expect(columnAddButton).toBeVisible()
+    const columnAddBarBox = await columnAddButton.boundingBox()
+
+    await page.mouse.move(tableBox.x + tableBox.width / 2, tableBox.y + tableBox.height - 3)
     await expect(rowAddButton).toBeVisible()
+    const rowAddBarBox = await rowAddButton.boundingBox()
 
     const viewport = page.viewportSize()
-    const addBarBoxes = await Promise.all([columnAddButton.boundingBox(), rowAddButton.boundingBox()])
-    const [columnAddBarBox, rowAddBarBox] = addBarBoxes
     expect(viewport).not.toBeNull()
     expect(columnAddBarBox).not.toBeNull()
     expect(rowAddBarBox).not.toBeNull()

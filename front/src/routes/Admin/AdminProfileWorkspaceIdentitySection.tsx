@@ -1,7 +1,7 @@
 import ProfileImage from "src/components/ProfileImage"
+import { CONFIG } from "site.config"
 import type { ProfileWorkspaceContent } from "src/libs/profileWorkspace"
 import {
-  AvatarFallback,
   AvatarWorkspaceCard,
   FieldBox,
   FieldGrid,
@@ -25,17 +25,19 @@ export const renderAdminProfileIdentitySection = (props: Record<string, any>) =>
     updateDraft,
   } = props as Record<string, any> & { draft: ProfileWorkspaceContent }
   const displayName = displayNameInput.trim() || sessionMember?.nickname || sessionMember?.username || "관리자"
-  const displayNameInitial = displayName.slice(0, 2).toUpperCase()
 
   return (
     <SectionStack>
       <AvatarWorkspaceCard>
         <div className="avatarPreview">
-          {draft.profileImageUrl ? (
-            <ProfileImage src={draft.profileImageUrl} alt={displayName} width={88} height={88} priority />
-          ) : (
-            <AvatarFallback>{displayNameInitial}</AvatarFallback>
-          )}
+          <ProfileImage
+            src={draft.profileImageUrl || undefined}
+            fallbackSrc={CONFIG.profile.image}
+            alt={displayName}
+            width={88}
+            height={88}
+            priority
+          />
         </div>
         <div className="avatarMeta">
           <strong>{displayName}</strong>

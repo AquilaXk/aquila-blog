@@ -486,6 +486,47 @@ const loginThroughUi = async (
   throw new Error(`UI login failed after retries. last=${lastFailure}`)
 }
 
+const authenticateLiveAdmin = async (page: Page, apiBaseUrl: string) => {
+  if (hasUiLoginCredentials) {
+    await loginThroughUi(page, apiBaseUrl, adminEmail, adminLegacyLoginId, adminPassword)
+    return
+  }
+
+  await loginWithRetry(page, apiBaseUrl, adminEmail, adminLegacyLoginId, adminPassword)
+}
+
+const isVisibleLoginPage = async (page: Page) => {
+  if (/\/login(\/|$|\?)/.test(page.url())) return true
+  return page.getByRole("heading", { name: "로그인" }).isVisible().catch(() => false)
+}
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+const expectLiveAdminRoute = async (
+  page: Page,
+  apiBaseUrl: string,
+  path: string,
+  headingPattern: RegExp,
+  label: string
+) => {
+  const routePattern = new RegExp(`${escapeRegExp(path)}(?:/?(?:$|[?#]))`)
+
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    await page.goto(path)
+
+    if (await isVisibleLoginPage(page)) {
+      await authenticateLiveAdmin(page, apiBaseUrl)
+      continue
+    }
+
+    await expect(page, `${label} route url`).toHaveURL(routePattern, { timeout: 20_000 })
+    await expect(page.getByRole("heading", { name: headingPattern }), `${label} heading`).toBeVisible()
+    return
+  }
+
+  throw new Error(`${label} route redirected to login after re-authentication: ${page.url()}`)
+}
+
 test.describe("live critical error filter", () => {
   test("WebKit Next data prefetch access-control noise는 critical error에서 제외한다", () => {
     expect(
@@ -552,18 +593,11 @@ test.describe("live production e2e", () => {
 
     const apiBaseUrl = resolveApiBaseUrl(page.url())
     await waitForApiReachability(page, apiBaseUrl)
-    if (hasUiLoginCredentials) {
-      await loginThroughUi(page, apiBaseUrl, adminEmail, adminLegacyLoginId, adminPassword)
-    } else {
-      await loginWithRetry(page, apiBaseUrl, adminEmail, adminLegacyLoginId, adminPassword)
-    }
+    await authenticateLiveAdmin(page, apiBaseUrl)
 
-    await page.goto("/admin")
-    await expect(page).toHaveURL(/\/admin(\/|$)/, { timeout: 20_000 })
-    await expect(page.getByRole("heading", { name: adminLandingHeadingPattern })).toBeVisible()
+    await expectLiveAdminRoute(page, apiBaseUrl, "/admin", adminLandingHeadingPattern, "admin landing")
 
-    await page.goto("/admin/profile")
-    await expect(page.getByRole("heading", { name: adminProfileHeadingPattern })).toBeVisible()
+    await expectLiveAdminRoute(page, apiBaseUrl, "/admin/profile", adminProfileHeadingPattern, "admin profile")
     const profileImage = page.locator("main img").first()
     await expect(profileImage).toBeVisible()
     await expect
@@ -575,26 +609,22 @@ test.describe("live production e2e", () => {
       })
       .toBeTruthy()
 
-    await page.goto("/admin/dashboard")
-    await expect(page.getByRole("heading", { name: adminDashboardHeadingPattern })).toBeVisible()
+    await expectLiveAdminRoute(page, apiBaseUrl, "/admin/dashboard", adminDashboardHeadingPattern, "admin dashboard")
     const dashboardKpiRail = page.locator('[data-ui="monitoring-service-rail"]')
     await expect(dashboardKpiRail).toBeVisible()
     await expect(dashboardKpiRail.getByText("서비스 상태")).toBeVisible()
     await expect(page.getByRole("heading", { name: "우선 점검 항목" })).toBeVisible()
 
-    await page.goto("/admin/cloud")
-    await expect(page.getByRole("heading", { name: adminCloudHeadingPattern })).toBeVisible()
+    await expectLiveAdminRoute(page, apiBaseUrl, "/admin/cloud", adminCloudHeadingPattern, "admin cloud")
     const visibleCloudUploadButtons = page
       .getByRole("button", { name: /^(파일 업로드|업로드 중)$/ })
       .filter({ visible: true })
     await expect(visibleCloudUploadButtons.first()).toBeVisible()
 
-    await page.goto("/admin/tools")
-    await expect(page.getByRole("heading", { name: adminToolsHeadingPattern })).toBeVisible()
+    await expectLiveAdminRoute(page, apiBaseUrl, "/admin/tools", adminToolsHeadingPattern, "admin tools")
     await expect(page.getByRole("tab", { name: /^작업 큐 진단/ })).toBeVisible()
 
-    await page.goto("/admin/posts")
-    await expect(page.getByRole("heading", { name: adminPostsHeadingPattern })).toBeVisible()
+    await expectLiveAdminRoute(page, apiBaseUrl, "/admin/posts", adminPostsHeadingPattern, "admin posts")
     const titleInput = page.locator("#post-title").first()
     const legacyTitleInput = page.getByPlaceholder("제목을 입력하세요").first()
     await openAdminNewPostEntry(page)

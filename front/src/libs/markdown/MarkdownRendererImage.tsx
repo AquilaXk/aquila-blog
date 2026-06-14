@@ -1,5 +1,6 @@
 import { memo, type CSSProperties, useEffect, useRef, useState } from "react"
 import type { MarkdownImageFigureProps } from "src/libs/markdown/MarkdownRenderer.types"
+import { normalizeSafeMarkdownImageSrc } from "src/libs/markdown/safeMarkdownUrl"
 
 export const MarkdownImageFigure = memo(
   ({ alt, src, widthPx, eager = false, editable = false, imageIndex, onWidthCommit }: MarkdownImageFigureProps) => {
@@ -14,9 +15,12 @@ export const MarkdownImageFigure = memo(
     }, [src, widthPx])
 
     const effectiveWidthPx = draftWidthPx ?? widthPx
+    const safeSrc = normalizeSafeMarkdownImageSrc(src)
     const frameStyle = effectiveWidthPx
       ? ({ "--aq-image-width": `${effectiveWidthPx}px` } as CSSProperties)
       : undefined
+
+    if (!safeSrc) return null
 
     return (
       <figure
@@ -28,7 +32,7 @@ export const MarkdownImageFigure = memo(
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={src}
+          src={safeSrc}
           alt={alt || ""}
           loading={eager ? "eager" : "lazy"}
           fetchPriority={eager ? "high" : "auto"}
@@ -71,7 +75,7 @@ export const MarkdownImageFigure = memo(
                 dragStateRef.current = null
                 liveWidthRef.current = null
                 setDraftWidthPx(null)
-                onWidthCommit?.({ src, alt, index: imageIndex, widthPx: nextWidth })
+                onWidthCommit?.({ src: safeSrc, alt, index: imageIndex, widthPx: nextWidth })
               }
 
               window.addEventListener("pointermove", handlePointerMove)

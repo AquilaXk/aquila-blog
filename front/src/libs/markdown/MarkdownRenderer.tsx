@@ -28,6 +28,7 @@ import {
   MarkdownTableRowRenderer,
 } from "src/libs/markdown/MarkdownRendererTable"
 import { renderMarkdownSegment } from "src/libs/markdown/MarkdownRendererSegments"
+import { normalizeSafeMarkdownImageSrc } from "src/libs/markdown/safeMarkdownUrl"
 import type { MarkdownRendererProps } from "src/libs/markdown/MarkdownRenderer.types"
 
 export { markdownGuide } from "src/libs/markdown/rendering"
@@ -103,7 +104,7 @@ const MarkdownRendererComponent: FC<MarkdownRendererProps> = ({
           )
         },
         img({ src, alt }) {
-          const imageSrc = typeof src === "string" ? src : ""
+          const imageSrc = normalizeSafeMarkdownImageSrc(typeof src === "string" ? src : "")
           if (!imageSrc) return null
           const isFirstImage = imageRenderOrderRef.current === 0
           imageRenderOrderRef.current += 1

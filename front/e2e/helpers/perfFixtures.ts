@@ -662,7 +662,7 @@ export const waitForPageReady = async (page: Page, options?: { waitAuth?: boolea
 
 export const waitForQaEditorReady = async (page: Page): Promise<Locator> => {
   const readyMarker = page.getByTestId("qa-editor-ready")
-  const editor = page.getByTestId("block-editor-prosemirror").first()
+  const editor = page.getByTestId("github-markdown-write-pane").locator(".cm-content").first()
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     await expect(readyMarker).toHaveCount(1, { timeout: 12_000 }).catch(() => {})

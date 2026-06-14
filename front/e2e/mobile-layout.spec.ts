@@ -14,11 +14,11 @@ test.describe("모바일 레이아웃 소스 경계", () => {
       "src/routes/Feed/ProfileCard.tsx",
       "src/routes/Feed/ServiceCard.tsx",
       "src/routes/Feed/ContactCard.tsx",
-      "src/routes/About/AboutPage.styles.ts",
       "src/routes/Detail/PostDetail/PostDetail.styles.ts",
       "src/routes/Detail/PostDetail/PostDetailSection.styles.ts",
       "src/routes/Detail/PostDetail/PostHeader.styles.ts",
     ].map((sourcePath) => [sourcePath, readSourceFile(sourcePath)] as const)
+    const aboutSource = readSourceFile("src/routes/About/AboutPage.styles.ts")
     const themeSource = readSourceFile("src/styles/theme.ts")
     const articleSurfaceSource = [
       readSourceFile("src/routes/Detail/PostDetail/PostDetail.styles.ts"),
@@ -77,14 +77,20 @@ test.describe("모바일 레이아웃 소스 경계", () => {
     expect(adminToolsSource).toContain("adminSurface")
     expect(adminToolsSource).toContain("adminSurfaceRaised")
     expect(adminDashboardSource).toContain("adminSurface")
-    expect(authShellSource).toContain("theme.publicDesign.readableSurface")
-    expect(errorSource).toContain("theme.publicDesign.readableSurface")
-    expect(editorComposeSource).toContain("theme.publicDesign.readableSurface")
-    expect(editorDedicatedSource).toContain("theme.publicDesign.readableSurface")
-    expect(editorPreviewSource).toContain("theme.publicDesign.readableSurface")
-    for (const [sourcePath, source] of publicSurfaceSources) {
-      expect(source, sourcePath).toContain("theme.publicDesign")
+    expect(authShellSource).toContain("theme.colors.gray1")
+    expect(errorSource).toContain("theme.colors.gray1")
+    expect(editorComposeSource).toContain("theme.colors.gray2")
+    expect(editorDedicatedSource).toContain("theme.colors.gray2")
+    expect(editorPreviewSource).toContain("theme.colors.gray1")
+    for (const source of [authShellSource, errorSource, editorComposeSource, editorDedicatedSource, editorPreviewSource]) {
+      expect(source).not.toContain("theme.blogDesign")
     }
+    for (const [sourcePath, source] of publicSurfaceSources) {
+      expect(source, sourcePath).not.toContain("theme.blogDesign")
+    }
+    expect(publicSurfaceSources.map(([, source]) => source).join("\n")).toContain("theme.publicDesign")
+    expect(aboutSource).toContain("theme.colors.gray1")
+    expect(aboutSource).not.toContain("theme.blogDesign")
     expect(articleSurfaceSource).toContain("theme.publicDesign.readableSurface")
     expect(articleSurfaceSource).toContain("article::before")
     expect(articleSurfaceSource).not.toContain("font-size: ${({ theme }) =>")

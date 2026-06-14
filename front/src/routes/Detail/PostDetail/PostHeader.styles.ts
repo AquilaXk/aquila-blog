@@ -1,8 +1,7 @@
-import styled from "@emotion/styled"
-import { HEADER_AUTH_ADMIN_ATTR } from "src/libs/headerAuthShell"
-import { articleTypographyScale } from "src/libs/markdown/contentTypography"
-
-export const StyledWrapper = styled.header`
+import styled from "@emotion/styled";
+import { HEADER_AUTH_ADMIN_ATTR } from "src/libs/headerAuthShell";
+import { articleTypographyScale } from "src/libs/markdown/contentTypography";
+export const StyledWrapper = styled.header `
   .taxonomyRow {
     display: flex;
     align-items: center;
@@ -30,14 +29,12 @@ export const StyledWrapper = styled.header`
     min-height: 32px;
     padding: 0.38rem 0.78rem;
     border-radius: 999px;
-    border: 1px solid ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
     font-size: 0.86rem;
     line-height: 1.2;
     font-weight: 600;
     color: ${({ theme }) => theme.colors.gray11};
-    background-color: ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.surfaceElevated : theme.colors.gray3};
+    background-color: ${({ theme }) => theme.colors.gray3};
   }
 
   .title {
@@ -74,8 +71,7 @@ export const StyledWrapper = styled.header`
     height: 48px;
     border-radius: 50%;
     overflow: hidden;
-    background: ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.surfaceElevated : theme.colors.gray3};
+    background: ${({ theme }) => theme.colors.gray3};
 
     img {
       object-fit: cover;
@@ -150,9 +146,8 @@ export const StyledWrapper = styled.header`
     min-height: 34px;
     padding: 0 0.78rem;
     border-radius: 999px;
-    border: 1px solid ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
-    background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.surface : theme.colors.gray2)};
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => (theme.colors.gray2)};
     color: ${({ theme }) => theme.colors.gray11};
     font-size: 0.82rem;
     font-weight: 650;
@@ -166,9 +161,8 @@ export const StyledWrapper = styled.header`
     min-height: 34px;
     padding: 0 0.76rem;
     border-radius: 999px;
-    border: 1px solid ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
-    background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.surface : theme.colors.gray2)};
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => (theme.colors.gray2)};
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 0.82rem;
     font-weight: 700;
@@ -227,8 +221,7 @@ export const StyledWrapper = styled.header`
     min-height: 40px;
     padding: 0 0.9rem;
     border-radius: 8px;
-    border: 1px solid ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
     background: transparent;
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 0.9rem;
@@ -266,8 +259,7 @@ export const StyledWrapper = styled.header`
     min-height: 40px;
     padding: 0 0.9rem;
     border-radius: 8px;
-    border: 1px solid ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
     background: transparent;
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 0.9rem;
@@ -287,7 +279,7 @@ export const StyledWrapper = styled.header`
     width: 0.22rem;
     height: 0.22rem;
     border-radius: 50%;
-    background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray8)};
+    background: ${({ theme }) => (theme.colors.gray8)};
   }
 
   .statChip {
@@ -297,8 +289,7 @@ export const StyledWrapper = styled.header`
     min-height: 40px;
     padding: 0 0.82rem;
     border-radius: 8px;
-    border: 1px solid ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
     background: transparent;
     color: ${({ theme }) => theme.colors.gray11};
     font-size: 0.9rem;
@@ -334,10 +325,8 @@ export const StyledWrapper = styled.header`
     margin-top: 2rem;
     border-radius: 10px;
     width: 100%;
-    border: 1px solid ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
-    background-color: ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.surfaceElevated : theme.colors.gray3};
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background-color: ${({ theme }) => theme.colors.gray3};
     padding-bottom: 52%;
   }
 
@@ -385,4 +374,4 @@ export const StyledWrapper = styled.header`
       display: none;
     }
   }
-`
+`;

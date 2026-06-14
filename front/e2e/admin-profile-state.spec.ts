@@ -332,7 +332,7 @@ test.describe("admin profile state contract", () => {
       blogTitle: "AquilaLog",
       homeIntroTitle: "비밀스러운 IT 공작소",
       homeIntroDescription: "비밀스러운 지식들을 탐구하는데 목적을 두고 있습니다",
-      blogDesign: "grid",
+      blogDesign: "grid" as never,
       legacyBlogScheme: "light",
       serviceLinks: [],
       contactLinks: [],

@@ -1,6 +1,5 @@
-import styled from "@emotion/styled"
-
-export const StyledWrapper = styled.div`
+import styled from "@emotion/styled";
+export const StyledWrapper = styled.div `
   width: 100%;
   max-width: none;
   box-sizing: border-box;
@@ -32,7 +31,7 @@ export const StyledWrapper = styled.div`
 
   article::before {
     content: "";
-    display: ${({ theme }) => (theme.blogDesign === "grid" ? "block" : "none")};
+    display: ${({ theme }) => ("none")};
     position: absolute;
     inset: -1.4rem -1.5rem;
     z-index: -1;
@@ -97,18 +96,12 @@ export const StyledWrapper = styled.div`
     justify-content: center;
     padding: 0;
     border-radius: 999px;
-    border: 1px solid ${({ theme }) =>
-      theme.blogDesign === "grid"
-        ? theme.publicDesign.border
-        : theme.scheme === "dark"
-          ? "rgba(148, 163, 184, 0.28)"
-          : theme.colors.gray6};
-    background: ${({ theme }) =>
-      theme.blogDesign === "grid"
-        ? theme.publicDesign.surface
-        : theme.scheme === "dark"
-          ? "rgba(15, 23, 42, 0.32)"
-          : "rgba(255, 255, 255, 0.92)"};
+    border: 1px solid ${({ theme }) => theme.scheme === "dark"
+    ? "rgba(148, 163, 184, 0.28)"
+    : theme.colors.gray6};
+    background: ${({ theme }) => theme.scheme === "dark"
+    ? "rgba(15, 23, 42, 0.32)"
+    : "rgba(255, 255, 255, 0.92)"};
     color: ${({ theme }) => theme.colors.gray12};
     cursor: pointer;
     transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
@@ -121,18 +114,12 @@ export const StyledWrapper = styled.div`
 
     &:hover {
       transform: translateY(-1px);
-      border-color: ${({ theme }) =>
-        theme.blogDesign === "grid"
-          ? theme.publicDesign.borderStrong
-          : theme.scheme === "dark"
-            ? "rgba(148, 163, 184, 0.62)"
-            : theme.colors.gray8};
-      background: ${({ theme }) =>
-        theme.blogDesign === "grid"
-          ? theme.publicDesign.surfaceElevated
-          : theme.scheme === "dark"
-            ? "rgba(17, 24, 39, 0.62)"
-            : "#ffffff"};
+      border-color: ${({ theme }) => theme.scheme === "dark"
+    ? "rgba(148, 163, 184, 0.62)"
+    : theme.colors.gray8};
+      background: ${({ theme }) => theme.scheme === "dark"
+    ? "rgba(17, 24, 39, 0.62)"
+    : "#ffffff"};
     }
 
     &:disabled {
@@ -156,10 +143,8 @@ export const StyledWrapper = styled.div`
       white-space: nowrap;
       padding: 0.3rem 0.48rem;
       border-radius: 8px;
-      border: 1px solid ${({ theme }) =>
-        theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
-      background: ${({ theme }) =>
-        theme.blogDesign === "grid" ? theme.publicDesign.surfaceElevated : theme.colors.gray2};
+      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      background: ${({ theme }) => theme.colors.gray2};
       color: ${({ theme }) => theme.colors.gray11};
       font-size: 0.68rem;
       line-height: 1;
@@ -221,12 +206,9 @@ export const StyledWrapper = styled.div`
   }
 
   .rightRailInner {
-    border-left: 1px solid ${({ theme }) =>
-      theme.blogDesign === "grid"
-        ? theme.publicDesign.border
-        : theme.scheme === "dark"
-          ? "rgba(148, 163, 184, 0.26)"
-          : theme.colors.gray6};
+    border-left: 1px solid ${({ theme }) => theme.scheme === "dark"
+    ? "rgba(148, 163, 184, 0.26)"
+    : theme.colors.gray6};
     padding: 0.2rem 0 0.2rem 1.4rem;
     background: transparent;
 
@@ -261,11 +243,9 @@ export const StyledWrapper = styled.div`
     }
 
     .tocDepthToggle {
-      border: 1px solid ${({ theme }) =>
-        theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
+      border: 1px solid ${({ theme }) => theme.colors.gray6};
       border-radius: 999px;
-      background: ${({ theme }) =>
-        theme.blogDesign === "grid" ? theme.publicDesign.surfaceElevated : theme.colors.gray2};
+      background: ${({ theme }) => theme.colors.gray2};
       color: ${({ theme }) => theme.colors.gray10};
       font-size: 0.71rem;
       font-weight: 700;
@@ -276,8 +256,7 @@ export const StyledWrapper = styled.div`
 
       &:hover {
         color: ${({ theme }) => theme.colors.gray12};
-        border-color: ${({ theme }) =>
-          theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray8};
+        border-color: ${({ theme }) => theme.colors.gray8};
       }
     }
 
@@ -330,8 +309,7 @@ export const StyledWrapper = styled.div`
 
     button:hover {
       color: ${({ theme }) => theme.colors.gray11};
-      background: ${({ theme }) =>
-        theme.blogDesign === "grid" ? theme.publicDesign.surfaceElevated : theme.colors.gray2};
+      background: ${({ theme }) => theme.colors.gray2};
     }
 
     button::before {
@@ -342,15 +320,14 @@ export const StyledWrapper = styled.div`
       bottom: 0.18rem;
       width: 1px;
       opacity: 0;
-      background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.accentBorder)};
+      background: ${({ theme }) => (theme.colors.accentBorder)};
       transition: opacity 0.15s ease;
     }
 
     button[data-active="true"] {
       color: ${({ theme }) => theme.colors.gray12};
       font-weight: 700;
-      background: ${({ theme }) =>
-        theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.accentSurfaceSubtle};
+      background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
     }
 
     button[data-active="true"]::before {
@@ -410,13 +387,11 @@ export const StyledWrapper = styled.div`
       max-width: 50rem;
     }
   }
-`
-
-export const BodySection = styled.div`
+`;
+export const BodySection = styled.div `
   margin-top: 0.8rem;
   padding-top: 1.05rem;
-  border-top: 1px solid ${({ theme }) =>
-    theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
+  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
   width: 100%;
   min-width: 0;
 
@@ -424,6 +399,5 @@ export const BodySection = styled.div`
     margin-top: 0.55rem;
     padding-top: 0.85rem;
   }
-`
-
-export { CompactTocSection, MobileSummaryBar, RelatedSection, RelatedSkeletonItem } from "./PostDetailSection.styles"
+`;
+export { CompactTocSection, MobileSummaryBar, RelatedSection, RelatedSkeletonItem } from "./PostDetailSection.styles";

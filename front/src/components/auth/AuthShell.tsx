@@ -1,39 +1,26 @@
-import styled from "@emotion/styled"
-import Link from "next/link"
-import { ReactNode } from "react"
-
+import styled from "@emotion/styled";
+import Link from "next/link";
+import { ReactNode } from "react";
 type AuthShellProps = {
-  activeTab: "login" | "signup"
-  title: string
-  subtitle?: string
-  eyebrow: string
-  heroTitle: string
-  heroDescription?: string
-  statItems?: {
-    label: string
-    value: string
-  }[]
-  tips?: string[]
-  footer: ReactNode
-  children: ReactNode
-  loginHref?: string
-  signupHref?: string
-  hideTabs?: boolean
-}
-
-const AuthShell = ({
-  activeTab,
-  title,
-  subtitle,
-  eyebrow,
-  footer,
-  children,
-  loginHref = "/login",
-  signupHref = "/signup",
-  hideTabs = false,
-}: AuthShellProps) => {
-  return (
-    <Main>
+    activeTab: "login" | "signup";
+    title: string;
+    subtitle?: string;
+    eyebrow: string;
+    heroTitle: string;
+    heroDescription?: string;
+    statItems?: {
+        label: string;
+        value: string;
+    }[];
+    tips?: string[];
+    footer: ReactNode;
+    children: ReactNode;
+    loginHref?: string;
+    signupHref?: string;
+    hideTabs?: boolean;
+};
+const AuthShell = ({ activeTab, title, subtitle, eyebrow, footer, children, loginHref = "/login", signupHref = "/signup", hideTabs = false, }: AuthShellProps) => {
+    return (<Main>
       <Backdrop />
       <Shell data-auth-shell="true">
         <FormPanel>
@@ -43,68 +30,50 @@ const AuthShell = ({
             {subtitle ? <SubTitle>{subtitle}</SubTitle> : null}
           </Top>
 
-          {hideTabs ? null : (
-            <Tabs>
-              {activeTab === "login" ? (
-                <>
+          {hideTabs ? null : (<Tabs>
+              {activeTab === "login" ? (<>
                   <ActiveTab>로그인</ActiveTab>
                   <PassiveTab href={signupHref}>회원가입</PassiveTab>
-                </>
-              ) : (
-                <>
+                </>) : (<>
                   <PassiveTab href={loginHref}>로그인</PassiveTab>
                   <ActiveTab>회원가입</ActiveTab>
-                </>
-              )}
-            </Tabs>
-          )}
+                </>)}
+            </Tabs>)}
 
           <Body>{children}</Body>
           <Footer>{footer}</Footer>
         </FormPanel>
       </Shell>
-    </Main>
-  )
-}
-
-export default AuthShell
-
-const Main = styled.main`
+    </Main>);
+};
+export default AuthShell;
+const Main = styled.main `
   position: relative;
   min-height: calc(100vh - 4rem);
   min-height: calc(100dvh - 4rem);
   padding: 1.8rem 1rem;
   display: grid;
   place-items: center;
-`
-
-const Backdrop = styled.div`
+`;
+const Backdrop = styled.div `
   position: absolute;
   inset: 0;
   background:
-    ${({ theme }) =>
-      theme.blogDesign === "grid"
-        ? `linear-gradient(180deg, color-mix(in srgb, ${theme.publicDesign.surfaceElevated} 72%, transparent), ${theme.publicDesign.pageBackgroundColor}), ${theme.publicDesign.pageBackgroundImage}`
-        : theme.colors.gray1};
-`
-
-const Shell = styled.section`
+    ${({ theme }) => theme.colors.gray1};
+`;
+const Shell = styled.section `
   position: relative;
   z-index: 1;
   width: min(520px, 100%);
-  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray5)};
-  border-radius: ${({ theme }) => (theme.blogDesign === "grid" ? "8px" : "22px")};
+  border: 1px solid ${({ theme }) => (theme.colors.gray5)};
+  border-radius: ${({ theme }) => ("22px")};
   overflow: hidden;
-  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.readableSurface : theme.colors.gray1)};
-  box-shadow: ${({ theme }) =>
-    theme.blogDesign === "grid"
-      ? theme.publicDesign.shadow
-      : theme.scheme === "light"
-      ? "0 18px 40px rgba(15, 23, 42, 0.08)"
-      : "0 18px 40px rgba(0, 0, 0, 0.3)"};
-`
-
-const FormPanel = styled.section`
+  background: ${({ theme }) => (theme.colors.gray1)};
+  box-shadow: ${({ theme }) => theme.scheme === "light"
+    ? "0 18px 40px rgba(15, 23, 42, 0.08)"
+    : "0 18px 40px rgba(0, 0, 0, 0.3)"};
+`;
+const FormPanel = styled.section `
   padding: 1.6rem 1.35rem 1.28rem;
   background: transparent;
   display: grid;
@@ -113,84 +82,71 @@ const FormPanel = styled.section`
   @media (max-width: 720px) {
     padding: 1.2rem 0.9rem 1rem;
   }
-`
-
-const Top = styled.div`
+`;
+const Top = styled.div `
   margin-bottom: 1.04rem;
-`
-
-const Eyebrow = styled.span`
+`;
+const Eyebrow = styled.span `
   display: inline-flex;
   align-items: center;
   margin-bottom: 0.38rem;
-  color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.gray10)};
+  color: ${({ theme }) => (theme.colors.gray10)};
   font-size: 0.74rem;
   font-weight: 760;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-`
-
-const Title = styled.h1`
+`;
+const Title = styled.h1 `
   margin: 0;
   font-size: 1.48rem;
   letter-spacing: -0.025em;
   color: ${({ theme }) => theme.colors.gray12};
-`
-
-const SubTitle = styled.p`
+`;
+const SubTitle = styled.p `
   margin: 0.45rem 0 0;
   color: ${({ theme }) => theme.colors.gray11};
   line-height: 1.6;
-`
-
-const Tabs = styled.div`
+`;
+const Tabs = styled.div `
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.42rem;
   margin-bottom: 1.08rem;
-`
-
-const ActiveTab = styled.div`
-  border-radius: ${({ theme }) => (theme.blogDesign === "grid" ? "4px" : "11px")};
-  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray6)};
-  background: ${({ theme }) =>
-    theme.blogDesign === "grid"
-      ? theme.publicDesign.accentMuted
-      : theme.scheme === "light"
-        ? theme.colors.gray2
-        : theme.colors.gray3};
+`;
+const ActiveTab = styled.div `
+  border-radius: ${({ theme }) => ("11px")};
+  border: 1px solid ${({ theme }) => (theme.colors.gray6)};
+  background: ${({ theme }) => theme.scheme === "light"
+    ? theme.colors.gray2
+    : theme.colors.gray3};
   color: ${({ theme }) => theme.colors.gray12};
   padding: 0.66rem 0.76rem;
   text-align: center;
   font-weight: 700;
-`
-
-const PassiveTab = styled(Link)`
-  border-radius: ${({ theme }) => (theme.blogDesign === "grid" ? "4px" : "11px")};
-  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray5)};
-  background: ${({ theme }) =>
-    theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.scheme === "light" ? "#f8fafc" : theme.colors.gray1};
+`;
+const PassiveTab = styled(Link) `
+  border-radius: ${({ theme }) => ("11px")};
+  border: 1px solid ${({ theme }) => (theme.colors.gray5)};
+  background: ${({ theme }) => theme.scheme === "light" ? "#f8fafc" : theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray11};
   padding: 0.66rem 0.76rem;
   text-align: center;
   text-decoration: none;
   font-weight: 600;
-`
-
-const Body = styled.div`
+`;
+const Body = styled.div `
   form {
     display: grid;
     gap: 0.85rem;
   }
-`
-
-const Footer = styled.div`
+`;
+const Footer = styled.div `
   margin-top: 1rem;
   color: ${({ theme }) => theme.colors.gray11};
 
   a {
-    color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.accentLink)};
+    color: ${({ theme }) => (theme.colors.accentLink)};
     text-decoration: underline;
     text-underline-offset: 3px;
   }
-`
+`;

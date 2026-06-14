@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 import {
   adminEmail,
   adminLegacyLoginId,
@@ -17,7 +17,6 @@ import {
   sleep,
   waitForApiReachability,
 } from "./helpers/liveAuth"
-import { expectPost507FinalReferenceTextSelectionStable } from "./helpers/post507Fixtures"
 
 const uiLoginId = adminEmail || adminLegacyLoginId
 const hasUiLoginCredentials = Boolean(uiLoginId && adminPassword)
@@ -31,13 +30,28 @@ const liveEditor507SeededHosts = new Set(
     .map((host) => host.trim().toLowerCase())
     .filter(Boolean)
 )
+
 const post507FinalTableTargetCell = "Stateless 의미"
 const post507FinalTableSelectAllNeedle = "구현되어 있는가"
-const post507LowerBodyText = "서버가 아무것도 안 하는 구조"
 const post507CodeText = "createAccessToken(user)"
 const post507ListText = "세션이랑 JWT"
 
-
+const markdownCanary = [
+  "# Live Markdown editor",
+  "",
+  "507 하단 복합 선택 회귀를 Markdown write/preview 경로에서 검증한다.",
+  "",
+  "- 세션이랑 JWT",
+  "- [ ] task item",
+  "",
+  "| 항목 | 설명 |",
+  "| --- | --- |",
+  "| Stateless 의미 | 구현되어 있는가 |",
+  "",
+  "```java",
+  "createAccessToken(user)",
+  "```",
+].join("\n")
 
 const tryEnterEditorRoute = async (page: Page, timeoutMs: number) => {
   const tries = 3
@@ -76,7 +90,7 @@ const gotoLoginForEditor = async (page: Page, timeoutMs: number) => {
   try {
     await page.waitForURL(/\/(login|editor)(\/|$|\?)/, { timeout: Math.min(timeoutMs, 8_000) })
   } catch {
-    // keep current url and let caller decide.
+    // Keep current URL and let the caller decide.
   }
 
   if (editorUrlPattern.test(page.url())) return "editor" as const
@@ -99,16 +113,6 @@ const getVisibleUiLoginError = async (page: Page) => {
   if (!(await loginError.isVisible().catch(() => false))) return null
   return (await loginError.textContent())?.trim() || "unknown error"
 }
-
-const getTableAffordances = (page: Page) => ({
-  rowHandle: page.locator("[data-table-affordance='row-handle']").first(),
-  columnHandle: page.locator("[data-table-affordance='column-handle']").first(),
-  rowAddButton: page.locator("[data-table-affordance='row-add']").first(),
-  columnAddButton: page.locator("[data-table-affordance='column-add']").first(),
-  growHandle: page.locator("[data-table-affordance='grow-handle']").first(),
-  structureMenuButton: page.locator("[data-table-affordance='structure-menu']").first(),
-  cellMenuButton: page.locator("[data-table-affordance='cell-menu']").first(),
-})
 
 const waitForUiLoginOutcome = async (
   page: Page,
@@ -139,8 +143,6 @@ const waitForUiLoginOutcome = async (
 
   return { kind: "timeout" }
 }
-
-
 
 const loginWithRetry = async (page: Page, apiBaseUrl: string) => {
   const payloadCandidates = buildLoginPayloadCandidates(adminEmail, adminLegacyLoginId, adminPassword)
@@ -290,11 +292,7 @@ type LiveWriteResponse = {
   }
 }
 
-const createHiddenEditorPost = async (
-  page: Page,
-  title: string,
-  content: string
-) => {
+const createHiddenEditorPost = async (page: Page, title: string, content: string) => {
   const apiBaseUrl = resolveApiBaseUrl(page.url())
   const response = await page.request.post(`${apiBaseUrl}/post/api/v1/posts`, {
     data: {
@@ -328,428 +326,38 @@ const deleteHiddenEditorPost = async (page: Page, postId: number) => {
   }
 }
 
-const pressSelectAll = async (page: Page) => page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
-
-const readScrollTop = (page: Page) =>
-  page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
-
-const readSelectionText = (page: Page) =>
-  page.evaluate(() => {
-    const candidates = [
-      window.getSelection()?.toString() ?? "",
-      document.documentElement.getAttribute("data-table-drag-selection-text") ?? "",
-      document
-        .querySelector("[data-table-drag-selection-text]")
-        ?.getAttribute("data-table-drag-selection-text") ?? "",
-      document.documentElement.getAttribute("data-code-drag-selection-text") ?? "",
-      document
-        .querySelector("[data-code-drag-selection-text]")
-        ?.getAttribute("data-code-drag-selection-text") ?? "",
-    ].filter((value) => value.trim().length > 0)
-    return candidates.sort((left, right) => right.length - left.length)[0] ?? ""
-  })
-
-const clearSelectionResidue = (page: Page) =>
-  page.evaluate(() => {
-    window.getSelection()?.removeAllRanges()
-    document.documentElement.removeAttribute("data-table-drag-selection-text")
-    document.documentElement.removeAttribute("data-code-drag-selection-text")
-    document
-      .querySelectorAll<HTMLElement>("[data-table-drag-selection-text], [data-code-drag-selection-text]")
-      .forEach((element) => {
-        element.removeAttribute("data-table-drag-selection-text")
-        element.removeAttribute("data-code-drag-selection-text")
-      })
-    document.dispatchEvent(new Event("selectionchange"))
-  })
-
-const readSelectionResidueState = (page: Page) =>
-  page.evaluate(() => {
-    const editor = document.querySelector<HTMLElement>("[data-testid='block-editor-prosemirror']")
-    const tableDragText =
-      document.documentElement.getAttribute("data-table-drag-selection-text") ||
-      document.querySelector("[data-table-drag-selection-text]")?.getAttribute("data-table-drag-selection-text") ||
-      ""
-    return {
-      activePreserveOwner: document.documentElement.getAttribute("data-editor-scroll-preserve-owner"),
-      blockOverlayCount: document.querySelectorAll("[data-testid='keyboard-block-selection-overlay']").length,
-      keyboardBlockSelection: editor?.getAttribute("data-keyboard-block-selection") ?? null,
-      selectedCellCount: document.querySelectorAll(".selectedCell").length,
-      tableDragText,
-    }
-  })
-
-const expectNoSelectionResidue = async (page: Page, label: string) => {
-  const state = await readSelectionResidueState(page)
-  expect(state.blockOverlayCount, `${label}: block selection overlay should not remain`).toBe(0)
-  expect(state.keyboardBlockSelection, `${label}: keyboard block selection should not remain`).not.toBe("true")
-  expect(state.selectedCellCount, `${label}: selectedCell should not remain`).toBe(0)
-  expect(state.activePreserveOwner, `${label}: table scroll preserve should not remain`).not.toBe("table")
-  expect(state.tableDragText, `${label}: stale table drag text should not remain`).not.toContain(
-    post507FinalTableTargetCell
-  )
+const expectMarkdownEditorShell = async (page: Page) => {
+  await expect(page.getByTestId("github-markdown-editor")).toBeVisible()
+  await expect(page.getByTestId("github-markdown-write-pane")).toBeVisible()
+  await expect(page.getByTestId("github-markdown-preview-pane")).toBeVisible()
+  await expect(page.locator("[data-testid='block-editor-prosemirror']")).toHaveCount(0)
+  await expect(page.locator("[data-testid='keyboard-block-selection-overlay']")).toHaveCount(0)
+  await expect(page.locator("[data-testid='block-drag-handle']")).toHaveCount(0)
+  await expect(page.locator("[data-table-affordance]")).toHaveCount(0)
 }
 
-const dragTextRange = async (
-  page: Page,
-  target: Locator,
-  label: string,
-  text: string,
-  options: {
-    endInsetPx?: number
-    paced?: boolean
-    retryWhenEmpty?: boolean
-    startInsetPx?: number
-    waitMs?: number
-  } = {}
-) => {
-  const isRetryable = (error: unknown) =>
-    error instanceof Error &&
-    /not attached to the DOM|Element is not attached|text rect is too small|text range is not hit-testable/i.test(
-      error.message
-    )
-
-  const runDrag = async () => {
-    const measureTextRange = async () => {
-      await target.evaluate((element) => {
-        element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
-      })
-      await page.waitForTimeout(80)
-      return target.evaluate(
-        (element, { endInsetPx, label, startInsetPx, textToSelect }) => {
-          const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
-          while (walker.nextNode()) {
-            const textNode = walker.currentNode as Text
-            const startOffset = textNode.data.indexOf(textToSelect)
-            if (startOffset < 0) continue
-            const range = document.createRange()
-            range.setStart(textNode, startOffset)
-            range.setEnd(textNode, startOffset + textToSelect.length)
-            const rects = Array.from(range.getClientRects())
-              .filter((candidate) => candidate.width > 2 && candidate.height > 2)
-              .sort((a, b) => a.top - b.top || a.left - b.left)
-            const startRect = rects[0] ?? range.getBoundingClientRect()
-            const endRect = rects[rects.length - 1] ?? startRect
-            if (startRect.width <= 2 || startRect.height <= 2 || endRect.width <= 2 || endRect.height <= 2) {
-              throw new Error(`${label} text rect is too small`)
-            }
-            const resolvedStartInsetPx = Math.min(startRect.width / 2, Math.max(2, startInsetPx ?? 2))
-            const resolvedEndInsetPx = Math.min(endRect.width / 2, Math.max(2, endInsetPx ?? 2))
-            return {
-              endX: endRect.right - resolvedEndInsetPx,
-              endY: endRect.top + endRect.height / 2,
-              startX: startRect.left + resolvedStartInsetPx,
-              startY: startRect.top + startRect.height / 2,
-            }
-          }
-          throw new Error(`${label} text node is missing`)
-        },
-        {
-          endInsetPx: options.endInsetPx,
-          label,
-          startInsetPx: options.startInsetPx,
-          textToSelect: text,
-        }
-      )
-    }
-
-    const pointHitsTargetText = (metrics: Awaited<ReturnType<typeof measureTextRange>>) =>
-      page.evaluate(
-        ({ endX, endY, startX, startY, textToSelect }) => {
-          const hitsText = (x: number, y: number) =>
-            Boolean(document.elementFromPoint(x, y)?.textContent?.includes(textToSelect))
-          return hitsText(startX, startY) && hitsText(endX, endY)
-        },
-        {
-          endX: metrics.endX,
-          endY: metrics.endY,
-          startX: metrics.startX,
-          startY: metrics.startY,
-          textToSelect: text,
-        }
-      )
-
-    let metrics = await measureTextRange()
-    const viewport = page.viewportSize()
-    for (let attempt = 0; viewport && attempt < 3; attempt += 1) {
-      const withinViewport =
-        metrics.startY >= 8 &&
-        metrics.endY >= 8 &&
-        metrics.startY <= viewport.height - 8 &&
-        metrics.endY <= viewport.height - 8
-      if (withinViewport) break
-      await page.mouse.wheel(0, Math.max(metrics.startY, metrics.endY) > viewport.height / 2 ? 360 : -360)
-      await page.waitForTimeout(160)
-      metrics = await measureTextRange()
-    }
-
-    let pointHit = await pointHitsTargetText(metrics)
-    for (let attempt = 0; !pointHit && attempt < 4; attempt += 1) {
-      await page.waitForTimeout(120 + attempt * 80)
-      metrics = await measureTextRange()
-      pointHit = await pointHitsTargetText(metrics)
-    }
-    if (!pointHit) throw new Error(`${label} text range is not hit-testable`)
-
-    const beforeScrollTop = await readScrollTop(page)
-    await page.mouse.move(metrics.startX, metrics.startY)
-    if (options.paced) await page.waitForTimeout(80)
-    await page.mouse.down()
-    if (options.paced) {
-      for (let index = 1; index <= 28; index += 1) {
-        const ratio = index / 28
-        await page.mouse.move(
-          metrics.startX + (metrics.endX - metrics.startX) * ratio,
-          metrics.startY + (metrics.endY - metrics.startY) * ratio
-        )
-        await page.waitForTimeout(index === 1 ? 16 : 4)
-      }
-      await page.waitForTimeout(40)
-    } else {
-      await page.mouse.move(metrics.endX, metrics.endY, { steps: 18 })
-    }
-    await page.mouse.up()
-    await page.waitForTimeout(options.waitMs ?? 720)
-    return {
-      afterScrollTop: await readScrollTop(page),
-      beforeScrollTop,
-      selectionText: await readSelectionText(page),
-    }
-  }
-
-  let result: Awaited<ReturnType<typeof runDrag>> | null = null
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      result = await runDrag()
-      break
-    } catch (error) {
-      if (!isRetryable(error) || attempt === 2) throw error
-      await page.waitForTimeout(160)
-    }
-  }
-  if (!result) throw new Error(`${label} drag did not start`)
-
-  for (let attempt = 1; options.retryWhenEmpty && !result.selectionText.includes(text) && attempt < 5; attempt += 1) {
-    await clearSelectionResidue(page)
-    await page.waitForTimeout(120 + attempt * 80)
-    try {
-      result = await runDrag()
-    } catch (error) {
-      if (!isRetryable(error) || attempt === 4) throw error
-      await page.waitForTimeout(160)
-    }
-  }
-
-  if (options.retryWhenEmpty && !result.selectionText.includes(text)) {
-    const residueState = await readSelectionResidueState(page)
-    throw new Error(
-      `${label} drag did not select expected text after retries: ${JSON.stringify(
-        { residueState, selectionText: result.selectionText },
-        null,
-        2
-      )}`
-    )
-  }
-
-  return result
+const focusMarkdownEditor = async (page: Page) => {
+  const writePane = page.getByTestId("github-markdown-write-pane")
+  await expect(writePane).toBeVisible()
+  const content = writePane.locator(".cm-content")
+  await content.click()
+  await expect(content).toBeFocused()
+  return content
 }
 
-const readFinalTableOverlayMetrics = (page: Page) =>
-  page.evaluate((targetCellText) => {
-    const table =
-      Array.from(document.querySelectorAll<HTMLElement>("table")).find((candidate) =>
-        candidate.textContent?.includes(targetCellText)
-      ) ?? null
-    const block = (table?.closest(".tableWrapper") as HTMLElement | null) ?? table
-    const overlay = document.querySelector<HTMLElement>("[data-testid='keyboard-block-selection-overlay']")
-    if (!block || !overlay) return null
-    const blockRect = block.getBoundingClientRect()
-    const overlayRect = overlay.getBoundingClientRect()
-    return {
-      blockLeft: blockRect.left,
-      blockTop: blockRect.top,
-      blockWidth: blockRect.width,
-      gapLeft: overlayRect.left - blockRect.left,
-      gapTop: overlayRect.top - blockRect.top,
-      overlayLeft: overlayRect.left,
-      overlayTop: overlayRect.top,
-      overlayWidth: overlayRect.width,
-      scrollTop: document.scrollingElement?.scrollTop ?? window.scrollY,
-    }
-  }, post507FinalTableTargetCell)
-
-const readFinalTableHoverTarget = (finalTable: Locator) =>
-  finalTable.evaluate((tableElement, targetCellText) => {
-    const table = tableElement as HTMLElement
-    const block = (table.closest(".tableWrapper") as HTMLElement | null) ?? table
-
-    const targetCell =
-      Array.from(table.querySelectorAll<HTMLElement>("td, th")).find((candidate) =>
-        candidate.textContent?.includes(targetCellText)
-      ) ?? null
-    const blockRect = block.getBoundingClientRect()
-    const cellRect = targetCell?.getBoundingClientRect() ?? null
-    const clamp = (value: number, min: number, max: number) =>
-      Math.min(Math.max(value, min), max)
-    const minInteractiveY = Math.min(96, Math.max(8, window.innerHeight - 24))
-    const maxInteractiveY = Math.max(minInteractiveY, window.innerHeight - 24)
-    const visibleTop = Math.max(blockRect.top, cellRect?.top ?? blockRect.top, minInteractiveY)
-    const visibleBottom = Math.min(
-      blockRect.bottom,
-      cellRect?.bottom ?? blockRect.bottom,
-      maxInteractiveY
-    )
-    const preferredY = cellRect
-      ? cellRect.top + cellRect.height / 2
-      : blockRect.top + Math.min(Math.max(blockRect.height / 2, 16), blockRect.height - 16)
-    const hoverY =
-      visibleBottom > visibleTop
-        ? visibleTop + (visibleBottom - visibleTop) / 2
-        : clamp(preferredY, minInteractiveY, maxInteractiveY)
-    const clampX = (value: number) => clamp(value, 4, window.innerWidth - 4)
-    const contentX = blockRect.left + Math.min(Math.max(blockRect.width / 2, 12), blockRect.width - 12)
-
-    return {
-      anchor: {
-        x: clampX(contentX),
-        y: hoverY,
-      },
-      points: [24, 18, 32, -24, -36].map((offsetX) => ({
-        x: clampX(blockRect.left + offsetX),
-        y: hoverY,
-      })),
-    }
-  }, post507FinalTableTargetCell)
-
-const readFinalTableHandleMetrics = (page: Page) =>
-  page.evaluate((targetCellText) => {
-    const table =
-      Array.from(document.querySelectorAll<HTMLElement>("table")).find((candidate) =>
-        candidate.textContent?.includes(targetCellText)
-      ) ?? null
-    const block = (table?.closest(".tableWrapper") as HTMLElement | null) ?? table
-    const handle = document.querySelector<HTMLElement>("[data-testid='block-drag-handle']")
-    if (!block || !handle) return null
-
-    const blockRect = block.getBoundingClientRect()
-    const handleRect = handle.getBoundingClientRect()
-    const handleCenterX = handleRect.left + handleRect.width / 2
-    const handleCenterY = handleRect.top + handleRect.height / 2
-    const style = window.getComputedStyle(handle)
-    const handleVisible =
-      handleRect.width > 0 &&
-      handleRect.height > 0 &&
-      style.display !== "none" &&
-      style.visibility !== "hidden" &&
-      Number(style.opacity || "1") > 0
-
-    return {
-      blockBottom: blockRect.bottom,
-      blockLeft: blockRect.left,
-      blockTop: blockRect.top,
-      handleCenterX,
-      handleCenterY,
-      handleRight: handleRect.right,
-      handleVisible,
-      verticalDistanceToBlock:
-        handleCenterY < blockRect.top
-          ? blockRect.top - handleCenterY
-          : handleCenterY > blockRect.bottom
-            ? handleCenterY - blockRect.bottom
-            : 0,
-    }
-  }, post507FinalTableTargetCell)
-
-const finalTableHandleIsRetargeted = (
-  metrics: Awaited<ReturnType<typeof readFinalTableHandleMetrics>>
-) =>
-  Boolean(
-    metrics &&
-      metrics.handleVisible &&
-      metrics.verticalDistanceToBlock <= 24 &&
-      metrics.handleCenterX < metrics.blockLeft + 32 &&
-      metrics.handleRight > metrics.blockLeft - 96
-  )
-
-const expectFinalTableOverlayFollowsScroll = async (page: Page, finalTable: Locator) => {
-  const targetCell = finalTable.locator("td, th", { hasText: post507FinalTableTargetCell }).first()
-  await targetCell.evaluate((element) => {
-    element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" })
-  })
-  await page.waitForTimeout(160)
-  await page.keyboard.press("Escape")
-  await clearSelectionResidue(page)
-  const tableBox = await finalTable.boundingBox()
-  if (!tableBox) throw new Error("live 507 final table metrics are missing")
-
-  const blockHandle = page.getByTestId("block-drag-handle")
-  let lastHandleMetrics: Awaited<ReturnType<typeof readFinalTableHandleMetrics>> = null
-  const hoverTarget = await readFinalTableHoverTarget(finalTable)
-  if (!hoverTarget) throw new Error("live 507 final table hover target metrics are missing")
-  for (const point of hoverTarget.points) {
-    await page.mouse.move(hoverTarget.anchor.x, hoverTarget.anchor.y)
-    await page.mouse.move(point.x, point.y, { steps: 4 })
-    await page.waitForTimeout(80)
-    lastHandleMetrics = await readFinalTableHandleMetrics(page)
-    if (finalTableHandleIsRetargeted(lastHandleMetrics)) break
-  }
-  await expect
-    .poll(async () => {
-      lastHandleMetrics = await readFinalTableHandleMetrics(page)
-      return finalTableHandleIsRetargeted(lastHandleMetrics)
-    }, { timeout: 2_500 })
-    .toBe(true)
-  await blockHandle.click()
-  await expect(page.getByTestId("keyboard-block-selection-overlay")).toBeVisible()
-
-  const before = await readFinalTableOverlayMetrics(page)
-  if (!before) throw new Error("live 507 final table overlay metrics are missing before scroll")
-  expect(Math.abs(before.gapTop + 4)).toBeLessThanOrEqual(8)
-  expect(Math.abs(before.overlayWidth - (before.blockWidth + 12))).toBeLessThanOrEqual(8)
-
-  const scrollState = await page.evaluate(() => {
-    const scroller = document.scrollingElement ?? document.documentElement
-    const scrollTop = scroller.scrollTop || window.scrollY
-    const scrollHeight = scroller.scrollHeight || document.documentElement.scrollHeight
-    return { maxScrollTop: scrollHeight - window.innerHeight, scrollTop }
-  })
-  const scrollDeltas =
-    scrollState.scrollTop < scrollState.maxScrollTop - 240 ? [180, 360] : [-180, -360]
-  let scrolled = false
-  for (const scrollDelta of scrollDeltas) {
-    const currentTableBox = await finalTable.boundingBox()
-    if (currentTableBox) {
-      await page.mouse.move(
-        currentTableBox.x + Math.min(Math.max(currentTableBox.width / 2, 12), currentTableBox.width - 12),
-        currentTableBox.y + Math.min(Math.max(currentTableBox.height / 2, 12), currentTableBox.height - 12)
-      )
-    }
-    await page.mouse.wheel(0, scrollDelta)
-    await page.waitForTimeout(160)
-    const current = await readFinalTableOverlayMetrics(page)
-    if (current && Math.abs(current.scrollTop - before.scrollTop) > 40) {
-      scrolled = true
-      break
-    }
-  }
-  if (!scrolled) {
-    const current = await readFinalTableOverlayMetrics(page)
-    throw new Error(
-      `live 507 final table overlay scroll did not move: ${JSON.stringify({ before, current, scrollState }, null, 2)}`
-    )
-  }
-  const after = await readFinalTableOverlayMetrics(page)
-  if (!after) throw new Error("live 507 final table overlay metrics are missing after scroll")
-  expect(Math.abs(after.gapTop - before.gapTop)).toBeLessThanOrEqual(3)
-  expect(Math.abs(after.gapLeft - before.gapLeft)).toBeLessThanOrEqual(3)
-  expect(Math.abs(after.blockTop - before.blockTop - (after.overlayTop - before.overlayTop))).toBeLessThanOrEqual(3)
-  expect(Math.abs(after.blockLeft - before.blockLeft - (after.overlayLeft - before.overlayLeft))).toBeLessThanOrEqual(3)
+const replaceMarkdown = async (page: Page, markdown: string) => {
+  await focusMarkdownEditor(page)
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
+  await page.keyboard.insertText(markdown)
 }
+
+const readEditorSelection = async (page: Page) =>
+  page.evaluate(() => window.getSelection()?.toString().replace(/\s+/g, " ").trim() ?? "")
 
 test.describe("editor live visual regression", () => {
   test.skip(!hasUiLoginCredentials, "E2E_ADMIN_EMAIL 또는 E2E_ADMIN_USERNAME / E2E_ADMIN_PASSWORD가 필요합니다.")
 
-  test("실제 /editor/new는 제품 셸 기준으로 제목/본문 정렬을 유지하고 QA affordance를 노출하지 않는다", async ({
+  test("실제 /editor/new는 Markdown write/preview 셸을 렌더하고 legacy block affordance를 노출하지 않는다", async ({
     page,
   }) => {
     test.slow()
@@ -757,240 +365,57 @@ test.describe("editor live visual regression", () => {
     await loginThroughUi(page)
 
     await page.goto("/editor/new")
-    await page.waitForURL(/\/editor(\/|$)/, { timeout: 30000 })
-    await expect(page.getByTestId("editor-writing-column")).toBeVisible()
-    await expect(page.getByTestId("editor-preview-column")).toHaveCount(0)
-    await expect(page.getByText("BlockEditorShell 엔진 QA")).toHaveCount(0)
-    await expect(page.getByRole("button", { name: "제목 1" })).toBeVisible()
+    await page.waitForURL(/\/editor(\/|$)/, { timeout: 30_000 })
     await expect(page.getByPlaceholder("제목을 입력하세요").first()).toBeVisible()
+    await expectMarkdownEditorShell(page)
+    await expect(page.getByRole("tab", { name: "Split" })).toHaveAttribute("aria-selected", "true")
 
-    await page.getByPlaceholder("제목을 입력하세요").first().fill("실화면 회귀 점검 제목")
+    await page.getByPlaceholder("제목을 입력하세요").first().fill("실화면 Markdown editor 회귀 점검")
+    await replaceMarkdown(page, markdownCanary)
 
-    const editor = page.getByTestId("block-editor-prosemirror").first()
-    await editor.click()
-    await page.getByRole("button", { name: "제목 1" }).click()
-    await page.keyboard.type("헤딩 정렬 확인")
-    await page.keyboard.press("Enter")
-    await page.keyboard.type("본문 정렬 확인")
-
-    const heading = editor.locator("h1").filter({ hasText: "헤딩 정렬 확인" }).first()
-    const paragraph = editor.locator("p").filter({ hasText: "본문 정렬 확인" }).first()
-    await expect(heading).toBeVisible()
-    await expect(paragraph).toBeVisible()
-
-    const headingStyle = await heading.evaluate((node) => {
-      const style = window.getComputedStyle(node)
-      return {
-        textAlign: style.textAlign,
-      }
-    })
-    expect(headingStyle.textAlign).toBe("left")
-
-    const headingBox = await heading.boundingBox()
-    const paragraphBox = await paragraph.boundingBox()
-    expect(headingBox).not.toBeNull()
-    expect(paragraphBox).not.toBeNull()
-    if (!headingBox || !paragraphBox) return
-
-    expect(Math.abs(headingBox.x - paragraphBox.x)).toBeLessThanOrEqual(4)
+    const preview = page.getByTestId("github-markdown-preview-pane")
+    await expect(preview.getByRole("heading", { name: "Live Markdown editor" })).toBeVisible()
+    await expect(preview.locator("table")).toContainText(post507FinalTableTargetCell)
+    await expect(preview.locator("pre")).toContainText(post507CodeText)
+    await expect(preview.getByText(post507ListText)).toBeVisible()
+    await expect(page.locator("[data-table-affordance]")).toHaveCount(0)
   })
 
-  test("실제 /editor/new는 table affordance가 제품 셸 clipping 없이 노출된다", async ({ page }) => {
-    test.slow()
-    await page.setViewportSize({ width: 1512, height: 982 })
-    await loginThroughUi(page)
-    const {
-      rowHandle,
-      columnHandle,
-      rowAddButton,
-      columnAddButton,
-      growHandle,
-      structureMenuButton,
-      cellMenuButton,
-    } = getTableAffordances(page)
-
-    await page.goto("/editor/new")
-    await page.waitForURL(/\/editor(\/|$)/, { timeout: 30000 })
-    await page.getByPlaceholder("제목을 입력하세요").first().fill("실화면 테이블 affordance 회귀 점검")
-
-    const editor = page.getByTestId("block-editor-prosemirror").first()
-    await editor.click()
-    await page.getByRole("button", { name: "테이블", exact: true }).first().click()
-
-    const table = page.locator(".aq-block-editor__content .tableWrapper table").first()
-    await expect(table).toBeVisible()
-
-    const tableBox = await table.boundingBox()
-    if (!tableBox) {
-      throw new Error("table bounding box is missing")
-    }
-
-    await page.mouse.move(tableBox.x + 3, tableBox.y + 3)
-
-    await expect(rowHandle).toBeVisible()
-    await expect(columnHandle).toBeVisible()
-    await expect(growHandle).toHaveCount(0)
-    await expect(structureMenuButton).toHaveCount(0)
-    await expect(cellMenuButton).toHaveCount(0)
-    await expect(rowAddButton).toHaveCount(0)
-    await expect(columnAddButton).toHaveCount(0)
-
-    await page.mouse.move(tableBox.x + tableBox.width / 2, tableBox.y + 24)
-
-    await expect(cellMenuButton).toBeVisible()
-    await expect(rowHandle).toHaveCount(0)
-    await expect(columnHandle).toHaveCount(0)
-    await expect(growHandle).toHaveCount(0)
-    await expect(structureMenuButton).toHaveCount(0)
-
-    await page.mouse.move(tableBox.x + tableBox.width - 6, tableBox.y + 6)
-
-    const cornerHandle = page.getByTestId("table-corner-handle")
-    await expect(cornerHandle).toBeVisible()
-    await expect(growHandle).toBeVisible()
-    await expect(structureMenuButton).toBeVisible()
-    await expect(cellMenuButton).toHaveCount(0)
-    await expect(rowHandle).toHaveCount(0)
-    await expect(columnHandle).toHaveCount(0)
-
-    await structureMenuButton.click()
-    const tableMenu = page.getByTestId("table-table-menu")
-    await expect(tableMenu.getByRole("button", { name: "페이지 너비에 맞춤" })).toBeVisible()
-    await expect(tableMenu.getByRole("button", { name: "넓은 표" })).toBeVisible()
-
-    await page.keyboard.press("Escape")
-    await expect(tableMenu).toBeHidden()
-
-    const visibleAffordanceBoxes = await Promise.all(
-      [cornerHandle, growHandle, structureMenuButton].map((locator) => locator.boundingBox())
-    )
-
-    const viewport = page.viewportSize()
-    expect(viewport).not.toBeNull()
-    if (!viewport) return
-
-    for (const box of visibleAffordanceBoxes) {
-      expect(box).not.toBeNull()
-      if (!box) continue
-      expect(box.x).toBeGreaterThanOrEqual(0)
-      expect(box.y).toBeGreaterThanOrEqual(0)
-      expect(box.x + box.width).toBeLessThanOrEqual(viewport.width)
-      expect(box.y + box.height).toBeLessThanOrEqual(viewport.height)
-    }
-  })
-
-  test("실제 /editor/[id]는 말머리 항목을 개별 블록으로 선택/이동하고 Tab 단계 승강을 유지한다", async ({ page }) => {
+  test("실제 /editor/[id]는 저장된 Markdown table/code/list를 write/preview에 같은 내용으로 로드한다", async ({
+    page,
+  }) => {
     test.slow()
     await page.setViewportSize({ width: 1512, height: 982 })
     await loginThroughUi(page)
 
-    const title = `실화면 리스트 회귀 ${Date.now()}`
-    const postId = await createHiddenEditorPost(page, title, "- 1단계\n- 2단계\n- 3단계")
+    const title = `실화면 Markdown 저장글 회귀 ${Date.now()}`
+    const postId = await createHiddenEditorPost(page, title, markdownCanary)
 
     try {
       await page.goto(`/editor/${postId}`)
-      await page.waitForURL(new RegExp(`/editor/${postId}(\\?|$)`), { timeout: 30000 })
+      await page.waitForURL(new RegExp(`/editor/${postId}(\\?|$)`), { timeout: 30_000 })
       await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(title)
+      await expectMarkdownEditorShell(page)
 
-      const editor = page.getByTestId("block-editor-prosemirror").first()
-      const blockSelectionOverlay = page.getByTestId("keyboard-block-selection-overlay")
-      const countOwnLabel = (label: string) =>
-        page.evaluate((targetLabel) => {
-          const readOwnLabel = (item: HTMLElement) =>
-            Array.from(item.childNodes)
-              .filter((node) => !(node instanceof HTMLElement && ["UL", "OL"].includes(node.tagName)))
-              .map((node) => node.textContent || "")
-              .join(" ")
-              .replace(/\s+/g, " ")
-              .trim()
+      const writePane = page.getByTestId("github-markdown-write-pane")
+      await expect(writePane.locator(".cm-content")).toContainText(post507FinalTableTargetCell)
+      await expect(writePane.locator(".cm-content")).toContainText(post507CodeText)
 
-          return Array.from(
-            document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")
-          ).filter((item) => readOwnLabel(item) === targetLabel).length
-        }, label)
+      const preview = page.getByTestId("github-markdown-preview-pane")
+      await expect(preview.locator("table")).toContainText(post507FinalTableSelectAllNeedle)
+      await expect(preview.locator("pre")).toContainText(post507CodeText)
+      await expect(preview.getByText(post507ListText)).toBeVisible()
 
-      const thirdItem = editor.locator("li", { hasText: /^3단계$/ }).first()
-      await thirdItem.hover()
-
-      const dragHandle = page.getByTestId("block-drag-handle")
-      await expect(dragHandle).toBeVisible()
-      await dragHandle.click()
-
-      const selectedDragHandle = page.getByRole("button", { name: "목록 항목 이동" })
-      await expect(selectedDragHandle).toBeVisible()
-      await expect(page.getByRole("button", { name: "블록 이동" })).toHaveCount(0)
-
-      const dragGeometry = await page.evaluate(() => {
-        const handle = Array.from(document.querySelectorAll<HTMLElement>("button")).find(
-          (element) => element.getAttribute("aria-label") === "목록 항목 이동" || element.getAttribute("title") === "목록 항목 이동"
-        )
-        const firstItem =
-          Array.from(document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")).find((item) =>
-            item.textContent?.includes("1단계")
-          ) ?? null
-        if (!handle || !firstItem) return null
-
-        const handleRect = handle.getBoundingClientRect()
-        const firstRect = firstItem.getBoundingClientRect()
-        return {
-          dragBox: {
-            x: handleRect.x,
-            y: handleRect.y,
-            width: handleRect.width,
-            height: handleRect.height,
-          },
-          firstBox: {
-            x: firstRect.x,
-            y: firstRect.y,
-            width: firstRect.width,
-            height: firstRect.height,
-          },
-        }
-      })
-      if (!dragGeometry) {
-        throw new Error("live editor list item drag geometry is missing")
-      }
-
-      const { dragBox, firstBox } = dragGeometry
-      await page.mouse.move(dragBox.x + dragBox.width / 2, dragBox.y + dragBox.height / 2)
-      await page.mouse.down()
-      await page.mouse.move(firstBox.x + firstBox.width / 2, firstBox.y + Math.max(6, firstBox.height * 0.2), {
-        steps: 12,
-      })
-      await page.mouse.up()
-
-      await expect
-        .poll(() =>
-          page.evaluate(() => {
-            const readOwnLabel = (item: HTMLElement) =>
-              Array.from(item.childNodes)
-                .filter((node) => !(node instanceof HTMLElement && ["UL", "OL"].includes(node.tagName)))
-                .map((node) => node.textContent || "")
-                .join(" ")
-                .replace(/\s+/g, " ")
-                .trim()
-
-            return Array.from(
-              document.querySelectorAll<HTMLElement>("[data-testid='block-editor-prosemirror'] li")
-            )
-              .map((item) => readOwnLabel(item))
-              .filter(Boolean)
-          })
-        )
-        .toEqual(["3단계", "1단계", "2단계"])
-
-      await editor.locator("li", { hasText: "2단계" }).first().click()
-      await page.keyboard.press("Tab")
-      await expect(blockSelectionOverlay).toHaveCount(0)
-      await expect.poll(() => countOwnLabel("1단계")).toBe(1)
-      await expect.poll(() => countOwnLabel("2단계")).toBe(1)
-      await expect.poll(() => countOwnLabel("3단계")).toBe(1)
+      await focusMarkdownEditor(page)
+      await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
+      await expect.poll(() => readEditorSelection(page)).toContain(post507FinalTableTargetCell)
+      await expect.poll(() => readEditorSelection(page)).toContain(post507CodeText)
     } finally {
       await deleteHiddenEditorPost(page, postId)
     }
   })
 
-  test("실제 /editor/507 하단 선택과 table block overlay는 배포본에서 stale table 상태를 남기지 않는다", async ({
+  test("실제 /editor/507 canary는 Markdown editor와 상세 렌더 preview 기준으로 하단 table/code/list를 표시한다", async ({
     page,
   }) => {
     test.skip(!liveEditor507CanaryEnabled, "E2E_LIVE_EDITOR_507_CANARY=true일 때만 실제 507 seeded live canary를 실행합니다.")
@@ -1013,71 +438,18 @@ test.describe("editor live visual regression", () => {
       expect(buildSha).toBe(expectedFrontendCommitSha)
     }
 
-    const editor = page.getByTestId("block-editor-prosemirror").first()
-    await expect(editor.getByText(post507FinalTableTargetCell).first()).toBeVisible({ timeout: 30_000 })
+    await expectMarkdownEditorShell(page)
+    const preview = page.getByTestId("github-markdown-preview-pane")
+    await expect(preview.locator("table")).toContainText(post507FinalTableTargetCell, { timeout: 30_000 })
+    await expect(preview.locator("table")).toContainText(post507FinalTableSelectAllNeedle)
+    await expect(preview.locator("pre")).toContainText(post507CodeText)
+    await expect(preview.getByText(post507ListText)).toBeVisible()
 
-    const finalTable = editor.locator("table", { hasText: post507FinalTableTargetCell }).last()
-    const targetCell = finalTable.locator("td", { hasText: post507FinalTableTargetCell }).first()
-    await expect(targetCell).toBeVisible()
-
-    const tableDrag = await dragTextRange(
-      page,
-      targetCell,
-      "live /editor/507 final table drag",
-      post507FinalTableTargetCell,
-      { paced: true, retryWhenEmpty: true, waitMs: 900 }
-    )
-    expect(tableDrag.selectionText).toContain(post507FinalTableTargetCell)
-
-    await pressSelectAll(page)
-    await expect.poll(() => readSelectionText(page)).toContain(post507FinalTableSelectAllNeedle)
-    const tableSelectAllText = await readSelectionText(page)
-    expect(tableSelectAllText).toContain(post507FinalTableTargetCell)
-    expect(tableSelectAllText).not.toContain(post507ListText)
-
-    const lowerBody = editor.locator("p", { hasText: post507LowerBodyText }).first()
-    const bodyDrag = await dragTextRange(page, lowerBody, "live /editor/507 lower body drag", post507LowerBodyText, {
-      paced: true,
-      waitMs: 1_000,
-    })
-    expect(bodyDrag.selectionText).toContain(post507LowerBodyText)
-    expect(bodyDrag.selectionText).not.toContain(post507FinalTableTargetCell)
-    expect(bodyDrag.selectionText).not.toContain(post507FinalTableSelectAllNeedle)
-    expect(Math.abs(bodyDrag.afterScrollTop - bodyDrag.beforeScrollTop)).toBeLessThanOrEqual(24)
-    await expectNoSelectionResidue(page, "live 507 lower body after table select all")
-
-    const codeContent = editor.locator(".aq-code-editor-content", { hasText: post507CodeText }).first()
-    const codeDrag = await dragTextRange(page, codeContent, "live /editor/507 code drag", post507CodeText, {
-      paced: true,
-      retryWhenEmpty: true,
-      waitMs: 1_000,
-    })
-    expect(codeDrag.selectionText).toContain(post507CodeText)
-    expect(codeDrag.selectionText).not.toContain(post507FinalTableTargetCell)
-    expect(codeDrag.selectionText).not.toContain(post507LowerBodyText)
-    expect(Math.abs(codeDrag.afterScrollTop - codeDrag.beforeScrollTop)).toBeLessThanOrEqual(24)
-    await expectNoSelectionResidue(page, "live 507 code after body drag")
-
-    await pressSelectAll(page)
-    await expect.poll(() => readSelectionText(page)).toContain("return new Token")
-    const codeSelectAllText = await readSelectionText(page)
-    expect(codeSelectAllText).toContain(post507CodeText)
-    expect(codeSelectAllText).not.toContain(post507FinalTableTargetCell)
-
-    const listTextDrag = await dragTextRange(
-      page,
-      editor.locator("li", { hasText: post507ListText }).first(),
-      "live /editor/507 list text drag",
-      post507ListText,
-      { paced: true, retryWhenEmpty: true, waitMs: 1_000 }
-    )
-    expect(listTextDrag.selectionText).toContain(post507ListText)
-    expect(listTextDrag.selectionText).not.toContain(post507FinalTableTargetCell)
-    expect(listTextDrag.selectionText).not.toContain(post507LowerBodyText)
-    expect(Math.abs(listTextDrag.afterScrollTop - listTextDrag.beforeScrollTop)).toBeLessThanOrEqual(24)
-    await expectNoSelectionResidue(page, "live 507 list text after code select all")
-
-    await expectPost507FinalReferenceTextSelectionStable(page, editor)
-    await expectFinalTableOverlayFollowsScroll(page, finalTable)
+    await focusMarkdownEditor(page)
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
+    await expect.poll(() => readEditorSelection(page)).toContain(post507FinalTableTargetCell)
+    await expect.poll(() => readEditorSelection(page)).toContain(post507CodeText)
+    await expect.poll(() => readEditorSelection(page)).toContain(post507ListText)
+    await expect(page.locator("[data-table-affordance]")).toHaveCount(0)
   })
 })

@@ -54,6 +54,8 @@ test.describe("core smoke public shell", () => {
   expect(appSource).toContain("initialAdminProfileShouldRefetch")
   expect(rootLayoutSource).toContain('pathname[1] !== "_"')
   expect(rootLayoutSource).toContain('const effectiveBlogDesign = "legacy"')
+  expect(rootLayoutSource).toContain('showThemeToggle={effectiveBlogDesign === "legacy"}')
+  expect(rootLayoutSource).not.toContain('showThemeToggle={effectiveBlogDesign === "legacy" && !isPublicBlogRoute}')
   expect(rootLayoutSource).toContain("refetchOnMount: isDesignAwareRoute")
   expect(rootLayoutSource).toContain("staleTimeMs: isDesignAwareRoute ? 0 : undefined")
   expect(rootLayoutSource).toContain('pathname[1] !== "_"')

@@ -231,7 +231,7 @@ const BrandBlock = styled.div`
 const BrandMark = styled.div`
   width: 2.95rem;
   height: 2.95rem;
-  border-radius: 2px;
+  border-radius: 999px;
   display: grid;
   place-items: center;
   position: relative;
@@ -244,6 +244,10 @@ const BrandMark = styled.div`
     font-size: 0.9rem;
     font-weight: 800;
     letter-spacing: -0.04em;
+  }
+
+  img {
+    border-radius: inherit;
   }
 `
 

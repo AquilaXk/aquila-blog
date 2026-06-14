@@ -32,7 +32,7 @@ test.describe("admin hub state contract", () => {
     expect(source).toContain("supportRailGroups={supportRailGroups}")
   })
 
-  test("관리자 허브는 범용 관리 문구 대신 경계선형 작업 구조를 사용한다", () => {
+  test("관리자 허브는 범용 관리 문구 대신 저선형 작업 구조를 사용한다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminHubSurface.tsx"), "utf8")
     const sectionSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminHubSurface.sections.tsx"), "utf8")
     const styleSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminHubSurface.styles.ts"), "utf8")
@@ -47,8 +47,9 @@ test.describe("admin hub state contract", () => {
     expect(styleSource).toContain("export const BorderlessSection = styled.section`")
     expect(styleSource).toContain("export const BorderlessPanelLink = styled.a`")
     expect(styleSource).toContain("export const BorderlessSupportSection = styled.section`")
-    expect(styleSource).toContain("border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};")
-    expect(styleSource).toContain("border-radius: 0;")
+    expect(styleSource).not.toContain("border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};")
+    expect(styleSource).toContain("border-radius: 8px;")
+    expect(styleSource).toContain("background: ${({ theme }) => adminRaisedSurface(theme)};")
     expect(styleSource).not.toContain("transform: translateY")
     expect(source).toContain("priorityActions: AdminHubNextAction[]")
     expect(source).toContain("handoffActions: AdminHubNextAction[]")

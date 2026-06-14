@@ -663,16 +663,26 @@ export const InlineList = styled.div`
 `
 
 export const QueuePanel = styled.section`
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 40;
   display: grid;
   gap: 0.55rem;
-  padding: 0.72rem 1.25rem 0.86rem;
-  border-bottom: 1px solid ${border};
-  border-radius: 0;
-  background: ${surface};
-  box-shadow: none;
+  width: min(25rem, calc(100vw - 2rem));
+  max-height: min(24rem, calc(100vh - var(--app-header-height, 73px) - 2rem));
+  padding: 0.78rem;
+  border: 1px solid ${borderStrong};
+  border-radius: 8px;
+  background: ${surfaceRaised};
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.2);
 
   @media (max-width: 760px) {
-    padding: 0.7rem 0.9rem 0.82rem;
+    right: 0.72rem;
+    bottom: 0.72rem;
+    width: calc(100vw - 1.44rem);
+    max-height: min(22rem, calc(100vh - var(--app-header-height, 73px) - 1.44rem));
+    padding: 0.68rem;
   }
 `
 
@@ -699,13 +709,12 @@ export const QueueHeader = styled.div`
 
 export const QueueList = styled.ul`
   display: grid;
-  gap: 0;
+  gap: 0.25rem;
   max-height: 15rem;
   overflow: auto;
   margin: 0;
   padding: 0;
   list-style: none;
-  border-top: 1px solid ${border};
 `
 
 export const QueueItem = styled.li`
@@ -714,11 +723,10 @@ export const QueueItem = styled.li`
   gap: 0.5rem 0.75rem;
   align-items: center;
   min-width: 0;
-  padding: 0.58rem 0;
+  padding: 0.54rem 0.58rem;
   border: 0;
-  border-bottom: 1px solid ${border};
-  border-radius: 2px;
-  background: transparent;
+  border-radius: 6px;
+  background: ${surface};
 
   strong {
     color: ${textPrimary};

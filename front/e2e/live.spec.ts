@@ -585,7 +585,7 @@ test.describe("live production e2e", () => {
     await page.goto("/admin/cloud")
     await expect(page.getByRole("heading", { name: adminCloudHeadingPattern })).toBeVisible()
     const visibleCloudUploadButton = page
-      .locator('button[aria-label="파일 업로드"], button[aria-label="업로드 중"]')
+      .getByRole("button", { name: /^(파일 업로드|업로드 중)$/ })
       .filter({ visible: true })
     await expect(visibleCloudUploadButton).toHaveCount(1)
     await expect(visibleCloudUploadButton).toBeVisible()

@@ -573,7 +573,50 @@ test.describe("Markdown editor replacement", () => {
       .toBeLessThan(textareaScroll.top)
   })
 
-  test("split preview wheel keeps the document page scroll chain active", async ({ page }) => {
+  test("분할 미리보기 wheel은 내부 스크롤 가능 구간에서 미리보기를 먼저 스크롤한다", async ({ page }) => {
+    const longMarkdown = Array.from({ length: 32 }, (_, index) => [
+      `## Section ${index + 1}`,
+      "",
+      `preview 내부 wheel 스크롤이 먼저 동작해야 합니다. paragraph ${index + 1}`,
+      "",
+      "| Column 1 | Column 2 |",
+      "| --- | --- |",
+      `| Value ${index + 1} | Result ${index + 1} |`,
+      "",
+    ].join("\n")).join("\n")
+
+    await routeAuthenticatedEditor(page, longMarkdown)
+
+    await page.goto("/editor/new?source=local-draft")
+
+    const previewScroll = page.getByTestId("markdown-editor-preview-scroll")
+    await expect(previewScroll).toBeVisible()
+    await previewScroll.evaluate((element) => {
+      element.scrollTop = 0
+    })
+
+    const box = await previewScroll.boundingBox()
+    if (!box) {
+      throw new Error("preview scroll metrics are missing before wheel")
+    }
+
+    const beforeDocumentScrollTop = await page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
+    await page.mouse.move(box.x + Math.min(box.width / 2, 160), box.y + Math.min(box.height / 2, 160))
+    await page.mouse.wheel(0, 420)
+
+    await expect
+      .poll(async () => previewScroll.evaluate((element) => element.scrollTop), {
+        message: "preview wheel should keep native preview scrolling active before overscroll",
+      })
+      .toBeGreaterThan(80)
+    await expect
+      .poll(async () => page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY), {
+        message: "window should not scroll while preview can consume the wheel",
+      })
+      .toBe(beforeDocumentScrollTop)
+  })
+
+  test("분할 미리보기 wheel은 끝에서 문서 페이지 스크롤 체인을 유지한다", async ({ page }) => {
     const longMarkdown = Array.from({ length: 24 }, (_, index) => [
       `## Section ${index + 1}`,
       "",
@@ -593,7 +636,10 @@ test.describe("Markdown editor replacement", () => {
 
     const previewScroll = page.getByTestId("markdown-editor-preview-scroll")
     await expect(previewScroll).toBeVisible()
-    await previewScroll.locator("table").first().scrollIntoViewIfNeeded()
+    await previewScroll.evaluate((element) => {
+      element.scrollTop = element.scrollHeight
+    })
+    await previewScroll.locator("table").last().scrollIntoViewIfNeeded()
 
     await page.evaluate(() => {
       if (document.querySelector("[data-testid='markdown-preview-wheel-spacer']")) return
@@ -603,7 +649,7 @@ test.describe("Markdown editor replacement", () => {
       document.body.appendChild(spacer)
     })
 
-    const box = await previewScroll.locator("table").first().boundingBox()
+    const box = await previewScroll.locator("table").last().boundingBox()
     if (!box) {
       throw new Error("preview table metrics are missing before wheel")
     }
@@ -617,6 +663,121 @@ test.describe("Markdown editor replacement", () => {
         message: "preview wheel should keep page scroll chaining active",
       })
       .toBeGreaterThan(beforeScrollTop + 80)
+  })
+
+  test("분할 미리보기 wheel은 끝을 넘는 남은 스크롤을 문서로 전달한다", async ({ page }) => {
+    const longMarkdown = Array.from({ length: 32 }, (_, index) => [
+      `## Section ${index + 1}`,
+      "",
+      `preview 끝 근처 wheel 잔여량이 문서 스크롤로 전달되어야 합니다. paragraph ${index + 1}`,
+      "",
+      "| Column 1 | Column 2 |",
+      "| --- | --- |",
+      `| Value ${index + 1} | Result ${index + 1} |`,
+      "",
+    ].join("\n")).join("\n")
+
+    await routeAuthenticatedEditor(page, longMarkdown)
+
+    await page.goto("/editor/new?source=local-draft")
+
+    const previewScroll = page.getByTestId("markdown-editor-preview-scroll")
+    await expect(previewScroll).toBeVisible()
+
+    await page.evaluate(() => {
+      if (document.querySelector("[data-testid='markdown-preview-wheel-remainder-spacer']")) return
+      const spacer = document.createElement("div")
+      spacer.setAttribute("data-testid", "markdown-preview-wheel-remainder-spacer")
+      spacer.style.height = "1600px"
+      document.body.appendChild(spacer)
+    })
+
+    const edgeState = await previewScroll.evaluate((element) => {
+      const max = element.scrollHeight - element.clientHeight
+      element.scrollTop = Math.max(0, max - 10)
+      return {
+        max,
+        top: element.scrollTop,
+      }
+    })
+    expect(edgeState.max).toBeGreaterThan(10)
+
+    const box = await previewScroll.boundingBox()
+    if (!box) {
+      throw new Error("preview scroll metrics are missing before remainder wheel")
+    }
+
+    const beforeDocumentScrollTop = await page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
+    await page.mouse.move(box.x + Math.min(box.width / 2, 160), box.y + Math.min(box.height / 2, 160))
+    await page.mouse.wheel(0, 420)
+
+    await expect
+      .poll(async () => previewScroll.evaluate((element) => element.scrollTop), {
+        message: "preview should clamp to the scroll edge before forwarding wheel remainder",
+      })
+      .toBeGreaterThanOrEqual(edgeState.max - 1)
+    await expect
+      .poll(async () => page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY), {
+        message: "remaining wheel delta should scroll the document after preview reaches its edge",
+      })
+      .toBeGreaterThan(beforeDocumentScrollTop + 80)
+  })
+
+  test("분할 미리보기 wheel은 라인 단위 delta도 픽셀로 환산해 남은 스크롤을 전달한다", async ({ page }) => {
+    const longMarkdown = Array.from({ length: 32 }, (_, index) => [
+      `## Section ${index + 1}`,
+      "",
+      `line delta wheel 잔여량이 문서 스크롤로 전달되어야 합니다. paragraph ${index + 1}`,
+      "",
+      "| Column 1 | Column 2 |",
+      "| --- | --- |",
+      `| Value ${index + 1} | Result ${index + 1} |`,
+      "",
+    ].join("\n")).join("\n")
+
+    await routeAuthenticatedEditor(page, longMarkdown)
+
+    await page.goto("/editor/new?source=local-draft")
+
+    const previewScroll = page.getByTestId("markdown-editor-preview-scroll")
+    await expect(previewScroll).toBeVisible()
+
+    await page.evaluate(() => {
+      const win = window as typeof window & { __previewWheelScrollByCalls?: number[] }
+      win.__previewWheelScrollByCalls = []
+      const originalScrollBy = window.scrollBy.bind(window)
+      window.scrollBy = ((options?: ScrollToOptions | number, y?: number) => {
+        const top = typeof options === "number" ? y ?? 0 : options?.top ?? 0
+        win.__previewWheelScrollByCalls?.push(top)
+        if (typeof options === "number") {
+          originalScrollBy(options, y ?? 0)
+          return
+        }
+        originalScrollBy(options)
+      }) as typeof window.scrollBy
+    })
+
+    const eventState = await previewScroll.evaluate((element) => {
+      element.style.lineHeight = "24px"
+      const max = element.scrollHeight - element.clientHeight
+      element.scrollTop = Math.max(0, max - 10)
+      const wheelEvent = new WheelEvent("wheel", {
+        bubbles: true,
+        cancelable: true,
+        deltaMode: WheelEvent.DOM_DELTA_LINE,
+        deltaY: 2,
+      })
+      element.dispatchEvent(wheelEvent)
+      return {
+        max,
+        top: element.scrollTop,
+      }
+    })
+
+    expect(eventState.max).toBeGreaterThan(10)
+    expect(eventState.top).toBeGreaterThanOrEqual(eventState.max - 1)
+    const scrollByCalls = await page.evaluate(() => (window as typeof window & { __previewWheelScrollByCalls?: number[] }).__previewWheelScrollByCalls ?? [])
+    expect(scrollByCalls.some((top) => top > 20)).toBe(true)
   })
 
   test("toolbar snippets insert at the textarea caret instead of appending at the document end", async ({

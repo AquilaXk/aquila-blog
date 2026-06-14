@@ -18,15 +18,15 @@ test.describe("관리자 표면 공통 계약", () => {
 
     expect(colorTokenSource).toContain("export const adminSystemThemeVariables =")
     expect(colorTokenSource).toContain('theme.scheme === "dark" ? adminDarkThemeVariables : adminLightThemeVariables')
-    expect(colorTokenSource).toContain("--admin-primary: #b9954f;")
-    expect(colorTokenSource).toContain("--admin-primary: #d0b46c;")
-    expect(colorTokenSource).toContain("--admin-accent-text: #6f5524;")
+    expect(colorTokenSource).toContain("--admin-primary: #4f7cff;")
+    expect(colorTokenSource).toContain("--admin-primary: #6f95ff;")
+    expect(colorTokenSource).toContain("--admin-accent-text: #315fd8;")
     expect(colorTokenSource).toContain("--admin-control-text: #101214;")
     expect(colorTokenSource).toContain("--admin-text-muted: #566273;")
     expect(colorTokenSource).toContain('export const adminTextMuted = "var(--admin-text-muted, #566273)"')
     expect(colorTokenSource).toContain('export const adminSurface = "var(--admin-surface')
-    expect(colorTokenSource).toContain('export const adminSurfaceAccent = "var(--admin-surface-accent, #f7f1e3)"')
-    expect(colorTokenSource).toContain('export const adminGold = "var(--admin-accent-text, #6f5524)"')
+    expect(colorTokenSource).toContain('export const adminSurfaceAccent = "var(--admin-surface-accent, #edf3ff)"')
+    expect(colorTokenSource).toContain('export const adminGold = "var(--admin-accent-text, #315fd8)"')
     expect(colorTokenSource).toContain('export const adminTeal = "var(--admin-primary')
     expect(colorTokenSource).toContain('export const usesDarkAdminSurface = (theme: Theme) => theme.scheme !== "light"')
     expect(colorTokenSource).not.toContain("#4f74ff")
@@ -365,10 +365,12 @@ test.describe("관리자 표면 공통 계약", () => {
 
     expect(source).toContain('import ProfileImage from "src/components/ProfileImage"')
     expect(source).toContain("profileSnapshot?: AdminShellProfileSnapshot | null")
-    expect(source).toContain('const sidebarIdentityName = (profileSnapshot?.blogTitle || member.blogTitle || "AquilaLog").trim()')
-    expect(source).toContain("profileSnapshot?.profileImageDirectUrl ||")
-    expect(source).toContain("profileSnapshot?.profileImageUrl ||")
+    expect(source).toContain('const sidebarIdentityName = (member.nickname || member.username || "관리자").trim()')
     expect(source).toContain("member.profileImageDirectUrl ||")
+    expect(source.indexOf("member.profileImageDirectUrl ||")).toBeLessThan(
+      source.indexOf("profileSnapshot?.profileImageDirectUrl ||")
+    )
+    expect(source).not.toContain('const sidebarIdentityName = (profileSnapshot?.blogTitle || member.blogTitle || "AquilaLog").trim()')
     expect(source).not.toContain('import { useAdminProfile } from "src/hooks/useAdminProfile"')
     expect(source).toContain('<SidebarPrimaryAction title="새 글 작성">')
     expect(source).not.toContain("<SidebarSectionLabel>관리 메뉴</SidebarSectionLabel>")
@@ -379,6 +381,20 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(source).not.toContain("SidebarCardTitle")
     expect(source).not.toContain("<strong>AquilaLog</strong>")
     expect(source).not.toContain('<AppIcon name="service" />')
+  })
+
+  test("관리자 MYBOX 색상 토큰은 brown gold 계열 대신 neutral blue accent를 사용한다", () => {
+    const tokenSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/adminColorTokens.ts"), "utf8")
+    const shellSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminShell.tsx"), "utf8")
+
+    expect(tokenSource).not.toContain("#b9954f")
+    expect(tokenSource).not.toContain("#9d7d3f")
+    expect(tokenSource).not.toContain("#6f5524")
+    expect(tokenSource).not.toContain("#f7f1e3")
+    expect(tokenSource).not.toContain("#2d291a")
+    expect(tokenSource).toContain("--admin-primary: #4f7cff;")
+    expect(tokenSource).toContain("--admin-primary-hover: #3f6df2;")
+    expect(shellSource).not.toContain("adminGold")
   })
 
   test("관리자 허브는 중복 상태와 바로가기 레일 대신 주요 작업 흐름 하나를 둔다", () => {

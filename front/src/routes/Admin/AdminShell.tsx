@@ -10,7 +10,6 @@ import {
   adminBorder,
   adminBorderStrong,
   adminControlText,
-  adminGold,
   adminShellSurface,
   adminSurface,
   adminSurfaceAccent,
@@ -98,13 +97,13 @@ const AdminShell = ({ currentSection, member, profileSnapshot = null, children }
     icon: item.icon,
     active: item.id === currentSection,
   }))
-  const sidebarIdentityName = (profileSnapshot?.blogTitle || member.blogTitle || "AquilaLog").trim()
+  const sidebarIdentityName = (member.nickname || member.username || "관리자").trim()
   const sidebarIdentityInitial = sidebarIdentityName.slice(0, 2).toUpperCase()
   const sidebarProfileImageSrc = (
-    profileSnapshot?.profileImageDirectUrl ||
-    profileSnapshot?.profileImageUrl ||
     member.profileImageDirectUrl ||
     member.profileImageUrl ||
+    profileSnapshot?.profileImageDirectUrl ||
+    profileSnapshot?.profileImageUrl ||
     ""
   ).trim()
 
@@ -238,7 +237,7 @@ const BrandMark = styled.div`
   overflow: hidden;
   border: 1px solid ${adminBorderStrong};
   background: ${adminSurfaceAccent};
-  color: ${adminGold};
+  color: ${adminTeal};
 
   span {
     font-size: 0.9rem;
@@ -327,13 +326,13 @@ const NavLink = styled.a`
   }
 
   &[data-active="true"] {
-    border-left-color: ${adminGold};
+    border-left-color: ${adminTeal};
     background: ${adminSurfaceAccent};
   }
 
   &[data-active="true"] .navIcon {
     background: transparent;
-    color: ${adminGold};
+    color: ${adminTeal};
   }
 
   &:hover {

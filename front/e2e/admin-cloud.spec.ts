@@ -94,6 +94,8 @@ const setupAdminCloudMocks = async (
   page: Page,
   options: {
     failDeleteIds?: string[]
+    failList?: boolean
+    failUploadNames?: string[]
     initialFiles?: CloudFileFixture[]
   } = {}
 ) => {
@@ -103,6 +105,7 @@ const setupAdminCloudMocks = async (
   const deletedIds: string[] = []
   const uploadedFiles: CloudFileFixture[] = []
   const failedDeleteIds = new Set(options.failDeleteIds ?? [])
+  const failedUploadNames = new Set(options.failUploadNames ?? [])
   const initialFiles = options.initialFiles ?? CLOUD_FILES
   let nextUploadId = 204
 
@@ -152,6 +155,11 @@ const setupAdminCloudMocks = async (
       const uploadedName = getUploadName(route)
       const metadata = getUploadFileMetadata(uploadedName)
 
+      if (failedUploadNames.has(uploadedName)) {
+        await fulfillJson(route, { resultCode: "500-1", msg: "외장 스토리지 저장에 실패했습니다." }, 500)
+        return
+      }
+
       if (uploadedName.includes("취소할")) await delay(700)
 
       const uploaded = {
@@ -182,6 +190,11 @@ const setupAdminCloudMocks = async (
       } catch {
         // The page aborts the in-flight request when an active upload is cancelled.
       }
+      return
+    }
+
+    if (options.failList) {
+      await fulfillJson(route, { resultCode: "500-1", msg: "클라우드 파일 목록 조회에 실패했습니다." }, 500)
       return
     }
 
@@ -350,5 +363,35 @@ test.describe("관리자 클라우드", () => {
 
     await uploadPanel.getByRole("button", { name: "취소할 영상.mp4 업로드 취소" }).click()
     await expect(uploadPanel.getByText("취소됨")).toBeVisible()
+  })
+
+  test("클라우드 목록 조회 실패는 로딩 대신 오류와 다시 시도 액션을 보여준다", async ({ page }) => {
+    await setupAdminCloudMocks(page, { failList: true })
+
+    await page.goto("/admin/cloud")
+
+    await expect(page.getByText("파일을 불러오는 중입니다.")).toHaveCount(0)
+    await expect(page.getByText("파일 목록을 불러오지 못했습니다.")).toBeVisible()
+    await expect(page.getByRole("button", { name: "파일 목록 다시 시도" })).toBeVisible()
+  })
+
+  test("클라우드 업로드 실패는 실패 사유와 재시도 버튼을 같은 항목에 남긴다", async ({ page }) => {
+    await setupAdminCloudMocks(page, {
+      failUploadNames: ["실패할 운영 문서.pdf"],
+      initialFiles: [],
+    })
+
+    await page.goto("/admin/cloud")
+
+    await page.getByLabel("클라우드 파일 업로드").setInputFiles({
+      name: "실패할 운영 문서.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4 failed upload"),
+    })
+
+    const uploadPanel = page.getByLabel("업로드 중인 파일")
+    await expect(uploadPanel.getByText("실패할 운영 문서.pdf")).toBeVisible()
+    await expect(uploadPanel.getByText(/서버 오류가 발생했습니다/)).toBeVisible()
+    await expect(uploadPanel.getByRole("button", { name: "실패할 운영 문서.pdf 업로드 다시 시도" })).toBeVisible()
   })
 })

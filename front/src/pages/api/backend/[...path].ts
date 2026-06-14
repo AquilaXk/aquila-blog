@@ -1,3 +1,4 @@
+import { Readable } from "node:stream"
 import type { NextApiRequest, NextApiResponse } from "next"
 import { normalizeApiRequestPath } from "src/libs/backend/requestPath"
 import { resolveServerApiBaseUrl } from "src/libs/server/backend"
@@ -74,6 +75,14 @@ const pipeWebStreamToResponse = async (stream: ReadableStream<Uint8Array>, res: 
   }
 }
 
+const resolveProxyBody = (req: NextApiRequest, method: string): BodyInit | undefined => {
+  if (BODYLESS_METHODS.has(method)) return undefined
+
+  // Vercel's Node runtime does not reliably accept the raw IncomingMessage as a fetch body.
+  // Convert it to a standards Web stream so JSON and multipart uploads use the same path.
+  return Readable.toWeb(req) as unknown as BodyInit
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   let safePath: string
   try {
@@ -98,7 +107,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const upstreamResponse = await fetch(`${resolveServerApiBaseUrl(req)}${safePath}`, {
       method,
       headers,
-      body: BODYLESS_METHODS.has(method) ? undefined : (req as unknown as BodyInit),
+      body: resolveProxyBody(req, method),
       duplex: "half",
       redirect: "manual",
       signal: controller.signal,

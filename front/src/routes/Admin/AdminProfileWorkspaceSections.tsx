@@ -73,7 +73,6 @@ export const AdminProfileWorkspaceSections = (props: Record<string, any>) => {
     publishedSnapshot: ProfileWorkspaceContent
   }
   const displayName = displayNameInput.trim() || sessionMember.nickname || sessionMember.username || "관리자"
-  const displayNameInitial = displayName.slice(0, 2).toUpperCase()
   const previewContent = previewMode === "published" ? publishedSnapshot : draft
   const missingExposureItems: string[] = []
   if (!displayNameInput.trim()) missingExposureItems.push("계정 이름")
@@ -158,7 +157,6 @@ export const AdminProfileWorkspaceSections = (props: Record<string, any>) => {
           activeSection={activeSection}
           activeSectionLabel={activeSectionMeta.label}
           displayName={displayName}
-          displayNameInitial={displayNameInitial}
           hasMissingExposureItems={hasMissingExposureItems}
           isPreviewExpanded={isPreviewExpanded}
           onPreviewModeChange={setPreviewMode}

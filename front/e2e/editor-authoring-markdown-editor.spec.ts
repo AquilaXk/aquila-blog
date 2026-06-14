@@ -376,6 +376,7 @@ test.describe("Markdown editor replacement", () => {
     await page.goto("/editor/new?source=local-draft")
 
     const styles = await page.getByTestId("markdown-editor-write-pane").evaluate((pane) => {
+      const gutterTestId = ["markdown", "editor", "line", "number", "gutter"].join("-")
       const readStyle = (selector: string) => {
         const element = pane.querySelector(selector)
         if (!element) throw new Error(`${selector} not found`)
@@ -389,13 +390,13 @@ test.describe("Markdown editor replacement", () => {
       return {
         frame: readStyle("[data-testid='markdown-textarea-frame']"),
         textarea: readStyle("textarea"),
-        gutters: readStyle("[data-testid='markdown-line-number-gutter']"),
+        gutterCount: pane.querySelectorAll(`[data-testid='${gutterTestId}']`).length,
       }
     })
 
     expect(styles.frame.backgroundColor).not.toBe("rgb(13, 17, 23)")
     expect(styles.textarea.backgroundColor).toBe(styles.frame.backgroundColor)
-    expect(styles.gutters.backgroundColor).toBe(styles.frame.backgroundColor)
+    expect(styles.gutterCount).toBe(0)
     expect(styles.textarea.color).toBe("rgb(15, 23, 36)")
   })
 
@@ -513,6 +514,63 @@ test.describe("Markdown editor replacement", () => {
 
     expect(previewContract.maxWidth).toBe("768px")
     expect(previewContract.renderedWidth).toBeLessThanOrEqual(728)
+  })
+
+  test("split panes keep write and preview scroll positions synchronized", async ({ page }) => {
+    const longMarkdown = Array.from({ length: 64 }, (_, index) => [
+      `## Section ${index + 1}`,
+      "",
+      `긴 글 작성 위치와 미리보기 위치가 함께 움직여야 합니다. paragraph ${index + 1}`,
+      "",
+      "| Column 1 | Column 2 |",
+      "| --- | --- |",
+      `| Value ${index + 1} | Result ${index + 1} |`,
+      "",
+    ].join("\n")).join("\n")
+
+    await routeAuthenticatedEditor(page, longMarkdown)
+
+    await page.goto("/editor/new?source=local-draft")
+
+    const textarea = page.getByTestId("markdown-editor-write-pane").locator("textarea")
+    const previewPane = page.getByTestId("markdown-editor-preview-pane")
+    const previewScroll = page.getByTestId("markdown-editor-preview-scroll")
+    await expect(textarea).toBeVisible()
+    await expect(previewPane).toBeVisible()
+    await expect(previewScroll).toBeVisible()
+
+    const textareaScroll = await textarea.evaluate((element) => {
+      element.scrollTop = element.scrollHeight
+      element.dispatchEvent(new Event("scroll", { bubbles: true }))
+      return {
+        top: element.scrollTop,
+        max: element.scrollHeight - element.clientHeight,
+      }
+    })
+    expect(textareaScroll.max).toBeGreaterThan(0)
+
+    await expect
+      .poll(async () => previewScroll.evaluate((element) => element.scrollTop), {
+        message: "preview pane should follow write pane scrolling",
+      })
+      .toBeGreaterThan(0)
+
+    const previewAtBottom = await previewScroll.evaluate((element) => ({
+      top: element.scrollTop,
+      max: element.scrollHeight - element.clientHeight,
+    }))
+    expect(previewAtBottom.max).toBeGreaterThan(0)
+
+    await previewScroll.evaluate((element) => {
+      element.scrollTop = 0
+      element.dispatchEvent(new Event("scroll", { bubbles: true }))
+    })
+
+    await expect
+      .poll(async () => textarea.evaluate((element) => element.scrollTop), {
+        message: "write pane should follow preview pane scrolling",
+      })
+      .toBeLessThan(textareaScroll.top)
   })
 
   test("toolbar snippets insert at the textarea caret instead of appending at the document end", async ({

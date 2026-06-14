@@ -295,10 +295,29 @@ test("deploy workflow는 frontend 변경에서만 live frontend SHA를 현재 co
   const workflow = readFileSync(workflowPath, "utf8")
 
   assert.match(workflow, /expected_front_commit_sha: \$\{\{ steps\.meta\.outputs\.expected_front_commit_sha \}\}/)
-  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*\^front\//)
+  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*\^front\/\(src\//)
+  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*packages\//)
+  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*scripts\/\(check-refactor-boundaries\\\.mjs/)
+  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*with-test-lock\\\.mjs/)
+  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*patch-lodash-template\\\.cjs/)
+  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*site\\\.config\\\.js/)
+  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*tsconfig\\\.json/)
+  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*next-sitemap\\\.config\\\.js/)
+  assert.doesNotMatch(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN='?\^front\/'?\n/)
   assert.match(workflow, /EXPECTED_FRONT_COMMIT_SHA="\$\{DEPLOY_SHA\}"/)
   assert.match(workflow, /E2E_EXPECTED_FRONT_COMMIT_SHA: \$\{\{ needs\.calculateTag\.outputs\.expected_front_commit_sha \}\}/)
   assert.doesNotMatch(workflow, /E2E_EXPECTED_FRONT_COMMIT_SHA:\s*\$\{\{ needs\.calculateTag\.outputs\.deploy_sha \}\}/)
+})
+
+test("deploy workflow는 stale workflow_run을 로그로 남기고 검증된 SHA 배포 기준을 유지한다", () => {
+  const workflow = readFileSync(workflowPath, "utf8")
+
+  assert.match(workflow, /ref: \$\{\{ github\.event\.workflow_run\.head_sha \|\| github\.sha \}\}/)
+  assert.match(workflow, /DEPLOY_SHA_INPUT: \$\{\{ github\.event\.workflow_run\.head_sha \|\| github\.sha \}\}/)
+  assert.match(workflow, /CURRENT_MAIN_SHA_INPUT: \$\{\{ github\.sha \}\}/)
+  assert.match(workflow, /stale workflow_run payload: deploy_sha=/)
+  assert.doesNotMatch(workflow, /STALE_WORKFLOW_RUN/)
+  assert.match(workflow, /if echo "\$\{CHANGED_FILES\}" \| grep -Eq "\$\{FRONT_BUILD_SHA_PATHS_PATTERN\}"/)
 })
 
 test("runtime contract accounts for every compose env interpolation", async () => {

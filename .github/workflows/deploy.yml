@@ -74,6 +74,7 @@ jobs:
         id: meta
         env:
           DEPLOY_SHA_INPUT: ${{ github.event.workflow_run.head_sha || github.sha }}
+          CURRENT_MAIN_SHA_INPUT: ${{ github.sha }}
           FORCE_BACKEND_DEPLOY_INPUT: ${{ github.event.inputs.force_backend_deploy || 'false' }}
           FORCE_FRONT_LIVE_VERIFY_INPUT: ${{ github.event.inputs.force_front_live_verify || 'false' }}
           FORCE_EDITOR_LIVE_CANARY_INPUT: ${{ github.event.inputs.force_editor_live_canary || 'false' }}
@@ -84,6 +85,7 @@ jobs:
           OWNER_LC="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
           REPO_NAME="$(basename "${GITHUB_REPOSITORY}")"
           DEPLOY_SHA="${DEPLOY_SHA_INPUT:-}"
+          CURRENT_MAIN_SHA="${CURRENT_MAIN_SHA_INPUT:-}"
           if [ -z "${DEPLOY_SHA}" ]; then
             echo "deploy sha is empty" >&2
             exit 1
@@ -101,9 +103,12 @@ jobs:
           CHANGE_SOURCE="first-parent-diff"
           BACKEND_DEPLOY_PATHS_PATTERN='^(back/|deploy/homeserver/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
           FRONT_LIVE_VERIFY_PATHS_PATTERN='^(front/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/frontend-ci\.yml|\.github/workflows/reusable-frontend-verify\.yml)'
-          FRONT_BUILD_SHA_PATHS_PATTERN='^front/'
+          FRONT_BUILD_SHA_PATHS_PATTERN='^front/(src/|public/|packages/|scripts/(check-refactor-boundaries\.mjs|with-test-lock\.mjs|patch-lodash-template\.cjs)|site\.config\.js|next-sitemap\.config\.js|next\.config\.js|tsconfig\.json|package\.json|yarn\.lock|Dockerfile|index\.d\.ts|next-env\.d\.ts)'
           EDITOR_LIVE_CANARY_PATHS_PATTERN='^(front/src/components/editor/|front/src/pages/editor/|front/src/routes/Admin/(Editor|WriterEditor|QaEditor|editor)|front/e2e/editor-|front/e2e/helpers/(authoringPlaywright|post507Fixtures)\.ts)'
           CHANGED_FILES=""
+          if [ -n "${CURRENT_MAIN_SHA}" ] && [ "${CURRENT_MAIN_SHA}" != "${DEPLOY_SHA}" ]; then
+            echo "stale workflow_run payload: deploy_sha=${DEPLOY_SHA} current_main_sha=${CURRENT_MAIN_SHA}"
+          fi
           CHANGED_FILES="$(git diff --name-only "${DEPLOY_SHA}^1" "${DEPLOY_SHA}" 2>/dev/null || true)"
           if [ -z "${CHANGED_FILES}" ]; then
             CHANGE_SOURCE="merge-diff-tree"

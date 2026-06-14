@@ -135,6 +135,65 @@ test.describe("GitHub Markdown editor replacement", () => {
     await expect(preview.getByText("quote at the bottom")).toBeVisible()
   })
 
+  test("write pane keeps every CodeMirror surface on the dark editor surface", async ({ page }) => {
+    await routeAuthenticatedEditor(page)
+
+    await page.goto("/editor/new?source=local-draft")
+
+    const styles = await page.getByTestId("github-markdown-write-pane").evaluate((pane) => {
+      const readStyle = (selector: string) => {
+        const element = pane.querySelector(selector)
+        if (!element) throw new Error(`${selector} not found`)
+        const style = window.getComputedStyle(element)
+        return {
+          backgroundColor: style.backgroundColor,
+          color: style.color,
+        }
+      }
+
+      return {
+        editor: readStyle(".cm-editor"),
+        scroller: readStyle(".cm-scroller"),
+        content: readStyle(".cm-content"),
+        line: readStyle(".cm-line"),
+        gutters: readStyle(".cm-gutters"),
+      }
+    })
+
+    expect(styles.editor.backgroundColor).toBe("rgb(13, 17, 23)")
+    expect(styles.scroller.backgroundColor).toBe("rgb(13, 17, 23)")
+    expect(styles.content.backgroundColor).toBe("rgb(13, 17, 23)")
+    expect(styles.gutters.backgroundColor).toBe("rgb(13, 17, 23)")
+    expect(styles.line.color).toBe("rgb(230, 237, 243)")
+  })
+
+  test("split preview uses the same readable width and typography contract as post detail", async ({
+    page,
+  }) => {
+    await routeAuthenticatedEditor(page)
+
+    await page.goto("/editor/new?source=local-draft")
+
+    const previewContract = await page
+      .getByTestId("github-markdown-preview-pane")
+      .locator(".aq-markdown")
+      .evaluate((markdownRoot) => {
+        const style = window.getComputedStyle(markdownRoot)
+        const rect = markdownRoot.getBoundingClientRect()
+        return {
+          maxWidth: style.maxWidth,
+          fontSize: style.fontSize,
+          lineHeight: style.lineHeight,
+          renderedWidth: rect.width,
+        }
+      })
+
+    expect(previewContract.maxWidth).toBe("768px")
+    expect(previewContract.fontSize).toBe("17px")
+    expect(previewContract.lineHeight).toBe("28px")
+    expect(previewContract.renderedWidth).toBeLessThanOrEqual(768)
+  })
+
   test("toolbar snippets insert at the CodeMirror caret instead of appending at the document end", async ({
     page,
   }) => {

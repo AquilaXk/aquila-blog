@@ -16,12 +16,12 @@ import {
 } from "src/libs/utils"
 import {
   consumeGuardOnExpectedUpdate,
-  createBlockEditorLoadGuardState,
+  createMarkdownEditorLoadGuardState,
   markGuardEmptyUpdateIgnored,
-  restoreBlockEditorCodeLossUpdate,
-  shouldIgnoreBlockEditorEmptyUpdate,
-  type BlockEditorLoadGuardState,
-} from "./editorLoadSyncGuard"
+  restoreMarkdownEditorCodeLossUpdate,
+  shouldIgnoreMarkdownEditorEmptyUpdate,
+  type MarkdownEditorLoadGuardState,
+} from "./markdownLoadSyncGuard"
 import {
   toFlags,
   toVisibility,
@@ -178,7 +178,7 @@ export const EditorStudioWorkspaceController = ({
     summary: "",
     firstImage: "",
   })
-  const blockEditorLoadGuardStateRef = useRef<BlockEditorLoadGuardState>({
+  const markdownEditorLoadGuardStateRef = useRef<MarkdownEditorLoadGuardState>({
     expectedBody: "",
     ignoreUntilMs: 0,
     ignoredInitialEmpty: false,
@@ -205,18 +205,18 @@ export const EditorStudioWorkspaceController = ({
       return
     }
 
-    let nextGuardState = consumeGuardOnExpectedUpdate(blockEditorLoadGuardStateRef.current, nextMarkdown)
+    let nextGuardState = consumeGuardOnExpectedUpdate(markdownEditorLoadGuardStateRef.current, nextMarkdown)
 
-    if (shouldIgnoreBlockEditorEmptyUpdate({
+    if (shouldIgnoreMarkdownEditorEmptyUpdate({
       nextMarkdown,
       currentMarkdown: previousMarkdown,
       guardState: nextGuardState,
     })) {
-      blockEditorLoadGuardStateRef.current = markGuardEmptyUpdateIgnored(nextGuardState)
+      markdownEditorLoadGuardStateRef.current = markGuardEmptyUpdateIgnored(nextGuardState)
       return
     }
 
-    const restoredCodeLossUpdate = restoreBlockEditorCodeLossUpdate({
+    const restoredCodeLossUpdate = restoreMarkdownEditorCodeLossUpdate({
       nextMarkdown,
       currentMarkdown: previousMarkdown,
       guardState: nextGuardState,
@@ -225,7 +225,7 @@ export const EditorStudioWorkspaceController = ({
 
     if (restoredCodeLossUpdate.changed) {
       const restoredMarkdown = restoredCodeLossUpdate.markdown
-      blockEditorLoadGuardStateRef.current = consumeGuardOnExpectedUpdate(nextGuardState, restoredMarkdown)
+      markdownEditorLoadGuardStateRef.current = consumeGuardOnExpectedUpdate(nextGuardState, restoredMarkdown)
       postContentLiveRef.current = restoredMarkdown
       setPostContent(restoredMarkdown)
       return
@@ -237,7 +237,7 @@ export const EditorStudioWorkspaceController = ({
         ignoreUntilMs: 0,
         ignoredInitialEmpty: true,
       }
-      blockEditorLoadGuardStateRef.current = nextGuardState
+      markdownEditorLoadGuardStateRef.current = nextGuardState
       postContentLiveRef.current = nextMarkdown
       startPostContentTransition(() => {
         setPostContent(nextMarkdown)
@@ -245,7 +245,7 @@ export const EditorStudioWorkspaceController = ({
       return
     }
 
-    blockEditorLoadGuardStateRef.current = nextGuardState
+    markdownEditorLoadGuardStateRef.current = nextGuardState
     postContentLiveRef.current = nextMarkdown
     setPostContent(nextMarkdown)
   }, [startPostContentTransition])
@@ -412,7 +412,7 @@ export const EditorStudioWorkspaceController = ({
 
   const syncEditorMeta = useCallback((content: string, contentHtml?: string | null) => {
     const snapshot = resolveEditorMetaSnapshot(content, contentHtml)
-    blockEditorLoadGuardStateRef.current = createBlockEditorLoadGuardState(snapshot.body)
+    markdownEditorLoadGuardStateRef.current = createMarkdownEditorLoadGuardState(snapshot.body)
     postContentLiveRef.current = snapshot.body
     setPostContent(snapshot.body)
     setPostSummary(snapshot.summary)
@@ -610,8 +610,8 @@ export const EditorStudioWorkspaceController = ({
   })
 
   const {
-    handleBlockEditorFileUpload,
-    handleBlockEditorImageUpload,
+    handleMarkdownEditorFileUpload,
+    handleMarkdownEditorImageUpload,
     handleModifyPost,
     handlePublishTempDraft,
     handleThumbnailImageFileChange,
@@ -825,7 +825,7 @@ export const EditorStudioWorkspaceController = ({
         deferredPostContent, deferredContentDerived, deleteConfirmNotice, deleteConfirmState, deletePostsFromList,
         deletedListNotice,
         deleteTagFromCatalog, disabled, editorMode, finalizePreviewThumbPointer, globalNotice,
-        handleMarkdownEditorChange, handleBlockEditorFileUpload, handleBlockEditorImageUpload, handleConfirmPublish, handleContinueSelectedPostEditing,
+        handleMarkdownEditorChange, handleMarkdownEditorFileUpload, handleMarkdownEditorImageUpload, handleConfirmPublish, handleContinueSelectedPostEditing,
         handleCreateNewPostFromSelectedPanel, handleDeleteComment, handleDeleteSelectedPost, handleExitDedicatedEditor, handleFlushMarkdownReady, handleHitPost,
         handleLikePost, handleListComments, handleListPageChange, handleListPageSizeChange, handleListSortChange,
         handleLoadOrCreateTempPost, handleModifyComment, handlePreviewThumbPointerDown, handlePreviewThumbPointerMove, handleProfileImageSelected,

@@ -49,7 +49,7 @@ export const EditorStudioPublishVisibilitySection = ({
   visibilityOptions,
   onPostVisibilityChange,
 }: VisibilitySectionProps) => (
-  <VisibilityCard>
+  <VisibilityCard data-testid="publish-visibility-panel">
     <SectionKicker>노출 범위</SectionKicker>
     <strong>누가 이 글을 볼 수 있나요?</strong>
     <VisibilityOptionGrid role="group" aria-label="노출 범위 선택">
@@ -113,7 +113,7 @@ export const EditorStudioPublishPreviewCard = <TViewport extends string,>({
   onPreviewThumbnailError,
   onPreviewViewportChange,
 }: PreviewCardProps<TViewport>) => (
-  <PreviewResultPanel>
+  <PreviewResultPanel data-testid="publish-preview-panel">
     <PreviewResultHeader>
       <div>
         <SectionKicker>{previewKicker}</SectionKicker>
@@ -259,4 +259,3 @@ export const EditorStudioPublishCardSettings = ({
     )}
   </PostPreviewSetup>
 )
-

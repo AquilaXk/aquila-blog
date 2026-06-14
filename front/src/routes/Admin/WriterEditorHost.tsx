@@ -1,5 +1,5 @@
 import { Profiler } from "react"
-import { GitHubMarkdownEditor } from "src/components/markdown-editor/GitHubMarkdownEditor"
+import { MarkdownEditor } from "src/components/markdown-editor/MarkdownEditor"
 
 type WriterEditorHostProps = {
   canvasId: string
@@ -29,7 +29,7 @@ export const WriterEditorHost = ({
       onCommitDuration?.(actualDuration)
     }}
   >
-    <GitHubMarkdownEditor
+    <MarkdownEditor
       value={markdown}
       onChange={onMarkdownChange}
       onFlushMarkdownReady={onFlushMarkdownReady}

@@ -136,11 +136,6 @@ export const EditorStudioPublishModal = <TViewport extends string,>({
             <PublishModalNotice data-tone={modalNotice.tone}>{modalNotice.text}</PublishModalNotice>
           ) : null}
           <PublishOverviewGrid>
-            <EditorStudioPublishVisibilitySection
-              postVisibility={postVisibility}
-              visibilityOptions={visibilityOptions}
-              onPostVisibilityChange={onPostVisibilityChange}
-            />
             <EditorStudioPublishPreviewCard
               displayName={displayName}
               displayNameInitial={displayNameInitial}
@@ -161,6 +156,11 @@ export const EditorStudioPublishModal = <TViewport extends string,>({
               previewVisibilityLabel={previewVisibilityLabel}
               onPreviewThumbnailError={onPreviewThumbnailError}
               onPreviewViewportChange={onPreviewViewportChange}
+            />
+            <EditorStudioPublishVisibilitySection
+              postVisibility={postVisibility}
+              visibilityOptions={visibilityOptions}
+              onPostVisibilityChange={onPostVisibilityChange}
             />
           </PublishOverviewGrid>
 

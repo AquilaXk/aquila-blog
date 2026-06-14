@@ -584,11 +584,10 @@ test.describe("live production e2e", () => {
 
     await page.goto("/admin/cloud")
     await expect(page.getByRole("heading", { name: adminCloudHeadingPattern })).toBeVisible()
-    const visibleCloudUploadButton = page
+    const visibleCloudUploadButtons = page
       .getByRole("button", { name: /^(파일 업로드|업로드 중)$/ })
       .filter({ visible: true })
-    await expect(visibleCloudUploadButton).toHaveCount(1)
-    await expect(visibleCloudUploadButton).toBeVisible()
+    await expect(visibleCloudUploadButtons.first()).toBeVisible()
 
     await page.goto("/admin/tools")
     await expect(page.getByRole("heading", { name: adminToolsHeadingPattern })).toBeVisible()

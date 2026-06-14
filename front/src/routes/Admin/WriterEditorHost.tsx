@@ -1,24 +1,15 @@
-import dynamic from "next/dynamic"
 import { Profiler } from "react"
-import type {
-  BlockEditorFeatureOptions,
-  BlockEditorProps,
-  BlockEditorUploadAdapters,
-} from "src/components/editor/blockEditorContract"
+import { GitHubMarkdownEditor } from "src/components/markdown-editor/GitHubMarkdownEditor"
 
-const LazyBlockEditorShell = dynamic(() => import("src/components/editor/BlockEditorShell"), {
-  ssr: false,
-  loading: () => <div style={{ padding: "1rem 1.1rem", color: "var(--color-gray10)" }}>블록 에디터 준비 중...</div>,
-})
-
-type WriterEditorHostProps = Pick<BlockEditorProps, "disabled"> & {
+type WriterEditorHostProps = {
   canvasId: string
   markdown: string
-  onMarkdownChange: BlockEditorProps["onChange"]
-  onFlushMarkdownReady: NonNullable<BlockEditorProps["onFlushMarkdownReady"]>
-  onImageUpload: BlockEditorUploadAdapters["onUploadImage"]
-  onFileUpload?: BlockEditorUploadAdapters["onUploadFile"]
-  mermaidEnabled: NonNullable<BlockEditorFeatureOptions["enableMermaidBlocks"]>
+  onMarkdownChange: (markdown: string, meta?: { editorFocused: boolean }) => void
+  onFlushMarkdownReady: (flush: (() => string) | null) => void
+  onImageUpload: (file: File) => Promise<{ alt?: string; title?: string; url?: string; src?: string }>
+  onFileUpload?: (file: File) => Promise<unknown>
+  mermaidEnabled: boolean
+  disabled?: boolean
   onCommitDuration?: (actualDuration: number) => void
 }
 
@@ -28,7 +19,6 @@ export const WriterEditorHost = ({
   onMarkdownChange,
   onFlushMarkdownReady,
   onImageUpload,
-  onFileUpload,
   mermaidEnabled,
   disabled = false,
   onCommitDuration,
@@ -39,14 +29,12 @@ export const WriterEditorHost = ({
       onCommitDuration?.(actualDuration)
     }}
   >
-    <LazyBlockEditorShell
-      className="aq-block-editor--writer-surface"
+    <GitHubMarkdownEditor
       value={markdown}
       onChange={onMarkdownChange}
       onFlushMarkdownReady={onFlushMarkdownReady}
       onUploadImage={onImageUpload}
-      onUploadFile={onFileUpload}
-      enableMermaidBlocks={mermaidEnabled}
+      disableMermaid={!mermaidEnabled}
       disabled={disabled}
     />
   </Profiler>

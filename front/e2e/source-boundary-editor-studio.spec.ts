@@ -2206,7 +2206,7 @@ test.describe("editor studio source boundaries", () => {
     expect(editorStudioPersistenceModelSource).toContain("void handleUploadThumbnailImage(imageFile)")
   })
 
-  test("QA route는 writer/engine surface 계약을 분리 유지한다", () => {
+  test("QA route는 writer/engine surface 계약을 Markdown editor 기준으로 분리 유지한다", () => {
     const qaSource = readFileSync(path.resolve(__dirname, "../src/pages/_qa/block-editor-slash.tsx"), "utf8")
     const qaHarnessSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/QaEditorHarness.tsx"), "utf8")
 
@@ -2218,10 +2218,11 @@ test.describe("editor studio source boundaries", () => {
     expect(qaSource).toContain("return <QaEditorHarness seedMarkdown={props.seedMarkdown} />")
     expect(qaSource).not.toContain("BlockEditorShell 엔진 QA")
     expect(qaSource).not.toContain('dynamic(() => import("src/components/editor/BlockEditorShell")')
-    expect(qaHarnessSource).toContain('import type { BlockEditorQaActions } from "src/components/editor/blockEditorContract"')
-    expect(qaHarnessSource).toContain('dynamic(() => import("src/components/editor/BlockEditorShell")')
-    expect(qaHarnessSource).toContain("BlockEditorShell 엔진 QA")
-    expect(qaHarnessSource).toContain("실제 글쓰기 화면 레이아웃과 제목 입력칸 회귀는")
+    expect(qaHarnessSource).toContain('import { WriterEditorHost } from "./WriterEditorHost"')
+    expect(qaHarnessSource).toContain("GitHub Markdown editor QA")
+    expect(qaHarnessSource).toContain('data-testid="qa-editor-ready"')
+    expect(qaHarnessSource).not.toContain("BlockEditorShell")
+    expect(qaHarnessSource).not.toContain("BlockEditorQaActions")
   })
 
   test("editor studio workspace panel props는 하위 view contract로 분리된다", () => {

@@ -136,7 +136,16 @@ test.describe("GitHub Markdown editor replacement", () => {
   })
 
   test("write pane keeps every CodeMirror surface on the dark editor surface", async ({ page }) => {
-    await routeAuthenticatedEditor(page)
+    await routeAuthenticatedEditor(
+      page,
+      [
+        "# Token Highlight",
+        "",
+        "[link](https://example.com) and `inline code`",
+        "",
+        "> quoted text",
+      ].join("\n")
+    )
 
     await page.goto("/editor/new?source=local-draft")
 
@@ -156,6 +165,9 @@ test.describe("GitHub Markdown editor replacement", () => {
         scroller: readStyle(".cm-scroller"),
         content: readStyle(".cm-content"),
         line: readStyle(".cm-line"),
+        tokenColors: Array.from(pane.querySelectorAll(".cm-line span"))
+          .map((span) => window.getComputedStyle(span).color)
+          .filter((color, index, colors) => colors.indexOf(color) === index),
         gutters: readStyle(".cm-gutters"),
       }
     })
@@ -165,6 +177,8 @@ test.describe("GitHub Markdown editor replacement", () => {
     expect(styles.content.backgroundColor).toBe("rgb(13, 17, 23)")
     expect(styles.gutters.backgroundColor).toBe("rgb(13, 17, 23)")
     expect(styles.line.color).toBe("rgb(230, 237, 243)")
+    expect(styles.tokenColors).toContain("rgb(121, 192, 255)")
+    expect(styles.tokenColors).not.toEqual(["rgb(230, 237, 243)"])
   })
 
   test("split preview uses the same readable width and typography contract as post detail", async ({
@@ -176,11 +190,16 @@ test.describe("GitHub Markdown editor replacement", () => {
 
     const previewContract = await page
       .getByTestId("github-markdown-preview-pane")
-      .locator(".aq-markdown")
-      .evaluate((markdownRoot) => {
+      .locator("article")
+      .evaluate((article) => {
+        const markdownRoot = article.querySelector(".aq-markdown")
+        if (!(markdownRoot instanceof HTMLElement)) throw new Error("preview markdown root not found")
+        const articleStyle = window.getComputedStyle(article)
         const style = window.getComputedStyle(markdownRoot)
         const rect = markdownRoot.getBoundingClientRect()
         return {
+          paddingLeft: articleStyle.paddingLeft,
+          paddingRight: articleStyle.paddingRight,
           maxWidth: style.maxWidth,
           fontSize: style.fontSize,
           lineHeight: style.lineHeight,
@@ -188,6 +207,8 @@ test.describe("GitHub Markdown editor replacement", () => {
         }
       })
 
+    expect(previewContract.paddingLeft).toBe("16px")
+    expect(previewContract.paddingRight).toBe("16px")
     expect(previewContract.maxWidth).toBe("768px")
     expect(previewContract.fontSize).toBe("17px")
     expect(previewContract.lineHeight).toBe("28px")

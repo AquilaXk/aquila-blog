@@ -1,8 +1,8 @@
 import {
   type KeyboardEvent as ReactKeyboardEvent,
+  type UIEvent as ReactUIEvent,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react"
@@ -69,12 +69,10 @@ export const MarkdownEditor = ({
   const [uploadError, setUploadError] = useState("")
   const [draftValue, setDraftValue] = useState(value)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const previewScrollRef = useRef<HTMLElement | null>(null)
+  const isSyncingScrollRef = useRef(false)
   const valueRef = useRef(value)
   const selectionRef = useRef<TextareaSelection>({ from: 0, to: 0 })
-  const lineNumbers = useMemo(
-    () => Array.from({ length: Math.max(1, draftValue.split("\n").length) }, (_, index) => index + 1),
-    [draftValue]
-  )
 
   useEffect(() => {
     if (value === valueRef.current) return
@@ -120,6 +118,37 @@ export const MarkdownEditor = ({
     textarea.setSelectionRange(nextSelection.from, nextSelection.to)
     selectionRef.current = nextSelection
   }, [])
+
+  const syncScrollPosition = useCallback((source: HTMLElement, target: HTMLElement | null) => {
+    if (!target) return
+
+    const sourceMax = source.scrollHeight - source.clientHeight
+    const targetMax = target.scrollHeight - target.clientHeight
+    if (sourceMax <= 0 || targetMax <= 0) return
+
+    const ratio = source.scrollTop / sourceMax
+    isSyncingScrollRef.current = true
+    target.scrollTop = ratio * targetMax
+    window.requestAnimationFrame(() => {
+      isSyncingScrollRef.current = false
+    })
+  }, [])
+
+  const handleWriteScroll = useCallback(
+    (event: ReactUIEvent<HTMLTextAreaElement>) => {
+      if (isSyncingScrollRef.current) return
+      syncScrollPosition(event.currentTarget, previewScrollRef.current)
+    },
+    [syncScrollPosition]
+  )
+
+  const handlePreviewScroll = useCallback(
+    (event: ReactUIEvent<HTMLElement>) => {
+      if (isSyncingScrollRef.current) return
+      syncScrollPosition(event.currentTarget, textareaRef.current)
+    },
+    [syncScrollPosition]
+  )
 
   const handleTextareaKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -257,11 +286,6 @@ export const MarkdownEditor = ({
         {mode !== "preview" ? (
           <WritePane data-pane="write" data-testid="markdown-editor-write-pane">
             <WriteEditorFrame data-testid="markdown-textarea-frame">
-              <LineNumberGutter aria-hidden="true" data-testid="markdown-line-number-gutter">
-                {lineNumbers.map((lineNumber) => (
-                  <span key={lineNumber}>{lineNumber}</span>
-                ))}
-              </LineNumberGutter>
               <MarkdownTextarea
                 ref={textareaRef}
                 aria-label="Markdown 본문"
@@ -280,6 +304,7 @@ export const MarkdownEditor = ({
                 onKeyUp={rememberTextareaSelection}
                 onMouseUp={rememberTextareaSelection}
                 onSelect={rememberTextareaSelection}
+                onScroll={handleWriteScroll}
               />
             </WriteEditorFrame>
           </WritePane>
@@ -287,7 +312,11 @@ export const MarkdownEditor = ({
         {mode !== "write" ? (
           <PreviewPane data-pane="preview" data-testid="markdown-editor-preview-pane">
             <PreviewHeader>Preview</PreviewHeader>
-            <PreviewArticle>
+            <PreviewArticle
+              ref={previewScrollRef}
+              data-testid="markdown-editor-preview-scroll"
+              onScroll={handlePreviewScroll}
+            >
               <MarkdownRenderer content={value} disableMermaid={disableMermaid} />
             </PreviewArticle>
           </PreviewPane>
@@ -447,30 +476,9 @@ const WritePane = styled.div`
 `
 
 const WriteEditorFrame = styled.div`
-  display: grid;
-  grid-template-columns: 2.75rem minmax(0, 1fr);
   min-height: 640px;
   background: ${({ theme }) => theme.publicDesign.readableSurface};
   color: ${({ theme }) => theme.colors.gray12};
-`
-
-const LineNumberGutter = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0;
-  padding: 16px 0.62rem 16px 0.4rem;
-  border-right: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.publicDesign.readableSurface};
-  color: ${({ theme }) => theme.colors.gray10};
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 14px;
-  line-height: 1.55;
-  user-select: none;
-
-  span {
-    height: 1.55em;
-  }
 `
 
 const MarkdownTextarea = styled.textarea`
@@ -503,7 +511,10 @@ const MarkdownTextarea = styled.textarea`
 
 const PreviewPane = styled.div`
   min-width: 0;
+  height: 640px;
   min-height: 640px;
+  display: flex;
+  flex-direction: column;
   background: ${({ theme }) => theme.publicDesign.readableSurface};
 `
 
@@ -519,6 +530,10 @@ const PreviewHeader = styled.div`
 `
 
 const PreviewArticle = styled.article`
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0 1rem 2rem;
   background: ${({ theme }) => theme.publicDesign.readableSurface};
 

@@ -1,5 +1,6 @@
 import AppIcon from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
+import { CONFIG } from "site.config"
 import type { ProfileWorkspaceContent } from "src/libs/profileWorkspace"
 import {
   AvatarFallback,
@@ -83,6 +84,7 @@ export default function AdminProfilePreviewRail({
                     {previewContent.profileImageUrl ? (
                       <ProfileImage
                         src={previewContent.profileImageUrl}
+                        fallbackSrc={CONFIG.profile.image}
                         alt={displayName}
                         width={72}
                         height={72}

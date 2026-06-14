@@ -1,6 +1,7 @@
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type UIEvent as ReactUIEvent,
+  type WheelEvent as ReactWheelEvent,
   useCallback,
   useEffect,
   useRef,
@@ -70,7 +71,6 @@ export const MarkdownEditor = ({
   const [draftValue, setDraftValue] = useState(value)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const previewScrollRef = useRef<HTMLElement | null>(null)
-  const isSyncingScrollRef = useRef(false)
   const valueRef = useRef(value)
   const selectionRef = useRef<TextareaSelection>({ from: 0, to: 0 })
 
@@ -127,16 +127,14 @@ export const MarkdownEditor = ({
     if (sourceMax <= 0 || targetMax <= 0) return
 
     const ratio = source.scrollTop / sourceMax
-    isSyncingScrollRef.current = true
-    target.scrollTop = ratio * targetMax
-    window.requestAnimationFrame(() => {
-      isSyncingScrollRef.current = false
-    })
+    const nextScrollTop = ratio * targetMax
+    if (Math.abs(target.scrollTop - nextScrollTop) < 1) return
+
+    target.scrollTop = nextScrollTop
   }, [])
 
   const handleWriteScroll = useCallback(
     (event: ReactUIEvent<HTMLTextAreaElement>) => {
-      if (isSyncingScrollRef.current) return
       syncScrollPosition(event.currentTarget, previewScrollRef.current)
     },
     [syncScrollPosition]
@@ -144,11 +142,21 @@ export const MarkdownEditor = ({
 
   const handlePreviewScroll = useCallback(
     (event: ReactUIEvent<HTMLElement>) => {
-      if (isSyncingScrollRef.current) return
       syncScrollPosition(event.currentTarget, textareaRef.current)
     },
     [syncScrollPosition]
   )
+
+  const handlePreviewWheel = useCallback((event: ReactWheelEvent<HTMLElement>) => {
+    if (event.deltaY === 0 && event.deltaX === 0) return
+
+    event.preventDefault()
+
+    window.scrollBy({
+      top: event.deltaY,
+      left: event.deltaX,
+    })
+  }, [])
 
   const handleTextareaKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -316,6 +324,7 @@ export const MarkdownEditor = ({
               ref={previewScrollRef}
               data-testid="markdown-editor-preview-scroll"
               onScroll={handlePreviewScroll}
+              onWheel={handlePreviewWheel}
             >
               <MarkdownRenderer content={value} disableMermaid={disableMermaid} />
             </PreviewArticle>

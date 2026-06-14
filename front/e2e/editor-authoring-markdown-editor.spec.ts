@@ -573,6 +573,52 @@ test.describe("Markdown editor replacement", () => {
       .toBeLessThan(textareaScroll.top)
   })
 
+  test("split preview wheel keeps the document page scroll chain active", async ({ page }) => {
+    const longMarkdown = Array.from({ length: 24 }, (_, index) => [
+      `## Section ${index + 1}`,
+      "",
+      "```ts",
+      `const previewWheelScrollChain${index + 1} = true`,
+      "```",
+      "",
+      "| Column 1 | Column 2 |",
+      "| --- | --- |",
+      `| Value ${index + 1} | Result ${index + 1} |`,
+      "",
+    ].join("\n")).join("\n")
+
+    await routeAuthenticatedEditor(page, longMarkdown)
+
+    await page.goto("/editor/new?source=local-draft")
+
+    const previewScroll = page.getByTestId("markdown-editor-preview-scroll")
+    await expect(previewScroll).toBeVisible()
+    await previewScroll.locator("table").first().scrollIntoViewIfNeeded()
+
+    await page.evaluate(() => {
+      if (document.querySelector("[data-testid='markdown-preview-wheel-spacer']")) return
+      const spacer = document.createElement("div")
+      spacer.setAttribute("data-testid", "markdown-preview-wheel-spacer")
+      spacer.style.height = "1600px"
+      document.body.appendChild(spacer)
+    })
+
+    const box = await previewScroll.locator("table").first().boundingBox()
+    if (!box) {
+      throw new Error("preview table metrics are missing before wheel")
+    }
+
+    await page.mouse.move(box.x + Math.min(box.width / 2, 120), box.y + Math.min(box.height / 2, 40))
+    const beforeScrollTop = await page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY)
+    await page.mouse.wheel(0, 420)
+
+    await expect
+      .poll(async () => page.evaluate(() => document.scrollingElement?.scrollTop ?? window.scrollY), {
+        message: "preview wheel should keep page scroll chaining active",
+      })
+      .toBeGreaterThan(beforeScrollTop + 80)
+  })
+
   test("toolbar snippets insert at the textarea caret instead of appending at the document end", async ({
     page,
   }) => {

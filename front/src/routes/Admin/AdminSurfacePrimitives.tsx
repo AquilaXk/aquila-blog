@@ -429,10 +429,22 @@ export const AdminInfoStatusItem = styled.div`
 
   &[data-tone="good"] {
     background: ${({ theme }) => theme.colors.statusSuccessSurface};
+    color: ${({ theme }) => theme.colors.statusSuccessText};
+
+    span,
+    strong {
+      color: ${({ theme }) => theme.colors.statusSuccessText};
+    }
   }
 
   &[data-tone="warn"] {
     background: ${({ theme }) => theme.colors.orange2};
+    color: ${({ theme }) => theme.colors.orange10};
+
+    span,
+    strong {
+      color: ${({ theme }) => theme.colors.orange10};
+    }
   }
 
   span {

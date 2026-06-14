@@ -34,13 +34,15 @@ const AdminCloudUploadQueue = ({
 }: AdminCloudUploadQueueProps) => {
   if (uploadQueue.length === 0) return null
 
-  const finishedCount = uploadQueue.length - activeUploadCount
+  const failedOrCancelledCount = uploadQueue.filter(
+    (item) => item.status === "failed" || item.status === "cancelled"
+  ).length
   const title =
     activeUploadCount > 0
       ? `항목 ${activeUploadCount}개 업로드 중`
       : completedUploadCount === uploadQueue.length
         ? `항목 ${completedUploadCount}개 업로드 완료`
-        : `항목 ${finishedCount}개 업로드 종료`
+        : `항목 ${failedOrCancelledCount}개 업로드 실패/취소`
 
   // The queue is fixed like Drive's transfer panel, while the upload state machine stays in this page.
   return (

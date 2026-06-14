@@ -282,6 +282,7 @@ test.describe("관리자 클라우드", () => {
 
     const uploadPanel = page.getByLabel("업로드 중인 파일")
     await expect(uploadPanel).toHaveCSS("position", "fixed")
+    await expect(uploadPanel).toHaveCSS("z-index", "160")
     await expect(uploadPanel.getByRole("heading", { name: /항목 .* 업로드/ })).toBeVisible()
     await expect(uploadPanel.getByText("신규 운영 문서.pdf")).toBeVisible()
     await expect(uploadPanel.getByText("배포 캡처.png")).toBeVisible()
@@ -393,6 +394,7 @@ test.describe("관리자 클라우드", () => {
 
     const uploadPanel = page.getByLabel("업로드 중인 파일")
     await expect(uploadPanel.getByText("실패할 운영 문서.pdf")).toBeVisible()
+    await expect(uploadPanel.getByRole("heading", { name: "항목 1개 업로드 실패/취소" })).toBeVisible()
     await expect(uploadPanel.getByText(/서버 오류가 발생했습니다/)).toBeVisible()
     await expect(uploadPanel.getByRole("button", { name: "실패할 운영 문서.pdf 업로드 다시 시도" })).toBeVisible()
   })

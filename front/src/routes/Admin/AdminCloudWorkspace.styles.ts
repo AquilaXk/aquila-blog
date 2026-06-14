@@ -666,7 +666,7 @@ export const QueuePanel = styled.section`
   position: fixed;
   right: max(1rem, env(safe-area-inset-right));
   bottom: max(1rem, env(safe-area-inset-bottom));
-  z-index: 40;
+  z-index: 160;
   display: grid;
   gap: 0.55rem;
   width: min(25rem, calc(100vw - 2rem));

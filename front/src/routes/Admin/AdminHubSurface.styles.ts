@@ -195,10 +195,22 @@ export const BorderlessPanel = styled.div`
 
   &[data-tone="good"] {
     background: ${({ theme }) => theme.colors.statusSuccessSurface};
+    color: ${({ theme }) => theme.colors.statusSuccessText};
+
+    span,
+    strong {
+      color: ${({ theme }) => theme.colors.statusSuccessText};
+    }
   }
 
   &[data-tone="warn"] {
     background: ${({ theme }) => theme.colors.orange2};
+    color: ${({ theme }) => theme.colors.orange10};
+
+    span,
+    strong {
+      color: ${({ theme }) => theme.colors.orange10};
+    }
   }
 
   span {
@@ -241,10 +253,24 @@ export const BorderlessPanelLink = styled.a`
 
   &[data-tone="good"] {
     background: ${({ theme }) => theme.colors.statusSuccessSurface};
+    color: ${({ theme }) => theme.colors.statusSuccessText};
+
+    small,
+    span,
+    strong {
+      color: ${({ theme }) => theme.colors.statusSuccessText};
+    }
   }
 
   &[data-tone="warn"] {
     background: ${({ theme }) => theme.colors.orange2};
+    color: ${({ theme }) => theme.colors.orange10};
+
+    small,
+    span,
+    strong {
+      color: ${({ theme }) => theme.colors.orange10};
+    }
   }
 
   &:hover {
@@ -326,10 +352,22 @@ export const BorderlessMetricRow = styled.div`
 
   &[data-tone="good"] {
     background: ${({ theme }) => theme.colors.statusSuccessSurface};
+    color: ${({ theme }) => theme.colors.statusSuccessText};
+
+    span,
+    strong {
+      color: ${({ theme }) => theme.colors.statusSuccessText};
+    }
   }
 
   &[data-tone="warn"] {
     background: ${({ theme }) => theme.colors.orange2};
+    color: ${({ theme }) => theme.colors.orange10};
+
+    span,
+    strong {
+      color: ${({ theme }) => theme.colors.orange10};
+    }
   }
 
   span {

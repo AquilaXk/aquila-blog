@@ -23,7 +23,18 @@ test.describe("관리자 런타임 회귀 계약", () => {
     expect(proxySource).toContain("normalizeApiRequestPath")
     expect(proxySource).toContain("resolveServerApiBaseUrl")
     expect(proxySource).toContain('headers.set("X-Forwarded-Host"')
+    expect(proxySource).toContain('headers.set("X-Forwarded-Proto", firstHeaderValue(req.headers["x-forwarded-proto"]) || "https")')
+    expect(proxySource).toContain('headers.set("X-Forwarded-For", clientIp)')
+    expect(proxySource).toContain("const BACKEND_PROXY_TIMEOUT_MS = 120_000")
+    expect(proxySource).toContain("const controller = new AbortController()")
+    expect(proxySource).toContain("const timeoutId = setTimeout(() => controller.abort(), BACKEND_PROXY_TIMEOUT_MS)")
+    expect(proxySource).toContain("signal: controller.signal")
+    expect(proxySource).toContain("clearTimeout(timeoutId)")
     expect(proxySource).toContain('duplex: "half"')
+    expect(proxySource).toContain('normalizedKey === "host"')
+    expect(proxySource).toContain('normalizedKey === "accept-encoding"')
+    expect(proxySource).toContain('const DECODED_RESPONSE_HEADERS = new Set(["content-encoding", "content-length"])')
+    expect(proxySource).toContain("DECODED_RESPONSE_HEADERS.has(normalizedKey)")
   })
 
   test("클라우드 목록과 업로드는 프록시 가능한 URL 생성기를 공유한다", () => {
@@ -40,9 +51,26 @@ test.describe("관리자 런타임 회귀 계약", () => {
 
     expect(documentSource).toContain("AQUILA_SCHEME_BOOTSTRAP_SCRIPT")
     expect(documentSource).toContain('document.documentElement.dataset.aquilaScheme = nextScheme')
+    expect(documentSource).toContain('document.documentElement.setAttribute("data-aquila-scheme-bootstrap", nextScheme)')
     expect(documentSource).toContain("prefers-color-scheme: dark")
     expect(documentSource).toContain("colorScheme = nextScheme")
-    expect(schemeSource).toContain("resolveInitialBrowserScheme")
+    expect(documentSource).toContain('nextScheme === "dark" ? "#121212" : "#f3f5f8"')
+    expect(documentSource).not.toContain("#111318")
+    expect(documentSource).toContain("html[data-aquila-scheme-bootstrap] body")
+    expect(schemeSource).toContain("initialData: fallbackScheme")
+    expect(schemeSource).toContain("clearSchemeBootstrapAfterHydration")
+    expect(schemeSource).toContain('style[data-aquila-scheme-bootstrap-style="true"]')
     expect(schemeSource).toContain('window.matchMedia?.("(prefers-color-scheme: dark)")?.matches')
+    expect(schemeSource).not.toContain("resolveInitialBrowserScheme")
+  })
+})
+
+test.describe("공개 피드 접근성 회귀 계약", () => {
+  test("홈 피드 활성 태그는 밝은 배경에서 충분한 대비의 텍스트 색을 사용한다", () => {
+    const tagListSource = readFrontSource("routes/Feed/TagList.tsx")
+
+    expect(tagListSource).toContain("--feed-tag-accent-text")
+    expect(tagListSource).toContain('theme.scheme === "light" ? theme.colors.blue11 : theme.colors.blue10')
+    expect(tagListSource).toContain("color: var(--feed-tag-accent-text);")
   })
 })

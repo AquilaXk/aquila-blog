@@ -112,6 +112,59 @@ test.describe("GitHub Markdown editor replacement", () => {
     expect(composeRootSource).not.toContain("handleBlockEditorChange")
   })
 
+  test("publish confirmation modal follows the admin neutral dialog contract", async ({ page }) => {
+    await routeAuthenticatedEditor(page)
+
+    await page.goto("/editor/new?source=local-draft")
+    await page.getByRole("button", { name: /^(발행|새 글 작성|수정 반영)$/ }).first().click()
+
+    const dialog = page.getByRole("dialog", { name: /^(발행 설정|새 글 작성|수정 설정)$/ })
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole("button", { name: "닫기" })).toBeVisible()
+    await expect(dialog.getByRole("button", { name: /^(발행하기|새 글 작성|변경 반영)$/ })).toBeVisible()
+
+    const dialogContract = await dialog.evaluate((element) => {
+      const style = window.getComputedStyle(element)
+      return {
+        borderRadius: Number.parseFloat(style.borderTopLeftRadius),
+        width: element.getBoundingClientRect().width,
+        backgroundImage: style.backgroundImage,
+      }
+    })
+
+    expect(dialogContract.borderRadius).toBeLessThanOrEqual(16)
+    expect(dialogContract.width).toBeLessThanOrEqual(960)
+    expect(dialogContract.backgroundImage).toBe("none")
+  })
+
+  test("publish modal shell styles stay in the modal style primitive file", () => {
+    const publishModalSource = readFileSync(
+      sourcePath("routes/Admin/EditorStudioPublishModal.tsx"),
+      "utf8"
+    )
+    const publishModalStylesSource = readFileSync(
+      sourcePath("routes/Admin/EditorStudioPublishModalStyles.tsx"),
+      "utf8"
+    )
+    const publishModalShellStylesSource = readFileSync(
+      sourcePath("routes/Admin/EditorStudioPublishModalShellStyles.tsx"),
+      "utf8"
+    )
+
+    expect(publishModalSource).not.toContain("const PublishModalBackdrop = styled.")
+    expect(publishModalSource).not.toContain("const PublishDialog = styled.")
+    expect(publishModalSource).not.toContain("const PublishModalHeader = styled.")
+    expect(publishModalSource).not.toContain("const PublishModalBody = styled.")
+    expect(publishModalSource).not.toContain("const PublishModalFooter = styled.")
+    expect(publishModalSource).toContain('from "./EditorStudioPublishModalStyles"')
+    expect(publishModalStylesSource).toContain('from "./EditorStudioPublishModalShellStyles"')
+    expect(publishModalShellStylesSource).toContain("export const PublishModalBackdrop")
+    expect(publishModalShellStylesSource).toContain("export const PublishDialog")
+    expect(publishModalShellStylesSource).toContain("export const PublishModalHeader")
+    expect(publishModalShellStylesSource).toContain("export const PublishModalBody")
+    expect(publishModalShellStylesSource).toContain("export const PublishModalFooter")
+  })
+
   test("/editor/new renders GitHub Markdown write and preview panes for 507-style bottom content", async ({
     page,
   }) => {
@@ -133,6 +186,101 @@ test.describe("GitHub Markdown editor replacement", () => {
     await expect(preview.locator("pre")).toContainText("console.log(\"507-code\")")
     await expect(preview.locator("input[type='checkbox']")).toHaveCount(2)
     await expect(preview.getByText("quote at the bottom")).toBeVisible()
+  })
+
+  test("preview matches GitHub table markdown for alignment, escaped pipes, and inline cell formatting", async ({
+    page,
+  }) => {
+    await routeAuthenticatedEditor(
+      page,
+      [
+        "# GitHub table parity",
+        "",
+        "```md",
+        "| example | only |",
+        "| --- | --- |",
+        "| this is code | not a rendered table |",
+        "```",
+        "",
+        "    | indented | code |",
+        "    | --- | --- |",
+        "",
+        "escaped \\| pipe is plain text",
+        "--- | ---",
+        "",
+        "Mismatch | Header | Count",
+        "--- | ---",
+        "one | two",
+        "",
+        "Inline | `pipe|code`",
+        "--- | ---",
+        "",
+        "Two dash A | Two dash B",
+        "-- | --",
+        "one | two",
+        "",
+        "Left | Center | Right",
+        ":--- | :---: | ---:",
+        "**strong** and *em* | `code` and [link](https://github.com) | escaped \\| pipe",
+        "",
+        '<!-- aq-table {"overflowMode":"wide","columnWidths":[320,360,420]} -->',
+        "| Wide A | Wide B | Wide C |",
+        "| --- | --- | --- |",
+        "| " + "wide content ".repeat(10) + " | beta | gamma |",
+      ].join("\n")
+    )
+
+    await page.goto("/editor/new?source=local-draft")
+
+    const preview = page.getByTestId("github-markdown-preview-pane")
+    await expect(preview.locator("pre").filter({ hasText: "| example | only |" })).toBeVisible()
+    await expect(preview.locator("pre").filter({ hasText: "| indented | code |" })).toBeVisible()
+    await expect(preview.getByText("escaped | pipe is plain text")).toBeVisible()
+    await expect(preview.getByText("Mismatch | Header | Count")).toBeVisible()
+    await expect(preview.getByText("Inline | pipe|code")).toBeVisible()
+    await expect(preview.locator("table")).toHaveCount(3)
+
+    const table = preview.locator("table").filter({ hasText: "strong" }).first()
+    await expect(table).toBeVisible()
+    await expect(table.locator("th")).toHaveCount(3)
+    await expect(table.locator("td")).toHaveCount(3)
+    await expect(table.locator("td").nth(0).locator("strong")).toHaveText("strong")
+    await expect(table.locator("td").nth(0).locator("em")).toHaveText("em")
+    await expect(table.locator("td").nth(1).locator("code")).toHaveText("code")
+    await expect(table.locator("td").nth(1).locator("a")).toHaveAttribute("href", "https://github.com")
+    await expect(table.locator("td").nth(2)).toHaveText("escaped | pipe")
+
+    const tableContract = await table.evaluate((element) => {
+      const cells = Array.from(element.querySelectorAll<HTMLElement>("th"))
+      const shell = element.closest(".aq-table-shell")
+      const scroll = element.closest(".aq-table-scroll")
+      return {
+        alignments: cells.map((cell) => window.getComputedStyle(cell).textAlign),
+        shellWidth: shell?.getBoundingClientRect().width ?? 0,
+        tableWidth: element.getBoundingClientRect().width,
+        scrollWidth: scroll?.scrollWidth ?? 0,
+        clientWidth: scroll?.clientWidth ?? 0,
+      }
+    })
+
+    expect(tableContract.alignments).toEqual(["left", "center", "right"])
+    expect(tableContract.tableWidth).toBeLessThanOrEqual(tableContract.shellWidth + 1)
+
+    const wideTableContract = await preview
+      .locator("table")
+      .filter({ hasText: "wide content" })
+      .first()
+      .evaluate((element) => {
+        const scroll = element.closest(".aq-table-scroll")
+        return {
+          mode: element.getAttribute("data-overflow-mode"),
+          scrollWidth: scroll?.scrollWidth ?? 0,
+          clientWidth: scroll?.clientWidth ?? 0,
+        }
+      })
+
+    expect(wideTableContract.mode).toBe("wide")
+    expect(wideTableContract.scrollWidth).toBeGreaterThan(wideTableContract.clientWidth)
   })
 
   test("write pane keeps every CodeMirror surface on the dark editor surface", async ({ page }) => {

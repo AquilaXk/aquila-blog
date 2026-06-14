@@ -19,6 +19,10 @@ import {
   VisibilityCard,
   VisibilityOptionButton,
   VisibilityOptionGrid,
+  PublishButton,
+  PublishModalNotice,
+  PublishOverviewGrid,
+  PublishPrimaryButton,
 } from "./EditorStudioPublishModalStyles"
 import AppIcon from "src/components/icons/AppIcon"
 import type { PostVisibility } from "./editorStudioState"
@@ -255,6 +259,4 @@ export const EditorStudioPublishCardSettings = ({
     )}
   </PostPreviewSetup>
 )
-
-export { PublishButton, PublishModalNotice, PublishOverviewGrid, PublishPrimaryButton } from "./EditorStudioPublishModalStyles"
 

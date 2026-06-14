@@ -1,5 +1,13 @@
 import styled from "@emotion/styled"
 
+export {
+  PublishDialog,
+  PublishModalBackdrop,
+  PublishModalBody,
+  PublishModalFooter,
+  PublishModalHeader,
+} from "./EditorStudioPublishModalShellStyles"
+
 export const PublishOverviewGrid = styled.div`
   display: grid;
   gap: 0.8rem;
@@ -16,9 +24,7 @@ export const VisibilityCard = styled.section`
   align-content: start;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 14px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
-    ${({ theme }) => theme.colors.gray1};
+  background: ${({ theme }) => theme.colors.gray1};
   padding: 0.9rem;
 
   > strong {
@@ -102,9 +108,7 @@ export const PreviewResultPanel = styled.div`
   overflow: hidden;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 14px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
-    ${({ theme }) => theme.colors.gray1};
+  background: ${({ theme }) => theme.colors.gray1};
   padding: 0.9rem;
 `
 
@@ -212,9 +216,7 @@ export const PreviewResultCard = styled.article`
     position: relative;
     aspect-ratio: 1.94 / 1;
     overflow: hidden;
-    background:
-      radial-gradient(circle at top left, rgba(96, 165, 250, 0.08), transparent 48%),
-      ${({ theme }) => theme.colors.gray3};
+    background: ${({ theme }) => theme.colors.gray3};
     border-bottom: 1px solid ${({ theme }) => theme.colors.gray4};
   }
 

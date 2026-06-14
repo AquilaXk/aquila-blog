@@ -536,6 +536,12 @@ const MarkdownTextarea = styled.textarea`
     background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(56, 139, 253, 0.45)" : "rgba(9, 105, 218, 0.24)")};
   }
 
+  &:focus,
+  &:focus-visible {
+    outline: 0;
+    box-shadow: none;
+  }
+
   &:disabled {
     cursor: not-allowed;
     opacity: 0.7;

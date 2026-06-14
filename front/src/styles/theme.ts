@@ -35,24 +35,7 @@ type Options = {
   blogDesign?: BlogDesignType
 }
 
-export const createPublicDesignTokens = (scheme: SchemeType, blogDesign: BlogDesignType): PublicDesignTokens => {
-  if (blogDesign === "grid") {
-    return {
-      pageBackgroundColor: "#101214",
-      pageBackgroundImage: "repeating-linear-gradient(90deg,#ba51 1px,#0000 0 5em)",
-      surface: "#171a1d",
-      surfaceElevated: "#202328",
-      readableSurface: "#121416",
-      operationSurface: "#101214",
-      operationSurfaceElevated: "#171a1d",
-      border: "#7656",
-      borderStrong: "#ca68",
-      accent: "#ca6",
-      accentMuted: "#221",
-      shadow: "0 20px 56px #0008",
-    }
-  }
-
+export const createPublicDesignTokens = (scheme: SchemeType): PublicDesignTokens => {
   const schemeColors = colors[scheme]
 
   return {
@@ -77,7 +60,7 @@ export const createPublicDesignTokens = (scheme: SchemeType, blogDesign: BlogDes
 export const createTheme = (options: Options): Theme => ({
   scheme: options.scheme,
   blogDesign: options.blogDesign ?? "legacy",
-  publicDesign: createPublicDesignTokens(options.scheme, options.blogDesign ?? "legacy"),
+  publicDesign: createPublicDesignTokens(options.scheme),
   colors: colors[options.scheme],
   variables: variables,
   zIndexes: zIndexes,

@@ -9,7 +9,6 @@ import { useRouter } from "next/router"
 import { useQuery } from "@tanstack/react-query"
 import { CONFIG } from "site.config"
 import type { AdminProfile } from "src/hooks/useAdminProfile"
-import { resolvePublicBlogAppearance } from "src/libs/blogAppearance"
 import { isNavigationCancelledError, isRequestCancelledError } from "src/libs/router"
 import {
   CONTENT_MAX_WIDTH_PX,
@@ -85,9 +84,8 @@ const RootLayout = ({
     refetchOnMount: isDesignAwareRoute,
     staleTimeMs: isDesignAwareRoute ? 0 : undefined,
   })
-  const publicAppearance = resolvePublicBlogAppearance(isDesignAwareRoute ? adminProfile : null)
-  const effectiveScheme = isDesignAwareRoute ? publicAppearance.scheme : scheme
-  const effectiveBlogDesign = isDesignAwareRoute ? publicAppearance.blogDesign : "legacy"
+  const effectiveScheme = scheme
+  const effectiveBlogDesign = "legacy"
   const headerBlogTitle = (isPublicBlogRoute && adminProfile?.blogTitle?.trim()) || CONFIG.blog.title
   const [isNavigating, setIsNavigating] = useState(false)
   useGtagEffect()

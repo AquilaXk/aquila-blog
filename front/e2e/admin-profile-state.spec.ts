@@ -344,7 +344,7 @@ test.describe("admin profile state contract", () => {
     expect(bridge.aboutSections.map((section) => section.title)).toEqual(["경력"])
     expect(bridge.aboutProjectSectionTitle).toBe("프로젝트")
     expect(bridge.aboutProjects.map((project) => project.name)).toEqual(["aquila-blog"])
-    expect(bridge.blogDesign).toBe("grid")
+    expect(bridge.blogDesign).toBe("legacy")
     expect(bridge.legacyBlogScheme).toBe("light")
     expect(bridge.aboutDetails).toContain("## 경력")
     expect(bridge.aboutDetails).toContain("- 2026.03 Aquila Blog 운영")
@@ -374,7 +374,7 @@ test.describe("admin profile state contract", () => {
     expect(normalized.legacyBlogScheme).toBe("dark")
   })
 
-  test("profile 화면은 전역 블로그 디자인 설정과 legacy 전용 scheme control을 가진다", () => {
+  test("profile 화면은 디자인 섹션 없이 공개 설정을 legacy로 고정한다", () => {
     const source = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceHomeDesignSections.tsx"),
       "utf8"
@@ -384,14 +384,14 @@ test.describe("admin profile state contract", () => {
       "utf8"
     )
 
-    expect(modelSource).toContain('id: "design"')
-    expect(modelSource).toContain('label: "디자인"')
-    expect(source).toContain('updateDraft("blogDesign",')
-    expect(source).toContain('updateDraft("legacyBlogScheme",')
-    expect(source).toContain('draft.blogDesign === "legacy"')
+    expect(modelSource).not.toContain('id: "design"')
+    expect(modelSource).not.toContain('label: "디자인"')
+    expect(source).not.toContain('updateDraft("blogDesign",')
+    expect(source).not.toContain('updateDraft("legacyBlogScheme",')
+    expect(source).not.toContain('draft.blogDesign')
   })
 
-  test("profile 디자인 공개 적용은 primary action에서 저장 후 publish까지 처리한다", () => {
+  test("profile 공개 적용은 primary action에서 저장 후 publish까지 처리한다", () => {
     const pageModelSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspacePageModel.ts"),
       "utf8"

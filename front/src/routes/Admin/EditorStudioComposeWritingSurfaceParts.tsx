@@ -1,13 +1,11 @@
-import styled from "@emotion/styled"
-import { articleTypographyScale } from "src/libs/markdown/contentTypography"
-
-export const EditorStudioComposeMainColumn = styled.div`
+import styled from "@emotion/styled";
+import { articleTypographyScale } from "src/libs/markdown/contentTypography";
+export const EditorStudioComposeMainColumn = styled.div `
   display: grid;
   gap: 1.1rem;
   min-width: 0;
-`
-
-export const EditorStudioComposeHeaderSection = styled.div`
+`;
+export const EditorStudioComposeHeaderSection = styled.div `
   display: grid;
   gap: 0.9rem;
 
@@ -15,9 +13,8 @@ export const EditorStudioComposeHeaderSection = styled.div`
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
   }
-`
-
-export const ComposeStudioHeaderCopy = styled.div`
+`;
+export const ComposeStudioHeaderCopy = styled.div `
   display: grid;
   gap: 0.28rem;
   min-width: 0;
@@ -38,20 +35,18 @@ export const ComposeStudioHeaderCopy = styled.div`
     line-height: 1.58;
     max-width: 34rem;
   }
-`
-
-export const ComposeStudioKicker = styled.span`
+`;
+export const ComposeStudioKicker = styled.span `
   display: inline-flex;
   align-items: center;
   width: fit-content;
-  color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.gray10)};
+  color: ${({ theme }) => (theme.colors.gray10)};
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0;
   text-transform: uppercase;
-`
-
-export const ComposeStudioContextBar = styled.div`
+`;
+export const ComposeStudioContextBar = styled.div `
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
@@ -60,16 +55,15 @@ export const ComposeStudioContextBar = styled.div`
   @media (min-width: 960px) {
     justify-content: flex-end;
   }
-`
-
-export const ComposeStudioContextItem = styled.div`
+`;
+export const ComposeStudioContextItem = styled.div `
   display: grid;
   gap: 0.08rem;
   min-width: 7rem;
   padding: 0.5rem 0.68rem;
-  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray5)};
-  border-radius: ${({ theme }) => (theme.blogDesign === "grid" ? "4px" : "12px")};
-  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurfaceElevated : theme.colors.gray2)};
+  border: 1px solid ${({ theme }) => (theme.colors.gray5)};
+  border-radius: ${({ theme }) => ("12px")};
+  background: ${({ theme }) => (theme.colors.gray2)};
 
   span {
     color: ${({ theme }) => theme.colors.gray10};
@@ -95,9 +89,8 @@ export const ComposeStudioContextItem = styled.div`
   &[data-tone="error"] strong {
     color: ${({ theme }) => theme.colors.red11};
   }
-`
-
-export const WriterHeader = styled.div`
+`;
+export const WriterHeader = styled.div `
   display: grid;
   grid-template-columns: 1fr;
   gap: 1rem;
@@ -108,16 +101,14 @@ export const WriterHeader = styled.div`
     gap: 1rem;
     min-width: 0;
   }
-`
-
-export const WriterAccent = styled.div`
+`;
+export const WriterAccent = styled.div `
   width: 5rem;
   height: 0.42rem;
   border-radius: 999px;
-  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.gray8)};
-`
-
-export const TitleInput = styled.textarea`
+  background: ${({ theme }) => (theme.colors.gray8)};
+`;
+export const TitleInput = styled.textarea `
   width: 100%;
   min-width: 0;
   border: 0;
@@ -149,39 +140,35 @@ export const TitleInput = styled.textarea`
     font-size: ${articleTypographyScale.postTitleFontSizeMobile};
     line-height: ${articleTypographyScale.postTitleLineHeightMobile};
   }
-`
-
-export const EditorStudioComposeMetadataSection = styled.div`
+`;
+export const EditorStudioComposeMetadataSection = styled.div `
   width: 100%;
   max-width: var(--article-readable-width, 48rem);
   min-width: 0;
   margin-inline: auto;
   display: grid;
   gap: 1rem;
-  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : "transparent")};
-  border-radius: ${({ theme }) => (theme.blogDesign === "grid" ? "8px" : "0")};
-  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.readableSurface : "transparent")};
-  padding: ${({ theme }) => (theme.blogDesign === "grid" ? "1rem" : "0")};
-`
-
-export const ComposeSummaryField = styled.div`
+  border: 1px solid ${({ theme }) => ("transparent")};
+  border-radius: ${({ theme }) => ("0")};
+  background: ${({ theme }) => ("transparent")};
+  padding: ${({ theme }) => ("0")};
+`;
+export const ComposeSummaryField = styled.div `
   display: grid;
   gap: 0.45rem;
-`
-
-export const FieldLabel = styled.label`
+`;
+export const FieldLabel = styled.label `
   font-size: 0.8rem;
   font-weight: 650;
   color: ${({ theme }) => theme.colors.gray11};
-`
-
-export const ComposeSummaryInput = styled.textarea`
+`;
+export const ComposeSummaryInput = styled.textarea `
   width: 100%;
   min-height: 5.6rem;
-  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray5)};
-  border-radius: ${({ theme }) => (theme.blogDesign === "grid" ? "4px" : "16px")};
+  border: 1px solid ${({ theme }) => (theme.colors.gray5)};
+  border-radius: ${({ theme }) => ("16px")};
   padding: 0.95rem 1rem;
-  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray2)};
+  background: ${({ theme }) => (theme.colors.gray2)};
   color: ${({ theme }) => theme.colors.gray12};
   font-size: 1rem;
   line-height: 1.7;
@@ -193,27 +180,24 @@ export const ComposeSummaryInput = styled.textarea`
 
   &:focus-visible {
     outline: none;
-    border-color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.gray7)};
-    box-shadow: 0 0 0 3px ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.blue4)};
+    border-color: ${({ theme }) => (theme.colors.gray7)};
+    box-shadow: 0 0 0 3px ${({ theme }) => (theme.colors.blue4)};
   }
-`
-
-export const ComposeSummaryMeta = styled.div`
+`;
+export const ComposeSummaryMeta = styled.div `
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.7rem;
   flex-wrap: wrap;
-`
-
-export const SummaryCounter = styled.span`
+`;
+export const SummaryCounter = styled.span `
   justify-self: end;
   color: ${({ theme }) => theme.colors.gray10};
   font-size: 0.74rem;
   line-height: 1;
-`
-
-export const InlineTagComposer = styled.div`
+`;
+export const InlineTagComposer = styled.div `
   display: grid;
   gap: 0.55rem;
   min-width: 0;
@@ -237,9 +221,8 @@ export const InlineTagComposer = styled.div`
     font-size: 0.78rem;
     font-weight: 600;
   }
-`
-
-export const InlineTagList = styled.div`
+`;
+export const InlineTagList = styled.div `
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
@@ -249,9 +232,8 @@ export const InlineTagList = styled.div`
   border: none;
   background: transparent;
   padding: 0;
-`
-
-export const InlineMetaInput = styled.input`
+`;
+export const InlineMetaInput = styled.input `
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
@@ -277,9 +259,8 @@ export const InlineMetaInput = styled.input`
     border-color: ${({ theme }) => theme.colors.blue8};
     box-shadow: 0 0 0 4px ${({ theme }) => theme.colors.blue4};
   }
-`
-
-export const SelectedTagChip = styled.span`
+`;
+export const SelectedTagChip = styled.span `
   display: inline-flex;
   align-items: stretch;
   gap: 0;
@@ -287,8 +268,8 @@ export const SelectedTagChip = styled.span`
   max-width: 100%;
   min-height: 32px;
   border-radius: 999px;
-  border: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
-  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.gray3)};
+  border: 1px solid ${({ theme }) => (theme.colors.gray6)};
+  background: ${({ theme }) => (theme.colors.gray3)};
   overflow: hidden;
   transition:
     border-color 0.18s ease,
@@ -321,8 +302,8 @@ export const SelectedTagChip = styled.span`
     min-width: 1.92rem;
     padding: 0 0.52rem;
     border: 0;
-    border-left: 1px solid ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6)};
-    background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.operationSurface : theme.colors.gray2)};
+    border-left: 1px solid ${({ theme }) => (theme.colors.gray6)};
+    background: ${({ theme }) => (theme.colors.gray2)};
     color: ${({ theme }) => theme.colors.gray10};
     cursor: pointer;
     flex: 0 0 auto;
@@ -339,14 +320,12 @@ export const SelectedTagChip = styled.span`
       color: ${({ theme }) => theme.colors.gray12};
     }
   }
-`
-
-export const EditorStudioComposeBodySection = styled.section`
+`;
+export const EditorStudioComposeBodySection = styled.section `
   display: grid;
   gap: 0.82rem;
-`
-
-export const ComposeBodyHeader = styled.div`
+`;
+export const ComposeBodyHeader = styled.div `
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -361,9 +340,8 @@ export const ComposeBodyHeader = styled.div`
     flex-direction: column;
     align-items: flex-start;
   }
-`
-
-export const ComposeBodyTitleGroup = styled.div`
+`;
+export const ComposeBodyTitleGroup = styled.div `
   display: grid;
   gap: 0.14rem;
 
@@ -374,9 +352,8 @@ export const ComposeBodyTitleGroup = styled.div`
     font-weight: 760;
     line-height: 1.3;
   }
-`
-
-export const ComposeBodyMetrics = styled.div`
+`;
+export const ComposeBodyMetrics = styled.div `
   display: flex;
   align-items: center;
   gap: 0.55rem;
@@ -384,9 +361,8 @@ export const ComposeBodyMetrics = styled.div`
   color: ${({ theme }) => theme.colors.gray10};
   font-size: 0.76rem;
   line-height: 1.4;
-`
-
-export const EditorStudioComposeFooterBar = styled.div`
+`;
+export const EditorStudioComposeFooterBar = styled.div `
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -395,18 +371,16 @@ export const EditorStudioComposeFooterBar = styled.div`
   margin-top: 0.84rem;
   padding-top: 0.72rem;
   border-top: 1px solid ${({ theme }) => theme.colors.gray6};
-`
-
-export const WriterFooterSummary = styled.div`
+`;
+export const WriterFooterSummary = styled.div `
   display: flex;
   flex-wrap: wrap;
   gap: 0.52rem 0.72rem;
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.76rem;
   line-height: 1.45;
-`
-
-export const WriterFooterControls = styled.div`
+`;
+export const WriterFooterControls = styled.div `
   display: grid;
   gap: 0.52rem;
   justify-items: stretch;
@@ -420,9 +394,8 @@ export const WriterFooterControls = styled.div`
     width: 100%;
     min-width: 100%;
   }
-`
-
-export const WriterFooterActions = styled.div`
+`;
+export const WriterFooterActions = styled.div `
   display: flex;
   flex-wrap: wrap;
   gap: 0.55rem;
@@ -432,9 +405,8 @@ export const WriterFooterActions = styled.div`
   @media (max-width: 720px) {
     display: none;
   }
-`
-
-export const Button = styled.button`
+`;
+export const Button = styled.button `
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 8px;
   padding: 0.62rem 0.92rem;
@@ -466,9 +438,8 @@ export const Button = styled.button`
     opacity: 0.45;
     cursor: not-allowed;
   }
-`
-
-export const PrimaryButton = styled(Button)`
+`;
+export const PrimaryButton = styled(Button) `
   border-radius: 8px;
   padding: 0.6rem 0.88rem;
   border-color: ${({ theme }) => theme.colors.blue9};
@@ -481,4 +452,4 @@ export const PrimaryButton = styled(Button)`
     background: ${({ theme }) => theme.colors.blue10};
     color: ${({ theme }) => theme.colors.gray1};
   }
-`
+`;

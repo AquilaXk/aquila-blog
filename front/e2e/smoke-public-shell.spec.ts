@@ -73,7 +73,7 @@ test.describe("core smoke public shell", () => {
     name: "aquila",
     nickname: "aquila",
     profileImageUrl: "/avatar.png",
-    blogDesign: "grid" as const,
+    blogDesign: "grid" as never,
     legacyBlogScheme: "light" as const,
   }
 

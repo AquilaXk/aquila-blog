@@ -1,12 +1,10 @@
-import styled from "@emotion/styled"
-
-export const CompactTocSection = styled.section`
+import styled from "@emotion/styled";
+export const CompactTocSection = styled.section `
   display: none;
   margin-top: 0.2rem;
-  border: 1px solid ${({ theme }) =>
-    theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 14px;
-  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.surface : theme.colors.gray2)};
+  background: ${({ theme }) => (theme.colors.gray2)};
   overflow: hidden;
 
   details {
@@ -53,8 +51,7 @@ export const CompactTocSection = styled.section`
     width: 2rem;
     height: 2rem;
     border-radius: 999px;
-    border: 1px solid ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
     color: ${({ theme }) => theme.colors.gray10};
     flex-shrink: 0;
     transition: transform 0.16s ease;
@@ -109,14 +106,12 @@ export const CompactTocSection = styled.section`
   }
 
   button:hover {
-    background: ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.surfaceElevated : theme.colors.gray3};
+    background: ${({ theme }) => theme.colors.gray3};
     color: ${({ theme }) => theme.colors.gray12};
   }
 
   button[data-active="true"] {
-    background: ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.gray3};
+    background: ${({ theme }) => theme.colors.gray3};
     color: ${({ theme }) => theme.colors.gray12};
     font-weight: 700;
   }
@@ -124,9 +119,8 @@ export const CompactTocSection = styled.section`
   @media (max-width: 1365px) {
     display: block;
   }
-`
-
-export const MobileSummaryBar = styled.div`
+`;
+export const MobileSummaryBar = styled.div `
   display: none;
 
   @media (max-width: 1023px) {
@@ -147,12 +141,8 @@ export const MobileSummaryBar = styled.div`
       gap: 0.36rem;
       padding: 0 0.55rem;
       border-radius: 999px;
-      border: 1px solid ${({ theme }) =>
-        theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
-      background: ${({ theme }) =>
-        theme.blogDesign === "grid"
-          ? `color-mix(in srgb, ${theme.publicDesign.surface} 88%, transparent)`
-          : `color-mix(in srgb, ${theme.colors.gray1} 88%, transparent)`};
+      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      background: ${({ theme }) => `color-mix(in srgb, ${theme.colors.gray1} 88%, transparent)`};
       color: ${({ theme }) => theme.colors.gray11};
       box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
       backdrop-filter: blur(12px);
@@ -163,11 +153,9 @@ export const MobileSummaryBar = styled.div`
     }
 
     button[data-active="true"] {
-      border-color: ${({ theme }) =>
-        theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.accentBorder};
-      background: ${({ theme }) =>
-        theme.blogDesign === "grid" ? theme.publicDesign.accentMuted : theme.colors.accentSurfaceSubtle};
-      color: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.accent : theme.colors.accentLink)};
+      border-color: ${({ theme }) => theme.colors.accentBorder};
+      background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
+      color: ${({ theme }) => (theme.colors.accentLink)};
     }
 
     button[data-active="true"][data-tone="danger"] {
@@ -186,13 +174,11 @@ export const MobileSummaryBar = styled.div`
       font-size: 0.74rem;
     }
   }
-`
-
-export const RelatedSection = styled.section`
+`;
+export const RelatedSection = styled.section `
   margin-top: 0.52rem;
   padding-top: 0.88rem;
-  border-top: 1px solid ${({ theme }) =>
-    theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
+  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
   display: grid;
   gap: 0.72rem;
   content-visibility: auto;
@@ -258,23 +244,17 @@ export const RelatedSection = styled.section`
     min-width: 0;
     padding: 0.68rem 0.74rem;
     border-radius: 10px;
-    border: 1px solid ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
-    background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.surface : theme.colors.gray1)};
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => (theme.colors.gray1)};
     text-decoration: none;
     transition: border-color 0.14s ease-in, background-color 0.14s ease-in, box-shadow 0.14s ease-in;
 
     &:hover {
-      border-color: ${({ theme }) =>
-        theme.blogDesign === "grid" ? theme.publicDesign.borderStrong : theme.colors.gray8};
-      background: ${({ theme }) =>
-        theme.blogDesign === "grid" ? theme.publicDesign.surfaceElevated : theme.colors.gray2};
-      box-shadow: ${({ theme }) =>
-        theme.blogDesign === "grid"
-          ? "0 12px 26px rgba(0, 0, 0, 0.28)"
-          : theme.scheme === "light"
-            ? "0 10px 24px rgba(15, 23, 42, 0.05)"
-            : "none"};
+      border-color: ${({ theme }) => theme.colors.gray8};
+      background: ${({ theme }) => theme.colors.gray2};
+      box-shadow: ${({ theme }) => theme.scheme === "light"
+    ? "0 10px 24px rgba(15, 23, 42, 0.05)"
+    : "none"};
     }
   }
 
@@ -285,10 +265,8 @@ export const RelatedSection = styled.section`
     min-height: 24px;
     padding: 0 0.52rem;
     border-radius: 999px;
-    border: 1px solid ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
-    background: ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.surfaceElevated : theme.colors.gray2};
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray2};
     color: ${({ theme }) => theme.colors.gray11};
     font-size: 0.7rem;
     font-weight: 800;
@@ -334,25 +312,22 @@ export const RelatedSection = styled.section`
       align-items: stretch;
     }
   }
-`
-
-export const RelatedSkeletonItem = styled.li`
+`;
+export const RelatedSkeletonItem = styled.li `
   display: grid;
   gap: 0.34rem;
   min-width: 0;
   padding: 0.68rem 0.74rem;
   border-radius: 10px;
-  border: 1px solid ${({ theme }) =>
-    theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
-  background: ${({ theme }) => (theme.blogDesign === "grid" ? theme.publicDesign.surface : theme.colors.gray1)};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => (theme.colors.gray1)};
 
   .titleLine,
   .summaryLine,
   .metaLine {
     display: block;
     border-radius: 999px;
-    background: ${({ theme }) =>
-      theme.blogDesign === "grid" ? theme.publicDesign.surfaceElevated : theme.colors.gray3};
+    background: ${({ theme }) => theme.colors.gray3};
     animation: related-skeleton-pulse 1.18s ease-in-out infinite;
   }
 
@@ -389,4 +364,4 @@ export const RelatedSkeletonItem = styled.li`
       opacity: 0.7;
     }
   }
-`
+`;

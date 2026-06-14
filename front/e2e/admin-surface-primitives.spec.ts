@@ -60,6 +60,8 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(shellSource).not.toContain("width: 100vw;")
     expect(shellSource).toContain("background: ${adminAppBackground};")
     expect(shellSource).not.toContain("border-radius: 14px;")
+    expect(shellSource).toContain("border-radius: 999px;")
+    expect(shellSource).toContain("border-radius: inherit;")
 
     expect(utilitySource).toContain("border-bottom: 1px solid ${adminBorder};")
     expect(utilitySource).not.toContain("backdrop-filter")
@@ -72,6 +74,10 @@ test.describe("관리자 표면 공통 계약", () => {
 
     expect(primitiveSource).toContain("adminPlainSurface(theme)")
     expect(primitiveSource).not.toContain("linear-gradient")
+    expect(primitiveSource).toContain("background: ${({ theme }) => adminMutedSurface(theme)};")
+    expect(primitiveSource).not.toContain("box-shadow: 0 0 0 1px ${({ theme }) => adminCardBorder(theme)} inset;")
+    expect(primitiveSource).toContain("& + & {")
+    expect(primitiveSource).toContain("margin-top: 0.4rem;")
     expect(hubStyleSource).not.toContain("transform: translateY")
   })
 
@@ -106,6 +112,9 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(source).toContain("export const AdminTextActionButton = styled.button`")
     expect(source).toContain("export const AdminTextActionLink = styled.a`")
     expect(source).toContain("export const AdminActionCardButton = styled.button`")
+    expect(source).toContain("export const AdminInlineActionRow = styled.div`")
+    expect(source).toContain("background: ${({ theme }) => adminMutedSurface(theme)};")
+    expect(source).toContain("border-bottom: 0;")
     const actionButtonBlock = source.match(/export const AdminActionCardButton = styled\.button`[\s\S]*?`\n/)?.[0] ?? ""
     expect(actionButtonBlock).toContain("background: ${({ theme }) => adminRaisedSurface(theme)};")
     expect(actionButtonBlock).toContain("background: ${({ theme }) => adminAccentSurface(theme)};")

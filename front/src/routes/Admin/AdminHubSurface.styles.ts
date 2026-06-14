@@ -34,7 +34,7 @@ export const HeroPanel = styled.section`
   display: grid;
   gap: 0.5rem;
   padding: 0 0 0.6rem;
-  border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  border-bottom: 0;
 `
 
 export const HeroHeader = styled.div`
@@ -146,8 +146,8 @@ export const BorderlessSupportSection = styled.section`
   display: grid;
   gap: 0.66rem;
   min-width: 0;
-  padding: 0 0 0.92rem;
-  border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  padding: 0 0 0.72rem;
+  border-bottom: 0;
 
   &:last-of-type {
     padding-bottom: 0;
@@ -174,8 +174,8 @@ export const BorderlessSection = styled.section`
   display: grid;
   min-width: 0;
   gap: 0.82rem;
-  padding: 0 0 1rem;
-  border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  padding: 0 0 0.86rem;
+  border-bottom: 0;
 
   &[data-variant="subtle"] {
     padding-bottom: 0;
@@ -187,18 +187,30 @@ export const BorderlessPanel = styled.div`
   display: grid;
   gap: 0.24rem;
   min-width: 0;
-  padding: 0.72rem 0.2rem;
+  padding: 0.72rem 0.82rem;
   border: 0;
-  border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};
-  border-radius: 0;
-  background: transparent;
+  border-bottom: 0;
+  border-radius: 8px;
+  background: ${({ theme }) => adminRaisedSurface(theme)};
 
   &[data-tone="good"] {
-    border-color: ${({ theme }) => theme.colors.green7};
+    background: ${({ theme }) => theme.colors.statusSuccessSurface};
+    color: ${({ theme }) => theme.colors.statusSuccessText};
+
+    span,
+    strong {
+      color: ${({ theme }) => theme.colors.statusSuccessText};
+    }
   }
 
   &[data-tone="warn"] {
-    border-color: ${({ theme }) => theme.colors.orange7};
+    background: ${({ theme }) => theme.colors.orange2};
+    color: ${({ theme }) => theme.colors.orange10};
+
+    span,
+    strong {
+      color: ${({ theme }) => theme.colors.orange10};
+    }
   }
 
   span {
@@ -223,15 +235,14 @@ export const BorderlessPanelLink = styled.a`
   align-items: center;
   min-width: 0;
   min-height: 3.75rem;
-  padding: 0.72rem 0.2rem;
+  padding: 0.72rem 0.82rem;
   border: 0;
-  border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};
-  border-radius: 0;
+  border-bottom: 0;
+  border-radius: 8px;
   background: transparent;
   color: inherit;
   text-decoration: none;
   transition:
-    border-color 0.16s ease,
     background 0.16s ease;
 
   &[data-featured="true"] {
@@ -241,11 +252,25 @@ export const BorderlessPanelLink = styled.a`
   }
 
   &[data-tone="good"] {
-    border-color: ${({ theme }) => theme.colors.green7};
+    background: ${({ theme }) => theme.colors.statusSuccessSurface};
+    color: ${({ theme }) => theme.colors.statusSuccessText};
+
+    small,
+    span,
+    strong {
+      color: ${({ theme }) => theme.colors.statusSuccessText};
+    }
   }
 
   &[data-tone="warn"] {
-    border-color: ${({ theme }) => theme.colors.orange7};
+    background: ${({ theme }) => theme.colors.orange2};
+    color: ${({ theme }) => theme.colors.orange10};
+
+    small,
+    span,
+    strong {
+      color: ${({ theme }) => theme.colors.orange10};
+    }
   }
 
   &:hover {
@@ -319,18 +344,30 @@ export const BorderlessMetricRow = styled.div`
   display: grid;
   gap: 0.24rem;
   min-width: 0;
-  padding: 0.72rem 0.2rem;
+  padding: 0.72rem 0.82rem;
   border: 0;
-  border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};
-  border-radius: 0;
-  background: transparent;
+  border-bottom: 0;
+  border-radius: 8px;
+  background: ${({ theme }) => adminRaisedSurface(theme)};
 
   &[data-tone="good"] {
-    border-color: ${({ theme }) => theme.colors.green7};
+    background: ${({ theme }) => theme.colors.statusSuccessSurface};
+    color: ${({ theme }) => theme.colors.statusSuccessText};
+
+    span,
+    strong {
+      color: ${({ theme }) => theme.colors.statusSuccessText};
+    }
   }
 
   &[data-tone="warn"] {
-    border-color: ${({ theme }) => theme.colors.orange7};
+    background: ${({ theme }) => theme.colors.orange2};
+    color: ${({ theme }) => theme.colors.orange10};
+
+    span,
+    strong {
+      color: ${({ theme }) => theme.colors.orange10};
+    }
   }
 
   span {

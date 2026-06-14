@@ -34,22 +34,33 @@ const AdminCloudUploadQueue = ({
 }: AdminCloudUploadQueueProps) => {
   if (uploadQueue.length === 0) return null
 
-  // Keep upload state in the file workspace flow so it reads as file management, not a toast.
+  const failedOrCancelledCount = uploadQueue.filter(
+    (item) => item.status === "failed" || item.status === "cancelled"
+  ).length
+  const title =
+    activeUploadCount > 0
+      ? `항목 ${activeUploadCount}개 업로드 중`
+      : completedUploadCount === uploadQueue.length
+        ? `항목 ${completedUploadCount}개 업로드 완료`
+        : `항목 ${failedOrCancelledCount}개 업로드 실패/취소`
+
+  // The queue is fixed like Drive's transfer panel, while the upload state machine stays in this page.
   return (
     <QueuePanel aria-label="업로드 중인 파일">
       <QueueHeader>
         <div>
-          <h2>업로드 관리</h2>
+          <h2>{title}</h2>
           <p>
             진행 중 {activeUploadCount}개 · 완료 {completedUploadCount}개
           </p>
         </div>
         <GhostButton
           type="button"
+          aria-label="종료된 업로드 항목 지우기"
           disabled={uploadQueue.every((item) => isUploadActive(item.status))}
           onClick={onClearFinishedUploads}
         >
-          종료된 항목 지우기
+          ×
         </GhostButton>
       </QueueHeader>
       <QueueList>

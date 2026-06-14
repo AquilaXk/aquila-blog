@@ -281,7 +281,9 @@ test.describe("관리자 클라우드", () => {
     ])
 
     const uploadPanel = page.getByLabel("업로드 중인 파일")
-    await expect(uploadPanel.getByRole("heading", { name: "업로드 관리" })).toBeVisible()
+    await expect(uploadPanel).toHaveCSS("position", "fixed")
+    await expect(uploadPanel).toHaveCSS("z-index", "29")
+    await expect(uploadPanel.getByRole("heading", { name: /항목 .* 업로드/ })).toBeVisible()
     await expect(uploadPanel.getByText("신규 운영 문서.pdf")).toBeVisible()
     await expect(uploadPanel.getByText("배포 캡처.png")).toBeVisible()
     await expect.poll(() => mocks.uploadedNames).toEqual(
@@ -300,7 +302,7 @@ test.describe("관리자 클라우드", () => {
     await uploadPanel.getByRole("button", { name: "취소할 영상.mp4 업로드 취소" }).click()
     await expect(uploadPanel.getByText("취소됨")).toBeVisible()
     await expect(page.getByRole("row", { name: /취소할 영상\.mp4/ })).toHaveCount(0)
-    await uploadPanel.getByRole("button", { name: "종료된 항목 지우기" }).click()
+    await uploadPanel.getByRole("button", { name: "종료된 업로드 항목 지우기" }).click()
     await expect(page.getByLabel("업로드 중인 파일")).toHaveCount(0)
 
     await page.getByRole("button", { name: "운영 점검 리포트.pdf 미리보기" }).click()
@@ -356,7 +358,8 @@ test.describe("관리자 클라우드", () => {
     })
 
     const uploadPanel = page.getByLabel("업로드 중인 파일")
-    await expect(uploadPanel.getByRole("heading", { name: "업로드 관리" })).toBeVisible()
+    await expect(uploadPanel).toHaveCSS("position", "fixed")
+    await expect(uploadPanel.getByRole("heading", { name: /항목 .* 업로드/ })).toBeVisible()
     await expect(uploadPanel.getByText("취소할 영상.mp4")).toBeVisible()
     await expect(page.getByText("표시할 파일이 없습니다.")).toHaveCount(0)
     await expect(page.getByText("업로드 중인 파일이 있습니다.")).toBeVisible()
@@ -391,6 +394,7 @@ test.describe("관리자 클라우드", () => {
 
     const uploadPanel = page.getByLabel("업로드 중인 파일")
     await expect(uploadPanel.getByText("실패할 운영 문서.pdf")).toBeVisible()
+    await expect(uploadPanel.getByRole("heading", { name: "항목 1개 업로드 실패/취소" })).toBeVisible()
     await expect(uploadPanel.getByText(/서버 오류가 발생했습니다/)).toBeVisible()
     await expect(uploadPanel.getByRole("button", { name: "실패할 운영 문서.pdf 업로드 다시 시도" })).toBeVisible()
   })

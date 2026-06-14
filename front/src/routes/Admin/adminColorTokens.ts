@@ -50,8 +50,19 @@ const adminDarkThemeVariables = `
   --admin-action-group-surface: rgba(18, 18, 18, 0.88);
 `
 
-export const adminSystemThemeVariables = (theme: Theme) =>
-  theme.scheme === "dark" ? adminDarkThemeVariables : adminLightThemeVariables
+export const adminSystemThemeVariables = (theme: Theme) => `
+  ${theme.scheme === "dark" ? adminDarkThemeVariables : adminLightThemeVariables}
+
+  html[data-aquila-scheme-bootstrap-source="cookie"][data-aquila-scheme-bootstrap="dark"] &,
+  html[data-aquila-scheme-bootstrap-source="system"][data-aquila-scheme-bootstrap="dark"] & {
+    ${adminDarkThemeVariables}
+  }
+
+  html[data-aquila-scheme-bootstrap-source="cookie"][data-aquila-scheme-bootstrap="light"] &,
+  html[data-aquila-scheme-bootstrap-source="system"][data-aquila-scheme-bootstrap="light"] & {
+    ${adminLightThemeVariables}
+  }
+`
 
 export const adminAppBackground = "var(--admin-app-bg, #ffffff)"
 export const adminTextPrimary = "var(--admin-text-primary, #20242b)"

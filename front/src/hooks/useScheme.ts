@@ -9,6 +9,16 @@ type SetScheme = (scheme: SchemeType) => void
 
 const isScheme = (value: unknown): value is SchemeType => value === "light" || value === "dark"
 
+const resolveSystemScheme = (): SchemeType => {
+  if (typeof window === "undefined") return "light"
+  return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light"
+}
+
+const resolveCachedScheme = (): SchemeType | null => {
+  const cachedScheme = getCookie("scheme")
+  return isScheme(cachedScheme) ? cachedScheme : null
+}
+
 const clearSchemeBootstrapStyle = () => {
   document.documentElement.removeAttribute("data-aquila-scheme-bootstrap")
   document.querySelector('style[data-aquila-scheme-bootstrap-style="true"]')?.remove()
@@ -30,24 +40,20 @@ const useScheme = (): [SchemeType, SetScheme] => {
     queryFn: () => fallbackScheme,
     enabled: false,
     staleTime: Infinity,
+    // Keep the first client render equal to the server render; _document bootstrap owns pre-hydration colors.
     initialData: fallbackScheme,
   })
 
   const setScheme = useCallback((scheme: SchemeType) => {
-    setCookie("scheme", scheme)
+    setCookie("scheme", scheme, { path: "/", sameSite: "lax" })
     queryClient.setQueryData(queryKey.scheme(), scheme)
   }, [queryClient])
 
   useEffect(() => {
     if (typeof window === "undefined") return
 
-    const cachedScheme = getCookie("scheme")
-    const defaultScheme = followsSystemTheme
-      ? window.matchMedia?.("(prefers-color-scheme: dark)")?.matches
-        ? "dark"
-        : "light"
-      : data
-    const nextScheme = isScheme(cachedScheme) ? cachedScheme : defaultScheme
+    const defaultScheme = followsSystemTheme ? resolveSystemScheme() : data
+    const nextScheme = resolveCachedScheme() ?? defaultScheme
     if (nextScheme !== data) {
       setScheme(nextScheme)
       clearSchemeBootstrapAfterHydration()

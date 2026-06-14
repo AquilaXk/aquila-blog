@@ -400,6 +400,39 @@ test.describe("Markdown editor replacement", () => {
     expect(styles.textarea.color).toBe("rgb(15, 23, 36)")
   })
 
+  test("write pane focus does not render the global blue textarea outline", async ({ page }) => {
+    await routeAuthenticatedEditor(
+      page,
+      [
+        "### Stateful",
+        "",
+        "Markdown textarea focus should keep the writing surface visually stable.",
+      ].join("\n")
+    )
+
+    await page.goto("/editor/new?source=local-draft")
+
+    const textarea = page.getByTestId("markdown-editor-write-pane").locator("textarea")
+    await expect(textarea).toBeVisible()
+    await textarea.click()
+    await textarea.pressSequentially("\n\n추가 입력")
+
+    const focusContract = await textarea.evaluate((element) => {
+      const style = window.getComputedStyle(element)
+      return {
+        active: document.activeElement === element,
+        outlineColor: style.outlineColor,
+        outlineStyle: style.outlineStyle,
+        outlineWidth: style.outlineWidth,
+      }
+    })
+
+    expect(focusContract.active).toBe(true)
+    expect(focusContract.outlineStyle).toBe("none")
+    expect(focusContract.outlineWidth).toBe("0px")
+    expect(focusContract.outlineColor).not.toBe("rgb(63, 81, 181)")
+  })
+
   test("write pane supports native mouse drag text selection", async ({ page }) => {
     await routeAuthenticatedEditor(
       page,

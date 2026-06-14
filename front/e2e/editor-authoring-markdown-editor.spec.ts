@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer"
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs"
 import { resolve } from "node:path"
 import type { Page, Route } from "./helpers/authoringPlaywright"
@@ -7,6 +8,10 @@ const sourcePath = (...segments: string[]) => resolve(__dirname, "../src", ...se
 const frontPath = (...segments: string[]) => resolve(__dirname, "..", ...segments)
 const joinParts = (...parts: string[]) => parts.join("")
 const localDraftStorageKey = "admin.editor.localDraft.v1"
+const onePixelPng = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+  "base64"
+)
 const adminMember = {
   id: 1,
   username: "qa-admin",
@@ -830,6 +835,53 @@ test.describe("Markdown editor replacement", () => {
     const editorText = await writePane.locator("textarea").inputValue()
     expect(editorText.indexOf("| Column 1 | Column 2 | Column 3 |")).toBeLessThan(editorText.indexOf("omega"))
     await expect(page.getByTestId("markdown-editor-preview-pane").locator("table")).toContainText("Column 1")
+  })
+
+  test("image upload inserts a url-only upload response at the textarea caret", async ({ page }) => {
+    await routeAuthenticatedEditor(page, ["alpha", "omega"].join("\n"))
+    let uploadCalled = false
+    await page.route("**/post/api/v1/posts/images", async (route) => {
+      uploadCalled = true
+      await fulfillJson(route, {
+        resultCode: "201-1",
+        msg: "이미지가 업로드되었습니다.",
+        data: {
+          key: "post-images/body-image.png",
+          url: "https://cdn.example.test/post-images/body-image.png",
+        },
+      })
+    })
+
+    await page.goto("/editor/new?source=local-draft")
+
+    const writePane = page.getByTestId("markdown-editor-write-pane")
+    const textarea = writePane.locator("textarea")
+    await expect(textarea).toBeVisible()
+    await textarea.click()
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+Home" : "Control+Home")
+    await page.keyboard.press("ArrowRight")
+
+    await page
+      .getByTestId("markdown-editor")
+      .locator("input[type='file'][accept='image/*']")
+      .setInputFiles({
+        name: "본문 이미지.png",
+        mimeType: "image/png",
+        buffer: onePixelPng,
+      })
+
+    await expect.poll(() => uploadCalled, { message: "post image upload request should be sent" }).toBe(true)
+    await expect(page.getByText("이미지 업로드에 실패했습니다.")).toHaveCount(0)
+    await expect(page.getByText(/이미지 업로드 실패:/)).toHaveCount(0)
+
+    const editorText = await textarea.inputValue()
+    const imageMarkdown = "![본문 이미지.png](https://cdn.example.test/post-images/body-image.png)"
+    expect(editorText).toContain(imageMarkdown)
+    expect(editorText.indexOf(imageMarkdown)).toBeLessThan(editorText.indexOf("omega"))
+    await expect(page.getByTestId("markdown-editor-preview-pane").locator("img")).toHaveAttribute(
+      "src",
+      "https://cdn.example.test/post-images/body-image.png"
+    )
   })
 
   test("preview keeps raw HTML script and javascript URLs out of the rendered DOM", async ({

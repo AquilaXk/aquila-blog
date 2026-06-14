@@ -247,9 +247,11 @@ export const MarkdownEditor = ({
         return
       }
       const alt = uploaded.alt || uploaded.title || file.name
-      commitMarkdown(`${valueRef.current}\n\n![${alt}](${src})\n`, true)
+      const imageMarkdown = `\n\n![${alt}](${src})\n`
+      if (insertMarkdownAtEditorSelection(imageMarkdown)) return
+      commitMarkdown(`${valueRef.current}${imageMarkdown}`, true)
     },
-    [commitMarkdown, onUploadImage]
+    [commitMarkdown, insertMarkdownAtEditorSelection, onUploadImage]
   )
 
   return (

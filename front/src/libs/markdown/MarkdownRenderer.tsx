@@ -33,6 +33,21 @@ import type { MarkdownRendererProps } from "src/libs/markdown/MarkdownRenderer.t
 
 export { markdownGuide } from "src/libs/markdown/rendering"
 
+const resolveMarkdownTableCellAlignment = (node: unknown, propAlignment: unknown, style: unknown) => {
+  const nodeProperties = (node as { properties?: { align?: unknown; style?: unknown } } | null)?.properties
+  const nodeAlignment = nodeProperties?.align
+  const styleAlignment =
+    typeof style === "object" && style && "textAlign" in style
+      ? (style as { textAlign?: unknown }).textAlign
+      : undefined
+  const serializedStyle = typeof nodeProperties?.style === "string" ? nodeProperties.style : ""
+  const serializedStyleAlignment = serializedStyle
+    .match(/text-align:\s*(left|center|right)/i)?.[1]
+    ?.toLowerCase()
+  const alignment = propAlignment || nodeAlignment || styleAlignment || serializedStyleAlignment
+  return typeof alignment === "string" ? alignment : undefined
+}
+
 const MarkdownRendererComponent: FC<MarkdownRendererProps> = ({
   content,
   contentHtml,
@@ -89,16 +104,24 @@ const MarkdownRendererComponent: FC<MarkdownRendererProps> = ({
         tr({ children, ...props }) {
           return <MarkdownTableRowRenderer {...props}>{children}</MarkdownTableRowRenderer>
         },
-        th({ children, ...props }) {
+        th({ children, node, ...props }) {
           return (
-            <MarkdownTableCellRenderer as="th" className={props.className}>
+            <MarkdownTableCellRenderer
+              as="th"
+              alignment={resolveMarkdownTableCellAlignment(node, props.align, props.style)}
+              className={props.className}
+            >
               {children}
             </MarkdownTableCellRenderer>
           )
         },
-        td({ children, ...props }) {
+        td({ children, node, ...props }) {
           return (
-            <MarkdownTableCellRenderer as="td" className={props.className}>
+            <MarkdownTableCellRenderer
+              as="td"
+              alignment={resolveMarkdownTableCellAlignment(node, props.align, props.style)}
+              className={props.className}
+            >
               {children}
             </MarkdownTableCellRenderer>
           )

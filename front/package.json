@@ -48,6 +48,7 @@
     "@emotion/react": "^11.11.1",
     "@emotion/server": "^11.11.0",
     "@emotion/styled": "^11.11.0",
+    "@lezer/highlight": "^1.2.3",
     "@next/env": "15.5.18",
     "@radix-ui/colors": "^1.0.0",
     "@shared/contracts": "file:packages/shared-contracts",

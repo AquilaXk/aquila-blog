@@ -272,6 +272,18 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
   assert(workflow.lastIndexOf("rm -f deploy/homeserver/.external-minio-migration-stopped") < workflow.indexOf('DEPLOY_COMPLETED="true"'))
 })
 
+test("deploy workflow pins production site cookie scope to the live custom domain before rollout", () => {
+  const workflow = readFileSync(workflowPath, "utf8")
+
+  assert.match(workflow, /upsert_env_key "CUSTOM_PROD_COOKIEDOMAIN" "aquilaxk\.site" "deploy\/homeserver\/\.env\.prod"/)
+  assert.match(workflow, /upsert_env_key "CUSTOM_PROD_FRONTURL" "https:\/\/www\.aquilaxk\.site" "deploy\/homeserver\/\.env\.prod"/)
+  assert.match(workflow, /upsert_env_key "CUSTOM_PROD_BACKURL" "https:\/\/api\.aquilaxk\.site" "deploy\/homeserver\/\.env\.prod"/)
+  assert(
+    workflow.indexOf('upsert_env_key "CUSTOM_PROD_COOKIEDOMAIN"') <
+      workflow.indexOf('require_nonempty_env_key "CF_TUNNEL_TOKEN"'),
+  )
+})
+
 test("required secret check does not inject multi-line HOME_SERVER_ENV into shell", () => {
   const workflow = readFileSync(workflowPath, "utf8")
 

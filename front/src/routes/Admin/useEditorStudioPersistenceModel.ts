@@ -117,11 +117,14 @@ export const useEditorStudioPersistenceUploads = ({
 
     try {
       const uploaded = await uploadPostImageFile(file)
-      const markdown = uploaded.uploaded.data?.markdown
-      if (!markdown) throw new Error("업로드 응답 형식이 올바르지 않습니다.")
+      const markdown = uploaded.uploaded.data?.markdown?.trim()
+      const uploadedUrl = uploaded.uploaded.data?.url?.trim()
+      if (!markdown && !uploadedUrl) throw new Error("업로드 응답 형식이 올바르지 않습니다.")
 
-      const parsed = parseStandaloneMarkdownImageLine(markdown)
-      if (!parsed) throw new Error("이미지 markdown 메타데이터를 해석하지 못했습니다.")
+      const parsed = markdown ? parseStandaloneMarkdownImageLine(markdown) : null
+      if (markdown && !parsed && !uploadedUrl) throw new Error("이미지 markdown 메타데이터를 해석하지 못했습니다.")
+      const safeUploadedUrl = normalizeSafeImageUrl(parsed?.src || uploadedUrl || "")
+      if (!safeUploadedUrl) throw new Error("허용되지 않은 이미지 URL 형식입니다.")
 
       setPublishStatus({
         tone: "success",
@@ -129,11 +132,11 @@ export const useEditorStudioPersistenceUploads = ({
       })
 
       return {
-        src: parsed.src,
-        alt: parsed.alt,
-        title: parsed.title,
-        widthPx: parsed.widthPx,
-        align: parsed.align || "center",
+        src: safeUploadedUrl,
+        alt: parsed?.alt || file.name,
+        title: parsed?.title,
+        widthPx: parsed?.widthPx,
+        align: parsed?.align || "center",
       }
     } catch (error) {
       const message = normalizeProfileImageUploadError(error)
@@ -143,7 +146,7 @@ export const useEditorStudioPersistenceUploads = ({
       })
       throw error
     }
-  }, [setPublishStatus, uploadPostImageFile])
+  }, [normalizeSafeImageUrl, setPublishStatus, uploadPostImageFile])
 
   const uploadPostAttachmentFile = useCallback(async (file: File): Promise<UploadPostFileResponse> => {
     const formData = new FormData()

@@ -663,18 +663,17 @@ export const InlineList = styled.div`
 `
 
 export const QueuePanel = styled.section`
-  position: fixed;
-  right: 1.25rem;
-  bottom: 1.25rem;
-  z-index: 30;
-  width: min(26rem, calc(100vw - 2rem));
   display: grid;
   gap: 0.55rem;
-  padding: 0.72rem;
-  border: 1px solid ${borderStrong};
-  border-radius: 2px;
+  padding: 0.72rem 1.25rem 0.86rem;
+  border-bottom: 1px solid ${border};
+  border-radius: 0;
   background: ${surface};
   box-shadow: none;
+
+  @media (max-width: 760px) {
+    padding: 0.7rem 0.9rem 0.82rem;
+  }
 `
 
 export const QueueHeader = styled.div`
@@ -700,24 +699,26 @@ export const QueueHeader = styled.div`
 
 export const QueueList = styled.ul`
   display: grid;
-  gap: 0.48rem;
-  max-height: 18rem;
+  gap: 0;
+  max-height: 15rem;
   overflow: auto;
   margin: 0;
   padding: 0;
   list-style: none;
+  border-top: 1px solid ${border};
 `
 
 export const QueueItem = styled.li`
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 0.5rem 0.75rem;
   align-items: center;
   min-width: 0;
-  padding: 0.55rem;
-  border: 1px solid ${border};
+  padding: 0.58rem 0;
+  border: 0;
+  border-bottom: 1px solid ${border};
   border-radius: 2px;
-  background: ${surfaceRaised};
+  background: transparent;
 
   strong {
     color: ${textPrimary};
@@ -733,6 +734,15 @@ export const QueueItem = styled.li`
     color: ${textMuted};
     font-size: 0.72rem;
     font-weight: 700;
+  }
+
+  @media (max-width: 640px) {
+    grid-template-columns: minmax(0, 1fr) auto;
+
+    button {
+      grid-column: 1 / -1;
+      justify-self: start;
+    }
   }
 `
 

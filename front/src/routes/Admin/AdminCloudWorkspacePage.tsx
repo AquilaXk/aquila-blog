@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element -- private cloud content needs browser-owned auth cookies. */
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import type { PDFDocumentLoadingTask, RenderTask } from "pdfjs-dist"
-import { type ChangeEvent, type CSSProperties, useEffect, useMemo, useRef, useState } from "react"
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react"
 import {
   deleteCloudFile,
   getCloudFileContentUrl,
@@ -22,13 +22,13 @@ import {
   getCloudKindBadge,
   getCloudKindIconLabel,
   getCloudKindLabel,
-  getUploadStatusLabel,
   isUploadActive,
   mergeCloudFiles,
   resolveCloudSearchParams,
   type CloudMediaFilter,
-  type UploadQueueStatus,
+  type UploadQueueItem,
 } from "./AdminCloudWorkspaceModel"
+import AdminCloudUploadQueue from "./AdminCloudUploadQueue"
 import {
   ActionBar,
   ActionGroup,
@@ -61,18 +61,12 @@ import {
   PreviewHeader,
   PreviewStage,
   PrimaryButton,
-  ProgressTrack,
-  QueueHeader,
-  QueueItem,
-  QueueList,
-  QueuePanel,
   RowActions,
   RowCheckbox,
   SearchDetail,
   SearchInput,
   SecondaryButton,
   SelectBoxCell,
-  StatusPill,
   ThumbnailStrip,
   Timeline,
   UploadInput,
@@ -81,17 +75,6 @@ import {
 
 const CLOUD_QUERY_KEY = "admin-cloud-files"
 const EMPTY_CLOUD_FILES: CloudFile[] = []
-
-type UploadQueueItem = {
-  id: string
-  file: File
-  name: string
-  byteSize: number
-  status: UploadQueueStatus
-  progress: number
-  message: string
-  uploadedFileId?: number
-}
 
 const mediaKindFromFilter = (filter: CloudMediaFilter): CloudMediaKind | undefined =>
   filter === "ALL" ? undefined : filter
@@ -510,6 +493,8 @@ const AdminCloudWorkspacePage = () => {
 
   const emptyTitle = filesQuery.isFetching
     ? "파일을 불러오는 중입니다."
+    : activeUploadCount > 0
+      ? "업로드 중인 파일이 있습니다."
     : keyword || filter !== "ALL"
       ? "선택한 조건에 맞는 파일이 없습니다."
       : "표시할 파일이 없습니다."
@@ -596,6 +581,14 @@ const AdminCloudWorkspacePage = () => {
               </IconButton>
             </ActionGroup>
           </ActionBar>
+
+          <AdminCloudUploadQueue
+            uploadQueue={uploadQueue}
+            activeUploadCount={activeUploadCount}
+            completedUploadCount={completedUploadCount}
+            onCancelUpload={handleCancelUpload}
+            onClearFinishedUploads={handleClearFinishedUploads}
+          />
 
           <FileTableScroll>
             {files.length === 0 ? (
@@ -723,43 +716,6 @@ const AdminCloudWorkspacePage = () => {
           ) : null}
         </DetailPanel>
       </CloudWorkspace>
-
-      {uploadQueue.length > 0 ? (
-        <QueuePanel aria-label="업로드 중인 파일">
-          <QueueHeader>
-            <div>
-              <h2>업로드 관리</h2>
-              <p>
-                진행 중 {activeUploadCount}개 · 완료 {completedUploadCount}개
-              </p>
-            </div>
-            <GhostButton type="button" disabled={uploadQueue.every((item) => isUploadActive(item.status))} onClick={handleClearFinishedUploads}>
-              완료 항목 지우기
-            </GhostButton>
-          </QueueHeader>
-          <QueueList>
-            {uploadQueue.map((item) => (
-              <QueueItem key={item.id}>
-                <div>
-                  <strong>{item.name}</strong>
-                  <p>
-                    {formatCloudFileSize(item.byteSize)} · {item.message}
-                  </p>
-                </div>
-                <StatusPill data-status={item.status}>{getUploadStatusLabel(item.status)}</StatusPill>
-                <ProgressTrack style={{ "--progress": `${item.progress}%` } as CSSProperties}>
-                  <span />
-                </ProgressTrack>
-                {isUploadActive(item.status) ? (
-                  <GhostButton type="button" aria-label={`${item.name} 업로드 취소`} onClick={() => handleCancelUpload(item)}>
-                    취소
-                  </GhostButton>
-                ) : null}
-              </QueueItem>
-            ))}
-          </QueueList>
-        </QueuePanel>
-      ) : null}
     </CloudMain>
   )
 }

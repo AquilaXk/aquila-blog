@@ -17,7 +17,7 @@ import {
   type ProfileWorkspaceResponse,
 } from "src/libs/profileWorkspace"
 
-export type WorkspaceSectionId = "identity" | "about" | "home" | "design" | "links"
+export type WorkspaceSectionId = "identity" | "about" | "home" | "links"
 export type LinkTab = "service" | "contact"
 export type PreviewMode = "draft" | "published"
 
@@ -36,10 +36,6 @@ export const WORKSPACE_SECTIONS: {
   {
     id: "home",
     label: "헤더 문구",
-  },
-  {
-    id: "design",
-    label: "디자인",
   },
   {
     id: "links",
@@ -72,11 +68,6 @@ const pickWorkspaceSectionContent = (
         blogTitle: content.blogTitle,
         homeIntroTitle: content.homeIntroTitle,
         homeIntroDescription: content.homeIntroDescription,
-      }
-    case "design":
-      return {
-        blogDesign: content.blogDesign,
-        legacyBlogScheme: content.legacyBlogScheme,
       }
     case "links":
       return {

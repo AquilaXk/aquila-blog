@@ -1,9 +1,11 @@
 import CodeMirror from "@uiw/react-codemirror"
 import { markdown } from "@codemirror/lang-markdown"
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands"
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language"
 import { markdownLanguage } from "@codemirror/lang-markdown"
 import { EditorState, type Extension } from "@codemirror/state"
 import { EditorView, keymap } from "@codemirror/view"
+import { tags } from "@lezer/highlight"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import styled from "@emotion/styled"
 import MarkdownRenderer from "src/libs/markdown/MarkdownRenderer"
@@ -51,6 +53,18 @@ const tableSnippet = [
 
 const codeBlockSnippet = ["", "```", "", "```", ""].join("\n")
 
+const markdownHighlightStyle = HighlightStyle.define([
+  { tag: tags.heading, color: "#79c0ff", fontWeight: "700" },
+  { tag: tags.strong, color: "#ffa657", fontWeight: "700" },
+  { tag: tags.emphasis, color: "#d2a8ff", fontStyle: "italic" },
+  { tag: tags.link, color: "#58a6ff", textDecoration: "underline" },
+  { tag: tags.url, color: "#a5d6ff" },
+  { tag: tags.monospace, color: "#a5d6ff" },
+  { tag: tags.quote, color: "#8b949e", fontStyle: "italic" },
+  { tag: tags.meta, color: "#7d8590" },
+  { tag: tags.punctuation, color: "#8b949e" },
+])
+
 const markdownEditorTheme: Extension = EditorView.theme(
   {
     "&.cm-editor": {
@@ -73,7 +87,7 @@ const markdownEditorTheme: Extension = EditorView.theme(
       color: "#e6edf3",
       caretColor: "#e6edf3",
     },
-    ".cm-line, .cm-line span": {
+    ".cm-line": {
       color: "#e6edf3",
     },
     ".cm-gutters": {
@@ -124,6 +138,7 @@ export const GitHubMarkdownEditor = ({
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       markdown({ base: markdownLanguage }),
+      syntaxHighlighting(markdownHighlightStyle),
       EditorView.lineWrapping,
       EditorState.tabSize.of(2),
       EditorView.editable.of(!disabled),
@@ -462,7 +477,7 @@ const PreviewHeader = styled.div`
 `
 
 const PreviewArticle = styled.article`
-  padding: 1.25rem 0 2rem;
+  padding: 1.25rem 1rem 2rem;
   background: #0d1117;
 
   .aq-markdown {

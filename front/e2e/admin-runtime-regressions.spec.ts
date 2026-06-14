@@ -1,0 +1,76 @@
+import { existsSync, readFileSync } from "node:fs"
+import path from "node:path"
+import { expect, test } from "@playwright/test"
+
+const readFrontSource = (relativePath: string) =>
+  readFileSync(path.resolve(__dirname, "../src", relativePath), "utf8")
+
+test.describe("관리자 런타임 회귀 계약", () => {
+  test("운영 브라우저 API는 로그인과 관리자 요청을 same-origin 백엔드 프록시로 보낸다", () => {
+    const clientSource = readFrontSource("apis/backend/client.ts")
+    const proxySourcePath = path.resolve(__dirname, "../src/pages/api/backend/[...path].ts")
+
+    expect(clientSource).toContain('const BROWSER_BACKEND_PROXY_PREFIX = "/api/backend"')
+    expect(clientSource).toContain("const shouldUseBrowserBackendProxy = (safePath: string) =>")
+    expect(clientSource).toContain('process.env.NODE_ENV === "production"')
+    expect(clientSource).toContain("safePath.startsWith(\"/member/api/v1/auth/\")")
+    expect(clientSource).toContain("safePath.startsWith(\"/system/api/v1/adm/\")")
+    expect(clientSource).toContain("return `${BROWSER_BACKEND_PROXY_PREFIX}${safePath}`")
+
+    expect(existsSync(proxySourcePath)).toBe(true)
+    const proxySource = readFileSync(proxySourcePath, "utf8")
+    expect(proxySource).toContain("bodyParser: false")
+    expect(proxySource).toContain("normalizeApiRequestPath")
+    expect(proxySource).toContain("resolveServerApiBaseUrl")
+    expect(proxySource).toContain('headers.set("X-Forwarded-Host"')
+    expect(proxySource).toContain('headers.set("X-Forwarded-Proto", firstHeaderValue(req.headers["x-forwarded-proto"]) || "https")')
+    expect(proxySource).toContain('headers.set("X-Forwarded-For", clientIp)')
+    expect(proxySource).toContain("const BACKEND_PROXY_TIMEOUT_MS = 120_000")
+    expect(proxySource).toContain("const controller = new AbortController()")
+    expect(proxySource).toContain("const timeoutId = setTimeout(() => controller.abort(), BACKEND_PROXY_TIMEOUT_MS)")
+    expect(proxySource).toContain("signal: controller.signal")
+    expect(proxySource).toContain("clearTimeout(timeoutId)")
+    expect(proxySource).toContain('duplex: "half"')
+    expect(proxySource).toContain('normalizedKey === "host"')
+    expect(proxySource).toContain('normalizedKey === "accept-encoding"')
+    expect(proxySource).toContain('const DECODED_RESPONSE_HEADERS = new Set(["content-encoding", "content-length"])')
+    expect(proxySource).toContain("DECODED_RESPONSE_HEADERS.has(normalizedKey)")
+  })
+
+  test("클라우드 목록과 업로드는 프록시 가능한 URL 생성기를 공유한다", () => {
+    const cloudSource = readFrontSource("apis/backend/cloud.ts")
+
+    expect(cloudSource).toContain('import { apiFetch, getApiRequestUrl } from "./client"')
+    expect(cloudSource).toContain("getApiRequestUrl(`/system/api/v1/adm/cloud/files/${fileId}/content`)")
+    expect(cloudSource).not.toContain("getApiBaseUrl")
+  })
+
+  test("새로고침 전 첫 페인트는 저장된 테마나 시스템 다크 모드를 먼저 적용한다", () => {
+    const documentSource = readFrontSource("pages/_document.tsx")
+    const schemeSource = readFrontSource("hooks/useScheme.ts")
+
+    expect(documentSource).toContain("AQUILA_SCHEME_BOOTSTRAP_SCRIPT")
+    expect(documentSource).toContain('document.documentElement.dataset.aquilaScheme = nextScheme')
+    expect(documentSource).toContain('document.documentElement.setAttribute("data-aquila-scheme-bootstrap", nextScheme)')
+    expect(documentSource).toContain("prefers-color-scheme: dark")
+    expect(documentSource).toContain("colorScheme = nextScheme")
+    expect(documentSource).toContain('nextScheme === "dark" ? "#121212" : "#f3f5f8"')
+    expect(documentSource).not.toContain("#111318")
+    expect(documentSource).toContain("html[data-aquila-scheme-bootstrap] body")
+    expect(schemeSource).toContain("initialData: fallbackScheme")
+    expect(schemeSource).toContain("clearSchemeBootstrapAfterHydration")
+    expect(schemeSource).toContain('style[data-aquila-scheme-bootstrap-style="true"]')
+    expect(schemeSource).toContain('window.matchMedia?.("(prefers-color-scheme: dark)")?.matches')
+    expect(schemeSource).not.toContain("resolveInitialBrowserScheme")
+  })
+})
+
+test.describe("공개 피드 접근성 회귀 계약", () => {
+  test("홈 피드 활성 태그는 밝은 배경에서 충분한 대비의 텍스트 색을 사용한다", () => {
+    const tagListSource = readFrontSource("routes/Feed/TagList.tsx")
+
+    expect(tagListSource).toContain("--feed-tag-accent-text")
+    expect(tagListSource).toContain('theme.scheme === "light" ? theme.colors.blue11 : theme.colors.blue10')
+    expect(tagListSource).toContain("color: var(--feed-tag-accent-text);")
+  })
+})

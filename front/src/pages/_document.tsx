@@ -13,6 +13,29 @@ import { pretendard } from "src/assets"
 import createEmotionCache from "src/libs/emotion/createEmotionCache"
 import { HEADER_AUTH_SHELL_BOOTSTRAP_SCRIPT } from "src/libs/headerAuthShell"
 
+const AQUILA_SCHEME_BOOTSTRAP_SCRIPT = `
+(function () {
+  if (typeof document === "undefined") return;
+  var cookieMatch = document.cookie.match(/(?:^|; )scheme=(light|dark)(?:;|$)/);
+  var cachedScheme = cookieMatch ? cookieMatch[1] : "";
+  var systemDark = false;
+  try {
+    systemDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  } catch (_) {}
+  var nextScheme = cachedScheme || (systemDark ? "dark" : "light");
+  var background = nextScheme === "dark" ? "#121212" : "#f3f5f8";
+  var foreground = nextScheme === "dark" ? "#f4f6fb" : "#101214";
+  document.documentElement.dataset.aquilaScheme = nextScheme;
+  document.documentElement.setAttribute("data-aquila-scheme-bootstrap", nextScheme);
+  document.documentElement.style.colorScheme = nextScheme;
+  document.documentElement.style.backgroundColor = background;
+  var style = document.createElement("style");
+  style.setAttribute("data-aquila-scheme-bootstrap-style", "true");
+  style.textContent = "html[data-aquila-scheme-bootstrap]{background:" + background + ";color-scheme:" + nextScheme + ";}html[data-aquila-scheme-bootstrap] body{background:" + background + ";color:" + foreground + ";color-scheme:" + nextScheme + ";}";
+  document.head.appendChild(style);
+})();
+`
+
 const CLIENT_RUNTIME_RECOVERY_SCRIPT = `
 (function () {
   if (typeof window === "undefined" || typeof document === "undefined") return;
@@ -132,6 +155,7 @@ class MyDocument extends Document {
     return (
       <Html lang={CONFIG.lang} data-header-auth-shell="anonymous" data-header-auth-admin="false">
         <Head>
+          <script dangerouslySetInnerHTML={{ __html: AQUILA_SCHEME_BOOTSTRAP_SCRIPT }} />
           <link rel="icon" href="/favicon.ico" />
           <link
             rel="apple-touch-icon"

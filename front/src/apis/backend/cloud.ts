@@ -1,5 +1,5 @@
 import type { components } from "@shared/contracts"
-import { apiFetch, getApiBaseUrl } from "./client"
+import { apiFetch, getApiRequestUrl } from "./client"
 
 export type CloudFileDto = components["schemas"]["CloudFileDto"]
 export type CloudMediaKind = NonNullable<CloudFileDto["mediaKind"]>
@@ -44,7 +44,7 @@ const appendQuery = (path: string, params: Record<string, string | undefined>) =
 }
 
 export const getCloudFileContentUrl = (fileId: number) =>
-  `${getApiBaseUrl()}/system/api/v1/adm/cloud/files/${fileId}/content`
+  getApiRequestUrl(`/system/api/v1/adm/cloud/files/${fileId}/content`)
 
 export const listCloudFiles = async ({
   folderPath = "",

@@ -1,7 +1,6 @@
 import type { ChangeEvent, ClipboardEvent as ReactClipboardEvent, Dispatch, SetStateAction } from "react"
 import { useCallback } from "react"
 import { getApiBaseUrl } from "src/apis/backend/client"
-import type { FileBlockAttrs, ImageBlockAttrs } from "src/components/editor/serialization"
 import { parseStandaloneMarkdownImageLine } from "src/libs/markdown/rendering"
 import {
   buildImageOptimizationSummary,
@@ -33,6 +32,22 @@ type UploadPostFileResponse = {
     url?: string
     name?: string
   }
+}
+
+export type MarkdownImageUploadAttrs = {
+  src: string
+  alt: string
+  title?: string
+  widthPx?: number
+  align: "left" | "center" | "right" | "wide" | "full"
+}
+
+export type MarkdownFileUploadAttrs = {
+  url: string
+  name: string
+  description: string
+  mimeType: string
+  sizeBytes: number
 }
 
 type UseEditorStudioPersistenceUploadsParams = {
@@ -94,10 +109,10 @@ export const useEditorStudioPersistenceUploads = ({
     }
   }, [uploadWithConflictRetry])
 
-  const handleBlockEditorImageUpload = useCallback(async (file: File): Promise<ImageBlockAttrs> => {
+  const handleMarkdownEditorImageUpload = useCallback(async (file: File): Promise<MarkdownImageUploadAttrs> => {
     setPublishStatus({
       tone: "loading",
-      text: `이미지 "${file.name}" 최적화/업로드 중입니다. 완료되면 블록에 바로 삽입됩니다.`,
+      text: `이미지 "${file.name}" 최적화/업로드 중입니다. 완료되면 본문에 바로 삽입됩니다.`,
     })
 
     try {
@@ -145,10 +160,10 @@ export const useEditorStudioPersistenceUploads = ({
     return (await response.json()) as UploadPostFileResponse
   }, [uploadWithConflictRetry])
 
-  const handleBlockEditorFileUpload = useCallback(async (file: File): Promise<FileBlockAttrs> => {
+  const handleMarkdownEditorFileUpload = useCallback(async (file: File): Promise<MarkdownFileUploadAttrs> => {
     setPublishStatus({
       tone: "loading",
-      text: `첨부 파일 "${file.name}" 업로드 중입니다. 완료되면 파일 블록으로 삽입됩니다.`,
+      text: `첨부 파일 "${file.name}" 업로드 중입니다. 완료되면 Markdown 링크로 삽입됩니다.`,
     })
 
     try {
@@ -246,8 +261,8 @@ export const useEditorStudioPersistenceUploads = ({
   }, [extractImageFileFromClipboard, handleUploadThumbnailImage, loadingKey, setThumbnailImageFileName])
 
   return {
-    handleBlockEditorImageUpload,
-    handleBlockEditorFileUpload,
+    handleMarkdownEditorImageUpload,
+    handleMarkdownEditorFileUpload,
     handleUploadThumbnailImage,
     handleThumbnailImageFileChange,
     handleThumbnailPaste,

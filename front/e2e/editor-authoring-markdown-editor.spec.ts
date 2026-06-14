@@ -1,9 +1,11 @@
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs"
 import { resolve } from "node:path"
 import type { Page, Route } from "./helpers/authoringPlaywright"
 import { expect, test } from "./helpers/authoringPlaywright"
 
 const sourcePath = (...segments: string[]) => resolve(__dirname, "../src", ...segments)
+const frontPath = (...segments: string[]) => resolve(__dirname, "..", ...segments)
+const joinParts = (...parts: string[]) => parts.join("")
 const localDraftStorageKey = "admin.editor.localDraft.v1"
 const adminMember = {
   id: 1,
@@ -11,8 +13,8 @@ const adminMember = {
   nickname: "aquila",
   isAdmin: true,
 }
-const longGithubMarkdownDraft = [
-  "# GitHub Markdown Contract",
+const longMarkdownDraft = [
+  "# Markdown Rendering Contract",
   "",
   "아래 내용은 507 긴 본문 하단에서 반복되던 table/code/list 선택 문제를 대체 경로로 검증한다.",
   "",
@@ -38,7 +40,7 @@ const fulfillJson = async (route: Route, data: unknown) => {
   })
 }
 
-const routeAuthenticatedEditor = async (page: Page, markdown = longGithubMarkdownDraft) => {
+const routeAuthenticatedEditor = async (page: Page, markdown = longMarkdownDraft) => {
   await page.route("**/member/api/v1/auth/me", async (route) => {
     await fulfillJson(route, adminMember)
   })
@@ -64,7 +66,7 @@ const routeAuthenticatedEditor = async (page: Page, markdown = longGithubMarkdow
       window.localStorage.setItem(
         storageKey,
         JSON.stringify({
-          title: "GitHub Markdown 작성 테스트",
+          title: "Markdown 작성 테스트",
           content,
           summary: "Markdown split editor test",
           thumbnailUrl: "",
@@ -82,17 +84,61 @@ const routeAuthenticatedEditor = async (page: Page, markdown = longGithubMarkdow
   )
 }
 
-test.describe("GitHub Markdown editor replacement", () => {
+test.describe("Markdown editor replacement", () => {
+  test("legacy block editor implementation and route files are removed from the frontend tree", () => {
+    const forbiddenPaths = [
+      sourcePath("components", "editor"),
+      sourcePath("pages", "_qa", joinParts("block", "-", "editor", "-", "slash.tsx")),
+      sourcePath("routes", "Admin", joinParts("Qa", "Editor", "Harness.tsx")),
+    ]
+
+    expect(forbiddenPaths.filter((path) => existsSync(path))).toEqual([])
+  })
+
+  test("authoring e2e suite no longer depends on legacy block editor selectors", () => {
+    const e2eRoot = frontPath("e2e")
+    const forbiddenPatterns = [
+      joinParts("Block", "Editor", "Engine"),
+      joinParts("Block", "Editor", "Shell"),
+      joinParts("block", "-", "editor", "-", "prose", "mirror"),
+      joinParts("_qa/", "block", "-", "editor", "-", "slash"),
+      joinParts(".aq-", "block", "-", "editor", "__content"),
+    ]
+    const allowedFiles = new Set(["editor-authoring-markdown-editor.spec.ts"])
+    const violations: string[] = []
+
+    const scan = (directory: string) => {
+      for (const entry of readdirSync(directory)) {
+        const entryPath = resolve(directory, entry)
+        const stat = statSync(entryPath)
+        if (stat.isDirectory()) {
+          if (entry === "node_modules" || entry === "test-results" || entry === "playwright-report") continue
+          scan(entryPath)
+          continue
+        }
+        if (!entryPath.endsWith(".ts") || allowedFiles.has(entry)) continue
+
+        const source = readFileSync(entryPath, "utf8")
+        const matched = forbiddenPatterns.filter((pattern) => source.includes(pattern))
+        if (matched.length > 0) violations.push(`${entryPath.replace(`${frontPath("")}/`, "")}: ${matched.join(", ")}`)
+      }
+    }
+
+    scan(e2eRoot)
+
+    expect(violations).toEqual([])
+  })
+
   test("writer host uses Markdown split editor instead of the legacy block editor", () => {
     const writerHostSource = readFileSync(sourcePath("routes/Admin/WriterEditorHost.tsx"), "utf8")
     const markdownEditorSource = readFileSync(
-      sourcePath("components/markdown-editor/GitHubMarkdownEditor.tsx"),
+      sourcePath("components/markdown-editor/MarkdownEditor.tsx"),
       "utf8"
     )
 
-    expect(writerHostSource).not.toContain("BlockEditorShell")
-    expect(writerHostSource).not.toContain("blockEditorContract")
-    expect(writerHostSource).toContain("GitHubMarkdownEditor")
+    expect(writerHostSource).not.toContain(joinParts("Block", "Editor", "Shell"))
+    expect(writerHostSource).not.toContain(joinParts("block", "Editor", "Contract"))
+    expect(writerHostSource).toContain("MarkdownEditor")
     expect(markdownEditorSource).toContain("MarkdownRenderer")
   })
 
@@ -108,8 +154,8 @@ test.describe("GitHub Markdown editor replacement", () => {
 
     expect(dedicatedSurfaceSource).not.toContain("block-drag-handle")
     expect(dedicatedSurfaceSource).not.toContain("keyboard-block-selection-overlay")
-    expect(composeRootSource).not.toContain("BLOCK_EDITOR_V2_MERMAID_ENABLED")
-    expect(composeRootSource).not.toContain("handleBlockEditorChange")
+    expect(composeRootSource).not.toContain(joinParts("BLOCK", "_EDITOR", "_V2", "_MERMAID", "_ENABLED"))
+    expect(composeRootSource).not.toContain(joinParts("handle", "Block", "Editor", "Change"))
   })
 
   test("publish confirmation modal follows the admin neutral dialog contract", async ({ page }) => {
@@ -132,9 +178,39 @@ test.describe("GitHub Markdown editor replacement", () => {
       }
     })
 
-    expect(dialogContract.borderRadius).toBeLessThanOrEqual(16)
-    expect(dialogContract.width).toBeLessThanOrEqual(960)
+    expect(dialogContract.borderRadius).toBeLessThanOrEqual(12)
+    expect(dialogContract.width).toBeLessThanOrEqual(1120)
     expect(dialogContract.backgroundImage).toBe("none")
+  })
+
+  test("publish modal uses an admin workflow layout instead of stacked explanation cards", async ({ page }) => {
+    await routeAuthenticatedEditor(page)
+
+    await page.goto("/editor/new?source=local-draft")
+    await page.getByRole("button", { name: /^(발행|새 글 작성|수정 반영)$/ }).first().click()
+
+    const dialog = page.getByRole("dialog", { name: /^(발행 설정|새 글 작성|수정 설정)$/ })
+    await expect(dialog).toBeVisible()
+
+    const layout = await dialog.evaluate((element) => {
+      const previewPanel = element.querySelector<HTMLElement>("[data-testid='publish-preview-panel']")
+      const visibilityPanel = element.querySelector<HTMLElement>("[data-testid='publish-visibility-panel']")
+      const optionButtons = Array.from(element.querySelectorAll<HTMLButtonElement>("[aria-pressed]"))
+      const optionHeights = optionButtons.map((button) => button.getBoundingClientRect().height)
+      const previewRect = previewPanel?.getBoundingClientRect()
+      const visibilityRect = visibilityPanel?.getBoundingClientRect()
+
+      return {
+        previewLeft: previewRect?.left ?? 0,
+        visibilityLeft: visibilityRect?.left ?? 0,
+        maxOptionHeight: Math.max(...optionHeights),
+        optionCount: optionButtons.length,
+      }
+    })
+
+    expect(layout.optionCount).toBe(3)
+    expect(layout.previewLeft).toBeLessThan(layout.visibilityLeft)
+    expect(layout.maxOptionHeight).toBeLessThanOrEqual(60)
   })
 
   test("publish modal shell styles stay in the modal style primitive file", () => {
@@ -165,36 +241,35 @@ test.describe("GitHub Markdown editor replacement", () => {
     expect(publishModalShellStylesSource).toContain("export const PublishModalFooter")
   })
 
-  test("/editor/new renders GitHub Markdown write and preview panes for 507-style bottom content", async ({
+  test("/editor/new renders Markdown write and preview panes for 507-style bottom content", async ({
     page,
   }) => {
     await routeAuthenticatedEditor(page)
 
     await page.goto("/editor/new?source=local-draft")
 
-    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue("GitHub Markdown 작성 테스트")
-    await expect(page.getByTestId("github-markdown-editor")).toBeVisible()
-    await expect(page.getByTestId("github-markdown-write-pane")).toBeVisible()
-    await expect(page.getByTestId("github-markdown-preview-pane")).toBeVisible()
-    await expect(page.locator("[data-testid='block-editor-prosemirror']")).toHaveCount(0)
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue("Markdown 작성 테스트")
+    await expect(page.getByTestId("markdown-editor")).toBeVisible()
+    await expect(page.getByTestId("markdown-editor-write-pane")).toBeVisible()
+    await expect(page.getByTestId("markdown-editor-preview-pane")).toBeVisible()
     await expect(page.locator("[data-testid='keyboard-block-selection-overlay']")).toHaveCount(0)
     await expect(page.locator("[data-testid='block-drag-handle']")).toHaveCount(0)
 
-    const preview = page.getByTestId("github-markdown-preview-pane")
-    await expect(preview.getByRole("heading", { name: "GitHub Markdown Contract" })).toBeVisible()
+    const preview = page.getByTestId("markdown-editor-preview-pane")
+    await expect(preview.getByRole("heading", { name: "Markdown Rendering Contract" })).toBeVisible()
     await expect(preview.locator("table")).toContainText("507")
     await expect(preview.locator("pre")).toContainText("console.log(\"507-code\")")
     await expect(preview.locator("input[type='checkbox']")).toHaveCount(2)
     await expect(preview.getByText("quote at the bottom")).toBeVisible()
   })
 
-  test("preview matches GitHub table markdown for alignment, escaped pipes, and inline cell formatting", async ({
+  test("preview matches supported table markdown for alignment, escaped pipes, and inline cell formatting", async ({
     page,
   }) => {
     await routeAuthenticatedEditor(
       page,
       [
-        "# GitHub table parity",
+        "# Table parity",
         "",
         "```md",
         "| example | only |",
@@ -232,7 +307,7 @@ test.describe("GitHub Markdown editor replacement", () => {
 
     await page.goto("/editor/new?source=local-draft")
 
-    const preview = page.getByTestId("github-markdown-preview-pane")
+    const preview = page.getByTestId("markdown-editor-preview-pane")
     await expect(preview.locator("pre").filter({ hasText: "| example | only |" })).toBeVisible()
     await expect(preview.locator("pre").filter({ hasText: "| indented | code |" })).toBeVisible()
     await expect(preview.getByText("escaped | pipe is plain text")).toBeVisible()
@@ -283,7 +358,7 @@ test.describe("GitHub Markdown editor replacement", () => {
     expect(wideTableContract.scrollWidth).toBeGreaterThan(wideTableContract.clientWidth)
   })
 
-  test("write pane keeps every CodeMirror surface on the dark editor surface", async ({ page }) => {
+  test("write pane follows the current theme surface instead of forcing dark colors", async ({ page }) => {
     await routeAuthenticatedEditor(
       page,
       [
@@ -297,7 +372,7 @@ test.describe("GitHub Markdown editor replacement", () => {
 
     await page.goto("/editor/new?source=local-draft")
 
-    const styles = await page.getByTestId("github-markdown-write-pane").evaluate((pane) => {
+    const styles = await page.getByTestId("markdown-editor-write-pane").evaluate((pane) => {
       const readStyle = (selector: string) => {
         const element = pane.querySelector(selector)
         if (!element) throw new Error(`${selector} not found`)
@@ -309,24 +384,63 @@ test.describe("GitHub Markdown editor replacement", () => {
       }
 
       return {
-        editor: readStyle(".cm-editor"),
-        scroller: readStyle(".cm-scroller"),
-        content: readStyle(".cm-content"),
-        line: readStyle(".cm-line"),
-        tokenColors: Array.from(pane.querySelectorAll(".cm-line span"))
-          .map((span) => window.getComputedStyle(span).color)
-          .filter((color, index, colors) => colors.indexOf(color) === index),
-        gutters: readStyle(".cm-gutters"),
+        frame: readStyle("[data-testid='markdown-textarea-frame']"),
+        textarea: readStyle("textarea"),
+        gutters: readStyle("[data-testid='markdown-line-number-gutter']"),
       }
     })
 
-    expect(styles.editor.backgroundColor).toBe("rgb(13, 17, 23)")
-    expect(styles.scroller.backgroundColor).toBe("rgb(13, 17, 23)")
-    expect(styles.content.backgroundColor).toBe("rgb(13, 17, 23)")
-    expect(styles.gutters.backgroundColor).toBe("rgb(13, 17, 23)")
-    expect(styles.line.color).toBe("rgb(230, 237, 243)")
-    expect(styles.tokenColors).toContain("rgb(121, 192, 255)")
-    expect(styles.tokenColors).not.toEqual(["rgb(230, 237, 243)"])
+    expect(styles.frame.backgroundColor).not.toBe("rgb(13, 17, 23)")
+    expect(styles.textarea.backgroundColor).toBe(styles.frame.backgroundColor)
+    expect(styles.gutters.backgroundColor).toBe(styles.frame.backgroundColor)
+    expect(styles.textarea.color).toBe("rgb(15, 23, 36)")
+  })
+
+  test("write pane supports native mouse drag text selection", async ({ page }) => {
+    await routeAuthenticatedEditor(
+      page,
+      [
+        "# Drag Selection",
+        "",
+        "마우스 드래그로 이 문장을 선택할 수 있어야 합니다.",
+        "선택이 풀리거나 preview pane으로 focus가 튀면 안 됩니다.",
+      ].join("\n")
+    )
+
+    await page.goto("/editor/new?source=local-draft")
+
+    const writePane = page.getByTestId("markdown-editor-write-pane")
+    await expect(writePane).toBeVisible()
+    const textarea = writePane.locator("textarea")
+    await expect(textarea).toBeVisible()
+
+    const textareaBox = await textarea.boundingBox()
+    expect(textareaBox).not.toBeNull()
+    if (!textareaBox) return
+
+    const lineHeight = await textarea.evaluate((element) => Number.parseFloat(window.getComputedStyle(element).lineHeight))
+    const targetY = textareaBox.y + 16 + lineHeight * 2 + lineHeight / 2
+
+    await page.mouse.move(textareaBox.x + 24, targetY)
+    await page.mouse.down()
+    await page.mouse.move(textareaBox.x + 330, targetY, {
+      steps: 12,
+    })
+    await page.mouse.up()
+
+    const selectionState = await textarea.evaluate((element) => {
+      return {
+        selectedText: element.value.slice(element.selectionStart, element.selectionEnd),
+        selectionStart: element.selectionStart,
+        selectionEnd: element.selectionEnd,
+        activeInsideWritePane: document.activeElement === element,
+      }
+    })
+
+    expect(selectionState.selectionEnd).toBeGreaterThan(selectionState.selectionStart)
+    expect(selectionState.selectedText).toContain("드래그")
+    expect(selectionState.selectedText).toContain("선택")
+    expect(selectionState.activeInsideWritePane).toBe(true)
   })
 
   test("split preview uses the same readable width and typography contract as post detail", async ({
@@ -337,7 +451,7 @@ test.describe("GitHub Markdown editor replacement", () => {
     await page.goto("/editor/new?source=local-draft")
 
     const previewContract = await page
-      .getByTestId("github-markdown-preview-pane")
+      .getByTestId("markdown-editor-preview-pane")
       .locator("article")
       .evaluate((article) => {
         const markdownRoot = article.querySelector(".aq-markdown")
@@ -346,8 +460,10 @@ test.describe("GitHub Markdown editor replacement", () => {
         const style = window.getComputedStyle(markdownRoot)
         const rect = markdownRoot.getBoundingClientRect()
         return {
+          articleBackground: articleStyle.backgroundColor,
           paddingLeft: articleStyle.paddingLeft,
           paddingRight: articleStyle.paddingRight,
+          marginTop: style.marginTop,
           maxWidth: style.maxWidth,
           fontSize: style.fontSize,
           lineHeight: style.lineHeight,
@@ -355,8 +471,10 @@ test.describe("GitHub Markdown editor replacement", () => {
         }
       })
 
+    expect(previewContract.articleBackground).not.toBe("rgb(13, 17, 23)")
     expect(previewContract.paddingLeft).toBe("16px")
     expect(previewContract.paddingRight).toBe("16px")
+    expect(previewContract.marginTop).toBe("26.4px")
     expect(previewContract.maxWidth).toBe("768px")
     expect(previewContract.fontSize).toBe("17px")
     expect(previewContract.lineHeight).toBe("28px")
@@ -371,8 +489,8 @@ test.describe("GitHub Markdown editor replacement", () => {
 
     await page.goto("/editor/new?source=local-draft")
 
-    const writePane = page.getByTestId("github-markdown-write-pane")
-    const previewPane = page.getByTestId("github-markdown-preview-pane")
+    const writePane = page.getByTestId("markdown-editor-write-pane")
+    const previewPane = page.getByTestId("markdown-editor-preview-pane")
 
     await expect(writePane).toBeVisible()
     await expect(previewPane).toBeHidden()
@@ -394,23 +512,23 @@ test.describe("GitHub Markdown editor replacement", () => {
     expect(previewContract.renderedWidth).toBeLessThanOrEqual(728)
   })
 
-  test("toolbar snippets insert at the CodeMirror caret instead of appending at the document end", async ({
+  test("toolbar snippets insert at the textarea caret instead of appending at the document end", async ({
     page,
   }) => {
     await routeAuthenticatedEditor(page, ["alpha", "omega"].join("\n"))
 
     await page.goto("/editor/new?source=local-draft")
 
-    const writePane = page.getByTestId("github-markdown-write-pane")
+    const writePane = page.getByTestId("markdown-editor-write-pane")
     await expect(writePane).toBeVisible()
-    await writePane.locator(".cm-content").click()
+    await writePane.locator("textarea").click()
     await page.keyboard.press(process.platform === "darwin" ? "Meta+Home" : "Control+Home")
     await page.keyboard.press("ArrowRight")
     await page.getByRole("button", { name: "표" }).click()
 
-    const editorText = await writePane.locator(".cm-content").innerText()
+    const editorText = await writePane.locator("textarea").inputValue()
     expect(editorText.indexOf("| Column 1 | Column 2 | Column 3 |")).toBeLessThan(editorText.indexOf("omega"))
-    await expect(page.getByTestId("github-markdown-preview-pane").locator("table")).toContainText("Column 1")
+    await expect(page.getByTestId("markdown-editor-preview-pane").locator("table")).toContainText("Column 1")
   })
 
   test("preview keeps raw HTML script and javascript URLs out of the rendered DOM", async ({
@@ -431,7 +549,7 @@ test.describe("GitHub Markdown editor replacement", () => {
 
     await page.goto("/editor/new?source=local-draft")
 
-    const preview = page.getByTestId("github-markdown-preview-pane")
+    const preview = page.getByTestId("markdown-editor-preview-pane")
     await expect(preview).toBeVisible()
     await expect(preview.locator("script")).toHaveCount(0)
     await expect(preview.locator("a[href^='javascript:']")).toHaveCount(0)

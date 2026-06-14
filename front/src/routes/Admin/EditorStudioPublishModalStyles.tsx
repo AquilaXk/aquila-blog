@@ -10,28 +10,33 @@ export {
 
 export const PublishOverviewGrid = styled.div`
   display: grid;
-  gap: 0.8rem;
+  gap: 1rem;
 
   @media (min-width: 1080px) {
-    grid-template-columns: minmax(0, 1fr) minmax(320px, 368px);
+    grid-template-columns: minmax(520px, 1fr) minmax(240px, 288px);
     align-items: start;
   }
 `
 
 export const VisibilityCard = styled.section`
   display: grid;
-  gap: 0.62rem;
+  gap: 0.72rem;
   align-content: start;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 14px;
-  background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.9rem;
+  border-left: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
+  padding: 0.1rem 0 0.1rem 1rem;
 
   > strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.94rem;
+    font-size: 0.9rem;
     font-weight: 700;
     line-height: 1.35;
+  }
+
+  @media (max-width: 1079px) {
+    border-left: 0;
+    border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+    padding: 0.9rem 0 0;
   }
 `
 
@@ -48,17 +53,20 @@ export const SectionKicker = styled.span`
 
 export const VisibilityOptionGrid = styled.div`
   display: grid;
-  gap: 0.5rem;
+  gap: 0.28rem;
 `
 
 export const VisibilityOptionButton = styled.button`
-  display: grid;
-  gap: 0.16rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
   width: 100%;
-  padding: 0.72rem 0.78rem;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  min-height: 48px;
+  padding: 0.5rem 0.58rem;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
   text-align: left;
   cursor: pointer;
   transition:
@@ -68,21 +76,29 @@ export const VisibilityOptionButton = styled.button`
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.84rem;
+    flex: 0 0 auto;
+    font-size: 0.82rem;
     font-weight: 700;
     line-height: 1.3;
   }
 
   span {
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.75rem;
-    line-height: 1.45;
+    min-width: 0;
+    font-size: 0.72rem;
+    line-height: 1.35;
+    text-align: right;
   }
 
   &[data-active="true"] {
     border-color: ${({ theme }) => theme.colors.blue8};
-    background: ${({ theme }) => theme.colors.blue3};
-    box-shadow: 0 0 0 1px ${({ theme }) => theme.colors.blue6} inset;
+    background: ${({ theme }) => theme.colors.gray3};
+    box-shadow: 3px 0 0 ${({ theme }) => theme.colors.blue8} inset;
+  }
+
+  &:hover:not([data-active="true"]) {
+    border-color: ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray3};
   }
 `
 
@@ -106,10 +122,10 @@ export const PreviewResultPanel = styled.div`
   gap: 0.75rem;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 14px;
-  background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.9rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
 `
 
 export const PreviewResultHeader = styled.div`
@@ -353,11 +369,11 @@ export const PreviewResultCard = styled.article`
 
 export const PostPreviewSetup = styled.section`
   display: grid;
-  gap: 0.82rem;
-  border: none;
+  gap: 0.78rem;
+  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 0;
   background: transparent;
-  padding: 0;
+  padding: 0.95rem 0 0;
 `
 
 export const PostPreviewHeader = styled.div`

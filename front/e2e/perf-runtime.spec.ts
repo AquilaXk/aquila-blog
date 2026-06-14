@@ -1,15 +1,11 @@
 import { expect, test } from "@playwright/test"
 import {
   PERF_RUNTIME_GUARD_TRIALS,
-  QA_ENGINE_ROUTE,
   average,
   buildMockExploreItem,
   clsAssertionEpsilon,
   clsBudget,
   detailEntryBudgetMs,
-  editorCommitP95BudgetMs,
-  editorInputLongTaskRatioBudget,
-  editorTypingP95BudgetMs,
   feedScrollLongFrameRatioBudget,
   feedScrollMaxFrameGapBudgetMs,
   getLayoutSnapshot,
@@ -27,7 +23,6 @@ import {
   reloadForPerf,
   waitForFeedCardLink,
   waitForPageReady,
-  waitForQaEditorReady,
 } from "./helpers/perfFixtures"
 
 test.describe("perf runtime guard budgets", () => {
@@ -101,195 +96,6 @@ test.describe("perf runtime guard budgets", () => {
     expect(jitterPx).toBeLessThanOrEqual(jitterBudgetPx)
     expect(cls).toBeLessThanOrEqual(clsBudget + clsAssertionEpsilon)
   }
-})
-
-  test("에디터 타이핑 p95는 런타임 가드 예산을 통과한다", async ({ page }) => {
-  const typingP95Samples: number[] = []
-  const typingMeanSamples: number[] = []
-  const typingMaxSamples: number[] = []
-  const typingLongTaskRatioSamples: number[] = []
-  const editorCommitP95Samples: number[] = []
-  const editorCommitRawSampleCounts: number[] = []
-  let editorCommitFallbackCount = 0
-  const typingSampleCounts: number[] = []
-  await page.addInitScript(() => {
-    ;(window as unknown as RuntimeGuardWindow).__AQ_RUNTIME_GUARD_ENABLED__ = true
-    ;(window as unknown as RuntimeGuardWindow).__AQ_RUNTIME_GUARD__ = {
-      editorCommitSamples: [],
-    }
-  })
-
-  for (let trial = 0; trial < PERF_RUNTIME_GUARD_TRIALS; trial += 1) {
-    await gotoForPerf(page, QA_ENGINE_ROUTE, { waitAuth: false })
-    await page.evaluate(() => {
-      ;(window as unknown as RuntimeGuardWindow).__AQ_RUNTIME_GUARD_ENABLED__ = true
-      ;(window as unknown as RuntimeGuardWindow).__AQ_RUNTIME_GUARD__ = {
-        editorCommitSamples: [],
-      }
-    })
-
-    const editor = await waitForQaEditorReady(page)
-    await editor.click()
-
-    const typingStats = await editor.evaluate(async (node) => {
-      const host = node as HTMLElement
-      const payload = "성능가드 타이핑 기준 블록 입력 "
-      const text = payload.repeat(6)
-      const samples: number[] = []
-      const longTaskDurations: number[] = []
-      let longTaskObserver: PerformanceObserver | null = null
-      const waitNextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-
-      try {
-        longTaskObserver = new PerformanceObserver((entryList) => {
-          for (const entry of entryList.getEntries()) {
-            longTaskDurations.push(entry.duration)
-          }
-        })
-        longTaskObserver.observe({ type: "longtask" })
-      } catch {
-        longTaskObserver = null
-      }
-
-      const setCaretToEnd = () => {
-        const range = document.createRange()
-        range.selectNodeContents(host)
-        range.collapse(false)
-        const selection = window.getSelection()
-        if (!selection) return
-        selection.removeAllRanges()
-        selection.addRange(range)
-      }
-
-      for (const character of text) {
-        const start = performance.now()
-        setCaretToEnd()
-
-        const insertedWithExecCommand =
-          typeof document.execCommand === "function" && document.execCommand("insertText", false, character)
-
-        if (!insertedWithExecCommand) {
-          const selection = window.getSelection()
-          if (selection && selection.rangeCount > 0) {
-            const range = selection.getRangeAt(0)
-            range.deleteContents()
-            range.insertNode(document.createTextNode(character))
-            range.collapse(false)
-          } else {
-            host.append(document.createTextNode(character))
-          }
-          host.dispatchEvent(
-            new InputEvent("input", {
-              bubbles: true,
-              cancelable: false,
-              inputType: "insertText",
-              data: character,
-            })
-          )
-        }
-
-        await waitNextFrame()
-        samples.push(performance.now() - start)
-      }
-
-      longTaskObserver?.disconnect()
-
-      const toPercentile = (values: number[], percentilePoint: number) => {
-        if (!values.length) return 0
-        const sorted = [...values].sort((a, b) => a - b)
-        const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * percentilePoint) - 1))
-        return sorted[index]
-      }
-      const meanMs = samples.reduce((sum, sample) => sum + sample, 0) / Math.max(samples.length, 1)
-      const p95Ms = toPercentile(samples, 0.95)
-      const maxMs = samples.length ? Math.max(...samples) : 0
-      const longTaskCount = longTaskDurations.length
-      const longTaskRatio = samples.length ? longTaskCount / samples.length : 0
-      return {
-        sampleCount: samples.length,
-        meanMs,
-        p95Ms,
-        maxMs,
-        longTaskCount,
-        longTaskRatio,
-      }
-    })
-
-    const commitStats = await page.evaluate(() => {
-      const runtime = (window as unknown as RuntimeGuardWindow).__AQ_RUNTIME_GUARD__
-      const rawSamples = runtime?.editorCommitSamples ?? []
-      const samples = rawSamples.filter((value) => Number.isFinite(value) && value > 0)
-      const sorted = [...samples].sort((a, b) => a - b)
-      const p95Index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * 0.95) - 1))
-      return {
-        sampleCount: samples.length,
-        p95Ms: sorted.length ? sorted[p95Index] : 0,
-      }
-    })
-
-    typingP95Samples.push(typingStats.p95Ms)
-    typingMeanSamples.push(typingStats.meanMs)
-    typingMaxSamples.push(typingStats.maxMs)
-    typingLongTaskRatioSamples.push(typingStats.longTaskRatio)
-    typingSampleCounts.push(typingStats.sampleCount)
-    editorCommitRawSampleCounts.push(commitStats.sampleCount)
-    if (commitStats.sampleCount > 0) {
-      editorCommitP95Samples.push(commitStats.p95Ms)
-    } else {
-      // Fallback keeps runtime guard signal available on surfaces without React Profiler wiring.
-      editorCommitP95Samples.push(typingStats.p95Ms)
-      editorCommitFallbackCount += 1
-    }
-  }
-
-  const averagedTypingP95Ms = average(typingP95Samples)
-  const averagedTypingMeanMs = average(typingMeanSamples)
-  const averagedTypingMaxMs = average(typingMaxSamples)
-  const averagedLongTaskRatio = average(typingLongTaskRatioSamples)
-  const averagedCommitP95Ms = average(editorCommitP95Samples)
-  const averagedTypingSampleCount = Math.round(average(typingSampleCounts))
-
-  console.log(
-    `[runtime-guard] editor-typing p95(avg)=${averagedTypingP95Ms.toFixed(2)}ms mean(avg)=${averagedTypingMeanMs.toFixed(2)}ms max(avg)=${averagedTypingMaxMs.toFixed(2)}ms samples(avg)=${averagedTypingSampleCount} trials=${PERF_RUNTIME_GUARD_TRIALS} budget=${editorTypingP95BudgetMs}ms`
-  )
-  console.log(
-    `[runtime-guard] editor-longtask ratio(avg)=${averagedLongTaskRatio.toFixed(4)} budget=${editorInputLongTaskRatioBudget}`
-  )
-  console.log(
-    `[runtime-guard] editor-commit p95(avg)=${averagedCommitP95Ms.toFixed(2)}ms samples=${Math.round(average(editorCommitRawSampleCounts))} fallbackTrials=${editorCommitFallbackCount} budget=${editorCommitP95BudgetMs}ms`
-  )
-
-  recordRuntimeGuardMetricWithAliases("editor_input_latency", averagedTypingP95Ms, editorTypingP95BudgetMs, {
-    unit: "ms",
-    route: QA_ENGINE_ROUTE,
-    section: "editor",
-    sampleCount: averagedTypingSampleCount,
-    extra: {
-      meanMs: averagedTypingMeanMs,
-      maxMs: averagedTypingMaxMs,
-      trials: PERF_RUNTIME_GUARD_TRIALS,
-    },
-  }, ["editor.typing.p95_ms"])
-  recordRuntimeGuardMetric("editor_input_longtask_ratio", averagedLongTaskRatio, editorInputLongTaskRatioBudget, {
-    unit: "ratio",
-    route: QA_ENGINE_ROUTE,
-    section: "editor",
-    sampleCount: averagedTypingSampleCount,
-  })
-  recordRuntimeGuardMetric("editor_render_commit_p95_ms", averagedCommitP95Ms, editorCommitP95BudgetMs, {
-    unit: "ms",
-    route: QA_ENGINE_ROUTE,
-    section: "editor",
-    sampleCount: Math.round(average(editorCommitRawSampleCounts)),
-    extra: {
-      fallbackTrials: editorCommitFallbackCount,
-    },
-  })
-
-  expect(averagedTypingSampleCount).toBeGreaterThanOrEqual(60)
-  expect(averagedTypingP95Ms).toBeLessThanOrEqual(editorTypingP95BudgetMs)
-  expect(averagedLongTaskRatio).toBeLessThanOrEqual(editorInputLongTaskRatioBudget)
-  expect(averagedCommitP95Ms).toBeLessThanOrEqual(editorCommitP95BudgetMs)
 })
 
   test("피드 스크롤 프레임 예산은 런타임 가드를 통과한다", async ({ page }) => {

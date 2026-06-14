@@ -9,7 +9,6 @@ import {
   useState,
   useTransition,
 } from "react"
-import type { BlockEditorMarkdownFlush } from "src/components/editor/blockEditorContract"
 import useAuthSession from "src/hooks/useAuthSession"
 import {
   compareCategoryValues,
@@ -66,7 +65,6 @@ import {
   DEFAULT_THUMBNAIL_ZOOM,
   stripThumbnailFocusFromUrl,
 } from "src/libs/thumbnailFocus"
-import type { BlockEditorChangeMeta } from "src/components/editor/blockEditorContract"
 import {
   CATEGORY_CATALOG_STORAGE_KEY,
   TAG_CATALOG_STORAGE_KEY,
@@ -99,6 +97,11 @@ import {
   type RsData,
   type StudioSurface,
 } from "./EditorStudioWorkspaceControllerRootModel"
+
+type MarkdownEditorFlush = () => string
+type MarkdownEditorChangeMeta = {
+  editorFocused: boolean
+}
 
 type EditorStudioWorkspaceControllerProps = AdminPageProps & {
   initialEditorPost?: PostForEditor | null
@@ -165,7 +168,7 @@ export const EditorStudioWorkspaceController = ({
   const [isComposeAssistOpen, setIsComposeAssistOpen] = useState(false)
   const [isComposeUtilityOpen, setIsComposeUtilityOpen] = useState(false)
   const postContentLiveRef = useRef(postContent)
-  const flushEditorMarkdownRef = useRef<BlockEditorMarkdownFlush | null>(null)
+  const flushEditorMarkdownRef = useRef<MarkdownEditorFlush | null>(null)
   const deferredContentDerivedCacheRef = useRef<{
     fingerprint: string
     summary: string
@@ -196,7 +199,7 @@ export const EditorStudioWorkspaceController = ({
     postContentLiveRef.current = postContent
   }, [postContent])
 
-  const handleBlockEditorChange = useCallback((nextMarkdown: string, meta?: BlockEditorChangeMeta) => {
+  const handleMarkdownEditorChange = useCallback((nextMarkdown: string, meta?: MarkdownEditorChangeMeta) => {
     const previousMarkdown = postContentLiveRef.current
     if (nextMarkdown === previousMarkdown) {
       return
@@ -247,7 +250,7 @@ export const EditorStudioWorkspaceController = ({
     setPostContent(nextMarkdown)
   }, [startPostContentTransition])
 
-  const handleFlushMarkdownReady = useCallback((flush: BlockEditorMarkdownFlush | null) => {
+  const handleFlushMarkdownReady = useCallback((flush: MarkdownEditorFlush | null) => {
     flushEditorMarkdownRef.current = flush
   }, [])
 
@@ -822,7 +825,7 @@ export const EditorStudioWorkspaceController = ({
         deferredPostContent, deferredContentDerived, deleteConfirmNotice, deleteConfirmState, deletePostsFromList,
         deletedListNotice,
         deleteTagFromCatalog, disabled, editorMode, finalizePreviewThumbPointer, globalNotice,
-        handleBlockEditorChange, handleBlockEditorFileUpload, handleBlockEditorImageUpload, handleConfirmPublish, handleContinueSelectedPostEditing,
+        handleMarkdownEditorChange, handleBlockEditorFileUpload, handleBlockEditorImageUpload, handleConfirmPublish, handleContinueSelectedPostEditing,
         handleCreateNewPostFromSelectedPanel, handleDeleteComment, handleDeleteSelectedPost, handleExitDedicatedEditor, handleFlushMarkdownReady, handleHitPost,
         handleLikePost, handleListComments, handleListPageChange, handleListPageSizeChange, handleListSortChange,
         handleLoadOrCreateTempPost, handleModifyComment, handlePreviewThumbPointerDown, handlePreviewThumbPointerMove, handleProfileImageSelected,

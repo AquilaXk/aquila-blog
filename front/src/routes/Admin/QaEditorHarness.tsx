@@ -1,33 +1,9 @@
-import dynamic from "next/dynamic"
-import { useEffect, useRef, useState, type MouseEvent } from "react"
-import type { BlockEditorQaActions } from "src/components/editor/blockEditorContract"
-
-const LazyBlockEditorShell = dynamic(() => import("src/components/editor/BlockEditorShell"), {
-  ssr: false,
-  loading: () => (
-    <div
-      style={{
-        padding: "1rem 1.1rem",
-        borderRadius: "1rem",
-        border: "1px solid rgba(148, 163, 184, 0.18)",
-        background: "rgba(15, 23, 42, 0.52)",
-        color: "#cbd5e1",
-      }}
-    >
-      블록 에디터 준비 중...
-    </div>
-  ),
-})
+import { useCallback, useEffect, useState } from "react"
+import { WriterEditorHost } from "./WriterEditorHost"
 
 const QA_IMAGE_DATA_URL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlH0WkAAAAASUVORK5CYII="
 const QA_EXTERNAL_POST_MARKDOWN = "# 선택 글 제목\n\n선택 글 본문\n\n선택 글 둘째 문단"
-
-const preserveEditorSelectionOnButtonMouseDown = (
-  event: MouseEvent<HTMLButtonElement>
-) => {
-  event.preventDefault()
-}
 
 type QaEditorHarnessProps = {
   seedMarkdown: string
@@ -36,176 +12,81 @@ type QaEditorHarnessProps = {
 export const QaEditorHarness = ({ seedMarkdown }: QaEditorHarnessProps) => {
   const [markdown, setMarkdown] = useState(() => seedMarkdown)
   const [editorReady, setEditorReady] = useState(false)
-  const qaActionsRef = useRef<BlockEditorQaActions | null>(null)
+  const [commitSamples, setCommitSamples] = useState<number[]>([])
+  const [flushMarkdown, setFlushMarkdown] = useState<(() => string) | null>(null)
 
   useEffect(() => {
-    if (typeof window === "undefined") return
-    const qaWindow = window as unknown as {
-      __qaGetSelectionSnapshot?: BlockEditorQaActions["getSelectionSnapshot"]
-      __qaSelectBlockAtIndex?: (blockIndex: number) => void
-      __qaMoveTaskItemInFirstTaskList?: (sourceIndex: number, insertionIndex: number) => void
-      __qaScrollCurrentSelectionIntoView?: () => void
-      __qaGetUndoDepth?: () => number
-    }
-    qaWindow.__qaGetSelectionSnapshot = () =>
-      qaActionsRef.current?.getSelectionSnapshot() ?? null
-    qaWindow.__qaSelectBlockAtIndex = (blockIndex) => {
-      qaActionsRef.current?.selectBlockAtIndex(blockIndex)
-    }
-    qaWindow.__qaMoveTaskItemInFirstTaskList =
-      (sourceIndex, insertionIndex) => {
-        qaActionsRef.current?.moveTaskItemInFirstTaskList(sourceIndex, insertionIndex)
-      }
-    qaWindow.__qaScrollCurrentSelectionIntoView = () => {
-      qaActionsRef.current?.scrollCurrentSelectionIntoView()
-    }
-    qaWindow.__qaGetUndoDepth = () => qaActionsRef.current?.getUndoDepth() ?? 0
+    if (!editorReady) return
+    const readyTimer = window.setTimeout(() => setEditorReady(true), 0)
+    return () => window.clearTimeout(readyTimer)
+  }, [editorReady])
 
-    return () => {
-      delete qaWindow.__qaGetSelectionSnapshot
-      delete qaWindow.__qaSelectBlockAtIndex
-      delete qaWindow.__qaMoveTaskItemInFirstTaskList
-      delete qaWindow.__qaScrollCurrentSelectionIntoView
-      delete qaWindow.__qaGetUndoDepth
-    }
+  const handleMarkdownChange = useCallback((nextMarkdown: string) => {
+    setMarkdown(nextMarkdown)
   }, [])
+
+  const handleFlushReady = useCallback((flush: (() => string) | null) => {
+    setFlushMarkdown(() => flush)
+    setEditorReady(Boolean(flush))
+  }, [])
+
+  const handleCommitDuration = useCallback((actualDuration: number) => {
+    setCommitSamples((samples) => [...samples.slice(-24), actualDuration])
+    if (typeof window === "undefined") return
+    const runtime = (window as unknown as {
+      __AQ_RUNTIME_GUARD__?: { editorCommitSamples?: number[] }
+    }).__AQ_RUNTIME_GUARD__
+    if (!runtime) return
+    runtime.editorCommitSamples = [...(runtime.editorCommitSamples ?? []), actualDuration]
+  }, [])
+
+  const handleExternalPostSelect = useCallback(() => {
+    setMarkdown(QA_EXTERNAL_POST_MARKDOWN)
+  }, [])
+
+  const currentMarkdown = flushMarkdown?.() ?? markdown
 
   return (
     <main
       style={{
         display: "grid",
         gap: "1.25rem",
-        maxWidth: "72rem",
+        maxWidth: "88rem",
         margin: "0 auto",
         padding: "2rem 1.25rem 4rem",
       }}
     >
       <header style={{ display: "grid", gap: "0.25rem" }}>
-        <strong>BlockEditorShell 엔진 QA</strong>
+        <strong>GitHub Markdown editor QA</strong>
         <span style={{ color: "#8b95a7", fontSize: "0.92rem" }}>
-          slash, rail, table, serialization 같은 에디터 엔진 동작만 검증합니다.
-        </span>
-        <span style={{ color: "#64748b", fontSize: "0.82rem" }}>
-          실제 글쓰기 화면 레이아웃과 제목 입력칸 회귀는 <code>/editor</code> 전용 테스트에서 검증합니다.
+          작성 화면과 같은 Markdown editor, toolbar, preview 렌더링 경로를 검증합니다.
         </span>
       </header>
 
-      <section
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "0.65rem",
-        }}
-      >
-        <button
-          type="button"
-          onMouseDown={preserveEditorSelectionOnButtonMouseDown}
-          onClick={() => qaActionsRef.current?.selectTableAxis("column")}
-        >
-          QA 열 선택
-        </button>
-        <button
-          type="button"
-          onMouseDown={preserveEditorSelectionOnButtonMouseDown}
-          onClick={() => qaActionsRef.current?.selectTableColumnViaDomFallback(0)}
-        >
-          QA fallback 열 선택
-        </button>
-        <button
-          type="button"
-          onMouseDown={preserveEditorSelectionOnButtonMouseDown}
-          onClick={() => qaActionsRef.current?.setActiveTableCellAlign("center")}
-        >
-          QA 가운데
-        </button>
-        <button
-          type="button"
-          onMouseDown={preserveEditorSelectionOnButtonMouseDown}
-          onClick={() => qaActionsRef.current?.setActiveTableCellBackground("#fef3c7")}
-        >
-          QA 노랑 배경
-        </button>
-        <button
-          type="button"
-          onMouseDown={preserveEditorSelectionOnButtonMouseDown}
-          onClick={() => qaActionsRef.current?.addTableRowAfter()}
-        >
-          QA 행 추가
-        </button>
-        <button
-          type="button"
-          onMouseDown={preserveEditorSelectionOnButtonMouseDown}
-          onClick={() => qaActionsRef.current?.addTableColumnAfter()}
-        >
-          QA 열 추가
-        </button>
-        <button
-          type="button"
-          onMouseDown={preserveEditorSelectionOnButtonMouseDown}
-          onClick={() => qaActionsRef.current?.deleteSelectedTableRow()}
-        >
-          QA 행 삭제
-        </button>
-        <button
-          type="button"
-          onMouseDown={preserveEditorSelectionOnButtonMouseDown}
-          onClick={() => qaActionsRef.current?.deleteSelectedTableColumn()}
-        >
-          QA 열 삭제
-        </button>
-        <button
-          type="button"
-          onMouseDown={preserveEditorSelectionOnButtonMouseDown}
-          onClick={() => qaActionsRef.current?.resizeFirstTableRow(28)}
-        >
-          QA 행 리사이즈
-        </button>
-        <button
-          type="button"
-          onMouseDown={preserveEditorSelectionOnButtonMouseDown}
-          onClick={() => qaActionsRef.current?.resizeFirstTableColumn(28)}
-        >
-          QA 열 리사이즈
-        </button>
-        <button type="button" onClick={() => qaActionsRef.current?.focusDocumentEnd()}>
-          QA 끝으로 이동
-        </button>
-        <button type="button" onClick={() => qaActionsRef.current?.appendCalloutBlock()}>
-          QA 콜아웃
-        </button>
-        <button type="button" onClick={() => qaActionsRef.current?.appendFormulaBlock()}>
-          QA 수식
-        </button>
-        <button type="button" onClick={() => qaActionsRef.current?.moveTaskItemInFirstTaskList(2, 0)}>
-          QA Task 3→1
-        </button>
-        <button type="button" onClick={() => setMarkdown(QA_EXTERNAL_POST_MARKDOWN)}>
+      <section style={{ display: "flex", flexWrap: "wrap", gap: "0.65rem" }}>
+        <button type="button" onClick={handleExternalPostSelect}>
           QA 외부 글 선택
+        </button>
+        <button type="button" onClick={() => setMarkdown(`${currentMarkdown}\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n`)}>
+          QA 표 추가
+        </button>
+        <button type="button" onClick={() => setMarkdown(`${currentMarkdown}\n\n\`\`\`js\nconsole.log("qa")\n\`\`\`\n`)}>
+          QA 코드 추가
         </button>
       </section>
 
-      <LazyBlockEditorShell
-        value={markdown}
-        onChange={(next) => setMarkdown(next)}
-        onUploadImage={async () => ({
+      <WriterEditorHost
+        canvasId="qa-github-markdown-editor"
+        markdown={markdown}
+        onMarkdownChange={handleMarkdownChange}
+        onFlushMarkdownReady={handleFlushReady}
+        onImageUpload={async () => ({
           src: QA_IMAGE_DATA_URL,
           alt: "qa-image",
           title: "qa-image",
-          widthPx: 640,
-          align: "center",
         })}
-        onUploadFile={async (file) => ({
-          url: `https://example.com/files/${encodeURIComponent(file.name)}`,
-          name: file.name,
-          description: "",
-          mimeType: file.type || "",
-          sizeBytes: file.size,
-        })}
-        enableMermaidBlocks={true}
-        onQaActionsReady={(actions) => {
-          qaActionsRef.current = actions
-          setEditorReady(true)
-        }}
+        mermaidEnabled={true}
+        onCommitDuration={handleCommitDuration}
       />
       {editorReady ? <div data-testid="qa-editor-ready" hidden /> : null}
 
@@ -226,8 +107,11 @@ export const QaEditorHarness = ({ seedMarkdown }: QaEditorHarnessProps) => {
             wordBreak: "break-word",
           }}
         >
-          {markdown || "(empty)"}
+          {currentMarkdown || "(empty)"}
         </pre>
+        <small style={{ color: "#64748b" }}>
+          commit samples: {commitSamples.length}
+        </small>
       </section>
     </main>
   )

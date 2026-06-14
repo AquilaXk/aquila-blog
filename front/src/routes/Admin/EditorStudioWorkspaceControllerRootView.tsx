@@ -16,7 +16,7 @@ import { LIST_SORT_OPTIONS } from "./useEditorStudioListConditions"
 import { deriveComposeViewModel, deriveEditorContentMetrics, deriveEditorPersistenceState, derivePublishActionViewModel, getVisibilityLabel, toFlags, type PublishActionType } from "./editorStudioState"
 import { PREVIEW_SUMMARY_MAX_LENGTH, buildEditorStateFingerprint, detectPublishPlaceholderIssue, makePreviewSummary } from "./editorStudioMetaModel"
 import { Main, HeroCard, HeroIntro, StudioStatusItem, StudioStatusStrip, WorkspaceGrid, WorkspaceMain } from "./EditorStudioWorkspaceControllerRoot.styles"
-import { BLOCK_EDITOR_V2_MERMAID_ENABLED, COMPOSE_MOBILE_STUDIO_STEPS, GLOBAL_NOTICE_IDLE_TEXT, MANAGE_MOBILE_STUDIO_STEPS, MOBILE_STUDIO_STEP_DESCRIPTION, MOBILE_STUDIO_STEP_LABEL, PREVIEW_CARD_VIEWPORT_ORDER, PREVIEW_CARD_VIEWPORTS, PUBLISH_VISIBILITY_OPTIONS, SHOW_LEGACY_CONTENT_STUDIO, SHOW_LEGACY_PROFILE_STUDIO, SHOW_LEGACY_UTILITY_STUDIO, TAG_RECOMMENDATION_IDLE_TEXT, getMobileStudioStepMoveLabel, recordEditorCommitDurationForRuntimeGuard, type MobileStudioStep, type NoticeTone, type PreviewViewportMode } from "./EditorStudioWorkspaceControllerRootModel"
+import { MARKDOWN_EDITOR_MERMAID_ENABLED, COMPOSE_MOBILE_STUDIO_STEPS, GLOBAL_NOTICE_IDLE_TEXT, MANAGE_MOBILE_STUDIO_STEPS, MOBILE_STUDIO_STEP_DESCRIPTION, MOBILE_STUDIO_STEP_LABEL, PREVIEW_CARD_VIEWPORT_ORDER, PREVIEW_CARD_VIEWPORTS, PUBLISH_VISIBILITY_OPTIONS, SHOW_LEGACY_CONTENT_STUDIO, SHOW_LEGACY_PROFILE_STUDIO, SHOW_LEGACY_UTILITY_STUDIO, TAG_RECOMMENDATION_IDLE_TEXT, getMobileStudioStepMoveLabel, recordEditorCommitDurationForRuntimeGuard, type MobileStudioStep, type NoticeTone, type PreviewViewportMode } from "./EditorStudioWorkspaceControllerRootModel"
 
 type EditorStudioWorkspaceControllerRootViewProps = {
   props: Record<string, any>
@@ -50,7 +50,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
     editorMode,
     finalizePreviewThumbPointer,
     globalNotice,
-    handleBlockEditorChange,
+    handleMarkdownEditorChange,
     handleBlockEditorFileUpload,
     handleBlockEditorImageUpload,
     handleConfirmPublish,
@@ -467,17 +467,17 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
       <WriterEditorHost
         canvasId="editor-dedicated-canvas"
         markdown={postContent}
-        onMarkdownChange={handleBlockEditorChange}
+        onMarkdownChange={handleMarkdownEditorChange}
         onFlushMarkdownReady={handleFlushMarkdownReady}
         onImageUpload={handleBlockEditorImageUpload}
         onFileUpload={handleBlockEditorFileUpload}
-        mermaidEnabled={BLOCK_EDITOR_V2_MERMAID_ENABLED}
+        mermaidEnabled={MARKDOWN_EDITOR_MERMAID_ENABLED}
         disabled={isBlockEditorDisabled}
         onCommitDuration={handleEditorCommitDuration}
       />
     ),
     [
-      handleBlockEditorChange,
+      handleMarkdownEditorChange,
       handleBlockEditorFileUpload,
       handleBlockEditorImageUpload,
       handleFlushMarkdownReady,
@@ -491,17 +491,17 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
       <WriterEditorHost
         canvasId="editor-compose-canvas"
         markdown={postContent}
-        onMarkdownChange={handleBlockEditorChange}
+        onMarkdownChange={handleMarkdownEditorChange}
         onFlushMarkdownReady={handleFlushMarkdownReady}
         onImageUpload={handleBlockEditorImageUpload}
         onFileUpload={handleBlockEditorFileUpload}
-        mermaidEnabled={BLOCK_EDITOR_V2_MERMAID_ENABLED}
+        mermaidEnabled={MARKDOWN_EDITOR_MERMAID_ENABLED}
         disabled={isBlockEditorDisabled}
         onCommitDuration={handleEditorCommitDuration}
       />
     ),
     [
-      handleBlockEditorChange,
+      handleMarkdownEditorChange,
       handleBlockEditorFileUpload,
       handleBlockEditorImageUpload,
       handleFlushMarkdownReady,

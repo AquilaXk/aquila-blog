@@ -177,13 +177,8 @@ const StyledWrapper = styled.div`
   position: sticky;
   top: 0;
   background: ${({ theme }) =>
-    theme.blogDesign === "grid"
-      ? theme.publicDesign.surface
-      : theme.scheme === "light"
-        ? "rgba(249, 251, 254, 0.94)"
-        : `${theme.colors.gray1}e6`};
-  border-bottom: 1px solid ${({ theme }) =>
-    theme.blogDesign === "grid" ? theme.publicDesign.border : theme.colors.gray6};
+    theme.scheme === "light" ? "rgba(249, 251, 254, 0.94)" : `${theme.colors.gray1}e6`};
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   transform: translateY(0);

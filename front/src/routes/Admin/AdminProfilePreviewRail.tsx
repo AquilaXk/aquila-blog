@@ -143,18 +143,6 @@ export default function AdminProfilePreviewRail({
               </PreviewHomeCard>
             ) : null}
 
-            {activeSection === "design" ? (
-              <PreviewHomeCard>
-                <span>Design</span>
-                <strong>{previewContent.blogDesign === "grid" ? "Grid" : "Legacy"}</strong>
-                <p>
-                  {previewContent.blogDesign === "legacy"
-                    ? `Legacy ${previewContent.legacyBlogScheme}`
-                    : "Grid dark presentation"}
-                </p>
-              </PreviewHomeCard>
-            ) : null}
-
             {activeSection === "links" ? (
               <PreviewLinksCard>
                 {([

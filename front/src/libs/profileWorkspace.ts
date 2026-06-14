@@ -67,8 +67,7 @@ type LegacyProfileLike = {
 
 export const DEFAULT_ABOUT_HEADLINE = "이유를 먼저 따지고, 운영 가능한 시스템을 설계합니다."
 export const DEFAULT_ABOUT_PROJECT_SECTION_TITLE = "프로젝트"
-export const normalizeBlogDesign = (value: unknown): BlogDesignType =>
-  value === "grid" ? "grid" : "legacy"
+export const normalizeBlogDesign = (_value: unknown): BlogDesignType => "legacy"
 export const normalizeLegacyBlogScheme = (value: unknown): LegacyBlogScheme =>
   value === "light" ? "light" : "dark"
 export const DEFAULT_ABOUT_PROJECTS: AboutProjectBlock[] = [

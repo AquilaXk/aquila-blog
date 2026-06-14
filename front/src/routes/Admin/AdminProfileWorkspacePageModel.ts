@@ -223,7 +223,6 @@ export const useAdminProfileWorkspacePageModel = ({
         identity: { dirty: false, publishedDiff: false },
         about: { dirty: false, publishedDiff: false },
         home: { dirty: false, publishedDiff: false },
-        design: { dirty: false, publishedDiff: false },
         links: { dirty: false, publishedDiff: false },
       }
     )

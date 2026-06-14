@@ -13,7 +13,7 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.describe("core smoke public shell", () => {
-  test("public blog appearance는 adminProfile 전역 설정에서 resolve된다", async () => {
+  test("public blog appearance는 전역 theme와 legacy 디자인으로 고정된다", async () => {
   const resolverSource = readFileSync(path.resolve(__dirname, "../src/libs/blogAppearance.ts"), "utf8")
   const rootLayoutSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/index.tsx"), "utf8")
   const headerSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/Header/index.tsx"), "utf8")
@@ -26,13 +26,15 @@ test.describe("core smoke public shell", () => {
   const postDetailPageSource = readFileSync(path.resolve(__dirname, "../src/libs/server/postDetailPage.ts"), "utf8")
   const useAdminProfileSource = readFileSync(path.resolve(__dirname, "../src/hooks/useAdminProfile.ts"), "utf8")
 
-  expect(resolverSource).toContain('blogDesign === "grid"')
-  expect(resolverSource).toContain('scheme: "dark"')
+  expect(resolverSource).toContain('const normalizeBlogDesign = (_value: unknown): BlogDesignType => "legacy"')
+  expect(resolverSource).not.toContain('blogDesign === "grid"')
   expect(resolverSource).not.toContain("src/libs/profileWorkspace")
-  expect(rootLayoutSource).toContain("resolvePublicBlogAppearance")
+  expect(rootLayoutSource).not.toContain("resolvePublicBlogAppearance")
   expect(rootLayoutSource).toContain("usePublicAdminProfile(initialAdminProfile")
   expect(headerSource).toContain("showThemeToggle")
+  expect(headerSource).not.toContain('blogDesign === "grid"')
   expect(logoSource).not.toContain("useAdminProfile")
+  expect(logoSource).not.toContain('blogDesign === "grid"')
   expect(logoSource).toContain("blogTitle")
   expect(adminShellSource).not.toContain("useAdminProfile")
   expect(adminPageSource).toContain("initialProfileSnapshot?: AdminProfile | null")
@@ -51,7 +53,7 @@ test.describe("core smoke public shell", () => {
   expect(postDetailPageSource).toContain('initialAdminProfileSource === "static-fallback"')
   expect(appSource).toContain("initialAdminProfileShouldRefetch")
   expect(rootLayoutSource).toContain('pathname[1] !== "_"')
-  expect(rootLayoutSource).toContain('effectiveBlogDesign === "legacy" && !isPublicBlogRoute')
+  expect(rootLayoutSource).toContain('const effectiveBlogDesign = "legacy"')
   expect(rootLayoutSource).toContain("refetchOnMount: isDesignAwareRoute")
   expect(rootLayoutSource).toContain("staleTimeMs: isDesignAwareRoute ? 0 : undefined")
   expect(rootLayoutSource).toContain('pathname[1] !== "_"')
@@ -76,7 +78,7 @@ test.describe("core smoke public shell", () => {
   }
 
   await expect(resolveStaticAdminProfileSeed(async () => publishedProfile)).resolves.toMatchObject({
-    profile: { blogDesign: "grid", legacyBlogScheme: "light" },
+    profile: { blogDesign: "legacy", legacyBlogScheme: "light" },
     source: "published",
   })
   await expect(

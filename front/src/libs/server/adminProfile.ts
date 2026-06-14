@@ -88,7 +88,7 @@ export const resolveStaticAdminProfileSeed = async (
 ): Promise<StaticAdminProfileSeed> => {
   try {
     return {
-      profile: await fetchProfile(),
+      profile: buildPersistedAdminProfileSnapshot(await fetchProfile()),
       source: "published",
     }
   } catch {

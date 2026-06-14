@@ -415,11 +415,11 @@ test.describe("성능 레이아웃과 표면 예산", () => {
   }
 })
 
-  test("공개와 인증 핵심 화면은 관리자 프로필 그리드 표면 계층을 유지한다", async ({ page }) => {
+  test("공개와 인증 핵심 화면은 system light legacy 표면 계층을 유지한다", async ({ page }) => {
   test.setTimeout(60_000)
   await mockFeedEndpoints(page, {
     adminProfile: {
-      blogDesign: "grid",
+      blogDesign: "legacy",
       legacyBlogScheme: "light",
     },
   })
@@ -449,21 +449,21 @@ test.describe("성능 레이아웃과 표면 예산", () => {
       .poll(async () => (await getThemeSurfaceFingerprint(page)).bodyBg, {
         timeout: 8000,
       })
-      .toBe("rgb(16, 18, 20)")
+      .toBe("rgb(243, 245, 248)")
 
     const fingerprint = await getThemeSurfaceFingerprint(page)
 
     expect(fingerprint.route).toBe(scenario.route)
     expect(fingerprint.themeToggleLabel).toBeNull()
-    expect(fingerprint.bodyBg).toBe("rgb(16, 18, 20)")
+    expect(fingerprint.bodyBg).toBe("rgb(243, 245, 248)")
     expect(fingerprint.headerBg).not.toBeNull()
     expect(fingerprint.headerBg).not.toBe(fingerprint.bodyBg)
 
     if (scenario.route === "/") {
-      expect(fingerprint.searchBg).toBe("rgb(23, 26, 29)")
-      expect(fingerprint.searchBorder).toBe("rgba(119, 102, 85, 0.4)")
-      expect(fingerprint.cardBg).toBe("rgb(23, 26, 29)")
-      expect(fingerprint.cardBorder).toBe("rgba(119, 102, 85, 0.4)")
+      expect(fingerprint.searchBg).toBe("rgb(255, 255, 255)")
+      expect(fingerprint.searchBorder).toBe("rgb(200, 210, 222)")
+      expect(fingerprint.cardBg).toBe("rgb(255, 255, 255)")
+      expect(fingerprint.cardBorder).toBe("rgb(200, 210, 222)")
     }
 
     if (scenario.route === "/posts/991") {
@@ -480,14 +480,14 @@ test.describe("성능 레이아웃과 표면 예산", () => {
       .poll(async () => (await getThemeSurfaceFingerprint(page)).bodyBg, {
         timeout: 8000,
       })
-      .toBe("rgb(16, 18, 20)")
+      .toBe("rgb(243, 245, 248)")
     const fingerprint = await getThemeSurfaceFingerprint(page)
     expect(fingerprint.route).toBe(scenario.route)
-    expect(fingerprint.bodyBg).toBe("rgb(16, 18, 20)")
-    expect(fingerprint.headerBg).toBe("rgb(23, 26, 29)")
-    expect(fingerprint.themeToggleLabel).toBeNull()
-    expect(fingerprint.authShellBg).toBe("rgb(18, 20, 22)")
-    expect(fingerprint.authShellBorder).toBe("rgba(204, 170, 102, 0.533)")
+    expect(fingerprint.bodyBg).toBe("rgb(243, 245, 248)")
+    expect(fingerprint.headerBg).toBe("rgba(249, 251, 254, 0.94)")
+    expect(fingerprint.themeToggleLabel).toBe("다크 모드로 전환")
+    expect(fingerprint.authShellBg).toBe("rgb(255, 255, 255)")
+    expect(fingerprint.authShellBorder).toBe("rgb(215, 224, 234)")
   }
 })
 })

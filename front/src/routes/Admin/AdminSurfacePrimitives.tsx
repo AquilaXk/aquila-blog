@@ -27,22 +27,25 @@ export const adminInteractiveFocusRing = (theme: Theme) =>
   adminFocusRing(theme)
 
 export const AdminElevatedCard = styled.section`
-  border-radius: 2px;
-  border: 1px solid ${({ theme }) => adminElevatedBorder(theme)};
-  background: ${({ theme }) => adminElevatedSurface(theme)};
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => adminElevatedBorder(theme)};
+  background: transparent;
   box-shadow: ${({ theme }) => adminElevatedShadow(theme)};
 `
 
 export const AdminPlainCard = styled.section`
-  border-radius: 2px;
-  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
-  background: ${({ theme }) => adminPlainSurface(theme)};
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  background: transparent;
 `
 
 export const AdminSubtleCard = styled.section`
-  border-radius: 2px;
-  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
-  background: ${({ theme }) => adminRaisedSurface(theme)};
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  background: transparent;
 `
 
 export const AdminRailCard = styled(AdminSubtleCard)`
@@ -207,9 +210,10 @@ export const AdminWorkspaceSectionNav = styled(AdminStickyRail)`
 
 export const AdminWorkspaceSectionNavStatus = styled(AdminRailCard)`
   gap: 0.22rem;
-  padding: 0.88rem 0.96rem;
-  border-radius: 2px;
-  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  padding: 0.72rem 0;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};
 
   small {
     color: ${({ theme }) => adminMutedText(theme)};
@@ -226,7 +230,7 @@ export const AdminWorkspaceSectionNavStatus = styled(AdminRailCard)`
   }
 
   &[data-jumping="true"] {
-    border-color: ${({ theme }) => adminStrongBorder(theme)};
+    border-bottom-color: ${({ theme }) => adminStrongBorder(theme)};
     background: ${({ theme }) => adminAccentSurface(theme)};
   }
 
@@ -246,9 +250,10 @@ export const AdminWorkspaceSectionNavButton = styled.button`
   gap: 0.42rem;
   min-height: 42px;
   padding: 0 0.9rem;
-  border-radius: 4px;
-  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
-  background: ${({ theme }) => adminRaisedSurface(theme)};
+  border-radius: 0;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: transparent;
   color: ${({ theme }) => adminMutedText(theme)};
   font-size: 0.84rem;
   font-weight: 700;
@@ -263,26 +268,26 @@ export const AdminWorkspaceSectionNavButton = styled.button`
 
   &:focus-visible {
     outline: none;
-    border-color: ${({ theme }) => adminStrongBorder(theme)};
+    border-left-color: ${({ theme }) => adminStrongBorder(theme)};
     box-shadow: ${({ theme }) => adminInteractiveFocusRing(theme)};
   }
 
   &[data-active="true"] {
     color: ${adminGold};
-    border-color: ${({ theme }) => adminStrongBorder(theme)};
+    border-left-color: ${adminGold};
     background: ${({ theme }) => adminAccentSurface(theme)};
   }
 
   &[data-freshness="fresh"] {
-    border-color: ${({ theme }) => theme.colors.statusSuccessBorder};
+    border-left-color: ${({ theme }) => theme.colors.statusSuccessBorder};
   }
 
   &[data-freshness="aging"] {
-    border-color: ${({ theme }) => theme.colors.orange7};
+    border-left-color: ${({ theme }) => theme.colors.orange7};
   }
 
   &[data-freshness="stale"] {
-    border-color: ${({ theme }) => theme.colors.gray7};
+    border-left-color: ${({ theme }) => theme.colors.gray7};
   }
 
   &[data-freshness]::before {
@@ -309,7 +314,7 @@ export const AdminWorkspaceSectionNavButton = styled.button`
   }
 
   &[data-tone="danger"] {
-    border-color: ${({ theme }) => theme.colors.statusDangerBorder};
+    border-left-color: ${({ theme }) => theme.colors.statusDangerBorder};
     color: ${({ theme }) => theme.colors.statusDangerText};
   }
 
@@ -329,10 +334,11 @@ export const AdminWorkspaceActionDockInner = styled.div`
   align-items: center;
   justify-content: flex-end;
   gap: 0.65rem;
-  padding: 0.7rem 0.9rem;
-  border-radius: 2px;
-  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
-  background: ${({ theme }) => adminRaisedSurface(theme)};
+  padding: 0.7rem 0;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  background: transparent;
 
   @media (max-width: 760px) {
     justify-content: space-between;
@@ -349,10 +355,11 @@ export const AdminInfoLinkCard = styled.a<{ $withIcon?: boolean }>`
   grid-template-columns: ${({ $withIcon = true }) => ($withIcon ? "auto minmax(0, 1fr)" : "minmax(0, 1fr)")};
   gap: ${({ $withIcon = true }) => ($withIcon ? "0.7rem" : "0.18rem")};
   align-items: center;
-  padding: 0.82rem 0.88rem;
-  border-radius: 2px;
-  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
-  background: ${({ theme }) => adminRaisedSurface(theme)};
+  padding: 0.78rem 0;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  background: transparent;
   color: inherit;
   text-decoration: none;
   min-width: 0;
@@ -373,7 +380,7 @@ export const AdminInfoLinkCard = styled.a<{ $withIcon?: boolean }>`
     height: 2.35rem;
     border-radius: 2px;
     place-items: center;
-    background: ${({ theme }) => adminMutedSurface(theme)};
+    background: transparent;
     color: ${({ theme }) => adminSecondaryText(theme)};
   }
 
@@ -410,10 +417,11 @@ export const AdminInfoStatusItem = styled.div`
   align-items: center;
   justify-content: space-between;
   gap: 0.72rem;
-  padding: 0.74rem 0.82rem;
-  border-radius: 2px;
-  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
-  background: ${({ theme }) => adminRaisedSurface(theme)};
+  padding: 0.74rem 0;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  background: transparent;
 
   &[data-tone="good"] {
     border-color: ${({ theme }) => theme.colors.green7};
@@ -440,10 +448,11 @@ export const AdminInfoStatusItem = styled.div`
 export const AdminInfoPanelCard = styled.div`
   display: grid;
   gap: 0.68rem;
-  padding: 0.92rem;
-  border-radius: 2px;
-  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
-  background: ${({ theme }) => adminPlainSurface(theme)};
+  padding: 0.92rem 0;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  background: transparent;
 `
 
 export const AdminStatusPill = styled.span<{ $size?: "sm" | "md" }>`

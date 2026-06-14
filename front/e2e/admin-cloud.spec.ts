@@ -94,6 +94,7 @@ const setupAdminCloudMocks = async (
   page: Page,
   options: {
     failDeleteIds?: string[]
+    initialFiles?: CloudFileFixture[]
   } = {}
 ) => {
   const requestedKinds: string[] = []
@@ -102,6 +103,7 @@ const setupAdminCloudMocks = async (
   const deletedIds: string[] = []
   const uploadedFiles: CloudFileFixture[] = []
   const failedDeleteIds = new Set(options.failDeleteIds ?? [])
+  const initialFiles = options.initialFiles ?? CLOUD_FILES
   let nextUploadId = 204
 
   await page.route("**/_next/image**", async (route) => {
@@ -186,7 +188,7 @@ const setupAdminCloudMocks = async (
     requestedKinds.push(mediaKind)
     requestedFolderPaths.push(folderPath)
     const keyword = (url.searchParams.get("kw") || "").toLowerCase()
-    const files = [...uploadedFiles, ...CLOUD_FILES].filter((file) => {
+    const files = [...uploadedFiles, ...initialFiles].filter((file) => {
       const isDeleted = deletedIds.includes(String(file.id))
       const kindMatches = mediaKind === "ALL" || file.mediaKind === mediaKind
       const folderMatches = !folderPath || normalizeFolderPathParam(file.folderPath) === folderPath
@@ -199,7 +201,7 @@ const setupAdminCloudMocks = async (
   await page.route("**/system/api/v1/adm/cloud/files/*/content", async (route) => {
     const url = new URL(route.request().url())
     const id = url.pathname.match(/\/files\/(\d+)\/content/)?.[1] ?? ""
-    const file = [...uploadedFiles, ...CLOUD_FILES].find((item) => String(item.id) === id)
+    const file = [...uploadedFiles, ...initialFiles].find((item) => String(item.id) === id)
     const contentType = file?.contentType ?? "application/octet-stream"
 
     await route.fulfill({
@@ -285,7 +287,7 @@ test.describe("관리자 클라우드", () => {
     await uploadPanel.getByRole("button", { name: "취소할 영상.mp4 업로드 취소" }).click()
     await expect(uploadPanel.getByText("취소됨")).toBeVisible()
     await expect(page.getByRole("row", { name: /취소할 영상\.mp4/ })).toHaveCount(0)
-    await uploadPanel.getByRole("button", { name: "완료 항목 지우기" }).click()
+    await uploadPanel.getByRole("button", { name: "종료된 항목 지우기" }).click()
     await expect(page.getByLabel("업로드 중인 파일")).toHaveCount(0)
 
     await page.getByRole("button", { name: "운영 점검 리포트.pdf 미리보기" }).click()
@@ -325,5 +327,28 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByRole("row", { name: /운영 점검 리포트\.pdf/ })).toHaveCount(0)
     await expect(page.getByRole("row", { name: /home-server-rack\.png/ })).toBeVisible()
     await expect(page.getByRole("checkbox", { name: "home-server-rack.png 선택" })).toBeChecked()
+  })
+
+  test("빈 클라우드에서 업로드 중인 파일은 목록 작업공간 안에서 상태를 보여준다", async ({ page }) => {
+    await setupAdminCloudMocks(page, { initialFiles: [] })
+
+    await page.goto("/admin/cloud")
+
+    await expect(page.getByText("표시할 파일이 없습니다.")).toBeVisible()
+
+    await page.getByLabel("클라우드 파일 업로드").setInputFiles({
+      name: "취소할 영상.mp4",
+      mimeType: "video/mp4",
+      buffer: Buffer.from("uploading item should replace empty state"),
+    })
+
+    const uploadPanel = page.getByLabel("업로드 중인 파일")
+    await expect(uploadPanel.getByRole("heading", { name: "업로드 관리" })).toBeVisible()
+    await expect(uploadPanel.getByText("취소할 영상.mp4")).toBeVisible()
+    await expect(page.getByText("표시할 파일이 없습니다.")).toHaveCount(0)
+    await expect(page.getByText("업로드 중인 파일이 있습니다.")).toBeVisible()
+
+    await uploadPanel.getByRole("button", { name: "취소할 영상.mp4 업로드 취소" }).click()
+    await expect(uploadPanel.getByText("취소됨")).toBeVisible()
   })
 })

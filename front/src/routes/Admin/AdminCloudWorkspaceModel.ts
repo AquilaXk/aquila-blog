@@ -2,6 +2,16 @@ import type { CloudFile, CloudMediaKind } from "src/apis/backend/cloud"
 
 export type CloudMediaFilter = "ALL" | CloudMediaKind
 export type UploadQueueStatus = "queued" | "uploading" | "done" | "failed" | "cancelled"
+export type UploadQueueItem = {
+  id: string
+  file: File
+  name: string
+  byteSize: number
+  status: UploadQueueStatus
+  progress: number
+  message: string
+  uploadedFileId?: number
+}
 export type CloudSearchParams = {
   folderPath: string
   keyword: string

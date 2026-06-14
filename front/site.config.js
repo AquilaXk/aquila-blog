@@ -32,7 +32,7 @@ const CONFIG = {
     description: "비밀스러운 지식들을 탐구하는데 목적을 두고 있습니다",
     homeIntroTitle: "비밀스러운 IT 공작소",
     homeIntroDescription: "비밀스러운 지식들을 탐구하는데 목적을 두고 있습니다",
-    scheme: "dark", // 'light' | 'dark' | 'system'
+    scheme: "system", // 'light' | 'dark' | 'system'
   },
 
   auth: {

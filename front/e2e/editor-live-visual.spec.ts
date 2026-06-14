@@ -440,9 +440,11 @@ test.describe("editor live visual regression", () => {
 
     await expectMarkdownEditorShell(page)
     const preview = page.getByTestId("github-markdown-preview-pane")
-    await expect(preview.locator("table")).toContainText(post507FinalTableTargetCell, { timeout: 30_000 })
-    await expect(preview.locator("table")).toContainText(post507FinalTableSelectAllNeedle)
-    await expect(preview.locator("pre")).toContainText(post507CodeText)
+    const finalReferenceTable = preview.locator("table").filter({ hasText: post507FinalTableTargetCell }).first()
+    const tokenCodeBlock = preview.locator("pre").filter({ hasText: post507CodeText }).first()
+    await expect(finalReferenceTable).toContainText(post507FinalTableTargetCell, { timeout: 30_000 })
+    await expect(finalReferenceTable).toContainText(post507FinalTableSelectAllNeedle)
+    await expect(tokenCodeBlock).toContainText(post507CodeText)
     await expect(preview.getByText(post507ListText)).toBeVisible()
 
     await focusMarkdownEditor(page)

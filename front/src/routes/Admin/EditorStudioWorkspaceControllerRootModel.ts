@@ -18,7 +18,7 @@ import type {
   ResolvedEditorMetaSnapshot,
 } from "./editorStudioMetaModel"
 
-export const BLOCK_EDITOR_V2_MERMAID_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED !== "false"
+export const MARKDOWN_EDITOR_MERMAID_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED !== "false"
 export const ADMIN_POSTS_WORKSPACE_ROUTE = "/admin/posts"
 export const EDITOR_NEW_ROUTE_PATH = "/editor/new"
 

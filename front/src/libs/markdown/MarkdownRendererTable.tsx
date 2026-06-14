@@ -184,10 +184,12 @@ export const MarkdownTableRowRenderer = ({
 }
 
 export const MarkdownTableCellRenderer = ({
+  alignment,
   as: Component,
   children,
   className,
 }: {
+  alignment?: string
   as: "td" | "th"
   children?: ReactNode
   className?: string
@@ -204,6 +206,8 @@ export const MarkdownTableCellRenderer = ({
   const columnIndex = cellIndexRef.current ?? 0
   const cellLayout = tableContext?.cellLayouts[rowIndex]?.[columnIndex] || null
   const columnAlignment = tableContext?.columnAlignments[columnIndex] || null
+  const markdownAlignment: MarkdownTableCellAlignment | null =
+    alignment === "left" || alignment === "center" || alignment === "right" ? alignment : null
 
   if (cellLayout?.hidden) {
     return null
@@ -211,7 +215,7 @@ export const MarkdownTableCellRenderer = ({
 
   const rowSpan = cellLayout?.rowspan && cellLayout.rowspan > 1 ? cellLayout.rowspan : undefined
   const colSpan = cellLayout?.colspan && cellLayout.colspan > 1 ? cellLayout.colspan : undefined
-  const textAlign = cellLayout?.align || columnAlignment || undefined
+  const textAlign = cellLayout?.align || columnAlignment || markdownAlignment || undefined
   const backgroundColor = cellLayout?.backgroundColor || undefined
   const style = textAlign || backgroundColor
     ? ({

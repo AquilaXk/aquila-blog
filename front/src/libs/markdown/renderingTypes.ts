@@ -48,7 +48,7 @@ export type MarkdownRenderModel = {
   resolvedContentHtml: string
   renderKey: string
   segments: MarkdownSegment[]
-  tableLayouts: MarkdownTableLayout[]
+  tableLayouts: Array<MarkdownTableLayout | null>
 }
 
 export const markdownGuide = `### 작성 가이드

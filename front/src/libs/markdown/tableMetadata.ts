@@ -221,16 +221,55 @@ export const serializeMarkdownTableLayoutComment = (
 
 type ExtractedTableLayouts = {
   cleanedMarkdown: string
-  layouts: MarkdownTableLayout[]
+  layouts: Array<MarkdownTableLayout | null>
+}
+
+const isIndentedCodeLine = (line: string) => /^(?: {4}|\t)/.test(line)
+
+const countUnescapedPipeDelimiters = (line: string) => {
+  let count = 0
+
+  for (let index = 0; index < line.length; index += 1) {
+    if (isUnescapedPipeAt(line, index)) count += 1
+  }
+
+  return count
+}
+
+const isUnescapedPipeAt = (line: string, index: number) => {
+  if (line[index] !== "|") return false
+
+  let slashCount = 0
+  for (let slashIndex = index - 1; slashIndex >= 0 && line[slashIndex] === "\\"; slashIndex -= 1) {
+    slashCount += 1
+  }
+
+  return slashCount % 2 === 0
+}
+
+const countGfmTableCells = (line: string) => {
+  const trimmed = line.trim()
+  const delimiterCount = countUnescapedPipeDelimiters(trimmed)
+  if (delimiterCount < 1) return 0
+
+  const hasLeadingPipe = isUnescapedPipeAt(trimmed, 0)
+  const hasTrailingPipe = isUnescapedPipeAt(trimmed, trimmed.length - 1)
+  return delimiterCount + 1 - (hasLeadingPipe ? 1 : 0) - (hasTrailingPipe ? 1 : 0)
 }
 
 const isTableSeparatorLine = (line: string) =>
-  /^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$/.test(line)
+  !isIndentedCodeLine(line) &&
+  /^\s*\|?(?:\s*:?-{2,}:?\s*\|)+\s*:?-{2,}:?\s*\|?\s*$/.test(line)
 
 const isLikelyTableRow = (line: string) => {
+  if (isIndentedCodeLine(line) || countGfmTableCells(line) < 2) return false
   const trimmed = line.trim()
-  if (!trimmed.includes("|")) return false
   return /^\|?.+\|.+\|?$/.test(trimmed)
+}
+
+const isLikelyGfmTable = (headerLine: string, separatorLine: string) => {
+  if (!isLikelyTableRow(headerLine) || !isTableSeparatorLine(separatorLine)) return false
+  return countGfmTableCells(headerLine) === countGfmTableCells(separatorLine)
 }
 
 export const extractMarkdownTableLayouts = (
@@ -238,21 +277,44 @@ export const extractMarkdownTableLayouts = (
 ): ExtractedTableLayouts => {
   const lines = markdown.replace(/\r\n?/g, "\n").split("\n")
   const cleanedLines: string[] = []
-  const layouts: MarkdownTableLayout[] = []
+  const layouts: Array<MarkdownTableLayout | null> = []
+  const tableHeaderLinesWithExplicitLayout = new Set<number>()
+  let inFencedCodeBlock = false
 
   for (let index = 0; index < lines.length; index += 1) {
-    const layout = parseMarkdownTableLayoutComment(lines[index] || "")
+    const line = lines[index] || ""
+    const trimmedLine = line.trim()
 
-    if (
-      layout &&
-      isLikelyTableRow(lines[index + 1] || "") &&
-      isTableSeparatorLine(lines[index + 2] || "")
-    ) {
-      layouts.push(layout)
+    if (/^(```|~~~)/.test(trimmedLine)) {
+      inFencedCodeBlock = !inFencedCodeBlock
+      cleanedLines.push(line)
       continue
     }
 
-    cleanedLines.push(lines[index])
+    if (inFencedCodeBlock) {
+      cleanedLines.push(line)
+      continue
+    }
+
+    const layout = parseMarkdownTableLayoutComment(line)
+
+    if (
+      layout &&
+      isLikelyGfmTable(lines[index + 1] || "", lines[index + 2] || "")
+    ) {
+      layouts.push(layout)
+      tableHeaderLinesWithExplicitLayout.add(index + 1)
+      continue
+    }
+
+    if (
+      !tableHeaderLinesWithExplicitLayout.has(index) &&
+      isLikelyGfmTable(line, lines[index + 1] || "")
+    ) {
+      layouts.push(null)
+    }
+
+    cleanedLines.push(line)
   }
 
   return {

@@ -131,7 +131,7 @@ export const markdownRendererRootTableToggleStyles = (theme: Theme) => css`
     ${(() => {
       const tableChrome = getTableChromePalette(theme)
       return `
-    text-align: left !important;
+    text-align: left;
     background: ${tableChrome.headerBackground};
     font-weight: 700;
     line-height: 1.52;

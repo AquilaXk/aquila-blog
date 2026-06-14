@@ -576,7 +576,7 @@ export const AdminActionCardButton = styled.button`
   padding: 0.82rem 0.88rem;
   border-radius: 2px;
   border: 1px solid ${({ theme }) => adminCardBorder(theme)};
-  background: transparent;
+  background: ${({ theme }) => adminRaisedSurface(theme)};
   color: ${({ theme }) => adminPrimaryText(theme)};
   cursor: pointer;
   transition:
@@ -588,6 +588,10 @@ export const AdminActionCardButton = styled.button`
     outline: none;
     border-color: ${({ theme }) => adminStrongBorder(theme)};
     box-shadow: ${({ theme }) => adminInteractiveFocusRing(theme)};
+  }
+
+  &:hover:not(:disabled) {
+    background: ${({ theme }) => adminAccentSurface(theme)};
   }
 
   &:disabled {

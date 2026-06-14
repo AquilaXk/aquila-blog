@@ -1,6 +1,7 @@
 import { normalizeApiRequestPath } from "src/libs/backend/requestPath"
 
 const DEFAULT_API_BASE_URL = "http://localhost:8080"
+const BROWSER_BACKEND_PROXY_PREFIX = "/api/backend"
 const DEFAULT_API_FETCH_TIMEOUT_MS = 12_000
 const DEFAULT_REVALIDATE_CACHE_TTL_MS = 15_000
 const REVALIDATE_CACHE_MAX_TTL_MS = 300_000
@@ -341,9 +342,31 @@ export const getApiBaseUrl = () => {
   return DEFAULT_API_BASE_URL
 }
 
+const shouldUseBrowserBackendProxy = (safePath: string) => {
+  if (isServer) return false
+  if (process.env.NODE_ENV !== "production") return false
+
+  return (
+    safePath.startsWith("/member/api/v1/auth/") ||
+    safePath.startsWith("/member/api/v1/adm/") ||
+    safePath.startsWith("/post/api/v1/adm/") ||
+    safePath.startsWith("/system/api/v1/adm/") ||
+    safePath.startsWith("/signup")
+  )
+}
+
+export const getApiRequestUrl = (path: string) => {
+  const safePath = normalizeApiRequestPath(path)
+  if (shouldUseBrowserBackendProxy(safePath)) {
+    return `${BROWSER_BACKEND_PROXY_PREFIX}${safePath}`
+  }
+
+  return `${getApiBaseUrl()}${safePath}`
+}
+
 export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Promise<T> => {
   const safePath = normalizeApiRequestPath(path)
-  const url = `${getApiBaseUrl()}${safePath}`
+  const url = getApiRequestUrl(safePath)
   const { timeoutMs: _timeoutMs, ...requestInit } = init
   const headers = new Headers(requestInit.headers || {})
   const hasBody = requestInit.body !== undefined && requestInit.body !== null

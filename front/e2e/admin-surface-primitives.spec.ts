@@ -106,6 +106,10 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(source).toContain("export const AdminTextActionButton = styled.button`")
     expect(source).toContain("export const AdminTextActionLink = styled.a`")
     expect(source).toContain("export const AdminActionCardButton = styled.button`")
+    const actionButtonBlock = source.match(/export const AdminActionCardButton = styled\.button`[\s\S]*?`\n/)?.[0] ?? ""
+    expect(actionButtonBlock).toContain("background: ${({ theme }) => adminRaisedSurface(theme)};")
+    expect(actionButtonBlock).toContain("background: ${({ theme }) => adminAccentSurface(theme)};")
+    expect(actionButtonBlock).not.toContain("background: transparent;")
     expect(source).toContain("export const AdminWorkspaceHero = styled.section`")
   })
 

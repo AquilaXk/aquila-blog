@@ -135,6 +135,117 @@ test.describe("GitHub Markdown editor replacement", () => {
     await expect(preview.getByText("quote at the bottom")).toBeVisible()
   })
 
+  test("write pane keeps every CodeMirror surface on the dark editor surface", async ({ page }) => {
+    await routeAuthenticatedEditor(
+      page,
+      [
+        "# Token Highlight",
+        "",
+        "[link](https://example.com) and `inline code`",
+        "",
+        "> quoted text",
+      ].join("\n")
+    )
+
+    await page.goto("/editor/new?source=local-draft")
+
+    const styles = await page.getByTestId("github-markdown-write-pane").evaluate((pane) => {
+      const readStyle = (selector: string) => {
+        const element = pane.querySelector(selector)
+        if (!element) throw new Error(`${selector} not found`)
+        const style = window.getComputedStyle(element)
+        return {
+          backgroundColor: style.backgroundColor,
+          color: style.color,
+        }
+      }
+
+      return {
+        editor: readStyle(".cm-editor"),
+        scroller: readStyle(".cm-scroller"),
+        content: readStyle(".cm-content"),
+        line: readStyle(".cm-line"),
+        tokenColors: Array.from(pane.querySelectorAll(".cm-line span"))
+          .map((span) => window.getComputedStyle(span).color)
+          .filter((color, index, colors) => colors.indexOf(color) === index),
+        gutters: readStyle(".cm-gutters"),
+      }
+    })
+
+    expect(styles.editor.backgroundColor).toBe("rgb(13, 17, 23)")
+    expect(styles.scroller.backgroundColor).toBe("rgb(13, 17, 23)")
+    expect(styles.content.backgroundColor).toBe("rgb(13, 17, 23)")
+    expect(styles.gutters.backgroundColor).toBe("rgb(13, 17, 23)")
+    expect(styles.line.color).toBe("rgb(230, 237, 243)")
+    expect(styles.tokenColors).toContain("rgb(121, 192, 255)")
+    expect(styles.tokenColors).not.toEqual(["rgb(230, 237, 243)"])
+  })
+
+  test("split preview uses the same readable width and typography contract as post detail", async ({
+    page,
+  }) => {
+    await routeAuthenticatedEditor(page)
+
+    await page.goto("/editor/new?source=local-draft")
+
+    const previewContract = await page
+      .getByTestId("github-markdown-preview-pane")
+      .locator("article")
+      .evaluate((article) => {
+        const markdownRoot = article.querySelector(".aq-markdown")
+        if (!(markdownRoot instanceof HTMLElement)) throw new Error("preview markdown root not found")
+        const articleStyle = window.getComputedStyle(article)
+        const style = window.getComputedStyle(markdownRoot)
+        const rect = markdownRoot.getBoundingClientRect()
+        return {
+          paddingLeft: articleStyle.paddingLeft,
+          paddingRight: articleStyle.paddingRight,
+          maxWidth: style.maxWidth,
+          fontSize: style.fontSize,
+          lineHeight: style.lineHeight,
+          renderedWidth: rect.width,
+        }
+      })
+
+    expect(previewContract.paddingLeft).toBe("16px")
+    expect(previewContract.paddingRight).toBe("16px")
+    expect(previewContract.maxWidth).toBe("768px")
+    expect(previewContract.fontSize).toBe("17px")
+    expect(previewContract.lineHeight).toBe("28px")
+    expect(previewContract.renderedWidth).toBeLessThanOrEqual(768)
+  })
+
+  test("narrow split mode keeps the write pane primary and shows detail preview through the Preview tab", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 760, height: 900 })
+    await routeAuthenticatedEditor(page)
+
+    await page.goto("/editor/new?source=local-draft")
+
+    const writePane = page.getByTestId("github-markdown-write-pane")
+    const previewPane = page.getByTestId("github-markdown-preview-pane")
+
+    await expect(writePane).toBeVisible()
+    await expect(previewPane).toBeHidden()
+
+    await page.getByRole("tab", { name: "Preview" }).click()
+
+    await expect(writePane).toHaveCount(0)
+    await expect(previewPane).toBeVisible()
+    const previewContract = await previewPane.locator(".aq-markdown").evaluate((markdownRoot) => {
+      const style = window.getComputedStyle(markdownRoot)
+      const rect = markdownRoot.getBoundingClientRect()
+      return {
+        maxWidth: style.maxWidth,
+        renderedWidth: rect.width,
+      }
+    })
+
+    expect(previewContract.maxWidth).toBe("768px")
+    expect(previewContract.renderedWidth).toBeLessThanOrEqual(728)
+  })
+
   test("toolbar snippets insert at the CodeMirror caret instead of appending at the document end", async ({
     page,
   }) => {

@@ -13,20 +13,28 @@ import { pretendard } from "src/assets"
 import createEmotionCache from "src/libs/emotion/createEmotionCache"
 import { HEADER_AUTH_SHELL_BOOTSTRAP_SCRIPT } from "src/libs/headerAuthShell"
 
+const AQUILA_CONFIGURED_SCHEME =
+  CONFIG.blog.scheme === "dark" || CONFIG.blog.scheme === "light" ? CONFIG.blog.scheme : "system"
+
 const AQUILA_SCHEME_BOOTSTRAP_SCRIPT = `
 (function () {
   if (typeof document === "undefined") return;
+  var configuredScheme = "${AQUILA_CONFIGURED_SCHEME}";
   var cookieMatch = document.cookie.match(/(?:^|; )scheme=(light|dark)(?:;|$)/);
   var cachedScheme = cookieMatch ? cookieMatch[1] : "";
   var systemDark = false;
   try {
     systemDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
   } catch (_) {}
-  var nextScheme = cachedScheme || (systemDark ? "dark" : "light");
+  var defaultScheme = configuredScheme === "system" ? (systemDark ? "dark" : "light") : configuredScheme;
+  var nextScheme = cachedScheme || defaultScheme;
+  var bootstrapSource = cachedScheme ? "cookie" : "system";
   var background = nextScheme === "dark" ? "#121212" : "#f3f5f8";
   var foreground = nextScheme === "dark" ? "#f4f6fb" : "#101214";
   document.documentElement.dataset.aquilaScheme = nextScheme;
+  document.documentElement.setAttribute("data-aquila-scheme-config", configuredScheme);
   document.documentElement.setAttribute("data-aquila-scheme-bootstrap", nextScheme);
+  document.documentElement.setAttribute("data-aquila-scheme-bootstrap-source", bootstrapSource);
   document.documentElement.style.colorScheme = nextScheme;
   document.documentElement.style.backgroundColor = background;
   var style = document.createElement("style");

@@ -207,6 +207,8 @@ const StyledWrapper = styled.div`
   --feed-tag-surface: ${({ theme }) => theme.publicDesign.surface};
   --feed-tag-surface-elevated: ${({ theme }) => theme.publicDesign.surfaceElevated};
   --feed-tag-accent: ${({ theme }) => theme.publicDesign.accent};
+  --feed-tag-accent-text: ${({ theme }) =>
+    theme.scheme === "light" ? theme.colors.blue11 : theme.colors.blue10};
   --feed-tag-accent-muted: ${({ theme }) => theme.publicDesign.accentMuted};
 
   .desktopPanel {
@@ -340,7 +342,7 @@ const StyledWrapper = styled.div`
   }
 
   .desktopList button[data-active="true"] .name {
-    color: var(--feed-tag-accent);
+    color: var(--feed-tag-accent-text);
     font-weight: 700;
     text-decoration: none;
   }
@@ -353,7 +355,7 @@ const StyledWrapper = styled.div`
   }
 
   .desktopList button[data-active="true"] .count {
-    color: var(--feed-tag-accent);
+    color: var(--feed-tag-accent-text);
   }
 
   .chipRail {
@@ -427,7 +429,7 @@ const StyledWrapper = styled.div`
     }
 
     &[data-active="true"] {
-      color: var(--feed-tag-accent);
+      color: var(--feed-tag-accent-text);
 
       &::after {
         border-color: var(--feed-tag-border-strong);
@@ -457,7 +459,7 @@ const StyledWrapper = styled.div`
   }
 
   .chipRail button[data-active="true"] .count {
-    color: var(--feed-tag-accent);
+    color: var(--feed-tag-accent-text);
   }
 
   .chipRail .chipToggle {

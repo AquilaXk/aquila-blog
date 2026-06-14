@@ -7,6 +7,19 @@ import { SchemeType } from "src/types"
 
 type SetScheme = (scheme: SchemeType) => void
 
+const isScheme = (value: unknown): value is SchemeType => value === "light" || value === "dark"
+
+const clearSchemeBootstrapStyle = () => {
+  document.documentElement.removeAttribute("data-aquila-scheme-bootstrap")
+  document.querySelector('style[data-aquila-scheme-bootstrap-style="true"]')?.remove()
+}
+
+const clearSchemeBootstrapAfterHydration = () => {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(clearSchemeBootstrapStyle)
+  })
+}
+
 const useScheme = (): [SchemeType, SetScheme] => {
   const queryClient = useQueryClient()
   const followsSystemTheme = CONFIG.blog.scheme === "system"
@@ -17,7 +30,6 @@ const useScheme = (): [SchemeType, SetScheme] => {
     queryFn: () => fallbackScheme,
     enabled: false,
     staleTime: Infinity,
-    // SSR/CSR 첫 렌더를 동일하게 맞춰 새로고침 시 하이드레이션 흔들림을 줄인다.
     initialData: fallbackScheme,
   })
 
@@ -29,16 +41,19 @@ const useScheme = (): [SchemeType, SetScheme] => {
   useEffect(() => {
     if (typeof window === "undefined") return
 
-    const cachedScheme = getCookie("scheme") as SchemeType
+    const cachedScheme = getCookie("scheme")
     const defaultScheme = followsSystemTheme
       ? window.matchMedia?.("(prefers-color-scheme: dark)")?.matches
         ? "dark"
         : "light"
       : data
-    const nextScheme = cachedScheme || defaultScheme
+    const nextScheme = isScheme(cachedScheme) ? cachedScheme : defaultScheme
     if (nextScheme !== data) {
       setScheme(nextScheme)
+      clearSchemeBootstrapAfterHydration()
+      return
     }
+    clearSchemeBootstrapAfterHydration()
   }, [data, followsSystemTheme, setScheme])
 
   return [data, setScheme]

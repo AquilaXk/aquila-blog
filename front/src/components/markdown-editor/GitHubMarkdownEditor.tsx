@@ -1,9 +1,11 @@
 import CodeMirror from "@uiw/react-codemirror"
 import { markdown } from "@codemirror/lang-markdown"
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands"
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language"
 import { markdownLanguage } from "@codemirror/lang-markdown"
 import { EditorState, type Extension } from "@codemirror/state"
 import { EditorView, keymap } from "@codemirror/view"
+import { tags } from "@lezer/highlight"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import styled from "@emotion/styled"
 import MarkdownRenderer from "src/libs/markdown/MarkdownRenderer"
@@ -51,41 +53,73 @@ const tableSnippet = [
 
 const codeBlockSnippet = ["", "```", "", "```", ""].join("\n")
 
-const markdownEditorTheme: Extension = EditorView.theme({
-  "&": {
-    minHeight: "100%",
-    backgroundColor: "#0d1117",
-    color: "#e6edf3",
-    fontSize: "14px",
+const markdownHighlightStyle = HighlightStyle.define([
+  { tag: tags.heading, color: "#79c0ff", fontWeight: "700" },
+  { tag: tags.strong, color: "#ffa657", fontWeight: "700" },
+  { tag: tags.emphasis, color: "#d2a8ff", fontStyle: "italic" },
+  { tag: tags.link, color: "#58a6ff", textDecoration: "underline" },
+  { tag: tags.url, color: "#a5d6ff" },
+  { tag: tags.monospace, color: "#a5d6ff" },
+  { tag: tags.quote, color: "#8b949e", fontStyle: "italic" },
+  { tag: tags.meta, color: "#7d8590" },
+  { tag: tags.punctuation, color: "#8b949e" },
+])
+
+const markdownEditorTheme: Extension = EditorView.theme(
+  {
+    "&.cm-editor": {
+      minHeight: "100%",
+      backgroundColor: "#0d1117",
+      color: "#e6edf3",
+      fontSize: "14px",
+    },
+    ".cm-scroller": {
+      backgroundColor: "#0d1117",
+      color: "#e6edf3",
+      fontFamily:
+        "ui-monospace, SFMono-Regular, SF Mono, Consolas, Liberation Mono, Menlo, monospace",
+      lineHeight: "1.55",
+    },
+    ".cm-content": {
+      minHeight: "560px",
+      padding: "16px",
+      backgroundColor: "#0d1117",
+      color: "#e6edf3",
+      caretColor: "#e6edf3",
+    },
+    ".cm-line": {
+      color: "#e6edf3",
+    },
+    ".cm-gutters": {
+      backgroundColor: "#0d1117",
+      borderRight: "1px solid #30363d",
+      color: "#7d8590",
+    },
+    ".cm-gutter": {
+      backgroundColor: "#0d1117",
+      color: "#7d8590",
+    },
+    ".cm-activeLine": {
+      backgroundColor: "rgba(110, 118, 129, 0.12)",
+    },
+    ".cm-activeLineGutter": {
+      backgroundColor: "rgba(110, 118, 129, 0.12)",
+    },
+    "&.cm-focused": {
+      outline: "none",
+    },
+    ".cm-cursor": {
+      borderLeftColor: "#e6edf3",
+    },
+    ".cm-placeholder": {
+      color: "#7d8590",
+    },
+    "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
+      backgroundColor: "rgba(56, 139, 253, 0.45)",
+    },
   },
-  ".cm-scroller": {
-    fontFamily:
-      "ui-monospace, SFMono-Regular, SF Mono, Consolas, Liberation Mono, Menlo, monospace",
-    lineHeight: "1.55",
-  },
-  ".cm-content": {
-    minHeight: "560px",
-    padding: "16px",
-    caretColor: "#e6edf3",
-  },
-  ".cm-gutters": {
-    backgroundColor: "#0d1117",
-    borderRight: "1px solid #30363d",
-    color: "#7d8590",
-  },
-  ".cm-activeLine": {
-    backgroundColor: "rgba(110, 118, 129, 0.12)",
-  },
-  ".cm-activeLineGutter": {
-    backgroundColor: "rgba(110, 118, 129, 0.12)",
-  },
-  "&.cm-focused": {
-    outline: "none",
-  },
-  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
-    backgroundColor: "rgba(56, 139, 253, 0.45)",
-  },
-})
+  { dark: true }
+)
 
 export const GitHubMarkdownEditor = ({
   value,
@@ -104,9 +138,9 @@ export const GitHubMarkdownEditor = ({
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       markdown({ base: markdownLanguage }),
+      syntaxHighlighting(markdownHighlightStyle),
       EditorView.lineWrapping,
       EditorState.tabSize.of(2),
-      markdownEditorTheme,
       EditorView.editable.of(!disabled),
     ],
     [disabled]
@@ -245,7 +279,7 @@ export const GitHubMarkdownEditor = ({
       {uploadError ? <ToolbarError role="alert">{uploadError}</ToolbarError> : null}
       <EditorBody data-mode={mode}>
         {mode !== "preview" ? (
-          <WritePane data-testid="github-markdown-write-pane">
+          <WritePane data-pane="write" data-testid="github-markdown-write-pane">
             <CodeMirror
               value={value}
               height="100%"
@@ -254,6 +288,7 @@ export const GitHubMarkdownEditor = ({
                 highlightActiveLine: true,
                 highlightSelectionMatches: false,
               }}
+              theme={markdownEditorTheme}
               extensions={extensions}
               onCreateEditor={(editorView) => {
                 editorViewRef.current = editorView
@@ -263,7 +298,7 @@ export const GitHubMarkdownEditor = ({
           </WritePane>
         ) : null}
         {mode !== "write" ? (
-          <PreviewPane data-testid="github-markdown-preview-pane">
+          <PreviewPane data-pane="preview" data-testid="github-markdown-preview-pane">
             <PreviewHeader>Preview</PreviewHeader>
             <PreviewArticle>
               <MarkdownRenderer content={value} disableMermaid={disableMermaid} />
@@ -401,6 +436,16 @@ const EditorBody = styled.div`
   @media (max-width: 980px) {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  @media (max-width: 768px) {
+    &[data-mode="split"] [data-pane="preview"] {
+      display: none;
+    }
+
+    &[data-mode="split"] [data-pane="write"] {
+      border-bottom: 0;
+    }
+  }
 `
 
 const WritePane = styled.div`
@@ -432,10 +477,17 @@ const PreviewHeader = styled.div`
 `
 
 const PreviewArticle = styled.article`
-  padding: 1.25rem 1.4rem 2rem;
+  padding: 1.25rem 1rem 2rem;
   background: #0d1117;
 
   .aq-markdown {
+    width: min(100%, var(--article-readable-width, 48rem));
+    max-width: var(--article-readable-width, 48rem);
+    margin-inline: auto;
     color: #e6edf3;
+  }
+
+  @media (max-width: 980px) {
+    padding-inline: 1rem;
   }
 `

@@ -100,6 +100,11 @@ const createUploadQueueItem = (file: File): UploadQueueItem => ({
 const isAbortLikeError = (error: unknown) =>
   error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")
 
+const resolveCloudErrorMessage = (error: unknown) => {
+  if (error instanceof Error && error.message.trim()) return error.message.trim()
+  return "요청 처리 중 오류가 발생했습니다."
+}
+
 type PdfPreviewProps = {
   file: CloudFile
   contentUrl: string
@@ -290,6 +295,8 @@ const AdminCloudWorkspacePage = () => {
 
   const filesQuery = useQuery({
     queryKey: [CLOUD_QUERY_KEY, filter, keyword],
+    retry: false,
+    refetchOnWindowFocus: false,
     queryFn: () => {
       const searchParams = resolveCloudSearchParams(keyword)
       return listCloudFiles({
@@ -371,7 +378,8 @@ const AdminCloudWorkspacePage = () => {
         void queryClient.invalidateQueries({ queryKey: [CLOUD_QUERY_KEY] })
       } catch (error) {
         const aborted = controller.signal.aborted || isAbortLikeError(error)
-        setNotice(aborted ? `${nextUpload.name} 업로드 취소` : `${nextUpload.name} 업로드 실패`)
+        const failureMessage = aborted ? "사용자가 취소함" : resolveCloudErrorMessage(error)
+        setNotice(aborted ? `${nextUpload.name} 업로드 취소` : `${nextUpload.name} 업로드 실패: ${failureMessage}`)
         setUploadQueue((current) =>
           current.map((item) =>
             item.id === nextUpload.id
@@ -379,7 +387,7 @@ const AdminCloudWorkspacePage = () => {
                   ...item,
                   status: aborted ? "cancelled" : "failed",
                   progress: aborted ? 0 : 100,
-                  message: aborted ? "사용자가 취소함" : "업로드 실패",
+                  message: failureMessage,
                 }
               : item
           )
@@ -415,6 +423,23 @@ const AdminCloudWorkspacePage = () => {
 
   const handleClearFinishedUploads = () => {
     setUploadQueue((current) => current.filter((item) => isUploadActive(item.status)))
+  }
+
+  const handleRetryUpload = (item: UploadQueueItem) => {
+    if (item.status !== "failed") return
+    setUploadQueue((current) =>
+      current.map((queueItem) =>
+        queueItem.id === item.id
+          ? {
+              ...queueItem,
+              status: "queued",
+              progress: 0,
+              message: "업로드 대기 중",
+              retryCount: (queueItem.retryCount ?? 0) + 1,
+            }
+          : queueItem
+      )
+    )
   }
 
   const handleToggleAllChecked = () => {
@@ -491,8 +516,11 @@ const AdminCloudWorkspacePage = () => {
     await queryClient.invalidateQueries({ queryKey: [CLOUD_QUERY_KEY] })
   }
 
-  const emptyTitle = filesQuery.isFetching
+  const isFileListError = filesQuery.isError
+  const emptyTitle = filesQuery.isLoading
     ? "파일을 불러오는 중입니다."
+    : isFileListError
+      ? "파일 목록을 불러오지 못했습니다."
     : activeUploadCount > 0
       ? "업로드 중인 파일이 있습니다."
     : keyword || filter !== "ALL"
@@ -587,6 +615,7 @@ const AdminCloudWorkspacePage = () => {
             activeUploadCount={activeUploadCount}
             completedUploadCount={completedUploadCount}
             onCancelUpload={handleCancelUpload}
+            onRetryUpload={handleRetryUpload}
             onClearFinishedUploads={handleClearFinishedUploads}
           />
 
@@ -595,9 +624,19 @@ const AdminCloudWorkspacePage = () => {
               <EmptyTableState>
                 <strong>{emptyTitle}</strong>
                 {activeUploadCount > 0 ? null : (
-                  <PrimaryButton type="button" aria-label="파일 업로드" onClick={() => uploadInputRef.current?.click()}>
-                    ⤴ 올리기
-                  </PrimaryButton>
+                  isFileListError ? (
+                    <PrimaryButton
+                      type="button"
+                      aria-label="파일 목록 다시 시도"
+                      onClick={() => void filesQuery.refetch()}
+                    >
+                      다시 시도
+                    </PrimaryButton>
+                  ) : (
+                    <PrimaryButton type="button" aria-label="파일 업로드" onClick={() => uploadInputRef.current?.click()}>
+                      ⤴ 올리기
+                    </PrimaryButton>
+                  )
                 )}
               </EmptyTableState>
             ) : (

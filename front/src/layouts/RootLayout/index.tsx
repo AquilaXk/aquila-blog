@@ -188,7 +188,7 @@ const RootLayout = ({
       <Scripts />
       {/* // TODO: replace react query */}
       {/* {metaConfig.type !== "Paper" && <Header />} */}
-      <Header fullWidth={false} showThemeToggle={effectiveBlogDesign === "legacy" && !isPublicBlogRoute} blogTitle={headerBlogTitle} />
+      <Header fullWidth={false} showThemeToggle={effectiveBlogDesign === "legacy"} blogTitle={headerBlogTitle} />
       <RouteProgress data-busy={isNavigating} aria-hidden="true" />
       <StyledMain $fullBleed={isFullBleedRoute}>{children}</StyledMain>
     </ThemeProvider>

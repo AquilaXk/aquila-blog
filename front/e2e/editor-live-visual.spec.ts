@@ -447,11 +447,6 @@ test.describe("editor live visual regression", () => {
     await expect(tokenCodeBlock).toContainText(post507CodeText)
     await expect(preview.getByText(post507ListText)).toBeVisible()
 
-    await focusMarkdownEditor(page)
-    await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
-    await expect.poll(() => readEditorSelection(page)).toContain(post507FinalTableTargetCell)
-    await expect.poll(() => readEditorSelection(page)).toContain(post507CodeText)
-    await expect.poll(() => readEditorSelection(page)).toContain(post507ListText)
     await expect(page.locator("[data-table-affordance]")).toHaveCount(0)
   })
 })

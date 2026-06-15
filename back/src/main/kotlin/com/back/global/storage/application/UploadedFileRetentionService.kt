@@ -5,6 +5,7 @@ import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
+import com.back.global.exception.application.AppException
 import com.back.global.jpa.application.ProdSequenceGuardService
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
 import com.back.global.storage.domain.UploadedFile
@@ -12,6 +13,7 @@ import com.back.global.storage.domain.UploadedFileOwnerType
 import com.back.global.storage.domain.UploadedFilePurpose
 import com.back.global.storage.domain.UploadedFileRetentionReason
 import com.back.global.storage.domain.UploadedFileStatus
+import com.fasterxml.jackson.annotation.JsonProperty
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.dao.DataIntegrityViolationException
@@ -37,6 +39,19 @@ data class UploadedFileCleanupDiagnostics(
     val blockedBySafetyThreshold: Boolean,
     val oldestEligiblePurgeAfter: Instant?,
     val sampleEligibleObjectKeys: List<String>,
+)
+
+data class ProfileImageHistoryDto(
+    val id: Long,
+    val imageUrl: String,
+    val objectKey: String,
+    val contentType: String,
+    val fileSize: Long,
+    val status: UploadedFileStatus,
+    @get:JsonProperty("isCurrent")
+    val isCurrent: Boolean,
+    val createdAt: Instant,
+    val modifiedAt: Instant,
 )
 
 /**
@@ -284,13 +299,57 @@ class UploadedFileRetentionService(
         }
 
         if (previousObjectKey != null && previousObjectKey != currentObjectKey) {
-            scheduleDeletionIfKnown(
+            scheduleProfileImageDeletionIfKnown(
+                memberId = memberId,
                 objectKey = previousObjectKey,
-                purpose = UploadedFilePurpose.PROFILE_IMAGE,
                 reason = UploadedFileRetentionReason.REPLACED_PROFILE_IMAGE,
                 purgeAfter = Instant.now().plusSeconds(retentionProperties.replacedProfileImageSeconds),
             )
         }
+    }
+
+    @Transactional(readOnly = true)
+    fun listProfileImages(
+        memberId: Long,
+        protectedProfileImgUrls: Collection<String?>,
+    ): List<ProfileImageHistoryDto> {
+        val protectedObjectKeys = protectedProfileImgUrls.extractProfileImageObjectKeys()
+        val profileImages =
+            uploadedFileRepository.findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
+                purpose = UploadedFilePurpose.PROFILE_IMAGE,
+                ownerType = UploadedFileOwnerType.MEMBER_PROFILE,
+                ownerId = memberId,
+                status = UploadedFileStatus.DELETED,
+            )
+
+        return profileImages.map { uploadedFile ->
+            uploadedFile.toProfileImageHistoryDto(
+                isCurrent = uploadedFile.objectKey in protectedObjectKeys,
+            )
+        }
+    }
+
+    @Transactional
+    fun deleteProfileImage(
+        memberId: Long,
+        fileId: Long,
+        protectedProfileImgUrls: Collection<String?>,
+    ) {
+        val uploadedFile =
+            uploadedFileRepository.findByIdAndPurposeAndOwnerTypeAndOwnerId(
+                id = fileId,
+                purpose = UploadedFilePurpose.PROFILE_IMAGE,
+                ownerType = UploadedFileOwnerType.MEMBER_PROFILE,
+                ownerId = memberId,
+            )
+                ?: throw AppException("404-1", "프로필 이미지를 찾을 수 없습니다.")
+        if (uploadedFile.objectKey in protectedProfileImgUrls.extractProfileImageObjectKeys()) {
+            throw AppException("400-1", "현재 사용 중인 프로필 이미지는 삭제할 수 없습니다.")
+        }
+
+        postImageStoragePort.deletePostImage(uploadedFile.objectKey)
+        uploadedFile.markDeleted()
+        uploadedFileRepository.save(uploadedFile)
     }
 
     /**
@@ -417,6 +476,22 @@ class UploadedFileRetentionService(
         uploadedFileRepository.save(uploadedFile)
     }
 
+    private fun scheduleProfileImageDeletionIfKnown(
+        memberId: Long,
+        objectKey: String,
+        reason: UploadedFileRetentionReason,
+        purgeAfter: Instant,
+    ) {
+        if (objectKey.isBlank()) return
+
+        val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: return
+        uploadedFile.purpose = UploadedFilePurpose.PROFILE_IMAGE
+        uploadedFile.ownerType = UploadedFileOwnerType.MEMBER_PROFILE
+        uploadedFile.ownerId = memberId
+        uploadedFile.scheduleDeletion(reason, purgeAfter)
+        uploadedFileRepository.save(uploadedFile)
+    }
+
     private fun findOrCreate(objectKey: String): UploadedFile =
         uploadedFileRepository.findByObjectKey(objectKey)
             ?: UploadedFile(
@@ -425,6 +500,23 @@ class UploadedFileRetentionService(
                 contentType = "application/octet-stream",
                 fileSize = 0,
             )
+
+    private fun UploadedFile.toProfileImageHistoryDto(isCurrent: Boolean): ProfileImageHistoryDto =
+        ProfileImageHistoryDto(
+            id = id,
+            imageUrl = UploadedFileUrlCodec.buildImageUrl(objectKey),
+            objectKey = objectKey,
+            contentType = contentType,
+            fileSize = fileSize,
+            status = status,
+            isCurrent = isCurrent,
+            createdAt = createdAt,
+            modifiedAt = modifiedAt,
+        )
+
+    private fun Collection<String?>.extractProfileImageObjectKeys(): Set<String> =
+        mapNotNull(UploadedFileUrlCodec::extractObjectKeyFromImageUrl)
+            .toSet()
 
     /**
      * 정책 조건을 검증해 처리 가능 여부를 판정합니다.

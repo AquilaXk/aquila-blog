@@ -1,6 +1,8 @@
 package com.back.global.storage.application.port.output
 
 import com.back.global.storage.domain.UploadedFile
+import com.back.global.storage.domain.UploadedFileOwnerType
+import com.back.global.storage.domain.UploadedFilePurpose
 import com.back.global.storage.domain.UploadedFileStatus
 import org.springframework.data.domain.Pageable
 import java.time.Instant
@@ -11,6 +13,20 @@ interface UploadedFileRepositoryPort {
     fun flush()
 
     fun findByObjectKey(objectKey: String): UploadedFile?
+
+    fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
+        purpose: UploadedFilePurpose,
+        ownerType: UploadedFileOwnerType,
+        ownerId: Long,
+        status: UploadedFileStatus,
+    ): List<UploadedFile>
+
+    fun findByIdAndPurposeAndOwnerTypeAndOwnerId(
+        id: Long,
+        purpose: UploadedFilePurpose,
+        ownerType: UploadedFileOwnerType,
+        ownerId: Long,
+    ): UploadedFile?
 
     fun countByStatus(status: UploadedFileStatus): Long
 

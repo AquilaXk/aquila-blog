@@ -2,6 +2,8 @@ package com.back.global.storage.adapter.persistence
 
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
 import com.back.global.storage.domain.UploadedFile
+import com.back.global.storage.domain.UploadedFileOwnerType
+import com.back.global.storage.domain.UploadedFilePurpose
 import com.back.global.storage.domain.UploadedFileStatus
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
@@ -15,6 +17,20 @@ interface UploadedFileRepository :
     JpaRepository<UploadedFile, Long>,
     UploadedFileRepositoryPort {
     override fun findByObjectKey(objectKey: String): UploadedFile?
+
+    override fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
+        purpose: UploadedFilePurpose,
+        ownerType: UploadedFileOwnerType,
+        ownerId: Long,
+        status: UploadedFileStatus,
+    ): List<UploadedFile>
+
+    override fun findByIdAndPurposeAndOwnerTypeAndOwnerId(
+        id: Long,
+        purpose: UploadedFilePurpose,
+        ownerType: UploadedFileOwnerType,
+        ownerId: Long,
+    ): UploadedFile?
 
     override fun countByStatus(status: UploadedFileStatus): Long
 

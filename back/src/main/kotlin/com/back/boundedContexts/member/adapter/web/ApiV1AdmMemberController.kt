@@ -14,11 +14,14 @@ import com.back.boundedContexts.member.domain.shared.memberMixin.normalizeProfil
 import com.back.boundedContexts.member.dto.AuthSessionMemberDto
 import com.back.boundedContexts.member.dto.MemberProfileWorkspaceResponseDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
+import com.back.boundedContexts.member.model.shared.Member
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
+import com.back.global.rsData.RsData
 import com.back.global.security.domain.SecurityUser
+import com.back.global.storage.application.ProfileImageHistoryDto
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.storage.domain.UploadedFilePurpose
 import com.back.standard.dto.member.type1.MemberSearchSortType1
@@ -34,6 +37,7 @@ import org.springframework.http.MediaType
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.validation.annotation.Validated
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -74,6 +78,10 @@ class ApiV1AdmMemberController(
     data class AdminProfileBootstrapResponse(
         val member: AuthSessionMemberDto,
         val workspace: MemberProfileWorkspaceResponseDto,
+    )
+
+    data class ProfileImageHistoryResponse(
+        val images: List<ProfileImageHistoryDto>,
     )
 
     private enum class LinkSection(
@@ -323,6 +331,48 @@ class ApiV1AdmMemberController(
         memberUseCase.modify(member, member.nickname, imageUrl)
         return currentMemberProfileQueryUseCase.getById(id)
     }
+
+    @GetMapping("/{id}/profileImageFiles")
+    @Transactional(readOnly = true)
+    fun listProfileImageFiles(
+        @PathVariable
+        @Positive
+        id: Long,
+    ): ProfileImageHistoryResponse {
+        val member = memberUseCase.findById(id).orElseThrow()
+        return ProfileImageHistoryResponse(
+            images =
+                uploadedFileRetentionService.listProfileImages(
+                    memberId = id,
+                    protectedProfileImgUrls = member.protectedProfileImgUrls(),
+                ),
+        )
+    }
+
+    @DeleteMapping("/{id}/profileImageFiles/{fileId}")
+    @Transactional
+    fun deleteProfileImageFile(
+        @PathVariable
+        @Positive
+        id: Long,
+        @PathVariable
+        @Positive
+        fileId: Long,
+    ): RsData<Void> {
+        val member = memberUseCase.findById(id).orElseThrow()
+        uploadedFileRetentionService.deleteProfileImage(
+            memberId = id,
+            fileId = fileId,
+            protectedProfileImgUrls = member.protectedProfileImgUrls(),
+        )
+        return RsData("200-1", "프로필 이미지가 삭제되었습니다.")
+    }
+
+    private fun Member.protectedProfileImgUrls(): List<String?> =
+        listOf(
+            profileImgUrl,
+            getProfileWorkspacePublishedContent().profileImageUrl,
+        )
 
     /**
      * 관리자 표시 이름(nickname)을 수정한다.

@@ -1132,6 +1132,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/member/api/v1/adm/members/{id}/profileImageFiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listProfileImageFiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/member/api/v1/adm/members/profile/bootstrap": {
         parameters: {
             query?: never;
@@ -1209,6 +1225,22 @@ export interface paths {
         put?: never;
         post?: never;
         delete: operations["logout"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/member/api/v1/adm/members/{id}/profileImageFiles/{fileId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteProfileImageFile"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2096,6 +2128,25 @@ export interface components {
         PageDtoMemberWithUsernameDto: {
             content?: components["schemas"]["MemberWithUsernameDto"][];
             pageable?: components["schemas"]["PageableDto"];
+        };
+        ProfileImageHistoryDto: {
+            /** Format: int64 */
+            id?: number;
+            imageUrl?: string;
+            objectKey?: string;
+            contentType?: string;
+            /** Format: int64 */
+            fileSize?: number;
+            /** @enum {string} */
+            status?: "TEMP" | "ACTIVE" | "PENDING_DELETE" | "DELETED";
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            modifiedAt?: string;
+            isCurrent?: boolean;
+        };
+        ProfileImageHistoryResponse: {
+            images?: components["schemas"]["ProfileImageHistoryDto"][];
         };
         AdminProfileBootstrapResponse: {
             member?: components["schemas"]["AuthSessionMemberDto"];
@@ -3921,6 +3972,28 @@ export interface operations {
             };
         };
     };
+    listProfileImageFiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProfileImageHistoryResponse"];
+                };
+            };
+        };
+    };
     profileBootstrap: {
         parameters: {
             query?: never;
@@ -4008,6 +4081,29 @@ export interface operations {
             query?: never;
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RsDataVoid"];
+                };
+            };
+        };
+    };
+    deleteProfileImageFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                fileId: number;
+            };
             cookie?: never;
         };
         requestBody?: never;

@@ -1,6 +1,6 @@
 /* eslint-disable @next/next/no-img-element -- private cloud content needs browser-owned auth cookies. */
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import type { PDFDocumentLoadingTask, RenderTask } from "pdfjs-dist"
+import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from "pdfjs-dist"
 import { type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import {
   deleteCloudFile,
@@ -65,7 +65,6 @@ import {
   PreviewHeader,
   PreviewStage,
   PrimaryButton,
-  RowActions,
   RowCheckbox,
   SearchDetail,
   SearchInput,
@@ -80,6 +79,7 @@ import {
 const CLOUD_QUERY_KEY = "admin-cloud-files"
 const EMPTY_CLOUD_FILES: CloudFile[] = []
 const PDF_STANDARD_FONT_DATA_URL = "/pdfjs/standard_fonts/"
+const PDF_LOADED_TASK_DESTROY_DELAY_MS = 3000
 
 const mediaKindFromFilter = (filter: CloudMediaFilter): CloudMediaKind | undefined =>
   filter === "ALL" ? undefined : filter
@@ -142,15 +142,31 @@ const installPdfWorkerTerminationRejectionHandler = () => {
 
 const ignorePdfPreviewTeardownRejection = (
   loadingTask: PDFDocumentLoadingTask | null,
+  pdfDocument: PDFDocumentProxy | null,
   renderTask: RenderTask | null
 ) => {
-  if (!loadingTask) return
+  const renderSettled = renderTask?.promise.catch(() => undefined) ?? Promise.resolve()
 
-  void loadingTask.promise.catch(() => {
-    // 미리보기 전환 중 PDF 로딩이 늦게 실패할 수 있으므로 cleanup 경로에서 reject를 소비한다.
+  void loadingTask?.promise.catch(() => {
+    // teardown 중 늦게 도착한 loading reject도 pageerror로 노출하지 않는다.
   })
 
-  const renderSettled = renderTask?.promise.catch(() => undefined) ?? Promise.resolve()
+  if (pdfDocument) {
+    void renderSettled.then(async () => {
+      await pdfDocument.cleanup().catch(() => {
+        // 이미 해제된 문서 리소스 정리는 사용자에게 노출하지 않는다.
+      })
+      window.setTimeout(() => {
+        void loadingTask?.destroy().catch(() => {
+          // worker 종료 reject는 teardown 내부에서 소비한다.
+        })
+      }, PDF_LOADED_TASK_DESTROY_DELAY_MS)
+    })
+    return
+  }
+
+  if (!loadingTask) return
+
   void renderSettled.finally(() => {
     void loadingTask.destroy().catch(() => {
       // cleanup에서 PDF.js worker/download를 종료할 때 발생하는 reject도 사용자에게 노출하지 않는다.
@@ -172,6 +188,7 @@ const PdfPreview = ({ file, contentUrl }: PdfPreviewProps) => {
     if (file.mediaKind !== "DOCUMENT") return
     let cancelled = false
     let loadingTask: PDFDocumentLoadingTask | null = null
+    let pdfDocument: PDFDocumentProxy | null = null
     let renderTask: RenderTask | null = null
     const releasePdfWorkerTerminationHandler = installPdfWorkerTerminationRejectionHandler()
 
@@ -188,6 +205,7 @@ const PdfPreview = ({ file, contentUrl }: PdfPreviewProps) => {
           // cleanup이 먼저 실행된 경우 await 경로 밖에서도 worker 종료 reject를 소비한다.
         })
         const pdf = await loadingTask.promise
+        pdfDocument = pdf
         if (cancelled) return
         setPageCount(pdf.numPages)
         const page = await pdf.getPage(1)
@@ -226,7 +244,7 @@ const PdfPreview = ({ file, contentUrl }: PdfPreviewProps) => {
       } catch {
         // loading task 종료가 먼저 끝난 경우 render task도 이미 취소 상태일 수 있다.
       }
-      ignorePdfPreviewTeardownRejection(loadingTask, renderTask)
+      ignorePdfPreviewTeardownRejection(loadingTask, pdfDocument, renderTask)
       releasePdfWorkerTerminationHandler(10000)
     }
   }, [contentUrl, file.mediaKind])
@@ -382,7 +400,6 @@ const FileTableHead = () => (
       <th>이름</th>
       <th>크기</th>
       <th>수정한 날짜</th>
-      <th aria-label="작업" />
     </tr>
   </thead>
 )
@@ -611,10 +628,6 @@ const AdminCloudWorkspacePage = () => {
     })
   }
 
-  const handleDelete = (file: CloudFile) => {
-    setDeleteConfirm({ files: [file] })
-  }
-
   const closeDeleteConfirm = () => {
     if (isDeletePending) return
     setDeleteConfirm(null)
@@ -827,7 +840,7 @@ const AdminCloudWorkspacePage = () => {
                 <FileTableHead />
                 <tbody>
                   <tr>
-                    <td colSpan={7}>
+                    <td colSpan={6}>
                       <LoadingTableStatus role="status" aria-label="파일 목록 로딩">
                         파일 목록 로딩
                       </LoadingTableStatus>
@@ -903,18 +916,6 @@ const AdminCloudWorkspacePage = () => {
                         </td>
                         <td>{formatCloudFileSize(file.byteSize)}</td>
                         <td>{formatCloudDate(file.modifiedAt || file.createdAt)}</td>
-                        <td>
-                          <RowActions>
-                            <GhostButton
-                              type="button"
-                              aria-label={`${file.originalFilename} 삭제`}
-                              onClick={() => handleDelete(file)}
-                            >
-                              <AppIcon name="trash" />
-                              삭제
-                            </GhostButton>
-                          </RowActions>
-                        </td>
                       </tr>
                     )
                   })}

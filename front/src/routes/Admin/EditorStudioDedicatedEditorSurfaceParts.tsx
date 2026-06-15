@@ -40,7 +40,7 @@ export const EditorStudioLoadingState = styled.div `
   }
 `;
 export const EditorStudioDedicatedTopBar = styled.div `
-  width: min(100%, 1600px);
+  width: min(100%, var(--article-readable-width, 48rem));
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -68,7 +68,7 @@ export const EditorExitAction = styled.button `
   justify-content: center;
   min-height: 42px;
   padding: 0.2rem 0.32rem;
-  margin: -0.2rem -0.32rem;
+  margin: 0;
   border: 0;
   border-radius: 10px;
   background: transparent;

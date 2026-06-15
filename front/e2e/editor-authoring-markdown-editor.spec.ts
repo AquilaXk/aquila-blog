@@ -271,6 +271,67 @@ test.describe("Markdown editor replacement", () => {
     await expect(preview.getByText("quote at the bottom")).toBeVisible()
   })
 
+  test("split write and preview panes start body text from the same pane-relative point", async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await routeAuthenticatedEditor(page, "ㄷㄷㄷ")
+
+    await page.goto("/editor/new?source=local-draft")
+
+    await expect(page.getByTestId("markdown-editor-write-pane").locator("textarea")).toBeVisible()
+    await expect(page.getByTestId("markdown-editor-preview-pane").getByText("ㄷㄷㄷ")).toBeVisible()
+
+    const startPointContract = await page.evaluate(() => {
+      const writePane = document.querySelector<HTMLElement>("[data-testid='markdown-editor-write-pane']")
+      const previewPane = document.querySelector<HTMLElement>("[data-testid='markdown-editor-preview-pane']")
+      const textarea = writePane?.querySelector<HTMLTextAreaElement>("textarea")
+      const firstPreviewBlock = previewPane?.querySelector<HTMLElement>(".aq-markdown > :first-child")
+      if (!writePane || !previewPane || !textarea || !firstPreviewBlock) {
+        throw new Error("markdown split pane elements not found")
+      }
+
+      const writePaneRect = writePane.getBoundingClientRect()
+      const previewPaneRect = previewPane.getBoundingClientRect()
+      const textareaRect = textarea.getBoundingClientRect()
+      const textareaStyle = window.getComputedStyle(textarea)
+      const firstPreviewBlockRect = firstPreviewBlock.getBoundingClientRect()
+
+      return {
+        writeStartLeft: textareaRect.left + Number.parseFloat(textareaStyle.paddingLeft) - writePaneRect.left,
+        writeStartTop: textareaRect.top + Number.parseFloat(textareaStyle.paddingTop) - writePaneRect.top,
+        previewStartLeft: firstPreviewBlockRect.left - previewPaneRect.left,
+        previewStartTop: firstPreviewBlockRect.top - previewPaneRect.top,
+      }
+    })
+
+    expect(Math.abs(startPointContract.writeStartLeft - startPointContract.previewStartLeft)).toBeLessThanOrEqual(2)
+    expect(Math.abs(startPointContract.writeStartTop - startPointContract.previewStartTop)).toBeLessThanOrEqual(2)
+  })
+
+  test("dedicated editor top actions stay inside the editor content rail", async ({ page }) => {
+    await page.setViewportSize({ width: 2048, height: 1152 })
+    await routeAuthenticatedEditor(page, "본문이 없습니다.")
+
+    await page.goto("/editor/new?source=local-draft")
+
+    const editor = page.getByTestId("markdown-editor")
+    const exitButton = page.getByRole("button", { name: "← 나가기" })
+    const publishButton = page.getByRole("button", { name: "발행" }).first()
+    await expect(editor).toBeVisible()
+    await expect(exitButton).toBeVisible()
+    await expect(publishButton).toBeVisible()
+
+    const editorBox = await editor.boundingBox()
+    const exitBox = await exitButton.boundingBox()
+    const publishBox = await publishButton.boundingBox()
+    expect(editorBox).not.toBeNull()
+    expect(exitBox).not.toBeNull()
+    expect(publishBox).not.toBeNull()
+    if (!editorBox || !exitBox || !publishBox) return
+
+    expect(exitBox.x).toBeGreaterThanOrEqual(editorBox.x - 2)
+    expect(publishBox.x + publishBox.width).toBeLessThanOrEqual(editorBox.x + editorBox.width + 2)
+  })
+
   test("preview matches supported table markdown for alignment, escaped pipes, and inline cell formatting", async ({
     page,
   }) => {
@@ -485,7 +546,7 @@ test.describe("Markdown editor replacement", () => {
     expect(selectionState.activeInsideWritePane).toBe(true)
   })
 
-  test("split preview uses the same readable width and typography contract as post detail", async ({
+  test("split preview keeps readable width and typography while matching the write start", async ({
     page,
   }) => {
     await routeAuthenticatedEditor(page)
@@ -516,7 +577,7 @@ test.describe("Markdown editor replacement", () => {
     expect(previewContract.articleBackground).not.toBe("rgb(13, 17, 23)")
     expect(previewContract.paddingLeft).toBe("16px")
     expect(previewContract.paddingRight).toBe("16px")
-    expect(previewContract.marginTop).toBe("26.4px")
+    expect(previewContract.marginTop).toBe("0px")
     expect(previewContract.maxWidth).toBe("768px")
     expect(previewContract.fontSize).toBe("17px")
     expect(previewContract.lineHeight).toBe("28px")

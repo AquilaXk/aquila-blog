@@ -314,13 +314,19 @@ class UploadedFileRetentionService(
         protectedProfileImgUrls: Collection<String?>,
     ): List<ProfileImageHistoryDto> {
         val protectedObjectKeys = protectedProfileImgUrls.extractProfileImageObjectKeys()
-        return uploadedFileRepository
-            .findProfileImagesByOwner(memberId)
-            .map { uploadedFile ->
-                uploadedFile.toProfileImageHistoryDto(
-                    isCurrent = uploadedFile.objectKey in protectedObjectKeys,
-                )
-            }
+        val profileImages =
+            uploadedFileRepository.findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
+                purpose = UploadedFilePurpose.PROFILE_IMAGE,
+                ownerType = UploadedFileOwnerType.MEMBER_PROFILE,
+                ownerId = memberId,
+                status = UploadedFileStatus.DELETED,
+            )
+
+        return profileImages.map { uploadedFile ->
+            uploadedFile.toProfileImageHistoryDto(
+                isCurrent = uploadedFile.objectKey in protectedObjectKeys,
+            )
+        }
     }
 
     @Transactional
@@ -330,7 +336,12 @@ class UploadedFileRetentionService(
         protectedProfileImgUrls: Collection<String?>,
     ) {
         val uploadedFile =
-            uploadedFileRepository.findProfileImageByIdAndOwner(fileId, memberId)
+            uploadedFileRepository.findByIdAndPurposeAndOwnerTypeAndOwnerId(
+                id = fileId,
+                purpose = UploadedFilePurpose.PROFILE_IMAGE,
+                ownerType = UploadedFileOwnerType.MEMBER_PROFILE,
+                ownerId = memberId,
+            )
                 ?: throw AppException("404-1", "프로필 이미지를 찾을 수 없습니다.")
         if (uploadedFile.objectKey in protectedProfileImgUrls.extractProfileImageObjectKeys()) {
             throw AppException("400-1", "현재 사용 중인 프로필 이미지는 삭제할 수 없습니다.")

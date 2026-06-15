@@ -3,7 +3,6 @@ package com.back.global.security.config
 import com.back.boundedContexts.member.config.MemberSecurityConfigurer
 import com.back.boundedContexts.member.config.shared.AuthSecurityConfigurer
 import com.back.boundedContexts.post.config.PostSecurityConfigurer
-import com.back.global.app.application.AppFacade
 import com.back.global.rsData.RsData
 import com.back.global.security.config.oauth2.CustomOAuth2AuthorizationRequestResolver
 import com.back.global.security.config.oauth2.CustomOAuth2LoginSuccessHandler
@@ -12,6 +11,7 @@ import com.back.global.security.config.oauth2.CustomOidcUserService
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.core.env.Environment
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
 import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
@@ -42,6 +42,7 @@ class SecurityConfig(
     private val postSecurityConfigurer: PostSecurityConfigurer,
     private val apiCorsPolicy: ApiCorsPolicy,
     private val objectMapper: ObjectMapper,
+    private val environment: Environment,
 ) {
     /**
      * 보안/인프라 설정을 요청 처리 체인에 반영합니다.
@@ -63,8 +64,9 @@ class SecurityConfig(
                 authorize("/*/api/*/**", authenticated)
                 authorize("/oauth2/**", permitAll)
                 authorize("/login/oauth2/**", permitAll)
-                val endpointExposurePolicy = SecurityEndpointExposurePolicy(AppFacade.isProd)
-                if (AppFacade.isProd) {
+                val isProd = environment.matchesProfiles("prod")
+                val endpointExposurePolicy = SecurityEndpointExposurePolicy(isProd)
+                if (isProd) {
                     // 프로덕션에서는 k8s/lb health probe 외 actuator 공개를 차단한다.
                     authorize("/actuator/health/liveness", permitAll)
                     authorize("/actuator/health/readiness", permitAll)

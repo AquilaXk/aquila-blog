@@ -234,6 +234,14 @@ const setupAdminCloudMocks = async (
 test.describe("관리자 클라우드", () => {
   test("MYBOX형 파일 목록, 다중 업로드 큐, 취소, 삭제와 owner 전용 preview drawer가 동작한다", async ({ page }) => {
     const mocks = await setupAdminCloudMocks(page)
+    const browserErrors: string[] = []
+
+    page.on("pageerror", (error) => {
+      browserErrors.push(error.message)
+    })
+    page.on("console", (message) => {
+      if (message.type() === "error") browserErrors.push(message.text())
+    })
 
     await page.goto("/admin/cloud")
 
@@ -312,6 +320,8 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByLabel("클라우드 상세정보").getByText("파일 선택")).toBeVisible()
     await page.getByRole("button", { name: "상세 패널 보기" }).click()
     await expect(page.getByRole("heading", { name: "문서 뷰어" })).toBeVisible()
+    await page.waitForTimeout(100)
+    expect(browserErrors.filter((message) => message.includes("Worker was terminated"))).toEqual([])
 
     await page.getByRole("button", { name: "home-server-rack.png 미리보기" }).click()
     await expect(page.getByRole("heading", { name: "사진 보기" })).toBeVisible()

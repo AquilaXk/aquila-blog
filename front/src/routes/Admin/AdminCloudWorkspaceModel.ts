@@ -48,15 +48,34 @@ export const getCloudKindLabel = (kind: CloudMediaFilter) => {
 }
 
 export const getCloudKindBadge = (file: CloudFile) => {
-  if (file.mediaKind === "DOCUMENT") return "PDF"
+  const extension = getCloudFileExtension(file.originalFilename)
+  if (file.mediaKind === "DOCUMENT") return extension || "DOC"
   if (file.mediaKind === "PHOTO") return "IMG"
   return "MP4"
 }
 
 export const getCloudKindIconLabel = (file: CloudFile) => {
-  if (file.mediaKind === "DOCUMENT") return "문"
-  if (file.mediaKind === "PHOTO") return "사"
-  return "동"
+  return getCloudKindBadge(file)
+}
+
+export const getCloudFileExtension = (filename: string) => {
+  const trimmed = filename.trim()
+  const extension = trimmed.includes(".") ? trimmed.split(".").pop() : ""
+  const normalized = extension?.replace(/[^A-Za-z0-9]+/g, "").toUpperCase() ?? ""
+  return normalized.slice(0, 4)
+}
+
+export const getCloudFilenameParts = (filename: string) => {
+  const trimmed = filename.trim()
+  const dotIndex = trimmed.lastIndexOf(".")
+  if (dotIndex <= 0 || dotIndex === trimmed.length - 1) {
+    return { stem: trimmed || "이름 없는 파일", extension: "" }
+  }
+
+  return {
+    stem: trimmed.slice(0, dotIndex),
+    extension: trimmed.slice(dotIndex),
+  }
 }
 
 export const formatCloudFileSize = (bytes: number) => {

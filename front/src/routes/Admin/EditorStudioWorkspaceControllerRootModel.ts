@@ -1,5 +1,5 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from "react"
-import { getApiBaseUrl } from "src/apis/backend/client"
+import { getApiRequestUrl } from "src/apis/backend/client"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import {
   applyThumbnailTransformToUrl,
@@ -260,9 +260,12 @@ export const requestTempPostWithConflictRetry = async (
   let lastConflictBody = ""
 
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-    const response = await fetch(`${getApiBaseUrl()}/post/api/v1/posts/temp`, {
+    const response = await fetch(getApiRequestUrl("/post/api/v1/posts/temp"), {
       method: "POST",
       credentials: "include",
+      headers: {
+        "X-Aquila-CSRF": "1",
+      },
     })
 
     if (response.status !== 409) {

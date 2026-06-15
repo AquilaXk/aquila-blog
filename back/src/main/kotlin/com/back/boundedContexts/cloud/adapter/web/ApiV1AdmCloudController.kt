@@ -72,11 +72,14 @@ class ApiV1AdmCloudController(
         @RequestPart("file") file: MultipartFile,
         @RequestParam(defaultValue = "")
         folderPath: String,
+        @RequestParam(required = false)
+        clientFilename: String?,
     ): ResponseEntity<RsData<CloudFileDto>> {
         val uploaded =
             cloudFileService.upload(
                 ownerMemberId = securityUser.id,
                 originalFilename = file.originalFilename,
+                clientOriginalFilename = clientFilename,
                 contentType = file.contentType,
                 bytes = file.bytes,
                 folderPath = folderPath,

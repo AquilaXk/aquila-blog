@@ -105,6 +105,7 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
             cloudFileService.upload(
                 ownerMemberId = 7L,
                 originalFilename = "photo.png",
+                clientOriginalFilename = "사진 원본.png",
                 contentType = "image/png",
                 bytes = uploadBytes,
                 folderPath = "photos",
@@ -115,6 +116,7 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
             .multipart("/system/api/v1/adm/cloud/files") {
                 file(MockMultipartFile("file", "photo.png", MediaType.IMAGE_PNG_VALUE, uploadBytes))
                 param("folderPath", "photos")
+                param("clientFilename", "사진 원본.png")
                 with(user(admin))
             }.andExpect {
                 status { isCreated() }

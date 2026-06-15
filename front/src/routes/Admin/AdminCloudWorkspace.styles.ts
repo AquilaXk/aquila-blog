@@ -344,6 +344,7 @@ export const GhostButton = styled.button`
   color: ${textSecondary};
   font-size: 0.82rem;
   font-weight: 820;
+  white-space: nowrap;
   cursor: pointer;
 
   &[data-active="true"] {
@@ -434,7 +435,7 @@ export const FileTable = styled.table`
 
   th:nth-of-type(7),
   td:nth-of-type(7) {
-    width: 4.6rem;
+    width: 5.6rem;
   }
 `
 
@@ -535,7 +536,8 @@ export const RowActions = styled.div`
   gap: 0.3rem;
 
   button {
-    min-width: 3.2rem;
+    min-width: 4.2rem;
+    padding-inline: 0.55rem;
   }
 `
 
@@ -614,8 +616,7 @@ export const DetailPreviewBox = styled.div`
   display: grid;
   align-items: start;
   min-height: 12.5rem;
-  border-radius: 2px;
-  background: ${surfaceMuted};
+  background: transparent;
   overflow: auto;
 `
 
@@ -683,7 +684,6 @@ export const PdfCanvas = styled.canvas`
 
 export const PhotoFrame = styled.div`
   display: grid;
-  gap: 0.65rem;
   width: 100%;
 
   img {
@@ -692,20 +692,6 @@ export const PhotoFrame = styled.div`
     object-fit: contain;
     border-radius: 8px;
     background: ${surfaceMuted};
-  }
-`
-
-export const ThumbnailStrip = styled.div`
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.42rem;
-
-  span {
-    display: block;
-    min-height: 2.7rem;
-    border-radius: 6px;
-    border: 1px solid ${border};
-    background: ${surfaceRaised};
   }
 `
 

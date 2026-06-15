@@ -2,6 +2,8 @@ package com.back.global.storage.adapter.persistence
 
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
 import com.back.global.storage.domain.UploadedFile
+import com.back.global.storage.domain.UploadedFileOwnerType
+import com.back.global.storage.domain.UploadedFilePurpose
 import com.back.global.storage.domain.UploadedFileStatus
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
@@ -15,6 +17,39 @@ interface UploadedFileRepository :
     JpaRepository<UploadedFile, Long>,
     UploadedFileRepositoryPort {
     override fun findByObjectKey(objectKey: String): UploadedFile?
+
+    override fun findProfileImagesByOwner(memberId: Long): List<UploadedFile> =
+        findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
+            purpose = UploadedFilePurpose.PROFILE_IMAGE,
+            ownerType = UploadedFileOwnerType.MEMBER_PROFILE,
+            ownerId = memberId,
+            status = UploadedFileStatus.DELETED,
+        )
+
+    override fun findProfileImageByIdAndOwner(
+        fileId: Long,
+        memberId: Long,
+    ): UploadedFile? =
+        findByIdAndPurposeAndOwnerTypeAndOwnerId(
+            id = fileId,
+            purpose = UploadedFilePurpose.PROFILE_IMAGE,
+            ownerType = UploadedFileOwnerType.MEMBER_PROFILE,
+            ownerId = memberId,
+        )
+
+    fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
+        purpose: UploadedFilePurpose,
+        ownerType: UploadedFileOwnerType,
+        ownerId: Long,
+        status: UploadedFileStatus,
+    ): List<UploadedFile>
+
+    fun findByIdAndPurposeAndOwnerTypeAndOwnerId(
+        id: Long,
+        purpose: UploadedFilePurpose,
+        ownerType: UploadedFileOwnerType,
+        ownerId: Long,
+    ): UploadedFile?
 
     override fun countByStatus(status: UploadedFileStatus): Long
 

@@ -8,9 +8,11 @@ import com.back.global.storage.domain.UploadedFileRetentionReason
 import com.back.global.storage.domain.UploadedFileStatus
 import com.back.support.BaseUploadedFileRetentionServiceIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertDoesNotThrow
+import org.mockito.BDDMockito.then
 import org.springframework.beans.factory.annotation.Autowired
 import java.time.Duration
 import java.time.Instant
@@ -99,6 +101,47 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
             Duration.ofDays(2),
             Duration.ofDays(4),
         )
+    }
+
+    @Test
+    fun `프로필 이미지 이력은 현재 이미지와 교체된 이미지를 함께 반환한다`() {
+        val oldKey = "posts/2026/03/profile-history-old.png"
+        val newKey = "posts/2026/03/profile-history-new.png"
+        val oldUrl = UploadedFileUrlCodec.buildImageUrl(oldKey)
+        val newUrl = UploadedFileUrlCodec.buildImageUrl(newKey)
+
+        uploadedFileRetentionService.registerTempUpload(oldKey, "image/png", 100, UploadedFilePurpose.PROFILE_IMAGE)
+        uploadedFileRetentionService.registerTempUpload(newKey, "image/png", 200, UploadedFilePurpose.PROFILE_IMAGE)
+        uploadedFileRetentionService.syncProfileImage(7, previousProfileImgUrl = oldUrl, currentProfileImgUrl = newUrl)
+
+        val images = uploadedFileRetentionService.listProfileImages(7, currentProfileImgUrl = newUrl)
+
+        assertThat(images).extracting("objectKey").contains(oldKey, newKey)
+        assertThat(images.single { it.objectKey == newKey }.isCurrent).isTrue()
+        assertThat(images.single { it.objectKey == oldKey }.isCurrent).isFalse()
+    }
+
+    @Test
+    fun `과거 프로필 이미지는 삭제할 수 있지만 현재 이미지는 삭제할 수 없다`() {
+        val oldKey = "posts/2026/03/profile-delete-old.png"
+        val newKey = "posts/2026/03/profile-delete-new.png"
+        val oldUrl = UploadedFileUrlCodec.buildImageUrl(oldKey)
+        val newUrl = UploadedFileUrlCodec.buildImageUrl(newKey)
+
+        uploadedFileRetentionService.registerTempUpload(oldKey, "image/png", 100, UploadedFilePurpose.PROFILE_IMAGE)
+        uploadedFileRetentionService.registerTempUpload(newKey, "image/png", 200, UploadedFilePurpose.PROFILE_IMAGE)
+        uploadedFileRetentionService.syncProfileImage(7, previousProfileImgUrl = oldUrl, currentProfileImgUrl = newUrl)
+
+        val oldFile = uploadedFileRepository.findByObjectKey(oldKey)!!
+        val newFile = uploadedFileRepository.findByObjectKey(newKey)!!
+
+        uploadedFileRetentionService.deleteProfileImage(7, oldFile.id, currentProfileImgUrl = newUrl)
+
+        assertThat(uploadedFileRepository.findByObjectKey(oldKey)!!.status).isEqualTo(UploadedFileStatus.DELETED)
+        then(postImageStoragePort).should().deletePostImage(oldKey)
+        assertThatThrownBy {
+            uploadedFileRetentionService.deleteProfileImage(7, newFile.id, currentProfileImgUrl = newUrl)
+        }.hasMessageContaining("현재 사용 중인 프로필 이미지는 삭제할 수 없습니다")
     }
 
     @Test

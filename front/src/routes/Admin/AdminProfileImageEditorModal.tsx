@@ -1,6 +1,7 @@
 import type { PointerEventHandler, Ref } from "react"
 import AppIcon from "src/components/icons/AppIcon"
 import { PROFILE_IMAGE_EDIT_MAX_ZOOM, PROFILE_IMAGE_EDIT_MIN_ZOOM } from "src/libs/profileImageUpload"
+import type { ProfileImageHistoryItem } from "src/routes/Admin/AdminProfilePersistenceModel"
 import {
   GhostButton,
   ModalActions,
@@ -11,6 +12,10 @@ import {
   ModalEmptyState,
   ModalFooter,
   ModalHeader,
+  ModalHistoryAction,
+  ModalHistoryGrid,
+  ModalHistoryItem,
+  ModalHistorySection,
   ModalNotice,
   ModalOverlay,
   ModalSliderWrap,
@@ -30,13 +35,16 @@ export type AdminProfileImageEditorModalProps = {
   }
   onApply: () => void
   onClear: () => void
+  onDeletePreviousProfileImage: (image: ProfileImageHistoryItem) => void
   onPointerCancel: PointerEventHandler<HTMLDivElement>
   onPointerDown: PointerEventHandler<HTMLDivElement>
   onPointerMove: PointerEventHandler<HTMLDivElement>
   onPointerUp: PointerEventHandler<HTMLDivElement>
   onRequestClose: () => void
+  onSelectPreviousProfileImage: (image: ProfileImageHistoryItem) => void
   onSelectFile: () => void
   onZoomChange: (zoom: number) => void
+  previousProfileImages: ProfileImageHistoryItem[]
   previewUrl: string
   zoom: number
 }
@@ -49,13 +57,16 @@ export default function AdminProfileImageEditorModal({
   notice,
   onApply,
   onClear,
+  onDeletePreviousProfileImage,
   onPointerCancel,
   onPointerDown,
   onPointerMove,
   onPointerUp,
   onRequestClose,
+  onSelectPreviousProfileImage,
   onSelectFile,
   onZoomChange,
+  previousProfileImages,
   previewUrl,
   zoom,
 }: AdminProfileImageEditorModalProps) {
@@ -96,6 +107,34 @@ export default function AdminProfileImageEditorModal({
             편집값 초기화
           </GhostButton>
         </ModalActions>
+
+        {previousProfileImages.length > 0 ? (
+          <ModalHistorySection aria-label="이전 프로필 이미지">
+            <ModalHistoryGrid>
+              {previousProfileImages.map((image) => (
+                <ModalHistoryItem key={image.id} data-current={image.isCurrent ? "true" : "false"}>
+                  <button
+                    type="button"
+                    disabled={isUploading || image.isCurrent}
+                    onClick={() => onSelectPreviousProfileImage(image)}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={image.imageUrl} alt="이전 프로필 이미지" loading="lazy" decoding="async" />
+                    <span>{image.isCurrent ? "현재" : "적용"}</span>
+                  </button>
+                  <ModalHistoryAction
+                    type="button"
+                    aria-label="프로필 이미지 삭제"
+                    disabled={isUploading || image.isCurrent}
+                    onClick={() => onDeletePreviousProfileImage(image)}
+                  >
+                    <AppIcon name="trash" />
+                  </ModalHistoryAction>
+                </ModalHistoryItem>
+              ))}
+            </ModalHistoryGrid>
+          </ModalHistorySection>
+        ) : null}
 
         {previewUrl ? (
           <>

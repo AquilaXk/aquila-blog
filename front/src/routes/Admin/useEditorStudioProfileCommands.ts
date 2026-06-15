@@ -8,6 +8,7 @@ import {
   prepareProfileImageForUpload,
 } from "src/libs/profileImageUpload"
 import { saveProfileCardWithConflictRetry } from "src/libs/profileCardSave"
+import { PROFILE_IMAGE_CSRF_PREFLIGHT_HEADERS } from "src/routes/Admin/AdminProfilePersistenceModel"
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null
 
@@ -126,6 +127,7 @@ export const useEditorStudioProfileCommands = ({
           `${getApiBaseUrl()}/member/api/v1/adm/members/${sessionMember.id}/profileImageFile`,
           {
             method: "POST",
+            headers: PROFILE_IMAGE_CSRF_PREFLIGHT_HEADERS,
             credentials: "include",
             body: formData,
           }

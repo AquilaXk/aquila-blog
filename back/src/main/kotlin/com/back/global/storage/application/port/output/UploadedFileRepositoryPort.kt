@@ -12,6 +12,13 @@ interface UploadedFileRepositoryPort {
 
     fun findByObjectKey(objectKey: String): UploadedFile?
 
+    fun findProfileImagesByOwner(memberId: Long): List<UploadedFile> = emptyList()
+
+    fun findProfileImageByIdAndOwner(
+        fileId: Long,
+        memberId: Long,
+    ): UploadedFile? = null
+
     fun countByStatus(status: UploadedFileStatus): Long
 
     fun countByStatusInAndPurgeAfterLessThanEqual(

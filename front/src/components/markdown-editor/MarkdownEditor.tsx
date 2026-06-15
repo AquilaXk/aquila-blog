@@ -345,7 +345,6 @@ export const MarkdownEditor = ({
         ) : null}
         {mode !== "write" ? (
           <PreviewPane data-pane="preview" data-testid="markdown-editor-preview-pane">
-            <PreviewHeader>Preview</PreviewHeader>
             <PreviewArticle
               ref={previewScrollRef}
               data-testid="markdown-editor-preview-scroll"
@@ -559,30 +558,24 @@ const PreviewPane = styled.div`
   background: ${({ theme }) => theme.publicDesign.readableSurface};
 `
 
-const PreviewHeader = styled.div`
-  height: 42px;
-  display: flex;
-  align-items: center;
-  padding: 0 1rem;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.8rem;
-  font-weight: 700;
-`
-
 const PreviewArticle = styled.article`
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 0 1rem 2rem;
+  padding: 16px 1rem 2rem;
   background: ${({ theme }) => theme.publicDesign.readableSurface};
 
   .aq-markdown {
     width: min(100%, var(--article-readable-width, 48rem));
     max-width: var(--article-readable-width, 48rem);
+    margin-top: 0;
     margin-inline: auto;
     color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  .aq-markdown > :first-child {
+    margin-top: 0;
   }
 
   @media (max-width: 980px) {

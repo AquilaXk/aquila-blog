@@ -419,6 +419,7 @@ export const FileTable = styled.table`
   th:nth-of-type(3),
   td:nth-of-type(3) {
     width: 4.2rem;
+    text-align: center;
   }
 
   th:nth-of-type(5),
@@ -433,7 +434,7 @@ export const FileTable = styled.table`
 
   th:nth-of-type(7),
   td:nth-of-type(7) {
-    width: 5.8rem;
+    width: 4.6rem;
   }
 `
 
@@ -458,24 +459,37 @@ export const FavoriteButton = styled.button`
 `
 
 export const FileTypeIcon = styled.span`
-  min-width: 2.25rem;
-  height: 1.38rem;
+  min-width: 2.65rem;
+  height: 1.58rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 4px;
-  background: ${surfaceAccent};
+  background: ${({ theme }) => theme.colors.gray3};
   color: ${accentGold};
-  font-size: 0.66rem;
+  border: 1px solid ${border};
+  font-size: 0.68rem;
   font-weight: 900;
   letter-spacing: 0;
+
+  &[data-selected="true"] {
+    background: ${({ theme }) => theme.colors.gray2};
+    border-color: ${borderStrong};
+    color: ${({ theme }) => theme.colors.gray12};
+  }
 `
 
 export const FileNameButton = styled.button`
+  && {
+    border-radius: 0;
+  }
+
   border: 0;
   padding: 0;
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
+  width: 100%;
   min-width: 0;
   max-width: 100%;
   background: transparent;
@@ -484,9 +498,12 @@ export const FileNameButton = styled.button`
   font-size: 0.88rem;
   font-weight: 800;
   text-align: left;
+  outline: none;
 
   strong {
-    display: inline-flex;
+    display: grid;
+    grid-template-columns: minmax(0, auto) auto;
+    justify-content: start;
     min-width: 0;
     max-width: 100%;
   }
@@ -502,12 +519,24 @@ export const FileNameButton = styled.button`
     flex: 0 0 auto;
     white-space: nowrap;
   }
+
+  &:focus-visible {
+    outline: none;
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 0.22rem;
+    color: ${accentGold};
+  }
 `
 
 export const RowActions = styled.div`
   display: flex;
   justify-content: flex-end;
   gap: 0.3rem;
+
+  button {
+    min-width: 3.2rem;
+  }
 `
 
 export const EmptyTableState = styled.div`

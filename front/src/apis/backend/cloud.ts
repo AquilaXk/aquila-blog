@@ -67,6 +67,7 @@ export const uploadCloudFile = async (
   signal?: AbortSignal,
 ): Promise<CloudFile> => {
   const formData = new FormData()
+  formData.append("clientFilename", file.name)
   formData.append("file", file)
   const response = await apiFetch<RsDataCloudFileDto>(
     appendQuery("/system/api/v1/adm/cloud/files", { folderPath }),

@@ -475,6 +475,13 @@
             "type" : "string",
             "default" : ""
           }
+        }, {
+          "name" : "clientFilename",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
         } ],
         "requestBody" : {
           "content" : {

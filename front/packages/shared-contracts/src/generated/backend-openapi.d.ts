@@ -2502,6 +2502,7 @@ export interface operations {
         parameters: {
             query?: {
                 folderPath?: string;
+                clientFilename?: string;
             };
             header?: never;
             path?: never;

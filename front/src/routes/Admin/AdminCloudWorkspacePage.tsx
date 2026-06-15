@@ -102,6 +102,34 @@ const createUploadQueueItem = (file: File): UploadQueueItem => ({
   message: "업로드 대기 중",
 })
 
+const sanitizeClientFilenameForDisplayFallback = (filename: string) => {
+  const normalized = filename
+    .replace(/[\r\n\t]/g, " ")
+    .replace(/[\\/]/g, "_")
+    .replace(/[\p{Cc}\p{Cf}\p{Cs}]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  return Array.from(normalized).slice(0, 255).join("")
+}
+
+const preferClientFilenameForUploadedFile = (uploaded: CloudFile, clientFilename: string): CloudFile => {
+  const normalizedClientFilename = sanitizeClientFilenameForDisplayFallback(clientFilename)
+  if (!normalizedClientFilename) return uploaded
+  const serverFilename = uploaded.originalFilename.trim()
+  if (normalizedClientFilename === serverFilename) return uploaded
+
+  const clientHasReadableUnicode = /[^\x00-\x7F]/u.test(normalizedClientFilename)
+  const serverLostReadableUnicode = !/[^\x00-\x7F]/u.test(serverFilename)
+  const serverLooksLikePlaceholder = /_{4,}/.test(serverFilename)
+  if (!clientHasReadableUnicode || !serverLostReadableUnicode || !serverLooksLikePlaceholder) return uploaded
+
+  return {
+    ...uploaded,
+    originalFilename: normalizedClientFilename,
+  }
+}
+
 const isAbortLikeError = (error: unknown) =>
   error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")
 
@@ -182,7 +210,7 @@ type PdfPreviewProps = {
 const PdfPreview = ({ file, contentUrl }: PdfPreviewProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [pageCount, setPageCount] = useState(0)
-  const [renderState, setRenderState] = useState("PDF.js canvas 렌더링 준비")
+  const [renderState, setRenderState] = useState("미리보기 준비")
 
   useEffect(() => {
     if (file.mediaKind !== "DOCUMENT") return
@@ -229,9 +257,9 @@ const PdfPreview = ({ file, contentUrl }: PdfPreviewProps) => {
           // 파일 전환/패널 닫기 중 render task 취소가 pageerror로 번지는 것을 막는다.
         })
         await renderTask.promise
-        if (!cancelled) setRenderState("PDF.js canvas 렌더링")
+        if (!cancelled) setRenderState("미리보기 완료")
       } catch {
-        if (!cancelled) setRenderState("PDF.js canvas 렌더링 대기")
+        if (!cancelled) setRenderState("미리보기 대기")
       }
     }
 
@@ -511,16 +539,17 @@ const AdminCloudWorkspacePage = () => {
       try {
         const uploaded = await uploadCloudFile(nextUpload.file, "", controller.signal)
         if (controller.signal.aborted) throw new DOMException("Upload aborted", "AbortError")
+        const displayUploaded = preferClientFilenameForUploadedFile(uploaded, nextUpload.name)
 
-        setOptimisticFiles((current) => mergeCloudFiles([uploaded], current))
+        setOptimisticFiles((current) => mergeCloudFiles([displayUploaded], current))
         queryClient.getQueriesData<CloudFile[]>({ queryKey: [CLOUD_QUERY_KEY] }).forEach(([queryKey, current]) => {
           if (!Array.isArray(current)) return
           const cachedFilters = getCachedCloudQueryFilters(queryKey)
-          if (!doesCloudFileMatchFilters(uploaded, cachedFilters.filter, cachedFilters.keyword)) return
-          queryClient.setQueryData(queryKey, mergeCloudFiles([uploaded], current))
+          if (!doesCloudFileMatchFilters(displayUploaded, cachedFilters.filter, cachedFilters.keyword)) return
+          queryClient.setQueryData(queryKey, mergeCloudFiles([displayUploaded], current))
         })
         setIsDetailPanelOpen(true)
-        setSelectedFileId(uploaded.id)
+        setSelectedFileId(displayUploaded.id)
         setNotice((current) =>
           current.includes(nextUpload.name) && /업로드 (실패|취소)/.test(current) ? "" : current
         )
@@ -532,7 +561,7 @@ const AdminCloudWorkspacePage = () => {
                   status: "done",
                   progress: 100,
                   message: "업로드 완료",
-                  uploadedFileId: uploaded.id,
+                  uploadedFileId: displayUploaded.id,
                 }
               : item
           )

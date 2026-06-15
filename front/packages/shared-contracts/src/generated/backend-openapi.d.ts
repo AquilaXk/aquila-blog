@@ -2143,7 +2143,7 @@ export interface components {
             createdAt?: string;
             /** Format: date-time */
             modifiedAt?: string;
-            current?: boolean;
+            isCurrent?: boolean;
         };
         ProfileImageHistoryResponse: {
             images?: components["schemas"]["ProfileImageHistoryDto"][];

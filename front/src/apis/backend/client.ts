@@ -350,6 +350,7 @@ const shouldUseBrowserBackendProxy = (safePath: string) => {
     safePath.startsWith("/member/api/v1/auth/") ||
     safePath.startsWith("/member/api/v1/notifications/snapshot") ||
     safePath.startsWith("/member/api/v1/adm/") ||
+    safePath.startsWith("/post/api/v1/posts/temp") ||
     safePath.startsWith("/post/api/v1/adm/") ||
     safePath.startsWith("/system/api/v1/adm/") ||
     safePath.startsWith("/signup")

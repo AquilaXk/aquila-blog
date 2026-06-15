@@ -170,8 +170,8 @@ const MarkdownRendererComponent: FC<MarkdownRendererProps> = ({
             </code>
           )
         },
-        pre({ node: _node, children, className: _className, ...props }) {
-          const { language, rawCode } = extractCodeMetaFromPreChildren(children)
+        pre({ node, children, className: _className, ...props }) {
+          const { language, rawCode } = extractCodeMetaFromPreChildren(children, node)
           const mermaidSource = extractNormalizedMermaidSource(rawCode)
           const shouldRenderMermaid = language === "mermaid" || isMermaidSource(rawCode)
 

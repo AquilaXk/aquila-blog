@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
+import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.time.Clock
 import java.time.Instant
@@ -231,12 +232,64 @@ class CloudFileService(
             decoded
                 .ifBlank { fallback }
                 .replace(Regex("[\\r\\n\\t]"), " ")
-                .replace(Regex("[^A-Za-z0-9가-힣._()\\[\\] -]"), "_")
-                .take(255)
+                .replace(Regex("[/\\\\]"), "_")
+                .replace(Regex("[\\p{Cc}\\p{Cf}\\p{Cs}]"), "")
+                .replace(Regex("\\s+"), " ")
+                .takeFilenameLimits()
                 .trim()
 
         return cleaned.ifBlank { fallback }
     }
+
+    private fun String.takeFilenameLimits(): String {
+        val originalExtensionIndex = lastIndexOf(".").takeIf { it > 0 && it < lastIndex }
+        val originalExtension =
+            originalExtensionIndex
+                ?.let(::substring)
+                .orEmpty()
+                .takeCodePoints(MAX_FILENAME_CODE_POINTS - 1)
+        val originalStem = originalExtensionIndex?.let { substring(0, it) } ?: this
+        val maxStemCodePoints =
+            MAX_FILENAME_CODE_POINTS - originalExtension.codePointCount(0, originalExtension.length).toLong()
+        val codePointLimited = originalStem.takeCodePoints(maxStemCodePoints.coerceAtLeast(0)) + originalExtension
+        if (metadataEncodedLength(codePointLimited) <= MAX_FILENAME_METADATA_ENCODED_BYTES) return codePointLimited
+
+        val extensionIndex = codePointLimited.lastIndexOf(".").takeIf { it > 0 && it < codePointLimited.lastIndex }
+        val extension =
+            extensionIndex
+                ?.let(codePointLimited::substring)
+                .orEmpty()
+                .takeMetadataEncodedBytes(MAX_FILENAME_METADATA_ENCODED_BYTES)
+        val stem = extensionIndex?.let { codePointLimited.substring(0, it) } ?: codePointLimited
+        val maxStemBytes = MAX_FILENAME_METADATA_ENCODED_BYTES - metadataEncodedLength(extension)
+        val safeStem = stem.takeMetadataEncodedBytes(maxStemBytes.coerceAtLeast(0))
+        return (safeStem + extension).ifBlank { takeMetadataEncodedBytes(MAX_FILENAME_METADATA_ENCODED_BYTES) }
+    }
+
+    private fun String.takeCodePoints(maxCodePoints: Long): String {
+        val codePoints = codePoints().limit(maxCodePoints).toArray()
+        return String(codePoints, 0, codePoints.size)
+    }
+
+    private fun String.takeMetadataEncodedBytes(maxEncodedBytes: Int): String {
+        val builder = StringBuilder()
+        val iterator = codePoints().iterator()
+        while (iterator.hasNext()) {
+            val next = iterator.nextInt()
+            val candidate = StringBuilder(builder).appendCodePoint(next).toString()
+            if (metadataEncodedLength(candidate) > maxEncodedBytes) break
+            builder.appendCodePoint(next)
+        }
+
+        return builder.toString()
+    }
+
+    private fun metadataEncodedLength(value: String): Int =
+        URLEncoder
+            .encode(value, StandardCharsets.UTF_8)
+            .replace("+", "%20")
+            .toByteArray(StandardCharsets.US_ASCII)
+            .size
 
     private fun recoverUtf8MojibakeFilename(raw: String): String {
         if (raw.isBlank()) return raw
@@ -369,6 +422,8 @@ class CloudFileService(
 
     companion object {
         private val DATE_PATH_FORMATTER = DateTimeFormatter.ofPattern("yyyy/MM/dd")
+        private const val MAX_FILENAME_CODE_POINTS = 255L
+        private const val MAX_FILENAME_METADATA_ENCODED_BYTES = 1024
         private val CONTENT_TYPE_ALIASES =
             mapOf(
                 "image/jpg" to "image/jpeg",

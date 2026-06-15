@@ -6,16 +6,19 @@ const readFrontSource = (relativePath: string) =>
   readFileSync(path.resolve(__dirname, "../src", relativePath), "utf8")
 
 test.describe("관리자 런타임 회귀 계약", () => {
-  test("운영 브라우저 API는 로그인과 관리자 요청을 same-origin 백엔드 프록시로 보낸다", () => {
+  test("운영 브라우저 API는 로그인과 관리자 요청, 알림 snapshot을 same-origin 백엔드 프록시로 보낸다", () => {
     const clientSource = readFrontSource("apis/backend/client.ts")
+    const notificationsSource = readFrontSource("apis/backend/notifications.ts")
     const proxySourcePath = path.resolve(__dirname, "../src/pages/api/backend/[...path].ts")
 
     expect(clientSource).toContain('const BROWSER_BACKEND_PROXY_PREFIX = "/api/backend"')
     expect(clientSource).toContain("const shouldUseBrowserBackendProxy = (safePath: string) =>")
     expect(clientSource).toContain('process.env.NODE_ENV === "production"')
     expect(clientSource).toContain("safePath.startsWith(\"/member/api/v1/auth/\")")
+    expect(clientSource).toContain("safePath.startsWith(\"/member/api/v1/notifications/snapshot\")")
     expect(clientSource).toContain("safePath.startsWith(\"/system/api/v1/adm/\")")
     expect(clientSource).toContain("return `${BROWSER_BACKEND_PROXY_PREFIX}${safePath}`")
+    expect(notificationsSource).toContain("return new URL(NOTIFICATIONS_STREAM_API_PATH, `${apiBaseUrl}/`).toString()")
 
     expect(existsSync(proxySourcePath)).toBe(true)
     const proxySource = readFileSync(proxySourcePath, "utf8")

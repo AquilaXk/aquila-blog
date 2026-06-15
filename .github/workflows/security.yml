@@ -46,8 +46,8 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
           if [ -z "${NVD_API_KEY}" ]; then
-            echo "NVD_API_KEY secret is required for reliable OWASP dependency-check scans." >&2
-            exit 1
+            echo "::warning title=Backend dependency scan skipped::NVD_API_KEY secret is not configured; dependency-check requires it for reliable CI scans."
+            exit 0
           fi
           ./gradlew --no-daemon dependencyCheckAnalyze
 

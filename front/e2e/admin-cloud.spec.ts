@@ -161,11 +161,13 @@ const expectElementCenterAligned = async (container: ReturnType<Page["locator"]>
 const setupAdminCloudMocks = async (
   page: Page,
   options: {
+    contentDelayMs?: number
     failDeleteIds?: string[]
     failList?: boolean
     failUploadOnceNames?: string[]
     failUploadNames?: string[]
     initialFiles?: CloudFileFixture[]
+    listDelayMs?: number
   } = {}
 ) => {
   const requestedKinds: string[] = []
@@ -173,6 +175,7 @@ const setupAdminCloudMocks = async (
   const uploadedNames: string[] = []
   const uploadedClientFilenames: string[] = []
   const deletedIds: string[] = []
+  const requestedContentIds: string[] = []
   const uploadedFiles: CloudFileFixture[] = []
   const failedDeleteIds = new Set(options.failDeleteIds ?? [])
   const failedUploadNames = new Set(options.failUploadNames ?? [])
@@ -268,10 +271,12 @@ const setupAdminCloudMocks = async (
     }
 
     if (options.failList) {
+      if (options.listDelayMs) await delay(options.listDelayMs)
       await fulfillJson(route, { resultCode: "500-1", msg: "클라우드 파일 목록 조회에 실패했습니다." }, 500)
       return
     }
 
+    if (options.listDelayMs) await delay(options.listDelayMs)
     requestedKinds.push(mediaKind)
     requestedFolderPaths.push(folderPath)
     const keyword = (url.searchParams.get("kw") || "").toLowerCase()
@@ -288,6 +293,7 @@ const setupAdminCloudMocks = async (
   await page.route("**/system/api/v1/adm/cloud/files/*/content", async (route) => {
     const url = new URL(route.request().url())
     const id = url.pathname.match(/\/files\/(\d+)\/content/)?.[1] ?? ""
+    requestedContentIds.push(id)
     const file = [...uploadedFiles, ...initialFiles].find((item) => String(item.id) === id)
     const contentType = file?.contentType ?? "application/octet-stream"
     const body = contentType === "application/pdf"
@@ -296,6 +302,7 @@ const setupAdminCloudMocks = async (
         ? pixelPng
         : Buffer.from("mock-private-cloud-content")
 
+    if (options.contentDelayMs) await delay(options.contentDelayMs)
     await route.fulfill({
       status: 200,
       contentType,
@@ -307,7 +314,7 @@ const setupAdminCloudMocks = async (
     })
   })
 
-  return { requestedKinds, requestedFolderPaths, uploadedNames, uploadedClientFilenames, deletedIds }
+  return { requestedKinds, requestedFolderPaths, uploadedNames, uploadedClientFilenames, deletedIds, requestedContentIds }
 }
 
 test.describe("관리자 클라우드", () => {
@@ -427,7 +434,67 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByText("재생 기록 00:00")).toBeVisible()
 
     await page.getByRole("button", { name: "deploy-walkthrough.mp4 삭제" }).click()
+    await expect(page.getByRole("dialog", { name: "파일 삭제" })).toBeVisible()
+    expect(mocks.deletedIds).toEqual([])
+    await page.getByRole("dialog", { name: "파일 삭제" }).getByRole("button", { name: "삭제" }).click()
     await expect.poll(() => mocks.deletedIds).toContain("103")
+  })
+
+  test("목록 로딩 중에도 클라우드 작업공간과 툴바를 유지한다", async ({ page }) => {
+    await setupAdminCloudMocks(page, { listDelayMs: 450 })
+
+    await page.goto("/admin/cloud")
+
+    await expect(page.getByRole("heading", { name: "내 파일" })).toBeVisible()
+    await expect(page.locator('button[aria-label="파일 업로드"]').first()).toBeVisible()
+    await expect(page.getByRole("status", { name: "파일 목록 로딩" })).toBeVisible()
+    await expect(page.getByText("파일을 불러오는 중입니다.")).toHaveCount(0)
+    await expect(page.getByRole("row", { name: /운영 점검 리포트\.pdf/ })).toBeVisible()
+    await expect(page.getByRole("status", { name: "파일 목록 로딩" })).toHaveCount(0)
+  })
+
+  test("사진 선택 시 상세 패널은 이미지 요청과 로딩 상태를 즉시 보여준다", async ({ page }) => {
+    const mocks = await setupAdminCloudMocks(page, { contentDelayMs: 450 })
+
+    await page.goto("/admin/cloud")
+    await page.locator('button[title="home-server-rack.png"]').click()
+
+    await expect(page.getByRole("heading", { name: "사진 보기" })).toBeVisible()
+    await expect(page.getByText("사진을 불러오는 중입니다.")).toBeVisible()
+    await expect.poll(() => mocks.requestedContentIds).toContain("102")
+    await expect(page.getByAltText("home-server-rack.png")).toBeVisible()
+    await expect(page.getByText("사진을 불러오는 중입니다.")).toHaveCount(0)
+  })
+
+  test("삭제 확인 모달은 확인 전 API 호출을 막고 툴바 레이아웃을 유지한다", async ({ page }) => {
+    const mocks = await setupAdminCloudMocks(page, { initialFiles: CLOUD_FILES })
+
+    await page.goto("/admin/cloud")
+
+    const longFileRow = page.getByRole("row", { name: /NCS기반 채용 직무설명자료.*게시\.pdf/ })
+    await expect(longFileRow).toBeVisible()
+    await longFileRow.getByRole("button", { name: /삭제/ }).click()
+
+    const dialog = page.getByRole("dialog", { name: "파일 삭제" })
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByText(/NCS기반 채용 직무설명자료.*게시\.pdf/)).toBeVisible()
+    expect(mocks.deletedIds).toEqual([])
+
+    const uploadButton = page.locator('button[aria-label="파일 업로드"]').first()
+    await expect(uploadButton).toHaveCSS("white-space", "nowrap")
+    const uploadButtonBox = await uploadButton.boundingBox()
+    expect(uploadButtonBox).not.toBeNull()
+    expect(uploadButtonBox!.height).toBeLessThanOrEqual(38)
+
+    await dialog.getByRole("button", { name: "취소" }).click()
+    await expect(dialog).toHaveCount(0)
+    expect(mocks.deletedIds).toEqual([])
+
+    await longFileRow.getByRole("button", { name: /삭제/ }).click()
+    await page.getByRole("dialog", { name: "파일 삭제" }).getByRole("button", { name: "삭제" }).click()
+    await expect.poll(() => mocks.deletedIds).toContain("104")
+    await expect(page.getByRole("status").filter({ hasText: /삭제 완료/ })).toBeVisible()
+    await expect(page.getByRole("row", { name: /NCS기반 채용 직무설명자료.*게시\.pdf/ })).toHaveCount(0)
   })
 
   test("긴 파일명과 업로드 완료 상태는 목록과 하단 업로드 패널에서 겹치지 않는다", async ({ page }) => {
@@ -534,9 +601,12 @@ test.describe("관리자 클라우드", () => {
     await page.getByRole("checkbox", { name: "운영 점검 리포트.pdf 선택" }).check()
     await page.getByRole("checkbox", { name: "home-server-rack.png 선택" }).check()
     await page.getByRole("button", { name: "선택 삭제" }).click()
+    await expect(page.getByRole("dialog", { name: "파일 삭제" })).toBeVisible()
+    expect(mocks.deletedIds).toEqual([])
+    await page.getByRole("dialog", { name: "파일 삭제" }).getByRole("button", { name: "삭제" }).click()
 
     await expect.poll(() => mocks.deletedIds).toContain("101")
-    await expect(page.getByText("1개 삭제 완료, 1개 실패")).toBeVisible()
+    await expect(page.getByRole("status").filter({ hasText: "1개 삭제 완료, 1개 실패" })).toBeVisible()
     await expect(page.getByRole("row", { name: /운영 점검 리포트\.pdf/ })).toHaveCount(0)
     await expect(page.getByRole("row", { name: /home-server-rack\.png/ })).toBeVisible()
     await expect(page.getByRole("checkbox", { name: "home-server-rack.png 선택" })).toBeChecked()

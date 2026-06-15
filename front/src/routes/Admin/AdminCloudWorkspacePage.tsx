@@ -106,29 +106,51 @@ const resolveCloudErrorMessage = (error: unknown) => {
   return "요청 처리 중 오류가 발생했습니다."
 }
 
-const suppressPdfWorkerTerminationRejection = () => {
+const installPdfWorkerTerminationRejectionHandler = () => {
+  const shouldIgnorePdfWorkerTermination = (error: unknown) => {
+    if (error instanceof Error) return error.message.includes("Worker was terminated")
+    if (typeof error === "string") return error.includes("Worker was terminated")
+
+    return false
+  }
+
   const handleCleanupRejection = (event: PromiseRejectionEvent) => {
-    if (!(event.reason instanceof Error)) return
-    if (!event.reason.message.includes("Worker was terminated")) return
+    if (!shouldIgnorePdfWorkerTermination(event.reason)) return
+
+    event.preventDefault()
+  }
+
+  const handleCleanupError = (event: ErrorEvent) => {
+    if (!shouldIgnorePdfWorkerTermination(event.error) && !shouldIgnorePdfWorkerTermination(event.message)) return
 
     event.preventDefault()
   }
 
   window.addEventListener("unhandledrejection", handleCleanupRejection)
-  window.setTimeout(() => {
-    window.removeEventListener("unhandledrejection", handleCleanupRejection)
-  }, 1000)
+  window.addEventListener("error", handleCleanupError)
+  return (delayMs = 0) => {
+    window.setTimeout(() => {
+      window.removeEventListener("unhandledrejection", handleCleanupRejection)
+      window.removeEventListener("error", handleCleanupError)
+    }, delayMs)
+  }
 }
 
-const ignorePdfPreviewTeardownRejection = (task: PDFDocumentLoadingTask | null) => {
-  if (!task) return
+const ignorePdfPreviewTeardownRejection = (
+  loadingTask: PDFDocumentLoadingTask | null,
+  renderTask: RenderTask | null
+) => {
+  if (!loadingTask) return
 
-  void task.promise.catch(() => {
+  void loadingTask.promise.catch(() => {
     // 미리보기 전환 중 PDF 로딩이 늦게 실패할 수 있으므로 cleanup 경로에서 reject를 소비한다.
   })
-  suppressPdfWorkerTerminationRejection()
-  void task.destroy().catch(() => {
-    // cleanup에서 PDF.js worker/download를 종료할 때 발생하는 reject도 사용자에게 노출하지 않는다.
+
+  const renderSettled = renderTask?.promise.catch(() => undefined) ?? Promise.resolve()
+  void renderSettled.finally(() => {
+    void loadingTask.destroy().catch(() => {
+      // cleanup에서 PDF.js worker/download를 종료할 때 발생하는 reject도 사용자에게 노출하지 않는다.
+    })
   })
 }
 
@@ -147,6 +169,7 @@ const PdfPreview = ({ file, contentUrl }: PdfPreviewProps) => {
     let cancelled = false
     let loadingTask: PDFDocumentLoadingTask | null = null
     let renderTask: RenderTask | null = null
+    const releasePdfWorkerTerminationHandler = installPdfWorkerTerminationRejectionHandler()
 
     const render = async () => {
       try {
@@ -198,7 +221,8 @@ const PdfPreview = ({ file, contentUrl }: PdfPreviewProps) => {
       } catch {
         // loading task 종료가 먼저 끝난 경우 render task도 이미 취소 상태일 수 있다.
       }
-      ignorePdfPreviewTeardownRejection(loadingTask)
+      ignorePdfPreviewTeardownRejection(loadingTask, renderTask)
+      releasePdfWorkerTerminationHandler(10000)
     }
   }, [contentUrl, file.mediaKind])
 
@@ -715,7 +739,10 @@ const AdminCloudWorkspacePage = () => {
                           </FavoriteButton>
                         </td>
                         <td>
-                          <FileTypeIcon aria-label={getCloudKindLabel(file.mediaKind)}>
+                          <FileTypeIcon
+                            aria-label={getCloudKindLabel(file.mediaKind)}
+                            data-selected={selected ? "true" : "false"}
+                          >
                             {getCloudKindIconLabel(file)}
                           </FileTypeIcon>
                         </td>
@@ -737,17 +764,11 @@ const AdminCloudWorkspacePage = () => {
                           <RowActions>
                             <GhostButton
                               type="button"
-                              aria-label={`${file.originalFilename} 미리보기`}
-                              onClick={() => handlePreviewFile(file.id)}
-                            >
-                              <AppIcon name="eye" />
-                            </GhostButton>
-                            <GhostButton
-                              type="button"
                               aria-label={`${file.originalFilename} 삭제`}
                               onClick={() => void handleDelete(file)}
                             >
                               <AppIcon name="trash" />
+                              삭제
                             </GhostButton>
                           </RowActions>
                         </td>

@@ -12,6 +12,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.io.ByteArrayInputStream
+import java.nio.charset.StandardCharsets
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -184,6 +185,24 @@ class CloudFileServiceTest {
         assertThat(result.originalFilename).isEqualTo("cloud-file")
         assertThat(result.folderPath).isEmpty()
         assertThat(repository.savedFiles.single().objectKey).startsWith("cloud/7/2026/06/12/")
+    }
+
+    @Test
+    @DisplayName("업로드 시 mojibake로 들어온 한글 파일명을 UTF-8 기준으로 복구한다")
+    fun `upload는 mojibake 한글 파일명을 UTF-8 기준으로 복구한다`() {
+        val originalName = "★2026년 제3회 식약처 공무원(일반직) 경력경쟁채용시험 공고문_게시.pdf"
+        val mojibakeName = String(originalName.toByteArray(StandardCharsets.UTF_8), StandardCharsets.ISO_8859_1)
+
+        val result =
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = mojibakeName,
+                contentType = "application/pdf",
+                bytes = "%PDF-1.7".toByteArray(),
+                folderPath = null,
+            )
+
+        assertThat(result.originalFilename).isEqualTo("_2026년 제3회 식약처 공무원(일반직) 경력경쟁채용시험 공고문_게시.pdf")
     }
 
     @Test

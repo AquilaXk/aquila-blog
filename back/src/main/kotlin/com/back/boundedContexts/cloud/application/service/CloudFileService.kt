@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
+import java.nio.charset.StandardCharsets
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -224,8 +225,9 @@ class CloudFileService(
                 ?.substringAfterLast('\\')
                 ?.trim()
                 .orEmpty()
+        val decoded = recoverUtf8MojibakeFilename(raw)
         val cleaned =
-            raw
+            decoded
                 .ifBlank { fallback }
                 .replace(Regex("[\\r\\n\\t]"), " ")
                 .replace(Regex("[^A-Za-z0-9가-힣._()\\[\\] -]"), "_")
@@ -233,6 +235,22 @@ class CloudFileService(
                 .trim()
 
         return cleaned.ifBlank { fallback }
+    }
+
+    private fun recoverUtf8MojibakeFilename(raw: String): String {
+        if (raw.isBlank()) return raw
+        if (raw.any { it in '가'..'힣' }) return raw
+
+        val recovered =
+            runCatching {
+                String(raw.toByteArray(StandardCharsets.ISO_8859_1), StandardCharsets.UTF_8)
+            }.getOrDefault(raw)
+
+        if (recovered == raw || recovered.contains('\uFFFD')) return raw
+
+        val rawHangulCount = raw.count { it in '가'..'힣' }
+        val recoveredHangulCount = recovered.count { it in '가'..'힣' }
+        return if (recoveredHangulCount > rawHangulCount) recovered else raw
     }
 
     private fun formatFileSizeLimit(maxFileSizeBytes: Long): String {

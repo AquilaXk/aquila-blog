@@ -44,6 +44,7 @@ class PostSecurityConfigurer : PublicApiRouteContributor {
         authorize.apply {
             authorize(HttpMethod.POST, "/post/api/*/posts", hasRole("ADMIN"))
             authorize(HttpMethod.POST, "/post/api/*/posts/images", hasRole("ADMIN"))
+            authorize(HttpMethod.POST, "/post/api/*/posts/files", hasRole("ADMIN"))
             authorize(HttpMethod.PUT, "/post/api/*/posts/{id:\\d+}", hasRole("ADMIN"))
             authorize(HttpMethod.DELETE, "/post/api/*/posts/{id:\\d+}", hasRole("ADMIN"))
             authorize(HttpMethod.GET, "/post/api/*/posts/mine", hasRole("ADMIN"))

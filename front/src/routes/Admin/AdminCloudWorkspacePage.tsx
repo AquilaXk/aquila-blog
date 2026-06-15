@@ -105,6 +105,17 @@ const resolveCloudErrorMessage = (error: unknown) => {
   return "요청 처리 중 오류가 발생했습니다."
 }
 
+const ignorePdfPreviewTeardownRejection = (task: PDFDocumentLoadingTask | null) => {
+  if (!task) return
+
+  void task.promise.catch(() => {
+    // 미리보기 cleanup에서 PDF.js worker를 의도적으로 종료하면 reject가 발생할 수 있다.
+  })
+  void task.destroy().catch(() => {
+    // 미리보기 cleanup에서 PDF.js worker를 의도적으로 종료하면 reject가 발생할 수 있다.
+  })
+}
+
 type PdfPreviewProps = {
   file: CloudFile
   contentUrl: string
@@ -128,6 +139,9 @@ const PdfPreview = ({ file, contentUrl }: PdfPreviewProps) => {
         loadingTask = pdfjs.getDocument({
           url: contentUrl,
           withCredentials: true,
+        })
+        void loadingTask.promise.catch(() => {
+          // cleanup이 먼저 실행된 경우 await 경로 밖에서도 worker 종료 reject를 소비한다.
         })
         const pdf = await loadingTask.promise
         if (cancelled) return
@@ -160,8 +174,12 @@ const PdfPreview = ({ file, contentUrl }: PdfPreviewProps) => {
 
     return () => {
       cancelled = true
-      renderTask?.cancel()
-      void loadingTask?.destroy()
+      try {
+        renderTask?.cancel()
+      } catch {
+        // loading task 종료가 먼저 끝난 경우 render task도 이미 취소 상태일 수 있다.
+      }
+      ignorePdfPreviewTeardownRejection(loadingTask)
     }
   }, [contentUrl, file.mediaKind])
 

@@ -12,6 +12,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.io.ByteArrayInputStream
+import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.time.Clock
 import java.time.Instant
@@ -188,7 +189,7 @@ class CloudFileServiceTest {
     }
 
     @Test
-    @DisplayName("업로드 시 mojibake로 들어온 한글 파일명을 UTF-8 기준으로 복구한다")
+    @DisplayName("업로드 시 mojibake로 들어온 한글 파일명은 원본 기호까지 UTF-8 기준으로 복구한다")
     fun `upload는 mojibake 한글 파일명을 UTF-8 기준으로 복구한다`() {
         val originalName = "★2026년 제3회 식약처 공무원(일반직) 경력경쟁채용시험 공고문_게시.pdf"
         val mojibakeName = String(originalName.toByteArray(StandardCharsets.UTF_8), StandardCharsets.ISO_8859_1)
@@ -202,7 +203,7 @@ class CloudFileServiceTest {
                 folderPath = null,
             )
 
-        assertThat(result.originalFilename).isEqualTo("_2026년 제3회 식약처 공무원(일반직) 경력경쟁채용시험 공고문_게시.pdf")
+        assertThat(result.originalFilename).isEqualTo(originalName)
     }
 
     @Test
@@ -221,6 +222,55 @@ class CloudFileServiceTest {
             )
 
         assertThat(result.originalFilename).isEqualTo(clientName)
+    }
+
+    @Test
+    @DisplayName("업로드 시 보이지 않는 Unicode 제어 서식 문자는 파일명에서 제거한다")
+    fun `upload는 보이지 않는 unicode 제어 서식 문자를 제거한다`() {
+        val result =
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "계약서\u202Ecod.exe\u0080.pdf",
+                contentType = "application/pdf",
+                bytes = "%PDF-1.7".toByteArray(),
+                folderPath = null,
+            )
+
+        assertThat(result.originalFilename).isEqualTo("계약서cod.exe.pdf")
+    }
+
+    @Test
+    @DisplayName("업로드 시 긴 non-BMP 파일명은 metadata 안전 길이로 자른다")
+    fun `upload는 긴 non-BMP 파일명을 metadata 안전 길이로 자른다`() {
+        val result =
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "😀".repeat(300) + ".pdf",
+                contentType = "application/pdf",
+                bytes = "%PDF-1.7".toByteArray(),
+                folderPath = null,
+            )
+
+        assertThat(metadataEncodedLength(result.originalFilename)).isLessThanOrEqualTo(1024)
+        assertThat(result.originalFilename).endsWith(".pdf")
+        assertThat(hasUnpairedSurrogate(result.originalFilename)).isFalse()
+    }
+
+    @Test
+    @DisplayName("업로드 시 과도하게 긴 확장자는 DB 컬럼 길이 안으로 자른다")
+    fun `upload는 과도하게 긴 확장자를 db 컬럼 길이 안으로 자른다`() {
+        val result =
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "a." + "x".repeat(300),
+                contentType = "application/pdf",
+                bytes = "%PDF-1.7".toByteArray(),
+                folderPath = null,
+            )
+
+        assertThat(result.originalFilename).hasSizeLessThanOrEqualTo(255)
+        assertThat(metadataEncodedLength(result.originalFilename)).isLessThanOrEqualTo(1024)
+        assertThat(result.originalFilename).startsWith("a.")
     }
 
     @Test
@@ -620,6 +670,29 @@ class CloudFileServiceTest {
             super.close()
         }
     }
+
+    private fun hasUnpairedSurrogate(value: String): Boolean {
+        var index = 0
+        while (index < value.length) {
+            val current = value[index]
+            if (Character.isHighSurrogate(current)) {
+                if (index + 1 >= value.length || !Character.isLowSurrogate(value[index + 1])) return true
+                index += 2
+                continue
+            }
+            if (Character.isLowSurrogate(current)) return true
+            index += 1
+        }
+
+        return false
+    }
+
+    private fun metadataEncodedLength(value: String): Int =
+        URLEncoder
+            .encode(value, StandardCharsets.UTF_8)
+            .replace("+", "%20")
+            .toByteArray(StandardCharsets.US_ASCII)
+            .size
 
     companion object {
         private val PNG_BYTES =

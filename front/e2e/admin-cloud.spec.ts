@@ -168,6 +168,7 @@ const setupAdminCloudMocks = async (
     failUploadNames?: string[]
     initialFiles?: CloudFileFixture[]
     listDelayMs?: number
+    uploadResponseFilenames?: Record<string, string>
   } = {}
 ) => {
   const requestedKinds: string[] = []
@@ -241,7 +242,7 @@ const setupAdminCloudMocks = async (
       const uploaded = {
         id: nextUploadId++,
         ownerMemberId: 1,
-        originalFilename: uploadedName,
+        originalFilename: options.uploadResponseFilenames?.[uploadedName] ?? uploadedName,
         contentType: metadata.contentType,
         byteSize: route.request().postDataBuffer()?.byteLength ?? 0,
         mediaKind: metadata.mediaKind,
@@ -410,7 +411,7 @@ test.describe("관리자 클라우드", () => {
 
     await page.locator('button[title="운영 점검 리포트.pdf"]').click()
     await expect(page.getByRole("heading", { name: "문서 뷰어" })).toBeVisible()
-    await expect(page.getByText("PDF.js canvas 렌더링")).toBeVisible()
+    await expect(page.getByText("미리보기 완료")).toBeVisible()
     await expectPdfPreviewFitsDetailPanel(page, "운영 점검 리포트.pdf PDF 미리보기")
     await page.getByRole("button", { name: "상세 패널 닫기" }).click()
     await expect(page.getByLabel("클라우드 상세정보").getByText("파일 선택")).toBeVisible()
@@ -699,5 +700,75 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByText(/재시도 성공 문서\.pdf 업로드 실패/)).toHaveCount(0)
     await expect(page.getByText("재시도 성공 문서.pdf 업로드 완료")).toHaveCount(0)
     await expect(page.getByRole("row", { name: /재시도 성공 문서\.pdf/ })).toBeVisible()
+  })
+
+  test("PDF 파일명은 업로드 직후 클라이언트 원본명으로 보이고 렌더링 지연 문구를 노출하지 않는다", async ({ page }) => {
+    const sourceName = "★2026년 제3회 식약처 공무원(일반직) 경력경쟁채용시험 공고문_게시.pdf"
+    const damagedServerName = "_2026__ __3__ ___________________.pdf"
+    await setupAdminCloudMocks(page, {
+      initialFiles: [],
+      uploadResponseFilenames: {
+        [sourceName]: damagedServerName,
+      },
+    })
+
+    await page.goto("/admin/cloud")
+    await page.getByLabel("클라우드 파일 업로드").setInputFiles({
+      name: sourceName,
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4 filename fallback"),
+    })
+
+    await expect(page.getByLabel("업로드 중인 파일").getByText(sourceName)).toBeVisible()
+    const escapedSourceName = sourceName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    await expect(page.getByRole("row", { name: new RegExp(escapedSourceName) })).toBeVisible()
+    await expect(page.getByRole("row", { name: /___________________\.pdf/ })).toHaveCount(0)
+    await expect(page.getByRole("heading", { name: "문서 뷰어" })).toBeVisible()
+    await expect(page.getByLabel("클라우드 상세정보").getByText(sourceName)).toBeVisible()
+    await expect(page.getByText(/렌더링 중|렌더링 대기|렌더링 준비|미리보기 준비|미리보기 대기/)).toHaveCount(0)
+  })
+
+  test("서버가 정상 정규화한 업로드 파일명은 클라이언트 원본명으로 덮어쓰지 않는다", async ({ page }) => {
+    const clientName = "서버 정규화    문서.pdf"
+    const serverName = "서버 정규화 문서.pdf"
+    await setupAdminCloudMocks(page, {
+      initialFiles: [],
+      uploadResponseFilenames: {
+        [clientName]: serverName,
+      },
+    })
+
+    await page.goto("/admin/cloud")
+    await page.getByLabel("클라우드 파일 업로드").setInputFiles({
+      name: clientName,
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4 normalized filename"),
+    })
+
+    await expect(page.getByRole("row", { name: new RegExp(serverName) })).toBeVisible()
+    await expect(page.getByRole("row", { name: /서버 정규화 {4}문서\.pdf/ })).toHaveCount(0)
+    await expect(page.getByLabel("클라우드 상세정보").getByText(serverName)).toBeVisible()
+  })
+
+  test("손상된 서버 응답의 클라이언트 파일명 fallback은 보이지 않는 제어문자를 제거한다", async ({ page }) => {
+    const clientName = "보고서\u202Ecod.exe.pdf"
+    const displayName = "보고서cod.exe.pdf"
+    await setupAdminCloudMocks(page, {
+      initialFiles: [],
+      uploadResponseFilenames: {
+        [clientName]: "______.pdf",
+      },
+    })
+
+    await page.goto("/admin/cloud")
+    await page.getByLabel("클라우드 파일 업로드").setInputFiles({
+      name: clientName,
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4 sanitized fallback filename"),
+    })
+
+    await expect(page.getByRole("row", { name: new RegExp(displayName) })).toBeVisible()
+    await expect(page.getByRole("row", { name: /보고서.*cod\.exe\.pdf/ })).toHaveCount(1)
+    await expect(page.getByLabel("클라우드 상세정보").getByText(displayName)).toBeVisible()
   })
 })

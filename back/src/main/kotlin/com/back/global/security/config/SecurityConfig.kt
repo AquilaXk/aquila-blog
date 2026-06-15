@@ -63,19 +63,26 @@ class SecurityConfig(
                 authorize("/*/api/*/**", authenticated)
                 authorize("/oauth2/**", permitAll)
                 authorize("/login/oauth2/**", permitAll)
+                val endpointExposurePolicy = SecurityEndpointExposurePolicy(AppFacade.isProd)
                 if (AppFacade.isProd) {
                     // 프로덕션에서는 k8s/lb health probe 외 actuator 공개를 차단한다.
                     authorize("/actuator/health/liveness", permitAll)
                     authorize("/actuator/health/readiness", permitAll)
-                    authorize("/actuator/prometheus", permitAll)
                     authorize("/actuator/**", hasRole("ADMIN"))
                 } else {
                     authorize("/actuator/health/**", permitAll)
                     authorize("/actuator/info", permitAll)
-                    authorize("/actuator/prometheus", permitAll)
+                    if (endpointExposurePolicy.allowsPublicPrometheus) {
+                        authorize("/actuator/prometheus", permitAll)
+                    }
                 }
-                authorize("/swagger-ui/**", permitAll)
-                authorize("/v3/api-docs/**", permitAll)
+                if (endpointExposurePolicy.allowsPublicOpenApi) {
+                    authorize("/swagger-ui/**", permitAll)
+                    authorize("/v3/api-docs/**", permitAll)
+                } else {
+                    authorize("/swagger-ui/**", hasRole("ADMIN"))
+                    authorize("/v3/api-docs/**", hasRole("ADMIN"))
+                }
                 authorize("/error", permitAll)
                 authorize(anyRequest, denyAll)
             }
@@ -168,4 +175,11 @@ class SecurityConfig(
         response.setHeader(HttpHeaders.PRAGMA, "no-cache")
         response.setDateHeader(HttpHeaders.EXPIRES, 0)
     }
+}
+
+internal data class SecurityEndpointExposurePolicy(
+    private val isProd: Boolean,
+) {
+    val allowsPublicPrometheus: Boolean = !isProd
+    val allowsPublicOpenApi: Boolean = !isProd
 }

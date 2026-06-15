@@ -68,7 +68,6 @@ import {
   SearchInput,
   SecondaryButton,
   SelectBoxCell,
-  ThumbnailStrip,
   Timeline,
   UploadInput,
   VideoFrame,
@@ -76,6 +75,7 @@ import {
 
 const CLOUD_QUERY_KEY = "admin-cloud-files"
 const EMPTY_CLOUD_FILES: CloudFile[] = []
+const PDF_STANDARD_FONT_DATA_URL = "/pdfjs/standard_fonts/"
 
 const mediaKindFromFilter = (filter: CloudMediaFilter): CloudMediaKind | undefined =>
   filter === "ALL" ? undefined : filter
@@ -177,6 +177,7 @@ const PdfPreview = ({ file, contentUrl }: PdfPreviewProps) => {
         pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs"
         loadingTask = pdfjs.getDocument({
           url: contentUrl,
+          standardFontDataUrl: PDF_STANDARD_FONT_DATA_URL,
           withCredentials: true,
         })
         void loadingTask.promise.catch(() => {
@@ -255,12 +256,6 @@ const PhotoPreview = ({ file, contentUrl }: PhotoPreviewProps) => (
     </PreviewHeader>
     <PhotoFrame>
       <img src={contentUrl} alt={file.originalFilename} />
-      <ThumbnailStrip aria-label="사진 썸네일">
-        <span />
-        <span />
-        <span />
-        <span />
-      </ThumbnailStrip>
     </PhotoFrame>
   </PreviewStage>
 )

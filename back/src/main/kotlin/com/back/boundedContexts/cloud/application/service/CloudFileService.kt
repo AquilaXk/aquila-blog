@@ -49,6 +49,7 @@ class CloudFileService(
     fun upload(
         ownerMemberId: Long,
         originalFilename: String?,
+        clientOriginalFilename: String? = null,
         contentType: String?,
         bytes: ByteArray,
         folderPath: String?,
@@ -62,7 +63,7 @@ class CloudFileService(
         }
 
         val normalizedFolderPath = normalizeFolderPath(folderPath)
-        val safeFilename = normalizeFilename(originalFilename)
+        val safeFilename = normalizeFilename(clientOriginalFilename?.takeIf(String::isNotBlank) ?: originalFilename)
         val detected = detectContent(bytes, contentType)
         val objectKey =
             buildObjectKey(

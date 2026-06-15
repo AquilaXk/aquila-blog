@@ -114,7 +114,7 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
         uploadedFileRetentionService.registerTempUpload(newKey, "image/png", 200, UploadedFilePurpose.PROFILE_IMAGE)
         uploadedFileRetentionService.syncProfileImage(7, previousProfileImgUrl = oldUrl, currentProfileImgUrl = newUrl)
 
-        val images = uploadedFileRetentionService.listProfileImages(7, currentProfileImgUrl = newUrl)
+        val images = uploadedFileRetentionService.listProfileImages(7, protectedProfileImgUrls = listOf(newUrl))
 
         assertThat(images).extracting("objectKey").contains(oldKey, newKey)
         assertThat(images.single { it.objectKey == newKey }.isCurrent).isTrue()
@@ -135,13 +135,36 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
         val oldFile = uploadedFileRepository.findByObjectKey(oldKey)!!
         val newFile = uploadedFileRepository.findByObjectKey(newKey)!!
 
-        uploadedFileRetentionService.deleteProfileImage(7, oldFile.id, currentProfileImgUrl = newUrl)
+        uploadedFileRetentionService.deleteProfileImage(7, oldFile.id, protectedProfileImgUrls = listOf(newUrl))
 
         assertThat(uploadedFileRepository.findByObjectKey(oldKey)!!.status).isEqualTo(UploadedFileStatus.DELETED)
         then(postImageStoragePort).should().deletePostImage(oldKey)
         assertThatThrownBy {
-            uploadedFileRetentionService.deleteProfileImage(7, newFile.id, currentProfileImgUrl = newUrl)
+            uploadedFileRetentionService.deleteProfileImage(7, newFile.id, protectedProfileImgUrls = listOf(newUrl))
         }.hasMessageContaining("현재 사용 중인 프로필 이미지는 삭제할 수 없습니다")
+    }
+
+    @Test
+    fun `published 프로필 이미지는 초안에서 교체되어도 삭제할 수 없다`() {
+        val publishedKey = "posts/2026/03/profile-published.png"
+        val draftKey = "posts/2026/03/profile-draft.png"
+        val publishedUrl = UploadedFileUrlCodec.buildImageUrl(publishedKey)
+        val draftUrl = UploadedFileUrlCodec.buildImageUrl(draftKey)
+
+        uploadedFileRetentionService.registerTempUpload(publishedKey, "image/png", 100, UploadedFilePurpose.PROFILE_IMAGE)
+        uploadedFileRetentionService.registerTempUpload(draftKey, "image/png", 200, UploadedFilePurpose.PROFILE_IMAGE)
+        uploadedFileRetentionService.syncProfileImage(7, previousProfileImgUrl = publishedUrl, currentProfileImgUrl = draftUrl)
+
+        val publishedFile = uploadedFileRepository.findByObjectKey(publishedKey)!!
+
+        assertThatThrownBy {
+            uploadedFileRetentionService.deleteProfileImage(
+                7,
+                publishedFile.id,
+                protectedProfileImgUrls = listOf(draftUrl, publishedUrl),
+            )
+        }.hasMessageContaining("현재 사용 중인 프로필 이미지는 삭제할 수 없습니다")
+        then(postImageStoragePort).shouldHaveNoInteractions()
     }
 
     @Test

@@ -230,8 +230,10 @@ class ApiV1AdmMemberControllerWebMvcTest : BaseAdmMemberControllerWebMvcTest() {
         fun `관리자는 과거 프로필 이미지 목록을 조회한다`() {
             val member = sampleMember(id = 7, username = "admin", nickname = "관리자", isAdmin = true)
             member.profileImgUrl = "http://localhost:8080/post/api/v1/images/profile/current.png"
+            val protectedProfileImgUrls =
+                listOf(member.profileImgUrl, member.getProfileWorkspacePublishedContent().profileImageUrl)
             given(memberUseCase.findById(7)).willReturn(Optional.of(member))
-            given(uploadedFileRetentionService.listProfileImages(7, member.profileImgUrl))
+            given(uploadedFileRetentionService.listProfileImages(7, protectedProfileImgUrls))
                 .willReturn(
                     listOf(
                         ProfileImageHistoryDto(
@@ -278,7 +280,12 @@ class ApiV1AdmMemberControllerWebMvcTest : BaseAdmMemberControllerWebMvcTest() {
 
             then(uploadedFileRetentionService)
                 .should()
-                .deleteProfileImage(memberId = 7, fileId = 11, currentProfileImgUrl = member.profileImgUrl)
+                .deleteProfileImage(
+                    memberId = 7,
+                    fileId = 11,
+                    protectedProfileImgUrls =
+                        listOf(member.profileImgUrl, member.getProfileWorkspacePublishedContent().profileImageUrl),
+                )
         }
     }
 

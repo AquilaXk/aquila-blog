@@ -14,6 +14,7 @@ import com.back.boundedContexts.member.domain.shared.memberMixin.normalizeProfil
 import com.back.boundedContexts.member.dto.AuthSessionMemberDto
 import com.back.boundedContexts.member.dto.MemberProfileWorkspaceResponseDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
+import com.back.boundedContexts.member.model.shared.Member
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.app.AppConfig
@@ -343,7 +344,7 @@ class ApiV1AdmMemberController(
             images =
                 uploadedFileRetentionService.listProfileImages(
                     memberId = id,
-                    currentProfileImgUrl = member.profileImgUrl,
+                    protectedProfileImgUrls = member.protectedProfileImgUrls(),
                 ),
         )
     }
@@ -362,10 +363,16 @@ class ApiV1AdmMemberController(
         uploadedFileRetentionService.deleteProfileImage(
             memberId = id,
             fileId = fileId,
-            currentProfileImgUrl = member.profileImgUrl,
+            protectedProfileImgUrls = member.protectedProfileImgUrls(),
         )
         return RsData("200-1", "프로필 이미지가 삭제되었습니다.")
     }
+
+    private fun Member.protectedProfileImgUrls(): List<String?> =
+        listOf(
+            profileImgUrl,
+            getProfileWorkspacePublishedContent().profileImageUrl,
+        )
 
     /**
      * 관리자 표시 이름(nickname)을 수정한다.

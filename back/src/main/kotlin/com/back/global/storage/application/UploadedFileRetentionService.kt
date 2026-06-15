@@ -13,6 +13,7 @@ import com.back.global.storage.domain.UploadedFileOwnerType
 import com.back.global.storage.domain.UploadedFilePurpose
 import com.back.global.storage.domain.UploadedFileRetentionReason
 import com.back.global.storage.domain.UploadedFileStatus
+import com.fasterxml.jackson.annotation.JsonProperty
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.dao.DataIntegrityViolationException
@@ -47,6 +48,7 @@ data class ProfileImageHistoryDto(
     val contentType: String,
     val fileSize: Long,
     val status: UploadedFileStatus,
+    @get:JsonProperty("isCurrent")
     val isCurrent: Boolean,
     val createdAt: Instant,
     val modifiedAt: Instant,
@@ -309,14 +311,14 @@ class UploadedFileRetentionService(
     @Transactional(readOnly = true)
     fun listProfileImages(
         memberId: Long,
-        currentProfileImgUrl: String?,
+        protectedProfileImgUrls: Collection<String?>,
     ): List<ProfileImageHistoryDto> {
-        val currentObjectKey = UploadedFileUrlCodec.extractObjectKeyFromImageUrl(currentProfileImgUrl)
+        val protectedObjectKeys = protectedProfileImgUrls.extractProfileImageObjectKeys()
         return uploadedFileRepository
             .findProfileImagesByOwner(memberId)
             .map { uploadedFile ->
                 uploadedFile.toProfileImageHistoryDto(
-                    isCurrent = uploadedFile.objectKey == currentObjectKey,
+                    isCurrent = uploadedFile.objectKey in protectedObjectKeys,
                 )
             }
     }
@@ -325,13 +327,12 @@ class UploadedFileRetentionService(
     fun deleteProfileImage(
         memberId: Long,
         fileId: Long,
-        currentProfileImgUrl: String?,
+        protectedProfileImgUrls: Collection<String?>,
     ) {
         val uploadedFile =
             uploadedFileRepository.findProfileImageByIdAndOwner(fileId, memberId)
                 ?: throw AppException("404-1", "프로필 이미지를 찾을 수 없습니다.")
-        val currentObjectKey = UploadedFileUrlCodec.extractObjectKeyFromImageUrl(currentProfileImgUrl)
-        if (uploadedFile.objectKey == currentObjectKey) {
+        if (uploadedFile.objectKey in protectedProfileImgUrls.extractProfileImageObjectKeys()) {
             throw AppException("400-1", "현재 사용 중인 프로필 이미지는 삭제할 수 없습니다.")
         }
 
@@ -501,6 +502,10 @@ class UploadedFileRetentionService(
             createdAt = createdAt,
             modifiedAt = modifiedAt,
         )
+
+    private fun Collection<String?>.extractProfileImageObjectKeys(): Set<String> =
+        mapNotNull(UploadedFileUrlCodec::extractObjectKeyFromImageUrl)
+            .toSet()
 
     /**
      * 정책 조건을 검증해 처리 가능 여부를 판정합니다.

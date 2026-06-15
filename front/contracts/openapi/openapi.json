@@ -5114,7 +5114,7 @@
             "type" : "string",
             "format" : "date-time"
           },
-          "current" : {
+          "isCurrent" : {
             "type" : "boolean"
           }
         }

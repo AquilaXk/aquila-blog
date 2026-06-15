@@ -18,33 +18,14 @@ interface UploadedFileRepository :
     UploadedFileRepositoryPort {
     override fun findByObjectKey(objectKey: String): UploadedFile?
 
-    override fun findProfileImagesByOwner(memberId: Long): List<UploadedFile> =
-        findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
-            purpose = UploadedFilePurpose.PROFILE_IMAGE,
-            ownerType = UploadedFileOwnerType.MEMBER_PROFILE,
-            ownerId = memberId,
-            status = UploadedFileStatus.DELETED,
-        )
-
-    override fun findProfileImageByIdAndOwner(
-        fileId: Long,
-        memberId: Long,
-    ): UploadedFile? =
-        findByIdAndPurposeAndOwnerTypeAndOwnerId(
-            id = fileId,
-            purpose = UploadedFilePurpose.PROFILE_IMAGE,
-            ownerType = UploadedFileOwnerType.MEMBER_PROFILE,
-            ownerId = memberId,
-        )
-
-    fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
+    override fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
         purpose: UploadedFilePurpose,
         ownerType: UploadedFileOwnerType,
         ownerId: Long,
         status: UploadedFileStatus,
     ): List<UploadedFile>
 
-    fun findByIdAndPurposeAndOwnerTypeAndOwnerId(
+    override fun findByIdAndPurposeAndOwnerTypeAndOwnerId(
         id: Long,
         purpose: UploadedFilePurpose,
         ownerType: UploadedFileOwnerType,

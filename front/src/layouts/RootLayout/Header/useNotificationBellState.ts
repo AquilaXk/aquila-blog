@@ -12,6 +12,7 @@ import { acquireBodyScrollLock } from "src/libs/utils/bodyScrollLock"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import { pushRoute } from "src/libs/router"
 import { TMemberNotification } from "src/types"
+import { useNotificationBackgroundActivation } from "./useNotificationBackgroundActivation"
 import { useNotificationBellTransport } from "./useNotificationBellTransport"
 import {
   AVATAR_PRELOAD_CACHE_MAX,
@@ -332,40 +333,16 @@ export const useNotificationBellState = (enabled: boolean) => {
     }
   }, [applySnapshotState, closeEventSource, enabled, preferPolling, setLastNotificationEventId])
 
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    if (!enabled || isRealtimeActive || open || !isDocumentVisible || notificationAccessState === "blocked") return
-
-    const idleWindow = window as Window & {
-      requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
-      cancelIdleCallback?: (handle: number) => void
-    }
-    let disposed = false
-    let fallbackTimer: number | null = null
-    let idleHandle: number | null = null
-
-    const activateRealtime = () => {
-      if (disposed) return
-      setIsRealtimeActive(true)
-      void loadSnapshot()
-    }
-
-    if (typeof idleWindow.requestIdleCallback === "function") {
-      idleHandle = idleWindow.requestIdleCallback(activateRealtime, { timeout: 4000 })
-    } else {
-      fallbackTimer = window.setTimeout(activateRealtime, 2400)
-    }
-
-    return () => {
-      disposed = true
-      if (idleHandle !== null && typeof idleWindow.cancelIdleCallback === "function") {
-        idleWindow.cancelIdleCallback(idleHandle)
-      }
-      if (fallbackTimer !== null) {
-        window.clearTimeout(fallbackTimer)
-      }
-    }
-  }, [enabled, isDocumentVisible, isRealtimeActive, loadSnapshot, notificationAccessState, open])
+  useNotificationBackgroundActivation({
+    enabled,
+    isDocumentVisible,
+    isRealtimeActive,
+    notificationAccessState,
+    open,
+    pathname: router.pathname,
+    loadSnapshot,
+    setIsRealtimeActive,
+  })
 
   useEffect(() => {
     if (!enabled || !isReady) return

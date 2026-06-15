@@ -133,6 +133,13 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
 
         override fun findByObjectKey(objectKey: String): UploadedFile? = store[objectKey]
 
+        override fun findProfileImagesByOwner(memberId: Long): List<UploadedFile> = emptyList()
+
+        override fun findProfileImageByIdAndOwner(
+            fileId: Long,
+            memberId: Long,
+        ): UploadedFile? = null
+
         override fun countByStatus(status: UploadedFileStatus): Long = 0
 
         override fun countByStatusInAndPurgeAfterLessThanEqual(
@@ -179,6 +186,13 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         }
 
         override fun findByObjectKey(objectKey: String): UploadedFile? = store[objectKey]
+
+        override fun findProfileImagesByOwner(memberId: Long): List<UploadedFile> = emptyList()
+
+        override fun findProfileImageByIdAndOwner(
+            fileId: Long,
+            memberId: Long,
+        ): UploadedFile? = null
 
         override fun countByStatus(status: UploadedFileStatus): Long = 0
 

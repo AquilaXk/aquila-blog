@@ -206,6 +206,24 @@ class CloudFileServiceTest {
     }
 
     @Test
+    @DisplayName("업로드 시 multipart 파일명이 이미 손상되면 client 파일명을 우선 저장한다")
+    fun `upload는 손상된 multipart 파일명 대신 client 파일명을 우선 저장한다`() {
+        val clientName = "[첨부1] NCS기반 채용 직무설명자료_2026년 제3회 식약처 공무원(일반직) 경력경쟁채용시험 공고문_게시.pdf"
+
+        val result =
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "______1_ NCS______2026__ __3__ ___________________.pdf",
+                clientOriginalFilename = clientName,
+                contentType = "application/pdf",
+                bytes = "%PDF-1.7".toByteArray(),
+                folderPath = null,
+            )
+
+        assertThat(result.originalFilename).isEqualTo(clientName)
+    }
+
+    @Test
     @DisplayName("목록과 단건 조회는 owner folder keyword mediaKind 조건을 적용한다")
     fun `목록과 단건 조회는 owner folder keyword mediaKind 조건을 적용한다`() {
         repository.assignAuditTimestamps = true

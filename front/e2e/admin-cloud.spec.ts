@@ -113,6 +113,13 @@ const getUploadName = (route: Route) => {
   return bodyText.match(/filename="([^"]+)"/)?.[1] ?? "uploaded.pdf"
 }
 
+const getUploadTextField = (route: Route, fieldName: string) => {
+  const body = route.request().postDataBuffer()
+  const bodyText = body?.toString("utf8") ?? ""
+  const match = bodyText.match(new RegExp(`name="${fieldName}"\\r?\\n\\r?\\n([^\\r\\n]*)`))
+  return match?.[1] ?? ""
+}
+
 const getUploadFileMetadata = (name: string) => {
   const lowerName = name.toLowerCase()
   if (lowerName.endsWith(".png") || lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) {
@@ -164,6 +171,7 @@ const setupAdminCloudMocks = async (
   const requestedKinds: string[] = []
   const requestedFolderPaths: string[] = []
   const uploadedNames: string[] = []
+  const uploadedClientFilenames: string[] = []
   const deletedIds: string[] = []
   const uploadedFiles: CloudFileFixture[] = []
   const failedDeleteIds = new Set(options.failDeleteIds ?? [])
@@ -216,6 +224,7 @@ const setupAdminCloudMocks = async (
 
     if (request.method() === "POST") {
       const uploadedName = getUploadName(route)
+      const clientFilename = getUploadTextField(route, "clientFilename")
       const metadata = getUploadFileMetadata(uploadedName)
 
       if (failedUploadNames.has(uploadedName) || failUploadOnceNames.has(uploadedName)) {
@@ -239,6 +248,7 @@ const setupAdminCloudMocks = async (
       }
 
       uploadedNames.push(uploadedName)
+      uploadedClientFilenames.push(clientFilename)
       if (!uploadedName.includes("취소할")) uploadedFiles.unshift(uploaded)
 
       try {
@@ -297,7 +307,7 @@ const setupAdminCloudMocks = async (
     })
   })
 
-  return { requestedKinds, requestedFolderPaths, uploadedNames, deletedIds }
+  return { requestedKinds, requestedFolderPaths, uploadedNames, uploadedClientFilenames, deletedIds }
 }
 
 test.describe("관리자 클라우드", () => {
@@ -310,6 +320,12 @@ test.describe("관리자 클라우드", () => {
     })
     page.on("console", (message) => {
       if (message.type() === "error") browserErrors.push(message.text())
+      if (
+        message.type() === "warning" &&
+        (message.text().includes("standardFontDataUrl") || message.text().includes("ZapfDingbats"))
+      ) {
+        browserErrors.push(message.text())
+      }
     })
 
     await page.goto("/admin/cloud")
@@ -395,10 +411,13 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByRole("heading", { name: "문서 뷰어" })).toBeVisible()
     await page.waitForTimeout(100)
     expect(browserErrors.filter((message) => message.includes("Worker was terminated"))).toEqual([])
+    expect(browserErrors.filter((message) => message.includes("standardFontDataUrl"))).toEqual([])
+    expect(browserErrors.filter((message) => message.includes("ZapfDingbats"))).toEqual([])
 
     await page.locator('button[title="home-server-rack.png"]').click()
     await expect(page.getByRole("heading", { name: "사진 보기" })).toBeVisible()
     await expect(page.getByAltText("home-server-rack.png")).toBeVisible()
+    await expect(page.getByLabel("사진 썸네일")).toHaveCount(0)
 
     await page.locator('button[title="deploy-walkthrough.mp4"]').click()
     await expect(page.getByRole("heading", { name: "동영상 플레이어" })).toBeVisible()
@@ -412,7 +431,7 @@ test.describe("관리자 클라우드", () => {
   })
 
   test("긴 파일명과 업로드 완료 상태는 목록과 하단 업로드 패널에서 겹치지 않는다", async ({ page }) => {
-    await setupAdminCloudMocks(page, { initialFiles: CLOUD_FILES })
+    const mocks = await setupAdminCloudMocks(page, { initialFiles: CLOUD_FILES })
 
     await page.goto("/admin/cloud")
 
@@ -432,6 +451,9 @@ test.describe("관리자 클라우드", () => {
       mimeType: "application/pdf",
       buffer: Buffer.from("%PDF-1.4 long upload"),
     })
+    await expect.poll(() => mocks.uploadedClientFilenames).toContain(
+      "★2026년 제3회 식약처 공무원(일반직) 경력경쟁채용시험 공고문_게시_긴파일명_상태겹침방지.pdf"
+    )
 
     const uploadPanel = page.getByLabel("업로드 중인 파일")
     await expect(uploadPanel.getByText(/상태겹침방지\.pdf/)).toBeVisible()
@@ -470,7 +492,12 @@ test.describe("관리자 클라우드", () => {
     await expect(nameButton).toHaveCSS("border-radius", "0px")
 
     await expect(selectedRow.getByRole("button", { name: /미리보기/ })).toHaveCount(0)
-    await expect(selectedRow.getByRole("button", { name: "운영 점검 리포트.pdf 삭제" })).toBeVisible()
+    const deleteButton = selectedRow.getByRole("button", { name: "운영 점검 리포트.pdf 삭제" })
+    await expect(deleteButton).toBeVisible()
+    await expect(deleteButton).toHaveCSS("white-space", "nowrap")
+    const deleteButtonBox = await deleteButton.boundingBox()
+    expect(deleteButtonBox).not.toBeNull()
+    expect(deleteButtonBox!.height).toBeLessThanOrEqual(38)
   })
 
   test("관리자 클라우드 진입만으로 알림 snapshot 백그라운드 요청을 시작하지 않는다", async ({ page }) => {

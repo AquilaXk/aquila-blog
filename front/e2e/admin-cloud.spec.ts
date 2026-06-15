@@ -72,6 +72,31 @@ const pixelPng = Buffer.from(
   "base64"
 )
 
+const minimalPdf = Buffer.from(
+  [
+    "%PDF-1.4",
+    "1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj",
+    "2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj",
+    "3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 220 120]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj",
+    "4 0 obj<</Length 44>>stream",
+    "BT /F1 18 Tf 24 68 Td (Aquila PDF Preview) Tj ET",
+    "endstream endobj",
+    "5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj",
+    "xref",
+    "0 6",
+    "0000000000 65535 f ",
+    "0000000010 00000 n ",
+    "0000000056 00000 n ",
+    "0000000111 00000 n ",
+    "0000000231 00000 n ",
+    "0000000325 00000 n ",
+    "trailer<</Root 1 0 R/Size 6>>",
+    "startxref",
+    "395",
+    "%%EOF",
+  ].join("\n")
+)
+
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const fulfillJson = async (route: Route, body: unknown, status = 200) => {
@@ -108,6 +133,20 @@ const expectPdfPreviewFitsDetailPanel = async (page: Page, previewName: string |
       const pdfCanvasBox = await page.getByLabel(previewName).boundingBox()
       if (!detailPanelBox || !pdfCanvasBox) return false
       return pdfCanvasBox.width <= detailPanelBox.width
+    })
+    .toBe(true)
+}
+
+const expectElementCenterAligned = async (container: ReturnType<Page["locator"]>, item: ReturnType<Page["locator"]>) => {
+  await expect
+    .poll(async () => {
+      const containerBox = await container.boundingBox()
+      const itemBox = await item.boundingBox()
+      if (!containerBox || !itemBox) return false
+
+      const containerCenterX = containerBox.x + containerBox.width / 2
+      const itemCenterX = itemBox.x + itemBox.width / 2
+      return Math.abs(containerCenterX - itemCenterX) <= 3
     })
     .toBe(true)
 }
@@ -241,11 +280,16 @@ const setupAdminCloudMocks = async (
     const id = url.pathname.match(/\/files\/(\d+)\/content/)?.[1] ?? ""
     const file = [...uploadedFiles, ...initialFiles].find((item) => String(item.id) === id)
     const contentType = file?.contentType ?? "application/octet-stream"
+    const body = contentType === "application/pdf"
+      ? minimalPdf
+      : contentType.startsWith("image/")
+        ? pixelPng
+        : Buffer.from("mock-private-cloud-content")
 
     await route.fulfill({
       status: 200,
       contentType,
-      body: contentType.startsWith("image/") ? pixelPng : Buffer.from("mock-private-cloud-content"),
+      body,
       headers: {
         "accept-ranges": "bytes",
         "cache-control": "private, no-store, max-age=0",
@@ -341,7 +385,7 @@ test.describe("관리자 클라우드", () => {
     await uploadPanel.getByRole("button", { name: "종료된 업로드 항목 지우기" }).click()
     await expect(page.getByLabel("업로드 중인 파일")).toHaveCount(0)
 
-    await page.getByRole("button", { name: "운영 점검 리포트.pdf 미리보기" }).click()
+    await page.locator('button[title="운영 점검 리포트.pdf"]').click()
     await expect(page.getByRole("heading", { name: "문서 뷰어" })).toBeVisible()
     await expect(page.getByText("PDF.js canvas 렌더링")).toBeVisible()
     await expectPdfPreviewFitsDetailPanel(page, "운영 점검 리포트.pdf PDF 미리보기")
@@ -352,11 +396,11 @@ test.describe("관리자 클라우드", () => {
     await page.waitForTimeout(100)
     expect(browserErrors.filter((message) => message.includes("Worker was terminated"))).toEqual([])
 
-    await page.getByRole("button", { name: "home-server-rack.png 미리보기" }).click()
+    await page.locator('button[title="home-server-rack.png"]').click()
     await expect(page.getByRole("heading", { name: "사진 보기" })).toBeVisible()
     await expect(page.getByAltText("home-server-rack.png")).toBeVisible()
 
-    await page.getByRole("button", { name: "deploy-walkthrough.mp4 미리보기" }).click()
+    await page.locator('button[title="deploy-walkthrough.mp4"]').click()
     await expect(page.getByRole("heading", { name: "동영상 플레이어" })).toBeVisible()
     await expect(page.getByText("IINA playback model")).toBeVisible()
     await expect(page.getByText("챕터 3개")).toBeVisible()
@@ -377,8 +421,9 @@ test.describe("관리자 클라우드", () => {
     const longFileName = longFileRow.locator('button[title$="게시.pdf"]')
     await expect(longFileName).toHaveAttribute("title", /게시\.pdf$/)
     await expect(longFileRow.getByLabel("문서")).toHaveText("PDF")
+    await expect(longFileRow.getByRole("button", { name: /미리보기/ })).toHaveCount(0)
 
-    await longFileRow.getByRole("button", { name: /미리보기/ }).click()
+    await longFileName.click()
     await expect(page.getByRole("heading", { name: "문서 뷰어" })).toBeVisible()
     await expectPdfPreviewFitsDetailPanel(page, /NCS기반 채용 직무설명자료.*PDF 미리보기/)
 
@@ -398,6 +443,60 @@ test.describe("관리자 클라우드", () => {
     expect(queueItemBox).not.toBeNull()
     expect(donePillBox).not.toBeNull()
     expect(queueItemBox!.x + queueItemBox!.width).toBeLessThanOrEqual(donePillBox!.x + 2)
+  })
+
+  test("선택된 긴 PDF 행은 종류 배지, 파일명 포커스, 삭제 액션이 명확하게 보인다", async ({ page }) => {
+    await setupAdminCloudMocks(page, { initialFiles: CLOUD_FILES })
+
+    await page.goto("/admin/cloud")
+
+    const selectedRow = page.getByRole("row", { name: /운영 점검 리포트\.pdf/ })
+    await expect(selectedRow).toBeVisible()
+    const typeCell = selectedRow.locator("td").nth(2)
+    const typeBadge = selectedRow.getByLabel("문서")
+    await expect(typeBadge).toHaveText("PDF")
+    await expectElementCenterAligned(typeCell, typeBadge)
+
+    const badgeBox = await typeBadge.boundingBox()
+    const selectedRowBox = await selectedRow.boundingBox()
+    expect(badgeBox).not.toBeNull()
+    expect(selectedRowBox).not.toBeNull()
+    expect(badgeBox!.width).toBeGreaterThan(34)
+    expect(badgeBox!.height).toBeGreaterThan(22)
+
+    const nameButton = selectedRow.locator('button[title="운영 점검 리포트.pdf"]')
+    await nameButton.focus()
+    await expect(nameButton).toHaveCSS("outline-style", "none")
+    await expect(nameButton).toHaveCSS("border-radius", "0px")
+
+    await expect(selectedRow.getByRole("button", { name: /미리보기/ })).toHaveCount(0)
+    await expect(selectedRow.getByRole("button", { name: "운영 점검 리포트.pdf 삭제" })).toBeVisible()
+  })
+
+  test("관리자 클라우드 진입만으로 알림 snapshot 백그라운드 요청을 시작하지 않는다", async ({ page }) => {
+    let snapshotRequestCount = 0
+    await page.addInitScript(() => {
+      window.requestIdleCallback = (callback) => {
+        window.setTimeout(() => callback({ didTimeout: false, timeRemaining: () => 50 }), 0)
+        return 1
+      }
+      window.cancelIdleCallback = () => {}
+    })
+    await setupAdminCloudMocks(page, { initialFiles: CLOUD_FILES })
+    await page.route("**/member/api/v1/notifications/snapshot", async (route) => {
+      snapshotRequestCount += 1
+      await route.fulfill({
+        status: 502,
+        contentType: "application/json",
+        body: JSON.stringify({ resultCode: "502-1", msg: "bad gateway" }),
+      })
+    })
+
+    await page.goto("/admin/cloud")
+    await expect(page.getByRole("heading", { name: "내 파일" })).toBeVisible()
+    await page.waitForTimeout(250)
+
+    expect(snapshotRequestCount).toBe(0)
   })
 
   test("선택 삭제 일부 실패 시 성공 항목만 목록에서 제거하고 실패 알림을 유지한다", async ({ page }) => {

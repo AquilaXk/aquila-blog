@@ -31,6 +31,8 @@ class ApiRateLimitBackstopFilter(
     private val requireRedisInProd: Boolean = true,
     @param:Value("\${custom.security.apiRateLimit.publicReadLimitPerMinute:120}")
     private val publicReadLimitPerMinute: Int = 120,
+    @param:Value("\${custom.security.apiRateLimit.authenticatedReadLimitPerMinute:120}")
+    private val authenticatedReadLimitPerMinute: Int = 120,
     @param:Value("\${custom.security.apiRateLimit.mutationLimitPerMinute:60}")
     private val mutationLimitPerMinute: Int = 60,
     @param:Value("\${custom.security.apiRateLimit.authLimitPerMinute:20}")
@@ -40,6 +42,7 @@ class ApiRateLimitBackstopFilter(
 ) : OncePerRequestFilter() {
     init {
         require(publicReadLimitPerMinute > 0) { "publicReadLimitPerMinute must be > 0" }
+        require(authenticatedReadLimitPerMinute > 0) { "authenticatedReadLimitPerMinute must be > 0" }
         require(mutationLimitPerMinute > 0) { "mutationLimitPerMinute must be > 0" }
         require(authLimitPerMinute > 0) { "authLimitPerMinute must be > 0" }
         require(sseLimitPerMinute > 0) { "sseLimitPerMinute must be > 0" }
@@ -124,6 +127,9 @@ class ApiRateLimitBackstopFilter(
         if (method in SAFE_METHODS && isPublicReadPath(path)) {
             return Bucket("public-read", publicReadLimitPerMinute)
         }
+        if (method in SAFE_METHODS && isAuthenticatedReadPath(path)) {
+            return Bucket("authenticated-read", authenticatedReadLimitPerMinute)
+        }
         if (method !in SAFE_METHODS && API_PATH_REGEX.matches(path)) {
             return Bucket("mutation", mutationLimitPerMinute)
         }
@@ -136,6 +142,8 @@ class ApiRateLimitBackstopFilter(
             path.startsWith("/login/oauth2/")
 
     private fun isPublicReadPath(path: String): Boolean = PUBLIC_READ_PATHS.any { it.matches(path) } || PUBLIC_DETAIL_PATH.matches(path)
+
+    private fun isAuthenticatedReadPath(path: String): Boolean = AUTHENTICATED_READ_PATHS.any { it.matches(path) }
 
     private fun shouldFailClosedWithoutRedis(): Boolean = environment.matchesProfiles("prod") && requireRedisInProd
 
@@ -217,5 +225,11 @@ class ApiRateLimitBackstopFilter(
                 Regex("^/post/api/v\\d+/images/.*"),
             )
         private val PUBLIC_DETAIL_PATH = Regex("^/post/api/v\\d+/posts/\\d+$")
+        private val AUTHENTICATED_READ_PATHS =
+            listOf(
+                Regex("^/member/api/v\\d+/notifications$"),
+                Regex("^/member/api/v\\d+/notifications/snapshot$"),
+                Regex("^/member/api/v\\d+/notifications/unread-count$"),
+            )
     }
 }

@@ -433,7 +433,9 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByRole("button", { name: "자막" })).toBeVisible()
     await expect(page.getByText("재생 기록 00:00")).toBeVisible()
 
-    await page.getByRole("button", { name: "deploy-walkthrough.mp4 삭제" }).click()
+    await expect(page.getByRole("button", { name: "deploy-walkthrough.mp4 삭제" })).toHaveCount(0)
+    await page.getByRole("checkbox", { name: "deploy-walkthrough.mp4 선택" }).check()
+    await page.getByRole("button", { name: "선택 삭제" }).click()
     await expect(page.getByRole("dialog", { name: "파일 삭제" })).toBeVisible()
     expect(mocks.deletedIds).toEqual([])
     await page.getByRole("dialog", { name: "파일 삭제" }).getByRole("button", { name: "삭제" }).click()
@@ -466,14 +468,16 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByText("사진을 불러오는 중입니다.")).toHaveCount(0)
   })
 
-  test("삭제 확인 모달은 확인 전 API 호출을 막고 툴바 레이아웃을 유지한다", async ({ page }) => {
+  test("개별 삭제 없이 선택 삭제 모달은 확인 전 API 호출을 막고 툴바 레이아웃을 유지한다", async ({ page }) => {
     const mocks = await setupAdminCloudMocks(page, { initialFiles: CLOUD_FILES })
 
     await page.goto("/admin/cloud")
 
     const longFileRow = page.getByRole("row", { name: /NCS기반 채용 직무설명자료.*게시\.pdf/ })
     await expect(longFileRow).toBeVisible()
-    await longFileRow.getByRole("button", { name: /삭제/ }).click()
+    await expect(longFileRow.getByRole("button", { name: /삭제/ })).toHaveCount(0)
+    await longFileRow.getByRole("checkbox", { name: /NCS기반 채용 직무설명자료.*게시\.pdf 선택/ }).check()
+    await page.getByRole("button", { name: "선택 삭제" }).click()
 
     const dialog = page.getByRole("dialog", { name: "파일 삭제" })
     await expect(dialog).toBeVisible()
@@ -495,13 +499,13 @@ test.describe("관리자 클라우드", () => {
     await expect(dialog).toHaveCount(0)
     expect(mocks.deletedIds).toEqual([])
 
-    await longFileRow.getByRole("button", { name: /삭제/ }).click()
+    await page.getByRole("button", { name: "선택 삭제" }).click()
     await expect(page.getByRole("dialog", { name: "파일 삭제" })).toBeVisible()
     await page.keyboard.press("Escape")
     await expect(page.getByRole("dialog", { name: "파일 삭제" })).toHaveCount(0)
     expect(mocks.deletedIds).toEqual([])
 
-    await longFileRow.getByRole("button", { name: /삭제/ }).click()
+    await page.getByRole("button", { name: "선택 삭제" }).click()
     await page.getByRole("dialog", { name: "파일 삭제" }).getByRole("button", { name: "삭제" }).click()
     await expect.poll(() => mocks.deletedIds).toContain("104")
     await expect(page.getByRole("status").filter({ hasText: /삭제 완료/ })).toBeVisible()
@@ -545,7 +549,7 @@ test.describe("관리자 클라우드", () => {
     expect(queueItemBox!.x + queueItemBox!.width).toBeLessThanOrEqual(donePillBox!.x + 2)
   })
 
-  test("선택된 긴 PDF 행은 종류 배지, 파일명 포커스, 삭제 액션이 명확하게 보인다", async ({ page }) => {
+  test("선택된 긴 PDF 행은 종류 배지와 파일명 포커스가 명확하고 개별 삭제를 노출하지 않는다", async ({ page }) => {
     await setupAdminCloudMocks(page, { initialFiles: CLOUD_FILES })
 
     await page.goto("/admin/cloud")
@@ -570,12 +574,7 @@ test.describe("관리자 클라우드", () => {
     await expect(nameButton).toHaveCSS("border-radius", "0px")
 
     await expect(selectedRow.getByRole("button", { name: /미리보기/ })).toHaveCount(0)
-    const deleteButton = selectedRow.getByRole("button", { name: "운영 점검 리포트.pdf 삭제" })
-    await expect(deleteButton).toBeVisible()
-    await expect(deleteButton).toHaveCSS("white-space", "nowrap")
-    const deleteButtonBox = await deleteButton.boundingBox()
-    expect(deleteButtonBox).not.toBeNull()
-    expect(deleteButtonBox!.height).toBeLessThanOrEqual(38)
+    await expect(selectedRow.getByRole("button", { name: "운영 점검 리포트.pdf 삭제" })).toHaveCount(0)
   })
 
   test("관리자 클라우드 진입만으로 알림 snapshot 백그라운드 요청을 시작하지 않는다", async ({ page }) => {

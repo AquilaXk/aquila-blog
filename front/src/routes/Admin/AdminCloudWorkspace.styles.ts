@@ -438,11 +438,6 @@ export const FileTable = styled.table`
   td:nth-of-type(6) {
     width: 8.9rem;
   }
-
-  th:nth-of-type(7),
-  td:nth-of-type(7) {
-    width: 5.6rem;
-  }
 `
 
 export const SelectBoxCell = styled.td`
@@ -533,17 +528,6 @@ export const FileNameButton = styled.button`
     text-decoration-thickness: 2px;
     text-underline-offset: 0.22rem;
     color: ${accentGold};
-  }
-`
-
-export const RowActions = styled.div`
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.3rem;
-
-  button {
-    min-width: 4.2rem;
-    padding-inline: 0.55rem;
   }
 `
 

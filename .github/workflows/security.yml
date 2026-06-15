@@ -48,11 +48,11 @@ jobs:
         run: |
           if [ -z "${NVD_API_KEY}" ]; then
             echo "ran=false" >> "${GITHUB_OUTPUT}"
-            if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
-              echo "::warning title=Backend dependency scan skipped::NVD_API_KEY secret is not configured for this PR context; dependency-check requires it for reliable CI scans."
+            if [ "${GITHUB_EVENT_NAME}" = "pull_request" ] || [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+              echo "::warning title=Backend dependency scan skipped::NVD_API_KEY secret is not configured for this ${GITHUB_EVENT_NAME} context; dependency-check requires it for reliable CI scans."
               exit 0
             fi
-            echo "::error title=Backend dependency scan blocked::NVD_API_KEY secret is required for trusted push, schedule, and manual security scans."
+            echo "::error title=Backend dependency scan blocked::NVD_API_KEY secret is required for scheduled and manual security scans."
             exit 1
           fi
           echo "ran=true" >> "${GITHUB_OUTPUT}"

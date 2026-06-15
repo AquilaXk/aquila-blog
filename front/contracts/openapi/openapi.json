@@ -2464,6 +2464,34 @@
         }
       }
     },
+    "/member/api/v1/adm/members/{id}/profileImageFiles" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-member-controller" ],
+        "operationId" : "listProfileImageFiles",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProfileImageHistoryResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/member/api/v1/adm/members/profile/bootstrap" : {
       "get" : {
         "tags" : [ "api-v-1-adm-member-controller" ],
@@ -2555,6 +2583,43 @@
       "delete" : {
         "tags" : [ "api-v-1-auth-controller" ],
         "operationId" : "logout",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/adm/members/{id}/profileImageFiles/{fileId}" : {
+      "delete" : {
+        "tags" : [ "api-v-1-adm-member-controller" ],
+        "operationId" : "deleteProfileImageFile",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        }, {
+          "name" : "fileId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
         "responses" : {
           "200" : {
             "description" : "OK",
@@ -5014,6 +5079,54 @@
           },
           "pageable" : {
             "$ref" : "#/components/schemas/PageableDto"
+          }
+        }
+      },
+      "ProfileImageHistoryDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "imageUrl" : {
+            "type" : "string"
+          },
+          "objectKey" : {
+            "type" : "string"
+          },
+          "contentType" : {
+            "type" : "string"
+          },
+          "fileSize" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "TEMP", "ACTIVE", "PENDING_DELETE", "DELETED" ]
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "modifiedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "isCurrent" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "ProfileImageHistoryResponse" : {
+        "type" : "object",
+        "properties" : {
+          "images" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ProfileImageHistoryDto"
+            }
           }
         }
       },

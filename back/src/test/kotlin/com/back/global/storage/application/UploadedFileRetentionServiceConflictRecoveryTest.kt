@@ -135,6 +135,20 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
 
         override fun countByStatus(status: UploadedFileStatus): Long = 0
 
+        override fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
+            purpose: com.back.global.storage.domain.UploadedFilePurpose,
+            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
+            ownerId: Long,
+            status: UploadedFileStatus,
+        ): List<UploadedFile> = emptyList()
+
+        override fun findByIdAndPurposeAndOwnerTypeAndOwnerId(
+            id: Long,
+            purpose: com.back.global.storage.domain.UploadedFilePurpose,
+            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
+            ownerId: Long,
+        ): UploadedFile? = null
+
         override fun countByStatusInAndPurgeAfterLessThanEqual(
             statuses: Collection<UploadedFileStatus>,
             purgeAfter: Instant,
@@ -181,6 +195,20 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         override fun findByObjectKey(objectKey: String): UploadedFile? = store[objectKey]
 
         override fun countByStatus(status: UploadedFileStatus): Long = 0
+
+        override fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
+            purpose: com.back.global.storage.domain.UploadedFilePurpose,
+            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
+            ownerId: Long,
+            status: UploadedFileStatus,
+        ): List<UploadedFile> = emptyList()
+
+        override fun findByIdAndPurposeAndOwnerTypeAndOwnerId(
+            id: Long,
+            purpose: com.back.global.storage.domain.UploadedFilePurpose,
+            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
+            ownerId: Long,
+        ): UploadedFile? = null
 
         override fun countByStatusInAndPurgeAfterLessThanEqual(
             statuses: Collection<UploadedFileStatus>,

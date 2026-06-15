@@ -24,6 +24,80 @@ test.describe("core smoke public shell", () => {
     expect(useSchemeSource).not.toMatch(/setScheme\(nextScheme\)\s*clearSchemeBootstrapAfterHydration\(\)/)
   })
 
+  test("OS 다크 첫 로드는 hydration 전 surface dark guard를 먼저 삽입한다", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark" })
+    await mockFeedEndpoints(page)
+    await page.route("**/member/api/v1/auth/me", async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ resultCode: "401-1", msg: "unauthorized" }),
+      })
+    })
+
+    await page.addInitScript(() => {
+      type BootstrapCaptureWindow = Window & { __aquilaBootstrapStyles?: string[] }
+
+      const captureWindow = window as BootstrapCaptureWindow
+      const originalAppendChild = Node.prototype.appendChild
+      captureWindow.__aquilaBootstrapStyles = []
+      Node.prototype.appendChild = function appendChildWithBootstrapCapture<T extends Node>(
+        child: T
+      ): T {
+        if (
+          child instanceof HTMLStyleElement &&
+          child.getAttribute("data-aquila-scheme-bootstrap-style") === "true"
+        ) {
+          captureWindow.__aquilaBootstrapStyles?.push(child.textContent || "")
+        }
+
+        return originalAppendChild.call(this, child) as T
+      }
+    })
+
+    await page.goto("/", { waitUntil: "domcontentloaded" })
+
+    type FirstLoadSchemeCapture = {
+      bodyBackground: string
+      datasetScheme?: string
+      styles: string[]
+    }
+    const readFirstLoadScheme = async (): Promise<FirstLoadSchemeCapture | null> => {
+      try {
+        return await page.evaluate(() => {
+          type BootstrapCaptureWindow = Window & { __aquilaBootstrapStyles?: string[] }
+
+          const captureWindow = window as BootstrapCaptureWindow
+          return {
+            bodyBackground: window.getComputedStyle(document.body).backgroundColor,
+            datasetScheme: document.documentElement.dataset.aquilaScheme,
+            styles: captureWindow.__aquilaBootstrapStyles ?? [],
+          }
+        })
+      } catch {
+        return null
+      }
+    }
+
+    let firstLoadScheme: FirstLoadSchemeCapture | null = null
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      firstLoadScheme = await readFirstLoadScheme()
+      if (firstLoadScheme?.styles[0]) break
+      await page.waitForTimeout(100)
+    }
+
+    const bootstrapStyle = firstLoadScheme?.styles[0]
+    if (!firstLoadScheme || !bootstrapStyle) {
+      throw new Error("OS 다크 첫 로드 bootstrap style을 캡처하지 못했습니다.")
+    }
+
+    expect(firstLoadScheme.datasetScheme).toBe("dark")
+    expect(firstLoadScheme.bodyBackground).toBe("rgb(18, 18, 18)")
+    expect(bootstrapStyle).toContain('html[data-aquila-scheme-bootstrap="dark"]')
+    expect(bootstrapStyle).toContain("background-color:transparent!important")
+    expect(bootstrapStyle).not.toContain("#f3f5f8")
+  })
+
   test("public blog appearance는 전역 theme와 legacy 디자인으로 고정된다", async () => {
   const resolverSource = readFileSync(path.resolve(__dirname, "../src/libs/blogAppearance.ts"), "utf8")
   const rootLayoutSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/index.tsx"), "utf8")

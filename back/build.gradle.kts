@@ -7,6 +7,7 @@ plugins {
     kotlin("plugin.jpa") version "2.2.21"
     kotlin("kapt") version "2.2.21"
     id("org.jlleitschuh.gradle.ktlint") version "12.1.1"
+    id("org.owasp.dependencycheck") version "12.2.2"
 }
 
 apply(from = "gradle/backend-test-infra.gradle.kts")
@@ -102,4 +103,13 @@ allOpen {
     annotation("jakarta.persistence.Entity")
     annotation("jakarta.persistence.MappedSuperclass")
     annotation("jakarta.persistence.Embeddable")
+}
+
+dependencyCheck {
+    formats = listOf("HTML", "JSON", "SARIF")
+    failBuildOnCVSS = 7.0f
+    failOnError = true
+    providers.environmentVariable("NVD_API_KEY").orNull?.takeIf(String::isNotBlank)?.let { apiKey ->
+        nvd.apiKey = apiKey
+    }
 }

@@ -271,6 +271,7 @@ export const PrimaryButton = styled.button`
   color: ${controlText};
   font-size: 0.84rem;
   font-weight: 850;
+  white-space: nowrap;
   cursor: pointer;
 
   &:disabled {
@@ -297,6 +298,7 @@ export const SecondaryButton = styled.button`
   color: ${textPrimary};
   font-size: 0.83rem;
   font-weight: 820;
+  white-space: nowrap;
   cursor: pointer;
 
   &:disabled {
@@ -361,6 +363,10 @@ export const GhostButton = styled.button`
 
 export const Notice = styled.p`
   margin: 0;
+  max-width: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: ${accentGold};
   font-size: 0.82rem;
   font-weight: 780;
@@ -556,6 +562,15 @@ export const EmptyTableState = styled.div`
   }
 `
 
+export const LoadingTableStatus = styled.div`
+  display: grid;
+  place-items: center;
+  min-height: 12rem;
+  color: ${textMuted};
+  font-size: 0.86rem;
+  font-weight: 800;
+`
+
 export const DetailPanel = styled.aside`
   display: grid;
   align-content: start;
@@ -683,8 +698,22 @@ export const PdfCanvas = styled.canvas`
 `
 
 export const PhotoFrame = styled.div`
+  position: relative;
   display: grid;
+  place-items: center;
   width: 100%;
+  min-height: 12rem;
+
+  > span {
+    position: absolute;
+    z-index: 1;
+    border-radius: 999px;
+    padding: 0.34rem 0.62rem;
+    background: ${surfaceRaised};
+    color: ${textSecondary};
+    font-size: 0.76rem;
+    font-weight: 780;
+  }
 
   img {
     width: 100%;
@@ -692,6 +721,102 @@ export const PhotoFrame = styled.div`
     object-fit: contain;
     border-radius: 8px;
     background: ${surfaceMuted};
+  }
+`
+
+export const ToastViewport = styled.div<{ "data-tone": "success" | "error" }>`
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: ${zIndexes.dialogHoverCard};
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.28rem 0.7rem;
+  align-items: center;
+  width: min(24rem, calc(100vw - 2rem));
+  padding: 0.78rem 0.9rem;
+  border: 1px solid
+    ${({ theme, "data-tone": tone }) =>
+      tone === "error" ? theme.colors.statusDangerBorder : theme.colors.statusSuccessBorder};
+  border-radius: 8px;
+  background: ${surfaceRaised};
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.22);
+
+  strong {
+    color: ${textPrimary};
+    font-size: 0.86rem;
+    font-weight: 850;
+  }
+
+  span {
+    grid-column: 1 / 2;
+    min-width: 0;
+    overflow: hidden;
+    color: ${textMuted};
+    font-size: 0.76rem;
+    font-weight: 720;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  button {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    border: 0;
+    background: transparent;
+    color: ${textSecondary};
+    font-size: 0.78rem;
+    font-weight: 800;
+    cursor: pointer;
+  }
+`
+
+export const ConfirmBackdrop = styled.div`
+  position: fixed;
+  inset: 0;
+  z-index: ${zIndexes.dialog};
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.46);
+`
+
+export const ConfirmDialog = styled.div`
+  display: grid;
+  gap: 0.95rem;
+  width: min(26rem, 100%);
+  padding: 1.15rem;
+  border: 1px solid ${borderStrong};
+  border-radius: 8px;
+  background: ${surfaceRaised};
+  box-shadow: 0 22px 54px rgba(0, 0, 0, 0.24);
+
+  > strong {
+    color: ${textPrimary};
+    font-size: 1rem;
+    font-weight: 880;
+  }
+
+  p {
+    display: grid;
+    gap: 0.42rem;
+    margin: 0;
+    color: ${textMuted};
+    font-size: 0.82rem;
+    line-height: 1.55;
+    font-weight: 720;
+  }
+
+  p span {
+    color: ${textPrimary};
+    font-weight: 850;
+    overflow-wrap: anywhere;
+  }
+
+  > div {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.45rem;
   }
 `
 

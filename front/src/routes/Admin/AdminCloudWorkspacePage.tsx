@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element -- private cloud content needs browser-owned auth cookies. */
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import type { PDFDocumentLoadingTask, RenderTask } from "pdfjs-dist"
-import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react"
+import { type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import {
   deleteCloudFile,
   getCloudFileContentUrl,
@@ -38,6 +38,8 @@ import {
   CloudSearchField,
   CloudTitleBar,
   CloudWorkspace,
+  ConfirmBackdrop,
+  ConfirmDialog,
   DetailHeader,
   DetailMetaList,
   DetailPanel,
@@ -55,6 +57,7 @@ import {
   GhostButton,
   IconButton,
   InlineList,
+  LoadingTableStatus,
   Notice,
   PdfCanvas,
   PhotoFrame,
@@ -68,6 +71,7 @@ import {
   SearchInput,
   SecondaryButton,
   SelectBoxCell,
+  ToastViewport,
   Timeline,
   UploadInput,
   VideoFrame,
@@ -248,17 +252,39 @@ type PhotoPreviewProps = {
   contentUrl: string
 }
 
-const PhotoPreview = ({ file, contentUrl }: PhotoPreviewProps) => (
-  <PreviewStage>
-    <PreviewHeader>
-      <h3>사진 보기</h3>
-      <p>{file.originalFilename}</p>
-    </PreviewHeader>
-    <PhotoFrame>
-      <img src={contentUrl} alt={file.originalFilename} />
-    </PhotoFrame>
-  </PreviewStage>
-)
+const PhotoPreview = ({ file, contentUrl }: PhotoPreviewProps) => {
+  const imageRef = useRef<HTMLImageElement | null>(null)
+  const [loadedContentUrl, setLoadedContentUrl] = useState<string | null>(null)
+  const isImageReady = loadedContentUrl === contentUrl
+
+  useEffect(() => {
+    const image = imageRef.current
+    if (image?.complete && image.naturalWidth > 0) {
+      setLoadedContentUrl(contentUrl)
+    }
+  }, [contentUrl])
+
+  return (
+    <PreviewStage>
+      <PreviewHeader>
+        <h3>사진 보기</h3>
+        <p>{file.originalFilename}</p>
+      </PreviewHeader>
+      <PhotoFrame aria-busy={isImageReady ? "false" : "true"}>
+        {!isImageReady ? <span role="status">사진을 불러오는 중입니다.</span> : null}
+        <img
+          ref={imageRef}
+          src={contentUrl}
+          alt={file.originalFilename}
+          decoding="async"
+          loading="eager"
+          onLoad={() => setLoadedContentUrl(contentUrl)}
+          onError={() => setLoadedContentUrl(contentUrl)}
+        />
+      </PhotoFrame>
+    </PreviewStage>
+  )
+}
 
 type VideoPreviewProps = {
   file: CloudFile
@@ -336,6 +362,31 @@ const PreviewDrawer = ({ file }: PreviewDrawerProps) => {
   return <VideoPreview file={file} contentUrl={contentUrl} />
 }
 
+type DeleteConfirmState = {
+  files: CloudFile[]
+}
+
+type CloudToastState =
+  | {
+      tone: "success" | "error"
+      text: string
+    }
+  | null
+
+const FileTableHead = () => (
+  <thead>
+    <tr>
+      <th aria-label="선택" />
+      <th aria-label="즐겨찾기" />
+      <th>종류</th>
+      <th>이름</th>
+      <th>크기</th>
+      <th>수정한 날짜</th>
+      <th aria-label="작업" />
+    </tr>
+  </thead>
+)
+
 const AdminCloudWorkspacePage = () => {
   const queryClient = useQueryClient()
   const uploadInputRef = useRef<HTMLInputElement>(null)
@@ -345,9 +396,12 @@ const AdminCloudWorkspacePage = () => {
   const [selectedFileId, setSelectedFileId] = useState<number | null>(null)
   const [checkedFileIds, setCheckedFileIds] = useState<number[]>([])
   const [notice, setNotice] = useState("")
+  const [toast, setToast] = useState<CloudToastState>(null)
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([])
   const [optimisticFiles, setOptimisticFiles] = useState<CloudFile[]>([])
   const [isDetailPanelOpen, setIsDetailPanelOpen] = useState(true)
+  const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState | null>(null)
+  const [isDeletePending, setIsDeletePending] = useState(false)
 
   const filesQuery = useQuery({
     queryKey: [CLOUD_QUERY_KEY, filter, keyword],
@@ -377,6 +431,9 @@ const AdminCloudWorkspacePage = () => {
   const activeUploadCount = uploadQueue.filter((item) => isUploadActive(item.status)).length
   const completedUploadCount = uploadQueue.filter((item) => item.status === "done").length
   const allVisibleChecked = files.length > 0 && files.every((file) => checkedFileIds.includes(file.id))
+  const deleteDialogRef = useRef<HTMLDivElement | null>(null)
+  const deleteCancelButtonRef = useRef<HTMLButtonElement | null>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     if (!isDetailPanelOpen) return
@@ -387,6 +444,36 @@ const AdminCloudWorkspacePage = () => {
   useEffect(() => {
     setCheckedFileIds((current) => current.filter((id) => files.some((file) => file.id === id)))
   }, [files])
+
+  useEffect(() => {
+    if (!deleteConfirm) return
+
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const focusFrame = window.requestAnimationFrame(() => {
+      deleteCancelButtonRef.current?.focus()
+    })
+
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+      previousFocusRef.current?.focus()
+      previousFocusRef.current = null
+    }
+  }, [deleteConfirm])
+
+  useEffect(() => {
+    if (!deleteConfirm) return
+
+    const handleDocumentKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || isDeletePending) return
+      event.preventDefault()
+      setDeleteConfirm(null)
+    }
+
+    document.addEventListener("keydown", handleDocumentKeyDown)
+    return () => {
+      document.removeEventListener("keydown", handleDocumentKeyDown)
+    }
+  }, [deleteConfirm, isDeletePending])
 
   useEffect(() => {
     const hasActiveUpload = uploadQueue.some((item) => item.status === "uploading")
@@ -524,26 +611,62 @@ const AdminCloudWorkspacePage = () => {
     })
   }
 
-  const handleDelete = async (file: CloudFile) => {
+  const handleDelete = (file: CloudFile) => {
+    setDeleteConfirm({ files: [file] })
+  }
+
+  const closeDeleteConfirm = () => {
+    if (isDeletePending) return
+    setDeleteConfirm(null)
+  }
+
+  const handleDeleteDialogKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault()
+      closeDeleteConfirm()
+      return
+    }
+
+    if (event.key !== "Tab") return
+
+    const dialog = deleteDialogRef.current
+    if (!dialog) return
+    const focusableElements = Array.from(dialog.querySelectorAll<HTMLElement>("button:not(:disabled)"))
+    if (focusableElements.length === 0) {
+      event.preventDefault()
+      return
+    }
+
+    const firstElement = focusableElements[0]
+    const lastElement = focusableElements[focusableElements.length - 1]
+    if (event.shiftKey && document.activeElement === firstElement) {
+      event.preventDefault()
+      lastElement.focus()
+      return
+    }
+    if (!event.shiftKey && document.activeElement === lastElement) {
+      event.preventDefault()
+      firstElement.focus()
+    }
+  }
+
+  const performSingleDelete = async (file: CloudFile) => {
     try {
       await deleteCloudFile(file.id)
       const deletedIds = new Set([file.id])
-      setNotice(`${file.originalFilename} 삭제 완료`)
+      setToast({ tone: "success", text: `${file.originalFilename} 삭제 완료` })
       setOptimisticFiles((current) => current.filter((item) => item.id !== file.id))
       setCheckedFileIds((current) => current.filter((id) => id !== file.id))
       removeDeletedFilesFromCloudCaches(deletedIds)
       if (selectedFileId === file.id) setSelectedFileId(null)
     } catch {
-      setNotice(`${file.originalFilename} 삭제 실패`)
+      setToast({ tone: "error", text: `${file.originalFilename} 삭제 실패` })
     } finally {
       await queryClient.invalidateQueries({ queryKey: [CLOUD_QUERY_KEY] })
     }
   }
 
-  const handleDeleteSelected = async () => {
-    const targets = files.filter((file) => checkedFileIds.includes(file.id))
-    if (targets.length === 0) return
-
+  const performBulkDelete = async (targets: CloudFile[]) => {
     const results = await Promise.allSettled(
       targets.map(async (file) => {
         await deleteCloudFile(file.id)
@@ -562,15 +685,37 @@ const AdminCloudWorkspacePage = () => {
     }
 
     if (failedCount > 0) {
-      setNotice(
-        deletedIds.size > 0
-          ? `${deletedIds.size}개 삭제 완료, ${failedCount}개 실패`
-          : `${failedCount}개 파일 삭제 실패`
-      )
+      const failureText =
+        deletedIds.size > 0 ? `${deletedIds.size}개 삭제 완료, ${failedCount}개 실패` : `${failedCount}개 파일 삭제 실패`
+      setToast({ tone: "error", text: failureText })
     } else {
-      setNotice(`${deletedIds.size}개 파일 삭제 완료`)
+      const successText = `${deletedIds.size}개 파일 삭제 완료`
+      setToast({ tone: "success", text: successText })
     }
     await queryClient.invalidateQueries({ queryKey: [CLOUD_QUERY_KEY] })
+  }
+
+  const handleDeleteSelected = () => {
+    const targets = files.filter((file) => checkedFileIds.includes(file.id))
+    if (targets.length === 0) return
+
+    setDeleteConfirm({ files: targets })
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirm || isDeletePending) return
+
+    setIsDeletePending(true)
+    try {
+      if (deleteConfirm.files.length === 1) {
+        await performSingleDelete(deleteConfirm.files[0])
+      } else {
+        await performBulkDelete(deleteConfirm.files)
+      }
+      setDeleteConfirm(null)
+    } finally {
+      setIsDeletePending(false)
+    }
   }
 
   const isFileListError = filesQuery.isError
@@ -631,7 +776,7 @@ const AdminCloudWorkspacePage = () => {
               <SecondaryButton type="button" disabled>
                 새로 만들기
               </SecondaryButton>
-              <SecondaryButton type="button" disabled={checkedFileIds.length === 0} onClick={() => void handleDeleteSelected()}>
+              <SecondaryButton type="button" disabled={checkedFileIds.length === 0} onClick={handleDeleteSelected}>
                 선택 삭제
               </SecondaryButton>
             </ActionGroup>
@@ -677,7 +822,20 @@ const AdminCloudWorkspacePage = () => {
           />
 
           <FileTableScroll>
-            {files.length === 0 ? (
+            {files.length === 0 && filesQuery.isLoading ? (
+              <FileTable aria-busy="true">
+                <FileTableHead />
+                <tbody>
+                  <tr>
+                    <td colSpan={7}>
+                      <LoadingTableStatus role="status" aria-label="파일 목록 로딩">
+                        파일 목록 로딩
+                      </LoadingTableStatus>
+                    </td>
+                  </tr>
+                </tbody>
+              </FileTable>
+            ) : files.length === 0 ? (
               <EmptyTableState>
                 <strong>{emptyTitle}</strong>
                 {activeUploadCount > 0 ? null : (
@@ -698,17 +856,7 @@ const AdminCloudWorkspacePage = () => {
               </EmptyTableState>
             ) : (
               <FileTable aria-busy={filesQuery.isFetching ? "true" : "false"}>
-                <thead>
-                  <tr>
-                    <th aria-label="선택" />
-                    <th aria-label="즐겨찾기" />
-                    <th>종류</th>
-                    <th>이름</th>
-                    <th>크기</th>
-                    <th>수정한 날짜</th>
-                    <th aria-label="작업" />
-                  </tr>
-                </thead>
+                <FileTableHead />
                 <tbody>
                   {files.map((file) => {
                     const checked = checkedFileIds.includes(file.id)
@@ -760,7 +908,7 @@ const AdminCloudWorkspacePage = () => {
                             <GhostButton
                               type="button"
                               aria-label={`${file.originalFilename} 삭제`}
-                              onClick={() => void handleDelete(file)}
+                              onClick={() => handleDelete(file)}
                             >
                               <AppIcon name="trash" />
                               삭제
@@ -817,6 +965,52 @@ const AdminCloudWorkspacePage = () => {
           ) : null}
         </DetailPanel>
       </CloudWorkspace>
+      {toast ? (
+        <ToastViewport data-tone={toast.tone} role="status" aria-live="polite">
+          <strong>{toast.tone === "error" ? "작업 실패" : "작업 완료"}</strong>
+          <span>{toast.text}</span>
+          <button type="button" onClick={() => setToast(null)}>
+            닫기
+          </button>
+        </ToastViewport>
+      ) : null}
+      {deleteConfirm ? (
+        <ConfirmBackdrop role="presentation" onClick={closeDeleteConfirm}>
+          <ConfirmDialog
+            ref={deleteDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cloud-delete-confirm-title"
+            aria-describedby="cloud-delete-confirm-description"
+            tabIndex={-1}
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={handleDeleteDialogKeyDown}
+          >
+            <strong id="cloud-delete-confirm-title">파일 삭제</strong>
+            <p id="cloud-delete-confirm-description">
+              <span>
+                {deleteConfirm.files.length === 1
+                  ? deleteConfirm.files[0].originalFilename
+                  : `${deleteConfirm.files.length}개 파일`}
+              </span>
+              삭제한 파일은 관리자 클라우드 목록에서 제거됩니다.
+            </p>
+            <div>
+              <SecondaryButton
+                ref={deleteCancelButtonRef}
+                type="button"
+                disabled={isDeletePending}
+                onClick={closeDeleteConfirm}
+              >
+                취소
+              </SecondaryButton>
+              <PrimaryButton type="button" disabled={isDeletePending} onClick={() => void handleConfirmDelete()}>
+                삭제
+              </PrimaryButton>
+            </div>
+          </ConfirmDialog>
+        </ConfirmBackdrop>
+      ) : null}
     </CloudMain>
   )
 }

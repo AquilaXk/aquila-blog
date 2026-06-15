@@ -218,8 +218,9 @@ export const SearchDetail = styled.span`
 `
 
 export const ActionBar = styled.div`
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   justify-content: space-between;
   gap: 0.8rem;
   min-width: 0;
@@ -227,8 +228,7 @@ export const ActionBar = styled.div`
   border-bottom: 1px solid ${border};
 
   @media (max-width: 760px) {
-    align-items: stretch;
-    flex-direction: column;
+    grid-template-columns: minmax(0, 1fr);
   }
 `
 
@@ -238,6 +238,16 @@ export const ActionGroup = styled.div`
   gap: 0.45rem;
   min-width: 0;
   flex-wrap: wrap;
+
+  &[data-align="end"] {
+    justify-content: flex-end;
+  }
+
+  @media (max-width: 760px) {
+    &[data-align="end"] {
+      justify-content: flex-start;
+    }
+  }
 `
 
 export const UploadInput = styled.input`
@@ -362,8 +372,9 @@ export const FileTableScroll = styled.div`
 
 export const FileTable = styled.table`
   width: 100%;
-  min-width: 46rem;
+  min-width: 50rem;
   border-collapse: collapse;
+  table-layout: fixed;
   color: ${textPrimary};
 
   th,
@@ -397,6 +408,33 @@ export const FileTable = styled.table`
   tbody tr:hover {
     background: ${surfaceMuted};
   }
+
+  th:nth-of-type(1),
+  th:nth-of-type(2),
+  td:nth-of-type(1),
+  td:nth-of-type(2) {
+    width: 2.65rem;
+  }
+
+  th:nth-of-type(3),
+  td:nth-of-type(3) {
+    width: 4.2rem;
+  }
+
+  th:nth-of-type(5),
+  td:nth-of-type(5) {
+    width: 5.6rem;
+  }
+
+  th:nth-of-type(6),
+  td:nth-of-type(6) {
+    width: 8.9rem;
+  }
+
+  th:nth-of-type(7),
+  td:nth-of-type(7) {
+    width: 5.8rem;
+  }
 `
 
 export const SelectBoxCell = styled.td`
@@ -420,15 +458,17 @@ export const FavoriteButton = styled.button`
 `
 
 export const FileTypeIcon = styled.span`
-  width: 1.45rem;
-  height: 1.2rem;
-  display: inline-grid;
-  place-items: center;
+  min-width: 2.25rem;
+  height: 1.38rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 4px;
   background: ${surfaceAccent};
   color: ${accentGold};
-  font-size: 0.63rem;
+  font-size: 0.66rem;
   font-weight: 900;
+  letter-spacing: 0;
 `
 
 export const FileNameButton = styled.button`
@@ -436,7 +476,6 @@ export const FileNameButton = styled.button`
   padding: 0;
   display: inline-flex;
   align-items: center;
-  gap: 0.52rem;
   min-width: 0;
   max-width: 100%;
   background: transparent;
@@ -447,8 +486,20 @@ export const FileNameButton = styled.button`
   text-align: left;
 
   strong {
+    display: inline-flex;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  [data-filename-stem] {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  [data-filename-extension] {
+    flex: 0 0 auto;
     white-space: nowrap;
   }
 `
@@ -532,11 +583,11 @@ export const DetailTab = styled.button`
 
 export const DetailPreviewBox = styled.div`
   display: grid;
-  place-items: center;
+  align-items: start;
   min-height: 12.5rem;
   border-radius: 2px;
   background: ${surfaceMuted};
-  overflow: hidden;
+  overflow: auto;
 `
 
 export const DetailMetaList = styled.dl`
@@ -586,14 +637,19 @@ export const PreviewStage = styled.div`
   width: 100%;
   min-height: 12rem;
   align-content: start;
+  min-width: 0;
 `
 
 export const PdfCanvas = styled.canvas`
   width: 100%;
-  max-height: 18rem;
+  height: auto;
+  max-width: 100%;
+  max-height: min(52vh, 34rem);
+  display: block;
   border: 1px solid ${border};
   border-radius: 8px;
   background: ${surfaceRaised};
+  object-fit: contain;
 `
 
 export const PhotoFrame = styled.div`
@@ -720,7 +776,7 @@ export const QueueList = styled.ul`
 
 export const QueueItem = styled.li`
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) minmax(3.7rem, auto) auto;
   gap: 0.5rem 0.75rem;
   align-items: center;
   min-width: 0;
@@ -730,6 +786,7 @@ export const QueueItem = styled.li`
   background: ${surface};
 
   strong {
+    display: block;
     color: ${textPrimary};
     font-size: 0.8rem;
     font-weight: 820;
@@ -757,14 +814,16 @@ export const QueueItem = styled.li`
 
 export const StatusPill = styled.span`
   justify-self: end;
-  min-width: 4.2rem;
+  min-width: 3.55rem;
+  max-width: 5.6rem;
   border-radius: 999px;
-  padding: 0.22rem 0.48rem;
+  padding: 0.22rem 0.45rem;
   background: ${surfaceAccent};
   color: ${accentGold};
   font-size: 0.7rem;
   font-weight: 850;
   text-align: center;
+  white-space: nowrap;
 
   &[data-status="failed"] {
     background: ${({ theme }) => theme.colors.statusDangerSurface};

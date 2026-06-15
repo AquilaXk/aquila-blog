@@ -13,6 +13,17 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.describe("core smoke public shell", () => {
+  test("system dark 공개 페이지는 hydration 첫 렌더에서 light scheme으로 되돌아가지 않는다", async () => {
+    const useSchemeSource = readFileSync(path.resolve(__dirname, "../src/hooks/useScheme.ts"), "utf8")
+
+    expect(useSchemeSource).toContain('CONFIG.blog.scheme === "system" ? "light" : CONFIG.blog.scheme')
+    expect(useSchemeSource).toContain("const bootstrapScheme = resolveCachedScheme() ?? defaultScheme")
+    expect(useSchemeSource).toContain("if (bootstrapScheme !== data)")
+    expect(useSchemeSource).toContain("queryClient.setQueryData(queryKey.scheme(), bootstrapScheme)")
+    expect(useSchemeSource).not.toContain("setScheme(bootstrapScheme)")
+    expect(useSchemeSource).not.toMatch(/setScheme\(nextScheme\)\s*clearSchemeBootstrapAfterHydration\(\)/)
+  })
+
   test("public blog appearance는 전역 theme와 legacy 디자인으로 고정된다", async () => {
   const resolverSource = readFileSync(path.resolve(__dirname, "../src/libs/blogAppearance.ts"), "utf8")
   const rootLayoutSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/index.tsx"), "utf8")

@@ -54,6 +54,17 @@ const CLOUD_FILES: CloudFileFixture[] = [
     createdAt: "2026-06-12T11:00:00Z",
     modifiedAt: "2026-06-12T11:00:00Z",
   },
+  {
+    id: 104,
+    ownerMemberId: 1,
+    originalFilename: "[첨부1] NCS기반 채용 직무설명자료_2026년 제3회 식약처 공무원(일반직) 경력경쟁채용시험 공고문_게시.pdf",
+    contentType: "application/pdf",
+    byteSize: 1_004_544,
+    mediaKind: "DOCUMENT",
+    folderPath: "/",
+    createdAt: "2026-06-13T02:20:00Z",
+    modifiedAt: "2026-06-13T02:20:00Z",
+  },
 ]
 
 const pixelPng = Buffer.from(
@@ -90,11 +101,23 @@ const getUploadFileMetadata = (name: string) => {
 
 const normalizeFolderPathParam = (value: string) => value.trim().replace(/^\/+|\/+$/g, "")
 
+const expectPdfPreviewFitsDetailPanel = async (page: Page, previewName: string | RegExp) => {
+  await expect
+    .poll(async () => {
+      const detailPanelBox = await page.getByLabel("클라우드 상세정보").boundingBox()
+      const pdfCanvasBox = await page.getByLabel(previewName).boundingBox()
+      if (!detailPanelBox || !pdfCanvasBox) return false
+      return pdfCanvasBox.width <= detailPanelBox.width
+    })
+    .toBe(true)
+}
+
 const setupAdminCloudMocks = async (
   page: Page,
   options: {
     failDeleteIds?: string[]
     failList?: boolean
+    failUploadOnceNames?: string[]
     failUploadNames?: string[]
     initialFiles?: CloudFileFixture[]
   } = {}
@@ -106,6 +129,7 @@ const setupAdminCloudMocks = async (
   const uploadedFiles: CloudFileFixture[] = []
   const failedDeleteIds = new Set(options.failDeleteIds ?? [])
   const failedUploadNames = new Set(options.failUploadNames ?? [])
+  const failUploadOnceNames = new Set(options.failUploadOnceNames ?? [])
   const initialFiles = options.initialFiles ?? CLOUD_FILES
   let nextUploadId = 204
 
@@ -155,7 +179,8 @@ const setupAdminCloudMocks = async (
       const uploadedName = getUploadName(route)
       const metadata = getUploadFileMetadata(uploadedName)
 
-      if (failedUploadNames.has(uploadedName)) {
+      if (failedUploadNames.has(uploadedName) || failUploadOnceNames.has(uploadedName)) {
+        failUploadOnceNames.delete(uploadedName)
         await fulfillJson(route, { resultCode: "500-1", msg: "외장 스토리지 저장에 실패했습니다." }, 500)
         return
       }
@@ -253,6 +278,8 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByText("표시할 파일이 없습니다.")).toHaveCount(0)
     await expect(page.getByText("계정 소유주만 볼 수 있음").first()).toBeVisible()
     await expect(page.getByRole("button", { name: "운영 점검 리포트.pdf 즐겨찾기 (준비 중)" })).toBeDisabled()
+    await expect(page.getByText("문", { exact: true })).toHaveCount(0)
+    await expect(page.getByText("PDF").first()).toBeVisible()
 
     const searchInput = page.getByLabel("클라우드 파일 검색")
     await searchInput.fill("/photos")
@@ -298,6 +325,7 @@ test.describe("관리자 클라우드", () => {
       expect.arrayContaining(["신규 운영 문서.pdf", "배포 캡처.png"])
     )
     await expect(uploadPanel.getByText("완료").first()).toBeVisible()
+    await expect(page.getByText("신규 운영 문서.pdf 업로드 완료")).toHaveCount(0)
     await expect(page.getByRole("row", { name: /신규 운영 문서\.pdf/ })).toBeVisible()
     await expect(page.getByRole("row", { name: /배포 캡처\.png/ })).toBeVisible()
 
@@ -316,6 +344,7 @@ test.describe("관리자 클라우드", () => {
     await page.getByRole("button", { name: "운영 점검 리포트.pdf 미리보기" }).click()
     await expect(page.getByRole("heading", { name: "문서 뷰어" })).toBeVisible()
     await expect(page.getByText("PDF.js canvas 렌더링")).toBeVisible()
+    await expectPdfPreviewFitsDetailPanel(page, "운영 점검 리포트.pdf PDF 미리보기")
     await page.getByRole("button", { name: "상세 패널 닫기" }).click()
     await expect(page.getByLabel("클라우드 상세정보").getByText("파일 선택")).toBeVisible()
     await page.getByRole("button", { name: "상세 패널 보기" }).click()
@@ -336,6 +365,39 @@ test.describe("관리자 클라우드", () => {
 
     await page.getByRole("button", { name: "deploy-walkthrough.mp4 삭제" }).click()
     await expect.poll(() => mocks.deletedIds).toContain("103")
+  })
+
+  test("긴 파일명과 업로드 완료 상태는 목록과 하단 업로드 패널에서 겹치지 않는다", async ({ page }) => {
+    await setupAdminCloudMocks(page, { initialFiles: CLOUD_FILES })
+
+    await page.goto("/admin/cloud")
+
+    const longFileRow = page.getByRole("row", { name: /NCS기반 채용 직무설명자료.*게시\.pdf/ })
+    await expect(longFileRow).toBeVisible()
+    const longFileName = longFileRow.locator('button[title$="게시.pdf"]')
+    await expect(longFileName).toHaveAttribute("title", /게시\.pdf$/)
+    await expect(longFileRow.getByLabel("문서")).toHaveText("PDF")
+
+    await longFileRow.getByRole("button", { name: /미리보기/ }).click()
+    await expect(page.getByRole("heading", { name: "문서 뷰어" })).toBeVisible()
+    await expectPdfPreviewFitsDetailPanel(page, /NCS기반 채용 직무설명자료.*PDF 미리보기/)
+
+    await page.getByLabel("클라우드 파일 업로드").setInputFiles({
+      name: "★2026년 제3회 식약처 공무원(일반직) 경력경쟁채용시험 공고문_게시_긴파일명_상태겹침방지.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4 long upload"),
+    })
+
+    const uploadPanel = page.getByLabel("업로드 중인 파일")
+    await expect(uploadPanel.getByText(/상태겹침방지\.pdf/)).toBeVisible()
+    const donePill = uploadPanel.getByText("완료", { exact: true })
+    await expect(donePill).toBeVisible()
+    await expect(page.getByText(/상태겹침방지\.pdf 업로드 완료/)).toHaveCount(0)
+    const queueItemBox = await uploadPanel.getByText(/상태겹침방지\.pdf/).boundingBox()
+    const donePillBox = await donePill.boundingBox()
+    expect(queueItemBox).not.toBeNull()
+    expect(donePillBox).not.toBeNull()
+    expect(queueItemBox!.x + queueItemBox!.width).toBeLessThanOrEqual(donePillBox!.x + 2)
   })
 
   test("선택 삭제 일부 실패 시 성공 항목만 목록에서 제거하고 실패 알림을 유지한다", async ({ page }) => {
@@ -407,5 +469,29 @@ test.describe("관리자 클라우드", () => {
     await expect(uploadPanel.getByRole("heading", { name: "항목 1개 업로드 실패/취소" })).toBeVisible()
     await expect(uploadPanel.getByText(/서버 오류가 발생했습니다/)).toBeVisible()
     await expect(uploadPanel.getByRole("button", { name: "실패할 운영 문서.pdf 업로드 다시 시도" })).toBeVisible()
+  })
+
+  test("업로드 재시도 성공 시 이전 실패 알림은 작업 영역에 남지 않는다", async ({ page }) => {
+    await setupAdminCloudMocks(page, {
+      failUploadOnceNames: ["재시도 성공 문서.pdf"],
+      initialFiles: [],
+    })
+
+    await page.goto("/admin/cloud")
+
+    await page.getByLabel("클라우드 파일 업로드").setInputFiles({
+      name: "재시도 성공 문서.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4 retry upload"),
+    })
+
+    const uploadPanel = page.getByLabel("업로드 중인 파일")
+    await expect(page.getByText(/재시도 성공 문서\.pdf 업로드 실패/)).toBeVisible()
+    await uploadPanel.getByRole("button", { name: "재시도 성공 문서.pdf 업로드 다시 시도" }).click()
+
+    await expect(uploadPanel.getByText("완료", { exact: true })).toBeVisible()
+    await expect(page.getByText(/재시도 성공 문서\.pdf 업로드 실패/)).toHaveCount(0)
+    await expect(page.getByText("재시도 성공 문서.pdf 업로드 완료")).toHaveCount(0)
+    await expect(page.getByRole("row", { name: /재시도 성공 문서\.pdf/ })).toBeVisible()
   })
 })

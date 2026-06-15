@@ -66,7 +66,7 @@ const AdminCloudUploadQueue = ({
       <QueueList>
         {uploadQueue.map((item) => (
           <QueueItem key={item.id}>
-            <div>
+            <div title={item.name}>
               <strong>{item.name}</strong>
               <p>
                 {formatCloudFileSize(item.byteSize)} · {item.message}

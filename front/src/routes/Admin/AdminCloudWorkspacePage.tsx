@@ -19,6 +19,7 @@ import {
   doesCloudFileMatchFilters,
   formatCloudDate,
   formatCloudFileSize,
+  getCloudFilenameParts,
   getCloudKindBadge,
   getCloudKindIconLabel,
   getCloudKindLabel,
@@ -105,14 +106,29 @@ const resolveCloudErrorMessage = (error: unknown) => {
   return "요청 처리 중 오류가 발생했습니다."
 }
 
+const suppressPdfWorkerTerminationRejection = () => {
+  const handleCleanupRejection = (event: PromiseRejectionEvent) => {
+    if (!(event.reason instanceof Error)) return
+    if (!event.reason.message.includes("Worker was terminated")) return
+
+    event.preventDefault()
+  }
+
+  window.addEventListener("unhandledrejection", handleCleanupRejection)
+  window.setTimeout(() => {
+    window.removeEventListener("unhandledrejection", handleCleanupRejection)
+  }, 1000)
+}
+
 const ignorePdfPreviewTeardownRejection = (task: PDFDocumentLoadingTask | null) => {
   if (!task) return
 
   void task.promise.catch(() => {
-    // 미리보기 cleanup에서 PDF.js worker를 의도적으로 종료하면 reject가 발생할 수 있다.
+    // 미리보기 전환 중 PDF 로딩이 늦게 실패할 수 있으므로 cleanup 경로에서 reject를 소비한다.
   })
+  suppressPdfWorkerTerminationRejection()
   void task.destroy().catch(() => {
-    // 미리보기 cleanup에서 PDF.js worker를 의도적으로 종료하면 reject가 발생할 수 있다.
+    // cleanup에서 PDF.js worker/download를 종료할 때 발생하는 reject도 사용자에게 노출하지 않는다.
   })
 }
 
@@ -155,13 +171,16 @@ const PdfPreview = ({ file, contentUrl }: PdfPreviewProps) => {
         const outputScale = window.devicePixelRatio || 1
         canvas.width = Math.floor(viewport.width * outputScale)
         canvas.height = Math.floor(viewport.height * outputScale)
-        canvas.style.width = `${Math.floor(viewport.width)}px`
-        canvas.style.height = `${Math.floor(viewport.height)}px`
+        canvas.style.width = "100%"
+        canvas.style.height = "auto"
         renderTask = page.render({
           canvas,
           canvasContext: context,
           viewport,
           transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined,
+        })
+        void renderTask.promise.catch(() => {
+          // 파일 전환/패널 닫기 중 render task 취소가 pageerror로 번지는 것을 막는다.
         })
         await renderTask.promise
         if (!cancelled) setRenderState("PDF.js canvas 렌더링")
@@ -379,7 +398,9 @@ const AdminCloudWorkspacePage = () => {
         })
         setIsDetailPanelOpen(true)
         setSelectedFileId(uploaded.id)
-        setNotice(`${uploaded.originalFilename} 업로드 완료`)
+        setNotice((current) =>
+          current.includes(nextUpload.name) && /업로드 (실패|취소)/.test(current) ? "" : current
+        )
         setUploadQueue((current) =>
           current.map((item) =>
             item.id === nextUpload.id && item.status !== "cancelled"
@@ -423,7 +444,6 @@ const AdminCloudWorkspacePage = () => {
     if (selectedFiles.length === 0) return
 
     setUploadQueue((current) => [...current, ...selectedFiles.map(createUploadQueueItem)])
-    setNotice(`${selectedFiles.length}개 파일을 업로드 큐에 추가했습니다.`)
     event.currentTarget.value = ""
   }
 
@@ -597,7 +617,7 @@ const AdminCloudWorkspacePage = () => {
               </SecondaryButton>
             </ActionGroup>
 
-            <ActionGroup>
+            <ActionGroup data-align="end">
               {notice ? <Notice>{notice}</Notice> : null}
               <FilterGroup aria-label="파일 종류 필터">
                 {CLOUD_FILTERS.map((item) => (
@@ -674,6 +694,7 @@ const AdminCloudWorkspacePage = () => {
                   {files.map((file) => {
                     const checked = checkedFileIds.includes(file.id)
                     const selected = selectedFile?.id === file.id
+                    const filenameParts = getCloudFilenameParts(file.originalFilename)
                     return (
                       <tr key={file.id} data-selected={selected ? "true" : "false"}>
                         <SelectBoxCell>
@@ -699,8 +720,15 @@ const AdminCloudWorkspacePage = () => {
                           </FileTypeIcon>
                         </td>
                         <td>
-                          <FileNameButton type="button" onClick={() => handlePreviewFile(file.id)}>
-                            <strong>{file.originalFilename}</strong>
+                          <FileNameButton
+                            type="button"
+                            title={file.originalFilename}
+                            onClick={() => handlePreviewFile(file.id)}
+                          >
+                            <strong>
+                              <span data-filename-stem>{filenameParts.stem}</span>
+                              <span data-filename-extension>{filenameParts.extension}</span>
+                            </strong>
                           </FileNameButton>
                         </td>
                         <td>{formatCloudFileSize(file.byteSize)}</td>

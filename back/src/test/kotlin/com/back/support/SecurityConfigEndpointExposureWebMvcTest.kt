@@ -36,6 +36,7 @@ import org.springframework.test.context.TestPropertySource
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
+import org.springframework.test.web.servlet.post
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RestController
 import tools.jackson.databind.ObjectMapper
@@ -47,6 +48,7 @@ import tools.jackson.databind.ObjectMapper
 )
 @TestPropertySource(
     properties = [
+        "custom.security.apiRateLimit.enabled=false",
         "spring.security.oauth2.client.registration.kakao.client-id=test-kakao-client-id",
     ],
 )
@@ -180,6 +182,24 @@ class SecurityConfigProdEndpointExposureWebMvcTest : SecurityConfigEndpointExpos
             mvc.get(path).andExpect {
                 status { isInternalServerError() }
             }
+        }
+    }
+
+    @Test
+    @DisplayName("prod에서 일반 사용자는 첨부 파일 업로드 보안 체인을 통과하지 못한다")
+    @WithMockUser(roles = ["USER"])
+    fun `prod protects post file upload from non admin access`() {
+        mvc.post("/post/api/v1/posts/files").andExpect {
+            status { isForbidden() }
+        }
+    }
+
+    @Test
+    @DisplayName("prod에서 관리자는 첨부 파일 업로드 보안 체인을 통과해 handler 계층까지 도달한다")
+    @WithMockUser(roles = ["ADMIN"])
+    fun `prod lets admin pass post file upload security checks to application handler layer`() {
+        mvc.post("/post/api/v1/posts/files").andExpect {
+            status { isInternalServerError() }
         }
     }
 

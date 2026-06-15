@@ -47,12 +47,16 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
           if [ -z "${NVD_API_KEY}" ]; then
-            echo "::warning title=Backend dependency scan skipped::NVD_API_KEY secret is not configured; dependency-check requires it for reliable CI scans."
             echo "ran=false" >> "${GITHUB_OUTPUT}"
-            exit 0
+            if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+              echo "::warning title=Backend dependency scan skipped::NVD_API_KEY secret is not configured for this PR context; dependency-check requires it for reliable CI scans."
+              exit 0
+            fi
+            echo "::error title=Backend dependency scan blocked::NVD_API_KEY secret is required for trusted push, schedule, and manual security scans."
+            exit 1
           fi
-          ./gradlew --no-daemon dependencyCheckAnalyze
           echo "ran=true" >> "${GITHUB_OUTPUT}"
+          ./gradlew --no-daemon dependencyCheckAnalyze
 
       - name: Upload backend dependency check reports
         if: always() && steps.backend_dependency_scan.outputs.ran == 'true'

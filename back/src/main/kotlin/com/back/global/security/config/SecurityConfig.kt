@@ -22,8 +22,12 @@ import org.springframework.security.web.AuthenticationEntryPoint
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.access.AccessDeniedHandler
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
+import org.springframework.security.web.util.matcher.RequestMatcher
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource
 import tools.jackson.databind.ObjectMapper
+import java.net.Inet4Address
+import java.net.Inet6Address
+import java.net.InetAddress
 
 /**
  * SecurityConfig는 글로벌 런타임 동작을 정의하는 설정 클래스입니다.
@@ -70,6 +74,7 @@ class SecurityConfig(
                     // 프로덕션에서는 k8s/lb health probe 외 actuator 공개를 차단한다.
                     authorize("/actuator/health/liveness", permitAll)
                     authorize("/actuator/health/readiness", permitAll)
+                    authorize(internalPrometheusScrapeMatcher(), permitAll)
                     authorize("/actuator/**", hasRole("ADMIN"))
                 } else {
                     authorize("/actuator/health/**", permitAll)
@@ -176,6 +181,45 @@ class SecurityConfig(
         response.setHeader(HttpHeaders.CACHE_CONTROL, "private, no-store, max-age=0")
         response.setHeader(HttpHeaders.PRAGMA, "no-cache")
         response.setDateHeader(HttpHeaders.EXPIRES, 0)
+    }
+
+    private fun internalPrometheusScrapeMatcher(): RequestMatcher =
+        RequestMatcher { request ->
+            request.requestURI.removePrefix(request.contextPath.orEmpty()) == "/actuator/prometheus" &&
+                request.method.equals("GET", ignoreCase = true) &&
+                !hasForwardedClientHeaders(request) &&
+                isInternalAddress(request.remoteAddr)
+        }
+
+    private fun hasForwardedClientHeaders(request: jakarta.servlet.http.HttpServletRequest): Boolean =
+        listOf(
+            "Forwarded",
+            "X-Forwarded-For",
+            "X-Real-IP",
+            "CF-Connecting-IP",
+            "True-Client-IP",
+        ).any { header -> !request.getHeader(header).isNullOrBlank() }
+
+    private fun isInternalAddress(raw: String?): Boolean {
+        val address = runCatching { InetAddress.getByName(raw?.trim().orEmpty()) }.getOrNull() ?: return false
+
+        if (address.isAnyLocalAddress || address.isLoopbackAddress || address.isSiteLocalAddress || address.isLinkLocalAddress) {
+            return true
+        }
+
+        if (address is Inet4Address) {
+            val bytes = address.address
+            val first = bytes[0].toInt() and 0xFF
+            val second = bytes[1].toInt() and 0xFF
+            if (first == 100 && second in 64..127) return true
+        }
+
+        if (address is Inet6Address) {
+            val first = address.address[0].toInt() and 0xFF
+            if ((first and 0xFE) == 0xFC) return true
+        }
+
+        return false
     }
 }
 

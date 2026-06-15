@@ -22,6 +22,7 @@ import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.springframework.http.HttpHeaders
+import org.springframework.mock.env.MockEnvironment
 import org.springframework.mock.web.MockFilterChain
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.mock.web.MockHttpServletResponse
@@ -31,6 +32,128 @@ import java.time.Instant
 
 @DisplayName("CustomAuthenticationFilter 테스트")
 class CustomAuthenticationFilterTest {
+    @Test
+    @DisplayName("prod Swagger와 OpenAPI 문서 경로도 쿠키 인증 필터 대상이다")
+    fun `prod api docs paths are authentication filter targets`() {
+        val actorApplicationService = mock(ActorApplicationService::class.java)
+        val memberSessionUseCase = mock(MemberSessionUseCase::class.java)
+        val authIpSecurityService = mock(AuthIpSecurityService::class.java)
+        val authSecurityEventService = mock(AuthSecurityEventService::class.java)
+        val authCookieService = mock(AuthCookieService::class.java)
+        val clientIpResolver = mock(ClientIpResolver::class.java)
+        val publicApiRequestMatcher = mock(PublicApiRequestMatcher::class.java)
+        val apiCorsPolicy = mock(ApiCorsPolicy::class.java)
+        val rq = mock(Rq::class.java)
+        val objectMapper = ObjectMapper()
+        val accessToken = "broken-access-token"
+        val filter =
+            CustomAuthenticationFilter(
+                actorApplicationService = actorApplicationService,
+                memberSessionUseCase = memberSessionUseCase,
+                authIpSecurityService = authIpSecurityService,
+                authSecurityEventService = authSecurityEventService,
+                authCookieService = authCookieService,
+                clientIpResolver = clientIpResolver,
+                objectMapper = objectMapper,
+                publicApiRequestMatcher = publicApiRequestMatcher,
+                apiCorsPolicy = apiCorsPolicy,
+                environment = MockEnvironment().apply { setActiveProfiles("prod") },
+                rq = rq,
+                freshLookupGraceSeconds = 15,
+            )
+
+        given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("")
+        given(rq.getCookieValue("apiKey", "")).willReturn("")
+        given(rq.getCookieValue("accessToken", "")).willReturn(accessToken)
+        given(rq.getCookieValue("sessionKey", "")).willReturn("")
+        given(rq.getCookieValue("refreshToken", "")).willReturn("")
+        given(actorApplicationService.payload(accessToken)).willThrow(RuntimeException("jwt down"))
+
+        listOf(
+            "/swagger-ui/index.html",
+            "/v3/api-docs",
+            "/v3/api-docs/swagger-config",
+        ).forEach { path ->
+            val request = MockHttpServletRequest("GET", path)
+            val response = MockHttpServletResponse()
+            val filterChain =
+                MockFilterChain(
+                    object : HttpServlet() {
+                        override fun service(
+                            req: HttpServletRequest,
+                            res: HttpServletResponse,
+                        ) {
+                            res.status = HttpServletResponse.SC_NO_CONTENT
+                        }
+                    },
+                )
+
+            given(publicApiRequestMatcher.matches(request)).willReturn(false)
+            given(clientIpResolver.resolve(request)).willReturn("203.0.113.20")
+
+            filter.doFilter(request, response, filterChain)
+
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_UNAUTHORIZED)
+            assertThat(response.contentAsString).contains("\"resultCode\":\"401-1\"")
+        }
+    }
+
+    @Test
+    @DisplayName("non-prod 공개 문서 경로는 stale 인증 쿠키가 있어도 필터를 건너뛴다")
+    fun `non prod public docs paths skip stale auth cookies`() {
+        val actorApplicationService = mock(ActorApplicationService::class.java)
+        val memberSessionUseCase = mock(MemberSessionUseCase::class.java)
+        val authIpSecurityService = mock(AuthIpSecurityService::class.java)
+        val authSecurityEventService = mock(AuthSecurityEventService::class.java)
+        val authCookieService = mock(AuthCookieService::class.java)
+        val clientIpResolver = mock(ClientIpResolver::class.java)
+        val publicApiRequestMatcher = mock(PublicApiRequestMatcher::class.java)
+        val apiCorsPolicy = mock(ApiCorsPolicy::class.java)
+        val rq = mock(Rq::class.java)
+        val objectMapper = ObjectMapper()
+        val filter =
+            CustomAuthenticationFilter(
+                actorApplicationService = actorApplicationService,
+                memberSessionUseCase = memberSessionUseCase,
+                authIpSecurityService = authIpSecurityService,
+                authSecurityEventService = authSecurityEventService,
+                authCookieService = authCookieService,
+                clientIpResolver = clientIpResolver,
+                objectMapper = objectMapper,
+                publicApiRequestMatcher = publicApiRequestMatcher,
+                apiCorsPolicy = apiCorsPolicy,
+                environment = MockEnvironment().apply { setActiveProfiles("test") },
+                rq = rq,
+                freshLookupGraceSeconds = 15,
+            )
+
+        listOf(
+            "/swagger-ui/index.html",
+            "/v3/api-docs",
+            "/v3/api-docs/swagger-config",
+        ).forEach { path ->
+            val request = MockHttpServletRequest("GET", path)
+            val response = MockHttpServletResponse()
+            val filterChain =
+                MockFilterChain(
+                    object : HttpServlet() {
+                        override fun service(
+                            req: HttpServletRequest,
+                            res: HttpServletResponse,
+                        ) {
+                            res.status = HttpServletResponse.SC_NO_CONTENT
+                        }
+                    },
+                )
+
+            filter.doFilter(request, response, filterChain)
+
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_NO_CONTENT)
+        }
+
+        verify(actorApplicationService, never()).payload("broken-access-token")
+    }
+
     @Test
     @DisplayName("보호 API에서 인증 처리 중 예기치 못한 예외가 발생하면 500 대신 401-1로 응답한다")
     fun `protected api unexpected auth error returns 401`() {
@@ -67,6 +190,7 @@ class CustomAuthenticationFilterTest {
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,
                 apiCorsPolicy = apiCorsPolicy,
+                environment = MockEnvironment().apply { setActiveProfiles("test") },
                 rq = rq,
                 freshLookupGraceSeconds = 15,
             )
@@ -115,6 +239,7 @@ class CustomAuthenticationFilterTest {
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,
                 apiCorsPolicy = apiCorsPolicy,
+                environment = MockEnvironment().apply { setActiveProfiles("test") },
                 rq = rq,
                 freshLookupGraceSeconds = 15,
             )
@@ -205,6 +330,7 @@ class CustomAuthenticationFilterTest {
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,
                 apiCorsPolicy = apiCorsPolicy,
+                environment = MockEnvironment().apply { setActiveProfiles("test") },
                 rq = rq,
                 freshLookupGraceSeconds = 15,
             )
@@ -310,6 +436,7 @@ class CustomAuthenticationFilterTest {
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,
                 apiCorsPolicy = apiCorsPolicy,
+                environment = MockEnvironment().apply { setActiveProfiles("test") },
                 rq = rq,
                 freshLookupGraceSeconds = 15,
             )
@@ -393,6 +520,7 @@ class CustomAuthenticationFilterTest {
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,
                 apiCorsPolicy = apiCorsPolicy,
+                environment = MockEnvironment().apply { setActiveProfiles("test") },
                 rq = rq,
                 freshLookupGraceSeconds = 15,
             )
@@ -467,6 +595,7 @@ class CustomAuthenticationFilterTest {
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,
                 apiCorsPolicy = apiCorsPolicy,
+                environment = MockEnvironment().apply { setActiveProfiles("test") },
                 rq = rq,
                 freshLookupGraceSeconds = 15,
             )

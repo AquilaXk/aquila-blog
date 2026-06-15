@@ -327,6 +327,88 @@ test.describe("core smoke detail rendering", () => {
   expect(colors.string).not.toBe(colors.code)
 })
 
+  test("상세 코드블럭은 fenced language alias 라벨을 TXT로 떨어뜨리지 않는다", async ({ page }) => {
+  const languageCases = [
+    ["java", "public Token login(User user) {\n  return new Token(access, refresh);\n}", "Java"],
+    ["js", "const value = 1", "JavaScript"],
+    ["javascript", "const value = 1", "JavaScript"],
+    ["ts", "const value: string = 'ok'", "TypeScript"],
+    ["typescript", "const value: string = 'ok'", "TypeScript"],
+    ["tsx", "export const View = () => <div />", "TSX"],
+    ["jsx", "export const View = () => <div />", "JSX"],
+    ["kotlin", "fun login(): Token = token", "Kotlin"],
+    ["kt", "val token = Token()", "Kotlin"],
+    ["python", "def login():\n    return token", "Python"],
+    ["py", "def login():\n    return token", "Python"],
+    ["bash", "echo hello", "Bash"],
+    ["sh", "echo hello", "Shell"],
+    ["shell", "echo hello", "Shell"],
+    ["sql", "SELECT * FROM users", "SQL"],
+    ["yaml", "name: aquila", "YAML"],
+    ["yml", "name: aquila", "YAML"],
+    ["json", "{\"ok\": true}", "JSON"],
+    ["html", "<main>hello</main>", "HTML"],
+    ["xml", "<root>hello</root>", "XML"],
+    ["css", ".login { color: red; }", "CSS"],
+    ["scss", "$color: red;\n.login { color: $color; }", "SCSS"],
+    ["markdown", "# Heading", "Markdown"],
+    ["md", "# Heading", "Markdown"],
+    ["go", "func main() {}", "Go"],
+    ["rust", "fn main() {}", "Rust"],
+    ["rs", "fn main() {}", "Rust"],
+  ] as const
+
+  await page.route("**/post/api/v1/posts/114", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 114,
+        createdAt: "2026-06-15T00:00:00Z",
+        modifiedAt: "2026-06-15T00:00:00Z",
+        authorId: 1,
+        authorName: "관리자",
+        authorUsername: "aquila",
+        authorProfileImageDirectUrl: "/avatar.png",
+        title: "코드 언어 라벨 회귀 방지",
+        content: languageCases
+          .map(([language, source]) => ["```" + language, source, "```"].join("\n"))
+          .join("\n\n"),
+        tags: ["테스트태그"],
+        category: [],
+        published: true,
+        listed: true,
+        likesCount: 0,
+        commentsCount: 0,
+        hitCount: 0,
+        actorHasLiked: false,
+        actorCanModify: false,
+        actorCanDelete: false,
+      }),
+    })
+  })
+
+  await page.route("**/post/api/v1/posts/114/hit", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        resultCode: "200-1",
+        msg: "ok",
+        data: { hitCount: 1 },
+      }),
+    })
+  })
+
+  await page.goto("/posts/114")
+
+  const languageLabels = page.locator(".aq-code-language")
+  await expect(languageLabels).toHaveCount(languageCases.length)
+  const labels = await languageLabels.allTextContents()
+  expect(labels).toEqual(languageCases.map(([, , label]) => label))
+  expect(labels).not.toContain("TXT")
+})
+
   test("code-heavy 상세 페이지는 markdown AST prop 누수 없이 hydration 된다", async ({ page }) => {
   const runtimeErrors: string[] = []
   const isHydrationRuntimeSignal = (value: string) =>

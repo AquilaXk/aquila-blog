@@ -911,4 +911,54 @@ test.describe("Markdown editor replacement", () => {
       .poll(() => page.evaluate(() => Boolean((window as unknown as { __markdownPreviewScript?: boolean }).__markdownPreviewScript)))
       .toBe(false)
   })
+
+  test("code block language labels keep common fenced language aliases out of TXT fallback", async ({
+    page,
+  }) => {
+    const languageCases = [
+      ["java", "public Token login(User user) {\n  return new Token(access, refresh);\n}", "Java"],
+      ["js", "const value = 1", "JavaScript"],
+      ["javascript", "const value = 1", "JavaScript"],
+      ["ts", "const value: string = 'ok'", "TypeScript"],
+      ["typescript", "const value: string = 'ok'", "TypeScript"],
+      ["tsx", "export const View = () => <div />", "TSX"],
+      ["jsx", "export const View = () => <div />", "JSX"],
+      ["kotlin", "fun login(): Token = token", "Kotlin"],
+      ["kt", "val token = Token()", "Kotlin"],
+      ["python", "def login():\n    return token", "Python"],
+      ["py", "def login():\n    return token", "Python"],
+      ["bash", "echo hello", "Bash"],
+      ["sh", "echo hello", "Shell"],
+      ["shell", "echo hello", "Shell"],
+      ["sql", "SELECT * FROM users", "SQL"],
+      ["yaml", "name: aquila", "YAML"],
+      ["yml", "name: aquila", "YAML"],
+      ["json", "{\"ok\": true}", "JSON"],
+      ["html", "<main>hello</main>", "HTML"],
+      ["xml", "<root>hello</root>", "XML"],
+      ["css", ".login { color: red; }", "CSS"],
+      ["scss", "$color: red;\n.login { color: $color; }", "SCSS"],
+      ["markdown", "# Heading", "Markdown"],
+      ["md", "# Heading", "Markdown"],
+      ["go", "func main() {}", "Go"],
+      ["rust", "fn main() {}", "Rust"],
+      ["rs", "fn main() {}", "Rust"],
+    ] as const
+
+    await routeAuthenticatedEditor(
+      page,
+      languageCases
+        .map(([language, source]) => ["```" + language, source, "```"].join("\n"))
+        .join("\n\n")
+    )
+
+    await page.goto("/editor/new?source=local-draft")
+
+    const labels = await page
+      .getByTestId("markdown-editor-preview-pane")
+      .locator(".aq-code-language")
+      .allTextContents()
+    expect(labels).toEqual(languageCases.map(([, , label]) => label))
+    expect(labels).not.toContain("TXT")
+  })
 })

@@ -39,6 +39,38 @@ const extractTextFromNode = (node: ReactNode): string => {
   return extractTextFromNode((node.props as { children?: ReactNode }).children)
 }
 
+const readAstProperties = (node: unknown): Record<string, unknown> => {
+  if (!node || typeof node !== "object") return {}
+  const properties = (node as { properties?: unknown }).properties
+  return properties && typeof properties === "object" ? properties as Record<string, unknown> : {}
+}
+
+const findCodeAstNode = (node: unknown): unknown => {
+  if (!node || typeof node !== "object") return null
+  if (String((node as { tagName?: unknown }).tagName || "").toLowerCase() === "code") return node
+  const children = (node as { children?: unknown }).children
+  if (!Array.isArray(children)) return null
+  return children.find((child) => String((child as { tagName?: unknown })?.tagName || "").toLowerCase() === "code") || null
+}
+
+const readClassName = (...values: unknown[]): string =>
+  values
+    .flatMap((value) => {
+      if (typeof value === "string") return [value]
+      if (!Array.isArray(value)) return []
+      return value.filter((item): item is string => typeof item === "string")
+    })
+    .join(" ")
+
+const readLanguageAttribute = (...values: unknown[]): string => {
+  for (const value of values) {
+    if (typeof value !== "string") continue
+    const normalized = value.trim().toLowerCase()
+    if (normalized) return normalized
+  }
+  return ""
+}
+
 export const extractTextFromCodeAst = (node: unknown): string => {
   if (!node || typeof node !== "object") return ""
 
@@ -52,15 +84,16 @@ export const extractTextFromCodeAst = (node: unknown): string => {
   return children.map(extractTextFromCodeAst).join("")
 }
 
-export const extractCodeMetaFromPreChildren = (children: ReactNode) => {
+export const extractCodeMetaFromPreChildren = (children: ReactNode, preNode?: unknown) => {
   const list = Array.isArray(children) ? children : [children]
   const codeElement = list.find(
     (child): child is ReactElement<Record<string, unknown>> =>
       isValidElement(child) && typeof child.type === "string" && child.type.toLowerCase() === "code"
   )
+  const codeAstNode = codeElement?.props.node || findCodeAstNode(preNode)
+  const astProperties = readAstProperties(codeAstNode)
 
-  const codeClassName =
-    typeof codeElement?.props.className === "string" ? codeElement.props.className : ""
+  const codeClassName = readClassName(codeElement?.props.className, astProperties.className)
   const classLanguage =
     codeClassName
       .split(" ")
@@ -69,10 +102,11 @@ export const extractCodeMetaFromPreChildren = (children: ReactNode) => {
       ?.replace("language-", "")
       .toLowerCase() || ""
 
-  const dataLanguage =
-    typeof codeElement?.props["data-language"] === "string"
-      ? String(codeElement.props["data-language"]).toLowerCase()
-      : ""
+  const dataLanguage = readLanguageAttribute(
+    codeElement?.props["data-language"],
+    astProperties["data-language"],
+    astProperties.dataLanguage
+  )
   const dataRawCode =
     typeof codeElement?.props["data-raw-code"] === "string"
       ? String(codeElement.props["data-raw-code"])
@@ -80,7 +114,7 @@ export const extractCodeMetaFromPreChildren = (children: ReactNode) => {
 
   const codeChildren = (codeElement?.props.children as ReactNode | undefined) ?? children
   const rawCodeFromChildren = extractTextFromNode(codeChildren)
-  const rawCodeFromAst = extractTextFromCodeAst(codeElement?.props.node)
+  const rawCodeFromAst = extractTextFromCodeAst(codeAstNode)
   const rawCode = (dataRawCode || rawCodeFromChildren || rawCodeFromAst).replace(/\n$/, "")
 
   return {

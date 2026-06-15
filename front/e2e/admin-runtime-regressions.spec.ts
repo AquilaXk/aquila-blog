@@ -66,6 +66,26 @@ test.describe("관리자 런타임 회귀 계약", () => {
     expect(cloudSource).not.toContain("getApiBaseUrl")
   })
 
+  test("프로필 이미지 업로드는 CSRF preflight 헤더를 포함한다", () => {
+    const profilePersistenceSource = readFrontSource("routes/Admin/AdminProfilePersistenceModel.ts")
+    const legacyProfileSource = readFrontSource("routes/Admin/useEditorStudioProfileCommands.ts")
+
+    expect(profilePersistenceSource).toContain('"X-Aquila-CSRF": "1"')
+    expect(legacyProfileSource).toContain("PROFILE_IMAGE_CSRF_PREFLIGHT_HEADERS")
+  })
+
+  test("프로필 이미지 편집 모달은 과거 이미지 선택과 삭제 동선을 제공한다", () => {
+    const modalSource = readFrontSource("routes/Admin/AdminProfileImageEditorModal.tsx")
+    const sectionSource = readFrontSource("routes/Admin/AdminProfileWorkspaceSections.tsx")
+    const pageModelSource = readFrontSource("routes/Admin/AdminProfileWorkspacePageModel.ts")
+
+    expect(modalSource).toContain("previousProfileImages")
+    expect(modalSource).toContain("onSelectPreviousProfileImage")
+    expect(modalSource).toContain("onDeletePreviousProfileImage")
+    expect(sectionSource).toContain("previousProfileImages={previousProfileImages}")
+    expect(pageModelSource).toContain("previousProfileImages")
+  })
+
   test("새로고침 전 첫 페인트는 저장된 테마나 시스템 다크 모드를 먼저 적용한다", () => {
     const documentSource = readFrontSource("pages/_document.tsx")
     const schemeSource = readFrontSource("hooks/useScheme.ts")

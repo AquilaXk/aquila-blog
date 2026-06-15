@@ -2,6 +2,8 @@ package com.back.boundedContexts.member.adapter.web
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
+import com.back.global.storage.application.ProfileImageHistoryDto
+import com.back.global.storage.domain.UploadedFileStatus
 import com.back.standard.dto.member.type1.MemberSearchSortType1
 import com.back.standard.dto.page.PagedResult
 import com.back.support.BaseAdmMemberControllerWebMvcTest
@@ -10,10 +12,13 @@ import org.hamcrest.Matchers.startsWith
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
+import org.mockito.BDDMockito.then
 import org.springframework.security.test.context.support.WithMockUser
+import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.handler
 import java.time.Instant
+import java.util.Optional
 
 @org.junit.jupiter.api.DisplayName("ApiV1AdmMemberControllerWebMvc 테스트")
 class ApiV1AdmMemberControllerWebMvcTest : BaseAdmMemberControllerWebMvcTest() {
@@ -215,6 +220,65 @@ class ApiV1AdmMemberControllerWebMvcTest : BaseAdmMemberControllerWebMvcTest() {
                     jsonPath("$.resultCode") { value("403-1") }
                     jsonPath("$.msg") { value("권한이 없습니다.") }
                 }
+        }
+    }
+
+    @Nested
+    inner class ProfileImageFiles {
+        @Test
+        @WithMockUser(roles = ["ADMIN"])
+        fun `관리자는 과거 프로필 이미지 목록을 조회한다`() {
+            val member = sampleMember(id = 7, username = "admin", nickname = "관리자", isAdmin = true)
+            member.profileImgUrl = "http://localhost:8080/post/api/v1/images/profile/current.png"
+            given(memberUseCase.findById(7)).willReturn(Optional.of(member))
+            given(uploadedFileRetentionService.listProfileImages(7, member.profileImgUrl))
+                .willReturn(
+                    listOf(
+                        ProfileImageHistoryDto(
+                            id = 11,
+                            imageUrl = member.profileImgUrl,
+                            objectKey = "profile/current.png",
+                            contentType = "image/png",
+                            fileSize = 100,
+                            status = UploadedFileStatus.ACTIVE,
+                            isCurrent = true,
+                            createdAt = Instant.parse("2026-06-15T00:00:00Z"),
+                            modifiedAt = Instant.parse("2026-06-15T00:01:00Z"),
+                        ),
+                    ),
+                )
+
+            mvc
+                .get("/member/api/v1/adm/members/7/profileImageFiles")
+                .andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1AdmMemberController::class.java))
+                    match(handler().methodName("listProfileImageFiles"))
+                    jsonPath("$.images.length()") { value(1) }
+                    jsonPath("$.images[0].id") { value(11) }
+                    jsonPath("$.images[0].isCurrent") { value(true) }
+                }
+        }
+
+        @Test
+        @WithMockUser(roles = ["ADMIN"])
+        fun `관리자는 과거 프로필 이미지를 삭제한다`() {
+            val member = sampleMember(id = 7, username = "admin", nickname = "관리자", isAdmin = true)
+            member.profileImgUrl = "http://localhost:8080/post/api/v1/images/profile/current.png"
+            given(memberUseCase.findById(7)).willReturn(Optional.of(member))
+
+            mvc
+                .delete("/member/api/v1/adm/members/7/profileImageFiles/11")
+                .andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1AdmMemberController::class.java))
+                    match(handler().methodName("deleteProfileImageFile"))
+                    jsonPath("$.resultCode") { value("200-1") }
+                }
+
+            then(uploadedFileRetentionService)
+                .should()
+                .deleteProfileImage(memberId = 7, fileId = 11, currentProfileImgUrl = member.profileImgUrl)
         }
     }
 

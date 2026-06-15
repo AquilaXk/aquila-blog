@@ -36,10 +36,12 @@ export const AdminProfileWorkspaceSections = (props: Record<string, any>) => {
     finalizeProfileImageDraftPointer,
     handleApplyProfileImageDraft,
     handleDraftFileChange,
+    handleDeletePreviousProfileImage,
     handleProfileImageDraftPointerDown,
     handleProfileImageDraftPointerMove,
     handlePublish,
     handleSaveDraft,
+    handleSelectPreviousProfileImage,
     hasPublishedDiff,
     hasUnsavedChanges,
     imageNotice,
@@ -56,6 +58,7 @@ export const AdminProfileWorkspaceSections = (props: Record<string, any>) => {
     profileImageDraftTransformRef,
     profileImageDraftZoom,
     profileImageFileInputRef,
+    previousProfileImages,
     publishedSnapshot,
     resetProfileImageDraftInteractions,
     scheduleProfileImageDraftTransform,
@@ -185,6 +188,7 @@ export const AdminProfileWorkspaceSections = (props: Record<string, any>) => {
           notice={profileImageDraftNotice}
           onApply={() => void handleApplyProfileImageDraft()}
           onClear={clearProfileImageDraft}
+          onDeletePreviousProfileImage={handleDeletePreviousProfileImage}
           onPointerCancel={finalizeProfileImageDraftPointer}
           onPointerDown={handleProfileImageDraftPointerDown}
           onPointerMove={handleProfileImageDraftPointerMove}
@@ -193,7 +197,9 @@ export const AdminProfileWorkspaceSections = (props: Record<string, any>) => {
             setIsProfileImageEditorOpen(false)
             resetProfileImageDraftInteractions()
           }}
+          onSelectPreviousProfileImage={handleSelectPreviousProfileImage}
           onSelectFile={() => profileImageFileInputRef.current?.click()}
+          previousProfileImages={previousProfileImages}
           onZoomChange={(zoom) =>
             scheduleProfileImageDraftTransform({
               ...profileImageDraftTransformRef.current,

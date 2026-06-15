@@ -383,6 +383,75 @@ export const ModalActions = styled.div`
   gap: 0.48rem;
 `
 
+export const ModalHistorySection = styled.section`
+  overflow-x: auto;
+  padding-bottom: 0.12rem;
+`
+
+export const ModalHistoryGrid = styled.div`
+  display: flex;
+  gap: 0.62rem;
+  min-width: max-content;
+`
+
+export const ModalHistoryItem = styled.div`
+  display: grid;
+  gap: 0.4rem;
+  width: 76px;
+
+  > button:first-child {
+    width: 76px;
+    border: 0;
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray11};
+    display: grid;
+    gap: 0.32rem;
+    justify-items: center;
+    padding: 0;
+    cursor: pointer;
+
+    &:disabled {
+      cursor: default;
+    }
+  }
+
+  img {
+    width: 64px;
+    height: 64px;
+    border-radius: 999px;
+    object-fit: cover;
+    border: 2px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray1};
+  }
+
+  span {
+    font-size: 0.78rem;
+    font-weight: 800;
+  }
+
+  &[data-current="true"] img {
+    border-color: ${({ theme }) => theme.colors.blue8};
+  }
+`
+
+export const ModalHistoryAction = styled.button`
+  width: 36px;
+  height: 36px;
+  justify-self: center;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  &:disabled {
+    opacity: 0.42;
+    cursor: not-allowed;
+  }
+`
+
 export const ModalEditorFrame = styled.div`
   --profile-draft-width: 100%;
   --profile-draft-height: 100%;

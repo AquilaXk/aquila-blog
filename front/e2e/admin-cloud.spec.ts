@@ -478,6 +478,11 @@ test.describe("관리자 클라우드", () => {
     const dialog = page.getByRole("dialog", { name: "파일 삭제" })
     await expect(dialog).toBeVisible()
     await expect(dialog.getByText(/NCS기반 채용 직무설명자료.*게시\.pdf/)).toBeVisible()
+    await expect(dialog.getByRole("button", { name: "취소" })).toBeFocused()
+    await page.keyboard.press("Tab")
+    await expect(dialog.getByRole("button", { name: "삭제" })).toBeFocused()
+    await page.keyboard.press("Tab")
+    await expect(dialog.getByRole("button", { name: "취소" })).toBeFocused()
     expect(mocks.deletedIds).toEqual([])
 
     const uploadButton = page.locator('button[aria-label="파일 업로드"]').first()
@@ -488,6 +493,12 @@ test.describe("관리자 클라우드", () => {
 
     await dialog.getByRole("button", { name: "취소" }).click()
     await expect(dialog).toHaveCount(0)
+    expect(mocks.deletedIds).toEqual([])
+
+    await longFileRow.getByRole("button", { name: /삭제/ }).click()
+    await expect(page.getByRole("dialog", { name: "파일 삭제" })).toBeVisible()
+    await page.keyboard.press("Escape")
+    await expect(page.getByRole("dialog", { name: "파일 삭제" })).toHaveCount(0)
     expect(mocks.deletedIds).toEqual([])
 
     await longFileRow.getByRole("button", { name: /삭제/ }).click()

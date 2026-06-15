@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element -- private cloud content needs browser-owned auth cookies. */
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import type { PDFDocumentLoadingTask, RenderTask } from "pdfjs-dist"
-import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react"
+import { type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import {
   deleteCloudFile,
   getCloudFileContentUrl,
@@ -253,10 +253,15 @@ type PhotoPreviewProps = {
 }
 
 const PhotoPreview = ({ file, contentUrl }: PhotoPreviewProps) => {
-  const [isImageReady, setIsImageReady] = useState(false)
+  const imageRef = useRef<HTMLImageElement | null>(null)
+  const [loadedContentUrl, setLoadedContentUrl] = useState<string | null>(null)
+  const isImageReady = loadedContentUrl === contentUrl
 
   useEffect(() => {
-    setIsImageReady(false)
+    const image = imageRef.current
+    if (image?.complete && image.naturalWidth > 0) {
+      setLoadedContentUrl(contentUrl)
+    }
   }, [contentUrl])
 
   return (
@@ -268,12 +273,13 @@ const PhotoPreview = ({ file, contentUrl }: PhotoPreviewProps) => {
       <PhotoFrame aria-busy={isImageReady ? "false" : "true"}>
         {!isImageReady ? <span role="status">사진을 불러오는 중입니다.</span> : null}
         <img
+          ref={imageRef}
           src={contentUrl}
           alt={file.originalFilename}
           decoding="async"
           loading="eager"
-          onLoad={() => setIsImageReady(true)}
-          onError={() => setIsImageReady(true)}
+          onLoad={() => setLoadedContentUrl(contentUrl)}
+          onError={() => setLoadedContentUrl(contentUrl)}
         />
       </PhotoFrame>
     </PreviewStage>
@@ -425,6 +431,9 @@ const AdminCloudWorkspacePage = () => {
   const activeUploadCount = uploadQueue.filter((item) => isUploadActive(item.status)).length
   const completedUploadCount = uploadQueue.filter((item) => item.status === "done").length
   const allVisibleChecked = files.length > 0 && files.every((file) => checkedFileIds.includes(file.id))
+  const deleteDialogRef = useRef<HTMLDivElement | null>(null)
+  const deleteCancelButtonRef = useRef<HTMLButtonElement | null>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     if (!isDetailPanelOpen) return
@@ -435,6 +444,36 @@ const AdminCloudWorkspacePage = () => {
   useEffect(() => {
     setCheckedFileIds((current) => current.filter((id) => files.some((file) => file.id === id)))
   }, [files])
+
+  useEffect(() => {
+    if (!deleteConfirm) return
+
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const focusFrame = window.requestAnimationFrame(() => {
+      deleteCancelButtonRef.current?.focus()
+    })
+
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+      previousFocusRef.current?.focus()
+      previousFocusRef.current = null
+    }
+  }, [deleteConfirm])
+
+  useEffect(() => {
+    if (!deleteConfirm) return
+
+    const handleDocumentKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || isDeletePending) return
+      event.preventDefault()
+      setDeleteConfirm(null)
+    }
+
+    document.addEventListener("keydown", handleDocumentKeyDown)
+    return () => {
+      document.removeEventListener("keydown", handleDocumentKeyDown)
+    }
+  }, [deleteConfirm, isDeletePending])
 
   useEffect(() => {
     const hasActiveUpload = uploadQueue.some((item) => item.status === "uploading")
@@ -574,6 +613,41 @@ const AdminCloudWorkspacePage = () => {
 
   const handleDelete = (file: CloudFile) => {
     setDeleteConfirm({ files: [file] })
+  }
+
+  const closeDeleteConfirm = () => {
+    if (isDeletePending) return
+    setDeleteConfirm(null)
+  }
+
+  const handleDeleteDialogKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault()
+      closeDeleteConfirm()
+      return
+    }
+
+    if (event.key !== "Tab") return
+
+    const dialog = deleteDialogRef.current
+    if (!dialog) return
+    const focusableElements = Array.from(dialog.querySelectorAll<HTMLElement>("button:not(:disabled)"))
+    if (focusableElements.length === 0) {
+      event.preventDefault()
+      return
+    }
+
+    const firstElement = focusableElements[0]
+    const lastElement = focusableElements[focusableElements.length - 1]
+    if (event.shiftKey && document.activeElement === firstElement) {
+      event.preventDefault()
+      lastElement.focus()
+      return
+    }
+    if (!event.shiftKey && document.activeElement === lastElement) {
+      event.preventDefault()
+      firstElement.focus()
+    }
   }
 
   const performSingleDelete = async (file: CloudFile) => {
@@ -901,13 +975,16 @@ const AdminCloudWorkspacePage = () => {
         </ToastViewport>
       ) : null}
       {deleteConfirm ? (
-        <ConfirmBackdrop role="presentation" onClick={() => (isDeletePending ? undefined : setDeleteConfirm(null))}>
+        <ConfirmBackdrop role="presentation" onClick={closeDeleteConfirm}>
           <ConfirmDialog
+            ref={deleteDialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="cloud-delete-confirm-title"
             aria-describedby="cloud-delete-confirm-description"
+            tabIndex={-1}
             onClick={(event) => event.stopPropagation()}
+            onKeyDown={handleDeleteDialogKeyDown}
           >
             <strong id="cloud-delete-confirm-title">파일 삭제</strong>
             <p id="cloud-delete-confirm-description">
@@ -919,7 +996,12 @@ const AdminCloudWorkspacePage = () => {
               삭제한 파일은 관리자 클라우드 목록에서 제거됩니다.
             </p>
             <div>
-              <SecondaryButton type="button" disabled={isDeletePending} onClick={() => setDeleteConfirm(null)}>
+              <SecondaryButton
+                ref={deleteCancelButtonRef}
+                type="button"
+                disabled={isDeletePending}
+                onClick={closeDeleteConfirm}
+              >
                 취소
               </SecondaryButton>
               <PrimaryButton type="button" disabled={isDeletePending} onClick={() => void handleConfirmDelete()}>

@@ -100,6 +100,22 @@ class ApiRateLimitBackstopFilterTest {
     }
 
     @Test
+    @DisplayName("알림 polling GET은 authenticated-read bucket으로 제한한다")
+    fun `notification polling get endpoints use authenticated read bucket`() {
+        val filter = createFilter(redis = InMemoryRedisKeyValuePort(), authenticatedReadLimitPerMinute = 2)
+
+        assertThat(runFilter(filter, "GET", "/member/api/v1/notifications/snapshot").status)
+            .isEqualTo(HttpServletResponse.SC_OK)
+        assertThat(runFilter(filter, "GET", "/member/api/v1/notifications/unread-count").status)
+            .isEqualTo(HttpServletResponse.SC_OK)
+
+        val limited = runFilter(filter, "GET", "/member/api/v1/notifications")
+
+        assertThat(limited.status).isEqualTo(429)
+        assertThat(limited.contentAsString).contains("authenticated-read")
+    }
+
+    @Test
     @DisplayName("OAuth와 signup/auth 요청은 auth bucket으로 제한한다")
     fun `oauth and signup auth paths use auth bucket`() {
         val filter = createFilter(redis = InMemoryRedisKeyValuePort(), authLimitPerMinute = 1)
@@ -292,6 +308,7 @@ class ApiRateLimitBackstopFilterTest {
         enabled: Boolean = true,
         requireRedisInProd: Boolean = false,
         publicReadLimitPerMinute: Int = 120,
+        authenticatedReadLimitPerMinute: Int = 120,
         mutationLimitPerMinute: Int = 60,
         authLimitPerMinute: Int = 20,
         sseLimitPerMinute: Int = 30,
@@ -307,6 +324,7 @@ class ApiRateLimitBackstopFilterTest {
         enabled = enabled,
         requireRedisInProd = requireRedisInProd,
         publicReadLimitPerMinute = publicReadLimitPerMinute,
+        authenticatedReadLimitPerMinute = authenticatedReadLimitPerMinute,
         mutationLimitPerMinute = mutationLimitPerMinute,
         authLimitPerMinute = authLimitPerMinute,
         sseLimitPerMinute = sseLimitPerMinute,

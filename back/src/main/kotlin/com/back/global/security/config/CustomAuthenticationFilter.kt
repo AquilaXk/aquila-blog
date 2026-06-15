@@ -18,6 +18,7 @@ import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.core.env.Environment
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
@@ -45,15 +46,20 @@ class CustomAuthenticationFilter(
     private val objectMapper: ObjectMapper,
     private val publicApiRequestMatcher: PublicApiRequestMatcher,
     private val apiCorsPolicy: ApiCorsPolicy,
+    private val environment: Environment,
     private val rq: Rq,
     @param:Value("\${custom.auth.session.freshLookupGraceSeconds:15}")
     private val freshLookupGraceSeconds: Long,
 ) : OncePerRequestFilter() {
     private val log = org.slf4j.LoggerFactory.getLogger(CustomAuthenticationFilter::class.java)
-    private val filteredPrefixes = listOf("/member/api/", "/post/api/", "/system/api/", "/ws/", "/sse/")
+    private val protectedDocumentationPrefixes = listOf("/swagger-ui/", "/v3/api-docs")
+    private val filteredPrefixes = listOf("/member/api/", "/post/api/", "/system/api/", "/ws/", "/sse/") + protectedDocumentationPrefixes
 
     override fun shouldNotFilter(request: HttpServletRequest): Boolean {
         val uri = request.requestURI
+        if (!environment.matchesProfiles("prod") && protectedDocumentationPrefixes.any { uri.startsWith(it) }) {
+            return true
+        }
         return filteredPrefixes.none { uri.startsWith(it) }
     }
 

@@ -32,6 +32,7 @@ import org.springframework.core.env.Environment
 import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext
 import org.springframework.security.test.context.support.WithMockUser
 import org.springframework.test.context.ActiveProfiles
+import org.springframework.test.context.TestPropertySource
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
@@ -43,6 +44,11 @@ import tools.jackson.databind.ObjectMapper
 @Import(
     SecurityConfig::class,
     SecurityConfigEndpointExposureWebMvcTestSupport.TestBeans::class,
+)
+@TestPropertySource(
+    properties = [
+        "spring.security.oauth2.client.registration.kakao.client-id=test-kakao-client-id",
+    ],
 )
 abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
     @Autowired
@@ -93,6 +99,7 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
         @Bean
         fun customAuthenticationFilter(
             apiCorsPolicy: ApiCorsPolicy,
+            environment: Environment,
             objectMapper: ObjectMapper,
         ): CustomAuthenticationFilter =
             CustomAuthenticationFilter(
@@ -105,6 +112,7 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = PublicApiRequestMatcher(emptyList<PublicApiRouteContributor>()),
                 apiCorsPolicy = apiCorsPolicy,
+                environment = environment,
                 rq = mock(Rq::class.java),
                 freshLookupGraceSeconds = 15,
             )
@@ -115,10 +123,9 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
 @DisplayName("SecurityConfig prod endpoint exposure 테스트")
 class SecurityConfigProdEndpointExposureWebMvcTest : SecurityConfigEndpointExposureWebMvcTestSupport() {
     @Test
-    @DisplayName("prod에서 Prometheus, Swagger, OpenAPI는 익명 접근을 401로 막는다")
-    fun `prod protects diagnostics and api docs from anonymous access`() {
+    @DisplayName("prod에서 public Swagger와 OpenAPI는 익명 접근을 401로 막는다")
+    fun `prod protects public api docs from anonymous access`() {
         listOf(
-            "/actuator/prometheus",
             "/swagger-ui/index.html",
             "/v3/api-docs",
         ).forEach { path ->
@@ -129,11 +136,30 @@ class SecurityConfigProdEndpointExposureWebMvcTest : SecurityConfigEndpointExpos
     }
 
     @Test
-    @DisplayName("prod에서 Prometheus, Swagger, OpenAPI는 일반 사용자 접근을 403으로 막는다")
+    @DisplayName("prod에서 public Prometheus forwarded 요청은 익명 접근을 401로 막는다")
+    fun `prod protects public prometheus forwarded access from anonymous access`() {
+        val result =
+            mvc.get("/actuator/prometheus") {
+                header("X-Forwarded-For", "203.0.113.10")
+            }
+        result.andExpect {
+            status { isUnauthorized() }
+        }
+    }
+
+    @Test
+    @DisplayName("prod에서 내부 Prometheus direct scrape는 익명 보안 체인을 통과해 no-handler까지 도달한다")
+    fun `prod keeps internal prometheus direct scrape public`() {
+        mvc.get("/actuator/prometheus").andExpect {
+            status { isInternalServerError() }
+        }
+    }
+
+    @Test
+    @DisplayName("prod에서 public Swagger와 OpenAPI는 일반 사용자 접근을 403으로 막는다")
     @WithMockUser(roles = ["USER"])
-    fun `prod protects diagnostics and api docs from non admin access`() {
+    fun `prod protects public api docs from non admin access`() {
         listOf(
-            "/actuator/prometheus",
             "/swagger-ui/index.html",
             "/v3/api-docs",
         ).forEach { path ->
@@ -144,11 +170,10 @@ class SecurityConfigProdEndpointExposureWebMvcTest : SecurityConfigEndpointExpos
     }
 
     @Test
-    @DisplayName("prod에서 관리자는 Prometheus, Swagger, OpenAPI 보안 체인을 통과해 no-handler까지 도달한다")
+    @DisplayName("prod에서 관리자는 Swagger와 OpenAPI 보안 체인을 통과해 no-handler까지 도달한다")
     @WithMockUser(roles = ["ADMIN"])
-    fun `prod lets admin pass diagnostics and api docs security checks to application handler layer`() {
+    fun `prod lets admin pass api docs security checks to application handler layer`() {
         listOf(
-            "/actuator/prometheus",
             "/swagger-ui/index.html",
             "/v3/api-docs",
         ).forEach { path ->

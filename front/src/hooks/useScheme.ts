@@ -53,14 +53,13 @@ const useScheme = (): [SchemeType, SetScheme] => {
     if (typeof window === "undefined") return
 
     const defaultScheme = followsSystemTheme ? resolveSystemScheme() : data
-    const nextScheme = resolveCachedScheme() ?? defaultScheme
-    if (nextScheme !== data) {
-      setScheme(nextScheme)
-      clearSchemeBootstrapAfterHydration()
+    const bootstrapScheme = resolveCachedScheme() ?? defaultScheme
+    if (bootstrapScheme !== data) {
+      queryClient.setQueryData(queryKey.scheme(), bootstrapScheme)
       return
     }
     clearSchemeBootstrapAfterHydration()
-  }, [data, followsSystemTheme, setScheme])
+  }, [data, followsSystemTheme, queryClient])
 
   return [data, setScheme]
 }

@@ -445,16 +445,42 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByRole("status", { name: "파일 목록 로딩" })).toHaveCount(0)
   })
 
-  test("사진 선택 시 상세 패널은 이미지 요청과 로딩 상태를 즉시 보여준다", async ({ page }) => {
+  test("사진 선택 시 상세 패널은 이미지 요청을 즉시 시작하고 텍스트 로딩 상태를 숨긴다", async ({ page }) => {
     const mocks = await setupAdminCloudMocks(page, { contentDelayMs: 450 })
+
+    await page.addInitScript(() => {
+      Object.assign(window, { __adminCloudPhotoLoadingTextSeen: false })
+
+      const markIfLoadingTextExists = () => {
+        if (document.body?.textContent?.includes("사진을 불러오는 중입니다.")) {
+          Object.assign(window, { __adminCloudPhotoLoadingTextSeen: true })
+        }
+      }
+
+      const startObserver = () => {
+        markIfLoadingTextExists()
+        new MutationObserver(markIfLoadingTextExists).observe(document.documentElement, {
+          characterData: true,
+          childList: true,
+          subtree: true,
+        })
+      }
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", startObserver, { once: true })
+      } else {
+        startObserver()
+      }
+    })
 
     await page.goto("/admin/cloud")
     await page.locator('button[title="home-server-rack.png"]').click()
 
     await expect(page.getByRole("heading", { name: "사진 보기" })).toBeVisible()
-    await expect(page.getByText("사진을 불러오는 중입니다.")).toBeVisible()
+    await expect(page.getByText("사진을 불러오는 중입니다.")).toHaveCount(0)
     await expect.poll(() => mocks.requestedContentIds).toContain("102")
     await expect(page.getByAltText("home-server-rack.png")).toBeVisible()
+    await expect.poll(() => page.evaluate(() => Boolean((window as any).__adminCloudPhotoLoadingTextSeen))).toBe(false)
     await expect(page.getByText("사진을 불러오는 중입니다.")).toHaveCount(0)
   })
 

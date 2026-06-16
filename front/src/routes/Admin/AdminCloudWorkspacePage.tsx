@@ -332,33 +332,13 @@ type PhotoPreviewProps = {
 }
 
 const PhotoPreview = ({ file, contentUrl }: PhotoPreviewProps) => {
-  const imageRef = useRef<HTMLImageElement | null>(null)
-  const [loadedContentUrl, setLoadedContentUrl] = useState<string | null>(null)
-  const isImageReady = loadedContentUrl === contentUrl
-
-  useEffect(() => {
-    const image = imageRef.current
-    if (image?.complete && image.naturalWidth > 0) {
-      setLoadedContentUrl(contentUrl)
-    }
-  }, [contentUrl])
-
   return (
     <PreviewStage>
       <PreviewHeader>
         <h3>사진 보기</h3>
       </PreviewHeader>
-      <PhotoFrame aria-busy={isImageReady ? "false" : "true"}>
-        {!isImageReady ? <span role="status">사진을 불러오는 중입니다.</span> : null}
-        <img
-          ref={imageRef}
-          src={contentUrl}
-          alt={file.originalFilename}
-          decoding="async"
-          loading="eager"
-          onLoad={() => setLoadedContentUrl(contentUrl)}
-          onError={() => setLoadedContentUrl(contentUrl)}
-        />
+      <PhotoFrame>
+        <img src={contentUrl} alt={file.originalFilename} decoding="async" loading="eager" />
       </PhotoFrame>
     </PreviewStage>
   )

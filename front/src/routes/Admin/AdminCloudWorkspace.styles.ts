@@ -930,6 +930,44 @@ export const PdfCanvas = styled.canvas`
   object-fit: contain;
 `
 
+export const DocumentFallbackBox = styled.div`
+  display: grid;
+  gap: 0.65rem;
+  place-items: center;
+  min-height: 12rem;
+  padding: 1.25rem;
+  border: 1px solid ${border};
+  border-radius: 8px;
+  background: ${surfaceRaised};
+  color: ${textSecondary};
+  text-align: center;
+
+  strong {
+    color: ${textPrimary};
+    font-size: 0.95rem;
+    font-weight: 850;
+  }
+
+  p {
+    margin: 0;
+    max-width: 18rem;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+
+  a {
+    border: 1px solid ${borderStrong};
+    border-radius: 999px;
+    padding: 0.45rem 0.7rem;
+    background: ${surfaceMuted};
+    color: ${textPrimary};
+    font-size: 0.78rem;
+    font-weight: 850;
+    text-decoration: none;
+  }
+`
+
 export const PhotoFrame = styled.div`
   position: relative;
   display: grid;

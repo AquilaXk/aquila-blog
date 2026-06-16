@@ -249,6 +249,23 @@ class CloudFileServiceTest {
     }
 
     @Test
+    @DisplayName("업로드 시 ZIP MIME으로 선언된 HWPX 파일도 HWPX 문서로 저장한다")
+    fun `upload는 zip mime으로 선언된 hwpx 파일도 hwpx 문서로 저장한다`() {
+        val result =
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "제출서류_총괄표.hwpx",
+                contentType = "application/x-zip-compressed",
+                bytes = zipBytes(),
+                folderPath = null,
+            )
+
+        assertThat(result.mediaKind).isEqualTo(CloudFileMediaKind.DOCUMENT)
+        assertThat(result.contentType).isEqualTo("application/haansofthwpx")
+        assertThat(result.originalFilename).isEqualTo("제출서류_총괄표.hwpx")
+    }
+
+    @Test
     @DisplayName("업로드 시 잘못된 ZIP 헤더 조합은 HWPX 문서로 저장하지 않는다")
     fun `upload는 잘못된 ZIP 헤더 조합을 HWPX 문서로 저장하지 않는다`() {
         assertThatThrownBy {
@@ -293,6 +310,46 @@ class CloudFileServiceTest {
                 originalFilename = "renamed.hwpx",
                 contentType = "application/octet-stream",
                 bytes = genericZipBytes(),
+                folderPath = null,
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("지원하지 않는 클라우드 파일 형식")
+
+        assertThat(storage.uploaded).isEmpty()
+        assertThat(repository.savedFiles).isEmpty()
+    }
+
+    @Test
+    @DisplayName("업로드 시 한글 파일명의 일반 ZIP 파일은 문서로 저장한다")
+    fun `upload는 한글 파일명의 일반 ZIP 파일을 문서로 저장한다`() {
+        val nfcName = "3._(별첨2)_직무시험_관련_국민건강보험법_및_노인장기요양법.zip"
+        val nfdName = Normalizer.normalize(nfcName, Normalizer.Form.NFD)
+
+        val result =
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = nfdName,
+                clientOriginalFilename = nfdName,
+                contentType = "application/zip",
+                bytes = genericZipBytes(),
+                folderPath = null,
+            )
+
+        assertThat(result.originalFilename).isEqualTo(nfcName)
+        assertThat(result.mediaKind).isEqualTo(CloudFileMediaKind.DOCUMENT)
+        assertThat(result.contentType).isEqualTo("application/zip")
+        assertThat(storage.uploaded.single().originalFilename).isEqualTo(nfcName)
+    }
+
+    @Test
+    @DisplayName("업로드 시 중앙 디렉터리가 없는 ZIP 조각은 일반 ZIP 문서로 저장하지 않는다")
+    fun `upload는 중앙 디렉터리가 없는 ZIP 조각을 일반 ZIP 문서로 저장하지 않는다`() {
+        assertThatThrownBy {
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "truncated.zip",
+                contentType = "application/zip",
+                bytes = truncatedZipBytes(),
                 folderPath = null,
             )
         }.isInstanceOf(AppException::class.java)

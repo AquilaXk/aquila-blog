@@ -48,6 +48,7 @@ import {
   DetailSummary,
   DetailTab,
   DetailTabs,
+  DocumentFallbackBox,
   EmptyState,
   EmptyTableState,
   FavoriteButton,
@@ -142,6 +143,8 @@ const preferClientFilenameForUploadedFile = (uploaded: CloudFile, clientFilename
 
 const isAbortLikeError = (error: unknown) =>
   error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")
+
+const isPdfDocumentFile = (file: CloudFile) => file.contentType.toLowerCase() === "application/pdf"
 
 const resolveCloudErrorMessage = (error: unknown) => {
   if (error instanceof Error && error.message.trim()) return error.message.trim()
@@ -303,6 +306,26 @@ const PdfPreview = ({ file, contentUrl }: PdfPreviewProps) => {
   )
 }
 
+type DocumentFallbackPreviewProps = {
+  file: CloudFile
+  contentUrl: string
+}
+
+const DocumentFallbackPreview = ({ file, contentUrl }: DocumentFallbackPreviewProps) => (
+  <PreviewStage>
+    <PreviewHeader>
+      <h3>문서 파일</h3>
+    </PreviewHeader>
+    <DocumentFallbackBox>
+      <strong>{getCloudKindBadge(file)} 파일</strong>
+      <p>{file.originalFilename}</p>
+      <a href={contentUrl} download={file.originalFilename}>
+        다운로드
+      </a>
+    </DocumentFallbackBox>
+  </PreviewStage>
+)
+
 type PhotoPreviewProps = {
   file: CloudFile
   contentUrl: string
@@ -411,7 +434,8 @@ const PreviewDrawer = ({ file }: PreviewDrawerProps) => {
   }
 
   const contentUrl = getCloudFileContentUrl(file.id)
-  if (file.mediaKind === "DOCUMENT") return <PdfPreview file={file} contentUrl={contentUrl} />
+  if (file.mediaKind === "DOCUMENT" && isPdfDocumentFile(file)) return <PdfPreview file={file} contentUrl={contentUrl} />
+  if (file.mediaKind === "DOCUMENT") return <DocumentFallbackPreview file={file} contentUrl={contentUrl} />
   if (file.mediaKind === "PHOTO") return <PhotoPreview file={file} contentUrl={contentUrl} />
   return <VideoPreview file={file} contentUrl={contentUrl} />
 }

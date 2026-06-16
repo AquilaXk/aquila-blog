@@ -349,13 +349,20 @@ class CloudFileService(
         if (
             normalizedDeclared != null &&
             normalizedDeclared in KNOWN_CONTENT_TYPES &&
-            normalizedDeclared != detected.contentType
+            !isDeclaredContentTypeCompatible(normalizedDeclared, detected.contentType)
         ) {
             throw AppException("400-1", "파일 내용과 콘텐츠 타입이 일치하지 않습니다.")
         }
 
         return detected
     }
+
+    private fun isDeclaredContentTypeCompatible(
+        declaredContentType: String,
+        detectedContentType: String,
+    ): Boolean =
+        declaredContentType == detectedContentType ||
+            (detectedContentType == HWPX_CONTENT_TYPE && declaredContentType == ZIP_CONTENT_TYPE)
 
     private fun normalizeContentType(raw: String?): String? {
         val normalized =
@@ -420,6 +427,9 @@ class CloudFileService(
         if (filename.substringAfterLast(".", "").lowercase(Locale.ROOT) == "hwpx" && isHwpxPackage(bytes)) {
             return DetectedContent(HWPX_CONTENT_TYPE, CloudFileMediaKind.DOCUMENT)
         }
+        if (filename.substringAfterLast(".", "").lowercase(Locale.ROOT) == "zip" && isValidZipArchive(bytes)) {
+            return DetectedContent(ZIP_CONTENT_TYPE, CloudFileMediaKind.DOCUMENT)
+        }
 
         return null
     }
@@ -436,15 +446,19 @@ class CloudFileService(
         return HWPX_MANIFEST_ENTRY in entries && entries.any { it in HWPX_DOCUMENT_ENTRIES }
     }
 
-    private fun readZipCentralDirectoryEntryNames(bytes: ByteArray): Set<String> {
-        val endRecordOffset = findZipEndOfCentralDirectoryOffset(bytes) ?: return emptySet()
+    private fun isValidZipArchive(bytes: ByteArray): Boolean = isZipSignature(bytes) && parseZipCentralDirectoryEntryNames(bytes) != null
+
+    private fun readZipCentralDirectoryEntryNames(bytes: ByteArray): Set<String> = parseZipCentralDirectoryEntryNames(bytes).orEmpty()
+
+    private fun parseZipCentralDirectoryEntryNames(bytes: ByteArray): Set<String>? {
+        val endRecordOffset = findZipEndOfCentralDirectoryOffset(bytes) ?: return null
         val entryCount = readUInt16Le(bytes, endRecordOffset + ZIP_EOCD_TOTAL_ENTRY_COUNT_OFFSET)
         val centralDirectorySize = readUInt32Le(bytes, endRecordOffset + ZIP_EOCD_DIRECTORY_SIZE_OFFSET)
         val centralDirectoryOffset = readUInt32Le(bytes, endRecordOffset + ZIP_EOCD_DIRECTORY_OFFSET)
-        if (centralDirectorySize > bytes.size || centralDirectoryOffset > bytes.size) return emptySet()
+        if (centralDirectorySize > bytes.size || centralDirectoryOffset > bytes.size) return null
 
         val directoryStart = centralDirectoryOffset.toInt()
-        val directoryEnd = (centralDirectoryOffset + centralDirectorySize).takeIf { it <= bytes.size }?.toInt() ?: return emptySet()
+        val directoryEnd = (centralDirectoryOffset + centralDirectorySize).takeIf { it <= bytes.size }?.toInt() ?: return null
         val names = mutableSetOf<String>()
         var offset = directoryStart
         var scannedCount = 0
@@ -453,21 +467,21 @@ class CloudFileService(
             offset + ZIP_CENTRAL_DIRECTORY_HEADER_SIZE <= directoryEnd &&
             scannedCount < entryCount
         ) {
-            if (!hasSignature(bytes, offset, ZIP_CENTRAL_DIRECTORY_FILE_HEADER_SIGNATURE)) break
+            if (!hasSignature(bytes, offset, ZIP_CENTRAL_DIRECTORY_FILE_HEADER_SIGNATURE)) return null
 
             val nameLength = readUInt16Le(bytes, offset + ZIP_CENTRAL_DIRECTORY_NAME_LENGTH_OFFSET)
             val extraLength = readUInt16Le(bytes, offset + ZIP_CENTRAL_DIRECTORY_EXTRA_LENGTH_OFFSET)
             val commentLength = readUInt16Le(bytes, offset + ZIP_CENTRAL_DIRECTORY_COMMENT_LENGTH_OFFSET)
             val nameOffset = offset + ZIP_CENTRAL_DIRECTORY_HEADER_SIZE
             val nextOffset = nameOffset + nameLength + extraLength + commentLength
-            if (nameOffset + nameLength > directoryEnd || nextOffset > directoryEnd) break
+            if (nameOffset + nameLength > directoryEnd || nextOffset > directoryEnd) return null
 
             names += String(bytes, nameOffset, nameLength, StandardCharsets.UTF_8).replace('\\', '/')
-            if (HWPX_MANIFEST_ENTRY in names && names.any { it in HWPX_DOCUMENT_ENTRIES }) break
-
             offset = nextOffset
             scannedCount++
         }
+
+        if (scannedCount != entryCount || offset != directoryEnd) return null
 
         return names
     }
@@ -515,6 +529,7 @@ class CloudFileService(
         private const val MAX_FILENAME_CODE_POINTS = 255L
         private const val MAX_FILENAME_METADATA_ENCODED_BYTES = 1024
         private const val HWPX_CONTENT_TYPE = "application/haansofthwpx"
+        private const val ZIP_CONTENT_TYPE = "application/zip"
         private const val HWPX_MANIFEST_ENTRY = "Contents/content.hpf"
         private const val ZIP_EOCD_MIN_SIZE = 22
         private const val ZIP_EOCD_MAX_SEARCH_LENGTH = ZIP_EOCD_MIN_SIZE + 0xFFFF
@@ -548,11 +563,13 @@ class CloudFileService(
                 "image/x-png" to "image/png",
                 "image/x-webp" to "image/webp",
                 "application/x-hwpx" to HWPX_CONTENT_TYPE,
+                "application/x-zip-compressed" to ZIP_CONTENT_TYPE,
             )
         private val KNOWN_CONTENT_TYPES =
             setOf(
                 "application/pdf",
                 HWPX_CONTENT_TYPE,
+                ZIP_CONTENT_TYPE,
                 "image/jpeg",
                 "image/png",
                 "image/gif",

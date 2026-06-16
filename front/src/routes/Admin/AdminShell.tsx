@@ -157,6 +157,7 @@ const AdminShell = ({ currentSection, member, profileSnapshot = null, children }
         <AdminUtilityBar
           navItems={utilityNavItems}
           currentLabel={currentNav.label}
+          searchMode={currentSection === "cloud" ? "hidden" : "shortcuts"}
         />
 
         <Canvas>{children}</Canvas>
@@ -170,7 +171,7 @@ export default AdminShell
 const ShellFrame = styled.div`
   ${({ theme }) => adminSystemThemeVariables(theme)}
   display: grid;
-  grid-template-columns: 17.5rem minmax(0, 1fr);
+  grid-template-columns: 14.75rem minmax(0, 1fr);
   gap: 0;
   width: 100%;
   margin: 0;
@@ -193,7 +194,7 @@ const Sidebar = styled.aside`
   top: var(--app-header-height, 73px);
   min-height: calc(100vh - var(--app-header-height, 73px));
   height: fit-content;
-  padding: 1.05rem 1.25rem 1.15rem;
+  padding: 0.95rem 0.9rem 1.05rem;
   border: 0;
   border-right: 1px solid ${adminBorder};
   border-radius: 0;
@@ -229,8 +230,8 @@ const BrandBlock = styled.div`
 `
 
 const BrandMark = styled.div`
-  width: 2.95rem;
-  height: 2.95rem;
+  width: 2.55rem;
+  height: 2.55rem;
   border-radius: 999px;
   display: grid;
   place-items: center;
@@ -257,7 +258,7 @@ const BrandCopy = styled.div`
 
   strong {
     color: ${adminTextPrimary};
-    font-size: 1.18rem;
+    font-size: 1rem;
     font-weight: 800;
     letter-spacing: -0.03em;
   }
@@ -300,10 +301,10 @@ const SidebarNav = styled.nav`
 const NavLink = styled.a`
   display: flex;
   align-items: center;
-  gap: 0.62rem;
+  gap: 0.5rem;
   min-width: 0;
-  min-height: 2.38rem;
-  padding: 0.38rem 0.55rem;
+  min-height: 2.28rem;
+  padding: 0.35rem 0.45rem;
   border-radius: 0;
   border: 0;
   border-left: 3px solid transparent;
@@ -324,7 +325,7 @@ const NavLink = styled.a`
 
   .navLabel {
     color: ${adminTextPrimary};
-    font-size: 0.92rem;
+    font-size: 0.86rem;
     font-weight: 760;
     letter-spacing: -0.02em;
     line-height: 1.2;
@@ -361,14 +362,14 @@ const SidebarPrimaryAction = styled.a`
   justify-content: center;
   gap: 0.46rem;
   width: 100%;
-  min-height: 2.38rem;
-  padding: 0.56rem 0.72rem;
+  min-height: 2.25rem;
+  padding: 0.52rem 0.62rem;
   border-radius: 2px;
   border: 1px solid ${adminTealBorder};
   background: ${adminTeal};
   color: ${adminControlText};
   text-decoration: none;
-  font-size: 0.88rem;
+  font-size: 0.84rem;
   font-weight: 760;
 
   &:hover {

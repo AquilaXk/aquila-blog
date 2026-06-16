@@ -334,6 +334,8 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByRole("button", { name: "운영 점검 리포트.pdf 즐겨찾기 (준비 중)" })).toBeDisabled()
     await expect(page.getByText("문", { exact: true })).toHaveCount(0)
     await expect(page.getByText("PDF").first()).toBeVisible()
+    await expect(page.getByLabel("관리자 검색")).toHaveCount(0)
+    await expect(page.getByPlaceholder("관리자 메뉴 검색")).toHaveCount(0)
 
     const searchInput = page.getByLabel("클라우드 파일 검색")
     await searchInput.fill("/photos")
@@ -437,6 +439,7 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByRole("heading", { name: "내 파일" })).toBeVisible()
     await expect(page.locator('button[aria-label="파일 업로드"]').first()).toBeVisible()
     await expect(page.getByRole("status", { name: "파일 목록 로딩" })).toBeVisible()
+    await expect(page.locator("[data-admin-cloud-skeleton-row]")).toHaveCount(3)
     await expect(page.getByText("파일을 불러오는 중입니다.")).toHaveCount(0)
     await expect(page.getByRole("row", { name: /운영 점검 리포트\.pdf/ })).toBeVisible()
     await expect(page.getByRole("status", { name: "파일 목록 로딩" })).toHaveCount(0)
@@ -551,6 +554,7 @@ test.describe("관리자 클라우드", () => {
     const badgeBox = await typeBadge.boundingBox()
     const thumbnailBox = await selectedRow.locator('[data-kind="DOCUMENT"]').first().boundingBox()
     const selectedRowBox = await selectedRow.boundingBox()
+    const selectedAccentCell = selectedRow.locator("td").first()
     expect(badgeBox).not.toBeNull()
     expect(thumbnailBox).not.toBeNull()
     expect(selectedRowBox).not.toBeNull()
@@ -558,11 +562,13 @@ test.describe("관리자 클라우드", () => {
     expect(badgeBox!.height).toBeGreaterThan(18)
     expect(thumbnailBox!.width).toBeGreaterThan(40)
     expect(thumbnailBox!.x).toBeGreaterThan(selectedRowBox!.x)
+    await expect(selectedAccentCell).toHaveCSS("border-left-color", "rgb(88, 166, 255)")
 
     const nameButton = selectedRow.locator('button[title="운영 점검 리포트.pdf"]')
     await nameButton.focus()
     await expect(nameButton).toHaveCSS("outline-style", "none")
     await expect(nameButton).toHaveCSS("border-radius", "0px")
+    await expect(nameButton).toHaveCSS("box-shadow", /rgb\(88, 166, 255\)/)
 
     await expect(selectedRow.getByRole("button", { name: /미리보기/ })).toHaveCount(0)
     await expect(selectedRow.getByRole("button", { name: "운영 점검 리포트.pdf 삭제" })).toHaveCount(0)

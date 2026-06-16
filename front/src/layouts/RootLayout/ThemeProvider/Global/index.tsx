@@ -12,6 +12,7 @@ export const Global = () => {
       styles={css`
         html {
           min-height: 100%;
+          color-scheme: ${theme.scheme};
           -webkit-text-size-adjust: 100%;
           text-size-adjust: 100%;
           overflow-x: visible;

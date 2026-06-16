@@ -232,6 +232,23 @@ class CloudFileServiceTest {
     }
 
     @Test
+    @DisplayName("업로드 시 HWPX 필수 항목이 중앙 디렉터리 뒤쪽에 있어도 문서로 저장한다")
+    fun `upload는 HWPX 필수 항목이 중앙 디렉터리 뒤쪽에 있어도 문서로 저장한다`() {
+        val result =
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "첨부자료_많은리소스.hwpx",
+                contentType = "application/octet-stream",
+                bytes = zipBytesWithLateHwpxEntries(),
+                folderPath = null,
+            )
+
+        assertThat(result.mediaKind).isEqualTo(CloudFileMediaKind.DOCUMENT)
+        assertThat(result.contentType).isEqualTo("application/haansofthwpx")
+        assertThat(result.originalFilename).isEqualTo("첨부자료_많은리소스.hwpx")
+    }
+
+    @Test
     @DisplayName("업로드 시 잘못된 ZIP 헤더 조합은 HWPX 문서로 저장하지 않는다")
     fun `upload는 잘못된 ZIP 헤더 조합을 HWPX 문서로 저장하지 않는다`() {
         assertThatThrownBy {
@@ -816,6 +833,21 @@ class CloudFileServiceTest {
                 "Contents/content.hpf" to "<package />",
                 "Contents/header.xml" to "<header />",
             )
+
+        private fun zipBytesWithLateHwpxEntries(): ByteArray {
+            val fillerEntries =
+                (0 until 600).map { index ->
+                    "Contents/resources/resource-$index.bin" to "x"
+                }
+            val hwpxEntries =
+                listOf(
+                    "Contents/content.hpf" to "<package />",
+                    "Contents/header.xml" to "<header />",
+                )
+            return zip(
+                *(fillerEntries + hwpxEntries).toTypedArray(),
+            )
+        }
 
         private fun invalidZipBytes(): ByteArray =
             byteArrayOf(

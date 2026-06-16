@@ -50,8 +50,8 @@ export const getCloudKindLabel = (kind: CloudMediaFilter) => {
 export const getCloudKindBadge = (file: CloudFile) => {
   const extension = getCloudFileExtension(file.originalFilename)
   if (file.mediaKind === "DOCUMENT") return extension || "DOC"
-  if (file.mediaKind === "PHOTO") return "IMG"
-  return "MP4"
+  if (file.mediaKind === "PHOTO") return extension || "IMG"
+  return extension || "MP4"
 }
 
 export const getCloudKindIconLabel = (file: CloudFile) => {

@@ -111,7 +111,7 @@ test.describe("관리자 런타임 회귀 계약", () => {
     expect(documentSource).toContain('document.documentElement.setAttribute("data-aquila-scheme-bootstrap-source", bootstrapSource)')
     expect(documentSource).toContain("prefers-color-scheme: dark")
     expect(documentSource).toContain("colorScheme = nextScheme")
-    expect(documentSource).toContain('nextScheme === "dark" ? "#121212" : "#f3f5f8"')
+    expect(documentSource).toContain('nextScheme === "dark" ? "#0d1117" : "#f3f5f8"')
     expect(documentSource).toContain('var darkPreHydrationGuard = nextScheme === "dark"')
     expect(documentSource).toContain('html[data-aquila-scheme-bootstrap="dark"] *{color-scheme:dark!important;}')
     expect(documentSource).toContain('background-color:transparent!important;background-image:none!important;box-shadow:none!important;')

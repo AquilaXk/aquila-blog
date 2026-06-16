@@ -27,15 +27,15 @@ const adminLightThemeVariables = `
 
 const adminDarkThemeVariables = `
   color-scheme: dark;
-  --admin-app-bg: #121212;
-  --admin-sidebar-bg: #181818;
-  --admin-surface: #121212;
-  --admin-surface-raised: #1b1b1b;
-  --admin-surface-muted: #222222;
-  --admin-surface-accent: #172033;
-  --admin-elevated-top: #181818;
-  --admin-border: #2f333a;
-  --admin-border-strong: #4a5464;
+  --admin-app-bg: #0d1117;
+  --admin-sidebar-bg: #0d1117;
+  --admin-surface: #0d1117;
+  --admin-surface-raised: #161b22;
+  --admin-surface-muted: #21262d;
+  --admin-surface-accent: #1f2a44;
+  --admin-elevated-top: #161b22;
+  --admin-border: #30363d;
+  --admin-border-strong: #4b5567;
   --admin-text-primary: #f5f6f8;
   --admin-text-secondary: #c8ced7;
   --admin-text-muted: #8f99a7;

@@ -115,7 +115,7 @@ const AdminUtilityBar = ({ navItems, currentLabel }: Props) => {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={handleSearchKeyDown}
-            placeholder="페이지 검색"
+            placeholder="관리자 메뉴 검색"
             aria-label="관리자 검색"
           />
         </SearchField>

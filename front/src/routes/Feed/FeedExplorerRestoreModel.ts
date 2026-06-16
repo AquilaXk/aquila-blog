@@ -38,6 +38,7 @@ export type FeedExplorerSnapshotPost = {
   summary?: string
   thumbnail?: string
   tags?: string[]
+  category?: string[]
   author?: {
     id: string
     name: string
@@ -45,6 +46,7 @@ export type FeedExplorerSnapshotPost = {
   }[]
   likesCount?: number
   commentsCount?: number
+  hitCount?: number
 }
 
 export type FeedExplorerSnapshotPage = {
@@ -110,6 +112,7 @@ export const toSnapshotPost = (post: TPost): FeedExplorerSnapshotPost => {
     ...(post.summary ? { summary: post.summary } : {}),
     ...(post.thumbnail ? { thumbnail: post.thumbnail } : {}),
     ...(post.tags?.length ? { tags: post.tags } : {}),
+    ...(post.category?.length ? { category: post.category } : {}),
     ...(firstAuthor
       ? {
           author: [
@@ -123,6 +126,7 @@ export const toSnapshotPost = (post: TPost): FeedExplorerSnapshotPost => {
       : {}),
     ...(typeof post.likesCount === "number" ? { likesCount: post.likesCount } : {}),
     ...(typeof post.commentsCount === "number" ? { commentsCount: post.commentsCount } : {}),
+    ...(typeof post.hitCount === "number" ? { hitCount: post.hitCount } : {}),
   }
 }
 
@@ -153,9 +157,11 @@ export const toRestoredPost = (post: FeedExplorerSnapshotPost): TPost => {
     ...(post.summary ? { summary: post.summary } : {}),
     ...(post.thumbnail ? { thumbnail: post.thumbnail } : {}),
     ...(post.tags?.length ? { tags: post.tags } : {}),
+    ...(post.category?.length ? { category: post.category } : {}),
     ...(post.author?.length ? { author: post.author } : {}),
     ...(typeof post.likesCount === "number" ? { likesCount: post.likesCount } : {}),
     ...(typeof post.commentsCount === "number" ? { commentsCount: post.commentsCount } : {}),
+    ...(typeof post.hitCount === "number" ? { hitCount: post.hitCount } : {}),
   }
 }
 

@@ -132,10 +132,9 @@ type FeedPageProps = {
 
 const FeedPage: NextPageWithLayout<FeedPageProps> = ({ initialAdminProfile }) => {
   const feedTitle =
-    initialAdminProfile?.homeIntroTitle ||
     initialAdminProfile?.blogTitle ||
-    CONFIG.blog.homeIntroTitle ||
-    CONFIG.blog.title
+    CONFIG.blog.title ||
+    "AquilaLog"
   const feedDescription = initialAdminProfile?.homeIntroDescription || CONFIG.blog.homeIntroDescription || CONFIG.blog.description
 
   const meta = {

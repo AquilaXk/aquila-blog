@@ -2,7 +2,6 @@ import { expect, test } from "@playwright/test"
 import {
   allowAdminDashboardLoginFallback,
   applySchemePreference,
-  getDesktopTagRailMetrics,
   getRailStickySnapshot,
   getThemeSurfaceFingerprint,
   getVisualLayoutFingerprint,
@@ -26,7 +25,7 @@ test.describe("성능 레이아웃과 표면 예산", () => {
   const ultraWideSnapshot = await getWidthLockSnapshot(page)
   expect(ultraWideSnapshot.mainWidth).toBeCloseTo(1728, 0)
   expect(ultraWideSnapshot.headerWidth).toBeCloseTo(1728, 0)
-  await expect(page.locator(".rt")).toBeVisible()
+  await expect(page.locator(".rt")).toBeHidden()
 
   await page.setViewportSize({ width: 1600, height: 900 })
   await reloadForPerf(page)
@@ -34,7 +33,7 @@ test.describe("성능 레이아웃과 표면 예산", () => {
   const wideSnapshot = await getWidthLockSnapshot(page)
   expect(wideSnapshot.mainWidth).toBeCloseTo(1376, 0)
   expect(wideSnapshot.headerWidth).toBeCloseTo(1376, 0)
-  await expect(page.locator(".rt")).toBeVisible()
+  await expect(page.locator(".rt")).toBeHidden()
 
   const checkpoints = [
     { viewport: 1300, expectedLocked: 1024 },
@@ -113,7 +112,7 @@ test.describe("성능 레이아웃과 표면 예산", () => {
   expect(hoverMetrics.articleTop).toBeLessThan(hoverMetrics.cardTop)
 })
 
-  test("메인 태그 레일은 1200/1201 전환과 넓은 데스크톱에서 안전하게 전환된다", async ({ page }) => {
+  test("메인 태그 칩 레일은 1200/1201 전환과 넓은 데스크톱에서 안전하게 유지된다", async ({ page }) => {
   await mockFeedEndpoints(page)
 
   await page.setViewportSize({ width: 1200, height: 900 })
@@ -123,28 +122,29 @@ test.describe("성능 레이아웃과 표면 예산", () => {
 
   await page.setViewportSize({ width: 1201, height: 900 })
   await reloadForPerf(page)
-  await expect(page.locator(".chipRail")).toBeHidden()
-  await expect(page.locator(".desktopPanel")).toBeVisible()
+  await expect(page.locator(".chipRail")).toBeVisible()
+  await expect(page.locator(".desktopPanel")).toBeHidden()
   await expect
     .poll(async () => {
-      const rect = await page.locator(".desktopPanel").boundingBox()
+      const rect = await page.locator(".chipRail").boundingBox()
       return rect?.x ?? -999
     })
     .toBeGreaterThanOrEqual(0)
 
   await page.setViewportSize({ width: 1680, height: 900 })
   await reloadForPerf(page)
-  await expect(page.locator(".desktopPanel")).toBeVisible()
+  await expect(page.locator(".chipRail")).toBeVisible()
+  await expect(page.locator(".desktopPanel")).toBeHidden()
 
-  const railRect = await page.locator(".desktopPanel").boundingBox()
+  const railRect = await page.locator(".chipRail").boundingBox()
   expect(railRect).not.toBeNull()
   expect((railRect?.x ?? -1)).toBeGreaterThanOrEqual(0)
 
   const firstCardRect = await page.locator(".postColumn article").first().boundingBox()
   expect(firstCardRect).not.toBeNull()
-  const railRight = (railRect?.x ?? 0) + (railRect?.width ?? 0)
-  const firstCardLeft = firstCardRect?.x ?? 0
-  expect(firstCardLeft).toBeGreaterThanOrEqual(railRight + 8)
+  const railBottom = (railRect?.y ?? 0) + (railRect?.height ?? 0)
+  const firstCardTop = firstCardRect?.y ?? 0
+  expect(firstCardTop).toBeGreaterThanOrEqual(railBottom + 8)
 })
 
   test("상세 좌/우 고정 레일은 스크롤 전후 좌표를 안정적으로 유지한다", async ({ page }) => {
@@ -213,38 +213,30 @@ test.describe("성능 레이아웃과 표면 예산", () => {
       expect(snapshot.route).toBe("/")
       expect(snapshot.viewport.width).toBe(1440)
       expect(snapshot.viewport.height).toBe(900)
-      expect(snapshot.rails.desktopTag).toBe(true)
+      expect(snapshot.rails.chip).toBe(true)
+      expect(snapshot.rails.desktopTag).toBe(false)
       expect(snapshot.rails.leftReaction).toBe(false)
       expect(snapshot.rails.rightToc).toBe(false)
 
       expect(snapshot.searchRect).not.toBeNull()
       expect(snapshot.firstCardRect).not.toBeNull()
-      const desktopTagRailMetrics = await getDesktopTagRailMetrics(page)
-      expect(desktopTagRailMetrics).not.toBeNull()
 
       const searchWidth = snapshot.searchRect?.width ?? 0
       const searchHeight = snapshot.searchRect?.height ?? 0
       const firstCardWidth = snapshot.firstCardRect?.width ?? 0
       const firstCardHeight = snapshot.firstCardRect?.height ?? 0
-      const railWidth = snapshot.desktopTagRailRect?.width ?? 0
-      const railHeight = desktopTagRailMetrics?.height ?? 0
-      const railScrollHeight = desktopTagRailMetrics?.scrollHeight ?? 0
-      const railPanelBottom = desktopTagRailMetrics?.panelBottom ?? 0
       const htmlScrollWidth = snapshot.scrollWidth?.html ?? 0
       const bodyScrollWidth = snapshot.scrollWidth?.body ?? 0
 
-      expect(searchWidth).toBeGreaterThanOrEqual(600)
-      expect(searchWidth).toBeLessThanOrEqual(680)
+      expect(searchWidth).toBeGreaterThanOrEqual(860)
+      expect(searchWidth).toBeLessThanOrEqual(1280)
       expect(searchHeight).toBe(36)
-      expect(firstCardWidth).toBeGreaterThanOrEqual(340)
-      expect(firstCardWidth).toBeLessThanOrEqual(380)
+      expect(firstCardWidth).toBeGreaterThanOrEqual(280)
+      expect(firstCardWidth).toBeLessThanOrEqual(420)
       expect(firstCardHeight).toBeGreaterThanOrEqual(360)
-      expect(firstCardHeight).toBeLessThanOrEqual(400)
-      expect(railWidth).toBe(184)
-      expect(railHeight).toBeGreaterThanOrEqual(84)
-      expect(railHeight).toBeLessThanOrEqual(560)
-      expect(railScrollHeight).toBeGreaterThanOrEqual(railHeight)
-      expect(railPanelBottom).toBeLessThanOrEqual(snapshot.viewport.height)
+      expect(firstCardHeight).toBeLessThanOrEqual(430)
+      expect(snapshot.desktopTagRailRect?.width ?? 0).toBe(0)
+      expect(snapshot.desktopTagRailRect?.height ?? 0).toBe(0)
       expect(htmlScrollWidth).toBeLessThanOrEqual(1440)
       expect(htmlScrollWidth).toBeGreaterThanOrEqual(1420)
       expect(bodyScrollWidth).toBeLessThanOrEqual(1440)
@@ -272,14 +264,14 @@ test.describe("성능 레이아웃과 표면 예산", () => {
       expect(searchWidth).toBeGreaterThanOrEqual(320)
       expect(searchWidth).toBeLessThanOrEqual(336)
       expect(searchHeight).toBe(34)
-      expect(searchY).toBeGreaterThanOrEqual(156)
-      expect(searchY).toBeLessThanOrEqual(188)
+      expect(searchY).toBeGreaterThanOrEqual(190)
+      expect(searchY).toBeLessThanOrEqual(230)
       expect(firstCardWidth).toBeGreaterThanOrEqual(360)
       expect(firstCardWidth).toBeLessThanOrEqual(370)
       expect(firstCardHeight).toBeGreaterThanOrEqual(388)
-      expect(firstCardHeight).toBeLessThanOrEqual(404)
+      expect(firstCardHeight).toBeLessThanOrEqual(430)
       expect(firstCardY).toBeGreaterThanOrEqual(298)
-      expect(firstCardY).toBeLessThanOrEqual(360)
+      expect(firstCardY).toBeLessThanOrEqual(410)
       continue
     }
 
@@ -303,14 +295,14 @@ test.describe("성능 레이아웃과 표면 예산", () => {
       expect(searchWidth).toBeGreaterThanOrEqual(692)
       expect(searchWidth).toBeLessThanOrEqual(710)
       expect(searchHeight).toBe(34)
-      expect(searchY).toBeGreaterThanOrEqual(156)
-      expect(searchY).toBeLessThanOrEqual(190)
+      expect(searchY).toBeGreaterThanOrEqual(190)
+      expect(searchY).toBeLessThanOrEqual(230)
       expect(firstCardWidth).toBeGreaterThanOrEqual(348)
       expect(firstCardWidth).toBeLessThanOrEqual(360)
       expect(firstCardHeight).toBeGreaterThanOrEqual(384)
-      expect(firstCardHeight).toBeLessThanOrEqual(398)
+      expect(firstCardHeight).toBeLessThanOrEqual(430)
       expect(firstCardY).toBeGreaterThanOrEqual(300)
-      expect(firstCardY).toBeLessThanOrEqual(334)
+      expect(firstCardY).toBeLessThanOrEqual(380)
       continue
     }
 
@@ -460,10 +452,10 @@ test.describe("성능 레이아웃과 표면 예산", () => {
     expect(fingerprint.headerBg).not.toBe(fingerprint.bodyBg)
 
     if (scenario.route === "/") {
-      expect(fingerprint.searchBg).toBe("rgb(255, 255, 255)")
-      expect(fingerprint.searchBorder).toBe("rgb(200, 210, 222)")
-      expect(fingerprint.cardBg).toBe("rgb(255, 255, 255)")
-      expect(fingerprint.cardBorder).toBe("rgb(200, 210, 222)")
+      expect(fingerprint.searchBg).toBe("rgb(22, 27, 34)")
+      expect(fingerprint.searchBorder).toBe("rgb(48, 54, 61)")
+      expect(fingerprint.cardBg).toBe("rgb(22, 27, 34)")
+      expect(fingerprint.cardBorder).toBe("rgb(48, 54, 61)")
     }
 
     if (scenario.route === "/posts/991") {

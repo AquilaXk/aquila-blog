@@ -1,15 +1,9 @@
 import Footer from "./Footer"
 import styled from "@emotion/styled"
-import MobileProfileCard from "./MobileProfileCard"
-import ProfileCard from "./ProfileCard"
-import ServiceCard from "./ServiceCard"
-import ContactCard from "./ContactCard"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
 import { CONFIG } from "site.config"
 import FeedExplorer from "./FeedExplorer"
-import {
-  WIDE_SIDEBAR_LAYOUT_MIN_PX,
-} from "src/layouts/RootLayout/layoutTiers"
+import ProfileSummaryCard from "./ProfileSummaryCard"
 
 type Props = {
   initialAdminProfile?: AdminProfile | null
@@ -18,28 +12,29 @@ type Props = {
 const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
   const adminProfile = useAdminProfile(initialAdminProfile)
   const introTitle =
-    adminProfile?.homeIntroTitle || adminProfile?.blogTitle || CONFIG.blog.homeIntroTitle || CONFIG.blog.title
+    adminProfile?.blogTitle || CONFIG.blog.title || "AquilaLog"
+  const introRole = adminProfile?.profileRole || CONFIG.profile.role || "Backend Engineering"
   const introDescription = adminProfile?.homeIntroDescription || CONFIG.blog.homeIntroDescription || CONFIG.blog.description
 
   return (
-    <StyledWrapper>
+    <StyledWrapper data-ui="feed-home-product-shell">
       <div className="mid">
         <IntroCard>
-          <h1>{introTitle}</h1>
-          <p>{introDescription}</p>
+          <div className="introCopy">
+            <span className="brandLabel" data-ui="feed-brand-role">
+              {introRole}
+            </span>
+            <h1>{introTitle}</h1>
+            <p>{introDescription}</p>
+            <div className="topicRail" aria-label="AquilaLog topics">
+              <span>Spring</span>
+              <span>Architecture</span>
+              <span>Infrastructure</span>
+            </div>
+          </div>
+          <ProfileSummaryCard initialAdminProfile={initialAdminProfile} />
         </IntroCard>
         <FeedExplorer />
-        <div className="mobileProfileCard">
-          <MobileProfileCard initialAdminProfile={initialAdminProfile} />
-        </div>
-        <div className="footer">
-          <Footer />
-        </div>
-      </div>
-      <div className="rt">
-        <ProfileCard initialAdminProfile={initialAdminProfile} />
-        <ServiceCard initialAdminProfile={initialAdminProfile} />
-        <ContactCard initialAdminProfile={initialAdminProfile} />
         <div className="footer">
           <Footer />
         </div>
@@ -50,103 +45,135 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
 
 export default Feed
 
-const FEED_SIDEBAR_WIDTH_REM = 20
-
 const StyledWrapper = styled.div`
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 1.25rem;
-  align-items: start;
-  padding: 1rem 0 1.9rem;
+  --feed-product-bg: #0d1117;
+  --feed-product-panel: #161b22;
+  --feed-product-panel-hover: #21262d;
+  --feed-product-border: #30363d;
+  --feed-product-text: #f0f6fc;
+  --feed-product-muted: #8b949e;
+  --feed-product-accent: #58a6ff;
+  display: block;
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+  padding: 1.2rem 0 2.4rem;
+  color: var(--feed-product-text);
 
-  @media (min-width: ${WIDE_SIDEBAR_LAYOUT_MIN_PX}px) {
-    grid-template-columns: minmax(0, 1fr) minmax(18rem, ${FEED_SIDEBAR_WIDTH_REM}rem);
-    column-gap: clamp(1.5rem, 2.2vw, 2.5rem);
+  &::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    z-index: -1;
+    width: 100vw;
+    transform: translateX(-50%);
+    background:
+      radial-gradient(circle at 78% 0%, rgba(88, 166, 255, 0.1), transparent 28rem),
+      var(--feed-product-bg);
   }
 
   @media (max-width: 768px) {
-    padding: 0.28rem 0 0.96rem;
+    padding: 0.5rem 0 1.1rem;
   }
 
   > .mid {
     display: grid;
     min-width: 0;
-    gap: 1rem;
+    gap: 1.35rem;
 
     @media (max-width: 768px) {
       gap: 0.82rem;
     }
 
-    .mobileProfileCard {
-      @media (min-width: ${WIDE_SIDEBAR_LAYOUT_MIN_PX}px) {
-        display: none;
-      }
-    }
-
     > .footer {
       padding-bottom: 2rem;
-      @media (min-width: ${WIDE_SIDEBAR_LAYOUT_MIN_PX}px) {
-        display: none;
-      }
-    }
-  }
-
-  > .rt {
-    display: none;
-    min-width: 0;
-    overflow: auto;
-    overscroll-behavior: contain;
-    position: sticky;
-    top: calc(var(--app-header-height, 73px) + 0.65rem);
-    height: calc(100vh - var(--app-header-height, 73px) - 0.65rem);
-    height: calc(100dvh - var(--app-header-height, 73px) - 0.65rem);
-    gap: 1rem;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-
-    &::-webkit-scrollbar {
-      display: none;
-    }
-
-    @media (min-width: ${WIDE_SIDEBAR_LAYOUT_MIN_PX}px) {
-      display: grid;
-    }
-
-    .footer {
-      padding-top: 1rem;
     }
   }
 `
 
 const IntroCard = styled.section`
-  border-bottom: 1px solid ${({ theme }) => theme.publicDesign.border};
-  padding: 0.28rem 0 0.96rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(17rem, 20rem);
+  align-items: end;
+  gap: clamp(1.2rem, 3vw, 2.4rem);
+  border-bottom: 1px solid rgba(48, 54, 61, 0.82);
+  padding: 0.2rem 0 1.3rem;
+
+  .introCopy {
+    min-width: 0;
+  }
+
+  .brandLabel {
+    display: block;
+    margin-bottom: 0.52rem;
+    color: #58a6ff;
+    font-size: 0.78rem;
+    line-height: 1.2;
+    font-weight: 860;
+    letter-spacing: 0.02em;
+  }
 
   h1 {
     margin: 0;
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: clamp(2.1rem, 4.2vw, 2.95rem);
-    letter-spacing: -0.04em;
-    line-height: 1.08;
-    font-weight: 760;
-    max-width: 13ch;
+    color: #f0f6fc;
+    font-size: clamp(2.6rem, 5vw, 4rem);
+    letter-spacing: -0.075em;
+    line-height: 0.96;
+    font-weight: 880;
+    max-width: 12ch;
   }
 
   p {
-    margin: 0.78rem 0 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: clamp(1rem, 1.55vw, 1.18rem);
+    margin: 0.82rem 0 0;
+    color: #8b949e;
+    font-size: clamp(0.98rem, 1.3vw, 1.08rem);
     line-height: 1.55;
-    letter-spacing: -0.022em;
-    max-width: 34rem;
+    letter-spacing: -0.018em;
+    max-width: 40rem;
+  }
+
+  .topicRail {
+    margin-top: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.48rem;
+    flex-wrap: wrap;
+  }
+
+  .topicRail span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    border-radius: 999px;
+    border: 1px solid rgba(48, 54, 61, 0.86);
+    background: rgba(22, 27, 34, 0.68);
+    color: #8b949e;
+    padding: 0 0.72rem;
+    font-size: 0.76rem;
+    font-weight: 780;
+  }
+
+  @media (max-width: 1024px) {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
   }
 
   @media (max-width: 768px) {
-    padding-bottom: 1.12rem;
+    padding-bottom: 1rem;
+
+    [data-ui="feed-profile-summary"] {
+      display: none;
+    }
+
+    .topicRail {
+      display: none;
+    }
 
     h1 {
       max-width: none;
-      font-size: clamp(1.85rem, 10vw, 2.55rem);
+      font-size: clamp(2rem, 11vw, 2.55rem);
       line-height: 1.1;
     }
 

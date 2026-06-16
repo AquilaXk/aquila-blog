@@ -38,7 +38,7 @@ test.describe("관리자 런타임 회귀 계약", () => {
     expect(proxySource).toContain("new Promise<BodyInit>")
     expect(proxySource).toContain('req.on("data", handleData)')
     expect(proxySource).toContain("Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)")
-    expect(proxySource).toContain("const DEFAULT_BACKEND_PROXY_MAX_BODY_BYTES = 10 * 1024 * 1024")
+    expect(proxySource).toContain("const DEFAULT_BACKEND_PROXY_MAX_BODY_BYTES = 50 * 1024 * 1024")
     expect(proxySource).toContain('process.env.BACKEND_PROXY_MAX_BODY_BYTES')
     expect(proxySource).toContain('firstHeaderValue(req.headers["content-length"])')
     expect(proxySource).toContain("throw new ProxyBodyTooLargeError()")

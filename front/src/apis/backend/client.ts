@@ -218,9 +218,27 @@ const resolveStatusMessage = (status: number) => {
   if (status === 403) return "권한이 없습니다."
   if (status === 404) return "요청한 정보를 찾을 수 없습니다."
   if (status === 409) return "요청 충돌이 발생했습니다. 다시 시도해주세요."
+  if (status === 413) return "파일 용량이 너무 큽니다. 50MB 이하 파일로 다시 시도해주세요."
   if (status === 429) return "요청이 많습니다. 잠시 후 다시 시도해주세요."
   if (status >= 500) return "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
   return "요청 처리 중 오류가 발생했습니다."
+}
+
+const resolveResponseBodyMessage = (status: number, body: string) => {
+  if (status !== 413) return ""
+  if (!body.trim()) return ""
+
+  try {
+    const parsed = JSON.parse(body) as { message?: unknown; msg?: unknown }
+    const message = typeof parsed.msg === "string" ? parsed.msg : parsed.message
+    if (typeof message !== "string") return ""
+    const normalizedMessage = message.trim()
+    if (!normalizedMessage) return ""
+    if (!/(용량|초과|MB)/i.test(normalizedMessage)) return ""
+    return /[가-힣]/.test(normalizedMessage) ? normalizedMessage : ""
+  } catch {
+    return ""
+  }
 }
 
 const sleep = (delayMs: number) => new Promise<void>((resolve) => setTimeout(resolve, delayMs))
@@ -267,7 +285,7 @@ export class ApiError extends Error {
   userMessage: string
 
   constructor(status: number, url: string, body: string) {
-    const userMessage = resolveStatusMessage(status)
+    const userMessage = resolveResponseBodyMessage(status, body) || resolveStatusMessage(status)
     super(userMessage)
     this.name = "ApiError"
     this.status = status

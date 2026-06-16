@@ -19,14 +19,21 @@ const resolveCachedScheme = (): SchemeType | null => {
   return isScheme(cachedScheme) ? cachedScheme : null
 }
 
-const clearSchemeBootstrapStyle = () => {
-  document.documentElement.removeAttribute("data-aquila-scheme-bootstrap")
+const clearSchemeBootstrapStyle = (scheme?: SchemeType) => {
+  const root = document.documentElement
+  if (scheme) {
+    root.dataset.aquilaScheme = scheme
+  }
+  root.removeAttribute("data-aquila-scheme-bootstrap")
+  root.removeAttribute("data-aquila-scheme-bootstrap-source")
+  root.style.removeProperty("color-scheme")
+  root.style.removeProperty("background-color")
   document.querySelector('style[data-aquila-scheme-bootstrap-style="true"]')?.remove()
 }
 
-const clearSchemeBootstrapAfterHydration = () => {
+const clearSchemeBootstrapAfterHydration = (scheme: SchemeType) => {
   requestAnimationFrame(() => {
-    requestAnimationFrame(clearSchemeBootstrapStyle)
+    requestAnimationFrame(() => clearSchemeBootstrapStyle(scheme))
   })
 }
 
@@ -47,6 +54,7 @@ const useScheme = (): [SchemeType, SetScheme] => {
   const setScheme = useCallback((scheme: SchemeType) => {
     setCookie("scheme", scheme, { path: "/", sameSite: "lax" })
     queryClient.setQueryData(queryKey.scheme(), scheme)
+    clearSchemeBootstrapStyle(scheme)
   }, [queryClient])
 
   useEffect(() => {
@@ -58,7 +66,7 @@ const useScheme = (): [SchemeType, SetScheme] => {
       queryClient.setQueryData(queryKey.scheme(), bootstrapScheme)
       return
     }
-    clearSchemeBootstrapAfterHydration()
+    clearSchemeBootstrapAfterHydration(data)
   }, [data, followsSystemTheme, queryClient])
 
   return [data, setScheme]

@@ -212,6 +212,24 @@ class CloudFileServiceTest {
     }
 
     @Test
+    @DisplayName("업로드 시 잘못된 ZIP 헤더 조합은 HWPX 문서로 저장하지 않는다")
+    fun `upload는 잘못된 ZIP 헤더 조합을 HWPX 문서로 저장하지 않는다`() {
+        assertThatThrownBy {
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "invalid.hwpx",
+                contentType = "application/octet-stream",
+                bytes = invalidZipBytes(),
+                folderPath = null,
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("지원하지 않는 클라우드 파일 형식")
+
+        assertThat(storage.uploaded).isEmpty()
+        assertThat(repository.savedFiles).isEmpty()
+    }
+
+    @Test
     @DisplayName("업로드 시 mojibake로 들어온 한글 파일명은 원본 기호까지 UTF-8 기준으로 복구한다")
     fun `upload는 mojibake 한글 파일명을 UTF-8 기준으로 복구한다`() {
         val originalName = "★2026년 제3회 식약처 공무원(일반직) 경력경쟁채용시험 공고문_게시.pdf"
@@ -736,6 +754,18 @@ class CloudFileServiceTest {
                 0x4B,
                 0x03,
                 0x04,
+                0x14,
+                0x00,
+                0x00,
+                0x00,
+            )
+
+        private fun invalidZipBytes(): ByteArray =
+            byteArrayOf(
+                0x50,
+                0x4B,
+                0x03,
+                0x06,
                 0x14,
                 0x00,
                 0x00,

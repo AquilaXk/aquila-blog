@@ -116,6 +116,38 @@ class CloudFileServiceTest {
     }
 
     @Test
+    @DisplayName("업로드 제한 초과 안내는 KB 단위도 표시한다")
+    fun `upload는 제한 초과 안내에 KB 단위도 표시한다`() {
+        val limitedService =
+            CloudFileService(
+                cloudFileRepository = repository,
+                cloudStoragePort = storage,
+                cloudStorageProperties =
+                    CloudStorageProperties(
+                        maxFileSizeBytes = 1024,
+                        cloudDocumentMaxFileSizeBytes = 1024,
+                    ),
+                clock = Clock.fixed(Instant.parse("2026-06-12T00:00:00Z"), ZoneOffset.UTC),
+            )
+        val pdfBytes = ByteArray(1025).also { "%PDF-1.7".toByteArray().copyInto(it) }
+
+        assertThatThrownBy {
+            limitedService.upload(
+                ownerMemberId = 7L,
+                originalFilename = "large.pdf",
+                contentType = "application/pdf",
+                bytes = pdfBytes,
+                folderPath = "docs",
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("클라우드 문서 파일은")
+            .hasMessageContaining("1 KB")
+
+        assertThat(storage.uploaded).isEmpty()
+        assertThat(repository.savedFiles).isEmpty()
+    }
+
+    @Test
     @DisplayName("업로드 시 기본 제한으로 17MB PDF 문서를 저장할 수 있다")
     fun `upload는 기본 제한으로 17MB PDF 문서를 저장할 수 있다`() {
         val pdfHeader = "%PDF-1.7".toByteArray()

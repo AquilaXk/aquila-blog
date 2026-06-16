@@ -23,7 +23,7 @@ const HOP_BY_HOP_HEADERS = new Set([
 const DECODED_RESPONSE_HEADERS = new Set(["content-encoding", "content-length"])
 const BODYLESS_METHODS = new Set(["GET", "HEAD"])
 const BACKEND_PROXY_TIMEOUT_MS = 120_000
-const DEFAULT_BACKEND_PROXY_MAX_BODY_BYTES = 10 * 1024 * 1024
+const DEFAULT_BACKEND_PROXY_MAX_BODY_BYTES = 50 * 1024 * 1024
 
 class ProxyBodyTooLargeError extends Error {}
 class ProxyBodyTimeoutError extends Error {}
@@ -211,7 +211,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.end()
   } catch (error) {
     if (error instanceof ProxyBodyTooLargeError) {
-      res.status(413).json({ message: "Backend proxy request body is too large." })
+      res.status(413).json({ message: "파일 용량이 너무 큽니다. 50MB 이하 파일로 다시 시도해주세요." })
       return
     }
     if (error instanceof ProxyBodyTimeoutError || controller.signal.aborted || isAbortLikeError(error)) {

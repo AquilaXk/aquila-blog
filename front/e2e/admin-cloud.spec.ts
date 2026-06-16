@@ -150,6 +150,7 @@ const setupAdminCloudMocks = async (
     contentDelayMs?: number
     failDeleteIds?: string[]
     failList?: boolean
+    failUploadStatusByName?: Record<string, number>
     failUploadOnceNames?: string[]
     failUploadNames?: string[]
     initialFiles?: CloudFileFixture[]
@@ -219,7 +220,8 @@ const setupAdminCloudMocks = async (
 
       if (failedUploadNames.has(uploadedName) || failUploadOnceNames.has(uploadedName)) {
         failUploadOnceNames.delete(uploadedName)
-        await fulfillJson(route, { resultCode: "500-1", msg: "외장 스토리지 저장에 실패했습니다." }, 500)
+        const status = options.failUploadStatusByName?.[uploadedName] ?? 500
+        await fulfillJson(route, { resultCode: `${status}-1`, msg: "외장 스토리지 저장에 실패했습니다." }, status)
         return
       }
 
@@ -758,6 +760,28 @@ test.describe("관리자 클라우드", () => {
     await expect(uploadPanel.getByRole("heading", { name: "항목 1개 업로드 실패/취소" })).toBeVisible()
     await expect(uploadPanel.getByText(/서버 오류가 발생했습니다/)).toBeVisible()
     await expect(uploadPanel.getByRole("button", { name: "실패할 운영 문서.pdf 업로드 다시 시도" })).toBeVisible()
+  })
+
+  test("클라우드 업로드 413 실패는 파일 용량 안내를 표시한다", async ({ page }) => {
+    await setupAdminCloudMocks(page, {
+      failUploadNames: ["대용량 포트폴리오.pdf"],
+      failUploadStatusByName: {
+        "대용량 포트폴리오.pdf": 413,
+      },
+      initialFiles: [],
+    })
+
+    await page.goto("/admin/cloud")
+
+    await page.getByLabel("클라우드 파일 업로드").setInputFiles({
+      name: "대용량 포트폴리오.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4 oversized upload"),
+    })
+
+    const uploadPanel = page.getByLabel("업로드 중인 파일")
+    await expect(uploadPanel.getByRole("heading", { name: "항목 1개 업로드 실패/취소" })).toBeVisible()
+    await expect(uploadPanel.getByText(/파일 용량이 너무 큽니다/)).toBeVisible()
   })
 
   test("업로드 재시도 성공 시 이전 실패 알림은 작업 영역에 남지 않는다", async ({ page }) => {

@@ -29,7 +29,7 @@ const AQUILA_SCHEME_BOOTSTRAP_SCRIPT = `
   var defaultScheme = configuredScheme === "system" ? (systemDark ? "dark" : "light") : configuredScheme;
   var nextScheme = cachedScheme || defaultScheme;
   var bootstrapSource = cachedScheme ? "cookie" : "system";
-  var background = nextScheme === "dark" ? "#121212" : "#f3f5f8";
+  var background = nextScheme === "dark" ? "#0d1117" : "#f3f5f8";
   var foreground = nextScheme === "dark" ? "#f4f6fb" : "#101214";
   var darkPreHydrationGuard = nextScheme === "dark"
     ? [

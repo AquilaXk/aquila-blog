@@ -70,7 +70,7 @@ test.describe("모바일 레이아웃 소스 경계", () => {
     expect(adminColorTokenSource).toContain("export const adminSystemThemeVariables = (theme: Theme) =>")
     expect(adminColorTokenSource).toContain('theme.scheme === "dark" ? adminDarkThemeVariables : adminLightThemeVariables')
     expect(adminColorTokenSource).toContain("--admin-app-bg: #ffffff;")
-    expect(adminColorTokenSource).toContain("--admin-app-bg: #121212;")
+    expect(adminColorTokenSource).toContain("--admin-app-bg: #0d1117;")
     expect(adminSurfaceSource).toContain("adminPlainSurface(theme)")
     expect(adminShellSource).toContain("adminSystemThemeVariables(theme)")
     expect(adminShellSource).toContain("background: ${adminAppBackground};")

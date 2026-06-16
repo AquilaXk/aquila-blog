@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
-import java.io.ByteArrayInputStream
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.text.Normalizer
@@ -21,7 +20,6 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
-import java.util.zip.ZipInputStream
 
 data class CloudFileDto(
     val id: Long,
@@ -433,21 +431,80 @@ class CloudFileService(
     private fun isHwpxPackage(bytes: ByteArray): Boolean {
         if (!isZipSignature(bytes)) return false
 
-        val entries =
-            runCatching {
-                ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
-                    buildSet {
-                        while (size < MAX_HWPX_ENTRY_SCAN_COUNT) {
-                            val entry = zip.nextEntry ?: break
-                            add(entry.name.replace('\\', '/'))
-                            zip.closeEntry()
-                        }
-                    }
-                }
-            }.getOrDefault(emptySet())
+        val entries = readZipCentralDirectoryEntryNames(bytes)
 
         return HWPX_MANIFEST_ENTRY in entries && entries.any { it in HWPX_DOCUMENT_ENTRIES }
     }
+
+    private fun readZipCentralDirectoryEntryNames(bytes: ByteArray): Set<String> {
+        val endRecordOffset = findZipEndOfCentralDirectoryOffset(bytes) ?: return emptySet()
+        val entryCount = readUInt16Le(bytes, endRecordOffset + ZIP_EOCD_TOTAL_ENTRY_COUNT_OFFSET)
+        val centralDirectorySize = readUInt32Le(bytes, endRecordOffset + ZIP_EOCD_DIRECTORY_SIZE_OFFSET)
+        val centralDirectoryOffset = readUInt32Le(bytes, endRecordOffset + ZIP_EOCD_DIRECTORY_OFFSET)
+        if (centralDirectorySize > bytes.size || centralDirectoryOffset > bytes.size) return emptySet()
+
+        val directoryStart = centralDirectoryOffset.toInt()
+        val directoryEnd = (centralDirectoryOffset + centralDirectorySize).takeIf { it <= bytes.size }?.toInt() ?: return emptySet()
+        val names = mutableSetOf<String>()
+        var offset = directoryStart
+        var scannedCount = 0
+
+        while (
+            offset + ZIP_CENTRAL_DIRECTORY_HEADER_SIZE <= directoryEnd &&
+            scannedCount < entryCount &&
+            scannedCount < MAX_HWPX_ENTRY_SCAN_COUNT
+        ) {
+            if (!hasSignature(bytes, offset, ZIP_CENTRAL_DIRECTORY_FILE_HEADER_SIGNATURE)) break
+
+            val nameLength = readUInt16Le(bytes, offset + ZIP_CENTRAL_DIRECTORY_NAME_LENGTH_OFFSET)
+            val extraLength = readUInt16Le(bytes, offset + ZIP_CENTRAL_DIRECTORY_EXTRA_LENGTH_OFFSET)
+            val commentLength = readUInt16Le(bytes, offset + ZIP_CENTRAL_DIRECTORY_COMMENT_LENGTH_OFFSET)
+            val nameOffset = offset + ZIP_CENTRAL_DIRECTORY_HEADER_SIZE
+            val nextOffset = nameOffset + nameLength + extraLength + commentLength
+            if (nameOffset + nameLength > directoryEnd || nextOffset > directoryEnd) break
+
+            names += String(bytes, nameOffset, nameLength, StandardCharsets.UTF_8).replace('\\', '/')
+            if (HWPX_MANIFEST_ENTRY in names && names.any { it in HWPX_DOCUMENT_ENTRIES }) break
+
+            offset = nextOffset
+            scannedCount++
+        }
+
+        return names
+    }
+
+    private fun findZipEndOfCentralDirectoryOffset(bytes: ByteArray): Int? {
+        val firstSearchOffset = maxOf(0, bytes.size - ZIP_EOCD_MAX_SEARCH_LENGTH)
+        for (offset in bytes.size - ZIP_EOCD_MIN_SIZE downTo firstSearchOffset) {
+            if (hasSignature(bytes, offset, ZIP_END_OF_CENTRAL_DIRECTORY_SIGNATURE)) return offset
+        }
+        return null
+    }
+
+    private fun hasSignature(
+        bytes: ByteArray,
+        offset: Int,
+        signature: ByteArray,
+    ): Boolean {
+        if (offset < 0 || offset + signature.size > bytes.size) return false
+        return signature.indices.all { index -> bytes[offset + index] == signature[index] }
+    }
+
+    private fun readUInt16Le(
+        bytes: ByteArray,
+        offset: Int,
+    ): Int =
+        (bytes[offset].toInt() and 0xFF) or
+            ((bytes[offset + 1].toInt() and 0xFF) shl 8)
+
+    private fun readUInt32Le(
+        bytes: ByteArray,
+        offset: Int,
+    ): Long =
+        (bytes[offset].toLong() and 0xFF) or
+            ((bytes[offset + 1].toLong() and 0xFF) shl 8) or
+            ((bytes[offset + 2].toLong() and 0xFF) shl 16) or
+            ((bytes[offset + 3].toLong() and 0xFF) shl 24)
 
     private data class DetectedContent(
         val contentType: String,
@@ -461,12 +518,25 @@ class CloudFileService(
         private const val HWPX_CONTENT_TYPE = "application/haansofthwpx"
         private const val HWPX_MANIFEST_ENTRY = "Contents/content.hpf"
         private const val MAX_HWPX_ENTRY_SCAN_COUNT = 512
+        private const val ZIP_EOCD_MIN_SIZE = 22
+        private const val ZIP_EOCD_MAX_SEARCH_LENGTH = ZIP_EOCD_MIN_SIZE + 0xFFFF
+        private const val ZIP_EOCD_TOTAL_ENTRY_COUNT_OFFSET = 10
+        private const val ZIP_EOCD_DIRECTORY_SIZE_OFFSET = 12
+        private const val ZIP_EOCD_DIRECTORY_OFFSET = 16
+        private const val ZIP_CENTRAL_DIRECTORY_HEADER_SIZE = 46
+        private const val ZIP_CENTRAL_DIRECTORY_NAME_LENGTH_OFFSET = 28
+        private const val ZIP_CENTRAL_DIRECTORY_EXTRA_LENGTH_OFFSET = 30
+        private const val ZIP_CENTRAL_DIRECTORY_COMMENT_LENGTH_OFFSET = 32
         private val HWPX_DOCUMENT_ENTRIES =
             setOf(
                 "Contents/header.xml",
                 "Contents/section0.xml",
                 "META-INF/container.xml",
             )
+        private val ZIP_END_OF_CENTRAL_DIRECTORY_SIGNATURE =
+            byteArrayOf(0x50.toByte(), 0x4B.toByte(), 0x05.toByte(), 0x06.toByte())
+        private val ZIP_CENTRAL_DIRECTORY_FILE_HEADER_SIGNATURE =
+            byteArrayOf(0x50.toByte(), 0x4B.toByte(), 0x01.toByte(), 0x02.toByte())
         private val ZIP_SIGNATURES =
             setOf(
                 listOf(0x50.toByte(), 0x4B.toByte(), 0x03.toByte(), 0x04.toByte()),

@@ -215,6 +215,23 @@ class CloudFileServiceTest {
     }
 
     @Test
+    @DisplayName("업로드 시 HWPX 판별은 압축 본문을 풀지 않고 중앙 디렉터리 이름만 확인한다")
+    fun `upload는 HWPX 판별 시 중앙 디렉터리 이름만 확인한다`() {
+        val result =
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "제출서류_총괄표.hwpx",
+                contentType = "application/octet-stream",
+                bytes = zipBytesWithLargeLeadingEntry(),
+                folderPath = null,
+            )
+
+        assertThat(result.mediaKind).isEqualTo(CloudFileMediaKind.DOCUMENT)
+        assertThat(result.contentType).isEqualTo("application/haansofthwpx")
+        assertThat(result.originalFilename).isEqualTo("제출서류_총괄표.hwpx")
+    }
+
+    @Test
     @DisplayName("업로드 시 잘못된 ZIP 헤더 조합은 HWPX 문서로 저장하지 않는다")
     fun `upload는 잘못된 ZIP 헤더 조합을 HWPX 문서로 저장하지 않는다`() {
         assertThatThrownBy {
@@ -771,6 +788,13 @@ class CloudFileServiceTest {
 
         private fun zipBytes(): ByteArray =
             zip(
+                "Contents/content.hpf" to "<package />",
+                "Contents/header.xml" to "<header />",
+            )
+
+        private fun zipBytesWithLargeLeadingEntry(): ByteArray =
+            zip(
+                "filler.bin" to "0".repeat(1024 * 1024),
                 "Contents/content.hpf" to "<package />",
                 "Contents/header.xml" to "<header />",
             )

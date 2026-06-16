@@ -2,6 +2,8 @@ package com.back.global.storage.config
 
 import org.springframework.boot.context.properties.ConfigurationProperties
 
+const val DEFAULT_CLOUD_FILE_MAX_SIZE_BYTES: Long = 50L * 1024 * 1024
+
 @ConfigurationProperties("custom.storage")
 data class CloudStorageProperties(
     var enabled: Boolean = false,
@@ -12,5 +14,5 @@ data class CloudStorageProperties(
     var secretKey: String = "",
     var pathStyleAccess: Boolean = true,
     var cloudKeyPrefix: String = "cloud",
-    var maxFileSizeBytes: Long = 10 * 1024 * 1024,
+    var maxFileSizeBytes: Long = DEFAULT_CLOUD_FILE_MAX_SIZE_BYTES,
 )

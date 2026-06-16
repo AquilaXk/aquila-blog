@@ -23,10 +23,19 @@ const HOP_BY_HOP_HEADERS = new Set([
 const DECODED_RESPONSE_HEADERS = new Set(["content-encoding", "content-length"])
 const BODYLESS_METHODS = new Set(["GET", "HEAD"])
 const BACKEND_PROXY_TIMEOUT_MS = 120_000
-const DEFAULT_BACKEND_PROXY_MAX_BODY_BYTES = 10 * 1024 * 1024
+const DEFAULT_BACKEND_PROXY_MAX_BODY_BYTES = 50 * 1024 * 1024
+const DEFAULT_BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES = 150 * 1024 * 1024
 
 class ProxyBodyTooLargeError extends Error {}
+class ProxyBodyCapacityExceededError extends Error {}
 class ProxyBodyTimeoutError extends Error {}
+
+type ProxyBodyReadResult = {
+  body: BodyInit | undefined
+  releaseReservation: () => void
+}
+
+let inFlightProxyBodyBytes = 0
 
 const isAbortLikeError = (error: unknown) => {
   if (!(error instanceof Error)) return false
@@ -41,6 +50,22 @@ const firstHeaderValue = (value: string | string[] | undefined): string => {
 const resolveMaxProxyBodyBytes = (): number => {
   const configured = Number.parseInt(process.env.BACKEND_PROXY_MAX_BODY_BYTES || "", 10)
   return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_BACKEND_PROXY_MAX_BODY_BYTES
+}
+
+const resolveMaxProxyInFlightBodyBytes = (): number => {
+  const configured = Number.parseInt(process.env.BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES || "", 10)
+  return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES
+}
+
+const reserveProxyBodyBytes = (byteCount: number, maxInFlightBodyBytes: number) => {
+  if (byteCount <= 0) return
+  if (inFlightProxyBodyBytes + byteCount > maxInFlightBodyBytes) throw new ProxyBodyCapacityExceededError()
+  inFlightProxyBodyBytes += byteCount
+}
+
+const releaseProxyBodyBytes = (byteCount: number) => {
+  if (byteCount <= 0) return
+  inFlightProxyBodyBytes = Math.max(0, inFlightProxyBodyBytes - byteCount)
 }
 
 const getSetCookieHeaders = (headers: Headers): string[] => {
@@ -98,18 +123,33 @@ const readProxyBody = async (
   req: NextApiRequest,
   method: string,
   signal: AbortSignal,
-): Promise<BodyInit | undefined> => {
-  if (BODYLESS_METHODS.has(method)) return undefined
+): Promise<ProxyBodyReadResult> => {
+  if (BODYLESS_METHODS.has(method)) return { body: undefined, releaseReservation: () => undefined }
   if (signal.aborted) throw new ProxyBodyTimeoutError()
 
   // Keep the exact incoming bytes so JSON and multipart boundaries survive the proxy hop.
   const maxBodyBytes = resolveMaxProxyBodyBytes()
+  const maxInFlightBodyBytes = resolveMaxProxyInFlightBodyBytes()
   const declaredContentLength = Number.parseInt(firstHeaderValue(req.headers["content-length"]), 10)
   if (Number.isFinite(declaredContentLength) && declaredContentLength > maxBodyBytes) {
     throw new ProxyBodyTooLargeError()
   }
+  const hasDeclaredContentLength = Number.isFinite(declaredContentLength) && declaredContentLength > 0
+  let reservedBytes = 0
+  let released = false
+  const reserveAdditionalBytes = (byteCount: number) => {
+    reserveProxyBodyBytes(byteCount, maxInFlightBodyBytes)
+    reservedBytes += byteCount
+  }
+  const releaseReservation = () => {
+    if (released) return
+    released = true
+    releaseProxyBodyBytes(reservedBytes)
+  }
 
-  return await new Promise<BodyInit>((resolve, reject) => {
+  if (hasDeclaredContentLength) reserveAdditionalBytes(declaredContentLength)
+
+  return await new Promise<ProxyBodyReadResult>((resolve, reject) => {
     const chunks: Buffer[] = []
     let totalBytes = 0
     let settled = false
@@ -129,7 +169,10 @@ const readProxyBody = async (
     const fail = (error: Error) => {
       // Stop consuming the body without closing the response socket, so 413/504 can still be delivered.
       req.pause()
-      settle(() => reject(error))
+      settle(() => {
+        releaseReservation()
+        reject(error)
+      })
     }
     const handleData = (chunk: Buffer | string) => {
       if (signal.aborted) {
@@ -143,10 +186,24 @@ const readProxyBody = async (
         fail(new ProxyBodyTooLargeError())
         return
       }
+      if (!hasDeclaredContentLength || totalBytes > reservedBytes) {
+        try {
+          reserveAdditionalBytes(totalBytes - reservedBytes)
+        } catch (error) {
+          fail(error instanceof Error ? error : new ProxyBodyCapacityExceededError())
+          return
+        }
+      }
       chunks.push(buffer)
     }
-    const handleEnd = () => settle(() => resolve(toArrayBuffer(Buffer.concat(chunks))))
-    const handleError = (error: Error) => settle(() => reject(error))
+    const handleEnd = () =>
+      settle(() =>
+        resolve({
+          body: toArrayBuffer(Buffer.concat(chunks)),
+          releaseReservation,
+        })
+      )
+    const handleError = (error: Error) => fail(error)
     const handleAbort = () => fail(new ProxyBodyTimeoutError())
 
     signal.addEventListener("abort", handleAbort, { once: true })
@@ -179,12 +236,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), BACKEND_PROXY_TIMEOUT_MS)
+  let proxyBodyRead: ProxyBodyReadResult | undefined
 
   try {
+    proxyBodyRead = await readProxyBody(req, method, controller.signal)
     const upstreamResponse = await fetch(`${resolveServerApiBaseUrl(req)}${safePath}`, {
       method,
       headers,
-      body: await readProxyBody(req, method, controller.signal),
+      body: proxyBodyRead.body,
       redirect: "manual",
       signal: controller.signal,
     })
@@ -211,7 +270,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.end()
   } catch (error) {
     if (error instanceof ProxyBodyTooLargeError) {
-      res.status(413).json({ message: "Backend proxy request body is too large." })
+      const maxMb = Math.floor(resolveMaxProxyBodyBytes() / (1024 * 1024))
+      res.status(413).json({
+        message: `파일 용량이 너무 큽니다. ${maxMb}MB 이하 파일로 다시 시도해주세요.`,
+      })
+      return
+    }
+    if (error instanceof ProxyBodyCapacityExceededError) {
+      res.status(503).json({ message: "동시에 처리 중인 업로드가 많습니다. 잠시 후 다시 시도해주세요." })
       return
     }
     if (error instanceof ProxyBodyTimeoutError || controller.signal.aborted || isAbortLikeError(error)) {
@@ -221,6 +287,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     res.status(502).json({ message: "Backend proxy request failed." })
   } finally {
+    proxyBodyRead?.releaseReservation()
     clearTimeout(timeoutId)
   }
 }

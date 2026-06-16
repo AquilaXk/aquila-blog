@@ -118,7 +118,7 @@ class ExceptionHandler(
         )
         return ResponseEntity
             .status(HttpStatus.PAYLOAD_TOO_LARGE)
-            .body(RsData("413-1", "업로드 가능한 파일 용량을 초과했습니다. 허용 크기 이내 이미지로 다시 시도해주세요."))
+            .body(RsData("413-1", "업로드 가능한 파일 용량을 초과했습니다. 허용 크기 이내 파일로 다시 시도해주세요."))
     }
 
     @ExceptionHandler(MultipartException::class)
@@ -137,7 +137,7 @@ class ExceptionHandler(
         )
         return ResponseEntity
             .status(HttpStatus.BAD_REQUEST)
-            .body(RsData("400-1", "업로드 요청 형식이 올바르지 않습니다. 이미지 파일을 다시 선택해주세요."))
+            .body(RsData("400-1", "업로드 요청 형식이 올바르지 않습니다. 파일을 다시 선택해주세요."))
     }
 
     @ExceptionHandler(MissingRequestHeaderException::class)

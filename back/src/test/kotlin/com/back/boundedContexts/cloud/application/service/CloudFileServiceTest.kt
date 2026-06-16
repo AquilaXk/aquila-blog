@@ -14,6 +14,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.io.ByteArrayInputStream
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.text.Normalizer
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -186,6 +187,28 @@ class CloudFileServiceTest {
         assertThat(result.originalFilename).isEqualTo("cloud-file")
         assertThat(result.folderPath).isEmpty()
         assertThat(repository.savedFiles.single().objectKey).startsWith("cloud/7/2026/06/12/")
+    }
+
+    @Test
+    @DisplayName("업로드 시 NFD 한글 HWPX 문서는 NFC 파일명으로 저장한다")
+    fun `upload는 NFD 한글 HWPX 문서를 NFC 파일명으로 저장한다`() {
+        val nfcName = "★2026년 제3회 식약처 공무원(일반직) 경력경쟁채용시험 공고문_게시.hwpx"
+        val nfdName = Normalizer.normalize(nfcName, Normalizer.Form.NFD)
+
+        val result =
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = nfdName,
+                clientOriginalFilename = nfdName,
+                contentType = "application/octet-stream",
+                bytes = zipBytes(),
+                folderPath = null,
+            )
+
+        assertThat(result.originalFilename).isEqualTo(nfcName)
+        assertThat(result.mediaKind).isEqualTo(CloudFileMediaKind.DOCUMENT)
+        assertThat(result.contentType).isEqualTo("application/haansofthwpx")
+        assertThat(storage.uploaded.single().originalFilename).isEqualTo(nfcName)
     }
 
     @Test
@@ -705,6 +728,18 @@ class CloudFileServiceTest {
                 0x0A,
                 0x1A,
                 0x0A,
+            )
+
+        private fun zipBytes(): ByteArray =
+            byteArrayOf(
+                0x50,
+                0x4B,
+                0x03,
+                0x04,
+                0x14,
+                0x00,
+                0x00,
+                0x00,
             )
 
         private fun cloudFile(

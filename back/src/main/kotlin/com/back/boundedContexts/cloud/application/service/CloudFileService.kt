@@ -13,6 +13,7 @@ import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.text.Normalizer
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -65,7 +66,7 @@ class CloudFileService(
 
         val normalizedFolderPath = normalizeFolderPath(folderPath)
         val safeFilename = normalizeFilename(clientOriginalFilename?.takeIf(String::isNotBlank) ?: originalFilename)
-        val detected = detectContent(bytes, contentType)
+        val detected = detectContent(bytes, contentType, safeFilename)
         val objectKey =
             buildObjectKey(
                 ownerMemberId = ownerMemberId,
@@ -229,7 +230,8 @@ class CloudFileService(
                 .orEmpty()
         val decoded = recoverUtf8MojibakeFilename(raw)
         val cleaned =
-            decoded
+            Normalizer
+                .normalize(decoded, Normalizer.Form.NFC)
                 .ifBlank { fallback }
                 .replace(Regex("[\\r\\n\\t]"), " ")
                 .replace(Regex("[/\\\\]"), "_")
@@ -337,10 +339,11 @@ class CloudFileService(
     private fun detectContent(
         bytes: ByteArray,
         declaredContentType: String?,
+        filename: String,
     ): DetectedContent {
         val normalizedDeclared = normalizeContentType(declaredContentType)
         val detected =
-            detectFromSignature(bytes)
+            detectFromSignature(bytes, filename)
                 ?: throw AppException("400-1", "지원하지 않는 클라우드 파일 형식입니다.")
 
         if (
@@ -365,7 +368,10 @@ class CloudFileService(
         return CONTENT_TYPE_ALIASES[normalized] ?: normalized
     }
 
-    private fun detectFromSignature(bytes: ByteArray): DetectedContent? {
+    private fun detectFromSignature(
+        bytes: ByteArray,
+        filename: String,
+    ): DetectedContent? {
         if (bytes.size >= 5 && bytes.copyOfRange(0, 5).toString(Charsets.US_ASCII) == "%PDF-") {
             return DetectedContent("application/pdf", CloudFileMediaKind.DOCUMENT)
         }
@@ -411,9 +417,19 @@ class CloudFileService(
         ) {
             return DetectedContent("video/webm", CloudFileMediaKind.VIDEO)
         }
+        if (isZipSignature(bytes) && filename.substringAfterLast(".", "").lowercase(Locale.ROOT) == "hwpx") {
+            return DetectedContent(HWPX_CONTENT_TYPE, CloudFileMediaKind.DOCUMENT)
+        }
 
         return null
     }
+
+    private fun isZipSignature(bytes: ByteArray): Boolean =
+        bytes.size >= 4 &&
+            bytes[0] == 0x50.toByte() &&
+            bytes[1] == 0x4B.toByte() &&
+            bytes[2] in ZIP_THIRD_BYTES &&
+            bytes[3] in ZIP_FOURTH_BYTES
 
     private data class DetectedContent(
         val contentType: String,
@@ -424,16 +440,21 @@ class CloudFileService(
         private val DATE_PATH_FORMATTER = DateTimeFormatter.ofPattern("yyyy/MM/dd")
         private const val MAX_FILENAME_CODE_POINTS = 255L
         private const val MAX_FILENAME_METADATA_ENCODED_BYTES = 1024
+        private const val HWPX_CONTENT_TYPE = "application/haansofthwpx"
+        private val ZIP_THIRD_BYTES = setOf(0x03.toByte(), 0x05.toByte(), 0x07.toByte())
+        private val ZIP_FOURTH_BYTES = setOf(0x04.toByte(), 0x06.toByte(), 0x08.toByte())
         private val CONTENT_TYPE_ALIASES =
             mapOf(
                 "image/jpg" to "image/jpeg",
                 "image/pjpeg" to "image/jpeg",
                 "image/x-png" to "image/png",
                 "image/x-webp" to "image/webp",
+                "application/x-hwpx" to HWPX_CONTENT_TYPE,
             )
         private val KNOWN_CONTENT_TYPES =
             setOf(
                 "application/pdf",
+                HWPX_CONTENT_TYPE,
                 "image/jpeg",
                 "image/png",
                 "image/gif",

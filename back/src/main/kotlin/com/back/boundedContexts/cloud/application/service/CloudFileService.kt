@@ -57,16 +57,10 @@ class CloudFileService(
         folderPath: String?,
     ): CloudFileDto {
         if (bytes.isEmpty()) throw AppException("400-1", "클라우드 파일이 비어 있습니다.")
-        if (bytes.size.toLong() > cloudStorageProperties.maxFileSizeBytes) {
-            throw AppException(
-                "413-1",
-                "클라우드 파일은 ${formatFileSizeLimit(cloudStorageProperties.maxFileSizeBytes)} 이하여야 합니다.",
-            )
-        }
-
         val normalizedFolderPath = normalizeFolderPath(folderPath)
         val safeFilename = normalizeFilename(clientOriginalFilename?.takeIf(String::isNotBlank) ?: originalFilename)
         val detected = detectContent(bytes, contentType, safeFilename)
+        validateFileSize(bytes.size.toLong(), detected)
         val objectKey =
             buildObjectKey(
                 ownerMemberId = ownerMemberId,
@@ -309,9 +303,46 @@ class CloudFileService(
         return if (recoveredHangulCount > rawHangulCount) recovered else raw
     }
 
+    private fun validateFileSize(
+        byteSize: Long,
+        detected: DetectedContent,
+    ) {
+        val limit = resolveUploadLimit(detected)
+        if (byteSize <= limit.maxBytes) return
+
+        throw AppException(
+            "413-1",
+            "클라우드 ${limit.label} 파일은 ${formatFileSizeLimit(limit.maxBytes)} 이하여야 합니다.",
+        )
+    }
+
+    private fun resolveUploadLimit(detected: DetectedContent): UploadLimit {
+        val typeLimit =
+            when {
+                detected.contentType == ZIP_CONTENT_TYPE ->
+                    UploadLimit("ZIP", cloudStorageProperties.cloudArchiveMaxFileSizeBytes)
+                detected.mediaKind == CloudFileMediaKind.PHOTO ->
+                    UploadLimit("사진", cloudStorageProperties.cloudPhotoMaxFileSizeBytes)
+                detected.mediaKind == CloudFileMediaKind.VIDEO ->
+                    UploadLimit("동영상", cloudStorageProperties.cloudVideoMaxFileSizeBytes)
+                else ->
+                    UploadLimit("문서", cloudStorageProperties.cloudDocumentMaxFileSizeBytes)
+            }
+
+        val effectiveMaxBytes = minOf(typeLimit.maxBytes, cloudStorageProperties.maxFileSizeBytes)
+        return typeLimit.copy(maxBytes = effectiveMaxBytes)
+    }
+
     private fun formatFileSizeLimit(maxFileSizeBytes: Long): String {
-        val limitMb = (maxFileSizeBytes + (1024 * 1024) - 1) / (1024 * 1024)
-        return "${limitMb}MB"
+        val units = listOf("B", "KB", "MB", "GB")
+        var value = maxFileSizeBytes.toDouble()
+        var unitIndex = 0
+        while (value >= 1024 && unitIndex < units.lastIndex) {
+            value /= 1024
+            unitIndex++
+        }
+        val formatted = if (value % 1.0 == 0.0) value.toLong().toString() else "%.1f".format(Locale.US, value)
+        return "$formatted ${units[unitIndex]}"
     }
 
     private fun buildObjectKey(
@@ -522,6 +553,11 @@ class CloudFileService(
     private data class DetectedContent(
         val contentType: String,
         val mediaKind: CloudFileMediaKind,
+    )
+
+    private data class UploadLimit(
+        val label: String,
+        val maxBytes: Long,
     )
 
     companion object {

@@ -32,9 +32,18 @@ const baseHomeServerEnv = [
   "PROMETHEUS_DOMAIN=prometheus.aquilaxk.site",
   "CADDY_EMAIL=ops@aquilaxk.site",
   "CF_TUNNEL_TOKEN=cloudflare-tunnel-token-value",
-  "CLOUDFLARED_IMAGE=cloudflare/cloudflared:2026.5.0",
-  "DB_IMAGE=jangka512/pgj:2026.05.21",
-  "MINIO_IMAGE=minio/minio:RELEASE.2026-05-21T00-00-00Z",
+  "CLOUDFLARED_IMAGE=cloudflare/cloudflared@sha256:4444444444444444444444444444444444444444444444444444444444444444",
+  "AUTOHEAL_IMAGE=willfarrell/autoheal@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "CADDY_IMAGE=caddy@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "UPTIME_KUMA_IMAGE=louislam/uptime-kuma@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "PROMETHEUS_IMAGE=prom/prometheus@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "GRAFANA_IMAGE=grafana/grafana@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "LOKI_IMAGE=grafana/loki@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "PROMTAIL_IMAGE=grafana/promtail@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "NODE_RUNTIME_IMAGE=node@sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "REDIS_IMAGE=redis@sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "DB_IMAGE=jangka512/pgj@sha256:5555555555555555555555555555555555555555555555555555555555555555",
+  "MINIO_IMAGE=minio/minio@sha256:6666666666666666666666666666666666666666666666666666666666666666",
   "AQUILA_EXTERNAL_STORAGE_ROOT=/mnt/aquila-blog-data",
   "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/backups",
   "AQUILA_BACKUP_RETENTION_DAILY=14",
@@ -105,6 +114,44 @@ test("home-server-source contract accepts a complete deployment env without BACK
   })
 
   assert.equal(result.ok, true, result.errors.map((error) => error.message).join("\n"))
+})
+
+test("runtime service images are env-backed in compose and digest-validated by contract", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const runtimeImageKeys = [
+    "AUTOHEAL_IMAGE",
+    "CADDY_IMAGE",
+    "UPTIME_KUMA_IMAGE",
+    "PROMETHEUS_IMAGE",
+    "GRAFANA_IMAGE",
+    "LOKI_IMAGE",
+    "PROMTAIL_IMAGE",
+    "NODE_RUNTIME_IMAGE",
+    "REDIS_IMAGE",
+  ]
+  const contractKeys = new Set(targetKeyNames(loadContract(contractPath), "home-server-source"))
+  const compose = readFileSync(composePath, "utf8")
+  const literalImageLines = compose
+    .split(/\r?\n/)
+    .map((line, index) => ({ line: index + 1, value: line.trim() }))
+    .filter(({ value }) => value.startsWith("image: "))
+    .filter(({ value }) => !value.includes("${"))
+
+  assert.deepEqual(literalImageLines, [])
+  for (const key of runtimeImageKeys) {
+    assert(contractKeys.has(key), `${key} must be covered by the home-server-source contract`)
+  }
+
+  const tagOnlyResult = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text: baseHomeServerEnv.replace(
+      "CADDY_IMAGE=caddy@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "CADDY_IMAGE=caddy:2.8-alpine",
+    ),
+  })
+  assert.equal(tagOnlyResult.ok, false)
+  assert(tagOnlyResult.errors.some((error) => error.key === "CADDY_IMAGE"))
 })
 
 test("home-server runtime contract covers external storage backup keys", async () => {
@@ -333,7 +380,7 @@ test("deploy workflow는 editor live canary를 editor 변경 또는 명시적 fo
   const workflow = readFileSync(workflowPath, "utf8")
 
   assert.match(workflow, /editor_live_canary: \$\{\{ steps\.meta\.outputs\.editor_live_canary \}\}/)
-  assert.match(workflow, /EDITOR_LIVE_CANARY_PATHS_PATTERN=.*front\/src\/components\/editor\//)
+  assert.match(workflow, /EDITOR_LIVE_CANARY_PATHS_PATTERN=.*front\/src\/components\/markdown-editor\//)
   assert.match(workflow, /EDITOR_LIVE_CANARY_PATHS_PATTERN=.*front\/src\/pages\/editor\//)
   assert.match(workflow, /force_editor_live_canary:\s*\n/)
   assert.match(workflow, /E2E_LIVE_EDITOR_507_CANARY: \$\{\{ needs\.calculateTag\.outputs\.editor_live_canary \}\}/)

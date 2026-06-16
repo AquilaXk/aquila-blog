@@ -985,6 +985,25 @@ require_pinned_image_env_key() {
   fi
 }
 
+require_digest_image_env_key() {
+  local key="$1"
+  local value
+  value="$(trim_quotes "$(env_value "${key}")")"
+
+  if [[ -z "${value}" ]]; then
+    echo "required image env key is missing: ${key}" >&2
+    return 1
+  fi
+  if [[ "${value}" == *":latest"* ]]; then
+    echo "latest tag is not allowed for ${key}: ${value}" >&2
+    return 1
+  fi
+  if [[ ! "${value}" =~ @sha256:[a-fA-F0-9]{64}$ ]]; then
+    echo "image must include sha256 digest for ${key}: ${value}" >&2
+    return 1
+  fi
+}
+
 validate_required_runtime_env() {
   require_nonempty_env_key "API_DOMAIN"
   require_nonempty_env_key "CF_TUNNEL_TOKEN"
@@ -992,11 +1011,29 @@ validate_required_runtime_env() {
   require_nonempty_env_key "PROD___SPRING__DATASOURCE__PASSWORD"
   require_nonempty_env_key "PROD___POSTGRES__PASSWORD"
   ensure_image_env_key_from_local_digest "CLOUDFLARED_IMAGE" "cloudflare/cloudflared:latest"
+  ensure_image_env_key_from_local_digest "AUTOHEAL_IMAGE" "willfarrell/autoheal:1.2.0"
+  ensure_image_env_key_from_local_digest "CADDY_IMAGE" "caddy:2.8-alpine"
+  ensure_image_env_key_from_local_digest "UPTIME_KUMA_IMAGE" "louislam/uptime-kuma:1"
+  ensure_image_env_key_from_local_digest "PROMETHEUS_IMAGE" "prom/prometheus:v2.54.1"
+  ensure_image_env_key_from_local_digest "GRAFANA_IMAGE" "grafana/grafana:11.2.2"
+  ensure_image_env_key_from_local_digest "LOKI_IMAGE" "grafana/loki:3.0.0"
+  ensure_image_env_key_from_local_digest "PROMTAIL_IMAGE" "grafana/promtail:3.0.0"
+  ensure_image_env_key_from_local_digest "NODE_RUNTIME_IMAGE" "node:20-alpine"
   ensure_image_env_key_from_local_digest "DB_IMAGE" "jangka512/pgj:latest"
+  ensure_image_env_key_from_local_digest "REDIS_IMAGE" "redis:7-alpine"
   ensure_image_env_key_from_local_digest "MINIO_IMAGE" "minio/minio:latest"
-  require_pinned_image_env_key "CLOUDFLARED_IMAGE"
-  require_pinned_image_env_key "DB_IMAGE"
-  require_pinned_image_env_key "MINIO_IMAGE"
+  require_digest_image_env_key "CLOUDFLARED_IMAGE"
+  require_digest_image_env_key "AUTOHEAL_IMAGE"
+  require_digest_image_env_key "CADDY_IMAGE"
+  require_digest_image_env_key "UPTIME_KUMA_IMAGE"
+  require_digest_image_env_key "PROMETHEUS_IMAGE"
+  require_digest_image_env_key "GRAFANA_IMAGE"
+  require_digest_image_env_key "LOKI_IMAGE"
+  require_digest_image_env_key "PROMTAIL_IMAGE"
+  require_digest_image_env_key "NODE_RUNTIME_IMAGE"
+  require_digest_image_env_key "DB_IMAGE"
+  require_digest_image_env_key "REDIS_IMAGE"
+  require_digest_image_env_key "MINIO_IMAGE"
 }
 
 resolve_prod_db_name() {

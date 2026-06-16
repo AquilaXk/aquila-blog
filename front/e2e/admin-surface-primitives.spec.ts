@@ -68,7 +68,10 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(utilitySource).not.toContain("border-radius: 14px;")
 
     expect(cloudStyleSource).toContain("background: ${surface};")
-    expect(cloudStyleSource).toContain("grid-template-columns: minmax(0, 1fr) minmax(18rem, 21rem);")
+    expect(cloudStyleSource).toContain("grid-template-columns: minmax(0, 1fr);")
+    expect(cloudStyleSource).toContain('data-detail-open="true"')
+    expect(cloudStyleSource).toContain('data-detail-mode="inline"')
+    expect(cloudStyleSource).toContain("grid-template-columns: minmax(0, 3fr) minmax(22rem, 2fr);")
     expect(cloudPageSource).toContain('선택한 조건에 맞는 파일이 없습니다.')
     expect(cloudPageSource).not.toContain("아직 올린 파일이 없습니다.")
 

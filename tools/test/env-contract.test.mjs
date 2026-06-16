@@ -88,6 +88,7 @@ const baseHomeServerEnv = [
   "CUSTOM_STORAGE_MULTIPART_MAX_FILE_SIZE=50MB",
   "CUSTOM_STORAGE_MULTIPART_MAX_REQUEST_SIZE=50MB",
   "BACKEND_PROXY_MAX_BODY_BYTES=52428800",
+  "BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES=157286400",
 ].join("\n")
 
 test("home-server-source contract accepts a complete deployment env without BACK_IMAGE", async () => {
@@ -242,6 +243,7 @@ test("renderer derives local env files and preserves existing generated secrets"
 
     assert.match(rendered, /^NEXT_PUBLIC_BACKEND_URL=https:\/\/api\.aquilaxk\.site$/m)
     assert.match(rendered, /^BACKEND_PROXY_MAX_BODY_BYTES=52428800$/m)
+    assert.match(rendered, /^BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES=157286400$/m)
     assert.match(rendered, /^PLAYWRIGHT_BASE_URL=https:\/\/www\.aquilaxk\.site$/m)
     assert.match(rendered, /^TOKEN_FOR_REVALIDATE=preserved-token$/m)
 

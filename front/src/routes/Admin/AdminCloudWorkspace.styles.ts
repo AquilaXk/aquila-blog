@@ -974,25 +974,27 @@ export const PhotoFrame = styled.div`
   place-items: center;
   width: 100%;
   min-height: 12rem;
-
-  > span {
-    position: absolute;
-    z-index: 1;
-    border-radius: 999px;
-    padding: 0.34rem 0.62rem;
-    background: ${surfaceRaised};
-    color: ${textSecondary};
-    font-size: 0.76rem;
-    font-weight: 780;
-  }
+  overflow: hidden;
+  border-radius: 8px;
+  background: ${surfaceMuted};
 
   img {
     width: 100%;
     max-height: 18rem;
     object-fit: contain;
-    border-radius: 8px;
-    background: ${surfaceMuted};
+    background: transparent;
   }
+`
+
+export const PhotoFallback = styled.div`
+  display: grid;
+  place-items: center;
+  min-height: 12rem;
+  padding: 1rem;
+  color: ${textSecondary};
+  font-size: 0.82rem;
+  font-weight: 780;
+  text-align: center;
 `
 
 export const ToastViewport = styled.div<{ "data-tone": "success" | "error" }>`

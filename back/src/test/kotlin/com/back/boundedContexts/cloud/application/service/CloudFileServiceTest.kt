@@ -116,6 +116,30 @@ class CloudFileServiceTest {
     }
 
     @Test
+    @DisplayName("업로드 시 기본 제한으로 17MB PDF 문서를 저장할 수 있다")
+    fun `upload는 기본 제한으로 17MB PDF 문서를 저장할 수 있다`() {
+        val pdfHeader = "%PDF-1.7".toByteArray()
+        val seventeenMbPdf =
+            ByteArray(17 * 1024 * 1024).also { bytes ->
+                pdfHeader.copyInto(bytes)
+            }
+
+        val result =
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "portfolio.pdf",
+                contentType = "application/pdf",
+                bytes = seventeenMbPdf,
+                folderPath = "docs",
+            )
+
+        assertThat(result.originalFilename).isEqualTo("portfolio.pdf")
+        assertThat(result.byteSize).isEqualTo(seventeenMbPdf.size.toLong())
+        assertThat(result.mediaKind).isEqualTo(CloudFileMediaKind.DOCUMENT)
+        assertThat(storage.uploaded.single().bytes).hasSize(seventeenMbPdf.size)
+    }
+
+    @Test
     @DisplayName("업로드 시 빈 파일과 미지원 파일 형식을 storage 저장 전에 차단한다")
     fun `upload는 빈 파일과 미지원 파일 형식을 storage 저장 전에 차단한다`() {
         assertThatThrownBy {

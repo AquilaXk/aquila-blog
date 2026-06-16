@@ -316,17 +316,22 @@ class CloudFileService(
         )
     }
 
-    private fun resolveUploadLimit(detected: DetectedContent): UploadLimit =
-        when {
-            detected.contentType == ZIP_CONTENT_TYPE ->
-                UploadLimit("ZIP", cloudStorageProperties.cloudArchiveMaxFileSizeBytes)
-            detected.mediaKind == CloudFileMediaKind.PHOTO ->
-                UploadLimit("사진", cloudStorageProperties.cloudPhotoMaxFileSizeBytes)
-            detected.mediaKind == CloudFileMediaKind.VIDEO ->
-                UploadLimit("동영상", cloudStorageProperties.cloudVideoMaxFileSizeBytes)
-            else ->
-                UploadLimit("문서", cloudStorageProperties.cloudDocumentMaxFileSizeBytes)
-        }
+    private fun resolveUploadLimit(detected: DetectedContent): UploadLimit {
+        val typeLimit =
+            when {
+                detected.contentType == ZIP_CONTENT_TYPE ->
+                    UploadLimit("ZIP", cloudStorageProperties.cloudArchiveMaxFileSizeBytes)
+                detected.mediaKind == CloudFileMediaKind.PHOTO ->
+                    UploadLimit("사진", cloudStorageProperties.cloudPhotoMaxFileSizeBytes)
+                detected.mediaKind == CloudFileMediaKind.VIDEO ->
+                    UploadLimit("동영상", cloudStorageProperties.cloudVideoMaxFileSizeBytes)
+                else ->
+                    UploadLimit("문서", cloudStorageProperties.cloudDocumentMaxFileSizeBytes)
+            }
+
+        val effectiveMaxBytes = minOf(typeLimit.maxBytes, cloudStorageProperties.maxFileSizeBytes)
+        return typeLimit.copy(maxBytes = effectiveMaxBytes)
+    }
 
     private fun formatFileSizeLimit(maxFileSizeBytes: Long): String {
         val units = listOf("B", "KB", "MB", "GB")

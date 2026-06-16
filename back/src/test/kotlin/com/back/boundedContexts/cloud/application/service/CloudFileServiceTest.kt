@@ -140,15 +140,15 @@ class CloudFileServiceTest {
     }
 
     @Test
-    @DisplayName("업로드 시 문서는 legacy 단일 제한보다 큰 파일도 문서 제한 안이면 저장한다")
-    fun `upload는 문서 제한을 legacy 단일 제한보다 우선 적용한다`() {
+    @DisplayName("업로드 시 문서는 문서 제한 안이면 저장한다")
+    fun `upload는 문서 제한 안이면 저장한다`() {
         val policyService =
             CloudFileService(
                 cloudFileRepository = repository,
                 cloudStoragePort = storage,
                 cloudStorageProperties =
                     CloudStorageProperties(
-                        maxFileSizeBytes = 5,
+                        maxFileSizeBytes = 10,
                         cloudDocumentMaxFileSizeBytes = 10,
                         cloudPhotoMaxFileSizeBytes = 5,
                     ),
@@ -210,7 +210,7 @@ class CloudFileServiceTest {
                 cloudStoragePort = storage,
                 cloudStorageProperties =
                     CloudStorageProperties(
-                        maxFileSizeBytes = 5,
+                        maxFileSizeBytes = maxOf(zipBytes.size, videoBytes.size).toLong() + 1,
                         cloudDocumentMaxFileSizeBytes = 5,
                         cloudArchiveMaxFileSizeBytes = zipBytes.size.toLong() + 1,
                         cloudVideoMaxFileSizeBytes = videoBytes.size.toLong() + 1,
@@ -238,6 +238,38 @@ class CloudFileServiceTest {
         assertThat(zip.contentType).isEqualTo("application/zip")
         assertThat(video.mediaKind).isEqualTo(CloudFileMediaKind.VIDEO)
         assertThat(storage.uploaded).hasSize(2)
+    }
+
+    @Test
+    @DisplayName("업로드 시 legacy 전체 제한은 파일 유형별 제한보다 우선한다")
+    fun `upload는 legacy 전체 제한을 파일 유형별 제한보다 먼저 적용한다`() {
+        val zipBytes = genericZipBytes()
+        val policyService =
+            CloudFileService(
+                cloudFileRepository = repository,
+                cloudStoragePort = storage,
+                cloudStorageProperties =
+                    CloudStorageProperties(
+                        maxFileSizeBytes = 5,
+                        cloudArchiveMaxFileSizeBytes = zipBytes.size.toLong() + 1,
+                    ),
+                clock = Clock.fixed(Instant.parse("2026-06-12T00:00:00Z"), ZoneOffset.UTC),
+            )
+
+        assertThatThrownBy {
+            policyService.upload(
+                ownerMemberId = 7L,
+                originalFilename = "archive.zip",
+                contentType = "application/zip",
+                bytes = zipBytes,
+                folderPath = "archives",
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("클라우드 ZIP 파일은")
+            .hasMessageContaining("5 B")
+
+        assertThat(storage.uploaded).isEmpty()
+        assertThat(repository.savedFiles).isEmpty()
     }
 
     @Test

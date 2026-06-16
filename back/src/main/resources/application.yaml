@@ -65,8 +65,8 @@ spring:
       auto-commit: false
   servlet:
     multipart:
-      max-file-size: ${CUSTOM_STORAGE_MULTIPART_MAX_FILE_SIZE:500MB}
-      max-request-size: ${CUSTOM_STORAGE_MULTIPART_MAX_REQUEST_SIZE:512MB}
+      max-file-size: ${CUSTOM_STORAGE_MULTIPART_MAX_FILE_SIZE:100MB}
+      max-request-size: ${CUSTOM_STORAGE_MULTIPART_MAX_REQUEST_SIZE:104MB}
   flyway:
     enabled: false
   sql:

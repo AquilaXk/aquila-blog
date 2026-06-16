@@ -480,6 +480,7 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByText("사진을 불러오는 중입니다.")).toHaveCount(0)
     await expect.poll(() => mocks.requestedContentIds).toContain("102")
     await expect(page.getByAltText("home-server-rack.png")).toBeVisible()
+    await expect(page.getByLabel("home-server-rack.png 사진 미리보기")).toHaveAttribute("aria-busy", "false")
     await expect.poll(() => page.evaluate(() => Boolean((window as any).__adminCloudPhotoLoadingTextSeen))).toBe(false)
     await expect(page.getByText("사진을 불러오는 중입니다.")).toHaveCount(0)
   })

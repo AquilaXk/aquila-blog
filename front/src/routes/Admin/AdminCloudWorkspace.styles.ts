@@ -986,6 +986,17 @@ export const PhotoFrame = styled.div`
   }
 `
 
+export const PhotoFallback = styled.div`
+  display: grid;
+  place-items: center;
+  min-height: 12rem;
+  padding: 1rem;
+  color: ${textSecondary};
+  font-size: 0.82rem;
+  font-weight: 780;
+  text-align: center;
+`
+
 export const ToastViewport = styled.div<{ "data-tone": "success" | "error" }>`
   position: fixed;
   right: max(1rem, env(safe-area-inset-right));

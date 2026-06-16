@@ -67,6 +67,7 @@ import {
   LoadingTableStatus,
   Notice,
   PdfCanvas,
+  PhotoFallback,
   PhotoFrame,
   PlayerBar,
   PreviewHeader,
@@ -332,13 +333,31 @@ type PhotoPreviewProps = {
 }
 
 const PhotoPreview = ({ file, contentUrl }: PhotoPreviewProps) => {
+  const [imageState, setImageState] = useState<"loading" | "ready" | "error">("loading")
+
+  useEffect(() => {
+    setImageState("loading")
+  }, [contentUrl])
+
   return (
     <PreviewStage>
       <PreviewHeader>
         <h3>사진 보기</h3>
       </PreviewHeader>
-      <PhotoFrame>
-        <img src={contentUrl} alt={file.originalFilename} decoding="async" loading="eager" />
+      <PhotoFrame
+        aria-label={`${file.originalFilename} 사진 미리보기`}
+        aria-busy={imageState === "loading" ? "true" : "false"}
+      >
+        {imageState === "error" ? <PhotoFallback role="alert">이미지를 불러올 수 없습니다.</PhotoFallback> : null}
+        <img
+          src={contentUrl}
+          alt={file.originalFilename}
+          decoding="async"
+          loading="eager"
+          hidden={imageState === "error"}
+          onLoad={() => setImageState("ready")}
+          onError={() => setImageState("error")}
+        />
       </PhotoFrame>
     </PreviewStage>
   )

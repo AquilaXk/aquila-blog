@@ -270,7 +270,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.end()
   } catch (error) {
     if (error instanceof ProxyBodyTooLargeError) {
-      res.status(413).json({ message: "파일 용량이 너무 큽니다. 50MB 이하 파일로 다시 시도해주세요." })
+      const maxMb = Math.floor(resolveMaxProxyBodyBytes() / (1024 * 1024))
+      res.status(413).json({
+        message: `파일 용량이 너무 큽니다. ${maxMb}MB 이하 파일로 다시 시도해주세요.`,
+      })
       return
     }
     if (error instanceof ProxyBodyCapacityExceededError) {

@@ -427,7 +427,7 @@ class CloudFileService(
         if (filename.substringAfterLast(".", "").lowercase(Locale.ROOT) == "hwpx" && isHwpxPackage(bytes)) {
             return DetectedContent(HWPX_CONTENT_TYPE, CloudFileMediaKind.DOCUMENT)
         }
-        if (filename.substringAfterLast(".", "").lowercase(Locale.ROOT) == "zip" && isZipSignature(bytes)) {
+        if (filename.substringAfterLast(".", "").lowercase(Locale.ROOT) == "zip" && isValidZipArchive(bytes)) {
             return DetectedContent(ZIP_CONTENT_TYPE, CloudFileMediaKind.DOCUMENT)
         }
 
@@ -446,15 +446,19 @@ class CloudFileService(
         return HWPX_MANIFEST_ENTRY in entries && entries.any { it in HWPX_DOCUMENT_ENTRIES }
     }
 
-    private fun readZipCentralDirectoryEntryNames(bytes: ByteArray): Set<String> {
-        val endRecordOffset = findZipEndOfCentralDirectoryOffset(bytes) ?: return emptySet()
+    private fun isValidZipArchive(bytes: ByteArray): Boolean = isZipSignature(bytes) && parseZipCentralDirectoryEntryNames(bytes) != null
+
+    private fun readZipCentralDirectoryEntryNames(bytes: ByteArray): Set<String> = parseZipCentralDirectoryEntryNames(bytes).orEmpty()
+
+    private fun parseZipCentralDirectoryEntryNames(bytes: ByteArray): Set<String>? {
+        val endRecordOffset = findZipEndOfCentralDirectoryOffset(bytes) ?: return null
         val entryCount = readUInt16Le(bytes, endRecordOffset + ZIP_EOCD_TOTAL_ENTRY_COUNT_OFFSET)
         val centralDirectorySize = readUInt32Le(bytes, endRecordOffset + ZIP_EOCD_DIRECTORY_SIZE_OFFSET)
         val centralDirectoryOffset = readUInt32Le(bytes, endRecordOffset + ZIP_EOCD_DIRECTORY_OFFSET)
-        if (centralDirectorySize > bytes.size || centralDirectoryOffset > bytes.size) return emptySet()
+        if (centralDirectorySize > bytes.size || centralDirectoryOffset > bytes.size) return null
 
         val directoryStart = centralDirectoryOffset.toInt()
-        val directoryEnd = (centralDirectoryOffset + centralDirectorySize).takeIf { it <= bytes.size }?.toInt() ?: return emptySet()
+        val directoryEnd = (centralDirectoryOffset + centralDirectorySize).takeIf { it <= bytes.size }?.toInt() ?: return null
         val names = mutableSetOf<String>()
         var offset = directoryStart
         var scannedCount = 0
@@ -463,21 +467,21 @@ class CloudFileService(
             offset + ZIP_CENTRAL_DIRECTORY_HEADER_SIZE <= directoryEnd &&
             scannedCount < entryCount
         ) {
-            if (!hasSignature(bytes, offset, ZIP_CENTRAL_DIRECTORY_FILE_HEADER_SIGNATURE)) break
+            if (!hasSignature(bytes, offset, ZIP_CENTRAL_DIRECTORY_FILE_HEADER_SIGNATURE)) return null
 
             val nameLength = readUInt16Le(bytes, offset + ZIP_CENTRAL_DIRECTORY_NAME_LENGTH_OFFSET)
             val extraLength = readUInt16Le(bytes, offset + ZIP_CENTRAL_DIRECTORY_EXTRA_LENGTH_OFFSET)
             val commentLength = readUInt16Le(bytes, offset + ZIP_CENTRAL_DIRECTORY_COMMENT_LENGTH_OFFSET)
             val nameOffset = offset + ZIP_CENTRAL_DIRECTORY_HEADER_SIZE
             val nextOffset = nameOffset + nameLength + extraLength + commentLength
-            if (nameOffset + nameLength > directoryEnd || nextOffset > directoryEnd) break
+            if (nameOffset + nameLength > directoryEnd || nextOffset > directoryEnd) return null
 
             names += String(bytes, nameOffset, nameLength, StandardCharsets.UTF_8).replace('\\', '/')
-            if (HWPX_MANIFEST_ENTRY in names && names.any { it in HWPX_DOCUMENT_ENTRIES }) break
-
             offset = nextOffset
             scannedCount++
         }
+
+        if (scannedCount != entryCount || offset != directoryEnd) return null
 
         return names
     }

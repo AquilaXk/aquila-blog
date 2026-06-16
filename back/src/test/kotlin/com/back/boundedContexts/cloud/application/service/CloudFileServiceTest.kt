@@ -12,11 +12,15 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.text.Normalizer
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 @DisplayName("관리자 클라우드 파일 서비스 테스트")
 class CloudFileServiceTest {
@@ -186,6 +190,116 @@ class CloudFileServiceTest {
         assertThat(result.originalFilename).isEqualTo("cloud-file")
         assertThat(result.folderPath).isEmpty()
         assertThat(repository.savedFiles.single().objectKey).startsWith("cloud/7/2026/06/12/")
+    }
+
+    @Test
+    @DisplayName("업로드 시 NFD 한글 HWPX 문서는 NFC 파일명으로 저장한다")
+    fun `upload는 NFD 한글 HWPX 문서를 NFC 파일명으로 저장한다`() {
+        val nfcName = "★2026년 제3회 식약처 공무원(일반직) 경력경쟁채용시험 공고문_게시.hwpx"
+        val nfdName = Normalizer.normalize(nfcName, Normalizer.Form.NFD)
+
+        val result =
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = nfdName,
+                clientOriginalFilename = nfdName,
+                contentType = "application/octet-stream",
+                bytes = zipBytes(),
+                folderPath = null,
+            )
+
+        assertThat(result.originalFilename).isEqualTo(nfcName)
+        assertThat(result.mediaKind).isEqualTo(CloudFileMediaKind.DOCUMENT)
+        assertThat(result.contentType).isEqualTo("application/haansofthwpx")
+        assertThat(storage.uploaded.single().originalFilename).isEqualTo(nfcName)
+    }
+
+    @Test
+    @DisplayName("업로드 시 HWPX 판별은 압축 본문을 풀지 않고 중앙 디렉터리 이름만 확인한다")
+    fun `upload는 HWPX 판별 시 중앙 디렉터리 이름만 확인한다`() {
+        val result =
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "제출서류_총괄표.hwpx",
+                contentType = "application/octet-stream",
+                bytes = zipBytesWithLargeLeadingEntry(),
+                folderPath = null,
+            )
+
+        assertThat(result.mediaKind).isEqualTo(CloudFileMediaKind.DOCUMENT)
+        assertThat(result.contentType).isEqualTo("application/haansofthwpx")
+        assertThat(result.originalFilename).isEqualTo("제출서류_총괄표.hwpx")
+    }
+
+    @Test
+    @DisplayName("업로드 시 HWPX 필수 항목이 중앙 디렉터리 뒤쪽에 있어도 문서로 저장한다")
+    fun `upload는 HWPX 필수 항목이 중앙 디렉터리 뒤쪽에 있어도 문서로 저장한다`() {
+        val result =
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "첨부자료_많은리소스.hwpx",
+                contentType = "application/octet-stream",
+                bytes = zipBytesWithLateHwpxEntries(),
+                folderPath = null,
+            )
+
+        assertThat(result.mediaKind).isEqualTo(CloudFileMediaKind.DOCUMENT)
+        assertThat(result.contentType).isEqualTo("application/haansofthwpx")
+        assertThat(result.originalFilename).isEqualTo("첨부자료_많은리소스.hwpx")
+    }
+
+    @Test
+    @DisplayName("업로드 시 잘못된 ZIP 헤더 조합은 HWPX 문서로 저장하지 않는다")
+    fun `upload는 잘못된 ZIP 헤더 조합을 HWPX 문서로 저장하지 않는다`() {
+        assertThatThrownBy {
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "invalid.hwpx",
+                contentType = "application/octet-stream",
+                bytes = invalidZipBytes(),
+                folderPath = null,
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("지원하지 않는 클라우드 파일 형식")
+
+        assertThat(storage.uploaded).isEmpty()
+        assertThat(repository.savedFiles).isEmpty()
+    }
+
+    @Test
+    @DisplayName("업로드 시 중앙 디렉터리가 없는 ZIP 조각은 HWPX 문서로 저장하지 않는다")
+    fun `upload는 중앙 디렉터리가 없는 ZIP 조각을 HWPX 문서로 저장하지 않는다`() {
+        assertThatThrownBy {
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "truncated.hwpx",
+                contentType = "application/octet-stream",
+                bytes = truncatedZipBytes(),
+                folderPath = null,
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("지원하지 않는 클라우드 파일 형식")
+
+        assertThat(storage.uploaded).isEmpty()
+        assertThat(repository.savedFiles).isEmpty()
+    }
+
+    @Test
+    @DisplayName("업로드 시 일반 ZIP 파일은 HWPX 확장자로 바꿔도 저장하지 않는다")
+    fun `upload는 일반 ZIP 파일을 HWPX 문서로 저장하지 않는다`() {
+        assertThatThrownBy {
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "renamed.hwpx",
+                contentType = "application/octet-stream",
+                bytes = genericZipBytes(),
+                folderPath = null,
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("지원하지 않는 클라우드 파일 형식")
+
+        assertThat(storage.uploaded).isEmpty()
+        assertThat(repository.savedFiles).isEmpty()
     }
 
     @Test
@@ -706,6 +820,75 @@ class CloudFileServiceTest {
                 0x1A,
                 0x0A,
             )
+
+        private fun zipBytes(): ByteArray =
+            zip(
+                "Contents/content.hpf" to "<package />",
+                "Contents/header.xml" to "<header />",
+            )
+
+        private fun zipBytesWithLargeLeadingEntry(): ByteArray =
+            zip(
+                "filler.bin" to "0".repeat(1024 * 1024),
+                "Contents/content.hpf" to "<package />",
+                "Contents/header.xml" to "<header />",
+            )
+
+        private fun zipBytesWithLateHwpxEntries(): ByteArray {
+            val fillerEntries =
+                (0 until 600).map { index ->
+                    "Contents/resources/resource-$index.bin" to "x"
+                }
+            val hwpxEntries =
+                listOf(
+                    "Contents/content.hpf" to "<package />",
+                    "Contents/header.xml" to "<header />",
+                )
+            return zip(
+                *(fillerEntries + hwpxEntries).toTypedArray(),
+            )
+        }
+
+        private fun invalidZipBytes(): ByteArray =
+            byteArrayOf(
+                0x50,
+                0x4B,
+                0x03,
+                0x06,
+                0x14,
+                0x00,
+                0x00,
+                0x00,
+            )
+
+        private fun truncatedZipBytes(): ByteArray =
+            byteArrayOf(
+                0x50,
+                0x4B,
+                0x03,
+                0x04,
+                0x14,
+                0x00,
+                0x00,
+                0x00,
+            )
+
+        private fun genericZipBytes(): ByteArray =
+            zip(
+                "readme.txt" to "not an hwpx package",
+            )
+
+        private fun zip(vararg entries: Pair<String, String>): ByteArray {
+            val output = ByteArrayOutputStream()
+            ZipOutputStream(output).use { zip ->
+                entries.forEach { (name, content) ->
+                    zip.putNextEntry(ZipEntry(name))
+                    zip.write(content.toByteArray(StandardCharsets.UTF_8))
+                    zip.closeEntry()
+                }
+            }
+            return output.toByteArray()
+        }
 
         private fun cloudFile(
             ownerMemberId: Long,

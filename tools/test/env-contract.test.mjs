@@ -142,6 +142,21 @@ test("runtime service images are env-backed in compose and digest-validated by c
     assert(contractKeys.has(key), `${key} must be covered by the home-server-source contract`)
   }
 
+  const sourceWithoutAutofilledRuntimeImages = baseHomeServerEnv
+    .split("\n")
+    .filter((line) => !runtimeImageKeys.some((key) => line.startsWith(`${key}=`)))
+    .join("\n")
+  const missingAutofilledRuntimeImagesResult = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text: sourceWithoutAutofilledRuntimeImages,
+  })
+  assert.equal(
+    missingAutofilledRuntimeImagesResult.ok,
+    true,
+    missingAutofilledRuntimeImagesResult.errors.map((error) => `${error.key}: ${error.message}`).join("\n"),
+  )
+
   const tagOnlyResult = validateEnvText({
     contract: loadContract(contractPath),
     target: "home-server-source",

@@ -76,6 +76,8 @@ import {
   SearchInput,
   SecondaryButton,
   SelectBoxCell,
+  SkeletonRow,
+  SkeletonRows,
   ToastViewport,
   Timeline,
   UploadInput,
@@ -909,7 +911,11 @@ const AdminCloudWorkspacePage = () => {
                   <tr>
                     <td colSpan={5}>
                       <LoadingTableStatus role="status" aria-label="파일 목록 로딩">
-                        파일 목록 로딩
+                        <SkeletonRows aria-hidden="true">
+                          <SkeletonRow data-admin-cloud-skeleton-row="true" />
+                          <SkeletonRow data-admin-cloud-skeleton-row="true" />
+                          <SkeletonRow data-admin-cloud-skeleton-row="true" />
+                        </SkeletonRows>
                       </LoadingTableStatus>
                     </td>
                   </tr>
@@ -1040,34 +1046,46 @@ const AdminCloudWorkspacePage = () => {
               </DetailSummary>
               <DetailMetaList>
                 <dt>
-                  <span aria-hidden="true">T</span>
+                  <span aria-hidden="true">
+                    <AppIcon name="file" />
+                  </span>
                   종류
                 </dt>
                 <dd>
                   {getCloudKindBadge(selectedFile)} · {getCloudKindLabel(selectedFile.mediaKind)}
                 </dd>
                 <dt>
-                  <span aria-hidden="true">P</span>
+                  <span aria-hidden="true">
+                    <AppIcon name="folder" />
+                  </span>
                   위치
                 </dt>
                 <dd>{selectedFile.folderPath || "/"}</dd>
                 <dt>
-                  <span aria-hidden="true">U</span>
+                  <span aria-hidden="true">
+                    <AppIcon name="clock" />
+                  </span>
                   올린 날짜
                 </dt>
                 <dd>{formatCloudDate(selectedFile.createdAt)}</dd>
                 <dt>
-                  <span aria-hidden="true">M</span>
+                  <span aria-hidden="true">
+                    <AppIcon name="edit" />
+                  </span>
                   수정한 날짜
                 </dt>
                 <dd>{formatCloudDate(selectedFile.modifiedAt || selectedFile.createdAt)}</dd>
                 <dt>
-                  <span aria-hidden="true">S</span>
+                  <span aria-hidden="true">
+                    <AppIcon name="package" />
+                  </span>
                   크기
                 </dt>
                 <dd>{formatCloudFileSize(selectedFile.byteSize)}</dd>
                 <dt>
-                  <span aria-hidden="true">L</span>
+                  <span aria-hidden="true">
+                    <AppIcon name="lock" />
+                  </span>
                   권한
                 </dt>
                 <dd>계정 소유주만 볼 수 있음</dd>

@@ -249,6 +249,23 @@ class CloudFileServiceTest {
     }
 
     @Test
+    @DisplayName("업로드 시 ZIP MIME으로 선언된 HWPX 파일도 HWPX 문서로 저장한다")
+    fun `upload는 zip mime으로 선언된 hwpx 파일도 hwpx 문서로 저장한다`() {
+        val result =
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "제출서류_총괄표.hwpx",
+                contentType = "application/x-zip-compressed",
+                bytes = zipBytes(),
+                folderPath = null,
+            )
+
+        assertThat(result.mediaKind).isEqualTo(CloudFileMediaKind.DOCUMENT)
+        assertThat(result.contentType).isEqualTo("application/haansofthwpx")
+        assertThat(result.originalFilename).isEqualTo("제출서류_총괄표.hwpx")
+    }
+
+    @Test
     @DisplayName("업로드 시 잘못된 ZIP 헤더 조합은 HWPX 문서로 저장하지 않는다")
     fun `upload는 잘못된 ZIP 헤더 조합을 HWPX 문서로 저장하지 않는다`() {
         assertThatThrownBy {

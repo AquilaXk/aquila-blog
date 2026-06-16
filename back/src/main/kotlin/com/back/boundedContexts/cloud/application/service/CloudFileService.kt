@@ -349,13 +349,20 @@ class CloudFileService(
         if (
             normalizedDeclared != null &&
             normalizedDeclared in KNOWN_CONTENT_TYPES &&
-            normalizedDeclared != detected.contentType
+            !isDeclaredContentTypeCompatible(normalizedDeclared, detected.contentType)
         ) {
             throw AppException("400-1", "파일 내용과 콘텐츠 타입이 일치하지 않습니다.")
         }
 
         return detected
     }
+
+    private fun isDeclaredContentTypeCompatible(
+        declaredContentType: String,
+        detectedContentType: String,
+    ): Boolean =
+        declaredContentType == detectedContentType ||
+            (detectedContentType == HWPX_CONTENT_TYPE && declaredContentType == ZIP_CONTENT_TYPE)
 
     private fun normalizeContentType(raw: String?): String? {
         val normalized =

@@ -84,11 +84,15 @@ const baseHomeServerEnv = [
   "CUSTOM_STORAGE_SECRETKEY=valid-minio-password",
   "CUSTOM_STORAGE_PATHSTYLEACCESS=true",
   "CUSTOM_STORAGE_KEYPREFIX=posts",
-  "CUSTOM_STORAGE_MAXFILESIZEBYTES=52428800",
-  "CUSTOM_STORAGE_MULTIPART_MAX_FILE_SIZE=50MB",
-  "CUSTOM_STORAGE_MULTIPART_MAX_REQUEST_SIZE=52MB",
-  "BACKEND_PROXY_MAX_BODY_BYTES=52428800",
-  "BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES=157286400",
+  "CUSTOM_STORAGE_MAXFILESIZEBYTES=104857600",
+  "CUSTOM_STORAGE_CLOUD_DOCUMENT_MAXFILESIZEBYTES=104857600",
+  "CUSTOM_STORAGE_CLOUD_PHOTO_MAXFILESIZEBYTES=52428800",
+  "CUSTOM_STORAGE_CLOUD_ARCHIVE_MAXFILESIZEBYTES=104857600",
+  "CUSTOM_STORAGE_CLOUD_VIDEO_MAXFILESIZEBYTES=104857600",
+  "CUSTOM_STORAGE_MULTIPART_MAX_FILE_SIZE=100MB",
+  "CUSTOM_STORAGE_MULTIPART_MAX_REQUEST_SIZE=104MB",
+  "BACKEND_PROXY_MAX_BODY_BYTES=109051904",
+  "BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES=268435456",
 ].join("\n")
 
 test("home-server-source contract accepts a complete deployment env without BACK_IMAGE", async () => {
@@ -132,6 +136,33 @@ test("external storage values reject unsafe paths and non-positive retention", a
   assert(result.errors.some((error) => error.key === "AQUILA_EXTERNAL_STORAGE_ROOT"))
   assert(result.errors.some((error) => error.key === "AQUILA_BACKUP_ROOT"))
   assert(result.errors.some((error) => error.key === "AQUILA_BACKUP_RETENTION_DAILY"))
+})
+
+test("external storage upload limits reject non-positive values", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const text = baseHomeServerEnv
+    .replace("CUSTOM_STORAGE_MAXFILESIZEBYTES=104857600", "CUSTOM_STORAGE_MAXFILESIZEBYTES=0")
+    .replace("CUSTOM_STORAGE_CLOUD_DOCUMENT_MAXFILESIZEBYTES=104857600", "CUSTOM_STORAGE_CLOUD_DOCUMENT_MAXFILESIZEBYTES=0")
+    .replace("CUSTOM_STORAGE_CLOUD_PHOTO_MAXFILESIZEBYTES=52428800", "CUSTOM_STORAGE_CLOUD_PHOTO_MAXFILESIZEBYTES=0")
+    .replace("CUSTOM_STORAGE_CLOUD_ARCHIVE_MAXFILESIZEBYTES=104857600", "CUSTOM_STORAGE_CLOUD_ARCHIVE_MAXFILESIZEBYTES=0")
+    .replace("CUSTOM_STORAGE_CLOUD_VIDEO_MAXFILESIZEBYTES=104857600", "CUSTOM_STORAGE_CLOUD_VIDEO_MAXFILESIZEBYTES=0")
+    .replace("BACKEND_PROXY_MAX_BODY_BYTES=109051904", "BACKEND_PROXY_MAX_BODY_BYTES=0")
+    .replace("BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES=268435456", "BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES=0")
+
+  const result = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text,
+  })
+
+  assert.equal(result.ok, false)
+  assert(result.errors.some((error) => error.key === "CUSTOM_STORAGE_MAXFILESIZEBYTES"))
+  assert(result.errors.some((error) => error.key === "CUSTOM_STORAGE_CLOUD_DOCUMENT_MAXFILESIZEBYTES"))
+  assert(result.errors.some((error) => error.key === "CUSTOM_STORAGE_CLOUD_PHOTO_MAXFILESIZEBYTES"))
+  assert(result.errors.some((error) => error.key === "CUSTOM_STORAGE_CLOUD_ARCHIVE_MAXFILESIZEBYTES"))
+  assert(result.errors.some((error) => error.key === "CUSTOM_STORAGE_CLOUD_VIDEO_MAXFILESIZEBYTES"))
+  assert(result.errors.some((error) => error.key === "BACKEND_PROXY_MAX_BODY_BYTES"))
+  assert(result.errors.some((error) => error.key === "BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES"))
 })
 
 test("external backup root must stay strictly inside the default or configured storage root", async () => {
@@ -242,8 +273,8 @@ test("renderer derives local env files and preserves existing generated secrets"
     })
 
     assert.match(rendered, /^NEXT_PUBLIC_BACKEND_URL=https:\/\/api\.aquilaxk\.site$/m)
-    assert.match(rendered, /^BACKEND_PROXY_MAX_BODY_BYTES=52428800$/m)
-    assert.match(rendered, /^BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES=157286400$/m)
+    assert.match(rendered, /^BACKEND_PROXY_MAX_BODY_BYTES=109051904$/m)
+    assert.match(rendered, /^BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES=268435456$/m)
     assert.match(rendered, /^PLAYWRIGHT_BASE_URL=https:\/\/www\.aquilaxk\.site$/m)
     assert.match(rendered, /^TOKEN_FOR_REVALIDATE=preserved-token$/m)
 

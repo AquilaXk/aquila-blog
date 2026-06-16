@@ -28,6 +28,7 @@ type UtilityNavItem = {
 type Props = {
   navItems: UtilityNavItem[]
   currentLabel: string
+  searchMode?: "shortcuts" | "hidden"
 }
 
 type ShortcutItem = {
@@ -47,8 +48,9 @@ const matchesShortcut = (item: ShortcutItem, query: string) => {
     .some((token) => token.includes(normalizedQuery))
 }
 
-const AdminUtilityBar = ({ navItems, currentLabel }: Props) => {
+const AdminUtilityBar = ({ navItems, currentLabel, searchMode = "shortcuts" }: Props) => {
   const router = useRouter()
+  const isSearchEnabled = searchMode !== "hidden"
   const [query, setQuery] = useState("")
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -88,9 +90,9 @@ const AdminUtilityBar = ({ navItems, currentLabel }: Props) => {
   }
 
   useEffect(() => {
-    if (!isSearchOpen) return
+    if (!isSearchEnabled || !isSearchOpen) return
     searchInputRef.current?.focus()
-  }, [isSearchOpen])
+  }, [isSearchEnabled, isSearchOpen])
 
   return (
     <UtilityBar data-search-open={isSearchOpen ? "true" : "false"}>
@@ -104,32 +106,38 @@ const AdminUtilityBar = ({ navItems, currentLabel }: Props) => {
         ))}
       </CompactNav>
 
-      <SearchForm role="search" onSubmit={handleSearchSubmit} data-open={isSearchOpen ? "true" : "false"}>
-        <SearchField>
-          <span className="searchIcon" aria-hidden="true">
-            <AppIcon name="search" />
-          </span>
-          <SearchInput
-            ref={searchInputRef}
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={handleSearchKeyDown}
-            placeholder="관리자 메뉴 검색"
-            aria-label="관리자 검색"
-          />
-        </SearchField>
-      </SearchForm>
+      {isSearchEnabled ? (
+        <SearchForm role="search" onSubmit={handleSearchSubmit} data-open={isSearchOpen ? "true" : "false"}>
+          <SearchField>
+            <span className="searchIcon" aria-hidden="true">
+              <AppIcon name="search" />
+            </span>
+            <SearchInput
+              ref={searchInputRef}
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              placeholder="관리자 메뉴 검색"
+              aria-label="관리자 검색"
+            />
+          </SearchField>
+        </SearchForm>
+      ) : (
+        <SearchSpacer aria-hidden="true" />
+      )}
 
       <UtilityActions>
-        <SearchToggleButton
-          type="button"
-          aria-label={isSearchOpen ? "관리자 검색 닫기" : "관리자 검색 열기"}
-          aria-expanded={isSearchOpen}
-          onClick={handleSearchToggle}
-        >
-          <AppIcon name="search" />
-        </SearchToggleButton>
+        {isSearchEnabled ? (
+          <SearchToggleButton
+            type="button"
+            aria-label={isSearchOpen ? "관리자 검색 닫기" : "관리자 검색 열기"}
+            aria-expanded={isSearchOpen}
+            onClick={handleSearchToggle}
+          >
+            <AppIcon name="search" />
+          </SearchToggleButton>
+        ) : null}
         <CurrentViewChip aria-label="현재 화면">
           <span>현재</span>
           <strong>{currentLabel}</strong>
@@ -226,6 +234,15 @@ const SearchForm = styled.form`
     &[data-open="true"] {
       display: block;
     }
+  }
+`
+
+const SearchSpacer = styled.div`
+  flex: 1;
+  min-width: 0;
+
+  @media (max-width: 720px) {
+    display: none;
   }
 `
 

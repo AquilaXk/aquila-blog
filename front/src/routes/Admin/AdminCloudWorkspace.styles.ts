@@ -34,7 +34,7 @@ export const CloudWorkspace = styled.section`
   min-height: calc(100vh - var(--app-header-height, 73px) - 3.95rem);
 
   &[data-detail-open="true"][data-detail-mode="inline"] {
-    grid-template-columns: minmax(0, 3fr) minmax(22rem, 2fr);
+    grid-template-columns: minmax(0, 5.7fr) minmax(20rem, 3fr);
   }
 
   &[data-detail-open="true"][data-detail-mode="drawer"] {
@@ -154,7 +154,7 @@ export const CloudContent = styled.div`
 
 export const CloudTitleBar = styled.header`
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(20rem, 32rem);
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 28rem);
   gap: 1rem;
   align-items: center;
   padding: 1rem 1.25rem 0.72rem;
@@ -463,8 +463,21 @@ export const FileTable = styled.table`
     background: ${surfaceAccent};
   }
 
-  tbody tr:hover {
+  tbody tr {
+    transition: background 140ms ease, color 140ms ease;
+  }
+
+  tbody tr:hover,
+  tbody tr:focus-within {
     background: ${surfaceMuted};
+  }
+
+  tbody tr td:first-of-type {
+    border-left: 3px solid transparent;
+  }
+
+  tbody tr[data-selected="true"] td:first-of-type {
+    border-left-color: #58a6ff;
   }
 
   th:nth-of-type(1),
@@ -644,6 +657,7 @@ export const FileNameButton = styled.button`
   &:focus-visible {
     outline: none;
     color: ${accentGold};
+    box-shadow: inset 0 -2px 0 #58a6ff;
   }
 `
 
@@ -655,6 +669,15 @@ export const EmptyTableState = styled.div`
   padding: 1.25rem;
   color: ${textMuted};
   text-align: center;
+
+  &::before {
+    content: "";
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 999px;
+    border: 1px solid ${border};
+    background: linear-gradient(135deg, ${surfaceRaised}, ${surfaceMuted});
+  }
 
   strong {
     color: ${textPrimary};
@@ -669,6 +692,39 @@ export const LoadingTableStatus = styled.div`
   color: ${textMuted};
   font-size: 0.86rem;
   font-weight: 800;
+`
+
+export const SkeletonRows = styled.div`
+  display: grid;
+  gap: 0.6rem;
+  width: min(100%, 44rem);
+`
+
+export const SkeletonRow = styled.span`
+  display: block;
+  height: 0.78rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, ${surfaceRaised}, ${surfaceMuted}, ${surfaceRaised});
+  background-size: 220% 100%;
+  animation: admin-cloud-skeleton 1.2s ease-in-out infinite;
+
+  &:nth-of-type(2) {
+    width: 78%;
+  }
+
+  &:nth-of-type(3) {
+    width: 58%;
+  }
+
+  @keyframes admin-cloud-skeleton {
+    0% {
+      background-position: 0% 50%;
+    }
+
+    100% {
+      background-position: -220% 50%;
+    }
+  }
 `
 
 export const DetailPanel = styled.aside`
@@ -690,7 +746,7 @@ export const DetailPanel = styled.aside`
     right: 0;
     bottom: 0;
     z-index: ${zIndexes.dialog};
-    width: min(29rem, calc(100vw - 2rem));
+    width: min(24rem, calc(100vw - 2rem));
     overflow: auto;
     box-shadow: -18px 0 48px rgba(0, 0, 0, 0.32);
   }
@@ -701,7 +757,7 @@ export const DetailPanel = styled.aside`
     right: 0;
     bottom: 0;
     z-index: ${zIndexes.dialog};
-    width: min(29rem, calc(100vw - 2rem));
+    width: min(24rem, calc(100vw - 2rem));
     overflow: auto;
     box-shadow: -18px 0 48px rgba(0, 0, 0, 0.32);
   }
@@ -816,7 +872,10 @@ export const DetailMetaList = styled.dl`
   }
 
   dt span {
-    width: 1rem;
+    width: 1.05rem;
+    height: 1.05rem;
+    display: inline-grid;
+    place-items: center;
     color: ${accentGold};
     text-align: center;
   }

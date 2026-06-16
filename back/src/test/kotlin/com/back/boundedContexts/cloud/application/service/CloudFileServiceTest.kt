@@ -250,6 +250,24 @@ class CloudFileServiceTest {
     }
 
     @Test
+    @DisplayName("업로드 시 중앙 디렉터리가 없는 ZIP 조각은 HWPX 문서로 저장하지 않는다")
+    fun `upload는 중앙 디렉터리가 없는 ZIP 조각을 HWPX 문서로 저장하지 않는다`() {
+        assertThatThrownBy {
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "truncated.hwpx",
+                contentType = "application/octet-stream",
+                bytes = truncatedZipBytes(),
+                folderPath = null,
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("지원하지 않는 클라우드 파일 형식")
+
+        assertThat(storage.uploaded).isEmpty()
+        assertThat(repository.savedFiles).isEmpty()
+    }
+
+    @Test
     @DisplayName("업로드 시 일반 ZIP 파일은 HWPX 확장자로 바꿔도 저장하지 않는다")
     fun `upload는 일반 ZIP 파일을 HWPX 문서로 저장하지 않는다`() {
         assertThatThrownBy {
@@ -805,6 +823,18 @@ class CloudFileServiceTest {
                 0x4B,
                 0x03,
                 0x06,
+                0x14,
+                0x00,
+                0x00,
+                0x00,
+            )
+
+        private fun truncatedZipBytes(): ByteArray =
+            byteArrayOf(
+                0x50,
+                0x4B,
+                0x03,
+                0x04,
                 0x14,
                 0x00,
                 0x00,

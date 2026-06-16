@@ -1,5 +1,6 @@
 import type { CalloutKind, MarkdownSegment } from "src/libs/markdown/renderingTypes"
 import { parseStandaloneMarkdownImageLine } from "src/libs/markdown/renderingImageModel"
+import { normalizeSafeMarkdownUrl } from "src/libs/markdown/safeMarkdownUrl"
 
 const CALLOUT_KIND_MAP: Record<string, CalloutKind> = {
   TIP: "tip",
@@ -149,6 +150,12 @@ const CARD_METADATA_COMMENT_PATTERN =
 
 const FORMULA_BLOCK_START_PATTERN = /^\s*\$\$\s*$/
 
+const normalizeOptionalCardUrl = (value: unknown): string | undefined => {
+  if (typeof value !== "string" || !value.trim()) return undefined
+  const normalized = normalizeSafeMarkdownUrl(value)
+  return normalized || undefined
+}
+
 const parseCardMetadataComment = (line: string) => {
   const match = line.match(CARD_METADATA_COMMENT_PATTERN)
   if (!match) return null
@@ -156,6 +163,8 @@ const parseCardMetadataComment = (line: string) => {
   try {
     const kind = match[1].toLowerCase() as "bookmark" | "embed" | "file"
     const payload = JSON.parse(match[2]) as Record<string, unknown>
+    const thumbnailUrl = normalizeOptionalCardUrl(payload.thumbnailUrl)
+    const embedUrl = normalizeOptionalCardUrl(payload.embedUrl)
     return {
       kind,
       attrs:
@@ -175,12 +184,8 @@ const parseCardMetadataComment = (line: string) => {
               ...(typeof payload.provider === "string" && payload.provider.trim()
                 ? { provider: payload.provider.trim() }
                 : {}),
-              ...(typeof payload.thumbnailUrl === "string" && payload.thumbnailUrl.trim()
-                ? { thumbnailUrl: payload.thumbnailUrl.trim() }
-                : {}),
-              ...(kind === "embed" && typeof payload.embedUrl === "string" && payload.embedUrl.trim()
-                ? { embedUrl: payload.embedUrl.trim() }
-                : {}),
+              ...(thumbnailUrl ? { thumbnailUrl } : {}),
+              ...(kind === "embed" && embedUrl ? { embedUrl } : {}),
             },
     }
   } catch {
@@ -251,7 +256,7 @@ export const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
     const customDirectiveMatch = line.trim().match(CUSTOM_DIRECTIVE_PATTERN)
     if (customDirectiveMatch) {
       const directive = customDirectiveMatch[1]?.toLowerCase()
-      const url = (customDirectiveMatch[2] || "").trim()
+      const url = normalizeSafeMarkdownUrl(customDirectiveMatch[2] || "")
       const bodyLines: string[] = []
       let closed = false
 

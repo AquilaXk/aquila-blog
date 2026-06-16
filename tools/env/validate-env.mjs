@@ -100,6 +100,9 @@ const validateKind = (definition, value) => {
     case "pinned-image":
       if (value.endsWith(":latest") || value.includes(":latest@")) return "must not use latest tag"
       return value.includes("@sha256:") || /:[^/:]+$/.test(value) ? null : "must include tag or digest"
+    case "digest-image":
+      if (value.endsWith(":latest") || value.includes(":latest@")) return "must not use latest tag"
+      return /@sha256:[a-f0-9]{64}$/i.test(value) ? null : "must include sha256 digest"
     default:
       return `unknown validation kind: ${definition.kind}`
   }

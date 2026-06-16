@@ -183,8 +183,8 @@ class PostImageStorageAdapter(
         objectKey: String,
         errorMessage: String,
     ): PostImageStoragePort.StoredObject? {
-        val client = requireClient()
         validateObjectKey(objectKey)
+        val client = requireClient()
 
         return try {
             val response =
@@ -226,8 +226,8 @@ class PostImageStorageAdapter(
         objectKey: String,
         errorMessage: String,
     ) {
-        val client = requireClient()
         validateObjectKey(objectKey)
+        val client = requireClient()
 
         try {
             client.deleteObject(
@@ -422,7 +422,13 @@ class PostImageStorageAdapter(
      * 스토리지 어댑터 계층에서 MinIO/파일 시스템 연동 실패를 고려해 방어적으로 동작합니다.
      */
     private fun validateObjectKey(objectKey: String) {
-        if (objectKey.isBlank() || objectKey.contains("..") || objectKey.startsWith("/")) {
+        val prefix = properties.keyPrefix.trim().trim('/')
+        if (
+            objectKey.isBlank() ||
+            objectKey.contains("..") ||
+            objectKey.startsWith("/") ||
+            (prefix.isNotBlank() && !objectKey.startsWith("$prefix/"))
+        ) {
             throw AppException("400-1", "유효하지 않은 이미지 경로입니다.")
         }
     }

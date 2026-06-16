@@ -22,8 +22,8 @@ const HOP_BY_HOP_HEADERS = new Set([
 
 const DECODED_RESPONSE_HEADERS = new Set(["content-encoding", "content-length"])
 const BODYLESS_METHODS = new Set(["GET", "HEAD"])
-const BACKEND_PROXY_TIMEOUT_MS = 120_000
-const DEFAULT_BACKEND_PROXY_MAX_BODY_BYTES = 500 * 1024 * 1024
+const BACKEND_PROXY_TIMEOUT_MS = 10 * 60_000
+const DEFAULT_BACKEND_PROXY_MAX_BODY_BYTES = 512 * 1024 * 1024
 const DEFAULT_BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES = 1024 * 1024 * 1024
 
 class ProxyBodyTooLargeError extends Error {}

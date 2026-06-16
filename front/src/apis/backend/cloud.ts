@@ -7,6 +7,8 @@ type CloudFileListResBody = components["schemas"]["CloudFileListResBody"]
 type RsDataCloudFileDto = components["schemas"]["RsDataCloudFileDto"]
 type RsDataVoid = components["schemas"]["RsDataVoid"]
 
+const CLOUD_UPLOAD_TIMEOUT_MS = 10 * 60_000
+
 export type CloudFile = Required<
   Pick<
     CloudFileDto,
@@ -75,6 +77,7 @@ export const uploadCloudFile = async (
       method: "POST",
       body: formData,
       signal,
+      timeoutMs: CLOUD_UPLOAD_TIMEOUT_MS,
     }
   )
   return normalizeCloudFile(response.data || {})

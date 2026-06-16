@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
+import java.io.ByteArrayInputStream
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.text.Normalizer
@@ -20,6 +21,7 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
+import java.util.zip.ZipInputStream
 
 data class CloudFileDto(
     val id: Long,
@@ -417,7 +419,7 @@ class CloudFileService(
         ) {
             return DetectedContent("video/webm", CloudFileMediaKind.VIDEO)
         }
-        if (isZipSignature(bytes) && filename.substringAfterLast(".", "").lowercase(Locale.ROOT) == "hwpx") {
+        if (filename.substringAfterLast(".", "").lowercase(Locale.ROOT) == "hwpx" && isHwpxPackage(bytes)) {
             return DetectedContent(HWPX_CONTENT_TYPE, CloudFileMediaKind.DOCUMENT)
         }
 
@@ -427,6 +429,25 @@ class CloudFileService(
     private fun isZipSignature(bytes: ByteArray): Boolean =
         bytes.size >= 4 &&
             bytes.copyOfRange(0, 4).toList() in ZIP_SIGNATURES
+
+    private fun isHwpxPackage(bytes: ByteArray): Boolean {
+        if (!isZipSignature(bytes)) return false
+
+        val entries =
+            runCatching {
+                ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
+                    buildSet {
+                        while (size < MAX_HWPX_ENTRY_SCAN_COUNT) {
+                            val entry = zip.nextEntry ?: break
+                            add(entry.name.replace('\\', '/'))
+                            zip.closeEntry()
+                        }
+                    }
+                }
+            }.getOrDefault(emptySet())
+
+        return HWPX_MANIFEST_ENTRY in entries && entries.any { it in HWPX_DOCUMENT_ENTRIES }
+    }
 
     private data class DetectedContent(
         val contentType: String,
@@ -438,6 +459,14 @@ class CloudFileService(
         private const val MAX_FILENAME_CODE_POINTS = 255L
         private const val MAX_FILENAME_METADATA_ENCODED_BYTES = 1024
         private const val HWPX_CONTENT_TYPE = "application/haansofthwpx"
+        private const val HWPX_MANIFEST_ENTRY = "Contents/content.hpf"
+        private const val MAX_HWPX_ENTRY_SCAN_COUNT = 512
+        private val HWPX_DOCUMENT_ENTRIES =
+            setOf(
+                "Contents/header.xml",
+                "Contents/section0.xml",
+                "META-INF/container.xml",
+            )
         private val ZIP_SIGNATURES =
             setOf(
                 listOf(0x50.toByte(), 0x4B.toByte(), 0x03.toByte(), 0x04.toByte()),

@@ -12,12 +12,15 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.text.Normalizer
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 @DisplayName("관리자 클라우드 파일 서비스 테스트")
 class CloudFileServiceTest {
@@ -220,6 +223,24 @@ class CloudFileServiceTest {
                 originalFilename = "invalid.hwpx",
                 contentType = "application/octet-stream",
                 bytes = invalidZipBytes(),
+                folderPath = null,
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("지원하지 않는 클라우드 파일 형식")
+
+        assertThat(storage.uploaded).isEmpty()
+        assertThat(repository.savedFiles).isEmpty()
+    }
+
+    @Test
+    @DisplayName("업로드 시 일반 ZIP 파일은 HWPX 확장자로 바꿔도 저장하지 않는다")
+    fun `upload는 일반 ZIP 파일을 HWPX 문서로 저장하지 않는다`() {
+        assertThatThrownBy {
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "renamed.hwpx",
+                contentType = "application/octet-stream",
+                bytes = genericZipBytes(),
                 folderPath = null,
             )
         }.isInstanceOf(AppException::class.java)
@@ -749,15 +770,9 @@ class CloudFileServiceTest {
             )
 
         private fun zipBytes(): ByteArray =
-            byteArrayOf(
-                0x50,
-                0x4B,
-                0x03,
-                0x04,
-                0x14,
-                0x00,
-                0x00,
-                0x00,
+            zip(
+                "Contents/content.hpf" to "<package />",
+                "Contents/header.xml" to "<header />",
             )
 
         private fun invalidZipBytes(): ByteArray =
@@ -771,6 +786,23 @@ class CloudFileServiceTest {
                 0x00,
                 0x00,
             )
+
+        private fun genericZipBytes(): ByteArray =
+            zip(
+                "readme.txt" to "not an hwpx package",
+            )
+
+        private fun zip(vararg entries: Pair<String, String>): ByteArray {
+            val output = ByteArrayOutputStream()
+            ZipOutputStream(output).use { zip ->
+                entries.forEach { (name, content) ->
+                    zip.putNextEntry(ZipEntry(name))
+                    zip.write(content.toByteArray(StandardCharsets.UTF_8))
+                    zip.closeEntry()
+                }
+            }
+            return output.toByteArray()
+        }
 
         private fun cloudFile(
             ownerMemberId: Long,

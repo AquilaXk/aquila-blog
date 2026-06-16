@@ -144,20 +144,6 @@ const expectPdfPreviewFitsDetailPanel = async (page: Page, previewName: string |
     .toBe(true)
 }
 
-const expectElementCenterAligned = async (container: ReturnType<Page["locator"]>, item: ReturnType<Page["locator"]>) => {
-  await expect
-    .poll(async () => {
-      const containerBox = await container.boundingBox()
-      const itemBox = await item.boundingBox()
-      if (!containerBox || !itemBox) return false
-
-      const containerCenterX = containerBox.x + containerBox.width / 2
-      const itemCenterX = itemBox.x + itemBox.width / 2
-      return Math.abs(containerCenterX - itemCenterX) <= 3
-    })
-    .toBe(true)
-}
-
 const setupAdminCloudMocks = async (
   page: Page,
   options: {
@@ -414,7 +400,7 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByText("미리보기 완료")).toBeVisible()
     await expectPdfPreviewFitsDetailPanel(page, "운영 점검 리포트.pdf PDF 미리보기")
     await page.getByRole("button", { name: "상세 패널 닫기" }).click()
-    await expect(page.getByLabel("클라우드 상세정보").getByText("파일 선택")).toBeVisible()
+    await expect(page.getByLabel("클라우드 상세정보")).toHaveCount(0)
     await page.getByRole("button", { name: "상세 패널 보기" }).click()
     await expect(page.getByRole("heading", { name: "문서 뷰어" })).toBeVisible()
     await page.waitForTimeout(100)
@@ -550,24 +536,28 @@ test.describe("관리자 클라우드", () => {
     expect(queueItemBox!.x + queueItemBox!.width).toBeLessThanOrEqual(donePillBox!.x + 2)
   })
 
-  test("선택된 긴 PDF 행은 종류 배지와 파일명 포커스가 명확하고 개별 삭제를 노출하지 않는다", async ({ page }) => {
+  test("선택된 긴 PDF 행은 이름 셀 안의 종류 배지와 파일명 포커스가 명확하다", async ({ page }) => {
     await setupAdminCloudMocks(page, { initialFiles: CLOUD_FILES })
 
     await page.goto("/admin/cloud")
 
     const selectedRow = page.getByRole("row", { name: /운영 점검 리포트\.pdf/ })
     await expect(selectedRow).toBeVisible()
-    const typeCell = selectedRow.locator("td").nth(2)
+    const nameCell = selectedRow.locator("td").nth(2)
     const typeBadge = selectedRow.getByLabel("문서")
     await expect(typeBadge).toHaveText("PDF")
-    await expectElementCenterAligned(typeCell, typeBadge)
+    await expect(nameCell.getByLabel("문서")).toBeVisible()
 
     const badgeBox = await typeBadge.boundingBox()
+    const thumbnailBox = await selectedRow.locator('[data-kind="DOCUMENT"]').first().boundingBox()
     const selectedRowBox = await selectedRow.boundingBox()
     expect(badgeBox).not.toBeNull()
+    expect(thumbnailBox).not.toBeNull()
     expect(selectedRowBox).not.toBeNull()
-    expect(badgeBox!.width).toBeGreaterThan(34)
-    expect(badgeBox!.height).toBeGreaterThan(22)
+    expect(badgeBox!.width).toBeGreaterThan(30)
+    expect(badgeBox!.height).toBeGreaterThan(18)
+    expect(thumbnailBox!.width).toBeGreaterThan(40)
+    expect(thumbnailBox!.x).toBeGreaterThan(selectedRowBox!.x)
 
     const nameButton = selectedRow.locator('button[title="운영 점검 리포트.pdf"]')
     await nameButton.focus()
@@ -576,6 +566,35 @@ test.describe("관리자 클라우드", () => {
 
     await expect(selectedRow.getByRole("button", { name: /미리보기/ })).toHaveCount(0)
     await expect(selectedRow.getByRole("button", { name: "운영 점검 리포트.pdf 삭제" })).toHaveCount(0)
+  })
+
+  test("파일이 많은 목록은 상세정보를 드로어로 열어 목록 폭을 유지한다", async ({ page }) => {
+    const manyFiles = Array.from({ length: 9 }, (_, index): CloudFileFixture => ({
+      id: 300 + index,
+      ownerMemberId: 1,
+      originalFilename: `density-${index + 1}.png`,
+      contentType: "image/png",
+      byteSize: 32_768 + index,
+      mediaKind: "PHOTO",
+      folderPath: "/photos",
+      createdAt: "2026-06-12T10:00:00Z",
+      modifiedAt: "2026-06-12T10:00:00Z",
+    }))
+    await setupAdminCloudMocks(page, { initialFiles: manyFiles })
+
+    await page.goto("/admin/cloud")
+
+    const tableBoxBefore = await page.getByRole("table").boundingBox()
+    await expect(page.getByLabel("클라우드 상세정보")).toHaveCount(0)
+    await page.locator('button[title="density-1.png"]').click()
+
+    const detailPanel = page.getByLabel("클라우드 상세정보")
+    await expect(detailPanel).toBeVisible()
+    await expect(detailPanel).toHaveCSS("position", "fixed")
+    const tableBoxAfter = await page.getByRole("table").boundingBox()
+    expect(tableBoxBefore).not.toBeNull()
+    expect(tableBoxAfter).not.toBeNull()
+    expect(Math.abs(tableBoxAfter!.width - tableBoxBefore!.width)).toBeLessThanOrEqual(2)
   })
 
   test("관리자 클라우드 진입만으로 알림 snapshot 백그라운드 요청을 시작하지 않는다", async ({ page }) => {

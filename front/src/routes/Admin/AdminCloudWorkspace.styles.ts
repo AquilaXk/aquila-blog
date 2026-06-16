@@ -28,16 +28,23 @@ export const CloudMain = styled.main`
 `
 
 export const CloudWorkspace = styled.section`
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(18rem, 21rem);
+  grid-template-columns: minmax(0, 1fr);
   min-height: calc(100vh - var(--app-header-height, 73px) - 3.95rem);
 
-  @media (max-width: 1260px) {
-    grid-template-columns: minmax(0, 1fr) minmax(17rem, 19rem);
+  &[data-detail-open="true"][data-detail-mode="inline"] {
+    grid-template-columns: minmax(0, 3fr) minmax(22rem, 2fr);
   }
 
-  @media (max-width: 980px) {
+  &[data-detail-open="true"][data-detail-mode="drawer"] {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  @media (max-width: 1080px) {
+    &[data-detail-open="true"][data-detail-mode] {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
 `
 
@@ -147,7 +154,7 @@ export const CloudContent = styled.div`
 
 export const CloudTitleBar = styled.header`
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(18rem, 26rem);
+  grid-template-columns: minmax(0, 1fr) minmax(20rem, 32rem);
   gap: 1rem;
   align-items: center;
   padding: 1rem 1.25rem 0.72rem;
@@ -220,7 +227,7 @@ export const SearchDetail = styled.span`
 export const ActionBar = styled.div`
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
+  align-items: center;
   justify-content: space-between;
   gap: 0.8rem;
   min-width: 0;
@@ -324,6 +331,40 @@ export const IconButton = styled.button`
     border-color: ${borderStrong};
     background: ${surfaceAccent};
   }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+  }
+`
+
+export const ViewModeButton = styled.button`
+  min-height: 2.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  border: 1px solid ${border};
+  border-radius: 5px;
+  padding: 0 0.64rem;
+  background: ${surface};
+  color: ${textSecondary};
+  font-size: 0.8rem;
+  font-weight: 820;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &[data-active="true"] {
+    color: ${accentGold};
+    border-color: ${borderStrong};
+    background: ${surfaceAccent};
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+  }
 `
 
 export const FilterGroup = styled.div`
@@ -379,7 +420,7 @@ export const FileTableScroll = styled.div`
 
 export const FileTable = styled.table`
   width: 100%;
-  min-width: 50rem;
+  min-width: 48rem;
   border-collapse: collapse;
   table-layout: fixed;
   color: ${textPrimary};
@@ -392,7 +433,7 @@ export const FileTable = styled.table`
   }
 
   th {
-    height: 2.25rem;
+    height: 2.4rem;
     padding: 0 0.7rem;
     color: ${textMuted};
     background: ${surfaceRaised};
@@ -401,7 +442,7 @@ export const FileTable = styled.table`
   }
 
   td {
-    height: 3.1rem;
+    height: 4.15rem;
     padding: 0 0.7rem;
     color: ${textSecondary};
     font-size: 0.82rem;
@@ -425,17 +466,16 @@ export const FileTable = styled.table`
 
   th:nth-of-type(3),
   td:nth-of-type(3) {
-    width: 4.2rem;
-    text-align: center;
+    width: auto;
+  }
+
+  th:nth-of-type(4),
+  td:nth-of-type(4) {
+    width: 5.8rem;
   }
 
   th:nth-of-type(5),
   td:nth-of-type(5) {
-    width: 5.6rem;
-  }
-
-  th:nth-of-type(6),
-  td:nth-of-type(6) {
     width: 8.9rem;
   }
 `
@@ -461,13 +501,14 @@ export const FavoriteButton = styled.button`
 `
 
 export const FileTypeIcon = styled.span`
-  min-width: 2.65rem;
+  min-width: 2.45rem;
+  flex: 0 0 2.65rem;
   height: 1.58rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 4px;
-  background: ${({ theme }) => theme.colors.gray3};
+  background: ${surfaceRaised};
   color: ${accentGold};
   border: 1px solid ${border};
   font-size: 0.68rem;
@@ -475,9 +516,74 @@ export const FileTypeIcon = styled.span`
   letter-spacing: 0;
 
   &[data-selected="true"] {
-    background: ${({ theme }) => theme.colors.gray2};
+    background: ${surfaceMuted};
     border-color: ${borderStrong};
-    color: ${({ theme }) => theme.colors.gray12};
+    color: ${textPrimary};
+  }
+`
+
+export const FileIdentity = styled.div`
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr);
+  gap: 0.72rem;
+  align-items: center;
+  min-width: 0;
+`
+
+export const FileThumbnailFrame = styled.span`
+  width: 3rem;
+  height: 2.4rem;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid ${border};
+  border-radius: 6px;
+  background: ${surfaceRaised};
+  color: ${accentGold};
+  font-size: 0.68rem;
+  font-weight: 900;
+
+  &[data-kind="DOCUMENT"] {
+    background: var(--admin-surface-accent, #edf3ff);
+  }
+
+  &[data-kind="VIDEO"] {
+    background: ${surfaceMuted};
+  }
+
+  &[data-selected="true"] {
+    border-color: ${borderStrong};
+    box-shadow: inset 0 0 0 1px ${borderStrong};
+  }
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    background: ${surfaceMuted};
+  }
+`
+
+export const FileNameStack = styled.div`
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+`
+
+export const FileMetaLine = styled.span`
+  display: flex;
+  align-items: center;
+  gap: 0.38rem;
+  min-width: 0;
+  color: ${textMuted};
+  font-size: 0.74rem;
+  font-weight: 760;
+
+  > span:not([data-file-kind-badge]) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 `
 
@@ -524,9 +630,6 @@ export const FileNameButton = styled.button`
 
   &:focus-visible {
     outline: none;
-    text-decoration: underline;
-    text-decoration-thickness: 2px;
-    text-underline-offset: 0.22rem;
     color: ${accentGold};
   }
 `
@@ -564,14 +667,54 @@ export const DetailPanel = styled.aside`
   border-left: 1px solid ${border};
   background: ${surface};
 
-  @media (max-width: 1260px) {
+  &[data-mode="inline"] {
     grid-column: 2;
   }
 
-  @media (max-width: 980px) {
-    grid-column: 1;
-    border-left: 0;
-    border-top: 1px solid ${border};
+  &[data-mode="drawer"] {
+    position: fixed;
+    top: var(--app-header-height, 73px);
+    right: 0;
+    bottom: 0;
+    z-index: ${zIndexes.dialog};
+    width: min(29rem, calc(100vw - 2rem));
+    overflow: auto;
+    box-shadow: -18px 0 48px rgba(0, 0, 0, 0.32);
+  }
+
+  @media (max-width: 1080px) {
+    position: fixed;
+    top: var(--app-header-height, 73px);
+    right: 0;
+    bottom: 0;
+    z-index: ${zIndexes.dialog};
+    width: min(29rem, calc(100vw - 2rem));
+    overflow: auto;
+    box-shadow: -18px 0 48px rgba(0, 0, 0, 0.32);
+  }
+`
+
+export const DetailScrim = styled.button`
+  display: none;
+
+  &[data-mode="drawer"] {
+    position: fixed;
+    inset: var(--app-header-height, 73px) 0 0;
+    z-index: ${zIndexes.dialog - 1};
+    display: block;
+    border: 0;
+    padding: 0;
+    background: rgba(0, 0, 0, 0.38);
+  }
+
+  @media (max-width: 1080px) {
+    position: fixed;
+    inset: var(--app-header-height, 73px) 0 0;
+    z-index: ${zIndexes.dialog - 1};
+    display: block;
+    border: 0;
+    padding: 0;
+    background: rgba(0, 0, 0, 0.38);
   }
 `
 
@@ -619,6 +762,31 @@ export const DetailPreviewBox = styled.div`
   overflow: auto;
 `
 
+export const DetailSummary = styled.div`
+  display: grid;
+  grid-template-columns: 3.2rem minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: center;
+  min-width: 0;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid ${border};
+
+  strong {
+    display: block;
+    color: ${textPrimary};
+    font-size: 0.94rem;
+    font-weight: 860;
+    overflow-wrap: anywhere;
+  }
+
+  p {
+    margin: 0.22rem 0 0;
+    color: ${textMuted};
+    font-size: 0.78rem;
+    font-weight: 760;
+  }
+`
+
 export const DetailMetaList = styled.dl`
   display: grid;
   grid-template-columns: 5rem minmax(0, 1fr);
@@ -626,9 +794,18 @@ export const DetailMetaList = styled.dl`
   margin: 0;
 
   dt {
+    display: flex;
+    align-items: center;
+    gap: 0.38rem;
     color: ${textMuted};
     font-size: 0.8rem;
     font-weight: 800;
+  }
+
+  dt span {
+    width: 1rem;
+    color: ${accentGold};
+    text-align: center;
   }
 
   dd {

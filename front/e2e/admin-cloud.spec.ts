@@ -603,10 +603,28 @@ test.describe("관리자 클라우드", () => {
 
     await page.goto("/admin/cloud")
 
-    await expect(page.getByRole("row", { name: /운영 점검 리포트\.pdf/ })).toBeVisible()
+    const firstRow = page.getByRole("row", { name: /운영 점검 리포트\.pdf/ })
+    await expect(firstRow).toBeVisible()
+    await expect(firstRow).not.toHaveAttribute("data-selected", "true")
     await expect(page.getByLabel("클라우드 상세정보")).toHaveCount(0)
     await page.locator('button[title="운영 점검 리포트.pdf"]').click()
     await expect(page.getByLabel("클라우드 상세정보")).toHaveCSS("position", "fixed")
+  })
+
+  test("작은 화면 빈 목록의 첫 업로드는 열린 상세정보를 유지한다", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await setupAdminCloudMocks(page, { initialFiles: [] })
+
+    await page.goto("/admin/cloud")
+    await page.getByLabel("클라우드 파일 업로드").setInputFiles({
+      name: "모바일 첫 업로드.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4 first mobile upload"),
+    })
+
+    await expect(page.getByRole("row", { name: /모바일 첫 업로드\.pdf/ })).toBeVisible()
+    await expect(page.getByLabel("클라우드 상세정보")).toHaveCSS("position", "fixed")
+    await expect(page.getByLabel("클라우드 상세정보").getByText("모바일 첫 업로드.pdf")).toBeVisible()
   })
 
   test("관리자 클라우드 진입만으로 알림 snapshot 백그라운드 요청을 시작하지 않는다", async ({ page }) => {

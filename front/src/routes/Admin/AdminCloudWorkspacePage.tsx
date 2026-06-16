@@ -511,11 +511,12 @@ const AdminCloudWorkspacePage = () => {
   }, [files, selectedFileId])
 
   useEffect(() => {
-    if (didInitializeDetailModeRef.current || files.length === 0) return
+    if (didInitializeDetailModeRef.current || filesQuery.isLoading) return
     didInitializeDetailModeRef.current = true
+    if (files.length === 0 || isDetailPanelOpen) return
     const canUseInlineDetail = window.matchMedia(DETAIL_INLINE_MEDIA_QUERY).matches
     setIsDetailPanelOpen(canUseInlineDetail && files.length <= 8)
-  }, [files.length])
+  }, [files.length, filesQuery.isLoading, isDetailPanelOpen])
 
   useEffect(() => {
     setCheckedFileIds((current) => current.filter((id) => files.some((file) => file.id === id)))
@@ -939,7 +940,7 @@ const AdminCloudWorkspacePage = () => {
                 <tbody>
                   {files.map((file) => {
                     const checked = checkedFileIds.includes(file.id)
-                    const selected = selectedFile?.id === file.id
+                    const selected = shouldShowDetailPanel && selectedFile?.id === file.id
                     const filenameParts = getCloudFilenameParts(file.originalFilename)
                     return (
                       <tr key={file.id} data-selected={selected ? "true" : "false"}>

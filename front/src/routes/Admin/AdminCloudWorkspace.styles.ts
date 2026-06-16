@@ -370,6 +370,11 @@ export const ViewModeButton = styled.button`
     cursor: not-allowed;
     opacity: 0.58;
   }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--admin-focus-ring, rgba(111, 149, 255, 0.22));
+  }
 `
 
 export const FilterGroup = styled.div`

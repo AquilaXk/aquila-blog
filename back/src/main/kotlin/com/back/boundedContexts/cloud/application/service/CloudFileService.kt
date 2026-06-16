@@ -451,8 +451,7 @@ class CloudFileService(
 
         while (
             offset + ZIP_CENTRAL_DIRECTORY_HEADER_SIZE <= directoryEnd &&
-            scannedCount < entryCount &&
-            scannedCount < MAX_HWPX_ENTRY_SCAN_COUNT
+            scannedCount < entryCount
         ) {
             if (!hasSignature(bytes, offset, ZIP_CENTRAL_DIRECTORY_FILE_HEADER_SIGNATURE)) break
 
@@ -517,7 +516,6 @@ class CloudFileService(
         private const val MAX_FILENAME_METADATA_ENCODED_BYTES = 1024
         private const val HWPX_CONTENT_TYPE = "application/haansofthwpx"
         private const val HWPX_MANIFEST_ENTRY = "Contents/content.hpf"
-        private const val MAX_HWPX_ENTRY_SCAN_COUNT = 512
         private const val ZIP_EOCD_MIN_SIZE = 22
         private const val ZIP_EOCD_MAX_SEARCH_LENGTH = ZIP_EOCD_MIN_SIZE + 0xFFFF
         private const val ZIP_EOCD_TOTAL_ENTRY_COUNT_OFFSET = 10

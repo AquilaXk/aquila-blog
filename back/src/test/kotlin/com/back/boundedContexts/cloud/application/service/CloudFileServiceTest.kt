@@ -303,6 +303,28 @@ class CloudFileServiceTest {
     }
 
     @Test
+    @DisplayName("업로드 시 한글 파일명의 일반 ZIP 파일은 문서로 저장한다")
+    fun `upload는 한글 파일명의 일반 ZIP 파일을 문서로 저장한다`() {
+        val nfcName = "3._(별첨2)_직무시험_관련_국민건강보험법_및_노인장기요양법.zip"
+        val nfdName = Normalizer.normalize(nfcName, Normalizer.Form.NFD)
+
+        val result =
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = nfdName,
+                clientOriginalFilename = nfdName,
+                contentType = "application/zip",
+                bytes = genericZipBytes(),
+                folderPath = null,
+            )
+
+        assertThat(result.originalFilename).isEqualTo(nfcName)
+        assertThat(result.mediaKind).isEqualTo(CloudFileMediaKind.DOCUMENT)
+        assertThat(result.contentType).isEqualTo("application/zip")
+        assertThat(storage.uploaded.single().originalFilename).isEqualTo(nfcName)
+    }
+
+    @Test
     @DisplayName("업로드 시 mojibake로 들어온 한글 파일명은 원본 기호까지 UTF-8 기준으로 복구한다")
     fun `upload는 mojibake 한글 파일명을 UTF-8 기준으로 복구한다`() {
         val originalName = "★2026년 제3회 식약처 공무원(일반직) 경력경쟁채용시험 공고문_게시.pdf"

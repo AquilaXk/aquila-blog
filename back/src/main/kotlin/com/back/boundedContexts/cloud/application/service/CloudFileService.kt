@@ -420,6 +420,9 @@ class CloudFileService(
         if (filename.substringAfterLast(".", "").lowercase(Locale.ROOT) == "hwpx" && isHwpxPackage(bytes)) {
             return DetectedContent(HWPX_CONTENT_TYPE, CloudFileMediaKind.DOCUMENT)
         }
+        if (filename.substringAfterLast(".", "").lowercase(Locale.ROOT) == "zip" && isZipSignature(bytes)) {
+            return DetectedContent(ZIP_CONTENT_TYPE, CloudFileMediaKind.DOCUMENT)
+        }
 
         return null
     }
@@ -515,6 +518,7 @@ class CloudFileService(
         private const val MAX_FILENAME_CODE_POINTS = 255L
         private const val MAX_FILENAME_METADATA_ENCODED_BYTES = 1024
         private const val HWPX_CONTENT_TYPE = "application/haansofthwpx"
+        private const val ZIP_CONTENT_TYPE = "application/zip"
         private const val HWPX_MANIFEST_ENTRY = "Contents/content.hpf"
         private const val ZIP_EOCD_MIN_SIZE = 22
         private const val ZIP_EOCD_MAX_SEARCH_LENGTH = ZIP_EOCD_MIN_SIZE + 0xFFFF
@@ -548,11 +552,13 @@ class CloudFileService(
                 "image/x-png" to "image/png",
                 "image/x-webp" to "image/webp",
                 "application/x-hwpx" to HWPX_CONTENT_TYPE,
+                "application/x-zip-compressed" to ZIP_CONTENT_TYPE,
             )
         private val KNOWN_CONTENT_TYPES =
             setOf(
                 "application/pdf",
                 HWPX_CONTENT_TYPE,
+                ZIP_CONTENT_TYPE,
                 "image/jpeg",
                 "image/png",
                 "image/gif",

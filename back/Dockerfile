@@ -1,19 +1,28 @@
 # syntax=docker/dockerfile:1.7
 
 # =========================
-# 1️⃣ Build Stage
+# 1️⃣ JDK Source Stage
+# =========================
+# Digest pin source:
+# docker buildx imagetools inspect eclipse-temurin:24-jdk
+FROM eclipse-temurin:24-jdk@sha256:7493205ffe6caa8074fa8a06a276bb1c5ac41d3dd0fd43a0db66d7f776e80b3e AS jdk-source
+
+# =========================
+# 2️⃣ Build Stage
 # =========================
 # jangka512/pgj: PGroonga + PostGIS + pgvector 포함 커스텀 이미지
-FROM jangka512/pgj:latest AS builder
+# Digest pin source:
+# docker buildx imagetools inspect jangka512/pgj:latest
+FROM jangka512/pgj@sha256:a8bfcb8e5c64805429cd1406d0840ba1c13f70830e73d9f5e4a63cd7c1b62da7 AS builder
 
-# JDK 24 + Redis 설치 (Gradle은 gradlew 사용)
+# Redis 설치 (Gradle은 gradlew 사용)
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl redis-server \
- && curl -sL https://download.java.net/java/GA/jdk24/1f9ff9062db4449d8ca828c504ffae90/36/GPL/openjdk-24_linux-x64_bin.tar.gz | tar xz -C /opt \
- && ln -s /opt/jdk-24 /opt/java \
+ && apt-get install -y --no-install-recommends redis-server \
  && rm -rf /var/lib/apt/lists/*
 
-ENV JAVA_HOME=/opt/java
+COPY --from=jdk-source /opt/java/openjdk /opt/java/openjdk
+
+ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
 WORKDIR /app
@@ -42,11 +51,11 @@ RUN set -e \
  && su postgres -c "pg_ctl -D $PGDATA stop -w"
 
 # =========================
-# 2️⃣ Layer Extract Stage
+# 3️⃣ Layer Extract Stage
 # =========================
 # Oracle GraalVM base can require x86-64-v3 on older CPUs.
 # Use Temurin for broader CPU compatibility.
-FROM eclipse-temurin:24-jdk AS extractor
+FROM eclipse-temurin:24-jdk@sha256:7493205ffe6caa8074fa8a06a276bb1c5ac41d3dd0fd43a0db66d7f776e80b3e AS extractor
 
 WORKDIR /app
 
@@ -56,9 +65,9 @@ COPY --from=builder /app/build/libs/*.jar app.jar
 RUN java -Djarmode=layertools -jar app.jar extract
 
 # =========================
-# 3️⃣ Runtime Stage
+# 4️⃣ Runtime Stage
 # =========================
-FROM eclipse-temurin:24-jdk
+FROM eclipse-temurin:24-jdk@sha256:7493205ffe6caa8074fa8a06a276bb1c5ac41d3dd0fd43a0db66d7f776e80b3e
 
 ENV LANG=ko_KR.UTF-8
 ENV LC_ALL=ko_KR.UTF-8

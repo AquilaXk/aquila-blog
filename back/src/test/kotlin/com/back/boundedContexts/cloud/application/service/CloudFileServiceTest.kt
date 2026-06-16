@@ -90,13 +90,13 @@ class CloudFileServiceTest {
     }
 
     @Test
-    @DisplayName("업로드 시 설정된 최대 크기를 넘으면 storage에 저장하지 않는다")
-    fun `upload는 설정된 최대 크기를 넘으면 storage에 저장하지 않는다`() {
+    @DisplayName("업로드 시 문서 제한을 넘으면 storage에 저장하지 않는다")
+    fun `upload는 문서 제한을 넘으면 storage에 저장하지 않는다`() {
         val limitedService =
             CloudFileService(
                 cloudFileRepository = repository,
                 cloudStoragePort = storage,
-                cloudStorageProperties = CloudStorageProperties(maxFileSizeBytes = 5),
+                cloudStorageProperties = CloudStorageProperties(cloudDocumentMaxFileSizeBytes = 5),
                 clock = Clock.fixed(Instant.parse("2026-06-12T00:00:00Z"), ZoneOffset.UTC),
             )
 
@@ -109,7 +109,7 @@ class CloudFileServiceTest {
                 folderPath = "docs",
             )
         }.isInstanceOf(AppException::class.java)
-            .hasMessageContaining("클라우드 파일은")
+            .hasMessageContaining("클라우드 문서 파일은")
 
         assertThat(storage.uploaded).isEmpty()
         assertThat(repository.savedFiles).isEmpty()
@@ -137,6 +137,107 @@ class CloudFileServiceTest {
         assertThat(result.byteSize).isEqualTo(seventeenMbPdf.size.toLong())
         assertThat(result.mediaKind).isEqualTo(CloudFileMediaKind.DOCUMENT)
         assertThat(storage.uploaded.single().bytes).hasSize(seventeenMbPdf.size)
+    }
+
+    @Test
+    @DisplayName("업로드 시 문서는 legacy 단일 제한보다 큰 파일도 문서 제한 안이면 저장한다")
+    fun `upload는 문서 제한을 legacy 단일 제한보다 우선 적용한다`() {
+        val policyService =
+            CloudFileService(
+                cloudFileRepository = repository,
+                cloudStoragePort = storage,
+                cloudStorageProperties =
+                    CloudStorageProperties(
+                        maxFileSizeBytes = 5,
+                        cloudDocumentMaxFileSizeBytes = 10,
+                        cloudPhotoMaxFileSizeBytes = 5,
+                    ),
+                clock = Clock.fixed(Instant.parse("2026-06-12T00:00:00Z"), ZoneOffset.UTC),
+            )
+
+        val result =
+            policyService.upload(
+                ownerMemberId = 7L,
+                originalFilename = "policy.pdf",
+                contentType = "application/pdf",
+                bytes = "%PDF-1.7".toByteArray(),
+                folderPath = "docs",
+            )
+
+        assertThat(result.mediaKind).isEqualTo(CloudFileMediaKind.DOCUMENT)
+        assertThat(result.byteSize).isEqualTo(8)
+    }
+
+    @Test
+    @DisplayName("업로드 시 사진은 사진 제한을 넘으면 storage 저장 전에 차단한다")
+    fun `upload는 사진 제한 초과를 storage 저장 전에 차단한다`() {
+        val policyService =
+            CloudFileService(
+                cloudFileRepository = repository,
+                cloudStoragePort = storage,
+                cloudStorageProperties =
+                    CloudStorageProperties(
+                        cloudDocumentMaxFileSizeBytes = 100,
+                        cloudPhotoMaxFileSizeBytes = 2,
+                    ),
+                clock = Clock.fixed(Instant.parse("2026-06-12T00:00:00Z"), ZoneOffset.UTC),
+            )
+
+        assertThatThrownBy {
+            policyService.upload(
+                ownerMemberId = 7L,
+                originalFilename = "large.jpg",
+                contentType = "image/jpeg",
+                bytes = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte()),
+                folderPath = "photos",
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("클라우드 사진 파일은")
+            .hasMessageContaining("2 B")
+
+        assertThat(storage.uploaded).isEmpty()
+        assertThat(repository.savedFiles).isEmpty()
+    }
+
+    @Test
+    @DisplayName("업로드 시 ZIP과 동영상은 문서보다 큰 동기 업로드 제한을 적용한다")
+    fun `upload는 zip과 동영상에 큰 동기 업로드 제한을 적용한다`() {
+        val zipBytes = genericZipBytes()
+        val videoBytes = byteArrayOf(0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70, 0, 0, 0, 0)
+        val policyService =
+            CloudFileService(
+                cloudFileRepository = repository,
+                cloudStoragePort = storage,
+                cloudStorageProperties =
+                    CloudStorageProperties(
+                        maxFileSizeBytes = 5,
+                        cloudDocumentMaxFileSizeBytes = 5,
+                        cloudArchiveMaxFileSizeBytes = zipBytes.size.toLong() + 1,
+                        cloudVideoMaxFileSizeBytes = videoBytes.size.toLong() + 1,
+                    ),
+                clock = Clock.fixed(Instant.parse("2026-06-12T00:00:00Z"), ZoneOffset.UTC),
+            )
+
+        val zip =
+            policyService.upload(
+                ownerMemberId = 7L,
+                originalFilename = "archive.zip",
+                contentType = "application/zip",
+                bytes = zipBytes,
+                folderPath = "archives",
+            )
+        val video =
+            policyService.upload(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                bytes = videoBytes,
+                folderPath = "video",
+            )
+
+        assertThat(zip.contentType).isEqualTo("application/zip")
+        assertThat(video.mediaKind).isEqualTo(CloudFileMediaKind.VIDEO)
+        assertThat(storage.uploaded).hasSize(2)
     }
 
     @Test

@@ -243,12 +243,23 @@ const arePostsEqual = (prevPosts: TPost[], nextPosts: TPost[]) => {
     if (prevPost.modifiedTime !== nextPost.modifiedTime) return false
     if (prevPost.likesCount !== nextPost.likesCount) return false
     if (prevPost.commentsCount !== nextPost.commentsCount) return false
+    if (prevPost.hitCount !== nextPost.hitCount) return false
     if (prevPost.title !== nextPost.title) return false
     if (prevPost.summary !== nextPost.summary) return false
     if (prevPost.thumbnail !== nextPost.thumbnail) return false
+    if (!areStringArraysEqual(prevPost.tags, nextPost.tags)) return false
+    if (!areStringArraysEqual(prevPost.category, nextPost.category)) return false
   }
 
   return true
+}
+
+const areStringArraysEqual = (prevValues?: string[], nextValues?: string[]) => {
+  if (prevValues === nextValues) return true
+  if (!prevValues || !nextValues) return !prevValues?.length && !nextValues?.length
+  if (prevValues.length !== nextValues.length) return false
+
+  return prevValues.every((value, index) => value === nextValues[index])
 }
 
 const arePostListPropsEqual = (prev: Props, next: Props) => {
@@ -276,6 +287,11 @@ const StyledWrapper = styled.div`
 
   @media (min-width: 768px) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2rem;
+  }
+
+  @media (min-width: 1440px) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 2rem;
   }
 
@@ -471,6 +487,11 @@ const StyledWrapper = styled.div`
 
     @media (min-width: 768px) {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 2rem;
+    }
+
+    @media (min-width: 1440px) {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 2rem;
     }
   }

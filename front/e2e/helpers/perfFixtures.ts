@@ -561,21 +561,6 @@ export const getDesktopTagRailMetrics = async (page: Page) =>
   })
 
 export const waitForHomeTagRailReady = async (page: Page, viewportWidth: number) => {
-  if (viewportWidth > 1200) {
-    await expect
-      .poll(
-        async () =>
-          page.evaluate(() => {
-            const list = document.querySelector(".desktopList")
-            if (!list) return 0
-            return list.querySelectorAll("li").length
-          }),
-        { timeout: 5000 }
-      )
-      .toBeGreaterThanOrEqual(4)
-    return
-  }
-
   await expect
     .poll(
       async () =>

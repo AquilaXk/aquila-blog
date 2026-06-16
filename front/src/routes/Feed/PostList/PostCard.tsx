@@ -1,5 +1,5 @@
 import { CONFIG } from "site.config"
-import { formatDate } from "src/libs/utils"
+import { formatDate, splitCategoryDisplay } from "src/libs/utils"
 import { TPost } from "../../../types"
 import styled from "@emotion/styled"
 import { uiTokens } from "@shared/ui-tokens"
@@ -25,7 +25,17 @@ const FEED_CARD_META_FONT_SIZE_REM = uiTokens.feed.card.metaFontSizeRem
 const FEED_CARD_SUMMARY_LINES = uiTokens.feed.card.summaryLines
 const FEED_CARD_SUMMARY_LINE_HEIGHT = uiTokens.feed.card.summaryLineHeight
 const FEED_CARD_TITLE_LINE_HEIGHT = uiTokens.feed.card.titleLineHeight
-const FEED_CARD_RADIUS_PX = 4
+const FEED_CARD_RADIUS_PX = 14
+const INTERNAL_CATEGORY_TAGS = new Set(["Pinned"])
+
+const toDisplayCategoryLabel = (post: TPost) => {
+  const rawLabel =
+    post.category?.[0] ||
+    post.tags?.find((tag) => !INTERNAL_CATEGORY_TAGS.has(tag)) ||
+    "Engineering"
+  return splitCategoryDisplay(rawLabel).label
+}
+
 const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
   const author = data.author?.[0]
   const postPath = toCanonicalPostPath(data.id)
@@ -36,6 +46,11 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
   const summary = normalizeCardSummary(data.summary)
   const commentsCount = data.commentsCount ?? 0
   const likesCount = data.likesCount ?? 0
+  const categoryLabel = toDisplayCategoryLabel(data)
+  const readMinutes = Math.max(4, Math.ceil(((data.title?.length || 0) + (summary?.length || 0)) / 120))
+  const viewsCount = data.hitCount ?? 0
+  const viewsText =
+    viewsCount >= 1000 ? `${(viewsCount / 1000).toFixed(viewsCount >= 10000 ? 0 : 1)}k views` : `${viewsCount} views`
   const { thumbnailSrc, thumbnailFocusX, thumbnailFocusY, thumbnailZoom } = useMemo(() => {
     const rawThumbnail = data.thumbnail || ""
     return {
@@ -66,7 +81,7 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
   )
 
   return (
-    <StyledWrapper href={postPath} data-layout={layout} onClick={handleNavigate}>
+    <StyledWrapper href={postPath} data-layout={layout} data-ui="feed-post-card" onClick={handleNavigate}>
       <article>
         {thumbnailSrc && (
           <div className="thumbnail">
@@ -86,8 +101,15 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
             />
           </div>
         )}
-        {!thumbnailSrc && <div className="thumbnail placeholder" aria-hidden="true" />}
+        {!thumbnailSrc && (
+          <div className="thumbnail brandCover" data-ui="feed-card-brand-cover" aria-label={`${data.title} cover`}>
+            <span className="coverCategory">{categoryLabel}</span>
+            <strong>{data.title}</strong>
+            <span className="coverBrand">AquilaLog</span>
+          </div>
+        )}
         <div className="content">
+          <div className="category">{categoryLabel}</div>
           <header>
             <h2>{data.title}</h2>
           </header>
@@ -96,6 +118,10 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
           </div>
           <div className="meta">
             <span>{createdAtText}</span>
+            <span className="dot">·</span>
+            <span>{readMinutes} min read</span>
+            <span className="dot">·</span>
+            <span>{viewsText}</span>
             <span className="dot">·</span>
             <span className="comment">
               <AppIcon name="message" />
@@ -147,9 +173,20 @@ const arePostCardPropsEqual = (prev: Props, next: Props) => {
     prev.data.createdTime === next.data.createdTime &&
     prev.data.commentsCount === next.data.commentsCount &&
     prev.data.likesCount === next.data.likesCount &&
+    prev.data.hitCount === next.data.hitCount &&
+    areStringArraysEqual(prev.data.tags, next.data.tags) &&
+    areStringArraysEqual(prev.data.category, next.data.category) &&
     prevAuthor?.name === nextAuthor?.name &&
     prevAuthor?.profile_photo === nextAuthor?.profile_photo
   )
+}
+
+const areStringArraysEqual = (prevValues?: string[], nextValues?: string[]) => {
+  if (prevValues === nextValues) return true
+  if (!prevValues || !nextValues) return !prevValues?.length && !nextValues?.length
+  if (prevValues.length !== nextValues.length) return false
+
+  return prevValues.every((value, index) => value === nextValues[index])
 }
 
 export default memo(PostCard, arePostCardPropsEqual)
@@ -161,12 +198,12 @@ const StyledWrapper = styled.a`
   min-width: 0;
   text-decoration: none;
   --post-card-translate-y: -8px;
-  --post-card-border-color: ${({ theme }) => theme.publicDesign.border};
-  --post-card-border-strong: ${({ theme }) => theme.publicDesign.borderStrong};
-  --post-card-surface: ${({ theme }) => theme.publicDesign.surface};
-  --post-card-surface-elevated: ${({ theme }) => theme.publicDesign.surfaceElevated};
-  --post-card-shadow-current: ${({ theme }) => theme.publicDesign.shadow};
-  --post-card-shadow-hover-current: ${({ theme }) => theme.publicDesign.shadow};
+  --post-card-border-color: #30363d;
+  --post-card-border-strong: #58a6ff;
+  --post-card-surface: #161b22;
+  --post-card-surface-elevated: #21262d;
+  --post-card-shadow-current: 0 12px 34px rgba(1, 4, 9, 0.26);
+  --post-card-shadow-hover-current: 0 20px 52px rgba(1, 4, 9, 0.36);
 
   &:focus-visible {
     outline: 0;
@@ -183,7 +220,9 @@ const StyledWrapper = styled.a`
     flex-direction: column;
     border-radius: ${FEED_CARD_RADIUS_PX}px;
     border: ${({ theme }) => `${theme.variables.ui.card.borderWidth}px solid var(--post-card-border-color)`};
-    background: var(--post-card-surface);
+    background:
+      linear-gradient(180deg, rgba(33, 38, 45, 0.34), rgba(22, 27, 34, 0.98)),
+      var(--post-card-surface);
     box-shadow: var(--post-card-shadow-current);
 
     > .thumbnail {
@@ -201,6 +240,49 @@ const StyledWrapper = styled.a`
 
       &.placeholder {
         background: var(--post-card-surface-elevated);
+      }
+
+      &.brandCover {
+        min-height: 0;
+        aspect-ratio: 1.92 / 1;
+        display: grid;
+        align-content: end;
+        gap: 0.36rem;
+        padding: 1rem;
+        background:
+          radial-gradient(circle at 82% 18%, rgba(88, 166, 255, 0.28), transparent 34%),
+          linear-gradient(135deg, rgba(88, 166, 255, 0.2), rgba(126, 231, 135, 0.08)),
+          #111722;
+        color: #f0f6fc;
+
+        .coverCategory {
+          width: fit-content;
+          border-radius: 999px;
+          border: 1px solid rgba(88, 166, 255, 0.42);
+          background: rgba(88, 166, 255, 0.1);
+          color: #c9e7ff;
+          padding: 0.22rem 0.5rem;
+          font-size: 0.64rem;
+          line-height: 1.2;
+          font-weight: 860;
+        }
+
+        strong {
+          max-width: 12ch;
+          color: #f0f6fc;
+          font-size: clamp(1.35rem, 2.5vw, 2rem);
+          line-height: 0.94;
+          letter-spacing: -0.07em;
+          font-weight: 920;
+          text-transform: uppercase;
+        }
+
+        .coverBrand {
+          color: #8b949e;
+          font-size: 0.7rem;
+          font-weight: 820;
+          letter-spacing: 0.02em;
+        }
       }
 
       &::after {
@@ -221,14 +303,25 @@ const StyledWrapper = styled.a`
       padding: ${({ theme }) => `${theme.variables.ui.card.padding}px`};
       gap: 0;
 
+      > .category {
+        width: fit-content;
+        margin-bottom: 0.42rem;
+        color: #58a6ff;
+        font-size: 0.7rem;
+        line-height: 1.2;
+        font-weight: 860;
+        letter-spacing: 0.035em;
+        text-transform: uppercase;
+      }
+
       > header {
         h2 {
           margin: 0;
-          color: ${({ theme }) => theme.colors.gray12};
-          font-size: 1.02rem;
+          color: #f0f6fc;
+          font-size: 1.12rem;
           line-height: ${FEED_CARD_TITLE_LINE_HEIGHT};
-          font-weight: 760;
-          letter-spacing: -0.01em;
+          font-weight: 840;
+          letter-spacing: -0.035em;
           word-break: keep-all;
           overflow-wrap: anywhere;
           display: -webkit-box;
@@ -244,7 +337,7 @@ const StyledWrapper = styled.a`
 
         p {
           margin: 0;
-          color: ${({ theme }) => theme.colors.gray10};
+          color: #8b949e;
           font-size: 0.85rem;
           line-height: ${FEED_CARD_SUMMARY_LINE_HEIGHT};
           letter-spacing: -0.01em;
@@ -264,7 +357,7 @@ const StyledWrapper = styled.a`
         align-items: center;
         margin-top: 0.6rem;
         padding-bottom: 0.88rem;
-        color: ${({ theme }) => theme.colors.gray10};
+        color: #8b949e;
         font-size: ${FEED_CARD_META_FONT_SIZE_REM}rem;
         line-height: 1.45;
         letter-spacing: -0.01em;
@@ -317,17 +410,17 @@ const StyledWrapper = styled.a`
             .initial {
               font-size: 0.72rem;
               font-weight: 800;
-              color: ${({ theme }) => theme.colors.gray11};
+              color: #0d1117;
             }
           }
 
           .by {
-            color: ${({ theme }) => theme.colors.gray10};
+            color: #8b949e;
             font-size: 0.72rem;
           }
 
           strong {
-            color: ${({ theme }) => theme.colors.gray12};
+            color: #f0f6fc;
             font-size: 0.76rem;
             font-weight: 760;
             line-height: 1.2;
@@ -342,14 +435,14 @@ const StyledWrapper = styled.a`
           display: inline-flex;
           align-items: center;
           gap: 0.42rem;
-          color: ${({ theme }) => theme.colors.gray11};
+          color: #8b949e;
           font-size: 0.75rem;
           font-weight: 700;
 
           svg {
             width: 0.75rem;
             height: 0.75rem;
-            color: ${({ theme }) => theme.colors.red10};
+            color: #ff7b72;
           }
         }
       }

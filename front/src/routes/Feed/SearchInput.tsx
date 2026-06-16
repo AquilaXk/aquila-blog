@@ -52,11 +52,11 @@ export default SearchInput
 
 const StyledWrapper = styled.div`
   min-width: 0;
-  --feed-search-border: ${({ theme }) => theme.publicDesign.border};
-  --feed-search-border-strong: ${({ theme }) => theme.publicDesign.borderStrong};
-  --feed-search-surface: ${({ theme }) => theme.publicDesign.surface};
-  --feed-search-surface-elevated: ${({ theme }) => theme.publicDesign.surfaceElevated};
-  --feed-search-accent-muted: ${({ theme }) => theme.publicDesign.accentMuted};
+  --feed-search-border: #30363d;
+  --feed-search-border-strong: #58a6ff;
+  --feed-search-surface: #161b22;
+  --feed-search-surface-elevated: #21262d;
+  --feed-search-accent-muted: rgba(88, 166, 255, 0.16);
 
   > .field {
     display: flex;
@@ -76,7 +76,7 @@ const StyledWrapper = styled.div`
       align-items: center;
       justify-content: center;
       flex: 0 0 auto;
-      color: ${({ theme }) => theme.colors.gray10};
+      color: #8b949e;
       width: 15px;
       height: 15px;
       transition: color 0.125s ease-in;
@@ -98,7 +98,7 @@ const StyledWrapper = styled.div`
       border-radius: ${({ theme }) => `${theme.variables.ui.button.radiusPill}px`};
       border: 1px solid var(--feed-search-border);
       background: transparent;
-      color: ${({ theme }) => theme.colors.gray10};
+      color: #8b949e;
       font-size: 0.74rem;
       font-weight: 700;
       letter-spacing: 0;
@@ -107,7 +107,7 @@ const StyledWrapper = styled.div`
       transition: all 0.125s ease-in;
 
       &:hover {
-        color: ${({ theme }) => theme.colors.gray12};
+        color: #f0f6fc;
         border-color: var(--feed-search-border-strong);
         background: var(--feed-search-accent-muted);
       }
@@ -126,8 +126,8 @@ const StyledWrapper = styled.div`
     font-size: 0.84rem;
     font-weight: 560;
     line-height: 1.4;
-    color: ${({ theme }) => theme.colors.gray12};
-    caret-color: ${({ theme }) => theme.colors.gray12};
+    color: #f0f6fc;
+    caret-color: #f0f6fc;
     border: 0;
     outline: none;
     box-shadow: none;
@@ -137,7 +137,7 @@ const StyledWrapper = styled.div`
     transition: all 0.125s ease-in;
 
     &::placeholder {
-      color: ${({ theme }) => theme.colors.gray10};
+      color: #8b949e;
       opacity: 1;
       transition: opacity 0.12s ease-in;
     }
@@ -160,7 +160,7 @@ const StyledWrapper = styled.div`
     box-shadow: 0 0 0 1px var(--feed-search-accent-muted);
 
     .searchIcon {
-      color: ${({ theme }) => theme.colors.gray11};
+      color: #c9d1d9;
     }
   }
 

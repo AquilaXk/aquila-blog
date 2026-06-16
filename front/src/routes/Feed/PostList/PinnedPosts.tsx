@@ -33,8 +33,22 @@ const arePinnedPostsEqual = (prev: Props, next: Props) => {
     if (prevPost.modifiedTime !== nextPost.modifiedTime) return false
     if (prevPost.likesCount !== nextPost.likesCount) return false
     if (prevPost.commentsCount !== nextPost.commentsCount) return false
+    if (prevPost.hitCount !== nextPost.hitCount) return false
+    if (prevPost.title !== nextPost.title) return false
+    if (prevPost.summary !== nextPost.summary) return false
+    if (prevPost.thumbnail !== nextPost.thumbnail) return false
+    if (!areStringArraysEqual(prevPost.tags, nextPost.tags)) return false
+    if (!areStringArraysEqual(prevPost.category, nextPost.category)) return false
   }
   return true
+}
+
+const areStringArraysEqual = (prevValues?: string[], nextValues?: string[]) => {
+  if (prevValues === nextValues) return true
+  if (!prevValues || !nextValues) return !prevValues?.length && !nextValues?.length
+  if (prevValues.length !== nextValues.length) return false
+
+  return prevValues.every((value, index) => value === nextValues[index])
 }
 
 export default memo(PinnedPosts, arePinnedPostsEqual)

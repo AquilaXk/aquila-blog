@@ -106,6 +106,7 @@ const TagList: React.FC = () => {
       <section
         className="desktopPanel"
         aria-label="태그 목록"
+        aria-hidden="true"
       >
         <h2 className="panelTitle">
           <span className="panelEmoji" aria-hidden="true">🏷️</span>
@@ -154,6 +155,7 @@ const TagList: React.FC = () => {
 
       <div
         className="chipRail"
+        data-ui="feed-tag-chip-rail"
         role="group"
         aria-label="태그 선택"
       >
@@ -201,15 +203,14 @@ export default memo(TagList)
 
 const StyledWrapper = styled.div`
   min-width: 0;
-  --feed-tag-border: ${({ theme }) => theme.publicDesign.border};
-  --feed-tag-border-strong: ${({ theme }) => theme.publicDesign.borderStrong};
-  --feed-tag-hover-border: ${({ theme }) => theme.publicDesign.borderStrong};
-  --feed-tag-surface: ${({ theme }) => theme.publicDesign.surface};
-  --feed-tag-surface-elevated: ${({ theme }) => theme.publicDesign.surfaceElevated};
-  --feed-tag-accent: ${({ theme }) => theme.publicDesign.accent};
-  --feed-tag-accent-text: ${({ theme }) =>
-    theme.scheme === "light" ? theme.colors.blue11 : theme.colors.blue10};
-  --feed-tag-accent-muted: ${({ theme }) => theme.publicDesign.accentMuted};
+  --feed-tag-border: #30363d;
+  --feed-tag-border-strong: #58a6ff;
+  --feed-tag-hover-border: #8b949e;
+  --feed-tag-surface: #161b22;
+  --feed-tag-surface-elevated: #21262d;
+  --feed-tag-accent: #58a6ff;
+  --feed-tag-accent-text: #58a6ff;
+  --feed-tag-accent-muted: rgba(88, 166, 255, 0.14);
 
   .desktopPanel {
     display: none;
@@ -219,10 +220,6 @@ const StyledWrapper = styled.div`
     max-height: calc(100vh - var(--app-header-height, 56px) - 1.8rem);
     max-height: calc(100dvh - var(--app-header-height, 56px) - 1.8rem);
     overflow: hidden;
-
-    @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
-      display: block;
-    }
   }
 
   .panelTitle {
@@ -387,7 +384,10 @@ const StyledWrapper = styled.div`
     }
 
     @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
-      display: none;
+      justify-content: center;
+      flex-wrap: wrap;
+      overflow-x: visible;
+      padding-bottom: 0;
     }
   }
 
@@ -403,7 +403,7 @@ const StyledWrapper = styled.div`
     border: 0;
     background: transparent;
     padding: 0.34rem 0.82rem;
-    color: ${({ theme }) => theme.colors.gray11};
+    color: #c9d1d9;
     flex-shrink: 0;
     scroll-snap-align: start;
     cursor: pointer;
@@ -455,7 +455,7 @@ const StyledWrapper = styled.div`
 
   .chipRail button .count {
     font-size: 0.72rem;
-    color: ${({ theme }) => theme.colors.gray8};
+    color: #8b949e;
   }
 
   .chipRail button[data-active="true"] .count {

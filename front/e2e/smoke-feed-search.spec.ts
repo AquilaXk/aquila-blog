@@ -18,47 +18,49 @@ test.describe("core smoke feed and search", () => {
   await page.goto("/")
   await expect(page.getByLabel("Search posts by keyword")).toBeVisible()
   await expect(page.getByRole("button", { name: "전체보기" })).toBeVisible()
-  await expect(page.locator('[data-ui="feed-service-section"]')).toBeVisible()
-  await expect(page.locator('[data-ui="feed-contact-section"]')).toBeVisible()
-  await expect(page.locator('[data-ui="feed-service-section"]').getByText("aquila-blog", { exact: true })).toBeVisible()
-  await expect(
-    page.locator('[data-ui="feed-contact-section"]').getByRole("link", { name: /github github\.com\/aquilaxk/i })
-  ).toBeVisible()
+  await expect(page.locator('[data-ui="feed-home-product-shell"]')).toBeVisible()
+  await expect(page.locator('[data-ui="feed-profile-summary"]')).toBeVisible()
+  await expect(page.locator('[data-ui="feed-tag-chip-rail"]')).toBeVisible()
+  await expect(page.locator(".rt")).toBeHidden()
 
-  const sidebarStyles = await page.evaluate(() => {
+  const homeStyles = await page.evaluate(() => {
     const read = (selector: string) => {
       const element = document.querySelector(selector) as HTMLElement | null
       if (!element) return null
       const styles = window.getComputedStyle(element)
       return {
         backgroundColor: styles.backgroundColor,
-        borderBottomWidth: styles.borderBottomWidth,
+        borderWidth: styles.borderWidth,
       }
     }
 
     return {
-      service: read('[data-ui="feed-service-links"]'),
-      contact: read('[data-ui="feed-contact-links"]'),
+      profileSummary: read('[data-ui="feed-profile-summary"]'),
+      firstCard: read('[data-ui="feed-post-card"] article'),
     }
   })
 
-  expect(sidebarStyles.service?.backgroundColor).toBe("rgba(0, 0, 0, 0)")
-  expect(sidebarStyles.service?.borderBottomWidth).toBe("1px")
-  expect(sidebarStyles.contact?.backgroundColor).toBe("rgba(0, 0, 0, 0)")
-  expect(sidebarStyles.contact?.borderBottomWidth).toBe("1px")
+  expect(homeStyles.profileSummary?.backgroundColor).not.toBe("rgba(0, 0, 0, 0)")
+  expect(homeStyles.profileSummary?.borderWidth).toBe("1px")
+  expect(homeStyles.firstCard?.backgroundColor).not.toBe("rgba(0, 0, 0, 0)")
+  expect(homeStyles.firstCard?.borderWidth).toBe("1px")
 })
 
-  test("홈 새로고침 이후에도 레거시 기본 문구로 되돌아가지 않는다", async ({ page }) => {
+  test("홈 새로고침 이후에도 제품형 브랜드 문구를 유지한다", async ({ page }) => {
   await mockFeedEndpoints(page)
 
   await page.goto("/")
-  await expect(page.getByRole("heading", { level: 1, name: "비밀스러운 IT 공작소" })).toBeVisible()
+  await expect(page.getByRole("heading", { level: 1, name: "AquilaLog" })).toBeVisible()
+  await expect(page.locator('[data-ui="feed-brand-role"]')).toBeVisible()
   await expect(page.getByText("비밀스러운 지식들을 탐구하는데 목적을 두고 있습니다")).toBeVisible()
+  await expect(page.getByText("비밀스러운 IT 공작소")).toHaveCount(0)
   await expect(page.getByText("aquilaXk's Blog")).toHaveCount(0)
 
   await page.reload()
-  await expect(page.getByRole("heading", { level: 1, name: "비밀스러운 IT 공작소" })).toBeVisible()
+  await expect(page.getByRole("heading", { level: 1, name: "AquilaLog" })).toBeVisible()
+  await expect(page.locator('[data-ui="feed-brand-role"]')).toBeVisible()
   await expect(page.getByText("비밀스러운 지식들을 탐구하는데 목적을 두고 있습니다")).toBeVisible()
+  await expect(page.getByText("비밀스러운 IT 공작소")).toHaveCount(0)
   await expect(page.getByText("aquilaXk's Blog")).toHaveCount(0)
 })
 
@@ -110,7 +112,7 @@ test.describe("core smoke feed and search", () => {
   await searchInput.fill("alpha")
 
   await expect.poll(() => capturedKw.some((value) => value === "alpha")).toBeTruthy()
-  await expect(page.getByText("검색:alpha")).toBeVisible()
+  await expect(page.locator("a[href^='/posts/'] h2").filter({ hasText: "검색:alpha" })).toBeVisible()
 })
 
   test("검색 모드는 백엔드가 반환한 순서를 그대로 유지한다", async ({ page }) => {
@@ -184,7 +186,7 @@ test.describe("core smoke feed and search", () => {
   await searchInput.fill("alpha beta")
 
   await expect.poll(() => capturedKw.some((value) => value === "alpha beta")).toBeTruthy()
-  await expect(page.getByText("본문 exact phrase 매치")).toBeVisible()
+  await expect(page.locator("a[href^='/posts/'] h2").filter({ hasText: "본문 exact phrase 매치" })).toBeVisible()
   const titles = await page.locator("a[href^='/posts/'] h2").evaluateAll((elements) =>
     elements.map((element) => element.textContent?.trim() || "").filter(Boolean)
   )
@@ -214,7 +216,7 @@ test.describe("core smoke feed and search", () => {
   await page.goto("/?tag=%ED%85%8C%EC%8A%A4%ED%8A%B8%ED%83%9C%EA%B7%B8")
 
   await expect.poll(() => capturedTag.some((value) => value === "테스트태그")).toBeTruthy()
-  await expect(page.getByText("태그:테스트태그")).toBeVisible()
+  await expect(page.locator("a[href^='/posts/'] h2").filter({ hasText: "태그:테스트태그" })).toBeVisible()
 })
 
   test("메인 피드 탐색 요청은 최신순 정렬(sort=CREATED_AT)로 고정된다", async ({ page }) => {
@@ -244,7 +246,7 @@ test.describe("core smoke feed and search", () => {
   await expect(page.getByRole("button", { name: "전체보기" })).toBeVisible()
 
   await expect.poll(() => capturedSort.some((value) => value === "CREATED_AT")).toBeTruthy()
-  await expect(page.getByText("정렬:CREATED_AT")).toBeVisible()
+  await expect(page.locator("a[href^='/posts/'] h2").filter({ hasText: "정렬:CREATED_AT" })).toBeVisible()
 })
 
   test("피드 카드 hover는 fallback 상세 _next/data prefetch를 만들지 않는다", async ({ page }) => {

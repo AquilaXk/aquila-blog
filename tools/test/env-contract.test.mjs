@@ -89,7 +89,6 @@ const baseHomeServerEnv = [
   "CUSTOM_STORAGE_CLOUD_PHOTO_MAXFILESIZEBYTES=52428800",
   "CUSTOM_STORAGE_CLOUD_ARCHIVE_MAXFILESIZEBYTES=104857600",
   "CUSTOM_STORAGE_CLOUD_VIDEO_MAXFILESIZEBYTES=104857600",
-  "CUSTOM_STORAGE_CLOUD_VIDEO_STREAM_MAXFILESIZEBYTES=5368709120",
   "CUSTOM_STORAGE_MULTIPART_MAX_FILE_SIZE=100MB",
   "CUSTOM_STORAGE_MULTIPART_MAX_REQUEST_SIZE=104MB",
   "BACKEND_PROXY_MAX_BODY_BYTES=109051904",
@@ -142,11 +141,11 @@ test("external storage values reject unsafe paths and non-positive retention", a
 test("external storage upload limits reject non-positive values", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const text = baseHomeServerEnv
+    .replace("CUSTOM_STORAGE_MAXFILESIZEBYTES=104857600", "CUSTOM_STORAGE_MAXFILESIZEBYTES=0")
     .replace("CUSTOM_STORAGE_CLOUD_DOCUMENT_MAXFILESIZEBYTES=104857600", "CUSTOM_STORAGE_CLOUD_DOCUMENT_MAXFILESIZEBYTES=0")
     .replace("CUSTOM_STORAGE_CLOUD_PHOTO_MAXFILESIZEBYTES=52428800", "CUSTOM_STORAGE_CLOUD_PHOTO_MAXFILESIZEBYTES=0")
     .replace("CUSTOM_STORAGE_CLOUD_ARCHIVE_MAXFILESIZEBYTES=104857600", "CUSTOM_STORAGE_CLOUD_ARCHIVE_MAXFILESIZEBYTES=0")
     .replace("CUSTOM_STORAGE_CLOUD_VIDEO_MAXFILESIZEBYTES=104857600", "CUSTOM_STORAGE_CLOUD_VIDEO_MAXFILESIZEBYTES=0")
-    .replace("CUSTOM_STORAGE_CLOUD_VIDEO_STREAM_MAXFILESIZEBYTES=5368709120", "CUSTOM_STORAGE_CLOUD_VIDEO_STREAM_MAXFILESIZEBYTES=0")
     .replace("BACKEND_PROXY_MAX_BODY_BYTES=109051904", "BACKEND_PROXY_MAX_BODY_BYTES=0")
     .replace("BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES=268435456", "BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES=0")
 
@@ -157,11 +156,11 @@ test("external storage upload limits reject non-positive values", async () => {
   })
 
   assert.equal(result.ok, false)
+  assert(result.errors.some((error) => error.key === "CUSTOM_STORAGE_MAXFILESIZEBYTES"))
   assert(result.errors.some((error) => error.key === "CUSTOM_STORAGE_CLOUD_DOCUMENT_MAXFILESIZEBYTES"))
   assert(result.errors.some((error) => error.key === "CUSTOM_STORAGE_CLOUD_PHOTO_MAXFILESIZEBYTES"))
   assert(result.errors.some((error) => error.key === "CUSTOM_STORAGE_CLOUD_ARCHIVE_MAXFILESIZEBYTES"))
   assert(result.errors.some((error) => error.key === "CUSTOM_STORAGE_CLOUD_VIDEO_MAXFILESIZEBYTES"))
-  assert(result.errors.some((error) => error.key === "CUSTOM_STORAGE_CLOUD_VIDEO_STREAM_MAXFILESIZEBYTES"))
   assert(result.errors.some((error) => error.key === "BACKEND_PROXY_MAX_BODY_BYTES"))
   assert(result.errors.some((error) => error.key === "BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES"))
 })

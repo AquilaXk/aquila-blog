@@ -4,7 +4,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 
 const val DEFAULT_CLOUD_DOCUMENT_MAX_SIZE_BYTES: Long = 100L * 1024 * 1024
 const val DEFAULT_CLOUD_PHOTO_MAX_SIZE_BYTES: Long = 50L * 1024 * 1024
-const val DEFAULT_CLOUD_VIDEO_STREAM_MAX_SIZE_BYTES: Long = 5L * 1024 * 1024 * 1024
 
 @ConfigurationProperties("custom.storage")
 data class CloudStorageProperties(
@@ -21,5 +20,4 @@ data class CloudStorageProperties(
     var cloudPhotoMaxFileSizeBytes: Long = DEFAULT_CLOUD_PHOTO_MAX_SIZE_BYTES,
     var cloudArchiveMaxFileSizeBytes: Long = maxFileSizeBytes,
     var cloudVideoMaxFileSizeBytes: Long = maxFileSizeBytes,
-    var cloudVideoStreamMaxFileSizeBytes: Long = DEFAULT_CLOUD_VIDEO_STREAM_MAX_SIZE_BYTES,
 )

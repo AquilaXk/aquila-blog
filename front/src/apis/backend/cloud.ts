@@ -7,7 +7,7 @@ type CloudFileListResBody = components["schemas"]["CloudFileListResBody"]
 type RsDataCloudFileDto = components["schemas"]["RsDataCloudFileDto"]
 type RsDataVoid = components["schemas"]["RsDataVoid"]
 
-const CLOUD_UPLOAD_TIMEOUT_MS = 10 * 60_000
+const CLOUD_UPLOAD_TIMEOUT_MS = 10 * 60_000 + 30_000
 
 export type CloudFile = Required<
   Pick<

@@ -78,7 +78,7 @@ test.describe("관리자 런타임 회귀 계약", () => {
     const cloudSource = readFrontSource("apis/backend/cloud.ts")
 
     expect(cloudSource).toContain('import { apiFetch, getApiRequestUrl } from "./client"')
-    expect(cloudSource).toContain("const CLOUD_UPLOAD_TIMEOUT_MS = 10 * 60_000")
+    expect(cloudSource).toContain("const CLOUD_UPLOAD_TIMEOUT_MS = 10 * 60_000 + 30_000")
     expect(cloudSource).toContain("timeoutMs: CLOUD_UPLOAD_TIMEOUT_MS")
     expect(cloudSource).toContain("getApiRequestUrl(`/system/api/v1/adm/cloud/files/${fileId}/content`)")
     expect(cloudSource).not.toContain("getApiBaseUrl")

@@ -421,14 +421,6 @@ type FileThumbnailProps = {
 const FileThumbnail = ({ file, selected }: FileThumbnailProps) => {
   const badge = getCloudKindBadge(file)
 
-  if (file.mediaKind === "PHOTO") {
-    return (
-      <FileThumbnailFrame data-kind={file.mediaKind} data-selected={selected ? "true" : "false"}>
-        <img src={getCloudFileContentUrl(file.id)} alt="" loading="lazy" decoding="async" />
-      </FileThumbnailFrame>
-    )
-  }
-
   return (
     <FileThumbnailFrame
       aria-hidden="true"

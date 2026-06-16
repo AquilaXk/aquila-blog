@@ -221,7 +221,11 @@ const setupAdminCloudMocks = async (
       if (failedUploadNames.has(uploadedName) || failUploadOnceNames.has(uploadedName)) {
         failUploadOnceNames.delete(uploadedName)
         const status = options.failUploadStatusByName?.[uploadedName] ?? 500
-        await fulfillJson(route, { resultCode: `${status}-1`, msg: "외장 스토리지 저장에 실패했습니다." }, status)
+        const message =
+          status === 413
+            ? "파일 용량이 너무 큽니다. 50MB 이하 파일로 다시 시도해주세요."
+            : "외장 스토리지 저장에 실패했습니다."
+        await fulfillJson(route, { resultCode: `${status}-1`, msg: message }, status)
         return
       }
 

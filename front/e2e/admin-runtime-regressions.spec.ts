@@ -64,6 +64,7 @@ test.describe("관리자 런타임 회귀 계약", () => {
     expect(proxySource).toContain("signal: controller.signal")
     expect(proxySource).toContain("clearTimeout(timeoutId)")
     expect(proxySource).toContain("res.status(413).json")
+    expect(proxySource).toContain("const maxMb = Math.floor(resolveMaxProxyBodyBytes() / (1024 * 1024))")
     expect(proxySource).toContain("controller.signal.aborted || isAbortLikeError(error)")
     expect(proxySource).toContain("res.status(504).json")
     expect(proxySource).not.toContain('duplex: "half"')

@@ -86,6 +86,7 @@ import {
 const CLOUD_QUERY_KEY = "admin-cloud-files"
 const EMPTY_CLOUD_FILES: CloudFile[] = []
 const PDF_STANDARD_FONT_DATA_URL = "/pdfjs/standard_fonts/"
+const PDF_LOADED_TASK_DESTROY_DELAY_MS = 3000
 
 const mediaKindFromFilter = (filter: CloudMediaFilter): CloudMediaKind | undefined =>
   filter === "ALL" ? undefined : filter
@@ -190,6 +191,12 @@ const ignorePdfPreviewTeardownRejection = (
       await pdfDocument.cleanup().catch(() => {
         // 이미 해제된 문서 리소스 정리는 사용자에게 노출하지 않는다.
       })
+
+      window.setTimeout(() => {
+        void loadingTask?.destroy().catch(() => {
+          // 로드 완료 후 worker 종료 reject도 미리보기 teardown 결과로 흡수한다.
+        })
+      }, PDF_LOADED_TASK_DESTROY_DELAY_MS)
     })
     return
   }
@@ -469,7 +476,7 @@ const AdminCloudWorkspacePage = () => {
   const [toast, setToast] = useState<CloudToastState>(null)
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([])
   const [optimisticFiles, setOptimisticFiles] = useState<CloudFile[]>([])
-  const [isDetailPanelOpen, setIsDetailPanelOpen] = useState(true)
+  const [isDetailPanelOpen, setIsDetailPanelOpen] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState | null>(null)
   const [isDeletePending, setIsDeletePending] = useState(false)
 

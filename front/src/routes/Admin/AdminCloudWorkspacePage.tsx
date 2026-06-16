@@ -87,6 +87,7 @@ const CLOUD_QUERY_KEY = "admin-cloud-files"
 const EMPTY_CLOUD_FILES: CloudFile[] = []
 const PDF_STANDARD_FONT_DATA_URL = "/pdfjs/standard_fonts/"
 const PDF_LOADED_TASK_DESTROY_DELAY_MS = 3000
+const DETAIL_INLINE_MEDIA_QUERY = "(min-width: 1081px)"
 
 const mediaKindFromFilter = (filter: CloudMediaFilter): CloudMediaKind | undefined =>
   filter === "ALL" ? undefined : filter
@@ -512,7 +513,8 @@ const AdminCloudWorkspacePage = () => {
   useEffect(() => {
     if (didInitializeDetailModeRef.current || files.length === 0) return
     didInitializeDetailModeRef.current = true
-    setIsDetailPanelOpen(files.length <= 8)
+    const canUseInlineDetail = window.matchMedia(DETAIL_INLINE_MEDIA_QUERY).matches
+    setIsDetailPanelOpen(canUseInlineDetail && files.length <= 8)
   }, [files.length])
 
   useEffect(() => {

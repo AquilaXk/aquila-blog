@@ -597,6 +597,18 @@ test.describe("관리자 클라우드", () => {
     expect(Math.abs(tableBoxAfter!.width - tableBoxBefore!.width)).toBeLessThanOrEqual(2)
   })
 
+  test("작은 화면 첫 진입은 상세정보 드로어로 파일 목록을 가리지 않는다", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await setupAdminCloudMocks(page, { initialFiles: CLOUD_FILES.slice(0, 2) })
+
+    await page.goto("/admin/cloud")
+
+    await expect(page.getByRole("row", { name: /운영 점검 리포트\.pdf/ })).toBeVisible()
+    await expect(page.getByLabel("클라우드 상세정보")).toHaveCount(0)
+    await page.locator('button[title="운영 점검 리포트.pdf"]').click()
+    await expect(page.getByLabel("클라우드 상세정보")).toHaveCSS("position", "fixed")
+  })
+
   test("관리자 클라우드 진입만으로 알림 snapshot 백그라운드 요청을 시작하지 않는다", async ({ page }) => {
     let snapshotRequestCount = 0
     await page.addInitScript(() => {

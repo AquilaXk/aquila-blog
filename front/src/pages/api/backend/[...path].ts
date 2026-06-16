@@ -20,6 +20,13 @@ const HOP_BY_HOP_HEADERS = new Set([
   "upgrade",
 ])
 
+const SPOOFABLE_FORWARDING_HEADERS = new Set([
+  "cf-connecting-ip",
+  "forwarded",
+  "true-client-ip",
+  "x-real-ip",
+])
+
 const DECODED_RESPONSE_HEADERS = new Set(["content-encoding", "content-length"])
 const BODYLESS_METHODS = new Set(["GET", "HEAD"])
 const BACKEND_PROXY_TIMEOUT_MS = 10 * 60_000
@@ -81,6 +88,7 @@ const appendIncomingHeader = (headers: Headers, key: string, value: string | str
   const normalizedKey = key.toLowerCase()
   if (value === undefined) return
   if (HOP_BY_HOP_HEADERS.has(normalizedKey)) return
+  if (SPOOFABLE_FORWARDING_HEADERS.has(normalizedKey) || normalizedKey.startsWith("x-forwarded-")) return
   if (normalizedKey === "host") return
   if (normalizedKey === "accept-encoding") return
 
@@ -230,8 +238,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const headers = new Headers()
   Object.entries(req.headers).forEach(([key, value]) => appendIncomingHeader(headers, key, value))
   headers.set("X-Forwarded-Host", req.headers.host || "")
-  headers.set("X-Forwarded-Proto", firstHeaderValue(req.headers["x-forwarded-proto"]) || "https")
-  const clientIp = firstHeaderValue(req.headers["x-forwarded-for"]) || req.socket?.remoteAddress || ""
+  headers.set("X-Forwarded-Proto", "https")
+  const clientIp = req.socket?.remoteAddress || ""
   if (clientIp) headers.set("X-Forwarded-For", clientIp)
 
   const controller = new AbortController()

@@ -426,10 +426,7 @@ class CloudFileService(
 
     private fun isZipSignature(bytes: ByteArray): Boolean =
         bytes.size >= 4 &&
-            bytes[0] == 0x50.toByte() &&
-            bytes[1] == 0x4B.toByte() &&
-            bytes[2] in ZIP_THIRD_BYTES &&
-            bytes[3] in ZIP_FOURTH_BYTES
+            bytes.copyOfRange(0, 4).toList() in ZIP_SIGNATURES
 
     private data class DetectedContent(
         val contentType: String,
@@ -441,8 +438,12 @@ class CloudFileService(
         private const val MAX_FILENAME_CODE_POINTS = 255L
         private const val MAX_FILENAME_METADATA_ENCODED_BYTES = 1024
         private const val HWPX_CONTENT_TYPE = "application/haansofthwpx"
-        private val ZIP_THIRD_BYTES = setOf(0x03.toByte(), 0x05.toByte(), 0x07.toByte())
-        private val ZIP_FOURTH_BYTES = setOf(0x04.toByte(), 0x06.toByte(), 0x08.toByte())
+        private val ZIP_SIGNATURES =
+            setOf(
+                listOf(0x50.toByte(), 0x4B.toByte(), 0x03.toByte(), 0x04.toByte()),
+                listOf(0x50.toByte(), 0x4B.toByte(), 0x05.toByte(), 0x06.toByte()),
+                listOf(0x50.toByte(), 0x4B.toByte(), 0x07.toByte(), 0x08.toByte()),
+            )
         private val CONTENT_TYPE_ALIASES =
             mapOf(
                 "image/jpg" to "image/jpeg",

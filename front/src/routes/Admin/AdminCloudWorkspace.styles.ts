@@ -336,6 +336,11 @@ export const IconButton = styled.button`
     cursor: not-allowed;
     opacity: 0.58;
   }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--admin-focus-ring, rgba(111, 149, 255, 0.22));
+  }
 `
 
 export const ViewModeButton = styled.button`
@@ -514,6 +519,9 @@ export const FileTypeIcon = styled.span`
   font-size: 0.68rem;
   font-weight: 900;
   letter-spacing: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 
   &[data-selected="true"] {
     background: ${surfaceMuted};

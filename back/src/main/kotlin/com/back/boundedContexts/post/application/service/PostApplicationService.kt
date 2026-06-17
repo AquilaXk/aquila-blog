@@ -51,9 +51,12 @@ import org.springframework.cache.CacheManager
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -76,6 +79,7 @@ class PostApplicationService(
     private val eventPublisher: EventPublisher,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
     private val cacheManager: CacheManager,
+    private val transactionManager: PlatformTransactionManager,
     private val meterRegistry: MeterRegistry? = null,
     private val postRecommendRankingService: PostRecommendRankingService,
     private val postRecommendFeatureStoreService: PostRecommendFeatureStoreService,
@@ -99,6 +103,10 @@ class PostApplicationService(
     private val hotPageSizes = listOf(30, 24, 16)
     private val hotSorts = listOf(PostSearchSortType1.CREATED_AT)
     private val maxTagCacheEvict = 12
+    private val afterCommitSideEffectTransactionTemplate =
+        TransactionTemplate(transactionManager).apply {
+            propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
+        }
 
     fun count(): Long = postRepository.count()
 
@@ -150,14 +158,6 @@ class PostApplicationService(
                     previousContent = null,
                     currentContent = created.content,
                     deletedContent = null,
-                    beforeTags = emptyList(),
-                    afterTags = createdTags,
-                    evictHotReadPages = isPublic,
-                    evictSearchFirstPage = isPublic,
-                    evictImpactedTagPages = isPublic,
-                    evictTagsPublic = isPublic,
-                    evictDetail = isPublic,
-                    evictReason = "write",
                     recommendationAction = recommendationActionFor(isPublic),
                 ),
             )
@@ -213,14 +213,6 @@ class PostApplicationService(
                 previousContent = null,
                 currentContent = createdPost.content,
                 deletedContent = null,
-                beforeTags = emptyList(),
-                afterTags = createdTags,
-                evictHotReadPages = isPublic,
-                evictSearchFirstPage = isPublic,
-                evictImpactedTagPages = isPublic,
-                evictTagsPublic = isPublic,
-                evictDetail = isPublic,
-                evictReason = "write-idempotent",
                 recommendationAction = recommendationActionFor(isPublic),
             ),
         )
@@ -317,14 +309,6 @@ class PostApplicationService(
                 previousContent = previousContent,
                 currentContent = post.content,
                 deletedContent = null,
-                beforeTags = previousTags,
-                afterTags = afterTags,
-                evictHotReadPages = affectsPublicRead,
-                evictSearchFirstPage = affectsPublicRead && (listingVisibilityChanged || titleChanged || contentChanged || tagChanged),
-                evictImpactedTagPages = affectsPublicRead && (tagChanged || listingVisibilityChanged),
-                evictTagsPublic = affectsPublicRead && (tagChanged || listingVisibilityChanged),
-                evictDetail = affectsPublicRead && (listingVisibilityChanged || titleChanged || contentChanged),
-                evictReason = "modify",
                 recommendationAction = recommendationActionFor(isPublic),
             ),
         )
@@ -468,14 +452,6 @@ class PostApplicationService(
                 previousContent = null,
                 currentContent = null,
                 deletedContent = deletedPostContent,
-                beforeTags = beforeTags,
-                afterTags = emptyList(),
-                evictHotReadPages = wasPublic,
-                evictSearchFirstPage = wasPublic,
-                evictImpactedTagPages = wasPublic,
-                evictTagsPublic = wasPublic,
-                evictDetail = wasPublic,
-                evictReason = "soft-delete",
                 recommendationAction = PostRecommendationSideEffect.EVICT,
             ),
         )
@@ -1402,36 +1378,47 @@ class PostApplicationService(
 
     private fun handlePostWriteSideEffect(command: PostWriteSideEffectCommand) {
         command.currentContent?.let { currentContent ->
-            runCatching {
+            runAfterCommitSideEffectInNewTransaction(
+                postId = command.postId,
+                failureMessage = "Failed to sync post attachments after commit",
+            ) {
                 uploadedFileRetentionService.syncPostContent(command.postId, command.previousContent, currentContent)
-            }.onFailure { exception ->
-                logger.warn("Failed to sync post attachments after commit: postId={}", command.postId, exception)
             }
         }
 
         command.deletedContent?.let { deletedContent ->
-            runCatching {
+            runAfterCommitSideEffectInNewTransaction(
+                postId = command.postId,
+                failureMessage = "Failed to schedule cleanup for deleted post after commit",
+            ) {
                 uploadedFileRetentionService.scheduleDeletedPostAttachments(deletedContent)
-            }.onFailure { exception ->
-                logger.warn("Failed to schedule cleanup for deleted post after commit: postId={}", command.postId, exception)
             }
         }
 
-        clearReadCaches(
-            postId = command.postId,
-            beforeTags = command.beforeTags,
-            afterTags = command.afterTags,
-            evictHotReadPages = command.evictHotReadPages,
-            evictSearchFirstPage = command.evictSearchFirstPage,
-            evictImpactedTagPages = command.evictImpactedTagPages,
-            evictTagsPublic = command.evictTagsPublic,
-            evictDetail = command.evictDetail,
-            evictReason = command.evictReason,
-        )
-
         when (command.recommendationAction) {
-            PostRecommendationSideEffect.REFRESH -> refreshRecommendFeatureStoreAfterCommit(command.postId)
+            PostRecommendationSideEffect.REFRESH ->
+                runAfterCommitSideEffectInNewTransaction(
+                    postId = command.postId,
+                    failureMessage = "Failed to refresh recommend feature store after commit",
+                ) {
+                    refreshRecommendFeatureStoreAfterCommit(command.postId)
+                }
+
             PostRecommendationSideEffect.EVICT -> postRecommendFeatureStoreService.evict(command.postId)
+        }
+    }
+
+    private fun runAfterCommitSideEffectInNewTransaction(
+        postId: Long,
+        failureMessage: String,
+        block: () -> Unit,
+    ) {
+        runCatching {
+            afterCommitSideEffectTransactionTemplate.executeWithoutResult {
+                block()
+            }
+        }.onFailure { exception ->
+            logger.warn("{}: postId={}", failureMessage, postId, exception)
         }
     }
 

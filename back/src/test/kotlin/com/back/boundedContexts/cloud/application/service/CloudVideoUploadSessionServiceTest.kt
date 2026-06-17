@@ -466,6 +466,40 @@ class CloudVideoUploadSessionServiceTest {
     }
 
     @Test
+    @DisplayName("세션 생성 시 S3 multipart 최대 조각 수를 넘는 설정은 시작하지 않는다")
+    fun `세션 생성은 S3 multipart 최대 조각 수 초과를 차단한다`() {
+        val oversizedService =
+            CloudVideoUploadSessionService(
+                sessionRepository = sessionRepository,
+                partRepository = partRepository,
+                cloudFileRepository = fileRepository,
+                cloudStoragePort = storage,
+                cloudStorageProperties =
+                    CloudStorageProperties(
+                        maxFileSizeBytes = 5L * 1024 * 1024,
+                        cloudVideoResumableMaxFileSizeBytes = 60L * 1024 * 1024 * 1024,
+                        cloudVideoResumablePartSizeBytes = 5L * 1024 * 1024,
+                        cloudVideoResumableExpiresSeconds = 3_600,
+                    ),
+                clock = clock,
+            )
+
+        assertThatThrownBy {
+            oversizedService.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "too-many-parts.mp4",
+                contentType = "video/mp4",
+                byteSize = 50_000L * 1024 * 1024 + 1,
+                folderPath = "",
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("10,000")
+
+        assertThat(storage.multipartInits).isEmpty()
+        assertThat(sessionRepository.savedSessions).isEmpty()
+    }
+
+    @Test
     @DisplayName("취소 시 S3 multipart upload를 abort하고 저장된 조각을 삭제한다")
     fun `취소는 multipart upload를 abort하고 조각을 삭제한다`() {
         val session =

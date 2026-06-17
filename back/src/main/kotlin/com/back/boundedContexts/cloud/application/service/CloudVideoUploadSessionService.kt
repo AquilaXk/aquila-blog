@@ -24,7 +24,6 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
-import kotlin.math.ceil
 
 data class CloudVideoUploadSessionDto(
     val id: Long,
@@ -76,7 +75,7 @@ class CloudVideoUploadSessionService(
         val normalizedContentType = normalizeVideoContentType(contentType, safeFilename)
         validateTotalSize(byteSize)
         val partSizeBytes = resolvePartSizeBytes()
-        val totalParts = ceil(byteSize.toDouble() / partSizeBytes.toDouble()).toInt()
+        val totalParts = resolveTotalParts(byteSize, partSizeBytes)
         val objectKey =
             buildObjectKey(
                 ownerMemberId = ownerMemberId,
@@ -303,6 +302,17 @@ class CloudVideoUploadSessionService(
         if (byteSize > maxBytes) {
             throw AppException("413-1", "클라우드 동영상 파일은 ${formatFileSizeLimit(maxBytes)} 이하여야 합니다.")
         }
+    }
+
+    private fun resolveTotalParts(
+        byteSize: Long,
+        partSizeBytes: Long,
+    ): Int {
+        val totalParts = ((byteSize - 1) / partSizeBytes) + 1
+        if (totalParts > MAX_MULTIPART_PARTS) {
+            throw AppException("400-1", "대용량 동영상 업로드는 최대 10,000개 조각 이하여야 합니다.")
+        }
+        return totalParts.toInt()
     }
 
     private fun validatePartNumber(
@@ -569,5 +579,6 @@ class CloudVideoUploadSessionService(
         private val DATE_PATH_FORMATTER = DateTimeFormatter.ofPattern("yyyy/MM/dd")
         private const val MAX_FILENAME_CODE_POINTS = 255L
         private const val MAX_FILENAME_METADATA_ENCODED_BYTES = 1024
+        private const val MAX_MULTIPART_PARTS = 10_000L
     }
 }

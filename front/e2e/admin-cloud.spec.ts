@@ -159,6 +159,7 @@ const setupAdminCloudMocks = async (
     initialFiles?: CloudFileFixture[]
     listDelayMs?: number
     lookupOnlyFiles?: CloudFileFixture[]
+    normalizeVideoSessionFilename?: boolean
     uploadResponseFilenames?: Record<string, string>
     videoCompletedFileId?: number
     videoSessionStatus?: "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "EXPIRED"
@@ -217,6 +218,9 @@ const setupAdminCloudMocks = async (
       const payload = JSON.parse(request.postData() || "{}") as { originalFilename?: string; byteSize?: number }
       videoSessionCreates.push(payload.originalFilename || "")
       videoSessionFilename = payload.originalFilename || videoSessionFilename
+      if (options.normalizeVideoSessionFilename) {
+        videoSessionFilename = videoSessionFilename.normalize("NFC")
+      }
       videoSessionByteSize = payload.byteSize || videoSessionByteSize
       await fulfillJson(
         route,
@@ -661,6 +665,32 @@ test.describe("관리자 클라우드", () => {
     await expect.poll(() => mocks.videoPartNumbers).toEqual([1, 2])
     await expect.poll(() => mocks.videoCompletes).toEqual(["301"])
     expect(mocks.videoSessionCreates).toEqual(["대용량 교육 영상.mp4"])
+    expect(mocks.videoCancels).toEqual([])
+  })
+
+  test("대용량 동영상 재시도는 서버 정규화 파일명 세션을 버리지 않는다", async ({ page }, testInfo) => {
+    const mocks = await setupAdminCloudMocks(page, {
+      failVideoPartOnceNumber: 2,
+      normalizeVideoSessionFilename: true,
+    })
+    const largeVideo = Buffer.alloc(101 * 1024 * 1024)
+    Buffer.from([0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70]).copy(largeVideo)
+    const nfcFilename = "대용량 교육 영상.mp4"
+    const nfdFilename = nfcFilename.normalize("NFD")
+    const largeVideoPath = testInfo.outputPath(nfdFilename)
+    writeFileSync(largeVideoPath, largeVideo)
+
+    await page.goto("/admin/cloud")
+    await page.getByLabel("클라우드 파일 업로드").setInputFiles(largeVideoPath)
+
+    const uploadPanel = page.getByLabel("업로드 중인 파일")
+    await expect(uploadPanel.getByRole("heading", { name: "항목 1개 업로드 실패/취소" })).toBeVisible()
+    await uploadPanel.getByRole("button", { name: `${nfdFilename} 업로드 다시 시도` }).click()
+
+    await expect.poll(() => mocks.videoSessionGets).toContain("301")
+    await expect.poll(() => mocks.videoPartNumbers).toEqual([1, 2])
+    await expect.poll(() => mocks.videoCompletes).toEqual(["301"])
+    expect(mocks.videoSessionCreates).toEqual([nfdFilename])
     expect(mocks.videoCancels).toEqual([])
   })
 

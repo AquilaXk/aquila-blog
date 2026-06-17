@@ -142,22 +142,20 @@ class PostApplicationService(
                 )
             val createdTags = extractNormalizedTags(created.content)
             val isPublic = isPubliclyListed(created)
-            clearReadCaches(
-                postId = created.id,
-                afterTags = createdTags,
-                evictHotReadPages = isPublic,
-                evictSearchFirstPage = isPublic,
-                evictImpactedTagPages = isPublic,
-                evictTagsPublic = isPublic,
-                evictDetail = isPublic,
-                evictReason = "write",
-            )
             enqueuePostWriteSideEffect(
                 PostWriteSideEffectCommand(
                     postId = created.id,
                     previousContent = null,
                     currentContent = created.content,
                     deletedContent = null,
+                    beforeTags = emptyList(),
+                    afterTags = createdTags,
+                    evictHotReadPages = isPublic,
+                    evictSearchFirstPage = isPublic,
+                    evictImpactedTagPages = isPublic,
+                    evictTagsPublic = isPublic,
+                    evictDetail = isPublic,
+                    evictReason = "write",
                     recommendationAction = recommendationActionFor(isPublic),
                 ),
             )
@@ -197,22 +195,20 @@ class PostApplicationService(
         postWriteRequestIdempotencyRepository.save(requestSlot)
         val createdTags = extractNormalizedTags(createdPost.content)
         val isPublic = isPubliclyListed(createdPost)
-        clearReadCaches(
-            postId = createdPost.id,
-            afterTags = createdTags,
-            evictHotReadPages = isPublic,
-            evictSearchFirstPage = isPublic,
-            evictImpactedTagPages = isPublic,
-            evictTagsPublic = isPublic,
-            evictDetail = isPublic,
-            evictReason = "write-idempotent",
-        )
         enqueuePostWriteSideEffect(
             PostWriteSideEffectCommand(
                 postId = createdPost.id,
                 previousContent = null,
                 currentContent = createdPost.content,
                 deletedContent = null,
+                beforeTags = emptyList(),
+                afterTags = createdTags,
+                evictHotReadPages = isPublic,
+                evictSearchFirstPage = isPublic,
+                evictImpactedTagPages = isPublic,
+                evictTagsPublic = isPublic,
+                evictDetail = isPublic,
+                evictReason = "write-idempotent",
                 recommendationAction = recommendationActionFor(isPublic),
             ),
         )
@@ -292,23 +288,20 @@ class PostApplicationService(
         val titleChanged = previousTitle != post.title
         val tagChanged = previousTags != afterTags
         val affectsPublicRead = wasPublic || isPublic
-        clearReadCaches(
-            postId = post.id,
-            beforeTags = previousTags,
-            afterTags = afterTags,
-            evictHotReadPages = affectsPublicRead,
-            evictSearchFirstPage = affectsPublicRead && (listingVisibilityChanged || titleChanged || contentChanged || tagChanged),
-            evictImpactedTagPages = affectsPublicRead && (tagChanged || listingVisibilityChanged),
-            evictTagsPublic = affectsPublicRead && (tagChanged || listingVisibilityChanged),
-            evictDetail = affectsPublicRead && (listingVisibilityChanged || titleChanged || contentChanged),
-            evictReason = "modify",
-        )
         enqueuePostWriteSideEffect(
             PostWriteSideEffectCommand(
                 postId = post.id,
                 previousContent = previousContent,
                 currentContent = post.content,
                 deletedContent = null,
+                beforeTags = previousTags,
+                afterTags = afterTags,
+                evictHotReadPages = affectsPublicRead,
+                evictSearchFirstPage = affectsPublicRead && (listingVisibilityChanged || titleChanged || contentChanged || tagChanged),
+                evictImpactedTagPages = affectsPublicRead && (tagChanged || listingVisibilityChanged),
+                evictTagsPublic = affectsPublicRead && (tagChanged || listingVisibilityChanged),
+                evictDetail = affectsPublicRead && (listingVisibilityChanged || titleChanged || contentChanged),
+                evictReason = "modify",
                 recommendationAction = recommendationActionFor(isPublic),
             ),
         )
@@ -435,23 +428,20 @@ class PostApplicationService(
             }
         }
 
-        clearReadCaches(
-            postId = post.id,
-            beforeTags = beforeTags,
-            afterTags = emptyList(),
-            evictHotReadPages = wasPublic,
-            evictSearchFirstPage = wasPublic,
-            evictImpactedTagPages = wasPublic,
-            evictTagsPublic = wasPublic,
-            evictDetail = wasPublic,
-            evictReason = "soft-delete",
-        )
         enqueuePostWriteSideEffect(
             PostWriteSideEffectCommand(
                 postId = post.id,
                 previousContent = null,
                 currentContent = null,
                 deletedContent = deletedPostContent,
+                beforeTags = beforeTags,
+                afterTags = emptyList(),
+                evictHotReadPages = wasPublic,
+                evictSearchFirstPage = wasPublic,
+                evictImpactedTagPages = wasPublic,
+                evictTagsPublic = wasPublic,
+                evictDetail = wasPublic,
+                evictReason = "soft-delete",
                 recommendationAction = PostRecommendationSideEffect.EVICT,
             ),
         )
@@ -1367,6 +1357,9 @@ class PostApplicationService(
             return
         }
 
+        if (command.evictTagsPublic) {
+            publicTagCountsCache = null
+        }
         TransactionSynchronizationManager.registerSynchronization(
             object : TransactionSynchronization {
                 override fun afterCommit() {
@@ -1377,6 +1370,18 @@ class PostApplicationService(
     }
 
     private fun handlePostWriteSideEffect(command: PostWriteSideEffectCommand) {
+        clearReadCaches(
+            postId = command.postId,
+            beforeTags = command.beforeTags,
+            afterTags = command.afterTags,
+            evictHotReadPages = command.evictHotReadPages,
+            evictSearchFirstPage = command.evictSearchFirstPage,
+            evictImpactedTagPages = command.evictImpactedTagPages,
+            evictTagsPublic = command.evictTagsPublic,
+            evictDetail = command.evictDetail,
+            evictReason = command.evictReason,
+        )
+
         command.currentContent?.let { currentContent ->
             runAfterCommitSideEffectInNewTransaction(
                 postId = command.postId,

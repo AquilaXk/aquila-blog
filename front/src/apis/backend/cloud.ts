@@ -244,7 +244,9 @@ const clearStoredVideoUploadSessionId = (storageKey: string) => {
 }
 
 const isMatchingVideoUploadSessionFile = (session: CloudVideoUploadSession, file: File) =>
-  session.byteSize === file.size && session.originalFilename === file.name
+  // The localStorage key already includes the browser's original filename and mtime.
+  // Server-side NFC normalization or metadata truncation must not discard a resumable session.
+  session.byteSize === file.size
 
 const isDefinitiveStaleVideoUploadSessionError = (error: unknown) =>
   error instanceof ApiError && (error.status === 404 || error.status === 410)

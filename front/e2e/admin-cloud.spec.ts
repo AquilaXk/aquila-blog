@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test"
+import { writeFileSync } from "node:fs"
 
 const ADMIN_MEMBER = {
   id: 1,
@@ -162,6 +163,10 @@ const setupAdminCloudMocks = async (
   const requestedFolderPaths: string[] = []
   const uploadedNames: string[] = []
   const uploadedClientFilenames: string[] = []
+  const videoSessionCreates: string[] = []
+  const videoPartNumbers: number[] = []
+  const videoCompletes: string[] = []
+  const videoCancels: string[] = []
   const deletedIds: string[] = []
   const requestedContentIds: string[] = []
   const uploadedFiles: CloudFileFixture[] = []
@@ -177,11 +182,82 @@ const setupAdminCloudMocks = async (
 
   await page.route("**/member/api/v1/auth/me", (route) => fulfillJson(route, ADMIN_MEMBER))
 
+  await page.route("**/system/api/v1/adm/cloud/files/video-upload-sessions**", async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    const sessionMatch = url.pathname.match(/\/video-upload-sessions\/(\d+)/)
+    const sessionId = sessionMatch?.[1] ?? "301"
+    const sessionBody = {
+      id: Number(sessionId),
+      ownerMemberId: 1,
+      originalFilename: "대용량 교육 영상.mp4",
+      contentType: "video/mp4",
+      byteSize: 106_954_752,
+      folderPath: "/",
+      partSizeBytes: 67_108_864,
+      totalParts: 2,
+      uploadedParts: videoPartNumbers,
+      status: "IN_PROGRESS",
+      expiresAt: "2026-06-13T12:00:00Z",
+      completedFileId: null,
+    }
+
+    if (request.method() === "POST" && url.pathname.endsWith("/video-upload-sessions")) {
+      const payload = JSON.parse(request.postData() || "{}") as { originalFilename?: string; byteSize?: number }
+      videoSessionCreates.push(payload.originalFilename || "")
+      sessionBody.originalFilename = payload.originalFilename || sessionBody.originalFilename
+      sessionBody.byteSize = payload.byteSize || sessionBody.byteSize
+      await fulfillJson(route, { resultCode: "201-1", msg: "created", data: sessionBody }, 201)
+      return
+    }
+
+    if (request.method() === "PUT" && url.pathname.includes("/parts/")) {
+      const partNumber = Number(url.pathname.match(/\/parts\/(\d+)$/)?.[1] || 0)
+      videoPartNumbers.push(partNumber)
+      const byteSize = request.postDataBuffer()?.byteLength ?? 0
+      await fulfillJson(route, {
+        session: { ...sessionBody, uploadedParts: [...videoPartNumbers] },
+        part: { partNumber, byteSize },
+      })
+      return
+    }
+
+    if (request.method() === "POST" && url.pathname.endsWith("/complete")) {
+      videoCompletes.push(sessionId)
+      const uploaded = {
+        id: nextUploadId++,
+        ownerMemberId: 1,
+        originalFilename: videoSessionCreates.at(-1) || sessionBody.originalFilename,
+        contentType: "video/mp4",
+        byteSize: sessionBody.byteSize,
+        mediaKind: "VIDEO" as const,
+        folderPath: "/",
+        createdAt: "2026-06-12T12:00:00Z",
+        modifiedAt: "2026-06-12T12:00:00Z",
+      }
+      uploadedFiles.unshift(uploaded)
+      await fulfillJson(route, { resultCode: "200-1", msg: "completed", data: uploaded })
+      return
+    }
+
+    if (request.method() === "DELETE" && sessionMatch) {
+      videoCancels.push(sessionId)
+      await fulfillJson(route, { resultCode: "200-1", msg: "cancelled" })
+      return
+    }
+
+    await route.fallback()
+  })
+
   await page.route("**/system/api/v1/adm/cloud/files/**", async (route) => {
     const request = route.request()
     const method = request.method()
     const url = new URL(request.url())
     const id = url.pathname.match(/\/files\/(\d+)$/)?.[1] ?? ""
+    if (url.pathname.includes("/video-upload-sessions")) {
+      await route.fallback()
+      return
+    }
 
     if (method === "DELETE" && id) {
       if (failedDeleteIds.has(id)) {
@@ -200,6 +276,10 @@ const setupAdminCloudMocks = async (
     const request = route.request()
     const url = new URL(request.url())
     const id = url.pathname.match(/\/files\/(\d+)$/)?.[1] ?? ""
+    if (url.pathname.includes("/video-upload-sessions")) {
+      await route.fallback()
+      return
+    }
     const mediaKind = url.searchParams.get("mediaKind") || "ALL"
     const folderPath = normalizeFolderPathParam(url.searchParams.get("folderPath") || "")
 
@@ -307,7 +387,18 @@ const setupAdminCloudMocks = async (
     })
   })
 
-  return { requestedKinds, requestedFolderPaths, uploadedNames, uploadedClientFilenames, deletedIds, requestedContentIds }
+  return {
+    requestedKinds,
+    requestedFolderPaths,
+    uploadedNames,
+    uploadedClientFilenames,
+    videoSessionCreates,
+    videoPartNumbers,
+    videoCompletes,
+    videoCancels,
+    deletedIds,
+    requestedContentIds,
+  }
 }
 
 test.describe("관리자 클라우드", () => {
@@ -449,6 +540,25 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByText("파일을 불러오는 중입니다.")).toHaveCount(0)
     await expect(page.getByRole("row", { name: /운영 점검 리포트\.pdf/ })).toBeVisible()
     await expect(page.getByRole("status", { name: "파일 목록 로딩" })).toHaveCount(0)
+  })
+
+  test("100MB 초과 동영상은 resumable 세션과 조각 업로드로 처리한다", async ({ page }, testInfo) => {
+    const mocks = await setupAdminCloudMocks(page)
+    const largeVideo = Buffer.alloc(101 * 1024 * 1024)
+    Buffer.from([0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70]).copy(largeVideo)
+    const largeVideoPath = testInfo.outputPath("대용량 교육 영상.mp4")
+    writeFileSync(largeVideoPath, largeVideo)
+
+    await page.goto("/admin/cloud")
+    await page.getByLabel("클라우드 파일 업로드").setInputFiles(largeVideoPath)
+
+    await expect.poll(() => mocks.videoSessionCreates).toContain("대용량 교육 영상.mp4")
+    await expect.poll(() => mocks.videoPartNumbers).toEqual([1, 2])
+    await expect.poll(() => mocks.videoCompletes).toEqual(["301"])
+    await expect(page.getByLabel("업로드 중인 파일").getByText("완료", { exact: true })).toBeVisible()
+    await expect(page.getByRole("row", { name: /대용량 교육 영상\.mp4/ })).toBeVisible()
+    expect(mocks.uploadedNames).not.toContain("대용량 교육 영상.mp4")
+    expect(mocks.videoCancels).toEqual([])
   })
 
   test("사진 선택 시 상세 패널은 이미지 요청을 즉시 시작하고 텍스트 로딩 상태를 숨긴다", async ({ page }) => {

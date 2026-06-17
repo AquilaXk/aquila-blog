@@ -44,6 +44,22 @@ class CloudVideoUploadSessionServiceTest {
             clock = clock,
         )
 
+    private fun createService(clock: Clock): CloudVideoUploadSessionService =
+        CloudVideoUploadSessionService(
+            sessionRepository = sessionRepository,
+            partRepository = partRepository,
+            cloudFileRepository = fileRepository,
+            cloudStoragePort = storage,
+            cloudStorageProperties =
+                CloudStorageProperties(
+                    maxFileSizeBytes = TEST_PART_SIZE_BYTES,
+                    cloudVideoResumableMaxFileSizeBytes = 5L * 1024 * 1024 * 1024,
+                    cloudVideoResumablePartSizeBytes = TEST_PART_SIZE_BYTES,
+                    cloudVideoResumableExpiresSeconds = 3_600,
+                ),
+            clock = clock,
+        )
+
     @Test
     @DisplayName("세션 생성 시 5GB 이하 동영상 metadata와 S3 multipart upload id를 저장한다")
     fun `세션 생성은 동영상 metadata와 multipart upload id를 저장한다`() {
@@ -121,6 +137,33 @@ class CloudVideoUploadSessionServiceTest {
 
         assertThat(found.id).isEqualTo(session.id)
         assertThat(found.uploadedParts).containsExactly(1)
+    }
+
+    @Test
+    @DisplayName("만료된 세션 조회는 multipart upload를 abort하고 410으로 거절한다")
+    fun `만료된 세션 조회는 abort 후 410으로 거절한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        val expiredService =
+            createService(
+                clock = Clock.fixed(Instant.parse("2026-06-17T02:00:00Z"), ZoneOffset.UTC),
+            )
+
+        assertThatThrownBy {
+            expiredService.getSession(7L, session.id)
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("만료")
+
+        assertThat(storage.abortedUploads.single().uploadId).isEqualTo("upload-1")
+        assertThat(partRepository.findBySessionId(session.id)).isEmpty()
+        assertThat(sessionRepository.savedSessions.last().status).isEqualTo(CloudVideoUploadSessionStatus.EXPIRED)
     }
 
     @Test
@@ -233,18 +276,7 @@ class CloudVideoUploadSessionServiceTest {
                 folderPath = "",
             )
         val expiredService =
-            CloudVideoUploadSessionService(
-                sessionRepository = sessionRepository,
-                partRepository = partRepository,
-                cloudFileRepository = fileRepository,
-                cloudStoragePort = storage,
-                cloudStorageProperties =
-                    CloudStorageProperties(
-                        maxFileSizeBytes = TEST_PART_SIZE_BYTES,
-                        cloudVideoResumableMaxFileSizeBytes = 5L * 1024 * 1024 * 1024,
-                        cloudVideoResumablePartSizeBytes = TEST_PART_SIZE_BYTES,
-                        cloudVideoResumableExpiresSeconds = 3_600,
-                    ),
+            createService(
                 clock = Clock.fixed(Instant.parse("2026-06-17T02:00:00Z"), ZoneOffset.UTC),
             )
 
@@ -255,6 +287,66 @@ class CloudVideoUploadSessionServiceTest {
 
         assertThat(storage.abortedUploads.single().uploadId).isEqualTo("upload-1")
         assertThat(sessionRepository.savedSessions.last().status).isEqualTo(CloudVideoUploadSessionStatus.EXPIRED)
+    }
+
+    @Test
+    @DisplayName("만료 정리는 방치된 multipart upload를 abort하고 조각을 삭제한다")
+    fun `만료 정리는 방치된 multipart upload를 abort하고 조각을 삭제한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        val expiredService =
+            createService(
+                clock = Clock.fixed(Instant.parse("2026-06-17T02:00:00Z"), ZoneOffset.UTC),
+            )
+
+        val purgedCount = expiredService.purgeExpiredSessions(batchSize = 100)
+
+        assertThat(purgedCount).isEqualTo(1)
+        assertThat(storage.abortedUploads.single().uploadId).isEqualTo("upload-1")
+        assertThat(partRepository.findBySessionId(session.id)).isEmpty()
+        assertThat(sessionRepository.savedSessions.last().status).isEqualTo(CloudVideoUploadSessionStatus.EXPIRED)
+    }
+
+    @Test
+    @DisplayName("만료 정리는 일부 abort 실패에도 다음 세션 정리를 계속한다")
+    fun `만료 정리는 일부 abort 실패에도 다음 세션 정리를 계속한다`() {
+        val first =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "first.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        val second =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "second.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        storage.failingAbortUploadIds += "upload-1"
+        val expiredService =
+            createService(
+                clock = Clock.fixed(Instant.parse("2026-06-17T02:00:00Z"), ZoneOffset.UTC),
+            )
+
+        val purgedCount = expiredService.purgeExpiredSessions(batchSize = 100)
+
+        assertThat(purgedCount).isEqualTo(1)
+        assertThat(storage.abortedUploads.single().uploadId).isEqualTo("upload-2")
+        assertThat(sessionRepository.savedSessions.first { it.id == first.id }.status)
+            .isEqualTo(CloudVideoUploadSessionStatus.IN_PROGRESS)
+        assertThat(sessionRepository.savedSessions.first { it.id == second.id }.status)
+            .isEqualTo(CloudVideoUploadSessionStatus.EXPIRED)
     }
 
     @Test
@@ -459,6 +551,17 @@ class CloudVideoUploadSessionServiceTest {
             id: Long,
             ownerMemberId: Long,
         ): CloudVideoUploadSession? = savedSessions.firstOrNull { it.id == id && it.ownerMemberId == ownerMemberId }
+
+        override fun findExpiredInProgress(
+            now: Instant,
+            limit: Int,
+        ): List<CloudVideoUploadSession> =
+            savedSessions
+                .filter {
+                    it.status == CloudVideoUploadSessionStatus.IN_PROGRESS &&
+                        it.expiresAt <= now
+                }.sortedWith(compareBy<CloudVideoUploadSession> { it.expiresAt }.thenBy { it.id })
+                .take(limit.coerceAtLeast(1))
     }
 
     private class FakeVideoUploadPartRepository : CloudVideoUploadPartRepositoryPort {
@@ -539,6 +642,7 @@ class CloudVideoUploadSessionServiceTest {
         val multipartParts = mutableListOf<CloudStoragePort.MultipartUploadPartRequest>()
         val completedUploads = mutableListOf<CloudStoragePort.MultipartUploadCompleteRequest>()
         val abortedUploads = mutableListOf<CloudStoragePort.MultipartUploadAbortRequest>()
+        val failingAbortUploadIds = mutableSetOf<String>()
 
         override fun upload(request: CloudStoragePort.UploadRequest): CloudStoragePort.UploadResult =
             CloudStoragePort.UploadResult(request.objectKey, "checksum")
@@ -568,6 +672,9 @@ class CloudVideoUploadSessionServiceTest {
         }
 
         override fun abortMultipartUpload(request: CloudStoragePort.MultipartUploadAbortRequest) {
+            if (request.uploadId in failingAbortUploadIds) {
+                throw IllegalStateException("abort failed")
+            }
             abortedUploads += request
         }
 

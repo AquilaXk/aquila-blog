@@ -7,6 +7,7 @@ import com.back.boundedContexts.cloud.model.CloudVideoUploadSession
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
+import java.time.Instant
 
 interface CloudVideoUploadSessionRepository :
     JpaRepository<CloudVideoUploadSession, Long>,
@@ -23,6 +24,22 @@ interface CloudVideoUploadSessionRepository :
         id: Long,
         ownerMemberId: Long,
     ): CloudVideoUploadSession?
+
+    @Query(
+        value = """
+            SELECT *
+            FROM cloud_video_upload_session
+            WHERE status = 'IN_PROGRESS'
+              AND expires_at <= :now
+            ORDER BY expires_at ASC, id ASC
+            LIMIT :limit
+        """,
+        nativeQuery = true,
+    )
+    override fun findExpiredInProgress(
+        now: Instant,
+        limit: Int,
+    ): List<CloudVideoUploadSession>
 }
 
 interface CloudVideoUploadPartRepository :

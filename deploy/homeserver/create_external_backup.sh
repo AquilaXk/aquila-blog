@@ -9,6 +9,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 ENV_FILE="${SCRIPT_DIR}/.env.prod"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
+COMPOSE_ENV_FILE="${ENV_FILE}"
+COMPOSE_ENV_FILE_TMP=""
 MIGRATION_STOPPED_FILE="${SCRIPT_DIR}/.external-minio-migration-stopped"
 DEFAULT_EXTERNAL_STORAGE_ROOT="/mnt/aquila-blog-data"
 TIMESTAMP="${AQUILA_BACKUP_TIMESTAMP:-$(date +%Y%m%d-%H%M%S)}"
@@ -18,6 +20,7 @@ STOPPED_BACKUP_MINIO_CONTAINERS=()
 LEGACY_MINIO_STOPPED_FOR_MIGRATION="false"
 MINIO_STOPPED_FOR_BACKUP="false"
 MIGRATED_MINIO_DIR_THIS_RUN=""
+COMPOSE_IMAGE_ENV_PREFLIGHT_DONE="false"
 
 read_key_from_text() {
   local key="$1"
@@ -82,6 +85,112 @@ env_value_from_current_file() {
     return 0
   fi
   printf '%s' "${default_value}"
+}
+
+trim_quotes() {
+  local value="$1"
+  value="${value#\"}"
+  value="${value%\"}"
+  value="${value#\'}"
+  value="${value%\'}"
+  printf '%s' "${value}"
+}
+
+require_digest_image_value() {
+  local key="$1"
+  local value="$2"
+  if [[ "${value}" == *":latest" || "${value}" == *":latest@"* ]]; then
+    fail "latest tag is not allowed for image env key before backup compose evaluation: ${key}=${value}"
+  fi
+  if [[ ! "${value}" =~ @sha256:[a-fA-F0-9]{64}$ ]]; then
+    fail "image env key must include sha256 digest before backup compose evaluation: ${key}=${value}"
+  fi
+}
+
+ensure_compose_env_work_file() {
+  if [[ -n "${COMPOSE_ENV_FILE_TMP}" ]]; then
+    return 0
+  fi
+
+  COMPOSE_ENV_FILE_TMP="$(mktemp "${TMPDIR:-/tmp}/aquila-compose-env.XXXXXX")"
+  if [[ -f "${ENV_FILE}" ]]; then
+    cp "${ENV_FILE}" "${COMPOSE_ENV_FILE_TMP}"
+  else
+    : > "${COMPOSE_ENV_FILE_TMP}"
+  fi
+  COMPOSE_ENV_FILE="${COMPOSE_ENV_FILE_TMP}"
+}
+
+upsert_env_key() {
+  local key="$1"
+  local value="$2"
+  local target="${3:-${COMPOSE_ENV_FILE}}"
+  local status
+  [[ -n "${value}" ]] || return 0
+  touch "${target}"
+
+  if grep -qE "^${key}=" "${target}"; then
+    set +e
+    grep -vE "^${key}=" "${target}" > "${target}.tmp"
+    status=$?
+    set -e
+    [[ "${status}" -eq 0 || "${status}" -eq 1 ]] || fail "failed to filter ${key} from ${target}"
+    printf '%s=%s\n' "${key}" "${value}" >> "${target}.tmp"
+    mv "${target}.tmp" "${target}"
+  else
+    printf '%s=%s\n' "${key}" "${value}" >> "${target}"
+  fi
+}
+
+resolve_local_repo_digest() {
+  local image_ref="$1"
+  docker image inspect --format '{{index .RepoDigests 0}}' "${image_ref}" 2>/dev/null | head -n 1 | tr -d '\r'
+}
+
+ensure_image_env_key_from_local_digest() {
+  local key="$1"
+  local fallback_image="$2"
+  local value
+  value="$(trim_quotes "$(env_value "${key}")")"
+  if [[ -n "${value}" ]]; then
+    require_digest_image_value "${key}" "${value}"
+    local file_value
+    file_value="$(trim_quotes "$(read_key_from_file "${key}" "${ENV_FILE}")")"
+    if [[ "${value}" != "${file_value}" ]]; then
+      # Keep the deploy snapshot truthful: stage HOME_SERVER_ENV or shell
+      # overrides in a temporary compose env file instead of mutating .env.prod.
+      ensure_compose_env_work_file
+      upsert_env_key "${key}" "${value}"
+    fi
+    return 0
+  fi
+
+  local digest
+  digest="$(resolve_local_repo_digest "${fallback_image}" || true)"
+  if [[ -n "${digest}" ]]; then
+    require_digest_image_value "${key}" "${digest}"
+    ensure_compose_env_work_file
+    upsert_env_key "${key}" "${digest}"
+    log "auto-filled ${key} from local digest (${fallback_image} -> ${digest})"
+    return 0
+  fi
+
+  fail "required image env key is missing and local digest lookup failed: ${key} (fallback=${fallback_image})"
+}
+
+ensure_compose_image_env_defaults() {
+  ensure_image_env_key_from_local_digest "CLOUDFLARED_IMAGE" "cloudflare/cloudflared:latest"
+  ensure_image_env_key_from_local_digest "AUTOHEAL_IMAGE" "willfarrell/autoheal:1.2.0"
+  ensure_image_env_key_from_local_digest "CADDY_IMAGE" "caddy:2.8-alpine"
+  ensure_image_env_key_from_local_digest "UPTIME_KUMA_IMAGE" "louislam/uptime-kuma:1"
+  ensure_image_env_key_from_local_digest "PROMETHEUS_IMAGE" "prom/prometheus:v2.54.1"
+  ensure_image_env_key_from_local_digest "GRAFANA_IMAGE" "grafana/grafana:11.2.2"
+  ensure_image_env_key_from_local_digest "LOKI_IMAGE" "grafana/loki:3.0.0"
+  ensure_image_env_key_from_local_digest "PROMTAIL_IMAGE" "grafana/promtail:3.0.0"
+  ensure_image_env_key_from_local_digest "NODE_RUNTIME_IMAGE" "node:20-alpine"
+  ensure_image_env_key_from_local_digest "DB_IMAGE" "jangka512/pgj:latest"
+  ensure_image_env_key_from_local_digest "REDIS_IMAGE" "redis:7-alpine"
+  ensure_image_env_key_from_local_digest "MINIO_IMAGE" "minio/minio:latest"
 }
 
 log() {
@@ -163,7 +272,29 @@ check_free_space() {
 }
 
 compose() {
-  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
+  docker compose --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
+}
+
+validate_compose_config_after_env_autofill() {
+  compose config --quiet >/dev/null || fail "compose config validation failed after image env auto-fill"
+}
+
+ensure_backup_compose_ready() {
+  if [[ "${COMPOSE_IMAGE_ENV_PREFLIGHT_DONE}" == "true" ]]; then
+    return 0
+  fi
+  ensure_compose_image_env_defaults
+  validate_compose_config_after_env_autofill
+  COMPOSE_IMAGE_ENV_PREFLIGHT_DONE="true"
+}
+
+prepare_postgres_backup_compose_if_needed() {
+  if [[ "${AQUILA_BACKUP_SKIP_POSTGRES:-false}" == "true" ]]; then
+    return 0
+  fi
+
+  command -v docker >/dev/null 2>&1 || fail "docker is required for PostgreSQL backup"
+  ensure_backup_compose_ready
 }
 
 backup_classes() {
@@ -219,6 +350,9 @@ copy_deploy_config() {
       cp "${SCRIPT_DIR}/${file}" "${target_dir}/${file}"
     fi
   done
+  if [[ "${COMPOSE_ENV_FILE}" != "${ENV_FILE}" && -f "${COMPOSE_ENV_FILE}" ]]; then
+    cp "${COMPOSE_ENV_FILE}" "${target_dir}/.env.prod.compose"
+  fi
 
   write_metadata "${class}" "${target_dir}"
 }
@@ -234,7 +368,7 @@ backup_postgres() {
     return 0
   fi
 
-  command -v docker >/dev/null 2>&1 || fail "docker is required for PostgreSQL backup"
+  prepare_postgres_backup_compose_if_needed
   compose exec -T db_1 pg_dump -U postgres -d "${POSTGRES_DB_NAME}" > "${target_dir}/dump.sql"
   write_metadata "${class}" "${target_dir}"
 }
@@ -343,6 +477,9 @@ write_stopped_legacy_minio_marker() {
 
 cleanup_on_exit() {
   local status=$?
+  if [[ -n "${COMPOSE_ENV_FILE_TMP}" ]]; then
+    rm -f -- "${COMPOSE_ENV_FILE_TMP}" "${COMPOSE_ENV_FILE_TMP}.tmp"
+  fi
   if [[ "${status}" -ne 0 ]]; then
     if [[ "${MINIO_STOPPED_FOR_BACKUP}" == "true" ]]; then
       restart_minio_after_consistent_backup || true
@@ -446,6 +583,7 @@ done < <(backup_classes)
 log "backup start id=${TIMESTAMP} root=${BACKUP_ROOT} classes=${classes[*]}"
 
 for class in "${classes[@]}"; do
+  prepare_postgres_backup_compose_if_needed
   copy_deploy_config "${class}"
   backup_postgres "${class}"
   backup_minio "${class}"

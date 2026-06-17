@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test"
+import { writeFileSync } from "node:fs"
 
 const ADMIN_MEMBER = {
   id: 1,
@@ -153,22 +154,38 @@ const setupAdminCloudMocks = async (
     failUploadStatusByName?: Record<string, number>
     failUploadOnceNames?: string[]
     failUploadNames?: string[]
+    failVideoPartOnceNumber?: number
+    failVideoSessionGetOnceStatus?: number
     initialFiles?: CloudFileFixture[]
     listDelayMs?: number
+    lookupOnlyFiles?: CloudFileFixture[]
+    normalizeVideoSessionFilename?: boolean
     uploadResponseFilenames?: Record<string, string>
+    videoCompletedFileId?: number
+    videoSessionStatus?: "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "EXPIRED"
   } = {}
 ) => {
   const requestedKinds: string[] = []
   const requestedFolderPaths: string[] = []
   const uploadedNames: string[] = []
   const uploadedClientFilenames: string[] = []
+  const videoSessionCreates: string[] = []
+  const videoSessionGets: string[] = []
+  const videoPartNumbers: number[] = []
+  const videoCompletes: string[] = []
+  const videoCancels: string[] = []
   const deletedIds: string[] = []
   const requestedContentIds: string[] = []
   const uploadedFiles: CloudFileFixture[] = []
   const failedDeleteIds = new Set(options.failDeleteIds ?? [])
   const failedUploadNames = new Set(options.failUploadNames ?? [])
   const failUploadOnceNames = new Set(options.failUploadOnceNames ?? [])
+  const failedVideoPartOnceNumbers = new Set<number>()
+  let didFailVideoSessionGet = false
   const initialFiles = options.initialFiles ?? CLOUD_FILES
+  const lookupOnlyFiles = options.lookupOnlyFiles ?? []
+  let videoSessionFilename = "대용량 교육 영상.mp4"
+  let videoSessionByteSize = 101 * 1024 * 1024
   let nextUploadId = 204
 
   await page.route("**/_next/image**", async (route) => {
@@ -177,11 +194,131 @@ const setupAdminCloudMocks = async (
 
   await page.route("**/member/api/v1/auth/me", (route) => fulfillJson(route, ADMIN_MEMBER))
 
+  await page.route("**/system/api/v1/adm/cloud/files/video-upload-sessions**", async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    const sessionMatch = url.pathname.match(/\/video-upload-sessions\/(\d+)/)
+    const sessionId = sessionMatch?.[1] ?? "301"
+    const sessionBody = {
+      id: Number(sessionId),
+      ownerMemberId: 1,
+      originalFilename: videoSessionFilename,
+      contentType: "video/mp4",
+      byteSize: videoSessionByteSize,
+      folderPath: "/",
+      partSizeBytes: 67_108_864,
+      totalParts: 2,
+      uploadedParts: videoPartNumbers,
+      status: options.videoSessionStatus ?? "IN_PROGRESS",
+      expiresAt: "2026-06-13T12:00:00Z",
+      completedFileId: options.videoCompletedFileId ?? null,
+    }
+
+    if (request.method() === "POST" && url.pathname.endsWith("/video-upload-sessions")) {
+      const payload = JSON.parse(request.postData() || "{}") as { originalFilename?: string; byteSize?: number }
+      videoSessionCreates.push(payload.originalFilename || "")
+      videoSessionFilename = payload.originalFilename || videoSessionFilename
+      if (options.normalizeVideoSessionFilename) {
+        videoSessionFilename = videoSessionFilename.normalize("NFC")
+      }
+      videoSessionByteSize = payload.byteSize || videoSessionByteSize
+      await fulfillJson(
+        route,
+        {
+          resultCode: "201-1",
+          msg: "created",
+          data: { ...sessionBody, originalFilename: videoSessionFilename, byteSize: videoSessionByteSize },
+        },
+        201
+      )
+      return
+    }
+
+    if (request.method() === "GET" && sessionMatch) {
+      videoSessionGets.push(sessionId)
+      if (options.failVideoSessionGetOnceStatus && !didFailVideoSessionGet) {
+        didFailVideoSessionGet = true
+        await fulfillJson(
+          route,
+          { resultCode: `${options.failVideoSessionGetOnceStatus}-1`, msg: "temporary session lookup failure" },
+          options.failVideoSessionGetOnceStatus
+        )
+        return
+      }
+      await fulfillJson(route, {
+        ...sessionBody,
+        originalFilename: videoSessionFilename,
+        byteSize: videoSessionByteSize,
+        uploadedParts: [...videoPartNumbers],
+      })
+      return
+    }
+
+    if (request.method() === "PUT" && url.pathname.includes("/parts/")) {
+      const partNumber = Number(url.pathname.match(/\/parts\/(\d+)$/)?.[1] || 0)
+      if (
+        options.failVideoPartOnceNumber === partNumber &&
+        !failedVideoPartOnceNumbers.has(partNumber)
+      ) {
+        failedVideoPartOnceNumbers.add(partNumber)
+        await fulfillJson(route, { msg: "transient video part failure" }, 503)
+        return
+      }
+      videoPartNumbers.push(partNumber)
+      const byteSize = request.postDataBuffer()?.byteLength ?? 0
+      await fulfillJson(route, {
+        session: { ...sessionBody, uploadedParts: [...videoPartNumbers] },
+        part: { partNumber, byteSize },
+      })
+      return
+    }
+
+    if (request.method() === "POST" && url.pathname.endsWith("/complete")) {
+      videoCompletes.push(sessionId)
+      const uploaded = {
+        id: nextUploadId++,
+        ownerMemberId: 1,
+        originalFilename: videoSessionFilename,
+        contentType: "video/mp4",
+        byteSize: videoSessionByteSize,
+        mediaKind: "VIDEO" as const,
+        folderPath: "/",
+        createdAt: "2026-06-12T12:00:00Z",
+        modifiedAt: "2026-06-12T12:00:00Z",
+      }
+      uploadedFiles.unshift(uploaded)
+      await fulfillJson(route, { resultCode: "200-1", msg: "completed", data: uploaded })
+      return
+    }
+
+    if (request.method() === "DELETE" && sessionMatch) {
+      videoCancels.push(sessionId)
+      await fulfillJson(route, { resultCode: "200-1", msg: "cancelled" })
+      return
+    }
+
+    await route.fallback()
+  })
+
   await page.route("**/system/api/v1/adm/cloud/files/**", async (route) => {
     const request = route.request()
     const method = request.method()
     const url = new URL(request.url())
     const id = url.pathname.match(/\/files\/(\d+)$/)?.[1] ?? ""
+    if (url.pathname.includes("/video-upload-sessions")) {
+      await route.fallback()
+      return
+    }
+
+    if (method === "GET" && id) {
+      const file = [...uploadedFiles, ...lookupOnlyFiles, ...initialFiles].find((item) => String(item.id) === id)
+      if (!file) {
+        await fulfillJson(route, { resultCode: "404-1", msg: "클라우드 파일을 찾을 수 없습니다." }, 404)
+        return
+      }
+      await fulfillJson(route, file)
+      return
+    }
 
     if (method === "DELETE" && id) {
       if (failedDeleteIds.has(id)) {
@@ -200,8 +337,22 @@ const setupAdminCloudMocks = async (
     const request = route.request()
     const url = new URL(request.url())
     const id = url.pathname.match(/\/files\/(\d+)$/)?.[1] ?? ""
+    if (url.pathname.includes("/video-upload-sessions")) {
+      await route.fallback()
+      return
+    }
     const mediaKind = url.searchParams.get("mediaKind") || "ALL"
     const folderPath = normalizeFolderPathParam(url.searchParams.get("folderPath") || "")
+
+    if (request.method() === "GET" && id) {
+      const file = [...uploadedFiles, ...lookupOnlyFiles, ...initialFiles].find((item) => String(item.id) === id)
+      if (!file) {
+        await fulfillJson(route, { resultCode: "404-1", msg: "클라우드 파일을 찾을 수 없습니다." }, 404)
+        return
+      }
+      await fulfillJson(route, file)
+      return
+    }
 
     if (request.method() === "DELETE" && id) {
       if (failedDeleteIds.has(id)) {
@@ -307,7 +458,19 @@ const setupAdminCloudMocks = async (
     })
   })
 
-  return { requestedKinds, requestedFolderPaths, uploadedNames, uploadedClientFilenames, deletedIds, requestedContentIds }
+  return {
+    requestedKinds,
+    requestedFolderPaths,
+    uploadedNames,
+    uploadedClientFilenames,
+    videoSessionCreates,
+    videoSessionGets,
+    videoPartNumbers,
+    videoCompletes,
+    videoCancels,
+    deletedIds,
+    requestedContentIds,
+  }
 }
 
 test.describe("관리자 클라우드", () => {
@@ -449,6 +612,162 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByText("파일을 불러오는 중입니다.")).toHaveCount(0)
     await expect(page.getByRole("row", { name: /운영 점검 리포트\.pdf/ })).toBeVisible()
     await expect(page.getByRole("status", { name: "파일 목록 로딩" })).toHaveCount(0)
+  })
+
+  test("100MB 초과 동영상은 resumable 세션과 조각 업로드로 처리한다", async ({ page }, testInfo) => {
+    const mocks = await setupAdminCloudMocks(page)
+    const largeVideo = Buffer.alloc(101 * 1024 * 1024)
+    Buffer.from([0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70]).copy(largeVideo)
+    const largeVideoPath = testInfo.outputPath("대용량 교육 영상.mp4")
+    writeFileSync(largeVideoPath, largeVideo)
+
+    await page.goto("/admin/cloud")
+    await page.getByLabel("클라우드 파일 업로드").setInputFiles(largeVideoPath)
+
+    await expect.poll(() => mocks.videoSessionCreates).toContain("대용량 교육 영상.mp4")
+    await expect.poll(() => mocks.videoPartNumbers).toEqual([1, 2])
+    await expect.poll(() => mocks.videoCompletes).toEqual(["301"])
+    await expect(page.getByLabel("업로드 중인 파일").getByText("완료", { exact: true })).toBeVisible()
+    await expect(page.getByRole("row", { name: /대용량 교육 영상\.mp4/ })).toBeVisible()
+    expect(mocks.uploadedNames).not.toContain("대용량 교육 영상.mp4")
+    expect(mocks.videoCancels).toEqual([])
+  })
+
+  test("대용량 동영상 part 실패 후 재시도는 기존 세션의 업로드된 조각부터 이어간다", async ({ page }, testInfo) => {
+    const mocks = await setupAdminCloudMocks(page, { failVideoPartOnceNumber: 2 })
+    const largeVideo = Buffer.alloc(101 * 1024 * 1024)
+    Buffer.from([0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70]).copy(largeVideo)
+    const largeVideoPath = testInfo.outputPath("대용량 교육 영상.mp4")
+    writeFileSync(largeVideoPath, largeVideo)
+
+    await page.goto("/admin/cloud")
+    await page.getByLabel("클라우드 파일 업로드").setInputFiles(largeVideoPath)
+
+    const uploadPanel = page.getByLabel("업로드 중인 파일")
+    await expect(page.getByText(/대용량 교육 영상\.mp4 업로드 실패/)).toBeVisible()
+    await expect(uploadPanel.getByRole("heading", { name: "항목 1개 업로드 실패/취소" })).toBeVisible()
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          Object.entries(window.localStorage)
+            .filter(([key]) => key.startsWith("aquila-cloud-video-upload-session"))
+            .map(([, value]) => value)
+        )
+      )
+      .toEqual(["301"])
+    expect(mocks.videoSessionCreates).toEqual(["대용량 교육 영상.mp4"])
+    expect(mocks.videoPartNumbers).toEqual([1])
+    expect(mocks.videoCancels).toEqual([])
+
+    await uploadPanel.getByRole("button", { name: "대용량 교육 영상.mp4 업로드 다시 시도" }).click()
+
+    await expect.poll(() => mocks.videoSessionGets).toContain("301")
+    await expect.poll(() => mocks.videoPartNumbers).toEqual([1, 2])
+    await expect.poll(() => mocks.videoCompletes).toEqual(["301"])
+    expect(mocks.videoSessionCreates).toEqual(["대용량 교육 영상.mp4"])
+    expect(mocks.videoCancels).toEqual([])
+  })
+
+  test("대용량 동영상 재시도는 서버 정규화 파일명 세션을 버리지 않는다", async ({ page }, testInfo) => {
+    const mocks = await setupAdminCloudMocks(page, {
+      failVideoPartOnceNumber: 2,
+      normalizeVideoSessionFilename: true,
+    })
+    const largeVideo = Buffer.alloc(101 * 1024 * 1024)
+    Buffer.from([0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70]).copy(largeVideo)
+    const nfcFilename = "대용량 교육 영상.mp4"
+    const nfdFilename = nfcFilename.normalize("NFD")
+    const largeVideoPath = testInfo.outputPath(nfdFilename)
+    writeFileSync(largeVideoPath, largeVideo)
+
+    await page.goto("/admin/cloud")
+    await page.getByLabel("클라우드 파일 업로드").setInputFiles(largeVideoPath)
+
+    const uploadPanel = page.getByLabel("업로드 중인 파일")
+    await expect(uploadPanel.getByRole("heading", { name: "항목 1개 업로드 실패/취소" })).toBeVisible()
+    await uploadPanel.getByRole("button", { name: `${nfdFilename} 업로드 다시 시도` }).click()
+
+    await expect.poll(() => mocks.videoSessionGets).toContain("301")
+    await expect.poll(() => mocks.videoPartNumbers).toEqual([1, 2])
+    await expect.poll(() => mocks.videoCompletes).toEqual(["301"])
+    expect(mocks.videoSessionCreates).toEqual([nfdFilename])
+    expect(mocks.videoCancels).toEqual([])
+  })
+
+  test("대용량 동영상 세션 조회 일시 실패는 저장된 세션을 지우지 않는다", async ({ page }, testInfo) => {
+    const mocks = await setupAdminCloudMocks(page, {
+      failVideoPartOnceNumber: 2,
+      failVideoSessionGetOnceStatus: 503,
+    })
+    const largeVideo = Buffer.alloc(101 * 1024 * 1024)
+    Buffer.from([0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70]).copy(largeVideo)
+    const largeVideoPath = testInfo.outputPath("대용량 교육 영상.mp4")
+    writeFileSync(largeVideoPath, largeVideo)
+
+    await page.goto("/admin/cloud")
+    await page.getByLabel("클라우드 파일 업로드").setInputFiles(largeVideoPath)
+
+    const uploadPanel = page.getByLabel("업로드 중인 파일")
+    await expect(page.getByText(/대용량 교육 영상\.mp4 업로드 실패/)).toBeVisible()
+    await uploadPanel.getByRole("button", { name: "대용량 교육 영상.mp4 업로드 다시 시도" }).click()
+    await expect(page.getByText(/대용량 교육 영상\.mp4 업로드 실패: 서버 오류가 발생했습니다/)).toBeVisible()
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          Object.entries(window.localStorage)
+            .filter(([key]) => key.startsWith("aquila-cloud-video-upload-session"))
+            .map(([, value]) => value)
+        )
+      )
+      .toEqual(["301"])
+    expect(mocks.videoSessionCreates).toEqual(["대용량 교육 영상.mp4"])
+    expect(mocks.videoCancels).toEqual([])
+
+    await uploadPanel.getByRole("button", { name: "대용량 교육 영상.mp4 업로드 다시 시도" }).click()
+    await expect.poll(() => mocks.videoSessionGets).toEqual(["301", "301"])
+    await expect.poll(() => mocks.videoPartNumbers).toEqual([1, 2])
+    await expect.poll(() => mocks.videoCompletes).toEqual(["301"])
+  })
+
+  test("대용량 동영상 완료 세션은 completedFileId로 복구하고 재업로드하지 않는다", async ({ page }, testInfo) => {
+    const completedVideo: CloudFileFixture = {
+      id: 205,
+      ownerMemberId: 1,
+      originalFilename: "대용량 교육 영상.mp4",
+      contentType: "video/mp4",
+      byteSize: 101 * 1024 * 1024,
+      mediaKind: "VIDEO",
+      folderPath: "/",
+      createdAt: "2026-06-12T12:00:00Z",
+      modifiedAt: "2026-06-12T12:00:00Z",
+    }
+    const mocks = await setupAdminCloudMocks(page, {
+      lookupOnlyFiles: [completedVideo],
+      videoCompletedFileId: completedVideo.id,
+      videoSessionStatus: "COMPLETED",
+    })
+    const largeVideo = Buffer.alloc(101 * 1024 * 1024)
+    Buffer.from([0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70]).copy(largeVideo)
+    const largeVideoPath = testInfo.outputPath("대용량 교육 영상.mp4")
+    writeFileSync(largeVideoPath, largeVideo)
+
+    await page.goto("/admin/cloud")
+    await page.evaluate(() => {
+      const originalGetItem = Storage.prototype.getItem
+      Storage.prototype.getItem = function getItemWithCompletedVideoSession(key: string) {
+        if (key.startsWith("aquila-cloud-video-upload-session")) return "301"
+        return originalGetItem.call(this, key)
+      }
+    })
+    await page.getByLabel("클라우드 파일 업로드").setInputFiles(largeVideoPath)
+
+    await expect.poll(() => mocks.videoSessionGets).toEqual(["301"])
+    await expect(page.getByLabel("업로드 중인 파일").getByText("완료", { exact: true })).toBeVisible()
+    await expect(page.getByRole("row", { name: /대용량 교육 영상\.mp4/ })).toBeVisible()
+    expect(mocks.videoSessionCreates).toEqual([])
+    expect(mocks.videoPartNumbers).toEqual([])
+    expect(mocks.videoCompletes).toEqual([])
+    expect(mocks.videoCancels).toEqual([])
   })
 
   test("사진 선택 시 상세 패널은 이미지 요청을 즉시 시작하고 텍스트 로딩 상태를 숨긴다", async ({ page }) => {

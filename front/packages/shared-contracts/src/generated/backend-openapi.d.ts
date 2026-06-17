@@ -4,6 +4,22 @@
  */
 
 export interface paths {
+    "/system/api/v1/adm/cloud/files/video-upload-sessions/{sessionId}/parts/{partNumber}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["uploadVideoPart"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/post/api/v1/posts/{postId}/comments/{id}": {
         parameters: {
             query?: never;
@@ -142,6 +158,38 @@ export interface paths {
         get: operations["listFiles"];
         put?: never;
         post: operations["upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/api/v1/adm/cloud/files/video-upload-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createVideoUploadSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/api/v1/adm/cloud/files/video-upload-sessions/{sessionId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["completeVideoUpload"];
         delete?: never;
         options?: never;
         head?: never;
@@ -609,6 +657,22 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/api/v1/adm/cloud/files/video-upload-sessions/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getVideoUploadSession"];
+        put?: never;
+        post?: never;
+        delete: operations["cancelVideoUpload"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1250,6 +1314,38 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        CloudVideoUploadPartDto: {
+            /** Format: int32 */
+            partNumber?: number;
+            /** Format: int64 */
+            byteSize?: number;
+        };
+        CloudVideoUploadPartResultDto: {
+            session?: components["schemas"]["CloudVideoUploadSessionDto"];
+            part?: components["schemas"]["CloudVideoUploadPartDto"];
+        };
+        CloudVideoUploadSessionDto: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            ownerMemberId?: number;
+            originalFilename?: string;
+            contentType?: string;
+            /** Format: int64 */
+            byteSize?: number;
+            folderPath?: string;
+            /** Format: int64 */
+            partSizeBytes?: number;
+            /** Format: int32 */
+            totalParts?: number;
+            uploadedParts?: number[];
+            /** @enum {string} */
+            status?: "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "EXPIRED";
+            /** Format: date-time */
+            expiresAt?: string;
+            /** Format: int64 */
+            completedFileId?: number;
+        };
         PostCommentModifyRequest: {
             content: string;
         };
@@ -1449,6 +1545,18 @@ export interface components {
             resultCode?: string;
             msg?: string;
             data?: components["schemas"]["CloudFileDto"];
+        };
+        CreateVideoUploadSessionReqBody: {
+            originalFilename?: string;
+            contentType?: string;
+            /** Format: int64 */
+            byteSize?: number;
+            folderPath?: string;
+        };
+        RsDataCloudVideoUploadSessionDto: {
+            resultCode?: string;
+            msg?: string;
+            data?: components["schemas"]["CloudVideoUploadSessionDto"];
         };
         PostWriteRequest: {
             title: string;
@@ -2165,6 +2273,33 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    uploadVideoPart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: number;
+                partNumber: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CloudVideoUploadPartResultDto"];
+                };
+            };
+        };
+    };
     getItem: {
         parameters: {
             query?: never;
@@ -2519,6 +2654,52 @@ export interface operations {
         responses: {
             /** @description Created */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RsDataCloudFileDto"];
+                };
+            };
+        };
+    };
+    createVideoUploadSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateVideoUploadSessionReqBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RsDataCloudVideoUploadSessionDto"];
+                };
+            };
+        };
+    };
+    completeVideoUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3262,6 +3443,50 @@ export interface operations {
                 };
                 content: {
                     "*/*": string;
+                };
+            };
+        };
+    };
+    getVideoUploadSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CloudVideoUploadSessionDto"];
+                };
+            };
+        };
+    };
+    cancelVideoUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RsDataVoid"];
                 };
             };
         };

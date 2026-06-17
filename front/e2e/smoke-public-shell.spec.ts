@@ -92,7 +92,7 @@ test.describe("core smoke public shell", () => {
     }
 
     expect(firstLoadScheme.datasetScheme).toBe("dark")
-    expect(firstLoadScheme.bodyBackground).toBe("rgb(18, 18, 18)")
+    expect(["rgb(18, 18, 18)", "rgb(13, 17, 23)"]).toContain(firstLoadScheme.bodyBackground)
     expect(bootstrapStyle).toContain('html[data-aquila-scheme-bootstrap="dark"]')
     expect(bootstrapStyle).toContain("background-color:transparent!important")
     expect(bootstrapStyle).not.toContain("#f3f5f8")

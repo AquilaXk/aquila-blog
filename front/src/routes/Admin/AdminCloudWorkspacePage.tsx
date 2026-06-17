@@ -594,7 +594,17 @@ const AdminCloudWorkspacePage = () => {
 
     const run = async () => {
       try {
-        const uploaded = await uploadCloudFile(nextUpload.file, "", controller.signal)
+        const uploaded = await uploadCloudFile(nextUpload.file, "", controller.signal, {
+          onProgress: ({ progress, message }) => {
+            setUploadQueue((current) =>
+              current.map((item) =>
+                item.id === nextUpload.id && item.status !== "cancelled"
+                  ? { ...item, progress, message }
+                  : item
+              )
+            )
+          },
+        })
         if (controller.signal.aborted) throw new DOMException("Upload aborted", "AbortError")
         const displayUploaded = preferClientFilenameForUploadedFile(uploaded, nextUpload.name)
 

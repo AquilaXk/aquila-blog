@@ -2,10 +2,16 @@ package com.back.boundedContexts.cloud.adapter.web
 
 import com.back.boundedContexts.cloud.application.service.CloudFileDto
 import com.back.boundedContexts.cloud.application.service.CloudFileService
+import com.back.boundedContexts.cloud.application.service.CloudVideoUploadPartResultDto
+import com.back.boundedContexts.cloud.application.service.CloudVideoUploadSessionDto
+import com.back.boundedContexts.cloud.application.service.CloudVideoUploadSessionService
 import com.back.boundedContexts.cloud.model.CloudFileMediaKind
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.security.domain.SecurityUser
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.media.Content
+import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.constraints.Positive
@@ -23,24 +29,36 @@ import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
+import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RequestPart
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
+import java.io.ByteArrayOutputStream
 import java.io.EOFException
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
+import io.swagger.v3.oas.annotations.parameters.RequestBody as OpenApiRequestBody
 
 @Validated
 @RestController
 @RequestMapping("/system/api/v1/adm/cloud")
 class ApiV1AdmCloudController(
     private val cloudFileService: CloudFileService,
+    private val cloudVideoUploadSessionService: CloudVideoUploadSessionService,
 ) {
     data class CloudFileListResBody(
         val files: List<CloudFileDto>,
+    )
+
+    data class CreateVideoUploadSessionReqBody(
+        val originalFilename: String?,
+        val contentType: String?,
+        val byteSize: Long?,
+        val folderPath: String? = "",
     )
 
     @GetMapping("/files")
@@ -88,6 +106,123 @@ class ApiV1AdmCloudController(
         return ResponseEntity
             .status(HttpStatus.CREATED)
             .body(RsData("201-1", "클라우드 파일이 업로드되었습니다.", uploaded))
+    }
+
+    @PostMapping("/files/video-upload-sessions")
+    @ApiResponse(responseCode = "201", description = "Created")
+    @ResponseStatus(HttpStatus.CREATED)
+    fun createVideoUploadSession(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+        @RequestBody body: CreateVideoUploadSessionReqBody,
+    ): ResponseEntity<RsData<CloudVideoUploadSessionDto>> {
+        val session =
+            cloudVideoUploadSessionService.createSession(
+                ownerMemberId = securityUser.id,
+                originalFilename = body.originalFilename,
+                contentType = body.contentType,
+                byteSize = body.byteSize ?: 0,
+                folderPath = body.folderPath,
+            )
+
+        return ResponseEntity
+            .status(HttpStatus.CREATED)
+            .body(RsData("201-1", "대용량 동영상 업로드 세션이 생성되었습니다.", session))
+    }
+
+    @GetMapping("/files/video-upload-sessions/{sessionId}")
+    fun getVideoUploadSession(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+        @PathVariable
+        @Positive
+        sessionId: Long,
+    ): CloudVideoUploadSessionDto =
+        cloudVideoUploadSessionService.getSession(
+            ownerMemberId = securityUser.id,
+            sessionId = sessionId,
+        )
+
+    @PutMapping(
+        "/files/video-upload-sessions/{sessionId}/parts/{partNumber}",
+        consumes = [MediaType.APPLICATION_OCTET_STREAM_VALUE],
+    )
+    @Operation(
+        requestBody =
+            OpenApiRequestBody(
+                required = true,
+                content = [
+                    Content(
+                        mediaType = MediaType.APPLICATION_OCTET_STREAM_VALUE,
+                        schema = Schema(type = "string", format = "binary"),
+                    ),
+                ],
+            ),
+    )
+    fun uploadVideoPart(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+        @PathVariable
+        @Positive
+        sessionId: Long,
+        @PathVariable
+        @Positive
+        partNumber: Int,
+        request: HttpServletRequest,
+    ): CloudVideoUploadPartResultDto {
+        val session =
+            cloudVideoUploadSessionService.getSession(
+                ownerMemberId = securityUser.id,
+                sessionId = sessionId,
+            )
+        if (partNumber !in 1..session.totalParts) {
+            throw AppException("400-1", "업로드 조각 번호가 올바르지 않습니다.")
+        }
+        val expectedBytes =
+            if (partNumber == session.totalParts) {
+                session.byteSize - (session.partSizeBytes * (partNumber - 1))
+            } else {
+                session.partSizeBytes
+            }
+        val contentLength = request.contentLengthLong
+        if (contentLength > expectedBytes) {
+            throw AppException("400-1", "업로드 조각 크기가 올바르지 않습니다.")
+        }
+
+        return cloudVideoUploadSessionService.uploadPart(
+            ownerMemberId = securityUser.id,
+            sessionId = sessionId,
+            partNumber = partNumber,
+            bytes = readBoundedPartBytes(request.inputStream, expectedBytes),
+        )
+    }
+
+    @PostMapping("/files/video-upload-sessions/{sessionId}/complete")
+    fun completeVideoUpload(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+        @PathVariable
+        @Positive
+        sessionId: Long,
+    ): RsData<CloudFileDto> {
+        val file =
+            cloudVideoUploadSessionService.complete(
+                ownerMemberId = securityUser.id,
+                sessionId = sessionId,
+            )
+
+        return RsData("200-1", "대용량 동영상 업로드가 완료되었습니다.", file)
+    }
+
+    @DeleteMapping("/files/video-upload-sessions/{sessionId}")
+    fun cancelVideoUpload(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+        @PathVariable
+        @Positive
+        sessionId: Long,
+    ): RsData<Void> {
+        cloudVideoUploadSessionService.cancel(
+            ownerMemberId = securityUser.id,
+            sessionId = sessionId,
+        )
+
+        return RsData("200-1", "대용량 동영상 업로드가 취소되었습니다.")
     }
 
     @GetMapping("/files/{id}")
@@ -260,6 +395,27 @@ class ApiV1AdmCloudController(
             }
             remaining -= 1
         }
+    }
+
+    private fun readBoundedPartBytes(
+        input: InputStream,
+        expectedBytes: Long,
+    ): ByteArray {
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        var total = 0L
+
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            total += read
+            if (total > expectedBytes) {
+                throw AppException("400-1", "업로드 조각 크기가 올바르지 않습니다.")
+            }
+            output.write(buffer, 0, read)
+        }
+
+        return output.toByteArray()
     }
 
     private fun sliceStream(

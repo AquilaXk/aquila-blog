@@ -2,6 +2,7 @@ package com.back.support
 
 import com.back.boundedContexts.cloud.adapter.web.ApiV1AdmCloudController
 import com.back.boundedContexts.cloud.application.service.CloudFileService
+import com.back.boundedContexts.cloud.application.service.CloudVideoUploadSessionService
 import com.back.global.security.config.CustomAuthenticationFilter
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.TestConfiguration
@@ -37,6 +38,9 @@ abstract class BaseAdmCloudControllerWebMvcTest : BaseIntegrationTest() {
 
     @MockitoBean
     protected lateinit var cloudFileService: CloudFileService
+
+    @MockitoBean
+    protected lateinit var cloudVideoUploadSessionService: CloudVideoUploadSessionService
 
     @MockitoBean(name = "jpaMappingContext")
     protected lateinit var jpaMappingContext: JpaMetamodelMappingContext

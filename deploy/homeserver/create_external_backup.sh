@@ -147,6 +147,22 @@ resolve_local_repo_digest() {
   docker image inspect --format '{{index .RepoDigests 0}}' "${image_ref}" 2>/dev/null | head -n 1 | tr -d '\r'
 }
 
+resolve_repo_digest_with_pull_fallback() {
+  local image_ref="$1"
+  local digest
+  digest="$(resolve_local_repo_digest "${image_ref}" || true)"
+  if [[ -n "${digest}" ]]; then
+    printf '%s' "${digest}"
+    return 0
+  fi
+
+  log "local digest missing for ${image_ref}; pulling fallback image before backup compose evaluation"
+  docker pull "${image_ref}" >/dev/null || fail "failed to pull fallback image before backup compose evaluation: ${image_ref}"
+  digest="$(resolve_local_repo_digest "${image_ref}" || true)"
+  [[ -n "${digest}" ]] || fail "fallback image pull did not provide repo digest: ${image_ref}"
+  printf '%s' "${digest}"
+}
+
 ensure_image_env_key_from_local_digest() {
   local key="$1"
   local fallback_image="$2"
@@ -166,16 +182,11 @@ ensure_image_env_key_from_local_digest() {
   fi
 
   local digest
-  digest="$(resolve_local_repo_digest "${fallback_image}" || true)"
-  if [[ -n "${digest}" ]]; then
-    require_digest_image_value "${key}" "${digest}"
-    ensure_compose_env_work_file
-    upsert_env_key "${key}" "${digest}"
-    log "auto-filled ${key} from local digest (${fallback_image} -> ${digest})"
-    return 0
-  fi
-
-  fail "required image env key is missing and local digest lookup failed: ${key} (fallback=${fallback_image})"
+  digest="$(resolve_repo_digest_with_pull_fallback "${fallback_image}")"
+  require_digest_image_value "${key}" "${digest}"
+  ensure_compose_env_work_file
+  upsert_env_key "${key}" "${digest}"
+  log "auto-filled ${key} from local digest (${fallback_image} -> ${digest})"
 }
 
 ensure_compose_image_env_defaults() {

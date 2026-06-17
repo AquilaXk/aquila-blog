@@ -11,6 +11,7 @@ const CLOUD_UPLOAD_TIMEOUT_MS = 10 * 60_000 + 30_000
 const CLOUD_SYNC_UPLOAD_MAX_BYTES = 100 * 1024 * 1024
 const CLOUD_VIDEO_RESUMABLE_PART_BYTES = 64 * 1024 * 1024
 const CLOUD_VIDEO_RESUMABLE_CHUNK_TIMEOUT_MS = 5 * 60_000
+const CLOUD_VIDEO_UPLOAD_SESSION_STORAGE_PREFIX = "aquila-cloud-video-upload-session"
 
 export type CloudFile = Required<
   Pick<
@@ -195,11 +196,74 @@ const completeVideoUploadSession = async (
   return normalizeCloudFile(response.data || {})
 }
 
+const getVideoUploadSession = (sessionId: number, signal?: AbortSignal): Promise<CloudVideoUploadSession> =>
+  apiFetch<CloudVideoUploadSession>(`/system/api/v1/adm/cloud/files/video-upload-sessions/${sessionId}`, {
+    signal,
+    timeoutMs: 30_000,
+  })
+
 const cancelVideoUploadSession = async (sessionId: number) => {
   await apiFetch<RsDataVoid>(`/system/api/v1/adm/cloud/files/video-upload-sessions/${sessionId}`, {
     method: "DELETE",
     timeoutMs: 30_000,
   })
+}
+
+const buildVideoUploadStorageKey = (file: File, folderPath: string) =>
+  [
+    CLOUD_VIDEO_UPLOAD_SESSION_STORAGE_PREFIX,
+    folderPath.trim(),
+    file.name,
+    String(file.size),
+    String(file.lastModified || 0),
+  ].join(":")
+
+const readStoredVideoUploadSessionId = (storageKey: string): number | null => {
+  if (typeof window === "undefined") return null
+  const raw = window.localStorage.getItem(storageKey)
+  const parsed = Number.parseInt(raw || "", 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+const storeVideoUploadSessionId = (storageKey: string, sessionId: number) => {
+  if (typeof window === "undefined") return
+  window.localStorage.setItem(storageKey, String(sessionId))
+}
+
+const clearStoredVideoUploadSessionId = (storageKey: string) => {
+  if (typeof window === "undefined") return
+  window.localStorage.removeItem(storageKey)
+}
+
+const isMatchingVideoUploadSession = (session: CloudVideoUploadSession, file: File) =>
+  session.status === "IN_PROGRESS" && session.byteSize === file.size && session.originalFilename === file.name
+
+const resolveVideoUploadSession = async (
+  file: File,
+  folderPath: string,
+  storageKey: string,
+  signal?: AbortSignal,
+) => {
+  const storedSessionId = readStoredVideoUploadSessionId(storageKey)
+  if (storedSessionId) {
+    try {
+      const storedSession = await getVideoUploadSession(storedSessionId, signal)
+      if (isMatchingVideoUploadSession(storedSession, file)) return storedSession
+    } catch {
+      // 조회 실패한 stale session id는 새 세션으로 대체한다.
+    }
+    clearStoredVideoUploadSessionId(storageKey)
+  }
+
+  const session = await createVideoUploadSession(file, folderPath, signal)
+  storeVideoUploadSessionId(storageKey, session.id)
+  return session
+}
+
+const isExplicitUploadAbort = (error: unknown, signal?: AbortSignal) => {
+  if (signal?.aborted) return true
+  if (!(error instanceof Error)) return false
+  return error.name === "AbortError"
 }
 
 const uploadCloudVideoFileResumable = async (
@@ -209,9 +273,10 @@ const uploadCloudVideoFileResumable = async (
   options: CloudUploadOptions = {},
 ): Promise<CloudFile> => {
   let session: CloudVideoUploadSession | null = null
+  const storageKey = buildVideoUploadStorageKey(file, folderPath)
   try {
     options.onProgress?.({ progress: 2, message: "대용량 업로드 준비 중" })
-    session = await createVideoUploadSession(file, folderPath, signal)
+    session = await resolveVideoUploadSession(file, folderPath, storageKey, signal)
     const partSize = session.partSizeBytes || CLOUD_VIDEO_RESUMABLE_PART_BYTES
     const uploadedParts = new Set(session.uploadedParts || [])
     const totalParts = session.totalParts || Math.ceil(file.size / partSize)
@@ -233,9 +298,14 @@ const uploadCloudVideoFileResumable = async (
     }
 
     options.onProgress?.({ progress: 98, message: "동영상 업로드 완료 처리 중" })
-    return await completeVideoUploadSession(session.id, signal)
+    const completed = await completeVideoUploadSession(session.id, signal)
+    clearStoredVideoUploadSessionId(storageKey)
+    return completed
   } catch (error) {
-    if (session) await cancelVideoUploadSession(session.id).catch(() => undefined)
+    if (session && isExplicitUploadAbort(error, signal)) {
+      await cancelVideoUploadSession(session.id).catch(() => undefined)
+      clearStoredVideoUploadSessionId(storageKey)
+    }
     throw error
   }
 }

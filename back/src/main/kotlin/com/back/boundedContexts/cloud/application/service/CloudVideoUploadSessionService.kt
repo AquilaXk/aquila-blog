@@ -381,11 +381,35 @@ class CloudVideoUploadSessionService(
                 .replace(Regex("[/\\\\]"), "_")
                 .replace(Regex("[\\p{Cc}\\p{Cf}\\p{Cs}]"), "")
                 .replace(Regex("\\s+"), " ")
-                .takeMetadataEncodedBytes(MAX_FILENAME_METADATA_ENCODED_BYTES)
-                .takeCodePoints(MAX_FILENAME_CODE_POINTS)
+                .takeFilenameLimits()
                 .trim()
 
         return cleaned.ifBlank { "cloud-video" }
+    }
+
+    private fun String.takeFilenameLimits(): String {
+        val originalExtensionIndex = lastIndexOf(".").takeIf { it > 0 && it < lastIndex }
+        val originalExtension =
+            originalExtensionIndex
+                ?.let(::substring)
+                .orEmpty()
+                .takeCodePoints(MAX_FILENAME_CODE_POINTS - 1)
+        val originalStem = originalExtensionIndex?.let { substring(0, it) } ?: this
+        val maxStemCodePoints =
+            MAX_FILENAME_CODE_POINTS - originalExtension.codePointCount(0, originalExtension.length).toLong()
+        val codePointLimited = originalStem.takeCodePoints(maxStemCodePoints.coerceAtLeast(0)) + originalExtension
+        if (metadataEncodedLength(codePointLimited) <= MAX_FILENAME_METADATA_ENCODED_BYTES) return codePointLimited
+
+        val extensionIndex = codePointLimited.lastIndexOf(".").takeIf { it > 0 && it < codePointLimited.lastIndex }
+        val extension =
+            extensionIndex
+                ?.let(codePointLimited::substring)
+                .orEmpty()
+                .takeMetadataEncodedBytes(MAX_FILENAME_METADATA_ENCODED_BYTES)
+        val stem = extensionIndex?.let { codePointLimited.substring(0, it) } ?: codePointLimited
+        val maxStemBytes = MAX_FILENAME_METADATA_ENCODED_BYTES - metadataEncodedLength(extension)
+        val safeStem = stem.takeMetadataEncodedBytes(maxStemBytes.coerceAtLeast(0))
+        return (safeStem + extension).ifBlank { takeMetadataEncodedBytes(MAX_FILENAME_METADATA_ENCODED_BYTES) }
     }
 
     private fun String.takeMetadataEncodedBytes(maxEncodedBytes: Int): String {

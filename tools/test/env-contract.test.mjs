@@ -236,6 +236,45 @@ test("external storage upload limits reject non-positive values", async () => {
   assert(result.errors.some((error) => error.key === "BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES"))
 })
 
+test("대용량 동영상 resumable 설정은 part 크기와 세션 만료 경계를 검증한다", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const belowBoundary = baseHomeServerEnv
+    .replace(
+      "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_PARTSIZEBYTES=67108864",
+      "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_PARTSIZEBYTES=5242879",
+    )
+    .replace(
+      "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_EXPIRESSECONDS=86400",
+      "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_EXPIRESSECONDS=59",
+    )
+  const atBoundary = baseHomeServerEnv
+    .replace(
+      "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_PARTSIZEBYTES=67108864",
+      "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_PARTSIZEBYTES=5242880",
+    )
+    .replace(
+      "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_EXPIRESSECONDS=86400",
+      "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_EXPIRESSECONDS=60",
+    )
+
+  const belowResult = validateEnvText({
+    contract,
+    target: "home-server-source",
+    text: belowBoundary,
+  })
+  const boundaryResult = validateEnvText({
+    contract,
+    target: "home-server-source",
+    text: atBoundary,
+  })
+
+  assert.equal(belowResult.ok, false)
+  assert(belowResult.errors.some((error) => error.key === "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_PARTSIZEBYTES"))
+  assert(belowResult.errors.some((error) => error.key === "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_EXPIRESSECONDS"))
+  assert.equal(boundaryResult.ok, true)
+})
+
 test("external backup root must stay strictly inside the default or configured storage root", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const withoutExternalRoot = baseHomeServerEnv.replace(/^AQUILA_EXTERNAL_STORAGE_ROOT=.*\n/m, "")

@@ -1,6 +1,12 @@
 package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
+import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
+import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.domain.postMixin.COMMENTS_COUNT
+import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
+import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
 import com.back.support.BasePostApplicationServiceAfterCommitIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
@@ -21,6 +27,9 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
 
     @Autowired
     private lateinit var postApplicationService: PostApplicationService
+
+    @Autowired
+    private lateinit var postAttrRepository: PostAttrRepositoryPort
 
     @Autowired
     private lateinit var transactionTemplate: TransactionTemplate
@@ -77,6 +86,55 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         assertThat(sideEffectTransactions).containsOnly(true)
     }
 
+    @Test
+    @DisplayName("글 수정 후 추천 feature store 갱신은 기존 hit/like/comment 카운터를 유지한다")
+    fun modifyCommitRefreshesRecommendFeatureStoreWithHydratedCounters() {
+        // given
+        clearSideEffectMocks()
+        val admin = actorApplicationService.findByEmail("admin@test.com")!!
+        val post =
+            transactionTemplate.execute {
+                postApplicationService.write(
+                    author = admin,
+                    title = "recommend counter source",
+                    content = "recommend counter content",
+                    published = true,
+                    listed = true,
+                )
+            }!!
+        transactionTemplate.executeWithoutResult {
+            postAttrRepository.incrementIntValue(post, HIT_COUNT, 11)
+            postAttrRepository.incrementIntValue(post, LIKES_COUNT, 7)
+            postAttrRepository.incrementIntValue(post, COMMENTS_COUNT, 3)
+        }
+        val refreshedCounters = mutableListOf<PostCounterSnapshot>()
+        clearSideEffectMocks()
+        recordRefreshedCounters(refreshedCounters)
+
+        // when
+        transactionTemplate.executeWithoutResult {
+            val latestPost = postApplicationService.findById(post.id)!!
+            postApplicationService.modify(
+                actor = admin,
+                post = latestPost,
+                title = "recommend counter source modified",
+                content = "recommend counter content modified",
+                published = true,
+                listed = true,
+                expectedVersion = latestPost.version ?: 0L,
+            )
+        }
+
+        // then
+        assertThat(refreshedCounters).contains(
+            PostCounterSnapshot(
+                hitCount = 11,
+                likesCount = 7,
+                commentsCount = 3,
+            ),
+        )
+    }
+
     private fun clearSideEffectMocks() {
         clearInvocations(
             uploadedFileRetentionService,
@@ -98,4 +156,31 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
             ArgumentMatchers.anyString(),
         )
     }
+
+    private fun recordRefreshedCounters(refreshedCounters: MutableList<PostCounterSnapshot>) {
+        doAnswer { invocation ->
+            val post = invocation.getArgument<Post>(0)
+            refreshedCounters +=
+                PostCounterSnapshot(
+                    hitCount = post.hitCount,
+                    likesCount = post.likesCount,
+                    commentsCount = post.commentsCount,
+                )
+            null
+        }.`when`(postRecommendFeatureStoreService).refresh(anyPost())
+    }
+
+    private fun anyPost(): Post =
+        ArgumentMatchers.any(Post::class.java)
+            ?: Post(
+                author = Member(id = 0, username = "dummy", nickname = "dummy", apiKey = "dummy"),
+                title = "dummy",
+                content = "dummy",
+            )
+
+    private data class PostCounterSnapshot(
+        val hitCount: Int,
+        val likesCount: Int,
+        val commentsCount: Int,
+    )
 }

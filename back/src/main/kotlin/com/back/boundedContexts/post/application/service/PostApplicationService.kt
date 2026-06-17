@@ -1429,6 +1429,7 @@ class PostApplicationService(
                     logger.warn("recommend_feature_store_refresh_skipped_missing_post postId={}", postId)
                     return
                 }
+        hydratePostAttrs(post)
         postRecommendFeatureStoreService.refresh(post)
     }
 

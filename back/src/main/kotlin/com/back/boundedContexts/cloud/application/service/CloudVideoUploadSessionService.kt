@@ -11,6 +11,7 @@ import com.back.boundedContexts.cloud.model.CloudVideoUploadSessionStatus
 import com.back.global.exception.application.AppException
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.global.storage.config.CloudStorageProperties
+import com.fasterxml.jackson.annotation.JsonInclude
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -37,6 +38,7 @@ data class CloudVideoUploadSessionDto(
     val uploadedParts: List<Int>,
     val status: CloudVideoUploadSessionStatus,
     val expiresAt: Instant,
+    @get:JsonInclude(JsonInclude.Include.NON_NULL)
     val completedFileId: Long?,
 )
 

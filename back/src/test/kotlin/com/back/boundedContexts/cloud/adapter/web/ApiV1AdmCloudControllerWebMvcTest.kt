@@ -218,6 +218,7 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                 jsonPath("$.id") { value(21) }
                 jsonPath("$.uploadedParts[0]") { value(1) }
                 jsonPath("$.uploadedParts[1]") { value(2) }
+                jsonPath("$.completedFileId") { doesNotExist() }
             }
     }
 
@@ -233,7 +234,7 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                 ownerMemberId = ArgumentMatchers.eq(7L),
                 sessionId = ArgumentMatchers.eq(21L),
                 partNumber = ArgumentMatchers.eq(1),
-                bytes = anyByteArray(),
+                bytes = byteArrayContentEquals(chunkBytes),
             ),
         ).willReturn(
             CloudVideoUploadPartResultDto(
@@ -709,7 +710,10 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
             completedFileId = null,
         )
 
-    private fun anyByteArray(): ByteArray = ArgumentMatchers.any(ByteArray::class.java) ?: ByteArray(0)
+    private fun byteArrayContentEquals(expected: ByteArray): ByteArray =
+        ArgumentMatchers.argThat<ByteArray> { actual ->
+            actual != null && actual.contentEquals(expected)
+        } ?: ByteArray(0)
 
     private class CloseAwareInputStream(
         bytes: ByteArray,

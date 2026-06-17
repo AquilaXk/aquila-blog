@@ -229,7 +229,20 @@ class CloudStorageAdapter(
             )
         } catch (e: S3Exception) {
             if (e.statusCode() == 404) return
-            logger.error("Cloud multipart abort failed (objectKey={}, uploadId={})", request.objectKey, request.uploadId, e)
+            logger.error(
+                "Cloud multipart abort failed (objectKey={}, uploadId={})",
+                request.objectKey,
+                request.uploadId,
+                e,
+            )
+            throw AppException("500-1", "클라우드 대용량 업로드 취소에 실패했습니다.")
+        } catch (e: Exception) {
+            logger.error(
+                "Cloud multipart abort failed (objectKey={}, uploadId={})",
+                request.objectKey,
+                request.uploadId,
+                e,
+            )
             throw AppException("500-1", "클라우드 대용량 업로드 취소에 실패했습니다.")
         }
     }

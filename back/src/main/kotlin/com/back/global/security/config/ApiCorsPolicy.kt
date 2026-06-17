@@ -28,7 +28,7 @@ class ApiCorsPolicy(
         CorsConfiguration().apply {
             allowedOriginPatterns = buildAllowedOriginPatterns()
             allowedMethods = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-            allowedHeaders = listOf("*")
+            allowedHeaders = buildAllowedRequestHeaders()
             allowCredentials = true
             maxAge = 1800
         }
@@ -83,6 +83,19 @@ class ApiCorsPolicy(
             .mapNotNull(::normalizeOriginPattern)
             .distinct()
     }
+
+    private fun buildAllowedRequestHeaders(): List<String> =
+        listOf(
+            HttpHeaders.ACCEPT,
+            HttpHeaders.AUTHORIZATION,
+            HttpHeaders.CONTENT_TYPE,
+            HttpHeaders.IF_NONE_MATCH,
+            "Idempotency-Key",
+            "Last-Event-ID",
+            HttpHeaders.RANGE,
+            ApiMutationCsrfGuardFilter.CSRF_PREFLIGHT_HEADER,
+            "X-Request-ID",
+        )
 
     private fun normalizeOriginPattern(raw: String?): String? {
         if (raw.isNullOrBlank()) return null

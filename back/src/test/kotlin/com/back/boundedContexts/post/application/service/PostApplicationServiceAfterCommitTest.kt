@@ -5,10 +5,13 @@ import com.back.support.BasePostApplicationServiceAfterCommitIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.mockito.ArgumentMatchers
 import org.mockito.Mockito.clearInvocations
+import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.mockingDetails
 import org.mockito.Mockito.verifyNoInteractions
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate
 
 @DisplayName("PostApplicationService 후속 작업 AFTER_COMMIT 테스트")
@@ -54,6 +57,8 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         // given
         clearSideEffectMocks()
         val admin = actorApplicationService.findByEmail("admin@test.com")!!
+        val sideEffectTransactions = mutableListOf<Boolean>()
+        recordActiveTransactionDuringSideEffects(sideEffectTransactions)
 
         // when
         transactionTemplate.executeWithoutResult {
@@ -69,6 +74,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         // then
         assertThat(invokedMethodNames(uploadedFileRetentionService)).contains("syncPostContent")
         assertThat(invokedMethodNames(postRecommendFeatureStoreService)).contains("refresh")
+        assertThat(sideEffectTransactions).containsOnly(true)
     }
 
     private fun clearSideEffectMocks() {
@@ -81,4 +87,15 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
     }
 
     private fun invokedMethodNames(mock: Any): List<String> = mockingDetails(mock).invocations.map { it.method.name }
+
+    private fun recordActiveTransactionDuringSideEffects(sideEffectTransactions: MutableList<Boolean>) {
+        doAnswer {
+            sideEffectTransactions += TransactionSynchronizationManager.isActualTransactionActive()
+            null
+        }.`when`(uploadedFileRetentionService).syncPostContent(
+            ArgumentMatchers.anyLong(),
+            ArgumentMatchers.nullable(String::class.java),
+            ArgumentMatchers.anyString(),
+        )
+    }
 }

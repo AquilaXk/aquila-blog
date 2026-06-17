@@ -57,6 +57,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         verifyNoInteractions(
             uploadedFileRetentionService,
             postRecommendFeatureStoreService,
+            cacheManager,
         )
     }
 

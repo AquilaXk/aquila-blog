@@ -3,8 +3,10 @@ package com.back.global.security.application
 import org.jsoup.Jsoup
 
 /**
- * HtmlContentSanitizer는 글로벌 공통 유스케이스를 조합하는 애플리케이션 계층 구성요소입니다.
- * 트랜잭션 경계, 예외 처리, 후속 동기화(캐시/이벤트/큐)를 함께 관리합니다.
+ * 게시글 contentHtml 렌더링 전 XSS 위험을 줄이기 위한 HTML 정제 유틸입니다.
+ *
+ * 허용 태그만 유지하고, 이벤트/style/srcdoc 속성과 위험 URI 프로토콜을 제거합니다.
+ * target="_blank" 링크에는 opener 참조를 막기 위한 rel 값을 보강합니다.
  */
 object HtmlContentSanitizer {
     private val allowedTags =
@@ -51,10 +53,6 @@ object HtmlContentSanitizer {
     private val blockedProtocols = listOf("javascript:", "vbscript:", "data:")
     private val uriAttributes = setOf("href", "src")
 
-    /**
-     * 입력 HTML을 정제해 렌더링/XSS 위험을 줄입니다.
-     * 애플리케이션 계층에서 트랜잭션 경계와 후속 처리(캐시/큐/이벤트)를 함께 관리합니다.
-     */
     fun sanitizeRichHtmlOrNull(rawHtml: String?): String? {
         if (rawHtml.isNullOrBlank()) return null
 
@@ -79,7 +77,7 @@ object HtmlContentSanitizer {
                 }
 
                 if (key in uriAttributes) {
-                    val normalized = value.lowercase()
+                    val normalized = normalizeUriForProtocolCheck(value)
                     if (blockedProtocols.any { normalized.startsWith(it) }) {
                         element.removeAttr(attr.key)
                     }
@@ -103,4 +101,9 @@ object HtmlContentSanitizer {
         val sanitized = body.html().trim()
         return sanitized.ifBlank { null }
     }
+
+    private fun normalizeUriForProtocolCheck(value: String): String =
+        value
+            .filterNot { it.isWhitespace() || it.isISOControl() }
+            .lowercase()
 }

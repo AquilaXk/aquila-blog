@@ -19,6 +19,11 @@ import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
 import org.mockito.Mockito.mock
 import org.springframework.cache.CacheManager
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
+import org.springframework.transaction.TransactionException
+import org.springframework.transaction.TransactionStatus
+import org.springframework.transaction.support.SimpleTransactionStatus
 import java.time.Instant
 
 @org.junit.jupiter.api.DisplayName("PostApplicationServiceDeleteResilience 테스트")
@@ -35,6 +40,7 @@ class PostApplicationServiceDeleteResilienceTest {
     private val eventPublisher: EventPublisher = mock(EventPublisher::class.java)
     private val uploadedFileRetentionService: UploadedFileRetentionService = mock(UploadedFileRetentionService::class.java)
     private val cacheManager: CacheManager = mock(CacheManager::class.java)
+    private val transactionManager: PlatformTransactionManager = NoopTransactionManager()
     private val postRecommendRankingService: PostRecommendRankingService = mock(PostRecommendRankingService::class.java)
     private val postRecommendFeatureStoreService: PostRecommendFeatureStoreService =
         mock(PostRecommendFeatureStoreService::class.java)
@@ -54,6 +60,7 @@ class PostApplicationServiceDeleteResilienceTest {
             eventPublisher = eventPublisher,
             uploadedFileRetentionService = uploadedFileRetentionService,
             cacheManager = cacheManager,
+            transactionManager = transactionManager,
             postRecommendRankingService = postRecommendRankingService,
             postRecommendFeatureStoreService = postRecommendFeatureStoreService,
             postKeywordSearchPipelineService = postKeywordSearchPipelineService,
@@ -110,5 +117,15 @@ class PostApplicationServiceDeleteResilienceTest {
         then(postRepository).should().softDeleteById(post.id)
         then(memberAttrRepository).should().incrementIntValue(author, POSTS_COUNT, -1)
         then(postRepository).should().countByAuthor(author)
+    }
+
+    private class NoopTransactionManager : PlatformTransactionManager {
+        override fun getTransaction(definition: TransactionDefinition?): TransactionStatus = SimpleTransactionStatus()
+
+        @Throws(TransactionException::class)
+        override fun commit(status: TransactionStatus) = Unit
+
+        @Throws(TransactionException::class)
+        override fun rollback(status: TransactionStatus) = Unit
     }
 }

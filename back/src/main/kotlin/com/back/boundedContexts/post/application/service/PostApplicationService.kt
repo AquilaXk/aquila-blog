@@ -51,7 +51,12 @@ import org.springframework.cache.CacheManager
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -74,6 +79,7 @@ class PostApplicationService(
     private val eventPublisher: EventPublisher,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
     private val cacheManager: CacheManager,
+    private val transactionManager: PlatformTransactionManager,
     private val meterRegistry: MeterRegistry? = null,
     private val postRecommendRankingService: PostRecommendRankingService,
     private val postRecommendFeatureStoreService: PostRecommendFeatureStoreService,
@@ -97,6 +103,10 @@ class PostApplicationService(
     private val hotPageSizes = listOf(30, 24, 16)
     private val hotSorts = listOf(PostSearchSortType1.CREATED_AT)
     private val maxTagCacheEvict = 12
+    private val afterCommitSideEffectTransactionTemplate =
+        TransactionTemplate(transactionManager).apply {
+            propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
+        }
 
     fun count(): Long = postRepository.count()
 
@@ -132,21 +142,24 @@ class PostApplicationService(
                 )
             val createdTags = extractNormalizedTags(created.content)
             val isPublic = isPubliclyListed(created)
-            clearReadCaches(
-                postId = created.id,
-                afterTags = createdTags,
-                evictHotReadPages = isPublic,
-                evictSearchFirstPage = isPublic,
-                evictImpactedTagPages = isPublic,
-                evictTagsPublic = isPublic,
-                evictDetail = isPublic,
-                evictReason = "write",
+            enqueuePostWriteSideEffect(
+                PostWriteSideEffectCommand(
+                    postId = created.id,
+                    previousContent = null,
+                    currentContent = created.content,
+                    deletedContent = null,
+                    beforeTags = emptyList(),
+                    afterTags = createdTags,
+                    evictHotReadPages = isPublic,
+                    evictSearchFirstPage = isPublic,
+                    evictImpactedTagPages = isPublic,
+                    evictTagsPublic = isPublic,
+                    evictDetail = isPublic,
+                    evictReason = "write",
+                    recommendationAction = recommendationActionFor(isPublic),
+                ),
             )
-            if (isPublic) {
-                postRecommendFeatureStoreService.refresh(created)
-            } else {
-                postRecommendFeatureStoreService.evict(created.id)
-            }
+            publishPostWrittenEvent(author, created, createdTags)
             return created
         }
 
@@ -183,21 +196,24 @@ class PostApplicationService(
         postWriteRequestIdempotencyRepository.save(requestSlot)
         val createdTags = extractNormalizedTags(createdPost.content)
         val isPublic = isPubliclyListed(createdPost)
-        clearReadCaches(
-            postId = createdPost.id,
-            afterTags = createdTags,
-            evictHotReadPages = isPublic,
-            evictSearchFirstPage = isPublic,
-            evictImpactedTagPages = isPublic,
-            evictTagsPublic = isPublic,
-            evictDetail = isPublic,
-            evictReason = "write-idempotent",
+        enqueuePostWriteSideEffect(
+            PostWriteSideEffectCommand(
+                postId = createdPost.id,
+                previousContent = null,
+                currentContent = createdPost.content,
+                deletedContent = null,
+                beforeTags = emptyList(),
+                afterTags = createdTags,
+                evictHotReadPages = isPublic,
+                evictSearchFirstPage = isPublic,
+                evictImpactedTagPages = isPublic,
+                evictTagsPublic = isPublic,
+                evictDetail = isPublic,
+                evictReason = "write-idempotent",
+                recommendationAction = recommendationActionFor(isPublic),
+            ),
         )
-        if (isPublic) {
-            postRecommendFeatureStoreService.refresh(createdPost)
-        } else {
-            postRecommendFeatureStoreService.evict(createdPost.id)
-        }
+        publishPostWrittenEvent(author, createdPost, createdTags)
 
         return createdPost
     }
@@ -267,11 +283,6 @@ class PostApplicationService(
         } catch (exception: ObjectOptimisticLockingFailureException) {
             throw AppException("409-1", "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.")
         }
-        runCatching {
-            uploadedFileRetentionService.syncPostContent(post.id, previousContent, post.content)
-        }.onFailure { exception ->
-            logger.warn("Failed to sync post attachments on modify: postId={}", post.id, exception)
-        }
         val afterTags = extractNormalizedTags(post.content)
         val isPublic = isPubliclyListed(post)
         val listingVisibilityChanged = wasPublic != isPublic
@@ -279,22 +290,23 @@ class PostApplicationService(
         val titleChanged = previousTitle != post.title
         val tagChanged = previousTags != afterTags
         val affectsPublicRead = wasPublic || isPublic
-        clearReadCaches(
-            postId = post.id,
-            beforeTags = previousTags,
-            afterTags = afterTags,
-            evictHotReadPages = affectsPublicRead,
-            evictSearchFirstPage = affectsPublicRead && (listingVisibilityChanged || titleChanged || contentChanged || tagChanged),
-            evictImpactedTagPages = affectsPublicRead && (tagChanged || listingVisibilityChanged),
-            evictTagsPublic = affectsPublicRead && (tagChanged || listingVisibilityChanged),
-            evictDetail = affectsPublicRead && (listingVisibilityChanged || titleChanged || contentChanged),
-            evictReason = "modify",
+        enqueuePostWriteSideEffect(
+            PostWriteSideEffectCommand(
+                postId = post.id,
+                previousContent = previousContent,
+                currentContent = post.content,
+                deletedContent = null,
+                beforeTags = previousTags,
+                afterTags = afterTags,
+                evictHotReadPages = affectsPublicRead,
+                evictSearchFirstPage = affectsPublicRead && (listingVisibilityChanged || titleChanged || contentChanged || tagChanged),
+                evictImpactedTagPages = affectsPublicRead && (tagChanged || listingVisibilityChanged),
+                evictTagsPublic = affectsPublicRead && (tagChanged || listingVisibilityChanged),
+                evictDetail = affectsPublicRead && (listingVisibilityChanged || titleChanged || contentChanged),
+                evictReason = "modify",
+                recommendationAction = recommendationActionFor(isPublic),
+            ),
         )
-        if (isPublic) {
-            postRecommendFeatureStoreService.refresh(post)
-        } else {
-            postRecommendFeatureStoreService.evict(post.id)
-        }
 
         runCatching {
             eventPublisher.publish(
@@ -337,29 +349,28 @@ class PostApplicationService(
             )
         val savedPost = postRepository.saveAndFlush(post)
         syncMetaTagIndexAttr(savedPost)
-        runCatching {
-            uploadedFileRetentionService.syncPostContent(savedPost.id, null, savedPost.content)
-        }.onFailure { exception ->
-            logger.warn("Failed to sync post attachments on write: postId={}", savedPost.id, exception)
-        }
         incrementMemberPostsCount(persistenceAuthor)
-        val afterTags = extractNormalizedTags(savedPost.content)
+        return savedPost
+    }
 
+    private fun publishPostWrittenEvent(
+        author: Member,
+        post: Post,
+        afterTags: List<String>,
+    ) {
         runCatching {
             eventPublisher.publish(
                 PostWrittenEvent(
                     UUID.randomUUID(),
-                    PostDto(savedPost),
+                    PostDto(post),
                     MemberDto(author),
                     emptyList(),
                     afterTags,
                 ),
             )
         }.onFailure { exception ->
-            logger.warn("Failed to publish PostWrittenEvent: postId={}", savedPost.id, exception)
+            logger.warn("Failed to publish PostWrittenEvent: postId={}", post.id, exception)
         }
-
-        return savedPost
     }
 
     /**
@@ -411,19 +422,6 @@ class PostApplicationService(
         if (wasTempDraft) {
             updateTempDraftMarker(post.author, null)
         }
-        clearReadCaches(
-            postId = post.id,
-            beforeTags = beforeTags,
-            afterTags = emptyList(),
-            evictHotReadPages = wasPublic,
-            evictSearchFirstPage = wasPublic,
-            evictImpactedTagPages = wasPublic,
-            evictTagsPublic = wasPublic,
-            evictDetail = wasPublic,
-            evictReason = "soft-delete",
-        )
-        postRecommendFeatureStoreService.evict(post.id)
-
         // 카운터 보정 실패는 삭제 실패로 전파하지 않는다. 실패 시 실제 개수 재동기화를 시도한다.
         runCatching {
             decrementMemberPostsCount(Member(post.author.id))
@@ -436,12 +434,23 @@ class PostApplicationService(
             }
         }
 
-        // 삭제 자체는 완료시키고, 보조 처리(파일 정리/이벤트)는 실패해도 트랜잭션을 깨지 않도록 분리한다.
-        runCatching {
-            uploadedFileRetentionService.scheduleDeletedPostAttachments(deletedPostContent)
-        }.onFailure { exception ->
-            logger.warn("Failed to schedule cleanup for deleted post id={}", post.id, exception)
-        }
+        enqueuePostWriteSideEffect(
+            PostWriteSideEffectCommand(
+                postId = post.id,
+                previousContent = null,
+                currentContent = null,
+                deletedContent = deletedPostContent,
+                beforeTags = beforeTags,
+                afterTags = emptyList(),
+                evictHotReadPages = wasPublic,
+                evictSearchFirstPage = wasPublic,
+                evictImpactedTagPages = wasPublic,
+                evictTagsPublic = wasPublic,
+                evictDetail = wasPublic,
+                evictReason = "soft-delete",
+                recommendationAction = PostRecommendationSideEffect.EVICT,
+            ),
+        )
 
         runCatching {
             val postDto = PostDto(post)
@@ -1344,6 +1353,100 @@ class PostApplicationService(
 
     // SecurityContext actor는 MemberProxy일 수 있어 영속 경계에서는 실제 엔티티를 사용한다.
     private fun toPersistenceMember(member: Member): Member = if (member is MemberProxy) member.persistenceMember else member
+
+    private fun recommendationActionFor(isPublic: Boolean): PostRecommendationSideEffect =
+        if (isPublic) PostRecommendationSideEffect.REFRESH else PostRecommendationSideEffect.EVICT
+
+    private fun enqueuePostWriteSideEffect(command: PostWriteSideEffectCommand) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            handlePostWriteSideEffect(command)
+            return
+        }
+
+        if (command.evictTagsPublic) {
+            publicTagCountsCache = null
+        }
+        TransactionSynchronizationManager.registerSynchronization(
+            object : TransactionSynchronization {
+                override fun afterCommit() {
+                    handlePostWriteSideEffect(command)
+                }
+            },
+        )
+    }
+
+    private fun handlePostWriteSideEffect(command: PostWriteSideEffectCommand) {
+        runCatching {
+            clearReadCaches(
+                postId = command.postId,
+                beforeTags = command.beforeTags,
+                afterTags = command.afterTags,
+                evictHotReadPages = command.evictHotReadPages,
+                evictSearchFirstPage = command.evictSearchFirstPage,
+                evictImpactedTagPages = command.evictImpactedTagPages,
+                evictTagsPublic = command.evictTagsPublic,
+                evictDetail = command.evictDetail,
+                evictReason = command.evictReason,
+            )
+        }.onFailure { exception ->
+            logger.warn("Failed to evict post read caches after commit: postId={}", command.postId, exception)
+        }
+
+        command.currentContent?.let { currentContent ->
+            runAfterCommitSideEffectInNewTransaction(
+                postId = command.postId,
+                failureMessage = "Failed to sync post attachments after commit",
+            ) {
+                uploadedFileRetentionService.syncPostContent(command.postId, command.previousContent, currentContent)
+            }
+        }
+
+        command.deletedContent?.let { deletedContent ->
+            runAfterCommitSideEffectInNewTransaction(
+                postId = command.postId,
+                failureMessage = "Failed to schedule cleanup for deleted post after commit",
+            ) {
+                uploadedFileRetentionService.scheduleDeletedPostAttachments(deletedContent)
+            }
+        }
+
+        when (command.recommendationAction) {
+            PostRecommendationSideEffect.REFRESH ->
+                runAfterCommitSideEffectInNewTransaction(
+                    postId = command.postId,
+                    failureMessage = "Failed to refresh recommend feature store after commit",
+                ) {
+                    refreshRecommendFeatureStoreAfterCommit(command.postId)
+                }
+
+            PostRecommendationSideEffect.EVICT -> postRecommendFeatureStoreService.evict(command.postId)
+        }
+    }
+
+    private fun runAfterCommitSideEffectInNewTransaction(
+        postId: Long,
+        failureMessage: String,
+        block: () -> Unit,
+    ) {
+        runCatching {
+            afterCommitSideEffectTransactionTemplate.executeWithoutResult {
+                block()
+            }
+        }.onFailure { exception ->
+            logger.warn("{}: postId={}", failureMessage, postId, exception)
+        }
+    }
+
+    private fun refreshRecommendFeatureStoreAfterCommit(postId: Long) {
+        val post =
+            postRepository.findById(postId).getOrNull()
+                ?: run {
+                    logger.warn("recommend_feature_store_refresh_skipped_missing_post postId={}", postId)
+                    return
+                }
+        hydratePostAttrs(post)
+        postRecommendFeatureStoreService.refresh(post)
+    }
 
     private fun clearReadCaches(
         postId: Long? = null,

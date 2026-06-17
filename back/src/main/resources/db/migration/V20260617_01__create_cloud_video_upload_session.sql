@@ -41,6 +41,3 @@ CREATE INDEX IF NOT EXISTS cloud_video_upload_session_idx_owner_status_expires
 
 CREATE INDEX IF NOT EXISTS cloud_video_upload_session_idx_status_expires
     ON cloud_video_upload_session (status, expires_at, id);
-
-CREATE INDEX IF NOT EXISTS cloud_video_upload_part_idx_session
-    ON cloud_video_upload_part (session_id, part_number);

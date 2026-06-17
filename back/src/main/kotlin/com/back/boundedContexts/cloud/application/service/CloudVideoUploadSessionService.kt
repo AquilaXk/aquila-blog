@@ -110,7 +110,7 @@ class CloudVideoUploadSessionService(
         return session.toDto(emptyList())
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = [AppException::class])
     fun getSession(
         ownerMemberId: Long,
         sessionId: Long,
@@ -143,7 +143,7 @@ class CloudVideoUploadSessionService(
         return purgedCount
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = [AppException::class])
     fun uploadPart(
         ownerMemberId: Long,
         sessionId: Long,
@@ -192,7 +192,7 @@ class CloudVideoUploadSessionService(
         )
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = [AppException::class])
     fun complete(
         ownerMemberId: Long,
         sessionId: Long,
@@ -507,8 +507,15 @@ class CloudVideoUploadSessionService(
         val ext = extractExtension(originalFilename)
         val datePath = DATE_PATH_FORMATTER.format(clock.instant().atZone(ZoneOffset.UTC))
         val folderSegment = folderPath.takeIf(String::isNotBlank)?.let { "$it/" }.orEmpty()
-        return "cloud/$ownerMemberId/$folderSegment$datePath/${UUID.randomUUID()}$ext"
+        val keyPrefix = normalizeObjectKeyPrefix(cloudStorageProperties.cloudKeyPrefix)
+        return "$keyPrefix/$ownerMemberId/$folderSegment$datePath/${UUID.randomUUID()}$ext"
     }
+
+    private fun normalizeObjectKeyPrefix(prefix: String): String =
+        prefix
+            .trim()
+            .trim('/')
+            .ifBlank { "cloud" }
 
     private fun extractExtension(filename: String): String {
         if (!filename.contains(".")) return ""

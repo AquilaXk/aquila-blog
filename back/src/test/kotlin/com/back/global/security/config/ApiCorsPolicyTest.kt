@@ -49,4 +49,38 @@ class ApiCorsPolicyTest {
 
         assertThat(patterns).isEmpty()
     }
+
+    @Test
+    @DisplayName("credential CORS 요청 헤더는 운영에 필요한 명시 목록만 허용한다")
+    fun `cors allowed headers use explicit production allowlist`() {
+        val environment = MockEnvironment().withProperty("spring.profiles.active", "prod")
+        val policy =
+            ApiCorsPolicy(
+                environment = environment,
+                siteFrontUrl = "https://www.aquilaxk.site",
+                siteBackUrl = "https://api.aquilaxk.site",
+                siteCookieDomain = "aquilaxk.site",
+            )
+
+        val allowedHeaders = policy.corsConfiguration().allowedHeaders.orEmpty()
+
+        assertThat(allowedHeaders).containsExactlyInAnyOrder(
+            "Accept",
+            "Authorization",
+            "Content-Type",
+            "If-None-Match",
+            "Idempotency-Key",
+            "Last-Event-ID",
+            "Range",
+            "X-Aquila-CSRF",
+            "X-Request-ID",
+        )
+        assertThat(allowedHeaders).doesNotContain(
+            "*",
+            "X-Forwarded-For",
+            "X-Real-IP",
+            "CF-Connecting-IP",
+            "True-Client-IP",
+        )
+    }
 }

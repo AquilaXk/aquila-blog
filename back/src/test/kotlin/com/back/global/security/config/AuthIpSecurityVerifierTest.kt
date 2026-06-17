@@ -10,6 +10,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.mockito.BDDMockito.given
+import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
@@ -87,6 +88,32 @@ class AuthIpSecurityVerifierTest {
         // then
         assertThat(exception.rsData.resultCode).isEqualTo("401-7")
         verify(memberSessionUseCase).revokeSession("session-key")
+        verify(authCookieService).expireAuthCookies()
+    }
+
+    @Test
+    @DisplayName("IP 보안 이벤트 기록 실패는 차단 응답을 유지하고 인증 쿠키를 만료한다")
+    fun continueBlockingWhenMismatchEventRecordingFails() {
+        // given
+        val check = check(reason = "event-record-failed")
+        given(authIpSecurityService.matches("expected-fingerprint", "203.0.113.13")).willReturn(false)
+        doThrow(RuntimeException("event store down"))
+            .`when`(authSecurityEventService)
+            .recordIpSecurityMismatchBlocked(
+                memberId = 54L,
+                loginIdentifier = "admin@test.com",
+                rememberLoginEnabled = true,
+                ipSecurityEnabled = true,
+                expectedIpFingerprint = "expected-fingerprint",
+                requestPath = "/member/api/v1/auth/me",
+                reason = "event-record-failed",
+            )
+
+        // when
+        val exception = assertThrows<AppException> { verifier.verify(check, clientIp = "203.0.113.13") }
+
+        // then
+        assertThat(exception.rsData.resultCode).isEqualTo("401-7")
         verify(authCookieService).expireAuthCookies()
     }
 

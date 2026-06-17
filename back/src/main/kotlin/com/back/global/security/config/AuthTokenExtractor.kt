@@ -41,19 +41,14 @@ class AuthTokenExtractor(
         val bits = headerAuthorization.trim().split(Regex("\\s+"))
         return when (bits.size) {
             2 -> {
-                if (bits[1].isBlank()) throw invalidBearerHeader()
                 ExtractedAuthTokens("", bits[1], sessionKey, refreshToken)
             }
             3 -> {
-                if (bits[1].isBlank() || bits[2].isBlank()) {
-                    throw invalidBearerHeader()
-                }
                 ExtractedAuthTokens(bits[1], bits[2], sessionKey, refreshToken)
             }
             else -> throw invalidBearerHeader()
         }
     }
 
-    private fun invalidBearerHeader(): AppException =
-        AppException("401-2", "${HttpHeaders.AUTHORIZATION} 헤더가 Bearer 형식이 아닙니다.")
+    private fun invalidBearerHeader(): AppException = AppException("401-2", "${HttpHeaders.AUTHORIZATION} 헤더가 Bearer 형식이 아닙니다.")
 }

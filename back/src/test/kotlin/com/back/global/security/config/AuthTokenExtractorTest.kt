@@ -99,4 +99,20 @@ class AuthTokenExtractorTest {
 
         assertThat(exception.rsData.resultCode).isEqualTo("401-2")
     }
+
+    @Test
+    @DisplayName("Authorization Bearer 토큰 수가 허용 형식을 초과하면 401-2로 거절한다")
+    fun rejectBearerAuthorizationHeaderWithTooManyTokens() {
+        // given
+        val rq = mock(Rq::class.java)
+        given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("Bearer api-key access-token extra-token")
+        given(rq.getCookieValue("sessionKey", "")).willReturn("")
+        given(rq.getCookieValue("refreshToken", "")).willReturn("")
+        val extractor = AuthTokenExtractor(rq)
+
+        // when / then
+        val exception = assertThrows<AppException> { extractor.extract() }
+
+        assertThat(exception.rsData.resultCode).isEqualTo("401-2")
+    }
 }

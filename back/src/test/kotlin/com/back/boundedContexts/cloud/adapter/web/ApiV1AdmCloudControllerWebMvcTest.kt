@@ -3,7 +3,12 @@ package com.back.boundedContexts.cloud.adapter.web
 import com.back.boundedContexts.cloud.application.service.CloudFileContent
 import com.back.boundedContexts.cloud.application.service.CloudFileDto
 import com.back.boundedContexts.cloud.application.service.CloudFileService
+import com.back.boundedContexts.cloud.application.service.CloudVideoUploadPartDto
+import com.back.boundedContexts.cloud.application.service.CloudVideoUploadPartResultDto
+import com.back.boundedContexts.cloud.application.service.CloudVideoUploadSessionDto
+import com.back.boundedContexts.cloud.application.service.CloudVideoUploadSessionService
 import com.back.boundedContexts.cloud.model.CloudFileMediaKind
+import com.back.boundedContexts.cloud.model.CloudVideoUploadSessionStatus
 import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.support.BaseAdmCloudControllerWebMvcTest
@@ -11,6 +16,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.mockito.ArgumentMatchers
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
 import org.mockito.Mockito.mock
@@ -24,6 +30,8 @@ import org.springframework.test.util.ReflectionTestUtils
 import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.multipart
+import org.springframework.test.web.servlet.post
+import org.springframework.test.web.servlet.put
 import java.io.ByteArrayInputStream
 import java.io.EOFException
 import java.io.InputStream
@@ -124,6 +132,149 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                 jsonPath("$.data.id") { value(11) }
                 jsonPath("$.data.ownerMemberId") { value(7) }
             }
+    }
+
+    @Test
+    @DisplayName("관리자는 대용량 동영상 업로드 세션을 생성한다")
+    fun `관리자는 대용량 동영상 업로드 세션을 생성한다`() {
+        val admin = adminUser(id = 7L)
+        given(
+            cloudVideoUploadSessionService.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "demo.mp4",
+                contentType = "video/mp4",
+                byteSize = 5_368_709_120L,
+                folderPath = "videos",
+            ),
+        ).willReturn(sampleVideoSessionDto())
+
+        mvc
+            .post("/system/api/v1/adm/cloud/files/video-upload-sessions") {
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                      "originalFilename": "demo.mp4",
+                      "contentType": "video/mp4",
+                      "byteSize": 5368709120,
+                      "folderPath": "videos"
+                    }
+                    """.trimIndent()
+                with(user(admin))
+            }.andExpect {
+                status { isCreated() }
+                jsonPath("$.resultCode") { value("201-1") }
+                jsonPath("$.data.id") { value(21) }
+                jsonPath("$.data.totalParts") { value(80) }
+            }
+    }
+
+    @Test
+    @DisplayName("관리자는 folderPath를 생략해도 대용량 동영상 업로드 세션을 생성한다")
+    fun `관리자는 folderPath 생략 요청으로 대용량 동영상 업로드 세션을 생성한다`() {
+        val admin = adminUser(id = 7L)
+        given(
+            cloudVideoUploadSessionService.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "demo.mp4",
+                contentType = "video/mp4",
+                byteSize = 5_368_709_120L,
+                folderPath = "",
+            ),
+        ).willReturn(sampleVideoSessionDto().copy(folderPath = ""))
+
+        mvc
+            .post("/system/api/v1/adm/cloud/files/video-upload-sessions") {
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                      "originalFilename": "demo.mp4",
+                      "contentType": "video/mp4",
+                      "byteSize": 5368709120
+                    }
+                    """.trimIndent()
+                with(user(admin))
+            }.andExpect {
+                status { isCreated() }
+                jsonPath("$.data.folderPath") { value("") }
+            }
+    }
+
+    @Test
+    @DisplayName("관리자는 대용량 동영상 업로드 세션 상태를 조회한다")
+    fun `관리자는 대용량 동영상 업로드 세션 상태를 조회한다`() {
+        val admin = adminUser(id = 7L)
+        given(cloudVideoUploadSessionService.getSession(ownerMemberId = 7L, sessionId = 21L))
+            .willReturn(sampleVideoSessionDto(uploadedParts = listOf(1, 2)))
+
+        mvc
+            .get("/system/api/v1/adm/cloud/files/video-upload-sessions/21") {
+                with(user(admin))
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.id") { value(21) }
+                jsonPath("$.uploadedParts[0]") { value(1) }
+                jsonPath("$.uploadedParts[1]") { value(2) }
+            }
+    }
+
+    @Test
+    @DisplayName("관리자는 대용량 동영상 조각을 raw body 그대로 업로드한다")
+    fun `관리자는 대용량 동영상 조각을 raw body 그대로 업로드한다`() {
+        val admin = adminUser(id = 7L)
+        val chunkBytes = byteArrayOf(0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70, 1, 2, 3, 4)
+        given(
+            cloudVideoUploadSessionService.uploadPart(
+                ownerMemberId = ArgumentMatchers.eq(7L),
+                sessionId = ArgumentMatchers.eq(21L),
+                partNumber = ArgumentMatchers.eq(1),
+                bytes = anyByteArray(),
+            ),
+        ).willReturn(
+            CloudVideoUploadPartResultDto(
+                session = sampleVideoSessionDto(uploadedParts = listOf(1)),
+                part = CloudVideoUploadPartDto(partNumber = 1, byteSize = chunkBytes.size.toLong()),
+            ),
+        )
+
+        mvc
+            .put("/system/api/v1/adm/cloud/files/video-upload-sessions/21/parts/1") {
+                contentType = MediaType.APPLICATION_OCTET_STREAM
+                content = chunkBytes
+                with(user(admin))
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.session.uploadedParts[0]") { value(1) }
+                jsonPath("$.part.partNumber") { value(1) }
+            }
+    }
+
+    @Test
+    @DisplayName("관리자는 대용량 동영상 세션 완료와 취소를 owner id로 위임한다")
+    fun `관리자는 대용량 동영상 세션 완료와 취소를 owner id로 위임한다`() {
+        val admin = adminUser(id = 7L)
+        val videoFile = sampleDto(id = 31L, ownerMemberId = 7L, originalFilename = "demo.mp4", mediaKind = CloudFileMediaKind.VIDEO)
+        given(cloudVideoUploadSessionService.complete(ownerMemberId = 7L, sessionId = 21L)).willReturn(videoFile)
+
+        mvc
+            .post("/system/api/v1/adm/cloud/files/video-upload-sessions/21/complete") {
+                with(user(admin))
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.resultCode") { value("200-1") }
+                jsonPath("$.data.id") { value(31) }
+            }
+
+        mvc
+            .delete("/system/api/v1/adm/cloud/files/video-upload-sessions/21") {
+                with(user(admin))
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.resultCode") { value("200-1") }
+            }
+
+        then(cloudVideoUploadSessionService).should().cancel(ownerMemberId = 7L, sessionId = 21L)
     }
 
     @Test
@@ -313,7 +464,11 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
     @Test
     @DisplayName("slice stream은 단일 byte read에서도 지정된 구간만 반환한다")
     fun `slice stream은 단일 byte read에서도 지정된 구간만 반환한다`() {
-        val controller = ApiV1AdmCloudController(mock(CloudFileService::class.java))
+        val controller =
+            ApiV1AdmCloudController(
+                mock(CloudFileService::class.java),
+                mock(CloudVideoUploadSessionService::class.java),
+            )
         val stream =
             ReflectionTestUtils.invokeMethod<InputStream>(
                 controller,
@@ -331,7 +486,11 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
     @Test
     @DisplayName("slice stream은 시작 위치까지 건너뛰지 못하면 EOF로 실패한다")
     fun `slice stream은 시작 위치까지 건너뛰지 못하면 EOF로 실패한다`() {
-        val controller = ApiV1AdmCloudController(mock(CloudFileService::class.java))
+        val controller =
+            ApiV1AdmCloudController(
+                mock(CloudFileService::class.java),
+                mock(CloudVideoUploadSessionService::class.java),
+            )
 
         assertThatThrownBy {
             ReflectionTestUtils.invokeMethod<InputStream>(
@@ -347,7 +506,11 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
     @Test
     @DisplayName("slice stream은 skip이 0이면 read로 건너뛰기를 이어간다")
     fun `slice stream은 skip이 0이면 read로 건너뛰기를 이어간다`() {
-        val controller = ApiV1AdmCloudController(mock(CloudFileService::class.java))
+        val controller =
+            ApiV1AdmCloudController(
+                mock(CloudFileService::class.java),
+                mock(CloudVideoUploadSessionService::class.java),
+            )
         val stream =
             ReflectionTestUtils.invokeMethod<InputStream>(
                 controller,
@@ -437,6 +600,24 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
             createdAt = Instant.parse("2026-06-12T00:00:00Z"),
             modifiedAt = Instant.parse("2026-06-12T00:00:00Z"),
         )
+
+    private fun sampleVideoSessionDto(uploadedParts: List<Int> = emptyList()): CloudVideoUploadSessionDto =
+        CloudVideoUploadSessionDto(
+            id = 21L,
+            ownerMemberId = 7L,
+            originalFilename = "demo.mp4",
+            contentType = "video/mp4",
+            byteSize = 5_368_709_120L,
+            folderPath = "videos",
+            partSizeBytes = 67_108_864L,
+            totalParts = 80,
+            uploadedParts = uploadedParts,
+            status = CloudVideoUploadSessionStatus.IN_PROGRESS,
+            expiresAt = Instant.parse("2026-06-18T00:00:00Z"),
+            completedFileId = null,
+        )
+
+    private fun anyByteArray(): ByteArray = ArgumentMatchers.any(ByteArray::class.java) ?: ByteArray(0)
 
     private class CloseAwareInputStream(
         bytes: ByteArray,

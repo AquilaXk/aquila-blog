@@ -41,6 +41,63 @@ interface CloudStoragePort {
         val checksumSha256: String,
     )
 
+    data class MultipartUploadInitRequest(
+        val objectKey: String,
+        val contentType: String,
+        val originalFilename: String,
+    )
+
+    data class MultipartUploadInitResult(
+        val objectKey: String,
+        val uploadId: String,
+    )
+
+    class MultipartUploadPartRequest(
+        val objectKey: String,
+        val uploadId: String,
+        val partNumber: Int,
+        val bytes: ByteArray,
+    ) {
+        override fun equals(other: Any?): Boolean =
+            this === other ||
+                (
+                    other is MultipartUploadPartRequest &&
+                        objectKey == other.objectKey &&
+                        uploadId == other.uploadId &&
+                        partNumber == other.partNumber &&
+                        bytes.contentEquals(other.bytes)
+                )
+
+        override fun hashCode(): Int {
+            var result = objectKey.hashCode()
+            result = 31 * result + uploadId.hashCode()
+            result = 31 * result + partNumber
+            result = 31 * result + bytes.contentHashCode()
+            return result
+        }
+    }
+
+    data class MultipartUploadPartResult(
+        val partNumber: Int,
+        val eTag: String,
+    )
+
+    data class CompletedMultipartUploadPart(
+        val partNumber: Int,
+        val eTag: String,
+    )
+
+    data class MultipartUploadCompleteRequest(
+        val objectKey: String,
+        val uploadId: String,
+        val parts: List<CompletedMultipartUploadPart>,
+    )
+
+    data class MultipartUploadAbortRequest(
+        val objectKey: String,
+        val uploadId: String,
+    )
+
     /**
      * S3 호환 클라이언트가 반환한 네트워크 스트림을 감싼다.
      * 응답을 반환하거나 복사한 호출자는 연결 풀이 고갈되지 않도록 반드시 닫아야 한다.
@@ -57,6 +114,14 @@ interface CloudStoragePort {
     }
 
     fun upload(request: UploadRequest): UploadResult
+
+    fun initiateMultipartUpload(request: MultipartUploadInitRequest): MultipartUploadInitResult
+
+    fun uploadMultipartPart(request: MultipartUploadPartRequest): MultipartUploadPartResult
+
+    fun completeMultipartUpload(request: MultipartUploadCompleteRequest)
+
+    fun abortMultipartUpload(request: MultipartUploadAbortRequest)
 
     fun open(objectKey: String): StoredObject?
 

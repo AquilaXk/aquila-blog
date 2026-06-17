@@ -1,0 +1,41 @@
+package com.back.boundedContexts.cloud.adapter.persistence
+
+import com.back.boundedContexts.cloud.application.port.output.CloudVideoUploadPartRepositoryPort
+import com.back.boundedContexts.cloud.application.port.output.CloudVideoUploadSessionRepositoryPort
+import com.back.boundedContexts.cloud.model.CloudVideoUploadPart
+import com.back.boundedContexts.cloud.model.CloudVideoUploadSession
+import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
+import org.springframework.data.jpa.repository.Query
+
+interface CloudVideoUploadSessionRepository :
+    JpaRepository<CloudVideoUploadSession, Long>,
+    CloudVideoUploadSessionRepositoryPort {
+    @Query(
+        """
+        SELECT s
+        FROM CloudVideoUploadSession s
+        WHERE s.id = :id
+          AND s.ownerMemberId = :ownerMemberId
+        """,
+    )
+    override fun findByIdAndOwner(
+        id: Long,
+        ownerMemberId: Long,
+    ): CloudVideoUploadSession?
+}
+
+interface CloudVideoUploadPartRepository :
+    JpaRepository<CloudVideoUploadPart, Long>,
+    CloudVideoUploadPartRepositoryPort {
+    override fun findBySessionIdAndPartNumber(
+        sessionId: Long,
+        partNumber: Int,
+    ): CloudVideoUploadPart?
+
+    override fun findBySessionId(sessionId: Long): List<CloudVideoUploadPart>
+
+    @Modifying
+    @Query("DELETE FROM CloudVideoUploadPart p WHERE p.sessionId = :sessionId")
+    override fun deleteBySessionId(sessionId: Long)
+}

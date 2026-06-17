@@ -7,8 +7,6 @@ import com.back.boundedContexts.member.subContexts.session.application.port.inpu
 import com.back.boundedContexts.member.subContexts.session.model.MemberSessionAuthSnapshot
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
-import com.back.global.security.domain.SecurityUser
-import com.back.global.security.domain.toGrantedAuthorities
 import com.back.global.web.application.AuthCookieService
 import com.back.global.web.application.ClientIpResolver
 import com.back.global.web.application.Rq
@@ -19,10 +17,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.env.Environment
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
-import org.springframework.security.core.Authentication
 import org.springframework.security.core.context.SecurityContextHolder
-import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
 import tools.jackson.databind.ObjectMapper
@@ -42,6 +37,7 @@ class CustomAuthenticationFilter(
     private val authCookieService: AuthCookieService,
     private val authTokenExtractor: AuthTokenExtractor,
     private val authIpSecurityVerifier: AuthIpSecurityVerifier,
+    private val securityContextAuthenticationWriter: SecurityContextAuthenticationWriter,
     private val clientIpResolver: ClientIpResolver,
     private val objectMapper: ObjectMapper,
     private val publicApiRequestMatcher: PublicApiRequestMatcher,
@@ -176,7 +172,7 @@ class CustomAuthenticationFilter(
                     )
                     rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $rotatedAccessToken")
                     memberSession?.let { memberSessionUseCase.touchAuthenticated(it) }
-                    authenticate(apiKeyMember)
+                    securityContextAuthenticationWriter.write(apiKeyMember)
                     return
                 }
             }
@@ -219,7 +215,7 @@ class CustomAuthenticationFilter(
                     )
                     rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $rotatedAccessToken")
                     memberSession?.let { memberSessionUseCase.touchAuthenticated(it) }
-                    authenticate(persistedMember)
+                    securityContextAuthenticationWriter.write(persistedMember)
                     return
                 }
             }
@@ -233,7 +229,7 @@ class CustomAuthenticationFilter(
                     nickname = payload.name,
                     email = payload.email,
                 )
-            authenticate(payloadMember)
+            securityContextAuthenticationWriter.write(payloadMember)
             return
         }
 
@@ -285,27 +281,7 @@ class CustomAuthenticationFilter(
         )
         rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $newAccessToken")
 
-        authenticate(member)
-    }
-
-    /**
-     * authenticate 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
-     * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.
-     */
-    private fun authenticate(member: Member) {
-        val user: UserDetails =
-            SecurityUser(
-                member.id,
-                member.username,
-                "",
-                member.name,
-                member.toGrantedAuthorities(),
-            )
-
-        val authentication: Authentication =
-            UsernamePasswordAuthenticationToken(user, user.password, user.authorities)
-
-        SecurityContextHolder.getContext().authentication = authentication
+        securityContextAuthenticationWriter.write(member)
     }
 
     private fun sanitizeLogValue(

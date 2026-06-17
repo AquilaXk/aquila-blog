@@ -14,6 +14,7 @@ import com.back.global.security.config.CustomAuthenticationFilter
 import com.back.global.security.config.PublicApiRequestMatcher
 import com.back.global.security.config.PublicApiRouteContributor
 import com.back.global.security.config.SecurityConfig
+import com.back.global.security.config.SecurityContextAuthenticationWriter
 import com.back.global.security.config.oauth2.CustomOAuth2AuthorizationRequestResolver
 import com.back.global.security.config.oauth2.CustomOAuth2LoginSuccessHandler
 import com.back.global.security.config.oauth2.CustomOAuth2UserService
@@ -123,6 +124,7 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
                         mock(AuthCookieService::class.java),
                         mock(MemberSessionUseCase::class.java),
                     ),
+                securityContextAuthenticationWriter = SecurityContextAuthenticationWriter(),
                 clientIpResolver = mock(ClientIpResolver::class.java),
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = PublicApiRequestMatcher(emptyList<PublicApiRouteContributor>()),

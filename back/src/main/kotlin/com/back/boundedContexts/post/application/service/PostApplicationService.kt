@@ -159,6 +159,7 @@ class PostApplicationService(
                     recommendationAction = recommendationActionFor(isPublic),
                 ),
             )
+            publishPostWrittenEvent(author, created, createdTags)
             return created
         }
 
@@ -212,6 +213,7 @@ class PostApplicationService(
                 recommendationAction = recommendationActionFor(isPublic),
             ),
         )
+        publishPostWrittenEvent(author, createdPost, createdTags)
 
         return createdPost
     }
@@ -348,23 +350,27 @@ class PostApplicationService(
         val savedPost = postRepository.saveAndFlush(post)
         syncMetaTagIndexAttr(savedPost)
         incrementMemberPostsCount(persistenceAuthor)
-        val afterTags = extractNormalizedTags(savedPost.content)
+        return savedPost
+    }
 
+    private fun publishPostWrittenEvent(
+        author: Member,
+        post: Post,
+        afterTags: List<String>,
+    ) {
         runCatching {
             eventPublisher.publish(
                 PostWrittenEvent(
                     UUID.randomUUID(),
-                    PostDto(savedPost),
+                    PostDto(post),
                     MemberDto(author),
                     emptyList(),
                     afterTags,
                 ),
             )
         }.onFailure { exception ->
-            logger.warn("Failed to publish PostWrittenEvent: postId={}", savedPost.id, exception)
+            logger.warn("Failed to publish PostWrittenEvent: postId={}", post.id, exception)
         }
-
-        return savedPost
     }
 
     /**
@@ -1370,17 +1376,21 @@ class PostApplicationService(
     }
 
     private fun handlePostWriteSideEffect(command: PostWriteSideEffectCommand) {
-        clearReadCaches(
-            postId = command.postId,
-            beforeTags = command.beforeTags,
-            afterTags = command.afterTags,
-            evictHotReadPages = command.evictHotReadPages,
-            evictSearchFirstPage = command.evictSearchFirstPage,
-            evictImpactedTagPages = command.evictImpactedTagPages,
-            evictTagsPublic = command.evictTagsPublic,
-            evictDetail = command.evictDetail,
-            evictReason = command.evictReason,
-        )
+        runCatching {
+            clearReadCaches(
+                postId = command.postId,
+                beforeTags = command.beforeTags,
+                afterTags = command.afterTags,
+                evictHotReadPages = command.evictHotReadPages,
+                evictSearchFirstPage = command.evictSearchFirstPage,
+                evictImpactedTagPages = command.evictImpactedTagPages,
+                evictTagsPublic = command.evictTagsPublic,
+                evictDetail = command.evictDetail,
+                evictReason = command.evictReason,
+            )
+        }.onFailure { exception ->
+            logger.warn("Failed to evict post read caches after commit: postId={}", command.postId, exception)
+        }
 
         command.currentContent?.let { currentContent ->
             runAfterCommitSideEffectInNewTransaction(

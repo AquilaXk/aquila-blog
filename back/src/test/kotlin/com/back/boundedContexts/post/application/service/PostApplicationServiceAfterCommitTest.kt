@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers
 import org.mockito.Mockito.clearInvocations
 import org.mockito.Mockito.doAnswer
+import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.mockingDetails
 import org.mockito.Mockito.verifyNoInteractions
 import org.springframework.beans.factory.annotation.Autowired
@@ -85,6 +86,32 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         assertThat(invokedMethodNames(uploadedFileRetentionService)).contains("syncPostContent")
         assertThat(invokedMethodNames(postRecommendFeatureStoreService)).contains("refresh")
         assertThat(sideEffectTransactions).containsOnly(true)
+    }
+
+    @Test
+    @DisplayName("커밋 후 캐시 축출 실패는 첨부파일·추천 후속 작업을 막지 않는다")
+    fun writeCommitContinuesSideEffectsWhenCacheEvictionFails() {
+        // given
+        clearSideEffectMocks()
+        val admin = actorApplicationService.findByEmail("admin@test.com")!!
+        doThrow(RuntimeException("cache backend down"))
+            .`when`(cacheManager)
+            .getCache(PostQueryCacheNames.FEED)
+
+        // when
+        transactionTemplate.executeWithoutResult {
+            postApplicationService.write(
+                author = admin,
+                title = "cache failure after commit guard",
+                content = "cache failure content",
+                published = true,
+                listed = true,
+            )
+        }
+
+        // then
+        assertThat(invokedMethodNames(uploadedFileRetentionService)).contains("syncPostContent")
+        assertThat(invokedMethodNames(postRecommendFeatureStoreService)).contains("refresh")
     }
 
     @Test

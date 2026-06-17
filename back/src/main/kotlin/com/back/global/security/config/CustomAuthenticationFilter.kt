@@ -7,8 +7,6 @@ import com.back.boundedContexts.member.subContexts.session.application.port.inpu
 import com.back.boundedContexts.member.subContexts.session.model.MemberSessionAuthSnapshot
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
-import com.back.global.security.application.AuthIpSecurityService
-import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.security.domain.SecurityUser
 import com.back.global.security.domain.toGrantedAuthorities
 import com.back.global.web.application.AuthCookieService
@@ -41,10 +39,9 @@ import java.util.Locale
 class CustomAuthenticationFilter(
     private val actorApplicationService: ActorApplicationService,
     private val memberSessionUseCase: MemberSessionUseCase,
-    private val authIpSecurityService: AuthIpSecurityService,
-    private val authSecurityEventService: AuthSecurityEventService,
     private val authCookieService: AuthCookieService,
     private val authTokenExtractor: AuthTokenExtractor,
+    private val authIpSecurityVerifier: AuthIpSecurityVerifier,
     private val clientIpResolver: ClientIpResolver,
     private val objectMapper: ObjectMapper,
     private val publicApiRequestMatcher: PublicApiRequestMatcher,
@@ -151,26 +148,18 @@ class CustomAuthenticationFilter(
                     val ipSecurityEnabled = memberSession?.ipSecurityEnabled ?: apiKeyMember.ipSecurityEnabled
                     val ipSecurityFingerprint = memberSession?.ipSecurityFingerprint ?: apiKeyMember.ipSecurityFingerprint
 
-                    if (ipSecurityEnabled) {
-                        val matched = authIpSecurityService.matches(ipSecurityFingerprint, clientIp)
-                        if (!matched) {
-                            runCatching {
-                                authSecurityEventService.recordIpSecurityMismatchBlocked(
-                                    memberId = apiKeyMember.id,
-                                    loginIdentifier = apiKeyMember.username,
-                                    rememberLoginEnabled = rememberLoginEnabled,
-                                    ipSecurityEnabled = ipSecurityEnabled,
-                                    expectedIpFingerprint = ipSecurityFingerprint,
-                                    requestPath = request.requestURI,
-                                    reason = "apikey-ip-mismatch",
-                                )
-                            }.onFailure { exception ->
-                                log.warn("auth_security_event_record_failed reason=apikey-ip-mismatch", exception)
-                            }
-                            authCookieService.expireAuthCookies()
-                            throw AppException("401-7", "IP 보안 검증에 실패했습니다. 다시 로그인해주세요.")
-                        }
-                    }
+                    authIpSecurityVerifier.verify(
+                        AuthIpSecurityCheck(
+                            memberId = apiKeyMember.id,
+                            loginIdentifier = apiKeyMember.username,
+                            rememberLoginEnabled = rememberLoginEnabled,
+                            ipSecurityEnabled = ipSecurityEnabled,
+                            expectedIpFingerprint = ipSecurityFingerprint,
+                            requestPath = request.requestURI,
+                            reason = "apikey-ip-mismatch",
+                        ),
+                        clientIp,
+                    )
 
                     val rotatedAccessToken =
                         actorApplicationService.genAccessToken(
@@ -199,26 +188,18 @@ class CustomAuthenticationFilter(
             val ipSecurityEnabled = memberSession?.ipSecurityEnabled ?: payload.ipSecurityEnabled
             val ipSecurityFingerprint = memberSession?.ipSecurityFingerprint ?: payload.ipSecurityFingerprint
             val tokenLoginIdentifier = resolveTokenLoginIdentifier(payload)
-            if (ipSecurityEnabled) {
-                val matched = authIpSecurityService.matches(ipSecurityFingerprint, clientIp)
-                if (!matched) {
-                    runCatching {
-                        authSecurityEventService.recordIpSecurityMismatchBlocked(
-                            memberId = payload.id,
-                            loginIdentifier = tokenLoginIdentifier,
-                            rememberLoginEnabled = rememberLoginEnabled,
-                            ipSecurityEnabled = ipSecurityEnabled,
-                            expectedIpFingerprint = ipSecurityFingerprint,
-                            requestPath = request.requestURI,
-                            reason = "token-payload-ip-mismatch",
-                        )
-                    }.onFailure { exception ->
-                        log.warn("auth_security_event_record_failed reason=token-payload-ip-mismatch", exception)
-                    }
-                    authCookieService.expireAuthCookies()
-                    throw AppException("401-7", "IP 보안 검증에 실패했습니다. 다시 로그인해주세요.")
-                }
-            }
+            authIpSecurityVerifier.verify(
+                AuthIpSecurityCheck(
+                    memberId = payload.id,
+                    loginIdentifier = tokenLoginIdentifier,
+                    rememberLoginEnabled = rememberLoginEnabled,
+                    ipSecurityEnabled = ipSecurityEnabled,
+                    expectedIpFingerprint = ipSecurityFingerprint,
+                    requestPath = request.requestURI,
+                    reason = "token-payload-ip-mismatch",
+                ),
+                clientIp,
+            )
 
             // 과거 토큰(payload.email 누락)과 현재 이메일 기반 관리자 판정의 드리프트를 즉시 복구한다.
             if (payload.email.isNullOrBlank()) {
@@ -274,27 +255,19 @@ class CustomAuthenticationFilter(
         val ipSecurityEnabled = memberSession.ipSecurityEnabled
         val ipSecurityFingerprint = memberSession.ipSecurityFingerprint
 
-        if (ipSecurityEnabled) {
-            val matched = authIpSecurityService.matches(ipSecurityFingerprint, clientIp)
-            if (!matched) {
-                runCatching {
-                    authSecurityEventService.recordIpSecurityMismatchBlocked(
-                        memberId = member.id,
-                        loginIdentifier = member.username,
-                        rememberLoginEnabled = rememberLoginEnabled,
-                        ipSecurityEnabled = ipSecurityEnabled,
-                        expectedIpFingerprint = ipSecurityFingerprint,
-                        requestPath = request.requestURI,
-                        reason = "refresh-token-ip-mismatch",
-                    )
-                }.onFailure { exception ->
-                    log.warn("auth_security_event_record_failed reason=refresh-token-ip-mismatch", exception)
-                }
-                memberSessionUseCase.revokeSession(memberSession.sessionKey)
-                authCookieService.expireAuthCookies()
-                throw AppException("401-7", "IP 보안 검증에 실패했습니다. 다시 로그인해주세요.")
-            }
-        }
+        authIpSecurityVerifier.verify(
+            AuthIpSecurityCheck(
+                memberId = member.id,
+                loginIdentifier = member.username,
+                rememberLoginEnabled = rememberLoginEnabled,
+                ipSecurityEnabled = ipSecurityEnabled,
+                expectedIpFingerprint = ipSecurityFingerprint,
+                requestPath = request.requestURI,
+                reason = "refresh-token-ip-mismatch",
+                revokeSessionKey = memberSession.sessionKey,
+            ),
+            clientIp,
+        )
 
         val newAccessToken =
             actorApplicationService.genAccessToken(

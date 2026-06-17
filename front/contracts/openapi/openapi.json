@@ -17,6 +17,43 @@
     "description" : "홈 컨트롤러"
   } ],
   "paths" : {
+    "/system/api/v1/adm/cloud/files/video-upload-sessions/{sessionId}/parts/{partNumber}" : {
+      "put" : {
+        "tags" : [ "api-v-1-adm-cloud-controller" ],
+        "operationId" : "uploadVideoPart",
+        "parameters" : [ {
+          "name" : "sessionId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        }, {
+          "name" : "partNumber",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CloudVideoUploadPartResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/post/api/v1/posts/{postId}/comments/{id}" : {
       "get" : {
         "tags" : [ "api-v-1-post-comment-controller" ],
@@ -502,6 +539,62 @@
         "responses" : {
           "201" : {
             "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataCloudFileDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/system/api/v1/adm/cloud/files/video-upload-sessions" : {
+      "post" : {
+        "tags" : [ "api-v-1-adm-cloud-controller" ],
+        "operationId" : "createVideoUploadSession",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateVideoUploadSessionReqBody"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataCloudVideoUploadSessionDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/system/api/v1/adm/cloud/files/video-upload-sessions/{sessionId}/complete" : {
+      "post" : {
+        "tags" : [ "api-v-1-adm-cloud-controller" ],
+        "operationId" : "completeVideoUpload",
+        "parameters" : [ {
+          "name" : "sessionId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
             "content" : {
               "*/*" : {
                 "schema" : {
@@ -1427,6 +1520,60 @@
                 "schema" : {
                   "type" : "string",
                   "format" : "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/system/api/v1/adm/cloud/files/video-upload-sessions/{sessionId}" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-cloud-controller" ],
+        "operationId" : "getVideoUploadSession",
+        "parameters" : [ {
+          "name" : "sessionId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CloudVideoUploadSessionDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "api-v-1-adm-cloud-controller" ],
+        "operationId" : "cancelVideoUpload",
+        "parameters" : [ {
+          "name" : "sessionId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataVoid"
                 }
               }
             }
@@ -2644,6 +2791,83 @@
   },
   "components" : {
     "schemas" : {
+      "CloudVideoUploadPartDto" : {
+        "type" : "object",
+        "properties" : {
+          "partNumber" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "byteSize" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "CloudVideoUploadPartResultDto" : {
+        "type" : "object",
+        "properties" : {
+          "session" : {
+            "$ref" : "#/components/schemas/CloudVideoUploadSessionDto"
+          },
+          "part" : {
+            "$ref" : "#/components/schemas/CloudVideoUploadPartDto"
+          }
+        }
+      },
+      "CloudVideoUploadSessionDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "ownerMemberId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "originalFilename" : {
+            "type" : "string"
+          },
+          "contentType" : {
+            "type" : "string"
+          },
+          "byteSize" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "folderPath" : {
+            "type" : "string"
+          },
+          "partSizeBytes" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalParts" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "uploadedParts" : {
+            "type" : "array",
+            "items" : {
+              "type" : "integer",
+              "format" : "int32"
+            }
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "IN_PROGRESS", "COMPLETED", "CANCELLED", "EXPIRED" ]
+          },
+          "expiresAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "completedFileId" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
       "PostCommentModifyRequest" : {
         "type" : "object",
         "properties" : {
@@ -3273,6 +3497,38 @@
           },
           "data" : {
             "$ref" : "#/components/schemas/CloudFileDto"
+          }
+        }
+      },
+      "CreateVideoUploadSessionReqBody" : {
+        "type" : "object",
+        "properties" : {
+          "originalFilename" : {
+            "type" : "string"
+          },
+          "contentType" : {
+            "type" : "string"
+          },
+          "byteSize" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "folderPath" : {
+            "type" : "string"
+          }
+        }
+      },
+      "RsDataCloudVideoUploadSessionDto" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/CloudVideoUploadSessionDto"
           }
         }
       },

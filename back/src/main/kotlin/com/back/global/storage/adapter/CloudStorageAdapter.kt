@@ -11,13 +11,19 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
 import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.model.AbortMultipartUploadRequest
+import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadRequest
+import software.amazon.awssdk.services.s3.model.CompletedMultipartUpload
+import software.amazon.awssdk.services.s3.model.CompletedPart
 import software.amazon.awssdk.services.s3.model.CreateBucketRequest
+import software.amazon.awssdk.services.s3.model.CreateMultipartUploadRequest
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.HeadBucketRequest
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.model.S3Exception
+import software.amazon.awssdk.services.s3.model.UploadPartRequest
 import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -99,6 +105,132 @@ class CloudStorageAdapter(
             if (e.statusCode() == 404) return null
             logger.error("Cloud file download failed (objectKey={})", objectKey, e)
             throw AppException("500-1", "클라우드 파일을 불러오지 못했습니다.")
+        }
+    }
+
+    override fun initiateMultipartUpload(
+        request: CloudStoragePort.MultipartUploadInitRequest,
+    ): CloudStoragePort.MultipartUploadInitResult {
+        val client = requireClient()
+        validateObjectKey(request.objectKey)
+
+        return try {
+            val response =
+                client.createMultipartUpload(
+                    CreateMultipartUploadRequest
+                        .builder()
+                        .bucket(properties.bucket)
+                        .key(request.objectKey)
+                        .contentType(request.contentType)
+                        .metadata(
+                            mapOf(
+                                "original-filename" to
+                                    URLEncoder
+                                        .encode(request.originalFilename, StandardCharsets.UTF_8)
+                                        .replace("+", "%20"),
+                            ),
+                        ).build(),
+                )
+
+            CloudStoragePort.MultipartUploadInitResult(
+                objectKey = request.objectKey,
+                uploadId = response.uploadId(),
+            )
+        } catch (e: Exception) {
+            logger.error("Cloud multipart upload init failed (objectKey={})", request.objectKey, e)
+            throw AppException("500-1", "클라우드 대용량 업로드를 시작하지 못했습니다.")
+        }
+    }
+
+    override fun uploadMultipartPart(request: CloudStoragePort.MultipartUploadPartRequest): CloudStoragePort.MultipartUploadPartResult {
+        val client = requireClient()
+        validateObjectKey(request.objectKey)
+
+        return try {
+            val response =
+                client.uploadPart(
+                    UploadPartRequest
+                        .builder()
+                        .bucket(properties.bucket)
+                        .key(request.objectKey)
+                        .uploadId(request.uploadId)
+                        .partNumber(request.partNumber)
+                        .contentLength(request.bytes.size.toLong())
+                        .build(),
+                    RequestBody.fromBytes(request.bytes),
+                )
+
+            CloudStoragePort.MultipartUploadPartResult(
+                partNumber = request.partNumber,
+                eTag = response.eTag(),
+            )
+        } catch (e: Exception) {
+            logger.error(
+                "Cloud multipart part upload failed (objectKey={}, uploadId={}, partNumber={})",
+                request.objectKey,
+                request.uploadId,
+                request.partNumber,
+                e,
+            )
+            throw AppException("500-1", "클라우드 대용량 업로드 조각 저장에 실패했습니다.")
+        }
+    }
+
+    override fun completeMultipartUpload(request: CloudStoragePort.MultipartUploadCompleteRequest) {
+        val client = requireClient()
+        validateObjectKey(request.objectKey)
+
+        try {
+            client.completeMultipartUpload(
+                CompleteMultipartUploadRequest
+                    .builder()
+                    .bucket(properties.bucket)
+                    .key(request.objectKey)
+                    .uploadId(request.uploadId)
+                    .multipartUpload(
+                        CompletedMultipartUpload
+                            .builder()
+                            .parts(
+                                request.parts
+                                    .sortedBy { it.partNumber }
+                                    .map {
+                                        CompletedPart
+                                            .builder()
+                                            .partNumber(it.partNumber)
+                                            .eTag(it.eTag)
+                                            .build()
+                                    },
+                            ).build(),
+                    ).build(),
+            )
+        } catch (e: Exception) {
+            logger.error(
+                "Cloud multipart complete failed (objectKey={}, uploadId={})",
+                request.objectKey,
+                request.uploadId,
+                e,
+            )
+            throw AppException("500-1", "클라우드 대용량 업로드 완료에 실패했습니다.")
+        }
+    }
+
+    override fun abortMultipartUpload(request: CloudStoragePort.MultipartUploadAbortRequest) {
+        val client = requireClient()
+        validateObjectKey(request.objectKey)
+
+        try {
+            client.abortMultipartUpload(
+                AbortMultipartUploadRequest
+                    .builder()
+                    .bucket(properties.bucket)
+                    .key(request.objectKey)
+                    .uploadId(request.uploadId)
+                    .build(),
+            )
+        } catch (e: S3Exception) {
+            if (e.statusCode() == 404) return
+            logger.error("Cloud multipart abort failed (objectKey={}, uploadId={})", request.objectKey, request.uploadId, e)
+            throw AppException("500-1", "클라우드 대용량 업로드 취소에 실패했습니다.")
         }
     }
 

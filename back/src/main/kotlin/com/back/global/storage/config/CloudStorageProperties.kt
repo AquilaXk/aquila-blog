@@ -4,6 +4,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 
 const val DEFAULT_CLOUD_DOCUMENT_MAX_SIZE_BYTES: Long = 100L * 1024 * 1024
 const val DEFAULT_CLOUD_PHOTO_MAX_SIZE_BYTES: Long = 50L * 1024 * 1024
+const val DEFAULT_CLOUD_VIDEO_RESUMABLE_MAX_SIZE_BYTES: Long = 5L * 1024 * 1024 * 1024
+const val DEFAULT_CLOUD_VIDEO_RESUMABLE_PART_SIZE_BYTES: Long = 64L * 1024 * 1024
+const val DEFAULT_CLOUD_VIDEO_RESUMABLE_EXPIRES_SECONDS: Long = 24L * 60 * 60
 
 @ConfigurationProperties("custom.storage")
 data class CloudStorageProperties(
@@ -20,4 +23,7 @@ data class CloudStorageProperties(
     var cloudPhotoMaxFileSizeBytes: Long = DEFAULT_CLOUD_PHOTO_MAX_SIZE_BYTES,
     var cloudArchiveMaxFileSizeBytes: Long = maxFileSizeBytes,
     var cloudVideoMaxFileSizeBytes: Long = maxFileSizeBytes,
+    var cloudVideoResumableMaxFileSizeBytes: Long = DEFAULT_CLOUD_VIDEO_RESUMABLE_MAX_SIZE_BYTES,
+    var cloudVideoResumablePartSizeBytes: Long = DEFAULT_CLOUD_VIDEO_RESUMABLE_PART_SIZE_BYTES,
+    var cloudVideoResumableExpiresSeconds: Long = DEFAULT_CLOUD_VIDEO_RESUMABLE_EXPIRES_SECONDS,
 )

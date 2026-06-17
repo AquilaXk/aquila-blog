@@ -1009,6 +1009,26 @@ class CloudFileServiceTest {
             )
         }
 
+        override fun initiateMultipartUpload(
+            request: CloudStoragePort.MultipartUploadInitRequest,
+        ): CloudStoragePort.MultipartUploadInitResult =
+            CloudStoragePort.MultipartUploadInitResult(
+                objectKey = request.objectKey,
+                uploadId = "unused",
+            )
+
+        override fun uploadMultipartPart(
+            request: CloudStoragePort.MultipartUploadPartRequest,
+        ): CloudStoragePort.MultipartUploadPartResult =
+            CloudStoragePort.MultipartUploadPartResult(
+                partNumber = request.partNumber,
+                eTag = "unused",
+            )
+
+        override fun completeMultipartUpload(request: CloudStoragePort.MultipartUploadCompleteRequest) = Unit
+
+        override fun abortMultipartUpload(request: CloudStoragePort.MultipartUploadAbortRequest) = Unit
+
         override fun open(objectKey: String): CloudStoragePort.StoredObject? {
             openedObjectKeys += objectKey
             return objects[objectKey]

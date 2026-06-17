@@ -98,6 +98,9 @@ const baseHomeServerEnv = [
   "CUSTOM_STORAGE_CLOUD_PHOTO_MAXFILESIZEBYTES=52428800",
   "CUSTOM_STORAGE_CLOUD_ARCHIVE_MAXFILESIZEBYTES=104857600",
   "CUSTOM_STORAGE_CLOUD_VIDEO_MAXFILESIZEBYTES=104857600",
+  "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_MAXFILESIZEBYTES=5368709120",
+  "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_PARTSIZEBYTES=67108864",
+  "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_EXPIRESSECONDS=86400",
   "CUSTOM_STORAGE_MULTIPART_MAX_FILE_SIZE=100MB",
   "CUSTOM_STORAGE_MULTIPART_MAX_REQUEST_SIZE=104MB",
   "BACKEND_PROXY_MAX_BODY_BYTES=109051904",
@@ -208,6 +211,9 @@ test("external storage upload limits reject non-positive values", async () => {
     .replace("CUSTOM_STORAGE_CLOUD_PHOTO_MAXFILESIZEBYTES=52428800", "CUSTOM_STORAGE_CLOUD_PHOTO_MAXFILESIZEBYTES=0")
     .replace("CUSTOM_STORAGE_CLOUD_ARCHIVE_MAXFILESIZEBYTES=104857600", "CUSTOM_STORAGE_CLOUD_ARCHIVE_MAXFILESIZEBYTES=0")
     .replace("CUSTOM_STORAGE_CLOUD_VIDEO_MAXFILESIZEBYTES=104857600", "CUSTOM_STORAGE_CLOUD_VIDEO_MAXFILESIZEBYTES=0")
+    .replace("CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_MAXFILESIZEBYTES=5368709120", "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_MAXFILESIZEBYTES=0")
+    .replace("CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_PARTSIZEBYTES=67108864", "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_PARTSIZEBYTES=0")
+    .replace("CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_EXPIRESSECONDS=86400", "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_EXPIRESSECONDS=0")
     .replace("BACKEND_PROXY_MAX_BODY_BYTES=109051904", "BACKEND_PROXY_MAX_BODY_BYTES=0")
     .replace("BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES=268435456", "BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES=0")
 
@@ -223,8 +229,50 @@ test("external storage upload limits reject non-positive values", async () => {
   assert(result.errors.some((error) => error.key === "CUSTOM_STORAGE_CLOUD_PHOTO_MAXFILESIZEBYTES"))
   assert(result.errors.some((error) => error.key === "CUSTOM_STORAGE_CLOUD_ARCHIVE_MAXFILESIZEBYTES"))
   assert(result.errors.some((error) => error.key === "CUSTOM_STORAGE_CLOUD_VIDEO_MAXFILESIZEBYTES"))
+  assert(result.errors.some((error) => error.key === "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_MAXFILESIZEBYTES"))
+  assert(result.errors.some((error) => error.key === "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_PARTSIZEBYTES"))
+  assert(result.errors.some((error) => error.key === "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_EXPIRESSECONDS"))
   assert(result.errors.some((error) => error.key === "BACKEND_PROXY_MAX_BODY_BYTES"))
   assert(result.errors.some((error) => error.key === "BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES"))
+})
+
+test("대용량 동영상 resumable 설정은 part 크기와 세션 만료 경계를 검증한다", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const belowBoundary = baseHomeServerEnv
+    .replace(
+      "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_PARTSIZEBYTES=67108864",
+      "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_PARTSIZEBYTES=5242879",
+    )
+    .replace(
+      "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_EXPIRESSECONDS=86400",
+      "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_EXPIRESSECONDS=59",
+    )
+  const atBoundary = baseHomeServerEnv
+    .replace(
+      "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_PARTSIZEBYTES=67108864",
+      "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_PARTSIZEBYTES=5242880",
+    )
+    .replace(
+      "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_EXPIRESSECONDS=86400",
+      "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_EXPIRESSECONDS=60",
+    )
+
+  const belowResult = validateEnvText({
+    contract,
+    target: "home-server-source",
+    text: belowBoundary,
+  })
+  const boundaryResult = validateEnvText({
+    contract,
+    target: "home-server-source",
+    text: atBoundary,
+  })
+
+  assert.equal(belowResult.ok, false)
+  assert(belowResult.errors.some((error) => error.key === "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_PARTSIZEBYTES"))
+  assert(belowResult.errors.some((error) => error.key === "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_EXPIRESSECONDS"))
+  assert.equal(boundaryResult.ok, true)
 })
 
 test("external backup root must stay strictly inside the default or configured storage root", async () => {

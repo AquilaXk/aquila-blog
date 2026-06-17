@@ -8,10 +8,13 @@ import com.back.boundedContexts.post.config.PostSecurityConfigurer
 import com.back.global.security.application.AuthIpSecurityService
 import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.security.config.ApiCorsPolicy
+import com.back.global.security.config.AuthIpSecurityVerifier
+import com.back.global.security.config.AuthTokenExtractor
 import com.back.global.security.config.CustomAuthenticationFilter
 import com.back.global.security.config.PublicApiRequestMatcher
 import com.back.global.security.config.PublicApiRouteContributor
 import com.back.global.security.config.SecurityConfig
+import com.back.global.security.config.SecurityContextAuthenticationWriter
 import com.back.global.security.config.oauth2.CustomOAuth2AuthorizationRequestResolver
 import com.back.global.security.config.oauth2.CustomOAuth2LoginSuccessHandler
 import com.back.global.security.config.oauth2.CustomOAuth2UserService
@@ -107,21 +110,30 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
             apiCorsPolicy: ApiCorsPolicy,
             environment: Environment,
             objectMapper: ObjectMapper,
-        ): CustomAuthenticationFilter =
-            CustomAuthenticationFilter(
+        ): CustomAuthenticationFilter {
+            val rq = mock(Rq::class.java)
+            return CustomAuthenticationFilter(
                 actorApplicationService = mock(ActorApplicationService::class.java),
                 memberSessionUseCase = mock(MemberSessionUseCase::class.java),
-                authIpSecurityService = mock(AuthIpSecurityService::class.java),
-                authSecurityEventService = mock(AuthSecurityEventService::class.java),
                 authCookieService = mock(AuthCookieService::class.java),
+                authTokenExtractor = AuthTokenExtractor(rq),
+                authIpSecurityVerifier =
+                    AuthIpSecurityVerifier(
+                        mock(AuthIpSecurityService::class.java),
+                        mock(AuthSecurityEventService::class.java),
+                        mock(AuthCookieService::class.java),
+                        mock(MemberSessionUseCase::class.java),
+                    ),
+                securityContextAuthenticationWriter = SecurityContextAuthenticationWriter(),
                 clientIpResolver = mock(ClientIpResolver::class.java),
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = PublicApiRequestMatcher(emptyList<PublicApiRouteContributor>()),
                 apiCorsPolicy = apiCorsPolicy,
                 environment = environment,
-                rq = mock(Rq::class.java),
+                rq = rq,
                 freshLookupGraceSeconds = 15,
             )
+        }
     }
 }
 

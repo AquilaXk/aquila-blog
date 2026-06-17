@@ -7,10 +7,6 @@ import com.back.boundedContexts.member.subContexts.session.application.port.inpu
 import com.back.boundedContexts.member.subContexts.session.model.MemberSessionAuthSnapshot
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
-import com.back.global.security.application.AuthIpSecurityService
-import com.back.global.security.application.AuthSecurityEventService
-import com.back.global.security.domain.SecurityUser
-import com.back.global.security.domain.toGrantedAuthorities
 import com.back.global.web.application.AuthCookieService
 import com.back.global.web.application.ClientIpResolver
 import com.back.global.web.application.Rq
@@ -21,10 +17,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.env.Environment
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
-import org.springframework.security.core.Authentication
 import org.springframework.security.core.context.SecurityContextHolder
-import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
 import tools.jackson.databind.ObjectMapper
@@ -32,16 +25,19 @@ import java.time.Instant
 import java.util.Locale
 
 /**
- * CustomAuthenticationFilter는 글로벌 런타임 동작을 정의하는 설정 클래스입니다.
- * 보안, 캐시, 세션, JPA, 스케줄링 등 공통 인프라 설정을 등록합니다.
+ * API 요청의 쿠키/JWT 인증을 SecurityContext로 연결하는 servlet filter입니다.
+ *
+ * 공개 API는 stale 인증 정보가 있어도 익명 요청으로 fallback하고,
+ * 보호 API는 세션 만료와 IP 보안 실패를 명시적인 401 응답으로 변환합니다.
  */
 @Component
 class CustomAuthenticationFilter(
     private val actorApplicationService: ActorApplicationService,
     private val memberSessionUseCase: MemberSessionUseCase,
-    private val authIpSecurityService: AuthIpSecurityService,
-    private val authSecurityEventService: AuthSecurityEventService,
     private val authCookieService: AuthCookieService,
+    private val authTokenExtractor: AuthTokenExtractor,
+    private val authIpSecurityVerifier: AuthIpSecurityVerifier,
+    private val securityContextAuthenticationWriter: SecurityContextAuthenticationWriter,
     private val clientIpResolver: ClientIpResolver,
     private val objectMapper: ObjectMapper,
     private val publicApiRequestMatcher: PublicApiRequestMatcher,
@@ -66,8 +62,7 @@ class CustomAuthenticationFilter(
     override fun shouldNotFilterAsyncDispatch(): Boolean = false
 
     /**
-     * doFilterInternal 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
-     * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.
+     * 인증 실패 응답은 JSON API 계약과 CORS header를 유지해야 하므로 filter 안에서 변환합니다.
      */
     override fun doFilterInternal(
         request: HttpServletRequest,
@@ -120,14 +115,13 @@ class CustomAuthenticationFilter(
     }
 
     /**
-     * authenticateIfPossible 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
-     * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.
+     * 기존 accessToken을 먼저 검증하고, 실패하면 refreshToken 회전 경로로 이동합니다.
      */
     private fun authenticateIfPossible(
         request: HttpServletRequest,
         response: HttpServletResponse,
     ) {
-        val tokens = extractTokens()
+        val tokens = authTokenExtractor.extract()
         val apiKey = tokens.apiKey
         val accessToken = tokens.accessToken
         val sessionKey = tokens.sessionKey
@@ -150,26 +144,18 @@ class CustomAuthenticationFilter(
                     val ipSecurityEnabled = memberSession?.ipSecurityEnabled ?: apiKeyMember.ipSecurityEnabled
                     val ipSecurityFingerprint = memberSession?.ipSecurityFingerprint ?: apiKeyMember.ipSecurityFingerprint
 
-                    if (ipSecurityEnabled) {
-                        val matched = authIpSecurityService.matches(ipSecurityFingerprint, clientIp)
-                        if (!matched) {
-                            runCatching {
-                                authSecurityEventService.recordIpSecurityMismatchBlocked(
-                                    memberId = apiKeyMember.id,
-                                    loginIdentifier = apiKeyMember.username,
-                                    rememberLoginEnabled = rememberLoginEnabled,
-                                    ipSecurityEnabled = ipSecurityEnabled,
-                                    expectedIpFingerprint = ipSecurityFingerprint,
-                                    requestPath = request.requestURI,
-                                    reason = "apikey-ip-mismatch",
-                                )
-                            }.onFailure { exception ->
-                                log.warn("auth_security_event_record_failed reason=apikey-ip-mismatch", exception)
-                            }
-                            authCookieService.expireAuthCookies()
-                            throw AppException("401-7", "IP 보안 검증에 실패했습니다. 다시 로그인해주세요.")
-                        }
-                    }
+                    authIpSecurityVerifier.verify(
+                        AuthIpSecurityCheck(
+                            memberId = apiKeyMember.id,
+                            loginIdentifier = apiKeyMember.username,
+                            rememberLoginEnabled = rememberLoginEnabled,
+                            ipSecurityEnabled = ipSecurityEnabled,
+                            expectedIpFingerprint = ipSecurityFingerprint,
+                            requestPath = request.requestURI,
+                            reason = "apikey-ip-mismatch",
+                        ),
+                        clientIp,
+                    )
 
                     val rotatedAccessToken =
                         actorApplicationService.genAccessToken(
@@ -186,7 +172,7 @@ class CustomAuthenticationFilter(
                     )
                     rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $rotatedAccessToken")
                     memberSession?.let { memberSessionUseCase.touchAuthenticated(it) }
-                    authenticate(apiKeyMember)
+                    securityContextAuthenticationWriter.write(apiKeyMember)
                     return
                 }
             }
@@ -198,26 +184,18 @@ class CustomAuthenticationFilter(
             val ipSecurityEnabled = memberSession?.ipSecurityEnabled ?: payload.ipSecurityEnabled
             val ipSecurityFingerprint = memberSession?.ipSecurityFingerprint ?: payload.ipSecurityFingerprint
             val tokenLoginIdentifier = resolveTokenLoginIdentifier(payload)
-            if (ipSecurityEnabled) {
-                val matched = authIpSecurityService.matches(ipSecurityFingerprint, clientIp)
-                if (!matched) {
-                    runCatching {
-                        authSecurityEventService.recordIpSecurityMismatchBlocked(
-                            memberId = payload.id,
-                            loginIdentifier = tokenLoginIdentifier,
-                            rememberLoginEnabled = rememberLoginEnabled,
-                            ipSecurityEnabled = ipSecurityEnabled,
-                            expectedIpFingerprint = ipSecurityFingerprint,
-                            requestPath = request.requestURI,
-                            reason = "token-payload-ip-mismatch",
-                        )
-                    }.onFailure { exception ->
-                        log.warn("auth_security_event_record_failed reason=token-payload-ip-mismatch", exception)
-                    }
-                    authCookieService.expireAuthCookies()
-                    throw AppException("401-7", "IP 보안 검증에 실패했습니다. 다시 로그인해주세요.")
-                }
-            }
+            authIpSecurityVerifier.verify(
+                AuthIpSecurityCheck(
+                    memberId = payload.id,
+                    loginIdentifier = tokenLoginIdentifier,
+                    rememberLoginEnabled = rememberLoginEnabled,
+                    ipSecurityEnabled = ipSecurityEnabled,
+                    expectedIpFingerprint = ipSecurityFingerprint,
+                    requestPath = request.requestURI,
+                    reason = "token-payload-ip-mismatch",
+                ),
+                clientIp,
+            )
 
             // 과거 토큰(payload.email 누락)과 현재 이메일 기반 관리자 판정의 드리프트를 즉시 복구한다.
             if (payload.email.isNullOrBlank()) {
@@ -237,7 +215,7 @@ class CustomAuthenticationFilter(
                     )
                     rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $rotatedAccessToken")
                     memberSession?.let { memberSessionUseCase.touchAuthenticated(it) }
-                    authenticate(persistedMember)
+                    securityContextAuthenticationWriter.write(persistedMember)
                     return
                 }
             }
@@ -251,7 +229,7 @@ class CustomAuthenticationFilter(
                     nickname = payload.name,
                     email = payload.email,
                 )
-            authenticate(payloadMember)
+            securityContextAuthenticationWriter.write(payloadMember)
             return
         }
 
@@ -273,27 +251,19 @@ class CustomAuthenticationFilter(
         val ipSecurityEnabled = memberSession.ipSecurityEnabled
         val ipSecurityFingerprint = memberSession.ipSecurityFingerprint
 
-        if (ipSecurityEnabled) {
-            val matched = authIpSecurityService.matches(ipSecurityFingerprint, clientIp)
-            if (!matched) {
-                runCatching {
-                    authSecurityEventService.recordIpSecurityMismatchBlocked(
-                        memberId = member.id,
-                        loginIdentifier = member.username,
-                        rememberLoginEnabled = rememberLoginEnabled,
-                        ipSecurityEnabled = ipSecurityEnabled,
-                        expectedIpFingerprint = ipSecurityFingerprint,
-                        requestPath = request.requestURI,
-                        reason = "refresh-token-ip-mismatch",
-                    )
-                }.onFailure { exception ->
-                    log.warn("auth_security_event_record_failed reason=refresh-token-ip-mismatch", exception)
-                }
-                memberSessionUseCase.revokeSession(memberSession.sessionKey)
-                authCookieService.expireAuthCookies()
-                throw AppException("401-7", "IP 보안 검증에 실패했습니다. 다시 로그인해주세요.")
-            }
-        }
+        authIpSecurityVerifier.verify(
+            AuthIpSecurityCheck(
+                memberId = member.id,
+                loginIdentifier = member.username,
+                rememberLoginEnabled = rememberLoginEnabled,
+                ipSecurityEnabled = ipSecurityEnabled,
+                expectedIpFingerprint = ipSecurityFingerprint,
+                requestPath = request.requestURI,
+                reason = "refresh-token-ip-mismatch",
+                revokeSessionKey = memberSession.sessionKey,
+            ),
+            clientIp,
+        )
 
         val newAccessToken =
             actorApplicationService.genAccessToken(
@@ -311,65 +281,7 @@ class CustomAuthenticationFilter(
         )
         rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $newAccessToken")
 
-        authenticate(member)
-    }
-
-    /**
-     * 입력/환경 데이터를 파싱·정규화해 내부 처리에 안전한 값으로 변환합니다.
-     * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.
-     */
-    private fun extractTokens(): ExtractedTokens {
-        val headerAuthorization = rq.getHeader(HttpHeaders.AUTHORIZATION, "").orEmpty()
-        val sessionKey = rq.getCookieValue("sessionKey", "").orEmpty()
-        val refreshToken = rq.getCookieValue("refreshToken", "").orEmpty()
-
-        return if (headerAuthorization.isNotBlank()) {
-            if (!headerAuthorization.startsWith("Bearer ")) {
-                throw AppException("401-2", "${HttpHeaders.AUTHORIZATION} 헤더가 Bearer 형식이 아닙니다.")
-            }
-
-            val bits = headerAuthorization.trim().split(Regex("\\s+"))
-            when (bits.size) {
-                2 -> {
-                    if (bits[1].isBlank()) throw AppException("401-2", "${HttpHeaders.AUTHORIZATION} 헤더가 Bearer 형식이 아닙니다.")
-                    ExtractedTokens("", bits[1], sessionKey, refreshToken)
-                }
-                3 -> {
-                    if (bits[1].isBlank() || bits[2].isBlank()) {
-                        throw AppException("401-2", "${HttpHeaders.AUTHORIZATION} 헤더가 Bearer 형식이 아닙니다.")
-                    }
-                    ExtractedTokens(bits[1], bits[2], sessionKey, refreshToken)
-                }
-                else -> throw AppException("401-2", "${HttpHeaders.AUTHORIZATION} 헤더가 Bearer 형식이 아닙니다.")
-            }
-        } else {
-            ExtractedTokens(
-                apiKey = rq.getCookieValue("apiKey", "").orEmpty(),
-                accessToken = rq.getCookieValue("accessToken", "").orEmpty(),
-                sessionKey = sessionKey,
-                refreshToken = refreshToken,
-            )
-        }
-    }
-
-    /**
-     * authenticate 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
-     * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.
-     */
-    private fun authenticate(member: Member) {
-        val user: UserDetails =
-            SecurityUser(
-                member.id,
-                member.username,
-                "",
-                member.name,
-                member.toGrantedAuthorities(),
-            )
-
-        val authentication: Authentication =
-            UsernamePasswordAuthenticationToken(user, user.password, user.authorities)
-
-        SecurityContextHolder.getContext().authentication = authentication
+        securityContextAuthenticationWriter.write(member)
     }
 
     private fun sanitizeLogValue(
@@ -396,13 +308,6 @@ class CustomAuthenticationFilter(
         private val MUTATING_METHODS = setOf("POST", "PUT", "PATCH", "DELETE")
         private val SAFE_METHODS = setOf("GET", "HEAD")
     }
-
-    private data class ExtractedTokens(
-        val apiKey: String,
-        val accessToken: String,
-        val sessionKey: String,
-        val refreshToken: String,
-    )
 
     private data class SessionResolution(
         val sessionKeyProvided: Boolean,

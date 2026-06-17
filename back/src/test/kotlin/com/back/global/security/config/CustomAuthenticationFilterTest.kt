@@ -50,9 +50,16 @@ class CustomAuthenticationFilterTest {
             CustomAuthenticationFilter(
                 actorApplicationService = actorApplicationService,
                 memberSessionUseCase = memberSessionUseCase,
-                authIpSecurityService = authIpSecurityService,
-                authSecurityEventService = authSecurityEventService,
                 authCookieService = authCookieService,
+                authTokenExtractor = AuthTokenExtractor(rq),
+                authIpSecurityVerifier =
+                    AuthIpSecurityVerifier(
+                        authIpSecurityService,
+                        authSecurityEventService,
+                        authCookieService,
+                        memberSessionUseCase,
+                    ),
+                securityContextAuthenticationWriter = SecurityContextAuthenticationWriter(),
                 clientIpResolver = clientIpResolver,
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,
@@ -115,9 +122,16 @@ class CustomAuthenticationFilterTest {
             CustomAuthenticationFilter(
                 actorApplicationService = actorApplicationService,
                 memberSessionUseCase = memberSessionUseCase,
-                authIpSecurityService = authIpSecurityService,
-                authSecurityEventService = authSecurityEventService,
                 authCookieService = authCookieService,
+                authTokenExtractor = AuthTokenExtractor(rq),
+                authIpSecurityVerifier =
+                    AuthIpSecurityVerifier(
+                        authIpSecurityService,
+                        authSecurityEventService,
+                        authCookieService,
+                        memberSessionUseCase,
+                    ),
+                securityContextAuthenticationWriter = SecurityContextAuthenticationWriter(),
                 clientIpResolver = clientIpResolver,
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,
@@ -183,9 +197,16 @@ class CustomAuthenticationFilterTest {
             CustomAuthenticationFilter(
                 actorApplicationService = actorApplicationService,
                 memberSessionUseCase = memberSessionUseCase,
-                authIpSecurityService = authIpSecurityService,
-                authSecurityEventService = authSecurityEventService,
                 authCookieService = authCookieService,
+                authTokenExtractor = AuthTokenExtractor(rq),
+                authIpSecurityVerifier =
+                    AuthIpSecurityVerifier(
+                        authIpSecurityService,
+                        authSecurityEventService,
+                        authCookieService,
+                        memberSessionUseCase,
+                    ),
+                securityContextAuthenticationWriter = SecurityContextAuthenticationWriter(),
                 clientIpResolver = clientIpResolver,
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,
@@ -232,9 +253,16 @@ class CustomAuthenticationFilterTest {
             CustomAuthenticationFilter(
                 actorApplicationService = actorApplicationService,
                 memberSessionUseCase = memberSessionUseCase,
-                authIpSecurityService = authIpSecurityService,
-                authSecurityEventService = authSecurityEventService,
                 authCookieService = authCookieService,
+                authTokenExtractor = AuthTokenExtractor(rq),
+                authIpSecurityVerifier =
+                    AuthIpSecurityVerifier(
+                        authIpSecurityService,
+                        authSecurityEventService,
+                        authCookieService,
+                        memberSessionUseCase,
+                    ),
+                securityContextAuthenticationWriter = SecurityContextAuthenticationWriter(),
                 clientIpResolver = clientIpResolver,
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,
@@ -323,9 +351,16 @@ class CustomAuthenticationFilterTest {
             CustomAuthenticationFilter(
                 actorApplicationService = actorApplicationService,
                 memberSessionUseCase = memberSessionUseCase,
-                authIpSecurityService = authIpSecurityService,
-                authSecurityEventService = authSecurityEventService,
                 authCookieService = authCookieService,
+                authTokenExtractor = AuthTokenExtractor(rq),
+                authIpSecurityVerifier =
+                    AuthIpSecurityVerifier(
+                        authIpSecurityService,
+                        authSecurityEventService,
+                        authCookieService,
+                        memberSessionUseCase,
+                    ),
+                securityContextAuthenticationWriter = SecurityContextAuthenticationWriter(),
                 clientIpResolver = clientIpResolver,
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,
@@ -429,9 +464,16 @@ class CustomAuthenticationFilterTest {
             CustomAuthenticationFilter(
                 actorApplicationService = actorApplicationService,
                 memberSessionUseCase = memberSessionUseCase,
-                authIpSecurityService = authIpSecurityService,
-                authSecurityEventService = authSecurityEventService,
                 authCookieService = authCookieService,
+                authTokenExtractor = AuthTokenExtractor(rq),
+                authIpSecurityVerifier =
+                    AuthIpSecurityVerifier(
+                        authIpSecurityService,
+                        authSecurityEventService,
+                        authCookieService,
+                        memberSessionUseCase,
+                    ),
+                securityContextAuthenticationWriter = SecurityContextAuthenticationWriter(),
                 clientIpResolver = clientIpResolver,
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,
@@ -513,9 +555,16 @@ class CustomAuthenticationFilterTest {
             CustomAuthenticationFilter(
                 actorApplicationService = actorApplicationService,
                 memberSessionUseCase = memberSessionUseCase,
-                authIpSecurityService = authIpSecurityService,
-                authSecurityEventService = authSecurityEventService,
                 authCookieService = authCookieService,
+                authTokenExtractor = AuthTokenExtractor(rq),
+                authIpSecurityVerifier =
+                    AuthIpSecurityVerifier(
+                        authIpSecurityService,
+                        authSecurityEventService,
+                        authCookieService,
+                        memberSessionUseCase,
+                    ),
+                securityContextAuthenticationWriter = SecurityContextAuthenticationWriter(),
                 clientIpResolver = clientIpResolver,
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,
@@ -588,9 +637,16 @@ class CustomAuthenticationFilterTest {
             CustomAuthenticationFilter(
                 actorApplicationService = actorApplicationService,
                 memberSessionUseCase = memberSessionUseCase,
-                authIpSecurityService = authIpSecurityService,
-                authSecurityEventService = authSecurityEventService,
                 authCookieService = authCookieService,
+                authTokenExtractor = AuthTokenExtractor(rq),
+                authIpSecurityVerifier =
+                    AuthIpSecurityVerifier(
+                        authIpSecurityService,
+                        authSecurityEventService,
+                        authCookieService,
+                        memberSessionUseCase,
+                    ),
+                securityContextAuthenticationWriter = SecurityContextAuthenticationWriter(),
                 clientIpResolver = clientIpResolver,
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,

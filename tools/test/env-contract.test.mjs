@@ -172,6 +172,117 @@ test("runtime service images are env-backed in compose and digest-validated by c
   assert(tagOnlyResult.errors.some((error) => error.key === "CADDY_IMAGE"))
 })
 
+test("외부 백업은 compose 평가 전에 누락된 runtime image env를 보정한다", () => {
+  const externalBackupScript = readFileSync(externalBackupScriptPath, "utf8")
+  const runtimeImageDefaults = [
+    ["CLOUDFLARED_IMAGE", "cloudflare/cloudflared:latest"],
+    ["AUTOHEAL_IMAGE", "willfarrell/autoheal:1.2.0"],
+    ["CADDY_IMAGE", "caddy:2.8-alpine"],
+    ["UPTIME_KUMA_IMAGE", "louislam/uptime-kuma:1"],
+    ["PROMETHEUS_IMAGE", "prom/prometheus:v2.54.1"],
+    ["GRAFANA_IMAGE", "grafana/grafana:11.2.2"],
+    ["LOKI_IMAGE", "grafana/loki:3.0.0"],
+    ["PROMTAIL_IMAGE", "grafana/promtail:3.0.0"],
+    ["NODE_RUNTIME_IMAGE", "node:20-alpine"],
+    ["DB_IMAGE", "jangka512/pgj:latest"],
+    ["REDIS_IMAGE", "redis:7-alpine"],
+    ["MINIO_IMAGE", "minio/minio:latest"],
+  ]
+
+  for (const [key, image] of runtimeImageDefaults) {
+    const escapedImage = image.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    assert.match(
+      externalBackupScript,
+      new RegExp(`ensure_image_env_key_from_local_digest "${key}" "${escapedImage}"`),
+    )
+  }
+
+  const imageGuardBody = externalBackupScript.slice(
+    externalBackupScript.indexOf("ensure_image_env_key_from_local_digest() {"),
+    externalBackupScript.indexOf("ensure_compose_image_env_defaults() {"),
+  )
+  assert.match(imageGuardBody, /value="\$\(trim_quotes "\$\(env_value "\$\{key\}"\)"\)"/)
+  assert.match(
+    externalBackupScript,
+    /if \[\[ "\$\{value\}" == \*":latest" \|\| "\$\{value\}" == \*":latest@"\* \]\]/,
+  )
+  assert.match(imageGuardBody, /require_digest_image_value "\$\{key\}" "\$\{value\}"/)
+  assert.match(imageGuardBody, /file_value="\$\(trim_quotes "\$\(read_key_from_file "\$\{key\}" "\$\{ENV_FILE\}"\)"\)"/)
+  assert.match(imageGuardBody, /ensure_compose_env_work_file\n\s+upsert_env_key "\$\{key\}" "\$\{value\}"/)
+  assert.match(imageGuardBody, /upsert_env_key "\$\{key\}" "\$\{value\}"/)
+  assert.match(
+    imageGuardBody,
+    /require_digest_image_value "\$\{key\}" "\$\{digest\}"/,
+  )
+  assert.match(imageGuardBody, /ensure_compose_env_work_file\n\s+upsert_env_key "\$\{key\}" "\$\{digest\}"/)
+  assert.match(
+    externalBackupScript,
+    /set \+e\n\s+grep -vE "\^\$\{key\}=" "\$\{target\}" > "\$\{target\}\.tmp"\n\s+status=\$\?\n\s+set -e\n\s+\[\[ "\$\{status\}" -eq 0 \|\| "\$\{status\}" -eq 1 \]\] \|\| fail "failed to filter \$\{key\} from \$\{target\}"/,
+  )
+  assert.match(
+    externalBackupScript,
+    /COMPOSE_ENV_FILE="\$\{ENV_FILE\}"/,
+  )
+  assert.match(
+    externalBackupScript,
+    /docker compose --env-file "\$\{COMPOSE_ENV_FILE\}" -f "\$\{COMPOSE_FILE\}" "\$@"/,
+  )
+  assert.match(
+    externalBackupScript,
+    /rm -f -- "\$\{COMPOSE_ENV_FILE_TMP\}" "\$\{COMPOSE_ENV_FILE_TMP\}\.tmp"/,
+  )
+  assert(
+    imageGuardBody.indexOf("ensure_compose_env_work_file") < imageGuardBody.indexOf('upsert_env_key "${key}" "${value}"') &&
+    imageGuardBody.indexOf('upsert_env_key "${key}" "${value}"') < imageGuardBody.indexOf("return 0"),
+    "HOME_SERVER_ENV image values must be staged before compose reads the env file",
+  )
+
+  const composeReadyBody = externalBackupScript.slice(
+    externalBackupScript.indexOf("ensure_backup_compose_ready() {"),
+    externalBackupScript.indexOf("backup_classes() {"),
+  )
+  const copyDeployConfigBody = externalBackupScript.slice(
+    externalBackupScript.indexOf("copy_deploy_config() {"),
+    externalBackupScript.indexOf("backup_postgres() {"),
+  )
+  const preparePostgresBody = externalBackupScript.slice(
+    externalBackupScript.indexOf("prepare_postgres_backup_compose_if_needed() {"),
+    externalBackupScript.indexOf("backup_classes() {"),
+  )
+  const backupPostgresBody = externalBackupScript.slice(
+    externalBackupScript.indexOf("backup_postgres() {"),
+    externalBackupScript.indexOf("is_dir_empty() {"),
+  )
+  const backupLoopBody = externalBackupScript.slice(
+    externalBackupScript.indexOf('for class in "${classes[@]}"; do'),
+    externalBackupScript.indexOf('log "backup complete id=${TIMESTAMP}"'),
+  )
+  const ensureCallIndex = composeReadyBody.indexOf("\n  ensure_compose_image_env_defaults\n")
+  const validateComposeIndex = composeReadyBody.indexOf("\n  validate_compose_config_after_env_autofill\n")
+  const skipMarkerIndex = preparePostgresBody.indexOf('if [[ "${AQUILA_BACKUP_SKIP_POSTGRES:-false}" == "true" ]]')
+  const prepareComposeReadyCallIndex = preparePostgresBody.indexOf("\n  ensure_backup_compose_ready\n")
+  const prepareCallIndex = backupPostgresBody.indexOf("\n  prepare_postgres_backup_compose_if_needed\n")
+  const composeExecIndex = backupPostgresBody.indexOf("\n  compose exec -T db_1")
+  const loopPrepareIndex = backupLoopBody.indexOf("\n  prepare_postgres_backup_compose_if_needed\n")
+  const loopCopyIndex = backupLoopBody.indexOf("\n  copy_deploy_config")
+  assert(ensureCallIndex > -1, "create_external_backup.sh must call image env auto-fill")
+  assert(validateComposeIndex > -1, "create_external_backup.sh must validate compose after image env auto-fill")
+  assert(skipMarkerIndex > -1, "PostgreSQL backup skip path must remain explicit")
+  assert(prepareComposeReadyCallIndex > -1, "PostgreSQL compose preparation must call compose preflight")
+  assert(prepareCallIndex > -1, "PostgreSQL backup must prepare compose before compose exec")
+  assert(composeExecIndex > -1, "PostgreSQL backup must keep compose exec")
+  assert(loopPrepareIndex > -1, "backup loop must prepare compose before copying deploy config")
+  assert(loopCopyIndex > -1, "backup loop must copy deploy config")
+  assert(ensureCallIndex < validateComposeIndex, "compose validation must run after image env auto-fill")
+  assert(skipMarkerIndex < prepareComposeReadyCallIndex, "compose preflight must not run before skipped PostgreSQL backups")
+  assert(prepareCallIndex < composeExecIndex, "compose preflight must run before backup compose calls")
+  assert(loopPrepareIndex < loopCopyIndex, "compose env failures must be detected before copying deploy config")
+  assert.match(
+    copyDeployConfigBody,
+    /cp "\$\{COMPOSE_ENV_FILE\}" "\$\{target_dir\}\/\.env\.prod\.compose"/,
+  )
+})
+
 test("home-server runtime contract covers external storage backup keys", async () => {
   const { loadContract } = await import("../env/validate-env.mjs")
   const keys = new Set(targetKeyNames(loadContract(contractPath), "home-server-runtime"))

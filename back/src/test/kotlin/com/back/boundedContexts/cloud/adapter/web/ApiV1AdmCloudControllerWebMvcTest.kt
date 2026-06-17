@@ -12,6 +12,7 @@ import com.back.boundedContexts.cloud.model.CloudVideoUploadSessionStatus
 import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.support.BaseAdmCloudControllerWebMvcTest
+import jakarta.servlet.http.HttpServletRequest
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
@@ -22,6 +23,7 @@ import org.mockito.BDDMockito.then
 import org.mockito.Mockito.mock
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
+import org.springframework.mock.web.DelegatingServletInputStream
 import org.springframework.mock.web.MockMultipartFile
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.context.support.WithMockUser
@@ -224,6 +226,8 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
     fun `관리자는 대용량 동영상 조각을 raw body 그대로 업로드한다`() {
         val admin = adminUser(id = 7L)
         val chunkBytes = byteArrayOf(0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70, 1, 2, 3, 4)
+        given(cloudVideoUploadSessionService.getSession(ownerMemberId = 7L, sessionId = 21L))
+            .willReturn(sampleVideoSessionDto())
         given(
             cloudVideoUploadSessionService.uploadPart(
                 ownerMemberId = ArgumentMatchers.eq(7L),
@@ -248,6 +252,89 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                 jsonPath("$.session.uploadedParts[0]") { value(1) }
                 jsonPath("$.part.partNumber") { value(1) }
             }
+    }
+
+    @Test
+    @DisplayName("대용량 동영상 조각 body가 기대 크기를 넘으면 service 업로드 전에 거절한다")
+    fun `대용량 동영상 조각 body가 기대 크기를 넘으면 service 업로드 전에 거절한다`() {
+        val admin = adminUser(id = 7L)
+        given(cloudVideoUploadSessionService.getSession(ownerMemberId = 7L, sessionId = 21L))
+            .willReturn(
+                sampleVideoSessionDto(
+                    byteSize = 10,
+                    partSizeBytes = 10,
+                    totalParts = 1,
+                ),
+            )
+
+        mvc
+            .put("/system/api/v1/adm/cloud/files/video-upload-sessions/21/parts/1") {
+                contentType = MediaType.APPLICATION_OCTET_STREAM
+                content = ByteArray(11) { 1 }
+                with(user(admin))
+            }.andExpect {
+                status { isBadRequest() }
+                jsonPath("$.resultCode") { value("400-1") }
+            }
+
+        then(cloudVideoUploadSessionService).should().getSession(ownerMemberId = 7L, sessionId = 21L)
+        then(cloudVideoUploadSessionService).shouldHaveNoMoreInteractions()
+    }
+
+    @Test
+    @DisplayName("대용량 동영상 조각 번호가 세션 범위를 벗어나면 service 업로드 전에 거절한다")
+    fun `대용량 동영상 조각 번호가 세션 범위를 벗어나면 service 업로드 전에 거절한다`() {
+        val admin = adminUser(id = 7L)
+        given(cloudVideoUploadSessionService.getSession(ownerMemberId = 7L, sessionId = 21L))
+            .willReturn(sampleVideoSessionDto(totalParts = 1))
+
+        mvc
+            .put("/system/api/v1/adm/cloud/files/video-upload-sessions/21/parts/2") {
+                contentType = MediaType.APPLICATION_OCTET_STREAM
+                content = ByteArray(1) { 1 }
+                with(user(admin))
+            }.andExpect {
+                status { isBadRequest() }
+                jsonPath("$.resultCode") { value("400-1") }
+            }
+
+        then(cloudVideoUploadSessionService).should().getSession(ownerMemberId = 7L, sessionId = 21L)
+        then(cloudVideoUploadSessionService).shouldHaveNoMoreInteractions()
+    }
+
+    @Test
+    @DisplayName("대용량 동영상 조각 chunked body가 기대 크기를 넘으면 읽는 중 거절한다")
+    fun `대용량 동영상 조각 chunked body가 기대 크기를 넘으면 읽는 중 거절한다`() {
+        val request = mock(HttpServletRequest::class.java)
+        given(request.contentLengthLong).willReturn(-1)
+        given(request.inputStream)
+            .willReturn(DelegatingServletInputStream(ByteArrayInputStream(ByteArray(11) { 1 })))
+        given(cloudVideoUploadSessionService.getSession(ownerMemberId = 7L, sessionId = 21L))
+            .willReturn(
+                sampleVideoSessionDto(
+                    byteSize = 10,
+                    partSizeBytes = 10,
+                    totalParts = 1,
+                ),
+            )
+
+        val controller =
+            ApiV1AdmCloudController(
+                cloudFileService,
+                cloudVideoUploadSessionService,
+            )
+
+        assertThatThrownBy {
+            controller.uploadVideoPart(
+                securityUser = adminUser(id = 7L),
+                sessionId = 21L,
+                partNumber = 1,
+                request = request,
+            )
+        }.hasMessageContaining("업로드 조각 크기가 올바르지 않습니다.")
+
+        then(cloudVideoUploadSessionService).should().getSession(ownerMemberId = 7L, sessionId = 21L)
+        then(cloudVideoUploadSessionService).shouldHaveNoMoreInteractions()
     }
 
     @Test
@@ -601,16 +688,21 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
             modifiedAt = Instant.parse("2026-06-12T00:00:00Z"),
         )
 
-    private fun sampleVideoSessionDto(uploadedParts: List<Int> = emptyList()): CloudVideoUploadSessionDto =
+    private fun sampleVideoSessionDto(
+        uploadedParts: List<Int> = emptyList(),
+        byteSize: Long = 5_368_709_120L,
+        partSizeBytes: Long = 67_108_864L,
+        totalParts: Int = 80,
+    ): CloudVideoUploadSessionDto =
         CloudVideoUploadSessionDto(
             id = 21L,
             ownerMemberId = 7L,
             originalFilename = "demo.mp4",
             contentType = "video/mp4",
-            byteSize = 5_368_709_120L,
+            byteSize = byteSize,
             folderPath = "videos",
-            partSizeBytes = 67_108_864L,
-            totalParts = 80,
+            partSizeBytes = partSizeBytes,
+            totalParts = totalParts,
             uploadedParts = uploadedParts,
             status = CloudVideoUploadSessionStatus.IN_PROGRESS,
             expiresAt = Instant.parse("2026-06-18T00:00:00Z"),

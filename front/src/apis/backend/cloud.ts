@@ -1,5 +1,5 @@
 import type { components } from "@shared/contracts"
-import { apiFetch, getApiRequestUrl } from "./client"
+import { ApiError, apiFetch, getApiRequestUrl } from "./client"
 
 export type CloudFileDto = components["schemas"]["CloudFileDto"]
 export type CloudMediaKind = NonNullable<CloudFileDto["mediaKind"]>
@@ -196,6 +196,14 @@ const completeVideoUploadSession = async (
   return normalizeCloudFile(response.data || {})
 }
 
+const getCloudFile = async (fileId: number, signal?: AbortSignal): Promise<CloudFile> =>
+  normalizeCloudFile(
+    await apiFetch<CloudFileDto>(`/system/api/v1/adm/cloud/files/${fileId}`, {
+      signal,
+      timeoutMs: 30_000,
+    })
+  )
+
 const getVideoUploadSession = (sessionId: number, signal?: AbortSignal): Promise<CloudVideoUploadSession> =>
   apiFetch<CloudVideoUploadSession>(`/system/api/v1/adm/cloud/files/video-upload-sessions/${sessionId}`, {
     signal,
@@ -235,29 +243,43 @@ const clearStoredVideoUploadSessionId = (storageKey: string) => {
   window.localStorage.removeItem(storageKey)
 }
 
-const isMatchingVideoUploadSession = (session: CloudVideoUploadSession, file: File) =>
-  session.status === "IN_PROGRESS" && session.byteSize === file.size && session.originalFilename === file.name
+const isMatchingVideoUploadSessionFile = (session: CloudVideoUploadSession, file: File) =>
+  session.byteSize === file.size && session.originalFilename === file.name
+
+const isDefinitiveStaleVideoUploadSessionError = (error: unknown) =>
+  error instanceof ApiError && (error.status === 404 || error.status === 410)
+
+type ResolvedVideoUploadSession =
+  | { kind: "inProgress"; session: CloudVideoUploadSession }
+  | { kind: "completed"; file: CloudFile }
 
 const resolveVideoUploadSession = async (
   file: File,
   folderPath: string,
   storageKey: string,
   signal?: AbortSignal,
-) => {
+): Promise<ResolvedVideoUploadSession> => {
   const storedSessionId = readStoredVideoUploadSessionId(storageKey)
   if (storedSessionId) {
     try {
       const storedSession = await getVideoUploadSession(storedSessionId, signal)
-      if (isMatchingVideoUploadSession(storedSession, file)) return storedSession
-    } catch {
-      // 조회 실패한 stale session id는 새 세션으로 대체한다.
+      if (isMatchingVideoUploadSessionFile(storedSession, file)) {
+        if (storedSession.status === "IN_PROGRESS") {
+          return { kind: "inProgress", session: storedSession }
+        }
+        if (storedSession.status === "COMPLETED" && storedSession.completedFileId) {
+          return { kind: "completed", file: await getCloudFile(storedSession.completedFileId, signal) }
+        }
+      }
+    } catch (error) {
+      if (!isDefinitiveStaleVideoUploadSessionError(error)) throw error
     }
     clearStoredVideoUploadSessionId(storageKey)
   }
 
   const session = await createVideoUploadSession(file, folderPath, signal)
   storeVideoUploadSessionId(storageKey, session.id)
-  return session
+  return { kind: "inProgress", session }
 }
 
 const isExplicitUploadAbort = (error: unknown, signal?: AbortSignal) => {
@@ -276,7 +298,13 @@ const uploadCloudVideoFileResumable = async (
   const storageKey = buildVideoUploadStorageKey(file, folderPath)
   try {
     options.onProgress?.({ progress: 2, message: "대용량 업로드 준비 중" })
-    session = await resolveVideoUploadSession(file, folderPath, storageKey, signal)
+    const resolvedSession = await resolveVideoUploadSession(file, folderPath, storageKey, signal)
+    if (resolvedSession.kind === "completed") {
+      clearStoredVideoUploadSessionId(storageKey)
+      return resolvedSession.file
+    }
+
+    session = resolvedSession.session
     const partSize = session.partSizeBytes || CLOUD_VIDEO_RESUMABLE_PART_BYTES
     const uploadedParts = new Set(session.uploadedParts || [])
     const totalParts = session.totalParts || Math.ceil(file.size / partSize)

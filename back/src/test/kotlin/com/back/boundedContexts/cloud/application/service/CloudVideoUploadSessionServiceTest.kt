@@ -15,6 +15,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.springframework.transaction.annotation.Transactional
 import java.io.ByteArrayInputStream
 import java.text.Normalizer
 import java.time.Clock
@@ -83,6 +84,37 @@ class CloudVideoUploadSessionServiceTest {
         assertThat(session.expiresAt).isEqualTo(Instant.parse("2026-06-17T01:00:00Z"))
         assertThat(storage.multipartInits.single().objectKey).startsWith("cloud/7/videos/2026/06/17/")
         assertThat(sessionRepository.savedSessions.single().uploadId).isEqualTo("upload-1")
+    }
+
+    @Test
+    @DisplayName("세션 생성은 설정된 클라우드 키 prefix로 S3 object key를 만든다")
+    fun `세션 생성은 설정된 클라우드 키 prefix를 사용한다`() {
+        val prefixedService =
+            CloudVideoUploadSessionService(
+                sessionRepository = sessionRepository,
+                partRepository = partRepository,
+                cloudFileRepository = fileRepository,
+                cloudStoragePort = storage,
+                cloudStorageProperties =
+                    CloudStorageProperties(
+                        maxFileSizeBytes = TEST_PART_SIZE_BYTES,
+                        cloudKeyPrefix = "/admin-cloud/",
+                        cloudVideoResumableMaxFileSizeBytes = 5L * 1024 * 1024 * 1024,
+                        cloudVideoResumablePartSizeBytes = TEST_PART_SIZE_BYTES,
+                        cloudVideoResumableExpiresSeconds = 3_600,
+                    ),
+                clock = clock,
+            )
+
+        prefixedService.createSession(
+            ownerMemberId = 7L,
+            originalFilename = "movie.mp4",
+            contentType = "video/mp4",
+            byteSize = TEST_PART_SIZE_BYTES,
+            folderPath = "videos",
+        )
+
+        assertThat(storage.multipartInits.single().objectKey).startsWith("admin-cloud/7/videos/2026/06/17/")
     }
 
     @Test
@@ -164,6 +196,27 @@ class CloudVideoUploadSessionServiceTest {
         assertThat(storage.abortedUploads.single().uploadId).isEqualTo("upload-1")
         assertThat(partRepository.findBySessionId(session.id)).isEmpty()
         assertThat(sessionRepository.savedSessions.last().status).isEqualTo(CloudVideoUploadSessionStatus.EXPIRED)
+    }
+
+    @Test
+    @DisplayName("만료 세션을 410으로 거절하는 진입점은 만료 상태 저장을 rollback하지 않는다")
+    fun `만료 세션 진입점은 AppException rollback을 방지한다`() {
+        val getSessionTransaction =
+            CloudVideoUploadSessionService::class.java
+                .getMethod("getSession", java.lang.Long.TYPE, java.lang.Long.TYPE)
+                .getAnnotation(Transactional::class.java)
+        val uploadPartTransaction =
+            CloudVideoUploadSessionService::class.java
+                .getMethod("uploadPart", java.lang.Long.TYPE, java.lang.Long.TYPE, Integer.TYPE, ByteArray::class.java)
+                .getAnnotation(Transactional::class.java)
+        val completeTransaction =
+            CloudVideoUploadSessionService::class.java
+                .getMethod("complete", java.lang.Long.TYPE, java.lang.Long.TYPE)
+                .getAnnotation(Transactional::class.java)
+
+        assertThat(getSessionTransaction.noRollbackFor).contains(AppException::class)
+        assertThat(uploadPartTransaction.noRollbackFor).contains(AppException::class)
+        assertThat(completeTransaction.noRollbackFor).contains(AppException::class)
     }
 
     @Test

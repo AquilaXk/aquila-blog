@@ -30,6 +30,12 @@ enum class CloudVideoUploadSessionStatus {
     ON cloud_video_upload_session (owner_member_id, status, expires_at, id)
     """,
 )
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS cloud_video_upload_session_idx_status_expires
+    ON cloud_video_upload_session (status, expires_at, id)
+    """,
+)
 class CloudVideoUploadSession(
     @field:Id
     @field:SequenceGenerator(

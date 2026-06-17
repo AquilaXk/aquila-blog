@@ -130,7 +130,6 @@ class ApiV1AdmCloudController(
     }
 
     @GetMapping("/files/video-upload-sessions/{sessionId}")
-    @Transactional(readOnly = true)
     fun getVideoUploadSession(
         @AuthenticationPrincipal securityUser: SecurityUser,
         @PathVariable

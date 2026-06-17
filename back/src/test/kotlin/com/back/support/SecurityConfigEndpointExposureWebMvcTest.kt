@@ -19,6 +19,7 @@ import com.back.global.security.config.oauth2.CustomOidcUserService
 import com.back.global.web.application.AuthCookieService
 import com.back.global.web.application.ClientIpResolver
 import com.back.global.web.application.Rq
+import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
@@ -30,6 +31,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.core.env.Environment
 import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext
+import org.springframework.http.HttpHeaders
 import org.springframework.security.test.context.support.WithMockUser
 import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.context.TestPropertySource
@@ -40,6 +42,8 @@ import org.springframework.test.web.servlet.post
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RestController
 import tools.jackson.databind.ObjectMapper
+
+private const val STRICT_TRANSPORT_SECURITY_HEADER = "Strict-Transport-Security"
 
 @WebMvcTest(controllers = [SecurityConfigEndpointExposureWebMvcTestSupport.ProbeController::class])
 @Import(
@@ -124,6 +128,23 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
 @ActiveProfiles("prod")
 @DisplayName("SecurityConfig prod endpoint exposure 테스트")
 class SecurityConfigProdEndpointExposureWebMvcTest : SecurityConfigEndpointExposureWebMvcTestSupport() {
+    @Test
+    @DisplayName("prod에서는 edge proxy가 보안 헤더를 단일 책임으로 내려주도록 Spring 기본 헤더를 위임한다")
+    fun `prod delegates default response security headers to edge proxy`() {
+        val response =
+            mvc
+                .get("/actuator/health/liveness")
+                .andExpect {
+                    status { isInternalServerError() }
+                }.andReturn()
+                .response
+
+        assertThat(response.getHeader("X-Content-Type-Options")).isNull()
+        assertThat(response.getHeader("X-Frame-Options")).isNull()
+        assertThat(response.getHeader(HttpHeaders.CACHE_CONTROL)).isNull()
+        assertThat(response.getHeader(STRICT_TRANSPORT_SECURITY_HEADER)).isNull()
+    }
+
     @Test
     @DisplayName("prod에서 public Swagger와 OpenAPI는 익명 접근을 401로 막는다")
     fun `prod protects public api docs from anonymous access`() {
@@ -215,6 +236,28 @@ class SecurityConfigProdEndpointExposureWebMvcTest : SecurityConfigEndpointExpos
 @ActiveProfiles("test")
 @DisplayName("SecurityConfig non-prod endpoint exposure 테스트")
 class SecurityConfigNonProdEndpointExposureWebMvcTest : SecurityConfigEndpointExposureWebMvcTestSupport() {
+    @Test
+    @DisplayName("non-prod에서는 proxy 보강 없이도 Spring 기본 보안 헤더를 유지한다")
+    fun `non prod keeps spring security default response headers`() {
+        val response =
+            mvc
+                .get("/actuator/info") {
+                    secure = true
+                }.andExpect {
+                    status { isInternalServerError() }
+                }.andReturn()
+                .response
+
+        assertThat(response.getHeader("X-Content-Type-Options")).isEqualTo("nosniff")
+        assertThat(response.getHeader("X-Frame-Options")).isEqualTo("DENY")
+        assertThat(response.getHeader(HttpHeaders.CACHE_CONTROL))
+            .isEqualTo("no-cache, no-store, max-age=0, must-revalidate")
+        assertThat(response.getHeader(HttpHeaders.PRAGMA)).isEqualTo("no-cache")
+        assertThat(response.getHeader(HttpHeaders.EXPIRES)).isEqualTo("0")
+        assertThat(response.getHeader(STRICT_TRANSPORT_SECURITY_HEADER))
+            .isEqualTo("max-age=31536000 ; includeSubDomains")
+    }
+
     @Test
     @DisplayName("non-prod에서는 Prometheus, Swagger, OpenAPI 개발 경로의 익명 접근을 유지한다")
     fun `non prod keeps diagnostics and api docs public`() {

@@ -32,8 +32,10 @@ import java.time.Instant
 import java.util.Locale
 
 /**
- * CustomAuthenticationFilter는 글로벌 런타임 동작을 정의하는 설정 클래스입니다.
- * 보안, 캐시, 세션, JPA, 스케줄링 등 공통 인프라 설정을 등록합니다.
+ * API 요청의 쿠키/JWT 인증을 SecurityContext로 연결하는 servlet filter입니다.
+ *
+ * 공개 API는 stale 인증 정보가 있어도 익명 요청으로 fallback하고,
+ * 보호 API는 세션 만료와 IP 보안 실패를 명시적인 401 응답으로 변환합니다.
  */
 @Component
 class CustomAuthenticationFilter(
@@ -42,6 +44,7 @@ class CustomAuthenticationFilter(
     private val authIpSecurityService: AuthIpSecurityService,
     private val authSecurityEventService: AuthSecurityEventService,
     private val authCookieService: AuthCookieService,
+    private val authTokenExtractor: AuthTokenExtractor,
     private val clientIpResolver: ClientIpResolver,
     private val objectMapper: ObjectMapper,
     private val publicApiRequestMatcher: PublicApiRequestMatcher,
@@ -66,8 +69,7 @@ class CustomAuthenticationFilter(
     override fun shouldNotFilterAsyncDispatch(): Boolean = false
 
     /**
-     * doFilterInternal 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
-     * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.
+     * 인증 실패 응답은 JSON API 계약과 CORS header를 유지해야 하므로 filter 안에서 변환합니다.
      */
     override fun doFilterInternal(
         request: HttpServletRequest,
@@ -120,14 +122,13 @@ class CustomAuthenticationFilter(
     }
 
     /**
-     * authenticateIfPossible 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
-     * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.
+     * 기존 accessToken을 먼저 검증하고, 실패하면 refreshToken 회전 경로로 이동합니다.
      */
     private fun authenticateIfPossible(
         request: HttpServletRequest,
         response: HttpServletResponse,
     ) {
-        val tokens = extractTokens()
+        val tokens = authTokenExtractor.extract()
         val apiKey = tokens.apiKey
         val accessToken = tokens.accessToken
         val sessionKey = tokens.sessionKey
@@ -315,44 +316,6 @@ class CustomAuthenticationFilter(
     }
 
     /**
-     * 입력/환경 데이터를 파싱·정규화해 내부 처리에 안전한 값으로 변환합니다.
-     * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.
-     */
-    private fun extractTokens(): ExtractedTokens {
-        val headerAuthorization = rq.getHeader(HttpHeaders.AUTHORIZATION, "").orEmpty()
-        val sessionKey = rq.getCookieValue("sessionKey", "").orEmpty()
-        val refreshToken = rq.getCookieValue("refreshToken", "").orEmpty()
-
-        return if (headerAuthorization.isNotBlank()) {
-            if (!headerAuthorization.startsWith("Bearer ")) {
-                throw AppException("401-2", "${HttpHeaders.AUTHORIZATION} 헤더가 Bearer 형식이 아닙니다.")
-            }
-
-            val bits = headerAuthorization.trim().split(Regex("\\s+"))
-            when (bits.size) {
-                2 -> {
-                    if (bits[1].isBlank()) throw AppException("401-2", "${HttpHeaders.AUTHORIZATION} 헤더가 Bearer 형식이 아닙니다.")
-                    ExtractedTokens("", bits[1], sessionKey, refreshToken)
-                }
-                3 -> {
-                    if (bits[1].isBlank() || bits[2].isBlank()) {
-                        throw AppException("401-2", "${HttpHeaders.AUTHORIZATION} 헤더가 Bearer 형식이 아닙니다.")
-                    }
-                    ExtractedTokens(bits[1], bits[2], sessionKey, refreshToken)
-                }
-                else -> throw AppException("401-2", "${HttpHeaders.AUTHORIZATION} 헤더가 Bearer 형식이 아닙니다.")
-            }
-        } else {
-            ExtractedTokens(
-                apiKey = rq.getCookieValue("apiKey", "").orEmpty(),
-                accessToken = rq.getCookieValue("accessToken", "").orEmpty(),
-                sessionKey = sessionKey,
-                refreshToken = refreshToken,
-            )
-        }
-    }
-
-    /**
      * authenticate 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
      * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.
      */
@@ -396,13 +359,6 @@ class CustomAuthenticationFilter(
         private val MUTATING_METHODS = setOf("POST", "PUT", "PATCH", "DELETE")
         private val SAFE_METHODS = setOf("GET", "HEAD")
     }
-
-    private data class ExtractedTokens(
-        val apiKey: String,
-        val accessToken: String,
-        val sessionKey: String,
-        val refreshToken: String,
-    )
 
     private data class SessionResolution(
         val sessionKeyProvided: Boolean,

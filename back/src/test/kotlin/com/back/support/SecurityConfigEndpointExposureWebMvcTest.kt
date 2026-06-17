@@ -8,6 +8,7 @@ import com.back.boundedContexts.post.config.PostSecurityConfigurer
 import com.back.global.security.application.AuthIpSecurityService
 import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.security.config.ApiCorsPolicy
+import com.back.global.security.config.AuthTokenExtractor
 import com.back.global.security.config.CustomAuthenticationFilter
 import com.back.global.security.config.PublicApiRequestMatcher
 import com.back.global.security.config.PublicApiRouteContributor
@@ -107,21 +108,24 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
             apiCorsPolicy: ApiCorsPolicy,
             environment: Environment,
             objectMapper: ObjectMapper,
-        ): CustomAuthenticationFilter =
-            CustomAuthenticationFilter(
+        ): CustomAuthenticationFilter {
+            val rq = mock(Rq::class.java)
+            return CustomAuthenticationFilter(
                 actorApplicationService = mock(ActorApplicationService::class.java),
                 memberSessionUseCase = mock(MemberSessionUseCase::class.java),
                 authIpSecurityService = mock(AuthIpSecurityService::class.java),
                 authSecurityEventService = mock(AuthSecurityEventService::class.java),
                 authCookieService = mock(AuthCookieService::class.java),
+                authTokenExtractor = AuthTokenExtractor(rq),
                 clientIpResolver = mock(ClientIpResolver::class.java),
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = PublicApiRequestMatcher(emptyList<PublicApiRouteContributor>()),
                 apiCorsPolicy = apiCorsPolicy,
                 environment = environment,
-                rq = mock(Rq::class.java),
+                rq = rq,
                 freshLookupGraceSeconds = 15,
             )
+        }
     }
 }
 

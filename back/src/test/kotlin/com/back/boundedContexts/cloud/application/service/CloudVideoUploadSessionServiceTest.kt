@@ -323,6 +323,25 @@ class CloudVideoUploadSessionServiceTest {
     }
 
     @Test
+    @DisplayName("긴 동영상 파일명은 metadata 제한 후에도 확장자를 보존한다")
+    fun `긴 동영상 파일명은 metadata 제한 후에도 확장자를 보존한다`() {
+        val longFilename = "${"가".repeat(400)}.mp4"
+
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = longFilename,
+                contentType = "",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+
+        assertThat(session.contentType).isEqualTo("video/mp4")
+        assertThat(session.originalFilename).endsWith(".mp4")
+        assertThat(storage.multipartInits.single().originalFilename).endsWith(".mp4")
+    }
+
+    @Test
     @DisplayName("지원하지 않는 확장자와 유효하지 않은 폴더 경로는 세션 생성에서 거절한다")
     fun `지원하지 않는 확장자와 유효하지 않은 폴더 경로는 거절한다`() {
         assertThatThrownBy {

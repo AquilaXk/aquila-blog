@@ -154,6 +154,7 @@ const setupAdminCloudMocks = async (
     failUploadStatusByName?: Record<string, number>
     failUploadOnceNames?: string[]
     failUploadNames?: string[]
+    failVideoPartOnceNumber?: number
     initialFiles?: CloudFileFixture[]
     listDelayMs?: number
     uploadResponseFilenames?: Record<string, string>
@@ -164,6 +165,7 @@ const setupAdminCloudMocks = async (
   const uploadedNames: string[] = []
   const uploadedClientFilenames: string[] = []
   const videoSessionCreates: string[] = []
+  const videoSessionGets: string[] = []
   const videoPartNumbers: number[] = []
   const videoCompletes: string[] = []
   const videoCancels: string[] = []
@@ -173,7 +175,10 @@ const setupAdminCloudMocks = async (
   const failedDeleteIds = new Set(options.failDeleteIds ?? [])
   const failedUploadNames = new Set(options.failUploadNames ?? [])
   const failUploadOnceNames = new Set(options.failUploadOnceNames ?? [])
+  const failedVideoPartOnceNumbers = new Set<number>()
   const initialFiles = options.initialFiles ?? CLOUD_FILES
+  let videoSessionFilename = "대용량 교육 영상.mp4"
+  let videoSessionByteSize = 106_954_752
   let nextUploadId = 204
 
   await page.route("**/_next/image**", async (route) => {
@@ -190,9 +195,9 @@ const setupAdminCloudMocks = async (
     const sessionBody = {
       id: Number(sessionId),
       ownerMemberId: 1,
-      originalFilename: "대용량 교육 영상.mp4",
+      originalFilename: videoSessionFilename,
       contentType: "video/mp4",
-      byteSize: 106_954_752,
+      byteSize: videoSessionByteSize,
       folderPath: "/",
       partSizeBytes: 67_108_864,
       totalParts: 2,
@@ -205,14 +210,41 @@ const setupAdminCloudMocks = async (
     if (request.method() === "POST" && url.pathname.endsWith("/video-upload-sessions")) {
       const payload = JSON.parse(request.postData() || "{}") as { originalFilename?: string; byteSize?: number }
       videoSessionCreates.push(payload.originalFilename || "")
-      sessionBody.originalFilename = payload.originalFilename || sessionBody.originalFilename
-      sessionBody.byteSize = payload.byteSize || sessionBody.byteSize
-      await fulfillJson(route, { resultCode: "201-1", msg: "created", data: sessionBody }, 201)
+      videoSessionFilename = payload.originalFilename || videoSessionFilename
+      videoSessionByteSize = payload.byteSize || videoSessionByteSize
+      await fulfillJson(
+        route,
+        {
+          resultCode: "201-1",
+          msg: "created",
+          data: { ...sessionBody, originalFilename: videoSessionFilename, byteSize: videoSessionByteSize },
+        },
+        201
+      )
+      return
+    }
+
+    if (request.method() === "GET" && sessionMatch) {
+      videoSessionGets.push(sessionId)
+      await fulfillJson(route, {
+        ...sessionBody,
+        originalFilename: videoSessionFilename,
+        byteSize: videoSessionByteSize,
+        uploadedParts: [...videoPartNumbers],
+      })
       return
     }
 
     if (request.method() === "PUT" && url.pathname.includes("/parts/")) {
       const partNumber = Number(url.pathname.match(/\/parts\/(\d+)$/)?.[1] || 0)
+      if (
+        options.failVideoPartOnceNumber === partNumber &&
+        !failedVideoPartOnceNumbers.has(partNumber)
+      ) {
+        failedVideoPartOnceNumbers.add(partNumber)
+        await fulfillJson(route, { msg: "transient video part failure" }, 503)
+        return
+      }
       videoPartNumbers.push(partNumber)
       const byteSize = request.postDataBuffer()?.byteLength ?? 0
       await fulfillJson(route, {
@@ -227,9 +259,9 @@ const setupAdminCloudMocks = async (
       const uploaded = {
         id: nextUploadId++,
         ownerMemberId: 1,
-        originalFilename: videoSessionCreates.at(-1) || sessionBody.originalFilename,
+        originalFilename: videoSessionFilename,
         contentType: "video/mp4",
-        byteSize: sessionBody.byteSize,
+        byteSize: videoSessionByteSize,
         mediaKind: "VIDEO" as const,
         folderPath: "/",
         createdAt: "2026-06-12T12:00:00Z",
@@ -393,6 +425,7 @@ const setupAdminCloudMocks = async (
     uploadedNames,
     uploadedClientFilenames,
     videoSessionCreates,
+    videoSessionGets,
     videoPartNumbers,
     videoCompletes,
     videoCancels,
@@ -558,6 +591,41 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByLabel("업로드 중인 파일").getByText("완료", { exact: true })).toBeVisible()
     await expect(page.getByRole("row", { name: /대용량 교육 영상\.mp4/ })).toBeVisible()
     expect(mocks.uploadedNames).not.toContain("대용량 교육 영상.mp4")
+    expect(mocks.videoCancels).toEqual([])
+  })
+
+  test("대용량 동영상 part 실패 후 재시도는 기존 세션의 업로드된 조각부터 이어간다", async ({ page }, testInfo) => {
+    const mocks = await setupAdminCloudMocks(page, { failVideoPartOnceNumber: 2 })
+    const largeVideo = Buffer.alloc(101 * 1024 * 1024)
+    Buffer.from([0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70]).copy(largeVideo)
+    const largeVideoPath = testInfo.outputPath("대용량 교육 영상.mp4")
+    writeFileSync(largeVideoPath, largeVideo)
+
+    await page.goto("/admin/cloud")
+    await page.getByLabel("클라우드 파일 업로드").setInputFiles(largeVideoPath)
+
+    const uploadPanel = page.getByLabel("업로드 중인 파일")
+    await expect(page.getByText(/대용량 교육 영상\.mp4 업로드 실패/)).toBeVisible()
+    await expect(uploadPanel.getByRole("heading", { name: "항목 1개 업로드 실패/취소" })).toBeVisible()
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          Object.entries(window.localStorage)
+            .filter(([key]) => key.startsWith("aquila-cloud-video-upload-session"))
+            .map(([, value]) => value)
+        )
+      )
+      .toEqual(["301"])
+    expect(mocks.videoSessionCreates).toEqual(["대용량 교육 영상.mp4"])
+    expect(mocks.videoPartNumbers).toEqual([1])
+    expect(mocks.videoCancels).toEqual([])
+
+    await uploadPanel.getByRole("button", { name: "대용량 교육 영상.mp4 업로드 다시 시도" }).click()
+
+    await expect.poll(() => mocks.videoSessionGets).toContain("301")
+    await expect.poll(() => mocks.videoPartNumbers).toEqual([1, 2])
+    await expect.poll(() => mocks.videoCompletes).toEqual(["301"])
+    expect(mocks.videoSessionCreates).toEqual(["대용량 교육 영상.mp4"])
     expect(mocks.videoCancels).toEqual([])
   })
 

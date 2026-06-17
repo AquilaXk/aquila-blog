@@ -57,6 +57,8 @@ class SecurityConfig(
         http: HttpSecurity,
         apiMutationCsrfGuardFilter: ApiMutationCsrfGuardFilter,
     ): SecurityFilterChain {
+        val isProd = environment.matchesProfiles("prod")
+
         http {
             authorizeHttpRequests {
                 authorize(HttpMethod.OPTIONS, "/**", permitAll)
@@ -68,7 +70,6 @@ class SecurityConfig(
                 authorize("/*/api/*/**", authenticated)
                 authorize("/oauth2/**", permitAll)
                 authorize("/login/oauth2/**", permitAll)
-                val isProd = environment.matchesProfiles("prod")
                 val endpointExposurePolicy = SecurityEndpointExposurePolicy(isProd)
                 if (isProd) {
                     // 프로덕션에서는 k8s/lb health probe 외 actuator 공개를 차단한다.
@@ -97,12 +98,13 @@ class SecurityConfig(
             cors { }
 
             headers {
-                // Caddy is the single source of response security headers in prod;
-                // disable Spring Security defaults that would otherwise duplicate them.
-                cacheControl { disable() }
-                contentTypeOptions { disable() }
-                frameOptions { disable() }
-                httpStrictTransportSecurity { disable() }
+                if (isProd) {
+                    // Caddy is the single source of response security headers in prod.
+                    cacheControl { disable() }
+                    contentTypeOptions { disable() }
+                    frameOptions { disable() }
+                    httpStrictTransportSecurity { disable() }
+                }
             }
 
             csrf { disable() }

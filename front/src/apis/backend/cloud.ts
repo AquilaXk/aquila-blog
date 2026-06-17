@@ -8,6 +8,9 @@ type RsDataCloudFileDto = components["schemas"]["RsDataCloudFileDto"]
 type RsDataVoid = components["schemas"]["RsDataVoid"]
 
 const CLOUD_UPLOAD_TIMEOUT_MS = 10 * 60_000 + 30_000
+const CLOUD_SYNC_UPLOAD_MAX_BYTES = 100 * 1024 * 1024
+const CLOUD_VIDEO_RESUMABLE_PART_BYTES = 64 * 1024 * 1024
+const CLOUD_VIDEO_RESUMABLE_CHUNK_TIMEOUT_MS = 5 * 60_000
 
 export type CloudFile = Required<
   Pick<
@@ -21,6 +24,44 @@ export type CloudFileListParams = {
   folderPath?: string
   keyword?: string
   mediaKind?: CloudMediaKind
+}
+
+type CloudVideoUploadSession = {
+  id: number
+  ownerMemberId: number
+  originalFilename: string
+  contentType: string
+  byteSize: number
+  folderPath: string
+  partSizeBytes: number
+  totalParts: number
+  uploadedParts: number[]
+  status: "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "EXPIRED"
+  expiresAt: string
+  completedFileId?: number | null
+}
+
+type CloudVideoUploadPartResult = {
+  session: CloudVideoUploadSession
+  part: {
+    partNumber: number
+    byteSize: number
+  }
+}
+
+type RsDataCloudVideoUploadSession = {
+  resultCode?: string
+  msg?: string
+  data?: CloudVideoUploadSession
+}
+
+type CloudUploadProgress = {
+  progress: number
+  message: string
+}
+
+type CloudUploadOptions = {
+  onProgress?: (progress: CloudUploadProgress) => void
 }
 
 const normalizeCloudFile = (file: CloudFileDto): CloudFile => ({
@@ -48,6 +89,17 @@ const appendQuery = (path: string, params: Record<string, string | undefined>) =
 export const getCloudFileContentUrl = (fileId: number) =>
   getApiRequestUrl(`/system/api/v1/adm/cloud/files/${fileId}/content`)
 
+export const isResumableVideoUploadFile = (file: File) => {
+  const lowerName = file.name.toLowerCase()
+  const looksLikeVideo =
+    file.type.startsWith("video/") ||
+    lowerName.endsWith(".mp4") ||
+    lowerName.endsWith(".m4v") ||
+    lowerName.endsWith(".mov") ||
+    lowerName.endsWith(".webm")
+  return looksLikeVideo && file.size > CLOUD_SYNC_UPLOAD_MAX_BYTES
+}
+
 export const listCloudFiles = async ({
   folderPath = "",
   keyword = "",
@@ -67,7 +119,12 @@ export const uploadCloudFile = async (
   file: File,
   folderPath = "",
   signal?: AbortSignal,
+  options: CloudUploadOptions = {},
 ): Promise<CloudFile> => {
+  if (isResumableVideoUploadFile(file)) {
+    return uploadCloudVideoFileResumable(file, folderPath, signal, options)
+  }
+
   const formData = new FormData()
   formData.append("clientFilename", file.name)
   formData.append("file", file)
@@ -81,6 +138,106 @@ export const uploadCloudFile = async (
     }
   )
   return normalizeCloudFile(response.data || {})
+}
+
+const createVideoUploadSession = async (
+  file: File,
+  folderPath: string,
+  signal?: AbortSignal,
+): Promise<CloudVideoUploadSession> => {
+  const response = await apiFetch<RsDataCloudVideoUploadSession>(
+    "/system/api/v1/adm/cloud/files/video-upload-sessions",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        originalFilename: file.name,
+        contentType: file.type || "application/octet-stream",
+        byteSize: file.size,
+        folderPath,
+      }),
+      signal,
+      timeoutMs: 30_000,
+    }
+  )
+  if (!response.data) throw new Error("대용량 동영상 업로드 세션을 생성하지 못했습니다.")
+  return response.data
+}
+
+const uploadVideoPart = async (
+  sessionId: number,
+  partNumber: number,
+  chunk: Blob,
+  signal?: AbortSignal,
+): Promise<CloudVideoUploadPartResult> =>
+  apiFetch<CloudVideoUploadPartResult>(
+    `/system/api/v1/adm/cloud/files/video-upload-sessions/${sessionId}/parts/${partNumber}`,
+    {
+      method: "PUT",
+      body: chunk,
+      headers: { "Content-Type": "application/octet-stream" },
+      signal,
+      timeoutMs: CLOUD_VIDEO_RESUMABLE_CHUNK_TIMEOUT_MS,
+    }
+  )
+
+const completeVideoUploadSession = async (
+  sessionId: number,
+  signal?: AbortSignal,
+): Promise<CloudFile> => {
+  const response = await apiFetch<RsDataCloudFileDto>(
+    `/system/api/v1/adm/cloud/files/video-upload-sessions/${sessionId}/complete`,
+    {
+      method: "POST",
+      signal,
+      timeoutMs: 60_000,
+    }
+  )
+  return normalizeCloudFile(response.data || {})
+}
+
+const cancelVideoUploadSession = async (sessionId: number) => {
+  await apiFetch<RsDataVoid>(`/system/api/v1/adm/cloud/files/video-upload-sessions/${sessionId}`, {
+    method: "DELETE",
+    timeoutMs: 30_000,
+  })
+}
+
+const uploadCloudVideoFileResumable = async (
+  file: File,
+  folderPath: string,
+  signal?: AbortSignal,
+  options: CloudUploadOptions = {},
+): Promise<CloudFile> => {
+  let session: CloudVideoUploadSession | null = null
+  try {
+    options.onProgress?.({ progress: 2, message: "대용량 업로드 준비 중" })
+    session = await createVideoUploadSession(file, folderPath, signal)
+    const partSize = session.partSizeBytes || CLOUD_VIDEO_RESUMABLE_PART_BYTES
+    const uploadedParts = new Set(session.uploadedParts || [])
+    const totalParts = session.totalParts || Math.ceil(file.size / partSize)
+
+    for (let partNumber = 1; partNumber <= totalParts; partNumber += 1) {
+      if (signal?.aborted) throw new DOMException("Upload aborted", "AbortError")
+      if (!uploadedParts.has(partNumber)) {
+        const start = (partNumber - 1) * partSize
+        const end = Math.min(start + partSize, file.size)
+        const chunk = file.slice(start, end)
+        await uploadVideoPart(session.id, partNumber, chunk, signal)
+      }
+      uploadedParts.add(partNumber)
+      const progress = Math.min(96, Math.max(5, Math.round((uploadedParts.size / totalParts) * 92)))
+      options.onProgress?.({
+        progress,
+        message: `동영상 조각 ${uploadedParts.size}/${totalParts} 업로드`,
+      })
+    }
+
+    options.onProgress?.({ progress: 98, message: "동영상 업로드 완료 처리 중" })
+    return await completeVideoUploadSession(session.id, signal)
+  } catch (error) {
+    if (session) await cancelVideoUploadSession(session.id).catch(() => undefined)
+    throw error
+  }
 }
 
 export const deleteCloudFile = async (fileId: number) =>

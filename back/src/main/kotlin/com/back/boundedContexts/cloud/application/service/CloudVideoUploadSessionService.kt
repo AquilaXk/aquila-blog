@@ -11,6 +11,7 @@ import com.back.boundedContexts.cloud.model.CloudVideoUploadSessionStatus
 import com.back.global.exception.application.AppException
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.global.storage.config.CloudStorageProperties
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.net.URLEncoder
@@ -58,6 +59,8 @@ class CloudVideoUploadSessionService(
     private val cloudStorageProperties: CloudStorageProperties = CloudStorageProperties(),
     private val clock: Clock = Clock.systemUTC(),
 ) {
+    private val log = LoggerFactory.getLogger(javaClass)
+
     @Transactional
     fun createSession(
         ownerMemberId: Long,
@@ -106,14 +109,37 @@ class CloudVideoUploadSessionService(
         return session.toDto(emptyList())
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     fun getSession(
         ownerMemberId: Long,
         sessionId: Long,
     ): CloudVideoUploadSessionDto {
         val session = findOwnedSession(ownerMemberId, sessionId)
+        if (expireSessionIfNeeded(session)) {
+            throw AppException("410-1", "대용량 업로드 세션이 만료되었습니다.")
+        }
         val parts = partRepository.findBySessionId(session.id)
         return session.toDto(parts)
+    }
+
+    @Transactional
+    fun purgeExpiredSessions(batchSize: Int): Int {
+        val sessions = sessionRepository.findExpiredInProgress(clock.instant(), batchSize.coerceAtLeast(1))
+        var purgedCount = 0
+        sessions.forEach { session ->
+            runCatching {
+                expireSession(session)
+                purgedCount++
+            }.onFailure {
+                log.warn(
+                    "Expired cloud video multipart upload cleanup failed (sessionId={}, objectKey={})",
+                    session.id,
+                    session.objectKey,
+                    it,
+                )
+            }
+        }
+        return purgedCount
     }
 
     @Transactional
@@ -243,19 +269,30 @@ class CloudVideoUploadSessionService(
         if (session.status != CloudVideoUploadSessionStatus.IN_PROGRESS) {
             throw AppException("409-1", "이미 종료된 대용량 업로드 세션입니다.")
         }
-        if (session.expiresAt <= clock.instant()) {
-            cloudStoragePort.abortMultipartUpload(
-                CloudStoragePort.MultipartUploadAbortRequest(
-                    objectKey = session.objectKey,
-                    uploadId = session.uploadId,
-                ),
-            )
-            session.expire(clock.instant())
-            sessionRepository.save(session)
+        if (expireSessionIfNeeded(session)) {
             throw AppException("410-1", "대용량 업로드 세션이 만료되었습니다.")
         }
 
         return session
+    }
+
+    private fun expireSessionIfNeeded(session: CloudVideoUploadSession): Boolean {
+        if (session.status != CloudVideoUploadSessionStatus.IN_PROGRESS) return false
+        if (session.expiresAt > clock.instant()) return false
+        expireSession(session)
+        return true
+    }
+
+    private fun expireSession(session: CloudVideoUploadSession) {
+        cloudStoragePort.abortMultipartUpload(
+            CloudStoragePort.MultipartUploadAbortRequest(
+                objectKey = session.objectKey,
+                uploadId = session.uploadId,
+            ),
+        )
+        partRepository.deleteBySessionId(session.id)
+        session.expire(clock.instant())
+        sessionRepository.save(session)
     }
 
     private fun validateTotalSize(byteSize: Long) {

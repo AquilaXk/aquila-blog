@@ -265,6 +265,7 @@ class PostApplicationService(
 
         val previousTitle = post.title
         val previousContent = post.content
+        val previousContentHtml = post.contentHtml
         val wasPublic = isPubliclyListed(post)
         val previousTags = extractNormalizedTags(previousContent)
         try {
@@ -287,6 +288,7 @@ class PostApplicationService(
         val isPublic = isPubliclyListed(post)
         val listingVisibilityChanged = wasPublic != isPublic
         val contentChanged = previousContent != post.content
+        val contentHtmlChanged = previousContentHtml != post.contentHtml
         val titleChanged = previousTitle != post.title
         val tagChanged = previousTags != afterTags
         val affectsPublicRead = wasPublic || isPublic
@@ -304,7 +306,7 @@ class PostApplicationService(
                             buildPublicPostChangeImpacts(
                                 listingVisibilityChanged = listingVisibilityChanged,
                                 titleChanged = titleChanged,
-                                contentChanged = contentChanged,
+                                contentChanged = contentChanged || contentHtmlChanged,
                                 tagChanged = tagChanged,
                             ),
                         )

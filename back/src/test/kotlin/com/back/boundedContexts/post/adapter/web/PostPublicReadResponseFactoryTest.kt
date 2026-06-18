@@ -341,6 +341,63 @@ class PostPublicReadResponseFactoryTest {
     }
 
     @Test
+    @DisplayName("ETag seed builder는 기본 검색어와 non-null 제외 post id 경로를 안정적으로 직렬화한다")
+    fun buildEtagSeedsWithDefaultFiltersAndExcludedPost() {
+        // given
+        val post = feedPost(id = 7L, modifiedAt = Instant.parse("2026-01-07T00:00:00Z"))
+        val page =
+            PageDto(
+                content = listOf(post),
+                pageable =
+                    PageableDto(
+                        pageNumber = 0,
+                        pageSize = 20,
+                        totalElements = 1,
+                        totalPages = 1,
+                        numberOfElements = 1,
+                    ),
+            )
+        val cursorFeed =
+            CursorFeedPageDto(
+                content = listOf(post),
+                pageSize = 20,
+                hasNext = false,
+                nextCursor = null,
+            )
+        val seedBuilder = PostPublicReadEtagSeedBuilder()
+
+        // when
+        val pageSeed =
+            seedBuilder.buildFeedPageEtagSeed(
+                source = "feed",
+                page = 0,
+                pageSize = 20,
+                sort = PostSearchSortType1.CREATED_AT,
+                data = page,
+            )
+        val cursorSeed =
+            seedBuilder.buildCursorFeedEtagSeed(
+                source = "feed-cursor",
+                pageSize = 20,
+                sort = PostSearchSortType1.CREATED_AT,
+                cursor = null,
+                data = cursorFeed,
+            )
+        val relatedSeed =
+            seedBuilder.buildRelatedAuthorEtagSeed(
+                authorId = 3L,
+                excludePostId = 7L,
+                limit = 4,
+                posts = listOf(post),
+            )
+
+        // then
+        assertThat(pageSeed).contains("|kw=|tag=|")
+        assertThat(cursorSeed).contains("|cursor=|tag=|hasNext=false|nextCursor=|")
+        assertThat(relatedSeed).contains("|excludePostId=7|")
+    }
+
+    @Test
     @DisplayName("공개 read cache policy registry는 모든 endpoint 정책을 노출한다")
     fun exposeAllPublicReadCachePolicies() {
         val policies =

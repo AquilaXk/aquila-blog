@@ -17,6 +17,8 @@ import com.back.global.event.application.EventPublisher
 import com.back.global.storage.application.UploadedFileRetentionService
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import org.mockito.ArgumentCaptor
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
@@ -237,6 +239,37 @@ class PostApplicationServiceDeleteResilienceTest {
         verifyNoInteractions(cacheManager)
         then(uploadedFileRetentionService).should().scheduleDeletedPostAttachments(snapshot.content)
         then(postRecommendFeatureStoreService).should().evict(23)
+    }
+
+    @ParameterizedTest
+    @CsvSource(
+        "true,false",
+        "false,true",
+    )
+    fun `관리자 부분공개 상태 영구삭제는 공개 읽기 캐시를 무효화하지 않는다`(
+        published: Boolean,
+        listed: Boolean,
+    ) {
+        val snapshot =
+            AdmDeletedPostSnapshotDto(
+                id = 24,
+                title = "부분공개 영구삭제 대상",
+                content = "부분공개 영구삭제 본문 #tag",
+                authorId = 4,
+                published = published,
+                listed = listed,
+            )
+        given(postRepository.findDeletedSnapshotById(24)).willReturn(snapshot)
+        given(postRepository.hardDeleteDeletedById(24)).willReturn(true)
+
+        service.hardDeleteDeletedByIdForAdmin(24)
+        val afterCommitEvent = capturePostWriteAfterCommitEvent()
+
+        postWriteSideEffectHandler.handle(afterCommitEvent)
+
+        verifyNoInteractions(cacheManager)
+        then(uploadedFileRetentionService).should().scheduleDeletedPostAttachments(snapshot.content)
+        then(postRecommendFeatureStoreService).should().evict(24)
     }
 
     private fun capturePostWriteAfterCommitEvent(): PostWriteAfterCommitEvent {

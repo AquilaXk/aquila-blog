@@ -168,6 +168,44 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         assertThat(publishedEvents()).hasAtLeastOneElementOfType(PostModifiedEvent::class.java)
     }
 
+    @Test
+    @DisplayName("contentHtml만 바뀐 공개 글 수정도 상세 캐시를 commit 이후 무효화한다")
+    fun modifyContentHtmlOnlyEvictsPublicDetailCachesAfterCommit() {
+        // given
+        clearSideEffectMocks()
+        val admin = actorApplicationService.findByEmail("admin@test.com")!!
+        val post =
+            transactionTemplate.execute {
+                postApplicationService.write(
+                    author = admin,
+                    title = "content html cache source",
+                    content = "same markdown content",
+                    published = true,
+                    listed = true,
+                )
+            }!!
+        clearSideEffectMocks()
+
+        // when
+        transactionTemplate.executeWithoutResult {
+            val latestPost = postApplicationService.findById(post.id)!!
+            postApplicationService.modify(
+                actor = admin,
+                post = latestPost,
+                title = latestPost.title,
+                content = latestPost.content,
+                published = true,
+                listed = true,
+                expectedVersion = latestPost.version ?: 0L,
+                contentHtml = "<p>rendered html only</p>",
+            )
+        }
+
+        // then
+        assertThat(cacheLookupNames()).contains(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT)
+        assertThat(publishedEvents()).hasAtLeastOneElementOfType(PostModifiedEvent::class.java)
+    }
+
     private fun clearSideEffectMocks() {
         clearInvocations(
             uploadedFileRetentionService,
@@ -178,6 +216,12 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
     }
 
     private fun invokedMethodNames(mock: Any): List<String> = mockingDetails(mock).invocations.map { it.method.name }
+
+    private fun cacheLookupNames(): List<String> =
+        mockingDetails(cacheManager)
+            .invocations
+            .filter { it.method.name == "getCache" }
+            .mapNotNull { it.arguments.firstOrNull() as? String }
 
     private fun publishedEvents(): List<Any?> =
         mockingDetails(eventPublisher)

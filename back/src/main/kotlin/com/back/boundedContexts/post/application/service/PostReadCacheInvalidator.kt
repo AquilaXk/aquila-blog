@@ -31,6 +31,9 @@ class PostReadCacheInvalidator(
             onPublicTagsEvicted()
             recordCacheEvict("local-tag-counts", "clear", request.evictReason)
         }
+        if (request.scope.isEmpty()) {
+            return
+        }
         val feedCache = cacheManager.getCache(PostQueryCacheNames.FEED)
         val exploreCache = cacheManager.getCache(PostQueryCacheNames.EXPLORE)
         val adminPostsFirstPageCache = cacheManager.getCache(PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE)

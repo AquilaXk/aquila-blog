@@ -953,7 +953,12 @@ class PostApplicationService(
                 deletedContent = snapshot.content,
                 beforeTags = extractNormalizedTags(snapshot.content),
                 afterTags = emptyList(),
-                cacheInvalidationScope = PostReadCacheInvalidationScope.PublicPostHardDeleted,
+                cacheInvalidationScope =
+                    if (snapshot.published && snapshot.listed) {
+                        PostReadCacheInvalidationScope.PublicPostHardDeleted
+                    } else {
+                        PostReadCacheInvalidationScope.None
+                    },
                 evictReason = "hard-delete",
                 recommendationAction = PostRecommendationSideEffect.EVICT,
             ),

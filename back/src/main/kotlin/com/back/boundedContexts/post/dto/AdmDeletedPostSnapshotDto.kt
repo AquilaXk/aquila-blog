@@ -10,4 +10,6 @@ data class AdmDeletedPostSnapshotDto(
     val title: String,
     val content: String,
     val authorId: Long,
+    val published: Boolean,
+    val listed: Boolean,
 )

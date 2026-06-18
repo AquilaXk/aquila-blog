@@ -12,6 +12,7 @@ import com.back.boundedContexts.post.application.port.output.SecureTipPort
 import com.back.boundedContexts.post.domain.POSTS_COUNT
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
+import com.back.global.app.AppConfig
 import com.back.global.event.application.EventPublisher
 import com.back.global.storage.application.UploadedFileRetentionService
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
@@ -33,6 +34,16 @@ import java.util.Optional
 
 @org.junit.jupiter.api.DisplayName("PostApplicationServiceDeleteResilience 테스트")
 class PostApplicationServiceDeleteResilienceTest {
+    init {
+        AppConfig(
+            siteBackUrl = "http://localhost:8080",
+            siteFrontUrl = "http://localhost:3000",
+            adminUsername = "admin",
+            adminEmail = "admin@example.com",
+            adminPassword = "password",
+        )
+    }
+
     private val postRepository: PostRepositoryPort = mock(PostRepositoryPort::class.java)
     private val postAttrRepository: PostAttrRepositoryPort = mock(PostAttrRepositoryPort::class.java)
     private val memberAttrRepository: MemberAttrRepositoryPort = mock(MemberAttrRepositoryPort::class.java)
@@ -143,6 +154,8 @@ class PostApplicationServiceDeleteResilienceTest {
                 title = "복구 대상",
                 content = "복구 본문 #tag",
                 authorId = 3,
+                published = true,
+                listed = true,
             )
         val restoredPost =
             Post(
@@ -184,6 +197,8 @@ class PostApplicationServiceDeleteResilienceTest {
                 title = "영구삭제 대상",
                 content = "영구삭제 본문 #tag",
                 authorId = 4,
+                published = true,
+                listed = true,
             )
         given(postRepository.findDeletedSnapshotById(22)).willReturn(snapshot)
         given(postRepository.hardDeleteDeletedById(22)).willReturn(true)
@@ -198,6 +213,30 @@ class PostApplicationServiceDeleteResilienceTest {
         then(cacheManager).should().getCache(PostQueryCacheNames.FEED)
         then(uploadedFileRetentionService).should().scheduleDeletedPostAttachments(snapshot.content)
         then(postRecommendFeatureStoreService).should().evict(22)
+    }
+
+    @Test
+    fun `관리자 비공개 글 영구삭제는 공개 읽기 캐시를 무효화하지 않는다`() {
+        val snapshot =
+            AdmDeletedPostSnapshotDto(
+                id = 23,
+                title = "비공개 영구삭제 대상",
+                content = "비공개 영구삭제 본문 #tag",
+                authorId = 4,
+                published = false,
+                listed = false,
+            )
+        given(postRepository.findDeletedSnapshotById(23)).willReturn(snapshot)
+        given(postRepository.hardDeleteDeletedById(23)).willReturn(true)
+
+        service.hardDeleteDeletedByIdForAdmin(23)
+        val afterCommitEvent = capturePostWriteAfterCommitEvent()
+
+        postWriteSideEffectHandler.handle(afterCommitEvent)
+
+        verifyNoInteractions(cacheManager)
+        then(uploadedFileRetentionService).should().scheduleDeletedPostAttachments(snapshot.content)
+        then(postRecommendFeatureStoreService).should().evict(23)
     }
 
     private fun capturePostWriteAfterCommitEvent(): PostWriteAfterCommitEvent {

@@ -42,10 +42,12 @@ import com.back.global.event.application.EventPublisher
 import com.back.global.exception.application.AppException
 import com.back.global.security.application.HtmlContentSanitizer
 import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.standard.dto.EventPayload
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Service
@@ -74,7 +76,7 @@ class PostApplicationService(
     private val postRecommendRankingService: PostRecommendRankingService,
     private val postRecommendFeatureStoreService: PostRecommendFeatureStoreService,
     private val postKeywordSearchPipelineService: PostKeywordSearchPipelineService,
-    private val postWriteSideEffectHandler: PostWriteSideEffectHandler,
+    private val applicationEventPublisher: ApplicationEventPublisher,
     @param:Value("\${custom.post.read.tags-local-cache-ttl-seconds:180}")
     private val tagsLocalCacheTtlSeconds: Long,
 ) {
@@ -126,7 +128,7 @@ class PostApplicationService(
                 )
             val createdTags = extractNormalizedTags(created.content)
             val isPublic = isPubliclyListed(created)
-            enqueuePostWriteSideEffect(
+            publishPostWriteAfterCommitEvent(
                 PostWriteSideEffectCommand(
                     postId = created.id,
                     previousContent = null,
@@ -142,8 +144,14 @@ class PostApplicationService(
                     evictReason = "write",
                     recommendationAction = recommendationActionFor(isPublic),
                 ),
+                PostWrittenEvent(
+                    UUID.randomUUID(),
+                    PostDto(created),
+                    MemberDto(author),
+                    emptyList(),
+                    createdTags,
+                ),
             )
-            publishPostWrittenEvent(author, created, createdTags)
             return created
         }
 
@@ -180,7 +188,7 @@ class PostApplicationService(
         postWriteRequestIdempotencyRepository.save(requestSlot)
         val createdTags = extractNormalizedTags(createdPost.content)
         val isPublic = isPubliclyListed(createdPost)
-        enqueuePostWriteSideEffect(
+        publishPostWriteAfterCommitEvent(
             PostWriteSideEffectCommand(
                 postId = createdPost.id,
                 previousContent = null,
@@ -196,8 +204,14 @@ class PostApplicationService(
                 evictReason = "write-idempotent",
                 recommendationAction = recommendationActionFor(isPublic),
             ),
+            PostWrittenEvent(
+                UUID.randomUUID(),
+                PostDto(createdPost),
+                MemberDto(author),
+                emptyList(),
+                createdTags,
+            ),
         )
-        publishPostWrittenEvent(author, createdPost, createdTags)
 
         return createdPost
     }
@@ -274,7 +288,7 @@ class PostApplicationService(
         val titleChanged = previousTitle != post.title
         val tagChanged = previousTags != afterTags
         val affectsPublicRead = wasPublic || isPublic
-        enqueuePostWriteSideEffect(
+        publishPostWriteAfterCommitEvent(
             PostWriteSideEffectCommand(
                 postId = post.id,
                 previousContent = previousContent,
@@ -290,21 +304,14 @@ class PostApplicationService(
                 evictReason = "modify",
                 recommendationAction = recommendationActionFor(isPublic),
             ),
+            PostModifiedEvent(
+                UUID.randomUUID(),
+                PostDto(post),
+                MemberDto(actor),
+                previousTags,
+                afterTags,
+            ),
         )
-
-        runCatching {
-            eventPublisher.publish(
-                PostModifiedEvent(
-                    UUID.randomUUID(),
-                    PostDto(post),
-                    MemberDto(actor),
-                    previousTags,
-                    afterTags,
-                ),
-            )
-        }.onFailure { exception ->
-            logger.warn("Failed to publish PostModifiedEvent: postId={}", post.id, exception)
-        }
     }
 
     /**
@@ -335,26 +342,6 @@ class PostApplicationService(
         syncMetaTagIndexAttr(savedPost)
         incrementMemberPostsCount(persistenceAuthor)
         return savedPost
-    }
-
-    private fun publishPostWrittenEvent(
-        author: Member,
-        post: Post,
-        afterTags: List<String>,
-    ) {
-        runCatching {
-            eventPublisher.publish(
-                PostWrittenEvent(
-                    UUID.randomUUID(),
-                    PostDto(post),
-                    MemberDto(author),
-                    emptyList(),
-                    afterTags,
-                ),
-            )
-        }.onFailure { exception ->
-            logger.warn("Failed to publish PostWrittenEvent: postId={}", post.id, exception)
-        }
     }
 
     /**
@@ -418,7 +405,7 @@ class PostApplicationService(
             }
         }
 
-        enqueuePostWriteSideEffect(
+        publishPostWriteAfterCommitEvent(
             PostWriteSideEffectCommand(
                 postId = post.id,
                 previousContent = null,
@@ -434,22 +421,14 @@ class PostApplicationService(
                 evictReason = "soft-delete",
                 recommendationAction = PostRecommendationSideEffect.EVICT,
             ),
+            PostDeletedEvent(
+                UUID.randomUUID(),
+                PostDto(post),
+                MemberDto(actor),
+                beforeTags,
+                emptyList(),
+            ),
         )
-
-        runCatching {
-            val postDto = PostDto(post)
-            eventPublisher.publish(
-                PostDeletedEvent(
-                    UUID.randomUUID(),
-                    postDto,
-                    MemberDto(actor),
-                    beforeTags,
-                    emptyList(),
-                ),
-            )
-        }.onFailure { exception ->
-            logger.warn("Failed to publish PostDeletedEvent for post id={}", post.id, exception)
-        }
     }
 
     /**
@@ -918,7 +897,7 @@ class PostApplicationService(
                 ?: throw AppException("404-1", "복구된 글을 확인할 수 없습니다.")
         val restoredTags = extractNormalizedTags(restoredPost.content)
         val isPublic = isPubliclyListed(restoredPost)
-        enqueuePostWriteSideEffect(
+        publishPostWriteAfterCommitEvent(
             PostWriteSideEffectCommand(
                 postId = id,
                 previousContent = null,
@@ -954,7 +933,7 @@ class PostApplicationService(
             throw AppException("404-1", "이미 영구삭제되었거나 존재하지 않는 글입니다.")
         }
 
-        enqueuePostWriteSideEffect(
+        publishPostWriteAfterCommitEvent(
             PostWriteSideEffectCommand(
                 postId = id,
                 previousContent = null,
@@ -1342,10 +1321,14 @@ class PostApplicationService(
     private fun recommendationActionFor(isPublic: Boolean): PostRecommendationSideEffect =
         if (isPublic) PostRecommendationSideEffect.REFRESH else PostRecommendationSideEffect.EVICT
 
-    private fun enqueuePostWriteSideEffect(command: PostWriteSideEffectCommand) {
-        postWriteSideEffectHandler.enqueue(command) {
+    private fun publishPostWriteAfterCommitEvent(
+        command: PostWriteSideEffectCommand,
+        domainEvent: EventPayload? = null,
+    ) {
+        if (command.evictTagsPublic) {
             publicTagCountsCache = null
         }
+        applicationEventPublisher.publishEvent(PostWriteAfterCommitEvent(command, domainEvent))
     }
 
     private fun isPubliclyListed(post: Post): Boolean = post.published && post.listed

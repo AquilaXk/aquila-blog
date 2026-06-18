@@ -20,6 +20,7 @@ import java.time.Instant
 @Service
 class PostUseCaseAdapter(
     private val postApplicationService: PostApplicationService,
+    private val postLikeConflictResolver: PostLikeConflictResolver,
 ) : PostUseCase {
     override fun count(): Long = postApplicationService.count()
 
@@ -82,22 +83,26 @@ class PostUseCaseAdapter(
     override fun like(
         post: Post,
         actor: Member,
-    ): PostLikeToggleResult = postApplicationService.like(post, actor)
+    ): PostLikeToggleResult =
+        postLikeConflictResolver.resolve(
+            post = post,
+            actor = actor,
+            action = { postApplicationService.like(post, actor) },
+            reconcile = { postApplicationService.reconcileLikeState(post, actor) },
+            snapshot = { postApplicationService.readLikeSnapshot(post, actor) },
+        )
 
     override fun unlike(
         post: Post,
         actor: Member,
-    ): PostLikeToggleResult = postApplicationService.unlike(post, actor)
-
-    override fun reconcileLikeState(
-        post: Post,
-        actor: Member,
-    ): PostLikeToggleResult = postApplicationService.reconcileLikeState(post, actor)
-
-    override fun readLikeSnapshot(
-        post: Post,
-        actor: Member,
-    ): PostLikeToggleResult = postApplicationService.readLikeSnapshot(post, actor)
+    ): PostLikeToggleResult =
+        postLikeConflictResolver.resolve(
+            post = post,
+            actor = actor,
+            action = { postApplicationService.unlike(post, actor) },
+            reconcile = { postApplicationService.reconcileLikeState(post, actor) },
+            snapshot = { postApplicationService.readLikeSnapshot(post, actor) },
+        )
 
     override fun incrementHit(post: Post) = postApplicationService.incrementHit(post)
 

@@ -16,17 +16,18 @@ import com.back.global.event.application.EventPublisher
 import com.back.global.storage.application.UploadedFileRetentionService
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Test
+import org.mockito.ArgumentCaptor
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verifyNoInteractions
 import org.springframework.cache.CacheManager
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.TransactionException
 import org.springframework.transaction.TransactionStatus
 import org.springframework.transaction.support.SimpleTransactionStatus
-import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Instant
 import java.util.Optional
 
@@ -50,6 +51,7 @@ class PostApplicationServiceDeleteResilienceTest {
         mock(PostRecommendFeatureStoreService::class.java)
     private val postKeywordSearchPipelineService: PostKeywordSearchPipelineService =
         mock(PostKeywordSearchPipelineService::class.java)
+    private val applicationEventPublisher: ApplicationEventPublisher = mock(ApplicationEventPublisher::class.java)
     private val postReadCacheInvalidator = PostReadCacheInvalidator(cacheManager)
     private val postWriteSideEffectHandler =
         PostWriteSideEffectHandler(
@@ -58,6 +60,7 @@ class PostApplicationServiceDeleteResilienceTest {
             postRecommendFeatureStoreService = postRecommendFeatureStoreService,
             postRepository = postRepository,
             postAttrRepository = postAttrRepository,
+            eventPublisher = eventPublisher,
             transactionManager = transactionManager,
         )
 
@@ -76,7 +79,7 @@ class PostApplicationServiceDeleteResilienceTest {
             postRecommendRankingService = postRecommendRankingService,
             postRecommendFeatureStoreService = postRecommendFeatureStoreService,
             postKeywordSearchPipelineService = postKeywordSearchPipelineService,
-            postWriteSideEffectHandler = postWriteSideEffectHandler,
+            applicationEventPublisher = applicationEventPublisher,
             tagsLocalCacheTtlSeconds = 180,
         )
 
@@ -162,19 +165,15 @@ class PostApplicationServiceDeleteResilienceTest {
         given(postRepository.restoreDeletedById(21)).willReturn(true)
         given(postRepository.findById(21)).willReturn(Optional.of(restoredPost))
 
-        TransactionSynchronizationManager.initSynchronization()
-        try {
-            service.restoreDeletedByIdForAdmin(21)
+        service.restoreDeletedByIdForAdmin(21)
+        val afterCommitEvent = capturePostWriteAfterCommitEvent()
 
-            verifyNoInteractions(cacheManager, postRecommendFeatureStoreService)
+        verifyNoInteractions(cacheManager, postRecommendFeatureStoreService)
 
-            TransactionSynchronizationManager.getSynchronizations().forEach { it.afterCommit() }
+        postWriteSideEffectHandler.handle(afterCommitEvent)
 
-            then(cacheManager).should().getCache(PostQueryCacheNames.FEED)
-            then(postRecommendFeatureStoreService).should().refresh(restoredPost)
-        } finally {
-            TransactionSynchronizationManager.clearSynchronization()
-        }
+        then(cacheManager).should().getCache(PostQueryCacheNames.FEED)
+        then(postRecommendFeatureStoreService).should().refresh(restoredPost)
     }
 
     @Test
@@ -189,20 +188,22 @@ class PostApplicationServiceDeleteResilienceTest {
         given(postRepository.findDeletedSnapshotById(22)).willReturn(snapshot)
         given(postRepository.hardDeleteDeletedById(22)).willReturn(true)
 
-        TransactionSynchronizationManager.initSynchronization()
-        try {
-            service.hardDeleteDeletedByIdForAdmin(22)
+        service.hardDeleteDeletedByIdForAdmin(22)
+        val afterCommitEvent = capturePostWriteAfterCommitEvent()
 
-            verifyNoInteractions(cacheManager, uploadedFileRetentionService, postRecommendFeatureStoreService)
+        verifyNoInteractions(cacheManager, uploadedFileRetentionService, postRecommendFeatureStoreService)
 
-            TransactionSynchronizationManager.getSynchronizations().forEach { it.afterCommit() }
+        postWriteSideEffectHandler.handle(afterCommitEvent)
 
-            then(cacheManager).should().getCache(PostQueryCacheNames.FEED)
-            then(uploadedFileRetentionService).should().scheduleDeletedPostAttachments(snapshot.content)
-            then(postRecommendFeatureStoreService).should().evict(22)
-        } finally {
-            TransactionSynchronizationManager.clearSynchronization()
-        }
+        then(cacheManager).should().getCache(PostQueryCacheNames.FEED)
+        then(uploadedFileRetentionService).should().scheduleDeletedPostAttachments(snapshot.content)
+        then(postRecommendFeatureStoreService).should().evict(22)
+    }
+
+    private fun capturePostWriteAfterCommitEvent(): PostWriteAfterCommitEvent {
+        val captor = ArgumentCaptor.forClass(PostWriteAfterCommitEvent::class.java)
+        then(applicationEventPublisher).should().publishEvent(captor.capture())
+        return captor.value
     }
 
     private class NoopTransactionManager : PlatformTransactionManager {

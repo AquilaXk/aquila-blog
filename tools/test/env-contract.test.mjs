@@ -553,6 +553,33 @@ test("deploy workflow pins production site cookie scope to the live custom domai
   )
 })
 
+test("deploy workflow validates live API security headers after homeserver rollout", () => {
+  const workflow = readFileSync(workflowPath, "utf8")
+
+  assert.match(workflow, /assert_live_security_headers\(\)/)
+  assert.match(workflow, /header_value_from_file\(\)/)
+  assert.match(workflow, /strict-transport-security" "max-age=31536000"/)
+  assert.match(workflow, /x-content-type-options" "nosniff"/)
+  assert.match(workflow, /x-frame-options" "deny"/)
+  assert.match(workflow, /referrer-policy" "strict-origin-when-cross-origin"/)
+  assert.match(workflow, /permissions-policy" "camera=\(\)"/)
+  assert.match(workflow, /cache-control" "no-store"/)
+  assert.match(workflow, /"public-feed"/)
+  assert.match(workflow, /\/post\/api\/v1\/posts\/feed\?page=1&pageSize=1&sort=CREATED_AT/)
+  assert.match(workflow, /"protected-auth-me"/)
+  assert.match(workflow, /\/member\/api\/v1\/auth\/me/)
+  assert.match(workflow, /rollback_and_exit "public_feed_security_header_smoke_failed"/)
+  assert.match(workflow, /rollback_and_exit "protected_auth_security_header_smoke_failed"/)
+  assert(
+    workflow.indexOf('wait_public_api_health "${API_DOMAIN}"') <
+      workflow.indexOf('assert_live_security_headers'),
+  )
+  assert(
+    workflow.indexOf('assert_live_security_headers') <
+      workflow.indexOf("run_canary_ratio_check()"),
+  )
+})
+
 test("required secret check does not inject multi-line HOME_SERVER_ENV into shell", () => {
   const workflow = readFileSync(workflowPath, "utf8")
 

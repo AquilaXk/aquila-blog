@@ -11,7 +11,9 @@ import java.time.Instant
 @DisplayName("AuthSecurityEventCleanupScheduledJob 테스트")
 class AuthSecurityEventCleanupScheduledJobTest {
     @Test
-    fun `cleanup은 만료된 보안 이벤트를 정리한다`() {
+    @DisplayName("cleanup은 만료된 보안 이벤트를 정리한다")
+    fun cleanupPurgesExpiredSecurityEvents() {
+        // given
         val store = RecordingAuthSecurityEventStore()
         store.deletedCounts += 1
         val service =
@@ -26,13 +28,17 @@ class AuthSecurityEventCleanupScheduledJobTest {
                 maxBatches = 1,
             )
 
+        // when
         job.cleanup()
 
+        // then
         assertThat(store.deleteExpiredBeforeCalls).hasSize(1)
     }
 
     @Test
-    fun `cleanup은 한 번의 스케줄에서 최대 batch 수만큼 반복 정리한다`() {
+    @DisplayName("cleanup은 한 번의 스케줄에서 최대 batch 수만큼 반복 정리한다")
+    fun cleanupRepeatsUntilMaxBatchCount() {
+        // given
         val store = RecordingAuthSecurityEventStore()
         store.deletedCounts += listOf(1, 1, 1)
         val service =
@@ -47,8 +53,10 @@ class AuthSecurityEventCleanupScheduledJobTest {
                 maxBatches = 2,
             )
 
+        // when
         job.cleanup()
 
+        // then
         assertThat(store.deleteExpiredBeforeCalls).hasSize(2)
     }
 

@@ -64,10 +64,6 @@ class MemberSignupVerificationService(
             )
     }
 
-    /**
-     * 생성/시작 처리 흐름을 수행하고 중복 요청과 예외 케이스를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     @Transactional
     fun start(
         email: String,
@@ -113,10 +109,6 @@ class MemberSignupVerificationService(
         return SignupEmailStartResult(email = normalizedEmail)
     }
 
-    /**
-     * verifyEmail 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     @Transactional
     fun verifyEmail(emailVerificationToken: String): SignupEmailVerifyResult {
         val normalizedToken = emailVerificationToken.trim()
@@ -146,10 +138,6 @@ class MemberSignupVerificationService(
         )
     }
 
-    /**
-     * 생성/시작 처리 흐름을 수행하고 중복 요청과 예외 케이스를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     @Transactional
     fun completeSignup(
         signupToken: String,
@@ -185,10 +173,6 @@ class MemberSignupVerificationService(
         return member
     }
 
-    /**
-     * buildVerificationLink 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     private fun buildVerificationLink(
         token: String,
         nextPath: String?,

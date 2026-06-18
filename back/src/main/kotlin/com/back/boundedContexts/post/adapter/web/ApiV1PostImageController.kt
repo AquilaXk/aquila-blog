@@ -31,10 +31,6 @@ import java.nio.charset.StandardCharsets
 import java.util.Base64
 import java.util.concurrent.TimeUnit
 
-/**
- * ApiV1PostImageController는 웹 계층에서 HTTP 요청/응답을 처리하는 클래스입니다.
- * 입력 DTO 검증과 응답 포맷팅을 담당하고 비즈니스 처리는 애플리케이션 계층에 위임합니다.
- */
 @RestController
 @RequestMapping("/post/api/v1")
 class ApiV1PostImageController(
@@ -59,10 +55,6 @@ class ApiV1PostImageController(
         val name: String,
     )
 
-    /**
-     * uploadPostImage 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
-     */
     @PostMapping("/posts/images", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
     fun uploadPostImage(
         @RequestPart("file") file: MultipartFile,
@@ -159,10 +151,6 @@ class ApiV1PostImageController(
         )
     }
 
-    /**
-     * 조회 조건을 적용해 필요한 데이터를 안전하게 반환합니다.
-     * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
-     */
     @GetMapping("/images/**")
     @Transactional(readOnly = true)
     fun getPostImage(request: HttpServletRequest): ResponseEntity<Resource> {
@@ -330,10 +318,6 @@ class ApiV1PostImageController(
         return finalizedBuilder.body(InputStreamResource(storedFile.inputStream))
     }
 
-    /**
-     * 원본 입력에서 필요한 값을 안전하게 추출합니다.
-     * 컨트롤러 계층에서 요청 DTO를 검증한 뒤 서비스 호출 결과를 응답 규격으로 변환합니다.
-     */
     private fun extractObjectKey(
         request: HttpServletRequest,
         prefix: String,
@@ -348,10 +332,6 @@ class ApiV1PostImageController(
         return URLDecoder.decode(encodedKey, StandardCharsets.UTF_8)
     }
 
-    /**
-     * 검증 규칙을 적용해 허용 여부를 판정합니다.
-     * 컨트롤러 계층에서 요청 DTO를 검증한 뒤 서비스 호출 결과를 응답 규격으로 변환합니다.
-     */
     private fun isNotModified(
         ifNoneMatch: String?,
         currentEtag: String,
@@ -363,10 +343,6 @@ class ApiV1PostImageController(
             .any { it == "*" || it == currentEtag }
     }
 
-    /**
-     * 원본 입력에서 필요한 값을 안전하게 추출합니다.
-     * 컨트롤러 계층에서 요청 DTO를 검증한 뒤 서비스 호출 결과를 응답 규격으로 변환합니다.
-     */
     private fun parseSingleRange(
         rangeHeader: String,
         totalLength: Long,
@@ -406,10 +382,6 @@ class ApiV1PostImageController(
         return start..end
     }
 
-    /**
-     * skipFully 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
-     */
     private fun skipFully(
         input: InputStream,
         count: Long,
@@ -429,10 +401,6 @@ class ApiV1PostImageController(
         }
     }
 
-    /**
-     * sliceStream 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
-     */
     private fun sliceStream(
         source: InputStream,
         range: LongRange,
@@ -441,10 +409,6 @@ class ApiV1PostImageController(
         return object : InputStream() {
             private var remaining = range.last - range.first + 1
 
-            /**
-             * 조회 조건을 적용해 필요한 데이터를 안전하게 반환합니다.
-             * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
-             */
             override fun read(): Int {
                 if (remaining <= 0) return -1
                 val value = source.read()
@@ -452,10 +416,6 @@ class ApiV1PostImageController(
                 return value
             }
 
-            /**
-             * 조회 조건을 적용해 필요한 데이터를 안전하게 반환합니다.
-             * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
-             */
             override fun read(
                 b: ByteArray,
                 off: Int,

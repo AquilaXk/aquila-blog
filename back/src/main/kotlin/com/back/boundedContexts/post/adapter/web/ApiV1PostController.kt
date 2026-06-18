@@ -29,10 +29,6 @@ import org.springframework.http.ResponseEntity
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.*
 
-/**
- * ApiV1PostController는 웹 계층에서 HTTP 요청/응답을 처리하는 클래스입니다.
- * 입력 DTO 검증과 응답 포맷팅을 담당하고 비즈니스 처리는 애플리케이션 계층에 위임합니다.
- */
 @RestController
 @RequestMapping("/post/api/v1/posts")
 class ApiV1PostController(
@@ -43,10 +39,6 @@ class ApiV1PostController(
     private val postSearchIntentResolver: PostSearchIntentResolver,
     private val rq: Rq,
 ) {
-    /**
-     * makePostDtoPage 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
-     */
     private fun makePostDtoPage(postPage: PagedResult<Post>): PageDto<PostDto> {
         val actor = rq.actorOrNull
         val likedPostIds = postUseCase.findLikedPostIds(actor, postPage.content)
@@ -121,10 +113,6 @@ class ApiV1PostController(
         )
     }
 
-    /**
-     * 검색/목록 조회 조건을 정규화해 페이징 결과를 구성합니다.
-     * 컨트롤러 계층에서 요청 DTO를 검증한 뒤 서비스 호출 결과를 응답 규격으로 변환합니다.
-     */
     @GetMapping("/explore")
     @Transactional(readOnly = true)
     fun explore(
@@ -376,10 +364,6 @@ class ApiV1PostController(
         return makePostDtoPage(postPage)
     }
 
-    /**
-     * 조회 조건을 적용해 필요한 데이터를 안전하게 반환합니다.
-     * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
-     */
     @GetMapping("/{id}")
     @Transactional(readOnly = true)
     fun getItem(
@@ -421,10 +405,6 @@ class ApiV1PostController(
         val listed: Boolean?,
     )
 
-    /**
-     * 생성 요청을 처리하고 멱등성·후속 동기화 절차를 함께 수행합니다.
-     * 컨트롤러 계층에서 요청 DTO를 검증한 뒤 서비스 호출 결과를 응답 규격으로 변환합니다.
-     */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Transactional
@@ -476,10 +456,6 @@ class ApiV1PostController(
             listed = post.listed,
         )
 
-    /**
-     * 수정 요청을 처리하고 낙관적 잠금/후속 동기화를 수행합니다.
-     * 컨트롤러 계층에서 요청 DTO를 검증한 뒤 서비스 호출 결과를 응답 규격으로 변환합니다.
-     */
     @PutMapping("/{id}")
     @Transactional
     fun modify(
@@ -524,10 +500,6 @@ class ApiV1PostController(
         val hitCount: Int,
     )
 
-    /**
-     * incrementHit 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
-     */
     @PostMapping("/{id}/hit")
     @Transactional
     fun incrementHit(
@@ -552,10 +524,6 @@ class ApiV1PostController(
         val likesCount: Int,
     )
 
-    /**
-     * 좋아요 상태 변경을 반영하고 경쟁 상황에서의 정합성을 보장합니다.
-     * 컨트롤러 계층에서 요청 DTO를 검증한 뒤 서비스 호출 결과를 응답 규격으로 변환합니다.
-     */
     @PutMapping("/{id}/like")
     @Transactional
     fun like(
@@ -576,10 +544,6 @@ class ApiV1PostController(
         )
     }
 
-    /**
-     * 좋아요 상태 변경을 반영하고 경쟁 상황에서의 정합성을 보장합니다.
-     * 컨트롤러 계층에서 요청 DTO를 검증한 뒤 서비스 호출 결과를 응답 규격으로 변환합니다.
-     */
     @DeleteMapping("/{id}/like")
     @Transactional
     fun unlike(
@@ -621,10 +585,6 @@ class ApiV1PostController(
         return makePostDtoPage(postPage)
     }
 
-    /**
-     * 조회 조건을 적용해 필요한 데이터를 안전하게 반환합니다.
-     * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
-     */
     @PostMapping("/temp")
     @Transactional
     fun getOrCreateTemp(response: jakarta.servlet.http.HttpServletResponse): RsData<PostWithContentDto> {

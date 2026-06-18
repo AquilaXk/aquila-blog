@@ -25,10 +25,6 @@ import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 
-/**
- * UploadedFileCleanupDiagnostics는 글로벌 공통 유스케이스를 조합하는 애플리케이션 계층 구성요소입니다.
- * 트랜잭션 경계, 예외 처리, 후속 동기화(캐시/이벤트/큐)를 함께 관리합니다.
- */
 data class UploadedFileCleanupDiagnostics(
     val tempCount: Long,
     val activeCount: Long,
@@ -53,11 +49,6 @@ data class ProfileImageHistoryDto(
     val createdAt: Instant,
     val modifiedAt: Instant,
 )
-
-/**
- * UploadedFileRetentionService는 글로벌 공통 유스케이스를 조합하는 애플리케이션 계층 구성요소입니다.
- * 트랜잭션 경계, 예외 처리, 후속 동기화(캐시/이벤트/큐)를 함께 관리합니다.
- */
 
 @Service
 class UploadedFileRetentionService(
@@ -173,10 +164,6 @@ class UploadedFileRetentionService(
             prodSequenceGuardService?.repairUploadedFileSequence() == true
         } ?: false
 
-    /**
-     * 데이터 동기화 또는 리밸리데이션 요청을 조정해 최신 상태를 유지합니다.
-     * 애플리케이션 계층에서 트랜잭션 경계와 후속 처리(캐시/큐/이벤트)를 함께 관리합니다.
-     */
     @Transactional
     fun syncPostContent(
         postId: Long,
@@ -209,10 +196,6 @@ class UploadedFileRetentionService(
         )
     }
 
-    /**
-     * restoreDeletedPostAttachments 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
-     * 애플리케이션 계층에서 트랜잭션 경계와 후속 처리(캐시/큐/이벤트)를 함께 관리합니다.
-     */
     @Transactional
     fun restoreDeletedPostAttachments(
         postId: Long,
@@ -279,10 +262,6 @@ class UploadedFileRetentionService(
         }
     }
 
-    /**
-     * 데이터 동기화 또는 리밸리데이션 요청을 조정해 최신 상태를 유지합니다.
-     * 애플리케이션 계층에서 트랜잭션 경계와 후속 처리(캐시/큐/이벤트)를 함께 관리합니다.
-     */
     @Transactional
     fun syncProfileImage(
         memberId: Long,
@@ -352,10 +331,6 @@ class UploadedFileRetentionService(
         uploadedFileRepository.save(uploadedFile)
     }
 
-    /**
-     * 만료/중단 상태를 정리해 리소스와 큐 정합성을 유지합니다.
-     * 애플리케이션 계층에서 트랜잭션 경계와 후속 처리(캐시/큐/이벤트)를 함께 관리합니다.
-     */
     @Transactional
     fun purgeExpiredFiles(limit: Int) {
         val safeLimit = limit.coerceIn(1, 500)
@@ -421,10 +396,6 @@ class UploadedFileRetentionService(
         }
     }
 
-    /**
-     * diagnoseCleanup 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
-     * 애플리케이션 계층에서 트랜잭션 경계와 후속 처리(캐시/큐/이벤트)를 함께 관리합니다.
-     */
     @Transactional(readOnly = true)
     fun diagnoseCleanup(sampleSize: Int = 5): UploadedFileCleanupDiagnostics {
         val now = Instant.now()
@@ -456,10 +427,6 @@ class UploadedFileRetentionService(
         )
     }
 
-    /**
-     * scheduleDeletionIfKnown 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
-     * 애플리케이션 계층에서 트랜잭션 경계와 후속 처리(캐시/큐/이벤트)를 함께 관리합니다.
-     */
     private fun scheduleDeletionIfKnown(
         objectKey: String,
         purpose: UploadedFilePurpose,
@@ -518,10 +485,6 @@ class UploadedFileRetentionService(
         mapNotNull(UploadedFileUrlCodec::extractObjectKeyFromImageUrl)
             .toSet()
 
-    /**
-     * 정책 조건을 검증해 처리 가능 여부를 판정합니다.
-     * 애플리케이션 계층에서 트랜잭션 경계와 후속 처리(캐시/큐/이벤트)를 함께 관리합니다.
-     */
     private fun isStillReferenced(uploadedFile: UploadedFile): Boolean {
         val objectKey = uploadedFile.objectKey
         val ownerId = uploadedFile.ownerId

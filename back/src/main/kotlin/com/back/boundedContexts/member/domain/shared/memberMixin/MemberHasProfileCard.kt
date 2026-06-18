@@ -128,10 +128,6 @@ private fun normalizeProfileLinkItems(
             item.label.isNotBlank() && item.href.isNotBlank()
         }
 
-/**
- * decodeProfileLinkItems 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
- * 도메인 계층에서 불변조건을 지키며 상태 전이를 캡슐화합니다.
- */
 private fun decodeProfileLinkItems(
     rawValue: String?,
     defaultIcon: String,
@@ -146,10 +142,6 @@ private fun decodeProfileLinkItems(
     }.let { normalizeProfileLinkItems(it, defaultIcon, allowedIcons) }
 }
 
-/**
- * encodeProfileLinkItems 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
- * 도메인 계층에서 불변조건을 지키며 상태 전이를 캡슐화합니다.
- */
 private fun encodeProfileLinkItems(
     items: List<MemberProfileLinkItem>,
     defaultIcon: String,

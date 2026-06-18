@@ -19,10 +19,6 @@ import org.springframework.stereotype.Service
 class MemberActionLogApplicationService(
     private val memberActionLogRepository: MemberActionLogRepositoryPort,
 ) {
-    /**
-     * save 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     fun save(event: EventPayload) {
         when (event) {
             is PostWrittenEvent -> savePostWrittenEvent(event)
@@ -37,10 +33,6 @@ class MemberActionLogApplicationService(
         }
     }
 
-    /**
-     * save 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     private fun savePostWrittenEvent(event: PostWrittenEvent) {
         memberActionLogRepository.save(
             MemberActionLog(
@@ -57,10 +49,6 @@ class MemberActionLogApplicationService(
         )
     }
 
-    /**
-     * save 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     private fun savePostModifiedEvent(event: PostModifiedEvent) {
         memberActionLogRepository.save(
             MemberActionLog(
@@ -77,10 +65,6 @@ class MemberActionLogApplicationService(
         )
     }
 
-    /**
-     * save 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     private fun savePostDeletedEvent(event: PostDeletedEvent) {
         memberActionLogRepository.save(
             MemberActionLog(
@@ -97,10 +81,6 @@ class MemberActionLogApplicationService(
         )
     }
 
-    /**
-     * save 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     private fun savePostCommentWrittenEvent(event: PostCommentWrittenEvent) {
         memberActionLogRepository.save(
             MemberActionLog(
@@ -117,10 +97,6 @@ class MemberActionLogApplicationService(
         )
     }
 
-    /**
-     * save 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     private fun savePostCommentModifiedEvent(event: PostCommentModifiedEvent) {
         memberActionLogRepository.save(
             MemberActionLog(
@@ -137,10 +113,6 @@ class MemberActionLogApplicationService(
         )
     }
 
-    /**
-     * save 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     private fun savePostCommentDeletedEvent(event: PostCommentDeletedEvent) {
         memberActionLogRepository.save(
             MemberActionLog(
@@ -157,10 +129,6 @@ class MemberActionLogApplicationService(
         )
     }
 
-    /**
-     * save 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     private fun savePostLikedEvent(event: PostLikedEvent) {
         memberActionLogRepository.save(
             MemberActionLog(
@@ -177,10 +145,6 @@ class MemberActionLogApplicationService(
         )
     }
 
-    /**
-     * save 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     private fun savePostUnlikedEvent(event: PostUnlikedEvent) {
         memberActionLogRepository.save(
             MemberActionLog(

@@ -156,10 +156,6 @@ class MemberApplicationService(
                 memberProfileHydrator.hydrate(member)
             }
 
-    /**
-     * 검증 규칙을 적용해 허용 여부를 판정합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     @Transactional(readOnly = true)
     fun checkPassword(
         member: Member,

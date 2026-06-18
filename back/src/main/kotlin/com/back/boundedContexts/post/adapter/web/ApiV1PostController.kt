@@ -4,7 +4,6 @@ import com.back.boundedContexts.post.application.port.input.PostHitDedupUseCase
 import com.back.boundedContexts.post.application.port.input.PostPublicReadQueryUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.application.support.PostCacheTags
-import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
 import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostDto
@@ -12,14 +11,12 @@ import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.boundedContexts.post.model.Post
-import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.web.application.Rq
 import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.extensions.getOrThrow
-import jakarta.persistence.OptimisticLockException
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.Valid
@@ -27,15 +24,10 @@ import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.Size
-import org.slf4j.LoggerFactory
-import org.springframework.dao.DataIntegrityViolationException
-import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
-import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.*
-import java.sql.SQLException
 
 /**
  * ApiV1PostController는 웹 계층에서 HTTP 요청/응답을 처리하는 클래스입니다.
@@ -51,8 +43,6 @@ class ApiV1PostController(
     private val postSearchIntentResolver: PostSearchIntentResolver,
     private val rq: Rq,
 ) {
-    private val logger = LoggerFactory.getLogger(ApiV1PostController::class.java)
-
     /**
      * makePostDtoPage 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
      * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
@@ -575,7 +565,7 @@ class ApiV1PostController(
         if (!rq.hasRole("ADMIN")) {
             post.checkActorCanRead(rq.actorOrNull)
         }
-        val likeResult = resolveLikeResult(post) { postUseCase.like(post, rq.actor) }
+        val likeResult = postUseCase.like(post, rq.actor)
         return RsData(
             "200-1",
             "좋아요를 반영했습니다.",
@@ -599,7 +589,7 @@ class ApiV1PostController(
         if (!rq.hasRole("ADMIN")) {
             post.checkActorCanRead(rq.actorOrNull)
         }
-        val likeResult = resolveLikeResult(post) { postUseCase.unlike(post, rq.actor) }
+        val likeResult = postUseCase.unlike(post, rq.actor)
         return RsData(
             "200-1",
             "좋아요 취소를 반영했습니다.",
@@ -661,61 +651,6 @@ class ApiV1PostController(
             -> sort
             else -> PostSearchSortType1.CREATED_AT
         }
-
-    /**
-     * 실행 시점에 필요한 의존성/값을 결정합니다.
-     * 컨트롤러 계층에서 요청 DTO를 검증한 뒤 서비스 호출 결과를 응답 규격으로 변환합니다.
-     */
-    private fun resolveLikeResult(
-        post: Post,
-        action: () -> PostLikeToggleResult,
-    ): PostLikeToggleResult =
-        try {
-            action()
-        } catch (exception: Exception) {
-            if (!isRecoverableLikeConflict(exception)) throw exception
-            recoverLikeResult(post, exception)
-        }
-
-    /**
-     * recoverLikeResult 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
-     */
-    private fun recoverLikeResult(
-        post: Post,
-        exception: Exception,
-    ): PostLikeToggleResult {
-        logger.warn("Like conflict recovered with reconcile/snapshot. postId={} actorId={}", post.id, rq.actor.id, exception)
-        return try {
-            postUseCase.reconcileLikeState(post, rq.actor)
-        } catch (reconcileException: Exception) {
-            logger.warn(
-                "Like reconcile failed, fallback to snapshot. postId={} actorId={}",
-                post.id,
-                rq.actor.id,
-                reconcileException,
-            )
-            postUseCase.readLikeSnapshot(post, rq.actor)
-        }
-    }
-
-    /**
-     * 검증 규칙을 적용해 허용 여부를 판정합니다.
-     * 컨트롤러 계층에서 요청 DTO를 검증한 뒤 서비스 호출 결과를 응답 규격으로 변환합니다.
-     */
-    private fun isRecoverableLikeConflict(exception: Exception): Boolean {
-        if (exception is DataIntegrityViolationException) return true
-        if (exception is ObjectOptimisticLockingFailureException) return true
-        if (exception is OptimisticLockingFailureException) return true
-        if (exception is OptimisticLockException) return true
-        if (exception is AppException && exception.rsData.statusCode == 409) return true
-
-        val sqlException =
-            generateSequence<Throwable>(exception) { it.cause }
-                .filterIsInstance<SQLException>()
-                .firstOrNull()
-        return sqlException?.sqlState in setOf("23505", "40001", "40P01")
-    }
 
     companion object {
         private const val MAX_PUBLIC_PAGE = 200

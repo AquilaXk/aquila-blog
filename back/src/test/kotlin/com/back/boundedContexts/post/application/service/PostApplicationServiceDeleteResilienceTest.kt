@@ -11,6 +11,7 @@ import com.back.boundedContexts.post.application.port.output.PostWriteRequestIde
 import com.back.boundedContexts.post.application.port.output.SecureTipPort
 import com.back.boundedContexts.post.domain.POSTS_COUNT
 import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
 import com.back.global.event.application.EventPublisher
 import com.back.global.storage.application.UploadedFileRetentionService
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
@@ -18,13 +19,16 @@ import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.verifyNoInteractions
 import org.springframework.cache.CacheManager
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.TransactionException
 import org.springframework.transaction.TransactionStatus
 import org.springframework.transaction.support.SimpleTransactionStatus
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Instant
+import java.util.Optional
 
 @org.junit.jupiter.api.DisplayName("PostApplicationServiceDeleteResilience 테스트")
 class PostApplicationServiceDeleteResilienceTest {
@@ -126,6 +130,79 @@ class PostApplicationServiceDeleteResilienceTest {
         then(postRepository).should().softDeleteById(post.id)
         then(memberAttrRepository).should().incrementIntValue(author, POSTS_COUNT, -1)
         then(postRepository).should().countByAuthor(author)
+    }
+
+    @Test
+    fun `관리자 복구는 캐시와 추천 후속 작업을 commit 이후에 실행한다`() {
+        val snapshot =
+            AdmDeletedPostSnapshotDto(
+                id = 21,
+                title = "복구 대상",
+                content = "복구 본문 #tag",
+                authorId = 3,
+            )
+        val restoredPost =
+            Post(
+                id = 21,
+                author =
+                    Member(
+                        id = 3,
+                        username = "restored-author",
+                        password = null,
+                        nickname = "복구작성자",
+                        email = null,
+                        apiKey = "restored-author-api-key",
+                    ),
+                title = "복구 대상",
+                content = "복구 본문 #tag",
+                published = true,
+                listed = true,
+            )
+        given(postRepository.findDeletedSnapshotById(21)).willReturn(snapshot)
+        given(postRepository.restoreDeletedById(21)).willReturn(true)
+        given(postRepository.findById(21)).willReturn(Optional.of(restoredPost))
+
+        TransactionSynchronizationManager.initSynchronization()
+        try {
+            service.restoreDeletedByIdForAdmin(21)
+
+            verifyNoInteractions(cacheManager, postRecommendFeatureStoreService)
+
+            TransactionSynchronizationManager.getSynchronizations().forEach { it.afterCommit() }
+
+            then(cacheManager).should().getCache(PostQueryCacheNames.FEED)
+            then(postRecommendFeatureStoreService).should().refresh(restoredPost)
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization()
+        }
+    }
+
+    @Test
+    fun `관리자 영구삭제는 캐시와 첨부파일 정리와 추천 evict를 commit 이후에 실행한다`() {
+        val snapshot =
+            AdmDeletedPostSnapshotDto(
+                id = 22,
+                title = "영구삭제 대상",
+                content = "영구삭제 본문 #tag",
+                authorId = 4,
+            )
+        given(postRepository.findDeletedSnapshotById(22)).willReturn(snapshot)
+        given(postRepository.hardDeleteDeletedById(22)).willReturn(true)
+
+        TransactionSynchronizationManager.initSynchronization()
+        try {
+            service.hardDeleteDeletedByIdForAdmin(22)
+
+            verifyNoInteractions(cacheManager, uploadedFileRetentionService, postRecommendFeatureStoreService)
+
+            TransactionSynchronizationManager.getSynchronizations().forEach { it.afterCommit() }
+
+            then(cacheManager).should().getCache(PostQueryCacheNames.FEED)
+            then(uploadedFileRetentionService).should().scheduleDeletedPostAttachments(snapshot.content)
+            then(postRecommendFeatureStoreService).should().evict(22)
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization()
+        }
     }
 
     private class NoopTransactionManager : PlatformTransactionManager {

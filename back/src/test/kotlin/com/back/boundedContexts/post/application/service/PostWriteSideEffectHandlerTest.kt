@@ -20,6 +20,7 @@ import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.TransactionException
 import org.springframework.transaction.TransactionStatus
 import org.springframework.transaction.support.SimpleTransactionStatus
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.util.Optional
 
 @DisplayName("PostWriteSideEffectHandler 테스트")
@@ -60,6 +61,53 @@ class PostWriteSideEffectHandlerTest {
             ) {}
         }
         verify(postRecommendFeatureStoreService).evict(10L)
+    }
+
+    @Test
+    @DisplayName("추천 feature store evict 실패는 후속 작업 handler 밖으로 전파하지 않는다")
+    fun continueWhenRecommendationEvictFails() {
+        // given
+        doThrow(RuntimeException("recommendation cache down"))
+            .`when`(postRecommendFeatureStoreService)
+            .evict(12L)
+
+        // when & then
+        assertDoesNotThrow {
+            handler.enqueue(
+                sideEffectCommand(
+                    postId = 12L,
+                    recommendationAction = PostRecommendationSideEffect.EVICT,
+                ),
+            ) {}
+        }
+    }
+
+    @Test
+    @DisplayName("트랜잭션 동기화가 활성화되면 후속 작업은 afterCommit 전까지 실행하지 않는다")
+    fun deferSideEffectsUntilAfterCommitWhenSynchronizationIsActive() {
+        // given
+        TransactionSynchronizationManager.initSynchronization()
+
+        try {
+            // when
+            handler.enqueue(
+                sideEffectCommand(
+                    postId = 13L,
+                    recommendationAction = PostRecommendationSideEffect.EVICT,
+                ),
+            ) {}
+
+            // then
+            verify(postRecommendFeatureStoreService, never()).evict(13L)
+
+            // when
+            TransactionSynchronizationManager.getSynchronizations().forEach { it.afterCommit() }
+
+            // then
+            verify(postRecommendFeatureStoreService).evict(13L)
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization()
+        }
     }
 
     @Test

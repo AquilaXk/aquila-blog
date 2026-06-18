@@ -918,9 +918,12 @@ class PostApplicationService(
                 ?: throw AppException("404-1", "복구된 글을 확인할 수 없습니다.")
         val restoredTags = extractNormalizedTags(restoredPost.content)
         val isPublic = isPubliclyListed(restoredPost)
-        evictReadCaches(
-            PostReadCacheInvalidationRequest(
+        enqueuePostWriteSideEffect(
+            PostWriteSideEffectCommand(
                 postId = id,
+                previousContent = null,
+                currentContent = null,
+                deletedContent = null,
                 beforeTags = emptyList(),
                 afterTags = restoredTags,
                 evictHotReadPages = isPublic,
@@ -929,13 +932,9 @@ class PostApplicationService(
                 evictTagsPublic = isPublic,
                 evictDetail = isPublic,
                 evictReason = "restore",
+                recommendationAction = recommendationActionFor(isPublic),
             ),
         )
-        if (isPublic) {
-            postRecommendFeatureStoreService.refresh(restoredPost)
-        } else {
-            postRecommendFeatureStoreService.evict(restoredPost.id)
-        }
 
         return restoredPost
     }
@@ -950,20 +949,17 @@ class PostApplicationService(
             postRepository.findDeletedSnapshotById(id)
                 ?: throw AppException("404-1", "해당 글을 찾을 수 없습니다.")
 
-        runCatching {
-            uploadedFileRetentionService.scheduleDeletedPostAttachments(snapshot.content)
-        }.onFailure { exception ->
-            logger.warn("Failed to schedule cleanup for hard-deleted post id={}", id, exception)
-        }
-
         val hardDeleted = postRepository.hardDeleteDeletedById(id)
         if (!hardDeleted) {
             throw AppException("404-1", "이미 영구삭제되었거나 존재하지 않는 글입니다.")
         }
 
-        evictReadCaches(
-            PostReadCacheInvalidationRequest(
+        enqueuePostWriteSideEffect(
+            PostWriteSideEffectCommand(
                 postId = id,
+                previousContent = null,
+                currentContent = null,
+                deletedContent = snapshot.content,
                 beforeTags = extractNormalizedTags(snapshot.content),
                 afterTags = emptyList(),
                 evictHotReadPages = true,
@@ -972,9 +968,9 @@ class PostApplicationService(
                 evictTagsPublic = true,
                 evictDetail = true,
                 evictReason = "hard-delete",
+                recommendationAction = PostRecommendationSideEffect.EVICT,
             ),
         )
-        postRecommendFeatureStoreService.evict(id)
     }
 
     fun findPagedByAuthor(
@@ -1348,12 +1344,6 @@ class PostApplicationService(
 
     private fun enqueuePostWriteSideEffect(command: PostWriteSideEffectCommand) {
         postWriteSideEffectHandler.enqueue(command) {
-            publicTagCountsCache = null
-        }
-    }
-
-    private fun evictReadCaches(request: PostReadCacheInvalidationRequest) {
-        postWriteSideEffectHandler.evictReadCaches(request) {
             publicTagCountsCache = null
         }
     }

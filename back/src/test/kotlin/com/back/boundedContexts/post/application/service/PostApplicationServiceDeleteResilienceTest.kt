@@ -46,6 +46,16 @@ class PostApplicationServiceDeleteResilienceTest {
         mock(PostRecommendFeatureStoreService::class.java)
     private val postKeywordSearchPipelineService: PostKeywordSearchPipelineService =
         mock(PostKeywordSearchPipelineService::class.java)
+    private val postReadCacheInvalidator = PostReadCacheInvalidator(cacheManager)
+    private val postWriteSideEffectHandler =
+        PostWriteSideEffectHandler(
+            postReadCacheInvalidator = postReadCacheInvalidator,
+            uploadedFileRetentionService = uploadedFileRetentionService,
+            postRecommendFeatureStoreService = postRecommendFeatureStoreService,
+            postRepository = postRepository,
+            postAttrRepository = postAttrRepository,
+            transactionManager = transactionManager,
+        )
 
     private val service =
         PostApplicationService(
@@ -59,11 +69,10 @@ class PostApplicationServiceDeleteResilienceTest {
             secureTipPort = secureTipPort,
             eventPublisher = eventPublisher,
             uploadedFileRetentionService = uploadedFileRetentionService,
-            cacheManager = cacheManager,
-            transactionManager = transactionManager,
             postRecommendRankingService = postRecommendRankingService,
             postRecommendFeatureStoreService = postRecommendFeatureStoreService,
             postKeywordSearchPipelineService = postKeywordSearchPipelineService,
+            postWriteSideEffectHandler = postWriteSideEffectHandler,
             tagsLocalCacheTtlSeconds = 180,
         )
 

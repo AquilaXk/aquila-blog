@@ -44,19 +44,12 @@ import com.back.global.security.application.HtmlContentSanitizer
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
-import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.cache.CacheManager
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Service
-import org.springframework.transaction.PlatformTransactionManager
-import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.annotation.Transactional
-import org.springframework.transaction.support.TransactionSynchronization
-import org.springframework.transaction.support.TransactionSynchronizationManager
-import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -78,12 +71,10 @@ class PostApplicationService(
     private val secureTipPort: SecureTipPort,
     private val eventPublisher: EventPublisher,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
-    private val cacheManager: CacheManager,
-    private val transactionManager: PlatformTransactionManager,
-    private val meterRegistry: MeterRegistry? = null,
     private val postRecommendRankingService: PostRecommendRankingService,
     private val postRecommendFeatureStoreService: PostRecommendFeatureStoreService,
     private val postKeywordSearchPipelineService: PostKeywordSearchPipelineService,
+    private val postWriteSideEffectHandler: PostWriteSideEffectHandler,
     @param:Value("\${custom.post.read.tags-local-cache-ttl-seconds:180}")
     private val tagsLocalCacheTtlSeconds: Long,
 ) {
@@ -100,13 +91,6 @@ class PostApplicationService(
     private var publicTagCountsCache: TagCountsCache? = null
 
     private val tagCacheTtlMillis: Long = tagsLocalCacheTtlSeconds.coerceAtLeast(5) * 1_000
-    private val hotPageSizes = listOf(30, 24, 16)
-    private val hotSorts = listOf(PostSearchSortType1.CREATED_AT)
-    private val maxTagCacheEvict = 12
-    private val afterCommitSideEffectTransactionTemplate =
-        TransactionTemplate(transactionManager).apply {
-            propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
-        }
 
     fun count(): Long = postRepository.count()
 
@@ -934,15 +918,18 @@ class PostApplicationService(
                 ?: throw AppException("404-1", "복구된 글을 확인할 수 없습니다.")
         val restoredTags = extractNormalizedTags(restoredPost.content)
         val isPublic = isPubliclyListed(restoredPost)
-        clearReadCaches(
-            postId = id,
-            afterTags = restoredTags,
-            evictHotReadPages = isPublic,
-            evictSearchFirstPage = isPublic,
-            evictImpactedTagPages = isPublic,
-            evictTagsPublic = isPublic,
-            evictDetail = isPublic,
-            evictReason = "restore",
+        evictReadCaches(
+            PostReadCacheInvalidationRequest(
+                postId = id,
+                beforeTags = emptyList(),
+                afterTags = restoredTags,
+                evictHotReadPages = isPublic,
+                evictSearchFirstPage = isPublic,
+                evictImpactedTagPages = isPublic,
+                evictTagsPublic = isPublic,
+                evictDetail = isPublic,
+                evictReason = "restore",
+            ),
         )
         if (isPublic) {
             postRecommendFeatureStoreService.refresh(restoredPost)
@@ -974,16 +961,18 @@ class PostApplicationService(
             throw AppException("404-1", "이미 영구삭제되었거나 존재하지 않는 글입니다.")
         }
 
-        clearReadCaches(
-            postId = id,
-            beforeTags = extractNormalizedTags(snapshot.content),
-            afterTags = emptyList(),
-            evictHotReadPages = true,
-            evictSearchFirstPage = true,
-            evictImpactedTagPages = true,
-            evictTagsPublic = true,
-            evictDetail = true,
-            evictReason = "hard-delete",
+        evictReadCaches(
+            PostReadCacheInvalidationRequest(
+                postId = id,
+                beforeTags = extractNormalizedTags(snapshot.content),
+                afterTags = emptyList(),
+                evictHotReadPages = true,
+                evictSearchFirstPage = true,
+                evictImpactedTagPages = true,
+                evictTagsPublic = true,
+                evictDetail = true,
+                evictReason = "hard-delete",
+            ),
         )
         postRecommendFeatureStoreService.evict(id)
     }
@@ -1358,241 +1347,15 @@ class PostApplicationService(
         if (isPublic) PostRecommendationSideEffect.REFRESH else PostRecommendationSideEffect.EVICT
 
     private fun enqueuePostWriteSideEffect(command: PostWriteSideEffectCommand) {
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            handlePostWriteSideEffect(command)
-            return
-        }
-
-        if (command.evictTagsPublic) {
+        postWriteSideEffectHandler.enqueue(command) {
             publicTagCountsCache = null
         }
-        TransactionSynchronizationManager.registerSynchronization(
-            object : TransactionSynchronization {
-                override fun afterCommit() {
-                    handlePostWriteSideEffect(command)
-                }
-            },
-        )
     }
 
-    private fun handlePostWriteSideEffect(command: PostWriteSideEffectCommand) {
-        runCatching {
-            clearReadCaches(
-                postId = command.postId,
-                beforeTags = command.beforeTags,
-                afterTags = command.afterTags,
-                evictHotReadPages = command.evictHotReadPages,
-                evictSearchFirstPage = command.evictSearchFirstPage,
-                evictImpactedTagPages = command.evictImpactedTagPages,
-                evictTagsPublic = command.evictTagsPublic,
-                evictDetail = command.evictDetail,
-                evictReason = command.evictReason,
-            )
-        }.onFailure { exception ->
-            logger.warn("Failed to evict post read caches after commit: postId={}", command.postId, exception)
-        }
-
-        command.currentContent?.let { currentContent ->
-            runAfterCommitSideEffectInNewTransaction(
-                postId = command.postId,
-                failureMessage = "Failed to sync post attachments after commit",
-            ) {
-                uploadedFileRetentionService.syncPostContent(command.postId, command.previousContent, currentContent)
-            }
-        }
-
-        command.deletedContent?.let { deletedContent ->
-            runAfterCommitSideEffectInNewTransaction(
-                postId = command.postId,
-                failureMessage = "Failed to schedule cleanup for deleted post after commit",
-            ) {
-                uploadedFileRetentionService.scheduleDeletedPostAttachments(deletedContent)
-            }
-        }
-
-        when (command.recommendationAction) {
-            PostRecommendationSideEffect.REFRESH ->
-                runAfterCommitSideEffectInNewTransaction(
-                    postId = command.postId,
-                    failureMessage = "Failed to refresh recommend feature store after commit",
-                ) {
-                    refreshRecommendFeatureStoreAfterCommit(command.postId)
-                }
-
-            PostRecommendationSideEffect.EVICT -> postRecommendFeatureStoreService.evict(command.postId)
-        }
-    }
-
-    private fun runAfterCommitSideEffectInNewTransaction(
-        postId: Long,
-        failureMessage: String,
-        block: () -> Unit,
-    ) {
-        runCatching {
-            afterCommitSideEffectTransactionTemplate.executeWithoutResult {
-                block()
-            }
-        }.onFailure { exception ->
-            logger.warn("{}: postId={}", failureMessage, postId, exception)
-        }
-    }
-
-    private fun refreshRecommendFeatureStoreAfterCommit(postId: Long) {
-        val post =
-            postRepository.findById(postId).getOrNull()
-                ?: run {
-                    logger.warn("recommend_feature_store_refresh_skipped_missing_post postId={}", postId)
-                    return
-                }
-        hydratePostAttrs(post)
-        postRecommendFeatureStoreService.refresh(post)
-    }
-
-    private fun clearReadCaches(
-        postId: Long? = null,
-        beforeTags: Collection<String> = emptyList(),
-        afterTags: Collection<String> = emptyList(),
-        evictHotReadPages: Boolean = true,
-        evictSearchFirstPage: Boolean = true,
-        evictImpactedTagPages: Boolean = true,
-        evictTagsPublic: Boolean = true,
-        evictDetail: Boolean = true,
-        evictReason: String = "unknown",
-    ) {
-        if (evictTagsPublic) {
+    private fun evictReadCaches(request: PostReadCacheInvalidationRequest) {
+        postWriteSideEffectHandler.evictReadCaches(request) {
             publicTagCountsCache = null
-            recordCacheEvict("local-tag-counts", "clear", evictReason)
         }
-        val feedCache = cacheManager.getCache(PostQueryCacheNames.FEED)
-        val exploreCache = cacheManager.getCache(PostQueryCacheNames.EXPLORE)
-        val adminPostsFirstPageCache = cacheManager.getCache(PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE)
-        val feedCursorFirstCache = cacheManager.getCache(PostQueryCacheNames.FEED_CURSOR_FIRST)
-        val exploreCursorFirstCache = cacheManager.getCache(PostQueryCacheNames.EXPLORE_CURSOR_FIRST)
-        val bootstrapCache = cacheManager.getCache(PostQueryCacheNames.BOOTSTRAP)
-        val searchCache = cacheManager.getCache(PostQueryCacheNames.SEARCH)
-        val searchNegativeCache = cacheManager.getCache(PostQueryCacheNames.SEARCH_NEGATIVE)
-        val tagsCache = cacheManager.getCache(PostQueryCacheNames.TAGS)
-
-        if (evictHotReadPages || evictSearchFirstPage) {
-            adminPostsFirstPageCache?.evict("page=1:size=20:sort=${PostSearchSortType1.CREATED_AT.name}")
-            recordCacheEvict(PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE, "key", evictReason)
-            hotPageSizes.forEach { pageSize ->
-                hotSorts.forEach { sort ->
-                    val sortName = sort.name
-                    if (evictHotReadPages) {
-                        feedCache?.evict("page=1:size=$pageSize:sort=$sortName")
-                        recordCacheEvict(PostQueryCacheNames.FEED, "key", evictReason)
-                        exploreCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_:tag=_")
-                        recordCacheEvict(PostQueryCacheNames.EXPLORE, "key", evictReason)
-                        feedCursorFirstCache?.evict("size=$pageSize:sort=$sortName")
-                        recordCacheEvict(PostQueryCacheNames.FEED_CURSOR_FIRST, "key", evictReason)
-                        exploreCursorFirstCache?.evict("size=$pageSize:sort=$sortName:tag=_")
-                        recordCacheEvict(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "key", evictReason)
-                        bootstrapCache?.evict(
-                            PostPublicReadQueryService.buildBootstrapCacheKey(
-                                pageSize = pageSize,
-                                sort = sort,
-                                tag = "",
-                            ),
-                        )
-                        recordCacheEvict(PostQueryCacheNames.BOOTSTRAP, "key", evictReason)
-                    }
-                    if (evictSearchFirstPage) {
-                        searchCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_")
-                        recordCacheEvict(PostQueryCacheNames.SEARCH, "key", evictReason)
-                        searchNegativeCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_")
-                        recordCacheEvict(PostQueryCacheNames.SEARCH_NEGATIVE, "key", evictReason)
-                    }
-                }
-            }
-        }
-
-        if (evictImpactedTagPages) {
-            val impactedTagTokens =
-                buildList(beforeTags.size + afterTags.size) {
-                    addAll(beforeTags)
-                    addAll(afterTags)
-                }.asSequence()
-                    .map(String::trim)
-                    .filter(String::isNotBlank)
-                    .map(PostPublicReadQueryService::toCacheKeyToken)
-                    .distinct()
-                    .take(maxTagCacheEvict)
-                    .toList()
-
-            impactedTagTokens.forEach { token ->
-                hotPageSizes.forEach { pageSize ->
-                    hotSorts.forEach { sort ->
-                        val sortName = sort.name
-                        exploreCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_:tag=$token")
-                        recordCacheEvict(PostQueryCacheNames.EXPLORE, "key", evictReason)
-                        exploreCursorFirstCache?.evict("size=$pageSize:sort=$sortName:tag=$token")
-                        recordCacheEvict(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "key", evictReason)
-                    }
-                }
-            }
-
-            buildList(beforeTags.size + afterTags.size) {
-                addAll(beforeTags)
-                addAll(afterTags)
-            }.asSequence()
-                .map(String::trim)
-                .filter(String::isNotBlank)
-                .distinct()
-                .take(maxTagCacheEvict)
-                .forEach { rawTag ->
-                    hotPageSizes.forEach { pageSize ->
-                        hotSorts.forEach { sort ->
-                            bootstrapCache?.evict(
-                                PostPublicReadQueryService.buildBootstrapCacheKey(
-                                    pageSize = pageSize,
-                                    sort = sort,
-                                    tag = rawTag,
-                                ),
-                            )
-                            recordCacheEvict(PostQueryCacheNames.BOOTSTRAP, "key", evictReason)
-                        }
-                    }
-                }
-        }
-
-        if (evictTagsPublic) {
-            tagsCache?.evict("public")
-            recordCacheEvict(PostQueryCacheNames.TAGS, "key", evictReason)
-        }
-        if (evictDetail) {
-            val detailSnapshotCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT)
-            val detailMetaCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_META)
-            val detailContentCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT)
-            val detailNegativeCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE)
-            if (postId == null) {
-                detailSnapshotCache?.clear()
-                recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "clear", evictReason)
-                detailMetaCache?.clear()
-                recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_META, "clear", evictReason)
-                detailContentCache?.clear()
-                recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "clear", evictReason)
-                detailNegativeCache?.clear()
-                recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, "clear", evictReason)
-            } else {
-                detailSnapshotCache?.evict(postId)
-                recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "key", evictReason)
-                detailMetaCache?.evict(postId)
-                recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_META, "key", evictReason)
-                detailContentCache?.evict(postId)
-                recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "key", evictReason)
-                detailNegativeCache?.evict(postId)
-                recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, "key", evictReason)
-            }
-        }
-    }
-
-    private fun recordCacheEvict(
-        cacheName: String,
-        scope: String,
-        reason: String,
-    ) {
-        meterRegistry?.counter("post.read.cache.evict", "cache", cacheName, "scope", scope, "reason", reason)?.increment()
     }
 
     private fun isPubliclyListed(post: Post): Boolean = post.published && post.listed

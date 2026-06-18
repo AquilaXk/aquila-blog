@@ -18,10 +18,14 @@ import software.amazon.awssdk.services.s3.model.HeadBucketRequest
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.model.S3Exception
+import java.io.BufferedInputStream
+import java.io.InputStream
 import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.Path
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.UUID
@@ -103,69 +107,88 @@ class PostImageStorageAdapter(
      * 스토리지 어댑터 계층에서 MinIO/파일 시스템 연동 실패를 고려해 방어적으로 동작합니다.
      */
     override fun uploadPostImage(request: PostImageStoragePort.UploadImageRequest): String {
-        val client = requireClient()
-        if (request.bytes.isEmpty()) throw AppException("400-1", "이미지 파일이 비어 있습니다.")
-        if (request.bytes.size > properties.maxFileSizeBytes) {
-            throw AppException("400-1", "이미지 파일은 ${properties.maxFileSizeBytes / (1024 * 1024)}MB 이하여야 합니다.")
-        }
+        validateUploadContentLength(
+            contentLength = request.contentLength,
+            emptyMessage = "이미지 파일이 비어 있습니다.",
+            oversizedMessage = "이미지 파일은 ${properties.maxFileSizeBytes / (1024 * 1024)}MB 이하여야 합니다.",
+        )
 
-        val declaredContentType = normalizeDeclaredContentType(request.contentType)
-        val signature = request.bytes.copyOfRange(0, minOf(16, request.bytes.size))
-        val detectedType = detectImageContentType(signature)
-        if (detectedType == null || detectedType !in allowedContentTypes) {
-            throw AppException("400-1", "지원하지 않는 이미지 형식입니다.")
-        }
-
-        // Browser/OS에 따라 image/x-png 등 별칭이 전달될 수 있어 선언 타입은 정규화 후 참고한다.
-        // 단, 정규화된 선언 타입이 명확히 존재하고 감지 결과와 다르면 위장 업로드로 보고 차단한다.
-        if (declaredContentType != null &&
-            declaredContentType in allowedContentTypes &&
-            declaredContentType != detectedType
-        ) {
-            throw AppException("400-1", "지원하지 않는 이미지 형식입니다.")
-        }
-
-        val contentType = detectedType
-
-        val key = buildObjectKey(request.originalFilename)
-
+        val preparedUpload = prepareRepeatableUpload(request.inputStream, request.contentLength)
         try {
-            putObject(
-                client = client,
-                objectKey = key,
-                contentType = contentType,
-                bytes = request.bytes,
-                originalFilename = request.originalFilename,
-            )
-        } catch (e: Exception) {
-            logger.error("Post image upload failed", e)
-            throw AppException("500-1", "이미지 업로드에 실패했습니다.")
-        }
+            val signature =
+                Files.newInputStream(preparedUpload.path).use { uploadStream ->
+                    uploadStream.asResettableStream().use { resettableStream ->
+                        resettableStream.mark(IMAGE_SIGNATURE_MAX_BYTES)
+                        resettableStream.readNBytes(IMAGE_SIGNATURE_MAX_BYTES)
+                    }
+                }
 
-        return key
+            val declaredContentType = normalizeDeclaredContentType(request.contentType)
+            val detectedType = detectImageContentType(signature)
+            if (detectedType == null || detectedType !in allowedContentTypes) {
+                throw AppException("400-1", "지원하지 않는 이미지 형식입니다.")
+            }
+
+            // Browser/OS에 따라 image/x-png 등 별칭이 전달될 수 있어 선언 타입은 정규화 후 참고한다.
+            // 단, 정규화된 선언 타입이 명확히 존재하고 감지 결과와 다르면 위장 업로드로 보고 차단한다.
+            if (declaredContentType != null &&
+                declaredContentType in allowedContentTypes &&
+                declaredContentType != detectedType
+            ) {
+                throw AppException("400-1", "지원하지 않는 이미지 형식입니다.")
+            }
+
+            val key = buildObjectKey(request.originalFilename)
+            val client = requireClient()
+
+            try {
+                putObject(
+                    client = client,
+                    objectKey = key,
+                    contentType = detectedType,
+                    uploadPath = preparedUpload.path,
+                    contentLength = preparedUpload.contentLength,
+                    originalFilename = request.originalFilename,
+                )
+            } catch (e: Exception) {
+                logger.error("Post image upload failed", e)
+                throw AppException("500-1", "이미지 업로드에 실패했습니다.")
+            }
+
+            return key
+        } finally {
+            preparedUpload.deleteQuietly()
+        }
     }
 
     override fun uploadPostFile(request: PostImageStoragePort.UploadFileRequest): String {
-        val client = requireClient()
-        if (request.bytes.isEmpty()) throw AppException("400-1", "첨부 파일이 비어 있습니다.")
-        if (request.bytes.size > properties.maxFileSizeBytes) {
-            throw AppException("400-1", "첨부 파일은 ${properties.maxFileSizeBytes / (1024 * 1024)}MB 이하여야 합니다.")
-        }
+        validateUploadContentLength(
+            contentLength = request.contentLength,
+            emptyMessage = "첨부 파일이 비어 있습니다.",
+            oversizedMessage = "첨부 파일은 ${properties.maxFileSizeBytes / (1024 * 1024)}MB 이하여야 합니다.",
+        )
 
         val key = buildObjectKey(request.originalFilename)
         val contentType = normalizeDeclaredContentType(request.contentType) ?: "application/octet-stream"
 
+        val preparedUpload = prepareRepeatableUpload(request.inputStream, request.contentLength)
         try {
-            putObject(
-                client = client,
-                objectKey = key,
-                contentType = contentType,
-                bytes = request.bytes,
-                originalFilename = request.originalFilename,
-            )
-        } catch (e: Exception) {
-            logger.error("Post file upload failed", e)
-            throw AppException("500-1", "첨부 파일 업로드에 실패했습니다.")
+            val client = requireClient()
+            try {
+                putObject(
+                    client = client,
+                    objectKey = key,
+                    contentType = contentType,
+                    uploadPath = preparedUpload.path,
+                    contentLength = preparedUpload.contentLength,
+                    originalFilename = request.originalFilename,
+                )
+            } catch (e: Exception) {
+                logger.error("Post file upload failed", e)
+                throw AppException("500-1", "첨부 파일 업로드에 실패했습니다.")
+            }
+        } finally {
+            preparedUpload.deleteQuietly()
         }
 
         return key
@@ -248,7 +271,8 @@ class PostImageStorageAdapter(
         client: S3Client,
         objectKey: String,
         contentType: String,
-        bytes: ByteArray,
+        uploadPath: Path,
+        contentLength: Long,
         originalFilename: String?,
     ) {
         val metadata =
@@ -271,10 +295,67 @@ class PostImageStorageAdapter(
                 .bucket(properties.bucket)
                 .key(objectKey)
                 .contentType(contentType)
+                .contentLength(contentLength)
                 .metadata(metadata)
                 .build(),
-            RequestBody.fromBytes(bytes),
+            RequestBody.fromFile(uploadPath),
         )
+    }
+
+    private fun prepareRepeatableUpload(
+        inputStream: InputStream,
+        expectedContentLength: Long,
+    ): PreparedUpload {
+        val path = Files.createTempFile("post-upload-", ".tmp")
+        var totalBytes = 0L
+
+        try {
+            inputStream.use { source ->
+                Files.newOutputStream(path).use { output ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    while (true) {
+                        val read = source.read(buffer)
+                        if (read == -1) break
+                        totalBytes += read
+                        if (totalBytes > properties.maxFileSizeBytes) {
+                            throw AppException("400-1", "업로드 파일 크기가 허용 범위를 초과했습니다.")
+                        }
+                        output.write(buffer, 0, read)
+                    }
+                }
+            }
+
+            if (totalBytes != expectedContentLength) {
+                throw AppException("400-1", "업로드 파일 크기 정보가 올바르지 않습니다.")
+            }
+
+            return PreparedUpload(path = path, contentLength = totalBytes)
+        } catch (e: Exception) {
+            Files.deleteIfExists(path)
+            throw e
+        }
+    }
+
+    private fun validateUploadContentLength(
+        contentLength: Long,
+        emptyMessage: String,
+        oversizedMessage: String,
+    ) {
+        if (contentLength <= 0) throw AppException("400-1", emptyMessage)
+        if (contentLength > properties.maxFileSizeBytes) {
+            throw AppException("400-1", oversizedMessage)
+        }
+    }
+
+    private fun InputStream.asResettableStream(): InputStream = if (markSupported()) this else BufferedInputStream(this)
+
+    private data class PreparedUpload(
+        val path: Path,
+        val contentLength: Long,
+    ) {
+        fun deleteQuietly() {
+            runCatching { Files.deleteIfExists(path) }
+        }
     }
 
     /**
@@ -457,6 +538,7 @@ class PostImageStorageAdapter(
             )
 
         private val ENV_REFERENCE_REGEX = Regex("^\\$\\{([A-Za-z_][A-Za-z0-9_]*)(?::-(.*))?}$")
+        private const val IMAGE_SIGNATURE_MAX_BYTES = 16
     }
 
     /**

@@ -15,8 +15,10 @@ import jakarta.servlet.http.HttpServlet
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatCode
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.mockito.ArgumentMatchers
 import org.mockito.BDDMockito.given
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
@@ -28,10 +30,176 @@ import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.mock.web.MockHttpServletResponse
 import org.springframework.security.core.context.SecurityContextHolder
 import tools.jackson.databind.ObjectMapper
+import java.lang.reflect.Modifier
 import java.time.Instant
 
 @DisplayName("CustomAuthenticationFilter 테스트")
 class CustomAuthenticationFilterTest {
+    @Test
+    @DisplayName("인증 세부 경로는 전용 handler와 resolver 경계로 분리되어 있다")
+    fun `authentication path responsibilities are extracted to handlers`() {
+        val extractedBoundaryTypes =
+            listOf(
+                "com.back.global.security.config.MemberSessionAuthenticationResolver",
+                "com.back.global.security.config.AccessTokenAuthenticationHandler",
+                "com.back.global.security.config.ApiKeyAuthorityRefreshHandler",
+                "com.back.global.security.config.LegacyPayloadRecoveryHandler",
+                "com.back.global.security.config.RefreshTokenAuthenticationHandler",
+            ).map(Class<*>::forName)
+
+        assertThat(extractedBoundaryTypes.map { it.simpleName })
+            .containsExactly(
+                "MemberSessionAuthenticationResolver",
+                "AccessTokenAuthenticationHandler",
+                "ApiKeyAuthorityRefreshHandler",
+                "LegacyPayloadRecoveryHandler",
+                "RefreshTokenAuthenticationHandler",
+            )
+
+        val privateMethodNames =
+            CustomAuthenticationFilter::class.java.declaredMethods
+                .filter { Modifier.isPrivate(it.modifiers) }
+                .map { it.name }
+
+        assertThat(privateMethodNames)
+            .doesNotContain(
+                "resolveMemberSession",
+                "ensureSessionIsUsable",
+                "canUseFreshTokenSessionFallback",
+                "resolveTokenLoginIdentifier",
+                "resolvePrincipalUsername",
+                "shouldPreferApiKeyAuthorityOnWrite",
+            )
+    }
+
+    @Test
+    @DisplayName("세션 검증 resolver는 세션이 선택 사항인 경로에서 쿠키를 만료하지 않는다")
+    fun `session resolver keeps optional missing session usable`() {
+        val memberSessionUseCase = mock(MemberSessionUseCase::class.java)
+        val authCookieService = mock(AuthCookieService::class.java)
+        val resolver =
+            MemberSessionAuthenticationResolver(
+                memberSessionUseCase = memberSessionUseCase,
+                authCookieService = authCookieService,
+                freshLookupGraceSeconds = 15,
+            )
+
+        assertThatCode {
+            resolver.ensureUsable(MemberSessionResolution(sessionKeyProvided = false, session = null))
+        }.doesNotThrowAnyException()
+
+        verify(authCookieService, never()).expireAuthCookies()
+    }
+
+    @Test
+    @DisplayName("legacy payload에 email과 username이 없고 DB 회원도 없으면 member id 기반 principal로 인증한다")
+    fun `legacy payload without persisted member falls back to member id principal`() {
+        val actorApplicationService = mock(ActorApplicationService::class.java)
+        val memberSessionUseCase = mock(MemberSessionUseCase::class.java)
+        val authIpSecurityService = mock(AuthIpSecurityService::class.java)
+        val authSecurityEventService = mock(AuthSecurityEventService::class.java)
+        val authCookieService = mock(AuthCookieService::class.java)
+        val rq = mock(Rq::class.java)
+        val accessToken = "legacy-access-token"
+        val sessionKey = "legacy-session-key"
+        val request = MockHttpServletRequest("GET", "/member/api/v1/auth/session")
+        val sessionSnapshot =
+            MemberSessionAuthSnapshot(
+                id = 11L,
+                memberId = 54L,
+                sessionKey = sessionKey,
+                rememberLoginEnabled = false,
+                ipSecurityEnabled = false,
+                ipSecurityFingerprint = null,
+                lastAuthenticatedAt = Instant.now(),
+            )
+        val sessionResolver =
+            MemberSessionAuthenticationResolver(
+                memberSessionUseCase = memberSessionUseCase,
+                authCookieService = authCookieService,
+                freshLookupGraceSeconds = 15,
+            )
+        val ipSecurityVerifier =
+            AuthIpSecurityVerifier(
+                authIpSecurityService,
+                authSecurityEventService,
+                authCookieService,
+                memberSessionUseCase,
+            )
+        val securityContextAuthenticationWriter = SecurityContextAuthenticationWriter()
+        val handler =
+            AccessTokenAuthenticationHandler(
+                actorApplicationService = actorApplicationService,
+                memberSessionUseCase = memberSessionUseCase,
+                authIpSecurityVerifier = ipSecurityVerifier,
+                securityContextAuthenticationWriter = securityContextAuthenticationWriter,
+                memberSessionAuthenticationResolver = sessionResolver,
+                apiKeyAuthorityRefreshHandler =
+                    ApiKeyAuthorityRefreshHandler(
+                        actorApplicationService = actorApplicationService,
+                        memberSessionUseCase = memberSessionUseCase,
+                        authCookieService = authCookieService,
+                        authIpSecurityVerifier = ipSecurityVerifier,
+                        securityContextAuthenticationWriter = securityContextAuthenticationWriter,
+                        memberSessionAuthenticationResolver = sessionResolver,
+                        rq = rq,
+                    ),
+                legacyPayloadRecoveryHandler =
+                    LegacyPayloadRecoveryHandler(
+                        actorApplicationService = actorApplicationService,
+                        memberSessionUseCase = memberSessionUseCase,
+                        authCookieService = authCookieService,
+                        securityContextAuthenticationWriter = securityContextAuthenticationWriter,
+                        rq = rq,
+                    ),
+            )
+
+        given(actorApplicationService.payload(accessToken))
+            .willReturn(
+                AccessTokenPayload(
+                    id = 54L,
+                    sessionKey = sessionKey,
+                    username = null,
+                    email = null,
+                    name = "aquila",
+                    rememberLoginEnabled = false,
+                    ipSecurityEnabled = false,
+                    ipSecurityFingerprint = null,
+                ),
+            )
+        given(memberSessionUseCase.findActiveSessionSnapshot(54L, sessionKey)).willReturn(sessionSnapshot)
+        given(actorApplicationService.findById(54L)).willReturn(null)
+
+        try {
+            val handled =
+                handler.authenticate(
+                    request = request,
+                    tokens =
+                        ExtractedAuthTokens(
+                            apiKey = "",
+                            accessToken = accessToken,
+                            sessionKey = sessionKey,
+                            refreshToken = "",
+                        ),
+                    clientIp = "203.0.113.30",
+                )
+
+            assertThat(handled).isTrue()
+            val authentication = SecurityContextHolder.getContext().authentication
+            assertThat(authentication).isNotNull()
+            assertThat(authentication?.name).isEqualTo("member-54")
+            verify(memberSessionUseCase).touchAuthenticated(sessionSnapshot)
+            verify(authCookieService, never()).issueAccessToken(
+                ArgumentMatchers.anyString(),
+                ArgumentMatchers.anyBoolean(),
+                ArgumentMatchers.nullable(String::class.java),
+                ArgumentMatchers.nullable(String::class.java),
+            )
+        } finally {
+            SecurityContextHolder.clearContext()
+        }
+    }
+
     @Test
     @DisplayName("prod Swagger와 OpenAPI 문서 경로도 쿠키 인증 필터 대상이다")
     fun `prod api docs paths are authentication filter targets`() {

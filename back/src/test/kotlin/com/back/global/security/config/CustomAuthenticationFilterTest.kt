@@ -18,6 +18,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatCode
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.mockito.ArgumentMatchers
 import org.mockito.BDDMockito.given
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
@@ -189,9 +190,10 @@ class CustomAuthenticationFilterTest {
             assertThat(authentication?.name).isEqualTo("member-54")
             verify(memberSessionUseCase).touchAuthenticated(sessionSnapshot)
             verify(authCookieService, never()).issueAccessToken(
-                accessToken = "legacy-access-token",
-                rememberLoginEnabled = false,
-                sessionKey = sessionKey,
+                ArgumentMatchers.anyString(),
+                ArgumentMatchers.anyBoolean(),
+                ArgumentMatchers.nullable(String::class.java),
+                ArgumentMatchers.nullable(String::class.java),
             )
         } finally {
             SecurityContextHolder.clearContext()

@@ -136,11 +136,12 @@ class PostApplicationService(
                     deletedContent = null,
                     beforeTags = emptyList(),
                     afterTags = createdTags,
-                    evictHotReadPages = isPublic,
-                    evictSearchFirstPage = isPublic,
-                    evictImpactedTagPages = isPublic,
-                    evictTagsPublic = isPublic,
-                    evictDetail = isPublic,
+                    cacheInvalidationScope =
+                        if (isPublic) {
+                            PostReadCacheInvalidationScope.PublicPostCreated
+                        } else {
+                            PostReadCacheInvalidationScope.None
+                        },
                     evictReason = "write",
                     recommendationAction = recommendationActionFor(isPublic),
                 ),
@@ -196,11 +197,12 @@ class PostApplicationService(
                 deletedContent = null,
                 beforeTags = emptyList(),
                 afterTags = createdTags,
-                evictHotReadPages = isPublic,
-                evictSearchFirstPage = isPublic,
-                evictImpactedTagPages = isPublic,
-                evictTagsPublic = isPublic,
-                evictDetail = isPublic,
+                cacheInvalidationScope =
+                    if (isPublic) {
+                        PostReadCacheInvalidationScope.PublicPostCreated
+                    } else {
+                        PostReadCacheInvalidationScope.None
+                    },
                 evictReason = "write-idempotent",
                 recommendationAction = recommendationActionFor(isPublic),
             ),
@@ -263,6 +265,7 @@ class PostApplicationService(
 
         val previousTitle = post.title
         val previousContent = post.content
+        val previousContentHtml = post.contentHtml
         val wasPublic = isPubliclyListed(post)
         val previousTags = extractNormalizedTags(previousContent)
         try {
@@ -285,6 +288,7 @@ class PostApplicationService(
         val isPublic = isPubliclyListed(post)
         val listingVisibilityChanged = wasPublic != isPublic
         val contentChanged = previousContent != post.content
+        val contentHtmlChanged = previousContentHtml != post.contentHtml
         val titleChanged = previousTitle != post.title
         val tagChanged = previousTags != afterTags
         val affectsPublicRead = wasPublic || isPublic
@@ -296,11 +300,19 @@ class PostApplicationService(
                 deletedContent = null,
                 beforeTags = previousTags,
                 afterTags = afterTags,
-                evictHotReadPages = affectsPublicRead,
-                evictSearchFirstPage = affectsPublicRead && (listingVisibilityChanged || titleChanged || contentChanged || tagChanged),
-                evictImpactedTagPages = affectsPublicRead && (tagChanged || listingVisibilityChanged),
-                evictTagsPublic = affectsPublicRead && (tagChanged || listingVisibilityChanged),
-                evictDetail = affectsPublicRead && (listingVisibilityChanged || titleChanged || contentChanged),
+                cacheInvalidationScope =
+                    if (affectsPublicRead) {
+                        PostReadCacheInvalidationScope.PublicPostModified(
+                            buildPublicPostChangeImpacts(
+                                listingVisibilityChanged = listingVisibilityChanged,
+                                titleChanged = titleChanged,
+                                contentChanged = contentChanged || contentHtmlChanged,
+                                tagChanged = tagChanged,
+                            ),
+                        )
+                    } else {
+                        PostReadCacheInvalidationScope.None
+                    },
                 evictReason = "modify",
                 recommendationAction = recommendationActionFor(isPublic),
             ),
@@ -413,11 +425,12 @@ class PostApplicationService(
                 deletedContent = deletedPostContent,
                 beforeTags = beforeTags,
                 afterTags = emptyList(),
-                evictHotReadPages = wasPublic,
-                evictSearchFirstPage = wasPublic,
-                evictImpactedTagPages = wasPublic,
-                evictTagsPublic = wasPublic,
-                evictDetail = wasPublic,
+                cacheInvalidationScope =
+                    if (wasPublic) {
+                        PostReadCacheInvalidationScope.PublicPostDeleted
+                    } else {
+                        PostReadCacheInvalidationScope.None
+                    },
                 evictReason = "soft-delete",
                 recommendationAction = PostRecommendationSideEffect.EVICT,
             ),
@@ -905,11 +918,12 @@ class PostApplicationService(
                 deletedContent = null,
                 beforeTags = emptyList(),
                 afterTags = restoredTags,
-                evictHotReadPages = isPublic,
-                evictSearchFirstPage = isPublic,
-                evictImpactedTagPages = isPublic,
-                evictTagsPublic = isPublic,
-                evictDetail = isPublic,
+                cacheInvalidationScope =
+                    if (isPublic) {
+                        PostReadCacheInvalidationScope.PublicPostRestored
+                    } else {
+                        PostReadCacheInvalidationScope.None
+                    },
                 evictReason = "restore",
                 recommendationAction = recommendationActionFor(isPublic),
             ),
@@ -941,11 +955,12 @@ class PostApplicationService(
                 deletedContent = snapshot.content,
                 beforeTags = extractNormalizedTags(snapshot.content),
                 afterTags = emptyList(),
-                evictHotReadPages = true,
-                evictSearchFirstPage = true,
-                evictImpactedTagPages = true,
-                evictTagsPublic = true,
-                evictDetail = true,
+                cacheInvalidationScope =
+                    if (snapshot.published && snapshot.listed) {
+                        PostReadCacheInvalidationScope.PublicPostHardDeleted
+                    } else {
+                        PostReadCacheInvalidationScope.None
+                    },
                 evictReason = "hard-delete",
                 recommendationAction = PostRecommendationSideEffect.EVICT,
             ),
@@ -1325,11 +1340,24 @@ class PostApplicationService(
         command: PostWriteSideEffectCommand,
         domainEvent: EventPayload? = null,
     ) {
-        if (command.evictTagsPublic) {
+        if (command.cacheInvalidationScope.evictsPublicTags()) {
             publicTagCountsCache = null
         }
         applicationEventPublisher.publishEvent(PostWriteAfterCommitEvent(command, domainEvent))
     }
+
+    private fun buildPublicPostChangeImpacts(
+        listingVisibilityChanged: Boolean,
+        titleChanged: Boolean,
+        contentChanged: Boolean,
+        tagChanged: Boolean,
+    ): Set<PostPublicChangeImpact> =
+        buildSet {
+            if (listingVisibilityChanged) add(PostPublicChangeImpact.LISTING_VISIBILITY)
+            if (titleChanged) add(PostPublicChangeImpact.TITLE)
+            if (contentChanged) add(PostPublicChangeImpact.CONTENT)
+            if (tagChanged) add(PostPublicChangeImpact.TAG)
+        }
 
     private fun isPubliclyListed(post: Post): Boolean = post.published && post.listed
 

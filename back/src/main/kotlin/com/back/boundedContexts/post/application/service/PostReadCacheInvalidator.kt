@@ -10,11 +10,7 @@ internal data class PostReadCacheInvalidationRequest(
     val postId: Long?,
     val beforeTags: Collection<String>,
     val afterTags: Collection<String>,
-    val evictHotReadPages: Boolean,
-    val evictSearchFirstPage: Boolean,
-    val evictImpactedTagPages: Boolean,
-    val evictTagsPublic: Boolean,
-    val evictDetail: Boolean,
+    val scope: PostReadCacheInvalidationScope,
     val evictReason: String,
 )
 
@@ -31,9 +27,12 @@ class PostReadCacheInvalidator(
         request: PostReadCacheInvalidationRequest,
         onPublicTagsEvicted: () -> Unit,
     ) {
-        if (request.evictTagsPublic) {
+        if (request.evicts(PostReadCacheInvalidationTarget.PUBLIC_TAGS)) {
             onPublicTagsEvicted()
             recordCacheEvict("local-tag-counts", "clear", request.evictReason)
+        }
+        if (request.scope.isEmpty()) {
+            return
         }
         val feedCache = cacheManager.getCache(PostQueryCacheNames.FEED)
         val exploreCache = cacheManager.getCache(PostQueryCacheNames.EXPLORE)
@@ -45,13 +44,16 @@ class PostReadCacheInvalidator(
         val searchNegativeCache = cacheManager.getCache(PostQueryCacheNames.SEARCH_NEGATIVE)
         val tagsCache = cacheManager.getCache(PostQueryCacheNames.TAGS)
 
-        if (request.evictHotReadPages || request.evictSearchFirstPage) {
+        if (
+            request.evicts(PostReadCacheInvalidationTarget.HOT_READ_PAGES) ||
+            request.evicts(PostReadCacheInvalidationTarget.SEARCH_FIRST_PAGE)
+        ) {
             adminPostsFirstPageCache?.evict("page=1:size=20:sort=${PostSearchSortType1.CREATED_AT.name}")
             recordCacheEvict(PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE, "key", request.evictReason)
             hotPageSizes.forEach { pageSize ->
                 hotSorts.forEach { sort ->
                     val sortName = sort.name
-                    if (request.evictHotReadPages) {
+                    if (request.evicts(PostReadCacheInvalidationTarget.HOT_READ_PAGES)) {
                         feedCache?.evict("page=1:size=$pageSize:sort=$sortName")
                         recordCacheEvict(PostQueryCacheNames.FEED, "key", request.evictReason)
                         exploreCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_:tag=_")
@@ -69,7 +71,7 @@ class PostReadCacheInvalidator(
                         )
                         recordCacheEvict(PostQueryCacheNames.BOOTSTRAP, "key", request.evictReason)
                     }
-                    if (request.evictSearchFirstPage) {
+                    if (request.evicts(PostReadCacheInvalidationTarget.SEARCH_FIRST_PAGE)) {
                         searchCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_")
                         recordCacheEvict(PostQueryCacheNames.SEARCH, "key", request.evictReason)
                         searchNegativeCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_")
@@ -79,18 +81,20 @@ class PostReadCacheInvalidator(
             }
         }
 
-        if (request.evictImpactedTagPages) {
+        if (request.evicts(PostReadCacheInvalidationTarget.IMPACTED_TAG_PAGES)) {
             evictImpactedTagPages(request, exploreCache, exploreCursorFirstCache, bootstrapCache)
         }
 
-        if (request.evictTagsPublic) {
+        if (request.evicts(PostReadCacheInvalidationTarget.PUBLIC_TAGS)) {
             tagsCache?.evict("public")
             recordCacheEvict(PostQueryCacheNames.TAGS, "key", request.evictReason)
         }
-        if (request.evictDetail) {
+        if (request.evicts(PostReadCacheInvalidationTarget.DETAIL)) {
             evictDetailCaches(request)
         }
     }
+
+    private fun PostReadCacheInvalidationRequest.evicts(target: PostReadCacheInvalidationTarget): Boolean = scope.evicts(target)
 
     private fun evictImpactedTagPages(
         request: PostReadCacheInvalidationRequest,

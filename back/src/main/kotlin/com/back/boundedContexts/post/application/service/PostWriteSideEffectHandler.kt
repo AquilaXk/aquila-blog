@@ -126,11 +126,7 @@ class PostWriteSideEffectHandler(
             postId = postId,
             beforeTags = beforeTags,
             afterTags = afterTags,
-            evictHotReadPages = evictHotReadPages,
-            evictSearchFirstPage = evictSearchFirstPage,
-            evictImpactedTagPages = evictImpactedTagPages,
-            evictTagsPublic = evictTagsPublic,
-            evictDetail = evictDetail,
+            scope = cacheInvalidationScope,
             evictReason = evictReason,
         )
 }

@@ -48,14 +48,10 @@ class ApiV1PostController(
     private val postHitDedupUseCase: PostHitDedupUseCase,
     private val postPublicReadQueryUseCase: PostPublicReadQueryUseCase,
     private val postPublicReadResponseFactory: PostPublicReadResponseFactory,
+    private val postSearchIntentResolver: PostSearchIntentResolver,
     private val rq: Rq,
 ) {
     private val logger = LoggerFactory.getLogger(ApiV1PostController::class.java)
-
-    private data class SearchIntent(
-        val keyword: String,
-        val tag: String,
-    )
 
     /**
      * makePostDtoPage 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
@@ -153,7 +149,7 @@ class ApiV1PostController(
         val startedAtNanos = System.nanoTime()
         val validPage = normalizePublicPage(page)
         val validPageSize = pageSize.coerceIn(1, 30)
-        val searchIntent = resolveSearchIntent(kw, tag)
+        val searchIntent = postSearchIntentResolver.resolve(kw, tag)
         val normalizedKw = searchIntent.keyword
         val normalizedTag = searchIntent.tag
         val data = postPublicReadQueryUseCase.getPublicExplore(validPage, validPageSize, normalizedKw, normalizedTag, sort)
@@ -262,7 +258,7 @@ class ApiV1PostController(
         val startedAtNanos = System.nanoTime()
         val validPage = normalizePublicPage(page)
         val validPageSize = pageSize.coerceIn(1, 30)
-        val searchIntent = resolveSearchIntent(kw, "")
+        val searchIntent = postSearchIntentResolver.resolve(kw, "")
         val normalizedKw = searchIntent.keyword
         val normalizedTag = searchIntent.tag
         val data =
@@ -671,52 +667,6 @@ class ApiV1PostController(
             .trim()
             .replace(Regex("\\s+"), " ")
             .take(maxLength)
-
-    private fun resolveSearchIntent(
-        rawKw: String,
-        rawTag: String,
-    ): SearchIntent {
-        val normalizedKw = normalizeExploreKeyword(rawKw)
-        val normalizedTag = normalizeExploreTag(rawTag)
-        if (normalizedTag.isNotBlank()) {
-            return SearchIntent(keyword = normalizedKw, tag = normalizedTag)
-        }
-
-        val hashtagRegex = Regex("(^|\\s)#([\\p{L}\\p{N}_-]{1,40})")
-        val hashMatchedTag =
-            hashtagRegex
-                .find(normalizedKw)
-                ?.groupValues
-                ?.getOrNull(2)
-                .orEmpty()
-        if (hashMatchedTag.isNotBlank()) {
-            val cleanedKeyword =
-                hashtagRegex
-                    .replace(normalizedKw, " ")
-                    .replace(Regex("\\s+"), " ")
-                    .trim()
-            return SearchIntent(
-                keyword = cleanedKeyword.take(MAX_EXPLORE_KW_LENGTH),
-                tag = normalizeExploreTag(hashMatchedTag),
-            )
-        }
-
-        val prefixedTagRegex = Regex("^(?:tag|태그)\\s*:\\s*([\\p{L}\\p{N}_-]{1,40})$", RegexOption.IGNORE_CASE)
-        val prefixedTag =
-            prefixedTagRegex
-                .find(normalizedKw)
-                ?.groupValues
-                ?.getOrNull(1)
-                .orEmpty()
-        if (prefixedTag.isNotBlank()) {
-            return SearchIntent(
-                keyword = "",
-                tag = normalizeExploreTag(prefixedTag),
-            )
-        }
-
-        return SearchIntent(keyword = normalizedKw, tag = "")
-    }
 
     /**
      * 실행 시점에 필요한 의존성/값을 결정합니다.

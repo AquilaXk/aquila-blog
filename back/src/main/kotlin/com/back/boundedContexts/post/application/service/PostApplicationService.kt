@@ -51,6 +51,7 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.util.UUID
@@ -653,7 +654,7 @@ class PostApplicationService(
         return PostLikeToggleResult(false, existingLikeId ?: 0L)
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun reconcileLikeState(
         post: Post,
         actor: Member,
@@ -668,7 +669,7 @@ class PostApplicationService(
         )
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
     fun readLikeSnapshot(
         post: Post,
         actor: Member,

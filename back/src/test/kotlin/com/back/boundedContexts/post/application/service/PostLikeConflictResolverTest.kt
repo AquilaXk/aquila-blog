@@ -83,4 +83,22 @@ class PostLikeConflictResolverTest {
             )
         }.isSameAs(exception)
     }
+
+    @Test
+    @DisplayName("recoverable SQLState가 아니면 DB 무결성 예외도 그대로 전파한다")
+    fun throwNonRecoverableDatabaseConflict() {
+        // given
+        val exception = DataIntegrityViolationException("foreign key violation", SQLException("fk", "23503"))
+
+        // when & then
+        assertThatThrownBy {
+            resolver.resolve(
+                post = post,
+                actor = actor,
+                action = { throw exception },
+                reconcile = { PostLikeToggleResult(isLiked = true, likeId = 1L) },
+                snapshot = { PostLikeToggleResult(isLiked = false, likeId = 0L) },
+            )
+        }.isSameAs(exception)
+    }
 }

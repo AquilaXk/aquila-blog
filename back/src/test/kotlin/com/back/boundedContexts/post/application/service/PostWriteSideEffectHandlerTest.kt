@@ -260,11 +260,7 @@ class PostWriteSideEffectHandlerTest {
             deletedContent = null,
             beforeTags = emptyList(),
             afterTags = emptyList(),
-            evictHotReadPages = false,
-            evictSearchFirstPage = false,
-            evictImpactedTagPages = false,
-            evictTagsPublic = false,
-            evictDetail = false,
+            cacheInvalidationScope = PostReadCacheInvalidationScope.None,
             evictReason = "unit-test",
             recommendationAction = recommendationAction,
         )

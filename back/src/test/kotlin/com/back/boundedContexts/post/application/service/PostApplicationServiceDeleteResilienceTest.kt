@@ -12,10 +12,13 @@ import com.back.boundedContexts.post.application.port.output.SecureTipPort
 import com.back.boundedContexts.post.domain.POSTS_COUNT
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
+import com.back.global.app.AppConfig
 import com.back.global.event.application.EventPublisher
 import com.back.global.storage.application.UploadedFileRetentionService
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import org.mockito.ArgumentCaptor
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
@@ -33,6 +36,16 @@ import java.util.Optional
 
 @org.junit.jupiter.api.DisplayName("PostApplicationServiceDeleteResilience 테스트")
 class PostApplicationServiceDeleteResilienceTest {
+    init {
+        AppConfig(
+            siteBackUrl = "http://localhost:8080",
+            siteFrontUrl = "http://localhost:3000",
+            adminUsername = "admin",
+            adminEmail = "admin@example.com",
+            adminPassword = "password",
+        )
+    }
+
     private val postRepository: PostRepositoryPort = mock(PostRepositoryPort::class.java)
     private val postAttrRepository: PostAttrRepositoryPort = mock(PostAttrRepositoryPort::class.java)
     private val memberAttrRepository: MemberAttrRepositoryPort = mock(MemberAttrRepositoryPort::class.java)
@@ -143,6 +156,8 @@ class PostApplicationServiceDeleteResilienceTest {
                 title = "복구 대상",
                 content = "복구 본문 #tag",
                 authorId = 3,
+                published = true,
+                listed = true,
             )
         val restoredPost =
             Post(
@@ -184,6 +199,8 @@ class PostApplicationServiceDeleteResilienceTest {
                 title = "영구삭제 대상",
                 content = "영구삭제 본문 #tag",
                 authorId = 4,
+                published = true,
+                listed = true,
             )
         given(postRepository.findDeletedSnapshotById(22)).willReturn(snapshot)
         given(postRepository.hardDeleteDeletedById(22)).willReturn(true)
@@ -198,6 +215,61 @@ class PostApplicationServiceDeleteResilienceTest {
         then(cacheManager).should().getCache(PostQueryCacheNames.FEED)
         then(uploadedFileRetentionService).should().scheduleDeletedPostAttachments(snapshot.content)
         then(postRecommendFeatureStoreService).should().evict(22)
+    }
+
+    @Test
+    fun `관리자 비공개 글 영구삭제는 공개 읽기 캐시를 무효화하지 않는다`() {
+        val snapshot =
+            AdmDeletedPostSnapshotDto(
+                id = 23,
+                title = "비공개 영구삭제 대상",
+                content = "비공개 영구삭제 본문 #tag",
+                authorId = 4,
+                published = false,
+                listed = false,
+            )
+        given(postRepository.findDeletedSnapshotById(23)).willReturn(snapshot)
+        given(postRepository.hardDeleteDeletedById(23)).willReturn(true)
+
+        service.hardDeleteDeletedByIdForAdmin(23)
+        val afterCommitEvent = capturePostWriteAfterCommitEvent()
+
+        postWriteSideEffectHandler.handle(afterCommitEvent)
+
+        verifyNoInteractions(cacheManager)
+        then(uploadedFileRetentionService).should().scheduleDeletedPostAttachments(snapshot.content)
+        then(postRecommendFeatureStoreService).should().evict(23)
+    }
+
+    @ParameterizedTest
+    @CsvSource(
+        "true,false",
+        "false,true",
+    )
+    fun `관리자 부분공개 상태 영구삭제는 공개 읽기 캐시를 무효화하지 않는다`(
+        published: Boolean,
+        listed: Boolean,
+    ) {
+        val snapshot =
+            AdmDeletedPostSnapshotDto(
+                id = 24,
+                title = "부분공개 영구삭제 대상",
+                content = "부분공개 영구삭제 본문 #tag",
+                authorId = 4,
+                published = published,
+                listed = listed,
+            )
+        given(postRepository.findDeletedSnapshotById(24)).willReturn(snapshot)
+        given(postRepository.hardDeleteDeletedById(24)).willReturn(true)
+
+        service.hardDeleteDeletedByIdForAdmin(24)
+        val afterCommitEvent = capturePostWriteAfterCommitEvent()
+
+        postWriteSideEffectHandler.handle(afterCommitEvent)
+
+        verifyNoInteractions(cacheManager)
+        then(uploadedFileRetentionService).should().scheduleDeletedPostAttachments(snapshot.content)
+        then(postRecommendFeatureStoreService).should().evict(24)
     }
 
     private fun capturePostWriteAfterCommitEvent(): PostWriteAfterCommitEvent {

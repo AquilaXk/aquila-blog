@@ -25,7 +25,7 @@ class PostDeletedQueryRepository(
         jdbcTemplate
             .query(
                 """
-                select id, title, content, author_id
+                select id, title, content, author_id, published, listed
                 from post
                 where id = ?
                   and deleted_at is not null
@@ -36,6 +36,8 @@ class PostDeletedQueryRepository(
                         title = rs.getString("title"),
                         content = rs.getString("content"),
                         authorId = rs.getLong("author_id"),
+                        published = rs.getBoolean("published"),
+                        listed = rs.getBoolean("listed"),
                     )
                 },
                 id,

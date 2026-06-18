@@ -3,19 +3,22 @@ package com.back.boundedContexts.post.application.port.output
 import java.io.InputStream
 
 /**
- * `PostImageStoragePort` 인터페이스입니다.
- * - 역할: 계층 간 계약(포트/스펙) 정의를 담당합니다.
- * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
+ * 게시글/프로필 이미지와 첨부파일을 외부 object storage에 저장하는 포트입니다.
+ *
+ * 업로드 요청은 `MultipartFile.bytes`의 전체 메모리 복사를 피하기 위해 stream과
+ * Spring multipart metadata의 `contentLength`를 함께 전달합니다.
  */
 interface PostImageStoragePort {
     data class UploadImageRequest(
-        val bytes: ByteArray,
+        val inputStream: InputStream,
+        val contentLength: Long,
         val contentType: String?,
         val originalFilename: String?,
     )
 
     data class UploadFileRequest(
-        val bytes: ByteArray,
+        val inputStream: InputStream,
+        val contentLength: Long,
         val contentType: String?,
         val originalFilename: String?,
     )

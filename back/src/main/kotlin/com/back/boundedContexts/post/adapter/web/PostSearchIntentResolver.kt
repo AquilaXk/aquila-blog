@@ -61,9 +61,9 @@ class PostSearchIntentResolver {
             ?.getOrNull(1)
             .orEmpty()
 
-    private fun normalizeKeyword(raw: String): String = normalizeSearchToken(raw, MAX_KEYWORD_LENGTH)
+    fun normalizeKeyword(raw: String): String = normalizeSearchToken(raw, MAX_KEYWORD_LENGTH)
 
-    private fun normalizeTag(raw: String): String = normalizeSearchToken(raw, MAX_TAG_LENGTH)
+    fun normalizeTag(raw: String): String = normalizeSearchToken(raw, MAX_TAG_LENGTH)
 
     private fun normalizeSearchToken(
         raw: String,

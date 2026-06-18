@@ -193,7 +193,7 @@ class ApiV1PostController(
     ): ResponseEntity<CursorFeedPageDto> {
         val startedAtNanos = System.nanoTime()
         val validPageSize = pageSize.coerceIn(1, 30)
-        val normalizedTag = normalizeExploreTag(tag)
+        val normalizedTag = postSearchIntentResolver.normalizeTag(tag)
         val validSort = normalizeCursorSort(sort)
         val data = postPublicReadQueryUseCase.getPublicExploreByCursor(cursor, validPageSize, normalizedTag, validSort)
         val etagSeed =
@@ -337,7 +337,7 @@ class ApiV1PostController(
         @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
     ): ResponseEntity<PublicPostsBootstrapDto> {
         val startedAtNanos = System.nanoTime()
-        val normalizedTag = normalizeExploreTag(tag)
+        val normalizedTag = postSearchIntentResolver.normalizeTag(tag)
         val validPageSize = pageSize.coerceIn(1, 30)
         val validSort = normalizeCursorSort(sort)
         val data = postPublicReadQueryUseCase.getPublicBootstrap(normalizedTag, validPageSize, validSort)
@@ -382,7 +382,7 @@ class ApiV1PostController(
     ): PageDto<PostDto> {
         val validPage = normalizePublicPage(page)
         val validPageSize = pageSize.coerceIn(1, 30)
-        val postPage = postUseCase.findPagedByKw(normalizeExploreKeyword(kw), sort, validPage, validPageSize)
+        val postPage = postUseCase.findPagedByKw(postSearchIntentResolver.normalizeKeyword(kw), sort, validPage, validPageSize)
         return makePostDtoPage(postPage)
     }
 
@@ -620,7 +620,14 @@ class ApiV1PostController(
     ): PageDto<PostDto> {
         val validPage = normalizePublicPage(page)
         val validPageSize = pageSize.coerceIn(1, 30)
-        val postPage = postUseCase.findPagedByAuthor(rq.actor, normalizeExploreKeyword(kw), sort, validPage, validPageSize)
+        val postPage =
+            postUseCase.findPagedByAuthor(
+                rq.actor,
+                postSearchIntentResolver.normalizeKeyword(kw),
+                sort,
+                validPage,
+                validPageSize,
+            )
         return makePostDtoPage(postPage)
     }
 
@@ -647,10 +654,6 @@ class ApiV1PostController(
 
     private fun normalizePublicPage(page: Int): Int = page.coerceIn(1, MAX_PUBLIC_PAGE)
 
-    private fun normalizeExploreKeyword(raw: String): String = normalizeSearchToken(raw, MAX_EXPLORE_KW_LENGTH)
-
-    private fun normalizeExploreTag(raw: String): String = normalizeSearchToken(raw, MAX_EXPLORE_TAG_LENGTH)
-
     private fun normalizeCursorSort(sort: PostSearchSortType1): PostSearchSortType1 =
         when (sort) {
             PostSearchSortType1.CREATED_AT,
@@ -658,15 +661,6 @@ class ApiV1PostController(
             -> sort
             else -> PostSearchSortType1.CREATED_AT
         }
-
-    private fun normalizeSearchToken(
-        raw: String,
-        maxLength: Int,
-    ): String =
-        raw
-            .trim()
-            .replace(Regex("\\s+"), " ")
-            .take(maxLength)
 
     /**
      * 실행 시점에 필요한 의존성/값을 결정합니다.
@@ -725,8 +719,6 @@ class ApiV1PostController(
 
     companion object {
         private const val MAX_PUBLIC_PAGE = 200
-        private const val MAX_EXPLORE_KW_LENGTH = 80
-        private const val MAX_EXPLORE_TAG_LENGTH = 40
         private const val MAX_RELATED_AUTHOR_LIMIT = 12
     }
 }

@@ -23,6 +23,20 @@ class PostSearchIntentResolverTest {
     }
 
     @Test
+    @DisplayName("tag 파라미터는 keyword 안의 hashtag 의도보다 우선한다")
+    fun resolveExplicitTagBeatsHashtagIntent() {
+        // given
+        val keyword = "  #SSE  "
+        val tag = "  Kotlin  "
+
+        // when
+        val intent = resolver.resolve(keyword, tag)
+
+        // then
+        assertThat(intent).isEqualTo(PostSearchIntent(keyword = "#SSE", tag = "Kotlin"))
+    }
+
+    @Test
     @DisplayName("hashtag 검색어는 태그 필터로 승격하고 남은 텍스트를 keyword로 유지한다")
     fun resolveHashtagIntent() {
         // given

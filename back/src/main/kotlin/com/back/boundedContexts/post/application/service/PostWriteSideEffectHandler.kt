@@ -6,13 +6,14 @@ import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.postMixin.COMMENTS_COUNT
 import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
 import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
+import com.back.global.event.application.EventPublisher
 import com.back.global.storage.application.UploadedFileRetentionService
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
-import org.springframework.transaction.support.TransactionSynchronization
-import org.springframework.transaction.support.TransactionSynchronizationManager
+import org.springframework.transaction.event.TransactionPhase
+import org.springframework.transaction.event.TransactionalEventListener
 import org.springframework.transaction.support.TransactionTemplate
 import kotlin.jvm.optionals.getOrNull
 
@@ -23,6 +24,7 @@ class PostWriteSideEffectHandler(
     private val postRecommendFeatureStoreService: PostRecommendFeatureStoreService,
     private val postRepository: PostRepositoryPort,
     private val postAttrRepository: PostAttrRepositoryPort,
+    private val eventPublisher: EventPublisher,
     transactionManager: PlatformTransactionManager,
 ) {
     private val logger = LoggerFactory.getLogger(PostWriteSideEffectHandler::class.java)
@@ -31,33 +33,22 @@ class PostWriteSideEffectHandler(
             propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
         }
 
-    internal fun enqueue(
-        command: PostWriteSideEffectCommand,
-        onPublicTagsEvicted: () -> Unit,
-    ) {
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            handle(command, onPublicTagsEvicted)
-            return
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    internal fun handle(event: PostWriteAfterCommitEvent) {
+        handle(event.command)
+        event.domainEvent?.let { domainEvent ->
+            runAfterCommitSideEffectInNewTransaction(
+                postId = event.command.postId,
+                failureMessage = "Failed to publish post write domain event after commit",
+            ) {
+                eventPublisher.publish(domainEvent)
+            }
         }
-
-        if (command.evictTagsPublic) {
-            onPublicTagsEvicted()
-        }
-        TransactionSynchronizationManager.registerSynchronization(
-            object : TransactionSynchronization {
-                override fun afterCommit() {
-                    handle(command, onPublicTagsEvicted)
-                }
-            },
-        )
     }
 
-    private fun handle(
-        command: PostWriteSideEffectCommand,
-        onPublicTagsEvicted: () -> Unit,
-    ) {
+    private fun handle(command: PostWriteSideEffectCommand) {
         runCatching {
-            postReadCacheInvalidator.invalidate(command.toCacheInvalidationRequest(), onPublicTagsEvicted)
+            postReadCacheInvalidator.invalidate(command.toCacheInvalidationRequest()) {}
         }.onFailure { exception ->
             logger.warn("Failed to evict post read caches after commit: postId={}", command.postId, exception)
         }

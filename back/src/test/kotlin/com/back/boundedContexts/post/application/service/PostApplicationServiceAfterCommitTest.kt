@@ -7,6 +7,8 @@ import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.postMixin.COMMENTS_COUNT
 import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
 import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
+import com.back.boundedContexts.post.event.PostModifiedEvent
+import com.back.boundedContexts.post.event.PostWrittenEvent
 import com.back.support.BasePostApplicationServiceAfterCommitIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
@@ -58,6 +60,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         verifyNoInteractions(
             uploadedFileRetentionService,
             postRecommendFeatureStoreService,
+            eventPublisher,
             cacheManager,
         )
     }
@@ -86,6 +89,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         assertThat(invokedMethodNames(uploadedFileRetentionService)).contains("syncPostContent")
         assertThat(invokedMethodNames(postRecommendFeatureStoreService)).contains("refresh")
         assertThat(sideEffectTransactions).containsOnly(true)
+        assertThat(publishedEvents()).hasAtLeastOneElementOfType(PostWrittenEvent::class.java)
     }
 
     @Test
@@ -161,6 +165,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
                 commentsCount = 3,
             ),
         )
+        assertThat(publishedEvents()).hasAtLeastOneElementOfType(PostModifiedEvent::class.java)
     }
 
     private fun clearSideEffectMocks() {
@@ -173,6 +178,12 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
     }
 
     private fun invokedMethodNames(mock: Any): List<String> = mockingDetails(mock).invocations.map { it.method.name }
+
+    private fun publishedEvents(): List<Any?> =
+        mockingDetails(eventPublisher)
+            .invocations
+            .filter { it.method.name == "publish" }
+            .map { it.arguments.firstOrNull() }
 
     private fun recordActiveTransactionDuringSideEffects(sideEffectTransactions: MutableList<Boolean>) {
         doAnswer {

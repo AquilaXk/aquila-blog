@@ -1,10 +1,7 @@
 package com.back.global.security.config
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
-import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.member.dto.shared.AccessTokenPayload
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
-import com.back.boundedContexts.member.subContexts.session.model.MemberSessionAuthSnapshot
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.web.application.AuthCookieService
@@ -15,14 +12,11 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.env.Environment
-import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
 import tools.jackson.databind.ObjectMapper
-import java.time.Instant
-import java.util.Locale
 
 /**
  * API 요청의 쿠키/JWT 인증을 SecurityContext로 연결하는 servlet filter입니다.
@@ -50,6 +44,49 @@ class CustomAuthenticationFilter(
     private val log = org.slf4j.LoggerFactory.getLogger(CustomAuthenticationFilter::class.java)
     private val protectedDocumentationPrefixes = listOf("/swagger-ui/", "/v3/api-docs")
     private val filteredPrefixes = listOf("/member/api/", "/post/api/", "/system/api/", "/ws/", "/sse/") + protectedDocumentationPrefixes
+    private val memberSessionAuthenticationResolver =
+        MemberSessionAuthenticationResolver(
+            memberSessionUseCase = memberSessionUseCase,
+            authCookieService = authCookieService,
+            freshLookupGraceSeconds = freshLookupGraceSeconds,
+        )
+    private val apiKeyAuthorityRefreshHandler =
+        ApiKeyAuthorityRefreshHandler(
+            actorApplicationService = actorApplicationService,
+            memberSessionUseCase = memberSessionUseCase,
+            authCookieService = authCookieService,
+            authIpSecurityVerifier = authIpSecurityVerifier,
+            securityContextAuthenticationWriter = securityContextAuthenticationWriter,
+            memberSessionAuthenticationResolver = memberSessionAuthenticationResolver,
+            rq = rq,
+        )
+    private val legacyPayloadRecoveryHandler =
+        LegacyPayloadRecoveryHandler(
+            actorApplicationService = actorApplicationService,
+            memberSessionUseCase = memberSessionUseCase,
+            authCookieService = authCookieService,
+            securityContextAuthenticationWriter = securityContextAuthenticationWriter,
+            rq = rq,
+        )
+    private val accessTokenAuthenticationHandler =
+        AccessTokenAuthenticationHandler(
+            actorApplicationService = actorApplicationService,
+            memberSessionUseCase = memberSessionUseCase,
+            authIpSecurityVerifier = authIpSecurityVerifier,
+            securityContextAuthenticationWriter = securityContextAuthenticationWriter,
+            memberSessionAuthenticationResolver = memberSessionAuthenticationResolver,
+            apiKeyAuthorityRefreshHandler = apiKeyAuthorityRefreshHandler,
+            legacyPayloadRecoveryHandler = legacyPayloadRecoveryHandler,
+        )
+    private val refreshTokenAuthenticationHandler =
+        RefreshTokenAuthenticationHandler(
+            actorApplicationService = actorApplicationService,
+            memberSessionUseCase = memberSessionUseCase,
+            authCookieService = authCookieService,
+            authIpSecurityVerifier = authIpSecurityVerifier,
+            securityContextAuthenticationWriter = securityContextAuthenticationWriter,
+            rq = rq,
+        )
 
     override fun shouldNotFilter(request: HttpServletRequest): Boolean {
         val uri = request.requestURI
@@ -73,7 +110,7 @@ class CustomAuthenticationFilter(
 
         try {
             try {
-                authenticateIfPossible(request, response)
+                authenticateIfPossible(request)
             } catch (e: AppException) {
                 if (!isPublicApi) throw e
                 // 공개 API는 잘못된 인증정보가 있어도 익명으로 계속 처리한다.
@@ -117,171 +154,14 @@ class CustomAuthenticationFilter(
     /**
      * 기존 accessToken을 먼저 검증하고, 실패하면 refreshToken 회전 경로로 이동합니다.
      */
-    private fun authenticateIfPossible(
-        request: HttpServletRequest,
-        response: HttpServletResponse,
-    ) {
+    private fun authenticateIfPossible(request: HttpServletRequest) {
         val tokens = authTokenExtractor.extract()
-        val apiKey = tokens.apiKey
-        val accessToken = tokens.accessToken
-        val sessionKey = tokens.sessionKey
-        val refreshToken = tokens.refreshToken
         val clientIp = clientIpResolver.resolve(request)
 
-        if (apiKey.isBlank() && accessToken.isBlank() && refreshToken.isBlank()) return
+        if (tokens.apiKey.isBlank() && tokens.accessToken.isBlank() && tokens.refreshToken.isBlank()) return
 
-        val payload = accessToken.takeIf { it.isNotBlank() }?.let(actorApplicationService::payload)
-
-        if (payload != null) {
-            // 쓰기 요청은 apiKey 기준 DB 회원을 우선 사용해 role 드리프트(특히 관리자 403 오탐)를 방지한다.
-            if (shouldPreferApiKeyAuthorityOnWrite(request, apiKey)) {
-                val apiKeyMember = actorApplicationService.findByApiKey(apiKey)
-                if (apiKeyMember != null) {
-                    val sessionResolution = resolveMemberSession(apiKeyMember.id, sessionKey, payload.sessionKey, payload, request)
-                    ensureSessionIsUsable(sessionResolution, requireSession = true)
-                    val memberSession = sessionResolution.session
-                    val rememberLoginEnabled = memberSession?.rememberLoginEnabled ?: apiKeyMember.rememberLoginEnabled
-                    val ipSecurityEnabled = memberSession?.ipSecurityEnabled ?: apiKeyMember.ipSecurityEnabled
-                    val ipSecurityFingerprint = memberSession?.ipSecurityFingerprint ?: apiKeyMember.ipSecurityFingerprint
-
-                    authIpSecurityVerifier.verify(
-                        AuthIpSecurityCheck(
-                            memberId = apiKeyMember.id,
-                            loginIdentifier = apiKeyMember.username,
-                            rememberLoginEnabled = rememberLoginEnabled,
-                            ipSecurityEnabled = ipSecurityEnabled,
-                            expectedIpFingerprint = ipSecurityFingerprint,
-                            requestPath = request.requestURI,
-                            reason = "apikey-ip-mismatch",
-                        ),
-                        clientIp,
-                    )
-
-                    val rotatedAccessToken =
-                        actorApplicationService.genAccessToken(
-                            member = apiKeyMember,
-                            sessionKey = memberSession?.sessionKey,
-                            rememberLoginEnabled = rememberLoginEnabled,
-                            ipSecurityEnabled = ipSecurityEnabled,
-                            ipSecurityFingerprint = ipSecurityFingerprint,
-                        )
-                    authCookieService.issueAccessToken(
-                        accessToken = rotatedAccessToken,
-                        rememberLoginEnabled = rememberLoginEnabled,
-                        sessionKey = memberSession?.sessionKey,
-                    )
-                    rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $rotatedAccessToken")
-                    memberSession?.let { memberSessionUseCase.touchAuthenticated(it) }
-                    securityContextAuthenticationWriter.write(apiKeyMember)
-                    return
-                }
-            }
-
-            val sessionResolution = resolveMemberSession(payload.id, sessionKey, payload.sessionKey, payload, request)
-            ensureSessionIsUsable(sessionResolution, requireSession = true)
-            val memberSession = sessionResolution.session
-            val rememberLoginEnabled = memberSession?.rememberLoginEnabled ?: payload.rememberLoginEnabled
-            val ipSecurityEnabled = memberSession?.ipSecurityEnabled ?: payload.ipSecurityEnabled
-            val ipSecurityFingerprint = memberSession?.ipSecurityFingerprint ?: payload.ipSecurityFingerprint
-            val tokenLoginIdentifier = resolveTokenLoginIdentifier(payload)
-            authIpSecurityVerifier.verify(
-                AuthIpSecurityCheck(
-                    memberId = payload.id,
-                    loginIdentifier = tokenLoginIdentifier,
-                    rememberLoginEnabled = rememberLoginEnabled,
-                    ipSecurityEnabled = ipSecurityEnabled,
-                    expectedIpFingerprint = ipSecurityFingerprint,
-                    requestPath = request.requestURI,
-                    reason = "token-payload-ip-mismatch",
-                ),
-                clientIp,
-            )
-
-            // 과거 토큰(payload.email 누락)과 현재 이메일 기반 관리자 판정의 드리프트를 즉시 복구한다.
-            if (payload.email.isNullOrBlank()) {
-                actorApplicationService.findById(payload.id)?.let { persistedMember ->
-                    val rotatedAccessToken =
-                        actorApplicationService.genAccessToken(
-                            member = persistedMember,
-                            sessionKey = memberSession?.sessionKey,
-                            rememberLoginEnabled = rememberLoginEnabled,
-                            ipSecurityEnabled = ipSecurityEnabled,
-                            ipSecurityFingerprint = ipSecurityFingerprint,
-                        )
-                    authCookieService.issueAccessToken(
-                        accessToken = rotatedAccessToken,
-                        rememberLoginEnabled = rememberLoginEnabled,
-                        sessionKey = memberSession?.sessionKey,
-                    )
-                    rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $rotatedAccessToken")
-                    memberSession?.let { memberSessionUseCase.touchAuthenticated(it) }
-                    securityContextAuthenticationWriter.write(persistedMember)
-                    return
-                }
-            }
-
-            memberSession?.let { memberSessionUseCase.touchAuthenticated(it) }
-            val payloadMember =
-                Member(
-                    id = payload.id,
-                    username = resolvePrincipalUsername(payload),
-                    password = null,
-                    nickname = payload.name,
-                    email = payload.email,
-                )
-            securityContextAuthenticationWriter.write(payloadMember)
-            return
-        }
-
-        if (sessionKey.isBlank() || refreshToken.isBlank()) {
-            authCookieService.expireAuthCookies()
-            throw AppException("401-8", "세션이 만료되었습니다. 다시 로그인해주세요.")
-        }
-
-        val refreshedSession =
-            memberSessionUseCase.rotateRefreshToken(sessionKey, refreshToken)
-                ?: run {
-                    authCookieService.expireAuthCookies()
-                    throw AppException("401-8", "세션이 만료되었습니다. 다시 로그인해주세요.")
-                }
-
-        val memberSession = refreshedSession.session
-        val member = memberSession.member
-        val rememberLoginEnabled = memberSession.rememberLoginEnabled
-        val ipSecurityEnabled = memberSession.ipSecurityEnabled
-        val ipSecurityFingerprint = memberSession.ipSecurityFingerprint
-
-        authIpSecurityVerifier.verify(
-            AuthIpSecurityCheck(
-                memberId = member.id,
-                loginIdentifier = member.username,
-                rememberLoginEnabled = rememberLoginEnabled,
-                ipSecurityEnabled = ipSecurityEnabled,
-                expectedIpFingerprint = ipSecurityFingerprint,
-                requestPath = request.requestURI,
-                reason = "refresh-token-ip-mismatch",
-                revokeSessionKey = memberSession.sessionKey,
-            ),
-            clientIp,
-        )
-
-        val newAccessToken =
-            actorApplicationService.genAccessToken(
-                member = member,
-                sessionKey = memberSession.sessionKey,
-                rememberLoginEnabled = rememberLoginEnabled,
-                ipSecurityEnabled = ipSecurityEnabled,
-                ipSecurityFingerprint = ipSecurityFingerprint,
-            )
-        authCookieService.issueAccessToken(
-            accessToken = newAccessToken,
-            rememberLoginEnabled = rememberLoginEnabled,
-            sessionKey = memberSession.sessionKey,
-            refreshToken = refreshedSession.refreshToken,
-        )
-        rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $newAccessToken")
-
-        securityContextAuthenticationWriter.write(member)
+        if (accessTokenAuthenticationHandler.authenticate(request, tokens, clientIp)) return
+        refreshTokenAuthenticationHandler.authenticate(request, tokens, clientIp)
     }
 
     private fun sanitizeLogValue(
@@ -305,118 +185,5 @@ class CustomAuthenticationFilter(
     companion object {
         private const val MAX_PATH_LENGTH = 512
         private val LOG_CONTROL_CHAR_REGEX = Regex("[\\x00-\\x1F\\x7F]")
-        private val MUTATING_METHODS = setOf("POST", "PUT", "PATCH", "DELETE")
-        private val SAFE_METHODS = setOf("GET", "HEAD")
-    }
-
-    private data class SessionResolution(
-        val sessionKeyProvided: Boolean,
-        val session: MemberSessionAuthSnapshot?,
-        val freshTokenFallback: Boolean = false,
-    )
-
-    private fun resolveMemberSession(
-        memberId: Long,
-        cookieSessionKey: String,
-        tokenSessionKey: String?,
-        payload: AccessTokenPayload?,
-        request: HttpServletRequest,
-    ): SessionResolution {
-        val effectiveSessionKey =
-            when {
-                cookieSessionKey.isNotBlank() -> cookieSessionKey
-                !tokenSessionKey.isNullOrBlank() -> tokenSessionKey
-                else -> ""
-            }.trim()
-
-        if (effectiveSessionKey.isBlank()) {
-            return SessionResolution(sessionKeyProvided = false, session = null)
-        }
-
-        val resolution =
-            SessionResolution(
-                sessionKeyProvided = true,
-                session = memberSessionUseCase.findActiveSessionSnapshot(memberId, effectiveSessionKey),
-            )
-
-        if (resolution.session != null || !resolution.sessionKeyProvided) return resolution
-        if (!canUseFreshTokenSessionFallback(request, payload, cookieSessionKey, effectiveSessionKey)) return resolution
-
-        log.info(
-            "auth_session_fresh_token_fallback path={} memberId={} graceSeconds={}",
-            sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH),
-            memberId,
-            freshLookupGraceSeconds,
-        )
-
-        return resolution.copy(freshTokenFallback = true)
-    }
-
-    private fun ensureSessionIsUsable(
-        sessionResolution: SessionResolution,
-        requireSession: Boolean = false,
-    ) {
-        if (!sessionResolution.sessionKeyProvided && requireSession) {
-            authCookieService.expireAuthCookies()
-            throw AppException("401-8", "세션이 만료되었습니다. 다시 로그인해주세요.")
-        }
-
-        if (sessionResolution.sessionKeyProvided && sessionResolution.session == null && !sessionResolution.freshTokenFallback) {
-            authCookieService.expireAuthCookies()
-            throw AppException("401-8", "세션이 만료되었습니다. 다시 로그인해주세요.")
-        }
-    }
-
-    private fun canUseFreshTokenSessionFallback(
-        request: HttpServletRequest,
-        payload: AccessTokenPayload?,
-        cookieSessionKey: String,
-        effectiveSessionKey: String,
-    ): Boolean {
-        if (payload == null) return false
-        if (freshLookupGraceSeconds <= 0) return false
-        val method =
-            request.method
-                ?.trim()
-                ?.uppercase(Locale.ROOT)
-                .orEmpty()
-        if (method !in SAFE_METHODS) return false
-        if (cookieSessionKey.isBlank() || effectiveSessionKey.isBlank()) return false
-        if (payload.sessionKey.isNullOrBlank() || payload.sessionKey != effectiveSessionKey) return false
-
-        val issuedAt = payload.issuedAt ?: return false
-        return !Instant.now().isAfter(issuedAt.plusSeconds(freshLookupGraceSeconds))
-    }
-
-    private fun resolveTokenLoginIdentifier(payload: AccessTokenPayload): String? {
-        val normalizedEmail = payload.email?.trim().orEmpty()
-        if (normalizedEmail.isNotBlank()) return normalizedEmail
-
-        val normalizedUsername = payload.username?.trim().orEmpty()
-        if (normalizedUsername.isNotBlank()) return normalizedUsername
-        return null
-    }
-
-    private fun resolvePrincipalUsername(payload: AccessTokenPayload): String {
-        val normalizedUsername = payload.username?.trim().orEmpty()
-        if (normalizedUsername.isNotBlank()) return normalizedUsername
-
-        val normalizedEmail = payload.email?.trim().orEmpty()
-        if (normalizedEmail.isNotBlank()) return normalizedEmail
-
-        return "member-${payload.id}"
-    }
-
-    private fun shouldPreferApiKeyAuthorityOnWrite(
-        request: HttpServletRequest,
-        apiKey: String,
-    ): Boolean {
-        if (apiKey.isBlank()) return false
-        val method =
-            request.method
-                ?.trim()
-                ?.uppercase(Locale.ROOT)
-                .orEmpty()
-        return method in MUTATING_METHODS
     }
 }

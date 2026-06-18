@@ -8,6 +8,7 @@ import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
+import org.assertj.core.api.Assertions.assertThatCode
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -16,7 +17,9 @@ import java.time.Instant
 @DisplayName("PostReadPrewarmService 테스트")
 class PostReadPrewarmServiceTest {
     @Test
-    fun `모든 prewarm step이 실패하면 예외를 던진다`() {
+    @DisplayName("모든 prewarm step이 실패하면 예외를 던진다")
+    fun throwWhenAllPrewarmStepsFail() {
+        // given
         val useCase =
             FakePostPublicReadQueryUseCase(
                 failFeedByCursor = true,
@@ -27,6 +30,7 @@ class PostReadPrewarmServiceTest {
             )
         val sut = PostReadPrewarmService(postPublicReadQueryUseCase = useCase, pageSize = 30, maxTagWarmups = 3)
 
+        // when & then
         assertThatThrownBy {
             sut.prewarm(postId = 101L, tags = listOf("kotlin"), warmDetail = true)
         }.isInstanceOf(IllegalStateException::class.java)
@@ -34,7 +38,9 @@ class PostReadPrewarmServiceTest {
     }
 
     @Test
-    fun `일부 prewarm step이 성공하면 예외를 던지지 않는다`() {
+    @DisplayName("일부 prewarm step이 성공하면 예외를 던지지 않는다")
+    fun completeWhenAnyPrewarmStepSucceeds() {
+        // given
         val useCase =
             FakePostPublicReadQueryUseCase(
                 failFeedByCursor = false,
@@ -45,7 +51,10 @@ class PostReadPrewarmServiceTest {
             )
         val sut = PostReadPrewarmService(postPublicReadQueryUseCase = useCase, pageSize = 30, maxTagWarmups = 3)
 
-        sut.prewarm(postId = 102L, tags = listOf("kotlin"), warmDetail = true)
+        // when & then
+        assertThatCode {
+            sut.prewarm(postId = 102L, tags = listOf("kotlin"), warmDetail = true)
+        }.doesNotThrowAnyException()
     }
 
     private class FakePostPublicReadQueryUseCase(

@@ -16,6 +16,7 @@ import com.back.global.app.AppConfig
 import com.back.global.event.application.EventPublisher
 import com.back.global.storage.application.UploadedFileRetentionService
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
+import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
@@ -34,7 +35,7 @@ import org.springframework.transaction.support.SimpleTransactionStatus
 import java.time.Instant
 import java.util.Optional
 
-@org.junit.jupiter.api.DisplayName("PostApplicationServiceDeleteResilience 테스트")
+@DisplayName("PostApplicationServiceDeleteResilience 테스트")
 class PostApplicationServiceDeleteResilienceTest {
     init {
         AppConfig(
@@ -97,7 +98,9 @@ class PostApplicationServiceDeleteResilienceTest {
         )
 
     @Test
-    fun `delete는 member posts 카운터 보정 실패가 나도 soft delete를 완료한다`() {
+    @DisplayName("delete는 member posts 카운터 보정 실패가 나도 soft delete를 완료한다")
+    fun completeSoftDeleteWhenMemberPostsCounterRepairFails() {
+        // given
         val author =
             Member(
                 id = 1,
@@ -139,17 +142,21 @@ class PostApplicationServiceDeleteResilienceTest {
         given(memberAttrRepository.findBySubjectAndName(author, POSTS_COUNT)).willReturn(null)
         given(postRepository.softDeleteById(post.id)).willReturn(true)
 
+        // when & then
         assertDoesNotThrow {
             service.delete(post, actor)
         }
 
+        // then
         then(postRepository).should().softDeleteById(post.id)
         then(memberAttrRepository).should().incrementIntValue(author, POSTS_COUNT, -1)
         then(postRepository).should().countByAuthor(author)
     }
 
     @Test
-    fun `관리자 복구는 캐시와 추천 후속 작업을 commit 이후에 실행한다`() {
+    @DisplayName("관리자 복구는 캐시와 추천 후속 작업을 commit 이후에 실행한다")
+    fun runRestoreSideEffectsAfterCommit() {
+        // given
         val snapshot =
             AdmDeletedPostSnapshotDto(
                 id = 21,
@@ -180,19 +187,25 @@ class PostApplicationServiceDeleteResilienceTest {
         given(postRepository.restoreDeletedById(21)).willReturn(true)
         given(postRepository.findById(21)).willReturn(Optional.of(restoredPost))
 
+        // when
         service.restoreDeletedByIdForAdmin(21)
         val afterCommitEvent = capturePostWriteAfterCommitEvent()
 
+        // then
         verifyNoInteractions(cacheManager, postRecommendFeatureStoreService)
 
+        // when
         postWriteSideEffectHandler.handle(afterCommitEvent)
 
+        // then
         then(cacheManager).should().getCache(PostQueryCacheNames.FEED)
         then(postRecommendFeatureStoreService).should().refresh(restoredPost)
     }
 
     @Test
-    fun `관리자 영구삭제는 캐시와 첨부파일 정리와 추천 evict를 commit 이후에 실행한다`() {
+    @DisplayName("관리자 영구삭제는 캐시와 첨부파일 정리와 추천 evict를 commit 이후에 실행한다")
+    fun runHardDeleteSideEffectsAfterCommit() {
+        // given
         val snapshot =
             AdmDeletedPostSnapshotDto(
                 id = 22,
@@ -205,20 +218,26 @@ class PostApplicationServiceDeleteResilienceTest {
         given(postRepository.findDeletedSnapshotById(22)).willReturn(snapshot)
         given(postRepository.hardDeleteDeletedById(22)).willReturn(true)
 
+        // when
         service.hardDeleteDeletedByIdForAdmin(22)
         val afterCommitEvent = capturePostWriteAfterCommitEvent()
 
+        // then
         verifyNoInteractions(cacheManager, uploadedFileRetentionService, postRecommendFeatureStoreService)
 
+        // when
         postWriteSideEffectHandler.handle(afterCommitEvent)
 
+        // then
         then(cacheManager).should().getCache(PostQueryCacheNames.FEED)
         then(uploadedFileRetentionService).should().scheduleDeletedPostAttachments(snapshot.content)
         then(postRecommendFeatureStoreService).should().evict(22)
     }
 
     @Test
-    fun `관리자 비공개 글 영구삭제는 공개 읽기 캐시를 무효화하지 않는다`() {
+    @DisplayName("관리자 비공개 글 영구삭제는 공개 읽기 캐시를 무효화하지 않는다")
+    fun skipPublicReadCacheInvalidationForPrivateHardDelete() {
+        // given
         val snapshot =
             AdmDeletedPostSnapshotDto(
                 id = 23,
@@ -231,11 +250,13 @@ class PostApplicationServiceDeleteResilienceTest {
         given(postRepository.findDeletedSnapshotById(23)).willReturn(snapshot)
         given(postRepository.hardDeleteDeletedById(23)).willReturn(true)
 
+        // when
         service.hardDeleteDeletedByIdForAdmin(23)
         val afterCommitEvent = capturePostWriteAfterCommitEvent()
 
         postWriteSideEffectHandler.handle(afterCommitEvent)
 
+        // then
         verifyNoInteractions(cacheManager)
         then(uploadedFileRetentionService).should().scheduleDeletedPostAttachments(snapshot.content)
         then(postRecommendFeatureStoreService).should().evict(23)
@@ -246,10 +267,12 @@ class PostApplicationServiceDeleteResilienceTest {
         "true,false",
         "false,true",
     )
-    fun `관리자 부분공개 상태 영구삭제는 공개 읽기 캐시를 무효화하지 않는다`(
+    @DisplayName("관리자 부분공개 상태 영구삭제는 공개 읽기 캐시를 무효화하지 않는다")
+    fun skipPublicReadCacheInvalidationForPartiallyPublicHardDelete(
         published: Boolean,
         listed: Boolean,
     ) {
+        // given
         val snapshot =
             AdmDeletedPostSnapshotDto(
                 id = 24,
@@ -262,11 +285,13 @@ class PostApplicationServiceDeleteResilienceTest {
         given(postRepository.findDeletedSnapshotById(24)).willReturn(snapshot)
         given(postRepository.hardDeleteDeletedById(24)).willReturn(true)
 
+        // when
         service.hardDeleteDeletedByIdForAdmin(24)
         val afterCommitEvent = capturePostWriteAfterCommitEvent()
 
         postWriteSideEffectHandler.handle(afterCommitEvent)
 
+        // then
         verifyNoInteractions(cacheManager)
         then(uploadedFileRetentionService).should().scheduleDeletedPostAttachments(snapshot.content)
         then(postRecommendFeatureStoreService).should().evict(24)

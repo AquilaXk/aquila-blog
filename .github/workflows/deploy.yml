@@ -906,6 +906,112 @@ jobs:
             rollback_and_exit "public_api_healthcheck_failed"
           fi
 
+          header_value_from_file() {
+            local headers_file="$1"
+            local header_name="$2"
+            awk -v header_name="${header_name}" '
+              BEGIN { target = tolower(header_name) }
+              {
+                line = $0
+                sub(/\r$/, "", line)
+                separator = index(line, ":")
+                if (separator == 0) {
+                  next
+                }
+                name = tolower(substr(line, 1, separator - 1))
+                if (name == target) {
+                  value = substr(line, separator + 1)
+                  sub(/^[[:space:]]+/, "", value)
+                  print value
+                  exit
+                }
+              }
+            ' "${headers_file}"
+          }
+
+          assert_header_contains() {
+            local label="$1"
+            local headers_file="$2"
+            local header_name="$3"
+            local expected_fragment="$4"
+            local value
+            value="$(header_value_from_file "${headers_file}" "${header_name}")"
+            if [ -z "${value}" ] || [[ "${value,,}" != *"${expected_fragment,,}"* ]]; then
+              echo "[security-header-smoke] FAIL ${label}: missing ${header_name} containing '${expected_fragment}'" >&2
+              return 1
+            fi
+          }
+
+          assert_live_security_headers() {
+            local label="$1"
+            local url="$2"
+            local status_pattern="$3"
+            local cache_policy="${4:-default}"
+            local headers_file
+            local code
+            headers_file="$(mktemp)"
+
+            code="$(
+              curl -sS \
+                --connect-timeout "${DEPLOY_SECURITY_HEADER_CONNECT_TIMEOUT_SECONDS:-5}" \
+                -m "${DEPLOY_SECURITY_HEADER_MAX_TIME_SECONDS:-15}" \
+                -D "${headers_file}" \
+                -o /dev/null \
+                -w "%{http_code}" \
+                "${url}" || true
+            )"
+            echo "[security-header-smoke] ${label} status=${code} url=${url}"
+            if ! [[ "${code}" =~ ${status_pattern} ]]; then
+              echo "[security-header-smoke] FAIL ${label}: unexpected status=${code} url=${url}" >&2
+              rm -f "${headers_file}"
+              return 1
+            fi
+
+            assert_header_contains "${label}" "${headers_file}" "strict-transport-security" "max-age=31536000" || {
+              rm -f "${headers_file}"
+              return 1
+            }
+            assert_header_contains "${label}" "${headers_file}" "x-content-type-options" "nosniff" || {
+              rm -f "${headers_file}"
+              return 1
+            }
+            assert_header_contains "${label}" "${headers_file}" "x-frame-options" "deny" || {
+              rm -f "${headers_file}"
+              return 1
+            }
+            assert_header_contains "${label}" "${headers_file}" "referrer-policy" "strict-origin-when-cross-origin" || {
+              rm -f "${headers_file}"
+              return 1
+            }
+            assert_header_contains "${label}" "${headers_file}" "permissions-policy" "camera=()" || {
+              rm -f "${headers_file}"
+              return 1
+            }
+            if [ "${cache_policy}" = "no-store" ]; then
+              assert_header_contains "${label}" "${headers_file}" "cache-control" "no-store" || {
+                rm -f "${headers_file}"
+                return 1
+              }
+            fi
+
+            rm -f "${headers_file}"
+          }
+
+          if ! assert_live_security_headers \
+            "public-feed" \
+            "https://${API_DOMAIN}/post/api/v1/posts/feed?page=1&pageSize=1&sort=CREATED_AT" \
+            '^200$'; then
+            rollback_and_exit "public_feed_security_header_smoke_failed"
+          fi
+
+          if ! assert_live_security_headers \
+            "protected-auth-me" \
+            "https://${API_DOMAIN}/member/api/v1/auth/me" \
+            '^401$' \
+            "no-store"; then
+            rollback_and_exit "protected_auth_security_header_smoke_failed"
+          fi
+
           run_canary_ratio_check() {
             local label="$1"
             local url="$2"

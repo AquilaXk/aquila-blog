@@ -61,6 +61,70 @@ class HtmlContentSanitizerTest {
     }
 
     @Test
+    @DisplayName("srcset 같은 비필수 URL 속성은 정제 결과에 남기지 않는다")
+    fun removesNonEssentialUriAttributes() {
+        // given
+        val rawHtml =
+            """
+            <img src="https://cdn.example.com/a.png" srcset="javascript:alert(1) 1x, https://cdn.example.com/a@2x.png 2x">
+            <table background="javascript:alert(2)"><tr><td formaction="javascript:alert(3)">cell</td></tr></table>
+            """.trimIndent()
+
+        // when
+        val sanitized = HtmlContentSanitizer.sanitizeRichHtmlOrNull(rawHtml)
+
+        // then
+        assertThat(sanitized).contains("<img src=\"https://cdn.example.com/a.png\">")
+        assertThat(sanitized).contains("<table>")
+        assertThat(sanitized).contains("<td>cell</td>")
+        assertThat(sanitized).doesNotContain("srcset")
+        assertThat(sanitized).doesNotContain("background")
+        assertThat(sanitized).doesNotContain("formaction")
+        assertThat(sanitized).doesNotContain("javascript:")
+    }
+
+    @Test
+    @DisplayName("Markdown 코드 렌더링에 필요한 class와 data 속성은 유지한다")
+    fun preservesMarkdownRenderingMetadataAttributes() {
+        // given
+        val rawHtml =
+            """
+            <pre class="aq-pretty-pre" data-language="kotlin" data-prism-source="println(1)">
+            <code class="language-kotlin" data-prism-language="kotlin" data-raw-code="println(1)">
+            <span class="line" data-line="true">println(1)</span>
+            </code>
+            </pre>
+            """.trimIndent()
+
+        // when
+        val sanitized = HtmlContentSanitizer.sanitizeRichHtmlOrNull(rawHtml)
+
+        // then
+        assertThat(sanitized).contains("class=\"aq-pretty-pre\"")
+        assertThat(sanitized).contains("data-language=\"kotlin\"")
+        assertThat(sanitized).contains("data-prism-source=\"println(1)\"")
+        assertThat(sanitized).contains("class=\"language-kotlin\"")
+        assertThat(sanitized).contains("data-prism-language=\"kotlin\"")
+        assertThat(sanitized).contains("data-raw-code=\"println(1)\"")
+        assertThat(sanitized).contains("class=\"line\"")
+        assertThat(sanitized).contains("data-line=\"true\"")
+    }
+
+    @Test
+    @DisplayName("상대 경로 href/src는 절대 URL로 바꾸지 않고 유지한다")
+    fun preservesRelativeHrefAndSrc() {
+        // given
+        val rawHtml = """<a href="/posts/1">post</a><img src="/images/a.png" alt="thumbnail">"""
+
+        // when
+        val sanitized = HtmlContentSanitizer.sanitizeRichHtmlOrNull(rawHtml)
+
+        // then
+        assertThat(sanitized).contains("""<a href="/posts/1">post</a>""")
+        assertThat(sanitized).contains("""<img src="/images/a.png" alt="thumbnail">""")
+    }
+
+    @Test
     @DisplayName("target blank 링크에는 opener 참조 차단 rel을 보강한다")
     fun addsNoopenerNoreferrerToBlankTargets() {
         // given

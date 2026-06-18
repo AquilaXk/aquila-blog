@@ -52,13 +52,6 @@ class PostWriteSideEffectHandler(
         )
     }
 
-    internal fun evictReadCaches(
-        request: PostReadCacheInvalidationRequest,
-        onPublicTagsEvicted: () -> Unit,
-    ) {
-        postReadCacheInvalidator.invalidate(request, onPublicTagsEvicted)
-    }
-
     private fun handle(
         command: PostWriteSideEffectCommand,
         onPublicTagsEvicted: () -> Unit,
@@ -96,7 +89,13 @@ class PostWriteSideEffectHandler(
                     refreshRecommendFeatureStoreAfterCommit(command.postId)
                 }
 
-            PostRecommendationSideEffect.EVICT -> postRecommendFeatureStoreService.evict(command.postId)
+            PostRecommendationSideEffect.EVICT ->
+                runAfterCommitSideEffectInNewTransaction(
+                    postId = command.postId,
+                    failureMessage = "Failed to evict recommend feature store after commit",
+                ) {
+                    postRecommendFeatureStoreService.evict(command.postId)
+                }
         }
     }
 

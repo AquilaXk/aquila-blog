@@ -20,7 +20,7 @@ class ApiMutationCsrfGuardFilterTest {
     fun `cookie authenticated mutation without csrf preflight header is forbidden`() {
         val filter = createFilter()
         val request = MockHttpServletRequest("POST", "/post/api/v1/posts/1/comments")
-        request.setCookies(Cookie("apiKey", "api-key"))
+        request.setCookies(Cookie(AuthCookieNames.API_KEY, "api-key"))
         request.addHeader(HttpHeaders.ORIGIN, "https://www.aquilaxk.site")
         val response = MockHttpServletResponse()
 
@@ -36,7 +36,7 @@ class ApiMutationCsrfGuardFilterTest {
     fun `cookie authenticated mutation with csrf preflight header passes`() {
         val filter = createFilter()
         val request = MockHttpServletRequest("POST", "/post/api/v1/posts/1/comments")
-        request.setCookies(Cookie("apiKey", "api-key"))
+        request.setCookies(Cookie(AuthCookieNames.API_KEY, "api-key"))
         request.addHeader(ApiMutationCsrfGuardFilter.CSRF_PREFLIGHT_HEADER, "1")
         val response = MockHttpServletResponse()
         val filterChain =
@@ -62,7 +62,7 @@ class ApiMutationCsrfGuardFilterTest {
         val filter = createFilter()
         val request = MockHttpServletRequest("POST", "/app/post/api/v1/posts/1/comments")
         request.contextPath = "/app"
-        request.setCookies(Cookie("apiKey", "api-key"))
+        request.setCookies(Cookie(AuthCookieNames.API_KEY, "api-key"))
         request.addHeader(ApiMutationCsrfGuardFilter.CSRF_PREFLIGHT_HEADER, "1")
         val response = MockHttpServletResponse()
         val filterChain =
@@ -87,7 +87,7 @@ class ApiMutationCsrfGuardFilterTest {
     fun `cookie authenticated mutation from disallowed origin is forbidden`() {
         val filter = createFilter()
         val request = MockHttpServletRequest("POST", "/post/api/v1/posts/1/comments")
-        request.setCookies(Cookie("apiKey", "api-key"))
+        request.setCookies(Cookie(AuthCookieNames.API_KEY, "api-key"))
         request.addHeader(HttpHeaders.ORIGIN, "https://evil.example")
         request.addHeader(ApiMutationCsrfGuardFilter.CSRF_PREFLIGHT_HEADER, "1")
         val response = MockHttpServletResponse()

@@ -5,6 +5,7 @@ import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.boundedContexts.post.application.service.PostHitDedupService
 import com.back.boundedContexts.post.application.service.PostQueryCacheNames
 import com.back.boundedContexts.post.dto.PublicPostDetailSnapshotCacheDto
+import com.back.global.security.config.AuthCookieNames
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.extensions.getOrThrow
 import com.back.support.BaseControllerIntegrationTest
@@ -403,8 +404,8 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         fun `공개 글 목록 조회는 잘못된 인증 정보가 있어도 정상 반환된다`() {
             mvc
                 .get("/post/api/v1/posts") {
-                    cookie(Cookie("apiKey", "invalid-api-key"))
-                    cookie(Cookie("accessToken", "invalid-access-token"))
+                    cookie(Cookie(AuthCookieNames.API_KEY, "invalid-api-key"))
+                    cookie(Cookie(AuthCookieNames.ACCESS_TOKEN, "invalid-access-token"))
                     header(HttpHeaders.AUTHORIZATION, "Bearer invalid-api-key invalid-access-token")
                 }.andExpect {
                     status { isOk() }
@@ -419,8 +420,8 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                 .get("/post/api/v1/posts/feed/cursor") {
                     param("sort", "CREATED_AT")
                     param("pageSize", "24")
-                    cookie(Cookie("apiKey", "invalid-api-key"))
-                    cookie(Cookie("accessToken", "invalid-access-token"))
+                    cookie(Cookie(AuthCookieNames.API_KEY, "invalid-api-key"))
+                    cookie(Cookie(AuthCookieNames.ACCESS_TOKEN, "invalid-access-token"))
                     header(HttpHeaders.AUTHORIZATION, "Bearer invalid-api-key invalid-access-token")
                 }.andExpect {
                     status { isOk() }
@@ -449,8 +450,8 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     param("sort", "CREATED_AT")
                     param("tag", "커서공개")
                     param("pageSize", "24")
-                    cookie(Cookie("apiKey", "invalid-api-key"))
-                    cookie(Cookie("accessToken", "invalid-access-token"))
+                    cookie(Cookie(AuthCookieNames.API_KEY, "invalid-api-key"))
+                    cookie(Cookie(AuthCookieNames.ACCESS_TOKEN, "invalid-access-token"))
                     header(HttpHeaders.AUTHORIZATION, "Bearer invalid-api-key invalid-access-token")
                 }.andExpect {
                     status { isOk() }
@@ -638,8 +639,8 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     param("page", "1")
                     param("pageSize", "24")
                     param("sort", "CREATED_AT")
-                    cookie(Cookie("apiKey", "invalid-api-key"))
-                    cookie(Cookie("accessToken", "invalid-access-token"))
+                    cookie(Cookie(AuthCookieNames.API_KEY, "invalid-api-key"))
+                    cookie(Cookie(AuthCookieNames.ACCESS_TOKEN, "invalid-access-token"))
                     header(HttpHeaders.AUTHORIZATION, "Bearer invalid-api-key invalid-access-token")
                 }.andExpect {
                     status { isOk() }

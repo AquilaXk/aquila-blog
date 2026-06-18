@@ -15,6 +15,7 @@ import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.security.application.AuthIpSecurityService
 import com.back.global.security.application.AuthSecurityEventService
+import com.back.global.security.config.AuthCookieNames
 import com.back.global.security.domain.SecurityUser
 import com.back.global.web.application.AuthCookieService
 import com.back.global.web.application.ClientIpResolver
@@ -174,7 +175,7 @@ class ApiV1AuthController(
     fun logout(request: HttpServletRequest): RsData<Void> {
         val sessionKeyCookie =
             request.cookies
-                ?.firstOrNull { it.name == "sessionKey" }
+                ?.firstOrNull { it.name == AuthCookieNames.SESSION_KEY }
                 ?.value
                 ?.trim()
                 .orEmpty()

@@ -37,15 +37,11 @@ class PostWriteSideEffectHandler(
     internal fun handle(event: PostWriteAfterCommitEvent) {
         handle(event.command)
         event.domainEvent?.let { domainEvent ->
-            runCatching {
+            runAfterCommitSideEffectInNewTransaction(
+                postId = event.command.postId,
+                failureMessage = "Failed to publish post write domain event after commit",
+            ) {
                 eventPublisher.publish(domainEvent)
-            }.onFailure { exception ->
-                logger.warn(
-                    "Failed to publish post write domain event after commit: postId={}, event={}",
-                    event.command.postId,
-                    domainEvent::class.simpleName,
-                    exception,
-                )
             }
         }
     }

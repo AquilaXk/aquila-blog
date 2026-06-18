@@ -10,10 +10,6 @@ import java.time.Instant
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.max
 
-/**
- * TaskTypeDiagnostics는 글로벌 공통 유스케이스를 조합하는 애플리케이션 계층 구성요소입니다.
- * 트랜잭션 경계, 예외 처리, 후속 동기화(캐시/이벤트/큐)를 함께 관리합니다.
- */
 data class TaskTypeDiagnostics(
     val taskType: String,
     val label: String,
@@ -32,10 +28,6 @@ data class TaskTypeDiagnostics(
     val retryPolicy: TaskRetryPolicy,
 )
 
-/**
- * TaskExecutionSample는 글로벌 공통 유스케이스를 조합하는 애플리케이션 계층 구성요소입니다.
- * 트랜잭션 경계, 예외 처리, 후속 동기화(캐시/이벤트/큐)를 함께 관리합니다.
- */
 data class TaskExecutionSample(
     val taskId: Long,
     val taskType: String,
@@ -50,10 +42,6 @@ data class TaskExecutionSample(
     val errorMessage: String?,
 )
 
-/**
- * TaskQueueDiagnostics는 글로벌 공통 유스케이스를 조합하는 애플리케이션 계층 구성요소입니다.
- * 트랜잭션 경계, 예외 처리, 후속 동기화(캐시/이벤트/큐)를 함께 관리합니다.
- */
 data class TaskQueueDiagnostics(
     val pendingCount: Long,
     val readyPendingCount: Long,
@@ -72,11 +60,6 @@ data class TaskQueueDiagnostics(
     val staleProcessingSamples: List<TaskExecutionSample>,
 )
 
-/**
- * TaskQueueDiagnosticsService는 글로벌 공통 유스케이스를 조합하는 애플리케이션 계층 구성요소입니다.
- * 트랜잭션 경계, 예외 처리, 후속 동기화(캐시/이벤트/큐)를 함께 관리합니다.
- */
-
 @Service
 class TaskQueueDiagnosticsService(
     private val taskRepository: TaskQueueRepositoryPort,
@@ -93,10 +76,6 @@ class TaskQueueDiagnosticsService(
 
     private val diagnosticsSnapshotRef = AtomicReference<DiagnosticsSnapshot?>(null)
 
-    /**
-     * diagnoseQueue 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
-     * 애플리케이션 계층에서 트랜잭션 경계와 후속 처리(캐시/큐/이벤트)를 함께 관리합니다.
-     */
     fun diagnoseQueue(): TaskQueueDiagnostics {
         val now = Instant.now()
         diagnosticsSnapshotRef.get()?.let { snapshot ->
@@ -111,10 +90,6 @@ class TaskQueueDiagnosticsService(
         return refreshed
     }
 
-    /**
-     * buildDiagnostics 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
-     * 애플리케이션 계층에서 트랜잭션 경계와 후속 처리(캐시/큐/이벤트)를 함께 관리합니다.
-     */
     private fun buildDiagnostics(now: Instant): TaskQueueDiagnostics {
         val readyPendingCount = taskRepository.countByStatusAndNextRetryAtLessThanEqual(TaskStatus.PENDING, now)
         val pendingCount = taskRepository.countByStatus(TaskStatus.PENDING)
@@ -169,10 +144,6 @@ class TaskQueueDiagnosticsService(
         return diagnoseTaskType(taskType, now, stuckBefore)
     }
 
-    /**
-     * diagnoseTaskType 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
-     * 애플리케이션 계층에서 트랜잭션 경계와 후속 처리(캐시/큐/이벤트)를 함께 관리합니다.
-     */
     private fun diagnoseTaskType(
         taskType: String,
         now: Instant,
@@ -227,10 +198,6 @@ class TaskQueueDiagnosticsService(
         )
     }
 
-    /**
-     * toTaskExecutionSample 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
-     * 애플리케이션 계층에서 트랜잭션 경계와 후속 처리(캐시/큐/이벤트)를 함께 관리합니다.
-     */
     private fun toTaskExecutionSample(task: Task): TaskExecutionSample {
         val retryPolicy = taskHandlerRegistry.getRetryPolicy(task.taskType)
 

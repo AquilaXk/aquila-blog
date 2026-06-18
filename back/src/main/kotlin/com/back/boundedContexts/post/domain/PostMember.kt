@@ -47,10 +47,6 @@ interface PostMember : MemberAware {
         postCommentsCount--
     }
 
-    /**
-     * 조회 조건을 적용해 필요한 데이터를 안전하게 반환합니다.
-     * 도메인 계층에서 불변조건을 지키며 상태 전이를 캡슐화합니다.
-     */
     fun getOrInitPostsCountAttr(): MemberAttr {
         if (postsCountAttr == null) {
             postsCountAttr = MemberAttr(0, member, POSTS_COUNT, POSTS_COUNT_DEFAULT_VALUE)
@@ -58,10 +54,6 @@ interface PostMember : MemberAware {
         return postsCountAttr!!
     }
 
-    /**
-     * 조회 조건을 적용해 필요한 데이터를 안전하게 반환합니다.
-     * 도메인 계층에서 불변조건을 지키며 상태 전이를 캡슐화합니다.
-     */
     fun getOrInitPostCommentsCountAttr(): MemberAttr {
         if (postCommentsCountAttr == null) {
             postCommentsCountAttr = MemberAttr(0, member, POST_COMMENTS_COUNT, POST_COMMENTS_COUNT_DEFAULT_VALUE)

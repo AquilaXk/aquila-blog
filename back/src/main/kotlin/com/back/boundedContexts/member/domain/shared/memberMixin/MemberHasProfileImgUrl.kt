@@ -12,10 +12,6 @@ private const val PROFILE_IMG_URL_DEFAULT_VALUE = ""
  * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
  */
 interface MemberHasProfileImgUrl : MemberAware {
-    /**
-     * appendProfileImgVersion 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 도메인 계층에서 불변조건을 지키며 상태 전이를 캡슐화합니다.
-     */
     private fun appendProfileImgVersion(url: String): String {
         val version =
             runCatching { getOrInitProfileImgUrlAttr().modifiedAt.toEpochMilli() }.getOrNull()

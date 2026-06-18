@@ -39,10 +39,6 @@ class MemberProdInitData(
             self.ensureConfiguredAdminMember()
         }
 
-    /**
-     * 검증 규칙을 적용해 허용 여부를 판정합니다.
-     * 초기화 단계에서 중복 생성 방지와 기본값 보정을 함께 수행합니다.
-     */
     @Transactional
     fun ensureConfiguredAdminMember() {
         val configuredAdminUsername = AppConfig.adminUsernameOrBlank.trim()

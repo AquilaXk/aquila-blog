@@ -70,10 +70,6 @@ class SignupMailDiagnosticsService(
             .getAnnotation(com.back.global.task.annotation.Task::class.java)
             .type
 
-    /**
-     * diagnose 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     fun diagnose(checkConnection: Boolean = false): SignupMailDiagnostics {
         val sender = signupVerificationMailSenderProvider.getIfAvailable()
         val adapter = sender?.javaClass?.simpleName ?: "UNAVAILABLE"
@@ -200,10 +196,6 @@ class SignupMailDiagnosticsService(
             ) ?: throw AppException("503-2", "회원가입 메일 발송 어댑터를 찾지 못했습니다.")
     }
 
-    /**
-     * buildMissingKeys 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     private fun buildMissingKeys(): List<String> {
         val missing = mutableListOf<String>()
 
@@ -227,10 +219,6 @@ class SignupMailDiagnosticsService(
                 }
             }
 
-    /**
-     * testConnection 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     private fun testConnection(): ConnectionTestResult {
         val javaMailSender = javaMailSenderProvider.getIfAvailable()
 

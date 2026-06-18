@@ -65,10 +65,6 @@ class CdnCachePurgeService(
         )
     }
 
-    /**
-     * purgeByTags 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 네트워크 오류가 발생해도 본 요청 흐름은 차단하지 않습니다.
-     */
     fun purgeByTags(
         tags: Collection<String>,
         reason: String,

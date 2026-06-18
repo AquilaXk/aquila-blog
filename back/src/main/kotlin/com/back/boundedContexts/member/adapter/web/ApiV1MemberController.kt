@@ -19,10 +19,6 @@ import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.*
 import java.net.URI
 
-/**
- * ApiV1MemberController는 웹 계층에서 HTTP 요청/응답을 처리하는 클래스입니다.
- * 입력 DTO 검증과 응답 포맷팅을 담당하고 비즈니스 처리는 애플리케이션 계층에 위임합니다.
- */
 @RestController
 @RequestMapping("/member/api/v1/members")
 class ApiV1MemberController(
@@ -37,10 +33,6 @@ class ApiV1MemberController(
     @GetMapping("/randomSecureTip")
     fun randomSecureTip() = securityTipProvider.signupPasswordTip()
 
-    /**
-     * 조회 조건을 적용해 필요한 데이터를 안전하게 반환합니다.
-     * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
-     */
     @GetMapping("/adminProfile")
     @Transactional(readOnly = true)
     fun getAdminProfile(): MemberWithUsernameDto {
@@ -59,10 +51,6 @@ class ApiV1MemberController(
         return currentMemberProfileQueryUseCase.getPublishedById(adminMember.id)
     }
 
-    /**
-     * redirectToProfileImg 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
-     */
     @GetMapping("/{id}/redirectToProfileImg")
     @ResponseStatus(HttpStatus.FOUND)
     @Transactional(readOnly = true)
@@ -97,10 +85,6 @@ class ApiV1MemberController(
         val nickname: String,
     )
 
-    /**
-     * 회원 가입 요청을 검증하고 계정을 생성합니다.
-     * 컨트롤러 계층에서 요청 DTO를 검증한 뒤 서비스 호출 결과를 응답 규격으로 변환합니다.
-     */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Transactional

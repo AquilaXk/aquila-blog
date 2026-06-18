@@ -39,10 +39,6 @@ class SignupStartRateLimitService(
     private val states = ConcurrentHashMap<String, WindowState>()
     private val lastCleanupEpochSeconds = AtomicLong(0)
 
-    /**
-     * 검증 규칙을 적용해 허용 여부를 판정합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     fun checkAndConsume(
         email: String,
         clientIp: String,
@@ -73,10 +69,6 @@ class SignupStartRateLimitService(
         return redisTemplate
     }
 
-    /**
-     * consumeInMemory 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     private fun consumeInMemory(
         key: String,
         maxAttempts: Int,
@@ -94,10 +86,6 @@ class SignupStartRateLimitService(
         return next.count <= maxAttempts
     }
 
-    /**
-     * consumeInRedis 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     private fun consumeInRedis(
         redisTemplate: StringRedisTemplate,
         key: String,

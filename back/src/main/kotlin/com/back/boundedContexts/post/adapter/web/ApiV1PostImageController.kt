@@ -78,7 +78,8 @@ class ApiV1PostImageController(
 
         val uploadRequest =
             PostImageStoragePort.UploadImageRequest(
-                bytes = file.bytes,
+                inputStream = file.inputStream,
+                contentLength = file.size,
                 contentType = file.contentType,
                 originalFilename = file.originalFilename,
             )
@@ -123,7 +124,8 @@ class ApiV1PostImageController(
 
         val uploadRequest =
             PostImageStoragePort.UploadFileRequest(
-                bytes = file.bytes,
+                inputStream = file.inputStream,
+                contentLength = file.size,
                 contentType = file.contentType,
                 originalFilename = file.originalFilename,
             )

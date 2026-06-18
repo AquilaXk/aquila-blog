@@ -311,7 +311,8 @@ class ApiV1AdmMemberController(
         val member = memberUseCase.findById(id).orElseThrow()
         val uploadRequest =
             PostImageStoragePort.UploadImageRequest(
-                bytes = file.bytes,
+                inputStream = file.inputStream,
+                contentLength = file.size,
                 contentType = file.contentType,
                 originalFilename = file.originalFilename,
             )

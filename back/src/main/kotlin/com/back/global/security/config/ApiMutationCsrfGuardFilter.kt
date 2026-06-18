@@ -45,7 +45,10 @@ class ApiMutationCsrfGuardFilter(
 
     private fun hasAuthCookie(request: HttpServletRequest): Boolean =
         request.cookies
-            ?.any { cookie -> cookie.name in AUTH_COOKIE_NAMES && cookie.value.isNotBlank() }
+            ?.any { cookie ->
+                cookie.name in AuthCookieNames.MUTATION_CSRF_GUARD_COOKIE_NAMES &&
+                    cookie.value.isNotBlank()
+            }
             ?: false
 
     private fun requestPath(request: HttpServletRequest): String {
@@ -74,7 +77,6 @@ class ApiMutationCsrfGuardFilter(
         const val CSRF_PREFLIGHT_VALUE = "1"
 
         private val SAFE_METHODS = setOf("GET", "HEAD")
-        private val AUTH_COOKIE_NAMES = setOf("apiKey", "accessToken", "sessionKey")
         private val API_PATH_REGEX = Regex("^/[^/]+/api/.*")
     }
 }

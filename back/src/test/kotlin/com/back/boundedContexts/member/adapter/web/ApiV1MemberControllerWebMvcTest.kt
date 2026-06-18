@@ -2,6 +2,7 @@ package com.back.boundedContexts.member.adapter.web
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
+import com.back.global.security.config.AuthCookieNames
 import com.back.support.BaseMemberControllerWebMvcTest
 import jakarta.servlet.http.Cookie
 import org.hamcrest.Matchers.startsWith
@@ -37,8 +38,8 @@ class ApiV1MemberControllerWebMvcTest : BaseMemberControllerWebMvcTest() {
 
             mvc
                 .get("/member/api/v1/members/adminProfile") {
-                    cookie(Cookie("apiKey", "invalid-api-key"))
-                    cookie(Cookie("accessToken", "invalid-access-token"))
+                    cookie(Cookie(AuthCookieNames.API_KEY, "invalid-api-key"))
+                    cookie(Cookie(AuthCookieNames.ACCESS_TOKEN, "invalid-access-token"))
                     header(HttpHeaders.AUTHORIZATION, "Bearer invalid-api-key invalid-access-token")
                 }.andExpect {
                     status { isOk() }

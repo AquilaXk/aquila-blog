@@ -5,6 +5,7 @@ import com.back.boundedContexts.member.subContexts.session.application.port.inpu
 import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
+import com.back.global.security.config.AuthCookieNames
 import com.back.standard.extensions.getOrThrow
 import com.back.support.BaseControllerIntegrationTest
 import jakarta.servlet.http.Cookie
@@ -91,8 +92,8 @@ class ApiV1PostCommentControllerTest : BaseControllerIntegrationTest() {
         fun `댓글 목록 조회는 잘못된 인증 정보가 있어도 정상 반환된다`() {
             mvc
                 .get("/post/api/v1/posts/${post.id}/comments") {
-                    cookie(Cookie("apiKey", "invalid-api-key"))
-                    cookie(Cookie("accessToken", "invalid-access-token"))
+                    cookie(Cookie(AuthCookieNames.API_KEY, "invalid-api-key"))
+                    cookie(Cookie(AuthCookieNames.ACCESS_TOKEN, "invalid-access-token"))
                     header(HttpHeaders.AUTHORIZATION, "Bearer invalid-api-key invalid-access-token")
                 }.andExpect {
                     status { isOk() }
@@ -129,9 +130,9 @@ class ApiV1PostCommentControllerTest : BaseControllerIntegrationTest() {
 
             mvc
                 .get("/post/api/v1/posts/${privatePost.id}/comments") {
-                    cookie(Cookie("apiKey", admin.apiKey))
-                    cookie(Cookie("accessToken", accessToken))
-                    cookie(Cookie("sessionKey", session.sessionKey))
+                    cookie(Cookie(AuthCookieNames.API_KEY, admin.apiKey))
+                    cookie(Cookie(AuthCookieNames.ACCESS_TOKEN, accessToken))
+                    cookie(Cookie(AuthCookieNames.SESSION_KEY, session.sessionKey))
                 }.andExpect {
                     status { isOk() }
                     match(handler().handlerType(ApiV1PostCommentController::class.java))
@@ -429,5 +430,8 @@ class ApiV1PostCommentControllerTest : BaseControllerIntegrationTest() {
             }.andReturn()
             .response
             .cookies
-            .filter { it.name in setOf("apiKey", "accessToken", "sessionKey") && it.value.isNotBlank() }
+            .filter {
+                it.name in AuthCookieNames.MUTATION_CSRF_GUARD_COOKIE_NAMES &&
+                    it.value.isNotBlank()
+            }
 }

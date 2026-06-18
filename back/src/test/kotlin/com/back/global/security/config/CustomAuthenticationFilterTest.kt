@@ -70,10 +70,10 @@ class CustomAuthenticationFilterTest {
             )
 
         given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("")
-        given(rq.getCookieValue("apiKey", "")).willReturn("")
-        given(rq.getCookieValue("accessToken", "")).willReturn(accessToken)
-        given(rq.getCookieValue("sessionKey", "")).willReturn("")
-        given(rq.getCookieValue("refreshToken", "")).willReturn("")
+        given(rq.getCookieValue(AuthCookieNames.API_KEY, "")).willReturn("")
+        given(rq.getCookieValue(AuthCookieNames.ACCESS_TOKEN, "")).willReturn(accessToken)
+        given(rq.getCookieValue(AuthCookieNames.SESSION_KEY, "")).willReturn("")
+        given(rq.getCookieValue(AuthCookieNames.REFRESH_TOKEN, "")).willReturn("")
         given(actorApplicationService.payload(accessToken)).willThrow(RuntimeException("jwt down"))
 
         listOf(
@@ -186,10 +186,10 @@ class CustomAuthenticationFilterTest {
 
         given(publicApiRequestMatcher.matches(request)).willReturn(false)
         given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("")
-        given(rq.getCookieValue("apiKey", "")).willReturn("")
-        given(rq.getCookieValue("accessToken", "")).willReturn("broken-access-token")
-        given(rq.getCookieValue("sessionKey", "")).willReturn("")
-        given(rq.getCookieValue("refreshToken", "")).willReturn("")
+        given(rq.getCookieValue(AuthCookieNames.API_KEY, "")).willReturn("")
+        given(rq.getCookieValue(AuthCookieNames.ACCESS_TOKEN, "")).willReturn("broken-access-token")
+        given(rq.getCookieValue(AuthCookieNames.SESSION_KEY, "")).willReturn("")
+        given(rq.getCookieValue(AuthCookieNames.REFRESH_TOKEN, "")).willReturn("")
         given(clientIpResolver.resolve(request)).willReturn("203.0.113.10")
         given(actorApplicationService.payload("broken-access-token")).willThrow(RuntimeException("jwt down"))
 
@@ -242,10 +242,10 @@ class CustomAuthenticationFilterTest {
 
         given(publicApiRequestMatcher.matches(request)).willReturn(true)
         given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("")
-        given(rq.getCookieValue("apiKey", "")).willReturn("")
-        given(rq.getCookieValue("accessToken", "")).willReturn("broken-access-token")
-        given(rq.getCookieValue("sessionKey", "")).willReturn("")
-        given(rq.getCookieValue("refreshToken", "")).willReturn("")
+        given(rq.getCookieValue(AuthCookieNames.API_KEY, "")).willReturn("")
+        given(rq.getCookieValue(AuthCookieNames.ACCESS_TOKEN, "")).willReturn("broken-access-token")
+        given(rq.getCookieValue(AuthCookieNames.SESSION_KEY, "")).willReturn("")
+        given(rq.getCookieValue(AuthCookieNames.REFRESH_TOKEN, "")).willReturn("")
         given(clientIpResolver.resolve(request)).willReturn("203.0.113.11")
         given(actorApplicationService.payload("broken-access-token")).willThrow(RuntimeException("jwt down"))
 
@@ -328,7 +328,7 @@ class CustomAuthenticationFilterTest {
 
         given(publicApiRequestMatcher.matches(request)).willReturn(false)
         given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("Bearer $legacyToken")
-        given(rq.getCookieValue("sessionKey", "")).willReturn(sessionKey)
+        given(rq.getCookieValue(AuthCookieNames.SESSION_KEY, "")).willReturn(sessionKey)
         given(actorApplicationService.payload(legacyToken))
             .willReturn(
                 AccessTokenPayload(
@@ -440,9 +440,9 @@ class CustomAuthenticationFilterTest {
 
         given(publicApiRequestMatcher.matches(request)).willReturn(false)
         given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("")
-        given(rq.getCookieValue("apiKey", "")).willReturn(apiKey)
-        given(rq.getCookieValue("accessToken", "")).willReturn(staleAccessToken)
-        given(rq.getCookieValue("sessionKey", "")).willReturn(sessionKey)
+        given(rq.getCookieValue(AuthCookieNames.API_KEY, "")).willReturn(apiKey)
+        given(rq.getCookieValue(AuthCookieNames.ACCESS_TOKEN, "")).willReturn(staleAccessToken)
+        given(rq.getCookieValue(AuthCookieNames.SESSION_KEY, "")).willReturn(sessionKey)
         given(actorApplicationService.payload(staleAccessToken))
             .willReturn(
                 AccessTokenPayload(
@@ -533,7 +533,7 @@ class CustomAuthenticationFilterTest {
 
         given(publicApiRequestMatcher.matches(request)).willReturn(false)
         given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("Bearer $accessToken")
-        given(rq.getCookieValue("sessionKey", "")).willReturn(sessionKey)
+        given(rq.getCookieValue(AuthCookieNames.SESSION_KEY, "")).willReturn(sessionKey)
         given(clientIpResolver.resolve(request)).willReturn("203.0.113.14")
         given(actorApplicationService.payload(accessToken))
             .willReturn(
@@ -615,7 +615,7 @@ class CustomAuthenticationFilterTest {
 
         given(publicApiRequestMatcher.matches(request)).willReturn(false)
         given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("Bearer $accessToken")
-        given(rq.getCookieValue("sessionKey", "")).willReturn(sessionKey)
+        given(rq.getCookieValue(AuthCookieNames.SESSION_KEY, "")).willReturn(sessionKey)
         given(clientIpResolver.resolve(request)).willReturn("203.0.113.15")
         given(actorApplicationService.payload(accessToken))
             .willReturn(

@@ -14,15 +14,15 @@ class AuthTokenExtractor(
 ) {
     fun extract(): ExtractedAuthTokens {
         val headerAuthorization = rq.getHeader(HttpHeaders.AUTHORIZATION, "").orEmpty()
-        val sessionKey = rq.getCookieValue("sessionKey", "").orEmpty()
-        val refreshToken = rq.getCookieValue("refreshToken", "").orEmpty()
+        val sessionKey = rq.getCookieValue(AuthCookieNames.SESSION_KEY, "").orEmpty()
+        val refreshToken = rq.getCookieValue(AuthCookieNames.REFRESH_TOKEN, "").orEmpty()
 
         return if (headerAuthorization.isNotBlank()) {
             extractBearerTokens(headerAuthorization, sessionKey, refreshToken)
         } else {
             ExtractedAuthTokens(
-                apiKey = rq.getCookieValue("apiKey", "").orEmpty(),
-                accessToken = rq.getCookieValue("accessToken", "").orEmpty(),
+                apiKey = rq.getCookieValue(AuthCookieNames.API_KEY, "").orEmpty(),
+                accessToken = rq.getCookieValue(AuthCookieNames.ACCESS_TOKEN, "").orEmpty(),
                 sessionKey = sessionKey,
                 refreshToken = refreshToken,
             )

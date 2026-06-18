@@ -79,10 +79,6 @@ class MemberNotificationSseService(
             }
         }
 
-    /**
-     * subscribe 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     fun subscribe(
         memberId: Long,
         lastEventIdRaw: String?,
@@ -197,10 +193,6 @@ class MemberNotificationSseService(
         heartbeatSentCount.incrementAndGet()
     }
 
-    /**
-     * registerHeartbeat 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     private fun registerHeartbeat(
         memberId: Long,
         emitter: SseEmitter,
@@ -253,10 +245,6 @@ class MemberNotificationSseService(
         return true
     }
 
-    /**
-     * enforceMemberEmitterLimit 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     private fun enforceMemberEmitterLimit(
         memberId: Long,
         emitters: MutableSet<SseEmitter>,
@@ -269,10 +257,6 @@ class MemberNotificationSseService(
         }
     }
 
-    /**
-     * enforceGlobalEmitterLimit 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     private fun enforceGlobalEmitterLimit() {
         val safeGlobalLimit = maxGlobalEmitters.coerceAtLeast(100)
         while (emitterConnectedAtEpochMillis.size > safeGlobalLimit) {
@@ -291,10 +275,6 @@ class MemberNotificationSseService(
         }
     }
 
-    /**
-     * replayMissedNotificationEvents 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
-     */
     private fun replayMissedNotificationEvents(
         memberId: Long,
         emitter: SseEmitter,

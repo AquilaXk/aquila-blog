@@ -23,10 +23,6 @@ class PostReadPrewarmService(
     private val bootstrapWarmPageSizes = listOf(HOME_BOOTSTRAP_PAGE_SIZE, safePageSize).distinct().sorted()
     private val safeMaxTagWarmups = maxTagWarmups.coerceIn(0, 10)
 
-    /**
-     * prewarm 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * 핵심 경로(feed/explore/tags/detail + 변경 태그 탐색)를 개별 격리 실행해 부분 실패 전파를 막습니다.
-     */
     fun prewarm(
         postId: Long,
         tags: List<String>,

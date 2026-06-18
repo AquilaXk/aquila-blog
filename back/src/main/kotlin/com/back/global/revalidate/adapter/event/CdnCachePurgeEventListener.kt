@@ -66,10 +66,6 @@ class CdnCachePurgeEventListener(
         )
     }
 
-    /**
-     * enqueue 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * purge 비활성화/큐 등록 실패가 본 트랜잭션 경로를 차단하지 않도록 fail-open으로 유지합니다.
-     */
     private fun enqueue(
         aggregateType: String,
         postId: Long,

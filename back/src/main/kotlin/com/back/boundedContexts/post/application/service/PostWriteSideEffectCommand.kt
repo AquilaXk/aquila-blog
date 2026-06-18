@@ -55,6 +55,8 @@ internal sealed class PostReadCacheInvalidationScope(
 
     fun evictsPublicTags(): Boolean = evicts(PostReadCacheInvalidationTarget.PUBLIC_TAGS)
 
+    fun isEmpty(): Boolean = targets.isEmpty()
+
     companion object {
         private val ALL_PUBLIC_READ_TARGETS = PostReadCacheInvalidationTarget.entries.toSet()
 

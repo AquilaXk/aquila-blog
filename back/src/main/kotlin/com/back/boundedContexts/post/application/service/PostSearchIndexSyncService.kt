@@ -22,10 +22,6 @@ class PostSearchIndexSyncService(
     private val logger = LoggerFactory.getLogger(PostSearchIndexSyncService::class.java)
     private val safeMaxTags = maxTags.coerceIn(1, 128)
 
-    /**
-     * sync 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
-     * forceClear=true면 인덱스를 즉시 비우고, 그렇지 않으면 DB 본문 태그 우선으로 재구성합니다.
-     */
     @Transactional
     fun sync(
         postId: Long,

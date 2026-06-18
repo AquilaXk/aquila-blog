@@ -19,18 +19,10 @@ interface PostHasPolicy : PostAware {
         return true
     }
 
-    /**
-     * 검증 규칙을 적용해 허용 여부를 판정합니다.
-     * 도메인 모델 내부에서 불변조건을 지키며 상태 변경을 캡슐화합니다.
-     */
     fun checkActorCanRead(actor: Member?) {
         if (!canRead(actor)) throw AppException("403-3", "${post.id}번 글 조회권한이 없습니다.")
     }
 
-    /**
-     * 조회 조건을 적용해 필요한 데이터를 안전하게 반환합니다.
-     * 도메인 계층에서 불변조건을 지키며 상태 전이를 캡슐화합니다.
-     */
     fun getCheckActorCanModifyRs(actor: Member?): RsData<Void> {
         if (actor == null) return RsData.fail("401-1", "로그인 후 이용해주세요.")
         if (actor.isAdmin) return RsData.OK
@@ -38,19 +30,11 @@ interface PostHasPolicy : PostAware {
         return RsData.fail("403-1", "작성자만 글을 수정할 수 있습니다.")
     }
 
-    /**
-     * 검증 규칙을 적용해 허용 여부를 판정합니다.
-     * 도메인 모델 내부에서 불변조건을 지키며 상태 변경을 캡슐화합니다.
-     */
     fun checkActorCanModify(actor: Member?) {
         val rs = getCheckActorCanModifyRs(actor)
         if (rs.isFail) throw AppException(rs.resultCode, rs.msg)
     }
 
-    /**
-     * 조회 조건을 적용해 필요한 데이터를 안전하게 반환합니다.
-     * 도메인 계층에서 불변조건을 지키며 상태 전이를 캡슐화합니다.
-     */
     fun getCheckActorCanDeleteRs(actor: Member?): RsData<Void> {
         if (actor == null) return RsData.fail("401-1", "로그인 후 이용해주세요.")
         if (actor.isAdmin) return RsData.OK
@@ -58,10 +42,6 @@ interface PostHasPolicy : PostAware {
         return RsData.fail("403-2", "작성자만 글을 삭제할 수 있습니다.")
     }
 
-    /**
-     * 검증 규칙을 적용해 허용 여부를 판정합니다.
-     * 도메인 모델 내부에서 불변조건을 지키며 상태 변경을 캡슐화합니다.
-     */
     fun checkActorCanDelete(actor: Member?) {
         val rs = getCheckActorCanDeleteRs(actor)
         if (rs.isFail) throw AppException(rs.resultCode, rs.msg)

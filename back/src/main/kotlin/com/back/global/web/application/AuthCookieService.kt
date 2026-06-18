@@ -1,5 +1,6 @@
 package com.back.global.web.application
 
+import com.back.global.security.config.AuthCookieNames
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpHeaders
@@ -8,10 +9,11 @@ import org.springframework.stereotype.Component
 import java.time.Duration
 
 /**
- * AuthCookieService는 글로벌 공통 유스케이스를 조합하는 애플리케이션 계층 구성요소입니다.
- * 트랜잭션 경계, 예외 처리, 후속 동기화(캐시/이벤트/큐)를 함께 관리합니다.
+ * 인증 쿠키 발급/갱신/만료를 같은 이름 정책으로 처리합니다.
+ *
+ * 표준 domain cookie를 발급하기 전 과거 host-only cookie를 먼저 만료해
+ * 브라우저에 같은 이름의 auth cookie가 중복으로 남지 않게 합니다.
  */
-
 @Component
 class AuthCookieService(
     private val rq: Rq,
@@ -30,11 +32,11 @@ class AuthCookieService(
         sessionKey: String? = null,
         rememberLoginEnabled: Boolean = true,
     ) {
-        issueCookie("apiKey", apiKey, apiKeyCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
-        issueCookie("accessToken", accessToken, accessTokenCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
-        issueCookie("refreshToken", refreshToken, refreshTokenCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
+        issueCookie(AuthCookieNames.API_KEY, apiKey, apiKeyCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
+        issueCookie(AuthCookieNames.ACCESS_TOKEN, accessToken, accessTokenCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
+        issueCookie(AuthCookieNames.REFRESH_TOKEN, refreshToken, refreshTokenCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
         if (!sessionKey.isNullOrBlank()) {
-            issueCookie("sessionKey", sessionKey, apiKeyCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
+            issueCookie(AuthCookieNames.SESSION_KEY, sessionKey, apiKeyCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
         }
     }
 
@@ -45,24 +47,26 @@ class AuthCookieService(
         refreshToken: String? = null,
     ) {
         issueCookie(
-            "accessToken",
+            AuthCookieNames.ACCESS_TOKEN,
             accessToken,
             accessTokenCookieMaxAgeSeconds,
             sessionOnly = !rememberLoginEnabled,
         )
         if (!refreshToken.isNullOrBlank()) {
-            issueCookie("refreshToken", refreshToken, refreshTokenCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
+            issueCookie(
+                AuthCookieNames.REFRESH_TOKEN,
+                refreshToken,
+                refreshTokenCookieMaxAgeSeconds,
+                sessionOnly = !rememberLoginEnabled,
+            )
         }
         if (!sessionKey.isNullOrBlank()) {
-            issueCookie("sessionKey", sessionKey, apiKeyCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
+            issueCookie(AuthCookieNames.SESSION_KEY, sessionKey, apiKeyCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
         }
     }
 
     fun expireAuthCookies() {
-        expireCookie("apiKey")
-        expireCookie("accessToken")
-        expireCookie("refreshToken")
-        expireCookie("sessionKey")
+        AuthCookieNames.AUTHENTICATION_COOKIE_NAMES.forEach(::expireCookie)
     }
 
     private fun issueCookie(
@@ -82,10 +86,6 @@ class AuthCookieService(
         rq.deleteCookie(name)
     }
 
-    /**
-     * 쿠키 속성을 정책에 맞게 설정하고 보안 플래그를 강제합니다.
-     * 애플리케이션 계층에서 트랜잭션 경계와 후속 처리(캐시/큐/이벤트)를 함께 관리합니다.
-     */
     private fun expireHostOnlyCookie(name: String) {
         val hostOnlyCookie =
             ResponseCookie

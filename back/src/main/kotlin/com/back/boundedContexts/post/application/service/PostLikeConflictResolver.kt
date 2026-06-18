@@ -6,7 +6,6 @@ import com.back.boundedContexts.post.model.Post
 import com.back.global.exception.application.AppException
 import jakarta.persistence.OptimisticLockException
 import org.slf4j.LoggerFactory
-import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Service
@@ -52,7 +51,6 @@ class PostLikeConflictResolver {
     }
 
     private fun isRecoverableLikeConflict(exception: Exception): Boolean {
-        if (exception is DataIntegrityViolationException) return true
         if (exception is ObjectOptimisticLockingFailureException) return true
         if (exception is OptimisticLockingFailureException) return true
         if (exception is OptimisticLockException) return true

@@ -1,5 +1,6 @@
 package com.back.global.app.config
 
+import com.back.global.app.AdminProperties
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.ApplicationArguments
 import org.springframework.boot.ApplicationRunner
@@ -19,10 +20,7 @@ class ProdConfigGuard(
     private val frontUrl: String,
     @param:Value("\${custom.site.backUrl:}")
     private val backUrl: String,
-    @param:Value("\${custom.admin.email:}")
-    private val adminEmail: String,
-    @param:Value("\${custom.admin.password:}")
-    private val adminPassword: String,
+    private val adminProperties: AdminProperties,
 ) : ApplicationRunner {
     /**
      * 애플리케이션 시작/스케줄 실행 시점에 점검 로직을 수행합니다.
@@ -34,8 +32,8 @@ class ProdConfigGuard(
                 if (cookieDomain.isBlank()) add("custom.site.cookieDomain")
                 if (frontUrl.isBlank()) add("custom.site.frontUrl")
                 if (backUrl.isBlank()) add("custom.site.backUrl")
-                if (adminEmail.isBlank()) add("custom.admin.email")
-                if (adminPassword.isBlank()) add("custom.admin.password")
+                if (adminProperties.normalizedEmail.isBlank()) add("custom.admin.email")
+                if (adminProperties.password.isBlank()) add("custom.admin.password")
             }
 
         require(missingKeys.isEmpty()) {

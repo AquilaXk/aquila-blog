@@ -4,7 +4,7 @@ import com.back.boundedContexts.member.application.port.input.CurrentMemberProfi
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
-import com.back.global.app.AppConfig
+import com.back.global.app.AdminProperties
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.security.application.SecurityTipProvider
@@ -25,6 +25,7 @@ class ApiV1MemberController(
     private val memberUseCase: MemberUseCase,
     private val currentMemberProfileQueryUseCase: CurrentMemberProfileQueryUseCase,
     private val securityTipProvider: SecurityTipProvider,
+    private val adminProperties: AdminProperties,
 ) {
     companion object {
         const val ADMIN_PROFILE_CACHE_NAME = "member-admin-profile-v2"
@@ -36,7 +37,7 @@ class ApiV1MemberController(
     @GetMapping("/adminProfile")
     @Transactional(readOnly = true)
     fun getAdminProfile(): MemberWithUsernameDto {
-        val adminEmail = AppConfig.adminEmailOrBlank.trim()
+        val adminEmail = adminProperties.normalizedEmail
 
         if (adminEmail.isBlank()) {
             throw AppException("404-1", "관리자 프로필이 설정되지 않았습니다.")

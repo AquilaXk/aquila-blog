@@ -16,12 +16,10 @@ class SecurityContextAuthenticationWriterTest {
         AppConfig(
             siteBackUrl = "https://api.aquilaxk.site",
             siteFrontUrl = "https://www.aquilaxk.site",
-            adminUsername = "admin",
-            adminEmail = "admin@test.com",
-            adminPassword = "secret",
         )
         val writer = SecurityContextAuthenticationWriter()
         val member = Member(54L, "internal-admin", null, "aquila", "admin@test.com", "admin-api-key")
+        member.grantAdmin()
 
         try {
             writer.write(member)

@@ -269,6 +269,7 @@ class CustomAuthenticationFilterTest {
                 lastAuthenticatedAt = Instant.now(),
             )
         val persistedAdmin = Member(54L, "internal-admin", null, "aquila", "admin@test.com")
+        persistedAdmin.grantAdmin()
 
         fixture.givenProtectedRequest(request)
         fixture.givenBearerAccessToken(legacyToken, sessionKey)
@@ -322,6 +323,7 @@ class CustomAuthenticationFilterTest {
                 lastAuthenticatedAt = Instant.now(),
             )
         val persistedAdmin = Member(54L, "internal-admin", null, "aquila", "admin@test.com", apiKey)
+        persistedAdmin.grantAdmin()
 
         fixture.givenProtectedRequest(request)
         fixture.givenEmptyAuthorizationHeader()
@@ -350,6 +352,64 @@ class CustomAuthenticationFilterTest {
         try {
             fixture.authenticationFilter().doFilter(request, response, filterChain)
             assertThat(response.status).isEqualTo(HttpServletResponse.SC_NO_CONTENT)
+        } finally {
+            SecurityContextHolder.clearContext()
+        }
+    }
+
+    @Test
+    @DisplayName("정상 accessToken 인증도 DB 회원의 admin flag로 권한을 구성한다")
+    fun `normal access token restores admin authority from persisted member`() {
+        configureProductionUrls()
+        val fixture = CustomAuthenticationFilterFixture()
+        val request = MockHttpServletRequest("PUT", "/post/api/v1/posts/452")
+        val accessToken = "admin-access-token"
+        val sessionKey = "admin-session-key"
+        val sessionSnapshot =
+            MemberSessionAuthSnapshot(
+                id = 12L,
+                memberId = 54L,
+                sessionKey = sessionKey,
+                rememberLoginEnabled = true,
+                ipSecurityEnabled = false,
+                ipSecurityFingerprint = null,
+                lastAuthenticatedAt = Instant.now(),
+            )
+        val persistedAdmin = Member(54L, "internal-admin", null, "aquila", "admin@test.com")
+        persistedAdmin.grantAdmin()
+
+        fixture.givenProtectedRequest(request)
+        fixture.givenBearerAccessToken(accessToken, sessionKey)
+        given(fixture.actorApplicationService.payload(accessToken))
+            .willReturn(
+                AccessTokenPayload(
+                    id = 54L,
+                    sessionKey = sessionKey,
+                    username = "internal-admin",
+                    email = "admin@test.com",
+                    name = "aquila",
+                    rememberLoginEnabled = true,
+                    ipSecurityEnabled = false,
+                    ipSecurityFingerprint = null,
+                ),
+            )
+        given(fixture.memberSessionUseCase.findActiveSessionSnapshot(54L, sessionKey)).willReturn(sessionSnapshot)
+        given(fixture.actorApplicationService.findById(54L)).willReturn(persistedAdmin)
+        fixture.givenClientIp(request, "203.0.113.16")
+
+        val response = MockHttpServletResponse()
+        val filterChain = fixture.adminRoleRequiredFilterChain()
+
+        try {
+            fixture.authenticationFilter().doFilter(request, response, filterChain)
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_NO_CONTENT)
+            verify(fixture.memberSessionUseCase).touchAuthenticated(sessionSnapshot)
+            verify(fixture.authCookieService, never()).issueAccessToken(
+                ArgumentMatchers.anyString(),
+                ArgumentMatchers.anyBoolean(),
+                ArgumentMatchers.nullable(String::class.java),
+                ArgumentMatchers.nullable(String::class.java),
+            )
         } finally {
             SecurityContextHolder.clearContext()
         }
@@ -438,9 +498,6 @@ class CustomAuthenticationFilterTest {
         AppConfig(
             siteBackUrl = "https://api.aquilaxk.site",
             siteFrontUrl = "https://www.aquilaxk.site",
-            adminUsername = "admin",
-            adminEmail = "admin@test.com",
-            adminPassword = "secret",
         )
     }
 

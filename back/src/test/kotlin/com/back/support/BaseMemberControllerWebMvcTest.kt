@@ -3,6 +3,7 @@ package com.back.support
 import com.back.boundedContexts.member.adapter.web.ApiV1MemberController
 import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
+import com.back.global.app.AdminProperties
 import com.back.global.app.AppConfig
 import com.back.global.security.application.SecurityTipProvider
 import com.back.global.security.config.CustomAuthenticationFilter
@@ -55,9 +56,6 @@ abstract class BaseMemberControllerWebMvcTest : BaseIntegrationTest() {
             AppConfig(
                 siteBackUrl = "http://localhost:8080",
                 siteFrontUrl = "http://localhost:3000",
-                adminUsername = "admin",
-                adminEmail = "admin@test.com",
-                adminPassword = "test-password",
             )
         }
     }
@@ -81,5 +79,8 @@ abstract class BaseMemberControllerWebMvcTest : BaseIntegrationTest() {
 
         @Bean
         fun appExceptionStatusCodeResolver(): ResponseStatusExceptionResolver = ResponseStatusExceptionResolver()
+
+        @Bean
+        fun adminProperties(): AdminProperties = AdminProperties(username = "admin", email = "admin@test.com")
     }
 }

@@ -2867,7 +2867,7 @@
           },
           "status" : {
             "type" : "string",
-            "enum" : [ "IN_PROGRESS", "COMPLETED", "CANCELLED", "EXPIRED" ]
+            "enum" : [ "INITIATING", "IN_PROGRESS", "UPLOADING_PART", "COMPLETING", "COMPLETED", "ABORTING", "CANCELLED", "EXPIRED", "FAILED" ]
           },
           "expiresAt" : {
             "type" : "string",
@@ -2876,6 +2876,9 @@
           "completedFileId" : {
             "type" : "integer",
             "format" : "int64"
+          },
+          "failureReason" : {
+            "type" : "string"
           }
         }
       },

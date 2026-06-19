@@ -67,7 +67,7 @@ class PostTagIndexJdbcRepository(
 
     override fun findAllPublicTagCounts(): List<PostTagIndexRepositoryPort.TagCountRow> =
         if (!isTableAvailable()) {
-            emptyList()
+            throw IllegalStateException("post_tag_index table is unavailable")
         } else {
             try {
                 jdbcTemplate.query(
@@ -92,7 +92,7 @@ class PostTagIndexJdbcRepository(
                 }
             } catch (exception: DataAccessException) {
                 markUnavailable(exception)
-                emptyList()
+                throw exception
             }
         }
 

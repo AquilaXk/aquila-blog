@@ -55,7 +55,7 @@ class PostHydrationService(
                 .findBySubjectInAndNameIn(uniqueMembers, listOf(PROFILE_IMG_URL))
                 .associateBy { it.subject.id }
 
-        uniqueMembers.forEach { member ->
+        members.forEach { member ->
             member.getOrInitProfileImgUrlAttr {
                 profileAttrsByMemberId[member.id] ?: MemberAttr(0, member, PROFILE_IMG_URL, "")
             }

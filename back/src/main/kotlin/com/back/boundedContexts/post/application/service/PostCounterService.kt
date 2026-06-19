@@ -47,7 +47,10 @@ class PostCounterService(
     }
 
     fun decrementLikesCount(post: Post) {
-        val updatedLikesCount = postAttrRepository.incrementIntValue(post, LIKES_COUNT, -1).coerceAtLeast(0)
+        var updatedLikesCount = postAttrRepository.incrementIntValue(post, LIKES_COUNT, -1)
+        if (updatedLikesCount < 0) {
+            updatedLikesCount = postAttrRepository.incrementIntValue(post, LIKES_COUNT, -updatedLikesCount)
+        }
         applyLikesCount(post, updatedLikesCount)
     }
 

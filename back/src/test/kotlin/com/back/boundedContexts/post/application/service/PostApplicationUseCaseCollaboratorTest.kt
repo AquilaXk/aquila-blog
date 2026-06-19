@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberAttr
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
 import com.back.boundedContexts.post.application.port.output.MemberAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostCommentRepositoryPort
@@ -23,6 +24,7 @@ import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
 import org.mockito.Mockito.any
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.never
 import java.time.Instant
 import java.util.Optional
 
@@ -53,17 +55,21 @@ class PostApplicationUseCaseCollaboratorTest {
         post.likesCountAttr = likesAttr
         given(postLikeRepository.countByPost(post)).willReturn(7)
         given(postAttrRepository.save(likesAttr)).willReturn(likesAttr)
+        given(postAttrRepository.incrementIntValue(post, LIKES_COUNT, -1)).willReturn(-2)
+        given(postAttrRepository.incrementIntValue(post, LIKES_COUNT, 2)).willReturn(0)
         given(memberAttrRepository.incrementIntValue(member, POSTS_COUNT, -1)).willReturn(-2)
         given(memberAttrRepository.incrementIntValue(member, POSTS_COUNT, 2)).willReturn(0)
 
         // when
         service.syncLikesCount(post)
+        service.decrementLikesCount(post)
         service.decrementMemberPostsCount(member)
 
         // then
-        assertThat(post.likesCount).isEqualTo(7)
-        assertThat(likesAttr.intValue).isEqualTo(7)
+        assertThat(post.likesCount).isZero()
+        assertThat(likesAttr.intValue).isZero()
         then(postAttrRepository).should().save(likesAttr)
+        then(postAttrRepository).should().incrementIntValue(post, LIKES_COUNT, 2)
         then(memberAttrRepository).should().incrementIntValue(member, POSTS_COUNT, 2)
     }
 
@@ -208,6 +214,27 @@ class PostApplicationUseCaseCollaboratorTest {
     }
 
     @Test
+    @DisplayName("PostHydrationService는 중복 member id 입력에도 모든 인스턴스에 profile image attr을 주입한다")
+    fun postHydrationServiceHydratesEveryDuplicateMemberInstance() {
+        // given
+        val postAttrRepository: PostAttrRepositoryPort = mock(PostAttrRepositoryPort::class.java)
+        val memberAttrRepository: MemberAttrRepositoryPort = mock(MemberAttrRepositoryPort::class.java)
+        val service = PostHydrationService(postAttrRepository, memberAttrRepository)
+        val first = testMember(id = 3)
+        val second = testMember(id = 3)
+        val persistedAttr = MemberAttr(1, first, PROFILE_IMG_URL, "https://example.com/profile.png")
+        given(memberAttrRepository.findBySubjectInAndNameIn(listOf(first), listOf(PROFILE_IMG_URL)))
+            .willReturn(listOf(persistedAttr))
+
+        // when
+        service.hydrateMembersProfileImgAttrs(listOf(first, second))
+
+        // then
+        assertThat(first.profileImgUrl).isEqualTo("https://example.com/profile.png")
+        assertThat(second.profileImgUrl).isEqualTo("https://example.com/profile.png")
+    }
+
+    @Test
     @DisplayName("PostCommentApplicationService는 parentComment 생략 시 새 댓글을 저장한다")
     fun postCommentApplicationServiceWritesRootCommentWithDefaultParent() {
         // given
@@ -242,6 +269,35 @@ class PostApplicationUseCaseCollaboratorTest {
         assertThat(comment.content).isEqualTo("댓글")
         then(counterService).should().incrementCommentsCount(post)
         then(counterService).should().incrementMemberPostCommentsCount(author)
+    }
+
+    @Test
+    @DisplayName("PostCommentApplicationService는 부모 댓글을 현재 게시글에서 찾지 못하면 저장하지 않는다")
+    fun postCommentApplicationServiceRejectsMissingParentComment() {
+        // given
+        val postRepository: PostRepositoryPort = mock(PostRepositoryPort::class.java)
+        val postCommentRepository: PostCommentRepositoryPort = mock(PostCommentRepositoryPort::class.java)
+        val hydrationService: PostHydrationService = mock(PostHydrationService::class.java)
+        val counterService: PostCounterService = mock(PostCounterService::class.java)
+        val sideEffectQueue: PostInteractionSideEffectQueue = mock(PostInteractionSideEffectQueue::class.java)
+        val service =
+            PostCommentApplicationService(
+                postRepository = postRepository,
+                postCommentRepository = postCommentRepository,
+                postHydrationService = hydrationService,
+                postCounterService = counterService,
+                postInteractionSideEffectQueue = sideEffectQueue,
+            )
+        val author = testMember(id = 2)
+        val post = testPost()
+        val parentComment = PostComment(99, author, post, "부모 댓글")
+        given(postCommentRepository.findByPostAndId(post, parentComment.id)).willReturn(null)
+
+        // when / then
+        assertThatThrownBy { service.writeComment(author, post, "대댓글", parentComment) }
+            .isInstanceOf(AppException::class.java)
+            .hasMessageContaining("부모 댓글을 찾을 수 없습니다.")
+        then(postCommentRepository).should(never()).save(anyValue())
     }
 
     private fun testMember(id: Long = 1): Member =

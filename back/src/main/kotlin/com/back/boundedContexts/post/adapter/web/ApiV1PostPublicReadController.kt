@@ -21,6 +21,16 @@ import org.springframework.http.ResponseEntity
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.*
 
+internal fun postExploreCursorSurrogateKeys(normalizedTag: String): Set<String> =
+    buildSet {
+        add(PostCacheTags.LIST)
+        add(PostCacheTags.EXPLORE)
+        add(PostCacheTags.EXPLORE_CURSOR)
+        if (normalizedTag.isNotBlank()) {
+            add(PostCacheTags.byTag(normalizedTag))
+        }
+    }
+
 @RestController
 @RequestMapping("/post/api/v1/posts")
 class ApiV1PostPublicReadController(
@@ -144,13 +154,7 @@ class ApiV1PostPublicReadController(
             request = request,
             response = response,
             cachePolicy = PostPublicReadCachePolicies.EXPLORE_CURSOR,
-            surrogateKeys =
-                setOf(
-                    PostCacheTags.LIST,
-                    PostCacheTags.EXPLORE,
-                    PostCacheTags.EXPLORE_CURSOR,
-                    PostCacheTags.byTag(normalizedTag),
-                ),
+            surrogateKeys = postExploreCursorSurrogateKeys(normalizedTag),
             etagSeed = etagSeed,
             startedAtNanos = startedAtNanos,
             body = data,

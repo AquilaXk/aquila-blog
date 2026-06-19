@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.application.service.ActorApplicationServi
 import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.boundedContexts.post.application.service.PostHitDedupService
 import com.back.boundedContexts.post.application.service.PostQueryCacheNames
+import com.back.boundedContexts.post.application.support.PostCacheTags
 import com.back.boundedContexts.post.dto.PublicPostDetailSnapshotCacheDto
 import com.back.global.security.config.AuthCookieNames
 import com.back.standard.dto.post.type1.PostSearchSortType1
@@ -458,6 +459,50 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     match(handler().handlerType(ApiV1PostPublicReadController::class.java))
                     match(handler().methodName("exploreByCursor"))
                 }
+        }
+
+        @Test
+        fun `explore 커서 cache tag는 빈 tag를 tag-specific key로 추가하지 않는다`() {
+            val surrogateKeys = postExploreCursorSurrogateKeys("")
+
+            assertThat(surrogateKeys)
+                .contains(PostCacheTags.EXPLORE_CURSOR)
+                .doesNotContain("post-tag-empty")
+        }
+
+        @Test
+        fun `explore 커서 조회는 tag filter가 있으면 tag cache tag를 유지한다`() {
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+            postFacade.write(
+                actor,
+                "explore-cursor-tag-cache-${System.currentTimeMillis()}",
+                """
+                tags: [커서태그]
+
+                커서 태그 캐시 검증
+                """.trimIndent(),
+                true,
+                true,
+            )
+
+            val expectedTag = PostCacheTags.byTag("커서태그")
+            val response =
+                mvc
+                    .get("/post/api/v1/posts/explore/cursor") {
+                        param("sort", "CREATED_AT")
+                        param("tag", "커서태그")
+                        param("pageSize", "24")
+                    }.andExpect {
+                        status { isOk() }
+                        match(handler().handlerType(ApiV1PostPublicReadController::class.java))
+                        match(handler().methodName("exploreByCursor"))
+                        header { exists("Surrogate-Key") }
+                        header { exists("Cache-Tag") }
+                    }.andReturn()
+                    .response
+
+            assertThat(response.getHeader("Surrogate-Key")).contains(expectedTag)
+            assertThat(response.getHeader("Cache-Tag")).contains(expectedTag)
         }
 
         @Test

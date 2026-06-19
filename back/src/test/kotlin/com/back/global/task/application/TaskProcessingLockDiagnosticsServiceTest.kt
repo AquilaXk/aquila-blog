@@ -70,6 +70,49 @@ class TaskProcessingLockDiagnosticsServiceTest {
         verify(redisTemplate, never()).delete(PROCESS_TASKS_LOCK_KEY)
     }
 
+    @Test
+    fun `redis ttl을 알 수 없으면 legacy processTasks lock으로 삭제하지 않는다`() {
+        given(redisTemplate.hasKey(PROCESS_TASKS_LOCK_KEY)).willReturn(true)
+        given(redisTemplate.getExpire(PROCESS_TASKS_LOCK_KEY, TimeUnit.SECONDS)).willReturn(-1L)
+
+        val service =
+            TaskProcessingLockDiagnosticsService(
+                stringRedisTemplateProvider = objectProvider(redisTemplate),
+                taskQueueRepository = fakeTaskQueueRepository(readyPendingCount = 2L, processingCount = 0L),
+                currentNodeWorkerEnabled = true,
+                currentNodeApiMode = "all",
+                legacyLockCleanupThresholdSeconds = 300,
+            )
+
+        val cleanupResult = service.clearLegacyProcessTasksLockIfNeeded()
+
+        assertEquals(null, cleanupResult.diagnostics.processTasksLockTtlSeconds)
+        assertFalse(cleanupResult.diagnostics.legacyOrphanLikely)
+        assertFalse(cleanupResult.attempted)
+        assertFalse(cleanupResult.deleted)
+        verify(redisTemplate, never()).delete(PROCESS_TASKS_LOCK_KEY)
+    }
+
+    @Test
+    fun `processTasks lock이 없으면 ttl 없이 정상으로 진단한다`() {
+        given(redisTemplate.hasKey(PROCESS_TASKS_LOCK_KEY)).willReturn(false)
+
+        val service =
+            TaskProcessingLockDiagnosticsService(
+                stringRedisTemplateProvider = objectProvider(redisTemplate),
+                taskQueueRepository = fakeTaskQueueRepository(readyPendingCount = 2L, processingCount = 0L),
+                currentNodeWorkerEnabled = true,
+                currentNodeApiMode = "all",
+                legacyLockCleanupThresholdSeconds = 300,
+            )
+
+        val diagnostics = service.diagnose()
+
+        assertFalse(diagnostics.processTasksLockExists)
+        assertEquals(null, diagnostics.processTasksLockTtlSeconds)
+        assertFalse(diagnostics.legacyOrphanLikely)
+    }
+
     private fun objectProvider(redisTemplate: StringRedisTemplate?): ObjectProvider<StringRedisTemplate> =
         object : ObjectProvider<StringRedisTemplate> {
             override fun getObject(vararg args: Any?): StringRedisTemplate = redisTemplate ?: error("No redis template")

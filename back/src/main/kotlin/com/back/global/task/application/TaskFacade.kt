@@ -1,23 +1,28 @@
 package com.back.global.task.application
 
-import com.back.global.app.application.AppFacade
 import com.back.global.task.application.port.output.TaskQueueRepositoryPort
 import com.back.global.task.domain.Task
 import com.back.standard.dto.TaskPayload
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.core.env.Environment
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import tools.jackson.databind.ObjectMapper
+import java.lang.reflect.InvocationTargetException
 
 @Service
 class TaskFacade(
     private val taskRepository: TaskQueueRepositoryPort,
     private val taskHandlerRegistry: TaskHandlerRegistry,
     private val objectMapper: ObjectMapper,
+    private val environment: Environment,
     @param:Value("\${custom.task.processor.inlineWhenNotProd:false}")
     private val inlineWhenNotProd: Boolean,
 ) {
-    fun addToQueue(payload: TaskPayload) {
+    fun addToQueue(
+        payload: TaskPayload,
+        inlineWhenEnabled: Boolean = true,
+    ) {
         val entry =
             taskHandlerRegistry.getEntry(payload.javaClass)
                 ?: error("No @TaskHandler registered for ${payload.javaClass.simpleName}")
@@ -34,7 +39,7 @@ class TaskFacade(
                 ),
             ) ?: return
 
-        if (AppFacade.isNotProd && inlineWhenNotProd) {
+        if (inlineWhenEnabled && inlineWhenNotProd && !environment.matchesProfiles("prod")) {
             fire(payload)
             task.markAsCompleted()
             taskRepository.save(task)
@@ -54,6 +59,10 @@ class TaskFacade(
 
     fun fire(payload: TaskPayload) {
         val handler = taskHandlerRegistry.getHandler(payload.javaClass)
-        handler?.method?.invoke(handler.bean, payload)
+        try {
+            handler?.method?.invoke(handler.bean, payload)
+        } catch (exception: InvocationTargetException) {
+            throw exception.targetException
+        }
     }
 }

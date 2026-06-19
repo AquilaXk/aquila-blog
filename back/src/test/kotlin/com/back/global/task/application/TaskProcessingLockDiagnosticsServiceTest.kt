@@ -16,6 +16,7 @@ import org.springframework.beans.factory.ObjectProvider
 import org.springframework.data.domain.Pageable
 import org.springframework.data.redis.core.StringRedisTemplate
 import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.stream.Stream
 
@@ -90,6 +91,8 @@ class TaskProcessingLockDiagnosticsServiceTest {
     ): TaskQueueRepositoryPort =
         object : TaskQueueRepositoryPort {
             override fun save(task: Task): Task = error("not used")
+
+            override fun existsByUid(uid: UUID): Boolean = error("not used")
 
             override fun countByStatus(status: TaskStatus): Long =
                 when (status) {

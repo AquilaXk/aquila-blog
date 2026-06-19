@@ -7,6 +7,7 @@ import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import java.time.Instant
+import java.util.UUID
 
 /**
  * TaskRepository는 글로벌 모듈 영속 계층 연동을 담당하는 퍼시스턴스 어댑터입니다.
@@ -45,6 +46,8 @@ interface TaskRepository :
         stuckBefore: Instant,
         limit: Int,
     ): List<Task>
+
+    override fun existsByUid(uid: UUID): Boolean
 
     override fun countByStatus(status: TaskStatus): Long
 

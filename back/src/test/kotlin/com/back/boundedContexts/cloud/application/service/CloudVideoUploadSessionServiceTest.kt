@@ -150,8 +150,11 @@ class CloudVideoUploadSessionServiceTest {
         val completed = service.complete(7L, session.id)
 
         assertThat(firstResult.session.uploadedParts).containsExactly(1)
+        assertThat(firstResult.session.status).isEqualTo(CloudVideoUploadSessionStatus.IN_PROGRESS)
         assertThat(retryResult.session.uploadedParts).containsExactly(1)
+        assertThat(retryResult.session.status).isEqualTo(CloudVideoUploadSessionStatus.IN_PROGRESS)
         assertThat(lastResult.session.uploadedParts).containsExactly(1, 2)
+        assertThat(lastResult.session.status).isEqualTo(CloudVideoUploadSessionStatus.IN_PROGRESS)
         assertThat(storage.multipartParts).hasSize(2)
         assertThat(
             storage.completedUploads

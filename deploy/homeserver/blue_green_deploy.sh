@@ -926,6 +926,24 @@ ensure_image_env_key_from_local_digest() {
   return 1
 }
 
+require_digest_image_value() {
+  local key="$1"
+  local value="$2"
+
+  if [[ -z "${value}" ]]; then
+    echo "required image value is missing: ${key}" >&2
+    return 1
+  fi
+  if [[ "${value}" == *":latest" || "${value}" == *":latest@"* ]]; then
+    echo "latest tag is not allowed for ${key}: ${value}" >&2
+    return 1
+  fi
+  if [[ ! "${value}" =~ ^[^[:space:]@]+@sha256:[a-fA-F0-9]{64}$ ]]; then
+    echo "image must be pinned by sha256 digest for ${key}: ${value}" >&2
+    return 1
+  fi
+}
+
 require_back_image() {
   local env_file_back_image
   env_file_back_image="$(trim_quotes "$(env_value "BACK_IMAGE")")"
@@ -939,19 +957,12 @@ require_back_image() {
 
   if [[ -z "${BACK_IMAGE:-}" ]]; then
     echo "BACK_IMAGE is empty. refusing deploy to avoid accidental latest-image rollout." >&2
-    echo "set BACK_IMAGE=ghcr.io/<owner>/<repo>-back:sha-<commit7>" >&2
+    echo "set BACK_IMAGE=ghcr.io/aquilaxk/aquila-blog-back@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" >&2
     exit 1
   fi
 
-  if [[ "${BACK_IMAGE}" == *":latest" ]]; then
-    echo "BACK_IMAGE latest tag is forbidden: ${BACK_IMAGE}" >&2
-    echo "set BACK_IMAGE=ghcr.io/<owner>/<repo>-back:sha-<commit7>" >&2
-    exit 1
-  fi
-
-  if [[ "${BACK_IMAGE}" != *@sha256:* && "${BACK_IMAGE}" != *:* ]]; then
-    echo "BACK_IMAGE must include tag or digest: ${BACK_IMAGE}" >&2
-    echo "set BACK_IMAGE=ghcr.io/<owner>/<repo>-back:sha-<commit7>" >&2
+  if ! require_digest_image_value "BACK_IMAGE" "${BACK_IMAGE}"; then
+    echo "set BACK_IMAGE=ghcr.io/aquilaxk/aquila-blog-back@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" >&2
     exit 1
   fi
 }

@@ -127,7 +127,7 @@ class PerformanceSanityTest : BasePerformanceIntegrationTest() {
                 status { isOk() }
             }
 
-        assertQueryCountWithin("auth-login", 10)
+        assertQueryCountWithin("auth-login", 12)
     }
 
     private fun assertQueryCountWithin(

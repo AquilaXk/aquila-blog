@@ -115,6 +115,48 @@ class UploadedFileRetentionService(
         }
     }
 
+    fun registerTempUploadWithCompensation(
+        objectKey: String,
+        contentType: String,
+        fileSize: Long,
+        purpose: UploadedFilePurpose,
+    ) {
+        try {
+            registerTempUpload(
+                objectKey = objectKey,
+                contentType = contentType,
+                fileSize = fileSize,
+                purpose = purpose,
+            )
+        } catch (exception: RuntimeException) {
+            deleteUploadedObjectAfterRegisterFailure(objectKey, purpose, exception)
+            throw exception
+        }
+    }
+
+    private fun deleteUploadedObjectAfterRegisterFailure(
+        objectKey: String,
+        purpose: UploadedFilePurpose,
+        registerFailure: RuntimeException,
+    ) {
+        runCatching {
+            when (purpose) {
+                UploadedFilePurpose.POST_FILE -> postImageStoragePort.deletePostFile(objectKey)
+                UploadedFilePurpose.POST_IMAGE,
+                UploadedFilePurpose.PROFILE_IMAGE,
+                -> postImageStoragePort.deletePostImage(objectKey)
+            }
+        }.onFailure { deleteFailure ->
+            logger.error(
+                "uploaded_file_register_compensation_delete_failed objectKey={} purpose={} registerFailure={}",
+                objectKey,
+                purpose,
+                registerFailure::class.simpleName,
+                deleteFailure,
+            )
+        }
+    }
+
     private fun saveTempUploadInRequiresNewTransaction(
         objectKey: String,
         normalizedContentType: String,

@@ -10,8 +10,10 @@ import com.back.global.storage.domain.UploadedFile
 import com.back.global.storage.domain.UploadedFilePurpose
 import com.back.global.storage.domain.UploadedFileStatus
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertDoesNotThrow
+import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
@@ -97,6 +99,60 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         verify(prodSequenceGuardService).repairUploadedFileSequence()
     }
 
+    @Test
+    fun `registerTempUploadWithCompensation은 POST_IMAGE 등록 실패 시 업로드 이미지를 삭제한다`() {
+        val failure = IllegalStateException("temp row save failed")
+        val service = newService(AlwaysFailingRepository(failure))
+
+        assertThatThrownBy {
+            service.registerTempUploadWithCompensation(
+                objectKey = "posts/2026/03/orphan.png",
+                contentType = "image/png",
+                fileSize = 256,
+                purpose = UploadedFilePurpose.POST_IMAGE,
+            )
+        }.isSameAs(failure)
+
+        verify(postImageStoragePort).deletePostImage("posts/2026/03/orphan.png")
+    }
+
+    @Test
+    fun `registerTempUploadWithCompensation은 POST_FILE 등록 실패 시 업로드 파일을 삭제한다`() {
+        val failure = IllegalStateException("temp row save failed")
+        val service = newService(AlwaysFailingRepository(failure))
+
+        assertThatThrownBy {
+            service.registerTempUploadWithCompensation(
+                objectKey = "posts/2026/03/orphan.pdf",
+                contentType = "application/pdf",
+                fileSize = 512,
+                purpose = UploadedFilePurpose.POST_FILE,
+            )
+        }.isSameAs(failure)
+
+        verify(postImageStoragePort).deletePostFile("posts/2026/03/orphan.pdf")
+    }
+
+    @Test
+    fun `registerTempUploadWithCompensation은 보상 삭제 실패가 나도 등록 실패 원인을 유지한다`() {
+        val failure = IllegalStateException("temp row save failed")
+        doThrow(IllegalStateException("delete failed"))
+            .`when`(postImageStoragePort)
+            .deletePostImage("posts/2026/03/delete-fail.png")
+        val service = newService(AlwaysFailingRepository(failure))
+
+        assertThatThrownBy {
+            service.registerTempUploadWithCompensation(
+                objectKey = "posts/2026/03/delete-fail.png",
+                contentType = "image/png",
+                fileSize = 256,
+                purpose = UploadedFilePurpose.PROFILE_IMAGE,
+            )
+        }.isSameAs(failure)
+
+        verify(postImageStoragePort).deletePostImage("posts/2026/03/delete-fail.png")
+    }
+
     private fun newService(repository: UploadedFileRepositoryPort): UploadedFileRetentionService =
         UploadedFileRetentionService(
             uploadedFileRepository = repository,
@@ -108,6 +164,43 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
             transactionManager = transactionManager,
             prodSequenceGuardService = prodSequenceGuardService,
         )
+
+    private class AlwaysFailingRepository(
+        private val failure: RuntimeException,
+    ) : UploadedFileRepositoryPort {
+        override fun save(entity: UploadedFile): UploadedFile = throw failure
+
+        override fun flush() {}
+
+        override fun findByObjectKey(objectKey: String): UploadedFile? = null
+
+        override fun countByStatus(status: UploadedFileStatus): Long = 0
+
+        override fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
+            purpose: com.back.global.storage.domain.UploadedFilePurpose,
+            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
+            ownerId: Long,
+            status: UploadedFileStatus,
+        ): List<UploadedFile> = emptyList()
+
+        override fun findByIdAndPurposeAndOwnerTypeAndOwnerId(
+            id: Long,
+            purpose: com.back.global.storage.domain.UploadedFilePurpose,
+            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
+            ownerId: Long,
+        ): UploadedFile? = null
+
+        override fun countByStatusInAndPurgeAfterLessThanEqual(
+            statuses: Collection<UploadedFileStatus>,
+            purgeAfter: Instant,
+        ): Long = 0
+
+        override fun findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
+            statuses: Collection<UploadedFileStatus>,
+            purgeAfter: Instant,
+            pageable: org.springframework.data.domain.Pageable,
+        ): List<UploadedFile> = emptyList()
+    }
 
     private class SequenceDriftRecoveringRepository(
         private val firstConflict: DataIntegrityViolationException,

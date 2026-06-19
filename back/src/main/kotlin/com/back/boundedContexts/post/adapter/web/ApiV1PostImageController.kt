@@ -76,7 +76,7 @@ class ApiV1PostImageController(
                 originalFilename = file.originalFilename,
             )
         val key = postImageStorageService.uploadPostImage(uploadRequest)
-        uploadedFileRetentionService.registerTempUpload(
+        uploadedFileRetentionService.registerTempUploadWithCompensation(
             objectKey = key,
             contentType = file.contentType.orEmpty(),
             fileSize = file.size,
@@ -122,7 +122,7 @@ class ApiV1PostImageController(
                 originalFilename = file.originalFilename,
             )
         val key = postImageStorageService.uploadPostFile(uploadRequest)
-        uploadedFileRetentionService.registerTempUpload(
+        uploadedFileRetentionService.registerTempUploadWithCompensation(
             objectKey = key,
             contentType = file.contentType.orEmpty(),
             fileSize = file.size,

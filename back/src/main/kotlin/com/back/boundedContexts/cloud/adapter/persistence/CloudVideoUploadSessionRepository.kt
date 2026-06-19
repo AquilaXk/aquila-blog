@@ -4,9 +4,11 @@ import com.back.boundedContexts.cloud.application.port.output.CloudVideoUploadPa
 import com.back.boundedContexts.cloud.application.port.output.CloudVideoUploadSessionRepositoryPort
 import com.back.boundedContexts.cloud.model.CloudVideoUploadPart
 import com.back.boundedContexts.cloud.model.CloudVideoUploadSession
+import com.back.boundedContexts.cloud.model.CloudVideoUploadSessionStatus
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
+import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 
 interface CloudVideoUploadSessionRepository :
@@ -40,6 +42,65 @@ interface CloudVideoUploadSessionRepository :
         now: Instant,
         limit: Int,
     ): List<CloudVideoUploadSession>
+
+    @Transactional
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        """
+        UPDATE CloudVideoUploadSession s
+        SET s.uploadId = :uploadId,
+            s.status = :nextStatus,
+            s.failureReason = NULL,
+            s.modifiedAt = :now
+        WHERE s.id = :id
+          AND s.status = :expectedStatus
+        """,
+    )
+    override fun attachUploadIdAndTransition(
+        id: Long,
+        expectedStatus: CloudVideoUploadSessionStatus,
+        uploadId: String,
+        nextStatus: CloudVideoUploadSessionStatus,
+        now: Instant,
+    ): Int
+
+    @Transactional
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        """
+        UPDATE CloudVideoUploadSession s
+        SET s.status = :nextStatus,
+            s.failureReason = NULL,
+            s.modifiedAt = :now
+        WHERE s.id = :id
+          AND s.status = :expectedStatus
+        """,
+    )
+    override fun transitionStatus(
+        id: Long,
+        expectedStatus: CloudVideoUploadSessionStatus,
+        nextStatus: CloudVideoUploadSessionStatus,
+        now: Instant,
+    ): Int
+
+    @Transactional
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        """
+        UPDATE CloudVideoUploadSession s
+        SET s.status = 'FAILED',
+            s.failureReason = :reason,
+            s.modifiedAt = :now
+        WHERE s.id = :id
+          AND s.status = :expectedStatus
+        """,
+    )
+    override fun markFailed(
+        id: Long,
+        expectedStatus: CloudVideoUploadSessionStatus,
+        reason: String,
+        now: Instant,
+    ): Int
 }
 
 interface CloudVideoUploadPartRepository :

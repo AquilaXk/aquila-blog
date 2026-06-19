@@ -1,5 +1,6 @@
 package com.back.global.storage.application
 
+import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.jpa.application.ProdSequenceGuardService
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
@@ -18,6 +19,7 @@ import java.time.Instant
 @Service
 class UploadedFileRegistrationService(
     private val uploadedFileRepository: UploadedFileRepositoryPort,
+    private val postImageStoragePort: PostImageStoragePort,
     private val storageProperties: PostImageStorageProperties,
     private val retentionProperties: UploadedFileRetentionProperties,
     private val transactionManager: PlatformTransactionManager,
@@ -76,6 +78,48 @@ class UploadedFileRegistrationService(
                 if (!repaired || attempt >= registerRetryLimit) throw exception
                 attempt += 1
             }
+        }
+    }
+
+    fun registerTempUploadWithCompensation(
+        objectKey: String,
+        contentType: String,
+        fileSize: Long,
+        purpose: UploadedFilePurpose,
+    ) {
+        try {
+            registerTempUpload(
+                objectKey = objectKey,
+                contentType = contentType,
+                fileSize = fileSize,
+                purpose = purpose,
+            )
+        } catch (exception: RuntimeException) {
+            deleteUploadedObjectAfterRegisterFailure(objectKey, purpose, exception)
+            throw exception
+        }
+    }
+
+    private fun deleteUploadedObjectAfterRegisterFailure(
+        objectKey: String,
+        purpose: UploadedFilePurpose,
+        registerFailure: RuntimeException,
+    ) {
+        runCatching {
+            when (purpose) {
+                UploadedFilePurpose.POST_FILE -> postImageStoragePort.deletePostFile(objectKey)
+                UploadedFilePurpose.POST_IMAGE,
+                UploadedFilePurpose.PROFILE_IMAGE,
+                -> postImageStoragePort.deletePostImage(objectKey)
+            }
+        }.onFailure { deleteFailure ->
+            logger.error(
+                "uploaded_file_register_compensation_delete_failed objectKey={} purpose={} registerFailure={}",
+                objectKey,
+                purpose,
+                registerFailure::class.simpleName,
+                deleteFailure,
+            )
         }
     }
 

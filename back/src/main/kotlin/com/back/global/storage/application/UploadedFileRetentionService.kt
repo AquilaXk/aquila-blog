@@ -52,6 +52,20 @@ class UploadedFileRetentionService(
         )
     }
 
+    fun registerTempUploadWithCompensation(
+        objectKey: String,
+        contentType: String,
+        fileSize: Long,
+        purpose: UploadedFilePurpose,
+    ) {
+        registrationService.registerTempUploadWithCompensation(
+            objectKey = objectKey,
+            contentType = contentType,
+            fileSize = fileSize,
+            purpose = purpose,
+        )
+    }
+
     fun syncPostContent(
         postId: Long,
         previousContent: String?,

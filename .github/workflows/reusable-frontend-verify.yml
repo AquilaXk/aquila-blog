@@ -56,7 +56,7 @@ jobs:
                 fi
                 curl "${curl_args[@]}" "${api_url}" > "${response_body}"
               fi
-              jq -r '.[].filename' "${response_body}" >> "${changed_files}"
+              jq -r '.[] | .filename, (.previous_filename // empty)' "${response_body}" >> "${changed_files}"
               api_url="$(
                 awk -F'[<>]' '/rel="next"/ { print $2 }' "${response_headers}" | tail -n 1
               )"
@@ -77,6 +77,36 @@ jobs:
           done < "${RUNNER_TEMP}/changed-files.txt"
 
           echo "frontend=${frontend}" >> "${GITHUB_OUTPUT}"
+
+      - name: Classify release risk
+        if: github.event_name == 'pull_request'
+        id: release_policy
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          report="${RUNNER_TEMP}/release-plan.json"
+          node tools/ci/classify-release.mjs \
+            --json \
+            --changed-files "${RUNNER_TEMP}/changed-files.txt" \
+            --github-output "$GITHUB_OUTPUT" \
+            > "${report}"
+          node - "${report}" <<'NODE'
+          const fs = require("node:fs")
+          const report = JSON.parse(fs.readFileSync(process.argv[2], "utf8"))
+          fs.appendFileSync(
+            process.env.GITHUB_STEP_SUMMARY,
+            [
+              "## Release policy",
+              `- change scope: ${report.changeScope}`,
+              `- risk profile: ${report.riskProfile}`,
+              `- deploy backend: ${report.deployBackend}`,
+              `- verify frontend: ${report.verifyFrontend}`,
+              `- reasons: ${report.reasons.join(", ") || "none"}`,
+              "",
+            ].join("\n"),
+          )
+          NODE
 
       - name: Skip frontend-heavy checks
         if: steps.changes.outputs.frontend != 'true'

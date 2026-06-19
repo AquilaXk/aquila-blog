@@ -63,7 +63,7 @@ jobs:
                 fi
                 curl "${curl_args[@]}" "${api_url}" > "${response_body}"
               fi
-              jq -r '.[].filename' "${response_body}" >> "${changed_files}"
+              jq -r '.[] | .filename, (.previous_filename // empty)' "${response_body}" >> "${changed_files}"
               api_url="$(
                 awk -F'[<>]' '/rel="next"/ { print $2 }' "${response_headers}" | tail -n 1
               )"
@@ -84,6 +84,79 @@ jobs:
           done < "${RUNNER_TEMP}/changed-files.txt"
 
           echo "backend=${backend}" >> "${GITHUB_OUTPUT}"
+
+      - name: Check Flyway deploy safety
+        if: github.event_name == 'pull_request'
+        id: flyway_safety
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          report="${RUNNER_TEMP}/flyway-deploy-safety.json"
+          set +e
+          node tools/ci/check-flyway-deploy-safety.mjs \
+            --json \
+            --changed-files "${RUNNER_TEMP}/changed-files.txt" \
+            --output "${report}" \
+            > "${RUNNER_TEMP}/flyway-deploy-safety.stdout"
+          status=$?
+          set -e
+
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+          node - "${report}" <<'NODE'
+          const fs = require("node:fs")
+          const report = JSON.parse(fs.readFileSync(process.argv[2], "utf8"))
+          fs.appendFileSync(
+            process.env.GITHUB_STEP_SUMMARY,
+            [
+              "## Flyway deploy safety",
+              `- checked files: ${report.checkedFiles.length}`,
+              `- blocked: ${report.blocked}`,
+              `- findings: ${report.findings.length}`,
+              "",
+            ].join("\n"),
+          )
+          NODE
+
+      - name: Classify release risk
+        if: github.event_name == 'pull_request'
+        id: release_policy
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          report="${RUNNER_TEMP}/release-plan.json"
+          node tools/ci/classify-release.mjs \
+            --json \
+            --changed-files "${RUNNER_TEMP}/changed-files.txt" \
+            --migration-safety-json "${RUNNER_TEMP}/flyway-deploy-safety.json" \
+            --github-output "$GITHUB_OUTPUT" \
+            > "${report}"
+          node - "${report}" <<'NODE'
+          const fs = require("node:fs")
+          const report = JSON.parse(fs.readFileSync(process.argv[2], "utf8"))
+          fs.appendFileSync(
+            process.env.GITHUB_STEP_SUMMARY,
+            [
+              "## Release policy",
+              `- change scope: ${report.changeScope}`,
+              `- risk profile: ${report.riskProfile}`,
+              `- deploy backend: ${report.deployBackend}`,
+              `- verify frontend: ${report.verifyFrontend}`,
+              `- reasons: ${report.reasons.join(", ") || "none"}`,
+              "",
+            ].join("\n"),
+          )
+          NODE
+
+      - name: Enforce blocked release policy
+        if: github.event_name == 'pull_request' && steps.release_policy.outputs.release_risk_profile == 'blocked'
+        run: |
+          echo "Release policy blocked this change. Destructive migrations must be redesigned as expand-only changes." >&2
+          exit 1
+
+      - name: Test release planner guards
+        run: node --test tools/test/release-plan.test.mjs tools/test/flyway-deploy-safety.test.mjs
 
       - name: Guard forbidden AI docs and tool metadata
         run: bash tools/guards/check-forbidden-tracked-files.sh

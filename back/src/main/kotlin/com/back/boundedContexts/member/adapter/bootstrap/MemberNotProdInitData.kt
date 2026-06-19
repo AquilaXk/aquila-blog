@@ -1,7 +1,7 @@
 package com.back.boundedContexts.member.adapter.bootstrap
 
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
-import com.back.global.app.AppConfig
+import com.back.global.app.AdminProperties
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.ApplicationRunner
 import org.springframework.context.annotation.Bean
@@ -10,7 +10,6 @@ import org.springframework.context.annotation.Lazy
 import org.springframework.context.annotation.Profile
 import org.springframework.core.annotation.Order
 import org.springframework.transaction.annotation.Transactional
-import java.util.Locale
 
 /**
  * MemberNotProdInitData는 환경별 초기 데이터/부트스트랩 로직을 담당합니다.
@@ -20,6 +19,7 @@ import java.util.Locale
 @Configuration
 class MemberNotProdInitData(
     private val memberUseCase: MemberUseCase,
+    private val adminProperties: AdminProperties,
 ) {
     @Lazy
     @Autowired
@@ -34,8 +34,8 @@ class MemberNotProdInitData(
 
     @Transactional
     fun makeBaseMembers() {
-        val adminUsername = AppConfig.adminUsernameOrBlank.trim().ifBlank { "admin" }
-        val configuredAdminEmail = AppConfig.adminEmailOrBlank.trim().lowercase(Locale.ROOT)
+        val adminUsername = adminProperties.username.trim().ifBlank { "admin" }
+        val configuredAdminEmail = adminProperties.normalizedEmail
         val adminEmail = configuredAdminEmail.ifBlank { "admin@test.com" }
 
         data class SeedMember(
@@ -56,8 +56,12 @@ class MemberNotProdInitData(
             )
 
         seedMembers.forEach { (email, seed) ->
-            if (memberUseCase.findByEmail(email) == null) {
-                memberUseCase.join(seed.username, "1234", seed.nickname, null, seed.email)
+            val existingMember = memberUseCase.findByEmail(email)
+            val member =
+                existingMember
+                    ?: memberUseCase.join(seed.username, "1234", seed.nickname, null, seed.email)
+            if (email == adminEmail) {
+                member.grantAdmin()
             }
         }
     }

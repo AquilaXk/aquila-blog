@@ -12,7 +12,7 @@ class MemberProxy(
     id: Long,
     username: String,
     nickname: String,
-) : Member(id, username, null, nickname, real.email) {
+) : Member(id, username, null, nickname, real.email, real.isAdmin) {
     val persistenceMember: Member
         get() = real
 

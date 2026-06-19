@@ -2,7 +2,7 @@ package com.back.boundedContexts.member.adapter.bootstrap
 
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.MemberPolicy
-import com.back.global.app.AppConfig
+import com.back.global.app.AdminProperties
 import com.back.global.exception.application.AppException
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
@@ -14,7 +14,6 @@ import org.springframework.context.annotation.Profile
 import org.springframework.core.annotation.Order
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.transaction.annotation.Transactional
-import java.util.Locale
 
 /**
  * MemberProdInitData는 환경별 초기 데이터/부트스트랩 로직을 담당합니다.
@@ -25,6 +24,7 @@ import java.util.Locale
 class MemberProdInitData(
     private val memberUseCase: MemberUseCase,
     private val passwordEncoder: PasswordEncoder,
+    private val adminProperties: AdminProperties,
 ) {
     private val logger = LoggerFactory.getLogger(MemberProdInitData::class.java)
 
@@ -41,10 +41,9 @@ class MemberProdInitData(
 
     @Transactional
     fun ensureConfiguredAdminMember() {
-        val configuredAdminUsername = AppConfig.adminUsernameOrBlank.trim()
-        val adminNickname = configuredAdminUsername.ifBlank { "관리자" }
-        val adminEmail = AppConfig.adminEmailOrBlank.trim().lowercase(Locale.ROOT)
-        val adminPassword = AppConfig.adminPasswordOrBlank
+        val adminNickname = adminProperties.nickname
+        val adminEmail = adminProperties.normalizedEmail
+        val adminPassword = adminProperties.password
 
         if (adminEmail.isBlank()) return
         if (adminPassword.isBlank()) return
@@ -77,6 +76,7 @@ class MemberProdInitData(
             if (existingAdmin.nickname != adminNickname) {
                 existingAdmin.nickname = adminNickname
             }
+            existingAdmin.grantAdmin()
             return
         }
 
@@ -91,5 +91,6 @@ class MemberProdInitData(
         if (member.apiKey.isBlank() || member.apiKey == member.username) {
             member.modifyApiKey(MemberPolicy.genApiKey())
         }
+        member.grantAdmin()
     }
 }

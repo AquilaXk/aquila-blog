@@ -18,9 +18,6 @@ class PostAuthorDtoMappingTest {
             AppConfig(
                 siteBackUrl = "https://api.example.com",
                 siteFrontUrl = "https://example.com",
-                adminUsername = "",
-                adminEmail = "",
-                adminPassword = "",
             )
         }
     }

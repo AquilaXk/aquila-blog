@@ -62,9 +62,6 @@ abstract class BaseAdmMemberControllerWebMvcTest : BaseIntegrationTest() {
             AppConfig(
                 siteBackUrl = "http://localhost:8080",
                 siteFrontUrl = "http://localhost:3000",
-                adminUsername = "admin",
-                adminEmail = "admin@test.com",
-                adminPassword = "test-password",
             )
         }
     }

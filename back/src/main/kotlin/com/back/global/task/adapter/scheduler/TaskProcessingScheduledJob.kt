@@ -1,6 +1,8 @@
 package com.back.global.task.adapter.scheduler
 
 import com.back.global.task.adapter.persistence.TaskRepository
+import com.back.global.task.application.TaskExecutionContext
+import com.back.global.task.application.TaskExecutionContextHolder
 import com.back.global.task.application.TaskHandlerEntry
 import com.back.global.task.application.TaskHandlerRegistry
 import com.back.global.task.domain.Task
@@ -17,6 +19,7 @@ import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
 import tools.jackson.databind.ObjectMapper
 import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
@@ -91,14 +94,17 @@ class TaskProcessingScheduledJob(
     @Volatile
     private var perTypeDynamicRefreshedAtEpochMs: Long = 0
 
-    private data class TaskExecutionContext(
+    private data class LoadedTaskExecution(
         val taskId: Long,
+        val taskUid: UUID,
+        val leaseToken: UUID,
         val taskType: String,
         val payload: String,
     )
 
     private data class TaskDispatchSlot(
         val taskId: Long,
+        val leaseToken: UUID,
         val taskType: String,
     )
 
@@ -126,30 +132,32 @@ class TaskProcessingScheduledJob(
             transactionTemplate.execute {
                 val pendingTasks = taskRepository.findPendingTasksWithLock(fetchLimit)
                 val dispatchableTasks = selectDispatchableTasks(pendingTasks, availableWorkerSlots)
-                dispatchableTasks.forEach { it.markAsProcessing() }
-                dispatchableTasks.map { TaskDispatchSlot(it.id, it.taskType) }
+                dispatchableTasks.map {
+                    val leaseToken = it.markAsProcessing()
+                    TaskDispatchSlot(it.id, leaseToken, it.taskType)
+                }
             } ?: emptyList()
 
         var dispatchedWorkers = 0
         dispatchSlots.forEach { slot ->
             if (dispatchedWorkers >= availableWorkerSlots) {
-                revertTaskToPending(slot.taskId)
+                revertTaskToPending(slot.taskId, slot.leaseToken)
                 return@forEach
             }
             if (!concurrencyGate.tryAcquire()) {
-                revertTaskToPending(slot.taskId)
+                revertTaskToPending(slot.taskId, slot.leaseToken)
                 return@forEach
             }
             if (!tryAcquirePerTypePermit(slot.taskType)) {
                 concurrencyGate.release()
-                revertTaskToPending(slot.taskId)
+                revertTaskToPending(slot.taskId, slot.leaseToken)
                 return@forEach
             }
 
             dispatchedWorkers++
             executor.submit {
                 try {
-                    executeTask(slot.taskId)
+                    executeTask(slot.taskId, slot.leaseToken)
                 } finally {
                     releasePerTypePermit(slot.taskType)
                     concurrencyGate.release()
@@ -377,45 +385,60 @@ class TaskProcessingScheduledJob(
         }
     }
 
-    private fun executeTask(taskId: Long) =
-        run {
-            val context = loadTaskExecutionContext(taskId) ?: return
-            val entry = taskHandlerRegistry.getEntry(context.taskType)
-            val startedAtNanos = System.nanoTime()
+    private fun executeTask(
+        taskId: Long,
+        leaseToken: UUID,
+    ) = run {
+        val context = loadTaskExecutionContext(taskId, leaseToken) ?: return
+        val entry = taskHandlerRegistry.getEntry(context.taskType)
+        val startedAtNanos = System.nanoTime()
 
-            if (entry == null) {
-                logger.warn("No handler found for task type: {}", context.taskType)
-                markTaskFailed(taskId, context.taskType, "No handler found")
-                return
-            }
-
-            try {
-                val payload = objectMapper.readValue(context.payload, entry.payloadClass) as TaskPayload
-                invokeHandlerWithTimeout(context.taskId, context.taskType, entry, payload)
-                markTaskCompleted(taskId, context.taskType)
-                recordTaskDuration(context.taskType, startedAtNanos)
-            } catch (exception: TimeoutException) {
-                logger.error(
-                    "Task handler timeout: {} (type={}, timeoutSeconds={})",
-                    taskId,
-                    context.taskType,
-                    handlerTimeoutSeconds,
-                )
-                markTaskFailed(taskId, context.taskType, "Task handler timed out after ${handlerTimeoutSeconds}s")
-                recordTaskDuration(context.taskType, startedAtNanos)
-            } catch (exception: Exception) {
-                val rootCause = exception.cause ?: exception
-                logger.error("Task failed: {} (type={})", taskId, context.taskType, rootCause)
-                markTaskFailed(taskId, context.taskType, rootCause.message ?: rootCause::class.simpleName)
-                recordTaskDuration(context.taskType, startedAtNanos)
-            }
+        if (entry == null) {
+            logger.warn("No handler found for task type: {}", context.taskType)
+            markTaskFailed(taskId, context.leaseToken, context.taskType, "No handler found")
+            return
         }
 
-    private fun loadTaskExecutionContext(taskId: Long): TaskExecutionContext? =
+        try {
+            val payload = objectMapper.readValue(context.payload, entry.payloadClass) as TaskPayload
+            invokeHandlerWithTimeout(context, entry, payload)
+            markTaskCompleted(taskId, context.leaseToken, context.taskType)
+            recordTaskDuration(context.taskType, startedAtNanos)
+        } catch (exception: TimeoutException) {
+            logger.error(
+                "Task handler timeout: {} (type={}, timeoutSeconds={})",
+                taskId,
+                context.taskType,
+                handlerTimeoutSeconds,
+            )
+            markTaskFailed(
+                taskId,
+                context.leaseToken,
+                context.taskType,
+                "Task handler timed out after ${handlerTimeoutSeconds}s",
+            )
+            recordTaskDuration(context.taskType, startedAtNanos)
+        } catch (exception: Exception) {
+            val rootCause = exception.cause ?: exception
+            logger.error("Task failed: {} (type={})", taskId, context.taskType, rootCause)
+            markTaskFailed(
+                taskId,
+                context.leaseToken,
+                context.taskType,
+                rootCause.message ?: rootCause::class.simpleName,
+            )
+            recordTaskDuration(context.taskType, startedAtNanos)
+        }
+    }
+
+    private fun loadTaskExecutionContext(
+        taskId: Long,
+        leaseToken: UUID,
+    ): LoadedTaskExecution? =
         transactionTemplate.execute {
             val task = taskRepository.findById(taskId).orElse(null) ?: return@execute null
-            if (task.status != TaskStatus.PROCESSING) return@execute null
-            TaskExecutionContext(task.id, task.taskType, task.payload)
+            if (!task.isCurrentExecution(leaseToken)) return@execute null
+            LoadedTaskExecution(task.id, task.uid, leaseToken, task.taskType, task.payload)
         }
 
     /**
@@ -424,15 +447,20 @@ class TaskProcessingScheduledJob(
      */
     private fun markTaskCompleted(
         taskId: Long,
+        leaseToken: UUID,
         taskType: String,
     ) {
+        var completed = false
         transactionTemplate.execute {
             val task = taskRepository.findById(taskId).orElse(null) ?: return@execute
-            if (task.status != TaskStatus.PROCESSING) return@execute
+            if (!task.isCurrentExecution(leaseToken)) return@execute
             task.markAsCompleted()
             task.errorMessage = null
+            completed = true
         }
-        recordTaskResult(taskType, "success")
+        if (completed) {
+            recordTaskResult(taskType, "success")
+        }
     }
 
     /**
@@ -441,12 +469,13 @@ class TaskProcessingScheduledJob(
      */
     private fun markTaskFailed(
         taskId: Long,
+        leaseToken: UUID,
         taskType: String,
         errorMessage: String?,
     ) {
         transactionTemplate.execute {
             val task = taskRepository.findById(taskId).orElse(null) ?: return@execute
-            if (task.status != TaskStatus.PROCESSING) return@execute
+            if (!task.isCurrentExecution(leaseToken)) return@execute
             task.errorMessage = errorMessage
             task.scheduleRetry(taskHandlerRegistry.getRetryPolicy(taskType))
             if (task.status == TaskStatus.FAILED) {
@@ -499,11 +528,15 @@ class TaskProcessingScheduledJob(
      * 작업 상태를 전이하고 실패 시 복구 가능한 상태로 보정합니다.
      * 어댑터 계층에서 외부 시스템 연동 오류를 캡슐화해 상위 계층 영향을 최소화합니다.
      */
-    private fun revertTaskToPending(taskId: Long) {
+    private fun revertTaskToPending(
+        taskId: Long,
+        leaseToken: UUID,
+    ) {
         transactionTemplate.execute {
             val task = taskRepository.findById(taskId).orElse(null) ?: return@execute
-            if (task.status != TaskStatus.PROCESSING) return@execute
+            if (!task.isCurrentExecution(leaseToken)) return@execute
             task.status = TaskStatus.PENDING
+            task.clearProcessingLease()
         }
     }
 
@@ -512,15 +545,24 @@ class TaskProcessingScheduledJob(
      * 어댑터 계층에서 외부 시스템 연동 오류를 캡슐화해 상위 계층 영향을 최소화합니다.
      */
     private fun invokeHandlerWithTimeout(
-        taskId: Long,
-        taskType: String,
+        context: LoadedTaskExecution,
         entry: TaskHandlerEntry,
         payload: TaskPayload,
     ) {
         val timeoutSeconds = handlerTimeoutSeconds.coerceIn(5, 3600)
+        val handlerContext =
+            TaskExecutionContext(
+                taskId = context.taskId,
+                taskUid = context.taskUid,
+                taskType = context.taskType,
+                executionLeaseToken = context.leaseToken,
+                idempotencyKey = context.taskUid.toString(),
+            )
         val future =
             executor.submit<Unit> {
-                entry.handlerMethod.method.invoke(entry.handlerMethod.bean, payload)
+                TaskExecutionContextHolder.withContext(handlerContext) {
+                    entry.handlerMethod.method.invoke(entry.handlerMethod.bean, payload)
+                }
             }
 
         try {
@@ -533,8 +575,8 @@ class TaskProcessingScheduledJob(
             if (cause is Exception) throw cause
             logger.error(
                 "Task handler failed with non-exception throwable (taskId={}, taskType={})",
-                taskId,
-                taskType,
+                context.taskId,
+                context.taskType,
                 cause,
             )
             throw RuntimeException(cause)
@@ -542,8 +584,8 @@ class TaskProcessingScheduledJob(
             Thread.currentThread().interrupt()
             logger.warn(
                 "Task worker interrupted while executing handler (taskId={}, taskType={})",
-                taskId,
-                taskType,
+                context.taskId,
+                context.taskType,
             )
             throw interruptedException
         }

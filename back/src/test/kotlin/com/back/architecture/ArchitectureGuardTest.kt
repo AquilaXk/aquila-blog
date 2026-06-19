@@ -17,6 +17,8 @@ class ArchitectureGuardTest {
     private val mainSourceRoot: Path = Path.of("src/main/kotlin")
     private val mainBoundedContextSourceRoot: Path = Path.of("src/main/kotlin/com/back/boundedContexts")
     private val testSourceRoot: Path = Path.of("src/test/kotlin")
+    private val packageRegex =
+        Regex("""^package\s+([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)*)\s*$""", RegexOption.MULTILINE)
     private val boundedContextPackageRegex =
         Regex("""^package\s+com\.back\.boundedContexts\.([A-Za-z][A-Za-z0-9_]*)(?:\.|$)""", RegexOption.MULTILINE)
     private val boundedContextImportRegex =
@@ -100,8 +102,21 @@ class ArchitectureGuardTest {
 
     private fun sourcePackagePath(packageName: String): Path = mainSourceRoot.resolve(packageName.replace(".", "/"))
 
-    private fun persistenceBridgeTargetsInPackage(packageName: String): Map<String, String> {
+    private fun sourcePackageName(source: String): String? =
+        packageRegex
+            .find(source)
+            ?.groupValues
+            ?.get(1)
+
+    private fun persistenceBridgeTargetsInPackage(
+        packageName: String,
+        excludingPath: Path? = null,
+    ): Map<String, String> {
         val aliasesPath = sourcePackagePath(packageName).resolve("PersistenceModelAliases.kt")
+
+        if (excludingPath != null && aliasesPath.normalize() == excludingPath.normalize()) {
+            return emptyMap()
+        }
 
         if (!Files.isRegularFile(aliasesPath)) {
             return emptyMap()
@@ -147,6 +162,10 @@ class ArchitectureGuardTest {
                 .findAll(source)
                 .map { match -> match.groupValues[1] }
                 .toList()
+        val samePackageBridgeTargets =
+            sourcePackageName(source)
+                ?.let { packageName -> persistenceBridgeTargetsInPackage(packageName, excludingPath = path) }
+                .orEmpty()
 
         return typeAliasRegex
             .findAll(source)
@@ -157,6 +176,7 @@ class ArchitectureGuardTest {
                         persistenceModelAliasTargetRegex.matches(aliasTarget) -> aliasTarget
                         importedModelTargets.containsKey(aliasTarget) -> importedModelTargets.getValue(aliasTarget)
                         importedBridgeTargets.containsKey(aliasTarget) -> importedBridgeTargets.getValue(aliasTarget)
+                        samePackageBridgeTargets.containsKey(aliasTarget) -> samePackageBridgeTargets.getValue(aliasTarget)
                         wildcardBridgeImports.isNotEmpty() && !aliasTarget.contains(".") -> {
                             val bridgeTargets =
                                 wildcardBridgeImports.mapNotNull { importPath ->
@@ -531,6 +551,35 @@ class ArchitectureGuardTest {
                 PersistenceModelAlias(
                     "example/domain/PersistenceModelAliases.kt",
                     "BridgePostAttr",
+                    "com.back.boundedContexts.post.model.PostAttr",
+                ),
+            )
+    }
+
+    @Test
+    fun `persistence model typealias scanner는 같은 패키지 bridge alias 체인 우회를 수집한다`() {
+        val aliases =
+            persistenceModelAliasesIn(
+                path = mainSourceRoot.resolve("com/back/boundedContexts/post/domain/PostAlias.kt"),
+                source =
+                    """
+                    |package com.back.boundedContexts.post.domain
+                    |
+                    |typealias Article = Post
+                    |typealias ArticleAttr = PostAttr
+                    """.trimMargin(),
+            )
+
+        assertThat(aliases)
+            .containsExactlyInAnyOrder(
+                PersistenceModelAlias(
+                    "com/back/boundedContexts/post/domain/PostAlias.kt",
+                    "Article",
+                    "com.back.boundedContexts.post.model.Post",
+                ),
+                PersistenceModelAlias(
+                    "com/back/boundedContexts/post/domain/PostAlias.kt",
+                    "ArticleAttr",
                     "com.back.boundedContexts.post.model.PostAttr",
                 ),
             )

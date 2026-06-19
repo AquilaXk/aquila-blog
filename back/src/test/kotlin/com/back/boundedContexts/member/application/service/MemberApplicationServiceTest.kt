@@ -2,14 +2,18 @@ package com.back.boundedContexts.member.application.service
 
 import com.back.boundedContexts.member.adapter.persistence.MemberAttrRepository
 import com.back.boundedContexts.member.adapter.persistence.MemberRepository
+import com.back.boundedContexts.member.application.event.MemberPublicProfileChangedEvent
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.support.BaseMemberApplicationServiceIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.security.crypto.password.PasswordEncoder
+import org.springframework.test.context.event.ApplicationEvents
+import org.springframework.test.context.event.RecordApplicationEvents
 
 @org.junit.jupiter.api.DisplayName("MemberApplicationService 테스트")
+@RecordApplicationEvents
 class MemberApplicationServiceTest : BaseMemberApplicationServiceIntegrationTest() {
     @Autowired
     private lateinit var memberFacade: MemberApplicationService
@@ -22,6 +26,9 @@ class MemberApplicationServiceTest : BaseMemberApplicationServiceIntegrationTest
 
     @Autowired
     private lateinit var passwordEncoder: PasswordEncoder
+
+    @Autowired
+    private lateinit var applicationEvents: ApplicationEvents
 
     @Test
     fun `회원 생성에서 profileImgUrl 을 함께 넘기면 기본 이미지 대신 저장된 이미지가 사용된다`() {
@@ -57,6 +64,25 @@ class MemberApplicationServiceTest : BaseMemberApplicationServiceIntegrationTest
         assertThat(memberAttrRepository.findBySubjectAndName(member, "profileImgUrl"))
             .extracting("value")
             .isEqualTo("https://example.com/updated-user1.png")
+    }
+
+    @Test
+    fun `회원 수정은 공개 작성자 표시 변경 이벤트를 발행한다`() {
+        val member = createMember("member-public-author-event", "변경전")
+
+        memberFacade.modify(
+            member = member,
+            nickname = "변경후",
+            profileImgUrl = "https://example.com/author-event.png",
+        )
+
+        val events = applicationEvents.stream(MemberPublicProfileChangedEvent::class.java).toList()
+        assertThat(events).hasSize(1)
+        assertThat(events.single().memberId).isEqualTo(member.id)
+        assertThat(events.single().previousNickname).isEqualTo("변경전")
+        assertThat(events.single().currentNickname).isEqualTo("변경후")
+        assertThat(events.single().previousProfileImgUrl).isEmpty()
+        assertThat(events.single().currentProfileImgUrl).isEqualTo("https://example.com/author-event.png")
     }
 
     @Test

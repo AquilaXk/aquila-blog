@@ -23,6 +23,24 @@ class PostReadCacheInvalidator(
     private val hotSorts = listOf(PostSearchSortType1.CREATED_AT)
     private val maxTagCacheEvict = 12
 
+    internal fun invalidateAuthorRepresentation(reason: String) {
+        listOf(
+            PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE,
+            PostQueryCacheNames.FEED,
+            PostQueryCacheNames.EXPLORE,
+            PostQueryCacheNames.FEED_CURSOR_FIRST,
+            PostQueryCacheNames.EXPLORE_CURSOR_FIRST,
+            PostQueryCacheNames.BOOTSTRAP,
+            PostQueryCacheNames.SEARCH,
+            PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT,
+            PostQueryCacheNames.DETAIL_PUBLIC_META,
+            PostQueryCacheNames.DETAIL_PUBLIC_CONTENT,
+        ).forEach { cacheName ->
+            cacheManager.getCache(cacheName)?.clear()
+            recordCacheEvict(cacheName, "clear", reason)
+        }
+    }
+
     internal fun invalidate(
         request: PostReadCacheInvalidationRequest,
         onPublicTagsEvicted: () -> Unit,

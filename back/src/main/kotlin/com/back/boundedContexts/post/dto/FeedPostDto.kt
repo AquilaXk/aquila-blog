@@ -44,7 +44,7 @@ data class FeedPostDto(
                     modifiedAt = post.modifiedAt,
                     authorId = post.author.id,
                     authorName = post.author.name,
-                    authorUsername = post.author.name,
+                    authorUsername = post.author.username,
                     authorProfileImgUrl = post.author.profileImgUrlVersionedOrDefault,
                     title = post.title,
                     thumbnail = preview.thumbnail,
@@ -66,7 +66,7 @@ data class FeedPostDto(
                     modifiedAt = post.modifiedAt,
                     authorId = runCatching { post.author.id }.getOrDefault(0),
                     authorName = runCatching { post.author.name }.getOrDefault("unknown"),
-                    authorUsername = runCatching { post.author.name }.getOrDefault("unknown"),
+                    authorUsername = runCatching { post.author.username }.getOrDefault("unknown"),
                     authorProfileImgUrl =
                         runCatching { post.author.profileImgUrlVersionedOrDefault }
                             .getOrDefault(FALLBACK_PROFILE_IMAGE_URL),

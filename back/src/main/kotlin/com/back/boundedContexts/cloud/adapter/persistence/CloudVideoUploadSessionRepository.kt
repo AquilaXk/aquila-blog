@@ -113,6 +113,7 @@ interface CloudVideoUploadPartRepository :
 
     override fun findBySessionId(sessionId: Long): List<CloudVideoUploadPart>
 
+    @Transactional
     @Modifying
     @Query("DELETE FROM CloudVideoUploadPart p WHERE p.sessionId = :sessionId")
     override fun deleteBySessionId(sessionId: Long)

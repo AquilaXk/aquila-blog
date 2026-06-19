@@ -22,10 +22,10 @@ data class PostCommentDeletedEvent
         override val aggregateType: String,
         override val aggregateId: Long,
         @field:JsonIgnore
-        @field:JsonProperty("postCommentDto")
+        @JsonProperty("postCommentDto")
         val postCommentDto: PostCommentDto,
         @field:JsonIgnore
-        @field:JsonProperty("postDto")
+        @JsonProperty("postDto")
         val postDto: PostDto,
         val actorDto: MemberDto,
     ) : EventPayload {

@@ -2,6 +2,7 @@ package com.back.boundedContexts.member.subContexts.notification.application.por
 
 import com.back.boundedContexts.member.subContexts.notification.domain.MemberNotification
 import java.time.Instant
+import java.util.UUID
 
 /**
  * `MemberNotificationRepositoryPort` 인터페이스입니다.
@@ -20,6 +21,8 @@ interface MemberNotificationRepositoryPort {
     ): List<MemberNotification>
 
     fun countUnreadByReceiverId(receiverId: Long): Long
+
+    fun existsByEventUid(eventUid: UUID): Boolean
 
     fun markAllRead(
         receiverId: Long,

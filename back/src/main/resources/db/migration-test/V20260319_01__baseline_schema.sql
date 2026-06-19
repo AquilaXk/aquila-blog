@@ -152,6 +152,7 @@ CREATE TABLE IF NOT EXISTS member_notification (
     comment_id BIGINT NOT NULL,
     post_title VARCHAR(160) NOT NULL,
     comment_preview VARCHAR(240) NOT NULL,
+    event_uid UUID,
     read_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     modified_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -274,6 +275,9 @@ CREATE INDEX IF NOT EXISTS member_notification_idx_receiver_id_asc
     ON member_notification (receiver_id, id ASC);
 CREATE INDEX IF NOT EXISTS member_notification_idx_actor_id
     ON member_notification (actor_id);
+CREATE UNIQUE INDEX IF NOT EXISTS member_notification_idx_event_uid_unique
+    ON member_notification (event_uid)
+    WHERE event_uid IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS member_action_log_idx_primary_owner_id
     ON member_action_log (primary_owner_id);

@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.time.Instant
+import java.util.UUID
 
 /**
  * `MemberNotificationRepository` 인터페이스입니다.
@@ -45,6 +46,8 @@ interface MemberNotificationRepository : JpaRepository<MemberNotification, Long>
     ): List<MemberNotification>
 
     fun countByReceiverIdAndReadAtIsNull(receiverId: Long): Long
+
+    fun existsByEventUid(eventUid: UUID): Boolean
 
     @Modifying(clearAutomatically = false, flushAutomatically = true)
     @Query(

@@ -471,15 +471,18 @@ class PostApplicationService(
             )
         incrementCommentsCount(post)
         incrementMemberPostCommentsCount(persistenceAuthor)
-        refreshRecommendFeatureStoreForPublicPost(post)
-
-        runCatching {
-            eventPublisher.publish(
-                PostCommentWrittenEvent(UUID.randomUUID(), PostCommentDto(comment), PostDto(post), MemberDto(author)),
-            )
-        }.onFailure { exception ->
-            logger.warn("Failed to publish PostCommentWrittenEvent: postId={}, commentId={}", post.id, comment.id, exception)
-        }
+        enqueuePostInteractionSideEffect(
+            postId = post.id,
+            recommendationAction = PostInteractionRecommendationSideEffect.REFRESH,
+            domainEvent =
+                PostCommentWrittenEvent(
+                    UUID.randomUUID(),
+                    PostCommentDto(comment),
+                    PostDto(post),
+                    MemberDto(author),
+                    persistedParentComment?.author?.id,
+                ),
+        )
 
         return comment
     }
@@ -496,23 +499,16 @@ class PostApplicationService(
     ) {
         postComment.modify(content)
 
-        runCatching {
-            eventPublisher.publish(
+        enqueuePostInteractionSideEffect(
+            postId = postComment.post.id,
+            domainEvent =
                 PostCommentModifiedEvent(
                     UUID.randomUUID(),
                     PostCommentDto(postComment),
                     PostDto(postComment.post),
                     MemberDto(actor),
                 ),
-            )
-        }.onFailure { exception ->
-            logger.warn(
-                "Failed to publish PostCommentModifiedEvent: postId={}, commentId={}",
-                postComment.post.id,
-                postComment.id,
-                exception,
-            )
-        }
+        )
     }
 
     /**
@@ -534,30 +530,27 @@ class PostApplicationService(
         commentsToDelete.forEach { hydrateMemberCounterAttrs(it.author) }
 
         val postDto = PostDto(post)
-        commentsToDelete.forEach { comment ->
+        commentsToDelete.forEachIndexed { index, comment ->
             val postCommentDto = PostCommentDto(comment)
             comment.author.decrementPostCommentsCount()
             saveMemberAttr(comment.author.postCommentsCountAttr)
             post.onCommentDeleted()
             comment.softDelete()
 
-            runCatching {
-                eventPublisher.publish(
-                    PostCommentDeletedEvent(UUID.randomUUID(), postCommentDto, postDto, MemberDto(actor)),
-                )
-            }.onFailure { exception ->
-                logger.warn(
-                    "Failed to publish PostCommentDeletedEvent: postId={}, commentId={}",
-                    comment.post.id,
-                    comment.id,
-                    exception,
-                )
-            }
+            enqueuePostInteractionSideEffect(
+                postId = comment.post.id,
+                recommendationAction =
+                    if (index == commentsToDelete.lastIndex) {
+                        PostInteractionRecommendationSideEffect.REFRESH
+                    } else {
+                        PostInteractionRecommendationSideEffect.NONE
+                    },
+                domainEvent = PostCommentDeletedEvent(UUID.randomUUID(), postCommentDto, postDto, MemberDto(actor)),
+            )
         }
 
         savePostAttr(post.commentsCountAttr)
         postRepository.flush()
-        refreshRecommendFeatureStoreForPublicPost(post)
     }
 
     /**
@@ -592,28 +585,21 @@ class PostApplicationService(
 
             incrementLikesCount(post)
             postRepository.flush()
-            refreshRecommendFeatureStoreForPublicPost(post)
-            runCatching {
-                eventPublisher.publish(
-                    PostLikedEvent(UUID.randomUUID(), post.id, post.author.id, recoveredLikeId, MemberDto(actor)),
-                )
-            }.onFailure { exception ->
-                logger.warn("Failed to publish recovered PostLikedEvent: postId={}, likeId={}", post.id, recoveredLikeId, exception)
-            }
+            enqueuePostInteractionSideEffect(
+                postId = post.id,
+                recommendationAction = PostInteractionRecommendationSideEffect.REFRESH,
+                domainEvent = PostLikedEvent(UUID.randomUUID(), post.id, post.author.id, recoveredLikeId, MemberDto(actor)),
+            )
             return PostLikeToggleResult(true, recoveredLikeId)
         }
 
         incrementLikesCount(post)
         postRepository.flush()
-        refreshRecommendFeatureStoreForPublicPost(post)
-
-        runCatching {
-            eventPublisher.publish(
-                PostLikedEvent(UUID.randomUUID(), post.id, post.author.id, insertedLikeId, MemberDto(actor)),
-            )
-        }.onFailure { exception ->
-            logger.warn("Failed to publish PostLikedEvent: postId={}, likeId={}", post.id, insertedLikeId, exception)
-        }
+        enqueuePostInteractionSideEffect(
+            postId = post.id,
+            recommendationAction = PostInteractionRecommendationSideEffect.REFRESH,
+            domainEvent = PostLikedEvent(UUID.randomUUID(), post.id, post.author.id, insertedLikeId, MemberDto(actor)),
+        )
 
         return PostLikeToggleResult(true, insertedLikeId)
     }
@@ -642,16 +628,18 @@ class PostApplicationService(
             ensureLikesCountLoaded(post)
         }
         postRepository.flush()
-        refreshRecommendFeatureStoreForPublicPost(post)
 
         if (deletedCount > 0 && existingLikeId != null) {
-            runCatching {
-                eventPublisher.publish(
-                    PostUnlikedEvent(UUID.randomUUID(), post.id, postAuthorId, existingLikeId, MemberDto(actor)),
-                )
-            }.onFailure { exception ->
-                logger.warn("Failed to publish PostUnlikedEvent: postId={}, likeId={}", post.id, existingLikeId, exception)
-            }
+            enqueuePostInteractionSideEffect(
+                postId = post.id,
+                recommendationAction = PostInteractionRecommendationSideEffect.REFRESH,
+                domainEvent = PostUnlikedEvent(UUID.randomUUID(), post.id, postAuthorId, existingLikeId, MemberDto(actor)),
+            )
+        } else {
+            enqueuePostInteractionSideEffect(
+                postId = post.id,
+                recommendationAction = PostInteractionRecommendationSideEffect.REFRESH,
+            )
         }
 
         return PostLikeToggleResult(false, existingLikeId ?: 0L)
@@ -1339,6 +1327,125 @@ class PostApplicationService(
         }
 
         return command.operationUid
+    }
+
+    private fun enqueuePostInteractionSideEffect(
+        postId: Long,
+        recommendationAction: PostInteractionRecommendationSideEffect = PostInteractionRecommendationSideEffect.NONE,
+        domainEvent: EventPayload? = null,
+        operationUid: UUID = UUID.randomUUID(),
+    ) {
+        if (domainEvent != null && recommendationAction != PostInteractionRecommendationSideEffect.NONE) {
+            addPostInteractionSideEffectTask(
+                postId = postId,
+                recommendationAction = PostInteractionRecommendationSideEffect.NONE,
+                domainEvent = domainEvent,
+                operationUid = operationUid,
+            )
+            addPostInteractionSideEffectTask(
+                postId = postId,
+                recommendationAction = recommendationAction,
+                domainEvent = null,
+                operationUid = postInteractionRefreshSideEffectTaskUid(domainEvent),
+            )
+            return
+        }
+
+        addPostInteractionSideEffectTask(
+            postId = postId,
+            recommendationAction = recommendationAction,
+            domainEvent = domainEvent,
+            operationUid = operationUid,
+        )
+    }
+
+    private fun addPostInteractionSideEffectTask(
+        postId: Long,
+        recommendationAction: PostInteractionRecommendationSideEffect,
+        domainEvent: EventPayload?,
+        operationUid: UUID,
+    ) {
+        taskFacade.addToQueue(
+            PostInteractionSideEffectPayload(
+                uid = postInteractionSideEffectTaskUid(domainEvent, operationUid),
+                aggregateType = domainEvent?.aggregateType ?: "Post",
+                aggregateId = domainEvent?.aggregateId ?: postId,
+                postId = postId,
+                recommendationAction = recommendationAction,
+                domainEventUid = domainEvent?.uid,
+                domainEventType = domainEvent?.javaClass?.name,
+                postCommentDto = postInteractionCommentDto(domainEvent),
+                postDto = postInteractionPostDto(domainEvent),
+                actorDto = postInteractionActorDto(domainEvent),
+                replyReceiverId = postInteractionReplyReceiverId(domainEvent),
+                postAuthorId = postInteractionPostAuthorId(domainEvent),
+                likeId = postInteractionLikeId(domainEvent),
+            ),
+            inlineWhenEnabled = false,
+        )
+    }
+
+    private fun postInteractionRefreshSideEffectTaskUid(domainEvent: EventPayload): UUID =
+        UUID.nameUUIDFromBytes(
+            "${PostInteractionSideEffectPayload.TASK_TYPE}:refresh:${domainEvent.uid}".toByteArray(
+                StandardCharsets.UTF_8,
+            ),
+        )
+
+    private fun postInteractionCommentDto(domainEvent: EventPayload?): PostCommentDto? =
+        when (domainEvent) {
+            is PostCommentWrittenEvent -> domainEvent.postCommentDto
+            is PostCommentModifiedEvent -> domainEvent.postCommentDto
+            is PostCommentDeletedEvent -> domainEvent.postCommentDto
+            else -> null
+        }
+
+    private fun postInteractionPostDto(domainEvent: EventPayload?): PostDto? =
+        when (domainEvent) {
+            is PostCommentWrittenEvent -> domainEvent.postDto
+            is PostCommentModifiedEvent -> domainEvent.postDto
+            is PostCommentDeletedEvent -> domainEvent.postDto
+            else -> null
+        }
+
+    private fun postInteractionActorDto(domainEvent: EventPayload?): MemberDto? =
+        when (domainEvent) {
+            is PostCommentWrittenEvent -> domainEvent.actorDto
+            is PostCommentModifiedEvent -> domainEvent.actorDto
+            is PostCommentDeletedEvent -> domainEvent.actorDto
+            is PostLikedEvent -> domainEvent.actorDto
+            is PostUnlikedEvent -> domainEvent.actorDto
+            else -> null
+        }
+
+    private fun postInteractionReplyReceiverId(domainEvent: EventPayload?): Long? =
+        when (domainEvent) {
+            is PostCommentWrittenEvent -> domainEvent.replyReceiverId
+            else -> null
+        }
+
+    private fun postInteractionPostAuthorId(domainEvent: EventPayload?): Long? =
+        when (domainEvent) {
+            is PostLikedEvent -> domainEvent.postAuthorId
+            is PostUnlikedEvent -> domainEvent.postAuthorId
+            else -> null
+        }
+
+    private fun postInteractionLikeId(domainEvent: EventPayload?): Long? =
+        when (domainEvent) {
+            is PostLikedEvent -> domainEvent.likeId
+            is PostUnlikedEvent -> domainEvent.likeId
+            else -> null
+        }
+
+    private fun postInteractionSideEffectTaskUid(
+        domainEvent: EventPayload?,
+        operationUid: UUID,
+    ): UUID {
+        val eventUid = domainEvent?.uid ?: return operationUid
+        return UUID.nameUUIDFromBytes(
+            "${PostInteractionSideEffectPayload.TASK_TYPE}:$eventUid".toByteArray(StandardCharsets.UTF_8),
+        )
     }
 
     private fun buildPublicPostChangeImpacts(

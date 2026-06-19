@@ -61,6 +61,20 @@ class CloudVideoUploadSessionServiceTest {
         )
 
     @Test
+    @DisplayName("기본 설정 생성자는 빈 만료 세션 정리를 수행할 수 있다")
+    fun defaultConstructorArguments() {
+        val defaultService =
+            CloudVideoUploadSessionService(
+                sessionRepository = FakeVideoUploadSessionRepository(),
+                partRepository = FakeVideoUploadPartRepository(),
+                cloudFileRepository = FakeCloudFileRepository(),
+                cloudStoragePort = FakeCloudStoragePort(),
+            )
+
+        assertThat(defaultService.purgeExpiredSessions(batchSize = 1)).isZero()
+    }
+
+    @Test
     @DisplayName("세션 생성 시 5GB 이하 동영상 metadata와 S3 multipart upload id를 저장한다")
     fun `세션 생성은 동영상 metadata와 multipart upload id를 저장한다`() {
         val nfcName = "대용량_소개영상.mp4"

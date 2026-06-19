@@ -21,11 +21,17 @@ class ArchitectureGuardTest {
         Regex("""^package\s+com\.back\.boundedContexts\.([A-Za-z][A-Za-z0-9_]*)(?:\.|$)""", RegexOption.MULTILINE)
     private val boundedContextImportRegex =
         Regex("""^import\s+com\.back\.boundedContexts\.([A-Za-z][A-Za-z0-9_]*)\.([A-Za-z0-9_.*]+)(?:\s+as\s+\w+)?\s*$""")
-    private val persistenceModelAliasRegex =
+    private val persistenceModelImportRegex =
         Regex(
-            """^typealias\s+([A-Za-z][A-Za-z0-9_]*)\s*=\s*""" +
-                """(com\.back\.[A-Za-z0-9_.]+\.model(?:\.[A-Za-z0-9_]+)*\.[A-Za-z][A-Za-z0-9_]*)\s*$""",
+            """^import\s+""" +
+                """(com\.back\.[A-Za-z0-9_.]+\.model(?:\.[A-Za-z0-9_]+)*\.[A-Za-z][A-Za-z0-9_]*)""" +
+                """(?:\s+as\s+([A-Za-z][A-Za-z0-9_]*))?\s*$""",
+            RegexOption.MULTILINE,
         )
+    private val persistenceModelAliasTargetRegex =
+        Regex("""^com\.back\.[A-Za-z0-9_.]+\.model(?:\.[A-Za-z0-9_]+)*\.[A-Za-z][A-Za-z0-9_]*$""")
+    private val typeAliasRegex =
+        Regex("""\btypealias\s+([A-Za-z][A-Za-z0-9_]*)\s*=\s*([A-Za-z][A-Za-z0-9_.]*)""")
 
     private data class PersistenceModelAlias(
         val sourcePath: String,
@@ -70,18 +76,43 @@ class ArchitectureGuardTest {
 
     private fun sourceText(path: Path): String = Files.readString(path)
 
-    private fun persistenceModelAliasesIn(path: Path): List<PersistenceModelAlias> =
-        sourceText(path)
-            .lineSequence()
-            .mapNotNull { line ->
-                val match = persistenceModelAliasRegex.matchEntire(line.trim()) ?: return@mapNotNull null
+    private fun relativeMainSourcePath(path: Path): String =
+        mainSourceRoot
+            .relativize(path)
+            .joinToString("/") { it.toString() }
+
+    private fun persistenceModelAliasesIn(
+        path: Path,
+        source: String = sourceText(path),
+    ): List<PersistenceModelAlias> {
+        val importedModelTargets =
+            persistenceModelImportRegex
+                .findAll(source)
+                .associate { match ->
+                    val targetFqcn = match.groupValues[1]
+                    val importedName = match.groupValues[2].ifBlank { targetFqcn.substringAfterLast(".") }
+
+                    importedName to targetFqcn
+                }
+
+        return typeAliasRegex
+            .findAll(source)
+            .mapNotNull { match ->
+                val aliasTarget = match.groupValues[2]
+                val targetFqcn =
+                    when {
+                        persistenceModelAliasTargetRegex.matches(aliasTarget) -> aliasTarget
+                        importedModelTargets.containsKey(aliasTarget) -> importedModelTargets.getValue(aliasTarget)
+                        else -> return@mapNotNull null
+                    }
 
                 PersistenceModelAlias(
-                    sourcePath = mainSourceRoot.relativize(path).toString(),
+                    sourcePath = relativeMainSourcePath(path),
                     aliasName = match.groupValues[1],
-                    targetFqcn = match.groupValues[2],
+                    targetFqcn = targetFqcn,
                 )
             }.toList()
+    }
 
     private fun sourceBoundedContextName(source: String): String? =
         boundedContextPackageRegex
@@ -357,6 +388,45 @@ class ArchitectureGuardTest {
                 .toSet()
 
         assertThat(aliases).containsExactlyInAnyOrderElementsOf(allowedAliases)
+    }
+
+    @Test
+    fun `persistence model typealias scanner는 import와 multiline alias 우회를 수집한다`() {
+        val aliases =
+            persistenceModelAliasesIn(
+                path = mainSourceRoot.resolve("example/domain/PersistenceModelAliases.kt"),
+                source =
+                    """
+                    |package com.back.example.domain
+                    |
+                    |import com.back.boundedContexts.post.model.Post
+                    |import com.back.boundedContexts.post.model.PostAttr as ImportedPostAttr
+                    |
+                    |typealias ImportedPost = Post
+                    |typealias ImportedPostAttrAlias = ImportedPostAttr
+                    |typealias MultilinePost =
+                    |    com.back.boundedContexts.post.model.PostLike
+                    """.trimMargin(),
+            )
+
+        assertThat(aliases)
+            .containsExactlyInAnyOrder(
+                PersistenceModelAlias(
+                    "example/domain/PersistenceModelAliases.kt",
+                    "ImportedPost",
+                    "com.back.boundedContexts.post.model.Post",
+                ),
+                PersistenceModelAlias(
+                    "example/domain/PersistenceModelAliases.kt",
+                    "ImportedPostAttrAlias",
+                    "com.back.boundedContexts.post.model.PostAttr",
+                ),
+                PersistenceModelAlias(
+                    "example/domain/PersistenceModelAliases.kt",
+                    "MultilinePost",
+                    "com.back.boundedContexts.post.model.PostLike",
+                ),
+            )
     }
 
     @Test

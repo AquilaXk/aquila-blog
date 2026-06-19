@@ -69,6 +69,7 @@ class Task(
     var nextRetryAt: Instant = Instant.now(),
     @field:Column(columnDefinition = "TEXT")
     var errorMessage: String? = null,
+    var executionLeaseToken: UUID? = null,
 ) : BaseTime(id) {
     constructor(
         uid: UUID,
@@ -89,6 +90,7 @@ class Task(
 
     fun scheduleRetry(retryPolicy: TaskRetryPolicy) {
         retryCount++
+        executionLeaseToken = null
         if (retryCount >= maxRetries) {
             status = TaskStatus.FAILED
         } else {
@@ -100,10 +102,20 @@ class Task(
 
     fun markAsCompleted() {
         status = TaskStatus.COMPLETED
+        executionLeaseToken = null
     }
 
-    fun markAsProcessing() {
+    fun markAsProcessing(): UUID {
+        val leaseToken = UUID.randomUUID()
         status = TaskStatus.PROCESSING
+        executionLeaseToken = leaseToken
+        return leaseToken
+    }
+
+    fun isCurrentExecution(leaseToken: UUID): Boolean = status == TaskStatus.PROCESSING && executionLeaseToken == leaseToken
+
+    fun clearProcessingLease() {
+        executionLeaseToken = null
     }
 
     fun recoverFromStuckProcessing(
@@ -112,6 +124,7 @@ class Task(
     ) {
         retryCount++
         errorMessage = message
+        executionLeaseToken = null
 
         if (retryCount >= maxRetries) {
             status = TaskStatus.FAILED

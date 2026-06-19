@@ -15,25 +15,35 @@ import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
 import com.back.global.app.AppConfig
 import com.back.global.event.application.EventPublisher
 import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.global.task.application.TaskFacade
+import com.back.global.task.application.TaskHandlerEntry
+import com.back.global.task.application.TaskHandlerMethod
+import com.back.global.task.application.TaskHandlerRegistry
+import com.back.global.task.application.TaskRetryPolicy
+import com.back.global.task.application.port.output.TaskQueueRepositoryPort
+import com.back.global.task.domain.Task
+import com.back.global.task.domain.TaskStatus
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
-import org.mockito.ArgumentCaptor
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verifyNoInteractions
 import org.springframework.cache.CacheManager
-import org.springframework.context.ApplicationEventPublisher
+import org.springframework.data.domain.Pageable
+import org.springframework.mock.env.MockEnvironment
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.TransactionException
 import org.springframework.transaction.TransactionStatus
 import org.springframework.transaction.support.SimpleTransactionStatus
+import tools.jackson.databind.ObjectMapper
 import java.time.Instant
 import java.util.Optional
+import java.util.UUID
 
 @DisplayName("PostApplicationServiceDeleteResilience 테스트")
 class PostApplicationServiceDeleteResilienceTest {
@@ -65,7 +75,7 @@ class PostApplicationServiceDeleteResilienceTest {
         mock(PostRecommendFeatureStoreService::class.java)
     private val postKeywordSearchPipelineService: PostKeywordSearchPipelineService =
         mock(PostKeywordSearchPipelineService::class.java)
-    private val applicationEventPublisher: ApplicationEventPublisher = mock(ApplicationEventPublisher::class.java)
+    private val objectMapper = ObjectMapper()
     private val postReadCacheInvalidator = PostReadCacheInvalidator(cacheManager)
     private val postWriteSideEffectHandler =
         PostWriteSideEffectHandler(
@@ -75,7 +85,17 @@ class PostApplicationServiceDeleteResilienceTest {
             postRepository = postRepository,
             postAttrRepository = postAttrRepository,
             eventPublisher = eventPublisher,
+            objectMapper = objectMapper,
             transactionManager = transactionManager,
+        )
+    private val taskRepository = RecordingTaskQueueRepository()
+    private val taskFacade: TaskFacade =
+        TaskFacade(
+            taskRepository = taskRepository,
+            taskHandlerRegistry = postWriteTaskHandlerRegistry(),
+            objectMapper = objectMapper,
+            environment = MockEnvironment().also { it.setActiveProfiles("test") },
+            inlineWhenNotProd = false,
         )
 
     private val service =
@@ -93,7 +113,8 @@ class PostApplicationServiceDeleteResilienceTest {
             postRecommendRankingService = postRecommendRankingService,
             postRecommendFeatureStoreService = postRecommendFeatureStoreService,
             postKeywordSearchPipelineService = postKeywordSearchPipelineService,
-            applicationEventPublisher = applicationEventPublisher,
+            taskFacade = taskFacade,
+            objectMapper = objectMapper,
             tagsLocalCacheTtlSeconds = 180,
         )
 
@@ -189,13 +210,13 @@ class PostApplicationServiceDeleteResilienceTest {
 
         // when
         service.restoreDeletedByIdForAdmin(21)
-        val afterCommitEvent = capturePostWriteAfterCommitEvent()
+        val payload = capturePostWriteSideEffectPayload()
 
         // then
         verifyNoInteractions(cacheManager, postRecommendFeatureStoreService)
 
         // when
-        postWriteSideEffectHandler.handle(afterCommitEvent)
+        postWriteSideEffectHandler.handle(payload)
 
         // then
         then(cacheManager).should().getCache(PostQueryCacheNames.FEED)
@@ -220,13 +241,13 @@ class PostApplicationServiceDeleteResilienceTest {
 
         // when
         service.hardDeleteDeletedByIdForAdmin(22)
-        val afterCommitEvent = capturePostWriteAfterCommitEvent()
+        val payload = capturePostWriteSideEffectPayload()
 
         // then
         verifyNoInteractions(cacheManager, uploadedFileRetentionService, postRecommendFeatureStoreService)
 
         // when
-        postWriteSideEffectHandler.handle(afterCommitEvent)
+        postWriteSideEffectHandler.handle(payload)
 
         // then
         then(cacheManager).should().getCache(PostQueryCacheNames.FEED)
@@ -252,9 +273,9 @@ class PostApplicationServiceDeleteResilienceTest {
 
         // when
         service.hardDeleteDeletedByIdForAdmin(23)
-        val afterCommitEvent = capturePostWriteAfterCommitEvent()
+        val payload = capturePostWriteSideEffectPayload()
 
-        postWriteSideEffectHandler.handle(afterCommitEvent)
+        postWriteSideEffectHandler.handle(payload)
 
         // then
         verifyNoInteractions(cacheManager)
@@ -287,9 +308,9 @@ class PostApplicationServiceDeleteResilienceTest {
 
         // when
         service.hardDeleteDeletedByIdForAdmin(24)
-        val afterCommitEvent = capturePostWriteAfterCommitEvent()
+        val payload = capturePostWriteSideEffectPayload()
 
-        postWriteSideEffectHandler.handle(afterCommitEvent)
+        postWriteSideEffectHandler.handle(payload)
 
         // then
         verifyNoInteractions(cacheManager)
@@ -297,10 +318,108 @@ class PostApplicationServiceDeleteResilienceTest {
         then(postRecommendFeatureStoreService).should().evict(24)
     }
 
-    private fun capturePostWriteAfterCommitEvent(): PostWriteAfterCommitEvent {
-        val captor = ArgumentCaptor.forClass(PostWriteAfterCommitEvent::class.java)
-        then(applicationEventPublisher).should().publishEvent(captor.capture())
-        return captor.value
+    private fun capturePostWriteSideEffectPayload(): PostWriteSideEffectPayload {
+        val task = taskRepository.savedTasks.single { it.taskType == PostWriteSideEffectPayload.TASK_TYPE }
+        return objectMapper.readValue(task.payload, PostWriteSideEffectPayload::class.java)
+    }
+
+    private fun postWriteTaskHandlerRegistry(): TaskHandlerRegistry {
+        val registry = TaskHandlerRegistry()
+        registry.register(
+            PostWriteSideEffectPayload.TASK_TYPE,
+            TaskHandlerEntry(
+                taskType = PostWriteSideEffectPayload.TASK_TYPE,
+                payloadClass = PostWriteSideEffectPayload::class.java,
+                handlerMethod =
+                    TaskHandlerMethod(
+                        bean = postWriteSideEffectHandler,
+                        method =
+                            PostWriteSideEffectHandler::class.java.getDeclaredMethod(
+                                "handle",
+                                PostWriteSideEffectPayload::class.java,
+                            ),
+                    ),
+                retryPolicy = TaskRetryPolicy.fallback(PostWriteSideEffectPayload.TASK_TYPE),
+            ),
+        )
+        return registry
+    }
+
+    private class RecordingTaskQueueRepository : TaskQueueRepositoryPort {
+        val savedTasks = mutableListOf<Task>()
+
+        override fun save(task: Task): Task {
+            savedTasks += task
+            return task
+        }
+
+        override fun existsByUid(uid: UUID): Boolean = savedTasks.any { it.uid == uid }
+
+        override fun countByStatus(status: TaskStatus): Long = unsupported()
+
+        override fun countByStatusAndNextRetryAtLessThanEqual(
+            status: TaskStatus,
+            nextRetryAt: Instant,
+        ): Long = unsupported()
+
+        override fun countByStatusAndModifiedAtBefore(
+            status: TaskStatus,
+            modifiedAt: Instant,
+        ): Long = unsupported()
+
+        override fun countByTaskTypeAndStatus(
+            taskType: String,
+            status: TaskStatus,
+        ): Long = unsupported()
+
+        override fun countByTaskTypeAndStatusAndNextRetryAtLessThanEqual(
+            taskType: String,
+            status: TaskStatus,
+            nextRetryAt: Instant,
+        ): Long = unsupported()
+
+        override fun countByTaskTypeAndStatusAndModifiedAtBefore(
+            taskType: String,
+            status: TaskStatus,
+            modifiedAt: Instant,
+        ): Long = unsupported()
+
+        override fun findByStatusAndNextRetryAtLessThanEqualOrderByNextRetryAtAsc(
+            status: TaskStatus,
+            nextRetryAt: Instant,
+            pageable: Pageable,
+        ): List<Task> = unsupported()
+
+        override fun findByStatusOrderByModifiedAtAsc(
+            status: TaskStatus,
+            pageable: Pageable,
+        ): List<Task> = unsupported()
+
+        override fun findByStatusOrderByModifiedAtDesc(
+            status: TaskStatus,
+            pageable: Pageable,
+        ): List<Task> = unsupported()
+
+        override fun findByStatusAndModifiedAtBeforeOrderByModifiedAtAsc(
+            status: TaskStatus,
+            modifiedAt: Instant,
+            pageable: Pageable,
+        ): List<Task> = unsupported()
+
+        override fun findByTaskTypeAndStatusAndNextRetryAtLessThanEqualOrderByNextRetryAtAsc(
+            taskType: String,
+            status: TaskStatus,
+            nextRetryAt: Instant,
+            pageable: Pageable,
+        ): List<Task> = unsupported()
+
+        override fun findByTaskTypeAndStatusOrderByModifiedAtDesc(
+            taskType: String,
+            status: TaskStatus,
+            pageable: Pageable,
+        ): List<Task> = unsupported()
+
+        private fun <T> unsupported(): T = throw UnsupportedOperationException("not needed in this test")
     }
 
     private class NoopTransactionManager : PlatformTransactionManager {

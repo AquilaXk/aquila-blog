@@ -1,19 +1,17 @@
 package com.back.global.task.application
 
-import com.back.global.app.application.AppFacade
 import com.back.global.task.application.port.output.TaskQueueRepositoryPort
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
 import com.back.standard.dto.TaskPayload
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatCode
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
-import org.mockito.Mockito.mock
-import org.mockito.Mockito.`when`
-import org.springframework.core.env.Environment
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.Pageable
+import org.springframework.mock.env.MockEnvironment
 import tools.jackson.databind.ObjectMapper
 import java.time.Instant
 import java.util.UUID
@@ -60,15 +58,44 @@ class TaskFacadeTest {
         assertThat(handler.handledPayloads).containsExactly(payload)
     }
 
+    @Test
+    @DisplayName("addToQueue는 호출자가 inline 실행을 비활성화할 수 있다")
+    fun `add to queue can disable inline handler execution`() {
+        val repository = InMemoryTaskQueueRepository()
+        val handler = StubTaskHandler()
+        val facade = createFacade(repository, handler, inlineWhenNotProd = true)
+        val payload = StubTaskPayload(uid = UUID.randomUUID())
+
+        facade.addToQueue(payload, inlineWhenEnabled = false)
+
+        assertThat(repository.savedTasks).hasSize(1)
+        assertThat(handler.handledPayloads).isEmpty()
+    }
+
+    @Test
+    @DisplayName("fire는 handler 원본 예외를 그대로 전파한다")
+    fun `fire unwraps handler exception`() {
+        val repository = InMemoryTaskQueueRepository()
+        val failure = RuntimeException("handler down")
+        val facade = createFacade(repository, StubTaskHandler(failure = failure))
+
+        assertThatThrownBy {
+            facade.fire(StubTaskPayload(uid = UUID.randomUUID()))
+        }.isSameAs(failure)
+    }
+
     private fun createFacade(
         repository: InMemoryTaskQueueRepository,
         handler: StubTaskHandler = StubTaskHandler(),
         inlineWhenNotProd: Boolean = false,
     ): TaskFacade {
-        val environment = mock(Environment::class.java)
-        `when`(environment.matchesProfiles("prod")).thenReturn(false)
+        val environment =
+            MockEnvironment()
+                .withProperty("custom.site.cookieDomain", "")
+                .withProperty("custom.site.frontUrl", "http://localhost:3000")
+                .withProperty("custom.site.backUrl", "http://localhost:8080")
+        environment.setActiveProfiles("test")
         val objectMapper = ObjectMapper()
-        AppFacade(environment, objectMapper)
 
         val registry = TaskHandlerRegistry()
         registry.register(
@@ -84,7 +111,13 @@ class TaskFacadeTest {
                 retryPolicy = TaskRetryPolicy.fallback(StubTaskPayload.TASK_TYPE),
             ),
         )
-        return TaskFacade(repository, registry, objectMapper, inlineWhenNotProd = inlineWhenNotProd)
+        return TaskFacade(
+            taskRepository = repository,
+            taskHandlerRegistry = registry,
+            objectMapper = objectMapper,
+            environment = environment,
+            inlineWhenNotProd = inlineWhenNotProd,
+        )
     }
 
     private data class StubTaskPayload(
@@ -97,10 +130,13 @@ class TaskFacadeTest {
         }
     }
 
-    private class StubTaskHandler {
+    private class StubTaskHandler(
+        private val failure: RuntimeException? = null,
+    ) {
         val handledPayloads = mutableListOf<StubTaskPayload>()
 
         fun handle(payload: StubTaskPayload) {
+            failure?.let { throw it }
             handledPayloads += payload
         }
     }

@@ -14,6 +14,12 @@ import org.springframework.stereotype.Component
     havingValue = "true",
     matchIfMissing = true,
 )
+@ConditionalOnProperty(
+    prefix = "custom.task.processor",
+    name = ["enabled"],
+    havingValue = "true",
+    matchIfMissing = true,
+)
 class TaskProcessingLockJanitor(
     private val taskProcessingLockDiagnosticsService: TaskProcessingLockDiagnosticsService,
 ) {

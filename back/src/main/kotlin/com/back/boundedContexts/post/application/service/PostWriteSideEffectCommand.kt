@@ -1,5 +1,38 @@
 package com.back.boundedContexts.post.application.service
 
+import com.back.global.task.annotation.Task
+import com.back.standard.dto.TaskPayload
+import java.util.UUID
+
+@Task(
+    type = PostWriteSideEffectPayload.TASK_TYPE,
+    label = "게시글 쓰기 후속 작업",
+    maxRetries = 5,
+    baseDelaySeconds = 10,
+    backoffMultiplier = 2.0,
+    maxDelaySeconds = 300,
+)
+data class PostWriteSideEffectPayload(
+    override val uid: UUID,
+    override val aggregateType: String,
+    override val aggregateId: Long,
+    val postId: Long,
+    val previousContent: String?,
+    val currentContent: String?,
+    val deletedContent: String?,
+    val beforeTags: List<String>,
+    val afterTags: List<String>,
+    val cacheInvalidationTargets: Set<PostReadCacheInvalidationTarget>,
+    val evictReason: String,
+    val recommendationAction: PostRecommendationSideEffect,
+    val domainEventType: String?,
+    val domainEventJson: String?,
+) : TaskPayload {
+    companion object {
+        const val TASK_TYPE = "post.write.side-effect"
+    }
+}
+
 internal data class PostWriteSideEffectCommand(
     val postId: Long,
     val previousContent: String?,
@@ -12,12 +45,12 @@ internal data class PostWriteSideEffectCommand(
     val recommendationAction: PostRecommendationSideEffect,
 )
 
-internal enum class PostRecommendationSideEffect {
+enum class PostRecommendationSideEffect {
     REFRESH,
     EVICT,
 }
 
-internal enum class PostReadCacheInvalidationTarget {
+enum class PostReadCacheInvalidationTarget {
     HOT_READ_PAGES,
     SEARCH_FIRST_PAGE,
     IMPACTED_TAG_PAGES,
@@ -33,7 +66,7 @@ internal enum class PostPublicChangeImpact {
 }
 
 internal sealed class PostReadCacheInvalidationScope(
-    private val targets: Set<PostReadCacheInvalidationTarget>,
+    private val targetSet: Set<PostReadCacheInvalidationTarget>,
 ) {
     data object None : PostReadCacheInvalidationScope(emptySet())
 
@@ -51,14 +84,27 @@ internal sealed class PostReadCacheInvalidationScope(
         impacts: Set<PostPublicChangeImpact>,
     ) : PostReadCacheInvalidationScope(targetsForModifiedPublicPost(impacts))
 
-    fun evicts(target: PostReadCacheInvalidationTarget): Boolean = target in targets
+    private class Explicit(
+        targets: Set<PostReadCacheInvalidationTarget>,
+    ) : PostReadCacheInvalidationScope(targets)
+
+    fun targets(): Set<PostReadCacheInvalidationTarget> = targetSet
+
+    fun evicts(target: PostReadCacheInvalidationTarget): Boolean = target in targetSet
 
     fun evictsPublicTags(): Boolean = evicts(PostReadCacheInvalidationTarget.PUBLIC_TAGS)
 
-    fun isEmpty(): Boolean = targets.isEmpty()
+    fun isEmpty(): Boolean = targetSet.isEmpty()
 
     companion object {
         private val ALL_PUBLIC_READ_TARGETS = PostReadCacheInvalidationTarget.entries.toSet()
+
+        fun fromTargets(targets: Set<PostReadCacheInvalidationTarget>): PostReadCacheInvalidationScope =
+            if (targets.isEmpty()) {
+                None
+            } else {
+                Explicit(targets)
+            }
 
         private fun targetsForModifiedPublicPost(impacts: Set<PostPublicChangeImpact>): Set<PostReadCacheInvalidationTarget> =
             buildSet {

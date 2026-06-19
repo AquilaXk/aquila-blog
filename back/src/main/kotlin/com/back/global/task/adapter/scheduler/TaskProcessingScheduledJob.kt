@@ -41,6 +41,12 @@ import kotlin.math.ceil
     havingValue = "true",
     matchIfMissing = true,
 )
+@ConditionalOnProperty(
+    prefix = "custom.task.processor",
+    name = ["enabled"],
+    havingValue = "true",
+    matchIfMissing = true,
+)
 class TaskProcessingScheduledJob(
     private val taskRepository: TaskRepository,
     private val taskHandlerRegistry: TaskHandlerRegistry,

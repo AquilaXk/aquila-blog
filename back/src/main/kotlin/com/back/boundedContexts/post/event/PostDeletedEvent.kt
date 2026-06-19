@@ -20,8 +20,8 @@ data class PostDeletedEvent
         override val uid: UUID,
         override val aggregateType: String,
         override val aggregateId: Long,
-        @field:JsonIgnore
-        @field:JsonProperty("postDto")
+        @param:JsonProperty("postDto")
+        @get:JsonIgnore
         val postDto: PostDto,
         val actorDto: MemberDto,
         val beforeTags: List<String> = emptyList(),

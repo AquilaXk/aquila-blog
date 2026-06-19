@@ -167,6 +167,7 @@ class PostWriteSideEffectHandler(
             cacheInvalidationScope = PostReadCacheInvalidationScope.fromTargets(cacheInvalidationTargets),
             evictReason = evictReason,
             recommendationAction = recommendationAction,
+            operationUid = uid,
         )
 
     private fun PostWriteSideEffectPayload.toDomainEvent(): EventPayload? {

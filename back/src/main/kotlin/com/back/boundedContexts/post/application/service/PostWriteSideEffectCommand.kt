@@ -43,6 +43,7 @@ internal data class PostWriteSideEffectCommand(
     val cacheInvalidationScope: PostReadCacheInvalidationScope,
     val evictReason: String,
     val recommendationAction: PostRecommendationSideEffect,
+    val operationUid: UUID = UUID.randomUUID(),
 )
 
 enum class PostRecommendationSideEffect {

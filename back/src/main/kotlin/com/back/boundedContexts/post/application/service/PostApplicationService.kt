@@ -1338,17 +1338,7 @@ class PostApplicationService(
             )
         }
 
-        val fingerprint =
-            listOf(
-                PostWriteSideEffectPayload.TASK_TYPE,
-                command.postId,
-                command.evictReason,
-                command.beforeTags.joinToString(","),
-                command.afterTags.joinToString(","),
-                command.cacheInvalidationScope.targets().joinToString(",") { it.name },
-                command.recommendationAction.name,
-            ).joinToString(":")
-        return UUID.nameUUIDFromBytes(fingerprint.toByteArray(StandardCharsets.UTF_8))
+        return command.operationUid
     }
 
     private fun buildPublicPostChangeImpacts(

@@ -51,8 +51,10 @@ class ArchitectureGuardTest {
         Regex("""^(com\.back\.[A-Za-z0-9_.]+\.domain(?:\.[A-Za-z0-9_]+)*)\.([A-Za-z][A-Za-z0-9_]*)$""")
     private val persistenceModelAliasTargetRegex =
         Regex("""^com\.back\.[A-Za-z0-9_.]+\.model(?:\.[A-Za-z0-9_]+)*\.[A-Za-z][A-Za-z0-9_]*$""")
+    private val aliasTargetTokenRegex =
+        Regex("""[A-Za-z][A-Za-z0-9_.]*""")
     private val typeAliasRegex =
-        Regex("""\btypealias\s+([A-Za-z][A-Za-z0-9_]*)\s*=\s*([A-Za-z][A-Za-z0-9_.]*)""")
+        Regex("""\btypealias\s+([A-Za-z][A-Za-z0-9_]*)\s*=\s*([^\r\n]+(?:\r?\n[ \t]+[^\r\n]+)*)""")
 
     private data class PersistenceModelAlias(
         val sourcePath: String,
@@ -161,6 +163,78 @@ class ArchitectureGuardTest {
         return persistenceBridgeTargetsInPackage(packageName, excludingPath)[aliasName]
     }
 
+    private fun persistenceModelTargetForAliasToken(
+        aliasTarget: String,
+        importedModelTargets: Map<String, String>,
+        wildcardModelImports: List<String>,
+        importedBridgeTargets: Map<String, String>,
+        wildcardBridgeImports: List<String>,
+        currentPackageName: String?,
+        localBridgeTargets: Map<String, String>,
+        excludingPath: Path,
+    ): String? =
+        when {
+            persistenceModelAliasTargetRegex.matches(aliasTarget) -> aliasTarget
+            importedModelTargets.containsKey(aliasTarget) -> importedModelTargets.getValue(aliasTarget)
+            importedBridgeTargets.containsKey(aliasTarget) -> importedBridgeTargets.getValue(aliasTarget)
+            localBridgeTargets.containsKey(aliasTarget) -> localBridgeTargets.getValue(aliasTarget)
+            bridgeAliasTargetFqcn(aliasTarget, currentPackageName, localBridgeTargets, excludingPath) != null ->
+                bridgeAliasTargetFqcn(aliasTarget, currentPackageName, localBridgeTargets, excludingPath)
+            wildcardBridgeImports.isNotEmpty() && !aliasTarget.contains(".") ->
+                wildcardBridgeImports
+                    .mapNotNull { importPath -> persistenceBridgeTargetsInPackage(importPath)[aliasTarget] }
+                    .takeIf { targets -> targets.isNotEmpty() }
+                    ?.joinToString("|")
+            wildcardModelImports.isNotEmpty() && !aliasTarget.contains(".") ->
+                wildcardModelTargets(wildcardModelImports, aliasTarget)
+                    .takeIf { targets -> targets.isNotEmpty() }
+                    ?.joinToString("|")
+            else -> null
+        }
+
+    private fun persistenceModelTargetsInAliasTarget(
+        aliasTarget: String,
+        importedModelTargets: Map<String, String>,
+        wildcardModelImports: List<String>,
+        importedBridgeTargets: Map<String, String>,
+        wildcardBridgeImports: List<String>,
+        currentPackageName: String?,
+        localBridgeTargets: Map<String, String>,
+        excludingPath: Path,
+    ): List<String> {
+        val directTarget =
+            persistenceModelTargetForAliasToken(
+                aliasTarget,
+                importedModelTargets,
+                wildcardModelImports,
+                importedBridgeTargets,
+                wildcardBridgeImports,
+                currentPackageName,
+                localBridgeTargets,
+                excludingPath,
+            )
+
+        if (directTarget != null) {
+            return listOf(directTarget)
+        }
+
+        return aliasTargetTokenRegex
+            .findAll(aliasTarget)
+            .mapNotNull { match ->
+                persistenceModelTargetForAliasToken(
+                    match.value,
+                    importedModelTargets,
+                    wildcardModelImports,
+                    importedBridgeTargets,
+                    wildcardBridgeImports,
+                    currentPackageName,
+                    localBridgeTargets,
+                    excludingPath,
+                )
+            }.distinct()
+            .toList()
+    }
+
     private fun persistenceBridgeTargetsInPackage(
         packageName: String,
         excludingPath: Path? = null,
@@ -232,36 +306,20 @@ class ArchitectureGuardTest {
             sourceBridgeTargetsChanged = false
 
             sourceAliasDeclarations.forEach { (aliasName, aliasTarget) ->
+                val localBridgeTargets = externalSamePackageBridgeTargets + sourceBridgeTargets
                 val targetFqcn =
-                    when {
-                        persistenceModelAliasTargetRegex.matches(aliasTarget) -> aliasTarget
-                        importedModelTargets.containsKey(aliasTarget) -> importedModelTargets.getValue(aliasTarget)
-                        importedBridgeTargets.containsKey(aliasTarget) -> importedBridgeTargets.getValue(aliasTarget)
-                        externalSamePackageBridgeTargets.containsKey(aliasTarget) ->
-                            externalSamePackageBridgeTargets.getValue(aliasTarget)
-                        bridgeAliasTargetFqcn(aliasTarget, currentPackageName, sourceBridgeTargets, path) != null ->
-                            bridgeAliasTargetFqcn(aliasTarget, currentPackageName, sourceBridgeTargets, path)
-                                ?: return@forEach
-                        sourceBridgeTargets.containsKey(aliasTarget) -> sourceBridgeTargets.getValue(aliasTarget)
-                        wildcardBridgeImports.isNotEmpty() && !aliasTarget.contains(".") -> {
-                            val bridgeTargets =
-                                wildcardBridgeImports.mapNotNull { importPath ->
-                                    persistenceBridgeTargetsInPackage(importPath)[aliasTarget]
-                                }
-
-                            if (bridgeTargets.isEmpty()) {
-                                return@forEach
-                            }
-
-                            bridgeTargets.joinToString("|")
-                        }
-                        wildcardModelImports.isNotEmpty() && !aliasTarget.contains(".") ->
-                            wildcardModelTargets(wildcardModelImports, aliasTarget)
-                                .takeIf { targets -> targets.isNotEmpty() }
-                                ?.joinToString("|")
-                                ?: return@forEach
-                        else -> return@forEach
-                    }
+                    persistenceModelTargetsInAliasTarget(
+                        aliasTarget,
+                        importedModelTargets,
+                        wildcardModelImports,
+                        importedBridgeTargets,
+                        wildcardBridgeImports,
+                        currentPackageName,
+                        localBridgeTargets,
+                        path,
+                    ).takeIf { targets -> targets.isNotEmpty() }
+                        ?.joinToString("|")
+                        ?: return@forEach
 
                 if (sourceBridgeTargets[aliasName] != targetFqcn) {
                     sourceBridgeTargets[aliasName] = targetFqcn
@@ -277,33 +335,18 @@ class ArchitectureGuardTest {
             .mapNotNull { match ->
                 val aliasTarget = match.groupValues[2]
                 val targetFqcn =
-                    when {
-                        persistenceModelAliasTargetRegex.matches(aliasTarget) -> aliasTarget
-                        importedModelTargets.containsKey(aliasTarget) -> importedModelTargets.getValue(aliasTarget)
-                        importedBridgeTargets.containsKey(aliasTarget) -> importedBridgeTargets.getValue(aliasTarget)
-                        samePackageBridgeTargets.containsKey(aliasTarget) -> samePackageBridgeTargets.getValue(aliasTarget)
-                        bridgeAliasTargetFqcn(aliasTarget, currentPackageName, samePackageBridgeTargets, path) != null ->
-                            bridgeAliasTargetFqcn(aliasTarget, currentPackageName, samePackageBridgeTargets, path)
-                                ?: return@mapNotNull null
-                        wildcardBridgeImports.isNotEmpty() && !aliasTarget.contains(".") -> {
-                            val bridgeTargets =
-                                wildcardBridgeImports.mapNotNull { importPath ->
-                                    persistenceBridgeTargetsInPackage(importPath)[aliasTarget]
-                                }
-
-                            if (bridgeTargets.isEmpty()) {
-                                return@mapNotNull null
-                            }
-
-                            bridgeTargets.joinToString("|")
-                        }
-                        wildcardModelImports.isNotEmpty() && !aliasTarget.contains(".") ->
-                            wildcardModelTargets(wildcardModelImports, aliasTarget)
-                                .takeIf { targets -> targets.isNotEmpty() }
-                                ?.joinToString("|")
-                                ?: return@mapNotNull null
-                        else -> return@mapNotNull null
-                    }
+                    persistenceModelTargetsInAliasTarget(
+                        aliasTarget,
+                        importedModelTargets,
+                        wildcardModelImports,
+                        importedBridgeTargets,
+                        wildcardBridgeImports,
+                        currentPackageName,
+                        samePackageBridgeTargets,
+                        path,
+                    ).takeIf { targets -> targets.isNotEmpty() }
+                        ?.joinToString("|")
+                        ?: return@mapNotNull null
 
                 PersistenceModelAlias(
                     sourcePath = relativeMainSourcePath(path),
@@ -606,6 +649,8 @@ class ArchitectureGuardTest {
                     |typealias ImportedPostAttrAlias = ImportedPostAttr
                     |typealias WildcardPostComment = PostComment
                     |typealias LocalId = Long
+                    |typealias ImportedPostList = List<Post>
+                    |typealias ImportedPostHandler = (Post) -> ImportedPostAttr
                     |typealias MultilinePost =
                     |    com.back.boundedContexts.post.model.PostLike
                     """.trimMargin(),
@@ -627,6 +672,16 @@ class ArchitectureGuardTest {
                     "example/domain/PersistenceModelAliases.kt",
                     "WildcardPostComment",
                     "com.back.boundedContexts.post.model.PostComment",
+                ),
+                PersistenceModelAlias(
+                    "example/domain/PersistenceModelAliases.kt",
+                    "ImportedPostList",
+                    "com.back.boundedContexts.post.model.Post",
+                ),
+                PersistenceModelAlias(
+                    "example/domain/PersistenceModelAliases.kt",
+                    "ImportedPostHandler",
+                    "com.back.boundedContexts.post.model.Post|com.back.boundedContexts.post.model.PostAttr",
                 ),
                 PersistenceModelAlias(
                     "example/domain/PersistenceModelAliases.kt",

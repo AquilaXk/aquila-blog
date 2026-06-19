@@ -23,6 +23,7 @@ import com.back.global.task.application.TaskRetryPolicy
 import com.back.global.task.application.port.output.TaskQueueRepositoryPort
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
+import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -224,6 +225,50 @@ class PostApplicationServiceDeleteResilienceTest {
     }
 
     @Test
+    @DisplayName("관리자 복구 후속 작업 UID는 같은 글 반복 복구에서도 충돌하지 않는다")
+    fun createUniqueRestoreSideEffectTaskUidForRepeatedRestore() {
+        // given
+        val snapshot =
+            AdmDeletedPostSnapshotDto(
+                id = 25,
+                title = "반복 복구 대상",
+                content = "반복 복구 본문 #tag",
+                authorId = 3,
+                published = true,
+                listed = true,
+            )
+        val restoredPost =
+            Post(
+                id = 25,
+                author =
+                    Member(
+                        id = 3,
+                        username = "repeat-restore-author",
+                        password = null,
+                        nickname = "반복복구작성자",
+                        email = null,
+                        apiKey = "repeat-restore-author-api-key",
+                    ),
+                title = "반복 복구 대상",
+                content = "반복 복구 본문 #tag",
+                published = true,
+                listed = true,
+            )
+        given(postRepository.findDeletedSnapshotById(25)).willReturn(snapshot)
+        given(postRepository.restoreDeletedById(25)).willReturn(true)
+        given(postRepository.findById(25)).willReturn(Optional.of(restoredPost))
+
+        // when
+        service.restoreDeletedByIdForAdmin(25)
+        service.restoreDeletedByIdForAdmin(25)
+
+        // then
+        val payloads = capturePostWriteSideEffectPayloads()
+        assertThat(payloads).hasSize(2)
+        assertThat(payloads.map { it.uid }).doesNotHaveDuplicates()
+    }
+
+    @Test
     @DisplayName("관리자 영구삭제는 캐시와 첨부파일 정리와 추천 evict를 commit 이후에 실행한다")
     fun runHardDeleteSideEffectsAfterCommit() {
         // given
@@ -319,9 +364,16 @@ class PostApplicationServiceDeleteResilienceTest {
     }
 
     private fun capturePostWriteSideEffectPayload(): PostWriteSideEffectPayload {
-        val task = taskRepository.savedTasks.single { it.taskType == PostWriteSideEffectPayload.TASK_TYPE }
+        val task = postWriteSideEffectTasks().single()
         return objectMapper.readValue(task.payload, PostWriteSideEffectPayload::class.java)
     }
+
+    private fun capturePostWriteSideEffectPayloads(): List<PostWriteSideEffectPayload> =
+        postWriteSideEffectTasks()
+            .map { task -> objectMapper.readValue(task.payload, PostWriteSideEffectPayload::class.java) }
+
+    private fun postWriteSideEffectTasks(): List<Task> =
+        taskRepository.savedTasks.filter { it.taskType == PostWriteSideEffectPayload.TASK_TYPE }
 
     private fun postWriteTaskHandlerRegistry(): TaskHandlerRegistry {
         val registry = TaskHandlerRegistry()

@@ -70,7 +70,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
             val post = postFacade.findById(postId).getOrThrow()
 
             resultActions.andExpect {
-                match(handler().handlerType(ApiV1PostController::class.java))
+                match(handler().handlerType(ApiV1PostCommandController::class.java))
                 match(handler().methodName("write"))
                 status { isCreated() }
                 jsonPath("$.resultCode") { value("201-1") }
@@ -92,7 +92,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     contentType = MediaType.APPLICATION_JSON
                     content = """{"title": "공개 글", "content": "내용", "published": true, "listed": true}"""
                 }.andExpect {
-                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().handlerType(ApiV1PostCommandController::class.java))
                     match(handler().methodName("write"))
                     status { isCreated() }
                     jsonPath("$.data.published") { value(true) }
@@ -108,7 +108,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     contentType = MediaType.APPLICATION_JSON
                     content = """{"title": "", "content": "내용"}"""
                 }.andExpect {
-                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().handlerType(ApiV1PostCommandController::class.java))
                     match(handler().methodName("write"))
                     status { isBadRequest() }
                     jsonPath("$.resultCode") { value("400-1") }
@@ -204,7 +204,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
             val post = postFacade.findPagedByKw("", PostSearchSortType1.CREATED_AT, 1, 1).content.first()
 
             mvc.get("/post/api/v1/posts/${post.id}").andExpect {
-                match(handler().handlerType(ApiV1PostController::class.java))
+                match(handler().handlerType(ApiV1PostPublicReadController::class.java))
                 match(handler().methodName("getItem"))
                 status { isOk() }
                 jsonPath("$.id") { value(post.id) }
@@ -311,7 +311,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @Test
         fun `실패 - 존재하지 않는 글`() {
             mvc.get("/post/api/v1/posts/${Int.MAX_VALUE}").andExpect {
-                match(handler().handlerType(ApiV1PostController::class.java))
+                match(handler().handlerType(ApiV1PostPublicReadController::class.java))
                 match(handler().methodName("getItem"))
                 status { isNotFound() }
                 jsonPath("$.resultCode") { value("404-1") }
@@ -338,7 +338,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
             val posts = postFacade.findPagedByKw("", PostSearchSortType1.CREATED_AT, 1, 30).content
 
             mvc.get("/post/api/v1/posts").andExpect {
-                match(handler().handlerType(ApiV1PostController::class.java))
+                match(handler().handlerType(ApiV1PostPublicReadController::class.java))
                 match(handler().methodName("getItems"))
                 status { isOk() }
                 jsonPath("$.content.length()") { value(posts.size) }
@@ -350,7 +350,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
             val posts = postFacade.findPagedByKw("", PostSearchSortType1.CREATED_AT, 1, 30).content
 
             mvc.get("/post/api/v1/posts?page=0&pageSize=31").andExpect {
-                match(handler().handlerType(ApiV1PostController::class.java))
+                match(handler().handlerType(ApiV1PostPublicReadController::class.java))
                 match(handler().methodName("getItems"))
                 status { isOk() }
                 jsonPath("$.content.length()") { value(posts.size) }
@@ -409,7 +409,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     header(HttpHeaders.AUTHORIZATION, "Bearer invalid-api-key invalid-access-token")
                 }.andExpect {
                     status { isOk() }
-                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().handlerType(ApiV1PostPublicReadController::class.java))
                     match(handler().methodName("getItems"))
                 }
         }
@@ -425,7 +425,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     header(HttpHeaders.AUTHORIZATION, "Bearer invalid-api-key invalid-access-token")
                 }.andExpect {
                     status { isOk() }
-                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().handlerType(ApiV1PostPublicReadController::class.java))
                     match(handler().methodName("getFeedByCursor"))
                 }
         }
@@ -455,7 +455,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     header(HttpHeaders.AUTHORIZATION, "Bearer invalid-api-key invalid-access-token")
                 }.andExpect {
                     status { isOk() }
-                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().handlerType(ApiV1PostPublicReadController::class.java))
                     match(handler().methodName("exploreByCursor"))
                 }
         }
@@ -524,7 +524,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                         param("sort", "CREATED_AT")
                     }.andExpect {
                         status { isOk() }
-                        match(handler().handlerType(ApiV1PostController::class.java))
+                        match(handler().handlerType(ApiV1PostPublicReadController::class.java))
                         match(handler().methodName("getBootstrap"))
                         jsonPath("$.feed.content") { isArray() }
                         jsonPath("$.tags") { isArray() }
@@ -541,6 +541,37 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                 .contains("stale-while-revalidate")
             assertThat(response.getHeader(HttpHeaders.PRAGMA)).isNull()
             assertThat(response.getHeader(HttpHeaders.EXPIRES)).isNull()
+        }
+
+        @Test
+        fun `홈 bootstrap 조회는 tag와 cursor 미지원 정렬을 공개 탐색 기본 정렬로 보정한다`() {
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+            val uniqueTag = "bootstrap-tag-${System.currentTimeMillis()}"
+            postFacade.write(
+                actor,
+                "bootstrap tag post",
+                """
+                tags: [$uniqueTag]
+
+                bootstrap tag 검증 본문
+                """.trimIndent(),
+                true,
+                true,
+            )
+
+            mvc
+                .get("/post/api/v1/posts/bootstrap") {
+                    param("tag", uniqueTag)
+                    param("pageSize", "24")
+                    param("sort", PostSearchSortType1.MODIFIED_AT.name)
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1PostPublicReadController::class.java))
+                    match(handler().methodName("getBootstrap"))
+                    jsonPath("$.feed.content") { isArray() }
+                    jsonPath("$.tags") { isArray() }
+                    header { string("X-Cache-Policy", "bootstrap-max20-smax60-swr60") }
+                }
         }
 
         @Test
@@ -573,6 +604,41 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         }
 
         @Test
+        fun `같은 작성자의 관련 공개 글 조회는 제외 글과 limit 경계를 보정한다`() {
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+            val excludedPost =
+                postFacade.write(
+                    actor,
+                    "related-author-excluded-${System.currentTimeMillis()}",
+                    "관련 글 제외 대상",
+                    true,
+                    true,
+                )
+            val relatedPost =
+                postFacade.write(
+                    actor,
+                    "related-author-target-${System.currentTimeMillis()}",
+                    "관련 글 조회 대상",
+                    true,
+                    true,
+                )
+
+            mvc
+                .get("/post/api/v1/posts/related/author") {
+                    param("authorId", actor.id.toString())
+                    param("excludePostId", excludedPost.id.toString())
+                    param("limit", "99")
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1PostPublicReadController::class.java))
+                    match(handler().methodName("getRelatedByAuthor"))
+                    jsonPath("$[*].id") { value(Matchers.hasItem(relatedPost.id.toInt())) }
+                    jsonPath("$[*].id") { value(Matchers.not(Matchers.hasItem(excludedPost.id.toInt()))) }
+                    header { exists(HttpHeaders.ETAG) }
+                }
+        }
+
+        @Test
         fun `탐색 목록 조회는 tags 와 category 메타를 포함한다`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val uniqueTitle = "feed-meta-${System.currentTimeMillis()}"
@@ -592,7 +658,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     param("pageSize", "30")
                 }.andExpect {
                     status { isOk() }
-                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().handlerType(ApiV1PostPublicReadController::class.java))
                     match(handler().methodName("explore"))
                     jsonPath("$.content[?(@.id == ${post.id})]") { value(Matchers.not(Matchers.empty<Any>())) }
                     jsonPath("$.content[?(@.id == ${post.id})].tags[*]") { value(Matchers.hasItems("성능", "피드")) }
@@ -625,7 +691,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     param("sort", "CREATED_AT")
                 }.andExpect {
                     status { isOk() }
-                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().handlerType(ApiV1PostPublicReadController::class.java))
                     match(handler().methodName("search"))
                     jsonPath("$.content[?(@.id == ${post.id})]") { value(Matchers.not(Matchers.empty<Any>())) }
                 }
@@ -644,7 +710,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     header(HttpHeaders.AUTHORIZATION, "Bearer invalid-api-key invalid-access-token")
                 }.andExpect {
                     status { isOk() }
-                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().handlerType(ApiV1PostPublicReadController::class.java))
                     match(handler().methodName("search"))
                 }
         }
@@ -759,7 +825,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     param("sort", "CREATED_AT")
                 }.andExpect {
                     status { isOk() }
-                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().handlerType(ApiV1PostPublicReadController::class.java))
                     match(handler().methodName("search"))
                     jsonPath("$.content[?(@.id == ${post.id})]") { value(Matchers.not(Matchers.empty<Any>())) }
                     jsonPath("$.content[?(@.id == ${post.id})].tags[*]") { value(Matchers.hasItem("SSE")) }
@@ -791,7 +857,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     param("sort", "CREATED_AT")
                 }.andExpect {
                     status { isOk() }
-                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().handlerType(ApiV1PostPublicReadController::class.java))
                     match(handler().methodName("search"))
                     jsonPath("$.content[?(@.id == ${post.id})]") { value(Matchers.not(Matchers.empty<Any>())) }
                     jsonPath("$.content[?(@.id == ${post.id})].tags[*]") { value(Matchers.hasItem("Kotlin")) }
@@ -824,7 +890,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     param("sort", "CREATED_AT")
                 }.andExpect {
                     status { isOk() }
-                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().handlerType(ApiV1PostPublicReadController::class.java))
                     match(handler().methodName("explore"))
                     jsonPath("$.content[?(@.id == ${post.id})]") { value(Matchers.not(Matchers.empty<Any>())) }
                     jsonPath("$.content[?(@.id == ${post.id})].tags[*]") { value(Matchers.hasItem("SSE")) }
@@ -850,7 +916,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                 .get("/post/api/v1/posts/tags")
                 .andExpect {
                     status { isOk() }
-                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().handlerType(ApiV1PostPublicReadController::class.java))
                     match(handler().methodName("getTags"))
                     jsonPath("$[*].tag") { value(Matchers.hasItems("운영", "성능")) }
                     jsonPath("$[?(@.tag == '운영')].count") { value(Matchers.hasItem(Matchers.greaterThanOrEqualTo(1))) }
@@ -903,7 +969,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     contentType = MediaType.APPLICATION_JSON
                     content = """{"title": "제목 new", "content": "내용 new", "version": $version}"""
                 }.andExpect {
-                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().handlerType(ApiV1PostCommandController::class.java))
                     match(handler().methodName("modify"))
                     status { isOk() }
                     jsonPath("$.resultCode") { value("200-1") }
@@ -1075,7 +1141,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
             val post = postFacade.write(actor, "삭제할 글", "내용", true, true)
 
             mvc.delete("/post/api/v1/posts/${post.id}").andExpect {
-                match(handler().handlerType(ApiV1PostController::class.java))
+                match(handler().handlerType(ApiV1PostCommandController::class.java))
                 match(handler().methodName("delete"))
                 status { isOk() }
                 jsonPath("$.resultCode") { value("200-1") }
@@ -1163,7 +1229,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     header("X-Forwarded-For", "203.0.113.10")
                     header(HttpHeaders.USER_AGENT, "JUnit-hit-single")
                 }.andExpect {
-                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().handlerType(ApiV1PostInteractionController::class.java))
                     match(handler().methodName("incrementHit"))
                     status { isOk() }
                     jsonPath("$.resultCode") { value("200-1") }
@@ -1236,7 +1302,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
             val post = postFacade.findPagedByKw("", PostSearchSortType1.CREATED_AT, 1, 1).content.first()
 
             mvc.put("/post/api/v1/posts/${post.id}/like").andExpect {
-                match(handler().handlerType(ApiV1PostController::class.java))
+                match(handler().handlerType(ApiV1PostInteractionController::class.java))
                 match(handler().methodName("like"))
                 status { isOk() }
                 jsonPath("$.resultCode") { value("200-1") }
@@ -1368,7 +1434,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @WithUserDetails("admin@test.com")
         fun `성공 - 내 글 목록 조회`() {
             mvc.get("/post/api/v1/posts/mine?page=1&pageSize=10").andExpect {
-                match(handler().handlerType(ApiV1PostController::class.java))
+                match(handler().handlerType(ApiV1PostCommandController::class.java))
                 match(handler().methodName("getMine"))
                 status { isOk() }
                 jsonPath("$.content") { isArray() }
@@ -1408,7 +1474,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @WithUserDetails("admin@test.com")
         fun `성공 - 새 임시글`() {
             mvc.post("/post/api/v1/posts/temp").andExpect {
-                match(handler().handlerType(ApiV1PostController::class.java))
+                match(handler().handlerType(ApiV1PostDraftController::class.java))
                 match(handler().methodName("getOrCreateTemp"))
                 status { isCreated() }
                 jsonPath("$.resultCode") { value("201-1") }

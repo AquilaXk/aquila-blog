@@ -23,7 +23,9 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.TransactionStatus
 import org.springframework.transaction.support.SimpleTransactionStatus
+import java.time.Clock
 import java.time.Instant
+import java.time.ZoneOffset
 
 class UploadedFileRetentionServiceConflictRecoveryTest {
     private val postRepository = mock(PostRepositoryPort::class.java)
@@ -31,6 +33,7 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
     private val postImageStoragePort = mock(PostImageStoragePort::class.java)
     private val prodSequenceGuardService = mock(ProdSequenceGuardService::class.java)
     private val transactionManager = NoopTransactionManager()
+    private val clock = Clock.fixed(Instant.parse("2026-06-19T00:00:00Z"), ZoneOffset.UTC)
 
     @Test
     fun `registerTempUpload은 sequence drift 충돌 시 같은 요청에서 보정 후 재시도한다`() {
@@ -117,6 +120,24 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
     }
 
     @Test
+    fun `registerTempUploadWithCompensation은 등록 성공 시 보상 삭제를 호출하지 않는다`() {
+        val repository = SuccessfulRepository()
+        val service = newService(repository)
+
+        assertDoesNotThrow {
+            service.registerTempUploadWithCompensation(
+                objectKey = "posts/2026/03/success.png",
+                contentType = "image/png",
+                fileSize = 128,
+                purpose = UploadedFilePurpose.POST_IMAGE,
+            )
+        }
+
+        assertThat(repository.findByObjectKey("posts/2026/03/success.png")).isNotNull
+        verifyNoInteractions(postImageStoragePort)
+    }
+
+    @Test
     fun `registerTempUploadWithCompensation은 POST_FILE 등록 실패 시 업로드 파일을 삭제한다`() {
         val failure = IllegalStateException("temp row save failed")
         val service = newService(AlwaysFailingRepository(failure))
@@ -155,15 +176,86 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
 
     private fun newService(repository: UploadedFileRepositoryPort): UploadedFileRetentionService =
         UploadedFileRetentionService(
-            uploadedFileRepository = repository,
-            postRepository = postRepository,
-            memberAttrRepository = memberAttrRepository,
-            postImageStoragePort = postImageStoragePort,
-            storageProperties = PostImageStorageProperties(),
-            retentionProperties = UploadedFileRetentionProperties(),
-            transactionManager = transactionManager,
-            prodSequenceGuardService = prodSequenceGuardService,
+            registrationService =
+                UploadedFileRegistrationService(
+                    uploadedFileRepository = repository,
+                    postImageStoragePort = postImageStoragePort,
+                    storageProperties = PostImageStorageProperties(),
+                    retentionProperties = UploadedFileRetentionProperties(),
+                    transactionManager = transactionManager,
+                    clock = clock,
+                    prodSequenceGuardService = prodSequenceGuardService,
+                ),
+            postAttachmentRetentionService =
+                PostAttachmentRetentionService(
+                    uploadedFileRepository = repository,
+                    storageProperties = PostImageStorageProperties(),
+                    retentionProperties = UploadedFileRetentionProperties(),
+                    clock = clock,
+                ),
+            profileImageRetentionService =
+                ProfileImageRetentionService(
+                    uploadedFileRepository = repository,
+                    postImageStoragePort = postImageStoragePort,
+                    storageProperties = PostImageStorageProperties(),
+                    retentionProperties = UploadedFileRetentionProperties(),
+                    transactionManager = transactionManager,
+                    clock = clock,
+                ),
+            purgeService =
+                UploadedFilePurgeService(
+                    uploadedFileRepository = repository,
+                    postImageStoragePort = postImageStoragePort,
+                    retentionProperties = UploadedFileRetentionProperties(),
+                    referenceQueryService =
+                        UploadedFileReferenceQueryService(
+                            postRepository = postRepository,
+                            memberAttrRepository = memberAttrRepository,
+                        ),
+                    transactionManager = transactionManager,
+                    clock = clock,
+                ),
         )
+
+    private class SuccessfulRepository : UploadedFileRepositoryPort {
+        private val store = linkedMapOf<String, UploadedFile>()
+
+        override fun save(entity: UploadedFile): UploadedFile {
+            store[entity.objectKey] = entity
+            return entity
+        }
+
+        override fun flush() {}
+
+        override fun findByObjectKey(objectKey: String): UploadedFile? = store[objectKey]
+
+        override fun countByStatus(status: UploadedFileStatus): Long = 0
+
+        override fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
+            purpose: com.back.global.storage.domain.UploadedFilePurpose,
+            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
+            ownerId: Long,
+            status: UploadedFileStatus,
+        ): List<UploadedFile> = emptyList()
+
+        override fun findByIdAndPurposeAndOwnerTypeAndOwnerId(
+            id: Long,
+            purpose: com.back.global.storage.domain.UploadedFilePurpose,
+            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
+            ownerId: Long,
+        ): UploadedFile? = null
+
+        override fun countByStatusInAndPurgeAfterLessThanEqual(
+            statuses: Collection<UploadedFileStatus>,
+            purgeAfter: Instant,
+        ): Long = 0
+
+        override fun findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
+            statuses: Collection<UploadedFileStatus>,
+            purgeAfter: Instant,
+            pageable: org.springframework.data.domain.Pageable,
+        ): List<UploadedFile> = emptyList()
+    }
 
     private class AlwaysFailingRepository(
         private val failure: RuntimeException,

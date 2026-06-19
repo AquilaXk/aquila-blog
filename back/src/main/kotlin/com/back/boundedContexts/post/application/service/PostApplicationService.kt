@@ -1,44 +1,21 @@
 package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.member.domain.shared.MemberAttr
-import com.back.boundedContexts.member.domain.shared.MemberProxy
-import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
 import com.back.boundedContexts.member.dto.MemberDto
-import com.back.boundedContexts.post.application.port.output.MemberAttrRepositoryPort
-import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
-import com.back.boundedContexts.post.application.port.output.PostCommentRepositoryPort
-import com.back.boundedContexts.post.application.port.output.PostLikeRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
-import com.back.boundedContexts.post.application.port.output.PostTagIndexRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostWriteRequestIdempotencyRepositoryPort
 import com.back.boundedContexts.post.application.port.output.SecureTipPort
-import com.back.boundedContexts.post.domain.POSTS_COUNT
-import com.back.boundedContexts.post.domain.POST_COMMENTS_COUNT
 import com.back.boundedContexts.post.domain.Post
-import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.domain.PostComment
 import com.back.boundedContexts.post.domain.PostWriteRequestIdempotency
-import com.back.boundedContexts.post.domain.postMixin.COMMENTS_COUNT
-import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
-import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
-import com.back.boundedContexts.post.domain.postMixin.META_TAGS_INDEX
 import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
-import com.back.boundedContexts.post.dto.PostCommentDto
 import com.back.boundedContexts.post.dto.PostDto
-import com.back.boundedContexts.post.dto.PostMetaExtractor
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.TagCountDto
-import com.back.boundedContexts.post.event.PostCommentDeletedEvent
-import com.back.boundedContexts.post.event.PostCommentModifiedEvent
-import com.back.boundedContexts.post.event.PostCommentWrittenEvent
 import com.back.boundedContexts.post.event.PostDeletedEvent
-import com.back.boundedContexts.post.event.PostLikedEvent
 import com.back.boundedContexts.post.event.PostModifiedEvent
-import com.back.boundedContexts.post.event.PostUnlikedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
-import com.back.global.event.application.EventPublisher
 import com.back.global.exception.application.AppException
 import com.back.global.security.application.HtmlContentSanitizer
 import com.back.global.storage.application.UploadedFileRetentionService
@@ -47,7 +24,6 @@ import com.back.standard.dto.EventPayload
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Service
@@ -57,7 +33,6 @@ import tools.jackson.databind.ObjectMapper
 import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.jvm.optionals.getOrNull
 
 /**
@@ -67,36 +42,21 @@ import kotlin.jvm.optionals.getOrNull
 @Service
 class PostApplicationService(
     private val postRepository: PostRepositoryPort,
-    private val postTagIndexRepository: PostTagIndexRepositoryPort,
-    private val postAttrRepository: PostAttrRepositoryPort,
-    private val memberAttrRepository: MemberAttrRepositoryPort,
-    private val postCommentRepository: PostCommentRepositoryPort,
-    private val postLikeRepository: PostLikeRepositoryPort,
     private val postWriteRequestIdempotencyRepository: PostWriteRequestIdempotencyRepositoryPort,
     private val secureTipPort: SecureTipPort,
-    private val eventPublisher: EventPublisher,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
     private val postRecommendRankingService: PostRecommendRankingService,
-    private val postRecommendFeatureStoreService: PostRecommendFeatureStoreService,
     private val postKeywordSearchPipelineService: PostKeywordSearchPipelineService,
     private val taskFacade: TaskFacade,
     private val objectMapper: ObjectMapper,
-    @param:Value("\${custom.post.read.tags-local-cache-ttl-seconds:180}")
-    private val tagsLocalCacheTtlSeconds: Long,
+    private val postHydrationService: PostHydrationService,
+    private val postCounterService: PostCounterService,
+    private val postTagIndexService: PostTagIndexService,
+    private val postTempDraftService: PostTempDraftService,
+    private val postCommentApplicationService: PostCommentApplicationService,
+    private val postLikeApplicationService: PostLikeApplicationService,
 ) {
     private val logger = LoggerFactory.getLogger(PostApplicationService::class.java)
-    private val activeTempDraftPostIdAttrName = "activeTempDraftPostId"
-    private val activeTempDraftLockAttrName = "activeTempDraftLock"
-
-    private data class TagCountsCache(
-        val expiresAtMillis: Long,
-        val values: List<TagCountDto>,
-    )
-
-    @Volatile
-    private var publicTagCountsCache: TagCountsCache? = null
-
-    private val tagCacheTtlMillis: Long = tagsLocalCacheTtlSeconds.coerceAtLeast(5) * 1_000
 
     fun count(): Long = postRepository.count()
 
@@ -116,7 +76,7 @@ class PostApplicationService(
         idempotencyKey: String? = null,
         contentHtml: String? = null,
     ): Post {
-        val persistenceAuthor = toPersistenceMember(author)
+        val persistenceAuthor = author.toPersistenceMember()
         val normalizedIdempotencyKey = idempotencyKey?.trim()?.takeIf { it.isNotBlank() }
 
         if (normalizedIdempotencyKey == null) {
@@ -130,7 +90,7 @@ class PostApplicationService(
                     listed = listed,
                     contentHtml = contentHtml,
                 )
-            val createdTags = extractNormalizedTags(created.content)
+            val createdTags = postTagIndexService.extractNormalizedTags(created.content)
             val isPublic = isPubliclyListed(created)
             publishPostWriteAfterCommitEvent(
                 PostWriteSideEffectCommand(
@@ -191,7 +151,7 @@ class PostApplicationService(
 
         requestSlot.postId = createdPost.id
         postWriteRequestIdempotencyRepository.save(requestSlot)
-        val createdTags = extractNormalizedTags(createdPost.content)
+        val createdTags = postTagIndexService.extractNormalizedTags(createdPost.content)
         val isPublic = isPubliclyListed(createdPost)
         publishPostWriteAfterCommitEvent(
             PostWriteSideEffectCommand(
@@ -227,8 +187,8 @@ class PostApplicationService(
             .findById(id)
             .getOrNull()
             ?.also { post ->
-                hydratePostAttrs(post)
-                hydrateMembersProfileImgAttrs(listOf(post.author))
+                postHydrationService.hydratePostAttrs(post)
+                postHydrationService.hydrateMembersProfileImgAttrs(listOf(post.author))
             }
 
     fun findPublicDetailById(id: Long): Post? =
@@ -236,9 +196,9 @@ class PostApplicationService(
             .findPublicDetailById(id)
             ?.also { post ->
                 if (post.likesCountAttr == null || post.commentsCountAttr == null || post.hitCountAttr == null) {
-                    hydratePostAttrs(post)
+                    postHydrationService.hydratePostAttrs(post)
                 }
-                hydrateMembersProfileImgAttrs(listOf(post.author))
+                postHydrationService.hydrateMembersProfileImgAttrs(listOf(post.author))
             }
 
     fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto? = postRepository.findPublicDetailContentById(id)
@@ -260,9 +220,9 @@ class PostApplicationService(
         expectedVersion: Long,
         contentHtml: String? = null,
     ) {
-        hydratePostAttrs(post)
+        postHydrationService.hydratePostAttrs(post)
         val currentVersion = post.version ?: 0L
-        val wasTempDraft = isTempDraft(post)
+        val wasTempDraft = postTempDraftService.isTempDraft(post)
         if (expectedVersion != currentVersion) {
             throw AppException("409-1", "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.")
         }
@@ -271,7 +231,7 @@ class PostApplicationService(
         val previousContent = post.content
         val previousContentHtml = post.contentHtml
         val wasPublic = isPubliclyListed(post)
-        val previousTags = extractNormalizedTags(previousContent)
+        val previousTags = postTagIndexService.extractNormalizedTags(previousContent)
         try {
             val sanitizedContentHtml =
                 if (contentHtml == null) {
@@ -281,14 +241,21 @@ class PostApplicationService(
                 }
             post.modify(title, content, published, listed, sanitizedContentHtml)
             postRepository.flush()
-            syncMetaTagIndexAttr(post)
+            postTagIndexService.syncMetaTagIndexAttr(post)
             if (wasTempDraft) {
-                updateTempDraftMarker(post.author, null)
+                postTempDraftService.updateTempDraftMarker(post.author, null)
             }
         } catch (exception: ObjectOptimisticLockingFailureException) {
+            logger.warn(
+                "post_modify_optimistic_lock_conflict postId={} expectedVersion={} currentVersion={}",
+                post.id,
+                expectedVersion,
+                currentVersion,
+                exception,
+            )
             throw AppException("409-1", "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.")
         }
-        val afterTags = extractNormalizedTags(post.content)
+        val afterTags = postTagIndexService.extractNormalizedTags(post.content)
         val isPublic = isPubliclyListed(post)
         val listingVisibilityChanged = wasPublic != isPublic
         val contentChanged = previousContent != post.content
@@ -355,8 +322,8 @@ class PostApplicationService(
                 HtmlContentSanitizer.sanitizeRichHtmlOrNull(contentHtml),
             )
         val savedPost = postRepository.saveAndFlush(post)
-        syncMetaTagIndexAttr(savedPost)
-        incrementMemberPostsCount(persistenceAuthor)
+        postTagIndexService.syncMetaTagIndexAttr(savedPost)
+        postCounterService.incrementMemberPostsCount(persistenceAuthor)
         return savedPost
     }
 
@@ -399,23 +366,23 @@ class PostApplicationService(
     ) {
         val deletedPostContent = post.content
         val wasPublic = isPubliclyListed(post)
-        val wasTempDraft = isTempDraft(post)
-        val beforeTags = extractNormalizedTags(deletedPostContent)
+        val wasTempDraft = postTempDraftService.isTempDraft(post)
+        val beforeTags = postTagIndexService.extractNormalizedTags(deletedPostContent)
 
         val softDeleted = postRepository.softDeleteById(post.id)
         if (!softDeleted) {
             throw AppException("404-1", "${post.id}번 글을 찾을 수 없습니다.")
         }
         if (wasTempDraft) {
-            updateTempDraftMarker(post.author, null)
+            postTempDraftService.updateTempDraftMarker(post.author, null)
         }
         // 카운터 보정 실패는 삭제 실패로 전파하지 않는다. 실패 시 실제 개수 재동기화를 시도한다.
         runCatching {
-            decrementMemberPostsCount(Member(post.author.id))
+            postCounterService.decrementMemberPostsCount(Member(post.author.id))
         }.onFailure { exception ->
             logger.warn("Failed to decrement member posts counter for member id={}", post.author.id, exception)
             runCatching {
-                reconcileMemberPostsCount(Member(post.author.id))
+                postCounterService.reconcileMemberPostsCount(Member(post.author.id))
             }.onFailure { reconcileException ->
                 logger.warn("Failed to reconcile member posts counter for member id={}", post.author.id, reconcileException)
             }
@@ -458,34 +425,7 @@ class PostApplicationService(
         post: Post,
         content: String,
         parentComment: PostComment? = null,
-    ): PostComment {
-        val persistenceAuthor = toPersistenceMember(author)
-        val persistedParentComment = parentComment?.let { findCommentById(post, it.id) ?: it }
-        val comment =
-            postCommentRepository.save(
-                post.newComment(
-                    author = persistenceAuthor,
-                    content = content,
-                    parentComment = persistedParentComment,
-                ),
-            )
-        incrementCommentsCount(post)
-        incrementMemberPostCommentsCount(persistenceAuthor)
-        enqueuePostInteractionSideEffect(
-            postId = post.id,
-            recommendationAction = PostInteractionRecommendationSideEffect.REFRESH,
-            domainEvent =
-                PostCommentWrittenEvent(
-                    UUID.randomUUID(),
-                    PostCommentDto(comment),
-                    PostDto(post),
-                    MemberDto(author),
-                    persistedParentComment?.author?.id,
-                ),
-        )
-
-        return comment
-    }
+    ): PostComment = postCommentApplicationService.writeComment(author, post, content, parentComment)
 
     /**
      * 댓글 내용을 수정하고 변경 이벤트를 발행합니다.
@@ -496,20 +436,7 @@ class PostApplicationService(
         postComment: PostComment,
         actor: Member,
         content: String,
-    ) {
-        postComment.modify(content)
-
-        enqueuePostInteractionSideEffect(
-            postId = postComment.post.id,
-            domainEvent =
-                PostCommentModifiedEvent(
-                    UUID.randomUUID(),
-                    PostCommentDto(postComment),
-                    PostDto(postComment.post),
-                    MemberDto(actor),
-                ),
-        )
-    }
+    ) = postCommentApplicationService.modifyComment(postComment, actor, content)
 
     /**
      * 댓글 삭제를 처리하고 연관 집계값을 함께 보정합니다.
@@ -520,38 +447,7 @@ class PostApplicationService(
         post: Post,
         postComment: PostComment,
         actor: Member,
-    ) {
-        hydratePostAttrs(post)
-        val commentsToDelete =
-            postCommentRepository
-                .findActiveSubtreeByPostAndRootCommentId(post, postComment.id)
-                .ifEmpty { listOf(postComment) }
-
-        commentsToDelete.forEach { hydrateMemberCounterAttrs(it.author) }
-
-        val postDto = PostDto(post)
-        commentsToDelete.forEachIndexed { index, comment ->
-            val postCommentDto = PostCommentDto(comment)
-            comment.author.decrementPostCommentsCount()
-            saveMemberAttr(comment.author.postCommentsCountAttr)
-            post.onCommentDeleted()
-            comment.softDelete()
-
-            enqueuePostInteractionSideEffect(
-                postId = comment.post.id,
-                recommendationAction =
-                    if (index == commentsToDelete.lastIndex) {
-                        PostInteractionRecommendationSideEffect.REFRESH
-                    } else {
-                        PostInteractionRecommendationSideEffect.NONE
-                    },
-                domainEvent = PostCommentDeletedEvent(UUID.randomUUID(), postCommentDto, postDto, MemberDto(actor)),
-            )
-        }
-
-        savePostAttr(post.commentsCountAttr)
-        postRepository.flush()
-    }
+    ) = postCommentApplicationService.deleteComment(post, postComment, actor)
 
     /**
      * 좋아요 상태 변경을 반영하고 경쟁 상황에서의 정합성을 보장합니다.
@@ -561,48 +457,7 @@ class PostApplicationService(
     fun like(
         post: Post,
         actor: Member,
-    ): PostLikeToggleResult {
-        val persistenceActor = toPersistenceMember(actor)
-        hydratePostAttrs(post)
-        val insertedLikeId = postLikeRepository.insertIfAbsent(persistenceActor, post)
-
-        if (insertedLikeId == null) {
-            val existingLike = postLikeRepository.findByLikerAndPost(persistenceActor, post)
-            if (existingLike != null) {
-                ensureLikesCountLoaded(post)
-                return PostLikeToggleResult(true, existingLike.id)
-            }
-
-            // 동시 unlike 경쟁으로 row가 사라진 경우 한 번 더 보정한다.
-            val recoveredLikeId = postLikeRepository.insertIfAbsent(persistenceActor, post)
-            if (recoveredLikeId == null) {
-                syncLikesCount(post)
-                return PostLikeToggleResult(
-                    isLiked = postLikeRepository.existsByLikerAndPost(persistenceActor, post),
-                    likeId = 0L,
-                )
-            }
-
-            incrementLikesCount(post)
-            postRepository.flush()
-            enqueuePostInteractionSideEffect(
-                postId = post.id,
-                recommendationAction = PostInteractionRecommendationSideEffect.REFRESH,
-                domainEvent = PostLikedEvent(UUID.randomUUID(), post.id, post.author.id, recoveredLikeId, MemberDto(actor)),
-            )
-            return PostLikeToggleResult(true, recoveredLikeId)
-        }
-
-        incrementLikesCount(post)
-        postRepository.flush()
-        enqueuePostInteractionSideEffect(
-            postId = post.id,
-            recommendationAction = PostInteractionRecommendationSideEffect.REFRESH,
-            domainEvent = PostLikedEvent(UUID.randomUUID(), post.id, post.author.id, insertedLikeId, MemberDto(actor)),
-        )
-
-        return PostLikeToggleResult(true, insertedLikeId)
-    }
+    ): PostLikeToggleResult = postLikeApplicationService.like(post, actor)
 
     /**
      * 좋아요 상태 변경을 반영하고 경쟁 상황에서의 정합성을 보장합니다.
@@ -612,109 +467,42 @@ class PostApplicationService(
     fun unlike(
         post: Post,
         actor: Member,
-    ): PostLikeToggleResult {
-        val persistenceActor = toPersistenceMember(actor)
-        hydratePostAttrs(post)
-        val existingLike = postLikeRepository.findByLikerAndPost(persistenceActor, post)
-        val postAuthorId = post.author.id
-        val existingLikeId = existingLike?.id
-        val deletedCount = postLikeRepository.deleteByLikerAndPost(persistenceActor, post)
-        if (deletedCount > 1) {
-            // Legacy 중복 row 정리 시에는 실제 개수 기준으로 즉시 재동기화한다.
-            syncLikesCount(post)
-        } else if (deletedCount == 1) {
-            decrementLikesCount(post)
-        } else {
-            ensureLikesCountLoaded(post)
-        }
-        postRepository.flush()
-
-        if (deletedCount > 0 && existingLikeId != null) {
-            enqueuePostInteractionSideEffect(
-                postId = post.id,
-                recommendationAction = PostInteractionRecommendationSideEffect.REFRESH,
-                domainEvent = PostUnlikedEvent(UUID.randomUUID(), post.id, postAuthorId, existingLikeId, MemberDto(actor)),
-            )
-        } else {
-            enqueuePostInteractionSideEffect(
-                postId = post.id,
-                recommendationAction = PostInteractionRecommendationSideEffect.REFRESH,
-            )
-        }
-
-        return PostLikeToggleResult(false, existingLikeId ?: 0L)
-    }
+    ): PostLikeToggleResult = postLikeApplicationService.unlike(post, actor)
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun reconcileLikeState(
         post: Post,
         actor: Member,
-    ): PostLikeToggleResult {
-        val persistenceActor = toPersistenceMember(actor)
-        hydratePostAttrs(post)
-        syncLikesCount(post)
-        val existingLike = postLikeRepository.findByLikerAndPost(persistenceActor, post)
-        return PostLikeToggleResult(
-            isLiked = existingLike != null,
-            likeId = existingLike?.id ?: 0L,
-        )
-    }
+    ): PostLikeToggleResult = postLikeApplicationService.reconcileLikeState(post, actor)
 
     @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
     fun readLikeSnapshot(
         post: Post,
         actor: Member,
-    ): PostLikeToggleResult {
-        val persistenceActor = toPersistenceMember(actor)
-        post.likesCount = postLikeRepository.countByPost(post).toInt()
-        val existingLike = postLikeRepository.findByLikerAndPost(persistenceActor, post)
-        return PostLikeToggleResult(
-            isLiked = existingLike != null,
-            likeId = existingLike?.id ?: 0L,
-        )
-    }
+    ): PostLikeToggleResult = postLikeApplicationService.readLikeSnapshot(post, actor)
 
     @Transactional
-    fun incrementHit(post: Post) {
-        val updatedHitCount = postAttrRepository.incrementIntValue(post, HIT_COUNT)
-        val refreshedAttr = post.hitCountAttr ?: postAttrRepository.findBySubjectAndName(post, HIT_COUNT)
-        refreshedAttr?.let {
-            it.intValue = updatedHitCount
-            post.hitCountAttr = it
-        }
-    }
+    fun incrementHit(post: Post) = postCounterService.incrementHit(post)
 
     fun getComments(
         post: Post,
         limit: Int,
-    ): List<PostComment> =
-        postCommentRepository.findByPostOrderByCreatedAtAscIdAsc(post, limit.coerceIn(1, 500)).also { comments ->
-            hydrateMembersProfileImgAttrs(comments.map { it.author })
-        }
+    ): List<PostComment> = postCommentApplicationService.getComments(post, limit)
 
     fun findCommentById(
         post: Post,
         id: Long,
-    ): PostComment? = postCommentRepository.findByPostAndId(post, id)
+    ): PostComment? = postCommentApplicationService.findCommentById(post, id)
 
     fun isLiked(
         post: Post,
         liker: Member?,
-    ): Boolean {
-        if (liker == null) return false
-        return postLikeRepository.existsByLikerAndPost(toPersistenceMember(liker), post)
-    }
+    ): Boolean = postLikeApplicationService.isLiked(post, liker)
 
     fun findLikedPostIds(
         liker: Member?,
         posts: List<Post>,
-    ): Set<Long> {
-        if (liker == null || posts.isEmpty()) return emptySet()
-        return postLikeRepository
-            .findByLikerAndPostIn(toPersistenceMember(liker), posts)
-            .map { it.post.id }
-            .toSet()
-    }
+    ): Set<Long> = postLikeApplicationService.findLikedPostIds(liker, posts)
 
     fun findPagedByKw(
         kw: String,
@@ -858,11 +646,11 @@ class PostApplicationService(
         val authorRef = Member(snapshot.authorId)
 
         runCatching {
-            incrementMemberPostsCount(authorRef)
+            postCounterService.incrementMemberPostsCount(authorRef)
         }.onFailure { exception ->
             logger.warn("Failed to increment member posts counter for member id={}", snapshot.authorId, exception)
             runCatching {
-                reconcileMemberPostsCount(authorRef)
+                postCounterService.reconcileMemberPostsCount(authorRef)
             }.onFailure { reconcileException ->
                 logger.warn("Failed to reconcile member posts counter for member id={}", snapshot.authorId, reconcileException)
             }
@@ -880,7 +668,7 @@ class PostApplicationService(
         val restoredPost =
             postRepository.findById(id).getOrNull()
                 ?: throw AppException("404-1", "복구된 글을 확인할 수 없습니다.")
-        val restoredTags = extractNormalizedTags(restoredPost.content)
+        val restoredTags = postTagIndexService.extractNormalizedTags(restoredPost.content)
         val isPublic = isPubliclyListed(restoredPost)
         publishPostWriteAfterCommitEvent(
             PostWriteSideEffectCommand(
@@ -921,7 +709,7 @@ class PostApplicationService(
                 previousContent = null,
                 currentContent = null,
                 deletedContent = snapshot.content,
-                beforeTags = extractNormalizedTags(snapshot.content),
+                beforeTags = postTagIndexService.extractNormalizedTags(snapshot.content),
                 afterTags = emptyList(),
                 cacheInvalidationScope =
                     if (snapshot.published && snapshot.listed) {
@@ -944,7 +732,7 @@ class PostApplicationService(
     ): PagedResult<Post> =
         findAndHydratePagedPosts(page, pageSize) {
             postRepository.findQPagedByAuthorAndKw(
-                toPersistenceMember(author),
+                author.toPersistenceMember(),
                 PostRepositoryPort.PagedQuery(
                     kw = kw,
                     zeroBasedPage = page - 1,
@@ -1031,62 +819,14 @@ class PostApplicationService(
         }
     }
 
-    fun getPublicTagCounts(): List<TagCountDto> {
-        val now = System.currentTimeMillis()
-        publicTagCountsCache?.takeIf { it.expiresAtMillis > now }?.let { return it.values }
+    fun getPublicTagCounts(): List<TagCountDto> = postTagIndexService.getPublicTagCounts()
 
-        synchronized(this) {
-            val refreshedNow = System.currentTimeMillis()
-            publicTagCountsCache?.takeIf { it.expiresAtMillis > refreshedNow }?.let { return it.values }
-
-            val result =
-                runCatching {
-                    postTagIndexRepository.findAllPublicTagCounts().map { row ->
-                        TagCountDto(row.tag, row.count)
-                    }
-                }.getOrElse { exception ->
-                    logger.warn(
-                        "public_tag_counts_query_failed: fallback to legacy metaTagsIndex path",
-                        exception,
-                    )
-                    loadPublicTagCountsFromMetaTagIndex()
-                }
-
-            publicTagCountsCache = TagCountsCache(refreshedNow + tagCacheTtlMillis, result)
-            return result
-        }
-    }
-
-    fun findTemp(author: Member): Post? {
-        val persistenceAuthor = toPersistenceMember(author)
-        return resolveTrackedTempPost(persistenceAuthor) ?: findLegacyTemp(persistenceAuthor)
-    }
+    fun findTemp(author: Member): Post? = postTempDraftService.findTemp(author)
 
     @Transactional
-    fun getOrCreateTemp(author: Member): Pair<Post, Boolean> {
-        val persistenceAuthor = toPersistenceMember(author)
-        if (!tryAcquireTempDraftLock(persistenceAuthor)) {
-            throw AppException("409-2", "다른 탭에서 임시글을 준비 중입니다. 잠시 후 다시 시도해주세요.")
-        }
+    fun getOrCreateTemp(author: Member): Pair<Post, Boolean> = postTempDraftService.getOrCreateTemp(author)
 
-        return try {
-            val existingTemp = resolveTrackedTempPost(persistenceAuthor) ?: findLegacyTemp(persistenceAuthor)
-            if (existingTemp != null) {
-                updateTempDraftMarker(persistenceAuthor, existingTemp.id)
-                postRepository.flush()
-                existingTemp to false
-            } else {
-                val newPost = postRepository.save(Post(0, persistenceAuthor, "임시글", "임시글 입니다."))
-                updateTempDraftMarker(persistenceAuthor, newPost.id)
-                postRepository.flush()
-                newPost to true
-            }
-        } finally {
-            releaseTempDraftLock(persistenceAuthor)
-        }
-    }
-
-    fun isTempDraft(post: Post): Boolean = resolveTrackedTempPostId(post.author) == post.id
+    fun isTempDraft(post: Post): Boolean = postTempDraftService.isTempDraft(post)
 
     private fun findAndHydratePagedPosts(
         page: Int,
@@ -1094,8 +834,8 @@ class PostApplicationService(
         loader: () -> PostRepositoryPort.PagedResult<Post>,
     ): PagedResult<Post> {
         val pageResult = loader()
-        hydratePostAttrs(pageResult.content)
-        hydrateMembersProfileImgAttrs(pageResult.content.map { it.author })
+        postHydrationService.hydratePostAttrs(pageResult.content)
+        postHydrationService.hydrateMembersProfileImgAttrs(pageResult.content.map { it.author })
         return PagedResult(
             content = pageResult.content,
             page = page,
@@ -1107,183 +847,10 @@ class PostApplicationService(
     private fun findAndHydratePublicCursorPosts(loader: () -> List<Post>): List<Post> {
         val posts = loader()
         if (posts.isEmpty()) return posts
-        hydratePostAttrs(posts)
-        hydrateMembersProfileImgAttrs(posts.map { it.author })
+        postHydrationService.hydratePostAttrs(posts)
+        postHydrationService.hydrateMembersProfileImgAttrs(posts.map { it.author })
         return posts
     }
-
-    private fun hydratePostAttrs(post: Post) {
-        post.likesCountAttr ?: postAttrRepository.findBySubjectAndName(post, LIKES_COUNT)?.let { post.likesCountAttr = it }
-        post.commentsCountAttr ?: postAttrRepository.findBySubjectAndName(post, COMMENTS_COUNT)?.let { post.commentsCountAttr = it }
-        post.hitCountAttr ?: postAttrRepository.findBySubjectAndName(post, HIT_COUNT)?.let { post.hitCountAttr = it }
-    }
-
-    private fun hydratePostAttrs(posts: List<Post>) {
-        if (posts.isEmpty()) return
-
-        // 목록 조회 시 post마다 natural-id lookup을 반복하면 쿼리가 급증하므로 일괄 hydrate 한다.
-        val attrsByKey =
-            postAttrRepository
-                .findBySubjectInAndNameIn(posts, listOf(LIKES_COUNT, COMMENTS_COUNT, HIT_COUNT))
-                .associateBy { "${it.subject.id}:${it.name}" }
-
-        posts.forEach { post ->
-            post.likesCountAttr = post.likesCountAttr ?: attrsByKey["${post.id}:$LIKES_COUNT"]
-            post.commentsCountAttr = post.commentsCountAttr ?: attrsByKey["${post.id}:$COMMENTS_COUNT"]
-            post.hitCountAttr = post.hitCountAttr ?: attrsByKey["${post.id}:$HIT_COUNT"]
-        }
-    }
-
-    private fun hydrateMemberCounterAttrs(member: Member) {
-        member.postsCountAttr ?: memberAttrRepository.findBySubjectAndName(member, POSTS_COUNT)?.let { member.postsCountAttr = it }
-        member.postCommentsCountAttr ?: memberAttrRepository
-            .findBySubjectAndName(member, POST_COMMENTS_COUNT)
-            ?.let { member.postCommentsCountAttr = it }
-    }
-
-    private fun hydrateMembersProfileImgAttrs(members: List<Member>) {
-        if (members.isEmpty()) return
-
-        val uniqueMembers = members.distinctBy { it.id }
-        val profileAttrsByMemberId =
-            memberAttrRepository
-                .findBySubjectInAndNameIn(uniqueMembers, listOf(PROFILE_IMG_URL))
-                .associateBy { it.subject.id }
-
-        // DTO 매핑에서 redirectToProfileImgUrlOrDefault 접근 시 profile attr lazy-load를 미리 해소한다.
-        uniqueMembers.forEach { member ->
-            member.getOrInitProfileImgUrlAttr {
-                profileAttrsByMemberId[member.id] ?: MemberAttr(0, member, PROFILE_IMG_URL, "")
-            }
-        }
-    }
-
-    private fun savePostAttr(attr: PostAttr?) {
-        attr?.let(postAttrRepository::save)
-    }
-
-    private fun syncLikesCount(post: Post) {
-        val actualLikesCount = postLikeRepository.countByPost(post).toInt()
-        post.likesCount = actualLikesCount
-        savePostAttr(post.likesCountAttr)
-    }
-
-    private fun ensureLikesCountLoaded(post: Post) {
-        post.likesCountAttr = postAttrRepository.findBySubjectAndName(post, LIKES_COUNT)
-    }
-
-    private fun incrementLikesCount(post: Post) {
-        val updatedLikesCount = postAttrRepository.incrementIntValue(post, LIKES_COUNT)
-        applyLikesCount(post, updatedLikesCount)
-    }
-
-    private fun incrementCommentsCount(post: Post) {
-        val updatedCommentsCount = postAttrRepository.incrementIntValue(post, COMMENTS_COUNT)
-        applyCommentsCount(post, updatedCommentsCount)
-    }
-
-    private fun decrementLikesCount(post: Post) {
-        val updatedLikesCount = postAttrRepository.incrementIntValue(post, LIKES_COUNT, -1).coerceAtLeast(0)
-        applyLikesCount(post, updatedLikesCount)
-    }
-
-    private fun applyLikesCount(
-        post: Post,
-        likesCount: Int,
-    ) {
-        val refreshedAttr = post.likesCountAttr ?: postAttrRepository.findBySubjectAndName(post, LIKES_COUNT)
-        refreshedAttr?.let {
-            it.intValue = likesCount
-            post.likesCountAttr = it
-        }
-    }
-
-    private fun applyCommentsCount(
-        post: Post,
-        commentsCount: Int,
-    ) {
-        val refreshedAttr = post.commentsCountAttr ?: postAttrRepository.findBySubjectAndName(post, COMMENTS_COUNT)
-        refreshedAttr?.let {
-            it.intValue = commentsCount
-            post.commentsCountAttr = it
-        }
-    }
-
-    private fun incrementMemberPostCommentsCount(member: Member) {
-        val updatedCount = memberAttrRepository.incrementIntValue(member, POST_COMMENTS_COUNT)
-        val refreshedAttr = member.postCommentsCountAttr ?: memberAttrRepository.findBySubjectAndName(member, POST_COMMENTS_COUNT)
-        refreshedAttr?.let {
-            it.intValue = updatedCount
-            member.postCommentsCountAttr = it
-        }
-    }
-
-    private fun incrementMemberPostsCount(member: Member) {
-        val updatedCount = memberAttrRepository.incrementIntValue(member, POSTS_COUNT)
-        member.postsCountAttr?.intValue = updatedCount
-    }
-
-    private fun decrementMemberPostsCount(member: Member) {
-        var updatedCount = memberAttrRepository.incrementIntValue(member, POSTS_COUNT, -1)
-        if (updatedCount < 0) {
-            updatedCount = memberAttrRepository.incrementIntValue(member, POSTS_COUNT, -updatedCount)
-        }
-        member.postsCountAttr?.intValue = updatedCount
-    }
-
-    private fun reconcileMemberPostsCount(member: Member) {
-        val actualCount = postRepository.countByAuthor(member).coerceAtLeast(0).toInt()
-        val refreshedAttr = member.postsCountAttr ?: memberAttrRepository.findBySubjectAndName(member, POSTS_COUNT)
-        val counterAttr = refreshedAttr ?: MemberAttr(0, member, POSTS_COUNT, actualCount)
-        counterAttr.intValue = actualCount
-        member.postsCountAttr = counterAttr
-        saveMemberAttr(counterAttr)
-    }
-
-    private fun saveMemberAttr(attr: MemberAttr?) {
-        attr?.let(memberAttrRepository::save)
-    }
-
-    private fun findLegacyTemp(author: Member): Post? = postRepository.findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(author, "임시글")
-
-    private fun resolveTrackedTempPost(author: Member): Post? {
-        val trackedPostId = resolveTrackedTempPostId(author) ?: return null
-        val trackedPost = postRepository.findById(trackedPostId).getOrNull() ?: return null
-        return trackedPost.takeIf { it.author.id == author.id }
-    }
-
-    private fun resolveTrackedTempPostId(author: Member): Long? =
-        memberAttrRepository
-            .findBySubjectAndName(author, activeTempDraftPostIdAttrName)
-            ?.strValue
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-            ?.toLongOrNull()
-
-    private fun updateTempDraftMarker(
-        author: Member,
-        postId: Long?,
-    ) {
-        val attr =
-            memberAttrRepository.findBySubjectAndName(author, activeTempDraftPostIdAttrName)
-                ?: MemberAttr(0, author, activeTempDraftPostIdAttrName, "")
-        attr.strValue = postId?.toString().orEmpty()
-        saveMemberAttr(attr)
-    }
-
-    private fun tryAcquireTempDraftLock(author: Member): Boolean {
-        val lockValue = memberAttrRepository.incrementIntValue(author, activeTempDraftLockAttrName, 1)
-        if (lockValue == 1) return true
-        memberAttrRepository.incrementIntValue(author, activeTempDraftLockAttrName, -1)
-        return false
-    }
-
-    private fun releaseTempDraftLock(author: Member) {
-        memberAttrRepository.incrementIntValue(author, activeTempDraftLockAttrName, -1)
-    }
-
-    // SecurityContext actor는 MemberProxy일 수 있어 영속 경계에서는 실제 엔티티를 사용한다.
-    private fun toPersistenceMember(member: Member): Member = if (member is MemberProxy) member.persistenceMember else member
 
     private fun recommendationActionFor(isPublic: Boolean): PostRecommendationSideEffect =
         if (isPublic) PostRecommendationSideEffect.REFRESH else PostRecommendationSideEffect.EVICT
@@ -1293,7 +860,7 @@ class PostApplicationService(
         domainEvent: EventPayload? = null,
     ) {
         if (command.cacheInvalidationScope.evictsPublicTags()) {
-            publicTagCountsCache = null
+            postTagIndexService.evictPublicTagCountsCache()
         }
         taskFacade.addToQueue(command.toTaskPayload(domainEvent), inlineWhenEnabled = false)
     }
@@ -1329,125 +896,6 @@ class PostApplicationService(
         return command.operationUid
     }
 
-    private fun enqueuePostInteractionSideEffect(
-        postId: Long,
-        recommendationAction: PostInteractionRecommendationSideEffect = PostInteractionRecommendationSideEffect.NONE,
-        domainEvent: EventPayload? = null,
-        operationUid: UUID = UUID.randomUUID(),
-    ) {
-        if (domainEvent != null && recommendationAction != PostInteractionRecommendationSideEffect.NONE) {
-            addPostInteractionSideEffectTask(
-                postId = postId,
-                recommendationAction = PostInteractionRecommendationSideEffect.NONE,
-                domainEvent = domainEvent,
-                operationUid = operationUid,
-            )
-            addPostInteractionSideEffectTask(
-                postId = postId,
-                recommendationAction = recommendationAction,
-                domainEvent = null,
-                operationUid = postInteractionRefreshSideEffectTaskUid(domainEvent),
-            )
-            return
-        }
-
-        addPostInteractionSideEffectTask(
-            postId = postId,
-            recommendationAction = recommendationAction,
-            domainEvent = domainEvent,
-            operationUid = operationUid,
-        )
-    }
-
-    private fun addPostInteractionSideEffectTask(
-        postId: Long,
-        recommendationAction: PostInteractionRecommendationSideEffect,
-        domainEvent: EventPayload?,
-        operationUid: UUID,
-    ) {
-        taskFacade.addToQueue(
-            PostInteractionSideEffectPayload(
-                uid = postInteractionSideEffectTaskUid(domainEvent, operationUid),
-                aggregateType = domainEvent?.aggregateType ?: "Post",
-                aggregateId = domainEvent?.aggregateId ?: postId,
-                postId = postId,
-                recommendationAction = recommendationAction,
-                domainEventUid = domainEvent?.uid,
-                domainEventType = domainEvent?.javaClass?.name,
-                postCommentDto = postInteractionCommentDto(domainEvent),
-                postDto = postInteractionPostDto(domainEvent),
-                actorDto = postInteractionActorDto(domainEvent),
-                replyReceiverId = postInteractionReplyReceiverId(domainEvent),
-                postAuthorId = postInteractionPostAuthorId(domainEvent),
-                likeId = postInteractionLikeId(domainEvent),
-            ),
-            inlineWhenEnabled = false,
-        )
-    }
-
-    private fun postInteractionRefreshSideEffectTaskUid(domainEvent: EventPayload): UUID =
-        UUID.nameUUIDFromBytes(
-            "${PostInteractionSideEffectPayload.TASK_TYPE}:refresh:${domainEvent.uid}".toByteArray(
-                StandardCharsets.UTF_8,
-            ),
-        )
-
-    private fun postInteractionCommentDto(domainEvent: EventPayload?): PostCommentDto? =
-        when (domainEvent) {
-            is PostCommentWrittenEvent -> domainEvent.postCommentDto
-            is PostCommentModifiedEvent -> domainEvent.postCommentDto
-            is PostCommentDeletedEvent -> domainEvent.postCommentDto
-            else -> null
-        }
-
-    private fun postInteractionPostDto(domainEvent: EventPayload?): PostDto? =
-        when (domainEvent) {
-            is PostCommentWrittenEvent -> domainEvent.postDto
-            is PostCommentModifiedEvent -> domainEvent.postDto
-            is PostCommentDeletedEvent -> domainEvent.postDto
-            else -> null
-        }
-
-    private fun postInteractionActorDto(domainEvent: EventPayload?): MemberDto? =
-        when (domainEvent) {
-            is PostCommentWrittenEvent -> domainEvent.actorDto
-            is PostCommentModifiedEvent -> domainEvent.actorDto
-            is PostCommentDeletedEvent -> domainEvent.actorDto
-            is PostLikedEvent -> domainEvent.actorDto
-            is PostUnlikedEvent -> domainEvent.actorDto
-            else -> null
-        }
-
-    private fun postInteractionReplyReceiverId(domainEvent: EventPayload?): Long? =
-        when (domainEvent) {
-            is PostCommentWrittenEvent -> domainEvent.replyReceiverId
-            else -> null
-        }
-
-    private fun postInteractionPostAuthorId(domainEvent: EventPayload?): Long? =
-        when (domainEvent) {
-            is PostLikedEvent -> domainEvent.postAuthorId
-            is PostUnlikedEvent -> domainEvent.postAuthorId
-            else -> null
-        }
-
-    private fun postInteractionLikeId(domainEvent: EventPayload?): Long? =
-        when (domainEvent) {
-            is PostLikedEvent -> domainEvent.likeId
-            is PostUnlikedEvent -> domainEvent.likeId
-            else -> null
-        }
-
-    private fun postInteractionSideEffectTaskUid(
-        domainEvent: EventPayload?,
-        operationUid: UUID,
-    ): UUID {
-        val eventUid = domainEvent?.uid ?: return operationUid
-        return UUID.nameUUIDFromBytes(
-            "${PostInteractionSideEffectPayload.TASK_TYPE}:$eventUid".toByteArray(StandardCharsets.UTF_8),
-        )
-    }
-
     private fun buildPublicPostChangeImpacts(
         listingVisibilityChanged: Boolean,
         titleChanged: Boolean,
@@ -1462,75 +910,4 @@ class PostApplicationService(
         }
 
     private fun isPubliclyListed(post: Post): Boolean = post.published && post.listed
-
-    private fun refreshRecommendFeatureStoreForPublicPost(post: Post) {
-        if (!isPubliclyListed(post)) return
-        runCatching {
-            postRecommendFeatureStoreService.refresh(post)
-        }.onFailure { exception ->
-            logger.warn("recommend_feature_store_refresh_failed postId={}", post.id, exception)
-        }
-    }
-
-    private fun syncMetaTagIndexAttr(post: Post) {
-        val normalizedTags = extractNormalizedTags(post.content)
-
-        val indexValue =
-            if (normalizedTags.isEmpty()) {
-                ""
-            } else {
-                normalizedTags.joinToString(separator = "|", prefix = "|", postfix = "|")
-            }
-
-        val tagIndexAttr = postAttrRepository.findBySubjectAndName(post, META_TAGS_INDEX) ?: PostAttr(0, post, META_TAGS_INDEX, "")
-        if ((tagIndexAttr.strValue ?: "") != indexValue) {
-            tagIndexAttr.strValue = indexValue
-            postAttrRepository.save(tagIndexAttr)
-        }
-
-        runCatching {
-            postTagIndexRepository.replacePostTags(post.id, normalizedTags)
-        }.onFailure { exception ->
-            logger.warn("failed_to_sync_post_tag_index postId={}", post.id, exception)
-        }
-    }
-
-    private fun loadPublicTagCountsFromMetaTagIndex(): List<TagCountDto> {
-        val tagCounts = ConcurrentHashMap<String, Int>()
-        val indexedTagRows = postRepository.findAllPublicListedTagIndexes(META_TAGS_INDEX)
-
-        indexedTagRows.forEach { tagIndex ->
-            parseTagIndex(tagIndex).forEach { normalizedTag ->
-                tagCounts.merge(normalizedTag, 1, Int::plus)
-            }
-        }
-
-        if (indexedTagRows.isEmpty()) {
-            logger.warn(
-                "public_tag_counts_index_empty: skip legacy content-scan fallback to protect DB under load",
-            )
-        }
-
-        return tagCounts
-            .entries
-            .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key.lowercase() })
-            .map { TagCountDto(it.key, it.value) }
-    }
-
-    private fun normalizeTag(tag: String): String = tag.trim()
-
-    private fun extractNormalizedTags(content: String): List<String> =
-        PostMetaExtractor
-            .extract(content)
-            .tags
-            .map(::normalizeTag)
-            .filter(String::isNotBlank)
-            .distinct()
-
-    private fun parseTagIndex(tagIndex: String): List<String> =
-        tagIndex
-            .split('|')
-            .map(String::trim)
-            .filter(String::isNotBlank)
-            .distinct()
 }

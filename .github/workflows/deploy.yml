@@ -407,6 +407,20 @@ jobs:
           chmod 600 "${LOCAL_REMOTE_VARS_FILE}"
 
           REMOTE_TMP_DIR="$(ssh -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "$PORT" "$HOME_SSH_USER@$HOME_HOST" "umask 077 && mktemp -d /tmp/aquila-deploy.XXXXXX")"
+          case "${REMOTE_TMP_DIR}" in
+            /tmp/aquila-deploy.*) ;;
+            *)
+              echo "unexpected remote tmp dir: ${REMOTE_TMP_DIR}" >&2
+              exit 1
+              ;;
+          esac
+          cleanup_remote_tmp_from_runner() {
+            if [ -n "${REMOTE_TMP_DIR:-}" ]; then
+              ssh -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "$PORT" "$HOME_SSH_USER@$HOME_HOST" "rm -rf -- ${REMOTE_TMP_DIR}" || true
+            fi
+          }
+          trap cleanup_remote_tmp_from_runner EXIT
+
           scp -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -P "$PORT" \
             "${LOCAL_ENV_FILE}" "${LOCAL_REMOTE_VARS_FILE}" \
             "$HOME_SSH_USER@$HOME_HOST:${REMOTE_TMP_DIR}/"
@@ -1133,6 +1147,8 @@ jobs:
           cleanup_remote_tmp
           trap - EXIT
           REMOTE
+          REMOTE_TMP_DIR=""
+          trap - EXIT
 
   frontLiveE2E:
     name: Frontend Live E2E Verification

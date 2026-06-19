@@ -306,6 +306,9 @@ class ApiV1AdmMemberControllerWebMvcTest : BaseAdmMemberControllerWebMvcTest() {
         member.createdAt = Instant.parse("2026-03-13T00:00:00Z")
         member.modifiedAt = Instant.parse("2026-03-13T00:01:00Z")
         check(!isAdmin || username == "admin") { "admin 샘플은 username=admin 이어야 한다." }
+        if (isAdmin) {
+            member.grantAdmin()
+        }
         return member
     }
 }

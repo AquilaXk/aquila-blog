@@ -67,14 +67,7 @@ internal class AccessTokenAuthenticationHandler(
         if (legacyPayloadRecoveryHandler.recoverIfNeeded(payload, sessionContext)) return true
 
         sessionContext.session?.let { memberSessionUseCase.touchAuthenticated(it) }
-        val payloadMember =
-            Member(
-                id = payload.id,
-                username = resolvePrincipalUsername(payload),
-                password = null,
-                nickname = payload.name,
-                email = payload.email,
-            )
+        val payloadMember = actorApplicationService.findById(payload.id) ?: payload.toTransientMember()
         securityContextAuthenticationWriter.write(payloadMember)
         return true
     }
@@ -97,4 +90,13 @@ internal class AccessTokenAuthenticationHandler(
 
         return "member-${payload.id}"
     }
+
+    private fun AccessTokenPayload.toTransientMember(): Member =
+        Member(
+            id = id,
+            username = resolvePrincipalUsername(this),
+            password = null,
+            nickname = name,
+            email = email,
+        )
 }

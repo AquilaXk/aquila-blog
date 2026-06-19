@@ -12,9 +12,17 @@ class MemberProxy(
     id: Long,
     username: String,
     nickname: String,
-) : Member(id, username, null, nickname, real.email) {
+) : Member(id, username, null, nickname, real.email, real.isAdmin) {
     val persistenceMember: Member
         get() = real
+
+    override val isAdmin: Boolean
+        get() = real.isAdmin
+
+    override fun grantAdmin() {
+        real.grantAdmin()
+        super.grantAdmin()
+    }
 
     override var nickname: String
         get() = super.nickname

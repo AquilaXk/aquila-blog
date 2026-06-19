@@ -4,7 +4,6 @@ import com.back.boundedContexts.member.domain.shared.MemberPolicy
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberHasProfileCard
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberHasProfileImgUrl
 import com.back.boundedContexts.post.domain.PostMember
-import com.back.global.app.AppConfig
 import com.back.global.jpa.domain.AfterDDL
 import com.back.global.jpa.domain.BaseTime
 import jakarta.persistence.*
@@ -13,7 +12,6 @@ import org.hibernate.annotations.DynamicUpdate
 import org.hibernate.annotations.NaturalId
 import org.hibernate.annotations.SQLRestriction
 import java.time.Instant
-import java.util.Locale
 
 /**
  * Member는 비즈니스 상태와 규칙을 캡슐화하는 도메인 모델입니다.
@@ -62,6 +60,8 @@ class Member(
     var email: String? = null,
     @field:Column(unique = true, nullable = false)
     var apiKey: String,
+    @field:Column(name = "is_admin", nullable = false)
+    private var admin: Boolean = false,
 ) : BaseTime(id),
     PostMember,
     MemberHasProfileImgUrl,
@@ -72,6 +72,7 @@ class Member(
         password: String?,
         nickname: String,
         email: String?,
+        admin: Boolean = false,
     ) : this(
         id,
         username,
@@ -79,6 +80,7 @@ class Member(
         nickname,
         email,
         MemberPolicy.genApiKey(),
+        admin,
     )
 
     constructor(
@@ -124,12 +126,12 @@ class Member(
     override val name: String
         get() = nickname
 
-    val isAdmin: Boolean
-        get() {
-            val configuredAdminEmail = AppConfig.adminEmailOrBlank.trim().lowercase(Locale.ROOT)
-            val memberEmail = email?.trim()?.lowercase(Locale.ROOT)
-            return configuredAdminEmail.isNotBlank() && memberEmail == configuredAdminEmail
-        }
+    open val isAdmin: Boolean
+        get() = admin
+
+    open fun grantAdmin() {
+        admin = true
+    }
 
     fun modify(
         nickname: String,

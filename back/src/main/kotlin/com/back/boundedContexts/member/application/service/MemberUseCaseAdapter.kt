@@ -68,18 +68,21 @@ class MemberUseCaseAdapter(
         contactLinks: List<MemberProfileLinkItem>,
     ) = memberApplicationService.modifyProfileCard(
         member = member,
-        role = role,
-        bio = bio,
-        aboutRole = aboutRole,
-        aboutBio = aboutBio,
-        aboutDetails = aboutDetails,
-        blogTitle = blogTitle,
-        homeIntroTitle = homeIntroTitle,
-        homeIntroDescription = homeIntroDescription,
-        blogDesign = blogDesign,
-        legacyBlogScheme = legacyBlogScheme,
-        serviceLinks = serviceLinks,
-        contactLinks = contactLinks,
+        command =
+            UpdateProfileCardCommand(
+                role = role,
+                bio = bio,
+                aboutRole = aboutRole,
+                aboutBio = aboutBio,
+                aboutDetails = aboutDetails,
+                blogTitle = blogTitle,
+                homeIntroTitle = homeIntroTitle,
+                homeIntroDescription = homeIntroDescription,
+                blogDesign = blogDesign,
+                legacyBlogScheme = legacyBlogScheme,
+                serviceLinks = serviceLinks,
+                contactLinks = contactLinks,
+            ),
     )
 
     override fun saveProfileWorkspaceDraft(

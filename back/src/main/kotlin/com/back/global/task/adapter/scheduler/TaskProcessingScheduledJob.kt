@@ -81,8 +81,6 @@ class TaskProcessingScheduledJob(
     private val perTypeAutoTuneEnabled: Boolean,
     @param:Value("\${custom.task.processor.perTypeAutoTuneMinConcurrent:1}")
     private val perTypeAutoTuneMinConcurrent: Int,
-    @param:Value("\${custom.task.processor.perTypeAutoTuneBacklogPerSlot:20}")
-    private val perTypeAutoTuneBacklogPerSlot: Int,
     @param:Value("\${custom.task.processor.perTypeAutoTuneRefreshMs:15000}")
     private val perTypeAutoTuneRefreshMs: Long,
     private val meterRegistry: MeterRegistry? = null,

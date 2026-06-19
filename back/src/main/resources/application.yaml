@@ -262,7 +262,6 @@ custom:
       perTypeMaxConcurrent: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_MAX_CONCURRENT:post.search-index.sync=4,post.read.prewarm=2,post.search-engine.mirror=1}
       perTypeAutoTuneEnabled: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_AUTO_TUNE_ENABLED:true}
       perTypeAutoTuneMinConcurrent: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_AUTO_TUNE_MIN_CONCURRENT:1}
-      perTypeAutoTuneBacklogPerSlot: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_AUTO_TUNE_BACKLOG_PER_SLOT:20}
       perTypeAutoTuneRefreshMs: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_AUTO_TUNE_REFRESH_MS:15000}
       inlineWhenNotProd: ${CUSTOM__TASK__PROCESSOR__INLINE_WHEN_NOT_PROD:false}
     diagnostics:

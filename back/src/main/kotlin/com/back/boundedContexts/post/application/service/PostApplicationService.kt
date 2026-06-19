@@ -246,6 +246,13 @@ class PostApplicationService(
                 postTempDraftService.updateTempDraftMarker(post.author, null)
             }
         } catch (exception: ObjectOptimisticLockingFailureException) {
+            logger.warn(
+                "post_modify_optimistic_lock_conflict postId={} expectedVersion={} currentVersion={}",
+                post.id,
+                expectedVersion,
+                currentVersion,
+                exception,
+            )
             throw AppException("409-1", "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.")
         }
         val afterTags = postTagIndexService.extractNormalizedTags(post.content)

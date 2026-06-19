@@ -11,6 +11,7 @@ import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.event.PostCommentDeletedEvent
 import com.back.boundedContexts.post.event.PostCommentModifiedEvent
 import com.back.boundedContexts.post.event.PostCommentWrittenEvent
+import com.back.global.exception.application.AppException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
@@ -31,7 +32,11 @@ class PostCommentApplicationService(
         parentComment: PostComment? = null,
     ): PostComment {
         val persistenceAuthor = author.toPersistenceMember()
-        val persistedParentComment = parentComment?.let { findCommentById(post, it.id) ?: it }
+        val persistedParentComment =
+            parentComment?.let {
+                findCommentById(post, it.id)
+                    ?: throw AppException("404-1", "부모 댓글을 찾을 수 없습니다.")
+            }
         val comment =
             postCommentRepository.save(
                 post.newComment(

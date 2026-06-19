@@ -1,28 +1,9 @@
 package com.back.global.storage.application
 
-import com.back.boundedContexts.member.application.port.output.MemberAttrRepositoryPort
-import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
-import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
-import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
-import com.back.boundedContexts.post.config.PostImageStorageProperties
-import com.back.global.exception.application.AppException
-import com.back.global.jpa.application.ProdSequenceGuardService
-import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
-import com.back.global.storage.domain.UploadedFile
-import com.back.global.storage.domain.UploadedFileOwnerType
 import com.back.global.storage.domain.UploadedFilePurpose
-import com.back.global.storage.domain.UploadedFileRetentionReason
 import com.back.global.storage.domain.UploadedFileStatus
 import com.fasterxml.jackson.annotation.JsonProperty
-import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.dao.DataIntegrityViolationException
-import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
-import org.springframework.transaction.PlatformTransactionManager
-import org.springframework.transaction.TransactionDefinition
-import org.springframework.transaction.annotation.Transactional
-import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 
 data class UploadedFileCleanupDiagnostics(
@@ -52,460 +33,87 @@ data class ProfileImageHistoryDto(
 
 @Service
 class UploadedFileRetentionService(
-    private val uploadedFileRepository: UploadedFileRepositoryPort,
-    private val postRepository: PostRepositoryPort,
-    private val memberAttrRepository: MemberAttrRepositoryPort,
-    private val postImageStoragePort: PostImageStoragePort,
-    private val storageProperties: PostImageStorageProperties,
-    private val retentionProperties: UploadedFileRetentionProperties,
-    private val transactionManager: PlatformTransactionManager,
-    @param:Autowired(required = false)
-    private val prodSequenceGuardService: ProdSequenceGuardService? = null,
+    private val registrationService: UploadedFileRegistrationService,
+    private val postAttachmentRetentionService: PostAttachmentRetentionService,
+    private val profileImageRetentionService: ProfileImageRetentionService,
+    private val purgeService: UploadedFilePurgeService,
 ) {
-    private val logger = LoggerFactory.getLogger(UploadedFileRetentionService::class.java)
-    private val purgeCandidateStatuses = listOf(UploadedFileStatus.TEMP, UploadedFileStatus.PENDING_DELETE)
-    private val registerRetryLimit = 2
-    private val requiresNewTransactionTemplate =
-        TransactionTemplate(transactionManager).apply {
-            propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
-        }
-
     fun registerTempUpload(
         objectKey: String,
         contentType: String,
         fileSize: Long,
         purpose: UploadedFilePurpose,
     ) {
-        val normalizedContentType = contentType.ifBlank { "application/octet-stream" }
-        val safeFileSize = fileSize.coerceAtLeast(0)
-        val purgeAfter = Instant.now().plusSeconds(retentionProperties.tempUploadSeconds)
-
-        for (attempt in 1..registerRetryLimit) {
-            try {
-                saveTempUploadInRequiresNewTransaction(
-                    objectKey = objectKey,
-                    normalizedContentType = normalizedContentType,
-                    safeFileSize = safeFileSize,
-                    purpose = purpose,
-                    purgeAfter = purgeAfter,
-                )
-                return
-            } catch (exception: DataIntegrityViolationException) {
-                if (
-                    recoverTempUploadFromExistingObjectKey(
-                        objectKey = objectKey,
-                        normalizedContentType = normalizedContentType,
-                        safeFileSize = safeFileSize,
-                        purpose = purpose,
-                        purgeAfter = purgeAfter,
-                    )
-                ) {
-                    return
-                }
-
-                val repaired = repairSequenceDriftInRequiresNewTransaction(exception)
-                logger.warn(
-                    "uploaded_file_register_conflict objectKey={} attempt={} repaired={}",
-                    objectKey,
-                    attempt,
-                    repaired,
-                )
-                if (!repaired || attempt >= registerRetryLimit) throw exception
-            }
-        }
+        registrationService.registerTempUpload(
+            objectKey = objectKey,
+            contentType = contentType,
+            fileSize = fileSize,
+            purpose = purpose,
+        )
     }
 
-    private fun saveTempUploadInRequiresNewTransaction(
-        objectKey: String,
-        normalizedContentType: String,
-        safeFileSize: Long,
-        purpose: UploadedFilePurpose,
-        purgeAfter: Instant,
-    ) {
-        requiresNewTransactionTemplate.executeWithoutResult {
-            val uploadedFile =
-                findOrCreate(objectKey).apply {
-                    bucket = storageProperties.bucket
-                    this.contentType = normalizedContentType
-                    this.fileSize = safeFileSize
-                    markTemporary(purpose, purgeAfter)
-                }
-            uploadedFileRepository.save(uploadedFile)
-            uploadedFileRepository.flush()
-        }
-    }
-
-    private fun recoverTempUploadFromExistingObjectKey(
-        objectKey: String,
-        normalizedContentType: String,
-        safeFileSize: Long,
-        purpose: UploadedFilePurpose,
-        purgeAfter: Instant,
-    ): Boolean =
-        requiresNewTransactionTemplate.execute<Boolean> {
-            val existing = uploadedFileRepository.findByObjectKey(objectKey) ?: return@execute false
-            existing.bucket = storageProperties.bucket
-            existing.contentType = normalizedContentType
-            existing.fileSize = safeFileSize
-            existing.markTemporary(purpose, purgeAfter)
-            uploadedFileRepository.save(existing)
-            uploadedFileRepository.flush()
-            true
-        } ?: false
-
-    private fun repairSequenceDriftInRequiresNewTransaction(exception: DataIntegrityViolationException): Boolean =
-        requiresNewTransactionTemplate.execute<Boolean> {
-            val repairedByConstraint = prodSequenceGuardService?.repairIfSequenceDrift(exception) == true
-            if (repairedByConstraint) {
-                return@execute true
-            }
-
-            // uploaded_file 등록 경로는 제약명 파싱 실패 시에도 전용 시퀀스 보정 fallback을 시도한다.
-            prodSequenceGuardService?.repairUploadedFileSequence() == true
-        } ?: false
-
-    @Transactional
     fun syncPostContent(
         postId: Long,
         previousContent: String?,
         currentContent: String,
     ) {
-        syncPostAttachmentKeys(
+        postAttachmentRetentionService.syncPostContent(
             postId = postId,
-            currentKeys = UploadedFileUrlCodec.extractImageObjectKeysFromContent(currentContent),
-            previousKeys = UploadedFileUrlCodec.extractImageObjectKeysFromContent(previousContent.orEmpty()),
-            purpose = UploadedFilePurpose.POST_IMAGE,
-        )
-        syncPostAttachmentKeys(
-            postId = postId,
-            currentKeys = UploadedFileUrlCodec.extractFileObjectKeysFromContent(currentContent),
-            previousKeys = UploadedFileUrlCodec.extractFileObjectKeysFromContent(previousContent.orEmpty()),
-            purpose = UploadedFilePurpose.POST_FILE,
+            previousContent = previousContent,
+            currentContent = currentContent,
         )
     }
 
-    @Transactional
     fun scheduleDeletedPostAttachments(content: String) {
-        scheduleDeletionForContent(
-            purpose = UploadedFilePurpose.POST_IMAGE,
-            keys = UploadedFileUrlCodec.extractImageObjectKeysFromContent(content),
-        )
-        scheduleDeletionForContent(
-            purpose = UploadedFilePurpose.POST_FILE,
-            keys = UploadedFileUrlCodec.extractFileObjectKeysFromContent(content),
-        )
+        postAttachmentRetentionService.scheduleDeletedPostAttachments(content)
     }
 
-    @Transactional
     fun restoreDeletedPostAttachments(
         postId: Long,
         content: String,
     ) {
-        restorePostAttachmentKeys(
+        postAttachmentRetentionService.restoreDeletedPostAttachments(
             postId = postId,
-            keys = UploadedFileUrlCodec.extractImageObjectKeysFromContent(content),
-            purpose = UploadedFilePurpose.POST_IMAGE,
-        )
-        restorePostAttachmentKeys(
-            postId = postId,
-            keys = UploadedFileUrlCodec.extractFileObjectKeysFromContent(content),
-            purpose = UploadedFilePurpose.POST_FILE,
+            content = content,
         )
     }
 
-    private fun syncPostAttachmentKeys(
-        postId: Long,
-        currentKeys: Set<String>,
-        previousKeys: Set<String>,
-        purpose: UploadedFilePurpose,
-    ) {
-        currentKeys.forEach { objectKey ->
-            val uploadedFile = findOrCreate(objectKey)
-            uploadedFile.attachToPost(postId, purpose)
-            uploadedFileRepository.save(uploadedFile)
-        }
-
-        (previousKeys - currentKeys).forEach { objectKey ->
-            scheduleDeletionIfKnown(
-                objectKey = objectKey,
-                purpose = purpose,
-                reason = UploadedFileRetentionReason.DETACHED_POST_ATTACHMENT,
-                purgeAfter = Instant.now().plusSeconds(retentionProperties.deletedPostAttachmentSeconds),
-            )
-        }
-    }
-
-    private fun scheduleDeletionForContent(
-        keys: Set<String>,
-        purpose: UploadedFilePurpose,
-    ) {
-        keys.forEach { objectKey ->
-            scheduleDeletionIfKnown(
-                objectKey = objectKey,
-                purpose = purpose,
-                reason = UploadedFileRetentionReason.DELETED_POST_ATTACHMENT,
-                purgeAfter = Instant.now().plusSeconds(retentionProperties.deletedPostAttachmentSeconds),
-            )
-        }
-    }
-
-    private fun restorePostAttachmentKeys(
-        postId: Long,
-        keys: Set<String>,
-        purpose: UploadedFilePurpose,
-    ) {
-        keys.forEach { objectKey ->
-            val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: return@forEach
-            if (uploadedFile.status == UploadedFileStatus.DELETED) return@forEach
-            uploadedFile.attachToPost(postId, purpose)
-            uploadedFileRepository.save(uploadedFile)
-        }
-    }
-
-    @Transactional
     fun syncProfileImage(
         memberId: Long,
         previousProfileImgUrl: String?,
         currentProfileImgUrl: String?,
     ) {
-        val previousObjectKey = UploadedFileUrlCodec.extractObjectKeyFromImageUrl(previousProfileImgUrl)
-        val currentObjectKey = UploadedFileUrlCodec.extractObjectKeyFromImageUrl(currentProfileImgUrl)
-
-        currentObjectKey?.let { objectKey ->
-            val uploadedFile = findOrCreate(objectKey)
-            uploadedFile.attachToMemberProfile(memberId)
-            uploadedFileRepository.save(uploadedFile)
-        }
-
-        if (previousObjectKey != null && previousObjectKey != currentObjectKey) {
-            scheduleProfileImageDeletionIfKnown(
-                memberId = memberId,
-                objectKey = previousObjectKey,
-                reason = UploadedFileRetentionReason.REPLACED_PROFILE_IMAGE,
-                purgeAfter = Instant.now().plusSeconds(retentionProperties.replacedProfileImageSeconds),
-            )
-        }
+        profileImageRetentionService.syncProfileImage(
+            memberId = memberId,
+            previousProfileImgUrl = previousProfileImgUrl,
+            currentProfileImgUrl = currentProfileImgUrl,
+        )
     }
 
-    @Transactional(readOnly = true)
     fun listProfileImages(
         memberId: Long,
         protectedProfileImgUrls: Collection<String?>,
-    ): List<ProfileImageHistoryDto> {
-        val protectedObjectKeys = protectedProfileImgUrls.extractProfileImageObjectKeys()
-        val profileImages =
-            uploadedFileRepository.findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
-                purpose = UploadedFilePurpose.PROFILE_IMAGE,
-                ownerType = UploadedFileOwnerType.MEMBER_PROFILE,
-                ownerId = memberId,
-                status = UploadedFileStatus.DELETED,
-            )
+    ): List<ProfileImageHistoryDto> =
+        profileImageRetentionService.listProfileImages(
+            memberId = memberId,
+            protectedProfileImgUrls = protectedProfileImgUrls,
+        )
 
-        return profileImages.map { uploadedFile ->
-            uploadedFile.toProfileImageHistoryDto(
-                isCurrent = uploadedFile.objectKey in protectedObjectKeys,
-            )
-        }
-    }
-
-    @Transactional
     fun deleteProfileImage(
         memberId: Long,
         fileId: Long,
         protectedProfileImgUrls: Collection<String?>,
     ) {
-        val uploadedFile =
-            uploadedFileRepository.findByIdAndPurposeAndOwnerTypeAndOwnerId(
-                id = fileId,
-                purpose = UploadedFilePurpose.PROFILE_IMAGE,
-                ownerType = UploadedFileOwnerType.MEMBER_PROFILE,
-                ownerId = memberId,
-            )
-                ?: throw AppException("404-1", "프로필 이미지를 찾을 수 없습니다.")
-        if (uploadedFile.objectKey in protectedProfileImgUrls.extractProfileImageObjectKeys()) {
-            throw AppException("400-1", "현재 사용 중인 프로필 이미지는 삭제할 수 없습니다.")
-        }
-
-        postImageStoragePort.deletePostImage(uploadedFile.objectKey)
-        uploadedFile.markDeleted()
-        uploadedFileRepository.save(uploadedFile)
+        profileImageRetentionService.deleteProfileImage(
+            memberId = memberId,
+            fileId = fileId,
+            protectedProfileImgUrls = protectedProfileImgUrls,
+        )
     }
 
-    @Transactional
     fun purgeExpiredFiles(limit: Int) {
-        val safeLimit = limit.coerceIn(1, 500)
-        val safetyThreshold = retentionProperties.cleanupSafetyThreshold.coerceAtLeast(1)
-        val now = Instant.now()
-        val eligibleCount =
-            uploadedFileRepository.countByStatusInAndPurgeAfterLessThanEqual(
-                purgeCandidateStatuses,
-                now,
-            )
-
-        val effectiveLimit =
-            if (eligibleCount > safetyThreshold) {
-                logger.warn(
-                    "Throttling uploaded file purge because eligible candidate count {} exceeds safety threshold {}",
-                    eligibleCount,
-                    safetyThreshold,
-                )
-                minOf(safeLimit, safetyThreshold)
-            } else {
-                safeLimit
-            }
-
-        if (effectiveLimit <= 0) {
-            logger.error(
-                "Skipping uploaded file purge because effective limit is non-positive (safeLimit={}, threshold={})",
-                safeLimit,
-                safetyThreshold,
-            )
-            return
-        }
-
-        val candidates =
-            uploadedFileRepository.findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
-                statuses = purgeCandidateStatuses,
-                purgeAfter = now,
-                pageable = PageRequest.of(0, effectiveLimit),
-            )
-
-        if (candidates.isEmpty()) {
-            logger.debug(
-                "No uploaded files eligible for purge (eligibleCount={}, effectiveLimit={})",
-                eligibleCount,
-                effectiveLimit,
-            )
-            return
-        }
-
-        candidates.forEach { uploadedFile ->
-            if (isStillReferenced(uploadedFile)) {
-                uploadedFile.restoreActive()
-                uploadedFileRepository.save(uploadedFile)
-                return@forEach
-            }
-
-            try {
-                postImageStoragePort.deletePostImage(uploadedFile.objectKey)
-                uploadedFile.markDeleted()
-                uploadedFileRepository.save(uploadedFile)
-            } catch (exception: Exception) {
-                logger.error("Failed to purge uploaded file: {}", uploadedFile.objectKey, exception)
-            }
-        }
+        purgeService.purgeExpiredFiles(limit)
     }
 
-    @Transactional(readOnly = true)
-    fun diagnoseCleanup(sampleSize: Int = 5): UploadedFileCleanupDiagnostics {
-        val now = Instant.now()
-        val safeSampleSize = sampleSize.coerceIn(1, 20)
-        val eligibleCandidates =
-            uploadedFileRepository.findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
-                statuses = purgeCandidateStatuses,
-                purgeAfter = now,
-                pageable = PageRequest.of(0, safeSampleSize),
-            )
-
-        val eligibleCount =
-            uploadedFileRepository.countByStatusInAndPurgeAfterLessThanEqual(
-                purgeCandidateStatuses,
-                now,
-            )
-
-        return UploadedFileCleanupDiagnostics(
-            tempCount = uploadedFileRepository.countByStatus(UploadedFileStatus.TEMP),
-            activeCount = uploadedFileRepository.countByStatus(UploadedFileStatus.ACTIVE),
-            pendingDeleteCount = uploadedFileRepository.countByStatus(UploadedFileStatus.PENDING_DELETE),
-            deletedCount = uploadedFileRepository.countByStatus(UploadedFileStatus.DELETED),
-            eligibleForPurgeCount = eligibleCount,
-            cleanupSafetyThreshold = retentionProperties.cleanupSafetyThreshold,
-            // 임계치 초과 시 전체 중단 대신 배치 제한으로 완만히 정리한다.
-            blockedBySafetyThreshold = eligibleCount > retentionProperties.cleanupSafetyThreshold,
-            oldestEligiblePurgeAfter = eligibleCandidates.firstOrNull()?.purgeAfter,
-            sampleEligibleObjectKeys = eligibleCandidates.map { it.objectKey },
-        )
-    }
-
-    private fun scheduleDeletionIfKnown(
-        objectKey: String,
-        purpose: UploadedFilePurpose,
-        reason: UploadedFileRetentionReason,
-        purgeAfter: Instant,
-    ) {
-        if (objectKey.isBlank()) return
-
-        // legacy 본문에는 업로드 추적 테이블에 없는 이미지 URL이 섞여 있을 수 있다.
-        // 삭제 예약 단계에서는 미등록 키를 새로 생성하지 않고, 추적 중인 파일만 상태 전환한다.
-        val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: return
-        uploadedFile.purpose = purpose
-        uploadedFile.scheduleDeletion(reason, purgeAfter)
-        uploadedFileRepository.save(uploadedFile)
-    }
-
-    private fun scheduleProfileImageDeletionIfKnown(
-        memberId: Long,
-        objectKey: String,
-        reason: UploadedFileRetentionReason,
-        purgeAfter: Instant,
-    ) {
-        if (objectKey.isBlank()) return
-
-        val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: return
-        uploadedFile.purpose = UploadedFilePurpose.PROFILE_IMAGE
-        uploadedFile.ownerType = UploadedFileOwnerType.MEMBER_PROFILE
-        uploadedFile.ownerId = memberId
-        uploadedFile.scheduleDeletion(reason, purgeAfter)
-        uploadedFileRepository.save(uploadedFile)
-    }
-
-    private fun findOrCreate(objectKey: String): UploadedFile =
-        uploadedFileRepository.findByObjectKey(objectKey)
-            ?: UploadedFile(
-                objectKey = objectKey,
-                bucket = storageProperties.bucket,
-                contentType = "application/octet-stream",
-                fileSize = 0,
-            )
-
-    private fun UploadedFile.toProfileImageHistoryDto(isCurrent: Boolean): ProfileImageHistoryDto =
-        ProfileImageHistoryDto(
-            id = id,
-            imageUrl = UploadedFileUrlCodec.buildImageUrl(objectKey),
-            objectKey = objectKey,
-            contentType = contentType,
-            fileSize = fileSize,
-            status = status,
-            isCurrent = isCurrent,
-            createdAt = createdAt,
-            modifiedAt = modifiedAt,
-        )
-
-    private fun Collection<String?>.extractProfileImageObjectKeys(): Set<String> =
-        mapNotNull(UploadedFileUrlCodec::extractObjectKeyFromImageUrl)
-            .toSet()
-
-    private fun isStillReferenced(uploadedFile: UploadedFile): Boolean {
-        val objectKey = uploadedFile.objectKey
-        val ownerId = uploadedFile.ownerId
-
-        if (uploadedFile.ownerType == UploadedFileOwnerType.POST && ownerId != null) {
-            if (postRepository.existsByIdAndContentContaining(ownerId, objectKey)) {
-                return true
-            }
-        }
-
-        if (uploadedFile.ownerType == UploadedFileOwnerType.MEMBER_PROFILE && ownerId != null) {
-            if (memberAttrRepository.existsBySubjectIdAndNameAndStrValueContaining(ownerId, PROFILE_IMG_URL, objectKey)) {
-                return true
-            }
-        }
-
-        val imageUrl = UploadedFileUrlCodec.buildImageUrl(objectKey)
-        val fileUrl = UploadedFileUrlCodec.buildFileUrl(objectKey)
-        return postRepository.existsByContentContaining(objectKey) ||
-            postRepository.existsByContentContaining(fileUrl) ||
-            memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_IMG_URL, objectKey) ||
-            memberAttrRepository.existsByNameAndStrValue(PROFILE_IMG_URL, imageUrl)
-    }
+    fun diagnoseCleanup(sampleSize: Int = 5): UploadedFileCleanupDiagnostics = purgeService.diagnoseCleanup(sampleSize)
 }

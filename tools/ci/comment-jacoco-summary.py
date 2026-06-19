@@ -37,6 +37,14 @@ def count_baseline_exclusions(path):
     )
 
 
+def baseline_class_ratio(baseline_count, report_root):
+    class_missed, class_covered, _ = read_counter(report_root, "CLASS")
+    class_total = class_missed + class_covered
+    if class_total == 0:
+        return 0.0
+    return baseline_count * 100.0 / class_total
+
+
 def format_counter(name, missed, covered, ratio):
     return f"| {name} | {covered} | {missed + covered} | {missed} | {ratio:.2f}% | `{coverage_bar(ratio)}` |"
 
@@ -98,11 +106,12 @@ def append_file_section(lines, title, rows, empty_message):
     lines.extend(format_file_row(row) for row in rows)
 
 
-def build_summary(report_path, baseline_path, changed_files_path=None):
+def build_summary(report_path, baseline_path, changed_files_path=None, full_report_path=None):
     root = ET.parse(report_path).getroot()
     line_missed, line_covered, line_ratio = read_counter(root, "LINE")
     status = "통과" if line_missed == 0 and line_ratio >= 100.0 else "미달"
     baseline_count = count_baseline_exclusions(baseline_path)
+    full_root = ET.parse(full_report_path).getroot() if full_report_path is not None and full_report_path.exists() else None
     sha = os.environ.get("GITHUB_SHA", "")
     sha_line = f"- Commit: `{sha}`" if sha else ""
     rows = source_file_rows(root)
@@ -122,16 +131,27 @@ def build_summary(report_path, baseline_path, changed_files_path=None):
         ("Method", *read_counter(root, "METHOD")),
         ("Class", *read_counter(root, "CLASS")),
     ]
+    full_line_ratio = read_counter(full_root, "LINE")[2] if full_root is not None else None
+    full_branch_ratio = read_counter(full_root, "BRANCH")[2] if full_root is not None else None
+    excluded_class_ratio = baseline_class_ratio(baseline_count, full_root) if full_root is not None else None
 
     lines = [
         MARKER,
         "## Jacoco 테스트 커버리지 요약",
         "",
         f"- 상태: **{status}**",
-        f"- 전체 Line coverage: **{line_ratio:.2f}%**",
-        "- 기준: baseline 제외 후 line coverage 100%",
+        f"- Baseline 제외 후 Line coverage: **{line_ratio:.2f}%**",
+        "- Gate 기준: static/baseline 제외 후 신규 코드 line coverage 100%",
         f"- Baseline 제외 클래스: `{baseline_count}`개",
     ]
+    if full_root is not None:
+        lines.extend(
+            [
+                f"- Full report Line coverage: **{full_line_ratio:.2f}%**",
+                f"- Full report Branch coverage: **{full_branch_ratio:.2f}%**",
+                f"- Baseline 제외 class ratio: **{excluded_class_ratio:.2f}%**",
+            ],
+        )
     if sha_line:
         lines.append(sha_line)
     lines.extend(
@@ -160,10 +180,12 @@ def build_summary(report_path, baseline_path, changed_files_path=None):
             "## 상세 report",
             "",
             "- Actions artifact: `jacoco-pr-report`",
-            f"- XML path: `{report_path}`",
+            f"- Baseline-filtered XML path: `{report_path}`",
             f"- Baseline: `{baseline_path}`",
         ],
     )
+    if full_report_path is not None:
+        lines.append(f"- Full XML path: `{full_report_path}`")
     return "\n".join(lines)
 
 
@@ -172,12 +194,15 @@ def main():
     parser.add_argument("report", type=Path)
     parser.add_argument("baseline", type=Path)
     parser.add_argument("--changed-files", type=Path)
+    parser.add_argument("--full-report", type=Path)
     args = parser.parse_args()
 
     if not args.report.exists():
         raise SystemExit(f"Jacoco report not found: {args.report}")
+    if args.full_report is not None and not args.full_report.exists():
+        raise SystemExit(f"Full Jacoco report not found: {args.full_report}")
 
-    print(build_summary(args.report, args.baseline, args.changed_files))
+    print(build_summary(args.report, args.baseline, args.changed_files, args.full_report))
 
 
 if __name__ == "__main__":

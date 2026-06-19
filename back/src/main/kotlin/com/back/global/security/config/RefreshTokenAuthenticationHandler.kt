@@ -7,8 +7,10 @@ import com.back.global.web.application.AuthCookieService
 import com.back.global.web.application.Rq
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.http.HttpHeaders
+import org.springframework.stereotype.Component
 
-internal class RefreshTokenAuthenticationHandler(
+@Component
+class RefreshTokenAuthenticationHandler(
     private val actorApplicationService: ActorApplicationService,
     private val memberSessionUseCase: MemberSessionUseCase,
     private val authCookieService: AuthCookieService,

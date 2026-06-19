@@ -318,7 +318,6 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
                 perTypeMaxConcurrentRaw = perTypeMaxConcurrentRaw,
                 perTypeAutoTuneEnabled = perTypeAutoTuneEnabled,
                 perTypeAutoTuneMinConcurrent = perTypeAutoTuneMinConcurrent,
-                perTypeAutoTuneBacklogPerSlot = 20,
                 perTypeAutoTuneRefreshMs = 15_000,
                 meterRegistry = null,
             )

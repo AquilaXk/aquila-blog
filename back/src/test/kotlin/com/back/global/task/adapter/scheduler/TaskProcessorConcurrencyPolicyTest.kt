@@ -40,6 +40,7 @@ class TaskProcessorConcurrencyPolicyTest {
         assertThat(policy.availableWorkerSlots(activeWorkers = 0) { 1L }).isEqualTo(2)
         assertThat(policy.availableWorkerSlots(activeWorkers = 0) { 200L }).isEqualTo(8)
         assertThat(policy.availableWorkerSlots(activeWorkers = 3) { 200L }).isEqualTo(5)
+        assertThat(policy.availableWorkerSlots(activeWorkers = 10) { 200L }).isZero()
     }
 
     @Test
@@ -81,6 +82,51 @@ class TaskProcessorConcurrencyPolicyTest {
     }
 
     @Test
+    @DisplayName("dynamic batch size off는 batch size와 남은 worker slot 중 작은 값을 사용한다")
+    fun `fixed batch size uses lower batch size and available slots`() {
+        val policy =
+            createPolicy(
+                workerConcurrency = 8,
+                dynamicBatchSizeEnabled = false,
+            )
+        var backlogCounted = false
+
+        val fetchLimit =
+            policy.fetchLimit(
+                safeBatchSize = 50,
+                availableWorkerSlots = 3,
+                recentHandlerDurationMs = 900,
+            ) {
+                backlogCounted = true
+                100L
+            }
+
+        assertThat(fetchLimit).isEqualTo(3)
+        assertThat(backlogCounted).isFalse()
+    }
+
+    @Test
+    @DisplayName("dynamic batch size는 backlog 조회 실패 시 max prefetch multiplier로 fallback한다")
+    fun `dynamic batch size falls back to max prefetch multiplier when backlog count fails`() {
+        val policy =
+            createPolicy(
+                workerConcurrency = 8,
+                dynamicBatchMaxPrefetchMultiplier = 3,
+            )
+
+        val fetchLimit =
+            policy.fetchLimit(
+                safeBatchSize = 50,
+                availableWorkerSlots = 2,
+                recentHandlerDurationMs = 3_600,
+            ) {
+                null
+            }
+
+        assertThat(fetchLimit).isEqualTo(4)
+    }
+
+    @Test
     @DisplayName("per-type auto-tune은 explicit 설정을 우선하고 미지정 type은 최소 permit을 보장한다")
     fun `per type limit prefers explicit value and keeps fallback permit`() {
         val policy =
@@ -101,9 +147,40 @@ class TaskProcessorConcurrencyPolicyTest {
             policy.perTypeLimit(
                 taskType = "post.read.prewarm",
                 explicitPerTypeMaxConcurrent = emptyMap(),
+                perTypeDynamicLimits = mapOf("post.read.prewarm" to 3),
+            ),
+        ).isEqualTo(3)
+        assertThat(
+            policy.perTypeLimit(
+                taskType = "post.search-index.sync",
+                explicitPerTypeMaxConcurrent = emptyMap(),
                 perTypeDynamicLimits = emptyMap(),
             ),
         ).isEqualTo(1)
+    }
+
+    @Test
+    @DisplayName("per-type auto-tune off는 미지정 type에 전체 worker 동시성을 사용한다")
+    fun `per type limit uses worker concurrency when auto tune is disabled`() {
+        val policy =
+            createPolicy(
+                workerConcurrency = 8,
+                perTypeAutoTuneEnabled = false,
+            )
+
+        assertThat(
+            policy.perTypeLimit(
+                taskType = "post.read.prewarm",
+                explicitPerTypeMaxConcurrent = emptyMap(),
+                perTypeDynamicLimits = emptyMap(),
+            ),
+        ).isEqualTo(8)
+        assertThat(
+            policy.dynamicPerTypeLimits(
+                registeredTaskTypes = listOf("post.search-index.sync"),
+                explicitPerTypeMaxConcurrent = emptyMap(),
+            ),
+        ).isEmpty()
     }
 
     @Test
@@ -125,6 +202,55 @@ class TaskProcessorConcurrencyPolicyTest {
         assertThat(limits).containsOnlyKeys("post.search-index.sync", "post.read.prewarm")
         assertThat(limits.values.sum()).isLessThanOrEqualTo(3)
         assertThat(limits.values).allSatisfy { limit -> assertThat(limit).isGreaterThanOrEqualTo(1) }
+    }
+
+    @Test
+    @DisplayName("per-type auto-tune은 최소 permit 합계가 budget을 넘으면 큰 limit부터 줄인다")
+    fun `per type dynamic limits trim largest limit when minimum total exceeds budget`() {
+        val policy =
+            createPolicy(
+                workerConcurrency = 8,
+                perTypeAutoTuneEnabled = true,
+                perTypeAutoTuneMinConcurrent = 3,
+            )
+
+        val limits =
+            policy.dynamicPerTypeLimits(
+                registeredTaskTypes =
+                    listOf(
+                        "post.search-index.sync",
+                        "post.read.prewarm",
+                        "member.signupVerification.sendMail",
+                    ),
+                explicitPerTypeMaxConcurrent = emptyMap(),
+            )
+
+        assertThat(limits.values.sum()).isEqualTo(8)
+        assertThat(limits.values).containsExactlyInAnyOrder(2, 3, 3)
+    }
+
+    @Test
+    @DisplayName("per-type auto-tune은 explicit type만 있거나 남은 budget이 없으면 dynamic limit을 비운다")
+    fun `per type dynamic limits are empty without dynamic type budget`() {
+        val policy =
+            createPolicy(
+                workerConcurrency = 2,
+                perTypeAutoTuneEnabled = true,
+                perTypeAutoTuneMinConcurrent = 1,
+            )
+
+        assertThat(
+            policy.dynamicPerTypeLimits(
+                registeredTaskTypes = listOf("post.read.prewarm"),
+                explicitPerTypeMaxConcurrent = mapOf("post.read.prewarm" to 1),
+            ),
+        ).isEmpty()
+        assertThat(
+            policy.dynamicPerTypeLimits(
+                registeredTaskTypes = listOf("post.read.prewarm"),
+                explicitPerTypeMaxConcurrent = mapOf("member.signupVerification.sendMail" to 8),
+            ),
+        ).isEmpty()
     }
 
     private fun createPolicy(

@@ -5,8 +5,10 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.shared.AccessTokenPayload
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import jakarta.servlet.http.HttpServletRequest
+import org.springframework.stereotype.Component
 
-internal class AccessTokenAuthenticationHandler(
+@Component
+class AccessTokenAuthenticationHandler(
     private val actorApplicationService: ActorApplicationService,
     private val memberSessionUseCase: MemberSessionUseCase,
     private val authIpSecurityVerifier: AuthIpSecurityVerifier,

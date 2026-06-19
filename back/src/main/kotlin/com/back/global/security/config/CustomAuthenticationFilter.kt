@@ -1,16 +1,11 @@
 package com.back.global.security.config
 
-import com.back.boundedContexts.member.application.service.ActorApplicationService
-import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
-import com.back.global.web.application.AuthCookieService
 import com.back.global.web.application.ClientIpResolver
-import com.back.global.web.application.Rq
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.env.Environment
 import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
 import org.springframework.security.core.context.SecurityContextHolder
@@ -26,67 +21,18 @@ import tools.jackson.databind.ObjectMapper
  */
 @Component
 class CustomAuthenticationFilter(
-    private val actorApplicationService: ActorApplicationService,
-    private val memberSessionUseCase: MemberSessionUseCase,
-    private val authCookieService: AuthCookieService,
     private val authTokenExtractor: AuthTokenExtractor,
-    private val authIpSecurityVerifier: AuthIpSecurityVerifier,
-    private val securityContextAuthenticationWriter: SecurityContextAuthenticationWriter,
+    private val accessTokenAuthenticationHandler: AccessTokenAuthenticationHandler,
+    private val refreshTokenAuthenticationHandler: RefreshTokenAuthenticationHandler,
     private val clientIpResolver: ClientIpResolver,
     private val objectMapper: ObjectMapper,
     private val publicApiRequestMatcher: PublicApiRequestMatcher,
     private val apiCorsPolicy: ApiCorsPolicy,
     private val environment: Environment,
-    private val rq: Rq,
-    @param:Value("\${custom.auth.session.freshLookupGraceSeconds:15}")
-    private val freshLookupGraceSeconds: Long,
 ) : OncePerRequestFilter() {
     private val log = org.slf4j.LoggerFactory.getLogger(CustomAuthenticationFilter::class.java)
     private val protectedDocumentationPrefixes = listOf("/swagger-ui/", "/v3/api-docs")
     private val filteredPrefixes = listOf("/member/api/", "/post/api/", "/system/api/", "/ws/", "/sse/") + protectedDocumentationPrefixes
-    private val memberSessionAuthenticationResolver =
-        MemberSessionAuthenticationResolver(
-            memberSessionUseCase = memberSessionUseCase,
-            authCookieService = authCookieService,
-            freshLookupGraceSeconds = freshLookupGraceSeconds,
-        )
-    private val apiKeyAuthorityRefreshHandler =
-        ApiKeyAuthorityRefreshHandler(
-            actorApplicationService = actorApplicationService,
-            memberSessionUseCase = memberSessionUseCase,
-            authCookieService = authCookieService,
-            authIpSecurityVerifier = authIpSecurityVerifier,
-            securityContextAuthenticationWriter = securityContextAuthenticationWriter,
-            memberSessionAuthenticationResolver = memberSessionAuthenticationResolver,
-            rq = rq,
-        )
-    private val legacyPayloadRecoveryHandler =
-        LegacyPayloadRecoveryHandler(
-            actorApplicationService = actorApplicationService,
-            memberSessionUseCase = memberSessionUseCase,
-            authCookieService = authCookieService,
-            securityContextAuthenticationWriter = securityContextAuthenticationWriter,
-            rq = rq,
-        )
-    private val accessTokenAuthenticationHandler =
-        AccessTokenAuthenticationHandler(
-            actorApplicationService = actorApplicationService,
-            memberSessionUseCase = memberSessionUseCase,
-            authIpSecurityVerifier = authIpSecurityVerifier,
-            securityContextAuthenticationWriter = securityContextAuthenticationWriter,
-            memberSessionAuthenticationResolver = memberSessionAuthenticationResolver,
-            apiKeyAuthorityRefreshHandler = apiKeyAuthorityRefreshHandler,
-            legacyPayloadRecoveryHandler = legacyPayloadRecoveryHandler,
-        )
-    private val refreshTokenAuthenticationHandler =
-        RefreshTokenAuthenticationHandler(
-            actorApplicationService = actorApplicationService,
-            memberSessionUseCase = memberSessionUseCase,
-            authCookieService = authCookieService,
-            authIpSecurityVerifier = authIpSecurityVerifier,
-            securityContextAuthenticationWriter = securityContextAuthenticationWriter,
-            rq = rq,
-        )
 
     override fun shouldNotFilter(request: HttpServletRequest): Boolean {
         val uri = request.requestURI

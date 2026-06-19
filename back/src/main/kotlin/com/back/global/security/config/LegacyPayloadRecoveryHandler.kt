@@ -6,8 +6,10 @@ import com.back.boundedContexts.member.subContexts.session.application.port.inpu
 import com.back.global.web.application.AuthCookieService
 import com.back.global.web.application.Rq
 import org.springframework.http.HttpHeaders
+import org.springframework.stereotype.Component
 
-internal class LegacyPayloadRecoveryHandler(
+@Component
+class LegacyPayloadRecoveryHandler(
     private val actorApplicationService: ActorApplicationService,
     private val memberSessionUseCase: MemberSessionUseCase,
     private val authCookieService: AuthCookieService,

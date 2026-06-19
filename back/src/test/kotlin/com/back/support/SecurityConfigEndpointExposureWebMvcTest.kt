@@ -7,12 +7,17 @@ import com.back.boundedContexts.member.subContexts.session.application.port.inpu
 import com.back.boundedContexts.post.config.PostSecurityConfigurer
 import com.back.global.security.application.AuthIpSecurityService
 import com.back.global.security.application.AuthSecurityEventService
+import com.back.global.security.config.AccessTokenAuthenticationHandler
 import com.back.global.security.config.ApiCorsPolicy
+import com.back.global.security.config.ApiKeyAuthorityRefreshHandler
 import com.back.global.security.config.AuthIpSecurityVerifier
 import com.back.global.security.config.AuthTokenExtractor
 import com.back.global.security.config.CustomAuthenticationFilter
+import com.back.global.security.config.LegacyPayloadRecoveryHandler
+import com.back.global.security.config.MemberSessionAuthenticationResolver
 import com.back.global.security.config.PublicApiRequestMatcher
 import com.back.global.security.config.PublicApiRouteContributor
+import com.back.global.security.config.RefreshTokenAuthenticationHandler
 import com.back.global.security.config.SecurityConfig
 import com.back.global.security.config.SecurityContextAuthenticationWriter
 import com.back.global.security.config.oauth2.CustomOAuth2AuthorizationRequestResolver
@@ -112,26 +117,69 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
             objectMapper: ObjectMapper,
         ): CustomAuthenticationFilter {
             val rq = mock(Rq::class.java)
+            val actorApplicationService = mock(ActorApplicationService::class.java)
+            val memberSessionUseCase = mock(MemberSessionUseCase::class.java)
+            val authCookieService = mock(AuthCookieService::class.java)
+            val securityContextAuthenticationWriter = SecurityContextAuthenticationWriter()
+            val memberSessionAuthenticationResolver =
+                MemberSessionAuthenticationResolver(
+                    memberSessionUseCase = memberSessionUseCase,
+                    authCookieService = authCookieService,
+                    freshLookupGraceSeconds = 15,
+                )
+            val authIpSecurityVerifier =
+                AuthIpSecurityVerifier(
+                    mock(AuthIpSecurityService::class.java),
+                    mock(AuthSecurityEventService::class.java),
+                    authCookieService,
+                    memberSessionUseCase,
+                )
+            val apiKeyAuthorityRefreshHandler =
+                ApiKeyAuthorityRefreshHandler(
+                    actorApplicationService = actorApplicationService,
+                    memberSessionUseCase = memberSessionUseCase,
+                    authCookieService = authCookieService,
+                    authIpSecurityVerifier = authIpSecurityVerifier,
+                    securityContextAuthenticationWriter = securityContextAuthenticationWriter,
+                    memberSessionAuthenticationResolver = memberSessionAuthenticationResolver,
+                    rq = rq,
+                )
+            val legacyPayloadRecoveryHandler =
+                LegacyPayloadRecoveryHandler(
+                    actorApplicationService = actorApplicationService,
+                    memberSessionUseCase = memberSessionUseCase,
+                    authCookieService = authCookieService,
+                    securityContextAuthenticationWriter = securityContextAuthenticationWriter,
+                    rq = rq,
+                )
+            val accessTokenAuthenticationHandler =
+                AccessTokenAuthenticationHandler(
+                    actorApplicationService = actorApplicationService,
+                    memberSessionUseCase = memberSessionUseCase,
+                    authIpSecurityVerifier = authIpSecurityVerifier,
+                    securityContextAuthenticationWriter = securityContextAuthenticationWriter,
+                    memberSessionAuthenticationResolver = memberSessionAuthenticationResolver,
+                    apiKeyAuthorityRefreshHandler = apiKeyAuthorityRefreshHandler,
+                    legacyPayloadRecoveryHandler = legacyPayloadRecoveryHandler,
+                )
+            val refreshTokenAuthenticationHandler =
+                RefreshTokenAuthenticationHandler(
+                    actorApplicationService = actorApplicationService,
+                    memberSessionUseCase = memberSessionUseCase,
+                    authCookieService = authCookieService,
+                    authIpSecurityVerifier = authIpSecurityVerifier,
+                    securityContextAuthenticationWriter = securityContextAuthenticationWriter,
+                    rq = rq,
+                )
             return CustomAuthenticationFilter(
-                actorApplicationService = mock(ActorApplicationService::class.java),
-                memberSessionUseCase = mock(MemberSessionUseCase::class.java),
-                authCookieService = mock(AuthCookieService::class.java),
                 authTokenExtractor = AuthTokenExtractor(rq),
-                authIpSecurityVerifier =
-                    AuthIpSecurityVerifier(
-                        mock(AuthIpSecurityService::class.java),
-                        mock(AuthSecurityEventService::class.java),
-                        mock(AuthCookieService::class.java),
-                        mock(MemberSessionUseCase::class.java),
-                    ),
-                securityContextAuthenticationWriter = SecurityContextAuthenticationWriter(),
+                accessTokenAuthenticationHandler = accessTokenAuthenticationHandler,
+                refreshTokenAuthenticationHandler = refreshTokenAuthenticationHandler,
                 clientIpResolver = mock(ClientIpResolver::class.java),
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = PublicApiRequestMatcher(emptyList<PublicApiRouteContributor>()),
                 apiCorsPolicy = apiCorsPolicy,
                 environment = environment,
-                rq = rq,
-                freshLookupGraceSeconds = 15,
             )
         }
     }

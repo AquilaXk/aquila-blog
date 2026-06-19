@@ -7,7 +7,12 @@ import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.postMixin.COMMENTS_COUNT
 import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
 import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
+import com.back.boundedContexts.post.event.PostCommentDeletedEvent
+import com.back.boundedContexts.post.event.PostCommentModifiedEvent
+import com.back.boundedContexts.post.event.PostCommentWrittenEvent
+import com.back.boundedContexts.post.event.PostLikedEvent
 import com.back.boundedContexts.post.event.PostModifiedEvent
+import com.back.boundedContexts.post.event.PostUnlikedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
 import com.back.global.task.adapter.persistence.TaskRepository
 import com.back.global.task.application.TaskFacade
@@ -77,6 +82,308 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
             eventPublisher,
             cacheManager,
         )
+    }
+
+    @Test
+    @DisplayName("댓글 작성 트랜잭션이 rollback되면 이벤트·추천 후속 작업을 실행하지 않는다")
+    fun writeCommentRollbackDoesNotRunSideEffects() {
+        // given
+        val admin = actorApplicationService.findByEmail("admin@test.com")!!
+        val post =
+            transactionTemplate.execute {
+                postApplicationService.write(
+                    author = admin,
+                    title = "comment rollback source",
+                    content = "comment rollback content",
+                    published = true,
+                    listed = true,
+                )
+            }!!
+        clearSideEffectMocks()
+
+        // when
+        transactionTemplate.executeWithoutResult { status ->
+            val latestPost = postApplicationService.findById(post.id)!!
+            postApplicationService.writeComment(
+                author = admin,
+                post = latestPost,
+                content = "rollback comment",
+            )
+            status.setRollbackOnly()
+        }
+
+        // then
+        verifyNoInteractions(
+            postRecommendFeatureStoreService,
+            eventPublisher,
+        )
+    }
+
+    @Test
+    @DisplayName("좋아요 트랜잭션이 rollback되면 이벤트·추천 후속 작업을 실행하지 않는다")
+    fun likeRollbackDoesNotRunSideEffects() {
+        // given
+        val admin = actorApplicationService.findByEmail("admin@test.com")!!
+        val post =
+            transactionTemplate.execute {
+                postApplicationService.write(
+                    author = admin,
+                    title = "like rollback source",
+                    content = "like rollback content",
+                    published = true,
+                    listed = true,
+                )
+            }!!
+        clearSideEffectMocks()
+
+        // when
+        transactionTemplate.executeWithoutResult { status ->
+            val latestPost = postApplicationService.findById(post.id)!!
+            postApplicationService.like(latestPost, admin)
+            status.setRollbackOnly()
+        }
+
+        // then
+        verifyNoInteractions(
+            postRecommendFeatureStoreService,
+            eventPublisher,
+        )
+    }
+
+    @Test
+    @DisplayName("댓글 작성 commit은 이벤트·추천 후속 작업을 durable interaction task row로 남긴다")
+    fun writeCommentCommitCreatesDurableInteractionSideEffectTask() {
+        // given
+        val admin = actorApplicationService.findByEmail("admin@test.com")!!
+        val post =
+            transactionTemplate.execute {
+                postApplicationService.write(
+                    author = admin,
+                    title = "comment durable source",
+                    content = "comment durable content",
+                    published = true,
+                    listed = true,
+                )
+            }!!
+        clearSideEffectMocks()
+        val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()
+
+        // when
+        transactionTemplate.executeWithoutResult {
+            val latestPost = postApplicationService.findById(post.id)!!
+            postApplicationService.writeComment(
+                author = admin,
+                post = latestPost,
+                content = "durable comment",
+            )
+        }
+
+        // then
+        val interactionTasks = postInteractionSideEffectTasksSince(previousTaskIds)
+        assertThat(interactionTasks).hasSize(2)
+        val eventTask = interactionTasks.single { task -> task.payload.contains("PostCommentWrittenEvent") }
+        val refreshTask = interactionTasks.single { task -> task.payload.contains("\"recommendationAction\":\"REFRESH\"") }
+        assertThat(eventTask.payload).contains(
+            "\"postId\":${post.id}",
+            "PostCommentWrittenEvent",
+        )
+        verifyNoInteractions(
+            postRecommendFeatureStoreService,
+            eventPublisher,
+        )
+
+        // when
+        taskFacade.fire(postInteractionSideEffectPayload(eventTask))
+        taskFacade.fire(postInteractionSideEffectPayload(refreshTask))
+
+        // then
+        assertThat(invokedMethodNames(postRecommendFeatureStoreService)).contains("refresh")
+        assertThat(publishedEvents()).hasAtLeastOneElementOfType(PostCommentWrittenEvent::class.java)
+    }
+
+    @Test
+    @DisplayName("좋아요 commit은 이벤트·추천 후속 작업을 durable interaction task row로 남긴다")
+    fun likeCommitCreatesDurableInteractionSideEffectTask() {
+        // given
+        val admin = actorApplicationService.findByEmail("admin@test.com")!!
+        val post =
+            transactionTemplate.execute {
+                postApplicationService.write(
+                    author = admin,
+                    title = "like durable source",
+                    content = "like durable content",
+                    published = true,
+                    listed = true,
+                )
+            }!!
+        clearSideEffectMocks()
+        val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()
+
+        // when
+        transactionTemplate.executeWithoutResult {
+            val latestPost = postApplicationService.findById(post.id)!!
+            postApplicationService.like(latestPost, admin)
+        }
+
+        // then
+        val interactionTasks = postInteractionSideEffectTasksSince(previousTaskIds)
+        assertThat(interactionTasks).hasSize(2)
+        val eventTask = interactionTasks.single { task -> task.payload.contains("PostLikedEvent") }
+        val refreshTask = interactionTasks.single { task -> task.payload.contains("\"recommendationAction\":\"REFRESH\"") }
+        assertThat(eventTask.payload).contains(
+            "\"postId\":${post.id}",
+            "PostLikedEvent",
+        )
+        verifyNoInteractions(
+            postRecommendFeatureStoreService,
+            eventPublisher,
+        )
+
+        // when
+        taskFacade.fire(postInteractionSideEffectPayload(eventTask))
+        taskFacade.fire(postInteractionSideEffectPayload(refreshTask))
+
+        // then
+        assertThat(invokedMethodNames(postRecommendFeatureStoreService)).contains("refresh")
+        assertThat(publishedEvents()).hasAtLeastOneElementOfType(PostLikedEvent::class.java)
+    }
+
+    @Test
+    @DisplayName("댓글 수정 commit은 이벤트 후속 작업을 durable interaction task row로 남긴다")
+    fun modifyCommentCommitCreatesDurableInteractionSideEffectTask() {
+        // given
+        val admin = actorApplicationService.findByEmail("admin@test.com")!!
+        val post =
+            transactionTemplate.execute {
+                postApplicationService.write(
+                    author = admin,
+                    title = "comment modify durable source",
+                    content = "comment modify durable content",
+                    published = true,
+                    listed = true,
+                )
+            }!!
+        val comment =
+            transactionTemplate.execute {
+                val latestPost = postApplicationService.findById(post.id)!!
+                postApplicationService.writeComment(admin, latestPost, "before modify")
+            }!!
+        clearSideEffectMocks()
+        val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()
+
+        // when
+        transactionTemplate.executeWithoutResult {
+            postApplicationService.modifyComment(comment, admin, "after modify")
+        }
+
+        // then
+        val interactionTasks = postInteractionSideEffectTasksSince(previousTaskIds)
+        assertThat(interactionTasks).hasSize(1)
+        assertThat(interactionTasks.single().payload).contains("PostCommentModifiedEvent")
+        verifyNoInteractions(eventPublisher)
+
+        // when
+        taskFacade.fire(postInteractionSideEffectPayload(interactionTasks.single()))
+
+        // then
+        assertThat(publishedEvents()).hasAtLeastOneElementOfType(PostCommentModifiedEvent::class.java)
+    }
+
+    @Test
+    @DisplayName("댓글 삭제 commit은 이벤트·추천 후속 작업을 durable interaction task row로 남긴다")
+    fun deleteCommentCommitCreatesDurableInteractionSideEffectTask() {
+        // given
+        val admin = actorApplicationService.findByEmail("admin@test.com")!!
+        val post =
+            transactionTemplate.execute {
+                postApplicationService.write(
+                    author = admin,
+                    title = "comment delete durable source",
+                    content = "comment delete durable content",
+                    published = true,
+                    listed = true,
+                )
+            }!!
+        val comment =
+            transactionTemplate.execute {
+                val latestPost = postApplicationService.findById(post.id)!!
+                postApplicationService.writeComment(admin, latestPost, "before delete")
+            }!!
+        clearSideEffectMocks()
+        val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()
+
+        // when
+        transactionTemplate.executeWithoutResult {
+            val latestPost = postApplicationService.findById(post.id)!!
+            postApplicationService.deleteComment(latestPost, comment, admin)
+        }
+
+        // then
+        val interactionTasks = postInteractionSideEffectTasksSince(previousTaskIds)
+        assertThat(interactionTasks).hasSize(2)
+        val eventTask = interactionTasks.single { task -> task.payload.contains("PostCommentDeletedEvent") }
+        val refreshTask = interactionTasks.single { task -> task.payload.contains("\"recommendationAction\":\"REFRESH\"") }
+        assertThat(eventTask.payload).contains("PostCommentDeletedEvent")
+        verifyNoInteractions(
+            postRecommendFeatureStoreService,
+            eventPublisher,
+        )
+
+        // when
+        taskFacade.fire(postInteractionSideEffectPayload(eventTask))
+        taskFacade.fire(postInteractionSideEffectPayload(refreshTask))
+
+        // then
+        assertThat(invokedMethodNames(postRecommendFeatureStoreService)).contains("refresh")
+        assertThat(publishedEvents()).hasAtLeastOneElementOfType(PostCommentDeletedEvent::class.java)
+    }
+
+    @Test
+    @DisplayName("좋아요 취소 commit은 이벤트·추천 후속 작업을 durable interaction task row로 남긴다")
+    fun unlikeCommitCreatesDurableInteractionSideEffectTask() {
+        // given
+        val admin = actorApplicationService.findByEmail("admin@test.com")!!
+        val post =
+            transactionTemplate.execute {
+                postApplicationService.write(
+                    author = admin,
+                    title = "unlike durable source",
+                    content = "unlike durable content",
+                    published = true,
+                    listed = true,
+                )
+            }!!
+        transactionTemplate.executeWithoutResult {
+            val latestPost = postApplicationService.findById(post.id)!!
+            postApplicationService.like(latestPost, admin)
+        }
+        clearSideEffectMocks()
+        val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()
+
+        // when
+        transactionTemplate.executeWithoutResult {
+            val latestPost = postApplicationService.findById(post.id)!!
+            postApplicationService.unlike(latestPost, admin)
+        }
+
+        // then
+        val interactionTasks = postInteractionSideEffectTasksSince(previousTaskIds)
+        assertThat(interactionTasks).hasSize(2)
+        val eventTask = interactionTasks.single { task -> task.payload.contains("PostUnlikedEvent") }
+        val refreshTask = interactionTasks.single { task -> task.payload.contains("\"recommendationAction\":\"REFRESH\"") }
+        assertThat(eventTask.payload).contains("PostUnlikedEvent")
+        verifyNoInteractions(
+            postRecommendFeatureStoreService,
+            eventPublisher,
+        )
+
+        // when
+        taskFacade.fire(postInteractionSideEffectPayload(eventTask))
+        taskFacade.fire(postInteractionSideEffectPayload(refreshTask))
+
+        // then
+        assertThat(invokedMethodNames(postRecommendFeatureStoreService)).contains("refresh")
+        assertThat(publishedEvents()).hasAtLeastOneElementOfType(PostUnlikedEvent::class.java)
     }
 
     @Test
@@ -308,6 +615,16 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
             .filter { task ->
                 task.id !in previousTaskIds && task.taskType == PostWriteSideEffectPayload.TASK_TYPE
             }
+
+    private fun postInteractionSideEffectTasksSince(previousTaskIds: Set<Long>): List<Task> =
+        taskRepository
+            .findAll()
+            .filter { task ->
+                task.id !in previousTaskIds && task.taskType == "post.interaction.side-effect"
+            }
+
+    private fun postInteractionSideEffectPayload(task: Task): PostInteractionSideEffectPayload =
+        objectMapper.readValue(task.payload, PostInteractionSideEffectPayload::class.java)
 
     private fun recordActiveTransactionDuringSideEffects(sideEffectTransactions: MutableList<Boolean>) {
         doAnswer {

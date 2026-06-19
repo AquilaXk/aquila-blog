@@ -83,30 +83,24 @@ class ArchitectureGuardTest {
             }
 
     private fun taskSchedulerPrivateReflectionUses(): List<ForbiddenReflectionUse> {
-        val forbiddenTargets =
-            listOf(
-                "resolveAvailableWorkerSlots",
-                "resolveFetchLimit",
-                "refreshPerTypeDynamicLimitsIfNeeded",
-                "resolvePerTypeLimit",
-                "concurrencyGate",
+        val reflectionUseRegex =
+            Regex(
+                """TaskProcessingScheduledJob\s*::class\.java\s*\.\s*getDeclared(?:Method|Field)\s*\(\s*"([^"]+)"""",
             )
+        val allowedPublicTargets = setOf("processTasks")
 
         return kotlinTestSources()
             .flatMap { sourcePath ->
                 val source = sourceText(sourcePath)
-                forbiddenTargets.mapNotNull { target ->
-                    val callsPrivateMethod =
-                        source.contains("""TaskProcessingScheduledJob::class.java.getDeclaredMethod("$target"""")
-                    val readsPrivateField =
-                        source.contains("""TaskProcessingScheduledJob::class.java.getDeclaredField("$target"""")
-
-                    if (callsPrivateMethod || readsPrivateField) {
-                        ForbiddenReflectionUse(sourcePath.toString(), target)
-                    } else {
-                        null
-                    }
-                }
+                reflectionUseRegex
+                    .findAll(source)
+                    .filterNot { match -> allowedPublicTargets.contains(match.groupValues[1]) }
+                    .map { match ->
+                        ForbiddenReflectionUse(
+                            sourcePath = sourcePath.toString(),
+                            target = match.groupValues[1],
+                        )
+                    }.toList()
             }
     }
 

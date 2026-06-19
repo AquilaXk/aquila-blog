@@ -16,10 +16,15 @@ import org.hibernate.annotations.DynamicUpdate
 import java.time.Instant
 
 enum class CloudVideoUploadSessionStatus {
+    INITIATING,
     IN_PROGRESS,
+    UPLOADING_PART,
+    COMPLETING,
     COMPLETED,
+    ABORTING,
     CANCELLED,
     EXPIRED,
+    FAILED,
 }
 
 @Entity
@@ -49,8 +54,8 @@ class CloudVideoUploadSession(
     val ownerMemberId: Long,
     @field:Column(nullable = false, unique = true, length = 1000)
     val objectKey: String,
-    @field:Column(nullable = false, length = 512)
-    val uploadId: String,
+    @field:Column(length = 512)
+    var uploadId: String?,
     @field:Column(nullable = false, length = 255)
     val originalFilename: String,
     @field:Column(nullable = false, length = 120)
@@ -70,23 +75,56 @@ class CloudVideoUploadSession(
     var status: CloudVideoUploadSessionStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
     @field:Column
     var completedFileId: Long? = null,
+    @field:Column(length = 500)
+    var failureReason: String? = null,
 ) : BaseTime(id) {
+    fun markInitiated(
+        uploadId: String,
+        now: Instant,
+    ) {
+        this.uploadId = uploadId
+        status = CloudVideoUploadSessionStatus.IN_PROGRESS
+        failureReason = null
+        updateModifiedAt(now)
+    }
+
+    fun transitionTo(
+        nextStatus: CloudVideoUploadSessionStatus,
+        now: Instant,
+    ) {
+        status = nextStatus
+        failureReason = null
+        updateModifiedAt(now)
+    }
+
     fun complete(
         fileId: Long,
         now: Instant,
     ) {
         status = CloudVideoUploadSessionStatus.COMPLETED
         completedFileId = fileId
+        failureReason = null
         updateModifiedAt(now)
     }
 
     fun cancel(now: Instant) {
         status = CloudVideoUploadSessionStatus.CANCELLED
+        failureReason = null
         updateModifiedAt(now)
     }
 
     fun expire(now: Instant) {
         status = CloudVideoUploadSessionStatus.EXPIRED
+        failureReason = null
+        updateModifiedAt(now)
+    }
+
+    fun fail(
+        reason: String,
+        now: Instant,
+    ) {
+        status = CloudVideoUploadSessionStatus.FAILED
+        failureReason = reason.take(500)
         updateModifiedAt(now)
     }
 

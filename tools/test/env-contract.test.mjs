@@ -644,7 +644,10 @@ test("deploy workflow blocks stale workflow_run before build and deploy", () => 
 
   assert.match(workflow, /ref: \$\{\{ github\.event\.workflow_run\.head_sha \|\| github\.sha \}\}/)
   assert.match(workflow, /DEPLOY_SHA_INPUT: \$\{\{ github\.event\.workflow_run\.head_sha \|\| github\.sha \}\}/)
-  assert.match(workflow, /REMOTE_MAIN_SHA="\$\(git rev-parse origin\/main\)"/)
+  assert.match(workflow, /REMOTE_MAIN_SHA="\$\(git ls-remote --exit-code origin refs\/heads\/main \| awk '\{print \$1\}'\)"/)
+  assert.match(workflow, /origin\/main sha lookup failed/)
+  assert.doesNotMatch(workflow, /git fetch --depth=1 origin main/)
+  assert.doesNotMatch(workflow, /git rev-parse origin\/main/)
   assert.match(workflow, /stale workflow_run blocked: deploy_sha=/)
   assert.match(workflow, /exit 1/)
   assert(

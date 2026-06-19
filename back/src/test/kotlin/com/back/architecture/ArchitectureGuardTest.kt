@@ -163,6 +163,25 @@ class ArchitectureGuardTest {
         return persistenceBridgeTargetsInPackage(packageName, excludingPath)[aliasName]
     }
 
+    private fun samePackageModelTargetFqcn(
+        aliasTarget: String,
+        currentPackageName: String?,
+    ): String? {
+        if (currentPackageName == null || aliasTarget.contains(".")) {
+            return null
+        }
+
+        if (!currentPackageName.split(".").contains("model")) {
+            return null
+        }
+
+        if (!packageDeclaresType(currentPackageName, aliasTarget)) {
+            return null
+        }
+
+        return "$currentPackageName.$aliasTarget"
+    }
+
     private fun persistenceModelTargetForAliasToken(
         aliasTarget: String,
         importedModelTargets: Map<String, String>,
@@ -180,6 +199,8 @@ class ArchitectureGuardTest {
             localBridgeTargets.containsKey(aliasTarget) -> localBridgeTargets.getValue(aliasTarget)
             bridgeAliasTargetFqcn(aliasTarget, currentPackageName, localBridgeTargets, excludingPath) != null ->
                 bridgeAliasTargetFqcn(aliasTarget, currentPackageName, localBridgeTargets, excludingPath)
+            samePackageModelTargetFqcn(aliasTarget, currentPackageName) != null ->
+                samePackageModelTargetFqcn(aliasTarget, currentPackageName)
             wildcardBridgeImports.isNotEmpty() && !aliasTarget.contains(".") ->
                 wildcardBridgeImports
                     .mapNotNull { importPath -> persistenceBridgeTargetsInPackage(importPath)[aliasTarget] }
@@ -731,6 +752,35 @@ class ArchitectureGuardTest {
                     "example/domain/PersistenceModelAliases.kt",
                     "BridgePostAttr",
                     "com.back.boundedContexts.post.model.PostAttr",
+                ),
+            )
+    }
+
+    @Test
+    fun `persistence model typealias scanner는 같은 model 패키지 alias 우회를 수집한다`() {
+        val aliases =
+            persistenceModelAliasesIn(
+                path = mainSourceRoot.resolve("com/back/boundedContexts/post/model/PostAlias.kt"),
+                source =
+                    """
+                    |package com.back.boundedContexts.post.model
+                    |
+                    |typealias Article = Post
+                    |typealias ArticlePair = Pair<Post, PostAttr>
+                    """.trimMargin(),
+            )
+
+        assertThat(aliases)
+            .containsExactlyInAnyOrder(
+                PersistenceModelAlias(
+                    "com/back/boundedContexts/post/model/PostAlias.kt",
+                    "Article",
+                    "com.back.boundedContexts.post.model.Post",
+                ),
+                PersistenceModelAlias(
+                    "com/back/boundedContexts/post/model/PostAlias.kt",
+                    "ArticlePair",
+                    "com.back.boundedContexts.post.model.Post|com.back.boundedContexts.post.model.PostAttr",
                 ),
             )
     }

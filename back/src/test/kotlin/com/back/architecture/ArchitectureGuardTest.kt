@@ -33,6 +33,18 @@ class ArchitectureGuardTest {
             """^import\s+(com\.back\.[A-Za-z0-9_.]+\.model(?:\.[A-Za-z0-9_]+)*)\.\*\s*$""",
             RegexOption.MULTILINE,
         )
+    private val persistenceBridgeImportRegex =
+        Regex(
+            """^import\s+""" +
+                """(com\.back\.[A-Za-z0-9_.]+\.domain(?:\.[A-Za-z0-9_]+)*\.([A-Za-z][A-Za-z0-9_]*))""" +
+                """(?:\s+as\s+([A-Za-z][A-Za-z0-9_]*))?\s*$""",
+            RegexOption.MULTILINE,
+        )
+    private val persistenceBridgeWildcardImportRegex =
+        Regex(
+            """^import\s+(com\.back\.[A-Za-z0-9_.]+\.domain(?:\.[A-Za-z0-9_]+)*)\.\*\s*$""",
+            RegexOption.MULTILINE,
+        )
     private val persistenceModelAliasTargetRegex =
         Regex("""^com\.back\.[A-Za-z0-9_.]+\.model(?:\.[A-Za-z0-9_]+)*\.[A-Za-z][A-Za-z0-9_]*$""")
     private val typeAliasRegex =
@@ -86,6 +98,19 @@ class ArchitectureGuardTest {
             .relativize(path)
             .joinToString("/") { it.toString() }
 
+    private fun sourcePackagePath(packageName: String): Path = mainSourceRoot.resolve(packageName.replace(".", "/"))
+
+    private fun persistenceBridgeTargetsInPackage(packageName: String): Map<String, String> {
+        val aliasesPath = sourcePackagePath(packageName).resolve("PersistenceModelAliases.kt")
+
+        if (!Files.isRegularFile(aliasesPath)) {
+            return emptyMap()
+        }
+
+        return persistenceModelAliasesIn(aliasesPath)
+            .associate { alias -> alias.aliasName to alias.targetFqcn }
+    }
+
     private fun persistenceModelAliasesIn(
         path: Path,
         source: String = sourceText(path),
@@ -104,6 +129,24 @@ class ArchitectureGuardTest {
                 .findAll(source)
                 .map { match -> match.groupValues[1] }
                 .toList()
+        val importedBridgeTargets =
+            persistenceBridgeImportRegex
+                .findAll(source)
+                .mapNotNull { match ->
+                    val packageName = match.groupValues[1].substringBeforeLast(".")
+                    val aliasName = match.groupValues[2]
+                    val importedName = match.groupValues[3].ifBlank { aliasName }
+                    val targetFqcn =
+                        persistenceBridgeTargetsInPackage(packageName)[aliasName]
+                            ?: return@mapNotNull null
+
+                    importedName to targetFqcn
+                }.toMap()
+        val wildcardBridgeImports =
+            persistenceBridgeWildcardImportRegex
+                .findAll(source)
+                .map { match -> match.groupValues[1] }
+                .toList()
 
         return typeAliasRegex
             .findAll(source)
@@ -113,6 +156,19 @@ class ArchitectureGuardTest {
                     when {
                         persistenceModelAliasTargetRegex.matches(aliasTarget) -> aliasTarget
                         importedModelTargets.containsKey(aliasTarget) -> importedModelTargets.getValue(aliasTarget)
+                        importedBridgeTargets.containsKey(aliasTarget) -> importedBridgeTargets.getValue(aliasTarget)
+                        wildcardBridgeImports.isNotEmpty() && !aliasTarget.contains(".") -> {
+                            val bridgeTargets =
+                                wildcardBridgeImports.mapNotNull { importPath ->
+                                    persistenceBridgeTargetsInPackage(importPath)[aliasTarget]
+                                }
+
+                            if (bridgeTargets.isEmpty()) {
+                                return@mapNotNull null
+                            }
+
+                            bridgeTargets.joinToString("|")
+                        }
                         wildcardModelImports.isNotEmpty() && !aliasTarget.contains(".") ->
                             wildcardModelImports.joinToString("|") { importPath -> "$importPath.$aliasTarget" }
                         else -> return@mapNotNull null
@@ -444,6 +500,38 @@ class ArchitectureGuardTest {
                     "example/domain/PersistenceModelAliases.kt",
                     "MultilinePost",
                     "com.back.boundedContexts.post.model.PostLike",
+                ),
+            )
+    }
+
+    @Test
+    fun `persistence model typealias scanner는 legacy bridge alias 체인 우회를 수집한다`() {
+        val aliases =
+            persistenceModelAliasesIn(
+                path = mainSourceRoot.resolve("example/domain/PersistenceModelAliases.kt"),
+                source =
+                    """
+                    |package com.back.example.domain
+                    |
+                    |import com.back.boundedContexts.post.domain.Post as DomainPost
+                    |import com.back.boundedContexts.post.domain.*
+                    |
+                    |typealias Article = DomainPost
+                    |typealias BridgePostAttr = PostAttr
+                    """.trimMargin(),
+            )
+
+        assertThat(aliases)
+            .containsExactlyInAnyOrder(
+                PersistenceModelAlias(
+                    "example/domain/PersistenceModelAliases.kt",
+                    "Article",
+                    "com.back.boundedContexts.post.model.Post",
+                ),
+                PersistenceModelAlias(
+                    "example/domain/PersistenceModelAliases.kt",
+                    "BridgePostAttr",
+                    "com.back.boundedContexts.post.model.PostAttr",
                 ),
             )
     }

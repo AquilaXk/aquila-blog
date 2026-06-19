@@ -1,6 +1,7 @@
 package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.domain.Post
@@ -8,10 +9,14 @@ import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.domain.postMixin.COMMENTS_COUNT
 import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
 import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
+import com.back.boundedContexts.post.dto.PostDto
+import com.back.boundedContexts.post.event.PostDeletedEvent
 import com.back.global.event.application.EventPublisher
 import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.global.task.annotation.TaskHandler
 import com.back.standard.dto.EventPayload
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertDoesNotThrow
@@ -23,14 +28,16 @@ import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.Mockito.`when`
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.TransactionException
 import org.springframework.transaction.TransactionStatus
-import org.springframework.transaction.event.TransactionPhase
-import org.springframework.transaction.event.TransactionalEventListener
 import org.springframework.transaction.support.SimpleTransactionStatus
+import tools.jackson.databind.ObjectMapper
+import java.time.Instant
 import java.util.Optional
+import java.util.UUID
 
 @DisplayName("PostWriteSideEffectHandler 테스트")
 class PostWriteSideEffectHandlerTest {
@@ -41,7 +48,9 @@ class PostWriteSideEffectHandlerTest {
     private val postRepository: PostRepositoryPort = mock(PostRepositoryPort::class.java)
     private val postAttrRepository: PostAttrRepositoryPort = mock(PostAttrRepositoryPort::class.java)
     private val eventPublisher: EventPublisher = mock(EventPublisher::class.java)
-    private val handler =
+    private val handler = newHandler()
+
+    private fun newHandler(eventPublisher: EventPublisher = this.eventPublisher): PostWriteSideEffectHandler =
         PostWriteSideEffectHandler(
             postReadCacheInvalidator = PostReadCacheInvalidator(ConcurrentMapCacheManager()),
             uploadedFileRetentionService = uploadedFileRetentionService,
@@ -49,6 +58,7 @@ class PostWriteSideEffectHandlerTest {
             postRepository = postRepository,
             postAttrRepository = postAttrRepository,
             eventPublisher = eventPublisher,
+            objectMapper = ObjectMapper(),
             transactionManager = NoopTransactionManager(),
         )
 
@@ -102,20 +112,20 @@ class PostWriteSideEffectHandlerTest {
     }
 
     @Test
-    @DisplayName("후속 작업 handler는 Spring transaction commit 이후 이벤트로만 호출된다")
-    fun handlePostWriteEventAfterCommit() {
+    @DisplayName("후속 작업 handler는 durable task payload handler로 등록된다")
+    fun handlePostWriteSideEffectPayloadAsTaskHandler() {
         // when
-        val handlerMethod =
+        val handlerMethods =
             PostWriteSideEffectHandler::class.java
-                .declaredMethods
-                .single { method ->
-                    method.parameterTypes.contentEquals(arrayOf(PostWriteAfterCommitEvent::class.java))
+                .methods
+                .filter { method ->
+                    method.name == "handle" &&
+                        method.parameterTypes.contentEquals(arrayOf(PostWriteSideEffectPayload::class.java))
                 }
-        val annotation = handlerMethod.getAnnotation(TransactionalEventListener::class.java)
 
         // then
-        assertThat(annotation.phase).isEqualTo(TransactionPhase.AFTER_COMMIT)
-        assertThat(annotation.fallbackExecution).isTrue()
+        assertThat(handlerMethods).hasSize(1)
+        assertThat(handlerMethods.single().getAnnotation(TaskHandler::class.java)).isNotNull()
     }
 
     @Test
@@ -164,6 +174,29 @@ class PostWriteSideEffectHandlerTest {
             )
         }
         verify(postRecommendFeatureStoreService).evict(15L)
+    }
+
+    @Test
+    @DisplayName("task payload 처리 중 첨부파일 동기화 실패는 task retry를 위해 전파한다")
+    fun propagateAttachmentSyncFailureWhenHandlingTaskPayload() {
+        // given
+        doThrow(RuntimeException("storage down"))
+            .`when`(uploadedFileRetentionService)
+            .syncPostContent(20L, "before", "after")
+
+        val payload =
+            postWriteSideEffectPayload(
+                postId = 20L,
+                previousContent = "before",
+                currentContent = "after",
+                recommendationAction = PostRecommendationSideEffect.EVICT,
+            )
+
+        // when & then
+        assertThatThrownBy {
+            handler.handle(payload)
+        }.isInstanceOf(RuntimeException::class.java)
+            .hasMessageContaining("storage down")
     }
 
     @Test
@@ -247,6 +280,83 @@ class PostWriteSideEffectHandlerTest {
         verify(postRecommendFeatureStoreService).refresh(post)
     }
 
+    @Test
+    @DisplayName("삭제 domain event payload는 durable task 처리 중 복원해 발행한다")
+    fun publishDeletedDomainEventFromTaskPayload() {
+        // given
+        val post = testPost(30L)
+        val domainEvent =
+            PostDeletedEvent(
+                uid = UUID.randomUUID(),
+                postDto = testPostDto(post.id),
+                actorDto = testMemberDto(post.author.id),
+                beforeTags = listOf("spring"),
+                afterTags = emptyList(),
+            )
+        val payload =
+            postWriteSideEffectPayload(
+                postId = 30L,
+                recommendationAction = PostRecommendationSideEffect.EVICT,
+                domainEventType = PostDeletedEvent::class.java.name,
+                domainEventJson = ObjectMapper().writeValueAsString(domainEvent),
+            )
+
+        // when
+        val applicationEventPublisher = RecordingApplicationEventPublisher()
+        newHandler(EventPublisher(applicationEventPublisher)).handle(payload)
+
+        // then
+        assertThat(applicationEventPublisher.publishedEvent).isInstanceOf(PostDeletedEvent::class.java)
+    }
+
+    @Test
+    @DisplayName("알 수 없는 domain event type은 task 실패로 전파하지 않고 발행만 건너뛴다")
+    fun skipUnknownDomainEventTypeWhenHandlingTaskPayload() {
+        // given
+        val payload =
+            postWriteSideEffectPayload(
+                postId = 31L,
+                recommendationAction = PostRecommendationSideEffect.EVICT,
+                domainEventType = "unknown.event.Type",
+                domainEventJson = "{}",
+            )
+
+        // when & then
+        assertDoesNotThrow {
+            handler.handle(payload)
+        }
+        verifyNoInteractions(eventPublisher)
+    }
+
+    @Test
+    @DisplayName("task payload 처리 중 non-runtime 실패는 retry 가능한 예외로 감싸 전파한다")
+    fun wrapNonRuntimeFailureWhenHandlingTaskPayload() {
+        // given
+        val post = testPost(32L)
+        val domainEvent =
+            PostDeletedEvent(
+                uid = UUID.randomUUID(),
+                postDto = testPostDto(post.id),
+                actorDto = testMemberDto(post.author.id),
+            )
+        val applicationEventPublisher = ThrowingApplicationEventPublisher(AssertionError("event publish failed"))
+
+        val payload =
+            postWriteSideEffectPayload(
+                postId = 32L,
+                recommendationAction = PostRecommendationSideEffect.EVICT,
+                domainEventType = PostDeletedEvent::class.java.name,
+                domainEventJson = ObjectMapper().writeValueAsString(domainEvent),
+            )
+
+        // when & then
+        assertThatThrownBy {
+            newHandler(EventPublisher(applicationEventPublisher)).handle(payload)
+        }.isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("Post write side effect failed")
+            .hasCauseInstanceOf(AssertionError::class.java)
+    }
+
     private fun sideEffectCommand(
         postId: Long,
         previousContent: String? = null,
@@ -283,6 +393,64 @@ class PostWriteSideEffectHandlerTest {
             listed = true,
         )
 
+    private fun testPostDto(id: Long): PostDto =
+        PostDto(
+            id = id,
+            createdAt = Instant.EPOCH,
+            modifiedAt = Instant.EPOCH,
+            authorId = 1L,
+            authorName = "작성자",
+            authorUsername = "author",
+            authorProfileImgUrl = "",
+            title = "title",
+            thumbnail = null,
+            summary = "summary",
+            version = 1L,
+            published = true,
+            listed = true,
+            likesCount = 0,
+            commentsCount = 0,
+            hitCount = 0,
+        )
+
+    private fun testMemberDto(id: Long): MemberDto =
+        MemberDto(
+            id = id,
+            createdAt = Instant.EPOCH,
+            modifiedAt = Instant.EPOCH,
+            isAdmin = false,
+            name = "작성자",
+            profileImageUrl = "",
+        )
+
+    private fun postWriteSideEffectPayload(
+        postId: Long,
+        previousContent: String? = null,
+        currentContent: String? = null,
+        deletedContent: String? = null,
+        beforeTags: List<String> = emptyList(),
+        afterTags: List<String> = emptyList(),
+        recommendationAction: PostRecommendationSideEffect = PostRecommendationSideEffect.REFRESH,
+        domainEventType: String? = null,
+        domainEventJson: String? = null,
+    ): PostWriteSideEffectPayload =
+        PostWriteSideEffectPayload(
+            uid = UUID.randomUUID(),
+            aggregateType = "Post",
+            aggregateId = postId,
+            postId = postId,
+            previousContent = previousContent,
+            currentContent = currentContent,
+            deletedContent = deletedContent,
+            beforeTags = beforeTags,
+            afterTags = afterTags,
+            cacheInvalidationTargets = emptySet(),
+            evictReason = "test",
+            recommendationAction = recommendationAction,
+            domainEventType = domainEventType,
+            domainEventJson = domainEventJson,
+        )
+
     private class NoopTransactionManager : PlatformTransactionManager {
         override fun getTransaction(definition: TransactionDefinition?): TransactionStatus = SimpleTransactionStatus()
 
@@ -291,5 +459,19 @@ class PostWriteSideEffectHandlerTest {
 
         @Throws(TransactionException::class)
         override fun rollback(status: TransactionStatus) = Unit
+    }
+
+    private class RecordingApplicationEventPublisher : ApplicationEventPublisher {
+        var publishedEvent: Any? = null
+
+        override fun publishEvent(event: Any) {
+            publishedEvent = event
+        }
+    }
+
+    private class ThrowingApplicationEventPublisher(
+        private val throwable: Throwable,
+    ) : ApplicationEventPublisher {
+        override fun publishEvent(event: Any): Unit = throw throwable
     }
 }

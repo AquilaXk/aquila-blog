@@ -147,6 +147,7 @@ class PostReadModelTaskEventListener(
         warmDetail: Boolean,
     ) {
         val normalizedAfterTags = normalizeTags(afterTags)
+        val failures = mutableListOf<Throwable>()
 
         if (asyncSearchIndexSyncEnabled) {
             enqueueTask("post.search-index.sync", aggregateType, postId) {
@@ -161,7 +162,7 @@ class PostReadModelTaskEventListener(
                         enqueuedAtEpochMs = System.currentTimeMillis(),
                     ),
                 )
-            }
+            }?.let(failures::add)
         }
 
         if (searchEngineMirrorEnabled) {
@@ -177,7 +178,7 @@ class PostReadModelTaskEventListener(
                         enqueuedAtEpochMs = System.currentTimeMillis(),
                     ),
                 )
-            }
+            }?.let(failures::add)
         }
 
         if (prewarmEnabled && warmDetail) {
@@ -192,8 +193,10 @@ class PostReadModelTaskEventListener(
                         warmDetail = warmDetail,
                     ),
                 )
-            }
+            }?.let(failures::add)
         }
+
+        if (failures.isNotEmpty()) throwEnqueueFailure(failures)
     }
 
     private fun taskPayloadUid(
@@ -209,14 +212,20 @@ class PostReadModelTaskEventListener(
         aggregateType: String,
         postId: Long,
         enqueueAction: () -> Unit,
-    ) {
+    ): Throwable? =
         runCatching(enqueueAction)
             .onSuccess {
                 meterRegistry?.counter("task.processor.enqueue.result", "taskType", taskType, "status", "success")?.increment()
             }.onFailure { exception ->
                 meterRegistry?.counter("task.processor.enqueue.result", "taskType", taskType, "status", "failed")?.increment()
                 log.warn("Failed to enqueue task: taskType={} aggregate={}:{}", taskType, aggregateType, postId, exception)
-            }
+            }.exceptionOrNull()
+
+    private fun throwEnqueueFailure(failures: List<Throwable>) {
+        val first = failures.first()
+        failures.drop(1).forEach(first::addSuppressed)
+        if (first is RuntimeException) throw first
+        throw IllegalStateException("Post read-model task enqueue failed", first)
     }
 
     private fun normalizeTags(tags: List<String>): List<String> =

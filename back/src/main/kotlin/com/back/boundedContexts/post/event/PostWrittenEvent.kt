@@ -20,8 +20,8 @@ data class PostWrittenEvent
         override val uid: UUID,
         override val aggregateType: String,
         override val aggregateId: Long,
-        @field:JsonIgnore
-        @JsonProperty("postDto")
+        @param:JsonProperty("postDto")
+        @get:JsonIgnore
         val postDto: PostDto,
         val actorDto: MemberDto,
         val beforeTags: List<String> = emptyList(),

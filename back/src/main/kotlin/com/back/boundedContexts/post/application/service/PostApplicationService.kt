@@ -42,17 +42,19 @@ import com.back.global.event.application.EventPublisher
 import com.back.global.exception.application.AppException
 import com.back.global.security.application.HtmlContentSanitizer
 import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.global.task.application.TaskFacade
 import com.back.standard.dto.EventPayload
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
+import tools.jackson.databind.ObjectMapper
+import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -77,7 +79,8 @@ class PostApplicationService(
     private val postRecommendRankingService: PostRecommendRankingService,
     private val postRecommendFeatureStoreService: PostRecommendFeatureStoreService,
     private val postKeywordSearchPipelineService: PostKeywordSearchPipelineService,
-    private val applicationEventPublisher: ApplicationEventPublisher,
+    private val taskFacade: TaskFacade,
+    private val objectMapper: ObjectMapper,
     @param:Value("\${custom.post.read.tags-local-cache-ttl-seconds:180}")
     private val tagsLocalCacheTtlSeconds: Long,
 ) {
@@ -1304,7 +1307,38 @@ class PostApplicationService(
         if (command.cacheInvalidationScope.evictsPublicTags()) {
             publicTagCountsCache = null
         }
-        applicationEventPublisher.publishEvent(PostWriteAfterCommitEvent(command, domainEvent))
+        taskFacade.addToQueue(command.toTaskPayload(domainEvent), inlineWhenEnabled = false)
+    }
+
+    private fun PostWriteSideEffectCommand.toTaskPayload(domainEvent: EventPayload?): PostWriteSideEffectPayload =
+        PostWriteSideEffectPayload(
+            uid = postWriteSideEffectTaskUid(this, domainEvent),
+            aggregateType = domainEvent?.aggregateType ?: "Post",
+            aggregateId = postId,
+            postId = postId,
+            previousContent = previousContent,
+            currentContent = currentContent,
+            deletedContent = deletedContent,
+            beforeTags = beforeTags,
+            afterTags = afterTags,
+            cacheInvalidationTargets = cacheInvalidationScope.targets(),
+            evictReason = evictReason,
+            recommendationAction = recommendationAction,
+            domainEventType = domainEvent?.javaClass?.name,
+            domainEventJson = domainEvent?.let(objectMapper::writeValueAsString),
+        )
+
+    private fun postWriteSideEffectTaskUid(
+        command: PostWriteSideEffectCommand,
+        domainEvent: EventPayload?,
+    ): UUID {
+        domainEvent?.uid?.let { eventUid ->
+            return UUID.nameUUIDFromBytes(
+                "${PostWriteSideEffectPayload.TASK_TYPE}:$eventUid".toByteArray(StandardCharsets.UTF_8),
+            )
+        }
+
+        return command.operationUid
     }
 
     private fun buildPublicPostChangeImpacts(

@@ -9,8 +9,12 @@ import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
 import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
 import com.back.boundedContexts.post.event.PostModifiedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
+import com.back.global.task.adapter.persistence.TaskRepository
+import com.back.global.task.application.TaskFacade
+import com.back.global.task.model.Task
 import com.back.support.BasePostApplicationServiceAfterCommitIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers
@@ -22,6 +26,7 @@ import org.mockito.Mockito.verifyNoInteractions
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate
+import tools.jackson.databind.ObjectMapper
 
 @DisplayName("PostApplicationService 후속 작업 AFTER_COMMIT 테스트")
 class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCommitIntegrationTest() {
@@ -33,6 +38,15 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
 
     @Autowired
     private lateinit var postAttrRepository: PostAttrRepositoryPort
+
+    @Autowired
+    private lateinit var taskRepository: TaskRepository
+
+    @Autowired
+    private lateinit var taskFacade: TaskFacade
+
+    @Autowired
+    private lateinit var objectMapper: ObjectMapper
 
     @Autowired
     private lateinit var transactionTemplate: TransactionTemplate
@@ -66,11 +80,12 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
     }
 
     @Test
-    @DisplayName("글 작성 트랜잭션이 commit되면 첨부파일·추천 후속 작업을 실행한다")
+    @DisplayName("글 작성 트랜잭션이 commit되면 durable task 실행으로 첨부파일·추천 후속 작업을 처리한다")
     fun writeCommitRunsSideEffects() {
         // given
         clearSideEffectMocks()
         val admin = actorApplicationService.findByEmail("admin@test.com")!!
+        val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()
         val sideEffectTransactions = mutableListOf<Boolean>()
         recordActiveTransactionDuringSideEffects(sideEffectTransactions)
 
@@ -84,6 +99,12 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
                 listed = true,
             )
         }
+        val payload = singlePostWriteSideEffectPayloadSince(previousTaskIds)
+
+        clearSideEffectMocks()
+
+        // and when
+        taskFacade.fire(payload)
 
         // then
         assertThat(invokedMethodNames(uploadedFileRetentionService)).contains("syncPostContent")
@@ -93,11 +114,40 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
     }
 
     @Test
-    @DisplayName("커밋 후 캐시 축출 실패는 첨부파일·추천 후속 작업을 막지 않는다")
+    @DisplayName("글 작성 commit은 후속 작업을 durable task row로 남긴다")
+    fun writeCommitCreatesDurablePostWriteSideEffectTask() {
+        // given
+        clearSideEffectMocks()
+        val admin = actorApplicationService.findByEmail("admin@test.com")!!
+        val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()
+
+        // when
+        val post =
+            transactionTemplate.execute {
+                postApplicationService.write(
+                    author = admin,
+                    title = "durable side effect source",
+                    content = "durable side effect content",
+                    published = true,
+                    listed = true,
+                )
+            }!!
+
+        // then
+        val sideEffectTasks = postWriteSideEffectTasksSince(previousTaskIds)
+        assertThat(sideEffectTasks).hasSize(1)
+        val sideEffectTask = sideEffectTasks.single()
+        assertThat(sideEffectTask.aggregateId).isEqualTo(post.id)
+        assertThat(sideEffectTask.payload).contains("\"postId\":${post.id}")
+    }
+
+    @Test
+    @DisplayName("durable task 실행 중 캐시 축출 실패는 첨부파일·추천 후속 작업 이후 retry로 전파된다")
     fun writeCommitContinuesSideEffectsWhenCacheEvictionFails() {
         // given
         clearSideEffectMocks()
         val admin = actorApplicationService.findByEmail("admin@test.com")!!
+        val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()
         doThrow(RuntimeException("cache backend down"))
             .`when`(cacheManager)
             .getCache(PostQueryCacheNames.FEED)
@@ -112,6 +162,13 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
                 listed = true,
             )
         }
+        val payload = singlePostWriteSideEffectPayloadSince(previousTaskIds)
+
+        // when
+        assertThatThrownBy {
+            taskFacade.fire(payload)
+        }.isInstanceOf(RuntimeException::class.java)
+            .hasMessageContaining("cache backend down")
 
         // then
         assertThat(invokedMethodNames(uploadedFileRetentionService)).contains("syncPostContent")
@@ -142,6 +199,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         val refreshedCounters = mutableListOf<PostCounterSnapshot>()
         clearSideEffectMocks()
         recordRefreshedCounters(refreshedCounters)
+        val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()
 
         // when
         transactionTemplate.executeWithoutResult {
@@ -156,6 +214,10 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
                 expectedVersion = latestPost.version ?: 0L,
             )
         }
+        val payload = singlePostWriteSideEffectPayloadSince(previousTaskIds)
+
+        // and when
+        taskFacade.fire(payload)
 
         // then
         assertThat(refreshedCounters).contains(
@@ -185,6 +247,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
                 )
             }!!
         clearSideEffectMocks()
+        val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()
 
         // when
         transactionTemplate.executeWithoutResult {
@@ -200,6 +263,10 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
                 contentHtml = "<p>rendered html only</p>",
             )
         }
+        val payload = singlePostWriteSideEffectPayloadSince(previousTaskIds)
+
+        // and when
+        taskFacade.fire(payload)
 
         // then
         assertThat(cacheLookupNames()).contains(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT)
@@ -228,6 +295,19 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
             .invocations
             .filter { it.method.name == "publish" }
             .map { it.arguments.firstOrNull() }
+
+    private fun singlePostWriteSideEffectPayloadSince(previousTaskIds: Set<Long>): PostWriteSideEffectPayload {
+        val sideEffectTasks = postWriteSideEffectTasksSince(previousTaskIds)
+        assertThat(sideEffectTasks).hasSize(1)
+        return objectMapper.readValue(sideEffectTasks.single().payload, PostWriteSideEffectPayload::class.java)
+    }
+
+    private fun postWriteSideEffectTasksSince(previousTaskIds: Set<Long>): List<Task> =
+        taskRepository
+            .findAll()
+            .filter { task ->
+                task.id !in previousTaskIds && task.taskType == PostWriteSideEffectPayload.TASK_TYPE
+            }
 
     private fun recordActiveTransactionDuringSideEffects(sideEffectTransactions: MutableList<Boolean>) {
         doAnswer {

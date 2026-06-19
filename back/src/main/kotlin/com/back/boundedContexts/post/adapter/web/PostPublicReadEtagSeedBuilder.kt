@@ -84,6 +84,16 @@ class PostPublicReadEtagSeedBuilder {
             append(data.commentsCount)
             append("|")
             append(data.hitCount)
+            append("|author=")
+            append(
+                buildLengthPrefixedToken(
+                    data.authorId.toString(),
+                    data.authorName,
+                    data.authorUsername,
+                    data.authorProfileImageUrl,
+                    data.authorProfileImageDirectUrl,
+                ),
+            )
         }
 
     fun buildTagsEtagSeed(tags: List<TagCountDto>): String = tags.joinToString(separator = "|") { "${it.tag}:${it.count}" }
@@ -129,7 +139,20 @@ class PostPublicReadEtagSeedBuilder {
 
     private fun buildFeedItemsToken(posts: List<FeedPostDto>): String =
         posts.joinToString(separator = "|") {
-            "${it.id}:${toEpochMillis(it.modifiedAt)}:${it.likesCount}:${it.commentsCount}:${it.hitCount}"
+            "${it.id}:${toEpochMillis(it.modifiedAt)}:${it.likesCount}:${it.commentsCount}:${it.hitCount}:" +
+                "author=${
+                    buildLengthPrefixedToken(
+                        it.authorId.toString(),
+                        it.authorName,
+                        it.authorUsername,
+                        it.authorProfileImgUrl,
+                    )
+                }"
+        }
+
+    private fun buildLengthPrefixedToken(vararg parts: String): String =
+        parts.joinToString(separator = ",") { part ->
+            "${part.length}:$part"
         }
 
     private fun toEpochMillis(instant: Instant): Long = instant.toEpochMilli()

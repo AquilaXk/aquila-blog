@@ -53,7 +53,7 @@ class Member(
     override val id: Long = 0,
     @field:NaturalId
     @field:Column(name = "login_id", nullable = false)
-    val username: String,
+    override val username: String,
     @field:Column(nullable = true)
     var password: String? = null,
     @field:Column(nullable = false)

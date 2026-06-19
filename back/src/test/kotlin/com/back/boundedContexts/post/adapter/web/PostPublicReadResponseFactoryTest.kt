@@ -327,15 +327,22 @@ class PostPublicReadResponseFactoryTest {
         // then
         assertThat(pageSeed).isEqualTo(
             "search|page=2|size=10|sort=CREATED_AT|kw=kotlin|tag=spring|total=22|pages=3|" +
-                "items=1:1767225600000:11:12:13|2:1767312000000:11:12:13",
+                "items=1:1767225600000:11:12:13:author=1:1,6:Author,6:author,31:https://example.com/profile.png|" +
+                "2:1767312000000:11:12:13:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
         )
         assertThat(cursorSeed).isEqualTo(
             "feed-cursor|size=10|sort=CREATED_AT|cursor=cursor-1|tag=backend|hasNext=true|nextCursor=next-1|" +
-                "items=1:1767225600000:11:12:13",
+                "items=1:1767225600000:11:12:13:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
         )
-        assertThat(detailSeed).isEqualTo("9|1767398400000|7|8|9|10")
+        assertThat(detailSeed).isEqualTo(
+            "9|1767398400000|7|8|9|10|author=1:1,6:Author,6:author," +
+                "31:https://example.com/profile.png,38:https://example.com/profile-direct.png",
+        )
         assertThat(responseFactory.buildTagsEtagSeed(tags)).isEqualTo("Kotlin:3|Spring:2")
-        assertThat(relatedSeed).isEqualTo("related-author|authorId=3|excludePostId=0|limit=4|items=2:1767312000000:11:12:13")
+        assertThat(relatedSeed).isEqualTo(
+            "related-author|authorId=3|excludePostId=0|limit=4|" +
+                "items=2:1767312000000:11:12:13:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
+        )
         assertThat(bootstrapFeedSeed).startsWith("bootstrap-feed-cursor|")
         assertThat(bootstrapExploreSeed).startsWith("bootstrap-explore-cursor|")
     }
@@ -398,6 +405,33 @@ class PostPublicReadResponseFactoryTest {
     }
 
     @Test
+    @DisplayName("ETag seed builder는 작성자 표현 필드 변경을 공개 read 표현 변경으로 반영한다")
+    fun buildEtagSeedsWithAuthorRepresentationFields() {
+        val basePost = feedPost(id = 1L, modifiedAt = Instant.parse("2026-01-01T00:00:00Z"))
+        val renamedPost = basePost.copy(authorName = "Renamed Author")
+        val usernameChangedPost = basePost.copy(authorUsername = "renamed-author")
+        val profileChangedPost = basePost.copy(authorProfileImgUrl = "https://example.com/profile-v2.png")
+        val baseDetail = detailPost()
+        val renamedDetail = baseDetail.copy(authorName = "Renamed Author")
+        val usernameChangedDetail = baseDetail.copy(authorUsername = "renamed-author")
+        val profileChangedDetail = baseDetail.copy(authorProfileImageUrl = "https://example.com/profile-v2.png")
+
+        val baseFeedSeed = responseFactory.buildFeedPageEtagSeed("feed", 0, 10, PostSearchSortType1.CREATED_AT, data = pageOf(basePost))
+        val baseDetailSeed = responseFactory.buildPublicDetailEtagSeed(baseDetail)
+
+        assertThat(responseFactory.buildFeedPageEtagSeed("feed", 0, 10, PostSearchSortType1.CREATED_AT, data = pageOf(renamedPost)))
+            .isNotEqualTo(baseFeedSeed)
+        assertThat(responseFactory.buildFeedPageEtagSeed("feed", 0, 10, PostSearchSortType1.CREATED_AT, data = pageOf(usernameChangedPost)))
+            .isNotEqualTo(baseFeedSeed)
+        assertThat(responseFactory.buildFeedPageEtagSeed("feed", 0, 10, PostSearchSortType1.CREATED_AT, data = pageOf(profileChangedPost)))
+            .isNotEqualTo(baseFeedSeed)
+
+        assertThat(responseFactory.buildPublicDetailEtagSeed(renamedDetail)).isNotEqualTo(baseDetailSeed)
+        assertThat(responseFactory.buildPublicDetailEtagSeed(usernameChangedDetail)).isNotEqualTo(baseDetailSeed)
+        assertThat(responseFactory.buildPublicDetailEtagSeed(profileChangedDetail)).isNotEqualTo(baseDetailSeed)
+    }
+
+    @Test
     @DisplayName("공개 read cache policy registry는 모든 endpoint 정책을 노출한다")
     fun exposeAllPublicReadCachePolicies() {
         val policies =
@@ -454,5 +488,39 @@ class PostPublicReadResponseFactoryTest {
             likesCount = 11,
             commentsCount = 12,
             hitCount = 13,
+        )
+
+    private fun pageOf(post: FeedPostDto): PageDto<FeedPostDto> =
+        PageDto(
+            content = listOf(post),
+            pageable =
+                PageableDto(
+                    pageNumber = 0,
+                    pageSize = 10,
+                    totalElements = 1,
+                    totalPages = 1,
+                    numberOfElements = 1,
+                ),
+        )
+
+    private fun detailPost(): PostWithContentDto =
+        PostWithContentDto(
+            id = 9L,
+            createdAt = Instant.parse("2026-01-01T00:00:00Z"),
+            modifiedAt = Instant.parse("2026-01-03T00:00:00Z"),
+            authorId = 1L,
+            authorName = "Author",
+            authorUsername = "author",
+            authorProfileImageUrl = "https://example.com/profile.png",
+            authorProfileImageDirectUrl = "https://example.com/profile-direct.png",
+            title = "Title",
+            content = "content",
+            contentHtml = "<p>content</p>",
+            version = 7L,
+            published = true,
+            listed = true,
+            likesCount = 8,
+            commentsCount = 9,
+            hitCount = 10,
         )
 }

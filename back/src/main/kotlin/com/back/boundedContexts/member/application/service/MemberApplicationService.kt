@@ -1,5 +1,6 @@
 package com.back.boundedContexts.member.application.service
 
+import com.back.boundedContexts.member.application.event.MemberPublicProfileChangedEvent
 import com.back.boundedContexts.member.application.port.output.MemberAttrRepositoryPort
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
@@ -13,6 +14,7 @@ import com.back.global.rsData.RsData
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.standard.dto.member.type1.MemberSearchSortType1
 import com.back.standard.dto.page.PagedResult
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
@@ -31,6 +33,7 @@ class MemberApplicationService(
     private val memberProfileHydrator: MemberProfileHydrator,
     private val passwordEncoder: PasswordEncoder,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
+    private val applicationEventPublisher: ApplicationEventPublisher,
 ) {
     companion object {
         private const val USERNAME_MAX_LENGTH = 30
@@ -175,6 +178,7 @@ class MemberApplicationService(
     ) {
         memberProfileHydrator.hydrate(member)
         ensureProfileWorkspaceSnapshotsInitialized(member)
+        val previousNickname = member.nickname
         val previousProfileImgUrl = member.profileImgUrl
         val publishedProfileImgUrl = member.getProfileWorkspacePublishedContent().profileImageUrl
         member.modify(nickname, profileImgUrl)
@@ -185,6 +189,17 @@ class MemberApplicationService(
                 member.id,
                 previousProfileImgUrl.takeUnless { it == publishedProfileImgUrl },
                 member.profileImgUrl,
+            )
+        }
+        if (previousNickname != member.nickname || previousProfileImgUrl != member.profileImgUrl) {
+            applicationEventPublisher.publishEvent(
+                MemberPublicProfileChangedEvent(
+                    memberId = member.id,
+                    previousNickname = previousNickname,
+                    currentNickname = member.nickname,
+                    previousProfileImgUrl = previousProfileImgUrl,
+                    currentProfileImgUrl = member.profileImgUrl,
+                ),
             )
         }
     }

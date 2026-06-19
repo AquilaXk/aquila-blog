@@ -105,6 +105,48 @@ class PostReadCacheInvalidatorTest {
         assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, 101L)).isNull()
     }
 
+    @Test
+    @DisplayName("작성자 표시 변경은 공개 응답 캐시를 전체 clear한다")
+    fun invalidateAuthorRepresentationClearsPublicResponseCaches() {
+        // given
+        put(PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE, "page=3:size=20:sort=CREATED_AT")
+        put(PostQueryCacheNames.FEED, "page=9:size=99:sort=CREATED_AT")
+        put(PostQueryCacheNames.EXPLORE, "page=4:size=15:sort=CREATED_AT:kw=_:tag=spring")
+        put(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=45:sort=CREATED_AT")
+        put(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "size=45:sort=CREATED_AT:tag=kotlin")
+        put(PostQueryCacheNames.BOOTSTRAP, PostPublicReadQueryService.buildBootstrapCacheKey(45, PostSearchSortType1.CREATED_AT, "Kotlin"))
+        put(PostQueryCacheNames.SEARCH, "page=2:size=25:sort=CREATED_AT:kw=author")
+        put(PostQueryCacheNames.SEARCH_NEGATIVE, "page=2:size=25:sort=CREATED_AT:kw=missing")
+        put(PostQueryCacheNames.TAGS, "public")
+        put(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, 201L)
+        put(PostQueryCacheNames.DETAIL_PUBLIC_META, 201L)
+        put(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, 201L)
+        put(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, 201L)
+
+        // when
+        invalidator.invalidateAuthorRepresentation("test-author")
+
+        // then
+        assertThat(get(PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE, "page=3:size=20:sort=CREATED_AT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED, "page=9:size=99:sort=CREATED_AT")).isNull()
+        assertThat(get(PostQueryCacheNames.EXPLORE, "page=4:size=15:sort=CREATED_AT:kw=_:tag=spring")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=45:sort=CREATED_AT")).isNull()
+        assertThat(get(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "size=45:sort=CREATED_AT:tag=kotlin")).isNull()
+        assertThat(
+            get(
+                PostQueryCacheNames.BOOTSTRAP,
+                PostPublicReadQueryService.buildBootstrapCacheKey(45, PostSearchSortType1.CREATED_AT, "Kotlin"),
+            ),
+        ).isNull()
+        assertThat(get(PostQueryCacheNames.SEARCH, "page=2:size=25:sort=CREATED_AT:kw=author")).isNull()
+        assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, 201L)).isNull()
+        assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_META, 201L)).isNull()
+        assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, 201L)).isNull()
+        assertThat(get(PostQueryCacheNames.SEARCH_NEGATIVE, "page=2:size=25:sort=CREATED_AT:kw=missing")).isEqualTo("cached")
+        assertThat(get(PostQueryCacheNames.TAGS, "public")).isEqualTo("cached")
+        assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, 201L)).isEqualTo("cached")
+    }
+
     private fun put(
         cacheName: String,
         key: Any,

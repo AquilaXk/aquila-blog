@@ -49,18 +49,18 @@ post_precheck_env_fail() {
   exit 1
 }
 
-require_pinned_image_value() {
+require_digest_image_value() {
   local code_prefix="$1"
   local value="$2"
 
   if [[ -z "${value}" ]]; then
     post_precheck_env_fail "${code_prefix}_missing" "BACK_IMAGE is empty"
   fi
-  if [[ "${value}" == *":latest" ]]; then
+  if [[ "${value}" == *":latest" || "${value}" == *":latest@"* ]]; then
     post_precheck_env_fail "${code_prefix}_latest_forbidden" "latest tag is forbidden value=${value}"
   fi
-  if [[ "${value}" != *@sha256:* && "${value}" != *:* ]]; then
-    post_precheck_env_fail "${code_prefix}_unpinned" "image must include tag or digest value=${value}"
+  if [[ ! "${value}" =~ ^[^[:space:]@]+@sha256:[a-fA-F0-9]{64}$ ]]; then
+    post_precheck_env_fail "${code_prefix}_not_digest" "image must be pinned by sha256 digest value=${value}"
   fi
 }
 
@@ -77,7 +77,7 @@ main() {
 
   staged_back_image="${STAGED_BACK_IMAGE:-${1:-}}"
   staged_back_image="$(trim_quotes "${staged_back_image}")"
-  require_pinned_image_value "staged_back_image" "${staged_back_image}"
+  require_digest_image_value "staged_back_image" "${staged_back_image}"
 
   echo "[POST_PRECHECK_ENV] checkpoint=after_pgroonga_precheck"
 
@@ -98,7 +98,7 @@ main() {
 
   upsert_env_key "BACK_IMAGE" "${staged_back_image}"
   persisted_back_image="$(trim_quotes "$(env_value "BACK_IMAGE")")"
-  require_pinned_image_value "persisted_back_image" "${persisted_back_image}"
+  require_digest_image_value "persisted_back_image" "${persisted_back_image}"
 
   echo "[POST_PRECHECK_ENV] checkpoint=after_back_image_persist image=${persisted_back_image}"
   echo "[POST_PRECHECK_ENV] passed"

@@ -39,18 +39,22 @@ one_line_file() {
   tr '\r\n' ' ' < "${path}" | xargs || true
 }
 
-require_back_image() {
-  local value="${BACK_IMAGE:-}"
-
+require_digest_image_value() {
+  local key="$1"
+  local value="$2"
   if [[ -z "${value}" ]]; then
-    pgroonga_precheck_fail "back_image_missing" "BACK_IMAGE is empty in shell env"
+    pgroonga_precheck_fail "back_image_missing" "required image value is missing: ${key}"
   fi
-  if [[ "${value}" == *":latest" ]]; then
-    pgroonga_precheck_fail "back_image_latest_forbidden" "BACK_IMAGE latest is forbidden value=${value}"
+  if [[ "${value}" == *":latest" || "${value}" == *":latest@"* ]]; then
+    pgroonga_precheck_fail "back_image_latest_forbidden" "latest tag is not allowed for ${key}: ${value}"
   fi
-  if [[ "${value}" != *@sha256:* && "${value}" != *:* ]]; then
-    pgroonga_precheck_fail "back_image_unpinned" "BACK_IMAGE must include tag or digest value=${value}"
+  if [[ ! "${value}" =~ ^[^[:space:]@]+@sha256:[a-fA-F0-9]{64}$ ]]; then
+    pgroonga_precheck_fail "back_image_not_digest" "BACK_IMAGE must be pinned by sha256 digest value=${value}"
   fi
+}
+
+require_back_image() {
+  require_digest_image_value "BACK_IMAGE" "${BACK_IMAGE:-}"
 }
 
 resolve_target_db_name() {

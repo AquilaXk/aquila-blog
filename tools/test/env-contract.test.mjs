@@ -119,6 +119,28 @@ test("home-server-source contract accepts a complete deployment env without BACK
   assert.equal(result.ok, true, result.errors.map((error) => error.message).join("\n"))
 })
 
+test("home-server runtime requires BACK_IMAGE by digest", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const digestBackImage = `ghcr.io/aquilaxk/aquila-blog-back@sha256:${"a".repeat(64)}`
+  const tagBackImage = `ghcr.io/aquilaxk/aquila-blog-back:sha-${"b".repeat(40)}`
+
+  const digestResult = validateEnvText({
+    contract,
+    target: "home-server-runtime",
+    text: `${baseHomeServerEnv}\nBACK_IMAGE=${digestBackImage}\n`,
+  })
+  assert.equal(digestResult.ok, true, digestResult.errors.map((error) => `${error.key}: ${error.message}`).join("\n"))
+
+  const tagResult = validateEnvText({
+    contract,
+    target: "home-server-runtime",
+    text: `${baseHomeServerEnv}\nBACK_IMAGE=${tagBackImage}\n`,
+  })
+  assert.equal(tagResult.ok, false)
+  assert(tagResult.errors.some((error) => error.key === "BACK_IMAGE" && error.message.includes("digest")))
+})
+
 test("runtime service images are env-backed in compose and digest-validated by contract", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const runtimeImageKeys = [
@@ -617,15 +639,63 @@ test("deploy workflow는 frontend 변경에서만 live frontend SHA를 현재 co
   assert.doesNotMatch(workflow, /E2E_EXPECTED_FRONT_COMMIT_SHA:\s*\$\{\{ needs\.calculateTag\.outputs\.deploy_sha \}\}/)
 })
 
-test("deploy workflow는 stale workflow_run을 로그로 남기고 검증된 SHA 배포 기준을 유지한다", () => {
+test("deploy workflow blocks stale workflow_run before build and deploy", () => {
   const workflow = readFileSync(workflowPath, "utf8")
 
   assert.match(workflow, /ref: \$\{\{ github\.event\.workflow_run\.head_sha \|\| github\.sha \}\}/)
   assert.match(workflow, /DEPLOY_SHA_INPUT: \$\{\{ github\.event\.workflow_run\.head_sha \|\| github\.sha \}\}/)
-  assert.match(workflow, /CURRENT_MAIN_SHA_INPUT: \$\{\{ github\.sha \}\}/)
-  assert.match(workflow, /stale workflow_run payload: deploy_sha=/)
+  assert.match(workflow, /REMOTE_MAIN_SHA="\$\(git ls-remote --exit-code origin refs\/heads\/main \| awk '\{print \$1\}'\)"/)
+  assert.match(workflow, /origin\/main sha lookup failed/)
+  assert.doesNotMatch(workflow, /git fetch --depth=1 origin main/)
+  assert.doesNotMatch(workflow, /git rev-parse origin\/main/)
+  assert.match(workflow, /stale workflow_run blocked: deploy_sha=/)
+  assert.match(workflow, /exit 1/)
+  assert(
+    workflow.indexOf("stale workflow_run blocked: deploy_sha=") <
+      workflow.indexOf('CHANGED_FILES="$(git diff --name-only "${DEPLOY_SHA}^1" "${DEPLOY_SHA}"'),
+  )
+  assert.doesNotMatch(workflow, /stale workflow_run payload: deploy_sha=/)
   assert.doesNotMatch(workflow, /STALE_WORKFLOW_RUN/)
   assert.match(workflow, /if echo "\$\{CHANGED_FILES\}" \| grep -Eq "\$\{FRONT_BUILD_SHA_PATHS_PATTERN\}"/)
+})
+
+test("deploy workflow uses immutable backend digest and does not push latest", () => {
+  const workflow = readFileSync(workflowPath, "utf8")
+
+  assert.match(workflow, /back_image_ref: \$\{\{ steps\.backend_image\.outputs\.back_image_ref \}\}/)
+  assert.match(workflow, /id: build_backend_image/)
+  assert.match(workflow, /echo "back_image_ref=\$\{IMAGE_NAME\}@\$\{BACKEND_IMAGE_DIGEST\}"/)
+  assert.match(workflow, /HOME_BACK_IMAGE: \$\{\{ needs\.buildAndPush\.outputs\.back_image_ref \}\}/)
+  assert.doesNotMatch(workflow, /image_latest_ref/)
+  assert.doesNotMatch(workflow, /\$\{\{ needs\.calculateTag\.outputs\.image_latest_ref \}\}/)
+  assert.doesNotMatch(workflow, /IMAGE_LATEST_REF="\$\{IMAGE_NAME\}:latest"/)
+})
+
+test("deploy workflow requires pinned known_hosts and private GHCR credentials", () => {
+  const workflow = readFileSync(workflowPath, "utf8")
+
+  assert.match(workflow, /HOME_KNOWN_HOSTS: \$\{\{ secrets\.HOME_KNOWN_HOSTS \}\}/)
+  assert.match(workflow, /HOME_GHCR_USERNAME: \$\{\{ secrets\.HOME_GHCR_USERNAME \}\}/)
+  assert.match(workflow, /HOME_GHCR_TOKEN: \$\{\{ secrets\.HOME_GHCR_TOKEN \}\}/)
+  assert.match(workflow, /HOME_KNOWN_HOSTS\s*\n\s*HOME_GHCR_USERNAME\s*\n\s*HOME_GHCR_TOKEN/)
+  assert.doesNotMatch(workflow, /ssh-keyscan/)
+  assert.doesNotMatch(workflow, /Collecting known_hosts/)
+  assert.doesNotMatch(workflow, /if \[ -n "\$\{HOME_GHCR_USERNAME:-\}" \] && \[ -n "\$\{HOME_GHCR_TOKEN:-\}" \]/)
+})
+
+test("deploy workflow transfers secret env through temporary files instead of ssh command line", () => {
+  const workflow = readFileSync(workflowPath, "utf8")
+
+  assert.match(workflow, /home-server\.env/)
+  assert.match(workflow, /scp -i "\$SSH_DIR\/home_key"/)
+  assert.match(workflow, /REMOTE_ENV_FILE=/)
+  assert.match(workflow, /cleanup_remote_tmp_from_runner\(\)/)
+  assert.match(workflow, /trap cleanup_remote_tmp_from_runner EXIT/)
+  assert.match(workflow, /REMOTE\n\s+REMOTE_TMP_DIR=""/)
+  assert.match(workflow, /REMOTE\n\s+REMOTE_TMP_DIR=""\n\s+trap - EXIT/)
+  assert.doesNotMatch(workflow, /HOME_SERVER_ENV_B64=/)
+  assert.doesNotMatch(workflow, /HOME_GHCR_TOKEN_B64=/)
+  assert.doesNotMatch(workflow, /HOME_AI_SUMMARY_GEMINI_API_KEY_B64=/)
 })
 
 test("runtime contract accounts for every compose env interpolation", async () => {

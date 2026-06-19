@@ -62,6 +62,11 @@ class ArchitectureGuardTest {
         val targetFqcn: String,
     )
 
+    private data class ForbiddenReflectionUse(
+        val sourcePath: String,
+        val target: String,
+    )
+
     private fun importedClasses(): JavaClasses =
         ClassFileImporter()
             .withImportOption(ImportOption.DoNotIncludeTests())
@@ -76,6 +81,28 @@ class ArchitectureGuardTest {
                     .filter { it.toString().endsWith(".kt") }
                     .toList()
             }
+
+    private fun taskSchedulerPrivateReflectionUses(): List<ForbiddenReflectionUse> {
+        val reflectionUseRegex =
+            Regex(
+                """TaskProcessingScheduledJob\s*::class\.java\s*\.\s*getDeclared(?:Method|Field)\s*\(\s*"([^"]+)"""",
+            )
+        val allowedPublicTargets = setOf("processTasks")
+
+        return kotlinTestSources()
+            .flatMap { sourcePath ->
+                val source = sourceText(sourcePath)
+                reflectionUseRegex
+                    .findAll(source)
+                    .filterNot { match -> allowedPublicTargets.contains(match.groupValues[1]) }
+                    .map { match ->
+                        ForbiddenReflectionUse(
+                            sourcePath = sourcePath.toString(),
+                            target = match.groupValues[1],
+                        )
+                    }.toList()
+            }
+    }
 
     private fun kotlinMainBoundedContextSources(): List<Path> =
         Files
@@ -651,6 +678,11 @@ class ArchitectureGuardTest {
                 .toSet()
 
         assertThat(aliases).containsExactlyInAnyOrderElementsOf(allowedAliases)
+    }
+
+    @Test
+    fun `task scheduler concurrency 테스트는 private scheduler 구현을 reflection으로 호출하지 않는다`() {
+        assertThat(taskSchedulerPrivateReflectionUses()).isEmpty()
     }
 
     @Test

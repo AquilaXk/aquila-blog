@@ -15,6 +15,8 @@ const val POST_COMMENTS_COUNT_DEFAULT_VALUE = 0
  * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
  */
 interface PostMember : MemberAware {
+    val username: String
+
     var postsCountAttr: MemberAttr?
 
     var postCommentsCountAttr: MemberAttr?

@@ -4,9 +4,12 @@ import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
 import org.springframework.data.domain.Pageable
 import java.time.Instant
+import java.util.UUID
 
 interface TaskQueueRepositoryPort {
     fun save(task: Task): Task
+
+    fun existsByUid(uid: UUID): Boolean
 
     fun countByStatus(status: TaskStatus): Long
 

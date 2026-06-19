@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -46,6 +47,7 @@ class PostReadModelTaskEventListener(
     )
     fun handle(event: PostWrittenEvent) =
         enqueueFollowupTasks(
+            sourceEventUid = event.uid,
             aggregateType = event.aggregateType,
             postId = event.aggregateId,
             beforeTags = event.beforeTags,
@@ -60,6 +62,7 @@ class PostReadModelTaskEventListener(
     )
     fun handle(event: PostModifiedEvent) =
         enqueueFollowupTasks(
+            sourceEventUid = event.uid,
             aggregateType = event.aggregateType,
             postId = event.aggregateId,
             beforeTags = event.beforeTags,
@@ -74,6 +77,7 @@ class PostReadModelTaskEventListener(
     )
     fun handle(event: PostDeletedEvent) =
         enqueueFollowupTasks(
+            sourceEventUid = event.uid,
             aggregateType = event.aggregateType,
             postId = event.aggregateId,
             beforeTags = event.beforeTags,
@@ -134,6 +138,7 @@ class PostReadModelTaskEventListener(
     }
 
     private fun enqueueFollowupTasks(
+        sourceEventUid: UUID,
         aggregateType: String,
         postId: Long,
         beforeTags: List<String>,
@@ -147,7 +152,7 @@ class PostReadModelTaskEventListener(
             enqueueTask("post.search-index.sync", aggregateType, postId) {
                 taskFacade.addToQueue(
                     PostSearchIndexSyncPayload(
-                        uid = UUID.randomUUID(),
+                        uid = taskPayloadUid(sourceEventUid, "post.search-index.sync"),
                         aggregateType = aggregateType,
                         aggregateId = postId,
                         postId = postId,
@@ -163,7 +168,7 @@ class PostReadModelTaskEventListener(
             enqueueTask("post.search-engine.mirror", aggregateType, postId) {
                 taskFacade.addToQueue(
                     PostSearchEngineMirrorPayload(
-                        uid = UUID.randomUUID(),
+                        uid = taskPayloadUid(sourceEventUid, "post.search-engine.mirror"),
                         aggregateType = aggregateType,
                         aggregateId = postId,
                         postId = postId,
@@ -179,7 +184,7 @@ class PostReadModelTaskEventListener(
             enqueueTask("post.read.prewarm", aggregateType, postId) {
                 taskFacade.addToQueue(
                     PostReadPrewarmPayload(
-                        uid = UUID.randomUUID(),
+                        uid = taskPayloadUid(sourceEventUid, "post.read.prewarm"),
                         aggregateType = aggregateType,
                         aggregateId = postId,
                         postId = postId,
@@ -190,6 +195,14 @@ class PostReadModelTaskEventListener(
             }
         }
     }
+
+    private fun taskPayloadUid(
+        sourceEventUid: UUID,
+        taskType: String,
+    ): UUID =
+        UUID.nameUUIDFromBytes(
+            "post-read-model:$sourceEventUid:$taskType".toByteArray(StandardCharsets.UTF_8),
+        )
 
     private fun enqueueTask(
         taskType: String,

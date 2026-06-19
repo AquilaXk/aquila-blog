@@ -5,9 +5,9 @@ import com.back.global.task.application.port.output.TaskQueueRepositoryPort
 import com.back.global.task.domain.Task
 import com.back.standard.dto.TaskPayload
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import tools.jackson.databind.ObjectMapper
-import java.util.*
 
 @Service
 class TaskFacade(
@@ -23,16 +23,16 @@ class TaskFacade(
                 ?: error("No @TaskHandler registered for ${payload.javaClass.simpleName}")
 
         val task =
-            taskRepository.save(
+            saveTaskIdempotently(
                 Task(
-                    UUID.randomUUID(),
+                    payload.uid,
                     payload.aggregateType,
                     payload.aggregateId,
                     entry.taskType,
                     objectMapper.writeValueAsString(payload),
                     entry.retryPolicy.maxRetries,
                 ),
-            )
+            ) ?: return
 
         if (AppFacade.isNotProd && inlineWhenNotProd) {
             fire(payload)
@@ -40,6 +40,17 @@ class TaskFacade(
             taskRepository.save(task)
         }
     }
+
+    private fun saveTaskIdempotently(task: Task): Task? =
+        try {
+            taskRepository.save(task)
+        } catch (exception: DataIntegrityViolationException) {
+            if (taskRepository.existsByUid(task.uid)) {
+                null
+            } else {
+                throw exception
+            }
+        }
 
     fun fire(payload: TaskPayload) {
         val handler = taskHandlerRegistry.getHandler(payload.javaClass)

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.Pageable
 import java.time.Instant
+import java.util.UUID
 
 class TaskQueueDiagnosticsServiceTest {
     @Test
@@ -56,6 +57,8 @@ class TaskQueueDiagnosticsServiceTest {
             private set
 
         override fun save(task: Task): Task = error("not used")
+
+        override fun existsByUid(uid: UUID): Boolean = error("not used")
 
         override fun countByStatus(status: TaskStatus): Long {
             statusCountCalls++

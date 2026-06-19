@@ -37,6 +37,10 @@ class MemberNotificationApplicationService(
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun createForCommentWritten(event: PostCommentWrittenEvent) {
+        if (memberNotificationRepository.existsByEventUid(event.uid)) {
+            return
+        }
+
         val actorId = event.postCommentDto.authorId
         val receiverInfo = resolveReceiver(event) ?: return
         if (receiverInfo.receiverId == actorId) {
@@ -53,6 +57,7 @@ class MemberNotificationApplicationService(
                     commentId = event.postCommentDto.id,
                     postTitle = normalizePostTitle(event.postDto.title),
                     commentPreview = normalizeCommentPreview(event.postCommentDto.content),
+                    eventUid = event.uid,
                 ),
             )
 
@@ -128,6 +133,7 @@ class MemberNotificationApplicationService(
     private fun resolveReceiver(event: PostCommentWrittenEvent): ReceiverInfo? {
         val parentCommentId = event.postCommentDto.parentCommentId
         if (parentCommentId != null) {
+            event.replyReceiverId?.let { return ReceiverInfo(it, MemberNotificationType.COMMENT_REPLY) }
             val parentComment = postCommentRepository.findById(parentCommentId).getOrNull() ?: return null
             return ReceiverInfo(parentComment.author.id, MemberNotificationType.COMMENT_REPLY)
         }

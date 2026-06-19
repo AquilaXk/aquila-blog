@@ -28,6 +28,7 @@ data class PostCommentWrittenEvent
         @JsonProperty("postDto")
         val postDto: PostDto,
         val actorDto: MemberDto,
+        val replyReceiverId: Long?,
     ) : EventPayload {
         @JsonGetter("postCommentDto")
         fun getPostCommentDtoForJson() = postCommentDto.forEventLog()
@@ -35,12 +36,19 @@ data class PostCommentWrittenEvent
         @JsonGetter("postDto")
         fun getPostDtoForJson() = postDto.forEventLog()
 
-        constructor(uid: UUID, postCommentDto: PostCommentDto, postDto: PostDto, actorDto: MemberDto) : this(
+        constructor(
+            uid: UUID,
+            postCommentDto: PostCommentDto,
+            postDto: PostDto,
+            actorDto: MemberDto,
+            replyReceiverId: Long?,
+        ) : this(
             uid,
             postCommentDto::class.simpleName!!,
             postCommentDto.id,
             postCommentDto,
             postDto,
             actorDto,
+            replyReceiverId,
         )
     }

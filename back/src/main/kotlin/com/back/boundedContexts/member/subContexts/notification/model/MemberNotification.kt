@@ -16,6 +16,7 @@ import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.SequenceGenerator
 import java.time.Instant
+import java.util.UUID
 
 /**
  * MemberNotification는 비즈니스 상태와 규칙을 캡슐화하는 도메인 모델입니다.
@@ -60,6 +61,8 @@ class MemberNotification(
     val postTitle: String,
     @field:Column(nullable = false, length = 240)
     val commentPreview: String,
+    @field:Column
+    val eventUid: UUID? = null,
 ) : BaseTime(id) {
     @field:Column
     var readAt: Instant? = null

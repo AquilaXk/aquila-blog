@@ -5,6 +5,7 @@ import com.back.boundedContexts.member.subContexts.notification.domain.MemberNot
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Component
 import java.time.Instant
+import java.util.UUID
 
 /**
  * MemberNotificationRepositoryAdapter는 영속 계층(JPA/쿼리) 연동을 담당하는 퍼시스턴스 어댑터입니다.
@@ -31,6 +32,8 @@ class MemberNotificationRepositoryAdapter(
         )
 
     override fun countUnreadByReceiverId(receiverId: Long): Long = memberNotificationRepository.countByReceiverIdAndReadAtIsNull(receiverId)
+
+    override fun existsByEventUid(eventUid: UUID): Boolean = memberNotificationRepository.existsByEventUid(eventUid)
 
     override fun markAllRead(
         receiverId: Long,

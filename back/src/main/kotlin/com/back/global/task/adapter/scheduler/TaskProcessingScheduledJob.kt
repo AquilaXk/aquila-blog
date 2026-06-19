@@ -28,7 +28,6 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
-import kotlin.math.ceil
 
 /**
  * TaskProcessingScheduledJob는 주기 작업을 트리거하는 스케줄러 어댑터입니다.
@@ -82,14 +81,26 @@ class TaskProcessingScheduledJob(
     private val perTypeAutoTuneEnabled: Boolean,
     @param:Value("\${custom.task.processor.perTypeAutoTuneMinConcurrent:1}")
     private val perTypeAutoTuneMinConcurrent: Int,
-    @param:Value("\${custom.task.processor.perTypeAutoTuneBacklogPerSlot:20}")
-    private val perTypeAutoTuneBacklogPerSlot: Int,
     @param:Value("\${custom.task.processor.perTypeAutoTuneRefreshMs:15000}")
     private val perTypeAutoTuneRefreshMs: Long,
     private val meterRegistry: MeterRegistry? = null,
 ) {
     private val logger = LoggerFactory.getLogger(TaskProcessingScheduledJob::class.java)
-    private val workerConcurrency = maxConcurrent.coerceIn(1, 256)
+    private val concurrencyPolicy =
+        TaskProcessorConcurrencyPolicy(
+            workerConcurrency = maxConcurrent,
+            dynamicConcurrencyEnabled = dynamicConcurrencyEnabled,
+            dynamicMinConcurrent = dynamicMinConcurrent,
+            dynamicBacklogPerSlot = dynamicBacklogPerSlot,
+            dynamicBatchSizeEnabled = dynamicBatchSizeEnabled,
+            dynamicBatchMinSize = dynamicBatchMinSize,
+            dynamicBatchBacklogPerStep = dynamicBatchBacklogPerStep,
+            dynamicBatchTargetHandlerDurationMs = dynamicBatchTargetHandlerDurationMs,
+            dynamicBatchMaxPrefetchMultiplier = dynamicBatchMaxPrefetchMultiplier,
+            perTypeAutoTuneEnabled = perTypeAutoTuneEnabled,
+            perTypeAutoTuneMinConcurrent = perTypeAutoTuneMinConcurrent,
+        )
+    private val workerConcurrency = concurrencyPolicy.workerConcurrency
     private val concurrencyGate = Semaphore(workerConcurrency)
     private val executor = Executors.newVirtualThreadPerTaskExecutor()
     private val explicitPerTypeMaxConcurrent = parsePerTypeMaxConcurrent(perTypeMaxConcurrentRaw)
@@ -203,26 +214,7 @@ class TaskProcessingScheduledJob(
 
     private fun resolveAvailableWorkerSlots(): Int {
         val activeWorkers = (workerConcurrency - concurrencyGate.availablePermits()).coerceAtLeast(0)
-        val targetConcurrency =
-            if (!dynamicConcurrencyEnabled) {
-                workerConcurrency
-            } else {
-                resolveDynamicTargetConcurrency()
-            }
-
-        return (targetConcurrency - activeWorkers).coerceIn(0, workerConcurrency)
-    }
-
-    private fun resolveDynamicTargetConcurrency(): Int {
-        val readyBacklog = countReadyBacklog() ?: return workerConcurrency
-        val minConcurrency = dynamicMinConcurrent.coerceIn(1, workerConcurrency)
-        val backlogPerSlot = dynamicBacklogPerSlot.coerceAtLeast(1)
-        val backlogConcurrency =
-            ceil(readyBacklog.coerceAtLeast(0).toDouble() / backlogPerSlot.toDouble())
-                .toInt()
-                .coerceAtLeast(minConcurrency)
-
-        return backlogConcurrency.coerceIn(minConcurrency, workerConcurrency)
+        return concurrencyPolicy.availableWorkerSlots(activeWorkers) { countReadyBacklog() }
     }
 
     private fun countReadyBacklog(): Long? =
@@ -236,41 +228,14 @@ class TaskProcessingScheduledJob(
     private fun resolveFetchLimit(
         safeBatchSize: Int,
         availableWorkerSlots: Int,
-    ): Int {
-        if (!dynamicBatchSizeEnabled) {
-            return minOf(safeBatchSize, availableWorkerSlots)
+    ): Int =
+        concurrencyPolicy.fetchLimit(
+            safeBatchSize = safeBatchSize,
+            availableWorkerSlots = availableWorkerSlots,
+            recentHandlerDurationMs = recentHandlerDurationMs.get(),
+        ) {
+            countReadyBacklog()
         }
-
-        val avgHandlerMs = recentHandlerDurationMs.get().coerceAtLeast(1)
-        val targetMs = dynamicBatchTargetHandlerDurationMs.coerceIn(100, 60_000)
-        val latencyFactor =
-            when {
-                avgHandlerMs <= targetMs -> 1.0
-                else -> (targetMs.toDouble() / avgHandlerMs.toDouble()).coerceIn(0.35, 1.0)
-            }
-
-        val prefetchMultiplier = resolveDynamicBatchPrefetchMultiplier()
-        val maxClaim = minOf(safeBatchSize, availableWorkerSlots.coerceAtLeast(1) * prefetchMultiplier)
-        val minClaim = minOf(dynamicBatchMinSize.coerceIn(1, safeBatchSize), maxClaim)
-        val raw =
-            ceil(availableWorkerSlots.toDouble() * prefetchMultiplier.toDouble() * latencyFactor)
-                .toInt()
-                .coerceAtLeast(1)
-
-        return raw.coerceIn(minClaim, maxClaim)
-    }
-
-    private fun resolveDynamicBatchPrefetchMultiplier(): Int {
-        val maxPrefetchMultiplier = dynamicBatchMaxPrefetchMultiplier.coerceIn(1, 16)
-        val backlogPerStep = dynamicBatchBacklogPerStep.coerceAtLeast(1)
-        val readyBacklog = countReadyBacklog() ?: return maxPrefetchMultiplier
-        val backlogMultiplier =
-            ceil(readyBacklog.coerceAtLeast(0).toDouble() / backlogPerStep.toDouble())
-                .toInt()
-                .coerceAtLeast(1)
-
-        return backlogMultiplier.coerceIn(1, maxPrefetchMultiplier)
-    }
 
     private fun tryAcquirePerTypePermit(taskType: String): Boolean {
         val maxAllowed = resolvePerTypeLimit(taskType)
@@ -298,11 +263,9 @@ class TaskProcessingScheduledJob(
     }
 
     private fun resolvePerTypeLimit(taskType: String): Int {
-        explicitPerTypeMaxConcurrent[taskType]?.let { return it }
-        if (!perTypeAutoTuneEnabled) return workerConcurrency
         // Auto-tune refresh 지연/예산 소진으로 limit map이 비어도 task type을 영구 0 permit로 막지 않는다.
         // 전체 동시성은 worker semaphore가 제한하므로, 미지정 타입은 최소 1 슬롯으로 처리 기회를 보장한다.
-        return perTypeDynamicLimits[taskType] ?: perTypeAutoTuneMinConcurrent.coerceIn(1, workerConcurrency)
+        return concurrencyPolicy.perTypeLimit(taskType, explicitPerTypeMaxConcurrent, perTypeDynamicLimits)
     }
 
     private fun parsePerTypeMaxConcurrent(raw: String): Map<String, Int> =
@@ -334,33 +297,15 @@ class TaskProcessingScheduledJob(
                 .distinct()
         if (registeredTaskTypes.isEmpty()) return
 
-        val dynamicTypes = registeredTaskTypes.filterNot { explicitPerTypeMaxConcurrent.containsKey(it) }
-        if (dynamicTypes.isEmpty()) {
-            perTypeDynamicLimits.clear()
-            perTypeDynamicRefreshedAtEpochMs = nowEpochMs
-            return
-        }
-
-        val minConcurrent = perTypeAutoTuneMinConcurrent.coerceIn(1, workerConcurrency)
-        val explicitReserved = explicitPerTypeMaxConcurrent.values.sum().coerceIn(0, workerConcurrency)
-        val dynamicBudget = (workerConcurrency - explicitReserved).coerceAtLeast(0)
-        if (dynamicBudget == 0) {
-            perTypeDynamicLimits.clear()
-            perTypeDynamicRefreshedAtEpochMs = nowEpochMs
-            return
-        }
-
-        val baseLimit = (dynamicBudget / dynamicTypes.size.coerceAtLeast(1)).coerceAtLeast(minConcurrent)
         val desiredByType =
-            dynamicTypes
-                .associateWith { baseLimit.coerceIn(1, workerConcurrency) }
-                .toMutableMap()
-
-        while (desiredByType.values.sum() > dynamicBudget) {
-            val typeToReduce = desiredByType.maxByOrNull { it.value }?.key ?: break
-            val current = desiredByType[typeToReduce] ?: break
-            if (current <= 1) break
-            desiredByType[typeToReduce] = current - 1
+            concurrencyPolicy.dynamicPerTypeLimits(
+                registeredTaskTypes = registeredTaskTypes,
+                explicitPerTypeMaxConcurrent = explicitPerTypeMaxConcurrent,
+            )
+        if (desiredByType.isEmpty()) {
+            perTypeDynamicLimits.clear()
+            perTypeDynamicRefreshedAtEpochMs = nowEpochMs
+            return
         }
 
         perTypeDynamicLimits.clear()

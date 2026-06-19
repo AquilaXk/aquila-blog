@@ -108,6 +108,40 @@ class ArchitectureGuardTest {
             ?.groupValues
             ?.get(1)
 
+    private fun packageDeclaresType(
+        packageName: String,
+        typeName: String,
+    ): Boolean {
+        val packagePath = sourcePackagePath(packageName)
+        val typeDeclarationRegex =
+            Regex("""\b(?:data\s+class|enum\s+class|class|interface|object)\s+${Regex.escape(typeName)}\b""")
+
+        if (!Files.isDirectory(packagePath)) {
+            return false
+        }
+
+        return Files
+            .walk(packagePath, 1)
+            .use { paths ->
+                paths
+                    .filter { Files.isRegularFile(it) }
+                    .filter { it.toString().endsWith(".kt") }
+                    .anyMatch { sourcePath -> typeDeclarationRegex.containsMatchIn(sourceText(sourcePath)) }
+            }
+    }
+
+    private fun wildcardModelTargets(
+        wildcardModelImports: List<String>,
+        aliasTarget: String,
+    ): List<String> =
+        wildcardModelImports.mapNotNull { importPath ->
+            if (packageDeclaresType(importPath, aliasTarget)) {
+                "$importPath.$aliasTarget"
+            } else {
+                null
+            }
+        }
+
     private fun persistenceBridgeTargetsInPackage(
         packageName: String,
         excludingPath: Path? = null,
@@ -199,7 +233,10 @@ class ArchitectureGuardTest {
                             bridgeTargets.joinToString("|")
                         }
                         wildcardModelImports.isNotEmpty() && !aliasTarget.contains(".") ->
-                            wildcardModelImports.joinToString("|") { importPath -> "$importPath.$aliasTarget" }
+                            wildcardModelTargets(wildcardModelImports, aliasTarget)
+                                .takeIf { targets -> targets.isNotEmpty() }
+                                ?.joinToString("|")
+                                ?: return@forEach
                         else -> return@forEach
                     }
 
@@ -235,7 +272,10 @@ class ArchitectureGuardTest {
                             bridgeTargets.joinToString("|")
                         }
                         wildcardModelImports.isNotEmpty() && !aliasTarget.contains(".") ->
-                            wildcardModelImports.joinToString("|") { importPath -> "$importPath.$aliasTarget" }
+                            wildcardModelTargets(wildcardModelImports, aliasTarget)
+                                .takeIf { targets -> targets.isNotEmpty() }
+                                ?.joinToString("|")
+                                ?: return@mapNotNull null
                         else -> return@mapNotNull null
                     }
 
@@ -539,6 +579,7 @@ class ArchitectureGuardTest {
                     |typealias ImportedPost = Post
                     |typealias ImportedPostAttrAlias = ImportedPostAttr
                     |typealias WildcardPostComment = PostComment
+                    |typealias LocalId = Long
                     |typealias MultilinePost =
                     |    com.back.boundedContexts.post.model.PostLike
                     """.trimMargin(),

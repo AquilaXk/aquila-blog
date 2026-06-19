@@ -14,12 +14,24 @@ import java.nio.file.Path
 
 @org.junit.jupiter.api.DisplayName("ArchitectureGuard 테스트")
 class ArchitectureGuardTest {
+    private val mainSourceRoot: Path = Path.of("src/main/kotlin")
     private val mainBoundedContextSourceRoot: Path = Path.of("src/main/kotlin/com/back/boundedContexts")
     private val testSourceRoot: Path = Path.of("src/test/kotlin")
     private val boundedContextPackageRegex =
         Regex("""^package\s+com\.back\.boundedContexts\.([A-Za-z][A-Za-z0-9_]*)(?:\.|$)""", RegexOption.MULTILINE)
     private val boundedContextImportRegex =
         Regex("""^import\s+com\.back\.boundedContexts\.([A-Za-z][A-Za-z0-9_]*)\.([A-Za-z0-9_.*]+)(?:\s+as\s+\w+)?\s*$""")
+    private val persistenceModelAliasRegex =
+        Regex(
+            """^typealias\s+([A-Za-z][A-Za-z0-9_]*)\s*=\s*""" +
+                """(com\.back\.[A-Za-z0-9_.]+\.model(?:\.[A-Za-z0-9_]+)*\.[A-Za-z][A-Za-z0-9_]*)\s*$""",
+        )
+
+    private data class PersistenceModelAlias(
+        val sourcePath: String,
+        val aliasName: String,
+        val targetFqcn: String,
+    )
 
     private fun importedClasses(): JavaClasses =
         ClassFileImporter()
@@ -46,7 +58,30 @@ class ArchitectureGuardTest {
                     .toList()
             }
 
+    private fun kotlinMainSources(): List<Path> =
+        Files
+            .walk(mainSourceRoot)
+            .use { paths ->
+                paths
+                    .filter { Files.isRegularFile(it) }
+                    .filter { it.toString().endsWith(".kt") }
+                    .toList()
+            }
+
     private fun sourceText(path: Path): String = Files.readString(path)
+
+    private fun persistenceModelAliasesIn(path: Path): List<PersistenceModelAlias> =
+        sourceText(path)
+            .lineSequence()
+            .mapNotNull { line ->
+                val match = persistenceModelAliasRegex.matchEntire(line.trim()) ?: return@mapNotNull null
+
+                PersistenceModelAlias(
+                    sourcePath = mainSourceRoot.relativize(path).toString(),
+                    aliasName = match.groupValues[1],
+                    targetFqcn = match.groupValues[2],
+                )
+            }.toList()
 
     private fun sourceBoundedContextName(source: String): String? =
         boundedContextPackageRegex
@@ -213,6 +248,115 @@ class ArchitectureGuardTest {
         assertThat(isForbiddenDirectCrossBoundedContextImport("domain.shared.Member")).isFalse()
         assertThat(isForbiddenDirectCrossBoundedContextImport("dto.MemberDto")).isFalse()
         assertThat(isForbiddenDirectCrossBoundedContextImport("config.shared.AuthSecurityConfigurer")).isFalse()
+    }
+
+    @Test
+    fun `persistence model typealias는 명시된 legacy bridge만 허용한다`() {
+        val allowedAliases =
+            setOf(
+                PersistenceModelAlias(
+                    "com/back/boundedContexts/member/domain/shared/PersistenceModelAliases.kt",
+                    "Member",
+                    "com.back.boundedContexts.member.model.shared.Member",
+                ),
+                PersistenceModelAlias(
+                    "com/back/boundedContexts/member/domain/shared/PersistenceModelAliases.kt",
+                    "MemberAttr",
+                    "com.back.boundedContexts.member.model.shared.MemberAttr",
+                ),
+                PersistenceModelAlias(
+                    "com/back/boundedContexts/member/subContexts/memberActionLog/domain/PersistenceModelAliases.kt",
+                    "MemberActionLog",
+                    "com.back.boundedContexts.member.subContexts.memberActionLog.model.MemberActionLog",
+                ),
+                PersistenceModelAlias(
+                    "com/back/boundedContexts/member/subContexts/notification/domain/PersistenceModelAliases.kt",
+                    "MemberNotification",
+                    "com.back.boundedContexts.member.subContexts.notification.model.MemberNotification",
+                ),
+                PersistenceModelAlias(
+                    "com/back/boundedContexts/member/subContexts/signupVerification/domain/PersistenceModelAliases.kt",
+                    "MemberSignupVerification",
+                    "com.back.boundedContexts.member.subContexts.signupVerification.model.MemberSignupVerification",
+                ),
+                PersistenceModelAlias(
+                    "com/back/boundedContexts/post/domain/PersistenceModelAliases.kt",
+                    "Post",
+                    "com.back.boundedContexts.post.model.Post",
+                ),
+                PersistenceModelAlias(
+                    "com/back/boundedContexts/post/domain/PersistenceModelAliases.kt",
+                    "PostAttr",
+                    "com.back.boundedContexts.post.model.PostAttr",
+                ),
+                PersistenceModelAlias(
+                    "com/back/boundedContexts/post/domain/PersistenceModelAliases.kt",
+                    "PostComment",
+                    "com.back.boundedContexts.post.model.PostComment",
+                ),
+                PersistenceModelAlias(
+                    "com/back/boundedContexts/post/domain/PersistenceModelAliases.kt",
+                    "PostLike",
+                    "com.back.boundedContexts.post.model.PostLike",
+                ),
+                PersistenceModelAlias(
+                    "com/back/boundedContexts/post/domain/PersistenceModelAliases.kt",
+                    "PostWriteRequestIdempotency",
+                    "com.back.boundedContexts.post.model.PostWriteRequestIdempotency",
+                ),
+                PersistenceModelAlias(
+                    "com/back/global/jpa/domain/PersistenceModelAliases.kt",
+                    "BaseEntity",
+                    "com.back.global.jpa.model.BaseEntity",
+                ),
+                PersistenceModelAlias(
+                    "com/back/global/jpa/domain/PersistenceModelAliases.kt",
+                    "BaseTime",
+                    "com.back.global.jpa.model.BaseTime",
+                ),
+                PersistenceModelAlias(
+                    "com/back/global/storage/domain/PersistenceModelAliases.kt",
+                    "UploadedFile",
+                    "com.back.global.storage.model.UploadedFile",
+                ),
+                PersistenceModelAlias(
+                    "com/back/global/storage/domain/PersistenceModelAliases.kt",
+                    "UploadedFileOwnerType",
+                    "com.back.global.storage.model.UploadedFileOwnerType",
+                ),
+                PersistenceModelAlias(
+                    "com/back/global/storage/domain/PersistenceModelAliases.kt",
+                    "UploadedFilePurpose",
+                    "com.back.global.storage.model.UploadedFilePurpose",
+                ),
+                PersistenceModelAlias(
+                    "com/back/global/storage/domain/PersistenceModelAliases.kt",
+                    "UploadedFileRetentionReason",
+                    "com.back.global.storage.model.UploadedFileRetentionReason",
+                ),
+                PersistenceModelAlias(
+                    "com/back/global/storage/domain/PersistenceModelAliases.kt",
+                    "UploadedFileStatus",
+                    "com.back.global.storage.model.UploadedFileStatus",
+                ),
+                PersistenceModelAlias(
+                    "com/back/global/task/domain/PersistenceModelAliases.kt",
+                    "Task",
+                    "com.back.global.task.model.Task",
+                ),
+                PersistenceModelAlias(
+                    "com/back/global/task/domain/PersistenceModelAliases.kt",
+                    "TaskStatus",
+                    "com.back.global.task.model.TaskStatus",
+                ),
+            )
+
+        val aliases =
+            kotlinMainSources()
+                .flatMap(::persistenceModelAliasesIn)
+                .toSet()
+
+        assertThat(aliases).containsExactlyInAnyOrderElementsOf(allowedAliases)
     }
 
     @Test

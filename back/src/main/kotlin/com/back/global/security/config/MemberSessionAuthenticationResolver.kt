@@ -6,11 +6,15 @@ import com.back.boundedContexts.member.subContexts.session.model.MemberSessionAu
 import com.back.global.exception.application.AppException
 import com.back.global.web.application.AuthCookieService
 import jakarta.servlet.http.HttpServletRequest
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.stereotype.Component
 import java.time.Instant
 
-internal class MemberSessionAuthenticationResolver(
+@Component
+class MemberSessionAuthenticationResolver(
     private val memberSessionUseCase: MemberSessionUseCase,
     private val authCookieService: AuthCookieService,
+    @param:Value("\${custom.auth.session.freshLookupGraceSeconds:15}")
     private val freshLookupGraceSeconds: Long,
 ) {
     private val log = org.slf4j.LoggerFactory.getLogger(MemberSessionAuthenticationResolver::class.java)
@@ -122,13 +126,13 @@ internal class MemberSessionAuthenticationResolver(
     }
 }
 
-internal data class MemberSessionResolution(
+data class MemberSessionResolution(
     val sessionKeyProvided: Boolean,
     val session: MemberSessionAuthSnapshot?,
     val freshTokenFallback: Boolean = false,
 )
 
-internal data class AuthenticationSessionContext(
+data class AuthenticationSessionContext(
     val session: MemberSessionAuthSnapshot?,
     val rememberLoginEnabled: Boolean,
     val ipSecurityEnabled: Boolean,

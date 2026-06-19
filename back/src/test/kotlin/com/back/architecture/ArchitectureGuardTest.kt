@@ -162,26 +162,55 @@ class ArchitectureGuardTest {
                 .findAll(source)
                 .map { match -> match.groupValues[1] }
                 .toList()
-        val sourceBridgeTargets =
-            typeAliasRegex
-                .findAll(source)
-                .mapNotNull { match ->
-                    val aliasName = match.groupValues[1]
-                    val aliasTarget = match.groupValues[2]
-                    val targetFqcn =
-                        when {
-                            persistenceModelAliasTargetRegex.matches(aliasTarget) -> aliasTarget
-                            importedModelTargets.containsKey(aliasTarget) -> importedModelTargets.getValue(aliasTarget)
-                            importedBridgeTargets.containsKey(aliasTarget) -> importedBridgeTargets.getValue(aliasTarget)
-                            else -> return@mapNotNull null
-                        }
-
-                    aliasName to targetFqcn
-                }.toMap()
-        val samePackageBridgeTargets =
+        val externalSamePackageBridgeTargets =
             sourcePackageName(source)
                 ?.let { packageName -> persistenceBridgeTargetsInPackage(packageName, excludingPath = path) }
-                .orEmpty() + sourceBridgeTargets
+                .orEmpty()
+        val sourceAliasDeclarations =
+            typeAliasRegex
+                .findAll(source)
+                .map { match -> match.groupValues[1] to match.groupValues[2] }
+                .toList()
+        val sourceBridgeTargets = mutableMapOf<String, String>()
+        var sourceBridgeTargetsChanged = true
+
+        while (sourceBridgeTargetsChanged) {
+            sourceBridgeTargetsChanged = false
+
+            sourceAliasDeclarations.forEach { (aliasName, aliasTarget) ->
+                val targetFqcn =
+                    when {
+                        persistenceModelAliasTargetRegex.matches(aliasTarget) -> aliasTarget
+                        importedModelTargets.containsKey(aliasTarget) -> importedModelTargets.getValue(aliasTarget)
+                        importedBridgeTargets.containsKey(aliasTarget) -> importedBridgeTargets.getValue(aliasTarget)
+                        externalSamePackageBridgeTargets.containsKey(aliasTarget) ->
+                            externalSamePackageBridgeTargets.getValue(aliasTarget)
+                        sourceBridgeTargets.containsKey(aliasTarget) -> sourceBridgeTargets.getValue(aliasTarget)
+                        wildcardBridgeImports.isNotEmpty() && !aliasTarget.contains(".") -> {
+                            val bridgeTargets =
+                                wildcardBridgeImports.mapNotNull { importPath ->
+                                    persistenceBridgeTargetsInPackage(importPath)[aliasTarget]
+                                }
+
+                            if (bridgeTargets.isEmpty()) {
+                                return@forEach
+                            }
+
+                            bridgeTargets.joinToString("|")
+                        }
+                        wildcardModelImports.isNotEmpty() && !aliasTarget.contains(".") ->
+                            wildcardModelImports.joinToString("|") { importPath -> "$importPath.$aliasTarget" }
+                        else -> return@forEach
+                    }
+
+                if (sourceBridgeTargets[aliasName] != targetFqcn) {
+                    sourceBridgeTargets[aliasName] = targetFqcn
+                    sourceBridgeTargetsChanged = true
+                }
+            }
+        }
+
+        val samePackageBridgeTargets = externalSamePackageBridgeTargets + sourceBridgeTargets
 
         return typeAliasRegex
             .findAll(source)
@@ -612,6 +641,7 @@ class ArchitectureGuardTest {
                     |
                     |typealias Post = com.back.boundedContexts.post.model.Post
                     |typealias Article = Post
+                    |typealias PublicArticle = Article
                     """.trimMargin(),
             )
 
@@ -625,6 +655,11 @@ class ArchitectureGuardTest {
                 PersistenceModelAlias(
                     "com/back/boundedContexts/post/domain/PersistenceModelAliases.kt",
                     "Article",
+                    "com.back.boundedContexts.post.model.Post",
+                ),
+                PersistenceModelAlias(
+                    "com/back/boundedContexts/post/domain/PersistenceModelAliases.kt",
+                    "PublicArticle",
                     "com.back.boundedContexts.post.model.Post",
                 ),
             )

@@ -54,7 +54,7 @@ class ApiV1PostImageControllerTest {
         assertThat(response.resultCode).isEqualTo("201-1")
         assertThat(postImageStorageService.lastImageContentLength).isEqualTo(file.size)
         assertThat(postImageStorageService.lastImageBytes).containsExactly(*pngBytes())
-        verify(uploadedFileRetentionService).registerTempUpload(
+        verify(uploadedFileRetentionService).registerTempUploadWithCompensation(
             "posts/2026/03/sample.png",
             "image/png",
             file.size,
@@ -76,7 +76,7 @@ class ApiV1PostImageControllerTest {
         assertThat(response.resultCode).isEqualTo("201-2")
         assertThat(postImageStorageService.lastFileContentLength).isEqualTo(file.size)
         assertThat(postImageStorageService.lastFileBytes).containsExactly(*"pdf".toByteArray())
-        verify(uploadedFileRetentionService).registerTempUpload(
+        verify(uploadedFileRetentionService).registerTempUploadWithCompensation(
             "posts/2026/03/manual.pdf",
             "application/pdf",
             file.size,

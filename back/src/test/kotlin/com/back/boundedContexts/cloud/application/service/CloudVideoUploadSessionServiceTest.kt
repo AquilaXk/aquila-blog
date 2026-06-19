@@ -15,7 +15,6 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
-import org.springframework.transaction.annotation.Transactional
 import java.io.ByteArrayInputStream
 import java.text.Normalizer
 import java.time.Clock
@@ -213,24 +212,30 @@ class CloudVideoUploadSessionServiceTest {
     }
 
     @Test
-    @DisplayName("만료 세션을 410으로 거절하는 진입점은 만료 상태 저장을 rollback하지 않는다")
-    fun `만료 세션 진입점은 AppException rollback을 방지한다`() {
-        val getSessionTransaction =
-            CloudVideoUploadSessionService::class.java
-                .getMethod("getSession", java.lang.Long.TYPE, java.lang.Long.TYPE)
-                .getAnnotation(Transactional::class.java)
-        val uploadPartTransaction =
-            CloudVideoUploadSessionService::class.java
-                .getMethod("uploadPart", java.lang.Long.TYPE, java.lang.Long.TYPE, Integer.TYPE, ByteArray::class.java)
-                .getAnnotation(Transactional::class.java)
-        val completeTransaction =
-            CloudVideoUploadSessionService::class.java
-                .getMethod("complete", java.lang.Long.TYPE, java.lang.Long.TYPE)
-                .getAnnotation(Transactional::class.java)
+    @DisplayName("S3 원격 호출 진입점은 서비스 레벨 트랜잭션을 잡지 않는다")
+    fun `S3 원격 호출 진입점은 서비스 트랜잭션을 잡지 않는다`() {
+        val transactionalAnnotationName = "org.springframework.transaction.annotation.Transactional"
+        val methods =
+            listOf(
+                CloudVideoUploadSessionService::class.java
+                    .getMethod(
+                        "createSession",
+                        java.lang.Long.TYPE,
+                        String::class.java,
+                        String::class.java,
+                        java.lang.Long.TYPE,
+                        String::class.java,
+                    ),
+                CloudVideoUploadSessionService::class.java
+                    .getMethod("uploadPart", java.lang.Long.TYPE, java.lang.Long.TYPE, Integer.TYPE, ByteArray::class.java),
+                CloudVideoUploadSessionService::class.java
+                    .getMethod("complete", java.lang.Long.TYPE, java.lang.Long.TYPE),
+                CloudVideoUploadSessionService::class.java
+                    .getMethod("cancel", java.lang.Long.TYPE, java.lang.Long.TYPE),
+            )
 
-        assertThat(getSessionTransaction.noRollbackFor).contains(AppException::class)
-        assertThat(uploadPartTransaction.noRollbackFor).contains(AppException::class)
-        assertThat(completeTransaction.noRollbackFor).contains(AppException::class)
+        assertThat(methods.flatMap { it.annotations.map { annotation -> annotation.annotationClass.qualifiedName } })
+            .doesNotContain(transactionalAnnotationName)
     }
 
     @Test
@@ -411,7 +416,9 @@ class CloudVideoUploadSessionServiceTest {
         assertThat(purgedCount).isEqualTo(1)
         assertThat(storage.abortedUploads.single().uploadId).isEqualTo("upload-2")
         assertThat(sessionRepository.savedSessions.first { it.id == first.id }.status)
-            .isEqualTo(CloudVideoUploadSessionStatus.IN_PROGRESS)
+            .isEqualTo(CloudVideoUploadSessionStatus.FAILED)
+        assertThat(sessionRepository.savedSessions.first { it.id == first.id }.failureReason)
+            .contains("multipart abort failed")
         assertThat(sessionRepository.savedSessions.first { it.id == second.id }.status)
             .isEqualTo(CloudVideoUploadSessionStatus.EXPIRED)
     }
@@ -587,6 +594,244 @@ class CloudVideoUploadSessionServiceTest {
     }
 
     @Test
+    @DisplayName("S3 initiate 실패는 DB 세션을 FAILED로 남긴다")
+    fun `S3 initiate 실패는 FAILED 상태로 남긴다`() {
+        storage.failInitiate = true
+
+        assertThatThrownBy {
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        }.isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("initiate failed")
+
+        assertThat(sessionRepository.savedSessions.single().status).isEqualTo(CloudVideoUploadSessionStatus.FAILED)
+        assertThat(sessionRepository.savedSessions.single().failureReason).contains("multipart initiate failed")
+    }
+
+    @Test
+    @DisplayName("파트 S3 업로드 성공 후 metadata 저장 실패는 FAILED로 남긴다")
+    fun `파트 metadata 저장 실패는 FAILED 상태로 남긴다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        partRepository.failSave = true
+
+        assertThatThrownBy {
+            service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        }.isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("part save failed")
+
+        assertThat(storage.multipartParts.single().partNumber).isEqualTo(1)
+        assertThat(sessionRepository.savedSessions.single { it.id == session.id }.status)
+            .isEqualTo(CloudVideoUploadSessionStatus.FAILED)
+        assertThat(sessionRepository.savedSessions.single { it.id == session.id }.failureReason)
+            .contains("metadata save failed")
+    }
+
+    @Test
+    @DisplayName("complete S3 성공 후 파일 metadata 저장 실패는 COMPLETING으로 남긴다")
+    fun `complete metadata 저장 실패는 COMPLETING 상태로 남긴다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        fileRepository.failSave = true
+
+        assertThatThrownBy {
+            service.complete(7L, session.id)
+        }.isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("file save failed")
+
+        assertThat(storage.completedUploads.single().uploadId).isEqualTo("upload-1")
+        assertThat(sessionRepository.savedSessions.single { it.id == session.id }.status)
+            .isEqualTo(CloudVideoUploadSessionStatus.COMPLETING)
+    }
+
+    @Test
+    @DisplayName("선점 상태의 세션은 cancel과 cleanup이 동시에 처리하지 않는다")
+    fun `선점 상태는 cancel과 cleanup을 막는다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        sessionRepository.transitionStatus(
+            id = session.id,
+            expectedStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
+            nextStatus = CloudVideoUploadSessionStatus.UPLOADING_PART,
+            now = clock.instant(),
+        )
+
+        assertThatThrownBy {
+            service.cancel(7L, session.id)
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("진행 중")
+
+        val expiredService =
+            createService(
+                clock = Clock.fixed(Instant.parse("2026-06-17T02:00:00Z"), ZoneOffset.UTC),
+            )
+        assertThat(expiredService.purgeExpiredSessions(batchSize = 100)).isZero()
+        assertThat(storage.abortedUploads).isEmpty()
+    }
+
+    @Test
+    @DisplayName("initiate 성공 후 DB 전이 실패는 abort 보상을 시도하고 FAILED로 남긴다")
+    fun `initiate 후 DB 전이 실패는 abort 보상 후 FAILED로 남긴다`() {
+        sessionRepository.failAttachUploadIdTransition = true
+        storage.failingAbortUploadIds += "upload-1"
+
+        assertThatThrownBy {
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("상태가 변경")
+
+        assertThat(storage.multipartInits.single().objectKey).startsWith("cloud/7/2026/06/17/")
+        assertThat(storage.abortedUploads).isEmpty()
+        assertThat(sessionRepository.savedSessions.single().status).isEqualTo(CloudVideoUploadSessionStatus.FAILED)
+        assertThat(sessionRepository.savedSessions.single().failureReason).contains("metadata attach failed")
+    }
+
+    @Test
+    @DisplayName("S3 part 업로드 실패는 선점 상태를 IN_PROGRESS로 되돌린다")
+    fun `S3 part 업로드 실패는 선점 상태를 되돌린다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        storage.failingPartNumbers += 1
+
+        assertThatThrownBy {
+            service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        }.isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("part upload failed")
+
+        assertThat(partRepository.findBySessionId(session.id)).isEmpty()
+        assertThat(sessionRepository.savedSessions.single { it.id == session.id }.status)
+            .isEqualTo(CloudVideoUploadSessionStatus.IN_PROGRESS)
+    }
+
+    @Test
+    @DisplayName("파트 저장 후 IN_PROGRESS 복귀 전이가 실패하면 409로 중단한다")
+    fun `파트 저장 후 복귀 전이 실패는 409로 중단한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        sessionRepository.failingTransitions +=
+            CloudVideoUploadSessionStatus.UPLOADING_PART to CloudVideoUploadSessionStatus.IN_PROGRESS
+
+        assertThatThrownBy {
+            service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("상태가 변경")
+
+        assertThat(partRepository.findBySessionId(session.id)).hasSize(1)
+        assertThat(sessionRepository.savedSessions.single { it.id == session.id }.status)
+            .isEqualTo(CloudVideoUploadSessionStatus.UPLOADING_PART)
+    }
+
+    @Test
+    @DisplayName("complete 선점 전이 실패는 S3 complete를 호출하지 않고 409로 중단한다")
+    fun `complete 선점 전이 실패는 S3 complete 없이 중단한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        sessionRepository.failingTransitions +=
+            CloudVideoUploadSessionStatus.IN_PROGRESS to CloudVideoUploadSessionStatus.COMPLETING
+
+        assertThatThrownBy {
+            service.complete(7L, session.id)
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("진행 중")
+
+        assertThat(storage.completedUploads).isEmpty()
+        assertThat(sessionRepository.savedSessions.single { it.id == session.id }.status)
+            .isEqualTo(CloudVideoUploadSessionStatus.IN_PROGRESS)
+    }
+
+    @Test
+    @DisplayName("S3 complete 실패는 FAILED로 남긴다")
+    fun `S3 complete 실패는 FAILED 상태로 남긴다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        storage.failingCompleteUploadIds += "upload-1"
+
+        assertThatThrownBy {
+            service.complete(7L, session.id)
+        }.isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("complete failed")
+
+        assertThat(sessionRepository.savedSessions.single { it.id == session.id }.status)
+            .isEqualTo(CloudVideoUploadSessionStatus.FAILED)
+        assertThat(sessionRepository.savedSessions.single { it.id == session.id }.failureReason)
+            .contains("multipart complete failed")
+    }
+
+    @Test
+    @DisplayName("terminal 상태의 cancel은 원격 abort를 다시 호출하지 않는다")
+    fun `terminal 상태 cancel은 no-op이다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.cancel(7L, session.id)
+
+        service.cancel(7L, session.id)
+
+        assertThat(storage.abortedUploads).hasSize(1)
+    }
+
+    @Test
     @DisplayName("multipart part request는 ByteArray 내용을 기준으로 equals와 hashCode를 계산한다")
     fun `multipart part request는 ByteArray 내용 기준으로 비교한다`() {
         val first =
@@ -619,6 +864,8 @@ class CloudVideoUploadSessionServiceTest {
     private class FakeVideoUploadSessionRepository : CloudVideoUploadSessionRepositoryPort {
         val savedSessions = mutableListOf<CloudVideoUploadSession>()
         private var nextId = 1L
+        var failAttachUploadIdTransition = false
+        val failingTransitions = mutableSetOf<Pair<CloudVideoUploadSessionStatus, CloudVideoUploadSessionStatus>>()
 
         override fun save(session: CloudVideoUploadSession): CloudVideoUploadSession {
             val stored =
@@ -637,6 +884,7 @@ class CloudVideoUploadSessionServiceTest {
                         expiresAt = session.expiresAt,
                         status = session.status,
                         completedFileId = session.completedFileId,
+                        failureReason = session.failureReason,
                     )
                 } else {
                     session
@@ -663,13 +911,58 @@ class CloudVideoUploadSessionServiceTest {
                         it.expiresAt <= now
                 }.sortedWith(compareBy<CloudVideoUploadSession> { it.expiresAt }.thenBy { it.id })
                 .take(limit.coerceAtLeast(1))
+
+        override fun attachUploadIdAndTransition(
+            id: Long,
+            expectedStatus: CloudVideoUploadSessionStatus,
+            uploadId: String,
+            nextStatus: CloudVideoUploadSessionStatus,
+            now: Instant,
+        ): Int {
+            if (failAttachUploadIdTransition) {
+                return 0
+            }
+            val session = savedSessions.firstOrNull { it.id == id && it.status == expectedStatus } ?: return 0
+            session.markInitiated(uploadId, now)
+            session.transitionTo(nextStatus, now)
+            return 1
+        }
+
+        override fun transitionStatus(
+            id: Long,
+            expectedStatus: CloudVideoUploadSessionStatus,
+            nextStatus: CloudVideoUploadSessionStatus,
+            now: Instant,
+        ): Int {
+            if (failingTransitions.remove(expectedStatus to nextStatus)) {
+                return 0
+            }
+            val session = savedSessions.firstOrNull { it.id == id && it.status == expectedStatus } ?: return 0
+            session.transitionTo(nextStatus, now)
+            return 1
+        }
+
+        override fun markFailed(
+            id: Long,
+            expectedStatus: CloudVideoUploadSessionStatus,
+            reason: String,
+            now: Instant,
+        ): Int {
+            val session = savedSessions.firstOrNull { it.id == id && it.status == expectedStatus } ?: return 0
+            session.fail(reason, now)
+            return 1
+        }
     }
 
     private class FakeVideoUploadPartRepository : CloudVideoUploadPartRepositoryPort {
         private val parts = mutableListOf<CloudVideoUploadPart>()
         private var nextId = 1L
+        var failSave = false
 
         override fun save(part: CloudVideoUploadPart): CloudVideoUploadPart {
+            if (failSave) {
+                throw IllegalStateException("part save failed")
+            }
             val stored =
                 if (part.id == 0L) {
                     CloudVideoUploadPart(
@@ -705,8 +998,12 @@ class CloudVideoUploadSessionServiceTest {
     private class FakeCloudFileRepository : CloudFileRepositoryPort {
         private val files = mutableListOf<CloudFile>()
         private var nextId = 1L
+        var failSave = false
 
         override fun save(file: CloudFile): CloudFile {
+            if (failSave) {
+                throw IllegalStateException("file save failed")
+            }
             val stored =
                 CloudFile.create(
                     id = nextId++,
@@ -744,6 +1041,9 @@ class CloudVideoUploadSessionServiceTest {
         val completedUploads = mutableListOf<CloudStoragePort.MultipartUploadCompleteRequest>()
         val abortedUploads = mutableListOf<CloudStoragePort.MultipartUploadAbortRequest>()
         val failingAbortUploadIds = mutableSetOf<String>()
+        val failingPartNumbers = mutableSetOf<Int>()
+        val failingCompleteUploadIds = mutableSetOf<String>()
+        var failInitiate = false
 
         override fun upload(request: CloudStoragePort.UploadRequest): CloudStoragePort.UploadResult =
             CloudStoragePort.UploadResult(request.objectKey, "checksum")
@@ -751,6 +1051,9 @@ class CloudVideoUploadSessionServiceTest {
         override fun initiateMultipartUpload(
             request: CloudStoragePort.MultipartUploadInitRequest,
         ): CloudStoragePort.MultipartUploadInitResult {
+            if (failInitiate) {
+                throw IllegalStateException("initiate failed")
+            }
             multipartInits += request
             return CloudStoragePort.MultipartUploadInitResult(
                 objectKey = request.objectKey,
@@ -761,6 +1064,9 @@ class CloudVideoUploadSessionServiceTest {
         override fun uploadMultipartPart(
             request: CloudStoragePort.MultipartUploadPartRequest,
         ): CloudStoragePort.MultipartUploadPartResult {
+            if (request.partNumber in failingPartNumbers) {
+                throw IllegalStateException("part upload failed")
+            }
             multipartParts += request
             return CloudStoragePort.MultipartUploadPartResult(
                 partNumber = request.partNumber,
@@ -769,6 +1075,9 @@ class CloudVideoUploadSessionServiceTest {
         }
 
         override fun completeMultipartUpload(request: CloudStoragePort.MultipartUploadCompleteRequest) {
+            if (request.uploadId in failingCompleteUploadIds) {
+                throw IllegalStateException("complete failed")
+            }
             completedUploads += request
         }
 

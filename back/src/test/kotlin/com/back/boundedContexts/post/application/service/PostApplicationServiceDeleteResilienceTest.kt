@@ -98,25 +98,56 @@ class PostApplicationServiceDeleteResilienceTest {
             environment = MockEnvironment().also { it.setActiveProfiles("test") },
             inlineWhenNotProd = false,
         )
+    private val postHydrationService = PostHydrationService(postAttrRepository, memberAttrRepository)
+    private val postCounterService =
+        PostCounterService(
+            postRepository = postRepository,
+            postAttrRepository = postAttrRepository,
+            memberAttrRepository = memberAttrRepository,
+            postLikeRepository = postLikeRepository,
+        )
+    private val postTagIndexService =
+        PostTagIndexService(
+            postRepository = postRepository,
+            postTagIndexRepository = postTagIndexRepository,
+            postAttrRepository = postAttrRepository,
+            tagsLocalCacheTtlSeconds = 180,
+        )
+    private val postTempDraftService = PostTempDraftService(postRepository, memberAttrRepository)
+    private val postInteractionSideEffectQueue = PostInteractionSideEffectQueue(taskFacade)
+    private val postCommentApplicationService =
+        PostCommentApplicationService(
+            postRepository = postRepository,
+            postCommentRepository = postCommentRepository,
+            postHydrationService = postHydrationService,
+            postCounterService = postCounterService,
+            postInteractionSideEffectQueue = postInteractionSideEffectQueue,
+        )
+    private val postLikeApplicationService =
+        PostLikeApplicationService(
+            postRepository = postRepository,
+            postLikeRepository = postLikeRepository,
+            postHydrationService = postHydrationService,
+            postCounterService = postCounterService,
+            postInteractionSideEffectQueue = postInteractionSideEffectQueue,
+        )
 
     private val service =
         PostApplicationService(
             postRepository = postRepository,
-            postTagIndexRepository = postTagIndexRepository,
-            postAttrRepository = postAttrRepository,
-            memberAttrRepository = memberAttrRepository,
-            postCommentRepository = postCommentRepository,
-            postLikeRepository = postLikeRepository,
             postWriteRequestIdempotencyRepository = postWriteRequestIdempotencyRepository,
             secureTipPort = secureTipPort,
-            eventPublisher = eventPublisher,
             uploadedFileRetentionService = uploadedFileRetentionService,
             postRecommendRankingService = postRecommendRankingService,
-            postRecommendFeatureStoreService = postRecommendFeatureStoreService,
             postKeywordSearchPipelineService = postKeywordSearchPipelineService,
             taskFacade = taskFacade,
             objectMapper = objectMapper,
-            tagsLocalCacheTtlSeconds = 180,
+            postHydrationService = postHydrationService,
+            postCounterService = postCounterService,
+            postTagIndexService = postTagIndexService,
+            postTempDraftService = postTempDraftService,
+            postCommentApplicationService = postCommentApplicationService,
+            postLikeApplicationService = postLikeApplicationService,
         )
 
     @Test

@@ -230,6 +230,7 @@ class CloudVideoUploadSessionService(
             expectedStatus = CloudVideoUploadSessionStatus.UPLOADING_PART,
             nextStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
         )
+        session.transitionTo(CloudVideoUploadSessionStatus.IN_PROGRESS, clock.instant())
         val parts = partRepository.findBySessionId(session.id)
 
         return CloudVideoUploadPartResultDto(

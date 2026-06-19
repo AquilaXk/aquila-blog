@@ -269,6 +269,7 @@ class CustomAuthenticationFilterTest {
                 lastAuthenticatedAt = Instant.now(),
             )
         val persistedAdmin = Member(54L, "internal-admin", null, "aquila", "admin@test.com")
+        persistedAdmin.grantAdmin()
 
         fixture.givenProtectedRequest(request)
         fixture.givenBearerAccessToken(legacyToken, sessionKey)
@@ -322,6 +323,7 @@ class CustomAuthenticationFilterTest {
                 lastAuthenticatedAt = Instant.now(),
             )
         val persistedAdmin = Member(54L, "internal-admin", null, "aquila", "admin@test.com", apiKey)
+        persistedAdmin.grantAdmin()
 
         fixture.givenProtectedRequest(request)
         fixture.givenEmptyAuthorizationHeader()
@@ -438,9 +440,6 @@ class CustomAuthenticationFilterTest {
         AppConfig(
             siteBackUrl = "https://api.aquilaxk.site",
             siteFrontUrl = "https://www.aquilaxk.site",
-            adminUsername = "admin",
-            adminEmail = "admin@test.com",
-            adminPassword = "secret",
         )
     }
 

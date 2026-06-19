@@ -24,9 +24,6 @@ class ApiV1PostImageControllerTest {
             AppConfig(
                 siteBackUrl = "https://api.aquilaxk.test",
                 siteFrontUrl = "https://www.aquilaxk.test",
-                adminUsername = "",
-                adminEmail = "",
-                adminPassword = "",
             )
         }
     }

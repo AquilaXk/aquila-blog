@@ -13,9 +13,6 @@ class MemberSecurityExtensionsTest {
         AppConfig(
             siteBackUrl = "https://api.aquilaxk.site",
             siteFrontUrl = "https://www.aquilaxk.site",
-            adminUsername = "admin",
-            adminEmail = "admin@example.com",
-            adminPassword = "1234",
         )
 
         val admin =
@@ -26,6 +23,7 @@ class MemberSecurityExtensionsTest {
                 nickname = "관리자",
                 email = "admin@example.com",
             )
+        admin.grantAdmin()
 
         assertThat(admin.isAdmin).isTrue()
         assertThat(admin.toGrantedAuthorities().map { it.authority }).containsExactly("ROLE_MEMBER", "ROLE_ADMIN")
@@ -36,9 +34,6 @@ class MemberSecurityExtensionsTest {
         AppConfig(
             siteBackUrl = "https://api.aquilaxk.site",
             siteFrontUrl = "https://www.aquilaxk.site",
-            adminUsername = "admin",
-            adminEmail = "admin@example.com",
-            adminPassword = "1234",
         )
 
         val user1 =

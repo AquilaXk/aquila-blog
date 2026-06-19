@@ -305,7 +305,7 @@ class ApiV1AdmMemberController(
                 originalFilename = file.originalFilename,
             )
         val key = postImageStorageService.uploadPostImage(uploadRequest)
-        uploadedFileRetentionService.registerTempUpload(
+        uploadedFileRetentionService.registerTempUploadWithCompensation(
             objectKey = key,
             contentType = file.contentType.orEmpty(),
             fileSize = file.size,

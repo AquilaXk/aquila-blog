@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.adapter.persistence.MemberAttrPersistence
 import com.back.boundedContexts.member.adapter.persistence.MemberRepositoryAdapter
 import com.back.boundedContexts.member.application.service.MemberApplicationService
 import com.back.boundedContexts.member.application.service.MemberProfileHydrator
+import com.back.boundedContexts.member.application.service.MemberProfilePersistenceService
 import com.back.global.app.AppConfig
 import com.back.global.jpa.config.JpaConfig
 import com.back.global.storage.application.UploadedFileRetentionService
@@ -16,6 +17,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import(
     MemberApplicationService::class,
+    MemberProfilePersistenceService::class,
     MemberRepositoryAdapter::class,
     MemberAttrPersistenceAdapter::class,
     MemberProfileHydrator::class,

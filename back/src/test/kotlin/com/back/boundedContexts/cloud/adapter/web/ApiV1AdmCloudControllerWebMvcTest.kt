@@ -708,6 +708,7 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
             status = CloudVideoUploadSessionStatus.IN_PROGRESS,
             expiresAt = Instant.parse("2026-06-18T00:00:00Z"),
             completedFileId = null,
+            failureReason = null,
         )
 
     private fun byteArrayContentEquals(expected: ByteArray): ByteArray =

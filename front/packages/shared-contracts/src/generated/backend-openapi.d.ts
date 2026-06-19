@@ -1340,11 +1340,12 @@ export interface components {
             totalParts?: number;
             uploadedParts?: number[];
             /** @enum {string} */
-            status?: "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "EXPIRED";
+            status?: "INITIATING" | "IN_PROGRESS" | "UPLOADING_PART" | "COMPLETING" | "COMPLETED" | "ABORTING" | "CANCELLED" | "EXPIRED" | "FAILED";
             /** Format: date-time */
             expiresAt?: string;
             /** Format: int64 */
             completedFileId?: number;
+            failureReason?: string;
         };
         PostCommentModifyRequest: {
             content: string;

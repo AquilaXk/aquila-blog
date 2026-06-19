@@ -178,7 +178,7 @@
     },
     "/post/api/v1/posts/{id}" : {
       "get" : {
-        "tags" : [ "api-v-1-post-controller" ],
+        "tags" : [ "api-v-1-post-public-read-controller" ],
         "operationId" : "getItem_1",
         "parameters" : [ {
           "name" : "id",
@@ -204,7 +204,7 @@
         }
       },
       "put" : {
-        "tags" : [ "api-v-1-post-controller" ],
+        "tags" : [ "api-v-1-post-command-controller" ],
         "operationId" : "modify_1",
         "parameters" : [ {
           "name" : "id",
@@ -240,7 +240,7 @@
         }
       },
       "delete" : {
-        "tags" : [ "api-v-1-post-controller" ],
+        "tags" : [ "api-v-1-post-command-controller" ],
         "operationId" : "delete_1",
         "parameters" : [ {
           "name" : "id",
@@ -268,7 +268,7 @@
     },
     "/post/api/v1/posts/{id}/like" : {
       "put" : {
-        "tags" : [ "api-v-1-post-controller" ],
+        "tags" : [ "api-v-1-post-interaction-controller" ],
         "operationId" : "like",
         "parameters" : [ {
           "name" : "id",
@@ -294,7 +294,7 @@
         }
       },
       "delete" : {
-        "tags" : [ "api-v-1-post-controller" ],
+        "tags" : [ "api-v-1-post-interaction-controller" ],
         "operationId" : "unlike",
         "parameters" : [ {
           "name" : "id",
@@ -619,7 +619,7 @@
     },
     "/post/api/v1/posts" : {
       "get" : {
-        "tags" : [ "api-v-1-post-controller" ],
+        "tags" : [ "api-v-1-post-public-read-controller" ],
         "operationId" : "getItems",
         "parameters" : [ {
           "name" : "page",
@@ -671,7 +671,7 @@
         }
       },
       "post" : {
-        "tags" : [ "api-v-1-post-controller" ],
+        "tags" : [ "api-v-1-post-command-controller" ],
         "operationId" : "write",
         "parameters" : [ {
           "name" : "Idempotency-Key",
@@ -781,7 +781,7 @@
     },
     "/post/api/v1/posts/{id}/hit" : {
       "post" : {
-        "tags" : [ "api-v-1-post-controller" ],
+        "tags" : [ "api-v-1-post-interaction-controller" ],
         "operationId" : "incrementHit",
         "parameters" : [ {
           "name" : "id",
@@ -809,7 +809,7 @@
     },
     "/post/api/v1/posts/temp" : {
       "post" : {
-        "tags" : [ "api-v-1-post-controller" ],
+        "tags" : [ "api-v-1-post-draft-controller" ],
         "operationId" : "getOrCreateTemp",
         "responses" : {
           "200" : {
@@ -1663,7 +1663,7 @@
     },
     "/post/api/v1/posts/tags" : {
       "get" : {
-        "tags" : [ "api-v-1-post-controller" ],
+        "tags" : [ "api-v-1-post-public-read-controller" ],
         "operationId" : "getTags",
         "responses" : {
           "200" : {
@@ -1684,7 +1684,7 @@
     },
     "/post/api/v1/posts/search" : {
       "get" : {
-        "tags" : [ "api-v-1-post-controller" ],
+        "tags" : [ "api-v-1-post-public-read-controller" ],
         "operationId" : "search",
         "parameters" : [ {
           "name" : "page",
@@ -1738,7 +1738,7 @@
     },
     "/post/api/v1/posts/related/author" : {
       "get" : {
-        "tags" : [ "api-v-1-post-controller" ],
+        "tags" : [ "api-v-1-post-public-read-controller" ],
         "operationId" : "getRelatedByAuthor",
         "parameters" : [ {
           "name" : "authorId",
@@ -1787,7 +1787,7 @@
     },
     "/post/api/v1/posts/mine" : {
       "get" : {
-        "tags" : [ "api-v-1-post-controller" ],
+        "tags" : [ "api-v-1-post-command-controller" ],
         "operationId" : "getMine",
         "parameters" : [ {
           "name" : "page",
@@ -1841,7 +1841,7 @@
     },
     "/post/api/v1/posts/feed" : {
       "get" : {
-        "tags" : [ "api-v-1-post-controller" ],
+        "tags" : [ "api-v-1-post-public-read-controller" ],
         "operationId" : "getFeed",
         "parameters" : [ {
           "name" : "page",
@@ -1887,7 +1887,7 @@
     },
     "/post/api/v1/posts/feed/cursor" : {
       "get" : {
-        "tags" : [ "api-v-1-post-controller" ],
+        "tags" : [ "api-v-1-post-public-read-controller" ],
         "operationId" : "getFeedByCursor",
         "parameters" : [ {
           "name" : "cursor",
@@ -1931,7 +1931,7 @@
     },
     "/post/api/v1/posts/explore" : {
       "get" : {
-        "tags" : [ "api-v-1-post-controller" ],
+        "tags" : [ "api-v-1-post-public-read-controller" ],
         "operationId" : "explore",
         "parameters" : [ {
           "name" : "page",
@@ -1993,7 +1993,7 @@
     },
     "/post/api/v1/posts/explore/cursor" : {
       "get" : {
-        "tags" : [ "api-v-1-post-controller" ],
+        "tags" : [ "api-v-1-post-public-read-controller" ],
         "operationId" : "exploreByCursor",
         "parameters" : [ {
           "name" : "cursor",
@@ -2045,7 +2045,7 @@
     },
     "/post/api/v1/posts/bootstrap" : {
       "get" : {
-        "tags" : [ "api-v-1-post-controller" ],
+        "tags" : [ "api-v-1-post-public-read-controller" ],
         "operationId" : "getBootstrap",
         "parameters" : [ {
           "name" : "tag",

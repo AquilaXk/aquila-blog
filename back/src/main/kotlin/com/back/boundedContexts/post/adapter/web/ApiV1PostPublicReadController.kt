@@ -1,6 +1,5 @@
 package com.back.boundedContexts.post.adapter.web
 
-import com.back.boundedContexts.post.application.port.input.PostHitDedupUseCase
 import com.back.boundedContexts.post.application.port.input.PostPublicReadQueryUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.application.support.PostCacheTags
@@ -10,61 +9,29 @@ import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.TagCountDto
-import com.back.boundedContexts.post.model.Post
-import com.back.global.rsData.RsData
 import com.back.global.web.application.Rq
 import com.back.standard.dto.page.PageDto
-import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.extensions.getOrThrow
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
-import jakarta.validation.Valid
 import jakarta.validation.constraints.Min
-import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Positive
-import jakarta.validation.constraints.Size
-import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/post/api/v1/posts")
-class ApiV1PostController(
+class ApiV1PostPublicReadController(
     private val postUseCase: PostUseCase,
-    private val postHitDedupUseCase: PostHitDedupUseCase,
     private val postPublicReadQueryUseCase: PostPublicReadQueryUseCase,
     private val postPublicReadResponseFactory: PostPublicReadResponseFactory,
     private val postSearchIntentResolver: PostSearchIntentResolver,
+    private val postWebDtoAssembler: PostWebDtoAssembler,
     private val rq: Rq,
 ) {
-    private fun makePostDtoPage(postPage: PagedResult<Post>): PageDto<PostDto> {
-        val actor = rq.actorOrNull
-        val likedPostIds = postUseCase.findLikedPostIds(actor, postPage.content)
-
-        return PageDto(
-            postPage.map { post ->
-                PostDto(post).apply {
-                    actorHasLiked = post.id in likedPostIds
-                }
-            },
-        )
-    }
-
-    private fun makePostWithContentDto(post: Post): PostWithContentDto {
-        val actor = rq.actorOrNull
-        val hasAdminRole = rq.hasRole("ADMIN")
-        return PostWithContentDto(post).apply {
-            tempDraft = postUseCase.isTempDraft(post)
-            actorHasLiked = postUseCase.isLiked(post, actor)
-            actorCanModify = hasAdminRole || post.getCheckActorCanModifyRs(actor).isSuccess
-            actorCanDelete = hasAdminRole || post.getCheckActorCanDeleteRs(actor).isSuccess
-        }
-    }
-
     @GetMapping("/feed")
-    @Transactional(readOnly = true)
     fun getFeed(
         request: HttpServletRequest,
         response: HttpServletResponse,
@@ -89,7 +56,6 @@ class ApiV1PostController(
     }
 
     @GetMapping("/feed/cursor")
-    @Transactional(readOnly = true)
     fun getFeedByCursor(
         request: HttpServletRequest,
         response: HttpServletResponse,
@@ -114,7 +80,6 @@ class ApiV1PostController(
     }
 
     @GetMapping("/explore")
-    @Transactional(readOnly = true)
     fun explore(
         request: HttpServletRequest,
         response: HttpServletResponse,
@@ -160,7 +125,6 @@ class ApiV1PostController(
     }
 
     @GetMapping("/explore/cursor")
-    @Transactional(readOnly = true)
     fun exploreByCursor(
         request: HttpServletRequest,
         response: HttpServletResponse,
@@ -194,7 +158,6 @@ class ApiV1PostController(
     }
 
     @GetMapping("/related/author")
-    @Transactional(readOnly = true)
     fun getRelatedByAuthor(
         request: HttpServletRequest,
         response: HttpServletResponse,
@@ -224,7 +187,6 @@ class ApiV1PostController(
     }
 
     @GetMapping("/search")
-    @Transactional(readOnly = true)
     fun search(
         request: HttpServletRequest,
         response: HttpServletResponse,
@@ -286,7 +248,6 @@ class ApiV1PostController(
     }
 
     @GetMapping("/tags")
-    @Transactional(readOnly = true)
     fun getTags(
         request: HttpServletRequest,
         response: HttpServletResponse,
@@ -306,7 +267,6 @@ class ApiV1PostController(
     }
 
     @GetMapping("/bootstrap")
-    @Transactional(readOnly = true)
     fun getBootstrap(
         request: HttpServletRequest,
         response: HttpServletResponse,
@@ -361,7 +321,7 @@ class ApiV1PostController(
         val validPage = normalizePublicPage(page)
         val validPageSize = pageSize.coerceIn(1, 30)
         val postPage = postUseCase.findPagedByKw(postSearchIntentResolver.normalizeKeyword(kw), sort, validPage, validPageSize)
-        return makePostDtoPage(postPage)
+        return postWebDtoAssembler.makePostDtoPage(postPage)
     }
 
     @GetMapping("/{id}")
@@ -390,217 +350,8 @@ class ApiV1PostController(
         if (!rq.hasRole("ADMIN")) {
             post.checkActorCanRead(rq.actor)
         }
-        return ResponseEntity.ok(makePostWithContentDto(post))
+        return ResponseEntity.ok(postWebDtoAssembler.makePostWithContentDto(post))
     }
-
-    data class PostWriteRequest(
-        @field:NotBlank
-        @field:Size(min = 2, max = 100)
-        val title: String,
-        @field:NotBlank
-        @field:Size(min = 2)
-        val content: String,
-        val contentHtml: String? = null,
-        val published: Boolean?,
-        val listed: Boolean?,
-    )
-
-    @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    @Transactional
-    fun write(
-        @Valid @RequestBody reqBody: PostWriteRequest,
-        @RequestHeader(name = "Idempotency-Key", required = false) idempotencyKey: String?,
-    ): RsData<PostDto> {
-        val post =
-            postUseCase.write(
-                rq.actor,
-                reqBody.title,
-                reqBody.content,
-                reqBody.published ?: false,
-                reqBody.listed ?: false,
-                idempotencyKey,
-                reqBody.contentHtml,
-            )
-        return RsData("201-1", "${post.id}번 글이 작성되었습니다.", PostDto(post))
-    }
-
-    data class PostModifyRequest(
-        @field:NotBlank
-        @field:Size(min = 2, max = 100)
-        val title: String,
-        @field:NotBlank
-        @field:Size(min = 2)
-        val content: String,
-        val contentHtml: String? = null,
-        val published: Boolean? = null,
-        val listed: Boolean? = null,
-        @field:Min(0)
-        val version: Long,
-    )
-
-    data class PostWriteResultDto(
-        val id: Long,
-        val title: String,
-        val version: Long,
-        val published: Boolean,
-        val listed: Boolean,
-    )
-
-    private fun makePostWriteResultDto(post: Post): PostWriteResultDto =
-        PostWriteResultDto(
-            id = post.id,
-            title = post.title,
-            version = post.version ?: 0L,
-            published = post.published,
-            listed = post.listed,
-        )
-
-    @PutMapping("/{id}")
-    @Transactional
-    fun modify(
-        @PathVariable @Positive id: Long,
-        @Valid @RequestBody reqBody: PostModifyRequest,
-    ): RsData<PostWriteResultDto> {
-        val post = postUseCase.findById(id).getOrThrow()
-        val actor = rq.actor
-        // URL access 제어는 SecurityConfig(hasRole ADMIN)에서 우선 담당한다.
-        // 역할 드리프트 상황에서도 작성자 전용 정책 검증은 비관리자 요청에만 한정한다.
-        if (!rq.hasRole("ADMIN")) {
-            post.checkActorCanModify(actor)
-        }
-        postUseCase.modify(
-            actor,
-            post,
-            reqBody.title,
-            reqBody.content,
-            reqBody.published,
-            reqBody.listed,
-            reqBody.version,
-            reqBody.contentHtml,
-        )
-        return RsData("200-1", "${post.id}번 글이 수정되었습니다.", makePostWriteResultDto(post))
-    }
-
-    @DeleteMapping("/{id}")
-    @Transactional
-    fun delete(
-        @PathVariable @Positive id: Long,
-    ): RsData<Void> {
-        val post = postUseCase.findById(id).getOrThrow()
-        val actor = rq.actor
-        if (!rq.hasRole("ADMIN")) {
-            post.checkActorCanDelete(actor)
-        }
-        postUseCase.delete(post, actor)
-        return RsData("200-1", "${id}번 글이 삭제되었습니다.")
-    }
-
-    data class PostHitResBody(
-        val hitCount: Int,
-    )
-
-    @PostMapping("/{id}/hit")
-    @Transactional
-    fun incrementHit(
-        @PathVariable @Positive id: Long,
-    ): RsData<PostHitResBody> {
-        val post = postUseCase.findById(id).getOrThrow()
-        if (!rq.hasRole("ADMIN")) {
-            post.checkActorCanRead(rq.actorOrNull)
-        }
-        if (postHitDedupUseCase.shouldCountHit(id, resolveHitViewerKey())) {
-            postUseCase.incrementHit(post)
-        }
-        return RsData(
-            "200-1",
-            "조회수를 반영했습니다.",
-            PostHitResBody(post.hitCount),
-        )
-    }
-
-    data class PostLikeToggleResBody(
-        val liked: Boolean,
-        val likesCount: Int,
-    )
-
-    @PutMapping("/{id}/like")
-    @Transactional
-    fun like(
-        @PathVariable @Positive id: Long,
-    ): RsData<PostLikeToggleResBody> {
-        val post = postUseCase.findById(id).getOrThrow()
-        if (!rq.hasRole("ADMIN")) {
-            post.checkActorCanRead(rq.actorOrNull)
-        }
-        val likeResult = postUseCase.like(post, rq.actor)
-        return RsData(
-            "200-1",
-            "좋아요를 반영했습니다.",
-            PostLikeToggleResBody(
-                likeResult.isLiked,
-                post.likesCount,
-            ),
-        )
-    }
-
-    @DeleteMapping("/{id}/like")
-    @Transactional
-    fun unlike(
-        @PathVariable @Positive id: Long,
-    ): RsData<PostLikeToggleResBody> {
-        val post = postUseCase.findById(id).getOrThrow()
-        if (!rq.hasRole("ADMIN")) {
-            post.checkActorCanRead(rq.actorOrNull)
-        }
-        val likeResult = postUseCase.unlike(post, rq.actor)
-        return RsData(
-            "200-1",
-            "좋아요 취소를 반영했습니다.",
-            PostLikeToggleResBody(
-                likeResult.isLiked,
-                post.likesCount,
-            ),
-        )
-    }
-
-    @GetMapping("/mine")
-    @Transactional(readOnly = true)
-    fun getMine(
-        @RequestParam(defaultValue = "1") page: Int,
-        @RequestParam(defaultValue = "30") pageSize: Int,
-        @RequestParam(defaultValue = "") kw: String,
-        @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
-    ): PageDto<PostDto> {
-        val validPage = normalizePublicPage(page)
-        val validPageSize = pageSize.coerceIn(1, 30)
-        val postPage =
-            postUseCase.findPagedByAuthor(
-                rq.actor,
-                postSearchIntentResolver.normalizeKeyword(kw),
-                sort,
-                validPage,
-                validPageSize,
-            )
-        return makePostDtoPage(postPage)
-    }
-
-    @PostMapping("/temp")
-    @Transactional
-    fun getOrCreateTemp(response: jakarta.servlet.http.HttpServletResponse): RsData<PostWithContentDto> {
-        val (post, isNew) = postUseCase.getOrCreateTemp(rq.actor)
-        return if (isNew) {
-            response.status = 201
-            RsData("201-1", "임시저장 글이 생성되었습니다.", makePostWithContentDto(post))
-        } else {
-            RsData("200-1", "기존 임시저장 글을 불러옵니다.", makePostWithContentDto(post))
-        }
-    }
-
-    private fun resolveHitViewerKey(): String =
-        rq.actorOrNull
-            ?.let { "member:${it.id}" }
-            ?: "anon:${rq.clientIp}|${rq.userAgent}"
 
     private fun normalizePublicPage(page: Int): Int = page.coerceIn(1, MAX_PUBLIC_PAGE)
 

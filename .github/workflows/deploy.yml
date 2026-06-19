@@ -55,8 +55,8 @@ jobs:
       )
     outputs:
       image_tag: ${{ steps.meta.outputs.image_tag }}
+      image_name: ${{ steps.meta.outputs.image_name }}
       image_ref: ${{ steps.meta.outputs.image_ref }}
-      image_latest_ref: ${{ steps.meta.outputs.image_latest_ref }}
       deploy_sha: ${{ steps.meta.outputs.deploy_sha }}
       backend_deploy: ${{ steps.meta.outputs.backend_deploy }}
       front_live_verify: ${{ steps.meta.outputs.front_live_verify }}
@@ -74,7 +74,6 @@ jobs:
         id: meta
         env:
           DEPLOY_SHA_INPUT: ${{ github.event.workflow_run.head_sha || github.sha }}
-          CURRENT_MAIN_SHA_INPUT: ${{ github.sha }}
           FORCE_BACKEND_DEPLOY_INPUT: ${{ github.event.inputs.force_backend_deploy || 'false' }}
           FORCE_FRONT_LIVE_VERIFY_INPUT: ${{ github.event.inputs.force_front_live_verify || 'false' }}
           FORCE_EDITOR_LIVE_CANARY_INPUT: ${{ github.event.inputs.force_editor_live_canary || 'false' }}
@@ -85,17 +84,14 @@ jobs:
           OWNER_LC="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
           REPO_NAME="$(basename "${GITHUB_REPOSITORY}")"
           DEPLOY_SHA="${DEPLOY_SHA_INPUT:-}"
-          CURRENT_MAIN_SHA="${CURRENT_MAIN_SHA_INPUT:-}"
           if [ -z "${DEPLOY_SHA}" ]; then
             echo "deploy sha is empty" >&2
             exit 1
           fi
 
-          SHORT_SHA="${DEPLOY_SHA::7}"
           IMAGE_NAME="ghcr.io/${OWNER_LC}/${REPO_NAME}-back"
-          IMAGE_TAG="sha-${SHORT_SHA}"
+          IMAGE_TAG="sha-${DEPLOY_SHA}"
           IMAGE_REF="${IMAGE_NAME}:${IMAGE_TAG}"
-          IMAGE_LATEST_REF="${IMAGE_NAME}:latest"
           BACKEND_DEPLOY="false"
           FRONT_LIVE_VERIFY="false"
           EDITOR_LIVE_CANARY="false"
@@ -104,10 +100,15 @@ jobs:
           BACKEND_DEPLOY_PATHS_PATTERN='^(back/|deploy/homeserver/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
           FRONT_LIVE_VERIFY_PATHS_PATTERN='^(front/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/frontend-ci\.yml|\.github/workflows/reusable-frontend-verify\.yml)'
           FRONT_BUILD_SHA_PATHS_PATTERN='^front/(src/|public/|packages/|scripts/(check-refactor-boundaries\.mjs|with-test-lock\.mjs|patch-lodash-template\.cjs)|site\.config\.js|next-sitemap\.config\.js|next\.config\.js|tsconfig\.json|package\.json|yarn\.lock|Dockerfile|index\.d\.ts|next-env\.d\.ts)'
-          EDITOR_LIVE_CANARY_PATHS_PATTERN='^(front/src/pages/editor/|front/src/routes/Admin/(Editor|WriterEditor|Markdown|markdown|editor)|front/src/components/markdown-editor/|front/e2e/editor-|front/e2e/helpers/authoringPlaywright\.ts)'
+          EDITOR_LIVE_CANARY_PATHS_PATTERN='^(front/src/pages/editor/|front/src/routes/Admin/(Editor|WriterEditor|Markdown|markdown|editor)|front/src/components/editor/|front/src/components/markdown-editor/|front/e2e/editor-|front/e2e/helpers/authoringPlaywright\.ts)'
           CHANGED_FILES=""
-          if [ -n "${CURRENT_MAIN_SHA}" ] && [ "${CURRENT_MAIN_SHA}" != "${DEPLOY_SHA}" ]; then
-            echo "stale workflow_run payload: deploy_sha=${DEPLOY_SHA} current_main_sha=${CURRENT_MAIN_SHA}"
+          if [ "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]; then
+            git fetch --depth=1 origin main
+            REMOTE_MAIN_SHA="$(git rev-parse origin/main)"
+            if [ "${DEPLOY_SHA}" != "${REMOTE_MAIN_SHA}" ]; then
+              echo "stale workflow_run blocked: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}" >&2
+              exit 1
+            fi
           fi
           CHANGED_FILES="$(git diff --name-only "${DEPLOY_SHA}^1" "${DEPLOY_SHA}" 2>/dev/null || true)"
           if [ -z "${CHANGED_FILES}" ]; then
@@ -153,8 +154,8 @@ jobs:
           echo "deploy_target_source=${CHANGE_SOURCE}"
 
           echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "image_name=${IMAGE_NAME}" >> "$GITHUB_OUTPUT"
           echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
-          echo "image_latest_ref=${IMAGE_LATEST_REF}" >> "$GITHUB_OUTPUT"
           echo "deploy_sha=${DEPLOY_SHA}" >> "$GITHUB_OUTPUT"
           echo "backend_deploy=${BACKEND_DEPLOY}" >> "$GITHUB_OUTPUT"
           echo "front_live_verify=${FRONT_LIVE_VERIFY}" >> "$GITHUB_OUTPUT"
@@ -195,6 +196,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      back_image_ref: ${{ steps.backend_image.outputs.back_image_ref }}
 
     steps:
       - name: Checkout
@@ -213,16 +216,30 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push backend image
+        id: build_backend_image
         uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
         with:
           context: ./back
           file: ./back/Dockerfile
           push: true
-          tags: |
-            ${{ needs.calculateTag.outputs.image_ref }}
-            ${{ needs.calculateTag.outputs.image_latest_ref }}
+          tags: ${{ needs.calculateTag.outputs.image_ref }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Export backend digest image ref
+        id: backend_image
+        env:
+          IMAGE_NAME: ${{ needs.calculateTag.outputs.image_name }}
+          BACKEND_IMAGE_DIGEST: ${{ steps.build_backend_image.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${BACKEND_IMAGE_DIGEST}" ]; then
+            echo "backend image digest is empty" >&2
+            exit 1
+          fi
+          echo "back_image_ref=${IMAGE_NAME}@${BACKEND_IMAGE_DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "backend image ref: ${IMAGE_NAME}@${BACKEND_IMAGE_DIGEST}" >> "$GITHUB_STEP_SUMMARY"
 
   blueGreenDeploy:
     runs-on: ubuntu-latest
@@ -250,7 +267,10 @@ jobs:
           HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
           HOME_HOST: ${{ secrets.HOME_TAILSCALE_HOST || secrets.HOME_TS_HOST || secrets.HOME_SSH_HOST || secrets.HOME_HOST }}
           HOME_SSH_KEY: ${{ secrets.HOME_SSH_KEY || secrets.HOME_SSH_PRIVATE_KEY }}
+          HOME_KNOWN_HOSTS: ${{ secrets.HOME_KNOWN_HOSTS }}
           HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
+          HOME_GHCR_USERNAME: ${{ secrets.HOME_GHCR_USERNAME }}
+          HOME_GHCR_TOKEN: ${{ secrets.HOME_GHCR_TOKEN }}
         shell: bash
         run: |
           required=(
@@ -260,6 +280,9 @@ jobs:
             HOME_APP_DIR
             HOME_HOST
             HOME_SSH_KEY
+            HOME_KNOWN_HOSTS
+            HOME_GHCR_USERNAME
+            HOME_GHCR_TOKEN
             HOME_SERVER_ENV
           )
 
@@ -326,6 +349,9 @@ jobs:
           fi
 
       - name: Configure SSH key
+        env:
+          HOME_SSH_KEY: ${{ secrets.HOME_SSH_KEY || secrets.HOME_SSH_PRIVATE_KEY }}
+          HOME_KNOWN_HOSTS: ${{ secrets.HOME_KNOWN_HOSTS }}
         shell: bash
         run: |
           set -euo pipefail
@@ -334,37 +360,12 @@ jobs:
           mkdir -p "$SSH_DIR"
           chmod 700 "$SSH_DIR"
 
-          printf '%s\n' "${{ secrets.HOME_SSH_KEY || secrets.HOME_SSH_PRIVATE_KEY }}" > "$SSH_DIR/home_key"
+          printf '%s\n' "${HOME_SSH_KEY}" > "$SSH_DIR/home_key"
           chmod 600 "$SSH_DIR/home_key"
-          if [ -n "${{ secrets.HOME_KNOWN_HOSTS }}" ]; then
-            printf '%s\n' "${{ secrets.HOME_KNOWN_HOSTS }}" > "$SSH_DIR/known_hosts"
-          else
-            SSH_HOST="${{ secrets.HOME_TAILSCALE_HOST || secrets.HOME_TS_HOST || secrets.HOME_SSH_HOST || secrets.HOME_HOST }}"
-            SSH_PORT="${{ secrets.HOME_SSH_PORT || '22' }}"
-
-            if [ -z "${SSH_HOST}" ]; then
-              echo "HOME host secret is empty. Set HOME_TAILSCALE_HOST (or HOME_TS_HOST/HOME_SSH_HOST/HOME_HOST)." >&2
-              exit 1
-            fi
-
-            echo "Collecting known_hosts for ${SSH_HOST}:${SSH_PORT}"
-            success=0
-            for attempt in 1 2 3 4 5; do
-              if timeout 10 ssh-keyscan -p "${SSH_PORT}" -H "${SSH_HOST}" > "$SSH_DIR/known_hosts.tmp" 2>/dev/null; then
-                if [ -s "$SSH_DIR/known_hosts.tmp" ]; then
-                  mv "$SSH_DIR/known_hosts.tmp" "$SSH_DIR/known_hosts"
-                  success=1
-                  break
-                fi
-              fi
-              echo "ssh-keyscan failed (attempt ${attempt}/5) for ${SSH_HOST}:${SSH_PORT}" >&2
-              sleep 3
-            done
-
-            if [ "${success}" -ne 1 ]; then
-              echo "Failed to build known_hosts. Set HOME_KNOWN_HOSTS explicitly or fix ssh-keyscan connectivity." >&2
-              exit 1
-            fi
+          printf '%s\n' "${HOME_KNOWN_HOSTS}" > "$SSH_DIR/known_hosts"
+          if [ ! -s "$SSH_DIR/known_hosts" ]; then
+            echo "HOME_KNOWN_HOSTS is required for production deploy" >&2
+            exit 1
           fi
           chmod 600 "$SSH_DIR/known_hosts"
           echo "SSH_DIR=$SSH_DIR" >> "$GITHUB_ENV"
@@ -376,7 +377,7 @@ jobs:
           HOME_SSH_PORT: ${{ secrets.HOME_SSH_PORT }}
           HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
           HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
-          HOME_BACK_IMAGE: ${{ needs.calculateTag.outputs.image_ref }}
+          HOME_BACK_IMAGE: ${{ needs.buildAndPush.outputs.back_image_ref }}
           HOME_DEPLOY_SHA: ${{ needs.calculateTag.outputs.deploy_sha }}
           HOME_GHCR_USERNAME: ${{ secrets.HOME_GHCR_USERNAME }}
           HOME_GHCR_TOKEN: ${{ secrets.HOME_GHCR_TOKEN }}
@@ -384,19 +385,31 @@ jobs:
           HOME_AI_SUMMARY_GEMINI_API_KEY: ${{ secrets.CUSTOM__AI__SUMMARY__GEMINI__API_KEY || vars.CUSTOM__AI__SUMMARY__GEMINI__API_KEY || '' }}
           HOME_AI_SUMMARY_GEMINI_MODEL: ${{ secrets.CUSTOM__AI__SUMMARY__GEMINI__MODEL || vars.CUSTOM__AI__SUMMARY__GEMINI__MODEL || '' }}
         run: |
+          set -euo pipefail
           PORT="${HOME_SSH_PORT:-22}"
           HOME_APP_DIR_B64="$(printf '%s' "${HOME_APP_DIR}" | base64 | tr -d '\n')"
-          HOME_SERVER_ENV_B64="$(printf '%s' "${HOME_SERVER_ENV}" | base64 | tr -d '\n')"
-          HOME_BACK_IMAGE_B64="$(printf '%s' "${HOME_BACK_IMAGE:-}" | base64 | tr -d '\n')"
-          HOME_DEPLOY_SHA_B64="$(printf '%s' "${HOME_DEPLOY_SHA:-}" | base64 | tr -d '\n')"
-          HOME_GHCR_USERNAME_B64="$(printf '%s' "${HOME_GHCR_USERNAME:-}" | base64 | tr -d '\n')"
-          HOME_GHCR_TOKEN_B64="$(printf '%s' "${HOME_GHCR_TOKEN:-}" | base64 | tr -d '\n')"
-          HOME_AI_SUMMARY_ENABLED_B64="$(printf '%s' "${HOME_AI_SUMMARY_ENABLED:-}" | base64 | tr -d '\n')"
-          HOME_AI_SUMMARY_GEMINI_API_KEY_B64="$(printf '%s' "${HOME_AI_SUMMARY_GEMINI_API_KEY:-}" | base64 | tr -d '\n')"
-          HOME_AI_SUMMARY_GEMINI_MODEL_B64="$(printf '%s' "${HOME_AI_SUMMARY_GEMINI_MODEL:-}" | base64 | tr -d '\n')"
+          LOCAL_ENV_FILE="${RUNNER_TEMP}/home-server.env"
+          LOCAL_REMOTE_VARS_FILE="${RUNNER_TEMP}/home-remote-vars.env"
+          printf '%s\n' "${HOME_SERVER_ENV}" > "${LOCAL_ENV_FILE}"
+          chmod 600 "${LOCAL_ENV_FILE}"
+          {
+            printf 'HOME_BACK_IMAGE=%q\n' "${HOME_BACK_IMAGE}"
+            printf 'HOME_DEPLOY_SHA=%q\n' "${HOME_DEPLOY_SHA}"
+            printf 'HOME_GHCR_USERNAME=%q\n' "${HOME_GHCR_USERNAME}"
+            printf 'HOME_GHCR_TOKEN=%q\n' "${HOME_GHCR_TOKEN}"
+            printf 'HOME_AI_SUMMARY_ENABLED=%q\n' "${HOME_AI_SUMMARY_ENABLED:-}"
+            printf 'HOME_AI_SUMMARY_GEMINI_API_KEY=%q\n' "${HOME_AI_SUMMARY_GEMINI_API_KEY:-}"
+            printf 'HOME_AI_SUMMARY_GEMINI_MODEL=%q\n' "${HOME_AI_SUMMARY_GEMINI_MODEL:-}"
+          } > "${LOCAL_REMOTE_VARS_FILE}"
+          chmod 600 "${LOCAL_REMOTE_VARS_FILE}"
+
+          REMOTE_TMP_DIR="$(ssh -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "$PORT" "$HOME_SSH_USER@$HOME_HOST" "umask 077 && mktemp -d /tmp/aquila-deploy.XXXXXX")"
+          scp -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -P "$PORT" \
+            "${LOCAL_ENV_FILE}" "${LOCAL_REMOTE_VARS_FILE}" \
+            "$HOME_SSH_USER@$HOME_HOST:${REMOTE_TMP_DIR}/"
 
           ssh -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "$PORT" "$HOME_SSH_USER@$HOME_HOST" \
-            "HOME_APP_DIR_B64='${HOME_APP_DIR_B64}' HOME_SERVER_ENV_B64='${HOME_SERVER_ENV_B64}' HOME_BACK_IMAGE_B64='${HOME_BACK_IMAGE_B64}' HOME_DEPLOY_SHA_B64='${HOME_DEPLOY_SHA_B64}' HOME_GHCR_USERNAME_B64='${HOME_GHCR_USERNAME_B64}' HOME_GHCR_TOKEN_B64='${HOME_GHCR_TOKEN_B64}' HOME_AI_SUMMARY_ENABLED_B64='${HOME_AI_SUMMARY_ENABLED_B64}' HOME_AI_SUMMARY_GEMINI_API_KEY_B64='${HOME_AI_SUMMARY_GEMINI_API_KEY_B64}' HOME_AI_SUMMARY_GEMINI_MODEL_B64='${HOME_AI_SUMMARY_GEMINI_MODEL_B64}' bash -s" <<'REMOTE'
+            "HOME_APP_DIR_B64='${HOME_APP_DIR_B64}' REMOTE_TMP_DIR='${REMOTE_TMP_DIR}' bash -s" <<'REMOTE'
           set -euo pipefail
 
           decode_b64() {
@@ -408,14 +421,37 @@ jobs:
           }
 
           HOME_APP_DIR="$(decode_b64 "${HOME_APP_DIR_B64:-}")"
-          HOME_SERVER_ENV="$(decode_b64 "${HOME_SERVER_ENV_B64:-}")"
-          HOME_BACK_IMAGE="$(decode_b64 "${HOME_BACK_IMAGE_B64:-}")"
-          HOME_DEPLOY_SHA="$(decode_b64 "${HOME_DEPLOY_SHA_B64:-}")"
-          HOME_GHCR_USERNAME="$(decode_b64 "${HOME_GHCR_USERNAME_B64:-}")"
-          HOME_GHCR_TOKEN="$(decode_b64 "${HOME_GHCR_TOKEN_B64:-}")"
-          HOME_AI_SUMMARY_ENABLED="$(decode_b64 "${HOME_AI_SUMMARY_ENABLED_B64:-}")"
-          HOME_AI_SUMMARY_GEMINI_API_KEY="$(decode_b64 "${HOME_AI_SUMMARY_GEMINI_API_KEY_B64:-}")"
-          HOME_AI_SUMMARY_GEMINI_MODEL="$(decode_b64 "${HOME_AI_SUMMARY_GEMINI_MODEL_B64:-}")"
+          REMOTE_ENV_FILE="${REMOTE_TMP_DIR}/home-server.env"
+          REMOTE_VARS_FILE="${REMOTE_TMP_DIR}/home-remote-vars.env"
+
+          DEPLOY_COMPLETED="false"
+          ROLLBACK_IN_PROGRESS="false"
+          ROLLBACK_RUNTIME_SPLIT_ENABLED="false"
+          BACKUP_DIR=""
+
+          rollback_from_backup_if_needed() {
+            return 0
+          }
+
+          cleanup_remote_tmp() {
+            if [ -n "${REMOTE_TMP_DIR:-}" ] && [ -d "${REMOTE_TMP_DIR}" ]; then
+              rm -rf "${REMOTE_TMP_DIR}" || true
+            fi
+          }
+
+          on_exit() {
+            local status="$?"
+            cleanup_remote_tmp
+            if [ "${status}" -ne 0 ]; then
+              rollback_from_backup_if_needed "unexpected_exit_status_${status}"
+            fi
+          }
+
+          trap on_exit EXIT
+
+          HOME_SERVER_ENV="$(cat "${REMOTE_ENV_FILE}")"
+          # shellcheck disable=SC1090
+          . "${REMOTE_VARS_FILE}"
           export HOME_SERVER_ENV
 
           upsert_env_key() {
@@ -482,11 +518,6 @@ jobs:
           }
 
           cd "${HOME_APP_DIR}"
-
-          DEPLOY_COMPLETED="false"
-          ROLLBACK_IN_PROGRESS="false"
-          ROLLBACK_RUNTIME_SPLIT_ENABLED="false"
-          BACKUP_DIR=""
 
           if [ -z "${HOME_DEPLOY_SHA:-}" ]; then
             echo "HOME_DEPLOY_SHA is empty. abort deploy." >&2
@@ -583,8 +614,6 @@ jobs:
               run_backup_rollback "${reason}"
             fi
           }
-
-          trap 'status=$?; if [ "${status}" -ne 0 ]; then rollback_from_backup_if_needed "unexpected_exit_status_${status}"; fi' EXIT
 
           ./deploy/homeserver/prune_external_backups.sh --dry-run
           ./deploy/homeserver/prune_external_backups.sh
@@ -712,21 +741,21 @@ jobs:
             local key="$1"
             local value="$2"
             if [ -z "${value}" ]; then
-              echo "required image env key is missing: ${key}" >&2
+              echo "required image value is missing: ${key}" >&2
               exit 1
             fi
-            if [[ "${value}" == *":latest"* ]]; then
+            if [[ "${value}" == *":latest" || "${value}" == *":latest@"* ]]; then
               echo "latest tag is not allowed for ${key}: ${value}" >&2
               exit 1
             fi
-            if [[ ! "${value}" =~ @sha256:[a-fA-F0-9]{64}$ ]]; then
-              echo "image must include sha256 digest for ${key}: ${value}" >&2
+            if [[ ! "${value}" =~ ^[^[:space:]@]+@sha256:[a-fA-F0-9]{64}$ ]]; then
+              echo "image must be pinned by sha256 digest for ${key}: ${value}" >&2
               exit 1
             fi
           }
 
           require_nonempty_env_key "CF_TUNNEL_TOKEN"
-          require_pinned_image_value "BACK_IMAGE" "${STAGED_BACK_IMAGE}"
+          require_digest_image_value "BACK_IMAGE" "${STAGED_BACK_IMAGE}"
           ensure_image_key_from_local_digest "CLOUDFLARED_IMAGE" "cloudflare/cloudflared:latest"
           ensure_image_key_from_local_digest "AUTOHEAL_IMAGE" "willfarrell/autoheal:1.2.0"
           ensure_image_key_from_local_digest "CADDY_IMAGE" "caddy:2.8-alpine"
@@ -760,9 +789,11 @@ jobs:
             exit 1
           fi
 
-          if [ -n "${HOME_GHCR_USERNAME:-}" ] && [ -n "${HOME_GHCR_TOKEN:-}" ]; then
-            echo "${HOME_GHCR_TOKEN}" | docker login ghcr.io -u "${HOME_GHCR_USERNAME}" --password-stdin
+          if [ -z "${HOME_GHCR_USERNAME:-}" ] || [ -z "${HOME_GHCR_TOKEN:-}" ]; then
+            echo "HOME_GHCR_USERNAME and HOME_GHCR_TOKEN are required for private GHCR deploy" >&2
+            exit 1
           fi
+          echo "${HOME_GHCR_TOKEN}" | docker login ghcr.io -u "${HOME_GHCR_USERNAME}" --password-stdin
 
           RUNTIME_SPLIT_ENABLED_VALUE="$(extract_env_value "RUNTIME_SPLIT_ENABLED")"
           RUNTIME_SPLIT_STAGE_VALUE="$(extract_env_value "RUNTIME_SPLIT_STAGE")"
@@ -1096,6 +1127,7 @@ jobs:
 
           rm -f deploy/homeserver/.external-minio-migration-stopped
           DEPLOY_COMPLETED="true"
+          cleanup_remote_tmp
           trap - EXIT
           REMOTE
 

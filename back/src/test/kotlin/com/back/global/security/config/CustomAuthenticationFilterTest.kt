@@ -29,6 +29,7 @@ import org.springframework.mock.web.MockFilterChain
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.mock.web.MockHttpServletResponse
 import org.springframework.security.core.context.SecurityContextHolder
+import org.springframework.stereotype.Component
 import tools.jackson.databind.ObjectMapper
 import java.lang.reflect.Modifier
 import java.time.Instant
@@ -54,6 +55,27 @@ class CustomAuthenticationFilterTest {
                 "ApiKeyAuthorityRefreshHandler",
                 "LegacyPayloadRecoveryHandler",
                 "RefreshTokenAuthenticationHandler",
+            )
+        assertThat(extractedBoundaryTypes)
+            .allSatisfy { boundaryType ->
+                assertThat(boundaryType.getAnnotation(Component::class.java)).isNotNull()
+            }
+
+        val filterConstructorTypes =
+            CustomAuthenticationFilter::class.java.constructors
+                .single()
+                .parameterTypes
+                .toList()
+
+        assertThat(filterConstructorTypes)
+            .contains(AccessTokenAuthenticationHandler::class.java, RefreshTokenAuthenticationHandler::class.java)
+            .doesNotContain(
+                ActorApplicationService::class.java,
+                MemberSessionUseCase::class.java,
+                AuthCookieService::class.java,
+                AuthIpSecurityVerifier::class.java,
+                SecurityContextAuthenticationWriter::class.java,
+                Rq::class.java,
             )
 
         val privateMethodNames =
@@ -526,50 +548,57 @@ class CustomAuthenticationFilterTest {
                 memberSessionUseCase,
             )
         private val securityContextAuthenticationWriter = SecurityContextAuthenticationWriter()
-
-        fun authenticationFilter(profile: String = "test"): CustomAuthenticationFilter =
-            CustomAuthenticationFilter(
+        private val apiKeyAuthorityRefreshHandler =
+            ApiKeyAuthorityRefreshHandler(
                 actorApplicationService = actorApplicationService,
                 memberSessionUseCase = memberSessionUseCase,
                 authCookieService = authCookieService,
-                authTokenExtractor = AuthTokenExtractor(rq),
                 authIpSecurityVerifier = authIpSecurityVerifier,
                 securityContextAuthenticationWriter = securityContextAuthenticationWriter,
-                clientIpResolver = clientIpResolver,
-                objectMapper = ObjectMapper(),
-                publicApiRequestMatcher = publicApiRequestMatcher,
-                apiCorsPolicy = apiCorsPolicy,
-                environment = MockEnvironment().apply { setActiveProfiles(profile) },
+                memberSessionAuthenticationResolver = memberSessionAuthenticationResolver,
                 rq = rq,
-                freshLookupGraceSeconds = 15,
             )
-
-        fun accessTokenAuthenticationHandler(): AccessTokenAuthenticationHandler =
+        private val legacyPayloadRecoveryHandler =
+            LegacyPayloadRecoveryHandler(
+                actorApplicationService = actorApplicationService,
+                memberSessionUseCase = memberSessionUseCase,
+                authCookieService = authCookieService,
+                securityContextAuthenticationWriter = securityContextAuthenticationWriter,
+                rq = rq,
+            )
+        private val accessTokenAuthenticationHandler =
             AccessTokenAuthenticationHandler(
                 actorApplicationService = actorApplicationService,
                 memberSessionUseCase = memberSessionUseCase,
                 authIpSecurityVerifier = authIpSecurityVerifier,
                 securityContextAuthenticationWriter = securityContextAuthenticationWriter,
                 memberSessionAuthenticationResolver = memberSessionAuthenticationResolver,
-                apiKeyAuthorityRefreshHandler =
-                    ApiKeyAuthorityRefreshHandler(
-                        actorApplicationService = actorApplicationService,
-                        memberSessionUseCase = memberSessionUseCase,
-                        authCookieService = authCookieService,
-                        authIpSecurityVerifier = authIpSecurityVerifier,
-                        securityContextAuthenticationWriter = securityContextAuthenticationWriter,
-                        memberSessionAuthenticationResolver = memberSessionAuthenticationResolver,
-                        rq = rq,
-                    ),
-                legacyPayloadRecoveryHandler =
-                    LegacyPayloadRecoveryHandler(
-                        actorApplicationService = actorApplicationService,
-                        memberSessionUseCase = memberSessionUseCase,
-                        authCookieService = authCookieService,
-                        securityContextAuthenticationWriter = securityContextAuthenticationWriter,
-                        rq = rq,
-                    ),
+                apiKeyAuthorityRefreshHandler = apiKeyAuthorityRefreshHandler,
+                legacyPayloadRecoveryHandler = legacyPayloadRecoveryHandler,
             )
+        private val refreshTokenAuthenticationHandler =
+            RefreshTokenAuthenticationHandler(
+                actorApplicationService = actorApplicationService,
+                memberSessionUseCase = memberSessionUseCase,
+                authCookieService = authCookieService,
+                authIpSecurityVerifier = authIpSecurityVerifier,
+                securityContextAuthenticationWriter = securityContextAuthenticationWriter,
+                rq = rq,
+            )
+
+        fun authenticationFilter(profile: String = "test"): CustomAuthenticationFilter =
+            CustomAuthenticationFilter(
+                authTokenExtractor = AuthTokenExtractor(rq),
+                accessTokenAuthenticationHandler = accessTokenAuthenticationHandler,
+                refreshTokenAuthenticationHandler = refreshTokenAuthenticationHandler,
+                clientIpResolver = clientIpResolver,
+                objectMapper = ObjectMapper(),
+                publicApiRequestMatcher = publicApiRequestMatcher,
+                apiCorsPolicy = apiCorsPolicy,
+                environment = MockEnvironment().apply { setActiveProfiles(profile) },
+            )
+
+        fun accessTokenAuthenticationHandler(): AccessTokenAuthenticationHandler = accessTokenAuthenticationHandler
 
         fun givenEmptyAuthorizationHeader() {
             given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("")

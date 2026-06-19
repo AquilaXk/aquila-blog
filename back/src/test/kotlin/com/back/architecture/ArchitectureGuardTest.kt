@@ -28,6 +28,11 @@ class ArchitectureGuardTest {
                 """(?:\s+as\s+([A-Za-z][A-Za-z0-9_]*))?\s*$""",
             RegexOption.MULTILINE,
         )
+    private val persistenceModelWildcardImportRegex =
+        Regex(
+            """^import\s+(com\.back\.[A-Za-z0-9_.]+\.model(?:\.[A-Za-z0-9_]+)*)\.\*\s*$""",
+            RegexOption.MULTILINE,
+        )
     private val persistenceModelAliasTargetRegex =
         Regex("""^com\.back\.[A-Za-z0-9_.]+\.model(?:\.[A-Za-z0-9_]+)*\.[A-Za-z][A-Za-z0-9_]*$""")
     private val typeAliasRegex =
@@ -94,6 +99,11 @@ class ArchitectureGuardTest {
 
                     importedName to targetFqcn
                 }
+        val wildcardModelImports =
+            persistenceModelWildcardImportRegex
+                .findAll(source)
+                .map { match -> match.groupValues[1] }
+                .toList()
 
         return typeAliasRegex
             .findAll(source)
@@ -103,6 +113,8 @@ class ArchitectureGuardTest {
                     when {
                         persistenceModelAliasTargetRegex.matches(aliasTarget) -> aliasTarget
                         importedModelTargets.containsKey(aliasTarget) -> importedModelTargets.getValue(aliasTarget)
+                        wildcardModelImports.isNotEmpty() && !aliasTarget.contains(".") ->
+                            wildcardModelImports.joinToString("|") { importPath -> "$importPath.$aliasTarget" }
                         else -> return@mapNotNull null
                     }
 
@@ -391,7 +403,7 @@ class ArchitectureGuardTest {
     }
 
     @Test
-    fun `persistence model typealias scanner는 import와 multiline alias 우회를 수집한다`() {
+    fun `persistence model typealias scanner는 import wildcard multiline alias 우회를 수집한다`() {
         val aliases =
             persistenceModelAliasesIn(
                 path = mainSourceRoot.resolve("example/domain/PersistenceModelAliases.kt"),
@@ -401,9 +413,11 @@ class ArchitectureGuardTest {
                     |
                     |import com.back.boundedContexts.post.model.Post
                     |import com.back.boundedContexts.post.model.PostAttr as ImportedPostAttr
+                    |import com.back.boundedContexts.post.model.*
                     |
                     |typealias ImportedPost = Post
                     |typealias ImportedPostAttrAlias = ImportedPostAttr
+                    |typealias WildcardPostComment = PostComment
                     |typealias MultilinePost =
                     |    com.back.boundedContexts.post.model.PostLike
                     """.trimMargin(),
@@ -420,6 +434,11 @@ class ArchitectureGuardTest {
                     "example/domain/PersistenceModelAliases.kt",
                     "ImportedPostAttrAlias",
                     "com.back.boundedContexts.post.model.PostAttr",
+                ),
+                PersistenceModelAlias(
+                    "example/domain/PersistenceModelAliases.kt",
+                    "WildcardPostComment",
+                    "com.back.boundedContexts.post.model.PostComment",
                 ),
                 PersistenceModelAlias(
                     "example/domain/PersistenceModelAliases.kt",

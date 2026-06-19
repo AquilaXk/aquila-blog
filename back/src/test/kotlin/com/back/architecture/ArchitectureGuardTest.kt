@@ -54,7 +54,7 @@ class ArchitectureGuardTest {
     private val aliasTargetTokenRegex =
         Regex("""[A-Za-z][A-Za-z0-9_.]*""")
     private val typeAliasRegex =
-        Regex("""\btypealias\s+([A-Za-z][A-Za-z0-9_]*)\s*=\s*([^\r\n]+(?:\r?\n[ \t]+[^\r\n]+)*)""")
+        Regex("""\btypealias\s+([A-Za-z][A-Za-z0-9_]*)(?:\s*<[^=\r\n]+>)?\s*=\s*([^\r\n]+(?:\r?\n[ \t]+[^\r\n]+)*)""")
 
     private data class PersistenceModelAlias(
         val sourcePath: String,
@@ -650,6 +650,7 @@ class ArchitectureGuardTest {
                     |typealias WildcardPostComment = PostComment
                     |typealias LocalId = Long
                     |typealias ImportedPostList = List<Post>
+                    |typealias ImportedPostMap<T> = Map<T, Post>
                     |typealias ImportedPostHandler = (Post) -> ImportedPostAttr
                     |typealias MultilinePost =
                     |    com.back.boundedContexts.post.model.PostLike
@@ -676,6 +677,11 @@ class ArchitectureGuardTest {
                 PersistenceModelAlias(
                     "example/domain/PersistenceModelAliases.kt",
                     "ImportedPostList",
+                    "com.back.boundedContexts.post.model.Post",
+                ),
+                PersistenceModelAlias(
+                    "example/domain/PersistenceModelAliases.kt",
+                    "ImportedPostMap",
                     "com.back.boundedContexts.post.model.Post",
                 ),
                 PersistenceModelAlias(

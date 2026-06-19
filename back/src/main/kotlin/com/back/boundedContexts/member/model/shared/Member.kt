@@ -126,10 +126,10 @@ class Member(
     override val name: String
         get() = nickname
 
-    val isAdmin: Boolean
+    open val isAdmin: Boolean
         get() = admin
 
-    fun grantAdmin() {
+    open fun grantAdmin() {
         admin = true
     }
 

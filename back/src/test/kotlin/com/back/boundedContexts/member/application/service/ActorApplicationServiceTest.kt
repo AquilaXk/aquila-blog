@@ -120,6 +120,25 @@ class ActorApplicationServiceTest {
         assertThat(member.profileImgUrlOrDefault).isEqualTo("https://example.com/proxy-user1.png")
     }
 
+    @Test
+    fun `MemberProxy 에서 관리자 권한을 부여하면 실제 회원에도 반영된다`() {
+        val securityUser =
+            SecurityUser(
+                user1.id,
+                user1.username,
+                user1.password ?: "",
+                user1.nickname,
+                listOf(SimpleGrantedAuthority("ROLE_USER")),
+            )
+
+        val member = actorApplicationService.memberOf(securityUser)
+
+        member.grantAdmin()
+
+        assertThat(member.isAdmin).isTrue()
+        assertThat(user1.isAdmin).isTrue()
+    }
+
     private class FakeMemberRepository(
         private val member: Member,
     ) : MemberRepositoryPort {

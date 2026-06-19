@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 
 /**
@@ -26,19 +27,19 @@ class RevalidateEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
         fallbackExecution = true,
     )
-    fun handle(event: PostWrittenEvent) = enqueueRevalidatePaths(event.aggregateType, event.aggregateId)
+    fun handle(event: PostWrittenEvent) = enqueueRevalidatePaths(event.uid, event.aggregateType, event.aggregateId)
 
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
         fallbackExecution = true,
     )
-    fun handle(event: PostModifiedEvent) = enqueueRevalidatePaths(event.aggregateType, event.aggregateId)
+    fun handle(event: PostModifiedEvent) = enqueueRevalidatePaths(event.uid, event.aggregateType, event.aggregateId)
 
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
         fallbackExecution = true,
     )
-    fun handle(event: PostDeletedEvent) = enqueueRevalidatePaths(event.aggregateType, event.aggregateId)
+    fun handle(event: PostDeletedEvent) = enqueueRevalidatePaths(event.uid, event.aggregateType, event.aggregateId)
 
     @TaskHandler
     fun handle(payload: RevalidateHomePayload) {
@@ -50,6 +51,7 @@ class RevalidateEventListener(
      * 어댑터 계층에서 외부 시스템 연동 오류를 캡슐화해 상위 계층 영향을 최소화합니다.
      */
     private fun enqueueRevalidatePaths(
+        sourceEventUid: UUID,
         aggregateType: String,
         aggregateId: Long,
     ) {
@@ -60,11 +62,12 @@ class RevalidateEventListener(
                 "/sitemap.xml",
             )
 
+        val failures = mutableListOf<Throwable>()
         pathsToRevalidate.forEach { path ->
             runCatching {
                 taskFacade.addToQueue(
                     RevalidateHomePayload(
-                        uid = UUID.randomUUID(),
+                        uid = revalidateTaskUid(sourceEventUid, path),
                         aggregateType = aggregateType,
                         aggregateId = aggregateId,
                         path = path,
@@ -78,8 +81,25 @@ class RevalidateEventListener(
                     path,
                     exception,
                 )
+                failures += exception
             }
         }
+        if (failures.isNotEmpty()) throwEnqueueFailure(failures)
+    }
+
+    private fun revalidateTaskUid(
+        sourceEventUid: UUID,
+        path: String,
+    ): UUID =
+        UUID.nameUUIDFromBytes(
+            "post-revalidate:$sourceEventUid:$path".toByteArray(StandardCharsets.UTF_8),
+        )
+
+    private fun throwEnqueueFailure(failures: List<Throwable>) {
+        val first = failures.first()
+        failures.drop(1).forEach(first::addSuppressed)
+        if (first is RuntimeException) throw first
+        throw IllegalStateException("Revalidate task enqueue failed", first)
     }
 
     companion object {

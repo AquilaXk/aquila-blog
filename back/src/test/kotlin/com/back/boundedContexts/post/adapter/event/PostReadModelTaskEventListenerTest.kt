@@ -18,10 +18,12 @@ import com.back.global.task.application.port.output.TaskQueueRepositoryPort
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.catchThrowable
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
 import org.springframework.data.domain.Pageable
+import org.springframework.mock.env.MockEnvironment
 import tools.jackson.databind.ObjectMapper
 import java.time.Instant
 import java.util.UUID
@@ -33,7 +35,7 @@ class PostReadModelTaskEventListenerTest {
         val repository = RecordingTaskQueueRepository()
         val listener =
             createListener(
-                taskFacade = TaskFacade(repository, createTaskHandlerRegistry(), ObjectMapper(), inlineWhenNotProd = false),
+                taskFacade = createTaskFacade(repository),
             )
         val event = postWrittenEvent(sourceEventUid = UUID.randomUUID())
 
@@ -54,6 +56,26 @@ class PostReadModelTaskEventListenerTest {
         assertThat(firstDelivery.map { it.uid }.toSet()).hasSize(3)
     }
 
+    @Test
+    @DisplayName("read-model task enqueue 실패는 source task retry를 위해 전파한다")
+    fun `enqueue failure propagates for source task retry`() {
+        val repository = RecordingTaskQueueRepository(failOnSave = true)
+        val listener =
+            createListener(
+                taskFacade = createTaskFacade(repository),
+            )
+
+        val thrown =
+            catchThrowable {
+                listener.handle(postWrittenEvent(sourceEventUid = UUID.randomUUID()))
+            }
+
+        assertThat(thrown)
+            .isInstanceOf(RuntimeException::class.java)
+            .hasMessage("enqueue down")
+        assertThat(thrown.suppressed).hasSize(2)
+    }
+
     private fun createListener(taskFacade: TaskFacade): PostReadModelTaskEventListener =
         PostReadModelTaskEventListener(
             taskFacade = taskFacade,
@@ -66,6 +88,19 @@ class PostReadModelTaskEventListenerTest {
             searchEngineMirrorEnabled = true,
             prewarmEnabled = true,
         )
+
+    private fun createTaskFacade(repository: RecordingTaskQueueRepository): TaskFacade {
+        val objectMapper = ObjectMapper()
+        val environment = MockEnvironment()
+        environment.setActiveProfiles("test")
+        return TaskFacade(
+            taskRepository = repository,
+            taskHandlerRegistry = createTaskHandlerRegistry(),
+            objectMapper = objectMapper,
+            environment = environment,
+            inlineWhenNotProd = false,
+        )
+    }
 
     private fun createTaskHandlerRegistry(): TaskHandlerRegistry {
         val registry = TaskHandlerRegistry()
@@ -130,10 +165,13 @@ class PostReadModelTaskEventListenerTest {
             afterTags = listOf("kotlin", "spring"),
         )
 
-    private class RecordingTaskQueueRepository : TaskQueueRepositoryPort {
+    private class RecordingTaskQueueRepository(
+        private val failOnSave: Boolean = false,
+    ) : TaskQueueRepositoryPort {
         val savedTasks = mutableListOf<Task>()
 
         override fun save(task: Task): Task {
+            if (failOnSave) throw RuntimeException("enqueue down")
             savedTasks += task
             return task
         }

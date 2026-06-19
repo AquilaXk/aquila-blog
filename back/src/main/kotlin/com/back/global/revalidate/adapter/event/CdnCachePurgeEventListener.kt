@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 
 /**
@@ -28,6 +29,7 @@ class CdnCachePurgeEventListener(
     fun handle(event: PostWrittenEvent) =
         enqueue(
             aggregateType = event.aggregateType,
+            sourceEventUid = event.uid,
             postId = event.aggregateId,
             beforeTags = event.beforeTags,
             afterTags = event.afterTags,
@@ -40,6 +42,7 @@ class CdnCachePurgeEventListener(
     fun handle(event: PostModifiedEvent) =
         enqueue(
             aggregateType = event.aggregateType,
+            sourceEventUid = event.uid,
             postId = event.aggregateId,
             beforeTags = event.beforeTags,
             afterTags = event.afterTags,
@@ -52,6 +55,7 @@ class CdnCachePurgeEventListener(
     fun handle(event: PostDeletedEvent) =
         enqueue(
             aggregateType = event.aggregateType,
+            sourceEventUid = event.uid,
             postId = event.aggregateId,
             beforeTags = event.beforeTags,
             afterTags = event.afterTags,
@@ -68,6 +72,7 @@ class CdnCachePurgeEventListener(
 
     private fun enqueue(
         aggregateType: String,
+        sourceEventUid: UUID,
         postId: Long,
         beforeTags: List<String>,
         afterTags: List<String>,
@@ -77,7 +82,7 @@ class CdnCachePurgeEventListener(
         runCatching {
             taskFacade.addToQueue(
                 PurgePostReadCachesPayload(
-                    uid = UUID.randomUUID(),
+                    uid = cachePurgeTaskUid(sourceEventUid),
                     aggregateType = aggregateType,
                     aggregateId = postId,
                     postId = postId,
@@ -92,8 +97,14 @@ class CdnCachePurgeEventListener(
                 postId,
                 exception,
             )
+            throw exception
         }
     }
+
+    private fun cachePurgeTaskUid(sourceEventUid: UUID): UUID =
+        UUID.nameUUIDFromBytes(
+            "post-cdn-cache-purge:$sourceEventUid".toByteArray(StandardCharsets.UTF_8),
+        )
 
     companion object {
         private val log = LoggerFactory.getLogger(CdnCachePurgeEventListener::class.java)

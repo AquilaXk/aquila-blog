@@ -21,7 +21,9 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.TransactionStatus
 import org.springframework.transaction.support.SimpleTransactionStatus
+import java.time.Clock
 import java.time.Instant
+import java.time.ZoneOffset
 
 class UploadedFileRetentionServiceConflictRecoveryTest {
     private val postRepository = mock(PostRepositoryPort::class.java)
@@ -29,6 +31,7 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
     private val postImageStoragePort = mock(PostImageStoragePort::class.java)
     private val prodSequenceGuardService = mock(ProdSequenceGuardService::class.java)
     private val transactionManager = NoopTransactionManager()
+    private val clock = Clock.fixed(Instant.parse("2026-06-19T00:00:00Z"), ZoneOffset.UTC)
 
     @Test
     fun `registerTempUpload은 sequence drift 충돌 시 같은 요청에서 보정 후 재시도한다`() {
@@ -97,17 +100,53 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         verify(prodSequenceGuardService).repairUploadedFileSequence()
     }
 
-    private fun newService(repository: UploadedFileRepositoryPort): UploadedFileRetentionService =
-        UploadedFileRetentionService(
-            uploadedFileRepository = repository,
-            postRepository = postRepository,
-            memberAttrRepository = memberAttrRepository,
-            postImageStoragePort = postImageStoragePort,
-            storageProperties = PostImageStorageProperties(),
-            retentionProperties = UploadedFileRetentionProperties(),
-            transactionManager = transactionManager,
-            prodSequenceGuardService = prodSequenceGuardService,
+    private fun newService(repository: UploadedFileRepositoryPort): UploadedFileRetentionService {
+        val registrationService =
+            UploadedFileRegistrationService(
+                uploadedFileRepository = repository,
+                storageProperties = PostImageStorageProperties(),
+                retentionProperties = UploadedFileRetentionProperties(),
+                transactionManager = transactionManager,
+                clock = clock,
+                prodSequenceGuardService = prodSequenceGuardService,
+            )
+        val postAttachmentRetentionService =
+            PostAttachmentRetentionService(
+                uploadedFileRepository = repository,
+                storageProperties = PostImageStorageProperties(),
+                retentionProperties = UploadedFileRetentionProperties(),
+                clock = clock,
+            )
+        val profileImageRetentionService =
+            ProfileImageRetentionService(
+                uploadedFileRepository = repository,
+                postImageStoragePort = postImageStoragePort,
+                storageProperties = PostImageStorageProperties(),
+                retentionProperties = UploadedFileRetentionProperties(),
+                transactionManager = transactionManager,
+                clock = clock,
+            )
+        val referenceQueryService =
+            UploadedFileReferenceQueryService(
+                postRepository = postRepository,
+                memberAttrRepository = memberAttrRepository,
+            )
+        val purgeService =
+            UploadedFilePurgeService(
+                uploadedFileRepository = repository,
+                postImageStoragePort = postImageStoragePort,
+                retentionProperties = UploadedFileRetentionProperties(),
+                referenceQueryService = referenceQueryService,
+                transactionManager = transactionManager,
+                clock = clock,
+            )
+        return UploadedFileRetentionService(
+            registrationService = registrationService,
+            postAttachmentRetentionService = postAttachmentRetentionService,
+            profileImageRetentionService = profileImageRetentionService,
+            purgeService = purgeService,
         )
+    }
 
     private class SequenceDriftRecoveringRepository(
         private val firstConflict: DataIntegrityViolationException,

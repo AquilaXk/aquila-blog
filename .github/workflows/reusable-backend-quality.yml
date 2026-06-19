@@ -156,7 +156,7 @@ jobs:
           exit 1
 
       - name: Test release planner guards
-        run: node --test tools/test/release-plan.test.mjs tools/test/flyway-deploy-safety.test.mjs
+        run: node --test tools/test/release-plan.test.mjs tools/test/flyway-deploy-safety.test.mjs tools/test/comment-jacoco-summary.test.mjs
 
       - name: Guard forbidden AI docs and tool metadata
         run: bash tools/guards/check-forbidden-tracked-files.sh
@@ -348,6 +348,7 @@ jobs:
             back/build/reports/jacoco/pr/jacocoPrReport.xml \
             back/config/jacoco-coverage-baseline-excludes.txt \
             --changed-files "${changed_files}" \
+            --full-report back/build/reports/jacoco/pr-full/jacocoPrFullCoverageReport.xml \
             > "${summary_file}"
 
           body="$(cat "${summary_file}")"
@@ -377,6 +378,8 @@ jobs:
           path: |
             back/build/reports/jacoco/pr/jacocoPrReport.xml
             back/build/reports/jacoco/pr/html
+            back/build/reports/jacoco/pr-full/jacocoPrFullCoverageReport.xml
+            back/build/reports/jacoco/pr-full/html
           if-no-files-found: error
           retention-days: 3
 
@@ -390,4 +393,5 @@ jobs:
             back/build/test-results/test
             back/build/reports/ktlint
             back/build/reports/jacoco/pr
+            back/build/reports/jacoco/pr-full
           retention-days: 3

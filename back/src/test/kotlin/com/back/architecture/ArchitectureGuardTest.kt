@@ -47,6 +47,8 @@ class ArchitectureGuardTest {
             """^import\s+(com\.back\.[A-Za-z0-9_.]+\.domain(?:\.[A-Za-z0-9_]+)*)\.\*\s*$""",
             RegexOption.MULTILINE,
         )
+    private val persistenceBridgeAliasTargetRegex =
+        Regex("""^(com\.back\.[A-Za-z0-9_.]+\.domain(?:\.[A-Za-z0-9_]+)*)\.([A-Za-z][A-Za-z0-9_]*)$""")
     private val persistenceModelAliasTargetRegex =
         Regex("""^com\.back\.[A-Za-z0-9_.]+\.model(?:\.[A-Za-z0-9_]+)*\.[A-Za-z][A-Za-z0-9_]*$""")
     private val typeAliasRegex =
@@ -142,6 +144,23 @@ class ArchitectureGuardTest {
             }
         }
 
+    private fun bridgeAliasTargetFqcn(
+        aliasTarget: String,
+        currentPackageName: String?,
+        localBridgeTargets: Map<String, String>,
+        excludingPath: Path,
+    ): String? {
+        val match = persistenceBridgeAliasTargetRegex.matchEntire(aliasTarget) ?: return null
+        val packageName = match.groupValues[1]
+        val aliasName = match.groupValues[2]
+
+        if (packageName == currentPackageName) {
+            return localBridgeTargets[aliasName]
+        }
+
+        return persistenceBridgeTargetsInPackage(packageName, excludingPath)[aliasName]
+    }
+
     private fun persistenceBridgeTargetsInPackage(
         packageName: String,
         excludingPath: Path? = null,
@@ -196,8 +215,9 @@ class ArchitectureGuardTest {
                 .findAll(source)
                 .map { match -> match.groupValues[1] }
                 .toList()
+        val currentPackageName = sourcePackageName(source)
         val externalSamePackageBridgeTargets =
-            sourcePackageName(source)
+            currentPackageName
                 ?.let { packageName -> persistenceBridgeTargetsInPackage(packageName, excludingPath = path) }
                 .orEmpty()
         val sourceAliasDeclarations =
@@ -219,6 +239,9 @@ class ArchitectureGuardTest {
                         importedBridgeTargets.containsKey(aliasTarget) -> importedBridgeTargets.getValue(aliasTarget)
                         externalSamePackageBridgeTargets.containsKey(aliasTarget) ->
                             externalSamePackageBridgeTargets.getValue(aliasTarget)
+                        bridgeAliasTargetFqcn(aliasTarget, currentPackageName, sourceBridgeTargets, path) != null ->
+                            bridgeAliasTargetFqcn(aliasTarget, currentPackageName, sourceBridgeTargets, path)
+                                ?: return@forEach
                         sourceBridgeTargets.containsKey(aliasTarget) -> sourceBridgeTargets.getValue(aliasTarget)
                         wildcardBridgeImports.isNotEmpty() && !aliasTarget.contains(".") -> {
                             val bridgeTargets =
@@ -259,6 +282,9 @@ class ArchitectureGuardTest {
                         importedModelTargets.containsKey(aliasTarget) -> importedModelTargets.getValue(aliasTarget)
                         importedBridgeTargets.containsKey(aliasTarget) -> importedBridgeTargets.getValue(aliasTarget)
                         samePackageBridgeTargets.containsKey(aliasTarget) -> samePackageBridgeTargets.getValue(aliasTarget)
+                        bridgeAliasTargetFqcn(aliasTarget, currentPackageName, samePackageBridgeTargets, path) != null ->
+                            bridgeAliasTargetFqcn(aliasTarget, currentPackageName, samePackageBridgeTargets, path)
+                                ?: return@mapNotNull null
                         wildcardBridgeImports.isNotEmpty() && !aliasTarget.contains(".") -> {
                             val bridgeTargets =
                                 wildcardBridgeImports.mapNotNull { importPath ->
@@ -623,6 +649,7 @@ class ArchitectureGuardTest {
                     |import com.back.boundedContexts.post.domain.*
                     |
                     |typealias Article = DomainPost
+                    |typealias FullyQualifiedArticle = com.back.boundedContexts.post.domain.Post
                     |typealias BridgePostAttr = PostAttr
                     """.trimMargin(),
             )
@@ -632,6 +659,11 @@ class ArchitectureGuardTest {
                 PersistenceModelAlias(
                     "example/domain/PersistenceModelAliases.kt",
                     "Article",
+                    "com.back.boundedContexts.post.model.Post",
+                ),
+                PersistenceModelAlias(
+                    "example/domain/PersistenceModelAliases.kt",
+                    "FullyQualifiedArticle",
                     "com.back.boundedContexts.post.model.Post",
                 ),
                 PersistenceModelAlias(

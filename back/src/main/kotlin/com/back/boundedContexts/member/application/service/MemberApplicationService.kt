@@ -1,14 +1,9 @@
 package com.back.boundedContexts.member.application.service
 
 import com.back.boundedContexts.member.application.event.MemberPublicProfileChangedEvent
-import com.back.boundedContexts.member.application.port.output.MemberAttrRepositoryPort
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.member.domain.shared.memberMixin.BLOG_DESIGN
-import com.back.boundedContexts.member.domain.shared.memberMixin.LEGACY_BLOG_SCHEME
-import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
-import com.back.boundedContexts.member.domain.shared.memberMixin.normalizeMemberProfileWorkspaceContent
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.storage.application.UploadedFileRetentionService
@@ -29,8 +24,8 @@ import java.util.Optional
 @Service
 class MemberApplicationService(
     private val memberRepository: MemberRepositoryPort,
-    private val memberAttrRepository: MemberAttrRepositoryPort,
     private val memberProfileHydrator: MemberProfileHydrator,
+    private val memberProfilePersistenceService: MemberProfilePersistenceService,
     private val passwordEncoder: PasswordEncoder,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
     private val applicationEventPublisher: ApplicationEventPublisher,
@@ -94,7 +89,7 @@ class MemberApplicationService(
         memberProfileHydrator.hydrate(member)
         profileImgUrl?.let {
             member.profileImgUrl = it
-            saveProfileImgUrlAttr(member)
+            memberProfilePersistenceService.saveProfileImage(member)
             uploadedFileRetentionService.syncProfileImage(member.id, null, member.profileImgUrl)
         }
 
@@ -177,14 +172,14 @@ class MemberApplicationService(
         profileImgUrl: String?,
     ) {
         memberProfileHydrator.hydrate(member)
-        ensureProfileWorkspaceSnapshotsInitialized(member)
+        memberProfilePersistenceService.ensureWorkspaceSnapshotsInitialized(member)
         val previousNickname = member.nickname
         val previousProfileImgUrl = member.profileImgUrl
         val publishedProfileImgUrl = member.getProfileWorkspacePublishedContent().profileImageUrl
         member.modify(nickname, profileImgUrl)
         if (profileImgUrl != null) {
-            saveProfileImgUrlAttr(member)
-            syncDraftWorkspaceFromLegacy(member)
+            memberProfilePersistenceService.saveProfileImage(member)
+            memberProfilePersistenceService.syncDraftWorkspaceFromLegacy(member)
             uploadedFileRetentionService.syncProfileImage(
                 member.id,
                 previousProfileImgUrl.takeUnless { it == publishedProfileImgUrl },
@@ -211,58 +206,11 @@ class MemberApplicationService(
     @Transactional
     fun modifyProfileCard(
         member: Member,
-        role: String,
-        bio: String,
-        aboutRole: String?,
-        aboutBio: String?,
-        aboutDetails: String?,
-        blogTitle: String,
-        homeIntroTitle: String,
-        homeIntroDescription: String,
-        blogDesign: String,
-        legacyBlogScheme: String,
-        serviceLinks: List<MemberProfileLinkItem>,
-        contactLinks: List<MemberProfileLinkItem>,
+        command: UpdateProfileCardCommand,
     ) {
         memberProfileHydrator.hydrate(member)
-        ensureProfileWorkspaceSnapshotsInitialized(member)
-        member.profileRole = role
-        member.profileBio = bio
-        if (aboutRole != null) {
-            member.aboutRole = aboutRole
-        }
-        if (aboutBio != null) {
-            member.aboutBio = aboutBio
-        }
-        if (aboutDetails != null) {
-            member.aboutDetails = aboutDetails
-        }
-        member.blogTitle = blogTitle
-        member.homeIntroTitle = homeIntroTitle
-        member.homeIntroDescription = homeIntroDescription
-        member.blogDesign = blogDesign
-        member.legacyBlogScheme = legacyBlogScheme
-        member.serviceLinks = serviceLinks
-        member.contactLinks = contactLinks
-        saveProfileRoleAttr(member)
-        saveProfileBioAttr(member)
-        if (aboutRole != null) {
-            saveAboutRoleAttr(member)
-        }
-        if (aboutBio != null) {
-            saveAboutBioAttr(member)
-        }
-        if (aboutDetails != null) {
-            saveAboutDetailsAttr(member)
-        }
-        saveBlogTitleAttr(member)
-        saveHomeIntroTitleAttr(member)
-        saveHomeIntroDescriptionAttr(member)
-        saveBlogDesignAttr(member)
-        saveLegacyBlogSchemeAttr(member)
-        saveServiceLinksAttr(member)
-        saveContactLinksAttr(member)
-        syncDraftWorkspaceFromLegacy(member)
+        memberProfilePersistenceService.ensureWorkspaceSnapshotsInitialized(member)
+        memberProfilePersistenceService.updateProfileCard(member, command)
     }
 
     @Transactional
@@ -271,31 +219,13 @@ class MemberApplicationService(
         content: MemberProfileWorkspaceContent,
     ) {
         memberProfileHydrator.hydrate(member)
-        ensureProfileWorkspaceSnapshotsInitialized(member)
-        val normalizedContent = normalizeMemberProfileWorkspaceContent(content)
-        val previousProfileImgUrl = member.profileImgUrl
-        val publishedProfileImgUrl = member.getProfileWorkspacePublishedContent().profileImageUrl
-        member.applyProfileWorkspaceContent(normalizedContent)
-        saveProfileImgUrlAttr(member)
-        saveProfileRoleAttr(member)
-        saveProfileBioAttr(member)
-        saveAboutRoleAttr(member)
-        saveAboutBioAttr(member)
-        saveAboutDetailsAttr(member)
-        saveBlogTitleAttr(member)
-        saveHomeIntroTitleAttr(member)
-        saveHomeIntroDescriptionAttr(member)
-        saveBlogDesignAttr(member)
-        saveLegacyBlogSchemeAttr(member)
-        saveServiceLinksAttr(member)
-        saveContactLinksAttr(member)
-        member.setProfileWorkspaceDraftContent(normalizedContent)
-        saveProfileWorkspaceDraftAttr(member)
-        if (previousProfileImgUrl != member.profileImgUrl) {
+        memberProfilePersistenceService.ensureWorkspaceSnapshotsInitialized(member)
+        val imageSyncRequest = memberProfilePersistenceService.saveWorkspaceDraft(member, content)
+        if (imageSyncRequest != null) {
             uploadedFileRetentionService.syncProfileImage(
                 member.id,
-                previousProfileImgUrl.takeUnless { it == publishedProfileImgUrl },
-                member.profileImgUrl,
+                imageSyncRequest.previousProfileImgUrl,
+                imageSyncRequest.currentProfileImgUrl,
             )
         }
     }
@@ -303,16 +233,13 @@ class MemberApplicationService(
     @Transactional
     fun publishProfileWorkspace(member: Member) {
         memberProfileHydrator.hydrate(member)
-        ensureProfileWorkspaceSnapshotsInitialized(member)
-        val previousPublished = member.getProfileWorkspacePublishedContent()
-        val draft = member.getProfileWorkspaceDraftContent()
-        member.setProfileWorkspacePublishedContent(draft)
-        saveProfileWorkspacePublishedAttr(member)
-        if (previousPublished.profileImageUrl != draft.profileImageUrl) {
+        memberProfilePersistenceService.ensureWorkspaceSnapshotsInitialized(member)
+        val imageSyncRequest = memberProfilePersistenceService.publishWorkspace(member)
+        if (imageSyncRequest != null) {
             uploadedFileRetentionService.syncProfileImage(
                 member.id,
-                previousPublished.profileImageUrl,
-                draft.profileImageUrl,
+                imageSyncRequest.previousProfileImgUrl,
+                imageSyncRequest.currentProfileImgUrl,
             )
         }
     }
@@ -389,91 +316,6 @@ class MemberApplicationService(
         }
 
         return pageSize
-    }
-
-    private fun saveProfileImgUrlAttr(member: Member) {
-        memberAttrRepository.save(member.getOrInitProfileImgUrlAttr())
-    }
-
-    private fun saveProfileRoleAttr(member: Member) {
-        memberAttrRepository.save(member.getOrInitProfileRoleAttr())
-    }
-
-    private fun saveProfileBioAttr(member: Member) {
-        memberAttrRepository.save(member.getOrInitProfileBioAttr())
-    }
-
-    private fun saveAboutRoleAttr(member: Member) {
-        memberAttrRepository.save(member.getOrInitAboutRoleAttr())
-    }
-
-    private fun saveAboutBioAttr(member: Member) {
-        memberAttrRepository.save(member.getOrInitAboutBioAttr())
-    }
-
-    private fun saveAboutDetailsAttr(member: Member) {
-        memberAttrRepository.save(member.getOrInitAboutDetailsAttr())
-    }
-
-    private fun saveBlogTitleAttr(member: Member) {
-        memberAttrRepository.save(member.getOrInitBlogTitleAttr())
-    }
-
-    private fun saveHomeIntroTitleAttr(member: Member) {
-        memberAttrRepository.save(member.getOrInitHomeIntroTitleAttr())
-    }
-
-    private fun saveHomeIntroDescriptionAttr(member: Member) {
-        memberAttrRepository.save(member.getOrInitHomeIntroDescriptionAttr())
-    }
-
-    private fun saveBlogDesignAttr(member: Member) {
-        val attr =
-            memberAttrRepository.findBySubjectAndName(member, BLOG_DESIGN)
-                ?: member.getOrInitBlogDesignAttr()
-        attr.strValue = member.blogDesign
-        memberAttrRepository.save(attr)
-    }
-
-    private fun saveLegacyBlogSchemeAttr(member: Member) {
-        val attr =
-            memberAttrRepository.findBySubjectAndName(member, LEGACY_BLOG_SCHEME)
-                ?: member.getOrInitLegacyBlogSchemeAttr()
-        attr.strValue = member.legacyBlogScheme
-        memberAttrRepository.save(attr)
-    }
-
-    private fun saveServiceLinksAttr(member: Member) {
-        memberAttrRepository.save(member.getOrInitServiceLinksAttr())
-    }
-
-    private fun saveContactLinksAttr(member: Member) {
-        memberAttrRepository.save(member.getOrInitContactLinksAttr())
-    }
-
-    private fun saveProfileWorkspaceDraftAttr(member: Member) {
-        memberAttrRepository.save(member.getOrInitProfileWorkspaceDraftAttr())
-    }
-
-    private fun saveProfileWorkspacePublishedAttr(member: Member) {
-        memberAttrRepository.save(member.getOrInitProfileWorkspacePublishedAttr())
-    }
-
-    private fun ensureProfileWorkspaceSnapshotsInitialized(member: Member) {
-        val legacyContent = member.currentProfileWorkspaceContent
-        if (!member.hasPersistedProfileWorkspacePublished()) {
-            member.setProfileWorkspacePublishedContent(legacyContent)
-            saveProfileWorkspacePublishedAttr(member)
-        }
-        if (!member.hasPersistedProfileWorkspaceDraft()) {
-            member.setProfileWorkspaceDraftContent(legacyContent)
-            saveProfileWorkspaceDraftAttr(member)
-        }
-    }
-
-    private fun syncDraftWorkspaceFromLegacy(member: Member) {
-        member.setProfileWorkspaceDraftContent(member.currentProfileWorkspaceContent)
-        saveProfileWorkspaceDraftAttr(member)
     }
 
     private fun normalizeEmailOrNull(email: String?): String? =

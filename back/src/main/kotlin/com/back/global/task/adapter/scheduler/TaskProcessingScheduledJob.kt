@@ -3,6 +3,7 @@ package com.back.global.task.adapter.scheduler
 import com.back.global.task.adapter.persistence.TaskRepository
 import com.back.global.task.application.TaskHandlerEntry
 import com.back.global.task.application.TaskHandlerRegistry
+import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
 import com.back.standard.dto.TaskPayload
 import io.micrometer.core.instrument.MeterRegistry
@@ -66,7 +67,7 @@ class TaskProcessingScheduledJob(
     private val dynamicBatchTargetHandlerDurationMs: Long,
     @param:Value("\${custom.task.processor.dynamicBatchMaxPrefetchMultiplier:2}")
     private val dynamicBatchMaxPrefetchMultiplier: Int,
-    @param:Value("\${custom.task.processor.perTypeMaxConcurrent:}")
+    @Value("\${custom.task.processor.perTypeMaxConcurrent:}")
     perTypeMaxConcurrentRaw: String,
     @param:Value("\${custom.task.processor.perTypeAutoTuneEnabled:true}")
     private val perTypeAutoTuneEnabled: Boolean,
@@ -124,11 +125,17 @@ class TaskProcessingScheduledJob(
         val dispatchSlots =
             transactionTemplate.execute {
                 val pendingTasks = taskRepository.findPendingTasksWithLock(fetchLimit)
-                pendingTasks.forEach { it.markAsProcessing() }
-                pendingTasks.map { TaskDispatchSlot(it.id, it.taskType) }
+                val dispatchableTasks = selectDispatchableTasks(pendingTasks, availableWorkerSlots)
+                dispatchableTasks.forEach { it.markAsProcessing() }
+                dispatchableTasks.map { TaskDispatchSlot(it.id, it.taskType) }
             } ?: emptyList()
 
+        var dispatchedWorkers = 0
         dispatchSlots.forEach { slot ->
+            if (dispatchedWorkers >= availableWorkerSlots) {
+                revertTaskToPending(slot.taskId)
+                return@forEach
+            }
             if (!concurrencyGate.tryAcquire()) {
                 revertTaskToPending(slot.taskId)
                 return@forEach
@@ -139,6 +146,7 @@ class TaskProcessingScheduledJob(
                 return@forEach
             }
 
+            dispatchedWorkers++
             executor.submit {
                 try {
                     executeTask(slot.taskId)
@@ -150,17 +158,66 @@ class TaskProcessingScheduledJob(
         }
     }
 
+    private fun selectDispatchableTasks(
+        pendingTasks: List<Task>,
+        availableWorkerSlots: Int,
+    ): List<Task> {
+        val projectedPerType = mutableMapOf<String, Int>()
+        val dispatchableTasks = mutableListOf<Task>()
+
+        for (task in pendingTasks) {
+            if (dispatchableTasks.size >= availableWorkerSlots) break
+            val projectedInFlight = projectedPerType[task.taskType] ?: 0
+            if (!canReservePerTypeSlot(task.taskType, projectedInFlight)) continue
+
+            projectedPerType[task.taskType] = projectedInFlight + 1
+            dispatchableTasks += task
+        }
+
+        return dispatchableTasks
+    }
+
+    private fun canReservePerTypeSlot(
+        taskType: String,
+        projectedInFlight: Int,
+    ): Boolean {
+        val maxAllowed = resolvePerTypeLimit(taskType)
+        if (maxAllowed <= 0) return false
+        val currentInFlight = perTypeInFlight[taskType]?.get() ?: 0
+        return currentInFlight + projectedInFlight < maxAllowed
+    }
+
     private fun resolveAvailableWorkerSlots(): Int {
         val activeWorkers = (workerConcurrency - concurrencyGate.availablePermits()).coerceAtLeast(0)
         val targetConcurrency =
             if (!dynamicConcurrencyEnabled) {
                 workerConcurrency
             } else {
-                workerConcurrency
+                resolveDynamicTargetConcurrency()
             }
 
         return (targetConcurrency - activeWorkers).coerceIn(0, workerConcurrency)
     }
+
+    private fun resolveDynamicTargetConcurrency(): Int {
+        val readyBacklog = countReadyBacklog() ?: return workerConcurrency
+        val minConcurrency = dynamicMinConcurrent.coerceIn(1, workerConcurrency)
+        val backlogPerSlot = dynamicBacklogPerSlot.coerceAtLeast(1)
+        val backlogConcurrency =
+            ceil(readyBacklog.coerceAtLeast(0).toDouble() / backlogPerSlot.toDouble())
+                .toInt()
+                .coerceAtLeast(minConcurrency)
+
+        return backlogConcurrency.coerceIn(minConcurrency, workerConcurrency)
+    }
+
+    private fun countReadyBacklog(): Long? =
+        runCatching {
+            taskRepository.countByStatusAndNextRetryAtLessThanEqual(TaskStatus.PENDING, Instant.now())
+        }.getOrElse { exception ->
+            logger.warn("Failed to count ready task backlog for dynamic concurrency; using max concurrency", exception)
+            null
+        }
 
     private fun resolveFetchLimit(
         safeBatchSize: Int,
@@ -178,11 +235,27 @@ class TaskProcessingScheduledJob(
                 else -> (targetMs.toDouble() / avgHandlerMs.toDouble()).coerceIn(0.35, 1.0)
             }
 
-        val maxClaim = minOf(safeBatchSize, availableWorkerSlots.coerceAtLeast(1))
+        val prefetchMultiplier = resolveDynamicBatchPrefetchMultiplier()
+        val maxClaim = minOf(safeBatchSize, availableWorkerSlots.coerceAtLeast(1) * prefetchMultiplier)
         val minClaim = minOf(dynamicBatchMinSize.coerceIn(1, safeBatchSize), maxClaim)
-        val raw = ceil(availableWorkerSlots.toDouble() * latencyFactor).toInt().coerceAtLeast(1)
+        val raw =
+            ceil(availableWorkerSlots.toDouble() * prefetchMultiplier.toDouble() * latencyFactor)
+                .toInt()
+                .coerceAtLeast(1)
 
         return raw.coerceIn(minClaim, maxClaim)
+    }
+
+    private fun resolveDynamicBatchPrefetchMultiplier(): Int {
+        val maxPrefetchMultiplier = dynamicBatchMaxPrefetchMultiplier.coerceIn(1, 16)
+        val backlogPerStep = dynamicBatchBacklogPerStep.coerceAtLeast(1)
+        val readyBacklog = countReadyBacklog() ?: return maxPrefetchMultiplier
+        val backlogMultiplier =
+            ceil(readyBacklog.coerceAtLeast(0).toDouble() / backlogPerStep.toDouble())
+                .toInt()
+                .coerceAtLeast(1)
+
+        return backlogMultiplier.coerceIn(1, maxPrefetchMultiplier)
     }
 
     private fun tryAcquirePerTypePermit(taskType: String): Boolean {

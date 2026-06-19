@@ -62,6 +62,11 @@ class ArchitectureGuardTest {
         val targetFqcn: String,
     )
 
+    private data class ForbiddenReflectionUse(
+        val sourcePath: String,
+        val target: String,
+    )
+
     private fun importedClasses(): JavaClasses =
         ClassFileImporter()
             .withImportOption(ImportOption.DoNotIncludeTests())
@@ -76,6 +81,34 @@ class ArchitectureGuardTest {
                     .filter { it.toString().endsWith(".kt") }
                     .toList()
             }
+
+    private fun taskSchedulerPrivateReflectionUses(): List<ForbiddenReflectionUse> {
+        val forbiddenTargets =
+            listOf(
+                "resolveAvailableWorkerSlots",
+                "resolveFetchLimit",
+                "refreshPerTypeDynamicLimitsIfNeeded",
+                "resolvePerTypeLimit",
+                "concurrencyGate",
+            )
+
+        return kotlinTestSources()
+            .flatMap { sourcePath ->
+                val source = sourceText(sourcePath)
+                forbiddenTargets.mapNotNull { target ->
+                    val callsPrivateMethod =
+                        source.contains("""TaskProcessingScheduledJob::class.java.getDeclaredMethod("$target"""")
+                    val readsPrivateField =
+                        source.contains("""TaskProcessingScheduledJob::class.java.getDeclaredField("$target"""")
+
+                    if (callsPrivateMethod || readsPrivateField) {
+                        ForbiddenReflectionUse(sourcePath.toString(), target)
+                    } else {
+                        null
+                    }
+                }
+            }
+    }
 
     private fun kotlinMainBoundedContextSources(): List<Path> =
         Files
@@ -651,6 +684,11 @@ class ArchitectureGuardTest {
                 .toSet()
 
         assertThat(aliases).containsExactlyInAnyOrderElementsOf(allowedAliases)
+    }
+
+    @Test
+    fun `task scheduler concurrency 테스트는 private scheduler 구현을 reflection으로 호출하지 않는다`() {
+        assertThat(taskSchedulerPrivateReflectionUses()).isEmpty()
     }
 
     @Test

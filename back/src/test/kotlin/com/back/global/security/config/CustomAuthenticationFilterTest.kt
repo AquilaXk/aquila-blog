@@ -358,6 +358,64 @@ class CustomAuthenticationFilterTest {
     }
 
     @Test
+    @DisplayName("정상 accessToken 인증도 DB 회원의 admin flag로 권한을 구성한다")
+    fun `normal access token restores admin authority from persisted member`() {
+        configureProductionUrls()
+        val fixture = CustomAuthenticationFilterFixture()
+        val request = MockHttpServletRequest("PUT", "/post/api/v1/posts/452")
+        val accessToken = "admin-access-token"
+        val sessionKey = "admin-session-key"
+        val sessionSnapshot =
+            MemberSessionAuthSnapshot(
+                id = 12L,
+                memberId = 54L,
+                sessionKey = sessionKey,
+                rememberLoginEnabled = true,
+                ipSecurityEnabled = false,
+                ipSecurityFingerprint = null,
+                lastAuthenticatedAt = Instant.now(),
+            )
+        val persistedAdmin = Member(54L, "internal-admin", null, "aquila", "admin@test.com")
+        persistedAdmin.grantAdmin()
+
+        fixture.givenProtectedRequest(request)
+        fixture.givenBearerAccessToken(accessToken, sessionKey)
+        given(fixture.actorApplicationService.payload(accessToken))
+            .willReturn(
+                AccessTokenPayload(
+                    id = 54L,
+                    sessionKey = sessionKey,
+                    username = "internal-admin",
+                    email = "admin@test.com",
+                    name = "aquila",
+                    rememberLoginEnabled = true,
+                    ipSecurityEnabled = false,
+                    ipSecurityFingerprint = null,
+                ),
+            )
+        given(fixture.memberSessionUseCase.findActiveSessionSnapshot(54L, sessionKey)).willReturn(sessionSnapshot)
+        given(fixture.actorApplicationService.findById(54L)).willReturn(persistedAdmin)
+        fixture.givenClientIp(request, "203.0.113.16")
+
+        val response = MockHttpServletResponse()
+        val filterChain = fixture.adminRoleRequiredFilterChain()
+
+        try {
+            fixture.authenticationFilter().doFilter(request, response, filterChain)
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_NO_CONTENT)
+            verify(fixture.memberSessionUseCase).touchAuthenticated(sessionSnapshot)
+            verify(fixture.authCookieService, never()).issueAccessToken(
+                ArgumentMatchers.anyString(),
+                ArgumentMatchers.anyBoolean(),
+                ArgumentMatchers.nullable(String::class.java),
+                ArgumentMatchers.nullable(String::class.java),
+            )
+        } finally {
+            SecurityContextHolder.clearContext()
+        }
+    }
+
+    @Test
     @DisplayName("로그인 직후 GET read 요청은 세션 snapshot miss여도 최근 accessToken이면 1회 fallback 인증을 허용한다")
     fun `fresh token fallback allows safe read request`() {
         val fixture = CustomAuthenticationFilterFixture()

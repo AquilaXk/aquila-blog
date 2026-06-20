@@ -1,26 +1,11 @@
 import { CONFIG } from "site.config"
-import { getServerSideSitemap, ISitemapField } from "next-sitemap"
+import { getServerSideSitemap } from "next-sitemap"
 import { GetServerSideProps } from "next"
-import { collectSitemapPosts } from "src/libs/sitemapPosts"
-import { toCanonicalPostPath } from "src/libs/utils/postPath"
+import { buildSitemapFields, collectSitemapPosts } from "src/libs/sitemapPosts"
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const posts = await collectSitemapPosts()
-  const dynamicPaths = posts.map((post) => `${CONFIG.link}${toCanonicalPostPath(post.id)}`)
-
-  const fields: ISitemapField[] = dynamicPaths.map((path) => ({
-    loc: path,
-    lastmod: new Date().toISOString(),
-    priority: 0.7,
-    changefreq: "daily",
-  }))
-
-  fields.unshift({
-    loc: CONFIG.link,
-    lastmod: new Date().toISOString(),
-    priority: 1.0,
-    changefreq: "daily",
-  })
+  const fields = buildSitemapFields(posts, CONFIG.link, `${CONFIG.since}-01-01T00:00:00.000Z`)
 
   return getServerSideSitemap(ctx, fields)
 }

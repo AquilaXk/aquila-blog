@@ -909,6 +909,8 @@ test("homeserver deploy preserves runtime-specific backend image release state",
   assert.match(deployScript, /value = substr\(\$0, index\(\$0, "="\) \+ 1\)/)
   assert.match(deployScript, /END \{\s*print value\s*\}/)
   assert.match(externalBackupScript, /is_digest_image_value\(\)/)
+  assert.match(externalBackupScript, /stage_backend_runtime_image_env_key\(\)/)
+  assert.match(externalBackupScript, /export "\$\{key\}=\$\{image\}"/)
   assert.doesNotMatch(
     externalBackupScript,
     /if \[\[ -n "\$\{value\}" \]\]; then\s*require_digest_image_value "\$\{key\}" "\$\{value\}"\s*return 0\s*fi/s,
@@ -917,6 +919,8 @@ test("homeserver deploy preserves runtime-specific backend image release state",
     externalBackupScript,
     /invalid .*runtime image env .*will try fallback sources before backup compose evaluation/,
   )
+  assert.match(externalBackupScript, /stage_backend_runtime_image_env_key "\$\{key\}" "\$\{legacy_value\}"/)
+  assert.match(externalBackupScript, /stage_backend_runtime_image_env_key "\$\{key\}" "\$\{container_value\}"/)
   assert.match(deployScript, /write_backend_release_state "\$\{next_backend\}" "\$\{active_backend\}"/)
   assert.match(deployScript, /prepare_runtime_backend_images "\$\{active_backend\}" "\$\{next_backend\}" "\$\{STAGED_BACK_IMAGE\}"/)
   assert.match(backupScript, /\.backend-release-state\.env/)

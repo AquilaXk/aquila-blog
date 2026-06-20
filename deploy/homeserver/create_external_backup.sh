@@ -149,6 +149,15 @@ upsert_env_key() {
   fi
 }
 
+stage_backend_runtime_image_env_key() {
+  local key="$1"
+  local image="$2"
+  require_digest_image_value "${key}" "${image}"
+  ensure_compose_env_work_file
+  upsert_env_key "${key}" "${image}"
+  export "${key}=${image}"
+}
+
 resolve_local_repo_digest() {
   local image_ref="$1"
   docker image inspect --format '{{index .RepoDigests 0}}' "${image_ref}" 2>/dev/null | head -n 1 | tr -d '\r'
@@ -218,6 +227,7 @@ ensure_backend_runtime_image_env_key() {
   value="$(trim_quotes "$(env_value "${key}")")"
   if [[ -n "${value}" ]]; then
     if is_digest_image_value "${value}"; then
+      stage_backend_runtime_image_env_key "${key}" "${value}"
       return 0
     fi
     log "invalid ${key} runtime image env value will try fallback sources before backup compose evaluation"
@@ -226,8 +236,7 @@ ensure_backend_runtime_image_env_key() {
   legacy_value="$(trim_quotes "$(env_value "BACK_IMAGE")")"
   if [[ -n "${legacy_value}" ]]; then
     if is_digest_image_value "${legacy_value}"; then
-      ensure_compose_env_work_file
-      upsert_env_key "${key}" "${legacy_value}"
+      stage_backend_runtime_image_env_key "${key}" "${legacy_value}"
       log "auto-filled ${key} from legacy BACK_IMAGE for compose preflight"
       return 0
     fi
@@ -236,9 +245,7 @@ ensure_backend_runtime_image_env_key() {
 
   container_value="$(container_image_for_service_any_state "${service}" || true)"
   if [[ -n "${container_value}" ]]; then
-    require_digest_image_value "${key}" "${container_value}"
-    ensure_compose_env_work_file
-    upsert_env_key "${key}" "${container_value}"
+    stage_backend_runtime_image_env_key "${key}" "${container_value}"
     log "auto-filled ${key} from ${service} container image for compose preflight"
     return 0
   fi

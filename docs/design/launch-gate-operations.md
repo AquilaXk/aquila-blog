@@ -22,9 +22,9 @@
 
 | Gate | Evidence | Pass 기준 | Block 기준 |
 | --- | --- | --- | --- |
-| P0/P1 issue 상태 | GitHub issue list와 release PR 관련 issue 링크 | P0는 모두 closed, P1 launch-blocking은 closed 또는 명시적 defer | P0 open, P1 blocker open, defer 사유 없음 |
+| P0/P1 issue 상태 | GitHub issue list와 release PR 관련 issue 링크 | P0는 모두 closed, P1 launch-blocking은 closed. P1을 defer하려면 먼저 non-blocking으로 재분류하고 추적 issue와 사유를 기록 | P0 open, P1 launch-blocking open, non-blocking 재분류 없는 P1 defer |
 | CI | PR checks와 main merge 후 CI run | backend/frontend CI가 success | required check failure 또는 stale run |
-| Security | Security workflow 또는 CodeQL/dependency check run | PR 또는 main 기준 security workflow success | CodeQL/dependency check failure |
+| Security | Security workflow, CodeQL result, dependency-check run/artifact | CodeQL success와 backend dependency-check 실제 run 또는 artifact evidence 확인. dependency-check skip은 pass가 아니며 block 또는 명시적 defer 필요 | CodeQL/dependency check failure, dependency-check skip 사유 미기록 |
 | Code review | CodeRabbit review 또는 Codex CLI fallback PR review | unresolved thread와 requested changes 없음 | review 미실행, unresolved actionable thread, requested changes |
 | Deploy workflow | `Deploy to Home Server` workflow run | main merge 후 workflow가 success 또는 docs-only skip 사유 확인 | deploy 대상 변경인데 deploy/live verify 미실행 또는 failure |
 | Sitemap/metadata/404/structured data | frontend smoke, sitemap E2E, live URL 확인 결과 | sitemap, metadata, canonical, 404, JSON-LD 계약 통과 | public discovery 또는 canonical/404 계약 실패 |

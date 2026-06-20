@@ -136,6 +136,7 @@ export const uploadCloudFile = async (
       body: formData,
       signal,
       timeoutMs: CLOUD_UPLOAD_TIMEOUT_MS,
+      backendProxy: "bypass",
     }
   )
   return normalizeCloudFile(response.data || {})
@@ -178,6 +179,7 @@ const uploadVideoPart = async (
       headers: { "Content-Type": "application/octet-stream" },
       signal,
       timeoutMs: CLOUD_VIDEO_RESUMABLE_CHUNK_TIMEOUT_MS,
+      backendProxy: "bypass",
     }
   )
 

@@ -1035,6 +1035,27 @@ test("blue-green deploy pauses autoheal while staging a candidate backend", () =
   )
 })
 
+test("blue-green deploy keeps old backend running during burn-in rollback window", () => {
+  const deployScript = readFileSync(deployScriptPath, "utf8")
+  const burnInIndex = deployScript.indexOf('run_blue_green_burn_in "${next_backend}" "${active_backend}" "${api_domain}"')
+  const stopOldIndex = deployScript.indexOf('drain_and_stop_backend_if_running "${active_backend}"')
+  const stateWriteIndex = deployScript.indexOf('write_backend_release_state "${next_backend}" "${active_backend}"')
+
+  assert.match(deployScript, /BLUE_GREEN_BURN_IN_STANDARD_SECONDS=/)
+  assert.match(deployScript, /BLUE_GREEN_BURN_IN_HIGH_RISK_SECONDS=/)
+  assert.match(deployScript, /resolve_blue_green_burn_in_seconds\(\)/)
+  assert.match(deployScript, /rollback_caddy_route_only\(\)/)
+  assert.match(deployScript, /run_blue_green_burn_in\(\)/)
+  assert.match(deployScript, /rollback_caddy_route_only "\$\{previous_backend\}" "\$\{candidate_backend\}" "\$\{api_domain\}"/)
+  assert.match(deployScript, /burn-in failed; keeping previous backend active/)
+  assert.match(deployScript, /burn-in ok: candidate=.*previous=.*duration_seconds=/)
+  assert(burnInIndex > 0, "deploy script must run burn-in after candidate cutover")
+  assert(stopOldIndex > 0, "deploy script must still stop old backend after burn-in")
+  assert(stateWriteIndex > 0, "deploy script must write release state after burn-in")
+  assert(burnInIndex < stopOldIndex, "old backend must not stop before burn-in completes")
+  assert(burnInIndex < stateWriteIndex, "release state must not mark candidate active before burn-in completes")
+})
+
 test("runtime-split memory tuner keeps backend color startup headroom", () => {
   const deployScript = readFileSync(deployScriptPath, "utf8")
   const splitAllocator = deployScript.slice(

@@ -201,9 +201,7 @@ const PostList: React.FC<Props> = ({
       })}
       {(hasNextPage || isFetchingNextPage || isFetchNextPageError) && (
         <section className="loadMoreArea">
-          {!isFetchNextPageError && (
-            <div ref={loadMoreTriggerRef} className="loadMoreTrigger" aria-hidden="true" />
-          )}
+          <div ref={loadMoreTriggerRef} className="loadMoreTrigger" aria-hidden="true" />
           {isFetchNextPageError && !isFetchingNextPage && (
             <div className="loadMoreError" role="alert" aria-live="assertive">
               <strong>다음 글을 불러오지 못했습니다.</strong>

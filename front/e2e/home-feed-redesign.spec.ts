@@ -249,6 +249,21 @@ test.describe("home feed product redesign", () => {
     await expect(profileSummary.locator(".links a")).toHaveCount(0)
   })
 
+  test("비관리자 empty state는 글 작성이나 admin CTA를 노출하지 않는다", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await mockHomeFeedRedesignEndpoints(page, [])
+
+    await page.goto("/")
+
+    const emptyState = page.locator(".emptyState")
+    await expect(emptyState).toBeVisible()
+    await expect(emptyState).toContainText("아직 게시글이 없습니다.")
+    await expect(emptyState).toContainText("곧 새로운 글을 준비하겠습니다.")
+    await expect(emptyState.getByRole("link", { name: "블로그 소개" })).toHaveAttribute("href", "/about")
+    await expect(emptyState.getByRole("link", { name: /글 작성/ })).toHaveCount(0)
+    await expect(emptyState.locator('a[href="/admin"]')).toHaveCount(0)
+  })
+
   test("category-only 글은 restore snapshot과 memo guard에서도 stale fallback으로 떨어지지 않는다", () => {
     const feedRoot = path.resolve(__dirname, "../src/routes/Feed")
     const restoreSource = readFileSync(path.join(feedRoot, "FeedExplorerRestoreModel.ts"), "utf8")

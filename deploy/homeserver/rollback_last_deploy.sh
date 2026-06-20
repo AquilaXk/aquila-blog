@@ -237,41 +237,118 @@ container_image_for_service_any_state() {
   docker inspect --format '{{.Config.Image}}' "${container_id}" 2>/dev/null | tr -d '\r' | head -n 1 || true
 }
 
-repair_back_image_if_missing() {
-  local current_value repaired_value metadata_image
-  current_value="$(trim_quotes "$(env_value "BACK_IMAGE")")"
+backend_image_key() {
+  local service="$1"
+  case "${service}" in
+    back_blue) echo "BACK_BLUE_IMAGE" ;;
+    back_green) echo "BACK_GREEN_IMAGE" ;;
+    back_read) echo "BACK_READ_IMAGE" ;;
+    back_admin) echo "BACK_ADMIN_IMAGE" ;;
+    back_worker) echo "BACK_WORKER_IMAGE" ;;
+    *)
+      echo "unknown backend runtime service: ${service}" >&2
+      return 1
+      ;;
+  esac
+}
+
+backup_image_key_for_service() {
+  local service="$1"
+  case "${service}" in
+    back_blue) echo "back_blue_image" ;;
+    back_green) echo "back_green_image" ;;
+    back_read) echo "back_read_image" ;;
+    back_admin) echo "back_admin_image" ;;
+    back_worker) echo "back_worker_image" ;;
+    *) return 1 ;;
+  esac
+}
+
+require_digest_image_value() {
+  local key="$1"
+  local value="$2"
+  if [[ -z "${value}" ]]; then
+    echo "required image value is missing: ${key}" >&2
+    return 1
+  fi
+  if [[ "${value}" == *":latest" || "${value}" == *":latest@"* ]]; then
+    echo "latest tag is not allowed for ${key}: ${value}" >&2
+    return 1
+  fi
+  if [[ ! "${value}" =~ ^[^[:space:]@]+@sha256:[a-fA-F0-9]{64}$ ]]; then
+    echo "image must be pinned by sha256 digest for ${key}: ${value}" >&2
+    return 1
+  fi
+}
+
+repair_runtime_back_image_if_missing() {
+  local service="$1"
+  local fallback="$2"
+  local key metadata_key current_value repaired_value metadata_image legacy_image
+  key="$(backend_image_key "${service}")"
+  current_value="$(trim_quotes "$(env_value "${key}")")"
   if [[ -n "${current_value}" ]]; then
-    echo "rollback BACK_IMAGE preserved: ${current_value}"
+    require_digest_image_value "${key}" "${current_value}"
+    echo "rollback ${key} preserved: ${current_value}"
     return 0
   fi
 
-  metadata_image="$(trim_quotes "$(backup_metadata_value "active_backend_image")")"
+  metadata_key="$(backup_image_key_for_service "${service}" || true)"
+  if [[ -n "${metadata_key}" ]]; then
+    metadata_image="$(trim_quotes "$(backup_metadata_value "${metadata_key}")")"
+  fi
+  if [[ -z "${metadata_image}" && "${service}" == "${target_backend:-}" ]]; then
+    metadata_image="$(trim_quotes "$(backup_metadata_value "active_backend_image")")"
+  fi
   if [[ -n "${metadata_image}" ]]; then
     repaired_value="${metadata_image}"
-    echo "rollback BACK_IMAGE repair source=backup_metadata image=${repaired_value}"
+    echo "rollback ${key} repair source=backup_metadata image=${repaired_value}"
   fi
 
-  if [[ -z "${repaired_value}" && -n "${target_backend:-}" ]]; then
-    repaired_value="$(container_image_for_service_any_state "${target_backend}" || true)"
+  if [[ -z "${repaired_value}" ]]; then
+    repaired_value="$(container_image_for_service_any_state "${service}" || true)"
     if [[ -n "${repaired_value}" ]]; then
-      echo "rollback BACK_IMAGE repair source=target_backend_container backend=${target_backend} image=${repaired_value}"
-    fi
-  fi
-
-  if [[ -z "${repaired_value}" && -n "${inactive_backend:-}" ]]; then
-    repaired_value="$(container_image_for_service_any_state "${inactive_backend}" || true)"
-    if [[ -n "${repaired_value}" ]]; then
-      echo "rollback BACK_IMAGE repair source=inactive_backend_container backend=${inactive_backend} image=${repaired_value}"
+      echo "rollback ${key} repair source=${service}_container image=${repaired_value}"
     fi
   fi
 
   if [[ -z "${repaired_value}" ]]; then
-    echo "rollback failed: BACK_IMAGE missing in restored env and no repair source available" >&2
+    legacy_image="$(trim_quotes "$(env_value "BACK_IMAGE")")"
+    if [[ -n "${legacy_image}" ]]; then
+      repaired_value="${legacy_image}"
+      echo "rollback ${key} repair source=legacy_BACK_IMAGE image=${repaired_value}"
+    fi
+  fi
+
+  if [[ -z "${repaired_value}" ]]; then
+    repaired_value="${fallback}"
+    echo "rollback ${key} repair source=fallback image=${repaired_value}"
+  fi
+
+  require_digest_image_value "${key}" "${repaired_value}"
+  upsert_env_key "${key}" "${repaired_value}"
+  echo "rollback repaired missing ${key}=${repaired_value}"
+}
+
+repair_back_image_if_missing() {
+  local target_image
+  target_image="$(container_image_for_service_any_state "${target_backend}" || true)"
+  if [[ -z "${target_image}" ]]; then
+    target_image="$(trim_quotes "$(backup_metadata_value "active_backend_image")")"
+  fi
+  if [[ -z "${target_image}" ]]; then
+    target_image="$(trim_quotes "$(env_value "BACK_IMAGE")")"
+  fi
+  if [[ -z "${target_image}" ]]; then
+    echo "rollback failed: no target backend image repair source available" >&2
     return 1
   fi
 
-  upsert_env_key "BACK_IMAGE" "${repaired_value}"
-  echo "rollback repaired missing BACK_IMAGE=${repaired_value}"
+  repair_runtime_back_image_if_missing "${target_backend}" "${target_image}"
+  repair_runtime_back_image_if_missing "${inactive_backend}" "${target_image}"
+  repair_runtime_back_image_if_missing "back_read" "${target_image}"
+  repair_runtime_back_image_if_missing "back_admin" "${target_image}"
+  repair_runtime_back_image_if_missing "back_worker" "${target_image}"
 }
 
 resolve_prod_db_name() {
@@ -568,7 +645,7 @@ trap 'release_deploy_lock' EXIT INT TERM
 
 echo "rollback from backup: ${BACKUP_DIR}"
 
-for file in .env.prod docker-compose.prod.yml .active_backend; do
+for file in .env.prod docker-compose.prod.yml .active_backend .backend-release-state.env; do
   if [[ -f "${BACKUP_DIR}/${file}" ]]; then
     cp "${BACKUP_DIR}/${file}" "${SCRIPT_DIR}/${file}"
   fi

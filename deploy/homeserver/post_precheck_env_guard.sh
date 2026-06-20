@@ -54,7 +54,7 @@ require_digest_image_value() {
   local value="$2"
 
   if [[ -z "${value}" ]]; then
-    post_precheck_env_fail "${code_prefix}_missing" "BACK_IMAGE is empty"
+    post_precheck_env_fail "${code_prefix}_missing" "STAGED_BACK_IMAGE is empty"
   fi
   if [[ "${value}" == *":latest" || "${value}" == *":latest@"* ]]; then
     post_precheck_env_fail "${code_prefix}_latest_forbidden" "latest tag is forbidden value=${value}"
@@ -69,7 +69,6 @@ main() {
   local enabled_value
   local api_key_value
   local api_key_present="false"
-  local persisted_back_image
 
   if [[ ! -f "${ENV_FILE}" ]]; then
     post_precheck_env_fail "env_file_missing" "missing env file=${ENV_FILE}"
@@ -94,13 +93,7 @@ main() {
   fi
 
   echo "[POST_PRECHECK_ENV] checkpoint=after_ai_summary_guard"
-  echo "[POST_PRECHECK_ENV] checkpoint=before_back_image_persist target=${staged_back_image}"
-
-  upsert_env_key "BACK_IMAGE" "${staged_back_image}"
-  persisted_back_image="$(trim_quotes "$(env_value "BACK_IMAGE")")"
-  require_digest_image_value "persisted_back_image" "${persisted_back_image}"
-
-  echo "[POST_PRECHECK_ENV] checkpoint=after_back_image_persist image=${persisted_back_image}"
+  echo "[POST_PRECHECK_ENV] checkpoint=staged_back_image_validated image=${staged_back_image}"
   echo "[POST_PRECHECK_ENV] passed"
 }
 

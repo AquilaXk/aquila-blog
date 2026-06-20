@@ -162,7 +162,7 @@ services:
       start_period: 20s
 
   back_blue:
-    image: ${BACK_IMAGE:?BACK_IMAGE is required (sha-pinned; latest forbidden)}
+    image: ${BACK_BLUE_IMAGE:?BACK_BLUE_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped
     mem_limit: ${BACK_MEM_LIMIT:-512m}
     mem_reservation: ${BACK_MEM_RESERVATION:-256m}
@@ -195,7 +195,7 @@ services:
           - back-blue
 
   back_green:
-    image: ${BACK_IMAGE:?BACK_IMAGE is required (sha-pinned; latest forbidden)}
+    image: ${BACK_GREEN_IMAGE:?BACK_GREEN_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped
     mem_limit: ${BACK_MEM_LIMIT:-512m}
     mem_reservation: ${BACK_MEM_RESERVATION:-256m}
@@ -227,7 +227,7 @@ services:
 
   back_read:
     profiles: ["runtime-split"]
-    image: ${BACK_IMAGE:?BACK_IMAGE is required (sha-pinned; latest forbidden)}
+    image: ${BACK_READ_IMAGE:?BACK_READ_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped
     mem_limit: ${BACK_READ_MEM_LIMIT:-640m}
     mem_reservation: ${BACK_READ_MEM_RESERVATION:-320m}
@@ -259,7 +259,7 @@ services:
 
   back_admin:
     profiles: ["runtime-split"]
-    image: ${BACK_IMAGE:?BACK_IMAGE is required (sha-pinned; latest forbidden)}
+    image: ${BACK_ADMIN_IMAGE:?BACK_ADMIN_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped
     mem_limit: ${BACK_ADMIN_MEM_LIMIT:-512m}
     mem_reservation: ${BACK_ADMIN_MEM_RESERVATION:-256m}
@@ -290,7 +290,7 @@ services:
           - back-admin
 
   back_worker:
-    image: ${BACK_IMAGE:?BACK_IMAGE is required (sha-pinned; latest forbidden)}
+    image: ${BACK_WORKER_IMAGE:?BACK_WORKER_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped
     mem_limit: ${BACK_WORKER_MEM_LIMIT:-768m}
     mem_reservation: ${BACK_WORKER_MEM_RESERVATION:-768m}

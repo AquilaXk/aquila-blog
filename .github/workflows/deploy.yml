@@ -600,7 +600,7 @@ jobs:
               return 1
             fi
 
-            for file in .env.prod docker-compose.prod.yml .active_backend; do
+            for file in .env.prod docker-compose.prod.yml .active_backend .backend-release-state.env; do
               if [ -f "${backup_dir}/${file}" ]; then
                 cp "${backup_dir}/${file}" "deploy/homeserver/${file}"
               fi
@@ -880,7 +880,7 @@ jobs:
             exit 1
           }
 
-          if ! RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}" RUNTIME_SPLIT_STAGE="${RUNTIME_SPLIT_STAGE_VALUE}" HEALTHCHECK_PATH=/actuator/health/readiness HEALTHCHECK_LOG_EVERY_N_TRIES=1 ./deploy/homeserver/blue_green_deploy.sh; then
+          if ! STAGED_BACK_IMAGE="${STAGED_BACK_IMAGE}" RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}" RUNTIME_SPLIT_STAGE="${RUNTIME_SPLIT_STAGE_VALUE}" HEALTHCHECK_PATH=/actuator/health/readiness HEALTHCHECK_LOG_EVERY_N_TRIES=1 ./deploy/homeserver/blue_green_deploy.sh; then
             rollback_and_exit "blue_green_deploy_failed"
           fi
 
@@ -900,7 +900,14 @@ jobs:
 
           ACTIVE_BACKEND_CONTAINER_ID="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps -q "${ACTIVE_BACKEND}" | head -n 1)"
           ACTIVE_BACKEND_IMAGE="$(docker inspect --format '{{.Config.Image}}' "${ACTIVE_BACKEND_CONTAINER_ID}" 2>/dev/null | tr -d '\r')"
-          EXPECTED_BACK_IMAGE="$(extract_env_value "BACK_IMAGE")"
+          case "${ACTIVE_BACKEND}" in
+            back_blue) ACTIVE_BACKEND_IMAGE_KEY="BACK_BLUE_IMAGE" ;;
+            back_green) ACTIVE_BACKEND_IMAGE_KEY="BACK_GREEN_IMAGE" ;;
+            *)
+              rollback_and_exit "invalid_active_backend_image_key"
+              ;;
+          esac
+          EXPECTED_BACK_IMAGE="$(extract_env_value "${ACTIVE_BACKEND_IMAGE_KEY}")"
           echo "post-deploy image verify: active_backend=${ACTIVE_BACKEND}, expected_image=${EXPECTED_BACK_IMAGE}, active_image=${ACTIVE_BACKEND_IMAGE:-none}"
           if [ -z "${ACTIVE_BACKEND_CONTAINER_ID}" ] || [ -z "${ACTIVE_BACKEND_IMAGE}" ] || [ "${ACTIVE_BACKEND_IMAGE}" != "${EXPECTED_BACK_IMAGE}" ]; then
             rollback_and_exit "active_backend_image_mismatch"

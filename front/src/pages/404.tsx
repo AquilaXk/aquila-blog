@@ -11,6 +11,8 @@ const NotFoundPage = () => {
           description: CONFIG.blog.description,
           type: "website",
           url: CONFIG.link,
+          robots: "noindex, follow",
+          canonicalUrl: null,
         }}
       />
       <CustomError />

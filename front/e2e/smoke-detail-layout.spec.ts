@@ -5,6 +5,18 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.describe("core smoke detail layout", () => {
+  test("404 robots 정책은 noindex이고 canonical은 생략하며 정상 페이지 기본값은 유지한다", async ({ page }) => {
+  await page.goto("/404")
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, follow")
+  await expect(page.locator('link[rel="canonical"]')).toHaveCount(0)
+
+  await addPublicAboutSnapshotCookie(page)
+  await page.goto("/about")
+  await expect(page.locator('[data-ui="about-eyebrow"]')).toHaveText("Profile")
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "follow, index")
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", /\/about$/)
+})
+
   test("게시글 상세 browser title은 글 제목을 포함하고 일반 페이지 title은 site suffix를 중복하지 않는다", async ({ page }) => {
   await page.route("**/member/api/v1/auth/me", async (route) => {
     await route.fulfill({

@@ -46,6 +46,102 @@ test.describe("core smoke feed and search", () => {
   expect(homeStyles.firstCard?.borderWidth).toBe("1px")
 })
 
+  test("홈 topic rail은 실제 태그 count 상위 항목을 표시하고 tag 탐색으로 연결한다", async ({ page }) => {
+  const capturedTag: string[] = []
+
+  await page.setViewportSize({ width: 1680, height: 1200 })
+  await mockFeedEndpoints(page)
+  await page.route("**/post/api/v1/posts/tags", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        { tag: "alpha", count: 5 },
+        { tag: "운영", count: 9 },
+        { tag: "검색", count: 7 },
+        { tag: "Spring", count: 1 },
+      ]),
+    })
+  })
+  await page.route("**/post/api/v1/posts/explore**", async (route) => {
+    const url = new URL(route.request().url())
+    const tag = url.searchParams.get("tag") || ""
+    capturedTag.push(tag)
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(createExplorePage(tag ? `태그:${tag}` : "기본목록", tag || "운영")),
+    })
+  })
+
+  await page.goto("/")
+  const topicRail = page.locator('[data-ui="feed-topic-rail"]')
+  await expect(topicRail).toBeVisible()
+  await expect(topicRail.locator('[data-ui="feed-topic-rail-chip"]')).toHaveText(["운영", "검색", "alpha"])
+  await expect(page.getByText("Architecture")).toHaveCount(0)
+  await expect(page.getByText("Infrastructure")).toHaveCount(0)
+
+  await topicRail.getByRole("button", { name: "태그 검색 글 7개 보기" }).click()
+
+  await expect.poll(() => capturedTag.some((value) => value === "검색")).toBeTruthy()
+  await expect(page.locator("a[href^='/posts/'] h2").filter({ hasText: "태그:검색" })).toBeVisible()
+})
+
+  test("홈 topic rail은 모바일 viewport에서도 tag 탐색으로 연결한다", async ({ page }) => {
+  const capturedTag: string[] = []
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await mockFeedEndpoints(page)
+  await page.route("**/post/api/v1/posts/tags", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        { tag: "운영", count: 9 },
+        { tag: "검색", count: 7 },
+        { tag: "alpha", count: 5 },
+      ]),
+    })
+  })
+  await page.route("**/post/api/v1/posts/explore**", async (route) => {
+    const url = new URL(route.request().url())
+    const tag = url.searchParams.get("tag") || ""
+    capturedTag.push(tag)
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(createExplorePage(tag ? `태그:${tag}` : "기본목록", tag || "운영")),
+    })
+  })
+
+  await page.goto("/")
+  const topicRail = page.locator('[data-ui="feed-topic-rail"]')
+  await expect(topicRail).toBeVisible()
+
+  await topicRail.getByRole("button", { name: "태그 검색 글 7개 보기" }).click()
+
+  await expect.poll(() => capturedTag.some((value) => value === "검색")).toBeTruthy()
+  await expect(page.locator("a[href^='/posts/'] h2").filter({ hasText: "태그:검색" })).toBeVisible()
+})
+
+  test("홈 topic rail은 태그가 없으면 렌더하지 않는다", async ({ page }) => {
+  await page.setViewportSize({ width: 1680, height: 1200 })
+  await mockFeedEndpoints(page)
+  await page.route("**/post/api/v1/posts/tags", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([]),
+    })
+  })
+
+  await page.goto("/")
+
+  await expect(page.locator('[data-ui="feed-topic-rail"]')).toHaveCount(0)
+})
+
   test("홈 새로고침 이후에도 제품형 브랜드 문구를 유지한다", async ({ page }) => {
   await mockFeedEndpoints(page)
 

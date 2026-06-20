@@ -904,6 +904,9 @@ test("homeserver deploy preserves runtime-specific backend image release state",
   }
 
   assert.match(deployScript, /RELEASE_STATE_FILE="\$\{SCRIPT_DIR\}\/\.backend-release-state\.env"/)
+  assert.match(deployScript, /awk -F= -v key="\$\{key\}"/)
+  assert.match(deployScript, /value = substr\(\$0, index\(\$0, "="\) \+ 1\)/)
+  assert.match(deployScript, /END \{\s*print value\s*\}/)
   assert.match(deployScript, /write_backend_release_state "\$\{next_backend\}" "\$\{active_backend\}"/)
   assert.match(deployScript, /prepare_runtime_backend_images "\$\{active_backend\}" "\$\{next_backend\}" "\$\{STAGED_BACK_IMAGE\}"/)
   assert.match(backupScript, /\.backend-release-state\.env/)
@@ -913,7 +916,9 @@ test("homeserver deploy preserves runtime-specific backend image release state",
   assert.match(rollbackScript, /repair_runtime_back_image_if_missing "\$\{target_backend\}"/)
   assert.match(recoverScript, /repair_runtime_back_image_if_missing "back_worker"/)
   assert.match(statusScript, /ACTIVE_BACKEND_IMAGE_KEY="BACK_BLUE_IMAGE"/)
+  assert.match(statusScript, /ACTIVE_BACKEND_IMAGE_KEY="BACK_GREEN_IMAGE"/)
   assert.match(steadyStateGuard, /image_key="BACK_BLUE_IMAGE"/)
+  assert.match(steadyStateGuard, /image_key="BACK_GREEN_IMAGE"/)
   assert.doesNotMatch(statusScript, /env_value "BACK_IMAGE"/)
   assert.doesNotMatch(steadyStateGuard, /env_value "BACK_IMAGE"/)
 })

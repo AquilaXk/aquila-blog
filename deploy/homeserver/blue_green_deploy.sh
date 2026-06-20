@@ -1006,7 +1006,16 @@ runtime_backend_image_value() {
   local service="$1"
   local key
   key="$(backend_image_key "${service}")"
-  trim_quotes "$(env_value "${key}")"
+  trim_quotes "$(
+    awk -F= -v key="${key}" '
+      $1 == key {
+        value = substr($0, index($0, "=") + 1)
+      }
+      END {
+        print value
+      }
+    ' "${ENV_FILE}"
+  )"
 }
 
 upsert_runtime_backend_image() {

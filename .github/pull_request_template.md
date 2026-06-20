@@ -43,3 +43,4 @@
 - [ ] 필요한 테스트와 검증 결과를 본문에 남겼는가?
 - [ ] SEO/권한/캐시/배포 영향이 있다면 본문에 설명했는가?
 - [ ] API 계약 또는 운영 문서 변경이 있다면 함께 반영했는가?
+- [ ] 새 코드 주석이 있다면 [코드 주석 정책](https://github.com/AquilaXk/aquila-blog/blob/main/docs/design/code-comment-policy.md)에 맞는 이유/불변조건/운영 영향을 설명하는가?

@@ -341,6 +341,11 @@ const FeedExplorer = () => {
     lastLoadMoreAtRef.current = now
     void fetchNextPage()
   }, [fetchNextPage])
+  const handleRetryLoadMore = useCallback(() => {
+    if (!hasNextPageRef.current || isFetchingNextPageRef.current) return
+    lastLoadMoreAtRef.current = 0
+    void fetchNextPage()
+  }, [fetchNextPage])
   const handleLoadMoreRef = useRef(handleLoadMore)
 
   useEffect(() => {
@@ -443,6 +448,7 @@ const FeedExplorer = () => {
             isFetchNextPageError={isFetchNextPageError}
             hasNextPage={hasNextPage}
             onLoadMore={handleLoadMore}
+            onRetryLoadMore={handleRetryLoadMore}
             loadMoreTriggerRef={loadMoreTriggerRef}
           />
         </section>

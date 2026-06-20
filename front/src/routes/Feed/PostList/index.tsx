@@ -16,6 +16,7 @@ type Props = {
   isFetchNextPageError?: boolean
   hasNextPage?: boolean
   onLoadMore?: () => void
+  onRetryLoadMore?: () => void
   loadMoreTriggerRef?: RefObject<HTMLDivElement>
 }
 
@@ -106,6 +107,7 @@ const PostList: React.FC<Props> = ({
   isFetchNextPageError = false,
   hasNextPage = false,
   onLoadMore,
+  onRetryLoadMore,
   loadMoreTriggerRef,
 }) => {
   const deferredMountTriggerRef = useRef<HTMLDivElement | null>(null)
@@ -204,7 +206,7 @@ const PostList: React.FC<Props> = ({
             <div className="loadMoreError" role="alert" aria-live="assertive">
               <strong>다음 글을 불러오지 못했습니다.</strong>
               <span>기존 목록은 유지했습니다. 잠시 후 다시 시도해주세요.</span>
-              <button type="button" className="loadMoreButton" onClick={onLoadMore}>
+              <button type="button" className="loadMoreButton" onClick={onRetryLoadMore ?? onLoadMore}>
                 다시 시도
               </button>
             </div>

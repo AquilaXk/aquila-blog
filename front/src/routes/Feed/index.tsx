@@ -216,7 +216,7 @@ const IntroCard = styled.section`
   }
 
   @media (max-width: 768px) {
-    padding-bottom: 1rem;
+    padding-bottom: 0.18rem;
 
     [data-ui="feed-profile-summary"] {
       display: none;
@@ -235,7 +235,7 @@ const IntroCard = styled.section`
     }
 
     .topicRail {
-      margin-top: 0.76rem;
+      margin-top: 0.28rem;
       gap: 0.4rem;
     }
 

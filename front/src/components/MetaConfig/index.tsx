@@ -8,6 +8,8 @@ export type MetaConfigProps = {
   date?: string
   image?: string
   url: string
+  robots?: string
+  canonicalUrl?: string | null
 }
 
 const SITE_TITLE = CONFIG.blog.title || "AquilaLog"
@@ -26,14 +28,16 @@ const resolveBrowserTabTitle = (title: string) => {
 
 const MetaConfig: React.FC<MetaConfigProps> = (props) => {
   const browserTabTitle = resolveBrowserTabTitle(props.title)
+  const robots = props.robots || "follow, index"
+  const canonicalUrl = props.canonicalUrl === undefined ? props.url : props.canonicalUrl
 
   return (
     <Head>
       <title>{browserTabTitle}</title>
-      <meta name="robots" content="follow, index" />
+      <meta name="robots" content={robots} />
       <meta charSet="UTF-8" />
       <meta name="description" content={props.description} />
-      <link rel="canonical" href={props.url} />
+      {canonicalUrl && <link rel="canonical" href={canonicalUrl} />}
       {/* og */}
       <meta property="og:type" content={props.type} />
       <meta property="og:title" content={props.title} />

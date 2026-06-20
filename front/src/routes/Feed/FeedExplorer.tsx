@@ -102,6 +102,7 @@ const FeedExplorer = () => {
   const lastObserverTriggerAtRef = useRef(0)
   const hasNextPageRef = useRef(hasNextPage)
   const isFetchingNextPageRef = useRef(isFetchingNextPage)
+  const isFetchNextPageErrorRef = useRef(isFetchNextPageError)
 
   useEffect(() => {
     hasNextPageRef.current = hasNextPage
@@ -110,6 +111,10 @@ const FeedExplorer = () => {
   useEffect(() => {
     isFetchingNextPageRef.current = isFetchingNextPage
   }, [isFetchingNextPage])
+
+  useEffect(() => {
+    isFetchNextPageErrorRef.current = isFetchNextPageError
+  }, [isFetchNextPageError])
 
   useEffect(() => {
     restoreSnapshotRef.current = {
@@ -354,6 +359,7 @@ const FeedExplorer = () => {
   ])
 
   const handleLoadMore = useCallback(() => {
+    if (isFetchNextPageErrorRef.current) return
     if (!hasNextPageRef.current || isFetchingNextPageRef.current) return
     const now = Date.now()
     if (now - lastLoadMoreAtRef.current < LOAD_MORE_THROTTLE_MS) return
@@ -378,6 +384,7 @@ const FeedExplorer = () => {
     const observer = new IntersectionObserver(
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) return
+        if (isFetchNextPageErrorRef.current) return
         if (typeof document !== "undefined" && document.visibilityState !== "visible") return
         const now = Date.now()
         if (now - lastObserverTriggerAtRef.current < LOAD_MORE_OBSERVER_THROTTLE_MS) return

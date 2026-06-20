@@ -26,7 +26,8 @@ is_allowed_markdown() {
     infra/README.md|\
     perf/k6/README.md|\
     tools/templates/agent-plan.compact.md|\
-    tools/templates/bug-report.compact.md)
+    tools/templates/bug-report.compact.md|\
+    docs/design/*.md)
       return 0
       ;;
   esac
@@ -37,9 +38,12 @@ is_allowed_markdown() {
 declare -a targets=()
 while IFS= read -r -d '' file; do
   case "${file}" in
-    docs/design/*.md)
+    docs/*)
+      if ! is_allowed_markdown "${file}"; then
+        targets+=("${file}")
+      fi
       ;;
-    docs/*|AGENTS.md|CLAUDE.md|GEMINI.md|CURSOR.md|COPILOT.md|.cursor/*|.claude/*|.aider/*|.aider*|.windsurf/*|.codex/*|.ai/*)
+    AGENTS.md|CLAUDE.md|GEMINI.md|CURSOR.md|COPILOT.md|.cursor/*|.claude/*|.aider/*|.aider*|.windsurf/*|.codex/*|.ai/*)
       targets+=("${file}")
       ;;
     *.md)

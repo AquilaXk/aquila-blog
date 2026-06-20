@@ -10,11 +10,6 @@ import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequest
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest
 import org.springframework.stereotype.Component
 
-/**
- * CustomOAuth2AuthorizationRequestResolver는 글로벌 런타임 동작을 정의하는 설정 클래스입니다.
- * 보안, 캐시, 세션, JPA, 스케줄링 등 공통 인프라 설정을 등록합니다.
- */
-
 @Component
 class CustomOAuth2AuthorizationRequestResolver(
     private val clientRegistrationRepository: ClientRegistrationRepository,

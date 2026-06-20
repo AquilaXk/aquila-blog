@@ -55,9 +55,6 @@ class MemberRepositoryImpl(
         return PageableExecutionUtils.getPage(itemsQuery.fetch(), pageable) { countQuery.fetchOne() ?: 0L }
     }
 
-    /**
-     * ItemsQuery 항목을 생성한다.
-     */
     private fun createItemsQuery(
         builder: BooleanBuilder,
         pageable: Pageable,
@@ -85,9 +82,6 @@ class MemberRepositoryImpl(
             .limit(pageable.pageSize.toLong())
     }
 
-    /**
-     * CountQuery 항목을 생성한다.
-     */
     private fun createCountQuery(builder: BooleanBuilder): JPAQuery<Long> =
         queryFactory
             .select(member.count())

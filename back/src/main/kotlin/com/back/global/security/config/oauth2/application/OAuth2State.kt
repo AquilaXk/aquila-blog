@@ -28,10 +28,6 @@ data class OAuth2State(
             )
         }
 
-        /**
-         * 입력/환경 데이터를 파싱·정규화해 내부 처리에 안전한 값으로 변환합니다.
-         * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.
-         */
         private fun normalizeRedirectUrl(raw: String): String {
             val redirectUrl = raw.trim()
             if (redirectUrl.isBlank()) return DEFAULT_REDIRECT_URL

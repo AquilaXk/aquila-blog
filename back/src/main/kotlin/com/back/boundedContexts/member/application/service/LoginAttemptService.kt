@@ -11,10 +11,6 @@ import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
-/**
- * LoginAttemptService는 유스케이스 단위 비즈니스 흐름을 조합하는 애플리케이션 서비스입니다.
- * 트랜잭션 경계, 도메인 규칙 적용, 후속 동기화(캐시/이벤트/스토리지)를 담당합니다.
- */
 @Service
 class LoginAttemptService(
     @param:Value("\${custom.auth.login.maxAttempts:5}")
@@ -63,10 +59,6 @@ class LoginAttemptService(
         return false
     }
 
-    /**
-     * 상태 기록을 남기고 제한 정책 계산에 반영합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     override fun recordFailure(
         username: String,
         clientIp: String,
@@ -136,10 +128,6 @@ class LoginAttemptService(
         return blockedUntil > nowEpochSeconds()
     }
 
-    /**
-     * 상태 기록을 남기고 제한 정책 계산에 반영합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     private fun recordFailureInRedis(key: String): Boolean {
         if (isBlockedInRedis(key)) return true
 
@@ -165,10 +153,6 @@ class LoginAttemptService(
 
     private fun redisBlockedKey(key: String): String = "auth:login:blocked:$key"
 
-    /**
-     * 실행 시점에 필요한 의존성/값을 결정합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     private fun resolveRedisAvailability(): Boolean {
         val isRedisAvailable = redisKeyValuePort.isAvailable()
         if (!isRedisAvailable && AppFacade.isProd && requireRedisInProd) {
@@ -177,10 +161,6 @@ class LoginAttemptService(
         return isRedisAvailable
     }
 
-    /**
-     * 누적 상태를 정리해 메모리/스토리지 사용량을 관리합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     private fun cleanupInMemoryState(nowEpochSeconds: Long) {
         val shouldForceCleanup = states.size > memoryMaxEntries
         val previousCleanupAt = lastCleanupEpochSeconds.get()

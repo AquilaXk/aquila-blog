@@ -35,10 +35,6 @@ import java.time.Instant
 import java.util.UUID
 import kotlin.jvm.optionals.getOrNull
 
-/**
- * PostApplicationService는 유스케이스 단위 비즈니스 흐름을 조합하는 애플리케이션 서비스입니다.
- * 트랜잭션 경계, 도메인 규칙 적용, 후속 동기화(캐시/이벤트/스토리지)를 담당합니다.
- */
 @Service
 class PostApplicationService(
     private val postRepository: PostRepositoryPort,
@@ -62,10 +58,6 @@ class PostApplicationService(
 
     fun randomSecureTip(): String = secureTipPort.randomSecureTip()
 
-    /**
-     * 생성 요청을 처리하고 멱등성·후속 동기화 절차를 함께 수행합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     @Transactional
     fun write(
         author: Member,
@@ -205,10 +197,6 @@ class PostApplicationService(
 
     fun findLatest(): Post? = postRepository.findFirstByOrderByIdDesc()
 
-    /**
-     * 수정 요청을 처리하고 낙관적 잠금/후속 동기화를 수행합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     @Transactional
     fun modify(
         actor: Member,
@@ -297,10 +285,6 @@ class PostApplicationService(
         )
     }
 
-    /**
-     * 생성 요청을 처리하고 멱등성·후속 동기화 절차를 함께 수행합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     private fun writeNewPost(
         author: Member,
         persistenceAuthor: Member,
@@ -327,9 +311,6 @@ class PostApplicationService(
         return savedPost
     }
 
-    /**
-     * IdempotencyRequestSlot 항목을 생성한다.
-     */
     private fun createIdempotencyRequestSlot(
         persistenceAuthor: Member,
         idempotencyKey: String,
@@ -355,10 +336,6 @@ class PostApplicationService(
         }
     }
 
-    /**
-     * 삭제 요청을 처리하고 캐시/카운터/첨부파일 정리를 후속으로 연결합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     @Transactional
     fun delete(
         post: Post,
@@ -415,10 +392,6 @@ class PostApplicationService(
         )
     }
 
-    /**
-     * 댓글 생성 요청을 처리하고 댓글/작성자 집계값을 함께 갱신합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     @Transactional
     fun writeComment(
         author: Member,
@@ -427,10 +400,6 @@ class PostApplicationService(
         parentComment: PostComment? = null,
     ): PostComment = postCommentApplicationService.writeComment(author, post, content, parentComment)
 
-    /**
-     * 댓글 내용을 수정하고 변경 이벤트를 발행합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     @Transactional
     fun modifyComment(
         postComment: PostComment,
@@ -438,10 +407,6 @@ class PostApplicationService(
         content: String,
     ) = postCommentApplicationService.modifyComment(postComment, actor, content)
 
-    /**
-     * 댓글 삭제를 처리하고 연관 집계값을 함께 보정합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     @Transactional
     fun deleteComment(
         post: Post,
@@ -449,20 +414,12 @@ class PostApplicationService(
         actor: Member,
     ) = postCommentApplicationService.deleteComment(post, postComment, actor)
 
-    /**
-     * 좋아요 상태 변경을 반영하고 경쟁 상황에서의 정합성을 보장합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     @Transactional
     fun like(
         post: Post,
         actor: Member,
     ): PostLikeToggleResult = postLikeApplicationService.like(post, actor)
 
-    /**
-     * 좋아요 상태 변경을 반영하고 경쟁 상황에서의 정합성을 보장합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     @Transactional
     fun unlike(
         post: Post,

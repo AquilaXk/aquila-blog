@@ -14,10 +14,6 @@ import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
-/**
- * PostHitDedupService는 유스케이스 단위 비즈니스 흐름을 조합하는 애플리케이션 서비스입니다.
- * 트랜잭션 경계, 도메인 규칙 적용, 후속 동기화(캐시/이벤트/스토리지)를 담당합니다.
- */
 @Service
 class PostHitDedupService(
     @param:Value("\${custom.post.hit.viewerWindowSeconds:86400}")
@@ -85,10 +81,6 @@ class PostHitDedupService(
 
     private fun redisKey(value: String): String = "$redisKeyPrefix$value"
 
-    /**
-     * 누적 상태를 정리해 메모리/스토리지 사용량을 관리합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     private fun cleanupInMemoryState(nowEpochSeconds: Long) {
         val shouldForceCleanup = memoryState.size > memoryMaxEntries
         val previousCleanupAt = lastCleanupEpochSeconds.get()

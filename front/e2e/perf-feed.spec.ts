@@ -1,11 +1,47 @@
 import { expect, test } from "@playwright/test"
 import {
+  toRestoredPageParams,
+  type FeedExplorerRestoreSnapshot,
+} from "../src/routes/Feed/FeedExplorerRestoreModel"
+import {
   buildMockExploreItem,
   mockFeedEndpoints,
   waitForPageReady,
 } from "./helpers/perfFixtures"
 
 test.describe("perf feed scroll budgets", () => {
+  test("restore snapshot은 cursor pageParams를 cursor chain으로 복원한다", () => {
+    const snapshot: FeedExplorerRestoreSnapshot = {
+      savedAt: Date.now(),
+      pages: [
+        {
+          posts: [],
+          totalCount: 4,
+          pageNumber: 1,
+          pageSize: 2,
+          hasNext: true,
+          nextCursor: "cursor-2",
+          paginationMode: "cursor",
+        },
+        {
+          posts: [],
+          totalCount: 4,
+          pageNumber: 2,
+          pageSize: 2,
+          hasNext: false,
+          nextCursor: null,
+          paginationMode: "cursor",
+        },
+      ],
+    }
+
+    expect(toRestoredPageParams(snapshot)).toEqual([null, "cursor-2"])
+    expect(toRestoredPageParams({ ...snapshot, pageParams: [null, "persisted-cursor-2"] })).toEqual([
+      null,
+      "persisted-cursor-2",
+    ])
+  })
+
   test("홈 피드는 다음 cursor 실패를 빈 결과로 숨기지 않고 재시도 버튼을 보여준다", async ({ page }) => {
   let nextCursorAttempts = 0
   const firstPageIds = Array.from({ length: 16 }, (_, index) => 1201 + index)

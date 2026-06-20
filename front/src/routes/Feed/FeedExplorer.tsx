@@ -32,12 +32,15 @@ import {
   scheduleIdleRevalidate,
   toFeedExplorerInfiniteQueryKey,
   toPersistFingerprint,
+  toRestoredPageParams,
   toRestoredPage,
+  toSnapshotPageParam,
   toSnapshotPage,
   useDebouncedValue,
   type FeedExplorerRestoreSnapshot,
   type FeedExplorerRestoreState,
   type FeedExplorerSnapshotPage,
+  type FeedExplorerSnapshotPageParam,
 } from "./FeedExplorerRestoreModel"
 
 const LOAD_MORE_THROTTLE_MS = 800
@@ -50,6 +53,7 @@ const FeedExplorer = () => {
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const restoreStateRef = useRef<FeedExplorerRestoreState | null>(null)
   const restoreQueryPagesRef = useRef<FeedExplorerSnapshotPage[] | null>(null)
+  const restoreQueryPageParamsRef = useRef<FeedExplorerSnapshotPageParam[] | null>(null)
   const hasHydratedQuerySnapshotRef = useRef(false)
   const hasAppliedRestoreSnapshotRef = useRef(false)
   const hasScheduledIdleRevalidateRef = useRef(false)
@@ -143,7 +147,14 @@ const FeedExplorer = () => {
       window.sessionStorage.getItem(restoreSnapshotStorageKey)
     )
     if (restoredSnapshot?.pages?.length) {
-      restoreQueryPagesRef.current = restoredSnapshot.pages.slice(0, resolveSnapshotPageCap())
+      const restoredPages = restoredSnapshot.pages.slice(0, resolveSnapshotPageCap())
+      const restoredPageParams = toRestoredPageParams({
+        ...restoredSnapshot,
+        pages: restoredPages,
+        pageParams: restoredSnapshot.pageParams?.slice(0, restoredPages.length),
+      })
+      restoreQueryPagesRef.current = restoredPages
+      restoreQueryPageParamsRef.current = restoredPageParams
     }
 
   }, [currentTag, q, restoreSnapshotStorageKey, restoreStorageKey, router.isReady])
@@ -174,7 +185,10 @@ const FeedExplorer = () => {
 
     queryClient.setQueryData<InfiniteData<ExplorePostsPage>>(restoreQueryKey, {
       pages: restoredPages.map(toRestoredPage),
-      pageParams: restoredPages.map((page) => page.pageNumber),
+      pageParams:
+        restoreQueryPageParamsRef.current?.length === restoredPages.length
+          ? restoreQueryPageParamsRef.current
+          : toRestoredPageParams({ savedAt: restored.savedAt, pages: restoredPages }),
     })
     hasHydratedQuerySnapshotRef.current = true
     hasAppliedRestoreSnapshotRef.current = true
@@ -247,9 +261,14 @@ const FeedExplorer = () => {
       const pages = queryData?.pages ?? []
 
       if (pages.length > 0) {
+        const snapshotPages = pages.slice(0, resolveSnapshotPageCap()).map(toSnapshotPage)
+        const snapshotPageParams = (queryData?.pageParams ?? [])
+          .slice(0, snapshotPages.length)
+          .map(toSnapshotPageParam)
         const snapshotPayload: FeedExplorerRestoreSnapshot = {
           savedAt: state.savedAt,
-          pages: pages.slice(0, resolveSnapshotPageCap()).map(toSnapshotPage),
+          pages: snapshotPages,
+          ...(snapshotPageParams.length === snapshotPages.length ? { pageParams: snapshotPageParams } : {}),
         }
         const snapshotJson = JSON.stringify(snapshotPayload)
         if (snapshotJson.length <= FEED_EXPLORER_SNAPSHOT_MAX_BYTES) {

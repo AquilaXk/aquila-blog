@@ -27,7 +27,10 @@ export type FeedExplorerRestoreState = {
 export type FeedExplorerRestoreSnapshot = {
   savedAt: number
   pages: FeedExplorerSnapshotPage[]
+  pageParams?: FeedExplorerSnapshotPageParam[]
 }
+
+export type FeedExplorerSnapshotPageParam = number | string | null
 
 export type FeedExplorerSnapshotPost = {
   id: string
@@ -181,6 +184,47 @@ export const toRestoredPage = (page: FeedExplorerSnapshotPage): ExplorePostsPage
   posts: page.posts.map(toRestoredPost),
 })
 
+const normalizeSnapshotPageParam = (value: unknown): FeedExplorerSnapshotPageParam | undefined => {
+  if (value === null) return null
+  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value)
+  if (typeof value !== "string") return undefined
+
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+export const toSnapshotPageParam = (value: unknown): FeedExplorerSnapshotPageParam => {
+  return normalizeSnapshotPageParam(value) ?? null
+}
+
+const toFallbackRestoredPageParam = (
+  pages: FeedExplorerSnapshotPage[],
+  index: number
+): FeedExplorerSnapshotPageParam => {
+  const page = pages[index]
+  if (page?.paginationMode !== "cursor") {
+    return typeof page?.pageNumber === "number" && Number.isFinite(page.pageNumber)
+      ? Math.trunc(page.pageNumber)
+      : index + 1
+  }
+  if (index === 0) return null
+
+  const previousCursor = pages[index - 1]?.nextCursor
+  return typeof previousCursor === "string" && previousCursor.trim().length > 0
+    ? previousCursor.trim()
+    : null
+}
+
+export const toRestoredPageParams = (
+  snapshot: FeedExplorerRestoreSnapshot
+): FeedExplorerSnapshotPageParam[] => {
+  const pageParams = Array.isArray(snapshot.pageParams) ? snapshot.pageParams : []
+  return snapshot.pages.map((_, index) => {
+    const parsed = normalizeSnapshotPageParam(pageParams[index])
+    return parsed === undefined ? toFallbackRestoredPageParam(snapshot.pages, index) : parsed
+  })
+}
+
 export const scheduleIdleRevalidate = (callback: () => void) => {
   if (typeof window === "undefined") return () => {}
 
@@ -225,9 +269,14 @@ export const parseFeedExplorerRestoreSnapshot = (raw: string | null): FeedExplor
     if (savedAt <= 0) return null
     if (Date.now() - savedAt > FEED_EXPLORER_RESTORE_TTL_MS) return null
 
+    const pageParams = Array.isArray(parsed.pageParams)
+      ? parsed.pageParams.map(toSnapshotPageParam).slice(0, parsed.pages.length)
+      : undefined
+
     return {
       savedAt,
       pages: parsed.pages as FeedExplorerSnapshotPage[],
+      ...(pageParams ? { pageParams } : {}),
     }
   } catch {
     return null

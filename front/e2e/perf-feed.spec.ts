@@ -8,8 +8,8 @@ import {
 test.describe("perf feed scroll budgets", () => {
   test("홈 피드는 다음 cursor 실패를 빈 결과로 숨기지 않고 재시도 버튼을 보여준다", async ({ page }) => {
   let nextCursorAttempts = 0
-  const firstPageIds = [1201, 1202]
-  const secondPageIds = [1203, 1204]
+  const firstPageIds = Array.from({ length: 16 }, (_, index) => 1201 + index)
+  const secondPageIds = [1251, 1252]
 
   await mockFeedEndpoints(page, {
     feedHandler: async (route) => {
@@ -89,14 +89,14 @@ test.describe("perf feed scroll budgets", () => {
 
   await page.getByRole("button", { name: "다시 시도" }).click()
 
-  await expect(page.getByRole("heading", { name: "CLS 예산 점검 1203" })).toBeVisible()
+  await expect(page.getByText("피드 18개")).toBeVisible()
   expect(nextCursorAttempts).toBe(3)
 })
 
   test("홈 피드는 cursor 첫 요청 fallback 이후 다음 page를 page API로 이어간다", async ({ page }) => {
   const pageRequests: number[] = []
-  const firstPageIds = [1301, 1302]
-  const secondPageIds = [1303, 1304]
+  const firstPageIds = Array.from({ length: 16 }, (_, index) => 1301 + index)
+  const secondPageIds = [1351, 1352]
 
   await mockFeedEndpoints(page, {
     feedHandler: async (route) => {
@@ -137,7 +137,7 @@ test.describe("perf feed scroll budgets", () => {
 
   await page.getByRole("button", { name: "더보기" }).click()
 
-  await expect(page.getByRole("heading", { name: "CLS 예산 점검 1303" })).toBeVisible()
+  await expect(page.getByText("피드 18개")).toBeVisible()
   expect(pageRequests).toContain(2)
   expect(pageRequests.filter((value) => value === 2)).toHaveLength(1)
 })

@@ -107,6 +107,7 @@ export const getStaticProps: GetStaticProps = async () => {
             pageSize: FEED_EXPLORE_PAGE_SIZE,
             hasNext,
             nextCursor,
+            paginationMode: "cursor",
           },
         ],
         pageParams: [1],

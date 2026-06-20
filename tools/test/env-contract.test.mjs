@@ -74,6 +74,12 @@ const createDeployStaleFixture = () => {
     "deploy runtime change\n",
     "deploy change",
   )
+  const envContractAfterDocsSha = commitFile(
+    workDir,
+    "deploy/env/env.contract.json",
+    '{"updated":true}\n',
+    "env contract change",
+  )
   git(workDir, ["checkout", "-b", "detached-deploy", initialSha])
   const nonAncestorSha = commitFile(workDir, "back/side.txt", "side backend\n", "side backend change")
   git(workDir, ["checkout", "main"])
@@ -83,6 +89,7 @@ const createDeployStaleFixture = () => {
     backendSha,
     docsSha,
     backendAfterDocsSha,
+    envContractAfterDocsSha,
     nonAncestorSha,
   }
 }
@@ -746,7 +753,9 @@ test("deploy workflow는 path-aware stale gate로 backend 영향 후속 변경�
   assert.match(workflow, /git fetch --no-tags --prune origin "\+refs\/heads\/main:refs\/remotes\/origin\/main"/)
   assert.match(workflow, /git merge-base --is-ancestor "\$\{DEPLOY_SHA\}" "\$\{REMOTE_MAIN_SHA\}"/)
   assert.match(workflow, /STALE_CHANGED_FILES="\$\(git diff --name-only "\$\{DEPLOY_SHA\}" "\$\{REMOTE_MAIN_SHA\}"/)
-  assert.match(workflow, /grep -Eq "\$\{BACKEND_DEPLOY_PATHS_PATTERN\}"/)
+  assert.match(workflow, /STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*deploy\/env\//)
+  assert.match(workflow, /STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*tools\/env\//)
+  assert.match(workflow, /grep -Eq "\$\{STALE_DEPLOY_BLOCK_PATHS_PATTERN\}"/)
   assert.doesNotMatch(workflow, /git fetch --depth=1 origin main/)
   assert.doesNotMatch(workflow, /git rev-parse origin\/main/)
   assert.match(workflow, /stale workflow_run blocked by backend-impacting newer main changes: deploy_sha=/)
@@ -784,6 +793,23 @@ test("deploy calculateTag는 backend 영향 후속 main 변경이면 stale deplo
           cwd: fixture.workDir,
           deploySha: fixture.backendSha,
           currentMainSha: fixture.backendAfterDocsSha,
+        }),
+      /stale workflow_run blocked by backend-impacting newer main changes/,
+    )
+  } finally {
+    rmSync(fixture.workDir, { recursive: true, force: true })
+  }
+})
+
+test("deploy calculateTag는 deploy-time env 검증 입력 후속 변경이면 stale deploy를 차단한다", () => {
+  const fixture = createDeployStaleFixture()
+  try {
+    assert.throws(
+      () =>
+        runDeployCalculateScript({
+          cwd: fixture.workDir,
+          deploySha: fixture.backendSha,
+          currentMainSha: fixture.envContractAfterDocsSha,
         }),
       /stale workflow_run blocked by backend-impacting newer main changes/,
     )

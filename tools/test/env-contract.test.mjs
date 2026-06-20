@@ -1089,6 +1089,43 @@ test("homeserver origin ingress is private behind Cloudflare Tunnel", () => {
   assert.match(hardeningDoc, /80\/443.*loopback/)
 })
 
+test("prometheus scrapes backend runtimes with color and component labels", () => {
+  const prometheus = readFileSync(prometheusPath, "utf8")
+  const taskAlerts = readFileSync(taskAlertsPath, "utf8")
+  const exampleTaskAlerts = readFileSync(
+    path.join(repoRoot, "deploy/homeserver/monitoring/prometheus-task-alerts.example.yml"),
+    "utf8",
+  )
+  const overviewDashboard = readFileSync(
+    path.join(repoRoot, "deploy/homeserver/monitoring/grafana/dashboards/blog-overview.json"),
+    "utf8",
+  )
+
+  for (const target of ["back-blue:8080", "back-green:8080", "back-read:8080", "back-admin:8080", "back_worker:8080"]) {
+    assert.match(prometheus, new RegExp(`- ${target.replace(".", "\\.")}`))
+  }
+
+  assert.match(prometheus, /deploy_color: blue/)
+  assert.match(prometheus, /deploy_color: green/)
+  assert.match(prometheus, /component: api/)
+  assert.match(prometheus, /component: read/)
+  assert.match(prometheus, /component: admin/)
+  assert.match(prometheus, /component: worker/)
+  assert.match(taskAlerts, /max\(up\{job="back",service="aquila-back",component="api"\}\) < 1/)
+  assert.match(taskAlerts, /AquilaBackWorkerScrapeDown/)
+  assert.match(taskAlerts, /max\(up\{job="back",service="aquila-back",component="worker"\}\) < 1/)
+  assert.match(taskAlerts, /AquilaBackRuntimeSplitScrapeDown/)
+  assert.match(taskAlerts, /component=~"read\|admin"/)
+  assert.match(taskAlerts, /docker_container_running\{job="docker_runtime_probe",service=~"back_\(read\|admin\)"\}/)
+  assert.doesNotMatch(taskAlerts, /min\(up\{job="back",service="aquila-back"\}\) < 1/)
+  assert.match(exampleTaskAlerts, /max\(up\{job="back",service="aquila-back",component="api"\}\) < 1/)
+  assert.match(exampleTaskAlerts, /AquilaBackWorkerScrapeDown/)
+  assert.match(exampleTaskAlerts, /AquilaBackRuntimeSplitScrapeDown/)
+  assert.doesNotMatch(exampleTaskAlerts, /min\(up\{job="back",service="aquila-back"\}\) < 1/)
+  assert.match(overviewDashboard, /max\(up\{job=\\"back\\",service=\\"aquila-back\\",component=\\"api\\"\}\) or on\(\) vector\(0\)/)
+  assert.match(overviewDashboard, /Back API scrape health \(any color up\)/)
+})
+
 test("ddos defense monitoring covers rate limit, docker runtime, redis, and memory pressure", () => {
   const compose = readFileSync(composePath, "utf8")
   const prometheus = readFileSync(prometheusPath, "utf8")

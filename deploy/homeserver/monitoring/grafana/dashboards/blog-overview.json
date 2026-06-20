@@ -387,13 +387,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "min(up{job=\"back\",service=\"aquila-back\"}) or on() vector(0)",
-          "legendFormat": "min up",
+          "expr": "max(up{job=\"back\",service=\"aquila-back\",component=\"api\"}) or on() vector(0)",
+          "legendFormat": "api color up",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Back scrape health (min up)",
+      "title": "Back API scrape health (any color up)",
       "type": "stat"
     },
     {

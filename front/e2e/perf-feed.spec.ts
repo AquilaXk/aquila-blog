@@ -142,6 +142,53 @@ test.describe("perf feed scroll budgets", () => {
   expect(pageRequests.filter((value) => value === 2)).toHaveLength(1)
 })
 
+  test("홈 피드 page fallback은 빈 page에서 추가 요청을 멈춘다", async ({ page }) => {
+  const pageRequests: number[] = []
+
+  await mockFeedEndpoints(page, {
+    feedHandler: async (route) => {
+      const url = new URL(route.request().url())
+      const isCursorEndpoint = url.pathname.endsWith("/cursor")
+      const pageNumber = Number(url.searchParams.get("page") || "1")
+      const pageSize = Number(url.searchParams.get("pageSize") || "24")
+
+      if (isCursorEndpoint) {
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "cursor disabled for empty-page guard regression" }),
+        })
+        return
+      }
+
+      pageRequests.push(pageNumber)
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          content: pageNumber === 1 ? [buildMockExploreItem(1351)] : [],
+          pageable: {
+            pageNumber: Math.max(pageNumber - 1, 0),
+            pageSize,
+            totalElements: pageSize * 3,
+            totalPages: 3,
+          },
+        }),
+      })
+    },
+  })
+
+  await page.goto("/")
+  await waitForPageReady(page)
+  await expect(page.getByRole("heading", { name: "CLS 예산 점검 1351" })).toBeVisible()
+
+  await page.getByRole("button", { name: "더보기" }).click()
+
+  await expect(page.getByRole("button", { name: "더보기" })).toHaveCount(0)
+  expect(pageRequests).toContain(2)
+  expect(pageRequests).not.toContain(3)
+})
+
   test("태그와 keyword 조합은 explore page API에 keyword를 보존한다", async ({ page }) => {
   const capturedExploreRequests: Array<{ isCursorEndpoint: boolean; kw: string; tag: string }> = []
 

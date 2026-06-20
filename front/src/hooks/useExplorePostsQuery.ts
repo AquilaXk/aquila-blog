@@ -118,6 +118,7 @@ const useExplorePostsQuery = ({
           ? lastPage.nextCursor.trim()
           : undefined
       }
+      if (lastPage.posts.length === 0) return undefined
       if (lastPage.pageNumber * lastPage.pageSize >= lastPage.totalCount) return undefined
       return lastPage.pageNumber + 1
     },

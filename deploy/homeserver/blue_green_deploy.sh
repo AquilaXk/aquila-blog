@@ -28,6 +28,11 @@ PREWARM_RETRIES="${PREWARM_RETRIES:-2}"
 PREWARM_BACKOFF_SECONDS="${PREWARM_BACKOFF_SECONDS:-1}"
 PREWARM_PUBLIC_ROUTE_POST_LIMIT="${PREWARM_PUBLIC_ROUTE_POST_LIMIT:-5}"
 STREAM_DRAIN_SECONDS="${STREAM_DRAIN_SECONDS:-15}"
+BLUE_GREEN_BURN_IN_PROFILE="${BLUE_GREEN_BURN_IN_PROFILE:-standard}"
+BLUE_GREEN_BURN_IN_SECONDS="${BLUE_GREEN_BURN_IN_SECONDS:-}"
+BLUE_GREEN_BURN_IN_STANDARD_SECONDS="${BLUE_GREEN_BURN_IN_STANDARD_SECONDS:-180}"
+BLUE_GREEN_BURN_IN_HIGH_RISK_SECONDS="${BLUE_GREEN_BURN_IN_HIGH_RISK_SECONDS:-600}"
+BLUE_GREEN_BURN_IN_PROBE_INTERVAL_SECONDS="${BLUE_GREEN_BURN_IN_PROBE_INTERVAL_SECONDS:-15}"
 RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED:-false}"
 RUNTIME_SPLIT_STAGE="${RUNTIME_SPLIT_STAGE:-A}"
 AUTO_MEMORY_TUNER_ENABLED="${AUTO_MEMORY_TUNER_ENABLED:-true}"
@@ -107,6 +112,9 @@ normalize_non_negative_int() {
 RUNTIME_SPLIT_ENABLED="$(normalize_bool "${RUNTIME_SPLIT_ENABLED}")"
 RUNTIME_SPLIT_STAGE="$(normalize_runtime_split_stage "${RUNTIME_SPLIT_STAGE}")"
 STREAM_DRAIN_SECONDS="$(normalize_non_negative_int "${STREAM_DRAIN_SECONDS}" "15")"
+BLUE_GREEN_BURN_IN_STANDARD_SECONDS="$(normalize_non_negative_int "${BLUE_GREEN_BURN_IN_STANDARD_SECONDS}" "180")"
+BLUE_GREEN_BURN_IN_HIGH_RISK_SECONDS="$(normalize_non_negative_int "${BLUE_GREEN_BURN_IN_HIGH_RISK_SECONDS}" "600")"
+BLUE_GREEN_BURN_IN_PROBE_INTERVAL_SECONDS="$(normalize_positive_int "${BLUE_GREEN_BURN_IN_PROBE_INTERVAL_SECONDS}" "15")"
 AUTO_MEMORY_TUNER_ENABLED="$(normalize_bool "${AUTO_MEMORY_TUNER_ENABLED}")"
 AUTO_MEMORY_TUNER_MAX_BUDGET_MB="$(normalize_positive_int "${AUTO_MEMORY_TUNER_MAX_BUDGET_MB}" "4096")"
 AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB="$(normalize_positive_int "${AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB}" "2048")"
@@ -1965,6 +1973,135 @@ ensure_steady_state_guard() {
   "${installer}"
 }
 
+resolve_blue_green_burn_in_seconds() {
+  local profile
+  profile="$(echo "${BLUE_GREEN_BURN_IN_PROFILE}" | tr '[:upper:]' '[:lower:]' | tr '_' '-')"
+
+  local default_seconds
+  case "${profile}" in
+    disabled|off|none)
+      default_seconds="0"
+      ;;
+    high|high-risk)
+      default_seconds="${BLUE_GREEN_BURN_IN_HIGH_RISK_SECONDS}"
+      ;;
+    *)
+      default_seconds="${BLUE_GREEN_BURN_IN_STANDARD_SECONDS}"
+      ;;
+  esac
+
+  if [[ -n "${BLUE_GREEN_BURN_IN_SECONDS}" ]]; then
+    normalize_non_negative_int "${BLUE_GREEN_BURN_IN_SECONDS}" "${default_seconds}"
+    return
+  fi
+
+  echo "${default_seconds}"
+}
+
+rollback_caddy_route_only() {
+  local previous_backend="$1"
+  local candidate_backend="$2"
+  local api_domain="$3"
+
+  echo "burn-in failed; keeping previous backend active: previous=${previous_backend}, candidate=${candidate_backend}" >&2
+
+  if ! is_backend_running "${previous_backend}"; then
+    echo "burn-in rollback blocked: previous backend is not running: ${previous_backend}" >&2
+    return 1
+  fi
+
+  if ! check_backend_dns_from_caddy "${previous_backend}"; then
+    echo "burn-in rollback blocked: DNS not resolvable for ${previous_backend}" >&2
+    return 1
+  fi
+
+  if ! check_backend_health "${previous_backend}"; then
+    echo "burn-in rollback blocked: healthcheck failed for ${previous_backend}" >&2
+    return 1
+  fi
+
+  switch_caddy_upstream "${previous_backend}"
+
+  if ! verify_caddy_route "${previous_backend}" "${api_domain}"; then
+    echo "burn-in rollback failed: caddy route verify failed" >&2
+    return 1
+  fi
+
+  echo "${previous_backend}" > "${STATE_FILE}"
+  write_backend_release_state "${previous_backend}" "${candidate_backend}"
+  compose stop "${candidate_backend}" || true
+  echo "burn-in rollback ok: route=${previous_backend}, stopped_candidate=${candidate_backend}"
+  return 0
+}
+
+run_blue_green_burn_in() {
+  local candidate_backend="$1"
+  local previous_backend="$2"
+  local api_domain="$3"
+  local duration_seconds
+  duration_seconds="$(resolve_blue_green_burn_in_seconds)"
+
+  if (( duration_seconds == 0 )); then
+    echo "burn-in skipped: profile=${BLUE_GREEN_BURN_IN_PROFILE}, duration_seconds=0"
+    return 0
+  fi
+
+  echo "burn-in start: candidate=${candidate_backend}, previous=${previous_backend}, duration_seconds=${duration_seconds}, interval_seconds=${BLUE_GREEN_BURN_IN_PROBE_INTERVAL_SECONDS}"
+
+  local elapsed=0
+  local wait_seconds
+  local post_code
+  while (( elapsed < duration_seconds )); do
+    wait_seconds="${BLUE_GREEN_BURN_IN_PROBE_INTERVAL_SECONDS}"
+    if (( elapsed + wait_seconds > duration_seconds )); then
+      wait_seconds=$((duration_seconds - elapsed))
+    fi
+
+    if (( wait_seconds > 0 )); then
+      sleep "${wait_seconds}"
+      elapsed=$((elapsed + wait_seconds))
+    fi
+
+    if ! check_backend_health "${candidate_backend}"; then
+      rollback_caddy_route_only "${previous_backend}" "${candidate_backend}" "${api_domain}" || true
+      return 1
+    fi
+
+    if ! verify_caddy_route "${candidate_backend}" "${api_domain}"; then
+      rollback_caddy_route_only "${previous_backend}" "${candidate_backend}" "${api_domain}" || true
+      return 1
+    fi
+
+    post_code="$(probe_caddy_http_code "${api_domain}")"
+    if ! is_healthy_http_code "${post_code}"; then
+      echo "burn-in public route verify failed (status=${post_code:-none})" >&2
+      rollback_caddy_route_only "${previous_backend}" "${candidate_backend}" "${api_domain}" || true
+      return 1
+    fi
+
+    if ! check_notification_sse_route "${api_domain}"; then
+      echo "burn-in notification sse verify failed" >&2
+      rollback_caddy_route_only "${previous_backend}" "${candidate_backend}" "${api_domain}" || true
+      return 1
+    fi
+
+    if ! check_cloudflared_runtime "${api_domain}"; then
+      echo "burn-in cloudflared runtime verify failed" >&2
+      rollback_caddy_route_only "${previous_backend}" "${candidate_backend}" "${api_domain}" || true
+      return 1
+    fi
+
+    if ! check_grafana_embed_origin_route; then
+      echo "burn-in grafana origin auth-proxy route verify failed" >&2
+      rollback_caddy_route_only "${previous_backend}" "${candidate_backend}" "${api_domain}" || true
+      return 1
+    fi
+  done
+
+  echo "burn-in ok: candidate=${candidate_backend}, previous=${previous_backend}, duration_seconds=${duration_seconds}"
+  return 0
+}
+
 rollback_to_backend() {
   local rollback_backend="$1"
   local api_domain="$2"
@@ -2094,6 +2231,11 @@ if ! check_notification_sse_route "${api_domain}"; then
   exit 1
 fi
 
+echo "post-switch phase: blue/green burn-in"
+if ! run_blue_green_burn_in "${next_backend}" "${active_backend}" "${api_domain}"; then
+  exit 1
+fi
+
 echo "${next_backend}" > "${STATE_FILE}"
 write_backend_release_state "${next_backend}" "${active_backend}"
 drain_and_stop_backend_if_running "${active_backend}"
@@ -2121,5 +2263,5 @@ warn_grafana_embed_public_route
 echo "post-switch phase: public read prewarm"
 prewarm_public_read_cache "${api_domain}"
 
-echo "post-switch verify ok (status=${post_code}); inactive backend stopped"
+echo "post-switch verify ok (status=${post_code}); burn-in complete; inactive backend stopped"
 compose ps

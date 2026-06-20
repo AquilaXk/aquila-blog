@@ -27,10 +27,9 @@ const isSitemapVisiblePost = (post: TPost) =>
 
 const hasMoreSitemapPages = (page: ExplorePostsPage, requestedPage: number, requestedPageSize: number) => {
   if (page.hasNext === true) return true
-  const responsePageNumber = toSafePositiveInteger(page.pageNumber, requestedPage)
   const responsePageSize = toSafePositiveInteger(page.pageSize, requestedPageSize)
   const totalCount = Number.isFinite(page.totalCount) ? Math.max(0, Math.trunc(page.totalCount)) : 0
-  return responsePageNumber * responsePageSize < totalCount
+  return requestedPage * responsePageSize < totalCount
 }
 
 export const collectSitemapPosts = async (

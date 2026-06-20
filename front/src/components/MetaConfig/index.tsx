@@ -10,8 +10,22 @@ export type MetaConfigProps = {
   url: string
 }
 
+const SITE_TITLE = CONFIG.blog.title || "AquilaLog"
+
+const resolveBrowserTabTitle = (title: string) => {
+  const pageTitle = title.trim()
+  if (!pageTitle || pageTitle === SITE_TITLE) {
+    return SITE_TITLE
+  }
+  if (pageTitle.endsWith(` | ${SITE_TITLE}`) || pageTitle.endsWith(` - ${SITE_TITLE}`)) {
+    return pageTitle
+  }
+
+  return `${pageTitle} | ${SITE_TITLE}`
+}
+
 const MetaConfig: React.FC<MetaConfigProps> = (props) => {
-  const browserTabTitle = "AquilaLog"
+  const browserTabTitle = resolveBrowserTabTitle(props.title)
 
   return (
     <Head>

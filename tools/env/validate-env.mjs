@@ -126,7 +126,6 @@ export const validateEnvText = ({ contract, target, text }) => {
 
     if (definition.placeholderForbidden !== false && placeholder.test(value)) {
       errors.push(safeError(definition.name, "must not contain placeholder value"))
-      continue
     }
 
     if (definition.allowedValues && !definition.allowedValues.includes(value)) {
@@ -135,6 +134,14 @@ export const validateEnvText = ({ contract, target, text }) => {
 
     if (definition.minLength && value.length < definition.minLength) {
       errors.push(safeError(definition.name, `must be at least ${definition.minLength} characters`))
+    }
+
+    if (definition.forbiddenValues?.includes(value)) {
+      errors.push(safeError(definition.name, "must not use forbidden value"))
+    }
+
+    if (definition.mustDifferFrom && value === valueOf(env, definition.mustDifferFrom)) {
+      errors.push(safeError(definition.name, `must differ from ${definition.mustDifferFrom}`))
     }
 
     const kindError = validateKind(definition, value)

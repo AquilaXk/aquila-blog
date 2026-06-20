@@ -55,8 +55,15 @@ export const collectSitemapPosts = async (
       posts.push(post)
     }
 
-    if (result.posts.length === 0 || !hasMoreSitemapPages(result, page, safePageSize)) {
+    const hasMore = result.posts.length > 0 && hasMoreSitemapPages(result, page, safePageSize)
+    if (!hasMore) {
       break
+    }
+
+    if (page === safeMaxPages) {
+      throw new Error(
+        `Sitemap collection reached maxPages=${safeMaxPages} before exhausting posts. Increase the limit or split the sitemap.`
+      )
     }
   }
 

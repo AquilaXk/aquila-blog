@@ -64,4 +64,17 @@ test.describe("server sitemap post collection", () => {
     expect(collected.map((post) => post.id)).toEqual(["1"])
     expect(requestedPages).toEqual([1, 2])
   })
+
+  test("fails loudly when maxPages is reached before exhausting public posts", async () => {
+    const posts = Array.from({ length: 31 }, (_, index) => makePost(index + 1))
+    const requestedPages: number[] = []
+
+    await expect(
+      collectSitemapPosts(createPagedLoader(posts, requestedPages), {
+        pageSize: 30,
+        maxPages: 1,
+      })
+    ).rejects.toThrow("Sitemap collection reached maxPages=1 before exhausting posts")
+    expect(requestedPages).toEqual([1])
+  })
 })

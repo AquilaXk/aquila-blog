@@ -33,17 +33,7 @@ const DEFERRED_MOUNT_ROOT_MARGIN = "680px 0px"
 const EmptyPostStateInner: React.FC<EmptyPostStateProps> = ({ hasFilter, onClearFilters }) => {
   const { me, authStatus } = useAuthSession()
   const isAdmin = authStatus === "authenticated" && Boolean(me?.isAdmin)
-  const secondaryCta = isAdmin
-    ? {
-        href: "/admin",
-        icon: "service" as const,
-        label: "관리자 허브",
-      }
-    : {
-        href: "/about",
-        icon: "service" as const,
-        label: "블로그 소개",
-      }
+  const emptyStateMessage = isAdmin ? "첫 글을 발행해보세요." : "곧 새로운 글을 준비하겠습니다."
 
   return (
     <section className="emptyState" aria-live="polite">
@@ -51,23 +41,28 @@ const EmptyPostStateInner: React.FC<EmptyPostStateProps> = ({ hasFilter, onClear
         <AppIcon name={hasFilter ? "search" : "edit"} />
       </div>
       <h3>{hasFilter ? "검색 결과가 없습니다." : "아직 게시글이 없습니다."}</h3>
-      <p>{hasFilter ? "다른 검색어를 입력해보세요." : "첫 글을 발행해보세요."}</p>
+      <p>{hasFilter ? "다른 검색어를 입력해보세요." : emptyStateMessage}</p>
       <div className="emptyActions">
         {hasFilter ? (
           <button type="button" onClick={onClearFilters} className="actionBtn actionBtn--primary">
             <AppIcon name="search" />
             초기화
           </button>
-        ) : (
-          <Link href={isAdmin ? "/editor/new" : "/admin"} className="actionBtn actionBtn--primary">
+        ) : isAdmin ? (
+          <Link href="/editor/new" className="actionBtn actionBtn--primary">
             <AppIcon name="edit" />
-            글 작성
+            첫 글 작성
+          </Link>
+        ) : (
+          <Link href="/about" className="actionBtn actionBtn--primary">
+            <AppIcon name="service" />
+            블로그 소개
           </Link>
         )}
-        {!hasFilter && (
-          <Link href={secondaryCta.href} className="actionBtn">
-            <AppIcon name={secondaryCta.icon} />
-            {secondaryCta.label}
+        {!hasFilter && isAdmin && (
+          <Link href="/admin" className="actionBtn">
+            <AppIcon name="service" />
+            관리자 허브
           </Link>
         )}
       </div>

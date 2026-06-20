@@ -110,7 +110,7 @@ export const getStaticProps: GetStaticProps = async () => {
             paginationMode: "cursor",
           },
         ],
-        pageParams: [1],
+        pageParams: [null],
       }
     )
   }

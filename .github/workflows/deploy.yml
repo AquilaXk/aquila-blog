@@ -108,9 +108,25 @@ jobs:
               echo "origin/main sha lookup failed" >&2
               exit 1
             fi
-            if [ "${DEPLOY_SHA}" != "${REMOTE_MAIN_SHA}" ]; then
-              echo "stale workflow_run blocked: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}" >&2
+            git fetch --no-tags --prune origin "+refs/heads/main:refs/remotes/origin/main"
+            FETCHED_MAIN_SHA="$(git rev-parse refs/remotes/origin/main)"
+            if [ "${FETCHED_MAIN_SHA}" != "${REMOTE_MAIN_SHA}" ]; then
+              echo "origin/main sha changed during stale check: remote=${REMOTE_MAIN_SHA} fetched=${FETCHED_MAIN_SHA}" >&2
               exit 1
+            fi
+            if ! git merge-base --is-ancestor "${DEPLOY_SHA}" "${REMOTE_MAIN_SHA}"; then
+              echo "deploy sha is not reachable from origin/main: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}" >&2
+              exit 1
+            fi
+            if [ "${DEPLOY_SHA}" != "${REMOTE_MAIN_SHA}" ]; then
+              STALE_CHANGED_FILES="$(git diff --name-only "${DEPLOY_SHA}" "${REMOTE_MAIN_SHA}" 2>/dev/null || true)"
+              if echo "${STALE_CHANGED_FILES}" | grep -Eq "${BACKEND_DEPLOY_PATHS_PATTERN}"; then
+                echo "stale workflow_run blocked by backend-impacting newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}" >&2
+                echo "${STALE_CHANGED_FILES}" >&2
+                exit 1
+              fi
+              echo "stale workflow_run allowed after backend-neutral newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}"
+              CHANGE_SOURCE="${CHANGE_SOURCE}+path-aware-stale-neutral"
             fi
           fi
           CHANGED_FILES="$(git diff --name-only "${DEPLOY_SHA}^1" "${DEPLOY_SHA}" 2>/dev/null || true)"

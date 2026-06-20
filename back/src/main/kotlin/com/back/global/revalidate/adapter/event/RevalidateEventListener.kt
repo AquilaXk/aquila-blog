@@ -13,10 +13,6 @@ import org.springframework.transaction.event.TransactionalEventListener
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
-/**
- * RevalidateEventListener는 도메인 이벤트를 수신해 후속 처리를 연결하는 이벤트 어댑터입니다.
- * 이벤트 수신 시 비동기 작업 등록과 재처리 경로를 담당합니다.
- */
 @Component
 class RevalidateEventListener(
     private val taskFacade: TaskFacade,
@@ -46,10 +42,6 @@ class RevalidateEventListener(
         revalidateService.revalidatePath(payload.path)
     }
 
-    /**
-     * enqueueHomeRevalidate 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
-     * 어댑터 계층에서 외부 시스템 연동 오류를 캡슐화해 상위 계층 영향을 최소화합니다.
-     */
     private fun enqueueRevalidatePaths(
         sourceEventUid: UUID,
         aggregateType: String,

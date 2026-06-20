@@ -16,10 +16,6 @@ import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
-/**
- * MemberNotificationSseService는 유스케이스 단위 비즈니스 흐름을 조합하는 애플리케이션 서비스입니다.
- * 트랜잭션 경계, 도메인 규칙 적용, 후속 동기화(캐시/이벤트/스토리지)를 담당합니다.
- */
 @Service
 class MemberNotificationSseService(
     private val memberNotificationRepository: MemberNotificationRepositoryPort,
@@ -115,10 +111,6 @@ class MemberNotificationSseService(
         return emitter
     }
 
-    /**
-     * 이벤트/메시지를 전파하고 실패를 안전하게 처리합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     fun publish(
         memberId: Long,
         notification: MemberNotificationDto,
@@ -150,10 +142,6 @@ class MemberNotificationSseService(
         )
     }
 
-    /**
-     * 이벤트/메시지를 전파하고 실패를 안전하게 처리합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     private fun send(
         emitter: SseEmitter,
         memberId: Long?,
@@ -337,10 +325,6 @@ class MemberNotificationSseService(
         return latestId
     }
 
-    /**
-     * 원본 입력에서 필요한 값을 안전하게 추출합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     private fun parseLastNotificationId(lastEventIdRaw: String?): Long? {
         val raw = lastEventIdRaw?.trim().orEmpty()
         if (raw.isBlank()) return null

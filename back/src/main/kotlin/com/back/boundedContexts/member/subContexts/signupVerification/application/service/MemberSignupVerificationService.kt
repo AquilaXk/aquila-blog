@@ -18,30 +18,16 @@ import java.time.Instant
 import java.util.Locale
 import java.util.UUID
 
-/**
- * `SignupEmailStartResult` 데이터 클래스입니다.
- * - 역할: 요청/응답/이벤트/상태 전달용 불변 데이터 구조를 담당합니다.
- * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
- */
 data class SignupEmailStartResult(
     val email: String,
 )
 
-/**
- * `SignupEmailVerifyResult` 데이터 클래스입니다.
- * - 역할: 요청/응답/이벤트/상태 전달용 불변 데이터 구조를 담당합니다.
- * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
- */
 data class SignupEmailVerifyResult(
     val email: String,
     val signupToken: String,
     val expiresAt: Instant,
 )
 
-/**
- * MemberSignupVerificationService는 유스케이스 단위 비즈니스 흐름을 조합하는 애플리케이션 서비스입니다.
- * 트랜잭션 경계, 도메인 규칙 적용, 후속 동기화(캐시/이벤트/스토리지)를 담당합니다.
- */
 @Service
 class MemberSignupVerificationService(
     private val memberRepository: MemberRepositoryPort,
@@ -204,10 +190,6 @@ class MemberSignupVerificationService(
         }
     }
 
-    /**
-     * 외부 입력값을 내부 규칙에 맞게 정규화합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     private fun normalizeNextPath(nextPath: String?): String? {
         val trimmed = nextPath?.trim()?.takeIf { it.isNotBlank() } ?: return null
 

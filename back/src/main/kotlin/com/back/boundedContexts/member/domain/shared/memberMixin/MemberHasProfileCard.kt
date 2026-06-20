@@ -62,11 +62,6 @@ val PROFILE_CONTACT_ICON_ALLOWED =
         "bell",
     )
 
-/**
- * `MemberProfileLinkItem` 데이터 클래스입니다.
- * - 역할: 요청/응답/이벤트/상태 전달용 불변 데이터 구조를 담당합니다.
- * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
- */
 data class MemberProfileLinkItem(
     val icon: String = PROFILE_SERVICE_LINK_ICON_DEFAULT_VALUE,
     val label: String = PROFILE_LINK_LABEL_DEFAULT_VALUE,
@@ -153,11 +148,6 @@ private fun encodeProfileLinkItems(
         ),
     )
 
-/**
- * `MemberHasProfileCard` 인터페이스입니다.
- * - 역할: 계층 간 계약(포트/스펙) 정의를 담당합니다.
- * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
- */
 interface MemberHasProfileCard : MemberAware {
     fun getOrInitProfileRoleAttr(loader: (() -> MemberAttr)? = null): MemberAttr =
         member.getOrPutAttr(PROFILE_ROLE) {

@@ -17,10 +17,6 @@ import org.springframework.transaction.annotation.Transactional
 import java.util.Locale
 import java.util.Optional
 
-/**
- * MemberApplicationService는 유스케이스 단위 비즈니스 흐름을 조합하는 애플리케이션 서비스입니다.
- * 트랜잭션 경계, 도메인 규칙 적용, 후속 동기화(캐시/이벤트/스토리지)를 담당합니다.
- */
 @Service
 class MemberApplicationService(
     private val memberRepository: MemberRepositoryPort,
@@ -42,10 +38,6 @@ class MemberApplicationService(
     @Transactional(readOnly = true)
     fun count(): Long = memberRepository.count()
 
-    /**
-     * 회원 가입 요청을 검증하고 계정을 생성합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     @Transactional
     fun join(
         username: String,
@@ -199,10 +191,6 @@ class MemberApplicationService(
         }
     }
 
-    /**
-     * 수정 요청을 처리하고 낙관적 잠금/후속 동기화를 수행합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     @Transactional
     fun modifyProfileCard(
         member: Member,
@@ -261,10 +249,6 @@ class MemberApplicationService(
                 RsData("201-1", "회원가입이 완료되었습니다.", joinedMember)
             }
 
-    /**
-     * 검색/목록 조회 조건을 정규화해 페이징 결과를 구성합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     @Transactional(readOnly = true)
     fun findPagedByKw(
         kw: String,
@@ -293,10 +277,6 @@ class MemberApplicationService(
         )
     }
 
-    /**
-     * 외부 입력값을 내부 규칙에 맞게 정규화합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     private fun normalizeZeroBasedPage(page: Int): Int {
         if (page < 1) {
             throw AppException("400-1", "page는 1 이상이어야 합니다.")
@@ -306,10 +286,6 @@ class MemberApplicationService(
         return if (page == 1) 0 else page - 1
     }
 
-    /**
-     * 외부 입력값을 내부 규칙에 맞게 정규화합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     private fun normalizePageSize(pageSize: Int): Int {
         if (pageSize !in 1..30) {
             throw AppException("400-1", "pageSize는 1~30 범위여야 합니다.")

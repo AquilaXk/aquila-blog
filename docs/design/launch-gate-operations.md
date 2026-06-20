@@ -66,7 +66,7 @@ Before merge:
 
 - [ ] #958 또는 관련 launch gate issue가 PR에 연결되어 있다.
 - [ ] P0/P1 launch-blocking issue 상태를 확인했다.
-- [ ] CI와 Security checks가 success다.
+- [ ] CI, CodeQL, backend dependency-check run/artifact evidence를 확인했다. dependency-check skip이면 block 또는 명시적 defer note를 기록했다.
 - [ ] CodeRabbit review 또는 Codex CLI fallback review가 PR review로 남아 있다.
 - [ ] unresolved review thread와 requested changes가 없다.
 - [ ] 배포 영향 범위를 `docs-only`, `frontend`, `backend`, `deploy` 중 하나로 기록했다.

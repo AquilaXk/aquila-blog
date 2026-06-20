@@ -1,39 +1,47 @@
-import styled from "@emotion/styled";
-import Link from "next/link";
-import React from "react";
-import AppIcon from "src/components/icons/AppIcon";
-type Props = {};
-const CustomError: React.FC<Props> = () => {
-    return (<StyledWrapper>
+import styled from "@emotion/styled"
+import Link from "next/link"
+
+import AppIcon from "src/components/icons/AppIcon"
+
+const CustomError = () => {
+  return (
+    <StyledWrapper>
       <div className="wrapper">
         <div className="top">
           <div>4</div>
-          <AppIcon name="question" className="questionIcon"/>
+          <AppIcon name="question" className="questionIcon" />
           <div>4</div>
         </div>
         <div className="copy">
           <strong>찾을 수 없는 페이지입니다.</strong>
-          <p>주소가 바뀌었거나 삭제된 글일 수 있습니다. 홈으로 돌아가 최신 글이나 블로그 소개부터 다시 확인하세요.</p>
+          <p>
+            주소가 바뀌었거나 삭제된 글일 수 있습니다. 홈으로 돌아가 최신
+            글이나 블로그 소개부터 다시 확인하세요.
+          </p>
         </div>
         <div className="actions">
           <Link href="/">홈으로 이동</Link>
           <Link href="/about">블로그 소개</Link>
         </div>
       </div>
-    </StyledWrapper>);
-};
-export default CustomError;
-const StyledWrapper = styled.div `
+    </StyledWrapper>
+  )
+}
+
+export default CustomError
+
+const StyledWrapper = styled.div`
   margin: 0 auto;
   padding-left: 1.5rem;
   padding-right: 1.5rem;
   padding-top: 3rem;
   padding-bottom: 3rem;
-  border-radius: ${({ theme }) => ("1.5rem")};
+  border-radius: 1.5rem;
   max-width: 56rem;
-  background: ${({ theme }) => ("transparent")};
-  border: 1px solid ${({ theme }) => ("transparent")};
-  box-shadow: ${({ theme }) => ("none")};
+  background: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
+
   .wrapper {
     display: flex;
     padding-top: 5rem;
@@ -51,9 +59,10 @@ const StyledWrapper = styled.div `
       .questionIcon {
         font-size: 3.1rem;
         flex: 0 0 auto;
-        color: ${({ theme }) => ("inherit")};
+        color: inherit;
       }
     }
+
     > .copy {
       display: grid;
       gap: 0.72rem;
@@ -88,8 +97,8 @@ const StyledWrapper = styled.div `
       min-height: 44px;
       padding: 0 1rem;
       border-radius: 999px;
-      border: 1px solid ${({ theme }) => (theme.colors.gray6)};
-      background: ${({ theme }) => (theme.colors.gray1)};
+      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      background: ${({ theme }) => theme.colors.gray1};
       color: ${({ theme }) => theme.colors.gray12};
       text-decoration: none;
       font-size: 0.92rem;
@@ -102,8 +111,8 @@ const StyledWrapper = styled.div `
 
     > .actions a:hover {
       transform: translateY(-1px);
-      border-color: ${({ theme }) => (theme.colors.gray8)};
-      background: ${({ theme }) => (theme.colors.gray2)};
+      border-color: ${({ theme }) => theme.colors.gray8};
+      background: ${({ theme }) => theme.colors.gray2};
     }
   }
-`;
+`

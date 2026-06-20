@@ -14,6 +14,11 @@ const STALE_IF_ERROR_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504])
 
 type GetCacheMode = "revalidate" | "no-store"
 type ApiRequestCredentials = "include" | "omit"
+type BackendProxyMode = "auto" | "bypass"
+
+type ApiRequestUrlOptions = {
+  backendProxy?: BackendProxyMode
+}
 
 type GetRequestPolicy = {
   cacheMode: GetCacheMode
@@ -116,6 +121,7 @@ const resolveGetRequestPolicy = (path: string): GetRequestPolicy => {
 
 export type ApiFetchOptions = RequestInit & {
   timeoutMs?: number
+  backendProxy?: BackendProxyMode
 }
 
 const isServer = typeof window === "undefined"
@@ -375,8 +381,12 @@ const shouldUseBrowserBackendProxy = (safePath: string) => {
   )
 }
 
-export const getApiRequestUrl = (path: string) => {
+export const getApiRequestUrl = (path: string, options: ApiRequestUrlOptions = {}) => {
   const safePath = normalizeApiRequestPath(path)
+  if (options.backendProxy === "bypass") {
+    return `${getApiBaseUrl()}${safePath}`
+  }
+
   if (shouldUseBrowserBackendProxy(safePath)) {
     return `${BROWSER_BACKEND_PROXY_PREFIX}${safePath}`
   }
@@ -386,8 +396,8 @@ export const getApiRequestUrl = (path: string) => {
 
 export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Promise<T> => {
   const safePath = normalizeApiRequestPath(path)
-  const url = getApiRequestUrl(safePath)
-  const { timeoutMs: _timeoutMs, ...requestInit } = init
+  const { timeoutMs: _timeoutMs, backendProxy = "auto", ...requestInit } = init
+  const url = getApiRequestUrl(safePath, { backendProxy })
   const headers = new Headers(requestInit.headers || {})
   const hasBody = requestInit.body !== undefined && requestInit.body !== null
   const isFormLikeBody =

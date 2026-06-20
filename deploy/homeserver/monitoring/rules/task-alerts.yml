@@ -173,13 +173,13 @@ groups:
           description: "Feed 5xx ratio exceeded 2% for 10m. Check backend exceptions, upstream timeout budget, and rollback criteria."
 
       - alert: AquilaBackScrapeDown
-        expr: min(up{job="back",service="aquila-back"}) < 1
+        expr: max(up{job="back",service="aquila-back",component="api"}) < 1
         for: 3m
         labels:
           severity: critical
         annotations:
           summary: "Back metrics scrape is down"
-          description: "Prometheus cannot scrape one or more back targets for 3m."
+          description: "Prometheus cannot scrape any blue/green API backend target for 3m."
 
       - alert: AquilaTaskDlqRateHigh
         expr: sum(rate(task_processor_result_total{status="dlq"}[10m])) > 0

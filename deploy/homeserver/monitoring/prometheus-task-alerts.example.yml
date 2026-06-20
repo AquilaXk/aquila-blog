@@ -54,6 +54,35 @@ groups:
           summary: "Back metrics scrape is down"
           description: "Prometheus cannot scrape any blue/green API backend target for 3m."
 
+      - alert: AquilaBackWorkerScrapeDown
+        expr: max(up{job="back",service="aquila-back",component="worker"}) < 1
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Back worker metrics scrape is down"
+          description: "Prometheus cannot scrape the backend worker target for 3m. Task queue and DLQ alerts may stop evaluating."
+
+      - alert: AquilaBackRuntimeSplitScrapeDown
+        expr: |
+          (
+            max by (component) (up{job="back",service="aquila-back",component=~"read|admin"}) < 1
+          )
+          and on (component)
+          label_replace(
+            max by (service) (docker_container_running{job="docker_runtime_probe",service=~"back_(read|admin)"}) == 1,
+            "component",
+            "$1",
+            "service",
+            "back_(read|admin)"
+          )
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Runtime-split backend metrics scrape is down"
+          description: "Prometheus cannot scrape a running runtime-split {{ $labels.component }} backend target for 3m."
+
       - alert: AquilaTaskDlqRateHigh
         expr: sum(rate(task_processor_result_total{status="dlq"}[10m])) > 0
         for: 10m

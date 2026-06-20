@@ -232,50 +232,7 @@ const PostList: React.FC<Props> = ({
   )
 }
 
-const arePostsEqual = (prevPosts: TPost[], nextPosts: TPost[]) => {
-  if (prevPosts === nextPosts) return true
-  if (prevPosts.length !== nextPosts.length) return false
-
-  for (let i = 0; i < prevPosts.length; i += 1) {
-    const prevPost = prevPosts[i]
-    const nextPost = nextPosts[i]
-    if (prevPost.id !== nextPost.id) return false
-    if (prevPost.modifiedTime !== nextPost.modifiedTime) return false
-    if (prevPost.likesCount !== nextPost.likesCount) return false
-    if (prevPost.commentsCount !== nextPost.commentsCount) return false
-    if (prevPost.hitCount !== nextPost.hitCount) return false
-    if (prevPost.title !== nextPost.title) return false
-    if (prevPost.summary !== nextPost.summary) return false
-    if (prevPost.thumbnail !== nextPost.thumbnail) return false
-    if (!areStringArraysEqual(prevPost.tags, nextPost.tags)) return false
-    if (!areStringArraysEqual(prevPost.category, nextPost.category)) return false
-  }
-
-  return true
-}
-
-const areStringArraysEqual = (prevValues?: string[], nextValues?: string[]) => {
-  if (prevValues === nextValues) return true
-  if (!prevValues || !nextValues) return !prevValues?.length && !nextValues?.length
-  if (prevValues.length !== nextValues.length) return false
-
-  return prevValues.every((value, index) => value === nextValues[index])
-}
-
-const arePostListPropsEqual = (prev: Props, next: Props) => {
-  if (!arePostsEqual(prev.posts, next.posts)) return false
-  if (prev.hasFilter !== next.hasFilter) return false
-  if (prev.hasExternalResults !== next.hasExternalResults) return false
-  if (prev.isInitialLoading !== next.isInitialLoading) return false
-  if (prev.isFetchingNextPage !== next.isFetchingNextPage) return false
-  if (prev.hasNextPage !== next.hasNextPage) return false
-  if (prev.onClearFilters !== next.onClearFilters) return false
-  if (prev.onLoadMore !== next.onLoadMore) return false
-  if (prev.loadMoreTriggerRef !== next.loadMoreTriggerRef) return false
-  return true
-}
-
-export default memo(PostList, arePostListPropsEqual)
+export default memo(PostList)
 
 const StyledWrapper = styled.div`
   margin: 0.9rem 0 0.35rem;

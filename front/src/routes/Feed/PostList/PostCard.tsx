@@ -159,37 +159,7 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
   )
 }
 
-const arePostCardPropsEqual = (prev: Props, next: Props) => {
-  const prevAuthor = prev.data.author?.[0]
-  const nextAuthor = next.data.author?.[0]
-
-  return (
-    prev.layout === next.layout &&
-    prev.data.id === next.data.id &&
-    prev.data.title === next.data.title &&
-    prev.data.summary === next.data.summary &&
-    prev.data.thumbnail === next.data.thumbnail &&
-    prev.data.modifiedTime === next.data.modifiedTime &&
-    prev.data.createdTime === next.data.createdTime &&
-    prev.data.commentsCount === next.data.commentsCount &&
-    prev.data.likesCount === next.data.likesCount &&
-    prev.data.hitCount === next.data.hitCount &&
-    areStringArraysEqual(prev.data.tags, next.data.tags) &&
-    areStringArraysEqual(prev.data.category, next.data.category) &&
-    prevAuthor?.name === nextAuthor?.name &&
-    prevAuthor?.profile_photo === nextAuthor?.profile_photo
-  )
-}
-
-const areStringArraysEqual = (prevValues?: string[], nextValues?: string[]) => {
-  if (prevValues === nextValues) return true
-  if (!prevValues || !nextValues) return !prevValues?.length && !nextValues?.length
-  if (prevValues.length !== nextValues.length) return false
-
-  return prevValues.every((value, index) => value === nextValues[index])
-}
-
-export default memo(PostCard, arePostCardPropsEqual)
+export default memo(PostCard)
 
 const StyledWrapper = styled.a`
   display: block;

@@ -1,10 +1,70 @@
 import { expect, test } from "@playwright/test"
-import { mockAvatarAsset } from "./helpers/smokeFixtures"
+import { addPublicAboutSnapshotCookie, mockAvatarAsset } from "./helpers/smokeFixtures"
 test.beforeEach(async ({ page }) => {
   await mockAvatarAsset(page)
 })
 
 test.describe("core smoke detail layout", () => {
+  test("게시글 상세 browser title은 글 제목을 포함하고 일반 페이지 title은 site suffix를 중복하지 않는다", async ({ page }) => {
+  await page.route("**/member/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ resultCode: "401-1", msg: "unauthorized" }),
+    })
+  })
+  await page.route("**/post/api/v1/posts/924", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 924,
+        createdAt: "2026-06-20T00:00:00Z",
+        modifiedAt: "2026-06-20T00:00:00Z",
+        authorId: 1,
+        authorName: "관리자",
+        authorUsername: "aquila",
+        authorProfileImageDirectUrl: "/avatar.png",
+        title: "브라우저 title 회귀 테스트",
+        content: "게시글 상세 document title이 글 제목을 포함하는지 확인합니다.",
+        type: "Post",
+        tags: ["SEO"],
+        category: [],
+        published: true,
+        listed: true,
+        likesCount: 0,
+        commentsCount: 0,
+        hitCount: 0,
+        actorHasLiked: false,
+        actorCanModify: false,
+        actorCanDelete: false,
+      }),
+    })
+  })
+  await page.route("**/post/api/v1/posts/924/hit", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        resultCode: "200-1",
+        msg: "ok",
+        data: { hitCount: 1 },
+      }),
+    })
+  })
+
+  await page.goto("/posts/924")
+  await expect(page.getByRole("heading", { name: "브라우저 title 회귀 테스트" })).toBeVisible()
+  await expect(page).toHaveTitle("브라우저 title 회귀 테스트 | AquilaLog")
+  await expect(page.locator('meta[property="og:title"]')).toHaveAttribute("content", "브라우저 title 회귀 테스트")
+  await expect(page.locator('meta[name="twitter:title"]')).toHaveAttribute("content", "브라우저 title 회귀 테스트")
+
+  await addPublicAboutSnapshotCookie(page)
+  await page.goto("/about")
+  await expect(page.locator('[data-ui="about-eyebrow"]')).toHaveText("Profile")
+  await expect(page).toHaveTitle("About - AquilaLog")
+})
+
   test("상세 table hover 중 wheel 입력도 page scroll chain을 유지한다", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 })
 

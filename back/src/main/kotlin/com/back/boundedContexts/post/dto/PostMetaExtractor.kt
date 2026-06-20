@@ -1,10 +1,5 @@
 package com.back.boundedContexts.post.dto
 
-/**
- * `PostMetaExtractor` 오브젝트입니다.
- * - 역할: 정적 유틸/상수/팩토리 기능을 제공합니다.
- * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
- */
 object PostMetaExtractor {
     private const val CACHE_MAX_ENTRIES = 1024
 

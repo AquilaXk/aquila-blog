@@ -14,10 +14,6 @@ import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import kotlin.jvm.optionals.getOrNull
 
-/**
- * MemberNotificationApplicationService는 유스케이스 단위 비즈니스 흐름을 조합하는 애플리케이션 서비스입니다.
- * 트랜잭션 경계, 도메인 규칙 적용, 후속 동기화(캐시/이벤트/스토리지)를 담당합니다.
- */
 @Service
 class MemberNotificationApplicationService(
     private val memberRepository: MemberRepositoryPort,
@@ -32,9 +28,6 @@ class MemberNotificationApplicationService(
         val unreadCount: Int,
     )
 
-    /**
-     * ForCommentWritten 항목을 생성한다.
-     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun createForCommentWritten(event: PostCommentWrittenEvent) {
         if (memberNotificationRepository.existsByEventUid(event.uid)) {
@@ -126,10 +119,6 @@ class MemberNotificationApplicationService(
         id: Long,
     ): Boolean = memberNotificationRepository.markRead(id, member.id, java.time.Instant.now()) > 0
 
-    /**
-     * 실행 시점에 필요한 의존성/값을 결정합니다.
-     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
-     */
     private fun resolveReceiver(event: PostCommentWrittenEvent): ReceiverInfo? {
         val parentCommentId = event.postCommentDto.parentCommentId
         if (parentCommentId != null) {

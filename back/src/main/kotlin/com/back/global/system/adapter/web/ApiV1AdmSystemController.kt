@@ -114,10 +114,6 @@ class ApiV1AdmSystemController(
             dashboard = adminDashboardSnapshotService.getSnapshot(),
         )
 
-    /**
-     * health 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
-     * 어댑터 계층에서 외부 시스템 연동 오류를 캡슐화해 상위 계층 영향을 최소화합니다.
-     */
     @GetMapping("/health")
     @Transactional(readOnly = true)
     fun health(

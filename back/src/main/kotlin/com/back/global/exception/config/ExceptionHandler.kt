@@ -21,11 +21,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.multipart.MaxUploadSizeExceededException
 import org.springframework.web.multipart.MultipartException
 
-/**
- * ExceptionHandler는 글로벌 런타임 동작을 정의하는 설정 클래스입니다.
- * 보안, 캐시, 세션, JPA, 스케줄링 등 공통 인프라 설정을 등록합니다.
- */
-
 @RestControllerAdvice
 class ExceptionHandler(
     @Autowired(required = false)
@@ -33,10 +28,6 @@ class ExceptionHandler(
 ) {
     private val logger = LoggerFactory.getLogger(ExceptionHandler::class.java)
 
-    /**
-     * 예외 또는 이벤트를 수신해 표준 처리 흐름으로 변환합니다.
-     * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.
-     */
     @ExceptionHandler(NoSuchElementException::class)
     fun handleNoSuchElementException(
         @Suppress("UNUSED_PARAMETER") ex: NoSuchElementException,
@@ -45,10 +36,6 @@ class ExceptionHandler(
             .status(HttpStatus.NOT_FOUND)
             .body(RsData("404-1", "해당 데이터가 존재하지 않습니다."))
 
-    /**
-     * 예외 또는 이벤트를 수신해 표준 처리 흐름으로 변환합니다.
-     * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.
-     */
     @ExceptionHandler(ConstraintViolationException::class)
     fun handleConstraintViolationException(e: ConstraintViolationException): ResponseEntity<RsData<Void>> {
         val message =
@@ -70,10 +57,6 @@ class ExceptionHandler(
             .body(RsData("400-1", message))
     }
 
-    /**
-     * 예외 또는 이벤트를 수신해 표준 처리 흐름으로 변환합니다.
-     * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.
-     */
     @ExceptionHandler(MethodArgumentNotValidException::class)
     fun handleMethodArgumentNotValidException(e: MethodArgumentNotValidException): ResponseEntity<RsData<Void>> {
         val message =
@@ -90,10 +73,6 @@ class ExceptionHandler(
             .body(RsData("400-1", message))
     }
 
-    /**
-     * 예외 또는 이벤트를 수신해 표준 처리 흐름으로 변환합니다.
-     * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.
-     */
     @ExceptionHandler(HttpMessageNotReadableException::class)
     fun handleHttpMessageNotReadableException(
         @Suppress("UNUSED_PARAMETER") e: HttpMessageNotReadableException,
@@ -187,10 +166,6 @@ class ExceptionHandler(
         return response.body(ex.rsData)
     }
 
-    /**
-     * 예외 또는 이벤트를 수신해 표준 처리 흐름으로 변환합니다.
-     * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.
-     */
     @ExceptionHandler(DataIntegrityViolationException::class)
     fun handleDataIntegrityViolationException(ex: DataIntegrityViolationException): ResponseEntity<RsData<Void>> {
         val repaired = prodSequenceGuardService?.repairIfSequenceDrift(ex) == true

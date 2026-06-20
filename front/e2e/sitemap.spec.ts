@@ -15,7 +15,7 @@ const makePost = (id: number, status: TPostStatus[] = ["Public"]): TPost => ({
 })
 
 const createPagedLoader =
-  (posts: TPost[], requestedPages: number[]) =>
+  (posts: TPost[], requestedPages: number[], pageNumberOffset = 0) =>
   async ({ page, pageSize }: { page?: number; pageSize?: number }): Promise<ExplorePostsPage> => {
     const safePage = page ?? 1
     const safePageSize = pageSize ?? 30
@@ -25,7 +25,7 @@ const createPagedLoader =
     return {
       posts: posts.slice(start, start + safePageSize),
       totalCount: posts.length,
-      pageNumber: safePage,
+      pageNumber: safePage + pageNumberOffset,
       pageSize: safePageSize,
       paginationMode: "page",
     }
@@ -76,5 +76,18 @@ test.describe("server sitemap post collection", () => {
       })
     ).rejects.toThrow("Sitemap collection reached maxPages=1 before exhausting posts")
     expect(requestedPages).toEqual([1])
+  })
+
+  test("does not treat zero-based response pageNumber as extra pages at the cap", async () => {
+    const posts = Array.from({ length: 60 }, (_, index) => makePost(index + 1))
+    const requestedPages: number[] = []
+
+    const collected = await collectSitemapPosts(createPagedLoader(posts, requestedPages, -1), {
+      pageSize: 30,
+      maxPages: 2,
+    })
+
+    expect(collected.map((post) => post.id)).toEqual(posts.map((post) => post.id))
+    expect(requestedPages).toEqual([1, 2])
   })
 })

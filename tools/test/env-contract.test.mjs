@@ -223,6 +223,48 @@ test("home-server-source contract accepts a complete deployment env without BACK
   assert.equal(result.ok, true, result.errors.map((error) => error.message).join("\n"))
 })
 
+test("grafana admin password has no compose fallback and rejects weak contract values", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const compose = readFileSync(composePath, "utf8")
+  const contract = loadContract(contractPath)
+  const assertGrafanaPasswordRejected = (text, expectedMessagePart) => {
+    const result = validateEnvText({
+      contract,
+      target: "home-server-source",
+      text,
+    })
+
+    assert.equal(result.ok, false)
+    assert(
+      result.errors.some(
+        (error) => error.key === "GRAFANA_ADMIN_PASSWORD" && error.message.includes(expectedMessagePart),
+      ),
+      result.errors.map((error) => `${error.key}: ${error.message}`).join("\n"),
+    )
+  }
+
+  assert.match(
+    compose,
+    /GF_SECURITY_ADMIN_PASSWORD:\s+\$\{GRAFANA_ADMIN_PASSWORD:\?GRAFANA_ADMIN_PASSWORD is required\}/,
+  )
+  assert(!compose.includes("change_me_grafana_password"))
+  assert(!compose.includes("${GRAFANA_ADMIN_PASSWORD:-"))
+  assertGrafanaPasswordRejected(
+    baseHomeServerEnv.replace("GRAFANA_ADMIN_PASSWORD=valid-grafana-password", "GRAFANA_ADMIN_PASSWORD=change_me_grafana_password"),
+    "forbidden value",
+  )
+  assertGrafanaPasswordRejected(
+    baseHomeServerEnv.replace("GRAFANA_ADMIN_PASSWORD=valid-grafana-password", "GRAFANA_ADMIN_PASSWORD=123456789012345"),
+    "at least 16 characters",
+  )
+  assertGrafanaPasswordRejected(
+    baseHomeServerEnv
+      .replace("GRAFANA_ADMIN_USER=admin", "GRAFANA_ADMIN_USER=grafana-operator")
+      .replace("GRAFANA_ADMIN_PASSWORD=valid-grafana-password", "GRAFANA_ADMIN_PASSWORD=grafana-operator"),
+    "must differ from GRAFANA_ADMIN_USER",
+  )
+})
+
 const runtimeBackendImageKeys = [
   "BACK_BLUE_IMAGE",
   "BACK_GREEN_IMAGE",

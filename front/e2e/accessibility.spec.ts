@@ -5,6 +5,7 @@ import { mockAdminPostsWorkspaceEndpoints } from "./helpers/mobileLayoutFixtures
 const AVATAR_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlH0WkAAAAASUVORK5CYII="
 const AVATAR_PNG = Buffer.from(AVATAR_PNG_BASE64, "base64")
+const testBaseUrl = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000"
 const localDraftStorageKey = "admin.editor.localDraft.v1"
 const adminMember = {
   id: 1,
@@ -38,6 +39,17 @@ const fulfillJson = async (route: Route, data: unknown) => {
     contentType: "application/json",
     body: JSON.stringify(data),
   })
+}
+
+const setSchemeCookie = async (page: Page, scheme: "light" | "dark") => {
+  await page.context().addCookies([
+    {
+      name: "scheme",
+      value: scheme,
+      url: testBaseUrl,
+      sameSite: "Lax",
+    },
+  ])
 }
 
 const mockAuthenticatedEditor = async (page: Page) => {
@@ -353,9 +365,11 @@ test("관리자 글 목록 surface는 심각도 높은 접근성 위반이 없�
 test("editor 작성 surface는 keyboard landmark와 심각도 높은 접근성 위반 gate를 통과한다", async ({
   page,
 }, testInfo) => {
+  await setSchemeCookie(page, "dark")
   await mockAuthenticatedEditor(page)
 
   await page.goto("/editor/new?source=local-draft")
+  await expect(page.locator("html")).toHaveAttribute("data-aquila-scheme", "dark")
   await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue("접근성 launch gate 작성 테스트")
   await expect(page.getByTestId("markdown-editor")).toBeVisible()
   await expect(page.getByLabel("Markdown 본문")).toBeVisible()

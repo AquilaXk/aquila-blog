@@ -84,6 +84,7 @@ const FeedExplorer = () => {
     hasNextPage,
     isInitialLoading,
     isFetchingNextPage,
+    isFetchNextPageError,
     fetchNextPage,
   } = useExplorePostsQuery({
     kw: debouncedQ,
@@ -439,6 +440,7 @@ const FeedExplorer = () => {
             onClearFilters={handleClearFilters}
             isInitialLoading={isInitialLoading}
             isFetchingNextPage={isFetchingNextPage}
+            isFetchNextPageError={isFetchNextPageError}
             hasNextPage={hasNextPage}
             onLoadMore={handleLoadMore}
             loadMoreTriggerRef={loadMoreTriggerRef}

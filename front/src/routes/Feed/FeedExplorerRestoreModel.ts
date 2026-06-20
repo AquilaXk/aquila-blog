@@ -54,6 +54,9 @@ export type FeedExplorerSnapshotPage = {
   totalCount: number
   pageNumber: number
   pageSize: number
+  hasNext?: boolean
+  nextCursor?: string | null
+  paginationMode?: "cursor" | "page"
 }
 
 export type NavigatorConnectionLike = {
@@ -134,6 +137,9 @@ export const toSnapshotPage = (page: ExplorePostsPage): FeedExplorerSnapshotPage
   totalCount: page.totalCount,
   pageNumber: page.pageNumber,
   pageSize: page.pageSize,
+  ...(typeof page.hasNext === "boolean" ? { hasNext: page.hasNext } : {}),
+  ...(typeof page.nextCursor === "string" || page.nextCursor === null ? { nextCursor: page.nextCursor } : {}),
+  ...(page.paginationMode ? { paginationMode: page.paginationMode } : {}),
   posts: page.posts.map(toSnapshotPost),
 })
 
@@ -169,6 +175,9 @@ export const toRestoredPage = (page: FeedExplorerSnapshotPage): ExplorePostsPage
   totalCount: page.totalCount,
   pageNumber: page.pageNumber,
   pageSize: page.pageSize,
+  ...(typeof page.hasNext === "boolean" ? { hasNext: page.hasNext } : {}),
+  ...(typeof page.nextCursor === "string" || page.nextCursor === null ? { nextCursor: page.nextCursor } : {}),
+  ...(page.paginationMode ? { paginationMode: page.paginationMode } : {}),
   posts: page.posts.map(toRestoredPost),
 })
 

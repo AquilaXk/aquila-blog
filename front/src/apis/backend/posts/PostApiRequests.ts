@@ -319,15 +319,7 @@ export const getFeedPostsCursorPage = async ({
     if (isAbortError(error)) {
       throw error
     }
-    return {
-      posts: [],
-      totalCount: 0,
-      pageNumber: 1,
-      pageSize: safePageSize,
-      hasNext: false,
-      nextCursor: null,
-      paginationMode: "cursor",
-    }
+    throw error
   }
 }
 
@@ -402,15 +394,7 @@ export const getExplorePostsCursorPage = async ({
     if (isAbortError(error)) {
       throw error
     }
-    return {
-      posts: [],
-      totalCount: 0,
-      pageNumber: 1,
-      pageSize: safePageSize,
-      hasNext: false,
-      nextCursor: null,
-      paginationMode: "cursor",
-    }
+    throw error
   }
 }
 

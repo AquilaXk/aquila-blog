@@ -1,8 +1,8 @@
 import { useInfiniteQuery } from "@tanstack/react-query"
 import { toSafeInt } from "@shared/utils"
 import {
-  getExplorePostsPage,
-  getFeedPostsPage,
+  getExplorePostsCursorPage,
+  getFeedPostsCursorPage,
   getSearchPostsPage,
 } from "src/apis/backend/posts"
 import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
@@ -21,7 +21,7 @@ type Params = {
 
 const EMPTY_POSTS: TPost[] = []
 const OFFSET_INITIAL_PAGE_PARAM = 1
-type ExplorePageParam = number
+type ExplorePageParam = number | string | null
 
 const useExplorePostsQuery = ({
   kw,
@@ -55,16 +55,17 @@ const useExplorePostsQuery = ({
             order,
           }),
     queryFn: ({ pageParam, signal }: { pageParam: ExplorePageParam; signal?: AbortSignal }) => {
-      const pageNumber = toSafeInt(pageParam, 1)
-
       if (feedMode) {
-        return getFeedPostsPage({
+        const cursor = typeof pageParam === "string" ? pageParam : undefined
+        return getFeedPostsCursorPage({
           order,
-          page: pageNumber,
           pageSize,
+          cursor,
           signal: signal ?? undefined,
         })
       }
+
+      const pageNumber = toSafeInt(pageParam, 1)
 
       if (searchMode) {
         return getSearchPostsPage({
@@ -75,12 +76,12 @@ const useExplorePostsQuery = ({
           signal: signal ?? undefined,
         })
       }
-      return getExplorePostsPage({
-        kw: normalizedKw,
+      const cursor = typeof pageParam === "string" ? pageParam : undefined
+      return getExplorePostsCursorPage({
         tag: normalizedTag,
         order,
-        page: pageNumber,
         pageSize,
+        cursor,
         signal: signal ?? undefined,
       })
     },
@@ -89,9 +90,14 @@ const useExplorePostsQuery = ({
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    initialPageParam: OFFSET_INITIAL_PAGE_PARAM,
+    initialPageParam: searchMode ? OFFSET_INITIAL_PAGE_PARAM : null,
     getNextPageParam: (lastPage) => {
-      if (lastPage.posts.length === 0) return undefined
+      if (lastPage.paginationMode === "cursor") {
+        if (lastPage.hasNext !== true) return undefined
+        return typeof lastPage.nextCursor === "string" && lastPage.nextCursor.trim()
+          ? lastPage.nextCursor.trim()
+          : undefined
+      }
       if (lastPage.pageNumber * lastPage.pageSize >= lastPage.totalCount) return undefined
       return lastPage.pageNumber + 1
     },
@@ -137,6 +143,7 @@ const useExplorePostsQuery = ({
     hasNextPage: query.hasNextPage ?? false,
     isInitialLoading: query.isLoading,
     isFetchingNextPage: query.isFetchingNextPage,
+    isFetchNextPageError: query.isFetchNextPageError,
     fetchNextPage: query.fetchNextPage,
   }
 }

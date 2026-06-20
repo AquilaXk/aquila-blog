@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import http from "node:http"
+import { realpathSync } from "node:fs"
 import fs from "node:fs/promises"
 import path from "node:path"
 import process from "node:process"
@@ -399,7 +400,7 @@ const probeRoute = async ({ baseUrl, route, requestsPerRoute, timeoutMs, state }
       samples.push({
         requestIndex,
         status: response.status,
-        statusAllowed: isStatusAllowedForRoute(parsedCanonicalPath || route, response.status),
+        statusAllowed: isStatusAllowedForRoute(route, response.status),
         cacheState,
         ageSeconds: ageHeader ?? 0,
         ttfbMs,
@@ -462,7 +463,7 @@ const probeRoute = async ({ baseUrl, route, requestsPerRoute, timeoutMs, state }
   const buildFirstSeenAt = buildId ? state.builds[buildId]?.firstSeenAt || nowIso : nowIso
   const deployAgeMs = Date.now() - new Date(buildFirstSeenAt).getTime()
   const publishAgeMs = publishedAt ? Date.now() - new Date(publishedAt).getTime() : null
-  const allowedStatuses = allowedStatusesForRoute(routeKey)
+  const allowedStatuses = allowedStatusesForRoute(route)
   const failedSample = samples.find((sample) => !sample.statusAllowed)
   const ok = samples.length > 0 && !failedSample
   const failureReason = failedSample
@@ -675,7 +676,15 @@ const main = async () => {
   await runOneShot(args)
 }
 
-const isCliEntry = () => process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href
+const isCliEntry = () => {
+  const entryPath = process.argv[1]
+  if (!entryPath) return false
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(entryPath)).href
+  } catch {
+    return import.meta.url === pathToFileURL(entryPath).href
+  }
+}
 
 if (isCliEntry()) {
   main().catch((error) => {

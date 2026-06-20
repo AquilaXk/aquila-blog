@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
+import { spawnSync } from "node:child_process"
 import http from "node:http"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, rmSync, symlinkSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
@@ -74,6 +75,20 @@ test("public edge probe allows the explicit 404 route policy", async () => {
   })
 })
 
+test("public edge probe checks status policy against the requested route", async () => {
+  await withServer((request, response) => {
+    response.writeHead(200, { "content-type": "text/html", "x-vercel-cache": "HIT" })
+    response.end("<html><head><link rel=\"canonical\" href=\"http://example.test/\" /></head><body>ok</body></html>")
+  }, async (baseUrl) => {
+    const result = await runProbeFixture(baseUrl, "/404")
+
+    assert.equal(result.report.overall.ok, false)
+    assert.match(result.prometheus, /aquila_public_edge_probe_route_up\{route="\/"\} 0/)
+    assert.match(result.report.routes[0].failureReason, /unexpected status 200/)
+    assert.match(result.report.routes[0].failureReason, /allowed=404/)
+  })
+})
+
 test("public edge probe exposes 5xx as route and overall failure", async () => {
   await withServer((request, response) => {
     response.writeHead(500, { "content-type": "text/html", "x-vercel-cache": "MISS" })
@@ -97,6 +112,22 @@ test("public edge probe exposes timeout as route and overall failure", async () 
     assert.match(result.prometheus, /aquila_public_edge_probe_status_code\{route="\/",request_index="1"\} 0/)
     assert.match(result.report.routes[0].failureReason, /timeout/i)
   })
+})
+
+test("public edge probe CLI runs when invoked through a symlinked script path", () => {
+  const stateDir = mkdtempSync(path.join(tmpdir(), "public-edge-probe-cli-test-"))
+  try {
+    const linkPath = path.join(stateDir, "public-edge-probe.mjs")
+    symlinkSync(path.resolve("deploy/homeserver/monitoring/public-edge-probe.mjs"), linkPath)
+
+    const result = spawnSync(process.execPath, [linkPath, "--help"], { encoding: "utf8" })
+
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /public-edge-probe\.mjs/)
+    assert.match(result.stdout, /--serve-port/)
+  } finally {
+    rmSync(stateDir, { recursive: true, force: true })
+  }
 })
 
 test("public edge probe healthz is stale after two refresh intervals", () => {

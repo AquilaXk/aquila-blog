@@ -5,6 +5,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import process from "node:process"
 import { performance } from "node:perf_hooks"
+import { pathToFileURL } from "node:url"
 
 const DEFAULT_BASE_URL = "https://www.aquilaxk.site"
 const DEFAULT_TIMEOUT_MS = 15_000
@@ -18,6 +19,11 @@ const DEFAULT_STATE_PATH = path.join(
 )
 const DEFAULT_REFRESH_INTERVAL_MS = 5 * 60_000
 const DEFAULT_SERVE_PORT = 9915
+const DEFAULT_ALLOWED_STATUSES = [200]
+const ROUTE_ALLOWED_STATUSES = new Map([
+  ["/404", [404]],
+  ["/not-found", [404]],
+])
 
 const HELP_TEXT = `public-edge-probe.mjs
 
@@ -47,6 +53,10 @@ const normalizePath = (value) => {
   if (!value || value === "/") return "/"
   return value.startsWith("/") ? value : `/${value}`
 }
+
+const allowedStatusesForRoute = (route) => ROUTE_ALLOWED_STATUSES.get(normalizePath(route)) || DEFAULT_ALLOWED_STATUSES
+
+const isStatusAllowedForRoute = (route, status) => allowedStatusesForRoute(route).includes(status)
 
 const parseArgs = (argv) => {
   const args = {
@@ -212,7 +222,7 @@ const parseBuildId = (html) => {
 
 const parseCanonicalPath = (html) => {
   const match = html.match(/<link rel="canonical" href="https?:\/\/[^/"<]+([^"]*)"/i)
-  return normalizePath(match?.[1] || "/")
+  return match ? normalizePath(match[1] || "/") : ""
 }
 
 const parsePublishedTime = (html) => {
@@ -322,14 +332,22 @@ const toPrometheusText = (report) => {
   const lines = [
     "# HELP aquila_public_edge_probe_request_ttfb_seconds Synthetic public-route TTFB by request order.",
     "# TYPE aquila_public_edge_probe_request_ttfb_seconds gauge",
+    "# HELP aquila_public_edge_probe_status_code Synthetic public-route HTTP status code by request order.",
+    "# TYPE aquila_public_edge_probe_status_code gauge",
+    "# HELP aquila_public_edge_probe_route_up Indicates whether all requests for the route returned an allowed status.",
+    "# TYPE aquila_public_edge_probe_route_up gauge",
     "# HELP aquila_public_edge_probe_first_probe_after_publish Indicates whether the current probe is the first probe after publish.",
     "# TYPE aquila_public_edge_probe_first_probe_after_publish gauge",
   ]
 
   for (const route of report.routes) {
+    lines.push(`aquila_public_edge_probe_route_up{route="${slugifyMetricLabel(route.route)}"} ${route.ok ? 1 : 0}`)
     for (const sample of route.samples) {
       lines.push(
         `aquila_public_edge_probe_request_ttfb_seconds{route="${slugifyMetricLabel(route.route)}",request_index="${sample.requestIndex}",cache_state="${slugifyMetricLabel(sample.cacheState)}",build_id="${slugifyMetricLabel(route.buildId || "unknown")}",deploy_window="${slugifyMetricLabel(route.deployWindowBucket)}",publish_age="${slugifyMetricLabel(route.publishAgeBucket)}"} ${round(sample.ttfbMs / 1000)}`
+      )
+      lines.push(
+        `aquila_public_edge_probe_status_code{route="${slugifyMetricLabel(route.route)}",request_index="${sample.requestIndex}"} ${sample.status || 0}`
       )
     }
     lines.push(
@@ -337,6 +355,28 @@ const toPrometheusText = (report) => {
     )
   }
 
+  return `${lines.join("\n")}\n`
+}
+
+const timestampSeconds = (isoValue) => {
+  const timestampMs = Date.parse(isoValue || "")
+  if (!Number.isFinite(timestampMs)) return 0
+  return Math.floor(timestampMs / 1000)
+}
+
+const appendExporterMetrics = (prometheus, { exporterUp, lastSuccessAt, lastError }) => {
+  const lines = [
+    prometheus.trimEnd(),
+    "# HELP aquila_public_edge_probe_up Probe exporter route health.",
+    "# TYPE aquila_public_edge_probe_up gauge",
+    `aquila_public_edge_probe_up ${exporterUp ? 1 : 0}`,
+    "# HELP aquila_public_edge_probe_last_success_timestamp_seconds Unix timestamp for the last fully healthy refresh.",
+    "# TYPE aquila_public_edge_probe_last_success_timestamp_seconds gauge",
+    `aquila_public_edge_probe_last_success_timestamp_seconds ${timestampSeconds(lastSuccessAt)}`,
+    "# HELP aquila_public_edge_probe_last_refresh_error Indicates the last refresh ended in error.",
+    "# TYPE aquila_public_edge_probe_last_refresh_error gauge",
+    `aquila_public_edge_probe_last_refresh_error ${lastError ? 1 : 0}`,
+  ]
   return `${lines.join("\n")}\n`
 }
 
@@ -348,20 +388,36 @@ const probeRoute = async ({ baseUrl, route, requestsPerRoute, timeoutMs, state }
 
   for (let requestIndex = 1; requestIndex <= requestsPerRoute; requestIndex += 1) {
     const targetUrl = `${baseUrl}${route}`
-    const { response, body, ttfbMs, totalMs } = await fetchText(targetUrl, timeoutMs)
-    const cacheState = response.headers.get("x-vercel-cache") || "UNKNOWN"
-    const ageHeader = safeNumber(response.headers.get("age") || "")
-    buildId = buildId || parseBuildId(body)
-    canonicalPath = parseCanonicalPath(body)
-    publishedAt = publishedAt || parsePublishedTime(body)
-    samples.push({
-      requestIndex,
-      status: response.status,
-      cacheState,
-      ageSeconds: ageHeader ?? 0,
-      ttfbMs,
-      totalMs,
-    })
+    try {
+      const { response, body, ttfbMs, totalMs } = await fetchText(targetUrl, timeoutMs)
+      const cacheState = response.headers.get("x-vercel-cache") || "UNKNOWN"
+      const ageHeader = safeNumber(response.headers.get("age") || "")
+      buildId = buildId || parseBuildId(body)
+      const parsedCanonicalPath = parseCanonicalPath(body)
+      canonicalPath = parsedCanonicalPath || canonicalPath
+      publishedAt = publishedAt || parsePublishedTime(body)
+      samples.push({
+        requestIndex,
+        status: response.status,
+        statusAllowed: isStatusAllowedForRoute(parsedCanonicalPath || route, response.status),
+        cacheState,
+        ageSeconds: ageHeader ?? 0,
+        ttfbMs,
+        totalMs,
+        error: "",
+      })
+    } catch (error) {
+      samples.push({
+        requestIndex,
+        status: 0,
+        statusAllowed: false,
+        cacheState: "ERROR",
+        ageSeconds: 0,
+        ttfbMs: timeoutMs,
+        totalMs: timeoutMs,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 
   const nowIso = new Date().toISOString()
@@ -406,9 +462,19 @@ const probeRoute = async ({ baseUrl, route, requestsPerRoute, timeoutMs, state }
   const buildFirstSeenAt = buildId ? state.builds[buildId]?.firstSeenAt || nowIso : nowIso
   const deployAgeMs = Date.now() - new Date(buildFirstSeenAt).getTime()
   const publishAgeMs = publishedAt ? Date.now() - new Date(publishedAt).getTime() : null
+  const allowedStatuses = allowedStatusesForRoute(routeKey)
+  const failedSample = samples.find((sample) => !sample.statusAllowed)
+  const ok = samples.length > 0 && !failedSample
+  const failureReason = failedSample
+    ? failedSample.error ||
+      `unexpected status ${failedSample.status} for ${routeKey}; allowed=${allowedStatuses.join(",")}`
+    : ""
 
   return {
     route: routeKey,
+    ok,
+    failureReason,
+    allowedStatuses,
     buildId,
     deployWindowBucket: newBuildSeen ? "deploy_first_seen" : deploymentWindowBucket(deployAgeMs),
     deployAgeMs,
@@ -450,11 +516,20 @@ const runProbe = async (args) => {
     probedAt: new Date().toISOString(),
     routes: routeReports,
     overall: {
+      ok: routeReports.every((route) => route.ok),
+      failureReason: routeReports
+        .filter((route) => !route.ok)
+        .map((route) => `${route.route}: ${route.failureReason || "route failed"}`)
+        .join("; "),
       firstRequestCache: summarizeOverallCache(routeReports),
     },
   }
   const markdown = toMarkdownReport(report)
-  const prometheus = toPrometheusText(report)
+  const prometheus = appendExporterMetrics(toPrometheusText(report), {
+    exporterUp: report.overall.ok,
+    lastSuccessAt: report.overall.ok ? report.probedAt : "",
+    lastError: report.overall.ok ? "" : report.overall.failureReason,
+  })
 
   await writeFileAtomically(args.statePath, `${JSON.stringify(state, null, 2)}\n`)
 
@@ -472,8 +547,27 @@ const runProbe = async (args) => {
 }
 
 const runOneShot = async (args) => {
-  const { markdown } = await runProbe(args)
+  const { report, markdown } = await runProbe(args)
   process.stdout.write(`${markdown}\n`)
+  if (!report.overall.ok) {
+    process.exitCode = 1
+  }
+}
+
+const createHealthPayload = (latest, refreshMs, nowMs = Date.now()) => {
+  const lastSuccessAt = latest.lastSuccessAt || ""
+  const lastSuccessMs = Date.parse(lastSuccessAt)
+  const stale = !Number.isFinite(lastSuccessMs) || nowMs - lastSuccessMs > refreshMs * 2
+  const ok = !latest.lastError && !stale
+  return {
+    statusCode: ok ? 200 : 503,
+    body: {
+      ok,
+      stale,
+      lastError: latest.lastError || (stale ? "last successful probe is stale" : ""),
+      lastSuccessAt,
+    },
+  }
 }
 
 const startServer = async (args) => {
@@ -493,18 +587,40 @@ const startServer = async (args) => {
     refreshing = true
     try {
       const next = await runProbe(args)
+      const lastError = next.report.overall.ok ? "" : next.report.overall.failureReason
+      const lastSuccessAt = next.report.overall.ok ? next.report.probedAt : latest.lastSuccessAt
       latest = {
         report: next.report,
         markdown: next.markdown,
-        prometheus: `${next.prometheus}# HELP aquila_public_edge_probe_up Probe exporter availability.\n# TYPE aquila_public_edge_probe_up gauge\naquila_public_edge_probe_up 1\n`,
-        lastError: "",
-        lastSuccessAt: next.report.probedAt,
+        prometheus: appendExporterMetrics(toPrometheusText(next.report), {
+          exporterUp: next.report.overall.ok,
+          lastSuccessAt,
+          lastError,
+        }),
+        lastError,
+        lastSuccessAt,
       }
     } catch (error) {
+      const lastError = error instanceof Error ? error.message : String(error)
+      const fallbackReport = latest.report || {
+        baseUrl: args.baseUrl,
+        probedAt: new Date().toISOString(),
+        routes: [],
+        overall: {
+          ok: false,
+          failureReason: lastError,
+          firstRequestCache: { total: 0, counts: {} },
+        },
+      }
       latest = {
         ...latest,
-        lastError: error instanceof Error ? error.message : String(error),
-        prometheus: `${latest.prometheus}# HELP aquila_public_edge_probe_last_refresh_error Indicates the last refresh ended in error.\n# TYPE aquila_public_edge_probe_last_refresh_error gauge\naquila_public_edge_probe_last_refresh_error 1\n`,
+        report: fallbackReport,
+        lastError,
+        prometheus: appendExporterMetrics(toPrometheusText(fallbackReport), {
+          exporterUp: false,
+          lastSuccessAt: latest.lastSuccessAt,
+          lastError,
+        }),
       }
       console.error(`[public-edge-probe] refresh failed: ${latest.lastError}`)
     } finally {
@@ -530,8 +646,9 @@ const startServer = async (args) => {
       return
     }
     if (pathname === "/healthz") {
-      res.writeHead(latest.lastError ? 503 : 200, { "Content-Type": "application/json; charset=utf-8" })
-      res.end(JSON.stringify({ ok: !latest.lastError, lastError: latest.lastError, lastSuccessAt: latest.lastSuccessAt }))
+      const health = createHealthPayload(latest, args.refreshMs)
+      res.writeHead(health.statusCode, { "Content-Type": "application/json; charset=utf-8" })
+      res.end(JSON.stringify(health.body))
       return
     }
     res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" })
@@ -558,7 +675,13 @@ const main = async () => {
   await runOneShot(args)
 }
 
-main().catch((error) => {
-  process.stderr.write(`[public-edge-probe] ${error instanceof Error ? error.message : String(error)}\n`)
-  process.exitCode = 1
-})
+const isCliEntry = () => process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href
+
+if (isCliEntry()) {
+  main().catch((error) => {
+    process.stderr.write(`[public-edge-probe] ${error instanceof Error ? error.message : String(error)}\n`)
+    process.exitCode = 1
+  })
+}
+
+export { createHealthPayload, runProbe }

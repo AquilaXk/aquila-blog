@@ -1,7 +1,9 @@
 import { useInfiniteQuery } from "@tanstack/react-query"
 import { toSafeInt } from "@shared/utils"
 import {
+  getExplorePostsCursorPage,
   getExplorePostsPage,
+  getFeedPostsCursorPage,
   getFeedPostsPage,
   getSearchPostsPage,
 } from "src/apis/backend/posts"
@@ -21,7 +23,7 @@ type Params = {
 
 const EMPTY_POSTS: TPost[] = []
 const OFFSET_INITIAL_PAGE_PARAM = 1
-type ExplorePageParam = number
+type ExplorePageParam = number | string | null
 
 const useExplorePostsQuery = ({
   kw,
@@ -58,10 +60,19 @@ const useExplorePostsQuery = ({
       const pageNumber = toSafeInt(pageParam, 1)
 
       if (feedMode) {
-        return getFeedPostsPage({
+        if (typeof pageParam === "number") {
+          return getFeedPostsPage({
+            order,
+            page: pageNumber,
+            pageSize,
+            signal: signal ?? undefined,
+          })
+        }
+        const cursor = typeof pageParam === "string" ? pageParam : undefined
+        return getFeedPostsCursorPage({
           order,
-          page: pageNumber,
           pageSize,
+          cursor,
           signal: signal ?? undefined,
         })
       }
@@ -75,12 +86,22 @@ const useExplorePostsQuery = ({
           signal: signal ?? undefined,
         })
       }
-      return getExplorePostsPage({
-        kw: normalizedKw,
+      if (normalizedKw.length > 0 || typeof pageParam === "number") {
+        return getExplorePostsPage({
+          kw: normalizedKw,
+          tag: normalizedTag,
+          order,
+          page: pageNumber,
+          pageSize,
+          signal: signal ?? undefined,
+        })
+      }
+      const cursor = typeof pageParam === "string" ? pageParam : undefined
+      return getExplorePostsCursorPage({
         tag: normalizedTag,
         order,
-        page: pageNumber,
         pageSize,
+        cursor,
         signal: signal ?? undefined,
       })
     },
@@ -89,8 +110,14 @@ const useExplorePostsQuery = ({
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    initialPageParam: OFFSET_INITIAL_PAGE_PARAM,
+    initialPageParam: normalizedKw.length > 0 ? OFFSET_INITIAL_PAGE_PARAM : null,
     getNextPageParam: (lastPage) => {
+      if (lastPage.paginationMode === "cursor") {
+        if (lastPage.hasNext !== true) return undefined
+        return typeof lastPage.nextCursor === "string" && lastPage.nextCursor.trim()
+          ? lastPage.nextCursor.trim()
+          : undefined
+      }
       if (lastPage.posts.length === 0) return undefined
       if (lastPage.pageNumber * lastPage.pageSize >= lastPage.totalCount) return undefined
       return lastPage.pageNumber + 1
@@ -137,6 +164,7 @@ const useExplorePostsQuery = ({
     hasNextPage: query.hasNextPage ?? false,
     isInitialLoading: query.isLoading,
     isFetchingNextPage: query.isFetchingNextPage,
+    isFetchNextPageError: query.isFetchNextPageError,
     fetchNextPage: query.fetchNextPage,
   }
 }

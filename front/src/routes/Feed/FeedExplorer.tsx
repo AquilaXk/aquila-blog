@@ -32,12 +32,15 @@ import {
   scheduleIdleRevalidate,
   toFeedExplorerInfiniteQueryKey,
   toPersistFingerprint,
+  toRestoredPageParams,
   toRestoredPage,
+  toSnapshotPageParam,
   toSnapshotPage,
   useDebouncedValue,
   type FeedExplorerRestoreSnapshot,
   type FeedExplorerRestoreState,
   type FeedExplorerSnapshotPage,
+  type FeedExplorerSnapshotPageParam,
 } from "./FeedExplorerRestoreModel"
 
 const LOAD_MORE_THROTTLE_MS = 800
@@ -50,6 +53,7 @@ const FeedExplorer = () => {
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const restoreStateRef = useRef<FeedExplorerRestoreState | null>(null)
   const restoreQueryPagesRef = useRef<FeedExplorerSnapshotPage[] | null>(null)
+  const restoreQueryPageParamsRef = useRef<FeedExplorerSnapshotPageParam[] | null>(null)
   const hasHydratedQuerySnapshotRef = useRef(false)
   const hasAppliedRestoreSnapshotRef = useRef(false)
   const hasScheduledIdleRevalidateRef = useRef(false)
@@ -84,6 +88,7 @@ const FeedExplorer = () => {
     hasNextPage,
     isInitialLoading,
     isFetchingNextPage,
+    isFetchNextPageError,
     fetchNextPage,
   } = useExplorePostsQuery({
     kw: debouncedQ,
@@ -97,6 +102,7 @@ const FeedExplorer = () => {
   const lastObserverTriggerAtRef = useRef(0)
   const hasNextPageRef = useRef(hasNextPage)
   const isFetchingNextPageRef = useRef(isFetchingNextPage)
+  const isFetchNextPageErrorRef = useRef(isFetchNextPageError)
 
   useEffect(() => {
     hasNextPageRef.current = hasNextPage
@@ -105,6 +111,10 @@ const FeedExplorer = () => {
   useEffect(() => {
     isFetchingNextPageRef.current = isFetchingNextPage
   }, [isFetchingNextPage])
+
+  useEffect(() => {
+    isFetchNextPageErrorRef.current = isFetchNextPageError
+  }, [isFetchNextPageError])
 
   useEffect(() => {
     restoreSnapshotRef.current = {
@@ -142,7 +152,14 @@ const FeedExplorer = () => {
       window.sessionStorage.getItem(restoreSnapshotStorageKey)
     )
     if (restoredSnapshot?.pages?.length) {
-      restoreQueryPagesRef.current = restoredSnapshot.pages.slice(0, resolveSnapshotPageCap())
+      const restoredPages = restoredSnapshot.pages.slice(0, resolveSnapshotPageCap())
+      const restoredPageParams = toRestoredPageParams({
+        ...restoredSnapshot,
+        pages: restoredPages,
+        pageParams: restoredSnapshot.pageParams?.slice(0, restoredPages.length),
+      })
+      restoreQueryPagesRef.current = restoredPages
+      restoreQueryPageParamsRef.current = restoredPageParams
     }
 
   }, [currentTag, q, restoreSnapshotStorageKey, restoreStorageKey, router.isReady])
@@ -173,7 +190,10 @@ const FeedExplorer = () => {
 
     queryClient.setQueryData<InfiniteData<ExplorePostsPage>>(restoreQueryKey, {
       pages: restoredPages.map(toRestoredPage),
-      pageParams: restoredPages.map((page) => page.pageNumber),
+      pageParams:
+        restoreQueryPageParamsRef.current?.length === restoredPages.length
+          ? restoreQueryPageParamsRef.current
+          : toRestoredPageParams({ savedAt: restored.savedAt, pages: restoredPages }),
     })
     hasHydratedQuerySnapshotRef.current = true
     hasAppliedRestoreSnapshotRef.current = true
@@ -246,9 +266,14 @@ const FeedExplorer = () => {
       const pages = queryData?.pages ?? []
 
       if (pages.length > 0) {
+        const snapshotPages = pages.slice(0, resolveSnapshotPageCap()).map(toSnapshotPage)
+        const snapshotPageParams = (queryData?.pageParams ?? [])
+          .slice(0, snapshotPages.length)
+          .map(toSnapshotPageParam)
         const snapshotPayload: FeedExplorerRestoreSnapshot = {
           savedAt: state.savedAt,
-          pages: pages.slice(0, resolveSnapshotPageCap()).map(toSnapshotPage),
+          pages: snapshotPages,
+          ...(snapshotPageParams.length === snapshotPages.length ? { pageParams: snapshotPageParams } : {}),
         }
         const snapshotJson = JSON.stringify(snapshotPayload)
         if (snapshotJson.length <= FEED_EXPLORER_SNAPSHOT_MAX_BYTES) {
@@ -334,10 +359,16 @@ const FeedExplorer = () => {
   ])
 
   const handleLoadMore = useCallback(() => {
+    if (isFetchNextPageErrorRef.current) return
     if (!hasNextPageRef.current || isFetchingNextPageRef.current) return
     const now = Date.now()
     if (now - lastLoadMoreAtRef.current < LOAD_MORE_THROTTLE_MS) return
     lastLoadMoreAtRef.current = now
+    void fetchNextPage()
+  }, [fetchNextPage])
+  const handleRetryLoadMore = useCallback(() => {
+    if (!hasNextPageRef.current || isFetchingNextPageRef.current) return
+    lastLoadMoreAtRef.current = 0
     void fetchNextPage()
   }, [fetchNextPage])
   const handleLoadMoreRef = useRef(handleLoadMore)
@@ -353,6 +384,7 @@ const FeedExplorer = () => {
     const observer = new IntersectionObserver(
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) return
+        if (isFetchNextPageErrorRef.current) return
         if (typeof document !== "undefined" && document.visibilityState !== "visible") return
         const now = Date.now()
         if (now - lastObserverTriggerAtRef.current < LOAD_MORE_OBSERVER_THROTTLE_MS) return
@@ -439,8 +471,10 @@ const FeedExplorer = () => {
             onClearFilters={handleClearFilters}
             isInitialLoading={isInitialLoading}
             isFetchingNextPage={isFetchingNextPage}
+            isFetchNextPageError={isFetchNextPageError}
             hasNextPage={hasNextPage}
             onLoadMore={handleLoadMore}
+            onRetryLoadMore={handleRetryLoadMore}
             loadMoreTriggerRef={loadMoreTriggerRef}
           />
         </section>

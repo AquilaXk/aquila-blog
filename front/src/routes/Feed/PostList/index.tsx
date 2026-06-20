@@ -13,8 +13,10 @@ type Props = {
   onClearFilters?: () => void
   isInitialLoading?: boolean
   isFetchingNextPage?: boolean
+  isFetchNextPageError?: boolean
   hasNextPage?: boolean
   onLoadMore?: () => void
+  onRetryLoadMore?: () => void
   loadMoreTriggerRef?: RefObject<HTMLDivElement>
 }
 
@@ -102,8 +104,10 @@ const PostList: React.FC<Props> = ({
   onClearFilters,
   isInitialLoading = false,
   isFetchingNextPage = false,
+  isFetchNextPageError = false,
   hasNextPage = false,
   onLoadMore,
+  onRetryLoadMore,
   loadMoreTriggerRef,
 }) => {
   const deferredMountTriggerRef = useRef<HTMLDivElement | null>(null)
@@ -195,10 +199,19 @@ const PostList: React.FC<Props> = ({
           </div>
         )
       })}
-      {(hasNextPage || isFetchingNextPage) && (
+      {(hasNextPage || isFetchingNextPage || isFetchNextPageError) && (
         <section className="loadMoreArea">
           <div ref={loadMoreTriggerRef} className="loadMoreTrigger" aria-hidden="true" />
-          {hasNextPage && (
+          {isFetchNextPageError && !isFetchingNextPage && (
+            <div className="loadMoreError" role="alert" aria-live="assertive">
+              <strong>다음 글을 불러오지 못했습니다.</strong>
+              <span>기존 목록은 유지했습니다. 잠시 후 다시 시도해주세요.</span>
+              <button type="button" className="loadMoreButton" onClick={onRetryLoadMore ?? onLoadMore}>
+                다시 시도
+              </button>
+            </div>
+          )}
+          {hasNextPage && !isFetchNextPageError && (
             <button
               type="button"
               className="loadMoreButton"
@@ -386,6 +399,29 @@ const StyledWrapper = styled.div`
     width: 100%;
     display: grid;
     gap: 0.72rem;
+  }
+
+  .loadMoreError {
+    width: min(100%, 34rem);
+    display: grid;
+    justify-items: center;
+    gap: 0.42rem;
+    border-top: 1px solid ${({ theme }) => theme.colors.red6};
+    border-bottom: 1px solid ${({ theme }) => theme.colors.red6};
+    padding: 0.85rem 0;
+    text-align: center;
+
+    strong {
+      color: ${({ theme }) => theme.colors.red11};
+      font-size: 0.9rem;
+      font-weight: 800;
+    }
+
+    span {
+      color: ${({ theme }) => theme.colors.gray10};
+      font-size: 0.8rem;
+      line-height: 1.5;
+    }
   }
 
   .loadMoreSkeletonCopy {

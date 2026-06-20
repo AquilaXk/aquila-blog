@@ -93,6 +93,98 @@ test.describe("perf feed scroll budgets", () => {
   expect(nextCursorAttempts).toBe(3)
 })
 
+  test("홈 피드는 cursor 첫 요청 fallback 이후 다음 page를 page API로 이어간다", async ({ page }) => {
+  const pageRequests: number[] = []
+  const firstPageIds = [1301, 1302]
+  const secondPageIds = [1303, 1304]
+
+  await mockFeedEndpoints(page, {
+    feedHandler: async (route) => {
+      const url = new URL(route.request().url())
+      const isCursorEndpoint = url.pathname.endsWith("/cursor")
+      const pageNumber = Number(url.searchParams.get("page") || "1")
+      const pageSize = Number(url.searchParams.get("pageSize") || "24")
+
+      if (isCursorEndpoint) {
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "cursor disabled for fallback regression" }),
+        })
+        return
+      }
+
+      pageRequests.push(pageNumber)
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          content: (pageNumber === 1 ? firstPageIds : secondPageIds).map(buildMockExploreItem),
+          pageable: {
+            pageNumber: Math.max(pageNumber - 1, 0),
+            pageSize,
+            totalElements: pageSize * 2,
+            totalPages: 2,
+          },
+        }),
+      })
+    },
+  })
+
+  await page.goto("/")
+  await waitForPageReady(page)
+  await expect(page.getByRole("heading", { name: "CLS 예산 점검 1301" })).toBeVisible()
+
+  await page.getByRole("button", { name: "더보기" }).click()
+
+  await expect(page.getByRole("heading", { name: "CLS 예산 점검 1303" })).toBeVisible()
+  expect(pageRequests).toContain(2)
+  expect(pageRequests.filter((value) => value === 2)).toHaveLength(1)
+})
+
+  test("태그와 keyword 조합은 explore page API에 keyword를 보존한다", async ({ page }) => {
+  const capturedExploreRequests: Array<{ isCursorEndpoint: boolean; kw: string; tag: string }> = []
+
+  await mockFeedEndpoints(page, {
+    exploreHandler: async (route) => {
+      const url = new URL(route.request().url())
+      const isCursorEndpoint = url.pathname.endsWith("/cursor")
+      const kw = url.searchParams.get("kw") || ""
+      const tag = url.searchParams.get("tag") || ""
+      capturedExploreRequests.push({ isCursorEndpoint, kw, tag })
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          content: [buildMockExploreItem(1401)],
+          pageable: {
+            pageNumber: 0,
+            pageSize: Number(url.searchParams.get("pageSize") || "24"),
+            totalElements: 1,
+            totalPages: 1,
+          },
+        }),
+      })
+    },
+  })
+
+  await page.goto("/?tag=perf")
+  await waitForPageReady(page)
+
+  capturedExploreRequests.length = 0
+  await page.getByLabel("Search posts by keyword").fill("latency")
+
+  await expect(page.getByRole("heading", { name: "CLS 예산 점검 1401" })).toBeVisible()
+  await expect
+    .poll(() =>
+      capturedExploreRequests.some(
+        (request) => !request.isCursorEndpoint && request.kw === "latency" && request.tag === "perf"
+      )
+    )
+    .toBeTruthy()
+})
+
   test("홈 피드 무한스크롤은 연속 트리거에서도 feed 호출이 폭주하지 않는다", async ({ page }) => {
   const feedCalls: number[] = []
   const feedCallSignatures: string[] = []

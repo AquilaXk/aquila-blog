@@ -36,9 +36,9 @@ test.describe("perf feed scroll budgets", () => {
     }
 
     expect(toRestoredPageParams(snapshot)).toEqual([null, "cursor-2"])
-    expect(toRestoredPageParams({ ...snapshot, pageParams: [null, "persisted-cursor-2"] })).toEqual([
+    expect(toRestoredPageParams({ ...snapshot, pageParams: [1, "persisted-cursor-2"] })).toEqual([
       null,
-      "persisted-cursor-2",
+      "cursor-2",
     ])
   })
 

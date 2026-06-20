@@ -219,7 +219,11 @@ export const toRestoredPageParams = (
   snapshot: FeedExplorerRestoreSnapshot
 ): FeedExplorerSnapshotPageParam[] => {
   const pageParams = Array.isArray(snapshot.pageParams) ? snapshot.pageParams : []
-  return snapshot.pages.map((_, index) => {
+  return snapshot.pages.map((page, index) => {
+    if (page.paginationMode === "cursor") {
+      return toFallbackRestoredPageParam(snapshot.pages, index)
+    }
+
     const parsed = normalizeSnapshotPageParam(pageParams[index])
     return parsed === undefined ? toFallbackRestoredPageParam(snapshot.pages, index) : parsed
   })

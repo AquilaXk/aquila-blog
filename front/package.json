@@ -24,6 +24,7 @@
     "test:e2e": "yarn playwright:preflight && env -u NO_COLOR PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 yarn playwright test",
     "test:e2e:smoke": "yarn playwright:preflight && env -u NO_COLOR PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 yarn playwright test e2e/smoke*.spec.ts e2e/mobile-layout*.spec.ts --workers=2",
     "test:e2e:authoring": "yarn playwright:preflight && env -u NO_COLOR PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 yarn playwright test e2e/editor-authoring-markdown-editor.spec.ts --workers=1",
+    "test:e2e:release-ui-qa": "yarn playwright:preflight && env -u NO_COLOR PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 yarn playwright test e2e/release-ui-qa-matrix.spec.ts --workers=1",
     "test:e2e:perf": "yarn playwright:preflight && node scripts/run-playwright-perf.mjs",
     "test:e2e:a11y": "yarn playwright:preflight && env -u NO_COLOR PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 yarn playwright test e2e/accessibility.spec.ts",
     "test:e2e:live": "yarn playwright:preflight && node scripts/run-live-e2e.mjs",

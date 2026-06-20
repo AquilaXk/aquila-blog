@@ -892,6 +892,7 @@ test("deploy workflow uses immutable backend digest and does not push latest", (
 test("homeserver deploy preserves runtime-specific backend image release state", () => {
   const deployScript = readFileSync(deployScriptPath, "utf8")
   const backupScript = readFileSync(deployBackupScriptPath, "utf8")
+  const externalBackupScript = readFileSync(externalBackupScriptPath, "utf8")
   const rollbackScript = readFileSync(path.join(repoRoot, "deploy/homeserver/rollback_last_deploy.sh"), "utf8")
   const recoverScript = readFileSync(path.join(repoRoot, "deploy/homeserver/recover.sh"), "utf8")
   const statusScript = readFileSync(path.join(repoRoot, "deploy/homeserver/check_deploy_status.sh"), "utf8")
@@ -907,12 +908,26 @@ test("homeserver deploy preserves runtime-specific backend image release state",
   assert.match(deployScript, /awk -F= -v key="\$\{key\}"/)
   assert.match(deployScript, /value = substr\(\$0, index\(\$0, "="\) \+ 1\)/)
   assert.match(deployScript, /END \{\s*print value\s*\}/)
+  assert.match(externalBackupScript, /is_digest_image_value\(\)/)
+  assert.match(externalBackupScript, /stage_backend_runtime_image_env_key\(\)/)
+  assert.match(externalBackupScript, /export "\$\{key\}=\$\{image\}"/)
+  assert.doesNotMatch(
+    externalBackupScript,
+    /if \[\[ -n "\$\{value\}" \]\]; then\s*require_digest_image_value "\$\{key\}" "\$\{value\}"\s*return 0\s*fi/s,
+  )
+  assert.match(
+    externalBackupScript,
+    /invalid .*runtime image env .*will try fallback sources before backup compose evaluation/,
+  )
+  assert.match(externalBackupScript, /stage_backend_runtime_image_env_key "\$\{key\}" "\$\{legacy_value\}"/)
+  assert.match(externalBackupScript, /stage_backend_runtime_image_env_key "\$\{key\}" "\$\{container_value\}"/)
   assert.match(deployScript, /write_backend_release_state "\$\{next_backend\}" "\$\{active_backend\}"/)
   assert.match(deployScript, /prepare_runtime_backend_images "\$\{active_backend\}" "\$\{next_backend\}" "\$\{STAGED_BACK_IMAGE\}"/)
   assert.match(backupScript, /\.backend-release-state\.env/)
   assert.match(backupScript, /back_blue_image=/)
   assert.match(backupScript, /back_green_image=/)
   assert.match(rollbackScript, /backup_image_key_for_service\(\)/)
+  assert.match(rollbackScript, /local key metadata_key current_value repaired_value metadata_image legacy_image\s+repaired_value=""/)
   assert.match(rollbackScript, /repair_runtime_back_image_if_missing "\$\{target_backend\}"/)
   assert.match(recoverScript, /repair_runtime_back_image_if_missing "back_worker"/)
   assert.match(statusScript, /ACTIVE_BACKEND_IMAGE_KEY="BACK_BLUE_IMAGE"/)

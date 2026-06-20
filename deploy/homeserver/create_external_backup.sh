@@ -96,6 +96,13 @@ trim_quotes() {
   printf '%s' "${value}"
 }
 
+is_digest_image_value() {
+  local value="$1"
+  [[ -n "${value}" ]] || return 1
+  [[ "${value}" != *":latest" && "${value}" != *":latest@"* ]] || return 1
+  [[ "${value}" =~ @sha256:[a-fA-F0-9]{64}$ ]]
+}
+
 require_digest_image_value() {
   local key="$1"
   local value="$2"
@@ -140,6 +147,15 @@ upsert_env_key() {
   else
     printf '%s=%s\n' "${key}" "${value}" >> "${target}"
   fi
+}
+
+stage_backend_runtime_image_env_key() {
+  local key="$1"
+  local image="$2"
+  require_digest_image_value "${key}" "${image}"
+  ensure_compose_env_work_file
+  upsert_env_key "${key}" "${image}"
+  export "${key}=${image}"
 }
 
 resolve_local_repo_digest() {
@@ -210,24 +226,26 @@ ensure_backend_runtime_image_env_key() {
   local value legacy_value container_value
   value="$(trim_quotes "$(env_value "${key}")")"
   if [[ -n "${value}" ]]; then
-    require_digest_image_value "${key}" "${value}"
-    return 0
+    if is_digest_image_value "${value}"; then
+      stage_backend_runtime_image_env_key "${key}" "${value}"
+      return 0
+    fi
+    log "invalid ${key} runtime image env value will try fallback sources before backup compose evaluation"
   fi
 
   legacy_value="$(trim_quotes "$(env_value "BACK_IMAGE")")"
   if [[ -n "${legacy_value}" ]]; then
-    require_digest_image_value "BACK_IMAGE" "${legacy_value}"
-    ensure_compose_env_work_file
-    upsert_env_key "${key}" "${legacy_value}"
-    log "auto-filled ${key} from legacy BACK_IMAGE for compose preflight"
-    return 0
+    if is_digest_image_value "${legacy_value}"; then
+      stage_backend_runtime_image_env_key "${key}" "${legacy_value}"
+      log "auto-filled ${key} from legacy BACK_IMAGE for compose preflight"
+      return 0
+    fi
+    log "invalid legacy BACK_IMAGE value will try container image before backup compose evaluation"
   fi
 
   container_value="$(container_image_for_service_any_state "${service}" || true)"
   if [[ -n "${container_value}" ]]; then
-    require_digest_image_value "${key}" "${container_value}"
-    ensure_compose_env_work_file
-    upsert_env_key "${key}" "${container_value}"
+    stage_backend_runtime_image_env_key "${key}" "${container_value}"
     log "auto-filled ${key} from ${service} container image for compose preflight"
     return 0
   fi

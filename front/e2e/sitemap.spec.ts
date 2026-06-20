@@ -1,16 +1,21 @@
 import { expect, test } from "@playwright/test"
 import type { ExplorePostsPage } from "../src/apis/backend/posts"
-import { collectSitemapPosts } from "../src/libs/sitemapPosts"
+import { buildSitemapFields, collectSitemapPosts } from "../src/libs/sitemapPosts"
 import type { TPost, TPostStatus } from "../src/types"
 
-const makePost = (id: number, status: TPostStatus[] = ["Public"]): TPost => ({
+const makePost = (
+  id: number,
+  status: TPostStatus[] = ["Public"],
+  timestamps: { createdTime?: string; modifiedTime?: string } = {}
+): TPost => ({
   id: String(id),
   date: { start_date: `2026-06-${String((id % 28) + 1).padStart(2, "0")}` },
   type: ["Post"],
   slug: `post-${id}`,
   title: `Post ${id}`,
   status,
-  createdTime: `2026-06-${String((id % 28) + 1).padStart(2, "0")}T00:00:00.000Z`,
+  createdTime: timestamps.createdTime ?? `2026-06-${String((id % 28) + 1).padStart(2, "0")}T00:00:00.000Z`,
+  ...(timestamps.modifiedTime ? { modifiedTime: timestamps.modifiedTime } : {}),
   fullWidth: false,
 })
 
@@ -89,5 +94,48 @@ test.describe("server sitemap post collection", () => {
 
     expect(collected.map((post) => post.id)).toEqual(posts.map((post) => post.id))
     expect(requestedPages).toEqual([1, 2])
+  })
+
+  test("uses stable content timestamps for sitemap lastmod fields", () => {
+    const updatedPost = makePost(1, ["Public"], {
+      createdTime: "2026-06-01T00:00:00.000Z",
+      modifiedTime: "2026-06-07T12:34:56.000Z",
+    })
+    const createdOnlyPost = makePost(2, ["Public"], {
+      createdTime: "2026-06-10T08:00:00.000Z",
+    })
+
+    const firstFields = buildSitemapFields(
+      [updatedPost, createdOnlyPost],
+      "https://example.com/",
+      "2026-01-01T00:00:00.000Z"
+    )
+    const secondFields = buildSitemapFields(
+      [updatedPost, createdOnlyPost],
+      "https://example.com/",
+      "2026-01-01T00:00:00.000Z"
+    )
+
+    expect(secondFields).toEqual(firstFields)
+    expect(firstFields).toEqual([
+      {
+        loc: "https://example.com",
+        lastmod: "2026-06-10T08:00:00.000Z",
+        priority: 1,
+        changefreq: "daily",
+      },
+      {
+        loc: "https://example.com/posts/1",
+        lastmod: "2026-06-07T12:34:56.000Z",
+        priority: 0.7,
+        changefreq: "daily",
+      },
+      {
+        loc: "https://example.com/posts/2",
+        lastmod: "2026-06-10T08:00:00.000Z",
+        priority: 0.7,
+        changefreq: "daily",
+      },
+    ])
   })
 })

@@ -753,6 +753,8 @@ test("deploy workflow는 path-aware stale gate로 backend 영향 후속 변경�
   assert.match(workflow, /git fetch --no-tags --prune origin "\+refs\/heads\/main:refs\/remotes\/origin\/main"/)
   assert.match(workflow, /git merge-base --is-ancestor "\$\{DEPLOY_SHA\}" "\$\{REMOTE_MAIN_SHA\}"/)
   assert.match(workflow, /STALE_CHANGED_FILES="\$\(git diff --name-only "\$\{DEPLOY_SHA\}" "\$\{REMOTE_MAIN_SHA\}"/)
+  assert.match(workflow, /BACKEND_DEPLOY_PATHS_PATTERN=.*deploy\/env\//)
+  assert.match(workflow, /BACKEND_DEPLOY_PATHS_PATTERN=.*tools\/env\//)
   assert.match(workflow, /STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*deploy\/env\//)
   assert.match(workflow, /STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*tools\/env\//)
   assert.match(workflow, /grep -Eq "\$\{STALE_DEPLOY_BLOCK_PATHS_PATTERN\}"/)
@@ -813,6 +815,23 @@ test("deploy calculateTag는 deploy-time env 검증 입력 후속 변경이면 s
         }),
       /stale workflow_run blocked by backend-impacting newer main changes/,
     )
+  } finally {
+    rmSync(fixture.workDir, { recursive: true, force: true })
+  }
+})
+
+test("deploy calculateTag는 deploy-time env 검증 입력 현재 main 변경이면 backend deploy를 실행한다", () => {
+  const fixture = createDeployStaleFixture()
+  try {
+    runDeployCalculateScript({
+      cwd: fixture.workDir,
+      deploySha: fixture.envContractAfterDocsSha,
+      currentMainSha: fixture.envContractAfterDocsSha,
+    })
+
+    const output = readFileSync(path.join(fixture.workDir, "github-output.txt"), "utf8")
+
+    assert.match(output, /backend_deploy=true/)
   } finally {
     rmSync(fixture.workDir, { recursive: true, force: true })
   }

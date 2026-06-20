@@ -259,6 +259,8 @@ ensure_compose_image_env_defaults() {
   ensure_image_env_key_from_local_digest "CADDY_IMAGE" "caddy:2.8-alpine"
   ensure_image_env_key_from_local_digest "UPTIME_KUMA_IMAGE" "louislam/uptime-kuma:1"
   ensure_image_env_key_from_local_digest "PROMETHEUS_IMAGE" "prom/prometheus:v2.54.1"
+  ensure_image_env_key_from_local_digest "ALERTMANAGER_IMAGE" "prom/alertmanager:v0.27.0"
+  ensure_image_env_key_from_local_digest "POSTGRES_EXPORTER_IMAGE" "quay.io/prometheuscommunity/postgres-exporter:v0.15.0"
   ensure_image_env_key_from_local_digest "GRAFANA_IMAGE" "grafana/grafana:11.2.2"
   ensure_image_env_key_from_local_digest "LOKI_IMAGE" "grafana/loki:3.0.0"
   ensure_image_env_key_from_local_digest "PROMTAIL_IMAGE" "grafana/promtail:3.0.0"

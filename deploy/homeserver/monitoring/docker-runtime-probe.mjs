@@ -11,7 +11,7 @@ const servePort = Number(optionValue("--serve-port", "9920"))
 const composeProject = optionValue("--project", "blog_home")
 const services = optionValue(
   "--services",
-  "cloudflared,back_blue,back_green,back_read,back_admin,back_worker,redis_1",
+  "cloudflared,back_blue,back_green,back_read,back_admin,back_worker,db_1,redis_1,minio_1",
 )
   .split(",")
   .map((value) => value.trim())
@@ -74,6 +74,7 @@ const collectServiceMetrics = async (containers, service) => {
       metricLine("docker_container_running", { service }, 0),
       metricLine("docker_container_memory_usage_bytes", { service }, 0),
       metricLine("docker_container_memory_limit_bytes", { service }, 0),
+      metricLine("docker_container_oom_killed", { service }, 0),
     ]
   }
 
@@ -88,6 +89,7 @@ const collectServiceMetrics = async (containers, service) => {
     metricLine("docker_container_running", { service }, inspect.State?.Running ? 1 : 0),
     metricLine("docker_container_memory_usage_bytes", { service }, memoryUsage),
     metricLine("docker_container_memory_limit_bytes", { service }, memoryLimit),
+    metricLine("docker_container_oom_killed", { service }, inspect.State?.OOMKilled ? 1 : 0),
   ]
 }
 
@@ -105,6 +107,8 @@ const collectMetrics = async () => {
     "# TYPE docker_container_memory_usage_bytes gauge",
     "# HELP docker_container_memory_limit_bytes Docker container memory limit by compose service.",
     "# TYPE docker_container_memory_limit_bytes gauge",
+    "# HELP docker_container_oom_killed Docker OOMKilled state by compose service.",
+    "# TYPE docker_container_oom_killed gauge",
   ]
 
   const serviceMetricLines = await Promise.all(services.map((service) => collectServiceMetrics(containers, service)))

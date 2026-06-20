@@ -1,0 +1,16 @@
+route:
+  receiver: operations-webhook
+  group_by: ["alertname", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - receiver: operations-webhook
+      matchers:
+        - severity=~"critical|warning"
+
+receivers:
+  - name: operations-webhook
+    webhook_configs:
+      - url: ${OPERATIONS_ALERT_WEBHOOK_URL}
+        send_resolved: true

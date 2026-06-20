@@ -181,6 +181,15 @@ groups:
           summary: "Back metrics scrape is down"
           description: "Prometheus cannot scrape any blue/green API backend target for 3m."
 
+      - alert: AquilaBackReadinessDown
+        expr: max(up{job="back",service="aquila-back",component="api"}) < 1
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Back API readiness path is unavailable"
+          description: "No blue/green API backend target is scrapeable for 3m. Treat this as a readiness failure for public traffic."
+
       - alert: AquilaBackWorkerScrapeDown
         expr: max(up{job="back",service="aquila-back",component="worker"}) < 1
         for: 3m
@@ -238,6 +247,24 @@ groups:
         annotations:
           summary: "docker runtime probe scrape is down"
           description: "Prometheus cannot scrape docker_runtime_probe for 3m. Check probe container health and docker socket access."
+
+      - alert: AquilaContainerRestarted
+        expr: increase(docker_container_restart_count{job="docker_runtime_probe",service=~"back_.+|db_1|redis_1|minio_1|cloudflared"}[15m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container restarted recently"
+          description: "{{ $labels.service }} restart_count increased in the last 15m. Check deploy churn, host pressure, or crash loops."
+
+      - alert: AquilaContainerOomKilled
+        expr: docker_container_oom_killed{job="docker_runtime_probe",service=~"back_.+|db_1|redis_1|minio_1"} > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Container was OOM killed"
+          description: "{{ $labels.service }} reports OOMKilled. Check memory limits, heap pressure, and host memory."
 
       - alert: AquilaApiRateLimitRejectedHigh
         expr: sum(rate(api_rate_limit_rejected_total{job="back",service="aquila-back"}[5m])) > 0.5
@@ -354,6 +381,61 @@ groups:
           summary: "Redis command latency is high"
           description: "redis command latency p95 exceeded 50ms for 10m. Check API rate-limit pressure and Redis saturation."
 
+      - alert: AquilaPostgresDiskUsageHigh
+        expr: |
+          (
+            pg_database_size_bytes{job="postgres_exporter",datname=~"blog.*|blog_prod"}
+            /
+            107374182400
+          ) > 0.90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL container resource usage is high"
+          description: "PostgreSQL database size exceeded 90% of the 100GiB disk budget for 10m. Check database disk pressure before writes fail."
+
+      - alert: AquilaPostgresUnavailable
+        expr: docker_container_running{job="docker_runtime_probe",service="db_1"} < 1
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL container is unavailable"
+          description: "db_1 is not running for 3m. Writes, migrations, and login flows can fail."
+
+      - alert: AquilaPostgresConnectionSaturationHigh
+        expr: |
+          (
+            sum(pg_stat_database_numbackends{job="postgres_exporter",datname=~"blog.*|blog_prod"})
+            /
+            clamp_min(sum(pg_settings_max_connections{job="postgres_exporter"}), 1)
+          ) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL connection pool saturation is high"
+          description: "PostgreSQL active database backends exceeded 85% of max_connections for 10m. Check slow queries and pool sizing."
+
+      - alert: AquilaRedisUnavailable
+        expr: docker_container_running{job="docker_runtime_probe",service="redis_1"} < 1
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis container is unavailable"
+          description: "redis_1 is not running for 3m. Login, cache, and rate-limit behavior can degrade."
+
+      - alert: AquilaMinioUnavailable
+        expr: docker_container_running{job="docker_runtime_probe",service="minio_1"} < 1
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MinIO container is unavailable"
+          description: "minio_1 is not running for 3m. Media upload and object reads can fail."
+
   - name: aquila-notification-sse
     rules:
       - alert: AquilaNotificationSseEmitterSaturated
@@ -434,3 +516,30 @@ groups:
         annotations:
           summary: "Promtail metrics scrape is down"
           description: "Prometheus cannot scrape Promtail for 3m. Check promtail container and docker log mount."
+
+      - alert: AquilaPublicEdgeProbeRouteDown
+        expr: min(aquila_public_edge_probe_route_up) < 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Public edge route probe is failing"
+          description: "At least one public edge probe route has failed for 5m. Check Cloudflare, Vercel, and origin health."
+
+      - alert: AquilaExternalBackupFailed
+        expr: increase(aquila_external_backup_failed_total[30m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "External backup failed"
+          description: "The external backup failure counter increased in the last 30m. Check deploy workflow logs and backup storage."
+
+      - alert: AquilaDeployRollbackDetected
+        expr: increase(aquila_deploy_rollback_total[30m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Deploy rollback detected"
+          description: "The deploy rollback counter increased in the last 30m. Check the failed deploy gate and rollback reason."

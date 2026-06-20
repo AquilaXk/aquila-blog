@@ -37,6 +37,8 @@ is_allowed_markdown() {
 declare -a targets=()
 while IFS= read -r -d '' file; do
   case "${file}" in
+    docs/design/*.md)
+      ;;
     docs/*|AGENTS.md|CLAUDE.md|GEMINI.md|CURSOR.md|COPILOT.md|.cursor/*|.claude/*|.aider/*|.aider*|.windsurf/*|.codex/*|.ai/*)
       targets+=("${file}")
       ;;

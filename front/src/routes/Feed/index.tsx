@@ -222,10 +222,6 @@ const IntroCard = styled.section`
       display: none;
     }
 
-    .topicRail {
-      display: none;
-    }
-
     h1 {
       max-width: none;
       font-size: clamp(2rem, 11vw, 2.55rem);
@@ -236,6 +232,17 @@ const IntroCard = styled.section`
       margin-top: 0.64rem;
       font-size: 0.95rem;
       line-height: 1.5;
+    }
+
+    .topicRail {
+      margin-top: 0.76rem;
+      gap: 0.4rem;
+    }
+
+    .topicRail button {
+      min-height: 28px;
+      padding: 0 0.62rem;
+      font-size: 0.72rem;
     }
   }
 `

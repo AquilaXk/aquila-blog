@@ -1,3 +1,4 @@
+import { Readable } from "node:stream"
 import type { NextApiRequest, NextApiResponse } from "next"
 import { normalizeApiRequestPath } from "src/libs/backend/requestPath"
 import { resolveServerApiBaseUrl } from "src/libs/server/backend"
@@ -30,8 +31,8 @@ const SPOOFABLE_FORWARDING_HEADERS = new Set([
 const DECODED_RESPONSE_HEADERS = new Set(["content-encoding", "content-length"])
 const BODYLESS_METHODS = new Set(["GET", "HEAD"])
 const BACKEND_PROXY_TIMEOUT_MS = 10 * 60_000
-const DEFAULT_BACKEND_PROXY_MAX_BODY_BYTES = 104 * 1024 * 1024
-const DEFAULT_BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES = 256 * 1024 * 1024
+const DEFAULT_BACKEND_PROXY_MAX_BODY_BYTES = 1 * 1024 * 1024
+const DEFAULT_BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES = 8 * 1024 * 1024
 
 class ProxyBodyTooLargeError extends Error {}
 class ProxyBodyCapacityExceededError extends Error {}
@@ -121,12 +122,6 @@ const pipeWebStreamToResponse = async (stream: ReadableStream<Uint8Array>, res: 
   }
 }
 
-const toArrayBuffer = (buffer: Buffer): ArrayBuffer => {
-  const body = new ArrayBuffer(buffer.byteLength)
-  new Uint8Array(body).set(buffer)
-  return body
-}
-
 const readProxyBody = async (
   req: NextApiRequest,
   method: string,
@@ -154,75 +149,37 @@ const readProxyBody = async (
     released = true
     releaseProxyBodyBytes(reservedBytes)
   }
+  const reserveObservedBytes = (observedBytes: number) => {
+    if (observedBytes <= reservedBytes) return
+    reserveAdditionalBytes(observedBytes - reservedBytes)
+  }
 
-  if (hasDeclaredContentLength) reserveAdditionalBytes(declaredContentLength)
+  if (hasDeclaredContentLength) reserveObservedBytes(declaredContentLength)
 
-  return await new Promise<ProxyBodyReadResult>((resolve, reject) => {
-    const chunks: Buffer[] = []
-    let totalBytes = 0
-    let settled = false
-
-    const cleanup = () => {
-      req.off("data", handleData)
-      req.off("end", handleEnd)
-      req.off("error", handleError)
-      signal.removeEventListener("abort", handleAbort)
-    }
-    const settle = (callback: () => void) => {
-      if (settled) return
-      settled = true
-      cleanup()
-      callback()
-    }
-    const fail = (error: Error) => {
-      // Stop consuming the body without closing the response socket, so 413/504 can still be delivered.
-      req.pause()
-      settle(() => {
-        releaseReservation()
-        reject(error)
-      })
-    }
-    const handleData = (chunk: Buffer | string) => {
-      if (signal.aborted) {
-        fail(new ProxyBodyTimeoutError())
-        return
-      }
-
-      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-      totalBytes += buffer.byteLength
-      if (totalBytes > maxBodyBytes) {
-        fail(new ProxyBodyTooLargeError())
-        return
-      }
-      if (!hasDeclaredContentLength || totalBytes > reservedBytes) {
-        try {
-          reserveAdditionalBytes(totalBytes - reservedBytes)
-        } catch (error) {
-          fail(error instanceof Error ? error : new ProxyBodyCapacityExceededError())
-          return
+  let totalBytes = 0
+  const incomingStream = Readable.toWeb(req) as unknown as ReadableStream<Uint8Array>
+  const countingStream = incomingStream.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        if (signal.aborted) {
+          throw new ProxyBodyTimeoutError()
         }
-      }
-      chunks.push(buffer)
-    }
-    const handleEnd = () =>
-      settle(() =>
-        resolve({
-          body: toArrayBuffer(Buffer.concat(chunks)),
-          releaseReservation,
-        })
-      )
-    const handleError = (error: Error) => fail(error)
-    const handleAbort = () => fail(new ProxyBodyTimeoutError())
 
-    signal.addEventListener("abort", handleAbort, { once: true })
-    if (signal.aborted) {
-      fail(new ProxyBodyTimeoutError())
-      return
-    }
-    req.on("data", handleData)
-    req.once("end", handleEnd)
-    req.once("error", handleError)
-  })
+        totalBytes += chunk.byteLength
+        if (totalBytes > maxBodyBytes) {
+          throw new ProxyBodyTooLargeError()
+        }
+
+        reserveObservedBytes(totalBytes)
+        controller.enqueue(chunk)
+      }
+    })
+  )
+
+  return {
+    body: countingStream as unknown as BodyInit,
+    releaseReservation,
+  }
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -248,13 +205,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     proxyBodyRead = await readProxyBody(req, method, controller.signal)
-    const upstreamResponse = await fetch(`${resolveServerApiBaseUrl(req)}${safePath}`, {
+    const upstreamRequestInit: RequestInit & { duplex?: "half" } = {
       method,
       headers,
       body: proxyBodyRead.body,
       redirect: "manual",
       signal: controller.signal,
-    })
+    }
+    if (proxyBodyRead.body) upstreamRequestInit.duplex = "half"
+    const upstreamResponse = await fetch(`${resolveServerApiBaseUrl(req)}${safePath}`, upstreamRequestInit)
 
     res.status(upstreamResponse.status)
     upstreamResponse.headers.forEach((value, key) => {

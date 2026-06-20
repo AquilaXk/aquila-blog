@@ -36,7 +36,13 @@ const createMockResponse = () => {
   return response
 }
 
-const invokeBackendProxy = async (headers: Record<string, string | string[]>) => {
+const invokeBackendProxy = async ({
+  method = "GET",
+  headers,
+}: {
+  method?: string
+  headers: Record<string, string | string[]>
+}) => {
   const previousBackendUrl = process.env.BACKEND_INTERNAL_URL
   const previousFetch = globalThis.fetch
   const captured: CapturedFetch[] = []
@@ -51,7 +57,7 @@ const invokeBackendProxy = async (headers: Record<string, string | string[]>) =>
 
   try {
     const req = Object.assign(new EventEmitter(), {
-      method: "GET",
+      method,
       headers,
       query: { path: ["member", "api", "v1", "auth", "login"] },
       url: "/api/backend/member/api/v1/auth/login",
@@ -75,15 +81,17 @@ const invokeBackendProxy = async (headers: Record<string, string | string[]>) =>
 test.describe("backend proxy forwarded header boundary", () => {
   test("strips spoofable forwarding headers before upstream fetch", async () => {
     const { captured, res } = await invokeBackendProxy({
-      host: "www.aquilaxk.site",
-      cookie: "accessToken=token",
-      "x-forwarded-for": "203.0.113.9",
-      "x-forwarded-host": "evil.example",
-      "x-forwarded-proto": "http",
-      "x-real-ip": "203.0.113.10",
-      "cf-connecting-ip": "203.0.113.11",
-      "true-client-ip": "203.0.113.12",
-      forwarded: "for=203.0.113.13;proto=http;host=evil.example",
+      headers: {
+        host: "www.aquilaxk.site",
+        cookie: "accessToken=token",
+        "x-forwarded-for": "203.0.113.9",
+        "x-forwarded-host": "evil.example",
+        "x-forwarded-proto": "http",
+        "x-real-ip": "203.0.113.10",
+        "cf-connecting-ip": "203.0.113.11",
+        "true-client-ip": "203.0.113.12",
+        forwarded: "for=203.0.113.13;proto=http;host=evil.example",
+      },
     })
 
     expect(res.statusCode).toBe(204)
@@ -98,5 +106,19 @@ test.describe("backend proxy forwarded header boundary", () => {
     expect(headers.get("cf-connecting-ip")).toBeNull()
     expect(headers.get("true-client-ip")).toBeNull()
     expect(headers.get("forwarded")).toBeNull()
+  })
+
+  test("rejects proxy request bodies above the JSON-sized default before upstream fetch", async () => {
+    const { captured, res } = await invokeBackendProxy({
+      method: "POST",
+      headers: {
+        host: "www.aquilaxk.site",
+        "content-type": "application/json",
+        "content-length": String(1 * 1024 * 1024 + 1),
+      },
+    })
+
+    expect(res.statusCode).toBe(413)
+    expect(captured).toHaveLength(0)
   })
 })

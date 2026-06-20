@@ -61,61 +61,94 @@ container_image_for_service_any_state() {
   docker inspect --format '{{.Config.Image}}' "${container_id}" 2>/dev/null | tr -d '\r' | head -n 1 || true
 }
 
-repair_back_image_if_missing() {
-  local value repaired_value state_backend
-  value="$(trim_quotes "$(env_value "BACK_IMAGE")")"
+backend_image_key() {
+  local service="$1"
+  case "${service}" in
+    back_blue) echo "BACK_BLUE_IMAGE" ;;
+    back_green) echo "BACK_GREEN_IMAGE" ;;
+    back_read) echo "BACK_READ_IMAGE" ;;
+    back_admin) echo "BACK_ADMIN_IMAGE" ;;
+    back_worker) echo "BACK_WORKER_IMAGE" ;;
+    *)
+      echo "unknown backend runtime service: ${service}" >&2
+      return 1
+      ;;
+  esac
+}
+
+require_digest_image_value() {
+  local key="$1"
+  local value="$2"
+  if [[ -z "${value}" ]]; then
+    echo "${key} is empty in ${ENV_FILE}. refusing recover to avoid latest rollback." >&2
+    exit 1
+  fi
+  if [[ "${value}" == *":latest" || "${value}" == *":latest@"* ]]; then
+    echo "${key} latest is forbidden in ${ENV_FILE}: ${value}" >&2
+    exit 1
+  fi
+  if [[ ! "${value}" =~ ^[^[:space:]@]+@sha256:[a-fA-F0-9]{64}$ ]]; then
+    echo "${key} must include sha256 digest in ${ENV_FILE}: ${value}" >&2
+    exit 1
+  fi
+}
+
+repair_runtime_back_image_if_missing() {
+  local service="$1"
+  local fallback="$2"
+  local key value repaired_value legacy_value
+  key="$(backend_image_key "${service}")"
+  value="$(trim_quotes "$(env_value "${key}")")"
   if [[ -n "${value}" ]]; then
-    echo "recover BACK_IMAGE preserved: ${value}"
+    echo "recover ${key} preserved: ${value}"
+    require_digest_image_value "${key}" "${value}"
     return 0
   fi
 
-  state_backend="$(cat "${SCRIPT_DIR}/.active_backend" 2>/dev/null || true)"
-  if [[ "${state_backend}" == "back_blue" || "${state_backend}" == "back_green" ]]; then
-    repaired_value="$(container_image_for_service_any_state "${state_backend}" || true)"
-    if [[ -n "${repaired_value}" ]]; then
-      echo "recover BACK_IMAGE repair source=state_backend_container backend=${state_backend} image=${repaired_value}"
+  repaired_value="$(container_image_for_service_any_state "${service}" || true)"
+  if [[ -n "${repaired_value}" ]]; then
+    echo "recover ${key} repair source=${service}_container image=${repaired_value}"
+  fi
+
+  if [[ -z "${repaired_value}" ]]; then
+    legacy_value="$(trim_quotes "$(env_value "BACK_IMAGE")")"
+    if [[ -n "${legacy_value}" ]]; then
+      repaired_value="${legacy_value}"
+      echo "recover ${key} repair source=legacy_BACK_IMAGE image=${repaired_value}"
     fi
   fi
 
   if [[ -z "${repaired_value}" ]]; then
-    for backend in back_blue back_green; do
-      repaired_value="$(container_image_for_service_any_state "${backend}" || true)"
-      if [[ -n "${repaired_value}" ]]; then
-        echo "recover BACK_IMAGE repair source=${backend}_container image=${repaired_value}"
-        break
-      fi
-    done
+    repaired_value="${fallback}"
+    echo "recover ${key} repair source=fallback image=${repaired_value}"
   fi
 
-  if [[ -z "${repaired_value}" ]]; then
-    echo "BACK_IMAGE is empty in ${ENV_FILE} and no repair source is available." >&2
-    exit 1
-  fi
-
-  upsert_env_key "BACK_IMAGE" "${repaired_value}"
-  echo "recover repaired missing BACK_IMAGE=${repaired_value}"
+  require_digest_image_value "${key}" "${repaired_value}"
+  upsert_env_key "${key}" "${repaired_value}"
+  echo "recover repaired missing ${key}=${repaired_value}"
 }
 
 require_back_image() {
-  local value
-  repair_back_image_if_missing
-  value="$(trim_quotes "$(env_value "BACK_IMAGE")")"
+  local state_backend fallback_image
+  state_backend="$(cat "${SCRIPT_DIR}/.active_backend" 2>/dev/null || true)"
+  if [[ "${state_backend}" != "back_blue" && "${state_backend}" != "back_green" ]]; then
+    state_backend="back_blue"
+  fi
 
-  if [[ -z "${value}" ]]; then
-    echo "BACK_IMAGE is empty in ${ENV_FILE}. refusing recover to avoid latest rollback." >&2
-    exit 1
+  fallback_image="$(container_image_for_service_any_state "${state_backend}" || true)"
+  if [[ -z "${fallback_image}" ]]; then
+    fallback_image="$(trim_quotes "$(env_value "BACK_IMAGE")")"
   fi
-  if [[ "${value}" == *":latest" ]]; then
-    echo "BACK_IMAGE latest is forbidden in ${ENV_FILE}: ${value}" >&2
-    exit 1
-  fi
-  if [[ "${value}" != *@sha256:* && "${value}" != *:* ]]; then
-    echo "BACK_IMAGE must include tag or digest in ${ENV_FILE}: ${value}" >&2
+  if [[ -z "${fallback_image}" ]]; then
+    echo "backend image is empty in ${ENV_FILE} and no repair source is available." >&2
     exit 1
   fi
 
-  BACK_IMAGE="${value}"
-  export BACK_IMAGE
+  repair_runtime_back_image_if_missing "back_blue" "${fallback_image}"
+  repair_runtime_back_image_if_missing "back_green" "${fallback_image}"
+  repair_runtime_back_image_if_missing "back_read" "${fallback_image}"
+  repair_runtime_back_image_if_missing "back_admin" "${fallback_image}"
+  repair_runtime_back_image_if_missing "back_worker" "${fallback_image}"
 }
 
 section() {

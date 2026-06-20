@@ -223,26 +223,37 @@ test("home-server-source contract accepts a complete deployment env without BACK
   assert.equal(result.ok, true, result.errors.map((error) => error.message).join("\n"))
 })
 
-test("home-server runtime requires BACK_IMAGE by digest", async () => {
+const runtimeBackendImageKeys = [
+  "BACK_BLUE_IMAGE",
+  "BACK_GREEN_IMAGE",
+  "BACK_READ_IMAGE",
+  "BACK_ADMIN_IMAGE",
+  "BACK_WORKER_IMAGE",
+]
+
+const runtimeBackendImageEnv = runtimeBackendImageKeys
+  .map((key, index) => `${key}=ghcr.io/aquilaxk/aquila-blog-back@sha256:${"789ab"[index].repeat(64)}`)
+  .join("\n")
+
+test("home-server runtime requires runtime-specific backend images by digest", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const contract = loadContract(contractPath)
-  const digestBackImage = `ghcr.io/aquilaxk/aquila-blog-back@sha256:${"a".repeat(64)}`
   const tagBackImage = `ghcr.io/aquilaxk/aquila-blog-back:sha-${"b".repeat(40)}`
 
   const digestResult = validateEnvText({
     contract,
     target: "home-server-runtime",
-    text: `${baseHomeServerEnv}\nBACK_IMAGE=${digestBackImage}\n`,
+    text: `${baseHomeServerEnv}\n${runtimeBackendImageEnv}\n`,
   })
   assert.equal(digestResult.ok, true, digestResult.errors.map((error) => `${error.key}: ${error.message}`).join("\n"))
 
   const tagResult = validateEnvText({
     contract,
     target: "home-server-runtime",
-    text: `${baseHomeServerEnv}\nBACK_IMAGE=${tagBackImage}\n`,
+    text: `${baseHomeServerEnv}\n${runtimeBackendImageEnv}\nBACK_BLUE_IMAGE=${tagBackImage}\n`,
   })
   assert.equal(tagResult.ok, false)
-  assert(tagResult.errors.some((error) => error.key === "BACK_IMAGE" && error.message.includes("digest")))
+  assert(tagResult.errors.some((error) => error.key === "BACK_BLUE_IMAGE" && error.message.includes("digest")))
 })
 
 test("runtime service images are env-backed in compose and digest-validated by contract", async () => {
@@ -257,8 +268,11 @@ test("runtime service images are env-backed in compose and digest-validated by c
     "PROMTAIL_IMAGE",
     "NODE_RUNTIME_IMAGE",
     "REDIS_IMAGE",
+    ...runtimeBackendImageKeys,
   ]
-  const contractKeys = new Set(targetKeyNames(loadContract(contractPath), "home-server-source"))
+  const contract = loadContract(contractPath)
+  const sourceContractKeys = new Set(targetKeyNames(contract, "home-server-source"))
+  const runtimeContractKeys = new Set(targetKeyNames(contract, "home-server-runtime"))
   const compose = readFileSync(composePath, "utf8")
   const literalImageLines = compose
     .split(/\r?\n/)
@@ -267,8 +281,14 @@ test("runtime service images are env-backed in compose and digest-validated by c
     .filter(({ value }) => !value.includes("${"))
 
   assert.deepEqual(literalImageLines, [])
+  assert(!compose.includes("${BACK_IMAGE"))
+  assert(!sourceContractKeys.has("BACK_IMAGE"))
+  assert(!runtimeContractKeys.has("BACK_IMAGE"))
   for (const key of runtimeImageKeys) {
-    assert(contractKeys.has(key), `${key} must be covered by the home-server-source contract`)
+    assert(
+      sourceContractKeys.has(key) || runtimeContractKeys.has(key),
+      `${key} must be covered by the env contract`,
+    )
   }
 
   const sourceWithoutAutofilledRuntimeImages = baseHomeServerEnv
@@ -861,9 +881,46 @@ test("deploy workflow uses immutable backend digest and does not push latest", (
   assert.match(workflow, /id: build_backend_image/)
   assert.match(workflow, /echo "back_image_ref=\$\{IMAGE_NAME\}@\$\{BACKEND_IMAGE_DIGEST\}"/)
   assert.match(workflow, /HOME_BACK_IMAGE: \$\{\{ needs\.buildAndPush\.outputs\.back_image_ref \}\}/)
+  assert.match(workflow, /ACTIVE_BACKEND_IMAGE_KEY=/)
+  assert.match(workflow, /EXPECTED_BACK_IMAGE="\$\(extract_env_value "\$\{ACTIVE_BACKEND_IMAGE_KEY\}"\)"/)
+  assert.doesNotMatch(workflow, /EXPECTED_BACK_IMAGE="\$\(extract_env_value "BACK_IMAGE"\)"/)
   assert.doesNotMatch(workflow, /image_latest_ref/)
   assert.doesNotMatch(workflow, /\$\{\{ needs\.calculateTag\.outputs\.image_latest_ref \}\}/)
   assert.doesNotMatch(workflow, /IMAGE_LATEST_REF="\$\{IMAGE_NAME\}:latest"/)
+})
+
+test("homeserver deploy preserves runtime-specific backend image release state", () => {
+  const deployScript = readFileSync(deployScriptPath, "utf8")
+  const backupScript = readFileSync(deployBackupScriptPath, "utf8")
+  const rollbackScript = readFileSync(path.join(repoRoot, "deploy/homeserver/rollback_last_deploy.sh"), "utf8")
+  const recoverScript = readFileSync(path.join(repoRoot, "deploy/homeserver/recover.sh"), "utf8")
+  const statusScript = readFileSync(path.join(repoRoot, "deploy/homeserver/check_deploy_status.sh"), "utf8")
+  const steadyStateGuard = readFileSync(path.join(repoRoot, "deploy/homeserver/steady_state_guard.sh"), "utf8")
+
+  for (const key of runtimeBackendImageKeys) {
+    assert.match(deployScript, new RegExp(`${key}`))
+    assert.match(rollbackScript, new RegExp(`${key}`))
+    assert.match(recoverScript, new RegExp(`${key}`))
+  }
+
+  assert.match(deployScript, /RELEASE_STATE_FILE="\$\{SCRIPT_DIR\}\/\.backend-release-state\.env"/)
+  assert.match(deployScript, /awk -F= -v key="\$\{key\}"/)
+  assert.match(deployScript, /value = substr\(\$0, index\(\$0, "="\) \+ 1\)/)
+  assert.match(deployScript, /END \{\s*print value\s*\}/)
+  assert.match(deployScript, /write_backend_release_state "\$\{next_backend\}" "\$\{active_backend\}"/)
+  assert.match(deployScript, /prepare_runtime_backend_images "\$\{active_backend\}" "\$\{next_backend\}" "\$\{STAGED_BACK_IMAGE\}"/)
+  assert.match(backupScript, /\.backend-release-state\.env/)
+  assert.match(backupScript, /back_blue_image=/)
+  assert.match(backupScript, /back_green_image=/)
+  assert.match(rollbackScript, /backup_image_key_for_service\(\)/)
+  assert.match(rollbackScript, /repair_runtime_back_image_if_missing "\$\{target_backend\}"/)
+  assert.match(recoverScript, /repair_runtime_back_image_if_missing "back_worker"/)
+  assert.match(statusScript, /ACTIVE_BACKEND_IMAGE_KEY="BACK_BLUE_IMAGE"/)
+  assert.match(statusScript, /ACTIVE_BACKEND_IMAGE_KEY="BACK_GREEN_IMAGE"/)
+  assert.match(steadyStateGuard, /image_key="BACK_BLUE_IMAGE"/)
+  assert.match(steadyStateGuard, /image_key="BACK_GREEN_IMAGE"/)
+  assert.doesNotMatch(statusScript, /env_value "BACK_IMAGE"/)
+  assert.doesNotMatch(steadyStateGuard, /env_value "BACK_IMAGE"/)
 })
 
 test("deploy workflow requires pinned known_hosts and private GHCR credentials", () => {

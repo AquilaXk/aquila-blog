@@ -133,7 +133,6 @@ require_file "${ENV_FILE}"
 require_file "${STATE_FILE}"
 
 ACTIVE_BACKEND="$(cat "${STATE_FILE}" 2>/dev/null || true)"
-EXPECTED_BACK_IMAGE="$(trim_quotes "$(env_value "BACK_IMAGE")")"
 API_DOMAIN="$(trim_quotes "$(env_value "API_DOMAIN")")"
 ADMIN_API_UPSTREAM="$(trim_quotes "$(env_value "ADMIN_API_UPSTREAM")")"
 READ_API_UPSTREAM="$(trim_quotes "$(env_value "READ_API_UPSTREAM")")"
@@ -145,10 +144,13 @@ fi
 if [[ "${ACTIVE_BACKEND}" == "back_blue" ]]; then
   EXPECTED_UPSTREAM="back_blue"
   INACTIVE_BACKEND="back_green"
+  ACTIVE_BACKEND_IMAGE_KEY="BACK_BLUE_IMAGE"
 else
   EXPECTED_UPSTREAM="back_green"
   INACTIVE_BACKEND="back_blue"
+  ACTIVE_BACKEND_IMAGE_KEY="BACK_GREEN_IMAGE"
 fi
+EXPECTED_BACK_IMAGE="$(trim_quotes "$(env_value "${ACTIVE_BACKEND_IMAGE_KEY}")")"
 
 RUNNING_SERVICES="$(compose ps --status running --services 2>/dev/null || true)"
 ACTIVE_BACKEND_CONTAINER_ID="$(compose ps -q "${ACTIVE_BACKEND}" 2>/dev/null | head -n 1 || true)"
@@ -236,7 +238,7 @@ log "promtail_status=${PROMTAIL_STATUS} restarting=${PROMTAIL_RESTARTING}"
 log "grafana_loki_datasource_status=${GRAFANA_LOKI_DS_STATUS}"
 
 if [[ -z "${EXPECTED_BACK_IMAGE}" ]]; then
-  remember_failure "missing_expected_back_image"
+  remember_failure "missing_expected_back_image key=${ACTIVE_BACKEND_IMAGE_KEY:-none}"
 fi
 
 if [[ -z "${API_DOMAIN}" ]]; then

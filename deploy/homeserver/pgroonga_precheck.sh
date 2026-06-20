@@ -11,7 +11,12 @@ ENV_FILE="${SCRIPT_DIR}/.env.prod"
 TARGET_DB_NAME="unknown"
 
 compose() {
-  BACK_IMAGE="${BACK_IMAGE}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
+  BACK_BLUE_IMAGE="${BACK_IMAGE}" \
+    BACK_GREEN_IMAGE="${BACK_IMAGE}" \
+    BACK_READ_IMAGE="${BACK_IMAGE}" \
+    BACK_ADMIN_IMAGE="${BACK_IMAGE}" \
+    BACK_WORKER_IMAGE="${BACK_IMAGE}" \
+    docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
 env_value() {

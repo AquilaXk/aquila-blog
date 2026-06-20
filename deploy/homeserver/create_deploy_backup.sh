@@ -12,6 +12,7 @@ BACKUP_ROOT="${SCRIPT_DIR}/.deploy-backups"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 BACKUP_DIR="${BACKUP_ROOT}/${TIMESTAMP}"
 STATE_FILE="${SCRIPT_DIR}/.active_backend"
+RELEASE_STATE_FILE="${SCRIPT_DIR}/.backend-release-state.env"
 
 container_image_for_service() {
   local service="$1"
@@ -38,7 +39,7 @@ elif [[ -f "${SCRIPT_DIR}/Caddyfile" ]]; then
   cp "${SCRIPT_DIR}/Caddyfile" "${BACKUP_DIR}/caddy/Caddyfile"
 fi
 
-for file in .env.prod docker-compose.prod.yml .active_backend; do
+for file in .env.prod docker-compose.prod.yml .active_backend .backend-release-state.env; do
   if [[ -f "${SCRIPT_DIR}/${file}" ]]; then
     cp "${SCRIPT_DIR}/${file}" "${BACKUP_DIR}/${file}"
   fi
@@ -46,12 +47,22 @@ done
 
 active_backend=""
 active_backend_image=""
+back_blue_image=""
+back_green_image=""
+back_read_image=""
+back_admin_image=""
+back_worker_image=""
 if [[ -f "${STATE_FILE}" ]]; then
   active_backend="$(cat "${STATE_FILE}" || true)"
   if [[ "${active_backend}" == "back_blue" || "${active_backend}" == "back_green" ]]; then
     active_backend_image="$(container_image_for_service "${active_backend}" || true)"
   fi
 fi
+back_blue_image="$(container_image_for_service "back_blue" || true)"
+back_green_image="$(container_image_for_service "back_green" || true)"
+back_read_image="$(container_image_for_service "back_read" || true)"
+back_admin_image="$(container_image_for_service "back_admin" || true)"
+back_worker_image="$(container_image_for_service "back_worker" || true)"
 
 {
   echo "created_at=${TIMESTAMP}"
@@ -61,6 +72,21 @@ fi
   fi
   if [[ -n "${active_backend_image}" ]]; then
     echo "active_backend_image=${active_backend_image}"
+  fi
+  if [[ -n "${back_blue_image}" ]]; then
+    echo "back_blue_image=${back_blue_image}"
+  fi
+  if [[ -n "${back_green_image}" ]]; then
+    echo "back_green_image=${back_green_image}"
+  fi
+  if [[ -n "${back_read_image}" ]]; then
+    echo "back_read_image=${back_read_image}"
+  fi
+  if [[ -n "${back_admin_image}" ]]; then
+    echo "back_admin_image=${back_admin_image}"
+  fi
+  if [[ -n "${back_worker_image}" ]]; then
+    echo "back_worker_image=${back_worker_image}"
   fi
 } > "${BACKUP_DIR}/metadata.env"
 

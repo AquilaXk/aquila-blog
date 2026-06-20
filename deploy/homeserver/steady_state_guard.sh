@@ -346,15 +346,24 @@ enforce_single_backend_rule() {
 }
 
 check_active_backend_image() {
-  local expected_image active_backend running_image
-  expected_image="$(trim_quotes "$(env_value "BACK_IMAGE")")"
-  if [[ -z "${expected_image}" ]]; then
-    log "FAIL missing BACK_IMAGE in ${ENV_FILE}"
+  local expected_image active_backend running_image image_key
+  if ! active_backend="$(resolve_active_backend)"; then
+    log "FAIL active backend unresolved for image drift check"
     return 1
   fi
 
-  if ! active_backend="$(resolve_active_backend)"; then
-    log "FAIL active backend unresolved for image drift check"
+  case "${active_backend}" in
+    back_blue) image_key="BACK_BLUE_IMAGE" ;;
+    back_green) image_key="BACK_GREEN_IMAGE" ;;
+    *)
+      log "FAIL unsupported active backend for image drift check active=${active_backend}"
+      return 1
+      ;;
+  esac
+
+  expected_image="$(trim_quotes "$(env_value "${image_key}")")"
+  if [[ -z "${expected_image}" ]]; then
+    log "FAIL missing ${image_key} in ${ENV_FILE}"
     return 1
   fi
 

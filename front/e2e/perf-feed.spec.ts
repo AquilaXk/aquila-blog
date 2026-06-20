@@ -86,6 +86,7 @@ test.describe("perf feed scroll budgets", () => {
   await expect(page.getByRole("heading", { name: "CLS 예산 점검 1201" })).toBeVisible()
   await expect(page.getByText("다음 글을 불러오지 못했습니다.")).toBeVisible()
   await expect(page.getByRole("button", { name: "다시 시도" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "더보기" })).toHaveCount(0)
 
   await page.getByRole("button", { name: "다시 시도" }).click()
 

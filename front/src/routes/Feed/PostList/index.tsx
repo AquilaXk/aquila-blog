@@ -211,7 +211,7 @@ const PostList: React.FC<Props> = ({
               </button>
             </div>
           )}
-          {hasNextPage && (
+          {hasNextPage && !isFetchNextPageError && (
             <button
               type="button"
               className="loadMoreButton"

@@ -285,6 +285,9 @@ repair_runtime_back_image_if_missing() {
   local service="$1"
   local fallback="$2"
   local key metadata_key current_value repaired_value metadata_image legacy_image
+  repaired_value=""
+  metadata_image=""
+  legacy_image=""
   key="$(backend_image_key "${service}")"
   current_value="$(trim_quotes "$(env_value "${key}")")"
   if [[ -n "${current_value}" ]]; then

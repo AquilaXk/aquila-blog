@@ -11,6 +11,7 @@ ENV_FILE="${SCRIPT_DIR}/.env.prod"
 CADDY_FILE="${SCRIPT_DIR}/caddy/Caddyfile"
 CADDY_CONTAINER_FILE="/etc/caddy/Caddyfile"
 STATE_FILE="${SCRIPT_DIR}/.active_backend"
+RELEASE_STATE_FILE="${SCRIPT_DIR}/.backend-release-state.env"
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-blog_home}"
 NETWORK_NAME="blog_home_default"
 DEPLOY_LOCK_DIR="${SCRIPT_DIR}/.deploy.lock"
@@ -947,24 +948,136 @@ require_digest_image_value() {
 require_back_image() {
   local env_file_back_image
   env_file_back_image="$(trim_quotes "$(env_value "BACK_IMAGE")")"
-  if [[ -n "${env_file_back_image}" ]]; then
-    if [[ -n "${BACK_IMAGE:-}" && "${BACK_IMAGE}" != "${env_file_back_image}" ]]; then
-      echo "BACK_IMAGE shell override detected. using ${ENV_FILE} value (${env_file_back_image})" >&2
-    fi
+  if [[ -n "${STAGED_BACK_IMAGE:-}" ]]; then
+    BACK_IMAGE="${STAGED_BACK_IMAGE}"
+  elif [[ -n "${BACK_IMAGE:-}" ]]; then
+    BACK_IMAGE="${BACK_IMAGE}"
+  elif [[ -n "${env_file_back_image}" ]]; then
+    echo "legacy BACK_IMAGE detected in ${ENV_FILE}; using it as staged deploy image" >&2
     BACK_IMAGE="${env_file_back_image}"
-    export BACK_IMAGE
   fi
 
   if [[ -z "${BACK_IMAGE:-}" ]]; then
-    echo "BACK_IMAGE is empty. refusing deploy to avoid accidental latest-image rollout." >&2
-    echo "set BACK_IMAGE=ghcr.io/aquilaxk/aquila-blog-back@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" >&2
+    echo "STAGED_BACK_IMAGE is empty. refusing deploy to avoid accidental latest-image rollout." >&2
+    echo "set STAGED_BACK_IMAGE=ghcr.io/aquilaxk/aquila-blog-back@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" >&2
     exit 1
   fi
 
-  if ! require_digest_image_value "BACK_IMAGE" "${BACK_IMAGE}"; then
-    echo "set BACK_IMAGE=ghcr.io/aquilaxk/aquila-blog-back@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" >&2
+  if ! require_digest_image_value "STAGED_BACK_IMAGE" "${BACK_IMAGE}"; then
+    echo "set STAGED_BACK_IMAGE=ghcr.io/aquilaxk/aquila-blog-back@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" >&2
     exit 1
   fi
+
+  STAGED_BACK_IMAGE="${BACK_IMAGE}"
+  export STAGED_BACK_IMAGE
+}
+
+backend_image_key() {
+  local service="$1"
+  case "${service}" in
+    back_blue) echo "BACK_BLUE_IMAGE" ;;
+    back_green) echo "BACK_GREEN_IMAGE" ;;
+    back_read) echo "BACK_READ_IMAGE" ;;
+    back_admin) echo "BACK_ADMIN_IMAGE" ;;
+    back_worker) echo "BACK_WORKER_IMAGE" ;;
+    *)
+      echo "unknown backend runtime service: ${service}" >&2
+      return 1
+      ;;
+  esac
+}
+
+container_image_for_service_any_state() {
+  local service="$1"
+  local container_id
+  container_id="$(
+    docker ps -aq \
+      --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" \
+      --filter "label=com.docker.compose.service=${service}" 2>/dev/null | head -n 1 || true
+  )"
+  if [[ -z "${container_id}" ]]; then
+    return 0
+  fi
+
+  docker inspect --format '{{.Config.Image}}' "${container_id}" 2>/dev/null | tr -d '\r' | head -n 1 || true
+}
+
+runtime_backend_image_value() {
+  local service="$1"
+  local key
+  key="$(backend_image_key "${service}")"
+  trim_quotes "$(env_value "${key}")"
+}
+
+upsert_runtime_backend_image() {
+  local service="$1"
+  local image="$2"
+  local key
+  key="$(backend_image_key "${service}")"
+  require_digest_image_value "${key}" "${image}"
+  upsert_env_key "${key}" "${image}"
+}
+
+resolve_preserved_backend_image() {
+  local service="$1"
+  local fallback="$2"
+  local image
+  image="$(runtime_backend_image_value "${service}")"
+  if [[ -n "${image}" ]]; then
+    echo "${image}"
+    return 0
+  fi
+
+  image="$(container_image_for_service_any_state "${service}" || true)"
+  if [[ -n "${image}" ]]; then
+    echo "${image}"
+    return 0
+  fi
+
+  image="$(trim_quotes "$(env_value "BACK_IMAGE")")"
+  if [[ -n "${image}" ]]; then
+    echo "${image}"
+    return 0
+  fi
+
+  echo "${fallback}"
+}
+
+write_backend_release_state() {
+  local active_backend="$1"
+  local previous_backend="$2"
+  local active_image previous_image
+  active_image="$(runtime_backend_image_value "${active_backend}")"
+  previous_image="$(runtime_backend_image_value "${previous_backend}")"
+
+  {
+    printf 'active_backend=%s\n' "${active_backend}"
+    printf 'previous_backend=%s\n' "${previous_backend}"
+    printf 'active_backend_image=%s\n' "${active_image}"
+    printf 'previous_backend_image=%s\n' "${previous_image}"
+    printf 'back_blue_image=%s\n' "$(runtime_backend_image_value "back_blue")"
+    printf 'back_green_image=%s\n' "$(runtime_backend_image_value "back_green")"
+    printf 'back_read_image=%s\n' "$(runtime_backend_image_value "back_read")"
+    printf 'back_admin_image=%s\n' "$(runtime_backend_image_value "back_admin")"
+    printf 'back_worker_image=%s\n' "$(runtime_backend_image_value "back_worker")"
+  } > "${RELEASE_STATE_FILE}"
+}
+
+prepare_runtime_backend_images() {
+  local active_backend="$1"
+  local next_backend="$2"
+  local staged_image="$3"
+  local active_image
+
+  active_image="$(resolve_preserved_backend_image "${active_backend}" "${staged_image}")"
+  upsert_runtime_backend_image "${active_backend}" "${active_image}"
+  upsert_runtime_backend_image "${next_backend}" "${staged_image}"
+  upsert_runtime_backend_image "back_read" "${staged_image}"
+  upsert_runtime_backend_image "back_admin" "${staged_image}"
+  upsert_runtime_backend_image "back_worker" "${staged_image}"
+
+  write_backend_release_state "${active_backend}" "${next_backend}"
+  echo "runtime backend image map prepared: active=${active_backend} active_image=${active_image} next=${next_backend} next_image=${staged_image}"
 }
 
 require_nonempty_env_key() {
@@ -1871,6 +1984,7 @@ rollback_to_backend() {
   echo "${rollback_backend}" > "${STATE_FILE}"
   local inactive_backend
   inactive_backend="$(other_backend "${rollback_backend}")"
+  write_backend_release_state "${rollback_backend}" "${inactive_backend}"
   drain_and_stop_backend_if_running "${inactive_backend}"
   return 0
 }
@@ -1913,6 +2027,7 @@ fi
 echo "active backend: ${active_backend}"
 echo "next backend: ${next_backend}"
 
+prepare_runtime_backend_images "${active_backend}" "${next_backend}" "${STAGED_BACK_IMAGE}"
 persist_single_runtime_caddy_upstreams "${active_backend}"
 
 action_backend_host="$(backend_host "${next_backend}")"
@@ -1971,6 +2086,7 @@ if ! check_notification_sse_route "${api_domain}"; then
 fi
 
 echo "${next_backend}" > "${STATE_FILE}"
+write_backend_release_state "${next_backend}" "${active_backend}"
 drain_and_stop_backend_if_running "${active_backend}"
 
 echo "post-switch phase: install steady-state guard"

@@ -189,6 +189,52 @@ ensure_image_env_key_from_local_digest() {
   log "auto-filled ${key} from local digest (${fallback_image} -> ${digest})"
 }
 
+container_image_for_service_any_state() {
+  local service="$1"
+  local container_id
+  container_id="$(
+    docker ps -aq \
+      --filter "label=com.docker.compose.project=blog_home" \
+      --filter "label=com.docker.compose.service=${service}" 2>/dev/null | head -n 1 || true
+  )"
+  if [[ -z "${container_id}" ]]; then
+    return 0
+  fi
+
+  docker inspect --format '{{.Config.Image}}' "${container_id}" 2>/dev/null | tr -d '\r' | head -n 1 || true
+}
+
+ensure_backend_runtime_image_env_key() {
+  local key="$1"
+  local service="$2"
+  local value legacy_value container_value
+  value="$(trim_quotes "$(env_value "${key}")")"
+  if [[ -n "${value}" ]]; then
+    require_digest_image_value "${key}" "${value}"
+    return 0
+  fi
+
+  legacy_value="$(trim_quotes "$(env_value "BACK_IMAGE")")"
+  if [[ -n "${legacy_value}" ]]; then
+    require_digest_image_value "BACK_IMAGE" "${legacy_value}"
+    ensure_compose_env_work_file
+    upsert_env_key "${key}" "${legacy_value}"
+    log "auto-filled ${key} from legacy BACK_IMAGE for compose preflight"
+    return 0
+  fi
+
+  container_value="$(container_image_for_service_any_state "${service}" || true)"
+  if [[ -n "${container_value}" ]]; then
+    require_digest_image_value "${key}" "${container_value}"
+    ensure_compose_env_work_file
+    upsert_env_key "${key}" "${container_value}"
+    log "auto-filled ${key} from ${service} container image for compose preflight"
+    return 0
+  fi
+
+  fail "required backend runtime image env key is missing: ${key}"
+}
+
 ensure_compose_image_env_defaults() {
   ensure_image_env_key_from_local_digest "CLOUDFLARED_IMAGE" "cloudflare/cloudflared:latest"
   ensure_image_env_key_from_local_digest "AUTOHEAL_IMAGE" "willfarrell/autoheal:1.2.0"
@@ -202,6 +248,11 @@ ensure_compose_image_env_defaults() {
   ensure_image_env_key_from_local_digest "DB_IMAGE" "jangka512/pgj:latest"
   ensure_image_env_key_from_local_digest "REDIS_IMAGE" "redis:7-alpine"
   ensure_image_env_key_from_local_digest "MINIO_IMAGE" "minio/minio:latest"
+  ensure_backend_runtime_image_env_key "BACK_BLUE_IMAGE" "back_blue"
+  ensure_backend_runtime_image_env_key "BACK_GREEN_IMAGE" "back_green"
+  ensure_backend_runtime_image_env_key "BACK_READ_IMAGE" "back_read"
+  ensure_backend_runtime_image_env_key "BACK_ADMIN_IMAGE" "back_admin"
+  ensure_backend_runtime_image_env_key "BACK_WORKER_IMAGE" "back_worker"
 }
 
 log() {

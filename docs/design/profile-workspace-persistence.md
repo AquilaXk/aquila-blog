@@ -38,7 +38,8 @@
 - profile workspace 저장은 HTTP transaction 안에서 처리되며 별도 async task retry 대상이 아니다.
 - DB transaction 실패 또는 optimistic conflict가 발생하면 client가 같은 payload로 다시 요청해야 한다.
 - image URL이 바뀌면 `UploadedFileRetentionService.syncProfileImage`가 이전/현재 profile image 참조를 동기화한다. 이 호출은 같은 transaction boundary 안에서 수행된다.
-- nickname/profile image가 바뀌면 `MemberPublicProfileChangedEvent`가 발행되어 post author representation cache invalidation을 유도한다.
+- 계정 profile 수정 경로(`MemberApplicationService.modify`)에서 nickname/profile image가 바뀌면 `MemberPublicProfileChangedEvent`가 발행되어 post author representation cache invalidation을 유도한다.
+- workspace draft save와 publish 경로는 profile image file retention을 동기화하지만 `MemberPublicProfileChangedEvent`를 발행하지 않는다.
 
 ## Idempotency key
 
@@ -53,7 +54,7 @@
 2. draft JSON이 깨졌거나 비어 있고 legacy attrs가 정상이라면 `PUT /member/api/v1/adm/members/{id}/profileWorkspace/draft`로 legacy 기준 content를 다시 저장한다.
 3. published가 오래됐으면 draft 내용을 확인한 뒤 `POST /member/api/v1/adm/members/{id}/profileWorkspace/publish`를 다시 호출한다.
 4. profile image 참조가 맞지 않으면 member의 legacy `profileImgUrl`, draft/published `profileImageUrl`, uploaded file retention 상태를 함께 확인한다.
-5. author 표시가 post public read path에 stale로 보이면 `MemberPublicProfileChangedEvent` 이후 post cache invalidation metric과 `docs/design/cache-consistency-contract.md`의 author recovery 절차를 따른다.
+5. workspace draft save 또는 publish로 profile image가 바뀐 뒤 post public read path의 author image가 stale로 보이면 자동 event 발행을 기대하지 않는다. 계정 profile 수정 event 발생 여부를 먼저 확인하고, event가 없었다면 `docs/design/cache-consistency-contract.md`의 author recovery 절차로 post cache를 수동 복구한다.
 
 ## 금지 사항
 

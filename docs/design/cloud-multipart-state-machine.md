@@ -44,7 +44,8 @@
 - multipart upload는 client-driven API 흐름이므로 일반 task retry 대상이 아니다.
 - part upload 중 remote storage 호출이 실패하면 `UPLOADING_PART -> IN_PROGRESS`로 claim을 풀고 client가 같은 part를 다시 보낼 수 있게 한다.
 - part metadata 저장 실패는 remote part가 이미 저장됐을 수 있으므로 session을 `FAILED`로 표시한다.
-- complete 실패는 `COMPLETING` 기준 `FAILED`로 표시한다.
+- remote complete 호출 자체가 실패하면 `COMPLETING` 기준 `FAILED`로 표시한다.
+- remote complete가 성공한 뒤 `CloudFile` 저장 또는 session `COMPLETED` 저장이 실패하면 row가 `COMPLETING`에 남을 수 있다. 이 상태는 client retry로 재완료할 수 없으므로 stuck completion 복구 대상으로 본다.
 - abort 실패는 `ABORTING` 기준 `FAILED`로 표시한다.
 - expired session cleanup은 scheduler가 batch로 호출하며 session 단위 실패를 warn log로 격리하고 다음 batch에서 다른 session 처리를 계속한다.
 
@@ -62,8 +63,9 @@
 2. `FAILED`가 `INITIATING` failure이고 uploadId가 없다면 remote multipart가 생성되지 않았거나 attach 전에 실패한 상태다. client가 새 session을 만들게 한다.
 3. `FAILED`가 `UPLOADING_PART` metadata save failure이면 remote part가 있을 수 있다. 같은 objectKey/uploadId를 remote storage에서 abort한 뒤 session을 운영 기록에 남기고 client에게 새 session을 만들게 한다.
 4. `FAILED`가 `COMPLETING` failure이면 remote complete 결과가 불명확하다. remote object 존재 여부를 확인하고, object가 존재하면 `CloudFile` row 누락 여부를 점검한다.
-5. `FAILED`가 `ABORTING` failure이면 remote multipart upload가 orphan일 수 있다. remote storage에서 uploadId를 abort한 뒤 session을 terminal recovery 대상으로 기록한다.
-6. 만료 session은 `CloudVideoUploadSessionCleanupScheduledJob`가 `purgeExpiredSessions`로 처리한다. scheduler가 멈췄다면 worker/admin runtime 상태와 cleanup job log를 먼저 확인한다.
+5. `COMPLETING` 상태가 요청 timeout/retry window를 지나 계속 남아 있으면 remote complete 성공 후 DB 저장이 실패한 stuck completion으로 분류한다. remote object와 `CloudFile` row, `completedFileId`를 대조하고 운영 기록을 남긴 뒤 보정 SQL 또는 재처리 작업으로 `CloudFile`/session terminal 상태를 맞춘다.
+6. `FAILED`가 `ABORTING` failure이면 remote multipart upload가 orphan일 수 있다. remote storage에서 uploadId를 abort한 뒤 session을 terminal recovery 대상으로 기록한다.
+7. 만료 session은 `CloudVideoUploadSessionCleanupScheduledJob`가 `purgeExpiredSessions`로 처리한다. scheduler가 멈췄다면 worker/admin runtime 상태와 cleanup job log를 먼저 확인한다.
 
 ## 금지 사항
 

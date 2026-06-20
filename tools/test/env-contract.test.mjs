@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { execFileSync } from "node:child_process"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
@@ -16,6 +17,109 @@ const hardeningScriptPath = path.join(repoRoot, "deploy/homeserver/hardening/set
 const hardeningDocPath = path.join(repoRoot, "deploy/homeserver/HARDENING.md")
 const prometheusPath = path.join(repoRoot, "deploy/homeserver/monitoring/prometheus.yml")
 const taskAlertsPath = path.join(repoRoot, "deploy/homeserver/monitoring/rules/task-alerts.yml")
+
+const git = (cwd, args) =>
+  execFileSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim()
+
+const commitFile = (cwd, relativePath, content, message) => {
+  const filePath = path.join(cwd, relativePath)
+  mkdirSync(path.dirname(filePath), { recursive: true })
+  writeFileSync(filePath, content)
+  git(cwd, ["add", relativePath])
+  git(cwd, ["commit", "-m", message])
+  return git(cwd, ["rev-parse", "HEAD"])
+}
+
+const extractDeployCalculateScript = () => {
+  const workflow = readFileSync(workflowPath, "utf8")
+  const lines = workflow.split("\n")
+  const runIndex = lines.findIndex((line, index) => {
+    return line === "        run: |" && lines.slice(Math.max(0, index - 20), index).some((prev) => prev.includes("Calculate deploy targets and image tags"))
+  })
+  assert.notEqual(runIndex, -1, "calculateTag run block not found")
+
+  const scriptLines = []
+  for (const line of lines.slice(runIndex + 1)) {
+    if (line.startsWith("          ")) {
+      scriptLines.push(line.slice(10))
+      continue
+    }
+    if (line.trim() === "") {
+      scriptLines.push("")
+      continue
+    }
+    break
+  }
+
+  return scriptLines.join("\n")
+}
+
+const createDeployStaleFixture = () => {
+  const workDir = mkdtempSync(path.join(tmpdir(), "aquila-deploy-stale-"))
+  git(workDir, ["init", "-b", "main"])
+  git(workDir, ["config", "user.email", "ci@example.test"])
+  git(workDir, ["config", "user.name", "CI Test"])
+  git(workDir, ["remote", "add", "origin", workDir])
+
+  const initialSha = commitFile(workDir, "README.md", "initial\n", "initial")
+  const backendSha = commitFile(workDir, "back/app.txt", `${initialSha}\nbackend\n`, "backend change")
+  const docsSha = commitFile(workDir, "docs/ops.md", "ops note\n", "docs change")
+  const backendAfterDocsSha = commitFile(
+    workDir,
+    "deploy/homeserver/runtime.txt",
+    "deploy runtime change\n",
+    "deploy change",
+  )
+  const envContractAfterDocsSha = commitFile(
+    workDir,
+    "deploy/env/env.contract.json",
+    '{"updated":true}\n',
+    "env contract change",
+  )
+  git(workDir, ["checkout", "-b", "detached-deploy", initialSha])
+  const nonAncestorSha = commitFile(workDir, "back/side.txt", "side backend\n", "side backend change")
+  git(workDir, ["checkout", "main"])
+
+  return {
+    workDir,
+    backendSha,
+    docsSha,
+    backendAfterDocsSha,
+    envContractAfterDocsSha,
+    nonAncestorSha,
+  }
+}
+
+const runDeployCalculateScript = ({ cwd, deploySha, currentMainSha }) => {
+  git(cwd, ["update-ref", "refs/heads/main", currentMainSha])
+  git(cwd, ["checkout", "--detach", deploySha])
+
+  const outputFile = path.join(cwd, "github-output.txt")
+  const summaryFile = path.join(cwd, "github-summary.md")
+  const script = extractDeployCalculateScript()
+
+  return execFileSync("bash", ["-lc", script], {
+    cwd,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GITHUB_EVENT_NAME: "workflow_run",
+      GITHUB_REPOSITORY_OWNER: "AquilaXk",
+      GITHUB_REPOSITORY: "AquilaXk/aquila-blog",
+      DEPLOY_SHA_INPUT: deploySha,
+      FORCE_BACKEND_DEPLOY_INPUT: "false",
+      FORCE_FRONT_LIVE_VERIFY_INPUT: "false",
+      FORCE_EDITOR_LIVE_CANARY_INPUT: "false",
+      GITHUB_OUTPUT: outputFile,
+      GITHUB_STEP_SUMMARY: summaryFile,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  })
+}
 
 const targetKeyNames = (contract, targetName) => {
   const target = contract.targets[targetName]
@@ -639,24 +743,115 @@ test("deploy workflow는 frontend 변경에서만 live frontend SHA를 현재 co
   assert.doesNotMatch(workflow, /E2E_EXPECTED_FRONT_COMMIT_SHA:\s*\$\{\{ needs\.calculateTag\.outputs\.deploy_sha \}\}/)
 })
 
-test("deploy workflow blocks stale workflow_run before build and deploy", () => {
+test("deploy workflow는 path-aware stale gate로 backend 영향 후속 변경만 차단한다", () => {
   const workflow = readFileSync(workflowPath, "utf8")
 
   assert.match(workflow, /ref: \$\{\{ github\.event\.workflow_run\.head_sha \|\| github\.sha \}\}/)
   assert.match(workflow, /DEPLOY_SHA_INPUT: \$\{\{ github\.event\.workflow_run\.head_sha \|\| github\.sha \}\}/)
   assert.match(workflow, /REMOTE_MAIN_SHA="\$\(git ls-remote --exit-code origin refs\/heads\/main \| awk '\{print \$1\}'\)"/)
   assert.match(workflow, /origin\/main sha lookup failed/)
+  assert.match(workflow, /git fetch --no-tags --prune origin "\+refs\/heads\/main:refs\/remotes\/origin\/main"/)
+  assert.match(workflow, /git merge-base --is-ancestor "\$\{DEPLOY_SHA\}" "\$\{REMOTE_MAIN_SHA\}"/)
+  assert.match(workflow, /STALE_CHANGED_FILES="\$\(git diff --name-only "\$\{DEPLOY_SHA\}" "\$\{REMOTE_MAIN_SHA\}"/)
+  assert.match(workflow, /BACKEND_DEPLOY_PATHS_PATTERN=.*deploy\/env\//)
+  assert.match(workflow, /BACKEND_DEPLOY_PATHS_PATTERN=.*tools\/env\//)
+  assert.match(workflow, /STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*deploy\/env\//)
+  assert.match(workflow, /STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*tools\/env\//)
+  assert.match(workflow, /grep -Eq "\$\{STALE_DEPLOY_BLOCK_PATHS_PATTERN\}"/)
   assert.doesNotMatch(workflow, /git fetch --depth=1 origin main/)
   assert.doesNotMatch(workflow, /git rev-parse origin\/main/)
-  assert.match(workflow, /stale workflow_run blocked: deploy_sha=/)
-  assert.match(workflow, /exit 1/)
-  assert(
-    workflow.indexOf("stale workflow_run blocked: deploy_sha=") <
-      workflow.indexOf('CHANGED_FILES="$(git diff --name-only "${DEPLOY_SHA}^1" "${DEPLOY_SHA}"'),
-  )
+  assert.match(workflow, /stale workflow_run blocked by backend-impacting newer main changes: deploy_sha=/)
+  assert.match(workflow, /stale workflow_run allowed after backend-neutral newer main changes: deploy_sha=/)
   assert.doesNotMatch(workflow, /stale workflow_run payload: deploy_sha=/)
   assert.doesNotMatch(workflow, /STALE_WORKFLOW_RUN/)
   assert.match(workflow, /if echo "\$\{CHANGED_FILES\}" \| grep -Eq "\$\{FRONT_BUILD_SHA_PATHS_PATTERN\}"/)
+})
+
+test("deploy calculateTag는 docs-only 후속 main 변경이면 기존 backend deploy를 계속 허용한다", () => {
+  const fixture = createDeployStaleFixture()
+  try {
+    runDeployCalculateScript({
+      cwd: fixture.workDir,
+      deploySha: fixture.backendSha,
+      currentMainSha: fixture.docsSha,
+    })
+
+    const output = readFileSync(path.join(fixture.workDir, "github-output.txt"), "utf8")
+    const summary = readFileSync(path.join(fixture.workDir, "github-summary.md"), "utf8")
+
+    assert.match(output, /backend_deploy=true/)
+    assert.match(summary, /path-aware-stale-neutral/)
+  } finally {
+    rmSync(fixture.workDir, { recursive: true, force: true })
+  }
+})
+
+test("deploy calculateTag는 backend 영향 후속 main 변경이면 stale deploy를 차단한다", () => {
+  const fixture = createDeployStaleFixture()
+  try {
+    assert.throws(
+      () =>
+        runDeployCalculateScript({
+          cwd: fixture.workDir,
+          deploySha: fixture.backendSha,
+          currentMainSha: fixture.backendAfterDocsSha,
+        }),
+      /stale workflow_run blocked by backend-impacting newer main changes/,
+    )
+  } finally {
+    rmSync(fixture.workDir, { recursive: true, force: true })
+  }
+})
+
+test("deploy calculateTag는 deploy-time env 검증 입력 후속 변경이면 stale deploy를 차단한다", () => {
+  const fixture = createDeployStaleFixture()
+  try {
+    assert.throws(
+      () =>
+        runDeployCalculateScript({
+          cwd: fixture.workDir,
+          deploySha: fixture.backendSha,
+          currentMainSha: fixture.envContractAfterDocsSha,
+        }),
+      /stale workflow_run blocked by backend-impacting newer main changes/,
+    )
+  } finally {
+    rmSync(fixture.workDir, { recursive: true, force: true })
+  }
+})
+
+test("deploy calculateTag는 deploy-time env 검증 입력 현재 main 변경이면 backend deploy를 실행한다", () => {
+  const fixture = createDeployStaleFixture()
+  try {
+    runDeployCalculateScript({
+      cwd: fixture.workDir,
+      deploySha: fixture.envContractAfterDocsSha,
+      currentMainSha: fixture.envContractAfterDocsSha,
+    })
+
+    const output = readFileSync(path.join(fixture.workDir, "github-output.txt"), "utf8")
+
+    assert.match(output, /backend_deploy=true/)
+  } finally {
+    rmSync(fixture.workDir, { recursive: true, force: true })
+  }
+})
+
+test("deploy calculateTag는 현재 main ancestry 밖의 deploy SHA를 차단한다", () => {
+  const fixture = createDeployStaleFixture()
+  try {
+    assert.throws(
+      () =>
+        runDeployCalculateScript({
+          cwd: fixture.workDir,
+          deploySha: fixture.nonAncestorSha,
+          currentMainSha: fixture.docsSha,
+        }),
+      /deploy sha is not reachable from origin\/main/,
+    )
+  } finally {
+    rmSync(fixture.workDir, { recursive: true, force: true })
+  }
 })
 
 test("deploy workflow uses immutable backend digest and does not push latest", () => {

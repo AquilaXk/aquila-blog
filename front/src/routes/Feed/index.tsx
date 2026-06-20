@@ -1,20 +1,54 @@
 import Footer from "./Footer"
 import styled from "@emotion/styled"
+import { startTransition, useCallback, useMemo } from "react"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
 import { CONFIG } from "site.config"
 import FeedExplorer from "./FeedExplorer"
 import ProfileSummaryCard from "./ProfileSummaryCard"
+import { useTagsQuery } from "src/hooks/useTagsQuery"
+import { useRouter } from "next/router"
+import { replaceShallowRoutePreservingScroll } from "src/libs/router"
 
 type Props = {
   initialAdminProfile?: AdminProfile | null
 }
 
+const TOPIC_RAIL_TAG_LIMIT = 3
+
 const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
+  const router = useRouter()
   const adminProfile = useAdminProfile(initialAdminProfile)
+  const { tagEntries } = useTagsQuery()
+  const topicEntries = useMemo(
+    () => tagEntries.slice(0, TOPIC_RAIL_TAG_LIMIT),
+    [tagEntries]
+  )
   const introTitle =
     adminProfile?.blogTitle || CONFIG.blog.title || "AquilaLog"
   const introRole = adminProfile?.profileRole || CONFIG.profile.role || "Backend Engineering"
   const introDescription = adminProfile?.homeIntroDescription || CONFIG.blog.homeIntroDescription || CONFIG.blog.description
+
+  const navigateWithTag = useCallback((value: string) => {
+    const { category: _deprecatedCategory, ...restQuery } = router.query
+    startTransition(() => {
+      void replaceShallowRoutePreservingScroll(router, {
+        pathname: "/",
+        query: {
+          ...restQuery,
+          tag: value,
+        },
+      })
+    })
+  }, [router])
+
+  const handleClickTopic = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      const value = event.currentTarget.dataset.tag
+      if (!value) return
+      navigateWithTag(value)
+    },
+    [navigateWithTag]
+  )
 
   return (
     <StyledWrapper data-ui="feed-home-product-shell">
@@ -26,11 +60,22 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
             </span>
             <h1>{introTitle}</h1>
             <p>{introDescription}</p>
-            <div className="topicRail" aria-label="AquilaLog topics">
-              <span>Spring</span>
-              <span>Architecture</span>
-              <span>Infrastructure</span>
-            </div>
+            {topicEntries.length > 0 && (
+              <div className="topicRail" data-ui="feed-topic-rail" aria-label="인기 태그">
+                {topicEntries.map(([tag, count]) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    data-ui="feed-topic-rail-chip"
+                    data-tag={tag}
+                    aria-label={`태그 ${tag} 글 ${count}개 보기`}
+                    onClick={handleClickTopic}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <ProfileSummaryCard initialAdminProfile={initialAdminProfile} />
         </IntroCard>
@@ -142,7 +187,7 @@ const IntroCard = styled.section`
     flex-wrap: wrap;
   }
 
-  .topicRail span {
+  .topicRail button {
     display: inline-flex;
     align-items: center;
     min-height: 30px;
@@ -153,6 +198,16 @@ const IntroCard = styled.section`
     padding: 0 0.72rem;
     font-size: 0.76rem;
     font-weight: 780;
+    cursor: pointer;
+    appearance: none;
+    font-family: inherit;
+  }
+
+  .topicRail button:hover,
+  .topicRail button:focus-visible {
+    border-color: rgba(88, 166, 255, 0.72);
+    color: #f0f6fc;
+    outline: none;
   }
 
   @media (max-width: 1024px) {

@@ -174,14 +174,14 @@ const Button = styled.button `
 export const PrimaryButton = styled(Button) `
   border-radius: 8px;
   padding: 0.6rem 0.88rem;
-  border-color: ${({ theme }) => (theme.colors.blue9)};
-  background: ${({ theme }) => (theme.colors.blue9)};
+  border-color: ${({ theme }) => (theme.scheme === "light" ? "#005fc4" : "#0d74ce")};
+  background: ${({ theme }) => (theme.scheme === "light" ? "#005fc4" : "#0d74ce")};
   color: ${({ theme }) => (theme.colors.gray1)};
   font-weight: 700;
 
   &:hover:not(:disabled) {
-    border-color: ${({ theme }) => (theme.colors.blue10)};
-    background: ${({ theme }) => (theme.colors.blue10)};
+    border-color: ${({ theme }) => (theme.scheme === "light" ? "#0052ad" : "#0a64b7")};
+    background: ${({ theme }) => (theme.scheme === "light" ? "#0052ad" : "#0a64b7")};
     color: ${({ theme }) => (theme.colors.gray1)};
   }
 `;

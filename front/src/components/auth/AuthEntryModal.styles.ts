@@ -372,10 +372,10 @@ export const Modal = styled.div`
 
   .primaryAction {
     border: 0;
-    background: #12b886;
+    background: #087f5b;
     color: #fff;
     box-shadow: ${({ theme }) =>
-      theme.scheme === "light" ? "0 10px 22px rgba(18, 184, 134, 0.18)" : "none"};
+      theme.scheme === "light" ? "0 10px 22px rgba(8, 127, 91, 0.18)" : "none"};
     transition: filter 0.16s ease, box-shadow 0.16s ease;
 
     &:hover:not(:disabled) {
@@ -430,7 +430,7 @@ export const Modal = styled.div`
     background: transparent;
     min-height: auto;
     padding: 0;
-    color: ${({ theme }) => theme.colors.accentLink};
+    color: ${({ theme }) => (theme.scheme === "light" ? "#005fc4" : "#7cc4ff")};
     font-size: 0.86rem;
     font-weight: 700;
     text-decoration: none;

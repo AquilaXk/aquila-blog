@@ -47,7 +47,7 @@ export const WorkspaceMain = styled.div`
 export const PrimaryCta = styled.button`
   border: 0;
   background: transparent;
-  color: ${({ theme }) => theme.colors.blue9};
+  color: ${({ theme }) => (theme.scheme === "light" ? "#005fc4" : "#7cc4ff")};
   padding: 0;
   font-size: 1rem;
   font-weight: 800;

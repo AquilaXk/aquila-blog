@@ -11,7 +11,9 @@ CLAUDE.md
 GEMINI.md
 CURSOR.md
 COPILOT.md
-docs/
+docs/*
+!docs/design/
+!docs/design/**
 .cursor/
 .claude/
 .aider/

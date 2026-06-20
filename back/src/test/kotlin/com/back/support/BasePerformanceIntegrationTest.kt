@@ -7,6 +7,7 @@ import org.springframework.test.context.TestPropertySource
         "spring.jpa.properties.hibernate.generate_statistics=true",
         "spring.task.scheduling.enabled=false",
         "custom.task.processor.enabled=false",
+        "custom.runtime.worker-enabled=false",
     ],
 )
 abstract class BasePerformanceIntegrationTest : BaseControllerIntegrationTest()

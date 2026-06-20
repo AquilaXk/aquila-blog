@@ -32,6 +32,11 @@ if run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob
   exit 1
 fi
 
+if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' docs/design/contract.md && bash '${guard}' >'${guard_output}' 2>&1"; then
+  echo "[test] expected tracked docs/design/contract.md to be allowed" >&2
+  exit 1
+fi
+
 if run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' back/new-report.md && bash '${guard}' >'${guard_output}' 2>&1"; then
   echo "[test] expected tracked back/new-report.md to be rejected" >&2
   exit 1
@@ -39,6 +44,11 @@ fi
 
 if run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' docs/leak.md && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
   echo "[test] expected staged docs/leak.md to be rejected" >&2
+  exit 1
+fi
+
+if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' docs/design/contract.md && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
+  echo "[test] expected staged docs/design/contract.md to be allowed" >&2
   exit 1
 fi
 

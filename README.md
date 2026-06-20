@@ -36,6 +36,7 @@
 - [환경 변수](#환경-변수)
 - [품질 게이트](#품질-게이트)
 - [운영 및 배포](#운영-및-배포)
+- [운영 계약 문서](#운영-계약-문서)
 - [트러블슈팅 기록](#트러블슈팅-기록)
 - [현재 상태와 개선 방향](#현재-상태와-개선-방향)
 - [관련 링크](#관련-링크)
@@ -198,7 +199,7 @@ Aquila Blog는 글 작성 도구와 공개 블로그를 하나로 묶고, 운영
 ├── deploy/homeserver/      # Blue/Green 배포, 복구, Caddy, monitoring 스크립트
 ├── infra/                  # Terraform 기반 인프라 정의
 ├── perf/k6/                # 공개 읽기 경로 성능/chaos 시나리오
-├── docs/                   # agent 작업 계획과 Superpowers spec/plan
+├── docs/                   # 운영 계약과 설계 문서
 ├── tools/                  # repo guard, bundle-size, current-task 관련 도구
 └── README.assets/          # README용 화면/아키텍처 이미지
 ```
@@ -328,6 +329,17 @@ Playwright 계열 스크립트는 `playwright:preflight`를 먼저 실행해 로
 | `deploy/homeserver/doctor.sh` | 홈서버 상태 진단 |
 | `deploy/homeserver/steady_state_guard.sh` | Caddy mount, readiness, 단일 실행 규칙 점검 |
 | `deploy/homeserver/monitoring/` | Prometheus, Grafana, Loki, Promtail 구성 |
+
+---
+
+## 운영 계약 문서
+
+| 문서 | 설명 |
+| --- | --- |
+| [Task Delivery Guarantees](docs/design/task-delivery-guarantees.md) | durable task queue 전달 보장, retry, idempotency key, DLQ replay 계약 |
+| [Cache Consistency Contract](docs/design/cache-consistency-contract.md) | 공개 post read ETag, Redis/local cache, CDN cache tag, author representation invalidation 계약 |
+| [Cloud Multipart Upload State Machine](docs/design/cloud-multipart-state-machine.md) | 클라우드 동영상 multipart upload session 상태 전이와 실패 복구 기준 |
+| [Profile Workspace Persistence](docs/design/profile-workspace-persistence.md) | profile workspace draft/published/legacy attr 저장 규칙과 복구 절차 |
 
 ---
 

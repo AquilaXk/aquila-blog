@@ -54,11 +54,10 @@ export const AdminPostsWorkspaceFilterToolbar: React.FC<AdminPostsWorkspaceFilte
 }) => (
   <StickyFilterToolbar data-compact={isStickyToolbarCompact}>
     <FilterRail>
-      <ScopeTabs role="tablist" aria-label="글 범위 선택">
+      <ScopeTabs role="group" aria-label="글 범위 선택">
         <ScopeTabButton
           type="button"
-          role="tab"
-          aria-selected={listScope === "active"}
+          aria-pressed={listScope === "active"}
           data-active={listScope === "active"}
           onClick={() => onScopeChange("active")}
         >
@@ -66,8 +65,7 @@ export const AdminPostsWorkspaceFilterToolbar: React.FC<AdminPostsWorkspaceFilte
         </ScopeTabButton>
         <ScopeTabButton
           type="button"
-          role="tab"
-          aria-selected={listScope === "deleted"}
+          aria-pressed={listScope === "deleted"}
           data-active={listScope === "deleted"}
           onClick={() => onScopeChange("deleted")}
         >

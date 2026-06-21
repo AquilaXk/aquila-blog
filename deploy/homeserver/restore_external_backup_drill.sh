@@ -87,6 +87,27 @@ resolve_postgres_image() {
   printf '%s' "${image}"
 }
 
+resolve_storage_paths() {
+  local external_root="${AQUILA_EXTERNAL_STORAGE_ROOT:-}"
+  local backup_root="${AQUILA_BACKUP_ROOT:-}"
+
+  if [[ -z "${external_root}" ]]; then
+    external_root="$(read_key_from_file AQUILA_EXTERNAL_STORAGE_ROOT "${DEPLOY_DIR}/.env.prod.compose")"
+  fi
+  if [[ -z "${external_root}" ]]; then
+    external_root="$(read_key_from_file AQUILA_EXTERNAL_STORAGE_ROOT "${DEPLOY_DIR}/.env.prod")"
+  fi
+  EXTERNAL_STORAGE_ROOT="${external_root:-${DEFAULT_EXTERNAL_STORAGE_ROOT}}"
+
+  if [[ -z "${backup_root}" ]]; then
+    backup_root="$(read_key_from_file AQUILA_BACKUP_ROOT "${DEPLOY_DIR}/.env.prod.compose")"
+  fi
+  if [[ -z "${backup_root}" ]]; then
+    backup_root="$(read_key_from_file AQUILA_BACKUP_ROOT "${DEPLOY_DIR}/.env.prod")"
+  fi
+  BACKUP_ROOT="${backup_root:-${EXTERNAL_STORAGE_ROOT}/backups}"
+}
+
 latest_backup_set_id() {
   local postgres_root="${BACKUP_ROOT}/postgres/${BACKUP_CLASS}"
   [[ -d "${postgres_root}" ]] || fail "missing PostgreSQL backup class directory: ${postgres_root}"
@@ -213,7 +234,7 @@ select_minio_sample_object() {
     | sed 's#^\./##' \
     | grep -Ev '(^$|/$|(^|/)format\.json$|(^|/)\.minio\.sys/)' \
     | sort \
-    | head -n 1
+    | awk 'NR == 1 { first = $0 } END { if (first != "") print first }'
 }
 
 checksum_minio_sample() {
@@ -228,6 +249,7 @@ checksum_minio_sample() {
 require_command docker
 require_command tar
 require_command sha256sum
+resolve_storage_paths
 POSTGRES_IMAGE="$(resolve_postgres_image)"
 
 if [[ -z "${BACKUP_SET_ID}" ]]; then

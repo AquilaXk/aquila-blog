@@ -212,7 +212,7 @@ activities:
     userRightsHandler: privacyRequestEmailAndFutureAccountDeletionFlow
     codeOwner: back/storage-cloud
     policySectionId: privacy-collection-files
-    enabledByEnv: custom.storage.*; aquila_external_storage_root
+    enabledByEnv: custom.storage.*; AQUILA_EXTERNAL_STORAGE_ROOT
     reviewRequired:
       - Backup tombstone handling is tracked by issue1004.
 
@@ -420,6 +420,6 @@ activities:
     userRightsHandler: restoreTombstoneReplayFutureWork
     codeOwner: deploy/home-server
     policySectionId: privacy-retention-backup
-    enabledByEnv: aquila_backup_root; deploy workflow_run
+    enabledByEnv: AQUILA_BACKUP_ROOT; deploy workflow_run
     reviewRequired:
       - Backup encryption and restore tombstone replay are tracked by issue1004.

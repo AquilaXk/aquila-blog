@@ -47,10 +47,24 @@ const requiredProcessors = new Set([
   "home_server_backup_storage",
 ])
 const requiredActivityDataCategories = new Map([
-  ["account_registration_email", ["email", "nickname", "passwordHash"]],
+  ["account_registration_email", ["email", "nickname", "passwordHash", "apiKey"]],
   [
     "ai_tag_recommendation_gemini",
     ["tagRecommendationCacheKey", "tagRecommendationRateLimitKey", "tagRecommendationCachedResult"],
+  ],
+  [
+    "user_content_posts_comments",
+    [
+      "profileNickname",
+      "profileRole",
+      "profileBio",
+      "profileImageUrl",
+      "aboutRole",
+      "aboutBio",
+      "aboutDetails",
+      "profileServiceLinks",
+      "profileContactLinks",
+    ],
   ],
 ])
 const requiredActivityEnvFragments = new Map([

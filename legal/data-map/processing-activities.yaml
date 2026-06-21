@@ -377,6 +377,9 @@ activities:
       - existingTags
       - generatedTags
       - aiTraceId
+      - tagRecommendationCacheKey
+      - tagRecommendationRateLimitKey
+      - tagRecommendationCachedResult
     dataSubjects:
       - contentAuthor
       - peopleMentionedInDraftContent
@@ -389,6 +392,7 @@ activities:
       - google_gemini
       - vercel_frontend_hosting
       - home_server_postgresql
+      - home_server_redis
     overseasTransfer: possibleViaGoogleGeminiGlobalInfrastructure
     retentionRule: noRawPromptRetentionIntended; providerRetentionRequiresContractReview
     destructionMethod: noLocalPersistence; providerDeletionControlsReviewRequired

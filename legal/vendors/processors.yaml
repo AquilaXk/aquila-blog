@@ -32,6 +32,9 @@ processors:
       - loginIpAttemptKey
       - notificationRelayPayload
       - postHitDedupHash
+      - tagRecommendationCacheKey
+      - tagRecommendationRateLimitKey
+      - tagRecommendationCachedResult
     region: selfHostedHomeServer
     overseasTransfer: false
     enabledByEnv: custom.site.redisHost/custom.site.redisPort; SPRING__DATA__REDIS__PASSWORD; REDIS_IMAGE

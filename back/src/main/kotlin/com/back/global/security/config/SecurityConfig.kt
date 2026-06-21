@@ -5,6 +5,7 @@ import com.back.boundedContexts.member.config.shared.AuthSecurityConfigurer
 import com.back.boundedContexts.post.config.PostSecurityConfigurer
 import com.back.global.rsData.RsData
 import com.back.global.security.config.oauth2.CustomOAuth2AuthorizationRequestResolver
+import com.back.global.security.config.oauth2.CustomOAuth2LoginFailureHandler
 import com.back.global.security.config.oauth2.CustomOAuth2LoginSuccessHandler
 import com.back.global.security.config.oauth2.CustomOAuth2UserService
 import com.back.global.security.config.oauth2.CustomOidcUserService
@@ -33,6 +34,7 @@ import java.net.InetAddress
 class SecurityConfig(
     private val customAuthenticationFilter: CustomAuthenticationFilter,
     private val customOAuth2LoginSuccessHandler: CustomOAuth2LoginSuccessHandler,
+    private val customOAuth2LoginFailureHandler: CustomOAuth2LoginFailureHandler,
     private val customOAuth2AuthorizationRequestResolver: CustomOAuth2AuthorizationRequestResolver,
     private val customOAuth2UserService: CustomOAuth2UserService,
     private val customOidcUserService: CustomOidcUserService,
@@ -109,6 +111,7 @@ class SecurityConfig(
 
             oauth2Login {
                 authenticationSuccessHandler = customOAuth2LoginSuccessHandler
+                authenticationFailureHandler = customOAuth2LoginFailureHandler
 
                 authorizationEndpoint {
                     authorizationRequestResolver = customOAuth2AuthorizationRequestResolver

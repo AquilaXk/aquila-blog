@@ -75,6 +75,22 @@ test.describe("frontend security headers", () => {
     expect(directives.get("upgrade-insecure-requests")).toEqual([])
   })
 
+  test("CSP frame-src keeps supported markdown embed preview providers available", async () => {
+    const directives = parseCspDirectives(await getCspHeader())
+
+    expect(directives.get("frame-src")).toEqual(
+      expect.arrayContaining([
+        "'self'",
+        "https://www.youtube.com",
+        "https://player.vimeo.com",
+        "https://www.loom.com",
+        "https://www.figma.com",
+        "https://codepen.io",
+        "https://codesandbox.io",
+      ]),
+    )
+  })
+
   test("CSP includes configured runtime origins without duplicating full URLs", async () => {
     const previousBackendUrl = process.env.NEXT_PUBLIC_BACKEND_URL
     const previousMonitoringUrl = process.env.NEXT_PUBLIC_MONITORING_EMBED_URL

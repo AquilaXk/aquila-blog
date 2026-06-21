@@ -1,5 +1,6 @@
 package com.back.global.security.config.oauth2
 
+import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
 import com.back.global.security.config.oauth2.application.OAuth2State
 import org.assertj.core.api.Assertions.assertThat
@@ -48,5 +49,35 @@ class CustomOAuth2LoginFailureHandlerTest {
 
         assertThat(response.status).isEqualTo(302)
         assertThat(response.redirectedUrl).isEqualTo("https://www.aquilaxk.site/login?oauthError=oauth-failed")
+    }
+
+    @Test
+    fun `absolute redirect state는 해당 origin의 로그인 화면으로 OAuth 실패 코드를 전달한다`() {
+        AppConfig("https://api.aquilaxk.site", "https://preview.aquilaxk.site")
+        try {
+            val handler = CustomOAuth2LoginFailureHandler("https://www.aquilaxk.site")
+            val request =
+                MockHttpServletRequest("GET", "/login/oauth2/code/kakao").apply {
+                    setParameter(
+                        "state",
+                        OAuth2State
+                            .of("https://preview.aquilaxk.site/editor?draft=1")
+                            .encode(),
+                    )
+                }
+            val response = MockHttpServletResponse()
+
+            handler.onAuthenticationFailure(
+                request,
+                response,
+                object : AuthenticationException("oauth failed") {},
+            )
+
+            assertThat(response.status).isEqualTo(302)
+            assertThat(response.redirectedUrl)
+                .isEqualTo("https://preview.aquilaxk.site/login?oauthError=oauth-failed&next=%2Feditor%3Fdraft%3D1")
+        } finally {
+            AppConfig("https://api.aquilaxk.site", "https://www.aquilaxk.site")
+        }
     }
 }

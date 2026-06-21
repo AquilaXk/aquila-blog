@@ -399,6 +399,11 @@ private class RecordingLegalAcceptanceRepository : MemberLegalAcceptanceReposito
         saved += memberLegalAcceptance
         return memberLegalAcceptance
     }
+
+    override fun findTopByMemberIdOrderByAcceptedAtDesc(memberId: Long): MemberLegalAcceptance? =
+        saved
+            .filter { it.member.id == memberId }
+            .maxByOrNull { it.acceptedAt }
 }
 
 private class RecordingMemberUseCase : MemberUseCase {

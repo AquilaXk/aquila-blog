@@ -2,9 +2,9 @@ package com.back.boundedContexts.member.subContexts.privacy.application.service
 
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
-import com.back.boundedContexts.member.subContexts.legalAcceptance.adapter.persistence.MemberLegalAcceptanceRepository
-import com.back.boundedContexts.member.subContexts.privacy.adapter.persistence.MemberAccountDeletionRepository
-import com.back.boundedContexts.member.subContexts.privacy.adapter.persistence.MemberPrivacyRequestRepository
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.port.output.MemberLegalAcceptanceRepositoryPort
+import com.back.boundedContexts.member.subContexts.privacy.application.port.output.MemberAccountDeletionRepositoryPort
+import com.back.boundedContexts.member.subContexts.privacy.application.port.output.MemberPrivacyRequestRepositoryPort
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberAccountDeletion
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequest
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequestStatus
@@ -20,9 +20,9 @@ import java.time.temporal.ChronoUnit
 class PrivacyRightsApplicationService(
     private val memberUseCase: MemberUseCase,
     private val memberRepository: MemberRepositoryPort,
-    private val memberPrivacyRequestRepository: MemberPrivacyRequestRepository,
-    private val memberAccountDeletionRepository: MemberAccountDeletionRepository,
-    private val memberLegalAcceptanceRepository: MemberLegalAcceptanceRepository,
+    private val memberPrivacyRequestRepository: MemberPrivacyRequestRepositoryPort,
+    private val memberAccountDeletionRepository: MemberAccountDeletionRepositoryPort,
+    private val memberLegalAcceptanceRepository: MemberLegalAcceptanceRepositoryPort,
     private val memberSessionUseCase: MemberSessionUseCase,
 ) {
     @Transactional(readOnly = true)

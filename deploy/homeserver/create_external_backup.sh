@@ -149,6 +149,28 @@ upsert_env_key() {
   fi
 }
 
+compose_env_quote_value() {
+  local value="$1"
+  local escaped=""
+  local prefix=""
+  while [[ "${value}" == *"'"* ]]; do
+    prefix="${value%%\'*}"
+    escaped+="${prefix}\\'"
+    value="${value#*\'}"
+  done
+  escaped+="${value}"
+  printf "'%s'" "${escaped}"
+}
+
+upsert_env_key_compose_quoted() {
+  local key="$1"
+  local value="$2"
+  local target="${3:-${COMPOSE_ENV_FILE}}"
+  local quoted_value
+  quoted_value="$(compose_env_quote_value "${value}")"
+  upsert_env_key "${key}" "${quoted_value}" "${target}"
+}
+
 stage_home_server_env_key() {
   local key="$1"
   local value
@@ -157,7 +179,7 @@ stage_home_server_env_key() {
   [[ -n "${value}" ]] || return 0
 
   ensure_compose_env_work_file
-  upsert_env_key "${key}" "${value}"
+  upsert_env_key_compose_quoted "${key}" "${value}"
 }
 
 stage_home_server_env_compose_values() {

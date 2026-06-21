@@ -5,6 +5,7 @@ import { useRouter } from "next/router"
 import { FormEvent, useMemo, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
+import { SIGNUP_LEGAL_POLICY_VERSION } from "src/apis/backend/legal"
 import AuthShell from "src/components/auth/AuthShell"
 import AppIcon from "src/components/icons/AppIcon"
 import { formatSignupCooldown, useSignupMailCooldown } from "src/hooks/useSignupMailCooldown"
@@ -21,8 +22,6 @@ type RsData<T> = {
 type SignupEmailStartResult = {
   email: string
 }
-
-const SIGNUP_LEGAL_POLICY_VERSION = "2026-06-21"
 
 export const getServerSideProps: GetServerSideProps<GuestPageProps> = async ({ req }) => {
   return await getGuestPageProps(req)

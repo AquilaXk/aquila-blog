@@ -19,7 +19,7 @@ const targetKey = (contract, targetName, keyName) => {
   return (target.keys || []).find((definition) => definition.name === keyName)
 }
 
-test("operations alert channel is wired through env contract, compose, and deploy preflight", () => {
+test("operations alert email channel is wired through env contract, compose, and deploy preflight", () => {
   const contract = JSON.parse(read(contractPath))
   const compose = read(composePath)
   const workflow = read(workflowPath)
@@ -31,11 +31,25 @@ test("operations alert channel is wired through env contract, compose, and deplo
     kind: "digest-image",
     required: false,
   })
-  assert.deepEqual(targetKey(contract, "home-server-source", "OPERATIONS_ALERT_WEBHOOK_URL"), {
-    name: "OPERATIONS_ALERT_WEBHOOK_URL",
-    kind: "https-url",
+  assert.deepEqual(targetKey(contract, "home-server-source", "OPERATIONS_ALERT_EMAIL_TO"), {
+    name: "OPERATIONS_ALERT_EMAIL_TO",
+    kind: "email",
     secret: true,
-    minLength: 16,
+  })
+  assert.deepEqual(targetKey(contract, "home-server-source", "ALERTMANAGER_SMTP_AUTH_ENABLED"), {
+    name: "ALERTMANAGER_SMTP_AUTH_ENABLED",
+    kind: "boolean",
+    required: false,
+  })
+  assert.deepEqual(targetKey(contract, "home-server-source", "ALERTMANAGER_SMTP_AUTH_USERNAME"), {
+    name: "ALERTMANAGER_SMTP_AUTH_USERNAME",
+    requiredWhen: { key: "ALERTMANAGER_SMTP_AUTH_ENABLED", equals: "true" },
+  })
+  assert.deepEqual(targetKey(contract, "home-server-source", "ALERTMANAGER_SMTP_AUTH_PASSWORD"), {
+    name: "ALERTMANAGER_SMTP_AUTH_PASSWORD",
+    secret: true,
+    requiredWhen: { key: "ALERTMANAGER_SMTP_AUTH_ENABLED", equals: "true" },
+    minLength: 8,
   })
 
   assert.match(compose, /alertmanager:/)
@@ -48,8 +62,13 @@ test("operations alert channel is wired through env contract, compose, and deplo
   )
   assert.match(
     compose,
-    /OPERATIONS_ALERT_WEBHOOK_URL:\s+\$\{OPERATIONS_ALERT_WEBHOOK_URL:\?OPERATIONS_ALERT_WEBHOOK_URL is required\}/,
+    /OPERATIONS_ALERT_EMAIL_TO:\s+\$\{OPERATIONS_ALERT_EMAIL_TO:\?OPERATIONS_ALERT_EMAIL_TO is required\}/,
   )
+  assert.match(compose, /ALERTMANAGER_SMTP_SMARTHOST:\s+\$\{SPRING__MAIL__HOST:\?SPRING__MAIL__HOST is required\}:\$\{SPRING__MAIL__PORT:\?SPRING__MAIL__PORT is required\}/)
+  assert.match(compose, /ALERTMANAGER_SMTP_FROM:\s+\$\{CUSTOM__MEMBER__SIGNUP__MAIL_FROM:\?CUSTOM__MEMBER__SIGNUP__MAIL_FROM is required\}/)
+  assert.match(compose, /ALERTMANAGER_SMTP_AUTH_USERNAME:\s+\$\{ALERTMANAGER_SMTP_AUTH_USERNAME:-\}/)
+  assert.match(compose, /ALERTMANAGER_SMTP_AUTH_PASSWORD:\s+\$\{ALERTMANAGER_SMTP_AUTH_PASSWORD:-\}/)
+  assert.match(compose, /ALERTMANAGER_SMTP_REQUIRE_TLS:\s+\$\{SPRING__MAIL__PROPERTIES__MAIL__SMTP__STARTTLS__ENABLE:-true\}/)
   assert.match(compose, /monitoring\/alertmanager\.yml:\/etc\/alertmanager\/alertmanager\.yml:ro/)
   assert.match(compose, /alertmanager_data:$/m)
 
@@ -60,16 +79,23 @@ test("operations alert channel is wired through env contract, compose, and deplo
 
   assert.match(alertmanager, /receiver:\s+drop/)
   assert.match(alertmanager, /- name: drop/)
-  assert.match(alertmanager, /receiver:\s+operations-webhook/)
+  assert.match(alertmanager, /receiver:\s+operations-email/)
   assert.match(alertmanager, /group_by:\s+\["alertname", "severity"\]/)
-  assert.match(alertmanager, /url:\s+\$\{OPERATIONS_ALERT_WEBHOOK_URL\}/)
+  assert.match(alertmanager, /smtp_smarthost:\s+\$\{ALERTMANAGER_SMTP_SMARTHOST\}/)
+  assert.match(alertmanager, /smtp_from:\s+\$\{ALERTMANAGER_SMTP_FROM\}/)
+  assert.match(alertmanager, /smtp_auth_username:\s+\$\{ALERTMANAGER_SMTP_AUTH_USERNAME\}/)
+  assert.match(alertmanager, /smtp_auth_password:\s+\|-\n\s+\$\{ALERTMANAGER_SMTP_AUTH_PASSWORD\}/)
+  assert.match(alertmanager, /smtp_require_tls:\s+\$\{ALERTMANAGER_SMTP_REQUIRE_TLS\}/)
+  assert.match(alertmanager, /email_configs:/)
+  assert.match(alertmanager, /to:\s+\$\{OPERATIONS_ALERT_EMAIL_TO\}/)
   assert.match(alertmanager, /send_resolved:\s+true/)
+  assert.doesNotMatch(alertmanager, /webhook_configs:/)
 
   assert.match(workflow, /Validate HOME_SERVER_ENV contract/)
   assert(workflow.indexOf("Validate HOME_SERVER_ENV contract") < workflow.indexOf("Deploy over SSH"))
 })
 
-test("operations alert webhook is required before homeserver deploy", async () => {
+test("operations alert email recipient is required before homeserver deploy", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
 
   const result = validateEnvText({
@@ -79,7 +105,7 @@ test("operations alert webhook is required before homeserver deploy", async () =
   })
 
   assert.equal(result.ok, false)
-  assert(result.errors.some((error) => error.key === "OPERATIONS_ALERT_WEBHOOK_URL" && error.message === "is required"))
+  assert(result.errors.some((error) => error.key === "OPERATIONS_ALERT_EMAIL_TO" && error.message === "is required"))
 })
 
 test("operations alert rules cover launch-blocking failure domains", () => {

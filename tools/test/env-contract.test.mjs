@@ -9,6 +9,7 @@ const repoRoot = path.resolve(import.meta.dirname, "../..")
 const contractPath = path.join(repoRoot, "deploy/env/env.contract.json")
 const workflowPath = path.join(repoRoot, ".github/workflows/deploy.yml")
 const composePath = path.join(repoRoot, "deploy/homeserver/docker-compose.prod.yml")
+const caddyfilePath = path.join(repoRoot, "deploy/homeserver/caddy/Caddyfile")
 const applicationProdPath = path.join(repoRoot, "back/src/main/resources/application-prod.yaml")
 const deployScriptPath = path.join(repoRoot, "deploy/homeserver/blue_green_deploy.sh")
 const deployBackupScriptPath = path.join(repoRoot, "deploy/homeserver/create_deploy_backup.sh")
@@ -228,6 +229,22 @@ test("home-server-source contract accepts a complete deployment env without BACK
   })
 
   assert.equal(result.ok, true, result.errors.map((error) => error.message).join("\n"))
+})
+
+test("Caddy access logs skip signup verification endpoint before proxying", () => {
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const matcherIndex = caddyfile.indexOf("@signupVerifySensitive path /member/api/v1/signup/email/verify")
+  const skipIndex = caddyfile.indexOf("log_skip @signupVerifySensitive")
+  const apiBlockIndex = caddyfile.indexOf("http://{$API_DOMAIN}")
+  const proxyIndex = caddyfile.indexOf("reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080", apiBlockIndex)
+
+  assert.notEqual(apiBlockIndex, -1, "API domain block must be configured")
+  assert.notEqual(matcherIndex, -1, "signup verify sensitive matcher must be configured")
+  assert.notEqual(skipIndex, -1, "signup verify access log skip must be configured")
+  assert(skipIndex > matcherIndex, "signup verify log_skip must reference the sensitive matcher")
+  assert(skipIndex < proxyIndex, "signup verify log_skip must be declared before API proxy handling")
+  assert(!caddyfile.includes("?token="), "Caddy config must not preserve signup verification token query examples")
+  assert(!caddyfile.includes("signup=done&email="), "Caddy config must not preserve signup completion email query examples")
 })
 
 test("home-server-source contract allows no-auth operations alert SMTP relay", async () => {

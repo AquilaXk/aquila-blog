@@ -69,6 +69,42 @@ class OAuthSignupApplicationServiceTest {
     }
 
     @Test
+    fun `provider nickname이 정책 범위를 벗어나도 pending을 만들고 기본 표시 이름을 사용한다`() {
+        val fixture = Fixture()
+
+        fixture.service.startPending(
+            provider = "KAKAO",
+            providerSubject = "subject-invalid-nickname",
+            nickname = "x",
+            profileImgUrl = null,
+        )
+
+        val pending = fixture.pendingRepository.saved.single()
+        assertThat(pending.nickname).isEqualTo("카카오사용자")
+    }
+
+    @Test
+    fun `최종 제출 nickname은 정책 범위 검증을 유지한다`() {
+        val fixture = Fixture()
+        val start =
+            fixture.service.startPending(
+                provider = "KAKAO",
+                providerSubject = "subject-final-invalid-nickname",
+                nickname = "카카오닉네임",
+                profileImgUrl = null,
+            )
+
+        assertThatThrownBy {
+            fixture.service.completeSignup(
+                pendingToken = start.pendingToken,
+                nickname = "x",
+                legalAcceptance = validLegalAcceptance(),
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("프로필 이름은 2~30자")
+    }
+
+    @Test
     fun `같은 OAuth subject가 다시 callback되면 기존 pending row를 새 token hash로 갱신한다`() {
         val fixture = Fixture()
         val first =
@@ -210,7 +246,7 @@ private fun validLegalAcceptance(): LegalAcceptanceCommand =
         termsVersion = "2026-06-21",
         termsContentSha256 = "3b71950e518b16b9a24cb4f9873633720ca7a9fce145a7bb9787c48845b56c5b",
         privacyVersion = "2026-06-21",
-        privacyContentSha256 = "4cc6ae3260aaca5f5ff35b235af91679a60760f13dccad9e85c94fda4d1552d9",
+        privacyContentSha256 = "cedbfea674a9e2aca9e29bf6a01492a1e3fa640b0ff53d47f969d64c057b980f",
         age14OrOlder = true,
         requiredPrivacyConfirmed = true,
         analyticsConsent = false,

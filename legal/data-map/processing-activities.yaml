@@ -97,13 +97,52 @@ activities:
       - accountOwner
       - serviceAdmin
       - databaseOperator
-    encryption: transportTls; providerSubjectStoredInAccountRecord
+    encryption: transportTls; legacyProviderSubjectMayExistInAccountRecord; newAccountsUseProviderSubjectHashLoginId
     userRightsHandler: privacyRequestEmailAndFutureOauthUnlinkFlow
     codeOwner: back/oauth2
     policySectionId: privacy-collection-oauth
     enabledByEnv: spring.security.oauth2.client.registration.kakao.client-id
     reviewRequired:
-      - New OAuth signup pending-consent flow is tracked by issue997.
+      - Legacy connected accounts may still contain provider subject in member login_id until unlink/migration policy is finalized.
+
+  - id: kakao_oauth_pending_signup
+    name: Kakao OAuth 신규 가입 pending 동의
+    dataCategories:
+      - oauthProvider
+      - oauthProviderSubjectHash
+      - pendingOAuthSignupTokenHash
+      - profileNickname
+      - profileImageUrl
+      - authState
+      - redirectOrigin
+      - legalAcceptanceVersion
+      - legalAcceptanceTimestamp
+    dataSubjects:
+      - oauthApplicant
+      - registeredMemberAfterConsent
+    purpose: Kakao OAuth 신규 사용자를 로컬 약관·개인정보·연령 동의 완료 전 pending 상태로 제한하고 동의 완료 후 계정 생성
+    legalBasis: contractPreparationAndConsentEvidence
+    collectionSource: Kakao OAuth redirect, /signup/social/complete, /member/api/v1/signup/social/*
+    requiredOrOptional: optionalSignupMethod
+    systemOfRecord: PostgreSQL pending_oauth_signup, member, member_legal_acceptance
+    processors:
+      - kakao_oauth
+      - home_server_postgresql
+    overseasTransfer: noPlannedOverseasTransferByService; Kakao processing terms apply
+    retentionRule: pendingTokenTtlThenPurge; accountLifetimeAfterConsent
+    destructionMethod: expireCancelConsumeThenPurgeByRetentionJob; unlinkOrAccountDeletion
+    accessRoles:
+      - signupApplicant
+      - accountOwner
+      - serviceAdmin
+      - databaseOperator
+    encryption: pendingTokenHmacHashAtRest; providerSubjectHmacHashAtRest; transportTls
+    userRightsHandler: privacyRequestEmailAndFutureOauthUnlinkFlow
+    codeOwner: back/oauth-signup; front/signup-social-complete
+    policySectionId: privacy-collection-oauth
+    enabledByEnv: spring.security.oauth2.client.registration.kakao.client-id
+    reviewRequired:
+      - Pending signup purge job and OAuth unlink/account deletion workflow remain tracked by issue1000 and issue999.
 
   - id: auth_session_and_cookies
     name: 인증 세션, refresh token, 보안 cookie

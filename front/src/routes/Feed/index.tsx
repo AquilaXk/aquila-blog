@@ -92,13 +92,17 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null, initialHomeBootstra
 export default Feed
 
 const StyledWrapper = styled.div`
-  --feed-product-bg: #0d1117;
-  --feed-product-panel: #161b22;
-  --feed-product-panel-hover: #21262d;
-  --feed-product-border: #30363d;
-  --feed-product-text: #f0f6fc;
-  --feed-product-muted: #8b949e;
-  --feed-product-accent: #58a6ff;
+  --feed-product-bg: ${({ theme }) => theme.publicDesign.pageBackgroundColor};
+  --feed-product-panel: ${({ theme }) => theme.publicDesign.readableSurface};
+  --feed-product-panel-hover: ${({ theme }) => theme.publicDesign.surfaceElevated};
+  --feed-product-border: ${({ theme }) => theme.publicDesign.border};
+  --feed-product-text: ${({ theme }) => theme.colors.gray12};
+  --feed-product-muted: ${({ theme }) => theme.colors.gray10};
+  --feed-product-accent: ${({ theme }) => theme.publicDesign.accent};
+  --feed-product-chip-bg: ${({ theme }) =>
+    theme.scheme === "light" ? "rgba(255, 255, 255, 0.78)" : "rgba(22, 27, 34, 0.68)"};
+  --feed-product-hero-glow: ${({ theme }) =>
+    theme.scheme === "light" ? "rgba(37, 99, 235, 0.08)" : "rgba(88, 166, 255, 0.1)"};
   display: block;
   position: relative;
   z-index: 0;
@@ -116,7 +120,7 @@ const StyledWrapper = styled.div`
     width: 100vw;
     transform: translateX(-50%);
     background:
-      radial-gradient(circle at 78% 0%, rgba(88, 166, 255, 0.1), transparent 28rem),
+      radial-gradient(circle at 78% 0%, var(--feed-product-hero-glow), transparent 28rem),
       var(--feed-product-bg);
   }
 
@@ -144,7 +148,8 @@ const IntroCard = styled.section`
   grid-template-columns: minmax(0, 1fr) minmax(17rem, 20rem);
   align-items: end;
   gap: clamp(1.2rem, 3vw, 2.4rem);
-  border-bottom: 1px solid rgba(48, 54, 61, 0.82);
+  border-bottom: 1px solid ${({ theme }) =>
+    theme.scheme === "light" ? "rgba(200, 210, 222, 0.92)" : "rgba(48, 54, 61, 0.82)"};
   padding: 0.2rem 0 1.3rem;
 
   .introCopy {
@@ -154,7 +159,7 @@ const IntroCard = styled.section`
   .brandLabel {
     display: block;
     margin-bottom: 0.52rem;
-    color: #58a6ff;
+    color: var(--feed-product-accent);
     font-size: 0.78rem;
     line-height: 1.2;
     font-weight: 860;
@@ -163,7 +168,7 @@ const IntroCard = styled.section`
 
   h1 {
     margin: 0;
-    color: #f0f6fc;
+    color: var(--feed-product-text);
     font-size: clamp(2.6rem, 5vw, 4rem);
     letter-spacing: -0.075em;
     line-height: 0.96;
@@ -173,7 +178,7 @@ const IntroCard = styled.section`
 
   p {
     margin: 0.82rem 0 0;
-    color: #8b949e;
+    color: var(--feed-product-muted);
     font-size: clamp(0.98rem, 1.3vw, 1.08rem);
     line-height: 1.55;
     letter-spacing: -0.018em;
@@ -193,9 +198,9 @@ const IntroCard = styled.section`
     align-items: center;
     min-height: 30px;
     border-radius: 999px;
-    border: 1px solid rgba(48, 54, 61, 0.86);
-    background: rgba(22, 27, 34, 0.68);
-    color: #8b949e;
+    border: 1px solid var(--feed-product-border);
+    background: var(--feed-product-chip-bg);
+    color: var(--feed-product-muted);
     padding: 0 0.72rem;
     font-size: 0.76rem;
     font-weight: 780;
@@ -206,8 +211,8 @@ const IntroCard = styled.section`
 
   .topicRail button:hover,
   .topicRail button:focus-visible {
-    border-color: rgba(88, 166, 255, 0.72);
-    color: #f0f6fc;
+    border-color: var(--feed-product-accent);
+    color: var(--feed-product-text);
     outline: none;
   }
 

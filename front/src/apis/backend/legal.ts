@@ -27,3 +27,5 @@ export const buildEmailSignupLegalAcceptancePayload = (input: {
   analyticsConsent: input.analyticsConsent,
   overseasTransferAcknowledged: input.overseasTransferAcknowledged,
 })
+
+export const buildSocialSignupLegalAcceptancePayload = buildEmailSignupLegalAcceptancePayload

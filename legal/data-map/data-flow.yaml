@@ -13,11 +13,13 @@ flows:
     collectionPoint: Kakao redirect and Spring Security OAuth2
     stores:
       - PostgreSQL member
+      - PostgreSQL pending_oauth_signup for new applicants
+      - PostgreSQL member_legal_acceptance after consent
       - OAuth state cookie
     processors:
       - home_server_postgresql
       - kakao_oauth
-    status: 신규 가입 pending 동의는 issue997
+    status: 신규 가입은 /signup/social/complete pending 동의 완료 후 계정 생성
   - id: auth_session
     collectionPoint: login form and auth filter
     stores:

@@ -7,6 +7,7 @@ import com.back.global.security.domain.SecurityUser
 import com.back.global.security.domain.toGrantedAuthorities
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.springframework.security.authentication.InternalAuthenticationServiceException
 import org.springframework.security.core.GrantedAuthority
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService
@@ -90,11 +91,16 @@ private fun upsertMember(
 
     val member =
         memberUseCase.findByLoginId(username)
-            ?: throw AppException("403-4", "소셜 로그인 신규 가입은 현재 지원하지 않습니다. 이메일 회원가입으로 먼저 약관과 개인정보처리방침에 동의해주세요.")
+            ?: throw signupRequiredAuthenticationException()
 
     memberUseCase.modify(member, profilePayload.nickname, profilePayload.profileImgUrl)
 
     return member
+}
+
+private fun signupRequiredAuthenticationException(): InternalAuthenticationServiceException {
+    val cause = AppException("403-4", "소셜 로그인 신규 가입은 현재 지원하지 않습니다. 이메일 회원가입으로 먼저 약관과 개인정보처리방침에 동의해주세요.")
+    return InternalAuthenticationServiceException(cause.message ?: "OAuth signup is not supported.", cause)
 }
 
 private fun Member.toSecurityUser(): SecurityUser =

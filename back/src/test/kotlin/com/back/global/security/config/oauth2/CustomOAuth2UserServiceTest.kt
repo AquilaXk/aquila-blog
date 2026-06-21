@@ -8,6 +8,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.springframework.security.authentication.InternalAuthenticationServiceException
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest
 import org.springframework.security.oauth2.client.registration.ClientRegistration
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest
@@ -121,7 +122,9 @@ class CustomOAuth2UserServiceTest {
             service.loadUser(
                 OAuth2UserRequest(kakaoClientRegistration(userNameAttributeName = "id"), accessToken()),
             )
-        }.isInstanceOf(AppException::class.java)
+        }.isInstanceOf(InternalAuthenticationServiceException::class.java)
+            .cause()
+            .isInstanceOf(AppException::class.java)
             .hasMessageContaining("소셜 로그인 신규 가입은 현재 지원하지 않습니다.")
     }
 

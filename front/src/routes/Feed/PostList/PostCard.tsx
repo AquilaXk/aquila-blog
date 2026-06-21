@@ -168,12 +168,20 @@ const StyledWrapper = styled.a`
   min-width: 0;
   text-decoration: none;
   --post-card-translate-y: -8px;
-  --post-card-border-color: #30363d;
-  --post-card-border-strong: #58a6ff;
-  --post-card-surface: #161b22;
-  --post-card-surface-elevated: #21262d;
-  --post-card-shadow-current: 0 12px 34px rgba(1, 4, 9, 0.26);
-  --post-card-shadow-hover-current: 0 20px 52px rgba(1, 4, 9, 0.36);
+  --post-card-border-color: ${({ theme }) => theme.publicDesign.border};
+  --post-card-border-strong: ${({ theme }) => theme.publicDesign.accent};
+  --post-card-surface: ${({ theme }) => theme.publicDesign.readableSurface};
+  --post-card-surface-elevated: ${({ theme }) => theme.publicDesign.surfaceElevated};
+  --post-card-shadow-current: ${({ theme }) =>
+    theme.scheme === "light" ? "0 12px 34px rgba(15, 23, 42, 0.08)" : "0 12px 34px rgba(1, 4, 9, 0.26)"};
+  --post-card-shadow-hover-current: ${({ theme }) =>
+    theme.scheme === "light" ? "0 18px 42px rgba(15, 23, 42, 0.13)" : "0 20px 52px rgba(1, 4, 9, 0.36)"};
+  --post-card-cover-text: ${({ theme }) => theme.colors.gray12};
+  --post-card-cover-muted: ${({ theme }) => theme.colors.gray10};
+  --post-card-cover-bg: ${({ theme }) =>
+    theme.scheme === "light"
+      ? "linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(34, 197, 94, 0.08)), #f8fafc"
+      : "linear-gradient(135deg, rgba(88, 166, 255, 0.2), rgba(126, 231, 135, 0.08)), #111722"};
 
   &:focus-visible {
     outline: 0;
@@ -191,7 +199,10 @@ const StyledWrapper = styled.a`
     border-radius: ${FEED_CARD_RADIUS_PX}px;
     border: ${({ theme }) => `${theme.variables.ui.card.borderWidth}px solid var(--post-card-border-color)`};
     background:
-      linear-gradient(180deg, rgba(33, 38, 45, 0.34), rgba(22, 27, 34, 0.98)),
+      ${({ theme }) =>
+        theme.scheme === "light"
+          ? "linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.98))"
+          : "linear-gradient(180deg, rgba(33, 38, 45, 0.34), rgba(22, 27, 34, 0.98))"},
       var(--post-card-surface);
     box-shadow: var(--post-card-shadow-current);
 
@@ -220,17 +231,17 @@ const StyledWrapper = styled.a`
         gap: 0.36rem;
         padding: 1rem;
         background:
-          radial-gradient(circle at 82% 18%, rgba(88, 166, 255, 0.28), transparent 34%),
-          linear-gradient(135deg, rgba(88, 166, 255, 0.2), rgba(126, 231, 135, 0.08)),
-          #111722;
-        color: #f0f6fc;
+          radial-gradient(circle at 82% 18%, ${({ theme }) =>
+            theme.scheme === "light" ? "rgba(37, 99, 235, 0.16)" : "rgba(88, 166, 255, 0.28)"}, transparent 34%),
+          var(--post-card-cover-bg);
+        color: var(--post-card-cover-text);
 
         .coverCategory {
           width: fit-content;
           border-radius: 999px;
-          border: 1px solid rgba(88, 166, 255, 0.42);
-          background: rgba(88, 166, 255, 0.1);
-          color: #c9e7ff;
+          border: 1px solid ${({ theme }) => theme.publicDesign.accent};
+          background: ${({ theme }) => theme.publicDesign.accentMuted};
+          color: ${({ theme }) => theme.colors.accentLink};
           padding: 0.22rem 0.5rem;
           font-size: 0.64rem;
           line-height: 1.2;
@@ -239,7 +250,7 @@ const StyledWrapper = styled.a`
 
         strong {
           max-width: 12ch;
-          color: #f0f6fc;
+          color: var(--post-card-cover-text);
           font-size: clamp(1.35rem, 2.5vw, 2rem);
           line-height: 0.94;
           letter-spacing: -0.07em;
@@ -248,7 +259,7 @@ const StyledWrapper = styled.a`
         }
 
         .coverBrand {
-          color: #8b949e;
+          color: var(--post-card-cover-muted);
           font-size: 0.7rem;
           font-weight: 820;
           letter-spacing: 0.02em;
@@ -276,7 +287,7 @@ const StyledWrapper = styled.a`
       > .category {
         width: fit-content;
         margin-bottom: 0.42rem;
-        color: #58a6ff;
+        color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.blue11 : theme.colors.accentLink)};
         font-size: 0.7rem;
         line-height: 1.2;
         font-weight: 860;
@@ -287,7 +298,7 @@ const StyledWrapper = styled.a`
       > header {
         h2 {
           margin: 0;
-          color: #f0f6fc;
+          color: ${({ theme }) => theme.colors.gray12};
           font-size: 1.12rem;
           line-height: ${FEED_CARD_TITLE_LINE_HEIGHT};
           font-weight: 840;
@@ -307,7 +318,7 @@ const StyledWrapper = styled.a`
 
         p {
           margin: 0;
-          color: #8b949e;
+          color: ${({ theme }) => theme.colors.gray10};
           font-size: 0.85rem;
           line-height: ${FEED_CARD_SUMMARY_LINE_HEIGHT};
           letter-spacing: -0.01em;
@@ -327,7 +338,7 @@ const StyledWrapper = styled.a`
         align-items: center;
         margin-top: 0.6rem;
         padding-bottom: 0.88rem;
-        color: #8b949e;
+        color: ${({ theme }) => theme.colors.gray10};
         font-size: ${FEED_CARD_META_FONT_SIZE_REM}rem;
         line-height: 1.45;
         letter-spacing: -0.01em;
@@ -380,17 +391,17 @@ const StyledWrapper = styled.a`
             .initial {
               font-size: 0.72rem;
               font-weight: 800;
-              color: #0d1117;
+              color: ${({ theme }) => theme.colors.gray12};
             }
           }
 
           .by {
-            color: #8b949e;
+            color: ${({ theme }) => theme.colors.gray10};
             font-size: 0.72rem;
           }
 
           strong {
-            color: #f0f6fc;
+            color: ${({ theme }) => theme.colors.gray12};
             font-size: 0.76rem;
             font-weight: 760;
             line-height: 1.2;
@@ -405,7 +416,7 @@ const StyledWrapper = styled.a`
           display: inline-flex;
           align-items: center;
           gap: 0.42rem;
-          color: #8b949e;
+          color: ${({ theme }) => theme.colors.gray10};
           font-size: 0.75rem;
           font-weight: 700;
 

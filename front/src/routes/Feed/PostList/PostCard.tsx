@@ -287,7 +287,7 @@ const StyledWrapper = styled.a`
       > .category {
         width: fit-content;
         margin-bottom: 0.42rem;
-        color: ${({ theme }) => theme.publicDesign.accent};
+        color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.blue11 : theme.colors.accentLink)};
         font-size: 0.7rem;
         line-height: 1.2;
         font-weight: 860;

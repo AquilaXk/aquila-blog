@@ -31,14 +31,17 @@ const readControlScheme = async (page: Page) =>
 const readLightFeedSurface = async (page: Page) =>
   page.evaluate(() => {
     const card = document.querySelector('[data-ui="feed-post-card"] article')
+    const category = card?.querySelector(".category")
     const title = card?.querySelector("h2")
     const contextCount = document.querySelector(".contextCount")
     const cardStyle = card ? window.getComputedStyle(card) : null
+    const categoryStyle = category ? window.getComputedStyle(category) : null
     const titleStyle = title ? window.getComputedStyle(title) : null
     const contextStyle = contextCount ? window.getComputedStyle(contextCount) : null
 
     return {
       cardBackgroundColor: cardStyle?.backgroundColor ?? null,
+      categoryColor: categoryStyle?.color ?? null,
       titleColor: titleStyle?.color ?? null,
       contextCountColor: contextStyle?.color ?? null,
     }
@@ -85,6 +88,7 @@ const assertHomeThemeToggleUsesLightFeedSurface = async (page: Page) => {
 
   await expect(readLightFeedSurface(page)).resolves.toEqual({
     cardBackgroundColor: "rgb(255, 255, 255)",
+    categoryColor: "rgb(0, 106, 220)",
     titleColor: "rgb(15, 23, 36)",
     contextCountColor: "rgb(15, 23, 36)",
   })

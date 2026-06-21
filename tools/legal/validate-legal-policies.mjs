@@ -5,11 +5,6 @@ import path from "node:path"
 
 const root = process.cwd()
 const policiesDir = path.join(root, "legal/policies")
-const policyFiles = [
-  "privacy.ko-KR.v1.0.0.yaml",
-  "terms.ko-KR.v1.0.0.yaml",
-  "cookies.ko-KR.v1.0.0.yaml",
-]
 const requiredFields = [
   "documentType",
   "locale",
@@ -92,6 +87,16 @@ const fail = (message) => {
   console.error(`[legal-policies] ${message}`)
 }
 
+const getPolicyFiles = () => {
+  if (!fs.existsSync(policiesDir)) {
+    fail(`missing policies directory ${policiesDir}`)
+    return []
+  }
+  const files = fs.readdirSync(policiesDir).filter((name) => name.endsWith(".yaml")).sort()
+  if (files.length === 0) fail("no policy files found")
+  return files
+}
+
 const stablePolicyHash = (policy) => {
   const normalized = { ...policy, contentSha256: "" }
   return crypto.createHash("sha256").update(JSON.stringify(normalized)).digest("hex")
@@ -111,15 +116,33 @@ const readPolicy = (fileName) => {
   }
 }
 
+const readRawPolicy = (fileName) => {
+  const filePath = path.join(policiesDir, fileName)
+  if (!fs.existsSync(filePath)) {
+    fail(`missing policy file ${fileName}`)
+    return null
+  }
+  return fs.readFileSync(filePath, "utf8")
+}
+
 const assertRequiredShape = (fileName, policy) => {
   for (const field of requiredFields) {
     if (!(field in policy)) fail(`${fileName} is missing ${field}`)
   }
   if (policy.locale !== "ko-KR") fail(`${fileName} locale must be ko-KR`)
   if (!/^\d+\.\d+\.\d+$/.test(policy.version || "")) fail(`${fileName} version must be semver`)
+  if (Number.isNaN(Date.parse(policy.publishedAt || ""))) fail(`${fileName} publishedAt must be date-time`)
+  if (Number.isNaN(Date.parse(policy.effectiveAt || ""))) fail(`${fileName} effectiveAt must be date-time`)
   if (!/^[a-f0-9]{64}$/.test(policy.contentSha256 || "")) fail(`${fileName} contentSha256 must be 64 lowercase hex`)
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(policy.contactEmail || "")) fail(`${fileName} contactEmail must be email`)
   if (policy.contactEmail !== "aquilaxk10@gmail.com") fail(`${fileName} contactEmail must be aquilaxk10@gmail.com`)
   if (!Array.isArray(policy.changeSummary) || policy.changeSummary.length === 0) fail(`${fileName} changeSummary is empty`)
+  if ("reviewRequired" in policy && (!Array.isArray(policy.reviewRequired) || policy.reviewRequired.length === 0)) {
+    fail(`${fileName} reviewRequired must be a non-empty string array when present`)
+  }
+  for (const item of policy.reviewRequired || []) {
+    if (typeof item !== "string" || item.trim().length === 0) fail(`${fileName} has empty reviewRequired item`)
+  }
   if (!Array.isArray(policy.sections) || policy.sections.length === 0) fail(`${fileName} sections is empty`)
   for (const section of policy.sections || []) {
     if (!section.id || !section.title) fail(`${fileName} has a section without id/title`)
@@ -144,6 +167,7 @@ const assertTextIncludes = (fileName, policy, tokens) => {
 }
 
 const policies = new Map()
+const policyFiles = getPolicyFiles()
 for (const fileName of policyFiles) {
   const policy = readPolicy(fileName)
   if (!policy) continue
@@ -174,7 +198,8 @@ if (cookies) {
 }
 
 for (const fileName of policyFiles) {
-  const raw = fs.readFileSync(path.join(policiesDir, fileName), "utf8")
+  const raw = readRawPolicy(fileName)
+  if (!raw) continue
   if (raw.includes("illusiveman7@gmail.com")) fail(`${fileName} contains stale contact email`)
 }
 

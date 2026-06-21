@@ -27,10 +27,12 @@
       "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
     },
     "publishedAt": {
-      "type": "string"
+      "type": "string",
+      "format": "date-time"
     },
     "effectiveAt": {
-      "type": "string"
+      "type": "string",
+      "format": "date-time"
     },
     "contentSha256": {
       "type": "string",
@@ -43,9 +45,17 @@
       "type": "string"
     },
     "contactEmail": {
-      "type": "string"
+      "type": "string",
+      "format": "email"
     },
     "changeSummary": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "reviewRequired": {
       "type": "array",
       "items": {
         "type": "string"
@@ -71,9 +81,11 @@
             },
             "minItems": 1
           }
-        }
+        },
+        "additionalProperties": false
       },
       "minItems": 1
     }
-  }
+  },
+  "additionalProperties": false
 }

@@ -1,6 +1,10 @@
 package com.back.boundedContexts.member.adapter.web
 
 import com.back.boundedContexts.member.application.service.MemberApplicationService
+import com.back.boundedContexts.member.subContexts.legalAcceptance.adapter.persistence.MemberLegalAcceptanceRepository
+import com.back.boundedContexts.member.subContexts.legalAcceptance.model.MemberLegalAcceptance
+import com.back.boundedContexts.member.subContexts.privacy.adapter.persistence.MemberAccountDeletionRepository
+import com.back.boundedContexts.member.subContexts.privacy.model.MemberAccountDeletion
 import com.back.boundedContexts.member.subContexts.session.adapter.persistence.MemberSessionRepository
 import com.back.global.security.config.AuthCookieNames
 import com.back.support.BaseControllerIntegrationTest
@@ -15,10 +19,17 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
+import java.time.Instant
 
 class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
     @Autowired
     private lateinit var memberFacade: MemberApplicationService
+
+    @Autowired
+    private lateinit var memberLegalAcceptanceRepository: MemberLegalAcceptanceRepository
+
+    @Autowired
+    private lateinit var memberAccountDeletionRepository: MemberAccountDeletionRepository
 
     @Autowired
     private lateinit var memberSessionRepository: MemberSessionRepository
@@ -36,6 +47,21 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
                 profileImgUrl = null,
                 email = "privacy-export-user@example.com",
             )
+        memberLegalAcceptanceRepository.save(
+            MemberLegalAcceptance(
+                member = member,
+                termsVersion = "2026-06-21",
+                termsContentSha256 = "terms-content-sha-256",
+                privacyVersion = "2026-06-21",
+                privacyContentSha256 = "privacy-content-sha-256",
+                age14OrOlder = true,
+                requiredPrivacyConfirmed = true,
+                analyticsConsent = false,
+                overseasTransferAcknowledged = true,
+                source = "EMAIL_SIGNUP",
+                acceptedAt = Instant.parse("2026-06-21T00:00:00Z"),
+            ),
+        )
         val authCookies = loginAuthCookies(member.email!!)
 
         mvc
@@ -50,6 +76,16 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
                 jsonPath("$.data.member.username") { value("privacy-export-user") }
                 jsonPath("$.data.member.nickname") { value("정보내보내기") }
                 jsonPath("$.data.member.createdAt") { value(startsWith(member.createdAt.toString().take(20))) }
+                jsonPath("$.data.latestLegalAcceptance.termsVersion") { value("2026-06-21") }
+                jsonPath("$.data.latestLegalAcceptance.termsContentSha256") { value("terms-content-sha-256") }
+                jsonPath("$.data.latestLegalAcceptance.privacyVersion") { value("2026-06-21") }
+                jsonPath("$.data.latestLegalAcceptance.privacyContentSha256") { value("privacy-content-sha-256") }
+                jsonPath("$.data.latestLegalAcceptance.age14OrOlder") { value(true) }
+                jsonPath("$.data.latestLegalAcceptance.requiredPrivacyConfirmed") { value(true) }
+                jsonPath("$.data.latestLegalAcceptance.analyticsConsent") { value(false) }
+                jsonPath("$.data.latestLegalAcceptance.overseasTransferAcknowledged") { value(true) }
+                jsonPath("$.data.latestLegalAcceptance.source") { value("EMAIL_SIGNUP") }
+                jsonPath("$.data.latestLegalAcceptance.acceptedAt") { value("2026-06-21T00:00:00Z") }
                 jsonPath("$.data.generatedAt") { value(startsWith("20")) }
             }
     }
@@ -105,6 +141,45 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
                 jsonPath("$.data.item.type") { value("EXPORT") }
                 jsonPath("$.data.item.status") { value("RECEIVED") }
             }
+
+        mvc
+            .post("/member/api/v1/privacy/requests") {
+                authCookies.forEach { cookie(it) }
+                header("X-Aquila-CSRF", "1")
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                        "type": "CORRECTION"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isCreated() }
+                jsonPath("$.data.item.type") { value("CORRECTION") }
+                jsonPath("$.data.item.message") { doesNotExist() }
+            }
+    }
+
+    @Test
+    fun `존재하지 않는 개인정보 처리 요청은 404를 반환한다`() {
+        val member =
+            memberFacade.join(
+                username = "privacy-request-missing-user",
+                password = "Abcd1234!",
+                nickname = "권리요청없음",
+                profileImgUrl = null,
+                email = "privacy-request-missing-user@example.com",
+            )
+        val authCookies = loginAuthCookies(member.email!!)
+
+        mvc
+            .get("/member/api/v1/privacy/requests/999999") {
+                authCookies.forEach { cookie(it) }
+            }.andExpect {
+                status { isNotFound() }
+                jsonPath("$.resultCode") { value("404-1") }
+                jsonPath("$.msg") { value("개인정보 처리 요청을 찾을 수 없습니다.") }
+            }
     }
 
     @Test
@@ -150,6 +225,13 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         assertThat(findSessionRevokedAt(firstSessionKey.value)).isNotNull()
         assertThat(findSessionRevokedAt(secondSessionKey.value)).isNotNull()
         assertThat(countDeletionTombstones(member.id, "서비스 이용 종료")).isEqualTo(1)
+        val deletion =
+            memberAccountDeletionRepository
+                .findAll()
+                .single { it.member.id == member.id }
+        assertThat(deletion.member.id).isEqualTo(member.id)
+        assertThat(deletion.reason).isEqualTo("서비스 이용 종료")
+        assertThat(deletion.deletedAt).isNotNull()
     }
 
     @Test
@@ -185,6 +267,42 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
 
         assertThat(memberFacade.findByEmail("account-delete-wrong-password-user@example.com")).isNotNull()
         assertThat(memberSessionRepository.findBySessionKey(sessionKey.value)?.revokedAt).isNull()
+    }
+
+    @Test
+    fun `계정 탈퇴는 기존 탈퇴 tombstone 이 있으면 409를 반환한다`() {
+        val member =
+            memberFacade.join(
+                username = "account-delete-duplicate-user",
+                password = "Abcd1234!",
+                nickname = "중복탈퇴",
+                profileImgUrl = null,
+                email = "account-delete-duplicate-user@example.com",
+            )
+        memberAccountDeletionRepository.save(
+            MemberAccountDeletion(
+                member = member,
+                deletedAt = Instant.parse("2026-06-21T00:00:00Z"),
+            ),
+        )
+        val authCookies = loginAuthCookies(member.email!!)
+
+        mvc
+            .delete("/member/api/v1/privacy/account") {
+                authCookies.forEach { cookie(it) }
+                header("X-Aquila-CSRF", "1")
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                        "password": "Abcd1234!"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isConflict() }
+                jsonPath("$.resultCode") { value("409-1") }
+                jsonPath("$.msg") { value("이미 탈퇴 처리된 계정입니다.") }
+            }
     }
 
     private fun loginAuthCookies(email: String): List<Cookie> =

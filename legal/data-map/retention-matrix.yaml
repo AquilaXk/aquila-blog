@@ -8,20 +8,20 @@ retentionRules:
     destruction: expireCancelConsumeThenPurgeByRetentionJob
     followUp: issue998
   - activityId: kakao_oauth_existing_login
-    retention: accountLifetimeForLinkedIdentifier
-    destruction: unlinkOrAccountDeletion
+    retention: accountLifetimeForLinkedIdentifier; transientStateCookieUntilCallback
+    destruction: unlinkOrAccountDeletion; transientCookieExpiry
     followUp: issue997
   - activityId: auth_session_and_cookies
     retention: untilLogoutRevocationExpiryOrSessionCleanupJob
     destruction: revokeSessionExpireCookiePurgeExpiredSessions
     followUp: issue995
   - activityId: user_content_posts_comments
-    retention: untilUserDeletionOrContentDeletion
-    destruction: softDeleteThenCachePurge
+    retention: untilUserDeletionOrContentDeletion; publicCacheUntilRevalidation
+    destruction: softDeleteThenCachePurge; anonymizeWhereRequired
     followUp: issue999
   - activityId: file_uploads_profile_post_cloud
-    retention: activeUntilOwnerDeletionTempUploadsUntilPurgeAfterDeletedObjectsUntilBackupExpiry
-    destruction: objectDeleteAndMetadataMarkDeleted
+    retention: activeUntilOwnerDeletion; tempUploadsUntilPurgeAfter; deletedObjectsUntilBackupExpiry
+    destruction: objectDeleteAndMetadataMarkDeleted; backupExpiryOrTombstoneFutureWork
     followUp: issue1004
   - activityId: auth_security_events
     retention: securityAuditWindowThenCleanupJob
@@ -36,16 +36,16 @@ retentionRules:
     destruction: accountDeletionOrRetentionJobFutureWork
     followUp: issue1000
   - activityId: analytics_and_rum
-    retention: providerDefaultUnlessConfiguredLocalRumLogRetentionPolicyRequired
+    retention: providerDefaultUnlessConfigured; localRumLogRetentionPolicyRequired
     destruction: providerRetentionControlsAndLocalLogExpiry
     followUp: issue1002
   - activityId: ai_tag_recommendation_gemini
-    retention: noRawPromptRetentionIntendedProviderRetentionRequiresContractReview
-    destruction: noLocalPersistenceProviderDeletionControlsReviewRequired
+    retention: noRawPromptRetentionIntended; providerRetentionRequiresContractReview
+    destruction: noLocalPersistence; providerDeletionControlsReviewRequired
     followUp: issue1003
   - activityId: backup_and_restore
-    retention: backupClassRetentionPolicyInDeployScriptsPrivacyTombstoneFutureWork
-    destruction: pruneExternalBackupsAndDeployBackupRotationEncryptedDeletionFutureWork
+    retention: backupClassRetentionPolicyInDeployScripts; privacyTombstoneFutureWork
+    destruction: pruneExternalBackupsAndDeployBackupRotation; encryptedDeletionFutureWork
     followUp: issue1004
 
 principles:

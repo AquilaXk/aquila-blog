@@ -157,11 +157,13 @@ for (const legalBasisEntry of legalBasisEntries) {
 }
 
 const retentionActivityIds = new Set()
+const retentionRuleByActivityId = new Map()
 for (const retentionRule of retentionRules) {
   assertRequiredFields("retention rule", retentionRule, ["activityId", "retention", "destruction", "followUp"])
   if (!activityIds.has(retentionRule.activityId)) fail(`retention rule references unknown activity ${retentionRule.activityId}`)
   if (retentionActivityIds.has(retentionRule.activityId)) fail(`duplicate retention rule for activity ${retentionRule.activityId}`)
   retentionActivityIds.add(retentionRule.activityId)
+  retentionRuleByActivityId.set(retentionRule.activityId, retentionRule)
 }
 
 for (const activity of activities) {
@@ -172,6 +174,13 @@ for (const activity of activities) {
     fail(`activity ${activity.id} legalBasis ${activity.legalBasis} does not match matrix ${matrixLegalBasis}`)
   }
   if (!retentionActivityIds.has(activity.id)) fail(`activity ${activity.id} is missing from retention-matrix.yaml`)
+  const retentionRule = retentionRuleByActivityId.get(activity.id)
+  if (retentionRule && retentionRule.retention !== activity.retentionRule) {
+    fail(`activity ${activity.id} retention ${activity.retentionRule} does not match matrix ${retentionRule.retention}`)
+  }
+  if (retentionRule && retentionRule.destruction !== activity.destructionMethod) {
+    fail(`activity ${activity.id} destruction ${activity.destructionMethod} does not match matrix ${retentionRule.destruction}`)
+  }
 }
 
 for (const relativePath of [

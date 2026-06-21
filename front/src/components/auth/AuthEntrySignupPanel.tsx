@@ -2,6 +2,7 @@ import { FormEvent, useMemo, useState } from "react"
 import Link from "next/link"
 import AppIcon from "src/components/icons/AppIcon"
 import { formatSignupCooldown } from "src/hooks/useSignupMailCooldown"
+import { legalPolicyCurrentPaths } from "src/libs/legal/policyLinks"
 
 type Props = {
   signupEmail: string
@@ -78,7 +79,7 @@ const AuthEntrySignupPanel = ({
               onChange={(event) => onTermsAcceptedChange(event.target.checked)}
             />
             <span>
-              <Link href="/terms">이용약관</Link>에 동의합니다.
+              <Link href={legalPolicyCurrentPaths.terms}>이용약관</Link>에 동의합니다.
             </span>
           </label>
           <label>
@@ -88,7 +89,7 @@ const AuthEntrySignupPanel = ({
               onChange={(event) => onPrivacyAcceptedChange(event.target.checked)}
             />
             <span>
-              <Link href="/privacy">개인정보처리방침</Link>에 동의합니다.
+              <Link href={legalPolicyCurrentPaths.privacy}>개인정보처리방침</Link>에 동의합니다.
             </span>
           </label>
         </div>

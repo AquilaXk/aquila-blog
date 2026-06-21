@@ -9,6 +9,7 @@ import { SIGNUP_LEGAL_POLICY_VERSION } from "src/apis/backend/legal"
 import AuthShell from "src/components/auth/AuthShell"
 import AppIcon from "src/components/icons/AppIcon"
 import { formatSignupCooldown, useSignupMailCooldown } from "src/hooks/useSignupMailCooldown"
+import { legalPolicyCurrentPaths } from "src/libs/legal/policyLinks"
 import { normalizeNextPath, toLoginPath, toSignupPath } from "src/libs/router"
 import { GuestPageProps, getGuestPageProps } from "src/libs/server/guestPage"
 import { isValidAuthEmail, normalizeAuthEmail } from "src/libs/validation/auth"
@@ -104,8 +105,8 @@ const SignupPage = () => {
         <FooterText>
           이미 계정이 있으면 <Link href={toLoginPath(next)}>로그인</Link>
           <span className="policyLinks">
-            <Link href="/privacy">개인정보처리방침</Link>
-            <Link href="/terms">이용약관</Link>
+            <Link href={legalPolicyCurrentPaths.privacy}>개인정보처리방침</Link>
+            <Link href={legalPolicyCurrentPaths.terms}>이용약관</Link>
           </span>
         </FooterText>
       }
@@ -148,7 +149,7 @@ const SignupPage = () => {
               onChange={(event) => setTermsAccepted(event.target.checked)}
             />
             <span>
-              <Link href="/terms">이용약관</Link>에 동의합니다.
+              <Link href={legalPolicyCurrentPaths.terms}>이용약관</Link>에 동의합니다.
             </span>
           </label>
           <label>
@@ -158,7 +159,7 @@ const SignupPage = () => {
               onChange={(event) => setPrivacyAccepted(event.target.checked)}
             />
             <span>
-              <Link href="/privacy">개인정보처리방침</Link>에 동의합니다.
+              <Link href={legalPolicyCurrentPaths.privacy}>개인정보처리방침</Link>에 동의합니다.
             </span>
           </label>
         </RequiredConsentBox>

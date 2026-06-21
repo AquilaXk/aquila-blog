@@ -2,6 +2,7 @@ import React, { RefObject, memo, useEffect, useRef, useState } from "react"
 import styled from "@emotion/styled"
 import Link from "next/link"
 import PostCard from "src/routes/Feed/PostList/PostCard"
+import InitialLoadErrorState from "src/routes/Feed/PostList/InitialLoadErrorState"
 import AppIcon from "src/components/icons/AppIcon"
 import useAuthSession from "src/hooks/useAuthSession"
 import { TPost } from "src/types"
@@ -12,10 +13,12 @@ type Props = {
   hasExternalResults?: boolean
   onClearFilters?: () => void
   isInitialLoading?: boolean
+  isInitialLoadError?: boolean
   isFetchingNextPage?: boolean
   isFetchNextPageError?: boolean
   hasNextPage?: boolean
   onLoadMore?: () => void
+  onRetryInitialLoad?: () => void
   onRetryLoadMore?: () => void
   loadMoreTriggerRef?: RefObject<HTMLDivElement>
 }
@@ -103,10 +106,12 @@ const PostList: React.FC<Props> = ({
   hasExternalResults = false,
   onClearFilters,
   isInitialLoading = false,
+  isInitialLoadError = false,
   isFetchingNextPage = false,
   isFetchNextPageError = false,
   hasNextPage = false,
   onLoadMore,
+  onRetryInitialLoad,
   onRetryLoadMore,
   loadMoreTriggerRef,
 }) => {
@@ -115,7 +120,8 @@ const PostList: React.FC<Props> = ({
   const [mountedCardCount, setMountedCardCount] = useState(() =>
     Math.min(posts.length, DEFERRED_MOUNT_INITIAL_COUNT)
   )
-  const showEmptyState = !isInitialLoading && !posts.length && !hasExternalResults
+  const showInitialLoadError = !isInitialLoading && isInitialLoadError && !posts.length && !hasExternalResults
+  const showEmptyState = !showInitialLoadError && !isInitialLoading && !posts.length && !hasExternalResults
 
   useEffect(() => {
     const nextFirstPostId = posts[0] ? String(posts[0].id) : null
@@ -180,6 +186,9 @@ const PostList: React.FC<Props> = ({
             ))}
           </div>
         ))}
+      {showInitialLoadError && (
+        <InitialLoadErrorState hasFilter={hasFilter} onRetryInitialLoad={onRetryInitialLoad} />
+      )}
       {showEmptyState && <EmptyPostState hasFilter={hasFilter} onClearFilters={onClearFilters} />}
       {posts.map((post, index) => {
         const shouldMountCard = index < mountedCardCount

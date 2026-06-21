@@ -8,6 +8,7 @@ activities:
       - legalAcceptanceVersion
       - legalAcceptanceTimestamp
       - accountIdentifier
+      - apiKey
     dataSubjects:
       - registeredMember
     purpose: 이메일 인증 기반 계정 제공, 로그인 식별, 약관 및 개인정보처리방침 동의 증빙
@@ -152,8 +153,14 @@ activities:
       - postRenderedHtml
       - commentContent
       - profileNickname
+      - profileRole
       - profileBio
       - profileImageUrl
+      - aboutRole
+      - aboutBio
+      - aboutDetails
+      - profileServiceLinks
+      - profileContactLinks
       - postHitDedupHash
     dataSubjects:
       - registeredMember
@@ -162,7 +169,7 @@ activities:
     legalBasis: contractAndUserPublishedContent
     collectionSource: admin editor, comment form, profile editor
     requiredOrOptional: optionalUserGeneratedContent
-    systemOfRecord: PostgreSQL post, post_comment, member profile columns
+    systemOfRecord: PostgreSQL post, post_comment, member profile columns, member_attr profile/home fields
     processors:
       - home_server_postgresql
       - home_server_redis

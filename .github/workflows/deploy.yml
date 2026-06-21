@@ -1195,6 +1195,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+      statuses: read
     env:
       PLAYWRIGHT_BASE_URL_OVERRIDE: ${{ secrets.CUSTOM_LIVE_FRONTURL || vars.CUSTOM_LIVE_FRONTURL || secrets.CUSTOM_PROD_FRONTURL || vars.CUSTOM_PROD_FRONTURL || secrets.HOME_FRONT_BASE_URL || vars.HOME_FRONT_BASE_URL || '' }}
       E2E_API_BASE_URL_OVERRIDE: ${{ secrets.CUSTOM_LIVE_BACKURL || vars.CUSTOM_LIVE_BACKURL || secrets.CUSTOM_PROD_BACKURL || vars.CUSTOM_PROD_BACKURL || '' }}
@@ -1208,6 +1209,7 @@ jobs:
       E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD || '' }}
       E2E_EXPECTED_FRONT_COMMIT_SHA: ${{ needs.calculateTag.outputs.expected_front_commit_sha }}
       E2E_LIVE_EDITOR_507_CANARY: ${{ needs.calculateTag.outputs.editor_live_canary }}
+      GITHUB_TOKEN: ${{ github.token }}
 
     steps:
       - name: Checkout
@@ -1470,6 +1472,34 @@ jobs:
           fi
 
           if [ -n "${E2E_EXPECTED_FRONT_COMMIT_SHA:-}" ]; then
+            if command -v jq >/dev/null 2>&1; then
+              vercel_status_json="$(
+                curl "${curl_args[@]}" \
+                  -H "Accept: application/vnd.github+json" \
+                  -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                  -H "X-GitHub-Api-Version: 2022-11-28" \
+                  "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${E2E_EXPECTED_FRONT_COMMIT_SHA}/status" || true
+              )"
+              vercel_status_line="$(
+                printf '%s' "${vercel_status_json}" |
+                  jq -r '.statuses[]? | select(.context == "Vercel") | [.state, .description, .target_url] | @tsv' |
+                  head -n 1
+              )"
+              if [ -n "${vercel_status_line}" ]; then
+                IFS=$'\t' read -r vercel_state vercel_description vercel_target_url <<< "${vercel_status_line}"
+                echo "[preflight] vercel-status state=${vercel_state:-missing} description=${vercel_description:-missing}"
+                if [ "${vercel_state}" = "failure" ] && [[ "${vercel_description}" == *"Deployment rate limited"* ]]; then
+                  echo "::error title=Vercel production deployment rate limited::${vercel_description} (${vercel_target_url})" >&2
+                  echo "preflight failed: Vercel production deployment is rate limited; retry the Vercel deployment before rerunning live frontend verification" >&2
+                  exit 1
+                fi
+              else
+                echo "[preflight] vercel-status missing for ${E2E_EXPECTED_FRONT_COMMIT_SHA}; continuing with live metadata polling"
+              fi
+            else
+              echo "[preflight] jq not available; skipping Vercel status preflight"
+            fi
+
             front_build_ok=0
             for attempt in $(seq 1 "${FRONT_BUILD_METADATA_ATTEMPTS}"); do
               front_html="$(

@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.dto
 
+import com.back.boundedContexts.member.domain.shared.memberMixin.defaultProfileImageUrl
 import com.back.boundedContexts.post.domain.Post
 import org.slf4j.LoggerFactory
 import java.time.Instant
@@ -25,7 +26,6 @@ data class FeedPostDto(
 ) {
     companion object {
         private val log = LoggerFactory.getLogger(FeedPostDto::class.java)
-        private const val FALLBACK_PROFILE_IMAGE_URL = "https://placehold.co/600x600?text=U_U"
         private const val FALLBACK_SUMMARY = "미리보기를 불러오지 못했습니다."
 
         fun from(post: Post): FeedPostDto =
@@ -64,7 +64,7 @@ data class FeedPostDto(
                     authorUsername = runCatching { post.author.username }.getOrDefault("unknown"),
                     authorProfileImgUrl =
                         runCatching { post.author.profileImgUrlVersionedOrDefault }
-                            .getOrDefault(FALLBACK_PROFILE_IMAGE_URL),
+                            .getOrDefault(defaultProfileImageUrl()),
                     title = runCatching { post.title }.getOrDefault("제목 없음"),
                     thumbnail = null,
                     summary = FALLBACK_SUMMARY,

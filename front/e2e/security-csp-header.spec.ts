@@ -71,8 +71,6 @@ test.describe("frontend security headers", () => {
         "'self'",
         "data:",
         "blob:",
-        "https:",
-        "http:",
         "https://*.aquilaxk.site",
         "https://www.notion.so",
         "https://avatars.githubusercontent.com",
@@ -103,6 +101,9 @@ test.describe("frontend security headers", () => {
     const remoteHosts = (nextConfig.images?.remotePatterns ?? [])
       .map((pattern) => pattern.hostname)
       .filter(Boolean)
+
+    expect(imageSources).not.toContain("https:")
+    expect(imageSources).not.toContain("http:")
 
     for (const host of externalPlaceholderHosts) {
       expect(imageSources).not.toContain(`https://${host}`)

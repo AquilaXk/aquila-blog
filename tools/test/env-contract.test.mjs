@@ -159,6 +159,9 @@ const baseHomeServerEnv = [
   "PROMETHEUS_BASIC_AUTH_USER=promviewer",
   "PROMETHEUS_BASIC_AUTH_HASH=$$2y$$05$$abcdefghijklmnopqrstuvABCDEFGHIJKLMNOPQRSTUVabcdefghi",
   "OPERATIONS_ALERT_EMAIL_TO=ops@aquilaxk.site",
+  "ALERTMANAGER_SMTP_AUTH_ENABLED=true",
+  "ALERTMANAGER_SMTP_AUTH_USERNAME=mailer@aquilaxk.site",
+  "ALERTMANAGER_SMTP_AUTH_PASSWORD=valid-mail-password",
   "GRAFANA_ADMIN_USER=admin",
   "GRAFANA_ADMIN_PASSWORD=valid-grafana-password",
   "GRAFANA_ROOT_URL=https://grafana.aquilaxk.site",
@@ -224,6 +227,26 @@ test("home-server-source contract accepts a complete deployment env without BACK
   })
 
   assert.equal(result.ok, true, result.errors.map((error) => error.message).join("\n"))
+})
+
+test("home-server-source contract allows no-auth operations alert SMTP relay", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const noAuthEnv = baseHomeServerEnv
+    .split("\n")
+    .filter((line) => !line.startsWith("ALERTMANAGER_SMTP_AUTH_USERNAME="))
+    .filter((line) => !line.startsWith("ALERTMANAGER_SMTP_AUTH_PASSWORD="))
+    .map((line) => {
+      return line === "ALERTMANAGER_SMTP_AUTH_ENABLED=true" ? "ALERTMANAGER_SMTP_AUTH_ENABLED=false" : line
+    })
+    .join("\n")
+
+  const result = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text: noAuthEnv,
+  })
+
+  assert.equal(result.ok, true, result.errors.map((error) => `${error.key}: ${error.message}`).join("\n"))
 })
 
 test("grafana admin password has no compose fallback and rejects weak contract values", async () => {

@@ -50,6 +50,11 @@ const requiredActivityDataCategories = new Map([
 ])
 const requiredActivityEnvFragments = new Map([
   ["ai_tag_recommendation_gemini", ["custom.ai.tag.enabled", "custom.ai.tag.gemini."]],
+  ["file_uploads_profile_post_cloud", ["AQUILA_EXTERNAL_STORAGE_ROOT"]],
+  ["backup_and_restore", ["AQUILA_BACKUP_ROOT"]],
+])
+const requiredProcessorEnvFragments = new Map([
+  ["google_gemini", ["custom.ai.tag.enabled", "custom.ai.tag.gemini."]],
 ])
 
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8")
@@ -149,6 +154,9 @@ for (const activity of activities) {
 for (const processor of processors) {
   assertRequiredFields("processor", processor, requiredProcessorFields)
   if (!/^[a-z0-9_]+$/.test(processor.id)) fail(`processor ${processor.id} must use snake_case id`)
+  for (const envFragment of requiredProcessorEnvFragments.get(processor.id) || []) {
+    if (!processor.enabledByEnv.includes(envFragment)) fail(`processor ${processor.id} enabledByEnv must include ${envFragment}`)
+  }
 }
 
 for (const processorId of requiredProcessors) {

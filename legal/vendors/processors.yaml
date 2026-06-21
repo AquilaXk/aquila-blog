@@ -175,7 +175,7 @@ processors:
       - generatedTags
     region: globalGoogleInfrastructure
     overseasTransfer: true
-    enabledByEnv: custom.ai.summary.gemini.* and API key
+    enabledByEnv: custom.ai.tag.enabled; custom.ai.tag.gemini.*; legacy fallback CUSTOM__AI__SUMMARY__GEMINI__*
     contractStatus: paidPlanAndDpaReviewRequired
     retentionControl: providerDataRetentionAndTrainingOptOutReviewRequired
     securityControls:

@@ -13,19 +13,13 @@ SET signup_session_token_hash = NULL
 WHERE signup_session_token_hash IS NULL;
 
 ALTER TABLE public.member_signup_verification
-    ALTER COLUMN email_verification_token_hash SET NOT NULL;
+    ALTER COLUMN email_verification_token DROP NOT NULL;
 
 ALTER TABLE public.member_signup_verification
     DROP CONSTRAINT IF EXISTS uk_member_signup_verification_email_verification_token;
 
 ALTER TABLE public.member_signup_verification
     DROP CONSTRAINT IF EXISTS uk_member_signup_verification_signup_session_token;
-
-ALTER TABLE public.member_signup_verification
-    DROP COLUMN IF EXISTS email_verification_token;
-
-ALTER TABLE public.member_signup_verification
-    DROP COLUMN IF EXISTS signup_session_token;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_member_signup_verification_email_verification_token_hash
     ON public.member_signup_verification (email_verification_token_hash);

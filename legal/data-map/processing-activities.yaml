@@ -3,6 +3,7 @@ activities:
     name: 이메일 회원가입 계정 생성
     dataCategories:
       - email
+      - nickname
       - passwordHash
       - legalAcceptanceVersion
       - legalAcceptanceTimestamp
@@ -384,7 +385,7 @@ activities:
     userRightsHandler: contentDeletionAndExternalProcessingDisclosureFutureWork
     codeOwner: back/post-ai; front/admin-editor
     policySectionId: privacy-processor-ai
-    enabledByEnv: custom.ai.summary.gemini.* and Gemini API key
+    enabledByEnv: custom.ai.tag.enabled; custom.ai.tag.gemini.*; legacy fallback CUSTOM__AI__SUMMARY__GEMINI__*
     reviewRequired:
       - Production default-off, PII scanner, and DPA checks are tracked by issue1003.
 

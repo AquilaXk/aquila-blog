@@ -45,6 +45,25 @@ read_key_from_text() {
   ' | tail -n 1
 }
 
+has_key_in_text() {
+  local key="$1"
+  local text="$2"
+  printf '%s\n' "${text}" | awk -F= -v k="${key}" '
+    /^[[:space:]]*#/ { next }
+    /^[[:space:]]*$/ { next }
+    {
+      line = $0
+      sub(/^[[:space:]]+/, "", line)
+      sub(/[[:space:]]+$/, "", line)
+      sub(/^[Ee][Xx][Pp][Oo][Rr][Tt][[:space:]]+/, "", line)
+      if (index(line, k "=") == 1) {
+        found = 1
+      }
+    }
+    END { exit(found ? 0 : 1) }
+  '
+}
+
 read_key_from_file() {
   local key="$1"
   local file="$2"
@@ -147,6 +166,81 @@ upsert_env_key() {
   else
     printf '%s=%s\n' "${key}" "${value}" >> "${target}"
   fi
+}
+
+compose_env_quote_value() {
+  local value="$1"
+  local escaped=""
+  local prefix=""
+  while [[ "${value}" == *"'"* ]]; do
+    prefix="${value%%\'*}"
+    escaped+="${prefix}\\'"
+    value="${value#*\'}"
+  done
+  escaped+="${value}"
+  printf "'%s'" "${escaped}"
+}
+
+upsert_env_key_compose_quoted() {
+  local key="$1"
+  local value="$2"
+  local target="${3:-${COMPOSE_ENV_FILE}}"
+  local quoted_value
+  quoted_value="$(compose_env_quote_value "${value}")"
+  upsert_env_key "${key}" "${quoted_value}" "${target}"
+}
+
+stage_home_server_env_key() {
+  local key="$1"
+  local value
+  [[ -n "${HOME_SERVER_ENV:-}" ]] || return 0
+  has_key_in_text "${key}" "${HOME_SERVER_ENV}" || return 0
+  value="$(read_key_from_text "${key}" "${HOME_SERVER_ENV}")"
+
+  ensure_compose_env_work_file
+  upsert_env_key_compose_quoted "${key}" "${value}"
+}
+
+stage_home_server_env_compose_values() {
+  stage_home_server_env_key "ALERTMANAGER_SMTP_AUTH_PASSWORD"
+  stage_home_server_env_key "ALERTMANAGER_SMTP_AUTH_USERNAME"
+  stage_home_server_env_key "AQUILA_EXTERNAL_STORAGE_ROOT"
+  stage_home_server_env_key "AUTOHEAL_INTERVAL_SECONDS"
+  stage_home_server_env_key "AUTOHEAL_START_PERIOD_SECONDS"
+  stage_home_server_env_key "BACK_ADMIN_MEM_LIMIT"
+  stage_home_server_env_key "BACK_ADMIN_MEM_RESERVATION"
+  stage_home_server_env_key "BACK_AUTOHEAL_ENABLED"
+  stage_home_server_env_key "BACK_MEM_LIMIT"
+  stage_home_server_env_key "BACK_MEM_RESERVATION"
+  stage_home_server_env_key "BACK_READ_MEM_LIMIT"
+  stage_home_server_env_key "BACK_READ_MEM_RESERVATION"
+  stage_home_server_env_key "BACK_WORKER_MEM_LIMIT"
+  stage_home_server_env_key "BACK_WORKER_MEM_RESERVATION"
+  stage_home_server_env_key "CF_TUNNEL_TOKEN"
+  stage_home_server_env_key "CUSTOM__MEMBER__SIGNUP__MAIL_FROM"
+  stage_home_server_env_key "CUSTOM__RUNTIME__API_MODE"
+  stage_home_server_env_key "CUSTOM__RUNTIME__API_MODE_BLUE"
+  stage_home_server_env_key "CUSTOM__RUNTIME__API_MODE_GREEN"
+  stage_home_server_env_key "CUSTOM__RUNTIME__API_MODE_WORKER"
+  stage_home_server_env_key "DB_BASE_NAME"
+  stage_home_server_env_key "GRAFANA_ADMIN_PASSWORD"
+  stage_home_server_env_key "GRAFANA_ADMIN_USER"
+  stage_home_server_env_key "GRAFANA_ROOT_URL"
+  stage_home_server_env_key "MINIO_ROOT_PASSWORD"
+  stage_home_server_env_key "MINIO_ROOT_USER"
+  stage_home_server_env_key "OPERATIONS_ALERT_EMAIL_TO"
+  stage_home_server_env_key "PROD___POSTGRES__PASSWORD"
+  stage_home_server_env_key "PROD___SPRING__DATASOURCE__PASSWORD"
+  stage_home_server_env_key "PROD___SPRING__DATA__REDIS__PASSWORD"
+  stage_home_server_env_key "PROMETHEUS_RETENTION_TIME"
+  stage_home_server_env_key "PUBLIC_EDGE_PROBE_BASE_URL"
+  stage_home_server_env_key "PUBLIC_EDGE_PROBE_LATEST_POSTS"
+  stage_home_server_env_key "PUBLIC_EDGE_PROBE_REFRESH_MS"
+  stage_home_server_env_key "PUBLIC_EDGE_PROBE_REQUESTS"
+  stage_home_server_env_key "PUBLIC_EDGE_PROBE_TIMEOUT_MS"
+  stage_home_server_env_key "SPRING__MAIL__HOST"
+  stage_home_server_env_key "SPRING__MAIL__PORT"
+  stage_home_server_env_key "SPRING__MAIL__PROPERTIES__MAIL__SMTP__STARTTLS__ENABLE"
 }
 
 stage_backend_runtime_image_env_key() {
@@ -365,6 +459,7 @@ ensure_backup_compose_ready() {
   if [[ "${COMPOSE_IMAGE_ENV_PREFLIGHT_DONE}" == "true" ]]; then
     return 0
   fi
+  stage_home_server_env_compose_values
   ensure_compose_image_env_defaults
   validate_compose_config_after_env_autofill
   COMPOSE_IMAGE_ENV_PREFLIGHT_DONE="true"

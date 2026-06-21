@@ -423,6 +423,10 @@ test("외부 백업은 compose 평가 전에 누락된 runtime image env를 보�
     externalBackupScript.indexOf("resolve_repo_digest_with_pull_fallback() {"),
     externalBackupScript.indexOf("ensure_image_env_key_from_local_digest() {"),
   )
+  const stageHomeServerEnvKeyBody = externalBackupScript.slice(
+    externalBackupScript.indexOf("stage_home_server_env_key() {"),
+    externalBackupScript.indexOf("stage_home_server_env_compose_values() {"),
+  )
   assert.match(imageGuardBody, /value="\$\(trim_quotes "\$\(env_value "\$\{key\}"\)"\)"/)
   assert.match(
     externalBackupScript,
@@ -465,6 +469,17 @@ test("외부 백업은 compose 평가 전에 누락된 runtime image env를 보�
     imageGuardBody.indexOf('upsert_env_key "${key}" "${value}"') < imageGuardBody.indexOf("return 0"),
     "HOME_SERVER_ENV image values must be staged before compose reads the env file",
   )
+  assert.match(externalBackupScript, /compose_env_quote_value\(\) \{/)
+  assert.match(externalBackupScript, /upsert_env_key_compose_quoted\(\) \{/)
+  assert.match(stageHomeServerEnvKeyBody, /upsert_env_key_compose_quoted "\$\{key\}" "\$\{value\}"/)
+  assert.match(externalBackupScript, /stage_home_server_env_compose_values\(\) \{/)
+  assert.match(externalBackupScript, /stage_home_server_env_key "OPERATIONS_ALERT_EMAIL_TO"/)
+  assert.match(externalBackupScript, /stage_home_server_env_key "ALERTMANAGER_SMTP_AUTH_USERNAME"/)
+  assert.match(externalBackupScript, /stage_home_server_env_key "ALERTMANAGER_SMTP_AUTH_PASSWORD"/)
+  assert.match(externalBackupScript, /stage_home_server_env_key "CUSTOM__RUNTIME__API_MODE_BLUE"/)
+  assert.match(externalBackupScript, /stage_home_server_env_key "CUSTOM__RUNTIME__API_MODE_GREEN"/)
+  assert.match(externalBackupScript, /stage_home_server_env_key "CUSTOM__RUNTIME__API_MODE_WORKER"/)
+  assert.match(externalBackupScript, /stage_home_server_env_key "SPRING__MAIL__PROPERTIES__MAIL__SMTP__STARTTLS__ENABLE"/)
 
   const composeReadyBody = externalBackupScript.slice(
     externalBackupScript.indexOf("ensure_backup_compose_ready() {"),
@@ -487,6 +502,7 @@ test("외부 백업은 compose 평가 전에 누락된 runtime image env를 보�
     externalBackupScript.indexOf('log "backup complete id=${TIMESTAMP}"'),
   )
   const ensureCallIndex = composeReadyBody.indexOf("\n  ensure_compose_image_env_defaults\n")
+  const stageHomeServerEnvIndex = composeReadyBody.indexOf("\n  stage_home_server_env_compose_values\n")
   const validateComposeIndex = composeReadyBody.indexOf("\n  validate_compose_config_after_env_autofill\n")
   const skipMarkerIndex = preparePostgresBody.indexOf('if [[ "${AQUILA_BACKUP_SKIP_POSTGRES:-false}" == "true" ]]')
   const prepareComposeReadyCallIndex = preparePostgresBody.indexOf("\n  ensure_backup_compose_ready\n")
@@ -495,6 +511,7 @@ test("외부 백업은 compose 평가 전에 누락된 runtime image env를 보�
   const loopPrepareIndex = backupLoopBody.indexOf("\n  prepare_postgres_backup_compose_if_needed\n")
   const loopCopyIndex = backupLoopBody.indexOf("\n  copy_deploy_config")
   assert(ensureCallIndex > -1, "create_external_backup.sh must call image env auto-fill")
+  assert(stageHomeServerEnvIndex > -1, "create_external_backup.sh must stage HOME_SERVER_ENV compose values")
   assert(validateComposeIndex > -1, "create_external_backup.sh must validate compose after image env auto-fill")
   assert(skipMarkerIndex > -1, "PostgreSQL backup skip path must remain explicit")
   assert(prepareComposeReadyCallIndex > -1, "PostgreSQL compose preparation must call compose preflight")
@@ -503,6 +520,7 @@ test("외부 백업은 compose 평가 전에 누락된 runtime image env를 보�
   assert(loopPrepareIndex > -1, "backup loop must prepare compose before copying deploy config")
   assert(loopCopyIndex > -1, "backup loop must copy deploy config")
   assert(ensureCallIndex < validateComposeIndex, "compose validation must run after image env auto-fill")
+  assert(stageHomeServerEnvIndex < validateComposeIndex, "HOME_SERVER_ENV compose values must be staged before compose validation")
   assert(skipMarkerIndex < prepareComposeReadyCallIndex, "compose preflight must not run before skipped PostgreSQL backups")
   assert(prepareCallIndex < composeExecIndex, "compose preflight must run before backup compose calls")
   assert(loopPrepareIndex < loopCopyIndex, "compose env failures must be detected before copying deploy config")
@@ -510,6 +528,58 @@ test("외부 백업은 compose 평가 전에 누락된 runtime image env를 보�
     copyDeployConfigBody,
     /cp "\$\{COMPOSE_ENV_FILE\}" "\$\{target_dir\}\/\.env\.prod\.compose"/,
   )
+})
+
+test("external backup stages HOME_SERVER_ENV values with compose-safe quoting", () => {
+  const externalBackupScript = readFileSync(externalBackupScriptPath, "utf8")
+  const workDir = mkdtempSync(path.join(tmpdir(), "aquila-compose-env-"))
+  const envFile = path.join(workDir, ".env.prod")
+  writeFileSync(envFile, "ALERTMANAGER_SMTP_AUTH_PASSWORD='stale'\n")
+
+  try {
+    const functionSnippet = externalBackupScript.slice(
+      externalBackupScript.indexOf("read_key_from_text() {"),
+      externalBackupScript.indexOf("stage_backend_runtime_image_env_key() {"),
+    )
+    const output = execFileSync(
+      "bash",
+      [
+        "-lc",
+        `
+set -euo pipefail
+ENV_FILE="${envFile}"
+COMPOSE_ENV_FILE="${envFile}"
+COMPOSE_ENV_FILE_TMP=""
+fail() { printf '%s\\n' "$*" >&2; exit 1; }
+${functionSnippet}
+stage_home_server_env_key "PROD___POSTGRES__PASSWORD"
+stage_home_server_env_key "GRAFANA_ADMIN_PASSWORD"
+stage_home_server_env_key "ALERTMANAGER_SMTP_AUTH_PASSWORD"
+cat "$COMPOSE_ENV_FILE"
+rm -f -- "$COMPOSE_ENV_FILE_TMP" "$COMPOSE_ENV_FILE_TMP.tmp"
+`,
+      ],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          HOME_SERVER_ENV: [
+            "PROD___POSTGRES__PASSWORD=pa$word",
+            "GRAFANA_ADMIN_PASSWORD=let's$secret\\path",
+            "ALERTMANAGER_SMTP_AUTH_PASSWORD=",
+          ].join("\n"),
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    )
+
+    assert.match(output, /^PROD___POSTGRES__PASSWORD='pa\$word'$/m)
+    assert.match(output, /^GRAFANA_ADMIN_PASSWORD='let\\'s\$secret\\path'$/m)
+    assert.match(output, /^ALERTMANAGER_SMTP_AUTH_PASSWORD=''$/m)
+    assert.doesNotMatch(output, /ALERTMANAGER_SMTP_AUTH_PASSWORD='stale'/)
+  } finally {
+    rmSync(workDir, { force: true, recursive: true })
+  }
 })
 
 test("home-server runtime contract covers external storage backup keys", async () => {

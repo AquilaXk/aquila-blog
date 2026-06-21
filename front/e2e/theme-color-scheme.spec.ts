@@ -47,6 +47,17 @@ const readLightFeedSurface = async (page: Page) =>
     }
   })
 
+const expectLightFeedSurface = async (page: Page) => {
+  await expect(page.locator('[data-ui="feed-post-card"] article').first()).toBeVisible()
+  await expect(page.locator(".contextCount").first()).toBeVisible()
+  await expect.poll(() => readLightFeedSurface(page)).toEqual({
+    cardBackgroundColor: "rgb(255, 255, 255)",
+    categoryColor: "rgb(0, 106, 220)",
+    titleColor: "rgb(15, 23, 36)",
+    contextCountColor: "rgb(15, 23, 36)",
+  })
+}
+
 const assertHomeThemeToggleUsesLightFeedSurface = async (page: Page) => {
   await page.goto("/")
   await expect(page.getByRole("button", { name: "라이트 모드로 전환" })).toBeVisible()
@@ -86,12 +97,7 @@ const assertHomeThemeToggleUsesLightFeedSurface = async (page: Page) => {
     input: "light",
   })
 
-  await expect(readLightFeedSurface(page)).resolves.toEqual({
-    cardBackgroundColor: "rgb(255, 255, 255)",
-    categoryColor: "rgb(0, 106, 220)",
-    titleColor: "rgb(15, 23, 36)",
-    contextCountColor: "rgb(15, 23, 36)",
-  })
+  await expectLightFeedSurface(page)
 }
 
 test.describe("theme color-scheme", () => {

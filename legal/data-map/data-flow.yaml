@@ -1,0 +1,118 @@
+flows:
+  - id: email_signup
+    collectionPoint: /signup and /member/api/v1/signup/email/start
+    stores:
+      - PostgreSQL member
+      - PostgreSQL member_signup_verification
+    processors:
+      - smtp_provider_unconfirmed
+    status: provider/region/DPA 확정 필요
+  - id: kakao_oauth_login
+    collectionPoint: Kakao redirect and Spring Security OAuth2
+    stores:
+      - PostgreSQL member
+      - OAuth state cookie
+    processors:
+      - kakao_oauth
+    status: 신규 가입 pending 동의는 issue997
+  - id: auth_session
+    collectionPoint: login form and auth filter
+    stores:
+      - PostgreSQL member_session
+      - HttpOnly browser cookies
+    processors:
+      - vercel_frontend_hosting
+      - cloudflare_dns_proxy
+    status: cookie inventory는 policy versioning 작업에서 확정
+  - id: posts_comments_profile
+    collectionPoint: admin editor, comment form, profile editor
+    stores:
+      - PostgreSQL post
+      - PostgreSQL post_comment
+      - PostgreSQL member profile columns
+      - public frontend cache
+    processors:
+      - vercel_frontend_hosting
+      - cloudflare_dns_proxy
+    status: deletion/export는 issue999
+  - id: uploads
+    collectionPoint: post/profile/cloud multipart upload
+    stores:
+      - PostgreSQL uploaded_file
+      - PostgreSQL cloud_file
+      - MinIO object storage
+    processors:
+      - home_server_minio
+      - home_server_backup_storage
+    status: restore tombstone은 issue1004
+  - id: security_and_action_logs
+    collectionPoint: auth filter and domain events
+    stores:
+      - PostgreSQL auth_security_event
+      - PostgreSQL member_action_log
+      - Loki logs
+    processors:
+      - grafana_loki_monitoring
+    status: redaction은 issue1001
+  - id: notifications_sse
+    collectionPoint: post/comment domain events and SSE API
+    stores:
+      - PostgreSQL member_notification
+      - runtime SSE memory
+    processors:
+      - vercel_frontend_hosting
+      - cloudflare_dns_proxy
+    status: retention 기간은 issue1000
+  - id: analytics_rum
+    collectionPoint: browser runtime and /api/rum/vitals
+    stores:
+      - Google Analytics property
+      - Vercel analytics
+      - application logs for custom RUM
+    processors:
+      - google_analytics
+      - vercel_frontend_hosting
+      - grafana_loki_monitoring
+    status: consent manager는 issue1002
+  - id: gemini_tag_recommendation
+    collectionPoint: admin editor tag recommendation request
+    stores:
+      - transient backend request
+      - optional AI trace metadata
+    processors:
+      - google_gemini
+    status: default-off/PII scanner/DPA는 issue1003
+  - id: backup_restore
+    collectionPoint: deploy and backup scripts
+    stores:
+      - home server backup root
+      - GitHub Actions workflow logs
+      - GHCR package metadata
+    processors:
+      - home_server_backup_storage
+      - github_actions
+      - ghcr_container_registry
+    status: encryption/tombstone은 issue1004
+
+reviewBlockers:
+  - SMTP provider name, region, TLS mode, DPA, retention policy
+  - Analytics consent and opt-out before optional tracking
+  - Gemini production default-off, DPA, retention, training opt-out
+  - Backup encryption and deletion tombstone replay
+
+codeEvidence:
+  account: back/src/main/kotlin/com/back/boundedContexts/member/model/shared/Member.kt
+  signupVerification: back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/model/MemberSignupVerification.kt
+  session: back/src/main/kotlin/com/back/boundedContexts/member/subContexts/session/model/MemberSession.kt
+  securityEvent: back/src/main/kotlin/com/back/global/security/model/AuthSecurityEvent.kt
+  actionLog: back/src/main/kotlin/com/back/boundedContexts/member/subContexts/memberActionLog/model/MemberActionLog.kt
+  post: back/src/main/kotlin/com/back/boundedContexts/post/model/Post.kt
+  comment: back/src/main/kotlin/com/back/boundedContexts/post/model/PostComment.kt
+  uploadedFile: back/src/main/kotlin/com/back/global/storage/model/UploadedFile.kt
+  cloudFile: back/src/main/kotlin/com/back/boundedContexts/cloud/model/CloudFile.kt
+  rum: front/src/pages/api/rum/vitals.ts
+  analytics: front/src/libs/gtag.ts
+  geminiProxy: front/src/pages/api/post/recommend-tags.ts
+  geminiBackend: back/src/main/kotlin/com/back/boundedContexts/post/adapter/web/ApiV1AdmPostController.kt
+  backup: deploy/homeserver/create_external_backup.sh
+  restoreDrill: deploy/homeserver/restore_external_backup_drill.sh

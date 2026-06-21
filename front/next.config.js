@@ -43,6 +43,7 @@ const buildContentSecurityPolicy = () => {
     "https://vercel.live",
     "wss://ws-us3.pusher.com",
   ]
+  const localDevConnectSources = isDev ? ["http://localhost:8080", "http://127.0.0.1:8080"] : []
   const embedFrameSources = [
     "https://www.youtube.com",
     "https://player.vimeo.com",
@@ -62,6 +63,8 @@ const buildContentSecurityPolicy = () => {
     "'self'",
     "data:",
     "blob:",
+    "https:",
+    "http:",
     ...aquilaDomains,
     "https://www.notion.so",
     "https://lh5.googleusercontent.com",
@@ -89,6 +92,7 @@ const buildContentSecurityPolicy = () => {
       "'self'",
       ...aquilaDomains,
       ...runtimeOrigins,
+      ...localDevConnectSources,
       ...vercelConnectSources,
       ...googleConnectSources,
     ],

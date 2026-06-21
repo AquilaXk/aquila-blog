@@ -160,7 +160,7 @@ jobs:
           }
           trap cleanup_remote_tmp EXIT
 
-          scp -i "${SSH_DIR}/home_key" -o UserKnownHostsFile="${SSH_DIR}/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -P "${PORT}" \
+          scp -i "${SSH_DIR}/home_key" -o UserKnownHostsFile="${SSH_DIR}/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -P "${PORT}" \
             deploy/homeserver/restore_external_backup_drill.sh \
             "${HOME_SSH_USER}@${HOME_HOST}:${REMOTE_TMP_DIR}/"
 
@@ -187,7 +187,7 @@ jobs:
             "${REMOTE_TMP_DIR}/restore_external_backup_drill.sh"
           REMOTE
 
-          scp -r -i "${SSH_DIR}/home_key" -o UserKnownHostsFile="${SSH_DIR}/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -P "${PORT}" \
+          scp -r -i "${SSH_DIR}/home_key" -o UserKnownHostsFile="${SSH_DIR}/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -P "${PORT}" \
             "${HOME_SSH_USER}@${HOME_HOST}:${REMOTE_TMP_DIR}/artifacts/." \
             "${LOCAL_ARTIFACT_DIR}/"
 

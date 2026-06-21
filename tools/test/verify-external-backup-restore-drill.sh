@@ -48,6 +48,20 @@ reject_pattern() {
   fi
 }
 
+require_pattern_count() {
+  local file="$1"
+  local pattern="$2"
+  local expected="$3"
+  local message="$4"
+  local actual
+
+  actual="$(grep -Ec "${pattern}" "${file}" || true)"
+  if [[ "${actual}" != "${expected}" ]]; then
+    echo "expected ${expected}, got ${actual}: ${message}" >&2
+    exit 1
+  fi
+}
+
 require_file "${DRILL_SCRIPT}" "restore drill script"
 require_executable "${DRILL_SCRIPT}" "restore drill script"
 require_pattern "${DRILL_SCRIPT}" '^umask 077$' "restore drill must protect generated artifacts"
@@ -77,6 +91,7 @@ require_pattern "${WORKFLOW}" 'BACKUP_SET_ID' "restore drill workflow must accep
 require_pattern "${WORKFLOW}" 'unsafe backup_set_id' "restore drill workflow must validate backup set input before SSH"
 require_pattern "${WORKFLOW}" 'RPO_TARGET_MINUTES.*=\~' "restore drill workflow must validate RPO target input before SSH"
 require_pattern "${WORKFLOW}" 'RTO_TARGET_MINUTES.*=\~' "restore drill workflow must validate RTO target input before SSH"
+require_pattern_count "${WORKFLOW}" '^[[:space:]]*scp .*ConnectTimeout=15' "2" "restore drill workflow scp calls must fail fast on connection timeout"
 
 require_pattern "${LAUNCH_GATE_DOC}" 'Backup/restore drill' "launch gate must keep backup/restore evidence gate"
 require_pattern "${LAUNCH_GATE_DOC}" 'restore_external_backup_drill\.sh' "launch gate must link restore drill script"

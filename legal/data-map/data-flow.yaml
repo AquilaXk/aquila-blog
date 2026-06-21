@@ -5,6 +5,8 @@ flows:
       - PostgreSQL member
       - PostgreSQL member_signup_verification
     processors:
+      - home_server_postgresql
+      - home_server_redis
       - smtp_provider_unconfirmed
     status: provider/region/DPA 확정 필요
   - id: kakao_oauth_login
@@ -13,6 +15,7 @@ flows:
       - PostgreSQL member
       - OAuth state cookie
     processors:
+      - home_server_postgresql
       - kakao_oauth
     status: 신규 가입 pending 동의는 issue997
   - id: auth_session
@@ -21,6 +24,8 @@ flows:
       - PostgreSQL member_session
       - HttpOnly browser cookies
     processors:
+      - home_server_postgresql
+      - home_server_redis
       - vercel_frontend_hosting
       - cloudflare_dns_proxy
     status: cookie inventory는 policy versioning 작업에서 확정
@@ -32,6 +37,8 @@ flows:
       - PostgreSQL member profile columns
       - public frontend cache
     processors:
+      - home_server_postgresql
+      - home_server_redis
       - vercel_frontend_hosting
       - cloudflare_dns_proxy
     status: deletion/export는 issue999
@@ -42,8 +49,10 @@ flows:
       - PostgreSQL cloud_file
       - MinIO object storage
     processors:
+      - home_server_postgresql
       - home_server_minio
       - home_server_backup_storage
+      - cloudflare_dns_proxy
     status: restore tombstone은 issue1004
   - id: security_and_action_logs
     collectionPoint: auth filter and domain events
@@ -52,6 +61,8 @@ flows:
       - PostgreSQL member_action_log
       - Loki logs
     processors:
+      - home_server_postgresql
+      - home_server_redis
       - grafana_loki_monitoring
     status: redaction은 issue1001
   - id: notifications_sse
@@ -60,6 +71,8 @@ flows:
       - PostgreSQL member_notification
       - runtime SSE memory
     processors:
+      - home_server_postgresql
+      - home_server_redis
       - vercel_frontend_hosting
       - cloudflare_dns_proxy
     status: retention 기간은 issue1000
@@ -81,6 +94,9 @@ flows:
       - optional AI trace metadata
     processors:
       - google_gemini
+      - vercel_frontend_hosting
+      - home_server_postgresql
+      - home_server_redis
     status: default-off/PII scanner/DPA는 issue1003
   - id: backup_restore
     collectionPoint: deploy and backup scripts

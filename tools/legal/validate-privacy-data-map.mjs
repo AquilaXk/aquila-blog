@@ -80,6 +80,18 @@ const requiredProcessorEnvFragments = new Map([
   ],
   ["home_server_redis", ["custom.site.redisHost", "SPRING__DATA__REDIS__PASSWORD", "REDIS_IMAGE"]],
 ])
+const requiredFlowProcessors = new Map([
+  ["email_signup", ["home_server_postgresql", "home_server_redis", "smtp_provider_unconfirmed"]],
+  ["kakao_oauth_login", ["home_server_postgresql", "kakao_oauth"]],
+  ["auth_session", ["home_server_postgresql", "home_server_redis", "vercel_frontend_hosting", "cloudflare_dns_proxy"]],
+  ["posts_comments_profile", ["home_server_postgresql", "home_server_redis", "vercel_frontend_hosting", "cloudflare_dns_proxy"]],
+  ["uploads", ["home_server_postgresql", "home_server_minio", "home_server_backup_storage", "cloudflare_dns_proxy"]],
+  ["security_and_action_logs", ["home_server_postgresql", "home_server_redis", "grafana_loki_monitoring"]],
+  ["notifications_sse", ["home_server_postgresql", "home_server_redis", "vercel_frontend_hosting", "cloudflare_dns_proxy"]],
+  ["analytics_rum", ["google_analytics", "vercel_frontend_hosting", "grafana_loki_monitoring"]],
+  ["gemini_tag_recommendation", ["google_gemini", "vercel_frontend_hosting", "home_server_postgresql", "home_server_redis"]],
+  ["backup_restore", ["home_server_backup_storage", "github_actions", "ghcr_container_registry"]],
+])
 
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8")
 
@@ -152,12 +164,14 @@ const assertRequiredFields = (kind, item, requiredFields) => {
 
 const activities = parseListYaml(read("legal/data-map/processing-activities.yaml"), "activities")
 const processors = parseListYaml(read("legal/vendors/processors.yaml"), "processors")
+const flows = parseListYaml(read("legal/data-map/data-flow.yaml"), "flows")
 const legalBasisEntries = parseListYaml(read("legal/data-map/legal-basis-matrix.yaml"), "legalBasis")
 const retentionRules = parseListYaml(read("legal/data-map/retention-matrix.yaml"), "retentionRules")
 const processorIds = new Set(processors.map((processor) => processor.id))
 
 if (activities.length < 10) fail(`expected at least 10 processing activities, got ${activities.length}`)
 if (processors.length < 6) fail(`expected at least 6 processors, got ${processors.length}`)
+if (flows.length < 10) fail(`expected at least 10 data flows, got ${flows.length}`)
 
 const activityIds = new Set()
 for (const activity of activities) {
@@ -191,6 +205,23 @@ for (const processor of processors) {
 
 for (const processorId of requiredProcessors) {
   if (!processorIds.has(processorId)) fail(`required processor ${processorId} is not registered`)
+}
+
+const flowIds = new Set()
+for (const flow of flows) {
+  assertRequiredFields("flow", flow, ["id", "collectionPoint", "stores", "processors", "status"])
+  if (flowIds.has(flow.id)) fail(`duplicate flow id ${flow.id}`)
+  flowIds.add(flow.id)
+  for (const processorId of flow.processors || []) {
+    if (!processorIds.has(processorId)) fail(`flow ${flow.id} references unknown processor ${processorId}`)
+  }
+  for (const processorId of requiredFlowProcessors.get(flow.id) || []) {
+    if (!flow.processors.includes(processorId)) fail(`flow ${flow.id} processors must include ${processorId}`)
+  }
+}
+
+for (const flowId of requiredFlowProcessors.keys()) {
+  if (!flowIds.has(flowId)) fail(`required flow ${flowId} is not registered`)
 }
 
 const legalBasisIds = new Set()

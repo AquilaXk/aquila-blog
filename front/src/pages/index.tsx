@@ -20,6 +20,7 @@ import { setAdminProfileCache } from "src/hooks/useAdminProfile"
 const HOME_ISR_REVALIDATE_SECONDS = 60
 const HOME_QA_SHELL_REVALIDATE_SECONDS = 15
 const IS_QA_STATIC_SHELL_MODE = process.env.ENABLE_QA_ROUTES === "true"
+type HomeBootstrapStatus = "ready" | "degraded" | "shell"
 
 const fetchPublicAdminProfile = async (): Promise<AdminProfile> =>
   await apiFetch<AdminProfile>("/member/api/v1/members/adminProfile")
@@ -41,6 +42,7 @@ export const getStaticProps: GetStaticProps = async () => {
         nextCursor: null as string | null,
         postsLoaded: false,
         tagsLoaded: false,
+        status: "shell" as HomeBootstrapStatus,
       }
     }
 
@@ -61,6 +63,7 @@ export const getStaticProps: GetStaticProps = async () => {
         nextCursor: bootstrapResult.nextCursor ?? null,
         postsLoaded: true,
         tagsLoaded: true,
+        status: "ready" as HomeBootstrapStatus,
       }
     } catch {
       return {
@@ -72,10 +75,11 @@ export const getStaticProps: GetStaticProps = async () => {
         nextCursor: null as string | null,
         postsLoaded: false,
         tagsLoaded: false,
+        status: "degraded" as HomeBootstrapStatus,
       }
     }
   })()
-  const { posts, tagCounts, totalCount, initialPageTotalCount, hasNext, nextCursor, postsLoaded, tagsLoaded } =
+  const { posts, tagCounts, totalCount, initialPageTotalCount, hasNext, nextCursor, postsLoaded, tagsLoaded, status } =
     bootstrapSnapshot
 
   setAdminProfileCache(queryClient, initialAdminProfile)
@@ -120,6 +124,7 @@ export const getStaticProps: GetStaticProps = async () => {
       dehydratedState: dehydrate(queryClient),
       initialAdminProfile,
       initialAdminProfileSource,
+      initialHomeBootstrapStatus: status,
     },
     revalidate:
       IS_QA_STATIC_SHELL_MODE || !postsLoaded ? HOME_QA_SHELL_REVALIDATE_SECONDS : HOME_ISR_REVALIDATE_SECONDS,
@@ -129,9 +134,10 @@ export const getStaticProps: GetStaticProps = async () => {
 type FeedPageProps = {
   initialAdminProfile: AdminProfile | null
   initialAdminProfileSource: StaticAdminProfileSeedSource
+  initialHomeBootstrapStatus: HomeBootstrapStatus
 }
 
-const FeedPage: NextPageWithLayout<FeedPageProps> = ({ initialAdminProfile }) => {
+const FeedPage: NextPageWithLayout<FeedPageProps> = ({ initialAdminProfile, initialHomeBootstrapStatus }) => {
   const feedTitle =
     initialAdminProfile?.blogTitle ||
     CONFIG.blog.title ||
@@ -148,7 +154,7 @@ const FeedPage: NextPageWithLayout<FeedPageProps> = ({ initialAdminProfile }) =>
   return (
     <>
       <MetaConfig {...meta} />
-      <Feed initialAdminProfile={initialAdminProfile} />
+      <Feed initialAdminProfile={initialAdminProfile} initialHomeBootstrapStatus={initialHomeBootstrapStatus} />
     </>
   )
 }

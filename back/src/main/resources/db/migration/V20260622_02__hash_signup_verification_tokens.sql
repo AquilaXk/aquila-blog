@@ -27,3 +27,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_member_signup_verification_email_verificati
 CREATE UNIQUE INDEX IF NOT EXISTS uk_member_signup_verification_signup_session_token_hash
     ON public.member_signup_verification (signup_session_token_hash)
     WHERE signup_session_token_hash IS NOT NULL;
+
+ALTER TABLE public.member_signup_verification
+    ADD CONSTRAINT ck_member_signup_verification_email_verification_token_hash_present
+    CHECK (email_verification_token_hash IS NOT NULL) NOT VALID;

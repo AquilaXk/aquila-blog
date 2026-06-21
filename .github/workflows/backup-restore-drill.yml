@@ -185,7 +185,7 @@ jobs:
             AQUILA_RESTORE_DRILL_RTO_TARGET_MINUTES="${RTO_TARGET_MINUTES}" \
             AQUILA_RESTORE_DRILL_ARTIFACT_DIR="${REMOTE_TMP_DIR}/artifacts" \
             "${REMOTE_TMP_DIR}/restore_external_backup_drill.sh"
-REMOTE
+          REMOTE
 
           scp -r -i "${SSH_DIR}/home_key" -o UserKnownHostsFile="${SSH_DIR}/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -P "${PORT}" \
             "${HOME_SSH_USER}@${HOME_HOST}:${REMOTE_TMP_DIR}/artifacts/." \

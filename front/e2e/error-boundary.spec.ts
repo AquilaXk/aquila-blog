@@ -13,6 +13,7 @@ test.describe("error boundary launch gate", () => {
   test("source wiring keeps global, markdown, and editor boundaries in place", () => {
     const appSource = readFileSync(sourcePath("pages", "_app.tsx"), "utf8")
     const clientErrorsSource = readFileSync(sourcePath("pages", "api", "rum", "client-errors.ts"), "utf8")
+    const serverErrorSource = readFileSync(sourcePath("pages", "500.tsx"), "utf8")
     const postDetailSource = readFileSync(sourcePath("routes", "Detail", "PostDetail", "index.tsx"), "utf8")
     const writerHostSource = readFileSync(sourcePath("routes", "Admin", "WriterEditorHost.tsx"), "utf8")
 
@@ -26,7 +27,10 @@ test.describe("error boundary launch gate", () => {
     expect(postDetailSource).toContain("<RecoverableSurfaceBoundary")
     expect(writerHostSource).toContain('surface="editor"')
     expect(writerHostSource).toContain("<RecoverableSurfaceBoundary")
+    expect(serverErrorSource).toContain('onRetry={() => router.reload()}')
     expect(clientErrorsSource).toContain("console.info(\"[rum:client-error] boundary caught client render error\", {")
+    expect(clientErrorsSource).toContain('const ALLOWED_SURFACES = new Set(["app", "markdown", "editor"])')
+    expect(clientErrorsSource).toContain("ALLOWED_SURFACES.has(surface)")
     for (const field of ["id", "boundary", "surface", "path", "errorName", "occurredAt"]) {
       expect(clientErrorsSource).toContain(`${field},`)
     }
@@ -96,5 +100,14 @@ test.describe("error boundary launch gate", () => {
 
     const getResponse = await request.get("/api/rum/client-errors")
     expect(getResponse.status()).toBe(405)
+  })
+
+  test("500 page keeps the global retry action available", async ({ page }) => {
+    await page.goto("/500")
+
+    await expect(page.getByRole("heading", { name: "문제가 발생했습니다" })).toBeVisible()
+    await expect(page.getByText("오류 ID: err_server_500")).toBeVisible()
+    await expect(page.getByRole("button", { name: "다시 시도" })).toBeVisible()
+    await expect(page.getByRole("link", { name: "홈으로 이동" })).toBeVisible()
   })
 })

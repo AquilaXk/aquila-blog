@@ -10,6 +10,7 @@ type ClientErrorBody = {
 }
 
 const ALLOWED_BOUNDARIES = new Set(["global", "surface"])
+const ALLOWED_SURFACES = new Set(["app", "markdown", "editor"])
 const SAFE_TEXT = /^[A-Za-z0-9_./:-]+$/
 
 const toSafeString = (value: unknown, maxLength: number) => {
@@ -32,7 +33,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   const errorName = toSafeString(body.errorName, 80)
   const occurredAt = toSafeString(body.occurredAt, 40)
 
-  if (id && ALLOWED_BOUNDARIES.has(boundary) && surface && path && errorName && occurredAt) {
+  if (id && ALLOWED_BOUNDARIES.has(boundary) && ALLOWED_SURFACES.has(surface) && path && errorName && occurredAt) {
     console.info("[rum:client-error] boundary caught client render error", {
       id,
       boundary,

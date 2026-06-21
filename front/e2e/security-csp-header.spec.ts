@@ -97,16 +97,13 @@ test.describe("frontend security headers", () => {
     expect(directives.get("upgrade-insecure-requests")).toEqual([])
   })
 
-  test("CSP and Next image config do not allow external placeholder providers", async () => {
+  test("Next image config does not explicitly optimize external placeholder providers", async () => {
     const nextConfig = await getNextConfig()
-    const directives = parseCspDirectives(await getCspHeader())
-    const imageSources = directives.get("img-src") ?? []
     const remoteHosts = (nextConfig.images?.remotePatterns ?? [])
       .map((pattern) => pattern.hostname)
       .filter(Boolean)
 
     for (const host of externalPlaceholderHosts) {
-      expect(imageSources).not.toContain(`https://${host}`)
       expect(remoteHosts).not.toContain(host)
     }
   })

@@ -1,0 +1,205 @@
+name: Backup Restore Drill
+
+on:
+  workflow_dispatch:
+    inputs:
+      backup_set_id:
+        description: "Backup set id in YYYYMMDD-HHMMSS format. Empty means latest daily PostgreSQL backup."
+        required: false
+        default: ""
+        type: string
+      backup_class:
+        description: "Backup class to restore."
+        required: true
+        default: "daily"
+        type: choice
+        options:
+          - daily
+          - weekly
+          - monthly
+      rpo_target_minutes:
+        description: "RPO target recorded in the drill artifact."
+        required: true
+        default: "1440"
+        type: string
+      rto_target_minutes:
+        description: "RTO target recorded in the drill artifact."
+        required: true
+        default: "120"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup-restore-drill
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  restore-drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
+
+      - name: Verify required secrets
+        env:
+          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
+          HOME_SSH_USER: ${{ secrets.HOME_SSH_USER }}
+          HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
+          HOME_HOST: ${{ secrets.HOME_TAILSCALE_HOST || secrets.HOME_TS_HOST || secrets.HOME_SSH_HOST || secrets.HOME_HOST }}
+          HOME_SSH_KEY: ${{ secrets.HOME_SSH_KEY || secrets.HOME_SSH_PRIVATE_KEY }}
+          HOME_KNOWN_HOSTS: ${{ secrets.HOME_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            TS_OAUTH_CLIENT_ID
+            TS_OAUTH_SECRET
+            HOME_SSH_USER
+            HOME_APP_DIR
+            HOME_HOST
+            HOME_SSH_KEY
+            HOME_KNOWN_HOSTS
+          )
+
+          for key in "${required[@]}"; do
+            value="${!key:-}"
+            if [ -z "${value}" ]; then
+              echo "${key} missing" >&2
+              exit 1
+            fi
+            echo "${key} present"
+          done
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8 # v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: ${{ vars.TS_OAUTH_TAGS || secrets.TS_OAUTH_TAGS || 'tag:ci' }}
+
+      - name: Configure SSH key
+        env:
+          HOME_SSH_KEY: ${{ secrets.HOME_SSH_KEY || secrets.HOME_SSH_PRIVATE_KEY }}
+          HOME_KNOWN_HOSTS: ${{ secrets.HOME_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SSH_DIR="${RUNNER_TEMP}/ssh"
+          rm -rf "${SSH_DIR}"
+          mkdir -p "${SSH_DIR}"
+          chmod 700 "${SSH_DIR}"
+          printf '%s\n' "${HOME_SSH_KEY}" > "${SSH_DIR}/home_key"
+          chmod 600 "${SSH_DIR}/home_key"
+          printf '%s\n' "${HOME_KNOWN_HOSTS}" > "${SSH_DIR}/known_hosts"
+          if [ ! -s "${SSH_DIR}/known_hosts" ]; then
+            echo "HOME_KNOWN_HOSTS is required for restore drill" >&2
+            exit 1
+          fi
+          chmod 600 "${SSH_DIR}/known_hosts"
+          echo "SSH_DIR=${SSH_DIR}" >> "${GITHUB_ENV}"
+
+      - name: Run restore drill on home server
+        env:
+          HOME_HOST: ${{ secrets.HOME_TAILSCALE_HOST || secrets.HOME_TS_HOST || secrets.HOME_SSH_HOST || secrets.HOME_HOST }}
+          HOME_SSH_USER: ${{ secrets.HOME_SSH_USER }}
+          HOME_SSH_PORT: ${{ secrets.HOME_SSH_PORT }}
+          HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
+          BACKUP_SET_ID: ${{ inputs.backup_set_id }}
+          BACKUP_CLASS: ${{ inputs.backup_class }}
+          RPO_TARGET_MINUTES: ${{ inputs.rpo_target_minutes }}
+          RTO_TARGET_MINUTES: ${{ inputs.rto_target_minutes }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT="${HOME_SSH_PORT:-22}"
+          HOME_APP_DIR_B64="$(printf '%s' "${HOME_APP_DIR}" | base64 | tr -d '\n')"
+          LOCAL_ARTIFACT_DIR="${RUNNER_TEMP}/restore-drill-artifacts"
+          mkdir -p "${LOCAL_ARTIFACT_DIR}"
+
+          if [[ -n "${BACKUP_SET_ID}" && ! "${BACKUP_SET_ID}" =~ ^[0-9]{8}-[0-9]{6}$ ]]; then
+            echo "unsafe backup_set_id: ${BACKUP_SET_ID}" >&2
+            exit 1
+          fi
+          case "${BACKUP_CLASS}" in
+            daily|weekly|monthly) ;;
+            *)
+              echo "unsafe backup_class: ${BACKUP_CLASS}" >&2
+              exit 1
+              ;;
+          esac
+          if [[ ! "${RPO_TARGET_MINUTES}" =~ ^[0-9]+$ ]]; then
+            echo "unsafe rpo_target_minutes: ${RPO_TARGET_MINUTES}" >&2
+            exit 1
+          fi
+          if [[ ! "${RTO_TARGET_MINUTES}" =~ ^[0-9]+$ ]]; then
+            echo "unsafe rto_target_minutes: ${RTO_TARGET_MINUTES}" >&2
+            exit 1
+          fi
+
+          REMOTE_TMP_DIR="$(ssh -i "${SSH_DIR}/home_key" -o UserKnownHostsFile="${SSH_DIR}/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "${PORT}" "${HOME_SSH_USER}@${HOME_HOST}" "umask 077 && mktemp -d /tmp/aquila-restore-drill.XXXXXX")"
+          case "${REMOTE_TMP_DIR}" in
+            /tmp/aquila-restore-drill.*) ;;
+            *)
+              echo "unexpected remote tmp dir: ${REMOTE_TMP_DIR}" >&2
+              exit 1
+              ;;
+          esac
+
+          cleanup_remote_tmp() {
+            ssh -i "${SSH_DIR}/home_key" -o UserKnownHostsFile="${SSH_DIR}/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "${PORT}" "${HOME_SSH_USER}@${HOME_HOST}" "rm -rf -- ${REMOTE_TMP_DIR}" || true
+          }
+          trap cleanup_remote_tmp EXIT
+
+          scp -i "${SSH_DIR}/home_key" -o UserKnownHostsFile="${SSH_DIR}/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -P "${PORT}" \
+            deploy/homeserver/restore_external_backup_drill.sh \
+            "${HOME_SSH_USER}@${HOME_HOST}:${REMOTE_TMP_DIR}/"
+
+          ssh -i "${SSH_DIR}/home_key" -o UserKnownHostsFile="${SSH_DIR}/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "${PORT}" "${HOME_SSH_USER}@${HOME_HOST}" \
+            "HOME_APP_DIR_B64='${HOME_APP_DIR_B64}' REMOTE_TMP_DIR='${REMOTE_TMP_DIR}' BACKUP_SET_ID='${BACKUP_SET_ID}' BACKUP_CLASS='${BACKUP_CLASS}' RPO_TARGET_MINUTES='${RPO_TARGET_MINUTES}' RTO_TARGET_MINUTES='${RTO_TARGET_MINUTES}' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          decode_b64() {
+            if printf '' | base64 --decode >/dev/null 2>&1; then
+              printf '%s' "$1" | base64 --decode
+            else
+              printf '%s' "$1" | base64 -d
+            fi
+          }
+
+          HOME_APP_DIR="$(decode_b64 "${HOME_APP_DIR_B64}")"
+          cd "${HOME_APP_DIR}"
+          chmod +x "${REMOTE_TMP_DIR}/restore_external_backup_drill.sh"
+          AQUILA_RESTORE_DRILL_BACKUP_SET_ID="${BACKUP_SET_ID}" \
+            AQUILA_RESTORE_DRILL_CLASS="${BACKUP_CLASS}" \
+            AQUILA_RESTORE_DRILL_RPO_TARGET_MINUTES="${RPO_TARGET_MINUTES}" \
+            AQUILA_RESTORE_DRILL_RTO_TARGET_MINUTES="${RTO_TARGET_MINUTES}" \
+            AQUILA_RESTORE_DRILL_ARTIFACT_DIR="${REMOTE_TMP_DIR}/artifacts" \
+            "${REMOTE_TMP_DIR}/restore_external_backup_drill.sh"
+REMOTE
+
+          scp -r -i "${SSH_DIR}/home_key" -o UserKnownHostsFile="${SSH_DIR}/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -P "${PORT}" \
+            "${HOME_SSH_USER}@${HOME_HOST}:${REMOTE_TMP_DIR}/artifacts/." \
+            "${LOCAL_ARTIFACT_DIR}/"
+
+          {
+            echo "## Backup Restore Drill"
+            cat "${LOCAL_ARTIFACT_DIR}/restore-drill-summary.md"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload restore drill artifacts
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: backup-restore-drill
+          path: ${{ runner.temp }}/restore-drill-artifacts
+          if-no-files-found: error
+          retention-days: 30

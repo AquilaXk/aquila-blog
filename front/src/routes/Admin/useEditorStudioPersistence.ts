@@ -5,6 +5,7 @@ import {
   type SetStateAction,
 } from "react"
 import { apiFetch } from "src/apis/backend/client"
+import { resolveEditorFailureRecovery } from "./editorFailureRecoveryModel"
 import { isTempDraftTitlePlaceholder } from "./editorTempDraft"
 import { useEditorStudioPersistenceUploads } from "./useEditorStudioPersistenceModel"
 
@@ -38,6 +39,8 @@ type EditorFingerprintPayload = {
   category: string
   visibility: PostVisibility
 }
+
+const isBrowserOnline = () => typeof navigator === "undefined" ? undefined : navigator.onLine
 
 type UseEditorStudioPersistenceParams = {
   editorMode: EditorMode
@@ -276,9 +279,12 @@ export const useEditorStudioPersistence = ({
       setKnownTags((prev) => dedupeStrings([...prev, ...postTags]).sort((a, b) => a.localeCompare(b)))
       return true
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      setResult(pretty({ error: message }))
-      setPublishStatus({ tone: "error", text: `작성 실패: ${message}` })
+      const recovery = resolveEditorFailureRecovery(error, {
+        action: "write",
+        isOnline: isBrowserOnline(),
+      })
+      setResult(pretty(recovery.result))
+      setPublishStatus({ tone: "error", text: recovery.statusText })
       return false
     } finally {
       setLoadingKey("")
@@ -396,9 +402,12 @@ export const useEditorStudioPersistence = ({
       setResult(pretty(response))
       return true
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      setPublishStatus({ tone: "error", text: `수정 실패: ${message}` })
-      setResult(pretty({ error: message }))
+      const recovery = resolveEditorFailureRecovery(error, {
+        action: "modify",
+        isOnline: isBrowserOnline(),
+      })
+      setPublishStatus({ tone: "error", text: recovery.statusText })
+      setResult(pretty(recovery.result))
       return false
     } finally {
       setLoadingKey("")
@@ -508,9 +517,12 @@ export const useEditorStudioPersistence = ({
       setResult(pretty(response))
       return true
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      setPublishStatus({ tone: "error", text: `새 글 작성 실패: ${message}` })
-      setResult(pretty({ error: message }))
+      const recovery = resolveEditorFailureRecovery(error, {
+        action: "publish-temp",
+        isOnline: isBrowserOnline(),
+      })
+      setPublishStatus({ tone: "error", text: recovery.statusText })
+      setResult(pretty(recovery.result))
       return false
     } finally {
       setLoadingKey("")

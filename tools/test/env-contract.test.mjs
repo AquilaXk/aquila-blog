@@ -17,6 +17,7 @@ const hardeningScriptPath = path.join(repoRoot, "deploy/homeserver/hardening/set
 const hardeningDocPath = path.join(repoRoot, "deploy/homeserver/HARDENING.md")
 const prometheusPath = path.join(repoRoot, "deploy/homeserver/monitoring/prometheus.yml")
 const taskAlertsPath = path.join(repoRoot, "deploy/homeserver/monitoring/rules/task-alerts.yml")
+const vercelConfigPath = path.join(repoRoot, "front/vercel.json")
 
 const git = (cwd, args) =>
   execFileSync("git", args, {
@@ -903,6 +904,28 @@ test("deploy workflow는 frontend 변경에서만 live frontend SHA를 현재 co
   assert.match(workflow, /EXPECTED_FRONT_COMMIT_SHA="\$\{DEPLOY_SHA\}"/)
   assert.match(workflow, /E2E_EXPECTED_FRONT_COMMIT_SHA: \$\{\{ needs\.calculateTag\.outputs\.expected_front_commit_sha \}\}/)
   assert.doesNotMatch(workflow, /E2E_EXPECTED_FRONT_COMMIT_SHA:\s*\$\{\{ needs\.calculateTag\.outputs\.deploy_sha \}\}/)
+})
+
+test("deploy workflow는 Vercel rate limit 상태를 live SHA polling 전에 fail-fast 한다", () => {
+  const workflow = readFileSync(workflowPath, "utf8")
+
+  assert.match(workflow, /statuses:\s*read/)
+  assert.match(workflow, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/)
+  assert.match(workflow, /api\.github\.com\/repos\/\$\{GITHUB_REPOSITORY\}\/commits\/\$\{E2E_EXPECTED_FRONT_COMMIT_SHA\}\/status/)
+  assert.match(workflow, /select\(\.context == "Vercel"\)/)
+  assert.match(workflow, /Deployment rate limited/)
+  assert.match(workflow, /Vercel production deployment is rate limited/)
+  assert(
+    workflow.indexOf("Vercel production deployment is rate limited") <
+      workflow.indexOf("front-build-sha attempt="),
+  )
+})
+
+test("Vercel frontend project skips builds when frontend inputs did not change", () => {
+  const config = JSON.parse(readFileSync(vercelConfigPath, "utf8"))
+
+  assert.equal(config.$schema, "https://openapi.vercel.sh/vercel.json")
+  assert.equal(config.ignoreCommand, "git diff --quiet HEAD^ HEAD ./ ../legal/policies")
 })
 
 test("deploy workflow는 path-aware stale gate로 backend 영향 후속 변경만 차단한다", () => {

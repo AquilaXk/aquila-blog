@@ -10,6 +10,7 @@ import com.back.boundedContexts.member.subContexts.oauthSignup.model.PendingOAut
 import com.back.global.exception.application.AppException
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.util.Locale
@@ -36,7 +37,7 @@ class OAuthSignupApplicationService(
         providerSubjectHash: String,
     ): String = oauthSignupHashService.memberLoginId(provider, providerSubjectHash)
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     override fun startPending(
         provider: String,
         providerSubject: String,

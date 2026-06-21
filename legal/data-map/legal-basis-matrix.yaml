@@ -7,14 +7,15 @@ legalBasis:
   - id: contractPreparationAndConsentEvidence
     activities:
       - signup_email_verification
+      - kakao_oauth_pending_signup
     rationale: 회원가입 전 이메일 소유 확인과 동의 증빙 연결
-    reviewRequired: token hash/URL 제거는 issue998
+    reviewRequired: token hash/URL 제거는 issue998; OAuth pending purge 자동화는 issue1000
   - id: contractAndLegitimateSecurityInterest
     activities:
       - kakao_oauth_existing_login
       - auth_session_and_cookies
     rationale: 로그인 제공과 세션 보안·오남용 방지
-    reviewRequired: OAuth pending 가입은 issue997
+    reviewRequired: legacy OAuth provider subject unlink/migration 정책 확정 필요
   - id: contractAndUserPublishedContent
     activities:
       - user_content_posts_comments

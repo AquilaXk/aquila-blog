@@ -14,6 +14,10 @@ test("signup verify flow keeps token and completion email out of query URLs", ()
   const signupVerificationController = readRepoFile(
     "back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/adapter/web/ApiV1SignupVerificationController.kt",
   )
+  const socialSignupPage = readRepoFile("front/src/pages/signup/social/complete.tsx")
+  const oauthFailureHandler = readRepoFile(
+    "back/src/main/kotlin/com/back/global/security/config/oauth2/CustomOAuth2LoginFailureHandler.kt",
+  )
 
   expect(signupVerifyPage).toContain("window.location.hash")
   expect(signupVerifyPage).toContain("window.history.replaceState")
@@ -34,4 +38,12 @@ test("signup verify flow keeps token and completion email out of query URLs", ()
   expect(signupVerificationController).toContain("@PostMapping(\"/email/verify\")")
   expect(signupVerificationController).toContain("@GetMapping(\"/email/verify\")")
   expect(signupVerificationController).not.toContain("@RequestParam token")
+
+  expect(socialSignupPage).toContain("window.location.hash")
+  expect(socialSignupPage).toContain("window.history.replaceState")
+  expect(socialSignupPage).toContain('"/member/api/v1/signup/social/pending"')
+  expect(socialSignupPage).toContain('"/member/api/v1/signup/social/complete"')
+  expect(socialSignupPage).not.toContain("router.query.token")
+  expect(oauthFailureHandler).toContain("appendFragment")
+  expect(oauthFailureHandler).toContain("signup/social/complete")
 })

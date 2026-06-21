@@ -11,6 +11,10 @@ retentionRules:
     retention: accountLifetimeForLinkedIdentifier; transientStateCookieUntilCallback
     destruction: unlinkOrAccountDeletion; transientCookieExpiry
     followUp: issue997
+  - activityId: kakao_oauth_pending_signup
+    retention: pendingTokenTtlThenPurge; accountLifetimeAfterConsent
+    destruction: expireCancelConsumeThenPurgeByRetentionJob; unlinkOrAccountDeletion
+    followUp: issue997
   - activityId: auth_session_and_cookies
     retention: untilLogoutRevocationExpiryOrSessionCleanupJob
     destruction: revokeSessionExpireCookiePurgeExpiredSessions

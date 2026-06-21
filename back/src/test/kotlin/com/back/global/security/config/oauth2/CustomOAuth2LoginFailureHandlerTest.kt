@@ -9,9 +9,72 @@ import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.mock.web.MockHttpServletResponse
 import org.springframework.security.authentication.InternalAuthenticationServiceException
 import org.springframework.security.core.AuthenticationException
+import java.time.Instant
 
 @org.junit.jupiter.api.DisplayName("CustomOAuth2LoginFailureHandler 테스트")
 class CustomOAuth2LoginFailureHandlerTest {
+    @Test
+    fun `pending OAuth 가입은 social complete 화면에 fragment token과 next를 전달한다`() {
+        val handler = CustomOAuth2LoginFailureHandler("https://www.aquilaxk.site")
+        val request =
+            MockHttpServletRequest("GET", "/login/oauth2/code/kakao").apply {
+                setParameter("state", OAuth2State("/posts/1?tab=comments", "state-id").encode())
+            }
+        val response = MockHttpServletResponse()
+
+        handler.onAuthenticationFailure(
+            request,
+            response,
+            OAuthSignupRequiredAuthenticationException(
+                provider = "KAKAO",
+                pendingToken = "pending-token",
+                expiresAt = Instant.EPOCH.plusSeconds(300),
+            ),
+        )
+
+        assertThat(response.status).isEqualTo(302)
+        assertThat(response.redirectedUrl)
+            .isEqualTo(
+                "https://www.aquilaxk.site/signup/social/complete#token=pending-token&provider=kakao&next=%2Fposts%2F1%3Ftab%3Dcomments",
+            )
+    }
+
+    @Test
+    fun `absolute redirect state는 해당 origin의 social complete 화면으로 pending token을 전달한다`() {
+        AppConfig("https://api.aquilaxk.site", "https://preview.aquilaxk.site")
+        try {
+            val handler = CustomOAuth2LoginFailureHandler("https://www.aquilaxk.site")
+            val request =
+                MockHttpServletRequest("GET", "/login/oauth2/code/kakao").apply {
+                    setParameter(
+                        "state",
+                        OAuth2State
+                            .of("https://preview.aquilaxk.site/editor?draft=1")
+                            .encode(),
+                    )
+                }
+            val response = MockHttpServletResponse()
+
+            handler.onAuthenticationFailure(
+                request,
+                response,
+                OAuthSignupRequiredAuthenticationException(
+                    provider = "KAKAO",
+                    pendingToken = "pending-token",
+                    expiresAt = Instant.EPOCH.plusSeconds(300),
+                ),
+            )
+
+            assertThat(response.status).isEqualTo(302)
+            assertThat(response.redirectedUrl)
+                .isEqualTo(
+                    "https://preview.aquilaxk.site/signup/social/complete#token=pending-token&provider=kakao&next=%2Feditor%3Fdraft%3D1",
+                )
+        } finally {
+            AppConfig("https://api.aquilaxk.site", "https://www.aquilaxk.site")
+        }
+    }
+
     @Test
     fun `신규 OAuth 가입 차단 실패는 로그인 화면에 signup-required 코드와 next를 전달한다`() {
         val handler = CustomOAuth2LoginFailureHandler("https://www.aquilaxk.site")

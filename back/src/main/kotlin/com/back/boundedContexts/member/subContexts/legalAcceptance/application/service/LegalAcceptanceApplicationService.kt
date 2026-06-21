@@ -62,6 +62,33 @@ class LegalAcceptanceApplicationService(
         member: Member,
         command: LegalAcceptanceCommand,
         acceptedAt: Instant,
+    ): MemberLegalAcceptance =
+        recordSignupAcceptance(
+            member = member,
+            command = command,
+            acceptedAt = acceptedAt,
+            source = "EMAIL_SIGNUP",
+        )
+
+    @Transactional
+    fun recordSocialSignupAcceptance(
+        member: Member,
+        command: LegalAcceptanceCommand,
+        acceptedAt: Instant,
+        source: String,
+    ): MemberLegalAcceptance =
+        recordSignupAcceptance(
+            member = member,
+            command = command,
+            acceptedAt = acceptedAt,
+            source = source,
+        )
+
+    private fun recordSignupAcceptance(
+        member: Member,
+        command: LegalAcceptanceCommand,
+        acceptedAt: Instant,
+        source: String,
     ): MemberLegalAcceptance {
         validateEmailSignupAcceptance(command)
 
@@ -76,7 +103,7 @@ class LegalAcceptanceApplicationService(
                 requiredPrivacyConfirmed = command.requiredPrivacyConfirmed,
                 analyticsConsent = command.analyticsConsent,
                 overseasTransferAcknowledged = command.overseasTransferAcknowledged,
-                source = "EMAIL_SIGNUP",
+                source = source.trim().take(32),
                 acceptedAt = acceptedAt,
             ),
         )

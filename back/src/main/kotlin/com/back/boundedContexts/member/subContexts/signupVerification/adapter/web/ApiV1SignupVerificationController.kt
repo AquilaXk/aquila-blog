@@ -6,8 +6,8 @@ import com.back.boundedContexts.member.subContexts.signupVerification.applicatio
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupEmailStartResult
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupEmailVerifyResult
 import com.back.global.rsData.RsData
+import com.back.global.web.application.Rq
 import io.swagger.v3.oas.annotations.media.Schema
-import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
@@ -19,15 +19,21 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import java.time.Duration
+import java.time.Instant
 
 @RestController
 @RequestMapping("/member/api/v1/signup")
 class ApiV1SignupVerificationController(
     private val memberSignupVerificationService: MemberSignupVerificationService,
+    private val rq: Rq,
 ) {
+    companion object {
+        const val SIGNUP_SESSION_COOKIE_NAME = "signup_session"
+    }
+
     data class SignupEmailStartRequest(
         @field:Email
         @field:NotBlank
@@ -45,9 +51,12 @@ class ApiV1SignupVerificationController(
         val nextPath: String? = null,
     )
 
-    data class SignupCompleteRequest(
+    data class SignupEmailVerifyRequest(
         @field:NotBlank
-        val signupToken: String,
+        val token: String,
+    )
+
+    data class SignupCompleteRequest(
         @field:Pattern(
             regexp = "^$",
             message = "username 필드는 더 이상 지원되지 않습니다.",
@@ -101,7 +110,6 @@ class ApiV1SignupVerificationController(
     @ResponseStatus(HttpStatus.ACCEPTED)
     @Transactional
     fun start(
-        request: HttpServletRequest,
         @RequestBody @Valid reqBody: SignupEmailStartRequest,
     ): RsData<SignupEmailStartResult> {
         val result =
@@ -111,7 +119,7 @@ class ApiV1SignupVerificationController(
                 privacyAccepted = reqBody.privacyAccepted,
                 legalPolicyVersion = reqBody.legalPolicyVersion,
                 nextPath = reqBody.nextPath,
-                clientIp = extractClientIp(request),
+                clientIp = rq.clientIp,
             )
 
         return RsData(
@@ -121,19 +129,33 @@ class ApiV1SignupVerificationController(
         )
     }
 
-    private fun extractClientIp(request: HttpServletRequest): String = request.remoteAddr.orEmpty()
-
     @GetMapping("/email/verify")
+    @ResponseStatus(HttpStatus.GONE)
+    fun verifyLegacyGet(): RsData<Void> =
+        RsData(
+            "410-3",
+            "query 기반 회원가입 인증 링크는 더 이상 지원되지 않습니다. 새 인증 메일을 요청해주세요.",
+        )
+
+    @PostMapping("/email/verify")
     @Transactional
     fun verify(
-        @RequestParam token: String,
+        @RequestBody @Valid reqBody: SignupEmailVerifyRequest,
     ): RsData<SignupEmailVerifyResult> {
-        val result = memberSignupVerificationService.verifyEmail(token)
+        val result = memberSignupVerificationService.verifyEmail(reqBody.token)
+        rq.setCookie(
+            SIGNUP_SESSION_COOKIE_NAME,
+            result.signupToken,
+            maxAgeSeconds = cookieMaxAgeSeconds(result.expiresAt),
+        )
 
         return RsData(
             "200-2",
             "이메일 인증이 완료되었습니다.",
-            result,
+            SignupEmailVerifyResult(
+                email = result.email,
+                expiresAt = result.expiresAt,
+            ),
         )
     }
 
@@ -145,11 +167,12 @@ class ApiV1SignupVerificationController(
     ): RsData<MemberDto> {
         val member =
             memberSignupVerificationService.completeSignup(
-                signupToken = reqBody.signupToken,
+                signupToken = rq.getCookieValue(SIGNUP_SESSION_COOKIE_NAME, ""),
                 password = reqBody.password,
                 nickname = reqBody.nickname,
                 legalAcceptance = reqBody.toLegalAcceptanceCommand(),
             )
+        rq.deleteCookie(SIGNUP_SESSION_COOKIE_NAME)
 
         return RsData(
             "201-2",
@@ -157,4 +180,11 @@ class ApiV1SignupVerificationController(
             MemberDto(member),
         )
     }
+
+    private fun cookieMaxAgeSeconds(expiresAt: Instant): Int =
+        Duration
+            .between(Instant.now(), expiresAt)
+            .seconds
+            .coerceIn(1, Int.MAX_VALUE.toLong())
+            .toInt()
 }

@@ -172,7 +172,7 @@ class SignupMailDiagnosticsService(
             throw AppException("503-2", "회원가입 메일 설정이 아직 준비되지 않았습니다.")
         }
 
-        val verificationLink = "${AppConfig.siteFrontUrl}${normalizeVerifyPath()}?token=test-signup-mail"
+        val verificationLink = "${AppConfig.siteFrontUrl}${normalizeVerifyPath()}#token=test-signup-mail"
 
         signupVerificationMailSenderProvider
             .getIfAvailable()

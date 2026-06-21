@@ -15,11 +15,11 @@ class MemberSignupVerificationRepositoryAdapter(
     override fun save(memberSignupVerification: MemberSignupVerification): MemberSignupVerification =
         memberSignupVerificationRepository.save(memberSignupVerification)
 
-    override fun findByEmailVerificationToken(emailVerificationToken: String): MemberSignupVerification? =
-        memberSignupVerificationRepository.findByEmailVerificationToken(emailVerificationToken)
+    override fun findByEmailVerificationTokenHash(emailVerificationTokenHash: String): MemberSignupVerification? =
+        memberSignupVerificationRepository.findByEmailVerificationTokenHash(emailVerificationTokenHash)
 
-    override fun findBySignupSessionToken(signupSessionToken: String): MemberSignupVerification? =
-        memberSignupVerificationRepository.findBySignupSessionToken(signupSessionToken)
+    override fun findBySignupSessionTokenHash(signupSessionTokenHash: String): MemberSignupVerification? =
+        memberSignupVerificationRepository.findBySignupSessionTokenHash(signupSessionTokenHash)
 
     override fun findTopByEmail(email: String): MemberSignupVerification? =
         memberSignupVerificationRepository.findTopByEmailOrderByCreatedAtDesc(email)

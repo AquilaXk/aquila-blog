@@ -26,6 +26,11 @@ data class SignupEmailStartResult(
 
 data class SignupEmailVerifyResult(
     val email: String,
+    val expiresAt: Instant,
+)
+
+data class SignupEmailVerifiedSession(
+    val email: String,
     val signupToken: String,
     val expiresAt: Instant,
 )
@@ -38,6 +43,7 @@ class MemberSignupVerificationService(
     private val memberSignupVerificationRepository: MemberSignupVerificationRepositoryPort,
     private val taskFacade: TaskFacade,
     private val signupStartRateLimitService: SignupStartRateLimitService,
+    private val signupTokenHashService: SignupTokenHashService,
     @Value("\${custom.member.signup.verifyPath:/signup/verify}")
     private val verifyPath: String,
     @Value("\${custom.member.signup.emailExpirationSeconds:86400}")
@@ -83,12 +89,13 @@ class MemberSignupVerificationService(
             ?.takeIf { it.consumedAt == null && it.cancelledAt == null }
             ?.cancel(now)
 
+        val emailVerificationToken = UUID.randomUUID().toString()
         val verificationExpiresAt = now.plusSeconds(emailExpirationSeconds)
         val verification =
             memberSignupVerificationRepository.save(
                 MemberSignupVerification(
                     email = normalizedEmail,
-                    emailVerificationToken = UUID.randomUUID().toString(),
+                    emailVerificationTokenHash = signupTokenHashService.emailVerificationTokenHash(emailVerificationToken),
                     emailVerificationExpiresAt = verificationExpiresAt,
                     termsAcceptedAt = now,
                     privacyAcceptedAt = now,
@@ -102,7 +109,7 @@ class MemberSignupVerificationService(
                 aggregateType = MemberSignupVerification::class.simpleName!!,
                 aggregateId = verification.id,
                 toEmail = normalizedEmail,
-                verificationLink = buildVerificationLink(verification.emailVerificationToken, nextPath),
+                verificationLink = buildVerificationLink(emailVerificationToken, nextPath),
                 expiresAt = verificationExpiresAt,
             ),
         )
@@ -111,7 +118,7 @@ class MemberSignupVerificationService(
     }
 
     @Transactional
-    fun verifyEmail(emailVerificationToken: String): SignupEmailVerifyResult {
+    fun verifyEmail(emailVerificationToken: String): SignupEmailVerifiedSession {
         val normalizedToken = emailVerificationToken.trim()
         if (normalizedToken.isBlank()) {
             throw AppException("400-2", "회원가입 링크가 올바르지 않습니다.")
@@ -119,7 +126,9 @@ class MemberSignupVerificationService(
 
         val now = Instant.now()
         val verification =
-            memberSignupVerificationRepository.findByEmailVerificationToken(normalizedToken)
+            memberSignupVerificationRepository.findByEmailVerificationTokenHash(
+                signupTokenHashService.emailVerificationTokenHash(normalizedToken),
+            )
                 ?: throw AppException("404-2", "유효하지 않은 회원가입 링크입니다.")
 
         verification.ensureVerifiable(now)
@@ -130,9 +139,13 @@ class MemberSignupVerificationService(
 
         val sessionToken = UUID.randomUUID().toString()
         val sessionExpiresAt = now.plusSeconds(sessionExpirationSeconds)
-        verification.issueSignupSession(sessionToken, sessionExpiresAt, now)
+        verification.issueSignupSession(
+            signupTokenHashService.signupSessionTokenHash(sessionToken),
+            sessionExpiresAt,
+            now,
+        )
 
-        return SignupEmailVerifyResult(
+        return SignupEmailVerifiedSession(
             email = verification.email,
             signupToken = sessionToken,
             expiresAt = sessionExpiresAt,
@@ -153,7 +166,9 @@ class MemberSignupVerificationService(
 
         val now = Instant.now()
         val verification =
-            memberSignupVerificationRepository.findBySignupSessionToken(normalizedToken)
+            memberSignupVerificationRepository.findBySignupSessionTokenHash(
+                signupTokenHashService.signupSessionTokenHash(normalizedToken),
+            )
                 ?: throw AppException("404-2", "유효하지 않은 회원가입 세션입니다.")
 
         verification.ensureCompletable(now)
@@ -204,13 +219,14 @@ class MemberSignupVerificationService(
         return buildString {
             append(AppConfig.siteFrontUrl)
             append(normalizedPath)
-            append("?token=")
-            append(token)
 
             if (normalizedNextPath != null) {
-                append("&next=")
+                append("?next=")
                 append(URLEncoder.encode(normalizedNextPath, StandardCharsets.UTF_8))
             }
+
+            append("#token=")
+            append(URLEncoder.encode(token, StandardCharsets.UTF_8))
         }
     }
 

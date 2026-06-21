@@ -21,6 +21,7 @@ import com.back.global.security.config.RefreshTokenAuthenticationHandler
 import com.back.global.security.config.SecurityConfig
 import com.back.global.security.config.SecurityContextAuthenticationWriter
 import com.back.global.security.config.oauth2.CustomOAuth2AuthorizationRequestResolver
+import com.back.global.security.config.oauth2.CustomOAuth2LoginFailureHandler
 import com.back.global.security.config.oauth2.CustomOAuth2LoginSuccessHandler
 import com.back.global.security.config.oauth2.CustomOAuth2UserService
 import com.back.global.security.config.oauth2.CustomOidcUserService
@@ -70,6 +71,9 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
 
     @MockitoBean
     protected lateinit var customOAuth2LoginSuccessHandler: CustomOAuth2LoginSuccessHandler
+
+    @MockitoBean
+    protected lateinit var customOAuth2LoginFailureHandler: CustomOAuth2LoginFailureHandler
 
     @MockitoBean
     protected lateinit var customOAuth2AuthorizationRequestResolver: CustomOAuth2AuthorizationRequestResolver

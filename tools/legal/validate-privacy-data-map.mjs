@@ -117,6 +117,8 @@ const assertRequiredFields = (kind, item, requiredFields) => {
 
 const activities = parseListYaml(read("legal/data-map/processing-activities.yaml"), "activities")
 const processors = parseListYaml(read("legal/vendors/processors.yaml"), "processors")
+const legalBasisEntries = parseListYaml(read("legal/data-map/legal-basis-matrix.yaml"), "legalBasis")
+const retentionRules = parseListYaml(read("legal/data-map/retention-matrix.yaml"), "retentionRules")
 const processorIds = new Set(processors.map((processor) => processor.id))
 
 if (activities.length < 10) fail(`expected at least 10 processing activities, got ${activities.length}`)
@@ -139,6 +141,37 @@ for (const processor of processors) {
 
 for (const processorId of requiredProcessors) {
   if (!processorIds.has(processorId)) fail(`required processor ${processorId} is not registered`)
+}
+
+const legalBasisIds = new Set()
+const activityLegalBasisMembership = new Map()
+for (const legalBasisEntry of legalBasisEntries) {
+  assertRequiredFields("legal basis", legalBasisEntry, ["id", "activities", "rationale"])
+  if (legalBasisIds.has(legalBasisEntry.id)) fail(`duplicate legal basis id ${legalBasisEntry.id}`)
+  legalBasisIds.add(legalBasisEntry.id)
+  for (const activityId of legalBasisEntry.activities || []) {
+    if (!activityIds.has(activityId)) fail(`legal basis ${legalBasisEntry.id} references unknown activity ${activityId}`)
+    if (activityLegalBasisMembership.has(activityId)) fail(`activity ${activityId} appears in multiple legal basis entries`)
+    activityLegalBasisMembership.set(activityId, legalBasisEntry.id)
+  }
+}
+
+const retentionActivityIds = new Set()
+for (const retentionRule of retentionRules) {
+  assertRequiredFields("retention rule", retentionRule, ["activityId", "retention", "destruction", "followUp"])
+  if (!activityIds.has(retentionRule.activityId)) fail(`retention rule references unknown activity ${retentionRule.activityId}`)
+  if (retentionActivityIds.has(retentionRule.activityId)) fail(`duplicate retention rule for activity ${retentionRule.activityId}`)
+  retentionActivityIds.add(retentionRule.activityId)
+}
+
+for (const activity of activities) {
+  if (!legalBasisIds.has(activity.legalBasis)) fail(`activity ${activity.id} references unknown legal basis ${activity.legalBasis}`)
+  const matrixLegalBasis = activityLegalBasisMembership.get(activity.id)
+  if (!matrixLegalBasis) fail(`activity ${activity.id} is missing from legal-basis-matrix.yaml`)
+  if (matrixLegalBasis && matrixLegalBasis !== activity.legalBasis) {
+    fail(`activity ${activity.id} legalBasis ${activity.legalBasis} does not match matrix ${matrixLegalBasis}`)
+  }
+  if (!retentionActivityIds.has(activity.id)) fail(`activity ${activity.id} is missing from retention-matrix.yaml`)
 }
 
 for (const relativePath of [

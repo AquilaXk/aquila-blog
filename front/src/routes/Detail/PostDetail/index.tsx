@@ -18,6 +18,7 @@ import { LEFT_RAIL_HYBRID_MIN_VIEWPORT_PX, RIGHT_RAIL_HYBRID_MIN_VIEWPORT_PX, ap
 import { CompactToc, FloatingActionRail, MobileSummaryActions, RightTocRail } from "./PostDetailActionSections"
 import { usePostDetailEngagementActions } from "./usePostDetailEngagementActions"
 import { usePostDetailRelatedPosts } from "./usePostDetailRelatedPosts"
+import { RecoverableSurfaceBoundary } from "src/components/error/ErrorBoundary"
 
 type Props = {
   initialComments?: TPostComment[] | null
@@ -466,7 +467,9 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
             />
           )}
           <BodySection data-rum-section="body">
-            <MarkdownRenderer content={renderedContent} />
+            <RecoverableSurfaceBoundary surface="markdown" resetKey={postId}>
+              <MarkdownRenderer content={renderedContent} />
+            </RecoverableSurfaceBoundary>
           </BodySection>
           {data.type[0] === "Post" && <div ref={relatedPrefetchTriggerRef} className="relatedPrefetchTrigger" aria-hidden="true" />}
           {data.type[0] === "Post" && shouldFetchRelated ? (

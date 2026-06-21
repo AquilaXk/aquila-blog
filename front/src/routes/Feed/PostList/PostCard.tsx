@@ -170,6 +170,7 @@ const StyledWrapper = styled.a`
   --post-card-translate-y: -8px;
   --post-card-border-color: ${({ theme }) => theme.publicDesign.border};
   --post-card-border-strong: ${({ theme }) => theme.publicDesign.accent};
+  --post-card-focus-ring: ${({ theme }) => theme.colors.indigo8};
   --post-card-surface: ${({ theme }) => theme.publicDesign.readableSurface};
   --post-card-surface-elevated: ${({ theme }) => theme.publicDesign.surfaceElevated};
   --post-card-shadow-current: ${({ theme }) =>
@@ -184,7 +185,13 @@ const StyledWrapper = styled.a`
       : "linear-gradient(135deg, rgba(88, 166, 255, 0.2), rgba(126, 231, 135, 0.08)), #111722"};
 
   &:focus-visible {
-    outline: 0;
+    outline: 3px solid var(--post-card-focus-ring);
+    outline-offset: 3px;
+  }
+
+  &:focus-visible article {
+    border-color: var(--post-card-border-strong);
+    box-shadow: var(--post-card-shadow-hover-current);
   }
 
   article {

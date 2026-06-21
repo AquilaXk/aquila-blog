@@ -307,6 +307,36 @@ test("홈 피드 주요 영역은 reduced motion과 landmark 계약에서 심각
   await expectLaunchGateAccessibility(page, testInfo, "home-reduced-motion")
 })
 
+test("홈 피드 PostCard는 keyboard focus ring을 pointer capability와 무관하게 노출한다", async ({ page }) => {
+  await page.setViewportSize({ width: 393, height: 852 })
+  await mockFeedEndpoints(page)
+  await page.goto("/")
+
+  const firstCard = page.locator('[data-ui="feed-post-card"]').first()
+  await expect(firstCard).toBeVisible()
+
+  for (let index = 0; index < 16; index += 1) {
+    if (await firstCard.evaluate((node) => node === document.activeElement)) break
+    await page.keyboard.press("Tab")
+  }
+
+  await expect(firstCard).toBeFocused()
+  const focusRing = await firstCard.evaluate((node) => {
+    const style = getComputedStyle(node)
+    return {
+      outlineStyle: style.outlineStyle,
+      outlineWidth: style.outlineWidth,
+      outlineColor: style.outlineColor,
+      outlineOffset: style.outlineOffset,
+    }
+  })
+
+  expect(focusRing.outlineStyle).not.toBe("none")
+  expect(Number.parseFloat(focusRing.outlineWidth)).toBeGreaterThanOrEqual(2)
+  expect(focusRing.outlineColor).not.toBe("rgba(0, 0, 0, 0)")
+  expect(Number.parseFloat(focusRing.outlineOffset)).toBeGreaterThanOrEqual(2)
+})
+
 test("상세 댓글 composer와 200% zoom 상태는 심각도 높은 접근성 위반이 없다", async ({
   page,
 }, testInfo) => {

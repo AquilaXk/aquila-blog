@@ -1,4 +1,3 @@
-import { CONFIG } from "site.config"
 import { GetStaticPaths, GetStaticProps } from "next"
 import { NextPageWithLayout } from "../../types"
 import styled from "@emotion/styled"
@@ -12,7 +11,7 @@ import {
   buildCanonicalPostDetailStaticPaths,
   buildCanonicalPostDetailStaticProps,
 } from "src/libs/server/postDetailPage"
-import { toCanonicalPostPath } from "src/libs/utils/postPath"
+import { buildPostDetailMetadata } from "src/routes/Detail/PostDetail/postDetailMetadataModel"
 
 export const getStaticPaths: GetStaticPaths = async () => {
   return await buildCanonicalPostDetailStaticPaths()
@@ -29,7 +28,9 @@ type DetailPageProps = {
   initialAdminProfileSource: "published" | "static-fallback"
 }
 
-const CanonicalPostPage: NextPageWithLayout<DetailPageProps> = ({ initialComments }) => {
+const CanonicalPostPage: NextPageWithLayout<DetailPageProps> = ({
+  initialComments,
+}) => {
   const { post, isLoading, isNotFound } = usePostQuery()
   if (isLoading) {
     return (
@@ -69,19 +70,7 @@ const CanonicalPostPage: NextPageWithLayout<DetailPageProps> = ({ initialComment
   }
   if (isNotFound || !post) return <CustomError />
 
-  const date = post.createdTime || post.date?.start_date || ""
-  const publishedDate = new Date(date)
-  const publishedDateIso = Number.isNaN(publishedDate.getTime()) ? undefined : publishedDate.toISOString()
-  const canonicalPath = toCanonicalPostPath(post.id)
-
-  const meta = {
-    title: post.title,
-    date: publishedDateIso,
-    image: post.thumbnail ?? `${CONFIG.ogImageGenerateURL}/${encodeURIComponent(post.title)}.png`,
-    description: post.summary || "",
-    type: Array.isArray(post.type) ? post.type[0] : post.type,
-    url: `${CONFIG.link}${canonicalPath}`,
-  }
+  const meta = buildPostDetailMetadata(post)
 
   return (
     <>

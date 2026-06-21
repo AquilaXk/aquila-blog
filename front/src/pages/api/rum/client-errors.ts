@@ -33,7 +33,14 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   const occurredAt = toSafeString(body.occurredAt, 40)
 
   if (id && ALLOWED_BOUNDARIES.has(boundary) && surface && path && errorName && occurredAt) {
-    console.info("[rum:client-error] boundary caught client render error")
+    console.info("[rum:client-error] boundary caught client render error", {
+      id,
+      boundary,
+      surface,
+      path,
+      errorName,
+      occurredAt,
+    })
   }
 
   return res.status(204).end()

@@ -25,6 +25,8 @@ const loadLoginPanel = () => import("./AuthEntryLoginPanel")
 const loadSignupPanel = () => import("./AuthEntrySignupPanel")
 const loadSignupSentPanel = () => import("./AuthEntrySignupSentPanel")
 
+const SIGNUP_LEGAL_POLICY_VERSION = "2026-06-21"
+
 const AuthEntryPanelFallback = () => (
   <div className="panelFallback" aria-hidden="true">
     <div className="line large" />
@@ -84,6 +86,8 @@ const AuthEntryModal: React.FC<AuthEntryModalProps> = ({
   const [signupError, setSignupError] = useState("")
   const [signupLoading, setSignupLoading] = useState(false)
   const [sentEmail, setSentEmail] = useState("")
+  const [signupTermsAccepted, setSignupTermsAccepted] = useState(false)
+  const [signupPrivacyAccepted, setSignupPrivacyAccepted] = useState(false)
   const { remainingSeconds: signupCooldownSeconds, startCooldown } = useSignupMailCooldown(signupEmail)
 
   const normalizedNextPath = useMemo(() => {
@@ -113,6 +117,8 @@ const AuthEntryModal: React.FC<AuthEntryModalProps> = ({
     setIpSecurityOn(prefs.ipSecurityOn)
     setSignupEmail("")
     setSentEmail("")
+    setSignupTermsAccepted(false)
+    setSignupPrivacyAccepted(false)
 
     return () => {
       releaseBodyScrollLock()
@@ -186,6 +192,10 @@ const AuthEntryModal: React.FC<AuthEntryModalProps> = ({
       setSignupError("이메일 형식을 확인해주세요.")
       return
     }
+    if (!signupTermsAccepted || !signupPrivacyAccepted) {
+      setSignupError("회원가입을 진행하려면 이용약관과 개인정보처리방침에 모두 동의해주세요.")
+      return
+    }
 
     setSignupLoading(true)
     setSignupError("")
@@ -196,6 +206,9 @@ const AuthEntryModal: React.FC<AuthEntryModalProps> = ({
         body: JSON.stringify({
           email: normalizedEmail,
           nextPath: normalizedNextPath,
+          termsAccepted: signupTermsAccepted,
+          privacyAccepted: signupPrivacyAccepted,
+          legalPolicyVersion: SIGNUP_LEGAL_POLICY_VERSION,
         }),
       })
 
@@ -254,9 +267,12 @@ const AuthEntryModal: React.FC<AuthEntryModalProps> = ({
               signupError={signupError}
               signupLoading={signupLoading}
               signupCooldownSeconds={signupCooldownSeconds}
-              socialItems={socialItems}
+              termsAccepted={signupTermsAccepted}
+              privacyAccepted={signupPrivacyAccepted}
               onSubmit={handleSignupEmailStart}
               onSignupEmailChange={setSignupEmail}
+              onTermsAcceptedChange={setSignupTermsAccepted}
+              onPrivacyAcceptedChange={setSignupPrivacyAccepted}
               onSwitchToLogin={() => setView("login")}
             />
           )}

@@ -17,6 +17,8 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.handler
 
 @org.junit.jupiter.api.DisplayName("ApiV1SignupVerificationController 테스트")
 class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
+    private val legalPolicyVersion = "2026-06-21"
+
     @Autowired
     private lateinit var memberApplicationService: MemberApplicationService
 
@@ -36,7 +38,10 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
                     content =
                         """
                         {
-                            "email": "new-user@example.com"
+                            "email": "new-user@example.com",
+                            "termsAccepted": true,
+                            "privacyAccepted": true,
+                            "legalPolicyVersion": "$legalPolicyVersion"
                         }
                         """.trimIndent()
                 }.andExpect {
@@ -52,11 +57,73 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
 
             checkNotNull(verification)
             assertThat(verification.emailVerificationToken).isNotBlank()
+            assertThat(verification.termsAcceptedAt).isNotNull()
+            assertThat(verification.privacyAcceptedAt).isNotNull()
+            assertThat(verification.legalPolicyVersion).isEqualTo(legalPolicyVersion)
             val mailTasks =
                 taskRepository.findAll().filter { it.taskType == "member.signupVerification.sendMail" }
             assertThat(mailTasks).hasSize(1)
             assertThat(mailTasks.single().aggregateId).isEqualTo(verification.id)
             assertThat(mailTasks.single().status).isEqualTo(TaskStatus.COMPLETED)
+        }
+
+        @Test
+        fun `필수 약관과 개인정보처리방침 동의가 없으면 이메일 인증 시작을 막는다`() {
+            mvc
+                .post("/member/api/v1/signup/email/start") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "email": "missing-consent@example.com",
+                            "termsAccepted": true,
+                            "privacyAccepted": false,
+                            "legalPolicyVersion": "$legalPolicyVersion"
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isBadRequest() }
+                    jsonPath("$.resultCode") { value("400-2") }
+                    jsonPath("$.msg") { value("회원가입을 진행하려면 이용약관과 개인정보처리방침에 모두 동의해야 합니다.") }
+                }
+
+            val verification =
+                memberSignupVerificationRepository.findTopByEmailOrderByCreatedAtDesc("missing-consent@example.com")
+
+            assertThat(verification).isNull()
+            val mailTasks =
+                taskRepository.findAll().filter { it.taskType == "member.signupVerification.sendMail" }
+            assertThat(mailTasks).isEmpty()
+        }
+
+        @Test
+        fun `약관 동의 버전이 비어 있으면 이메일 인증 시작을 막는다`() {
+            mvc
+                .post("/member/api/v1/signup/email/start") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "email": "missing-policy-version@example.com",
+                            "termsAccepted": true,
+                            "privacyAccepted": true,
+                            "legalPolicyVersion": ""
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isBadRequest() }
+                    jsonPath("$.resultCode") { value("400-2") }
+                    jsonPath("$.msg") { value("약관 동의 버전이 올바르지 않습니다.") }
+                }
+
+            val verification =
+                memberSignupVerificationRepository
+                    .findTopByEmailOrderByCreatedAtDesc("missing-policy-version@example.com")
+
+            assertThat(verification).isNull()
+            val mailTasks =
+                taskRepository.findAll().filter { it.taskType == "member.signupVerification.sendMail" }
+            assertThat(mailTasks).isEmpty()
         }
 
         @Test
@@ -75,7 +142,10 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
                     content =
                         """
                         {
-                            "email": "dup@example.com"
+                            "email": "dup@example.com",
+                            "termsAccepted": true,
+                            "privacyAccepted": true,
+                            "legalPolicyVersion": "$legalPolicyVersion"
                         }
                         """.trimIndent()
                 }.andExpect {
@@ -101,7 +171,10 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
                 content =
                     """
                     {
-                        "email": "$email"
+                        "email": "$email",
+                        "termsAccepted": true,
+                        "privacyAccepted": true,
+                        "legalPolicyVersion": "$legalPolicyVersion"
                     }
                     """.trimIndent()
             }
@@ -172,6 +245,61 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
         }
 
         @Test
+        fun `동의 기록이 없는 기존 signup session이면 최종 가입을 막는다`() {
+            val email = "legacy-without-consent@example.com"
+
+            mvc.post("/member/api/v1/signup/email/start") {
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                        "email": "$email",
+                        "termsAccepted": true,
+                        "privacyAccepted": true,
+                        "legalPolicyVersion": "$legalPolicyVersion"
+                    }
+                    """.trimIndent()
+            }
+
+            val verification =
+                memberSignupVerificationRepository.findTopByEmailOrderByCreatedAtDesc(email)
+                    ?: error("verification row not created")
+            verification.termsAcceptedAt = null
+            verification.privacyAcceptedAt = null
+            verification.legalPolicyVersion = null
+            memberSignupVerificationRepository.save(verification)
+
+            mvc.get("/member/api/v1/signup/email/verify") {
+                param("token", verification.emailVerificationToken)
+            }
+
+            val signupToken =
+                memberSignupVerificationRepository
+                    .findTopByEmailOrderByCreatedAtDesc(email)
+                    ?.signupSessionToken
+                    ?: error("signup token not issued")
+
+            mvc
+                .post("/member/api/v1/signup/complete") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "signupToken": "$signupToken",
+                            "password": "Abcd1234!",
+                            "nickname": "동의누락회원"
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isBadRequest() }
+                    jsonPath("$.resultCode") { value("400-2") }
+                    jsonPath("$.msg") { value("회원가입을 진행하려면 이용약관과 개인정보처리방침에 다시 동의해야 합니다.") }
+                }
+
+            assertThat(memberApplicationService.findByEmail(email)).isNull()
+        }
+
+        @Test
         fun `signup complete 요청에 username 필드를 보내면 검증 오류를 반환한다`() {
             val email = "legacy-signup@example.com"
 
@@ -180,7 +308,10 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
                 content =
                     """
                     {
-                        "email": "$email"
+                        "email": "$email",
+                        "termsAccepted": true,
+                        "privacyAccepted": true,
+                        "legalPolicyVersion": "$legalPolicyVersion"
                     }
                     """.trimIndent()
             }

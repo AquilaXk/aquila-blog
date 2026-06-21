@@ -1718,6 +1718,9 @@ export interface components {
         SignupEmailStartRequest: {
             /** Format: email */
             email: string;
+            termsAccepted: boolean;
+            privacyAccepted: boolean;
+            legalPolicyVersion: string;
             nextPath?: string;
         };
         RsDataSignupEmailStartResult: {

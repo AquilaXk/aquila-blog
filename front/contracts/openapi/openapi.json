@@ -2891,6 +2891,34 @@
         } ]
       }
     },
+    "/member/api/v1/privacy/account" : {
+      "delete" : {
+        "tags" : [ "api-v-1-privacy-rights-controller" ],
+        "operationId" : "deleteAccount",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AccountDeletionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataAccountDeletionResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/member/api/v1/auth/logout" : {
       "delete" : {
         "tags" : [ "api-v-1-auth-controller" ],
@@ -5871,6 +5899,53 @@
           },
           "profile" : {
             "$ref" : "#/components/schemas/MemberWithUsernameDto"
+          }
+        }
+      },
+      "AccountDeletionRequest" : {
+        "type" : "object",
+        "properties" : {
+          "password" : {
+            "type" : "string",
+            "maxLength" : 128,
+            "minLength" : 0
+          },
+          "reason" : {
+            "type" : "string",
+            "maxLength" : 500,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "password" ]
+      },
+      "AccountDeletionResult" : {
+        "type" : "object",
+        "properties" : {
+          "memberId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "deletedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "revokedSessionCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "RsDataAccountDeletionResult" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/AccountDeletionResult"
           }
         }
       }

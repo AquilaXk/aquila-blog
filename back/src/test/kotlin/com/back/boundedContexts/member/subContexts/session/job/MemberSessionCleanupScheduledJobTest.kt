@@ -75,6 +75,11 @@ class MemberSessionCleanupScheduledJobTest {
             now: Instant,
         ): Int = 0
 
+        override fun revokeAllActiveSessionsForMember(
+            memberId: Long,
+            now: Instant,
+        ): Int = 0
+
         override fun deleteRevokedBefore(
             cutoff: Instant,
             limit: Int,

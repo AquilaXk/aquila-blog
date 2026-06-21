@@ -5,11 +5,13 @@ import com.back.global.app.AppConfig
 
 const val PROFILE_IMG_URL = "profileImgUrl"
 private const val PROFILE_IMG_URL_DEFAULT_VALUE = ""
+private const val DEFAULT_SITE_FRONT_URL = "https://www.aquilaxk.site"
 private const val DEFAULT_PROFILE_IMAGE_PATH = "/images/default-profile.svg"
 
 fun defaultProfileImageUrl(): String {
     val siteFrontUrl = runCatching { AppConfig.siteFrontUrl.trimEnd('/') }.getOrDefault("")
-    return if (siteFrontUrl.isBlank()) DEFAULT_PROFILE_IMAGE_PATH else "$siteFrontUrl$DEFAULT_PROFILE_IMAGE_PATH"
+    val normalizedFrontUrl = siteFrontUrl.ifBlank { DEFAULT_SITE_FRONT_URL }
+    return "$normalizedFrontUrl$DEFAULT_PROFILE_IMAGE_PATH"
 }
 
 interface MemberHasProfileImgUrl : MemberAware {

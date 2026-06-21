@@ -10,8 +10,12 @@ const EXTERNAL_PLACEHOLDER_IMAGE_HOSTS = new Set(
   ].map((parts) => parts.join(".")),
 )
 
-const isExternalPlaceholderImageHost = (host: string): boolean =>
-  EXTERNAL_PLACEHOLDER_IMAGE_HOSTS.has(host.toLowerCase())
+const isExternalPlaceholderImageHost = (host: string): boolean => {
+  const normalizedHost = host.toLowerCase()
+  return Array.from(EXTERNAL_PLACEHOLDER_IMAGE_HOSTS).some(
+    (blockedHost) => normalizedHost === blockedHost || normalizedHost.endsWith(`.${blockedHost}`),
+  )
+}
 
 export const normalizeSafeMarkdownUrl = (raw: string): string => {
   const value = raw.trim()

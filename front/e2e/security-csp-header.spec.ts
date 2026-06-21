@@ -26,7 +26,12 @@ const externalPlaceholderHosts = [
   ["via", "placeholder", "com"],
   [["pic", "sum"].join(""), "photos"],
   [["dummy", "image"].join(""), "com"],
+  ["source", "unsplash", "com"],
+  ["place", "kitten", "com"],
+  ["lorem", "flickr", "com"],
 ].map((parts) => parts.join("."))
+
+const nextImageHostPatternTokens = (host: string) => [host, `*.${host}`, `**.${host}`]
 
 const getNextConfig = async () => {
   const nextConfigModule = await import("../next.config.js")
@@ -104,15 +109,19 @@ test.describe("frontend security headers", () => {
       .filter(Boolean)
 
     for (const host of externalPlaceholderHosts) {
-      expect(remoteHosts).not.toContain(host)
+      for (const blockedPattern of nextImageHostPatternTokens(host)) {
+        expect(remoteHosts).not.toContain(blockedPattern)
+      }
     }
   })
 
   test("markdown image sanitizer rejects external placeholder providers only", () => {
     const placeholderImageUrl = `https://${["placehold", "co"].join(".")}/600x600?text=U_U`
+    const placeholderSubdomainImageUrl = `https://img.${["placehold", "co"].join(".")}/600x600?text=U_U`
     const supportedExternalImageUrl = "https://cdn.example.com/post-image.png"
 
     expect(normalizeSafeMarkdownImageSrc(placeholderImageUrl)).toBe("")
+    expect(normalizeSafeMarkdownImageSrc(placeholderSubdomainImageUrl)).toBe("")
     expect(normalizeSafeMarkdownImageSrc(supportedExternalImageUrl)).toBe(supportedExternalImageUrl)
   })
 

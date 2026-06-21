@@ -56,7 +56,7 @@ class OAuthSignupApplicationService(
         val pendingToken = UUID.randomUUID().toString()
         val pendingTokenHash = oauthSignupHashService.pendingTokenHash(pendingToken)
         val expiresAt = now.plusSeconds(pendingExpirationSeconds.coerceAtLeast(60))
-        val normalizedNickname = normalizeNickname(nickname)
+        val pendingNickname = normalizePendingNickname(nickname)
 
         val pending =
             pendingOAuthSignupRepository
@@ -70,7 +70,7 @@ class OAuthSignupApplicationService(
                     it.refresh(
                         pendingTokenHash = pendingTokenHash,
                         expiresAt = expiresAt,
-                        nickname = normalizedNickname,
+                        nickname = pendingNickname,
                         profileImgUrl = profileImgUrl,
                     )
                 }
@@ -80,7 +80,7 @@ class OAuthSignupApplicationService(
                     memberLoginId = memberLoginId,
                     pendingTokenHash = pendingTokenHash,
                     pendingTokenExpiresAt = expiresAt,
-                    nickname = normalizedNickname,
+                    nickname = pendingNickname,
                     profileImgUrl = profileImgUrl,
                 )
 
@@ -166,4 +166,10 @@ class OAuthSignupApplicationService(
         }
         return normalized
     }
+
+    private fun normalizePendingNickname(nickname: String): String =
+        nickname
+            .trim()
+            .takeIf { it.length in 2..30 }
+            ?: "카카오사용자"
 }

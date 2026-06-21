@@ -6,7 +6,7 @@ export const ACTIVE_LEGAL_DOCUMENTS = {
   },
   privacy: {
     version: "2026-06-21",
-    contentSha256: "4cc6ae3260aaca5f5ff35b235af91679a60760f13dccad9e85c94fda4d1552d9",
+    contentSha256: "cedbfea674a9e2aca9e29bf6a01492a1e3fa640b0ff53d47f969d64c057b980f",
   },
 } as const
 

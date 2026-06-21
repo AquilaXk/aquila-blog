@@ -37,6 +37,11 @@ interface MemberSessionStorePort {
         now: Instant,
     ): Int
 
+    fun revokeAllActiveSessionsForMember(
+        memberId: Long,
+        now: Instant,
+    ): Int
+
     fun deleteRevokedBefore(
         cutoff: Instant,
         limit: Int,

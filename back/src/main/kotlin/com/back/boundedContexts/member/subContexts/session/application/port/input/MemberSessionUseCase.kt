@@ -48,4 +48,6 @@ interface MemberSessionUseCase {
     ): MemberSessionWithRefreshToken?
 
     fun revokeSession(sessionKey: String)
+
+    fun revokeAllActiveSessionsForMember(memberId: Long): Int
 }

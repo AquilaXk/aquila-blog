@@ -1358,6 +1358,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/member/api/v1/privacy/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteAccount"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/member/api/v1/auth/logout": {
         parameters: {
             query?: never;
@@ -2448,6 +2464,23 @@ export interface components {
         AdminHubBootstrapResponse: {
             member?: components["schemas"]["AuthSessionMemberDto"];
             profile?: components["schemas"]["MemberWithUsernameDto"];
+        };
+        AccountDeletionRequest: {
+            password: string;
+            reason?: string;
+        };
+        AccountDeletionResult: {
+            /** Format: int64 */
+            memberId?: number;
+            /** Format: date-time */
+            deletedAt?: string;
+            /** Format: int32 */
+            revokedSessionCount?: number;
+        };
+        RsDataAccountDeletionResult: {
+            resultCode?: string;
+            msg?: string;
+            data?: components["schemas"]["AccountDeletionResult"];
         };
     };
     responses: never;
@@ -4619,6 +4652,30 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["RsDataVoid"];
+                };
+            };
+        };
+    };
+    deleteAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountDeletionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RsDataAccountDeletionResult"];
                 };
             };
         };

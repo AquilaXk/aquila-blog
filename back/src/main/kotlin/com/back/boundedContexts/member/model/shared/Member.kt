@@ -116,8 +116,12 @@ class Member(
     @Transient
     override var postCommentsCountAttr: MemberAttr? = null
 
-    fun softDelete() {
-        deletedAt = Instant.now()
+    fun softDelete(now: Instant = Instant.now()) {
+        deletedAt = now
+        email = null
+        password = null
+        nickname = "탈퇴한 사용자"
+        modifyApiKey(MemberPolicy.genApiKey())
     }
 
     override val member: Member

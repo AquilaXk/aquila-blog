@@ -263,6 +263,17 @@ class MemberSessionServiceTest {
             return sessionsToRevoke.size
         }
 
+        override fun revokeAllActiveSessionsForMember(
+            memberId: Long,
+            now: Instant,
+        ): Int {
+            val activeSessions =
+                sessionsByKey.values
+                    .filter { it.member.id == memberId && it.revokedAt == null }
+            activeSessions.forEach { it.revoke(now) }
+            return activeSessions.size
+        }
+
         override fun deleteRevokedBefore(
             cutoff: Instant,
             limit: Int,

@@ -180,6 +180,15 @@ class MemberSessionService(
     }
 
     @Transactional
+    override fun revokeAllActiveSessionsForMember(memberId: Long): Int {
+        val revokedCount = memberSessionStorePort.revokeAllActiveSessionsForMember(memberId, Instant.now())
+        if (revokedCount > 0) {
+            evictAllActiveSnapshots()
+        }
+        return revokedCount
+    }
+
+    @Transactional
     fun purgeExpiredRevokedSessions(
         batchSize: Int,
         now: Instant = Instant.now(),

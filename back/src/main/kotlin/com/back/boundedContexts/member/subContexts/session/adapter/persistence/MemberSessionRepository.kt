@@ -117,6 +117,20 @@ interface MemberSessionRepository : JpaRepository<MemberSession, Long> {
 
     @Modifying(flushAutomatically = true, clearAutomatically = false)
     @Query(
+        """
+        update MemberSession session
+        set session.revokedAt = :now
+        where session.member.id = :memberId
+          and session.revokedAt is null
+        """,
+    )
+    fun revokeAllActiveSessionsForMember(
+        @Param("memberId") memberId: Long,
+        @Param("now") now: Instant,
+    ): Int
+
+    @Modifying(flushAutomatically = true, clearAutomatically = false)
+    @Query(
         value = """
         delete from member_session
         where id in (

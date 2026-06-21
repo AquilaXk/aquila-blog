@@ -454,8 +454,8 @@ test.describe("성능 레이아웃과 표면 예산", () => {
     if (scenario.route === "/") {
       expect(fingerprint.searchBg).toBe("rgb(22, 27, 34)")
       expect(fingerprint.searchBorder).toBe("rgb(48, 54, 61)")
-      expect(fingerprint.cardBg).toBe("rgb(22, 27, 34)")
-      expect(fingerprint.cardBorder).toBe("rgb(48, 54, 61)")
+      expect(fingerprint.cardBg).toBe("rgb(255, 255, 255)")
+      expect(fingerprint.cardBorder).toBe("rgb(200, 210, 222)")
     }
 
     if (scenario.route === "/posts/991") {

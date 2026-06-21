@@ -248,6 +248,8 @@ test.describe("core smoke auth and notifications", () => {
 
   await page.goto("/signup")
   await page.getByLabel("이메일").fill("smoke@example.com")
+  await page.getByRole("checkbox", { name: /이용약관/ }).check()
+  await page.getByRole("checkbox", { name: /개인정보처리방침/ }).check()
   await page.getByRole("button", { name: "인증 메일 보내기" }).click()
 
   await expect(page.getByText("회원가입 메일 발송에 실패했습니다.")).toBeVisible()

@@ -163,9 +163,12 @@ const useExplorePostsQuery = ({
     loadedPagesCount: query.data?.pages.length ?? 0,
     hasNextPage: query.hasNextPage ?? false,
     isInitialLoading: query.isLoading,
+    isInitialLoadError: query.isError && !(query.data?.pages.length),
+    hasInitialLoadSucceeded: query.isSuccess && query.isFetchedAfterMount,
     isFetchingNextPage: query.isFetchingNextPage,
     isFetchNextPageError: query.isFetchNextPageError,
     fetchNextPage: query.fetchNextPage,
+    refetchInitialPage: query.refetch,
   }
 }
 

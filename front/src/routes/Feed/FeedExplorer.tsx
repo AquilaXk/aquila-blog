@@ -45,7 +45,12 @@ import {
 
 const LOAD_MORE_THROTTLE_MS = 800
 const LOAD_MORE_OBSERVER_THROTTLE_MS = 180
-const FeedExplorer = () => {
+
+type FeedExplorerProps = {
+  initialBootstrapDegraded?: boolean
+}
+
+const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = false }) => {
   const queryClient = useQueryClient()
   const [q, setQ] = useState("")
   const [isComposing, setIsComposing] = useState(false)
@@ -87,9 +92,12 @@ const FeedExplorer = () => {
     loadedPagesCount,
     hasNextPage,
     isInitialLoading,
+    isInitialLoadError,
+    hasInitialLoadSucceeded,
     isFetchingNextPage,
     isFetchNextPageError,
     fetchNextPage,
+    refetchInitialPage,
   } = useExplorePostsQuery({
     kw: debouncedQ,
     tag: currentTag,
@@ -402,6 +410,7 @@ const FeedExplorer = () => {
 
   const hasFilter = Boolean(normalizedQuery || currentTag)
   const resultCount = pinnedPosts.length + regularPosts.length
+  const showBootstrapDegraded = initialBootstrapDegraded && !hasInitialLoadSucceeded
   const hasQueryFilter = normalizedQuery.length > 0
   const hasTagFilter = Boolean(currentTag)
   const filterSummary = useMemo(() => {
@@ -413,8 +422,9 @@ const FeedExplorer = () => {
   }, [currentTag, hasFilter, hasQueryFilter, hasTagFilter, normalizedQuery])
   const contextStatusLabel = useMemo(() => {
     if (isInitialLoading) return hasFilter ? "검색 결과를 불러오는 중..." : "피드를 불러오는 중..."
+    if (showBootstrapDegraded && resultCount > 0) return "최근 저장된 글을 먼저 표시 중"
     return ""
-  }, [hasFilter, isInitialLoading])
+  }, [hasFilter, isInitialLoading, resultCount, showBootstrapDegraded])
 
   const handleClearFilters = useCallback(() => {
     setQ("")
@@ -470,10 +480,12 @@ const FeedExplorer = () => {
             hasExternalResults={pinnedPosts.length > 0}
             onClearFilters={handleClearFilters}
             isInitialLoading={isInitialLoading}
+            isInitialLoadError={isInitialLoadError || (showBootstrapDegraded && resultCount === 0)}
             isFetchingNextPage={isFetchingNextPage}
             isFetchNextPageError={isFetchNextPageError}
             hasNextPage={hasNextPage}
             onLoadMore={handleLoadMore}
+            onRetryInitialLoad={refetchInitialPage}
             onRetryLoadMore={handleRetryLoadMore}
             loadMoreTriggerRef={loadMoreTriggerRef}
           />

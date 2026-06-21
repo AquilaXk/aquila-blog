@@ -11,11 +11,12 @@ import { replaceShallowRoutePreservingScroll } from "src/libs/router"
 
 type Props = {
   initialAdminProfile?: AdminProfile | null
+  initialHomeBootstrapStatus?: "ready" | "degraded" | "shell"
 }
 
 const TOPIC_RAIL_TAG_LIMIT = 3
 
-const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
+const Feed: React.FC<Props> = ({ initialAdminProfile = null, initialHomeBootstrapStatus = "ready" }) => {
   const router = useRouter()
   const adminProfile = useAdminProfile(initialAdminProfile)
   const { tagEntries } = useTagsQuery()
@@ -79,7 +80,7 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
           </div>
           <ProfileSummaryCard initialAdminProfile={initialAdminProfile} />
         </IntroCard>
-        <FeedExplorer />
+        <FeedExplorer initialBootstrapDegraded={initialHomeBootstrapStatus === "degraded"} />
         <div className="footer">
           <Footer />
         </div>

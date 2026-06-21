@@ -20,6 +20,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
+import java.time.Instant
 import java.util.Optional
 
 @DisplayName("OAuthSignupApplicationService 테스트")
@@ -69,6 +70,47 @@ class OAuthSignupApplicationServiceTest {
     }
 
     @Test
+    fun `provider subject hash와 member login id helper는 hash service 계약을 노출한다`() {
+        val fixture = Fixture()
+
+        val providerSubjectHash =
+            fixture.service.providerSubjectHash(
+                provider = " kakao ",
+                providerSubject = RAW_PROVIDER_SUBJECT,
+            )
+        val memberLoginId =
+            fixture.service.memberLoginId(
+                provider = " kakao ",
+                providerSubjectHash = providerSubjectHash,
+            )
+
+        assertThat(providerSubjectHash)
+            .isEqualTo(fixture.hashService.providerSubjectHash(" kakao ", RAW_PROVIDER_SUBJECT))
+        assertThat(memberLoginId)
+            .isEqualTo(fixture.hashService.memberLoginId(" kakao ", providerSubjectHash))
+    }
+
+    @Test
+    fun `이미 연결된 member login id가 있으면 pending을 시작하지 않는다`() {
+        val fixture = Fixture()
+        fixture.memberUseCase.existingLoginIds +=
+            fixture.hashService.memberLoginId(
+                "KAKAO",
+                fixture.hashService.providerSubjectHash("KAKAO", "subject-existing-member"),
+            )
+
+        assertThatThrownBy {
+            fixture.service.startPending(
+                provider = "KAKAO",
+                providerSubject = "subject-existing-member",
+                nickname = "카카오닉네임",
+                profileImgUrl = null,
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("이미 연결된 소셜 계정")
+    }
+
+    @Test
     fun `provider nickname이 정책 범위를 벗어나도 pending을 만들고 기본 표시 이름을 사용한다`() {
         val fixture = Fixture()
 
@@ -81,6 +123,30 @@ class OAuthSignupApplicationServiceTest {
 
         val pending = fixture.pendingRepository.saved.single()
         assertThat(pending.nickname).isEqualTo("카카오사용자")
+    }
+
+    @Test
+    fun `이미 소비된 pending row가 있으면 callback refresh를 거부한다`() {
+        val fixture = Fixture()
+        fixture.service.startPending(
+            provider = "KAKAO",
+            providerSubject = "subject-consumed",
+            nickname = "카카오닉네임",
+            profileImgUrl = null,
+        )
+        fixture.pendingRepository.saved
+            .single()
+            .consume(Instant.EPOCH.plusSeconds(1))
+
+        assertThatThrownBy {
+            fixture.service.startPending(
+                provider = "KAKAO",
+                providerSubject = "subject-consumed",
+                nickname = "카카오닉네임",
+                profileImgUrl = null,
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("이미 처리된 소셜 회원가입")
     }
 
     @Test
@@ -132,6 +198,52 @@ class OAuthSignupApplicationServiceTest {
     }
 
     @Test
+    fun `pending 조회는 token hash로 세션 상세를 반환한다`() {
+        val fixture = Fixture()
+        val start =
+            fixture.service.startPending(
+                provider = "KAKAO",
+                providerSubject = "subject-readable",
+                nickname = "카카오닉네임",
+                profileImgUrl = "https://kakao.cdn/profile.png",
+            )
+
+        val pending = fixture.service.findPending(start.pendingToken)
+
+        assertThat(pending.provider).isEqualTo("KAKAO")
+        assertThat(pending.nickname).isEqualTo("카카오닉네임")
+        assertThat(pending.profileImgUrl).isEqualTo("https://kakao.cdn/profile.png")
+        assertThat(pending.expiresAt).isEqualTo(start.expiresAt)
+    }
+
+    @Test
+    fun `pending 조회는 blank token과 없는 token을 거부한다`() {
+        val fixture = Fixture()
+
+        assertThatThrownBy { fixture.service.findPending(" ") }
+            .isInstanceOf(AppException::class.java)
+            .hasMessageContaining("올바르지 않습니다")
+        assertThatThrownBy { fixture.service.findPending("missing-token") }
+            .isInstanceOf(AppException::class.java)
+            .hasMessageContaining("유효하지 않은")
+    }
+
+    @Test
+    fun `blank provider는 pending 시작을 거부한다`() {
+        val fixture = Fixture()
+
+        assertThatThrownBy {
+            fixture.service.startPending(
+                provider = " ",
+                providerSubject = "subject",
+                nickname = "카카오닉네임",
+                profileImgUrl = null,
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("제공자가 올바르지 않습니다")
+    }
+
+    @Test
     fun `pending 완료는 member와 social legal acceptance를 생성하고 pending을 소비한다`() {
         val fixture = Fixture()
         val start =
@@ -158,6 +270,8 @@ class OAuthSignupApplicationServiceTest {
         assertThat(member.nickname).isEqualTo("완료닉네임")
         val legalAcceptance = fixture.legalAcceptanceRepository.saved.single()
         val consumedPending = fixture.pendingRepository.saved.single()
+        assertThat(legalAcceptance.id)
+            .isEqualTo(0)
         assertThat(legalAcceptance.source)
             .isEqualTo("KAKAO_OAUTH_SIGNUP")
         assertThat(consumedPending.consumedAt)

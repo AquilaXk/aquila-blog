@@ -119,18 +119,21 @@ private fun loadExistingMemberOrStartSignup(
     val member =
         memberUseCase.findByLoginId(memberLoginId)
             ?: memberUseCase.findByLoginId(legacyLoginId)
-            ?: startPendingSignup(provider, profilePayload, oauthSignupUseCase)
+
+    if (member == null) {
+        throw buildPendingSignupException(provider, profilePayload, oauthSignupUseCase)
+    }
 
     memberUseCase.modify(member, profilePayload.nickname, profilePayload.profileImgUrl)
 
     return member
 }
 
-private fun startPendingSignup(
+private fun buildPendingSignupException(
     provider: OAuth2Provider,
     profilePayload: OAuth2ProfilePayload,
     oauthSignupUseCase: OAuthSignupUseCase,
-): Nothing {
+): OAuthSignupRequiredAuthenticationException {
     val pending =
         oauthSignupUseCase.startPending(
             provider = provider.name,
@@ -139,7 +142,7 @@ private fun startPendingSignup(
             profileImgUrl = profilePayload.profileImgUrl,
         )
 
-    throw OAuthSignupRequiredAuthenticationException(
+    return OAuthSignupRequiredAuthenticationException(
         provider = pending.provider,
         pendingToken = pending.pendingToken,
         expiresAt = pending.expiresAt,

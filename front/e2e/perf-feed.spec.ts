@@ -78,11 +78,12 @@ test.describe("perf feed scroll budgets", () => {
     await expect(page.getByText("아직 게시글이 없습니다.")).toHaveCount(0)
     await expect(page.getByRole("button", { name: "다시 시도" })).toBeVisible()
 
+    const attemptsBeforeRetry = feedAttempts
     allowFeedRecovery = true
     await page.getByRole("button", { name: "다시 시도" }).click()
 
     await expect(page.getByRole("heading", { name: "CLS 예산 점검 1171" })).toBeVisible()
-    expect(feedAttempts).toBeGreaterThan(1)
+    expect(feedAttempts).toBeGreaterThan(attemptsBeforeRetry)
   })
 
   test("홈 피드는 다음 cursor 실패를 빈 결과로 숨기지 않고 재시도 버튼을 보여준다", async ({ page }) => {

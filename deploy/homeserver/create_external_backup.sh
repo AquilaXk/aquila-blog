@@ -45,6 +45,25 @@ read_key_from_text() {
   ' | tail -n 1
 }
 
+has_key_in_text() {
+  local key="$1"
+  local text="$2"
+  printf '%s\n' "${text}" | awk -F= -v k="${key}" '
+    /^[[:space:]]*#/ { next }
+    /^[[:space:]]*$/ { next }
+    {
+      line = $0
+      sub(/^[[:space:]]+/, "", line)
+      sub(/[[:space:]]+$/, "", line)
+      sub(/^[Ee][Xx][Pp][Oo][Rr][Tt][[:space:]]+/, "", line)
+      if (index(line, k "=") == 1) {
+        found = 1
+      }
+    }
+    END { exit(found ? 0 : 1) }
+  '
+}
+
 read_key_from_file() {
   local key="$1"
   local file="$2"
@@ -175,8 +194,8 @@ stage_home_server_env_key() {
   local key="$1"
   local value
   [[ -n "${HOME_SERVER_ENV:-}" ]] || return 0
+  has_key_in_text "${key}" "${HOME_SERVER_ENV}" || return 0
   value="$(read_key_from_text "${key}" "${HOME_SERVER_ENV}")"
-  [[ -n "${value}" ]] || return 0
 
   ensure_compose_env_work_file
   upsert_env_key_compose_quoted "${key}" "${value}"

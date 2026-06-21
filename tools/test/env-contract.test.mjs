@@ -534,7 +534,7 @@ test("external backup stages HOME_SERVER_ENV values with compose-safe quoting", 
   const externalBackupScript = readFileSync(externalBackupScriptPath, "utf8")
   const workDir = mkdtempSync(path.join(tmpdir(), "aquila-compose-env-"))
   const envFile = path.join(workDir, ".env.prod")
-  writeFileSync(envFile, "")
+  writeFileSync(envFile, "ALERTMANAGER_SMTP_AUTH_PASSWORD='stale'\n")
 
   try {
     const functionSnippet = externalBackupScript.slice(
@@ -554,6 +554,7 @@ fail() { printf '%s\\n' "$*" >&2; exit 1; }
 ${functionSnippet}
 stage_home_server_env_key "PROD___POSTGRES__PASSWORD"
 stage_home_server_env_key "GRAFANA_ADMIN_PASSWORD"
+stage_home_server_env_key "ALERTMANAGER_SMTP_AUTH_PASSWORD"
 cat "$COMPOSE_ENV_FILE"
 rm -f -- "$COMPOSE_ENV_FILE_TMP" "$COMPOSE_ENV_FILE_TMP.tmp"
 `,
@@ -565,6 +566,7 @@ rm -f -- "$COMPOSE_ENV_FILE_TMP" "$COMPOSE_ENV_FILE_TMP.tmp"
           HOME_SERVER_ENV: [
             "PROD___POSTGRES__PASSWORD=pa$word",
             "GRAFANA_ADMIN_PASSWORD=let's$secret\\path",
+            "ALERTMANAGER_SMTP_AUTH_PASSWORD=",
           ].join("\n"),
         },
         stdio: ["ignore", "pipe", "pipe"],
@@ -573,6 +575,8 @@ rm -f -- "$COMPOSE_ENV_FILE_TMP" "$COMPOSE_ENV_FILE_TMP.tmp"
 
     assert.match(output, /^PROD___POSTGRES__PASSWORD='pa\$word'$/m)
     assert.match(output, /^GRAFANA_ADMIN_PASSWORD='let\\'s\$secret\\path'$/m)
+    assert.match(output, /^ALERTMANAGER_SMTP_AUTH_PASSWORD=''$/m)
+    assert.doesNotMatch(output, /ALERTMANAGER_SMTP_AUTH_PASSWORD='stale'/)
   } finally {
     rmSync(workDir, { force: true, recursive: true })
   }

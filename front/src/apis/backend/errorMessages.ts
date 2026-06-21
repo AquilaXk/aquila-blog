@@ -24,7 +24,7 @@ const authStatusMessages: Record<AuthAction, Partial<Record<number, string>>> = 
   },
   signupComplete: {
     400: "입력값을 다시 확인해주세요.",
-    409: "이미 사용 중인 정보입니다.",
+    409: "약관 또는 개인정보처리방침이 변경되었습니다. 최신 내용을 확인하고 다시 동의해주세요.",
     500: "회원가입 처리 중 서버 오류가 발생했습니다.",
   },
 }

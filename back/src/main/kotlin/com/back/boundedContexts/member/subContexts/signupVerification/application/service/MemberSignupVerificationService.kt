@@ -3,6 +3,8 @@ package com.back.boundedContexts.member.subContexts.signupVerification.applicati
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.application.service.MemberApplicationService
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.LegalAcceptanceApplicationService
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.LegalAcceptanceCommand
 import com.back.boundedContexts.member.subContexts.signupVerification.application.port.output.MemberSignupVerificationRepositoryPort
 import com.back.boundedContexts.member.subContexts.signupVerification.domain.MemberSignupVerification
 import com.back.boundedContexts.member.subContexts.signupVerification.dto.SendSignupVerificationMailPayload
@@ -32,6 +34,7 @@ data class SignupEmailVerifyResult(
 class MemberSignupVerificationService(
     private val memberRepository: MemberRepositoryPort,
     private val memberApplicationService: MemberApplicationService,
+    private val legalAcceptanceApplicationService: LegalAcceptanceApplicationService,
     private val memberSignupVerificationRepository: MemberSignupVerificationRepositoryPort,
     private val taskFacade: TaskFacade,
     private val signupStartRateLimitService: SignupStartRateLimitService,
@@ -141,6 +144,7 @@ class MemberSignupVerificationService(
         signupToken: String,
         password: String,
         nickname: String,
+        legalAcceptance: LegalAcceptanceCommand,
     ): Member {
         val normalizedToken = signupToken.trim()
         if (normalizedToken.isBlank()) {
@@ -154,6 +158,7 @@ class MemberSignupVerificationService(
 
         verification.ensureCompletable(now)
         verification.ensureLegalAcceptanceRecorded(now)
+        legalAcceptanceApplicationService.validateEmailSignupAcceptance(legalAcceptance)
         if (memberRepository.existsByEmail(verification.email)) {
             verification.cancel(now)
             throw AppException("404-2", "유효하지 않은 회원가입 세션입니다.")
@@ -167,6 +172,11 @@ class MemberSignupVerificationService(
                 profileImgUrl = null,
             )
 
+        legalAcceptanceApplicationService.recordEmailSignupAcceptance(
+            member = member,
+            command = legalAcceptance,
+            acceptedAt = now,
+        )
         verification.consume(now)
 
         return member

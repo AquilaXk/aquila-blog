@@ -41,19 +41,26 @@ test.describe("legal policy public pages", () => {
     await expect(page.getByRole("link", { name: "개인정보처리방침" })).toHaveAttribute("href", "/privacy")
     await expect(page.getByRole("link", { name: "이용약관" })).toHaveAttribute("href", "/terms")
 
+    await page.goto("/login?oauthError=signup-required", { waitUntil: "domcontentloaded" })
+    await expect(page.getByText("소셜 로그인 신규 가입은 현재 지원하지 않습니다.")).toBeVisible()
+
     await page.goto("/signup", { waitUntil: "domcontentloaded" })
 
     const signupForm = page.locator("form")
     const signupSubmitButton = signupForm.getByRole("button", { name: "인증 메일 보내기" })
+    const signupKakaoButton = signupForm.getByRole("button", { name: "카카오로 로그인" })
 
     await expect(page.getByText("회원가입을 진행하려면 필수 약관과 개인정보처리방침에 동의해야 합니다.")).toBeVisible()
     await expect(signupSubmitButton).toBeDisabled()
+    await expect(signupKakaoButton).toBeDisabled()
     await expect(signupForm.getByRole("link", { name: "개인정보처리방침" })).toHaveAttribute("href", "/privacy")
     await expect(signupForm.getByRole("link", { name: "이용약관" })).toHaveAttribute("href", "/terms")
     await signupForm.getByRole("checkbox", { name: /이용약관/ }).check()
     await expect(signupSubmitButton).toBeDisabled()
+    await expect(signupKakaoButton).toBeDisabled()
     await signupForm.getByRole("checkbox", { name: /개인정보처리방침/ }).check()
     await expect(signupSubmitButton).toBeEnabled()
+    await expect(signupKakaoButton).toBeEnabled()
 
     await mockAvatarAsset(page)
     await addPublicAboutSnapshotCookie(page)
@@ -64,15 +71,19 @@ test.describe("legal policy public pages", () => {
     const authDialog = page.getByRole("dialog")
     await authDialog.getByRole("button", { name: "회원가입" }).click()
     const modalSignupButton = authDialog.getByRole("button", { name: "인증 메일 보내기" })
+    const modalKakaoButton = authDialog.getByRole("button", { name: "카카오로 로그인" })
 
     await expect(authDialog.getByText("회원가입을 진행하려면 필수 약관과 개인정보처리방침에 동의해야 합니다.")).toBeVisible()
     await expect(modalSignupButton).toBeDisabled()
+    await expect(modalKakaoButton).toBeDisabled()
     await expect(authDialog.getByRole("link", { name: "개인정보처리방침" })).toHaveAttribute("href", "/privacy")
     await expect(authDialog.getByRole("link", { name: "이용약관" })).toHaveAttribute("href", "/terms")
     await authDialog.getByRole("checkbox", { name: /이용약관/ }).check()
     await expect(modalSignupButton).toBeDisabled()
+    await expect(modalKakaoButton).toBeDisabled()
     await authDialog.getByRole("checkbox", { name: /개인정보처리방침/ }).check()
     await expect(modalSignupButton).toBeEnabled()
+    await expect(modalKakaoButton).toBeEnabled()
     await authDialog.getByRole("button", { name: "닫기" }).click()
 
     const footer = page.locator("footer")

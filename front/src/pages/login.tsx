@@ -36,6 +36,10 @@ const LoginPage = () => {
     const value = Array.isArray(raw) ? raw[0] : raw
     return value === "done"
   }, [router.query.signup])
+  const oauthError = useMemo(() => {
+    const raw = router.query.oauthError
+    return Array.isArray(raw) ? raw[0] : raw
+  }, [router.query.oauthError])
   const loginIdPrefill = useMemo(() => {
     const emailRaw = router.query.email
     const emailValue = Array.isArray(emailRaw) ? emailRaw[0] : emailRaw
@@ -68,6 +72,15 @@ const LoginPage = () => {
   useEffect(() => {
     saveAuthLoginPolicyPrefs({ keepSignedIn, ipSecurityOn })
   }, [keepSignedIn, ipSecurityOn])
+
+  useEffect(() => {
+    if (!oauthError) return
+    setError(
+      oauthError === "signup-required"
+        ? "소셜 로그인 신규 가입은 현재 지원하지 않습니다. 이메일 회원가입으로 먼저 약관과 개인정보처리방침에 동의해주세요."
+        : "소셜 로그인에 실패했습니다. 잠시 후 다시 시도해주세요.",
+    )
+  }, [oauthError])
 
   const socialItems = useMemo(() => {
     return buildSocialAuthItems(next)

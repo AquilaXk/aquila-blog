@@ -97,6 +97,36 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
         }
 
         @Test
+        fun `약관 동의 버전이 비어 있으면 이메일 인증 시작을 막는다`() {
+            mvc
+                .post("/member/api/v1/signup/email/start") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "email": "missing-policy-version@example.com",
+                            "termsAccepted": true,
+                            "privacyAccepted": true,
+                            "legalPolicyVersion": ""
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isBadRequest() }
+                    jsonPath("$.resultCode") { value("400-2") }
+                    jsonPath("$.msg") { value("약관 동의 버전이 올바르지 않습니다.") }
+                }
+
+            val verification =
+                memberSignupVerificationRepository
+                    .findTopByEmailOrderByCreatedAtDesc("missing-policy-version@example.com")
+
+            assertThat(verification).isNull()
+            val mailTasks =
+                taskRepository.findAll().filter { it.taskType == "member.signupVerification.sendMail" }
+            assertThat(mailTasks).isEmpty()
+        }
+
+        @Test
         fun `이미 사용 중인 이메일이면 충돌 응답을 반환한다`() {
             memberApplicationService.join(
                 username = "dup-email-user",

@@ -45,6 +45,12 @@ const requiredProcessors = new Set([
   "google_gemini",
   "home_server_backup_storage",
 ])
+const requiredActivityDataCategories = new Map([
+  ["account_registration_email", ["email", "nickname", "passwordHash"]],
+])
+const requiredActivityEnvFragments = new Map([
+  ["ai_tag_recommendation_gemini", ["custom.ai.tag.enabled", "custom.ai.tag.gemini."]],
+])
 
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8")
 
@@ -131,6 +137,12 @@ for (const activity of activities) {
   activityIds.add(activity.id)
   for (const processorId of activity.processors || []) {
     if (!processorIds.has(processorId)) fail(`activity ${activity.id} references unknown processor ${processorId}`)
+  }
+  for (const dataCategory of requiredActivityDataCategories.get(activity.id) || []) {
+    if (!activity.dataCategories.includes(dataCategory)) fail(`activity ${activity.id} is missing required data category ${dataCategory}`)
+  }
+  for (const envFragment of requiredActivityEnvFragments.get(activity.id) || []) {
+    if (!activity.enabledByEnv.includes(envFragment)) fail(`activity ${activity.id} enabledByEnv must include ${envFragment}`)
   }
 }
 

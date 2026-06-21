@@ -166,6 +166,10 @@ const LoginPage = () => {
       footer={
         <FooterText>
           계정이 없으면 <Link href={toSignupPath(next)}>회원가입</Link>
+          <span className="policyLinks">
+            <Link href="/privacy">개인정보처리방침</Link>
+            <Link href="/terms">이용약관</Link>
+          </span>
         </FooterText>
       }
       loginHref={toLoginPath(next)}

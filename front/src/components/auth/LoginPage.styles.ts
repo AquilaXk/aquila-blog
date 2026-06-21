@@ -325,6 +325,13 @@ export const FooterText = styled.p`
     align-items: center;
     min-height: 34px;
   }
+
+  .policyLinks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.7rem;
+    margin-top: 0.25rem;
+  }
 `
 
 export const SocialSection = styled.div`

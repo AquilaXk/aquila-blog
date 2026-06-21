@@ -2,8 +2,9 @@ import Link from "next/link"
 import styled from "@emotion/styled"
 import { CONFIG } from "site.config"
 
-export const DATA_DELETION_MAILTO =
-  "mailto:illusiveman7@gmail.com?subject=AquilaLog%20%EB%8D%B0%EC%9D%B4%ED%84%B0%20%EC%82%AD%EC%A0%9C%20%EC%9A%94%EC%B2%AD"
+const DATA_DELETION_SUBJECT = encodeURIComponent("AquilaLog 데이터 삭제 요청")
+
+export const buildDataDeletionMailto = (email: string) => `mailto:${email}?subject=${DATA_DELETION_SUBJECT}`
 
 type LegalPolicySection = {
   title: string
@@ -30,7 +31,7 @@ const LegalPolicyPage = ({ eyebrow, title, description, updatedAt, sections }: L
           <nav aria-label="정책 문서">
             <Link href="/privacy">개인정보처리방침</Link>
             <Link href="/terms">이용약관</Link>
-            <a href={DATA_DELETION_MAILTO}>{CONFIG.profile.email}</a>
+            <a href={buildDataDeletionMailto(CONFIG.profile.email)}>{CONFIG.profile.email}</a>
           </nav>
         </header>
 
@@ -38,8 +39,8 @@ const LegalPolicyPage = ({ eyebrow, title, description, updatedAt, sections }: L
           {sections.map((section) => (
             <section key={section.title}>
               <h2>{section.title}</h2>
-              {section.body.map((paragraph) => (
-                <p key={paragraph}>{paragraph}</p>
+              {section.body.map((paragraph, index) => (
+                <p key={`${section.title}-${index}`}>{paragraph}</p>
               ))}
             </section>
           ))}

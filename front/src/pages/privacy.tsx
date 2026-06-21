@@ -1,8 +1,9 @@
 import { CONFIG } from "site.config"
 import MetaConfig from "src/components/MetaConfig"
-import LegalPolicyPage, { DATA_DELETION_MAILTO } from "src/routes/LegalPolicy/LegalPolicyPage"
+import LegalPolicyPage, { buildDataDeletionMailto } from "src/routes/LegalPolicy/LegalPolicyPage"
 
 const PrivacyPage = () => {
+  const dataDeletionMailto = buildDataDeletionMailto(CONFIG.profile.email)
   const meta = {
     title: "개인정보처리방침",
     description: "AquilaLog가 처리하는 개인정보 항목, 이용 목적, 보관 기준, 삭제 요청 경로를 안내합니다.",
@@ -45,7 +46,7 @@ const PrivacyPage = () => {
             title: "데이터 삭제 요청",
             body: [
               `데이터 삭제 요청은 ${CONFIG.profile.email}로 보낼 수 있습니다. 요청 시 계정 이메일, 삭제 대상, 본인 확인에 필요한 최소 정보를 함께 알려주세요.`,
-              `빠른 접수를 위해 메일 링크를 사용할 수 있습니다: ${DATA_DELETION_MAILTO}`,
+              `빠른 접수를 위해 메일 링크를 사용할 수 있습니다: ${dataDeletionMailto}`,
             ],
           },
           {

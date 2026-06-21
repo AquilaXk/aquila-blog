@@ -898,6 +898,7 @@ test("deploy workflow는 frontend 변경에서만 live frontend SHA를 현재 co
   assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*with-test-lock\\\.mjs/)
   assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*patch-lodash-template\\\.cjs/)
   assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*site\\\.config\\\.js/)
+  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*vercel\\\.json/)
   assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*tsconfig\\\.json/)
   assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*next-sitemap\\\.config\\\.js/)
   assert.doesNotMatch(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN='?\^front\/'?\n/)

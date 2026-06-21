@@ -86,6 +86,7 @@ require_pattern 'FRONT_BUILD_SHA_PATHS_PATTERN=.*scripts/\(check-refactor-bounda
 require_pattern 'FRONT_BUILD_SHA_PATHS_PATTERN=.*with-test-lock\\\.mjs' "frontend build wrapper changes must force live build sha equality"
 require_pattern 'FRONT_BUILD_SHA_PATHS_PATTERN=.*patch-lodash-template\\\.cjs' "frontend postinstall patch changes must force live build sha equality"
 require_pattern 'FRONT_BUILD_SHA_PATHS_PATTERN=.*site\\\.config\\\.js' "frontend site config changes must force live build sha equality"
+require_pattern 'FRONT_BUILD_SHA_PATHS_PATTERN=.*vercel\\\.json' "Vercel project config changes must force live build sha equality"
 require_pattern 'FRONT_BUILD_SHA_PATHS_PATTERN=.*tsconfig\\\.json' "frontend TypeScript config changes must force live build sha equality"
 require_pattern 'FRONT_BUILD_SHA_PATHS_PATTERN=.*next-sitemap\\\.config\\\.js' "frontend sitemap config changes must force live build sha equality"
 require_pattern 'FRONT_LIVE_VERIFY_PATHS_PATTERN=.*legal/policies/' "legal policy source changes must run live frontend verification"

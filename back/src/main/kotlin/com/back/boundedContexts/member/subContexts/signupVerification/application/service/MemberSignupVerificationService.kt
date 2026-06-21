@@ -158,6 +158,7 @@ class MemberSignupVerificationService(
 
         verification.ensureCompletable(now)
         verification.ensureLegalAcceptanceRecorded(now)
+        legalAcceptanceApplicationService.validateStoredSignupPolicyVersion(verification.legalPolicyVersion)
         legalAcceptanceApplicationService.validateEmailSignupAcceptance(legalAcceptance)
         if (memberRepository.existsByEmail(verification.email)) {
             verification.cancel(now)

@@ -461,7 +461,43 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
             assertThat(memberApplicationService.findByEmail(email)).isNull()
         }
 
-        private fun issueSignupToken(email: String): String {
+        @Test
+        fun `가입 시작에 저장된 정책 버전이 최신 active 문서와 다르면 최종 가입을 409로 막는다`() {
+            val email = "stale-start-policy@example.com"
+            val signupToken = issueSignupToken(email, legalPolicyVersion = "2026-01-01")
+
+            mvc
+                .post("/member/api/v1/signup/complete") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "signupToken": "$signupToken",
+                            "password": "Abcd1234!",
+                            "nickname": "오래된시작정책회원",
+                            "termsVersion": "${activeLegalDocuments.terms.version}",
+                            "termsContentSha256": "${activeLegalDocuments.terms.contentSha256}",
+                            "privacyVersion": "${activeLegalDocuments.privacy.version}",
+                            "privacyContentSha256": "${activeLegalDocuments.privacy.contentSha256}",
+                            "age14OrOlder": true,
+                            "requiredPrivacyConfirmed": true,
+                            "analyticsConsent": false,
+                            "overseasTransferAcknowledged": true
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isConflict() }
+                    jsonPath("$.resultCode") { value("409-4") }
+                    jsonPath("$.msg") { value("약관 또는 개인정보처리방침이 변경되었습니다. 최신 내용을 확인하고 다시 동의해주세요.") }
+                }
+
+            assertThat(memberApplicationService.findByEmail(email)).isNull()
+        }
+
+        private fun issueSignupToken(
+            email: String,
+            legalPolicyVersion: String = this@ApiV1SignupVerificationControllerTest.legalPolicyVersion,
+        ): String {
             mvc.post("/member/api/v1/signup/email/start") {
                 contentType = MediaType.APPLICATION_JSON
                 content =

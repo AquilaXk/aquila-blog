@@ -8,6 +8,7 @@ import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
 import AuthShell from "src/components/auth/AuthShell"
 import AppIcon from "src/components/icons/AppIcon"
 import { formatSignupCooldown, useSignupMailCooldown } from "src/hooks/useSignupMailCooldown"
+import { ACTIVE_LEGAL_POLICY_VERSION, legalPolicyCurrentPaths } from "src/libs/legal/policyLinks"
 import { normalizeNextPath, toLoginPath, toSignupPath } from "src/libs/router"
 import { GuestPageProps, getGuestPageProps } from "src/libs/server/guestPage"
 import { isValidAuthEmail, normalizeAuthEmail } from "src/libs/validation/auth"
@@ -22,7 +23,7 @@ type SignupEmailStartResult = {
   email: string
 }
 
-const SIGNUP_LEGAL_POLICY_VERSION = "2026-06-21"
+const SIGNUP_LEGAL_POLICY_VERSION = ACTIVE_LEGAL_POLICY_VERSION
 
 export const getServerSideProps: GetServerSideProps<GuestPageProps> = async ({ req }) => {
   return await getGuestPageProps(req)
@@ -105,8 +106,8 @@ const SignupPage = () => {
         <FooterText>
           이미 계정이 있으면 <Link href={toLoginPath(next)}>로그인</Link>
           <span className="policyLinks">
-            <Link href="/privacy">개인정보처리방침</Link>
-            <Link href="/terms">이용약관</Link>
+            <Link href={legalPolicyCurrentPaths.privacy}>개인정보처리방침</Link>
+            <Link href={legalPolicyCurrentPaths.terms}>이용약관</Link>
           </span>
         </FooterText>
       }
@@ -149,7 +150,7 @@ const SignupPage = () => {
               onChange={(event) => setTermsAccepted(event.target.checked)}
             />
             <span>
-              <Link href="/terms">이용약관</Link>에 동의합니다.
+              <Link href={legalPolicyCurrentPaths.terms}>이용약관</Link>에 동의합니다.
             </span>
           </label>
           <label>
@@ -159,7 +160,7 @@ const SignupPage = () => {
               onChange={(event) => setPrivacyAccepted(event.target.checked)}
             />
             <span>
-              <Link href="/privacy">개인정보처리방침</Link>에 동의합니다.
+              <Link href={legalPolicyCurrentPaths.privacy}>개인정보처리방침</Link>에 동의합니다.
             </span>
           </label>
         </RequiredConsentBox>

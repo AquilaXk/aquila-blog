@@ -51,7 +51,7 @@ export const FilterContextBar = styled.div`
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  color: #8b949e;
+  color: ${({ theme }) => theme.colors.gray10};
 
   .contextMain {
     min-width: 0;
@@ -70,13 +70,13 @@ export const FilterContextBar = styled.div`
 
   .contextCount {
     font-size: 0.88rem;
-    color: #f0f6fc;
+    color: ${({ theme }) => theme.colors.gray12};
     font-weight: 740;
     letter-spacing: -0.015em;
   }
 
   .filterSummary {
-    color: #8b949e;
+    color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.74rem;
     line-height: 1.35;
     font-weight: 600;
@@ -93,9 +93,9 @@ export const FilterContextBar = styled.div`
     min-height: 1.7rem;
     padding: 0 0.58rem;
     border-radius: 999px;
-    border: 1px solid #30363d;
-    background: #161b22;
-    color: #c9d1d9;
+    border: 1px solid ${({ theme }) => theme.publicDesign.border};
+    background: ${({ theme }) => theme.publicDesign.operationSurfaceElevated};
+    color: ${({ theme }) => theme.colors.gray11};
     font-size: 0.72rem;
     font-weight: 700;
     white-space: nowrap;
@@ -106,18 +106,18 @@ export const FilterContextBar = styled.div`
     min-height: 1.7rem;
     padding: 0 0.52rem;
     border-radius: 999px;
-    border: 1px solid #30363d;
+    border: 1px solid ${({ theme }) => theme.publicDesign.border};
     background: transparent;
-    color: #8b949e;
+    color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.72rem;
     font-weight: 700;
     cursor: pointer;
     transition: border-color 0.125s ease-in, color 0.125s ease-in, background-color 0.125s ease-in;
 
     &:hover {
-      border-color: #58a6ff;
-      background: rgba(88, 166, 255, 0.12);
-      color: #f0f6fc;
+      border-color: ${({ theme }) => theme.publicDesign.accent};
+      background: ${({ theme }) => theme.publicDesign.accentMuted};
+      color: ${({ theme }) => theme.colors.gray12};
     }
   }
 

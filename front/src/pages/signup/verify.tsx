@@ -5,6 +5,7 @@ import { useRouter } from "next/router"
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
+import { ACTIVE_LEGAL_DOCUMENTS, buildEmailSignupLegalAcceptancePayload } from "src/apis/backend/legal"
 import AuthShell from "src/components/auth/AuthShell"
 import AppIcon from "src/components/icons/AppIcon"
 import { normalizeNextPath, replaceRoute, toLoginPath, toSignupPath } from "src/libs/router"
@@ -36,6 +37,10 @@ const SignupVerifyPage = () => {
   const [passwordConfirm, setPasswordConfirm] = useState("")
   const [nickname, setNickname] = useState("")
   const [showPassword, setShowPassword] = useState(false)
+  const [age14OrOlder, setAge14OrOlder] = useState(false)
+  const [requiredPrivacyConfirmed, setRequiredPrivacyConfirmed] = useState(false)
+  const [analyticsConsent, setAnalyticsConsent] = useState(false)
+  const [overseasTransferAcknowledged, setOverseasTransferAcknowledged] = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [submitLoading, setSubmitLoading] = useState(false)
 
@@ -89,6 +94,7 @@ const SignupVerifyPage = () => {
   const hasPasswordConfirmInput = passwordConfirm.length > 0
   const passwordMatched = hasPasswordInput && hasPasswordConfirmInput && password === passwordConfirm
   const passwordMismatch = hasPasswordConfirmInput && password !== passwordConfirm
+  const requiredLegalAccepted = age14OrOlder && requiredPrivacyConfirmed && overseasTransferAcknowledged
   const submitFeedbackMessage = submitError ? (
     <ErrorText>{submitError}</ErrorText>
   ) : (
@@ -118,6 +124,11 @@ const SignupVerifyPage = () => {
       return
     }
 
+    if (!requiredLegalAccepted) {
+      setSubmitError("만 14세 이상, 개인정보 필수 안내, 국외 이전 안내를 모두 확인해주세요.")
+      return
+    }
+
     setSubmitLoading(true)
     setSubmitError("")
 
@@ -128,6 +139,12 @@ const SignupVerifyPage = () => {
           signupToken: verification.signupToken,
           password,
           nickname: nickname.trim(),
+          ...buildEmailSignupLegalAcceptancePayload({
+            age14OrOlder,
+            requiredPrivacyConfirmed,
+            analyticsConsent,
+            overseasTransferAcknowledged,
+          }),
         }),
       })
 
@@ -262,11 +279,52 @@ const SignupVerifyPage = () => {
             </PasswordPolicyList>
           </PasswordPolicyCard>
 
+          <RequiredConsentBox aria-label="회원가입 완료 필수 확인">
+            <p>
+              가입 시점 기준 정책 버전: 이용약관 {ACTIVE_LEGAL_DOCUMENTS.terms.version}, 개인정보처리방침{" "}
+              {ACTIVE_LEGAL_DOCUMENTS.privacy.version}
+            </p>
+            <label>
+              <input
+                type="checkbox"
+                checked={age14OrOlder}
+                onChange={(event) => setAge14OrOlder(event.target.checked)}
+              />
+              <span>만 14세 이상입니다.</span>
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={requiredPrivacyConfirmed}
+                onChange={(event) => setRequiredPrivacyConfirmed(event.target.checked)}
+              />
+              <span>
+                <Link href="/privacy">개인정보처리방침</Link>의 필수 수집·이용 항목을 확인했습니다.
+              </span>
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={overseasTransferAcknowledged}
+                onChange={(event) => setOverseasTransferAcknowledged(event.target.checked)}
+              />
+              <span>서비스 운영에 필요한 외부 처리자와 국외 이전 가능성을 확인했습니다.</span>
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={analyticsConsent}
+                onChange={(event) => setAnalyticsConsent(event.target.checked)}
+              />
+              <span>서비스 품질 개선을 위한 analytics/RUM 처리에 선택 동의합니다.</span>
+            </label>
+          </RequiredConsentBox>
+
           <FeedbackSlot aria-live="polite">{submitFeedbackMessage}</FeedbackSlot>
 
           <ActionRow>
             <CancelLink href={toSignupPath(next)}>취소</CancelLink>
-            <PrimaryButton type="submit" disabled={submitLoading}>
+            <PrimaryButton type="submit" disabled={submitLoading || !requiredLegalAccepted}>
               {submitLoading ? "가입 중..." : "가입"}
             </PrimaryButton>
           </ActionRow>
@@ -398,6 +456,41 @@ const PasswordPolicyItem = styled.li`
 
   &[data-ok="false"] {
     color: ${({ theme }) => theme.colors.gray10};
+  }
+`
+
+const RequiredConsentBox = styled.div`
+  display: grid;
+  gap: 0.58rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 14px;
+  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.74rem 0.84rem;
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.82rem;
+    line-height: 1.55;
+  }
+
+  label {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.5rem;
+    align-items: start;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.84rem;
+    line-height: 1.5;
+  }
+
+  input {
+    margin-top: 0.22rem;
+  }
+
+  a {
+    color: ${({ theme }) => theme.colors.blue10};
+    font-weight: 700;
   }
 `
 

@@ -1,4 +1,5 @@
 import { CONFIG } from "site.config"
+import Link from "next/link"
 import React from "react"
 import styled from "@emotion/styled"
 
@@ -13,20 +14,32 @@ type Props = {
 const Footer: React.FC<Props> = ({ className }) => {
   return (
     <StyledWrapper className={className}>
-      <a
-        href={`https://github.com/${CONFIG.profile.github}`}
-        target="_blank"
-        rel="noreferrer"
-      >
-        © {CONFIG.profile.name} {from === y || !from ? y : `${from} - ${y}`}
-      </a>
+      <div className="footerLinks">
+        <a
+          href={`https://github.com/${CONFIG.profile.github}`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          © {CONFIG.profile.name} {from === y || !from ? y : `${from} - ${y}`}
+        </a>
+        <Link href="/privacy">개인정보처리방침</Link>
+        <Link href="/terms">이용약관</Link>
+      </div>
     </StyledWrapper>
   )
 }
 
 export default Footer
 
-const StyledWrapper = styled.div`
+const StyledWrapper = styled.footer`
+  .footerLinks {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem 0.85rem;
+  }
+
   a {
     display: inline-flex;
     align-items: center;

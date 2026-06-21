@@ -30,6 +30,9 @@ class ApiV1SignupVerificationController(
         @field:Email
         @field:NotBlank
         val email: String,
+        val termsAccepted: Boolean = false,
+        val privacyAccepted: Boolean = false,
+        val legalPolicyVersion: String? = null,
         val nextPath: String? = null,
     )
 
@@ -63,6 +66,9 @@ class ApiV1SignupVerificationController(
         val result =
             memberSignupVerificationService.start(
                 email = reqBody.email,
+                termsAccepted = reqBody.termsAccepted,
+                privacyAccepted = reqBody.privacyAccepted,
+                legalPolicyVersion = reqBody.legalPolicyVersion,
                 nextPath = reqBody.nextPath,
                 clientIp = extractClientIp(request),
             )

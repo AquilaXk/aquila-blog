@@ -106,6 +106,46 @@ export const Modal = styled.div`
     margin-top: 0.2rem;
   }
 
+  .requiredConsentBox {
+    display: grid;
+    gap: 0.5rem;
+    margin: -0.12rem 0 0.12rem;
+    padding: 0.78rem 0.82rem;
+    border: 1px solid ${({ theme }) => theme.colors.gray5};
+    border-radius: 12px;
+    background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : theme.colors.gray2)};
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.8rem;
+    line-height: 1.55;
+  }
+
+  .requiredConsentBox p {
+    margin: 0;
+  }
+
+  .requiredConsentBox label {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.44rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-weight: 650;
+  }
+
+  .requiredConsentBox input {
+    width: 16px;
+    height: 16px;
+    margin-top: 0.15rem;
+    accent-color: #12b886;
+    flex: 0 0 auto;
+  }
+
+  .requiredConsentBox a {
+    color: ${({ theme }) => theme.colors.accentLink};
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
   .naverField {
     position: relative;
     border: 1px solid ${({ theme }) => theme.colors.gray6};

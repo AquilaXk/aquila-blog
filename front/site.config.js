@@ -15,7 +15,7 @@ const CONFIG = {
     image: "/images/default-profile.svg",
     role: "backend developer",
     bio: "백엔드 아키텍처와 운영 트러블슈팅을 기록합니다.",
-    email: "illusiveman7@gmail.com",
+    email: "aquilaxk10@gmail.com",
     linkedin: "",
     github: "aquilaXk",
     instagram: "",

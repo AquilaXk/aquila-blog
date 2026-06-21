@@ -3976,6 +3976,15 @@
             "format" : "email",
             "minLength" : 1
           },
+          "termsAccepted" : {
+            "type" : "boolean"
+          },
+          "privacyAccepted" : {
+            "type" : "boolean"
+          },
+          "legalPolicyVersion" : {
+            "type" : "string"
+          },
           "nextPath" : {
             "type" : "string"
           }

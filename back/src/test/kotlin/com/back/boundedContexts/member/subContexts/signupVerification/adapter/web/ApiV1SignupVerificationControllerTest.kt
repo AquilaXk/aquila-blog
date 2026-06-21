@@ -17,6 +17,8 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.handler
 
 @org.junit.jupiter.api.DisplayName("ApiV1SignupVerificationController 테스트")
 class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
+    private val legalPolicyVersion = "2026-06-21"
+
     @Autowired
     private lateinit var memberApplicationService: MemberApplicationService
 
@@ -36,7 +38,10 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
                     content =
                         """
                         {
-                            "email": "new-user@example.com"
+                            "email": "new-user@example.com",
+                            "termsAccepted": true,
+                            "privacyAccepted": true,
+                            "legalPolicyVersion": "$legalPolicyVersion"
                         }
                         """.trimIndent()
                 }.andExpect {
@@ -52,11 +57,43 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
 
             checkNotNull(verification)
             assertThat(verification.emailVerificationToken).isNotBlank()
+            assertThat(verification.termsAcceptedAt).isNotNull()
+            assertThat(verification.privacyAcceptedAt).isNotNull()
+            assertThat(verification.legalPolicyVersion).isEqualTo(legalPolicyVersion)
             val mailTasks =
                 taskRepository.findAll().filter { it.taskType == "member.signupVerification.sendMail" }
             assertThat(mailTasks).hasSize(1)
             assertThat(mailTasks.single().aggregateId).isEqualTo(verification.id)
             assertThat(mailTasks.single().status).isEqualTo(TaskStatus.COMPLETED)
+        }
+
+        @Test
+        fun `필수 약관과 개인정보처리방침 동의가 없으면 이메일 인증 시작을 막는다`() {
+            mvc
+                .post("/member/api/v1/signup/email/start") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "email": "missing-consent@example.com",
+                            "termsAccepted": true,
+                            "privacyAccepted": false,
+                            "legalPolicyVersion": "$legalPolicyVersion"
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isBadRequest() }
+                    jsonPath("$.resultCode") { value("400-2") }
+                    jsonPath("$.msg") { value("회원가입을 진행하려면 이용약관과 개인정보처리방침에 모두 동의해야 합니다.") }
+                }
+
+            val verification =
+                memberSignupVerificationRepository.findTopByEmailOrderByCreatedAtDesc("missing-consent@example.com")
+
+            assertThat(verification).isNull()
+            val mailTasks =
+                taskRepository.findAll().filter { it.taskType == "member.signupVerification.sendMail" }
+            assertThat(mailTasks).isEmpty()
         }
 
         @Test
@@ -75,7 +112,10 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
                     content =
                         """
                         {
-                            "email": "dup@example.com"
+                            "email": "dup@example.com",
+                            "termsAccepted": true,
+                            "privacyAccepted": true,
+                            "legalPolicyVersion": "$legalPolicyVersion"
                         }
                         """.trimIndent()
                 }.andExpect {
@@ -101,7 +141,10 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
                 content =
                     """
                     {
-                        "email": "$email"
+                        "email": "$email",
+                        "termsAccepted": true,
+                        "privacyAccepted": true,
+                        "legalPolicyVersion": "$legalPolicyVersion"
                     }
                     """.trimIndent()
             }
@@ -180,7 +223,10 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
                 content =
                     """
                     {
-                        "email": "$email"
+                        "email": "$email",
+                        "termsAccepted": true,
+                        "privacyAccepted": true,
+                        "legalPolicyVersion": "$legalPolicyVersion"
                     }
                     """.trimIndent()
             }

@@ -36,6 +36,21 @@ test("operations alert email channel is wired through env contract, compose, and
     kind: "email",
     secret: true,
   })
+  assert.deepEqual(targetKey(contract, "home-server-source", "ALERTMANAGER_SMTP_AUTH_ENABLED"), {
+    name: "ALERTMANAGER_SMTP_AUTH_ENABLED",
+    kind: "boolean",
+    required: false,
+  })
+  assert.deepEqual(targetKey(contract, "home-server-source", "ALERTMANAGER_SMTP_AUTH_USERNAME"), {
+    name: "ALERTMANAGER_SMTP_AUTH_USERNAME",
+    requiredWhen: { key: "ALERTMANAGER_SMTP_AUTH_ENABLED", equals: "true" },
+  })
+  assert.deepEqual(targetKey(contract, "home-server-source", "ALERTMANAGER_SMTP_AUTH_PASSWORD"), {
+    name: "ALERTMANAGER_SMTP_AUTH_PASSWORD",
+    secret: true,
+    requiredWhen: { key: "ALERTMANAGER_SMTP_AUTH_ENABLED", equals: "true" },
+    minLength: 8,
+  })
 
   assert.match(compose, /alertmanager:/)
   assert.match(compose, /image:\s+\$\{ALERTMANAGER_IMAGE:\?ALERTMANAGER_IMAGE is required \(sha256 digest required\)\}/)
@@ -51,8 +66,8 @@ test("operations alert email channel is wired through env contract, compose, and
   )
   assert.match(compose, /ALERTMANAGER_SMTP_SMARTHOST:\s+\$\{SPRING__MAIL__HOST:\?SPRING__MAIL__HOST is required\}:\$\{SPRING__MAIL__PORT:\?SPRING__MAIL__PORT is required\}/)
   assert.match(compose, /ALERTMANAGER_SMTP_FROM:\s+\$\{CUSTOM__MEMBER__SIGNUP__MAIL_FROM:\?CUSTOM__MEMBER__SIGNUP__MAIL_FROM is required\}/)
-  assert.match(compose, /ALERTMANAGER_SMTP_AUTH_USERNAME:\s+\$\{SPRING__MAIL__USERNAME:\?SPRING__MAIL__USERNAME is required\}/)
-  assert.match(compose, /ALERTMANAGER_SMTP_AUTH_PASSWORD:\s+\$\{SPRING__MAIL__PASSWORD:\?SPRING__MAIL__PASSWORD is required\}/)
+  assert.match(compose, /ALERTMANAGER_SMTP_AUTH_USERNAME:\s+\$\{ALERTMANAGER_SMTP_AUTH_USERNAME:-\}/)
+  assert.match(compose, /ALERTMANAGER_SMTP_AUTH_PASSWORD:\s+\$\{ALERTMANAGER_SMTP_AUTH_PASSWORD:-\}/)
   assert.match(compose, /ALERTMANAGER_SMTP_REQUIRE_TLS:\s+\$\{SPRING__MAIL__PROPERTIES__MAIL__SMTP__STARTTLS__ENABLE:-true\}/)
   assert.match(compose, /monitoring\/alertmanager\.yml:\/etc\/alertmanager\/alertmanager\.yml:ro/)
   assert.match(compose, /alertmanager_data:$/m)

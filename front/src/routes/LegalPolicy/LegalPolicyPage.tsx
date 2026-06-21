@@ -35,7 +35,7 @@ const LegalPolicyPage = ({ policy, kind, currentHref, versionHref, historyHref, 
             </div>
             <div>
               <dt>문서 해시</dt>
-              <dd>{policy.contentSha256.slice(0, 12)}</dd>
+              <dd>{policy.contentSha256}</dd>
             </div>
           </dl>
           <nav aria-label="정책 문서">

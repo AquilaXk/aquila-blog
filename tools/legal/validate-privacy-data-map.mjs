@@ -48,6 +48,10 @@ const requiredProcessors = new Set([
 ])
 const requiredActivityDataCategories = new Map([
   ["account_registration_email", ["email", "nickname", "passwordHash"]],
+  [
+    "ai_tag_recommendation_gemini",
+    ["tagRecommendationCacheKey", "tagRecommendationRateLimitKey", "tagRecommendationCachedResult"],
+  ],
 ])
 const requiredActivityEnvFragments = new Map([
   [
@@ -67,6 +71,7 @@ const requiredActivityProcessors = new Map([
   ["user_content_posts_comments", ["home_server_redis"]],
   ["auth_security_events", ["home_server_redis"]],
   ["notifications_sse", ["home_server_redis"]],
+  ["ai_tag_recommendation_gemini", ["home_server_redis"]],
 ])
 const requiredProcessorEnvFragments = new Map([
   [
@@ -173,8 +178,11 @@ for (const activity of activities) {
   }
 }
 
+const seenProcessorIds = new Set()
 for (const processor of processors) {
   assertRequiredFields("processor", processor, requiredProcessorFields)
+  if (seenProcessorIds.has(processor.id)) fail(`duplicate processor id ${processor.id}`)
+  seenProcessorIds.add(processor.id)
   if (!/^[a-z0-9_]+$/.test(processor.id)) fail(`processor ${processor.id} must use snake_case id`)
   for (const envFragment of requiredProcessorEnvFragments.get(processor.id) || []) {
     if (!processor.enabledByEnv.includes(envFragment)) fail(`processor ${processor.id} enabledByEnv must include ${envFragment}`)

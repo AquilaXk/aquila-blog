@@ -43,6 +43,14 @@ const buildContentSecurityPolicy = () => {
     "https://vercel.live",
     "wss://ws-us3.pusher.com",
   ]
+  const embedFrameSources = [
+    "https://www.youtube.com",
+    "https://player.vimeo.com",
+    "https://www.loom.com",
+    "https://www.figma.com",
+    "https://codepen.io",
+    "https://codesandbox.io",
+  ]
   const googleScriptSources = ["https://www.googletagmanager.com"]
   const googleConnectSources = [
     "https://www.google-analytics.com",
@@ -86,7 +94,7 @@ const buildContentSecurityPolicy = () => {
     ],
     ["font-src", "'self'", "data:"],
     ["media-src", "'self'", "blob:", ...aquilaDomains, ...runtimeOrigins],
-    ["frame-src", "'self'", "https://vercel.live", ...runtimeOrigins],
+    ["frame-src", "'self'", "https://vercel.live", ...runtimeOrigins, ...embedFrameSources],
     ["object-src", "'none'"],
     ["base-uri", "'self'"],
     ["form-action", "'self'"],

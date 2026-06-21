@@ -96,4 +96,29 @@ test.describe("editor failure recovery UX model", () => {
       canRetry: true,
     })
   })
+
+  test("plain Error 업로드 실패도 HTTP status와 원본 메시지를 보존한다", () => {
+    const tooLarge = resolveEditorUploadFailureRecovery(
+      new Error("이미지 업로드 실패 (413): 업로드 가능한 파일 용량을 초과했습니다."),
+      {
+        kind: "image",
+        fileName: "huge.png",
+        isOnline: true,
+      },
+    )
+    const validation = resolveEditorUploadFailureRecovery(new Error("지원하지 않는 이미지 형식입니다."), {
+      kind: "thumbnail",
+      fileName: "broken.bmp",
+      isOnline: true,
+    })
+
+    expect(tooLarge.result.errorType).toBe("too-large")
+    expect(tooLarge.statusText).toContain("용량")
+    expect(tooLarge.statusText).toContain("업로드 가능한 파일 용량을 초과했습니다")
+
+    expect(validation.result.errorType).toBe("unknown")
+    expect(validation.result.message).toBe("지원하지 않는 이미지 형식입니다.")
+    expect(validation.statusText).toContain("broken.bmp")
+    expect(validation.statusText).toContain("지원하지 않는 이미지 형식입니다.")
+  })
 })

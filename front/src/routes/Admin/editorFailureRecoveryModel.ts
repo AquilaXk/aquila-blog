@@ -57,7 +57,21 @@ const isFetchTransportError = (error: unknown) =>
   error instanceof TypeError &&
   /failed to fetch|networkerror|load failed|fetch/i.test(error.message)
 
-const getStatus = (error: unknown) => error instanceof ApiError ? error.status : undefined
+const getErrorMessage = (error: unknown) => {
+  if (error instanceof Error) return error.message.trim()
+  return String(error || "").trim()
+}
+
+const getStatusFromMessage = (message: string) => {
+  const statusMatch = message.match(/(?:^|[^\d])([45]\d{2})(?:[^\d]|$)/)
+  if (!statusMatch) return undefined
+  return Number(statusMatch[1])
+}
+
+const getStatus = (error: unknown) => {
+  if (error instanceof ApiError) return error.status
+  return getStatusFromMessage(getErrorMessage(error))
+}
 
 const classifyEditorFailure = (
   error: unknown,
@@ -76,7 +90,12 @@ const classifyEditorFailure = (
   return { type: "unknown", status }
 }
 
-const buildMessage = (type: EditorFailureType) => {
+const appendOriginalMessage = (message: string, originalMessage: string) => {
+  if (!originalMessage || message.includes(originalMessage)) return message
+  return `${message} ${originalMessage}`
+}
+
+const buildMessage = (type: EditorFailureType, originalMessage: string) => {
   switch (type) {
     case "version-conflict":
       return "서버 최신본과 충돌했습니다. 작성 내용은 유지됩니다."
@@ -93,9 +112,12 @@ const buildMessage = (type: EditorFailureType) => {
     case "server-error":
       return "서버 오류로 요청을 완료하지 못했습니다. 작성 내용은 유지됩니다."
     case "unknown":
-      return "요청을 완료하지 못했습니다. 작성 내용은 유지됩니다."
+      return originalMessage || "요청을 완료하지 못했습니다. 작성 내용은 유지됩니다."
   }
 }
+
+const buildDetailedMessage = (type: EditorFailureType, originalMessage: string) =>
+  appendOriginalMessage(buildMessage(type, originalMessage), originalMessage)
 
 const buildNextActions = (type: EditorFailureType) => {
   switch (type) {
@@ -130,7 +152,7 @@ export const resolveEditorFailureRecovery = (
 ): EditorFailureRecovery => {
   const { type, status } = classifyEditorFailure(error, isOnline)
   const actionLabel = actionLabels[action]
-  const message = buildMessage(type)
+  const message = buildDetailedMessage(type, getErrorMessage(error))
   const nextActions = buildNextActions(type)
 
   return {
@@ -152,7 +174,7 @@ export const resolveEditorUploadFailureRecovery = (
 ): EditorFailureRecovery => {
   const { type, status } = classifyEditorFailure(error, isOnline)
   const uploadLabel = uploadLabels[kind]
-  const message = buildMessage(type)
+  const message = buildDetailedMessage(type, getErrorMessage(error))
   const nextActions = buildNextActions(type)
 
   return {

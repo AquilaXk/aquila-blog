@@ -11,6 +11,10 @@ CREATE TABLE IF NOT EXISTS member_privacy_request (
     requested_at TIMESTAMPTZ NOT NULL,
     due_at TIMESTAMPTZ NOT NULL,
     completed_at TIMESTAMPTZ,
+    CONSTRAINT chk_member_privacy_request_due_at
+        CHECK (due_at >= requested_at),
+    CONSTRAINT chk_member_privacy_request_completed_at
+        CHECK (completed_at IS NULL OR completed_at >= requested_at),
     CONSTRAINT fk_member_privacy_request_member
         FOREIGN KEY (member_id) REFERENCES member(id)
 );

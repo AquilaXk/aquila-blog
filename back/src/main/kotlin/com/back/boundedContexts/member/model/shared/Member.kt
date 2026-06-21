@@ -121,6 +121,8 @@ class Member(
         email = null
         password = null
         nickname = "탈퇴한 사용자"
+        ipSecurityEnabled = false
+        ipSecurityFingerprint = null
         modifyApiKey(MemberPolicy.genApiKey())
     }
 

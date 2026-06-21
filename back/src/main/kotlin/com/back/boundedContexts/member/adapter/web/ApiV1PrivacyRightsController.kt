@@ -8,8 +8,10 @@ import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRe
 import com.back.global.rsData.RsData
 import com.back.global.security.domain.SecurityUser
 import com.back.global.web.application.AuthCookieService
+import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.annotation.AuthenticationPrincipal
@@ -30,6 +32,8 @@ class ApiV1PrivacyRightsController(
     private val authCookieService: AuthCookieService,
 ) {
     data class PrivacyRequestCreateRequest(
+        @field:NotNull
+        @field:Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         val type: MemberPrivacyRequestType,
         @field:Size(max = 1000)
         val message: String? = null,
@@ -41,7 +45,7 @@ class ApiV1PrivacyRightsController(
 
     data class AccountDeletionRequest(
         @field:NotBlank
-        @field:Size(max = 128)
+        @field:Size(min = 1, max = 128)
         val password: String,
         @field:Size(max = 500)
         val reason: String? = null,

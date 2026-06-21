@@ -26,7 +26,7 @@ const SettingsLayout = ({ active, title, children }: SettingsLayoutProps) => {
         <section className="emptyState" aria-label="로그인 필요">
           <h1>설정</h1>
           <p>로그인 후 개인정보와 계정 설정을 관리할 수 있습니다.</p>
-          <Link className="primaryLink" href="/login?next=/settings/privacy">로그인</Link>
+          <Link className="primaryLink" href={`/login?next=/settings/${active}`}>로그인</Link>
         </section>
         <style jsx global>{settingsStyles}</style>
       </main>
@@ -42,8 +42,20 @@ const SettingsLayout = ({ active, title, children }: SettingsLayoutProps) => {
           <p className="summary">{me.nickname || me.username} 계정의 개인정보와 보안 상태를 관리합니다.</p>
         </div>
         <nav className="tabs" aria-label="설정 메뉴">
-          <Link className={active === "privacy" ? "active" : ""} href="/settings/privacy">개인정보</Link>
-          <Link className={active === "account" ? "active" : ""} href="/settings/account">계정 보안</Link>
+          <Link
+            className={active === "privacy" ? "active" : ""}
+            aria-current={active === "privacy" ? "page" : undefined}
+            href="/settings/privacy"
+          >
+            개인정보
+          </Link>
+          <Link
+            className={active === "account" ? "active" : ""}
+            aria-current={active === "account" ? "page" : undefined}
+            href="/settings/account"
+          >
+            계정 보안
+          </Link>
         </nav>
       </header>
       {children}

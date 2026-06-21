@@ -6,6 +6,7 @@ import com.back.boundedContexts.member.subContexts.session.application.port.outp
 import com.back.boundedContexts.member.subContexts.session.model.MemberSession
 import com.back.boundedContexts.member.subContexts.session.model.MemberSessionAuthSnapshot
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager
@@ -128,6 +129,41 @@ class MemberSessionServiceTest {
     }
 
     @Test
+    fun `삭제된 회원은 세션을 생성할 수 없다`() {
+        val store = RecordingMemberSessionStorePort()
+        val service =
+            MemberSessionService(
+                memberSessionStorePort = store,
+                cacheManager = ConcurrentMapCacheManager(),
+                touchMinIntervalSeconds = 60,
+                refreshTokenExpirationSeconds = 3600,
+            )
+        val member =
+            Member(
+                58L,
+                "deleted-session-user",
+                null,
+                "삭제세션",
+                "deleted-session@example.com",
+                MemberPolicy.genApiKey(),
+            ).apply {
+                softDelete(Instant.parse("2026-06-21T00:00:00Z"))
+            }
+        store.deletedMemberIds += member.id
+
+        assertThatThrownBy {
+            service.createSessionWithRefreshToken(
+                member = member,
+                rememberLoginEnabled = true,
+                ipSecurityEnabled = true,
+                ipSecurityFingerprint = "fingerprint",
+                createdIp = "203.0.113.33",
+                userAgent = "test-agent",
+            )
+        }.hasMessage("409-1 : 탈퇴 처리된 계정은 세션을 생성할 수 없습니다.")
+    }
+
+    @Test
     fun `snapshot lastAuthenticatedAt 이 최소 간격 이내면 DB touch update를 생략한다`() {
         val store = RecordingMemberSessionStorePort()
         val service =
@@ -209,12 +245,23 @@ class MemberSessionServiceTest {
         var touchCallCount: Int = 0
         var lastTouchedSessionId: Long? = null
         var lastRevokedBeyondLimit: Int? = null
+        val deletedMemberIds = mutableSetOf<Long>()
         private val sessionsByKey = linkedMapOf<String, MemberSession>()
 
         override fun save(memberSession: MemberSession): MemberSession {
             sessionsByKey[memberSession.sessionKey] = memberSession
             return memberSession
         }
+
+        override fun findActiveMemberForSessionIssue(memberId: Long): Member? =
+            if (memberId in deletedMemberIds) {
+                null
+            } else {
+                sessionsByKey.values
+                    .firstOrNull { it.member.id == memberId }
+                    ?.member
+                    ?: Member(memberId, "member-$memberId", null, "회원", "member-$memberId@example.com", MemberPolicy.genApiKey())
+            }
 
         override fun findBySessionKey(sessionKey: String): MemberSession? = sessionsByKey[sessionKey]
 

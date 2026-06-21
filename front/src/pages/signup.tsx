@@ -97,6 +97,10 @@ const SignupPage = () => {
       footer={
         <FooterText>
           이미 계정이 있으면 <Link href={toLoginPath(next)}>로그인</Link>
+          <span className="policyLinks">
+            <Link href="/privacy">개인정보처리방침</Link>
+            <Link href="/terms">이용약관</Link>
+          </span>
         </FooterText>
       }
       loginHref={toLoginPath(next)}
@@ -325,5 +329,12 @@ const FooterText = styled.div`
     display: inline-flex;
     align-items: center;
     min-height: 34px;
+  }
+
+  .policyLinks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.7rem;
+    margin-top: 0.25rem;
   }
 `

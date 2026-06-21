@@ -7,5 +7,5 @@ import org.springframework.data.jpa.repository.JpaRepository
 interface MemberLegalAcceptanceRepository :
     JpaRepository<MemberLegalAcceptance, Long>,
     MemberLegalAcceptanceRepositoryPort {
-    fun findTopByMemberIdOrderByAcceptedAtDesc(memberId: Long): MemberLegalAcceptance?
+    override fun findTopByMemberIdOrderByAcceptedAtDesc(memberId: Long): MemberLegalAcceptance?
 }

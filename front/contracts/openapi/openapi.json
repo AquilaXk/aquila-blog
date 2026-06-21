@@ -1113,6 +1113,34 @@
         }
       }
     },
+    "/member/api/v1/privacy/requests" : {
+      "post" : {
+        "tags" : [ "api-v-1-privacy-rights-controller" ],
+        "operationId" : "createRequest",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PrivacyRequestCreateRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataPrivacyRequestResBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/member/api/v1/notifications/{id}/read" : {
       "post" : {
         "tags" : [ "api-v-1-member-notification-controller" ],
@@ -2406,6 +2434,51 @@
         "security" : [ {
           "bearerAuth" : [ ]
         } ]
+      }
+    },
+    "/member/api/v1/privacy/requests/{requestId}" : {
+      "get" : {
+        "tags" : [ "api-v-1-privacy-rights-controller" ],
+        "operationId" : "getRequest",
+        "parameters" : [ {
+          "name" : "requestId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataPrivacyRequestResBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/privacy/export" : {
+      "get" : {
+        "tags" : [ "api-v-1-privacy-rights-controller" ],
+        "operationId" : "export",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataPrivacyExportResponse"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/member/api/v1/notifications" : {
@@ -4310,6 +4383,78 @@
         },
         "required" : [ "age14OrOlder", "analyticsConsent", "nickname", "overseasTransferAcknowledged", "password", "privacyContentSha256", "privacyVersion", "requiredPrivacyConfirmed", "termsContentSha256", "termsVersion" ]
       },
+      "PrivacyRequestCreateRequest" : {
+        "type" : "object",
+        "properties" : {
+          "type" : {
+            "type" : "string",
+            "enum" : [ "EXPORT", "CORRECTION", "DELETION", "PROCESSING_RESTRICTION", "CONSENT_WITHDRAWAL" ]
+          },
+          "message" : {
+            "type" : "string",
+            "maxLength" : 1000,
+            "minLength" : 0
+          }
+        }
+      },
+      "PrivacyRequestDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "memberId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "type" : {
+            "type" : "string",
+            "enum" : [ "EXPORT", "CORRECTION", "DELETION", "PROCESSING_RESTRICTION", "CONSENT_WITHDRAWAL" ]
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "RECEIVED", "IN_PROGRESS", "COMPLETED", "REJECTED" ]
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "requestedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "dueAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "completedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "PrivacyRequestResBody" : {
+        "type" : "object",
+        "properties" : {
+          "item" : {
+            "$ref" : "#/components/schemas/PrivacyRequestDto"
+          }
+        }
+      },
+      "RsDataPrivacyRequestResBody" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/PrivacyRequestResBody"
+          }
+        }
+      },
       "RsDataMapStringBoolean" : {
         "type" : "object",
         "properties" : {
@@ -5468,6 +5613,97 @@
           },
           "firstPage" : {
             "$ref" : "#/components/schemas/PageDtoPostDto"
+          }
+        }
+      },
+      "PrivacyExportMemberSnapshot" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "username" : {
+            "type" : "string"
+          },
+          "nickname" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "modifiedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "PrivacyExportResponse" : {
+        "type" : "object",
+        "properties" : {
+          "generatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "member" : {
+            "$ref" : "#/components/schemas/PrivacyExportMemberSnapshot"
+          },
+          "latestLegalAcceptance" : {
+            "$ref" : "#/components/schemas/PrivacyLegalAcceptanceSnapshot"
+          }
+        }
+      },
+      "PrivacyLegalAcceptanceSnapshot" : {
+        "type" : "object",
+        "properties" : {
+          "termsVersion" : {
+            "type" : "string"
+          },
+          "termsContentSha256" : {
+            "type" : "string"
+          },
+          "privacyVersion" : {
+            "type" : "string"
+          },
+          "privacyContentSha256" : {
+            "type" : "string"
+          },
+          "age14OrOlder" : {
+            "type" : "boolean"
+          },
+          "requiredPrivacyConfirmed" : {
+            "type" : "boolean"
+          },
+          "analyticsConsent" : {
+            "type" : "boolean"
+          },
+          "overseasTransferAcknowledged" : {
+            "type" : "boolean"
+          },
+          "source" : {
+            "type" : "string"
+          },
+          "acceptedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "RsDataPrivacyExportResponse" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/PrivacyExportResponse"
           }
         }
       },

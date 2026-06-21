@@ -465,6 +465,11 @@ test("외부 백업은 compose 평가 전에 누락된 runtime image env를 보�
     imageGuardBody.indexOf('upsert_env_key "${key}" "${value}"') < imageGuardBody.indexOf("return 0"),
     "HOME_SERVER_ENV image values must be staged before compose reads the env file",
   )
+  assert.match(externalBackupScript, /stage_home_server_env_compose_values\(\) \{/)
+  assert.match(externalBackupScript, /stage_home_server_env_key "OPERATIONS_ALERT_EMAIL_TO"/)
+  assert.match(externalBackupScript, /stage_home_server_env_key "ALERTMANAGER_SMTP_AUTH_USERNAME"/)
+  assert.match(externalBackupScript, /stage_home_server_env_key "ALERTMANAGER_SMTP_AUTH_PASSWORD"/)
+  assert.match(externalBackupScript, /stage_home_server_env_key "SPRING__MAIL__PROPERTIES__MAIL__SMTP__STARTTLS__ENABLE"/)
 
   const composeReadyBody = externalBackupScript.slice(
     externalBackupScript.indexOf("ensure_backup_compose_ready() {"),
@@ -487,6 +492,7 @@ test("외부 백업은 compose 평가 전에 누락된 runtime image env를 보�
     externalBackupScript.indexOf('log "backup complete id=${TIMESTAMP}"'),
   )
   const ensureCallIndex = composeReadyBody.indexOf("\n  ensure_compose_image_env_defaults\n")
+  const stageHomeServerEnvIndex = composeReadyBody.indexOf("\n  stage_home_server_env_compose_values\n")
   const validateComposeIndex = composeReadyBody.indexOf("\n  validate_compose_config_after_env_autofill\n")
   const skipMarkerIndex = preparePostgresBody.indexOf('if [[ "${AQUILA_BACKUP_SKIP_POSTGRES:-false}" == "true" ]]')
   const prepareComposeReadyCallIndex = preparePostgresBody.indexOf("\n  ensure_backup_compose_ready\n")
@@ -495,6 +501,7 @@ test("외부 백업은 compose 평가 전에 누락된 runtime image env를 보�
   const loopPrepareIndex = backupLoopBody.indexOf("\n  prepare_postgres_backup_compose_if_needed\n")
   const loopCopyIndex = backupLoopBody.indexOf("\n  copy_deploy_config")
   assert(ensureCallIndex > -1, "create_external_backup.sh must call image env auto-fill")
+  assert(stageHomeServerEnvIndex > -1, "create_external_backup.sh must stage HOME_SERVER_ENV compose values")
   assert(validateComposeIndex > -1, "create_external_backup.sh must validate compose after image env auto-fill")
   assert(skipMarkerIndex > -1, "PostgreSQL backup skip path must remain explicit")
   assert(prepareComposeReadyCallIndex > -1, "PostgreSQL compose preparation must call compose preflight")
@@ -503,6 +510,7 @@ test("외부 백업은 compose 평가 전에 누락된 runtime image env를 보�
   assert(loopPrepareIndex > -1, "backup loop must prepare compose before copying deploy config")
   assert(loopCopyIndex > -1, "backup loop must copy deploy config")
   assert(ensureCallIndex < validateComposeIndex, "compose validation must run after image env auto-fill")
+  assert(stageHomeServerEnvIndex < validateComposeIndex, "HOME_SERVER_ENV compose values must be staged before compose validation")
   assert(skipMarkerIndex < prepareComposeReadyCallIndex, "compose preflight must not run before skipped PostgreSQL backups")
   assert(prepareCallIndex < composeExecIndex, "compose preflight must run before backup compose calls")
   assert(loopPrepareIndex < loopCopyIndex, "compose env failures must be detected before copying deploy config")

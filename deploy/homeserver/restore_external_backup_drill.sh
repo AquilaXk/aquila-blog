@@ -13,7 +13,15 @@ BACKUP_SET_ID="${AQUILA_RESTORE_DRILL_BACKUP_SET_ID:-${BACKUP_SET_ID:-}}"
 EXTERNAL_STORAGE_ROOT="${AQUILA_EXTERNAL_STORAGE_ROOT:-${DEFAULT_EXTERNAL_STORAGE_ROOT}}"
 BACKUP_ROOT="${AQUILA_BACKUP_ROOT:-${EXTERNAL_STORAGE_ROOT}/backups}"
 ARTIFACT_DIR="${AQUILA_RESTORE_DRILL_ARTIFACT_DIR:-${SCRIPT_DIR}/.restore-drills/${TIMESTAMP}}"
-POSTGRES_IMAGE="${AQUILA_RESTORE_DRILL_POSTGRES_IMAGE:-postgres:16-alpine}"
+if [[ -n "${AQUILA_RESTORE_DRILL_DEPLOY_DIR:-}" ]]; then
+  DEPLOY_DIR="${AQUILA_RESTORE_DRILL_DEPLOY_DIR}"
+elif [[ -d "$(pwd)/deploy/homeserver" ]]; then
+  DEPLOY_DIR="$(pwd)/deploy/homeserver"
+elif [[ -f "$(pwd)/.env.prod" || -f "$(pwd)/docker-compose.prod.yml" ]]; then
+  DEPLOY_DIR="$(pwd)"
+else
+  DEPLOY_DIR="${SCRIPT_DIR}"
+fi
 POSTGRES_CONTAINER="aquila-restore-drill-${TIMESTAMP}"
 POSTGRES_DB="${AQUILA_RESTORE_DRILL_DB:-restore_drill}"
 POSTGRES_PASSWORD="${AQUILA_RESTORE_DRILL_POSTGRES_PASSWORD:-restore_drill_${TIMESTAMP}}"
@@ -41,6 +49,44 @@ is_safe_backup_id() {
   [[ "$1" =~ ^[0-9]{8}-[0-9]{6}$ ]]
 }
 
+read_key_from_file() {
+  local key="$1"
+  local file="$2"
+  [[ -f "${file}" ]] || return 0
+  awk -F= -v k="${key}" '
+    /^[[:space:]]*#/ { next }
+    /^[[:space:]]*$/ { next }
+    {
+      line = $0
+      sub(/^[[:space:]]+/, "", line)
+      sub(/^[Ee][Xx][Pp][Oo][Rr][Tt][[:space:]]+/, "", line)
+      if (index(line, k "=") == 1) {
+        value = substr(line, length(k) + 2)
+        sub(/^[[:space:]]+/, "", value)
+        sub(/[[:space:]]+$/, "", value)
+        if ((value ~ /^".*"$/) || (value ~ /^'\''.*'\''$/)) {
+          value = substr(value, 2, length(value) - 2)
+        }
+        print value
+      }
+    }
+  ' "${file}" | tail -n 1
+}
+
+resolve_postgres_image() {
+  local image="${AQUILA_RESTORE_DRILL_POSTGRES_IMAGE:-${DB_IMAGE:-}}"
+  if [[ -z "${image}" ]]; then
+    image="$(read_key_from_file DB_IMAGE "${DEPLOY_DIR}/.env.prod.compose")"
+  fi
+  if [[ -z "${image}" ]]; then
+    image="$(read_key_from_file DB_IMAGE "${DEPLOY_DIR}/.env.prod")"
+  fi
+
+  [[ -n "${image}" ]] || fail "DB_IMAGE is required for restore drill PostgreSQL image"
+  [[ "${image}" != *":latest" && "${image}" != *":latest@"* ]] || fail "DB_IMAGE must not use latest tag for restore drill: ${image}"
+  printf '%s' "${image}"
+}
+
 latest_backup_set_id() {
   local postgres_root="${BACKUP_ROOT}/postgres/${BACKUP_CLASS}"
   [[ -d "${postgres_root}" ]] || fail "missing PostgreSQL backup class directory: ${postgres_root}"
@@ -50,10 +96,33 @@ latest_backup_set_id() {
     | tail -n 1
 }
 
+date_utc_epoch() {
+  local value="$1"
+  date -u -d "${value}" +%s 2>/dev/null \
+    || date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "${value}" +%s 2>/dev/null \
+    || true
+}
+
+date_local_epoch_from_backup_id() {
+  local backup_id="$1"
+  local stamp="${backup_id:0:8} ${backup_id:9:2}:${backup_id:11:2}:${backup_id:13:2}"
+  date -d "${stamp}" +%s 2>/dev/null \
+    || date -j -f "%Y%m%d-%H%M%S" "${backup_id}" +%s 2>/dev/null \
+    || true
+}
+
 parse_backup_epoch() {
   local backup_id="$1"
-  local stamp="${backup_id:0:8} ${backup_id:9:2}:${backup_id:11:2}:${backup_id:13:2} UTC"
-  date -u -d "${stamp}" +%s 2>/dev/null || true
+  local metadata_file="${BACKUP_ROOT}/postgres/${BACKUP_CLASS}/${backup_id}/metadata.env"
+  local created_at_utc
+
+  created_at_utc="$(read_key_from_file created_at_utc "${metadata_file}")"
+  if [[ -n "${created_at_utc}" ]]; then
+    date_utc_epoch "${created_at_utc}"
+    return 0
+  fi
+
+  date_local_epoch_from_backup_id "${backup_id}"
 }
 
 write_result() {
@@ -70,6 +139,7 @@ write_result() {
     printf 'STATUS=%s\n' "${status}"
     printf 'BACKUP_SET_ID=%s\n' "${BACKUP_SET_ID}"
     printf 'BACKUP_CLASS=%s\n' "${BACKUP_CLASS}"
+    printf 'POSTGRES_IMAGE=%q\n' "${POSTGRES_IMAGE}"
     printf 'RPO_TARGET_MINUTES=%s\n' "${RPO_TARGET_MINUTES}"
     printf 'RPO_ACTUAL_MINUTES=%s\n' "${rpo_minutes}"
     printf 'RTO_TARGET_MINUTES=%s\n' "${RTO_TARGET_MINUTES}"
@@ -158,6 +228,7 @@ checksum_minio_sample() {
 require_command docker
 require_command tar
 require_command sha256sum
+POSTGRES_IMAGE="$(resolve_postgres_image)"
 
 if [[ -z "${BACKUP_SET_ID}" ]]; then
   BACKUP_SET_ID="$(latest_backup_set_id)"
@@ -173,7 +244,7 @@ MINIO_ARCHIVE_FILE="${BACKUP_ROOT}/minio/${BACKUP_CLASS}/${BACKUP_SET_ID}/minio-
 mkdir -p "${ARTIFACT_DIR}"
 trap cleanup EXIT
 
-start_epoch="$(date -u +%s)"
+start_epoch="${AQUILA_RESTORE_DRILL_NOW_EPOCH:-$(date -u +%s)}"
 backup_epoch="$(parse_backup_epoch "${BACKUP_SET_ID}")"
 if [[ -n "${backup_epoch}" ]]; then
   rpo_minutes=$(((start_epoch - backup_epoch) / 60))

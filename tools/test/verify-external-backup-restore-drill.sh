@@ -61,7 +61,10 @@ require_pattern "${DRILL_SCRIPT}" 'restore-drill-summary\.md' "restore drill mus
 require_pattern "${DRILL_SCRIPT}" 'restore-drill-result\.env' "restore drill must write a machine-readable result artifact"
 require_pattern "${DRILL_SCRIPT}" 'RPO' "restore drill must record RPO"
 require_pattern "${DRILL_SCRIPT}" 'RTO' "restore drill must record RTO"
+require_pattern "${DRILL_SCRIPT}" 'DB_IMAGE is required' "restore drill must require the production DB image"
+require_pattern "${DRILL_SCRIPT}" 'created_at_utc' "restore drill must prefer UTC backup metadata for RPO"
 reject_pattern "${DRILL_SCRIPT}" 'HOME_SERVER_ENV' "restore drill must not require raw production secret blobs"
+reject_pattern "${DRILL_SCRIPT}" 'postgres:16-alpine' "restore drill must not default to vanilla PostgreSQL"
 
 require_file "${WORKFLOW}" "manual restore drill workflow"
 require_pattern "${WORKFLOW}" 'workflow_dispatch:' "restore drill workflow must be manually runnable"
@@ -94,6 +97,12 @@ cat > "${POSTGRES_BACKUP_DIR}/dump.sql" <<'SQL'
 CREATE TABLE flyway_schema_history(success boolean);
 CREATE TABLE post(id bigint, listed boolean, created_at timestamptz);
 SQL
+cat > "${POSTGRES_BACKUP_DIR}/metadata.env" <<'EOF'
+backup_set_id=20260101-010203
+class=daily
+created_at=20260101-010203
+created_at_utc=2026-01-01T01:02:03Z
+EOF
 printf 'fixture-object\n' > "${MINIO_SOURCE_DIR}/post-img/posts/2026/01/sample.txt"
 tar -C "${MINIO_SOURCE_DIR}" -czf "${MINIO_BACKUP_DIR}/minio-data.tar.gz" .
 
@@ -173,11 +182,15 @@ AQUILA_EXTERNAL_STORAGE_ROOT="${WORK_DIR}/storage" \
 AQUILA_BACKUP_ROOT="${BACKUP_ROOT}" \
 AQUILA_RESTORE_DRILL_BACKUP_SET_ID="${BACKUP_SET_ID}" \
 AQUILA_RESTORE_DRILL_ARTIFACT_DIR="${ARTIFACT_DIR}" \
+AQUILA_RESTORE_DRILL_POSTGRES_IMAGE="jangka512/pgj@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
 AQUILA_RESTORE_DRILL_TIMESTAMP="20260102-030405" \
+AQUILA_RESTORE_DRILL_NOW_EPOCH="1767323045" \
   "${DRILL_SCRIPT}" >/dev/null
 
 grep -q '^STATUS=success$' "${ARTIFACT_DIR}/restore-drill-result.env"
 grep -q '^BACKUP_SET_ID=20260101-010203$' "${ARTIFACT_DIR}/restore-drill-result.env"
+grep -q 'POSTGRES_IMAGE=jangka512/pgj@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "${ARTIFACT_DIR}/restore-drill-result.env"
+grep -q '^RPO_ACTUAL_MINUTES=1562$' "${ARTIFACT_DIR}/restore-drill-result.env"
 grep -q '^FLYWAY_SUCCESS_COUNT=32$' "${ARTIFACT_DIR}/restore-drill-result.env"
 grep -q '^POST_ROW_COUNT=7$' "${ARTIFACT_DIR}/restore-drill-result.env"
 grep -q '^LATEST_PUBLIC_POST_ID=42$' "${ARTIFACT_DIR}/restore-drill-result.env"

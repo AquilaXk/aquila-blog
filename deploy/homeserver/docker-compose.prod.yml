@@ -54,9 +54,34 @@ services:
       - ./monitoring/rules:/etc/prometheus/rules:ro
       - prometheus_data:/prometheus
     depends_on:
+      - alertmanager
       - back_blue
       - back_green
       - back_worker
+      - postgres_exporter
+
+  alertmanager:
+    image: ${ALERTMANAGER_IMAGE:?ALERTMANAGER_IMAGE is required (sha256 digest required)}
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+      - "--config.expand-env"
+    environment:
+      OPERATIONS_ALERT_WEBHOOK_URL: ${OPERATIONS_ALERT_WEBHOOK_URL:?OPERATIONS_ALERT_WEBHOOK_URL is required}
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+
+  postgres_exporter:
+    image: ${POSTGRES_EXPORTER_IMAGE:?POSTGRES_EXPORTER_IMAGE is required (sha256 digest required)}
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_URI: db_1:5432/postgres?sslmode=disable
+      DATA_SOURCE_USER: postgres
+      DATA_SOURCE_PASS: ${PROD___POSTGRES__PASSWORD}
+    depends_on:
+      - db_1
 
   grafana:
     image: ${GRAFANA_IMAGE:?GRAFANA_IMAGE is required (sha256 digest required)}
@@ -150,7 +175,9 @@ services:
       - "--project"
       - "blog_home"
       - "--services"
-      - "cloudflared,back_blue,back_green,back_read,back_admin,back_worker,redis_1"
+      - "cloudflared,back_blue,back_green,back_read,back_admin,back_worker,db_1,redis_1,minio_1"
+      - "--readiness-targets"
+      - "api=back-blue:8080,api=back-green:8080,read=back-read:8080,admin=back-admin:8080,worker=back_worker:8080"
     volumes:
       - ./monitoring/docker-runtime-probe.mjs:/app/docker-runtime-probe.mjs:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -361,6 +388,7 @@ volumes:
   caddy_config:
   uptime_kuma_data:
   prometheus_data:
+  alertmanager_data:
   grafana_data:
   loki_data:
   promtail_positions:

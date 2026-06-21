@@ -11,13 +11,24 @@ const servePort = Number(optionValue("--serve-port", "9920"))
 const composeProject = optionValue("--project", "blog_home")
 const services = optionValue(
   "--services",
-  "cloudflared,back_blue,back_green,back_read,back_admin,back_worker,redis_1",
+  "cloudflared,back_blue,back_green,back_read,back_admin,back_worker,db_1,redis_1,minio_1",
 )
   .split(",")
   .map((value) => value.trim())
   .filter(Boolean)
 
 const dockerSocketPath = optionValue("--docker-socket", "/var/run/docker.sock")
+const readinessTargets = optionValue(
+  "--readiness-targets",
+  "api=back-blue:8080,api=back-green:8080,read=back-read:8080,admin=back-admin:8080,worker=back_worker:8080",
+)
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean)
+  .map((value) => {
+    const [component, target] = value.split("=")
+    return { component: component || "unknown", target: target || value }
+  })
 
 const escapeLabel = (value) => value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n")
 
@@ -65,6 +76,36 @@ const dockerGet = (path) =>
     request.end()
   })
 
+const probeReadiness = ({ component, target }) =>
+  new Promise((resolve) => {
+    const [host, port = "8080"] = target.split(":")
+    const request = http.request(
+      {
+        method: "GET",
+        host,
+        port: Number(port),
+        path: "/actuator/health/readiness",
+        timeout: 3000,
+      },
+      (response) => {
+        response.resume()
+        response.on("end", () => {
+          const value = response.statusCode === 200 ? 1 : 0
+          resolve(metricLine("aquila_backend_readiness_up", { component, target }, value))
+        })
+      },
+    )
+
+    request.on("timeout", () => {
+      request.destroy()
+      resolve(metricLine("aquila_backend_readiness_up", { component, target }, 0))
+    })
+    request.on("error", () => {
+      resolve(metricLine("aquila_backend_readiness_up", { component, target }, 0))
+    })
+    request.end()
+  })
+
 const collectServiceMetrics = async (containers, service) => {
   const container = matchingContainerForService(containers, service)
 
@@ -74,6 +115,7 @@ const collectServiceMetrics = async (containers, service) => {
       metricLine("docker_container_running", { service }, 0),
       metricLine("docker_container_memory_usage_bytes", { service }, 0),
       metricLine("docker_container_memory_limit_bytes", { service }, 0),
+      metricLine("docker_container_oom_killed", { service }, 0),
     ]
   }
 
@@ -88,6 +130,7 @@ const collectServiceMetrics = async (containers, service) => {
     metricLine("docker_container_running", { service }, inspect.State?.Running ? 1 : 0),
     metricLine("docker_container_memory_usage_bytes", { service }, memoryUsage),
     metricLine("docker_container_memory_limit_bytes", { service }, memoryLimit),
+    metricLine("docker_container_oom_killed", { service }, inspect.State?.OOMKilled ? 1 : 0),
   ]
 }
 
@@ -105,10 +148,16 @@ const collectMetrics = async () => {
     "# TYPE docker_container_memory_usage_bytes gauge",
     "# HELP docker_container_memory_limit_bytes Docker container memory limit by compose service.",
     "# TYPE docker_container_memory_limit_bytes gauge",
+    "# HELP docker_container_oom_killed Docker OOMKilled state by compose service.",
+    "# TYPE docker_container_oom_killed gauge",
+    "# HELP aquila_backend_readiness_up Backend readiness endpoint probe result.",
+    "# TYPE aquila_backend_readiness_up gauge",
   ]
 
   const serviceMetricLines = await Promise.all(services.map((service) => collectServiceMetrics(containers, service)))
+  const readinessMetricLines = await Promise.all(readinessTargets.map((target) => probeReadiness(target)))
   lines.push(...serviceMetricLines.flat())
+  lines.push(...readinessMetricLines)
 
   return `${lines.join("\n")}\n`
 }

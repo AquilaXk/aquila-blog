@@ -9,7 +9,7 @@ import com.back.boundedContexts.member.subContexts.legalAcceptance.application.s
 import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.LegalAcceptanceCommand
 import com.back.boundedContexts.member.subContexts.legalAcceptance.model.MemberLegalAcceptance
 import com.back.boundedContexts.member.subContexts.oauthSignup.application.port.output.PendingOAuthSignupRepositoryPort
-import com.back.boundedContexts.member.subContexts.oauthSignup.domain.PendingOAuthSignup
+import com.back.boundedContexts.member.subContexts.oauthSignup.model.PendingOAuthSignup
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.standard.dto.member.type1.MemberSearchSortType1

@@ -3,9 +3,9 @@ package com.back.global.security.config.oauth2
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.LegalAcceptanceCommand
-import com.back.boundedContexts.member.subContexts.oauthSignup.application.port.input.OAuthSignupPendingDetails
-import com.back.boundedContexts.member.subContexts.oauthSignup.application.port.input.OAuthSignupPendingStartResult
 import com.back.boundedContexts.member.subContexts.oauthSignup.application.port.input.OAuthSignupUseCase
+import com.back.boundedContexts.member.subContexts.oauthSignup.application.service.OAuthSignupPendingDetails
+import com.back.boundedContexts.member.subContexts.oauthSignup.application.service.OAuthSignupPendingStartResult
 import com.back.global.security.domain.SecurityUser
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy

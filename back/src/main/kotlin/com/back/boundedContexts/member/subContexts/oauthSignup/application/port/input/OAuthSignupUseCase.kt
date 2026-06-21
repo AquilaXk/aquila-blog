@@ -2,20 +2,8 @@ package com.back.boundedContexts.member.subContexts.oauthSignup.application.port
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.LegalAcceptanceCommand
-import java.time.Instant
-
-data class OAuthSignupPendingStartResult(
-    val provider: String,
-    val pendingToken: String,
-    val expiresAt: Instant,
-)
-
-data class OAuthSignupPendingDetails(
-    val provider: String,
-    val nickname: String,
-    val profileImgUrl: String?,
-    val expiresAt: Instant,
-)
+import com.back.boundedContexts.member.subContexts.oauthSignup.application.service.OAuthSignupPendingDetails
+import com.back.boundedContexts.member.subContexts.oauthSignup.application.service.OAuthSignupPendingStartResult
 
 interface OAuthSignupUseCase {
     fun providerSubjectHash(

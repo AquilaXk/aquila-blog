@@ -23,7 +23,7 @@ const isDocsFile = (file) =>
   file.startsWith("docs/") ||
   ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "CURSOR.md", "COPILOT.md", "README.md"].includes(file)
 
-const isFrontendFile = (file) => file.startsWith("front/")
+const isFrontendFile = (file) => file.startsWith("front/") || file.startsWith("legal/policies/")
 
 const isBackendFile = (file) =>
   file.startsWith("back/") ||

@@ -37,6 +37,7 @@ test("docs-only changes stay standard and skip deploy verifications", () => {
 test("backend-only and frontend-only changes keep independent standard routing", () => {
   const backend = runClassifier(["back/src/main/kotlin/com/back/PostController.kt"])
   const frontend = runClassifier(["front/src/pages/index.tsx"])
+  const legalPolicy = runClassifier(["legal/policies/privacy.ko-KR.v1.0.1.yaml"])
 
   assert.equal(backend.status, 0, backend.stderr)
   assert.equal(backend.json.changeScope, "backend-only")
@@ -49,6 +50,13 @@ test("backend-only and frontend-only changes keep independent standard routing",
   assert.equal(frontend.json.riskProfile, "standard")
   assert.equal(frontend.json.deployBackend, false)
   assert.equal(frontend.json.verifyFrontend, true)
+
+  assert.equal(legalPolicy.status, 0, legalPolicy.stderr)
+  assert.equal(legalPolicy.json.changeScope, "frontend-only")
+  assert.equal(legalPolicy.json.riskProfile, "standard")
+  assert.equal(legalPolicy.json.deployBackend, false)
+  assert.equal(legalPolicy.json.verifyFrontend, true)
+  assert(legalPolicy.json.reasons.includes("frontend"))
 })
 
 test("security deploy storage task migration workflow and dockerfile changes are extended", () => {
@@ -140,6 +148,7 @@ test("reusable workflows run release planner policy checks", () => {
 
   assert.match(frontendWorkflow, /Classify release risk/)
   assert.match(frontendWorkflow, /previous_filename/)
+  assert.match(frontendWorkflow, /legal\/policies\/\*/)
   assert.match(frontendWorkflow, /tools\/ci\/classify-release\.mjs/)
   assert(frontendWorkflow.indexOf("Classify release risk") < frontendWorkflow.indexOf("Skip frontend-heavy checks"))
 })

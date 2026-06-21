@@ -33,12 +33,12 @@ class MemberSignupVerification(
     override val id: Long = 0,
     @field:Column(nullable = false)
     val email: String,
-    @field:Column(unique = true, nullable = false, length = 120)
-    var emailVerificationToken: String,
+    @field:Column(unique = true, nullable = false, length = 128)
+    var emailVerificationTokenHash: String,
     @field:Column(nullable = false)
     var emailVerificationExpiresAt: Instant,
-    @field:Column(unique = true, length = 120)
-    var signupSessionToken: String? = null,
+    @field:Column(unique = true, length = 128)
+    var signupSessionTokenHash: String? = null,
     @field:Column
     var signupSessionExpiresAt: Instant? = null,
     @field:Column
@@ -69,12 +69,12 @@ class MemberSignupVerification(
     }
 
     fun issueSignupSession(
-        token: String,
+        tokenHash: String,
         expiresAt: Instant,
         now: Instant,
     ) {
         verifiedAt = verifiedAt ?: now
-        signupSessionToken = token
+        signupSessionTokenHash = tokenHash
         signupSessionExpiresAt = expiresAt
     }
 
@@ -83,7 +83,7 @@ class MemberSignupVerification(
             throw AppException("410-1", "회원가입 세션이 더 이상 유효하지 않습니다.")
         }
 
-        if (verifiedAt == null || signupSessionToken.isNullOrBlank() || signupSessionExpiresAt == null) {
+        if (verifiedAt == null || signupSessionTokenHash.isNullOrBlank() || signupSessionExpiresAt == null) {
             throw AppException("401-4", "이메일 인증이 완료되지 않았습니다.")
         }
 

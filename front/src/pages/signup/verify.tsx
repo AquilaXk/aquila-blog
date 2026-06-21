@@ -2,7 +2,7 @@ import styled from "@emotion/styled"
 import { GetServerSideProps } from "next"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { FormEvent, useEffect, useMemo, useState } from "react"
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
 import { ACTIVE_LEGAL_DOCUMENTS, buildEmailSignupLegalAcceptancePayload } from "src/apis/backend/legal"
@@ -20,12 +20,23 @@ type RsData<T> = {
 
 type SignupVerifyResult = {
   email: string
-  signupToken: string
   expiresAt: string
 }
 
 export const getServerSideProps: GetServerSideProps<GuestPageProps> = async ({ req }) => {
   return await getGuestPageProps(req)
+}
+
+const readSignupVerificationTokenFromFragment = () => {
+  if (typeof window === "undefined") return null
+
+  const fragment = window.location.hash.replace(/^#/, "")
+  const params = new URLSearchParams(fragment)
+  const token = params.get("token")?.trim() || null
+  const cleanUrl = `${window.location.pathname}${window.location.search}`
+  window.history.replaceState(window.history.state, "", cleanUrl)
+
+  return token
 }
 
 const SignupVerifyPage = () => {
@@ -43,17 +54,17 @@ const SignupVerifyPage = () => {
   const [overseasTransferAcknowledged, setOverseasTransferAcknowledged] = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [submitLoading, setSubmitLoading] = useState(false)
+  const verificationTokenRef = useRef<string | null>(null)
 
-  const token = useMemo(() => {
-    const raw = router.query.token
-    return Array.isArray(raw) ? raw[0] : raw
-  }, [router.query.token])
   const next = useMemo(() => {
     return normalizeNextPath(router.query.next)
   }, [router.query.next])
 
   useEffect(() => {
     if (!router.isReady) return
+
+    const token = verificationTokenRef.current ?? readSignupVerificationTokenFromFragment()
+    verificationTokenRef.current = token
 
     if (!token) {
       setVerificationError("회원가입 링크가 올바르지 않습니다.")
@@ -69,7 +80,11 @@ const SignupVerifyPage = () => {
 
       try {
         const response = await apiFetch<RsData<SignupVerifyResult>>(
-          `/member/api/v1/signup/email/verify?token=${encodeURIComponent(token)}`
+          "/member/api/v1/signup/email/verify",
+          {
+            method: "POST",
+            body: JSON.stringify({ token }),
+          }
         )
 
         if (cancelled) return
@@ -87,7 +102,7 @@ const SignupVerifyPage = () => {
     return () => {
       cancelled = true
     }
-  }, [router.isReady, token])
+  }, [router.isReady])
 
   const passwordPolicy = useMemo(() => evaluatePasswordPolicy(password), [password])
   const hasPasswordInput = password.length > 0
@@ -104,7 +119,7 @@ const SignupVerifyPage = () => {
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!verification?.signupToken) {
+    if (!verification) {
       setSubmitError("회원가입 세션이 준비되지 않았습니다.")
       return
     }
@@ -136,7 +151,6 @@ const SignupVerifyPage = () => {
       await apiFetch<RsData<unknown>>("/member/api/v1/signup/complete", {
         method: "POST",
         body: JSON.stringify({
-          signupToken: verification.signupToken,
           password,
           nickname: nickname.trim(),
           ...buildEmailSignupLegalAcceptancePayload({
@@ -148,10 +162,7 @@ const SignupVerifyPage = () => {
         }),
       })
 
-      await replaceRoute(
-        router,
-        `/login?signup=done&email=${encodeURIComponent(verification.email)}&next=${encodeURIComponent(next)}`
-      )
+      await replaceRoute(router, `/login?signup=done&next=${encodeURIComponent(next)}`)
     } catch (error) {
       setSubmitError(toAuthErrorMessage("signupComplete", error, "회원가입에 실패했습니다."))
     } finally {

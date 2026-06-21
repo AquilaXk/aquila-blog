@@ -326,6 +326,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/member/api/v1/signup/email/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["verifyLegacyGet"];
+        put?: never;
+        post: operations["verify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/member/api/v1/signup/email/start": {
         parameters: {
             query?: never;
@@ -980,22 +996,6 @@ export interface paths {
         };
         /** 관리자 글 작업공간 bootstrap */
         get: operations["bootstrap_1"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/member/api/v1/signup/email/verify": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["verify"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1715,6 +1715,19 @@ export interface components {
             msg?: string;
             data?: components["schemas"]["RecommendTagsResBody"];
         };
+        SignupEmailVerifyRequest: {
+            token: string;
+        };
+        RsDataSignupEmailVerifyResult: {
+            resultCode?: string;
+            msg?: string;
+            data?: components["schemas"]["SignupEmailVerifyResult"];
+        };
+        SignupEmailVerifyResult: {
+            email?: string;
+            /** Format: date-time */
+            expiresAt?: string;
+        };
         SignupEmailStartRequest: {
             /** Format: email */
             email: string;
@@ -1732,7 +1745,6 @@ export interface components {
             email?: string;
         };
         SignupCompleteRequest: {
-            signupToken: string;
             username?: string;
             password: string;
             nickname: string;
@@ -2199,17 +2211,6 @@ export interface components {
         AdminPostsBootstrapResBody: {
             member?: components["schemas"]["AuthSessionMemberDto"];
             firstPage?: components["schemas"]["PageDtoPostDto"];
-        };
-        RsDataSignupEmailVerifyResult: {
-            resultCode?: string;
-            msg?: string;
-            data?: components["schemas"]["SignupEmailVerifyResult"];
-        };
-        SignupEmailVerifyResult: {
-            email?: string;
-            signupToken?: string;
-            /** Format: date-time */
-            expiresAt?: string;
         };
         MemberNotificationDto: {
             /** Format: int64 */
@@ -2960,6 +2961,50 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["RsDataRecommendTagsResBody"];
+                };
+            };
+        };
+    };
+    verifyLegacyGet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RsDataVoid"];
+                };
+            };
+        };
+    };
+    verify: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignupEmailVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RsDataSignupEmailVerifyResult"];
                 };
             };
         };
@@ -3931,28 +3976,6 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["AdminPostsBootstrapResBody"];
-                };
-            };
-        };
-    };
-    verify: {
-        parameters: {
-            query: {
-                token: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["RsDataSignupEmailVerifyResult"];
                 };
             };
         };

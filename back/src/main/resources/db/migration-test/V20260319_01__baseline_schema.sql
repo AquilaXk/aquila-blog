@@ -164,9 +164,9 @@ CREATE TABLE IF NOT EXISTS member_notification (
 CREATE TABLE IF NOT EXISTS member_signup_verification (
     id BIGINT NOT NULL DEFAULT nextval('member_signup_verification_seq'),
     email VARCHAR(255) NOT NULL,
-    email_verification_token VARCHAR(120) NOT NULL,
+    email_verification_token_hash VARCHAR(128) NOT NULL,
     email_verification_expires_at TIMESTAMPTZ NOT NULL,
-    signup_session_token VARCHAR(120),
+    signup_session_token_hash VARCHAR(128),
     signup_session_expires_at TIMESTAMPTZ,
     verified_at TIMESTAMPTZ,
     consumed_at TIMESTAMPTZ,
@@ -177,8 +177,8 @@ CREATE TABLE IF NOT EXISTS member_signup_verification (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     modified_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_member_signup_verification PRIMARY KEY (id),
-    CONSTRAINT uk_member_signup_verification_email_verification_token UNIQUE (email_verification_token),
-    CONSTRAINT uk_member_signup_verification_signup_session_token UNIQUE (signup_session_token)
+    CONSTRAINT uk_member_signup_verification_email_verification_token_hash UNIQUE (email_verification_token_hash),
+    CONSTRAINT uk_member_signup_verification_signup_session_token_hash UNIQUE (signup_session_token_hash)
 );
 
 CREATE TABLE IF NOT EXISTS uploaded_file (

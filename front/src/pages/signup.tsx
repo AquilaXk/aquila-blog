@@ -5,10 +5,11 @@ import { useRouter } from "next/router"
 import { FormEvent, useMemo, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
+import { SIGNUP_LEGAL_POLICY_VERSION } from "src/apis/backend/legal"
 import AuthShell from "src/components/auth/AuthShell"
 import AppIcon from "src/components/icons/AppIcon"
 import { formatSignupCooldown, useSignupMailCooldown } from "src/hooks/useSignupMailCooldown"
-import { ACTIVE_LEGAL_POLICY_VERSION, legalPolicyCurrentPaths } from "src/libs/legal/policyLinks"
+import { legalPolicyCurrentPaths } from "src/libs/legal/policyLinks"
 import { normalizeNextPath, toLoginPath, toSignupPath } from "src/libs/router"
 import { GuestPageProps, getGuestPageProps } from "src/libs/server/guestPage"
 import { isValidAuthEmail, normalizeAuthEmail } from "src/libs/validation/auth"
@@ -22,8 +23,6 @@ type RsData<T> = {
 type SignupEmailStartResult = {
   email: string
 }
-
-const SIGNUP_LEGAL_POLICY_VERSION = ACTIVE_LEGAL_POLICY_VERSION
 
 export const getServerSideProps: GetServerSideProps<GuestPageProps> = async ({ req }) => {
   return await getGuestPageProps(req)

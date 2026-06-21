@@ -164,7 +164,7 @@ const useExplorePostsQuery = ({
     hasNextPage: query.hasNextPage ?? false,
     isInitialLoading: query.isLoading,
     isInitialLoadError: query.isError && !(query.data?.pages.length),
-    hasInitialLoadSucceeded: query.isSuccess,
+    hasInitialLoadSucceeded: query.isSuccess && query.isFetchedAfterMount,
     isFetchingNextPage: query.isFetchingNextPage,
     isFetchNextPageError: query.isFetchNextPageError,
     fetchNextPage: query.fetchNextPage,

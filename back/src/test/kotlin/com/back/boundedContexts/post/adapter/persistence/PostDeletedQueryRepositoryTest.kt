@@ -5,6 +5,7 @@ import com.back.boundedContexts.member.adapter.persistence.MemberRepository
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberAttr
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
+import com.back.boundedContexts.member.domain.shared.memberMixin.defaultProfileImageUrl
 import com.back.boundedContexts.post.domain.Post
 import com.back.support.BaseRepositoryIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
@@ -80,6 +81,6 @@ class PostDeletedQueryRepositoryTest : BaseRepositoryIntegrationTest() {
         val page = postDeletedQueryRepository.findDeletedPagedByKw("", PageRequest.of(0, 10))
         val row = page.content.first { it.authorName == "기본이미지작성자" }
 
-        assertThat(row.authorProfileImgUrl).isEqualTo("https://placehold.co/600x600?text=U_U")
+        assertThat(row.authorProfileImgUrl).isEqualTo(defaultProfileImageUrl())
     }
 }

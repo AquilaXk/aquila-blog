@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.adapter.persistence
 
+import com.back.boundedContexts.member.domain.shared.memberMixin.defaultProfileImageUrl
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
 import org.springframework.data.domain.Page
@@ -17,7 +18,6 @@ class PostDeletedQueryRepository(
     private val jdbcTemplate: JdbcTemplate,
 ) {
     private companion object {
-        const val DEFAULT_PROFILE_IMG_URL = "https://placehold.co/600x600?text=U_U"
         const val PROFILE_IMG_ATTR_NAME = "profileImgUrl"
     }
 
@@ -218,7 +218,7 @@ class PostDeletedQueryRepository(
         authorModifiedAt: java.time.Instant?,
     ): String {
         val normalizedUrl = rawUrl?.trim().orEmpty()
-        if (normalizedUrl.isBlank()) return DEFAULT_PROFILE_IMG_URL
+        if (normalizedUrl.isBlank()) return defaultProfileImageUrl()
 
         val version = profileImgModifiedAt ?: authorModifiedAt ?: return normalizedUrl
         val separator = if (normalizedUrl.contains("?")) "&" else "?"

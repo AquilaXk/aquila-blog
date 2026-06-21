@@ -52,6 +52,8 @@ test.describe("frontend security headers", () => {
         "'self'",
         "data:",
         "blob:",
+        "https:",
+        "http:",
         "https://*.aquilaxk.site",
         "https://www.notion.so",
         "https://avatars.githubusercontent.com",
@@ -73,6 +75,28 @@ test.describe("frontend security headers", () => {
     expect(directives.get("base-uri")).toEqual(["'self'"])
     expect(directives.get("frame-ancestors")).toEqual(["'self'"])
     expect(directives.get("upgrade-insecure-requests")).toEqual([])
+  })
+
+  test("CSP connect-src keeps documented local backend fallback available in development", async () => {
+    const previousNodeEnv = process.env.NODE_ENV
+    const previousBackendUrl = process.env.NEXT_PUBLIC_BACKEND_URL
+
+    process.env.NODE_ENV = "development"
+    delete process.env.NEXT_PUBLIC_BACKEND_URL
+
+    try {
+      const directives = parseCspDirectives(await getCspHeader())
+
+      expect(directives.get("connect-src")).toEqual(
+        expect.arrayContaining(["http://localhost:8080", "http://127.0.0.1:8080"]),
+      )
+    } finally {
+      if (previousNodeEnv === undefined) delete process.env.NODE_ENV
+      else process.env.NODE_ENV = previousNodeEnv
+
+      if (previousBackendUrl === undefined) delete process.env.NEXT_PUBLIC_BACKEND_URL
+      else process.env.NEXT_PUBLIC_BACKEND_URL = previousBackendUrl
+    }
   })
 
   test("CSP frame-src keeps supported markdown embed preview providers available", async () => {

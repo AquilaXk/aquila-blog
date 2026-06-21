@@ -9,6 +9,8 @@
 - `script-src`는 Next.js runtime, 현재 inline bootstrap, Vercel Analytics/Toolbar, Google Analytics script source만 허용한다.
 - `style-src`는 Emotion/Next.js inline style 운용을 위해 `'unsafe-inline'`을 유지한다.
 - `img-src`, `connect-src`, `font-src`, `media-src`, `frame-src`는 현재 운영 image domain, same-origin API proxy, Vercel telemetry, Google Analytics, monitoring embed origin을 명시한다.
+- `img-src`의 `http:`/`https:` scheme source는 현재 markdown image와 unfurl thumbnail 입력 계약이 외부 image URL을 허용하기 때문에 유지한다. 별도 image proxy 또는 domain validation으로 좁히는 변경은 content validation 이슈로 분리한다.
+- `connect-src`의 `http://localhost:8080`, `http://127.0.0.1:8080`은 `NEXT_PUBLIC_BACKEND_URL`이 없을 때 쓰는 local backend fallback을 위해 development build에서만 포함한다.
 - nonce 기반 `script-src`는 Next.js proxy 동적 렌더링 전환이 필요하므로 이번 변경에서는 적용하지 않는다. nonce 전환 시 `script-src 'nonce-<value>' 'strict-dynamic'`과 `style-src 'nonce-<value>'`를 별도 이슈로 검증한다.
 
 ## Report-Only Rollout

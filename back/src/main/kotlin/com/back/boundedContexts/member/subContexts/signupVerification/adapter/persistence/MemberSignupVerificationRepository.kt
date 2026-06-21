@@ -4,9 +4,9 @@ import com.back.boundedContexts.member.subContexts.signupVerification.domain.Mem
 import org.springframework.data.jpa.repository.JpaRepository
 
 interface MemberSignupVerificationRepository : JpaRepository<MemberSignupVerification, Long> {
-    fun findByEmailVerificationToken(emailVerificationToken: String): MemberSignupVerification?
+    fun findByEmailVerificationTokenHash(emailVerificationTokenHash: String): MemberSignupVerification?
 
-    fun findBySignupSessionToken(signupSessionToken: String): MemberSignupVerification?
+    fun findBySignupSessionTokenHash(signupSessionTokenHash: String): MemberSignupVerification?
 
     fun findTopByEmailOrderByCreatedAtDesc(email: String): MemberSignupVerification?
 }

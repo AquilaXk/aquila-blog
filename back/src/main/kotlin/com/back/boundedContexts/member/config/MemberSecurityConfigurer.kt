@@ -26,6 +26,7 @@ class MemberSecurityConfigurer(
             add(PublicApiRouteSpec("/member/api/*/members/{id:\\d+}/redirectToProfileImg", HttpMethod.GET))
             add(PublicApiRouteSpec("/member/api/*/signup/email/start", HttpMethod.POST))
             add(PublicApiRouteSpec("/member/api/*/signup/email/verify", HttpMethod.GET))
+            add(PublicApiRouteSpec("/member/api/*/signup/email/verify", HttpMethod.POST))
             add(PublicApiRouteSpec("/member/api/*/signup/complete", HttpMethod.POST))
         }
 

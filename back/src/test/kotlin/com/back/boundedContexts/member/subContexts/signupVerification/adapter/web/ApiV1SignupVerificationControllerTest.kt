@@ -4,11 +4,12 @@ import com.back.boundedContexts.member.application.service.MemberApplicationServ
 import com.back.boundedContexts.member.subContexts.legalAcceptance.adapter.persistence.MemberLegalAcceptanceRepository
 import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.ActiveLegalDocumentMetadata
 import com.back.boundedContexts.member.subContexts.signupVerification.adapter.persistence.MemberSignupVerificationRepository
+import com.back.boundedContexts.member.subContexts.signupVerification.adapter.web.ApiV1SignupVerificationController.Companion.SIGNUP_SESSION_COOKIE_NAME
 import com.back.global.task.adapter.persistence.TaskRepository
 import com.back.global.task.domain.TaskStatus
 import com.back.support.BaseControllerIntegrationTest
+import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
-import org.hamcrest.Matchers.startsWith
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -16,6 +17,8 @@ import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.handler
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 
 @org.junit.jupiter.api.DisplayName("ApiV1SignupVerificationController 테스트")
 class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
@@ -62,7 +65,6 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
                 memberSignupVerificationRepository.findTopByEmailOrderByCreatedAtDesc("new-user@example.com")
 
             checkNotNull(verification)
-            assertThat(verification.emailVerificationToken).isNotBlank()
             assertThat(verification.termsAcceptedAt).isNotNull()
             assertThat(verification.privacyAcceptedAt).isNotNull()
             assertThat(verification.legalPolicyVersion).isEqualTo(legalPolicyVersion)
@@ -70,7 +72,14 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
                 taskRepository.findAll().filter { it.taskType == "member.signupVerification.sendMail" }
             assertThat(mailTasks).hasSize(1)
             assertThat(mailTasks.single().aggregateId).isEqualTo(verification.id)
+            assertThat(mailTasks.single().payload).doesNotContain("?token=")
+            assertThat(mailTasks.single().payload).contains("#token=")
             assertThat(mailTasks.single().status).isEqualTo(TaskStatus.COMPLETED)
+
+            val emailVerificationToken = emailVerificationTokenFromMailTask(verification.id)
+            assertThat(verification.emailVerificationTokenHash).isNotBlank()
+            assertThat(verification.emailVerificationTokenHash).isNotEqualTo(emailVerificationToken)
+            assertThat(mailTasks.single().payload).doesNotContain(verification.emailVerificationTokenHash)
         }
 
         @Test
@@ -169,6 +178,19 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
     @Nested
     inner class EmailVerifyAndComplete {
         @Test
+        fun `legacy GET verify는 query token을 처리하지 않고 410을 반환한다`() {
+            mvc
+                .get("/member/api/v1/signup/email/verify") {
+                    param("token", "legacy-query-token")
+                }.andExpect {
+                    status { isGone() }
+                    match(handler().handlerType(ApiV1SignupVerificationController::class.java))
+                    match(handler().methodName("verifyLegacyGet"))
+                    jsonPath("$.resultCode") { value("410-3") }
+                }
+        }
+
+        @Test
         fun `이메일 인증 후 최종 가입을 완료할 수 있다`() {
             val email = "verify-user@example.com"
 
@@ -188,32 +210,39 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
             val verification =
                 memberSignupVerificationRepository.findTopByEmailOrderByCreatedAtDesc(email)
                     ?: error("verification row not created")
+            val emailVerificationToken = emailVerificationTokenFromMailTask(verification.id)
 
-            mvc
-                .get("/member/api/v1/signup/email/verify") {
-                    param("token", verification.emailVerificationToken)
-                }.andExpect {
-                    status { isOk() }
-                    match(handler().handlerType(ApiV1SignupVerificationController::class.java))
-                    match(handler().methodName("verify"))
-                    jsonPath("$.resultCode") { value("200-2") }
-                    jsonPath("$.data.email") { value(email) }
-                    jsonPath("$.data.signupToken") { value(startsWith("")) }
-                }
+            val signupSessionCookie =
+                mvc
+                    .post("/member/api/v1/signup/email/verify") {
+                        contentType = MediaType.APPLICATION_JSON
+                        content = """{"token": "$emailVerificationToken"}"""
+                    }.andExpect {
+                        status { isOk() }
+                        match(handler().handlerType(ApiV1SignupVerificationController::class.java))
+                        match(handler().methodName("verify"))
+                        jsonPath("$.resultCode") { value("200-2") }
+                        jsonPath("$.data.email") { value(email) }
+                        jsonPath("$.data.signupToken") { doesNotExist() }
+                    }.andReturn()
+                    .response
+                    .getHeader("Set-Cookie")
+                    .let(::signupSessionCookieFrom)
 
             val refreshed =
                 memberSignupVerificationRepository.findTopByEmailOrderByCreatedAtDesc(email)
                     ?: error("verification row missing after verify")
 
-            val signupToken = refreshed.signupSessionToken ?: error("signup token not issued")
+            assertThat(refreshed.signupSessionTokenHash).isNotBlank()
+            assertThat(refreshed.signupSessionTokenHash).isNotEqualTo(signupSessionCookie.value)
 
             mvc
                 .post("/member/api/v1/signup/complete") {
                     contentType = MediaType.APPLICATION_JSON
+                    cookie(signupSessionCookie)
                     content =
                         """
                         {
-                            "signupToken": "$signupToken",
                             "password": "Abcd1234!",
                             "nickname": "이메일인증회원",
                             "termsVersion": "${activeLegalDocuments.terms.version}",
@@ -256,7 +285,6 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
         fun `signup complete request는 법적 동의 command로 변환된다`() {
             val request =
                 ApiV1SignupVerificationController.SignupCompleteRequest(
-                    signupToken = "signup-token",
                     password = "Abcd1234!",
                     nickname = "동의요청회원",
                     termsVersion = activeLegalDocuments.terms.version,
@@ -291,14 +319,13 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
         }
 
         @Test
-        fun `유효하지 않은 signup token이면 최종 가입을 막는다`() {
+        fun `signup session cookie가 없으면 최종 가입을 막는다`() {
             mvc
                 .post("/member/api/v1/signup/complete") {
                     contentType = MediaType.APPLICATION_JSON
                     content =
                         """
                         {
-                            "signupToken": "invalid-token",
                             "password": "Abcd1234!",
                             "nickname": "이메일인증회원",
                             "termsVersion": "${activeLegalDocuments.terms.version}",
@@ -312,8 +339,8 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
                         }
                         """.trimIndent()
                 }.andExpect {
-                    status { isNotFound() }
-                    jsonPath("$.resultCode") { value("404-2") }
+                    status { isBadRequest() }
+                    jsonPath("$.resultCode") { value("400-2") }
                 }
         }
 
@@ -342,23 +369,16 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
             verification.legalPolicyVersion = null
             memberSignupVerificationRepository.save(verification)
 
-            mvc.get("/member/api/v1/signup/email/verify") {
-                param("token", verification.emailVerificationToken)
-            }
-
-            val signupToken =
-                memberSignupVerificationRepository
-                    .findTopByEmailOrderByCreatedAtDesc(email)
-                    ?.signupSessionToken
-                    ?: error("signup token not issued")
+            val signupSessionCookie =
+                verifySignupEmailAndIssueCookie(emailVerificationTokenFromMailTask(verification.id))
 
             mvc
                 .post("/member/api/v1/signup/complete") {
                     contentType = MediaType.APPLICATION_JSON
+                    cookie(signupSessionCookie)
                     content =
                         """
                         {
-                            "signupToken": "$signupToken",
                             "password": "Abcd1234!",
                             "nickname": "동의누락회원",
                             "termsVersion": "${activeLegalDocuments.terms.version}",
@@ -401,23 +421,16 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
                 memberSignupVerificationRepository.findTopByEmailOrderByCreatedAtDesc(email)
                     ?: error("verification row not created")
 
-            mvc.get("/member/api/v1/signup/email/verify") {
-                param("token", verification.emailVerificationToken)
-            }
-
-            val signupToken =
-                memberSignupVerificationRepository
-                    .findTopByEmailOrderByCreatedAtDesc(email)
-                    ?.signupSessionToken
-                    ?: error("signup token not issued")
+            val signupSessionCookie =
+                verifySignupEmailAndIssueCookie(emailVerificationTokenFromMailTask(verification.id))
 
             mvc
                 .post("/member/api/v1/signup/complete") {
                     contentType = MediaType.APPLICATION_JSON
+                    cookie(signupSessionCookie)
                     content =
                         """
                         {
-                            "signupToken": "$signupToken",
                             "username": "legacy-signup-user",
                             "password": "Abcd1234!",
                             "nickname": "레거시회원",
@@ -439,15 +452,15 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
         @Test
         fun `만 14세 이상 확인이 없으면 최종 가입을 막고 member를 생성하지 않는다`() {
             val email = "under-age-direct@example.com"
-            val signupToken = issueSignupToken(email)
+            val signupSessionCookie = issueSignupSessionCookie(email)
 
             mvc
                 .post("/member/api/v1/signup/complete") {
                     contentType = MediaType.APPLICATION_JSON
+                    cookie(signupSessionCookie)
                     content =
                         """
                         {
-                            "signupToken": "$signupToken",
                             "password": "Abcd1234!",
                             "nickname": "연령미확인회원",
                             "termsVersion": "${activeLegalDocuments.terms.version}",
@@ -472,15 +485,15 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
         @Test
         fun `필수 개인정보 처리 확인이 없으면 최종 가입을 막고 member를 생성하지 않는다`() {
             val email = "missing-required-privacy@example.com"
-            val signupToken = issueSignupToken(email)
+            val signupSessionCookie = issueSignupSessionCookie(email)
 
             mvc
                 .post("/member/api/v1/signup/complete") {
                     contentType = MediaType.APPLICATION_JSON
+                    cookie(signupSessionCookie)
                     content =
                         """
                         {
-                            "signupToken": "$signupToken",
                             "password": "Abcd1234!",
                             "nickname": "개인정보미확인회원",
                             "termsVersion": "${activeLegalDocuments.terms.version}",
@@ -505,15 +518,15 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
         @Test
         fun `국외 이전 안내 확인이 없으면 최종 가입을 막고 member를 생성하지 않는다`() {
             val email = "missing-overseas-transfer@example.com"
-            val signupToken = issueSignupToken(email)
+            val signupSessionCookie = issueSignupSessionCookie(email)
 
             mvc
                 .post("/member/api/v1/signup/complete") {
                     contentType = MediaType.APPLICATION_JSON
+                    cookie(signupSessionCookie)
                     content =
                         """
                         {
-                            "signupToken": "$signupToken",
                             "password": "Abcd1234!",
                             "nickname": "국외이전미확인회원",
                             "termsVersion": "${activeLegalDocuments.terms.version}",
@@ -538,15 +551,15 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
         @Test
         fun `정책 hash가 최신 active 문서와 다르면 최종 가입을 409로 막는다`() {
             val email = "stale-policy@example.com"
-            val signupToken = issueSignupToken(email)
+            val signupSessionCookie = issueSignupSessionCookie(email)
 
             mvc
                 .post("/member/api/v1/signup/complete") {
                     contentType = MediaType.APPLICATION_JSON
+                    cookie(signupSessionCookie)
                     content =
                         """
                         {
-                            "signupToken": "$signupToken",
                             "password": "Abcd1234!",
                             "nickname": "오래된정책회원",
                             "termsVersion": "${activeLegalDocuments.terms.version}",
@@ -571,15 +584,15 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
         @Test
         fun `가입 시작에 저장된 정책 버전이 최신 active 문서와 다르면 최종 가입을 409로 막는다`() {
             val email = "stale-start-policy@example.com"
-            val signupToken = issueSignupToken(email, legalPolicyVersion = "2026-01-01")
+            val signupSessionCookie = issueSignupSessionCookie(email, legalPolicyVersion = "2026-01-01")
 
             mvc
                 .post("/member/api/v1/signup/complete") {
                     contentType = MediaType.APPLICATION_JSON
+                    cookie(signupSessionCookie)
                     content =
                         """
                         {
-                            "signupToken": "$signupToken",
                             "password": "Abcd1234!",
                             "nickname": "오래된시작정책회원",
                             "termsVersion": "${activeLegalDocuments.terms.version}",
@@ -601,10 +614,10 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
             assertThat(memberApplicationService.findByEmail(email)).isNull()
         }
 
-        private fun issueSignupToken(
+        private fun issueSignupSessionCookie(
             email: String,
             legalPolicyVersion: String = this@ApiV1SignupVerificationControllerTest.legalPolicyVersion,
-        ): String {
+        ): Cookie {
             mvc.post("/member/api/v1/signup/email/start") {
                 contentType = MediaType.APPLICATION_JSON
                 content =
@@ -622,14 +635,49 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
                 memberSignupVerificationRepository.findTopByEmailOrderByCreatedAtDesc(email)
                     ?: error("verification row not created")
 
-            mvc.get("/member/api/v1/signup/email/verify") {
-                param("token", verification.emailVerificationToken)
-            }
-
-            return memberSignupVerificationRepository
-                .findTopByEmailOrderByCreatedAtDesc(email)
-                ?.signupSessionToken
-                ?: error("signup token not issued")
+            return verifySignupEmailAndIssueCookie(emailVerificationTokenFromMailTask(verification.id))
         }
+
+        private fun verifySignupEmailAndIssueCookie(emailVerificationToken: String): Cookie =
+            mvc
+                .post("/member/api/v1/signup/email/verify") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content = """{"token": "$emailVerificationToken"}"""
+                }.andExpect {
+                    status { isOk() }
+                }.andReturn()
+                .response
+                .getHeader("Set-Cookie")
+                .let(::signupSessionCookieFrom)
+
+        private fun signupSessionCookieFrom(setCookieHeader: String?): Cookie {
+            val headerValue = setCookieHeader ?: error("signup session cookie not issued")
+            assertThat(headerValue).contains("$SIGNUP_SESSION_COOKIE_NAME=")
+            assertThat(headerValue).contains("HttpOnly")
+            assertThat(headerValue).contains("Secure")
+            assertThat(headerValue).contains("SameSite=Strict")
+
+            val cookieValue = headerValue.substringBefore(";").substringAfter("=")
+            assertThat(cookieValue).isNotBlank()
+            return Cookie(SIGNUP_SESSION_COOKIE_NAME, cookieValue)
+        }
+    }
+
+    private fun emailVerificationTokenFromMailTask(verificationId: Long): String {
+        val payload =
+            taskRepository
+                .findAll()
+                .single {
+                    it.taskType == "member.signupVerification.sendMail" &&
+                        it.aggregateId == verificationId
+                }.payload
+        val encodedToken =
+            Regex("#token=([^\"\\\\\\s<]+)")
+                .find(payload)
+                ?.groupValues
+                ?.get(1)
+                ?: error("verification token fragment not found")
+
+        return URLDecoder.decode(encodedToken, StandardCharsets.UTF_8)
     }
 }

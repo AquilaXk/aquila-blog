@@ -5,6 +5,12 @@ import com.back.global.app.AppConfig
 
 const val PROFILE_IMG_URL = "profileImgUrl"
 private const val PROFILE_IMG_URL_DEFAULT_VALUE = ""
+private const val DEFAULT_PROFILE_IMAGE_PATH = "/images/default-profile.svg"
+
+fun defaultProfileImageUrl(): String {
+    val siteFrontUrl = runCatching { AppConfig.siteFrontUrl.trimEnd('/') }.getOrDefault("")
+    return if (siteFrontUrl.isBlank()) DEFAULT_PROFILE_IMAGE_PATH else "$siteFrontUrl$DEFAULT_PROFILE_IMAGE_PATH"
+}
 
 interface MemberHasProfileImgUrl : MemberAware {
     private fun appendProfileImgVersion(url: String): String {
@@ -30,7 +36,7 @@ interface MemberHasProfileImgUrl : MemberAware {
     val profileImgUrlOrDefault: String
         get() =
             profileImgUrl.takeIf { it.isNotBlank() }
-                ?: "https://placehold.co/600x600?text=U_U"
+                ?: defaultProfileImageUrl()
 
     val profileImgUrlVersionedOrDefault: String
         get() =

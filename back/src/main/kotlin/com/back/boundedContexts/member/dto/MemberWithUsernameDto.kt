@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
 import com.back.boundedContexts.member.domain.shared.memberMixin.convertAboutSectionsToLegacyDetails
+import com.back.boundedContexts.member.domain.shared.memberMixin.defaultProfileImageUrl
 import com.back.boundedContexts.member.domain.shared.memberMixin.parseLegacyAboutDetailsToBlocks
 import java.time.Instant
 
@@ -105,7 +106,7 @@ data class MemberWithUsernameDto(
             url: String,
             modifiedAt: Instant?,
         ): String {
-            if (url.isBlank() || modifiedAt == null || url.startsWith("https://placehold.co/")) return url
+            if (url.isBlank() || modifiedAt == null || url == defaultProfileImageUrl()) return url
             val separator = if (url.contains("?")) "&" else "?"
             return "$url${separator}v=${modifiedAt.toEpochMilli()}"
         }

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { normalizeSafeMarkdownImageSrc } from "src/libs/markdown/safeMarkdownUrl"
 
 type NextHeader = {
   key: string
@@ -10,11 +11,35 @@ type NextHeaderRule = {
   headers: NextHeader[]
 }
 
-const getCspHeader = async () => {
-  const nextConfigModule = await import("../next.config.js")
-  const nextConfig = nextConfigModule.default as {
-    headers: () => Promise<NextHeaderRule[]>
+type NextConfig = {
+  headers: () => Promise<NextHeaderRule[]>
+  images?: {
+    remotePatterns?: Array<{
+      protocol?: string
+      hostname?: string
+    }>
   }
+}
+
+const externalPlaceholderHosts = [
+  ["placehold", "co"],
+  ["via", "placeholder", "com"],
+  [["pic", "sum"].join(""), "photos"],
+  [["dummy", "image"].join(""), "com"],
+  ["source", "unsplash", "com"],
+  ["place", "kitten", "com"],
+  ["lorem", "flickr", "com"],
+].map((parts) => parts.join("."))
+
+const nextImageHostPatternTokens = (host: string) => [host, `*.${host}`, `**.${host}`]
+
+const getNextConfig = async () => {
+  const nextConfigModule = await import("../next.config.js")
+  return nextConfigModule.default as NextConfig
+}
+
+const getCspHeader = async () => {
+  const nextConfig = await getNextConfig()
   const rules = await nextConfig.headers()
   const globalRule = rules.find((rule) => rule.source === "/:path*")
   const csp = globalRule?.headers.find(
@@ -75,6 +100,29 @@ test.describe("frontend security headers", () => {
     expect(directives.get("base-uri")).toEqual(["'self'"])
     expect(directives.get("frame-ancestors")).toEqual(["'self'"])
     expect(directives.get("upgrade-insecure-requests")).toEqual([])
+  })
+
+  test("Next image config does not explicitly optimize external placeholder providers", async () => {
+    const nextConfig = await getNextConfig()
+    const remoteHosts = (nextConfig.images?.remotePatterns ?? [])
+      .map((pattern) => pattern.hostname)
+      .filter(Boolean)
+
+    for (const host of externalPlaceholderHosts) {
+      for (const blockedPattern of nextImageHostPatternTokens(host)) {
+        expect(remoteHosts).not.toContain(blockedPattern)
+      }
+    }
+  })
+
+  test("markdown image sanitizer rejects external placeholder providers only", () => {
+    const placeholderImageUrl = `https://${["placehold", "co"].join(".")}/600x600?text=U_U`
+    const placeholderSubdomainImageUrl = `https://img.${["placehold", "co"].join(".")}/600x600?text=U_U`
+    const supportedExternalImageUrl = "https://cdn.example.com/post-image.png"
+
+    expect(normalizeSafeMarkdownImageSrc(placeholderImageUrl)).toBe("")
+    expect(normalizeSafeMarkdownImageSrc(placeholderSubdomainImageUrl)).toBe("")
+    expect(normalizeSafeMarkdownImageSrc(supportedExternalImageUrl)).toBe(supportedExternalImageUrl)
   })
 
   test("CSP connect-src keeps documented local backend fallback available in development", async () => {

@@ -40,6 +40,42 @@ class CustomOAuth2LoginFailureHandlerTest {
     }
 
     @Test
+    fun `absolute redirect state는 해당 origin의 social complete 화면으로 pending token을 전달한다`() {
+        AppConfig("https://api.aquilaxk.site", "https://preview.aquilaxk.site")
+        try {
+            val handler = CustomOAuth2LoginFailureHandler("https://www.aquilaxk.site")
+            val request =
+                MockHttpServletRequest("GET", "/login/oauth2/code/kakao").apply {
+                    setParameter(
+                        "state",
+                        OAuth2State
+                            .of("https://preview.aquilaxk.site/editor?draft=1")
+                            .encode(),
+                    )
+                }
+            val response = MockHttpServletResponse()
+
+            handler.onAuthenticationFailure(
+                request,
+                response,
+                OAuthSignupRequiredAuthenticationException(
+                    provider = "KAKAO",
+                    pendingToken = "pending-token",
+                    expiresAt = Instant.EPOCH.plusSeconds(300),
+                ),
+            )
+
+            assertThat(response.status).isEqualTo(302)
+            assertThat(response.redirectedUrl)
+                .isEqualTo(
+                    "https://preview.aquilaxk.site/signup/social/complete#token=pending-token&provider=kakao&next=%2Feditor%3Fdraft%3D1",
+                )
+        } finally {
+            AppConfig("https://api.aquilaxk.site", "https://www.aquilaxk.site")
+        }
+    }
+
+    @Test
     fun `신규 OAuth 가입 차단 실패는 로그인 화면에 signup-required 코드와 next를 전달한다`() {
         val handler = CustomOAuth2LoginFailureHandler("https://www.aquilaxk.site")
         val request =

@@ -203,7 +203,7 @@ write_summary() {
 }
 
 cleanup() {
-  docker rm -f "${POSTGRES_CONTAINER}" >/dev/null 2>&1 || true
+  docker rm -f -v "${POSTGRES_CONTAINER}" >/dev/null 2>&1 || true
 }
 
 wait_for_postgres() {

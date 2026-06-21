@@ -1,0 +1,54 @@
+retentionRules:
+  - activityId: account_registration_email
+    retention: accountLifetimeUntilDeletionOrLegalHold
+    destruction: softDeleteThenAnonymizeOrHardDeleteAfterRetention
+    followUp: issue999
+  - activityId: signup_email_verification
+    retention: verificationTokenTtlPlusOperationalAuditWindow
+    destruction: expireCancelConsumeThenPurgeByRetentionJob
+    followUp: issue998
+  - activityId: kakao_oauth_existing_login
+    retention: accountLifetimeForLinkedIdentifier
+    destruction: unlinkOrAccountDeletion
+    followUp: issue997
+  - activityId: auth_session_and_cookies
+    retention: untilLogoutRevocationExpiryOrSessionCleanupJob
+    destruction: revokeSessionExpireCookiePurgeExpiredSessions
+    followUp: issue995
+  - activityId: user_content_posts_comments
+    retention: untilUserDeletionOrContentDeletion
+    destruction: softDeleteThenCachePurge
+    followUp: issue999
+  - activityId: file_uploads_profile_post_cloud
+    retention: activeUntilOwnerDeletionTempUploadsUntilPurgeAfterDeletedObjectsUntilBackupExpiry
+    destruction: objectDeleteAndMetadataMarkDeleted
+    followUp: issue1004
+  - activityId: auth_security_events
+    retention: securityAuditWindowThenCleanupJob
+    destruction: scheduledPurgeAndLogRetentionExpiry
+    followUp: issue1001
+  - activityId: member_action_logs
+    retention: operationalAuditWindowThenPurgePolicyRequired
+    destruction: scheduledPurgeFutureWork
+    followUp: issue1001
+  - activityId: notifications_sse
+    retention: notificationHistoryWindowThenPurgePolicyRequired
+    destruction: accountDeletionOrRetentionJobFutureWork
+    followUp: issue1000
+  - activityId: analytics_and_rum
+    retention: providerDefaultUnlessConfiguredLocalRumLogRetentionPolicyRequired
+    destruction: providerRetentionControlsAndLocalLogExpiry
+    followUp: issue1002
+  - activityId: ai_tag_recommendation_gemini
+    retention: noRawPromptRetentionIntendedProviderRetentionRequiresContractReview
+    destruction: noLocalPersistenceProviderDeletionControlsReviewRequired
+    followUp: issue1003
+  - activityId: backup_and_restore
+    retention: backupClassRetentionPolicyInDeployScriptsPrivacyTombstoneFutureWork
+    destruction: pruneExternalBackupsAndDeployBackupRotationEncryptedDeletionFutureWork
+    followUp: issue1004
+
+principles:
+  - Security or legal hold data must be separated from account-visible data during deletion handling.
+  - Backup retention can outlive database deletion, so restore must replay deletion tombstones before traffic opens.
+  - Analytics, RUM, and AI external processing must prefer aggregate or transient handling that does not require user identification.

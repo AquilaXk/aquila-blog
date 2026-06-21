@@ -1,0 +1,247 @@
+processors:
+  - id: home_server_postgresql
+    name: Home server PostgreSQL
+    role: systemOfRecord
+    serviceType: database
+    dataCategories:
+      - account
+      - session
+      - content
+      - logs
+      - notifications
+    region: selfHostedHomeServer
+    overseasTransfer: false
+    enabledByEnv: DATABASE_URL and docker compose postgres service
+    contractStatus: internalSelfHosted
+    retentionControl: application retention jobs and database backup policy
+    securityControls:
+      - privateNetwork
+      - restrictedOperatorAccess
+      - transportTlsAtEdge
+    reviewRequired:
+      - Disk encryption and backup encryption status must be finalized.
+
+  - id: home_server_minio
+    name: Home server MinIO
+    role: storageProcessor
+    serviceType: objectStorage
+    dataCategories:
+      - uploadedFiles
+      - profileImages
+      - postAttachments
+      - adminCloudFiles
+    region: selfHostedHomeServer
+    overseasTransfer: false
+    enabledByEnv: custom.storage.* and AQUILA_EXTERNAL_STORAGE_ROOT
+    contractStatus: internalSelfHosted
+    retentionControl: object delete and uploaded_file retention metadata
+    securityControls:
+      - privateNetwork
+      - bucketAccessPolicy
+      - restrictedOperatorAccess
+    reviewRequired:
+      - Restore tombstone replay and encryption are tracked by issue1004.
+
+  - id: home_server_backup_storage
+    name: Home server external backup storage
+    role: backupProcessor
+    serviceType: backupStorage
+    dataCategories:
+      - databaseSnapshot
+      - objectStorageArchive
+      - deploymentConfigSnapshot
+      - operationalLogs
+    region: selfHostedHomeServer
+    overseasTransfer: false
+    enabledByEnv: AQUILA_BACKUP_ROOT and deploy backup scripts
+    contractStatus: internalSelfHosted
+    retentionControl: prune_external_backups.sh and deploy backup rotation
+    securityControls:
+      - restrictedOperatorAccess
+      - pathSafetyChecks
+    reviewRequired:
+      - Encryption at rest and deletion tombstone controls are tracked by issue1004.
+
+  - id: vercel_frontend_hosting
+    name: Vercel
+    role: frontendHostingAndAnalyticsProcessor
+    serviceType: hostingEdgeAnalytics
+    dataCategories:
+      - pageRequests
+      - publicAssets
+      - analyticsEvents
+      - speedInsights
+    region: globalEdgeNetwork
+    overseasTransfer: true
+    enabledByEnv: Vercel deployment and analytics packages
+    contractStatus: vendorTermsReviewRequired
+    retentionControl: Vercel project settings and provider retention controls
+    securityControls:
+      - HTTPS
+      - projectAccessControl
+      - deploymentAudit
+    reviewRequired:
+      - Analytics consent and provider retention settings are tracked by issue1002.
+
+  - id: cloudflare_dns_proxy
+    name: Cloudflare
+    role: dnsProxyAndEdgeSecurityProvider
+    serviceType: dnsProxyCdnSecurity
+    dataCategories:
+      - dnsRequestMetadata
+      - edgeRequestMetadata
+      - securityHeaders
+    region: globalEdgeNetwork
+    overseasTransfer: true
+    enabledByEnv: domain DNS and proxy configuration
+    contractStatus: vendorTermsReviewRequired
+    retentionControl: Cloudflare dashboard retention controls
+    securityControls:
+      - TLS
+      - edgeProxy
+      - accessControl
+    reviewRequired:
+      - Exact Cloudflare products enabled in production must be confirmed.
+
+  - id: kakao_oauth
+    name: Kakao OAuth
+    role: identityProvider
+    serviceType: oauthProvider
+    dataCategories:
+      - oauthProviderSubject
+      - emailWhenProvided
+      - oauthAuthorizationCode
+      - oauthState
+    region: koreaProviderReviewRequired
+    overseasTransfer: false
+    enabledByEnv: spring.security.oauth2.client.registration.kakao.client-id
+    contractStatus: kakaoDeveloperTermsReviewRequired
+    retentionControl: Kakao developer console and account unlink controls
+    securityControls:
+      - OAuth2AuthorizationCodeFlow
+      - redirectUriAllowlist
+      - stateParameter
+    reviewRequired:
+      - New OAuth signup pending consent is tracked by issue997.
+
+  - id: smtp_provider_unconfirmed
+    name: SMTP provider
+    role: emailDeliveryProcessor
+    serviceType: emailDelivery
+    dataCategories:
+      - recipientEmail
+      - signupVerificationLink
+      - operationalEmailContent
+    region: reviewRequired
+    overseasTransfer: reviewRequired
+    enabledByEnv: custom.member.signup.mail.* SMTP configuration
+    contractStatus: providerUnconfirmedLaunchBlocker
+    retentionControl: providerRetentionPolicyReviewRequired
+    securityControls:
+      - SMTPAuth
+      - TLSReviewRequired
+    reviewRequired:
+      - Provider name, region, DPA, retention, and TLS mode must be finalized before open signup.
+
+  - id: google_analytics
+    name: Google Analytics
+    role: analyticsProcessor
+    serviceType: webAnalytics
+    dataCategories:
+      - pagePath
+      - eventMetadata
+      - browserMetadata
+      - aggregatedUsage
+    region: globalGoogleInfrastructure
+    overseasTransfer: true
+    enabledByEnv: CONFIG.googleAnalytics.enable and measurementId
+    contractStatus: googleTermsReviewRequired
+    retentionControl: Google Analytics property data retention settings
+    securityControls:
+      - HTTPS
+      - accountAccessControl
+      - IPAndSignalControlsReviewRequired
+    reviewRequired:
+      - Consent manager and opt-out are tracked by issue1002.
+
+  - id: google_gemini
+    name: Google Gemini API
+    role: aiExternalProcessingProvider
+    serviceType: generativeAiApi
+    dataCategories:
+      - postTitle
+      - postContent
+      - existingTags
+      - generatedTags
+    region: globalGoogleInfrastructure
+    overseasTransfer: true
+    enabledByEnv: custom.ai.summary.gemini.* and API key
+    contractStatus: paidPlanAndDpaReviewRequired
+    retentionControl: providerDataRetentionAndTrainingOptOutReviewRequired
+    securityControls:
+      - serverSideApiKey
+      - HTTPS
+      - explicitAdminActionRequiredFutureWork
+    reviewRequired:
+      - Production default-off, PII scanner, and DPA guard are tracked by issue1003.
+
+  - id: grafana_loki_monitoring
+    name: Grafana and Loki monitoring stack
+    role: monitoringAndLogProcessor
+    serviceType: observability
+    dataCategories:
+      - applicationLogs
+      - securityEvents
+      - metrics
+      - operationalAlerts
+    region: selfHostedHomeServer
+    overseasTransfer: false
+    enabledByEnv: deploy homeserver monitoring compose and Grafana credentials
+    contractStatus: internalSelfHosted
+    retentionControl: Loki retention configuration review required
+    securityControls:
+      - adminPasswordSecret
+      - restrictedNetworkAccess
+      - dashboardAccessControl
+    reviewRequired:
+      - Sensitive log redaction and retention are tracked by issue1001.
+
+  - id: github_actions
+    name: GitHub Actions
+    role: ciCdProcessor
+    serviceType: ciCd
+    dataCategories:
+      - commitMetadata
+      - workflowLogs
+      - deploymentStatus
+      - secretNamesWithoutValues
+    region: globalGitHubInfrastructure
+    overseasTransfer: true
+    enabledByEnv: GitHub workflows
+    contractStatus: githubTermsReviewRequired
+    retentionControl: GitHub Actions log retention settings
+    securityControls:
+      - GitHubSecrets
+      - branchProtection
+      - workflowPermissions
+    reviewRequired:
+      - Workflow logs must not include raw personal data or secrets.
+
+  - id: ghcr_container_registry
+    name: GitHub Container Registry
+    role: containerImageRegistry
+    serviceType: artifactRegistry
+    dataCategories:
+      - containerImageDigest
+      - deploymentMetadata
+      - packageAuditMetadata
+    region: globalGitHubInfrastructure
+    overseasTransfer: true
+    enabledByEnv: deploy workflow GHCR image push
+    contractStatus: githubTermsReviewRequired
+    retentionControl: package retention settings
+    securityControls:
+      - digestPinnedDeploy
+      - packagePermissions
+    reviewRequired:
+      - Container images must not contain personal data or secrets.

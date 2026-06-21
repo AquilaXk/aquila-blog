@@ -17,6 +17,8 @@ test("signup verify flow keeps token and completion email out of query URLs", ()
 
   expect(signupVerifyPage).toContain("window.location.hash")
   expect(signupVerifyPage).toContain("window.history.replaceState")
+  expect(signupVerifyPage).toContain("verificationTokenRef.current ?? readSignupVerificationTokenFromFragment()")
+  expect(signupVerifyPage).toContain("setVerifyRetryCount")
   expect(signupVerifyPage).toContain('"/member/api/v1/signup/email/verify"')
   expect(signupVerifyPage).not.toContain("router.query.token")
   expect(signupVerifyPage).not.toContain("/email/verify?token=")

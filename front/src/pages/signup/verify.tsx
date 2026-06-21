@@ -54,6 +54,7 @@ const SignupVerifyPage = () => {
   const [overseasTransferAcknowledged, setOverseasTransferAcknowledged] = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [submitLoading, setSubmitLoading] = useState(false)
+  const [verifyRetryCount, setVerifyRetryCount] = useState(0)
   const verificationTokenRef = useRef<string | null>(null)
 
   const next = useMemo(() => {
@@ -102,7 +103,12 @@ const SignupVerifyPage = () => {
     return () => {
       cancelled = true
     }
-  }, [router.isReady])
+  }, [router.isReady, verifyRetryCount])
+
+  const retryVerification = () => {
+    if (!verificationTokenRef.current) return
+    setVerifyRetryCount((value) => value + 1)
+  }
 
   const passwordPolicy = useMemo(() => evaluatePasswordPolicy(password), [password])
   const hasPasswordInput = password.length > 0
@@ -189,7 +195,12 @@ const SignupVerifyPage = () => {
       {loadingVerification ? (
         <InfoText>회원가입 링크를 확인하고 있습니다...</InfoText>
       ) : verificationError ? (
-        <ErrorText>{verificationError}</ErrorText>
+        <ErrorPanel>
+          <ErrorText>{verificationError}</ErrorText>
+          <GhostButton type="button" onClick={retryVerification} disabled={!verificationTokenRef.current}>
+            다시 확인
+          </GhostButton>
+        </ErrorPanel>
       ) : verification ? (
         <form onSubmit={onSubmit}>
           <Field>
@@ -513,6 +524,16 @@ const GhostButton = styled.button`
   color: ${({ theme }) => theme.colors.gray12};
   cursor: pointer;
   white-space: nowrap;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+`
+
+const ErrorPanel = styled.div`
+  display: grid;
+  gap: 0.8rem;
 `
 
 const PrimaryButton = styled.button`

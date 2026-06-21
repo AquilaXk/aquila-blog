@@ -7,6 +7,7 @@ import AppIcon from "src/components/icons/AppIcon"
 import useAuthSession from "src/hooks/useAuthSession"
 import { useSignupMailCooldown } from "src/hooks/useSignupMailCooldown"
 import { loadAuthLoginPolicyPrefs, saveAuthLoginPolicyPrefs } from "src/libs/authLoginPolicy"
+import { ACTIVE_LEGAL_POLICY_VERSION } from "src/libs/legal/policyLinks"
 import { normalizeNextPath } from "src/libs/router"
 import { acquireBodyScrollLock } from "src/libs/utils/bodyScrollLock"
 import { isValidAuthEmail, normalizeAuthEmail } from "src/libs/validation/auth"
@@ -25,7 +26,7 @@ const loadLoginPanel = () => import("./AuthEntryLoginPanel")
 const loadSignupPanel = () => import("./AuthEntrySignupPanel")
 const loadSignupSentPanel = () => import("./AuthEntrySignupSentPanel")
 
-const SIGNUP_LEGAL_POLICY_VERSION = "2026-06-21"
+const SIGNUP_LEGAL_POLICY_VERSION = ACTIVE_LEGAL_POLICY_VERSION
 
 const AuthEntryPanelFallback = () => (
   <div className="panelFallback" aria-hidden="true">

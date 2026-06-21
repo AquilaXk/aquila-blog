@@ -63,6 +63,8 @@ require_pattern "${DRILL_SCRIPT}" 'RPO' "restore drill must record RPO"
 require_pattern "${DRILL_SCRIPT}" 'RTO' "restore drill must record RTO"
 require_pattern "${DRILL_SCRIPT}" 'DB_IMAGE is required' "restore drill must require the production DB image"
 require_pattern "${DRILL_SCRIPT}" 'created_at_utc' "restore drill must prefer UTC backup metadata for RPO"
+require_pattern "${DRILL_SCRIPT}" 'read_key_from_file AQUILA_BACKUP_ROOT' "restore drill must read backup root from deploy env"
+require_pattern "${DRILL_SCRIPT}" "awk 'NR == 1" "restore drill must select MinIO sample without head-induced SIGPIPE"
 reject_pattern "${DRILL_SCRIPT}" 'HOME_SERVER_ENV' "restore drill must not require raw production secret blobs"
 reject_pattern "${DRILL_SCRIPT}" 'postgres:16-alpine' "restore drill must not default to vanilla PostgreSQL"
 
@@ -91,7 +93,13 @@ MINIO_BACKUP_DIR="${BACKUP_ROOT}/minio/daily/${BACKUP_SET_ID}"
 MINIO_SOURCE_DIR="${WORK_DIR}/minio-source"
 FAKE_BIN_DIR="${WORK_DIR}/bin"
 ARTIFACT_DIR="${WORK_DIR}/artifacts"
-mkdir -p "${POSTGRES_BACKUP_DIR}" "${MINIO_BACKUP_DIR}" "${MINIO_SOURCE_DIR}/post-img/posts/2026/01" "${FAKE_BIN_DIR}"
+DEPLOY_DIR="${WORK_DIR}/deploy"
+mkdir -p "${POSTGRES_BACKUP_DIR}" "${MINIO_BACKUP_DIR}" "${MINIO_SOURCE_DIR}/post-img/posts/2026/01" "${FAKE_BIN_DIR}" "${DEPLOY_DIR}"
+cat > "${DEPLOY_DIR}/.env.prod" <<EOF
+AQUILA_EXTERNAL_STORAGE_ROOT=${WORK_DIR}/storage
+AQUILA_BACKUP_ROOT=${BACKUP_ROOT}
+DB_IMAGE=jangka512/pgj@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+EOF
 
 cat > "${POSTGRES_BACKUP_DIR}/dump.sql" <<'SQL'
 CREATE TABLE flyway_schema_history(success boolean);
@@ -104,6 +112,7 @@ created_at=20260101-010203
 created_at_utc=2026-01-01T01:02:03Z
 EOF
 printf 'fixture-object\n' > "${MINIO_SOURCE_DIR}/post-img/posts/2026/01/sample.txt"
+printf 'fixture-object-2\n' > "${MINIO_SOURCE_DIR}/post-img/posts/2026/01/zzz.txt"
 tar -C "${MINIO_SOURCE_DIR}" -czf "${MINIO_BACKUP_DIR}/minio-data.tar.gz" .
 
 cat > "${FAKE_BIN_DIR}/docker" <<'SH'
@@ -178,11 +187,9 @@ SH
 chmod +x "${FAKE_BIN_DIR}/docker"
 
 PATH="${FAKE_BIN_DIR}:${PATH}" \
-AQUILA_EXTERNAL_STORAGE_ROOT="${WORK_DIR}/storage" \
-AQUILA_BACKUP_ROOT="${BACKUP_ROOT}" \
 AQUILA_RESTORE_DRILL_BACKUP_SET_ID="${BACKUP_SET_ID}" \
+AQUILA_RESTORE_DRILL_DEPLOY_DIR="${DEPLOY_DIR}" \
 AQUILA_RESTORE_DRILL_ARTIFACT_DIR="${ARTIFACT_DIR}" \
-AQUILA_RESTORE_DRILL_POSTGRES_IMAGE="jangka512/pgj@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
 AQUILA_RESTORE_DRILL_TIMESTAMP="20260102-030405" \
 AQUILA_RESTORE_DRILL_NOW_EPOCH="1767323045" \
   "${DRILL_SCRIPT}" >/dev/null

@@ -4,8 +4,10 @@ import { HydrationBoundary, QueryClientProvider } from "@tanstack/react-query"
 import type { NextWebVitalsMetric } from "next/app"
 import dynamic from "next/dynamic"
 import Head from "next/head"
+import { useRouter } from "next/router"
 import { RootLayout } from "src/layouts"
 import type { AdminProfile } from "src/hooks/useAdminProfile"
+import { GlobalErrorBoundary } from "src/components/error/ErrorBoundary"
 import createEmotionCache from "src/libs/emotion/createEmotionCache"
 import { createQueryClient } from "src/libs/react-query"
 import { useState } from "react"
@@ -31,6 +33,7 @@ function App({ Component, pageProps, emotionCache = clientSideEmotionCache }: Ap
   const initialAdminProfile = appPageProps.initialAdminProfile ?? appPageProps.initialProfileSnapshot ?? null
   const initialAdminProfileShouldRefetch = appPageProps.initialAdminProfileSource === "static-fallback"
   const [queryClient] = useState(createQueryClient)
+  const router = useRouter()
 
   return (
     <CacheProvider value={emotionCache}>
@@ -38,22 +41,24 @@ function App({ Component, pageProps, emotionCache = clientSideEmotionCache }: Ap
         <title>AquilaLog</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
       </Head>
-      <QueryClientProvider client={queryClient}>
-        <HydrationBoundary state={pageProps.dehydratedState}>
-          <RootLayout
-            initialAdminProfile={initialAdminProfile}
-            initialAdminProfileShouldRefetch={initialAdminProfileShouldRefetch}
-          >
-            {getLayout(<Component {...pageProps} />)}
-            {process.env.NODE_ENV === "production" ? (
-              <>
-                <Analytics />
-                <SpeedInsights />
-              </>
-            ) : null}
-          </RootLayout>
-        </HydrationBoundary>
-      </QueryClientProvider>
+      <GlobalErrorBoundary resetKey={router.asPath}>
+        <QueryClientProvider client={queryClient}>
+          <HydrationBoundary state={pageProps.dehydratedState}>
+            <RootLayout
+              initialAdminProfile={initialAdminProfile}
+              initialAdminProfileShouldRefetch={initialAdminProfileShouldRefetch}
+            >
+              {getLayout(<Component {...pageProps} />)}
+              {process.env.NODE_ENV === "production" ? (
+                <>
+                  <Analytics />
+                  <SpeedInsights />
+                </>
+              ) : null}
+            </RootLayout>
+          </HydrationBoundary>
+        </QueryClientProvider>
+      </GlobalErrorBoundary>
     </CacheProvider>
   )
 }

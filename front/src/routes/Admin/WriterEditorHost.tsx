@@ -1,4 +1,5 @@
 import { Profiler } from "react"
+import { RecoverableSurfaceBoundary } from "src/components/error/ErrorBoundary"
 import { MarkdownEditor } from "src/components/markdown-editor/MarkdownEditor"
 
 type WriterEditorHostProps = {
@@ -29,13 +30,15 @@ export const WriterEditorHost = ({
       onCommitDuration?.(actualDuration)
     }}
   >
-    <MarkdownEditor
-      value={markdown}
-      onChange={onMarkdownChange}
-      onFlushMarkdownReady={onFlushMarkdownReady}
-      onUploadImage={onImageUpload}
-      disableMermaid={!mermaidEnabled}
-      disabled={disabled}
-    />
+    <RecoverableSurfaceBoundary surface="editor" resetKey={canvasId}>
+      <MarkdownEditor
+        value={markdown}
+        onChange={onMarkdownChange}
+        onFlushMarkdownReady={onFlushMarkdownReady}
+        onUploadImage={onImageUpload}
+        disableMermaid={!mermaidEnabled}
+        disabled={disabled}
+      />
+    </RecoverableSurfaceBoundary>
   </Profiler>
 )

@@ -42,6 +42,14 @@ test("operations alert channel is wired through env contract, compose, and deplo
   assert.match(compose, /image:\s+\$\{ALERTMANAGER_IMAGE:\?ALERTMANAGER_IMAGE is required \(sha256 digest required\)\}/)
   assert.match(compose, /--config\.file=\/etc\/alertmanager\/alertmanager\.yml/)
   assert.match(compose, /--config\.expand-env/)
+  assert.doesNotMatch(
+    compose.slice(compose.indexOf("  alertmanager:"), compose.indexOf("  postgres_exporter:")),
+    /env_file:/,
+  )
+  assert.match(
+    compose,
+    /OPERATIONS_ALERT_WEBHOOK_URL:\s+\$\{OPERATIONS_ALERT_WEBHOOK_URL:\?OPERATIONS_ALERT_WEBHOOK_URL is required\}/,
+  )
   assert.match(compose, /monitoring\/alertmanager\.yml:\/etc\/alertmanager\/alertmanager\.yml:ro/)
   assert.match(compose, /alertmanager_data:$/m)
 
@@ -50,6 +58,8 @@ test("operations alert channel is wired through env contract, compose, and deplo
   assert.match(prometheus, /job_name: postgres_exporter/)
   assert.match(prometheus, /targets:\s+\["postgres_exporter:9187"\]/)
 
+  assert.match(alertmanager, /receiver:\s+drop/)
+  assert.match(alertmanager, /- name: drop/)
   assert.match(alertmanager, /receiver:\s+operations-webhook/)
   assert.match(alertmanager, /group_by:\s+\["alertname", "severity"\]/)
   assert.match(alertmanager, /url:\s+\$\{OPERATIONS_ALERT_WEBHOOK_URL\}/)
@@ -95,6 +105,7 @@ test("operations alert rules cover launch-blocking failure domains", () => {
   }
 
   assert.match(taskAlerts, /aquila_public_edge_probe_route_up/)
+  assert.match(taskAlerts, /aquila_backend_readiness_up\{component="api"\}/)
   assert.match(taskAlerts, /docker_container_running\{job="docker_runtime_probe",service="db_1"\}/)
   assert.match(taskAlerts, /pg_stat_database_numbackends/)
   assert.match(taskAlerts, /pg_settings_max_connections/)

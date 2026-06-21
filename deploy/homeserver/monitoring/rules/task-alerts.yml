@@ -182,13 +182,13 @@ groups:
           description: "Prometheus cannot scrape any blue/green API backend target for 3m."
 
       - alert: AquilaBackReadinessDown
-        expr: max(up{job="back",service="aquila-back",component="api"}) < 1
+        expr: max(aquila_backend_readiness_up{component="api"}) < 1
         for: 3m
         labels:
           severity: critical
         annotations:
           summary: "Back API readiness path is unavailable"
-          description: "No blue/green API backend target is scrapeable for 3m. Treat this as a readiness failure for public traffic."
+          description: "No blue/green API backend readiness endpoint has returned 200 for 3m."
 
       - alert: AquilaBackWorkerScrapeDown
         expr: max(up{job="back",service="aquila-back",component="worker"}) < 1

@@ -1,0 +1,182 @@
+#!/usr/bin/env node
+import crypto from "node:crypto"
+import fs from "node:fs"
+import path from "node:path"
+
+const root = process.cwd()
+const policiesDir = path.join(root, "legal/policies")
+const policyFiles = [
+  "privacy.ko-KR.v1.0.0.yaml",
+  "terms.ko-KR.v1.0.0.yaml",
+  "cookies.ko-KR.v1.0.0.yaml",
+]
+const requiredFields = [
+  "documentType",
+  "locale",
+  "version",
+  "publishedAt",
+  "effectiveAt",
+  "contentSha256",
+  "supersedes",
+  "owner",
+  "contactEmail",
+  "changeSummary",
+  "sections",
+]
+const requiredPrivacySections = [
+  "개인정보처리자 및 연락처",
+  "처리 목적",
+  "처리하는 개인정보 항목과 수집 방법",
+  "처리의 법적 근거",
+  "보유·이용기간",
+  "개인정보의 파기 절차와 방법",
+  "제3자 제공",
+  "개인정보 처리위탁",
+  "개인정보 국외이전",
+  "쿠키·로컬 저장소·온라인 식별자",
+  "Vercel Analytics·Speed Insights·자체 RUM",
+  "Kakao 로그인",
+  "Google Gemini 사용",
+  "이용자와 법정대리인의 권리 및 행사방법",
+  "만 14세 미만 이용자 정책",
+  "개인정보의 안전성 확보조치",
+  "자동화된 결정 여부",
+  "개인정보 침해·민원 구제 절차",
+  "개인정보 보호책임자 또는 담당자",
+  "정책 변경, 시행일, 이전 버전",
+]
+const requiredTermsSections = [
+  "목적",
+  "용어 정의",
+  "운영자 정보 및 적용 범위",
+  "약관 게시·변경·통지",
+  "이용계약 성립",
+  "이용 자격과 만 14세 미만 정책",
+  "계정 생성·관리·보안",
+  "서비스 내용",
+  "게시글·댓글·파일 등 이용자 콘텐츠",
+  "이용자 콘텐츠의 저작권과 서비스 이용허락",
+  "금지행위",
+  "신고·노출 제한·삭제·계정 제재 절차",
+  "서비스 변경·점검·중단",
+  "외부 서비스와 링크",
+  "AI 기능",
+  "회원 탈퇴와 계약 종료",
+  "개인정보 처리",
+  "책임의 범위",
+  "손해배상",
+  "통지",
+  "준거법·분쟁 해결",
+  "시행일·이전 버전",
+]
+const requiredVendors = [
+  "Vercel",
+  "Cloudflare",
+  "Kakao",
+  "SMTP",
+  "Google Analytics",
+  "Google Gemini",
+  "GitHub Actions",
+  "GHCR",
+  "PostgreSQL",
+  "Redis",
+  "MinIO",
+  "Grafana",
+  "Loki",
+]
+
+let failed = false
+
+const fail = (message) => {
+  failed = true
+  console.error(`[legal-policies] ${message}`)
+}
+
+const stablePolicyHash = (policy) => {
+  const normalized = { ...policy, contentSha256: "" }
+  return crypto.createHash("sha256").update(JSON.stringify(normalized)).digest("hex")
+}
+
+const readPolicy = (fileName) => {
+  const filePath = path.join(policiesDir, fileName)
+  if (!fs.existsSync(filePath)) {
+    fail(`missing policy file ${fileName}`)
+    return null
+  }
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"))
+  } catch (error) {
+    fail(`${fileName} is not parseable JSON-compatible YAML: ${error.message}`)
+    return null
+  }
+}
+
+const assertRequiredShape = (fileName, policy) => {
+  for (const field of requiredFields) {
+    if (!(field in policy)) fail(`${fileName} is missing ${field}`)
+  }
+  if (policy.locale !== "ko-KR") fail(`${fileName} locale must be ko-KR`)
+  if (!/^\d+\.\d+\.\d+$/.test(policy.version || "")) fail(`${fileName} version must be semver`)
+  if (!/^[a-f0-9]{64}$/.test(policy.contentSha256 || "")) fail(`${fileName} contentSha256 must be 64 lowercase hex`)
+  if (policy.contactEmail !== "aquilaxk10@gmail.com") fail(`${fileName} contactEmail must be aquilaxk10@gmail.com`)
+  if (!Array.isArray(policy.changeSummary) || policy.changeSummary.length === 0) fail(`${fileName} changeSummary is empty`)
+  if (!Array.isArray(policy.sections) || policy.sections.length === 0) fail(`${fileName} sections is empty`)
+  for (const section of policy.sections || []) {
+    if (!section.id || !section.title) fail(`${fileName} has a section without id/title`)
+    if (!Array.isArray(section.body) || section.body.length === 0) fail(`${fileName} section ${section.id} has empty body`)
+  }
+  const actualHash = stablePolicyHash(policy)
+  if (policy.contentSha256 !== actualHash) fail(`${fileName} contentSha256 mismatch: expected ${actualHash}`)
+}
+
+const assertSectionTitles = (fileName, policy, requiredTitles) => {
+  const titles = new Set((policy.sections || []).map((section) => section.title))
+  for (const title of requiredTitles) {
+    if (!titles.has(title)) fail(`${fileName} is missing required section title: ${title}`)
+  }
+}
+
+const assertTextIncludes = (fileName, policy, tokens) => {
+  const text = JSON.stringify(policy)
+  for (const token of tokens) {
+    if (!text.includes(token)) fail(`${fileName} must mention ${token}`)
+  }
+}
+
+const policies = new Map()
+for (const fileName of policyFiles) {
+  const policy = readPolicy(fileName)
+  if (!policy) continue
+  assertRequiredShape(fileName, policy)
+  policies.set(policy.documentType, policy)
+}
+
+if (!policies.has("PRIVACY_POLICY")) fail("missing PRIVACY_POLICY")
+if (!policies.has("TERMS_OF_SERVICE")) fail("missing TERMS_OF_SERVICE")
+if (!policies.has("COOKIE_POLICY")) fail("missing COOKIE_POLICY")
+
+const privacy = policies.get("PRIVACY_POLICY")
+if (privacy) {
+  assertSectionTitles("privacy.ko-KR.v1.0.0.yaml", privacy, requiredPrivacySections)
+  assertTextIncludes("privacy.ko-KR.v1.0.0.yaml", privacy, requiredVendors)
+  assertTextIncludes("privacy.ko-KR.v1.0.0.yaml", privacy, ["apiKey", "refresh token", "NEXT_PUBLIC_RUM_SAMPLE_RATE"])
+}
+
+const terms = policies.get("TERMS_OF_SERVICE")
+if (terms) {
+  assertSectionTitles("terms.ko-KR.v1.0.0.yaml", terms, requiredTermsSections)
+  assertTextIncludes("terms.ko-KR.v1.0.0.yaml", terms, ["고의 또는 중대한 과실", "부당하게 불리한 전속 관할"])
+}
+
+const cookies = policies.get("COOKIE_POLICY")
+if (cookies) {
+  assertTextIncludes("cookies.ko-KR.v1.0.0.yaml", cookies, ["필수 쿠키", "Analytics", "RUM", "NEXT_PUBLIC_RUM_SAMPLE_RATE"])
+}
+
+for (const fileName of policyFiles) {
+  const raw = fs.readFileSync(path.join(policiesDir, fileName), "utf8")
+  if (raw.includes("illusiveman7@gmail.com")) fail(`${fileName} contains stale contact email`)
+}
+
+if (failed) process.exit(1)
+console.log(`[legal-policies] ok: ${policyFiles.length} policies`)

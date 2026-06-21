@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AquilaLog legal policy document",
+  "type": "object",
+  "required": [
+    "documentType",
+    "locale",
+    "version",
+    "publishedAt",
+    "effectiveAt",
+    "contentSha256",
+    "supersedes",
+    "owner",
+    "contactEmail",
+    "changeSummary",
+    "sections"
+  ],
+  "properties": {
+    "documentType": {
+      "enum": ["PRIVACY_POLICY", "TERMS_OF_SERVICE", "COOKIE_POLICY"]
+    },
+    "locale": {
+      "const": "ko-KR"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "publishedAt": {
+      "type": "string"
+    },
+    "effectiveAt": {
+      "type": "string"
+    },
+    "contentSha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "supersedes": {
+      "type": ["string", "null"]
+    },
+    "owner": {
+      "type": "string"
+    },
+    "contactEmail": {
+      "type": "string"
+    },
+    "changeSummary": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "body"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          }
+        }
+      },
+      "minItems": 1
+    }
+  }
+}

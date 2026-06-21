@@ -243,10 +243,51 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
             assertThat(acceptance.termsContentSha256).isEqualTo(activeLegalDocuments.terms.contentSha256)
             assertThat(acceptance.privacyVersion).isEqualTo(activeLegalDocuments.privacy.version)
             assertThat(acceptance.privacyContentSha256).isEqualTo(activeLegalDocuments.privacy.contentSha256)
+            assertThat(acceptance.member.id).isEqualTo(joinedMember.id)
             assertThat(acceptance.age14OrOlder).isTrue()
             assertThat(acceptance.requiredPrivacyConfirmed).isTrue()
             assertThat(acceptance.analyticsConsent).isFalse()
             assertThat(acceptance.overseasTransferAcknowledged).isTrue()
+            assertThat(acceptance.source).isEqualTo("EMAIL_SIGNUP")
+            assertThat(acceptance.acceptedAt).isNotNull()
+        }
+
+        @Test
+        fun `signup complete request는 법적 동의 command로 변환된다`() {
+            val request =
+                ApiV1SignupVerificationController.SignupCompleteRequest(
+                    signupToken = "signup-token",
+                    password = "Abcd1234!",
+                    nickname = "동의요청회원",
+                    termsVersion = activeLegalDocuments.terms.version,
+                    termsContentSha256 = activeLegalDocuments.terms.contentSha256,
+                    privacyVersion = activeLegalDocuments.privacy.version,
+                    privacyContentSha256 = activeLegalDocuments.privacy.contentSha256,
+                    age14OrOlder = true,
+                    requiredPrivacyConfirmed = true,
+                    analyticsConsent = false,
+                    overseasTransferAcknowledged = true,
+                )
+
+            assertThat(request.termsVersion).isEqualTo(activeLegalDocuments.terms.version)
+            assertThat(request.termsContentSha256).isEqualTo(activeLegalDocuments.terms.contentSha256)
+            assertThat(request.privacyVersion).isEqualTo(activeLegalDocuments.privacy.version)
+            assertThat(request.privacyContentSha256).isEqualTo(activeLegalDocuments.privacy.contentSha256)
+            assertThat(request.age14OrOlder).isTrue()
+            assertThat(request.requiredPrivacyConfirmed).isTrue()
+            assertThat(request.analyticsConsent).isFalse()
+            assertThat(request.overseasTransferAcknowledged).isTrue()
+
+            val command = request.toLegalAcceptanceCommand()
+
+            assertThat(command.termsVersion).isEqualTo(request.termsVersion)
+            assertThat(command.termsContentSha256).isEqualTo(request.termsContentSha256)
+            assertThat(command.privacyVersion).isEqualTo(request.privacyVersion)
+            assertThat(command.privacyContentSha256).isEqualTo(request.privacyContentSha256)
+            assertThat(command.age14OrOlder).isEqualTo(request.age14OrOlder)
+            assertThat(command.requiredPrivacyConfirmed).isEqualTo(request.requiredPrivacyConfirmed)
+            assertThat(command.analyticsConsent).isEqualTo(request.analyticsConsent)
+            assertThat(command.overseasTransferAcknowledged).isEqualTo(request.overseasTransferAcknowledged)
         }
 
         @Test
@@ -423,6 +464,72 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
                     status { isBadRequest() }
                     jsonPath("$.resultCode") { value("400-2") }
                     jsonPath("$.msg") { value("만 14세 이상인 경우에만 회원가입할 수 있습니다.") }
+                }
+
+            assertThat(memberApplicationService.findByEmail(email)).isNull()
+        }
+
+        @Test
+        fun `필수 개인정보 처리 확인이 없으면 최종 가입을 막고 member를 생성하지 않는다`() {
+            val email = "missing-required-privacy@example.com"
+            val signupToken = issueSignupToken(email)
+
+            mvc
+                .post("/member/api/v1/signup/complete") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "signupToken": "$signupToken",
+                            "password": "Abcd1234!",
+                            "nickname": "개인정보미확인회원",
+                            "termsVersion": "${activeLegalDocuments.terms.version}",
+                            "termsContentSha256": "${activeLegalDocuments.terms.contentSha256}",
+                            "privacyVersion": "${activeLegalDocuments.privacy.version}",
+                            "privacyContentSha256": "${activeLegalDocuments.privacy.contentSha256}",
+                            "age14OrOlder": true,
+                            "requiredPrivacyConfirmed": false,
+                            "analyticsConsent": false,
+                            "overseasTransferAcknowledged": true
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isBadRequest() }
+                    jsonPath("$.resultCode") { value("400-2") }
+                    jsonPath("$.msg") { value("개인정보 처리 필수 안내를 확인해야 회원가입할 수 있습니다.") }
+                }
+
+            assertThat(memberApplicationService.findByEmail(email)).isNull()
+        }
+
+        @Test
+        fun `국외 이전 안내 확인이 없으면 최종 가입을 막고 member를 생성하지 않는다`() {
+            val email = "missing-overseas-transfer@example.com"
+            val signupToken = issueSignupToken(email)
+
+            mvc
+                .post("/member/api/v1/signup/complete") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "signupToken": "$signupToken",
+                            "password": "Abcd1234!",
+                            "nickname": "국외이전미확인회원",
+                            "termsVersion": "${activeLegalDocuments.terms.version}",
+                            "termsContentSha256": "${activeLegalDocuments.terms.contentSha256}",
+                            "privacyVersion": "${activeLegalDocuments.privacy.version}",
+                            "privacyContentSha256": "${activeLegalDocuments.privacy.contentSha256}",
+                            "age14OrOlder": true,
+                            "requiredPrivacyConfirmed": true,
+                            "analyticsConsent": false,
+                            "overseasTransferAcknowledged": false
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isBadRequest() }
+                    jsonPath("$.resultCode") { value("400-2") }
+                    jsonPath("$.msg") { value("국외 이전 및 외부 처리자 안내를 확인해야 회원가입할 수 있습니다.") }
                 }
 
             assertThat(memberApplicationService.findByEmail(email)).isNull()

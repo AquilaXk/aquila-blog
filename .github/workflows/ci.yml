@@ -7,6 +7,7 @@ on:
     paths:
       - "back/**"
       - "front/**"
+      - "legal/policies/**"
       - "deploy/**"
       - "AGENTS.md"
       - "CLAUDE.md"

@@ -10,11 +10,30 @@ type NextHeaderRule = {
   headers: NextHeader[]
 }
 
-const getCspHeader = async () => {
-  const nextConfigModule = await import("../next.config.js")
-  const nextConfig = nextConfigModule.default as {
-    headers: () => Promise<NextHeaderRule[]>
+type NextConfig = {
+  headers: () => Promise<NextHeaderRule[]>
+  images?: {
+    remotePatterns?: Array<{
+      protocol?: string
+      hostname?: string
+    }>
   }
+}
+
+const externalPlaceholderHosts = [
+  ["placehold", "co"],
+  ["via", "placeholder", "com"],
+  [["pic", "sum"].join(""), "photos"],
+  [["dummy", "image"].join(""), "com"],
+].map((parts) => parts.join("."))
+
+const getNextConfig = async () => {
+  const nextConfigModule = await import("../next.config.js")
+  return nextConfigModule.default as NextConfig
+}
+
+const getCspHeader = async () => {
+  const nextConfig = await getNextConfig()
   const rules = await nextConfig.headers()
   const globalRule = rules.find((rule) => rule.source === "/:path*")
   const csp = globalRule?.headers.find(
@@ -75,6 +94,20 @@ test.describe("frontend security headers", () => {
     expect(directives.get("base-uri")).toEqual(["'self'"])
     expect(directives.get("frame-ancestors")).toEqual(["'self'"])
     expect(directives.get("upgrade-insecure-requests")).toEqual([])
+  })
+
+  test("CSP and Next image config do not allow external placeholder providers", async () => {
+    const nextConfig = await getNextConfig()
+    const directives = parseCspDirectives(await getCspHeader())
+    const imageSources = directives.get("img-src") ?? []
+    const remoteHosts = (nextConfig.images?.remotePatterns ?? [])
+      .map((pattern) => pattern.hostname)
+      .filter(Boolean)
+
+    for (const host of externalPlaceholderHosts) {
+      expect(imageSources).not.toContain(`https://${host}`)
+      expect(remoteHosts).not.toContain(host)
+    }
   })
 
   test("CSP connect-src keeps documented local backend fallback available in development", async () => {

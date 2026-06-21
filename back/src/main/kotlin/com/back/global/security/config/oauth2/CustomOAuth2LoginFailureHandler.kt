@@ -43,6 +43,17 @@ internal fun buildOAuth2LoginFailureRedirectUrl(
     exception: AuthenticationException,
 ): String {
     val redirectUrl = encodedState?.let { runCatching { OAuth2State.decode(it).redirectUrl }.getOrNull() }
+    findOAuthSignupRequiredException(exception)?.let { signupException ->
+        val parameters =
+            buildList {
+                add("token" to signupException.pendingToken)
+                add("provider" to signupException.provider.lowercase())
+                resolveNextPath(redirectUrl)?.let { add("next" to it) }
+            }
+
+        return appendFragment(resolveSignupCompleteBaseUrl(siteFrontUrl, redirectUrl), parameters)
+    }
+
     val parameters =
         buildList {
             add("oauthError" to resolveOAuth2LoginFailureCode(exception))
@@ -54,6 +65,11 @@ internal fun buildOAuth2LoginFailureRedirectUrl(
 
 private fun resolveOAuth2LoginFailureCode(exception: AuthenticationException): String =
     if (containsAppExceptionCode(exception, "403-4")) OAUTH_SIGNUP_REQUIRED_ERROR else OAUTH_FAILED_ERROR
+
+private fun findOAuthSignupRequiredException(exception: Throwable): OAuthSignupRequiredAuthenticationException? =
+    generateSequence(exception as Throwable?) { it.cause }
+        .filterIsInstance<OAuthSignupRequiredAuthenticationException>()
+        .firstOrNull()
 
 private fun containsAppExceptionCode(
     throwable: Throwable,
@@ -73,6 +89,19 @@ private fun resolveLoginBaseUrl(
 
     val normalizedFrontUrl = siteFrontUrl.trim().removeSuffix("/")
     return if (normalizedFrontUrl.isBlank()) "/login" else "$normalizedFrontUrl/login"
+}
+
+private fun resolveSignupCompleteBaseUrl(
+    siteFrontUrl: String,
+    redirectUrl: String?,
+): String {
+    val redirectUri = runCatching { URI(redirectUrl.orEmpty()) }.getOrNull()
+    if (redirectUri != null && redirectUri.isAbsolute && !redirectUri.rawAuthority.isNullOrBlank()) {
+        return "${redirectUri.scheme}://${redirectUri.rawAuthority}/signup/social/complete"
+    }
+
+    val normalizedFrontUrl = siteFrontUrl.trim().removeSuffix("/")
+    return if (normalizedFrontUrl.isBlank()) "/signup/social/complete" else "$normalizedFrontUrl/signup/social/complete"
 }
 
 private fun resolveNextPath(redirectUrl: String?): String? {
@@ -100,6 +129,18 @@ private fun appendQuery(
     return parameters.joinToString(
         separator = "&",
         prefix = baseUrl + separator,
+    ) { (key, value) -> "${encodeQueryValue(key)}=${encodeQueryValue(value)}" }
+}
+
+private fun appendFragment(
+    baseUrl: String,
+    parameters: List<Pair<String, String>>,
+): String {
+    if (parameters.isEmpty()) return baseUrl
+
+    return parameters.joinToString(
+        separator = "&",
+        prefix = "$baseUrl#",
     ) { (key, value) -> "${encodeQueryValue(key)}=${encodeQueryValue(value)}" }
 }
 

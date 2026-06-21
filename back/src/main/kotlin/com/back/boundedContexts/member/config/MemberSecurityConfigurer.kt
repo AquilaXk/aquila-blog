@@ -28,6 +28,8 @@ class MemberSecurityConfigurer(
             add(PublicApiRouteSpec("/member/api/*/signup/email/verify", HttpMethod.GET))
             add(PublicApiRouteSpec("/member/api/*/signup/email/verify", HttpMethod.POST))
             add(PublicApiRouteSpec("/member/api/*/signup/complete", HttpMethod.POST))
+            add(PublicApiRouteSpec("/member/api/*/signup/social/pending", HttpMethod.POST))
+            add(PublicApiRouteSpec("/member/api/*/signup/social/complete", HttpMethod.POST))
         }
 
     fun configure(authorize: AuthorizeHttpRequestsDsl) {

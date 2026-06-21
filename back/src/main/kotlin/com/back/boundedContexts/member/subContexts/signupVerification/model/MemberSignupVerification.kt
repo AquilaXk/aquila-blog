@@ -47,6 +47,12 @@ class MemberSignupVerification(
     var consumedAt: Instant? = null,
     @field:Column
     var cancelledAt: Instant? = null,
+    @field:Column
+    var termsAcceptedAt: Instant? = null,
+    @field:Column
+    var privacyAcceptedAt: Instant? = null,
+    @field:Column(length = 32)
+    var legalPolicyVersion: String? = null,
 ) : BaseTime(id) {
     fun cancel(now: Instant) {
         cancelledAt = now

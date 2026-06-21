@@ -2,12 +2,13 @@ package com.back.global.security.config.oauth2
 
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.global.rsData.RsData
+import com.back.global.exception.application.AppException
 import com.back.global.security.domain.SecurityUser
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.springframework.security.authentication.InternalAuthenticationServiceException
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest
 import org.springframework.security.oauth2.client.registration.ClientRegistration
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest
@@ -28,8 +29,8 @@ import java.time.Instant
 @DisplayName("CustomOAuth2UserService 테스트")
 class CustomOAuth2UserServiceTest {
     @Test
-    fun `OAuth2 사용자 정보는 내부 SecurityUser로 매핑하고 기본 닉네임 fallback을 기록한다`() {
-        val memberUseCase = RecordingMemberUseCase()
+    fun `OAuth2 기존 사용자는 내부 SecurityUser로 매핑하고 프로필을 갱신한다`() {
+        val memberUseCase = RecordingMemberUseCase(existingMemberUsername = "KAKAO__oauth-user-id")
         val service =
             CustomOAuth2UserService(memberUseCase.proxy).apply {
                 delegate =
@@ -43,11 +44,10 @@ class CustomOAuth2UserServiceTest {
                 OAuth2UserRequest(kakaoClientRegistration(userNameAttributeName = "id"), accessToken()),
             ) as SecurityUser
 
-        assertThat(memberUseCase.lastRequest)
+        assertThat(memberUseCase.lastFindLoginId).isEqualTo("KAKAO__oauth-user-id")
+        assertThat(memberUseCase.lastModifyRequest)
             .isEqualTo(
-                ModifyOrJoinRequest(
-                    username = "KAKAO__oauth-user-id",
-                    password = "",
+                ModifyRequest(
                     nickname = OAuth2ProfileExtractor.DEFAULT_KAKAO_NICKNAME,
                     profileImgUrl = null,
                 ),
@@ -59,7 +59,7 @@ class CustomOAuth2UserServiceTest {
 
     @Test
     fun `OIDC claims는 SecurityUser이자 OidcUser인 principal로 매핑한다`() {
-        val memberUseCase = RecordingMemberUseCase()
+        val memberUseCase = RecordingMemberUseCase(existingMemberUsername = "KAKAO__oidc-user-id")
         val idToken =
             OidcIdToken(
                 "id-token",
@@ -92,11 +92,10 @@ class CustomOAuth2UserServiceTest {
             )
         val securityUser = principal as SecurityUser
 
-        assertThat(memberUseCase.lastRequest)
+        assertThat(memberUseCase.lastFindLoginId).isEqualTo("KAKAO__oidc-user-id")
+        assertThat(memberUseCase.lastModifyRequest)
             .isEqualTo(
-                ModifyOrJoinRequest(
-                    username = "KAKAO__oidc-user-id",
-                    password = "",
+                ModifyRequest(
                     nickname = "OIDC닉네임",
                     profileImgUrl = "https://kakao.cdn/oidc.png",
                 ),
@@ -107,6 +106,26 @@ class CustomOAuth2UserServiceTest {
         assertThat(principal.claims["nickname"]).isEqualTo("OIDC닉네임")
         assertThat(principal.idToken).isSameAs(idToken)
         assertThat(principal.userInfo.subject).isEqualTo("oidc-user-id")
+    }
+
+    @Test
+    fun `OAuth2 신규 사용자는 동의 기록이 없으므로 자동 가입하지 않는다`() {
+        val service =
+            CustomOAuth2UserService(RecordingMemberUseCase().proxy).apply {
+                delegate =
+                    OAuth2UserService<OAuth2UserRequest, OAuth2User> {
+                        DefaultOAuth2User(emptyList(), mapOf("id" to "new-oauth-user-id"), "id")
+                    }
+            }
+
+        assertThatThrownBy {
+            service.loadUser(
+                OAuth2UserRequest(kakaoClientRegistration(userNameAttributeName = "id"), accessToken()),
+            )
+        }.isInstanceOf(InternalAuthenticationServiceException::class.java)
+            .cause()
+            .isInstanceOf(AppException::class.java)
+            .hasMessageContaining("소셜 로그인 신규 가입은 현재 지원하지 않습니다.")
     }
 
     @Test
@@ -160,16 +179,27 @@ class CustomOAuth2UserServiceTest {
         )
 }
 
-private data class ModifyOrJoinRequest(
-    val username: String,
-    val password: String,
+private data class ModifyRequest(
     val nickname: String,
     val profileImgUrl: String?,
 )
 
-private class RecordingMemberUseCase {
-    lateinit var lastRequest: ModifyOrJoinRequest
+private class RecordingMemberUseCase(
+    private val existingMemberUsername: String? = null,
+) {
+    var lastFindLoginId: String? = null
         private set
+    var lastModifyRequest: ModifyRequest? = null
+        private set
+    private var existingMember: Member? =
+        existingMemberUsername?.let {
+            Member(
+                id = 1,
+                username = it,
+                password = "",
+                nickname = "기존닉네임",
+            )
+        }
 
     val proxy: MemberUseCase =
         Proxy
@@ -178,24 +208,24 @@ private class RecordingMemberUseCase {
                 arrayOf(MemberUseCase::class.java),
             ) { _, method, args ->
                 when (method.name) {
-                    "modifyOrJoin" -> {
+                    "findByLoginId" -> {
+                        val loginId = args?.get(0) as String
+                        lastFindLoginId = loginId
+                        existingMember?.takeIf { it.username == loginId }
+                    }
+                    "modify" -> {
                         val request =
-                            ModifyOrJoinRequest(
-                                username = args?.get(0) as String,
-                                password = args[1] as String,
-                                nickname = args[2] as String,
-                                profileImgUrl = args[3] as String?,
+                            ModifyRequest(
+                                nickname = args?.get(1) as String,
+                                profileImgUrl = args[2] as String?,
                             )
-                        lastRequest = request
-
-                        RsData.ok(
-                            Member(
-                                id = 1,
-                                username = request.username,
-                                password = request.password,
-                                nickname = request.nickname,
-                            ),
-                        )
+                        lastModifyRequest = request
+                        existingMember =
+                            (args[0] as Member).apply {
+                                nickname = request.nickname
+                                request.profileImgUrl?.let { profileImgUrl = it }
+                            }
+                        Unit
                     }
                     "toString" -> "RecordingMemberUseCase"
                     else -> error("Unexpected MemberUseCase method: ${method.name}")

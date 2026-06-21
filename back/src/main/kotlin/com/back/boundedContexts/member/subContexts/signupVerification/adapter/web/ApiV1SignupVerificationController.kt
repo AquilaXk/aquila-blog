@@ -5,6 +5,7 @@ import com.back.boundedContexts.member.subContexts.signupVerification.applicatio
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupEmailStartResult
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupEmailVerifyResult
 import com.back.global.rsData.RsData
+import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Email
@@ -30,6 +31,16 @@ class ApiV1SignupVerificationController(
         @field:Email
         @field:NotBlank
         val email: String,
+        @field:Schema(requiredMode = Schema.RequiredMode.REQUIRED)
+        val termsAccepted: Boolean,
+        @field:Schema(requiredMode = Schema.RequiredMode.REQUIRED)
+        val privacyAccepted: Boolean,
+        @field:Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            minLength = 1,
+            maxLength = 32,
+        )
+        val legalPolicyVersion: String,
         val nextPath: String? = null,
     )
 
@@ -63,6 +74,9 @@ class ApiV1SignupVerificationController(
         val result =
             memberSignupVerificationService.start(
                 email = reqBody.email,
+                termsAccepted = reqBody.termsAccepted,
+                privacyAccepted = reqBody.privacyAccepted,
+                legalPolicyVersion = reqBody.legalPolicyVersion,
                 nextPath = reqBody.nextPath,
                 clientIp = extractClientIp(request),
             )

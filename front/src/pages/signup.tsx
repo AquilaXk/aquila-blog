@@ -7,8 +7,6 @@ import { apiFetch } from "src/apis/backend/client"
 import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
 import AuthShell from "src/components/auth/AuthShell"
 import AppIcon from "src/components/icons/AppIcon"
-import SocialAuthButtons from "src/components/auth/SocialAuthButtons"
-import { buildSocialAuthItems } from "src/components/auth/socialAuth"
 import { formatSignupCooldown, useSignupMailCooldown } from "src/hooks/useSignupMailCooldown"
 import { normalizeNextPath, toLoginPath, toSignupPath } from "src/libs/router"
 import { GuestPageProps, getGuestPageProps } from "src/libs/server/guestPage"
@@ -23,6 +21,8 @@ type RsData<T> = {
 type SignupEmailStartResult = {
   email: string
 }
+
+const SIGNUP_LEGAL_POLICY_VERSION = "2026-06-21"
 
 export const getServerSideProps: GetServerSideProps<GuestPageProps> = async ({ req }) => {
   return await getGuestPageProps(req)
@@ -39,12 +39,12 @@ const SignupPage = () => {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [emailFocused, setEmailFocused] = useState(false)
+  const [termsAccepted, setTermsAccepted] = useState(false)
+  const [privacyAccepted, setPrivacyAccepted] = useState(false)
   const { remainingSeconds, isCoolingDown, startCooldown } = useSignupMailCooldown(email)
 
-  const socialItems = useMemo(() => {
-    return buildSocialAuthItems(next)
-  }, [next])
   const emailActive = useMemo(() => emailFocused || email.length > 0, [email, emailFocused])
+  const signupConsentAccepted = termsAccepted && privacyAccepted
   const feedbackMessage = error ? (
     <ErrorText>{error}</ErrorText>
   ) : sentEmail ? (
@@ -65,6 +65,10 @@ const SignupPage = () => {
       setError("이메일 형식을 확인해주세요.")
       return
     }
+    if (!signupConsentAccepted) {
+      setError("회원가입을 진행하려면 이용약관과 개인정보처리방침에 모두 동의해주세요.")
+      return
+    }
 
     setLoading(true)
     setError("")
@@ -75,6 +79,9 @@ const SignupPage = () => {
         body: JSON.stringify({
           email: normalizedEmail,
           nextPath: next,
+          termsAccepted,
+          privacyAccepted,
+          legalPolicyVersion: SIGNUP_LEGAL_POLICY_VERSION,
         }),
       })
       setSentEmail(response.data.email)
@@ -133,16 +140,33 @@ const SignupPage = () => {
           {feedbackMessage}
         </FeedbackSlot>
 
-        <PrimaryButton type="submit" disabled={loading || isCoolingDown}>
+        <RequiredConsentBox aria-label="회원가입 필수 동의">
+          <p>회원가입을 진행하려면 필수 약관과 개인정보처리방침에 동의해야 합니다.</p>
+          <label>
+            <input
+              type="checkbox"
+              checked={termsAccepted}
+              onChange={(event) => setTermsAccepted(event.target.checked)}
+            />
+            <span>
+              <Link href="/terms">이용약관</Link>에 동의합니다.
+            </span>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={privacyAccepted}
+              onChange={(event) => setPrivacyAccepted(event.target.checked)}
+            />
+            <span>
+              <Link href="/privacy">개인정보처리방침</Link>에 동의합니다.
+            </span>
+          </label>
+        </RequiredConsentBox>
+
+        <PrimaryButton type="submit" disabled={loading || isCoolingDown || !signupConsentAccepted}>
           {loading ? "메일 보내는 중..." : isCoolingDown ? `다시 보내기 ${formatSignupCooldown(remainingSeconds)}` : "인증 메일 보내기"}
         </PrimaryButton>
-
-        <SocialSection>
-          <span>소셜 계정으로 계속하기</span>
-          <SocialButtonRow>
-            <SocialAuthButtons items={socialItems} />
-          </SocialButtonRow>
-        </SocialSection>
       </form>
     </AuthShell>
   )
@@ -265,6 +289,46 @@ const PrimaryButton = styled.button`
   }
 `
 
+const RequiredConsentBox = styled.div`
+  display: grid;
+  gap: 0.55rem;
+  margin-top: -0.35rem;
+  padding: 0.82rem 0.9rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  border-radius: 12px;
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : theme.colors.gray2)};
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.82rem;
+  line-height: 1.55;
+
+  p {
+    margin: 0;
+  }
+
+  label {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.46rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-weight: 650;
+  }
+
+  input {
+    width: 16px;
+    height: 16px;
+    margin-top: 0.16rem;
+    accent-color: #12b886;
+    flex: 0 0 auto;
+  }
+
+  a {
+    color: ${({ theme }) => theme.colors.accentLink};
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+`
+
 const ErrorText = styled.p`
   margin: 0;
   border-radius: 12px;
@@ -303,23 +367,6 @@ const FeedbackSlot = styled.div`
   > * {
     width: 100%;
   }
-`
-
-const SocialSection = styled.div`
-  display: grid;
-  gap: 0.6rem;
-  margin-top: 0.2rem;
-
-  span {
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.82rem;
-    font-weight: 700;
-  }
-`
-
-const SocialButtonRow = styled.div`
-  display: flex;
-  gap: 1rem;
 `
 
 const FooterText = styled.div`

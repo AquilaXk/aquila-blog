@@ -3976,11 +3976,22 @@
             "format" : "email",
             "minLength" : 1
           },
+          "termsAccepted" : {
+            "type" : "boolean"
+          },
+          "privacyAccepted" : {
+            "type" : "boolean"
+          },
+          "legalPolicyVersion" : {
+            "type" : "string",
+            "maxLength" : 32,
+            "minLength" : 1
+          },
           "nextPath" : {
             "type" : "string"
           }
         },
-        "required" : [ "email" ]
+        "required" : [ "email", "legalPolicyVersion", "privacyAccepted", "termsAccepted" ]
       },
       "RsDataSignupEmailStartResult" : {
         "type" : "object",

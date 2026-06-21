@@ -4,10 +4,10 @@ import { getApiBaseUrl } from "src/apis/backend/client"
 import { parseStandaloneMarkdownImageLine } from "src/libs/markdown/rendering"
 import {
   buildImageOptimizationSummary,
-  normalizeProfileImageUploadError,
   preparePostImageForUpload,
 } from "src/libs/profileImageUpload"
 import { stripThumbnailFocusFromUrl } from "src/libs/thumbnailFocus"
+import { resolveEditorUploadFailureRecovery } from "./editorFailureRecoveryModel"
 
 type StudioSetState<T> = Dispatch<SetStateAction<T>>
 type NoticeTone = "idle" | "loading" | "success" | "error"
@@ -33,6 +33,8 @@ type UploadPostFileResponse = {
     name?: string
   }
 }
+
+const isBrowserOnline = () => typeof navigator === "undefined" ? undefined : navigator.onLine
 
 export type MarkdownImageUploadAttrs = {
   src: string
@@ -139,10 +141,14 @@ export const useEditorStudioPersistenceUploads = ({
         align: parsed?.align || "center",
       }
     } catch (error) {
-      const message = normalizeProfileImageUploadError(error)
+      const recovery = resolveEditorUploadFailureRecovery(error, {
+        kind: "image",
+        fileName: file.name,
+        isOnline: isBrowserOnline(),
+      })
       setPublishStatus({
         tone: "error",
-        text: `이미지 업로드 실패: ${message}`,
+        text: recovery.statusText,
       })
       throw error
     }
@@ -188,10 +194,14 @@ export const useEditorStudioPersistenceUploads = ({
         sizeBytes: file.size,
       }
     } catch (error) {
-      const message = normalizeProfileImageUploadError(error)
+      const recovery = resolveEditorUploadFailureRecovery(error, {
+        kind: "file",
+        fileName: file.name,
+        isOnline: isBrowserOnline(),
+      })
       setPublishStatus({
         tone: "error",
-        text: `첨부 파일 업로드 실패: ${message}`,
+        text: recovery.statusText,
       })
       throw error
     }
@@ -221,10 +231,14 @@ export const useEditorStudioPersistenceUploads = ({
         text: `썸네일 파일 업로드가 완료되었습니다. ${uploaded.prepared.summary}`,
       })
     } catch (error) {
-      const message = normalizeProfileImageUploadError(error)
+      const recovery = resolveEditorUploadFailureRecovery(error, {
+        kind: "thumbnail",
+        fileName: file.name,
+        isOnline: isBrowserOnline(),
+      })
       setPublishStatus({
         tone: "error",
-        text: `썸네일 업로드 실패: ${message}`,
+        text: recovery.statusText,
       })
     } finally {
       setLoadingKey("")

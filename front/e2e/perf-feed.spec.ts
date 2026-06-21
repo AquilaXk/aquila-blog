@@ -42,6 +42,49 @@ test.describe("perf feed scroll budgets", () => {
     ])
   })
 
+  test("홈 피드는 초기 bootstrap/feed 실패를 빈 글 목록으로 숨기지 않는다", async ({ page }) => {
+    let feedAttempts = 0
+    let allowFeedRecovery = false
+
+    await mockFeedEndpoints(page, {
+      feedHandler: async (route) => {
+        feedAttempts += 1
+        if (!allowFeedRecovery) {
+          await route.fulfill({
+            status: 503,
+            contentType: "application/json",
+            body: JSON.stringify({ message: "feed bootstrap temporarily unavailable" }),
+          })
+          return
+        }
+
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            content: [buildMockExploreItem(1171)],
+            pageSize: 24,
+            hasNext: false,
+            nextCursor: null,
+          }),
+        })
+      },
+    })
+
+    await page.goto("/")
+    await waitForPageReady(page)
+
+    await expect(page.getByText("게시글을 불러오지 못했습니다.")).toBeVisible()
+    await expect(page.getByText("아직 게시글이 없습니다.")).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "다시 시도" })).toBeVisible()
+
+    allowFeedRecovery = true
+    await page.getByRole("button", { name: "다시 시도" }).click()
+
+    await expect(page.getByRole("heading", { name: "CLS 예산 점검 1171" })).toBeVisible()
+    expect(feedAttempts).toBeGreaterThan(1)
+  })
+
   test("홈 피드는 다음 cursor 실패를 빈 결과로 숨기지 않고 재시도 버튼을 보여준다", async ({ page }) => {
   let nextCursorAttempts = 0
   const firstPageIds = Array.from({ length: 16 }, (_, index) => 1201 + index)

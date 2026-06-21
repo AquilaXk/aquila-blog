@@ -10,6 +10,7 @@ import jakarta.persistence.FetchType
 import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType.SEQUENCE
 import jakarta.persistence.Id
+import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.SequenceGenerator
 import java.time.Instant
@@ -25,6 +26,7 @@ class MemberPrivacyRequest(
     @field:GeneratedValue(strategy = SEQUENCE, generator = "member_privacy_request_seq_gen")
     override val id: Long = 0,
     @field:ManyToOne(fetch = FetchType.LAZY)
+    @field:JoinColumn(name = "member_id", nullable = false)
     val member: Member,
     @field:Enumerated(EnumType.STRING)
     @field:Column(nullable = false, length = 48)

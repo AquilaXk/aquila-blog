@@ -4423,7 +4423,8 @@
             "maxLength" : 1000,
             "minLength" : 0
           }
-        }
+        },
+        "required" : [ "type" ]
       },
       "PrivacyRequestDto" : {
         "type" : "object",
@@ -5908,7 +5909,7 @@
           "password" : {
             "type" : "string",
             "maxLength" : 128,
-            "minLength" : 0
+            "minLength" : 1
           },
           "reason" : {
             "type" : "string",

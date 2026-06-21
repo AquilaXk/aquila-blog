@@ -31,6 +31,8 @@ class MemberRepositoryAdapter(
 
     override fun findById(id: Long): Optional<Member> = memberRepository.findById(id)
 
+    override fun findByIdForUpdate(id: Long): Optional<Member> = memberRepository.findByIdForUpdate(id)
+
     override fun getReferenceById(id: Long): Member = memberRepository.getReferenceById(id)
 
     override fun findQPagedByKw(query: MemberRepositoryPort.PagedQuery): MemberRepositoryPort.PagedResult<Member> {

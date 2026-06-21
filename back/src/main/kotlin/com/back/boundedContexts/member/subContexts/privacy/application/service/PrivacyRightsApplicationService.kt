@@ -104,7 +104,7 @@ class PrivacyRightsApplicationService(
     ): AccountDeletionResult {
         val member =
             memberRepository
-                .findById(memberId)
+                .findByIdForUpdate(memberId)
                 .orElseThrow { AppException("404-1", "회원을 찾을 수 없습니다.") }
 
         memberUseCase.checkPassword(member, password)

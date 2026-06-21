@@ -8,9 +8,15 @@ import {
 } from "src/apis/backend/privacy"
 import SettingsLayout from "./SettingsLayout"
 
+const dateTimeFormatter = new Intl.DateTimeFormat("ko-KR", {
+  dateStyle: "medium",
+  timeStyle: "short",
+})
+
 const formatDateTime = (value?: string | null) => {
   if (!value) return "미확인"
-  return value.slice(0, 16).replace("T", " ")
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? "미확인" : dateTimeFormatter.format(parsed)
 }
 
 const SettingsPrivacyPage = () => {

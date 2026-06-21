@@ -1899,7 +1899,7 @@ export interface components {
         };
         PrivacyRequestCreateRequest: {
             /** @enum {string} */
-            type?: "EXPORT" | "CORRECTION" | "DELETION" | "PROCESSING_RESTRICTION" | "CONSENT_WITHDRAWAL";
+            type: "EXPORT" | "CORRECTION" | "DELETION" | "PROCESSING_RESTRICTION" | "CONSENT_WITHDRAWAL";
             message?: string;
         };
         PrivacyRequestDto: {

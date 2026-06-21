@@ -8,6 +8,7 @@ import com.back.boundedContexts.member.subContexts.session.model.MemberSession
 import com.back.boundedContexts.member.subContexts.session.model.MemberSessionAuthSnapshot
 import com.back.boundedContexts.member.subContexts.session.model.MemberSessionRefreshTokenPolicy
 import com.back.boundedContexts.member.subContexts.session.model.MemberSessionWithRefreshToken
+import com.back.global.exception.application.AppException
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.cache.CacheManager
 import org.springframework.cache.annotation.Cacheable
@@ -60,10 +61,13 @@ class MemberSessionService(
         userAgent: String?,
     ): MemberSessionWithRefreshToken {
         val now = Instant.now()
+        val activeMember =
+            memberSessionStorePort.findActiveMemberForSessionIssue(member.id)
+                ?: throw AppException("409-1", "탈퇴 처리된 계정은 세션을 생성할 수 없습니다.")
         val refreshToken = MemberSessionRefreshTokenPolicy.generate()
         val session =
             MemberSession(
-                member = member,
+                member = activeMember,
                 sessionKey = MemberPolicy.genApiKey(),
                 rememberLoginEnabled = rememberLoginEnabled,
                 ipSecurityEnabled = ipSecurityEnabled,

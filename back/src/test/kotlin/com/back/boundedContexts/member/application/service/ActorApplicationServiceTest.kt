@@ -158,6 +158,8 @@ class ActorApplicationServiceTest {
 
         override fun findById(id: Long): Optional<Member> = Optional.ofNullable(member.takeIf { it.id == id })
 
+        override fun findByIdForUpdate(id: Long): Optional<Member> = findById(id)
+
         override fun getReferenceById(id: Long): Member = member.takeIf { it.id == id } ?: error("member not found")
 
         override fun findQPagedByKw(query: MemberRepositoryPort.PagedQuery): MemberRepositoryPort.PagedResult<Member> =

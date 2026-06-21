@@ -183,6 +183,53 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
     }
 
     @Test
+    fun `개인정보 처리 요청은 다른 회원이 조회할 수 없다`() {
+        val owner =
+            memberFacade.join(
+                username = "privacy-request-owner",
+                password = "Abcd1234!",
+                nickname = "요청소유자",
+                profileImgUrl = null,
+                email = "privacy-request-owner@example.com",
+            )
+        val attacker =
+            memberFacade.join(
+                username = "privacy-request-attacker",
+                password = "Abcd1234!",
+                nickname = "다른사용자",
+                profileImgUrl = null,
+                email = "privacy-request-attacker@example.com",
+            )
+        val ownerCookies = loginAuthCookies(owner.email!!)
+        val attackerCookies = loginAuthCookies(attacker.email!!)
+        val created =
+            mvc
+                .post("/member/api/v1/privacy/requests") {
+                    ownerCookies.forEach { cookie(it) }
+                    header("X-Aquila-CSRF", "1")
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "type": "EXPORT"
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isCreated() }
+                }.andReturn()
+        val requestId = JsonPath.read<Int>(created.response.contentAsString, "$.data.item.id").toLong()
+
+        mvc
+            .get("/member/api/v1/privacy/requests/$requestId") {
+                attackerCookies.forEach { cookie(it) }
+            }.andExpect {
+                status { isNotFound() }
+                jsonPath("$.resultCode") { value("404-1") }
+                jsonPath("$.msg") { value("개인정보 처리 요청을 찾을 수 없습니다.") }
+            }
+    }
+
+    @Test
     fun `계정 탈퇴는 비밀번호 재확인 후 회원을 삭제 상태로 전환하고 모든 세션을 폐기한다`() {
         val member =
             memberFacade.join(
@@ -194,6 +241,11 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             )
         val firstAuthCookies = loginAuthCookies(member.email!!)
         val secondAuthCookies = loginAuthCookies(member.email!!)
+        member.applyLoginSecurityPolicy(
+            rememberLoginEnabled = true,
+            ipSecurityEnabled = true,
+            ipSecurityFingerprint = "fingerprint-before-delete",
+        )
         val firstSessionKey = requireAuthCookie(firstAuthCookies, AuthCookieNames.SESSION_KEY)
         val secondSessionKey = requireAuthCookie(secondAuthCookies, AuthCookieNames.SESSION_KEY)
 
@@ -222,6 +274,8 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         assertThat(memberFacade.findByEmail("account-delete-user@example.com")).isNull()
         assertThat(findMemberDeletionState(member.id).email).isNull()
         assertThat(findMemberDeletionState(member.id).deletedAt).isNotNull()
+        assertThat(findMemberDeletionState(member.id).ipSecurityEnabled).isFalse()
+        assertThat(findMemberDeletionState(member.id).ipSecurityFingerprint).isNull()
         assertThat(findSessionRevokedAt(firstSessionKey.value)).isNotNull()
         assertThat(findSessionRevokedAt(secondSessionKey.value)).isNotNull()
         assertThat(countDeletionTombstones(member.id, "서비스 이용 종료")).isEqualTo(1)
@@ -350,7 +404,7 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
     private fun findMemberDeletionState(memberId: Long): MemberDeletionState =
         jdbcTemplate.queryForObject(
             """
-            select email, deleted_at
+            select email, deleted_at, ip_security_enabled, ip_security_fingerprint
             from member
             where id = ?
             """.trimIndent(),
@@ -358,6 +412,8 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
                 MemberDeletionState(
                     email = rs.getString("email"),
                     deletedAt = rs.getTimestamp("deleted_at")?.toInstant(),
+                    ipSecurityEnabled = rs.getBoolean("ip_security_enabled"),
+                    ipSecurityFingerprint = rs.getString("ip_security_fingerprint"),
                 )
             },
             memberId,
@@ -377,5 +433,7 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
     private data class MemberDeletionState(
         val email: String?,
         val deletedAt: java.time.Instant?,
+        val ipSecurityEnabled: Boolean,
+        val ipSecurityFingerprint: String?,
     )
 }

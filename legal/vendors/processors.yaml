@@ -21,6 +21,30 @@ processors:
     reviewRequired:
       - Disk encryption and backup encryption status must be finalized.
 
+  - id: home_server_redis
+    name: Home server Redis
+    role: transientOperationalStateProcessor
+    serviceType: cacheRateLimitAndPubSub
+    dataCategories:
+      - signupEmailRateLimitKey
+      - signupIpRateLimitKey
+      - loginIdentifierAttemptKey
+      - loginIpAttemptKey
+      - notificationRelayPayload
+      - postHitDedupHash
+    region: selfHostedHomeServer
+    overseasTransfer: false
+    enabledByEnv: custom.site.redisHost/custom.site.redisPort; SPRING__DATA__REDIS__PASSWORD; REDIS_IMAGE
+    contractStatus: internalSelfHosted
+    retentionControl: Redis TTL per feature window; no durable persistence intended
+    securityControls:
+      - privateNetwork
+      - passwordProtected
+      - ttlBoundKeys
+      - restrictedOperatorAccess
+    reviewRequired:
+      - Raw signup/login identifiers in Redis keys should be hashed before unrestricted signup.
+
   - id: home_server_minio
     name: Home server MinIO
     role: storageProcessor

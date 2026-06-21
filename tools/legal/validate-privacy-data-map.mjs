@@ -38,6 +38,7 @@ const requiredProcessorFields = [
   "securityControls",
 ]
 const requiredProcessors = new Set([
+  "home_server_redis",
   "vercel_frontend_hosting",
   "cloudflare_dns_proxy",
   "kakao_oauth",
@@ -53,8 +54,16 @@ const requiredActivityEnvFragments = new Map([
   ["file_uploads_profile_post_cloud", ["AQUILA_EXTERNAL_STORAGE_ROOT"]],
   ["backup_and_restore", ["AQUILA_BACKUP_ROOT"]],
 ])
+const requiredActivityProcessors = new Map([
+  ["signup_email_verification", ["home_server_redis"]],
+  ["auth_session_and_cookies", ["home_server_redis"]],
+  ["user_content_posts_comments", ["home_server_redis"]],
+  ["auth_security_events", ["home_server_redis"]],
+  ["notifications_sse", ["home_server_redis"]],
+])
 const requiredProcessorEnvFragments = new Map([
   ["google_gemini", ["custom.ai.tag.enabled", "custom.ai.tag.gemini."]],
+  ["home_server_redis", ["custom.site.redisHost", "SPRING__DATA__REDIS__PASSWORD", "REDIS_IMAGE"]],
 ])
 
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8")
@@ -148,6 +157,9 @@ for (const activity of activities) {
   }
   for (const envFragment of requiredActivityEnvFragments.get(activity.id) || []) {
     if (!activity.enabledByEnv.includes(envFragment)) fail(`activity ${activity.id} enabledByEnv must include ${envFragment}`)
+  }
+  for (const processorId of requiredActivityProcessors.get(activity.id) || []) {
+    if (!activity.processors.includes(processorId)) fail(`activity ${activity.id} processors must include ${processorId}`)
   }
 }
 

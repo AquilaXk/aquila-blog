@@ -42,6 +42,8 @@ activities:
       - verificationExpiry
       - legalAcceptanceVersion
       - legalAcceptanceTimestamp
+      - signupEmailRateLimitKey
+      - signupIpRateLimitKey
     dataSubjects:
       - signupApplicant
     purpose: 회원가입 요청자가 이메일 소유자인지 확인하고 in-flight 가입 세션을 제한
@@ -51,6 +53,7 @@ activities:
     systemOfRecord: PostgreSQL member_signup_verification; outbound SMTP task queue
     processors:
       - home_server_postgresql
+      - home_server_redis
       - smtp_provider_unconfirmed
     overseasTransfer: reviewRequired:smtp-provider-region-unconfirmed
     retentionRule: verificationTokenTtlPlusOperationalAuditWindow
@@ -112,6 +115,8 @@ activities:
       - userAgent
       - ipSecurityFingerprint
       - rememberLoginPreference
+      - loginAttemptIdentifierKey
+      - loginAttemptIpKey
     dataSubjects:
       - registeredMember
     purpose: 로그인 상태 유지, 세션 탈취 방지, IP 보안 정책 적용
@@ -121,6 +126,7 @@ activities:
     systemOfRecord: PostgreSQL member_session; HttpOnly browser cookies
     processors:
       - home_server_postgresql
+      - home_server_redis
       - vercel_frontend_hosting
       - cloudflare_dns_proxy
     overseasTransfer: possibleViaVercelOrCloudflareEdge
@@ -148,6 +154,7 @@ activities:
       - profileNickname
       - profileBio
       - profileImageUrl
+      - postHitDedupHash
     dataSubjects:
       - registeredMember
       - publicVisitorWhenViewing
@@ -158,6 +165,7 @@ activities:
     systemOfRecord: PostgreSQL post, post_comment, member profile columns
     processors:
       - home_server_postgresql
+      - home_server_redis
       - vercel_frontend_hosting
       - cloudflare_dns_proxy
     overseasTransfer: possibleViaVercelOrCloudflareEdge
@@ -225,6 +233,8 @@ activities:
       - rememberLoginEnabled
       - ipSecurityEnabled
       - clientIpFingerprint
+      - loginAttemptIdentifierKey
+      - loginAttemptIpKey
       - requestPath
       - reason
     dataSubjects:
@@ -237,6 +247,7 @@ activities:
     systemOfRecord: PostgreSQL auth_security_event; application logs
     processors:
       - home_server_postgresql
+      - home_server_redis
       - grafana_loki_monitoring
     overseasTransfer: noPlannedOverseasTransferForDatabase; monitoringHostLocal
     retentionRule: securityAuditWindowThenCleanupJob
@@ -295,15 +306,18 @@ activities:
       - eventUid
       - readAt
       - lastNotificationId
+      - notificationRelayPayload
+      - unreadCount
     dataSubjects:
       - registeredMember
     purpose: 댓글 등 서비스 이벤트 알림, unread count 제공, SSE 재연결 복구
     legalBasis: contractAndLegitimateOperationalInterest
     collectionSource: post/comment domain events and notification API
     requiredOrOptional: requiredForNotificationFeature
-    systemOfRecord: PostgreSQL member_notification; SSE runtime memory
+    systemOfRecord: PostgreSQL member_notification; SSE runtime memory; Redis pub/sub relay
     processors:
       - home_server_postgresql
+      - home_server_redis
       - vercel_frontend_hosting
       - cloudflare_dns_proxy
     overseasTransfer: possibleViaVercelOrCloudflareEdge

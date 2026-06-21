@@ -1,7 +1,6 @@
 import { FormEvent, useMemo, useState } from "react"
 import Link from "next/link"
 import AppIcon from "src/components/icons/AppIcon"
-import SocialAuthButtons, { SocialAuthItem } from "src/components/auth/SocialAuthButtons"
 import { formatSignupCooldown } from "src/hooks/useSignupMailCooldown"
 
 type Props = {
@@ -11,7 +10,6 @@ type Props = {
   signupCooldownSeconds: number
   termsAccepted: boolean
   privacyAccepted: boolean
-  socialItems: SocialAuthItem[]
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onSignupEmailChange: (value: string) => void
   onTermsAcceptedChange: (value: boolean) => void
@@ -26,7 +24,6 @@ const AuthEntrySignupPanel = ({
   signupCooldownSeconds,
   termsAccepted,
   privacyAccepted,
-  socialItems,
   onSubmit,
   onSignupEmailChange,
   onTermsAcceptedChange,
@@ -36,12 +33,6 @@ const AuthEntrySignupPanel = ({
   const [emailFocused, setEmailFocused] = useState(false)
   const emailActive = useMemo(() => emailFocused || signupEmail.length > 0, [emailFocused, signupEmail])
   const signupConsentAccepted = termsAccepted && privacyAccepted
-  const consentedSocialItems = useMemo(() => {
-    return socialItems.map((item) => ({
-      ...item,
-      disabled: item.disabled || !signupConsentAccepted,
-    }))
-  }, [signupConsentAccepted, socialItems])
 
   return (
     <>
@@ -114,13 +105,6 @@ const AuthEntrySignupPanel = ({
               : "인증 메일 보내기"}
         </button>
       </form>
-
-      <div className="socialSection">
-        <span>소셜 계정으로 계속하기</span>
-        <div className="socialButtonRow">
-          <SocialAuthButtons size="compact" items={consentedSocialItems} />
-        </div>
-      </div>
 
       <div className="signupRow">
         <span>이미 계정이 있으신가요?</span>

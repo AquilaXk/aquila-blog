@@ -7,8 +7,6 @@ import { apiFetch } from "src/apis/backend/client"
 import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
 import AuthShell from "src/components/auth/AuthShell"
 import AppIcon from "src/components/icons/AppIcon"
-import SocialAuthButtons from "src/components/auth/SocialAuthButtons"
-import { buildSocialAuthItems } from "src/components/auth/socialAuth"
 import { formatSignupCooldown, useSignupMailCooldown } from "src/hooks/useSignupMailCooldown"
 import { normalizeNextPath, toLoginPath, toSignupPath } from "src/libs/router"
 import { GuestPageProps, getGuestPageProps } from "src/libs/server/guestPage"
@@ -45,12 +43,6 @@ const SignupPage = () => {
   const [privacyAccepted, setPrivacyAccepted] = useState(false)
   const { remainingSeconds, isCoolingDown, startCooldown } = useSignupMailCooldown(email)
 
-  const socialItems = useMemo(() => {
-    return buildSocialAuthItems(next).map((item) => ({
-      ...item,
-      disabled: item.disabled || !termsAccepted || !privacyAccepted,
-    }))
-  }, [next, privacyAccepted, termsAccepted])
   const emailActive = useMemo(() => emailFocused || email.length > 0, [email, emailFocused])
   const signupConsentAccepted = termsAccepted && privacyAccepted
   const feedbackMessage = error ? (
@@ -175,13 +167,6 @@ const SignupPage = () => {
         <PrimaryButton type="submit" disabled={loading || isCoolingDown || !signupConsentAccepted}>
           {loading ? "메일 보내는 중..." : isCoolingDown ? `다시 보내기 ${formatSignupCooldown(remainingSeconds)}` : "인증 메일 보내기"}
         </PrimaryButton>
-
-        <SocialSection>
-          <span>소셜 계정으로 계속하기</span>
-          <SocialButtonRow>
-            <SocialAuthButtons items={socialItems} />
-          </SocialButtonRow>
-        </SocialSection>
       </form>
     </AuthShell>
   )
@@ -382,23 +367,6 @@ const FeedbackSlot = styled.div`
   > * {
     width: 100%;
   }
-`
-
-const SocialSection = styled.div`
-  display: grid;
-  gap: 0.6rem;
-  margin-top: 0.2rem;
-
-  span {
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.82rem;
-    font-weight: 700;
-  }
-`
-
-const SocialButtonRow = styled.div`
-  display: flex;
-  gap: 1rem;
 `
 
 const FooterText = styled.div`

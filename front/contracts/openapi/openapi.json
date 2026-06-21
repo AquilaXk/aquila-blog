@@ -4036,9 +4036,41 @@
             "type" : "string",
             "maxLength" : 30,
             "minLength" : 2
+          },
+          "termsVersion" : {
+            "type" : "string",
+            "maxLength" : 32,
+            "minLength" : 0
+          },
+          "termsContentSha256" : {
+            "type" : "string",
+            "maxLength" : 64,
+            "minLength" : 64
+          },
+          "privacyVersion" : {
+            "type" : "string",
+            "maxLength" : 32,
+            "minLength" : 0
+          },
+          "privacyContentSha256" : {
+            "type" : "string",
+            "maxLength" : 64,
+            "minLength" : 64
+          },
+          "age14OrOlder" : {
+            "type" : "boolean"
+          },
+          "requiredPrivacyConfirmed" : {
+            "type" : "boolean"
+          },
+          "analyticsConsent" : {
+            "type" : "boolean"
+          },
+          "overseasTransferAcknowledged" : {
+            "type" : "boolean"
           }
         },
-        "required" : [ "nickname", "password", "signupToken" ]
+        "required" : [ "age14OrOlder", "analyticsConsent", "nickname", "overseasTransferAcknowledged", "password", "privacyContentSha256", "privacyVersion", "requiredPrivacyConfirmed", "signupToken", "termsContentSha256", "termsVersion" ]
       },
       "MemberDto" : {
         "type" : "object",

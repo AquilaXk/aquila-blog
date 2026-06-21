@@ -2,8 +2,8 @@ package com.back.boundedContexts.member.subContexts.oauthSignup.adapter.web
 
 import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.LegalAcceptanceCommand
-import com.back.boundedContexts.member.subContexts.oauthSignup.application.port.input.OAuthSignupPendingDetails
 import com.back.boundedContexts.member.subContexts.oauthSignup.application.port.input.OAuthSignupUseCase
+import com.back.boundedContexts.member.subContexts.oauthSignup.application.service.OAuthSignupPendingDetails
 import com.back.global.rsData.RsData
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.Valid

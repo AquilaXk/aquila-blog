@@ -4,11 +4,9 @@ import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.LegalAcceptanceApplicationService
 import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.LegalAcceptanceCommand
-import com.back.boundedContexts.member.subContexts.oauthSignup.application.port.input.OAuthSignupPendingDetails
-import com.back.boundedContexts.member.subContexts.oauthSignup.application.port.input.OAuthSignupPendingStartResult
 import com.back.boundedContexts.member.subContexts.oauthSignup.application.port.input.OAuthSignupUseCase
 import com.back.boundedContexts.member.subContexts.oauthSignup.application.port.output.PendingOAuthSignupRepositoryPort
-import com.back.boundedContexts.member.subContexts.oauthSignup.domain.PendingOAuthSignup
+import com.back.boundedContexts.member.subContexts.oauthSignup.model.PendingOAuthSignup
 import com.back.global.exception.application.AppException
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service

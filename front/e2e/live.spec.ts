@@ -491,6 +491,22 @@ test.describe("live frontend build metadata", () => {
   })
 })
 
+test.describe("live public RSS feed", () => {
+  test("/feed는 RSS XML discovery 계약을 만족한다", async ({ page }) => {
+    const response = await page.request.get("/feed")
+    expect(response.status()).toBe(200)
+    expect(response.headers()["content-type"]).toContain("application/rss+xml")
+
+    const body = await response.text()
+    expect(body).toContain('<?xml version="1.0" encoding="UTF-8"?>')
+    expect(body).toContain('<rss version="2.0">')
+    expect(body).toContain("<channel>")
+    expect(body).toContain("<link>https://www.aquilaxk.site</link>")
+    expect(body).toMatch(/<item>[\s\S]*<guid>https:\/\/www\.aquilaxk\.site\/posts\/\d+<\/guid>[\s\S]*<\/item>/)
+    expect(body).not.toContain("<!DOCTYPE")
+  })
+})
+
 test.describe("live production e2e", () => {
   test.skip(!hasLiveCredentials, "E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD is required")
   test.setTimeout(120_000)

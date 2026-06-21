@@ -65,6 +65,7 @@ require_pattern "${DRILL_SCRIPT}" 'DB_IMAGE is required' "restore drill must req
 require_pattern "${DRILL_SCRIPT}" 'created_at_utc' "restore drill must prefer UTC backup metadata for RPO"
 require_pattern "${DRILL_SCRIPT}" 'read_key_from_file AQUILA_BACKUP_ROOT' "restore drill must read backup root from deploy env"
 require_pattern "${DRILL_SCRIPT}" "awk 'NR == 1" "restore drill must select MinIO sample without head-induced SIGPIPE"
+require_pattern "${DRILL_SCRIPT}" 'docker rm -f -v' "restore drill must remove anonymous PostgreSQL volumes"
 reject_pattern "${DRILL_SCRIPT}" 'HOME_SERVER_ENV' "restore drill must not require raw production secret blobs"
 reject_pattern "${DRILL_SCRIPT}" 'postgres:16-alpine' "restore drill must not default to vanilla PostgreSQL"
 

@@ -190,7 +190,7 @@ activities:
       - registeredMember
       - contentAuthor
     purpose: 이미지, 첨부 파일, 프로필 이미지, 관리자 파일 보관과 제공
-    legalBasis: contractAndUserProvidedContent
+    legalBasis: contractAndUserPublishedContent
     collectionSource: multipart upload endpoints and admin cloud workspace
     requiredOrOptional: optionalUserGeneratedContent
     systemOfRecord: PostgreSQL uploaded_file, cloud_file; MinIO object storage

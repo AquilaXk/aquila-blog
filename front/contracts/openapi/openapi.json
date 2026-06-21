@@ -957,6 +957,62 @@
         } ]
       }
     },
+    "/member/api/v1/signup/social/pending" : {
+      "post" : {
+        "tags" : [ "api-v-1-o-auth-signup-controller" ],
+        "operationId" : "pending",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SocialSignupPendingRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataOAuthSignupPendingDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/signup/social/complete" : {
+      "post" : {
+        "tags" : [ "api-v-1-o-auth-signup-controller" ],
+        "operationId" : "complete",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SocialSignupCompleteRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataMemberDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/member/api/v1/signup/email/verify" : {
       "get" : {
         "tags" : [ "api-v-1-signup-verification-controller" ],
@@ -1032,7 +1088,7 @@
     "/member/api/v1/signup/complete" : {
       "post" : {
         "tags" : [ "api-v-1-signup-verification-controller" ],
-        "operationId" : "complete",
+        "operationId" : "complete_1",
         "requestBody" : {
           "content" : {
             "application/json" : {
@@ -3986,6 +4042,138 @@
           }
         }
       },
+      "SocialSignupPendingRequest" : {
+        "type" : "object",
+        "properties" : {
+          "token" : {
+            "type" : "string",
+            "minLength" : 1
+          }
+        },
+        "required" : [ "token" ]
+      },
+      "OAuthSignupPendingDetails" : {
+        "type" : "object",
+        "properties" : {
+          "provider" : {
+            "type" : "string"
+          },
+          "nickname" : {
+            "type" : "string"
+          },
+          "profileImgUrl" : {
+            "type" : "string"
+          },
+          "expiresAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "RsDataOAuthSignupPendingDetails" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/OAuthSignupPendingDetails"
+          }
+        }
+      },
+      "SocialSignupCompleteRequest" : {
+        "type" : "object",
+        "properties" : {
+          "token" : {
+            "type" : "string",
+            "minLength" : 1
+          },
+          "nickname" : {
+            "type" : "string",
+            "maxLength" : 30,
+            "minLength" : 2
+          },
+          "termsVersion" : {
+            "type" : "string",
+            "maxLength" : 32,
+            "minLength" : 0
+          },
+          "termsContentSha256" : {
+            "type" : "string",
+            "maxLength" : 64,
+            "minLength" : 64
+          },
+          "privacyVersion" : {
+            "type" : "string",
+            "maxLength" : 32,
+            "minLength" : 0
+          },
+          "privacyContentSha256" : {
+            "type" : "string",
+            "maxLength" : 64,
+            "minLength" : 64
+          },
+          "age14OrOlder" : {
+            "type" : "boolean"
+          },
+          "requiredPrivacyConfirmed" : {
+            "type" : "boolean"
+          },
+          "analyticsConsent" : {
+            "type" : "boolean"
+          },
+          "overseasTransferAcknowledged" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "age14OrOlder", "analyticsConsent", "overseasTransferAcknowledged", "privacyContentSha256", "privacyVersion", "requiredPrivacyConfirmed", "termsContentSha256", "termsVersion", "token" ]
+      },
+      "MemberDto" : {
+        "type" : "object",
+        "properties" : {
+          "isAdmin" : {
+            "type" : "boolean"
+          },
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "modifiedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "profileImageUrl" : {
+            "type" : "string"
+          },
+          "admin" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "RsDataMemberDto" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/MemberDto"
+          }
+        }
+      },
       "SignupEmailVerifyRequest" : {
         "type" : "object",
         "properties" : {
@@ -4121,49 +4309,6 @@
           }
         },
         "required" : [ "age14OrOlder", "analyticsConsent", "nickname", "overseasTransferAcknowledged", "password", "privacyContentSha256", "privacyVersion", "requiredPrivacyConfirmed", "termsContentSha256", "termsVersion" ]
-      },
-      "MemberDto" : {
-        "type" : "object",
-        "properties" : {
-          "isAdmin" : {
-            "type" : "boolean"
-          },
-          "id" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "createdAt" : {
-            "type" : "string",
-            "format" : "date-time"
-          },
-          "modifiedAt" : {
-            "type" : "string",
-            "format" : "date-time"
-          },
-          "name" : {
-            "type" : "string"
-          },
-          "profileImageUrl" : {
-            "type" : "string"
-          },
-          "admin" : {
-            "type" : "boolean"
-          }
-        }
-      },
-      "RsDataMemberDto" : {
-        "type" : "object",
-        "properties" : {
-          "resultCode" : {
-            "type" : "string"
-          },
-          "msg" : {
-            "type" : "string"
-          },
-          "data" : {
-            "$ref" : "#/components/schemas/MemberDto"
-          }
-        }
       },
       "RsDataMapStringBoolean" : {
         "type" : "object",

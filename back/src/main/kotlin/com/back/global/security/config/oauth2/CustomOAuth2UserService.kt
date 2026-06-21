@@ -2,7 +2,7 @@ package com.back.global.security.config.oauth2
 
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.global.exception.application.AppException
+import com.back.boundedContexts.member.subContexts.oauthSignup.application.port.input.OAuthSignupUseCase
 import com.back.global.security.domain.SecurityUser
 import com.back.global.security.domain.toGrantedAuthorities
 import org.slf4j.Logger
@@ -20,6 +20,7 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUser
 import org.springframework.security.oauth2.core.user.OAuth2User
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.Instant
 
 private enum class OAuth2Provider {
     KAKAO,
@@ -35,6 +36,7 @@ private enum class OAuth2Provider {
 @Service
 class CustomOAuth2UserService(
     private val memberUseCase: MemberUseCase,
+    private val oauthSignupUseCase: OAuthSignupUseCase,
 ) : OAuth2UserService<OAuth2UserRequest, OAuth2User> {
     internal var delegate: OAuth2UserService<OAuth2UserRequest, OAuth2User> = DefaultOAuth2UserService()
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -48,13 +50,20 @@ class CustomOAuth2UserService(
                 OAuth2Provider.KAKAO -> OAuth2ProfileExtractor.extractKakao(oAuth2User.attributes, oAuth2User.name)
             }
 
-        return upsertMember(provider, profilePayload, memberUseCase, logger).toSecurityUser()
+        return loadExistingMemberOrStartSignup(
+            provider = provider,
+            profilePayload = profilePayload,
+            memberUseCase = memberUseCase,
+            oauthSignupUseCase = oauthSignupUseCase,
+            logger = logger,
+        ).toSecurityUser()
     }
 }
 
 @Service
 class CustomOidcUserService(
     private val memberUseCase: MemberUseCase,
+    private val oauthSignupUseCase: OAuthSignupUseCase,
 ) : OAuth2UserService<OidcUserRequest, OidcUser> {
     internal var delegate: OAuth2UserService<OidcUserRequest, OidcUser> = OidcUserService()
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -67,41 +76,81 @@ class CustomOidcUserService(
             when (provider) {
                 OAuth2Provider.KAKAO -> OAuth2ProfileExtractor.extractKakao(oidcUser.claims, oidcUser.name)
             }
-        val member = upsertMember(provider, profilePayload, memberUseCase, logger)
+        val member =
+            loadExistingMemberOrStartSignup(
+                provider = provider,
+                profilePayload = profilePayload,
+                memberUseCase = memberUseCase,
+                oauthSignupUseCase = oauthSignupUseCase,
+                logger = logger,
+            )
 
         return member.toSecurityOidcUser(oidcUser)
     }
 }
 
-private fun upsertMember(
+private fun loadExistingMemberOrStartSignup(
     provider: OAuth2Provider,
     profilePayload: OAuth2ProfilePayload,
     memberUseCase: MemberUseCase,
+    oauthSignupUseCase: OAuthSignupUseCase,
     logger: Logger,
 ): Member {
+    val providerSubjectHash =
+        oauthSignupUseCase.providerSubjectHash(
+            provider = provider.name,
+            providerSubject = profilePayload.oauthUserId,
+        )
     if (profilePayload.nickname == OAuth2ProfileExtractor.DEFAULT_KAKAO_NICKNAME) {
         logger.warn(
-            "oauth2_kakao_profile_fallback_used provider={} oauthUserId={}",
+            "oauth2_kakao_profile_fallback_used provider={} providerSubjectHash={}",
             provider.name.lowercase(),
-            profilePayload.oauthUserId,
+            providerSubjectHash,
         )
     }
 
-    val username = "${provider.name}__${profilePayload.oauthUserId}"
+    val memberLoginId =
+        oauthSignupUseCase.memberLoginId(
+            provider = provider.name,
+            providerSubjectHash = providerSubjectHash,
+        )
+    val legacyLoginId = "${provider.name}__${profilePayload.oauthUserId}"
 
     val member =
-        memberUseCase.findByLoginId(username)
-            ?: throw signupRequiredAuthenticationException()
+        memberUseCase.findByLoginId(memberLoginId)
+            ?: memberUseCase.findByLoginId(legacyLoginId)
+            ?: startPendingSignup(provider, profilePayload, oauthSignupUseCase)
 
     memberUseCase.modify(member, profilePayload.nickname, profilePayload.profileImgUrl)
 
     return member
 }
 
-private fun signupRequiredAuthenticationException(): InternalAuthenticationServiceException {
-    val cause = AppException("403-4", "소셜 로그인 신규 가입은 현재 지원하지 않습니다. 이메일 회원가입으로 먼저 약관과 개인정보처리방침에 동의해주세요.")
-    return InternalAuthenticationServiceException(cause.message ?: "OAuth signup is not supported.", cause)
+private fun startPendingSignup(
+    provider: OAuth2Provider,
+    profilePayload: OAuth2ProfilePayload,
+    oauthSignupUseCase: OAuthSignupUseCase,
+): Nothing {
+    val pending =
+        oauthSignupUseCase.startPending(
+            provider = provider.name,
+            providerSubject = profilePayload.oauthUserId,
+            nickname = profilePayload.nickname,
+            profileImgUrl = profilePayload.profileImgUrl,
+        )
+
+    throw OAuthSignupRequiredAuthenticationException(
+        provider = pending.provider,
+        pendingToken = pending.pendingToken,
+        expiresAt = pending.expiresAt,
+    )
 }
+
+internal class OAuthSignupRequiredAuthenticationException(
+    val provider: String,
+    val pendingToken: String,
+    val expiresAt: Instant,
+) : InternalAuthenticationServiceException("OAuth signup requires local consent.")
 
 private fun Member.toSecurityUser(): SecurityUser =
     SecurityUser(

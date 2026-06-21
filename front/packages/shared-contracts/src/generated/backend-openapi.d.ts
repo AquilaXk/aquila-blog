@@ -326,6 +326,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/member/api/v1/signup/social/pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["pending"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/member/api/v1/signup/social/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["complete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/member/api/v1/signup/email/verify": {
         parameters: {
             query?: never;
@@ -367,7 +399,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["complete"];
+        post: operations["complete_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1715,6 +1747,50 @@ export interface components {
             msg?: string;
             data?: components["schemas"]["RecommendTagsResBody"];
         };
+        SocialSignupPendingRequest: {
+            token: string;
+        };
+        OAuthSignupPendingDetails: {
+            provider?: string;
+            nickname?: string;
+            profileImgUrl?: string;
+            /** Format: date-time */
+            expiresAt?: string;
+        };
+        RsDataOAuthSignupPendingDetails: {
+            resultCode?: string;
+            msg?: string;
+            data?: components["schemas"]["OAuthSignupPendingDetails"];
+        };
+        SocialSignupCompleteRequest: {
+            token: string;
+            nickname?: string;
+            termsVersion: string;
+            termsContentSha256: string;
+            privacyVersion: string;
+            privacyContentSha256: string;
+            age14OrOlder: boolean;
+            requiredPrivacyConfirmed: boolean;
+            analyticsConsent: boolean;
+            overseasTransferAcknowledged: boolean;
+        };
+        MemberDto: {
+            isAdmin?: boolean;
+            /** Format: int64 */
+            id?: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            modifiedAt?: string;
+            name?: string;
+            profileImageUrl?: string;
+            admin?: boolean;
+        };
+        RsDataMemberDto: {
+            resultCode?: string;
+            msg?: string;
+            data?: components["schemas"]["MemberDto"];
+        };
         SignupEmailVerifyRequest: {
             token: string;
         };
@@ -1756,23 +1832,6 @@ export interface components {
             requiredPrivacyConfirmed: boolean;
             analyticsConsent: boolean;
             overseasTransferAcknowledged: boolean;
-        };
-        MemberDto: {
-            isAdmin?: boolean;
-            /** Format: int64 */
-            id?: number;
-            /** Format: date-time */
-            createdAt?: string;
-            /** Format: date-time */
-            modifiedAt?: string;
-            name?: string;
-            profileImageUrl?: string;
-            admin?: boolean;
-        };
-        RsDataMemberDto: {
-            resultCode?: string;
-            msg?: string;
-            data?: components["schemas"]["MemberDto"];
         };
         RsDataMapStringBoolean: {
             resultCode?: string;
@@ -2965,6 +3024,54 @@ export interface operations {
             };
         };
     };
+    pending: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SocialSignupPendingRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RsDataOAuthSignupPendingDetails"];
+                };
+            };
+        };
+    };
+    complete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SocialSignupCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RsDataMemberDto"];
+                };
+            };
+        };
+    };
     verifyLegacyGet: {
         parameters: {
             query?: never;
@@ -3033,7 +3140,7 @@ export interface operations {
             };
         };
     };
-    complete: {
+    complete_1: {
         parameters: {
             query?: never;
             header?: never;

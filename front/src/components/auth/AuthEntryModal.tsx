@@ -269,7 +269,6 @@ const AuthEntryModal: React.FC<AuthEntryModalProps> = ({
               signupCooldownSeconds={signupCooldownSeconds}
               termsAccepted={signupTermsAccepted}
               privacyAccepted={signupPrivacyAccepted}
-              socialItems={socialItems}
               onSubmit={handleSignupEmailStart}
               onSignupEmailChange={setSignupEmail}
               onTermsAcceptedChange={setSignupTermsAccepted}

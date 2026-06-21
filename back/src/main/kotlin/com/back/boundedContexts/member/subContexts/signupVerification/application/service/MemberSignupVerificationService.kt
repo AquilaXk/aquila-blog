@@ -153,6 +153,7 @@ class MemberSignupVerificationService(
                 ?: throw AppException("404-2", "유효하지 않은 회원가입 세션입니다.")
 
         verification.ensureCompletable(now)
+        verification.ensureLegalAcceptanceRecorded(now)
         if (memberRepository.existsByEmail(verification.email)) {
             verification.cancel(now)
             throw AppException("404-2", "유효하지 않은 회원가입 세션입니다.")
@@ -226,6 +227,18 @@ class MemberSignupVerificationService(
                     throw AppException("400-2", "이메일 형식을 확인해주세요.")
                 }
             }
+
+    private fun MemberSignupVerification.ensureLegalAcceptanceRecorded(now: Instant) {
+        val hasLegalAcceptance =
+            termsAcceptedAt != null &&
+                privacyAcceptedAt != null &&
+                !legalPolicyVersion.isNullOrBlank()
+
+        if (!hasLegalAcceptance) {
+            cancel(now)
+            throw AppException("400-2", "회원가입을 진행하려면 이용약관과 개인정보처리방침에 다시 동의해야 합니다.")
+        }
+    }
 
     private fun normalizeLegalPolicyVersion(
         termsAccepted: Boolean,

@@ -365,7 +365,7 @@ activities:
     userRightsHandler: privacyPreferenceAndConsentWithdrawalFutureWork
     codeOwner: front/analytics-rum
     policySectionId: privacy-cookie-analytics
-    enabledByEnv: CONFIG.googleAnalytics.enable; Vercel analytics package; RUM_LOG_SLOW_ONLY
+    enabledByEnv: CONFIG.googleAnalytics.enable; Vercel analytics package in production; NEXT_PUBLIC_RUM_SAMPLE_RATE defaults 0.2 and 0 disables custom RUM; RUM_LOG_SLOW_ONLY only controls server logging
     reviewRequired:
       - Consent manager and opt-out are tracked by issue1002.
 
@@ -399,7 +399,7 @@ activities:
     userRightsHandler: contentDeletionAndExternalProcessingDisclosureFutureWork
     codeOwner: back/post-ai; front/admin-editor
     policySectionId: privacy-processor-ai
-    enabledByEnv: custom.ai.tag.enabled; custom.ai.tag.gemini.*; legacy fallback CUSTOM__AI__SUMMARY__GEMINI__*
+    enabledByEnv: custom.ai.tag.enabled defaults true; disable with CUSTOM__AI__TAG__ENABLED=false; custom.ai.tag.gemini.*; legacy fallback CUSTOM__AI__SUMMARY__GEMINI__*
     reviewRequired:
       - Production default-off, PII scanner, and DPA checks are tracked by issue1003.
 

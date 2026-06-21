@@ -50,7 +50,14 @@ const requiredActivityDataCategories = new Map([
   ["account_registration_email", ["email", "nickname", "passwordHash"]],
 ])
 const requiredActivityEnvFragments = new Map([
-  ["ai_tag_recommendation_gemini", ["custom.ai.tag.enabled", "custom.ai.tag.gemini."]],
+  [
+    "analytics_and_rum",
+    ["NEXT_PUBLIC_RUM_SAMPLE_RATE", "defaults 0.2", "0 disables custom RUM"],
+  ],
+  [
+    "ai_tag_recommendation_gemini",
+    ["custom.ai.tag.enabled", "defaults true", "CUSTOM__AI__TAG__ENABLED=false", "custom.ai.tag.gemini."],
+  ],
   ["file_uploads_profile_post_cloud", ["AQUILA_EXTERNAL_STORAGE_ROOT"]],
   ["backup_and_restore", ["AQUILA_BACKUP_ROOT"]],
 ])
@@ -62,7 +69,10 @@ const requiredActivityProcessors = new Map([
   ["notifications_sse", ["home_server_redis"]],
 ])
 const requiredProcessorEnvFragments = new Map([
-  ["google_gemini", ["custom.ai.tag.enabled", "custom.ai.tag.gemini."]],
+  [
+    "google_gemini",
+    ["custom.ai.tag.enabled", "defaults true", "CUSTOM__AI__TAG__ENABLED=false", "custom.ai.tag.gemini."],
+  ],
   ["home_server_redis", ["custom.site.redisHost", "SPRING__DATA__REDIS__PASSWORD", "REDIS_IMAGE"]],
 ])
 

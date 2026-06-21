@@ -31,7 +31,7 @@
 | Upload architecture | 관련 issue/PR 또는 design evidence | 현재 출시 범위에서 upload blocking 없음 | upload 경로가 launch path인데 검증 누락 |
 | Blue/green rollback | deploy workflow log 또는 rollback script evidence | green health check 실패 시 rollback 경로 확인 가능 | rollback script 부재, rollback 후 health 미확인 |
 | Worker rollback | worker 관련 issue/PR 또는 out-of-scope 기록 | worker 변경 없음 또는 rollback 절차 확인 | worker 변경이 있는데 rollback evidence 없음 |
-| Backup/restore drill | backup metadata, restore drill issue/PR/run | restore drill evidence 연결 또는 launch-blocker defer 불가 사유 해소 | backup/restore evidence 없음 |
+| Backup/restore drill | backup metadata, restore drill issue/PR/run, RPO/RTO artifact | restore drill evidence 연결, RPO/RTO 목표 대비 결과 기록, PostgreSQL/MinIO checksum 검증 | backup/restore evidence 없음, RPO/RTO 결과 누락 |
 | Alert receiver | Prometheus/Grafana alert rule과 수신 채널 evidence | alert rule과 수신 채널이 존재하고 테스트 evidence 연결 | 운영 alert 수신 경로 없음 |
 | Live E2E account cleanup | live E2E run artifact 또는 cleanup log | 테스트 계정/데이터 cleanup 결과 확인 | live E2E가 계정/데이터를 남김 |
 | Mobile/keyboard/200% zoom QA | `docs/design/release-ui-qa-matrix.md` run table과 artifact | matrix pass run 연결 | 핵심 viewport 또는 keyboard/zoom failure |
@@ -57,8 +57,19 @@ Merge 전 PR 본문 또는 review note에는 다음 항목을 남긴다.
 - Blue/green deploy script: `deploy/homeserver/blue_green_deploy.sh`
 - Rollback script: `deploy/homeserver/rollback_last_deploy.sh`
 - Backup script: `deploy/homeserver/create_external_backup.sh`
+- Restore drill script: `deploy/homeserver/restore_external_backup_drill.sh`
+- Restore drill workflow: `.github/workflows/backup-restore-drill.yml`
 - Public edge probe: `deploy/homeserver/monitoring/public-edge-probe.mjs`
 - Alert examples: `deploy/homeserver/monitoring/prometheus-task-alerts.example.yml`
+
+## Backup Restore Drill Evidence
+
+- 수동 실행: GitHub Actions `Backup Restore Drill` workflow를 `workflow_dispatch`로 실행한다.
+- 기본 대상: `backup_class=daily`, `backup_set_id`는 비워 두면 최신 daily PostgreSQL backup을 사용한다.
+- 통과 증거: workflow artifact `backup-restore-drill` 안의 `restore-drill-summary.md`, `restore-drill-result.env`, `minio-checksums.sha256`.
+- DB 검증: 임시 PostgreSQL container에 `dump.sql`을 복원하고 `flyway_schema_history`, `post` row count, 최신 public post(`listed = true`) 조회를 확인한다.
+- Object 검증: `minio-data.tar.gz`에서 운영 object 샘플 1개 이상을 선택해 `sha256sum`을 기록한다.
+- RPO/RTO 기준: 기본 RPO target은 1440분, 기본 RTO target은 120분이며, 실제 `RPO_ACTUAL_MINUTES`와 `RTO_ACTUAL_SECONDS`를 artifact에 남긴다.
 
 ## PR Checklist
 

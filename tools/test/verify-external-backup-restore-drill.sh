@@ -1,0 +1,188 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+DRILL_SCRIPT="${ROOT_DIR}/deploy/homeserver/restore_external_backup_drill.sh"
+WORKFLOW="${ROOT_DIR}/.github/workflows/backup-restore-drill.yml"
+LAUNCH_GATE_DOC="${ROOT_DIR}/docs/design/launch-gate-operations.md"
+
+require_file() {
+  local file="$1"
+  local message="$2"
+
+  if [[ ! -f "${file}" ]]; then
+    echo "missing: ${message}" >&2
+    exit 1
+  fi
+}
+
+require_executable() {
+  local file="$1"
+  local message="$2"
+
+  if [[ ! -x "${file}" ]]; then
+    echo "missing executable: ${message}" >&2
+    exit 1
+  fi
+}
+
+require_pattern() {
+  local file="$1"
+  local pattern="$2"
+  local message="$3"
+
+  if ! grep -Eq "${pattern}" "${file}"; then
+    echo "missing: ${message}" >&2
+    exit 1
+  fi
+}
+
+reject_pattern() {
+  local file="$1"
+  local pattern="$2"
+  local message="$3"
+
+  if grep -Eq "${pattern}" "${file}"; then
+    echo "unexpected: ${message}" >&2
+    exit 1
+  fi
+}
+
+require_file "${DRILL_SCRIPT}" "restore drill script"
+require_executable "${DRILL_SCRIPT}" "restore drill script"
+require_pattern "${DRILL_SCRIPT}" '^umask 077$' "restore drill must protect generated artifacts"
+require_pattern "${DRILL_SCRIPT}" 'psql .*POSTGRES_DUMP_FILE|pg_restore .*POSTGRES_DUMP_FILE' "restore drill must restore the PostgreSQL dump"
+require_pattern "${DRILL_SCRIPT}" 'flyway_schema_history' "restore drill must verify Flyway/schema state"
+require_pattern "${DRILL_SCRIPT}" 'SELECT COUNT\(\*\) FROM post' "restore drill must verify restored post row count"
+require_pattern "${DRILL_SCRIPT}" 'WHERE listed = true' "restore drill must query latest public post"
+require_pattern "${DRILL_SCRIPT}" 'sha256sum' "restore drill must produce or compare MinIO object checksums"
+require_pattern "${DRILL_SCRIPT}" 'minio-data\.tar\.gz' "restore drill must inspect MinIO backup tarball"
+require_pattern "${DRILL_SCRIPT}" 'restore-drill-summary\.md' "restore drill must write a human-readable summary artifact"
+require_pattern "${DRILL_SCRIPT}" 'restore-drill-result\.env' "restore drill must write a machine-readable result artifact"
+require_pattern "${DRILL_SCRIPT}" 'RPO' "restore drill must record RPO"
+require_pattern "${DRILL_SCRIPT}" 'RTO' "restore drill must record RTO"
+reject_pattern "${DRILL_SCRIPT}" 'HOME_SERVER_ENV' "restore drill must not require raw production secret blobs"
+
+require_file "${WORKFLOW}" "manual restore drill workflow"
+require_pattern "${WORKFLOW}" 'workflow_dispatch:' "restore drill workflow must be manually runnable"
+require_pattern "${WORKFLOW}" 'restore_external_backup_drill\.sh' "restore drill workflow must run the drill script"
+require_pattern "${WORKFLOW}" 'actions/upload-artifact@' "restore drill workflow must upload drill artifacts"
+require_pattern "${WORKFLOW}" 'BACKUP_SET_ID' "restore drill workflow must accept or derive a backup set id"
+require_pattern "${WORKFLOW}" 'unsafe backup_set_id' "restore drill workflow must validate backup set input before SSH"
+require_pattern "${WORKFLOW}" 'RPO_TARGET_MINUTES.*=\~' "restore drill workflow must validate RPO target input before SSH"
+require_pattern "${WORKFLOW}" 'RTO_TARGET_MINUTES.*=\~' "restore drill workflow must validate RTO target input before SSH"
+
+require_pattern "${LAUNCH_GATE_DOC}" 'Backup/restore drill' "launch gate must keep backup/restore evidence gate"
+require_pattern "${LAUNCH_GATE_DOC}" 'restore_external_backup_drill\.sh' "launch gate must link restore drill script"
+require_pattern "${LAUNCH_GATE_DOC}" 'RPO/RTO' "launch gate must document restore drill RPO/RTO evidence"
+
+TMP_BASE="${TMPDIR:-/tmp}"
+TMP_BASE="${TMP_BASE%/}"
+WORK_DIR="$(mktemp -d "${TMP_BASE}/aquila-restore-drill-test.XXXXXX")"
+trap 'rm -rf "${WORK_DIR}"' EXIT
+
+BACKUP_ROOT="${WORK_DIR}/storage/backups"
+BACKUP_SET_ID="20260101-010203"
+POSTGRES_BACKUP_DIR="${BACKUP_ROOT}/postgres/daily/${BACKUP_SET_ID}"
+MINIO_BACKUP_DIR="${BACKUP_ROOT}/minio/daily/${BACKUP_SET_ID}"
+MINIO_SOURCE_DIR="${WORK_DIR}/minio-source"
+FAKE_BIN_DIR="${WORK_DIR}/bin"
+ARTIFACT_DIR="${WORK_DIR}/artifacts"
+mkdir -p "${POSTGRES_BACKUP_DIR}" "${MINIO_BACKUP_DIR}" "${MINIO_SOURCE_DIR}/post-img/posts/2026/01" "${FAKE_BIN_DIR}"
+
+cat > "${POSTGRES_BACKUP_DIR}/dump.sql" <<'SQL'
+CREATE TABLE flyway_schema_history(success boolean);
+CREATE TABLE post(id bigint, listed boolean, created_at timestamptz);
+SQL
+printf 'fixture-object\n' > "${MINIO_SOURCE_DIR}/post-img/posts/2026/01/sample.txt"
+tar -C "${MINIO_SOURCE_DIR}" -czf "${MINIO_BACKUP_DIR}/minio-data.tar.gz" .
+
+cat > "${FAKE_BIN_DIR}/docker" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "${1:-}" in
+  run)
+    echo "fake-postgres-container"
+    ;;
+  rm)
+    exit 0
+    ;;
+  exec)
+    shift
+    if [[ "${1:-}" == "-i" ]]; then
+      shift
+      container="$1"
+      shift
+      if [[ "${1:-}" == "psql" ]]; then
+        cat >/dev/null
+        exit 0
+      fi
+      echo "unexpected docker exec -i command for ${container}: $*" >&2
+      exit 1
+    fi
+
+    container="$1"
+    shift
+    case "${1:-}" in
+      pg_isready)
+        exit 0
+        ;;
+      psql)
+        sql=""
+        while [[ "$#" -gt 0 ]]; do
+          if [[ "$1" == "-c" ]]; then
+            shift
+            sql="${1:-}"
+            break
+          fi
+          shift
+        done
+        case "${sql}" in
+          *flyway_schema_history*)
+            echo "32"
+            ;;
+          *"COUNT(*) FROM post"*)
+            echo "7"
+            ;;
+          *"SELECT id FROM post"*)
+            echo "42"
+            ;;
+          *)
+            echo "unexpected SQL: ${sql}" >&2
+            exit 1
+            ;;
+        esac
+        ;;
+      *)
+        echo "unexpected docker exec command for ${container}: $*" >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  *)
+    echo "unexpected docker command: $*" >&2
+    exit 1
+    ;;
+esac
+SH
+chmod +x "${FAKE_BIN_DIR}/docker"
+
+PATH="${FAKE_BIN_DIR}:${PATH}" \
+AQUILA_EXTERNAL_STORAGE_ROOT="${WORK_DIR}/storage" \
+AQUILA_BACKUP_ROOT="${BACKUP_ROOT}" \
+AQUILA_RESTORE_DRILL_BACKUP_SET_ID="${BACKUP_SET_ID}" \
+AQUILA_RESTORE_DRILL_ARTIFACT_DIR="${ARTIFACT_DIR}" \
+AQUILA_RESTORE_DRILL_TIMESTAMP="20260102-030405" \
+  "${DRILL_SCRIPT}" >/dev/null
+
+grep -q '^STATUS=success$' "${ARTIFACT_DIR}/restore-drill-result.env"
+grep -q '^BACKUP_SET_ID=20260101-010203$' "${ARTIFACT_DIR}/restore-drill-result.env"
+grep -q '^FLYWAY_SUCCESS_COUNT=32$' "${ARTIFACT_DIR}/restore-drill-result.env"
+grep -q '^POST_ROW_COUNT=7$' "${ARTIFACT_DIR}/restore-drill-result.env"
+grep -q '^LATEST_PUBLIC_POST_ID=42$' "${ARTIFACT_DIR}/restore-drill-result.env"
+grep -q 'post-img/posts/2026/01/sample.txt' "${ARTIFACT_DIR}/restore-drill-result.env"
+grep -q 'Backup Restore Drill Summary' "${ARTIFACT_DIR}/restore-drill-summary.md"
+grep -q 'post-img/posts/2026/01/sample.txt' "${ARTIFACT_DIR}/minio-checksums.sha256"
+
+echo "[external-backup-restore-drill] ok"

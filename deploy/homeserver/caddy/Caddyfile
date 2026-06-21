@@ -112,6 +112,10 @@ http://{$API_DOMAIN} {
 
   @notificationSse path /member/api/v1/notifications/stream
   log_skip @notificationSse
+
+  @signupVerifySensitive path /member/api/v1/signup/email/verify
+  log_skip @signupVerifySensitive
+
   handle @notificationSse {
     header {
       Cache-Control "no-cache, no-transform"

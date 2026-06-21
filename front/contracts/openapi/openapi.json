@@ -957,6 +957,50 @@
         } ]
       }
     },
+    "/member/api/v1/signup/email/verify" : {
+      "get" : {
+        "tags" : [ "api-v-1-signup-verification-controller" ],
+        "operationId" : "verifyLegacyGet",
+        "responses" : {
+          "410" : {
+            "description" : "Gone",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataVoid"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "api-v-1-signup-verification-controller" ],
+        "operationId" : "verify",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SignupEmailVerifyRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataSignupEmailVerifyResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/member/api/v1/signup/email/start" : {
       "post" : {
         "tags" : [ "api-v-1-signup-verification-controller" ],
@@ -2306,32 +2350,6 @@
         "security" : [ {
           "bearerAuth" : [ ]
         } ]
-      }
-    },
-    "/member/api/v1/signup/email/verify" : {
-      "get" : {
-        "tags" : [ "api-v-1-signup-verification-controller" ],
-        "operationId" : "verify",
-        "parameters" : [ {
-          "name" : "token",
-          "in" : "query",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/RsDataSignupEmailVerifyResult"
-                }
-              }
-            }
-          }
-        }
       }
     },
     "/member/api/v1/notifications" : {
@@ -3968,6 +3986,42 @@
           }
         }
       },
+      "SignupEmailVerifyRequest" : {
+        "type" : "object",
+        "properties" : {
+          "token" : {
+            "type" : "string",
+            "minLength" : 1
+          }
+        },
+        "required" : [ "token" ]
+      },
+      "RsDataSignupEmailVerifyResult" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/SignupEmailVerifyResult"
+          }
+        }
+      },
+      "SignupEmailVerifyResult" : {
+        "type" : "object",
+        "properties" : {
+          "email" : {
+            "type" : "string"
+          },
+          "expiresAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
       "SignupEmailStartRequest" : {
         "type" : "object",
         "properties" : {
@@ -4018,10 +4072,6 @@
       "SignupCompleteRequest" : {
         "type" : "object",
         "properties" : {
-          "signupToken" : {
-            "type" : "string",
-            "minLength" : 1
-          },
           "username" : {
             "type" : "string",
             "pattern" : "^$"
@@ -4070,7 +4120,7 @@
             "type" : "boolean"
           }
         },
-        "required" : [ "age14OrOlder", "analyticsConsent", "nickname", "overseasTransferAcknowledged", "password", "privacyContentSha256", "privacyVersion", "requiredPrivacyConfirmed", "signupToken", "termsContentSha256", "termsVersion" ]
+        "required" : [ "age14OrOlder", "analyticsConsent", "nickname", "overseasTransferAcknowledged", "password", "privacyContentSha256", "privacyVersion", "requiredPrivacyConfirmed", "termsContentSha256", "termsVersion" ]
       },
       "MemberDto" : {
         "type" : "object",
@@ -5273,35 +5323,6 @@
           },
           "firstPage" : {
             "$ref" : "#/components/schemas/PageDtoPostDto"
-          }
-        }
-      },
-      "RsDataSignupEmailVerifyResult" : {
-        "type" : "object",
-        "properties" : {
-          "resultCode" : {
-            "type" : "string"
-          },
-          "msg" : {
-            "type" : "string"
-          },
-          "data" : {
-            "$ref" : "#/components/schemas/SignupEmailVerifyResult"
-          }
-        }
-      },
-      "SignupEmailVerifyResult" : {
-        "type" : "object",
-        "properties" : {
-          "email" : {
-            "type" : "string"
-          },
-          "signupToken" : {
-            "type" : "string"
-          },
-          "expiresAt" : {
-            "type" : "string",
-            "format" : "date-time"
           }
         }
       },

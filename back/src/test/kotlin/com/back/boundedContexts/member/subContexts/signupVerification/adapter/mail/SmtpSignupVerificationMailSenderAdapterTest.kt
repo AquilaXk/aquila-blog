@@ -28,7 +28,7 @@ class SmtpSignupVerificationMailSenderAdapterTest {
                 mailSubject = "Aquila 블로그 회원가입",
             )
 
-        val verificationLink = "https://www.aquilaxk.site/signup/verify?token=test-token"
+        val verificationLink = "https://www.aquilaxk.site/signup/verify#token=test-token"
         adapter.send(
             toEmail = "tester@example.com",
             verificationLink = verificationLink,
@@ -64,7 +64,7 @@ class SmtpSignupVerificationMailSenderAdapterTest {
 
         adapter.send(
             toEmail = "tester@example.com",
-            verificationLink = "https://www.aquilaxk.site/signup/verify?token=test-token",
+            verificationLink = "https://www.aquilaxk.site/signup/verify#token=test-token",
             expiresAt = Instant.parse("2026-03-12T10:05:13Z"),
         )
 

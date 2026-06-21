@@ -70,7 +70,6 @@ const buildContentSecurityPolicy = () => {
     "https://lh5.googleusercontent.com",
     "https://s3-us-west-2.amazonaws.com",
     "https://avatars.githubusercontent.com",
-    "https://placehold.co",
     ...googleConnectSources,
     ...runtimeOrigins,
   ]
@@ -164,10 +163,6 @@ module.exports = {
       {
         protocol: "https",
         hostname: "avatars.githubusercontent.com",
-      },
-      {
-        protocol: "https",
-        hostname: "placehold.co",
       },
     ],
   },

@@ -69,7 +69,7 @@ jobs:
           frontend=false
           while IFS= read -r file; do
             case "${file}" in
-              front/*|.github/workflows/frontend-ci.yml|.github/workflows/ci.yml|.github/workflows/reusable-frontend-verify.yml)
+              front/*|legal/policies/*|.github/workflows/frontend-ci.yml|.github/workflows/ci.yml|.github/workflows/reusable-frontend-verify.yml)
                 frontend=true
                 break
                 ;;

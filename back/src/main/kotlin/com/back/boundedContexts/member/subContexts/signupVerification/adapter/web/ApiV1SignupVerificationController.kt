@@ -1,6 +1,7 @@
 package com.back.boundedContexts.member.subContexts.signupVerification.adapter.web
 
 import com.back.boundedContexts.member.dto.MemberDto
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.LegalAcceptanceCommand
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.MemberSignupVerificationService
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupEmailStartResult
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupEmailVerifyResult
@@ -62,7 +63,39 @@ class ApiV1SignupVerificationController(
         @field:NotBlank
         @field:Size(min = 2, max = 30)
         val nickname: String,
-    )
+        @field:NotBlank
+        @field:Size(max = 32)
+        val termsVersion: String,
+        @field:NotBlank
+        @field:Size(min = 64, max = 64)
+        val termsContentSha256: String,
+        @field:NotBlank
+        @field:Size(max = 32)
+        val privacyVersion: String,
+        @field:NotBlank
+        @field:Size(min = 64, max = 64)
+        val privacyContentSha256: String,
+        @field:Schema(requiredMode = Schema.RequiredMode.REQUIRED)
+        val age14OrOlder: Boolean,
+        @field:Schema(requiredMode = Schema.RequiredMode.REQUIRED)
+        val requiredPrivacyConfirmed: Boolean,
+        @field:Schema(requiredMode = Schema.RequiredMode.REQUIRED)
+        val analyticsConsent: Boolean,
+        @field:Schema(requiredMode = Schema.RequiredMode.REQUIRED)
+        val overseasTransferAcknowledged: Boolean,
+    ) {
+        fun toLegalAcceptanceCommand(): LegalAcceptanceCommand =
+            LegalAcceptanceCommand(
+                termsVersion = termsVersion,
+                termsContentSha256 = termsContentSha256,
+                privacyVersion = privacyVersion,
+                privacyContentSha256 = privacyContentSha256,
+                age14OrOlder = age14OrOlder,
+                requiredPrivacyConfirmed = requiredPrivacyConfirmed,
+                analyticsConsent = analyticsConsent,
+                overseasTransferAcknowledged = overseasTransferAcknowledged,
+            )
+    }
 
     @PostMapping("/email/start")
     @ResponseStatus(HttpStatus.ACCEPTED)
@@ -115,6 +148,7 @@ class ApiV1SignupVerificationController(
                 signupToken = reqBody.signupToken,
                 password = reqBody.password,
                 nickname = reqBody.nickname,
+                legalAcceptance = reqBody.toLegalAcceptanceCommand(),
             )
 
         return RsData(

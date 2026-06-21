@@ -1736,6 +1736,14 @@ export interface components {
             username?: string;
             password: string;
             nickname: string;
+            termsVersion: string;
+            termsContentSha256: string;
+            privacyVersion: string;
+            privacyContentSha256: string;
+            age14OrOlder: boolean;
+            requiredPrivacyConfirmed: boolean;
+            analyticsConsent: boolean;
+            overseasTransferAcknowledged: boolean;
         };
         MemberDto: {
             isAdmin?: boolean;

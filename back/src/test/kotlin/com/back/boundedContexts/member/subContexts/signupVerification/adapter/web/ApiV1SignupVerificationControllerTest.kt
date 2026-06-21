@@ -19,8 +19,8 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.handler
 
 @org.junit.jupiter.api.DisplayName("ApiV1SignupVerificationController 테스트")
 class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
-    private val legalPolicyVersion = "2026-06-21"
     private val activeLegalDocuments = ActiveLegalDocumentMetadata.current()
+    private val legalPolicyVersion = activeLegalDocuments.signupPolicyVersion
 
     @Autowired
     private lateinit var memberApplicationService: MemberApplicationService

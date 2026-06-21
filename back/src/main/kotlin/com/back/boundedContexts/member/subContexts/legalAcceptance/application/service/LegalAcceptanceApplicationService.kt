@@ -28,11 +28,8 @@ class LegalAcceptanceApplicationService(
     fun validateStoredSignupPolicyVersion(legalPolicyVersion: String?) {
         val storedVersion = legalPolicyVersion?.trim().orEmpty()
         val active = currentDocuments()
-        val matchesActiveDocuments =
-            storedVersion == active.terms.version &&
-                storedVersion == active.privacy.version
 
-        if (!matchesActiveDocuments) {
+        if (storedVersion != active.signupPolicyVersion) {
             throw AppException("409-4", "약관 또는 개인정보처리방침이 변경되었습니다. 최신 내용을 확인하고 다시 동의해주세요.")
         }
     }

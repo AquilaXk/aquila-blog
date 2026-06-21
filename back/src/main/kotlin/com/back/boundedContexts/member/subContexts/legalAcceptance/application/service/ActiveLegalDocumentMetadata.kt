@@ -6,12 +6,14 @@ data class LegalDocumentMetadata(
 )
 
 data class ActiveLegalDocumentMetadata(
+    val signupPolicyVersion: String,
     val terms: LegalDocumentMetadata,
     val privacy: LegalDocumentMetadata,
 ) {
     companion object {
         fun current(): ActiveLegalDocumentMetadata =
             ActiveLegalDocumentMetadata(
+                signupPolicyVersion = "2026-06-21",
                 terms =
                     LegalDocumentMetadata(
                         version = "2026-06-21",

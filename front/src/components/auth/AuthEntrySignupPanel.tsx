@@ -1,4 +1,5 @@
 import { FormEvent, useMemo, useState } from "react"
+import Link from "next/link"
 import AppIcon from "src/components/icons/AppIcon"
 import SocialAuthButtons, { SocialAuthItem } from "src/components/auth/SocialAuthButtons"
 import { formatSignupCooldown } from "src/hooks/useSignupMailCooldown"
@@ -8,9 +9,13 @@ type Props = {
   signupError: string
   signupLoading: boolean
   signupCooldownSeconds: number
+  termsAccepted: boolean
+  privacyAccepted: boolean
   socialItems: SocialAuthItem[]
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onSignupEmailChange: (value: string) => void
+  onTermsAcceptedChange: (value: boolean) => void
+  onPrivacyAcceptedChange: (value: boolean) => void
   onSwitchToLogin: () => void
 }
 
@@ -19,13 +24,24 @@ const AuthEntrySignupPanel = ({
   signupError,
   signupLoading,
   signupCooldownSeconds,
+  termsAccepted,
+  privacyAccepted,
   socialItems,
   onSubmit,
   onSignupEmailChange,
+  onTermsAcceptedChange,
+  onPrivacyAcceptedChange,
   onSwitchToLogin,
 }: Props) => {
   const [emailFocused, setEmailFocused] = useState(false)
   const emailActive = useMemo(() => emailFocused || signupEmail.length > 0, [emailFocused, signupEmail])
+  const signupConsentAccepted = termsAccepted && privacyAccepted
+  const consentedSocialItems = useMemo(() => {
+    return socialItems.map((item) => ({
+      ...item,
+      disabled: item.disabled || !signupConsentAccepted,
+    }))
+  }, [signupConsentAccepted, socialItems])
 
   return (
     <>
@@ -62,7 +78,35 @@ const AuthEntrySignupPanel = ({
 
         {signupError && <p className="inlineError">{signupError}</p>}
 
-        <button type="submit" className="primaryAction" disabled={signupLoading || signupCooldownSeconds > 0}>
+        <div className="requiredConsentBox" aria-label="회원가입 필수 동의">
+          <p>회원가입을 진행하려면 필수 약관과 개인정보처리방침에 동의해야 합니다.</p>
+          <label>
+            <input
+              type="checkbox"
+              checked={termsAccepted}
+              onChange={(event) => onTermsAcceptedChange(event.target.checked)}
+            />
+            <span>
+              <Link href="/terms">이용약관</Link>에 동의합니다.
+            </span>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={privacyAccepted}
+              onChange={(event) => onPrivacyAcceptedChange(event.target.checked)}
+            />
+            <span>
+              <Link href="/privacy">개인정보처리방침</Link>에 동의합니다.
+            </span>
+          </label>
+        </div>
+
+        <button
+          type="submit"
+          className="primaryAction"
+          disabled={signupLoading || signupCooldownSeconds > 0 || !signupConsentAccepted}
+        >
           {signupLoading
             ? "메일 보내는 중..."
             : signupCooldownSeconds > 0
@@ -74,7 +118,7 @@ const AuthEntrySignupPanel = ({
       <div className="socialSection">
         <span>소셜 계정으로 계속하기</span>
         <div className="socialButtonRow">
-          <SocialAuthButtons size="compact" items={socialItems} />
+          <SocialAuthButtons size="compact" items={consentedSocialItems} />
         </div>
       </div>
 

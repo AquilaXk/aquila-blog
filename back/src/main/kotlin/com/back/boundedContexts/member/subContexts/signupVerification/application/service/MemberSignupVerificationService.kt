@@ -53,10 +53,19 @@ class MemberSignupVerificationService(
     @Transactional
     fun start(
         email: String,
+        termsAccepted: Boolean = false,
+        privacyAccepted: Boolean = false,
+        legalPolicyVersion: String? = null,
         nextPath: String? = null,
         clientIp: String = "unknown",
     ): SignupEmailStartResult {
         val normalizedEmail = normalizeEmail(email)
+        val normalizedLegalPolicyVersion =
+            normalizeLegalPolicyVersion(
+                termsAccepted = termsAccepted,
+                privacyAccepted = privacyAccepted,
+                legalPolicyVersion = legalPolicyVersion,
+            )
         val canStart = signupStartRateLimitService.checkAndConsume(normalizedEmail, clientIp)
         if (!canStart) {
             throw AppException("429-2", "이메일 인증 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.")
@@ -78,6 +87,9 @@ class MemberSignupVerificationService(
                     email = normalizedEmail,
                     emailVerificationToken = UUID.randomUUID().toString(),
                     emailVerificationExpiresAt = verificationExpiresAt,
+                    termsAcceptedAt = now,
+                    privacyAcceptedAt = now,
+                    legalPolicyVersion = normalizedLegalPolicyVersion,
                 ),
             )
 
@@ -214,4 +226,23 @@ class MemberSignupVerificationService(
                     throw AppException("400-2", "이메일 형식을 확인해주세요.")
                 }
             }
+
+    private fun normalizeLegalPolicyVersion(
+        termsAccepted: Boolean,
+        privacyAccepted: Boolean,
+        legalPolicyVersion: String?,
+    ): String {
+        if (!termsAccepted || !privacyAccepted) {
+            throw AppException("400-2", "회원가입을 진행하려면 이용약관과 개인정보처리방침에 모두 동의해야 합니다.")
+        }
+
+        return legalPolicyVersion
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.also { version ->
+                if (version.length > 32) {
+                    throw AppException("400-2", "약관 동의 버전이 올바르지 않습니다.")
+                }
+            } ?: throw AppException("400-2", "약관 동의 버전이 올바르지 않습니다.")
+    }
 }

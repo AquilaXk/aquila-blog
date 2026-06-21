@@ -69,7 +69,7 @@ test("operations alert email channel is wired through env contract, compose, and
   assert.match(alertmanager, /smtp_smarthost:\s+\$\{ALERTMANAGER_SMTP_SMARTHOST\}/)
   assert.match(alertmanager, /smtp_from:\s+\$\{ALERTMANAGER_SMTP_FROM\}/)
   assert.match(alertmanager, /smtp_auth_username:\s+\$\{ALERTMANAGER_SMTP_AUTH_USERNAME\}/)
-  assert.match(alertmanager, /smtp_auth_password:\s+\$\{ALERTMANAGER_SMTP_AUTH_PASSWORD\}/)
+  assert.match(alertmanager, /smtp_auth_password:\s+\|-\n\s+\$\{ALERTMANAGER_SMTP_AUTH_PASSWORD\}/)
   assert.match(alertmanager, /smtp_require_tls:\s+\$\{ALERTMANAGER_SMTP_REQUIRE_TLS\}/)
   assert.match(alertmanager, /email_configs:/)
   assert.match(alertmanager, /to:\s+\$\{OPERATIONS_ALERT_EMAIL_TO\}/)

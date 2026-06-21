@@ -2,7 +2,8 @@ global:
   smtp_smarthost: ${ALERTMANAGER_SMTP_SMARTHOST}
   smtp_from: ${ALERTMANAGER_SMTP_FROM}
   smtp_auth_username: ${ALERTMANAGER_SMTP_AUTH_USERNAME}
-  smtp_auth_password: ${ALERTMANAGER_SMTP_AUTH_PASSWORD}
+  smtp_auth_password: |-
+    ${ALERTMANAGER_SMTP_AUTH_PASSWORD}
   smtp_require_tls: ${ALERTMANAGER_SMTP_REQUIRE_TLS}
 
 route:

@@ -18,10 +18,29 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
 import java.util.Optional
 
 @DisplayName("OAuthSignupApplicationService 테스트")
 class OAuthSignupApplicationServiceTest {
+    @Test
+    fun `pending 시작은 OAuth redirect 예외 rollback과 분리되는 새 transaction에서 실행한다`() {
+        val method =
+            OAuthSignupApplicationService::class.java.getMethod(
+                "startPending",
+                String::class.java,
+                String::class.java,
+                String::class.java,
+                String::class.java,
+            )
+
+        val transactional = method.getAnnotation(Transactional::class.java)
+
+        assertThat(transactional.propagation)
+            .isEqualTo(Propagation.REQUIRES_NEW)
+    }
+
     @Test
     fun `신규 OAuth pending은 원문 token과 provider subject 대신 hash를 저장한다`() {
         val fixture = Fixture()

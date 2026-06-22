@@ -65,8 +65,8 @@ class ApiV1SignupVerificationController(
         @field:NotBlank
         @field:Size(min = 8, max = 64)
         @field:Pattern(
-            regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{8,64}$",
-            message = "비밀번호는 8~64자이며 영문 대문자/소문자/숫자/특수문자를 모두 포함해야 합니다.",
+            regexp = "^(?=\\S{8,64}$)(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9\\s]).*$",
+            message = "비밀번호는 공백 없이 8~64자이며 영문 대문자/소문자/숫자/특수문자를 모두 포함해야 합니다.",
         )
         val password: String,
         @field:NotBlank

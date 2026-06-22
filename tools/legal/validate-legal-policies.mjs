@@ -5,6 +5,11 @@ import path from "node:path"
 
 const root = process.cwd()
 const policiesDir = path.join(root, "legal/policies")
+const frontendLegalMetadataPath = path.join(root, "front/src/apis/backend/legal.ts")
+const backendLegalMetadataPath = path.join(
+  root,
+  "back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance/application/service/ActiveLegalDocumentMetadata.kt",
+)
 const requiredFields = [
   "documentType",
   "locale",
@@ -125,6 +130,83 @@ const readRawPolicy = (fileName) => {
   return fs.readFileSync(filePath, "utf8")
 }
 
+const extractQuotedValue = (source, pattern, label) => {
+  const match = source.match(pattern)
+  if (!match) {
+    fail(`missing ${label}`)
+    return ""
+  }
+  return match[1]
+}
+
+const readFrontendActiveMetadata = () => {
+  if (!fs.existsSync(frontendLegalMetadataPath)) {
+    fail(`missing frontend legal metadata ${frontendLegalMetadataPath}`)
+    return null
+  }
+
+  const source = fs.readFileSync(frontendLegalMetadataPath, "utf8")
+  return {
+    signupPolicyVersion: extractQuotedValue(
+      source,
+      /signupPolicyVersion:\s*"([^"]+)"/,
+      "frontend signupPolicyVersion",
+    ),
+    terms: {
+      version: extractQuotedValue(source, /terms:\s*\{[\s\S]*?version:\s*"([^"]+)"/, "frontend terms version"),
+      contentSha256: extractQuotedValue(
+        source,
+        /terms:\s*\{[\s\S]*?contentSha256:\s*"([^"]+)"/,
+        "frontend terms contentSha256",
+      ),
+    },
+    privacy: {
+      version: extractQuotedValue(source, /privacy:\s*\{[\s\S]*?version:\s*"([^"]+)"/, "frontend privacy version"),
+      contentSha256: extractQuotedValue(
+        source,
+        /privacy:\s*\{[\s\S]*?contentSha256:\s*"([^"]+)"/,
+        "frontend privacy contentSha256",
+      ),
+    },
+  }
+}
+
+const readBackendActiveMetadata = () => {
+  if (!fs.existsSync(backendLegalMetadataPath)) {
+    fail(`missing backend legal metadata ${backendLegalMetadataPath}`)
+    return null
+  }
+
+  const source = fs.readFileSync(backendLegalMetadataPath, "utf8")
+  return {
+    signupPolicyVersion: extractQuotedValue(
+      source,
+      /signupPolicyVersion\s*=\s*"([^"]+)"/,
+      "backend signupPolicyVersion",
+    ),
+    terms: {
+      version: extractQuotedValue(source, /terms\s*=\s*[\s\S]*?version\s*=\s*"([^"]+)"/, "backend terms version"),
+      contentSha256: extractQuotedValue(
+        source,
+        /terms\s*=\s*[\s\S]*?contentSha256\s*=\s*"([^"]+)"/,
+        "backend terms contentSha256",
+      ),
+    },
+    privacy: {
+      version: extractQuotedValue(
+        source,
+        /privacy\s*=\s*[\s\S]*?version\s*=\s*"([^"]+)"/,
+        "backend privacy version",
+      ),
+      contentSha256: extractQuotedValue(
+        source,
+        /privacy\s*=\s*[\s\S]*?contentSha256\s*=\s*"([^"]+)"/,
+        "backend privacy contentSha256",
+      ),
+    },
+  }
+}
+
 const assertRequiredShape = (fileName, policy) => {
   for (const field of requiredFields) {
     if (!(field in policy)) fail(`${fileName} is missing ${field}`)
@@ -166,6 +248,26 @@ const assertTextIncludes = (fileName, policy, tokens) => {
   }
 }
 
+const assertActiveMetadataMatchesPolicies = (sourceName, metadata, termsPolicy, privacyPolicy) => {
+  if (!metadata || !termsPolicy || !privacyPolicy) return
+
+  if (metadata.signupPolicyVersion !== termsPolicy.version) {
+    fail(`${sourceName} signupPolicyVersion mismatch: expected ${termsPolicy.version}`)
+  }
+  if (metadata.terms.version !== termsPolicy.version) {
+    fail(`${sourceName} terms version mismatch: expected ${termsPolicy.version}`)
+  }
+  if (metadata.terms.contentSha256 !== termsPolicy.contentSha256) {
+    fail(`${sourceName} terms contentSha256 mismatch: expected ${termsPolicy.contentSha256}`)
+  }
+  if (metadata.privacy.version !== privacyPolicy.version) {
+    fail(`${sourceName} privacy version mismatch: expected ${privacyPolicy.version}`)
+  }
+  if (metadata.privacy.contentSha256 !== privacyPolicy.contentSha256) {
+    fail(`${sourceName} privacy contentSha256 mismatch: expected ${privacyPolicy.contentSha256}`)
+  }
+}
+
 const policies = new Map()
 const policyFiles = getPolicyFiles()
 for (const fileName of policyFiles) {
@@ -191,6 +293,9 @@ if (terms) {
   assertSectionTitles("terms.ko-KR.v1.0.0.yaml", terms, requiredTermsSections)
   assertTextIncludes("terms.ko-KR.v1.0.0.yaml", terms, ["고의 또는 중대한 과실", "부당하게 불리한 전속 관할"])
 }
+
+assertActiveMetadataMatchesPolicies("frontend active legal metadata", readFrontendActiveMetadata(), terms, privacy)
+assertActiveMetadataMatchesPolicies("backend active legal metadata", readBackendActiveMetadata(), terms, privacy)
 
 const cookies = policies.get("COOKIE_POLICY")
 if (cookies) {

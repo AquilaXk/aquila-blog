@@ -5,6 +5,7 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
 import com.back.boundedContexts.member.subContexts.legalAcceptance.application.port.output.MemberLegalAcceptanceRepositoryPort
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.ActiveLegalDocumentMetadata
 import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.LegalAcceptanceApplicationService
 import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.LegalAcceptanceCommand
 import com.back.boundedContexts.member.subContexts.legalAcceptance.model.MemberLegalAcceptance
@@ -402,16 +403,18 @@ class OAuthSignupApplicationServiceTest {
 }
 
 private fun validLegalAcceptance(): LegalAcceptanceCommand =
-    LegalAcceptanceCommand(
-        termsVersion = "2026-06-21",
-        termsContentSha256 = "3b71950e518b16b9a24cb4f9873633720ca7a9fce145a7bb9787c48845b56c5b",
-        privacyVersion = "2026-06-21",
-        privacyContentSha256 = "cedbfea674a9e2aca9e29bf6a01492a1e3fa640b0ff53d47f969d64c057b980f",
-        age14OrOlder = true,
-        requiredPrivacyConfirmed = true,
-        analyticsConsent = false,
-        overseasTransferAcknowledged = true,
-    )
+    ActiveLegalDocumentMetadata.current().let { active ->
+        LegalAcceptanceCommand(
+            termsVersion = active.terms.version,
+            termsContentSha256 = active.terms.contentSha256,
+            privacyVersion = active.privacy.version,
+            privacyContentSha256 = active.privacy.contentSha256,
+            age14OrOlder = true,
+            requiredPrivacyConfirmed = true,
+            analyticsConsent = false,
+            overseasTransferAcknowledged = true,
+        )
+    }
 
 private class RecordingPendingOAuthSignupRepository : PendingOAuthSignupRepositoryPort {
     val saved = mutableListOf<PendingOAuthSignup>()

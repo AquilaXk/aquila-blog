@@ -449,6 +449,7 @@ class PostApplicationService(
                 uid = UUID.randomUUID(),
                 aggregateId = post.id,
                 beforeTags = beforeTags,
+                afterTags = emptyList(),
             ),
         )
     }

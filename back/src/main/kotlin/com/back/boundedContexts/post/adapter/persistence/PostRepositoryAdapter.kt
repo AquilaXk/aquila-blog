@@ -32,10 +32,7 @@ class PostRepositoryAdapter(
 
     override fun findById(id: Long): Optional<Post> = postRepository.findById(id)
 
-    override fun findByAuthorIdOrderByIdAsc(authorId: Long): List<Post> =
-        postDeletedQueryRepository
-            .findActiveIdsByAuthorId(authorId)
-            .mapNotNull { postRepository.findById(it).orElse(null) }
+    override fun findByAuthorIdOrderByIdAsc(authorId: Long): List<Post> = postRepository.findActiveByAuthorIdOrderByIdAsc(authorId)
 
     override fun findFirstByOrderByIdDesc(): Post? = postRepository.findFirstByOrderByIdDesc()
 

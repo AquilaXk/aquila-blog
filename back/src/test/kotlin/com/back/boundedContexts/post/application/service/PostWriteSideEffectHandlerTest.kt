@@ -319,6 +319,7 @@ class PostWriteSideEffectHandlerTest {
                 uid = UUID.randomUUID(),
                 aggregateId = 33L,
                 beforeTags = listOf("privacy"),
+                afterTags = emptyList(),
             )
         val payload =
             postWriteSideEffectPayload(

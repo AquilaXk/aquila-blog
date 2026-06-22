@@ -512,7 +512,7 @@ class PostTagRecommendationService(
 
     private fun normalizeTag(raw: String): String {
         val cleaned =
-            raw
+            sanitizePromptText(raw)
                 .replace("\r", " ")
                 .replace("\n", " ")
                 .replace("#", "")
@@ -521,6 +521,8 @@ class PostTagRecommendationService(
                 .replace(WHITESPACE_REGEX, " ")
                 .trim()
         if (cleaned.isBlank()) return ""
+        if (cleaned.contains("[redacted-", ignoreCase = true)) return ""
+        if (cleaned.contains("=")) return ""
         if (cleaned.length < 2) return ""
         if (cleaned.length > normalizedMaxTagLength) return ""
         if (!cleaned.any { it.isLetterOrDigit() }) return ""

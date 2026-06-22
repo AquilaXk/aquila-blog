@@ -97,7 +97,7 @@ class PostTagRecommendationServiceResilienceTest {
                     ---
                     장애 대응 본문에는 token=super-secret-content-token 값과 Authorization: Bearer bearer-secret-token 예시가 있다.
                     """.trimIndent(),
-                existingTags = listOf("password=existing-secret-token", "Kotlin"),
+                existingTags = listOf("password=existing-secret-token", "token=shortsecret", "Kotlin"),
                 maxTags = 8,
             )
 
@@ -112,12 +112,14 @@ class PostTagRecommendationServiceResilienceTest {
             .doesNotContain("super-secret-content-token")
             .doesNotContain("bearer-secret-token")
             .doesNotContain("existing-secret-token")
+            .doesNotContain("shortsecret")
         assertThat(cachedPayload)
             .doesNotContain("super-secret-title-token")
             .doesNotContain("frontmatter-secret-token")
             .doesNotContain("super-secret-content-token")
             .doesNotContain("bearer-secret-token")
             .doesNotContain("existing-secret-token")
+            .doesNotContain("shortsecret")
     }
 
     @Test

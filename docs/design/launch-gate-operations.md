@@ -5,7 +5,7 @@
 ## Scope
 
 - Issue: #958
-- 적용 대상: release readiness, GitHub Actions CI/CD, 홈서버 배포, QA, monitoring, legal/public pages
+- 적용 대상: release readiness, GitHub Actions CI/CD, 홈서버 배포, QA, monitoring, legal/public pages, privacy launch gate
 - 기본 흐름: issue 확인 -> work branch -> PR -> CI/security -> code review -> merge -> post-merge CI/CD 확인
 
 ## Gate Decision
@@ -36,6 +36,7 @@
 | Live E2E account cleanup | live E2E run artifact 또는 cleanup log | 테스트 계정/데이터 cleanup 결과 확인 | live E2E가 계정/데이터를 남김 |
 | Mobile/keyboard/200% zoom QA | `docs/design/release-ui-qa-matrix.md` run table과 artifact | matrix pass run 연결 | 핵심 viewport 또는 keyboard/zoom failure |
 | Privacy/terms/contact | public URL 또는 PR evidence | privacy, terms, contact 접근 가능 | 법적/연락처 페이지 미공개 |
+| Privacy launch gate | `docs/design/privacy-launch-gate-checklist.md`의 matrix와 evidence | 개인정보 필수 출시 전 완료 항목 closed, 공개 정책 gate pass, 법무/운영 owner evidence 존재 | 개인정보 launch-blocking issue open, policy-code drift, 법무/운영 owner evidence 없음 |
 
 ## Evidence Collection
 
@@ -47,10 +48,12 @@ Merge 전 PR 본문 또는 review note에는 다음 항목을 남긴다.
 - post-merge 확인: main CI run, deploy workflow run, live verification run 또는 skip 사유
 - QA evidence: release UI QA matrix 문서 또는 Actions artifact
 - legal evidence: privacy, terms, contact URL 확인 결과
+- privacy evidence: `docs/design/privacy-launch-gate-checklist.md`의 go/no-go 판정과 launch-blocking issue 상태
 
 ## Current Baseline Links
 
 - Release UI QA matrix: `docs/design/release-ui-qa-matrix.md`
+- Privacy launch gate checklist: `docs/design/privacy-launch-gate-checklist.md`
 - CI workflow: `.github/workflows/ci.yml`
 - Security workflow: `.github/workflows/security.yml`
 - Deploy workflow: `.github/workflows/deploy.yml`

@@ -38,4 +38,19 @@ class ApiV1SignupVerificationFeatureFreezeTest : BaseSignupDisabledControllerInt
         assertThat(memberSignupVerificationRepository.findTopByEmailOrderByCreatedAtDesc("freeze@example.com"))
             .isNull()
     }
+
+    @Test
+    fun `email signup flag가 꺼져 있으면 토큰 검증과 세션 쿠키 발급도 차단한다`() {
+        val response =
+            mvc
+                .post("/member/api/v1/signup/email/verify") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content = """{"token": "freeze-token"}"""
+                }.andExpect {
+                    status { isServiceUnavailable() }
+                }.andReturn()
+                .response
+
+        assertThat(response.getHeader("Set-Cookie")).isNull()
+    }
 }

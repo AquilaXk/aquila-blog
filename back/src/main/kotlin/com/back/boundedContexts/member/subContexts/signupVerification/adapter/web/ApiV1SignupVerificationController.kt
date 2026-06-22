@@ -148,6 +148,8 @@ class ApiV1SignupVerificationController(
     fun verify(
         @RequestBody @Valid reqBody: SignupEmailVerifyRequest,
     ): RsData<SignupEmailVerifyResult> {
+        requireSignupEnabled()
+
         val result = memberSignupVerificationService.verifyEmail(reqBody.token)
         rq.setCookie(
             SIGNUP_SESSION_COOKIE_NAME,

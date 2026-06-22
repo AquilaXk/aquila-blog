@@ -72,7 +72,7 @@ Merge 전 PR 본문 또는 review note에는 다음 항목을 남긴다.
 - 통과 증거: workflow artifact `backup-restore-drill` 안의 `restore-drill-summary.md`, `restore-drill-result.env`, `restore-privacy-gate.txt`, `minio-checksums.sha256`.
 - DB 검증: 임시 PostgreSQL container에 `dump.sql.enc`를 복호화해 복원하고 `flyway_schema_history`, `post` row count, 최신 public post(`listed = true`) 조회를 확인한다.
 - Object 검증: `minio-data.tar.gz.enc`를 복호화한 archive에서 운영 object 샘플 1개 이상을 선택해 `sha256sum`을 기록한다.
-- Privacy gate: `AQUILA_RESTORE_PRIVACY_GATE_SCRIPT`가 tombstone replay 또는 동등한 삭제 검증을 수행하고 traffic open 전 pass evidence를 남긴다.
+- Privacy gate: `AQUILA_RESTORE_PRIVACY_GATE_SCRIPT`가 tombstone replay 또는 동등한 삭제 검증을 수행하고 traffic open 전 `status=pass` evidence를 남긴다.
 - Key 분리: backup encryption key file은 기본 `${AQUILA_EXTERNAL_STORAGE_ROOT}/backup-encryption.key`이며 `AQUILA_BACKUP_ROOT` 내부에 있으면 gate 실패다.
 - RPO/RTO 기준: 기본 RPO target은 1440분, 기본 RTO target은 120분이며, 실제 `RPO_ACTUAL_MINUTES`와 `RTO_ACTUAL_SECONDS`를 artifact에 남긴다.
 

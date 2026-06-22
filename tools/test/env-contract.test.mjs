@@ -616,6 +616,18 @@ test("home-server runtime contract covers external storage backup keys", async (
   assert(keys.has("AQUILA_RESTORE_PRIVACY_GATE_SCRIPT"))
 })
 
+test("restore privacy gate script is required for home-server source env", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const result = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text: baseHomeServerEnv.replace(/^AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=.*\n/m, ""),
+  })
+
+  assert.equal(result.ok, false)
+  assert(result.errors.some((error) => error.key === "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT"))
+})
+
 test("external storage values reject unsafe paths and non-positive retention", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const text = baseHomeServerEnv

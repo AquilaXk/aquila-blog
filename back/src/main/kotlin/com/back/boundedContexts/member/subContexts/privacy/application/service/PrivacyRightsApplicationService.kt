@@ -144,6 +144,7 @@ class PrivacyRightsApplicationService(
         val deletedAt = Instant.now()
         val originalMemberLoginId = member.username
         val profileImageUrlsForCleanup = collectProfileImageUrlsForCleanup(member)
+        val revokedSessionCount = memberSessionUseCase.revokeAllActiveSessionsForMember(member.id)
         postUseCase.deleteContentByAuthorForAccountDeletion(member)
         oauthSignupUseCase.releaseConsumedSignupForMemberLoginId(originalMemberLoginId)
         member.softDelete(deletedAt)
@@ -156,7 +157,7 @@ class PrivacyRightsApplicationService(
                 deletedAt = deletedAt,
             ),
         )
-        val revokedSessionCount = memberSessionUseCase.revokeAllActiveSessionsForMember(member.id)
+        memberAccountDeletionRepository.flush()
 
         return AccountDeletionResult(
             memberId = member.id,

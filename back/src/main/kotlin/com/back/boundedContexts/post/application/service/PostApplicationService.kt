@@ -393,6 +393,16 @@ class PostApplicationService(
     }
 
     @Transactional
+    fun deleteContentByAuthorForAccountDeletion(author: Member) {
+        postCommentApplicationService.deleteCommentsByAuthorForAccountDeletion(author)
+        val posts = postRepository.findByAuthorIdOrderByIdAsc(author.id)
+
+        posts.forEach { post ->
+            delete(post, author)
+        }
+    }
+
+    @Transactional
     fun writeComment(
         author: Member,
         post: Post,

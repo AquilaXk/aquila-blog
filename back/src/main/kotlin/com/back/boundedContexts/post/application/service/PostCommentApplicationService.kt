@@ -121,6 +121,40 @@ class PostCommentApplicationService(
         postRepository.flush()
     }
 
+    @Transactional
+    fun deleteCommentsByAuthorForAccountDeletion(author: Member): Int {
+        val rootComments =
+            findAccountDeletionRootComments(
+                postCommentRepository.findActiveByAuthorIdOrderByPostIdCreatedAtIdAsc(author.id),
+            )
+
+        rootComments.forEach { comment ->
+            deleteComment(comment.post, comment, author)
+        }
+
+        return rootComments.size
+    }
+
+    private fun findAccountDeletionRootComments(comments: List<PostComment>): List<PostComment> {
+        val authoredCommentIds = comments.mapTo(mutableSetOf(), PostComment::id)
+
+        return comments.filterNot { comment ->
+            hasAuthoredAncestor(comment, authoredCommentIds)
+        }
+    }
+
+    private fun hasAuthoredAncestor(
+        comment: PostComment,
+        authoredCommentIds: Set<Long>,
+    ): Boolean {
+        var parentComment = comment.parentComment
+        while (parentComment != null) {
+            if (parentComment.id in authoredCommentIds) return true
+            parentComment = parentComment.parentComment
+        }
+        return false
+    }
+
     fun getComments(
         post: Post,
         limit: Int,

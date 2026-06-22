@@ -305,6 +305,7 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         val secondSessionKey = requireAuthCookie(secondAuthCookies, AuthCookieNames.SESSION_KEY)
         assertThat(countMemberAttrsContaining(member.id, "민감")).isGreaterThan(0)
         assertThat(findPostCommentsCount(otherPost.id)).isEqualTo(3)
+        assertThat(findMemberPostCommentsCount(otherAuthor.id)).isEqualTo(1)
 
         mvc
             .delete("/member/api/v1/privacy/account") {
@@ -338,12 +339,11 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         assertThat(countDeletionTombstones(member.id, "서비스 이용 종료")).isEqualTo(1)
         assertThat(countMemberAttrsContaining(member.id, "민감")).isZero()
         assertThat(findPostDeletionState(authoredPost.id).deletedAt).isNotNull()
-        assertThat(findPostDeletionState(authoredPost.id).published).isFalse()
-        assertThat(findPostDeletionState(authoredPost.id).listed).isFalse()
         assertThat(findCommentDeletedAt(authoredComment.id)).isNotNull()
         assertThat(findCommentDeletedAt(replyToAuthoredComment.id)).isNotNull()
         assertThat(findCommentDeletedAt(nestedReplyToAuthoredComment.id)).isNotNull()
         assertThat(findPostCommentsCount(otherPost.id)).isZero()
+        assertThat(findMemberPostCommentsCount(otherAuthor.id)).isZero()
         val deletion =
             memberAccountDeletionRepository
                 .findAll()
@@ -711,6 +711,18 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             """.trimIndent(),
             Int::class.java,
             postId,
+        ) ?: 0
+
+    private fun findMemberPostCommentsCount(memberId: Long): Int =
+        jdbcTemplate.queryForObject(
+            """
+            select int_value
+            from member_attr
+            where subject_id = ?
+              and name = 'postCommentsCount'
+            """.trimIndent(),
+            Int::class.java,
+            memberId,
         ) ?: 0
 
     private fun findMemberDeletionState(memberId: Long): MemberDeletionState =

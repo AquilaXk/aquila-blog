@@ -19,12 +19,12 @@ interface PostCommentRepositoryPort {
         rootCommentId: Long,
     ): List<PostComment>
 
+    fun findActiveByAuthorIdOrderByPostIdCreatedAtIdAsc(authorId: Long): List<PostComment>
+
     fun findByPostAndId(
         post: Post,
         id: Long,
     ): PostComment?
 
     fun findById(id: Long): Optional<PostComment>
-
-    fun softDeleteByAuthorId(authorId: Long): Int
 }

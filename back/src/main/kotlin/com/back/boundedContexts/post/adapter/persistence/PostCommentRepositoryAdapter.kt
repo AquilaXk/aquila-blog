@@ -30,12 +30,13 @@ class PostCommentRepositoryAdapter(
         rootCommentId: Long,
     ): List<PostComment> = postCommentRepository.findActiveSubtreeByPostAndRootCommentId(post, rootCommentId)
 
+    override fun findActiveByAuthorIdOrderByPostIdCreatedAtIdAsc(authorId: Long): List<PostComment> =
+        postCommentRepository.findActiveByAuthorIdOrderByPostIdCreatedAtIdAsc(authorId)
+
     override fun findByPostAndId(
         post: Post,
         id: Long,
     ): PostComment? = postCommentRepository.findByPostAndId(post, id)
 
     override fun findById(id: Long): Optional<PostComment> = postCommentRepository.findById(id)
-
-    override fun softDeleteByAuthorId(authorId: Long): Int = postCommentRepository.softDeleteByAuthorId(authorId)
 }

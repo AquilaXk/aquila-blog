@@ -9,5 +9,5 @@ interface PostCommentRepositoryCustom {
         rootCommentId: Long,
     ): List<PostComment>
 
-    fun softDeleteByAuthorId(authorId: Long): Int
+    fun findActiveByAuthorIdOrderByPostIdCreatedAtIdAsc(authorId: Long): List<PostComment>
 }

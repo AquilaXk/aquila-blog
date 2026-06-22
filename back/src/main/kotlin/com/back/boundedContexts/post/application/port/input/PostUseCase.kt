@@ -50,6 +50,8 @@ interface PostUseCase {
         actor: Member,
     )
 
+    fun deleteContentByAuthorForAccountDeletion(author: Member)
+
     fun writeComment(
         author: Member,
         post: Post,

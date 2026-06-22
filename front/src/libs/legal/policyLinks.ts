@@ -1,6 +1,6 @@
 import type { LegalPolicyKind } from "./policyTypes"
 
-export const ACTIVE_LEGAL_POLICY_VERSION = "1.0.0"
+export const ACTIVE_LEGAL_POLICY_VERSION = "1.0.1"
 
 export const legalPolicyKindLabels: Record<LegalPolicyKind, string> = {
   privacy: "개인정보처리방침",

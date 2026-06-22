@@ -1,12 +1,12 @@
 export const ACTIVE_LEGAL_DOCUMENTS = {
-  signupPolicyVersion: "1.0.0",
+  signupPolicyVersion: "1.0.1",
   terms: {
-    version: "1.0.0",
-    contentSha256: "12edf927d89a4fe9c629fefec4f01ebc0a98b3898d9f7cd96db424df5b94986b",
+    version: "1.0.1",
+    contentSha256: "379676461cc354709b0648030a758a6fe6b36c60272775465a56cdb5dba9b87e",
   },
   privacy: {
-    version: "1.0.0",
-    contentSha256: "901852cce1aa6db1a0d46a2e35caf36060475c613fd4cd9c0870904411cd2cd7",
+    version: "1.0.1",
+    contentSha256: "c91dbe9a587040d66502d502cd259749e6d391ef8d52ddecf3a8a5b4732c122a",
   },
 } as const
 

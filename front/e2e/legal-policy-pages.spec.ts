@@ -53,7 +53,7 @@ test.describe("legal policy public pages", () => {
     await expectNoInternalPolicyTodos(page)
     await expect(page.getByRole("link", { name: "개인정보처리방침" })).toHaveAttribute("href", "/privacy")
 
-    await page.goto("/legal/cookies/1.0.0", { waitUntil: "domcontentloaded" })
+    await page.goto("/legal/cookies/1.0.1", { waitUntil: "domcontentloaded" })
 
     await expect(page).toHaveTitle(/쿠키 정책/)
     await expect(page.getByRole("heading", { name: "쿠키 정책", exact: true })).toBeVisible()

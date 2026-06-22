@@ -12,11 +12,16 @@ import type { LegalPolicyDocument, LegalPolicyKind, LegalPolicyPageProps, LegalP
 
 const policyDir = path.resolve(process.cwd(), "..", "legal", "policies")
 
-const policyFileNames: Record<LegalPolicyKind, string> = {
-  privacy: "privacy.ko-KR.v1.0.0.yaml",
-  terms: "terms.ko-KR.v1.0.0.yaml",
-  cookies: "cookies.ko-KR.v1.0.0.yaml",
+const policyVersions = ["1.0.0", ACTIVE_LEGAL_POLICY_VERSION] as const
+
+const policyFilePrefixes: Record<LegalPolicyKind, string> = {
+  privacy: "privacy",
+  terms: "terms",
+  cookies: "cookies",
 }
+
+const getPolicyFileName = (kind: LegalPolicyKind, version: string) =>
+  `${policyFilePrefixes[kind]}.ko-KR.v${version}.yaml`
 
 const stablePolicyHash = (policy: LegalPolicyDocument) => {
   const normalized = { ...policy, contentSha256: "" }
@@ -25,9 +30,11 @@ const stablePolicyHash = (policy: LegalPolicyDocument) => {
 
 const readPolicy = (kind: LegalPolicyKind, version = ACTIVE_LEGAL_POLICY_VERSION): LegalPolicyDocument => {
   if (version !== ACTIVE_LEGAL_POLICY_VERSION) {
-    throw new Error(`Unsupported legal policy version: ${kind}@${version}`)
+    if (!(policyVersions as readonly string[]).includes(version)) {
+      throw new Error(`Unsupported legal policy version: ${kind}@${version}`)
+    }
   }
-  const source = fs.readFileSync(path.join(policyDir, policyFileNames[kind]), "utf8")
+  const source = fs.readFileSync(path.join(policyDir, getPolicyFileName(kind, version)), "utf8")
   const policy = JSON.parse(source) as LegalPolicyDocument
   const actualHash = stablePolicyHash(policy)
   if (policy.contentSha256 !== actualHash) {
@@ -61,23 +68,27 @@ export const getLegalPolicyPageStaticProps = (kind: LegalPolicyKind, version = A
 }
 
 export const getLegalPolicyVersionStaticPaths = (kind: LegalPolicyKind) => ({
-  paths: [{ params: { version: ACTIVE_LEGAL_POLICY_VERSION } }],
+  paths: policyVersions.map((version) => ({ params: { version } })),
   fallback: false,
 })
 
 export const getLegalPolicyHistoryStaticProps = () => {
-  const policies: LegalPolicySummary[] = (Object.keys(policyFileNames) as LegalPolicyKind[]).map((kind) => {
-    const policy = readPolicy(kind)
-    return {
-      kind,
-      title: legalPolicyKindLabels[kind],
-      version: policy.version,
-      effectiveAt: policy.effectiveAt,
-      contentSha256: policy.contentSha256,
-      href: toLegalPolicyVersionPath(kind, policy.version),
-      currentHref: legalPolicyCurrentPaths[kind],
-      changeSummary: policy.changeSummary,
-    }
-  })
+  const policies: LegalPolicySummary[] = (Object.keys(policyFilePrefixes) as LegalPolicyKind[])
+    .flatMap((kind) =>
+      policyVersions.map((version) => {
+        const policy = readPolicy(kind, version)
+        return {
+          kind,
+          title: legalPolicyKindLabels[kind],
+          version: policy.version,
+          effectiveAt: policy.effectiveAt,
+          contentSha256: policy.contentSha256,
+          href: toLegalPolicyVersionPath(kind, policy.version),
+          currentHref: legalPolicyCurrentPaths[kind],
+          changeSummary: policy.changeSummary,
+        }
+      }),
+    )
+    .sort((a, b) => b.effectiveAt.localeCompare(a.effectiveAt) || b.version.localeCompare(a.version))
   return { props: { policies } }
 }

@@ -27,7 +27,8 @@ is_allowed_markdown() {
     perf/k6/README.md|\
     tools/templates/agent-plan.compact.md|\
     tools/templates/bug-report.compact.md|\
-    docs/design/*.md)
+    docs/design/*.md|\
+    docs/legal/*.md)
       return 0
       ;;
   esac

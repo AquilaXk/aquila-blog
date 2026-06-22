@@ -106,9 +106,10 @@ class PostCommentRepositoryImpl : PostCommentRepositoryCustom {
 
         val commentsById = findActiveCommentsByIdsInOrder(rows.map(AccountDeletionTargetRow::commentId)).associateBy(PostComment::id)
 
-        return rows.map { row ->
+        return rows.mapNotNull { row ->
+            val comment = commentsById[row.commentId] ?: return@mapNotNull null
             PostCommentAccountDeletionTargetResult(
-                comment = commentsById.getValue(row.commentId),
+                comment = comment,
                 postId = row.postId,
                 postDeleted = row.postDeleted,
             )

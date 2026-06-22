@@ -14,6 +14,7 @@ import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.domain.PostComment
 import com.back.boundedContexts.post.domain.PostLike
 import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
+import com.back.boundedContexts.post.event.PostCommentDeletedEvent
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
 import org.assertj.core.api.Assertions.assertThat
@@ -24,6 +25,7 @@ import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
 import org.mockito.Mockito.any
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.mockingDetails
 import org.mockito.Mockito.never
 import java.time.Instant
 import java.util.Optional
@@ -331,6 +333,10 @@ class PostApplicationUseCaseCollaboratorTest {
         // then
         assertThat(comment.deletedAt).isNotNull()
         then(postRepository).should().flush()
+        val enqueueInvocation = mockingDetails(sideEffectQueue).invocations.single { it.method.name == "enqueue" }
+        assertThat(enqueueInvocation.arguments[0]).isEqualTo(post.id)
+        assertThat(enqueueInvocation.arguments[1]).isEqualTo(PostInteractionRecommendationSideEffect.REFRESH)
+        assertThat(enqueueInvocation.arguments[2]).isInstanceOf(PostCommentDeletedEvent::class.java)
     }
 
     private fun testMember(id: Long = 1): Member =

@@ -161,8 +161,6 @@ is_safe_absolute_path() {
 }
 
 resolve_restore_privacy_contract() {
-  local backup_root_for_exclusion
-
   if [[ -z "${BACKUP_ENCRYPTION_KEY_FILE}" ]]; then
     BACKUP_ENCRYPTION_KEY_FILE="$(read_key_from_file AQUILA_BACKUP_ENCRYPTION_KEY_FILE "${DEPLOY_DIR}/.env.prod.compose")"
   fi
@@ -179,7 +177,19 @@ resolve_restore_privacy_contract() {
     RESTORE_PRIVACY_GATE_SCRIPT="$(read_key_from_file AQUILA_RESTORE_PRIVACY_GATE_SCRIPT "${DEPLOY_DIR}/.env.prod")"
   fi
 
-  backup_root_for_exclusion="${BACKUP_ROOT%/}"
+  [[ -n "${RESTORE_PRIVACY_GATE_SCRIPT}" ]] || fail "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT is required before traffic open"
+  is_safe_absolute_path "${RESTORE_PRIVACY_GATE_SCRIPT}" || fail "unsafe AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=${RESTORE_PRIVACY_GATE_SCRIPT}"
+  local backup_root_for_exclusion="${BACKUP_ROOT%/}"
+  case "${RESTORE_PRIVACY_GATE_SCRIPT}" in
+    "${backup_root_for_exclusion}"|"${backup_root_for_exclusion}"/*)
+      fail "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT must be outside AQUILA_BACKUP_ROOT"
+      ;;
+  esac
+  [[ -x "${RESTORE_PRIVACY_GATE_SCRIPT}" ]] || fail "restore privacy gate script is not executable: ${RESTORE_PRIVACY_GATE_SCRIPT}"
+}
+
+validate_backup_encryption_key_file() {
+  local backup_root_for_exclusion="${BACKUP_ROOT%/}"
   is_safe_absolute_path "${BACKUP_ENCRYPTION_KEY_FILE}" || fail "unsafe AQUILA_BACKUP_ENCRYPTION_KEY_FILE=${BACKUP_ENCRYPTION_KEY_FILE}"
   case "${BACKUP_ENCRYPTION_KEY_FILE}" in
     "${backup_root_for_exclusion}"|"${backup_root_for_exclusion}"/*)
@@ -188,15 +198,17 @@ resolve_restore_privacy_contract() {
   esac
   [[ -f "${BACKUP_ENCRYPTION_KEY_FILE}" ]] || fail "backup encryption key file is not a regular file: ${BACKUP_ENCRYPTION_KEY_FILE}"
   [[ -r "${BACKUP_ENCRYPTION_KEY_FILE}" ]] || fail "backup encryption key file is not readable: ${BACKUP_ENCRYPTION_KEY_FILE}"
+}
 
-  [[ -n "${RESTORE_PRIVACY_GATE_SCRIPT}" ]] || fail "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT is required before traffic open"
-  is_safe_absolute_path "${RESTORE_PRIVACY_GATE_SCRIPT}" || fail "unsafe AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=${RESTORE_PRIVACY_GATE_SCRIPT}"
-  case "${RESTORE_PRIVACY_GATE_SCRIPT}" in
-    "${backup_root_for_exclusion}"|"${backup_root_for_exclusion}"/*)
-      fail "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT must be outside AQUILA_BACKUP_ROOT"
-      ;;
-  esac
-  [[ -x "${RESTORE_PRIVACY_GATE_SCRIPT}" ]] || fail "restore privacy gate script is not executable: ${RESTORE_PRIVACY_GATE_SCRIPT}"
+resolve_backup_encryption_key_for_backup() {
+  local metadata_file="${BACKUP_ROOT}/postgres/${BACKUP_CLASS}/${BACKUP_SET_ID}/metadata.env"
+  local metadata_key_file
+
+  metadata_key_file="$(read_key_from_file encryption_key_file "${metadata_file}")"
+  if [[ -n "${metadata_key_file}" ]]; then
+    BACKUP_ENCRYPTION_KEY_FILE="${metadata_key_file}"
+  fi
+  validate_backup_encryption_key_file
 }
 
 decrypt_file_to_path() {
@@ -371,6 +383,7 @@ if [[ -z "${BACKUP_SET_ID}" ]]; then
   BACKUP_SET_ID="$(latest_backup_set_id)"
 fi
 is_safe_backup_id "${BACKUP_SET_ID}" || fail "unsafe backup set id: ${BACKUP_SET_ID}"
+resolve_backup_encryption_key_for_backup
 
 POSTGRES_ENCRYPTED_DUMP_FILE="${BACKUP_ROOT}/postgres/${BACKUP_CLASS}/${BACKUP_SET_ID}/dump.sql.enc"
 MINIO_ENCRYPTED_ARCHIVE_FILE="${BACKUP_ROOT}/minio/${BACKUP_CLASS}/${BACKUP_SET_ID}/minio-data.tar.gz.enc"

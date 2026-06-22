@@ -20,7 +20,7 @@ const LegalPolicyHistoryPage = ({ policies }: LegalPolicyHistoryProps) => (
     />
     <main className="historyShell">
       <header>
-        <p className="eyebrow">Legal history</p>
+        <p className="eyebrow">정책 원문 검증</p>
         <h1>정책 변경 이력</h1>
         <p>현재 시행 중인 법적 정책 문서와 immutable content hash를 확인합니다.</p>
       </header>
@@ -36,7 +36,7 @@ const LegalPolicyHistoryPage = ({ policies }: LegalPolicyHistoryProps) => (
               ))}
             </div>
             <nav aria-label={`${policy.title} 링크`}>
-              <Link href={policy.currentHref}>현재 문서</Link>
+              {policy.currentHref !== policy.href ? <Link href={policy.currentHref}>현재 문서</Link> : null}
               <Link href={policy.href}>버전 문서</Link>
             </nav>
           </article>

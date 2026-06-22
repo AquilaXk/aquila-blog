@@ -44,4 +44,7 @@ export type LegalPolicyPageProps = {
   versionHref: string
   historyHref: string
   downloadText: string
+  downloadFilename: string
+  downloadHashBasis: string
+  isCurrentRoute: boolean
 }

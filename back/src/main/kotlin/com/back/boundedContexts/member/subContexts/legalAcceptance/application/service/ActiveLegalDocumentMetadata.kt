@@ -13,15 +13,15 @@ data class ActiveLegalDocumentMetadata(
     companion object {
         fun current(): ActiveLegalDocumentMetadata =
             ActiveLegalDocumentMetadata(
-                signupPolicyVersion = "2026-06-21",
+                signupPolicyVersion = "1.0.0",
                 terms =
                     LegalDocumentMetadata(
-                        version = "2026-06-21",
-                        contentSha256 = "3b71950e518b16b9a24cb4f9873633720ca7a9fce145a7bb9787c48845b56c5b",
+                        version = "1.0.0",
+                        contentSha256 = "5c0d0013897baf15be95d57adc15acfbd10d2772ab48572b07a75f8e2c9360a8",
                     ),
                 privacy =
                     LegalDocumentMetadata(
-                        version = "2026-06-21",
+                        version = "1.0.0",
                         contentSha256 = "cedbfea674a9e2aca9e29bf6a01492a1e3fa640b0ff53d47f969d64c057b980f",
                     ),
             )

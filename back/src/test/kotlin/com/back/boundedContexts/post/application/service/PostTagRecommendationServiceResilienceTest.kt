@@ -208,6 +208,35 @@ class PostTagRecommendationServiceResilienceTest {
     }
 
     @Test
+    @DisplayName("Gemini 태그 추천은 일반 API code 필드를 민감 OAuth code로 오탐하지 않는다")
+    fun `gemini tag recommendation allows ordinary api code field`() {
+        val capturedBodies = mutableListOf<String>()
+        val server = startGeminiServer(capturedBodies)
+        val service =
+            createService(
+                aiEnabled = true,
+                redisPort = fakeRedisPort(),
+                geminiApiKey = "test-key",
+                geminiBaseUrl = "http://127.0.0.1:${server.address.port}/v1beta",
+            )
+
+        try {
+            val result =
+                service.recommend(
+                    title = "API error response",
+                    content = """응답 예시는 {"code":"USER_NOT_FOUND"} 형태입니다.""",
+                    existingTags = emptyList(),
+                    maxTags = 5,
+                )
+
+            assertThat(result.provider).isEqualTo("gemini")
+            assertThat(capturedBodies).hasSize(1)
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    @Test
     @DisplayName("Gemini 태그 추천은 민감정보 없는 명시 요청만 외부 호출한다")
     fun `gemini tag recommendation allows explicit safe request`() {
         val redisPort = capturingRedisPort()

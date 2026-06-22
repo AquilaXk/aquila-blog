@@ -784,7 +784,7 @@ class PostTagRecommendationService(
         private val KOREAN_RRN_LIKE_REGEX = Regex("(?<!\\d)\\d{6}[-\\s]?\\d{7}(?!\\d)")
         private val OAUTH_CODE_REGEX =
             Regex(
-                """["']?\b(?:oauth[_-]?code|authorization[_-]?code|code)\b["']?\s*[:=]\s*(?:"[^"]{8,}"|'[^']{8,}'|[^"'\s,)&}]{8,})""",
+                """["']?\b(?:oauth[_-]?code|authorization[_-]?code|auth[_-]?code)\b["']?\s*[:=]\s*(?:"[^"]{8,}"|'[^']{8,}'|[^"'\s,)&}]{8,})|\b(?:oauth|authorization|auth|callback)\b[\s\S]{0,80}["']?\bcode\b["']?\s*[:=]\s*(?:"[^"]{8,}"|'[^']{8,}'|[^"'\s,)&}]{8,})""",
                 RegexOption.IGNORE_CASE,
             )
         private val SENSITIVE_EXTERNAL_PROCESSING_REGEXES =

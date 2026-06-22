@@ -13,6 +13,8 @@ const formatDate = (value: string) => value.slice(0, 10)
 const LegalPolicyPage = ({ policy, kind, currentHref, versionHref, historyHref, downloadText }: LegalPolicyPageProps) => {
   const downloadHref = `data:text/plain;charset=utf-8,${encodeURIComponent(downloadText)}`
   const title = legalPolicyKindLabels[kind]
+  const reviewRequired = policy.reviewRequired ?? []
+  const shouldShowReviewRequired = policy.status !== "effective" && reviewRequired.length > 0
   return (
     <StyledWrapper>
       <div className="legalShell">
@@ -65,10 +67,10 @@ const LegalPolicyPage = ({ policy, kind, currentHref, versionHref, historyHref, 
               ))}
             </section>
           ))}
-          {policy.reviewRequired && policy.reviewRequired.length > 0 ? (
+          {shouldShowReviewRequired ? (
             <section>
               <h2>법무·운영 확인 필요 항목</h2>
-              {policy.reviewRequired.map((item, index) => (
+              {reviewRequired.map((item, index) => (
                 <p key={`review-${index}`}>{item}</p>
               ))}
             </section>

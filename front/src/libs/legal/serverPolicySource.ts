@@ -12,11 +12,22 @@ import type { LegalPolicyDocument, LegalPolicyKind, LegalPolicyPageProps, LegalP
 
 const policyDir = path.resolve(process.cwd(), "..", "legal", "policies")
 
-const policyFileNames: Record<LegalPolicyKind, string> = {
-  privacy: "privacy.ko-KR.v1.0.0.yaml",
-  terms: "terms.ko-KR.v1.0.0.yaml",
-  cookies: "cookies.ko-KR.v1.0.0.yaml",
+const publicPolicyVersions = [ACTIVE_LEGAL_POLICY_VERSION] as const
+
+const policyFilePrefixes: Record<LegalPolicyKind, string> = {
+  privacy: "privacy",
+  terms: "terms",
+  cookies: "cookies",
 }
+
+const policyDocumentTypes: Record<LegalPolicyKind, LegalPolicyDocument["documentType"]> = {
+  privacy: "PRIVACY_POLICY",
+  terms: "TERMS_OF_SERVICE",
+  cookies: "COOKIE_POLICY",
+}
+
+const getPolicyFileName = (kind: LegalPolicyKind, version: string) =>
+  `${policyFilePrefixes[kind]}.ko-KR.v${version}.yaml`
 
 const stablePolicyHash = (policy: LegalPolicyDocument) => {
   const normalized = { ...policy, contentSha256: "" }
@@ -25,10 +36,18 @@ const stablePolicyHash = (policy: LegalPolicyDocument) => {
 
 const readPolicy = (kind: LegalPolicyKind, version = ACTIVE_LEGAL_POLICY_VERSION): LegalPolicyDocument => {
   if (version !== ACTIVE_LEGAL_POLICY_VERSION) {
-    throw new Error(`Unsupported legal policy version: ${kind}@${version}`)
+    if (!(publicPolicyVersions as readonly string[]).includes(version)) {
+      throw new Error(`Unsupported legal policy version: ${kind}@${version}`)
+    }
   }
-  const source = fs.readFileSync(path.join(policyDir, policyFileNames[kind]), "utf8")
+  const source = fs.readFileSync(path.join(policyDir, getPolicyFileName(kind, version)), "utf8")
   const policy = JSON.parse(source) as LegalPolicyDocument
+  if (policy.documentType !== policyDocumentTypes[kind]) {
+    throw new Error(`Legal policy documentType mismatch: ${kind}@${version}`)
+  }
+  if (policy.version !== version) {
+    throw new Error(`Legal policy version mismatch: ${kind}@${version}`)
+  }
   const actualHash = stablePolicyHash(policy)
   if (policy.contentSha256 !== actualHash) {
     throw new Error(`Legal policy hash mismatch: ${kind}@${policy.version}`)
@@ -61,23 +80,37 @@ export const getLegalPolicyPageStaticProps = (kind: LegalPolicyKind, version = A
 }
 
 export const getLegalPolicyVersionStaticPaths = (kind: LegalPolicyKind) => ({
-  paths: [{ params: { version: ACTIVE_LEGAL_POLICY_VERSION } }],
+  paths: publicPolicyVersions.map((version) => ({ params: { version } })),
   fallback: false,
 })
 
+const compareSemver = (left: string, right: string) => {
+  const leftParts = left.split(".").map((value) => Number.parseInt(value, 10))
+  const rightParts = right.split(".").map((value) => Number.parseInt(value, 10))
+  for (let index = 0; index < Math.max(leftParts.length, rightParts.length); index += 1) {
+    const diff = (leftParts[index] || 0) - (rightParts[index] || 0)
+    if (diff !== 0) return diff
+  }
+  return 0
+}
+
 export const getLegalPolicyHistoryStaticProps = () => {
-  const policies: LegalPolicySummary[] = (Object.keys(policyFileNames) as LegalPolicyKind[]).map((kind) => {
-    const policy = readPolicy(kind)
-    return {
-      kind,
-      title: legalPolicyKindLabels[kind],
-      version: policy.version,
-      effectiveAt: policy.effectiveAt,
-      contentSha256: policy.contentSha256,
-      href: toLegalPolicyVersionPath(kind, policy.version),
-      currentHref: legalPolicyCurrentPaths[kind],
-      changeSummary: policy.changeSummary,
-    }
-  })
+  const policies: LegalPolicySummary[] = (Object.keys(policyFilePrefixes) as LegalPolicyKind[])
+    .flatMap((kind) =>
+      publicPolicyVersions.map((version) => {
+        const policy = readPolicy(kind, version)
+        return {
+          kind,
+          title: legalPolicyKindLabels[kind],
+          version: policy.version,
+          effectiveAt: policy.effectiveAt,
+          contentSha256: policy.contentSha256,
+          href: toLegalPolicyVersionPath(kind, policy.version),
+          currentHref: legalPolicyCurrentPaths[kind],
+          changeSummary: policy.changeSummary,
+        }
+      }),
+    )
+    .sort((a, b) => b.effectiveAt.localeCompare(a.effectiveAt) || compareSemver(a.version, b.version))
   return { props: { policies } }
 }

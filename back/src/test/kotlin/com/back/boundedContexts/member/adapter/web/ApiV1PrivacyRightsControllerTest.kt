@@ -384,6 +384,40 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
     }
 
     @Test
+    fun `계정 탈퇴는 비밀번호 계정에서 비밀번호가 없으면 세션과 회원 상태를 유지한다`() {
+        val member =
+            memberFacade.join(
+                username = "account-delete-missing-password-user",
+                password = "Abcd1234!",
+                nickname = "탈퇴비밀번호누락",
+                profileImgUrl = null,
+                email = "account-delete-missing-password-user@example.com",
+            )
+        val authCookies = loginAuthCookies(member.email!!)
+        val sessionKey = requireAuthCookie(authCookies, AuthCookieNames.SESSION_KEY)
+
+        mvc
+            .delete("/member/api/v1/privacy/account") {
+                authCookies.forEach { cookie(it) }
+                header("X-Aquila-CSRF", "1")
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                        "reason": "서비스 이용 종료"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isBadRequest() }
+                jsonPath("$.resultCode") { value("400-1") }
+                jsonPath("$.msg") { value("비밀번호를 입력해주세요.") }
+            }
+
+        assertThat(memberFacade.findByEmail("account-delete-missing-password-user@example.com")).isNotNull()
+        assertThat(memberSessionRepository.findBySessionKey(sessionKey.value)?.revokedAt).isNull()
+    }
+
+    @Test
     fun `계정 탈퇴는 기존 탈퇴 tombstone 이 있으면 409를 반환한다`() {
         val member =
             memberFacade.join(

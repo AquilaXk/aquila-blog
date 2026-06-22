@@ -444,3 +444,18 @@ test("피드 empty state는 keyboard와 screen-reader landmark gate를 통과한
   await expectPrimaryLandmarks(page)
   await expectLaunchGateAccessibility(page, testInfo, "feed-empty-state")
 })
+
+test("법적 정책 route는 200% zoom과 dark mode에서 심각도 높은 접근성 위반이 없다", async ({
+  page,
+}, testInfo) => {
+  await setSchemeCookie(page, "dark")
+
+  await page.goto("/privacy")
+  await expect(page.locator("html")).toHaveAttribute("data-aquila-scheme", "dark")
+  await expect(page.getByRole("heading", { name: "개인정보처리방침" })).toBeVisible()
+  await expect(page.getByText(/contentSha256/)).toBeVisible()
+  await page.addStyleTag({ content: "html { zoom: 2; }" })
+  await expectNoHorizontalOverflow(page)
+  await expectPrimaryLandmarks(page)
+  await expectLaunchGateAccessibility(page, testInfo, "legal-privacy-dark-zoom")
+})

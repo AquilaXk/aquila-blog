@@ -111,7 +111,7 @@ export const completeLegalReconsentIfRequired = async (
     .poll(() => page.url(), { timeout: timeoutMs })
     .not.toContain("reconsent=required")
 
-  if (!page.url().includes(fallbackPath)) {
+  if (!isCurrentFallbackPath(page.url(), fallbackPath)) {
     await page.goto(fallbackPath)
   }
 

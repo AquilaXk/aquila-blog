@@ -10,6 +10,7 @@ import com.back.boundedContexts.post.domain.postMixin.COMMENTS_COUNT
 import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
 import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
 import com.back.boundedContexts.post.dto.PostDto
+import com.back.boundedContexts.post.event.PostAccountDeletionDeletedEvent
 import com.back.boundedContexts.post.event.PostDeletedEvent
 import com.back.global.event.application.EventPublisher
 import com.back.global.storage.application.UploadedFileRetentionService
@@ -307,6 +308,56 @@ class PostWriteSideEffectHandlerTest {
 
         // then
         assertThat(applicationEventPublisher.publishedEvent).isInstanceOf(PostDeletedEvent::class.java)
+    }
+
+    @Test
+    @DisplayName("계정 탈퇴 삭제 domain event payload는 durable task 처리 중 복원해 발행한다")
+    fun publishAccountDeletionDeletedDomainEventFromTaskPayload() {
+        // given
+        val domainEvent =
+            PostAccountDeletionDeletedEvent(
+                uid = UUID.randomUUID(),
+                aggregateId = 33L,
+                beforeTags = listOf("privacy"),
+            )
+        val payload =
+            postWriteSideEffectPayload(
+                postId = 33L,
+                recommendationAction = PostRecommendationSideEffect.EVICT,
+                domainEventType = PostAccountDeletionDeletedEvent::class.java.name,
+                domainEventJson = ObjectMapper().writeValueAsString(domainEvent),
+            )
+
+        // when
+        val applicationEventPublisher = RecordingApplicationEventPublisher()
+        newHandler(EventPublisher(applicationEventPublisher)).handle(payload)
+
+        // then
+        val publishedEvent = applicationEventPublisher.publishedEvent
+        assertThat(publishedEvent).isInstanceOf(PostAccountDeletionDeletedEvent::class.java)
+        assertThat((publishedEvent as PostAccountDeletionDeletedEvent).beforeTags).containsExactly("privacy")
+    }
+
+    @Test
+    @DisplayName("domain event 없는 durable task payload도 삭제 첨부 정리와 추천 갱신을 수행한다")
+    fun handleTaskPayloadWithoutDomainEvent() {
+        // given
+        val post = testPost(34L)
+        `when`(postRepository.findById(34L)).thenReturn(Optional.of(post))
+        val payload =
+            postWriteSideEffectPayload(
+                postId = 34L,
+                deletedContent = "deleted content",
+                recommendationAction = PostRecommendationSideEffect.REFRESH,
+            )
+
+        // when
+        handler.handle(payload)
+
+        // then
+        verify(uploadedFileRetentionService).scheduleDeletedPostAttachments("deleted content")
+        verify(postRecommendFeatureStoreService).refresh(post)
+        verifyNoInteractions(eventPublisher)
     }
 
     @Test

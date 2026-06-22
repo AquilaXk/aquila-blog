@@ -337,6 +337,7 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
 
         assertThat(memberFacade.findByEmail("account-delete-user@example.com")).isNull()
         assertThat(findMemberDeletionState(member.id).email).isNull()
+        assertThat(findMemberDeletionState(member.id).username).startsWith("deleted-${member.id}-")
         assertThat(findMemberDeletionState(member.id).deletedAt).isNotNull()
         assertThat(findMemberDeletionState(member.id).ipSecurityEnabled).isFalse()
         assertThat(findMemberDeletionState(member.id).ipSecurityFingerprint).isNull()
@@ -363,6 +364,15 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         assertThat(deletion.memberId).isEqualTo(member.id)
         assertThat(deletion.reason).isEqualTo("서비스 이용 종료")
         assertThat(deletion.deletedAt).isNotNull()
+        val rejoinedMember =
+            memberFacade.joinWithVerifiedEmail(
+                email = "account-delete-user@example.com",
+                password = "Abcd1234!",
+                nickname = "재가입유저",
+                profileImgUrl = null,
+            )
+        assertThat(rejoinedMember.id).isNotEqualTo(member.id)
+        assertThat(rejoinedMember.email).isEqualTo("account-delete-user@example.com")
     }
 
     @Test
@@ -762,12 +772,13 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
     private fun findMemberDeletionState(memberId: Long): MemberDeletionState =
         jdbcTemplate.queryForObject(
             """
-            select email, deleted_at, ip_security_enabled, ip_security_fingerprint
+            select login_id, email, deleted_at, ip_security_enabled, ip_security_fingerprint
             from member
             where id = ?
             """.trimIndent(),
             { rs, _ ->
                 MemberDeletionState(
+                    username = rs.getString("login_id"),
                     email = rs.getString("email"),
                     deletedAt = rs.getTimestamp("deleted_at")?.toInstant(),
                     ipSecurityEnabled = rs.getBoolean("ip_security_enabled"),
@@ -789,6 +800,7 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         )
 
     private data class MemberDeletionState(
+        val username: String,
         val email: String?,
         val deletedAt: java.time.Instant?,
         val ipSecurityEnabled: Boolean,

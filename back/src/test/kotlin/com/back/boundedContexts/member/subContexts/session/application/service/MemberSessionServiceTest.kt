@@ -10,6 +10,7 @@ import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Instant
 
 @DisplayName("MemberSessionService 테스트")
@@ -161,6 +162,44 @@ class MemberSessionServiceTest {
                 userAgent = "test-agent",
             )
         }.hasMessage("409-1 : 탈퇴 처리된 계정은 세션을 생성할 수 없습니다.")
+    }
+
+    @Test
+    fun `회원 전체 세션 폐기는 커밋 후에도 active session cache를 다시 비운다`() {
+        val cacheManager = ConcurrentMapCacheManager(MemberSessionCacheNames.ACTIVE)
+        val store = RecordingMemberSessionStorePort()
+        val service =
+            MemberSessionService(
+                memberSessionStorePort = store,
+                cacheManager = cacheManager,
+                touchMinIntervalSeconds = 60,
+                refreshTokenExpirationSeconds = 3600,
+            )
+        val member = Member(59L, "session-revoke-all-user", null, "전체폐기", "session-revoke-all@example.com", MemberPolicy.genApiKey())
+        val session = memberSession(member, "revoke-all-session")
+        store.save(session)
+        val activeCache = requireNotNull(cacheManager.getCache(MemberSessionCacheNames.ACTIVE))
+        activeCache.put("session:${session.sessionKey}", "pre-revoke")
+        activeCache.put("member:${member.id}:session:${session.sessionKey}", "pre-revoke")
+
+        TransactionSynchronizationManager.initSynchronization()
+        try {
+            val revokedCount = service.revokeAllActiveSessionsForMember(member.id)
+            activeCache.put("session:${session.sessionKey}", "stale-repopulated-before-commit")
+            activeCache.put("member:${member.id}:session:${session.sessionKey}", "stale-repopulated-before-commit")
+
+            assertThat(revokedCount).isEqualTo(1)
+            assertThat(activeCache.get("session:${session.sessionKey}")?.get()).isEqualTo("stale-repopulated-before-commit")
+
+            TransactionSynchronizationManager.getSynchronizations().forEach { synchronization ->
+                synchronization.afterCommit()
+            }
+
+            assertThat(activeCache.get("session:${session.sessionKey}")).isNull()
+            assertThat(activeCache.get("member:${member.id}:session:${session.sessionKey}")).isNull()
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization()
+        }
     }
 
     @Test

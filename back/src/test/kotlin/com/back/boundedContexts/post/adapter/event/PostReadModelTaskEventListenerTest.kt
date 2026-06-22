@@ -90,6 +90,7 @@ class PostReadModelTaskEventListenerTest {
                 uid = UUID.randomUUID(),
                 aggregateId = 91L,
                 beforeTags = listOf("privacy", "retention"),
+                afterTags = emptyList(),
             )
 
         listener.handle(event)

@@ -159,19 +159,6 @@ class PostDeletedQueryRepository(
         return updatedRows > 0
     }
 
-    fun findActiveIdsByAuthorId(authorId: Long): List<Long> =
-        jdbcTemplate.queryForList(
-            """
-            select id
-            from post
-            where author_id = ?
-              and deleted_at is null
-            order by id asc
-            """.trimIndent(),
-            Long::class.java,
-            authorId,
-        )
-
     fun restoreDeletedById(id: Long): Boolean {
         val updatedRows =
             jdbcTemplate.update(

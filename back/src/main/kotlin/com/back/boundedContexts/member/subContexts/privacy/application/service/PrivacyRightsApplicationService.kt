@@ -17,6 +17,7 @@ import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_ROLE
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_SERVICE_LINKS
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_WORKSPACE_DRAFT
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_WORKSPACE_PUBLISHED
+import com.back.boundedContexts.member.domain.shared.memberMixin.decodeMemberProfileWorkspaceContent
 import com.back.boundedContexts.member.subContexts.legalAcceptance.application.port.output.MemberLegalAcceptanceRepositoryPort
 import com.back.boundedContexts.member.subContexts.privacy.application.port.output.MemberAccountDeletionRepositoryPort
 import com.back.boundedContexts.member.subContexts.privacy.application.port.output.MemberPrivacyRequestRepositoryPort
@@ -27,6 +28,7 @@ import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRe
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.global.exception.application.AppException
+import com.back.global.storage.application.UploadedFileRetentionService
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -42,6 +44,7 @@ class PrivacyRightsApplicationService(
     private val memberLegalAcceptanceRepository: MemberLegalAcceptanceRepositoryPort,
     private val memberSessionUseCase: MemberSessionUseCase,
     private val postUseCase: PostUseCase,
+    private val uploadedFileRetentionService: UploadedFileRetentionService,
 ) {
     @Transactional(readOnly = true)
     fun exportFor(memberId: Long): PrivacyExportResponse {
@@ -137,8 +140,10 @@ class PrivacyRightsApplicationService(
         }
 
         val deletedAt = Instant.now()
+        val profileImageUrlsForCleanup = collectProfileImageUrlsForCleanup(member)
         postUseCase.deleteContentByAuthorForAccountDeletion(member)
         member.softDelete(deletedAt)
+        scheduleProfileImageCleanup(member.id, profileImageUrlsForCleanup)
         memberAttrRepository.clearStringValuesBySubjectIdAndNameIn(member.id, PROFILE_PRIVACY_ATTR_NAMES)
         memberAccountDeletionRepository.save(
             MemberAccountDeletion(
@@ -175,7 +180,42 @@ class PrivacyRightsApplicationService(
         memberUseCase.checkPassword(member, rawPassword)
     }
 
+    private fun collectProfileImageUrlsForCleanup(member: Member): List<String> {
+        val attrs =
+            memberAttrRepository
+                .findBySubjectInAndNameIn(listOf(member), PROFILE_IMAGE_CLEANUP_ATTR_NAMES)
+                .associateBy { it.name }
+
+        return listOfNotNull(
+            attrs[PROFILE_IMG_URL]?.strValue,
+            attrs[PROFILE_WORKSPACE_DRAFT]?.strValue?.let(::decodeMemberProfileWorkspaceContent)?.profileImageUrl,
+            attrs[PROFILE_WORKSPACE_PUBLISHED]?.strValue?.let(::decodeMemberProfileWorkspaceContent)?.profileImageUrl,
+        ).map(String::trim)
+            .filter(String::isNotBlank)
+            .distinct()
+    }
+
+    private fun scheduleProfileImageCleanup(
+        memberId: Long,
+        profileImageUrls: List<String>,
+    ) {
+        profileImageUrls.forEach { profileImageUrl ->
+            uploadedFileRetentionService.syncProfileImage(
+                memberId = memberId,
+                previousProfileImgUrl = profileImageUrl,
+                currentProfileImgUrl = null,
+            )
+        }
+    }
+
     companion object {
+        private val PROFILE_IMAGE_CLEANUP_ATTR_NAMES =
+            listOf(
+                PROFILE_IMG_URL,
+                PROFILE_WORKSPACE_DRAFT,
+                PROFILE_WORKSPACE_PUBLISHED,
+            )
+
         private val PROFILE_PRIVACY_ATTR_NAMES =
             listOf(
                 PROFILE_IMG_URL,

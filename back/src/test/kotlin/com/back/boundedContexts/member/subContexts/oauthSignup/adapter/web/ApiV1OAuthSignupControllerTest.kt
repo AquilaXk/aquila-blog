@@ -1,6 +1,7 @@
 package com.back.boundedContexts.member.subContexts.oauthSignup.adapter.web
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.ActiveLegalDocumentMetadata
 import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.LegalAcceptanceCommand
 import com.back.boundedContexts.member.subContexts.oauthSignup.application.port.input.OAuthSignupUseCase
 import com.back.boundedContexts.member.subContexts.oauthSignup.application.service.OAuthSignupPendingDetails
@@ -13,6 +14,8 @@ import java.time.Instant
 
 @DisplayName("ApiV1OAuthSignupController 테스트")
 class ApiV1OAuthSignupControllerTest {
+    private val activeLegalDocuments = ActiveLegalDocumentMetadata.current()
+
     @Test
     fun `pending은 token으로 social signup 세션을 조회한다`() {
         val useCase = RecordingOAuthSignupUseCase()
@@ -47,10 +50,10 @@ class ApiV1OAuthSignupControllerTest {
                 ApiV1OAuthSignupController.SocialSignupCompleteRequest(
                     token = "pending-token",
                     nickname = "완료닉네임",
-                    termsVersion = "2026-06-21",
-                    termsContentSha256 = TERMS_HASH,
-                    privacyVersion = "2026-06-21",
-                    privacyContentSha256 = PRIVACY_HASH,
+                    termsVersion = activeLegalDocuments.terms.version,
+                    termsContentSha256 = activeLegalDocuments.terms.contentSha256,
+                    privacyVersion = activeLegalDocuments.privacy.version,
+                    privacyContentSha256 = activeLegalDocuments.privacy.contentSha256,
                     age14OrOlder = true,
                     requiredPrivacyConfirmed = true,
                     analyticsConsent = false,
@@ -66,10 +69,10 @@ class ApiV1OAuthSignupControllerTest {
         assertThat(useCase.lastLegalAcceptance)
             .isEqualTo(
                 LegalAcceptanceCommand(
-                    termsVersion = "2026-06-21",
-                    termsContentSha256 = TERMS_HASH,
-                    privacyVersion = "2026-06-21",
-                    privacyContentSha256 = PRIVACY_HASH,
+                    termsVersion = activeLegalDocuments.terms.version,
+                    termsContentSha256 = activeLegalDocuments.terms.contentSha256,
+                    privacyVersion = activeLegalDocuments.privacy.version,
+                    privacyContentSha256 = activeLegalDocuments.privacy.contentSha256,
                     age14OrOlder = true,
                     requiredPrivacyConfirmed = true,
                     analyticsConsent = false,
@@ -83,10 +86,10 @@ class ApiV1OAuthSignupControllerTest {
         val request =
             ApiV1OAuthSignupController.SocialSignupCompleteRequest(
                 token = "pending-token",
-                termsVersion = "2026-06-21",
-                termsContentSha256 = TERMS_HASH,
-                privacyVersion = "2026-06-21",
-                privacyContentSha256 = PRIVACY_HASH,
+                termsVersion = activeLegalDocuments.terms.version,
+                termsContentSha256 = activeLegalDocuments.terms.contentSha256,
+                privacyVersion = activeLegalDocuments.privacy.version,
+                privacyContentSha256 = activeLegalDocuments.privacy.contentSha256,
                 age14OrOlder = true,
                 requiredPrivacyConfirmed = true,
                 analyticsConsent = true,
@@ -97,27 +100,22 @@ class ApiV1OAuthSignupControllerTest {
 
         assertThat(request.token).isEqualTo("pending-token")
         assertThat(request.nickname).isNull()
-        assertThat(request.termsVersion).isEqualTo("2026-06-21")
-        assertThat(request.termsContentSha256).isEqualTo(TERMS_HASH)
-        assertThat(request.privacyVersion).isEqualTo("2026-06-21")
-        assertThat(request.privacyContentSha256).isEqualTo(PRIVACY_HASH)
+        assertThat(request.termsVersion).isEqualTo(activeLegalDocuments.terms.version)
+        assertThat(request.termsContentSha256).isEqualTo(activeLegalDocuments.terms.contentSha256)
+        assertThat(request.privacyVersion).isEqualTo(activeLegalDocuments.privacy.version)
+        assertThat(request.privacyContentSha256).isEqualTo(activeLegalDocuments.privacy.contentSha256)
         assertThat(request.age14OrOlder).isTrue()
         assertThat(request.requiredPrivacyConfirmed).isTrue()
         assertThat(request.analyticsConsent).isTrue()
         assertThat(request.overseasTransferAcknowledged).isTrue()
-        assertThat(command.termsVersion).isEqualTo("2026-06-21")
-        assertThat(command.termsContentSha256).isEqualTo(TERMS_HASH)
-        assertThat(command.privacyVersion).isEqualTo("2026-06-21")
-        assertThat(command.privacyContentSha256).isEqualTo(PRIVACY_HASH)
+        assertThat(command.termsVersion).isEqualTo(activeLegalDocuments.terms.version)
+        assertThat(command.termsContentSha256).isEqualTo(activeLegalDocuments.terms.contentSha256)
+        assertThat(command.privacyVersion).isEqualTo(activeLegalDocuments.privacy.version)
+        assertThat(command.privacyContentSha256).isEqualTo(activeLegalDocuments.privacy.contentSha256)
         assertThat(command.age14OrOlder).isTrue()
         assertThat(command.requiredPrivacyConfirmed).isTrue()
         assertThat(command.analyticsConsent).isTrue()
         assertThat(command.overseasTransferAcknowledged).isTrue()
-    }
-
-    private companion object {
-        private const val TERMS_HASH = "3b71950e518b16b9a24cb4f9873633720ca7a9fce145a7bb9787c48845b56c5b"
-        private const val PRIVACY_HASH = "cedbfea674a9e2aca9e29bf6a01492a1e3fa640b0ff53d47f969d64c057b980f"
     }
 }
 

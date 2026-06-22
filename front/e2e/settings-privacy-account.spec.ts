@@ -37,8 +37,8 @@ test("settings privacy page exposes export snapshot and creates privacy request"
             modifiedAt: authMember.modifiedAt,
           },
           latestLegalAcceptance: {
-            termsVersion: "2026-06-21",
-            privacyVersion: "2026-06-21",
+            termsVersion: "1.0.0",
+            privacyVersion: "1.0.0",
             analyticsConsent: false,
             overseasTransferAcknowledged: true,
             acceptedAt: "2026-06-21T00:10:00Z",
@@ -75,7 +75,7 @@ test("settings privacy page exposes export snapshot and creates privacy request"
 
   await expect(page.getByRole("heading", { name: "개인정보 관리" })).toBeVisible()
   await expect(page.getByText("privacy-user@example.com")).toBeVisible()
-  await expect(page.getByText("개인정보처리방침 2026-06-21")).toBeVisible()
+  await expect(page.getByText("개인정보처리방침 1.0.0")).toBeVisible()
 
   await page.getByLabel("요청 사유").fill("가입 정보와 운영 로그 열람을 요청합니다.")
   await page.getByRole("button", { name: "처리 요청 접수" }).click()

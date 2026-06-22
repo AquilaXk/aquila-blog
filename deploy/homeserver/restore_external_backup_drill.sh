@@ -160,6 +160,8 @@ is_safe_absolute_path() {
 }
 
 resolve_restore_privacy_contract() {
+  local backup_root_for_exclusion
+
   if [[ -z "${BACKUP_ENCRYPTION_KEY_FILE}" ]]; then
     BACKUP_ENCRYPTION_KEY_FILE="$(read_key_from_file AQUILA_BACKUP_ENCRYPTION_KEY_FILE "${DEPLOY_DIR}/.env.prod.compose")"
   fi
@@ -176,9 +178,10 @@ resolve_restore_privacy_contract() {
     RESTORE_PRIVACY_GATE_SCRIPT="$(read_key_from_file AQUILA_RESTORE_PRIVACY_GATE_SCRIPT "${DEPLOY_DIR}/.env.prod")"
   fi
 
+  backup_root_for_exclusion="${BACKUP_ROOT%/}"
   is_safe_absolute_path "${BACKUP_ENCRYPTION_KEY_FILE}" || fail "unsafe AQUILA_BACKUP_ENCRYPTION_KEY_FILE=${BACKUP_ENCRYPTION_KEY_FILE}"
   case "${BACKUP_ENCRYPTION_KEY_FILE}" in
-    "${BACKUP_ROOT}"|"${BACKUP_ROOT}"/*)
+    "${backup_root_for_exclusion}"|"${backup_root_for_exclusion}"/*)
       fail "AQUILA_BACKUP_ENCRYPTION_KEY_FILE must be outside AQUILA_BACKUP_ROOT"
       ;;
   esac
@@ -188,7 +191,7 @@ resolve_restore_privacy_contract() {
   [[ -n "${RESTORE_PRIVACY_GATE_SCRIPT}" ]] || fail "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT is required before traffic open"
   is_safe_absolute_path "${RESTORE_PRIVACY_GATE_SCRIPT}" || fail "unsafe AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=${RESTORE_PRIVACY_GATE_SCRIPT}"
   case "${RESTORE_PRIVACY_GATE_SCRIPT}" in
-    "${BACKUP_ROOT}"|"${BACKUP_ROOT}"/*)
+    "${backup_root_for_exclusion}"|"${backup_root_for_exclusion}"/*)
       fail "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT must be outside AQUILA_BACKUP_ROOT"
       ;;
   esac

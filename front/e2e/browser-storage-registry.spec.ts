@@ -6,6 +6,7 @@ import {
   OPTIONAL_TRACKING_CONSENT_STORAGE_KEY,
   registeredBrowserStorageKeys,
 } from "../src/libs/privacy/browserStorageRegistry"
+import { getLegalPolicyHistoryStaticProps } from "../src/libs/legal/serverPolicySource"
 
 const srcRoot = path.resolve(__dirname, "../src")
 const sourceConstantPattern =
@@ -124,4 +125,15 @@ test("signup cooldown registry documents hashed storage instead of raw email ide
   expect(hookSource).not.toContain("fnv1a")
   expect(hookSource).not.toContain("current[targetEmail] =")
   expect(hookSource).not.toContain("current[normalizedEmail]")
+})
+
+test("legal history lists same-day cookie policies newest version first", () => {
+  const { props } = getLegalPolicyHistoryStaticProps()
+  const cookieVersions = props.policies
+    .filter((policy) => policy.kind === "cookies" && policy.effectiveAt.startsWith("2026-06-22"))
+    .map((policy) => policy.version)
+
+  expect(cookieVersions.indexOf("1.0.2")).toBeGreaterThanOrEqual(0)
+  expect(cookieVersions.indexOf("1.0.1")).toBeGreaterThanOrEqual(0)
+  expect(cookieVersions.indexOf("1.0.2")).toBeLessThan(cookieVersions.indexOf("1.0.1"))
 })

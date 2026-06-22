@@ -119,6 +119,6 @@ export const getLegalPolicyHistoryStaticProps = () => {
         }
       }),
     )
-    .sort((a, b) => b.effectiveAt.localeCompare(a.effectiveAt) || compareSemver(a.version, b.version))
+    .sort((a, b) => b.effectiveAt.localeCompare(a.effectiveAt) || compareSemver(b.version, a.version))
   return { props: { policies } }
 }

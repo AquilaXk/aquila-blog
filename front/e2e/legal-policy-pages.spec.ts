@@ -1,6 +1,14 @@
 import { expect, test, type Page } from "@playwright/test"
+import { readFileSync } from "node:fs"
+import path from "node:path"
 import { addPublicAboutSnapshotCookie, mockAvatarAsset, mockFeedEndpoints } from "./helpers/smokeFixtures"
 
+type LegalPolicyFixture = {
+  version: string
+  sections: Array<{ id: string; title: string }>
+}
+
+const currentLegalVersion = "1.0.1"
 const internalPolicyTokens = [
   "법무·운영 확인 필요 항목",
   "reviewRequired",
@@ -11,26 +19,49 @@ const internalPolicyTokens = [
   "consent manager",
 ]
 
+const readPolicyFixture = (kind: "privacy" | "terms" | "cookies"): LegalPolicyFixture =>
+  JSON.parse(
+    readFileSync(
+      path.join(process.cwd(), "..", "legal", "policies", `${kind}.ko-KR.v${currentLegalVersion}.yaml`),
+      "utf8",
+    ),
+  )
+
 const expectNoInternalPolicyTodos = async (page: Page) => {
   for (const token of internalPolicyTokens) {
     await expect(page.getByText(token, { exact: false })).toHaveCount(0)
   }
 }
 
+const expectPolicySections = async (page: Page, policy: LegalPolicyFixture, sectionIds: string[]) => {
+  for (const sectionId of sectionIds) {
+    const section = policy.sections.find((candidate) => candidate.id === sectionId)
+    expect(section, `${policy.version} policy section ${sectionId}`).toBeTruthy()
+    await expect(page.getByRole("heading", { name: section!.title, exact: true })).toBeVisible()
+    await expect(page.locator(`[id="${sectionId}"]`)).toBeVisible()
+  }
+}
+
 test.describe("legal policy public pages", () => {
   test("effective policy pages expose public notices without internal review todos", async ({ page }) => {
+    const privacyPolicy = readPolicyFixture("privacy")
+    const termsPolicy = readPolicyFixture("terms")
+    const cookiesPolicy = readPolicyFixture("cookies")
+
     await page.goto("/privacy", { waitUntil: "domcontentloaded" })
 
     await expect(page).toHaveTitle(/개인정보처리방침/)
     await expect(page.locator("meta[name='robots']")).toHaveAttribute("content", /index/)
     await expect(page.getByRole("heading", { name: "개인정보처리방침" })).toBeVisible()
-    await expect(page.getByRole("heading", { name: "처리하는 개인정보 항목과 수집 방법" })).toBeVisible()
-    await expect(page.getByRole("heading", { name: "개인정보 처리위탁" })).toBeVisible()
-    await expect(page.getByRole("heading", { name: "개인정보 국외이전" })).toBeVisible()
-    await expect(page.getByRole("heading", { name: "이용자와 법정대리인의 권리 및 행사방법" })).toBeVisible()
-    await expect(page.getByRole("heading", { name: "쿠키·로컬 저장소·온라인 식별자" })).toBeVisible()
-    await expect(page.getByRole("heading", { name: "개인정보 보호책임자 또는 담당자" })).toBeVisible()
-    await expect(page.getByRole("heading", { name: "개인정보 침해·민원 구제 절차" })).toBeVisible()
+    await expectPolicySections(page, privacyPolicy, [
+      "privacy-collection-items",
+      "privacy-processors",
+      "privacy-overseas-transfer",
+      "privacy-rights",
+      "privacy-cookies-storage",
+      "privacy-officer",
+      "privacy-remedy",
+    ])
     await expect(page.getByText("illusiveman7@gmail.com")).toHaveCount(0)
     await expectNoInternalPolicyTodos(page)
     await expect(page.getByRole("link", { name: /aquilaxk10@gmail\.com/ })).toHaveAttribute(
@@ -43,24 +74,38 @@ test.describe("legal policy public pages", () => {
     await expect(page).toHaveTitle(/이용약관/)
     await expect(page.locator("meta[name='robots']")).toHaveAttribute("content", /index/)
     await expect(page.getByRole("heading", { name: "이용약관" })).toBeVisible()
-    await expect(page.getByRole("heading", { name: "이용계약 성립" })).toBeVisible()
-    await expect(page.getByRole("heading", { name: "게시글·댓글·파일 등 이용자 콘텐츠" })).toBeVisible()
-    await expect(page.getByRole("heading", { name: "금지행위" })).toBeVisible()
-    await expect(page.getByRole("heading", { name: "서비스 변경·점검·중단" })).toBeVisible()
-    await expect(page.getByRole("heading", { name: "통지", exact: true })).toBeVisible()
+    await expectPolicySections(page, termsPolicy, [
+      "terms-contract",
+      "terms-content",
+      "terms-prohibited",
+      "terms-maintenance",
+      "terms-notice",
+    ])
     await expect(page.getByRole("link", { name: "aquilaxk10@gmail.com" })).toBeVisible()
     await expect(page.getByText("illusiveman7@gmail.com")).toHaveCount(0)
     await expectNoInternalPolicyTodos(page)
     await expect(page.getByRole("link", { name: "개인정보처리방침" })).toHaveAttribute("href", "/privacy")
 
-    await page.goto("/legal/cookies/1.0.1", { waitUntil: "domcontentloaded" })
+    await page.goto(`/legal/cookies/${currentLegalVersion}`, { waitUntil: "domcontentloaded" })
 
     await expect(page).toHaveTitle(/쿠키 정책/)
     await expect(page.getByRole("heading", { name: "쿠키 정책", exact: true })).toBeVisible()
-    await expect(page.getByRole("heading", { name: "필수 쿠키" })).toBeVisible()
-    await expect(page.getByRole("heading", { name: "Analytics와 RUM" })).toBeVisible()
-    await expect(page.getByRole("heading", { name: "관리 방법" })).toBeVisible()
+    await expectPolicySections(page, cookiesPolicy, ["cookies-essential", "cookies-analytics", "cookies-control"])
     await expectNoInternalPolicyTodos(page)
+
+    await page.goto("/legal/history", { waitUntil: "domcontentloaded" })
+    await expect(page.getByRole("heading", { name: "정책 변경 이력" })).toBeVisible()
+    await expect(page.getByRole("navigation", { name: "개인정보처리방침 링크" }).getByRole("link", { name: "버전 문서" })).toHaveAttribute(
+      "href",
+      `/legal/privacy/${currentLegalVersion}`,
+    )
+    await expect(page.getByRole("navigation", { name: "이용약관 링크" }).getByRole("link", { name: "버전 문서" })).toHaveAttribute(
+      "href",
+      `/legal/terms/${currentLegalVersion}`,
+    )
+
+    const legacyResponse = await page.goto("/legal/privacy/1.0.0", { waitUntil: "domcontentloaded" })
+    expect(legacyResponse?.status()).toBe(404)
   })
 
   test("auth, signup, modal, and footer surfaces link to privacy and terms", async ({ page }) => {

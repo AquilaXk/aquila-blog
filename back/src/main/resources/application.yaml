@@ -321,6 +321,12 @@ custom:
         apiKey: "${CUSTOM__AI__TAG__GEMINI__API_KEY:${CUSTOM__AI__SUMMARY__GEMINI__API_KEY:}}"
         model: "${CUSTOM__AI__TAG__GEMINI__MODEL:${CUSTOM__AI__SUMMARY__GEMINI__MODEL:gemini-2.5-flash}}"
         baseUrl: "${CUSTOM__AI__TAG__GEMINI__BASE_URL:${CUSTOM__AI__SUMMARY__GEMINI__BASE_URL:https://generativelanguage.googleapis.com/v1beta}}"
+      policy:
+        dpaConfirmed: ${CUSTOM__AI__TAG__POLICY__DPA_CONFIRMED:false}
+        regionConfirmed: ${CUSTOM__AI__TAG__POLICY__REGION_CONFIRMED:false}
+        retentionConfirmed: ${CUSTOM__AI__TAG__POLICY__RETENTION_CONFIRMED:false}
+        trainingOptOutConfirmed: ${CUSTOM__AI__TAG__POLICY__TRAINING_OPT_OUT_CONFIRMED:false}
+        processorRegistryConfirmed: ${CUSTOM__AI__TAG__POLICY__PROCESSOR_REGISTRY_CONFIRMED:false}
   storage:
     enabled: ${CUSTOM_STORAGE_ENABLED:false}
     endpoint: ${CUSTOM_STORAGE_ENDPOINT:http://localhost:9000}

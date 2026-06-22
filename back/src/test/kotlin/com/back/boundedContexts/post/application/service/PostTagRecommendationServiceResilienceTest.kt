@@ -131,8 +131,8 @@ class PostTagRecommendationServiceResilienceTest {
     }
 
     @Test
-    @DisplayName("Gemini 요청과 캐시는 원문 개인정보와 secret을 저장하지 않는다")
-    fun `gemini request and cache redact raw personal data and secrets`() {
+    @DisplayName("Gemini 태그 추천은 개인정보와 secret-like 입력을 외부 전송하지 않는다")
+    fun `gemini tag recommendation blocks external call for personal data and secrets`() {
         val redisPort = capturingRedisPort()
         val capturedBodies = mutableListOf<String>()
         val server = startGeminiServer(capturedBodies)
@@ -160,21 +160,9 @@ class PostTagRecommendationServiceResilienceTest {
                     maxTags = 5,
                 )
 
-            assertThat(result.provider).isEqualTo("gemini")
-            assertThat(capturedBodies).hasSize(1)
-            assertThat(capturedBodies.single())
-                .doesNotContain("secret@example.com")
-                .doesNotContain("010-1234-5678")
-                .doesNotContain("super-secret-token")
-                .doesNotContain("multi word secret")
-                .doesNotContain("quoted token value")
-                .doesNotContain("json-secret-token")
-                .doesNotContain("json-bearer-token")
-                .doesNotContain("bearer-secret-token")
-                .contains("[redacted-email]")
-                .contains("[redacted-phone]")
-                .contains("apiKey=[redacted-secret]")
-                .contains("Authorization=[redacted-secret]")
+            assertThat(result.provider).isEqualTo("rule")
+            assertThat(result.reason).isEqualTo("pii-blocked")
+            assertThat(capturedBodies).isEmpty()
             assertThat(redisPort.writes.flatMap { listOf(it.key, it.value) }.joinToString("\n"))
                 .doesNotContain("secret@example.com")
                 .doesNotContain("010-1234-5678")
@@ -184,6 +172,38 @@ class PostTagRecommendationServiceResilienceTest {
                 .doesNotContain("json-secret-token")
                 .doesNotContain("json-bearer-token")
                 .doesNotContain("bearer-secret-token")
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    @Test
+    @DisplayName("Gemini 태그 추천은 민감정보 없는 명시 요청만 외부 호출한다")
+    fun `gemini tag recommendation allows explicit safe request`() {
+        val redisPort = capturingRedisPort()
+        val capturedBodies = mutableListOf<String>()
+        val server = startGeminiServer(capturedBodies)
+        val service =
+            createService(
+                aiEnabled = true,
+                redisPort = redisPort,
+                geminiApiKey = "test-key",
+                geminiBaseUrl = "http://127.0.0.1:${server.address.port}/v1beta",
+            )
+
+        try {
+            val result =
+                service.recommend(
+                    title = "Kotlin coroutine scheduler",
+                    content = "백엔드 작업 큐와 coroutine dispatcher 튜닝 내용을 정리한다.",
+                    existingTags = listOf("Kotlin"),
+                    maxTags = 5,
+                )
+
+            assertThat(result.provider).isEqualTo("gemini")
+            assertThat(capturedBodies).hasSize(1)
+            assertThat(redisPort.writes.flatMap { listOf(it.key, it.value) }.joinToString("\n"))
+                .doesNotContain("백엔드 작업 큐와 coroutine dispatcher")
         } finally {
             server.stop(0)
         }

@@ -150,11 +150,7 @@ const useAuthSession = () => {
       }
     }
 
-    routeToReconsent().catch(() => {
-      if (!cancelled) {
-        void replaceRoute(router, "/settings/privacy?reconsent=required")
-      }
-    })
+    void routeToReconsent().catch(() => undefined)
 
     return () => {
       cancelled = true

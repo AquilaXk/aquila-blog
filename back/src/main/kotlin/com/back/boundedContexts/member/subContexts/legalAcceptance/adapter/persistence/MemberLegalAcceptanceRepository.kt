@@ -13,12 +13,17 @@ interface MemberLegalAcceptanceRepository :
 
     @Query(
         """
-        select count(distinct acceptance.member.id)
-        from MemberLegalAcceptance acceptance
-        where acceptance.termsVersion = :termsVersion
-          and acceptance.termsContentSha256 = :termsContentSha256
-          and acceptance.privacyVersion = :privacyVersion
-          and acceptance.privacyContentSha256 = :privacyContentSha256
+        select count(member)
+        from Member member
+        where exists (
+            select acceptance.id
+            from MemberLegalAcceptance acceptance
+            where acceptance.member = member
+              and acceptance.termsVersion = :termsVersion
+              and acceptance.termsContentSha256 = :termsContentSha256
+              and acceptance.privacyVersion = :privacyVersion
+              and acceptance.privacyContentSha256 = :privacyContentSha256
+        )
         """,
     )
     override fun countMembersWithCurrentAcceptance(

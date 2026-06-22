@@ -76,6 +76,22 @@ const isCurrentFallbackPath = (currentUrl: string, fallbackPath: string) => {
   }
 }
 
+const hasRequiredLegalReconsent = async (page: Page, timeoutMs: number) => {
+  try {
+    const response = await page.request.get(`${resolveApiBaseUrl(page.url())}/member/api/v1/auth/session`, {
+      timeout: timeoutMs,
+    })
+    if (!response.ok()) return false
+
+    const session = (await response.json().catch(() => null)) as
+      | { legalReconsent?: { required?: boolean } | null }
+      | null
+    return session?.legalReconsent?.required === true
+  } catch {
+    return false
+  }
+}
+
 export const completeLegalReconsentIfRequired = async (
   page: Page,
   fallbackPath: string,
@@ -96,6 +112,10 @@ export const completeLegalReconsentIfRequired = async (
         () => true,
         () => false
       )
+  }
+  if (!isGate && (await hasRequiredLegalReconsent(page, timeoutMs))) {
+    await page.goto(`/settings/privacy?reconsent=required&next=${encodeURIComponent(fallbackPath)}`)
+    isGate = true
   }
   if (!isGate) return false
 

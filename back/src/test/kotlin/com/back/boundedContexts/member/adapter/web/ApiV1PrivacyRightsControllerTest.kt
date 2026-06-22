@@ -11,6 +11,7 @@ import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_SERVICE
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_WORKSPACE_DRAFT
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_WORKSPACE_PUBLISHED
 import com.back.boundedContexts.member.subContexts.legalAcceptance.adapter.persistence.MemberLegalAcceptanceRepository
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.ActiveLegalDocumentMetadata
 import com.back.boundedContexts.member.subContexts.legalAcceptance.model.MemberLegalAcceptance
 import com.back.boundedContexts.member.subContexts.privacy.adapter.persistence.MemberAccountDeletionRepository
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberAccountDeletion
@@ -60,6 +61,7 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
 
     @Test
     fun `개인정보 export 는 로그인 사용자의 계정 스냅샷을 반환한다`() {
+        val activeLegalDocuments = ActiveLegalDocumentMetadata.current()
         val member =
             memberFacade.join(
                 username = "privacy-export-user",
@@ -71,10 +73,10 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         memberLegalAcceptanceRepository.save(
             MemberLegalAcceptance(
                 member = member,
-                termsVersion = "2026-06-21",
-                termsContentSha256 = "terms-content-sha-256",
-                privacyVersion = "2026-06-21",
-                privacyContentSha256 = "privacy-content-sha-256",
+                termsVersion = activeLegalDocuments.terms.version,
+                termsContentSha256 = activeLegalDocuments.terms.contentSha256,
+                privacyVersion = activeLegalDocuments.privacy.version,
+                privacyContentSha256 = activeLegalDocuments.privacy.contentSha256,
                 age14OrOlder = true,
                 requiredPrivacyConfirmed = true,
                 analyticsConsent = false,
@@ -97,10 +99,14 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
                 jsonPath("$.data.member.username") { value("privacy-export-user") }
                 jsonPath("$.data.member.nickname") { value("정보내보내기") }
                 jsonPath("$.data.member.createdAt") { value(startsWith(member.createdAt.toString().take(20))) }
-                jsonPath("$.data.latestLegalAcceptance.termsVersion") { value("2026-06-21") }
-                jsonPath("$.data.latestLegalAcceptance.termsContentSha256") { value("terms-content-sha-256") }
-                jsonPath("$.data.latestLegalAcceptance.privacyVersion") { value("2026-06-21") }
-                jsonPath("$.data.latestLegalAcceptance.privacyContentSha256") { value("privacy-content-sha-256") }
+                jsonPath("$.data.latestLegalAcceptance.termsVersion") { value(activeLegalDocuments.terms.version) }
+                jsonPath("$.data.latestLegalAcceptance.termsContentSha256") {
+                    value(activeLegalDocuments.terms.contentSha256)
+                }
+                jsonPath("$.data.latestLegalAcceptance.privacyVersion") { value(activeLegalDocuments.privacy.version) }
+                jsonPath("$.data.latestLegalAcceptance.privacyContentSha256") {
+                    value(activeLegalDocuments.privacy.contentSha256)
+                }
                 jsonPath("$.data.latestLegalAcceptance.age14OrOlder") { value(true) }
                 jsonPath("$.data.latestLegalAcceptance.requiredPrivacyConfirmed") { value(true) }
                 jsonPath("$.data.latestLegalAcceptance.analyticsConsent") { value(false) }

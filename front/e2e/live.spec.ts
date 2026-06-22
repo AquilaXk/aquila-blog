@@ -365,8 +365,8 @@ const loginThroughUi = async (
         if (isInvalidLoginRequestBody(status, bodyPreview)) {
           await loginWithRetry(page, apiBaseUrl, loginEmail, legacyLoginId, password)
           await page.goto("/admin")
-          await expect(page).toHaveURL(/\/admin(\/|$)/, { timeout: liveUiRedirectTimeoutMs })
           await completeLegalReconsentIfRequired(page, "/admin", liveUiRedirectTimeoutMs, liveUiRedirectTimeoutMs)
+          await expect(page).toHaveURL(/\/admin(\/|$)/, { timeout: liveUiRedirectTimeoutMs })
           return
         }
 

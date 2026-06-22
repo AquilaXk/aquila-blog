@@ -11,4 +11,6 @@ interface PendingOAuthSignupRepositoryPort {
     ): PendingOAuthSignup?
 
     fun findByPendingTokenHash(pendingTokenHash: String): PendingOAuthSignup?
+
+    fun deleteByMemberLoginId(memberLoginId: String): Int
 }

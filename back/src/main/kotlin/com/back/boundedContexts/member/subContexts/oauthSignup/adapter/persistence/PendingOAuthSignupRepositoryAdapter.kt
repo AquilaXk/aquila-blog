@@ -21,4 +21,6 @@ class PendingOAuthSignupRepositoryAdapter(
 
     override fun findByPendingTokenHash(pendingTokenHash: String): PendingOAuthSignup? =
         pendingOAuthSignupRepository.findByPendingTokenHash(pendingTokenHash)
+
+    override fun deleteByMemberLoginId(memberLoginId: String): Int = pendingOAuthSignupRepository.deleteByMemberLoginId(memberLoginId)
 }

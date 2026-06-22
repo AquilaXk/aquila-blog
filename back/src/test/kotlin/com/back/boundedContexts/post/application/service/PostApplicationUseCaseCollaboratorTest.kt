@@ -297,6 +297,42 @@ class PostApplicationUseCaseCollaboratorTest {
         then(postCommentRepository).should(never()).save(anyValue())
     }
 
+    @Test
+    @DisplayName("PostCommentApplicationService는 공개 댓글 삭제 시 도메인 이벤트를 큐에 넣는다")
+    fun postCommentApplicationServiceDeletesCommentWithDomainEvent() {
+        // given
+        val postRepository: PostRepositoryPort = mock(PostRepositoryPort::class.java)
+        val postCommentRepository: PostCommentRepositoryPort = mock(PostCommentRepositoryPort::class.java)
+        val hydrationService: PostHydrationService = mock(PostHydrationService::class.java)
+        val counterService: PostCounterService = mock(PostCounterService::class.java)
+        val sideEffectQueue: PostInteractionSideEffectQueue = mock(PostInteractionSideEffectQueue::class.java)
+        val service =
+            PostCommentApplicationService(
+                postRepository = postRepository,
+                postCommentRepository = postCommentRepository,
+                postHydrationService = hydrationService,
+                postCounterService = counterService,
+                postInteractionSideEffectQueue = sideEffectQueue,
+            )
+        val author = testMember(id = 2)
+        val post = testPost()
+        val comment =
+            PostComment(7, author, post, "삭제할 댓글").also {
+                val now = Instant.now()
+                it.createdAt = now
+                it.modifiedAt = now
+            }
+        given(postCommentRepository.findActiveSubtreeByPostAndRootCommentId(post, comment.id))
+            .willReturn(listOf(comment))
+
+        // when
+        service.deleteComment(post, comment, author)
+
+        // then
+        assertThat(comment.deletedAt).isNotNull()
+        then(postRepository).should().flush()
+    }
+
     private fun testMember(id: Long = 1): Member =
         Member(id = id, username = "user-$id", nickname = "작성자$id", apiKey = "api-key-$id").also {
             val now = Instant.now()

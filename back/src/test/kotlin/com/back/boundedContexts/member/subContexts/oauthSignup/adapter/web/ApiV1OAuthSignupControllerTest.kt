@@ -176,4 +176,7 @@ private class RecordingOAuthSignupUseCase : OAuthSignupUseCase {
             modifiedAt = Instant.EPOCH.plusSeconds(1)
         }
     }
+
+    override fun releaseConsumedSignupForMemberLoginId(memberLoginId: String): Int =
+        error("releaseConsumedSignupForMemberLoginId is not used in ApiV1OAuthSignupControllerTest")
 }

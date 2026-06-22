@@ -142,6 +142,10 @@ class OAuthSignupApplicationService(
         return member
     }
 
+    @Transactional
+    override fun releaseConsumedSignupForMemberLoginId(memberLoginId: String): Int =
+        pendingOAuthSignupRepository.deleteByMemberLoginId(memberLoginId)
+
     private fun findPendingOrThrow(pendingToken: String): PendingOAuthSignup {
         val normalizedToken =
             pendingToken
@@ -153,11 +157,13 @@ class OAuthSignupApplicationService(
         ) ?: throw AppException("404-2", "유효하지 않은 소셜 회원가입 세션입니다.")
     }
 
-    private fun normalizeProvider(provider: String): String =
-        provider
-            .trim()
-            .uppercase(Locale.ROOT)
-            .ifBlank { throw AppException("400-2", "소셜 로그인 제공자가 올바르지 않습니다.") }
+    private fun normalizeProvider(provider: String): String {
+        val normalizedProvider = provider.trim().uppercase(Locale.ROOT)
+        if (normalizedProvider.isBlank()) {
+            throw AppException("400-2", "소셜 로그인 제공자가 올바르지 않습니다.")
+        }
+        return normalizedProvider
+    }
 
     private fun normalizeNickname(nickname: String): String {
         val normalized = nickname.trim().ifBlank { "카카오사용자" }

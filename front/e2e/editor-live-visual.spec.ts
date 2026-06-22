@@ -66,12 +66,12 @@ const tryEnterEditorRoute = async (page: Page, timeoutMs: number) => {
       if (!isNavigationInterruptedError(error)) throw error
     }
 
-    if (await completeLegalReconsentIfRequired(page, "/editor/new", timeoutMs)) return true
+    if (await completeLegalReconsentIfRequired(page, "/editor/new", timeoutMs, timeoutMs)) return true
     if (editorUrlPattern.test(page.url())) return true
 
     try {
       await page.waitForURL(editorUrlPattern, { timeout: perTryTimeout })
-      if (await completeLegalReconsentIfRequired(page, "/editor/new", timeoutMs)) return true
+      if (await completeLegalReconsentIfRequired(page, "/editor/new", timeoutMs, timeoutMs)) return true
       return true
     } catch {
       if (attempt < tries) await sleep(400 * attempt)
@@ -202,7 +202,12 @@ const loginWithRetry = async (page: Page, apiBaseUrl: string) => {
 const loginThroughUi = async (page: Page) => {
   const route = await gotoLoginForEditor(page, liveUiRedirectTimeoutMs)
   if (route === "editor") {
-    await completeLegalReconsentIfRequired(page, "/editor/new", liveUiRedirectTimeoutMs)
+    await completeLegalReconsentIfRequired(
+      page,
+      "/editor/new",
+      liveUiRedirectTimeoutMs,
+      liveUiRedirectTimeoutMs
+    )
     return
   }
 
@@ -243,7 +248,12 @@ const loginThroughUi = async (page: Page) => {
     if (outcome.kind === "response") {
       if (outcome.status < 400) {
         if (editorUrlPattern.test(page.url())) {
-          await completeLegalReconsentIfRequired(page, "/editor/new", liveUiRedirectTimeoutMs)
+          await completeLegalReconsentIfRequired(
+            page,
+            "/editor/new",
+            liveUiRedirectTimeoutMs,
+            liveUiRedirectTimeoutMs
+          )
           return
         }
         if (await tryEnterEditorRoute(page, liveUiRedirectTimeoutMs)) return
@@ -261,7 +271,12 @@ const loginThroughUi = async (page: Page) => {
     }
 
     if (outcome.kind === "editor-url") {
-      await completeLegalReconsentIfRequired(page, "/editor/new", liveUiRedirectTimeoutMs)
+      await completeLegalReconsentIfRequired(
+        page,
+        "/editor/new",
+        liveUiRedirectTimeoutMs,
+        liveUiRedirectTimeoutMs
+      )
       return
     }
 

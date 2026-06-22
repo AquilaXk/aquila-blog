@@ -70,7 +70,7 @@ export const completeLegalReconsentIfRequired = async (
   page: Page,
   fallbackPath: string,
   timeoutMs = liveUiRedirectTimeoutMs,
-  probeTimeoutMs = timeoutMs
+  probeTimeoutMs = quickReconsentProbeTimeoutMs
 ) => {
   const reconsentPanel = page.getByRole("region", { name: "법적 문서 재동의" })
   let isGate = isLegalReconsentGateUrl(page.url()) || (await reconsentPanel.isVisible().catch(() => false))

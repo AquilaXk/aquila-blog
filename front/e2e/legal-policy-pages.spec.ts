@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import { readFileSync } from "node:fs"
 import path from "node:path"
+import { parse as parseYaml } from "yaml"
 import { addPublicAboutSnapshotCookie, mockAvatarAsset, mockFeedEndpoints } from "./helpers/smokeFixtures"
 
 type LegalPolicyFixture = {
@@ -20,12 +21,12 @@ const internalPolicyTokens = [
 ]
 
 const readPolicyFixture = (kind: "privacy" | "terms" | "cookies"): LegalPolicyFixture =>
-  JSON.parse(
+  parseYaml(
     readFileSync(
       path.join(process.cwd(), "..", "legal", "policies", `${kind}.ko-KR.v${currentLegalVersion}.yaml`),
       "utf8",
     ),
-  )
+  ) as LegalPolicyFixture
 
 const expectNoInternalPolicyTodos = async (page: Page) => {
   for (const token of internalPolicyTokens) {

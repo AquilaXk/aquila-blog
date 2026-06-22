@@ -19,6 +19,7 @@ import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_WORKSPA
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_WORKSPACE_PUBLISHED
 import com.back.boundedContexts.member.domain.shared.memberMixin.decodeMemberProfileWorkspaceContent
 import com.back.boundedContexts.member.subContexts.legalAcceptance.application.port.output.MemberLegalAcceptanceRepositoryPort
+import com.back.boundedContexts.member.subContexts.oauthSignup.application.port.input.OAuthSignupUseCase
 import com.back.boundedContexts.member.subContexts.privacy.application.port.output.MemberAccountDeletionRepositoryPort
 import com.back.boundedContexts.member.subContexts.privacy.application.port.output.MemberPrivacyRequestRepositoryPort
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberAccountDeletion
@@ -43,6 +44,7 @@ class PrivacyRightsApplicationService(
     private val memberAccountDeletionRepository: MemberAccountDeletionRepositoryPort,
     private val memberLegalAcceptanceRepository: MemberLegalAcceptanceRepositoryPort,
     private val memberSessionUseCase: MemberSessionUseCase,
+    private val oauthSignupUseCase: OAuthSignupUseCase,
     private val postUseCase: PostUseCase,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
 ) {
@@ -140,8 +142,10 @@ class PrivacyRightsApplicationService(
         }
 
         val deletedAt = Instant.now()
+        val originalMemberLoginId = member.username
         val profileImageUrlsForCleanup = collectProfileImageUrlsForCleanup(member)
         postUseCase.deleteContentByAuthorForAccountDeletion(member)
+        oauthSignupUseCase.releaseConsumedSignupForMemberLoginId(originalMemberLoginId)
         member.softDelete(deletedAt)
         scheduleProfileImageCleanup(member.id, profileImageUrlsForCleanup)
         memberAttrRepository.clearStringValuesBySubjectIdAndNameIn(member.id, PROFILE_PRIVACY_ATTR_NAMES)

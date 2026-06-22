@@ -111,6 +111,28 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
     }
 
     @Test
+    fun `개인정보 export 는 법적 동의 이력이 없어도 계정 스냅샷을 반환한다`() {
+        val member =
+            memberFacade.join(
+                username = "privacy-export-no-legal-user",
+                password = "Abcd1234!",
+                nickname = "동의이력없음",
+                profileImgUrl = null,
+                email = "privacy-export-no-legal-user@example.com",
+            )
+        val authCookies = loginAuthCookies(member.email!!)
+
+        mvc
+            .get("/member/api/v1/privacy/export") {
+                authCookies.forEach { cookie(it) }
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.data.member.id") { value(member.id) }
+                jsonPath("$.data.latestLegalAcceptance") { doesNotExist() }
+            }
+    }
+
+    @Test
     fun `개인정보 처리 요청은 생성 후 본인 상태 조회가 가능하다`() {
         val member =
             memberFacade.join(
@@ -170,7 +192,8 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
                 content =
                     """
                     {
-                        "type": "CORRECTION"
+                        "type": "CORRECTION",
+                        "message": "   "
                     }
                     """.trimIndent()
             }.andExpect {
@@ -315,11 +338,24 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         val replyToAuthoredComment = postFacade.writeComment(otherAuthor, otherPost, "탈퇴 댓글의 답글", authoredComment)
         val nestedReplyToAuthoredComment =
             postFacade.writeComment(member, otherPost, "탈퇴 댓글의 중첩 답글", replyToAuthoredComment)
+        val deletedOtherPost =
+            postFacade.write(
+                author = otherAuthor,
+                title = "탈퇴 댓글 대상 삭제글",
+                content = "이미 삭제된 글의 댓글도 정리되어야 한다",
+                published = true,
+                listed = true,
+            )
+        val authoredCommentOnDeletedPost =
+            postFacade.writeComment(member, deletedOtherPost, "삭제된 글에 남은 탈퇴 회원 댓글")
+        val replyToDeletedPostAuthoredComment =
+            postFacade.writeComment(otherAuthor, deletedOtherPost, "삭제된 글 탈퇴 댓글의 답글", authoredCommentOnDeletedPost)
+        deletedOtherPost.softDelete()
         val firstSessionKey = requireAuthCookie(firstAuthCookies, AuthCookieNames.SESSION_KEY)
         val secondSessionKey = requireAuthCookie(secondAuthCookies, AuthCookieNames.SESSION_KEY)
         assertThat(countMemberAttrsContaining(member.id, "민감")).isGreaterThan(0)
         assertThat(findPostCommentsCount(otherPost.id)).isEqualTo(3)
-        assertThat(findMemberPostCommentsCount(otherAuthor.id)).isEqualTo(1)
+        assertThat(findMemberPostCommentsCount(otherAuthor.id)).isEqualTo(2)
         assertThat(findUploadedFileState(legacyProfileImageKey).status).isEqualTo("ACTIVE")
         assertThat(findUploadedFileState(draftProfileImageKey).status).isEqualTo("ACTIVE")
         assertThat(findUploadedFileState(publishedProfileImageKey).status).isEqualTo("ACTIVE")
@@ -366,6 +402,8 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         assertThat(findCommentDeletedAt(authoredComment.id)).isNotNull()
         assertThat(findCommentDeletedAt(replyToAuthoredComment.id)).isNotNull()
         assertThat(findCommentDeletedAt(nestedReplyToAuthoredComment.id)).isNotNull()
+        assertThat(findCommentDeletedAt(authoredCommentOnDeletedPost.id)).isNotNull()
+        assertThat(findCommentDeletedAt(replyToDeletedPostAuthoredComment.id)).isNotNull()
         assertThat(findPostCommentsCount(otherPost.id)).isZero()
         assertThat(findMemberPostCommentsCount(otherAuthor.id)).isZero()
         listOf(legacyProfileImageKey, draftProfileImageKey, publishedProfileImageKey).forEach { objectKey ->
@@ -489,6 +527,7 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
                 content =
                     """
                     {
+                        "password": "   ",
                         "reason": "서비스 이용 종료"
                     }
                     """.trimIndent()
@@ -550,6 +589,8 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             )
         val authCookies = issueSessionAuthCookies(member)
         val sessionKey = requireAuthCookie(authCookies, AuthCookieNames.SESSION_KEY)
+        insertConsumedPendingOAuthSignup(member.username)
+        assertThat(countPendingOAuthSignupByMemberLoginId(member.username)).isEqualTo(1)
 
         mvc
             .delete("/member/api/v1/privacy/account") {
@@ -577,6 +618,7 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         assertThat(findMemberDeletionState(member.id).deletedAt).isNotNull()
         assertThat(findSessionRevokedAt(sessionKey.value)).isNotNull()
         assertThat(countDeletionTombstones(member.id, "소셜 계정 탈퇴")).isEqualTo(1)
+        assertThat(countPendingOAuthSignupByMemberLoginId(member.username)).isZero()
     }
 
     @Test
@@ -742,6 +784,55 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             },
             objectKey,
         ) ?: error("uploaded file not found")
+
+    private fun insertConsumedPendingOAuthSignup(memberLoginId: String) {
+        jdbcTemplate.update(
+            """
+            insert into pending_oauth_signup (
+                id,
+                created_at,
+                modified_at,
+                provider,
+                provider_subject_hash,
+                member_login_id,
+                pending_token_hash,
+                pending_token_expires_at,
+                nickname,
+                profile_img_url,
+                consumed_at,
+                cancelled_at
+            )
+            values (
+                nextval('pending_oauth_signup_seq'),
+                current_timestamp,
+                current_timestamp,
+                'KAKAO',
+                ?,
+                ?,
+                ?,
+                current_timestamp + interval '30 minutes',
+                '소셜탈퇴',
+                null,
+                current_timestamp,
+                null
+            )
+            """.trimIndent(),
+            "subject-hash-$memberLoginId",
+            memberLoginId,
+            "pending-token-hash-$memberLoginId",
+        )
+    }
+
+    private fun countPendingOAuthSignupByMemberLoginId(memberLoginId: String): Int =
+        jdbcTemplate.queryForObject(
+            """
+            select count(*)
+            from pending_oauth_signup
+            where member_login_id = ?
+            """.trimIndent(),
+            Int::class.java,
+            memberLoginId,
+        ) ?: 0
 
     private fun countMemberAttrsContaining(
         memberId: Long,

@@ -114,6 +114,44 @@ class CustomAuthenticationFilterTest {
     }
 
     @Test
+    @DisplayName("세션 resolver는 fresh token grace 구간의 read 요청을 fallback으로 허용한다")
+    fun `session resolver allows fresh token read fallback`() {
+        val memberSessionUseCase = mock(MemberSessionUseCase::class.java)
+        val authCookieService = mock(AuthCookieService::class.java)
+        val resolver =
+            MemberSessionAuthenticationResolver(
+                memberSessionUseCase = memberSessionUseCase,
+                authCookieService = authCookieService,
+                freshLookupGraceSeconds = 15,
+            )
+        val request = MockHttpServletRequest("GET", "/member/api/v1/auth/session\r\n")
+        val payload =
+            AccessTokenPayload(
+                id = 7L,
+                sessionKey = "fresh-session-key",
+                username = "fresh-user",
+                email = "fresh-user@example.com",
+                name = "Fresh User",
+                rememberLoginEnabled = false,
+                ipSecurityEnabled = false,
+                ipSecurityFingerprint = null,
+                issuedAt = Instant.now(),
+                expiresAt = Instant.now().plusSeconds(60),
+            )
+
+        val resolution =
+            resolver.resolve(
+                memberId = 7L,
+                cookieSessionKey = "fresh-session-key",
+                tokenSessionKey = null,
+                payload = payload,
+                request = request,
+            )
+
+        assertThat(resolution.freshTokenFallback).isTrue()
+    }
+
+    @Test
     @DisplayName("legacy payload에 email과 username이 없고 DB 회원도 없으면 member id 기반 principal로 인증한다")
     fun `legacy payload without persisted member falls back to member id principal`() {
         val fixture = CustomAuthenticationFilterFixture()

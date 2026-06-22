@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test"
+import { expect, type Page } from "@playwright/test"
 
 export const adminEmail = process.env.E2E_ADMIN_EMAIL?.trim() || ""
 export const adminLegacyLoginId = process.env.E2E_ADMIN_USERNAME?.trim() || ""
@@ -54,6 +54,51 @@ export const hasAuthCookie = async (page: Page) => {
 export const isNavigationInterruptedError = (error: unknown) => {
   const message = error instanceof Error ? error.message : String(error)
   return /(interrupted by another navigation|net::ERR_ABORTED)/i.test(message)
+}
+
+export const isLegalReconsentGateUrl = (url: string) => {
+  try {
+    const parsed = new URL(url)
+    return parsed.pathname === "/settings/privacy" && parsed.searchParams.get("reconsent") === "required"
+  } catch {
+    return false
+  }
+}
+
+export const completeLegalReconsentIfRequired = async (
+  page: Page,
+  fallbackPath: string,
+  timeoutMs = liveUiRedirectTimeoutMs
+) => {
+  const reconsentPanel = page.getByRole("region", { name: "법적 문서 재동의" })
+  let isGate = isLegalReconsentGateUrl(page.url()) || (await reconsentPanel.isVisible().catch(() => false))
+  if (!isGate) {
+    const probeTimeoutMs = Math.min(timeoutMs, 3_000)
+    isGate =
+      (await page.waitForURL((url) => isLegalReconsentGateUrl(url.href), { timeout: probeTimeoutMs }).then(
+        () => true,
+        () => false
+      )) || (await reconsentPanel.waitFor({ state: "visible", timeout: probeTimeoutMs }).then(
+        () => true,
+        () => false
+      ))
+  }
+  if (!isGate) return false
+
+  await page.getByLabel("만 14세 이상입니다.").check()
+  await page.getByLabel("필수 개인정보 처리 안내를 확인했습니다.").check()
+  await page.getByLabel("국외 이전 및 외부 처리자 안내를 확인했습니다.").check()
+  await page.getByRole("button", { name: "동의하고 계속 이용" }).click()
+
+  await expect
+    .poll(() => page.url(), { timeout: timeoutMs })
+    .not.toContain("reconsent=required")
+
+  if (!page.url().includes(fallbackPath)) {
+    await page.goto(fallbackPath)
+  }
+
+  return true
 }
 
 export const waitForApiReachability = async (page: Page, apiBaseUrl: string) => {

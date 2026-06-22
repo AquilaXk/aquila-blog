@@ -4,6 +4,7 @@ import {
   adminLegacyLoginId,
   adminPassword,
   buildLoginPayloadCandidates,
+  completeLegalReconsentIfRequired,
   hasAuthCookie,
   isInvalidLoginRequestBody,
   isNavigationInterruptedError,
@@ -48,9 +49,11 @@ const tryEnterAdminRoute = async (page: Page, timeoutMs: number) => {
     }
 
     if (adminUrlPattern.test(page.url())) return true
+    if (await completeLegalReconsentIfRequired(page, "/admin", timeoutMs)) return true
 
     try {
       await page.waitForURL(adminUrlPattern, { timeout: perTryTimeout })
+      if (await completeLegalReconsentIfRequired(page, "/admin", timeoutMs)) return true
       return true
     } catch {
       if (attempt < tries) {
@@ -451,6 +454,7 @@ const expectLiveAdminRoute = async (
       continue
     }
 
+    await completeLegalReconsentIfRequired(page, path)
     await expect(page, `${label} route url`).toHaveURL(routePattern, { timeout: 20_000 })
     await expect(page.getByRole("heading", { name: headingPattern }), `${label} heading`).toBeVisible()
     return

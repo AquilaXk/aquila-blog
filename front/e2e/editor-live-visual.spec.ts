@@ -4,6 +4,7 @@ import {
   adminLegacyLoginId,
   adminPassword,
   buildLoginPayloadCandidates,
+  completeLegalReconsentIfRequired,
   hasAuthCookie,
   isInvalidLoginRequestBody,
   isNavigationInterruptedError,
@@ -65,9 +66,11 @@ const tryEnterEditorRoute = async (page: Page, timeoutMs: number) => {
     }
 
     if (editorUrlPattern.test(page.url())) return true
+    if (await completeLegalReconsentIfRequired(page, "/editor/new", timeoutMs)) return true
 
     try {
       await page.waitForURL(editorUrlPattern, { timeout: perTryTimeout })
+      if (await completeLegalReconsentIfRequired(page, "/editor/new", timeoutMs)) return true
       return true
     } catch {
       if (attempt < tries) await sleep(400 * attempt)
@@ -367,6 +370,7 @@ test.describe("editor live visual regression", () => {
     await loginThroughUi(page)
 
     await page.goto("/editor/new")
+    await completeLegalReconsentIfRequired(page, "/editor/new")
     await page.waitForURL(/\/editor(\/|$)/, { timeout: 30_000 })
     await expect(page.getByPlaceholder("제목을 입력하세요").first()).toBeVisible()
     await expectMarkdownEditorShell(page)
@@ -395,6 +399,7 @@ test.describe("editor live visual regression", () => {
 
     try {
       await page.goto(`/editor/${postId}`)
+      await completeLegalReconsentIfRequired(page, `/editor/${postId}`)
       await page.waitForURL(new RegExp(`/editor/${postId}(\\?|$)`), { timeout: 30_000 })
       await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(title)
       await expectMarkdownEditorShell(page)
@@ -430,6 +435,7 @@ test.describe("editor live visual regression", () => {
     )
 
     await page.goto("/editor/507")
+    await completeLegalReconsentIfRequired(page, "/editor/507")
     await page.waitForURL(/\/editor\/507(\?|$)/, { timeout: 30_000 })
     await expect(page.getByPlaceholder("제목을 입력하세요").first()).toBeVisible()
 

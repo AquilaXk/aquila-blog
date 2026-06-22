@@ -749,7 +749,7 @@ class PostTagRecommendationService(
             Regex("\\b(authorization)\\s*[:=]\\s*(?:bearer|basic|token)\\s+[^\"'\\s,)&]+", RegexOption.IGNORE_CASE)
         private val SECRET_ASSIGNMENT_REGEX =
             Regex(
-                """\b(api[_-]?key|token|password|secret|authorization)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,)&]+)""",
+                """["']?\b(api[_-]?key|token|password|secret|authorization)\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,)&}]+)""",
                 RegexOption.IGNORE_CASE,
             )
         private val FENCED_CODE_REGEX = Regex("```[\\s\\S]*?```")

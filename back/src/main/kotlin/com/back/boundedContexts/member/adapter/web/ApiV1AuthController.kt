@@ -22,6 +22,7 @@ import com.back.global.security.config.AuthCookieNames
 import com.back.global.security.domain.SecurityUser
 import com.back.global.web.application.AuthCookieService
 import com.back.global.web.application.ClientIpResolver
+import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
@@ -75,13 +76,25 @@ class ApiV1AuthController(
     )
 
     data class LegalReconsentRequest(
+        @field:NotBlank
+        @field:Size(max = 32)
         val termsVersion: String,
+        @field:NotBlank
+        @field:Size(min = 64, max = 64)
         val termsContentSha256: String,
+        @field:NotBlank
+        @field:Size(max = 32)
         val privacyVersion: String,
+        @field:NotBlank
+        @field:Size(min = 64, max = 64)
         val privacyContentSha256: String,
+        @field:Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         val age14OrOlder: Boolean,
+        @field:Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         val requiredPrivacyConfirmed: Boolean,
+        @field:Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         val analyticsConsent: Boolean,
+        @field:Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         val overseasTransferAcknowledged: Boolean,
     ) {
         fun toCommand(): LegalAcceptanceCommand =

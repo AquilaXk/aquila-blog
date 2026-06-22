@@ -4635,16 +4635,24 @@
         "type" : "object",
         "properties" : {
           "termsVersion" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 32,
+            "minLength" : 0
           },
           "termsContentSha256" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 64,
+            "minLength" : 64
           },
           "privacyVersion" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 32,
+            "minLength" : 0
           },
           "privacyContentSha256" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 64,
+            "minLength" : 64
           },
           "age14OrOlder" : {
             "type" : "boolean"
@@ -4658,7 +4666,8 @@
           "overseasTransferAcknowledged" : {
             "type" : "boolean"
           }
-        }
+        },
+        "required" : [ "age14OrOlder", "analyticsConsent", "overseasTransferAcknowledged", "privacyContentSha256", "privacyVersion", "requiredPrivacyConfirmed", "termsContentSha256", "termsVersion" ]
       },
       "LegalReconsentResponse" : {
         "type" : "object",

@@ -1993,14 +1993,14 @@ export interface components {
             data?: components["schemas"]["MemberLoginResBody"];
         };
         LegalReconsentRequest: {
-            termsVersion?: string;
-            termsContentSha256?: string;
-            privacyVersion?: string;
-            privacyContentSha256?: string;
-            age14OrOlder?: boolean;
-            requiredPrivacyConfirmed?: boolean;
-            analyticsConsent?: boolean;
-            overseasTransferAcknowledged?: boolean;
+            termsVersion: string;
+            termsContentSha256: string;
+            privacyVersion: string;
+            privacyContentSha256: string;
+            age14OrOlder: boolean;
+            requiredPrivacyConfirmed: boolean;
+            analyticsConsent: boolean;
+            overseasTransferAcknowledged: boolean;
         };
         LegalReconsentResponse: {
             legalReconsent?: components["schemas"]["LegalReconsentStatus"];

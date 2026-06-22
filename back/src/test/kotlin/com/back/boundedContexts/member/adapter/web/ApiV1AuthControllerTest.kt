@@ -639,6 +639,33 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
         }
 
         @Test
+        fun `재동의 요청 DTO는 모든 법적 증빙 필드를 command 로 전달한다`() {
+            val active = ActiveLegalDocumentMetadata.current()
+            val request =
+                ApiV1AuthController.LegalReconsentRequest(
+                    termsVersion = active.terms.version,
+                    termsContentSha256 = active.terms.contentSha256,
+                    privacyVersion = active.privacy.version,
+                    privacyContentSha256 = active.privacy.contentSha256,
+                    age14OrOlder = true,
+                    requiredPrivacyConfirmed = true,
+                    analyticsConsent = false,
+                    overseasTransferAcknowledged = true,
+                )
+
+            val command = request.toCommand()
+
+            assertThat(command.termsVersion).isEqualTo(request.termsVersion)
+            assertThat(command.termsContentSha256).isEqualTo(request.termsContentSha256)
+            assertThat(command.privacyVersion).isEqualTo(request.privacyVersion)
+            assertThat(command.privacyContentSha256).isEqualTo(request.privacyContentSha256)
+            assertThat(command.age14OrOlder).isEqualTo(request.age14OrOlder)
+            assertThat(command.requiredPrivacyConfirmed).isEqualTo(request.requiredPrivacyConfirmed)
+            assertThat(command.analyticsConsent).isEqualTo(request.analyticsConsent)
+            assertThat(command.overseasTransferAcknowledged).isEqualTo(request.overseasTransferAcknowledged)
+        }
+
+        @Test
         fun `내 정보 조회는 apiKey 쿠키만 있으면 세션 만료로 거부한다`() {
             val member = memberFacade.findByLoginId("user1")!!
 

@@ -82,6 +82,31 @@ class PostCommentRepositoryImpl : PostCommentRepositoryCustom {
 
         if (affectedPostIds.isEmpty()) return 0
 
+        val commentIdsToDelete =
+            entityManager
+                .createNativeQuery(
+                    """
+                    with recursive comment_tree as (
+                        select pc.id, pc.created_at, 0 as depth
+                        from post_comment pc
+                        where pc.author_id = :authorId
+                          and pc.deleted_at is null
+                        union all
+                        select child.id, child.created_at, comment_tree.depth + 1
+                        from post_comment child
+                        join comment_tree on child.parent_comment_id = comment_tree.id
+                        where child.deleted_at is null
+                    )
+                    select distinct id
+                    from comment_tree
+                    order by id asc
+                    """.trimIndent(),
+                ).setParameter("authorId", authorId)
+                .resultList
+                .map { (it as Number).toLong() }
+
+        if (commentIdsToDelete.isEmpty()) return 0
+
         val deletedRows =
             entityManager
                 .createNativeQuery(
@@ -89,10 +114,10 @@ class PostCommentRepositoryImpl : PostCommentRepositoryCustom {
                     update post_comment
                     set deleted_at = now(),
                         modified_at = now()
-                    where author_id = :authorId
+                    where id in (:commentIds)
                       and deleted_at is null
                     """.trimIndent(),
-                ).setParameter("authorId", authorId)
+                ).setParameter("commentIds", commentIdsToDelete)
                 .executeUpdate()
 
         entityManager

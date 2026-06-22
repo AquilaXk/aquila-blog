@@ -298,10 +298,13 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
                 listed = true,
             )
         val authoredComment = postFacade.writeComment(member, otherPost, "탈퇴 후 숨겨져야 하는 댓글")
+        val replyToAuthoredComment = postFacade.writeComment(otherAuthor, otherPost, "탈퇴 댓글의 답글", authoredComment)
+        val nestedReplyToAuthoredComment =
+            postFacade.writeComment(member, otherPost, "탈퇴 댓글의 중첩 답글", replyToAuthoredComment)
         val firstSessionKey = requireAuthCookie(firstAuthCookies, AuthCookieNames.SESSION_KEY)
         val secondSessionKey = requireAuthCookie(secondAuthCookies, AuthCookieNames.SESSION_KEY)
         assertThat(countMemberAttrsContaining(member.id, "민감")).isGreaterThan(0)
-        assertThat(findPostCommentsCount(otherPost.id)).isEqualTo(1)
+        assertThat(findPostCommentsCount(otherPost.id)).isEqualTo(3)
 
         mvc
             .delete("/member/api/v1/privacy/account") {
@@ -338,6 +341,8 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         assertThat(findPostDeletionState(authoredPost.id).published).isFalse()
         assertThat(findPostDeletionState(authoredPost.id).listed).isFalse()
         assertThat(findCommentDeletedAt(authoredComment.id)).isNotNull()
+        assertThat(findCommentDeletedAt(replyToAuthoredComment.id)).isNotNull()
+        assertThat(findCommentDeletedAt(nestedReplyToAuthoredComment.id)).isNotNull()
         assertThat(findPostCommentsCount(otherPost.id)).isZero()
         val deletion =
             memberAccountDeletionRepository
@@ -346,6 +351,41 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         assertThat(deletion.memberId).isEqualTo(member.id)
         assertThat(deletion.reason).isEqualTo("서비스 이용 종료")
         assertThat(deletion.deletedAt).isNotNull()
+    }
+
+    @Test
+    fun `계정 탈퇴는 비밀번호 앞뒤 공백을 원문 그대로 검증한다`() {
+        val rawPassword = " Abcd1234! "
+        val member =
+            memberFacade.join(
+                username = "account-delete-spaced-password-user",
+                password = rawPassword,
+                nickname = "공백비밀번호",
+                profileImgUrl = null,
+                email = "account-delete-spaced-password-user@example.com",
+            )
+        val authCookies = loginAuthCookies(member.email!!, rawPassword)
+
+        mvc
+            .delete("/member/api/v1/privacy/account") {
+                authCookies.forEach { cookie(it) }
+                header("X-Aquila-CSRF", "1")
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                        "password": " Abcd1234! ",
+                        "reason": "비밀번호 원문 검증"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.resultCode") { value("200-1") }
+                jsonPath("$.msg") { value("계정 탈퇴가 완료되었습니다.") }
+            }
+
+        assertThat(findMemberDeletionState(member.id).deletedAt).isNotNull()
+        assertThat(countDeletionTombstones(member.id, "비밀번호 원문 검증")).isEqualTo(1)
     }
 
     @Test
@@ -528,7 +568,10 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         assertThat(findSessionRevokedAt(sessionKey.value)).isNull()
     }
 
-    private fun loginAuthCookies(email: String): List<Cookie> =
+    private fun loginAuthCookies(
+        email: String,
+        password: String = "Abcd1234!",
+    ): List<Cookie> =
         mvc
             .post("/member/api/v1/auth/login") {
                 contentType = MediaType.APPLICATION_JSON
@@ -536,7 +579,7 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
                     """
                     {
                         "email": "$email",
-                        "password": "Abcd1234!"
+                        "password": "$password"
                     }
                     """.trimIndent()
             }.andExpect {

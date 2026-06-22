@@ -173,7 +173,6 @@ class PrivacyRightsApplicationService(
 
         val rawPassword =
             password
-                ?.trim()
                 ?.takeIf { it.isNotBlank() }
                 ?: throw AppException("400-1", "비밀번호를 입력해주세요.")
         memberUseCase.checkPassword(member, rawPassword)

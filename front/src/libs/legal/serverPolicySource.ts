@@ -12,7 +12,7 @@ import type { LegalPolicyDocument, LegalPolicyKind, LegalPolicyPageProps, LegalP
 
 const policyDir = path.resolve(process.cwd(), "..", "legal", "policies")
 
-const policyVersions = ["1.0.0", ACTIVE_LEGAL_POLICY_VERSION] as const
+const publicPolicyVersions = [ACTIVE_LEGAL_POLICY_VERSION] as const
 
 const policyFilePrefixes: Record<LegalPolicyKind, string> = {
   privacy: "privacy",
@@ -30,7 +30,7 @@ const stablePolicyHash = (policy: LegalPolicyDocument) => {
 
 const readPolicy = (kind: LegalPolicyKind, version = ACTIVE_LEGAL_POLICY_VERSION): LegalPolicyDocument => {
   if (version !== ACTIVE_LEGAL_POLICY_VERSION) {
-    if (!(policyVersions as readonly string[]).includes(version)) {
+    if (!(publicPolicyVersions as readonly string[]).includes(version)) {
       throw new Error(`Unsupported legal policy version: ${kind}@${version}`)
     }
   }
@@ -68,14 +68,14 @@ export const getLegalPolicyPageStaticProps = (kind: LegalPolicyKind, version = A
 }
 
 export const getLegalPolicyVersionStaticPaths = (kind: LegalPolicyKind) => ({
-  paths: policyVersions.map((version) => ({ params: { version } })),
+  paths: publicPolicyVersions.map((version) => ({ params: { version } })),
   fallback: false,
 })
 
 export const getLegalPolicyHistoryStaticProps = () => {
   const policies: LegalPolicySummary[] = (Object.keys(policyFilePrefixes) as LegalPolicyKind[])
     .flatMap((kind) =>
-      policyVersions.map((version) => {
+      publicPolicyVersions.map((version) => {
         const policy = readPolicy(kind, version)
         return {
           kind,

@@ -16,7 +16,7 @@
 | 역할 | Owner | 출시 전 확인 |
 | --- | --- | --- |
 | 서비스 운영 owner | AquilaXk | 운영 문의 수신, 권리 요청 처리, incident escalation을 승인한다. |
-| 개인정보 문의 수신처 | `aquilaxk10@gmail.com` | 실제 수신 가능 여부를 launch PR evidence에 남긴다. |
+| 개인정보 문의 수신처 | `privacy@aquila-blog.example` | 실제 공유 메일함 수신 가능 여부를 launch PR evidence에 남긴다. |
 | 법무 확인 owner | 외부 전문가 또는 서비스 운영자가 지정한 검토자 | 이 문서는 법률 자문이 아니며, 최종 법적 판단을 대체하지 않는다. |
 | 기술 evidence owner | PR 작성자 | 코드/정책/데이터맵/테스트 결과를 PR 본문과 이 문서에 연결한다. |
 

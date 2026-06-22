@@ -25,4 +25,6 @@ interface PostCommentRepositoryPort {
     ): PostComment?
 
     fun findById(id: Long): Optional<PostComment>
+
+    fun softDeleteByAuthorId(authorId: Long): Int
 }

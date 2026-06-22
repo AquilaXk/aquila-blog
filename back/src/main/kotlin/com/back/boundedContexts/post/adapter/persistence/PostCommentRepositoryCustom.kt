@@ -8,4 +8,6 @@ interface PostCommentRepositoryCustom {
         post: Post,
         rootCommentId: Long,
     ): List<PostComment>
+
+    fun softDeleteByAuthorId(authorId: Long): Int
 }

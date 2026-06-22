@@ -66,6 +66,8 @@ class PostRepositoryAdapter(
 
     override fun softDeleteById(id: Long): Boolean = postDeletedQueryRepository.softDeleteById(id)
 
+    override fun softDeleteByAuthorId(authorId: Long): Int = postDeletedQueryRepository.softDeleteByAuthorId(authorId)
+
     override fun restoreDeletedById(id: Long): Boolean = postDeletedQueryRepository.restoreDeletedById(id)
 
     override fun hardDeleteDeletedById(id: Long): Boolean = postDeletedQueryRepository.hardDeleteDeletedById(id)

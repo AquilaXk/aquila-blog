@@ -92,6 +92,8 @@ interface PostRepositoryPort {
 
     fun softDeleteById(id: Long): Boolean
 
+    fun softDeleteByAuthorId(authorId: Long): Int
+
     fun restoreDeletedById(id: Long): Boolean
 
     fun hardDeleteDeletedById(id: Long): Boolean

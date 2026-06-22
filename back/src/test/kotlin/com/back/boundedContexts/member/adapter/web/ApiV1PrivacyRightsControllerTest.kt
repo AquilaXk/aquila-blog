@@ -16,6 +16,7 @@ import com.back.boundedContexts.member.subContexts.privacy.adapter.persistence.M
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberAccountDeletion
 import com.back.boundedContexts.member.subContexts.session.adapter.persistence.MemberSessionRepository
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
+import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.global.security.config.AuthCookieNames
 import com.back.support.BaseControllerIntegrationTest
 import com.jayway.jsonpath.JsonPath
@@ -49,6 +50,9 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
 
     @Autowired
     private lateinit var authTokenIssueUseCase: AuthTokenIssueUseCase
+
+    @Autowired
+    private lateinit var postFacade: PostApplicationService
 
     @Autowired
     private lateinit var jdbcTemplate: JdbcTemplate
@@ -269,9 +273,35 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         insertMemberAttr(member.id, PROFILE_CONTACT_LINKS, """[{"label":"민감한 연락처","href":"mailto:secret@example.test"}]""")
         insertMemberAttr(member.id, PROFILE_WORKSPACE_DRAFT, """{"blocks":[{"text":"민감한 draft"}]}""")
         insertMemberAttr(member.id, PROFILE_WORKSPACE_PUBLISHED, """{"blocks":[{"text":"민감한 published"}]}""")
+        val authoredPost =
+            postFacade.write(
+                author = member,
+                title = "탈퇴 회원 작성글",
+                content = "탈퇴 후 공개 조회에서 빠져야 하는 글",
+                published = true,
+                listed = true,
+            )
+        val otherAuthor =
+            memberFacade.join(
+                username = "account-delete-other-author",
+                password = "Abcd1234!",
+                nickname = "다른작성자",
+                profileImgUrl = null,
+                email = "account-delete-other-author@example.com",
+            )
+        val otherPost =
+            postFacade.write(
+                author = otherAuthor,
+                title = "탈퇴 댓글 대상글",
+                content = "다른 회원의 공개 글",
+                published = true,
+                listed = true,
+            )
+        val authoredComment = postFacade.writeComment(member, otherPost, "탈퇴 후 숨겨져야 하는 댓글")
         val firstSessionKey = requireAuthCookie(firstAuthCookies, AuthCookieNames.SESSION_KEY)
         val secondSessionKey = requireAuthCookie(secondAuthCookies, AuthCookieNames.SESSION_KEY)
         assertThat(countMemberAttrsContaining(member.id, "민감")).isGreaterThan(0)
+        assertThat(findPostCommentsCount(otherPost.id)).isEqualTo(1)
 
         mvc
             .delete("/member/api/v1/privacy/account") {
@@ -304,6 +334,11 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         assertThat(findSessionRevokedAt(secondSessionKey.value)).isNotNull()
         assertThat(countDeletionTombstones(member.id, "서비스 이용 종료")).isEqualTo(1)
         assertThat(countMemberAttrsContaining(member.id, "민감")).isZero()
+        assertThat(findPostDeletionState(authoredPost.id).deletedAt).isNotNull()
+        assertThat(findPostDeletionState(authoredPost.id).published).isFalse()
+        assertThat(findPostDeletionState(authoredPost.id).listed).isFalse()
+        assertThat(findCommentDeletedAt(authoredComment.id)).isNotNull()
+        assertThat(findPostCommentsCount(otherPost.id)).isZero()
         val deletion =
             memberAccountDeletionRepository
                 .findAll()
@@ -561,6 +596,46 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             "%$valueFragment%",
         ) ?: 0
 
+    private fun findPostDeletionState(postId: Long): PostDeletionState =
+        jdbcTemplate.queryForObject(
+            """
+            select published, listed, deleted_at
+            from post
+            where id = ?
+            """.trimIndent(),
+            { rs, _ ->
+                PostDeletionState(
+                    published = rs.getBoolean("published"),
+                    listed = rs.getBoolean("listed"),
+                    deletedAt = rs.getTimestamp("deleted_at")?.toInstant(),
+                )
+            },
+            postId,
+        ) ?: error("post not found")
+
+    private fun findCommentDeletedAt(commentId: Long): java.time.Instant? =
+        jdbcTemplate.queryForObject(
+            """
+            select deleted_at
+            from post_comment
+            where id = ?
+            """.trimIndent(),
+            { rs, _ -> rs.getTimestamp("deleted_at")?.toInstant() },
+            commentId,
+        )
+
+    private fun findPostCommentsCount(postId: Long): Int =
+        jdbcTemplate.queryForObject(
+            """
+            select int_value
+            from post_attr
+            where subject_id = ?
+              and name = 'commentsCount'
+            """.trimIndent(),
+            Int::class.java,
+            postId,
+        ) ?: 0
+
     private fun findMemberDeletionState(memberId: Long): MemberDeletionState =
         jdbcTemplate.queryForObject(
             """
@@ -595,5 +670,11 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         val deletedAt: java.time.Instant?,
         val ipSecurityEnabled: Boolean,
         val ipSecurityFingerprint: String?,
+    )
+
+    private data class PostDeletionState(
+        val published: Boolean,
+        val listed: Boolean,
+        val deletedAt: java.time.Instant?,
     )
 }

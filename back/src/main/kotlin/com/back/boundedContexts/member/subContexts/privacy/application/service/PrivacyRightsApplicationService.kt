@@ -25,6 +25,8 @@ import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRe
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequestStatus
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequestType
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
+import com.back.boundedContexts.post.application.port.output.PostCommentRepositoryPort
+import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.global.exception.application.AppException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -40,6 +42,8 @@ class PrivacyRightsApplicationService(
     private val memberAccountDeletionRepository: MemberAccountDeletionRepositoryPort,
     private val memberLegalAcceptanceRepository: MemberLegalAcceptanceRepositoryPort,
     private val memberSessionUseCase: MemberSessionUseCase,
+    private val postRepository: PostRepositoryPort,
+    private val postCommentRepository: PostCommentRepositoryPort,
 ) {
     @Transactional(readOnly = true)
     fun exportFor(memberId: Long): PrivacyExportResponse {
@@ -135,6 +139,8 @@ class PrivacyRightsApplicationService(
         }
 
         val deletedAt = Instant.now()
+        postCommentRepository.softDeleteByAuthorId(member.id)
+        postRepository.softDeleteByAuthorId(member.id)
         member.softDelete(deletedAt)
         memberAttrRepository.clearStringValuesBySubjectIdAndNameIn(member.id, PROFILE_PRIVACY_ATTR_NAMES)
         memberAccountDeletionRepository.save(

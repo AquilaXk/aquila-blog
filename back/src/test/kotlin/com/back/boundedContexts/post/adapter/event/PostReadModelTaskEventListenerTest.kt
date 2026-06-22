@@ -8,6 +8,7 @@ import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostReadPrewarmPayload
 import com.back.boundedContexts.post.dto.PostSearchEngineMirrorPayload
 import com.back.boundedContexts.post.dto.PostSearchIndexSyncPayload
+import com.back.boundedContexts.post.event.PostAccountDeletionDeletedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
 import com.back.global.task.application.TaskFacade
 import com.back.global.task.application.TaskHandlerEntry
@@ -74,6 +75,42 @@ class PostReadModelTaskEventListenerTest {
             .isInstanceOf(RuntimeException::class.java)
             .hasMessage("enqueue down")
         assertThat(thrown.suppressed).hasSize(2)
+    }
+
+    @Test
+    @DisplayName("계정 탈퇴 삭제 이벤트는 개인정보 DTO 없이 search/read-model 삭제 cleanup을 enqueue한다")
+    fun `account deletion deleted event enqueues sanitized search cleanup`() {
+        val repository = RecordingTaskQueueRepository()
+        val listener =
+            createListener(
+                taskFacade = createTaskFacade(repository),
+            )
+        val event =
+            PostAccountDeletionDeletedEvent(
+                uid = UUID.randomUUID(),
+                aggregateId = 91L,
+                beforeTags = listOf("privacy", "retention"),
+            )
+
+        listener.handle(event)
+
+        assertThat(repository.savedTasks.map { it.taskType }).containsExactly(
+            "post.search-index.sync",
+            "post.search-engine.mirror",
+        )
+        val objectMapper = ObjectMapper()
+        val searchIndexPayload =
+            objectMapper.readValue(repository.savedTasks[0].payload, PostSearchIndexSyncPayload::class.java)
+        val mirrorPayload =
+            objectMapper.readValue(repository.savedTasks[1].payload, PostSearchEngineMirrorPayload::class.java)
+        assertThat(searchIndexPayload.postId).isEqualTo(91L)
+        assertThat(searchIndexPayload.forceClear).isTrue()
+        assertThat(mirrorPayload.postId).isEqualTo(91L)
+        assertThat(mirrorPayload.deleted).isTrue()
+        assertThat(mirrorPayload.tags).containsExactly("privacy", "retention")
+        assertThat(repository.savedTasks.joinToString("\n") { it.payload })
+            .doesNotContain("postDto")
+            .doesNotContain("actorDto")
     }
 
     private fun createListener(taskFacade: TaskFacade): PostReadModelTaskEventListener =

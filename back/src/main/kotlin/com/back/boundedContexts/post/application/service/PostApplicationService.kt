@@ -13,6 +13,7 @@ import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.TagCountDto
+import com.back.boundedContexts.post.event.PostAccountDeletionDeletedEvent
 import com.back.boundedContexts.post.event.PostDeletedEvent
 import com.back.boundedContexts.post.event.PostModifiedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
@@ -406,6 +407,7 @@ class PostApplicationService(
         val deletedPostContent = post.content
         val wasPublic = isPubliclyListed(post)
         val wasTempDraft = postTempDraftService.isTempDraft(post)
+        val beforeTags = postTagIndexService.extractNormalizedTags(deletedPostContent)
 
         val softDeleted = postRepository.softDeleteById(post.id)
         if (!softDeleted) {
@@ -432,7 +434,7 @@ class PostApplicationService(
                 previousContent = null,
                 currentContent = null,
                 deletedContent = null,
-                beforeTags = emptyList(),
+                beforeTags = beforeTags,
                 afterTags = emptyList(),
                 cacheInvalidationScope =
                     if (wasPublic) {
@@ -442,6 +444,11 @@ class PostApplicationService(
                     },
                 evictReason = "account-deletion-soft-delete",
                 recommendationAction = PostRecommendationSideEffect.EVICT,
+            ),
+            PostAccountDeletionDeletedEvent(
+                uid = UUID.randomUUID(),
+                aggregateId = post.id,
+                beforeTags = beforeTags,
             ),
         )
     }

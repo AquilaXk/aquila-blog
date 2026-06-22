@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test"
+import { expect, type Page } from "@playwright/test"
 
 export const adminEmail = process.env.E2E_ADMIN_EMAIL?.trim() || ""
 export const adminLegacyLoginId = process.env.E2E_ADMIN_USERNAME?.trim() || ""
@@ -9,6 +9,7 @@ export const liveLoginAttempts = Number.parseInt(process.env.E2E_LIVE_LOGIN_ATTE
 export const liveLoginTimeoutMs = Number.parseInt(process.env.E2E_LIVE_LOGIN_TIMEOUT_MS || "30000", 10)
 export const liveRetryBaseDelayMs = Number.parseInt(process.env.E2E_LIVE_RETRY_BASE_DELAY_MS || "2000", 10)
 export const liveUiRedirectTimeoutMs = Number.parseInt(process.env.E2E_LIVE_UI_REDIRECT_TIMEOUT_MS || "20000", 10)
+export const quickReconsentProbeTimeoutMs = 1_500
 
 export const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
 export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -54,6 +55,98 @@ export const hasAuthCookie = async (page: Page) => {
 export const isNavigationInterruptedError = (error: unknown) => {
   const message = error instanceof Error ? error.message : String(error)
   return /(interrupted by another navigation|net::ERR_ABORTED)/i.test(message)
+}
+
+export const isLegalReconsentGateUrl = (url: string) => {
+  try {
+    const parsed = new URL(url)
+    return parsed.pathname === "/settings/privacy" && parsed.searchParams.get("reconsent") === "required"
+  } catch {
+    return false
+  }
+}
+
+const isCurrentFallbackPath = (currentUrl: string, fallbackPath: string) => {
+  try {
+    const current = new URL(currentUrl)
+    const fallback = new URL(fallbackPath, current.origin)
+    return current.pathname === fallback.pathname
+  } catch {
+    return false
+  }
+}
+
+const hasRequiredLegalReconsent = async (page: Page, timeoutMs: number) => {
+  try {
+    const response = await page.request.get(`${resolveApiBaseUrl(page.url())}/member/api/v1/auth/session`, {
+      timeout: timeoutMs,
+    })
+    if (!response.ok()) return false
+
+    const session = (await response.json().catch(() => null)) as
+      | { legalReconsent?: { required?: boolean } | null }
+      | null
+    return session?.legalReconsent?.required === true
+  } catch {
+    return false
+  }
+}
+
+export const completeLegalReconsentIfRequired = async (
+  page: Page,
+  fallbackPath: string,
+  timeoutMs = liveUiRedirectTimeoutMs,
+  probeTimeoutMs = quickReconsentProbeTimeoutMs
+) => {
+  const reconsentPanel = page.getByRole("region", { name: "법적 문서 재동의" })
+  let isGate = isLegalReconsentGateUrl(page.url()) || (await reconsentPanel.isVisible().catch(() => false))
+  if (!isGate) {
+    const gateProbeTimeoutMs = Math.min(timeoutMs, probeTimeoutMs)
+    isGate = await expect
+      .poll(
+        async () => isLegalReconsentGateUrl(page.url()) || (await reconsentPanel.isVisible().catch(() => false)),
+        { timeout: gateProbeTimeoutMs }
+      )
+      .toBe(true)
+      .then(
+        () => true,
+        () => false
+      )
+  }
+  if (!isGate && (await hasRequiredLegalReconsent(page, timeoutMs))) {
+    await page.goto(`/settings/privacy?reconsent=required&next=${encodeURIComponent(fallbackPath)}`)
+    isGate = true
+  }
+  if (!isGate) return false
+
+  const ageCheckbox = page.getByLabel("만 14세 이상입니다.")
+  const privacyCheckbox = page.getByLabel("필수 개인정보 처리 안내를 확인했습니다.")
+  const overseasCheckbox = page.getByLabel("국외 이전 및 외부 처리자 안내를 확인했습니다.")
+  const hasForm = await expect
+    .poll(() => ageCheckbox.isVisible().catch(() => false), { timeout: timeoutMs })
+    .toBe(true)
+    .then(
+      () => true,
+      () => false
+    )
+  if (!hasForm) {
+    throw new Error(`Legal reconsent gate did not expose the required form. url=${page.url()}`)
+  }
+
+  await ageCheckbox.check()
+  await privacyCheckbox.check()
+  await overseasCheckbox.check()
+  await page.getByRole("button", { name: "동의하고 계속 이용" }).click()
+
+  await expect
+    .poll(() => page.url(), { timeout: timeoutMs })
+    .not.toContain("reconsent=required")
+
+  if (!isCurrentFallbackPath(page.url(), fallbackPath)) {
+    await page.goto(fallbackPath)
+  }
+
+  return true
 }
 
 export const waitForApiReachability = async (page: Page, apiBaseUrl: string) => {

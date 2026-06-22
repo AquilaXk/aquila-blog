@@ -471,7 +471,7 @@ activities:
     policySectionId: privacy-processor-ai
     enabledByEnv: custom.ai.tag.enabled defaults false via CUSTOM__AI__TAG__ENABLED; custom.ai.tag.gemini.*; legacy fallback CUSTOM__AI__SUMMARY__GEMINI__*
     reviewRequired:
-      - Production default-off, PII scanner, and DPA checks are tracked by issue1003.
+      - Production default-off, PII block, and DPA/region/retention/training opt-out startup checks are enforced by issue1003.
 
   - id: backup_and_restore
     name: PostgreSQL, MinIO, deploy rollback backup

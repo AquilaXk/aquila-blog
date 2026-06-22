@@ -16,6 +16,18 @@ class ProdConfigGuard(
     private val frontUrl: String,
     @param:Value("\${custom.site.backUrl:}")
     private val backUrl: String,
+    @param:Value("\${custom.ai.tag.enabled:false}")
+    private val aiTagEnabled: Boolean,
+    @param:Value("\${custom.ai.tag.policy.dpaConfirmed:false}")
+    private val aiTagDpaConfirmed: Boolean,
+    @param:Value("\${custom.ai.tag.policy.regionConfirmed:false}")
+    private val aiTagRegionConfirmed: Boolean,
+    @param:Value("\${custom.ai.tag.policy.retentionConfirmed:false}")
+    private val aiTagRetentionConfirmed: Boolean,
+    @param:Value("\${custom.ai.tag.policy.trainingOptOutConfirmed:false}")
+    private val aiTagTrainingOptOutConfirmed: Boolean,
+    @param:Value("\${custom.ai.tag.policy.processorRegistryConfirmed:false}")
+    private val aiTagProcessorRegistryConfirmed: Boolean,
     private val adminProperties: AdminProperties,
 ) : ApplicationRunner {
     override fun run(args: ApplicationArguments) {
@@ -40,5 +52,15 @@ class ProdConfigGuard(
         require(backUrl.startsWith("https://")) {
             "custom.site.backUrl must use https in prod profile."
         }
+        require(!aiTagEnabled || aiTagPolicyConfirmed()) {
+            "custom.ai.tag.enabled requires confirmed DPA, region, retention, training opt-out, and processor registry in prod profile."
+        }
     }
+
+    private fun aiTagPolicyConfirmed(): Boolean =
+        aiTagDpaConfirmed &&
+            aiTagRegionConfirmed &&
+            aiTagRetentionConfirmed &&
+            aiTagTrainingOptOutConfirmed &&
+            aiTagProcessorRegistryConfirmed
 }

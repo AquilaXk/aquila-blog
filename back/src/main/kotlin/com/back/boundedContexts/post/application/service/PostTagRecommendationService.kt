@@ -162,6 +162,17 @@ class PostTagRecommendationService(
             )
         }
 
+        if (hasSensitiveExternalProcessingInput(normalizedTitle, normalizedContent, normalizedExistingTags)) {
+            return done(
+                fallbackAndCache(
+                    cacheKey = cacheKey,
+                    tags = fallbackTags,
+                    reason = "pii-blocked",
+                    nowMillis = now,
+                ),
+            )
+        }
+
         if (!allowRequest(now)) {
             return done(
                 fallbackAndCache(
@@ -559,6 +570,20 @@ class PostTagRecommendationService(
             .replace(PHONE_REGEX, "[redacted-phone]")
     }
 
+    private fun hasSensitiveExternalProcessingInput(
+        title: String,
+        content: String,
+        existingTags: List<String>,
+    ): Boolean {
+        val value =
+            buildString {
+                appendLine(title)
+                appendLine(content)
+                append(existingTags.joinToString("\n"))
+            }
+        return SENSITIVE_EXTERNAL_PROCESSING_REGEXES.any { it.containsMatchIn(value) }
+    }
+
     private fun stripCodeFence(raw: String): String {
         val trimmed = raw.trim()
         if (!trimmed.startsWith("```")) return trimmed
@@ -755,6 +780,18 @@ class PostTagRecommendationService(
             Regex(
                 """["']?\b(api[_-]?key|token|password|secret|authorization)\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,)&}]+)""",
                 RegexOption.IGNORE_CASE,
+            )
+        private val KOREAN_RRN_LIKE_REGEX = Regex("(?<!\\d)\\d{6}[-\\s]?\\d{7}(?!\\d)")
+        private val OAUTH_CODE_REGEX =
+            Regex("\\b(?:oauth[_-]?code|authorization[_-]?code|code)\\b\\s*[:=]\\s*[^\"'\\s,)&}]{8,}", RegexOption.IGNORE_CASE)
+        private val SENSITIVE_EXTERNAL_PROCESSING_REGEXES =
+            listOf(
+                EMAIL_REGEX,
+                PHONE_REGEX,
+                AUTHORIZATION_SECRET_REGEX,
+                SECRET_ASSIGNMENT_REGEX,
+                KOREAN_RRN_LIKE_REGEX,
+                OAUTH_CODE_REGEX,
             )
         private val FENCED_CODE_REGEX = Regex("```[\\s\\S]*?```")
         private val MARKDOWN_IMAGE_REGEX = Regex("!\\[[^\\]]*\\]\\(([^)\\s]+)(?:\\s+\"[^\"]*\")?\\)")

@@ -1,5 +1,6 @@
 import type { NextWebVitalsMetric } from "next/app"
 import * as gtag from "src/libs/gtag"
+import { hasOptionalTrackingConsent } from "src/libs/privacy/browserStorageRegistry"
 import { CONFIG } from "site.config"
 
 type RumMetricPayload = {
@@ -39,6 +40,7 @@ const toSampleRate = () => {
 const shouldSendMetric = (metric: NextWebVitalsMetric) => {
   if (!ALLOWED_METRICS.has(metric.name)) return false
   if (typeof window === "undefined") return false
+  if (!hasOptionalTrackingConsent()) return false
   const sampleRate = toSampleRate()
   if (sampleRate <= 0) return false
   return Math.random() <= sampleRate
@@ -71,6 +73,7 @@ const sendToApi = (payload: RumMetricPayload) => {
 
 const sendToAnalytics = (metric: NextWebVitalsMetric) => {
   if (!(CONFIG.isProd && CONFIG.googleAnalytics?.enable)) return
+  if (!hasOptionalTrackingConsent()) return
   gtag.event({
     action: "web_vital",
     category: metric.name,

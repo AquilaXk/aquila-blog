@@ -208,6 +208,15 @@ jobs:
         working-directory: front
         run: yarn test:e2e:smoke
 
+      - name: Run legal privacy e2e
+        if: steps.changes.outputs.frontend == 'true'
+        working-directory: front
+        env:
+          NEXT_PUBLIC_RUM_SAMPLE_RATE: "1"
+          NODE_ENV: production
+          VERCEL_ENV: production
+        run: yarn playwright test e2e/legal-policy-pages.spec.ts e2e/privacy-tracking-consent.spec.ts e2e/browser-storage-registry.spec.ts --project=chromium --workers=1
+
       - name: Run editor authoring e2e
         if: steps.changes.outputs.frontend == 'true'
         working-directory: front

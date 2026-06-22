@@ -26,6 +26,8 @@ const watchedEntries = [
 
 const buildSignature = {
   enableQaRoutes: process.env.ENABLE_QA_ROUTES === "true",
+  nextPublicRumSampleRate: process.env.NEXT_PUBLIC_RUM_SAMPLE_RATE || "",
+  vercelEnv: process.env.VERCEL_ENV || "",
 }
 
 const getLatestMtimeMs = (targetPath) => {

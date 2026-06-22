@@ -9,6 +9,7 @@ import { RootLayout } from "src/layouts"
 import type { AdminProfile } from "src/hooks/useAdminProfile"
 import { GlobalErrorBoundary } from "src/components/error/ErrorBoundary"
 import createEmotionCache from "src/libs/emotion/createEmotionCache"
+import { useOptionalTrackingConsent } from "src/libs/privacy/optionalTrackingConsent"
 import { createQueryClient } from "src/libs/react-query"
 import { useState } from "react"
 import "katex/dist/katex.min.css"
@@ -34,6 +35,7 @@ function App({ Component, pageProps, emotionCache = clientSideEmotionCache }: Ap
   const initialAdminProfileShouldRefetch = appPageProps.initialAdminProfileSource === "static-fallback"
   const [queryClient] = useState(createQueryClient)
   const router = useRouter()
+  const optionalTrackingAllowed = useOptionalTrackingConsent()
 
   return (
     <CacheProvider value={emotionCache}>
@@ -49,7 +51,7 @@ function App({ Component, pageProps, emotionCache = clientSideEmotionCache }: Ap
               initialAdminProfileShouldRefetch={initialAdminProfileShouldRefetch}
             >
               {getLayout(<Component {...pageProps} />)}
-              {process.env.NODE_ENV === "production" ? (
+              {process.env.NODE_ENV === "production" && optionalTrackingAllowed ? (
                 <>
                   <Analytics />
                   <SpeedInsights />

@@ -6,6 +6,7 @@ import {
   PrivacyRequestItem,
   PrivacyRequestType,
 } from "src/apis/backend/privacy"
+import { setOptionalTrackingConsent } from "src/libs/privacy/browserStorageRegistry"
 import SettingsLayout from "./SettingsLayout"
 
 const dateTimeFormatter = new Intl.DateTimeFormat("ko-KR", {
@@ -58,6 +59,9 @@ const SettingsPrivacyPage = () => {
         message: message.trim() || undefined,
       })
       setCreatedRequest(response.data.item)
+      if (requestType === "CONSENT_WITHDRAWAL") {
+        setOptionalTrackingConsent(false)
+      }
       setFeedback(response.msg)
     } catch {
       setFeedback("개인정보 처리 요청을 접수하지 못했습니다.")

@@ -305,7 +305,7 @@ custom:
       coalesceMaxTags: ${CUSTOM__CDN__PURGE__COALESCE_MAX_TAGS:2048}
   ai:
     tag:
-      enabled: ${CUSTOM__AI__TAG__ENABLED:true}
+      enabled: ${CUSTOM__AI__TAG__ENABLED:false}
       timeoutSeconds: ${CUSTOM__AI__TAG__TIMEOUT_SECONDS:6}
       maxRequestsPerMinute: ${CUSTOM__AI__TAG__MAX_REQUESTS_PER_MINUTE:30}
       maxRequestsPerDay: ${CUSTOM__AI__TAG__MAX_REQUESTS_PER_DAY:1000}

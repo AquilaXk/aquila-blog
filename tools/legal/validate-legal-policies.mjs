@@ -4,11 +4,23 @@ import fs from "node:fs"
 import path from "node:path"
 
 const root = process.cwd()
-const policiesDir = path.join(root, "legal/policies")
-const frontendLegalMetadataPath = path.join(root, "front/src/apis/backend/legal.ts")
-const backendLegalMetadataPath = path.join(
-  root,
-  "back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance/application/service/ActiveLegalDocumentMetadata.kt",
+const resolvePath = (envName, fallback) => {
+  const configured = process.env[envName]
+  if (!configured) return fallback
+  return path.isAbsolute(configured) ? configured : path.join(root, configured)
+}
+
+const policiesDir = resolvePath("LEGAL_POLICIES_DIR", path.join(root, "legal/policies"))
+const frontendLegalMetadataPath = resolvePath(
+  "LEGAL_FRONTEND_METADATA_PATH",
+  path.join(root, "front/src/apis/backend/legal.ts"),
+)
+const backendLegalMetadataPath = resolvePath(
+  "LEGAL_BACKEND_METADATA_PATH",
+  path.join(
+    root,
+    "back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance/application/service/ActiveLegalDocumentMetadata.kt",
+  ),
 )
 const requiredFields = [
   "documentType",

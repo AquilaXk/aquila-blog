@@ -192,7 +192,7 @@ activities:
     policySectionId: privacy-collection-session
     enabledByEnv: custom.prod.cookieDomain; custom.prod.frontUrl
     reviewRequired:
-      - Cookie inventory is published in cookies.ko-KR.v1.0.1 and must stay aligned with browserStorageRegistry.
+      - Cookie inventory is published in cookies.ko-KR.v1.0.2 and must stay aligned with browserStorageRegistry.
 
   - id: user_content_posts_comments
     name: 게시글, 댓글, 공개 프로필 콘텐츠

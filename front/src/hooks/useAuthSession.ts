@@ -137,7 +137,10 @@ const useAuthSession = () => {
 
   useEffect(() => {
     if (!isMounted || authStatus !== "authenticated" || !me) return
-    if (router.asPath.startsWith("/settings/privacy")) return
+    const pathname = router.asPath.split("?")[0] || router.pathname
+    const canReadLegalDocument =
+      ["/settings/privacy", "/terms", "/privacy"].includes(pathname) || pathname.startsWith("/legal/")
+    if (canReadLegalDocument) return
 
     let cancelled = false
     const routeToReconsent = async () => {

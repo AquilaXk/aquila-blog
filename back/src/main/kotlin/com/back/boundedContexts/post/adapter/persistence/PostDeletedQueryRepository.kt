@@ -159,17 +159,16 @@ class PostDeletedQueryRepository(
         return updatedRows > 0
     }
 
-    fun softDeleteByAuthorId(authorId: Long): Int =
-        jdbcTemplate.update(
+    fun findActiveIdsByAuthorId(authorId: Long): List<Long> =
+        jdbcTemplate.queryForList(
             """
-            update post
-            set published = false,
-                listed = false,
-                deleted_at = now(),
-                modified_at = now()
+            select id
+            from post
             where author_id = ?
               and deleted_at is null
+            order by id asc
             """.trimIndent(),
+            Long::class.java,
             authorId,
         )
 

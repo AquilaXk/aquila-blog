@@ -70,6 +70,8 @@ interface PostRepositoryPort {
 
     fun findById(id: Long): Optional<Post>
 
+    fun findByAuthorIdOrderByIdAsc(authorId: Long): List<Post>
+
     fun findFirstByOrderByIdDesc(): Post?
 
     fun findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(
@@ -91,8 +93,6 @@ interface PostRepositoryPort {
     fun findDeletedSnapshotById(id: Long): AdmDeletedPostSnapshotDto?
 
     fun softDeleteById(id: Long): Boolean
-
-    fun softDeleteByAuthorId(authorId: Long): Int
 
     fun restoreDeletedById(id: Long): Boolean
 

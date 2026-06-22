@@ -32,6 +32,11 @@ class PostRepositoryAdapter(
 
     override fun findById(id: Long): Optional<Post> = postRepository.findById(id)
 
+    override fun findByAuthorIdOrderByIdAsc(authorId: Long): List<Post> =
+        postDeletedQueryRepository
+            .findActiveIdsByAuthorId(authorId)
+            .mapNotNull { postRepository.findById(it).orElse(null) }
+
     override fun findFirstByOrderByIdDesc(): Post? = postRepository.findFirstByOrderByIdDesc()
 
     override fun findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(
@@ -65,8 +70,6 @@ class PostRepositoryAdapter(
     override fun findDeletedSnapshotById(id: Long): AdmDeletedPostSnapshotDto? = postDeletedQueryRepository.findDeletedSnapshotById(id)
 
     override fun softDeleteById(id: Long): Boolean = postDeletedQueryRepository.softDeleteById(id)
-
-    override fun softDeleteByAuthorId(authorId: Long): Int = postDeletedQueryRepository.softDeleteByAuthorId(authorId)
 
     override fun restoreDeletedById(id: Long): Boolean = postDeletedQueryRepository.restoreDeletedById(id)
 

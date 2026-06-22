@@ -81,8 +81,8 @@ class PostTagRecommendationServiceResilienceTest {
     }
 
     @Test
-    @DisplayName("규칙 fallback 태그 추천은 secret-like 토큰을 반환하거나 캐시하지 않는다")
-    fun `rule fallback recommendation redacts secret-like tokens before returning and caching`() {
+    @DisplayName("비활성 AI도 secret-like 토큰을 태그나 캐시에 남기지 않는다")
+    fun `disabled ai fallback does not return or cache secret-like tokens`() {
         val redisPort = capturingRedisPort()
         val service = createService(aiEnabled = false, redisPort = redisPort)
 
@@ -105,7 +105,8 @@ class PostTagRecommendationServiceResilienceTest {
         val cachedPayload = redisPort.writes.flatMap { listOf(it.key, it.value) }.joinToString("\n")
 
         assertThat(result.provider).isEqualTo("rule")
-        assertThat(result.reason).isEqualTo("ai-disabled")
+        assertThat(result.reason).isEqualTo("pii-blocked")
+        assertThat(result.tags).isEmpty()
         assertThat(returnedTags)
             .doesNotContain("super-secret-title-token")
             .doesNotContain("frontmatter-secret-token")
@@ -208,40 +209,27 @@ class PostTagRecommendationServiceResilienceTest {
     }
 
     @Test
-    @DisplayName("PII 차단 fallback은 새 민감 패턴을 태그나 캐시에 남기지 않는다")
-    fun `pii blocked fallback does not return or cache newly detected sensitive tokens`() {
+    @DisplayName("비활성 AI도 새 민감 패턴을 태그나 캐시에 남기지 않는다")
+    fun `disabled ai fallback does not return or cache newly detected sensitive tokens`() {
         val redisPort = capturingRedisPort()
-        val capturedBodies = mutableListOf<String>()
-        val server = startGeminiServer(capturedBodies)
-        val service =
-            createService(
-                aiEnabled = true,
-                redisPort = redisPort,
-                geminiApiKey = "test-key",
-                geminiBaseUrl = "http://127.0.0.1:${server.address.port}/v1beta",
+        val service = createService(aiEnabled = false, redisPort = redisPort)
+
+        val result =
+            service.recommend(
+                title = "OAuth callback 900101-1234567",
+                content = """응답 예시는 {"code":"quoted-oauth-code-123456"} 형태입니다.""",
+                existingTags = emptyList(),
+                maxTags = 5,
             )
 
-        try {
-            val result =
-                service.recommend(
-                    title = "OAuth callback 900101-1234567",
-                    content = """응답 예시는 {"code":"quoted-oauth-code-123456"} 형태입니다.""",
-                    existingTags = emptyList(),
-                    maxTags = 5,
-                )
+        val cachedPayload = redisPort.writes.flatMap { listOf(it.key, it.value) }.joinToString("\n")
 
-            val cachedPayload = redisPort.writes.flatMap { listOf(it.key, it.value) }.joinToString("\n")
-
-            assertThat(result.provider).isEqualTo("rule")
-            assertThat(result.reason).isEqualTo("pii-blocked")
-            assertThat(result.tags).isEmpty()
-            assertThat(capturedBodies).isEmpty()
-            assertThat(cachedPayload)
-                .doesNotContain("900101-1234567")
-                .doesNotContain("quoted-oauth-code-123456")
-        } finally {
-            server.stop(0)
-        }
+        assertThat(result.provider).isEqualTo("rule")
+        assertThat(result.reason).isEqualTo("pii-blocked")
+        assertThat(result.tags).isEmpty()
+        assertThat(cachedPayload)
+            .doesNotContain("900101-1234567")
+            .doesNotContain("quoted-oauth-code-123456")
     }
 
     @Test

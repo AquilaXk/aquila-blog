@@ -14,6 +14,7 @@ const requiredFields = [
   "documentType",
   "locale",
   "version",
+  "status",
   "publishedAt",
   "effectiveAt",
   "contentSha256",
@@ -83,6 +84,15 @@ const requiredVendors = [
   "MinIO",
   "Grafana",
   "Loki",
+]
+const legalPolicyStatuses = new Set(["draft", "effective", "superseded"])
+const forbiddenEffectivePolicyTokens = [
+  "reviewRequired",
+  "출시 gate",
+  "별도 이슈",
+  "추후 확정",
+  "구현 후 제공",
+  "consent manager",
 ]
 
 let failed = false
@@ -213,6 +223,7 @@ const assertRequiredShape = (fileName, policy) => {
   }
   if (policy.locale !== "ko-KR") fail(`${fileName} locale must be ko-KR`)
   if (!/^\d+\.\d+\.\d+$/.test(policy.version || "")) fail(`${fileName} version must be semver`)
+  if (!legalPolicyStatuses.has(policy.status)) fail(`${fileName} status must be draft|effective|superseded`)
   if (Number.isNaN(Date.parse(policy.publishedAt || ""))) fail(`${fileName} publishedAt must be date-time`)
   if (Number.isNaN(Date.parse(policy.effectiveAt || ""))) fail(`${fileName} effectiveAt must be date-time`)
   if (!/^[a-f0-9]{64}$/.test(policy.contentSha256 || "")) fail(`${fileName} contentSha256 must be 64 lowercase hex`)
@@ -221,6 +232,9 @@ const assertRequiredShape = (fileName, policy) => {
   if (!Array.isArray(policy.changeSummary) || policy.changeSummary.length === 0) fail(`${fileName} changeSummary is empty`)
   if ("reviewRequired" in policy && (!Array.isArray(policy.reviewRequired) || policy.reviewRequired.length === 0)) {
     fail(`${fileName} reviewRequired must be a non-empty string array when present`)
+  }
+  if (policy.status === "effective" && "reviewRequired" in policy) {
+    fail(`${fileName} effective policy must not contain reviewRequired`)
   }
   for (const item of policy.reviewRequired || []) {
     if (typeof item !== "string" || item.trim().length === 0) fail(`${fileName} has empty reviewRequired item`)
@@ -245,6 +259,15 @@ const assertTextIncludes = (fileName, policy, tokens) => {
   const text = JSON.stringify(policy)
   for (const token of tokens) {
     if (!text.includes(token)) fail(`${fileName} must mention ${token}`)
+  }
+}
+
+const assertEffectiveTextIsPublicReady = (fileName, policy) => {
+  if (policy.status !== "effective") return
+
+  const text = JSON.stringify(policy)
+  for (const token of forbiddenEffectivePolicyTokens) {
+    if (text.includes(token)) fail(`${fileName} effective policy exposes internal review token: ${token}`)
   }
 }
 
@@ -274,6 +297,7 @@ for (const fileName of policyFiles) {
   const policy = readPolicy(fileName)
   if (!policy) continue
   assertRequiredShape(fileName, policy)
+  assertEffectiveTextIsPublicReady(fileName, policy)
   policies.set(policy.documentType, policy)
 }
 

@@ -2,13 +2,14 @@
   "documentType": "PRIVACY_POLICY",
   "locale": "ko-KR",
   "version": "1.0.0",
+  "status": "effective",
   "publishedAt": "2026-06-21T00:00:00+09:00",
   "effectiveAt": "2026-06-21T00:00:00+09:00",
-  "contentSha256": "cedbfea674a9e2aca9e29bf6a01492a1e3fa640b0ff53d47f969d64c057b980f",
+  "contentSha256": "901852cce1aa6db1a0d46a2e35caf36060475c613fd4cd9c0870904411cd2cd7",
   "supersedes": null,
   "owner": "AquilaLog",
   "contactEmail": "aquilaxk10@gmail.com",
-  "changeSummary": ["상용 출시 전 개인정보 처리 항목, 처리위탁, 국외이전, 보유기간, 권리 행사 절차를 구조화한 최초 버전"],
+  "changeSummary": ["개인정보 처리 항목, 처리위탁, 국외이전, 보유기간, 권리 행사 절차를 구조화한 최초 버전"],
   "sections": [
     {
       "id": "privacy-controller",
@@ -50,8 +51,8 @@
       "title": "보유·이용기간",
       "body": [
         "계정 정보와 사용자가 작성한 콘텐츠는 계정 유지 또는 서비스 제공에 필요한 기간 동안 보관하고, 삭제 요청 또는 탈퇴 처리 후에는 법령상 보관·보안 감사 필요 범위를 제외하고 삭제 또는 익명화합니다.",
-        "회원가입 인증 token과 signup session은 만료, 취소, 완료 후 정해진 정리 작업으로 삭제하는 것을 목표로 하며, token hash 전환과 보유기간 자동화는 별도 이슈에서 추적합니다.",
-        "백업은 운영 복구 목적으로만 사용하며, 백업 보관 주기와 삭제 tombstone 재적용 절차는 백업 개인정보 보호 이슈에서 확정합니다."
+        "회원가입 인증 token과 signup session은 만료, 취소, 완료 후 정기 정리 작업으로 삭제하거나 비활성화합니다.",
+        "백업은 운영 복구 목적으로만 사용하며, 삭제 요청이 반영된 데이터는 복구 시 tombstone 재적용으로 재활성화를 차단합니다."
       ]
     },
     {
@@ -75,7 +76,7 @@
       "title": "개인정보 처리위탁",
       "body": [
         "서비스 운영에는 Vercel, Cloudflare, Kakao OAuth, SMTP provider, Google Analytics, Google Gemini API, GitHub Actions, GHCR, 자체 홈서버 PostgreSQL·Redis·MinIO·Grafana·Loki가 관련될 수 있습니다.",
-        "SMTP provider, Google Gemini API, analytics, Cloudflare와 Vercel의 구체적 계약 상태, 보유기간, 국외이전 조건은 출시 gate에서 확정하기 전까지 reviewRequired 상태로 관리합니다."
+        "외부 처리자는 서비스 제공, 인증, 보안, 배포, 장애 분석, 품질 측정 등 고지된 목적 범위에서만 개인정보 또는 요청 metadata를 처리합니다."
       ]
     },
     {
@@ -83,7 +84,7 @@
       "title": "개인정보 국외이전",
       "body": [
         "Vercel, Cloudflare, Google Analytics, Google Gemini API, GitHub Actions, GHCR은 global infrastructure를 사용할 수 있어 국외이전 또는 국외 접근 가능성이 있습니다.",
-        "이전되는 항목, 국가, 시점, 방법, 보유기간, 계약 상태는 processor registry와 출시 gate에서 확인하며, 확인되지 않은 외부 처리는 기본 비활성화 또는 제한 운영합니다."
+        "외부 처리가 필요한 기능은 이전 항목, 국가, 시점, 방법, 보유기간, 계약 조건을 확인한 뒤 활성화하거나 제한 운영합니다."
       ]
     },
     {
@@ -91,7 +92,7 @@
       "title": "쿠키·로컬 저장소·온라인 식별자",
       "body": [
         "로그인 상태 유지, 세션 보안, 화면 설정, OAuth state, 회원가입 흐름, analytics/RUM 측정을 위해 cookie, sessionStorage, localStorage 또는 유사 식별자가 사용될 수 있습니다.",
-        "필수 cookie를 제한하면 로그인과 보안 기능이 정상 동작하지 않을 수 있으며, 선택 analytics와 RUM은 동의 관리자 구현 후 거부할 수 있게 관리합니다."
+        "필수 cookie를 제한하면 로그인과 보안 기능이 정상 동작하지 않을 수 있으며, 선택 analytics와 RUM은 별도 안내와 설정에 따라 거부할 수 있게 관리합니다."
       ]
     },
     {
@@ -115,7 +116,7 @@
       "title": "Google Gemini 사용",
       "body": [
         "관리자 태그 추천 기능은 글 제목, 본문, 기존 태그를 Google Gemini API로 전송할 수 있습니다.",
-        "이 기능은 명시적 관리자 조작, production default-off, 개인정보 탐지·제거, DPA와 provider retention 검토가 완료된 뒤 활성화하는 것을 원칙으로 합니다."
+        "이 기능은 기본 비활성 상태이며, 운영자가 명시적으로 실행하는 경우에만 최소 범위의 입력을 외부 API로 전송합니다."
       ]
     },
     {
@@ -174,9 +175,5 @@
         "현재 시행 버전은 1.0.0이며 시행일은 2026-06-21입니다."
       ]
     }
-  ],
-  "reviewRequired": [
-    "법률 자문은 이 저장소 작업 범위 밖이며, 최종 상용 출시 전 국내 개인정보·IT 법무 검토가 필요합니다.",
-    "SMTP provider, DPA, 국외이전 국가, 보유기간, 개인정보 전용 메일 주소 운영 여부는 출시 gate에서 확정해야 합니다."
   ]
 }

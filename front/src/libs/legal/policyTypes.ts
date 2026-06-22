@@ -2,6 +2,8 @@ export type LegalPolicyKind = "privacy" | "terms" | "cookies"
 
 export type LegalDocumentType = "PRIVACY_POLICY" | "TERMS_OF_SERVICE" | "COOKIE_POLICY"
 
+export type LegalPolicyStatus = "draft" | "effective" | "superseded"
+
 export type LegalPolicySection = {
   id: string
   title: string
@@ -12,6 +14,7 @@ export type LegalPolicyDocument = {
   documentType: LegalDocumentType
   locale: "ko-KR"
   version: string
+  status: LegalPolicyStatus
   publishedAt: string
   effectiveAt: string
   contentSha256: string

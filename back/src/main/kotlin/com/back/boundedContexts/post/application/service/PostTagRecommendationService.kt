@@ -783,7 +783,10 @@ class PostTagRecommendationService(
             )
         private val KOREAN_RRN_LIKE_REGEX = Regex("(?<!\\d)\\d{6}[-\\s]?\\d{7}(?!\\d)")
         private val OAUTH_CODE_REGEX =
-            Regex("\\b(?:oauth[_-]?code|authorization[_-]?code|code)\\b\\s*[:=]\\s*[^\"'\\s,)&}]{8,}", RegexOption.IGNORE_CASE)
+            Regex(
+                """["']?\b(?:oauth[_-]?code|authorization[_-]?code|code)\b["']?\s*[:=]\s*(?:"[^"]{8,}"|'[^']{8,}'|[^"'\s,)&}]{8,})""",
+                RegexOption.IGNORE_CASE,
+            )
         private val SENSITIVE_EXTERNAL_PROCESSING_REGEXES =
             listOf(
                 EMAIL_REGEX,

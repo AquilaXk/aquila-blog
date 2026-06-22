@@ -208,6 +208,43 @@ class PostTagRecommendationServiceResilienceTest {
     }
 
     @Test
+    @DisplayName("PII 차단 fallback은 새 민감 패턴을 태그나 캐시에 남기지 않는다")
+    fun `pii blocked fallback does not return or cache newly detected sensitive tokens`() {
+        val redisPort = capturingRedisPort()
+        val capturedBodies = mutableListOf<String>()
+        val server = startGeminiServer(capturedBodies)
+        val service =
+            createService(
+                aiEnabled = true,
+                redisPort = redisPort,
+                geminiApiKey = "test-key",
+                geminiBaseUrl = "http://127.0.0.1:${server.address.port}/v1beta",
+            )
+
+        try {
+            val result =
+                service.recommend(
+                    title = "OAuth callback 900101-1234567",
+                    content = """응답 예시는 {"code":"quoted-oauth-code-123456"} 형태입니다.""",
+                    existingTags = emptyList(),
+                    maxTags = 5,
+                )
+
+            val cachedPayload = redisPort.writes.flatMap { listOf(it.key, it.value) }.joinToString("\n")
+
+            assertThat(result.provider).isEqualTo("rule")
+            assertThat(result.reason).isEqualTo("pii-blocked")
+            assertThat(result.tags).isEmpty()
+            assertThat(capturedBodies).isEmpty()
+            assertThat(cachedPayload)
+                .doesNotContain("900101-1234567")
+                .doesNotContain("quoted-oauth-code-123456")
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    @Test
     @DisplayName("Gemini 태그 추천은 일반 API code 필드를 민감 OAuth code로 오탐하지 않는다")
     fun `gemini tag recommendation allows ordinary api code field`() {
         val capturedBodies = mutableListOf<String>()

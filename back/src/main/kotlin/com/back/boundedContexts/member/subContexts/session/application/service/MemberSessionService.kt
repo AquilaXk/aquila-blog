@@ -14,6 +14,8 @@ import org.springframework.cache.CacheManager
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
@@ -85,7 +87,7 @@ class MemberSessionService(
                 now = now,
             )
         if (revokedCount > 0) {
-            evictAllActiveSnapshots()
+            evictAllActiveSnapshotsNowAndAfterCommit()
         }
         return MemberSessionWithRefreshToken(
             session = savedSession,
@@ -187,7 +189,7 @@ class MemberSessionService(
     override fun revokeAllActiveSessionsForMember(memberId: Long): Int {
         val revokedCount = memberSessionStorePort.revokeAllActiveSessionsForMember(memberId, Instant.now())
         if (revokedCount > 0) {
-            evictAllActiveSnapshots()
+            evictAllActiveSnapshotsNowAndAfterCommit()
         }
         return revokedCount
     }
@@ -213,6 +215,19 @@ class MemberSessionService(
 
     private fun evictAllActiveSnapshots() {
         cacheManager.getCache(MemberSessionCacheNames.ACTIVE)?.clear()
+    }
+
+    private fun evictAllActiveSnapshotsNowAndAfterCommit() {
+        evictAllActiveSnapshots()
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) return
+
+        TransactionSynchronizationManager.registerSynchronization(
+            object : TransactionSynchronization {
+                override fun afterCommit() {
+                    evictAllActiveSnapshots()
+                }
+            },
+        )
     }
 
     private fun isTouchDue(

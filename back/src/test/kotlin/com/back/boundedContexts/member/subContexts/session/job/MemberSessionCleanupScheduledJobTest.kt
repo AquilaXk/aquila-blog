@@ -45,6 +45,9 @@ class MemberSessionCleanupScheduledJobTest {
             return memberSession
         }
 
+        override fun findActiveMemberForSessionIssue(memberId: Long): Member? =
+            sessionsByKey.values.firstOrNull { it.member.id == memberId }?.member
+
         override fun findBySessionKey(sessionKey: String): MemberSession? = sessionsByKey[sessionKey]
 
         override fun findBySessionKeyAndRevokedAtIsNull(sessionKey: String): MemberSession? = null
@@ -72,6 +75,11 @@ class MemberSessionCleanupScheduledJobTest {
         override fun revokeActiveSessionsBeyondLimit(
             memberId: Long,
             keepLimit: Int,
+            now: Instant,
+        ): Int = 0
+
+        override fun revokeAllActiveSessionsForMember(
+            memberId: Long,
             now: Instant,
         ): Int = 0
 

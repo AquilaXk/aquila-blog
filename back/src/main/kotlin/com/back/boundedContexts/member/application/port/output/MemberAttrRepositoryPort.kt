@@ -36,5 +36,10 @@ interface MemberAttrRepositoryPort {
         delta: Int = 1,
     ): Int
 
+    fun clearStringValuesBySubjectIdAndNameIn(
+        subjectId: Long,
+        names: Collection<String>,
+    ): Int
+
     fun save(attr: MemberAttr): MemberAttr
 }

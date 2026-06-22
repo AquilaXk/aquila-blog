@@ -14,6 +14,7 @@ import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.domain.PostComment
 import com.back.boundedContexts.post.domain.PostLike
 import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
+import com.back.boundedContexts.post.event.PostCommentDeletedEvent
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
 import org.assertj.core.api.Assertions.assertThat
@@ -24,6 +25,7 @@ import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
 import org.mockito.Mockito.any
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.mockingDetails
 import org.mockito.Mockito.never
 import java.time.Instant
 import java.util.Optional
@@ -295,6 +297,46 @@ class PostApplicationUseCaseCollaboratorTest {
             .isInstanceOf(AppException::class.java)
             .hasMessageContaining("부모 댓글을 찾을 수 없습니다.")
         then(postCommentRepository).should(never()).save(anyValue())
+    }
+
+    @Test
+    @DisplayName("PostCommentApplicationService는 공개 댓글 삭제 시 도메인 이벤트를 큐에 넣는다")
+    fun postCommentApplicationServiceDeletesCommentWithDomainEvent() {
+        // given
+        val postRepository: PostRepositoryPort = mock(PostRepositoryPort::class.java)
+        val postCommentRepository: PostCommentRepositoryPort = mock(PostCommentRepositoryPort::class.java)
+        val hydrationService: PostHydrationService = mock(PostHydrationService::class.java)
+        val counterService: PostCounterService = mock(PostCounterService::class.java)
+        val sideEffectQueue: PostInteractionSideEffectQueue = mock(PostInteractionSideEffectQueue::class.java)
+        val service =
+            PostCommentApplicationService(
+                postRepository = postRepository,
+                postCommentRepository = postCommentRepository,
+                postHydrationService = hydrationService,
+                postCounterService = counterService,
+                postInteractionSideEffectQueue = sideEffectQueue,
+            )
+        val author = testMember(id = 2)
+        val post = testPost()
+        val comment =
+            PostComment(7, author, post, "삭제할 댓글").also {
+                val now = Instant.now()
+                it.createdAt = now
+                it.modifiedAt = now
+            }
+        given(postCommentRepository.findActiveSubtreeByPostAndRootCommentId(post, comment.id))
+            .willReturn(listOf(comment))
+
+        // when
+        service.deleteComment(post, comment, author)
+
+        // then
+        assertThat(comment.deletedAt).isNotNull()
+        then(postRepository).should().flush()
+        val enqueueInvocation = mockingDetails(sideEffectQueue).invocations.single { it.method.name == "enqueue" }
+        assertThat(enqueueInvocation.arguments[0]).isEqualTo(post.id)
+        assertThat(enqueueInvocation.arguments[1]).isEqualTo(PostInteractionRecommendationSideEffect.REFRESH)
+        assertThat(enqueueInvocation.arguments[2]).isInstanceOf(PostCommentDeletedEvent::class.java)
     }
 
     private fun testMember(id: Long = 1): Member =

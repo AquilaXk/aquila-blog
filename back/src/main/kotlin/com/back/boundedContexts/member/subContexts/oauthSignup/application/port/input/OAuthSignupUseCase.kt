@@ -30,4 +30,6 @@ interface OAuthSignupUseCase {
         nickname: String?,
         legalAcceptance: LegalAcceptanceCommand,
     ): Member
+
+    fun releaseConsumedSignupForMemberLoginId(memberLoginId: String): Int
 }

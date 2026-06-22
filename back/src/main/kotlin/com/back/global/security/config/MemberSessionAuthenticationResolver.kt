@@ -10,6 +10,9 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import java.time.Instant
 
+private const val MEMBER_SESSION_AUTH_MAX_PATH_LENGTH = 512
+private val MEMBER_SESSION_AUTH_LOG_CONTROL_CHAR_REGEX = Regex("[\\x00-\\x1F\\x7F]")
+
 @Component
 class MemberSessionAuthenticationResolver(
     private val memberSessionUseCase: MemberSessionUseCase,
@@ -48,7 +51,7 @@ class MemberSessionAuthenticationResolver(
 
         log.info(
             "auth_session_fresh_token_fallback path={} memberId={} graceSeconds={}",
-            sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH),
+            sanitizeLogValue(request.requestURI, MEMBER_SESSION_AUTH_MAX_PATH_LENGTH),
             memberId,
             freshLookupGraceSeconds,
         )
@@ -69,6 +72,16 @@ class MemberSessionAuthenticationResolver(
             authCookieService.expireAuthCookies()
             throw AppException("401-8", "세션이 만료되었습니다. 다시 로그인해주세요.")
         }
+    }
+
+    fun ensureFreshTokenFallbackMemberFound(
+        sessionResolution: MemberSessionResolution,
+        persistedMemberFound: Boolean,
+    ) {
+        if (!sessionResolution.freshTokenFallback || persistedMemberFound) return
+
+        authCookieService.expireAuthCookies()
+        throw AppException("401-8", "세션이 만료되었습니다. 다시 로그인해주세요.")
     }
 
     fun context(
@@ -113,16 +126,11 @@ class MemberSessionAuthenticationResolver(
                 .replace('\r', ' ')
                 .replace('\n', ' ')
                 .replace('\t', ' ')
-                .replace(LOG_CONTROL_CHAR_REGEX, "?")
+                .replace(MEMBER_SESSION_AUTH_LOG_CONTROL_CHAR_REGEX, "?")
                 .trim()
 
         if (sanitized.isBlank()) return "-"
         return sanitized.take(maxLength)
-    }
-
-    private companion object {
-        const val MAX_PATH_LENGTH = 512
-        val LOG_CONTROL_CHAR_REGEX = Regex("[\\x00-\\x1F\\x7F]")
     }
 }
 

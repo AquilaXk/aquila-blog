@@ -168,6 +168,11 @@ class PostDeletedQueryRepository(
                     modified_at = now()
                 where id = ?
                   and deleted_at is not null
+                  and not exists (
+                      select 1
+                      from member_account_deletion mad
+                      where mad.member_id = post.author_id
+                  )
                 """.trimIndent(),
                 id,
             )

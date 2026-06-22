@@ -114,6 +114,44 @@ class CustomAuthenticationFilterTest {
     }
 
     @Test
+    @DisplayName("세션 resolver는 fresh token grace 구간의 read 요청을 fallback으로 허용한다")
+    fun `session resolver allows fresh token read fallback`() {
+        val memberSessionUseCase = mock(MemberSessionUseCase::class.java)
+        val authCookieService = mock(AuthCookieService::class.java)
+        val resolver =
+            MemberSessionAuthenticationResolver(
+                memberSessionUseCase = memberSessionUseCase,
+                authCookieService = authCookieService,
+                freshLookupGraceSeconds = 15,
+            )
+        val request = MockHttpServletRequest("GET", "/member/api/v1/auth/session\r\n")
+        val payload =
+            AccessTokenPayload(
+                id = 7L,
+                sessionKey = "fresh-session-key",
+                username = "fresh-user",
+                email = "fresh-user@example.com",
+                name = "Fresh User",
+                rememberLoginEnabled = false,
+                ipSecurityEnabled = false,
+                ipSecurityFingerprint = null,
+                issuedAt = Instant.now(),
+                expiresAt = Instant.now().plusSeconds(60),
+            )
+
+        val resolution =
+            resolver.resolve(
+                memberId = 7L,
+                cookieSessionKey = "fresh-session-key",
+                tokenSessionKey = null,
+                payload = payload,
+                request = request,
+            )
+
+        assertThat(resolution.freshTokenFallback).isTrue()
+    }
+
+    @Test
     @DisplayName("legacy payload에 email과 username이 없고 DB 회원도 없으면 member id 기반 principal로 인증한다")
     fun `legacy payload without persisted member falls back to member id principal`() {
         val fixture = CustomAuthenticationFilterFixture()
@@ -463,6 +501,8 @@ class CustomAuthenticationFilterTest {
                 ),
             )
         given(fixture.memberSessionUseCase.findActiveSessionSnapshot(54L, sessionKey)).willReturn(null)
+        given(fixture.actorApplicationService.findById(54L))
+            .willReturn(Member(54L, "internal-admin", null, "aquila", "admin@test.com"))
 
         val response = MockHttpServletResponse()
         val filterChain = fixture.noContentFilterChain()
@@ -471,6 +511,47 @@ class CustomAuthenticationFilterTest {
             fixture.authenticationFilter().doFilter(request, response, filterChain)
             assertThat(response.status).isEqualTo(HttpServletResponse.SC_NO_CONTENT)
             verify(fixture.authCookieService, never()).expireAuthCookies()
+        } finally {
+            SecurityContextHolder.clearContext()
+        }
+    }
+
+    @Test
+    @DisplayName("로그인 직후 GET read 요청도 삭제된 계정이면 fresh token fallback 인증을 거절한다")
+    fun `fresh token fallback rejects deleted account read request`() {
+        val fixture = CustomAuthenticationFilterFixture()
+        val request = MockHttpServletRequest("GET", "/member/api/v1/auth/session")
+        val accessToken = "fresh-deleted-access-token"
+        val sessionKey = "fresh-deleted-session-key"
+
+        fixture.givenProtectedRequest(request)
+        fixture.givenBearerAccessToken(accessToken, sessionKey)
+        fixture.givenClientIp(request, "203.0.113.17")
+        given(fixture.actorApplicationService.payload(accessToken))
+            .willReturn(
+                AccessTokenPayload(
+                    id = 54L,
+                    sessionKey = sessionKey,
+                    username = "deleted-54",
+                    email = null,
+                    name = "탈퇴한 사용자",
+                    rememberLoginEnabled = true,
+                    ipSecurityEnabled = false,
+                    ipSecurityFingerprint = null,
+                    issuedAt = Instant.now(),
+                ),
+            )
+        given(fixture.memberSessionUseCase.findActiveSessionSnapshot(54L, sessionKey)).willReturn(null)
+        given(fixture.actorApplicationService.findById(54L)).willReturn(null)
+
+        val response = MockHttpServletResponse()
+        val filterChain = MockFilterChain()
+
+        try {
+            fixture.authenticationFilter().doFilter(request, response, filterChain)
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_UNAUTHORIZED)
+            assertThat(response.contentAsString).contains("\"resultCode\":\"401-8\"")
+            verify(fixture.authCookieService).expireAuthCookies()
         } finally {
             SecurityContextHolder.clearContext()
         }

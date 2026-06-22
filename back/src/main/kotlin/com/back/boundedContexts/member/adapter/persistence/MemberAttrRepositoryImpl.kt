@@ -146,6 +146,25 @@ class MemberAttrRepositoryImpl : MemberAttrRepositoryCustom {
         }
     }
 
+    override fun clearStringValuesBySubjectIdAndNameIn(
+        subjectId: Long,
+        names: Collection<String>,
+    ): Int {
+        if (names.isEmpty()) return 0
+
+        return entityManager
+            .createQuery(
+                """
+                update MemberAttr a
+                set a.strValue = ''
+                where a.subject.id = :subjectId
+                  and a.name in :names
+                """.trimIndent(),
+            ).setParameter("subjectId", subjectId)
+            .setParameter("names", names)
+            .executeUpdate()
+    }
+
     /**
      * IntValue 항목을 수정한다.
      */

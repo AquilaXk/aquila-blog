@@ -12,6 +12,7 @@ import org.hibernate.annotations.DynamicUpdate
 import org.hibernate.annotations.NaturalId
 import org.hibernate.annotations.SQLRestriction
 import java.time.Instant
+import java.util.UUID
 
 /**
  * Member는 비즈니스 상태와 규칙을 캡슐화하는 도메인 모델입니다.
@@ -49,9 +50,9 @@ class Member(
     @field:SequenceGenerator(name = "member_seq_gen", sequenceName = "member_seq", allocationSize = 50)
     @field:GeneratedValue(strategy = SEQUENCE, generator = "member_seq_gen")
     override val id: Long = 0,
-    @field:NaturalId
+    @field:NaturalId(mutable = true)
     @field:Column(name = "login_id", nullable = false)
-    override val username: String,
+    override var username: String,
     @field:Column(nullable = true)
     var password: String? = null,
     @field:Column(nullable = false)
@@ -116,8 +117,15 @@ class Member(
     @Transient
     override var postCommentsCountAttr: MemberAttr? = null
 
-    fun softDelete() {
-        deletedAt = Instant.now()
+    fun softDelete(now: Instant = Instant.now()) {
+        deletedAt = now
+        username = "deleted-$id-${UUID.randomUUID()}"
+        email = null
+        password = null
+        nickname = "탈퇴한 사용자"
+        ipSecurityEnabled = false
+        ipSecurityFingerprint = null
+        modifyApiKey(MemberPolicy.genApiKey())
     }
 
     override val member: Member

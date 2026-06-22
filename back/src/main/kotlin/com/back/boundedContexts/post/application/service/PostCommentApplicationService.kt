@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.MemberDto
+import com.back.boundedContexts.post.application.port.output.PostCommentAccountDeletionTarget
 import com.back.boundedContexts.post.application.port.output.PostCommentRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.domain.Post
@@ -88,18 +89,16 @@ class PostCommentApplicationService(
         post: Post,
         postComment: PostComment,
         actor: Member,
+        publishDomainEvent: Boolean = true,
     ) {
         postHydrationService.hydratePostAttrs(post)
         val commentsToDelete =
             postCommentRepository
                 .findActiveSubtreeByPostAndRootCommentId(post, postComment.id)
-                .ifEmpty { listOf(postComment) }
 
         commentsToDelete.forEach { postHydrationService.hydrateMemberCounterAttrs(it.author) }
 
-        val postDto = PostDto(post)
         commentsToDelete.forEachIndexed { index, comment ->
-            val postCommentDto = PostCommentDto(comment)
             comment.author.decrementPostCommentsCount()
             postCounterService.saveMemberAttr(comment.author.postCommentsCountAttr)
             post.onCommentDeleted()
@@ -113,11 +112,91 @@ class PostCommentApplicationService(
                     } else {
                         PostInteractionRecommendationSideEffect.NONE
                     },
-                domainEvent = PostCommentDeletedEvent(UUID.randomUUID(), postCommentDto, postDto, MemberDto(actor)),
+                domainEvent =
+                    if (publishDomainEvent) {
+                        PostCommentDeletedEvent(
+                            UUID.randomUUID(),
+                            PostCommentDto(comment),
+                            PostDto(post),
+                            MemberDto(actor),
+                        )
+                    } else {
+                        null
+                    },
             )
         }
 
         postCounterService.savePostAttr(post.commentsCountAttr)
+        postRepository.flush()
+    }
+
+    @Transactional
+    fun deleteCommentsByAuthorForAccountDeletion(author: Member): Int {
+        val rootTargets =
+            findAccountDeletionRootCommentTargets(
+                postCommentRepository.findActiveAccountDeletionTargetsByAuthorId(author.id),
+            )
+
+        rootTargets.forEach { target ->
+            if (target.postDeleted) {
+                deleteDeletedPostCommentSubtreeForAccountDeletion(target.postId, target.comment)
+            } else {
+                deleteComment(target.comment.post, target.comment, author, publishDomainEvent = false)
+            }
+        }
+
+        return rootTargets.size
+    }
+
+    private fun findAccountDeletionRootCommentTargets(
+        targets: List<PostCommentAccountDeletionTarget>,
+    ): List<PostCommentAccountDeletionTarget> {
+        val authoredCommentIds = targets.mapTo(mutableSetOf()) { it.comment.id }
+
+        return targets.filterNot { target ->
+            hasAuthoredAncestor(target.comment, authoredCommentIds)
+        }
+    }
+
+    private fun hasAuthoredAncestor(
+        comment: PostComment,
+        authoredCommentIds: Set<Long>,
+    ): Boolean {
+        var parentComment = comment.parentComment
+        while (parentComment != null) {
+            if (parentComment.id in authoredCommentIds) return true
+            parentComment = parentComment.parentComment
+        }
+        return false
+    }
+
+    private fun deleteDeletedPostCommentSubtreeForAccountDeletion(
+        postId: Long,
+        postComment: PostComment,
+    ) {
+        val commentsToDelete =
+            postCommentRepository
+                .findActiveSubtreeByPostIdAndRootCommentId(postId, postComment.id)
+
+        commentsToDelete.forEach { postHydrationService.hydrateMemberCounterAttrs(it.author) }
+
+        commentsToDelete.forEachIndexed { index, comment ->
+            comment.author.decrementPostCommentsCount()
+            postCounterService.saveMemberAttr(comment.author.postCommentsCountAttr)
+            comment.softDelete()
+            postInteractionSideEffectQueue.enqueue(
+                postId = postId,
+                recommendationAction =
+                    if (index == commentsToDelete.lastIndex) {
+                        PostInteractionRecommendationSideEffect.REFRESH
+                    } else {
+                        PostInteractionRecommendationSideEffect.NONE
+                    },
+                domainEvent = null,
+            )
+        }
+
+        postCommentRepository.decrementPostCommentsCountByPostId(postId, commentsToDelete.size)
         postRepository.flush()
     }
 

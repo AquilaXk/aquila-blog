@@ -57,6 +57,9 @@ class PostUseCaseAdapter(
         actor: Member,
     ) = postApplicationService.delete(post, actor)
 
+    override fun deleteContentByAuthorForAccountDeletion(author: Member) =
+        postApplicationService.deleteContentByAuthorForAccountDeletion(author)
+
     override fun writeComment(
         author: Member,
         post: Post,

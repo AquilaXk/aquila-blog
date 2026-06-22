@@ -4,4 +4,6 @@ import com.back.boundedContexts.member.subContexts.legalAcceptance.model.MemberL
 
 interface MemberLegalAcceptanceRepositoryPort {
     fun save(memberLegalAcceptance: MemberLegalAcceptance): MemberLegalAcceptance
+
+    fun findTopByMemberIdOrderByAcceptedAtDesc(memberId: Long): MemberLegalAcceptance?
 }

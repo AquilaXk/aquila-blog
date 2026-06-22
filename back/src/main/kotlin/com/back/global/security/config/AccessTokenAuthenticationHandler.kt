@@ -45,6 +45,11 @@ class AccessTokenAuthenticationHandler(
                 request = request,
             )
         memberSessionAuthenticationResolver.ensureUsable(sessionResolution, requireSession = true)
+        val persistedMember = actorApplicationService.findById(payload.id)
+        memberSessionAuthenticationResolver.ensureFreshTokenFallbackMemberFound(
+            sessionResolution = sessionResolution,
+            persistedMemberFound = persistedMember != null,
+        )
         val sessionContext =
             memberSessionAuthenticationResolver.context(
                 sessionResolution = sessionResolution,
@@ -69,7 +74,7 @@ class AccessTokenAuthenticationHandler(
         if (legacyPayloadRecoveryHandler.recoverIfNeeded(payload, sessionContext)) return true
 
         sessionContext.session?.let { memberSessionUseCase.touchAuthenticated(it) }
-        val payloadMember = actorApplicationService.findById(payload.id) ?: payload.toTransientMember()
+        val payloadMember = persistedMember ?: payload.toTransientMember()
         securityContextAuthenticationWriter.write(payloadMember)
         return true
     }

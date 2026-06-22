@@ -318,11 +318,23 @@ jobs:
       - name: Validate HOME_SERVER_ENV contract
         env:
           HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
+          HOME_MEMBER_SIGNUP_ENABLED: ${{ secrets.CUSTOM__MEMBER__SIGNUP__ENABLED || vars.CUSTOM__MEMBER__SIGNUP__ENABLED || 'false' }}
+          HOME_MEMBER_OAUTH_SIGNUP_ENABLED: ${{ secrets.CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED || vars.CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED || 'false' }}
+          HOME_AI_TAG_ENABLED: ${{ secrets.CUSTOM__AI__TAG__ENABLED || vars.CUSTOM__AI__TAG__ENABLED || 'false' }}
+          HOME_NEXT_PUBLIC_SIGNUP_ENABLED: ${{ secrets.NEXT_PUBLIC_SIGNUP_ENABLED || vars.NEXT_PUBLIC_SIGNUP_ENABLED || 'false' }}
+          HOME_NEXT_PUBLIC_RUM_SAMPLE_RATE: ${{ secrets.NEXT_PUBLIC_RUM_SAMPLE_RATE || vars.NEXT_PUBLIC_RUM_SAMPLE_RATE || '0' }}
         shell: bash
         run: |
           set -euo pipefail
           home_server_env_file="${RUNNER_TEMP}/home-server.env"
-          printf '%s\n' "${HOME_SERVER_ENV}" > "${home_server_env_file}"
+          {
+            printf '%s\n' "${HOME_SERVER_ENV}"
+            printf 'CUSTOM__MEMBER__SIGNUP__ENABLED=%s\n' "${HOME_MEMBER_SIGNUP_ENABLED:-false}"
+            printf 'CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED=%s\n' "${HOME_MEMBER_OAUTH_SIGNUP_ENABLED:-false}"
+            printf 'CUSTOM__AI__TAG__ENABLED=%s\n' "${HOME_AI_TAG_ENABLED:-false}"
+            printf 'NEXT_PUBLIC_SIGNUP_ENABLED=%s\n' "${HOME_NEXT_PUBLIC_SIGNUP_ENABLED:-false}"
+            printf 'NEXT_PUBLIC_RUM_SAMPLE_RATE=%s\n' "${HOME_NEXT_PUBLIC_RUM_SAMPLE_RATE:-0}"
+          } > "${home_server_env_file}"
           node tools/env/validate-env.mjs --target home-server-source --file "${home_server_env_file}"
 
       - name: Resolve Tailscale OAuth tags

@@ -111,6 +111,21 @@ class OAuthSignupApplicationServiceTest {
     }
 
     @Test
+    fun `provider가 공백이면 pending을 시작하지 않는다`() {
+        val fixture = Fixture()
+
+        assertThatThrownBy {
+            fixture.service.startPending(
+                provider = "   ",
+                providerSubject = RAW_PROVIDER_SUBJECT,
+                nickname = "카카오닉네임",
+                profileImgUrl = null,
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("소셜 로그인 제공자가 올바르지 않습니다.")
+    }
+
+    @Test
     fun `provider nickname이 정책 범위를 벗어나도 pending을 만들고 기본 표시 이름을 사용한다`() {
         val fixture = Fixture()
 
@@ -168,6 +183,37 @@ class OAuthSignupApplicationServiceTest {
             )
         }.isInstanceOf(AppException::class.java)
             .hasMessageContaining("프로필 이름은 2~30자")
+    }
+
+    @Test
+    fun `계정 탈퇴 release는 기존 member login id의 consumed pending row만 제거한다`() {
+        val fixture = Fixture()
+        val pending =
+            PendingOAuthSignup(
+                provider = "KAKAO",
+                providerSubjectHash = "subject-release",
+                memberLoginId = "KAKAO__subject-release",
+                pendingTokenHash = "pending-release",
+                pendingTokenExpiresAt = Instant.EPOCH.plusSeconds(300),
+                nickname = "카카오닉네임",
+            )
+        pending.consume(Instant.EPOCH.plusSeconds(10))
+        val activePending =
+            PendingOAuthSignup(
+                provider = "KAKAO",
+                providerSubjectHash = "subject-active",
+                memberLoginId = pending.memberLoginId,
+                pendingTokenHash = "pending-active",
+                pendingTokenExpiresAt = Instant.EPOCH.plusSeconds(300),
+                nickname = "활성닉네임",
+            )
+        fixture.pendingRepository.save(pending)
+        fixture.pendingRepository.save(activePending)
+
+        val deletedCount = fixture.service.releaseConsumedSignupForMemberLoginId(pending.memberLoginId)
+
+        assertThat(deletedCount).isEqualTo(1)
+        assertThat(fixture.pendingRepository.saved).containsExactly(activePending)
     }
 
     @Test
@@ -390,6 +436,12 @@ private class RecordingPendingOAuthSignupRepository : PendingOAuthSignupReposito
 
     override fun findByPendingTokenHash(pendingTokenHash: String): PendingOAuthSignup? =
         saved.firstOrNull { it.pendingTokenHash == pendingTokenHash }
+
+    override fun deleteByMemberLoginId(memberLoginId: String): Int {
+        val beforeCount = saved.size
+        saved.removeIf { it.memberLoginId == memberLoginId && it.consumedAt != null }
+        return beforeCount - saved.size
+    }
 }
 
 private class RecordingLegalAcceptanceRepository : MemberLegalAcceptanceRepositoryPort {
@@ -399,6 +451,11 @@ private class RecordingLegalAcceptanceRepository : MemberLegalAcceptanceReposito
         saved += memberLegalAcceptance
         return memberLegalAcceptance
     }
+
+    override fun findTopByMemberIdOrderByAcceptedAtDesc(memberId: Long): MemberLegalAcceptance? =
+        saved
+            .filter { it.member.id == memberId }
+            .maxByOrNull { it.acceptedAt }
 }
 
 private class RecordingMemberUseCase : MemberUseCase {

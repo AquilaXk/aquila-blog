@@ -2,6 +2,7 @@ package com.back.boundedContexts.member.adapter.web
 
 import com.back.boundedContexts.member.application.service.MemberApplicationService
 import com.back.support.BaseControllerIntegrationTest
+import org.assertj.core.api.Assertions.assertThat
 import org.hamcrest.Matchers.startsWith
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -95,6 +96,29 @@ class ApiV1MemberControllerTest : BaseControllerIntegrationTest() {
                         match(handler().methodName("join"))
                         jsonPath("$.resultCode") { value("400-1") }
                     }
+            }
+
+            @Test
+            fun `회원 가입 요청에서 비밀번호에 공백이 있으면 400을 반환한다`() {
+                mvc
+                    .post("/member/api/v1/members") {
+                        contentType = MediaType.APPLICATION_JSON
+                        content =
+                            """
+                            {
+                                "username": "spacepassword",
+                                "password": "Abcd 1234!",
+                                "nickname": "공백비밀번호"
+                            }
+                            """.trimIndent()
+                    }.andExpect {
+                        status { isBadRequest() }
+                        match(handler().handlerType(ApiV1MemberController::class.java))
+                        match(handler().methodName("join"))
+                        jsonPath("$.resultCode") { value("400-1") }
+                    }
+
+                assertThat(memberFacade.findByLoginId("spacepassword")).isNull()
             }
         }
     }

@@ -345,6 +345,40 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
         }
 
         @Test
+        fun `signup complete 요청에서 비밀번호에 공백이 있으면 최종 가입을 막는다`() {
+            val email = "signup-space-password@example.com"
+            val signupSessionCookie = issueSignupSessionCookie(email)
+
+            mvc
+                .post("/member/api/v1/signup/complete") {
+                    contentType = MediaType.APPLICATION_JSON
+                    cookie(signupSessionCookie)
+                    content =
+                        """
+                        {
+                            "password": "Abcd 1234!",
+                            "nickname": "공백비밀번호",
+                            "termsVersion": "${activeLegalDocuments.terms.version}",
+                            "termsContentSha256": "${activeLegalDocuments.terms.contentSha256}",
+                            "privacyVersion": "${activeLegalDocuments.privacy.version}",
+                            "privacyContentSha256": "${activeLegalDocuments.privacy.contentSha256}",
+                            "age14OrOlder": true,
+                            "requiredPrivacyConfirmed": true,
+                            "analyticsConsent": false,
+                            "overseasTransferAcknowledged": true
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isBadRequest() }
+                    match(handler().handlerType(ApiV1SignupVerificationController::class.java))
+                    match(handler().methodName("complete"))
+                    jsonPath("$.resultCode") { value("400-1") }
+                }
+
+            assertThat(memberApplicationService.findByEmail(email)).isNull()
+        }
+
+        @Test
         fun `동의 기록이 없는 기존 signup session이면 최종 가입을 막는다`() {
             val email = "legacy-without-consent@example.com"
 

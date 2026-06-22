@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.adapter.persistence
 
+import com.back.boundedContexts.post.application.port.output.PostCommentAccountDeletionTarget
 import com.back.boundedContexts.post.application.port.output.PostCommentRepositoryPort
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
@@ -29,6 +30,19 @@ class PostCommentRepositoryAdapter(
         post: Post,
         rootCommentId: Long,
     ): List<PostComment> = postCommentRepository.findActiveSubtreeByPostAndRootCommentId(post, rootCommentId)
+
+    override fun findActiveSubtreeByPostIdAndRootCommentId(
+        postId: Long,
+        rootCommentId: Long,
+    ): List<PostComment> = postCommentRepository.findActiveSubtreeByPostIdAndRootCommentId(postId, rootCommentId)
+
+    override fun findActiveAccountDeletionTargetsByAuthorId(authorId: Long): List<PostCommentAccountDeletionTarget> =
+        postCommentRepository.findActiveAccountDeletionTargetsByAuthorId(authorId)
+
+    override fun decrementPostCommentsCountByPostId(
+        postId: Long,
+        count: Int,
+    ): Int = postCommentRepository.decrementPostCommentsCountByPostId(postId, count)
 
     override fun findByPostAndId(
         post: Post,

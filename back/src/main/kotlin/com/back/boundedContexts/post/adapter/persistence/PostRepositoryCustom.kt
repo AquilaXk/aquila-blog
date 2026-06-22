@@ -58,4 +58,6 @@ interface PostRepositoryCustom {
     fun findAllPublicListedContents(): List<String>
 
     fun findAllPublicListedTagIndexes(tagIndexAttrName: String): List<String>
+
+    fun findActiveByAuthorIdOrderByIdAsc(authorId: Long): List<Post>
 }

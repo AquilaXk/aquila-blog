@@ -32,6 +32,8 @@ class PostRepositoryAdapter(
 
     override fun findById(id: Long): Optional<Post> = postRepository.findById(id)
 
+    override fun findByAuthorIdOrderByIdAsc(authorId: Long): List<Post> = postRepository.findActiveByAuthorIdOrderByIdAsc(authorId)
+
     override fun findFirstByOrderByIdDesc(): Post? = postRepository.findFirstByOrderByIdDesc()
 
     override fun findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(

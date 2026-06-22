@@ -13,6 +13,7 @@ import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.TagCountDto
+import com.back.boundedContexts.post.event.PostAccountDeletionDeletedEvent
 import com.back.boundedContexts.post.event.PostDeletedEvent
 import com.back.boundedContexts.post.event.PostModifiedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
@@ -388,6 +389,67 @@ class PostApplicationService(
                 MemberDto(actor),
                 beforeTags,
                 emptyList(),
+            ),
+        )
+    }
+
+    @Transactional
+    fun deleteContentByAuthorForAccountDeletion(author: Member) {
+        postCommentApplicationService.deleteCommentsByAuthorForAccountDeletion(author)
+        val posts = postRepository.findByAuthorIdOrderByIdAsc(author.id)
+
+        posts.forEach { post ->
+            deleteForAccountDeletion(post)
+        }
+    }
+
+    private fun deleteForAccountDeletion(post: Post) {
+        val deletedPostContent = post.content
+        val wasPublic = isPubliclyListed(post)
+        val wasTempDraft = postTempDraftService.isTempDraft(post)
+        val beforeTags = postTagIndexService.extractNormalizedTags(deletedPostContent)
+
+        val softDeleted = postRepository.softDeleteById(post.id)
+        if (!softDeleted) {
+            throw AppException("404-1", "${post.id}번 글을 찾을 수 없습니다.")
+        }
+        if (wasTempDraft) {
+            postTempDraftService.updateTempDraftMarker(post.author, null)
+        }
+        runCatching {
+            postCounterService.decrementMemberPostsCount(Member(post.author.id))
+        }.onFailure { exception ->
+            logger.warn("Failed to decrement member posts counter for member id={}", post.author.id, exception)
+            runCatching {
+                postCounterService.reconcileMemberPostsCount(Member(post.author.id))
+            }.onFailure { reconcileException ->
+                logger.warn("Failed to reconcile member posts counter for member id={}", post.author.id, reconcileException)
+            }
+        }
+        uploadedFileRetentionService.scheduleDeletedPostAttachments(deletedPostContent)
+
+        publishPostWriteAfterCommitEvent(
+            PostWriteSideEffectCommand(
+                postId = post.id,
+                previousContent = null,
+                currentContent = null,
+                deletedContent = null,
+                beforeTags = beforeTags,
+                afterTags = emptyList(),
+                cacheInvalidationScope =
+                    if (wasPublic) {
+                        PostReadCacheInvalidationScope.PublicPostDeleted
+                    } else {
+                        PostReadCacheInvalidationScope.None
+                    },
+                evictReason = "account-deletion-soft-delete",
+                recommendationAction = PostRecommendationSideEffect.EVICT,
+            ),
+            PostAccountDeletionDeletedEvent(
+                uid = UUID.randomUUID(),
+                aggregateId = post.id,
+                beforeTags = beforeTags,
+                afterTags = emptyList(),
             ),
         )
     }

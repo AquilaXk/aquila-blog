@@ -33,6 +33,8 @@ interface MemberRepositoryPort {
 
     fun findById(id: Long): Optional<Member>
 
+    fun findByIdForUpdate(id: Long): Optional<Member>
+
     fun getReferenceById(id: Long): Member
 
     fun findQPagedByKw(query: PagedQuery): PagedResult<Member>

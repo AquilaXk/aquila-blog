@@ -302,4 +302,7 @@ private class RecordingOAuthSignupUseCase : OAuthSignupUseCase {
         nickname: String?,
         legalAcceptance: LegalAcceptanceCommand,
     ): Member = error("completeSignup is not used in CustomOAuth2UserServiceTest")
+
+    override fun releaseConsumedSignupForMemberLoginId(memberLoginId: String): Int =
+        error("releaseConsumedSignupForMemberLoginId is not used in CustomOAuth2UserServiceTest")
 }

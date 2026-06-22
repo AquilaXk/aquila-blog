@@ -406,6 +406,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/member/api/v1/privacy/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/member/api/v1/notifications/{id}/read": {
         parameters: {
             query?: never;
@@ -1036,6 +1052,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/member/api/v1/privacy/requests/{requestId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/member/api/v1/privacy/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["export"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/member/api/v1/notifications": {
         parameters: {
             query?: never;
@@ -1305,6 +1353,22 @@ export interface paths {
         post?: never;
         /** 관리자용 soft delete 글 영구삭제 */
         delete: operations["hardDeleteDeletedItem"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/member/api/v1/privacy/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteAccount"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1833,6 +1897,36 @@ export interface components {
             analyticsConsent: boolean;
             overseasTransferAcknowledged: boolean;
         };
+        PrivacyRequestCreateRequest: {
+            /** @enum {string} */
+            type: "EXPORT" | "CORRECTION" | "DELETION" | "PROCESSING_RESTRICTION" | "CONSENT_WITHDRAWAL";
+            message?: string;
+        };
+        PrivacyRequestDto: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            memberId?: number;
+            /** @enum {string} */
+            type?: "EXPORT" | "CORRECTION" | "DELETION" | "PROCESSING_RESTRICTION" | "CONSENT_WITHDRAWAL";
+            /** @enum {string} */
+            status?: "RECEIVED" | "IN_PROGRESS" | "COMPLETED" | "REJECTED";
+            message?: string;
+            /** Format: date-time */
+            requestedAt?: string;
+            /** Format: date-time */
+            dueAt?: string;
+            /** Format: date-time */
+            completedAt?: string;
+        };
+        PrivacyRequestResBody: {
+            item?: components["schemas"]["PrivacyRequestDto"];
+        };
+        RsDataPrivacyRequestResBody: {
+            resultCode?: string;
+            msg?: string;
+            data?: components["schemas"]["PrivacyRequestResBody"];
+        };
         RsDataMapStringBoolean: {
             resultCode?: string;
             msg?: string;
@@ -2271,6 +2365,41 @@ export interface components {
             member?: components["schemas"]["AuthSessionMemberDto"];
             firstPage?: components["schemas"]["PageDtoPostDto"];
         };
+        PrivacyExportMemberSnapshot: {
+            /** Format: int64 */
+            id?: number;
+            email?: string;
+            username?: string;
+            nickname?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            modifiedAt?: string;
+        };
+        PrivacyExportResponse: {
+            /** Format: date-time */
+            generatedAt?: string;
+            member?: components["schemas"]["PrivacyExportMemberSnapshot"];
+            latestLegalAcceptance?: components["schemas"]["PrivacyLegalAcceptanceSnapshot"];
+        };
+        PrivacyLegalAcceptanceSnapshot: {
+            termsVersion?: string;
+            termsContentSha256?: string;
+            privacyVersion?: string;
+            privacyContentSha256?: string;
+            age14OrOlder?: boolean;
+            requiredPrivacyConfirmed?: boolean;
+            analyticsConsent?: boolean;
+            overseasTransferAcknowledged?: boolean;
+            source?: string;
+            /** Format: date-time */
+            acceptedAt?: string;
+        };
+        RsDataPrivacyExportResponse: {
+            resultCode?: string;
+            msg?: string;
+            data?: components["schemas"]["PrivacyExportResponse"];
+        };
         MemberNotificationDto: {
             /** Format: int64 */
             id?: number;
@@ -2335,6 +2464,24 @@ export interface components {
         AdminHubBootstrapResponse: {
             member?: components["schemas"]["AuthSessionMemberDto"];
             profile?: components["schemas"]["MemberWithUsernameDto"];
+        };
+        AccountDeletionRequest: {
+            password?: string;
+            oauthAccountDeletionConfirmed?: boolean;
+            reason?: string;
+        };
+        AccountDeletionResult: {
+            /** Format: int64 */
+            memberId?: number;
+            /** Format: date-time */
+            deletedAt?: string;
+            /** Format: int32 */
+            revokedSessionCount?: number;
+        };
+        RsDataAccountDeletionResult: {
+            resultCode?: string;
+            msg?: string;
+            data?: components["schemas"]["AccountDeletionResult"];
         };
     };
     responses: never;
@@ -3160,6 +3307,30 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["RsDataMemberDto"];
+                };
+            };
+        };
+    };
+    createRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrivacyRequestCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RsDataPrivacyRequestResBody"];
                 };
             };
         };
@@ -4087,6 +4258,48 @@ export interface operations {
             };
         };
     };
+    getRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RsDataPrivacyRequestResBody"];
+                };
+            };
+        };
+    };
+    export: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RsDataPrivacyExportResponse"];
+                };
+            };
+        };
+    };
     getItems_3: {
         parameters: {
             query?: never;
@@ -4440,6 +4653,30 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["RsDataVoid"];
+                };
+            };
+        };
+    };
+    deleteAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountDeletionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RsDataAccountDeletionResult"];
                 };
             };
         };

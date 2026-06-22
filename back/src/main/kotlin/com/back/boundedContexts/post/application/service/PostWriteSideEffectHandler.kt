@@ -6,6 +6,7 @@ import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.postMixin.COMMENTS_COUNT
 import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
 import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
+import com.back.boundedContexts.post.event.PostAccountDeletionDeletedEvent
 import com.back.boundedContexts.post.event.PostDeletedEvent
 import com.back.boundedContexts.post.event.PostModifiedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
@@ -174,6 +175,8 @@ class PostWriteSideEffectHandler(
         val eventType = domainEventType ?: return null
         val eventJson = domainEventJson ?: return null
         return when (eventType) {
+            PostAccountDeletionDeletedEvent::class.java.name ->
+                objectMapper.readValue(eventJson, PostAccountDeletionDeletedEvent::class.java)
             PostWrittenEvent::class.java.name -> objectMapper.readValue(eventJson, PostWrittenEvent::class.java)
             PostModifiedEvent::class.java.name -> objectMapper.readValue(eventJson, PostModifiedEvent::class.java)
             PostDeletedEvent::class.java.name -> objectMapper.readValue(eventJson, PostDeletedEvent::class.java)

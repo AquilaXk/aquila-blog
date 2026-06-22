@@ -208,9 +208,10 @@ processors:
     securityControls:
       - serverSideApiKey
       - HTTPS
-      - explicitAdminActionRequiredFutureWork
+      - explicitAdminActionRequired
+      - prodActivationPolicyGuard
     reviewRequired:
-      - Production default-off, PII scanner, and DPA guard are tracked by issue1003.
+      - Production default-off, PII block, and DPA/region/retention/training opt-out startup checks are enforced by issue1003.
 
   - id: grafana_loki_monitoring
     name: Grafana and Loki monitoring stack

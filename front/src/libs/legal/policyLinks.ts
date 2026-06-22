@@ -16,7 +16,7 @@ export const legalPolicyKindLabels: Record<LegalPolicyKind, string> = {
 export const legalPolicyCurrentPaths: Record<LegalPolicyKind, string> = {
   privacy: "/privacy",
   terms: "/terms",
-  cookies: `/legal/cookies/${ACTIVE_LEGAL_POLICY_VERSIONS.cookies}`,
+  cookies: "/cookies",
 }
 
 export const toLegalPolicyVersionPath = (kind: LegalPolicyKind, version: string) => `/legal/${kind}/${version}`

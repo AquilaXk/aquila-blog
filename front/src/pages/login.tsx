@@ -76,9 +76,11 @@ const LoginPage = () => {
   useEffect(() => {
     if (!oauthError) return
     setError(
-      oauthError === "signup-required"
-        ? "소셜 로그인 신규 가입은 현재 지원하지 않습니다. 이메일 회원가입으로 먼저 약관과 개인정보처리방침에 동의해주세요."
-        : "소셜 로그인에 실패했습니다. 잠시 후 다시 시도해주세요.",
+      oauthError === "signup-disabled"
+        ? "신규 소셜 회원가입은 출시 전 개인정보 처리 점검이 완료될 때까지 사용할 수 없습니다. 기존 계정은 계속 로그인할 수 있습니다."
+        : oauthError === "signup-required"
+          ? "소셜 로그인 신규 가입은 현재 지원하지 않습니다. 이메일 회원가입으로 먼저 약관과 개인정보처리방침에 동의해주세요."
+          : "소셜 로그인에 실패했습니다. 잠시 후 다시 시도해주세요.",
     )
   }, [oauthError])
 

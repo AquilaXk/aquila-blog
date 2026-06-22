@@ -178,6 +178,7 @@ custom:
     redisDatabase: "${custom.dev.redisDatabase}"
   member:
     signup:
+      enabled: ${CUSTOM__MEMBER__SIGNUP__ENABLED:false}
       legacyDirectJoinEnabled: ${CUSTOM__MEMBER__SIGNUP__LEGACY_DIRECT_JOIN_ENABLED:false}
       verifyPath: ${CUSTOM__MEMBER__SIGNUP__VERIFY_PATH:/signup/verify}
       emailExpirationSeconds: ${CUSTOM__MEMBER__SIGNUP__EMAIL_EXPIRATION_SECONDS:86400}
@@ -191,6 +192,8 @@ custom:
         memoryMaxEntries: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__MEMORY_MAX_ENTRIES:10000}
         memoryCleanupIntervalSeconds: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__MEMORY_CLEANUP_INTERVAL_SECONDS:60}
         requireRedisInProd: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__REQUIRE_REDIS_IN_PROD:true}
+    oauth-signup:
+      enabled: ${CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED:false}
     notification:
       realtime:
         enabled: ${CUSTOM__MEMBER__NOTIFICATION__REALTIME__ENABLED:true}

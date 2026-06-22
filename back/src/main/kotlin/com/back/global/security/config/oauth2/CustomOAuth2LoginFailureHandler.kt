@@ -13,6 +13,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
 private const val OAUTH_SIGNUP_REQUIRED_ERROR = "signup-required"
+private const val OAUTH_SIGNUP_DISABLED_ERROR = "signup-disabled"
 private const val OAUTH_FAILED_ERROR = "oauth-failed"
 
 @Component
@@ -64,12 +65,20 @@ internal fun buildOAuth2LoginFailureRedirectUrl(
 }
 
 private fun resolveOAuth2LoginFailureCode(exception: AuthenticationException): String =
-    if (containsAppExceptionCode(exception, "403-4")) OAUTH_SIGNUP_REQUIRED_ERROR else OAUTH_FAILED_ERROR
+    when {
+        containsOAuthSignupDisabledException(exception) -> OAUTH_SIGNUP_DISABLED_ERROR
+        containsAppExceptionCode(exception, "403-4") -> OAUTH_SIGNUP_REQUIRED_ERROR
+        else -> OAUTH_FAILED_ERROR
+    }
 
 private fun findOAuthSignupRequiredException(exception: Throwable): OAuthSignupRequiredAuthenticationException? =
     generateSequence(exception as Throwable?) { it.cause }
         .filterIsInstance<OAuthSignupRequiredAuthenticationException>()
         .firstOrNull()
+
+private fun containsOAuthSignupDisabledException(exception: Throwable): Boolean =
+    generateSequence(exception as Throwable?) { it.cause }
+        .any { it is OAuthSignupDisabledAuthenticationException }
 
 private fun containsAppExceptionCode(
     throwable: Throwable,

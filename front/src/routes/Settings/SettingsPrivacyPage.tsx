@@ -97,6 +97,7 @@ const SettingsPrivacyPage = () => {
         overseasTransferAcknowledged: overseasConfirmed,
       })
       setLegalReconsent(response.data.legalReconsent)
+      setOptionalTrackingConsent(false)
       setLegalFeedback(response.msg)
     } catch {
       setLegalFeedback("최신 약관과 개인정보처리방침 동의를 저장하지 못했습니다.")

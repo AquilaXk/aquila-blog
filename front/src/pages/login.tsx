@@ -148,8 +148,8 @@ const LoginPage = () => {
         }
       }
 
-      const legalReconsent = await getLegalReconsentStatus().catch(() => null)
-      const destination = legalReconsent?.required ? "/settings/privacy?reconsent=required" : next
+      const legalReconsent = await getLegalReconsentStatus().catch(() => ({ required: true }))
+      const destination = legalReconsent?.required === false ? next : "/settings/privacy?reconsent=required"
 
       const normalizePathname = (value: string) => {
         if (!value) return "/"

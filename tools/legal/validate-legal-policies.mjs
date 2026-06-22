@@ -85,8 +85,10 @@ const requiredVendors = [
   "Loki",
 ]
 const legalPolicyStatuses = new Set(["draft", "effective", "superseded"])
-const forbiddenEffectivePolicyTokens = [
+const publicPolicyStatuses = new Set(["effective", "superseded"])
+const forbiddenPublicPolicyTokens = [
   "reviewRequired",
+  "법무·운영 확인 필요 항목",
   "출시 gate",
   "별도 이슈",
   "추후 확정",
@@ -234,8 +236,8 @@ const assertRequiredShape = (fileName, policy) => {
   if ("reviewRequired" in policy && (!Array.isArray(policy.reviewRequired) || policy.reviewRequired.length === 0)) {
     fail(`${fileName} reviewRequired must be a non-empty string array when present`)
   }
-  if (policy.status === "effective" && "reviewRequired" in policy) {
-    fail(`${fileName} effective policy must not contain reviewRequired`)
+  if (publicPolicyStatuses.has(policy.status) && "reviewRequired" in policy) {
+    fail(`${fileName} public policy must not contain reviewRequired`)
   }
   for (const item of policy.reviewRequired || []) {
     if (typeof item !== "string" || item.trim().length === 0) fail(`${fileName} has empty reviewRequired item`)
@@ -263,12 +265,12 @@ const assertTextIncludes = (fileName, policy, tokens) => {
   }
 }
 
-const assertEffectiveTextIsPublicReady = (fileName, policy) => {
-  if (policy.status !== "effective") return
+const assertPublicTextIsPublicReady = (fileName, policy) => {
+  if (!publicPolicyStatuses.has(policy.status)) return
 
   const text = JSON.stringify(policy)
-  for (const token of forbiddenEffectivePolicyTokens) {
-    if (text.includes(token)) fail(`${fileName} effective policy exposes internal review token: ${token}`)
+  for (const token of forbiddenPublicPolicyTokens) {
+    if (text.includes(token)) fail(`${fileName} public policy exposes internal review token: ${token}`)
   }
 }
 
@@ -318,7 +320,7 @@ for (const fileName of policyFiles) {
   const policy = readPolicy(fileName)
   if (!policy) continue
   assertRequiredShape(fileName, policy)
-  assertEffectiveTextIsPublicReady(fileName, policy)
+  assertPublicTextIsPublicReady(fileName, policy)
   policies.set(policy.documentType, policy)
   setLatestEffectivePolicy(latestEffectivePolicies, policy)
 }

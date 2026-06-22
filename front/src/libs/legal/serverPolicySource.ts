@@ -20,6 +20,12 @@ const policyFilePrefixes: Record<LegalPolicyKind, string> = {
   cookies: "cookies",
 }
 
+const policyDocumentTypes: Record<LegalPolicyKind, LegalPolicyDocument["documentType"]> = {
+  privacy: "PRIVACY_POLICY",
+  terms: "TERMS_OF_SERVICE",
+  cookies: "COOKIE_POLICY",
+}
+
 const getPolicyFileName = (kind: LegalPolicyKind, version: string) =>
   `${policyFilePrefixes[kind]}.ko-KR.v${version}.yaml`
 
@@ -36,6 +42,12 @@ const readPolicy = (kind: LegalPolicyKind, version = ACTIVE_LEGAL_POLICY_VERSION
   }
   const source = fs.readFileSync(path.join(policyDir, getPolicyFileName(kind, version)), "utf8")
   const policy = JSON.parse(source) as LegalPolicyDocument
+  if (policy.documentType !== policyDocumentTypes[kind]) {
+    throw new Error(`Legal policy documentType mismatch: ${kind}@${version}`)
+  }
+  if (policy.version !== version) {
+    throw new Error(`Legal policy version mismatch: ${kind}@${version}`)
+  }
   const actualHash = stablePolicyHash(policy)
   if (policy.contentSha256 !== actualHash) {
     throw new Error(`Legal policy hash mismatch: ${kind}@${policy.version}`)
@@ -72,6 +84,16 @@ export const getLegalPolicyVersionStaticPaths = (kind: LegalPolicyKind) => ({
   fallback: false,
 })
 
+const compareSemver = (left: string, right: string) => {
+  const leftParts = left.split(".").map((value) => Number.parseInt(value, 10))
+  const rightParts = right.split(".").map((value) => Number.parseInt(value, 10))
+  for (let index = 0; index < Math.max(leftParts.length, rightParts.length); index += 1) {
+    const diff = (leftParts[index] || 0) - (rightParts[index] || 0)
+    if (diff !== 0) return diff
+  }
+  return 0
+}
+
 export const getLegalPolicyHistoryStaticProps = () => {
   const policies: LegalPolicySummary[] = (Object.keys(policyFilePrefixes) as LegalPolicyKind[])
     .flatMap((kind) =>
@@ -89,6 +111,6 @@ export const getLegalPolicyHistoryStaticProps = () => {
         }
       }),
     )
-    .sort((a, b) => b.effectiveAt.localeCompare(a.effectiveAt) || b.version.localeCompare(a.version))
+    .sort((a, b) => b.effectiveAt.localeCompare(a.effectiveAt) || compareSemver(a.version, b.version))
   return { props: { policies } }
 }

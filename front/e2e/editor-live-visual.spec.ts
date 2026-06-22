@@ -65,8 +65,8 @@ const tryEnterEditorRoute = async (page: Page, timeoutMs: number) => {
       if (!isNavigationInterruptedError(error)) throw error
     }
 
-    if (editorUrlPattern.test(page.url())) return true
     if (await completeLegalReconsentIfRequired(page, "/editor/new", timeoutMs)) return true
+    if (editorUrlPattern.test(page.url())) return true
 
     try {
       await page.waitForURL(editorUrlPattern, { timeout: perTryTimeout })
@@ -200,7 +200,10 @@ const loginWithRetry = async (page: Page, apiBaseUrl: string) => {
 
 const loginThroughUi = async (page: Page) => {
   const route = await gotoLoginForEditor(page, liveUiRedirectTimeoutMs)
-  if (route === "editor") return
+  if (route === "editor") {
+    await completeLegalReconsentIfRequired(page, "/editor/new", liveUiRedirectTimeoutMs)
+    return
+  }
 
   const apiBaseUrl = resolveApiBaseUrl(page.url())
   await waitForApiReachability(page, apiBaseUrl)
@@ -238,7 +241,10 @@ const loginThroughUi = async (page: Page) => {
 
     if (outcome.kind === "response") {
       if (outcome.status < 400) {
-        if (editorUrlPattern.test(page.url())) return
+        if (editorUrlPattern.test(page.url())) {
+          await completeLegalReconsentIfRequired(page, "/editor/new", liveUiRedirectTimeoutMs)
+          return
+        }
         if (await tryEnterEditorRoute(page, liveUiRedirectTimeoutMs)) return
       } else {
         lastFailure = `status=${outcome.status} body=${outcome.bodyPreview}`
@@ -253,7 +259,10 @@ const loginThroughUi = async (page: Page) => {
       }
     }
 
-    if (outcome.kind === "editor-url") return
+    if (outcome.kind === "editor-url") {
+      await completeLegalReconsentIfRequired(page, "/editor/new", liveUiRedirectTimeoutMs)
+      return
+    }
 
     if (outcome.kind === "auth-cookie") {
       if (await tryEnterEditorRoute(page, liveUiRedirectTimeoutMs)) return

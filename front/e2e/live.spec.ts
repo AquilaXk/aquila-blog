@@ -48,8 +48,8 @@ const tryEnterAdminRoute = async (page: Page, timeoutMs: number) => {
       if (!isNavigationInterruptedError(error)) throw error
     }
 
-    if (adminUrlPattern.test(page.url())) return true
     if (await completeLegalReconsentIfRequired(page, "/admin", timeoutMs)) return true
+    if (adminUrlPattern.test(page.url())) return true
 
     try {
       await page.waitForURL(adminUrlPattern, { timeout: perTryTimeout })
@@ -320,7 +320,10 @@ const loginThroughUi = async (
 
   for (let attempt = 1; attempt <= liveLoginAttempts; attempt += 1) {
     const route = await gotoLoginForAdmin(page, liveUiRedirectTimeoutMs)
-    if (route === "admin") return
+    if (route === "admin") {
+      await completeLegalReconsentIfRequired(page, "/admin", liveUiRedirectTimeoutMs)
+      return
+    }
 
     await expect(page.getByRole("heading", { name: "로그인" })).toBeVisible()
     await page.getByLabel("이메일").fill(loginEmail)
@@ -361,6 +364,7 @@ const loginThroughUi = async (
           await loginWithRetry(page, apiBaseUrl, loginEmail, legacyLoginId, password)
           await page.goto("/admin")
           await expect(page).toHaveURL(/\/admin(\/|$)/, { timeout: liveUiRedirectTimeoutMs })
+          await completeLegalReconsentIfRequired(page, "/admin", liveUiRedirectTimeoutMs)
           return
         }
 
@@ -371,11 +375,17 @@ const loginThroughUi = async (
         throw new Error(`UI login request failed. ${lastFailure}`)
       }
 
-      if (adminUrlPattern.test(page.url())) return
+      if (adminUrlPattern.test(page.url())) {
+        await completeLegalReconsentIfRequired(page, "/admin", liveUiRedirectTimeoutMs)
+        return
+      }
       if (await tryEnterAdminRoute(page, liveUiRedirectTimeoutMs)) return
     }
 
-    if (outcome.kind === "admin-url") return
+    if (outcome.kind === "admin-url") {
+      await completeLegalReconsentIfRequired(page, "/admin", liveUiRedirectTimeoutMs)
+      return
+    }
 
     // 성공 쿠키가 있는데 리다이렉트가 지연되는 경우 /admin 재진입으로 판정한다.
     // 단, 쿠키가 만료/무효일 수 있으므로 즉시 실패시키지 않고 API 로그인 복구 경로를 탄다.

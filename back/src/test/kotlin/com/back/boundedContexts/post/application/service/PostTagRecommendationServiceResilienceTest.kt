@@ -178,6 +178,36 @@ class PostTagRecommendationServiceResilienceTest {
     }
 
     @Test
+    @DisplayName("Gemini 태그 추천은 quoted OAuth code도 외부 전송하지 않는다")
+    fun `gemini tag recommendation blocks quoted oauth code`() {
+        val capturedBodies = mutableListOf<String>()
+        val server = startGeminiServer(capturedBodies)
+        val service =
+            createService(
+                aiEnabled = true,
+                redisPort = fakeRedisPort(),
+                geminiApiKey = "test-key",
+                geminiBaseUrl = "http://127.0.0.1:${server.address.port}/v1beta",
+            )
+
+        try {
+            val result =
+                service.recommend(
+                    title = "OAuth callback debugging",
+                    content = """응답 예시는 {"code":"quoted-oauth-code-123456"} 형태입니다.""",
+                    existingTags = emptyList(),
+                    maxTags = 5,
+                )
+
+            assertThat(result.provider).isEqualTo("rule")
+            assertThat(result.reason).isEqualTo("pii-blocked")
+            assertThat(capturedBodies).isEmpty()
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    @Test
     @DisplayName("Gemini 태그 추천은 민감정보 없는 명시 요청만 외부 호출한다")
     fun `gemini tag recommendation allows explicit safe request`() {
         val redisPort = capturingRedisPort()

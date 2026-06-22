@@ -179,11 +179,11 @@ grep -q "LEGACY_MINIO_STOPPED_FOR_MIGRATION" "${CREATE_SCRIPT}"
 grep -q "minio_dir=" "${CREATE_SCRIPT}"
 grep -q "env_value_from_current_file CUSTOM_PROD_DBNAME" "${CREATE_SCRIPT}"
 grep -q "^umask 077$" "${CREATE_SCRIPT}"
-grep -q "backup-encryption.key" "${CREATE_SCRIPT}"
-grep -q "AQUILA_BACKUP_ENCRYPTION_KEY_FILE must be outside AQUILA_BACKUP_ROOT" "${CREATE_SCRIPT}"
-grep -q "openssl enc -aes-256-cbc -pbkdf2" "${CREATE_SCRIPT}"
-grep -q "dump.sql.enc" "${CREATE_SCRIPT}"
-grep -q "minio-data.tar.gz.enc" "${CREATE_SCRIPT}"
+grep -q "backup-encryption.key" "${CREATE_SCRIPT}" || { echo "missing: default separated backup key path" >&2; exit 1; }
+grep -q "AQUILA_BACKUP_ENCRYPTION_KEY_FILE must be outside AQUILA_BACKUP_ROOT" "${CREATE_SCRIPT}" || { echo "missing: backup key must be outside backup root guard" >&2; exit 1; }
+grep -q "openssl enc -aes-256-cbc -pbkdf2" "${CREATE_SCRIPT}" || { echo "missing: openssl encryption command" >&2; exit 1; }
+grep -q "dump.sql.enc" "${CREATE_SCRIPT}" || { echo "missing: encrypted postgres dump artifact name" >&2; exit 1; }
+grep -q "minio-data.tar.gz.enc" "${CREATE_SCRIPT}" || { echo "missing: encrypted minio archive artifact name" >&2; exit 1; }
 grep -q "AQUILA_BACKUP_ROOT must not be inside the MinIO data directory" "${PRUNE_SCRIPT}"
 
 echo "[external-storage-retention] ok"

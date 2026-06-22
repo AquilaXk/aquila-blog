@@ -33,6 +33,7 @@ CHECKSUM_FILE="${ARTIFACT_DIR}/minio-checksums.sha256"
 RESTORE_PRIVACY_GATE_FILE="${ARTIFACT_DIR}/restore-privacy-gate.txt"
 BACKUP_ENCRYPTION_KEY_FILE="${AQUILA_BACKUP_ENCRYPTION_KEY_FILE:-}"
 RESTORE_PRIVACY_GATE_SCRIPT="${AQUILA_RESTORE_PRIVACY_GATE_SCRIPT:-}"
+RESTORE_PRIVACY_GATE_STATUS="fail"
 DECRYPT_DIR=""
 
 log() {
@@ -225,7 +226,7 @@ write_result() {
     printf 'MINIO_SAMPLE_OBJECT=%q\n' "${minio_sample_object}"
     printf 'MINIO_SAMPLE_SHA256=%s\n' "${minio_sample_sha256}"
     printf 'ENCRYPTION=%s\n' "openssl-enc-aes-256-cbc-pbkdf2"
-    printf 'RESTORE_PRIVACY_GATE=%s\n' "pass"
+    printf 'RESTORE_PRIVACY_GATE=%s\n' "${RESTORE_PRIVACY_GATE_STATUS}"
     printf 'RESTORE_PRIVACY_GATE_FILE=%q\n' "${RESTORE_PRIVACY_GATE_FILE}"
     printf 'SUMMARY_FILE=%q\n' "${SUMMARY_FILE}"
   } > "${RESULT_FILE}"
@@ -257,7 +258,7 @@ write_summary() {
     printf -- '- MinIO checksum sample: `%s`\n' "${minio_sample_object}"
     printf -- '- MinIO sample sha256: `%s`\n' "${minio_sample_sha256}"
     printf -- '- Backup encryption: `openssl-enc-aes-256-cbc-pbkdf2`\n'
-    printf -- '- Restore privacy gate: `pass`\n'
+    printf -- '- Restore privacy gate: `%s`\n' "${RESTORE_PRIVACY_GATE_STATUS}"
   } > "${SUMMARY_FILE}"
 }
 
@@ -318,6 +319,9 @@ run_restore_privacy_gate() {
     RESTORE_PRIVACY_GATE_FILE="${RESTORE_PRIVACY_GATE_FILE}" \
     "${RESTORE_PRIVACY_GATE_SCRIPT}" > "${RESTORE_PRIVACY_GATE_FILE}"
   [[ -s "${RESTORE_PRIVACY_GATE_FILE}" ]] || fail "restore privacy gate produced no evidence: ${RESTORE_PRIVACY_GATE_FILE}"
+  grep -Eq '^status=pass$' "${RESTORE_PRIVACY_GATE_FILE}" \
+    || fail "restore privacy gate did not report status=pass: ${RESTORE_PRIVACY_GATE_FILE}"
+  RESTORE_PRIVACY_GATE_STATUS="pass"
 }
 
 require_command docker

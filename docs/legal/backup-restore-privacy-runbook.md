@@ -25,7 +25,7 @@
 3. `AQUILA_BACKUP_ENCRYPTION_KEY_FILE`이 backup root 밖의 운영 key 파일을 가리키는지 확인한다.
 4. PostgreSQL `dump.sql.enc`와 MinIO `minio-data.tar.gz.enc`만 복호화 restore 대상으로 사용한다.
 5. restore 전 최신 deletion tombstone과 retention cutoff를 준비한다.
-6. PostgreSQL restore 후 `AQUILA_RESTORE_PRIVACY_GATE_SCRIPT`가 tombstone replay 또는 동등한 삭제 검증을 실행한다.
+6. PostgreSQL restore 후 `AQUILA_RESTORE_PRIVACY_GATE_SCRIPT`가 tombstone replay 또는 동등한 삭제 검증을 실행하고 `status=pass` evidence를 남긴다.
 7. object storage restore 후 tombstone object key hash list가 재노출되지 않는지 확인한다.
 8. session, refresh token, signup token, OAuth pending token, auth cookie, API key가 restore 후 재사용 가능하지 않은지 확인한다.
 9. public edge probe와 live E2E는 `restore-privacy-gate.txt`가 pass evidence를 남기기 전에는 production traffic에 연결하지 않는다.

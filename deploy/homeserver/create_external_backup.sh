@@ -464,12 +464,14 @@ validate_backup_encryption_key_file() {
   require_command openssl
   if [[ ! -e "${BACKUP_ENCRYPTION_KEY_FILE}" ]]; then
     mkdir -p "$(dirname "${BACKUP_ENCRYPTION_KEY_FILE}")"
-    openssl rand -hex 32 > "${BACKUP_ENCRYPTION_KEY_FILE}"
-    chmod 600 "${BACKUP_ENCRYPTION_KEY_FILE}"
+    (umask 077 && openssl rand -hex 32 > "${BACKUP_ENCRYPTION_KEY_FILE}") \
+      || fail "failed to create backup encryption key file: ${BACKUP_ENCRYPTION_KEY_FILE}"
     log "created backup encryption key file: ${BACKUP_ENCRYPTION_KEY_FILE}"
   fi
   [[ -f "${BACKUP_ENCRYPTION_KEY_FILE}" ]] || fail "backup encryption key file is not a regular file: ${BACKUP_ENCRYPTION_KEY_FILE}"
   [[ -r "${BACKUP_ENCRYPTION_KEY_FILE}" ]] || fail "backup encryption key file is not readable: ${BACKUP_ENCRYPTION_KEY_FILE}"
+  chmod 600 "${BACKUP_ENCRYPTION_KEY_FILE}" || fail "failed to harden backup encryption key file permissions: ${BACKUP_ENCRYPTION_KEY_FILE}"
+  [[ -s "${BACKUP_ENCRYPTION_KEY_FILE}" ]] || fail "backup encryption key file is empty: ${BACKUP_ENCRYPTION_KEY_FILE}"
 }
 
 encrypt_stream_to_file() {

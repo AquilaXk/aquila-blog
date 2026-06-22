@@ -16,16 +16,16 @@ retentionRules:
     destruction: expireCancelConsumeThenPurgeByRetentionJob; unlinkOrAccountDeletion
     followUp: issue997
   - activityId: auth_session_and_cookies
-    retention: untilLogoutRevocationExpiryOrSessionCleanupJob
-    destruction: revokeSessionExpireCookiePurgeExpiredSessions
+    retention: untilLogoutRevocationExpiryOrSessionCleanupJob; apiKey/accessToken/refreshToken/sessionKey cookies sessionOrConfiguredMaxAge; signup_session untilSignupExpiry; auth.signupMailCooldown.v1 untilCooldownExpiryOrTabClose; auth.login.keepSignedIn/auth.login.ipSecurityOn untilPreferenceChangeOrBrowserStorageClear
+    destruction: revokeSessionExpireCookiePurgeExpiredSessions; auth.signupMailCooldown.v1 expires hashed entries; auth.login.* browserPreferenceDeletion
     followUp: issue995
   - activityId: user_content_posts_comments
-    retention: untilUserDeletionOrContentDeletion; publicCacheUntilRevalidation
-    destruction: softDeleteThenCachePurge; anonymizeWhereRequired
+    retention: untilUserDeletionOrContentDeletion; publicCacheUntilRevalidation; admin.editor.localDraft.v1 sevenDaysFromSavedAt; admin.editor.customTags/admin.editor.customCategories untilCatalogChange; admin.contentStudio.listConditions.v1 untilPreferenceChange
+    destruction: softDeleteThenCachePurge; anonymizeWhereRequired; admin.editor.localDraft.v1 manualClearPublishOrTtlExpiry
     followUp: issue999
   - activityId: file_uploads_profile_post_cloud
-    retention: activeUntilOwnerDeletion; tempUploadsUntilPurgeAfter; deletedObjectsUntilBackupExpiry
-    destruction: objectDeleteAndMetadataMarkDeleted; backupExpiryOrTombstoneFutureWork
+    retention: activeUntilOwnerDeletion; tempUploadsUntilPurgeAfter; deletedObjectsUntilBackupExpiry; aquila-cloud-video-upload-session:* untilUploadCompleteCancelOrStale
+    destruction: objectDeleteAndMetadataMarkDeleted; backupExpiryOrTombstoneFutureWork; aquila-cloud-video-upload-session:* localStorageClearOnCompleteCancelOrStale
     followUp: issue1004
   - activityId: auth_security_events
     retention: securityAuditWindowThenCleanupJob
@@ -40,8 +40,8 @@ retentionRules:
     destruction: accountDeletionOrRetentionJobFutureWork
     followUp: issue1000
   - activityId: analytics_and_rum
-    retention: providerDefaultUnlessConfigured; localRumLogRetentionPolicyRequired
-    destruction: providerRetentionControlsAndLocalLogExpiry
+    retention: providerDefaultUnlessConfigured; localRumLogRetentionPolicyRequired; privacy.optionalTrackingConsent.v1 untilConsentChangeOrBrowserStorageClear
+    destruction: providerRetentionControlsAndLocalLogExpiry; privacy.optionalTrackingConsent.v1 preferenceDeletion
     followUp: issue1002
   - activityId: ai_tag_recommendation_gemini
     retention: noRawPromptRetentionIntended; providerRetentionRequiresContractReview

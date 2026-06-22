@@ -45,5 +45,10 @@ class MemberAttrPersistenceAdapter(
         delta: Int,
     ): Int = memberAttrRepository.incrementIntValue(subject, name, delta)
 
+    override fun clearStringValuesBySubjectIdAndNameIn(
+        subjectId: Long,
+        names: Collection<String>,
+    ): Int = memberAttrRepository.clearStringValuesBySubjectIdAndNameIn(subjectId, names)
+
     override fun save(attr: MemberAttr): MemberAttr = memberAttrRepository.save(attr)
 }

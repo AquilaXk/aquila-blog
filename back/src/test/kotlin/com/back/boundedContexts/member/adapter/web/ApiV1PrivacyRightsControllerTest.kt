@@ -1,11 +1,21 @@
 package com.back.boundedContexts.member.adapter.web
 
+import com.back.boundedContexts.member.application.port.input.AuthTokenIssueUseCase
 import com.back.boundedContexts.member.application.service.MemberApplicationService
+import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.domain.shared.memberMixin.ABOUT_DETAILS
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_BIO
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_CONTACT_LINKS
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_SERVICE_LINKS
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_WORKSPACE_DRAFT
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_WORKSPACE_PUBLISHED
 import com.back.boundedContexts.member.subContexts.legalAcceptance.adapter.persistence.MemberLegalAcceptanceRepository
 import com.back.boundedContexts.member.subContexts.legalAcceptance.model.MemberLegalAcceptance
 import com.back.boundedContexts.member.subContexts.privacy.adapter.persistence.MemberAccountDeletionRepository
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberAccountDeletion
 import com.back.boundedContexts.member.subContexts.session.adapter.persistence.MemberSessionRepository
+import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import com.back.global.security.config.AuthCookieNames
 import com.back.support.BaseControllerIntegrationTest
 import com.jayway.jsonpath.JsonPath
@@ -33,6 +43,12 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
 
     @Autowired
     private lateinit var memberSessionRepository: MemberSessionRepository
+
+    @Autowired
+    private lateinit var memberSessionUseCase: MemberSessionUseCase
+
+    @Autowired
+    private lateinit var authTokenIssueUseCase: AuthTokenIssueUseCase
 
     @Autowired
     private lateinit var jdbcTemplate: JdbcTemplate
@@ -246,8 +262,16 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             ipSecurityEnabled = true,
             ipSecurityFingerprint = "fingerprint-before-delete",
         )
+        insertMemberAttr(member.id, PROFILE_IMG_URL, "https://cdn.example.test/민감-profile.png")
+        insertMemberAttr(member.id, PROFILE_BIO, "민감한 자기소개")
+        insertMemberAttr(member.id, ABOUT_DETAILS, "민감한 상세 소개")
+        insertMemberAttr(member.id, PROFILE_SERVICE_LINKS, """[{"label":"민감한 서비스","href":"https://example.test"}]""")
+        insertMemberAttr(member.id, PROFILE_CONTACT_LINKS, """[{"label":"민감한 연락처","href":"mailto:secret@example.test"}]""")
+        insertMemberAttr(member.id, PROFILE_WORKSPACE_DRAFT, """{"blocks":[{"text":"민감한 draft"}]}""")
+        insertMemberAttr(member.id, PROFILE_WORKSPACE_PUBLISHED, """{"blocks":[{"text":"민감한 published"}]}""")
         val firstSessionKey = requireAuthCookie(firstAuthCookies, AuthCookieNames.SESSION_KEY)
         val secondSessionKey = requireAuthCookie(secondAuthCookies, AuthCookieNames.SESSION_KEY)
+        assertThat(countMemberAttrsContaining(member.id, "민감")).isGreaterThan(0)
 
         mvc
             .delete("/member/api/v1/privacy/account") {
@@ -279,6 +303,7 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         assertThat(findSessionRevokedAt(firstSessionKey.value)).isNotNull()
         assertThat(findSessionRevokedAt(secondSessionKey.value)).isNotNull()
         assertThat(countDeletionTombstones(member.id, "서비스 이용 종료")).isEqualTo(1)
+        assertThat(countMemberAttrsContaining(member.id, "민감")).isZero()
         val deletion =
             memberAccountDeletionRepository
                 .findAll()
@@ -359,6 +384,81 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             }
     }
 
+    @Test
+    fun `비밀번호가 없는 소셜 계정은 확인 플래그로 탈퇴할 수 있다`() {
+        val member =
+            memberFacade.join(
+                username = "account-delete-oauth-user",
+                password = null,
+                nickname = "소셜탈퇴",
+                profileImgUrl = null,
+                email = "account-delete-oauth-user@example.com",
+            )
+        val authCookies = issueSessionAuthCookies(member)
+        val sessionKey = requireAuthCookie(authCookies, AuthCookieNames.SESSION_KEY)
+
+        mvc
+            .delete("/member/api/v1/privacy/account") {
+                authCookies.forEach { cookie(it) }
+                header("X-Aquila-CSRF", "1")
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                        "oauthAccountDeletionConfirmed": true,
+                        "reason": "소셜 계정 탈퇴"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.resultCode") { value("200-1") }
+                jsonPath("$.msg") { value("계정 탈퇴가 완료되었습니다.") }
+                cookie { maxAge(AuthCookieNames.API_KEY, 0) }
+                cookie { maxAge(AuthCookieNames.ACCESS_TOKEN, 0) }
+                cookie { maxAge(AuthCookieNames.REFRESH_TOKEN, 0) }
+                cookie { maxAge(AuthCookieNames.SESSION_KEY, 0) }
+            }
+
+        assertThat(findMemberDeletionState(member.id).email).isNull()
+        assertThat(findMemberDeletionState(member.id).deletedAt).isNotNull()
+        assertThat(findSessionRevokedAt(sessionKey.value)).isNotNull()
+        assertThat(countDeletionTombstones(member.id, "소셜 계정 탈퇴")).isEqualTo(1)
+    }
+
+    @Test
+    fun `비밀번호가 없는 소셜 계정은 확인 플래그가 없으면 탈퇴할 수 없다`() {
+        val member =
+            memberFacade.join(
+                username = "account-delete-oauth-unconfirmed-user",
+                password = null,
+                nickname = "소셜탈퇴미확인",
+                profileImgUrl = null,
+                email = "account-delete-oauth-unconfirmed-user@example.com",
+            )
+        val authCookies = issueSessionAuthCookies(member)
+        val sessionKey = requireAuthCookie(authCookies, AuthCookieNames.SESSION_KEY)
+
+        mvc
+            .delete("/member/api/v1/privacy/account") {
+                authCookies.forEach { cookie(it) }
+                header("X-Aquila-CSRF", "1")
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                        "reason": "소셜 계정 탈퇴"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isBadRequest() }
+                jsonPath("$.resultCode") { value("400-2") }
+                jsonPath("$.msg") { value("소셜 계정 탈퇴 확인이 필요합니다.") }
+            }
+
+        assertThat(findMemberDeletionState(member.id).deletedAt).isNull()
+        assertThat(findSessionRevokedAt(sessionKey.value)).isNull()
+    }
+
     private fun loginAuthCookies(email: String): List<Cookie> =
         mvc
             .post("/member/api/v1/auth/login") {
@@ -380,6 +480,34 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
                     it.value.isNotBlank()
             }
 
+    private fun issueSessionAuthCookies(member: Member): List<Cookie> {
+        val sessionWithRefreshToken =
+            memberSessionUseCase.createSessionWithRefreshToken(
+                member = member,
+                rememberLoginEnabled = true,
+                ipSecurityEnabled = false,
+                ipSecurityFingerprint = null,
+                createdIp = "127.0.0.1",
+                userAgent = "ApiV1PrivacyRightsControllerTest",
+            )
+        val session = sessionWithRefreshToken.session
+        val accessToken =
+            authTokenIssueUseCase.genAccessToken(
+                member = member,
+                sessionKey = session.sessionKey,
+                rememberLoginEnabled = session.rememberLoginEnabled,
+                ipSecurityEnabled = session.ipSecurityEnabled,
+                ipSecurityFingerprint = session.ipSecurityFingerprint,
+            )
+
+        return listOf(
+            Cookie(AuthCookieNames.API_KEY, member.apiKey),
+            Cookie(AuthCookieNames.ACCESS_TOKEN, accessToken),
+            Cookie(AuthCookieNames.REFRESH_TOKEN, sessionWithRefreshToken.refreshToken),
+            Cookie(AuthCookieNames.SESSION_KEY, session.sessionKey),
+        )
+    }
+
     private fun requireAuthCookie(
         cookies: List<Cookie>,
         name: String,
@@ -399,6 +527,38 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             Int::class.java,
             memberId,
             reason,
+        ) ?: 0
+
+    private fun insertMemberAttr(
+        memberId: Long,
+        name: String,
+        strValue: String,
+    ) {
+        jdbcTemplate.update(
+            """
+            insert into member_attr (id, subject_id, name, str_value)
+            values (nextval('member_attr_seq'), ?, ?, ?)
+            """.trimIndent(),
+            memberId,
+            name,
+            strValue,
+        )
+    }
+
+    private fun countMemberAttrsContaining(
+        memberId: Long,
+        valueFragment: String,
+    ): Int =
+        jdbcTemplate.queryForObject(
+            """
+            select count(*)
+            from member_attr
+            where subject_id = ?
+              and str_value like ?
+            """.trimIndent(),
+            Int::class.java,
+            memberId,
+            "%$valueFragment%",
         ) ?: 0
 
     private fun findMemberDeletionState(memberId: Long): MemberDeletionState =

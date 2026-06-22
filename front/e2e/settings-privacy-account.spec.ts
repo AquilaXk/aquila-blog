@@ -118,7 +118,7 @@ test("settings account page deletes account after password reauthentication", as
   await page.goto("/settings/account")
 
   await expect(page.getByRole("heading", { name: "계정 보안" })).toBeVisible()
-  await page.getByLabel("비밀번호 재확인").fill("Abcd1234!")
+  await page.getByLabel("비밀번호 재확인 (이메일 계정)").fill("Abcd1234!")
   await page.getByLabel("탈퇴 사유").fill("서비스 이용 종료")
   await page.getByRole("checkbox", { name: "계정 탈퇴 영향을 확인했습니다." }).check()
   await page.getByRole("button", { name: "계정 탈퇴" }).click()
@@ -129,4 +129,46 @@ test("settings account page deletes account after password reauthentication", as
     password: "Abcd1234!",
     reason: "서비스 이용 종료",
   })
+})
+
+test("settings account page sends oauth confirmation when password is empty", async ({ page }) => {
+  let deletionRequestBody: Record<string, unknown> | null = null
+
+  await page.route("**/member/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(authMember),
+    })
+  })
+  await page.route("**/member/api/v1/privacy/account", async (route) => {
+    deletionRequestBody = route.request().postDataJSON()
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        resultCode: "200-1",
+        msg: "계정 탈퇴가 완료되었습니다.",
+        data: {
+          memberId: authMember.id,
+          deletedAt: "2026-06-22T01:20:00Z",
+          revokedSessionCount: 1,
+        },
+      }),
+    })
+  })
+
+  await page.goto("/settings/account")
+
+  await expect(page.getByText("비밀번호가 없는 소셜 계정은 비워두고 확인 체크 후 진행합니다.")).toBeVisible()
+  await page.getByLabel("탈퇴 사유").fill("소셜 계정 탈퇴")
+  await page.getByRole("checkbox", { name: "계정 탈퇴 영향을 확인했습니다." }).check()
+  await page.getByRole("button", { name: "계정 탈퇴" }).click()
+
+  await expect(page.getByText("계정 탈퇴가 완료되었습니다.")).toBeVisible()
+  expect(deletionRequestBody).toMatchObject({
+    oauthAccountDeletionConfirmed: true,
+    reason: "소셜 계정 탈퇴",
+  })
+  expect(deletionRequestBody).not.toHaveProperty("password")
 })

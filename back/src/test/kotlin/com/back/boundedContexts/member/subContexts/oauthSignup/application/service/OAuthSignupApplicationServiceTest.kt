@@ -186,7 +186,7 @@ class OAuthSignupApplicationServiceTest {
     }
 
     @Test
-    fun `계정 탈퇴 release는 기존 member login id의 pending row를 제거한다`() {
+    fun `계정 탈퇴 release는 기존 member login id의 consumed pending row만 제거한다`() {
         val fixture = Fixture()
         val pending =
             PendingOAuthSignup(
@@ -197,12 +197,23 @@ class OAuthSignupApplicationServiceTest {
                 pendingTokenExpiresAt = Instant.EPOCH.plusSeconds(300),
                 nickname = "카카오닉네임",
             )
+        pending.consume(Instant.EPOCH.plusSeconds(10))
+        val activePending =
+            PendingOAuthSignup(
+                provider = "KAKAO",
+                providerSubjectHash = "subject-active",
+                memberLoginId = pending.memberLoginId,
+                pendingTokenHash = "pending-active",
+                pendingTokenExpiresAt = Instant.EPOCH.plusSeconds(300),
+                nickname = "활성닉네임",
+            )
         fixture.pendingRepository.save(pending)
+        fixture.pendingRepository.save(activePending)
 
         val deletedCount = fixture.service.releaseConsumedSignupForMemberLoginId(pending.memberLoginId)
 
         assertThat(deletedCount).isEqualTo(1)
-        assertThat(fixture.pendingRepository.saved).isEmpty()
+        assertThat(fixture.pendingRepository.saved).containsExactly(activePending)
     }
 
     @Test
@@ -428,7 +439,7 @@ private class RecordingPendingOAuthSignupRepository : PendingOAuthSignupReposito
 
     override fun deleteByMemberLoginId(memberLoginId: String): Int {
         val beforeCount = saved.size
-        saved.removeIf { it.memberLoginId == memberLoginId }
+        saved.removeIf { it.memberLoginId == memberLoginId && it.consumedAt != null }
         return beforeCount - saved.size
     }
 }

@@ -14,6 +14,12 @@ interface PendingOAuthSignupRepository : JpaRepository<PendingOAuthSignup, Long>
     fun findByPendingTokenHash(pendingTokenHash: String): PendingOAuthSignup?
 
     @Modifying(flushAutomatically = true)
-    @Query("delete from PendingOAuthSignup p where p.memberLoginId = :memberLoginId")
+    @Query(
+        """
+        delete from PendingOAuthSignup p
+        where p.memberLoginId = :memberLoginId
+          and p.consumedAt is not null
+        """,
+    )
     fun deleteByMemberLoginId(memberLoginId: String): Int
 }

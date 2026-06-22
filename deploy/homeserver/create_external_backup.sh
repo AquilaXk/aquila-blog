@@ -455,9 +455,10 @@ require_command() {
 
 validate_backup_encryption_key_file() {
   BACKUP_ENCRYPTION_KEY_FILE="$(env_value AQUILA_BACKUP_ENCRYPTION_KEY_FILE "${EXTERNAL_STORAGE_ROOT}/backup-encryption.key")"
+  local backup_root_for_exclusion="${BACKUP_ROOT%/}"
   is_safe_absolute_path "${BACKUP_ENCRYPTION_KEY_FILE}" || fail "unsafe AQUILA_BACKUP_ENCRYPTION_KEY_FILE=${BACKUP_ENCRYPTION_KEY_FILE}"
   case "${BACKUP_ENCRYPTION_KEY_FILE}" in
-    "${BACKUP_ROOT}"|"${BACKUP_ROOT}"/*)
+    "${backup_root_for_exclusion}"|"${backup_root_for_exclusion}"/*)
       fail "AQUILA_BACKUP_ENCRYPTION_KEY_FILE must be outside AQUILA_BACKUP_ROOT"
       ;;
   esac

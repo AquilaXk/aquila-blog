@@ -68,6 +68,7 @@ require_pattern "${DRILL_SCRIPT}" '^umask 077$' "restore drill must protect gene
 require_pattern "${DRILL_SCRIPT}" 'psql .*POSTGRES_DUMP_FILE|pg_restore .*POSTGRES_DUMP_FILE' "restore drill must restore the PostgreSQL dump"
 require_pattern "${DRILL_SCRIPT}" 'backup-encryption\.key' "restore drill must default to the separated backup encryption key file"
 require_pattern "${DRILL_SCRIPT}" 'AQUILA_RESTORE_PRIVACY_GATE_SCRIPT is required' "restore drill must require a restore privacy gate script"
+require_pattern "${DRILL_SCRIPT}" 'backup_root_for_exclusion="\$\{BACKUP_ROOT%/\}"' "restore drill must normalize backup root before exclusion checks"
 require_pattern "${DRILL_SCRIPT}" 'openssl enc -d -aes-256-cbc -pbkdf2' "restore drill must decrypt encrypted backup artifacts"
 require_pattern "${DRILL_SCRIPT}" 'flyway_schema_history' "restore drill must verify Flyway/schema state"
 require_pattern "${DRILL_SCRIPT}" 'SELECT COUNT\(\*\) FROM post' "restore drill must verify restored post row count"

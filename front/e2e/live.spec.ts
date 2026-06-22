@@ -325,7 +325,7 @@ const loginThroughUi = async (
       await completeLegalReconsentIfRequired(page, "/admin", liveUiRedirectTimeoutMs, liveUiRedirectTimeoutMs)
       return
     }
-    if (await completeLegalReconsentIfRequired(page, "/admin", liveUiRedirectTimeoutMs, liveUiRedirectTimeoutMs)) return
+    if (await completeLegalReconsentIfRequired(page, "/admin", liveUiRedirectTimeoutMs, quickReconsentProbeTimeoutMs)) return
 
     await expect(page.getByRole("heading", { name: "로그인" })).toBeVisible()
     await page.getByLabel("이메일").fill(loginEmail)

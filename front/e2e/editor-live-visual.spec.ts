@@ -210,7 +210,12 @@ const loginThroughUi = async (page: Page) => {
     )
     return
   }
-  if (await completeLegalReconsentIfRequired(page, "/editor/new", liveUiRedirectTimeoutMs, liveUiRedirectTimeoutMs)) return
+  if (await completeLegalReconsentIfRequired(
+    page,
+    "/editor/new",
+    liveUiRedirectTimeoutMs,
+    quickReconsentProbeTimeoutMs
+  )) return
 
   const apiBaseUrl = resolveApiBaseUrl(page.url())
   await waitForApiReachability(page, apiBaseUrl)

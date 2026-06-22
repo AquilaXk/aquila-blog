@@ -85,7 +85,7 @@ export const completeLegalReconsentIfRequired = async (
   const reconsentPanel = page.getByRole("region", { name: "법적 문서 재동의" })
   let isGate = isLegalReconsentGateUrl(page.url()) || (await reconsentPanel.isVisible().catch(() => false))
   if (!isGate) {
-    const gateProbeTimeoutMs = Math.min(timeoutMs, probeTimeoutMs, quickReconsentProbeTimeoutMs)
+    const gateProbeTimeoutMs = Math.min(timeoutMs, probeTimeoutMs)
     isGate = await expect
       .poll(
         async () => isLegalReconsentGateUrl(page.url()) || (await reconsentPanel.isVisible().catch(() => false)),
@@ -99,9 +99,26 @@ export const completeLegalReconsentIfRequired = async (
   }
   if (!isGate) return false
 
-  await page.getByLabel("만 14세 이상입니다.").check()
-  await page.getByLabel("필수 개인정보 처리 안내를 확인했습니다.").check()
-  await page.getByLabel("국외 이전 및 외부 처리자 안내를 확인했습니다.").check()
+  const ageCheckbox = page.getByLabel("만 14세 이상입니다.")
+  const privacyCheckbox = page.getByLabel("필수 개인정보 처리 안내를 확인했습니다.")
+  const overseasCheckbox = page.getByLabel("국외 이전 및 외부 처리자 안내를 확인했습니다.")
+  const hasForm = await expect
+    .poll(() => ageCheckbox.isVisible().catch(() => false), { timeout: quickReconsentProbeTimeoutMs })
+    .toBe(true)
+    .then(
+      () => true,
+      () => false
+    )
+  if (!hasForm) {
+    if (!isCurrentFallbackPath(page.url(), fallbackPath)) {
+      await page.goto(fallbackPath)
+    }
+    return true
+  }
+
+  await ageCheckbox.check()
+  await privacyCheckbox.check()
+  await overseasCheckbox.check()
   await page.getByRole("button", { name: "동의하고 계속 이용" }).click()
 
   await expect

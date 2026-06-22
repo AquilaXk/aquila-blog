@@ -117,7 +117,6 @@ class PostTagRecommendationService(
         val normalizedTitle = title.trim()
         val normalizedContent = content.trim()
         val normalizedExistingTags = sanitizeTags(existingTags, normalizedMaxTags * 2)
-        val fallbackTags = buildRuleTags(normalizedTitle, normalizedContent, normalizedExistingTags, normalizedMaxTags)
         val traceId = newTraceId()
         val cacheKey = recommendationCacheKey(normalizedTitle, normalizedContent, normalizedExistingTags, normalizedMaxTags)
         val now = System.currentTimeMillis()
@@ -135,9 +134,22 @@ class PostTagRecommendationService(
             return traced
         }
 
+        if (hasSensitiveExternalProcessingInput(normalizedTitle, normalizedContent, normalizedExistingTags)) {
+            return done(
+                fallbackAndCache(
+                    cacheKey = cacheKey,
+                    tags = emptyList(),
+                    reason = "pii-blocked",
+                    nowMillis = now,
+                ),
+            )
+        }
+
         readCache(cacheKey, now)?.let {
             return done(it)
         }
+
+        val fallbackTags = buildRuleTags(normalizedTitle, normalizedContent, normalizedExistingTags, normalizedMaxTags)
 
         if (!aiTagEnabled) {
             return done(
@@ -157,17 +169,6 @@ class PostTagRecommendationService(
                     cacheKey = cacheKey,
                     tags = fallbackTags,
                     reason = "api-key-missing",
-                    nowMillis = now,
-                ),
-            )
-        }
-
-        if (hasSensitiveExternalProcessingInput(normalizedTitle, normalizedContent, normalizedExistingTags)) {
-            return done(
-                fallbackAndCache(
-                    cacheKey = cacheKey,
-                    tags = emptyList(),
-                    reason = "pii-blocked",
                     nowMillis = now,
                 ),
             )

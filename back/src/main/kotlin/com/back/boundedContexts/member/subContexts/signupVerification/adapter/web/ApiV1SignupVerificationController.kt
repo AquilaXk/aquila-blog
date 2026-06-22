@@ -1,7 +1,7 @@
 package com.back.boundedContexts.member.subContexts.signupVerification.adapter.web
 
 import com.back.boundedContexts.member.dto.MemberDto
-import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.LegalAcceptanceCommand
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.dto.LegalAcceptanceCommand
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.MemberSignupVerificationService
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupEmailStartResult
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupEmailVerifyResult

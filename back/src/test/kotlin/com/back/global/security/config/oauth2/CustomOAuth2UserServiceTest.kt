@@ -2,7 +2,7 @@ package com.back.global.security.config.oauth2
 
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.LegalAcceptanceCommand
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.dto.LegalAcceptanceCommand
 import com.back.boundedContexts.member.subContexts.oauthSignup.application.port.input.OAuthSignupUseCase
 import com.back.boundedContexts.member.subContexts.oauthSignup.application.service.OAuthSignupPendingDetails
 import com.back.boundedContexts.member.subContexts.oauthSignup.application.service.OAuthSignupPendingStartResult

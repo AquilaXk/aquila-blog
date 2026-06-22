@@ -486,6 +486,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/member/api/v1/auth/legal-reconsent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["legalReconsent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/member/api/v1/adm/members/{id}/profileWorkspace/publish": {
         parameters: {
             query?: never;
@@ -1308,6 +1324,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/member/api/v1/adm/members/legal-reconsent/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["legalReconsentReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/member/api/v1/adm/members/bootstrap": {
         parameters: {
             query?: never;
@@ -1960,6 +1992,37 @@ export interface components {
             msg?: string;
             data?: components["schemas"]["MemberLoginResBody"];
         };
+        LegalReconsentRequest: {
+            termsVersion: string;
+            termsContentSha256: string;
+            privacyVersion: string;
+            privacyContentSha256: string;
+            age14OrOlder: boolean;
+            requiredPrivacyConfirmed: boolean;
+            analyticsConsent: boolean;
+            overseasTransferAcknowledged: boolean;
+        };
+        LegalReconsentResponse: {
+            legalReconsent?: components["schemas"]["LegalReconsentStatus"];
+        };
+        LegalReconsentStatus: {
+            status?: string;
+            required?: boolean;
+            termsVersion?: string;
+            termsContentSha256?: string;
+            privacyVersion?: string;
+            privacyContentSha256?: string;
+            /** Format: date-time */
+            acceptedAt?: string;
+            refusalGuidePath?: string;
+            exportGuidePath?: string;
+            deletionGuidePath?: string;
+        };
+        RsDataLegalReconsentResponse: {
+            resultCode?: string;
+            msg?: string;
+            data?: components["schemas"]["LegalReconsentResponse"];
+        };
         MemberWithUsernameDto: {
             /** Format: int64 */
             id?: number;
@@ -2253,6 +2316,7 @@ export interface components {
             id?: number;
             username?: string;
             nickname?: string;
+            legalReconsent?: components["schemas"]["LegalReconsentStatus"];
             isAdmin?: boolean;
         };
         AuthSecurityEventDto: {
@@ -2460,6 +2524,19 @@ export interface components {
         AdminProfileBootstrapResponse: {
             member?: components["schemas"]["AuthSessionMemberDto"];
             workspace?: components["schemas"]["MemberProfileWorkspaceResponseDto"];
+        };
+        LegalReconsentReport: {
+            /** Format: int64 */
+            currentAcceptedMembers?: number;
+            /** Format: int64 */
+            reconsentRequiredMembers?: number;
+            /** Format: int64 */
+            totalMembers?: number;
+            /** Format: double */
+            completionRate?: number;
+        };
+        LegalReconsentReportResponse: {
+            report?: components["schemas"]["LegalReconsentReport"];
         };
         AdminHubBootstrapResponse: {
             member?: components["schemas"]["AuthSessionMemberDto"];
@@ -3421,6 +3498,30 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["RsDataMemberLoginResBody"];
+                };
+            };
+        };
+    };
+    legalReconsent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LegalReconsentRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RsDataLegalReconsentResponse"];
                 };
             };
         };
@@ -4591,6 +4692,26 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["AdminProfileBootstrapResponse"];
+                };
+            };
+        };
+    };
+    legalReconsentReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["LegalReconsentReportResponse"];
                 };
             };
         };

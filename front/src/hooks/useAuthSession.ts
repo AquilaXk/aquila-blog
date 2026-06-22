@@ -1,8 +1,11 @@
+import { useRouter } from "next/router"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useState } from "react"
 import { ApiError, apiFetch } from "src/apis/backend/client"
+import { getLegalReconsentStatus, type LegalReconsentStatus } from "src/apis/backend/legal"
 import { queryKey } from "src/constants/queryKey"
 import type { ProfileCardLinkItem } from "src/constants/profileCardLinks"
+import { replaceRoute, toLegalReconsentPath } from "src/libs/router"
 import type { BlogDesignType, LegacyBlogScheme } from "src/types"
 
 const AUTH_ME_ANON_SUPPRESS_UNTIL_KEY = "auth:me:anon-probe-suppress-until:v1"
@@ -54,9 +57,11 @@ export type AuthMember = {
   legacyBlogScheme?: LegacyBlogScheme
   serviceLinks?: ProfileCardLinkItem[]
   contactLinks?: ProfileCardLinkItem[]
+  legalReconsent?: LegalReconsentStatus | null
 }
 
 const useAuthSession = () => {
+  const router = useRouter()
   const [isMounted, setIsMounted] = useState(false)
   useEffect(() => {
     setIsMounted(true)
@@ -129,6 +134,29 @@ const useAuthSession = () => {
           : hasResolvedSnapshot
             ? "anonymous"
             : "loading"
+
+  useEffect(() => {
+    if (!isMounted || authStatus !== "authenticated" || !me) return
+    const pathname = router.asPath.split("?")[0] || router.pathname
+    const canReadLegalDocument =
+      ["/settings/privacy", "/settings/account", "/terms", "/privacy"].includes(pathname) ||
+      pathname.startsWith("/legal/")
+    if (canReadLegalDocument) return
+
+    let cancelled = false
+    const routeToReconsent = async () => {
+      const status = me.legalReconsent ?? (await getLegalReconsentStatus())
+      if (!cancelled && status?.required) {
+        await replaceRoute(router, toLegalReconsentPath(router.asPath))
+      }
+    }
+
+    void routeToReconsent().catch(() => undefined)
+
+    return () => {
+      cancelled = true
+    }
+  }, [authStatus, isMounted, me, router, router.asPath])
 
   const logout = async () => {
     try {

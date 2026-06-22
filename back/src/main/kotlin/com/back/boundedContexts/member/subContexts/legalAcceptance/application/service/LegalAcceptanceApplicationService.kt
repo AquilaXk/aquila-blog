@@ -1,31 +1,25 @@
 package com.back.boundedContexts.member.subContexts.legalAcceptance.application.service
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.dto.LegalAcceptanceCommand
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.dto.LegalReconsentReport
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.dto.LegalReconsentStatus
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.port.input.LegalAcceptanceUseCase
 import com.back.boundedContexts.member.subContexts.legalAcceptance.application.port.output.MemberLegalAcceptanceRepositoryPort
 import com.back.boundedContexts.member.subContexts.legalAcceptance.model.MemberLegalAcceptance
 import com.back.global.exception.application.AppException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.security.MessageDigest
 import java.time.Instant
-
-data class LegalAcceptanceCommand(
-    val termsVersion: String,
-    val termsContentSha256: String,
-    val privacyVersion: String,
-    val privacyContentSha256: String,
-    val age14OrOlder: Boolean,
-    val requiredPrivacyConfirmed: Boolean,
-    val analyticsConsent: Boolean,
-    val overseasTransferAcknowledged: Boolean,
-)
 
 @Service
 class LegalAcceptanceApplicationService(
     private val memberLegalAcceptanceRepository: MemberLegalAcceptanceRepositoryPort,
-) {
-    fun currentDocuments(): ActiveLegalDocumentMetadata = ActiveLegalDocumentMetadata.current()
+) : LegalAcceptanceUseCase {
+    override fun currentDocuments(): ActiveLegalDocumentMetadata = ActiveLegalDocumentMetadata.current()
 
-    fun validateStoredSignupPolicyVersion(legalPolicyVersion: String?) {
+    override fun validateStoredSignupPolicyVersion(legalPolicyVersion: String?) {
         val storedVersion = legalPolicyVersion?.trim().orEmpty()
         val active = currentDocuments()
 
@@ -34,7 +28,7 @@ class LegalAcceptanceApplicationService(
         }
     }
 
-    fun validateEmailSignupAcceptance(command: LegalAcceptanceCommand) {
+    override fun validateEmailSignupAcceptance(command: LegalAcceptanceCommand) {
         if (!command.age14OrOlder) {
             throw AppException("400-2", "만 14세 이상인 경우에만 회원가입할 수 있습니다.")
         }
@@ -57,8 +51,49 @@ class LegalAcceptanceApplicationService(
         }
     }
 
+    override fun legalReconsentStatus(memberId: Long): LegalReconsentStatus {
+        val active = currentDocuments()
+        val latest = memberLegalAcceptanceRepository.findTopByMemberIdOrderByAcceptedAtDesc(memberId)
+        val current =
+            latest != null &&
+                latest.termsVersion == active.terms.version &&
+                latest.termsContentSha256 == active.terms.contentSha256 &&
+                latest.privacyVersion == active.privacy.version &&
+                latest.privacyContentSha256 == active.privacy.contentSha256
+
+        return LegalReconsentStatus(
+            status = if (current) "CURRENT" else "RECONSENT_REQUIRED",
+            required = !current,
+            termsVersion = active.terms.version,
+            termsContentSha256 = active.terms.contentSha256,
+            privacyVersion = active.privacy.version,
+            privacyContentSha256 = active.privacy.contentSha256,
+            acceptedAt = latest?.acceptedAt?.takeIf { current },
+        )
+    }
+
+    override fun legalReconsentReport(): LegalReconsentReport {
+        val active = currentDocuments()
+        return LegalReconsentReport(
+            currentAcceptedMembers =
+                memberLegalAcceptanceRepository.countMembersWithCurrentAcceptance(
+                    termsVersion = active.terms.version,
+                    termsContentSha256 = active.terms.contentSha256,
+                    privacyVersion = active.privacy.version,
+                    privacyContentSha256 = active.privacy.contentSha256,
+                ),
+            reconsentRequiredMembers =
+                memberLegalAcceptanceRepository.countMembersMissingCurrentAcceptance(
+                    termsVersion = active.terms.version,
+                    termsContentSha256 = active.terms.contentSha256,
+                    privacyVersion = active.privacy.version,
+                    privacyContentSha256 = active.privacy.contentSha256,
+                ),
+        )
+    }
+
     @Transactional
-    fun recordEmailSignupAcceptance(
+    override fun recordEmailSignupAcceptance(
         member: Member,
         command: LegalAcceptanceCommand,
         acceptedAt: Instant,
@@ -71,7 +106,7 @@ class LegalAcceptanceApplicationService(
         )
 
     @Transactional
-    fun recordSocialSignupAcceptance(
+    override fun recordSocialSignupAcceptance(
         member: Member,
         command: LegalAcceptanceCommand,
         acceptedAt: Instant,
@@ -84,11 +119,30 @@ class LegalAcceptanceApplicationService(
             source = source,
         )
 
+    @Transactional
+    override fun recordLegalReconsent(
+        member: Member,
+        command: LegalAcceptanceCommand,
+        acceptedAt: Instant,
+        clientIp: String?,
+        userAgent: String?,
+    ): MemberLegalAcceptance =
+        recordSignupAcceptance(
+            member = member,
+            command = command,
+            acceptedAt = acceptedAt,
+            source = "RECONSENT",
+            clientIpHash = sha256OrNull(clientIp),
+            userAgentHash = sha256OrNull(userAgent),
+        )
+
     private fun recordSignupAcceptance(
         member: Member,
         command: LegalAcceptanceCommand,
         acceptedAt: Instant,
         source: String,
+        clientIpHash: String? = null,
+        userAgentHash: String? = null,
     ): MemberLegalAcceptance {
         validateEmailSignupAcceptance(command)
 
@@ -104,8 +158,20 @@ class LegalAcceptanceApplicationService(
                 analyticsConsent = command.analyticsConsent,
                 overseasTransferAcknowledged = command.overseasTransferAcknowledged,
                 source = source.trim().take(32),
+                clientIpHash = clientIpHash,
+                userAgentHash = userAgentHash,
                 acceptedAt = acceptedAt,
             ),
         )
+    }
+
+    private fun sha256OrNull(value: String?): String? {
+        val normalized = value?.trim().orEmpty()
+        if (normalized.isBlank()) return null
+
+        return MessageDigest
+            .getInstance("SHA-256")
+            .digest(normalized.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
     }
 }

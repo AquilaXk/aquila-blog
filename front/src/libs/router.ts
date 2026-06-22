@@ -123,6 +123,9 @@ export const toLoginPath = (nextPath: NextPathInput, fallback = "/") =>
 export const toSignupPath = (nextPath: NextPathInput, fallback = "/") =>
   `/signup?next=${encodeURIComponent(normalizeNextPath(nextPath, fallback))}`
 
+export const toLegalReconsentPath = (nextPath: NextPathInput, fallback = "/") =>
+  `/settings/privacy?reconsent=required&next=${encodeURIComponent(normalizeNextPath(nextPath, fallback))}`
+
 const toSafeClientRedirectTarget = (target: string, fallback = "/"): string => {
   if (typeof window === "undefined") return normalizeNextPath(target, fallback)
 

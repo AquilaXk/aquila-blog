@@ -1,4 +1,7 @@
+import Link from "next/link"
+import { useRouter } from "next/router"
 import { FormEvent, useEffect, useState } from "react"
+import { getLegalReconsentStatus, LegalReconsentStatus, submitLegalReconsent } from "src/apis/backend/legal"
 import {
   createPrivacyRequest,
   getPrivacyExport,
@@ -7,6 +10,7 @@ import {
   PrivacyRequestType,
 } from "src/apis/backend/privacy"
 import { setOptionalTrackingConsent } from "src/libs/privacy/browserStorageRegistry"
+import { normalizeNextPath, replaceRoute } from "src/libs/router"
 import SettingsLayout from "./SettingsLayout"
 
 const dateTimeFormatter = new Intl.DateTimeFormat("ko-KR", {
@@ -21,13 +25,20 @@ const formatDateTime = (value?: string | null) => {
 }
 
 const SettingsPrivacyPage = () => {
+  const router = useRouter()
   const [snapshot, setSnapshot] = useState<PrivacyExportResponse | null>(null)
   const [requestType, setRequestType] = useState<PrivacyRequestType>("EXPORT")
   const [message, setMessage] = useState("")
   const [createdRequest, setCreatedRequest] = useState<PrivacyRequestItem | null>(null)
+  const [legalReconsent, setLegalReconsent] = useState<LegalReconsentStatus | null>(null)
+  const [ageConfirmed, setAgeConfirmed] = useState(false)
+  const [privacyConfirmed, setPrivacyConfirmed] = useState(false)
+  const [overseasConfirmed, setOverseasConfirmed] = useState(false)
   const [feedback, setFeedback] = useState("")
+  const [legalFeedback, setLegalFeedback] = useState("")
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [legalSubmitting, setLegalSubmitting] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -43,6 +54,13 @@ const SettingsPrivacyPage = () => {
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
+      })
+    getLegalReconsentStatus()
+      .then((status) => {
+        if (!cancelled) setLegalReconsent(status)
+      })
+      .catch(() => {
+        if (!cancelled) setLegalFeedback("법적 문서 동의 상태를 불러오지 못했습니다.")
       })
     return () => {
       cancelled = true
@@ -70,9 +88,79 @@ const SettingsPrivacyPage = () => {
     }
   }
 
+  const submitReconsent = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setLegalSubmitting(true)
+    setLegalFeedback("")
+    try {
+      const response = await submitLegalReconsent({
+        age14OrOlder: ageConfirmed,
+        requiredPrivacyConfirmed: privacyConfirmed,
+        analyticsConsent: false,
+        overseasTransferAcknowledged: overseasConfirmed,
+      })
+      setLegalReconsent(response.data.legalReconsent)
+      setOptionalTrackingConsent(false)
+      setLegalFeedback(response.msg)
+      await replaceRoute(router, normalizeNextPath(router.query.next, "/"))
+    } catch {
+      setLegalFeedback("최신 약관과 개인정보처리방침 동의를 저장하지 못했습니다.")
+    } finally {
+      setLegalSubmitting(false)
+    }
+  }
+
   return (
     <SettingsLayout active="privacy" title="개인정보 관리">
       <div className="settingsGrid">
+        <section className="panel" aria-label="법적 문서 재동의">
+          <h2>약관·개인정보처리방침 동의</h2>
+          {legalReconsent?.required ? (
+            <>
+              <p className="muted">
+                기존 계정은 최신 <Link href="/terms">이용약관</Link>과{" "}
+                <Link href="/privacy">개인정보처리방침</Link> 확인 후 계속 이용할 수 있습니다.
+              </p>
+              <form className="requestForm" onSubmit={submitReconsent}>
+                <label className="checkLabel">
+                  <input type="checkbox" checked={ageConfirmed} onChange={(event) => setAgeConfirmed(event.target.checked)} />
+                  만 14세 이상입니다.
+                </label>
+                <label className="checkLabel">
+                  <input
+                    type="checkbox"
+                    checked={privacyConfirmed}
+                    onChange={(event) => setPrivacyConfirmed(event.target.checked)}
+                  />
+                  필수 개인정보 처리 안내를 확인했습니다.
+                </label>
+                <label className="checkLabel">
+                  <input
+                    type="checkbox"
+                    checked={overseasConfirmed}
+                    onChange={(event) => setOverseasConfirmed(event.target.checked)}
+                  />
+                  국외 이전 및 외부 처리자 안내를 확인했습니다.
+                </label>
+                <button type="submit" disabled={legalSubmitting || !ageConfirmed || !privacyConfirmed || !overseasConfirmed}>
+                  {legalSubmitting ? "저장 중" : "동의하고 계속 이용"}
+                </button>
+              </form>
+              <p className="muted">
+                동의하지 않는 경우 이 화면에서 개인정보 내보내기 또는 삭제 요청을 접수할 수 있습니다.
+              </p>
+            </>
+          ) : legalReconsent ? (
+            <p className="muted">
+              최신 약관·개인정보처리방침 동의 상태입니다.
+              {legalReconsent?.acceptedAt ? ` 저장 시각: ${formatDateTime(legalReconsent.acceptedAt)}` : ""}
+            </p>
+          ) : (
+            <p className="muted">법적 문서 동의 상태를 확인하는 중입니다.</p>
+          )}
+          {legalFeedback ? <p className="feedback">{legalFeedback}</p> : null}
+        </section>
+
         <section className="panel" aria-label="개인정보 내보내기">
           <h2>내보내기 스냅샷</h2>
           {loading ? (
@@ -168,6 +256,17 @@ const SettingsPrivacyPage = () => {
           gap: 7px;
           color: #44515f;
           font-weight: 800;
+        }
+
+        .checkLabel {
+          display: flex;
+          align-items: center;
+          gap: 9px;
+        }
+
+        .checkLabel input {
+          width: 18px;
+          height: 18px;
         }
 
         select,

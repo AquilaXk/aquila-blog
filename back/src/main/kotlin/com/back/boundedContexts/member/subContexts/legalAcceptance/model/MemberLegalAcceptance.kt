@@ -42,6 +42,10 @@ class MemberLegalAcceptance(
     val overseasTransferAcknowledged: Boolean,
     @field:Column(nullable = false, length = 32)
     val source: String,
+    @field:Column(length = 64)
+    val clientIpHash: String? = null,
+    @field:Column(length = 64)
+    val userAgentHash: String? = null,
     @field:Column(nullable = false)
     val acceptedAt: Instant,
 ) : BaseTime(id)

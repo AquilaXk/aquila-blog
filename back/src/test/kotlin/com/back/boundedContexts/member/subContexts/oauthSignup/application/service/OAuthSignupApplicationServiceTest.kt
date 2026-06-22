@@ -4,10 +4,10 @@ import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.dto.LegalAcceptanceCommand
 import com.back.boundedContexts.member.subContexts.legalAcceptance.application.port.output.MemberLegalAcceptanceRepositoryPort
 import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.ActiveLegalDocumentMetadata
 import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.LegalAcceptanceApplicationService
-import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.LegalAcceptanceCommand
 import com.back.boundedContexts.member.subContexts.legalAcceptance.model.MemberLegalAcceptance
 import com.back.boundedContexts.member.subContexts.oauthSignup.application.port.output.PendingOAuthSignupRepositoryPort
 import com.back.boundedContexts.member.subContexts.oauthSignup.model.PendingOAuthSignup
@@ -459,6 +459,30 @@ private class RecordingLegalAcceptanceRepository : MemberLegalAcceptanceReposito
         saved
             .filter { it.member.id == memberId }
             .maxByOrNull { it.acceptedAt }
+
+    override fun countMembersWithCurrentAcceptance(
+        termsVersion: String,
+        termsContentSha256: String,
+        privacyVersion: String,
+        privacyContentSha256: String,
+    ): Long =
+        saved
+            .filter {
+                it.termsVersion == termsVersion &&
+                    it.termsContentSha256 == termsContentSha256 &&
+                    it.privacyVersion == privacyVersion &&
+                    it.privacyContentSha256 == privacyContentSha256
+            }.map { it.member.id }
+            .distinct()
+            .size
+            .toLong()
+
+    override fun countMembersMissingCurrentAcceptance(
+        termsVersion: String,
+        termsContentSha256: String,
+        privacyVersion: String,
+        privacyContentSha256: String,
+    ): Long = 0
 }
 
 private class RecordingMemberUseCase : MemberUseCase {

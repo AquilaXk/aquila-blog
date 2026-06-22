@@ -206,12 +206,15 @@ jobs:
       - name: Run smoke e2e
         if: steps.changes.outputs.frontend == 'true'
         working-directory: front
+        env:
+          NEXT_PUBLIC_SIGNUP_ENABLED: "true"
         run: yarn test:e2e:smoke
 
       - name: Run legal privacy e2e
         if: steps.changes.outputs.frontend == 'true'
         working-directory: front
         env:
+          NEXT_PUBLIC_SIGNUP_ENABLED: "true"
           NEXT_PUBLIC_RUM_SAMPLE_RATE: "1"
           NODE_ENV: production
           VERCEL_ENV: production

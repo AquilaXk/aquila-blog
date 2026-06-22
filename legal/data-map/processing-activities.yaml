@@ -30,7 +30,7 @@ activities:
     userRightsHandler: privacyRequestEmailAndFutureAccountDeletionFlow
     codeOwner: back/member-auth
     policySectionId: privacy-collection-account
-    enabledByEnv: custom.member.signup.enabled; frontend signup route availability
+    enabledByEnv: custom.member.signup.enabled defaults false via CUSTOM__MEMBER__SIGNUP__ENABLED; NEXT_PUBLIC_SIGNUP_ENABLED defaults false
     reviewRequired:
       - SMTP provider name, region, DPA, retention policy must be finalized before commercial launch.
 
@@ -67,7 +67,7 @@ activities:
     userRightsHandler: privacyRequestEmailAndExpiredTokenPurge
     codeOwner: back/member-signup-verification
     policySectionId: privacy-collection-signup-verification
-    enabledByEnv: custom.member.signup.enabled
+    enabledByEnv: custom.member.signup.enabled defaults false via CUSTOM__MEMBER__SIGNUP__ENABLED
     reviewRequired:
       - Token hash migration is tracked separately and must complete before unrestricted signup.
 
@@ -101,7 +101,7 @@ activities:
     userRightsHandler: privacyRequestEmailAndFutureOauthUnlinkFlow
     codeOwner: back/oauth2
     policySectionId: privacy-collection-oauth
-    enabledByEnv: spring.security.oauth2.client.registration.kakao.client-id
+    enabledByEnv: spring.security.oauth2.client.registration.kakao.client-id; existing login remains available while signup freeze is on
     reviewRequired:
       - Legacy connected accounts may still contain provider subject in member login_id until unlink/migration policy is finalized.
 
@@ -140,7 +140,7 @@ activities:
     userRightsHandler: privacyRequestEmailAndFutureOauthUnlinkFlow
     codeOwner: back/oauth-signup; front/signup-social-complete
     policySectionId: privacy-collection-oauth
-    enabledByEnv: spring.security.oauth2.client.registration.kakao.client-id
+    enabledByEnv: spring.security.oauth2.client.registration.kakao.client-id; custom.member.oauth-signup.enabled defaults false via CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED
     reviewRequired:
       - Pending signup purge job and OAuth unlink/account deletion workflow remain tracked by issue1000 and issue999.
 
@@ -431,7 +431,7 @@ activities:
     userRightsHandler: privacyPreferenceAndConsentWithdrawalFutureWork
     codeOwner: front/analytics-rum
     policySectionId: privacy-cookie-analytics
-    enabledByEnv: CONFIG.googleAnalytics.enable; Vercel analytics package in production; NEXT_PUBLIC_RUM_SAMPLE_RATE defaults 0.2 and 0 disables custom RUM; RUM_LOG_SLOW_ONLY only controls server logging
+    enabledByEnv: CONFIG.googleAnalytics.enable with optional tracking consent; Vercel analytics package in production; NEXT_PUBLIC_RUM_SAMPLE_RATE defaults 0 and explicit non-zero enables custom RUM; RUM_LOG_SLOW_ONLY only controls server logging
     reviewRequired:
       - Consent manager and opt-out are tracked by issue1002.
 
@@ -469,7 +469,7 @@ activities:
     userRightsHandler: contentDeletionAndExternalProcessingDisclosureFutureWork
     codeOwner: back/post-ai; front/admin-editor
     policySectionId: privacy-processor-ai
-    enabledByEnv: custom.ai.tag.enabled defaults true; disable with CUSTOM__AI__TAG__ENABLED=false; custom.ai.tag.gemini.*; legacy fallback CUSTOM__AI__SUMMARY__GEMINI__*
+    enabledByEnv: custom.ai.tag.enabled defaults false via CUSTOM__AI__TAG__ENABLED; custom.ai.tag.gemini.*; legacy fallback CUSTOM__AI__SUMMARY__GEMINI__*
     reviewRequired:
       - Production default-off, PII scanner, and DPA checks are tracked by issue1003.
 

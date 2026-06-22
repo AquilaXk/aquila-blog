@@ -32,8 +32,8 @@ const ALLOWED_METRICS = new Set<NextWebVitalsMetric["name"]>([
 ])
 
 const toSampleRate = () => {
-  const raw = Number(process.env.NEXT_PUBLIC_RUM_SAMPLE_RATE || "0.2")
-  if (!Number.isFinite(raw)) return 0.2
+  const raw = Number(process.env.NEXT_PUBLIC_RUM_SAMPLE_RATE || "0")
+  if (!Number.isFinite(raw)) return 0
   return Math.min(1, Math.max(0, raw))
 }
 

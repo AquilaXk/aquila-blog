@@ -121,7 +121,11 @@ class CustomOAuth2UserServiceTest {
         val memberUseCase = RecordingMemberUseCase()
         val oauthSignupUseCase = RecordingOAuthSignupUseCase()
         val service =
-            CustomOAuth2UserService(memberUseCase.proxy, oauthSignupUseCase).apply {
+            CustomOAuth2UserService(
+                memberUseCase.proxy,
+                oauthSignupUseCase,
+                oauthSignupEnabled = true,
+            ).apply {
                 delegate =
                     OAuth2UserService<OAuth2UserRequest, OAuth2User> {
                         DefaultOAuth2User(emptyList(), mapOf("id" to "new-oauth-user-id"), "id")
@@ -145,6 +149,29 @@ class CustomOAuth2UserServiceTest {
                     profileImgUrl = null,
                 ),
             )
+    }
+
+    @Test
+    fun `OAuth2 신규 가입 flag가 꺼져 있으면 pending 동의 토큰을 발급하지 않는다`() {
+        val memberUseCase = RecordingMemberUseCase()
+        val oauthSignupUseCase = RecordingOAuthSignupUseCase()
+        val service =
+            CustomOAuth2UserService(memberUseCase.proxy, oauthSignupUseCase).apply {
+                delegate =
+                    OAuth2UserService<OAuth2UserRequest, OAuth2User> {
+                        DefaultOAuth2User(emptyList(), mapOf("id" to "new-oauth-user-id"), "id")
+                    }
+            }
+
+        assertThatThrownBy {
+            service.loadUser(
+                OAuth2UserRequest(kakaoClientRegistration(userNameAttributeName = "id"), accessToken()),
+            )
+        }.isInstanceOf(OAuthSignupDisabledAuthenticationException::class.java)
+            .hasMessageNotContaining("new-oauth-user-id")
+
+        assertThat(memberUseCase.findLoginIds).containsExactly("KAKAO__subject-hash", "KAKAO__new-oauth-user-id")
+        assertThat(oauthSignupUseCase.pendingStarts).isEmpty()
     }
 
     @Test

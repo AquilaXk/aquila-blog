@@ -19,6 +19,8 @@ type Props = {
   onSwitchToLogin: () => void
 }
 
+const SIGNUP_ENABLED = process.env.NEXT_PUBLIC_SIGNUP_ENABLED === "true"
+
 const AuthEntrySignupPanel = ({
   signupEmail,
   signupError,
@@ -36,6 +38,20 @@ const AuthEntrySignupPanel = ({
   const [emailFocused, setEmailFocused] = useState(false)
   const emailActive = useMemo(() => emailFocused || signupEmail.length > 0, [emailFocused, signupEmail])
   const signupConsentAccepted = termsAccepted && privacyAccepted
+
+  if (!SIGNUP_ENABLED) {
+    return (
+      <>
+        <p className="inlineError">회원가입은 출시 전 개인정보 처리 점검이 완료될 때까지 사용할 수 없습니다.</p>
+        <div className="signupRow">
+          <span>이미 계정이 있으신가요?</span>
+          <button type="button" className="inlineLinkButton" onClick={onSwitchToLogin}>
+            로그인
+          </button>
+        </div>
+      </>
+    )
+  }
 
   return (
     <>

@@ -76,6 +76,29 @@ class CustomOAuth2LoginFailureHandlerTest {
     }
 
     @Test
+    fun `신규 OAuth 가입 feature freeze는 로그인 화면에 signup-disabled 코드와 next를 전달한다`() {
+        val handler = CustomOAuth2LoginFailureHandler("https://www.aquilaxk.site")
+        val request =
+            MockHttpServletRequest("GET", "/login/oauth2/code/kakao").apply {
+                setParameter("state", OAuth2State("/posts/1?tab=comments", "state-id").encode())
+            }
+        val response = MockHttpServletResponse()
+
+        handler.onAuthenticationFailure(
+            request,
+            response,
+            InternalAuthenticationServiceException(
+                "oauth user service failed",
+                OAuthSignupDisabledAuthenticationException("KAKAO"),
+            ),
+        )
+
+        assertThat(response.status).isEqualTo(302)
+        assertThat(response.redirectedUrl)
+            .isEqualTo("https://www.aquilaxk.site/login?oauthError=signup-disabled&next=%2Fposts%2F1%3Ftab%3Dcomments")
+    }
+
+    @Test
     fun `신규 OAuth 가입 차단 실패는 로그인 화면에 signup-required 코드와 next를 전달한다`() {
         val handler = CustomOAuth2LoginFailureHandler("https://www.aquilaxk.site")
         val request =

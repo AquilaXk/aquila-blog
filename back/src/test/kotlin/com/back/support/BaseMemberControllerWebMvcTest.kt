@@ -8,6 +8,8 @@ import com.back.global.app.AppConfig
 import com.back.global.security.application.SecurityTipProvider
 import com.back.global.security.config.CustomAuthenticationFilter
 import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.BeforeEach
+import org.mockito.BDDMockito.given
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
@@ -46,6 +48,9 @@ abstract class BaseMemberControllerWebMvcTest : BaseIntegrationTest() {
     @MockitoBean
     protected lateinit var securityTipProvider: SecurityTipProvider
 
+    @MockitoBean
+    protected lateinit var adminProperties: AdminProperties
+
     @MockitoBean(name = "jpaMappingContext")
     protected lateinit var jpaMappingContext: JpaMetamodelMappingContext
 
@@ -58,6 +63,11 @@ abstract class BaseMemberControllerWebMvcTest : BaseIntegrationTest() {
                 siteFrontUrl = "http://localhost:3000",
             )
         }
+    }
+
+    @BeforeEach
+    fun setUpAdminProperties() {
+        given(adminProperties.normalizedEmail).willReturn("admin@test.com")
     }
 
     @TestConfiguration
@@ -79,8 +89,5 @@ abstract class BaseMemberControllerWebMvcTest : BaseIntegrationTest() {
 
         @Bean
         fun appExceptionStatusCodeResolver(): ResponseStatusExceptionResolver = ResponseStatusExceptionResolver()
-
-        @Bean
-        fun adminProperties(): AdminProperties = AdminProperties(username = "admin", email = "admin@test.com")
     }
 }

@@ -6,7 +6,7 @@
 
 | 항목 | 현재 판정 | 근거 | 다음 조치 |
 | --- | --- | --- | --- |
-| Production launch | `block` | #998, #1000, #1001, #1002, #1003, #1004, #1006, #1007, #1008이 open | 각 issue 완료 후 이 문서의 matrix와 evidence를 갱신한다. |
+| Production launch | `block` | #998, #1000, #1001, #1002, #1003, #1004, #1006, #1008이 open | 각 issue 완료 후 이 문서의 matrix와 evidence를 갱신한다. |
 | Public policy gate | `pass` | #1024, #1025, #1026, #1027, #1028 closed. `status: effective` 정책은 `reviewRequired=0`과 내부 검토 문구 미노출을 검증 대상으로 둔다. | `node tools/legal/validate-legal-policies.mjs`를 PR마다 실행한다. |
 | Legal sign-off | `block` | 실제 사업자 요건, processor 계약, 국외이전, 최종 정책 문구는 전문가 확인 전이다. | 출시 승인 전 법무/운영 owner가 evidence와 결정을 남긴다. |
 | Operations readiness | `block` | 보유기간 자동 파기와 백업 암호화/복구 privacy guard가 open issue다. | #1000, #1004 완료 후 재판정한다. |
@@ -37,7 +37,7 @@
 | #1004 | Open | 필수 출시 전 완료 | backup 암호화, deletion tombstone, restore privacy guard | backup artifact encryption, restore drill, deletion tombstone evidence | 차단 |
 | #1005 | Closed | 필수 출시 전 완료 | 침해사고 대응 runbook | `docs/legal/*.md`, tabletop exercise template, owner/contact/evidence 절차 | 완료 |
 | #1006 | Open | 필수 출시 전 완료 | 정책·코드 privacy drift gate | CI command, failing fixture example, passing workflow link | 차단 |
-| #1007 | Open | 필수 출시 전 완료 | 신규 개인정보 수집 feature flag 동결 | flag inventory, disabled-by-default evidence | 차단 |
+| #1007 | Closed | 필수 출시 전 완료 | 신규 개인정보 수집 feature flag 동결 | `back/gradlew -p back ciFastCheck --rerun-tasks` 2회 연속 exit 0, `yarn --cwd front build` 2회 exit 0, privacy data-map/env contract validator exit 0 | 완료 |
 | #1008 | Open | 필수 출시 전 완료 | 기존 사용자 재동의와 legacy 고지 migration | legacy account migration, re-consent prompt, audit log evidence | 차단 |
 | #1024 | Closed | 필수 출시 전 완료 | 공개 정책과 legal acceptance version/hash 단일화 | `ActiveLegalDocumentMetadata`와 public policy hash evidence | 완료 |
 | #1025 | Closed | 필수 출시 전 완료 | effective 정책의 내부 검토 문구 제거 | `reviewRequired=0`, internal phrase validator, page e2e | 완료 |

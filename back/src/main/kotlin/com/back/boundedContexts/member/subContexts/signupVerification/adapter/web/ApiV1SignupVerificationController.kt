@@ -5,6 +5,7 @@ import com.back.boundedContexts.member.subContexts.legalAcceptance.application.s
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.MemberSignupVerificationService
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupEmailStartResult
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupEmailVerifyResult
+import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.web.application.Rq
 import io.swagger.v3.oas.annotations.media.Schema
@@ -13,6 +14,7 @@ import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.GetMapping
@@ -29,6 +31,8 @@ import java.time.Instant
 class ApiV1SignupVerificationController(
     private val memberSignupVerificationService: MemberSignupVerificationService,
     private val rq: Rq,
+    @param:Value("\${custom.member.signup.enabled:false}")
+    private val signupEnabled: Boolean,
 ) {
     companion object {
         const val SIGNUP_SESSION_COOKIE_NAME = "signup_session"
@@ -112,6 +116,8 @@ class ApiV1SignupVerificationController(
     fun start(
         @RequestBody @Valid reqBody: SignupEmailStartRequest,
     ): RsData<SignupEmailStartResult> {
+        requireSignupEnabled()
+
         val result =
             memberSignupVerificationService.start(
                 email = reqBody.email,
@@ -142,6 +148,8 @@ class ApiV1SignupVerificationController(
     fun verify(
         @RequestBody @Valid reqBody: SignupEmailVerifyRequest,
     ): RsData<SignupEmailVerifyResult> {
+        requireSignupEnabled()
+
         val result = memberSignupVerificationService.verifyEmail(reqBody.token)
         rq.setCookie(
             SIGNUP_SESSION_COOKIE_NAME,
@@ -165,6 +173,8 @@ class ApiV1SignupVerificationController(
     fun complete(
         @RequestBody @Valid reqBody: SignupCompleteRequest,
     ): RsData<MemberDto> {
+        requireSignupEnabled()
+
         val member =
             memberSignupVerificationService.completeSignup(
                 signupToken = rq.getCookieValue(SIGNUP_SESSION_COOKIE_NAME, ""),
@@ -187,4 +197,10 @@ class ApiV1SignupVerificationController(
             .seconds
             .coerceIn(1, Int.MAX_VALUE.toLong())
             .toInt()
+
+    private fun requireSignupEnabled() {
+        if (!signupEnabled) {
+            throw AppException("503-5", "회원가입은 출시 준비 중입니다.")
+        }
+    }
 }

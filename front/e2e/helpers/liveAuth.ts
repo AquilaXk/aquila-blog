@@ -66,6 +66,16 @@ export const isLegalReconsentGateUrl = (url: string) => {
   }
 }
 
+const isCurrentFallbackPath = (currentUrl: string, fallbackPath: string) => {
+  try {
+    const current = new URL(currentUrl)
+    const fallback = new URL(fallbackPath, current.origin)
+    return current.pathname === fallback.pathname
+  } catch {
+    return false
+  }
+}
+
 export const completeLegalReconsentIfRequired = async (
   page: Page,
   fallbackPath: string,
@@ -75,7 +85,10 @@ export const completeLegalReconsentIfRequired = async (
   const reconsentPanel = page.getByRole("region", { name: "법적 문서 재동의" })
   let isGate = isLegalReconsentGateUrl(page.url()) || (await reconsentPanel.isVisible().catch(() => false))
   if (!isGate) {
-    const gateProbeTimeoutMs = Math.min(timeoutMs, probeTimeoutMs)
+    const destinationProbeTimeoutMs = isCurrentFallbackPath(page.url(), fallbackPath)
+      ? quickReconsentProbeTimeoutMs
+      : probeTimeoutMs
+    const gateProbeTimeoutMs = Math.min(timeoutMs, destinationProbeTimeoutMs)
     isGate = await expect
       .poll(
         async () => isLegalReconsentGateUrl(page.url()) || (await reconsentPanel.isVisible().catch(() => false)),

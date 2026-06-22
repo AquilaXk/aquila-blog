@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { useRouter } from "next/router"
 import { FormEvent, useEffect, useState } from "react"
 import { getLegalReconsentStatus, LegalReconsentStatus, submitLegalReconsent } from "src/apis/backend/legal"
 import {
@@ -9,6 +10,7 @@ import {
   PrivacyRequestType,
 } from "src/apis/backend/privacy"
 import { setOptionalTrackingConsent } from "src/libs/privacy/browserStorageRegistry"
+import { normalizeNextPath, replaceRoute } from "src/libs/router"
 import SettingsLayout from "./SettingsLayout"
 
 const dateTimeFormatter = new Intl.DateTimeFormat("ko-KR", {
@@ -23,6 +25,7 @@ const formatDateTime = (value?: string | null) => {
 }
 
 const SettingsPrivacyPage = () => {
+  const router = useRouter()
   const [snapshot, setSnapshot] = useState<PrivacyExportResponse | null>(null)
   const [requestType, setRequestType] = useState<PrivacyRequestType>("EXPORT")
   const [message, setMessage] = useState("")
@@ -99,6 +102,7 @@ const SettingsPrivacyPage = () => {
       setLegalReconsent(response.data.legalReconsent)
       setOptionalTrackingConsent(false)
       setLegalFeedback(response.msg)
+      await replaceRoute(router, normalizeNextPath(router.query.next, "/"))
     } catch {
       setLegalFeedback("최신 약관과 개인정보처리방침 동의를 저장하지 못했습니다.")
     } finally {

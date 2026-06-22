@@ -12,7 +12,7 @@ import { buildSocialAuthItems } from "src/components/auth/socialAuth"
 import useAuthSession from "src/hooks/useAuthSession"
 import type { AuthMember } from "src/hooks/useAuthSession"
 import { loadAuthLoginPolicyPrefs, saveAuthLoginPolicyPrefs } from "src/libs/authLoginPolicy"
-import { normalizeNextPath, replaceRoute, toLoginPath, toSignupPath } from "src/libs/router"
+import { normalizeNextPath, replaceRoute, toLegalReconsentPath, toLoginPath, toSignupPath } from "src/libs/router"
 import { GuestPageProps, getGuestPageProps } from "src/libs/server/guestPage"
 import { isValidAuthEmail, normalizeAuthEmail } from "src/libs/validation/auth"
 
@@ -149,7 +149,7 @@ const LoginPage = () => {
       }
 
       const legalReconsent = await getLegalReconsentStatus().catch(() => ({ required: true }))
-      const destination = legalReconsent?.required === false ? next : "/settings/privacy?reconsent=required"
+      const destination = legalReconsent?.required === false ? next : toLegalReconsentPath(next)
 
       const normalizePathname = (value: string) => {
         if (!value) return "/"

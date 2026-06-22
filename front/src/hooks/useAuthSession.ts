@@ -5,7 +5,7 @@ import { ApiError, apiFetch } from "src/apis/backend/client"
 import { getLegalReconsentStatus, type LegalReconsentStatus } from "src/apis/backend/legal"
 import { queryKey } from "src/constants/queryKey"
 import type { ProfileCardLinkItem } from "src/constants/profileCardLinks"
-import { replaceRoute } from "src/libs/router"
+import { replaceRoute, toLegalReconsentPath } from "src/libs/router"
 import type { BlogDesignType, LegacyBlogScheme } from "src/types"
 
 const AUTH_ME_ANON_SUPPRESS_UNTIL_KEY = "auth:me:anon-probe-suppress-until:v1"
@@ -147,7 +147,7 @@ const useAuthSession = () => {
     const routeToReconsent = async () => {
       const status = me.legalReconsent ?? (await getLegalReconsentStatus())
       if (!cancelled && status?.required) {
-        await replaceRoute(router, "/settings/privacy?reconsent=required")
+        await replaceRoute(router, toLegalReconsentPath(router.asPath))
       }
     }
 

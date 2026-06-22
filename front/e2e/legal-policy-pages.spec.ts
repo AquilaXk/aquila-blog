@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
+import crypto from "node:crypto"
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import { parse as parseYaml } from "yaml"
@@ -6,10 +7,16 @@ import { addPublicAboutSnapshotCookie, mockAvatarAsset, mockFeedEndpoints } from
 
 type LegalPolicyFixture = {
   version: string
+  contentSha256: string
   sections: Array<{ id: string; title: string }>
 }
 
 const currentLegalVersion = "1.0.1"
+const currentLegalVersions = {
+  privacy: "1.0.1",
+  terms: "1.0.1",
+  cookies: "1.0.2",
+} as const
 const internalPolicyTokens = [
   "법무·운영 확인 필요 항목",
   "reviewRequired",
@@ -23,10 +30,18 @@ const internalPolicyTokens = [
 const readPolicyFixture = (kind: "privacy" | "terms" | "cookies"): LegalPolicyFixture =>
   parseYaml(
     readFileSync(
-      path.join(process.cwd(), "..", "legal", "policies", `${kind}.ko-KR.v${currentLegalVersion}.yaml`),
+      path.join(process.cwd(), "..", "legal", "policies", `${kind}.ko-KR.v${currentLegalVersions[kind]}.yaml`),
       "utf8",
     ),
   ) as LegalPolicyFixture
+
+const expectCanonicalDownloadHash = async (page: Page, expectedHash: string) => {
+  const downloadHref = await page.getByRole("link", { name: "원문 JSON 다운로드" }).getAttribute("href")
+  expect(downloadHref).toBeTruthy()
+  const encodedPayload = downloadHref!.replace("data:application/json;charset=utf-8,", "")
+  const canonicalJson = decodeURIComponent(encodedPayload)
+  expect(crypto.createHash("sha256").update(canonicalJson).digest("hex")).toBe(expectedHash)
+}
 
 const expectNoInternalPolicyTodos = async (page: Page) => {
   for (const token of internalPolicyTokens) {
@@ -65,10 +80,21 @@ test.describe("legal policy public pages", () => {
     ])
     await expect(page.getByText("illusiveman7@gmail.com")).toHaveCount(0)
     await expectNoInternalPolicyTodos(page)
-    await expect(page.getByRole("link", { name: /aquilaxk10@gmail\.com/ })).toHaveAttribute(
+    await expect(page.getByRole("link", { name: "AquilaLog 개인정보 문의 및 데이터 삭제 요청" })).toHaveAttribute(
       "href",
-      "mailto:aquilaxk10@gmail.com?subject=AquilaLog%20%EB%8D%B0%EC%9D%B4%ED%84%B0%20%EC%82%AD%EC%A0%9C%20%EC%9A%94%EC%B2%AD",
+      "mailto:aquilaxk10@gmail.com?subject=AquilaLog%20%EA%B0%9C%EC%9D%B8%EC%A0%95%EB%B3%B4%20%EB%AC%B8%EC%9D%98%20%EB%B0%8F%20%EB%8D%B0%EC%9D%B4%ED%84%B0%20%EC%82%AD%EC%A0%9C%20%EC%9A%94%EC%B2%AD",
     )
+    await expect(page.getByRole("link", { name: "현재 버전" })).toHaveCount(0)
+    await expect(page.getByRole("navigation", { name: "정책 목차" }).getByRole("link")).toHaveCount(
+      privacyPolicy.sections.length,
+    )
+    await expect(page.getByLabel("정책 섹션 이동")).toHaveValue("privacy-controller")
+    await expect(page.getByRole("link", { name: "처리하는 개인정보 항목과 수집 방법 섹션 링크" })).toHaveAttribute(
+      "href",
+      "#privacy-collection-items",
+    )
+    await expect(page.getByText("문서 무결성 정보")).toBeVisible()
+    await expectCanonicalDownloadHash(page, privacyPolicy.contentSha256)
 
     await page.goto("/terms", { waitUntil: "domcontentloaded" })
 
@@ -82,16 +108,27 @@ test.describe("legal policy public pages", () => {
       "terms-maintenance",
       "terms-notice",
     ])
-    await expect(page.getByRole("link", { name: "aquilaxk10@gmail.com" })).toBeVisible()
+    await expect(page.getByRole("link", { name: "AquilaLog 이용약관 문의" })).toHaveAttribute(
+      "href",
+      "mailto:aquilaxk10@gmail.com?subject=AquilaLog%20%EC%9D%B4%EC%9A%A9%EC%95%BD%EA%B4%80%20%EB%AC%B8%EC%9D%98",
+    )
     await expect(page.getByText("illusiveman7@gmail.com")).toHaveCount(0)
     await expectNoInternalPolicyTodos(page)
     await expect(page.getByRole("link", { name: "개인정보처리방침" })).toHaveAttribute("href", "/privacy")
 
-    await page.goto(`/legal/cookies/${currentLegalVersion}`, { waitUntil: "domcontentloaded" })
+    await page.goto("/cookies", { waitUntil: "domcontentloaded" })
 
     await expect(page).toHaveTitle(/쿠키 정책/)
     await expect(page.getByRole("heading", { name: "쿠키 정책", exact: true })).toBeVisible()
     await expectPolicySections(page, cookiesPolicy, ["cookies-essential", "cookies-analytics", "cookies-control"])
+    await expect(page.getByRole("link", { name: "현재 버전" })).toHaveCount(0)
+    await expect(page.getByRole("link", { name: "AquilaLog 쿠키 및 브라우저 저장소 문의" })).toHaveAttribute(
+      "href",
+      "mailto:aquilaxk10@gmail.com?subject=AquilaLog%20%EC%BF%A0%ED%82%A4%20%EB%B0%8F%20%EB%B8%8C%EB%9D%BC%EC%9A%B0%EC%A0%80%20%EC%A0%80%EC%9E%A5%EC%86%8C%20%EB%AC%B8%EC%9D%98",
+    )
+    await expectCanonicalDownloadHash(page, cookiesPolicy.contentSha256)
+    await page.goto(`/legal/cookies/${currentLegalVersions.cookies}`, { waitUntil: "domcontentloaded" })
+    await expect(page.getByRole("link", { name: "현재 버전" })).toHaveAttribute("href", "/cookies")
     await expectNoInternalPolicyTodos(page)
 
     await page.goto("/legal/history", { waitUntil: "domcontentloaded" })
@@ -104,6 +141,11 @@ test.describe("legal policy public pages", () => {
       "href",
       `/legal/terms/${currentLegalVersion}`,
     )
+    const currentCookiesHistoryItem = page
+      .locator("article")
+      .filter({ has: page.getByText(`버전 ${currentLegalVersions.cookies}`) })
+      .filter({ has: page.getByRole("heading", { name: "쿠키 정책" }) })
+    await expect(currentCookiesHistoryItem.getByRole("link", { name: "현재 문서" })).toHaveAttribute("href", "/cookies")
 
     const legacyResponse = await page.goto("/legal/privacy/1.0.0", { waitUntil: "domcontentloaded" })
     expect(legacyResponse?.status()).toBe(404)
@@ -164,5 +206,7 @@ test.describe("legal policy public pages", () => {
       "href",
       "/terms",
     )
+    await expect(footer.getByRole("link", { name: "쿠키 정책" })).toHaveAttribute("href", "/cookies")
+    await expect(footer.getByRole("link", { name: "쿠키 설정" })).toHaveAttribute("href", "/settings/privacy")
   })
 })

@@ -106,6 +106,8 @@ test("browser storage registry records retention and deletion metadata for every
 test("signup cooldown registry documents hashed storage instead of raw email identifiers", () => {
   const cooldownEntry = registeredBrowserStorageKeys.find((entry) => entry.key === "auth.signupMailCooldown.v1")
   const hookSource = readFileSync(path.join(srcRoot, "hooks/useSignupMailCooldown.ts"), "utf8")
+  const signupPageSource = readFileSync(path.join(srcRoot, "pages/signup.tsx"), "utf8")
+  const authEntryModalSource = readFileSync(path.join(srcRoot, "components/auth/AuthEntryModal.tsx"), "utf8")
 
   expect(cooldownEntry).toEqual(
     expect.objectContaining({
@@ -115,6 +117,9 @@ test("signup cooldown registry documents hashed storage instead of raw email ide
   )
   expect(hookSource).toContain("hashCooldownEmail")
   expect(hookSource).toContain("current[targetEmailKey]")
+  expect(hookSource).toContain("isCooldownPending || remainingSeconds > 0")
+  expect(signupPageSource).toContain("await startCooldown(response.data.email)")
+  expect(authEntryModalSource).toContain("await startCooldown(response.data.email)")
   expect(hookSource).not.toContain("fallbackHash")
   expect(hookSource).not.toContain("fnv1a")
   expect(hookSource).not.toContain("current[targetEmail] =")

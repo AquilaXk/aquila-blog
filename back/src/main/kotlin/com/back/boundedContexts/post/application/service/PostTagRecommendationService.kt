@@ -530,11 +530,13 @@ class PostTagRecommendationService(
     private fun sanitizePromptContent(content: String): String {
         val sanitized = sanitizePromptText(content)
         if (sanitized.length <= MAX_PROMPT_CONTENT_LENGTH) return sanitized
-        val front = sanitized.take(MAX_PROMPT_CONTENT_LENGTH / 2)
-        val back = sanitized.takeLast(MAX_PROMPT_CONTENT_LENGTH / 2)
+        val delimiter = "\n...\n"
+        val contentBudget = MAX_PROMPT_CONTENT_LENGTH - delimiter.length
+        val front = sanitized.take(contentBudget / 2)
+        val back = sanitized.takeLast(contentBudget - front.length)
         return buildString {
             append(front)
-            append("\n...\n")
+            append(delimiter)
             append(back)
         }
     }

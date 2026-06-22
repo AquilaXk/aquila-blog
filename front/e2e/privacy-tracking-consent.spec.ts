@@ -49,6 +49,13 @@ test("optional analytics and RUM stay silent before consent and after withdrawal
   await page.reload({ waitUntil: "domcontentloaded" })
   await waitForClientTrackingWindow(page)
 
+  await expect
+    .poll(() => optionalTrackingRequests.length, {
+      message: "post-consent optional tracking requests",
+      timeout: 10000,
+    })
+    .toBeGreaterThan(0)
+
   optionalTrackingRequests.splice(0, optionalTrackingRequests.length)
   await page.evaluate(
     ({ key, eventName }) => {

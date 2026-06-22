@@ -34,10 +34,10 @@ const policyDocumentTypes: Record<LegalPolicyKind, LegalPolicyDocument["document
 const getPolicyFileName = (kind: LegalPolicyKind, version: string) =>
   `${policyFilePrefixes[kind]}.ko-KR.v${version}.yaml`
 
-const stablePolicyHash = (policy: LegalPolicyDocument) => {
-  const normalized = { ...policy, contentSha256: "" }
-  return crypto.createHash("sha256").update(JSON.stringify(normalized)).digest("hex")
-}
+const canonicalPolicyJson = (policy: LegalPolicyDocument) => JSON.stringify({ ...policy, contentSha256: "" })
+
+const stablePolicyHash = (policy: LegalPolicyDocument) =>
+  crypto.createHash("sha256").update(canonicalPolicyJson(policy)).digest("hex")
 
 const readPolicy = (
   kind: LegalPolicyKind,
@@ -63,26 +63,21 @@ const readPolicy = (
   return policy
 }
 
-const buildDownloadText = (policy: LegalPolicyDocument) => {
-  const lines = [
-    `${policy.owner} ${policy.documentType} ${policy.version}`,
-    `시행일: ${policy.effectiveAt}`,
-    `contentSha256: ${policy.contentSha256}`,
-    "",
-    ...policy.sections.flatMap((section) => [`# ${section.title}`, ...section.body, ""]),
-  ]
-  return lines.join("\n")
-}
+const getPolicyDownloadFilename = (kind: LegalPolicyKind, version: string) => `aquilalog-${kind}-${version}.canonical.json`
 
-export const getLegalPolicyPageStaticProps = (kind: LegalPolicyKind, version = ACTIVE_LEGAL_POLICY_VERSION) => {
+export const getLegalPolicyPageStaticProps = (kind: LegalPolicyKind, version?: string) => {
   const policy = readPolicy(kind, version)
+  const isCurrentRoute = version == null
   const props: LegalPolicyPageProps = {
     policy,
     kind,
     currentHref: legalPolicyCurrentPaths[kind],
     versionHref: toLegalPolicyVersionPath(kind, policy.version),
     historyHref: legalPolicyHistoryPath,
-    downloadText: buildDownloadText(policy),
+    downloadText: canonicalPolicyJson(policy),
+    downloadFilename: getPolicyDownloadFilename(kind, policy.version),
+    downloadHashBasis: "contentSha256 필드를 빈 문자열로 둔 canonical JSON 바이트",
+    isCurrentRoute,
   }
   return { props }
 }

@@ -26,6 +26,7 @@ const Footer: React.FC<Props> = ({ className }) => {
         <Link href={legalPolicyCurrentPaths.privacy}>개인정보처리방침</Link>
         <Link href={legalPolicyCurrentPaths.terms}>이용약관</Link>
         <Link href={legalPolicyCurrentPaths.cookies}>쿠키 정책</Link>
+        <Link href="/settings/privacy">쿠키 설정</Link>
       </div>
     </StyledWrapper>
   )
@@ -45,8 +46,9 @@ const StyledWrapper = styled.footer`
   a {
     display: inline-flex;
     align-items: center;
-    min-height: 34px;
+    min-height: 44px;
     margin-top: 0.75rem;
+    padding: 0 0.15rem;
     font-size: 0.875rem;
     line-height: 1.25rem;
     color: ${({ theme }) => theme.colors.gray10};

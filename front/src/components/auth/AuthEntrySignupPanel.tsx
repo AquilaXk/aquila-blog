@@ -9,6 +9,7 @@ type Props = {
   signupError: string
   signupLoading: boolean
   signupCooldownSeconds: number
+  signupCooldownActive: boolean
   termsAccepted: boolean
   privacyAccepted: boolean
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
@@ -23,6 +24,7 @@ const AuthEntrySignupPanel = ({
   signupError,
   signupLoading,
   signupCooldownSeconds,
+  signupCooldownActive,
   termsAccepted,
   privacyAccepted,
   onSubmit,
@@ -97,12 +99,14 @@ const AuthEntrySignupPanel = ({
         <button
           type="submit"
           className="primaryAction"
-          disabled={signupLoading || signupCooldownSeconds > 0 || !signupConsentAccepted}
+          disabled={signupLoading || signupCooldownActive || !signupConsentAccepted}
         >
           {signupLoading
             ? "메일 보내는 중..."
-            : signupCooldownSeconds > 0
-              ? `다시 보내기 ${formatSignupCooldown(signupCooldownSeconds)}`
+            : signupCooldownActive
+              ? signupCooldownSeconds > 0
+                ? `다시 보내기 ${formatSignupCooldown(signupCooldownSeconds)}`
+                : "잠시만 기다려주세요"
               : "인증 메일 보내기"}
         </button>
       </form>

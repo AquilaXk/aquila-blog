@@ -7,6 +7,18 @@ type SignupMailCooldownMap = Record<string, number>
 
 const normalizeCooldownEmail = (value: string) => value.trim().toLowerCase()
 
+const hashCooldownEmail = async (email: string) => {
+  const normalizedEmail = normalizeCooldownEmail(email)
+  if (!normalizedEmail) return ""
+
+  const source = `auth.signupMailCooldown.v1:${normalizedEmail}`
+  if (!globalThis.crypto?.subtle) return ""
+
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(source))
+  const encoded = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")
+  return `sha256:${encoded}`
+}
+
 const readCooldownMap = (): SignupMailCooldownMap => {
   if (typeof window === "undefined") return {}
 
@@ -35,12 +47,12 @@ const cleanupCooldownMap = (nowMs: number) => {
   return next
 }
 
-const readRemainingSeconds = (email: string, nowMs: number) => {
-  const normalizedEmail = normalizeCooldownEmail(email)
-  if (!normalizedEmail) return 0
+const readRemainingSeconds = async (email: string, nowMs: number) => {
+  const emailKey = await hashCooldownEmail(email)
+  if (!emailKey) return 0
 
   const current = cleanupCooldownMap(nowMs)
-  const expiresAtMs = current[normalizedEmail]
+  const expiresAtMs = current[emailKey]
   if (!expiresAtMs) return 0
 
   return Math.max(0, Math.ceil((expiresAtMs - nowMs) / 1000))
@@ -57,32 +69,72 @@ export const useSignupMailCooldown = (
   cooldownSeconds: number = DEFAULT_SIGNUP_MAIL_COOLDOWN_SECONDS
 ) => {
   const normalizedEmail = useMemo(() => normalizeCooldownEmail(email), [email])
-  const [remainingSeconds, setRemainingSeconds] = useState(() =>
-    readRemainingSeconds(normalizedEmail, Date.now())
-  )
+  const [remainingSeconds, setRemainingSeconds] = useState(0)
+  const [isCooldownPending, setIsCooldownPending] = useState(false)
 
   useEffect(() => {
-    const sync = () => setRemainingSeconds(readRemainingSeconds(normalizedEmail, Date.now()))
-    sync()
+    let isActive = true
+    const sync = (markPending = false) => {
+      if (!normalizedEmail) {
+        setRemainingSeconds(0)
+        setIsCooldownPending(false)
+        return
+      }
 
-    if (!normalizedEmail) return
+      if (markPending) setIsCooldownPending(true)
+      readRemainingSeconds(normalizedEmail, Date.now())
+        .then((nextRemainingSeconds) => {
+          if (!isActive) return
+          setRemainingSeconds(nextRemainingSeconds)
+          if (markPending) setIsCooldownPending(false)
+        })
+        .catch(() => {
+          if (!isActive) return
+          setRemainingSeconds(0)
+          if (markPending) setIsCooldownPending(false)
+        })
+    }
+    sync(true)
+
+    if (!normalizedEmail) {
+      return () => {
+        isActive = false
+      }
+    }
 
     const intervalId = window.setInterval(sync, 1000)
-    return () => window.clearInterval(intervalId)
+    return () => {
+      isActive = false
+      window.clearInterval(intervalId)
+    }
   }, [normalizedEmail])
 
   const startCooldown = useCallback(
-    (nextEmail?: string) => {
+    async (nextEmail?: string) => {
       const targetEmail = normalizeCooldownEmail(nextEmail ?? normalizedEmail)
       if (!targetEmail || typeof window === "undefined") return
 
-      const nowMs = Date.now()
-      const current = cleanupCooldownMap(nowMs)
-      current[targetEmail] = nowMs + cooldownSeconds * 1000
-      writeCooldownMap(current)
+      const reflectsCurrentEmail = targetEmail === normalizedEmail
+      if (reflectsCurrentEmail) setIsCooldownPending(true)
 
-      if (targetEmail === normalizedEmail) {
-        setRemainingSeconds(cooldownSeconds)
+      try {
+        const nowMs = Date.now()
+        const current = cleanupCooldownMap(nowMs)
+        const targetEmailKey = await hashCooldownEmail(targetEmail)
+        if (!targetEmailKey) return
+
+        current[targetEmailKey] = nowMs + cooldownSeconds * 1000
+        writeCooldownMap(current)
+
+        if (reflectsCurrentEmail) {
+          setRemainingSeconds(cooldownSeconds)
+        }
+      } catch {
+        if (reflectsCurrentEmail) {
+          setRemainingSeconds(0)
+        }
+      } finally {
+        if (reflectsCurrentEmail) setIsCooldownPending(false)
       }
     },
     [cooldownSeconds, normalizedEmail]
@@ -90,7 +142,7 @@ export const useSignupMailCooldown = (
 
   return {
     remainingSeconds,
-    isCoolingDown: remainingSeconds > 0,
+    isCoolingDown: isCooldownPending || remainingSeconds > 0,
     startCooldown,
   }
 }

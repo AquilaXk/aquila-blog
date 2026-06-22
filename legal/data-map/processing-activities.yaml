@@ -151,6 +151,16 @@ activities:
       - refreshTokenHash
       - sessionKey
       - authCookie
+      - apiKey cookie
+      - accessToken cookie
+      - refreshToken cookie
+      - sessionKey cookie
+      - signup_session cookie
+      - auth.login.keepSignedIn
+      - auth.login.ipSecurityOn
+      - auth.signupMailCooldown.v1
+      - auth:me:anon-probe-suppress-until:v1
+      - header.auth-shell.v1
       - createdIp
       - userAgent
       - ipSecurityFingerprint
@@ -170,8 +180,8 @@ activities:
       - vercel_frontend_hosting
       - cloudflare_dns_proxy
     overseasTransfer: possibleViaVercelOrCloudflareEdge
-    retentionRule: untilLogoutRevocationExpiryOrSessionCleanupJob
-    destructionMethod: revokeSessionExpireCookiePurgeExpiredSessions
+    retentionRule: untilLogoutRevocationExpiryOrSessionCleanupJob; apiKey/accessToken/refreshToken/sessionKey cookies sessionOrConfiguredMaxAge; signup_session untilSignupExpiry; auth.signupMailCooldown.v1 untilCooldownExpiryOrTabClose; auth.login.keepSignedIn/auth.login.ipSecurityOn untilPreferenceChangeOrBrowserStorageClear
+    destructionMethod: revokeSessionExpireCookiePurgeExpiredSessions; auth.signupMailCooldown.v1 expires hashed entries; auth.login.* browserPreferenceDeletion
     accessRoles:
       - accountOwner
       - serviceAdmin
@@ -182,7 +192,7 @@ activities:
     policySectionId: privacy-collection-session
     enabledByEnv: custom.prod.cookieDomain; custom.prod.frontUrl
     reviewRequired:
-      - Exact cookie inventory should be exported into policy versioning work.
+      - Cookie inventory is published in cookies.ko-KR.v1.0.2 and must stay aligned with browserStorageRegistry.
 
   - id: user_content_posts_comments
     name: 게시글, 댓글, 공개 프로필 콘텐츠
@@ -201,6 +211,14 @@ activities:
       - profileServiceLinks
       - profileContactLinks
       - postHitDedupHash
+      - admin.editor.localDraft.v1
+      - admin.editor.customTags
+      - admin.editor.customCategories
+      - admin.contentStudio.listConditions.v1
+      - editor.actual-preview.v1:*
+      - posts:public-cursor-disabled:v1
+      - posts:runtime-endpoints:v1
+      - feed.restore.*
     dataSubjects:
       - registeredMember
       - publicVisitorWhenViewing
@@ -215,8 +233,8 @@ activities:
       - vercel_frontend_hosting
       - cloudflare_dns_proxy
     overseasTransfer: possibleViaVercelOrCloudflareEdge
-    retentionRule: untilUserDeletionOrContentDeletion; publicCacheUntilRevalidation
-    destructionMethod: softDeleteThenCachePurge; anonymizeWhereRequired
+    retentionRule: untilUserDeletionOrContentDeletion; publicCacheUntilRevalidation; admin.editor.localDraft.v1 sevenDaysFromSavedAt; admin.editor.customTags/admin.editor.customCategories untilCatalogChange; admin.contentStudio.listConditions.v1 untilPreferenceChange; editor.actual-preview.v1:*/posts:public-cursor-disabled:v1/posts:runtime-endpoints:v1/feed.restore.* untilTabCloseOrBrowserStorageClear
+    destructionMethod: softDeleteThenCachePurge; anonymizeWhereRequired; admin.editor.localDraft.v1 manualClearPublishOrTtlExpiry; editor.actual-preview.v1:*/posts:public-cursor-disabled:v1/posts:runtime-endpoints:v1/feed.restore.* tabCloseOrBrowserStorageDeletion
     accessRoles:
       - contentAuthor
       - serviceAdmin
@@ -241,6 +259,7 @@ activities:
       - checksumSha256
       - ownerMemberId
       - ownerObjectId
+      - aquila-cloud-video-upload-session:*
     dataSubjects:
       - registeredMember
       - contentAuthor
@@ -255,8 +274,8 @@ activities:
       - home_server_backup_storage
       - cloudflare_dns_proxy
     overseasTransfer: noPlannedOverseasTransferForObjectStorage; edgeTransferPossibleViaCloudflare
-    retentionRule: activeUntilOwnerDeletion; tempUploadsUntilPurgeAfter; deletedObjectsUntilBackupExpiry
-    destructionMethod: objectDeleteAndMetadataMarkDeleted; backupExpiryOrTombstoneFutureWork
+    retentionRule: activeUntilOwnerDeletion; tempUploadsUntilPurgeAfter; deletedObjectsUntilBackupExpiry; aquila-cloud-video-upload-session:* untilUploadCompleteCancelOrStale
+    destructionMethod: objectDeleteAndMetadataMarkDeleted; backupExpiryOrTombstoneFutureWork; aquila-cloud-video-upload-session:* localStorageClearOnCompleteCancelOrStale
     accessRoles:
       - contentAuthor
       - serviceAdmin
@@ -389,6 +408,7 @@ activities:
       - performanceRating
       - browserEventMetadata
       - aggregatedUsageEvent
+      - privacy.optionalTrackingConsent.v1
     dataSubjects:
       - publicVisitor
       - registeredMemberWhenLoggedIn
@@ -402,8 +422,8 @@ activities:
       - vercel_frontend_hosting
       - grafana_loki_monitoring
     overseasTransfer: possibleViaGoogleAndVercelGlobalInfrastructure
-    retentionRule: providerDefaultUnlessConfigured; localRumLogRetentionPolicyRequired
-    destructionMethod: providerRetentionControlsAndLocalLogExpiry
+    retentionRule: providerDefaultUnlessConfigured; localRumLogRetentionPolicyRequired; privacy.optionalTrackingConsent.v1 untilConsentChangeOrBrowserStorageClear
+    destructionMethod: providerRetentionControlsAndLocalLogExpiry; privacy.optionalTrackingConsent.v1 preferenceDeletion
     accessRoles:
       - serviceAdmin
       - analyticsOperator

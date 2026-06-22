@@ -87,7 +87,11 @@ const AuthEntryModal: React.FC<AuthEntryModalProps> = ({
   const [sentEmail, setSentEmail] = useState("")
   const [signupTermsAccepted, setSignupTermsAccepted] = useState(false)
   const [signupPrivacyAccepted, setSignupPrivacyAccepted] = useState(false)
-  const { remainingSeconds: signupCooldownSeconds, startCooldown } = useSignupMailCooldown(signupEmail)
+  const {
+    remainingSeconds: signupCooldownSeconds,
+    isCoolingDown: signupCooldownActive,
+    startCooldown,
+  } = useSignupMailCooldown(signupEmail)
 
   const normalizedNextPath = useMemo(() => {
     return normalizeNextPath(nextPath)
@@ -212,7 +216,7 @@ const AuthEntryModal: React.FC<AuthEntryModalProps> = ({
       })
 
       setSentEmail(response.data.email)
-      startCooldown(response.data.email)
+      await startCooldown(response.data.email)
       setView("signup-sent")
     } catch (signupStartError) {
       setSignupError(toAuthErrorMessage("signupStart", signupStartError, "회원가입 메일 전송에 실패했습니다."))
@@ -266,6 +270,7 @@ const AuthEntryModal: React.FC<AuthEntryModalProps> = ({
               signupError={signupError}
               signupLoading={signupLoading}
               signupCooldownSeconds={signupCooldownSeconds}
+              signupCooldownActive={signupCooldownActive}
               termsAccepted={signupTermsAccepted}
               privacyAccepted={signupPrivacyAccepted}
               onSubmit={handleSignupEmailStart}

@@ -1,4 +1,8 @@
 import { isServerTempDraftPost } from "./editorTempDraft"
+import {
+  isLocalDraftExpired,
+  LOCAL_DRAFT_STORAGE_KEY,
+} from "./editorStudioStorageModel"
 
 export type PostListScope = "active" | "deleted"
 
@@ -89,7 +93,6 @@ export type ListState = {
   loadedAt: string
 }
 
-export const LOCAL_DRAFT_STORAGE_KEY = "admin.editor.localDraft.v1"
 export const EDITOR_NEW_ROUTE_PATH = "/editor/new"
 export const DEFAULT_PAGE = "1"
 export const DEFAULT_PAGE_SIZE = "20"
@@ -176,6 +179,10 @@ export const readLocalDraft = (): LocalDraftSummary | null => {
     const content = typeof parsed.content === "string" ? parsed.content.trim() : ""
     const summary = typeof parsed.summary === "string" ? parsed.summary.trim() : ""
     const savedAt = typeof parsed.savedAt === "string" ? parsed.savedAt : ""
+    if (isLocalDraftExpired(savedAt)) {
+      window.localStorage.removeItem(LOCAL_DRAFT_STORAGE_KEY)
+      return null
+    }
     const tags = Array.isArray(parsed.tags)
       ? parsed.tags.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
       : []

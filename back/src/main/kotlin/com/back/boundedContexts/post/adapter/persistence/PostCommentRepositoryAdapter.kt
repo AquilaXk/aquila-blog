@@ -36,4 +36,6 @@ class PostCommentRepositoryAdapter(
     ): PostComment? = postCommentRepository.findByPostAndId(post, id)
 
     override fun findById(id: Long): Optional<PostComment> = postCommentRepository.findById(id)
+
+    override fun softDeleteByAuthorId(authorId: Long): Int = postCommentRepository.softDeleteByAuthorId(authorId)
 }

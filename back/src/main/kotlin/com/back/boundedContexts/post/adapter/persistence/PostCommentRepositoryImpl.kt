@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.adapter.persistence
 
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
+import com.back.boundedContexts.post.domain.postMixin.COMMENTS_COUNT
 import jakarta.persistence.EntityManager
 import jakarta.persistence.PersistenceContext
 
@@ -63,5 +64,57 @@ class PostCommentRepositoryImpl : PostCommentRepositoryCustom {
                 .associateBy(PostComment::id)
 
         return ids.mapNotNull(comments::get)
+    }
+
+    override fun softDeleteByAuthorId(authorId: Long): Int {
+        val affectedPostIds =
+            entityManager
+                .createNativeQuery(
+                    """
+                    select distinct post_id
+                    from post_comment
+                    where author_id = :authorId
+                      and deleted_at is null
+                    """.trimIndent(),
+                ).setParameter("authorId", authorId)
+                .resultList
+                .map { (it as Number).toLong() }
+
+        if (affectedPostIds.isEmpty()) return 0
+
+        val deletedRows =
+            entityManager
+                .createNativeQuery(
+                    """
+                    update post_comment
+                    set deleted_at = now(),
+                        modified_at = now()
+                    where author_id = :authorId
+                      and deleted_at is null
+                    """.trimIndent(),
+                ).setParameter("authorId", authorId)
+                .executeUpdate()
+
+        entityManager
+            .createNativeQuery(
+                """
+                update post_attr pa
+                set int_value = counts.active_count,
+                    modified_at = now()
+                from (
+                    select p.id as post_id, count(pc.id)::int as active_count
+                    from post p
+                    left join post_comment pc on pc.post_id = p.id and pc.deleted_at is null
+                    where p.id in (:postIds)
+                    group by p.id
+                ) counts
+                where pa.subject_id = counts.post_id
+                  and pa.name = :commentsCountName
+                """.trimIndent(),
+            ).setParameter("postIds", affectedPostIds)
+            .setParameter("commentsCountName", COMMENTS_COUNT)
+            .executeUpdate()
+
+        return deletedRows
     }
 }

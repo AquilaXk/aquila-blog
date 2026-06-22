@@ -159,6 +159,20 @@ class PostDeletedQueryRepository(
         return updatedRows > 0
     }
 
+    fun softDeleteByAuthorId(authorId: Long): Int =
+        jdbcTemplate.update(
+            """
+            update post
+            set published = false,
+                listed = false,
+                deleted_at = now(),
+                modified_at = now()
+            where author_id = ?
+              and deleted_at is null
+            """.trimIndent(),
+            authorId,
+        )
+
     fun restoreDeletedById(id: Long): Boolean {
         val updatedRows =
             jdbcTemplate.update(

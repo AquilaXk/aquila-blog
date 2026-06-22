@@ -166,7 +166,7 @@ class PostTagRecommendationService(
             return done(
                 fallbackAndCache(
                     cacheKey = cacheKey,
-                    tags = fallbackTags,
+                    tags = emptyList(),
                     reason = "pii-blocked",
                     nowMillis = now,
                 ),

@@ -448,7 +448,9 @@ class PostTagRecommendationService(
         maxTags: Int,
     ): List<String> {
         val existing = sanitizeTags(existingTags, maxTags * 2)
-        val frontmatterTags = PostMetaExtractor.extract(content).tags
+        val safeTitle = sanitizePromptText(title)
+        val safeContent = sanitizePromptText(content)
+        val frontmatterTags = PostMetaExtractor.extract(safeContent).tags
         val weighted = linkedMapOf<String, Int>()
 
         fun addTokens(
@@ -463,8 +465,8 @@ class PostTagRecommendationService(
             }
         }
 
-        addTokens(title, 3)
-        addTokens(content, 1)
+        addTokens(safeTitle, 3)
+        addTokens(safeContent, 1)
 
         val ranked =
             weighted.entries
@@ -798,12 +800,22 @@ class PostTagRecommendationService(
             )
         private val NOISE_TAGS =
             setOf(
+                "apikey",
+                "api-key",
+                "api_key",
                 "aside",
                 "blockquote",
+                "authorization",
                 "section",
+                "password",
+                "redacted-email",
+                "redacted-phone",
+                "redacted-secret",
+                "secret",
                 "article",
                 "header",
                 "footer",
+                "token",
                 "html",
                 "body",
             )

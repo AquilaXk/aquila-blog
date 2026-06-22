@@ -81,6 +81,46 @@ class PostTagRecommendationServiceResilienceTest {
     }
 
     @Test
+    @DisplayName("규칙 fallback 태그 추천은 secret-like 토큰을 반환하거나 캐시하지 않는다")
+    fun `rule fallback recommendation redacts secret-like tokens before returning and caching`() {
+        val redisPort = capturingRedisPort()
+        val service = createService(aiEnabled = false, redisPort = redisPort)
+
+        val result =
+            service.recommend(
+                title = "apiKey=super-secret-title-token 장애 대응",
+                content =
+                    """
+                    ---
+                    tags:
+                      - secret: frontmatter-secret-token
+                    ---
+                    장애 대응 본문에는 token=super-secret-content-token 값과 Authorization: Bearer bearer-secret-token 예시가 있다.
+                    """.trimIndent(),
+                existingTags = listOf("password=existing-secret-token", "Kotlin"),
+                maxTags = 8,
+            )
+
+        val returnedTags = result.tags.joinToString("\n")
+        val cachedPayload = redisPort.writes.flatMap { listOf(it.key, it.value) }.joinToString("\n")
+
+        assertThat(result.provider).isEqualTo("rule")
+        assertThat(result.reason).isEqualTo("ai-disabled")
+        assertThat(returnedTags)
+            .doesNotContain("super-secret-title-token")
+            .doesNotContain("frontmatter-secret-token")
+            .doesNotContain("super-secret-content-token")
+            .doesNotContain("bearer-secret-token")
+            .doesNotContain("existing-secret-token")
+        assertThat(cachedPayload)
+            .doesNotContain("super-secret-title-token")
+            .doesNotContain("frontmatter-secret-token")
+            .doesNotContain("super-secret-content-token")
+            .doesNotContain("bearer-secret-token")
+            .doesNotContain("existing-secret-token")
+    }
+
+    @Test
     @DisplayName("Gemini 태그 추천은 환경변수가 없으면 기본 비활성화된다")
     fun `gemini tag recommendation is disabled by default configuration`() {
         val applicationYaml = Files.readString(Path.of("src/main/resources/application.yaml"))

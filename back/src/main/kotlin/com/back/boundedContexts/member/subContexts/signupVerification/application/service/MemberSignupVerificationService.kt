@@ -3,8 +3,8 @@ package com.back.boundedContexts.member.subContexts.signupVerification.applicati
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.application.service.MemberApplicationService
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.dto.LegalAcceptanceCommand
 import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.LegalAcceptanceApplicationService
-import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.LegalAcceptanceCommand
 import com.back.boundedContexts.member.subContexts.signupVerification.application.port.output.MemberSignupVerificationRepositoryPort
 import com.back.boundedContexts.member.subContexts.signupVerification.domain.MemberSignupVerification
 import com.back.boundedContexts.member.subContexts.signupVerification.dto.SendSignupVerificationMailPayload

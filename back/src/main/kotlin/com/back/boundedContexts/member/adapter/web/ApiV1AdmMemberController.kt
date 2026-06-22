@@ -15,6 +15,8 @@ import com.back.boundedContexts.member.dto.AuthSessionMemberDto
 import com.back.boundedContexts.member.dto.MemberProfileWorkspaceResponseDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.boundedContexts.member.model.shared.Member
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.dto.LegalReconsentReport
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.port.input.LegalAcceptanceUseCase
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.app.AppConfig
@@ -61,6 +63,7 @@ class ApiV1AdmMemberController(
     private val postImageStorageService: PostImageStoragePort,
     private val postImageStorageProperties: PostImageStorageProperties,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
+    private val legalAcceptanceUseCase: LegalAcceptanceUseCase,
 ) {
     companion object {
         private const val PROFILE_IMAGE_MAX_FILE_SIZE_BYTES = 2L * 1024 * 1024
@@ -80,6 +83,10 @@ class ApiV1AdmMemberController(
         val images: List<ProfileImageHistoryDto>,
     )
 
+    data class LegalReconsentReportResponse(
+        val report: LegalReconsentReport,
+    )
+
     private enum class LinkSection(
         val displayName: String,
         val defaultIcon: String,
@@ -94,6 +101,13 @@ class ApiV1AdmMemberController(
         @field:Size(max = 2000)
         val profileImgUrl: String,
     )
+
+    @GetMapping("/legal-reconsent/report")
+    @Transactional(readOnly = true)
+    fun legalReconsentReport(): LegalReconsentReportResponse =
+        LegalReconsentReportResponse(
+            report = legalAcceptanceUseCase.legalReconsentReport(),
+        )
 
     data class UpdateProfileIdentityRequest(
         @field:NotBlank

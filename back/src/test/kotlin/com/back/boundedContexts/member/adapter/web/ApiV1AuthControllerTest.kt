@@ -3,6 +3,8 @@ package com.back.boundedContexts.member.adapter.web
 import com.back.boundedContexts.member.application.service.AuthTokenService
 import com.back.boundedContexts.member.application.service.LoginAttemptService
 import com.back.boundedContexts.member.application.service.MemberApplicationService
+import com.back.boundedContexts.member.subContexts.legalAcceptance.adapter.persistence.MemberLegalAcceptanceRepository
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.ActiveLegalDocumentMetadata
 import com.back.boundedContexts.member.subContexts.session.adapter.persistence.MemberSessionRepository
 import com.back.global.security.config.AuthCookieNames
 import com.back.support.BaseControllerIntegrationTest
@@ -34,6 +36,9 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
 
     @Autowired
     private lateinit var memberSessionRepository: MemberSessionRepository
+
+    @Autowired
+    private lateinit var memberLegalAcceptanceRepository: MemberLegalAcceptanceRepository
 
     @AfterEach
     fun clearLoginAttemptState() {
@@ -572,6 +577,64 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
                     jsonPath("$.isAdmin") { value(member.isAdmin) }
                     jsonPath("$.username") { value(member.name) }
                     jsonPath("$.nickname") { value(member.nickname) }
+                    jsonPath("$.legalReconsent.status") { value("RECONSENT_REQUIRED") }
+                    jsonPath("$.legalReconsent.required") { value(true) }
+                }
+        }
+
+        @Test
+        fun `최신 약관 재동의를 저장하면 세션 재동의 상태가 current 로 바뀐다`() {
+            val active = ActiveLegalDocumentMetadata.current()
+            val member =
+                memberFacade.join(
+                    username = "legal-reconsent-user",
+                    password = "Abcd1234!",
+                    nickname = "재동의유저",
+                    profileImgUrl = null,
+                    email = "legal-reconsent-user@example.com",
+                )
+            val authCookies = loginAuthCookies(member.email!!)
+
+            mvc
+                .post("/member/api/v1/auth/legal-reconsent") {
+                    authCookies.forEach { cookie(it) }
+                    header("X-Aquila-CSRF", "1")
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "termsVersion": "${active.terms.version}",
+                            "termsContentSha256": "${active.terms.contentSha256}",
+                            "privacyVersion": "${active.privacy.version}",
+                            "privacyContentSha256": "${active.privacy.contentSha256}",
+                            "age14OrOlder": true,
+                            "requiredPrivacyConfirmed": true,
+                            "analyticsConsent": false,
+                            "overseasTransferAcknowledged": true
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1AuthController::class.java))
+                    match(handler().methodName("legalReconsent"))
+                    jsonPath("$.resultCode") { value("200-1") }
+                    jsonPath("$.data.legalReconsent.status") { value("CURRENT") }
+                    jsonPath("$.data.legalReconsent.required") { value(false) }
+                }
+
+            val saved = memberLegalAcceptanceRepository.findTopByMemberIdOrderByAcceptedAtDesc(member.id)
+            assertThat(saved).isNotNull
+            assertThat(saved!!.source).isEqualTo("RECONSENT")
+            assertThat(saved.termsVersion).isEqualTo(active.terms.version)
+            assertThat(saved.privacyVersion).isEqualTo(active.privacy.version)
+
+            mvc
+                .get("/member/api/v1/auth/session") {
+                    authCookies.forEach { cookie(it) }
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.legalReconsent.status") { value("CURRENT") }
+                    jsonPath("$.legalReconsent.required") { value(false) }
                 }
         }
 

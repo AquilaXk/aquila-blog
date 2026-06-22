@@ -4,6 +4,7 @@ import { useRouter } from "next/router"
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
+import { getLegalReconsentStatus } from "src/apis/backend/legal"
 import { ErrorText, FooterText, SuccessText } from "src/components/auth/LoginPage.styles"
 import { LoginPageForm } from "src/components/auth/LoginPageForm"
 import AuthShell from "src/components/auth/AuthShell"
@@ -147,6 +148,9 @@ const LoginPage = () => {
         }
       }
 
+      const legalReconsent = await getLegalReconsentStatus().catch(() => null)
+      const destination = legalReconsent?.required ? "/settings/privacy?reconsent=required" : next
+
       const normalizePathname = (value: string) => {
         if (!value) return "/"
         if (value === "/") return "/"
@@ -155,12 +159,12 @@ const LoginPage = () => {
       }
 
       const currentPathname = normalizePathname(router.asPath.split("?")[0] || router.pathname)
-      const nextPathname = normalizePathname(next.split("?")[0] || "/")
+      const nextPathname = normalizePathname(destination.split("?")[0] || "/")
       const shouldNavigate = nextPathname !== currentPathname
 
-      if (shouldNavigate && router.asPath !== next) {
-        await replaceRoute(router, next, {
-          preferHardNavigation: nextPathname.startsWith("/editor/"),
+      if (shouldNavigate && router.asPath !== destination) {
+        await replaceRoute(router, destination, {
+          preferHardNavigation: destination.startsWith("/editor/"),
         })
       }
     } catch (authError) {

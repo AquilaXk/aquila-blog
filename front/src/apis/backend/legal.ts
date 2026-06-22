@@ -1,3 +1,5 @@
+import { apiFetch } from "./client"
+
 export const ACTIVE_LEGAL_DOCUMENTS = {
   signupPolicyVersion: "1.0.1",
   terms: {
@@ -29,3 +31,43 @@ export const buildEmailSignupLegalAcceptancePayload = (input: {
 })
 
 export const buildSocialSignupLegalAcceptancePayload = buildEmailSignupLegalAcceptancePayload
+
+export type LegalReconsentStatus = {
+  status: "CURRENT" | "RECONSENT_REQUIRED"
+  required: boolean
+  termsVersion: string
+  termsContentSha256: string
+  privacyVersion: string
+  privacyContentSha256: string
+  acceptedAt?: string | null
+  refusalGuidePath: string
+  exportGuidePath: string
+  deletionGuidePath: string
+}
+
+type RsData<T> = {
+  resultCode: string
+  msg: string
+  data: T
+}
+
+type AuthSessionLegalResponse = {
+  legalReconsent?: LegalReconsentStatus | null
+}
+
+export const getLegalReconsentStatus = async () => {
+  const session = await apiFetch<AuthSessionLegalResponse>("/member/api/v1/auth/session")
+  return session.legalReconsent ?? null
+}
+
+export const submitLegalReconsent = async (input: {
+  age14OrOlder: boolean
+  requiredPrivacyConfirmed: boolean
+  analyticsConsent: boolean
+  overseasTransferAcknowledged: boolean
+}) => {
+  return await apiFetch<RsData<{ legalReconsent: LegalReconsentStatus }>>("/member/api/v1/auth/legal-reconsent", {
+    method: "POST",
+    body: JSON.stringify(buildEmailSignupLegalAcceptancePayload(input)),
+  })
+}

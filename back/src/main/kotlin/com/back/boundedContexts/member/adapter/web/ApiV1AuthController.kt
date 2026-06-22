@@ -10,6 +10,9 @@ import com.back.boundedContexts.member.domain.shared.MemberPolicy
 import com.back.boundedContexts.member.dto.AuthSessionMemberDto
 import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.dto.LegalAcceptanceCommand
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.dto.LegalReconsentStatus
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.port.input.LegalAcceptanceUseCase
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
@@ -31,6 +34,7 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
+import java.time.Instant
 import java.util.Locale
 
 @RestController
@@ -46,6 +50,7 @@ class ApiV1AuthController(
     private val clientIpResolver: ClientIpResolver,
     private val loginAttemptPolicyUseCase: LoginAttemptPolicyUseCase,
     private val memberSessionUseCase: MemberSessionUseCase,
+    private val legalAcceptanceUseCase: LegalAcceptanceUseCase,
 ) {
     companion object {
         private const val MAX_EMAIL_LENGTH = 320
@@ -67,6 +72,33 @@ class ApiV1AuthController(
 
     data class MemberLoginResBody(
         val item: MemberDto,
+    )
+
+    data class LegalReconsentRequest(
+        val termsVersion: String,
+        val termsContentSha256: String,
+        val privacyVersion: String,
+        val privacyContentSha256: String,
+        val age14OrOlder: Boolean,
+        val requiredPrivacyConfirmed: Boolean,
+        val analyticsConsent: Boolean,
+        val overseasTransferAcknowledged: Boolean,
+    ) {
+        fun toCommand(): LegalAcceptanceCommand =
+            LegalAcceptanceCommand(
+                termsVersion = termsVersion,
+                termsContentSha256 = termsContentSha256,
+                privacyVersion = privacyVersion,
+                privacyContentSha256 = privacyContentSha256,
+                age14OrOlder = age14OrOlder,
+                requiredPrivacyConfirmed = requiredPrivacyConfirmed,
+                analyticsConsent = analyticsConsent,
+                overseasTransferAcknowledged = overseasTransferAcknowledged,
+            )
+    }
+
+    data class LegalReconsentResponse(
+        val legalReconsent: LegalReconsentStatus,
     )
 
     @PostMapping("/login")
@@ -188,7 +220,40 @@ class ApiV1AuthController(
     @Transactional(readOnly = true)
     fun session(
         @AuthenticationPrincipal securityUser: SecurityUser,
-    ): AuthSessionMemberDto = AuthSessionMemberDto(securityUser)
+    ): AuthSessionMemberDto =
+        AuthSessionMemberDto(
+            securityUser = securityUser,
+            legalReconsent = legalAcceptanceUseCase.legalReconsentStatus(securityUser.id),
+        )
+
+    @PostMapping("/legal-reconsent")
+    @Transactional
+    fun legalReconsent(
+        request: HttpServletRequest,
+        @AuthenticationPrincipal securityUser: SecurityUser,
+        @RequestBody @Valid reqBody: LegalReconsentRequest,
+    ): RsData<LegalReconsentResponse> {
+        val member =
+            memberUseCase
+                .findById(securityUser.id)
+                .orElseThrow { AppException("404-1", "회원을 찾을 수 없습니다.") }
+
+        legalAcceptanceUseCase.recordLegalReconsent(
+            member = member,
+            command = reqBody.toCommand(),
+            acceptedAt = Instant.now(),
+            clientIp = extractClientIp(request),
+            userAgent = request.getHeader("User-Agent"),
+        )
+
+        return RsData(
+            "200-1",
+            "최신 약관과 개인정보처리방침 동의를 저장했습니다.",
+            LegalReconsentResponse(
+                legalReconsent = legalAcceptanceUseCase.legalReconsentStatus(member.id),
+            ),
+        )
+    }
 
     private fun isPasswordValid(
         member: Member,

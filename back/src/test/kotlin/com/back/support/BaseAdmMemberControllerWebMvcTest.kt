@@ -3,6 +3,7 @@ package com.back.support
 import com.back.boundedContexts.member.adapter.web.ApiV1AdmMemberController
 import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.port.input.LegalAcceptanceUseCase
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.app.AppConfig
@@ -51,6 +52,9 @@ abstract class BaseAdmMemberControllerWebMvcTest : BaseIntegrationTest() {
 
     @MockitoBean
     protected lateinit var uploadedFileRetentionService: UploadedFileRetentionService
+
+    @MockitoBean
+    protected lateinit var legalAcceptanceUseCase: LegalAcceptanceUseCase
 
     @MockitoBean(name = "jpaMappingContext")
     protected lateinit var jpaMappingContext: JpaMetamodelMappingContext

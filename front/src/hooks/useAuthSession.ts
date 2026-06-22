@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useState } from "react"
 import { ApiError, apiFetch } from "src/apis/backend/client"
+import type { LegalReconsentStatus } from "src/apis/backend/legal"
 import { queryKey } from "src/constants/queryKey"
 import type { ProfileCardLinkItem } from "src/constants/profileCardLinks"
 import type { BlogDesignType, LegacyBlogScheme } from "src/types"
@@ -54,6 +55,7 @@ export type AuthMember = {
   legacyBlogScheme?: LegacyBlogScheme
   serviceLinks?: ProfileCardLinkItem[]
   contactLinks?: ProfileCardLinkItem[]
+  legalReconsent?: LegalReconsentStatus | null
 }
 
 const useAuthSession = () => {

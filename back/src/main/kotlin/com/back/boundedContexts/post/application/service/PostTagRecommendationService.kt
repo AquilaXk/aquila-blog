@@ -30,7 +30,7 @@ import kotlin.random.Random
  */
 @Service
 class PostTagRecommendationService(
-    @param:Value("\${custom.ai.tag.enabled:true}")
+    @param:Value("\${custom.ai.tag.enabled:false}")
     private val aiTagEnabled: Boolean,
     @param:Value("\${custom.ai.tag.timeoutSeconds:6}")
     private val timeoutSeconds: Long,
@@ -324,7 +324,7 @@ class PostTagRecommendationService(
                 add("- 너무 일반적인 태그(예: 개발, 블로그) 남발 금지")
                 add("")
                 add("<입력데이터>")
-                add("제목: ${title.take(MAX_TITLE_LENGTH)}")
+                add("제목: ${sanitizePromptText(title).take(MAX_TITLE_LENGTH)}")
                 add("본문:")
                 add(sanitizePromptContent(content))
             }.joinToString("\n")
@@ -528,14 +528,25 @@ class PostTagRecommendationService(
     }
 
     private fun sanitizePromptContent(content: String): String {
-        if (content.length <= MAX_PROMPT_CONTENT_LENGTH) return content
-        val front = content.take(MAX_PROMPT_CONTENT_LENGTH / 2)
-        val back = content.takeLast(MAX_PROMPT_CONTENT_LENGTH / 2)
+        val sanitized = sanitizePromptText(content)
+        if (sanitized.length <= MAX_PROMPT_CONTENT_LENGTH) return sanitized
+        val front = sanitized.take(MAX_PROMPT_CONTENT_LENGTH / 2)
+        val back = sanitized.takeLast(MAX_PROMPT_CONTENT_LENGTH / 2)
         return buildString {
             append(front)
             append("\n...\n")
             append(back)
         }
+    }
+
+    private fun sanitizePromptText(value: String): String {
+        val withoutSecrets =
+            SECRET_ASSIGNMENT_REGEX.replace(value) { match ->
+                "${match.groupValues[1]}=[redacted-secret]"
+            }
+        return withoutSecrets
+            .replace(EMAIL_REGEX, "[redacted-email]")
+            .replace(PHONE_REGEX, "[redacted-phone]")
     }
 
     private fun stripCodeFence(raw: String): String {
@@ -726,6 +737,10 @@ class PostTagRecommendationService(
         private const val DEFAULT_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
         private const val DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
         private val TOKEN_REGEX = Regex("[\\p{IsHangul}\\p{L}\\p{N}_-]{2,24}")
+        private val EMAIL_REGEX = Regex("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", RegexOption.IGNORE_CASE)
+        private val PHONE_REGEX = Regex("(?<!\\d)(?:\\+?\\d{1,3}[-.\\s]?)?(?:0\\d{1,2}[-.\\s]?\\d{3,4}[-.\\s]?\\d{4})(?!\\d)")
+        private val SECRET_ASSIGNMENT_REGEX =
+            Regex("\\b(api[_-]?key|token|password|secret|authorization)\\s*[:=]\\s*[\"']?[^\"'\\s,)&]+", RegexOption.IGNORE_CASE)
         private val FENCED_CODE_REGEX = Regex("```[\\s\\S]*?```")
         private val MARKDOWN_IMAGE_REGEX = Regex("!\\[[^\\]]*\\]\\(([^)\\s]+)(?:\\s+\"[^\"]*\")?\\)")
         private val MARKDOWN_LINK_REGEX = Regex("\\[(.*?)\\]\\((.*?)\\)")

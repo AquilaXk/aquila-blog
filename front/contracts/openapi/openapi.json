@@ -1242,6 +1242,34 @@
         }
       }
     },
+    "/member/api/v1/auth/legal-reconsent" : {
+      "post" : {
+        "tags" : [ "api-v-1-auth-controller" ],
+        "operationId" : "legalReconsent",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LegalReconsentRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataLegalReconsentResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/member/api/v1/adm/members/{id}/profileWorkspace/publish" : {
       "post" : {
         "tags" : [ "api-v-1-adm-member-controller" ],
@@ -2815,6 +2843,24 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/AdminProfileBootstrapResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/adm/members/legal-reconsent/report" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-member-controller" ],
+        "operationId" : "legalReconsentReport",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/LegalReconsentReportResponse"
                 }
               }
             }
@@ -4585,6 +4631,102 @@
           }
         }
       },
+      "LegalReconsentRequest" : {
+        "type" : "object",
+        "properties" : {
+          "termsVersion" : {
+            "type" : "string",
+            "maxLength" : 32,
+            "minLength" : 0
+          },
+          "termsContentSha256" : {
+            "type" : "string",
+            "maxLength" : 64,
+            "minLength" : 64
+          },
+          "privacyVersion" : {
+            "type" : "string",
+            "maxLength" : 32,
+            "minLength" : 0
+          },
+          "privacyContentSha256" : {
+            "type" : "string",
+            "maxLength" : 64,
+            "minLength" : 64
+          },
+          "age14OrOlder" : {
+            "type" : "boolean"
+          },
+          "requiredPrivacyConfirmed" : {
+            "type" : "boolean"
+          },
+          "analyticsConsent" : {
+            "type" : "boolean"
+          },
+          "overseasTransferAcknowledged" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "age14OrOlder", "analyticsConsent", "overseasTransferAcknowledged", "privacyContentSha256", "privacyVersion", "requiredPrivacyConfirmed", "termsContentSha256", "termsVersion" ]
+      },
+      "LegalReconsentResponse" : {
+        "type" : "object",
+        "properties" : {
+          "legalReconsent" : {
+            "$ref" : "#/components/schemas/LegalReconsentStatus"
+          }
+        }
+      },
+      "LegalReconsentStatus" : {
+        "type" : "object",
+        "properties" : {
+          "status" : {
+            "type" : "string"
+          },
+          "required" : {
+            "type" : "boolean"
+          },
+          "termsVersion" : {
+            "type" : "string"
+          },
+          "termsContentSha256" : {
+            "type" : "string"
+          },
+          "privacyVersion" : {
+            "type" : "string"
+          },
+          "privacyContentSha256" : {
+            "type" : "string"
+          },
+          "acceptedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "refusalGuidePath" : {
+            "type" : "string"
+          },
+          "exportGuidePath" : {
+            "type" : "string"
+          },
+          "deletionGuidePath" : {
+            "type" : "string"
+          }
+        }
+      },
+      "RsDataLegalReconsentResponse" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/LegalReconsentResponse"
+          }
+        }
+      },
       "MemberWithUsernameDto" : {
         "type" : "object",
         "properties" : {
@@ -5349,6 +5491,9 @@
           "nickname" : {
             "type" : "string"
           },
+          "legalReconsent" : {
+            "$ref" : "#/components/schemas/LegalReconsentStatus"
+          },
           "isAdmin" : {
             "type" : "boolean"
           }
@@ -5889,6 +6034,35 @@
           },
           "workspace" : {
             "$ref" : "#/components/schemas/MemberProfileWorkspaceResponseDto"
+          }
+        }
+      },
+      "LegalReconsentReport" : {
+        "type" : "object",
+        "properties" : {
+          "currentAcceptedMembers" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "reconsentRequiredMembers" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalMembers" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "completionRate" : {
+            "type" : "number",
+            "format" : "double"
+          }
+        }
+      },
+      "LegalReconsentReportResponse" : {
+        "type" : "object",
+        "properties" : {
+          "report" : {
+            "$ref" : "#/components/schemas/LegalReconsentReport"
           }
         }
       },

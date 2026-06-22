@@ -5,19 +5,19 @@
   "status": "effective",
   "publishedAt": "2026-06-22T00:00:00+09:00",
   "effectiveAt": "2026-06-22T00:00:00+09:00",
-  "contentSha256": "5becc34dcf3c45fba79451c0e816ccd436519da855bf68b6244c58b201dbb668",
+  "contentSha256": "d15a5ef5882c7f02c3947acd1790e17f0e4b560deb152a9168a7a3a420130772",
   "supersedes": "1.0.0",
   "owner": "AquilaLog",
   "contactEmail": "aquilaxk10@gmail.com",
-  "changeSummary": ["시행 중 쿠키 정책에서 내부 검토 항목을 제거하고 공개 고지 문구와 실제 브라우저 저장소 인벤토리를 확정한 버전"],
+  "changeSummary": ["시행 중 쿠키 정책에서 내부 검토 항목을 제거하고 공개 고지 문구를 확정한 버전"],
   "sections": [
     {"id":"cookies-purpose","title":"쿠키 정책의 목적","body":["이 문서는 AquilaLog가 cookie, sessionStorage, localStorage, online identifier를 어떤 목적으로 사용하는지 설명합니다."]},
-    {"id":"cookies-essential","title":"필수 쿠키","body":["apiKey, accessToken, refreshToken, sessionKey는 HttpOnly, Secure, SameSite=Strict, Path=/ 속성으로 발급되는 로그인 필수 cookie입니다. 로그인 상태 유지 선택 시 accessToken은 access token TTL, apiKey·refreshToken·sessionKey는 최대 30일 범위에서 유지되고, 세션 로그인은 브라우저 세션 cookie로 동작합니다.","signup_session은 이메일 회원가입 검증 흐름을 이어가기 위한 HttpOnly, Secure, SameSite=Strict, Path=/ cookie이며 가입 완료, 취소, 만료, 브라우저 cookie 삭제 시 제거됩니다.","필수 cookie를 차단하면 로그인, 회원가입 검증, 세션 보안 기능이 정상 동작하지 않을 수 있습니다."]},
-    {"id":"cookies-preference","title":"설정 저장","body":["scheme cookie는 light 또는 dark 화면 설정을 저장하며 사용자가 테마를 변경하거나 브라우저 cookie를 삭제할 때 갱신·삭제됩니다.","auth.login.keepSignedIn과 auth.login.ipSecurityOn localStorage는 로그인 상태 유지 및 IP 보안 선택값만 저장하며, 로그인 화면에서 선택을 바꾸거나 브라우저 저장소를 삭제하면 갱신·삭제됩니다.","auth.signupMailCooldown.v1 sessionStorage는 회원가입 인증 메일 재전송 제한을 위해 이메일 원문이 아닌 hash key와 만료 시각만 저장하며, 제한 시간이 지나거나 탭을 닫으면 정리됩니다.","auth:me:anon-probe-suppress-until:v1, header.auth-shell.v1, member.notification.lastEventId.v1, member.notification.snapshot.v1 sessionStorage는 인증·알림 첫 화면과 재연결을 안정화하기 위한 탭 세션 상태이며, 탭 종료·로그아웃·새 상태 수신·브라우저 저장소 삭제 시 제거됩니다.","admin.editor.localDraft.v1 localStorage는 관리자 작성 중인 제목, 본문, 요약, 썸네일 URL, 태그, 카테고리, 공개 범위, 저장 시각을 7일 동안 보관하며, 수동 삭제, 글 발행, 만료, 브라우저 저장소 삭제 시 제거됩니다.","admin.editor.customTags, admin.editor.customCategories, admin.contentStudio.listConditions.v1, editor.actual-preview.v1:*, admin.tools.resultsFilter.v1은 관리자 화면 편의 설정 또는 미리보기 상태이며, 설정 변경·탭 종료·브라우저 저장소 삭제로 제거됩니다.","aquila-cloud-video-upload-session:* localStorage는 대용량 동영상 업로드 재개를 위한 session id만 저장하며 업로드 완료, 취소, stale session 정리, 브라우저 저장소 삭제 시 제거됩니다.","posts:public-cursor-disabled:v1, posts:runtime-endpoints:v1, __aquila_client_runtime_recovery__*, feed.restore.* sessionStorage는 공개 피드와 런타임 복구 진단을 위한 탭 세션 상태이며 탭 종료 또는 브라우저 저장소 삭제 시 제거됩니다."]},
-    {"id":"cookies-analytics","title":"Analytics와 RUM","body":["privacy.optionalTrackingConsent.v1 localStorage는 optional analytics와 RUM 동의 상태(granted 또는 denied)를 저장하며, 개인정보 설정 변경이나 브라우저 저장소 삭제 시 갱신·삭제됩니다.","Google Analytics, Vercel Analytics, Speed Insights, 자체 RUM은 페이지 품질과 성능 지표를 집계하는 데 사용할 수 있습니다.","자체 RUM은 NEXT_PUBLIC_RUM_SAMPLE_RATE가 0이면 전송하지 않습니다. 선택 analytics는 명시적 안내와 설정에 따라 기본 비활성 또는 제한 운영합니다."]},
+    {"id":"cookies-essential","title":"필수 쿠키","body":["인증 cookie, refresh token cookie, OAuth state, signup session, CSRF 또는 보안 관련 cookie는 로그인, 계정 보호, 요청 검증에 필요합니다.","필수 cookie를 차단하면 로그인과 보안 기능이 정상 동작하지 않을 수 있습니다."]},
+    {"id":"cookies-preference","title":"설정 저장","body":["테마, 화면 설정, 임시 작성 상태, 검색·피드 복원 정보는 브라우저 저장소에 저장될 수 있습니다.","이 정보는 사용자 경험 유지 목적이며, 브라우저 설정이나 서비스 UI에서 삭제될 수 있습니다."]},
+    {"id":"cookies-analytics","title":"Analytics와 RUM","body":["Google Analytics, Vercel Analytics, Speed Insights, 자체 RUM은 페이지 품질과 성능 지표를 집계하는 데 사용할 수 있습니다.","자체 RUM은 NEXT_PUBLIC_RUM_SAMPLE_RATE가 0이면 전송하지 않습니다. 선택 analytics는 명시적 안내와 설정에 따라 기본 비활성 또는 제한 운영합니다."]},
     {"id":"cookies-third-party","title":"제3자 식별자","body":["Vercel, Cloudflare, Google Analytics, Kakao OAuth 등 외부 제공자는 자체 cookie 또는 요청 metadata를 처리할 수 있습니다.","각 제공자의 처리 조건은 개인정보처리방침의 처리위탁·국외이전 항목과 provider 정책을 함께 따릅니다."]},
-    {"id":"cookies-control","title":"관리 방법","body":["브라우저 설정에서 cookie 저장을 거부하거나 삭제할 수 있습니다.","필수 cookie를 제외한 optional analytics와 RUM은 서비스 설정 또는 브라우저 설정으로 거부할 수 있게 제공합니다.","관리자 local draft는 작성 화면의 임시 저장 삭제 동작으로 제거할 수 있으며, 공유 PC에서는 작성 종료 후 삭제하거나 브라우저 저장소를 비워야 합니다."]},
-    {"id":"cookies-retention","title":"보유기간","body":["인증·세션 cookie는 만료, 로그아웃, 세션 철회, 계정 탈퇴 시 무효화됩니다.","sessionStorage 항목은 탭 세션 종료 시 사라지고, 각 기능의 TTL이 있는 경우 더 빨리 정리됩니다.","localStorage 설정값은 사용자가 삭제하거나 서비스가 갱신할 때까지 남을 수 있습니다. 단, admin.editor.localDraft.v1은 savedAt 기준 7일이 지나면 읽기 시 자동 삭제됩니다."]},
+    {"id":"cookies-control","title":"관리 방법","body":["브라우저 설정에서 cookie 저장을 거부하거나 삭제할 수 있습니다.","필수 cookie를 제외한 optional analytics와 RUM은 서비스 설정 또는 브라우저 설정으로 거부할 수 있게 제공합니다."]},
+    {"id":"cookies-retention","title":"보유기간","body":["인증·세션 cookie는 만료, 로그아웃, 세션 철회, 계정 탈퇴 시 무효화됩니다.","브라우저 저장소의 설정값은 사용자가 삭제하거나 서비스가 갱신할 때까지 남을 수 있습니다."]},
     {"id":"cookies-history","title":"시행일·변경 이력","body":["현재 시행 버전은 1.0.1이며 시행일은 2026-06-22입니다.","이전 버전 1.0.0은 변경하지 않고 보존합니다.","변경 시 새 version 문서를 추가하고 이전 버전은 보존합니다."]}
   ]
 }

@@ -9,7 +9,10 @@ import {
 
 const srcRoot = path.resolve(__dirname, "../src")
 const sourceConstantPattern =
-  /const\s+([A-Z0-9_]*(?:STORAGE_KEY|STORAGE_PREFIX|COOKIE)[A-Z0-9_]*)\s*=\s*"([^"]+)"/g
+  /const\s+([A-Za-z0-9_]*(?:KEY|PREFIX|COOKIE)[A-Za-z0-9_]*)\s*=\s*"([^"]+)"/g
+const storageApiCallPattern =
+  /\b(?:localStorage|sessionStorage)\.(?:getItem|setItem|removeItem)\(\s*([A-Za-z0-9_]+)/g
+const cookieApiCallPattern = /\b(?:setCookie|deleteCookie|getCookieValue)\(\s*([A-Za-z0-9_]+)/g
 
 const listSourceFiles = (directory: string): string[] =>
   readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -21,11 +24,23 @@ const listSourceFiles = (directory: string): string[] =>
 const collectStorageConstants = () =>
   listSourceFiles(srcRoot).flatMap((filePath) => {
     const source = readFileSync(filePath, "utf8")
+    const hasBrowserStorageApi = /\b(?:localStorage|sessionStorage|setCookie|document\.cookie)/.test(source)
+    const storageApiConstantNames = new Set(
+      [
+        ...Array.from(source.matchAll(storageApiCallPattern), (match) => match[1]),
+        ...Array.from(source.matchAll(cookieApiCallPattern), (match) => match[1]),
+      ],
+    )
+
     return Array.from(source.matchAll(sourceConstantPattern), (match) => ({
       name: match[1],
       key: match[2],
       filePath: path.relative(srcRoot, filePath),
-    }))
+    })).filter(
+      (sourceConstant) =>
+        storageApiConstantNames.has(sourceConstant.name) ||
+        (hasBrowserStorageApi && sourceConstant.name.includes("PREFIX") && !sourceConstant.key.startsWith("/")),
+    )
   })
 
 test("browser storage registry includes privacy and runtime keys used by public flows", () => {
@@ -57,8 +72,14 @@ test("browser storage registry covers source storage constants", () => {
   const sourceConstants = collectStorageConstants()
 
   expect(sourceConstants).toEqual(expect.arrayContaining([
+    expect.objectContaining({ name: "KEEP_SIGNED_IN_KEY", key: "auth.login.keepSignedIn" }),
+    expect.objectContaining({ name: "IP_SECURITY_KEY", key: "auth.login.ipSecurityOn" }),
     expect.objectContaining({ name: "SIGNUP_MAIL_COOLDOWN_STORAGE_KEY", key: "auth.signupMailCooldown.v1" }),
     expect.objectContaining({ name: "LOCAL_DRAFT_STORAGE_KEY", key: "admin.editor.localDraft.v1" }),
+    expect.objectContaining({
+      name: "PUBLIC_CURSOR_DISABLED_SESSION_KEY",
+      key: "posts:public-cursor-disabled:v1",
+    }),
     expect.objectContaining({ name: "CLOUD_VIDEO_UPLOAD_SESSION_STORAGE_PREFIX", key: "aquila-cloud-video-upload-session" }),
   ]))
 

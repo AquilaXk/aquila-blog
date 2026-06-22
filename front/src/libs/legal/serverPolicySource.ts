@@ -3,6 +3,7 @@ import fs from "node:fs"
 import path from "node:path"
 import {
   ACTIVE_LEGAL_POLICY_VERSION,
+  ACTIVE_LEGAL_POLICY_VERSIONS,
   legalPolicyCurrentPaths,
   legalPolicyHistoryPath,
   legalPolicyKindLabels,
@@ -12,7 +13,11 @@ import type { LegalPolicyDocument, LegalPolicyKind, LegalPolicyPageProps, LegalP
 
 const policyDir = path.resolve(process.cwd(), "..", "legal", "policies")
 
-const publicPolicyVersions = [ACTIVE_LEGAL_POLICY_VERSION] as const
+const publicPolicyVersionsByKind: Record<LegalPolicyKind, string[]> = {
+  privacy: [ACTIVE_LEGAL_POLICY_VERSIONS.privacy],
+  terms: [ACTIVE_LEGAL_POLICY_VERSIONS.terms],
+  cookies: [ACTIVE_LEGAL_POLICY_VERSION, ACTIVE_LEGAL_POLICY_VERSIONS.cookies],
+}
 
 const policyFilePrefixes: Record<LegalPolicyKind, string> = {
   privacy: "privacy",
@@ -34,9 +39,12 @@ const stablePolicyHash = (policy: LegalPolicyDocument) => {
   return crypto.createHash("sha256").update(JSON.stringify(normalized)).digest("hex")
 }
 
-const readPolicy = (kind: LegalPolicyKind, version = ACTIVE_LEGAL_POLICY_VERSION): LegalPolicyDocument => {
-  if (version !== ACTIVE_LEGAL_POLICY_VERSION) {
-    if (!(publicPolicyVersions as readonly string[]).includes(version)) {
+const readPolicy = (
+  kind: LegalPolicyKind,
+  version = ACTIVE_LEGAL_POLICY_VERSIONS[kind],
+): LegalPolicyDocument => {
+  if (version !== ACTIVE_LEGAL_POLICY_VERSIONS[kind]) {
+    if (!publicPolicyVersionsByKind[kind].includes(version)) {
       throw new Error(`Unsupported legal policy version: ${kind}@${version}`)
     }
   }
@@ -80,7 +88,7 @@ export const getLegalPolicyPageStaticProps = (kind: LegalPolicyKind, version = A
 }
 
 export const getLegalPolicyVersionStaticPaths = (kind: LegalPolicyKind) => ({
-  paths: publicPolicyVersions.map((version) => ({ params: { version } })),
+  paths: publicPolicyVersionsByKind[kind].map((version) => ({ params: { version } })),
   fallback: false,
 })
 
@@ -97,7 +105,7 @@ const compareSemver = (left: string, right: string) => {
 export const getLegalPolicyHistoryStaticProps = () => {
   const policies: LegalPolicySummary[] = (Object.keys(policyFilePrefixes) as LegalPolicyKind[])
     .flatMap((kind) =>
-      publicPolicyVersions.map((version) => {
+      publicPolicyVersionsByKind[kind].map((version) => {
         const policy = readPolicy(kind, version)
         return {
           kind,

@@ -50,6 +50,8 @@ const SignupSentPanel = dynamic(loadSignupSentPanel, {
   loading: AuthEntryPanelFallback,
 })
 
+const SIGNUP_ENABLED = process.env.NEXT_PUBLIC_SIGNUP_ENABLED === "true"
+
 export const preloadAuthEntryPanels = (view: AuthModalView = "login") => {
   if (view === "signup") {
     void loadSignupPanel()
@@ -185,6 +187,11 @@ const AuthEntryModal: React.FC<AuthEntryModalProps> = ({
 
   const handleSignupEmailStart = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (!SIGNUP_ENABLED) {
+      setSignupError("회원가입은 출시 전 개인정보 처리 점검이 완료될 때까지 사용할 수 없습니다.")
+      return
+    }
+
     const normalizedEmail = normalizeAuthEmail(signupEmail)
 
     if (!normalizedEmail) {

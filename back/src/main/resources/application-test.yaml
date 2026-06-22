@@ -26,6 +26,7 @@ spring:
 custom:
   member:
     signup:
+      enabled: true
       legacyDirectJoinEnabled: true
   admin:
     username: admin

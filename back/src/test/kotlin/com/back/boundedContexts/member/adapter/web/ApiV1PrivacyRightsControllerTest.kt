@@ -306,6 +306,12 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         assertThat(countMemberAttrsContaining(member.id, "민감")).isGreaterThan(0)
         assertThat(findPostCommentsCount(otherPost.id)).isEqualTo(3)
         assertThat(findMemberPostCommentsCount(otherAuthor.id)).isEqualTo(1)
+        val taskPayloadsWithDeletedPostContentBeforeDeletion =
+            countTaskPayloadsContaining("탈퇴 후 공개 조회에서 빠져야 하는 글")
+        val taskPayloadsWithDeletedCommentContentBeforeDeletion =
+            countTaskPayloadsContaining("탈퇴 후 숨겨져야 하는 댓글")
+        val actionLogsWithDeletingMemberProfileBeforeDeletion =
+            countActionLogsContaining("탈퇴유저")
 
         mvc
             .delete("/member/api/v1/privacy/account") {
@@ -344,6 +350,12 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         assertThat(findCommentDeletedAt(nestedReplyToAuthoredComment.id)).isNotNull()
         assertThat(findPostCommentsCount(otherPost.id)).isZero()
         assertThat(findMemberPostCommentsCount(otherAuthor.id)).isZero()
+        assertThat(countTaskPayloadsContaining("탈퇴 후 공개 조회에서 빠져야 하는 글"))
+            .isEqualTo(taskPayloadsWithDeletedPostContentBeforeDeletion)
+        assertThat(countTaskPayloadsContaining("탈퇴 후 숨겨져야 하는 댓글"))
+            .isEqualTo(taskPayloadsWithDeletedCommentContentBeforeDeletion)
+        assertThat(countActionLogsContaining("탈퇴유저"))
+            .isEqualTo(actionLogsWithDeletingMemberProfileBeforeDeletion)
         val deletion =
             memberAccountDeletionRepository
                 .findAll()
@@ -670,6 +682,28 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             """.trimIndent(),
             Int::class.java,
             memberId,
+            "%$valueFragment%",
+        ) ?: 0
+
+    private fun countTaskPayloadsContaining(valueFragment: String): Int =
+        jdbcTemplate.queryForObject(
+            """
+            select count(*)
+            from task
+            where payload like ?
+            """.trimIndent(),
+            Int::class.java,
+            "%$valueFragment%",
+        ) ?: 0
+
+    private fun countActionLogsContaining(valueFragment: String): Int =
+        jdbcTemplate.queryForObject(
+            """
+            select count(*)
+            from member_action_log
+            where data like ?
+            """.trimIndent(),
+            Int::class.java,
             "%$valueFragment%",
         ) ?: 0
 

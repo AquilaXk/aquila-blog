@@ -88,6 +88,7 @@ class PostCommentApplicationService(
         post: Post,
         postComment: PostComment,
         actor: Member,
+        publishDomainEvent: Boolean = true,
     ) {
         postHydrationService.hydratePostAttrs(post)
         val commentsToDelete =
@@ -97,9 +98,9 @@ class PostCommentApplicationService(
 
         commentsToDelete.forEach { postHydrationService.hydrateMemberCounterAttrs(it.author) }
 
-        val postDto = PostDto(post)
+        val postDto = if (publishDomainEvent) PostDto(post) else null
         commentsToDelete.forEachIndexed { index, comment ->
-            val postCommentDto = PostCommentDto(comment)
+            val postCommentDto = if (publishDomainEvent) PostCommentDto(comment) else null
             comment.author.decrementPostCommentsCount()
             postCounterService.saveMemberAttr(comment.author.postCommentsCountAttr)
             post.onCommentDeleted()
@@ -113,7 +114,17 @@ class PostCommentApplicationService(
                     } else {
                         PostInteractionRecommendationSideEffect.NONE
                     },
-                domainEvent = PostCommentDeletedEvent(UUID.randomUUID(), postCommentDto, postDto, MemberDto(actor)),
+                domainEvent =
+                    if (publishDomainEvent) {
+                        PostCommentDeletedEvent(
+                            UUID.randomUUID(),
+                            requireNotNull(postCommentDto),
+                            requireNotNull(postDto),
+                            MemberDto(actor),
+                        )
+                    } else {
+                        null
+                    },
             )
         }
 
@@ -129,7 +140,7 @@ class PostCommentApplicationService(
             )
 
         rootComments.forEach { comment ->
-            deleteComment(comment.post, comment, author)
+            deleteComment(comment.post, comment, author, publishDomainEvent = false)
         }
 
         return rootComments.size

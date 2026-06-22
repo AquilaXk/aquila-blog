@@ -14,6 +14,8 @@ COPILOT.md
 docs/*
 !docs/design/
 !docs/design/**
+!docs/legal/
+!docs/legal/**
 .cursor/
 .claude/
 .aider/

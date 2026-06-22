@@ -34,6 +34,7 @@ RESTORE_PRIVACY_GATE_FILE="${ARTIFACT_DIR}/restore-privacy-gate.txt"
 BACKUP_ENCRYPTION_KEY_FILE="${AQUILA_BACKUP_ENCRYPTION_KEY_FILE:-}"
 RESTORE_PRIVACY_GATE_SCRIPT="${AQUILA_RESTORE_PRIVACY_GATE_SCRIPT:-}"
 RESTORE_PRIVACY_GATE_STATUS="fail"
+DECRYPT_BASE_DIR=""
 DECRYPT_DIR=""
 
 log() {
@@ -204,6 +205,37 @@ decrypt_file_to_path() {
   openssl enc -d -aes-256-cbc -pbkdf2 -pass "file:${BACKUP_ENCRYPTION_KEY_FILE}" -in "${source_file}" -out "${target_file}"
 }
 
+file_size_bytes() {
+  local file="$1"
+  stat -c %s "${file}" 2>/dev/null || stat -f %z "${file}"
+}
+
+available_bytes_for_path() {
+  local path="$1"
+  df -Pk "${path}" | awk 'NR == 2 { printf "%.0f\n", $4 * 1024 }'
+}
+
+prepare_decrypt_workspace() {
+  local postgres_size
+  local minio_size
+  local required_bytes
+  local available_bytes
+
+  DECRYPT_BASE_DIR="${AQUILA_RESTORE_DRILL_DECRYPT_DIR:-${BACKUP_ROOT}/.restore-drill-decrypted}"
+  is_safe_absolute_path "${DECRYPT_BASE_DIR}" || fail "unsafe AQUILA_RESTORE_DRILL_DECRYPT_DIR=${DECRYPT_BASE_DIR}"
+  mkdir -p "${DECRYPT_BASE_DIR}"
+
+  postgres_size="$(file_size_bytes "${POSTGRES_ENCRYPTED_DUMP_FILE}")"
+  minio_size="$(file_size_bytes "${MINIO_ENCRYPTED_ARCHIVE_FILE}")"
+  required_bytes=$((postgres_size + minio_size))
+  available_bytes="$(available_bytes_for_path "${DECRYPT_BASE_DIR}")"
+  [[ -n "${available_bytes}" ]] || fail "could not determine restore decrypt workspace free space: ${DECRYPT_BASE_DIR}"
+  (( available_bytes > required_bytes )) \
+    || fail "insufficient restore decrypt workspace free space: required=${required_bytes} available=${available_bytes} dir=${DECRYPT_BASE_DIR}"
+
+  DECRYPT_DIR="$(mktemp -d "${DECRYPT_BASE_DIR%/}/aquila-restore-drill-decrypted.${TIMESTAMP}.XXXXXX")"
+}
+
 write_result() {
   local status="$1"
   local rto_seconds="$2"
@@ -267,7 +299,7 @@ write_summary() {
 
 cleanup() {
   docker rm -f -v "${POSTGRES_CONTAINER}" >/dev/null 2>&1 || true
-  if [[ -n "${DECRYPT_DIR}" && "${DECRYPT_DIR}" == /tmp/aquila-restore-drill-decrypted.* && -d "${DECRYPT_DIR}" ]]; then
+  if [[ -n "${DECRYPT_DIR}" && -n "${DECRYPT_BASE_DIR}" && "${DECRYPT_DIR}" == "${DECRYPT_BASE_DIR%/}"/aquila-restore-drill-decrypted.* && -d "${DECRYPT_DIR}" ]]; then
     rm -rf -- "${DECRYPT_DIR}"
   fi
 }
@@ -348,7 +380,7 @@ MINIO_ENCRYPTED_ARCHIVE_FILE="${BACKUP_ROOT}/minio/${BACKUP_CLASS}/${BACKUP_SET_
 
 mkdir -p "${ARTIFACT_DIR}"
 trap cleanup EXIT
-DECRYPT_DIR="$(mktemp -d /tmp/aquila-restore-drill-decrypted.XXXXXX)"
+prepare_decrypt_workspace
 POSTGRES_DUMP_FILE="${DECRYPT_DIR}/dump.sql"
 MINIO_ARCHIVE_FILE="${DECRYPT_DIR}/minio-data.tar.gz"
 decrypt_file_to_path "${POSTGRES_ENCRYPTED_DUMP_FILE}" "${POSTGRES_DUMP_FILE}"

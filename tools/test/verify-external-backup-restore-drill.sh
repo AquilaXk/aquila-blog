@@ -69,6 +69,7 @@ require_pattern "${DRILL_SCRIPT}" 'psql .*POSTGRES_DUMP_FILE|pg_restore .*POSTGR
 require_pattern "${DRILL_SCRIPT}" 'backup-encryption\.key' "restore drill must default to the separated backup encryption key file"
 require_pattern "${DRILL_SCRIPT}" 'AQUILA_RESTORE_PRIVACY_GATE_SCRIPT is required' "restore drill must require a restore privacy gate script"
 require_pattern "${DRILL_SCRIPT}" 'backup_root_for_exclusion="\$\{BACKUP_ROOT%/\}"' "restore drill must normalize backup root before exclusion checks"
+require_pattern "${DRILL_SCRIPT}" 'read_key_from_file encryption_key_file' "restore drill must prefer the selected backup metadata encryption key"
 require_pattern "${DRILL_SCRIPT}" 'openssl enc -d -aes-256-cbc -pbkdf2' "restore drill must decrypt encrypted backup artifacts"
 require_pattern "${DRILL_SCRIPT}" 'AQUILA_RESTORE_DRILL_DECRYPT_DIR' "restore drill decrypt workspace must be configurable"
 require_pattern "${DRILL_SCRIPT}" 'BACKUP_ROOT}/\.restore-drill-decrypted' "restore drill decrypt workspace must default to the backup volume"
@@ -121,14 +122,17 @@ FAKE_BIN_DIR="${WORK_DIR}/bin"
 ARTIFACT_DIR="${WORK_DIR}/artifacts"
 DEPLOY_DIR="${WORK_DIR}/deploy"
 KEY_FILE="${WORK_DIR}/backup-encryption.key"
+ROTATED_KEY_FILE="${WORK_DIR}/rotated-backup-encryption.key"
 PRIVACY_GATE_SCRIPT="${WORK_DIR}/restore-privacy-gate.sh"
 mkdir -p "${POSTGRES_BACKUP_DIR}" "${MINIO_BACKUP_DIR}" "${MINIO_SOURCE_DIR}/post-img/posts/2026/01" "${FAKE_BIN_DIR}" "${DEPLOY_DIR}"
 printf 'test-backup-key\n' > "${KEY_FILE}"
+printf 'rotated-backup-key\n' > "${ROTATED_KEY_FILE}"
 chmod 600 "${KEY_FILE}"
+chmod 600 "${ROTATED_KEY_FILE}"
 cat > "${DEPLOY_DIR}/.env.prod" <<EOF
 AQUILA_EXTERNAL_STORAGE_ROOT=${WORK_DIR}/storage
 AQUILA_BACKUP_ROOT=${BACKUP_ROOT}
-AQUILA_BACKUP_ENCRYPTION_KEY_FILE=${KEY_FILE}
+AQUILA_BACKUP_ENCRYPTION_KEY_FILE=${ROTATED_KEY_FILE}
 AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=${PRIVACY_GATE_SCRIPT}
 DB_IMAGE=jangka512/pgj@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 EOF
@@ -138,12 +142,13 @@ CREATE TABLE flyway_schema_history(success boolean);
 CREATE TABLE post(id bigint, listed boolean, created_at timestamptz);
 SQL
 openssl enc -aes-256-cbc -pbkdf2 -salt -pass "file:${KEY_FILE}" -in "${WORK_DIR}/dump.sql" -out "${POSTGRES_BACKUP_DIR}/dump.sql.enc"
-cat > "${POSTGRES_BACKUP_DIR}/metadata.env" <<'EOF'
+cat > "${POSTGRES_BACKUP_DIR}/metadata.env" <<EOF
 backup_set_id=20260101-010203
 class=daily
 created_at=20260101-010203
 created_at_utc=2026-01-01T01:02:03Z
 encryption=openssl-enc-aes-256-cbc-pbkdf2
+encryption_key_file=${KEY_FILE}
 EOF
 printf 'fixture-object\n' > "${MINIO_SOURCE_DIR}/post-img/posts/2026/01/sample.txt"
 printf 'fixture-object-2\n' > "${MINIO_SOURCE_DIR}/post-img/posts/2026/01/zzz.txt"

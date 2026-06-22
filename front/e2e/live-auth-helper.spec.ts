@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test"
 
-import { isNavigationInterruptedError } from "./helpers/liveAuth"
+import { isLegalReconsentGateUrl, isNavigationInterruptedError } from "./helpers/liveAuth"
 
 test.describe("live auth navigation helper", () => {
   test("treats Playwright net ERR_ABORTED as a retriable navigation interruption", () => {
@@ -19,5 +19,11 @@ test.describe("live auth navigation helper", () => {
     const error = new Error("page.goto: net::ERR_NAME_NOT_RESOLVED at https://www.aquilaxk.site/editor/new")
 
     expect(isNavigationInterruptedError(error)).toBe(false)
+  })
+
+  test("detects legal reconsent gate urls", () => {
+    expect(isLegalReconsentGateUrl("https://www.aquilaxk.site/settings/privacy?reconsent=required")).toBe(true)
+    expect(isLegalReconsentGateUrl("https://www.aquilaxk.site/settings/privacy")).toBe(false)
+    expect(isLegalReconsentGateUrl("https://www.aquilaxk.site/editor/new")).toBe(false)
   })
 })

@@ -14,7 +14,6 @@ const requiredFields = [
   "documentType",
   "locale",
   "version",
-  "status",
   "publishedAt",
   "effectiveAt",
   "contentSha256",
@@ -223,7 +222,9 @@ const assertRequiredShape = (fileName, policy) => {
   }
   if (policy.locale !== "ko-KR") fail(`${fileName} locale must be ko-KR`)
   if (!/^\d+\.\d+\.\d+$/.test(policy.version || "")) fail(`${fileName} version must be semver`)
-  if (!legalPolicyStatuses.has(policy.status)) fail(`${fileName} status must be draft|effective|superseded`)
+  if ("status" in policy && !legalPolicyStatuses.has(policy.status)) {
+    fail(`${fileName} status must be draft|effective|superseded`)
+  }
   if (Number.isNaN(Date.parse(policy.publishedAt || ""))) fail(`${fileName} publishedAt must be date-time`)
   if (Number.isNaN(Date.parse(policy.effectiveAt || ""))) fail(`${fileName} effectiveAt must be date-time`)
   if (!/^[a-f0-9]{64}$/.test(policy.contentSha256 || "")) fail(`${fileName} contentSha256 must be 64 lowercase hex`)
@@ -271,6 +272,25 @@ const assertEffectiveTextIsPublicReady = (fileName, policy) => {
   }
 }
 
+const compareSemver = (left, right) => {
+  const leftParts = left.split(".").map((value) => Number.parseInt(value, 10))
+  const rightParts = right.split(".").map((value) => Number.parseInt(value, 10))
+  for (let index = 0; index < Math.max(leftParts.length, rightParts.length); index += 1) {
+    const diff = (leftParts[index] || 0) - (rightParts[index] || 0)
+    if (diff !== 0) return diff
+  }
+  return 0
+}
+
+const setLatestEffectivePolicy = (map, policy) => {
+  if (policy.status !== "effective") return
+
+  const existing = map.get(policy.documentType)
+  if (!existing || compareSemver(existing.version, policy.version) < 0) {
+    map.set(policy.documentType, policy)
+  }
+}
+
 const assertActiveMetadataMatchesPolicies = (sourceName, metadata, termsPolicy, privacyPolicy) => {
   if (!metadata || !termsPolicy || !privacyPolicy) return
 
@@ -292,6 +312,7 @@ const assertActiveMetadataMatchesPolicies = (sourceName, metadata, termsPolicy, 
 }
 
 const policies = new Map()
+const latestEffectivePolicies = new Map()
 const policyFiles = getPolicyFiles()
 for (const fileName of policyFiles) {
   const policy = readPolicy(fileName)
@@ -299,31 +320,32 @@ for (const fileName of policyFiles) {
   assertRequiredShape(fileName, policy)
   assertEffectiveTextIsPublicReady(fileName, policy)
   policies.set(policy.documentType, policy)
+  setLatestEffectivePolicy(latestEffectivePolicies, policy)
 }
 
-if (!policies.has("PRIVACY_POLICY")) fail("missing PRIVACY_POLICY")
-if (!policies.has("TERMS_OF_SERVICE")) fail("missing TERMS_OF_SERVICE")
-if (!policies.has("COOKIE_POLICY")) fail("missing COOKIE_POLICY")
+if (!latestEffectivePolicies.has("PRIVACY_POLICY")) fail("missing effective PRIVACY_POLICY")
+if (!latestEffectivePolicies.has("TERMS_OF_SERVICE")) fail("missing effective TERMS_OF_SERVICE")
+if (!latestEffectivePolicies.has("COOKIE_POLICY")) fail("missing effective COOKIE_POLICY")
 
-const privacy = policies.get("PRIVACY_POLICY")
+const privacy = latestEffectivePolicies.get("PRIVACY_POLICY")
 if (privacy) {
-  assertSectionTitles("privacy.ko-KR.v1.0.0.yaml", privacy, requiredPrivacySections)
-  assertTextIncludes("privacy.ko-KR.v1.0.0.yaml", privacy, requiredVendors)
-  assertTextIncludes("privacy.ko-KR.v1.0.0.yaml", privacy, ["apiKey", "refresh token", "NEXT_PUBLIC_RUM_SAMPLE_RATE"])
+  assertSectionTitles(`privacy.ko-KR.v${privacy.version}.yaml`, privacy, requiredPrivacySections)
+  assertTextIncludes(`privacy.ko-KR.v${privacy.version}.yaml`, privacy, requiredVendors)
+  assertTextIncludes(`privacy.ko-KR.v${privacy.version}.yaml`, privacy, ["apiKey", "refresh token", "NEXT_PUBLIC_RUM_SAMPLE_RATE"])
 }
 
-const terms = policies.get("TERMS_OF_SERVICE")
+const terms = latestEffectivePolicies.get("TERMS_OF_SERVICE")
 if (terms) {
-  assertSectionTitles("terms.ko-KR.v1.0.0.yaml", terms, requiredTermsSections)
-  assertTextIncludes("terms.ko-KR.v1.0.0.yaml", terms, ["고의 또는 중대한 과실", "부당하게 불리한 전속 관할"])
+  assertSectionTitles(`terms.ko-KR.v${terms.version}.yaml`, terms, requiredTermsSections)
+  assertTextIncludes(`terms.ko-KR.v${terms.version}.yaml`, terms, ["고의 또는 중대한 과실", "부당하게 불리한 전속 관할"])
 }
 
 assertActiveMetadataMatchesPolicies("frontend active legal metadata", readFrontendActiveMetadata(), terms, privacy)
 assertActiveMetadataMatchesPolicies("backend active legal metadata", readBackendActiveMetadata(), terms, privacy)
 
-const cookies = policies.get("COOKIE_POLICY")
+const cookies = latestEffectivePolicies.get("COOKIE_POLICY")
 if (cookies) {
-  assertTextIncludes("cookies.ko-KR.v1.0.0.yaml", cookies, ["필수 쿠키", "Analytics", "RUM", "NEXT_PUBLIC_RUM_SAMPLE_RATE"])
+  assertTextIncludes(`cookies.ko-KR.v${cookies.version}.yaml`, cookies, ["필수 쿠키", "Analytics", "RUM", "NEXT_PUBLIC_RUM_SAMPLE_RATE"])
 }
 
 for (const fileName of policyFiles) {

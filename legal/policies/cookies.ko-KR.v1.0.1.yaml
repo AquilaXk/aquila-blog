@@ -1,25 +1,23 @@
 {
   "documentType": "COOKIE_POLICY",
   "locale": "ko-KR",
-  "version": "1.0.0",
-  "publishedAt": "2026-06-21T00:00:00+09:00",
-  "effectiveAt": "2026-06-21T00:00:00+09:00",
-  "contentSha256": "17b778d30df83ffac6436da76b395eedb27049d9c7e04786a7a204271dd0ce89",
-  "supersedes": null,
+  "version": "1.0.1",
+  "status": "effective",
+  "publishedAt": "2026-06-22T00:00:00+09:00",
+  "effectiveAt": "2026-06-22T00:00:00+09:00",
+  "contentSha256": "d15a5ef5882c7f02c3947acd1790e17f0e4b560deb152a9168a7a3a420130772",
+  "supersedes": "1.0.0",
   "owner": "AquilaLog",
   "contactEmail": "aquilaxk10@gmail.com",
-  "changeSummary": ["필수 cookie, OAuth state, 화면 설정, analytics/RUM 식별자 사용 기준을 구조화한 최초 버전"],
+  "changeSummary": ["시행 중 쿠키 정책에서 내부 검토 항목을 제거하고 공개 고지 문구를 확정한 버전"],
   "sections": [
     {"id":"cookies-purpose","title":"쿠키 정책의 목적","body":["이 문서는 AquilaLog가 cookie, sessionStorage, localStorage, online identifier를 어떤 목적으로 사용하는지 설명합니다."]},
     {"id":"cookies-essential","title":"필수 쿠키","body":["인증 cookie, refresh token cookie, OAuth state, signup session, CSRF 또는 보안 관련 cookie는 로그인, 계정 보호, 요청 검증에 필요합니다.","필수 cookie를 차단하면 로그인과 보안 기능이 정상 동작하지 않을 수 있습니다."]},
     {"id":"cookies-preference","title":"설정 저장","body":["테마, 화면 설정, 임시 작성 상태, 검색·피드 복원 정보는 브라우저 저장소에 저장될 수 있습니다.","이 정보는 사용자 경험 유지 목적이며, 브라우저 설정이나 서비스 UI에서 삭제될 수 있습니다."]},
-    {"id":"cookies-analytics","title":"Analytics와 RUM","body":["Google Analytics, Vercel Analytics, Speed Insights, 자체 RUM은 페이지 품질과 성능 지표를 집계하는 데 사용할 수 있습니다.","자체 RUM은 NEXT_PUBLIC_RUM_SAMPLE_RATE가 0이면 전송하지 않습니다. 선택 analytics 동의 관리자는 별도 이슈에서 구현합니다."]},
+    {"id":"cookies-analytics","title":"Analytics와 RUM","body":["Google Analytics, Vercel Analytics, Speed Insights, 자체 RUM은 페이지 품질과 성능 지표를 집계하는 데 사용할 수 있습니다.","자체 RUM은 NEXT_PUBLIC_RUM_SAMPLE_RATE가 0이면 전송하지 않습니다. 선택 analytics는 명시적 안내와 설정에 따라 기본 비활성 또는 제한 운영합니다."]},
     {"id":"cookies-third-party","title":"제3자 식별자","body":["Vercel, Cloudflare, Google Analytics, Kakao OAuth 등 외부 제공자는 자체 cookie 또는 요청 metadata를 처리할 수 있습니다.","각 제공자의 처리 조건은 개인정보처리방침의 처리위탁·국외이전 항목과 provider 정책을 함께 따릅니다."]},
-    {"id":"cookies-control","title":"관리 방법","body":["브라우저 설정에서 cookie 저장을 거부하거나 삭제할 수 있습니다.","필수 cookie를 제외한 optional analytics와 RUM은 consent manager 구현 후 거부할 수 있게 제공합니다."]},
+    {"id":"cookies-control","title":"관리 방법","body":["브라우저 설정에서 cookie 저장을 거부하거나 삭제할 수 있습니다.","필수 cookie를 제외한 optional analytics와 RUM은 서비스 설정 또는 브라우저 설정으로 거부할 수 있게 제공합니다."]},
     {"id":"cookies-retention","title":"보유기간","body":["인증·세션 cookie는 만료, 로그아웃, 세션 철회, 계정 탈퇴 시 무효화됩니다.","브라우저 저장소의 설정값은 사용자가 삭제하거나 서비스가 갱신할 때까지 남을 수 있습니다."]},
-    {"id":"cookies-history","title":"시행일·변경 이력","body":["현재 시행 버전은 1.0.0이며 시행일은 2026-06-21입니다.","변경 시 새 version 문서를 추가하고 이전 버전은 보존합니다."]}
-  ],
-  "reviewRequired": [
-    "선택 analytics consent manager가 구현되기 전까지 optional tracking은 기본 비활성화하거나 제한 운영해야 합니다."
+    {"id":"cookies-history","title":"시행일·변경 이력","body":["현재 시행 버전은 1.0.1이며 시행일은 2026-06-22입니다.","이전 버전 1.0.0은 변경하지 않고 보존합니다.","변경 시 새 version 문서를 추가하고 이전 버전은 보존합니다."]}
   ]
 }

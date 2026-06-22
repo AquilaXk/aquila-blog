@@ -14,6 +14,7 @@ import {
   liveLoginTimeoutMs,
   liveRetryBaseDelayMs,
   liveUiRedirectTimeoutMs,
+  quickReconsentProbeTimeoutMs,
   resolveApiBaseUrl,
   sleep,
   waitForApiReachability,
@@ -379,7 +380,12 @@ test.describe("editor live visual regression", () => {
     await loginThroughUi(page)
 
     await page.goto("/editor/new")
-    await completeLegalReconsentIfRequired(page, "/editor/new")
+    await completeLegalReconsentIfRequired(
+      page,
+      "/editor/new",
+      liveUiRedirectTimeoutMs,
+      quickReconsentProbeTimeoutMs
+    )
     await page.waitForURL(/\/editor(\/|$)/, { timeout: 30_000 })
     await expect(page.getByPlaceholder("제목을 입력하세요").first()).toBeVisible()
     await expectMarkdownEditorShell(page)
@@ -408,7 +414,12 @@ test.describe("editor live visual regression", () => {
 
     try {
       await page.goto(`/editor/${postId}`)
-      await completeLegalReconsentIfRequired(page, `/editor/${postId}`)
+      await completeLegalReconsentIfRequired(
+        page,
+        `/editor/${postId}`,
+        liveUiRedirectTimeoutMs,
+        quickReconsentProbeTimeoutMs
+      )
       await page.waitForURL(new RegExp(`/editor/${postId}(\\?|$)`), { timeout: 30_000 })
       await expect(page.getByPlaceholder("제목을 입력하세요").first()).toHaveValue(title)
       await expectMarkdownEditorShell(page)
@@ -444,7 +455,7 @@ test.describe("editor live visual regression", () => {
     )
 
     await page.goto("/editor/507")
-    await completeLegalReconsentIfRequired(page, "/editor/507")
+    await completeLegalReconsentIfRequired(page, "/editor/507", liveUiRedirectTimeoutMs, quickReconsentProbeTimeoutMs)
     await page.waitForURL(/\/editor\/507(\?|$)/, { timeout: 30_000 })
     await expect(page.getByPlaceholder("제목을 입력하세요").first()).toBeVisible()
 

@@ -14,6 +14,7 @@ import {
   liveLoginTimeoutMs,
   liveRetryBaseDelayMs,
   liveUiRedirectTimeoutMs,
+  quickReconsentProbeTimeoutMs,
   resolveApiBaseUrl,
   sleep,
   waitForApiReachability,
@@ -464,7 +465,7 @@ const expectLiveAdminRoute = async (
       continue
     }
 
-    await completeLegalReconsentIfRequired(page, path)
+    await completeLegalReconsentIfRequired(page, path, liveUiRedirectTimeoutMs, quickReconsentProbeTimeoutMs)
     await expect(page, `${label} route url`).toHaveURL(routePattern, { timeout: 20_000 })
     await expect(page.getByRole("heading", { name: headingPattern }), `${label} heading`).toBeVisible()
     return

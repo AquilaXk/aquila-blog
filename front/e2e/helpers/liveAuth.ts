@@ -9,6 +9,7 @@ export const liveLoginAttempts = Number.parseInt(process.env.E2E_LIVE_LOGIN_ATTE
 export const liveLoginTimeoutMs = Number.parseInt(process.env.E2E_LIVE_LOGIN_TIMEOUT_MS || "30000", 10)
 export const liveRetryBaseDelayMs = Number.parseInt(process.env.E2E_LIVE_RETRY_BASE_DELAY_MS || "2000", 10)
 export const liveUiRedirectTimeoutMs = Number.parseInt(process.env.E2E_LIVE_UI_REDIRECT_TIMEOUT_MS || "20000", 10)
+export const quickReconsentProbeTimeoutMs = 1_500
 
 export const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
 export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -68,16 +69,17 @@ export const isLegalReconsentGateUrl = (url: string) => {
 export const completeLegalReconsentIfRequired = async (
   page: Page,
   fallbackPath: string,
-  timeoutMs = liveUiRedirectTimeoutMs
+  timeoutMs = liveUiRedirectTimeoutMs,
+  probeTimeoutMs = timeoutMs
 ) => {
   const reconsentPanel = page.getByRole("region", { name: "법적 문서 재동의" })
   let isGate = isLegalReconsentGateUrl(page.url()) || (await reconsentPanel.isVisible().catch(() => false))
   if (!isGate) {
-    const probeTimeoutMs = Math.min(timeoutMs, 1_500)
+    const gateProbeTimeoutMs = Math.min(timeoutMs, probeTimeoutMs)
     isGate = await expect
       .poll(
         async () => isLegalReconsentGateUrl(page.url()) || (await reconsentPanel.isVisible().catch(() => false)),
-        { timeout: probeTimeoutMs }
+        { timeout: gateProbeTimeoutMs }
       )
       .toBe(true)
       .then(

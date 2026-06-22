@@ -25,7 +25,7 @@
 3. restore 전 최신 deletion tombstone과 retention cutoff를 준비한다.
 4. PostgreSQL restore 후 tombstone replay를 실행하거나 수동 검증 query를 수행한다.
 5. object storage restore 후 tombstone object key hash list가 재노출되지 않는지 확인한다.
-6. session/token/auth cookie 관련 데이터가 restore 후 재사용 가능하지 않은지 확인한다.
+6. session, token, auth cookie뿐 아니라 API key, refresh token 등 모든 인증 자산이 restore 후 재사용 가능하지 않은지 확인한다.
 7. public edge probe와 live E2E는 privacy gate pass 전에는 production traffic에 연결하지 않는다.
 
 ## Tombstone Replay Checklist
@@ -38,7 +38,7 @@
 | post/comment | 삭제 또는 anonymized 상태 유지 |
 | object storage | 삭제 대상 key 재생성 없음 |
 | cache/index | restored stale cache purge |
-| session/token | active session 재활성화 없음 |
+| auth asset | active session, refresh token, API key 재활성화 없음 |
 
 ## Evidence
 
@@ -52,7 +52,7 @@
 
 - tombstone replay 또는 동등한 deletion verification이 pass다.
 - 개인정보 삭제/처리정지 요청이 restore로 되돌아가지 않았다.
-- token/session이 재활성화되지 않았다.
+- token/session/API key/refresh token이 재활성화되지 않았다.
 - service owner가 traffic open을 승인했다.
 - 실패 항목은 production 연결 전에 issue/PR로 분리됐다.
 

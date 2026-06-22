@@ -21,7 +21,8 @@
 ## Deletion Steps
 
 1. 요청 id와 member id를 연결하고 본인확인 상태를 확인한다.
-2. 삭제 전 export 요청 여부와 법적 보존/분쟁/abuse hold 여부를 확인한다.
+2. 삭제 전 export 요청이 없거나 이미 완료됐는지, 법적 보존/분쟁/abuse hold 여부를 확인한다.
+   export가 pending이면 먼저 완료 또는 반려 사유를 기록한 뒤 삭제를 진행한다.
 3. active session, refresh token, API key, signup/session cookie를 revoke한다.
 4. member profile, email, nickname, OAuth link, legal acceptance metadata, privacy request metadata를 retention policy에 맞춰 soft delete, anonymize, 또는 보존 상태로 분류한다.
 5. posts/comments/profile content는 사용자 요청, 공개 게시 상태, 법적 보존 필요 여부에 따라 삭제 또는 anonymize한다.

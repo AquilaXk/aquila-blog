@@ -7,7 +7,7 @@
 | 역할 | 담당 |
 | --- | --- |
 | Service owner | AquilaXk |
-| Privacy contact | `aquilaxk10@gmail.com` |
+| Privacy contact | `privacy@aquila-blog.example` |
 | Security owner | Service owner가 지정한 incident lead |
 | Infrastructure owner | Home server / GitHub Actions / Vercel / Cloudflare 운영 담당 |
 | Legal counsel | 출시 전 지정 필요 |

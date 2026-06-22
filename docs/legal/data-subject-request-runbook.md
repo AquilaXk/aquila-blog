@@ -6,7 +6,7 @@
 
 | 역할 | 담당 |
 | --- | --- |
-| Intake owner | `aquilaxk10@gmail.com` 수신 담당 |
+| Intake owner | `privacy@aquila-blog.example` 공유 메일함 담당 |
 | Privacy request owner | Service owner |
 | Technical owner | member/privacy API 담당 |
 | Legal counsel | 출시 전 지정 필요 |
@@ -21,9 +21,10 @@
 
 1. 요청 id를 만든다: `privacy-request-YYYYMMDD-NN`.
 2. 요청 유형을 `access`, `correction`, `deletion`, `restriction`, `withdrawal`, `export` 중 하나로 분류한다.
-3. 로그인 상태 요청은 session member id와 요청 id를 연결한다.
-4. 이메일 요청은 계정 소유 증명 절차를 진행한다. password, token, 원본 cookie, 전체 log를 이메일로 요구하지 않는다.
-5. 미확인 요청은 `identity_pending` 상태로 두고 처리 기한과 추가 확인 필요 항목을 기록한다.
+3. 로그인 상태 요청도 access, export, deletion, restriction, withdrawal 같은 고위험 작업이면 재인증 또는 step-up verification을 진행한다.
+4. 재인증이 끝난 로그인 요청은 session member id와 요청 id를 연결한다.
+5. 이메일 요청은 계정 소유 증명 절차를 진행한다. password, token, 원본 cookie, 전체 log를 이메일로 요구하지 않는다.
+6. 미확인 요청은 `identity_pending` 상태로 두고 처리 기한과 추가 확인 필요 항목을 기록한다.
 
 ## Handling Matrix
 

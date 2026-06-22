@@ -8,7 +8,7 @@
 | --- | --- |
 | Service owner | AquilaXk |
 | Security reviewer | Service owner가 지정 |
-| Privacy reviewer | `aquilaxk10@gmail.com` 운영 담당 |
+| Privacy reviewer | `privacy@aquila-blog.example` 공유 메일함 담당 |
 | Legal counsel | 출시 전 지정 필요 |
 
 ## Trigger

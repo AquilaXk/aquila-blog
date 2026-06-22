@@ -8,7 +8,7 @@
 | --- | --- |
 | Policy author | Service owner |
 | Technical owner | frontend/backend legal metadata 담당 |
-| Privacy reviewer | `aquilaxk10@gmail.com` 운영 담당 |
+| Privacy reviewer | `privacy@aquila-blog.example` 공유 메일함 담당 |
 | Legal counsel | 출시 전 지정 필요 |
 
 ## Trigger
@@ -20,7 +20,7 @@
 ## Change Steps
 
 1. 변경 유형을 `minor_notice`, `material_reconsent`, `legal_correction`, `processor_update` 중 하나로 분류한다.
-2. 새 policy YAML을 작성하고 version, effectiveDate, contentSha256를 확정한다.
+2. 새 policy YAML을 작성하고 version, publishedAt, effectiveAt, contentSha256를 확정한다.
 3. material change이면 재동의 필요 여부와 대상 계정을 기록한다.
 4. `ActiveLegalDocumentMetadata.kt`, `front/src/apis/backend/legal.ts`, `front/src/libs/legal/serverPolicySource.ts`가 같은 version/hash를 가리키는지 확인한다.
 5. 공개 페이지 `/privacy`, `/terms`, `/cookies`, `/legal/history`에서 current link와 이전 version link를 확인한다.
@@ -39,7 +39,7 @@
 
 ## Evidence
 
-- policy diff, version/hash table, effective date.
+- policy diff, version/hash table, publishedAt/effectiveAt.
 - validator output: `node tools/legal/validate-legal-policies.mjs`.
 - backend/frontend active metadata check.
 - e2e 또는 live screenshot path for `/privacy`, `/terms`, `/cookies`, `/legal/history`.

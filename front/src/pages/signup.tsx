@@ -24,6 +24,8 @@ type SignupEmailStartResult = {
   email: string
 }
 
+const SIGNUP_ENABLED = process.env.NEXT_PUBLIC_SIGNUP_ENABLED === "true"
+
 export const getServerSideProps: GetServerSideProps<GuestPageProps> = async ({ req }) => {
   return await getGuestPageProps(req)
 }
@@ -91,6 +93,32 @@ const SignupPage = () => {
     } finally {
       setLoading(false)
     }
+  }
+
+  if (!SIGNUP_ENABLED) {
+    return (
+      <AuthShell
+        activeTab="signup"
+        title="회원가입 준비 중"
+        subtitle="개인정보 처리 점검이 끝난 뒤 다시 열립니다."
+        eyebrow="Account Setup"
+        heroTitle="회원가입 준비 중"
+        heroDescription="현재 신규 회원가입은 잠시 닫혀 있습니다."
+        footer={
+          <FooterText>
+            이미 계정이 있으면 <Link href={toLoginPath(next)}>로그인</Link>
+            <span className="policyLinks">
+              <Link href={legalPolicyCurrentPaths.privacy}>개인정보처리방침</Link>
+              <Link href={legalPolicyCurrentPaths.terms}>이용약관</Link>
+            </span>
+          </FooterText>
+        }
+        loginHref={toLoginPath(next)}
+        signupHref={toSignupPath(next)}
+      >
+        <SuccessText>회원가입은 출시 전 개인정보 처리 점검이 완료될 때까지 사용할 수 없습니다.</SuccessText>
+      </AuthShell>
+    )
   }
 
   return (

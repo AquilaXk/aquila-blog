@@ -39,6 +39,11 @@ class PostCommentRepositoryAdapter(
     override fun findActiveAccountDeletionTargetsByAuthorId(authorId: Long): List<PostCommentAccountDeletionTarget> =
         postCommentRepository.findActiveAccountDeletionTargetsByAuthorId(authorId)
 
+    override fun decrementPostCommentsCountByPostId(
+        postId: Long,
+        count: Int,
+    ): Int = postCommentRepository.decrementPostCommentsCountByPostId(postId, count)
+
     override fun findByPostAndId(
         post: Post,
         id: Long,

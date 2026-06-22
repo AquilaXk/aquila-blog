@@ -16,4 +16,9 @@ interface PostCommentRepositoryCustom {
     ): List<PostComment>
 
     fun findActiveAccountDeletionTargetsByAuthorId(authorId: Long): List<PostCommentAccountDeletionTarget>
+
+    fun decrementPostCommentsCountByPostId(
+        postId: Long,
+        count: Int,
+    ): Int
 }

@@ -196,6 +196,7 @@ class PostCommentApplicationService(
             )
         }
 
+        postCommentRepository.decrementPostCommentsCountByPostId(postId, commentsToDelete.size)
         postRepository.flush()
     }
 

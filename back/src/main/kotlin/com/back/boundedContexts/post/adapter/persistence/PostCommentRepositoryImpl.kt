@@ -3,6 +3,7 @@ package com.back.boundedContexts.post.adapter.persistence
 import com.back.boundedContexts.post.application.port.output.PostCommentAccountDeletionTarget
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
+import com.back.boundedContexts.post.domain.postMixin.COMMENTS_COUNT
 import jakarta.persistence.EntityManager
 import jakarta.persistence.PersistenceContext
 
@@ -113,6 +114,26 @@ class PostCommentRepositoryImpl : PostCommentRepositoryCustom {
             )
         }
     }
+
+    override fun decrementPostCommentsCountByPostId(
+        postId: Long,
+        count: Int,
+    ): Int =
+        (
+            entityManager
+                .createNativeQuery(
+                    """
+                    update post_attr
+                    set int_value = greatest(0, coalesce(int_value, 0) - :count)
+                    where subject_id = :postId
+                      and name = :name
+                    returning int_value
+                    """.trimIndent(),
+                ).setParameter("postId", postId)
+                .setParameter("name", COMMENTS_COUNT)
+                .setParameter("count", count)
+                .singleResult as Number
+        ).toInt()
 
     private fun findActiveCommentsByIdsInOrder(ids: List<Long>): List<PostComment> {
         if (ids.isEmpty()) return emptyList()

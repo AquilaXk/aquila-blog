@@ -22,6 +22,7 @@ import com.back.support.BaseControllerIntegrationTest
 import com.jayway.jsonpath.JsonPath
 import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.hamcrest.Matchers.startsWith
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -355,6 +356,7 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         val secondSessionKey = requireAuthCookie(secondAuthCookies, AuthCookieNames.SESSION_KEY)
         assertThat(countMemberAttrsContaining(member.id, "민감")).isGreaterThan(0)
         assertThat(findPostCommentsCount(otherPost.id)).isEqualTo(3)
+        assertThat(findPostCommentsCount(deletedOtherPost.id)).isEqualTo(2)
         assertThat(findMemberPostCommentsCount(otherAuthor.id)).isEqualTo(2)
         assertThat(findUploadedFileState(legacyProfileImageKey).status).isEqualTo("ACTIVE")
         assertThat(findUploadedFileState(draftProfileImageKey).status).isEqualTo("ACTIVE")
@@ -405,7 +407,10 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         assertThat(findCommentDeletedAt(authoredCommentOnDeletedPost.id)).isNotNull()
         assertThat(findCommentDeletedAt(replyToDeletedPostAuthoredComment.id)).isNotNull()
         assertThat(findPostCommentsCount(otherPost.id)).isZero()
+        assertThat(findPostCommentsCount(deletedOtherPost.id)).isZero()
         assertThat(findMemberPostCommentsCount(otherAuthor.id)).isZero()
+        assertThatThrownBy { postFacade.restoreDeletedByIdForAdmin(authoredPost.id) }
+            .hasMessage("404-1 : 이미 복구되었거나 존재하지 않는 글입니다.")
         listOf(legacyProfileImageKey, draftProfileImageKey, publishedProfileImageKey).forEach { objectKey ->
             val uploadedFile = findUploadedFileState(objectKey)
             assertThat(uploadedFile.status).isEqualTo("PENDING_DELETE")

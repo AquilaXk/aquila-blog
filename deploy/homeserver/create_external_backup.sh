@@ -15,6 +15,7 @@ MIGRATION_STOPPED_FILE="${SCRIPT_DIR}/.external-minio-migration-stopped"
 DEFAULT_EXTERNAL_STORAGE_ROOT="/mnt/aquila-blog-data"
 TIMESTAMP="${AQUILA_BACKUP_TIMESTAMP:-$(date +%Y%m%d-%H%M%S)}"
 BACKUP_LOG_FILE=""
+BACKUP_ENCRYPTION_KEY_FILE=""
 STOPPED_LEGACY_MINIO_CONTAINERS=()
 STOPPED_BACKUP_MINIO_CONTAINERS=()
 LEGACY_MINIO_STOPPED_FOR_MIGRATION="false"
@@ -447,6 +448,35 @@ check_free_space() {
   fi
 }
 
+require_command() {
+  local command_name="$1"
+  command -v "${command_name}" >/dev/null 2>&1 || fail "${command_name} is required for backup"
+}
+
+validate_backup_encryption_key_file() {
+  BACKUP_ENCRYPTION_KEY_FILE="$(env_value AQUILA_BACKUP_ENCRYPTION_KEY_FILE "${EXTERNAL_STORAGE_ROOT}/backup-encryption.key")"
+  is_safe_absolute_path "${BACKUP_ENCRYPTION_KEY_FILE}" || fail "unsafe AQUILA_BACKUP_ENCRYPTION_KEY_FILE=${BACKUP_ENCRYPTION_KEY_FILE}"
+  case "${BACKUP_ENCRYPTION_KEY_FILE}" in
+    "${BACKUP_ROOT}"|"${BACKUP_ROOT}"/*)
+      fail "AQUILA_BACKUP_ENCRYPTION_KEY_FILE must be outside AQUILA_BACKUP_ROOT"
+      ;;
+  esac
+  require_command openssl
+  if [[ ! -e "${BACKUP_ENCRYPTION_KEY_FILE}" ]]; then
+    mkdir -p "$(dirname "${BACKUP_ENCRYPTION_KEY_FILE}")"
+    openssl rand -hex 32 > "${BACKUP_ENCRYPTION_KEY_FILE}"
+    chmod 600 "${BACKUP_ENCRYPTION_KEY_FILE}"
+    log "created backup encryption key file: ${BACKUP_ENCRYPTION_KEY_FILE}"
+  fi
+  [[ -f "${BACKUP_ENCRYPTION_KEY_FILE}" ]] || fail "backup encryption key file is not a regular file: ${BACKUP_ENCRYPTION_KEY_FILE}"
+  [[ -r "${BACKUP_ENCRYPTION_KEY_FILE}" ]] || fail "backup encryption key file is not readable: ${BACKUP_ENCRYPTION_KEY_FILE}"
+}
+
+encrypt_stream_to_file() {
+  local target_file="$1"
+  openssl enc -aes-256-cbc -pbkdf2 -salt -pass "file:${BACKUP_ENCRYPTION_KEY_FILE}" -out "${target_file}"
+}
+
 compose() {
   docker compose --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
@@ -497,9 +527,14 @@ write_metadata() {
     echo "backup_set_id=${TIMESTAMP}"
     echo "class=${class}"
     echo "created_at=${TIMESTAMP}"
+    echo "created_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "git_head=$(git -C "${REPO_ROOT}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
     echo "external_storage_root=${EXTERNAL_STORAGE_ROOT}"
     echo "backup_root=${BACKUP_ROOT}"
+    if [[ -n "${BACKUP_ENCRYPTION_KEY_FILE:-}" ]]; then
+      echo "encryption=openssl-enc-aes-256-cbc-pbkdf2"
+      echo "encryption_key_file=${BACKUP_ENCRYPTION_KEY_FILE}"
+    fi
     if [[ -n "${POSTGRES_DB_NAME:-}" ]]; then
       echo "postgres_database=${POSTGRES_DB_NAME}"
     fi
@@ -546,7 +581,8 @@ backup_postgres() {
   fi
 
   prepare_postgres_backup_compose_if_needed
-  compose exec -T db_1 pg_dump -U postgres -d "${POSTGRES_DB_NAME}" > "${target_dir}/dump.sql"
+  compose exec -T db_1 pg_dump -U postgres -d "${POSTGRES_DB_NAME}" \
+    | encrypt_stream_to_file "${target_dir}/dump.sql.enc"
   write_metadata "${class}" "${target_dir}"
 }
 
@@ -733,7 +769,7 @@ backup_minio() {
   if [[ "${#STOPPED_BACKUP_MINIO_CONTAINERS[@]}" -gt 0 ]]; then
     mode="stopped-filesystem-copy"
   fi
-  if ! tar -C "${minio_dir}" -czf "${target_dir}/minio-data.tar.gz" .; then
+  if ! tar -C "${minio_dir}" -czf - . | encrypt_stream_to_file "${target_dir}/minio-data.tar.gz.enc"; then
     restart_minio_after_consistent_backup || true
     fail "failed to archive minio data directory: ${minio_dir}"
   fi
@@ -748,6 +784,7 @@ CURRENT_DB_BASE_NAME="$(env_value_from_current_file DB_BASE_NAME "blog")"
 POSTGRES_DB_NAME="$(env_value_from_current_file CUSTOM_PROD_DBNAME "${CURRENT_DB_BASE_NAME}_prod")"
 
 validate_paths
+validate_backup_encryption_key_file
 mkdir -p "${BACKUP_ROOT}/logs"
 BACKUP_LOG_FILE="${BACKUP_ROOT}/logs/${TIMESTAMP}.log"
 check_free_space "${MIN_FREE_PERCENT}"

@@ -158,6 +158,8 @@ const baseHomeServerEnv = [
   "AQUILA_BACKUP_RETENTION_WEEKLY=8",
   "AQUILA_BACKUP_RETENTION_MONTHLY=6",
   "AQUILA_BACKUP_MIN_FREE_PERCENT=15",
+  "AQUILA_BACKUP_ENCRYPTION_KEY_FILE=/mnt/aquila-blog-data/backup-encryption.key",
+  "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=/opt/aquila-blog/restore-privacy-gate.sh",
   "PROMETHEUS_BASIC_AUTH_USER=promviewer",
   "PROMETHEUS_BASIC_AUTH_HASH=$$2y$$05$$abcdefghijklmnopqrstuvABCDEFGHIJKLMNOPQRSTUVabcdefghi",
   "OPERATIONS_ALERT_EMAIL_TO=ops@aquilaxk.site",
@@ -610,6 +612,8 @@ test("home-server runtime contract covers external storage backup keys", async (
   assert(keys.has("AQUILA_BACKUP_RETENTION_WEEKLY"))
   assert(keys.has("AQUILA_BACKUP_RETENTION_MONTHLY"))
   assert(keys.has("AQUILA_BACKUP_MIN_FREE_PERCENT"))
+  assert(keys.has("AQUILA_BACKUP_ENCRYPTION_KEY_FILE"))
+  assert(keys.has("AQUILA_RESTORE_PRIVACY_GATE_SCRIPT"))
 })
 
 test("external storage values reject unsafe paths and non-positive retention", async () => {
@@ -722,6 +726,14 @@ test("external backup root must stay strictly inside the default or configured s
     "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/backups",
     "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data//minio/backups",
   )
+  const keyInsideBackupRoot = baseHomeServerEnv.replace(
+    "AQUILA_BACKUP_ENCRYPTION_KEY_FILE=/mnt/aquila-blog-data/backup-encryption.key",
+    "AQUILA_BACKUP_ENCRYPTION_KEY_FILE=/mnt/aquila-blog-data/backups/backup-encryption.key",
+  )
+  const privacyGateInsideBackupRoot = baseHomeServerEnv.replace(
+    "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=/opt/aquila-blog/restore-privacy-gate.sh",
+    "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=/mnt/aquila-blog-data/backups/restore-privacy-gate.sh",
+  )
   const nonDefaultStorageRoot = baseHomeServerEnv
     .replace("AQUILA_EXTERNAL_STORAGE_ROOT=/mnt/aquila-blog-data", "AQUILA_EXTERNAL_STORAGE_ROOT=/mnt/other-disk")
     .replace("AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/backups", "AQUILA_BACKUP_ROOT=/mnt/other-disk/backups")
@@ -751,6 +763,16 @@ test("external backup root must stay strictly inside the default or configured s
     target: "home-server-source",
     text: nonDefaultStorageRoot,
   })
+  const keyInsideBackupRootResult = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text: keyInsideBackupRoot,
+  })
+  const privacyGateInsideBackupRootResult = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text: privacyGateInsideBackupRoot,
+  })
 
   assert.equal(outsideResult.ok, false)
   assert(outsideResult.errors.some((error) => error.key === "AQUILA_BACKUP_ROOT"))
@@ -762,6 +784,10 @@ test("external backup root must stay strictly inside the default or configured s
   assert(repeatedSeparatorInsideMinioResult.errors.some((error) => error.key === "AQUILA_BACKUP_ROOT"))
   assert.equal(nonDefaultStorageRootResult.ok, false)
   assert(nonDefaultStorageRootResult.errors.some((error) => error.key === "AQUILA_EXTERNAL_STORAGE_ROOT"))
+  assert.equal(keyInsideBackupRootResult.ok, false)
+  assert(keyInsideBackupRootResult.errors.some((error) => error.key === "AQUILA_BACKUP_ENCRYPTION_KEY_FILE"))
+  assert.equal(privacyGateInsideBackupRootResult.ok, false)
+  assert(privacyGateInsideBackupRootResult.errors.some((error) => error.key === "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT"))
 })
 
 test("home-server-source requires DB runtime username after runtime-role cutover", async () => {

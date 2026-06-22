@@ -540,8 +540,12 @@ class PostTagRecommendationService(
     }
 
     private fun sanitizePromptText(value: String): String {
+        val withoutAuthorizationSecrets =
+            AUTHORIZATION_SECRET_REGEX.replace(value) { match ->
+                "${match.groupValues[1]}=[redacted-secret]"
+            }
         val withoutSecrets =
-            SECRET_ASSIGNMENT_REGEX.replace(value) { match ->
+            SECRET_ASSIGNMENT_REGEX.replace(withoutAuthorizationSecrets) { match ->
                 "${match.groupValues[1]}=[redacted-secret]"
             }
         return withoutSecrets
@@ -739,6 +743,8 @@ class PostTagRecommendationService(
         private val TOKEN_REGEX = Regex("[\\p{IsHangul}\\p{L}\\p{N}_-]{2,24}")
         private val EMAIL_REGEX = Regex("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", RegexOption.IGNORE_CASE)
         private val PHONE_REGEX = Regex("(?<!\\d)(?:\\+?\\d{1,3}[-.\\s]?)?(?:0\\d{1,2}[-.\\s]?\\d{3,4}[-.\\s]?\\d{4})(?!\\d)")
+        private val AUTHORIZATION_SECRET_REGEX =
+            Regex("\\b(authorization)\\s*[:=]\\s*(?:bearer|basic|token)\\s+[^\"'\\s,)&]+", RegexOption.IGNORE_CASE)
         private val SECRET_ASSIGNMENT_REGEX =
             Regex("\\b(api[_-]?key|token|password|secret|authorization)\\s*[:=]\\s*[\"']?[^\"'\\s,)&]+", RegexOption.IGNORE_CASE)
         private val FENCED_CODE_REGEX = Regex("```[\\s\\S]*?```")

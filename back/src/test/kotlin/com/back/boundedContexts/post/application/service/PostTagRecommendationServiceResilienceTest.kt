@@ -110,6 +110,7 @@ class PostTagRecommendationServiceResilienceTest {
                         """
                         장애 대응 담당자는 secret@example.com, 010-1234-5678 입니다.
                         내부 호출 예시는 apiKey=super-secret-token 값으로 남아 있습니다.
+                        요청 헤더 예시는 Authorization: Bearer bearer-secret-token 입니다.
                         """.trimIndent(),
                     existingTags = emptyList(),
                     maxTags = 5,
@@ -121,13 +122,16 @@ class PostTagRecommendationServiceResilienceTest {
                 .doesNotContain("secret@example.com")
                 .doesNotContain("010-1234-5678")
                 .doesNotContain("super-secret-token")
+                .doesNotContain("bearer-secret-token")
                 .contains("[redacted-email]")
                 .contains("[redacted-phone]")
                 .contains("apiKey=[redacted-secret]")
+                .contains("Authorization=[redacted-secret]")
             assertThat(redisPort.writes.flatMap { listOf(it.key, it.value) }.joinToString("\n"))
                 .doesNotContain("secret@example.com")
                 .doesNotContain("010-1234-5678")
                 .doesNotContain("super-secret-token")
+                .doesNotContain("bearer-secret-token")
         } finally {
             server.stop(0)
         }

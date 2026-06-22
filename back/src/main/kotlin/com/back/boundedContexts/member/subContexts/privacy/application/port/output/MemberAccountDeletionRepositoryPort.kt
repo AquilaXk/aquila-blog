@@ -5,5 +5,7 @@ import com.back.boundedContexts.member.subContexts.privacy.model.MemberAccountDe
 interface MemberAccountDeletionRepositoryPort {
     fun save(memberAccountDeletion: MemberAccountDeletion): MemberAccountDeletion
 
+    fun flush()
+
     fun existsByMemberId(memberId: Long): Boolean
 }

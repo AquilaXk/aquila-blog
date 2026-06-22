@@ -85,7 +85,7 @@ const SignupPage = () => {
         }),
       })
       setSentEmail(response.data.email)
-      startCooldown(response.data.email)
+      await startCooldown(response.data.email)
     } catch (signupError) {
       setError(toAuthErrorMessage("signupStart", signupError, "회원가입 메일 전송에 실패했습니다."))
     } finally {
@@ -165,7 +165,13 @@ const SignupPage = () => {
         </RequiredConsentBox>
 
         <PrimaryButton type="submit" disabled={loading || isCoolingDown || !signupConsentAccepted}>
-          {loading ? "메일 보내는 중..." : isCoolingDown ? `다시 보내기 ${formatSignupCooldown(remainingSeconds)}` : "인증 메일 보내기"}
+          {loading
+            ? "메일 보내는 중..."
+            : isCoolingDown
+              ? remainingSeconds > 0
+                ? `다시 보내기 ${formatSignupCooldown(remainingSeconds)}`
+                : "잠시만 기다려주세요"
+              : "인증 메일 보내기"}
         </PrimaryButton>
       </form>
     </AuthShell>

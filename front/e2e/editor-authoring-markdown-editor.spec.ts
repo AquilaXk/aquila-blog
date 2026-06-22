@@ -81,7 +81,7 @@ const routeAuthenticatedEditor = async (page: Page, markdown = longMarkdownDraft
           tags: ["markdown", "507"],
           category: "",
           visibility: "PUBLIC_UNLISTED",
-          savedAt: "2026-06-14T10:00:00.000Z",
+          savedAt: new Date().toISOString(),
         })
       )
     },

@@ -20,7 +20,15 @@ import {
 
 export const TAG_CATALOG_STORAGE_KEY = "admin.editor.customTags"
 export const CATEGORY_CATALOG_STORAGE_KEY = "admin.editor.customCategories"
-const LOCAL_DRAFT_STORAGE_KEY = "admin.editor.localDraft.v1"
+export const LOCAL_DRAFT_STORAGE_KEY = "admin.editor.localDraft.v1"
+export const LOCAL_DRAFT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+
+export const isLocalDraftExpired = (savedAt: string, nowMs: number = Date.now()) => {
+  const savedAtMs = Date.parse(savedAt)
+  if (!Number.isFinite(savedAtMs)) return true
+  if (savedAtMs > nowMs) return true
+  return nowMs - savedAtMs >= LOCAL_DRAFT_MAX_AGE_MS
+}
 
 export const readStoredCatalog = (storageKey: string) => {
   if (typeof window === "undefined") return []
@@ -50,6 +58,11 @@ export const readLocalDraft = (): LocalDraftPayload | null => {
     if (!raw) return null
     const parsed = JSON.parse(raw) as Partial<LocalDraftPayload>
     if (!parsed || typeof parsed !== "object") return null
+    const savedAt = typeof parsed.savedAt === "string" ? parsed.savedAt : ""
+    if (isLocalDraftExpired(savedAt)) {
+      removeLocalDraft()
+      return null
+    }
 
     const visibility = parsed.visibility
     const isValidVisibility =
@@ -85,7 +98,7 @@ export const readLocalDraft = (): LocalDraftPayload | null => {
         : [],
       category: typeof parsed.category === "string" ? normalizeCategoryValue(parsed.category) : "",
       visibility: isValidVisibility ? visibility : "PUBLIC_LISTED",
-      savedAt: typeof parsed.savedAt === "string" ? parsed.savedAt : "",
+      savedAt,
     }
   } catch {
     return null

@@ -20,8 +20,8 @@ retentionRules:
     destruction: revokeSessionExpireCookiePurgeExpiredSessions; auth.signupMailCooldown.v1 expires hashed entries; auth.login.* browserPreferenceDeletion
     followUp: issue995
   - activityId: user_content_posts_comments
-    retention: untilUserDeletionOrContentDeletion; publicCacheUntilRevalidation; admin.editor.localDraft.v1 sevenDaysFromSavedAt; admin.editor.customTags/admin.editor.customCategories untilCatalogChange; admin.contentStudio.listConditions.v1 untilPreferenceChange
-    destruction: softDeleteThenCachePurge; anonymizeWhereRequired; admin.editor.localDraft.v1 manualClearPublishOrTtlExpiry
+    retention: untilUserDeletionOrContentDeletion; publicCacheUntilRevalidation; admin.editor.localDraft.v1 sevenDaysFromSavedAt; admin.editor.customTags/admin.editor.customCategories untilCatalogChange; admin.contentStudio.listConditions.v1 untilPreferenceChange; editor.actual-preview.v1:*/posts:public-cursor-disabled:v1/posts:runtime-endpoints:v1/feed.restore.* untilTabCloseOrBrowserStorageClear
+    destruction: softDeleteThenCachePurge; anonymizeWhereRequired; admin.editor.localDraft.v1 manualClearPublishOrTtlExpiry; editor.actual-preview.v1:*/posts:public-cursor-disabled:v1/posts:runtime-endpoints:v1/feed.restore.* tabCloseOrBrowserStorageDeletion
     followUp: issue999
   - activityId: file_uploads_profile_post_cloud
     retention: activeUntilOwnerDeletion; tempUploadsUntilPurgeAfter; deletedObjectsUntilBackupExpiry; aquila-cloud-video-upload-session:* untilUploadCompleteCancelOrStale

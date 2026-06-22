@@ -25,7 +25,9 @@ export const LOCAL_DRAFT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
 export const isLocalDraftExpired = (savedAt: string, nowMs: number = Date.now()) => {
   const savedAtMs = Date.parse(savedAt)
-  return !Number.isFinite(savedAtMs) || nowMs - savedAtMs > LOCAL_DRAFT_MAX_AGE_MS
+  if (!Number.isFinite(savedAtMs)) return true
+  if (savedAtMs > nowMs) return true
+  return nowMs - savedAtMs >= LOCAL_DRAFT_MAX_AGE_MS
 }
 
 export const readStoredCatalog = (storageKey: string) => {

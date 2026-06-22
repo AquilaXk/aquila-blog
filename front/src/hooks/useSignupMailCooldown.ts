@@ -129,6 +129,10 @@ export const useSignupMailCooldown = (
         if (reflectsCurrentEmail) {
           setRemainingSeconds(cooldownSeconds)
         }
+      } catch {
+        if (reflectsCurrentEmail) {
+          setRemainingSeconds(0)
+        }
       } finally {
         if (reflectsCurrentEmail) setIsCooldownPending(false)
       }

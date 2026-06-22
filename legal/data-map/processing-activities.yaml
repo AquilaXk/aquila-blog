@@ -233,8 +233,8 @@ activities:
       - vercel_frontend_hosting
       - cloudflare_dns_proxy
     overseasTransfer: possibleViaVercelOrCloudflareEdge
-    retentionRule: untilUserDeletionOrContentDeletion; publicCacheUntilRevalidation; admin.editor.localDraft.v1 sevenDaysFromSavedAt; admin.editor.customTags/admin.editor.customCategories untilCatalogChange; admin.contentStudio.listConditions.v1 untilPreferenceChange
-    destructionMethod: softDeleteThenCachePurge; anonymizeWhereRequired; admin.editor.localDraft.v1 manualClearPublishOrTtlExpiry
+    retentionRule: untilUserDeletionOrContentDeletion; publicCacheUntilRevalidation; admin.editor.localDraft.v1 sevenDaysFromSavedAt; admin.editor.customTags/admin.editor.customCategories untilCatalogChange; admin.contentStudio.listConditions.v1 untilPreferenceChange; editor.actual-preview.v1:*/posts:public-cursor-disabled:v1/posts:runtime-endpoints:v1/feed.restore.* untilTabCloseOrBrowserStorageClear
+    destructionMethod: softDeleteThenCachePurge; anonymizeWhereRequired; admin.editor.localDraft.v1 manualClearPublishOrTtlExpiry; editor.actual-preview.v1:*/posts:public-cursor-disabled:v1/posts:runtime-endpoints:v1/feed.restore.* tabCloseOrBrowserStorageDeletion
     accessRoles:
       - contentAuthor
       - serviceAdmin

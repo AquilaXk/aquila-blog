@@ -74,6 +74,16 @@ class MemberSessionAuthenticationResolver(
         }
     }
 
+    fun ensureFreshTokenFallbackMemberFound(
+        sessionResolution: MemberSessionResolution,
+        persistedMemberFound: Boolean,
+    ) {
+        if (!sessionResolution.freshTokenFallback || persistedMemberFound) return
+
+        authCookieService.expireAuthCookies()
+        throw AppException("401-8", "세션이 만료되었습니다. 다시 로그인해주세요.")
+    }
+
     fun context(
         sessionResolution: MemberSessionResolution,
         fallbackRememberLoginEnabled: Boolean,

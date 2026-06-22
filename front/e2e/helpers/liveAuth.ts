@@ -73,15 +73,17 @@ export const completeLegalReconsentIfRequired = async (
   const reconsentPanel = page.getByRole("region", { name: "법적 문서 재동의" })
   let isGate = isLegalReconsentGateUrl(page.url()) || (await reconsentPanel.isVisible().catch(() => false))
   if (!isGate) {
-    const probeTimeoutMs = Math.min(timeoutMs, 3_000)
-    isGate =
-      (await page.waitForURL((url) => isLegalReconsentGateUrl(url.href), { timeout: probeTimeoutMs }).then(
+    const probeTimeoutMs = Math.min(timeoutMs, 1_500)
+    isGate = await expect
+      .poll(
+        async () => isLegalReconsentGateUrl(page.url()) || (await reconsentPanel.isVisible().catch(() => false)),
+        { timeout: probeTimeoutMs }
+      )
+      .toBe(true)
+      .then(
         () => true,
         () => false
-      )) || (await reconsentPanel.waitFor({ state: "visible", timeout: probeTimeoutMs }).then(
-        () => true,
-        () => false
-      ))
+      )
   }
   if (!isGate) return false
 

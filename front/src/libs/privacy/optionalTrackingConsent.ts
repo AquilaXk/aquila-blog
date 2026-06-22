@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react"
 import {
   OPTIONAL_TRACKING_CONSENT_CHANGE_EVENT,
+  disableOptionalTrackingRuntime,
   hasOptionalTrackingConsent,
+  installOptionalTrackingDenyGuard,
 } from "src/libs/privacy/browserStorageRegistry"
 
 export const useOptionalTrackingConsent = () => {
@@ -9,9 +11,14 @@ export const useOptionalTrackingConsent = () => {
 
   useEffect(() => {
     const syncConsentState = () => {
-      setOptionalTrackingAllowed(hasOptionalTrackingConsent())
+      const allowed = hasOptionalTrackingConsent()
+      if (!allowed) {
+        disableOptionalTrackingRuntime()
+      }
+      setOptionalTrackingAllowed(allowed)
     }
 
+    installOptionalTrackingDenyGuard()
     syncConsentState()
     window.addEventListener("storage", syncConsentState)
     window.addEventListener(OPTIONAL_TRACKING_CONSENT_CHANGE_EVENT, syncConsentState)

@@ -64,6 +64,16 @@ test("optional analytics and RUM stay silent before consent and after withdrawal
     },
     { key: OPTIONAL_TRACKING_CONSENT_STORAGE_KEY, eventName: OPTIONAL_TRACKING_CONSENT_CHANGE_EVENT },
   )
+  await page.waitForTimeout(100)
+  const blockedTrackingResults = await page.evaluate(async () => {
+    const fetchResponse = await window.fetch("/_vercel/insights/view", { method: "POST" })
+    const beaconResult = window.navigator.sendBeacon("/_vercel/speed-insights/vitals", "{}")
+    return { beaconResult, fetchStatus: fetchResponse.status }
+  })
+
+  expect(blockedTrackingResults).toEqual({ beaconResult: true, fetchStatus: 204 })
+  expect(optionalTrackingRequests, "same-session post-withdrawal optional tracking requests").toEqual([])
+
   await page.reload({ waitUntil: "domcontentloaded" })
   await waitForClientTrackingWindow(page)
 

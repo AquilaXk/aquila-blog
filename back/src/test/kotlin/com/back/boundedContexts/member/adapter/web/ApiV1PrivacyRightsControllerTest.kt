@@ -266,13 +266,27 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             ipSecurityEnabled = true,
             ipSecurityFingerprint = "fingerprint-before-delete",
         )
-        insertMemberAttr(member.id, PROFILE_IMG_URL, "https://cdn.example.test/민감-profile.png")
+        val legacyProfileImageKey = "profiles/account-delete/legacy-profile.png"
+        val draftProfileImageKey = "profiles/account-delete/draft-profile.png"
+        val publishedProfileImageKey = "profiles/account-delete/published-profile.png"
+        insertActiveProfileUploadedFile(member.id, legacyProfileImageKey)
+        insertActiveProfileUploadedFile(member.id, draftProfileImageKey)
+        insertActiveProfileUploadedFile(member.id, publishedProfileImageKey)
+        insertMemberAttr(member.id, PROFILE_IMG_URL, "/post/api/v1/images/$legacyProfileImageKey")
         insertMemberAttr(member.id, PROFILE_BIO, "민감한 자기소개")
         insertMemberAttr(member.id, ABOUT_DETAILS, "민감한 상세 소개")
         insertMemberAttr(member.id, PROFILE_SERVICE_LINKS, """[{"label":"민감한 서비스","href":"https://example.test"}]""")
         insertMemberAttr(member.id, PROFILE_CONTACT_LINKS, """[{"label":"민감한 연락처","href":"mailto:secret@example.test"}]""")
-        insertMemberAttr(member.id, PROFILE_WORKSPACE_DRAFT, """{"blocks":[{"text":"민감한 draft"}]}""")
-        insertMemberAttr(member.id, PROFILE_WORKSPACE_PUBLISHED, """{"blocks":[{"text":"민감한 published"}]}""")
+        insertMemberAttr(
+            member.id,
+            PROFILE_WORKSPACE_DRAFT,
+            """{"content":{"profileImageUrl":"/post/api/v1/images/$draftProfileImageKey","profileBio":"민감한 draft"}}""",
+        )
+        insertMemberAttr(
+            member.id,
+            PROFILE_WORKSPACE_PUBLISHED,
+            """{"content":{"profileImageUrl":"/post/api/v1/images/$publishedProfileImageKey","profileBio":"민감한 published"}}""",
+        )
         val authoredPost =
             postFacade.write(
                 author = member,
@@ -306,6 +320,9 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         assertThat(countMemberAttrsContaining(member.id, "민감")).isGreaterThan(0)
         assertThat(findPostCommentsCount(otherPost.id)).isEqualTo(3)
         assertThat(findMemberPostCommentsCount(otherAuthor.id)).isEqualTo(1)
+        assertThat(findUploadedFileState(legacyProfileImageKey).status).isEqualTo("ACTIVE")
+        assertThat(findUploadedFileState(draftProfileImageKey).status).isEqualTo("ACTIVE")
+        assertThat(findUploadedFileState(publishedProfileImageKey).status).isEqualTo("ACTIVE")
         val taskPayloadsWithDeletedPostContentBeforeDeletion =
             countTaskPayloadsContaining("탈퇴 후 공개 조회에서 빠져야 하는 글")
         val taskPayloadsWithDeletedCommentContentBeforeDeletion =
@@ -351,6 +368,12 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         assertThat(findCommentDeletedAt(nestedReplyToAuthoredComment.id)).isNotNull()
         assertThat(findPostCommentsCount(otherPost.id)).isZero()
         assertThat(findMemberPostCommentsCount(otherAuthor.id)).isZero()
+        listOf(legacyProfileImageKey, draftProfileImageKey, publishedProfileImageKey).forEach { objectKey ->
+            val uploadedFile = findUploadedFileState(objectKey)
+            assertThat(uploadedFile.status).isEqualTo("PENDING_DELETE")
+            assertThat(uploadedFile.retentionReason).isEqualTo("REPLACED_PROFILE_IMAGE")
+            assertThat(uploadedFile.purgeAfter).isNotNull()
+        }
         assertThat(countTaskPayloadsContaining("탈퇴 후 공개 조회에서 빠져야 하는 글"))
             .isEqualTo(taskPayloadsWithDeletedPostContentBeforeDeletion)
         assertThat(countTaskPayloadsContaining("탈퇴 후 숨겨져야 하는 댓글"))
@@ -679,6 +702,47 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         )
     }
 
+    private fun insertActiveProfileUploadedFile(
+        memberId: Long,
+        objectKey: String,
+    ) {
+        jdbcTemplate.update(
+            """
+            insert into uploaded_file (
+                id,
+                object_key,
+                bucket,
+                content_type,
+                file_size,
+                purpose,
+                status,
+                owner_type,
+                owner_id
+            )
+            values (nextval('uploaded_file_seq'), ?, 'test-bucket', 'image/png', 128, 'PROFILE_IMAGE', 'ACTIVE', 'MEMBER_PROFILE', ?)
+            """.trimIndent(),
+            objectKey,
+            memberId,
+        )
+    }
+
+    private fun findUploadedFileState(objectKey: String): UploadedFileState =
+        jdbcTemplate.queryForObject(
+            """
+            select status, retention_reason, purge_after
+            from uploaded_file
+            where object_key = ?
+            """.trimIndent(),
+            { rs, _ ->
+                UploadedFileState(
+                    status = rs.getString("status"),
+                    retentionReason = rs.getString("retention_reason"),
+                    purgeAfter = rs.getTimestamp("purge_after")?.toInstant(),
+                )
+            },
+            objectKey,
+        ) ?: error("uploaded file not found")
+
     private fun countMemberAttrsContaining(
         memberId: Long,
         valueFragment: String,
@@ -811,5 +875,11 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         val published: Boolean,
         val listed: Boolean,
         val deletedAt: java.time.Instant?,
+    )
+
+    private data class UploadedFileState(
+        val status: String,
+        val retentionReason: String?,
+        val purgeAfter: java.time.Instant?,
     )
 }

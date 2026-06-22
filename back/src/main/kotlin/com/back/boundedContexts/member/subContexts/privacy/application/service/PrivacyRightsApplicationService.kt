@@ -145,7 +145,7 @@ class PrivacyRightsApplicationService(
         memberAttrRepository.clearStringValuesBySubjectIdAndNameIn(member.id, PROFILE_PRIVACY_ATTR_NAMES)
         memberAccountDeletionRepository.save(
             MemberAccountDeletion(
-                member = member,
+                memberId = member.id,
                 reason = reason?.trim()?.takeIf { it.isNotBlank() },
                 deletedAt = deletedAt,
             ),

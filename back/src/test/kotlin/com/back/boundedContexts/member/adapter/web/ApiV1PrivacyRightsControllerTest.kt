@@ -342,8 +342,8 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         val deletion =
             memberAccountDeletionRepository
                 .findAll()
-                .single { it.member.id == member.id }
-        assertThat(deletion.member.id).isEqualTo(member.id)
+                .single { it.memberId == member.id }
+        assertThat(deletion.memberId).isEqualTo(member.id)
         assertThat(deletion.reason).isEqualTo("서비스 이용 종료")
         assertThat(deletion.deletedAt).isNotNull()
     }
@@ -395,7 +395,7 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             )
         memberAccountDeletionRepository.save(
             MemberAccountDeletion(
-                member = member,
+                memberId = member.id,
                 deletedAt = Instant.parse("2026-06-21T00:00:00Z"),
             ),
         )

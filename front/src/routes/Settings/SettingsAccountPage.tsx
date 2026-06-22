@@ -20,7 +20,7 @@ const SettingsAccountPage = () => {
     const trimmedPassword = password.trim()
     try {
       const response = await deletePrivacyAccount({
-        password: trimmedPassword || undefined,
+        password: trimmedPassword ? password : undefined,
         oauthAccountDeletionConfirmed: !trimmedPassword && confirmed,
         reason: reason.trim() || undefined,
       })

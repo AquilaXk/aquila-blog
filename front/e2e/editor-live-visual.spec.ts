@@ -66,12 +66,12 @@ const tryEnterEditorRoute = async (page: Page, timeoutMs: number) => {
       if (!isNavigationInterruptedError(error)) throw error
     }
 
-    if (await completeLegalReconsentIfRequired(page, "/editor/new", timeoutMs, timeoutMs)) return true
+    if (await completeLegalReconsentIfRequired(page, "/editor/new", timeoutMs, quickReconsentProbeTimeoutMs)) return true
     if (editorUrlPattern.test(page.url())) return true
 
     try {
       await page.waitForURL(editorUrlPattern, { timeout: perTryTimeout })
-      if (await completeLegalReconsentIfRequired(page, "/editor/new", timeoutMs, timeoutMs)) return true
+      if (await completeLegalReconsentIfRequired(page, "/editor/new", timeoutMs, quickReconsentProbeTimeoutMs)) return true
       return true
     } catch {
       if (attempt < tries) await sleep(400 * attempt)
@@ -206,7 +206,7 @@ const loginThroughUi = async (page: Page) => {
       page,
       "/editor/new",
       liveUiRedirectTimeoutMs,
-      liveUiRedirectTimeoutMs
+      quickReconsentProbeTimeoutMs
     )
     return
   }
@@ -258,7 +258,7 @@ const loginThroughUi = async (page: Page) => {
             page,
             "/editor/new",
             liveUiRedirectTimeoutMs,
-            liveUiRedirectTimeoutMs
+            quickReconsentProbeTimeoutMs
           )
           return
         }
@@ -281,7 +281,7 @@ const loginThroughUi = async (page: Page) => {
         page,
         "/editor/new",
         liveUiRedirectTimeoutMs,
-        liveUiRedirectTimeoutMs
+        quickReconsentProbeTimeoutMs
       )
       return
     }

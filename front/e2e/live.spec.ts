@@ -49,12 +49,12 @@ const tryEnterAdminRoute = async (page: Page, timeoutMs: number) => {
       if (!isNavigationInterruptedError(error)) throw error
     }
 
-    if (await completeLegalReconsentIfRequired(page, "/admin", timeoutMs, timeoutMs)) return true
+    if (await completeLegalReconsentIfRequired(page, "/admin", timeoutMs, quickReconsentProbeTimeoutMs)) return true
     if (adminUrlPattern.test(page.url())) return true
 
     try {
       await page.waitForURL(adminUrlPattern, { timeout: perTryTimeout })
-      if (await completeLegalReconsentIfRequired(page, "/admin", timeoutMs, timeoutMs)) return true
+      if (await completeLegalReconsentIfRequired(page, "/admin", timeoutMs, quickReconsentProbeTimeoutMs)) return true
       return true
     } catch {
       if (attempt < tries) {
@@ -322,7 +322,7 @@ const loginThroughUi = async (
   for (let attempt = 1; attempt <= liveLoginAttempts; attempt += 1) {
     const route = await gotoLoginForAdmin(page, liveUiRedirectTimeoutMs)
     if (route === "admin") {
-      await completeLegalReconsentIfRequired(page, "/admin", liveUiRedirectTimeoutMs, liveUiRedirectTimeoutMs)
+      await completeLegalReconsentIfRequired(page, "/admin", liveUiRedirectTimeoutMs, quickReconsentProbeTimeoutMs)
       return
     }
     if (await completeLegalReconsentIfRequired(page, "/admin", liveUiRedirectTimeoutMs, quickReconsentProbeTimeoutMs)) return
@@ -365,7 +365,7 @@ const loginThroughUi = async (
         if (isInvalidLoginRequestBody(status, bodyPreview)) {
           await loginWithRetry(page, apiBaseUrl, loginEmail, legacyLoginId, password)
           await page.goto("/admin")
-          await completeLegalReconsentIfRequired(page, "/admin", liveUiRedirectTimeoutMs, liveUiRedirectTimeoutMs)
+          await completeLegalReconsentIfRequired(page, "/admin", liveUiRedirectTimeoutMs, quickReconsentProbeTimeoutMs)
           await expect(page).toHaveURL(/\/admin(\/|$)/, { timeout: liveUiRedirectTimeoutMs })
           return
         }
@@ -378,14 +378,14 @@ const loginThroughUi = async (
       }
 
       if (adminUrlPattern.test(page.url())) {
-        await completeLegalReconsentIfRequired(page, "/admin", liveUiRedirectTimeoutMs, liveUiRedirectTimeoutMs)
+        await completeLegalReconsentIfRequired(page, "/admin", liveUiRedirectTimeoutMs, quickReconsentProbeTimeoutMs)
         return
       }
       if (await tryEnterAdminRoute(page, liveUiRedirectTimeoutMs)) return
     }
 
     if (outcome.kind === "admin-url") {
-      await completeLegalReconsentIfRequired(page, "/admin", liveUiRedirectTimeoutMs, liveUiRedirectTimeoutMs)
+      await completeLegalReconsentIfRequired(page, "/admin", liveUiRedirectTimeoutMs, quickReconsentProbeTimeoutMs)
       return
     }
 

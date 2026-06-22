@@ -103,17 +103,14 @@ export const completeLegalReconsentIfRequired = async (
   const privacyCheckbox = page.getByLabel("필수 개인정보 처리 안내를 확인했습니다.")
   const overseasCheckbox = page.getByLabel("국외 이전 및 외부 처리자 안내를 확인했습니다.")
   const hasForm = await expect
-    .poll(() => ageCheckbox.isVisible().catch(() => false), { timeout: quickReconsentProbeTimeoutMs })
+    .poll(() => ageCheckbox.isVisible().catch(() => false), { timeout: timeoutMs })
     .toBe(true)
     .then(
       () => true,
       () => false
     )
   if (!hasForm) {
-    if (!isCurrentFallbackPath(page.url(), fallbackPath)) {
-      await page.goto(fallbackPath)
-    }
-    return true
+    throw new Error(`Legal reconsent gate did not expose the required form. url=${page.url()}`)
   }
 
   await ageCheckbox.check()

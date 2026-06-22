@@ -2466,7 +2466,8 @@ export interface components {
             profile?: components["schemas"]["MemberWithUsernameDto"];
         };
         AccountDeletionRequest: {
-            password: string;
+            password?: string;
+            oauthAccountDeletionConfirmed?: boolean;
             reason?: string;
         };
         AccountDeletionResult: {

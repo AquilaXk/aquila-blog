@@ -10,7 +10,6 @@ import com.back.global.security.domain.SecurityUser
 import com.back.global.web.application.AuthCookieService
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.Valid
-import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
@@ -44,9 +43,9 @@ class ApiV1PrivacyRightsController(
     )
 
     data class AccountDeletionRequest(
-        @field:NotBlank
         @field:Size(min = 1, max = 128)
-        val password: String,
+        val password: String? = null,
+        val oauthAccountDeletionConfirmed: Boolean = false,
         @field:Size(max = 500)
         val reason: String? = null,
     )
@@ -104,6 +103,7 @@ class ApiV1PrivacyRightsController(
             privacyRightsApplicationService.deleteAccount(
                 memberId = securityUser.id,
                 password = reqBody.password,
+                oauthAccountDeletionConfirmed = reqBody.oauthAccountDeletionConfirmed,
                 reason = reqBody.reason,
             )
         authCookieService.expireAuthCookies()

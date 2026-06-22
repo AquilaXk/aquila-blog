@@ -14,19 +14,21 @@ const SettingsAccountPage = () => {
 
   const submitDeletion = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!confirmed || !password.trim()) return
+    if (!confirmed) return
     setSubmitting(true)
     setFeedback("")
+    const trimmedPassword = password.trim()
     try {
       const response = await deletePrivacyAccount({
-        password,
+        password: trimmedPassword || undefined,
+        oauthAccountDeletionConfirmed: !trimmedPassword && confirmed,
         reason: reason.trim() || undefined,
       })
       setRevokedSessionCount(response.data.revokedSessionCount)
       setFeedback(response.msg)
       window.setTimeout(() => clearMe(), 1200)
     } catch {
-      setFeedback("비밀번호를 확인했지만 계정 탈퇴를 완료하지 못했습니다.")
+      setFeedback("계정 확인 상태를 확인했지만 탈퇴를 완료하지 못했습니다.")
     } finally {
       setSubmitting(false)
     }
@@ -43,7 +45,7 @@ const SettingsAccountPage = () => {
           </p>
           <form className="deleteForm" onSubmit={submitDeletion}>
             <label>
-              비밀번호 재확인
+              비밀번호 재확인 (이메일 계정)
               <input
                 autoComplete="current-password"
                 type="password"
@@ -51,6 +53,7 @@ const SettingsAccountPage = () => {
                 onChange={(event) => setPassword(event.target.value)}
               />
             </label>
+            <p className="fieldHint">비밀번호가 없는 소셜 계정은 비워두고 확인 체크 후 진행합니다.</p>
             <label>
               탈퇴 사유
               <textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={3} />
@@ -63,7 +66,7 @@ const SettingsAccountPage = () => {
               />
               계정 탈퇴 영향을 확인했습니다.
             </label>
-            <button type="submit" disabled={!confirmed || !password.trim() || submitting}>
+            <button type="submit" disabled={!confirmed || submitting}>
               {submitting ? "처리 중" : "계정 탈퇴"}
             </button>
           </form>
@@ -99,6 +102,13 @@ const SettingsAccountPage = () => {
           padding: 11px 12px;
           color: #1f2933;
           font: inherit;
+        }
+
+        .fieldHint {
+          margin: -8px 0 0;
+          color: #677484;
+          font-size: 0.92rem;
+          line-height: 1.5;
         }
 
         .checkRow {

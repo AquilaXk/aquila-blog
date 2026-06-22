@@ -67,7 +67,8 @@ export const createPrivacyRequest = (input: {
   })
 
 export const deletePrivacyAccount = (input: {
-  password: string
+  password?: string
+  oauthAccountDeletionConfirmed?: boolean
   reason?: string
 }) =>
   apiFetch<RsData<AccountDeletionResult>>(PRIVACY_ACCOUNT_PATH, {

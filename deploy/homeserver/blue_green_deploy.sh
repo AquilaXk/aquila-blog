@@ -17,6 +17,7 @@ NETWORK_NAME="blog_home_default"
 DEPLOY_LOCK_DIR="${SCRIPT_DIR}/.deploy.lock"
 HEALTHCHECK_PATH="${HEALTHCHECK_PATH:-/actuator/health/readiness}"
 HEALTHCHECK_RETRIES="${HEALTHCHECK_RETRIES:-120}"
+CANDIDATE_HEALTHCHECK_RETRIES="${CANDIDATE_HEALTHCHECK_RETRIES:-450}"
 HEALTHCHECK_INTERVAL_SECONDS="${HEALTHCHECK_INTERVAL_SECONDS:-2}"
 HEALTHCHECK_CONNECT_TIMEOUT_SECONDS="${HEALTHCHECK_CONNECT_TIMEOUT_SECONDS:-2}"
 HEALTHCHECK_MAX_TIME_SECONDS="${HEALTHCHECK_MAX_TIME_SECONDS:-5}"
@@ -111,6 +112,8 @@ normalize_non_negative_int() {
 
 RUNTIME_SPLIT_ENABLED="$(normalize_bool "${RUNTIME_SPLIT_ENABLED}")"
 RUNTIME_SPLIT_STAGE="$(normalize_runtime_split_stage "${RUNTIME_SPLIT_STAGE}")"
+HEALTHCHECK_RETRIES="$(normalize_positive_int "${HEALTHCHECK_RETRIES}" "120")"
+CANDIDATE_HEALTHCHECK_RETRIES="$(normalize_positive_int "${CANDIDATE_HEALTHCHECK_RETRIES}" "450")"
 STREAM_DRAIN_SECONDS="$(normalize_non_negative_int "${STREAM_DRAIN_SECONDS}" "15")"
 BLUE_GREEN_BURN_IN_STANDARD_SECONDS="$(normalize_non_negative_int "${BLUE_GREEN_BURN_IN_STANDARD_SECONDS}" "180")"
 BLUE_GREEN_BURN_IN_HIGH_RISK_SECONDS="$(normalize_non_negative_int "${BLUE_GREEN_BURN_IN_HIGH_RISK_SECONDS}" "600")"
@@ -1905,6 +1908,16 @@ check_backend_health() {
   return 1
 }
 
+check_candidate_backend_health() {
+  local backend="$1"
+  local previous_retries="${HEALTHCHECK_RETRIES}"
+  HEALTHCHECK_RETRIES="${CANDIDATE_HEALTHCHECK_RETRIES}"
+  check_backend_health "${backend}"
+  local status=$?
+  HEALTHCHECK_RETRIES="${previous_retries}"
+  return "${status}"
+}
+
 check_notification_sse_route() {
   local api_domain="$1"
   local admin_email admin_password
@@ -2370,7 +2383,7 @@ if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
     echo "skip runtime helper dns check before candidate health: helpers were not prebooted"
   fi
 fi
-if ! check_backend_health "${next_backend}"; then
+if ! check_candidate_backend_health "${next_backend}"; then
   echo "candidate backend health failed before cutover: ${next_backend}" >&2
   compose stop "${next_backend}" || true
   exit 1

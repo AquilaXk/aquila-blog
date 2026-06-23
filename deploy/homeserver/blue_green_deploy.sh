@@ -2328,8 +2328,10 @@ action_backend_host="$(backend_host "${next_backend}")"
 echo "starting infra before ${next_backend} (${action_backend_host})"
 services_to_boot=(db_1 redis_1 minio_1 uptime_kuma autoheal)
 compose_up_with_retry "${services_to_boot[@]}"
+runtime_split_helpers_prebooted="false"
 if is_backend_running "${active_backend}"; then
   start_runtime_split_helper_backends_on_active "${active_backend}"
+  runtime_split_helpers_prebooted="true"
 else
   echo "skip active-image helper preboot: active backend is not running (${active_backend}); candidate will migrate first"
 fi
@@ -2353,8 +2355,12 @@ fi
 # Verify cutover target DNS and currently running active backend DNS (if running).
 check_required_backend_dns_from_caddy "${next_backend}" "${active_backend}"
 if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
-  check_backend_dns_from_caddy "back_read"
-  check_backend_dns_from_caddy "back_admin"
+  if [[ "${runtime_split_helpers_prebooted}" == "true" ]]; then
+    check_backend_dns_from_caddy "back_read"
+    check_backend_dns_from_caddy "back_admin"
+  else
+    echo "skip runtime helper dns check before candidate health: helpers were not prebooted"
+  fi
 fi
 check_backend_health "${next_backend}"
 if ! restart_runtime_split_backends_after_candidate_ready "${next_backend}"; then
@@ -2362,6 +2368,10 @@ if ! restart_runtime_split_backends_after_candidate_ready "${next_backend}"; the
   restore_runtime_split_helper_backends_to_active "${active_backend}" "${next_backend}" || true
   compose stop "${next_backend}" || true
   exit 1
+fi
+if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
+  check_backend_dns_from_caddy "back_read"
+  check_backend_dns_from_caddy "back_admin"
 fi
 
 switch_caddy_upstream "${next_backend}"

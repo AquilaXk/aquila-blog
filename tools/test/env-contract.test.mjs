@@ -1387,9 +1387,18 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
   const preCandidateBootEnd = deployScript.indexOf('compose_up_with_retry "${services_to_boot[@]}"')
   const activeHelperGuardIndex = deployScript.indexOf('if is_backend_running "${active_backend}"; then')
   const activeHelperStartIndex = deployScript.indexOf('start_runtime_split_helper_backends_on_active "${active_backend}"')
+  const helperPrebootFlagInitIndex = deployScript.indexOf('runtime_split_helpers_prebooted="false"')
+  const helperPrebootFlagSetIndex = deployScript.indexOf('runtime_split_helpers_prebooted="true"')
+  const preCandidateHelperDnsSkipIndex = deployScript.indexOf(
+    "skip runtime helper dns check before candidate health: helpers were not prebooted",
+  )
   const edgeBootIndex = deployScript.indexOf("edge_services_to_boot=(caddy cloudflared)")
   const candidateHealthIndex = deployScript.indexOf('check_backend_health "${next_backend}"')
   const helperRestartIndex = deployScript.indexOf('if ! restart_runtime_split_backends_after_candidate_ready "${next_backend}"; then')
+  const postRestartHelperDnsIndex = deployScript.indexOf(
+    'check_backend_dns_from_caddy "back_read"',
+    helperRestartIndex,
+  )
   const rollbackRouteIndex = rollbackBlock.indexOf('switch_caddy_upstream "${rollback_backend}"')
   const rollbackRestoreIndex = rollbackBlock.indexOf('restore_runtime_split_helper_backends_to_active "${rollback_backend}" "${inactive_backend}"')
   const burnInRollbackRouteIndex = burnInRollbackBlock.indexOf('switch_caddy_upstream "${previous_backend}"')
@@ -1412,9 +1421,16 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
   assert(activeHelperGuardIndex > preCandidateBootEnd, "active helper preboot must check that active backend is running")
   assert(activeHelperStartIndex > preCandidateBootEnd, "runtime split helpers must start on active image after data infra")
   assert(activeHelperStartIndex > activeHelperGuardIndex, "runtime split helpers must not preboot on fresh deployments")
+  assert(helperPrebootFlagInitIndex > preCandidateBootEnd, "helper DNS gate state must initialize after data infra boot")
+  assert(helperPrebootFlagSetIndex > activeHelperStartIndex, "helper DNS gate state must only flip after active helper preboot")
+  assert(
+    preCandidateHelperDnsSkipIndex > activeHelperStartIndex,
+    "fresh runtime-split deploys must skip helper DNS checks before helpers start",
+  )
   assert(edgeBootIndex > activeHelperStartIndex, "edge services must start after active-image helpers exist")
   assert(candidateHealthIndex > preCandidateBootEnd, "candidate healthcheck must happen after infra boot")
   assert(helperRestartIndex > candidateHealthIndex, "runtime split helpers must restart after candidate health with explicit failure handling")
+  assert(postRestartHelperDnsIndex > helperRestartIndex, "helper DNS checks must run after candidate-backed helper startup")
   assert(rollbackRouteIndex >= 0, "rollback must switch caddy route")
   assert(rollbackRestoreIndex > rollbackRouteIndex, "rollback helper recovery must run after route rollback")
   assert(burnInRollbackRouteIndex >= 0, "burn-in rollback must switch caddy route")

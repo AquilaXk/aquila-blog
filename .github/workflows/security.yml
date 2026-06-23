@@ -106,6 +106,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Fetch PR base ref for design color guard
+        if: github.event_name == 'pull_request' && matrix.language == 'javascript-typescript'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@256d634097be96e792d6764f9edaefc4320557b1 # v4
         with:

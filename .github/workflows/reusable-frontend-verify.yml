@@ -25,6 +25,13 @@ jobs:
           git fetch --depth=1 origin "${GITHUB_REF}"
           git checkout --force FETCH_HEAD
 
+      - name: Fetch PR base ref for design color guard
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"
+
       - name: Detect frontend-related changes
         id: changes
         env:

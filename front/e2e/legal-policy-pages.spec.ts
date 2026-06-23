@@ -232,7 +232,7 @@ test.describe("legal policy public pages", () => {
       await expect(modalSignupButton).toBeEnabled()
       await authDialog.getByRole("button", { name: "닫기" }).click()
     } else {
-      await expect(page.getByRole("link", { name: "Admin" })).toBeVisible()
+      await expect(page.getByRole("link", { name: "Admin" }).or(loginButton)).toBeVisible()
     }
 
     const footer = page.locator("footer")

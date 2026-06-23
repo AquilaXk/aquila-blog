@@ -46,9 +46,7 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
   const initialAdminProfileSource: StaticAdminProfileSeedSource =
     adminProfileResult.ok && adminProfileResult.value
       ? "published"
-      : fallbackProfileSnapshot?.source === "cookie-snapshot"
-        ? "published"
-        : "static-fallback"
+      : "static-fallback"
 
   res.setHeader(
     "Cache-Control",
@@ -128,7 +126,7 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile, in
   const supplementalSections = aboutDetailSections.filter(
     (section) => section !== projectSection && section !== timelineSection
   )
-  const githubHref = contactLinks.find((item) => item.label.toLowerCase().includes("github"))?.safeHref || ""
+  const hasProfileLinks = contactLinks.length > 0 || serviceLinks.length > 0
   const workspaceProjects =
     adminProfile?.aboutProjects && adminProfile.aboutProjects.length > 0
       ? adminProfile.aboutProjects
@@ -203,35 +201,29 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile, in
               </div>
             </section>
 
-            <section>
-              <h2>Links</h2>
-              <div className="stack-list">
-                {contactLinks.map((item) => (
-                  <div className="stack-row" key={`${item.label}-${item.safeHref}`}>
-                    <strong>{item.label.toUpperCase()}</strong>
-                    <a href={item.safeHref} target="_blank" rel="noopener noreferrer">
-                      {item.safeHref.replace(/^https?:\/\//, "")}
-                    </a>
-                  </div>
-                ))}
-                {serviceLinks.map((item) => (
-                  <div className="stack-row" key={`${item.label}-${item.safeHref}`}>
-                    <strong>{item.label.toUpperCase()}</strong>
-                    <a href={item.safeHref} target="_blank" rel="noopener noreferrer">
-                      {item.safeHref.replace(/^https?:\/\//, "")}
-                    </a>
-                  </div>
-                ))}
-                {contactLinks.length === 0 && serviceLinks.length === 0 && githubHref ? (
-                  <div className="stack-row">
-                    <strong>REPOSITORY</strong>
-                    <a href={githubHref} target="_blank" rel="noopener noreferrer">
-                      {githubHref.replace(/^https?:\/\//, "")}
-                    </a>
-                  </div>
-                ) : null}
-              </div>
-            </section>
+            {hasProfileLinks ? (
+              <section>
+                <h2>Links</h2>
+                <div className="stack-list">
+                  {contactLinks.map((item) => (
+                    <div className="stack-row" key={`${item.label}-${item.safeHref}`}>
+                      <strong>{item.label.toUpperCase()}</strong>
+                      <a href={item.safeHref} target="_blank" rel="noopener noreferrer">
+                        {item.safeHref.replace(/^https?:\/\//, "")}
+                      </a>
+                    </div>
+                  ))}
+                  {serviceLinks.map((item) => (
+                    <div className="stack-row" key={`${item.label}-${item.safeHref}`}>
+                      <strong>{item.label.toUpperCase()}</strong>
+                      <a href={item.safeHref} target="_blank" rel="noopener noreferrer">
+                        {item.safeHref.replace(/^https?:\/\//, "")}
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
 
             {projectItems.length > 0 ? (
               <section id="about-projects" data-ui="about-projects">

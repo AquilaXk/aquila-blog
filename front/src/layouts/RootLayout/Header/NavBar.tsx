@@ -66,11 +66,15 @@ const NavBar = ({ showThemeToggle = true }: Props) => {
       </ul>
 
       <div className="authArea">
-        <button type="button" className="searchTrigger">
+        <Link
+          href={{ pathname: "/", hash: "feed-search-input" }}
+          className="searchTrigger"
+          aria-label="글과 태그 검색으로 이동"
+        >
           <SearchIcon />
           <span>글과 태그 검색</span>
           <kbd>⌘ K</kbd>
-        </button>
+        </Link>
 
         {showThemeToggle ? <ThemeToggle /> : null}
 
@@ -104,13 +108,6 @@ const NavBar = ({ showThemeToggle = true }: Props) => {
           </Link>
         ) : null}
 
-        <button
-          type="button"
-          className="mobileMenuTrigger"
-          data-ui="nav-control"
-        >
-          Menu
-        </button>
       </div>
 
       <AuthEntryModal
@@ -198,6 +195,7 @@ const StyledWrapper = styled.div`
     color: ${({ theme }) => theme.colors.gray9};
     border-radius: 0;
     cursor: pointer;
+    text-decoration: none;
 
     svg {
       width: 0.9375rem;
@@ -253,20 +251,6 @@ const StyledWrapper = styled.div`
     color: ${({ theme }) => theme.colors.gray1};
   }
 
-  .mobileMenuTrigger {
-    display: none;
-    min-height: 36px;
-    padding: 0 0.52rem;
-    border-radius: ${({ theme }) => theme.variables.navControl.radius}px;
-    border: none;
-    background: transparent;
-    color: ${({ theme }) => theme.colors.gray11};
-    align-items: center;
-    justify-content: center;
-    font-size: ${({ theme }) => theme.variables.navControl.fontSize}rem;
-    font-weight: 630;
-  }
-
   @media (max-width: 860px) {
     .searchTrigger,
     .bellSlot,
@@ -282,10 +266,6 @@ const StyledWrapper = styled.div`
 
     .authArea {
       gap: 0.28rem;
-    }
-
-    .mobileMenuTrigger {
-      display: none;
     }
   }
 

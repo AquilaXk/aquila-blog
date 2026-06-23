@@ -49,7 +49,7 @@ const StyledWrapper = styled(Link)`
   }
 
   em {
-    color: ${({ theme }) => theme.colors.gray9};
+    color: ${({ theme }) => theme.colors.gray10};
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
     font-size: 0.625rem;
     line-height: 1;

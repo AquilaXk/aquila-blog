@@ -192,7 +192,7 @@ const StyledWrapper = styled.div`
     align-items: center;
     gap: 0.5rem;
     padding: 0 0.625rem;
-    color: ${({ theme }) => theme.colors.gray9};
+    color: ${({ theme }) => theme.colors.gray10};
     border-radius: 0;
     cursor: pointer;
     text-decoration: none;

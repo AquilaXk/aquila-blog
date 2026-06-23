@@ -444,36 +444,46 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
   return (
     <>
       <PinnedPosts posts={pinnedPosts} />
-      <ExplorerCard>
-        <div className="searchSlot">
-          <SearchInput
-            inputRef={searchInputRef}
-            value={q}
-            onChange={(event) => setQ(event.target.value)}
-            onCompositionStart={() => setIsComposing(true)}
-            onCompositionEnd={() => setIsComposing(false)}
-          />
-        </div>
-      </ExplorerCard>
       <FeedBody data-sticky-rail-safe="true">
         <aside className="tagColumn">
           <TagList />
         </aside>
         <section className="postColumn">
-          <FilterContextBar data-visible={hasFilter}>
-            <div className="contextMain">
-              <strong className="contextCount">{hasFilter ? `${resultCount}개` : `피드 ${resultCount}개`}</strong>
-              {hasFilter && <span className="filterSummary">{filterSummary}</span>}
-              {contextStatusLabel ? <span className="statusBadge">{contextStatusLabel}</span> : null}
+          <ExplorerCard>
+            <div className="feedTitle">
+              <span>Latest Notes</span>
+              <h2>최근 글</h2>
+              <p className="feedDescription">실제 운영에서 마주친 문제와 선택, 검증 결과를 긴 글로 정리합니다.</p>
             </div>
-            <div className="contextActions">
-              {hasFilter && (
-                <button type="button" className="resetButton" onClick={handleClearFilters}>
-                  초기화
-                </button>
-              )}
+            <div className="searchSlot">
+              <SearchInput
+                inputRef={searchInputRef}
+                value={q}
+                onChange={(event) => setQ(event.target.value)}
+                onCompositionStart={() => setIsComposing(true)}
+                onCompositionEnd={() => setIsComposing(false)}
+              />
+              <select className="sortSelect" aria-label="피드 정렬" value="latest" onChange={() => undefined}>
+                <option value="latest">최신순</option>
+              </select>
             </div>
-          </FilterContextBar>
+          </ExplorerCard>
+          {(hasFilter || contextStatusLabel) && (
+            <FilterContextBar>
+              <div className="contextMain">
+                <strong className="contextCount">{hasFilter ? `${resultCount}개` : `피드 ${resultCount}개`}</strong>
+                {hasFilter && <span className="filterSummary">{filterSummary}</span>}
+                {contextStatusLabel ? <span className="statusBadge">{contextStatusLabel}</span> : null}
+              </div>
+              <div className="contextActions">
+                {hasFilter && (
+                  <button type="button" className="resetButton" onClick={handleClearFilters}>
+                    초기화
+                  </button>
+                )}
+              </div>
+            </FilterContextBar>
+          )}
           <PostList
             posts={regularPosts}
             hasFilter={hasFilter}

@@ -26,7 +26,9 @@ test.describe("mobile layout public", () => {
 
   await page.goto("/")
   await expect(page.getByLabel("Search posts by keyword")).toBeVisible()
-  await expect(page.getByRole("button", { name: "헤더 메뉴 열기" })).toBeVisible()
+  await expect(page.getByRole("link", { name: "Notes" })).toBeVisible()
+  await expect(page.getByRole("link", { name: "Topics" })).toBeVisible()
+  await expect(page.getByRole("link", { name: "About" })).toBeVisible()
   await expect(page.getByRole("button", { name: "전체보기" })).toBeVisible()
   await expect(page.locator("a[href^='/posts/'] h2").first()).toBeVisible()
   const moreTagButton = page.getByRole("button", { name: /더보기/ })

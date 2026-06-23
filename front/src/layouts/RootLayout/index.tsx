@@ -10,15 +10,7 @@ import { useQuery } from "@tanstack/react-query"
 import { CONFIG } from "site.config"
 import type { AdminProfile } from "src/hooks/useAdminProfile"
 import { isNavigationCancelledError, isRequestCancelledError } from "src/libs/router"
-import {
-  CONTENT_MAX_WIDTH_PX,
-  DESKTOP_LOCK_MAX_PX,
-  DESKTOP_LOCK_MIN_PX,
-  DESKTOP_LOCK_WIDTH_PX,
-  FLUID_LAYOUT_MAX_PX,
-  WIDE_CONTENT_BREAKPOINT_PX,
-  WIDE_CONTENT_MAX_PX,
-} from "./layoutTiers"
+import { FLUID_LAYOUT_MAX_PX } from "./layoutTiers"
 
 const PUBLIC_ADMIN_PROFILE_QUERY_KEY = ["member", "adminProfile"] as const
 const INITIAL_PROPS_CANCELLED_MESSAGE = "loading initial props cancelled"
@@ -200,32 +192,20 @@ export default RootLayout
 const StyledMain = styled.main<{ $fullBleed?: boolean }>`
   margin: 0 auto;
   box-sizing: border-box;
-  width: ${({ $fullBleed }) => ($fullBleed ? "100%" : `min(100%, ${CONTENT_MAX_WIDTH_PX}px)`)};
-  padding: ${({ $fullBleed }) => ($fullBleed ? "0" : "0 clamp(0.85rem, 1.6vw, 1.2rem)")};
+  width: ${({ $fullBleed }) => ($fullBleed ? "100%" : "min(calc(100% - 40px), 1240px)")};
+  padding: 0;
   overflow-x: ${({ $fullBleed }) => ($fullBleed ? "clip" : "visible")};
 
   ${({ $fullBleed }) =>
     $fullBleed
       ? ""
       : `
-        @media (max-width: ${WIDE_CONTENT_BREAKPOINT_PX}px) {
-          width: min(100%, ${WIDE_CONTENT_MAX_PX}px);
-        }
-
-        /* Velog-like desktop width lock: fixed content rail before tablet/mobile fluid mode */
-        @media (max-width: ${DESKTOP_LOCK_MAX_PX}px) and (min-width: ${DESKTOP_LOCK_MIN_PX}px) {
-          width: min(100%, ${DESKTOP_LOCK_WIDTH_PX}px);
-        }
-
         @media (max-width: ${FLUID_LAYOUT_MAX_PX}px) {
-          width: 100%;
-          padding-left: 1rem;
-          padding-right: 1rem;
+          width: min(calc(100% - 24px), 1240px);
         }
 
         @media (max-width: 768px) {
-          padding-left: 0.85rem;
-          padding-right: 0.85rem;
+          width: min(calc(100% - 24px), 1240px);
         }
       `}
 `

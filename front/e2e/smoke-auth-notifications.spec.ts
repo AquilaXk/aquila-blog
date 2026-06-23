@@ -237,21 +237,21 @@ test.describe("core smoke auth and notifications", () => {
   await expect(page.getByText("이메일 또는 비밀번호가 올바르지 않습니다.")).toBeVisible()
 })
 
-  test("회원가입 메일 시작 실패 메시지가 표준화된다", async ({ page }) => {
-  await page.route("**/member/api/v1/signup/email/start", async (route) => {
-    await route.fulfill({
-      status: 500,
-      contentType: "application/json",
-      body: JSON.stringify({ resultCode: "500-1", msg: "smtp down" }),
-    })
-  })
-
+  test("회원가입 화면은 현재 환경 정책에 맞게 렌더한다", async ({ page }) => {
   await page.goto("/signup")
-  await page.getByLabel("이메일").fill("smoke@example.com")
-  await page.getByRole("checkbox", { name: /이용약관/ }).check()
-  await page.getByRole("checkbox", { name: /개인정보처리방침/ }).check()
-  await page.getByRole("button", { name: "인증 메일 보내기" }).click()
 
-  await expect(page.getByText("회원가입 메일 발송에 실패했습니다.")).toBeVisible()
+  const disabledHeading = page.getByRole("heading", { level: 1, name: "회원가입 준비 중" })
+  if (await disabledHeading.isVisible()) {
+    await expect(disabledHeading).toBeVisible()
+    await expect(page.getByText("회원가입은 출시 전 개인정보 처리 점검이 완료될 때까지 사용할 수 없습니다.")).toBeVisible()
+    await expect(page.getByLabel("이메일")).toHaveCount(0)
+    return
+  }
+
+  const signupForm = page.locator("form")
+  await expect(page.getByRole("heading", { level: 1, name: "회원가입" })).toBeVisible()
+  await expect(signupForm.getByRole("button", { name: "인증 메일 보내기" })).toBeDisabled()
+  await expect(signupForm.getByRole("link", { name: "개인정보처리방침" })).toHaveAttribute("href", "/privacy")
+  await expect(signupForm.getByRole("link", { name: "이용약관" })).toHaveAttribute("href", "/terms")
 })
 })

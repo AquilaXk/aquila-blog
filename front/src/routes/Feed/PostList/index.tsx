@@ -201,7 +201,7 @@ const PostList: React.FC<Props> = ({
             className="deferredPostCardWrap"
           >
             {shouldMountCard ? (
-              <PostCard data={post} layout="regular" />
+              <PostCard data={post} layout="regular" index={index} />
             ) : (
               <article className="deferredPostCardPlaceholder" aria-hidden="true" />
             )}
@@ -252,22 +252,12 @@ const PostList: React.FC<Props> = ({
 export default memo(PostList)
 
 const StyledWrapper = styled.div`
-  margin: 0.9rem 0 0.35rem;
+  margin: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 1rem;
+  gap: 0;
   align-items: start;
   overflow-anchor: none;
-
-  @media (min-width: 768px) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 2rem;
-  }
-
-  @media (min-width: 1440px) {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 2rem;
-  }
 
   .emptyState {
     grid-column: 1 / -1;
@@ -479,27 +469,26 @@ const StyledWrapper = styled.div`
     width: 100%;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    gap: 1rem;
+    gap: 0.85rem;
     align-items: start;
 
     @media (min-width: 768px) {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 2rem;
+      grid-template-columns: minmax(0, 1fr);
     }
 
     @media (min-width: 1440px) {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 2rem;
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 
   .skeletonCard {
     position: relative;
     overflow: hidden;
-    min-height: 26rem;
-    border-radius: 15px;
-    border: 1px solid ${({ theme }) => theme.colors.gray5};
-    background: ${({ theme }) => theme.colors.gray2};
+    min-height: 11.5rem;
+    border-radius: 0;
+    border: 0;
+    border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+    background: transparent;
 
     &::before,
     &::after {
@@ -517,14 +506,15 @@ const StyledWrapper = styled.div`
     }
 
     &::before {
-      width: 100%;
-      aspect-ratio: 1.92 / 1;
+      width: min(100%, 12rem);
+      aspect-ratio: 1.45 / 1;
+      margin-left: auto;
     }
 
     &::after {
-      margin: 0.95rem 1rem 1rem;
-      border-radius: 10px;
-      min-height: 10.6rem;
+      margin: 0.95rem 0 1rem;
+      border-radius: 4px;
+      min-height: 4.4rem;
     }
   }
 
@@ -535,17 +525,10 @@ const StyledWrapper = styled.div`
 
   .deferredPostCardPlaceholder {
     width: 100%;
-    min-height: 26rem;
-    border-radius: 4px;
-    border: ${({ theme }) => `${theme.variables.ui.card.borderWidth}px solid ${theme.colors.gray4}`};
-    background:
-      linear-gradient(
-        180deg,
-        ${({ theme }) => theme.colors.gray2} 0%,
-        ${({ theme }) => theme.colors.gray2} 45%,
-        ${({ theme }) => theme.colors.gray1} 45%,
-        ${({ theme }) => theme.colors.gray1} 100%
-      );
+    min-height: 11.5rem;
+    border-radius: 0;
+    border-bottom: ${({ theme }) => `${theme.variables.ui.card.borderWidth}px solid ${theme.colors.gray4}`};
+    background: transparent;
   }
 
   @media (max-width: 640px) {

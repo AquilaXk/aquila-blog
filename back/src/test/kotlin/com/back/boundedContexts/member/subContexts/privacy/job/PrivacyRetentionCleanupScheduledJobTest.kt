@@ -2,6 +2,7 @@ package com.back.boundedContexts.member.subContexts.privacy.job
 
 import com.back.boundedContexts.member.subContexts.memberActionLog.application.port.output.MemberActionLogRepositoryPort
 import com.back.boundedContexts.member.subContexts.memberActionLog.domain.MemberActionLog
+import com.back.boundedContexts.member.subContexts.notification.adapter.persistence.MemberNotificationRepository
 import com.back.boundedContexts.member.subContexts.notification.application.port.output.MemberNotificationRepositoryPort
 import com.back.boundedContexts.member.subContexts.notification.domain.MemberNotification
 import com.back.boundedContexts.member.subContexts.privacy.application.port.output.MemberAccountDeletionRepositoryPort
@@ -13,6 +14,7 @@ import com.back.boundedContexts.member.subContexts.signupVerification.domain.Mem
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.util.UUID
 
@@ -79,6 +81,18 @@ class PrivacyRetentionCleanupScheduledJobTest {
 
         assertThat(signup.calls).hasSize(2)
         assertThat(empty.calls).hasSize(1)
+    }
+
+    @Test
+    fun `notification retention delete query는 scheduled job에서 단독 실행되도록 transactional 이다`() {
+        val method =
+            MemberNotificationRepository::class.java.getMethod(
+                "deleteCreatedBefore",
+                Instant::class.java,
+                Int::class.javaPrimitiveType,
+            )
+
+        assertThat(method.isAnnotationPresent(Transactional::class.java)).isTrue()
     }
 
     private data class DeleteCall(

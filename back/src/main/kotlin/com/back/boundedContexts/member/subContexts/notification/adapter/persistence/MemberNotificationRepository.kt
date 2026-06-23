@@ -77,6 +77,7 @@ interface MemberNotificationRepository : JpaRepository<MemberNotification, Long>
     ): Int
 
     @Modifying(clearAutomatically = false, flushAutomatically = true)
+    @Transactional
     @Query(
         value = """
         delete from member_notification

@@ -91,3 +91,36 @@ test("optional analytics and RUM stay silent before consent and after withdrawal
 
   expect(optionalTrackingRequests, "post-withdrawal optional tracking requests").toEqual([])
 })
+
+test("browser DNT surfaces block optional tracking even with granted consent", async ({ page }) => {
+  await page.addInitScript(({ key }) => {
+    Object.defineProperty(window, "doNotTrack", { configurable: true, value: "1" })
+    Object.defineProperty(Navigator.prototype, "doNotTrack", { configurable: true, value: "yes" })
+    Object.defineProperty(Navigator.prototype, "msDoNotTrack", { configurable: true, value: "1" })
+    window.localStorage.setItem(
+      key,
+      JSON.stringify({
+        version: 1,
+        state: "granted",
+        updatedAt: "2026-06-23T00:00:00.000Z",
+        source: "settings",
+        categories: {
+          analytics: true,
+          rum: true,
+        },
+      }),
+    )
+  }, { key: OPTIONAL_TRACKING_CONSENT_STORAGE_KEY })
+  const optionalTrackingRequests = collectOptionalTrackingRequests(page)
+
+  await page.goto("/", { waitUntil: "domcontentloaded" })
+  await waitForClientTrackingWindow(page)
+
+  const blockedTrackingResults = await page.evaluate(async () => {
+    const fetchResponse = await window.fetch("/_vercel/insights/view", { method: "POST" })
+    const beaconResult = window.navigator.sendBeacon("/_vercel/speed-insights/vitals", "{}")
+    return { beaconResult, fetchStatus: fetchResponse.status }
+  })
+  expect(blockedTrackingResults).toEqual({ beaconResult: true, fetchStatus: 204 })
+  expect(optionalTrackingRequests, "DNT optional tracking requests").toEqual([])
+})

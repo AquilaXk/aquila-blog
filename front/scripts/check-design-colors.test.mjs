@@ -47,6 +47,25 @@ test("findDirectColorViolations ignores removed lines and theme tokens", () => {
   assert.deepEqual(findDirectColorViolations(diff), [])
 })
 
+test("findDirectColorViolations ignores URL fragment references", () => {
+  const diff = [
+    "diff --git a/src/layouts/RootLayout/Header.tsx b/src/layouts/RootLayout/Header.tsx",
+    "+++ b/src/layouts/RootLayout/Header.tsx",
+    "@@ -1,0 +1,3 @@",
+    '+  <a href="#feed">Feed</a>',
+    '+  mask: url(#fade);',
+    '+  color: "#ffffff";',
+  ].join("\n")
+
+  assert.deepEqual(findDirectColorViolations(diff), [
+    {
+      file: "src/layouts/RootLayout/Header.tsx",
+      line: 3,
+      source: 'color: "#ffffff";',
+    },
+  ])
+})
+
 test("committedDiffRange avoids requiring a shallow checkout merge base", () => {
   assert.equal(committedDiffRange("origin/main"), "origin/main..HEAD")
 })

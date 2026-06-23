@@ -12,6 +12,8 @@ const TARGET_PATHS = [
 
 const DIRECT_COLOR_PATTERN =
   /(?:^|[^A-Za-z0-9_-])(?:#[0-9A-Fa-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\))/
+const FRAGMENT_REFERENCE_PATTERN =
+  /(?:href\s*=\s*["']#[A-Za-z][\w:-]*["']|url\(\s*#[A-Za-z][\w:-]*\s*\))/g
 
 const runGit = (args, options = {}) =>
   execFileSync("git", args, {
@@ -91,7 +93,8 @@ export const findDirectColorViolations = (diffText) => {
     }
 
     const sourceLine = line.slice(1)
-    if (DIRECT_COLOR_PATTERN.test(sourceLine)) {
+    const colorSourceLine = sourceLine.replace(FRAGMENT_REFERENCE_PATTERN, "")
+    if (DIRECT_COLOR_PATTERN.test(colorSourceLine)) {
       violations.push({
         file: currentFile,
         line: addedLineNumber,

@@ -34,6 +34,26 @@ test("findDirectColorViolations reports added rgb colors", () => {
   assert.equal(findDirectColorViolations(diff).length, 1)
 })
 
+test("findDirectColorViolations reports multi-line functional colors", () => {
+  const diff = [
+    "diff --git a/src/routes/Feed/Card.tsx b/src/routes/Feed/Card.tsx",
+    "+++ b/src/routes/Feed/Card.tsx",
+    "@@ -20,0 +21,4 @@",
+    "+  box-shadow: 0 8px 20px rgba(",
+    "+    15,",
+    "+    23,",
+    "+    42,",
+  ].join("\n")
+
+  assert.deepEqual(findDirectColorViolations(diff), [
+    {
+      file: "src/routes/Feed/Card.tsx",
+      line: 21,
+      source: "box-shadow: 0 8px 20px rgba(",
+    },
+  ])
+})
+
 test("findDirectColorViolations ignores removed lines and theme tokens", () => {
   const diff = [
     "diff --git a/src/routes/Feed/Card.tsx b/src/routes/Feed/Card.tsx",

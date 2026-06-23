@@ -12,6 +12,7 @@ const TARGET_PATHS = [
 
 const DIRECT_COLOR_PATTERN =
   /(?:^|[^A-Za-z0-9_-])(?:#[0-9A-Fa-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\))/
+const FUNCTION_COLOR_START_PATTERN = /(?:^|[^A-Za-z0-9_-])(?:rgba?|hsla?)\(/
 const FRAGMENT_REFERENCE_PATTERN =
   /(?:href\s*=\s*(?:["']#[A-Za-z][\w:-]*["']|\{\s*["']#[A-Za-z][\w:-]*["']\s*\})|url\(\s*["']?#[A-Za-z][\w:-]*["']?\s*\))/g
 
@@ -94,7 +95,10 @@ export const findDirectColorViolations = (diffText) => {
 
     const sourceLine = line.slice(1)
     const colorSourceLine = sourceLine.replace(FRAGMENT_REFERENCE_PATTERN, "")
-    if (DIRECT_COLOR_PATTERN.test(colorSourceLine)) {
+    if (
+      DIRECT_COLOR_PATTERN.test(colorSourceLine) ||
+      FUNCTION_COLOR_START_PATTERN.test(colorSourceLine)
+    ) {
       violations.push({
         file: currentFile,
         line: addedLineNumber,

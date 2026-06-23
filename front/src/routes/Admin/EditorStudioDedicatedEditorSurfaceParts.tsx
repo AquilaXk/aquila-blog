@@ -70,7 +70,7 @@ export const EditorExitAction = styled.button `
   padding: 0.2rem 0.32rem;
   margin: 0;
   border: 0;
-  border-radius: 10px;
+  border-radius: 6px;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
   font-size: 0.98rem;
@@ -140,7 +140,7 @@ export const EditorStudioSaveState = styled.span `
 `;
 const Button = styled.button `
   border: 1px solid ${({ theme }) => (theme.colors.gray6)};
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 0.62rem 0.92rem;
   min-height: 44px;
   background: ${({ theme }) => ("transparent")};
@@ -172,17 +172,17 @@ const Button = styled.button `
   }
 `;
 export const PrimaryButton = styled(Button) `
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 0.6rem 0.88rem;
-  border-color: #005fc4;
-  background: #005fc4;
-  color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : theme.colors.gray12)};
+  border-color: ${({ theme }) => theme.publicDesign.accent};
+  background: ${({ theme }) => theme.publicDesign.accent};
+  color: ${({ theme }) => theme.colors.accentControlText};
   font-weight: 700;
 
   &:hover:not(:disabled) {
-    border-color: #0052ad;
-    background: #0052ad;
-    color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : theme.colors.gray12)};
+    border-color: ${({ theme }) => theme.colors.accentControlHover};
+    background: ${({ theme }) => theme.colors.accentControlHover};
+    color: ${({ theme }) => theme.colors.accentControlText};
   }
 `;
 export const EditorStudioFrame = styled.div `
@@ -238,9 +238,9 @@ export const SelectedTagChip = styled.span `
   min-width: 0;
   max-width: 100%;
   min-height: 32px;
-  border-radius: 999px;
+  border-radius: 0;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray3};
+  background: ${({ theme }) => theme.publicDesign.surfaceElevated};
   overflow: hidden;
   transition:
     border-color 0.18s ease,
@@ -274,7 +274,7 @@ export const SelectedTagChip = styled.span `
     padding: 0 0.52rem;
     border: 0;
     border-left: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
+    background: ${({ theme }) => theme.publicDesign.readableSurface};
     color: ${({ theme }) => theme.colors.gray10};
     cursor: pointer;
     flex: 0 0 auto;
@@ -383,7 +383,8 @@ export const EditorHeaderAvatar = styled.div<{
   width: ${({ $compact }) => ($compact ? "40px" : "48px")};
   height: ${({ $compact }) => ($compact ? "40px" : "48px")};
   flex-shrink: 0;
-  border-radius: 999px;
+  border-radius: 0;
+  border: 1px solid ${({ theme }) => theme.publicDesign.borderStrong};
   overflow: hidden;
   background: ${({ theme }) => theme.colors.gray3};
 
@@ -426,9 +427,9 @@ export const EditorHeaderMetaPill = styled.span<{
   align-items: center;
   min-height: ${({ $compact }) => ($compact ? "30px" : "34px")};
   padding: ${({ $compact }) => ($compact ? "0 0.72rem" : "0 0.82rem")};
-  border-radius: 999px;
+  border-radius: 0;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  background: ${({ theme }) => theme.publicDesign.surfaceElevated};
   color: ${({ theme }) => theme.colors.gray11};
   font-size: ${({ $compact }) => ($compact ? "0.74rem" : "0.82rem")};
   font-weight: 650;
@@ -437,7 +438,7 @@ export const EditorHeaderMetaPill = styled.span<{
 export const EditorHeaderActionButton = styled(Button) `
   min-height: 34px;
   padding: 0.45rem 0.7rem;
-  border-radius: 999px;
+  border-radius: 6px;
   font-size: 0.78rem;
 `;
 export const EditorStudioDedicatedCanvasSection = styled.section `

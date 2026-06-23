@@ -62,8 +62,8 @@ export const ComposeStudioContextItem = styled.div `
   min-width: 7rem;
   padding: 0.5rem 0.68rem;
   border: 1px solid ${({ theme }) => (theme.colors.gray5)};
-  border-radius: ${({ theme }) => ("12px")};
-  background: ${({ theme }) => (theme.colors.gray2)};
+  border-radius: 6px;
+  background: ${({ theme }) => theme.publicDesign.surfaceElevated};
 
   span {
     color: ${({ theme }) => theme.colors.gray10};
@@ -104,9 +104,9 @@ export const WriterHeader = styled.div `
 `;
 export const WriterAccent = styled.div `
   width: 5rem;
-  height: 0.42rem;
-  border-radius: 999px;
-  background: ${({ theme }) => (theme.colors.gray8)};
+  height: 2px;
+  border-radius: 0;
+  background: ${({ theme }) => theme.publicDesign.accent};
 `;
 export const TitleInput = styled.textarea `
   width: 100%;
@@ -166,9 +166,9 @@ export const ComposeSummaryInput = styled.textarea `
   width: 100%;
   min-height: 5.6rem;
   border: 1px solid ${({ theme }) => (theme.colors.gray5)};
-  border-radius: ${({ theme }) => ("16px")};
+  border-radius: 6px;
   padding: 0.95rem 1rem;
-  background: ${({ theme }) => (theme.colors.gray2)};
+  background: ${({ theme }) => theme.publicDesign.readableSurface};
   color: ${({ theme }) => theme.colors.gray12};
   font-size: 1rem;
   line-height: 1.7;
@@ -267,9 +267,9 @@ export const SelectedTagChip = styled.span `
   min-width: 0;
   max-width: 100%;
   min-height: 32px;
-  border-radius: 999px;
+  border-radius: 0;
   border: 1px solid ${({ theme }) => (theme.colors.gray6)};
-  background: ${({ theme }) => (theme.colors.gray3)};
+  background: ${({ theme }) => theme.publicDesign.surfaceElevated};
   overflow: hidden;
   transition:
     border-color 0.18s ease,
@@ -303,7 +303,7 @@ export const SelectedTagChip = styled.span `
     padding: 0 0.52rem;
     border: 0;
     border-left: 1px solid ${({ theme }) => (theme.colors.gray6)};
-    background: ${({ theme }) => (theme.colors.gray2)};
+    background: ${({ theme }) => theme.publicDesign.readableSurface};
     color: ${({ theme }) => theme.colors.gray10};
     cursor: pointer;
     flex: 0 0 auto;
@@ -408,7 +408,7 @@ export const WriterFooterActions = styled.div `
 `;
 export const Button = styled.button `
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 0.62rem 0.92rem;
   min-height: 44px;
   background: transparent;
@@ -440,16 +440,16 @@ export const Button = styled.button `
   }
 `;
 export const PrimaryButton = styled(Button) `
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 0.6rem 0.88rem;
-  border-color: ${({ theme }) => theme.colors.blue9};
-  background: ${({ theme }) => theme.colors.blue9};
-  color: ${({ theme }) => theme.colors.gray1};
+  border-color: ${({ theme }) => theme.publicDesign.accent};
+  background: ${({ theme }) => theme.publicDesign.accent};
+  color: ${({ theme }) => theme.colors.accentControlText};
   font-weight: 700;
 
   &:hover:not(:disabled) {
-    border-color: ${({ theme }) => theme.colors.blue10};
-    background: ${({ theme }) => theme.colors.blue10};
-    color: ${({ theme }) => theme.colors.gray1};
+    border-color: ${({ theme }) => theme.colors.accentControlHover};
+    background: ${({ theme }) => theme.colors.accentControlHover};
+    color: ${({ theme }) => theme.colors.accentControlText};
   }
 `;

@@ -613,6 +613,12 @@ check_grafana_embed_origin_route() {
   return 1
 }
 
+warn_grafana_embed_origin_route() {
+  check_grafana_embed_origin_route && return 0
+  echo "WARN grafana origin auth-proxy route unhealthy; backend deploy continues and steady-state guard monitors it" >&2
+  return 0
+}
+
 warn_grafana_embed_public_route() {
   local url
   url="$(monitoring_embed_candidate_url)"
@@ -2095,11 +2101,7 @@ run_blue_green_burn_in() {
       return 1
     fi
 
-    if ! check_grafana_embed_origin_route; then
-      echo "burn-in grafana origin auth-proxy route verify failed" >&2
-      rollback_caddy_route_only "${previous_backend}" "${candidate_backend}" "${api_domain}" || true
-      return 1
-    fi
+    warn_grafana_embed_origin_route
   done
 
   echo "burn-in ok: candidate=${candidate_backend}, previous=${previous_backend}, duration_seconds=${duration_seconds}"
@@ -2191,7 +2193,7 @@ compose_up_with_retry "${services_to_boot[@]}"
 compose_up_no_deps_with_retry loki promtail prometheus grafana
 ensure_caddy_mount_sync
 check_cloudflared_runtime "${api_domain}"
-check_grafana_embed_origin_route
+warn_grafana_embed_origin_route
 warn_grafana_embed_public_route
 validate_db_runtime_role_env
 provision_db_runtime_role
@@ -2256,12 +2258,7 @@ if ! check_cloudflared_runtime "${api_domain}"; then
 fi
 
 echo "post-switch phase: grafana embed route verify"
-if ! check_grafana_embed_origin_route; then
-  echo "post-switch grafana origin auth-proxy route verify failed" >&2
-  rollback_to_backend "${active_backend}" "${api_domain}" || true
-  compose stop "${next_backend}" || true
-  exit 1
-fi
+warn_grafana_embed_origin_route
 warn_grafana_embed_public_route
 
 echo "post-switch phase: public read prewarm"

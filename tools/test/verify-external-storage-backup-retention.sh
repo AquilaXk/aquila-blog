@@ -188,6 +188,24 @@ if AQUILA_EXTERNAL_STORAGE_ALLOW_TEST_ROOT=true \
   exit 1
 fi
 
+KEY_PARENT_ROOT="${WORK_DIR}/key-parent-root"
+KEY_PARENT_EXTERNAL_ROOT="${KEY_PARENT_ROOT}/external"
+KEY_PARENT_BACKUP_ROOT="${KEY_PARENT_EXTERNAL_ROOT}/backups"
+KEY_PARENT_FILE="${KEY_PARENT_EXTERNAL_ROOT}/keys/rotated/backup-encryption.key"
+mkdir -p "${KEY_PARENT_EXTERNAL_ROOT}"
+
+AQUILA_EXTERNAL_STORAGE_ALLOW_TEST_ROOT=true \
+  AQUILA_EXTERNAL_STORAGE_SKIP_MOUNT_CHECK=true \
+  AQUILA_EXTERNAL_STORAGE_ROOT="${KEY_PARENT_EXTERNAL_ROOT}" \
+  AQUILA_BACKUP_ROOT="${KEY_PARENT_BACKUP_ROOT}" \
+  AQUILA_BACKUP_ENCRYPTION_KEY_FILE="${KEY_PARENT_FILE}" \
+  AQUILA_BACKUP_MIN_FREE_PERCENT=0 \
+  AQUILA_BACKUP_SKIP_POSTGRES=true \
+  AQUILA_BACKUP_SKIP_MINIO=true \
+    "${CREATE_SCRIPT}" >/dev/null
+
+[[ -s "${KEY_PARENT_FILE}" ]] || { echo "backup did not create custom encryption key with missing parent" >&2; exit 1; }
+
 grep -q "stop_legacy_minio_for_migration" "${CREATE_SCRIPT}"
 grep -q "docker stop" "${CREATE_SCRIPT}"
 grep -q "MIGRATION_STOPPED_FILE" "${CREATE_SCRIPT}"

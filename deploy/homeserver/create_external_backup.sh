@@ -485,9 +485,11 @@ validate_backup_encryption_key_file() {
   is_safe_absolute_path "${BACKUP_ENCRYPTION_KEY_FILE}" || fail "unsafe AQUILA_BACKUP_ENCRYPTION_KEY_FILE=${BACKUP_ENCRYPTION_KEY_FILE}"
   require_command realpath
   require_command openssl
-  assert_outside_backup_root "AQUILA_BACKUP_ENCRYPTION_KEY_FILE" "${BACKUP_ENCRYPTION_KEY_FILE}"
   if [[ ! -e "${BACKUP_ENCRYPTION_KEY_FILE}" ]]; then
     mkdir -p "$(dirname "${BACKUP_ENCRYPTION_KEY_FILE}")"
+  fi
+  assert_outside_backup_root "AQUILA_BACKUP_ENCRYPTION_KEY_FILE" "${BACKUP_ENCRYPTION_KEY_FILE}"
+  if [[ ! -e "${BACKUP_ENCRYPTION_KEY_FILE}" ]]; then
     (umask 077 && openssl rand -hex 32 > "${BACKUP_ENCRYPTION_KEY_FILE}") \
       || fail "failed to create backup encryption key file: ${BACKUP_ENCRYPTION_KEY_FILE}"
     log "created backup encryption key file: ${BACKUP_ENCRYPTION_KEY_FILE}"

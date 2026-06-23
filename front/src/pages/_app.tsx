@@ -23,6 +23,21 @@ const SpeedInsights = dynamic(() => import("@vercel/speed-insights/next").then((
 })
 const SENSITIVE_SIGNUP_ROUTES = new Set(["/signup/verify", "/signup/social/complete"])
 
+type VercelTelemetryEvent = {
+  url: string
+}
+
+const resolveTelemetryPathname = (url: string): string => {
+  try {
+    return new URL(url, "https://aquila.local").pathname
+  } catch {
+    return url.split(/[?#]/, 1)[0] ?? ""
+  }
+}
+
+const filterSensitiveSignupTelemetry = <T extends VercelTelemetryEvent>(event: T): T | null =>
+  SENSITIVE_SIGNUP_ROUTES.has(resolveTelemetryPathname(event.url)) ? null : event
+
 type AppPageProps = AppPropsWithLayout["pageProps"] & {
   initialAdminProfile?: AdminProfile | null
   initialProfileSnapshot?: AdminProfile | null
@@ -57,8 +72,8 @@ function App({ Component, pageProps, emotionCache = clientSideEmotionCache }: Ap
               {getLayout(<Component {...pageProps} />)}
               {shouldRenderVercelTelemetry ? (
                 <>
-                  <Analytics />
-                  <SpeedInsights />
+                  <Analytics beforeSend={filterSensitiveSignupTelemetry} />
+                  <SpeedInsights beforeSend={filterSensitiveSignupTelemetry} />
                 </>
               ) : null}
             </RootLayout>

@@ -13,9 +13,9 @@ class ActiveLegalDocumentMetadataTest {
         val active = ActiveLegalDocumentMetadata.current()
 
         val terms = readPolicyMetadata("../legal/policies/terms.ko-KR.v1.0.1.yaml")
-        val privacy = readPolicyMetadata("../legal/policies/privacy.ko-KR.v1.0.1.yaml")
+        val privacy = readPolicyMetadata("../legal/policies/privacy.ko-KR.v1.0.2.yaml")
 
-        assertThat(active.signupPolicyVersion).isEqualTo(terms.version)
+        assertThat(active.signupPolicyVersion).isEqualTo(privacy.version)
         assertThat(active.terms).isEqualTo(terms)
         assertThat(active.privacy).isEqualTo(privacy)
     }

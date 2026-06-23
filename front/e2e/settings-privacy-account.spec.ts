@@ -40,7 +40,7 @@ test("settings privacy page exposes export snapshot and creates privacy request"
           },
           latestLegalAcceptance: {
             termsVersion: "1.0.1",
-            privacyVersion: "1.0.1",
+            privacyVersion: "1.0.2",
             analyticsConsent: false,
             overseasTransferAcknowledged: true,
             acceptedAt: "2026-06-21T00:10:00Z",
@@ -78,7 +78,7 @@ test("settings privacy page exposes export snapshot and creates privacy request"
   await expect(page.getByRole("heading", { name: "개인정보 관리" })).toBeVisible()
   await expect(page.getByRole("heading", { name: "선택 analytics·RUM" })).toBeVisible()
   await expect(page.getByText("privacy-user@example.com")).toBeVisible()
-  await expect(page.getByText("개인정보처리방침 1.0.1")).toBeVisible()
+  await expect(page.getByText("개인정보처리방침 1.0.2")).toBeVisible()
 
   await page.getByRole("button", { name: "선택 분석 동의" }).click()
   await expect(page.getByText("동의됨")).toBeVisible()

@@ -1,6 +1,9 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { committedDiffRange, findDirectColorViolations } from "./check-design-colors.mjs"
+import { mkdtempSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { collectDiffText, committedDiffRange, findDirectColorViolations } from "./check-design-colors.mjs"
 
 test("findDirectColorViolations reports added hex colors", () => {
   const diff = [
@@ -46,4 +49,16 @@ test("findDirectColorViolations ignores removed lines and theme tokens", () => {
 
 test("committedDiffRange avoids requiring a shallow checkout merge base", () => {
   assert.equal(committedDiffRange("origin/main"), "origin/main..HEAD")
+})
+
+test("collectDiffText skips non-git build directories", () => {
+  const originalCwd = process.cwd()
+  const buildDir = mkdtempSync(join(tmpdir(), "design-colors-no-git-"))
+
+  try {
+    process.chdir(buildDir)
+    assert.equal(collectDiffText(), "")
+  } finally {
+    process.chdir(originalCwd)
+  }
 })

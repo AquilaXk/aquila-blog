@@ -36,6 +36,14 @@ const resolveBaseRef = () => {
   throw new Error(`Unable to resolve design color base ref: ${candidates.join(", ")}`)
 }
 
+export const isInsideGitWorkTree = () => {
+  try {
+    return runGit(["rev-parse", "--is-inside-work-tree"], { silent: true }).trim() === "true"
+  } catch {
+    return false
+  }
+}
+
 const diffArgs = (baseRef) => [
   "diff",
   "--unified=0",
@@ -105,6 +113,11 @@ const formatViolations = (violations) =>
 export const committedDiffRange = (baseRef) => `${baseRef}..HEAD`
 
 export const collectDiffText = () => {
+  if (!isInsideGitWorkTree()) {
+    console.warn("[design-colors] warning: not inside a git worktree; skipping diff check")
+    return ""
+  }
+
   let committedDiff = ""
   try {
     const baseRef = resolveBaseRef()

@@ -137,6 +137,8 @@ CREATE TABLE IF NOT EXISTS member_action_log (
     secondary_owner_id BIGINT NOT NULL,
     actor_id BIGINT NOT NULL,
     data TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    modified_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_member_action_log PRIMARY KEY (id),
     CONSTRAINT fk_member_action_log_primary_owner FOREIGN KEY (primary_owner_id) REFERENCES member (id),
     CONSTRAINT fk_member_action_log_secondary_owner FOREIGN KEY (secondary_owner_id) REFERENCES member (id),
@@ -288,6 +290,8 @@ CREATE INDEX IF NOT EXISTS member_action_log_idx_secondary_owner_id
     ON member_action_log (secondary_owner_id);
 CREATE INDEX IF NOT EXISTS member_action_log_idx_actor_id
     ON member_action_log (actor_id);
+CREATE INDEX IF NOT EXISTS member_action_log_idx_created_at_id
+    ON member_action_log (created_at ASC, id ASC);
 
 CREATE INDEX IF NOT EXISTS member_signup_verification_idx_email_created_at_desc
     ON member_signup_verification (email, created_at DESC);

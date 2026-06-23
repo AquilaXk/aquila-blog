@@ -1095,12 +1095,14 @@ prepare_runtime_backend_images() {
   active_image="$(resolve_preserved_backend_image "${active_backend}" "${staged_image}")"
   upsert_runtime_backend_image "${active_backend}" "${active_image}"
   upsert_runtime_backend_image "${next_backend}" "${staged_image}"
-  upsert_runtime_backend_image "back_read" "${staged_image}"
-  upsert_runtime_backend_image "back_admin" "${staged_image}"
-  upsert_runtime_backend_image "back_worker" "${staged_image}"
+  local service
+  while IFS= read -r service; do
+    [[ -n "${service}" ]] || continue
+    upsert_runtime_backend_image "${service}" "${active_image}"
+  done < <(runtime_split_helper_backends)
 
   write_backend_release_state "${active_backend}" "${next_backend}"
-  echo "runtime backend image map prepared: active=${active_backend} active_image=${active_image} next=${next_backend} next_image=${staged_image}"
+  echo "runtime backend image map prepared: active=${active_backend} active_image=${active_image} next=${next_backend} next_image=${staged_image} helper_image=${active_image}"
 }
 
 require_nonempty_env_key() {
@@ -1604,12 +1606,59 @@ runtime_split_helper_backends() {
   printf '%s\n' "${services[@]}"
 }
 
-restart_runtime_split_backends_after_candidate_ready() {
-  local candidate_backend="$1"
+start_runtime_split_helper_backends_on_active() {
+  local active_backend="$1"
+  local active_image
+  active_image="$(runtime_backend_image_value "${active_backend}")"
+  if [[ -z "${active_image}" ]]; then
+    echo "runtime helper startup failed: active backend image missing for ${active_backend}" >&2
+    return 1
+  fi
+
   local helper_services=()
   local service
   while IFS= read -r service; do
     [[ -n "${service}" ]] || continue
+    upsert_runtime_backend_image "${service}" "${active_image}"
+    helper_services+=("${service}")
+  done < <(runtime_split_helper_backends)
+
+  if [[ "${#helper_services[@]}" -eq 0 ]]; then
+    return 0
+  fi
+
+  echo "starting runtime helper backends on active image before edge boot: active=${active_backend}, services=${helper_services[*]}"
+  compose pull "${helper_services[@]}" || true
+  if ! compose_up_force_recreate_with_retry "${helper_services[@]}"; then
+    for service in "${helper_services[@]}"; do
+      emit_backend_diagnostics "${service}" >&2 || true
+    done
+    return 1
+  fi
+
+  for service in "${helper_services[@]}"; do
+    if ! check_backend_health "${service}"; then
+      echo "runtime helper backend unhealthy on active image: ${service}" >&2
+      return 1
+    fi
+  done
+  return 0
+}
+
+restart_runtime_split_backends_after_candidate_ready() {
+  local candidate_backend="$1"
+  local candidate_image
+  candidate_image="$(runtime_backend_image_value "${candidate_backend}")"
+  if [[ -z "${candidate_image}" ]]; then
+    echo "runtime helper restart failed: candidate backend image missing for ${candidate_backend}" >&2
+    return 1
+  fi
+
+  local helper_services=()
+  local service
+  while IFS= read -r service; do
+    [[ -n "${service}" ]] || continue
+    upsert_runtime_backend_image "${service}" "${candidate_image}"
     helper_services+=("${service}")
   done < <(runtime_split_helper_backends)
 
@@ -2114,6 +2163,10 @@ rollback_caddy_route_only() {
     return 1
   fi
 
+  if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
+    restore_runtime_split_helper_backends_to_active "${previous_backend}" "${candidate_backend}" || return 1
+  fi
+
   switch_caddy_upstream "${previous_backend}"
 
   if ! verify_caddy_route "${previous_backend}" "${api_domain}"; then
@@ -2209,6 +2262,12 @@ rollback_to_backend() {
     return 1
   fi
 
+  local inactive_backend
+  inactive_backend="$(other_backend "${rollback_backend}")"
+  if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
+    restore_runtime_split_helper_backends_to_active "${rollback_backend}" "${inactive_backend}" || return 1
+  fi
+
   switch_caddy_upstream "${rollback_backend}"
 
   if ! verify_caddy_route "${rollback_backend}" "${api_domain}"; then
@@ -2217,8 +2276,6 @@ rollback_to_backend() {
   fi
 
   echo "${rollback_backend}" > "${STATE_FILE}"
-  local inactive_backend
-  inactive_backend="$(other_backend "${rollback_backend}")"
   write_backend_release_state "${rollback_backend}" "${inactive_backend}"
   drain_and_stop_backend_if_running "${inactive_backend}"
   return 0
@@ -2268,8 +2325,11 @@ persist_single_runtime_caddy_upstreams "${active_backend}"
 action_backend_host="$(backend_host "${next_backend}")"
 
 echo "starting infra before ${next_backend} (${action_backend_host})"
-services_to_boot=(db_1 redis_1 minio_1 caddy cloudflared uptime_kuma autoheal)
+services_to_boot=(db_1 redis_1 minio_1 uptime_kuma autoheal)
 compose_up_with_retry "${services_to_boot[@]}"
+start_runtime_split_helper_backends_on_active "${active_backend}"
+edge_services_to_boot=(caddy cloudflared)
+compose_up_with_retry "${edge_services_to_boot[@]}"
 compose_up_no_deps_with_retry loki promtail prometheus grafana
 ensure_caddy_mount_sync
 check_cloudflared_runtime "${api_domain}"

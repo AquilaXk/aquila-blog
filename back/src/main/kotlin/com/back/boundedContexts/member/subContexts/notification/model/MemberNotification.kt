@@ -35,6 +35,12 @@ import java.util.UUID
     ON member_notification (receiver_id, read_at, created_at DESC)
     """,
 )
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS member_notification_idx_created_at_id
+    ON member_notification (created_at ASC, id ASC)
+    """,
+)
 class MemberNotification(
     @field:Id
     @field:SequenceGenerator(

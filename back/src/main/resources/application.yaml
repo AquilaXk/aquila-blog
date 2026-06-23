@@ -273,8 +273,20 @@ custom:
       refreshEnabled: ${CUSTOM__TASK__METRICS__REFRESH_ENABLED:true}
       refreshFixedDelayMs: ${CUSTOM__TASK__METRICS__REFRESH_FIXED_DELAY_MS:60000}
   runtime:
-    workerEnabled: ${CUSTOM__RUNTIME__WORKER_ENABLED:true}
+    worker-enabled: ${CUSTOM__RUNTIME__WORKER_ENABLED:true}
     apiMode: ${CUSTOM__RUNTIME__API_MODE:all}
+  privacy:
+    retention:
+      signupVerificationDays: ${CUSTOM__PRIVACY__RETENTION__SIGNUP_VERIFICATION_DAYS:7}
+      revokedSessionDays: ${CUSTOM__PRIVACY__RETENTION__REVOKED_SESSION_DAYS:${CUSTOM__AUTH__SESSION__REVOKED_RETENTION_DAYS:30}}
+      authSecurityEventDays: ${CUSTOM__PRIVACY__RETENTION__AUTH_SECURITY_EVENT_DAYS:${CUSTOM__AUTH__SECURITY_EVENT__RETENTION_DAYS:30}}
+      memberActionLogDays: ${CUSTOM__PRIVACY__RETENTION__MEMBER_ACTION_LOG_DAYS:90}
+      notificationDays: ${CUSTOM__PRIVACY__RETENTION__NOTIFICATION_DAYS:60}
+      privacyRequestDays: ${CUSTOM__PRIVACY__RETENTION__PRIVACY_REQUEST_DAYS:30}
+      cleanup:
+        batchSize: ${CUSTOM__PRIVACY__RETENTION__CLEANUP__BATCH_SIZE:500}
+        maxBatches: ${CUSTOM__PRIVACY__RETENTION__CLEANUP__MAX_BATCHES:20}
+        fixedDelayMs: ${CUSTOM__PRIVACY__RETENTION__CLEANUP__FIXED_DELAY_MS:3600000}
   cache:
     ttl-seconds: 3600
     ttl-overrides:

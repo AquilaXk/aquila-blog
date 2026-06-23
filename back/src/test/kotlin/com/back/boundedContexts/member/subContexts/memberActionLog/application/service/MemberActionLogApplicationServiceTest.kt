@@ -3,6 +3,8 @@ package com.back.boundedContexts.member.subContexts.memberActionLog.application.
 import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.member.subContexts.memberActionLog.application.port.output.MemberActionLogRepositoryPort
 import com.back.boundedContexts.member.subContexts.memberActionLog.domain.MemberActionLog
+import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.domain.PostComment
 import com.back.boundedContexts.post.dto.PostCommentDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.event.PostCommentDeletedEvent
@@ -42,11 +44,28 @@ class MemberActionLogApplicationServiceTest {
 
         // then
         val saved = repository.saved.single()
+        assertThat(saved.id).isZero()
+        assertThat(saved.type).isEqualTo(PostCommentWrittenEvent::class.simpleName)
+        assertThat(saved.primaryType).isEqualTo(PostComment::class.simpleName)
+        assertThat(saved.primaryId).isEqualTo(11L)
+        assertThat(saved.primaryOwner.id).isEqualTo(9L)
+        assertThat(saved.secondaryType).isEqualTo(Post::class.simpleName)
+        assertThat(saved.secondaryId).isEqualTo(22L)
+        assertThat(saved.secondaryOwner.id).isEqualTo(8L)
+        assertThat(saved.actor.id).isEqualTo(9L)
         assertThat(saved.data).contains("structured_audit_v1")
         assertThat(saved.data).contains("\"commentId\":11")
         assertThat(saved.data).contains("\"postId\":22")
         assertThat(saved.data).doesNotContain("canary secret comment body")
         assertThat(saved.data).doesNotContain("canary secret post title")
+        assertThat(javaGetterValues(saved))
+            .containsEntry("getId", 0L)
+            .containsEntry("getType", PostCommentWrittenEvent::class.simpleName)
+            .containsEntry("getPrimaryType", PostComment::class.simpleName)
+            .containsEntry("getPrimaryId", 11L)
+            .containsEntry("getSecondaryType", Post::class.simpleName)
+            .containsEntry("getSecondaryId", 22L)
+            .containsEntry("getData", saved.data)
     }
 
     @Test
@@ -108,7 +127,28 @@ class MemberActionLogApplicationServiceTest {
             saved += memberActionLog
             return memberActionLog
         }
+
+        override fun deleteCreatedBefore(
+            cutoff: Instant,
+            limit: Int,
+        ): Int = 0
     }
+
+    private fun javaGetterValues(memberActionLog: MemberActionLog): Map<String, Any?> =
+        listOf(
+            "getId",
+            "getType",
+            "getPrimaryType",
+            "getPrimaryId",
+            "getPrimaryOwner",
+            "getSecondaryType",
+            "getSecondaryId",
+            "getSecondaryOwner",
+            "getActor",
+            "getData",
+        ).associateWith { getterName ->
+            MemberActionLog::class.java.getMethod(getterName).invoke(memberActionLog)
+        }
 
     private fun testCommentDto(content: String): PostCommentDto =
         PostCommentDto(

@@ -615,7 +615,7 @@ check_grafana_embed_origin_route() {
 
 warn_grafana_embed_origin_route() {
   check_grafana_embed_origin_route && return 0
-  echo "WARN grafana origin auth-proxy route unhealthy; backend deploy continues and steady-state guard monitors it" >&2
+  echo "WARN grafana origin auth-proxy route unhealthy; backend deploy continues" >&2
   return 0
 }
 
@@ -2101,7 +2101,6 @@ run_blue_green_burn_in() {
       return 1
     fi
 
-    warn_grafana_embed_origin_route
   done
 
   echo "burn-in ok: candidate=${candidate_backend}, previous=${previous_backend}, duration_seconds=${duration_seconds}"

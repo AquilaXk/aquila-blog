@@ -890,6 +890,14 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
 
   assert.match(workflow, /Validate HOME_SERVER_ENV contract/)
   assert.match(workflow, /tools\/env\/validate-env\.mjs --target home-server-source/)
+  assert.match(workflow, /HOME_RESTORE_PRIVACY_GATE_SCRIPT: \$\{\{ secrets\.AQUILA_RESTORE_PRIVACY_GATE_SCRIPT \|\| vars\.AQUILA_RESTORE_PRIVACY_GATE_SCRIPT \|\| '\/opt\/aquila-blog\/restore-privacy-gate\.sh' \}\}/)
+  assert.equal(
+    workflow.match(/HOME_RESTORE_PRIVACY_GATE_SCRIPT: \$\{\{ secrets\.AQUILA_RESTORE_PRIVACY_GATE_SCRIPT \|\| vars\.AQUILA_RESTORE_PRIVACY_GATE_SCRIPT \|\| '\/opt\/aquila-blog\/restore-privacy-gate\.sh' \}\}/g)?.length,
+    2,
+  )
+  assert.match(workflow, /printf 'AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=%s\\n' "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT\}"/)
+  assert.match(workflow, /printf 'HOME_RESTORE_PRIVACY_GATE_SCRIPT=%q\\n' "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT:-\/opt\/aquila-blog\/restore-privacy-gate\.sh\}"/)
+  assert.match(workflow, /upsert_env_key "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT" "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT:-\/opt\/aquila-blog\/restore-privacy-gate\.sh\}" "deploy\/homeserver\/\.env\.prod"/)
   assert(workflow.indexOf("Validate HOME_SERVER_ENV contract") < workflow.indexOf("Deploy over SSH"))
   assert.match(workflow, /export HOME_SERVER_ENV/)
   assert(workflow.indexOf("export HOME_SERVER_ENV") < workflow.indexOf("create_external_backup.sh"))

@@ -2170,7 +2170,9 @@ rollback_caddy_route_only() {
   fi
 
   if ! restore_runtime_split_helper_backends_to_active "${previous_backend}" "${candidate_backend}"; then
-    echo "burn-in rollback warning: helper recovery failed after route rollback" >&2
+    echo "burn-in rollback failed: helper recovery failed after route rollback" >&2
+    compose stop "${candidate_backend}" || true
+    return 1
   fi
 
   echo "${previous_backend}" > "${STATE_FILE}"
@@ -2272,7 +2274,8 @@ rollback_to_backend() {
   fi
 
   if ! restore_runtime_split_helper_backends_to_active "${rollback_backend}" "${inactive_backend}"; then
-    echo "rollback warning: helper recovery failed after route rollback" >&2
+    echo "rollback failed: helper recovery failed after route rollback" >&2
+    return 1
   fi
 
   echo "${rollback_backend}" > "${STATE_FILE}"

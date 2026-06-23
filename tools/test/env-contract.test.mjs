@@ -1405,8 +1405,14 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
   )
   const rollbackRouteIndex = rollbackBlock.indexOf('switch_caddy_upstream "${rollback_backend}"')
   const rollbackRestoreIndex = rollbackBlock.indexOf('restore_runtime_split_helper_backends_to_active "${rollback_backend}" "${inactive_backend}"')
+  const rollbackHelperFailIndex = rollbackBlock.indexOf("rollback failed: helper recovery failed after route rollback")
+  const rollbackStateWriteIndex = rollbackBlock.indexOf('echo "${rollback_backend}" > "${STATE_FILE}"')
   const burnInRollbackRouteIndex = burnInRollbackBlock.indexOf('switch_caddy_upstream "${previous_backend}"')
   const burnInRollbackRestoreIndex = burnInRollbackBlock.indexOf('restore_runtime_split_helper_backends_to_active "${previous_backend}" "${candidate_backend}"')
+  const burnInRollbackHelperFailIndex = burnInRollbackBlock.indexOf(
+    "burn-in rollback failed: helper recovery failed after route rollback",
+  )
+  const burnInRollbackStateWriteIndex = burnInRollbackBlock.indexOf('echo "${previous_backend}" > "${STATE_FILE}"')
 
   assert.match(backendHttpHostBlock, /back_blue\|back_green\|back_read\|back_admin\|back_worker/)
   assert.match(backendDnsBlock, /host="\$\(backend_http_host "\$\{backend\}"\)"/)
@@ -1441,8 +1447,20 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
   assert(postRestartHelperDnsIndex > helperRestartIndex, "helper DNS checks must run after candidate-backed helper startup")
   assert(rollbackRouteIndex >= 0, "rollback must switch caddy route")
   assert(rollbackRestoreIndex > rollbackRouteIndex, "rollback helper recovery must run after route rollback")
+  assert(rollbackHelperFailIndex > rollbackRestoreIndex, "rollback helper recovery failure must be explicit")
+  assert(
+    rollbackStateWriteIndex > rollbackHelperFailIndex &&
+      rollbackBlock.slice(rollbackHelperFailIndex, rollbackStateWriteIndex).includes("return 1"),
+    "rollback must fail before writing active state when helper recovery fails",
+  )
   assert(burnInRollbackRouteIndex >= 0, "burn-in rollback must switch caddy route")
   assert(burnInRollbackRestoreIndex > burnInRollbackRouteIndex, "burn-in helper recovery must run after route rollback")
+  assert(burnInRollbackHelperFailIndex > burnInRollbackRestoreIndex, "burn-in helper recovery failure must be explicit")
+  assert(
+    burnInRollbackStateWriteIndex > burnInRollbackHelperFailIndex &&
+      burnInRollbackBlock.slice(burnInRollbackHelperFailIndex, burnInRollbackStateWriteIndex).includes("return 1"),
+    "burn-in rollback must fail before writing active state when helper recovery fails",
+  )
   assert.match(
     deployScript,
     /restore_runtime_split_helper_backends_to_active "\$\{active_backend\}" "\$\{next_backend\}" \|\| true/,

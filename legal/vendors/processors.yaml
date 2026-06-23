@@ -232,7 +232,7 @@ processors:
       - restrictedNetworkAccess
       - dashboardAccessControl
     reviewRequired:
-      - Sensitive log redaction and retention are tracked by issue1001.
+      - Retention configuration still requires review; DB-backed auth/action logs minimize identifiers and content before Loki ingestion.
 
   - id: github_actions
     name: GitHub Actions

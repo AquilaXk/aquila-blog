@@ -14,13 +14,22 @@ test.describe("core smoke feed and search", () => {
   test("홈 피드 기본 UI가 렌더링된다", async ({ page }) => {
   await page.setViewportSize({ width: 1680, height: 1200 })
   await mockFeedEndpoints(page)
+  await page.route("**/post/api/v1/posts/feed**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(createExplorePage("정렬:CREATED_AT", "테스트태그", { thumbnail: "/avatar.png" })),
+    })
+  })
 
   await page.goto("/")
   await expect(page.getByLabel("Search posts by keyword")).toBeVisible()
   await expect(page.getByRole("button", { name: "전체보기" })).toBeVisible()
   await expect(page.locator('[data-ui="feed-home-product-shell"]')).toBeVisible()
-  await expect(page.locator('[data-ui="feed-profile-summary"]')).toBeVisible()
-  await expect(page.locator('[data-ui="feed-tag-chip-rail"]')).toBeVisible()
+  await expect(page.locator('[data-ui="feed-profile-summary"]')).toHaveCount(0)
+  await expect(page.locator('section[aria-label="태그 목록"]')).toBeVisible()
+  await expect(page.locator('[data-ui="feed-tag-chip-rail"]')).toBeHidden()
+  await expect(page.locator(".thumbnail").first()).toBeVisible()
   await expect(page.locator(".rt")).toBeHidden()
 
   const homeStyles = await page.evaluate(() => {
@@ -30,20 +39,38 @@ test.describe("core smoke feed and search", () => {
       const styles = window.getComputedStyle(element)
       return {
         backgroundColor: styles.backgroundColor,
-        borderWidth: styles.borderWidth,
+        borderBottomWidth: styles.borderBottomWidth,
+        display: styles.display,
       }
     }
 
     return {
-      profileSummary: read('[data-ui="feed-profile-summary"]'),
       firstCard: read('[data-ui="feed-post-card"] article'),
     }
   })
 
-  expect(homeStyles.profileSummary?.backgroundColor).not.toBe("rgba(0, 0, 0, 0)")
-  expect(homeStyles.profileSummary?.borderWidth).toBe("1px")
-  expect(homeStyles.firstCard?.backgroundColor).not.toBe("rgba(0, 0, 0, 0)")
-  expect(homeStyles.firstCard?.borderWidth).toBe("1px")
+  expect(homeStyles.firstCard?.backgroundColor).toBe("rgba(0, 0, 0, 0)")
+  expect(homeStyles.firstCard?.borderBottomWidth).toBe("1px")
+})
+
+  test("피드 카드 thumbnail 로드 실패는 빈 사각형 대신 fallback cover를 렌더한다", async ({ page }) => {
+  await mockFeedEndpoints(page)
+  await page.route("**/post/api/v1/posts/feed**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(
+        createExplorePage("깨진 썸네일 fallback", "테스트태그", { thumbnail: "https://cdn.example.invalid/broken.png" })
+      ),
+    })
+  })
+  await page.route("https://cdn.example.invalid/broken.png", async (route) => route.abort("failed"))
+
+  await page.goto("/")
+
+  const firstCard = page.locator('[data-ui="feed-post-card"]').first()
+  await expect(firstCard.locator(".imageFallback")).toBeVisible()
+  await expect(firstCard.locator(".imageFallback")).toContainText("깨진 썸네일 fallback")
 })
 
   test("홈 topic rail은 실제 태그 count 상위 항목을 표시하고 tag 탐색으로 연결한다", async ({ page }) => {
@@ -76,13 +103,13 @@ test.describe("core smoke feed and search", () => {
   })
 
   await page.goto("/")
-  const topicRail = page.locator('[data-ui="feed-topic-rail"]')
+  const topicRail = page.locator('section[aria-label="태그 목록"]')
   await expect(topicRail).toBeVisible()
-  await expect(topicRail.locator('[data-ui="feed-topic-rail-chip"]')).toHaveText(["운영", "검색", "alpha"])
+  await expect(topicRail.locator(".desktopList button[data-tag] .name")).toHaveText(["운영", "검색", "alpha", "Spring"])
   await expect(page.getByText("Architecture")).toHaveCount(0)
   await expect(page.getByText("Infrastructure")).toHaveCount(0)
 
-  await topicRail.getByRole("button", { name: "태그 검색 글 7개 보기" }).click()
+  await topicRail.locator('button[data-tag="검색"]').click()
 
   await expect.poll(() => capturedTag.some((value) => value === "검색")).toBeTruthy()
   await expect(page.locator("a[href^='/posts/'] h2").filter({ hasText: "태그:검색" })).toBeVisible()
@@ -117,16 +144,16 @@ test.describe("core smoke feed and search", () => {
   })
 
   await page.goto("/")
-  const topicRail = page.locator('[data-ui="feed-topic-rail"]')
+  const topicRail = page.locator('[data-ui="feed-tag-chip-rail"]')
   await expect(topicRail).toBeVisible()
 
-  await topicRail.getByRole("button", { name: "태그 검색 글 7개 보기" }).click()
+  await topicRail.locator('button[data-tag="검색"]').click()
 
   await expect.poll(() => capturedTag.some((value) => value === "검색")).toBeTruthy()
   await expect(page.locator("a[href^='/posts/'] h2").filter({ hasText: "태그:검색" })).toBeVisible()
 })
 
-  test("홈 topic rail은 태그가 없으면 렌더하지 않는다", async ({ page }) => {
+  test("홈 topic rail은 태그가 없으면 전체 항목만 렌더한다", async ({ page }) => {
   await page.setViewportSize({ width: 1680, height: 1200 })
   await mockFeedEndpoints(page)
   await page.route("**/post/api/v1/posts/tags", async (route) => {
@@ -139,24 +166,25 @@ test.describe("core smoke feed and search", () => {
 
   await page.goto("/")
 
-  await expect(page.locator('[data-ui="feed-topic-rail"]')).toHaveCount(0)
+  const topicRail = page.locator('section[aria-label="태그 목록"]')
+  await expect(topicRail).toBeVisible()
+  await expect(topicRail.locator(".desktopList button[data-tag]")).toHaveCount(0)
+  await expect(topicRail.getByRole("button", { name: "전체보기" })).toBeVisible()
 })
 
   test("홈 새로고침 이후에도 제품형 브랜드 문구를 유지한다", async ({ page }) => {
   await mockFeedEndpoints(page)
 
   await page.goto("/")
-  await expect(page.getByRole("heading", { level: 1, name: "AquilaLog" })).toBeVisible()
+  await expect(page.getByRole("heading", { level: 1, name: "비밀스러운 IT 공작소" })).toBeVisible()
   await expect(page.locator('[data-ui="feed-brand-role"]')).toBeVisible()
   await expect(page.getByText("비밀스러운 지식들을 탐구하는데 목적을 두고 있습니다")).toBeVisible()
-  await expect(page.getByText("비밀스러운 IT 공작소")).toHaveCount(0)
   await expect(page.getByText("aquilaXk's Blog")).toHaveCount(0)
 
   await page.reload()
-  await expect(page.getByRole("heading", { level: 1, name: "AquilaLog" })).toBeVisible()
+  await expect(page.getByRole("heading", { level: 1, name: "비밀스러운 IT 공작소" })).toBeVisible()
   await expect(page.locator('[data-ui="feed-brand-role"]')).toBeVisible()
   await expect(page.getByText("비밀스러운 지식들을 탐구하는데 목적을 두고 있습니다")).toBeVisible()
-  await expect(page.getByText("비밀스러운 IT 공작소")).toHaveCount(0)
   await expect(page.getByText("aquilaXk's Blog")).toHaveCount(0)
 })
 

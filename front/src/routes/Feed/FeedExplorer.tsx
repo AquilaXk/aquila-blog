@@ -17,6 +17,7 @@ import { replaceShallowRoutePreservingScroll } from "src/libs/router"
 import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
 import { queryKey } from "src/constants/queryKey"
 import { type ExplorePostsPage } from "src/apis/backend/posts"
+import type { TPost } from "src/types"
 import { normalizeKeywordQuery, normalizeOptionalTagQuery, normalizeTagQuery } from "src/libs/query/normalize"
 import { ExplorerCard, FeedBody, FilterContextBar } from "./FeedExplorer.styles"
 import {
@@ -45,17 +46,46 @@ import {
 
 const LOAD_MORE_THROTTLE_MS = 800
 const LOAD_MORE_OBSERVER_THROTTLE_MS = 180
+type FeedSortMode = "latest" | "views" | "likes"
+const FEED_SORT_OPTIONS: Array<{ value: FeedSortMode; label: string }> = [
+  { value: "latest", label: "최신순" },
+  { value: "views", label: "조회순" },
+  { value: "likes", label: "좋아요순" },
+]
 
 type FeedExplorerProps = {
   initialBootstrapDegraded?: boolean
 }
 
+const getPostTime = (post: TPost) => {
+  const value = post.date?.start_date || post.createdTime
+  const time = value ? new Date(value).getTime() : 0
+  return Number.isFinite(time) ? time : 0
+}
+
+const compareLatestPosts = (a: TPost, b: TPost) => getPostTime(b) - getPostTime(a)
+
+const sortFeedPosts = (posts: TPost[], sortMode: FeedSortMode) => {
+  if (sortMode === "latest") return posts
+
+  return [...posts].sort((a, b) => {
+    const primary =
+      sortMode === "views"
+        ? (b.hitCount ?? 0) - (a.hitCount ?? 0)
+        : (b.likesCount ?? 0) - (a.likesCount ?? 0)
+    return primary || compareLatestPosts(a, b)
+  })
+}
+
 const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = false }) => {
   const queryClient = useQueryClient()
   const [q, setQ] = useState("")
+  const [sortMode, setSortMode] = useState<FeedSortMode>("latest")
+  const [sortOpen, setSortOpen] = useState(false)
   const [isComposing, setIsComposing] = useState(false)
   const router = useRouter()
   const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const sortMenuRef = useRef<HTMLDivElement | null>(null)
   const restoreStateRef = useRef<FeedExplorerRestoreState | null>(null)
   const restoreQueryPagesRef = useRef<FeedExplorerSnapshotPage[] | null>(null)
   const restoreQueryPageParamsRef = useRef<FeedExplorerSnapshotPageParam[] | null>(null)
@@ -123,6 +153,18 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
   useEffect(() => {
     isFetchNextPageErrorRef.current = isFetchNextPageError
   }, [isFetchNextPageError])
+
+  useEffect(() => {
+    if (!sortOpen) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (sortMenuRef.current?.contains(event.target as Node)) return
+      setSortOpen(false)
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown)
+    return () => document.removeEventListener("pointerdown", handlePointerDown)
+  }, [sortOpen])
 
   useEffect(() => {
     restoreSnapshotRef.current = {
@@ -410,6 +452,10 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
 
   const hasFilter = Boolean(normalizedQuery || currentTag)
   const resultCount = pinnedPosts.length + regularPosts.length
+  const sortedRegularPosts = useMemo(
+    () => sortFeedPosts(regularPosts, sortMode),
+    [regularPosts, sortMode]
+  )
   const showBootstrapDegraded = initialBootstrapDegraded && !hasInitialLoadSucceeded
   const hasQueryFilter = normalizedQuery.length > 0
   const hasTagFilter = Boolean(currentTag)
@@ -440,42 +486,85 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
       })
     })
   }, [currentTag, router])
+  const currentSortLabel =
+    FEED_SORT_OPTIONS.find((option) => option.value === sortMode)?.label ?? "최신순"
+
+  const handleSortSelect = useCallback((value: FeedSortMode) => {
+    setSortMode(value)
+    setSortOpen(false)
+  }, [])
 
   return (
     <>
       <PinnedPosts posts={pinnedPosts} />
-      <ExplorerCard>
-        <div className="searchSlot">
-          <SearchInput
-            inputRef={searchInputRef}
-            value={q}
-            onChange={(event) => setQ(event.target.value)}
-            onCompositionStart={() => setIsComposing(true)}
-            onCompositionEnd={() => setIsComposing(false)}
-          />
-        </div>
-      </ExplorerCard>
       <FeedBody data-sticky-rail-safe="true">
         <aside className="tagColumn">
           <TagList />
         </aside>
         <section className="postColumn">
-          <FilterContextBar data-visible={hasFilter}>
-            <div className="contextMain">
-              <strong className="contextCount">{hasFilter ? `${resultCount}개` : `피드 ${resultCount}개`}</strong>
-              {hasFilter && <span className="filterSummary">{filterSummary}</span>}
-              {contextStatusLabel ? <span className="statusBadge">{contextStatusLabel}</span> : null}
+          <ExplorerCard>
+            <div className="feedTitle">
+              <span>Latest Notes</span>
+              <h2>최근 글</h2>
+              <p className="feedDescription">실제 운영에서 마주친 문제와 선택, 검증 결과를 긴 글로 정리합니다.</p>
             </div>
-            <div className="contextActions">
-              {hasFilter && (
-                <button type="button" className="resetButton" onClick={handleClearFilters}>
-                  초기화
+            <div className="searchSlot">
+              <SearchInput
+                inputRef={searchInputRef}
+                value={q}
+                onChange={(event) => setQ(event.target.value)}
+                onCompositionStart={() => setIsComposing(true)}
+                onCompositionEnd={() => setIsComposing(false)}
+              />
+              <div className="sortDropdown" ref={sortMenuRef}>
+                <button
+                  type="button"
+                  className="sortTrigger"
+                  aria-haspopup="listbox"
+                  aria-expanded={sortOpen}
+                  onClick={() => setSortOpen((prev) => !prev)}
+                >
+                  {currentSortLabel}
+                  <span className="sortChevron" aria-hidden="true" />
                 </button>
-              )}
+                {sortOpen && (
+                  <div className="sortMenu" role="listbox" aria-label="피드 정렬">
+                    {FEED_SORT_OPTIONS.map((option) => (
+                      <button
+                        type="button"
+                        key={option.value}
+                        className="sortOption"
+                        role="option"
+                        aria-selected={sortMode === option.value}
+                        data-active={sortMode === option.value}
+                        onClick={() => handleSortSelect(option.value)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </FilterContextBar>
+          </ExplorerCard>
+          {(hasFilter || contextStatusLabel) && (
+            <FilterContextBar>
+              <div className="contextMain">
+                <strong className="contextCount">{hasFilter ? `${resultCount}개` : `피드 ${resultCount}개`}</strong>
+                {hasFilter && <span className="filterSummary">{filterSummary}</span>}
+                {contextStatusLabel ? <span className="statusBadge">{contextStatusLabel}</span> : null}
+              </div>
+              <div className="contextActions">
+                {hasFilter && (
+                  <button type="button" className="resetButton" onClick={handleClearFilters}>
+                    초기화
+                  </button>
+                )}
+              </div>
+            </FilterContextBar>
+          )}
           <PostList
-            posts={regularPosts}
+            posts={sortedRegularPosts}
             hasFilter={hasFilter}
             hasExternalResults={pinnedPosts.length > 0}
             onClearFilters={handleClearFilters}

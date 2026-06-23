@@ -14,6 +14,7 @@ const Logo = ({ blogTitle: blogTitleProp }: Props) => {
     <StyledWrapper href="/" aria-label={blogTitle}>
       <BrandMark className="brandMark" priority />
       <span className="brandText">{blogTitle}</span>
+      <em>ENGINEERING JOURNAL</em>
     </StyledWrapper>
   )
 }
@@ -23,21 +24,21 @@ export default Logo
 const StyledWrapper = styled(Link)`
   display: inline-flex;
   align-items: center;
-  gap: clamp(0.4rem, 0.24rem + 0.32vw, 0.6rem);
+  gap: 0.625rem;
   min-width: 0;
   max-width: 100%;
   min-height: 40px;
   color: ${({ theme }) => theme.colors.gray12};
-  font-weight: 760;
-  font-size: clamp(1.42rem, 1.12rem + 0.8vw, 1.9rem);
+  font-weight: 850;
+  font-size: 0.94rem;
   letter-spacing: -0.03em;
   line-height: 1.1;
 
   .brandMark {
     display: block;
     flex-shrink: 0;
-    width: clamp(1.58rem, 1.24rem + 0.56vw, 1.96rem);
-    height: clamp(1.58rem, 1.24rem + 0.56vw, 1.96rem);
+    width: 1.75rem;
+    height: 1.75rem;
   }
 
   .brandText {
@@ -47,13 +48,28 @@ const StyledWrapper = styled(Link)`
     white-space: nowrap;
   }
 
+  em {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.625rem;
+    line-height: 1;
+    font-weight: 600;
+    font-style: normal;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+  }
+
   @media (max-width: 720px) {
     min-height: 36px;
-    font-size: clamp(1.18rem, 1.02rem + 0.56vw, 1.46rem);
+    font-size: 1rem;
 
     .brandMark {
       width: 1.42rem;
       height: 1.42rem;
+    }
+
+    em {
+      display: none;
     }
   }
 `

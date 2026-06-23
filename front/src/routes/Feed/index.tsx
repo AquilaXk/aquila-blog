@@ -1,13 +1,10 @@
 import Footer from "./Footer"
 import styled from "@emotion/styled"
-import { startTransition, useCallback, useMemo } from "react"
+import { useMemo } from "react"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
 import { CONFIG } from "site.config"
 import FeedExplorer from "./FeedExplorer"
-import ProfileSummaryCard from "./ProfileSummaryCard"
 import { useTagsQuery } from "src/hooks/useTagsQuery"
-import { useRouter } from "next/router"
-import { replaceShallowRoutePreservingScroll } from "src/libs/router"
 
 type Props = {
   initialAdminProfile?: AdminProfile | null
@@ -17,7 +14,6 @@ type Props = {
 const TOPIC_RAIL_TAG_LIMIT = 3
 
 const Feed: React.FC<Props> = ({ initialAdminProfile = null, initialHomeBootstrapStatus = "ready" }) => {
-  const router = useRouter()
   const adminProfile = useAdminProfile(initialAdminProfile)
   const { tagEntries } = useTagsQuery()
   const topicEntries = useMemo(
@@ -25,31 +21,13 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null, initialHomeBootstra
     [tagEntries]
   )
   const introTitle =
-    adminProfile?.blogTitle || CONFIG.blog.title || "AquilaLog"
-  const introRole = adminProfile?.profileRole || CONFIG.profile.role || "Backend Engineering"
+    adminProfile?.homeIntroTitle || CONFIG.blog.homeIntroTitle || adminProfile?.blogTitle || CONFIG.blog.title || "AquilaLog"
+  const introRole = adminProfile?.profileRole || "Backend systems · production notes"
   const introDescription = adminProfile?.homeIntroDescription || CONFIG.blog.homeIntroDescription || CONFIG.blog.description
-
-  const navigateWithTag = useCallback((value: string) => {
-    const { category: _deprecatedCategory, ...restQuery } = router.query
-    startTransition(() => {
-      void replaceShallowRoutePreservingScroll(router, {
-        pathname: "/",
-        query: {
-          ...restQuery,
-          tag: value,
-        },
-      })
-    })
-  }, [router])
-
-  const handleClickTopic = useCallback(
-    (event: React.MouseEvent<HTMLButtonElement>) => {
-      const value = event.currentTarget.dataset.tag
-      if (!value) return
-      navigateWithTag(value)
-    },
-    [navigateWithTag]
-  )
+  const focusLabel = topicEntries.length > 0
+    ? topicEntries.map(([tag]) => tag).join(" · ")
+    : "Architecture · Security · Reliability"
+  const repositoryLabel = CONFIG.projects?.[0]?.href?.replace(/^https?:\/\//, "") || "AquilaXk/aquila-blog"
 
   return (
     <StyledWrapper data-ui="feed-home-product-shell">
@@ -61,24 +39,21 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null, initialHomeBootstra
             </span>
             <h1>{introTitle}</h1>
             <p>{introDescription}</p>
-            {topicEntries.length > 0 && (
-              <div className="topicRail" data-ui="feed-topic-rail" aria-label="인기 태그">
-                {topicEntries.map(([tag, count]) => (
-                  <button
-                    key={tag}
-                    type="button"
-                    data-ui="feed-topic-rail-chip"
-                    data-tag={tag}
-                    aria-label={`태그 ${tag} 글 ${count}개 보기`}
-                    onClick={handleClickTopic}
-                  >
-                    {tag}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
-          <ProfileSummaryCard initialAdminProfile={initialAdminProfile} />
+          <aside className="homeNote" aria-label="블로그 운영 정보">
+            <div className="noteRow">
+              <strong>Focus</strong>
+              <span>{focusLabel}</span>
+            </div>
+            <div className="noteRow">
+              <strong>Updated</strong>
+              <span>최신 글 기준</span>
+            </div>
+            <div className="noteRow">
+              <strong>Repository</strong>
+              <span>{repositoryLabel}</span>
+            </div>
+          </aside>
         </IntroCard>
         <FeedExplorer initialBootstrapDegraded={initialHomeBootstrapStatus === "degraded"} />
         <div className="footer">
@@ -92,7 +67,8 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null, initialHomeBootstra
 export default Feed
 
 const StyledWrapper = styled.div`
-  --feed-product-bg: ${({ theme }) => theme.publicDesign.pageBackgroundColor};
+  --feed-product-bg: ${({ theme }) =>
+    theme.scheme === "light" ? "color-mix(in srgb, white 97%, black)" : theme.publicDesign.pageBackgroundColor};
   --feed-product-panel: ${({ theme }) => theme.publicDesign.readableSurface};
   --feed-product-panel-hover: ${({ theme }) => theme.publicDesign.surfaceElevated};
   --feed-product-border: ${({ theme }) => theme.publicDesign.border};
@@ -107,7 +83,7 @@ const StyledWrapper = styled.div`
   position: relative;
   z-index: 0;
   isolation: isolate;
-  padding: 1.2rem 0 2.4rem;
+  padding: 0 0 2.4rem;
   color: var(--feed-product-text);
 
   &::before {
@@ -120,7 +96,6 @@ const StyledWrapper = styled.div`
     width: 100vw;
     transform: translateX(-50%);
     background:
-      radial-gradient(circle at 78% 0%, var(--feed-product-hero-glow), transparent 28rem),
       var(--feed-product-bg);
   }
 
@@ -131,7 +106,7 @@ const StyledWrapper = styled.div`
   > .mid {
     display: grid;
     min-width: 0;
-    gap: 1.35rem;
+    gap: 0;
 
     @media (max-width: 768px) {
       gap: 0.82rem;
@@ -140,17 +115,17 @@ const StyledWrapper = styled.div`
     > .footer {
       padding-bottom: 2rem;
     }
+
   }
 `
 
 const IntroCard = styled.section`
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(17rem, 20rem);
+  grid-template-columns: minmax(0, 1fr) 360px;
   align-items: end;
-  gap: clamp(1.2rem, 3vw, 2.4rem);
-  border-bottom: 1px solid ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(200, 210, 222, 0.92)" : "rgba(48, 54, 61, 0.82)"};
-  padding: 0.2rem 0 1.3rem;
+  gap: 80px;
+  border-bottom: 1px solid var(--feed-product-border);
+  padding: 66px 0 42px;
 
   .introCopy {
     min-width: 0;
@@ -158,97 +133,100 @@ const IntroCard = styled.section`
 
   .brandLabel {
     display: block;
-    margin-bottom: 0.52rem;
+    margin-bottom: 14px;
     color: var(--feed-product-accent);
-    font-size: 0.78rem;
+    font-size: 0.6875rem;
     line-height: 1.2;
-    font-weight: 860;
-    letter-spacing: 0.02em;
+    font-weight: 820;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 
   h1 {
-    margin: 0;
+    margin: 14px 0 22px;
     color: var(--feed-product-text);
-    font-size: clamp(2.6rem, 5vw, 4rem);
-    letter-spacing: -0.075em;
-    line-height: 0.96;
-    font-weight: 880;
-    max-width: 12ch;
+    font-size: clamp(42px, 5.1vw, 72px);
+    letter-spacing: -0.065em;
+    line-height: 1.04;
+    font-weight: 850;
+    max-width: 850px;
   }
 
   p {
-    margin: 0.82rem 0 0;
+    margin: 0;
     color: var(--feed-product-muted);
-    font-size: clamp(0.98rem, 1.3vw, 1.08rem);
-    line-height: 1.55;
+    font-size: 17px;
+    line-height: 1.75;
     letter-spacing: -0.018em;
-    max-width: 40rem;
+    max-width: 640px;
+    word-break: keep-all;
   }
 
-  .topicRail {
-    margin-top: 1rem;
-    display: flex;
-    align-items: center;
-    gap: 0.48rem;
-    flex-wrap: wrap;
+  .homeNote {
+    display: grid;
+    gap: 0;
+    border-top: 2px solid var(--feed-product-text);
+    padding-top: 14px;
   }
 
-  .topicRail button {
-    display: inline-flex;
-    align-items: center;
-    min-height: 30px;
-    border-radius: 999px;
-    border: 1px solid var(--feed-product-border);
-    background: var(--feed-product-chip-bg);
-    color: var(--feed-product-muted);
-    padding: 0 0.72rem;
-    font-size: 0.76rem;
-    font-weight: 780;
-    cursor: pointer;
-    appearance: none;
-    font-family: inherit;
+  .noteRow {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 16px;
+    border-bottom: 1px solid var(--feed-product-border);
+    padding: 0 0 13px;
+    margin-bottom: 18px;
   }
 
-  .topicRail button:hover,
-  .topicRail button:focus-visible {
-    border-color: var(--feed-product-accent);
+  .noteRow strong {
+    color: ${({ theme }) => theme.colors.gray9};
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    font-weight: 760;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .noteRow span {
+    min-width: 0;
     color: var(--feed-product-text);
-    outline: none;
+    font-size: 0.875rem;
+    line-height: 1.55;
+    font-weight: 720;
+    overflow-wrap: anywhere;
   }
 
   @media (max-width: 1024px) {
     grid-template-columns: minmax(0, 1fr);
-    align-items: start;
+    gap: 34px;
+
+    .homeNote {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .noteRow {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
 
   @media (max-width: 768px) {
-    padding-bottom: 0.18rem;
-
-    [data-ui="feed-profile-summary"] {
-      display: none;
-    }
+    padding: 44px 0 30px;
 
     h1 {
+      margin: 14px 0 20px;
       max-width: none;
-      font-size: clamp(2rem, 11vw, 2.55rem);
-      line-height: 1.1;
+      font-size: 42px;
+      line-height: 1.04;
     }
 
     p {
-      margin-top: 0.64rem;
       font-size: 0.95rem;
       line-height: 1.5;
     }
 
-    .topicRail {
-      margin-top: 0.28rem;
-      gap: 0.4rem;
-    }
-
-    .topicRail button {
-      min-height: 28px;
-      padding: 0 0.62rem;
-      font-size: 0.72rem;
+    .noteRow {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 `

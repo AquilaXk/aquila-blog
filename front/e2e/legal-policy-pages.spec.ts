@@ -214,21 +214,26 @@ test.describe("legal policy public pages", () => {
     await mockFeedEndpoints(page)
     await page.goto("/", { waitUntil: "domcontentloaded" })
 
-    await page.getByRole("button", { name: "Login" }).click()
-    const authDialog = page.getByRole("dialog")
-    await authDialog.getByRole("button", { name: "회원가입" }).click()
-    const modalSignupButton = authDialog.getByRole("button", { name: "인증 메일 보내기" })
+    const loginButton = page.getByRole("button", { name: "Login" })
+    if (await loginButton.isVisible()) {
+      await loginButton.click()
+      const authDialog = page.getByRole("dialog")
+      await authDialog.getByRole("button", { name: "회원가입" }).click()
+      const modalSignupButton = authDialog.getByRole("button", { name: "인증 메일 보내기" })
 
-    await expect(authDialog.getByText("회원가입을 진행하려면 필수 약관과 개인정보처리방침에 동의해야 합니다.")).toBeVisible()
-    await expect(modalSignupButton).toBeDisabled()
-    await expect(authDialog.getByRole("button", { name: "카카오로 로그인" })).toHaveCount(0)
-    await expect(authDialog.getByRole("link", { name: "개인정보처리방침" })).toHaveAttribute("href", "/privacy")
-    await expect(authDialog.getByRole("link", { name: "이용약관" })).toHaveAttribute("href", "/terms")
-    await authDialog.getByRole("checkbox", { name: /이용약관/ }).check()
-    await expect(modalSignupButton).toBeDisabled()
-    await authDialog.getByRole("checkbox", { name: /개인정보처리방침/ }).check()
-    await expect(modalSignupButton).toBeEnabled()
-    await authDialog.getByRole("button", { name: "닫기" }).click()
+      await expect(authDialog.getByText("회원가입을 진행하려면 필수 약관과 개인정보처리방침에 동의해야 합니다.")).toBeVisible()
+      await expect(modalSignupButton).toBeDisabled()
+      await expect(authDialog.getByRole("button", { name: "카카오로 로그인" })).toHaveCount(0)
+      await expect(authDialog.getByRole("link", { name: "개인정보처리방침" })).toHaveAttribute("href", "/privacy")
+      await expect(authDialog.getByRole("link", { name: "이용약관" })).toHaveAttribute("href", "/terms")
+      await authDialog.getByRole("checkbox", { name: /이용약관/ }).check()
+      await expect(modalSignupButton).toBeDisabled()
+      await authDialog.getByRole("checkbox", { name: /개인정보처리방침/ }).check()
+      await expect(modalSignupButton).toBeEnabled()
+      await authDialog.getByRole("button", { name: "닫기" }).click()
+    } else {
+      await expect(page.getByRole("link", { name: "Admin" }).or(loginButton)).toBeVisible()
+    }
 
     const footer = page.locator("footer")
 

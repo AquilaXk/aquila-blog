@@ -1,6 +1,5 @@
 import { GetServerSideProps } from "next"
 import { CONFIG } from "site.config"
-import AppIcon from "src/components/icons/AppIcon"
 import MetaConfig from "src/components/MetaConfig"
 import ProfileImage from "src/components/ProfileImage"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
@@ -35,7 +34,7 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
   const fallbackProfileSnapshot = !hasAuthCookie ? resolvePublicAdminProfileSnapshot(req) : null
   const adminProfileResult = await timed(() =>
     fetchServerAdminProfile(req, {
-      timeoutMs: hasAuthCookie ? 1_800 : 900,
+      timeoutMs: 1_800,
     })
   )
   const initialAdminProfile =
@@ -47,9 +46,7 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
   const initialAdminProfileSource: StaticAdminProfileSeedSource =
     adminProfileResult.ok && adminProfileResult.value
       ? "published"
-      : fallbackProfileSnapshot?.source === "cookie-snapshot"
-        ? "published"
-        : "static-fallback"
+      : "static-fallback"
 
   res.setHeader(
     "Cache-Control",
@@ -84,8 +81,12 @@ type AboutPageProps = {
   initialAdminProfileSource: StaticAdminProfileSeedSource
 }
 
-const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) => {
-  const adminProfile = useAdminProfile(initialAdminProfile)
+const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile, initialAdminProfileSource }) => {
+  const shouldRefreshProfile = initialAdminProfileSource !== "published"
+  const adminProfile = useAdminProfile(initialAdminProfile, {
+    refetchOnMount: shouldRefreshProfile,
+    staleTimeMs: shouldRefreshProfile ? 0 : undefined,
+  })
 
   const displayName = adminProfile?.nickname || adminProfile?.name || CONFIG.profile.name
   const displayHeadline = adminProfile?.aboutHeadline || DEFAULT_ABOUT_HEADLINE
@@ -125,7 +126,7 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
   const supplementalSections = aboutDetailSections.filter(
     (section) => section !== projectSection && section !== timelineSection
   )
-  const githubHref = contactLinks.find((item) => item.label.toLowerCase().includes("github"))?.safeHref || ""
+  const hasProfileLinks = contactLinks.length > 0 || serviceLinks.length > 0
   const workspaceProjects =
     adminProfile?.aboutProjects && adminProfile.aboutProjects.length > 0
       ? adminProfile.aboutProjects
@@ -151,11 +152,6 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
     }
   })
   const timelineItems = (timelineSection?.items || []).map(parseTimelineItem)
-  const ctaLinks = [
-    githubHref ? { label: "GitHub", safeHref: githubHref } : null,
-    projectItems.length > 0 ? { label: "프로젝트 보기", safeHref: "#about-projects" } : null,
-  ].filter((item): item is { label: string; safeHref: string } => Boolean(item?.safeHref))
-
   const meta = {
     title: `About - ${blogTitle}`,
     description: displayBio,
@@ -167,137 +163,120 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
     <>
       <MetaConfig {...meta} />
       <AboutPageView>
-          <section className="hero-grid">
-            <div className="hero-copy" data-ui="about-hero">
-              <p className="about-eyebrow" data-ui="about-eyebrow">
-                Profile
-              </p>
-              <h1 className="profile-name">{displayName}</h1>
-              <p className="profile-statement">{displayHeadline}</p>
-              <p className="profile-role">{displayRole}</p>
-              <p className="profile-bio">{displayBio}</p>
+          <section className="page-head" data-ui="about-hero">
+            <div>
+              <span className="mono-label">About {blogTitle}</span>
+              <h1>{displayHeadline}</h1>
             </div>
-
-            <aside className="hero-rail">
-              <div className="profile-avatar" data-ui="about-avatar">
-                <ProfileImage
-                  src={profileImageSrc}
-                  width={108}
-                  height={108}
-                  alt={`${displayName} profile`}
-                  fillContainer
-                />
-              </div>
-
-              <div className="cta-group" data-ui="about-cta-group">
-                {ctaLinks.map((item) => (
-                  <a
-                    key={item.label}
-                    className="cta-link"
-                    href={item.safeHref}
-                    target={isExternalHref(item.safeHref) ? "_blank" : undefined}
-                    rel={isExternalHref(item.safeHref) ? "noopener noreferrer" : undefined}
-                  >
-                    {item.label}
-                  </a>
-                ))}
-              </div>
-            </aside>
           </section>
 
-          {projectItems.length > 0 ? (
-            <section className="content-section" id="about-projects" data-ui="about-projects">
-              <h2 className="section-title">{projectSectionTitle}</h2>
-              <ul className="project-list" data-ui="about-project-list">
-                {projectItems.map((item) => (
-                  <li key={item.name}>
-                    <div className="project-copy">
-                      <h3>{item.name}</h3>
-                      {item.summary ? <p data-ui="about-project-summary">{item.summary}</p> : null}
+          <div className="about-grid">
+            <section>
+              <h2>Profile</h2>
+              <div className="profile-inline">
+                <div className="profile-image" data-ui="about-avatar">
+                  <ProfileImage
+                    src={profileImageSrc}
+                    width={132}
+                    height={132}
+                    alt={`${displayName} profile`}
+                    fillContainer
+                  />
+                </div>
+                <div className="profile-copy">
+                  <strong>{displayName}</strong>
+                  <span>{displayRole}</span>
+                  <p>{displayBio}</p>
+                </div>
+              </div>
+              <div className="stack-list">
+                <div className="stack-row">
+                  <strong>NAME</strong>
+                  <span>{displayName}</span>
+                </div>
+                <div className="stack-row">
+                  <strong>ROLE</strong>
+                  <span>{displayRole}</span>
+                </div>
+              </div>
+            </section>
+
+            {hasProfileLinks ? (
+              <section>
+                <h2>Links</h2>
+                <div className="stack-list">
+                  {contactLinks.map((item) => (
+                    <div className="stack-row" key={`${item.label}-${item.safeHref}`}>
+                      <strong>{item.label.toUpperCase()}</strong>
+                      <a href={item.safeHref} target="_blank" rel="noopener noreferrer">
+                        {item.safeHref.replace(/^https?:\/\//, "")}
+                      </a>
                     </div>
-                    <div className="project-meta">
-                      {item.role ? <span data-ui="about-project-role">{item.role}</span> : null}
-                      {item.safeHref && item.linkLabel ? (
+                  ))}
+                  {serviceLinks.map((item) => (
+                    <div className="stack-row" key={`${item.label}-${item.safeHref}`}>
+                      <strong>{item.label.toUpperCase()}</strong>
+                      <a href={item.safeHref} target="_blank" rel="noopener noreferrer">
+                        {item.safeHref.replace(/^https?:\/\//, "")}
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
+            {projectItems.length > 0 ? (
+              <section id="about-projects" data-ui="about-projects">
+                <h2>{projectSectionTitle}</h2>
+                <div className="stack-list" data-ui="about-project-list">
+                  {projectItems.map((item) => (
+                    <div className="stack-row" key={item.name}>
+                      <strong>{item.role || item.linkLabel || "PROJECT"}</strong>
+                      {item.safeHref ? (
                         <a
-                          className="project-link"
                           href={item.safeHref}
                           target={isExternalHref(item.safeHref) ? "_blank" : undefined}
                           rel={isExternalHref(item.safeHref) ? "noopener noreferrer" : undefined}
                         >
-                          {item.linkLabel}
+                          {item.name}
                         </a>
-                      ) : null}
+                      ) : (
+                        <span>{item.name}</span>
+                      )}
                     </div>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
+                  ))}
+                </div>
+              </section>
+            ) : null}
 
-          {timelineItems.length > 0 ? (
-            <section className="content-section" data-ui="about-timeline-section">
-              <h2 className="section-title">{timelineSection?.title || "이력"}</h2>
-              <ol className="timeline-list" data-ui="about-timeline">
-                {timelineItems.map((item) => (
-                  <li key={`${item.label}-${item.date}`}>
-                    <span className="timeline-date">{item.date}</span>
-                    <strong>{item.label}</strong>
-                  </li>
-                ))}
-              </ol>
-            </section>
-          ) : null}
-
-          {supplementalSections.map((section, index) => (
-            <section
-              key={`${section.title}-${index}`}
-              className="content-section supplemental-section"
-              data-has-divider={section.hasDivider ? "true" : "false"}
-            >
-              <h2 className="section-title">{section.title}</h2>
-              <ul className="supplemental-list">
-                {section.items.map((item) => (
-                  <li key={`${section.title}-${item}`}>{item}</li>
-                ))}
-              </ul>
-            </section>
-          ))}
-
-          {contactLinks.length > 0 ? (
-            <section className="content-section compact-link-section" data-ui="about-contact-section">
-              <h2 className="section-title">Contact</h2>
-              <ul className="compact-link-list" data-ui="about-contact-links">
-                {contactLinks.map((item) => (
-                  <li key={`${item.icon}-${item.label}-${item.safeHref}`}>
-                    <a href={item.safeHref} target="_blank" rel="noopener noreferrer">
-                      <span className="icon">
-                        <AppIcon name={item.icon} aria-hidden="true" />
-                      </span>
+            {timelineItems.length > 0 ? (
+              <section data-ui="about-timeline-section">
+                <h2>{timelineSection?.title || "이력"}</h2>
+                <div className="stack-list" data-ui="about-timeline">
+                  {timelineItems.map((item) => (
+                    <div className="stack-row" key={`${item.label}-${item.date}`}>
+                      <strong>{item.date}</strong>
                       <span>{item.label}</span>
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
 
-          {serviceLinks.length > 0 ? (
-            <section className="content-section compact-link-section" data-ui="about-service-section">
-              <h2 className="section-title">Service</h2>
-              <ul className="compact-link-list" data-ui="about-service-links" id="about-service-links">
-                {serviceLinks.map((item) => (
-                  <li key={`${item.icon}-${item.label}-${item.safeHref}`}>
-                    <a href={item.safeHref} target="_blank" rel="noopener noreferrer">
-                      <span className="icon">
-                        <AppIcon name={item.icon} aria-hidden="true" />
-                      </span>
-                      <span>{item.label}</span>
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
+            {supplementalSections.map((section, index) => (
+              <section key={`${section.title}-${index}`} data-has-divider={section.hasDivider ? "true" : "false"}>
+                <h2>{section.title}</h2>
+                <div className="stack-list">
+                  {section.items.map((item) => (
+                    <div className="stack-row" key={`${section.title}-${item}`}>
+                      <strong>{String(index + 1).padStart(2, "0")}</strong>
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
       </AboutPageView>
     </>
   )

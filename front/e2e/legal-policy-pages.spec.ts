@@ -14,7 +14,7 @@ type LegalPolicyFixture = {
 const currentLegalVersions = {
   privacy: "1.0.2",
   terms: "1.0.1",
-  cookies: "1.0.2",
+  cookies: "1.0.3",
 } as const
 const internalPolicyTokens = [
   "법무·운영 확인 필요 항목",
@@ -132,7 +132,11 @@ test.describe("legal policy public pages", () => {
 
     await page.goto("/legal/history", { waitUntil: "domcontentloaded" })
     await expect(page.getByRole("heading", { name: "정책 변경 이력" })).toBeVisible()
-    await expect(page.getByRole("navigation", { name: "개인정보처리방침 링크" }).getByRole("link", { name: "버전 문서" })).toHaveAttribute(
+    const currentPrivacyHistoryItem = page
+      .locator("article")
+      .filter({ has: page.getByText(`버전 ${currentLegalVersions.privacy}`) })
+      .filter({ has: page.getByRole("heading", { name: "개인정보처리방침" }) })
+    await expect(currentPrivacyHistoryItem.getByRole("link", { name: "버전 문서" })).toHaveAttribute(
       "href",
       `/legal/privacy/${currentLegalVersions.privacy}`,
     )
@@ -140,14 +144,38 @@ test.describe("legal policy public pages", () => {
       "href",
       `/legal/terms/${currentLegalVersions.terms}`,
     )
+    const legacyPrivacyHistoryItem = page
+      .locator("article")
+      .filter({ has: page.getByText("버전 1.0.1") })
+      .filter({ has: page.getByRole("heading", { name: "개인정보처리방침" }) })
+    await expect(legacyPrivacyHistoryItem.getByRole("link", { name: "버전 문서" })).toHaveAttribute(
+      "href",
+      "/legal/privacy/1.0.1",
+    )
     const currentCookiesHistoryItem = page
       .locator("article")
       .filter({ has: page.getByText(`버전 ${currentLegalVersions.cookies}`) })
       .filter({ has: page.getByRole("heading", { name: "쿠키 정책" }) })
     await expect(currentCookiesHistoryItem.getByRole("link", { name: "현재 문서" })).toHaveAttribute("href", "/cookies")
+    const legacyCookiesHistoryItem = page
+      .locator("article")
+      .filter({ has: page.getByText("버전 1.0.2") })
+      .filter({ has: page.getByRole("heading", { name: "쿠키 정책" }) })
+    await expect(legacyCookiesHistoryItem.getByRole("link", { name: "버전 문서" })).toHaveAttribute(
+      "href",
+      "/legal/cookies/1.0.2",
+    )
 
-    const legacyResponse = await page.goto("/legal/privacy/1.0.0", { waitUntil: "domcontentloaded" })
-    expect(legacyResponse?.status()).toBe(404)
+    const legacyPrivacyResponse = await page.goto("/legal/privacy/1.0.1", { waitUntil: "domcontentloaded" })
+    expect(legacyPrivacyResponse?.status()).toBe(200)
+    await expect(page.getByRole("link", { name: "현재 버전" })).toHaveAttribute("href", "/privacy")
+
+    const legacyCookiesResponse = await page.goto("/legal/cookies/1.0.2", { waitUntil: "domcontentloaded" })
+    expect(legacyCookiesResponse?.status()).toBe(200)
+    await expect(page.getByRole("link", { name: "현재 버전" })).toHaveAttribute("href", "/cookies")
+
+    const unsupportedResponse = await page.goto("/legal/privacy/9.9.9", { waitUntil: "domcontentloaded" })
+    expect(unsupportedResponse?.status()).toBe(404)
   })
 
   test("auth, signup, modal, and footer surfaces link to privacy and terms", async ({ page }) => {

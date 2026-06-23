@@ -1324,6 +1324,25 @@ test("blue-green deploy keeps old backend running during burn-in rollback window
   assert(burnInIndex < stateWriteIndex, "release state must not mark candidate active before burn-in completes")
 })
 
+test("blue-green deploy waits longer for candidate Flyway startup only", () => {
+  const workflow = readFileSync(workflowPath, "utf8")
+  const deployScript = readFileSync(deployScriptPath, "utf8")
+  const candidateHealthBlock = deployScript.slice(
+    deployScript.indexOf("check_candidate_backend_health()"),
+    deployScript.indexOf("check_notification_sse_route()"),
+  )
+
+  assert.match(deployScript, /CANDIDATE_HEALTHCHECK_RETRIES="\$\{CANDIDATE_HEALTHCHECK_RETRIES:-450\}"/)
+  assert.match(deployScript, /CANDIDATE_HEALTHCHECK_RETRIES="\$\(normalize_positive_int "\$\{CANDIDATE_HEALTHCHECK_RETRIES\}" "450"\)"/)
+  assert.match(candidateHealthBlock, /local previous_retries="\$\{HEALTHCHECK_RETRIES\}"/)
+  assert.match(candidateHealthBlock, /HEALTHCHECK_RETRIES="\$\{CANDIDATE_HEALTHCHECK_RETRIES\}"/)
+  assert.match(candidateHealthBlock, /HEALTHCHECK_RETRIES="\$\{previous_retries\}"/)
+  assert.match(
+    workflow,
+    /CANDIDATE_HEALTHCHECK_RETRIES=450 \.\/deploy\/homeserver\/blue_green_deploy\.sh/,
+  )
+})
+
 test("runtime-split memory tuner keeps backend color startup headroom", () => {
   const deployScript = readFileSync(deployScriptPath, "utf8")
   const splitAllocator = deployScript.slice(
@@ -1403,7 +1422,7 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
   const preCandidateHelperDnsSkipIndex = deployScript.indexOf(
     "skip runtime helper dns check before candidate health: helpers were not prebooted",
   )
-  const candidateHealthIndex = deployScript.indexOf('check_backend_health "${next_backend}"')
+  const candidateHealthIndex = deployScript.indexOf('check_candidate_backend_health "${next_backend}"')
   const helperRestartIndex = deployScript.indexOf('if ! restart_runtime_split_backends_after_candidate_ready "${next_backend}"; then')
   const postRestartHelperDnsIndex = deployScript.indexOf(
     'check_backend_dns_from_caddy "back_read"',
@@ -1451,7 +1470,7 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
   )
   assert(edgeBootIndex > activeHelperStartIndex, "edge services must start after active-image helpers exist")
   assert(candidateHealthIndex > preCandidateBootEnd, "candidate healthcheck must happen after infra boot")
-  assert.match(deployScript, /if ! check_backend_health "\$\{next_backend\}"; then/)
+  assert.match(deployScript, /if ! check_candidate_backend_health "\$\{next_backend\}"; then/)
   assert.match(deployScript, /candidate backend health failed before cutover: \$\{next_backend\}/)
   assert(helperRestartIndex > candidateHealthIndex, "runtime split helpers must restart after candidate health with explicit failure handling")
   assert(postRestartHelperDnsIndex > helperRestartIndex, "helper DNS checks must run after candidate-backed helper startup")

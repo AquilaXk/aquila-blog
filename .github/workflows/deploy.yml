@@ -269,7 +269,7 @@ jobs:
     if: >
       needs.calculateTag.outputs.backend_deploy == 'true' &&
       needs.buildAndPush.result == 'success'
-    timeout-minutes: 30
+    timeout-minutes: 75
     permissions:
       contents: read
 
@@ -932,7 +932,7 @@ jobs:
             exit 1
           }
 
-          if ! STAGED_BACK_IMAGE="${STAGED_BACK_IMAGE}" RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}" RUNTIME_SPLIT_STAGE="${RUNTIME_SPLIT_STAGE_VALUE}" HEALTHCHECK_PATH=/actuator/health/readiness HEALTHCHECK_LOG_EVERY_N_TRIES=1 ./deploy/homeserver/blue_green_deploy.sh; then
+          if ! STAGED_BACK_IMAGE="${STAGED_BACK_IMAGE}" RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}" RUNTIME_SPLIT_STAGE="${RUNTIME_SPLIT_STAGE_VALUE}" HEALTHCHECK_PATH=/actuator/health/readiness HEALTHCHECK_LOG_EVERY_N_TRIES=1 CANDIDATE_HEALTHCHECK_RETRIES=450 ./deploy/homeserver/blue_green_deploy.sh; then
             rollback_and_exit "blue_green_deploy_failed"
           fi
 

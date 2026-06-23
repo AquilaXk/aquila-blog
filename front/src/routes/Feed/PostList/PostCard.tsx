@@ -5,7 +5,7 @@ import styled from "@emotion/styled"
 import { uiTokens } from "@shared/ui-tokens"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import AppIcon from "src/components/icons/AppIcon"
-import { memo, useCallback, useMemo, type MouseEvent } from "react"
+import { memo, useCallback, useEffect, useMemo, useState, type MouseEvent } from "react"
 import ProfileImage from "src/components/ProfileImage"
 import Router from "next/router"
 import {
@@ -26,12 +26,12 @@ const FEED_CARD_META_FONT_SIZE_REM = uiTokens.feed.card.metaFontSizeRem
 const FEED_CARD_SUMMARY_LINES = uiTokens.feed.card.summaryLines
 const INTERNAL_CATEGORY_TAGS = new Set(["Pinned"])
 
-const toDisplayCategoryLabel = (post: TPost) => {
-  const rawLabel =
-    post.category?.[0] ||
-    post.tags?.find((tag) => !INTERNAL_CATEGORY_TAGS.has(tag)) ||
-    "Engineering"
-  return splitCategoryDisplay(rawLabel).label
+const toDisplayCategoryLabels = (post: TPost) => {
+  const labels = [...(post.category ?? []), ...(post.tags ?? [])]
+    .filter((tag) => !INTERNAL_CATEGORY_TAGS.has(tag))
+    .map((tag) => splitCategoryDisplay(tag).label)
+  const uniqueLabels = Array.from(new Set(labels))
+  return uniqueLabels.length > 0 ? uniqueLabels : ["Engineering"]
 }
 
 const PostCard: React.FC<Props> = ({ data, layout = "regular", index = 0 }) => {
@@ -41,9 +41,10 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular", index = 0 }) => {
     CONFIG.lang
   )
   const summary = normalizeCardSummary(data.summary)
+  const likesCount = data.likesCount ?? 0
   const commentsCount = data.commentsCount ?? 0
-  const categoryLabel = toDisplayCategoryLabel(data)
-  const readMinutes = Math.max(4, Math.ceil(((data.title?.length || 0) + (summary?.length || 0)) / 120))
+  const categoryLabels = toDisplayCategoryLabels(data)
+  const coverCategoryLabel = categoryLabels[0]
   const viewsCount = data.hitCount ?? 0
   const viewsText =
     viewsCount >= 1000 ? `${(viewsCount / 1000).toFixed(viewsCount >= 10000 ? 0 : 1)}k views` : `${viewsCount} views`
@@ -56,6 +57,8 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular", index = 0 }) => {
       thumbnailZoom: parseThumbnailZoomFromUrl(rawThumbnail),
     }
   }, [data.thumbnail])
+  const [thumbnailFailed, setThumbnailFailed] = useState(false)
+  useEffect(() => setThumbnailFailed(false), [thumbnailSrc])
 
   const handleNavigate = useCallback(
     (event: MouseEvent<HTMLAnchorElement>) => {
@@ -84,7 +87,11 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular", index = 0 }) => {
         </span>
         <div className="content">
           <div className="tagRow">
-            <span className="tag">{categoryLabel.toUpperCase()}</span>
+            {categoryLabels.map((categoryLabel) => (
+              <span className="tag" key={categoryLabel}>
+                {categoryLabel.toUpperCase()}
+              </span>
+            ))}
           </div>
           <header>
             <h2>{data.title}</h2>
@@ -95,9 +102,12 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular", index = 0 }) => {
           <div className="meta">
             <span>{createdAtText}</span>
             <span className="dot">·</span>
-            <span>{readMinutes} min read</span>
-            <span className="dot">·</span>
             <span>{viewsText}</span>
+            <span className="dot">·</span>
+            <span className="like">
+              <AppIcon name="heart" />
+              {likesCount}개의 좋아요
+            </span>
             <span className="dot">·</span>
             <span className="comment">
               <AppIcon name="message" />
@@ -108,12 +118,7 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular", index = 0 }) => {
         <div className="side">
           <span className="date">{createdAtText}</span>
           <div className="thumbnail" aria-label={`${data.title} 미리보기`}>
-            <div className="imageFallback" aria-hidden="true">
-              <span className="coverCategory">{categoryLabel}</span>
-              <strong>{data.title}</strong>
-              <span className="coverBrand">AquilaLog</span>
-            </div>
-            {thumbnailSrc ? (
+            {thumbnailSrc && !thumbnailFailed ? (
               <ProfileImage
                 src={thumbnailSrc}
                 alt=""
@@ -121,6 +126,7 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular", index = 0 }) => {
                 fillContainer
                 priority={layout === "pinned"}
                 loading={layout === "pinned" ? "eager" : "lazy"}
+                onError={() => setThumbnailFailed(true)}
                 style={{
                   objectFit: "cover",
                   objectPosition: `${thumbnailFocusX}% ${thumbnailFocusY}%`,
@@ -128,7 +134,13 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular", index = 0 }) => {
                   transformOrigin: `${thumbnailFocusX}% ${thumbnailFocusY}%`,
                 }}
               />
-            ) : null}
+            ) : (
+              <div className="imageFallback" aria-hidden="true">
+                <span className="coverCategory">{coverCategoryLabel}</span>
+                <strong>{data.title}</strong>
+                <span className="coverBrand">AquilaLog</span>
+              </div>
+            )}
           </div>
           <span className="arrowBtn" aria-hidden="true">
           </span>
@@ -265,6 +277,7 @@ const StyledWrapper = styled.a`
           opacity: 0.56;
         }
 
+        .like,
         .comment {
           display: inline-flex;
           align-items: center;
@@ -349,15 +362,6 @@ const StyledWrapper = styled.a`
           font-weight: 780;
         }
 
-        &::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          background: ${({ theme }) => theme.publicDesign.accentMuted};
-          opacity: 0.45;
-          z-index: 2;
-          pointer-events: none;
-        }
       }
 
       .arrowBtn {
@@ -432,6 +436,7 @@ const StyledWrapper = styled.a`
       > .content > .meta {
         font-size: 0.66rem;
 
+        .like,
         .comment {
           svg {
             width: 0.78rem;

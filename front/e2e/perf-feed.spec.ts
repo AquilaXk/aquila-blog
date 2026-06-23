@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 import {
   toRestoredPageParams,
   type FeedExplorerRestoreSnapshot,
@@ -8,6 +8,19 @@ import {
   mockFeedEndpoints,
   waitForPageReady,
 } from "./helpers/perfFixtures"
+
+const expectDeferredPostHeadingVisible = async (page: Page, name: string) => {
+  const heading = page.getByRole("heading", { name })
+
+  for (let attempt = 0; attempt < 4 && (await heading.count()) === 0; attempt += 1) {
+    const placeholder = page.locator(".deferredPostCardPlaceholder").first()
+    if ((await placeholder.count()) === 0) break
+    await placeholder.scrollIntoViewIfNeeded()
+    await page.waitForTimeout(120)
+  }
+
+  await expect(heading).toBeVisible()
+}
 
 test.describe("perf feed scroll budgets", () => {
   test("restore snapshot은 cursor pageParams를 cursor chain으로 복원한다", () => {
@@ -172,7 +185,7 @@ test.describe("perf feed scroll budgets", () => {
 
   await page.getByRole("button", { name: "다시 시도" }).click()
 
-  await expect(page.getByText("피드 18개")).toBeVisible()
+  await expectDeferredPostHeadingVisible(page, "CLS 예산 점검 1251")
   expect(nextCursorAttempts).toBe(3)
 })
 
@@ -220,7 +233,7 @@ test.describe("perf feed scroll budgets", () => {
 
   await page.getByRole("button", { name: "더보기" }).click()
 
-  await expect(page.getByText("피드 18개")).toBeVisible()
+  await expectDeferredPostHeadingVisible(page, "CLS 예산 점검 1351")
   expect(pageRequests).toContain(2)
   expect(pageRequests.filter((value) => value === 2)).toHaveLength(1)
 })

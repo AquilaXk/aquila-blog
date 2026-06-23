@@ -65,7 +65,7 @@ const StyledWrapper = styled.div`
     min-width: 0;
     min-height: 36px;
     padding: 0 10px;
-    border-radius: ${({ theme }) => `${theme.variables.ui.button.radius}px`};
+    border-radius: 0;
     border: 1px solid ${({ theme }) => theme.publicDesign.border};
     background: ${({ theme }) => theme.publicDesign.readableSurface};
     box-shadow: none;
@@ -95,7 +95,7 @@ const StyledWrapper = styled.div`
       min-width: 56px;
       height: 24px;
       padding: 0 0.5rem;
-      border-radius: ${({ theme }) => `${theme.variables.ui.button.radius}px`};
+      border-radius: 0;
       border: 1px solid ${({ theme }) => theme.publicDesign.border};
       background: transparent;
       color: ${({ theme }) => theme.colors.gray10};
@@ -169,7 +169,7 @@ const StyledWrapper = styled.div`
       height: auto;
       min-height: ${MOBILE_TOUCH_TARGET_MIN_PX}px;
       padding: 0 0.5rem;
-      border-radius: ${({ theme }) => `${Math.max(theme.variables.ui.button.radius - 1, 6)}px`};
+      border-radius: 0;
     }
 
     > .field > .mid {

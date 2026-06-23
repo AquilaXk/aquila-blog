@@ -1,398 +1,172 @@
-import styled from "@emotion/styled";
-export const StyledWrapper = styled.div `
-  max-width: 62rem;
-  margin: 0 auto;
-  padding: 2.25rem 0 3rem;
+import styled from "@emotion/styled"
+
+export const StyledWrapper = styled.div`
+  padding: 70px 0 100px;
 
   .about-content {
-    display: grid;
-    gap: 2.6rem;
+    display: block;
   }
 
-  .hero-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.6fr) minmax(220px, 0.9fr);
-    gap: 2.25rem;
-    padding-bottom: 2rem;
-    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  .page-head {
+    display: block;
+    padding-bottom: 34px;
+    border-bottom: 2px solid ${({ theme }) => theme.colors.gray12};
   }
 
-  .hero-copy {
-    min-width: 0;
-  }
-
-  .about-eyebrow {
-    margin: 0 0 0.9rem;
+  .mono-label {
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 1.05rem;
-    line-height: 1.2;
-    font-weight: 800;
-    letter-spacing: 0.12em;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.6875rem;
+    line-height: 1;
+    font-weight: 780;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
   }
 
-  .profile-name {
-    margin: 0;
+  .page-head h1 {
+    margin: 13px 0 0;
+    max-width: 920px;
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: clamp(2.4rem, 2rem + 1vw, 3.25rem);
-    line-height: 1.02;
-    letter-spacing: -0.045em;
-    font-weight: 800;
-  }
-
-  .profile-statement {
-    margin: 1rem 0 0;
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: clamp(1.18rem, 1.02rem + 0.42vw, 1.45rem);
-    line-height: 1.5;
-    font-weight: 650;
-    letter-spacing: -0.02em;
-  }
-
-  .profile-role {
-    margin: 0.8rem 0 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.98rem;
-    line-height: 1.5;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-  }
-
-  .profile-bio {
-    margin: 1.1rem 0 0;
-    max-width: 40rem;
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 1rem;
-    line-height: 1.8;
-    white-space: pre-line;
+    font-size: 54px;
+    line-height: 1.05;
+    letter-spacing: -0.06em;
+    font-weight: 850;
     word-break: keep-all;
   }
 
-  .hero-rail {
-    display: grid;
-    align-content: start;
-    justify-items: start;
-    gap: 1rem;
-  }
-
-  .profile-avatar {
+  .profile-image {
     position: relative;
-    width: 148px;
-    border-radius: 999px;
+    width: 132px;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    border: 1px solid ${({ theme }) => theme.publicDesign.border};
+    background: ${({ theme }) => theme.publicDesign.readableSurface};
     overflow: hidden;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => (theme.colors.gray1)};
-    box-shadow: ${({ theme }) => "0 18px 38px rgba(0, 0, 0, 0.18)"};
-
-    &::after {
-      content: "";
-      display: block;
-      padding-bottom: 100%;
-    }
   }
 
-  .cta-group {
-    width: min(100%, 270px);
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.56rem;
-
-    a {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 40px;
-      padding: 0.68rem 0.92rem;
-      border-radius: 999px;
-      border: 1px solid ${({ theme }) => theme.colors.gray6};
-      background: ${({ theme }) => (theme.colors.gray1)};
-      color: ${({ theme }) => theme.colors.gray12};
-      font-size: 0.94rem;
-      font-weight: 700;
-      line-height: 1;
-      transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
-
-      &:hover {
-        background: ${({ theme }) => theme.colors.gray2};
-        border-color: ${({ theme }) => theme.colors.gray10};
-        transform: translateY(-1px);
-      }
-    }
+  .profile-image img {
+    object-fit: cover;
   }
 
-  .content-section {
+  .profile-inline {
+    display: grid;
+    grid-template-columns: 132px minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+    margin-bottom: 18px;
+  }
+
+  .profile-copy {
     min-width: 0;
+    display: grid;
+    gap: 6px;
   }
 
-  .section-title {
-    margin: 0 0 1.1rem;
+  .profile-copy strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1.38rem;
+    font-size: 1.125rem;
     line-height: 1.35;
-    font-weight: 800;
-    letter-spacing: -0.02em;
+    font-weight: 820;
+    word-break: keep-all;
   }
 
-  .project-list,
-  .timeline-list,
-  .supplemental-list,
-  .compact-link-list {
-    list-style: none;
+  .profile-copy span {
     margin: 0;
-    padding: 0;
-  }
-
-  .project-list {
-    display: grid;
-    gap: 0.7rem;
-
-    li {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(10rem, 15rem);
-      gap: 1.1rem;
-      padding: 1rem 1.1rem;
-      border: 1px solid ${({ theme }) => theme.colors.gray6};
-      border-radius: 16px;
-      background: ${({ theme }) => (theme.colors.gray1)};
-    }
-  }
-
-  .project-copy {
-    min-width: 0;
-
-    h3 {
-      margin: 0;
-      color: ${({ theme }) => theme.colors.gray12};
-      font-size: 1.05rem;
-      line-height: 1.4;
-      font-weight: 720;
-    }
-
-    p {
-      margin: 0.4rem 0 0;
-      color: ${({ theme }) => theme.colors.gray11};
-      font-size: 0.96rem;
-      line-height: 1.7;
-      word-break: keep-all;
-    }
-  }
-
-  .project-meta {
-    display: grid;
-    justify-items: start;
-    align-content: start;
-    gap: 0.5rem;
-
-    span {
-      color: ${({ theme }) => theme.colors.gray10};
-      font-size: 0.84rem;
-      line-height: 1.4;
-      font-weight: 700;
-      text-align: left;
-      letter-spacing: 0.02em;
-      text-transform: uppercase;
-    }
-
-    a {
-      display: inline-flex;
-      align-items: center;
-      min-height: 30px;
-      padding: 0.42rem 0.7rem;
-      border: 1px solid ${({ theme }) => theme.colors.gray6};
-      border-radius: 999px;
-      color: ${({ theme }) => theme.colors.gray12};
-      font-size: 0.86rem;
-      line-height: 1.4;
-      font-weight: 650;
-
-      &:hover {
-        border-color: ${({ theme }) => theme.colors.gray10};
-        text-decoration: none;
-      }
-    }
-  }
-
-  .timeline-list {
-    display: grid;
-    gap: 0.92rem;
-
-    li {
-      display: flex;
-      align-items: baseline;
-      gap: 1rem;
-    }
-  }
-
-  .timeline-date {
-    flex: 0 0 7.2rem;
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.9rem;
-    line-height: 1.45rem;
-    font-weight: 650;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    font-weight: 700;
+    text-transform: uppercase;
   }
 
-  .timeline-list strong {
-    flex: 1 1 auto;
-    min-width: 0;
-    color: ${({ theme }) => theme.colors.gray12};
+  .profile-copy p {
+    margin: 8px 0 0;
+    color: ${({ theme }) => theme.colors.gray11};
     font-size: 1rem;
-    line-height: 1.45rem;
-    font-weight: 650;
+    line-height: 1.75;
+    word-break: keep-all;
+    white-space: pre-line;
   }
 
-  .supplemental-section[data-has-divider="true"] {
-    padding-top: 1.2rem;
-    border-top: 1px solid ${({ theme }) => theme.colors.gray6};
-  }
-
-  .supplemental-list {
+  .about-grid {
     display: grid;
-    gap: 0.52rem;
-
-    li {
-      color: ${({ theme }) => theme.colors.gray11};
-      font-size: 0.98rem;
-      line-height: 1.7;
-    }
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 60px;
+    padding-top: 48px;
   }
 
-  .compact-link-section {
-    .section-title {
-      margin-bottom: 0.82rem;
-    }
+  .about-grid section {
+    min-width: 0;
   }
 
-  .compact-link-list {
-    background: transparent;
-    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-
-    li + li {
-      border-top: 1px solid ${({ theme }) => theme.colors.gray6};
-    }
-
-    a {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.7rem;
-      width: 100%;
-      min-height: 44px;
-      padding: 0.84rem 0;
-      color: ${({ theme }) => theme.colors.gray12};
-      font-size: 0.98rem;
-      line-height: 1.5;
-
-      &:hover {
-        text-decoration: underline;
-        text-underline-offset: 3px;
-      }
-    }
-
-    .icon {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      color: ${({ theme }) => theme.colors.gray10};
-      font-size: 1.05rem;
-    }
+  .about-grid h2 {
+    margin: 0 0 16px;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 30px;
+    line-height: 1.25;
+    letter-spacing: -0.04em;
+    font-weight: 820;
   }
 
-  @media (max-width: 900px) {
-    .hero-grid {
+  .stack-list {
+    border-top: 1px solid ${({ theme }) => theme.colors.gray12};
+  }
+
+  .stack-row {
+    display: grid;
+    grid-template-columns: 140px minmax(0, 1fr);
+    gap: 20px;
+    padding: 14px 0;
+    border-bottom: 1px solid ${({ theme }) => theme.publicDesign.border};
+  }
+
+  .stack-row strong {
+    color: ${({ theme }) => theme.colors.gray9};
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.6875rem;
+    line-height: 1.5;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .stack-row span,
+  .stack-row a {
+    min-width: 0;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+  }
+
+  .stack-row a {
+    text-decoration: none;
+  }
+
+  .stack-row a:hover {
+    color: ${({ theme }) => theme.colors.gray12};
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  @media (max-width: 820px) {
+    padding: 44px 0 70px;
+
+    .page-head h1 {
+      font-size: 42px;
+    }
+
+    .about-grid {
       grid-template-columns: 1fr;
-      gap: 1.5rem;
+      gap: 34px;
     }
 
-    .hero-rail {
-      justify-items: start;
+    .profile-inline {
+      grid-template-columns: 96px minmax(0, 1fr);
     }
 
-    .cta-group {
-      width: 100%;
-      max-width: 28rem;
-    }
-
-    .project-list li {
-      grid-template-columns: 1fr;
-    }
-
-    .project-meta {
-      justify-items: start;
-
-      span {
-        text-align: left;
-      }
+    .profile-image {
+      width: 96px;
     }
   }
-
-  @media (max-width: 768px) {
-    padding: 1.6rem 0 2.4rem;
-
-    .about-content {
-      gap: 2.1rem;
-    }
-
-    .hero-grid {
-      padding-bottom: 1.6rem;
-    }
-
-    .profile-name {
-      font-size: 2.25rem;
-    }
-
-    .profile-statement {
-      font-size: 1.08rem;
-      line-height: 1.56;
-    }
-
-    .profile-role {
-      font-size: 0.9rem;
-    }
-
-    .profile-bio {
-      font-size: 0.96rem;
-      line-height: 1.72;
-    }
-
-    .profile-avatar {
-      width: 88px;
-      box-shadow: none;
-    }
-
-    .cta-group {
-      gap: 0.54rem;
-
-      a {
-        min-height: 42px;
-        padding: 0.76rem 0.88rem;
-        font-size: 0.95rem;
-      }
-    }
-
-    .section-title {
-      font-size: 1.18rem;
-      margin-bottom: 0.88rem;
-    }
-
-    .timeline-list {
-      gap: 0.74rem;
-
-      li {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.18rem;
-      }
-    }
-
-    .timeline-date {
-      flex-basis: auto;
-      font-size: 0.82rem;
-    }
-
-    .project-copy p,
-    .supplemental-list li,
-    .compact-link-list a {
-      font-size: 0.94rem;
-    }
-  }
-`;
+`

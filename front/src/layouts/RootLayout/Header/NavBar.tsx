@@ -1,20 +1,32 @@
 import styled from "@emotion/styled"
+import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { Suspense, lazy, useEffect, useState } from "react"
+import { Suspense, lazy, useState } from "react"
 import ThemeToggle from "./ThemeToggle"
+import useAuthSession from "src/hooks/useAuthSession"
+import { normalizeNextPath } from "src/libs/router"
 
 type Props = {
   showThemeToggle?: boolean
 }
 
 const primaryLinks = [
-  ["notes", "Notes", "/"],
-  ["topics", "Topics", "/#topics"],
+  ["home", "Home", "/"],
   ["about", "About", "/about"],
 ] as const
 
 const NotificationBell = lazy(() => import("./NotificationBell"))
+const AuthEntryModal = dynamic(() => import("src/components/auth/AuthEntryModal"), {
+  ssr: false,
+  loading: () => null,
+})
+
+const preloadAuthEntryModal = () => {
+  void import("src/components/auth/AuthEntryModal").then((module) => {
+    module.preloadAuthEntryPanels?.("login")
+  })
+}
 
 const SearchIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
@@ -23,20 +35,14 @@ const SearchIcon = () => (
   </svg>
 )
 
-const BellIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true">
-    <path d="M10.35 20a1.8 1.8 0 0 0 3.3 0" strokeLinecap="round" />
-    <path d="M5.2 16.2c1.1-1.1 1.95-2.54 1.95-5A4.85 4.85 0 0 1 12 6.35a4.85 4.85 0 0 1 4.85 4.85c0 2.46.85 3.9 1.95 5H5.2Z" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-)
-
 const NavBar = ({ showThemeToggle = true }: Props) => {
   const router = useRouter()
-  const [hasSessionCookie, setHasSessionCookie] = useState(false)
-
-  useEffect(() => {
-    setHasSessionCookie(document.cookie.includes("apiKey="))
-  }, [])
+  const { me, authStatus } = useAuthSession()
+  const [authModalOpen, setAuthModalOpen] = useState(false)
+  const isAuthenticated = authStatus === "authenticated"
+  const isAdmin = authStatus === "authenticated" && Boolean(me?.isAdmin)
+  const showLogin = authStatus !== "authenticated"
+  const nextPath = normalizeNextPath(router.asPath)
 
   return (
     <StyledWrapper>
@@ -47,7 +53,7 @@ const NavBar = ({ showThemeToggle = true }: Props) => {
               href={to}
               data-ui="nav-control"
               data-active={
-                (id === "notes" && router.pathname === "/") ||
+                (id === "home" && router.pathname === "/") ||
                 (id === "about" && router.pathname === "/about")
                   ? "true"
                   : "false"
@@ -68,21 +74,35 @@ const NavBar = ({ showThemeToggle = true }: Props) => {
 
         {showThemeToggle ? <ThemeToggle /> : null}
 
-        {hasSessionCookie ? (
+        {showLogin ? (
+          <button
+            type="button"
+            data-ui="nav-control"
+            className="loginLink"
+            onMouseEnter={preloadAuthEntryModal}
+            onFocus={preloadAuthEntryModal}
+            onClick={() => {
+              preloadAuthEntryModal()
+              setAuthModalOpen(true)
+            }}
+          >
+            Login
+          </button>
+        ) : null}
+
+        {isAuthenticated ? (
           <div className="bellSlot">
             <Suspense fallback={null}>
               <NotificationBell enabled />
             </Suspense>
           </div>
-        ) : (
-          <button type="button" className="iconBtn bellSlot" aria-label="알림">
-            <BellIcon />
-          </button>
-        )}
+        ) : null}
 
-        <Link href="/admin" data-ui="nav-control" className="adminLink">
-          Admin
-        </Link>
+        {isAdmin ? (
+          <Link href="/admin" data-ui="nav-control" className="adminLink">
+            Admin
+          </Link>
+        ) : null}
 
         <button
           type="button"
@@ -92,6 +112,13 @@ const NavBar = ({ showThemeToggle = true }: Props) => {
           Menu
         </button>
       </div>
+
+      <AuthEntryModal
+        open={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        nextPath={nextPath}
+        title="로그인"
+      />
     </StyledWrapper>
   )
 }
@@ -169,7 +196,7 @@ const StyledWrapper = styled.div`
     gap: 0.5rem;
     padding: 0 0.625rem;
     color: ${({ theme }) => theme.colors.gray9};
-    border-radius: ${({ theme }) => theme.variables.ui.button.radius}px;
+    border-radius: 0;
     cursor: pointer;
 
     svg {
@@ -200,42 +227,30 @@ const StyledWrapper = styled.div`
     }
   }
 
-  .iconBtn {
-    width: 36px;
-    height: 36px;
-    border: 1px solid transparent;
-    background: transparent;
-    display: grid;
-    place-items: center;
-    border-radius: ${({ theme }) => theme.variables.ui.button.radius}px;
-    color: ${({ theme }) => theme.colors.gray10};
-    cursor: pointer;
-
-    &:hover {
-      border-color: ${({ theme }) => theme.publicDesign.border};
-      background: ${({ theme }) => theme.publicDesign.readableSurface};
-      color: ${({ theme }) => theme.colors.gray12};
-    }
-
-    svg {
-      width: 1.125rem;
-      height: 1.125rem;
-    }
-  }
-
+  .loginLink,
   .adminLink {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     height: 36px;
     padding: 0 0.75rem;
-    border: 1px solid ${({ theme }) => theme.colors.gray12};
-    background: ${({ theme }) => theme.colors.gray12};
-    color: ${({ theme }) => theme.colors.gray1};
     font-size: 0.75rem;
     font-weight: 750;
     border-radius: ${({ theme }) => theme.variables.ui.button.radius}px;
     text-decoration: none;
+  }
+
+  .loginLink {
+    border: 1px solid ${({ theme }) => theme.publicDesign.border};
+    background: ${({ theme }) => theme.publicDesign.readableSurface};
+    color: ${({ theme }) => theme.colors.gray12};
+    cursor: pointer;
+  }
+
+  .adminLink {
+    border: 1px solid ${({ theme }) => theme.colors.gray12};
+    background: ${({ theme }) => theme.colors.gray12};
+    color: ${({ theme }) => theme.colors.gray1};
   }
 
   .mobileMenuTrigger {
@@ -255,6 +270,7 @@ const StyledWrapper = styled.div`
   @media (max-width: 860px) {
     .searchTrigger,
     .bellSlot,
+    .loginLink,
     .adminLink {
       display: none;
     }

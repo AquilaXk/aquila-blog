@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { CONFIG } from "site.config"
 import styled from "@emotion/styled"
+import BrandMark from "src/components/branding/BrandMark"
 
 type Props = {
   blogTitle?: string
@@ -11,10 +12,7 @@ const Logo = ({ blogTitle: blogTitleProp }: Props) => {
 
   return (
     <StyledWrapper href="/" aria-label={blogTitle}>
-      <span className="brandMark" aria-hidden="true">
-        <i />
-        <b>A</b>
-      </span>
+      <BrandMark className="brandMark" priority />
       <span className="brandText">{blogTitle}</span>
       <em>ENGINEERING JOURNAL</em>
     </StyledWrapper>
@@ -37,27 +35,10 @@ const StyledWrapper = styled(Link)`
   line-height: 1.1;
 
   .brandMark {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: block;
     flex-shrink: 0;
     width: 1.75rem;
     height: 1.75rem;
-    border: 1.5px solid currentColor;
-
-    i {
-      border-right: 1px solid currentColor;
-      transform: skew(-18deg);
-      margin-left: 7px;
-    }
-
-    b {
-      align-self: center;
-      color: currentColor;
-      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-      font-size: 10px;
-      line-height: 1;
-      font-weight: 700;
-    }
   }
 
   .brandText {

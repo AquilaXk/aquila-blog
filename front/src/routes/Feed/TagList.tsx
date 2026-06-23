@@ -272,18 +272,13 @@ const StyledWrapper = styled.div`
     align-items: baseline;
     gap: 16px;
     text-align: left;
-    color: ${({ theme }) => theme.colors.gray10};
+    color: ${({ theme }) => theme.colors.gray9};
     cursor: pointer;
-    transition: all 0.125s ease-in;
+    transition: color 0.125s ease-in;
 
     &:hover {
       background: transparent;
       color: ${({ theme }) => theme.colors.gray12};
-
-      .name {
-        text-decoration: underline;
-        text-underline-offset: 2px;
-      }
     }
 
     &:focus-visible {
@@ -293,6 +288,7 @@ const StyledWrapper = styled.div`
 
     &[data-active="true"] {
       background: transparent;
+      color: ${({ theme }) => theme.colors.gray12};
     }
   }
 
@@ -322,26 +318,32 @@ const StyledWrapper = styled.div`
     min-width: 0;
     font-size: 0.8rem;
     font-weight: 610;
-    color: ${({ theme }) => theme.colors.gray10};
+    color: inherit;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .desktopList button[data-active="true"] .name {
-    color: var(--feed-tag-accent-text);
-    font-weight: 700;
+    color: inherit;
+    font-weight: 800;
     text-decoration: none;
+  }
+
+  .desktopList button:hover .name {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-weight: 800;
   }
 
   .desktopList button .count {
     font-size: 0.72rem;
-    color: ${({ theme }) => theme.colors.gray10};
+    color: ${({ theme }) => theme.colors.gray8};
     font-variant-numeric: tabular-nums;
   }
 
+  .desktopList button:hover .count,
   .desktopList button[data-active="true"] .count {
-    color: var(--feed-tag-accent-text);
+    color: ${({ theme }) => theme.colors.gray12};
   }
 
   .chipRail {
@@ -396,7 +398,7 @@ const StyledWrapper = styled.div`
     border: 0;
     background: transparent;
     padding: 0.34rem 0.82rem;
-    color: #c9d1d9;
+    color: ${({ theme }) => theme.colors.gray9};
     flex-shrink: 0;
     scroll-snap-align: start;
     cursor: pointer;
@@ -415,6 +417,9 @@ const StyledWrapper = styled.div`
     }
 
     &:hover {
+      color: ${({ theme }) => theme.colors.gray12};
+      font-weight: 760;
+
       &::after {
         border-color: var(--feed-tag-hover-border);
         background: var(--feed-tag-surface-elevated);
@@ -448,7 +453,7 @@ const StyledWrapper = styled.div`
 
   .chipRail button .count {
     font-size: 0.72rem;
-    color: #8b949e;
+    color: ${({ theme }) => theme.colors.gray10};
   }
 
   .chipRail button[data-active="true"] .count {

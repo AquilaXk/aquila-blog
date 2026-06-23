@@ -53,6 +53,26 @@ test.describe("core smoke feed and search", () => {
   expect(homeStyles.firstCard?.borderBottomWidth).toBe("1px")
 })
 
+  test("피드 카드 thumbnail 로드 실패는 빈 사각형 대신 fallback cover를 렌더한다", async ({ page }) => {
+  await mockFeedEndpoints(page)
+  await page.route("**/post/api/v1/posts/feed**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(
+        createExplorePage("깨진 썸네일 fallback", "테스트태그", { thumbnail: "https://cdn.example.invalid/broken.png" })
+      ),
+    })
+  })
+  await page.route("https://cdn.example.invalid/broken.png", async (route) => route.abort("failed"))
+
+  await page.goto("/")
+
+  const firstCard = page.locator('[data-ui="feed-post-card"]').first()
+  await expect(firstCard.locator(".imageFallback")).toBeVisible()
+  await expect(firstCard.locator(".imageFallback")).toContainText("깨진 썸네일 fallback")
+})
+
   test("홈 topic rail은 실제 태그 count 상위 항목을 표시하고 tag 탐색으로 연결한다", async ({ page }) => {
   const capturedTag: string[] = []
 

@@ -56,15 +56,89 @@ export const ExplorerCard = styled.section`
     align-items: center;
   }
 
-  .sortSelect {
+  .sortDropdown {
+    position: relative;
+    flex: 0 0 auto;
+  }
+
+  .sortTrigger {
     height: 36px;
     border: 1px solid ${({ theme }) => theme.publicDesign.border};
     background: ${({ theme }) => theme.publicDesign.readableSurface};
-    color: ${({ theme }) => theme.colors.gray12};
+    display: inline-flex;
+    color: ${({ theme }) => theme.colors.gray10};
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 86px;
     padding: 0 10px;
-    border-radius: ${({ theme }) => theme.variables.ui.button.radius}px;
     font-size: 0.8125rem;
-    font-weight: 650;
+    line-height: 1;
+    font-weight: 740;
+    letter-spacing: 0;
+    cursor: pointer;
+  }
+
+  .sortTrigger:hover,
+  .sortTrigger:focus-visible,
+  .sortTrigger[aria-expanded="true"] {
+    border-color: ${({ theme }) => theme.colors.gray12};
+    color: ${({ theme }) => theme.colors.gray12};
+    outline: none;
+  }
+
+  .sortChevron {
+    width: 7px;
+    height: 7px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: translateY(-2px) rotate(45deg);
+  }
+
+  .sortMenu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 4px);
+    z-index: 20;
+    min-width: 100%;
+    border: 1px solid ${({ theme }) => theme.publicDesign.borderStrong};
+    background: ${({ theme }) => theme.publicDesign.readableSurface};
+    box-shadow: none;
+    padding: 3px;
+  }
+
+  .sortOption {
+    width: 100%;
+    height: 30px;
+    border: 0;
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray10};
+    display: grid;
+    grid-template-columns: 12px 1fr;
+    align-items: center;
+    gap: 5px;
+    text-align: left;
+    padding: 0 8px;
+    font-size: 0.75rem;
+    font-weight: 720;
+    cursor: pointer;
+  }
+
+  .sortOption::before {
+    content: "";
+  }
+
+  .sortOption:hover,
+  .sortOption:focus-visible,
+  .sortOption[data-active="true"] {
+    background: ${({ theme }) => theme.publicDesign.surfaceElevated};
+    color: ${({ theme }) => theme.colors.gray12};
+    outline: none;
+  }
+
+  .sortOption[data-active="true"]::before {
+    content: "✓";
+    font-weight: 900;
   }
 
   @media (max-width: 768px) {
@@ -75,6 +149,20 @@ export const ExplorerCard = styled.section`
 
     .searchSlot {
       width: 100%;
+    }
+
+    .sortDropdown {
+      flex: 0 0 auto;
+    }
+
+    .sortTrigger {
+      height: 36px;
+      min-width: 86px;
+    }
+
+    .sortMenu {
+      left: auto;
+      right: 0;
     }
   }
 `

@@ -82,8 +82,8 @@ const StyledButton = styled.button<StyledButtonProps>`
 `
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ size = "lg", variant = "secondary", ...props }, ref) => (
-    <StyledButton ref={ref} $size={size} $variant={variant} {...props} />
+  ({ size = "lg", type = "button", variant = "secondary", ...props }, ref) => (
+    <StyledButton ref={ref} type={type} $size={size} $variant={variant} {...props} />
   )
 )
 
@@ -108,8 +108,8 @@ const StyledIconButton = styled.button<StyledButtonProps>`
 `
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
-  ({ size = "md", variant = "secondary", ...props }, ref) => (
-    <StyledIconButton ref={ref} $size={size} $variant={variant} {...props} />
+  ({ size = "md", type = "button", variant = "secondary", ...props }, ref) => (
+    <StyledIconButton ref={ref} type={type} $size={size} $variant={variant} {...props} />
   )
 )
 
@@ -182,8 +182,8 @@ const StyledChip = styled.button<{ $selected: boolean }>`
 `
 
 export const Chip = forwardRef<HTMLButtonElement, ChipProps>(
-  ({ selected = false, ...props }, ref) => (
-    <StyledChip ref={ref} $selected={selected} {...props} />
+  ({ selected = false, type = "button", ...props }, ref) => (
+    <StyledChip ref={ref} type={type} $selected={selected} {...props} />
   )
 )
 

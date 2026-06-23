@@ -1331,12 +1331,17 @@ test("blue-green deploy waits longer for candidate Flyway startup only", () => {
     deployScript.indexOf("check_candidate_backend_health()"),
     deployScript.indexOf("check_notification_sse_route()"),
   )
+  const blueGreenDeployJob = workflow.slice(
+    workflow.indexOf("  blueGreenDeploy:"),
+    workflow.indexOf("  frontLiveE2E:"),
+  )
 
   assert.match(deployScript, /CANDIDATE_HEALTHCHECK_RETRIES="\$\{CANDIDATE_HEALTHCHECK_RETRIES:-450\}"/)
   assert.match(deployScript, /CANDIDATE_HEALTHCHECK_RETRIES="\$\(normalize_positive_int "\$\{CANDIDATE_HEALTHCHECK_RETRIES\}" "450"\)"/)
   assert.match(candidateHealthBlock, /local previous_retries="\$\{HEALTHCHECK_RETRIES\}"/)
   assert.match(candidateHealthBlock, /HEALTHCHECK_RETRIES="\$\{CANDIDATE_HEALTHCHECK_RETRIES\}"/)
   assert.match(candidateHealthBlock, /HEALTHCHECK_RETRIES="\$\{previous_retries\}"/)
+  assert.match(blueGreenDeployJob, /timeout-minutes:\s*75/)
   assert.match(
     workflow,
     /CANDIDATE_HEALTHCHECK_RETRIES=450 \.\/deploy\/homeserver\/blue_green_deploy\.sh/,

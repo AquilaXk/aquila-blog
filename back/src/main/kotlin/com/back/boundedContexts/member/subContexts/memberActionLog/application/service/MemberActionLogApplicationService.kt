@@ -8,13 +8,15 @@ import com.back.boundedContexts.post.domain.PostComment
 import com.back.boundedContexts.post.domain.PostLike
 import com.back.boundedContexts.post.event.*
 import com.back.standard.dto.EventPayload
-import com.back.standard.util.Ut
 import org.springframework.stereotype.Service
+import tools.jackson.databind.ObjectMapper
 
 @Service
 class MemberActionLogApplicationService(
     private val memberActionLogRepository: MemberActionLogRepositoryPort,
 ) {
+    private val objectMapper = ObjectMapper()
+
     fun save(event: EventPayload) {
         when (event) {
             is PostWrittenEvent -> savePostWrittenEvent(event)
@@ -40,7 +42,14 @@ class MemberActionLogApplicationService(
                 secondaryId = event.actorDto.id,
                 secondaryOwner = Member(event.actorDto.id),
                 actor = Member(event.actorDto.id),
-                data = Ut.JSON.toString(event),
+                data =
+                    auditData(
+                        event = event,
+                        "postId" to event.postDto.id,
+                        "actorId" to event.actorDto.id,
+                        "beforeTagCount" to event.beforeTags.size,
+                        "afterTagCount" to event.afterTags.size,
+                    ),
             ),
         )
     }
@@ -56,7 +65,14 @@ class MemberActionLogApplicationService(
                 secondaryId = event.actorDto.id,
                 secondaryOwner = Member(event.actorDto.id),
                 actor = Member(event.actorDto.id),
-                data = Ut.JSON.toString(event),
+                data =
+                    auditData(
+                        event = event,
+                        "postId" to event.postDto.id,
+                        "actorId" to event.actorDto.id,
+                        "beforeTagCount" to event.beforeTags.size,
+                        "afterTagCount" to event.afterTags.size,
+                    ),
             ),
         )
     }
@@ -72,7 +88,14 @@ class MemberActionLogApplicationService(
                 secondaryId = event.actorDto.id,
                 secondaryOwner = Member(event.actorDto.id),
                 actor = Member(event.actorDto.id),
-                data = Ut.JSON.toString(event),
+                data =
+                    auditData(
+                        event = event,
+                        "postId" to event.postDto.id,
+                        "actorId" to event.actorDto.id,
+                        "beforeTagCount" to event.beforeTags.size,
+                        "afterTagCount" to event.afterTags.size,
+                    ),
             ),
         )
     }
@@ -88,7 +111,14 @@ class MemberActionLogApplicationService(
                 secondaryId = event.postDto.id,
                 secondaryOwner = Member(event.postDto.authorId),
                 actor = Member(event.actorDto.id),
-                data = Ut.JSON.toString(event),
+                data =
+                    auditData(
+                        event = event,
+                        "commentId" to event.postCommentDto.id,
+                        "postId" to event.postDto.id,
+                        "actorId" to event.actorDto.id,
+                        "replyReceiverId" to event.replyReceiverId,
+                    ),
             ),
         )
     }
@@ -104,7 +134,13 @@ class MemberActionLogApplicationService(
                 secondaryId = event.postDto.id,
                 secondaryOwner = Member(event.postDto.authorId),
                 actor = Member(event.actorDto.id),
-                data = Ut.JSON.toString(event),
+                data =
+                    auditData(
+                        event = event,
+                        "commentId" to event.postCommentDto.id,
+                        "postId" to event.postDto.id,
+                        "actorId" to event.actorDto.id,
+                    ),
             ),
         )
     }
@@ -120,7 +156,13 @@ class MemberActionLogApplicationService(
                 secondaryId = event.postDto.id,
                 secondaryOwner = Member(event.postDto.authorId),
                 actor = Member(event.actorDto.id),
-                data = Ut.JSON.toString(event),
+                data =
+                    auditData(
+                        event = event,
+                        "commentId" to event.postCommentDto.id,
+                        "postId" to event.postDto.id,
+                        "actorId" to event.actorDto.id,
+                    ),
             ),
         )
     }
@@ -136,7 +178,13 @@ class MemberActionLogApplicationService(
                 secondaryId = event.postId,
                 secondaryOwner = Member(event.postAuthorId),
                 actor = Member(event.actorDto.id),
-                data = Ut.JSON.toString(event),
+                data =
+                    auditData(
+                        event = event,
+                        "likeId" to event.likeId,
+                        "postId" to event.postId,
+                        "actorId" to event.actorDto.id,
+                    ),
             ),
         )
     }
@@ -152,8 +200,32 @@ class MemberActionLogApplicationService(
                 secondaryId = event.postId,
                 secondaryOwner = Member(event.postAuthorId),
                 actor = Member(event.actorDto.id),
-                data = Ut.JSON.toString(event),
+                data =
+                    auditData(
+                        event = event,
+                        "likeId" to event.likeId,
+                        "postId" to event.postId,
+                        "actorId" to event.actorDto.id,
+                    ),
             ),
         )
     }
+
+    private fun auditData(
+        event: EventPayload,
+        vararg fields: Pair<String, Any?>,
+    ): String =
+        objectMapper.writeValueAsString(
+            linkedMapOf<String, Any?>(
+                "eventType" to event::class.simpleName,
+                "metadataCode" to "structured_audit_v1",
+                "aggregateType" to event.aggregateType,
+                "aggregateId" to event.aggregateId,
+                "eventUid" to event.uid.toString(),
+            ).apply {
+                fields.forEach { (key, value) ->
+                    if (value != null) put(key, value)
+                }
+            },
+        )
 }

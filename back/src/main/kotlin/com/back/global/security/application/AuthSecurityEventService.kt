@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
+import java.security.MessageDigest
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
@@ -47,7 +48,7 @@ class AuthSecurityEventService(
             AuthSecurityEvent(
                 eventType = AuthSecurityEventType.LOGIN_POLICY_APPLIED,
                 memberId = member.id,
-                loginIdentifier = loginIdentifier,
+                loginIdentifier = minimizedLoginIdentifier(member.id, loginIdentifier),
                 rememberLoginEnabled = member.rememberLoginEnabled,
                 ipSecurityEnabled = member.ipSecurityEnabled,
                 clientIpFingerprint = member.ipSecurityFingerprint,
@@ -75,7 +76,7 @@ class AuthSecurityEventService(
             AuthSecurityEvent(
                 eventType = AuthSecurityEventType.IP_SECURITY_MISMATCH_BLOCKED,
                 memberId = memberId,
-                loginIdentifier = loginIdentifier,
+                loginIdentifier = minimizedLoginIdentifier(memberId, loginIdentifier),
                 rememberLoginEnabled = rememberLoginEnabled,
                 ipSecurityEnabled = ipSecurityEnabled,
                 clientIpFingerprint = expectedIpFingerprint,
@@ -115,5 +116,19 @@ class AuthSecurityEventService(
         if (value.isNullOrBlank()) return null
         if (value.length <= 16) return value
         return "${value.take(12)}...${value.takeLast(4)}"
+    }
+
+    private fun minimizedLoginIdentifier(
+        memberId: Long?,
+        loginIdentifier: String?,
+    ): String? {
+        if (memberId != null || loginIdentifier.isNullOrBlank()) return null
+        val normalized = loginIdentifier.trim().lowercase()
+        val digest =
+            MessageDigest
+                .getInstance("SHA-256")
+                .digest(normalized.toByteArray())
+                .joinToString("") { "%02x".format(it) }
+        return "sha256:$digest"
     }
 }

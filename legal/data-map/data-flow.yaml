@@ -66,7 +66,7 @@ flows:
       - home_server_postgresql
       - home_server_redis
       - grafana_loki_monitoring
-    status: redaction은 issue1001
+    status: auth security identifiers and member action log bodies are minimized by issue1001
   - id: notifications_sse
     collectionPoint: post/comment domain events and SSE API
     stores:

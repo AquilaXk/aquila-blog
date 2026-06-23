@@ -1015,11 +1015,10 @@ test.describe("Markdown editor replacement", () => {
 
     await page.goto("/editor/new?source=local-draft")
 
-    const labels = await page
+    const languageLabels = page
       .getByTestId("markdown-editor-preview-pane")
       .locator(".aq-code-language")
-      .allTextContents()
-    expect(labels).toEqual(languageCases.map(([, , label]) => label))
-    expect(labels).not.toContain("TXT")
+    await expect(languageLabels).toHaveText(languageCases.map(([, , label]) => label))
+    expect(await languageLabels.allTextContents()).not.toContain("TXT")
   })
 })

@@ -1367,18 +1367,39 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
     deployScript.indexOf("restart_runtime_split_backends_after_candidate_ready()"),
     deployScript.indexOf("probe_caddy_http_code()"),
   )
+  const prepareImagesBlock = deployScript.slice(
+    deployScript.indexOf("prepare_runtime_backend_images()"),
+    deployScript.indexOf("require_nonempty_env_key()"),
+  )
+  const activeHelperStartBlock = deployScript.slice(
+    deployScript.indexOf("start_runtime_split_helper_backends_on_active()"),
+    deployScript.indexOf("restart_runtime_split_backends_after_candidate_ready()"),
+  )
+  const rollbackBlock = deployScript.slice(
+    deployScript.indexOf("rollback_to_backend()"),
+    deployScript.indexOf('if [[ ! -f "${ENV_FILE}" ]]'),
+  )
   const preCandidateBootStart = deployScript.indexOf("services_to_boot=(")
   const preCandidateBootEnd = deployScript.indexOf('compose_up_with_retry "${services_to_boot[@]}"')
+  const activeHelperStartIndex = deployScript.indexOf('start_runtime_split_helper_backends_on_active "${active_backend}"')
+  const edgeBootIndex = deployScript.indexOf("edge_services_to_boot=(caddy cloudflared)")
   const candidateHealthIndex = deployScript.indexOf('check_backend_health "${next_backend}"')
   const helperRestartIndex = deployScript.indexOf('if ! restart_runtime_split_backends_after_candidate_ready "${next_backend}"; then')
 
   assert.match(backendHttpHostBlock, /back_blue\|back_green\|back_read\|back_admin\|back_worker/)
+  assert.match(prepareImagesBlock, /upsert_runtime_backend_image "\$\{service\}" "\$\{active_image\}"/)
+  assert.match(activeHelperStartBlock, /compose_up_force_recreate_with_retry "\$\{helper_services\[@\]\}"/)
+  assert.match(activeHelperStartBlock, /if ! check_backend_health "\$\{service\}"; then/)
+  assert.match(helperRestartBlock, /upsert_runtime_backend_image "\$\{service\}" "\$\{candidate_image\}"/)
   assert.match(helperRestartBlock, /if ! check_backend_health "\$\{service\}"; then/)
   assert.match(helperRestartBlock, /restore_runtime_split_helper_backends_to_active\(\)/)
   assert.match(helperRestartBlock, /upsert_runtime_backend_image "\$\{service\}" "\$\{active_image\}"/)
   assert.match(helperRestartBlock, /write_backend_release_state "\$\{active_backend\}" "\$\{failed_candidate\}"/)
+  assert.match(rollbackBlock, /restore_runtime_split_helper_backends_to_active "\$\{rollback_backend\}" "\$\{inactive_backend\}" \|\| return 1/)
   assert(preCandidateBootStart > 0, "deploy script must build the pre-candidate boot list")
   assert(preCandidateBootEnd > preCandidateBootStart, "deploy script must boot infra before the candidate")
+  assert(activeHelperStartIndex > preCandidateBootEnd, "runtime split helpers must start on active image after data infra")
+  assert(edgeBootIndex > activeHelperStartIndex, "edge services must start after active-image helpers exist")
   assert(candidateHealthIndex > preCandidateBootEnd, "candidate healthcheck must happen after infra boot")
   assert(helperRestartIndex > candidateHealthIndex, "runtime split helpers must restart after candidate health with explicit failure handling")
   assert.match(
@@ -1391,6 +1412,8 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
   for (const service of helperServices) {
     assert(!preCandidateBoot.includes(service), `${service} must not start before candidate migration`)
   }
+  assert(!preCandidateBoot.includes("caddy"), "caddy must wait until active-image helpers exist")
+  assert(!preCandidateBoot.includes("cloudflared"), "cloudflared must wait until active-image helpers exist")
 })
 
 test("homeserver origin ingress is private behind Cloudflare Tunnel", () => {

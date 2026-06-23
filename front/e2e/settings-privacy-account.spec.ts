@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test"
 
+const OPTIONAL_TRACKING_CONSENT_STORAGE_KEY = "privacy.optionalTrackingConsent.v1"
+
 const authMember = {
   id: 901,
   createdAt: "2026-06-21T00:00:00Z",
@@ -38,7 +40,7 @@ test("settings privacy page exposes export snapshot and creates privacy request"
           },
           latestLegalAcceptance: {
             termsVersion: "1.0.1",
-            privacyVersion: "1.0.1",
+            privacyVersion: "1.0.2",
             analyticsConsent: false,
             overseasTransferAcknowledged: true,
             acceptedAt: "2026-06-21T00:10:00Z",
@@ -74,8 +76,36 @@ test("settings privacy page exposes export snapshot and creates privacy request"
   await page.goto("/settings/privacy")
 
   await expect(page.getByRole("heading", { name: "개인정보 관리" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "선택 analytics·RUM" })).toBeVisible()
   await expect(page.getByText("privacy-user@example.com")).toBeVisible()
-  await expect(page.getByText("개인정보처리방침 1.0.1")).toBeVisible()
+  await expect(page.getByText("개인정보처리방침 1.0.2")).toBeVisible()
+
+  await page.getByRole("button", { name: "선택 분석 동의" }).click()
+  await expect(page.getByText("동의됨")).toBeVisible()
+  const grantedConsent = await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || "{}"), OPTIONAL_TRACKING_CONSENT_STORAGE_KEY)
+  expect(grantedConsent).toMatchObject({
+    version: 1,
+    state: "granted",
+    source: "settings",
+    categories: {
+      analytics: true,
+      rum: true,
+    },
+  })
+  expect(typeof grantedConsent.updatedAt).toBe("string")
+
+  await page.getByRole("button", { name: "선택 분석 거부·철회" }).click()
+  await expect(page.getByText("거부됨")).toBeVisible()
+  const deniedConsent = await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || "{}"), OPTIONAL_TRACKING_CONSENT_STORAGE_KEY)
+  expect(deniedConsent).toMatchObject({
+    version: 1,
+    state: "denied",
+    source: "settings",
+    categories: {
+      analytics: false,
+      rum: false,
+    },
+  })
 
   await page.getByLabel("요청 사유").fill("가입 정보와 운영 로그 열람을 요청합니다.")
   await page.getByRole("button", { name: "처리 요청 접수" }).click()

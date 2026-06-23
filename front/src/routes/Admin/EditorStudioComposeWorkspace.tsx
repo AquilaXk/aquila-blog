@@ -138,11 +138,10 @@ const ComposeSurfaceSection = styled.section `
   display: grid;
   gap: 1.2rem;
   border: 1px solid ${({ theme }) => (theme.colors.gray4)};
-  border-radius: ${({ theme }) => ("14px")};
+  border-radius: 6px;
   padding: 1.1rem 1.1rem 1.3rem;
   margin-bottom: 1.2rem;
-  background:
-    ${({ theme }) => `radial-gradient(circle at top left, rgba(96, 165, 250, 0.04), transparent 24%), ${theme.colors.gray1}`};
+  background: ${({ theme }) => theme.publicDesign.operationSurface};
   box-shadow: ${({ theme }) => ("none")};
 
   h2 {
@@ -153,7 +152,7 @@ const ComposeSurfaceSection = styled.section `
 
   @media (max-width: 420px) {
     gap: 1rem;
-    border-radius: 12px;
+    border-radius: 6px;
     padding: 0.82rem 0.82rem 1rem;
     margin-bottom: 0.95rem;
   }
@@ -210,7 +209,7 @@ const SubActionRow = styled.div `
 `;
 const Button = styled.button `
   border: 1px solid ${({ theme }) => (theme.colors.gray6)};
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 0.62rem 0.92rem;
   min-height: 44px;
   background: ${({ theme }) => ("transparent")};
@@ -242,16 +241,16 @@ const Button = styled.button `
   }
 `;
 const PrimaryButton = styled(Button) `
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 0.6rem 0.88rem;
-  border-color: ${({ theme }) => (theme.colors.blue9)};
-  background: ${({ theme }) => (theme.colors.blue9)};
-  color: ${({ theme }) => (theme.colors.gray1)};
+  border-color: ${({ theme }) => (theme.scheme === "dark" ? "#0a58ca" : "#0969da")};
+  background: ${({ theme }) => (theme.scheme === "dark" ? "#0a58ca" : "#0969da")};
+  color: ${({ theme }) => theme.colors.accentControlText};
   font-weight: 700;
 
   &:hover:not(:disabled) {
-    border-color: ${({ theme }) => (theme.colors.blue10)};
-    background: ${({ theme }) => (theme.colors.blue10)};
-    color: ${({ theme }) => (theme.colors.gray1)};
+    border-color: ${({ theme }) => (theme.scheme === "dark" ? "#084298" : "#075bb5")};
+    background: ${({ theme }) => (theme.scheme === "dark" ? "#084298" : "#075bb5")};
+    color: ${({ theme }) => theme.colors.accentControlText};
   }
 `;

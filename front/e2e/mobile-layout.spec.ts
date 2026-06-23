@@ -79,8 +79,8 @@ test.describe("모바일 레이아웃 소스 경계", () => {
     expect(adminDashboardSource).toContain("adminSurface")
     expect(authShellSource).toContain("theme.colors.gray1")
     expect(errorSource).toContain("theme.colors.gray1")
-    expect(editorComposeSource).toContain("theme.colors.gray2")
-    expect(editorDedicatedSource).toContain("theme.colors.gray2")
+    expect(editorComposeSource).toContain("theme.publicDesign")
+    expect(editorDedicatedSource).toContain("theme.publicDesign")
     expect(editorPreviewSource).toContain("theme.colors.gray1")
     for (const source of [authShellSource, errorSource, editorComposeSource, editorDedicatedSource, editorPreviewSource]) {
       expect(source).not.toContain("theme.blogDesign")

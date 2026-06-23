@@ -32,6 +32,7 @@ export const StyledWrapper = styled.div`
     letter-spacing: -0.06em;
     font-weight: 850;
     word-break: keep-all;
+    overflow-wrap: anywhere;
   }
 
   .profile-image {
@@ -68,6 +69,7 @@ export const StyledWrapper = styled.div`
     line-height: 1.35;
     font-weight: 820;
     word-break: keep-all;
+    overflow-wrap: anywhere;
   }
 
   .profile-copy span {
@@ -77,6 +79,7 @@ export const StyledWrapper = styled.div`
     line-height: 1.5;
     font-weight: 700;
     text-transform: uppercase;
+    overflow-wrap: anywhere;
   }
 
   .profile-copy p {
@@ -86,6 +89,7 @@ export const StyledWrapper = styled.div`
     line-height: 1.75;
     word-break: keep-all;
     white-space: pre-line;
+    overflow-wrap: anywhere;
   }
 
   .about-grid {
@@ -121,12 +125,14 @@ export const StyledWrapper = styled.div`
   }
 
   .stack-row strong {
+    min-width: 0;
     color: ${({ theme }) => theme.colors.gray9};
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
     font-size: 0.6875rem;
     line-height: 1.5;
     font-weight: 700;
     text-transform: uppercase;
+    overflow-wrap: anywhere;
   }
 
   .stack-row span,

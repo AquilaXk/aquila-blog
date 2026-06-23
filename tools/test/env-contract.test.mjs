@@ -1359,11 +1359,21 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
     assert.match(serviceBlock(service), /SPRING_FLYWAY_ENABLED:\s*"false"/)
   }
 
+  const backendHttpHostBlock = deployScript.slice(
+    deployScript.indexOf("backend_http_host()"),
+    deployScript.indexOf("resolve_in_caddy()"),
+  )
+  const helperRestartBlock = deployScript.slice(
+    deployScript.indexOf("restart_runtime_split_backends_after_candidate_ready()"),
+    deployScript.indexOf("probe_caddy_http_code()"),
+  )
   const preCandidateBootStart = deployScript.indexOf("services_to_boot=(")
   const preCandidateBootEnd = deployScript.indexOf('compose_up_with_retry "${services_to_boot[@]}"')
   const candidateHealthIndex = deployScript.indexOf('check_backend_health "${next_backend}"')
   const helperRestartIndex = deployScript.indexOf('if ! restart_runtime_split_backends_after_candidate_ready "${next_backend}"; then')
 
+  assert.match(backendHttpHostBlock, /back_blue\|back_green\|back_read\|back_admin\|back_worker/)
+  assert.match(helperRestartBlock, /if ! check_backend_health "\$\{service\}"; then/)
   assert(preCandidateBootStart > 0, "deploy script must build the pre-candidate boot list")
   assert(preCandidateBootEnd > preCandidateBootStart, "deploy script must boot infra before the candidate")
   assert(candidateHealthIndex > preCandidateBootEnd, "candidate healthcheck must happen after infra boot")

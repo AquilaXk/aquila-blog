@@ -1382,11 +1382,15 @@ backend_host() {
 
 backend_http_host() {
   local backend="$1"
-  if [[ "${backend}" == "back_blue" ]]; then
-    echo "back_blue"
-    return
-  fi
-  echo "back_green"
+  case "${backend}" in
+    back_blue|back_green|back_read|back_admin|back_worker)
+      echo "${backend}"
+      ;;
+    *)
+      echo "unknown backend service for healthcheck: ${backend}" >&2
+      return 1
+      ;;
+  esac
 }
 
 resolve_in_caddy() {
@@ -1623,8 +1627,12 @@ restart_runtime_split_backends_after_candidate_ready() {
   fi
 
   for service in "${helper_services[@]}"; do
-    check_backend_health "${service}"
+    if ! check_backend_health "${service}"; then
+      echo "runtime helper backend unhealthy after restart: ${service}" >&2
+      return 1
+    fi
   done
+  return 0
 }
 
 probe_caddy_http_code() {

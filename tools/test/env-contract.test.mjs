@@ -1340,6 +1340,151 @@ test("runtime-split memory tuner keeps backend color startup headroom", () => {
   assert(!splitAllocator.includes("local blue_min=384"))
 })
 
+test("runtime-split helper backends do not compete with candidate Flyway migration", () => {
+  const compose = readFileSync(composePath, "utf8")
+  const deployScript = readFileSync(deployScriptPath, "utf8")
+  const helperServices = ["back_read", "back_admin", "back_worker"]
+
+  const serviceBlock = (service) => {
+    const marker = `  ${service}:\n`
+    const start = compose.indexOf(marker)
+    assert.notEqual(start, -1, `${service} block must exist`)
+    const tailStart = start + marker.length
+    const tail = compose.slice(tailStart)
+    const next = tail.search(/\n  [a-zA-Z0-9_]+:\n/)
+    return compose.slice(start, next === -1 ? compose.length : tailStart + next)
+  }
+
+  for (const service of helperServices) {
+    assert.match(serviceBlock(service), /SPRING_FLYWAY_ENABLED:\s*"false"/)
+  }
+
+  const backendHttpHostBlock = deployScript.slice(
+    deployScript.indexOf("backend_http_host()"),
+    deployScript.indexOf("resolve_in_caddy()"),
+  )
+  const backendDnsBlock = deployScript.slice(
+    deployScript.indexOf("check_backend_dns_from_caddy()"),
+    deployScript.indexOf("is_backend_running()"),
+  )
+  const helperRestartBlock = deployScript.slice(
+    deployScript.indexOf("restart_runtime_split_backends_after_candidate_ready()"),
+    deployScript.indexOf("probe_caddy_http_code()"),
+  )
+  const prepareImagesBlock = deployScript.slice(
+    deployScript.indexOf("prepare_runtime_backend_images()"),
+    deployScript.indexOf("require_nonempty_env_key()"),
+  )
+  const activeHelperStartBlock = deployScript.slice(
+    deployScript.indexOf("start_runtime_split_helper_backends_on_active()"),
+    deployScript.indexOf("restart_runtime_split_backends_after_candidate_ready()"),
+  )
+  const rollbackBlock = deployScript.slice(
+    deployScript.indexOf("rollback_to_backend()"),
+    deployScript.indexOf('if [[ ! -f "${ENV_FILE}" ]]'),
+  )
+  const burnInRollbackBlock = deployScript.slice(
+    deployScript.indexOf("rollback_caddy_route_only()"),
+    deployScript.indexOf("run_blue_green_burn_in()"),
+  )
+  const preCandidateBootStart = deployScript.indexOf("services_to_boot=(")
+  const preCandidateBootEnd = deployScript.indexOf('compose_up_with_retry "${services_to_boot[@]}"')
+  const activeHelperGuardIndex = deployScript.indexOf('if is_backend_running "${active_backend}"; then')
+  const activeHelperStartIndex = deployScript.indexOf('start_runtime_split_helper_backends_on_active "${active_backend}"')
+  const activeBackendRunningFlagInitIndex = deployScript.indexOf('active_backend_was_running="false"')
+  const activeBackendRunningFlagSetIndex = deployScript.indexOf('active_backend_was_running="true"')
+  const edgeBootIndex = deployScript.indexOf("edge_services_to_boot=(caddy cloudflared)")
+  const preCandidateCloudflaredCheckIndex = deployScript.indexOf('check_cloudflared_runtime "${api_domain}"', edgeBootIndex)
+  const preCandidateCloudflaredSkipIndex = deployScript.indexOf(
+    "skip cloudflared runtime check before candidate health: active backend is not running",
+  )
+  const helperPrebootFlagInitIndex = deployScript.indexOf('runtime_split_helpers_prebooted="false"')
+  const helperPrebootFlagSetIndex = deployScript.indexOf('runtime_split_helpers_prebooted="true"')
+  const preCandidateHelperDnsSkipIndex = deployScript.indexOf(
+    "skip runtime helper dns check before candidate health: helpers were not prebooted",
+  )
+  const candidateHealthIndex = deployScript.indexOf('check_backend_health "${next_backend}"')
+  const helperRestartIndex = deployScript.indexOf('if ! restart_runtime_split_backends_after_candidate_ready "${next_backend}"; then')
+  const postRestartHelperDnsIndex = deployScript.indexOf(
+    'check_backend_dns_from_caddy "back_read"',
+    helperRestartIndex,
+  )
+  const rollbackRouteIndex = rollbackBlock.indexOf('switch_caddy_upstream "${rollback_backend}"')
+  const rollbackRestoreIndex = rollbackBlock.indexOf('restore_runtime_split_helper_backends_to_active "${rollback_backend}" "${inactive_backend}"')
+  const rollbackHelperFailIndex = rollbackBlock.indexOf("rollback failed: helper recovery failed after route rollback")
+  const rollbackStateWriteIndex = rollbackBlock.indexOf('echo "${rollback_backend}" > "${STATE_FILE}"')
+  const burnInRollbackRouteIndex = burnInRollbackBlock.indexOf('switch_caddy_upstream "${previous_backend}"')
+  const burnInRollbackRestoreIndex = burnInRollbackBlock.indexOf('restore_runtime_split_helper_backends_to_active "${previous_backend}" "${candidate_backend}"')
+  const burnInRollbackHelperFailIndex = burnInRollbackBlock.indexOf(
+    "burn-in rollback failed: helper recovery failed after route rollback",
+  )
+  const burnInRollbackStateWriteIndex = burnInRollbackBlock.indexOf('echo "${previous_backend}" > "${STATE_FILE}"')
+
+  assert.match(backendHttpHostBlock, /back_blue\|back_green\|back_read\|back_admin\|back_worker/)
+  assert.match(backendDnsBlock, /host="\$\(backend_http_host "\$\{backend\}"\)"/)
+  assert.match(prepareImagesBlock, /for service in back_read back_admin back_worker; do/)
+  assert.match(prepareImagesBlock, /upsert_runtime_backend_image "\$\{service\}" "\$\{active_image\}"/)
+  assert.match(activeHelperStartBlock, /compose_up_force_recreate_with_retry "\$\{helper_services\[@\]\}"/)
+  assert.match(activeHelperStartBlock, /if ! check_backend_health "\$\{service\}"; then/)
+  assert.match(helperRestartBlock, /upsert_runtime_backend_image "\$\{service\}" "\$\{candidate_image\}"/)
+  assert.match(helperRestartBlock, /if ! check_backend_health "\$\{service\}"; then/)
+  assert.match(helperRestartBlock, /restore_runtime_split_helper_backends_to_active\(\)/)
+  assert.match(helperRestartBlock, /upsert_runtime_backend_image "\$\{service\}" "\$\{active_image\}"/)
+  assert.match(helperRestartBlock, /write_backend_release_state "\$\{active_backend\}" "\$\{failed_candidate\}"/)
+  assert.match(rollbackBlock, /if ! restore_runtime_split_helper_backends_to_active "\$\{rollback_backend\}" "\$\{inactive_backend\}"; then/)
+  assert.match(burnInRollbackBlock, /if ! restore_runtime_split_helper_backends_to_active "\$\{previous_backend\}" "\$\{candidate_backend\}"; then/)
+  assert.match(deployScript, /skip active-image helper preboot: active backend is not running/)
+  assert(preCandidateBootStart > 0, "deploy script must build the pre-candidate boot list")
+  assert(preCandidateBootEnd > preCandidateBootStart, "deploy script must boot infra before the candidate")
+  assert(activeBackendRunningFlagInitIndex > preCandidateBootEnd, "active backend running gate must initialize after data infra boot")
+  assert(activeHelperGuardIndex > preCandidateBootEnd, "active helper preboot must check that active backend is running")
+  assert(activeBackendRunningFlagSetIndex > activeHelperGuardIndex, "active backend running gate must only flip inside running-active branch")
+  assert(activeHelperStartIndex > preCandidateBootEnd, "runtime split helpers must start on active image after data infra")
+  assert(activeHelperStartIndex > activeHelperGuardIndex, "runtime split helpers must not preboot on fresh deployments")
+  assert(preCandidateCloudflaredCheckIndex > edgeBootIndex, "early cloudflared check must run after edge boot")
+  assert(preCandidateCloudflaredSkipIndex > edgeBootIndex, "fresh deploys must skip early cloudflared public readiness before backend route exists")
+  assert(helperPrebootFlagInitIndex > preCandidateBootEnd, "helper DNS gate state must initialize after data infra boot")
+  assert(helperPrebootFlagSetIndex > activeHelperStartIndex, "helper DNS gate state must only flip after active helper preboot")
+  assert(
+    preCandidateHelperDnsSkipIndex > activeHelperStartIndex,
+    "fresh runtime-split deploys must skip helper DNS checks before helpers start",
+  )
+  assert(edgeBootIndex > activeHelperStartIndex, "edge services must start after active-image helpers exist")
+  assert(candidateHealthIndex > preCandidateBootEnd, "candidate healthcheck must happen after infra boot")
+  assert.match(deployScript, /if ! check_backend_health "\$\{next_backend\}"; then/)
+  assert.match(deployScript, /candidate backend health failed before cutover: \$\{next_backend\}/)
+  assert(helperRestartIndex > candidateHealthIndex, "runtime split helpers must restart after candidate health with explicit failure handling")
+  assert(postRestartHelperDnsIndex > helperRestartIndex, "helper DNS checks must run after candidate-backed helper startup")
+  assert(rollbackRouteIndex >= 0, "rollback must switch caddy route")
+  assert(rollbackRestoreIndex > rollbackRouteIndex, "rollback helper recovery must run after route rollback")
+  assert(rollbackHelperFailIndex > rollbackRestoreIndex, "rollback helper recovery failure must be explicit")
+  assert(
+    rollbackStateWriteIndex > rollbackHelperFailIndex &&
+      rollbackBlock.slice(rollbackHelperFailIndex, rollbackStateWriteIndex).includes("return 1"),
+    "rollback must fail before writing active state when helper recovery fails",
+  )
+  assert(burnInRollbackRouteIndex >= 0, "burn-in rollback must switch caddy route")
+  assert(burnInRollbackRestoreIndex > burnInRollbackRouteIndex, "burn-in helper recovery must run after route rollback")
+  assert(burnInRollbackHelperFailIndex > burnInRollbackRestoreIndex, "burn-in helper recovery failure must be explicit")
+  assert(
+    burnInRollbackStateWriteIndex > burnInRollbackHelperFailIndex &&
+      burnInRollbackBlock.slice(burnInRollbackHelperFailIndex, burnInRollbackStateWriteIndex).includes("return 1"),
+    "burn-in rollback must fail before writing active state when helper recovery fails",
+  )
+  assert.match(
+    deployScript,
+    /restore_runtime_split_helper_backends_to_active "\$\{active_backend\}" "\$\{next_backend\}" \|\| true/,
+  )
+  assert.match(deployScript, /compose stop "\$\{next_backend\}" \|\| true/)
+
+  const preCandidateBoot = deployScript.slice(preCandidateBootStart, preCandidateBootEnd)
+  for (const service of helperServices) {
+    assert(!preCandidateBoot.includes(service), `${service} must not start before candidate migration`)
+  }
+  assert(!preCandidateBoot.includes("caddy"), "caddy must wait until active-image helpers exist")
+  assert(!preCandidateBoot.includes("cloudflared"), "cloudflared must wait until active-image helpers exist")
+})
+
 test("homeserver origin ingress is private behind Cloudflare Tunnel", () => {
   const compose = readFileSync(composePath, "utf8")
   const hardeningScript = readFileSync(hardeningScriptPath, "utf8")

@@ -12,7 +12,7 @@ test.describe("core smoke detail layout", () => {
 
   await addPublicAboutSnapshotCookie(page)
   await page.goto("/about")
-  await expect(page.locator('[data-ui="about-eyebrow"]')).toHaveText("Profile")
+  await expect(page.locator('[data-ui="about-hero"] h1')).toHaveText("이유를 먼저 따지고, 운영 가능한 시스템을 설계합니다.")
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "follow, index")
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", /\/about$/)
 })
@@ -73,7 +73,7 @@ test.describe("core smoke detail layout", () => {
 
   await addPublicAboutSnapshotCookie(page)
   await page.goto("/about")
-  await expect(page.locator('[data-ui="about-eyebrow"]')).toHaveText("Profile")
+  await expect(page.locator('[data-ui="about-hero"] h1')).toHaveText("이유를 먼저 따지고, 운영 가능한 시스템을 설계합니다.")
   await expect(page).toHaveTitle("About - AquilaLog")
 })
 

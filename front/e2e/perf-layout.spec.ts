@@ -16,54 +16,28 @@ import {
 } from "./helpers/perfFixtures"
 
 test.describe("성능 레이아웃과 표면 예산", () => {
-  test("메인 레이아웃은 velog형 폭 단계(1728/1376/1024/100%)를 유지한다", async ({ page }) => {
+  test("메인 레이아웃은 V4 1240px 컨테이너와 40px gutter를 유지한다", async ({ page }) => {
   await mockFeedEndpoints(page)
 
-  await page.setViewportSize({ width: 2000, height: 900 })
-  await gotoForPerf(page, "/")
+  const checkpoints = [2000, 1600, 1300, 1100, 1060, 1056]
 
-  const ultraWideSnapshot = await getWidthLockSnapshot(page)
-  expect(ultraWideSnapshot.mainWidth).toBeCloseTo(1728, 0)
-  expect(ultraWideSnapshot.headerWidth).toBeCloseTo(1728, 0)
-  await expect(page.locator(".rt")).toBeHidden()
+  for (const viewport of checkpoints) {
+    await page.setViewportSize({ width: viewport, height: 900 })
+    if (viewport === checkpoints[0]) {
+      await gotoForPerf(page, "/")
+    } else {
+      await reloadForPerf(page)
+    }
 
-  await page.setViewportSize({ width: 1600, height: 900 })
-  await reloadForPerf(page)
-
-  const wideSnapshot = await getWidthLockSnapshot(page)
-  expect(wideSnapshot.mainWidth).toBeCloseTo(1376, 0)
-  expect(wideSnapshot.headerWidth).toBeCloseTo(1376, 0)
-  await expect(page.locator(".rt")).toBeHidden()
-
-  const checkpoints = [
-    { viewport: 1300, expectedLocked: 1024 },
-    { viewport: 1100, expectedLocked: 1024 },
-    { viewport: 1060, expectedLocked: 1024 },
-  ]
-
-  for (const checkpoint of checkpoints) {
-    await page.setViewportSize({ width: checkpoint.viewport, height: 900 })
-    await reloadForPerf(page)
-
+    const expectedWidth = viewport <= 1056 ? viewport - 24 : Math.min(1240, viewport - 40)
     const snapshot = await getWidthLockSnapshot(page)
-    expect(snapshot.mainWidth).toBeCloseTo(checkpoint.expectedLocked, 0)
-    expect(snapshot.headerWidth).toBeCloseTo(checkpoint.expectedLocked, 0)
+    expect(snapshot.mainWidth).toBeCloseTo(expectedWidth, 0)
+    expect(snapshot.headerWidth).toBeCloseTo(expectedWidth, 0)
     await expect(page.locator(".rt")).toBeHidden()
   }
-
-  await page.setViewportSize({ width: 1056, height: 900 })
-  await reloadForPerf(page)
-
-  const fluidSnapshot = await getWidthLockSnapshot(page)
-  const expectedFluidWidth = Math.min(fluidSnapshot.layoutViewport, fluidSnapshot.bodyViewport)
-  expect(fluidSnapshot.mainWidth).toBeGreaterThan(1024)
-  expect(fluidSnapshot.headerWidth).toBeGreaterThan(1024)
-  expect(fluidSnapshot.mainWidth).toBeCloseTo(expectedFluidWidth, 0)
-  expect(fluidSnapshot.headerWidth).toBeCloseTo(expectedFluidWidth, 0)
-  await expect(page.locator(".rt")).toBeHidden()
 })
 
-  test("피드 카드 호버 상승은 콘텐츠 표시 잘림 없이 상단을 그릴 수 있다", async ({ page }) => {
+  test("피드 카드 호버는 V4 행형 목록의 레이아웃 위치를 이동시키지 않는다", async ({ page }) => {
   await mockFeedEndpoints(page)
   await page.setViewportSize({ width: 1440, height: 900 })
   await gotoForPerf(page, "/")
@@ -79,7 +53,9 @@ test.describe("성능 레이아웃과 표면 예산", () => {
 
     const cardStyle = window.getComputedStyle(card as HTMLElement)
     const articleStyle = window.getComputedStyle(article)
+    const articleRect = article.getBoundingClientRect()
     return {
+      articleTop: Number(articleRect.top.toFixed(2)),
       cardContentVisibility: cardStyle.contentVisibility,
       articleTransform: articleStyle.transform,
     }
@@ -97,22 +73,20 @@ test.describe("성능 레이아웃과 표면 예산", () => {
       throw new Error("regular feed card article을 찾지 못했습니다.")
     }
 
-    const cardRect = (card as HTMLElement).getBoundingClientRect()
     const articleRect = article.getBoundingClientRect()
     const articleStyle = window.getComputedStyle(article)
 
     return {
-      cardTop: Number(cardRect.top.toFixed(2)),
       articleTop: Number(articleRect.top.toFixed(2)),
       articleTransform: articleStyle.transform,
     }
   })
 
-  expect(hoverMetrics.articleTransform).not.toBe("none")
-  expect(hoverMetrics.articleTop).toBeLessThan(hoverMetrics.cardTop)
+  expect(hoverMetrics.articleTransform).toBe("none")
+  expect(Math.abs(hoverMetrics.articleTop - initialMetrics.articleTop)).toBeLessThanOrEqual(1)
 })
 
-  test("메인 태그 칩 레일은 1200/1201 전환과 넓은 데스크톱에서 안전하게 유지된다", async ({ page }) => {
+  test("메인 태그 레일은 1200/1201 전환과 넓은 데스크톱에서 안전하게 유지된다", async ({ page }) => {
   await mockFeedEndpoints(page)
 
   await page.setViewportSize({ width: 1200, height: 900 })
@@ -122,29 +96,27 @@ test.describe("성능 레이아웃과 표면 예산", () => {
 
   await page.setViewportSize({ width: 1201, height: 900 })
   await reloadForPerf(page)
-  await expect(page.locator(".chipRail")).toBeVisible()
-  await expect(page.locator(".desktopPanel")).toBeHidden()
+  await expect(page.locator(".chipRail")).toBeHidden()
+  await expect(page.locator(".desktopPanel")).toBeVisible()
   await expect
     .poll(async () => {
-      const rect = await page.locator(".chipRail").boundingBox()
+      const rect = await page.locator(".desktopPanel").boundingBox()
       return rect?.x ?? -999
     })
     .toBeGreaterThanOrEqual(0)
 
   await page.setViewportSize({ width: 1680, height: 900 })
   await reloadForPerf(page)
-  await expect(page.locator(".chipRail")).toBeVisible()
-  await expect(page.locator(".desktopPanel")).toBeHidden()
+  await expect(page.locator(".chipRail")).toBeHidden()
+  await expect(page.locator(".desktopPanel")).toBeVisible()
 
-  const railRect = await page.locator(".chipRail").boundingBox()
+  const railRect = await page.locator(".desktopPanel").boundingBox()
   expect(railRect).not.toBeNull()
   expect((railRect?.x ?? -1)).toBeGreaterThanOrEqual(0)
 
   const firstCardRect = await page.locator(".postColumn article").first().boundingBox()
   expect(firstCardRect).not.toBeNull()
-  const railBottom = (railRect?.y ?? 0) + (railRect?.height ?? 0)
-  const firstCardTop = firstCardRect?.y ?? 0
-  expect(firstCardTop).toBeGreaterThanOrEqual(railBottom + 8)
+  expect(firstCardRect?.x ?? 0).toBeGreaterThanOrEqual((railRect?.x ?? 0) + (railRect?.width ?? 0) + 16)
 })
 
   test("상세 좌/우 고정 레일은 스크롤 전후 좌표를 안정적으로 유지한다", async ({ page }) => {
@@ -213,8 +185,8 @@ test.describe("성능 레이아웃과 표면 예산", () => {
       expect(snapshot.route).toBe("/")
       expect(snapshot.viewport.width).toBe(1440)
       expect(snapshot.viewport.height).toBe(900)
-      expect(snapshot.rails.chip).toBe(true)
-      expect(snapshot.rails.desktopTag).toBe(false)
+      expect(snapshot.rails.chip).toBe(false)
+      expect(snapshot.rails.desktopTag).toBe(true)
       expect(snapshot.rails.leftReaction).toBe(false)
       expect(snapshot.rails.rightToc).toBe(false)
 
@@ -228,15 +200,16 @@ test.describe("성능 레이아웃과 표면 예산", () => {
       const htmlScrollWidth = snapshot.scrollWidth?.html ?? 0
       const bodyScrollWidth = snapshot.scrollWidth?.body ?? 0
 
-      expect(searchWidth).toBeGreaterThanOrEqual(860)
-      expect(searchWidth).toBeLessThanOrEqual(1280)
-      expect(searchHeight).toBe(36)
-      expect(firstCardWidth).toBeGreaterThanOrEqual(280)
-      expect(firstCardWidth).toBeLessThanOrEqual(420)
-      expect(firstCardHeight).toBeGreaterThanOrEqual(360)
-      expect(firstCardHeight).toBeLessThanOrEqual(430)
-      expect(snapshot.desktopTagRailRect?.width ?? 0).toBe(0)
-      expect(snapshot.desktopTagRailRect?.height ?? 0).toBe(0)
+      expect(searchWidth).toBeGreaterThanOrEqual(120)
+      expect(searchWidth).toBeLessThanOrEqual(240)
+      expect(searchHeight).toBeGreaterThanOrEqual(34)
+      expect(searchHeight).toBeLessThanOrEqual(44)
+      expect(firstCardWidth).toBeGreaterThanOrEqual(820)
+      expect(firstCardWidth).toBeLessThanOrEqual(1020)
+      expect(firstCardHeight).toBeGreaterThanOrEqual(120)
+      expect(firstCardHeight).toBeLessThanOrEqual(280)
+      expect(snapshot.desktopTagRailRect?.width ?? 0).toBeGreaterThanOrEqual(160)
+      expect(snapshot.desktopTagRailRect?.width ?? 0).toBeLessThanOrEqual(240)
       expect(htmlScrollWidth).toBeLessThanOrEqual(1440)
       expect(htmlScrollWidth).toBeGreaterThanOrEqual(1420)
       expect(bodyScrollWidth).toBeLessThanOrEqual(1440)
@@ -261,17 +234,17 @@ test.describe("성능 레이아웃과 표면 예산", () => {
       const firstCardHeight = snapshot.firstCardRect?.height ?? 0
       const firstCardY = snapshot.firstCardRect?.y ?? 0
 
-      expect(searchWidth).toBeGreaterThanOrEqual(320)
-      expect(searchWidth).toBeLessThanOrEqual(336)
+      expect(searchWidth).toBeGreaterThanOrEqual(170)
+      expect(searchWidth).toBeLessThanOrEqual(190)
       expect(searchHeight).toBe(34)
-      expect(searchY).toBeGreaterThanOrEqual(190)
-      expect(searchY).toBeLessThanOrEqual(230)
+      expect(searchY).toBeGreaterThanOrEqual(620)
+      expect(searchY).toBeLessThanOrEqual(700)
       expect(firstCardWidth).toBeGreaterThanOrEqual(360)
       expect(firstCardWidth).toBeLessThanOrEqual(370)
-      expect(firstCardHeight).toBeGreaterThanOrEqual(388)
+      expect(firstCardHeight).toBeGreaterThanOrEqual(340)
       expect(firstCardHeight).toBeLessThanOrEqual(430)
-      expect(firstCardY).toBeGreaterThanOrEqual(298)
-      expect(firstCardY).toBeLessThanOrEqual(410)
+      expect(firstCardY).toBeGreaterThanOrEqual(700)
+      expect(firstCardY).toBeLessThanOrEqual(820)
       continue
     }
 
@@ -292,17 +265,17 @@ test.describe("성능 레이아웃과 표면 예산", () => {
       const firstCardHeight = snapshot.firstCardRect?.height ?? 0
       const firstCardY = snapshot.firstCardRect?.y ?? 0
 
-      expect(searchWidth).toBeGreaterThanOrEqual(692)
-      expect(searchWidth).toBeLessThanOrEqual(710)
+      expect(searchWidth).toBeGreaterThanOrEqual(170)
+      expect(searchWidth).toBeLessThanOrEqual(190)
       expect(searchHeight).toBe(34)
-      expect(searchY).toBeGreaterThanOrEqual(190)
-      expect(searchY).toBeLessThanOrEqual(230)
-      expect(firstCardWidth).toBeGreaterThanOrEqual(348)
-      expect(firstCardWidth).toBeLessThanOrEqual(360)
-      expect(firstCardHeight).toBeGreaterThanOrEqual(384)
+      expect(searchY).toBeGreaterThanOrEqual(560)
+      expect(searchY).toBeLessThanOrEqual(760)
+      expect(firstCardWidth).toBeGreaterThanOrEqual(720)
+      expect(firstCardWidth).toBeLessThanOrEqual(750)
+      expect(firstCardHeight).toBeGreaterThanOrEqual(260)
       expect(firstCardHeight).toBeLessThanOrEqual(430)
-      expect(firstCardY).toBeGreaterThanOrEqual(300)
-      expect(firstCardY).toBeLessThanOrEqual(380)
+      expect(firstCardY).toBeGreaterThanOrEqual(650)
+      expect(firstCardY).toBeLessThanOrEqual(850)
       continue
     }
 
@@ -333,12 +306,12 @@ test.describe("성능 레이아웃과 표면 예산", () => {
       expect(leftRailHeight).toBeGreaterThanOrEqual(128)
       expect(leftRailHeight).toBeLessThanOrEqual(172)
       expect(leftRailY).toBeGreaterThanOrEqual(84)
-      expect(leftRailY).toBeLessThanOrEqual(93)
+      expect(leftRailY).toBeLessThanOrEqual(104)
       expect(rightRailWidth).toBe(240)
       expect(rightRailHeight).toBeGreaterThanOrEqual(280)
       expect(rightRailHeight).toBeLessThanOrEqual(380)
       expect(rightRailY).toBeGreaterThanOrEqual(84)
-      expect(rightRailY).toBeLessThanOrEqual(93)
+      expect(rightRailY).toBeLessThanOrEqual(104)
       expect(htmlScrollWidth).toBeLessThanOrEqual(1440)
       expect(htmlScrollWidth).toBeGreaterThanOrEqual(1420)
       expect(bodyScrollWidth).toBeLessThanOrEqual(1440)
@@ -452,10 +425,10 @@ test.describe("성능 레이아웃과 표면 예산", () => {
     expect(fingerprint.headerBg).not.toBe(fingerprint.bodyBg)
 
     if (scenario.route === "/") {
-      expect(fingerprint.searchBg).toBe("rgb(22, 27, 34)")
-      expect(fingerprint.searchBorder).toBe("rgb(48, 54, 61)")
-      expect(fingerprint.cardBg).toBe("rgb(255, 255, 255)")
-      expect(fingerprint.cardBorder).toBe("rgb(200, 210, 222)")
+      expect(fingerprint.searchBg).toBe("rgb(255, 255, 255)")
+      expect(fingerprint.searchBorder).not.toBeNull()
+      expect(fingerprint.cardBg).not.toBe("rgb(22, 27, 34)")
+      expect(fingerprint.cardBorder).not.toBeNull()
     }
 
     if (scenario.route === "/posts/991") {

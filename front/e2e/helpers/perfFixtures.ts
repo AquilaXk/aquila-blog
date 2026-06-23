@@ -561,14 +561,15 @@ export const getDesktopTagRailMetrics = async (page: Page) =>
   })
 
 export const waitForHomeTagRailReady = async (page: Page, viewportWidth: number) => {
+  const selector = viewportWidth >= 1201 ? ".desktopPanel" : ".chipRail"
   await expect
     .poll(
       async () =>
-        page.evaluate(() => {
-          const rail = document.querySelector(".chipRail")
+        page.evaluate((railSelector) => {
+          const rail = document.querySelector(railSelector)
           if (!rail) return 0
           return rail.querySelectorAll("button").length
-        }),
+        }, selector),
       { timeout: 5000 }
     )
     .toBeGreaterThanOrEqual(4)

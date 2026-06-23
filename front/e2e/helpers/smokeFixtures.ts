@@ -69,7 +69,7 @@ export const addPublicAboutSnapshotCookie = async (page: Page) => {
           contactLinks: [{ icon: "github", label: "GitHub", href: "https://github.com/AquilaXk" }],
         })
       ),
-      url: "http://127.0.0.1:3000",
+      url: "http://127.0.0.1:3100",
     },
   ])
 }
@@ -162,4 +162,3 @@ export const mockFeedEndpoints = async (page: Page) => {
     })
   })
 }
-

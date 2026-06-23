@@ -1,19 +1,10 @@
 import NavBar from "./NavBar"
 import Logo from "./Logo"
-import ThemeToggle from "./ThemeToggle"
 import styled from "@emotion/styled"
 import { zIndexes } from "src/styles/zIndexes"
 import { useRouter } from "next/router"
 import { useEffect, useRef, useState } from "react"
-import {
-  CONTENT_MAX_WIDTH_PX,
-  DESKTOP_LOCK_MAX_PX,
-  DESKTOP_LOCK_MIN_PX,
-  DESKTOP_LOCK_WIDTH_PX,
-  FLUID_LAYOUT_MAX_PX,
-  WIDE_CONTENT_BREAKPOINT_PX,
-  WIDE_CONTENT_MAX_PX,
-} from "../layoutTiers"
+import { FLUID_LAYOUT_MAX_PX } from "../layoutTiers"
 
 type Props = {
   fullWidth: boolean
@@ -162,8 +153,7 @@ const Header: React.FC<Props> = ({ fullWidth, showThemeToggle = true, blogTitle 
       <div data-full-width={fullWidth} className="container">
         <Logo blogTitle={blogTitle} />
         <div className="nav">
-          {showThemeToggle ? <ThemeToggle /> : null}
-          <NavBar />
+          <NavBar showThemeToggle={showThemeToggle} />
         </div>
       </div>
     </StyledWrapper>
@@ -179,8 +169,8 @@ const StyledWrapper = styled.div`
   background: ${({ theme }) =>
     theme.scheme === "light" ? "rgba(249, 251, 254, 0.94)" : `${theme.colors.gray1}e6`};
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   transform: translateY(0);
   opacity: 1;
   transition: transform 0.2s ease, opacity 0.2s ease, border-color 0.2s ease;
@@ -188,29 +178,19 @@ const StyledWrapper = styled.div`
   backface-visibility: hidden;
 
   .container {
-    display: flex;
+    display: grid;
     box-sizing: border-box;
-    padding-left: 1rem;
-    padding-right: 1rem;
-    gap: 0.9rem;
-    justify-content: space-between;
+    grid-template-columns: auto 1fr;
+    padding-left: 0;
+    padding-right: 0;
+    gap: 2rem;
     align-items: center;
-    width: min(100%, ${CONTENT_MAX_WIDTH_PX}px);
-    min-height: 3.75rem;
+    width: min(calc(100% - 40px), 1240px);
+    min-height: 4rem;
     margin: 0 auto;
 
-    @media (max-width: ${WIDE_CONTENT_BREAKPOINT_PX}px) {
-      width: min(100%, ${WIDE_CONTENT_MAX_PX}px);
-    }
-
-    @media (max-width: ${DESKTOP_LOCK_MAX_PX}px) and (min-width: ${DESKTOP_LOCK_MIN_PX}px) {
-      width: min(100%, ${DESKTOP_LOCK_WIDTH_PX}px);
-    }
-
     @media (max-width: ${FLUID_LAYOUT_MAX_PX}px) {
-      width: 100%;
-      padding-left: 1rem;
-      padding-right: 1rem;
+      width: min(calc(100% - 24px), 1240px);
       min-height: 3.6rem;
     }
 
@@ -222,9 +202,9 @@ const StyledWrapper = styled.div`
     }
     .nav {
       display: flex;
-      gap: 0.48rem;
+      gap: 0.4rem;
       align-items: center;
-      flex-shrink: 0;
+      justify-content: flex-end;
       min-width: 0;
     }
   }

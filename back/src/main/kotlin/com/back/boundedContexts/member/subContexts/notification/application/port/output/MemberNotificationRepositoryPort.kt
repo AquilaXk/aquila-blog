@@ -29,4 +29,9 @@ interface MemberNotificationRepositoryPort {
         receiverId: Long,
         readAt: Instant,
     ): Int
+
+    fun deleteCreatedBefore(
+        cutoff: Instant,
+        limit: Int,
+    ): Int
 }

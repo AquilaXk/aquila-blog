@@ -57,8 +57,8 @@ activities:
       - home_server_redis
       - smtp_provider_unconfirmed
     overseasTransfer: reviewRequired:smtp-provider-region-unconfirmed
-    retentionRule: verificationTokenTtlPlusOperationalAuditWindow
-    destructionMethod: expireCancelConsumeThenPurgeByRetentionJob
+    retentionRule: token/session expiry plus custom.privacy.retention.signupVerificationDays default 7 days
+    destructionMethod: expireCancelConsumeThenPrivacyRetentionCleanupPurge
     accessRoles:
       - signupApplicant
       - serviceAdmin
@@ -180,7 +180,7 @@ activities:
       - vercel_frontend_hosting
       - cloudflare_dns_proxy
     overseasTransfer: possibleViaVercelOrCloudflareEdge
-    retentionRule: untilLogoutRevocationExpiryOrSessionCleanupJob; apiKey/accessToken/refreshToken/sessionKey cookies sessionOrConfiguredMaxAge; signup_session untilSignupExpiry; auth.signupMailCooldown.v1 untilCooldownExpiryOrTabClose; auth.login.keepSignedIn/auth.login.ipSecurityOn untilPreferenceChangeOrBrowserStorageClear
+    retentionRule: revoked sessions custom.privacy.retention.revokedSessionDays default 30 days; apiKey/accessToken/refreshToken/sessionKey cookies sessionOrConfiguredMaxAge; signup_session untilSignupExpiry; auth.signupMailCooldown.v1 untilCooldownExpiryOrTabClose; auth.login.keepSignedIn/auth.login.ipSecurityOn untilPreferenceChangeOrBrowserStorageClear
     destructionMethod: revokeSessionExpireCookiePurgeExpiredSessions; auth.signupMailCooldown.v1 expires hashed entries; auth.login.* browserPreferenceDeletion
     accessRoles:
       - accountOwner
@@ -315,7 +315,7 @@ activities:
       - home_server_redis
       - grafana_loki_monitoring
     overseasTransfer: noPlannedOverseasTransferForDatabase; monitoringHostLocal
-    retentionRule: securityAuditWindowThenCleanupJob
+    retentionRule: custom.privacy.retention.authSecurityEventDays default 30 days
     destructionMethod: scheduledPurgeAndLogRetentionExpiry
     accessRoles:
       - serviceAdmin
@@ -349,8 +349,8 @@ activities:
       - home_server_postgresql
       - grafana_loki_monitoring
     overseasTransfer: noPlannedOverseasTransferForDatabase
-    retentionRule: operationalAuditWindowThenPurgePolicyRequired
-    destructionMethod: scheduledPurgeFutureWork
+    retentionRule: custom.privacy.retention.memberActionLogDays default 90 days
+    destructionMethod: privacyRetentionCleanup scheduled batch purge
     accessRoles:
       - serviceAdmin
       - securityOperator
@@ -386,8 +386,8 @@ activities:
       - vercel_frontend_hosting
       - cloudflare_dns_proxy
     overseasTransfer: possibleViaVercelOrCloudflareEdge
-    retentionRule: notificationHistoryWindowThenPurgePolicyRequired
-    destructionMethod: accountDeletionOrRetentionJobFutureWork
+    retentionRule: custom.privacy.retention.notificationDays default 60 days
+    destructionMethod: privacyRetentionCleanup scheduled batch purge; account deletion removes account-visible access
     accessRoles:
       - accountOwner
       - serviceAdmin
@@ -398,7 +398,7 @@ activities:
     policySectionId: privacy-collection-notification
     enabledByEnv: alwaysEnabledForLoggedInMembers
     reviewRequired:
-      - Exact notification retention period must be finalized with issue1000.
+      - Notification DB history is purged by custom.privacy.retention.notificationDays.
 
   - id: analytics_and_rum
     name: Google Analytics, Vercel Speed Insights, custom RUM

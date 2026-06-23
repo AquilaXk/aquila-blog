@@ -275,6 +275,7 @@ services:
       - ./.env.prod
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_FLYWAY_ENABLED: "false"
       CUSTOM_PROD_DBHOST: db_1
       CUSTOM_PROD_REDISHOST: redis_1
       CUSTOM__RUNTIME__WORKER_ENABLED: "false"
@@ -307,6 +308,7 @@ services:
       - ./.env.prod
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_FLYWAY_ENABLED: "false"
       CUSTOM_PROD_DBHOST: db_1
       CUSTOM_PROD_REDISHOST: redis_1
       CUSTOM__RUNTIME__WORKER_ENABLED: "false"
@@ -338,6 +340,7 @@ services:
       - ./.env.prod
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_FLYWAY_ENABLED: "false"
       CUSTOM_PROD_DBHOST: db_1
       CUSTOM_PROD_REDISHOST: redis_1
       CUSTOM__RUNTIME__WORKER_ENABLED: "true"

@@ -171,6 +171,23 @@ if AQUILA_EXTERNAL_STORAGE_ALLOW_TEST_ROOT=true \
   exit 1
 fi
 
+KEY_SYMLINK_ROOT="${WORK_DIR}/key-symlink-root"
+KEY_SYMLINK_EXTERNAL_ROOT="${KEY_SYMLINK_ROOT}/external"
+KEY_SYMLINK_BACKUP_ROOT="${KEY_SYMLINK_EXTERNAL_ROOT}/backups"
+mkdir -p "${KEY_SYMLINK_BACKUP_ROOT}/keys"
+ln -s "${KEY_SYMLINK_BACKUP_ROOT}/keys" "${KEY_SYMLINK_EXTERNAL_ROOT}/keys"
+
+if AQUILA_EXTERNAL_STORAGE_ALLOW_TEST_ROOT=true \
+  AQUILA_EXTERNAL_STORAGE_SKIP_MOUNT_CHECK=true \
+  AQUILA_EXTERNAL_STORAGE_ROOT="${KEY_SYMLINK_EXTERNAL_ROOT}" \
+  AQUILA_BACKUP_ROOT="${KEY_SYMLINK_BACKUP_ROOT}" \
+  AQUILA_BACKUP_ENCRYPTION_KEY_FILE="${KEY_SYMLINK_EXTERNAL_ROOT}/keys/backup-encryption.key" \
+  AQUILA_BACKUP_MIN_FREE_PERCENT=0 \
+    "${CREATE_SCRIPT}" >/dev/null 2>&1; then
+  echo "backup unexpectedly allowed symlinked encryption key inside backup root" >&2
+  exit 1
+fi
+
 grep -q "stop_legacy_minio_for_migration" "${CREATE_SCRIPT}"
 grep -q "docker stop" "${CREATE_SCRIPT}"
 grep -q "MIGRATION_STOPPED_FILE" "${CREATE_SCRIPT}"
@@ -180,8 +197,8 @@ grep -q "minio_dir=" "${CREATE_SCRIPT}"
 grep -q "env_value_from_current_file CUSTOM_PROD_DBNAME" "${CREATE_SCRIPT}"
 grep -q "^umask 077$" "${CREATE_SCRIPT}"
 grep -q "backup-encryption.key" "${CREATE_SCRIPT}" || { echo "missing: default separated backup key path" >&2; exit 1; }
-grep -q "AQUILA_BACKUP_ENCRYPTION_KEY_FILE must be outside AQUILA_BACKUP_ROOT" "${CREATE_SCRIPT}" || { echo "missing: backup key must be outside backup root guard" >&2; exit 1; }
-grep -q 'backup_root_for_exclusion="${BACKUP_ROOT%/}"' "${CREATE_SCRIPT}" || { echo "missing: normalized backup root exclusion guard" >&2; exit 1; }
+grep -q "canonical_path_for_compare" "${CREATE_SCRIPT}" || { echo "missing: canonical backup key path guard" >&2; exit 1; }
+grep -q 'assert_outside_backup_root "AQUILA_BACKUP_ENCRYPTION_KEY_FILE"' "${CREATE_SCRIPT}" || { echo "missing: backup key must be outside backup root guard" >&2; exit 1; }
 grep -q "openssl enc -aes-256-cbc -pbkdf2" "${CREATE_SCRIPT}" || { echo "missing: openssl encryption command" >&2; exit 1; }
 grep -q "dump.sql.enc" "${CREATE_SCRIPT}" || { echo "missing: encrypted postgres dump artifact name" >&2; exit 1; }
 grep -q "minio-data.tar.gz.enc" "${CREATE_SCRIPT}" || { echo "missing: encrypted minio archive artifact name" >&2; exit 1; }

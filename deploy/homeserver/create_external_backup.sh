@@ -453,16 +453,39 @@ require_command() {
   command -v "${command_name}" >/dev/null 2>&1 || fail "${command_name} is required for backup"
 }
 
-validate_backup_encryption_key_file() {
-  BACKUP_ENCRYPTION_KEY_FILE="$(env_value AQUILA_BACKUP_ENCRYPTION_KEY_FILE "${EXTERNAL_STORAGE_ROOT}/backup-encryption.key")"
-  local backup_root_for_exclusion="${BACKUP_ROOT%/}"
-  is_safe_absolute_path "${BACKUP_ENCRYPTION_KEY_FILE}" || fail "unsafe AQUILA_BACKUP_ENCRYPTION_KEY_FILE=${BACKUP_ENCRYPTION_KEY_FILE}"
-  case "${BACKUP_ENCRYPTION_KEY_FILE}" in
+canonical_path_for_compare() {
+  local path="$1"
+  if [[ -e "${path}" ]]; then
+    realpath "${path}"
+    return
+  fi
+  local dir base
+  dir="$(dirname "${path}")"
+  base="$(basename "${path}")"
+  [[ -d "${dir}" ]] || return 1
+  printf '%s/%s\n' "$(realpath "${dir}")" "${base}"
+}
+
+assert_outside_backup_root() {
+  local label="$1"
+  local path="$2"
+  local backup_root_for_exclusion path_for_exclusion
+  backup_root_for_exclusion="$(canonical_path_for_compare "${BACKUP_ROOT}")" || fail "could not resolve AQUILA_BACKUP_ROOT=${BACKUP_ROOT}"
+  path_for_exclusion="$(canonical_path_for_compare "${path}")" || fail "could not resolve ${label}=${path}"
+  backup_root_for_exclusion="${backup_root_for_exclusion%/}"
+  case "${path_for_exclusion}" in
     "${backup_root_for_exclusion}"|"${backup_root_for_exclusion}"/*)
-      fail "AQUILA_BACKUP_ENCRYPTION_KEY_FILE must be outside AQUILA_BACKUP_ROOT"
+      fail "${label} must be outside AQUILA_BACKUP_ROOT"
       ;;
   esac
+}
+
+validate_backup_encryption_key_file() {
+  BACKUP_ENCRYPTION_KEY_FILE="$(env_value AQUILA_BACKUP_ENCRYPTION_KEY_FILE "${EXTERNAL_STORAGE_ROOT}/backup-encryption.key")"
+  is_safe_absolute_path "${BACKUP_ENCRYPTION_KEY_FILE}" || fail "unsafe AQUILA_BACKUP_ENCRYPTION_KEY_FILE=${BACKUP_ENCRYPTION_KEY_FILE}"
+  require_command realpath
   require_command openssl
+  assert_outside_backup_root "AQUILA_BACKUP_ENCRYPTION_KEY_FILE" "${BACKUP_ENCRYPTION_KEY_FILE}"
   if [[ ! -e "${BACKUP_ENCRYPTION_KEY_FILE}" ]]; then
     mkdir -p "$(dirname "${BACKUP_ENCRYPTION_KEY_FILE}")"
     (umask 077 && openssl rand -hex 32 > "${BACKUP_ENCRYPTION_KEY_FILE}") \

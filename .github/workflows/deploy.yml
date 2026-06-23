@@ -269,7 +269,7 @@ jobs:
     if: >
       needs.calculateTag.outputs.backend_deploy == 'true' &&
       needs.buildAndPush.result == 'success'
-    timeout-minutes: 30
+    timeout-minutes: 75
     permissions:
       contents: read
 

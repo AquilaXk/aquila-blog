@@ -2,7 +2,6 @@ package com.back.boundedContexts.member.subContexts.privacy.job
 
 import com.back.boundedContexts.member.subContexts.memberActionLog.application.port.output.MemberActionLogRepositoryPort
 import com.back.boundedContexts.member.subContexts.notification.application.port.output.MemberNotificationRepositoryPort
-import com.back.boundedContexts.member.subContexts.privacy.application.port.output.MemberAccountDeletionRepositoryPort
 import com.back.boundedContexts.member.subContexts.privacy.application.port.output.MemberPrivacyRequestRepositoryPort
 import com.back.boundedContexts.member.subContexts.signupVerification.application.port.output.MemberSignupVerificationRepositoryPort
 import io.micrometer.core.instrument.MeterRegistry
@@ -27,7 +26,6 @@ class PrivacyRetentionCleanupScheduledJob(
     private val memberActionLogRepository: MemberActionLogRepositoryPort,
     private val memberNotificationRepository: MemberNotificationRepositoryPort,
     private val memberPrivacyRequestRepository: MemberPrivacyRequestRepositoryPort,
-    private val memberAccountDeletionRepository: MemberAccountDeletionRepositoryPort,
     private val meterRegistry: MeterRegistry?,
     @param:Value("\${custom.privacy.retention.signupVerificationDays:7}")
     private val signupVerificationDays: Int,
@@ -37,8 +35,6 @@ class PrivacyRetentionCleanupScheduledJob(
     private val notificationDays: Int,
     @param:Value("\${custom.privacy.retention.privacyRequestDays:30}")
     private val privacyRequestDays: Int,
-    @param:Value("\${custom.privacy.retention.deletionTombstoneDays:365}")
-    private val deletionTombstoneDays: Int,
     @param:Value("\${custom.privacy.retention.cleanup.batchSize:500}")
     private val batchSize: Int,
     @param:Value("\${custom.privacy.retention.cleanup.maxBatches:20}")
@@ -57,7 +53,6 @@ class PrivacyRetentionCleanupScheduledJob(
         purge("member_action_log", now, memberActionLogDays, memberActionLogRepository::deleteCreatedBefore)
         purge("notification", now, notificationDays, memberNotificationRepository::deleteCreatedBefore)
         purge("privacy_request", now, privacyRequestDays, memberPrivacyRequestRepository::deleteClosedBefore)
-        purge("deletion_tombstone", now, deletionTombstoneDays, memberAccountDeletionRepository::deleteDeletedBefore)
     }
 
     private fun purge(

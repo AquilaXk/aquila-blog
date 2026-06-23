@@ -1,6 +1,7 @@
 package com.back.boundedContexts.member.subContexts.privacy.model
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.global.jpa.domain.AfterDDL
 import com.back.global.jpa.domain.BaseTime
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -16,6 +17,12 @@ import jakarta.persistence.SequenceGenerator
 import java.time.Instant
 
 @Entity
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS member_privacy_request_idx_status_closed_at_id
+    ON member_privacy_request (status, (COALESCE(completed_at, modified_at, requested_at)), id)
+    """,
+)
 class MemberPrivacyRequest(
     @field:Id
     @field:SequenceGenerator(

@@ -5,9 +5,7 @@ import com.back.boundedContexts.member.subContexts.memberActionLog.domain.Member
 import com.back.boundedContexts.member.subContexts.notification.adapter.persistence.MemberNotificationRepository
 import com.back.boundedContexts.member.subContexts.notification.application.port.output.MemberNotificationRepositoryPort
 import com.back.boundedContexts.member.subContexts.notification.domain.MemberNotification
-import com.back.boundedContexts.member.subContexts.privacy.application.port.output.MemberAccountDeletionRepositoryPort
 import com.back.boundedContexts.member.subContexts.privacy.application.port.output.MemberPrivacyRequestRepositoryPort
-import com.back.boundedContexts.member.subContexts.privacy.model.MemberAccountDeletion
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequest
 import com.back.boundedContexts.member.subContexts.signupVerification.application.port.output.MemberSignupVerificationRepositoryPort
 import com.back.boundedContexts.member.subContexts.signupVerification.domain.MemberSignupVerification
@@ -26,7 +24,6 @@ class PrivacyRetentionCleanupScheduledJobTest {
         val actionLog = RecordingActionLogRepository(1)
         val notification = RecordingNotificationRepository(1)
         val privacyRequest = RecordingPrivacyRequestRepository(1)
-        val accountDeletion = RecordingAccountDeletionRepository(1)
         val registry = SimpleMeterRegistry()
         val job =
             PrivacyRetentionCleanupScheduledJob(
@@ -34,13 +31,11 @@ class PrivacyRetentionCleanupScheduledJobTest {
                 memberActionLogRepository = actionLog,
                 memberNotificationRepository = notification,
                 memberPrivacyRequestRepository = privacyRequest,
-                memberAccountDeletionRepository = accountDeletion,
                 meterRegistry = registry,
                 signupVerificationDays = 7,
                 memberActionLogDays = 90,
                 notificationDays = 60,
                 privacyRequestDays = 30,
-                deletionTombstoneDays = 365,
                 batchSize = 25,
                 maxBatches = 1,
             )
@@ -51,7 +46,6 @@ class PrivacyRetentionCleanupScheduledJobTest {
         assertThat(actionLog.calls).containsExactly(DeleteCall(now.minusSeconds(90 * DAY), 25))
         assertThat(notification.calls).containsExactly(DeleteCall(now.minusSeconds(60 * DAY), 25))
         assertThat(privacyRequest.calls).containsExactly(DeleteCall(now.minusSeconds(30 * DAY), 25))
-        assertThat(accountDeletion.calls).containsExactly(DeleteCall(now.minusSeconds(365 * DAY), 25))
         assertThat(registry.counter("privacy.retention.cleanup.deleted", "target", "signup_verification").count()).isEqualTo(1.0)
     }
 
@@ -66,13 +60,11 @@ class PrivacyRetentionCleanupScheduledJobTest {
                 memberActionLogRepository = empty,
                 memberNotificationRepository = RecordingNotificationRepository(0),
                 memberPrivacyRequestRepository = RecordingPrivacyRequestRepository(0),
-                memberAccountDeletionRepository = RecordingAccountDeletionRepository(0),
                 meterRegistry = SimpleMeterRegistry(),
                 signupVerificationDays = 7,
                 memberActionLogDays = 90,
                 notificationDays = 60,
                 privacyRequestDays = 30,
-                deletionTombstoneDays = 365,
                 batchSize = 2,
                 maxBatches = 2,
             )
@@ -185,25 +177,6 @@ class PrivacyRetentionCleanupScheduledJobTest {
         ): MemberPrivacyRequest? = null
 
         override fun deleteClosedBefore(
-            cutoff: Instant,
-            limit: Int,
-        ): Int = record(calls, counts, cutoff, limit)
-    }
-
-    private class RecordingAccountDeletionRepository(
-        vararg counts: Int,
-    ) : MemberAccountDeletionRepositoryPort {
-        private val counts = ArrayDeque(counts.toList())
-        val calls = mutableListOf<DeleteCall>()
-
-        override fun save(memberAccountDeletion: MemberAccountDeletion): MemberAccountDeletion = memberAccountDeletion
-
-        override fun flush() {
-        }
-
-        override fun existsByMemberId(memberId: Long): Boolean = false
-
-        override fun deleteDeletedBefore(
             cutoff: Instant,
             limit: Int,
         ): Int = record(calls, counts, cutoff, limit)

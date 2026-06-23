@@ -621,7 +621,7 @@ test("restore privacy gate script is required for home-server source env", async
   const result = validateEnvText({
     contract: loadContract(contractPath),
     target: "home-server-source",
-    text: baseHomeServerEnv.replace(/^AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=.*\n/m, ""),
+    text: baseHomeServerEnv.replace(/^AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=.*(?:\n|$)/m, ""),
   })
 
   assert.equal(result.ok, false)
@@ -742,7 +742,7 @@ test("external backup root must stay strictly inside the default or configured s
     "AQUILA_BACKUP_ENCRYPTION_KEY_FILE=/mnt/aquila-blog-data/backup-encryption.key",
     "AQUILA_BACKUP_ENCRYPTION_KEY_FILE=/mnt/aquila-blog-data/backups/backup-encryption.key",
   )
-  const withoutBackupRoot = baseHomeServerEnv.replace(/^AQUILA_BACKUP_ROOT=.*\n/m, "")
+  const withoutBackupRoot = baseHomeServerEnv.replace(/^AQUILA_BACKUP_ROOT=.*(?:\n|$)/m, "")
   const keyInsideDefaultBackupRoot = withoutBackupRoot.replace(
     "AQUILA_BACKUP_ENCRYPTION_KEY_FILE=/mnt/aquila-blog-data/backup-encryption.key",
     "AQUILA_BACKUP_ENCRYPTION_KEY_FILE=/mnt/aquila-blog-data/backups/backup-encryption.key",

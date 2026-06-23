@@ -1563,7 +1563,7 @@ get_caddy_ip() {
 check_backend_dns_from_caddy() {
   local backend="$1"
   local host
-  host="$(backend_host "${backend}")"
+  host="$(backend_http_host "${backend}")"
 
   if ! resolve_in_caddy "${host}"; then
     echo "caddy dns resolve failed: ${host}" >&2

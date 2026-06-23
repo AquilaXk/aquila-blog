@@ -66,11 +66,23 @@ require_file "${DRILL_SCRIPT}" "restore drill script"
 require_executable "${DRILL_SCRIPT}" "restore drill script"
 require_pattern "${DRILL_SCRIPT}" '^umask 077$' "restore drill must protect generated artifacts"
 require_pattern "${DRILL_SCRIPT}" 'psql .*POSTGRES_DUMP_FILE|pg_restore .*POSTGRES_DUMP_FILE' "restore drill must restore the PostgreSQL dump"
+require_pattern "${DRILL_SCRIPT}" 'backup-encryption\.key' "restore drill must default to the separated backup encryption key file"
+require_pattern "${DRILL_SCRIPT}" 'AQUILA_RESTORE_PRIVACY_GATE_SCRIPT is required' "restore drill must require a restore privacy gate script"
+require_pattern "${DRILL_SCRIPT}" 'canonical_path_for_compare' "restore drill must compare canonical paths before exclusion checks"
+require_pattern "${DRILL_SCRIPT}" 'assert_outside_backup_root "AQUILA_BACKUP_ENCRYPTION_KEY_FILE"' "restore drill must keep backup key outside backup root"
+require_pattern "${DRILL_SCRIPT}" 'read_key_from_file encryption_key_file' "restore drill must prefer the selected backup metadata encryption key"
+require_pattern "${DRILL_SCRIPT}" 'openssl enc -d -aes-256-cbc -pbkdf2' "restore drill must decrypt encrypted backup artifacts"
+require_pattern "${DRILL_SCRIPT}" 'AQUILA_RESTORE_DRILL_DECRYPT_DIR' "restore drill decrypt workspace must be configurable"
+require_pattern "${DRILL_SCRIPT}" 'BACKUP_ROOT}/\.restore-drill-decrypted' "restore drill decrypt workspace must default to the backup volume"
+require_pattern "${DRILL_SCRIPT}" 'df -Pk' "restore drill must check decrypt workspace free space"
+reject_pattern "${DRILL_SCRIPT}" 'mktemp -d /tmp/aquila-restore-drill-decrypted' "restore drill must not hard-code decrypted backups under root /tmp"
 require_pattern "${DRILL_SCRIPT}" 'flyway_schema_history' "restore drill must verify Flyway/schema state"
 require_pattern "${DRILL_SCRIPT}" 'SELECT COUNT\(\*\) FROM post' "restore drill must verify restored post row count"
 require_pattern "${DRILL_SCRIPT}" 'WHERE listed = true' "restore drill must query latest public post"
 require_pattern "${DRILL_SCRIPT}" 'sha256sum' "restore drill must produce or compare MinIO object checksums"
-require_pattern "${DRILL_SCRIPT}" 'minio-data\.tar\.gz' "restore drill must inspect MinIO backup tarball"
+require_pattern "${DRILL_SCRIPT}" 'minio-data\.tar\.gz\.enc' "restore drill must inspect encrypted MinIO backup tarball"
+require_pattern "${DRILL_SCRIPT}" 'restore-privacy-gate\.txt' "restore drill must write privacy gate evidence"
+require_pattern "${DRILL_SCRIPT}" '\^status=pass\$' "restore drill must require a passing privacy gate status"
 require_pattern "${DRILL_SCRIPT}" 'restore-drill-summary\.md' "restore drill must write a human-readable summary artifact"
 require_pattern "${DRILL_SCRIPT}" 'restore-drill-result\.env' "restore drill must write a machine-readable result artifact"
 require_pattern "${DRILL_SCRIPT}" 'RPO' "restore drill must record RPO"
@@ -110,26 +122,51 @@ MINIO_SOURCE_DIR="${WORK_DIR}/minio-source"
 FAKE_BIN_DIR="${WORK_DIR}/bin"
 ARTIFACT_DIR="${WORK_DIR}/artifacts"
 DEPLOY_DIR="${WORK_DIR}/deploy"
+KEY_FILE="${WORK_DIR}/backup-encryption.key"
+ROTATED_KEY_FILE="${WORK_DIR}/rotated-backup-encryption.key"
+PRIVACY_GATE_SCRIPT="${WORK_DIR}/restore-privacy-gate.sh"
 mkdir -p "${POSTGRES_BACKUP_DIR}" "${MINIO_BACKUP_DIR}" "${MINIO_SOURCE_DIR}/post-img/posts/2026/01" "${FAKE_BIN_DIR}" "${DEPLOY_DIR}"
+printf 'test-backup-key\n' > "${KEY_FILE}"
+printf 'rotated-backup-key\n' > "${ROTATED_KEY_FILE}"
+chmod 600 "${KEY_FILE}"
+chmod 600 "${ROTATED_KEY_FILE}"
 cat > "${DEPLOY_DIR}/.env.prod" <<EOF
 AQUILA_EXTERNAL_STORAGE_ROOT=${WORK_DIR}/storage
 AQUILA_BACKUP_ROOT=${BACKUP_ROOT}
+AQUILA_BACKUP_ENCRYPTION_KEY_FILE=${ROTATED_KEY_FILE}
+AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=${PRIVACY_GATE_SCRIPT}
 DB_IMAGE=jangka512/pgj@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 EOF
 
-cat > "${POSTGRES_BACKUP_DIR}/dump.sql" <<'SQL'
+cat > "${WORK_DIR}/dump.sql" <<'SQL'
 CREATE TABLE flyway_schema_history(success boolean);
 CREATE TABLE post(id bigint, listed boolean, created_at timestamptz);
 SQL
-cat > "${POSTGRES_BACKUP_DIR}/metadata.env" <<'EOF'
+openssl enc -aes-256-cbc -pbkdf2 -salt -pass "file:${KEY_FILE}" -in "${WORK_DIR}/dump.sql" -out "${POSTGRES_BACKUP_DIR}/dump.sql.enc"
+cat > "${POSTGRES_BACKUP_DIR}/metadata.env" <<EOF
 backup_set_id=20260101-010203
 class=daily
 created_at=20260101-010203
 created_at_utc=2026-01-01T01:02:03Z
+encryption=openssl-enc-aes-256-cbc-pbkdf2
+encryption_key_file=${KEY_FILE}
 EOF
 printf 'fixture-object\n' > "${MINIO_SOURCE_DIR}/post-img/posts/2026/01/sample.txt"
 printf 'fixture-object-2\n' > "${MINIO_SOURCE_DIR}/post-img/posts/2026/01/zzz.txt"
-tar -C "${MINIO_SOURCE_DIR}" -czf "${MINIO_BACKUP_DIR}/minio-data.tar.gz" .
+tar -C "${MINIO_SOURCE_DIR}" -czf - . | openssl enc -aes-256-cbc -pbkdf2 -salt -pass "file:${KEY_FILE}" -out "${MINIO_BACKUP_DIR}/minio-data.tar.gz.enc"
+
+cat > "${PRIVACY_GATE_SCRIPT}" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "${BACKUP_SET_ID}" == "20260101-010203" ]]
+[[ "${BACKUP_CLASS}" == "daily" ]]
+[[ -n "${POSTGRES_CONTAINER}" ]]
+[[ -s "${MINIO_CHECKSUM_FILE}" ]]
+printf 'status=pass\n'
+printf 'tombstone_replay=operator-gate-fixture\n'
+printf 'traffic_open=blocked_until_gate_pass\n'
+SH
+chmod +x "${PRIVACY_GATE_SCRIPT}"
 
 cat > "${FAKE_BIN_DIR}/docker" <<'SH'
 #!/usr/bin/env bash
@@ -217,8 +254,12 @@ grep -q '^RPO_ACTUAL_MINUTES=1562$' "${ARTIFACT_DIR}/restore-drill-result.env"
 grep -q '^FLYWAY_SUCCESS_COUNT=32$' "${ARTIFACT_DIR}/restore-drill-result.env"
 grep -q '^POST_ROW_COUNT=7$' "${ARTIFACT_DIR}/restore-drill-result.env"
 grep -q '^LATEST_PUBLIC_POST_ID=42$' "${ARTIFACT_DIR}/restore-drill-result.env"
-grep -q 'post-img/posts/2026/01/sample.txt' "${ARTIFACT_DIR}/restore-drill-result.env"
-grep -q 'Backup Restore Drill Summary' "${ARTIFACT_DIR}/restore-drill-summary.md"
+require_pattern "${ARTIFACT_DIR}/restore-drill-result.env" '^ENCRYPTION=openssl-enc-aes-256-cbc-pbkdf2$' "result.env must include encryption marker"
+require_pattern "${ARTIFACT_DIR}/restore-drill-result.env" '^RESTORE_PRIVACY_GATE=pass$' "result.env must include privacy gate pass"
+require_pattern "${ARTIFACT_DIR}/restore-drill-result.env" 'post-img/posts/2026/01/sample.txt' "result.env must include sampled object key"
+require_pattern "${ARTIFACT_DIR}/restore-drill-summary.md" 'Backup Restore Drill Summary' "summary must be generated"
+require_pattern "${ARTIFACT_DIR}/restore-drill-summary.md" 'Restore privacy gate: `pass`' "summary must include privacy gate status"
+require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^tombstone_replay=operator-gate-fixture$' "privacy gate evidence must include tombstone replay marker"
 grep -q 'post-img/posts/2026/01/sample.txt' "${ARTIFACT_DIR}/minio-checksums.sha256"
 
 echo "[external-backup-restore-drill] ok"

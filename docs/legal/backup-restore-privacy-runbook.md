@@ -22,11 +22,23 @@
 
 1. restore target이 production traffic과 격리되어 있는지 확인한다.
 2. backup set id, backup class, source time, restore target, operator를 기록한다.
-3. restore 전 최신 deletion tombstone과 retention cutoff를 준비한다.
-4. PostgreSQL restore 후 tombstone replay를 실행하거나 수동 검증 query를 수행한다.
-5. object storage restore 후 tombstone object key hash list가 재노출되지 않는지 확인한다.
-6. session, token, auth cookie뿐 아니라 API key, refresh token 등 모든 인증 자산이 restore 후 재사용 가능하지 않은지 확인한다.
-7. public edge probe와 live E2E는 privacy gate pass 전에는 production traffic에 연결하지 않는다.
+3. `AQUILA_BACKUP_ENCRYPTION_KEY_FILE`이 backup root 밖의 운영 key 파일을 가리키는지 확인한다.
+4. PostgreSQL `dump.sql.enc`와 MinIO `minio-data.tar.gz.enc`만 복호화 restore 대상으로 사용한다.
+5. restore 전 최신 deletion tombstone과 retention cutoff를 준비한다.
+6. PostgreSQL restore 후 `AQUILA_RESTORE_PRIVACY_GATE_SCRIPT`가 tombstone replay 또는 동등한 삭제 검증을 실행하고 `status=pass` evidence를 남긴다.
+7. object storage restore 후 tombstone object key hash list가 재노출되지 않는지 확인한다.
+8. session, refresh token, signup token, OAuth pending token, auth cookie, API key가 restore 후 재사용 가능하지 않은지 확인한다.
+9. public edge probe와 live E2E는 `restore-privacy-gate.txt`가 pass evidence를 남기기 전에는 production traffic에 연결하지 않는다.
+
+## Backup Encryption
+
+- PostgreSQL backup artifact: `postgres/<class>/<backup_set_id>/dump.sql.enc`.
+- MinIO backup artifact: `minio/<class>/<backup_set_id>/minio-data.tar.gz.enc`.
+- Algorithm: `openssl enc -aes-256-cbc -pbkdf2 -salt`.
+- Key file: `AQUILA_BACKUP_ENCRYPTION_KEY_FILE`로 지정하며 `AQUILA_BACKUP_ROOT` 내부에 둘 수 없다.
+  값을 생략하면 `${AQUILA_EXTERNAL_STORAGE_ROOT}/backup-encryption.key`를 사용하고, 최초 backup 시 0600 권한으로 생성된다.
+- Rotation: 새 key 파일을 배포 env에 먼저 추가하고 다음 backup부터 새 key로 생성한다. 기존 backup 복구 기간 동안 이전 key는 별도 offline secret store에 보관하고, retention 만료 후 폐기한다.
+- 접근 log: key 파일 read 권한은 backup/restore 운영자와 restore drill workflow 실행 계정으로 제한하고, key 접근/rotation/drill 실행 시각을 운영 변경 기록에 남긴다.
 
 ## Tombstone Replay Checklist
 
@@ -44,7 +56,9 @@
 
 - workflow run link와 artifact: `restore-drill-summary.md`, `restore-drill-result.env`, checksum file.
 - backup set id, restore startedAt/completedAt, RPO/RTO.
+- encryption algorithm과 key file 분리 확인 결과.
 - tombstone replay result: count, skipped with reason, failure list.
+- `restore-privacy-gate.txt`: tombstone replay 또는 동등한 삭제 검증 pass evidence.
 - object checksum result와 redacted sample.
 - traffic open approval: approver, timestamp, gate result.
 
@@ -52,7 +66,7 @@
 
 - tombstone replay 또는 동등한 deletion verification이 pass다.
 - 개인정보 삭제/처리정지 요청이 restore로 되돌아가지 않았다.
-- token/session/API key/refresh token이 재활성화되지 않았다.
+- token/session/API key/refresh token/signup token/OAuth pending token이 재활성화되지 않았다.
 - service owner가 traffic open을 승인했다.
 - 실패 항목은 production 연결 전에 issue/PR로 분리됐다.
 

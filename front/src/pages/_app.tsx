@@ -21,6 +21,22 @@ const Analytics = dynamic(() => import("@vercel/analytics/next").then((mod) => m
 const SpeedInsights = dynamic(() => import("@vercel/speed-insights/next").then((mod) => mod.SpeedInsights), {
   ssr: false,
 })
+const SENSITIVE_SIGNUP_ROUTES = new Set(["/signup/verify", "/signup/social/complete"])
+
+type VercelTelemetryEvent = {
+  url: string
+}
+
+const resolveTelemetryPathname = (url: string): string => {
+  try {
+    return new URL(url, "https://aquila.local").pathname
+  } catch {
+    return url.split(/[?#]/, 1)[0] ?? ""
+  }
+}
+
+const filterSensitiveSignupTelemetry = <T extends VercelTelemetryEvent>(event: T): T | null =>
+  SENSITIVE_SIGNUP_ROUTES.has(resolveTelemetryPathname(event.url)) ? null : event
 
 type AppPageProps = AppPropsWithLayout["pageProps"] & {
   initialAdminProfile?: AdminProfile | null
@@ -36,6 +52,9 @@ function App({ Component, pageProps, emotionCache = clientSideEmotionCache }: Ap
   const [queryClient] = useState(createQueryClient)
   const router = useRouter()
   const optionalTrackingAllowed = useOptionalTrackingConsent()
+  const isSensitiveSignupRoute = SENSITIVE_SIGNUP_ROUTES.has(router.pathname)
+  const shouldRenderVercelTelemetry =
+    process.env.NODE_ENV === "production" && optionalTrackingAllowed && !isSensitiveSignupRoute
 
   return (
     <CacheProvider value={emotionCache}>
@@ -51,10 +70,10 @@ function App({ Component, pageProps, emotionCache = clientSideEmotionCache }: Ap
               initialAdminProfileShouldRefetch={initialAdminProfileShouldRefetch}
             >
               {getLayout(<Component {...pageProps} />)}
-              {process.env.NODE_ENV === "production" && optionalTrackingAllowed ? (
+              {shouldRenderVercelTelemetry ? (
                 <>
-                  <Analytics />
-                  <SpeedInsights />
+                  <Analytics beforeSend={filterSensitiveSignupTelemetry} />
+                  <SpeedInsights beforeSend={filterSensitiveSignupTelemetry} />
                 </>
               ) : null}
             </RootLayout>

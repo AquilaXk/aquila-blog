@@ -1340,6 +1340,41 @@ test("runtime-split memory tuner keeps backend color startup headroom", () => {
   assert(!splitAllocator.includes("local blue_min=384"))
 })
 
+test("runtime-split helper backends do not compete with candidate Flyway migration", () => {
+  const compose = readFileSync(composePath, "utf8")
+  const deployScript = readFileSync(deployScriptPath, "utf8")
+  const helperServices = ["back_read", "back_admin", "back_worker"]
+
+  const serviceBlock = (service) => {
+    const marker = `  ${service}:\n`
+    const start = compose.indexOf(marker)
+    assert.notEqual(start, -1, `${service} block must exist`)
+    const tailStart = start + marker.length
+    const tail = compose.slice(tailStart)
+    const next = tail.search(/\n  [a-zA-Z0-9_]+:\n/)
+    return compose.slice(start, next === -1 ? compose.length : tailStart + next)
+  }
+
+  for (const service of helperServices) {
+    assert.match(serviceBlock(service), /SPRING_FLYWAY_ENABLED:\s*"false"/)
+  }
+
+  const preCandidateBootStart = deployScript.indexOf("services_to_boot=(")
+  const preCandidateBootEnd = deployScript.indexOf('compose_up_with_retry "${services_to_boot[@]}"')
+  const candidateHealthIndex = deployScript.indexOf('check_backend_health "${next_backend}"')
+  const helperRestartIndex = deployScript.indexOf('restart_runtime_split_backends_after_candidate_ready "${next_backend}"')
+
+  assert(preCandidateBootStart > 0, "deploy script must build the pre-candidate boot list")
+  assert(preCandidateBootEnd > preCandidateBootStart, "deploy script must boot infra before the candidate")
+  assert(candidateHealthIndex > preCandidateBootEnd, "candidate healthcheck must happen after infra boot")
+  assert(helperRestartIndex > candidateHealthIndex, "runtime split helpers must restart after candidate health")
+
+  const preCandidateBoot = deployScript.slice(preCandidateBootStart, preCandidateBootEnd)
+  for (const service of helperServices) {
+    assert(!preCandidateBoot.includes(service), `${service} must not start before candidate migration`)
+  }
+})
+
 test("homeserver origin ingress is private behind Cloudflare Tunnel", () => {
   const compose = readFileSync(composePath, "utf8")
   const hardeningScript = readFileSync(hardeningScriptPath, "utf8")

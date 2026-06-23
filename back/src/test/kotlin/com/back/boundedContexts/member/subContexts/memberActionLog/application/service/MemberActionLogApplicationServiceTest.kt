@@ -108,6 +108,11 @@ class MemberActionLogApplicationServiceTest {
             saved += memberActionLog
             return memberActionLog
         }
+
+        override fun deleteCreatedBefore(
+            cutoff: Instant,
+            limit: Int,
+        ): Int = 0
     }
 
     private fun testCommentDto(content: String): PostCommentDto =

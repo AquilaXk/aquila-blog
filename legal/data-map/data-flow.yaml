@@ -77,7 +77,7 @@ flows:
       - home_server_redis
       - vercel_frontend_hosting
       - cloudflare_dns_proxy
-    status: retention 기간은 issue1000
+    status: PostgreSQL member_notification is purged after custom.privacy.retention.notificationDays, default 60 days
   - id: analytics_rum
     collectionPoint: browser runtime after optional tracking consent, /api/rum/vitals, and /api/rum/client-errors
     stores:

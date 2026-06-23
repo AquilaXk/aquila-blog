@@ -2361,7 +2361,11 @@ if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
     echo "skip runtime helper dns check before candidate health: helpers were not prebooted"
   fi
 fi
-check_backend_health "${next_backend}"
+if ! check_backend_health "${next_backend}"; then
+  echo "candidate backend health failed before cutover: ${next_backend}" >&2
+  compose stop "${next_backend}" || true
+  exit 1
+fi
 if ! restart_runtime_split_backends_after_candidate_ready "${next_backend}"; then
   echo "runtime helper backend restart failed after ${next_backend} became healthy" >&2
   restore_runtime_split_helper_backends_to_active "${active_backend}" "${next_backend}" || true

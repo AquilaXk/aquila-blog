@@ -1435,6 +1435,8 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
   )
   assert(edgeBootIndex > activeHelperStartIndex, "edge services must start after active-image helpers exist")
   assert(candidateHealthIndex > preCandidateBootEnd, "candidate healthcheck must happen after infra boot")
+  assert.match(deployScript, /if ! check_backend_health "\$\{next_backend\}"; then/)
+  assert.match(deployScript, /candidate backend health failed before cutover: \$\{next_backend\}/)
   assert(helperRestartIndex > candidateHealthIndex, "runtime split helpers must restart after candidate health with explicit failure handling")
   assert(postRestartHelperDnsIndex > helperRestartIndex, "helper DNS checks must run after candidate-backed helper startup")
   assert(rollbackRouteIndex >= 0, "rollback must switch caddy route")

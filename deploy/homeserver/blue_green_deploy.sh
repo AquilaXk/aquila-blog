@@ -2163,9 +2163,7 @@ rollback_caddy_route_only() {
     return 1
   fi
 
-  if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
-    restore_runtime_split_helper_backends_to_active "${previous_backend}" "${candidate_backend}" || return 1
-  fi
+  restore_runtime_split_helper_backends_to_active "${previous_backend}" "${candidate_backend}" || return 1
 
   switch_caddy_upstream "${previous_backend}"
 
@@ -2264,9 +2262,7 @@ rollback_to_backend() {
 
   local inactive_backend
   inactive_backend="$(other_backend "${rollback_backend}")"
-  if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
-    restore_runtime_split_helper_backends_to_active "${rollback_backend}" "${inactive_backend}" || return 1
-  fi
+  restore_runtime_split_helper_backends_to_active "${rollback_backend}" "${inactive_backend}" || return 1
 
   switch_caddy_upstream "${rollback_backend}"
 

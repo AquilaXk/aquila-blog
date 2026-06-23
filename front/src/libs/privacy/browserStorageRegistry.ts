@@ -1,4 +1,21 @@
 import { FEED_EXPLORER_RESTORE_KEY_PREFIX } from "src/libs/feed/feedRestoreCache"
+export {
+  OPTIONAL_TRACKING_CONSENT_CHANGE_EVENT,
+  OPTIONAL_TRACKING_CONSENT_STORAGE_KEY,
+  disableOptionalTrackingRuntime,
+  hasBrowserPrivacyOptOutSignal,
+  hasOptionalTrackingConsent,
+  installOptionalTrackingDenyGuard,
+  readOptionalTrackingConsent,
+  setOptionalTrackingConsent,
+  writeOptionalTrackingConsent,
+} from "src/libs/privacy/optionalTrackingConsentCore"
+export type {
+  OptionalTrackingConsentRecord,
+  OptionalTrackingConsentSource,
+  OptionalTrackingConsentState,
+} from "src/libs/privacy/optionalTrackingConsentCore"
+import { OPTIONAL_TRACKING_CONSENT_STORAGE_KEY } from "src/libs/privacy/optionalTrackingConsentCore"
 
 export type BrowserStorageArea = "cookie" | "localStorage" | "sessionStorage"
 
@@ -11,44 +28,6 @@ export type BrowserStorageRegistryEntry = {
   deletion: string
   stores: string
 }
-
-export const OPTIONAL_TRACKING_CONSENT_STORAGE_KEY = "privacy.optionalTrackingConsent.v1"
-export const OPTIONAL_TRACKING_CONSENT_CHANGE_EVENT = "aquila:optional-tracking-consent-change"
-export type OptionalTrackingConsentState = "granted" | "denied"
-
-type OptionalTrackingWindow = Window & {
-  dataLayer?: unknown[]
-  ga?: unknown
-  gtag?: unknown
-  si?: unknown
-  siq?: unknown[]
-  va?: unknown
-  vam?: unknown
-  vaq?: unknown[]
-}
-
-const optionalTrackingUrlTokens = [
-  "/api/rum/vitals",
-  "/_vercel/insights",
-  "/_vercel/speed-insights",
-  "vitals.vercel-insights.com",
-  "vercel-insights.com",
-  "googletagmanager.com",
-  "google-analytics.com",
-]
-
-const optionalTrackingScriptSelectors = [
-  "script[src*='/_vercel/insights']",
-  "script[src*='/_vercel/speed-insights']",
-  "script[src*='vercel-scripts.com/v1/script']",
-  "script[src*='vercel-scripts.com/v1/speed-insights']",
-  "script[src*='googletagmanager.com/gtag/js']",
-  "script#ga",
-]
-
-let originalFetch: typeof window.fetch | null = null
-let originalSendBeacon: typeof window.navigator.sendBeacon | null = null
-let denyGuardInstalled = false
 
 export const registeredBrowserStorageKeys: BrowserStorageRegistryEntry[] = [
   {
@@ -130,7 +109,7 @@ export const registeredBrowserStorageKeys: BrowserStorageRegistryEntry[] = [
     required: false,
     retention: "until consent is changed, withdrawn, or browser storage is cleared",
     deletion: "privacy settings change or browser storage deletion",
-    stores: "granted or denied optional tracking consent state",
+    stores: "JSON consent record with version, granted or denied state, timestamp, source, and analytics/RUM categories",
   },
   {
     area: "localStorage",
@@ -295,85 +274,3 @@ export const registeredBrowserStorageKeys: BrowserStorageRegistryEntry[] = [
     stores: "feed explorer scroll, query, and snapshot restoration state",
   },
 ]
-
-export const hasOptionalTrackingConsent = () => {
-  if (typeof window === "undefined") return false
-
-  try {
-    return window.localStorage.getItem(OPTIONAL_TRACKING_CONSENT_STORAGE_KEY) === "granted"
-  } catch {
-    return false
-  }
-}
-
-const optionalTrackingUrl = (input: RequestInfo | URL) => {
-  if (typeof input === "string") return input
-  if (input instanceof URL) return input.toString()
-  return input.url
-}
-
-const isOptionalTrackingUrl = (input: RequestInfo | URL) => {
-  const url = optionalTrackingUrl(input)
-  return optionalTrackingUrlTokens.some((token) => url.includes(token))
-}
-
-const shouldBlockOptionalTrackingRequest = (input: RequestInfo | URL) => {
-  return !hasOptionalTrackingConsent() && isOptionalTrackingUrl(input)
-}
-
-export const installOptionalTrackingDenyGuard = () => {
-  if (typeof window === "undefined" || denyGuardInstalled) return
-
-  denyGuardInstalled = true
-  originalFetch = window.fetch.bind(window)
-  window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-    if (shouldBlockOptionalTrackingRequest(input)) {
-      return Promise.resolve(new Response(null, { status: 204 }))
-    }
-    return originalFetch!(input, init)
-  }) as typeof window.fetch
-
-  originalSendBeacon = window.navigator.sendBeacon.bind(window.navigator)
-  window.navigator.sendBeacon = ((url: string | URL, data?: BodyInit | null) => {
-    if (shouldBlockOptionalTrackingRequest(url)) {
-      return true
-    }
-    return originalSendBeacon!(url, data)
-  }) as typeof window.navigator.sendBeacon
-}
-
-export const disableOptionalTrackingRuntime = () => {
-  if (typeof window === "undefined") return
-
-  for (const selector of optionalTrackingScriptSelectors) {
-    document.querySelectorAll(selector).forEach((script) => script.remove())
-  }
-
-  const trackingWindow = window as OptionalTrackingWindow
-  trackingWindow.dataLayer = []
-  delete trackingWindow.ga
-  delete trackingWindow.gtag
-  delete trackingWindow.si
-  delete trackingWindow.siq
-  delete trackingWindow.va
-  delete trackingWindow.vam
-  delete trackingWindow.vaq
-}
-
-export const writeOptionalTrackingConsent = (state: OptionalTrackingConsentState) => {
-  if (typeof window === "undefined") return
-
-  try {
-    window.localStorage.setItem(OPTIONAL_TRACKING_CONSENT_STORAGE_KEY, state)
-    if (state === "denied") {
-      disableOptionalTrackingRuntime()
-    }
-    window.dispatchEvent(new Event(OPTIONAL_TRACKING_CONSENT_CHANGE_EVENT))
-  } catch {
-    // Optional analytics consent must never block the primary user flow.
-  }
-}
-
-export const setOptionalTrackingConsent = (granted: boolean) => {
-  writeOptionalTrackingConsent(granted ? "granted" : "denied")
-}

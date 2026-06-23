@@ -414,7 +414,7 @@ activities:
       - registeredMemberWhenLoggedIn
     purpose: 페이지 품질, 성능, 오류 추적, 이용 흐름 집계 분석
     legalBasis: consentOrLegitimateAnalyticsInterestReviewRequired
-    collectionSource: browser runtime, Next.js API route /api/rum/vitals
+    collectionSource: browser runtime after optional tracking consent, Next.js API route /api/rum/vitals and /api/rum/client-errors
     requiredOrOptional: optionalAnalyticsExceptEssentialOperationalMetrics
     systemOfRecord: Google Analytics, Vercel analytics, application logs for custom RUM
     processors:
@@ -422,18 +422,17 @@ activities:
       - vercel_frontend_hosting
       - grafana_loki_monitoring
     overseasTransfer: possibleViaGoogleAndVercelGlobalInfrastructure
-    retentionRule: providerDefaultUnlessConfigured; localRumLogRetentionPolicyRequired; privacy.optionalTrackingConsent.v1 untilConsentChangeOrBrowserStorageClear
+    retentionRule: providerDefaultUnlessConfigured; localRumLogRetentionPolicyRequired; privacy.optionalTrackingConsent.v1 JSON record untilConsentChangeOrBrowserStorageClear
     destructionMethod: providerRetentionControlsAndLocalLogExpiry; privacy.optionalTrackingConsent.v1 preferenceDeletion
     accessRoles:
       - serviceAdmin
       - analyticsOperator
     encryption: transportTls; aggregateMetricsPreferred
-    userRightsHandler: privacyPreferenceAndConsentWithdrawalFutureWork
+    userRightsHandler: /settings/privacy preference and consent withdrawal
     codeOwner: front/analytics-rum
     policySectionId: privacy-cookie-analytics
-    enabledByEnv: CONFIG.googleAnalytics.enable with optional tracking consent; Vercel analytics package in production; NEXT_PUBLIC_RUM_SAMPLE_RATE defaults 0 and explicit non-zero enables custom RUM; RUM_LOG_SLOW_ONLY only controls server logging
-    reviewRequired:
-      - Consent manager and opt-out are tracked by issue1002.
+    enabledByEnv: CONFIG.googleAnalytics.enable with optional tracking consent; Vercel analytics package in production only after optional tracking consent; NEXT_PUBLIC_RUM_SAMPLE_RATE defaults 0 and explicit non-zero enables custom RUM; RUM_LOG_SLOW_ONLY only controls server logging; Do Not Track and Global Privacy Control block optional tracking
+    reviewRequired: []
 
   - id: ai_tag_recommendation_gemini
     name: Gemini 기반 관리자 태그 추천

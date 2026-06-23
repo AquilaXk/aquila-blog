@@ -1391,12 +1391,18 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
   const preCandidateBootEnd = deployScript.indexOf('compose_up_with_retry "${services_to_boot[@]}"')
   const activeHelperGuardIndex = deployScript.indexOf('if is_backend_running "${active_backend}"; then')
   const activeHelperStartIndex = deployScript.indexOf('start_runtime_split_helper_backends_on_active "${active_backend}"')
+  const activeBackendRunningFlagInitIndex = deployScript.indexOf('active_backend_was_running="false"')
+  const activeBackendRunningFlagSetIndex = deployScript.indexOf('active_backend_was_running="true"')
+  const edgeBootIndex = deployScript.indexOf("edge_services_to_boot=(caddy cloudflared)")
+  const preCandidateCloudflaredCheckIndex = deployScript.indexOf('check_cloudflared_runtime "${api_domain}"', edgeBootIndex)
+  const preCandidateCloudflaredSkipIndex = deployScript.indexOf(
+    "skip cloudflared runtime check before candidate health: active backend is not running",
+  )
   const helperPrebootFlagInitIndex = deployScript.indexOf('runtime_split_helpers_prebooted="false"')
   const helperPrebootFlagSetIndex = deployScript.indexOf('runtime_split_helpers_prebooted="true"')
   const preCandidateHelperDnsSkipIndex = deployScript.indexOf(
     "skip runtime helper dns check before candidate health: helpers were not prebooted",
   )
-  const edgeBootIndex = deployScript.indexOf("edge_services_to_boot=(caddy cloudflared)")
   const candidateHealthIndex = deployScript.indexOf('check_backend_health "${next_backend}"')
   const helperRestartIndex = deployScript.indexOf('if ! restart_runtime_split_backends_after_candidate_ready "${next_backend}"; then')
   const postRestartHelperDnsIndex = deployScript.indexOf(
@@ -1430,9 +1436,13 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
   assert.match(deployScript, /skip active-image helper preboot: active backend is not running/)
   assert(preCandidateBootStart > 0, "deploy script must build the pre-candidate boot list")
   assert(preCandidateBootEnd > preCandidateBootStart, "deploy script must boot infra before the candidate")
+  assert(activeBackendRunningFlagInitIndex > preCandidateBootEnd, "active backend running gate must initialize after data infra boot")
   assert(activeHelperGuardIndex > preCandidateBootEnd, "active helper preboot must check that active backend is running")
+  assert(activeBackendRunningFlagSetIndex > activeHelperGuardIndex, "active backend running gate must only flip inside running-active branch")
   assert(activeHelperStartIndex > preCandidateBootEnd, "runtime split helpers must start on active image after data infra")
   assert(activeHelperStartIndex > activeHelperGuardIndex, "runtime split helpers must not preboot on fresh deployments")
+  assert(preCandidateCloudflaredCheckIndex > edgeBootIndex, "early cloudflared check must run after edge boot")
+  assert(preCandidateCloudflaredSkipIndex > edgeBootIndex, "fresh deploys must skip early cloudflared public readiness before backend route exists")
   assert(helperPrebootFlagInitIndex > preCandidateBootEnd, "helper DNS gate state must initialize after data infra boot")
   assert(helperPrebootFlagSetIndex > activeHelperStartIndex, "helper DNS gate state must only flip after active helper preboot")
   assert(

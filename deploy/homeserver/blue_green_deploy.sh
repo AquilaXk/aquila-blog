@@ -2243,7 +2243,10 @@ if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
   check_backend_dns_from_caddy "back_admin"
 fi
 check_backend_health "${next_backend}"
-restart_runtime_split_backends_after_candidate_ready "${next_backend}"
+if ! restart_runtime_split_backends_after_candidate_ready "${next_backend}"; then
+  echo "runtime helper backend restart failed after ${next_backend} became healthy" >&2
+  exit 1
+fi
 
 switch_caddy_upstream "${next_backend}"
 

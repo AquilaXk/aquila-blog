@@ -1362,12 +1362,12 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
   const preCandidateBootStart = deployScript.indexOf("services_to_boot=(")
   const preCandidateBootEnd = deployScript.indexOf('compose_up_with_retry "${services_to_boot[@]}"')
   const candidateHealthIndex = deployScript.indexOf('check_backend_health "${next_backend}"')
-  const helperRestartIndex = deployScript.indexOf('restart_runtime_split_backends_after_candidate_ready "${next_backend}"')
+  const helperRestartIndex = deployScript.indexOf('if ! restart_runtime_split_backends_after_candidate_ready "${next_backend}"; then')
 
   assert(preCandidateBootStart > 0, "deploy script must build the pre-candidate boot list")
   assert(preCandidateBootEnd > preCandidateBootStart, "deploy script must boot infra before the candidate")
   assert(candidateHealthIndex > preCandidateBootEnd, "candidate healthcheck must happen after infra boot")
-  assert(helperRestartIndex > candidateHealthIndex, "runtime split helpers must restart after candidate health")
+  assert(helperRestartIndex > candidateHealthIndex, "runtime split helpers must restart after candidate health with explicit failure handling")
 
   const preCandidateBoot = deployScript.slice(preCandidateBootStart, preCandidateBootEnd)
   for (const service of helperServices) {

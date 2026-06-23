@@ -323,12 +323,14 @@ jobs:
           HOME_AI_TAG_ENABLED: ${{ secrets.CUSTOM__AI__TAG__ENABLED || vars.CUSTOM__AI__TAG__ENABLED || 'false' }}
           HOME_NEXT_PUBLIC_SIGNUP_ENABLED: ${{ secrets.NEXT_PUBLIC_SIGNUP_ENABLED || vars.NEXT_PUBLIC_SIGNUP_ENABLED || 'false' }}
           HOME_NEXT_PUBLIC_RUM_SAMPLE_RATE: ${{ secrets.NEXT_PUBLIC_RUM_SAMPLE_RATE || vars.NEXT_PUBLIC_RUM_SAMPLE_RATE || '0' }}
+          HOME_RESTORE_PRIVACY_GATE_SCRIPT: ${{ secrets.AQUILA_RESTORE_PRIVACY_GATE_SCRIPT || vars.AQUILA_RESTORE_PRIVACY_GATE_SCRIPT || '/opt/aquila-blog/restore-privacy-gate.sh' }}
         shell: bash
         run: |
           set -euo pipefail
           home_server_env_file="${RUNNER_TEMP}/home-server.env"
           {
             printf '%s\n' "${HOME_SERVER_ENV}"
+            printf 'AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=%s\n' "${HOME_RESTORE_PRIVACY_GATE_SCRIPT}"
             printf 'CUSTOM__MEMBER__SIGNUP__ENABLED=%s\n' "${HOME_MEMBER_SIGNUP_ENABLED:-false}"
             printf 'CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED=%s\n' "${HOME_MEMBER_OAUTH_SIGNUP_ENABLED:-false}"
             printf 'CUSTOM__AI__TAG__ENABLED=%s\n' "${HOME_AI_TAG_ENABLED:-false}"
@@ -421,6 +423,7 @@ jobs:
           HOME_AI_TAG_ENABLED: ${{ secrets.CUSTOM__AI__TAG__ENABLED || vars.CUSTOM__AI__TAG__ENABLED || 'false' }}
           HOME_NEXT_PUBLIC_SIGNUP_ENABLED: ${{ secrets.NEXT_PUBLIC_SIGNUP_ENABLED || vars.NEXT_PUBLIC_SIGNUP_ENABLED || 'false' }}
           HOME_NEXT_PUBLIC_RUM_SAMPLE_RATE: ${{ secrets.NEXT_PUBLIC_RUM_SAMPLE_RATE || vars.NEXT_PUBLIC_RUM_SAMPLE_RATE || '0' }}
+          HOME_RESTORE_PRIVACY_GATE_SCRIPT: ${{ secrets.AQUILA_RESTORE_PRIVACY_GATE_SCRIPT || vars.AQUILA_RESTORE_PRIVACY_GATE_SCRIPT || '/opt/aquila-blog/restore-privacy-gate.sh' }}
         run: |
           set -euo pipefail
           PORT="${HOME_SSH_PORT:-22}"
@@ -689,6 +692,7 @@ jobs:
           upsert_env_key "CUSTOM__AI__SUMMARY__ENABLED" "${HOME_AI_SUMMARY_ENABLED:-}" "deploy/homeserver/.env.prod"
           upsert_env_key "CUSTOM__AI__SUMMARY__GEMINI__API_KEY" "${HOME_AI_SUMMARY_GEMINI_API_KEY:-}" "deploy/homeserver/.env.prod"
           upsert_env_key "CUSTOM__AI__SUMMARY__GEMINI__MODEL" "${HOME_AI_SUMMARY_GEMINI_MODEL:-}" "deploy/homeserver/.env.prod"
+          upsert_env_key "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT" "${HOME_RESTORE_PRIVACY_GATE_SCRIPT:-/opt/aquila-blog/restore-privacy-gate.sh}" "deploy/homeserver/.env.prod"
 
           require_privacy_freeze_value() {
             local key="$1"

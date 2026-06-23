@@ -28,7 +28,7 @@ data class TaskProcessingLockCleanupResult(
 class TaskProcessingLockDiagnosticsService(
     private val stringRedisTemplateProvider: ObjectProvider<StringRedisTemplate>,
     private val taskQueueRepository: TaskQueueRepositoryPort,
-    @Value("\${custom.runtime.workerEnabled:true}")
+    @Value("\${custom.runtime.worker-enabled:true}")
     private val currentNodeWorkerEnabled: Boolean,
     @Value("\${custom.runtime.apiMode:all}")
     private val currentNodeApiMode: String,

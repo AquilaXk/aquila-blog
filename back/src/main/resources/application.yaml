@@ -273,7 +273,7 @@ custom:
       refreshEnabled: ${CUSTOM__TASK__METRICS__REFRESH_ENABLED:true}
       refreshFixedDelayMs: ${CUSTOM__TASK__METRICS__REFRESH_FIXED_DELAY_MS:60000}
   runtime:
-    workerEnabled: ${CUSTOM__RUNTIME__WORKER_ENABLED:true}
+    worker-enabled: ${CUSTOM__RUNTIME__WORKER_ENABLED:true}
     apiMode: ${CUSTOM__RUNTIME__API_MODE:all}
   privacy:
     retention:

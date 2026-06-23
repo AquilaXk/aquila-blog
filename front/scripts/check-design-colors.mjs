@@ -103,8 +103,14 @@ const formatViolations = (violations) =>
     .join("\n")
 
 export const collectDiffText = () => {
-  const baseRef = resolveBaseRef()
-  const committedDiff = runGit(diffArgs(`${baseRef}...HEAD`))
+  let committedDiff = ""
+  try {
+    const baseRef = resolveBaseRef()
+    committedDiff = runGit(diffArgs(`${baseRef}...HEAD`))
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    console.warn(`[design-colors] warning: ${reason}; checking local diffs only`)
+  }
   const stagedDiff = runGit(["diff", "--cached", ...localDiffArgs.slice(1)])
   const workingTreeDiff = runGit(localDiffArgs)
   return [committedDiff, stagedDiff, workingTreeDiff].filter(Boolean).join("\n")

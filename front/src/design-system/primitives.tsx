@@ -89,10 +89,18 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
 Button.displayName = "Button"
 
-export type IconButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  size?: ControlSize
-  variant?: ButtonVariant
-}
+type AccessibleIconButtonName =
+  | { "aria-label": string; "aria-labelledby"?: never }
+  | { "aria-label"?: never; "aria-labelledby": string }
+
+export type IconButtonProps = Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  "aria-label" | "aria-labelledby"
+> &
+  AccessibleIconButtonName & {
+    size?: ControlSize
+    variant?: ButtonVariant
+  }
 
 const StyledIconButton = styled.button<StyledButtonProps>`
   width: ${({ $size }) => controlHeight($size)};

@@ -2331,7 +2331,9 @@ echo "starting infra before ${next_backend} (${action_backend_host})"
 services_to_boot=(db_1 redis_1 minio_1 uptime_kuma autoheal)
 compose_up_with_retry "${services_to_boot[@]}"
 runtime_split_helpers_prebooted="false"
+active_backend_was_running="false"
 if is_backend_running "${active_backend}"; then
+  active_backend_was_running="true"
   start_runtime_split_helper_backends_on_active "${active_backend}"
   runtime_split_helpers_prebooted="true"
 else
@@ -2341,7 +2343,11 @@ edge_services_to_boot=(caddy cloudflared)
 compose_up_with_retry "${edge_services_to_boot[@]}"
 compose_up_no_deps_with_retry loki promtail prometheus grafana
 ensure_caddy_mount_sync
-check_cloudflared_runtime "${api_domain}"
+if [[ "${active_backend_was_running}" == "true" ]]; then
+  check_cloudflared_runtime "${api_domain}"
+else
+  echo "skip cloudflared runtime check before candidate health: active backend is not running (${active_backend})"
+fi
 warn_grafana_embed_origin_route
 warn_grafana_embed_public_route
 validate_db_runtime_role_env

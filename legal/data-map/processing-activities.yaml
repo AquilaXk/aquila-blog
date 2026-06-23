@@ -327,7 +327,7 @@ activities:
     policySectionId: privacy-collection-security-log
     enabledByEnv: alwaysEnabledForAuthSecurity
     reviewRequired:
-      - Raw loginIdentifier minimization and redaction are tracked by issue1001.
+      - loginIdentifier stores null for member-known success events and one-way hash for anonymous blocked identifiers.
 
   - id: member_action_logs
     name: 관리자·사용자 action log
@@ -361,7 +361,7 @@ activities:
     policySectionId: privacy-collection-action-log
     enabledByEnv: alwaysEnabledForAuditableActions
     reviewRequired:
-      - Free-text data field minimization is tracked by issue1001.
+      - action log data stores structured_audit_v1 metadata without post/comment body text.
 
   - id: notifications_sse
     name: 알림과 SSE 연결 상태

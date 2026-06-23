@@ -26,9 +26,9 @@ test.describe("mobile layout public", () => {
 
   await page.goto("/")
   await expect(page.getByLabel("Search posts by keyword")).toBeVisible()
-  await expect(page.getByRole("link", { name: "Notes" })).toBeVisible()
-  await expect(page.getByRole("link", { name: "Topics" })).toBeVisible()
+  await expect(page.getByRole("link", { name: "Home" })).toBeVisible()
   await expect(page.getByRole("link", { name: "About" })).toBeVisible()
+  await expect(page.getByRole("link", { name: "Topics" })).toHaveCount(0)
   await expect(page.getByRole("button", { name: "전체보기" })).toBeVisible()
   await expect(page.locator("a[href^='/posts/'] h2").first()).toBeVisible()
   const moreTagButton = page.getByRole("button", { name: /더보기/ })
@@ -57,10 +57,11 @@ test.describe("mobile layout public", () => {
   expect(Math.abs(firstSnapshot.firstCardWidth - secondSnapshot.firstCardWidth)).toBeLessThanOrEqual(1.5)
 })
 
-  test("iPhone 15 Pro about 페이지는 소개/cta/프로젝트/이력/링크 순서와 compact avatar 계약을 유지한다", async ({ page }) => {
+  test("iPhone 15 Pro about 페이지는 V4 프로필 본문과 원형 avatar 계약을 유지한다", async ({ page }) => {
   await addPublicAboutSnapshotCookie(page)
   await page.goto("/about")
-  await expect(page.locator('[data-ui="about-eyebrow"]')).toHaveText("Profile")
+  await expect(page.locator('[data-ui="about-hero"] h1')).toHaveText("이유를 먼저 따지고, 운영 가능한 시스템을 설계합니다.")
+  await expect(page.locator(".profile-copy")).toContainText("안녕하세요, 백엔드 개발자 아퀼라입니다.")
 
   const snapshot = await page.evaluate(() => {
     const readRect = (selector: string) => {
@@ -79,34 +80,29 @@ test.describe("mobile layout public", () => {
       htmlScrollWidth: document.documentElement.scrollWidth,
       bodyScrollWidth: document.body.scrollWidth,
       hero: readRect('[data-ui="about-hero"]'),
-      eyebrowFontSize: Number.parseFloat(
-        window.getComputedStyle(document.querySelector('[data-ui="about-eyebrow"]') as HTMLElement).fontSize
-      ),
-      cta: readRect('[data-ui="about-cta-group"]'),
+      profileCopy: readRect(".profile-copy"),
+      profileCopyText: document.querySelector(".profile-copy")?.textContent || "",
       projects: readRect('[data-ui="about-projects"]'),
       timeline: readRect('[data-ui="about-timeline-section"]'),
-      contact: readRect('[data-ui="about-contact-section"]'),
-      service: readRect('[data-ui="about-service-section"]'),
       avatar: readRect('[data-ui="about-avatar"]'),
+      avatarRadius: window.getComputedStyle(document.querySelector('[data-ui="about-avatar"]') as HTMLElement)
+        .borderRadius,
     }
   })
 
   expect(snapshot.htmlScrollWidth).toBeLessThanOrEqual(snapshot.viewportWidth)
   expect(snapshot.bodyScrollWidth).toBeLessThanOrEqual(snapshot.viewportWidth)
-  expect(snapshot.eyebrowFontSize).toBeGreaterThanOrEqual(16)
   expect(snapshot.hero).not.toBeNull()
-  expect(snapshot.cta).not.toBeNull()
+  expect(snapshot.profileCopy).not.toBeNull()
+  expect(snapshot.profileCopyText).toContain("Java, Kotlin, Spring Boot")
   expect(snapshot.projects).not.toBeNull()
   expect(snapshot.timeline).not.toBeNull()
-  expect(snapshot.contact).not.toBeNull()
-  expect(snapshot.service).not.toBeNull()
-  expect((snapshot.cta?.top ?? 0)).toBeGreaterThan(snapshot.hero?.top ?? 0)
-  expect((snapshot.projects?.top ?? 0)).toBeGreaterThan(snapshot.cta?.top ?? 0)
+  expect((snapshot.profileCopy?.top ?? 0)).toBeGreaterThan(snapshot.hero?.top ?? 0)
+  expect((snapshot.projects?.top ?? 0)).toBeGreaterThan(snapshot.profileCopy?.top ?? 0)
   expect((snapshot.timeline?.top ?? 0)).toBeGreaterThan(snapshot.projects?.top ?? 0)
-  expect((snapshot.contact?.top ?? 0)).toBeGreaterThan(snapshot.timeline?.top ?? 0)
-  expect((snapshot.service?.top ?? 0)).toBeGreaterThan(snapshot.contact?.top ?? 0)
   expect(snapshot.avatar?.width ?? 0).toBeLessThanOrEqual(96)
   expect(snapshot.avatar?.right ?? 0).toBeLessThanOrEqual(snapshot.viewportWidth + 0.5)
+  expect(snapshot.avatarRadius).toBe("50%")
 })
 
   test("iPhone 15 Pro 상세 본문(table/code block)은 가로 클리핑 없이 유지된다", async ({ page }) => {

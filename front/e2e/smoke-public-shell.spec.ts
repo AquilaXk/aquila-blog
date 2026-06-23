@@ -189,9 +189,9 @@ test.describe("core smoke public shell", () => {
 
   await addPublicAboutSnapshotCookie(page)
   await page.goto("/about")
-  await expect(page.locator('[data-ui="about-eyebrow"]')).toHaveText("Profile")
+  await expect(page.locator('[data-ui="about-hero"] h1')).toHaveText("이유를 먼저 따지고, 운영 가능한 시스템을 설계합니다.")
 
-  const profileBioStyle = await page.locator(".profile-bio").evaluate((element) => {
+  const profileBioStyle = await page.locator(".profile-copy p").evaluate((element) => {
     const styles = window.getComputedStyle(element as HTMLElement)
     return {
       whiteSpace: styles.whiteSpace,
@@ -205,7 +205,7 @@ test.describe("core smoke public shell", () => {
   expect(profileBioStyle.text.length).toBeGreaterThan(0)
 })
 
-  test("about 공개 프로필은 intro/cta/project/timeline 구조로 재구성된다", async ({ page }) => {
+  test("about 공개 프로필은 V4 stack 구조와 원형 avatar를 유지한다", async ({ page }) => {
   await page.route("**/member/api/v1/auth/me", async (route) => {
     await route.fulfill({
       status: 401,
@@ -218,63 +218,65 @@ test.describe("core smoke public shell", () => {
   await page.goto("/about")
 
   await expect(page.getByRole("heading", { level: 1, name: "About Me" })).toHaveCount(0)
-  await expect(page.locator('[data-ui="about-eyebrow"]')).toHaveText("Profile")
+  await expect(page.locator('[data-ui="about-hero"] h1')).toHaveText("이유를 먼저 따지고, 운영 가능한 시스템을 설계합니다.")
   await expect(page.locator('[data-ui="about-hero"]')).toBeVisible()
-  await expect(page.locator('[data-ui="about-cta-group"]').getByRole("link")).toHaveCount(2)
-  await expect(page.locator('[data-ui="about-cta-group"]')).not.toContainText("대표 글 보기")
+  await expect(page.locator(".profile-copy")).toContainText("안녕하세요, 백엔드 개발자 아퀼라입니다.")
   await expect(page.locator('[data-ui="about-projects"]')).toBeVisible()
-  await expect(page.locator('[data-ui="about-project-list"] li').first()).toBeVisible()
-  await expect(page.locator('[data-ui="about-project-list"] li').first().locator('[data-ui="about-project-summary"]')).toBeVisible()
-  await expect(page.locator('[data-ui="about-project-list"] li').first().locator('[data-ui="about-project-role"]')).toBeVisible()
-  await expect(page.locator('[data-ui="about-timeline"] li').first()).toBeVisible()
+  await expect(page.locator('[data-ui="about-project-list"] .stack-row').first()).toBeVisible()
+  await expect(page.locator('[data-ui="about-timeline"] .stack-row').first()).toBeVisible()
 
   const aboutLayoutTone = await page.evaluate(() => {
     const parsePixel = (value: string) => Number.parseFloat(value.replace("px", ""))
-    const ctaGroup = document.querySelector('[data-ui="about-cta-group"]') as HTMLElement | null
-    const ctaLink = ctaGroup?.querySelector("a") as HTMLElement | null
-    const projectRow = document.querySelector('[data-ui="about-project-list"] li') as HTMLElement | null
-    const projectMeta = projectRow?.querySelector(".project-meta") as HTMLElement | null
-    const eyebrow = document.querySelector('[data-ui="about-eyebrow"]') as HTMLElement | null
-    const ctaGroupStyle = ctaGroup ? window.getComputedStyle(ctaGroup) : null
-    const ctaLinkStyle = ctaLink ? window.getComputedStyle(ctaLink) : null
+    const avatar = document.querySelector('[data-ui="about-avatar"]') as HTMLElement | null
+    const projectRow = document.querySelector('[data-ui="about-project-list"] .stack-row') as HTMLElement | null
+    const stackList = document.querySelector('[data-ui="about-project-list"]') as HTMLElement | null
+    const label = projectRow?.querySelector("strong") as HTMLElement | null
+    const heroLabel = document.querySelector(".mono-label") as HTMLElement | null
+    const avatarStyle = avatar ? window.getComputedStyle(avatar) : null
     const projectRowStyle = projectRow ? window.getComputedStyle(projectRow) : null
-    const projectMetaStyle = projectMeta ? window.getComputedStyle(projectMeta) : null
-    const eyebrowStyle = eyebrow ? window.getComputedStyle(eyebrow) : null
+    const stackListStyle = stackList ? window.getComputedStyle(stackList) : null
+    const labelStyle = label ? window.getComputedStyle(label) : null
+    const heroLabelStyle = heroLabel ? window.getComputedStyle(heroLabel) : null
 
     return {
-      eyebrowFontSize: eyebrowStyle ? parsePixel(eyebrowStyle.fontSize) : null,
-      ctaDisplay: ctaGroupStyle?.display ?? null,
-      ctaLinkBorderRadius: ctaLinkStyle ? parsePixel(ctaLinkStyle.borderTopLeftRadius) : null,
-      projectRowBorderRadius: projectRowStyle ? parsePixel(projectRowStyle.borderTopLeftRadius) : null,
+      heroLabelFontSize: heroLabelStyle ? parsePixel(heroLabelStyle.fontSize) : null,
+      avatarBorderRadius: avatarStyle?.borderRadius ?? null,
+      stackListBorderTopWidth: stackListStyle?.borderTopWidth ?? null,
+      projectRowDisplay: projectRowStyle?.display ?? null,
+      projectRowGridTemplateColumns: projectRowStyle?.gridTemplateColumns ?? null,
+      projectRowBorderBottomWidth: projectRowStyle?.borderBottomWidth ?? null,
       projectRowPaddingLeft: projectRowStyle ? parsePixel(projectRowStyle.paddingLeft) : null,
-      projectMetaJustifyItems: projectMetaStyle?.justifyItems ?? null,
+      labelTextTransform: labelStyle?.textTransform ?? null,
     }
   })
 
-  expect(aboutLayoutTone.eyebrowFontSize).toBeGreaterThanOrEqual(16)
-  expect(aboutLayoutTone.ctaDisplay).toBe("flex")
-  expect(aboutLayoutTone.ctaLinkBorderRadius).toBeGreaterThanOrEqual(999)
-  expect(aboutLayoutTone.projectRowBorderRadius).toBeGreaterThanOrEqual(14)
-  expect(aboutLayoutTone.projectRowPaddingLeft).toBeGreaterThanOrEqual(16)
-  expect(aboutLayoutTone.projectMetaJustifyItems).toBe("start")
+  expect(aboutLayoutTone.heroLabelFontSize).toBeLessThanOrEqual(12)
+  expect(aboutLayoutTone.avatarBorderRadius).toBe("50%")
+  expect(aboutLayoutTone.stackListBorderTopWidth).toBe("1px")
+  expect(aboutLayoutTone.projectRowDisplay).toBe("grid")
+  expect(aboutLayoutTone.projectRowGridTemplateColumns).toContain("140px")
+  expect(aboutLayoutTone.projectRowBorderBottomWidth).toBe("1px")
+  expect(aboutLayoutTone.projectRowPaddingLeft).toBe(0)
+  expect(aboutLayoutTone.labelTextTransform).toBe("uppercase")
 
   const timelineAlignment = await page.evaluate(() => {
-    const row = document.querySelector('[data-ui="about-timeline"] li')
-    const date = row?.querySelector(".timeline-date") as HTMLElement | null
-    const label = row?.querySelector("strong") as HTMLElement | null
+    const row = document.querySelector('[data-ui="about-timeline"] .stack-row')
+    const date = row?.querySelector("strong") as HTMLElement | null
+    const label = row?.querySelector("span") as HTMLElement | null
     const rowStyle = row ? getComputedStyle(row) : null
     const dateStyle = date ? getComputedStyle(date) : null
     const labelStyle = label ? getComputedStyle(label) : null
 
     return {
-      alignItems: rowStyle?.alignItems ?? null,
+      display: rowStyle?.display ?? null,
       dateLineHeight: dateStyle?.lineHeight ?? null,
       labelLineHeight: labelStyle?.lineHeight ?? null,
     }
   })
 
-  expect(timelineAlignment.alignItems).toBe("baseline")
-  expect(timelineAlignment.dateLineHeight).toBe(timelineAlignment.labelLineHeight)
+  expect(timelineAlignment.display).toBe("grid")
+  expect(timelineAlignment.dateLineHeight).not.toBe("normal")
+  expect(timelineAlignment.labelLineHeight).not.toBe("normal")
 
   const linkStyles = await page.evaluate(() => {
     const read = (selector: string) => {
@@ -289,17 +291,13 @@ test.describe("core smoke public shell", () => {
     }
 
     return {
-      contact: read('[data-ui="about-contact-links"]'),
-      service: read('[data-ui="about-service-links"]'),
+      links: read(".about-grid section:nth-of-type(2) .stack-list"),
     }
   })
 
-  expect(linkStyles.contact?.backgroundColor).toBe("rgba(0, 0, 0, 0)")
-  expect(linkStyles.contact?.borderTopWidth).toBe("0px")
-  expect(linkStyles.contact?.borderBottomWidth).toBe("1px")
-  expect(linkStyles.service?.backgroundColor).toBe("rgba(0, 0, 0, 0)")
-  expect(linkStyles.service?.borderTopWidth).toBe("0px")
-  expect(linkStyles.service?.borderBottomWidth).toBe("1px")
+  expect(linkStyles.links?.backgroundColor).toBe("rgba(0, 0, 0, 0)")
+  expect(linkStyles.links?.borderTopWidth).toBe("1px")
+  expect(linkStyles.links?.borderBottomWidth).toBe("0px")
 })
 
   test("상단 내비 컨트롤은 공통 높이 토큰을 유지한다", async ({ page }) => {

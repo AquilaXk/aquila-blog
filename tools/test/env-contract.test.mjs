@@ -955,6 +955,15 @@ test("deploy workflow validates live API security headers after homeserver rollo
   )
 })
 
+test("blue green deploy keeps grafana route checks out of backend rollback decisions", () => {
+  const deployScript = readFileSync(deployScriptPath, "utf8")
+
+  assert.match(deployScript, /warn_grafana_embed_origin_route\(\)/)
+  assert.doesNotMatch(deployScript, /if ! check_grafana_embed_origin_route; then/)
+  assert.doesNotMatch(deployScript, /^check_grafana_embed_origin_route$/m)
+  assert.doesNotMatch(deployScript, /grafana origin auth-proxy route verify failed[\s\S]{0,220}rollback_/)
+})
+
 test("required secret check does not inject multi-line HOME_SERVER_ENV into shell", () => {
   const workflow = readFileSync(workflowPath, "utf8")
 

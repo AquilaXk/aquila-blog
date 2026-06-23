@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Request } from "@playwright/test"
+import { sanitizeRumUrlPath } from "../src/libs/rum/reportWebVital"
 
 const OPTIONAL_TRACKING_CONSENT_STORAGE_KEY = "privacy.optionalTrackingConsent.v1"
 const OPTIONAL_TRACKING_CONSENT_CHANGE_EVENT = "aquila:optional-tracking-consent-change"
@@ -123,4 +124,12 @@ test("browser DNT surfaces block optional tracking even with granted consent", a
   })
   expect(blockedTrackingResults).toEqual({ beaconResult: true, fetchStatus: 204 })
   expect(optionalTrackingRequests, "DNT optional tracking requests").toEqual([])
+})
+
+test("RUM attribution URL sanitizer drops non-http resource payloads", () => {
+  expect(sanitizeRumUrlPath("https://cdn.example.com/assets/lcp.png?token=secret#hash")).toBe("/assets/lcp.png")
+  expect(sanitizeRumUrlPath("/posts/123?draftToken=secret#comments")).toBe("/posts/123")
+  expect(sanitizeRumUrlPath("data:image/svg+xml,<svg><text>secret</text></svg>")).toBeUndefined()
+  expect(sanitizeRumUrlPath("mailto:user@example.com")).toBeUndefined()
+  expect(sanitizeRumUrlPath("blob:https://www.aquilaxk.site/opaque-id")).toBeUndefined()
 })

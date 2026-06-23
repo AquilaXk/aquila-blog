@@ -1374,10 +1374,18 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
 
   assert.match(backendHttpHostBlock, /back_blue\|back_green\|back_read\|back_admin\|back_worker/)
   assert.match(helperRestartBlock, /if ! check_backend_health "\$\{service\}"; then/)
+  assert.match(helperRestartBlock, /restore_runtime_split_helper_backends_to_active\(\)/)
+  assert.match(helperRestartBlock, /upsert_runtime_backend_image "\$\{service\}" "\$\{active_image\}"/)
+  assert.match(helperRestartBlock, /write_backend_release_state "\$\{active_backend\}" "\$\{failed_candidate\}"/)
   assert(preCandidateBootStart > 0, "deploy script must build the pre-candidate boot list")
   assert(preCandidateBootEnd > preCandidateBootStart, "deploy script must boot infra before the candidate")
   assert(candidateHealthIndex > preCandidateBootEnd, "candidate healthcheck must happen after infra boot")
   assert(helperRestartIndex > candidateHealthIndex, "runtime split helpers must restart after candidate health with explicit failure handling")
+  assert.match(
+    deployScript,
+    /restore_runtime_split_helper_backends_to_active "\$\{active_backend\}" "\$\{next_backend\}" \|\| true/,
+  )
+  assert.match(deployScript, /compose stop "\$\{next_backend\}" \|\| true/)
 
   const preCandidateBoot = deployScript.slice(preCandidateBootStart, preCandidateBootEnd)
   for (const service of helperServices) {

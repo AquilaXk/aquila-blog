@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { findDirectColorViolations } from "./check-design-colors.mjs"
+import { committedDiffRange, findDirectColorViolations } from "./check-design-colors.mjs"
 
 test("findDirectColorViolations reports added hex colors", () => {
   const diff = [
@@ -42,4 +42,8 @@ test("findDirectColorViolations ignores removed lines and theme tokens", () => {
   ].join("\n")
 
   assert.deepEqual(findDirectColorViolations(diff), [])
+})
+
+test("committedDiffRange avoids requiring a shallow checkout merge base", () => {
+  assert.equal(committedDiffRange("origin/main"), "origin/main..HEAD")
 })

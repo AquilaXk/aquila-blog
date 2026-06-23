@@ -102,11 +102,13 @@ const formatViolations = (violations) =>
     .map((violation) => `- ${violation.file}:${violation.line} ${violation.source}`)
     .join("\n")
 
+export const committedDiffRange = (baseRef) => `${baseRef}..HEAD`
+
 export const collectDiffText = () => {
   let committedDiff = ""
   try {
     const baseRef = resolveBaseRef()
-    committedDiff = runGit(diffArgs(`${baseRef}...HEAD`))
+    committedDiff = runGit(diffArgs(committedDiffRange(baseRef)))
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
     console.warn(`[design-colors] warning: ${reason}; checking local diffs only`)

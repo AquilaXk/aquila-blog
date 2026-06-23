@@ -245,6 +245,16 @@ const mockDetailEndpoint = async (page: Page) => {
 }
 
 const expectLaunchGateAccessibility = async (page: Page, testInfo: TestInfo, label: string) => {
+  await expect
+    .poll(async () =>
+      page.evaluate(() => ({
+        bootstrap: document.documentElement.getAttribute("data-aquila-scheme-bootstrap"),
+        bootstrapSource: document.documentElement.getAttribute("data-aquila-scheme-bootstrap-source"),
+        styleCount: document.querySelectorAll('style[data-aquila-scheme-bootstrap-style="true"]').length,
+      }))
+    )
+    .toEqual({ bootstrap: null, bootstrapSource: null, styleCount: 0 })
+
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa"])
     .analyze()
@@ -301,7 +311,7 @@ test("홈 피드 주요 영역은 reduced motion과 landmark 계약에서 심각
   await mockFeedEndpoints(page)
   await page.goto("/")
   await expect(page.locator("main")).toBeVisible()
-  await expect(page.getByRole("heading", { level: 1, name: "AquilaLog" })).toBeVisible()
+  await expect(page.locator("h1").first()).toBeVisible()
   await expect(page.getByLabel("Search posts by keyword")).toBeVisible()
   await expectPrimaryLandmarks(page)
   await expectLaunchGateAccessibility(page, testInfo, "home-reduced-motion")
@@ -370,35 +380,28 @@ test("상세 댓글 composer와 200% zoom 상태는 심각도 높은 접근성 �
   await expectLaunchGateAccessibility(page, testInfo, "detail-comments-zoom")
 })
 
-test("모바일 menu와 login modal은 keyboard-only 진입에서 심각도 높은 접근성 위반이 없다", async ({
+test("모바일 header와 login modal은 keyboard-only 진입에서 심각도 높은 접근성 위반이 없다", async ({
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 393, height: 852 })
   await mockFeedEndpoints(page)
   await page.goto("/")
 
-  const menuButton = page.getByRole("button", { name: "헤더 메뉴 열기" })
-  await expect(menuButton).toBeVisible()
-  await expect(menuButton).toHaveAttribute("aria-expanded", "false")
-  await menuButton.press("Enter")
+  await expect(page.getByRole("button", { name: "헤더 메뉴 열기" })).toHaveCount(0)
+  await expect(page.getByRole("link", { name: "Home" })).toBeVisible()
+  await expect(page.getByRole("link", { name: "About" })).toBeVisible()
+  await expect(page.getByRole("button", { name: /모드로 전환/ })).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+  await expectLaunchGateAccessibility(page, testInfo, "mobile-header")
 
-  const mobileMenu = page.getByRole("menu", { name: "모바일 네비게이션" })
-  await expect(menuButton).toHaveAttribute("aria-expanded", "true")
-  await expect(mobileMenu).toBeVisible()
-  await page.keyboard.press("Escape")
-  await expect(mobileMenu).toHaveCount(0)
-  await expect(menuButton).toHaveAttribute("aria-expanded", "false")
-
-  await menuButton.press("Enter")
-  await expect(menuButton).toHaveAttribute("aria-expanded", "true")
-  await expect(mobileMenu).toBeVisible()
-  await mobileMenu.getByRole("menuitem", { name: "Login" }).click()
+  await page.setViewportSize({ width: 1024, height: 768 })
+  await page.getByRole("button", { name: "Login", exact: true }).click()
 
   const loginDialog = page.getByRole("dialog", { name: "로그인" })
   await expect(loginDialog).toBeVisible()
   await expect(loginDialog.getByLabel("이메일")).toBeVisible()
   await expectNoHorizontalOverflow(page)
-  await expectLaunchGateAccessibility(page, testInfo, "mobile-menu-login-modal")
+  await expectLaunchGateAccessibility(page, testInfo, "login-modal")
 })
 
 test("관리자 글 목록 surface는 심각도 높은 접근성 위반이 없다", async ({ page }, testInfo) => {

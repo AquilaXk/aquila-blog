@@ -117,7 +117,7 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular", index = 0 }) => {
         </div>
         <div className="side">
           <span className="date">{createdAtText}</span>
-          <div className="thumbnail" aria-label={`${data.title} 미리보기`}>
+          <div className="thumbnail" role="img" aria-label={`${data.title} 미리보기`}>
             {thumbnailSrc && !thumbnailFailed ? (
               <ProfileImage
                 src={thumbnailSrc}

@@ -22,6 +22,30 @@ import java.time.Instant
     ON member_signup_verification (email, created_at DESC)
     """,
 )
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS member_signup_verification_idx_consumed_at_id
+    ON member_signup_verification (consumed_at ASC, id ASC)
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS member_signup_verification_idx_cancelled_at_id
+    ON member_signup_verification (cancelled_at ASC, id ASC)
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS member_signup_verification_idx_email_verification_expires_at_id
+    ON member_signup_verification (email_verification_expires_at ASC, id ASC)
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS member_signup_verification_idx_signup_session_expires_at_id
+    ON member_signup_verification (signup_session_expires_at ASC, id ASC)
+    """,
+)
 class MemberSignupVerification(
     @field:Id
     @field:SequenceGenerator(

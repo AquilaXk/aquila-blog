@@ -7,7 +7,7 @@ import { apiFetch } from "src/apis/backend/client"
 import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
 import { ACTIVE_LEGAL_DOCUMENTS, buildSocialSignupLegalAcceptancePayload } from "src/apis/backend/legal"
 import AuthShell from "src/components/auth/AuthShell"
-import { setOptionalTrackingConsent } from "src/libs/privacy/browserStorageRegistry"
+import { setOptionalTrackingConsent } from "src/libs/privacy/optionalTrackingConsentCore"
 import { normalizeNextPath, replaceRoute, toLoginPath, toSignupPath } from "src/libs/router"
 import { GuestPageProps, getGuestPageProps } from "src/libs/server/guestPage"
 
@@ -182,7 +182,7 @@ const SocialSignupCompletePage = () => {
         }),
       })
 
-      setOptionalTrackingConsent(analyticsConsent)
+      setOptionalTrackingConsent(analyticsConsent, "signup-social")
       await replaceRoute(router, `/login?signup=done&next=${encodeURIComponent(next)}`)
     } catch (error) {
       setSubmitError(toAuthErrorMessage("signupComplete", error, "소셜 회원가입에 실패했습니다."))

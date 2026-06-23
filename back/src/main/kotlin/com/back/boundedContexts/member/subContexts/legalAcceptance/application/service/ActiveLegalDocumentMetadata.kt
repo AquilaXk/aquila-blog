@@ -22,7 +22,7 @@ data class ActiveLegalDocumentMetadata(
                 privacy =
                     LegalDocumentMetadata(
                         version = "1.0.1",
-                        contentSha256 = "c91dbe9a587040d66502d502cd259749e6d391ef8d52ddecf3a8a5b4732c122a",
+                        contentSha256 = "8a9ddfd329397f6983a5ed72d1c2feb6119ec95921fbe5620d0ae7b4ed71f2cd",
                     ),
             )
     }

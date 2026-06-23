@@ -4,7 +4,7 @@ import {
   disableOptionalTrackingRuntime,
   hasOptionalTrackingConsent,
   installOptionalTrackingDenyGuard,
-} from "src/libs/privacy/browserStorageRegistry"
+} from "src/libs/privacy/optionalTrackingConsentCore"
 
 export const useOptionalTrackingConsent = () => {
   const [optionalTrackingAllowed, setOptionalTrackingAllowed] = useState(false)

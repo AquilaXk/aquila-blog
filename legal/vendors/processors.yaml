@@ -100,7 +100,7 @@ processors:
       - speedInsights
     region: globalEdgeNetwork
     overseasTransfer: true
-    enabledByEnv: Vercel deployment and analytics packages
+    enabledByEnv: Vercel deployment; analytics packages only after optional tracking consent
     contractStatus: vendorTermsReviewRequired
     retentionControl: Vercel project settings and provider retention controls
     securityControls:
@@ -108,7 +108,7 @@ processors:
       - projectAccessControl
       - deploymentAudit
     reviewRequired:
-      - Analytics consent and provider retention settings are tracked by issue1002.
+      - Provider retention settings still require launch owner review.
 
   - id: cloudflare_dns_proxy
     name: Cloudflare

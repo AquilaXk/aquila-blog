@@ -162,6 +162,13 @@ test.describe("legal policy public pages", () => {
 
     await page.goto("/signup", { waitUntil: "domcontentloaded" })
 
+    if (await page.getByRole("heading", { name: "회원가입 준비 중" }).isVisible()) {
+      await expect(page.getByText("회원가입은 출시 전 개인정보 처리 점검이 완료될 때까지 사용할 수 없습니다.")).toBeVisible()
+      await expect(page.getByRole("link", { name: "개인정보처리방침" })).toHaveAttribute("href", "/privacy")
+      await expect(page.getByRole("link", { name: "이용약관" })).toHaveAttribute("href", "/terms")
+      return
+    }
+
     const signupForm = page.locator("form")
     const signupSubmitButton = signupForm.getByRole("button", { name: "인증 메일 보내기" })
 

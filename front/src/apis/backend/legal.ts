@@ -1,14 +1,14 @@
 import { apiFetch } from "./client"
 
 export const ACTIVE_LEGAL_DOCUMENTS = {
-  signupPolicyVersion: "1.0.1",
+  signupPolicyVersion: "1.0.2",
   terms: {
     version: "1.0.1",
     contentSha256: "379676461cc354709b0648030a758a6fe6b36c60272775465a56cdb5dba9b87e",
   },
   privacy: {
-    version: "1.0.1",
-    contentSha256: "8a9ddfd329397f6983a5ed72d1c2feb6119ec95921fbe5620d0ae7b4ed71f2cd",
+    version: "1.0.2",
+    contentSha256: "d5d40597a589187395132deb831c0f01a409a5e05380119f2e2f8930ca88122b",
   },
 } as const
 

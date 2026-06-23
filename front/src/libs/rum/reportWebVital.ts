@@ -1,6 +1,6 @@
 import type { NextWebVitalsMetric } from "next/app"
 import * as gtag from "src/libs/gtag"
-import { hasOptionalTrackingConsent } from "src/libs/privacy/browserStorageRegistry"
+import { hasOptionalTrackingConsent } from "src/libs/privacy/optionalTrackingConsentCore"
 import { CONFIG } from "site.config"
 
 type RumMetricPayload = {
@@ -12,7 +12,6 @@ type RumMetricPayload = {
   navigationType?: string
   path: string
   attribution?: {
-    target?: string
     eventType?: string
     resourceUrl?: string
   }
@@ -82,6 +81,19 @@ const sendToAnalytics = (metric: NextWebVitalsMetric) => {
   })
 }
 
+export const sanitizeRumUrlPath = (value?: string) => {
+  if (!value) return undefined
+
+  try {
+    const baseOrigin = typeof window === "undefined" ? "https://www.aquilaxk.site" : window.location.origin
+    const url = new URL(value, baseOrigin)
+    if (url.protocol !== "http:" && url.protocol !== "https:") return undefined
+    return url.pathname
+  } catch {
+    return undefined
+  }
+}
+
 const resolveDetailScrollContext = () => {
   if (typeof window === "undefined" || typeof document === "undefined") return undefined
   if (!window.location.pathname.startsWith("/posts/")) return undefined
@@ -129,12 +141,6 @@ export const reportWebVital = (metric: NextWebVitalsMetric) => {
   const attribution =
     rawAttribution && typeof rawAttribution === "object"
       ? {
-          target:
-            typeof rawAttribution.interactionTarget === "string"
-              ? rawAttribution.interactionTarget
-              : typeof rawAttribution.element === "string"
-                ? rawAttribution.element
-                : undefined,
           eventType:
             typeof rawAttribution.eventType === "string"
               ? rawAttribution.eventType
@@ -143,9 +149,9 @@ export const reportWebVital = (metric: NextWebVitalsMetric) => {
                 : undefined,
           resourceUrl:
             typeof rawAttribution.url === "string"
-              ? rawAttribution.url
+              ? sanitizeRumUrlPath(rawAttribution.url)
               : typeof rawAttribution.lcpResourceUrl === "string"
-                ? rawAttribution.lcpResourceUrl
+                ? sanitizeRumUrlPath(rawAttribution.lcpResourceUrl)
                 : undefined,
         }
       : undefined

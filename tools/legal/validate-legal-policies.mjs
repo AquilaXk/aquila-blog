@@ -308,8 +308,10 @@ const setLatestEffectivePolicy = (map, policy) => {
 const assertActiveMetadataMatchesPolicies = (sourceName, metadata, termsPolicy, privacyPolicy) => {
   if (!metadata || !termsPolicy || !privacyPolicy) return
 
-  if (metadata.signupPolicyVersion !== termsPolicy.version) {
-    fail(`${sourceName} signupPolicyVersion mismatch: expected ${termsPolicy.version}`)
+  const expectedSignupPolicyVersion =
+    compareSemver(privacyPolicy.version, termsPolicy.version) > 0 ? privacyPolicy.version : termsPolicy.version
+  if (metadata.signupPolicyVersion !== expectedSignupPolicyVersion) {
+    fail(`${sourceName} signupPolicyVersion mismatch: expected ${expectedSignupPolicyVersion}`)
   }
   if (metadata.terms.version !== termsPolicy.version) {
     fail(`${sourceName} terms version mismatch: expected ${termsPolicy.version}`)

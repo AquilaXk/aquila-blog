@@ -40,9 +40,9 @@ retentionRules:
     destruction: accountDeletionOrRetentionJobFutureWork
     followUp: issue1000
   - activityId: analytics_and_rum
-    retention: providerDefaultUnlessConfigured; localRumLogRetentionPolicyRequired; privacy.optionalTrackingConsent.v1 untilConsentChangeOrBrowserStorageClear
+    retention: providerDefaultUnlessConfigured; localRumLogRetentionPolicyRequired; privacy.optionalTrackingConsent.v1 JSON record untilConsentChangeOrBrowserStorageClear
     destruction: providerRetentionControlsAndLocalLogExpiry; privacy.optionalTrackingConsent.v1 preferenceDeletion
-    followUp: issue1002
+    followUp: providerRetentionReview
   - activityId: ai_tag_recommendation_gemini
     retention: noRawPromptRetentionIntended; providerRetentionRequiresContractReview
     destruction: noLocalPersistence; providerDeletionControlsReviewRequired

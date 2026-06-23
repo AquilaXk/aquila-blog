@@ -1,3 +1,5 @@
+import { hasOptionalTrackingConsent } from "src/libs/privacy/optionalTrackingConsentCore"
+
 export type ClientErrorBoundaryKind = "global" | "surface"
 
 export type ClientErrorSurface = "app" | "markdown" | "editor"
@@ -76,7 +78,7 @@ export const reportClientError = ({ id, boundary, surface, error }: ReportClient
 
   window.__AQUILA_CLIENT_ERROR_REPORTS__ = [...(window.__AQUILA_CLIENT_ERROR_REPORTS__ || []), payload]
 
-  if (process.env.NODE_ENV === "production") {
+  if (process.env.NODE_ENV === "production" && hasOptionalTrackingConsent()) {
     sendClientError(payload)
   }
 }

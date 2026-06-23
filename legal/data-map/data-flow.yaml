@@ -79,7 +79,7 @@ flows:
       - cloudflare_dns_proxy
     status: retention 기간은 issue1000
   - id: analytics_rum
-    collectionPoint: browser runtime and /api/rum/vitals
+    collectionPoint: browser runtime after optional tracking consent, /api/rum/vitals, and /api/rum/client-errors
     stores:
       - Google Analytics property
       - Vercel analytics
@@ -88,7 +88,7 @@ flows:
       - google_analytics
       - vercel_frontend_hosting
       - grafana_loki_monitoring
-    status: consent manager는 issue1002
+    status: /settings/privacy consent manager와 opt-out guard 구현
   - id: gemini_tag_recommendation
     collectionPoint: admin editor tag recommendation request
     stores:
@@ -114,7 +114,6 @@ flows:
 
 reviewBlockers:
   - SMTP provider name, region, TLS mode, DPA, retention policy
-  - Analytics consent and opt-out before optional tracking
   - Gemini production default-off, DPA, retention, training opt-out
   - Backup encryption and deletion tombstone replay
 

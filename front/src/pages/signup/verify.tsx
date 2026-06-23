@@ -8,7 +8,7 @@ import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
 import { ACTIVE_LEGAL_DOCUMENTS, buildEmailSignupLegalAcceptancePayload } from "src/apis/backend/legal"
 import AuthShell from "src/components/auth/AuthShell"
 import AppIcon from "src/components/icons/AppIcon"
-import { setOptionalTrackingConsent } from "src/libs/privacy/browserStorageRegistry"
+import { setOptionalTrackingConsent } from "src/libs/privacy/optionalTrackingConsentCore"
 import { normalizeNextPath, replaceRoute, toLoginPath, toSignupPath } from "src/libs/router"
 import { GuestPageProps, getGuestPageProps } from "src/libs/server/guestPage"
 import { evaluatePasswordPolicy } from "src/libs/validation/auth"
@@ -175,7 +175,7 @@ const SignupVerifyPage = () => {
         }),
       })
 
-      setOptionalTrackingConsent(analyticsConsent)
+      setOptionalTrackingConsent(analyticsConsent, "signup-email")
       await replaceRoute(router, `/login?signup=done&next=${encodeURIComponent(next)}`)
     } catch (error) {
       setSubmitError(toAuthErrorMessage("signupComplete", error, "회원가입에 실패했습니다."))

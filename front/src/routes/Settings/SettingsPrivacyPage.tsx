@@ -9,7 +9,14 @@ import {
   PrivacyRequestItem,
   PrivacyRequestType,
 } from "src/apis/backend/privacy"
-import { setOptionalTrackingConsent } from "src/libs/privacy/browserStorageRegistry"
+import {
+  OPTIONAL_TRACKING_CONSENT_CHANGE_EVENT,
+  type OptionalTrackingConsentRecord,
+  hasBrowserPrivacyOptOutSignal,
+  hasOptionalTrackingConsent,
+  readOptionalTrackingConsent,
+  setOptionalTrackingConsent,
+} from "src/libs/privacy/optionalTrackingConsentCore"
 import { normalizeNextPath, replaceRoute } from "src/libs/router"
 import SettingsLayout from "./SettingsLayout"
 
@@ -24,6 +31,15 @@ const formatDateTime = (value?: string | null) => {
   return Number.isNaN(parsed.getTime()) ? "미확인" : dateTimeFormatter.format(parsed)
 }
 
+const optionalTrackingSourceLabels: Record<OptionalTrackingConsentRecord["source"], string> = {
+  settings: "개인정보 설정",
+  "signup-email": "이메일 회원가입",
+  "signup-social": "소셜 회원가입",
+  "privacy-request": "개인정보 처리 요청",
+  "legal-reconsent": "법적 문서 재동의",
+  "legacy-string": "이전 저장 형식",
+}
+
 const SettingsPrivacyPage = () => {
   const router = useRouter()
   const [snapshot, setSnapshot] = useState<PrivacyExportResponse | null>(null)
@@ -36,6 +52,9 @@ const SettingsPrivacyPage = () => {
   const [overseasConfirmed, setOverseasConfirmed] = useState(false)
   const [feedback, setFeedback] = useState("")
   const [legalFeedback, setLegalFeedback] = useState("")
+  const [trackingConsent, setTrackingConsent] = useState<OptionalTrackingConsentRecord | null>(null)
+  const [trackingAllowed, setTrackingAllowed] = useState(false)
+  const [browserPrivacySignal, setBrowserPrivacySignal] = useState(false)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [legalSubmitting, setLegalSubmitting] = useState(false)
@@ -67,6 +86,29 @@ const SettingsPrivacyPage = () => {
     }
   }, [])
 
+  useEffect(() => {
+    const syncTrackingConsent = () => {
+      setTrackingConsent(readOptionalTrackingConsent())
+      setTrackingAllowed(hasOptionalTrackingConsent())
+      setBrowserPrivacySignal(hasBrowserPrivacyOptOutSignal())
+    }
+
+    syncTrackingConsent()
+    window.addEventListener("storage", syncTrackingConsent)
+    window.addEventListener(OPTIONAL_TRACKING_CONSENT_CHANGE_EVENT, syncTrackingConsent)
+    return () => {
+      window.removeEventListener("storage", syncTrackingConsent)
+      window.removeEventListener(OPTIONAL_TRACKING_CONSENT_CHANGE_EVENT, syncTrackingConsent)
+    }
+  }, [])
+
+  const updateTrackingConsent = (granted: boolean) => {
+    setOptionalTrackingConsent(granted, "settings")
+    setTrackingConsent(readOptionalTrackingConsent())
+    setTrackingAllowed(hasOptionalTrackingConsent())
+    setBrowserPrivacySignal(hasBrowserPrivacyOptOutSignal())
+  }
+
   const submitRequest = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setSubmitting(true)
@@ -78,7 +120,7 @@ const SettingsPrivacyPage = () => {
       })
       setCreatedRequest(response.data.item)
       if (requestType === "CONSENT_WITHDRAWAL") {
-        setOptionalTrackingConsent(false)
+        setOptionalTrackingConsent(false, "privacy-request")
       }
       setFeedback(response.msg)
     } catch {
@@ -100,7 +142,7 @@ const SettingsPrivacyPage = () => {
         overseasTransferAcknowledged: overseasConfirmed,
       })
       setLegalReconsent(response.data.legalReconsent)
-      setOptionalTrackingConsent(false)
+      setOptionalTrackingConsent(false, "legal-reconsent")
       setLegalFeedback(response.msg)
       await replaceRoute(router, normalizeNextPath(router.query.next, "/"))
     } catch {
@@ -159,6 +201,57 @@ const SettingsPrivacyPage = () => {
             <p className="muted">법적 문서 동의 상태를 확인하는 중입니다.</p>
           )}
           {legalFeedback ? <p className="feedback">{legalFeedback}</p> : null}
+        </section>
+
+        <section className="panel" aria-label="선택 analytics와 RUM 설정">
+          <h2>선택 analytics·RUM</h2>
+          <p className="muted">
+            로그인과 보안에 필요한 cookie는 필수이며, Vercel Analytics, Speed Insights, Google Analytics,
+            자체 RUM은 서비스 품질 측정을 위한 선택 항목입니다. 선택하지 않아도 계정과 글 읽기 기능은 제한되지 않습니다.
+          </p>
+          <dl className="snapshotList">
+            <div>
+              <dt>현재 상태</dt>
+              <dd>{trackingAllowed ? "동의됨" : trackingConsent?.state === "denied" ? "거부됨" : "미동의"}</dd>
+            </div>
+            <div>
+              <dt>저장 버전</dt>
+              <dd>{trackingConsent ? `v${trackingConsent.version}` : "미저장"}</dd>
+            </div>
+            <div>
+              <dt>저장 시각</dt>
+              <dd>{formatDateTime(trackingConsent?.updatedAt)}</dd>
+            </div>
+            <div>
+              <dt>저장 경로</dt>
+              <dd>{trackingConsent ? optionalTrackingSourceLabels[trackingConsent.source] || trackingConsent.source : "미저장"}</dd>
+            </div>
+            <div>
+              <dt>선택 범주</dt>
+              <dd>
+                analytics {trackingConsent?.categories.analytics ? "허용" : "차단"} · RUM{" "}
+                {trackingConsent?.categories.rum ? "허용" : "차단"}
+              </dd>
+            </div>
+            <div>
+              <dt>브라우저 거부 신호</dt>
+              <dd>{browserPrivacySignal ? "감지됨" : "없음"}</dd>
+            </div>
+          </dl>
+          {browserPrivacySignal ? (
+            <p className="muted">Do Not Track 또는 Global Privacy Control 신호가 감지되어 선택 추적 전송을 차단합니다.</p>
+          ) : null}
+          <div className="buttonRow">
+            <button type="button" onClick={() => updateTrackingConsent(true)} disabled={browserPrivacySignal}>
+              선택 분석 동의
+            </button>
+            <button type="button" onClick={() => updateTrackingConsent(false)}>
+              선택 분석 거부·철회
+            </button>
+          </div>
+          <p className="muted">
+            자세한 항목은 <Link href="/cookies">쿠키 정책</Link>과 <Link href="/privacy">개인정보처리방침</Link>에서 확인할 수 있습니다.
+          </p>
         </section>
 
         <section className="panel" aria-label="개인정보 내보내기">
@@ -249,6 +342,13 @@ const SettingsPrivacyPage = () => {
         .requestForm {
           display: grid;
           gap: 14px;
+        }
+
+        .buttonRow {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+          margin-top: 16px;
         }
 
         label {

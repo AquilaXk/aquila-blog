@@ -61,14 +61,14 @@ const StyledWrapper = styled.div`
   > .field {
     display: flex;
     align-items: center;
-    gap: 0.42rem;
+    gap: 7px;
     min-width: 0;
-    min-height: ${FEED_SEARCH_FIELD_MIN_HEIGHT_PX}px;
-    padding: 0 0.56rem;
+    min-height: 36px;
+    padding: 0 10px;
     border-radius: ${({ theme }) => `${theme.variables.ui.button.radius}px`};
-    border: 1px solid var(--feed-search-border);
-    background: var(--feed-search-surface);
-    box-shadow: 0 0 0 1px var(--feed-search-accent-muted);
+    border: 1px solid ${({ theme }) => theme.publicDesign.border};
+    background: ${({ theme }) => theme.publicDesign.readableSurface};
+    box-shadow: none;
     transition: border-color 0.125s ease-in, background-color 0.125s ease-in, box-shadow 0.125s ease-in;
 
     .searchIcon {
@@ -76,7 +76,7 @@ const StyledWrapper = styled.div`
       align-items: center;
       justify-content: center;
       flex: 0 0 auto;
-      color: #8b949e;
+      color: ${({ theme }) => theme.colors.gray9};
       width: 15px;
       height: 15px;
       transition: color 0.125s ease-in;
@@ -93,12 +93,12 @@ const StyledWrapper = styled.div`
       justify-content: center;
       flex: 0 0 auto;
       min-width: 56px;
-      height: 26px;
-      padding: 0 0.52rem;
-      border-radius: ${({ theme }) => `${theme.variables.ui.button.radiusPill}px`};
-      border: 1px solid var(--feed-search-border);
+      height: 24px;
+      padding: 0 0.5rem;
+      border-radius: ${({ theme }) => `${theme.variables.ui.button.radius}px`};
+      border: 1px solid ${({ theme }) => theme.publicDesign.border};
       background: transparent;
-      color: #8b949e;
+      color: ${({ theme }) => theme.colors.gray10};
       font-size: 0.74rem;
       font-weight: 700;
       letter-spacing: 0;
@@ -107,9 +107,9 @@ const StyledWrapper = styled.div`
       transition: all 0.125s ease-in;
 
       &:hover {
-        color: #f0f6fc;
-        border-color: var(--feed-search-border-strong);
-        background: var(--feed-search-accent-muted);
+        color: ${({ theme }) => theme.colors.gray12};
+        border-color: ${({ theme }) => theme.publicDesign.accent};
+        background: ${({ theme }) => theme.publicDesign.accentMuted};
       }
 
       @media (max-width: ${FEED_TAG_RAIL_CHIP_MAX_PX}px) {
@@ -119,15 +119,15 @@ const StyledWrapper = styled.div`
   }
 
   > .field > .mid {
-    width: 100%;
+    width: 180px;
     min-width: 0;
-    min-height: 36px;
-    padding: 0.32rem 0;
-    font-size: 0.84rem;
+    min-height: 34px;
+    padding: 0;
+    font-size: 0.8125rem;
     font-weight: 560;
     line-height: 1.4;
-    color: #f0f6fc;
-    caret-color: #f0f6fc;
+    color: ${({ theme }) => theme.colors.gray12};
+    caret-color: ${({ theme }) => theme.publicDesign.accent};
     border: 0;
     outline: none;
     box-shadow: none;
@@ -137,7 +137,7 @@ const StyledWrapper = styled.div`
     transition: all 0.125s ease-in;
 
     &::placeholder {
-      color: #8b949e;
+      color: ${({ theme }) => theme.colors.gray9};
       opacity: 1;
       transition: opacity 0.12s ease-in;
     }
@@ -155,17 +155,18 @@ const StyledWrapper = styled.div`
   }
 
   > .field:focus-within {
-    border-color: var(--feed-search-border-strong);
-    background: var(--feed-search-surface-elevated);
-    box-shadow: 0 0 0 1px var(--feed-search-accent-muted);
+    border-color: ${({ theme }) => theme.publicDesign.accent};
+    background: ${({ theme }) => theme.publicDesign.readableSurface};
+    box-shadow: none;
 
     .searchIcon {
-      color: #c9d1d9;
+      color: ${({ theme }) => theme.colors.gray11};
     }
   }
 
   @media (max-width: 768px) {
     > .field {
+      height: auto;
       min-height: ${MOBILE_TOUCH_TARGET_MIN_PX}px;
       padding: 0 0.5rem;
       border-radius: ${({ theme }) => `${Math.max(theme.variables.ui.button.radius - 1, 6)}px`};

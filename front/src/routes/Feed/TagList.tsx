@@ -106,11 +106,9 @@ const TagList: React.FC = () => {
       <section
         className="desktopPanel"
         aria-label="태그 목록"
-        aria-hidden="true"
       >
         <h2 className="panelTitle">
-          <span className="panelEmoji" aria-hidden="true">🏷️</span>
-          <span>태그 목록</span>
+          <span>Topics</span>
         </h2>
         <ul className="desktopList">
           <li>
@@ -121,8 +119,8 @@ const TagList: React.FC = () => {
               aria-label="전체보기"
               onClick={handleClickAll}
             >
-              <span className="name">전체보기</span>
-              {typeof allCount === "number" && <span className="count">({allCount})</span>}
+              <span className="name">전체</span>
+              {typeof allCount === "number" && <span className="count">{allCount}</span>}
             </button>
           </li>
           {desktopTagEntries.map(([key, count]) => (
@@ -132,11 +130,10 @@ const TagList: React.FC = () => {
                 data-tag={key}
                 data-active={key === currentTag}
                 aria-pressed={key === currentTag}
-                aria-label={`Filter by tag: ${key}`}
                 onClick={handleClickTagButton}
               >
                 <span className="name">{key}</span>
-                <span className="count">({count})</span>
+                <span className="count">{String(count).padStart(2, "0")}</span>
               </button>
             </li>
           ))}
@@ -176,7 +173,6 @@ const TagList: React.FC = () => {
             data-tag={key}
             data-active={key === currentTag}
             aria-pressed={key === currentTag}
-            aria-label={`Filter by tag: ${key}`}
             onClick={handleClickTagButton}
           >
             <span className="name">{key}</span>
@@ -203,14 +199,14 @@ export default memo(TagList)
 
 const StyledWrapper = styled.div`
   min-width: 0;
-  --feed-tag-border: #30363d;
-  --feed-tag-border-strong: #58a6ff;
-  --feed-tag-hover-border: #8b949e;
-  --feed-tag-surface: #161b22;
-  --feed-tag-surface-elevated: #21262d;
-  --feed-tag-accent: #58a6ff;
-  --feed-tag-accent-text: #58a6ff;
-  --feed-tag-accent-muted: rgba(88, 166, 255, 0.14);
+  --feed-tag-border: ${({ theme }) => theme.publicDesign.border};
+  --feed-tag-border-strong: ${({ theme }) => theme.publicDesign.accent};
+  --feed-tag-hover-border: ${({ theme }) => theme.colors.gray9};
+  --feed-tag-surface: ${({ theme }) => theme.publicDesign.readableSurface};
+  --feed-tag-surface-elevated: ${({ theme }) => theme.publicDesign.surfaceElevated};
+  --feed-tag-accent: ${({ theme }) => theme.publicDesign.accent};
+  --feed-tag-accent-text: ${({ theme }) => theme.publicDesign.accent};
+  --feed-tag-accent-muted: ${({ theme }) => theme.publicDesign.accentMuted};
 
   .desktopPanel {
     display: none;
@@ -224,34 +220,28 @@ const StyledWrapper = styled.div`
 
   .panelTitle {
     margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.9rem;
-    font-weight: 740;
-    letter-spacing: -0.01em;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.82rem;
+    font-weight: 820;
+    letter-spacing: 0;
     line-height: 1.5;
-    padding: 0 0 0.42rem;
-    border-bottom: 1px solid var(--feed-tag-border);
+    padding: 0;
     display: inline-flex;
     align-items: center;
     gap: 0.44rem;
   }
 
   .panelEmoji {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.02rem;
-    line-height: 1;
-    transform: rotate(62deg) translateY(-0.02rem);
-    transform-origin: 48% 56%;
+    display: none;
   }
 
   .desktopList {
     list-style: none;
-    margin: 0.88rem 0 0;
+    margin: 18px 0 0;
     padding: 0;
     display: grid;
-    gap: 0.18rem;
+    gap: 0;
+    border-top: 1px solid ${({ theme }) => theme.colors.gray12};
     max-height: calc(100vh - var(--app-header-height, 56px) - 6.35rem);
     max-height: calc(100dvh - var(--app-header-height, 56px) - 6.35rem);
     overflow-y: auto;
@@ -273,13 +263,14 @@ const StyledWrapper = styled.div`
     width: 100%;
     min-height: 0;
     border: 0;
-    border-radius: 4px;
+    border-radius: 0;
     background: transparent;
-    padding: 0.12rem 0;
-    display: flex;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--feed-tag-border);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: baseline;
-    justify-content: flex-start;
-    gap: 0.42rem;
+    gap: 16px;
     text-align: left;
     color: ${({ theme }) => theme.colors.gray10};
     cursor: pointer;
@@ -329,8 +320,7 @@ const StyledWrapper = styled.div`
 
   .desktopList button .name {
     min-width: 0;
-    flex: 0 1 auto;
-    font-size: 0.84rem;
+    font-size: 0.8rem;
     font-weight: 610;
     color: ${({ theme }) => theme.colors.gray10};
     white-space: nowrap;
@@ -345,8 +335,7 @@ const StyledWrapper = styled.div`
   }
 
   .desktopList button .count {
-    flex: 0 0 auto;
-    font-size: 0.78rem;
+    font-size: 0.72rem;
     color: ${({ theme }) => theme.colors.gray10};
     font-variant-numeric: tabular-nums;
   }
@@ -383,11 +372,15 @@ const StyledWrapper = styled.div`
       height: 0;
     }
 
-    @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
-      justify-content: center;
-      flex-wrap: wrap;
-      overflow-x: visible;
-      padding-bottom: 0;
+  }
+
+  @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
+    .desktopPanel {
+      display: block;
+    }
+
+    .chipRail {
+      display: none;
     }
   }
 

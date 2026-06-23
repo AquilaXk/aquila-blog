@@ -144,5 +144,7 @@ BEGIN
             ON member_action_log (secondary_owner_id);
         CREATE INDEX IF NOT EXISTS member_action_log_idx_actor_id
             ON member_action_log (actor_id);
+        CREATE INDEX IF NOT EXISTS member_action_log_idx_created_at_id
+            ON member_action_log (created_at ASC, id ASC);
     END IF;
 END $$;

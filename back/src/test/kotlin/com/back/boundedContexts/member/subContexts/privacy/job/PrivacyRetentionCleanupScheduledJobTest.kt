@@ -9,6 +9,7 @@ import com.back.boundedContexts.member.subContexts.privacy.application.port.outp
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequest
 import com.back.boundedContexts.member.subContexts.signupVerification.application.port.output.MemberSignupVerificationRepositoryPort
 import com.back.boundedContexts.member.subContexts.signupVerification.domain.MemberSignupVerification
+import com.back.global.jpa.domain.BaseTime
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -76,6 +77,29 @@ class PrivacyRetentionCleanupScheduledJobTest {
     }
 
     @Test
+    fun `cleanup은 target 실패를 metric으로 기록하고 개인정보 없이 로그 경로로 넘긴다`() {
+        val registry = SimpleMeterRegistry()
+        val job =
+            PrivacyRetentionCleanupScheduledJob(
+                signupVerificationRepository = RecordingSignupVerificationRepository(0),
+                memberActionLogRepository = FailingActionLogRepository(),
+                memberNotificationRepository = RecordingNotificationRepository(0),
+                memberPrivacyRequestRepository = RecordingPrivacyRequestRepository(0),
+                meterRegistry = registry,
+                signupVerificationDays = 7,
+                memberActionLogDays = 90,
+                notificationDays = 60,
+                privacyRequestDays = 30,
+                batchSize = 25,
+                maxBatches = 1,
+            )
+
+        job.cleanup(Instant.parse("2026-06-23T00:00:00Z"))
+
+        assertThat(registry.counter("privacy.retention.cleanup.failed", "target", "member_action_log").count()).isEqualTo(1.0)
+    }
+
+    @Test
     fun `notification retention delete query는 scheduled job에서 단독 실행되도록 transactional 이다`() {
         val method =
             MemberNotificationRepository::class.java.getMethod(
@@ -85,6 +109,11 @@ class PrivacyRetentionCleanupScheduledJobTest {
             )
 
         assertThat(method.isAnnotationPresent(Transactional::class.java)).isTrue()
+    }
+
+    @Test
+    fun `action log retention은 created_at purge를 위해 timestamp base model을 사용한다`() {
+        assertThat(BaseTime::class.java.isAssignableFrom(MemberActionLog::class.java)).isTrue()
     }
 
     private data class DeleteCall(
@@ -124,6 +153,15 @@ class PrivacyRetentionCleanupScheduledJobTest {
             cutoff: Instant,
             limit: Int,
         ): Int = record(calls, counts, cutoff, limit)
+    }
+
+    private class FailingActionLogRepository : MemberActionLogRepositoryPort {
+        override fun save(memberActionLog: MemberActionLog): MemberActionLog = memberActionLog
+
+        override fun deleteCreatedBefore(
+            cutoff: Instant,
+            limit: Int,
+        ): Int = throw IllegalStateException("synthetic cleanup failure")
     }
 
     private class RecordingNotificationRepository(

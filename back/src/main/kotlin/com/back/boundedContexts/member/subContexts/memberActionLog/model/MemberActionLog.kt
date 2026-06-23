@@ -2,7 +2,7 @@ package com.back.boundedContexts.member.subContexts.memberActionLog.model
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.global.jpa.domain.AfterDDL
-import com.back.global.jpa.domain.BaseEntity
+import com.back.global.jpa.domain.BaseTime
 import jakarta.persistence.*
 import jakarta.persistence.GenerationType.SEQUENCE
 import org.hibernate.annotations.DynamicUpdate
@@ -33,4 +33,4 @@ class MemberActionLog(
     @field:ManyToOne(fetch = FetchType.LAZY) val secondaryOwner: Member,
     @field:ManyToOne(fetch = FetchType.LAZY) val actor: Member,
     @field:Column(columnDefinition = "TEXT") val data: String,
-) : BaseEntity()
+) : BaseTime(id)

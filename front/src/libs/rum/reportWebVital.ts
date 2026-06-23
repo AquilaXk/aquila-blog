@@ -81,13 +81,16 @@ const sendToAnalytics = (metric: NextWebVitalsMetric) => {
   })
 }
 
-const sanitizeRumUrlPath = (value?: string) => {
+export const sanitizeRumUrlPath = (value?: string) => {
   if (!value) return undefined
 
   try {
-    return new URL(value, window.location.origin).pathname
+    const baseOrigin = typeof window === "undefined" ? "https://www.aquilaxk.site" : window.location.origin
+    const url = new URL(value, baseOrigin)
+    if (url.protocol !== "http:" && url.protocol !== "https:") return undefined
+    return url.pathname
   } catch {
-    return value.split(/[?#]/, 1)[0] || undefined
+    return undefined
   }
 }
 

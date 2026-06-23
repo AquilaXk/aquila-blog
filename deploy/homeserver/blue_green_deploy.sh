@@ -1096,10 +1096,9 @@ prepare_runtime_backend_images() {
   upsert_runtime_backend_image "${active_backend}" "${active_image}"
   upsert_runtime_backend_image "${next_backend}" "${staged_image}"
   local service
-  while IFS= read -r service; do
-    [[ -n "${service}" ]] || continue
+  for service in back_read back_admin back_worker; do
     upsert_runtime_backend_image "${service}" "${active_image}"
-  done < <(runtime_split_helper_backends)
+  done
 
   write_backend_release_state "${active_backend}" "${next_backend}"
   echo "runtime backend image map prepared: active=${active_backend} active_image=${active_image} next=${next_backend} next_image=${staged_image} helper_image=${active_image}"

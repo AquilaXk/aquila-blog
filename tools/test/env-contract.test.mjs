@@ -1405,6 +1405,7 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
   const burnInRollbackRestoreIndex = burnInRollbackBlock.indexOf('restore_runtime_split_helper_backends_to_active "${previous_backend}" "${candidate_backend}"')
 
   assert.match(backendHttpHostBlock, /back_blue\|back_green\|back_read\|back_admin\|back_worker/)
+  assert.match(prepareImagesBlock, /for service in back_read back_admin back_worker; do/)
   assert.match(prepareImagesBlock, /upsert_runtime_backend_image "\$\{service\}" "\$\{active_image\}"/)
   assert.match(activeHelperStartBlock, /compose_up_force_recreate_with_retry "\$\{helper_services\[@\]\}"/)
   assert.match(activeHelperStartBlock, /if ! check_backend_health "\$\{service\}"; then/)

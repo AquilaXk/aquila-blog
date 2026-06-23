@@ -1327,14 +1327,17 @@ test("blue-green deploy keeps old backend running during burn-in rollback window
 test("blue-green deploy waits longer for candidate Flyway startup only", () => {
   const workflow = readFileSync(workflowPath, "utf8")
   const deployScript = readFileSync(deployScriptPath, "utf8")
-  const candidateHealthBlock = deployScript.slice(
-    deployScript.indexOf("check_candidate_backend_health()"),
-    deployScript.indexOf("check_notification_sse_route()"),
-  )
-  const blueGreenDeployJob = workflow.slice(
-    workflow.indexOf("  blueGreenDeploy:"),
-    workflow.indexOf("  frontLiveE2E:"),
-  )
+  const candidateStart = deployScript.indexOf("check_candidate_backend_health()")
+  const candidateEnd = deployScript.indexOf("check_notification_sse_route()")
+  assert.notEqual(candidateStart, -1, "candidate health helper marker must exist")
+  assert.notEqual(candidateEnd, -1, "notification route marker must exist")
+  const candidateHealthBlock = deployScript.slice(candidateStart, candidateEnd)
+
+  const deployJobStart = workflow.indexOf("  blueGreenDeploy:")
+  const deployJobEnd = workflow.indexOf("  frontLiveE2E:")
+  assert.notEqual(deployJobStart, -1, "blueGreenDeploy job marker must exist")
+  assert.notEqual(deployJobEnd, -1, "frontLiveE2E job marker must exist")
+  const blueGreenDeployJob = workflow.slice(deployJobStart, deployJobEnd)
 
   assert.match(deployScript, /CANDIDATE_HEALTHCHECK_RETRIES="\$\{CANDIDATE_HEALTHCHECK_RETRIES:-450\}"/)
   assert.match(deployScript, /CANDIDATE_HEALTHCHECK_RETRIES="\$\(normalize_positive_int "\$\{CANDIDATE_HEALTHCHECK_RETRIES\}" "450"\)"/)

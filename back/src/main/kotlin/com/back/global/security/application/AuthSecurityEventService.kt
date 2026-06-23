@@ -31,7 +31,7 @@ data class AuthSecurityEventDto(
 @Service
 class AuthSecurityEventService(
     private val authSecurityEventStore: AuthSecurityEventStore,
-    @param:Value("\${custom.auth.securityEvent.retentionDays:30}")
+    @param:Value("\${custom.privacy.retention.authSecurityEventDays:\${custom.auth.securityEvent.retentionDays:30}}")
     private val retentionDays: Int = 30,
 ) {
     /**

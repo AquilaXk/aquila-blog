@@ -45,4 +45,9 @@ class MemberNotificationRepositoryAdapter(
         receiverId: Long,
         readAt: Instant,
     ): Int = memberNotificationRepository.markRead(id, receiverId, readAt)
+
+    override fun deleteCreatedBefore(
+        cutoff: Instant,
+        limit: Int,
+    ): Int = memberNotificationRepository.deleteCreatedBefore(cutoff, limit.coerceIn(1, 1_000))
 }

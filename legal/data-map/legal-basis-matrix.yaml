@@ -35,8 +35,8 @@ legalBasis:
   - id: contractAndLegitimateOperationalInterest
     activities:
       - notifications_sse
-    rationale: 계정 기능 제공과 이벤트 전달 안정성
-    reviewRequired: retention 기간 확정은 issue1000
+    rationale: 계정 기능 제공과 이벤트 전달 안정성; notification DB history is purged after custom.privacy.retention.notificationDays, default 60 days
+    reviewRequired: []
   - id: consentOrLegitimateAnalyticsInterestReviewRequired
     activities:
       - analytics_and_rum

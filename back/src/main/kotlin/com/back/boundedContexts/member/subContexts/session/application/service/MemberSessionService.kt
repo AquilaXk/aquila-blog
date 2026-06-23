@@ -32,7 +32,7 @@ class MemberSessionService(
     private val refreshTokenExpirationSeconds: Long = 2_592_000,
     @param:Value("\${custom.auth.session.maxActivePerMember:32}")
     private val maxActivePerMember: Int = 32,
-    @param:Value("\${custom.auth.session.revokedRetentionDays:30}")
+    @param:Value("\${custom.privacy.retention.revokedSessionDays:\${custom.auth.session.revokedRetentionDays:30}}")
     private val revokedSessionRetentionDays: Int = 30,
 ) : MemberSessionUseCase {
     @Transactional

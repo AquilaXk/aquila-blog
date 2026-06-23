@@ -3,6 +3,7 @@ package com.back.boundedContexts.member.subContexts.signupVerification.adapter.p
 import com.back.boundedContexts.member.subContexts.signupVerification.application.port.output.MemberSignupVerificationRepositoryPort
 import com.back.boundedContexts.member.subContexts.signupVerification.domain.MemberSignupVerification
 import org.springframework.stereotype.Component
+import java.time.Instant
 
 /**
  * MemberSignupVerificationRepositoryAdapter는 영속 계층(JPA/쿼리) 연동을 담당하는 퍼시스턴스 어댑터입니다.
@@ -23,4 +24,9 @@ class MemberSignupVerificationRepositoryAdapter(
 
     override fun findTopByEmail(email: String): MemberSignupVerification? =
         memberSignupVerificationRepository.findTopByEmailOrderByCreatedAtDesc(email)
+
+    override fun deleteRetainedBefore(
+        cutoff: Instant,
+        limit: Int,
+    ): Int = memberSignupVerificationRepository.deleteRetainedBefore(cutoff, limit.coerceIn(1, 1_000))
 }

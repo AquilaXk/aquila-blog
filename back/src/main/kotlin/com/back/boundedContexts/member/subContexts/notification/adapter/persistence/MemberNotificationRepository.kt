@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
+import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.util.UUID
 
@@ -45,6 +46,7 @@ interface MemberNotificationRepository : JpaRepository<MemberNotification, Long>
     fun existsByEventUid(eventUid: UUID): Boolean
 
     @Modifying(clearAutomatically = false, flushAutomatically = true)
+    @Transactional
     @Query(
         """
         UPDATE MemberNotification notification
@@ -72,5 +74,25 @@ interface MemberNotificationRepository : JpaRepository<MemberNotification, Long>
         @Param("id") id: Long,
         @Param("receiverId") receiverId: Long,
         @Param("readAt") readAt: Instant,
+    ): Int
+
+    @Modifying(clearAutomatically = false, flushAutomatically = true)
+    @Transactional
+    @Query(
+        value = """
+        delete from member_notification
+        where id in (
+            select id
+            from member_notification
+            where created_at < :cutoff
+            order by created_at asc, id asc
+            limit :limit
+        )
+        """,
+        nativeQuery = true,
+    )
+    fun deleteCreatedBefore(
+        @Param("cutoff") cutoff: Instant,
+        @Param("limit") limit: Int,
     ): Int
 }

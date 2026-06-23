@@ -212,7 +212,7 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
                     ?: error("verification row not created")
             val emailVerificationToken = emailVerificationTokenFromMailTask(verification.id)
 
-            val signupSessionCookie =
+            val signupSessionSetCookie =
                 mvc
                     .post("/member/api/v1/signup/email/verify") {
                         contentType = MediaType.APPLICATION_JSON
@@ -227,7 +227,9 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
                     }.andReturn()
                     .response
                     .getHeader("Set-Cookie")
-                    .let(::signupSessionCookieFrom)
+
+            assertThat(signupSessionSetCookie).contains("HttpOnly", "Secure", "SameSite=Strict")
+            val signupSessionCookie = signupSessionCookieFrom(signupSessionSetCookie)
 
             val refreshed =
                 memberSignupVerificationRepository.findTopByEmailOrderByCreatedAtDesc(email)

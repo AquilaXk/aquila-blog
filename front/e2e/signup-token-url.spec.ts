@@ -8,6 +8,7 @@ const readRepoFile = (relativePath: string) => fs.readFileSync(path.join(repoRoo
 
 test("signup verify flow keeps token and completion email out of query URLs", () => {
   const signupVerifyPage = readRepoFile("front/src/pages/signup/verify.tsx")
+  const appPage = readRepoFile("front/src/pages/_app.tsx")
   const signupVerificationService = readRepoFile(
     "back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/application/service/MemberSignupVerificationService.kt",
   )
@@ -28,6 +29,14 @@ test("signup verify flow keeps token and completion email out of query URLs", ()
   expect(signupVerifyPage).not.toContain("/email/verify?token=")
   expect(signupVerifyPage).not.toContain("signup=done&email=")
   expect(signupVerifyPage).not.toContain("signupToken:")
+  expect(appPage).toContain('"/signup/verify"')
+  expect(appPage).toContain('"/signup/social/complete"')
+  expect(appPage).toContain("shouldRenderVercelTelemetry")
+  expect(appPage).toContain("filterSensitiveSignupTelemetry")
+  expect(appPage).toContain("<Analytics beforeSend={filterSensitiveSignupTelemetry} />")
+  expect(appPage).toContain("<SpeedInsights beforeSend={filterSensitiveSignupTelemetry} />")
+  expect(appPage).toContain("return new URL(url,")
+  expect(appPage).toContain("? null : event")
 
   expect(signupVerificationService).toContain('append("#token=")')
   expect(signupVerificationService).not.toContain('append("?token=")')

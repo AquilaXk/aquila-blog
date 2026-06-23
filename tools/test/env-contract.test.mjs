@@ -1379,6 +1379,10 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
     deployScript.indexOf("rollback_to_backend()"),
     deployScript.indexOf('if [[ ! -f "${ENV_FILE}" ]]'),
   )
+  const burnInRollbackBlock = deployScript.slice(
+    deployScript.indexOf("rollback_caddy_route_only()"),
+    deployScript.indexOf("run_blue_green_burn_in()"),
+  )
   const preCandidateBootStart = deployScript.indexOf("services_to_boot=(")
   const preCandidateBootEnd = deployScript.indexOf('compose_up_with_retry "${services_to_boot[@]}"')
   const activeHelperStartIndex = deployScript.indexOf('start_runtime_split_helper_backends_on_active "${active_backend}"')
@@ -1396,6 +1400,7 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
   assert.match(helperRestartBlock, /upsert_runtime_backend_image "\$\{service\}" "\$\{active_image\}"/)
   assert.match(helperRestartBlock, /write_backend_release_state "\$\{active_backend\}" "\$\{failed_candidate\}"/)
   assert.match(rollbackBlock, /restore_runtime_split_helper_backends_to_active "\$\{rollback_backend\}" "\$\{inactive_backend\}" \|\| return 1/)
+  assert.match(burnInRollbackBlock, /restore_runtime_split_helper_backends_to_active "\$\{previous_backend\}" "\$\{candidate_backend\}" \|\| return 1/)
   assert(preCandidateBootStart > 0, "deploy script must build the pre-candidate boot list")
   assert(preCandidateBootEnd > preCandidateBootStart, "deploy script must boot infra before the candidate")
   assert(activeHelperStartIndex > preCandidateBootEnd, "runtime split helpers must start on active image after data infra")

@@ -397,8 +397,7 @@ activities:
     codeOwner: back/member-notification
     policySectionId: privacy-collection-notification
     enabledByEnv: alwaysEnabledForLoggedInMembers
-    reviewRequired:
-      - Notification DB history is purged by custom.privacy.retention.notificationDays.
+    reviewRequired: []
 
   - id: analytics_and_rum
     name: Google Analytics, Vercel Speed Insights, custom RUM

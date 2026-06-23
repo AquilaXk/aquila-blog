@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicLong
 @Component
 class TaskQueueMetricsBinder(
     private val taskQueueDiagnosticsService: TaskQueueDiagnosticsService,
-    @Value("\${custom.runtime.workerEnabled:true}")
+    @Value("\${custom.runtime.worker-enabled:true}")
     private val workerEnabled: Boolean,
     @Value("\${custom.task.metrics.refreshEnabled:true}")
     private val refreshEnabled: Boolean,

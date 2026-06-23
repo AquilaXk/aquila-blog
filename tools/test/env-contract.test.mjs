@@ -1363,6 +1363,10 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
     deployScript.indexOf("backend_http_host()"),
     deployScript.indexOf("resolve_in_caddy()"),
   )
+  const backendDnsBlock = deployScript.slice(
+    deployScript.indexOf("check_backend_dns_from_caddy()"),
+    deployScript.indexOf("is_backend_running()"),
+  )
   const helperRestartBlock = deployScript.slice(
     deployScript.indexOf("restart_runtime_split_backends_after_candidate_ready()"),
     deployScript.indexOf("probe_caddy_http_code()"),
@@ -1405,6 +1409,7 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
   const burnInRollbackRestoreIndex = burnInRollbackBlock.indexOf('restore_runtime_split_helper_backends_to_active "${previous_backend}" "${candidate_backend}"')
 
   assert.match(backendHttpHostBlock, /back_blue\|back_green\|back_read\|back_admin\|back_worker/)
+  assert.match(backendDnsBlock, /host="\$\(backend_http_host "\$\{backend\}"\)"/)
   assert.match(prepareImagesBlock, /for service in back_read back_admin back_worker; do/)
   assert.match(prepareImagesBlock, /upsert_runtime_backend_image "\$\{service\}" "\$\{active_image\}"/)
   assert.match(activeHelperStartBlock, /compose_up_force_recreate_with_retry "\$\{helper_services\[@\]\}"/)

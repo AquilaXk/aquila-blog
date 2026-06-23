@@ -51,16 +51,19 @@ test("findDirectColorViolations ignores URL fragment references", () => {
   const diff = [
     "diff --git a/src/layouts/RootLayout/Header.tsx b/src/layouts/RootLayout/Header.tsx",
     "+++ b/src/layouts/RootLayout/Header.tsx",
-    "@@ -1,0 +1,3 @@",
+    "@@ -1,0 +1,6 @@",
     '+  <a href="#feed">Feed</a>',
+    '+  <a href={"#feed"}>Feed</a>',
+    "+  <a href={'#feed'}>Feed</a>",
     '+  mask: url(#fade);',
+    '+  mask: url("#fade");',
     '+  color: "#ffffff";',
   ].join("\n")
 
   assert.deepEqual(findDirectColorViolations(diff), [
     {
       file: "src/layouts/RootLayout/Header.tsx",
-      line: 3,
+      line: 6,
       source: 'color: "#ffffff";',
     },
   ])

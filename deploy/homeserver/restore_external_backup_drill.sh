@@ -160,6 +160,33 @@ is_safe_absolute_path() {
   [[ ! "${value}" =~ (^|/)\.\.?($|/) ]] || return 1
 }
 
+canonical_path_for_compare() {
+  local path="$1"
+  if [[ -e "${path}" ]]; then
+    realpath "${path}"
+    return
+  fi
+  local dir base
+  dir="$(dirname "${path}")"
+  base="$(basename "${path}")"
+  [[ -d "${dir}" ]] || return 1
+  printf '%s/%s\n' "$(realpath "${dir}")" "${base}"
+}
+
+assert_outside_backup_root() {
+  local label="$1"
+  local path="$2"
+  local backup_root_for_exclusion path_for_exclusion
+  backup_root_for_exclusion="$(canonical_path_for_compare "${BACKUP_ROOT}")" || fail "could not resolve AQUILA_BACKUP_ROOT=${BACKUP_ROOT}"
+  path_for_exclusion="$(canonical_path_for_compare "${path}")" || fail "could not resolve ${label}=${path}"
+  backup_root_for_exclusion="${backup_root_for_exclusion%/}"
+  case "${path_for_exclusion}" in
+    "${backup_root_for_exclusion}"|"${backup_root_for_exclusion}"/*)
+      fail "${label} must be outside AQUILA_BACKUP_ROOT"
+      ;;
+  esac
+}
+
 resolve_restore_privacy_contract() {
   if [[ -z "${BACKUP_ENCRYPTION_KEY_FILE}" ]]; then
     BACKUP_ENCRYPTION_KEY_FILE="$(read_key_from_file AQUILA_BACKUP_ENCRYPTION_KEY_FILE "${DEPLOY_DIR}/.env.prod.compose")"
@@ -179,23 +206,15 @@ resolve_restore_privacy_contract() {
 
   [[ -n "${RESTORE_PRIVACY_GATE_SCRIPT}" ]] || fail "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT is required before traffic open"
   is_safe_absolute_path "${RESTORE_PRIVACY_GATE_SCRIPT}" || fail "unsafe AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=${RESTORE_PRIVACY_GATE_SCRIPT}"
-  local backup_root_for_exclusion="${BACKUP_ROOT%/}"
-  case "${RESTORE_PRIVACY_GATE_SCRIPT}" in
-    "${backup_root_for_exclusion}"|"${backup_root_for_exclusion}"/*)
-      fail "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT must be outside AQUILA_BACKUP_ROOT"
-      ;;
-  esac
+  command -v realpath >/dev/null 2>&1 || fail "realpath is required for restore drill"
+  assert_outside_backup_root "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT" "${RESTORE_PRIVACY_GATE_SCRIPT}"
   [[ -x "${RESTORE_PRIVACY_GATE_SCRIPT}" ]] || fail "restore privacy gate script is not executable: ${RESTORE_PRIVACY_GATE_SCRIPT}"
 }
 
 validate_backup_encryption_key_file() {
-  local backup_root_for_exclusion="${BACKUP_ROOT%/}"
   is_safe_absolute_path "${BACKUP_ENCRYPTION_KEY_FILE}" || fail "unsafe AQUILA_BACKUP_ENCRYPTION_KEY_FILE=${BACKUP_ENCRYPTION_KEY_FILE}"
-  case "${BACKUP_ENCRYPTION_KEY_FILE}" in
-    "${backup_root_for_exclusion}"|"${backup_root_for_exclusion}"/*)
-      fail "AQUILA_BACKUP_ENCRYPTION_KEY_FILE must be outside AQUILA_BACKUP_ROOT"
-      ;;
-  esac
+  command -v realpath >/dev/null 2>&1 || fail "realpath is required for restore drill"
+  assert_outside_backup_root "AQUILA_BACKUP_ENCRYPTION_KEY_FILE" "${BACKUP_ENCRYPTION_KEY_FILE}"
   [[ -f "${BACKUP_ENCRYPTION_KEY_FILE}" ]] || fail "backup encryption key file is not a regular file: ${BACKUP_ENCRYPTION_KEY_FILE}"
   [[ -r "${BACKUP_ENCRYPTION_KEY_FILE}" ]] || fail "backup encryption key file is not readable: ${BACKUP_ENCRYPTION_KEY_FILE}"
 }

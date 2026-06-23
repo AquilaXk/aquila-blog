@@ -155,7 +155,7 @@ const ConfirmBackdrop = styled.div`
   display: grid;
   place-items: center;
   padding: 1rem;
-  background: rgba(15, 23, 42, 0.56);
+  background: rgba(15, 23, 42, 0.42);
 `
 
 const ConfirmDialog = styled.div`
@@ -163,10 +163,10 @@ const ConfirmDialog = styled.div`
   display: grid;
   gap: 0.95rem;
   padding: 1.1rem;
-  border-radius: 18px;
+  border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
-  box-shadow: 0 24px 54px rgba(15, 23, 42, 0.24);
+  box-shadow: none;
 
   > strong {
     font-size: 1.02rem;

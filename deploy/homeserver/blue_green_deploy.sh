@@ -2163,13 +2163,15 @@ rollback_caddy_route_only() {
     return 1
   fi
 
-  restore_runtime_split_helper_backends_to_active "${previous_backend}" "${candidate_backend}" || return 1
-
   switch_caddy_upstream "${previous_backend}"
 
   if ! verify_caddy_route "${previous_backend}" "${api_domain}"; then
     echo "burn-in rollback failed: caddy route verify failed" >&2
     return 1
+  fi
+
+  if ! restore_runtime_split_helper_backends_to_active "${previous_backend}" "${candidate_backend}"; then
+    echo "burn-in rollback warning: helper recovery failed after route rollback" >&2
   fi
 
   echo "${previous_backend}" > "${STATE_FILE}"
@@ -2262,13 +2264,16 @@ rollback_to_backend() {
 
   local inactive_backend
   inactive_backend="$(other_backend "${rollback_backend}")"
-  restore_runtime_split_helper_backends_to_active "${rollback_backend}" "${inactive_backend}" || return 1
 
   switch_caddy_upstream "${rollback_backend}"
 
   if ! verify_caddy_route "${rollback_backend}" "${api_domain}"; then
     echo "rollback failed: caddy route verify failed" >&2
     return 1
+  fi
+
+  if ! restore_runtime_split_helper_backends_to_active "${rollback_backend}" "${inactive_backend}"; then
+    echo "rollback warning: helper recovery failed after route rollback" >&2
   fi
 
   echo "${rollback_backend}" > "${STATE_FILE}"
@@ -2323,7 +2328,11 @@ action_backend_host="$(backend_host "${next_backend}")"
 echo "starting infra before ${next_backend} (${action_backend_host})"
 services_to_boot=(db_1 redis_1 minio_1 uptime_kuma autoheal)
 compose_up_with_retry "${services_to_boot[@]}"
-start_runtime_split_helper_backends_on_active "${active_backend}"
+if is_backend_running "${active_backend}"; then
+  start_runtime_split_helper_backends_on_active "${active_backend}"
+else
+  echo "skip active-image helper preboot: active backend is not running (${active_backend}); candidate will migrate first"
+fi
 edge_services_to_boot=(caddy cloudflared)
 compose_up_with_retry "${edge_services_to_boot[@]}"
 compose_up_no_deps_with_retry loki promtail prometheus grafana

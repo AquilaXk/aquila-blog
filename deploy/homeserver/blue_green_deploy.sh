@@ -1592,6 +1592,41 @@ check_required_backend_dns_from_caddy() {
   fi
 }
 
+runtime_split_helper_backends() {
+  local services=(back_worker)
+  if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
+    services+=(back_read back_admin)
+  fi
+  printf '%s\n' "${services[@]}"
+}
+
+restart_runtime_split_backends_after_candidate_ready() {
+  local candidate_backend="$1"
+  local helper_services=()
+  local service
+  while IFS= read -r service; do
+    [[ -n "${service}" ]] || continue
+    helper_services+=("${service}")
+  done < <(runtime_split_helper_backends)
+
+  if [[ "${#helper_services[@]}" -eq 0 ]]; then
+    return 0
+  fi
+
+  echo "restarting runtime helper backends after candidate health: candidate=${candidate_backend}, services=${helper_services[*]}"
+  compose pull "${helper_services[@]}"
+  if ! compose_up_force_recreate_with_retry "${helper_services[@]}"; then
+    for service in "${helper_services[@]}"; do
+      emit_backend_diagnostics "${service}" >&2 || true
+    done
+    return 1
+  fi
+
+  for service in "${helper_services[@]}"; do
+    check_backend_health "${service}"
+  done
+}
+
 probe_caddy_http_code() {
   local api_domain="$1"
   docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
@@ -2183,11 +2218,8 @@ persist_single_runtime_caddy_upstreams "${active_backend}"
 
 action_backend_host="$(backend_host "${next_backend}")"
 
-echo "starting infra + ${next_backend} (${action_backend_host})"
-services_to_boot=(db_1 redis_1 minio_1 caddy cloudflared uptime_kuma autoheal back_worker)
-if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
-  services_to_boot+=(back_read back_admin)
-fi
+echo "starting infra before ${next_backend} (${action_backend_host})"
+services_to_boot=(db_1 redis_1 minio_1 caddy cloudflared uptime_kuma autoheal)
 compose_up_with_retry "${services_to_boot[@]}"
 compose_up_no_deps_with_retry loki promtail prometheus grafana
 ensure_caddy_mount_sync
@@ -2211,6 +2243,7 @@ if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
   check_backend_dns_from_caddy "back_admin"
 fi
 check_backend_health "${next_backend}"
+restart_runtime_split_backends_after_candidate_ready "${next_backend}"
 
 switch_caddy_upstream "${next_backend}"
 

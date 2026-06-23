@@ -36,6 +36,9 @@ function App({ Component, pageProps, emotionCache = clientSideEmotionCache }: Ap
   const [queryClient] = useState(createQueryClient)
   const router = useRouter()
   const optionalTrackingAllowed = useOptionalTrackingConsent()
+  const isSignupVerifyRoute = router.pathname === "/signup/verify"
+  const shouldRenderVercelTelemetry =
+    process.env.NODE_ENV === "production" && optionalTrackingAllowed && !isSignupVerifyRoute
 
   return (
     <CacheProvider value={emotionCache}>
@@ -51,7 +54,7 @@ function App({ Component, pageProps, emotionCache = clientSideEmotionCache }: Ap
               initialAdminProfileShouldRefetch={initialAdminProfileShouldRefetch}
             >
               {getLayout(<Component {...pageProps} />)}
-              {process.env.NODE_ENV === "production" && optionalTrackingAllowed ? (
+              {shouldRenderVercelTelemetry ? (
                 <>
                   <Analytics />
                   <SpeedInsights />

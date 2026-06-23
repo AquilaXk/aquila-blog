@@ -1635,6 +1635,47 @@ restart_runtime_split_backends_after_candidate_ready() {
   return 0
 }
 
+restore_runtime_split_helper_backends_to_active() {
+  local active_backend="$1"
+  local failed_candidate="$2"
+  local active_image
+  active_image="$(runtime_backend_image_value "${active_backend}")"
+  if [[ -z "${active_image}" ]]; then
+    echo "runtime helper recovery failed: active backend image missing for ${active_backend}" >&2
+    return 1
+  fi
+
+  local helper_services=()
+  local service
+  while IFS= read -r service; do
+    [[ -n "${service}" ]] || continue
+    upsert_runtime_backend_image "${service}" "${active_image}"
+    helper_services+=("${service}")
+  done < <(runtime_split_helper_backends)
+
+  if [[ "${#helper_services[@]}" -eq 0 ]]; then
+    return 0
+  fi
+
+  echo "recovering runtime helper backends to active image: active=${active_backend}, failed_candidate=${failed_candidate}, services=${helper_services[*]}"
+  compose pull "${helper_services[@]}" || true
+  if ! compose_up_force_recreate_with_retry "${helper_services[@]}"; then
+    for service in "${helper_services[@]}"; do
+      emit_backend_diagnostics "${service}" >&2 || true
+    done
+    return 1
+  fi
+
+  for service in "${helper_services[@]}"; do
+    if ! check_backend_health "${service}"; then
+      echo "runtime helper backend unhealthy after active-image recovery: ${service}" >&2
+      return 1
+    fi
+  done
+  write_backend_release_state "${active_backend}" "${failed_candidate}"
+  return 0
+}
+
 probe_caddy_http_code() {
   local api_domain="$1"
   docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
@@ -2253,6 +2294,8 @@ fi
 check_backend_health "${next_backend}"
 if ! restart_runtime_split_backends_after_candidate_ready "${next_backend}"; then
   echo "runtime helper backend restart failed after ${next_backend} became healthy" >&2
+  restore_runtime_split_helper_backends_to_active "${active_backend}" "${next_backend}" || true
+  compose stop "${next_backend}" || true
   exit 1
 fi
 

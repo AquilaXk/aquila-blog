@@ -445,6 +445,7 @@ jobs:
             printf 'HOME_AI_TAG_ENABLED=%q\n' "${HOME_AI_TAG_ENABLED:-false}"
             printf 'HOME_NEXT_PUBLIC_SIGNUP_ENABLED=%q\n' "${HOME_NEXT_PUBLIC_SIGNUP_ENABLED:-false}"
             printf 'HOME_NEXT_PUBLIC_RUM_SAMPLE_RATE=%q\n' "${HOME_NEXT_PUBLIC_RUM_SAMPLE_RATE:-0}"
+            printf 'HOME_RESTORE_PRIVACY_GATE_SCRIPT=%q\n' "${HOME_RESTORE_PRIVACY_GATE_SCRIPT:-/opt/aquila-blog/restore-privacy-gate.sh}"
           } > "${LOCAL_REMOTE_VARS_FILE}"
           chmod 600 "${LOCAL_REMOTE_VARS_FILE}"
 

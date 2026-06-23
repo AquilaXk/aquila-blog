@@ -896,6 +896,7 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
     2,
   )
   assert.match(workflow, /printf 'AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=%s\\n' "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT\}"/)
+  assert.match(workflow, /printf 'HOME_RESTORE_PRIVACY_GATE_SCRIPT=%q\\n' "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT:-\/opt\/aquila-blog\/restore-privacy-gate\.sh\}"/)
   assert.match(workflow, /upsert_env_key "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT" "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT:-\/opt\/aquila-blog\/restore-privacy-gate\.sh\}" "deploy\/homeserver\/\.env\.prod"/)
   assert(workflow.indexOf("Validate HOME_SERVER_ENV contract") < workflow.indexOf("Deploy over SSH"))
   assert.match(workflow, /export HOME_SERVER_ENV/)

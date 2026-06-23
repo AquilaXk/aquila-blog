@@ -23,6 +23,7 @@ export type OptionalTrackingConsentRecord = {
 
 type OptionalTrackingWindow = Window & {
   dataLayer?: unknown[]
+  doNotTrack?: string | null
   ga?: unknown
   gtag?: unknown
   si?: unknown
@@ -30,6 +31,11 @@ type OptionalTrackingWindow = Window & {
   va?: unknown
   vam?: unknown
   vaq?: unknown[]
+}
+
+type OptionalTrackingNavigator = Navigator & {
+  globalPrivacyControl?: boolean
+  msDoNotTrack?: string | null
 }
 
 const optionalTrackingUrlTokens = [
@@ -111,8 +117,19 @@ export const readOptionalTrackingConsent = (): OptionalTrackingConsentRecord | n
 export const hasBrowserPrivacyOptOutSignal = () => {
   if (typeof navigator === "undefined") return false
 
-  const navigatorWithGpc = navigator as Navigator & { globalPrivacyControl?: boolean }
-  return navigator.doNotTrack === "1" || navigatorWithGpc.globalPrivacyControl === true
+  const isDoNotTrackEnabled = (value?: string | null) => {
+    const normalized = value?.trim().toLowerCase()
+    return normalized === "1" || normalized === "yes" || normalized === "true"
+  }
+  const browserNavigator = navigator as OptionalTrackingNavigator
+  const browserWindow = typeof window === "undefined" ? undefined : (window as OptionalTrackingWindow)
+
+  return (
+    browserNavigator.globalPrivacyControl === true ||
+    isDoNotTrackEnabled(browserNavigator.doNotTrack) ||
+    isDoNotTrackEnabled(browserNavigator.msDoNotTrack) ||
+    isDoNotTrackEnabled(browserWindow?.doNotTrack)
+  )
 }
 
 export const hasOptionalTrackingConsent = () => {

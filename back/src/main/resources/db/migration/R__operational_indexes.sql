@@ -70,6 +70,14 @@ BEGIN
     IF to_regclass('public.member_signup_verification') IS NOT NULL THEN
         CREATE INDEX IF NOT EXISTS member_signup_verification_idx_email_created_at_desc
             ON member_signup_verification (email, created_at DESC);
+        CREATE INDEX IF NOT EXISTS member_signup_verification_idx_consumed_at_id
+            ON member_signup_verification (consumed_at ASC, id ASC);
+        CREATE INDEX IF NOT EXISTS member_signup_verification_idx_cancelled_at_id
+            ON member_signup_verification (cancelled_at ASC, id ASC);
+        CREATE INDEX IF NOT EXISTS member_signup_verification_idx_email_verification_expires_at_id
+            ON member_signup_verification (email_verification_expires_at ASC, id ASC);
+        CREATE INDEX IF NOT EXISTS member_signup_verification_idx_signup_session_expires_at_id
+            ON member_signup_verification (signup_session_expires_at ASC, id ASC);
     END IF;
 
     IF to_regclass('public.member_notification') IS NOT NULL THEN
@@ -79,6 +87,13 @@ BEGIN
             ON member_notification (receiver_id, read_at, created_at DESC);
         CREATE INDEX IF NOT EXISTS member_notification_idx_actor_id
             ON member_notification (actor_id);
+        CREATE INDEX IF NOT EXISTS member_notification_idx_created_at_id
+            ON member_notification (created_at ASC, id ASC);
+    END IF;
+
+    IF to_regclass('public.member_privacy_request') IS NOT NULL THEN
+        CREATE INDEX IF NOT EXISTS member_privacy_request_idx_status_closed_at_id
+            ON member_privacy_request (status, (COALESCE(completed_at, modified_at, requested_at)), id);
     END IF;
 
     IF to_regclass('public.member_session') IS NOT NULL THEN

@@ -1271,6 +1271,7 @@ test("prod datasource uses a non-superuser runtime role contract", () => {
   assert.match(applicationProd, /username:\s*"\$\{PROD___SPRING__DATASOURCE__USERNAME\}"/)
   assert.match(applicationProd, /flyway:\n(?:.*\n)*\s+user:\s*"\$\{PROD___SPRING__FLYWAY__USER:postgres\}"/)
   assert.match(applicationProd, /password:\s*"\$\{PROD___SPRING__FLYWAY__PASSWORD:\$\{PROD___POSTGRES__PASSWORD\}\}"/)
+  assert.match(applicationProd, /lock-retry-count:\s*\$\{PROD___SPRING__FLYWAY__LOCK_RETRY_COUNT:300\}/)
   assert.match(compose, /POSTGRES_PASSWORD:\s*\$\{PROD___POSTGRES__PASSWORD:-\$\{PROD___SPRING__DATASOURCE__PASSWORD\}\}/)
   assert.match(deployScript, /validate_db_runtime_role_env/)
   assert.match(deployScript, /provision_db_runtime_role/)

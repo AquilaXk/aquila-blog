@@ -30,6 +30,7 @@ test.describe("admin hub state contract", () => {
     expect(source).toContain("initialOperationalSnapshot")
     expect(source).toContain("readAdminHubOperationalSnapshot(req)")
     expect(source).toContain("const buildAdminHubPostListEndpoint = () =>")
+    expect(source).toContain('"/post/api/v1/adm/posts?page=1&pageSize=20&kw=&sort=MODIFIED_AT"')
     expect(source).toContain("readJsonIfOk<AdminHubPageDto<AdminHubPostListItem>>(req, buildAdminHubPostListEndpoint())")
     expect(source).toContain('readJsonIfOk<AdminHubSystemHealthPayload>(req, "/system/api/v1/adm/health")')
     expect(source).toContain('readJsonIfOk<AdminHubDashboardSnapshotPayload>(req, "/system/api/v1/adm/dashboard-snapshot")')

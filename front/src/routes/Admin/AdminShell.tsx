@@ -1,8 +1,8 @@
 import styled from "@emotion/styled"
 import Link from "next/link"
 import { type ReactNode, useEffect } from "react"
-import { apiFetch } from "src/apis/backend/client"
 import AppIcon, { type IconName } from "src/components/icons/AppIcon"
+import BrandLogoMark from "src/components/branding/BrandMark"
 import ProfileImage from "src/components/ProfileImage"
 import type { AuthMember } from "src/hooks/useAuthSession"
 import { CONFIG } from "site.config"
@@ -111,7 +111,6 @@ const AdminShell = ({ currentSection, member, profileSnapshot = null, children }
     ""
   ).trim()
   const brandTitle = (profileSnapshot?.blogTitle || member.blogTitle || CONFIG.blog.title || "AquilaLog").trim()
-  const brandInitial = brandTitle.slice(0, 1).toUpperCase()
   const currentTitle = SECTION_TITLES[currentSection]
 
   useEffect(() => {
@@ -140,22 +139,16 @@ const AdminShell = ({ currentSection, member, profileSnapshot = null, children }
     }
   }, [member?.isAdmin])
 
-  const handleLogout = async () => {
-    await apiFetch("/member/api/v1/auth/logout", { method: "DELETE" }).catch(() => undefined)
-    const rawNextPath = `${window.location.pathname}${window.location.search}${window.location.hash}`
-    const nextPath = rawNextPath.startsWith("/") && !rawNextPath.startsWith("//") ? rawNextPath : "/admin"
-    window.location.href = `/login?next=${encodeURIComponent(nextPath)}`
-  }
-
   return (
     <ShellFrame>
       <Sidebar>
         <BrandBlock>
           <BrandMark>
-            <span>{brandInitial}</span>
+            <BrandLogoMark className="brandLogoMark" priority />
           </BrandMark>
           <BrandCopy>
             <strong>{brandTitle}</strong>
+            <span>ENGINEERING JOURNAL</span>
           </BrandCopy>
         </BrandBlock>
 
@@ -201,16 +194,12 @@ const AdminShell = ({ currentSection, member, profileSnapshot = null, children }
             ))}
           </CompactNav>
           <TopBarTitle>
-            <span>ADMIN</span>
             <strong>{currentTitle}</strong>
           </TopBarTitle>
           <TopBarActions>
             <Link href="/" passHref legacyBehavior>
               <SecondaryTopAction>블로그 보기</SecondaryTopAction>
             </Link>
-            <button type="button" onClick={() => void handleLogout()}>
-              Logout
-            </button>
             <Link href="/editor/new" passHref legacyBehavior>
               <PrimaryTopAction>새 글</PrimaryTopAction>
             </Link>
@@ -228,7 +217,7 @@ export default AdminShell
 const ShellFrame = styled.div`
   ${({ theme }) => adminSystemThemeVariables(theme)}
   display: grid;
-  grid-template-columns: 13.5rem minmax(0, 1fr);
+  grid-template-columns: 14.5rem minmax(0, 1fr);
   gap: 0;
   width: 100%;
   min-height: 100vh;
@@ -243,13 +232,13 @@ const ShellFrame = styled.div`
 const Sidebar = styled.aside`
   display: grid;
   grid-template-rows: auto 1fr auto;
-  gap: 1.4rem;
+  gap: 1.6rem;
   min-width: 0;
   position: sticky;
   top: 0;
   min-height: 100vh;
   height: 100vh;
-  padding: 1.15rem 0.82rem 1rem;
+  padding: 1.375rem 1rem 1.125rem;
   border-right: 1px solid ${adminBorder};
   background: ${adminShellSurface};
 
@@ -262,35 +251,47 @@ const Sidebar = styled.aside`
 const BrandBlock = styled.div`
   display: flex;
   align-items: center;
-  gap: 0.65rem;
-  padding: 0 0.15rem;
+  gap: 0.55rem;
+  padding: 0 0.35rem;
 `
 
 const BrandMark = styled.div`
-  width: 2.55rem;
-  height: 2.55rem;
+  width: 1.72rem;
+  height: 1.72rem;
   border-radius: 2px;
   display: grid;
   place-items: center;
   border: 1px solid ${adminBorderStrong};
-  background: ${adminTextPrimary};
-  color: ${adminShellSurface};
+  background: transparent;
+  color: ${adminTextPrimary};
 
-  span {
-    font-size: 1rem;
-    font-weight: 800;
-    letter-spacing: 0;
+  .brandLogoMark {
+    display: block;
+    width: 100%;
+    height: 100%;
   }
 `
 
 const BrandCopy = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.72rem;
+  min-width: 0;
+
   strong {
     color: ${adminTextPrimary};
-    font-size: 0.96rem;
-    font-weight: 800;
+    font-size: 0.88rem;
+    font-weight: 850;
     letter-spacing: 0;
   }
 
+  span {
+    color: ${adminTextMuted};
+    font-size: 0.54rem;
+    font-weight: 760;
+    letter-spacing: 0.16em;
+    line-height: 1.1;
+  }
 `
 
 const SidebarNavSection = styled.section`
@@ -300,26 +301,25 @@ const SidebarNavSection = styled.section`
 const SidebarNav = styled.nav`
   display: grid;
   align-content: start;
-  gap: 0.15rem;
+  gap: 0.2rem;
 `
 
 const NavLink = styled.a`
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.65rem;
   min-width: 0;
-  min-height: 2.28rem;
-  padding: 0.46rem 0.52rem;
+  min-height: 2.5rem;
+  padding: 0 0.72rem;
   border-radius: 2px;
   border: 0;
-  border-left: 3px solid transparent;
   color: inherit;
   text-decoration: none;
-  transition: border-color 140ms ease, background 140ms ease;
+  transition: background 140ms ease, color 140ms ease;
 
   > span {
-    width: 1.55rem;
-    height: 1.55rem;
+    width: 1.05rem;
+    height: 1.05rem;
     border-radius: 0;
     display: grid;
     place-items: center;
@@ -331,13 +331,12 @@ const NavLink = styled.a`
   > strong {
     color: ${adminTextPrimary};
     font-size: 0.86rem;
-    font-weight: 760;
+    font-weight: 650;
     letter-spacing: 0;
     line-height: 1.2;
   }
 
   &[data-active="true"] {
-    border-left-color: ${adminTeal};
     background: ${adminSurfaceAccent};
   }
 
@@ -346,9 +345,14 @@ const NavLink = styled.a`
     color: ${adminTeal};
   }
 
+  &[data-active="true"] > strong {
+    color: ${adminTeal};
+    font-weight: 800;
+  }
+
   &:hover {
     background: ${adminSurfaceAccent};
-    border-left-color: ${adminTealBorder};
+    color: ${adminTextPrimary};
   }
 `
 
@@ -357,7 +361,7 @@ const SidebarProfile = styled.div`
   align-items: center;
   gap: 0.65rem;
   min-width: 0;
-  padding: 0.82rem 0.15rem 0;
+  padding: 1rem 0.35rem 0;
   border-top: 1px solid ${adminBorder};
 `
 
@@ -425,8 +429,8 @@ const TopBar = styled.header`
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  min-height: 4.25rem;
-  padding: 0.72rem 1.45rem;
+  min-height: 4rem;
+  padding: 0 1.75rem;
   border-bottom: 1px solid ${adminBorder};
   background: ${adminSurface};
 
@@ -474,21 +478,13 @@ const CompactNavLink = styled.a`
 `
 
 const TopBarTitle = styled.div`
-  display: grid;
-  gap: 0.05rem;
+  display: block;
   min-width: 0;
   margin-right: auto;
 
-  span {
-    color: ${adminTextMuted};
-    font-size: 0.66rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-  }
-
   strong {
     color: ${adminTextPrimary};
-    font-size: 1.02rem;
+    font-size: 0.94rem;
     font-weight: 820;
     line-height: 1.2;
   }
@@ -499,29 +495,14 @@ const TopBarActions = styled.div`
   align-items: center;
   gap: 0.55rem;
   flex: 0 0 auto;
-
-  button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 2.2rem;
-    padding: 0 0.85rem;
-    border: 1px solid ${adminBorder};
-    border-radius: 2px;
-    background: ${adminSurfaceRaised};
-    color: ${adminTextPrimary};
-    font-size: 0.82rem;
-    font-weight: 780;
-    cursor: pointer;
-  }
 `
 
 const SecondaryTopAction = styled.a`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 2.2rem;
-  padding: 0 0.85rem;
+  min-height: 2.25rem;
+  padding: 0 0.9rem;
   border: 1px solid ${adminBorder};
   border-radius: 2px;
   background: ${adminSurfaceRaised};
@@ -535,7 +516,7 @@ const PrimaryTopAction = styled.a`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 2.2rem;
+  min-height: 2.25rem;
   padding: 0 0.95rem;
   border: 1px solid ${adminTealBorder};
   border-radius: 2px;

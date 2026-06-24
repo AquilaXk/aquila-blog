@@ -267,16 +267,15 @@ test("관리자 대시보드는 알림 snapshot 백그라운드 갱신을 유지
   await expect.poll(() => snapshotRequestCount).toBeGreaterThan(0)
 })
 
-test("관리자 허브 모바일 first fold의 글 작성 CTA는 primary action hit area를 유지한다", async ({ page }) => {
+test("관리자 허브 모바일 first fold의 글 작성 진입점은 상단 V4 액션을 유지한다", async ({ page }) => {
   await page.setViewportSize({ width: 393, height: 852 })
   await page.goto("/admin")
 
   await expect(page.getByRole("heading", { name: /좋은 아침이에요/ })).toBeVisible()
 
   const ctaSnapshot = await page.evaluate(() => {
-    const main = document.querySelector<HTMLElement>("main main") ?? document.querySelector<HTMLElement>("main")
-    const cta = Array.from(main?.querySelectorAll<HTMLAnchorElement>("a") ?? []).find(
-      (element) => element.textContent?.trim() === "작성",
+    const cta = Array.from(document.querySelectorAll<HTMLAnchorElement>("header a")).find(
+      (element) => element.textContent?.trim() === "새 글",
     )
     const rect = cta?.getBoundingClientRect()
     return rect
@@ -289,9 +288,9 @@ test("관리자 허브 모바일 first fold의 글 작성 CTA는 primary action 
   })
 
   expect(ctaSnapshot).not.toBeNull()
-  expect(ctaSnapshot?.top ?? Number.POSITIVE_INFINITY).toBeLessThan(320)
-  expect(ctaSnapshot?.width ?? 0).toBeGreaterThanOrEqual(96)
-  expect(ctaSnapshot?.height ?? 0).toBeGreaterThanOrEqual(40)
+  expect(ctaSnapshot?.top ?? Number.POSITIVE_INFINITY).toBeLessThan(140)
+  expect(ctaSnapshot?.width ?? 0).toBeGreaterThanOrEqual(48)
+  expect(ctaSnapshot?.height ?? 0).toBeGreaterThanOrEqual(36)
 })
 
 const capturePostsFirstFoldSnapshot = async (page: Page) =>

@@ -1037,10 +1037,24 @@ test.describe("Markdown editor replacement", () => {
 
     await page.goto("/editor/new?source=local-draft")
 
-    const languageLabels = page
+    const codeTitles = page
       .getByTestId("markdown-editor-preview-pane")
-      .locator(".aq-code-language")
-    await expect(languageLabels).toHaveText(languageCases.map(([, , label]) => label))
-    expect(await languageLabels.allTextContents()).not.toContain("TXT")
+      .locator(".aq-code-title")
+    await expect(codeTitles).toHaveText(languageCases.map(([, , label]) => label))
+    expect(await codeTitles.allTextContents()).not.toContain("TXT")
+  })
+
+  test("code block title metadata renders in the V4 header next to copy", async ({ page }) => {
+    await routeAuthenticatedEditor(
+      page,
+      ["```kotlin title=\"UserService.kt\"", "fun login(): Token = token", "```"].join("\n")
+    )
+
+    await page.goto("/editor/new?source=local-draft")
+
+    const preview = page.getByTestId("markdown-editor-preview-pane")
+    const codeBlock = preview.locator(".aq-code-block").first()
+    await expect(codeBlock.locator(".aq-code-title")).toHaveText("UserService.kt")
+    await expect(codeBlock.locator(".aq-code-copy")).toHaveText("COPY")
   })
 })

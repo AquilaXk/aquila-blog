@@ -28,105 +28,53 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
   }
 
   .aq-code-toolbar {
-    display: grid;
-    grid-template-columns: auto 1fr;
+    display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 0.75rem;
     min-height: 42px;
     padding: 0 14px;
     background: #0f1728;
     border-bottom: 1px solid #27334a;
-  }
-
-  .aq-code-toolbar-left {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.7rem;
-  }
-
-  .aq-code-dot {
-    display: none;
-  }
-
-  .aq-code-dot-red {
-    background: #ff5f56;
-  }
-
-  .aq-code-dot-yellow {
-    background: #ffbd2e;
-  }
-
-  .aq-code-dot-green {
-    background: #27c93f;
-  }
-
-  .aq-code-language {
-    justify-self: end;
-    font-size: 0.78rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
     color: #7895c9;
+    font: 600 11px / 1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+      "Courier New", monospace;
+  }
+
+  .aq-code-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 700;
   }
 
   .aq-code-copy {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid
-      ${
-        theme.scheme === "dark" ? "rgba(255, 255, 255, 0.12)" : "rgba(17, 24, 39, 0.12)"};
-    background: ${
-      theme.scheme === "dark" ? "rgba(255, 255, 255, 0.04)" : "rgba(255, 255, 255, 0.72)"};
-    color: ${ (theme.scheme === "dark" ? "#d7dbe5" : "#334155")};
+    border: 0;
+    background: transparent;
+    color: #7895c9;
     border-radius: 0;
-    width: 2.25rem;
-    min-width: 2.25rem;
-    height: 2.05rem;
+    width: auto;
+    min-width: 0;
+    height: auto;
     padding: 0;
-    font-size: 0.8rem;
+    font: inherit;
     font-weight: 700;
+    letter-spacing: 0.02em;
     cursor: pointer;
-    transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+    text-transform: uppercase;
+    transition: color 0.16s ease;
   }
 
   .aq-code-copy:hover {
-    background: ${
-      theme.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(255, 255, 255, 0.9)"};
-    border-color: ${
-      theme.scheme === "dark" ? "rgba(255, 255, 255, 0.18)" : "rgba(17, 24, 39, 0.18)"};
+    color: #a9c5ff;
   }
 
-  .aq-code-copy svg {
-    width: 1rem;
-    height: 1rem;
-  }
-
-  .aq-code-copy-done {
-    line-height: 1;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-    font-size: 0.72rem;
-    padding-top: 0.04rem;
-  }
-
-  .aq-code-copy-bottom {
-    position: absolute;
-    right: 0.74rem;
-    bottom: 0.74rem;
-    z-index: 1;
-    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.18);
-  }
-
-  .aq-code-copy-bottom.is-copied {
+  .aq-code-copy.is-copied {
     color: ${ (theme.scheme === "dark" ? "#98c379" : "#15803d")};
-    border-color: ${
-      theme.scheme === "dark" ? "rgba(152, 195, 121, 0.35)" : "rgba(21, 128, 61, 0.22)"};
-    background: ${
-      theme.scheme === "dark" ? "rgba(152, 195, 121, 0.12)" : "rgba(220, 252, 231, 0.95)"};
-    width: auto;
-    min-width: 3.3rem;
-    padding: 0 0.58rem;
   }
 
   .aq-code-body {
@@ -151,7 +99,7 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
     border: 0;
     border-radius: 0;
     box-shadow: none;
-    padding: 1.05rem var(--aq-code-shell-padding-x) 3.55rem;
+    padding: 1.05rem var(--aq-code-shell-padding-x);
     min-width: 100%;
     background: #0f1728;
     color: #dbe7ff;
@@ -381,34 +329,8 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
       --aq-code-gutter-gap: 0.46rem;
     }
 
-    .aq-code-toolbar {
-      grid-template-columns: auto 1fr;
-    }
-
-    .aq-code-block .aq-code {
-      padding-bottom: 3.2rem;
-    }
-
-    .aq-code-copy-bottom {
-      right: 0.48rem;
-      bottom: 0.48rem;
-    }
-
     .aq-code-copy {
-      width: 2.12rem;
-      min-width: 2.12rem;
-      height: 1.94rem;
       font-size: 0.74rem;
-    }
-
-    .aq-code-copy svg {
-      width: 0.95rem;
-      height: 0.95rem;
-    }
-
-    .aq-code-copy-bottom.is-copied {
-      min-width: 3rem;
-      padding: 0 0.52rem;
     }
 
     .aq-mermaid {

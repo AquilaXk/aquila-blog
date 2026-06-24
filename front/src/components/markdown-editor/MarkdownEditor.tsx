@@ -58,7 +58,7 @@ const tableSnippet = [
   "",
 ].join("\n")
 
-const codeBlockSnippet = ["", "```", "", "```", ""].join("\n")
+const codeBlockSnippet = ["", "```text title=\"코드 제목\"", "", "```", ""].join("\n")
 const mermaidSnippet = ["", "```mermaid", "flowchart LR", "    A[Admin write] --> B[DB commit]", "```", ""].join("\n")
 const calloutSnippet = ["", "> [!TIP]", "> **설계 원칙**", "> 내용을 입력하세요.", ""].join("\n")
 const toggleSnippet = ["", ":::toggle 자세히 보기", "내용을 입력하세요.", ":::", ""].join("\n")

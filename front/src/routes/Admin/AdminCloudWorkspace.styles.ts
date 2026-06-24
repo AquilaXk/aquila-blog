@@ -748,7 +748,7 @@ export const DetailPanel = styled.aside`
     z-index: ${zIndexes.dialog};
     width: min(24rem, calc(100vw - 2rem));
     overflow: auto;
-    box-shadow: -18px 0 48px rgba(0, 0, 0, 0.32);
+    box-shadow: none;
   }
 
   @media (max-width: 1080px) {
@@ -759,7 +759,7 @@ export const DetailPanel = styled.aside`
     z-index: ${zIndexes.dialog};
     width: min(24rem, calc(100vw - 2rem));
     overflow: auto;
-    box-shadow: -18px 0 48px rgba(0, 0, 0, 0.32);
+    box-shadow: none;
   }
 `
 
@@ -773,7 +773,7 @@ export const DetailScrim = styled.button`
     display: block;
     border: 0;
     padding: 0;
-    background: rgba(0, 0, 0, 0.38);
+    background: rgba(0, 0, 0, 0.32);
   }
 
   @media (max-width: 1080px) {
@@ -783,7 +783,7 @@ export const DetailScrim = styled.button`
     display: block;
     border: 0;
     padding: 0;
-    background: rgba(0, 0, 0, 0.38);
+    background: rgba(0, 0, 0, 0.32);
   }
 `
 
@@ -1013,7 +1013,7 @@ export const ToastViewport = styled.div<{ "data-tone": "success" | "error" }>`
       tone === "error" ? theme.colors.statusDangerBorder : theme.colors.statusSuccessBorder};
   border-radius: 8px;
   background: ${surfaceRaised};
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.22);
+  box-shadow: none;
 
   strong {
     color: ${textPrimary};
@@ -1051,7 +1051,7 @@ export const ConfirmBackdrop = styled.div`
   display: grid;
   place-items: center;
   padding: 1rem;
-  background: rgba(0, 0, 0, 0.46);
+  background: rgba(0, 0, 0, 0.36);
 `
 
 export const ConfirmDialog = styled.div`
@@ -1062,7 +1062,7 @@ export const ConfirmDialog = styled.div`
   border: 1px solid ${borderStrong};
   border-radius: 8px;
   background: ${surfaceRaised};
-  box-shadow: 0 22px 54px rgba(0, 0, 0, 0.24);
+  box-shadow: none;
 
   > strong {
     color: ${textPrimary};
@@ -1145,7 +1145,7 @@ export const QueuePanel = styled.section`
   border: 1px solid ${borderStrong};
   border-radius: 8px;
   background: ${surfaceRaised};
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.2);
+  box-shadow: none;
 
   @media (max-width: 760px) {
     right: 0.72rem;

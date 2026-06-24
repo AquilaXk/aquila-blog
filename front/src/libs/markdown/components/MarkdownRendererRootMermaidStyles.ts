@@ -7,12 +7,12 @@ export const markdownRendererRootMermaidStyles = (theme: Theme) => css`
     --aq-toggle-gap: 0.52rem;
     --aq-toggle-summary-padding-x: 0;
     --aq-toggle-indent: calc(var(--aq-toggle-summary-padding-x) + var(--aq-toggle-caret-hit) + var(--aq-toggle-gap));
-    margin: 0.98rem 0;
+    margin: 30px 0;
     position: relative;
   }
 
   .aq-mermaid {
-    margin: 1rem 0;
+    margin: 30px 0;
     display: block;
     width: 100%;
     max-width: 100%;
@@ -91,7 +91,8 @@ export const markdownRendererRootMermaidStyles = (theme: Theme) => css`
   }
 
   .aq-mermaid-error-state {
-    border-radius: 12px;
+    margin: 28px;
+    border-radius: 0;
     border: 1px solid ${ (theme.scheme === "dark" ? "rgba(217, 119, 6, 0.46)" : "rgba(217, 119, 6, 0.42)")};
     background: ${ (theme.scheme === "dark" ? "rgba(120, 53, 15, 0.16)" : "rgba(254, 243, 199, 0.88)")};
     padding: 0.88rem 0.94rem;
@@ -119,7 +120,7 @@ export const markdownRendererRootMermaidStyles = (theme: Theme) => css`
   }
 
   .aq-mermaid-error-guidance code {
-    border-radius: 6px;
+    border-radius: 0;
     border: 1px solid ${ (theme.scheme === "dark" ? "rgba(251, 191, 36, 0.3)" : "rgba(217, 119, 6, 0.32)")};
     background: ${ (theme.scheme === "dark" ? "rgba(120, 53, 15, 0.24)" : "rgba(255, 251, 235, 0.92)")};
     padding: 0.08rem 0.34rem;
@@ -149,7 +150,7 @@ export const markdownRendererRootMermaidStyles = (theme: Theme) => css`
     color: ${ (theme.scheme === "dark" ? "#fef3c7" : "#7c2d12")};
     font-size: 0.78rem;
     line-height: 1.5;
-    border-radius: 8px;
+    border-radius: 0;
     border: 1px solid ${ (theme.scheme === "dark" ? "rgba(251, 191, 36, 0.22)" : "rgba(217, 119, 6, 0.24)")};
     background: ${ (theme.scheme === "dark" ? "rgba(120, 53, 15, 0.18)" : "rgba(255, 251, 235, 0.82)")};
     margin-top: 0.34rem;
@@ -159,7 +160,7 @@ export const markdownRendererRootMermaidStyles = (theme: Theme) => css`
   .aq-mermaid-expand-btn {
     margin: 0.45rem 0 0;
     min-height: 32px;
-    border-radius: 999px;
+    border-radius: 0;
     border: 1px solid ${ theme.colors.gray6};
     background: ${ theme.colors.gray2};
     color: ${ theme.colors.gray11};

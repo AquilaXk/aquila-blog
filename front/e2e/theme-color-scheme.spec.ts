@@ -155,6 +155,22 @@ test.describe("theme color-scheme", () => {
   test("저장된 dark 테마 새로고침은 hydration 중 light frame으로 되돌아가지 않는다", async ({ page }) => {
     await prepareHomeThemePage(page)
     await installSchemeFrameSampler(page)
+    const hydrationErrors: string[] = []
+    page.on("console", (message) => {
+      if (message.type() !== "error") return
+      const text = message.text()
+      if (
+        text.includes("Hydration failed") ||
+        text.includes("There was an error while hydrating") ||
+        text.includes("did not match") ||
+        text.includes("Minified React error #418") ||
+        text.includes("Minified React error #423") ||
+        text.includes("Minified React error `#418`") ||
+        text.includes("Minified React error `#423`")
+      ) {
+        hydrationErrors.push(text)
+      }
+    })
 
     await page.goto("/")
     await expect(page.getByRole("button", { name: "라이트 모드로 전환" })).toBeVisible()
@@ -166,6 +182,7 @@ test.describe("theme color-scheme", () => {
     expect(sampledSchemes).toEqual(new Set(["dark"]))
     expect(samples.every((sample) => sample.datasetScheme === "dark")).toBe(true)
     await expect(page.locator("html")).toHaveAttribute("data-aquila-scheme", "dark")
+    expect(hydrationErrors).toEqual([])
   })
 
   test("헤더 테마 토글은 루트, form control, 메인 feed surface를 함께 전환한다", async ({ page }) => {

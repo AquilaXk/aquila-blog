@@ -271,7 +271,7 @@ test("관리자 허브 모바일 first fold의 글 작성 CTA는 primary action 
   await page.setViewportSize({ width: 393, height: 852 })
   await page.goto("/admin")
 
-  await expect(page.getByRole("heading", { name: "관리자" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: /좋은 아침이에요/ })).toBeVisible()
 
   const ctaSnapshot = await page.evaluate(() => {
     const main = document.querySelector<HTMLElement>("main main") ?? document.querySelector<HTMLElement>("main")
@@ -296,13 +296,13 @@ test("관리자 허브 모바일 first fold의 글 작성 CTA는 primary action 
 
 const capturePostsFirstFoldSnapshot = async (page: Page) =>
   page.evaluate(() => {
-    const heading = Array.from(document.querySelectorAll<HTMLElement>("h2")).find(
-      (element) => element.textContent?.trim() === "글 목록",
-    )
-    const listSection = heading?.closest<HTMLElement>("section")
-    const search = listSection?.querySelector<HTMLElement>("#workspace-post-search")
-    const firstRow = Array.from(listSection?.querySelectorAll<HTMLElement>("tbody tr, article") ?? []).find((element) =>
+    const search = document.querySelector<HTMLElement>("#workspace-post-search")
+    const listSection = search?.closest<HTMLElement>("section") ?? null
+    const firstRow = Array.from(document.querySelectorAll<HTMLElement>("tbody tr, article")).find((element) =>
       element.textContent?.includes("First fold 운영 점검"),
+    )
+    const heading = Array.from((listSection ?? document).querySelectorAll<HTMLElement>("h2")).find(
+      (element) => element.textContent?.trim() === "글 목록",
     )
     const recentHeading = Array.from(document.querySelectorAll<HTMLElement>("h2")).find(
       (element) => element.textContent?.trim() === "최근 작업",

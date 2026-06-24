@@ -70,14 +70,14 @@ const RootLayout = ({
   const isDedicatedEditorRoute = pathname === "/editor/[id]" || pathname === "/editor/new"
   const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/")
   const isFullBleedRoute = isDedicatedEditorRoute || isAdminRoute
-  const isDesignAwareRoute = !isAdminRoute && pathname[1] !== "_" && pathname !== "/sitemap.xml"
+  const isDesignAwareRoute = pathname[1] !== "_" && pathname !== "/sitemap.xml"
   const adminProfile = usePublicAdminProfile(initialAdminProfile, {
     enabled: isDesignAwareRoute || initialAdminProfileShouldRefetch,
     refetchOnMount: isDesignAwareRoute,
     staleTimeMs: isDesignAwareRoute ? 0 : undefined,
   })
   const effectiveScheme = scheme
-  const effectiveBlogDesign = "legacy"
+  const effectiveBlogDesign = adminProfile?.blogDesign || "legacy"
   const headerBlogTitle = (isPublicBlogRoute && adminProfile?.blogTitle?.trim()) || CONFIG.blog.title
   useGtagEffect()
 
@@ -152,7 +152,9 @@ const RootLayout = ({
       <Scripts />
       {/* // TODO: replace react query */}
       {/* {metaConfig.type !== "Paper" && <Header />} */}
-      <Header fullWidth={false} showThemeToggle={effectiveBlogDesign === "legacy"} blogTitle={headerBlogTitle} />
+      {isAdminRoute ? null : (
+        <Header fullWidth={false} showThemeToggle={effectiveBlogDesign === "legacy"} blogTitle={headerBlogTitle} />
+      )}
       <StyledMain $fullBleed={isFullBleedRoute}>{children}</StyledMain>
     </ThemeProvider>
   )

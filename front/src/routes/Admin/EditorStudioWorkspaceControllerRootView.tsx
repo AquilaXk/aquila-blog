@@ -66,6 +66,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
     handleListPageChange,
     handleListPageSizeChange,
     handleListSortChange,
+    handleLogout,
     handleLoadOrCreateTempPost,
     handleModifyComment,
     handlePreviewThumbPointerDown,
@@ -545,6 +546,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
         thumbnailImageFileInputRef={thumbnailImageFileInputRef}
         onThumbnailImageFileChange={handleThumbnailImageFileChange}
         onExit={handleExitDedicatedEditor}
+        onLogout={handleLogout}
         saveStateText={composeStatusText}
         saveStateTone={composeStatusTone}
         primaryActionDisabled={publishActionTriggerDisabled}

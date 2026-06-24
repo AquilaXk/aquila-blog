@@ -257,17 +257,6 @@ export const MarkdownEditor = ({
   return (
     <EditorRoot data-testid="markdown-editor">
       <EditorToolbar aria-label="Markdown 작성 도구">
-        <ModeTabs role="tablist" aria-label="Markdown editor mode">
-          <ModeTab type="button" role="tab" aria-selected={mode === "write"} onClick={() => setMode("write")}>
-            Write
-          </ModeTab>
-          <ModeTab type="button" role="tab" aria-selected={mode === "preview"} onClick={() => setMode("preview")}>
-            Preview
-          </ModeTab>
-          <ModeTab type="button" role="tab" aria-selected={mode === "split"} onClick={() => setMode("split")}>
-            Split
-          </ModeTab>
-        </ModeTabs>
         <ToolbarGroup>
           {toolbarMarkdownSnippets.map((snippet) => (
             <ToolbarButton
@@ -314,6 +303,17 @@ export const MarkdownEditor = ({
             />
           </ImageUploadButton>
         </ToolbarGroup>
+        <ModeTabs role="tablist" aria-label="Markdown editor mode">
+          <ModeTab type="button" role="tab" aria-selected={mode === "write"} onClick={() => setMode("write")}>
+            Write
+          </ModeTab>
+          <ModeTab type="button" role="tab" aria-selected={mode === "preview"} onClick={() => setMode("preview")}>
+            Preview
+          </ModeTab>
+          <ModeTab type="button" role="tab" aria-selected={mode === "split"} onClick={() => setMode("split")}>
+            Split
+          </ModeTab>
+        </ModeTabs>
       </EditorToolbar>
       {uploadError ? <ToolbarError role="alert">{uploadError}</ToolbarError> : null}
       <EditorBody data-mode={mode}>
@@ -376,7 +376,7 @@ const EditorToolbar = styled.div`
   gap: 0.75rem;
   padding: 0.5rem;
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  background: ${({ theme }) => theme.publicDesign.surfaceElevated};
   flex-wrap: wrap;
 `
 
@@ -474,7 +474,7 @@ const ToolbarError = styled.div`
 `
 
 const EditorBody = styled.div`
-  min-height: 640px;
+  min-height: min(720px, calc(100vh - 260px));
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 
@@ -500,7 +500,7 @@ const EditorBody = styled.div`
 
 const WritePane = styled.div`
   min-width: 0;
-  min-height: 640px;
+  min-height: min(720px, calc(100vh - 260px));
   border-right: 1px solid ${({ theme }) => theme.colors.gray6};
 
   @media (max-width: 980px) {
@@ -510,22 +510,22 @@ const WritePane = styled.div`
 `
 
 const WriteEditorFrame = styled.div`
-  min-height: 640px;
-  background: ${({ theme }) => theme.publicDesign.readableSurface};
-  color: ${({ theme }) => theme.colors.gray12};
+  min-height: min(720px, calc(100vh - 260px));
+  background: #0f1728;
+  color: #dbe7ff;
 `
 
 const MarkdownTextarea = styled.textarea`
   width: 100%;
-  min-height: 640px;
-  max-width: var(--article-readable-width, 48rem);
-  padding: 16px;
+  min-height: min(720px, calc(100vh - 260px));
+  max-width: none;
+  padding: 2rem;
   border: 0;
   outline: none;
   resize: vertical;
-  background: ${({ theme }) => theme.publicDesign.readableSurface};
-  color: ${({ theme }) => theme.colors.gray12};
-  caret-color: ${({ theme }) => theme.colors.gray12};
+  background: #0f1728;
+  color: #dbe7ff;
+  caret-color: #dbe7ff;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
   font-size: 14px;
   line-height: 1.55;
@@ -551,8 +551,8 @@ const MarkdownTextarea = styled.textarea`
 
 const PreviewPane = styled.div`
   min-width: 0;
-  height: 640px;
-  min-height: 640px;
+  height: min(720px, calc(100vh - 260px));
+  min-height: min(720px, calc(100vh - 260px));
   display: flex;
   flex-direction: column;
   background: ${({ theme }) => theme.publicDesign.readableSurface};
@@ -563,7 +563,7 @@ const PreviewArticle = styled.article`
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 16px 1rem 2rem;
+  padding: 2rem;
   background: ${({ theme }) => theme.publicDesign.readableSurface};
 
   .aq-markdown {

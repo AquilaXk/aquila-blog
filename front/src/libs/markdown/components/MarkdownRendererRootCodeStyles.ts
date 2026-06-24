@@ -58,9 +58,10 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
     color: #7895c9;
     border-radius: 0;
     width: auto;
-    min-width: 0;
-    height: auto;
-    padding: 0;
+    min-width: 44px;
+    min-height: 32px;
+    padding: 0 8px;
+    margin-right: -8px;
     font: inherit;
     font-weight: 700;
     letter-spacing: 0.02em;

@@ -9,6 +9,7 @@ import {
   useState,
   useTransition,
 } from "react"
+import { apiFetch } from "src/apis/backend/client"
 import useAuthSession from "src/hooks/useAuthSession"
 import {
   compareCategoryValues,
@@ -812,6 +813,14 @@ export const EditorStudioWorkspaceController = ({
     switchToCreateMode({ keepContent: false })
   }, [switchToCreateMode])
 
+  const handleLogout = useCallback(async () => {
+    await apiFetch("/member/api/v1/auth/logout", { method: "DELETE" }).catch(() => undefined)
+    setMe(null)
+    const rawNextPath = `${window.location.pathname}${window.location.search}${window.location.hash}`
+    const nextPath = rawNextPath.startsWith("/") && !rawNextPath.startsWith("//") ? rawNextPath : "/editor/new"
+    window.location.href = `/login?next=${encodeURIComponent(nextPath)}`
+  }, [setMe])
+
   const handleDeleteSelectedPost = useCallback(() => {
     openDeleteConfirm([Number.parseInt(postId, 10)], postTitle)
   }, [openDeleteConfirm, postId, postTitle])
@@ -827,7 +836,7 @@ export const EditorStudioWorkspaceController = ({
         deleteTagFromCatalog, disabled, editorMode, finalizePreviewThumbPointer, globalNotice,
         handleMarkdownEditorChange, handleMarkdownEditorFileUpload, handleMarkdownEditorImageUpload, handleConfirmPublish, handleContinueSelectedPostEditing,
         handleCreateNewPostFromSelectedPanel, handleDeleteComment, handleDeleteSelectedPost, handleExitDedicatedEditor, handleFlushMarkdownReady, handleHitPost,
-        handleLikePost, handleListComments, handleListPageChange, handleListPageSizeChange, handleListSortChange,
+        handleLikePost, handleListComments, handleListPageChange, handleListPageSizeChange, handleListSortChange, handleLogout,
         handleLoadOrCreateTempPost, handleModifyComment, handlePreviewThumbPointerDown, handlePreviewThumbPointerMove, handleProfileImageSelected,
         handleReadComment, handleReadPostCount, handleReadSystemHealth, handleRecommendTags, handleRefreshAdminProfile,
         handleSelectedPostIdChange, handleThumbnailImageFileChange, handleThumbnailPaste, handleThumbnailUrlModalChange, handleTitleChange,

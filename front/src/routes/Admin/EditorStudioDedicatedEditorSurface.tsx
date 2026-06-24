@@ -50,6 +50,7 @@ type EditorStudioDedicatedEditorSurfaceProps = {
   thumbnailImageFileInputRef: Ref<HTMLInputElement>
   onThumbnailImageFileChange: ChangeEventHandler<HTMLInputElement>
   onExit: () => void
+  onLogout: () => void
   saveStateText: string
   saveStateTone: string
   primaryActionDisabled: boolean
@@ -132,6 +133,7 @@ export const EditorStudioDedicatedEditorSurface = ({
   thumbnailImageFileInputRef,
   onThumbnailImageFileChange,
   onExit,
+  onLogout,
   saveStateText,
   saveStateTone,
   primaryActionDisabled,
@@ -194,6 +196,9 @@ export const EditorStudioDedicatedEditorSurface = ({
         <EditorStudioTopBarActions>
           <SecondaryButton type="button" onClick={() => setIsGuideOpen(true)}>
             Markdown 가이드
+          </SecondaryButton>
+          <SecondaryButton type="button" onClick={onLogout}>
+            Logout
           </SecondaryButton>
           <PrimaryButton type="button" disabled={primaryActionDisabled} onClick={onPrimaryAction}>
             {primaryActionLabel}

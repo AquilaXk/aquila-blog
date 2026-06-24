@@ -91,7 +91,7 @@ test.describe("모바일 레이아웃 소스 경계", () => {
       expect(source, sourcePath).not.toContain("theme.blogDesign")
     }
     expect(publicSurfaceSources.map(([, source]) => source).join("\n")).toContain("theme.publicDesign")
-    expect(aboutSource).toContain("theme.colors.gray1")
+    expect(aboutSource).toContain("var(--aq-surface)")
     expect(aboutSource).not.toContain("theme.blogDesign")
     expect(articleSurfaceSource).toContain("theme.publicDesign.readableSurface")
     expect(articleSurfaceSource).toContain("article::before")

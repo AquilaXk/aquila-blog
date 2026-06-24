@@ -10,11 +10,11 @@ export const StyledWrapper = styled.div`
   .page-head {
     display: block;
     padding-bottom: 34px;
-    border-bottom: 2px solid ${({ theme }) => theme.colors.gray12};
+    border-bottom: 2px solid var(--aq-text);
   }
 
   .mono-label {
-    color: ${({ theme }) => theme.colors.gray10};
+    color: var(--aq-muted);
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
     font-size: 0.6875rem;
     line-height: 1;
@@ -26,7 +26,7 @@ export const StyledWrapper = styled.div`
   .page-head h1 {
     margin: 13px 0 0;
     max-width: 920px;
-    color: ${({ theme }) => theme.colors.gray12};
+    color: var(--aq-text);
     font-size: 54px;
     line-height: 1.05;
     letter-spacing: -0.06em;
@@ -40,8 +40,8 @@ export const StyledWrapper = styled.div`
     width: 132px;
     aspect-ratio: 1;
     border-radius: 50%;
-    border: 1px solid ${({ theme }) => theme.publicDesign.border};
-    background: ${({ theme }) => theme.publicDesign.readableSurface};
+    border: 1px solid var(--aq-border);
+    background: var(--aq-surface);
     overflow: hidden;
   }
 
@@ -64,7 +64,7 @@ export const StyledWrapper = styled.div`
   }
 
   .profile-copy strong {
-    color: ${({ theme }) => theme.colors.gray12};
+    color: var(--aq-text);
     font-size: 1.125rem;
     line-height: 1.35;
     font-weight: 820;
@@ -74,7 +74,7 @@ export const StyledWrapper = styled.div`
 
   .profile-copy span {
     margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
+    color: var(--aq-muted);
     font-size: 0.875rem;
     line-height: 1.5;
     font-weight: 700;
@@ -84,7 +84,7 @@ export const StyledWrapper = styled.div`
 
   .profile-copy p {
     margin: 8px 0 0;
-    color: ${({ theme }) => theme.colors.gray11};
+    color: var(--aq-muted);
     font-size: 1rem;
     line-height: 1.75;
     word-break: keep-all;
@@ -105,7 +105,7 @@ export const StyledWrapper = styled.div`
 
   .about-grid h2 {
     margin: 0 0 16px;
-    color: ${({ theme }) => theme.colors.gray12};
+    color: var(--aq-text);
     font-size: 30px;
     line-height: 1.25;
     letter-spacing: -0.04em;
@@ -113,7 +113,7 @@ export const StyledWrapper = styled.div`
   }
 
   .stack-list {
-    border-top: 1px solid ${({ theme }) => theme.colors.gray12};
+    border-top: 1px solid var(--aq-text);
   }
 
   .stack-row {
@@ -121,12 +121,12 @@ export const StyledWrapper = styled.div`
     grid-template-columns: 140px minmax(0, 1fr);
     gap: 20px;
     padding: 14px 0;
-    border-bottom: 1px solid ${({ theme }) => theme.publicDesign.border};
+    border-bottom: 1px solid var(--aq-border);
   }
 
   .stack-row strong {
     min-width: 0;
-    color: ${({ theme }) => theme.colors.gray9};
+    color: var(--aq-subtle);
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
     font-size: 0.6875rem;
     line-height: 1.5;
@@ -138,7 +138,7 @@ export const StyledWrapper = styled.div`
   .stack-row span,
   .stack-row a {
     min-width: 0;
-    color: ${({ theme }) => theme.colors.gray11};
+    color: var(--aq-muted);
     font-size: 0.9375rem;
     line-height: 1.55;
     word-break: keep-all;
@@ -150,7 +150,7 @@ export const StyledWrapper = styled.div`
   }
 
   .stack-row a:hover {
-    color: ${({ theme }) => theme.colors.gray12};
+    color: var(--aq-text);
     text-decoration: underline;
     text-underline-offset: 3px;
   }

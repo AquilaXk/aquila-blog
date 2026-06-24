@@ -111,7 +111,15 @@ export const AdminDashboardWorkspaceView = (props: Record<string, any>) => {
                         <small>{row.summary}</small>
                       </span>
                     </span>
-                    <PrioritySummary data-tone={row.tone}>{row.actionLabel}</PrioritySummary>
+                    {row.href ? (
+                      <Link href={row.href} passHref legacyBehavior>
+                        <PrioritySummary as="a" data-tone={row.tone}>
+                          {row.actionLabel}
+                        </PrioritySummary>
+                      </Link>
+                    ) : (
+                      <PrioritySummary data-tone={row.tone}>{row.actionLabel}</PrioritySummary>
+                    )}
                   </StatusRow>
                 ))}
               </StatusRows>

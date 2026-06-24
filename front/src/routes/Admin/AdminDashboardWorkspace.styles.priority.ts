@@ -210,7 +210,12 @@ export const PrioritySummary = styled.div`
   font-weight: 820;
   line-height: 1.2;
   text-align: center;
+  text-decoration: none;
   white-space: normal;
+
+  &[href] {
+    cursor: pointer;
+  }
 
   &[data-tone="good"] {
     border-color: ${adminTealBorder};

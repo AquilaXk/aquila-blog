@@ -223,6 +223,7 @@ test("관리자 대시보드 1440px 데스크톱은 V4 steady-state guard를 fir
   await expect(page.getByRole("heading", { name: "Steady-state guard" })).toBeVisible()
   await expect(page.getByRole("heading", { name: "Public read latency" })).toBeVisible()
   await expect(page.getByRole("heading", { name: "Live logs" })).toBeVisible()
+  await expect(page.getByRole("link", { name: "도구 열기" })).toHaveAttribute("href", "/admin/tools")
 
   const snapshot = await captureDashboardPrioritySnapshot(page)
 

@@ -262,7 +262,7 @@ const SearchField = styled.div`
   }
 
   @media (max-width: 720px) {
-    border-radius: 999px;
+    border-radius: 2px;
     box-shadow: ${({ theme }) =>
       theme.scheme === "light"
         ? "0 14px 28px rgba(15, 23, 42, 0.12)"
@@ -276,7 +276,7 @@ const SearchInput = styled.input`
   height: 2.58rem;
   padding: 0 0.92rem 0 2.55rem;
   border: 1px solid ${adminBorder};
-  border-radius: 999px;
+  border-radius: 2px;
   background: ${adminSurface};
   color: ${adminTextPrimary};
   font-size: 0.88rem;
@@ -339,7 +339,7 @@ const CurrentViewChip = styled.div`
   gap: 0.48rem;
   min-width: 0;
   padding: 0 0.1rem;
-  border-radius: 999px;
+  border-radius: 2px;
   border: none;
   background: transparent;
   color: ${adminTextMuted};

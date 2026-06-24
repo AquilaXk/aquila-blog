@@ -165,7 +165,7 @@ export const AdminPostsWorkspaceFilterToolbar: React.FC<AdminPostsWorkspaceFilte
 
 const baseButton = ({ theme }: { theme: any }) => `
   min-height: 48px;
-  border-radius: 12px;
+  border-radius: 2px;
   border: 1px solid ${theme.colors.gray5};
   font-size: 0.95rem;
   font-weight: 800;
@@ -249,7 +249,7 @@ const ScopeTabButton = styled.button<{ "data-active"?: boolean }>`
   @media (max-width: 767px) {
     min-height: 38px;
     padding: 0 0.46rem;
-    border-radius: 10px;
+    border-radius: 2px;
     font-size: 0.78rem;
   }
 `
@@ -270,7 +270,7 @@ const SearchField = styled.div`
     width: 100%;
     min-width: 0;
     min-height: 46px;
-    border-radius: 12px;
+    border-radius: 2px;
     border: 1px solid ${({ theme }) => theme.colors.gray5};
     background: ${({ theme }) => theme.colors.gray1};
     color: ${({ theme }) => theme.colors.gray12};
@@ -294,7 +294,7 @@ const SearchField = styled.div`
 
     input {
       min-height: 38px;
-      border-radius: 10px;
+      border-radius: 2px;
       padding: 0 0.7rem;
       font-size: 0.86rem;
     }
@@ -362,7 +362,7 @@ const FieldBox = styled.div`
     width: 100%;
     min-width: 0;
     min-height: 44px;
-    border-radius: 12px;
+    border-radius: 2px;
     border: 1px solid ${({ theme }) => theme.colors.gray5};
     background: ${({ theme }) => theme.colors.gray1};
     color: ${({ theme }) => theme.colors.gray12};
@@ -434,7 +434,7 @@ const SummaryPill = styled.span<{ "data-tone"?: "neutral" }>`
   min-width: 0;
   min-height: 32px;
   padding: 0 0.72rem;
-  border-radius: 999px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme, "data-tone": tone }) => (tone === "neutral" ? theme.colors.gray1 : theme.colors.gray3)};
   color: ${({ theme }) => theme.colors.gray11};

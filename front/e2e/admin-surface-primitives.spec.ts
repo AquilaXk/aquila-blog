@@ -66,8 +66,12 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(shellSource).not.toContain("border-radius: 14px;")
     expect(shellSource).toContain("<TopBar>")
     expect(shellSource).toContain("<SecondaryTopAction>블로그 보기</SecondaryTopAction>")
+    expect(shellSource).toContain('<button type="button" onClick={handleLogout}>')
+    expect(shellSource).toContain('method: "DELETE"')
+    expect(shellSource).toContain('"/api/backend/member/api/v1/auth/logout"')
     expect(shellSource).toContain("<PrimaryTopAction>새 글</PrimaryTopAction>")
     expect(shellSource).toContain('<CompactNav aria-label="관리자 바로가기">')
+    expect(shellSource).toContain("aria-label={item.label}")
     expect(shellSource).toContain("top: 0;")
 
     expect(cloudStyleSource).toContain("background: ${surface};")

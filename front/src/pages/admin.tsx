@@ -93,15 +93,7 @@ async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | 
   }
 }
 
-const buildAdminHubPostListEndpoint = () => {
-  const query = new URLSearchParams({
-    page: "1",
-    pageSize: "50",
-    kw: "",
-    sort: "CREATED_AT",
-  })
-  return `/post/api/v1/adm/posts?${query.toString()}`
-}
+const buildAdminHubPostListEndpoint = () => "/post/api/v1/adm/posts?page=1&pageSize=20&kw=&sort=CREATED_AT"
 
 const readAdminHubOperationalSnapshot = async (req: IncomingMessage): Promise<AdminHubOperationalSnapshot> => {
   const [posts, systemHealth, dashboard] = await Promise.all([
@@ -390,23 +382,6 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({
     {
       label: "프로필 완성도",
       value: `${profileCompletion}%`,
-      tone: profileCompletion >= 80 ? ("good" as const) : ("warn" as const),
-    },
-    {
-      label: "연결 채널",
-      value: linkCount > 0 ? `${linkCount}개` : "없음",
-      tone: linkCount > 0 ? ("good" as const) : ("warn" as const),
-    },
-  ]
-  const recentWorkItems = [
-    {
-      label: "마지막 점검",
-      value: profileUpdatedText,
-      tone: "neutral" as const,
-    },
-    {
-      label: "프로필 상태",
-      value: profileCompletion >= 80 ? "정리 완료" : "보강 필요",
       tone: profileCompletion >= 80 ? ("good" as const) : ("warn" as const),
     },
     {

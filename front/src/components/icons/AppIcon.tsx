@@ -43,6 +43,7 @@ export type IconName =
   | "clock"
   | "package"
   | "lock"
+  | "log-out"
 
 type Props = {
   name: IconName
@@ -263,6 +264,13 @@ const AppIcon: React.FC<Props> = ({ name, className, ...props }) => {
         <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
           <rect x="5.5" y="10" width="13" height="9.2" rx="2" />
           <path d="M8.4 10V7.6a3.6 3.6 0 0 1 7.2 0V10" strokeLinecap="round" />
+        </svg>
+      )
+    case "log-out":
+      return (
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
+          <path d="M10 5H6.8A1.8 1.8 0 0 0 5 6.8v10.4A1.8 1.8 0 0 0 6.8 19H10" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M13 8.2 16.8 12 13 15.8M16.8 12H9.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )
     case "check-circle":

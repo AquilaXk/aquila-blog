@@ -1,5 +1,4 @@
 import Link from "next/link"
-import AppIcon from "src/components/icons/AppIcon"
 import type {
   AdminHubContentItem,
   AdminHubMetricItem,
@@ -22,8 +21,8 @@ import {
   MetricCard,
   MetricGrid,
   Panel,
+  PanelDots,
   PanelHeader,
-  PrimaryActionLink,
   SecondaryActionLink,
   StatusList,
   StatusRow,
@@ -57,13 +56,7 @@ export const AdminHubSurfaceSections = ({
       </HeroCopy>
       <HeroActions>
         <Link href={primaryAction.secondaryHref} passHref legacyBehavior>
-          <SecondaryActionLink>글 전체 보기</SecondaryActionLink>
-        </Link>
-        <Link href={primaryAction.href} passHref legacyBehavior>
-          <PrimaryActionLink>
-            <AppIcon name="edit" aria-hidden="true" />
-            <span>{primaryAction.cta}</span>
-          </PrimaryActionLink>
+          <SecondaryActionLink>글 전체 보기 →</SecondaryActionLink>
         </Link>
       </HeroActions>
     </HeroHeader>
@@ -82,7 +75,7 @@ export const AdminHubSurfaceSections = ({
       <Panel>
         <PanelHeader>
           <h2>최근 콘텐츠</h2>
-          <Link href="/admin/posts">전체 보기</Link>
+          <PanelDots aria-hidden="true">•••</PanelDots>
         </PanelHeader>
         {contentItems.length > 0 ? (
           <ContentList aria-label="최근 콘텐츠">
@@ -110,8 +103,11 @@ export const AdminHubSurfaceSections = ({
           </PanelHeader>
           <StatusList aria-label="서비스 상태">
             {serviceStatusItems.map((item) => (
-              <StatusRow key={`${item.label}-${item.value}`} data-tone={item.tone || "neutral"}>
-                <span>{item.label}</span>
+              <StatusRow key={`${item.label}-${item.value}`} data-kind="service" data-tone={item.tone || "neutral"}>
+                <span>
+                  <i aria-hidden="true" />
+                  <b>{item.label}</b>
+                </span>
                 <strong>{item.value}</strong>
               </StatusRow>
             ))}
@@ -124,7 +120,7 @@ export const AdminHubSurfaceSections = ({
           </PanelHeader>
           <ActivityList aria-label="최근 활동">
             {activityItems.map((item) => (
-              <StatusRow key={`${item.label}-${item.value}`} data-tone={item.tone || "neutral"}>
+              <StatusRow key={`${item.label}-${item.value}`} data-kind="activity" data-tone={item.tone || "neutral"}>
                 <span>{item.label}</span>
                 <strong>{item.value}</strong>
               </StatusRow>

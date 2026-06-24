@@ -18,6 +18,8 @@ test.describe("core smoke public shell", () => {
 
     expect(useSchemeSource).toContain('CONFIG.blog.scheme === "system" ? "light" : CONFIG.blog.scheme')
     expect(useSchemeSource).toContain("const resolveBootstrapScheme = (): SchemeType | null =>")
+    expect(useSchemeSource).toContain('const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect')
+    expect(useSchemeSource).toContain("useIsomorphicLayoutEffect(() =>")
     expect(useSchemeSource).toContain("initialData: fallbackScheme")
     expect(useSchemeSource).toContain("resolveBootstrapScheme() ??")
     expect(useSchemeSource).not.toContain("getCookie")

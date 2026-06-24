@@ -23,7 +23,7 @@ import {
 const hasLiveCredentials = Boolean((adminEmail || adminLegacyLoginId) && adminPassword)
 const hasUiLoginCredentials = Boolean(adminEmail && adminPassword)
 const expectedFrontendCommitSha = process.env.E2E_EXPECTED_FRONT_COMMIT_SHA?.trim() || ""
-const adminLandingHeadingPattern = /^관리자$/
+const adminLandingHeadingPattern = /^관리자 허브$/
 const adminDashboardHeadingPattern = /^운영 상태$/
 const adminCloudHeadingPattern = /^내 파일$/
 const adminProfileHeadingPattern = /^프로필$/

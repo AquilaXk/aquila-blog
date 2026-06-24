@@ -39,6 +39,7 @@ test.describe("admin tools state contract", () => {
   test("운영 도구는 helper copy와 읽기 전용 pill 없이 요약 카드와 실행 버튼만 남긴다", () => {
     const source = readRouteSource("AdminToolsWorkspaceSections.tsx")
     const styleSource = readRouteSource("AdminToolsWorkspace.styles.tokens.ts")
+    const layoutStyleSource = readRouteSource("AdminToolsWorkspace.styles.layout.ts")
 
     expect(source).toContain("<h1>운영 도구</h1>")
     expect(styleSource).toContain("grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));")
@@ -49,6 +50,8 @@ test.describe("admin tools state contract", () => {
     expect(source).not.toContain("운영 변경 없이 현재 상태와 영향 범위를 먼저 다시 확인합니다.")
     expect(source).not.toContain("복구 전에 같이 읽어야 할 화면과 기록으로 바로 이동합니다.")
     expect(source).not.toContain('data-emphasis="primary"')
+    expect(styleSource).not.toContain("border-radius: 999px;")
+    expect(layoutStyleSource).not.toContain("border-radius: 999px;")
   })
 
   test("운영 도구는 최근 진단 결과 panel 렌더링을 Admin route component로 위임한다", () => {

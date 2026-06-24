@@ -197,19 +197,17 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
     top: 0;
     width: var(--aq-code-gutter-width);
     text-align: right;
-    color: ${ (theme.scheme === "dark" ? "#6d768b" : "#90a0b7")};
+    color: #6d768b;
     user-select: none;
   }
 
   .aq-pretty-pre code > [data-highlighted-line] {
-    background: ${
-      theme.scheme === "dark" ? "rgba(96, 165, 250, 0.11)" : "rgba(59, 130, 246, 0.1)"};
+    background: rgba(96, 165, 250, 0.11);
     border-radius: 0;
   }
 
   .aq-pretty-pre code [data-highlighted-chars] {
-    background: ${
-      theme.scheme === "dark" ? "rgba(250, 204, 21, 0.2)" : "rgba(250, 204, 21, 0.25)"};
+    background: rgba(250, 204, 21, 0.2);
     border-radius: 0;
     padding: 0.04em 0.2em;
   }
@@ -269,12 +267,12 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
   pre code .token.prolog,
   pre code .token.doctype,
   pre code .token.cdata {
-    color: ${ (theme.scheme === "dark" ? "#808b99" : "#6a7280")};
+    color: #808b99;
     font-style: italic;
   }
 
   pre code .token.punctuation {
-    color: ${ (theme.scheme === "dark" ? "#a9b7c6" : "#495367")};
+    color: #a9b7c6;
   }
 
   pre code .token.property,
@@ -282,12 +280,12 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
   pre code .token.constant,
   pre code .token.symbol,
   pre code .token.deleted {
-    color: ${ (theme.scheme === "dark" ? "#cc7832" : "#b45309")};
+    color: #cc7832;
   }
 
   pre code .token.boolean,
   pre code .token.number {
-    color: ${ (theme.scheme === "dark" ? "#6897bb" : "#1d4ed8")};
+    color: #6897bb;
   }
 
   pre code .token.selector,
@@ -296,14 +294,14 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
   pre code .token.char,
   pre code .token.builtin,
   pre code .token.inserted {
-    color: ${ (theme.scheme === "dark" ? "#6aab73" : "#047857")};
+    color: #6aab73;
   }
 
   pre code .token.operator,
   pre code .token.entity,
   pre code .token.url,
   pre code .token.variable {
-    color: ${ (theme.scheme === "dark" ? "#9876aa" : "#7c3aed")};
+    color: #9876aa;
   }
 
   pre code .token.atrule,
@@ -311,18 +309,18 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
   pre code .token.keyword,
   pre code .token.annotation,
   pre code .token.decorator {
-    color: ${ (theme.scheme === "dark" ? "#cc7832" : "#1d4ed8")};
+    color: #cc7832;
     font-weight: 600;
   }
 
   pre code .token.function,
   pre code .token.class-name {
-    color: ${ (theme.scheme === "dark" ? "#ffc66d" : "#be185d")};
+    color: #ffc66d;
   }
 
   pre code .token.regex,
   pre code .token.important {
-    color: ${ (theme.scheme === "dark" ? "#bbb529" : "#92400e")};
+    color: #bbb529;
   }
 
   @media (max-width: 768px) {

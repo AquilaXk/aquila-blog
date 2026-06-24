@@ -23,7 +23,6 @@ const clearSchemeBootstrapStyle = (scheme: SchemeType) => {
   const root = document.documentElement
   root.dataset.aquilaScheme = scheme
   root.style.colorScheme = scheme
-  document.body.style.background = scheme === "dark" ? "Canvas" : ""
   root.removeAttribute("data-aquila-scheme-bootstrap")
   root.removeAttribute("data-aquila-scheme-bootstrap-source")
   root.style.removeProperty("background-color")
@@ -32,7 +31,13 @@ const clearSchemeBootstrapStyle = (scheme: SchemeType) => {
 
 const clearSchemeBootstrapAfterHydration = (scheme: SchemeType) => {
   requestAnimationFrame(() => {
-    requestAnimationFrame(() => clearSchemeBootstrapStyle(scheme))
+    requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        if (document.documentElement.dataset.aquilaScheme === scheme) {
+          clearSchemeBootstrapStyle(scheme)
+        }
+      }, 160)
+    })
   })
 }
 

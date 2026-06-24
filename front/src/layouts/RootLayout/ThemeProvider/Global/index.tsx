@@ -72,7 +72,6 @@ export const Global = () => {
         }
 
         * {
-          color-scheme: ${theme.scheme};
           box-sizing: border-box;
         }
 

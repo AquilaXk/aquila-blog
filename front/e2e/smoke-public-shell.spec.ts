@@ -17,7 +17,10 @@ test.describe("core smoke public shell", () => {
     const useSchemeSource = readFileSync(path.resolve(__dirname, "../src/hooks/useScheme.ts"), "utf8")
 
     expect(useSchemeSource).toContain('CONFIG.blog.scheme === "system" ? "light" : CONFIG.blog.scheme')
-    expect(useSchemeSource).toContain("const bootstrapScheme = resolveCachedScheme() ?? defaultScheme")
+    expect(useSchemeSource).toContain("const resolveBootstrapScheme = (): SchemeType | null =>")
+    expect(useSchemeSource).toContain("initialData: () => resolveBootstrapScheme() ?? fallbackScheme")
+    expect(useSchemeSource).toContain("resolveBootstrapScheme() ??")
+    expect(useSchemeSource).not.toContain("getCookie")
     expect(useSchemeSource).toContain("if (bootstrapScheme !== data)")
     expect(useSchemeSource).toContain("queryClient.setQueryData(queryKey.scheme(), bootstrapScheme)")
     expect(useSchemeSource).not.toContain("setScheme(bootstrapScheme)")
@@ -138,7 +141,9 @@ test.describe("core smoke public shell", () => {
   expect(postDetailPageSource).toContain('initialAdminProfileSource === "static-fallback"')
   expect(appSource).toContain("initialAdminProfileShouldRefetch")
   expect(rootLayoutSource).toContain('pathname[1] !== "_"')
-  expect(rootLayoutSource).toContain('const effectiveBlogDesign = "legacy"')
+  expect(rootLayoutSource).toContain(
+    'const effectiveBlogDesign = isAdminRoute ? adminProfile?.blogDesign || "legacy" : "legacy"'
+  )
   expect(rootLayoutSource).toContain('showThemeToggle={effectiveBlogDesign === "legacy"}')
   expect(rootLayoutSource).not.toContain('showThemeToggle={effectiveBlogDesign === "legacy" && !isPublicBlogRoute}')
   expect(rootLayoutSource).toContain("refetchOnMount: isDesignAwareRoute")

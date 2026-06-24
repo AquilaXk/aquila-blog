@@ -7,52 +7,32 @@ const meta: Meta<typeof AdminHubSurface> = {
   tags: ["autodocs"],
   args: {
     displayName: "aquila",
-    displayNameInitial: "AQ",
-    profileSrc: "https://www.aquilaxk.site/avatar.png",
-    profileRole: "Backend Developer",
-    profileBio: "서버가 '펑' 터지기 전에\n멘탈이 먼저 '펑' 터지는 주니어의 기록",
-    summaryItems: [
-      { label: "현재 계정", value: "aquila" },
-      { label: "프로필 완성도", value: "80%", tone: "good" },
-      { label: "홈 소개", value: "준비됨", tone: "good" },
-      { label: "연결 채널", value: "4개", tone: "neutral" },
-      { label: "마지막 업데이트", value: "2026-03-24 14:05" },
-    ],
-    nextActions: [
-      {
-        href: "/admin/profile",
-        title: "프로필 완성도 보강",
-        tone: "warn",
-      },
-      {
-        href: "/editor/new",
-        title: "새 글 작성 시작",
-        tone: "neutral",
-      },
-    ],
+    recentWorkSummary: "최근 업데이트 2026-03-24 14:05 · 프로필 80% · 연결 4개",
     primaryAction: {
       href: "/editor/new",
-      title: "새 글 쓰기",
-      cta: "글 쓰기 시작",
+      cta: "작성",
       secondaryHref: "/admin/posts",
-      secondaryLabel: "기존 글 관리",
     },
-    secondaryLinks: [
-      {
-        href: "/admin/profile",
-        title: "프로필 관리",
-        cta: "프로필 정리",
-      },
-      {
-        href: "/admin/dashboard",
-        title: "운영 대시보드",
-        cta: "대시보드 열기",
-      },
-      {
-        href: "/admin/tools",
-        title: "운영 진단",
-        cta: "진단 열기",
-      },
+    metrics: [
+      { label: "POSTS", value: "12", detail: "active list", tone: "good" },
+      { label: "PUBLISHED", value: "9", detail: "loaded rows", tone: "good" },
+      { label: "DRAFTS", value: "3", detail: "loaded rows", tone: "warn" },
+      { label: "EVENTS", value: "0", detail: "security events", tone: "neutral" },
+    ],
+    contentItems: [
+      { href: "/editor/1", title: "Spring Boot 운영 기록", meta: "2026-03-24 14:05 · #1", status: "PUBLISHED", tone: "good" },
+      { href: "/editor/2", title: "Kotlin 트레이드오프 정리", meta: "2026-03-23 09:10 · #2", status: "DRAFT" },
+    ],
+    serviceStatusItems: [
+      { label: "Public API", value: "서비스 정상", tone: "good" },
+      { label: "Task Queue", value: "0 ready", tone: "good" },
+      { label: "Signup Mail", value: "전송 준비", tone: "good" },
+      { label: "Storage", value: "0 purge", tone: "neutral" },
+    ],
+    activityItems: [
+      { label: "최근 업데이트", value: "2026-03-24 14:05" },
+      { label: "프로필 완성도", value: "80%", tone: "good" },
+      { label: "연결 채널", value: "4개", tone: "neutral" },
     ],
   },
 }

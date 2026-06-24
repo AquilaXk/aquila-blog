@@ -56,7 +56,7 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(rootLayoutSource).toContain(
       'const effectiveBlogDesign = isAdminRoute ? adminProfile?.blogDesign || "legacy" : "legacy"'
     )
-    expect(rootLayoutSource).toContain("{isAdminRoute ? null : (")
+    expect(rootLayoutSource).toContain("{isAdminRoute || isDedicatedEditorRoute ? null : (")
     expect(rootLayoutSource).not.toContain("publicAppearance.scheme")
     expect(shellSource).toContain("${({ theme }) => adminSystemThemeVariables(theme)}")
     expect(shellSource).toContain("grid-template-columns: 13.5rem minmax(0, 1fr);")

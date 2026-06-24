@@ -78,14 +78,12 @@ const installSchemeFrameSampler = async (page: Page) => {
 
     const sampleSchemeFrame = () => {
       const datasetScheme = document.documentElement.dataset.aquilaScheme
-      if (datasetScheme) {
-        const colorTarget = document.body ?? document.documentElement
-        sampleWindow.__aquilaSchemeFrameSamples?.push({
-          bodyBackground: window.getComputedStyle(colorTarget).backgroundColor,
-          datasetScheme,
-          time: Math.round(performance.now() - startedAt),
-        })
-      }
+      const colorTarget = document.body ?? document.documentElement
+      sampleWindow.__aquilaSchemeFrameSamples?.push({
+        bodyBackground: window.getComputedStyle(colorTarget).backgroundColor,
+        datasetScheme,
+        time: Math.round(performance.now() - startedAt),
+      })
 
       if (performance.now() - startedAt < 3000) {
         requestAnimationFrame(sampleSchemeFrame)
@@ -166,6 +164,7 @@ test.describe("theme color-scheme", () => {
 
     expect(samples.length).toBeGreaterThan(0)
     expect(sampledSchemes).toEqual(new Set(["dark"]))
+    expect(samples.every((sample) => sample.datasetScheme === "dark")).toBe(true)
     await expect(page.locator("html")).toHaveAttribute("data-aquila-scheme", "dark")
   })
 

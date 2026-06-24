@@ -22,10 +22,11 @@ const resolveBootstrapScheme = (): SchemeType | null => {
 const clearSchemeBootstrapStyle = (scheme: SchemeType) => {
   const root = document.documentElement
   root.dataset.aquilaScheme = scheme
-  root.style.cssText = `color-scheme:${scheme}`
+  root.style.colorScheme = scheme
   document.body.style.background = scheme === "dark" ? "Canvas" : ""
   root.removeAttribute("data-aquila-scheme-bootstrap")
   root.removeAttribute("data-aquila-scheme-bootstrap-source")
+  root.style.removeProperty("background-color")
   document.querySelector('style[data-aquila-scheme-bootstrap-style="true"]')?.remove()
 }
 

@@ -93,7 +93,7 @@ async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | 
   }
 }
 
-const buildAdminHubPostListEndpoint = () => "/post/api/v1/adm/posts?page=1&pageSize=20&kw=&sort=CREATED_AT"
+const buildAdminHubPostListEndpoint = () => "/post/api/v1/adm/posts?page=1&pageSize=20&kw=&sort=MODIFIED_AT"
 
 const readAdminHubOperationalSnapshot = async (req: IncomingMessage): Promise<AdminHubOperationalSnapshot> => {
   const [posts, systemHealth, dashboard] = await Promise.all([

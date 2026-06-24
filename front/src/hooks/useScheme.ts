@@ -51,7 +51,7 @@ const useScheme = (): [SchemeType, SetScheme] => {
     queryFn: () => fallbackScheme,
     enabled: false,
     staleTime: Infinity,
-    initialData: () => resolveBootstrapScheme() ?? fallbackScheme,
+    initialData: fallbackScheme,
   })
 
   const setScheme = useCallback((scheme: SchemeType) => {

@@ -171,7 +171,7 @@ const MarkdownRendererComponent: FC<MarkdownRendererProps> = ({
           )
         },
         pre({ node, children, className: _className, ...props }) {
-          const { language, rawCode } = extractCodeMetaFromPreChildren(children, node)
+          const { language, title, rawCode } = extractCodeMetaFromPreChildren(children, node)
           const mermaidSource = extractNormalizedMermaidSource(rawCode)
           const shouldRenderMermaid = language === "mermaid" || isMermaidSource(rawCode)
 
@@ -197,6 +197,7 @@ const MarkdownRendererComponent: FC<MarkdownRendererProps> = ({
           return (
             <PrettyCodeBlock
               language={initialCodePresentation.language}
+              title={title}
               rawCode={rawCode}
               preElement={
                 <pre {...props} className={mergedClassName}>

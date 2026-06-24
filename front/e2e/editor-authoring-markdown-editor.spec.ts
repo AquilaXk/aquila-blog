@@ -323,6 +323,15 @@ test.describe("Markdown editor replacement", () => {
     await expect(publishButton).toBeVisible()
     await expect(page.getByRole("heading", { name: "Document outline" })).toBeVisible()
     await expect(page.getByRole("heading", { name: "Publish inspector" })).toBeVisible()
+    await expect(page.getByLabel("Summary")).toHaveAttribute("maxLength", "150")
+
+    await page.getByLabel("Summary").fill("x".repeat(200))
+    await expect(page.getByLabel("Summary")).toHaveValue("x".repeat(150))
+
+    await page.getByPlaceholder("제목을 입력하세요").fill("")
+    await page.getByLabel("Markdown 본문").fill("")
+    await page.getByLabel("Summary").fill("")
+    await expect(page.locator('aside[aria-label="발행 설정"] b[data-tone="warn"]')).toHaveCount(3)
 
     const editorBox = await editor.boundingBox()
     const exitBox = await exitButton.boundingBox()

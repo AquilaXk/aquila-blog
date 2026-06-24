@@ -17,7 +17,10 @@ test.describe("core smoke public shell", () => {
     const useSchemeSource = readFileSync(path.resolve(__dirname, "../src/hooks/useScheme.ts"), "utf8")
 
     expect(useSchemeSource).toContain('CONFIG.blog.scheme === "system" ? "light" : CONFIG.blog.scheme')
-    expect(useSchemeSource).toContain("const bootstrapScheme = resolveCachedScheme() ?? defaultScheme")
+    expect(useSchemeSource).toContain("const resolveBootstrapScheme = (): SchemeType | null =>")
+    expect(useSchemeSource).toContain("initialData: () => resolveBootstrapScheme() ?? fallbackScheme")
+    expect(useSchemeSource).toContain("resolveBootstrapScheme() ??")
+    expect(useSchemeSource).not.toContain("getCookie")
     expect(useSchemeSource).toContain("if (bootstrapScheme !== data)")
     expect(useSchemeSource).toContain("queryClient.setQueryData(queryKey.scheme(), bootstrapScheme)")
     expect(useSchemeSource).not.toContain("setScheme(bootstrapScheme)")

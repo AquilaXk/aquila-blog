@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { getCookie, setCookie } from "cookies-next"
+import { setCookie } from "cookies-next"
 import { useCallback, useEffect } from "react"
 import { CONFIG } from "site.config"
 import { queryKey } from "src/constants/queryKey"
@@ -14,20 +14,18 @@ const resolveSystemScheme = (): SchemeType => {
   return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light"
 }
 
-const resolveCachedScheme = (): SchemeType | null => {
-  const cachedScheme = getCookie("scheme")
-  return isScheme(cachedScheme) ? cachedScheme : null
+const resolveBootstrapScheme = (): SchemeType | null => {
+  const scheme = globalThis.document?.documentElement.dataset.aquilaScheme
+  return isScheme(scheme) ? scheme : null
 }
 
-const clearSchemeBootstrapStyle = (scheme?: SchemeType) => {
+const clearSchemeBootstrapStyle = (scheme: SchemeType) => {
   const root = document.documentElement
-  if (scheme) {
-    root.dataset.aquilaScheme = scheme
-  }
+  root.dataset.aquilaScheme = scheme
+  root.style.cssText = `color-scheme:${scheme}`
+  document.body.style.background = scheme === "dark" ? "Canvas" : ""
   root.removeAttribute("data-aquila-scheme-bootstrap")
   root.removeAttribute("data-aquila-scheme-bootstrap-source")
-  root.style.removeProperty("color-scheme")
-  root.style.removeProperty("background-color")
   document.querySelector('style[data-aquila-scheme-bootstrap-style="true"]')?.remove()
 }
 
@@ -47,8 +45,7 @@ const useScheme = (): [SchemeType, SetScheme] => {
     queryFn: () => fallbackScheme,
     enabled: false,
     staleTime: Infinity,
-    // Keep the first client render equal to the server render; _document bootstrap owns pre-hydration colors.
-    initialData: fallbackScheme,
+    initialData: () => resolveBootstrapScheme() ?? fallbackScheme,
   })
 
   const setScheme = useCallback((scheme: SchemeType) => {
@@ -58,16 +55,15 @@ const useScheme = (): [SchemeType, SetScheme] => {
   }, [queryClient])
 
   useEffect(() => {
-    if (typeof window === "undefined") return
-
-    const defaultScheme = followsSystemTheme ? resolveSystemScheme() : data
-    const bootstrapScheme = resolveCachedScheme() ?? defaultScheme
+    const bootstrapScheme =
+      resolveBootstrapScheme() ??
+      (followsSystemTheme ? resolveSystemScheme() : fallbackScheme)
     if (bootstrapScheme !== data) {
       queryClient.setQueryData(queryKey.scheme(), bootstrapScheme)
       return
     }
     clearSchemeBootstrapAfterHydration(data)
-  }, [data, followsSystemTheme, queryClient])
+  }, [data, fallbackScheme, followsSystemTheme, queryClient])
 
   return [data, setScheme]
 }

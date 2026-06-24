@@ -20,9 +20,7 @@ export const Main = styled.main`
   display: grid;
   gap: 1.05rem;
   align-items: start;
-  width: 100%;
   min-width: 0;
-  margin: 0;
   padding: 1.25rem 1.45rem 2.4rem;
   background: ${adminAppBackground};
 
@@ -66,13 +64,11 @@ export const HeroKicker = styled.span`
 
 export const HeroHeading = styled.h1`
   margin: 0;
-  min-width: 0;
   color: ${adminTextPrimary};
   font-size: 1.78rem;
   line-height: 1.12;
   font-weight: 840;
-  letter-spacing: 0;
-  word-break: keep-all;
+  overflow-wrap: anywhere;
 
   @media (max-width: 768px) {
     font-size: 1.38rem;
@@ -233,7 +229,6 @@ export const PanelHeader = styled.div`
 
 export const ContentList = styled.div`
   display: grid;
-  gap: 0;
 `
 
 export const ContentRow = styled.a`
@@ -313,12 +308,10 @@ export const EmptyPanel = styled.div`
 
 export const StatusList = styled.div`
   display: grid;
-  gap: 0;
 `
 
 export const ActivityList = styled.div`
   display: grid;
-  gap: 0;
 `
 
 export const StatusRow = styled.div`
@@ -353,6 +346,6 @@ export const StatusRow = styled.div`
   }
 
   &[data-tone="warn"] strong {
-    color: ${adminTextPrimary};
+    color: ${adminAccentText};
   }
 `

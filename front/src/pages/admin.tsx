@@ -101,12 +101,11 @@ const readAdminHubOperationalSnapshot = async (req: IncomingMessage): Promise<Ad
     readJsonIfOk<AdminHubSystemHealthPayload>(req, "/system/api/v1/adm/health"),
     readJsonIfOk<AdminHubDashboardSnapshotPayload>(req, "/system/api/v1/adm/dashboard-snapshot"),
   ])
-
   return {
     posts,
     systemHealth,
     dashboard,
-    fetchedAt: new Date().toISOString(),
+    fetchedAt: posts || systemHealth || dashboard ? new Date().toISOString() : null,
   }
 }
 

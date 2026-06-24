@@ -174,7 +174,7 @@ export const RecentActionList = styled.ul`
     align-items: center;
     min-height: 24px;
     padding: 0 0.56rem;
-    border-radius: 999px;
+    border-radius: 2px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     background: ${({ theme }) => theme.colors.gray2};
     color: ${({ theme }) => theme.colors.gray11};

@@ -34,6 +34,8 @@ type AdminHubPostListItem = {
   listed: boolean
   tempDraft?: boolean
   modifiedAt: string
+  commentsCount?: number
+  hitCount?: number
 }
 
 type AdminHubPageDto<T> = {
@@ -45,6 +47,10 @@ type AdminHubPageDto<T> = {
 
 type AdminHubSystemHealthPayload = {
   status?: string
+  checks?: {
+    db?: string
+    redis?: string
+  }
 }
 
 type AdminHubDashboardSnapshotPayload = {
@@ -129,31 +135,20 @@ const getSystemHealthTone = (value: string | null | undefined) => {
   return normalized === "UP" ? ("good" as const) : ("warn" as const)
 }
 
-const getMailStatusLabel = (value: string | null | undefined) => {
+const getDependencyStatusLabel = (value: string | null | undefined) => {
   const normalized = value?.trim()
-  if (normalized === "READY") return "전송 준비"
-  if (normalized === "TEST_MODE") return "테스트 모드"
-  if (normalized === "MISCONFIGURED") return "설정 누락"
-  if (normalized === "QUEUE_LOCKED") return "큐 잠금"
-  if (normalized === "CONNECTION_FAILED") return "연결 실패"
-  if (normalized === "UNAVAILABLE") return "비활성"
+  if (normalized === "UP") return "UP"
+  if (normalized === "DOWN") return "DOWN"
+  if (normalized === "DISABLED") return "DISABLED"
   return normalized || DASHBOARD_DATA_MISSING_LABEL
 }
 
-const getMailStatusTone = (value: string | null | undefined) => {
+const getDependencyStatusTone = (value: string | null | undefined) => {
   const normalized = value?.trim()
-  return normalized === "READY" || normalized === "TEST_MODE"
-    ? ("good" as const)
-    : normalized
-      ? ("warn" as const)
-      : ("neutral" as const)
-}
-
-const getTaskQueueTone = (dashboard: AdminHubDashboardSnapshotPayload | null | undefined) => {
-  if (!dashboard) return "neutral" as const
-  if (dashboard.taskQueue.failedCount > 0 || dashboard.taskQueue.staleProcessingCount > 0) return "warn" as const
-  if (dashboard.taskQueue.readyPendingCount === 0 && dashboard.taskQueue.processingCount === 0) return "good" as const
-  return "neutral" as const
+  if (!normalized) return "neutral" as const
+  if (normalized === "UP") return "good" as const
+  if (normalized === "DISABLED") return "neutral" as const
+  return "warn" as const
 }
 
 export const getServerSideProps: GetServerSideProps<AdminHubPageProps> = async ({ req, res }) => {
@@ -307,9 +302,10 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({
   const linkCount = (profileSnapshot.serviceLinks?.length || 0) + (profileSnapshot.contactLinks?.length || 0)
   const recentWorkSummary = `최근 업데이트 ${profileUpdatedText} · 프로필 ${profileCompletion}% · 연결 ${linkCount}개`
   const postRows = initialOperationalSnapshot.posts?.content || []
-  const totalPosts = initialOperationalSnapshot.posts?.pageable?.totalElements ?? postRows.length
   const publishedRows = postRows.filter((post) => post.published && post.tempDraft !== true)
   const draftRows = postRows.filter((post) => !post.published || post.tempDraft === true)
+  const loadedViewsCount = postRows.reduce((sum, post) => sum + (post.hitCount ?? 0), 0)
+  const loadedCommentsCount = postRows.reduce((sum, post) => sum + (post.commentsCount ?? 0), 0)
   const recentContentItems = postRows
     .slice()
     .sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime())
@@ -321,16 +317,8 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({
       status: post.tempDraft ? "DRAFT" : post.published ? "PUBLISHED" : "PRIVATE",
       tone: post.published && post.tempDraft !== true ? ("good" as const) : ("neutral" as const),
     }))
-  const dashboard = initialOperationalSnapshot.dashboard
   const serviceHealthTone = getSystemHealthTone(initialOperationalSnapshot.systemHealth?.status)
-  const taskQueueTone = getTaskQueueTone(dashboard)
   const metrics = [
-    {
-      label: "POSTS",
-      value: String(totalPosts),
-      detail: "active list",
-      tone: totalPosts > 0 ? ("good" as const) : ("neutral" as const),
-    },
     {
       label: "PUBLISHED",
       value: String(publishedRows.length),
@@ -344,12 +332,19 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({
       tone: draftRows.length > 0 ? ("warn" as const) : ("neutral" as const),
     },
     {
-      label: "EVENTS",
-      value: dashboard ? String(dashboard.authSecurity.recentEventCount) : "-",
-      detail: dashboard ? "security events" : DASHBOARD_DATA_MISSING_LABEL,
-      tone: dashboard && dashboard.authSecurity.blockedEventCount > 0 ? ("warn" as const) : ("neutral" as const),
+      label: "VIEWS",
+      value: String(loadedViewsCount),
+      detail: "loaded rows",
+      tone: loadedViewsCount > 0 ? ("good" as const) : ("neutral" as const),
+    },
+    {
+      label: "COMMENTS",
+      value: String(loadedCommentsCount),
+      detail: "loaded rows",
+      tone: loadedCommentsCount > 0 ? ("good" as const) : ("neutral" as const),
     },
   ]
+  const healthChecks = initialOperationalSnapshot.systemHealth?.checks
   const serviceStatusItems = [
     {
       label: "Public API",
@@ -357,19 +352,14 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({
       tone: serviceHealthTone,
     },
     {
-      label: "Task Queue",
-      value: dashboard ? `${dashboard.taskQueue.readyPendingCount} ready` : DASHBOARD_DATA_MISSING_LABEL,
-      tone: taskQueueTone,
+      label: "PostgreSQL",
+      value: getDependencyStatusLabel(healthChecks?.db),
+      tone: getDependencyStatusTone(healthChecks?.db),
     },
     {
-      label: "Signup Mail",
-      value: getMailStatusLabel(dashboard?.signupMail.status),
-      tone: getMailStatusTone(dashboard?.signupMail.status),
-    },
-    {
-      label: "Storage",
-      value: dashboard ? `${dashboard.storageCleanup.eligibleForPurgeCount} purge` : DASHBOARD_DATA_MISSING_LABEL,
-      tone: dashboard?.storageCleanup.blockedBySafetyThreshold ? ("warn" as const) : ("neutral" as const),
+      label: "Redis",
+      value: getDependencyStatusLabel(healthChecks?.redis),
+      tone: getDependencyStatusTone(healthChecks?.redis),
     },
   ]
   const activityItems = [

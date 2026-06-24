@@ -20,9 +20,9 @@ const getContrastRatio = (foreground: string, background: string) => {
 }
 
 const getStyledComponentBlock = (source: string, componentName: string) => {
-  const marker = `export const ${componentName} =`
+  const marker = `const ${componentName} =`
   const start = source.indexOf(marker)
-  expect(start, `${componentName} export`).toBeGreaterThanOrEqual(0)
+  expect(start, `${componentName} const`).toBeGreaterThanOrEqual(0)
 
   const templateStart = source.indexOf("`", start)
   expect(templateStart, `${componentName} template start`).toBeGreaterThanOrEqual(0)
@@ -207,6 +207,14 @@ test.describe("관리자 표면 공통 계약", () => {
       path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceList.styles.ts"),
       "utf8",
     )
+    const postsFilterSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceFilterToolbar.tsx"),
+      "utf8",
+    )
+    const postsSectionSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePageSections.tsx"),
+      "utf8",
+    )
     const toolsPageSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspacePage.tsx"), "utf8")
     const toolsExecutionSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminToolsExecutionSection.tsx"),
@@ -225,6 +233,11 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(postsListStyleSource).toContain("export const RowPrimaryButton = styled(AdminTextActionButton)`")
     expect(postsListStyleSource).toContain("export const RowActions = styled(AdminInlineActionRow)``")
     expect(postsListSource).toContain("VisibilityBadge,")
+    expectStyledComponentRadius(postsFilterSource, "SummaryPill", "2px")
+    expectStyledComponentRadius(postsFilterSource, "SearchField", "2px")
+    expect(postsSectionSource).toContain(
+      ".stateLabel {\n    display: inline-flex;\n    align-items: center;\n    min-height: 24px;\n    padding: 0 0.56rem;\n    border-radius: 2px;",
+    )
 
     expect(toolsTokenStyleSource).toContain("export const StatusBadge = styled(AdminStatusPill)`")
     expect(toolsTokenStyleSource).toContain("export const FreshnessBadge = styled(AdminStatusPill)`")
@@ -437,6 +450,9 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(source).not.toContain("운영 도구 바로가기")
     expect(source).not.toContain("ProfileImage")
     expect(source).not.toContain('<AppIcon name="camera" />')
+    expectStyledComponentRadius(source, "SearchField", "2px")
+    expectStyledComponentRadius(source, "SearchInput", "2px")
+    expectStyledComponentRadius(source, "CurrentViewChip", "2px")
   })
 
   test("관리자 사이드바는 V4 reference rail 순서와 하단 프로필을 유지한다", () => {

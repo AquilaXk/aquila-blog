@@ -102,13 +102,20 @@ const installSchemeFrameSampler = async (page: Page) => {
       const sunIcon = document.querySelector(".themeIconLight")
       const moonIcon = document.querySelector(".themeIconDark")
       const feedBeforeStyle = feed ? window.getComputedStyle(feed, "::before") : null
+      const feedBeforeBackground = !feedBeforeStyle
+        ? null
+        : feedBeforeStyle.backgroundColor !== "rgba(0, 0, 0, 0)"
+          ? feedBeforeStyle.backgroundColor
+          : feedBeforeStyle.backgroundImage && feedBeforeStyle.backgroundImage !== "none"
+            ? feedBeforeStyle.backgroundImage
+            : feedBeforeStyle.backgroundColor
       const headerStyle = header ? window.getComputedStyle(header) : null
       const cardStyle = card ? window.getComputedStyle(card) : null
       sampleWindow.__aquilaSchemeFrameSamples?.push({
         bootstrapStyleCount: document.querySelectorAll('style[data-aquila-scheme-bootstrap-style="true"]').length,
         bodyBackground: window.getComputedStyle(colorTarget).backgroundColor,
         datasetScheme,
-        feedBeforeBackground: feedBeforeStyle?.backgroundColor ?? feedBeforeStyle?.backgroundImage ?? null,
+        feedBeforeBackground,
         firstCardBackground: cardStyle?.backgroundColor ?? null,
         firstCardBorder: cardStyle?.borderBottomColor ?? null,
         headerBackground: headerStyle?.backgroundColor ?? null,
@@ -175,7 +182,8 @@ const expectStableUniqueValue = <T,>(values: T[], expected: T) => {
 
 const assertHomeThemeToggleUsesLightFeedSurface = async (page: Page) => {
   await page.goto("/")
-  await expect(page.getByRole("button", { name: "라이트 모드로 전환" })).toBeVisible()
+  const themeToggle = page.getByRole("button", { name: "테마 전환" })
+  await expect(themeToggle).toBeVisible()
 
   await expect(readControlScheme(page)).resolves.toEqual({
     body: "dark",
@@ -183,8 +191,8 @@ const assertHomeThemeToggleUsesLightFeedSurface = async (page: Page) => {
     input: "dark",
   })
 
-  await page.getByRole("button", { name: "라이트 모드로 전환" }).click()
-  await expect(page.getByRole("button", { name: "다크 모드로 전환" })).toBeVisible()
+  await themeToggle.click()
+  await expect(themeToggle).toBeVisible()
 
   const nextScheme = await page.evaluate(() => {
     const input = document.createElement("input")
@@ -246,8 +254,7 @@ test.describe("theme color-scheme", () => {
       })
 
       await page.goto("/")
-      const toggleName = firstPaintCase.expectedScheme === "dark" ? "라이트 모드로 전환" : "다크 모드로 전환"
-      await expect(page.getByRole("button", { name: toggleName })).toBeVisible()
+      await expect(page.getByRole("button", { name: "테마 전환" })).toBeVisible()
       await expect(page.locator('[data-ui="feed-post-card"] article').first()).toBeVisible()
 
       const samples = await readSchemeFrameSamples(page)

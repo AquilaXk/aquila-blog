@@ -15,8 +15,8 @@ const ThemeToggle: React.FC<Props> = () => {
     <StyledWrapper
       type="button"
       onClick={handleClick}
-      aria-label={scheme === "light" ? "다크 모드로 전환" : "라이트 모드로 전환"}
-      title={scheme === "light" ? "다크 모드" : "라이트 모드"}
+      aria-label="테마 전환"
+      title="테마 전환"
     >
       <span className="themeIcon themeIconLight">
         <SunIcon />

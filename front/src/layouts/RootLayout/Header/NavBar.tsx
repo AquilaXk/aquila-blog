@@ -5,7 +5,7 @@ import { useRouter } from "next/router"
 import { Suspense, lazy, useState } from "react"
 import ThemeToggle from "./ThemeToggle"
 import useAuthSession from "src/hooks/useAuthSession"
-import { normalizeNextPath } from "src/libs/router"
+import { normalizeNextPath, replaceRoute, toLoginPath } from "src/libs/router"
 
 type Props = {
   showThemeToggle?: boolean
@@ -37,12 +37,22 @@ const SearchIcon = () => (
 
 const NavBar = ({ showThemeToggle = true }: Props) => {
   const router = useRouter()
-  const { me, authStatus } = useAuthSession()
+  const { me, authStatus, logout } = useAuthSession()
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const isAuthenticated = authStatus === "authenticated"
   const isAdmin = authStatus === "authenticated" && Boolean(me?.isAdmin)
   const showLogin = authStatus !== "authenticated"
   const nextPath = normalizeNextPath(router.asPath)
+
+  const handleLogout = async () => {
+    await logout()
+
+    const isProtectedAuthoringRoute = router.pathname.startsWith("/admin") || router.pathname.startsWith("/editor")
+    if (!isProtectedAuthoringRoute) return
+
+    const fallbackPath = router.pathname.startsWith("/editor") ? "/editor/new" : "/admin"
+    await replaceRoute(router, toLoginPath(nextPath, fallbackPath), { preferHardNavigation: true })
+  }
 
   return (
     <StyledWrapper>
@@ -108,6 +118,11 @@ const NavBar = ({ showThemeToggle = true }: Props) => {
           </Link>
         ) : null}
 
+        {isAuthenticated ? (
+          <button type="button" data-ui="nav-control" className="logoutBtn" onClick={() => void handleLogout()}>
+            Logout
+          </button>
+        ) : null}
       </div>
 
       <AuthEntryModal
@@ -226,7 +241,8 @@ const StyledWrapper = styled.div`
   }
 
   .loginLink,
-  .adminLink {
+  .adminLink,
+  .logoutBtn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -249,6 +265,13 @@ const StyledWrapper = styled.div`
     border: 1px solid ${({ theme }) => theme.colors.gray12};
     background: ${({ theme }) => theme.colors.gray12};
     color: ${({ theme }) => theme.colors.gray1};
+  }
+
+  .logoutBtn {
+    border: 1px solid ${({ theme }) => theme.publicDesign.border};
+    background: ${({ theme }) => theme.publicDesign.readableSurface};
+    color: ${({ theme }) => theme.colors.gray12};
+    cursor: pointer;
   }
 
   @media (max-width: 860px) {

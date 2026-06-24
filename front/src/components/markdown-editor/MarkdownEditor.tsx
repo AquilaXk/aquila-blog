@@ -58,7 +58,7 @@ const tableSnippet = [
   "",
 ].join("\n")
 
-const codeBlockSnippet = ["", "```kotlin", "", "```", ""].join("\n")
+const codeBlockSnippet = ["", "```", "", "```", ""].join("\n")
 const mermaidSnippet = ["", "```mermaid", "flowchart LR", "    A[Admin write] --> B[DB commit]", "```", ""].join("\n")
 const calloutSnippet = ["", "> [!TIP]", "> **설계 원칙**", "> 내용을 입력하세요.", ""].join("\n")
 const toggleSnippet = ["", ":::toggle 자세히 보기", "내용을 입력하세요.", ":::", ""].join("\n")
@@ -589,40 +589,6 @@ const PreviewArticle = styled.article`
 
   .aq-markdown > :first-child {
     margin-top: 0;
-  }
-
-  .aq-mermaid {
-    padding: 0;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.publicDesign.readableSurface};
-  }
-
-  .aq-mermaid::before {
-    content: "Mermaid · diagram";
-    height: 42px;
-    padding: 0 14px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-    color: ${({ theme }) => theme.colors.gray9};
-    background: ${({ theme }) => theme.publicDesign.surfaceElevated};
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
-    font-size: 10px;
-    font-weight: 700;
-    line-height: 1;
-    text-transform: uppercase;
-  }
-
-  .aq-mermaid[data-mermaid-rendered="pending"] {
-    min-height: 12rem;
-  }
-
-  .aq-mermaid-stage {
-    padding: 28px;
-    background-image: linear-gradient(${({ theme }) => theme.publicDesign.surfaceElevated} 1px, transparent 1px),
-      linear-gradient(90deg, ${({ theme }) => theme.publicDesign.surfaceElevated} 1px, transparent 1px);
-    background-size: 28px 28px;
   }
 
   @media (max-width: 980px) {

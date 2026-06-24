@@ -20,12 +20,29 @@ export const markdownRendererRootMermaidStyles = (theme: Theme) => css`
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     white-space: normal;
-    padding: 0.2rem 0;
-    border: 0;
+    padding: 0;
+    border: 1px solid ${theme.colors.gray6};
     border-radius: 0;
     background: transparent;
     box-shadow: none;
     scrollbar-width: thin;
+  }
+
+  .aq-mermaid::before {
+    content: "Mermaid · diagram";
+    height: 42px;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid ${theme.colors.gray6};
+    color: ${theme.colors.gray9};
+    background: ${theme.publicDesign.surfaceElevated};
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    text-transform: uppercase;
   }
 
   .aq-mermaid[data-mermaid-wide="true"] {
@@ -37,7 +54,7 @@ export const markdownRendererRootMermaidStyles = (theme: Theme) => css`
   }
 
   .aq-mermaid[data-mermaid-rendered="pending"] {
-    min-height: 7.5rem;
+    min-height: 12rem;
   }
 
   .aq-mermaid[data-mermaid-rendered="pending"] > code {
@@ -53,6 +70,10 @@ export const markdownRendererRootMermaidStyles = (theme: Theme) => css`
     align-items: flex-start;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    padding: 28px;
+    background-image: linear-gradient(${theme.publicDesign.surfaceElevated} 1px, transparent 1px),
+      linear-gradient(90deg, ${theme.publicDesign.surfaceElevated} 1px, transparent 1px);
+    background-size: 28px 28px;
   }
 
   .aq-mermaid[data-mermaid-wide="true"] .aq-mermaid-stage {

@@ -139,6 +139,18 @@ const AdminShell = ({ currentSection, member, profileSnapshot = null, children }
     }
   }, [member?.isAdmin])
 
+  const handleLogout = () => {
+    void window
+      .fetch("/api/backend/member/api/v1/auth/logout", {
+        method: "DELETE",
+        credentials: "include",
+      })
+      .catch(() => undefined)
+    const rawNextPath = `${window.location.pathname}${window.location.search}${window.location.hash}`
+    const nextPath = rawNextPath.startsWith("/") && !rawNextPath.startsWith("//") ? rawNextPath : "/admin"
+    window.location.href = `/login?next=${encodeURIComponent(nextPath)}`
+  }
+
   return (
     <ShellFrame>
       <Sidebar>
@@ -148,19 +160,18 @@ const AdminShell = ({ currentSection, member, profileSnapshot = null, children }
           </BrandMark>
           <BrandCopy>
             <strong>{brandTitle}</strong>
-            <span>Production UI</span>
           </BrandCopy>
         </BrandBlock>
 
         <SidebarNavSection>
-          <SidebarNav aria-label="관리자 내비게이션">
+          <SidebarNav>
             {NAV_ITEMS.map((item) => (
               <Link key={item.id} href={item.href} passHref legacyBehavior>
-                <NavLink data-active={item.id === currentSection ? "true" : "false"} title={item.label}>
-                  <span className="navIcon">
+                <NavLink data-active={item.id === currentSection ? "true" : "false"}>
+                  <span>
                     <AppIcon name={item.icon} />
                   </span>
-                  <strong className="navLabel">{item.label}</strong>
+                  <strong>{item.label}</strong>
                 </NavLink>
               </Link>
             ))}
@@ -187,7 +198,7 @@ const AdminShell = ({ currentSection, member, profileSnapshot = null, children }
           <CompactNav aria-label="관리자 바로가기">
             {NAV_ITEMS.map((item) => (
               <Link key={`compact-${item.id}`} href={item.href} passHref legacyBehavior>
-                <CompactNavLink data-active={item.id === currentSection ? "true" : "false"} title={item.label} aria-label={item.label}>
+                <CompactNavLink data-active={item.id === currentSection ? "true" : "false"} aria-label={item.label}>
                   <AppIcon name={item.icon} />
                 </CompactNavLink>
               </Link>
@@ -201,6 +212,9 @@ const AdminShell = ({ currentSection, member, profileSnapshot = null, children }
             <Link href="/" passHref legacyBehavior>
               <SecondaryTopAction>블로그 보기</SecondaryTopAction>
             </Link>
+            <button type="button" onClick={handleLogout}>
+              Logout
+            </button>
             <Link href="/editor/new" passHref legacyBehavior>
               <PrimaryTopAction>새 글</PrimaryTopAction>
             </Link>
@@ -258,10 +272,6 @@ const BrandBlock = styled.div`
   align-items: center;
   gap: 0.65rem;
   padding: 0 0.15rem;
-
-  @media (max-width: 1100px) {
-    flex-shrink: 0;
-  }
 `
 
 const BrandMark = styled.div`
@@ -294,17 +304,6 @@ const BrandCopy = styled.div`
     letter-spacing: 0;
   }
 
-  span {
-    color: ${adminTextMuted};
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  @media (max-width: 1100px) and (min-width: 768px) {
-    display: none;
-  }
 `
 
 const SidebarNavSection = styled.section`
@@ -317,19 +316,6 @@ const SidebarNav = styled.nav`
   display: grid;
   align-content: start;
   gap: 0.15rem;
-
-  @media (max-width: 1100px) {
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(3.25rem, max-content);
-    overflow-x: auto;
-    padding-bottom: 0.1rem;
-    scrollbar-width: none;
-    align-items: center;
-
-    &::-webkit-scrollbar {
-      display: none;
-    }
-  }
 `
 
 const NavLink = styled.a`
@@ -346,7 +332,7 @@ const NavLink = styled.a`
   text-decoration: none;
   transition: border-color 140ms ease, background 140ms ease;
 
-  .navIcon {
+  > span {
     width: 1.55rem;
     height: 1.55rem;
     border-radius: 0;
@@ -357,7 +343,7 @@ const NavLink = styled.a`
     background: transparent;
   }
 
-  .navLabel {
+  > strong {
     color: ${adminTextPrimary};
     font-size: 0.86rem;
     font-weight: 760;
@@ -370,7 +356,7 @@ const NavLink = styled.a`
     background: ${adminSurfaceAccent};
   }
 
-  &[data-active="true"] .navIcon {
+  &[data-active="true"] > span {
     background: transparent;
     color: ${adminTeal};
   }
@@ -378,16 +364,6 @@ const NavLink = styled.a`
   &:hover {
     background: ${adminSurfaceAccent};
     border-left-color: ${adminTealBorder};
-  }
-
-  @media (max-width: 1100px) {
-    justify-content: center;
-    padding: 0.72rem;
-    min-width: 3.25rem;
-
-    .navLabel {
-      display: none;
-    }
   }
 `
 
@@ -542,6 +518,21 @@ const TopBarActions = styled.div`
   align-items: center;
   gap: 0.55rem;
   flex: 0 0 auto;
+
+  button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.2rem;
+    padding: 0 0.85rem;
+    border: 1px solid ${adminBorder};
+    border-radius: 2px;
+    background: ${adminSurfaceRaised};
+    color: ${adminTextPrimary};
+    font-size: 0.82rem;
+    font-weight: 780;
+    cursor: pointer;
+  }
 `
 
 const SecondaryTopAction = styled.a`
@@ -557,6 +548,7 @@ const SecondaryTopAction = styled.a`
   text-decoration: none;
   font-size: 0.82rem;
   font-weight: 780;
+  cursor: pointer;
 `
 
 const PrimaryTopAction = styled.a`

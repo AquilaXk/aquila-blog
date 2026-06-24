@@ -31,18 +31,6 @@ const clearSchemeBootstrapStyle = (scheme: SchemeType) => {
   document.querySelector('style[data-aquila-scheme-bootstrap-style="true"]')?.remove()
 }
 
-const clearSchemeBootstrapAfterHydration = (scheme: SchemeType) => {
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      window.setTimeout(() => {
-        if (document.documentElement.dataset.aquilaScheme === scheme) {
-          clearSchemeBootstrapStyle(scheme)
-        }
-      }, 160)
-    })
-  })
-}
-
 const useScheme = (): [SchemeType, SetScheme] => {
   const queryClient = useQueryClient()
   const followsSystemTheme = CONFIG.blog.scheme === "system"
@@ -68,9 +56,10 @@ const useScheme = (): [SchemeType, SetScheme] => {
       (followsSystemTheme ? resolveSystemScheme() : fallbackScheme)
     if (bootstrapScheme !== data) {
       queryClient.setQueryData(queryKey.scheme(), bootstrapScheme)
+      clearSchemeBootstrapStyle(bootstrapScheme)
       return
     }
-    clearSchemeBootstrapAfterHydration(data)
+    clearSchemeBootstrapStyle(data)
   }, [data, fallbackScheme, followsSystemTheme, queryClient])
 
   return [data, setScheme]

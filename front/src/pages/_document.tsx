@@ -31,17 +31,6 @@ const AQUILA_SCHEME_BOOTSTRAP_SCRIPT = `
   var bootstrapSource = cachedScheme ? "cookie" : "system";
   var background = nextScheme === "dark" ? "#121212" : "#f3f5f8";
   var foreground = nextScheme === "dark" ? "#f5f5f5" : "#101214";
-  var darkPreHydrationGuard = nextScheme === "dark"
-    ? [
-        'html[data-aquila-scheme-bootstrap="dark"] *{color-scheme:dark!important;}',
-        'html[data-aquila-scheme-bootstrap="dark"] body :where(header,main,nav,aside,section,article,form,label,div,button,input,textarea,select,ul,li,a){border-color:#363636!important;}',
-        'html[data-aquila-scheme-bootstrap="dark"] body :where(header,nav,aside,section,article,form,div,button,input,textarea,select){background-color:transparent!important;background-image:none!important;box-shadow:none!important;}',
-        'html[data-aquila-scheme-bootstrap="dark"] body :where(article,input,textarea,select,[role="search"],[class*="Card"],[class*="card"]){background-color:#181818!important;}',
-        'html[data-aquila-scheme-bootstrap="dark"] body :where(h1,h2,h3,h4,h5,h6,strong,a,button,input,textarea,select){color:#f5f5f5!important;}',
-        'html[data-aquila-scheme-bootstrap="dark"] body :where(p,span,small,li,dd,dt){color:#b2b2b2!important;}',
-        'html[data-aquila-scheme-bootstrap="dark"] body img{background-color:transparent!important;}'
-      ].join("")
-    : "";
   document.documentElement.dataset.aquilaScheme = nextScheme;
   document.documentElement.setAttribute("data-aquila-scheme-config", configuredScheme);
   document.documentElement.setAttribute("data-aquila-scheme-bootstrap", nextScheme);
@@ -50,7 +39,7 @@ const AQUILA_SCHEME_BOOTSTRAP_SCRIPT = `
   document.documentElement.style.backgroundColor = background;
   var style = document.createElement("style");
   style.setAttribute("data-aquila-scheme-bootstrap-style", "true");
-  style.textContent = "html[data-aquila-scheme-bootstrap]{background:" + background + ";color-scheme:" + nextScheme + ";}html[data-aquila-scheme-bootstrap] body{background:" + background + ";color:" + foreground + ";color-scheme:" + nextScheme + ";}" + darkPreHydrationGuard;
+  style.textContent = "html[data-aquila-scheme-bootstrap]{background:" + background + ";color-scheme:" + nextScheme + ";}html[data-aquila-scheme-bootstrap] body{background:" + background + ";color:" + foreground + ";color-scheme:" + nextScheme + ";}";
   document.head.appendChild(style);
 })();
 `

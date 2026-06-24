@@ -158,15 +158,14 @@ const StyledWrapper = styled.a`
   max-width: 100%;
   min-width: 0;
   text-decoration: none;
-  --post-card-border-color: ${({ theme }) => theme.publicDesign.border};
-  --post-card-border-strong: ${({ theme }) => theme.publicDesign.accent};
-  --post-card-focus-ring: ${({ theme }) => theme.colors.indigo8};
-  --post-card-surface: ${({ theme }) => theme.publicDesign.readableSurface};
-  --post-card-surface-elevated: ${({ theme }) => theme.publicDesign.surfaceElevated};
-  --post-card-cover-text: ${({ theme }) => theme.colors.gray12};
-  --post-card-cover-muted: ${({ theme }) => theme.colors.gray10};
-  --post-card-cover-bg: ${({ theme }) =>
-    `linear-gradient(135deg, ${theme.publicDesign.accentMuted}, ${theme.colors.gray2}), ${theme.publicDesign.readableSurface}`};
+  --post-card-border-color: var(--aq-border);
+  --post-card-border-strong: var(--aq-accent);
+  --post-card-focus-ring: var(--aq-focus-ring);
+  --post-card-surface: var(--aq-surface);
+  --post-card-surface-elevated: var(--aq-surface-elevated);
+  --post-card-cover-text: var(--aq-text);
+  --post-card-cover-muted: var(--aq-muted);
+  --post-card-cover-bg: var(--aq-card-cover-bg);
 
   &:focus-visible {
     outline: 2px solid var(--post-card-focus-ring);
@@ -184,13 +183,13 @@ const StyledWrapper = styled.a`
     align-items: start;
     border-bottom: 1px solid var(--post-card-border-color);
     padding: 28px 0;
-    background: transparent;
-    color: ${({ theme }) => theme.colors.gray12};
+    background: var(--aq-page-bg);
+    color: var(--aq-text);
 
     > .rowIndex {
       align-self: start;
       padding-top: 0.24rem;
-      color: ${({ theme }) => theme.colors.gray9};
+      color: var(--aq-subtle);
       font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
       font-size: 0.72rem;
       line-height: 1.4;
@@ -218,7 +217,7 @@ const StyledWrapper = styled.a`
         padding: 0 8px;
         border: 1px solid var(--post-card-border-color);
         background: transparent;
-        color: ${({ theme }) => theme.colors.gray10};
+        color: var(--aq-muted);
         font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
         font-size: 0.6875rem;
         line-height: 1;
@@ -228,7 +227,7 @@ const StyledWrapper = styled.a`
       > header {
         h2 {
           margin: 0;
-          color: ${({ theme }) => theme.colors.gray12};
+          color: var(--aq-text);
           font-size: 24px;
           line-height: 1.3;
           font-weight: 820;
@@ -248,7 +247,7 @@ const StyledWrapper = styled.a`
 
         p {
           margin: 0;
-          color: ${({ theme }) => theme.colors.gray10};
+          color: var(--aq-muted);
           font-size: 0.875rem;
           line-height: 1.7;
           letter-spacing: -0.01em;
@@ -267,7 +266,7 @@ const StyledWrapper = styled.a`
         gap: 0.42rem 0.52rem;
         align-items: center;
         margin-top: 14px;
-        color: ${({ theme }) => theme.colors.gray10};
+        color: var(--aq-muted);
         font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
         font-size: ${FEED_CARD_META_FONT_SIZE_REM}rem;
         line-height: 1.45;
@@ -302,7 +301,7 @@ const StyledWrapper = styled.a`
       gap: 1rem;
 
       .date {
-        color: ${({ theme }) => theme.colors.gray9};
+        color: var(--aq-subtle);
         font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
         font-size: 0.68rem;
         line-height: 1.4;
@@ -337,9 +336,9 @@ const StyledWrapper = styled.a`
 
         .coverCategory {
           width: fit-content;
-          border: 1px solid ${({ theme }) => theme.publicDesign.accent};
-          background: ${({ theme }) => theme.publicDesign.accentMuted};
-          color: ${({ theme }) => theme.colors.accentLink};
+          border: 1px solid var(--aq-accent);
+          background: var(--aq-accent-muted);
+          color: var(--aq-accent-link);
           padding: 0.14rem 0.34rem;
           font-size: 0.54rem;
           line-height: 1.2;
@@ -370,7 +369,7 @@ const StyledWrapper = styled.a`
         border: 1px solid var(--post-card-border-color);
         display: grid;
         place-items: center;
-        color: ${({ theme }) => theme.colors.gray10};
+        color: var(--aq-muted);
       }
 
       .arrowBtn::before {

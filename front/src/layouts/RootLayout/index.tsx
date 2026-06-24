@@ -152,7 +152,9 @@ const RootLayout = ({
       <Scripts />
       {/* // TODO: replace react query */}
       {/* {metaConfig.type !== "Paper" && <Header />} */}
-      <Header fullWidth={false} showThemeToggle={effectiveBlogDesign === "legacy"} blogTitle={headerBlogTitle} />
+      {isDedicatedEditorRoute ? null : (
+        <Header fullWidth={false} showThemeToggle={effectiveBlogDesign === "legacy"} blogTitle={headerBlogTitle} />
+      )}
       <StyledMain $fullBleed={isFullBleedRoute}>{children}</StyledMain>
     </ThemeProvider>
   )

@@ -13,12 +13,12 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.describe("core smoke public shell", () => {
-  test("system dark 공개 페이지는 hydration 첫 렌더에서 light scheme으로 되돌아가지 않는다", async () => {
+  test("system dark 공개 페이지는 hydration 첫 렌더와 bootstrap 동기화 경계를 분리한다", async () => {
     const useSchemeSource = readFileSync(path.resolve(__dirname, "../src/hooks/useScheme.ts"), "utf8")
 
     expect(useSchemeSource).toContain('CONFIG.blog.scheme === "system" ? "light" : CONFIG.blog.scheme')
     expect(useSchemeSource).toContain("const resolveBootstrapScheme = (): SchemeType | null =>")
-    expect(useSchemeSource).toContain("initialData: () => resolveBootstrapScheme() ?? fallbackScheme")
+    expect(useSchemeSource).toContain("initialData: fallbackScheme")
     expect(useSchemeSource).toContain("resolveBootstrapScheme() ??")
     expect(useSchemeSource).not.toContain("getCookie")
     expect(useSchemeSource).toContain("if (bootstrapScheme !== data)")

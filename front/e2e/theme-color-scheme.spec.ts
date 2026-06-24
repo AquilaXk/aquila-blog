@@ -159,7 +159,15 @@ test.describe("theme color-scheme", () => {
     page.on("console", (message) => {
       if (message.type() !== "error") return
       const text = message.text()
-      if (text.includes("Hydration failed") || text.includes("did not match")) {
+      if (
+        text.includes("Hydration failed") ||
+        text.includes("There was an error while hydrating") ||
+        text.includes("did not match") ||
+        text.includes("Minified React error #418") ||
+        text.includes("Minified React error #423") ||
+        text.includes("Minified React error `#418`") ||
+        text.includes("Minified React error `#423`")
+      ) {
         hydrationErrors.push(text)
       }
     })

@@ -64,7 +64,7 @@ export const adminSystemThemeVariables = (theme: Theme) => `
   }
 `
 
-export const adminAppBackground = "var(--admin-app-bg, #ffffff)"
+export const adminAppBackground = "var(--admin-app-bg, #f3f5f8)"
 export const adminTextPrimary = "var(--admin-text-primary, #0f1724)"
 export const adminTextSecondary = "var(--admin-text-secondary, #36414f)"
 export const adminTextMuted = "var(--admin-text-muted, #566273)"

@@ -4,34 +4,27 @@ import { articleTypographyScale } from "src/libs/markdown/contentTypography"
 
 export const markdownRendererRootCodeStyles = (theme: Theme) => css`
   .aq-code {
-    border-radius: 14px;
+    border-radius: 0;
     padding: 1.02rem 1.1rem;
     overflow-x: auto;
-    background: ${
-      theme.scheme === "dark"
-        ? "linear-gradient(180deg, rgba(20, 26, 34, 0.98), rgba(15, 19, 27, 0.98))"
-        : "linear-gradient(180deg, #f8fafc, #f3f5f8)"};
-    border: 1px solid
-      ${
-        theme.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(17, 24, 39, 0.08)"};
-    box-shadow: ${
-      theme.scheme === "dark" ? "0 16px 36px rgba(2, 6, 23, 0.32)" : "0 16px 32px rgba(15, 23, 42, 0.06)"};
+    background: #0f1728;
+    border: 1px solid #27334a;
+    box-shadow: none;
   }
 
   .aq-code-block {
     --aq-code-shell-padding-x: 0.72rem;
     --aq-code-gutter-width: 1.34rem;
     --aq-code-gutter-gap: 0.54rem;
-    margin: 1.2rem 0;
+    margin: 28px 0;
     max-width: 100%;
     min-width: 0;
-    border-radius: 14px;
+    border-radius: 0;
     overflow: hidden;
     border: 1px solid
       ${
         theme.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(17, 24, 39, 0.08)"};
-    box-shadow: ${
-      theme.scheme === "dark" ? "0 18px 38px rgba(2, 6, 23, 0.34)" : "0 18px 36px rgba(15, 23, 42, 0.08)"};
+    box-shadow: none;
   }
 
   .aq-code-toolbar {
@@ -39,14 +32,10 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
     grid-template-columns: auto 1fr;
     align-items: center;
     gap: 0.75rem;
-    padding: 0.84rem 0.96rem 0.76rem;
-    background: ${
-      theme.scheme === "dark"
-        ? "linear-gradient(180deg, #3a3f59, #363b54)"
-        : "linear-gradient(180deg, #dee4ef, #d6dde8)"};
-    border-bottom: 1px solid
-      ${
-        theme.scheme === "dark" ? "rgba(255, 255, 255, 0.06)" : "rgba(17, 24, 39, 0.08)"};
+    min-height: 42px;
+    padding: 0 14px;
+    background: #0f1728;
+    border-bottom: 1px solid #27334a;
   }
 
   .aq-code-toolbar-left {
@@ -56,10 +45,7 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
   }
 
   .aq-code-dot {
-    width: 0.92rem;
-    height: 0.92rem;
-    border-radius: 999px;
-    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+    display: none;
   }
 
   .aq-code-dot-red {
@@ -80,7 +66,7 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: ${ (theme.scheme === "dark" ? "#ff9d62" : "#7b4b2a")};
+    color: #7895c9;
   }
 
   .aq-code-copy {
@@ -93,7 +79,7 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
     background: ${
       theme.scheme === "dark" ? "rgba(255, 255, 255, 0.04)" : "rgba(255, 255, 255, 0.72)"};
     color: ${ (theme.scheme === "dark" ? "#d7dbe5" : "#334155")};
-    border-radius: 10px;
+    border-radius: 0;
     width: 2.25rem;
     min-width: 2.25rem;
     height: 2.05rem;
@@ -156,8 +142,7 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
     touch-action: pan-x;
-    background: ${
-      theme.scheme === "dark" ? "#2b2d3a" : "#f2f4f8"};
+    background: #0f1728;
   }
 
   .aq-code-block .aq-code {
@@ -168,9 +153,8 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
     box-shadow: none;
     padding: 1.05rem var(--aq-code-shell-padding-x) 3.55rem;
     min-width: 100%;
-    background: ${
-      theme.scheme === "dark" ? "#2b2d3a" : "#f2f4f8"};
-    color: ${ (theme.scheme === "dark" ? "#a9b7c6" : "#2f3747")};
+    background: #0f1728;
+    color: #dbe7ff;
   }
 
   .aq-code pre,
@@ -220,13 +204,13 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
   .aq-pretty-pre code > [data-highlighted-line] {
     background: ${
       theme.scheme === "dark" ? "rgba(96, 165, 250, 0.11)" : "rgba(59, 130, 246, 0.1)"};
-    border-radius: 6px;
+    border-radius: 0;
   }
 
   .aq-pretty-pre code [data-highlighted-chars] {
     background: ${
       theme.scheme === "dark" ? "rgba(250, 204, 21, 0.2)" : "rgba(250, 204, 21, 0.25)"};
-    border-radius: 4px;
+    border-radius: 0;
     padding: 0.04em 0.2em;
   }
 
@@ -240,7 +224,7 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
     margin: 1rem 0;
     max-width: 100%;
     min-width: 0;
-    border-radius: 14px;
+    border-radius: 0;
     overflow: hidden;
     border: 1px solid ${ theme.colors.gray6};
     background: ${

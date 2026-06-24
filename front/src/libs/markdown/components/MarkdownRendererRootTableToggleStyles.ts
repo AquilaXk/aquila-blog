@@ -5,8 +5,6 @@ import {
 } from "src/libs/markdown/tableMetadata"
 import {
   getTableChromePalette,
-  TABLE_SHARED_MARGIN_Y,
-  TABLE_SHARED_RADIUS_PX,
 } from "src/libs/markdown/tableChrome"
 
 export const markdownRendererRootTableToggleStyles = (theme: Theme) => css`
@@ -15,10 +13,10 @@ export const markdownRendererRootTableToggleStyles = (theme: Theme) => css`
     position: relative;
     display: block;
     list-style: none;
-    padding: 0.1rem var(--aq-toggle-summary-padding-x) 0.1rem var(--aq-toggle-indent);
+    padding: 0.16rem var(--aq-toggle-summary-padding-x) 0.16rem var(--aq-toggle-indent);
     color: var(--color-gray12);
-    font-size: 1.01rem;
-    font-weight: 580;
+    font-size: 0.96rem;
+    font-weight: 650;
     line-height: 1.58;
   }
 
@@ -75,7 +73,7 @@ export const markdownRendererRootTableToggleStyles = (theme: Theme) => css`
     width: 100%;
     max-width: 100%;
     min-width: 0;
-    margin: ${TABLE_SHARED_MARGIN_Y} 0;
+    margin: 30px 0;
   }
 
   .aq-table-scroll {
@@ -88,9 +86,9 @@ export const markdownRendererRootTableToggleStyles = (theme: Theme) => css`
     overflow-x: auto;
     overflow-y: hidden;
     border: 1px solid ${tableChrome.border};
-    border-radius: ${TABLE_SHARED_RADIUS_PX}px;
+    border-radius: 0;
     background: ${tableChrome.background};
-    box-shadow: ${tableChrome.shadow};
+    box-shadow: none;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
     overscroll-behavior-y: auto;
@@ -133,11 +131,15 @@ export const markdownRendererRootTableToggleStyles = (theme: Theme) => css`
       return `
     text-align: left;
     background: ${tableChrome.headerBackground};
-    font-weight: 700;
-    line-height: 1.52;
-    padding-top: calc(0.78rem + 0.14rem);
-    padding-bottom: calc(0.78rem - 0.14rem);
-    border-bottom: 2px solid ${tableChrome.headerRule};
+    color: ${theme.colors.gray10};
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+    font-size: 11px;
+    font-weight: 750;
+    line-height: 1.4;
+    text-transform: uppercase;
+    padding-top: 13px;
+    padding-bottom: 13px;
+    border-bottom: 1px solid ${tableChrome.headerRule};
       `
     })()}
   }
@@ -145,9 +147,9 @@ export const markdownRendererRootTableToggleStyles = (theme: Theme) => css`
   @media (min-width: 769px) {
     thead th,
     .aq-table thead th {
-      line-height: 1.6;
-      padding-top: calc(0.78rem + 0.32rem);
-      padding-bottom: calc(0.78rem - 0.04rem);
+      line-height: 1.4;
+      padding-top: 13px;
+      padding-bottom: 13px;
     }
   }
 
@@ -155,7 +157,7 @@ export const markdownRendererRootTableToggleStyles = (theme: Theme) => css`
   td,
   .aq-table th,
   .aq-table td {
-    padding: 0.78rem 0.92rem;
+    padding: 13px 15px;
     border-right: 1px solid ${ theme.colors.gray6};
     border-bottom: 1px solid ${ theme.colors.gray6};
     vertical-align: top;
@@ -192,7 +194,7 @@ export const markdownRendererRootTableToggleStyles = (theme: Theme) => css`
 
   @media (max-width: 480px) {
     .aq-table-shell {
-      margin: calc(${TABLE_SHARED_MARGIN_Y} - 0.1rem) 0;
+      margin: 24px 0;
       width: 100%;
       max-width: 100%;
       min-width: 0;

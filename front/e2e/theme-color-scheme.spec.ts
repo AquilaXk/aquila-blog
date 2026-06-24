@@ -254,7 +254,9 @@ test.describe("theme color-scheme", () => {
       })
 
       await page.goto("/")
-      await expect(page.getByRole("button", { name: "테마 전환" })).toBeVisible()
+      const themeToggle = page.getByRole("button", { name: "테마 전환" })
+      await expect(themeToggle).toBeVisible()
+      await expect(themeToggle).toHaveAttribute("aria-pressed", firstPaintCase.expectedScheme === "dark" ? "true" : "false")
       await expect(page.locator('[data-ui="feed-post-card"] article').first()).toBeVisible()
 
       const samples = await readSchemeFrameSamples(page)

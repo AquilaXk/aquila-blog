@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { setCookie } from "cookies-next"
-import { useCallback, useEffect } from "react"
+import { useCallback, useEffect, useLayoutEffect } from "react"
 import { CONFIG } from "site.config"
 import { queryKey } from "src/constants/queryKey"
 import { SchemeType } from "src/types"
@@ -18,6 +18,8 @@ const resolveBootstrapScheme = (): SchemeType | null => {
   const scheme = globalThis.document?.documentElement.dataset.aquilaScheme
   return isScheme(scheme) ? scheme : null
 }
+
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect
 
 const clearSchemeBootstrapStyle = (scheme: SchemeType) => {
   const root = document.documentElement
@@ -60,7 +62,7 @@ const useScheme = (): [SchemeType, SetScheme] => {
     clearSchemeBootstrapStyle(scheme)
   }, [queryClient])
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     const bootstrapScheme =
       resolveBootstrapScheme() ??
       (followsSystemTheme ? resolveSystemScheme() : fallbackScheme)

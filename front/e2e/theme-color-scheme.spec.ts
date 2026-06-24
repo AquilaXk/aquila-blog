@@ -177,9 +177,11 @@ test.describe("theme color-scheme", () => {
 
     const samples = await readSchemeFrameSamples(page)
     const sampledSchemes = new Set(samples.map((sample) => sample.datasetScheme))
+    const sampledBodyBackgrounds = new Set(samples.map((sample) => sample.bodyBackground))
 
     expect(samples.length).toBeGreaterThan(0)
     expect(sampledSchemes).toEqual(new Set(["dark"]))
+    expect(sampledBodyBackgrounds).toEqual(new Set(["rgb(18, 18, 18)"]))
     expect(samples.every((sample) => sample.datasetScheme === "dark")).toBe(true)
     await expect(page.locator("html")).toHaveAttribute("data-aquila-scheme", "dark")
     expect(hydrationErrors).toEqual([])

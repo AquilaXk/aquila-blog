@@ -38,14 +38,16 @@ type TextareaSelection = {
 }
 
 const toolbarMarkdownSnippets = [
-  { label: "H", title: "제목", before: "## ", after: "" },
+  { label: "H1", title: "제목 1", before: "# ", after: "" },
+  { label: "H2", title: "제목 2", before: "## ", after: "" },
+  { label: "H3", title: "제목 3", before: "### ", after: "" },
   { label: "B", title: "굵게", before: "**", after: "**" },
   { label: "I", title: "기울임", before: "_", after: "_" },
-  { label: "Quote", title: "인용문", before: "> ", after: "" },
-  { label: "Code", title: "코드", before: "`", after: "`" },
-  { label: "Link", title: "링크", before: "[", after: "](https://)" },
+  { label: ">", title: "인용문", before: "> ", after: "" },
   { label: "List", title: "목록", before: "- ", after: "" },
   { label: "Task", title: "작업 목록", before: "- [ ] ", after: "" },
+  { label: "Code", title: "인라인 코드", before: "`", after: "`" },
+  { label: "Link", title: "링크", before: "[", after: "](https://)" },
 ] as const
 
 const tableSnippet = [
@@ -57,6 +59,18 @@ const tableSnippet = [
 ].join("\n")
 
 const codeBlockSnippet = ["", "```", "", "```", ""].join("\n")
+const mermaidSnippet = ["", "```mermaid", "flowchart LR", "    A[Admin write] --> B[DB commit]", "```", ""].join("\n")
+const calloutSnippet = ["", "> [!TIP]", "> **설계 원칙**", "> 내용을 입력하세요.", ""].join("\n")
+const toggleSnippet = ["", ":::toggle 자세히 보기", "내용을 입력하세요.", ":::", ""].join("\n")
+
+const blockMarkdownSnippets = [
+  { label: "Code", title: "코드 블록", snippet: codeBlockSnippet },
+  { label: "Table", title: "표", snippet: tableSnippet },
+  { label: "Mermaid", title: "Mermaid", snippet: mermaidSnippet, disableWhenMermaid: true },
+  { label: "Callout", title: "콜아웃", snippet: calloutSnippet },
+  { label: "Toggle", title: "토글", snippet: toggleSnippet },
+] as const
+
 const WHEEL_DELTA_PIXEL = 0
 const WHEEL_DELTA_LINE = 1
 const WHEEL_DELTA_PAGE = 2
@@ -271,24 +285,18 @@ export const MarkdownEditor = ({
               {snippet.label}
             </ToolbarButton>
           ))}
-          <ToolbarButton
-            type="button"
-            aria-label="코드 블록"
-            disabled={disabled}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => applySnippet(codeBlockSnippet)}
-          >
-            Code block
-          </ToolbarButton>
-          <ToolbarButton
-            type="button"
-            aria-label="표"
-            disabled={disabled}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => applySnippet(tableSnippet)}
-          >
-            Table
-          </ToolbarButton>
+          {blockMarkdownSnippets.map((snippet) => (
+            <ToolbarButton
+              key={snippet.title}
+              type="button"
+              aria-label={snippet.title}
+              disabled={disabled || ("disableWhenMermaid" in snippet && disableMermaid)}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => applySnippet(snippet.snippet)}
+            >
+              {snippet.label}
+            </ToolbarButton>
+          ))}
           <ImageUploadButton>
             Image
             <input
@@ -362,45 +370,50 @@ export const MarkdownEditor = ({
 
 const EditorRoot = styled.section`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 6px;
+  border-radius: 0;
   overflow: hidden;
   background: ${({ theme }) => theme.publicDesign.readableSurface};
   color: ${({ theme }) => theme.colors.gray12};
 `
 
 const EditorToolbar = styled.div`
-  min-height: 48px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.5rem;
+  gap: 0.5rem;
+  padding: 0.35rem 0.55rem;
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.publicDesign.surfaceElevated};
+  background: ${({ theme }) => theme.publicDesign.readableSurface};
   flex-wrap: wrap;
 `
 
 const ModeTabs = styled.div`
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.publicDesign.surfaceElevated};
 `
 
 const ModeTab = styled.button`
-  border: 1px solid transparent;
-  border-radius: 6px;
-  min-height: 32px;
-  padding: 0 0.75rem;
+  border: 0;
+  border-left: 1px solid ${({ theme }) => theme.colors.gray6};
+  min-height: 28px;
+  padding: 0 0.62rem;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.86rem;
-  font-weight: 600;
+  font-size: 0.72rem;
+  font-weight: 750;
   cursor: pointer;
 
+  &:first-of-type {
+    border-left: 0;
+  }
+
   &[aria-selected="true"] {
-    background: ${({ theme }) => theme.publicDesign.readableSurface};
-    border-color: ${({ theme }) => theme.colors.gray6};
-    color: ${({ theme }) => theme.colors.gray12};
+    background: ${({ theme }) => theme.colors.gray12};
+    color: ${({ theme }) => theme.colors.gray1};
   }
 
   &:focus-visible {
@@ -412,19 +425,19 @@ const ModeTab = styled.button`
 const ToolbarGroup = styled.div`
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 0.25rem;
+  justify-content: flex-start;
+  gap: 0.12rem;
   flex-wrap: wrap;
 `
 
 const ToolbarButton = styled.button`
   border: 0;
-  border-radius: 6px;
-  min-height: 32px;
-  padding: 0 0.58rem;
+  border-radius: 4px;
+  min-height: 30px;
+  padding: 0 0.52rem;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.78rem;
+  font-size: 0.7rem;
   font-weight: 700;
   cursor: pointer;
 
@@ -440,13 +453,13 @@ const ToolbarButton = styled.button`
 `
 
 const ImageUploadButton = styled.label`
-  border-radius: 6px;
-  min-height: 32px;
+  border-radius: 4px;
+  min-height: 30px;
   display: inline-flex;
   align-items: center;
-  padding: 0 0.58rem;
+  padding: 0 0.52rem;
   color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.78rem;
+  font-size: 0.7rem;
   font-weight: 700;
   cursor: pointer;
 

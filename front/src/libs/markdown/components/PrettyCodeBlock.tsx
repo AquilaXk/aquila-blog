@@ -1,15 +1,16 @@
 import { FC, ReactNode, useEffect, useState } from "react"
-import AppIcon from "src/components/icons/AppIcon"
 import { toLanguageLabel } from "src/libs/markdown/rendering"
 
 type PrettyCodeBlockProps = {
   language: string
+  title?: string
   rawCode: string
   preElement: ReactNode
 }
 
-const PrettyCodeBlock: FC<PrettyCodeBlockProps> = ({ language, rawCode, preElement }) => {
+const PrettyCodeBlock: FC<PrettyCodeBlockProps> = ({ language, title, rawCode, preElement }) => {
   const [copied, setCopied] = useState(false)
+  const label = title?.trim() || toLanguageLabel(language)
 
   useEffect(() => {
     if (!copied) return
@@ -29,24 +30,19 @@ const PrettyCodeBlock: FC<PrettyCodeBlockProps> = ({ language, rawCode, preEleme
   return (
     <div className="aq-code-block">
       <div className="aq-code-toolbar">
-        <div className="aq-code-toolbar-left" aria-hidden="true">
-          <span className="aq-code-dot aq-code-dot-red" />
-          <span className="aq-code-dot aq-code-dot-yellow" />
-          <span className="aq-code-dot aq-code-dot-green" />
-        </div>
-        <span className="aq-code-language">{toLanguageLabel(language)}</span>
-      </div>
-      <div className="aq-code-body">
-        <div className="aq-code-shell">{preElement}</div>
+        <span className="aq-code-title">{label}</span>
         <button
           type="button"
-          className={`aq-code-copy aq-code-copy-bottom${copied ? " is-copied" : ""}`}
+          className={`aq-code-copy${copied ? " is-copied" : ""}`}
           onClick={handleCopy}
           aria-label={copied ? "코드가 복사되었습니다" : "코드 복사"}
           title={copied ? "복사됨" : "복사"}
         >
-          {copied ? <span className="aq-code-copy-done">Copy</span> : <AppIcon name="copy" />}
+          {copied ? "COPIED" : "COPY"}
         </button>
+      </div>
+      <div className="aq-code-body">
+        <div className="aq-code-shell">{preElement}</div>
       </div>
     </div>
   )

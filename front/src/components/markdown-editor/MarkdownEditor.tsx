@@ -47,7 +47,7 @@ const toolbarMarkdownSnippets = [
   { label: "List", title: "목록", before: "- ", after: "" },
   { label: "Task", title: "작업 목록", before: "- [ ] ", after: "" },
   { label: "Code", title: "인라인 코드", before: "`", after: "`" },
-  { label: "Link", title: "링크", before: "[링크 텍스트](https://)", after: "" },
+  { label: "Link", title: "링크", before: "[", after: "](https://)" },
 ] as const
 
 const tableSnippet = [

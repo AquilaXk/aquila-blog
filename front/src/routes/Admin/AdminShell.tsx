@@ -1,6 +1,7 @@
 import styled from "@emotion/styled"
 import Link from "next/link"
 import { type ReactNode, useEffect } from "react"
+import { apiFetch } from "src/apis/backend/client"
 import AppIcon, { type IconName } from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
 import type { AuthMember } from "src/hooks/useAuthSession"
@@ -139,13 +140,8 @@ const AdminShell = ({ currentSection, member, profileSnapshot = null, children }
     }
   }, [member?.isAdmin])
 
-  const handleLogout = () => {
-    void window
-      .fetch("/api/backend/member/api/v1/auth/logout", {
-        method: "DELETE",
-        credentials: "include",
-      })
-      .catch(() => undefined)
+  const handleLogout = async () => {
+    await apiFetch("/member/api/v1/auth/logout", { method: "DELETE" }).catch(() => undefined)
     const rawNextPath = `${window.location.pathname}${window.location.search}${window.location.hash}`
     const nextPath = rawNextPath.startsWith("/") && !rawNextPath.startsWith("//") ? rawNextPath : "/admin"
     window.location.href = `/login?next=${encodeURIComponent(nextPath)}`
@@ -212,7 +208,7 @@ const AdminShell = ({ currentSection, member, profileSnapshot = null, children }
             <Link href="/" passHref legacyBehavior>
               <SecondaryTopAction>블로그 보기</SecondaryTopAction>
             </Link>
-            <button type="button" onClick={handleLogout}>
+            <button type="button" onClick={() => void handleLogout()}>
               Logout
             </button>
             <Link href="/editor/new" passHref legacyBehavior>
@@ -235,9 +231,7 @@ const ShellFrame = styled.div`
   grid-template-columns: 13.5rem minmax(0, 1fr);
   gap: 0;
   width: 100%;
-  margin: 0;
   min-height: 100vh;
-  padding: 0;
   background: ${adminAppBackground};
 
   @media (max-width: 1100px) {
@@ -256,9 +250,7 @@ const Sidebar = styled.aside`
   min-height: 100vh;
   height: 100vh;
   padding: 1.15rem 0.82rem 1rem;
-  border: 0;
   border-right: 1px solid ${adminBorder};
-  border-radius: 0;
   background: ${adminShellSurface};
 
   @media (max-width: 1100px) {
@@ -280,8 +272,6 @@ const BrandMark = styled.div`
   border-radius: 2px;
   display: grid;
   place-items: center;
-  position: relative;
-  overflow: hidden;
   border: 1px solid ${adminBorderStrong};
   background: ${adminTextPrimary};
   color: ${adminShellSurface};
@@ -294,9 +284,6 @@ const BrandMark = styled.div`
 `
 
 const BrandCopy = styled.div`
-  display: grid;
-  gap: 0.16rem;
-
   strong {
     color: ${adminTextPrimary};
     font-size: 0.96rem;
@@ -307,8 +294,6 @@ const BrandCopy = styled.div`
 `
 
 const SidebarNavSection = styled.section`
-  display: grid;
-  gap: 0.3rem;
   padding-top: 0.15rem;
 `
 
@@ -442,11 +427,8 @@ const TopBar = styled.header`
   gap: 1rem;
   min-height: 4.25rem;
   padding: 0.72rem 1.45rem;
-  border: 0;
   border-bottom: 1px solid ${adminBorder};
-  border-radius: 0;
   background: ${adminSurface};
-  box-shadow: none;
 
   @media (max-width: 720px) {
     align-items: flex-start;
@@ -481,7 +463,6 @@ const CompactNavLink = styled.a`
   place-items: center;
   flex: 0 0 auto;
   border: 1px solid transparent;
-  background: transparent;
   color: ${adminTextSecondary};
   text-decoration: none;
 
@@ -548,7 +529,6 @@ const SecondaryTopAction = styled.a`
   text-decoration: none;
   font-size: 0.82rem;
   font-weight: 780;
-  cursor: pointer;
 `
 
 const PrimaryTopAction = styled.a`

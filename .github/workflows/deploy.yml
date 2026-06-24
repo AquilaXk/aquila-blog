@@ -96,6 +96,7 @@ jobs:
           FRONT_LIVE_VERIFY="false"
           EDITOR_LIVE_CANARY="false"
           EXPECTED_FRONT_COMMIT_SHA=""
+          FRONT_BUILD_SHA_SUPERSEDED="false"
           CHANGE_SOURCE="first-parent-diff"
           BACKEND_DEPLOY_PATHS_PATTERN='^(back/|deploy/homeserver/|deploy/env/|tools/env/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
           STALE_DEPLOY_BLOCK_PATHS_PATTERN='^(back/|deploy/homeserver/|deploy/env/|tools/env/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
@@ -126,6 +127,10 @@ jobs:
                 echo "${STALE_CHANGED_FILES}" >&2
                 exit 1
               fi
+              if echo "${STALE_CHANGED_FILES}" | grep -Eq "${FRONT_BUILD_SHA_PATHS_PATTERN}"; then
+                FRONT_BUILD_SHA_SUPERSEDED="true"
+                CHANGE_SOURCE="${CHANGE_SOURCE}+front-build-superseded"
+              fi
               echo "stale workflow_run allowed after backend-neutral newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}"
               CHANGE_SOURCE="${CHANGE_SOURCE}+path-aware-stale-neutral"
             fi
@@ -148,7 +153,7 @@ jobs:
             if echo "${CHANGED_FILES}" | grep -Eq "${FRONT_LIVE_VERIFY_PATHS_PATTERN}"; then
               FRONT_LIVE_VERIFY="true"
             fi
-            if echo "${CHANGED_FILES}" | grep -Eq "${FRONT_BUILD_SHA_PATHS_PATTERN}"; then
+            if [ "${FRONT_BUILD_SHA_SUPERSEDED}" != "true" ] && echo "${CHANGED_FILES}" | grep -Eq "${FRONT_BUILD_SHA_PATHS_PATTERN}"; then
               # Vercel can keep the previous frontend build for workflow/backend-only commits.
               EXPECTED_FRONT_COMMIT_SHA="${DEPLOY_SHA}"
             fi
@@ -199,7 +204,7 @@ jobs:
               if [ -n "${EXPECTED_FRONT_COMMIT_SHA}" ]; then
                 echo "- frontend build sha: ${EXPECTED_FRONT_COMMIT_SHA}"
               else
-                echo "- frontend build sha: not asserted for non-frontend deploy"
+                echo "- frontend build sha: not asserted for non-frontend or superseded deploy"
               fi
               echo "- editor live canary: ${EDITOR_LIVE_CANARY}"
             else

@@ -16,6 +16,7 @@ const ThemeToggle: React.FC<Props> = () => {
       type="button"
       onClick={handleClick}
       aria-label="테마 전환"
+      aria-pressed={scheme === "dark"}
       title="테마 전환"
     >
       <span className="themeIcon themeIconLight">

@@ -175,18 +175,23 @@ const AdminShell = ({ currentSection, member, profileSnapshot = null, children }
           </SidebarNav>
         </SidebarNavSection>
 
-        <SidebarProfile type="button" aria-label="Logout" onClick={() => void handleLogout()}>
-          <SidebarAvatar>
-            {sidebarProfileImageSrc ? (
-              <ProfileImage src={sidebarProfileImageSrc} alt={`${sidebarIdentityName} 프로필 이미지`} fillContainer />
-            ) : (
-              <span>{sidebarIdentityInitial}</span>
-            )}
-          </SidebarAvatar>
-          <ProfileCopy>
-            <strong>{sidebarIdentityName}</strong>
-            <span>관리자</span>
-          </ProfileCopy>
+        <SidebarProfile>
+          <SidebarProfileIdentity>
+            <SidebarAvatar>
+              {sidebarProfileImageSrc ? (
+                <ProfileImage src={sidebarProfileImageSrc} alt={`${sidebarIdentityName} 프로필 이미지`} fillContainer />
+              ) : (
+                <span>{sidebarIdentityInitial}</span>
+              )}
+            </SidebarAvatar>
+            <ProfileCopy>
+              <strong>{sidebarIdentityName}</strong>
+              <span>관리자</span>
+            </ProfileCopy>
+          </SidebarProfileIdentity>
+          <SidebarLogoutAction type="button" aria-label="Logout" onClick={() => void handleLogout()}>
+            <AppIcon name="log-out" />
+          </SidebarLogoutAction>
         </SidebarProfile>
       </Sidebar>
 
@@ -367,19 +372,34 @@ const NavLink = styled.a`
   }
 `
 
-const SidebarProfile = styled.button`
-  display: flex;
+const SidebarProfile = styled.div`
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.65rem;
   min-width: 0;
   width: 100%;
   padding: 1rem 0.35rem 0;
   border-top: 1px solid ${adminBorder};
-  border-right: 0;
-  border-bottom: 0;
-  border-left: 0;
-  background: transparent;
-  text-align: left;
+`
+
+const SidebarProfileIdentity = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+`
+
+const SidebarLogoutAction = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid ${adminBorder};
+  border-radius: 2px;
+  background: ${adminSurfaceRaised};
+  color: ${adminTextSecondary};
   cursor: pointer;
 `
 

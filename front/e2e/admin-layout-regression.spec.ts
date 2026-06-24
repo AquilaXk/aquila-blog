@@ -271,7 +271,7 @@ test("관리자 허브 모바일 first fold의 글 작성 CTA는 primary action 
   await page.setViewportSize({ width: 393, height: 852 })
   await page.goto("/admin")
 
-  await expect(page.getByRole("heading", { name: "관리자" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: /좋은 아침이에요/ })).toBeVisible()
 
   const ctaSnapshot = await page.evaluate(() => {
     const main = document.querySelector<HTMLElement>("main main") ?? document.querySelector<HTMLElement>("main")

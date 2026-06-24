@@ -53,7 +53,9 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(rootLayoutSource).toContain('const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/")')
     expect(rootLayoutSource).toContain('const isDesignAwareRoute = pathname[1] !== "_" && pathname !== "/sitemap.xml"')
     expect(rootLayoutSource).toContain("const effectiveScheme = scheme")
-    expect(rootLayoutSource).toContain('const effectiveBlogDesign = adminProfile?.blogDesign || "legacy"')
+    expect(rootLayoutSource).toContain(
+      'const effectiveBlogDesign = isAdminRoute ? adminProfile?.blogDesign || "legacy" : "legacy"'
+    )
     expect(rootLayoutSource).toContain("{isAdminRoute ? null : (")
     expect(rootLayoutSource).not.toContain("publicAppearance.scheme")
     expect(shellSource).toContain("${({ theme }) => adminSystemThemeVariables(theme)}")

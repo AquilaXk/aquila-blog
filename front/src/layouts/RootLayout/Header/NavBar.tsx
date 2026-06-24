@@ -278,8 +278,7 @@ const StyledWrapper = styled.div`
     .searchTrigger,
     .bellSlot,
     .loginLink,
-    .adminLink,
-    .logoutBtn {
+    .adminLink {
       display: none;
     }
 

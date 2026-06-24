@@ -6,6 +6,15 @@ import {
   AdminSectionTitleStack,
   AdminTextActionLink,
 } from "src/routes/Admin/AdminSurfacePrimitives"
+import {
+  adminBorder,
+  adminSurface,
+  adminSurfaceAccent,
+  adminTeal,
+  adminTealBorder,
+  adminTextPrimary,
+  adminTextSecondary,
+} from "src/routes/Admin/adminColorTokens"
 
 export const SectionHeader = styled(AdminSectionTitleStack)`
   h2 {
@@ -15,13 +24,13 @@ export const SectionHeader = styled(AdminSectionTitleStack)`
 
 export const PrioritySection = styled(AdminPlainCard)`
   display: grid;
-  gap: 10px;
-  padding: 14px 16px;
+  gap: 0;
+  padding: 0;
   border-radius: 2px;
+  overflow: hidden;
 
-  @media (max-width: 720px) {
-    gap: 8px;
-    padding: 12px;
+  @media (max-width: 1120px) {
+    order: -1;
   }
 `
 
@@ -189,25 +198,29 @@ export const PriorityCellCopy = styled.div`
 export const PrioritySummary = styled.div`
   display: inline-flex;
   align-items: center;
-  min-height: 34px;
-  padding: 0.32rem 0.72rem;
+  justify-content: center;
+  min-width: 4.4rem;
+  min-height: 1.8rem;
+  padding: 0.2rem 0.5rem;
   border-radius: 2px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.78rem;
-  font-weight: 760;
-  line-height: 1.4;
+  border: 1px solid ${adminBorder};
+  background: ${adminSurface};
+  color: ${adminTextSecondary};
+  font-size: 0.67rem;
+  font-weight: 820;
+  line-height: 1.2;
+  text-align: center;
   white-space: normal;
 
   &[data-tone="good"] {
-    border-color: ${({ theme }) => theme.colors.green7};
-    background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
+    border-color: ${adminTealBorder};
+    background: ${adminSurfaceAccent};
+    color: ${adminTeal};
   }
 
   &[data-tone="warn"] {
-    border-color: ${({ theme }) => theme.colors.orange7};
-    background: ${({ theme }) => theme.colors.orange2};
+    border-color: ${adminBorder};
+    color: ${adminTextPrimary};
   }
 `
 

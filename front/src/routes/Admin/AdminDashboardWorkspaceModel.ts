@@ -66,6 +66,21 @@ export type DashboardQuickAction = {
   label: string
 }
 
+export type DashboardChartBar = {
+  key: string
+  label: string
+  height: number
+  tone: "neutral" | "good" | "warn"
+}
+
+export type DashboardLogRow = {
+  key: string
+  time: string
+  message: string
+  detail: string
+  tone: "neutral" | "good" | "warn"
+}
+
 export const EMPTY_INITIAL_SNAPSHOT: AdminDashboardInitialSnapshot = {
   systemHealth: null,
   dashboard: null,

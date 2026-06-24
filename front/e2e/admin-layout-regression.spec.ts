@@ -197,43 +197,45 @@ test("관리자 프로필 1440px 데스크톱은 간결한 heading 아래 편집
 const captureDashboardPrioritySnapshot = async (page: Page) =>
   page.evaluate(() => {
     const priorityHeading = Array.from(document.querySelectorAll<HTMLElement>("h2")).find(
-      (element) => element.textContent?.trim() === "우선 점검 항목",
+      (element) => element.textContent?.trim() === "Steady-state guard",
     )
     const prioritySection = priorityHeading?.closest<HTMLElement>("section")
-    const priorityTable = prioritySection?.querySelector<HTMLElement>("table")
+    const priorityRows = prioritySection?.querySelector<HTMLElement>("[data-ui='dashboard-guard-rows']")
     const headingRect = priorityHeading?.getBoundingClientRect()
     const sectionRect = prioritySection?.getBoundingClientRect()
-    const tableRect = priorityTable?.getBoundingClientRect()
+    const rowsRect = priorityRows?.getBoundingClientRect()
 
     return {
       viewportHeight: window.innerHeight,
       viewportWidth: window.innerWidth,
       headingTop: headingRect?.top ?? Number.POSITIVE_INFINITY,
       sectionTop: sectionRect?.top ?? Number.POSITIVE_INFINITY,
-      tableTop: tableRect?.top ?? Number.POSITIVE_INFINITY,
+      rowsTop: rowsRect?.top ?? Number.POSITIVE_INFINITY,
       bodyScrollWidth: document.body.scrollWidth,
     }
   })
 
-test("관리자 대시보드 1440px 데스크톱은 우선 점검 테이블을 first fold 안에 노출한다", async ({ page }) => {
+test("관리자 대시보드 1440px 데스크톱은 V4 steady-state guard를 first fold 안에 노출한다", async ({ page }) => {
   await mockAdminDashboardEndpoints(page)
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto("/admin/dashboard")
 
-  await expect(page.getByRole("heading", { name: "우선 점검 항목" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Steady-state guard" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Public read latency" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Live logs" })).toBeVisible()
 
   const snapshot = await captureDashboardPrioritySnapshot(page)
 
-  expect(snapshot.tableTop).toBeLessThanOrEqual(860)
+  expect(snapshot.rowsTop).toBeLessThanOrEqual(860)
   expect(snapshot.bodyScrollWidth).toBeLessThanOrEqual(snapshot.viewportWidth)
 })
 
-test("관리자 대시보드 모바일은 우선 점검 heading을 first fold 안에 노출한다", async ({ page }) => {
+test("관리자 대시보드 모바일은 V4 steady-state guard heading을 first fold 안에 노출한다", async ({ page }) => {
   await mockAdminDashboardEndpoints(page)
   await page.setViewportSize({ width: 393, height: 852 })
   await page.goto("/admin/dashboard")
 
-  await expect(page.getByRole("heading", { name: "우선 점검 항목" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Steady-state guard" })).toBeVisible()
 
   const snapshot = await captureDashboardPrioritySnapshot(page)
 
@@ -262,7 +264,7 @@ test("관리자 대시보드는 알림 snapshot 백그라운드 갱신을 유지
   })
 
   await page.goto("/admin/dashboard")
-  await expect(page.getByRole("heading", { name: "우선 점검 항목" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Steady-state guard" })).toBeVisible()
 
   await expect.poll(() => snapshotRequestCount).toBeGreaterThan(0)
 })

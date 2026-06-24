@@ -359,19 +359,18 @@ test.describe("성능 레이아웃과 표면 예산", () => {
       const htmlScrollWidth = snapshot.scrollWidth?.html ?? 0
       const bodyScrollWidth = snapshot.scrollWidth?.body ?? 0
 
-      // V4 관리자 first fold는 iPad mini 768 환경에서 우선 점검 영역을 300px 전후로 당긴다.
-      // V4 shell compact topbar에서는 Linux headless 기준 287px까지 내려온다.
+      // V4 관리자 dashboard는 iPad mini 768 환경에서 metric strip 다음 steady-state guard를 먼저 노출한다.
       // 관리자 route는 full-bleed 작업 공간이므로 콘텐츠 폭은 742px 안팎으로 고정한다.
       expect(serviceRailWidth).toBeGreaterThanOrEqual(738)
       expect(serviceRailWidth).toBeLessThanOrEqual(744)
-      expect(prioritySectionY).toBeGreaterThanOrEqual(285)
-      expect(prioritySectionY).toBeLessThanOrEqual(320)
+      expect(prioritySectionY).toBeGreaterThanOrEqual(540)
+      expect(prioritySectionY).toBeLessThanOrEqual(590)
       expect(panelGridWidth).toBeGreaterThanOrEqual(738)
       expect(panelGridWidth).toBeLessThanOrEqual(744)
       expect(firstPanelWidth).toBeGreaterThanOrEqual(738)
       expect(firstPanelWidth).toBeLessThanOrEqual(744)
       expect(firstPanelY).toBeGreaterThanOrEqual(prioritySectionBottom)
-      expect(firstPanelY).toBeLessThanOrEqual(650)
+      expect(firstPanelY).toBeLessThanOrEqual(1120)
       expect(htmlScrollWidth).toBeLessThanOrEqual(768)
       expect(bodyScrollWidth).toBeLessThanOrEqual(768)
       continue

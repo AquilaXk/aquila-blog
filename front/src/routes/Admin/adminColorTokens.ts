@@ -32,21 +32,21 @@ const adminDarkThemeVariables = `
   --admin-surface: #121212;
   --admin-surface-raised: #1f1f1f;
   --admin-surface-muted: #181818;
-  --admin-surface-accent: rgba(10, 88, 202, 0.2);
+  --admin-surface-accent: rgba(122, 182, 255, 0.18);
   --admin-elevated-top: #1f1f1f;
   --admin-border: #363636;
   --admin-border-strong: #4f4f4f;
   --admin-text-primary: #f5f5f5;
   --admin-text-secondary: #d8d8d8;
   --admin-text-muted: #b2b2b2;
-  --admin-primary: #0a58ca;
-  --admin-primary-hover: #084298;
+  --admin-primary: #7ab6ff;
+  --admin-primary-hover: #9bcbff;
   --admin-accent-text: #7ab6ff;
-  --admin-primary-border: rgba(10, 88, 202, 0.52);
-  --admin-primary-border-hover: rgba(10, 88, 202, 0.72);
-  --admin-control-text: #f8fafc;
-  --admin-focus-ring: rgba(10, 88, 202, 0.32);
-  --admin-focus-ring-strong: rgba(10, 88, 202, 0.42);
+  --admin-primary-border: rgba(122, 182, 255, 0.46);
+  --admin-primary-border-hover: rgba(122, 182, 255, 0.66);
+  --admin-control-text: #101214;
+  --admin-focus-ring: rgba(122, 182, 255, 0.3);
+  --admin-focus-ring-strong: rgba(122, 182, 255, 0.42);
   --admin-action-group-surface: rgba(18, 18, 18, 0.92);
 `
 

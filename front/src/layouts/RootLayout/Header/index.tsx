@@ -68,6 +68,16 @@ const Header: React.FC<Props> = ({ fullWidth, showThemeToggle = true, blogTitle 
   }, [isPostDetailRoute])
 
   useEffect(() => {
+    const wrapper = wrapperRef.current
+    if (!wrapper) return
+
+    wrapper.inert = hiddenByScroll
+    return () => {
+      wrapper.inert = false
+    }
+  }, [hiddenByScroll])
+
+  useEffect(() => {
     if (typeof window === "undefined") return
     const wrapper = wrapperRef.current
     if (!wrapper) return
@@ -140,6 +150,7 @@ const Header: React.FC<Props> = ({ fullWidth, showThemeToggle = true, blogTitle 
       data-ui="app-header"
       data-autohide={isPostDetailRoute}
       data-hidden={hiddenByScroll}
+      aria-hidden={hiddenByScroll ? true : undefined}
       style={
         hiddenByScroll
           ? {

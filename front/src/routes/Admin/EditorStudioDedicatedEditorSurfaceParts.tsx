@@ -12,6 +12,7 @@ export const EditorStudioRoot = styled.main `
   gap: 0;
   overflow-x: clip;
   background: ${({ theme }) => theme.publicDesign.operationSurface};
+  color: ${({ theme }) => theme.colors.gray12};
 
   @media (max-width: 1024px) {
     padding: 0;

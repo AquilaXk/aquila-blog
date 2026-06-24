@@ -307,18 +307,22 @@ test.describe("Markdown editor replacement", () => {
     expect(Math.abs(startPointContract.writeStartTop - startPointContract.previewStartTop)).toBeLessThanOrEqual(2)
   })
 
-  test("dedicated editor top actions stay inside the editor content rail", async ({ page }) => {
+  test("dedicated editor exposes V4 full-screen chrome around the editor", async ({ page }) => {
     await page.setViewportSize({ width: 2048, height: 1152 })
     await routeAuthenticatedEditor(page, "본문이 없습니다.")
 
     await page.goto("/editor/new?source=local-draft")
 
     const editor = page.getByTestId("markdown-editor")
-    const exitButton = page.getByRole("button", { name: "← 나가기" })
+    const exitButton = page.getByRole("button", { name: "← 글 관리" })
+    const guideButton = page.getByRole("button", { name: "Markdown 가이드" })
     const publishButton = page.getByRole("button", { name: "발행" }).first()
     await expect(editor).toBeVisible()
     await expect(exitButton).toBeVisible()
+    await expect(guideButton).toBeVisible()
     await expect(publishButton).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Document outline" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Publish inspector" })).toBeVisible()
 
     const editorBox = await editor.boundingBox()
     const exitBox = await exitButton.boundingBox()
@@ -328,8 +332,8 @@ test.describe("Markdown editor replacement", () => {
     expect(publishBox).not.toBeNull()
     if (!editorBox || !exitBox || !publishBox) return
 
-    expect(exitBox.x).toBeGreaterThanOrEqual(editorBox.x - 2)
-    expect(publishBox.x + publishBox.width).toBeLessThanOrEqual(editorBox.x + editorBox.width + 2)
+    expect(exitBox.y).toBeLessThan(editorBox.y)
+    expect(publishBox.y).toBeLessThan(editorBox.y)
   })
 
   test("preview matches supported table markdown for alignment, escaped pipes, and inline cell formatting", async ({
@@ -427,7 +431,7 @@ test.describe("Markdown editor replacement", () => {
     expect(wideTableContract.scrollWidth).toBeGreaterThan(wideTableContract.clientWidth)
   })
 
-  test("write pane follows the current theme surface instead of forcing dark colors", async ({ page }) => {
+  test("write pane uses the V4 dark markdown source surface", async ({ page }) => {
     await routeAuthenticatedEditor(
       page,
       [
@@ -460,10 +464,10 @@ test.describe("Markdown editor replacement", () => {
       }
     })
 
-    expect(styles.frame.backgroundColor).not.toBe("rgb(13, 17, 23)")
+    expect(styles.frame.backgroundColor).toBe("rgb(15, 23, 40)")
     expect(styles.textarea.backgroundColor).toBe(styles.frame.backgroundColor)
     expect(styles.gutterCount).toBe(0)
-    expect(styles.textarea.color).toBe("rgb(15, 23, 36)")
+    expect(styles.textarea.color).toBe("rgb(219, 231, 255)")
   })
 
   test("write pane focus does not render the global blue textarea outline", async ({ page }) => {
@@ -521,12 +525,19 @@ test.describe("Markdown editor replacement", () => {
     expect(textareaBox).not.toBeNull()
     if (!textareaBox) return
 
-    const lineHeight = await textarea.evaluate((element) => Number.parseFloat(window.getComputedStyle(element).lineHeight))
-    const targetY = textareaBox.y + 16 + lineHeight * 2 + lineHeight / 2
+    const dragMetrics = await textarea.evaluate((element) => {
+      const style = window.getComputedStyle(element)
+      return {
+        lineHeight: Number.parseFloat(style.lineHeight),
+        paddingTop: Number.parseFloat(style.paddingTop),
+        paddingLeft: Number.parseFloat(style.paddingLeft),
+      }
+    })
+    const targetY = textareaBox.y + dragMetrics.paddingTop + dragMetrics.lineHeight * 2 + dragMetrics.lineHeight / 2
 
-    await page.mouse.move(textareaBox.x + 24, targetY)
+    await page.mouse.move(textareaBox.x + dragMetrics.paddingLeft, targetY)
     await page.mouse.down()
-    await page.mouse.move(textareaBox.x + 330, targetY, {
+    await page.mouse.move(textareaBox.x + dragMetrics.paddingLeft + 330, targetY, {
       steps: 12,
     })
     await page.mouse.up()
@@ -575,8 +586,8 @@ test.describe("Markdown editor replacement", () => {
       })
 
     expect(previewContract.articleBackground).not.toBe("rgb(13, 17, 23)")
-    expect(previewContract.paddingLeft).toBe("16px")
-    expect(previewContract.paddingRight).toBe("16px")
+    expect(previewContract.paddingLeft).toBe("32px")
+    expect(previewContract.paddingRight).toBe("32px")
     expect(previewContract.marginTop).toBe("0px")
     expect(previewContract.maxWidth).toBe("768px")
     expect(previewContract.fontSize).toBe("17px")

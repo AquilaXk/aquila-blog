@@ -566,6 +566,11 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
         authorAvatarSrc={previewAuthorAvatarSrc}
         previewDateText={previewDateText}
         currentVisibilityText={currentVisibilityText}
+        postContent={postContent}
+        postSummary={postSummary}
+        onPostSummaryChange={setPostSummary}
+        postVisibility={postVisibility}
+        onPostVisibilityChange={setPostVisibility}
         canOpenCurrentPostDetail={canOpenCurrentPostDetail}
         onOpenPostDetail={() => void openPostDetailRoute(postId)}
         onCopyPostDetailLink={() => void copyPostDetailLink(postId, postTitle)}

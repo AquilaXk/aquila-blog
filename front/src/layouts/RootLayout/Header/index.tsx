@@ -137,6 +137,7 @@ const Header: React.FC<Props> = ({ fullWidth, showThemeToggle = true, blogTitle 
   return (
     <StyledWrapper
       ref={wrapperRef}
+      data-ui="app-header"
       data-autohide={isPostDetailRoute}
       data-hidden={hiddenByScroll}
       style={
@@ -166,9 +167,8 @@ const StyledWrapper = styled.div`
   z-index: ${zIndexes.header};
   position: sticky;
   top: 0;
-  background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(249, 251, 254, 0.94)" : `${theme.colors.gray1}e6`};
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: var(--aq-header-bg);
+  border-bottom: 1px solid var(--aq-border);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   transform: translateY(0);

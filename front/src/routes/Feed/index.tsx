@@ -67,18 +67,15 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null, initialHomeBootstra
 export default Feed
 
 const StyledWrapper = styled.div`
-  --feed-product-bg: ${({ theme }) =>
-    theme.scheme === "light" ? "color-mix(in srgb, white 97%, black)" : theme.publicDesign.pageBackgroundColor};
-  --feed-product-panel: ${({ theme }) => theme.publicDesign.readableSurface};
-  --feed-product-panel-hover: ${({ theme }) => theme.publicDesign.surfaceElevated};
-  --feed-product-border: ${({ theme }) => theme.publicDesign.border};
-  --feed-product-text: ${({ theme }) => theme.colors.gray12};
-  --feed-product-muted: ${({ theme }) => theme.colors.gray10};
-  --feed-product-accent: ${({ theme }) => theme.publicDesign.accent};
-  --feed-product-chip-bg: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(255, 255, 255, 0.78)" : "rgba(22, 27, 34, 0.68)"};
-  --feed-product-hero-glow: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(37, 99, 235, 0.08)" : "rgba(88, 166, 255, 0.1)"};
+  --feed-product-bg: var(--aq-page-bg);
+  --feed-product-panel: var(--aq-surface);
+  --feed-product-panel-hover: var(--aq-surface-elevated);
+  --feed-product-border: var(--aq-border);
+  --feed-product-text: var(--aq-text);
+  --feed-product-muted: var(--aq-muted);
+  --feed-product-accent: var(--aq-accent);
+  --feed-product-chip-bg: var(--aq-feed-chip-bg);
+  --feed-product-hero-glow: var(--aq-feed-hero-glow);
   display: block;
   position: relative;
   z-index: 0;
@@ -95,8 +92,7 @@ const StyledWrapper = styled.div`
     z-index: -1;
     width: 100vw;
     transform: translateX(-50%);
-    background:
-      var(--feed-product-bg);
+    background-color: var(--feed-product-bg);
   }
 
   @media (max-width: 768px) {
@@ -179,7 +175,7 @@ const IntroCard = styled.section`
   }
 
   .noteRow strong {
-    color: ${({ theme }) => theme.colors.gray9};
+    color: var(--aq-subtle);
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
     font-size: 11px;
     line-height: 1.5;

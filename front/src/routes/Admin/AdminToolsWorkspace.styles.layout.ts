@@ -279,7 +279,7 @@ export const TextArea = styled.textarea`
 export const PrimaryButton = styled.button`
   min-height: 42px;
   padding: 0 0.95rem;
-  border-radius: 999px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => theme.colors.accentControl};
   background: ${({ theme }) => theme.colors.accentControl};
   color: ${({ theme }) => theme.colors.accentControlText};
@@ -344,7 +344,7 @@ export const DangerButton = styled.button`
   width: fit-content;
   min-height: 42px;
   padding: 0 0.95rem;
-  border-radius: 999px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => theme.colors.statusDangerBorder};
   background: transparent;
   color: ${({ theme }) => theme.colors.statusDangerText};
@@ -370,7 +370,7 @@ export const ResultFilterButton = styled.button`
   gap: 0.45rem;
   min-height: 36px;
   padding: 0 0.8rem;
-  border-radius: 999px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray11};

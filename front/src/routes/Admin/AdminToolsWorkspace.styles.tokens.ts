@@ -320,7 +320,7 @@ export const DiagnosticsTabs = styled.div`
 export const DiagnosticsTabButton = styled.button`
   min-height: 38px;
   padding: 0 0.82rem;
-  border-radius: 999px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray10};

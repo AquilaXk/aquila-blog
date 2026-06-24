@@ -38,6 +38,7 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(colorTokenSource).toContain("--admin-primary: #0969da;")
     expect(colorTokenSource).toContain("--admin-primary: #7ab6ff;")
     expect(colorTokenSource).toContain("--admin-accent-text: #0969da;")
+    expect(colorTokenSource).toContain('export const adminAppBackground = "var(--admin-app-bg, #f3f5f8)"')
     expect(colorTokenSource).toContain("--admin-control-text: #ffffff;")
     expect(colorTokenSource).toContain("--admin-control-text: #101214;")
     expect(colorTokenSource).toContain("--admin-text-muted: #566273;")

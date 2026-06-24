@@ -168,7 +168,7 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(source).toContain("export const AdminWorkspaceHero = styled.section`")
   })
 
-  test("대시보드 컨텍스트 레일은 태블릿 폭에서 우선 영역을 먼저 노출한다", () => {
+  test("대시보드는 V4 운영 화면의 metric, guard, log 구조를 먼저 노출한다", () => {
     const workspaceSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspacePage.tsx"),
       "utf8",
@@ -187,23 +187,21 @@ test.describe("관리자 표면 공통 계약", () => {
     )
 
     expect(workspaceSource).toContain('"/system/api/v1/adm/dashboard-snapshot"')
-    expect(workspaceSource).toContain("const grafanaPanelsCanEmbed = env.monitoringEmbedIsPublicGrafana && Boolean(grafanaDashboardUrl)")
-    expect(workspaceSource).toContain("private Grafana 대시보드라 iframe 대신 링크로만 제공합니다.")
-    expect(viewSource).toContain("<strong>최근 실패</strong>")
-    expect(viewSource).toContain("<strong>런북</strong>")
-    expect(viewSource).toContain("<strong>즉시 이동</strong>")
-    expect(viewSource).toContain("<ContextGrid>")
-    expect(viewSource).toContain("<AdditionalPanelsSection>")
-    expect(layoutStyleSource).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));")
-    expect(layoutStyleSource).toContain("@media (max-width: 1180px) {\n    grid-template-columns: 1fr;")
-    expect(priorityStyleSource).toContain("export const ContextLinkGrid = styled(AdminInfoList)`")
-    expect(layoutStyleSource).toContain("export const CompactPanelCard = styled(PanelCard)`")
-    expect(layoutStyleSource).toContain("export const CompactPanelSummary = styled.div`")
-    expect(layoutStyleSource).toContain("export const SnapshotLeadBody = styled(PanelBody)`")
-    expect(layoutStyleSource).toContain("export const LeadMetaGrid = styled.div`")
-    expect(priorityStyleSource).toContain("export const InsightLink = styled(AdminTextActionLink)`")
+    expect(workspaceSource).toContain("const chartBars: DashboardChartBar[]")
+    expect(workspaceSource).toContain("const logRows: DashboardLogRow[]")
+    expect(viewSource).toContain("<h2>Public read latency</h2>")
+    expect(viewSource).toContain("<h2>Steady-state guard</h2>")
+    expect(viewSource).toContain("<h2>Live logs</h2>")
+    expect(viewSource).toContain('<StatusRows data-ui="dashboard-guard-rows">')
+    expect(viewSource).not.toContain("<ContextGrid>")
+    expect(viewSource).not.toContain("<AdditionalPanelsSection>")
+    expect(viewSource).not.toContain("<PriorityTable>")
+    expect(layoutStyleSource).toContain("export const OpsGrid = styled.section`")
+    expect(layoutStyleSource).toContain("grid-template-columns: minmax(0, 1fr) 20rem;")
+    expect(layoutStyleSource).toContain("export const ChartBars = styled.div`")
+    expect(layoutStyleSource).toContain("export const LogLines = styled.div`")
+    expect(priorityStyleSource).toContain("export const PrioritySection = styled(AdminPlainCard)`")
     expect(priorityStyleSource).toContain("export const PrioritySummary = styled.div`")
-    expect(priorityStyleSource).toContain("export const PriorityLink = styled(AdminTextActionLink)`")
     expect(`${layoutStyleSource}\n${priorityStyleSource}`).not.toContain("${AdminInfoPanelCard}")
     expect(`${layoutStyleSource}\n${priorityStyleSource}`).not.toContain("${AdminInfoLinkCard}")
   })
@@ -293,7 +291,7 @@ test.describe("관리자 표면 공통 계약", () => {
 
     expect(profileSectionSource).toContain('from "src/routes/Admin/AdminProfileWorkspace.styles"')
     expect(toolsSource).toContain('from "src/routes/Admin/AdminToolsWorkspace.styles"')
-    expect(dashboardSource).toContain('from "src/routes/Admin/AdminDashboardWorkspace.styles"')
+    expect(dashboardSource).toContain('export { default } from "src/routes/Admin/AdminDashboardWorkspacePage"')
 
     expect(profileSource).not.toContain("const PreviewRail = styled(")
     expect(profileSource).not.toContain("const ModalOverlay = styled.div`")
@@ -318,8 +316,10 @@ test.describe("관리자 표면 공통 계약", () => {
     expectStyledComponentRadius(profileLinkStyles, "DragHandleButton", "2px")
     expect(toolsLayoutStyles).toContain("export const ExecutionLayout = styled.div`")
     expect(toolsLayoutStyles).toContain("export const ResultPanel = styled.pre`")
-    expect(dashboardLayoutStyles).toContain("export const PanelGrid = styled.section`")
-    expect(dashboardPriorityStyles).toContain("export const PriorityTable = styled.table`")
+    expect(dashboardLayoutStyles).toContain("export const OpsGrid = styled.section`")
+    expect(dashboardLayoutStyles).toContain("export const ChartBars = styled.div`")
+    expect(dashboardLayoutStyles).toContain("export const LogLines = styled.div`")
+    expect(dashboardPriorityStyles).toContain("export const PrioritySection = styled(AdminPlainCard)`")
 
     expect(profileSource.split("\n").length).toBeLessThan(2600)
     expect(toolsSource.split("\n").length).toBeLessThan(2100)

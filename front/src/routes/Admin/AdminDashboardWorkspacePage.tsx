@@ -4,12 +4,6 @@ import { apiFetch } from "src/apis/backend/client"
 import type { AuthMember } from "src/hooks/useAuthSession"
 import useAuthSession from "src/hooks/useAuthSession"
 import {
-  DASHBOARD_PANEL_CARDS,
-  buildGrafanaPanelEmbedUrl,
-  buildMonitoringItems,
-  getMonitoringEnv,
-} from "src/routes/Admin/adminMonitoring"
-import {
   DASHBOARD_BACKEND_CHECK_LABEL,
   DASHBOARD_DATA_MISSING_LABEL,
   EMPTY_INITIAL_SNAPSHOT,
@@ -22,9 +16,10 @@ import {
   getTaskQueueTone,
   hasDashboardSnapshot,
   type AdminDashboardInitialSnapshot,
+  type DashboardChartBar,
   type DashboardKpiCard,
+  type DashboardLogRow,
   type DashboardPriorityRow,
-  type DashboardQuickAction,
   type DashboardSnapshotPayload,
   type SystemHealthPayload,
 } from "src/routes/Admin/AdminDashboardWorkspaceModel"
@@ -34,8 +29,6 @@ type AdminDashboardPageProps = {
   initialMember: AuthMember
   initialSnapshot: AdminDashboardInitialSnapshot
 }
-
-const env = getMonitoringEnv()
 
 const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
   initialMember,
@@ -79,10 +72,6 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
   const rawSystemHealthStatus = systemHealthQuery.data?.status ?? null
   const dashboardSnapshot = dashboardSnapshotQuery.data ?? initialSnapshot.dashboard
   const hasSnapshot = hasDashboardSnapshot(dashboardSnapshot)
-  const monitoringItems = buildMonitoringItems(rawSystemHealthStatus ?? "", env)
-  const grafanaDashboardUrl = env.monitoringEmbedLooksLikeGrafana ? env.monitoringEmbedUrl : ""
-  const grafanaPanelsCanEmbed = env.monitoringEmbedIsPublicGrafana && Boolean(grafanaDashboardUrl)
-  const secondaryPanels = DASHBOARD_PANEL_CARDS
   const dashboardStatusLabel = getSystemHealthStatusLabel(rawSystemHealthStatus)
   const dashboardStatusTone = getSystemHealthTone(rawSystemHealthStatus)
   const dashboardSnapshotGeneratedAt = hasSnapshot ? formatInstant(dashboardSnapshot.generatedAt) : DASHBOARD_DATA_MISSING_LABEL
@@ -93,83 +82,6 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
   const authSecurityDetail = hasSnapshot
     ? `최근 기록 ${dashboardSnapshot.authSecurity.recentEventCount}건`
     : DASHBOARD_DATA_MISSING_LABEL
-  const leadFailureItems = hasSnapshot ? [
-    {
-      key: "task-failed",
-      label: "실패 task",
-      value: `${dashboardSnapshot.taskQueue.failedCount}건`,
-      tone: dashboardSnapshot.taskQueue.failedCount ? ("warn" as const) : ("good" as const),
-    },
-    {
-      key: "task-stale",
-      label: "정체 task",
-      value: `${dashboardSnapshot.taskQueue.staleProcessingCount}건`,
-      tone: dashboardSnapshot.taskQueue.staleProcessingCount ? ("warn" as const) : ("good" as const),
-    },
-    {
-      key: "mail-failure",
-      label: "메일 최근 실패",
-      value: dashboardSnapshot.signupMail.latestFailureAt
-        ? formatInstant(dashboardSnapshot.signupMail.latestFailureAt)
-        : DASHBOARD_DATA_MISSING_LABEL,
-      tone: dashboardSnapshot.signupMail.latestFailureAt ? ("warn" as const) : ("good" as const),
-    },
-    {
-      key: "auth-blocked",
-      label: "최근 인증 차단",
-      value: dashboardSnapshot.authSecurity.latestBlockedAt
-        ? formatInstant(dashboardSnapshot.authSecurity.latestBlockedAt)
-        : DASHBOARD_DATA_MISSING_LABEL,
-      tone: dashboardSnapshot.authSecurity.latestBlockedAt ? ("warn" as const) : ("good" as const),
-    },
-  ] : [
-    {
-      key: "snapshot-missing",
-      label: "운영 스냅샷",
-      value: DASHBOARD_DATA_MISSING_LABEL,
-      tone: "neutral" as const,
-    },
-  ]
-
-  const leadFailureMetaItems = hasSnapshot ? [
-    {
-      key: "mail-message",
-      label: "메일 실패 메시지",
-      value: dashboardSnapshot.signupMail.latestFailureMessage ?? DASHBOARD_DATA_MISSING_LABEL,
-    },
-    {
-      key: "task-message",
-      label: "task 실패 메시지",
-      value: dashboardSnapshot.taskQueue.latestFailureMessage ?? DASHBOARD_DATA_MISSING_LABEL,
-    },
-    {
-      key: "mail-latest",
-      label: "메일 실패 시각",
-      value: dashboardSnapshot.signupMail.latestFailureAt
-        ? formatInstant(dashboardSnapshot.signupMail.latestFailureAt)
-        : DASHBOARD_DATA_MISSING_LABEL,
-    },
-    {
-      key: "task-latest",
-      label: "task 실패 시각",
-      value: dashboardSnapshot.taskQueue.latestFailureAt
-        ? formatInstant(dashboardSnapshot.taskQueue.latestFailureAt)
-        : DASHBOARD_DATA_MISSING_LABEL,
-    },
-    {
-      key: "auth-latest",
-      label: "차단 시각",
-      value: dashboardSnapshot.authSecurity.latestBlockedAt
-        ? formatInstant(dashboardSnapshot.authSecurity.latestBlockedAt)
-        : DASHBOARD_DATA_MISSING_LABEL,
-    },
-  ] : [
-    {
-      key: "snapshot-check",
-      label: "스냅샷",
-      value: DASHBOARD_BACKEND_CHECK_LABEL,
-    },
-  ]
 
   const kpiCards: DashboardKpiCard[] = [
     {
@@ -266,55 +178,139 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
     },
   ]
 
-  const quickActions: DashboardQuickAction[] = [
-    {
-      key: "tools",
-      href: "/admin/tools",
-      label: "운영 진단 열기",
-    },
-    ...(grafanaDashboardUrl
-      ? [
-          {
-            key: "grafana",
-            href: grafanaDashboardUrl,
-            label: "Grafana 열기",
-          },
-        ]
-      : []),
-    ...(env.logsDashboardUrl
-      ? [
-          {
-            key: "logs",
-            href: env.logsDashboardUrl,
-            label: "로그 보드",
-          },
-        ]
-      : []),
-  ]
+  const chartBars: DashboardChartBar[] = hasSnapshot
+    ? ([
+        {
+          key: "ready",
+          label: "ready",
+          value: dashboardSnapshot.taskQueue.readyPendingCount,
+          tone: dashboardSnapshot.taskQueue.readyPendingCount ? "neutral" : "good",
+        },
+        {
+          key: "processing",
+          label: "processing",
+          value: dashboardSnapshot.taskQueue.processingCount,
+          tone: "neutral",
+        },
+        {
+          key: "failed",
+          label: "failed",
+          value: dashboardSnapshot.taskQueue.failedCount,
+          tone: dashboardSnapshot.taskQueue.failedCount ? "warn" : "good",
+        },
+        {
+          key: "stale",
+          label: "stale",
+          value: dashboardSnapshot.taskQueue.staleProcessingCount,
+          tone: dashboardSnapshot.taskQueue.staleProcessingCount ? "warn" : "good",
+        },
+        {
+          key: "auth-recent",
+          label: "auth",
+          value: dashboardSnapshot.authSecurity.recentEventCount,
+          tone: "neutral",
+        },
+        {
+          key: "auth-blocked",
+          label: "blocked",
+          value: dashboardSnapshot.authSecurity.blockedEventCount,
+          tone: dashboardSnapshot.authSecurity.blockedEventCount ? "warn" : "good",
+        },
+        {
+          key: "purge",
+          label: "purge",
+          value: dashboardSnapshot.storageCleanup.eligibleForPurgeCount,
+          tone: dashboardSnapshot.storageCleanup.eligibleForPurgeCount ? "warn" : "good",
+        },
+        {
+          key: "mail-lag",
+          label: "mail",
+          value: dashboardSnapshot.signupMail.queueLagSeconds ?? 0,
+          tone: getMailStatusTone(dashboardSnapshot.signupMail.status),
+        },
+      ] as Array<{ key: string; label: string; value: number; tone: DashboardChartBar["tone"] }>)
+        .map((item, _index, items) => {
+          const maxValue = Math.max(...items.map((bar) => bar.value), 1)
+          const height = item.value > 0 ? Math.max(14, Math.round((item.value / maxValue) * 100)) : 8
+          return {
+            key: item.key,
+            label: item.label,
+            height,
+            tone: item.tone,
+          }
+        })
+    : []
 
-  const grafanaPanelFallbackTitle = grafanaDashboardUrl ? "Grafana 패널은 새 창에서 확인하세요." : "대시보드를 불러올 수 없습니다."
-  const grafanaPanelFallbackBody = grafanaDashboardUrl
-    ? env.monitoringEmbedIsPrivateGrafana
-      ? "현재 URL은 인증이 필요한 private Grafana 대시보드라 iframe 대신 링크로만 제공합니다."
-      : "현재 대시보드는 iframe 임베드를 지원하지 않아 새 창 링크로만 제공합니다."
-    : "Grafana embed URL 또는 public dashboard 구성을 먼저 확인하세요."
+  const logRows: DashboardLogRow[] = hasSnapshot
+    ? [
+        {
+          key: "snapshot",
+          time: formatInstant(dashboardSnapshot.generatedAt),
+          message: "운영 스냅샷 수집",
+          detail: `system ${dashboardStatusLabel}`,
+          tone: dashboardStatusTone,
+        },
+        {
+          key: "task-queue",
+          time: dashboardSnapshot.taskQueue.latestFailureAt
+            ? formatInstant(dashboardSnapshot.taskQueue.latestFailureAt)
+            : formatInstant(dashboardSnapshot.generatedAt),
+          message: "작업 큐 상태",
+          detail: `ready ${dashboardSnapshot.taskQueue.readyPendingCount} · failed ${dashboardSnapshot.taskQueue.failedCount} · stale ${dashboardSnapshot.taskQueue.staleProcessingCount}`,
+          tone: getTaskQueueTone(dashboardSnapshot),
+        },
+        {
+          key: "signup-mail",
+          time: dashboardSnapshot.signupMail.latestFailureAt
+            ? formatInstant(dashboardSnapshot.signupMail.latestFailureAt)
+            : formatInstant(dashboardSnapshot.generatedAt),
+          message: "회원가입 메일",
+          detail: dashboardSnapshot.signupMail.latestFailureMessage ?? mailStatusLabel,
+          tone: getMailStatusTone(dashboardSnapshot.signupMail.status),
+        },
+        {
+          key: "auth-security",
+          time: dashboardSnapshot.authSecurity.latestEventAt
+            ? formatInstant(dashboardSnapshot.authSecurity.latestEventAt)
+            : formatInstant(dashboardSnapshot.generatedAt),
+          message: "인증 이벤트",
+          detail: `recent ${dashboardSnapshot.authSecurity.recentEventCount} · blocked ${dashboardSnapshot.authSecurity.blockedEventCount}`,
+          tone: dashboardSnapshot.authSecurity.blockedEventCount ? "warn" : "good",
+        },
+        {
+          key: "storage-cleanup",
+          time: dashboardSnapshot.storageCleanup.oldestEligiblePurgeAfter
+            ? formatInstant(dashboardSnapshot.storageCleanup.oldestEligiblePurgeAfter)
+            : formatInstant(dashboardSnapshot.generatedAt),
+          message: "스토리지 정리",
+          detail: dashboardSnapshot.storageCleanup.blockedBySafetyThreshold
+            ? "safety threshold blocked"
+            : `eligible ${dashboardSnapshot.storageCleanup.eligibleForPurgeCount}`,
+          tone:
+            dashboardSnapshot.storageCleanup.blockedBySafetyThreshold ||
+            dashboardSnapshot.storageCleanup.eligibleForPurgeCount > 0
+              ? "warn"
+              : "good",
+        },
+      ]
+    : [
+        {
+          key: "snapshot-missing",
+          time: DASHBOARD_DATA_MISSING_LABEL,
+          message: "운영 스냅샷 미수집",
+          detail: DASHBOARD_BACKEND_CHECK_LABEL,
+          tone: "neutral",
+        },
+      ]
 
   return (
     <AdminDashboardWorkspaceView
-      buildGrafanaPanelEmbedUrl={buildGrafanaPanelEmbedUrl}
+      chartBars={chartBars}
       dashboardStatusLabel={dashboardStatusLabel}
       dashboardStatusTone={dashboardStatusTone}
-      focusItems={leadFailureItems}
-      grafanaDashboardUrl={grafanaDashboardUrl}
-      grafanaPanelFallbackBody={grafanaPanelFallbackBody}
-      grafanaPanelFallbackTitle={grafanaPanelFallbackTitle}
-      grafanaPanelsCanEmbed={grafanaPanelsCanEmbed}
       kpiCards={kpiCards}
-      leadFailureMetaItems={leadFailureMetaItems}
-      monitoringItems={monitoringItems}
+      logRows={logRows}
       priorityRows={priorityRows}
-      quickActions={quickActions}
-      secondaryPanels={secondaryPanels}
       sessionMember={sessionMember}
     />
   )

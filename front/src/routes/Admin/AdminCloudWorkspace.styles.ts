@@ -199,7 +199,7 @@ export const SearchInput = styled.input`
   width: 100%;
   min-height: 2.42rem;
   border: 0;
-  border-radius: 999px;
+  border-radius: 2px;
   padding: 0 3.25rem 0 2.45rem;
   background: ${surfaceRaised};
   color: ${textPrimary};
@@ -958,7 +958,7 @@ export const DocumentFallbackBox = styled.div`
 
   a {
     border: 1px solid ${borderStrong};
-    border-radius: 999px;
+    border-radius: 2px;
     padding: 0.45rem 0.7rem;
     background: ${surfaceMuted};
     color: ${textPrimary};
@@ -1124,7 +1124,7 @@ export const InlineList = styled.div`
 
   span {
     border: 1px solid ${border};
-    border-radius: 999px;
+    border-radius: 2px;
     padding: 0.25rem 0.48rem;
     color: ${textSecondary};
     font-size: 0.72rem;
@@ -1229,7 +1229,7 @@ export const StatusPill = styled.span`
   justify-self: end;
   min-width: 3.55rem;
   max-width: 5.6rem;
-  border-radius: 999px;
+  border-radius: 2px;
   padding: 0.22rem 0.45rem;
   background: ${surfaceAccent};
   color: ${accentGold};

@@ -205,6 +205,18 @@ jobs:
           if-no-files-found: warn
           retention-days: 3
 
+      - name: Disable Microsoft apt sources for Playwright deps
+        if: steps.changes.outputs.frontend == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for source in /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+            [ -e "${source}" ] || continue
+            if grep -q 'packages.microsoft.com' "${source}"; then
+              sudo mv "${source}" "${source}.disabled"
+            fi
+          done
+
       - name: Install Playwright browser
         if: steps.changes.outputs.frontend == 'true'
         working-directory: front

@@ -71,6 +71,24 @@ const readLanguageAttribute = (...values: unknown[]): string => {
   return ""
 }
 
+const readCodeMeta = (node: unknown): string => {
+  if (!node || typeof node !== "object") return ""
+  const data = (node as { data?: unknown }).data
+  const dataMeta = data && typeof data === "object" ? (data as { meta?: unknown }).meta : ""
+  const meta = (node as { meta?: unknown }).meta || dataMeta
+  return typeof meta === "string" ? meta.trim() : ""
+}
+
+const unquoteMetaValue = (value: string) => value.trim().replace(/^["']|["']$/g, "")
+
+const extractCodeTitle = (meta: string) => {
+  const titleMatch = meta.match(/(?:^|\s)title=(?:"([^"]+)"|'([^']+)'|([^\s]+))/i)
+  if (titleMatch) return unquoteMetaValue(titleMatch[1] || titleMatch[2] || titleMatch[3] || "")
+  const filenameMatch = meta.match(/(?:^|\s)filename=(?:"([^"]+)"|'([^']+)'|([^\s]+))/i)
+  if (filenameMatch) return unquoteMetaValue(filenameMatch[1] || filenameMatch[2] || filenameMatch[3] || "")
+  return ""
+}
+
 export const extractTextFromCodeAst = (node: unknown): string => {
   if (!node || typeof node !== "object") return ""
 
@@ -116,9 +134,11 @@ export const extractCodeMetaFromPreChildren = (children: ReactNode, preNode?: un
   const rawCodeFromChildren = extractTextFromNode(codeChildren)
   const rawCodeFromAst = extractTextFromCodeAst(codeAstNode)
   const rawCode = (dataRawCode || rawCodeFromChildren || rawCodeFromAst).replace(/\n$/, "")
+  const meta = readCodeMeta(codeAstNode)
 
   return {
     language: dataLanguage || classLanguage || "text",
+    title: extractCodeTitle(meta),
     rawCode,
   }
 }

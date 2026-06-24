@@ -402,7 +402,7 @@ test.describe("core smoke detail rendering", () => {
 
   await page.goto("/posts/114")
 
-  const languageLabels = page.locator(".aq-code-language")
+  const languageLabels = page.locator(".aq-code-title")
   await expect(languageLabels).toHaveCount(languageCases.length)
   const labels = await languageLabels.allTextContents()
   expect(labels).toEqual(languageCases.map(([, , label]) => label))

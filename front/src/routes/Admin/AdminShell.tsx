@@ -211,6 +211,9 @@ const AdminShell = ({ currentSection, member, profileSnapshot = null, children }
             <Link href="/editor/new" passHref legacyBehavior>
               <PrimaryTopAction>새 글</PrimaryTopAction>
             </Link>
+            <ResponsiveLogoutAction type="button" aria-label="Logout" onClick={() => void handleLogout()}>
+              <AppIcon name="log-out" />
+            </ResponsiveLogoutAction>
           </TopBarActions>
         </TopBar>
 
@@ -516,7 +519,7 @@ const SecondaryTopAction = styled.a`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 2.25rem;
+  min-height: 36px;
   padding: 0 0.9rem;
   border: 1px solid ${adminBorder};
   border-radius: 2px;
@@ -531,7 +534,7 @@ const PrimaryTopAction = styled.a`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 2.25rem;
+  min-height: 36px;
   padding: 0 0.95rem;
   border: 1px solid ${adminTealBorder};
   border-radius: 2px;
@@ -543,6 +546,23 @@ const PrimaryTopAction = styled.a`
 
   &:hover {
     background: ${adminTealHover};
+  }
+`
+
+const ResponsiveLogoutAction = styled.button`
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid ${adminBorder};
+  border-radius: 2px;
+  background: ${adminSurfaceRaised};
+  color: ${adminTextSecondary};
+  cursor: pointer;
+
+  @media (max-width: 1100px) {
+    display: inline-flex;
   }
 `
 

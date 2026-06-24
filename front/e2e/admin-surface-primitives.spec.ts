@@ -87,6 +87,8 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(shellSource).not.toContain('<button type="button" onClick={() => void handleLogout()}>')
     expect(shellSource).toContain('apiFetch("/member/api/v1/auth/logout", { method: "DELETE" })')
     expect(shellSource).toContain('<SidebarProfile type="button" aria-label="Logout" onClick={() => void handleLogout()}>')
+    expect(shellSource).toContain('<ResponsiveLogoutAction type="button" aria-label="Logout" onClick={() => void handleLogout()}>')
+    expect(shellSource).toContain('<AppIcon name="log-out" />')
     expect(shellSource).not.toContain('"/api/backend/member/api/v1/auth/logout"')
     expect(shellSource).toContain("<PrimaryTopAction>새 글</PrimaryTopAction>")
     expect(shellSource).toContain('<CompactNav aria-label="관리자 바로가기">')
@@ -481,6 +483,8 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(source).toContain('label: "설정"')
     const sidebarProfileMarker = '<SidebarProfile type="button" aria-label="Logout" onClick={() => void handleLogout()}>'
     expect(source).toContain(sidebarProfileMarker)
+    expect(source).toContain("const ResponsiveLogoutAction = styled.button`")
+    expect(source).toMatch(/const ResponsiveLogoutAction = styled\.button`[\s\S]*?@media \(max-width: 1100px\) \{[\s\S]*?display: inline-flex;/)
     expect(source).not.toContain("<SidebarSectionLabel>관리 메뉴</SidebarSectionLabel>")
     expect(source.indexOf("<BrandBlock>")).toBeLessThan(source.indexOf("<SidebarNavSection>"))
     expect(source.indexOf("<SidebarNavSection>")).toBeLessThan(source.indexOf(sidebarProfileMarker))

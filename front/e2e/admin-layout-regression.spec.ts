@@ -272,6 +272,7 @@ test("관리자 허브 모바일 first fold의 글 작성 진입점은 상단 V4
   await page.goto("/admin")
 
   await expect(page.getByRole("heading", { name: /좋은 아침이에요/ })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Logout", exact: true })).toBeVisible()
 
   const ctaSnapshot = await page.evaluate(() => {
     const cta = Array.from(document.querySelectorAll<HTMLAnchorElement>("header a")).find(

@@ -61,8 +61,10 @@ test.describe("모바일 레이아웃 소스 경계", () => {
     expect(themeSource).toContain("readableSurface")
     expect(themeSource).toContain("operationSurface")
     expect(themeSource).toContain("operationSurfaceElevated")
-    expect(rootLayoutSource).toContain('const isDesignAwareRoute = !isAdminRoute && pathname[1] !== "_" && pathname !== "/sitemap.xml"')
-    expect(rootLayoutSource).toContain('const effectiveBlogDesign = "legacy"')
+    expect(rootLayoutSource).toContain('const isDesignAwareRoute = pathname[1] !== "_" && pathname !== "/sitemap.xml"')
+    expect(rootLayoutSource).toContain(
+      'const effectiveBlogDesign = isAdminRoute ? adminProfile?.blogDesign || "legacy" : "legacy"'
+    )
     expect(rootLayoutSource).toContain('const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/")')
     expect(rootLayoutSource).toContain("const isFullBleedRoute = isDedicatedEditorRoute || isAdminRoute")
     expect(rootLayoutSource).toContain("<StyledMain $fullBleed={isFullBleedRoute}>")

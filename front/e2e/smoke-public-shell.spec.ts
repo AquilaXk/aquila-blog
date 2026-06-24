@@ -138,7 +138,9 @@ test.describe("core smoke public shell", () => {
   expect(postDetailPageSource).toContain('initialAdminProfileSource === "static-fallback"')
   expect(appSource).toContain("initialAdminProfileShouldRefetch")
   expect(rootLayoutSource).toContain('pathname[1] !== "_"')
-  expect(rootLayoutSource).toContain('const effectiveBlogDesign = "legacy"')
+  expect(rootLayoutSource).toContain(
+    'const effectiveBlogDesign = isAdminRoute ? adminProfile?.blogDesign || "legacy" : "legacy"'
+  )
   expect(rootLayoutSource).toContain('showThemeToggle={effectiveBlogDesign === "legacy"}')
   expect(rootLayoutSource).not.toContain('showThemeToggle={effectiveBlogDesign === "legacy" && !isPublicBlogRoute}')
   expect(rootLayoutSource).toContain("refetchOnMount: isDesignAwareRoute")

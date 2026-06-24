@@ -77,7 +77,7 @@ const RootLayout = ({
     staleTimeMs: isDesignAwareRoute ? 0 : undefined,
   })
   const effectiveScheme = scheme
-  const effectiveBlogDesign = adminProfile?.blogDesign || "legacy"
+  const effectiveBlogDesign = isAdminRoute ? adminProfile?.blogDesign || "legacy" : "legacy"
   const headerBlogTitle = (isPublicBlogRoute && adminProfile?.blogTitle?.trim()) || CONFIG.blog.title
   useGtagEffect()
 

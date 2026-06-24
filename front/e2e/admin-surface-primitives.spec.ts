@@ -19,6 +19,24 @@ const getContrastRatio = (foreground: string, background: string) => {
   return (lighter + 0.05) / (darker + 0.05)
 }
 
+const getStyledComponentBlock = (source: string, componentName: string) => {
+  const marker = `export const ${componentName} =`
+  const start = source.indexOf(marker)
+  expect(start, `${componentName} export`).toBeGreaterThanOrEqual(0)
+
+  const templateStart = source.indexOf("`", start)
+  expect(templateStart, `${componentName} template start`).toBeGreaterThanOrEqual(0)
+
+  const templateEnd = source.indexOf("`", templateStart + 1)
+  expect(templateEnd, `${componentName} template end`).toBeGreaterThan(templateStart)
+
+  return source.slice(start, templateEnd + 1)
+}
+
+const expectStyledComponentRadius = (source: string, componentName: string, radius: string) => {
+  expect(getStyledComponentBlock(source, componentName)).toContain(`border-radius: ${radius};`)
+}
+
 test.describe("관리자 표면 공통 계약", () => {
   test("관리자 표면은 MYBOX형 화이트 우선 시스템 테마 토큰을 공유한다", () => {
     const colorTokenSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/adminColorTokens.ts"), "utf8")
@@ -269,15 +287,15 @@ test.describe("관리자 표면 공통 계약", () => {
 
     expect(profileSectionStyles).toContain("export const PreviewRail = styled(AdminStickyRail)`")
     expect(`${profileLayoutStyles}\n${profileLinkStyles}`).toContain("export const LinkRowCard = styled.div`")
-    expect(profileSectionStyles).toMatch(/export const PreviewToggleButton = styled\.button`[\s\S]*?border-radius: 2px;/)
-    expect(profileSectionStyles).toMatch(/export const DockSecondaryButton = styled\(BaseButton\)`[\s\S]*?border-radius: 2px;/)
-    expect(profileSectionStyles).toMatch(/export const DockPrimaryButton = styled\(PublishButton\)`[\s\S]*?border-radius: 2px;/)
-    expect(profileSectionStyles).toMatch(/export const ModalCloseButton = styled\.button`[\s\S]*?border-radius: 2px;/)
-    expect(profileSectionStyles).toMatch(/export const ModalHistoryAction = styled\.button`[\s\S]*?border-radius: 2px;/)
-    expect(profileLayoutStyles).toMatch(/export const SectionStateBadge = styled\.span`[\s\S]*?border-radius: 2px;/)
-    expect(profileLayoutStyles).toMatch(/export const SegmentedControl = styled\.div`[\s\S]*?border-radius: 2px;/)
-    expect(profileLayoutStyles).toMatch(/export const SegmentButton = styled\.button`[\s\S]*?border-radius: 2px;/)
-    expect(profileLinkStyles).toMatch(/export const DragHandleButton = styled\.span`[\s\S]*?border-radius: 2px;/)
+    expectStyledComponentRadius(profileSectionStyles, "PreviewToggleButton", "2px")
+    expectStyledComponentRadius(profileSectionStyles, "DockSecondaryButton", "2px")
+    expectStyledComponentRadius(profileSectionStyles, "DockPrimaryButton", "2px")
+    expectStyledComponentRadius(profileSectionStyles, "ModalCloseButton", "2px")
+    expectStyledComponentRadius(profileSectionStyles, "ModalHistoryAction", "2px")
+    expectStyledComponentRadius(profileLayoutStyles, "SectionStateBadge", "2px")
+    expectStyledComponentRadius(profileLayoutStyles, "SegmentedControl", "2px")
+    expectStyledComponentRadius(profileLayoutStyles, "SegmentButton", "2px")
+    expectStyledComponentRadius(profileLinkStyles, "DragHandleButton", "2px")
     expect(toolsLayoutStyles).toContain("export const ExecutionLayout = styled.div`")
     expect(toolsLayoutStyles).toContain("export const ResultPanel = styled.pre`")
     expect(dashboardLayoutStyles).toContain("export const PanelGrid = styled.section`")

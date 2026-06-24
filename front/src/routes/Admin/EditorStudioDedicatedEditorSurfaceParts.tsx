@@ -598,6 +598,12 @@ export const EditorInspector = styled.aside`
     border-bottom: 1px solid ${({ theme }) => theme.publicDesign.border};
   }
 
+  small {
+    justify-self: end;
+    color: ${({ theme }) => theme.colors.gray10};
+    font: 700 0.72rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
   select,
   textarea {
     width: 100%;
@@ -633,6 +639,11 @@ export const EditorInspector = styled.aside`
     padding: 0.12rem 0.34rem;
     color: ${({ theme }) => theme.colors.green11};
     font: 750 0.68rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  b[data-tone="warn"] {
+    border-color: ${({ theme }) => theme.colors.orange7};
+    color: ${({ theme }) => theme.colors.orange10};
   }
 
   @media (max-width: 1180px) {

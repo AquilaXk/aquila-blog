@@ -41,6 +41,7 @@ import {
   TitleInput,
 } from "./EditorStudioDedicatedEditorSurfaceParts"
 import type { PostVisibility } from "./editorStudioState"
+import { PREVIEW_SUMMARY_MAX_LENGTH } from "./editorStudioMetaModel"
 import { PUBLISH_VISIBILITY_OPTIONS } from "./EditorStudioWorkspaceControllerRootModel"
 
 type NoticeTone = "idle" | "loading" | "success" | "error"
@@ -169,8 +170,11 @@ export const EditorStudioDedicatedEditorSurface = ({
 }: EditorStudioDedicatedEditorSurfaceProps) => {
   const [isGuideOpen, setIsGuideOpen] = useState(false)
   const outlineItems = useMemo(() => extractEditorOutline(postTitle, postContent), [postContent, postTitle])
-  const summaryText = postSummary.trim() || "요약을 입력하면 발행 카드와 공개 글 설명에 함께 반영됩니다."
-  const primaryTag = postTags[0] || "Architecture"
+  const hasTitleAndBody = Boolean(postTitle.trim() && postContent.trim())
+  const hasMarkdownBody = Boolean(postContent.trim())
+  const hasSummaryPreview = Boolean(postSummary.trim() || postContent.trim())
+  const primaryTag = postTags[0] || "태그 없음"
+  const readTimeText = postContent.trim() ? `${Math.max(1, Math.ceil(postContent.trim().length / 500))}분` : "읽기 시간"
 
   return (
     <EditorStudioRoot>
@@ -295,7 +299,14 @@ export const EditorStudioDedicatedEditorSurface = ({
           </label>
           <label>
             <span>Summary</span>
-            <textarea value={postSummary} onChange={(event) => onPostSummaryChange(event.target.value)} />
+            <textarea
+              value={postSummary}
+              maxLength={PREVIEW_SUMMARY_MAX_LENGTH}
+              onChange={(event) => onPostSummaryChange(event.target.value)}
+            />
+            <small>
+              {postSummary.length}/{PREVIEW_SUMMARY_MAX_LENGTH}
+            </small>
           </label>
           <section>
             <span>Tags</span>
@@ -313,13 +324,22 @@ export const EditorStudioDedicatedEditorSurface = ({
           <EditorInspectorPreview>
             <div>ETAG<br />INVALIDATION</div>
             <strong>{postTitle.trim() || "제목을 입력하세요"}</strong>
-            <span>{primaryTag} · 11분</span>
+            <span>{primaryTag} · {readTimeText}</span>
           </EditorInspectorPreview>
           <section>
             <span>Quality checks</span>
-            <p><strong>제목과 본문</strong><b>PASS</b></p>
-            <p><strong>Markdown 렌더링</strong><b>PASS</b></p>
-            <p><strong>요약</strong><b>{summaryText ? "PASS" : "WARN"}</b></p>
+            <p>
+              <strong>제목과 본문</strong>
+              <b data-tone={hasTitleAndBody ? "pass" : "warn"}>{hasTitleAndBody ? "PASS" : "WARN"}</b>
+            </p>
+            <p>
+              <strong>Markdown 렌더링</strong>
+              <b data-tone={hasMarkdownBody ? "pass" : "warn"}>{hasMarkdownBody ? "PASS" : "WARN"}</b>
+            </p>
+            <p>
+              <strong>요약</strong>
+              <b data-tone={hasSummaryPreview ? "pass" : "warn"}>{hasSummaryPreview ? "PASS" : "WARN"}</b>
+            </p>
           </section>
         </EditorInspector>
       </EditorStudioFrame>

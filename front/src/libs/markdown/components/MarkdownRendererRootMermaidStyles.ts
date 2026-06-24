@@ -63,6 +63,7 @@ export const markdownRendererRootMermaidStyles = (theme: Theme) => css`
 
   .aq-mermaid-stage {
     display: flex;
+    box-sizing: border-box;
     width: 100%;
     min-width: 0;
     max-width: 100%;

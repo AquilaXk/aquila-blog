@@ -72,7 +72,7 @@ export const PreviewToggleButton = styled.button`
     justify-content: center;
     min-height: 34px;
     padding: 0 0.82rem;
-    border-radius: 999px;
+    border-radius: 2px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     background: ${({ theme }) => theme.colors.gray1};
     color: ${({ theme }) => theme.colors.gray11};
@@ -94,7 +94,7 @@ export const EditorActionDock = styled(AdminWorkspaceActionDock)``
 export const DockSecondaryButton = styled(BaseButton)`
   min-height: 40px;
   padding: 0 1rem;
-  border-radius: 999px;
+  border-radius: 2px;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
 `
@@ -102,7 +102,7 @@ export const DockSecondaryButton = styled(BaseButton)`
 export const DockPrimaryButton = styled(PublishButton)`
   min-height: 40px;
   padding: 0 1rem;
-  border-radius: 999px;
+  border-radius: 2px;
 `
 
 export const PreviewViewport = styled(AdminInfoPanelCard)`
@@ -359,7 +359,7 @@ export const ModalHeader = styled.div`
 export const ModalCloseButton = styled.button`
   width: 40px;
   height: 40px;
-  border-radius: 999px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray12};
@@ -438,7 +438,7 @@ export const ModalHistoryAction = styled.button`
   width: 36px;
   height: 36px;
   justify-self: center;
-  border-radius: 999px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray11};

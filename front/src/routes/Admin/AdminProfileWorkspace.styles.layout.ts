@@ -99,7 +99,7 @@ export const SectionStateBadge = styled.span`
   justify-content: center;
   min-height: 1.8rem;
   padding: 0 0.62rem;
-  border-radius: 999px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   color: ${({ theme }) => theme.colors.gray10};
   background: ${({ theme }) => theme.colors.gray2};
@@ -394,7 +394,7 @@ export const SegmentedControl = styled.div`
   display: inline-flex;
   gap: 0.36rem;
   padding: 0.25rem;
-  border-radius: 999px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => theme.colors.gray7};
   background: ${({ theme }) => theme.colors.gray2};
 `
@@ -402,7 +402,7 @@ export const SegmentedControl = styled.div`
 export const SegmentButton = styled.button`
   min-height: 34px;
   padding: 0 0.82rem;
-  border-radius: 999px;
+  border-radius: 2px;
   border: none;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray10};

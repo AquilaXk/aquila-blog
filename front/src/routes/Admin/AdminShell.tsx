@@ -1,6 +1,7 @@
 import styled from "@emotion/styled"
 import Link from "next/link"
 import { type ReactNode, useEffect } from "react"
+import { apiFetch } from "src/apis/backend/client"
 import AppIcon, { type IconName } from "src/components/icons/AppIcon"
 import BrandLogoMark from "src/components/branding/BrandMark"
 import ProfileImage from "src/components/ProfileImage"
@@ -139,6 +140,13 @@ const AdminShell = ({ currentSection, member, profileSnapshot = null, children }
     }
   }, [member?.isAdmin])
 
+  const handleLogout = async () => {
+    await apiFetch("/member/api/v1/auth/logout", { method: "DELETE" }).catch(() => undefined)
+    const rawNextPath = `${window.location.pathname}${window.location.search}${window.location.hash}`
+    const nextPath = rawNextPath.startsWith("/") && !rawNextPath.startsWith("//") ? rawNextPath : "/admin"
+    window.location.href = `/login?next=${encodeURIComponent(nextPath)}`
+  }
+
   return (
     <ShellFrame>
       <Sidebar>
@@ -167,7 +175,7 @@ const AdminShell = ({ currentSection, member, profileSnapshot = null, children }
           </SidebarNav>
         </SidebarNavSection>
 
-        <SidebarProfile>
+        <SidebarProfile type="button" aria-label="Logout" onClick={() => void handleLogout()}>
           <SidebarAvatar>
             {sidebarProfileImageSrc ? (
               <ProfileImage src={sidebarProfileImageSrc} alt={`${sidebarIdentityName} 프로필 이미지`} fillContainer />
@@ -356,13 +364,20 @@ const NavLink = styled.a`
   }
 `
 
-const SidebarProfile = styled.div`
+const SidebarProfile = styled.button`
   display: flex;
   align-items: center;
   gap: 0.65rem;
   min-width: 0;
+  width: 100%;
   padding: 1rem 0.35rem 0;
   border-top: 1px solid ${adminBorder};
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
 `
 
 const SidebarAvatar = styled.div`

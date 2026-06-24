@@ -153,6 +153,25 @@ export const MetricCard = styled.div`
     border-right: 0;
   }
 
+  @media (max-width: 1040px) {
+    &:nth-of-type(2n) {
+      border-right: 0;
+    }
+
+    &:nth-of-type(-n + 2) {
+      border-bottom: 1px solid ${adminBorder};
+    }
+  }
+
+  @media (max-width: 560px) {
+    border-right: 0;
+    border-bottom: 1px solid ${adminBorder};
+
+    &:last-of-type {
+      border-bottom: 0;
+    }
+  }
+
   &[data-tone="good"] {
     background: transparent;
   }

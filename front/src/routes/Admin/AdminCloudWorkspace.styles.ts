@@ -140,7 +140,7 @@ export const StorageMeter = styled.div`
   span {
     display: block;
     height: 0.28rem;
-    border-radius: 999px;
+    border-radius: 2px;
     background: linear-gradient(90deg, ${accentGold} 0 22%, ${surfaceMuted} 22% 100%);
   }
 `
@@ -703,7 +703,7 @@ export const SkeletonRows = styled.div`
 export const SkeletonRow = styled.span`
   display: block;
   height: 0.78rem;
-  border-radius: 999px;
+  border-radius: 2px;
   background: linear-gradient(90deg, ${surfaceRaised}, ${surfaceMuted}, ${surfaceRaised});
   background-size: 220% 100%;
   animation: admin-cloud-skeleton 1.2s ease-in-out infinite;
@@ -1113,7 +1113,7 @@ export const PlayerBar = styled.div`
 
 export const Timeline = styled.div`
   height: 0.45rem;
-  border-radius: 999px;
+  border-radius: 2px;
   background: linear-gradient(90deg, ${accentGold} 0 34%, ${accentTeal} 34% 36%, ${surfaceMuted} 36% 100%);
 `
 
@@ -1258,7 +1258,7 @@ export const ProgressTrack = styled.div`
   grid-column: 1 / -1;
   height: 0.28rem;
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: 2px;
   background: ${surfaceMuted};
 
   span {

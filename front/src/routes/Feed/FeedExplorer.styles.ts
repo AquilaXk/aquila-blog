@@ -13,7 +13,7 @@ export const ExplorerCard = styled.section`
   height: auto;
   overflow: visible;
   margin: 0;
-  border-bottom: 2px solid ${({ theme }) => theme.colors.gray12};
+  border-bottom: 2px solid var(--aq-text);
   padding-bottom: 18px;
 
   .feedTitle {
@@ -23,7 +23,7 @@ export const ExplorerCard = styled.section`
   }
 
   .feedTitle span {
-    color: ${({ theme }) => theme.publicDesign.accent};
+    color: var(--aq-accent);
     font-size: 0.6875rem;
     line-height: 1.2;
     font-weight: 820;
@@ -33,7 +33,7 @@ export const ExplorerCard = styled.section`
 
   .feedTitle h2 {
     margin: 0;
-    color: ${({ theme }) => theme.colors.gray12};
+    color: var(--aq-text);
     margin: 4px 0 0;
     font-size: 28px;
     line-height: 1.2;
@@ -43,7 +43,7 @@ export const ExplorerCard = styled.section`
 
   .feedDescription {
     margin: 8px 0 0;
-    color: ${({ theme }) => theme.colors.gray10};
+    color: var(--aq-muted);
     max-width: 560px;
     font-size: 0.875rem;
     line-height: 1.55;
@@ -63,10 +63,10 @@ export const ExplorerCard = styled.section`
 
   .sortTrigger {
     height: 36px;
-    border: 1px solid ${({ theme }) => theme.publicDesign.border};
-    background: ${({ theme }) => theme.publicDesign.readableSurface};
+    border: 1px solid var(--aq-border);
+    background: var(--aq-surface);
     display: inline-flex;
-    color: ${({ theme }) => theme.colors.gray10};
+    color: var(--aq-muted);
     align-items: center;
     justify-content: space-between;
     gap: 12px;
@@ -82,8 +82,8 @@ export const ExplorerCard = styled.section`
   .sortTrigger:hover,
   .sortTrigger:focus-visible,
   .sortTrigger[aria-expanded="true"] {
-    border-color: ${({ theme }) => theme.colors.gray12};
-    color: ${({ theme }) => theme.colors.gray12};
+    border-color: var(--aq-text);
+    color: var(--aq-text);
     outline: none;
   }
 
@@ -101,8 +101,8 @@ export const ExplorerCard = styled.section`
     top: calc(100% + 4px);
     z-index: 20;
     min-width: 100%;
-    border: 1px solid ${({ theme }) => theme.publicDesign.borderStrong};
-    background: ${({ theme }) => theme.publicDesign.readableSurface};
+    border: 1px solid var(--aq-border-strong);
+    background: var(--aq-surface);
     box-shadow: none;
     padding: 3px;
   }
@@ -112,7 +112,7 @@ export const ExplorerCard = styled.section`
     height: 30px;
     border: 0;
     background: transparent;
-    color: ${({ theme }) => theme.colors.gray10};
+    color: var(--aq-muted);
     display: grid;
     grid-template-columns: 12px 1fr;
     align-items: center;
@@ -131,8 +131,8 @@ export const ExplorerCard = styled.section`
   .sortOption:hover,
   .sortOption:focus-visible,
   .sortOption[data-active="true"] {
-    background: ${({ theme }) => theme.publicDesign.surfaceElevated};
-    color: ${({ theme }) => theme.colors.gray12};
+    background: var(--aq-surface-elevated);
+    color: var(--aq-text);
     outline: none;
   }
 
@@ -203,7 +203,7 @@ export const FilterContextBar = styled.div`
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  color: ${({ theme }) => theme.colors.gray10};
+  color: var(--aq-muted);
 
   .contextMain {
     min-width: 0;
@@ -222,13 +222,13 @@ export const FilterContextBar = styled.div`
 
   .contextCount {
     font-size: 0.88rem;
-    color: ${({ theme }) => theme.colors.gray12};
+    color: var(--aq-text);
     font-weight: 740;
     letter-spacing: -0.015em;
   }
 
   .filterSummary {
-    color: ${({ theme }) => theme.colors.gray10};
+    color: var(--aq-muted);
     font-size: 0.74rem;
     line-height: 1.35;
     font-weight: 600;
@@ -245,9 +245,9 @@ export const FilterContextBar = styled.div`
     min-height: 1.7rem;
     padding: 0 0.58rem;
     border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.publicDesign.border};
-    background: ${({ theme }) => theme.publicDesign.operationSurfaceElevated};
-    color: ${({ theme }) => theme.colors.gray11};
+    border: 1px solid var(--aq-border);
+    background: var(--aq-surface-elevated);
+    color: var(--aq-muted);
     font-size: 0.72rem;
     font-weight: 700;
     white-space: nowrap;
@@ -258,18 +258,18 @@ export const FilterContextBar = styled.div`
     min-height: 1.7rem;
     padding: 0 0.52rem;
     border-radius: 4px;
-    border: 1px solid ${({ theme }) => theme.publicDesign.border};
+    border: 1px solid var(--aq-border);
     background: transparent;
-    color: ${({ theme }) => theme.colors.gray10};
+    color: var(--aq-muted);
     font-size: 0.72rem;
     font-weight: 700;
     cursor: pointer;
     transition: border-color 0.125s ease-in, color 0.125s ease-in, background-color 0.125s ease-in;
 
     &:hover {
-      border-color: ${({ theme }) => theme.publicDesign.accent};
-      background: ${({ theme }) => theme.publicDesign.accentMuted};
-      color: ${({ theme }) => theme.colors.gray12};
+      border-color: var(--aq-accent);
+      background: var(--aq-accent-muted);
+      color: var(--aq-text);
     }
   }
 

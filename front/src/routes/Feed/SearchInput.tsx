@@ -66,8 +66,8 @@ const StyledWrapper = styled.div`
     min-height: 36px;
     padding: 0 10px;
     border-radius: 0;
-    border: 1px solid ${({ theme }) => theme.publicDesign.border};
-    background: ${({ theme }) => theme.publicDesign.readableSurface};
+    border: 1px solid var(--aq-border);
+    background: var(--aq-surface);
     box-shadow: none;
     transition: border-color 0.125s ease-in, background-color 0.125s ease-in, box-shadow 0.125s ease-in;
 
@@ -76,7 +76,7 @@ const StyledWrapper = styled.div`
       align-items: center;
       justify-content: center;
       flex: 0 0 auto;
-      color: ${({ theme }) => theme.colors.gray9};
+      color: var(--aq-subtle);
       width: 15px;
       height: 15px;
       transition: color 0.125s ease-in;
@@ -96,9 +96,9 @@ const StyledWrapper = styled.div`
       height: 24px;
       padding: 0 0.5rem;
       border-radius: 0;
-      border: 1px solid ${({ theme }) => theme.publicDesign.border};
+      border: 1px solid var(--aq-border);
       background: transparent;
-      color: ${({ theme }) => theme.colors.gray10};
+      color: var(--aq-muted);
       font-size: 0.74rem;
       font-weight: 700;
       letter-spacing: 0;
@@ -107,9 +107,9 @@ const StyledWrapper = styled.div`
       transition: all 0.125s ease-in;
 
       &:hover {
-        color: ${({ theme }) => theme.colors.gray12};
-        border-color: ${({ theme }) => theme.publicDesign.accent};
-        background: ${({ theme }) => theme.publicDesign.accentMuted};
+        color: var(--aq-text);
+        border-color: var(--aq-accent);
+        background: var(--aq-accent-muted);
       }
 
       @media (max-width: ${FEED_TAG_RAIL_CHIP_MAX_PX}px) {
@@ -126,8 +126,8 @@ const StyledWrapper = styled.div`
     font-size: 0.8125rem;
     font-weight: 560;
     line-height: 1.4;
-    color: ${({ theme }) => theme.colors.gray12};
-    caret-color: ${({ theme }) => theme.publicDesign.accent};
+    color: var(--aq-text);
+    caret-color: var(--aq-accent);
     border: 0;
     outline: none;
     box-shadow: none;
@@ -137,7 +137,7 @@ const StyledWrapper = styled.div`
     transition: all 0.125s ease-in;
 
     &::placeholder {
-      color: ${({ theme }) => theme.colors.gray9};
+      color: var(--aq-subtle);
       opacity: 1;
       transition: opacity 0.12s ease-in;
     }
@@ -155,12 +155,12 @@ const StyledWrapper = styled.div`
   }
 
   > .field:focus-within {
-    border-color: ${({ theme }) => theme.publicDesign.accent};
-    background: ${({ theme }) => theme.publicDesign.readableSurface};
+    border-color: var(--aq-accent);
+    background: var(--aq-surface);
     box-shadow: none;
 
     .searchIcon {
-      color: ${({ theme }) => theme.colors.gray11};
+      color: var(--aq-muted);
     }
   }
 

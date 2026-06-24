@@ -28,7 +28,7 @@ const StyledWrapper = styled(Link)`
   min-width: 0;
   max-width: 100%;
   min-height: 40px;
-  color: ${({ theme }) => theme.colors.gray12};
+  color: var(--aq-text);
   font-weight: 850;
   font-size: 0.94rem;
   letter-spacing: -0.03em;
@@ -49,7 +49,7 @@ const StyledWrapper = styled(Link)`
   }
 
   em {
-    color: ${({ theme }) => theme.colors.gray10};
+    color: var(--aq-muted);
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
     font-size: 0.625rem;
     line-height: 1;

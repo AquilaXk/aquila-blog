@@ -199,14 +199,14 @@ export default memo(TagList)
 
 const StyledWrapper = styled.div`
   min-width: 0;
-  --feed-tag-border: ${({ theme }) => theme.publicDesign.border};
-  --feed-tag-border-strong: ${({ theme }) => theme.publicDesign.accent};
-  --feed-tag-hover-border: ${({ theme }) => theme.colors.gray9};
-  --feed-tag-surface: ${({ theme }) => theme.publicDesign.readableSurface};
-  --feed-tag-surface-elevated: ${({ theme }) => theme.publicDesign.surfaceElevated};
-  --feed-tag-accent: ${({ theme }) => theme.publicDesign.accent};
-  --feed-tag-accent-text: ${({ theme }) => theme.publicDesign.accent};
-  --feed-tag-accent-muted: ${({ theme }) => theme.publicDesign.accentMuted};
+  --feed-tag-border: var(--aq-border);
+  --feed-tag-border-strong: var(--aq-accent);
+  --feed-tag-hover-border: var(--aq-subtle);
+  --feed-tag-surface: var(--aq-surface);
+  --feed-tag-surface-elevated: var(--aq-surface-elevated);
+  --feed-tag-accent: var(--aq-accent);
+  --feed-tag-accent-text: var(--aq-accent);
+  --feed-tag-accent-muted: var(--aq-accent-muted);
 
   .desktopPanel {
     display: none;
@@ -220,7 +220,7 @@ const StyledWrapper = styled.div`
 
   .panelTitle {
     margin: 0;
-    color: ${({ theme }) => theme.colors.gray12};
+    color: var(--aq-text);
     font-size: 0.82rem;
     font-weight: 820;
     letter-spacing: 0;
@@ -241,7 +241,7 @@ const StyledWrapper = styled.div`
     padding: 0;
     display: grid;
     gap: 0;
-    border-top: 1px solid ${({ theme }) => theme.colors.gray12};
+    border-top: 1px solid var(--aq-text);
     max-height: calc(100vh - var(--app-header-height, 56px) - 6.35rem);
     max-height: calc(100dvh - var(--app-header-height, 56px) - 6.35rem);
     overflow-y: auto;
@@ -272,13 +272,13 @@ const StyledWrapper = styled.div`
     align-items: baseline;
     gap: 16px;
     text-align: left;
-    color: ${({ theme }) => theme.colors.gray9};
+    color: var(--aq-subtle);
     cursor: pointer;
     transition: color 0.125s ease-in;
 
     &:hover {
       background: transparent;
-      color: ${({ theme }) => theme.colors.gray12};
+      color: var(--aq-text);
     }
 
     &:focus-visible {
@@ -288,7 +288,7 @@ const StyledWrapper = styled.div`
 
     &[data-active="true"] {
       background: transparent;
-      color: ${({ theme }) => theme.colors.gray12};
+      color: var(--aq-text);
     }
   }
 
@@ -297,14 +297,14 @@ const StyledWrapper = styled.div`
     min-height: 30px;
     border: 0;
     background: transparent;
-    color: ${({ theme }) => theme.colors.gray10};
+    color: var(--aq-muted);
     font-size: 0.76rem;
     font-weight: 700;
     letter-spacing: -0.01em;
     transition: color 0.125s ease-in;
 
     &:hover {
-      color: ${({ theme }) => theme.colors.gray12};
+      color: var(--aq-text);
     }
 
     &:focus-visible {
@@ -331,19 +331,19 @@ const StyledWrapper = styled.div`
   }
 
   .desktopList button:hover .name {
-    color: ${({ theme }) => theme.colors.gray12};
+    color: var(--aq-text);
     font-weight: 800;
   }
 
   .desktopList button .count {
     font-size: 0.72rem;
-    color: ${({ theme }) => theme.colors.gray8};
+    color: var(--aq-subtle);
     font-variant-numeric: tabular-nums;
   }
 
   .desktopList button:hover .count,
   .desktopList button[data-active="true"] .count {
-    color: ${({ theme }) => theme.colors.gray12};
+    color: var(--aq-text);
   }
 
   .chipRail {
@@ -398,7 +398,7 @@ const StyledWrapper = styled.div`
     border: 0;
     background: transparent;
     padding: 0.34rem 0.82rem;
-    color: ${({ theme }) => theme.colors.gray9};
+    color: var(--aq-subtle);
     flex-shrink: 0;
     scroll-snap-align: start;
     cursor: pointer;
@@ -417,7 +417,7 @@ const StyledWrapper = styled.div`
     }
 
     &:hover {
-      color: ${({ theme }) => theme.colors.gray12};
+      color: var(--aq-text);
       font-weight: 760;
 
       &::after {
@@ -453,7 +453,7 @@ const StyledWrapper = styled.div`
 
   .chipRail button .count {
     font-size: 0.72rem;
-    color: ${({ theme }) => theme.colors.gray10};
+    color: var(--aq-muted);
   }
 
   .chipRail button[data-active="true"] .count {

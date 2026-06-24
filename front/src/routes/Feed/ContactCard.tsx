@@ -80,7 +80,7 @@ const StyledContent = styled.div`
   gap: 0.22rem;
   width: 100%;
   padding: 0 0 0.8rem;
-  border-bottom: 1px solid ${({ theme }) => theme.publicDesign.border};
+  border-bottom: 1px solid var(--aq-border);
 
   a {
     display: grid;
@@ -90,14 +90,14 @@ const StyledContent = styled.div`
     gap: 0.72rem;
     align-items: center;
     border-radius: 14px;
-    color: ${({ theme }) => theme.colors.gray11};
+    color: var(--aq-muted);
     cursor: pointer;
     text-decoration: none;
     transition: background-color 120ms ease, color 120ms ease;
 
     &:hover {
-      color: ${({ theme }) => theme.colors.gray12};
-      background: ${({ theme }) => theme.publicDesign.accentMuted};
+      color: var(--aq-text);
+      background: var(--aq-accent-muted);
     }
 
     .icon {
@@ -108,9 +108,9 @@ const StyledContent = styled.div`
       height: 2rem;
       flex: 0 0 2rem;
       border-radius: 12px;
-      border: 1px solid ${({ theme }) => theme.publicDesign.border};
-      background: ${({ theme }) => theme.publicDesign.surfaceElevated};
-      color: ${({ theme }) => theme.colors.gray10};
+      border: 1px solid var(--aq-border);
+      background: var(--aq-surface-elevated);
+      color: var(--aq-muted);
       font-size: 0.98rem;
       line-height: 1;
     }
@@ -120,7 +120,7 @@ const StyledContent = styled.div`
     }
 
     .name {
-      color: ${({ theme }) => theme.colors.gray12};
+      color: var(--aq-text);
       font-size: 0.93rem;
       line-height: 1.24rem;
       font-weight: 600;
@@ -128,7 +128,7 @@ const StyledContent = styled.div`
 
     .hint {
       margin-top: 0.14rem;
-      color: ${({ theme }) => theme.colors.gray10};
+      color: var(--aq-muted);
       font-size: 0.78rem;
       line-height: 1.24;
       word-break: break-word;

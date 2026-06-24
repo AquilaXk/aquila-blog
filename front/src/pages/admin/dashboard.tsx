@@ -1,95 +1,15 @@
-import { useQuery } from "@tanstack/react-query"
-import { GetServerSideProps, NextPage } from "next"
 import { IncomingMessage } from "http"
-import Link from "next/link"
-import type { SimpleIcon } from "simple-icons"
-import { useEffect, useRef, useState } from "react"
-import { apiFetch } from "src/apis/backend/client"
-import AppIcon from "src/components/icons/AppIcon"
+import { GetServerSideProps } from "next"
 import type { AuthMember } from "src/hooks/useAuthSession"
-import useAuthSession from "src/hooks/useAuthSession"
 import { AdminPageProps, buildAdminPagePropsFromMember, getAdminPageProps, readAdminProtectedBootstrap } from "src/libs/server/adminPage"
 import { hasServerAuthCookie } from "src/libs/server/authSession"
 import { serverApiFetch } from "src/libs/server/backend"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import {
-  DASHBOARD_PANEL_CARDS,
-  buildGrafanaPanelEmbedUrl,
-  buildMonitoringItems,
-  getMonitoringEnv,
-} from "src/routes/Admin/adminMonitoring"
-import AdminShell from "src/routes/Admin/AdminShell"
-import {
-  DASHBOARD_BACKEND_CHECK_LABEL,
-  DASHBOARD_DATA_MISSING_LABEL,
-  EMPTY_INITIAL_SNAPSHOT,
-  formatAge,
-  formatInstant,
-  getMailStatusLabel,
-  getMailStatusTone,
-  getSystemHealthStatusLabel,
-  getSystemHealthTone,
-  getTaskQueueTone,
-  hasDashboardSnapshot,
   type AdminDashboardInitialSnapshot,
-  type DashboardKpiCard,
-  type DashboardPriorityRow,
-  type DashboardQuickAction,
   type DashboardSnapshotPayload,
   type SystemHealthPayload,
 } from "src/routes/Admin/AdminDashboardWorkspaceModel"
-import {
-  Main,
-  Shell,
-  HeroPanel,
-  HeroTop,
-  HeroCopy,
-  HeroActions,
-  StatusChip,
-  HeaderLink,
-  ServiceRail,
-  MetricCard,
-  MetricIcon,
-  MetricCopy,
-  PanelGrid,
-  PanelCard,
-  LeadPanelCard,
-  CompactPanelCard,
-  PanelHeader,
-  LaunchLink,
-  PanelBody,
-  SnapshotLeadBody,
-  PanelFrame,
-  CompactPanelBody,
-  CompactPanelSummary,
-  PanelFallback,
-  InsightRail,
-  LeadMetaGrid,
-  LeadMetaCard,
-  ActionList,
-  ActionListLinkCard,
-  SectionHeader,
-  PrioritySection,
-  ContextGrid,
-  ContextSection,
-  ContextLinkGrid,
-  ContextMonitoringLinkCard,
-  AdditionalPanelsSection,
-  AdditionalPanelsDisclosure,
-  AdditionalPanelsSummary,
-  AdditionalPanelsGrid,
-  PriorityTable,
-  PriorityCellCopy,
-  PrioritySummary,
-  PriorityLink,
-  InsightLink,
-} from "src/routes/Admin/AdminDashboardWorkspace.styles"
-import {
-  AdminInfoLinkCard,
-  AdminInfoList,
-  AdminInfoStatusItem,
-  AdminInfoStatusList,
-} from "src/routes/Admin/AdminSurfacePrimitives"
 
 type AdminDashboardPageProps = AdminPageProps & {
   initialSnapshot: AdminDashboardInitialSnapshot

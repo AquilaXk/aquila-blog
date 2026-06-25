@@ -6,6 +6,10 @@ import { queryKey } from "src/constants/queryKey"
 import { SchemeType } from "src/types"
 
 type SetScheme = (scheme: SchemeType) => void
+type BootstrapScheme = {
+  scheme: SchemeType
+  renderedScheme: SchemeType
+}
 
 const isScheme = (value: unknown): value is SchemeType => value === "light" || value === "dark"
 
@@ -14,19 +18,29 @@ const resolveSystemScheme = (): SchemeType => {
   return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light"
 }
 
-const resolveBootstrapScheme = (): SchemeType | null => {
-  const scheme = globalThis.document?.documentElement.dataset.aquilaScheme
-  return isScheme(scheme) ? scheme : null
+const resolveBootstrapScheme = (): BootstrapScheme | null => {
+  const root = globalThis.document?.documentElement
+  const renderedScheme = root?.dataset.aquilaScheme
+  if (!root || !isScheme(renderedScheme)) return null
+
+  const userScheme = root.getAttribute("data-aquila-scheme-user")
+  const source = root.getAttribute("data-aquila-scheme-bootstrap-source")
+  if (source === "public" && isScheme(userScheme)) {
+    return { scheme: userScheme, renderedScheme }
+  }
+
+  return { scheme: renderedScheme, renderedScheme }
 }
 
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect
 
-const clearSchemeBootstrapStyle = (scheme: SchemeType) => {
+const clearSchemeBootstrapStyle = (scheme: SchemeType, renderedScheme = scheme) => {
   const root = document.documentElement
-  root.dataset.aquilaScheme = scheme
-  root.style.colorScheme = scheme
+  root.dataset.aquilaScheme = renderedScheme
+  root.style.colorScheme = renderedScheme
   root.removeAttribute("data-aquila-scheme-bootstrap")
   root.removeAttribute("data-aquila-scheme-bootstrap-source")
+  root.removeAttribute("data-aquila-scheme-user")
   root.style.removeProperty("background-color")
   document.querySelector('style[data-aquila-scheme-bootstrap-style="true"]')?.remove()
 }
@@ -51,15 +65,17 @@ const useScheme = (): [SchemeType, SetScheme] => {
   }, [queryClient])
 
   useIsomorphicLayoutEffect(() => {
+    const bootstrap = resolveBootstrapScheme()
     const bootstrapScheme =
-      resolveBootstrapScheme() ??
+      bootstrap?.scheme ??
       (followsSystemTheme ? resolveSystemScheme() : fallbackScheme)
+    const renderedScheme = bootstrap?.renderedScheme ?? bootstrapScheme
     if (bootstrapScheme !== data) {
       queryClient.setQueryData(queryKey.scheme(), bootstrapScheme)
-      clearSchemeBootstrapStyle(bootstrapScheme)
+      clearSchemeBootstrapStyle(bootstrapScheme, renderedScheme)
       return
     }
-    clearSchemeBootstrapStyle(data)
+    clearSchemeBootstrapStyle(data, renderedScheme)
   }, [data, fallbackScheme, followsSystemTheme, queryClient])
 
   return [data, setScheme]

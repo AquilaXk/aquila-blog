@@ -29,7 +29,8 @@ const AQUILA_SCHEME_BOOTSTRAP_SCRIPT = `
     systemDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
   } catch (_) {}
   var defaultScheme = configuredScheme === "system" ? (systemDark ? "dark" : "light") : configuredScheme;
-  var nextScheme = isPublicBlogRoute ? "light" : (cachedScheme || defaultScheme);
+  var actualScheme = cachedScheme || defaultScheme;
+  var nextScheme = isPublicBlogRoute ? "light" : actualScheme;
   var bootstrapSource = isPublicBlogRoute ? "public" : (cachedScheme ? "cookie" : "system");
   var background = nextScheme === "dark" ? "#121212" : "#f3f5f8";
   var foreground = nextScheme === "dark" ? "#f5f5f5" : "#101214";
@@ -45,6 +46,7 @@ const AQUILA_SCHEME_BOOTSTRAP_SCRIPT = `
       ].join("")
     : "";
   document.documentElement.dataset.aquilaScheme = nextScheme;
+  document.documentElement.setAttribute("data-aquila-scheme-user", actualScheme);
   document.documentElement.setAttribute("data-aquila-scheme-config", configuredScheme);
   document.documentElement.setAttribute("data-aquila-scheme-bootstrap", nextScheme);
   document.documentElement.setAttribute("data-aquila-scheme-bootstrap-source", bootstrapSource);

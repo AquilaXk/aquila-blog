@@ -86,20 +86,14 @@ const RootLayout = ({
     if (typeof document === "undefined") return
 
     const root = document.documentElement
-    const previousScheme = root.dataset.aquilaScheme
-    const previousColorScheme = root.style.colorScheme
     root.dataset.aquilaScheme = "light"
     root.style.colorScheme = "light"
 
     return () => {
-      if (previousScheme) {
-        root.dataset.aquilaScheme = previousScheme
-      } else {
-        delete root.dataset.aquilaScheme
-      }
-      root.style.colorScheme = previousColorScheme
+      root.dataset.aquilaScheme = scheme
+      root.style.colorScheme = scheme
     }
-  }, [isPublicBlogRoute])
+  }, [isPublicBlogRoute, scheme])
 
   useEffect(() => {
     if (typeof window === "undefined") return

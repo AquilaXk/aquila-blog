@@ -26,9 +26,9 @@ test.describe("mobile layout public", () => {
 
   await page.goto("/")
   await expect(page.getByLabel("Search posts by keyword")).toBeVisible()
-  await expect(page.getByRole("link", { name: "Home" })).toBeVisible()
+  await expect(page.getByRole("link", { name: "Notes" })).toBeVisible()
+  await expect(page.getByRole("link", { name: "Topics" })).toBeVisible()
   await expect(page.getByRole("link", { name: "About" })).toBeVisible()
-  await expect(page.getByRole("link", { name: "Topics" })).toHaveCount(0)
   await expect(page.getByRole("button", { name: "전체보기" })).toBeVisible()
   await expect(page.locator("a[href^='/posts/'] h2").first()).toBeVisible()
   const moreTagButton = page.getByRole("button", { name: /더보기/ })
@@ -281,7 +281,7 @@ test.describe("데스크톱 상세 floating reaction 액션", () => {
     hasTouch: false,
   })
 
-  test("하트/공유 아이콘은 원형 버튼 크기에 맞는 시각 크기를 유지한다", async ({ page }) => {
+  test("하트/공유 아이콘은 V4 square rail 버튼 크기에 맞는 시각 크기를 유지한다", async ({ page }) => {
     await mockDetailEndpoint(page, {
       id: 993,
       title: "반응 버튼 아이콘 크기 테스트",
@@ -316,16 +316,16 @@ test.describe("데스크톱 상세 floating reaction 액션", () => {
       }
     })
 
-    expect(metrics.like.buttonWidth).toBeGreaterThanOrEqual(55.5)
-    expect(metrics.like.buttonHeight).toBeGreaterThanOrEqual(55.5)
-    expect(metrics.share.buttonWidth).toBeGreaterThanOrEqual(55.5)
-    expect(metrics.share.buttonHeight).toBeGreaterThanOrEqual(55.5)
-    expect(metrics.like.iconWidth).toBeGreaterThanOrEqual(28)
-    expect(metrics.like.iconHeight).toBeGreaterThanOrEqual(28)
-    expect(metrics.share.iconWidth).toBeGreaterThanOrEqual(28)
-    expect(metrics.share.iconHeight).toBeGreaterThanOrEqual(28)
-    expect(metrics.like.iconFontSize).toBeGreaterThanOrEqual(28)
-    expect(metrics.share.iconFontSize).toBeGreaterThanOrEqual(28)
+    expect(metrics.like.buttonWidth).toBeGreaterThanOrEqual(41.5)
+    expect(metrics.like.buttonHeight).toBeGreaterThanOrEqual(41.5)
+    expect(metrics.share.buttonWidth).toBeGreaterThanOrEqual(41.5)
+    expect(metrics.share.buttonHeight).toBeGreaterThanOrEqual(41.5)
+    expect(metrics.like.iconWidth).toBeGreaterThanOrEqual(17.5)
+    expect(metrics.like.iconHeight).toBeGreaterThanOrEqual(17.5)
+    expect(metrics.share.iconWidth).toBeGreaterThanOrEqual(17.5)
+    expect(metrics.share.iconHeight).toBeGreaterThanOrEqual(17.5)
+    expect(metrics.like.iconFontSize).toBeGreaterThanOrEqual(17.5)
+    expect(metrics.share.iconFontSize).toBeGreaterThanOrEqual(17.5)
   })
 })
 })

@@ -727,9 +727,9 @@ test.describe("core smoke detail rendering", () => {
     })
 
   await expect(readTypography("h1.title")).resolves.toEqual({
-    fontSize: "44px",
-    lineHeight: "52px",
-    fontWeight: "700",
+    fontSize: "67.84px",
+    lineHeight: "73.2672px",
+    fontWeight: "850",
   })
   await expect(readTypography(".aq-markdown h1")).resolves.toEqual({
     fontSize: "32px",

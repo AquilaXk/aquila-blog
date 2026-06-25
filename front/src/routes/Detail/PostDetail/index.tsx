@@ -108,6 +108,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const commentsCount = typeof data?.commentsCount === "number" ? data.commentsCount : 0
   const commentsProgressLabel = commentsRailActive ? "읽는 중" : `${commentsCount}`
   const extractedSummaryState = useMemo(() => extractLeadingSummaryBlock(data?.content || "", 180), [data?.content])
+  const leadSummaryText = extractedSummaryState.summary || data?.summary?.trim() || ""
   const renderedContent = useMemo(() => {
     if (!data?.content) return ""
     return extractedSummaryState.summary ? extractedSummaryState.contentWithoutSummary : data.content
@@ -418,6 +419,8 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
           shareFeedback={shareFeedback}
           onToggleLike={handleToggleLike}
           onSharePost={handleSharePost}
+          onScrollToComments={() => scrollSectionIntoView(commentsSectionRef.current)}
+          commentsCount={commentsCount}
         />
 
         <article ref={articleRef}>
@@ -467,6 +470,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
             />
           )}
           <BodySection data-rum-section="body">
+            {leadSummaryText ? <p className="leadSummary">{leadSummaryText}</p> : null}
             <RecoverableSurfaceBoundary surface="markdown" resetKey={postId}>
               <MarkdownRenderer content={renderedContent} />
             </RecoverableSurfaceBoundary>

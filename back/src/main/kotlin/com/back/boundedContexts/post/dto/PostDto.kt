@@ -25,12 +25,14 @@ data class PostDto
         val commentsCount: Int,
         val hitCount: Int,
         var actorHasLiked: Boolean = false,
+        val tags: List<String> = emptyList(),
     ) {
         constructor(post: Post) : this(post, PostPreviewExtractor.extract(post.content))
 
         private constructor(
             post: Post,
             preview: PostPreviewExtractor.Preview,
+            meta: PostMetaExtractor.PostMeta,
         ) : this(
             post.id,
             post.createdAt,
@@ -49,7 +51,13 @@ data class PostDto
             post.likesCount,
             post.commentsCount,
             post.hitCount,
+            tags = meta.tags,
         )
+
+        private constructor(
+            post: Post,
+            preview: PostPreviewExtractor.Preview,
+        ) : this(post, preview, PostMetaExtractor.extract(post.content))
 
         fun forEventLog() = copy(title = "")
     }

@@ -3864,6 +3864,12 @@
           },
           "actorHasLiked" : {
             "type" : "boolean"
+          },
+          "tags" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
           }
         }
       },

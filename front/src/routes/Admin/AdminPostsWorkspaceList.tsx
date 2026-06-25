@@ -40,6 +40,7 @@ type AdminPostsWorkspaceListProps = {
   onOpenWriteRoute: (query?: Record<string, string>) => void
   onPageChange: (page: number) => void
   mutationPending: { rowId: number; kind: "delete" | "restore" | "hardDelete" } | null
+  onDeletePost: (row: AdminPostListItem) => void
   onHardDeletePost: (row: AdminPostListItem) => void
   onRestorePost: (row: AdminPostListItem) => void
   onResetSearch: () => void
@@ -58,6 +59,7 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
   onOpenWriteRoute,
   onPageChange,
   mutationPending,
+  onDeletePost,
   onHardDeletePost,
   onRestorePost,
   onResetSearch,
@@ -67,6 +69,7 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
   const getStatusLabel = (row: AdminPostListItem) => (listScope === "deleted" ? "삭제됨" : workspaceStatusLabel(row))
   const getStatusTone = (row: AdminPostListItem) => (listScope === "deleted" ? "PRIVATE" : toVisibility(row.published, row.listed))
   const isDeletedActionPending = Boolean(mutationPending)
+  const isActiveActionPending = Boolean(mutationPending)
 
   if (isListLoading) {
     return (
@@ -218,7 +221,12 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
                       </GhostButton>
                     </RowActions>
                   ) : (
-                    formatWorkspaceViews(row)
+                    <RowActions>
+                      <span>{formatWorkspaceViews(row)}</span>
+                      <GhostButton type="button" disabled={isActiveActionPending} onClick={() => onDeletePost(row)}>
+                        삭제
+                      </GhostButton>
+                    </RowActions>
                   )}
                 </td>
               </tr>
@@ -265,7 +273,13 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
                     영구삭제
                   </GhostButton>
                 </RowActions>
-              ) : null}
+              ) : (
+                <RowActions>
+                  <GhostButton type="button" disabled={isActiveActionPending} onClick={() => onDeletePost(row)}>
+                    삭제
+                  </GhostButton>
+                </RowActions>
+              )}
             </article>
           ))}
         </MobileCardList>

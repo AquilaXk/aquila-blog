@@ -1721,6 +1721,7 @@ export interface components {
             /** Format: int32 */
             hitCount?: number;
             actorHasLiked?: boolean;
+            tags?: string[];
         };
         RsDataPostDto: {
             resultCode?: string;

@@ -72,7 +72,7 @@ class ApiV1AdmPostController(
     ): AdminPostsBootstrapResBody =
         AdminPostsBootstrapResBody(
             member = AuthSessionMemberDto(securityUser),
-            firstPage = adminPostListSnapshotService.getFirstPageSnapshot(PostSearchSortType1.CREATED_AT),
+            firstPage = adminPostListSnapshotService.getFirstPageSnapshot(PostSearchSortType1.MODIFIED_AT),
         )
 
     @GetMapping

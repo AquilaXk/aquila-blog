@@ -48,7 +48,7 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
                 authorities = listOf(SimpleGrantedAuthority("ROLE_ADMIN")),
             )
         val post = samplePost(id = 55, title = "첫 화면 캐시", content = "본문", published = true, listed = true)
-        given(adminPostListSnapshotService.getFirstPageSnapshot(com.back.standard.dto.post.type1.PostSearchSortType1.CREATED_AT))
+        given(adminPostListSnapshotService.getFirstPageSnapshot(com.back.standard.dto.post.type1.PostSearchSortType1.MODIFIED_AT))
             .willReturn(
                 PageDto(
                     content =

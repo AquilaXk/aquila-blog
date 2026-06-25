@@ -26,11 +26,13 @@ const resolveBootstrapScheme = (): BootstrapScheme | null => {
 
   const userScheme = root.getAttribute("data-aquila-scheme-user")
   const source = root.getAttribute("data-aquila-scheme-bootstrap-source")
+  const bootstrapScheme = root.getAttribute("data-aquila-scheme-bootstrap")
+  if (!source || !isScheme(bootstrapScheme)) return null
   if (source === "public" && isScheme(userScheme)) {
     return { scheme: userScheme, renderedScheme }
   }
 
-  return { scheme: renderedScheme, renderedScheme }
+  return { scheme: bootstrapScheme, renderedScheme }
 }
 
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect

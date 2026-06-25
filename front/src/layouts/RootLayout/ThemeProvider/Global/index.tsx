@@ -1,11 +1,15 @@
 import { Global as _Global, css, useTheme } from "@emotion/react"
 
 import { pretendard } from "src/assets"
+import { colors, createPublicDesignTokens } from "src/styles"
+
+const lightDesign = createPublicDesignTokens("light")
+const darkDesign = createPublicDesignTokens("dark")
+const lightColors = colors.light
+const darkColors = colors.dark
 
 export const Global = () => {
   const theme = useTheme()
-  const bodyBackgroundColor = theme.publicDesign.pageBackgroundColor
-  const bodyBackgroundImage = theme.publicDesign.pageBackgroundImage
 
   return (
     <_Global
@@ -18,6 +22,43 @@ export const Global = () => {
           overflow-x: visible;
           --article-readable-width: 48rem;
           --editor-split-readable-width: 42rem;
+          --aq-page-bg: ${lightDesign.pageBackgroundColor};
+          --aq-page-bg-image: ${lightDesign.pageBackgroundImage};
+          --aq-surface: ${lightDesign.readableSurface};
+          --aq-surface-elevated: ${lightDesign.surfaceElevated};
+          --aq-border: ${lightDesign.border};
+          --aq-border-strong: ${lightDesign.borderStrong};
+          --aq-text: ${lightColors.gray12};
+          --aq-muted: ${lightColors.gray10};
+          --aq-subtle: ${lightColors.gray9};
+          --aq-header-bg: ${lightDesign.readableSurface};
+          --aq-accent: ${lightDesign.accent};
+          --aq-accent-muted: ${lightDesign.accentMuted};
+          --aq-accent-link: ${lightColors.accentLink};
+          --aq-focus-ring: ${lightColors.indigo8};
+          --aq-feed-chip-bg: ${lightDesign.readableSurface};
+          --aq-feed-hero-glow: ${lightDesign.accentMuted};
+          --aq-card-cover-bg: linear-gradient(135deg, ${lightDesign.accentMuted}, ${lightColors.gray2}), ${lightDesign.readableSurface};
+        }
+
+        html[data-aquila-scheme="dark"] {
+          --aq-page-bg: ${darkDesign.pageBackgroundColor};
+          --aq-page-bg-image: ${darkDesign.pageBackgroundImage};
+          --aq-surface: ${darkDesign.readableSurface};
+          --aq-surface-elevated: ${darkDesign.surfaceElevated};
+          --aq-border: ${darkDesign.border};
+          --aq-border-strong: ${darkDesign.borderStrong};
+          --aq-text: ${darkColors.gray12};
+          --aq-muted: ${darkColors.gray10};
+          --aq-subtle: ${darkColors.gray9};
+          --aq-header-bg: ${darkDesign.readableSurface};
+          --aq-accent: ${darkDesign.accent};
+          --aq-accent-muted: ${darkDesign.accentMuted};
+          --aq-accent-link: ${darkColors.accentLink};
+          --aq-focus-ring: ${darkColors.indigo8};
+          --aq-feed-chip-bg: ${darkDesign.surfaceElevated};
+          --aq-feed-hero-glow: ${darkDesign.accentMuted};
+          --aq-card-cover-bg: linear-gradient(135deg, ${darkDesign.accentMuted}, ${darkColors.gray2}), ${darkDesign.readableSurface};
         }
 
         body {
@@ -27,9 +68,9 @@ export const Global = () => {
           padding: 0;
           overflow-y: scroll;
           overflow-x: visible;
-          color: ${theme.colors.gray12};
-          background-color: ${bodyBackgroundColor};
-          background-image: ${bodyBackgroundImage};
+          color: var(--aq-text);
+          background-color: var(--aq-page-bg);
+          background-image: var(--aq-page-bg-image);
           font-family: ${pretendard.style.fontFamily};
           font-weight: ${pretendard.style.fontWeight};
           font-style: ${pretendard.style.fontStyle};
@@ -152,7 +193,7 @@ export const Global = () => {
           width: 100%;
           border: none;
           margin: 0;
-          border-top: 1px solid ${theme.colors.gray6};
+          border-top: 1px solid var(--aq-border);
         }
 
         @media (prefers-reduced-motion: reduce) {

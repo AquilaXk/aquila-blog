@@ -15,6 +15,7 @@ interface PostRepositoryPort {
         val pageSize: Int,
         val sortProperty: String,
         val sortAscending: Boolean,
+        val adminStatus: String = "all",
     )
 
     data class TaggedPagedQuery(

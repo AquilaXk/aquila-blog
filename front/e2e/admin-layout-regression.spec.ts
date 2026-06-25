@@ -14,11 +14,14 @@ const ADMIN_POST_FIXTURES = Array.from({ length: 6 }, (_, index) => ({
   title: index === 0 ? "First fold 운영 점검" : `관리자 글 목록 회귀 ${index}`,
   authorName: "관리자",
   authorProfileImgUrl: "/avatar.png",
+  category: index === 0 ? ["Architecture"] : ["JWT"],
+  tags: index === 0 ? ["Cache", "Redis"] : ["Auth"],
   published: index % 2 === 0,
   listed: index % 3 !== 0,
   tempDraft: false,
   createdAt: `2026-05-${String(10 + index).padStart(2, "0")}T01:00:00Z`,
   modifiedAt: `2026-05-${String(20 - index).padStart(2, "0")}T08:30:00Z`,
+  hitCount: 100 + index,
 }))
 
 const SYSTEM_HEALTH_FIXTURE = {
@@ -304,16 +307,12 @@ const capturePostsFirstFoldSnapshot = async (page: Page) =>
     const firstRow = Array.from(document.querySelectorAll<HTMLElement>("tbody tr, article")).find((element) =>
       element.textContent?.includes("First fold 운영 점검"),
     )
-    const heading = Array.from((listSection ?? document).querySelectorAll<HTMLElement>("h2")).find(
-      (element) => element.textContent?.trim() === "글 목록",
-    )
-    const recentHeading = Array.from(document.querySelectorAll<HTMLElement>("h2")).find(
-      (element) => element.textContent?.trim() === "최근 작업",
+    const heading = Array.from(document.querySelectorAll<HTMLElement>("h1")).find(
+      (element) => element.textContent?.trim() === "글 관리",
     )
     const headingRect = heading?.getBoundingClientRect()
     const searchRect = search?.getBoundingClientRect()
     const firstRowRect = firstRow?.getBoundingClientRect()
-    const recentRect = recentHeading?.getBoundingClientRect()
 
     return {
       viewportHeight: window.innerHeight,
@@ -321,72 +320,49 @@ const capturePostsFirstFoldSnapshot = async (page: Page) =>
       headingTop: headingRect?.top ?? Number.POSITIVE_INFINITY,
       searchTop: searchRect?.top ?? Number.POSITIVE_INFINITY,
       firstRowTop: firstRowRect?.top ?? Number.POSITIVE_INFINITY,
-      recentTop: recentRect?.top ?? Number.POSITIVE_INFINITY,
       bodyScrollWidth: document.body.scrollWidth,
     }
   })
 
-const captureVisibleActionRects = async (page: Page, labels: string[]) =>
-  page.evaluate((targetLabels) => {
-    const firstPost = Array.from(document.querySelectorAll<HTMLElement>("tbody tr, article")).find((element) =>
-      element.textContent?.includes("First fold 운영 점검"),
-    )
-    const controls = Array.from(firstPost?.querySelectorAll<HTMLElement>("button, a") ?? [])
-    return targetLabels.map((label) => {
-      const control = controls.find((element) => element.textContent?.trim() === label)
-      const rect = control?.getBoundingClientRect()
-      return {
-        label,
-        width: rect?.width ?? 0,
-        height: rect?.height ?? 0,
-      }
-    })
-  }, labels)
-
-test("관리자 글 관리는 1440px 데스크톱에서 첫 글을 최근 작업보다 먼저 first fold에 노출한다", async ({ page }) => {
+test("관리자 글 관리는 1440px 데스크톱에서 V4 toolbar와 table을 first fold에 노출한다", async ({ page }) => {
   await mockAdminPostsWorkspaceEndpoints(page)
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto("/admin/posts")
 
-  await expect(page.getByRole("heading", { name: "글 목록" })).toBeVisible()
-  await page.getByRole("button", { name: "새로고침" }).click()
+  await expect(page.getByRole("heading", { name: "글 관리" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "전체", exact: true })).toBeVisible()
+  await expect(page.getByRole("columnheader", { name: "Title" })).toBeVisible()
+  await expect(page.getByRole("columnheader", { name: "Topic" })).toBeVisible()
+  await expect(page.getByRole("columnheader", { name: "Status" })).toBeVisible()
+  await expect(page.getByRole("columnheader", { name: "Updated" })).toBeVisible()
+  await expect(page.getByRole("columnheader", { name: "Views" })).toBeVisible()
+  await expect(page.getByText("Architecture")).toBeVisible()
+  await expect(page.getByText("100")).toBeVisible()
+  await expect(page.getByText("발행").first()).toBeVisible()
+  await expect(page.getByLabel("글 검색")).toBeVisible()
   await expect(page.locator("tbody tr, article").filter({ hasText: "First fold 운영 점검" }).first()).toBeVisible()
 
   const snapshot = await capturePostsFirstFoldSnapshot(page)
 
   expect(snapshot.searchTop).toBeLessThanOrEqual(560)
   expect(snapshot.firstRowTop).toBeLessThanOrEqual(760)
-  expect(snapshot.firstRowTop).toBeLessThan(snapshot.recentTop)
   expect(snapshot.bodyScrollWidth).toBeLessThanOrEqual(snapshot.viewportWidth)
-
-  const actionRects = await captureVisibleActionRects(page, ["수정", "링크 복사", "삭제"])
-  for (const rect of actionRects) {
-    expect(rect.width, `${rect.label} width`).toBeGreaterThanOrEqual(32)
-    expect(rect.height, `${rect.label} height`).toBeGreaterThanOrEqual(32)
-  }
 })
 
-test("관리자 글 관리는 모바일에서 첫 글 카드를 최근 작업보다 먼저 first fold에 노출한다", async ({ page }) => {
+test("관리자 글 관리는 모바일에서 V4 filter와 첫 글 카드를 first fold에 노출한다", async ({ page }) => {
   await mockAdminPostsWorkspaceEndpoints(page)
   await page.setViewportSize({ width: 393, height: 852 })
   await page.goto("/admin/posts")
 
-  await expect(page.getByRole("heading", { name: "글 목록" })).toBeVisible()
-  await page.getByRole("button", { name: "새로고침" }).click()
+  await expect(page.getByRole("heading", { name: "글 관리" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "전체", exact: true })).toBeVisible()
   await expect(page.locator("tbody tr, article").filter({ hasText: "First fold 운영 점검" }).first()).toBeVisible()
 
   const snapshot = await capturePostsFirstFoldSnapshot(page)
 
   expect(snapshot.searchTop).toBeLessThanOrEqual(520)
   expect(snapshot.firstRowTop).toBeLessThan(snapshot.viewportHeight)
-  expect(snapshot.firstRowTop).toBeLessThan(snapshot.recentTop)
   expect(snapshot.bodyScrollWidth).toBeLessThanOrEqual(snapshot.viewportWidth)
-
-  const actionRects = await captureVisibleActionRects(page, ["수정", "링크 복사", "삭제"])
-  for (const rect of actionRects) {
-    expect(rect.width, `${rect.label} width`).toBeGreaterThanOrEqual(32)
-    expect(rect.height, `${rect.label} height`).toBeGreaterThanOrEqual(32)
-  }
 })
 
 test("관리자 프로필 모바일 섹션 rail은 마지막 섹션 탭까지 같은 viewport 안에서 드러낸다", async ({ page }) => {

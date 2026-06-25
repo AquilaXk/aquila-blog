@@ -120,6 +120,7 @@ interface PostUseCase {
         sort: PostSearchSortType1,
         page: Int,
         pageSize: Int,
+        status: String = "all",
     ): PagedResult<Post>
 
     fun findDeletedPagedByKwForAdmin(

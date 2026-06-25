@@ -54,7 +54,7 @@ class PostRepositoryAdapter(
 
     override fun findQPagedByKwForAdmin(query: PostRepositoryPort.PagedQuery): PostRepositoryPort.PagedResult<Post> {
         val pageable = query.toPageRequest()
-        val page = postRepository.findQPagedByKwForAdmin(query.kw, pageable)
+        val page = postRepository.findQPagedByKwForAdmin(query.kw, pageable, query.adminStatus)
         return PostRepositoryPort.PagedResult(content = page.content, totalElements = page.totalElements)
     }
 

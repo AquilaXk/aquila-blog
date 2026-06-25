@@ -16,6 +16,7 @@ interface PostRepositoryCustom {
     fun findQPagedByKwForAdmin(
         kw: String,
         pageable: Pageable,
+        status: String,
     ): Page<Post>
 
     fun findQPagedByAuthorAndKw(

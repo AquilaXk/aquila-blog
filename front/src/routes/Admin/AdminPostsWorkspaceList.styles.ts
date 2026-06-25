@@ -104,6 +104,10 @@ export const ListSkeleton = styled.div`
     width: 4.5rem;
   }
 
+  .line.tiny {
+    width: 1rem;
+  }
+
   .line.medium {
     width: 8.5rem;
   }

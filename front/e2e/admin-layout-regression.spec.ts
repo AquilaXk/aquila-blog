@@ -334,6 +334,7 @@ test("관리자 글 관리는 1440px 데스크톱에서 V4 toolbar와 table을 f
   await expect(page.getByRole("columnheader", { name: "Title" })).toBeVisible()
   await expect(page.getByRole("columnheader", { name: "Topic" })).toBeVisible()
   await expect(page.getByRole("columnheader", { name: "Status" })).toBeVisible()
+  await expect(page.getByRole("columnheader", { name: "Updated" })).toBeVisible()
   await expect(page.getByRole("columnheader", { name: "Views" })).toBeVisible()
   await expect(page.getByText("Architecture")).toBeVisible()
   await expect(page.getByText("100")).toBeVisible()

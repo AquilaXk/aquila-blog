@@ -15,8 +15,8 @@ import {
 import {
   formatDateTime,
   formatWorkspaceViews,
+  buildRowTitle,
   getWorkspaceTopicLabel,
-  getWorkspaceRowTitle,
   LIST_SKELETON_ROW_COUNT,
   toVisibility,
   workspaceStatusLabel,
@@ -55,6 +55,8 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
   onResetSearch,
 }) => {
   const openEditorForRow = (row: AdminPostListItem) => onOpenWriteRoute({ postId: String(row.id) })
+  const getStatusLabel = (row: AdminPostListItem) => (listScope === "deleted" ? "삭제됨" : workspaceStatusLabel(row))
+  const getStatusTone = (row: AdminPostListItem) => (listScope === "deleted" ? "PRIVATE" : toVisibility(row.published, row.listed))
 
   if (isListLoading) {
     return (
@@ -62,22 +64,33 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
         <ListSkeleton>
           <div className="desktopRows">
             <div className="headerRow">
-              <span className="idCell">ID</span>
-              <span>제목</span>
-              <span className="dateCell">{listScope === "active" ? "수정일" : "삭제일"}</span>
+              <span className="selectCell" />
+              <span>Title</span>
+              <span className="topicCell">Topic</span>
+              <span className="statusCell">Status</span>
+              <span className="dateCell">Updated</span>
+              <span className="viewsCell">Views</span>
             </div>
             {Array.from({ length: LIST_SKELETON_ROW_COUNT }, (_, index) => (
               <div className="row" key={`desktop-skeleton-${index}`}>
-                <div className="cell idCell">
-                  <span className="line short" />
+                <div className="cell selectCell">
+                  <span className="line tiny" />
                 </div>
                 <div className="cell titleCell">
-                  <span className="line medium" />
                   <span className="line wide" />
                   <span className="line short muted" />
                 </div>
+                <div className="cell topicCell">
+                  <span className="line short" />
+                </div>
+                <div className="cell statusCell">
+                  <span className="line medium" />
+                </div>
                 <div className="cell dateCell">
                   <span className="line medium" />
+                </div>
+                <div className="cell viewsCell">
+                  <span className="line short" />
                 </div>
               </div>
             ))}
@@ -170,7 +183,7 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
                 </td>
                 <td>
                   <TitleCell>
-                    <TitleText>{getWorkspaceRowTitle(row)}</TitleText>
+                    <TitleText>{buildRowTitle(row)}</TitleText>
                     <div className="metaRow">
                       <span>ID #{row.id}</span>
                     </div>
@@ -178,9 +191,7 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
                 </td>
                 <td className="topicCell">{getWorkspaceTopicLabel(row)}</td>
                 <td className="statusCell">
-                  <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
-                    {workspaceStatusLabel(row)}
-                  </VisibilityBadge>
+                  <VisibilityBadge data-tone={getStatusTone(row)}>{getStatusLabel(row)}</VisibilityBadge>
                 </td>
                 <td className="dateCell">{formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)}</td>
                 <td className="viewsCell">{listScope === "active" ? formatWorkspaceViews(row) : "-"}</td>
@@ -208,11 +219,9 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
               <header>
                 <span className="id">#{row.id}</span>
               </header>
-              <TitleText>{getWorkspaceRowTitle(row)}</TitleText>
+              <TitleText>{buildRowTitle(row)}</TitleText>
               <div className="metaRow">
-                <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
-                  {workspaceStatusLabel(row)}
-                </VisibilityBadge>
+                <VisibilityBadge data-tone={getStatusTone(row)}>{getStatusLabel(row)}</VisibilityBadge>
               </div>
               <span className="date">
                 {getWorkspaceTopicLabel(row)} · {formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)} ·{" "}

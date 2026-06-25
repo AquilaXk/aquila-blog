@@ -21,7 +21,7 @@ test.describe("모바일 관리자 레이아웃", () => {
   test("모바일 어드민 V4 topbar는 검색 없이 compact nav와 핵심 액션을 보존한다", async ({ page }) => {
     await page.goto("/admin/tools")
 
-    await expect(page.getByRole("heading", { name: "운영 도구" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "운영 상태와 복구" })).toBeVisible()
     await expect(page.getByRole("navigation", { name: "관리자 바로가기" })).toBeVisible()
     await expect(page.getByRole("link", { name: "글 관리" })).toBeVisible()
     await expect(page.getByRole("link", { name: "블로그 보기" })).toBeVisible()

@@ -372,14 +372,6 @@ export const PanelCard = styled(AdminPlainCard)`
   box-shadow: none;
 `
 
-export const LeadPanelCard = styled(PanelCard)`
-  min-width: 0;
-`
-
-export const CompactPanelCard = styled(PanelCard)`
-  min-width: 0;
-`
-
 export const PanelHeader = styled.div`
   display: flex;
   justify-content: space-between;

@@ -29,6 +29,7 @@ test.describe("admin tools state contract", () => {
     expect(modelSource).toContain("export const getStatusTone")
     expect(modelSource).toContain("export type ExecutionEntry")
     expect(modelSource).toContain("export type ExecutionResultFilter")
+    expect(source).toContain('"/system/api/v1/adm/dashboard-snapshot"')
     expect(source).not.toContain("const ACTION_META")
     expect(source).not.toContain("const formatInstant")
     expect(source).not.toContain("const getFreshnessMeta")
@@ -38,10 +39,15 @@ test.describe("admin tools state contract", () => {
 
   test("운영 도구는 helper copy와 읽기 전용 pill 없이 요약 카드와 실행 버튼만 남긴다", () => {
     const source = readRouteSource("AdminToolsWorkspaceSections.tsx")
+    const overviewSource = readRouteSource("AdminToolsOpsOverview.tsx")
     const styleSource = readRouteSource("AdminToolsWorkspace.styles.tokens.ts")
     const layoutStyleSource = readRouteSource("AdminToolsWorkspace.styles.layout.ts")
 
-    expect(source).toContain("<h1>운영 도구</h1>")
+    expect(source).toContain("<AdminToolsOpsOverview")
+    expect(overviewSource).toContain("<h1>운영 상태와 복구</h1>")
+    expect(overviewSource).toContain("<h2>Public read latency</h2>")
+    expect(overviewSource).toContain("<h2>Steady-state guard</h2>")
+    expect(overviewSource).toContain("<h2>Live logs</h2>")
     expect(styleSource).toContain("grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));")
     expect(source).not.toContain("메일, 작업 큐, 정리 상태, 보안 이벤트처럼 장애와 직접 연결되는 항목만 우선 다룹니다.")
     expect(source).not.toContain("<ReadonlyPill>읽기 전용</ReadonlyPill>")
@@ -158,6 +164,7 @@ test.describe("admin tools state contract", () => {
     const boundedModules = [
       "AdminToolsWorkspacePage.tsx",
       "AdminToolsWorkspaceSections.tsx",
+      "AdminToolsOpsOverview.tsx",
       "AdminToolsWorkspacePageState.ts",
       "AdminToolsDiagnosticsSection.tsx",
       "AdminToolsExecutionSection.tsx",
@@ -183,6 +190,7 @@ test.describe("admin tools state contract", () => {
     const toolsSectionsSource = readRouteSource("AdminToolsWorkspaceSections.tsx")
     expect(toolsSectionsSource).toContain("<AdminToolsDiagnosticsSection")
     expect(toolsSectionsSource).toContain("<AdminToolsExecutionSection")
+    expect(toolsSectionsSource).toContain("<AdminToolsOpsOverview")
     expect(toolsSectionsSource).not.toContain("<MetricGrid>")
     expect(toolsSectionsSource).not.toContain("<DangerPanel>")
 

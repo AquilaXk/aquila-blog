@@ -272,14 +272,11 @@ const BrandBlock = styled.div`
 `
 
 const BrandMark = styled.div`
-  width: 1.72rem;
-  height: 1.72rem;
-  border-radius: 2px;
+  width: 1.9rem;
+  height: 1.9rem;
   display: grid;
   place-items: center;
-  border: 1px solid ${adminBorderStrong};
   background: transparent;
-  color: ${adminTextPrimary};
 
   .brandLogoMark {
     display: block;

@@ -11,6 +11,7 @@ import {
   AdminWorkspaceSectionNavButton,
 } from "src/routes/Admin/AdminSurfacePrimitives"
 import {
+  adminGold,
   adminFocusRing,
   adminWarningBadgeBorder,
   adminWarningBadgeSurface,
@@ -18,16 +19,62 @@ import {
 } from "src/routes/Admin/adminColorTokens"
 
 
-export const WorkspaceHero = styled(AdminWorkspaceHero)``
+export const WorkspaceHero = styled(AdminWorkspaceHero)`
+  padding: 0 0 2.1rem;
+  border-bottom: 2px solid ${({ theme }) => theme.colors.gray12};
+
+  > div {
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 3.75rem;
+    align-items: start;
+  }
+
+  .settingsLabel {
+    color: ${adminGold};
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    margin-top: 0.8rem;
+    max-width: 46rem;
+    font-size: clamp(2.4rem, 5vw, 3.4rem);
+    line-height: 1.05;
+    letter-spacing: -0.06em;
+  }
+
+  .settingsHeroDeck {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 1rem;
+    line-height: 1.7;
+  }
+
+  @media (max-width: 900px) {
+    padding-bottom: 1.4rem;
+
+    > div {
+      grid-template-columns: 1fr;
+      gap: 1.25rem;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 10vw, 2.65rem);
+    }
+  }
+`
 
 export const WorkspaceShell = styled.section`
   display: grid;
-  grid-template-columns: 184px minmax(0, 1fr) 288px;
-  gap: 0.85rem;
+  grid-template-columns: minmax(180px, 210px) minmax(0, 760px) minmax(220px, 288px);
+  gap: clamp(1.25rem, 2.6vw, 3.125rem);
   align-items: start;
 
-  @media (max-width: 1480px) {
+  @media (max-width: 1180px) {
     grid-template-columns: minmax(0, 1fr);
+    gap: 1.2rem;
   }
 
   @media (max-width: 760px) {
@@ -36,12 +83,16 @@ export const WorkspaceShell = styled.section`
 `
 
 export const SectionRail = styled(AdminWorkspaceSectionNav)`
-  @media (max-width: 1480px) {
+  gap: 0;
+  border-top: 1px solid ${({ theme }) => theme.colors.gray12};
+
+  @media (max-width: 1180px) {
     position: static;
     display: flex;
-    gap: 0.5rem;
+    gap: 0.38rem;
     overflow-x: auto;
     padding-bottom: 0.2rem;
+    border-top: 0;
     scroll-snap-type: x proximity;
     scrollbar-width: none;
 
@@ -57,25 +108,38 @@ export const SectionRail = styled(AdminWorkspaceSectionNav)`
     scroll-snap-type: none;
   }
 
-  @media (min-width: 1481px) {
+  @media (min-width: 1181px) {
     display: grid;
-    gap: 0.24rem;
   }
 `
 
 export const SectionRailButton = styled(AdminWorkspaceSectionNavButton)`
+  border-left: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray10};
+
+  &[data-active="true"] {
+    border-left: 0;
+    border-bottom-color: ${({ theme }) => theme.colors.gray12};
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-weight: 850;
+  }
+
   @media (max-width: 760px) {
     min-height: 36px;
     padding: 0 0.78rem;
+    border: 1px solid ${({ theme }) => theme.colors.gray5};
     font-size: 0.8rem;
   }
 
-  @media (min-width: 1481px) {
+  @media (min-width: 1181px) {
     width: 100%;
-    min-height: 46px;
+    min-height: 47px;
     justify-content: flex-start;
-    padding: 0.78rem 0.94rem;
-    border-radius: 2px;
+    padding: 0.82rem 0;
+    border-radius: 0;
   }
 `
 
@@ -85,11 +149,27 @@ export const EditorColumn = styled.div`
 `
 
 export const EditorPaneHeader = styled(AdminPaneHeader)`
+  padding-bottom: 1rem;
+
+  .settingsPanelLabel {
+    color: ${adminGold};
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
   .titleRow {
     display: flex;
     align-items: center;
     gap: 0.6rem;
     flex-wrap: wrap;
+  }
+
+  h2 {
+    font-size: 1.88rem;
+    line-height: 1.15;
+    letter-spacing: -0.04em;
   }
 `
 
@@ -127,9 +207,10 @@ export const SectionStateBadge = styled.span`
 `
 
 export const EditorSurface = styled(AdminSubtleCard)`
-  padding: 0.96rem 1rem 1.02rem;
+  max-width: 760px;
+  padding: 0;
   display: grid;
-  gap: 0.88rem;
+  gap: 0.9rem;
 `
 
 export const SectionStack = styled.div`
@@ -144,12 +225,13 @@ export const SectionStack = styled.div`
 
 export const AvatarWorkspaceCard = styled.div`
   display: grid;
-  justify-items: center;
-  gap: 0.58rem;
-  padding: 0.92rem;
-  border-radius: 2px;
-  background: ${({ theme }) => theme.colors.gray2};
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.35rem 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: transparent;
+  border-radius: 0;
 
   .avatarPreview {
     width: 88px;
@@ -161,7 +243,7 @@ export const AvatarWorkspaceCard = styled.div`
   .avatarMeta {
     display: grid;
     gap: 0.14rem;
-    text-align: center;
+    text-align: left;
   }
 
   .avatarMeta strong {
@@ -172,15 +254,21 @@ export const AvatarWorkspaceCard = styled.div`
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.78rem;
   }
+
+  @media (max-width: 760px) {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+  }
 `
 
 export const FieldSectionCard = styled.div`
   display: grid;
   gap: 0.82rem;
-  padding: 1rem;
-  border-radius: 2px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) => theme.colors.gray1};
+  padding: 1.35rem 0;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: transparent;
 
   @media (max-width: 760px) {
     padding: 0.9rem;
@@ -195,7 +283,7 @@ export const SectionBlockHeader = styled.div`
 
   h3 {
     margin: 0;
-    font-size: 1.02rem;
+    font-size: 0.95rem;
     color: ${({ theme }) => theme.colors.gray12};
   }
 

@@ -68,8 +68,8 @@ export const WorkspaceHero = styled(AdminWorkspaceHero)`
 
 export const WorkspaceShell = styled.section`
   display: grid;
-  grid-template-columns: 210px minmax(0, 760px) 288px;
-  gap: 3.125rem;
+  grid-template-columns: minmax(180px, 210px) minmax(0, 760px) minmax(220px, 288px);
+  gap: clamp(1.25rem, 2.6vw, 3.125rem);
   align-items: start;
 
   @media (max-width: 1180px) {

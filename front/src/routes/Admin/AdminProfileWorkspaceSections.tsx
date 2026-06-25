@@ -137,7 +137,7 @@ export const AdminProfileWorkspaceSections = (props: Record<string, any>) => {
         <EditorColumn>
           <EditorSurface>
             <EditorPaneHeader>
-              <span className="settingsPanelLabel">{activeSection}</span>
+              <span className="settingsPanelLabel">{activeSectionMeta.label}</span>
               <div className="titleRow">
                 <h2>{activeSectionMeta.label}</h2>
                 {activeSectionState.dirty ? (

@@ -465,6 +465,7 @@ test.describe("관리자 표면 공통 계약", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminShell.tsx"), "utf8")
 
     expect(source).toContain('import ProfileImage from "src/components/ProfileImage"')
+    expect(source).toContain('import BrandLogoMark from "src/components/branding/BrandMark"')
     expect(source).toContain("profileSnapshot?: AdminShellProfileSnapshot | null")
     expect(source).toContain('const sidebarIdentityName = (member.nickname || member.username || "관리자").trim()')
     expect(source).toContain('const brandTitle = (profileSnapshot?.blogTitle || member.blogTitle || CONFIG.blog.title || "AquilaLog").trim()')
@@ -489,6 +490,7 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(source).not.toContain("<SidebarSectionLabel>관리 메뉴</SidebarSectionLabel>")
     expect(source.indexOf("<BrandBlock>")).toBeLessThan(source.indexOf("<SidebarNavSection>"))
     expect(source.indexOf("<SidebarNavSection>")).toBeLessThan(source.indexOf("<SidebarProfile>"))
+    expect(getStyledComponentBlock(source, "BrandMark")).not.toContain("border: 1px solid")
     expect(source).not.toContain('<SidebarStatusCard aria-label="현재 화면">')
     expect(source).not.toContain("SidebarCardTitle")
   })

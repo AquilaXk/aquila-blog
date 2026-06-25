@@ -142,7 +142,8 @@ class PostUseCaseAdapter(
         sort: PostSearchSortType1,
         page: Int,
         pageSize: Int,
-    ): PagedResult<Post> = postApplicationService.findPagedByKwForAdmin(kw, sort, page, pageSize)
+        status: String,
+    ): PagedResult<Post> = postApplicationService.findPagedByKwForAdmin(kw, sort, page, pageSize, status)
 
     override fun findDeletedPagedByKwForAdmin(
         kw: String,

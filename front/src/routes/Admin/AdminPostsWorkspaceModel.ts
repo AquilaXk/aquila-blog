@@ -5,18 +5,22 @@ import {
 } from "./editorStudioStorageModel"
 
 export type PostListScope = "active" | "deleted"
+export type PostStatusFilter = "all" | "draft" | "published" | "private" | "deleted"
 
 export type AdminPostListItem = {
   id: number
   title: string
   authorName: string
   authorProfileImgUrl?: string
+  category?: string | string[]
+  tags?: string[]
   published: boolean
   listed: boolean
   tempDraft?: boolean
   createdAt: string
   modifiedAt: string
   deletedAt?: string
+  hitCount?: number
 }
 
 export type PageDto<T> = {
@@ -51,7 +55,7 @@ export type LocalDraftSummary = {
   visibility: LocalDraftPayload["visibility"]
 }
 
-export type ListSort = "CREATED_AT" | "CREATED_AT_ASC"
+export type ListSort = "MODIFIED_AT" | "CREATED_AT" | "CREATED_AT_ASC"
 
 export type WorkspaceConfirmState =
   | {
@@ -96,7 +100,7 @@ export type ListState = {
 export const EDITOR_NEW_ROUTE_PATH = "/editor/new"
 export const DEFAULT_PAGE = "1"
 export const DEFAULT_PAGE_SIZE = "20"
-export const DEFAULT_SORT: ListSort = "CREATED_AT"
+export const DEFAULT_SORT: ListSort = "MODIFIED_AT"
 export const LIST_SKELETON_ROW_COUNT = 5
 export const POSTS_WORKSPACE_DEFERRED_PANEL_TIMEOUT_MS = 720
 export const POSTS_WORKSPACE_MOBILE_LIST_DELAY_MS = 180
@@ -119,6 +123,32 @@ export const visibilityLabel = (published: boolean, listed: boolean) => {
   if (visibility === "PUBLIC_UNLISTED") return "링크 공개"
   return "전체 공개"
 }
+
+export const getWorkspacePostStatusFilter = (
+  row: Pick<AdminPostListItem, "title" | "published" | "listed" | "tempDraft">
+): Exclude<PostStatusFilter, "all" | "deleted"> => {
+  if (isServerTempDraftPost(row)) return "draft"
+  if (!row.published) return "private"
+  return "published"
+}
+
+export const workspaceStatusLabel = (row: Pick<AdminPostListItem, "title" | "published" | "listed" | "tempDraft">) => {
+  const status = getWorkspacePostStatusFilter(row)
+  if (status === "draft") return "초안"
+  if (status === "published") return "발행"
+  return "비공개"
+}
+
+export const getWorkspaceTopicLabel = (row: Pick<AdminPostListItem, "category" | "tags">) => {
+  if (typeof row.category === "string" && row.category.trim()) return row.category.trim()
+  const firstCategory = Array.isArray(row.category) ? row.category.find((category) => category.trim()) : undefined
+  if (firstCategory?.trim()) return firstCategory.trim()
+  const firstTag = row.tags?.find((tag) => tag.trim())
+  return firstTag?.trim() || "-"
+}
+
+export const formatWorkspaceViews = (row: Pick<AdminPostListItem, "hitCount">) =>
+  typeof row.hitCount === "number" ? String(row.hitCount) : "-"
 
 export const isWorkspaceTempDraft = (row: Pick<AdminPostListItem, "title" | "published" | "listed" | "tempDraft">) =>
   isServerTempDraftPost(row)
@@ -150,7 +180,7 @@ export const sanitizeNumberInput = (value: string, fallback: string) => {
 
 export const buildListEndpoint = (
   scope: PostListScope,
-  options: { page: string; pageSize: string; kw: string; sort: ListSort }
+  options: { page: string; pageSize: string; kw: string; sort: ListSort; status?: PostStatusFilter }
 ) => {
   const query = new URLSearchParams({
     page: options.page,
@@ -161,6 +191,9 @@ export const buildListEndpoint = (
   const endpoint = scope === "deleted" ? "/post/api/v1/adm/posts/deleted" : "/post/api/v1/adm/posts"
   if (scope === "active") {
     query.set("sort", options.sort)
+    if (options.status && options.status !== "all" && options.status !== "deleted") {
+      query.set("status", options.status)
+    }
   }
 
   return `${endpoint}?${query.toString()}`

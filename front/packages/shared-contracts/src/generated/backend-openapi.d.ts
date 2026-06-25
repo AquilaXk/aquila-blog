@@ -1721,6 +1721,8 @@ export interface components {
             /** Format: int32 */
             hitCount?: number;
             actorHasLiked?: boolean;
+            tags?: string[];
+            category?: string[];
         };
         RsDataPostDto: {
             resultCode?: string;
@@ -4255,6 +4257,7 @@ export interface operations {
                 pageSize?: number;
                 kw?: string;
                 sort?: "CREATED_AT" | "CREATED_AT_ASC" | "MODIFIED_AT" | "MODIFIED_AT_ASC";
+                status?: string;
             };
             header?: never;
             path?: never;

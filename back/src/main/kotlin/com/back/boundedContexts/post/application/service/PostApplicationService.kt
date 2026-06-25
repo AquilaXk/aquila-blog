@@ -617,6 +617,7 @@ class PostApplicationService(
         sort: PostSearchSortType1,
         page: Int,
         pageSize: Int,
+        status: String = "all",
     ): PagedResult<Post> =
         findAndHydratePagedPosts(page, pageSize) {
             postRepository.findQPagedByKwForAdmin(
@@ -626,6 +627,7 @@ class PostApplicationService(
                     pageSize = pageSize,
                     sortProperty = sort.property,
                     sortAscending = sort.isAsc,
+                    adminStatus = status,
                 ),
             )
         }

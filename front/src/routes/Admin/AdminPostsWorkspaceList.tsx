@@ -1,101 +1,75 @@
-import type { MouseEvent } from "react"
-import ProfileImage from "src/components/ProfileImage"
-import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import {
   ActionRow,
-  AuthorAvatarFrame,
-  AuthorIdentity,
-  DangerTextButton,
   GhostButton,
   ListCard,
   ListEmptyState,
   ListSkeleton,
   MobileCardList,
+  PageFooter,
+  RowActions,
   PostsDesktopTable,
   PrimaryInlineButton,
-  RowActions,
-  RowPrimaryButton,
-  RowSecondaryButton,
-  TitleAnchor,
+  TitleButton,
   TitleCell,
   TitleText,
   VisibilityBadge,
 } from "./AdminPostsWorkspaceList.styles"
 import {
-  buildWorkspaceAuthorFallbackInitial,
-  canOpenCanonicalPost,
+  buildRowTitle,
   formatDateTime,
-  getWorkspaceRowTitle,
+  formatWorkspaceViews,
+  getWorkspaceTopicLabel,
   LIST_SKELETON_ROW_COUNT,
   toVisibility,
-  visibilityLabel,
+  workspaceStatusLabel,
   type AdminPostListItem,
   type ListState,
   type PostListScope,
 } from "./AdminPostsWorkspaceModel"
 
-type MutationPending = {
-  rowId: number
-  kind: "delete" | "restore" | "hardDelete"
-} | null
-
 type AdminPostsWorkspaceListProps = {
   listScope: PostListScope
   listKw: string
+  listPage: string
+  listPageSize: string
   listState: ListState
   isListLoading: boolean
   listError: string
   shouldRenderMobileList: boolean
-  mutationPending: MutationPending
   onLoadList: () => void
   onOpenWriteRoute: (query?: Record<string, string>) => void
-  onResetSearch: () => void
-  onContinueRecent: (row: AdminPostListItem) => void
-  onCopyPostDetailLink: (row: AdminPostListItem) => void
-  onOpenCanonicalPost: (
-    event: MouseEvent<HTMLAnchorElement>,
-    row: Pick<AdminPostListItem, "id" | "published" | "listed" | "tempDraft">
-  ) => void
+  onPageChange: (page: number) => void
+  mutationPending: { rowId: number; kind: "delete" | "restore" | "hardDelete" } | null
   onDeletePost: (row: AdminPostListItem) => void
-  onRestorePost: (row: AdminPostListItem) => void
   onHardDeletePost: (row: AdminPostListItem) => void
+  onRestorePost: (row: AdminPostListItem) => void
+  onResetSearch: () => void
 }
 
 export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = ({
   listScope,
   listKw,
+  listPage,
+  listPageSize,
   listState,
   isListLoading,
   listError,
   shouldRenderMobileList,
-  mutationPending,
   onLoadList,
   onOpenWriteRoute,
-  onResetSearch,
-  onContinueRecent,
-  onCopyPostDetailLink,
-  onOpenCanonicalPost,
+  onPageChange,
+  mutationPending,
   onDeletePost,
-  onRestorePost,
   onHardDeletePost,
+  onRestorePost,
+  onResetSearch,
 }) => {
-  const renderAuthorMeta = (row: Pick<AdminPostListItem, "authorName" | "authorProfileImgUrl">) => {
-    const authorName = row.authorName || "작성자 미상"
-    const avatarSrc = (row.authorProfileImgUrl || "").trim()
-
-    return (
-      <AuthorIdentity>
-        <AuthorAvatarFrame aria-hidden="true" data-has-image={avatarSrc ? "true" : "false"}>
-          {avatarSrc ? (
-            <ProfileImage src={avatarSrc} alt="" fillContainer />
-          ) : (
-            <span>{buildWorkspaceAuthorFallbackInitial(row.authorName)}</span>
-          )}
-        </AuthorAvatarFrame>
-        <span className="author">{authorName}</span>
-      </AuthorIdentity>
-    )
-  }
+  const isDeletedScope = listScope === "deleted"
+  const openEditorForRow = (row: AdminPostListItem) => onOpenWriteRoute({ postId: String(row.id) })
+  const getStatusLabel = (row: AdminPostListItem) => (listScope === "deleted" ? "삭제됨" : workspaceStatusLabel(row))
+  const getStatusTone = (row: AdminPostListItem) => (listScope === "deleted" ? "PRIVATE" : toVisibility(row.published, row.listed))
+  const isDeletedActionPending = Boolean(mutationPending)
+  const isActiveActionPending = Boolean(mutationPending)
 
   if (isListLoading) {
     return (
@@ -103,26 +77,32 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
         <ListSkeleton>
           <div className="desktopRows">
             <div className="headerRow">
-              <span className="idCell">ID</span>
-              <span>제목</span>
-              <span className="dateCell">{listScope === "active" ? "수정일" : "삭제일"}</span>
-              <span className="actionCell">작업</span>
+              <span className="selectCell" />
+              <span>Title</span>
+              <span className="topicCell">Topic</span>
+              <span className="statusCell">Status</span>
+              <span className="dateCell">Updated</span>
+              <span className="viewsCell">Views</span>
             </div>
             {Array.from({ length: LIST_SKELETON_ROW_COUNT }, (_, index) => (
               <div className="row" key={`desktop-skeleton-${index}`}>
-                <div className="cell idCell">
-                  <span className="line short" />
+                <div className="cell selectCell">
+                  <span className="line tiny" />
                 </div>
                 <div className="cell titleCell">
-                  <span className="line medium" />
                   <span className="line wide" />
                   <span className="line short muted" />
+                </div>
+                <div className="cell topicCell">
+                  <span className="line short" />
+                </div>
+                <div className="cell statusCell">
+                  <span className="line medium" />
                 </div>
                 <div className="cell dateCell">
                   <span className="line medium" />
                 </div>
-                <div className="cell actionCell">
-                  <span className="line short" />
+                <div className="cell viewsCell">
                   <span className="line short" />
                 </div>
               </div>
@@ -138,10 +118,6 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
                 <span className="line wide" />
                 <span className="line medium muted" />
                 <span className="line short muted" />
-                <div className="actionRow">
-                  <span className="line short" />
-                  <span className="line short" />
-                </div>
               </article>
             ))}
           </div>
@@ -182,31 +158,10 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
     )
   }
 
-  const renderActions = (row: AdminPostListItem) =>
-    listScope === "active" ? (
-      <>
-        <RowPrimaryButton type="button" onClick={() => onContinueRecent(row)}>
-          수정
-        </RowPrimaryButton>
-        {canOpenCanonicalPost(row) ? (
-          <RowSecondaryButton type="button" onClick={() => onCopyPostDetailLink(row)}>
-            링크 복사
-          </RowSecondaryButton>
-        ) : null}
-        <DangerTextButton type="button" disabled={Boolean(mutationPending)} onClick={() => onDeletePost(row)}>
-          삭제
-        </DangerTextButton>
-      </>
-    ) : (
-      <>
-        <RowPrimaryButton type="button" disabled={Boolean(mutationPending)} onClick={() => onRestorePost(row)}>
-          복구
-        </RowPrimaryButton>
-        <DangerTextButton type="button" disabled={Boolean(mutationPending)} onClick={() => onHardDeletePost(row)}>
-          영구삭제
-        </DangerTextButton>
-      </>
-    )
+  const currentPage = Math.max(1, Number.parseInt(listPage, 10) || 1)
+  const pageSize = Math.max(1, Number.parseInt(listPageSize, 10) || 1)
+  const totalPages = Math.max(currentPage, Math.ceil(listState.total / pageSize))
+  const showPager = totalPages > 1
 
   return (
     <ListCard>
@@ -214,36 +169,65 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
         <PostsDesktopTable>
           <thead>
             <tr>
-              <th className="idCell">ID</th>
-              <th>제목</th>
-              <th className="dateCell">{listScope === "active" ? "수정일" : "삭제일"}</th>
-              <th className="actionCell">작업</th>
+              <th className="selectCell"></th>
+              <th>Title</th>
+              <th className="topicCell">Topic</th>
+              <th className="statusCell">Status</th>
+              <th className="dateCell">Updated</th>
+              <th className="viewsCell">{isDeletedScope ? "Actions" : "Views"}</th>
             </tr>
           </thead>
           <tbody>
             {listState.rows.map((row) => (
               <tr key={row.id}>
-                <td className="idCell">#{row.id}</td>
+                <td className="selectCell">
+                  <span className="check" aria-hidden="true" />
+                </td>
                 <td>
                   <TitleCell>
-                    {canOpenCanonicalPost(row) ? (
-                      <TitleAnchor href={toCanonicalPostPath(row.id)} onClick={(event) => onOpenCanonicalPost(event, row)}>
-                        {getWorkspaceRowTitle(row)}
-                      </TitleAnchor>
+                    {isDeletedScope ? (
+                      <TitleText>{buildRowTitle(row)}</TitleText>
                     ) : (
-                      <TitleText>{getWorkspaceRowTitle(row)}</TitleText>
+                      <TitleButton type="button" onClick={() => openEditorForRow(row)}>
+                        {buildRowTitle(row)}
+                      </TitleButton>
                     )}
                     <div className="metaRow">
-                      <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
-                        {visibilityLabel(row.published, row.listed)}
-                      </VisibilityBadge>
-                      {renderAuthorMeta(row)}
+                      <span>ID #{row.id}</span>
                     </div>
                   </TitleCell>
                 </td>
+                <td className="topicCell">{getWorkspaceTopicLabel(row)}</td>
+                <td className="statusCell">
+                  <VisibilityBadge data-tone={getStatusTone(row)}>{getStatusLabel(row)}</VisibilityBadge>
+                </td>
                 <td className="dateCell">{formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)}</td>
-                <td className="actionCell">
-                  <RowActions>{renderActions(row)}</RowActions>
+                <td className="viewsCell">
+                  {isDeletedScope ? (
+                    <RowActions>
+                      <GhostButton
+                        type="button"
+                        disabled={isDeletedActionPending}
+                        onClick={() => onRestorePost(row)}
+                      >
+                        복구
+                      </GhostButton>
+                      <GhostButton
+                        type="button"
+                        disabled={isDeletedActionPending}
+                        onClick={() => onHardDeletePost(row)}
+                      >
+                        영구삭제
+                      </GhostButton>
+                    </RowActions>
+                  ) : (
+                    <RowActions>
+                      <span>{formatWorkspaceViews(row)}</span>
+                      <GhostButton type="button" disabled={isActiveActionPending} onClick={() => onDeletePost(row)}>
+                        삭제
+                      </GhostButton>
+                    </RowActions>
+                  )}
                 </td>
               </tr>
             ))}
@@ -258,24 +242,65 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
               <header>
                 <span className="id">#{row.id}</span>
               </header>
-              {canOpenCanonicalPost(row) ? (
-                <TitleAnchor href={toCanonicalPostPath(row.id)} onClick={(event) => onOpenCanonicalPost(event, row)}>
-                  {getWorkspaceRowTitle(row)}
-                </TitleAnchor>
+              {isDeletedScope ? (
+                <TitleText>{buildRowTitle(row)}</TitleText>
               ) : (
-                <TitleText>{getWorkspaceRowTitle(row)}</TitleText>
+                <TitleButton type="button" onClick={() => openEditorForRow(row)}>
+                  {buildRowTitle(row)}
+                </TitleButton>
               )}
               <div className="metaRow">
-                <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
-                  {visibilityLabel(row.published, row.listed)}
-                </VisibilityBadge>
-                {renderAuthorMeta(row)}
+                <VisibilityBadge data-tone={getStatusTone(row)}>{getStatusLabel(row)}</VisibilityBadge>
               </div>
-              <span className="date">{formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)}</span>
-              <div className="actions">{renderActions(row)}</div>
+              <span className="date">
+                {getWorkspaceTopicLabel(row)} · {formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)} ·{" "}
+                {listScope === "active" ? formatWorkspaceViews(row) : "-"} views
+              </span>
+              {isDeletedScope ? (
+                <RowActions>
+                  <GhostButton
+                    type="button"
+                    disabled={isDeletedActionPending}
+                    onClick={() => onRestorePost(row)}
+                  >
+                    복구
+                  </GhostButton>
+                  <GhostButton
+                    type="button"
+                    disabled={isDeletedActionPending}
+                    onClick={() => onHardDeletePost(row)}
+                  >
+                    영구삭제
+                  </GhostButton>
+                </RowActions>
+              ) : (
+                <RowActions>
+                  <GhostButton type="button" disabled={isActiveActionPending} onClick={() => onDeletePost(row)}>
+                    삭제
+                  </GhostButton>
+                </RowActions>
+              )}
             </article>
           ))}
         </MobileCardList>
+      ) : null}
+
+      {showPager ? (
+        <PageFooter>
+          <GhostButton type="button" disabled={currentPage <= 1} onClick={() => onPageChange(currentPage - 1)}>
+            이전
+          </GhostButton>
+          <span>
+            {currentPage} / {totalPages}
+          </span>
+          <PrimaryInlineButton
+            type="button"
+            disabled={currentPage >= totalPages}
+            onClick={() => onPageChange(currentPage + 1)}
+          >
+            다음
+          </PrimaryInlineButton>
+        </PageFooter>
       ) : null}
     </ListCard>
   )

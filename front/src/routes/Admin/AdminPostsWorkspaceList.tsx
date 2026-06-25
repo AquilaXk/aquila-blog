@@ -9,6 +9,7 @@ import {
   RowActions,
   PostsDesktopTable,
   PrimaryInlineButton,
+  TitleButton,
   TitleCell,
   TitleText,
   VisibilityBadge,
@@ -65,8 +66,7 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
   const openEditorForRow = (row: AdminPostListItem) => onOpenWriteRoute({ postId: String(row.id) })
   const getStatusLabel = (row: AdminPostListItem) => (listScope === "deleted" ? "삭제됨" : workspaceStatusLabel(row))
   const getStatusTone = (row: AdminPostListItem) => (listScope === "deleted" ? "PRIVATE" : toVisibility(row.published, row.listed))
-  const isRowPending = (row: AdminPostListItem, kind: "restore" | "hardDelete") =>
-    mutationPending?.rowId === row.id && mutationPending.kind === kind
+  const isDeletedActionPending = Boolean(mutationPending)
 
   if (isListLoading) {
     return (
@@ -176,28 +176,19 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
           </thead>
           <tbody>
             {listState.rows.map((row) => (
-              <tr
-                key={row.id}
-                tabIndex={isDeletedScope ? undefined : 0}
-                role={isDeletedScope ? undefined : "button"}
-                onClick={isDeletedScope ? undefined : () => openEditorForRow(row)}
-                onKeyDown={
-                  isDeletedScope
-                    ? undefined
-                    : (event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault()
-                          openEditorForRow(row)
-                        }
-                      }
-                }
-              >
+              <tr key={row.id}>
                 <td className="selectCell">
                   <span className="check" aria-hidden="true" />
                 </td>
                 <td>
                   <TitleCell>
-                    <TitleText>{buildRowTitle(row)}</TitleText>
+                    {isDeletedScope ? (
+                      <TitleText>{buildRowTitle(row)}</TitleText>
+                    ) : (
+                      <TitleButton type="button" onClick={() => openEditorForRow(row)}>
+                        {buildRowTitle(row)}
+                      </TitleButton>
+                    )}
                     <div className="metaRow">
                       <span>ID #{row.id}</span>
                     </div>
@@ -213,14 +204,14 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
                     <RowActions>
                       <GhostButton
                         type="button"
-                        disabled={isRowPending(row, "restore")}
+                        disabled={isDeletedActionPending}
                         onClick={() => onRestorePost(row)}
                       >
                         복구
                       </GhostButton>
                       <GhostButton
                         type="button"
-                        disabled={isRowPending(row, "hardDelete")}
+                        disabled={isDeletedActionPending}
                         onClick={() => onHardDeletePost(row)}
                       >
                         영구삭제
@@ -239,26 +230,17 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
       {shouldRenderMobileList ? (
         <MobileCardList>
           {listState.rows.map((row) => (
-            <article
-              key={`mobile-${row.id}`}
-              tabIndex={isDeletedScope ? undefined : 0}
-              role={isDeletedScope ? undefined : "button"}
-              onClick={isDeletedScope ? undefined : () => openEditorForRow(row)}
-              onKeyDown={
-                isDeletedScope
-                  ? undefined
-                  : (event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault()
-                        openEditorForRow(row)
-                      }
-                    }
-              }
-            >
+            <article key={`mobile-${row.id}`}>
               <header>
                 <span className="id">#{row.id}</span>
               </header>
-              <TitleText>{buildRowTitle(row)}</TitleText>
+              {isDeletedScope ? (
+                <TitleText>{buildRowTitle(row)}</TitleText>
+              ) : (
+                <TitleButton type="button" onClick={() => openEditorForRow(row)}>
+                  {buildRowTitle(row)}
+                </TitleButton>
+              )}
               <div className="metaRow">
                 <VisibilityBadge data-tone={getStatusTone(row)}>{getStatusLabel(row)}</VisibilityBadge>
               </div>
@@ -270,14 +252,14 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
                 <RowActions>
                   <GhostButton
                     type="button"
-                    disabled={isRowPending(row, "restore")}
+                    disabled={isDeletedActionPending}
                     onClick={() => onRestorePost(row)}
                   >
                     복구
                   </GhostButton>
                   <GhostButton
                     type="button"
-                    disabled={isRowPending(row, "hardDelete")}
+                    disabled={isDeletedActionPending}
                     onClick={() => onHardDeletePost(row)}
                   >
                     영구삭제

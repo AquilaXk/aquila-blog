@@ -249,15 +249,6 @@ export const PostsDesktopTable = styled.table`
     border-bottom: none;
   }
 
-  tbody tr[role="button"] {
-    cursor: pointer;
-  }
-
-  tbody tr:focus-visible {
-    outline: 2px solid ${({ theme }) => theme.colors.gray8};
-    outline-offset: -2px;
-  }
-
   @media (max-width: 900px) {
     display: none;
   }
@@ -322,6 +313,32 @@ export const TitleText = styled.strong`
   -webkit-line-clamp: 3;
 `
 
+export const TitleButton = styled.button`
+  display: -webkit-box;
+  width: fit-content;
+  max-width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray12};
+  font: inherit;
+  font-size: 0.96rem;
+  font-weight: 800;
+  line-height: 1.45;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  word-break: keep-all;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+
+  &:focus-visible {
+    outline: 2px solid ${({ theme }) => theme.colors.gray8};
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+`
+
 export const MobileCardList = styled.div`
   display: none;
 
@@ -338,12 +355,6 @@ export const MobileCardList = styled.div`
     border-radius: 2px;
     border: 1px solid ${({ theme }) => theme.colors.gray5};
     background: ${({ theme }) => theme.colors.gray1};
-    cursor: pointer;
-  }
-
-  article:focus-visible {
-    outline: 2px solid ${({ theme }) => theme.colors.gray8};
-    outline-offset: 2px;
   }
 
   header {

@@ -65,6 +65,7 @@ test.describe("admin posts workspace link contract", () => {
     expect(listSource).toContain('<div className="metaRow">')
     expect(listSource).toContain("getWorkspaceTopicLabel(row)")
     expect(listSource).toContain("formatWorkspaceViews(row)")
+    expect(modelSource).toContain('category?: string | string[]')
     expect(modelSource).toContain('tags?: string[]')
     expect(listSource).not.toContain('<div className="titleRow">')
     expect(listSource).not.toContain("TitleAnchor")

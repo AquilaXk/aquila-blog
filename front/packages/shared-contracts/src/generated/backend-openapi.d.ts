@@ -1722,6 +1722,7 @@ export interface components {
             hitCount?: number;
             actorHasLiked?: boolean;
             tags?: string[];
+            category?: string[];
         };
         RsDataPostDto: {
             resultCode?: string;

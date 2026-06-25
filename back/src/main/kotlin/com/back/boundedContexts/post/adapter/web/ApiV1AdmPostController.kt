@@ -82,7 +82,7 @@ class ApiV1AdmPostController(
         @RequestParam(defaultValue = "1") page: Int,
         @RequestParam(defaultValue = "30") pageSize: Int,
         @RequestParam(defaultValue = "") kw: String,
-        @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
+        @RequestParam(defaultValue = "MODIFIED_AT") sort: PostSearchSortType1,
         @RequestParam(defaultValue = "all") status: String,
     ): PageDto<PostDto> {
         val validPage = page.coerceAtLeast(1)
@@ -92,7 +92,7 @@ class ApiV1AdmPostController(
             kw.isBlank() &&
             validPage == 1 &&
             validPageSize == 20 &&
-            sort == PostSearchSortType1.CREATED_AT &&
+            sort == PostSearchSortType1.MODIFIED_AT &&
             validStatus == "all"
         ) {
             return adminPostListSnapshotService.getFirstPageSnapshot(sort)

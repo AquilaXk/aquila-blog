@@ -26,6 +26,7 @@ data class PostDto
         val hitCount: Int,
         var actorHasLiked: Boolean = false,
         val tags: List<String> = emptyList(),
+        val category: List<String> = emptyList(),
     ) {
         constructor(post: Post) : this(post, PostPreviewExtractor.extract(post.content))
 
@@ -52,6 +53,7 @@ data class PostDto
             post.commentsCount,
             post.hitCount,
             tags = meta.tags,
+            category = meta.categories,
         )
 
         private constructor(

@@ -99,7 +99,7 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
         given(
             postUseCase.findPagedByKwForAdmin(
                 "관리자 검색용 숨김",
-                com.back.standard.dto.post.type1.PostSearchSortType1.CREATED_AT,
+                com.back.standard.dto.post.type1.PostSearchSortType1.MODIFIED_AT,
                 1,
                 30,
                 "all",
@@ -125,7 +125,7 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
     @WithMockUser(roles = ["ADMIN"])
     fun `관리자 첫 화면 기본 목록은 snapshot cache 서비스로 응답한다`() {
         val post = samplePost(id = 55, title = "첫 화면 캐시", content = "본문", published = true, listed = true)
-        given(adminPostListSnapshotService.getFirstPageSnapshot(com.back.standard.dto.post.type1.PostSearchSortType1.CREATED_AT))
+        given(adminPostListSnapshotService.getFirstPageSnapshot(com.back.standard.dto.post.type1.PostSearchSortType1.MODIFIED_AT))
             .willReturn(
                 PageDto(
                     content =
@@ -142,7 +142,7 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
                 param("page", "1")
                 param("pageSize", "20")
                 param("kw", "")
-                param("sort", "CREATED_AT")
+                param("sort", "MODIFIED_AT")
             }.andExpect {
                 status { isOk() }
                 jsonPath("$.content[0].id") { value(55) }
@@ -151,10 +151,10 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
 
         then(adminPostListSnapshotService)
             .should()
-            .getFirstPageSnapshot(com.back.standard.dto.post.type1.PostSearchSortType1.CREATED_AT)
+            .getFirstPageSnapshot(com.back.standard.dto.post.type1.PostSearchSortType1.MODIFIED_AT)
         then(postUseCase)
             .should(never())
-            .findPagedByKwForAdmin("", com.back.standard.dto.post.type1.PostSearchSortType1.CREATED_AT, 1, 20, "all")
+            .findPagedByKwForAdmin("", com.back.standard.dto.post.type1.PostSearchSortType1.MODIFIED_AT, 1, 20, "all")
     }
 
     @Test

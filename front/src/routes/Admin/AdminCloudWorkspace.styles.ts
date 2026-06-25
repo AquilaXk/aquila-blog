@@ -547,6 +547,15 @@ export const FileTable = styled.table`
     transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
   }
 
+  tbody tr[data-loading-row="true"] {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 12rem;
+  }
+
+  tbody tr[data-loading-row="true"] td {
+    grid-column: 1 / -1;
+  }
+
   tbody tr[data-selected="true"] {
     background: ${surfaceAccent};
     border-color: ${borderStrong};

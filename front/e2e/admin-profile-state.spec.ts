@@ -128,8 +128,11 @@ test.describe("admin profile state contract", () => {
     const combinedWorkspaceSource = [sectionSource, identitySource, layoutStyleSource, sectionStyleSource].join("\n")
 
     expect(layoutStyleSource).toContain("export const SectionRail = styled(AdminWorkspaceSectionNav)`")
-    expect(layoutStyleSource).toContain("@media (max-width: 1480px)")
+    expect(layoutStyleSource).toContain("grid-template-columns: 210px minmax(0, 760px) 288px;")
+    expect(layoutStyleSource).toContain("border-top: 1px solid")
+    expect(layoutStyleSource).toContain("@media (max-width: 1180px)")
     expect(layoutStyleSource).toContain("export const SectionRailButton = styled(AdminWorkspaceSectionNavButton)`")
+    expect(layoutStyleSource).toContain("border-bottom: 1px solid")
     expect(sectionSource).toContain("role=\"tab\"")
     expect(sectionSource).toContain("aria-selected={activeSection === section.id}")
     expect(sectionStyleSource).toContain("export const EditorActionDock = styled(AdminWorkspaceActionDock)``")
@@ -260,7 +263,11 @@ test.describe("admin profile state contract", () => {
       "utf8"
     )
 
-    expect(source).toContain("<h1>프로필</h1>")
+    expect(source).toContain('<span className="settingsLabel">Settings</span>')
+    expect(source).toContain("<h1>개인정보와 계정 설정</h1>")
+    expect(source).toContain('className="settingsHeroDeck"')
+    expect(source).toContain('className="settingsPanelLabel"')
+    expect(source).toContain("변경 사항은 초안 저장 후 공개 적용으로 블로그와 About 페이지에 반영됩니다.")
     expect(source).not.toContain(
       "프로필 이미지, 소개 문구, 헤더 카피, 외부 링크를 공개 화면 문맥에서 바로 조정합니다."
     )

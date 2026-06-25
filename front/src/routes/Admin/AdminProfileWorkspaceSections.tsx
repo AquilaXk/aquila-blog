@@ -109,8 +109,12 @@ export const AdminProfileWorkspaceSections = (props: Record<string, any>) => {
       <WorkspaceHero>
         <AdminWorkspaceHeroLayout>
           <AdminWorkspaceHeroCopy>
-            <h1>프로필</h1>
+            <span className="settingsLabel">Settings</span>
+            <h1>개인정보와 계정 설정</h1>
           </AdminWorkspaceHeroCopy>
+          <p className="settingsHeroDeck">
+            공개 프로필, About 소개, 메인 헤더와 외부 링크를 한 곳에서 관리합니다.
+          </p>
         </AdminWorkspaceHeroLayout>
       </WorkspaceHero>
 
@@ -133,6 +137,7 @@ export const AdminProfileWorkspaceSections = (props: Record<string, any>) => {
         <EditorColumn>
           <EditorSurface>
             <EditorPaneHeader>
+              <span className="settingsPanelLabel">{activeSection}</span>
               <div className="titleRow">
                 <h2>{activeSectionMeta.label}</h2>
                 {activeSectionState.dirty ? (
@@ -141,6 +146,7 @@ export const AdminProfileWorkspaceSections = (props: Record<string, any>) => {
                   <SectionStateBadge data-tone="published">공개본과 차이 있음</SectionStateBadge>
                 ) : null}
               </div>
+              <p>변경 사항은 초안 저장 후 공개 적용으로 블로그와 About 페이지에 반영됩니다.</p>
             </EditorPaneHeader>
             {renderAdminProfileWorkspaceSection(props)}
           </EditorSurface>
